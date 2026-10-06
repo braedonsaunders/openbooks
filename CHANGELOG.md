@@ -6,6 +6,42 @@ changes; each release documents required operator action.
 
 ## [Unreleased]
 
+## [0.1.0-alpha.30] - 2026-10-05
+
+- Add commerce channels: sales channels and channel orders, a Shopify
+  connector with inventory sync, item families with price schedules,
+  promotions and restocking, stored value, tenders, shipping, and order
+  economics.
+- Add payment-service automation: PSP payout pull and reconciliation,
+  autopay with setup tokens, payment-run approval flows and reservation
+  guards, revenue recovery, and Stripe billing history import.
+- Extend revenue and billing: quote-to-cash, usage schedules, revenue
+  contract scope, contract costs, payer hierarchies, SaaS entitlements and a
+  customer portal.
+- Add cross-border tax with evidence, marketplace tax commits, registration
+  filing-period starts, and FX rate age policies.
+- Extend payroll and workforce: benefit program identity and selected-hours
+  components, entitlement bank drawdown, compensation packages and source
+  cycles, training delivery, business calendars, and component protection
+  classes.
+- Rebuild Analytics dashboards on shared scoped aggregates, add demand
+  forecasting, configurable aging bucket policies and explicit department
+  billable expectations.
+- Expand global search: menu pages and workspace tabs, reports, settings,
+  help articles, operational records (opportunities, activities,
+  subscriptions, fixed assets, equipment, timesheets, custom records, files,
+  dashboards, locations, warehouses), contact people, phone numbers,
+  migrated-system ids, line descriptions, barcodes, and recently opened
+  results re-checked against current permissions.
+- Fence the subscription drawer and its customer picker to the reader's
+  subsidiaries.
+
+Migrations 0482 through 0567 apply forward on the alpha.29 release baseline.
+Migration 0567 builds search indexes with `CREATE INDEX CONCURRENTLY` outside
+a transaction. Run the release's read-only upgrade check before deploying and
+resolve any preflight refusal it names. No new operator configuration is
+required.
+
 ## [0.1.0-alpha.29] - 2026-10-02
 
 - Install new databases from one verified release baseline. Preserve historical
