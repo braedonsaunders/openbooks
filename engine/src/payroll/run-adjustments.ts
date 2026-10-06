@@ -172,6 +172,9 @@ type PayRunAdjustmentInput = {
   orgId: string;
   documentId: string;
   actorId: string;
+  /** Supporting reason for a controlled correction or scope change. */
+  reason?: string;
+  source?: "payroll" | "data_import";
   allowedSubsidiaryIds?: PayrollSubsidiaryScope;
   mutation: PayRunAdjustmentMutation;
 };
@@ -190,6 +193,9 @@ export async function preflightPayRunAdjustment(
 
 async function executePayRunAdjustment(input: PayRunAdjustmentInput, validateOnly: boolean): Promise<{ changed: boolean; replayed: boolean }> {
   const { orgId, documentId, actorId, mutation } = input;
+  if (input.reason !== undefined && (!input.reason.trim() || input.reason.length > 500)) {
+    throw new PayrollError("adjustment correction reason must contain 1 to 500 characters");
+  }
   if (validateOnly && mutation.action !== "add") throw new PayrollError("adjustment preflight only supports adding a line");
   return db.transaction(async (tx) => {
     const runRows = (await tx.execute<{ run_status: string; pay_schedule_id: string; period_start: string; document_status: string; subsidiary_id: string | null }>(sql`
@@ -261,6 +267,7 @@ async function executePayRunAdjustment(input: PayRunAdjustmentInput, validateOnl
     }
 
     let changed = false;
+    const auditChanges: { id: string; before: Record<string, unknown> | null; after: Record<string, unknown> | null }[] = [];
     if (mutation.action === "add") {
       // amount is numeric(19,4) and hours numeric(12,2): the values reach the
       // columns verbatim, so an oversized paste died at storage with a driver
@@ -317,7 +324,7 @@ async function executePayRunAdjustment(input: PayRunAdjustmentInput, validateOnl
       if (component.rows.length === 0) throw new PayrollError("component cannot be adjusted");
       if (validateOnly) return { changed: false, replayed: false };
       if (key != null) {
-        await tx.execute(sql`
+        const inserted = (await tx.execute<Record<string, unknown> & { id: string }>(sql`
           insert into pay_run_adjustments
             (id, org_id, pay_run_document_id, employee_party_id, adjustment_type,
              component_id, amount, hours, replace_component, note, created_by, updated_by)
@@ -325,9 +332,12 @@ async function executePayRunAdjustment(input: PayRunAdjustmentInput, validateOnl
             (${key}, ${orgId}, ${documentId}, ${mutation.employeePartyId}, 'line',
              ${mutation.componentId}, ${amount}, ${hours},
              ${replaceComponent}, ${note}, ${actorId}, ${actorId})
-        `);
+          returning *
+        `)).rows[0];
+        if (!inserted) throw new PayrollError("pay run adjustment was not saved");
+        auditChanges.push({ id: inserted.id, before: null, after: inserted });
       } else {
-        await tx.execute(sql`
+        const inserted = (await tx.execute<Record<string, unknown> & { id: string }>(sql`
           insert into pay_run_adjustments
             (org_id, pay_run_document_id, employee_party_id, adjustment_type,
              component_id, amount, hours, replace_component, note, created_by, updated_by)
@@ -335,20 +345,24 @@ async function executePayRunAdjustment(input: PayRunAdjustmentInput, validateOnl
             (${orgId}, ${documentId}, ${mutation.employeePartyId}, 'line',
              ${mutation.componentId}, ${amount}, ${hours},
              ${replaceComponent}, ${mutation.note ?? null}, ${actorId}, ${actorId})
-        `);
+          returning *
+        `)).rows[0];
+        if (!inserted) throw new PayrollError("pay run adjustment was not saved");
+        auditChanges.push({ id: inserted.id, before: null, after: inserted });
       }
       changed = true;
     } else if (mutation.action === "delete") {
-      const deleted = (await tx.execute<{ id: string }>(sql`
+      const deleted = (await tx.execute<Record<string, unknown> & { id: string }>(sql`
         delete from pay_run_adjustments
          where org_id = ${orgId} and pay_run_document_id = ${documentId}
            and id = ${mutation.adjustmentId}
-         returning id
+         returning *
       `));
       if (deleted.rows.length === 0) throw new PayrollError("pay run adjustment not found");
+      for (const row of deleted.rows) auditChanges.push({ id: row.id, before: row, after: null });
       changed = true;
     } else if (mutation.action === "exclude") {
-      const inserted = (await tx.execute<{ id: string }>(sql`
+      const inserted = (await tx.execute<Record<string, unknown> & { id: string }>(sql`
         insert into pay_run_adjustments
           (org_id, pay_run_document_id, employee_party_id, adjustment_type, created_by, updated_by)
         values (${orgId}, ${documentId}, ${mutation.employeePartyId}, 'exclude', ${actorId}, ${actorId})
@@ -356,20 +370,30 @@ async function executePayRunAdjustment(input: PayRunAdjustmentInput, validateOnl
         on conflict (pay_run_document_id, employee_party_id)
           where adjustment_type = 'exclude'
         do nothing
-        returning id
+        returning *
       `));
       changed = inserted.rows.length > 0;
+      for (const row of inserted.rows) auditChanges.push({ id: row.id, before: null, after: row });
     } else {
-      const deleted = (await tx.execute<{ id: string }>(sql`
+      const deleted = (await tx.execute<Record<string, unknown> & { id: string }>(sql`
         delete from pay_run_adjustments
          where org_id = ${orgId} and pay_run_document_id = ${documentId}
            and employee_party_id = ${mutation.employeePartyId} and adjustment_type = 'exclude'
-         returning id
+         returning *
       `));
       changed = deleted.rows.length > 0;
+      for (const row of deleted.rows) auditChanges.push({ id: row.id, before: row, after: null });
     }
 
     if (changed) {
+      // Record each actual row change before invalidating the derived result.
+      // Replays and previews return earlier and leave no duplicate audit event.
+      for (const row of auditChanges) {
+        await tx.execute(sql`insert into audit_log(org_id,table_name,row_id,action,changes,actor_id)
+          values (${orgId},'pay_run_adjustments',${row.id},${row.after ? 'insert' : 'delete'},
+            ${JSON.stringify({ before: row.before, after: row.after, source: input.source ?? 'payroll',
+              reason: input.reason ?? row.after?.note ?? row.before?.note ?? null })}::jsonb,${actorId})`);
+      }
       // Calculated stubs are a derived snapshot. Invalidate them through the
       // one shared helper — stubs, errors and acknowledgement together — in
       // the same transaction as the input change.
