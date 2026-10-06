@@ -8,6 +8,7 @@ const absorbedId = '00000000-0000-4000-8000-000000000002';
 const survivorId = '00000000-0000-4000-8000-000000000003';
 const dialect = new PgDialect();
 const queries: { sql: string; params: unknown[] }[] = [];
+let protectedTable = 'pay_run_benefit_allocations';
 const executor = {
   async execute(query: Parameters<typeof dialect.sqlToQuery>[0]) {
     const compiled = dialect.sqlToQuery(query);
@@ -19,7 +20,7 @@ const executor = {
       const id = compiled.params[0];
       return { rows: [{ id, display_name: id === absorbedId ? 'Recorded employee' : 'Surviving employee', is_active: true, custom: {} }] };
     }
-    if (compiled.sql.includes('pay_run_benefit_allocations')) return { rows: [{ id: 'recorded-benefit-allocation' }] };
+    if (compiled.sql.startsWith('select id from')) return { rows: compiled.sql.includes(`"${protectedTable}"`) ? [{ id: 'recorded-evidence' }] : [] };
     throw new Error('Unexpected query before protected payroll refusal: ' + compiled.sql);
   },
 };
@@ -40,13 +41,26 @@ const hook = registerHooks({
   },
 });
 const { applySourcePartyMerge } = await import('./party-merges.ts');
-test('recorded benefit payroll subjects refuse party merges before any identity or history mutation', async () => {
+test('recorded payroll subjects and approval authors refuse party merges before any identity or history mutation', async () => {
   try {
-    await assert.rejects(applySourcePartyMerge({ orgId, absorbedId, survivorId, sourceName: 'native', absorbedRef: 'employee-a', survivorRef: 'employee-b', actorId: null, runId: null }), /native benefit payroll evidence.*Keep the employee identities separate/);
-    const evidence = queries.find(query => query.sql.includes('pay_run_benefit_allocations'));
-    assert.ok(evidence);
-    assert.deepEqual(evidence.params, [orgId, absorbedId]);
-    assert.ok(!queries.some(query => /^\s*(update|insert|delete)\b/i.test(query.sql)));
+    for (const [table, label] of [
+      ['pay_run_benefit_allocations', 'native benefit payroll evidence'],
+      ['payroll_compensation_assignments', 'compensation assignment history'],
+      ['payroll_period_openings', 'prior-provider payroll period balances'],
+      ['hrm_training_courses', 'training course authorship evidence'],
+      ['hrm_shift_templates', 'shift template authorship evidence'],
+      ['hrm_shift_assignments', 'shift assignment authorship evidence'],
+      ['hrm_shifts', 'shift authorship evidence'],
+      ['hrm_shift_requests', 'shift request authorship evidence'],
+    ]) {
+      protectedTable = table!;
+      queries.length = 0;
+      await assert.rejects(applySourcePartyMerge({ orgId, absorbedId, survivorId, sourceName: 'native', absorbedRef: 'employee-a', survivorRef: 'employee-b', actorId: null, runId: null }), new RegExp(label + '.*Keep the employee identities separate'));
+      const evidence = queries.find(query => query.sql.includes(`"${table}"`));
+      assert.ok(evidence, table);
+      assert.deepEqual(evidence.params, [orgId, absorbedId]);
+      assert.ok(!queries.some(query => /^\s*(update|insert|delete)\b/i.test(query.sql)), table);
+    }
   } finally {
     hook.deregister();
     delete (globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey];
