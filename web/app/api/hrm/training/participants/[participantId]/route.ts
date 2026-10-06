@@ -4,7 +4,7 @@ import { getTrainingParticipant, respondTrainingInvitation } from '@openbooks/en
 import { participantParams, responseBody } from '../../contracts'
 export const GET = defineRoute({
   permission: 'hrm.certifications.read',
-  feature: 'hrmCertifications',
+  feature: 'hrmTraining',
   params: participantParams,
   handler: async ({ authz, params }) =>
     NextResponse.json(
@@ -13,7 +13,7 @@ export const GET = defineRoute({
 })
 export const POST = defineRoute({
   permission: 'hrm.certifications.manage',
-  feature: 'hrmCertifications',
+  feature: 'hrmTraining',
   params: participantParams,
   body: responseBody,
   invalidBodyStatus: 422,

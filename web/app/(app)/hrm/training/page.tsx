@@ -38,7 +38,7 @@ export default async function TrainingPage({
     authz = await requirePermission('hrm.certifications.read'),
     t = await getTranslations('admin.setup.training')
   await requireFeatureEnabled(authz.user.orgId, 'hrm')
-  await requireFeatureEnabled(authz.user.orgId, 'hrmCertifications')
+  await requireFeatureEnabled(authz.user.orgId, 'hrmTraining')
   const manage = can(authz, 'hrm.certifications.manage'),
     actor = { orgId: authz.user.orgId, actorId: authz.user.id }
   const shared = {

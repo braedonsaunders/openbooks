@@ -6994,6 +6994,22 @@
       "title": "薪酬",
       "description": "岗位体系与薪酬带宽、调薪周期、带成本测算的编制计划以及薪酬透明。调薪周期还需要启用薪资。"
     },
+    "hrmTraining": {
+      "title": "培训管理",
+      "description": "可选的课程、场次、邀请、结果和反馈。授予资格还需启用认证与执照。"
+    },
+    "hrmShiftPlanning": {
+      "title": "排班计划",
+      "description": "可选的循环班次、员工安排和已发布排班表。工资核算和工时录入无需排班表。"
+    },
+    "hrmAttendance": {
+      "title": "设备考勤",
+      "description": "可选的设备身份、打卡记录和同步完整性记录。采集打卡记录无需排班计划。"
+    },
+    "hrmShiftClosing": {
+      "title": "正式班次关闭",
+      "description": "可选：根据最新考勤证据审核并关闭已结束班次。需要排班计划和设备考勤；发布班次无需关闭班次。"
+    },
     "hrmCertifications": {
       "title": "认证与执照",
       "description": "员工资质台账：分类、所持证书、派工要求与到期提醒。关闭功能不会删除数据。"

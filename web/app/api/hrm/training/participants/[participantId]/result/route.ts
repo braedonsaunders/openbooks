@@ -5,7 +5,7 @@ import { participantParams, completionBody } from '../../../contracts'
 import { requireFileAccess } from '@/app/api/file-cabinet/lib'
 export const POST = defineRoute({
   permission: 'hrm.certifications.manage',
-  feature: 'hrmCertifications',
+  feature: 'hrmTraining',
   params: participantParams,
   body: completionBody,
   invalidBodyStatus: 422,

@@ -5,13 +5,13 @@ import { courseBody, trainingCreateKey } from '../contracts'
 export const dynamic = 'force-dynamic'
 export const GET = defineRoute({
   permission: 'hrm.certifications.read',
-  feature: 'hrmCertifications',
+  feature: 'hrmTraining',
   handler: async ({ authz }) =>
     NextResponse.json(await listTrainingCourses({ orgId: authz.user.orgId, actorId: authz.user.id })),
 })
 export const POST = defineRoute({
   permission: 'hrm.certifications.manage',
-  feature: 'hrmCertifications',
+  feature: 'hrmTraining',
   body: courseBody,
   invalidBodyStatus: 422,
   handler: async ({ request, authz, body }) => {

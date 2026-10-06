@@ -6994,6 +6994,22 @@
       "title": "Rémunération",
       "description": "Architecture des postes et fourchettes salariales, campagnes de mérite, plans d'effectifs chiffrés et transparence salariale. Les campagnes de mérite nécessitent aussi la Paie."
     },
+    "hrmTraining": {
+      "title": "Formation",
+      "description": "Cours, sessions, invitations, résultats et commentaires facultatifs. Les qualifications délivrées nécessitent aussi Certifications et licences."
+    },
+    "hrmShiftPlanning": {
+      "title": "Planification des quarts",
+      "description": "Horaires récurrents, affectations et planning publié facultatifs. La paie et la saisie des temps ne nécessitent pas de planning."
+    },
+    "hrmAttendance": {
+      "title": "Présence par appareil",
+      "description": "Identités des appareils, pointages et suivi de la synchronisation facultatifs. La collecte des pointages ne nécessite pas la planification des quarts."
+    },
+    "hrmShiftClosing": {
+      "title": "Clôture formelle des quarts",
+      "description": "Contrôle et clôture facultatifs des quarts terminés selon les preuves de présence actuelles. Nécessite Planification des quarts et Présence par appareil. La publication ne nécessite pas de clôture."
+    },
     "hrmCertifications": {
       "title": "Certifications et licences",
       "description": "Registre des qualifications : taxonomie, titres détenus, exigences d'affectation et alertes d'expiration. Désactiver ne supprime jamais les données."

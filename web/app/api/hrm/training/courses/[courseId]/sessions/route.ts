@@ -4,7 +4,7 @@ import { createTrainingSession } from '@openbooks/engine/hrm/training'
 import { courseParams, sessionBody, trainingCreateKey } from '../../../contracts'
 export const POST = defineRoute({
   permission: 'hrm.certifications.manage',
-  feature: 'hrmCertifications',
+  feature: 'hrmTraining',
   params: courseParams,
   body: sessionBody,
   invalidBodyStatus: 422,

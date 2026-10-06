@@ -6994,6 +6994,22 @@
       "title": "Remuneração",
       "description": "Arquitetura de cargos e faixas salariais, ciclos de mérito, planos de headcount custeados e transparência salarial. Os ciclos de mérito também exigem a Folha de pagamento."
     },
+    "hrmTraining": {
+      "title": "Treinamento",
+      "description": "Cursos, sessões, convites, resultados e avaliações opcionais. A concessão de qualificações também exige Certificações e licenças."
+    },
+    "hrmShiftPlanning": {
+      "title": "Planejamento de turnos",
+      "description": "Escalas recorrentes, alocações e escala publicada opcionais. A folha e o registro de horas não exigem uma escala."
+    },
+    "hrmAttendance": {
+      "title": "Presença por dispositivo",
+      "description": "Identidades de dispositivos, registros de ponto e acompanhamento da sincronização opcionais. Coletar registros não exige planejamento de turnos."
+    },
+    "hrmShiftClosing": {
+      "title": "Encerramento formal de turnos",
+      "description": "Revisão e encerramento opcionais de turnos concluídos com evidências atuais de presença. Exige Planejamento de turnos e Presença por dispositivo; publicar turnos não exige encerramento."
+    },
     "hrmCertifications": {
       "title": "Certificações e licenças",
       "description": "Registro de qualificações: taxonomia, credenciais, requisitos de alocação e alertas de vencimento. Desativar nunca apaga dados."

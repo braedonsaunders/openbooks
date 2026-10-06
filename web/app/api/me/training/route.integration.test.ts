@@ -35,7 +35,7 @@ const { GET: list } = await import('./route')
 const { GET: read, POST: respond } = await import('./participants/[participantId]/route')
 const { POST: feedback } = await import('./participants/[participantId]/feedback/route')
 const spec = {
-  features: ['hrm', 'hrmCertifications'],
+  features: ['hrm', 'hrmCertifications', 'hrmTraining'],
   users: [
     {
       key: 'authorId',

@@ -4,14 +4,14 @@ import { getTrainingCourse, transitionTrainingCourse } from '@openbooks/engine/h
 import { courseParams, courseAction } from '../../contracts'
 export const GET = defineRoute({
   permission: 'hrm.certifications.read',
-  feature: 'hrmCertifications',
+  feature: 'hrmTraining',
   params: courseParams,
   handler: async ({ authz, params }) =>
     NextResponse.json(await getTrainingCourse({ ...params, orgId: authz.user.orgId, actorId: authz.user.id })),
 })
 export const POST = defineRoute({
   permission: 'hrm.certifications.manage',
-  feature: 'hrmCertifications',
+  feature: 'hrmTraining',
   params: courseParams,
   body: courseAction,
   invalidBodyStatus: 422,
