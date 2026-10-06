@@ -141,3 +141,28 @@ test('health dashboard fails closed when a functional has no spot coverage', { s
     await withBypass(() => dropScratchOrg(org.orgId))
   }
 })
+
+test('the landing card and selected tab share one canonical scorecard without repeating statement reads', { skip: !env.OPENBOOKS_DB_URL }, async t => {
+  const { financialHealth } = await import('./financial-health')
+  const { withAnalyticsRead } = await import('./read-context')
+  const org = await seedTwoCurrencyHealth()
+  const execute = db.execute
+  let calls = 0
+  db.execute = ((...args: Parameters<typeof execute>) => { calls++; return execute.apply(db, args) }) as typeof execute
+  t.after(() => { db.execute = execute })
+  try {
+    await withOrgContext(org.orgId, async () => {
+      const authz = { user: { orgId: org.orgId, id: randomUUID() }, permissions: new Set(['*']), allowedSubsidiaryIds: null } as unknown as import('../authz').Authz
+      const read = <T>(projection: 'summary' | 'tab', work: () => Promise<T>) => withAnalyticsRead({ authz, slug: 'financial-health', tab: projection === 'tab' ? 'overview' : '', projection, locale: 'en', revision: 'scorecard-sharing', observedAt: Date.now() }, work)
+      const card = await read('summary', () => financialHealth(JULY, org.orgId, null))
+      const afterCard = calls
+      assert.ok(afterCard > 0, 'the first scorecard must actually read its sources')
+      const tab = await read('tab', () => financialHealth(JULY, org.orgId, null))
+      assert.equal(calls, afterCard, 'the tab must reuse the card scorecard, including underlying statement reads')
+      assert.deepEqual(tab, card)
+    })
+  } finally {
+    db.execute = execute
+    await withBypass(() => dropScratchOrg(org.orgId))
+  }
+})

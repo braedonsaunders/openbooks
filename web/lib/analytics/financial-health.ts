@@ -1,5 +1,7 @@
 import "server-only";
 import { analyticsQuery } from "./query";
+import { currentAnalyticsRead } from "./read-context";
+import { cachedAnalyticsRead } from "./preview-cache";
 import { getMoneyFormatter } from '../money-server'
 import { sql } from "drizzle-orm";
 import { profitAndLoss, balanceSheet, type StatementRow } from "../reports";
@@ -423,6 +425,25 @@ async function presentationStatements(
 // ---------------------------------------------------------------------------
 
 export async function financialHealth(
+  period: { from: string; to: string; label: string },
+  orgId: string,
+  allowedSubsidiaryIds: ReadonlySet<string> | null,
+  notes: FinancialHealthNotes = healthStrings(englishCatalogMessage, "en"),
+): Promise<FinancialHealth> {
+  const read = currentAnalyticsRead();
+  if (read?.slug !== "financial-health" || read.authz.user.orgId !== orgId) {
+    return calculateFinancialHealth(period, orgId, allowedSubsidiaryIds, notes);
+  }
+  // Cards and detailed tabs share the same scorecard, including statement
+  // readers beneath it. Scope and period label are explicit calculation
+  // inputs; equally authorized requests cannot substitute another scope.
+  const scope = allowedSubsidiaryIds === null ? "all" : JSON.stringify([...allowedSubsidiaryIds].sort());
+  return cachedAnalyticsRead(read.authz, "metric:financial-health", { ...period, scope },
+    () => calculateFinancialHealth(period, orgId, allowedSubsidiaryIds, notes),
+    { identity: read, admit: false });
+}
+
+async function calculateFinancialHealth(
   period: { from: string; to: string; label: string },
   orgId: string,
   allowedSubsidiaryIds: ReadonlySet<string> | null,
