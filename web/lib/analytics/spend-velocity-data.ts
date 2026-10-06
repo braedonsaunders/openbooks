@@ -13,7 +13,7 @@ import { operatingExpenseRatio, periodOperatingExpenses } from "./operating-expe
 import { spendVelocityStrings, type SpendVelocityStrings } from "./spend-velocity-strings";
 import { englishCatalogMessage } from "./catalog-strings";
 import { getMoneyFormatter } from '../money-server'
-import { addCalendarDays, addMonthsClamped, calendarDaysBetween, endOfMonth } from '@openbooks/engine/src/platform/business-date.ts';
+import { addCalendarDays, addMonthsClamped, calendarDaysBetween, endOfMonth } from '@openbooks/engine/platform/civil-date';
 import { toChartNumber } from "../chart-number";
 
 /**
@@ -402,15 +402,15 @@ type SqlNumber = string | number | null;
 interface AccountSpendRow extends Record<string, unknown> {
   account_id: string; account_name: string | null; bucket: string; bucket_label: string | null; month_num: number;
   bill_amount: SqlNumber; expense_amount: SqlNumber; check_amount: SqlNumber; credit_amount: SqlNumber;
-  total_amount: SqlNumber; transaction_count: SqlNumber; doc_ids: string[] | null; func: string | null; late: string | null;
+  total_amount: SqlNumber; transaction_count: SqlNumber; bucket_transaction_count: SqlNumber; func: string | null; late: string | null;
 }
 interface VendorSpendRow extends Record<string, unknown> {
   vendor_id: string; vendor_name: string; bucket: string; bucket_label: string | null; total_amount: SqlNumber; transaction_count: SqlNumber;
-  doc_ids: string[] | null; func: string | null; late: string | null;
+  func: string | null; late: string | null;
 }
 interface PriorYearRow extends Record<string, unknown> {
   bucket: string; total_amount: SqlNumber; transaction_count: SqlNumber;
-  doc_ids: string[] | null; func: string | null; late: string | null;
+  func: string | null; late: string | null;
 }
 interface CommitmentRow extends Record<string, unknown> {
   kind: string; bucket: string; amount: SqlNumber; func: string | null; late: string | null;
@@ -520,7 +520,7 @@ export async function spendVelocityData(
   // Filter on the line's own posting date: the entry is still joined for
   // its source document, but the date no longer has to be reached through
   // it, so the window is a predicate the line index can serve.
-  const spendBaseWithSubs = (f: string, t: string) => sql`
+  const spendBaseWithSubs = (f: string, t: string, postingDate = sql`l.posting_date`) => sql`
     from journal_lines l
     join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
     join documents d on d.id = e.source_document_id and d.org_id = e.org_id
@@ -533,68 +533,74 @@ export async function spendVelocityData(
       and e.status in ('posted', 'reversed') and e.book_id = ${statementBookExpr(orgId)}
       and d.kind in (${spendKindsIn})
       and a.type in ('expense', 'expense_other', 'expense_deferred', 'cogs')
-      and l.posting_date >= ${f} and l.posting_date <= ${t}`;
+      and ${postingDate} >= ${f} and ${postingDate} <= ${t}`;
 
   const [acctRows, vendRows, pyRows, poSoRows, plOpex, spenderRows, catRows, cmpRows] = await Promise.all([
-    // 1. Monthly account spend split by transaction kind (PRIMARY). Legs are
-    // stamped in their line entity's functional: aggregate per (account,
-    // bucket, functional) and translate below. Document counts ride
-    // array_agg unions so multi-line documents still count once. Buckets are
-    // the org's fiscal periods when it runs a non-monthly calendar, else
-    // calendar months; the calendar month number rides along for seasonality.
+    // Monetary legs retain their original fiscal/month/currency grain and
+    // latest-date translation basis. Distinct counts are computed separately
+    // before joining those legs, so counts never carry document-id arrays.
     analyticsQuery<AccountSpendRow>(sql`
-      select l.account_id, a.name as account_name, a.number as account_number, a.type as account_type,
-        ${fiscalBucketKey(sql`e.posting_date`, buckets.useFiscal)} as bucket,
-        ${fiscalBucketLabel(sql`e.posting_date`, buckets.useFiscal)} as bucket_label,
-        extract(month from e.posting_date)::int as month_num,
-        sum(l.amount) filter (where d.kind = 'vendor_bill') as bill_amount,
-        sum(l.amount) filter (where d.kind = 'expense_report') as expense_amount,
-        sum(l.amount) filter (where d.kind = 'check') as check_amount,
-        -sum(l.amount) filter (where d.kind = 'vendor_credit') as credit_amount,
-        sum(l.amount) as total_amount,
-        array_agg(distinct d.id) as doc_ids,
-        sub.base_currency as func,
-        max(l.posting_date)::text as late
-      ${spendBaseWithSubs(from, to)}
-      group by 1, 2, 3, 4, 5, 6, 7, sub.base_currency
+      with spend as materialized (
+        select l.account_id, a.name as account_name, a.number as account_number, a.type as account_type,
+          ${fiscalBucketKey(sql`e.posting_date`, buckets.useFiscal)} as bucket,
+          ${fiscalBucketLabel(sql`e.posting_date`, buckets.useFiscal)} as bucket_label,
+          extract(month from e.posting_date)::int as month_num,
+          d.id as doc_id, d.kind, l.amount, sub.base_currency as func, l.posting_date
+        ${spendBaseWithSubs(from, to)}
+      ), counts as (
+        select account_id, bucket, count(distinct doc_id) as transaction_count
+        from spend group by account_id, bucket
+      ), bucket_counts as (
+        select bucket, count(distinct doc_id) as bucket_transaction_count
+        from spend group by bucket
+      ), amounts as (
+        select account_id, account_name, account_number, account_type, bucket, bucket_label, month_num, func,
+          sum(amount) filter (where kind = 'vendor_bill') as bill_amount,
+          sum(amount) filter (where kind = 'expense_report') as expense_amount,
+          sum(amount) filter (where kind = 'check') as check_amount,
+          -sum(amount) filter (where kind = 'vendor_credit') as credit_amount,
+          sum(amount) as total_amount, max(posting_date)::text as late
+        from spend group by 1, 2, 3, 4, 5, 6, 7, 8
+      )
+      select amounts.*, counts.transaction_count, bucket_counts.bucket_transaction_count
+      from amounts join counts using (account_id, bucket) join bucket_counts using (bucket)
     `),
     // 2. Monthly vendor/party spend (drill-down).
     analyticsQuery<VendorSpendRow>(sql`
-      select d.party_id as vendor_id, coalesce(p.display_name, 'Unknown') as vendor_name,
-        ${fiscalBucketKey(sql`e.posting_date`, buckets.useFiscal)} as bucket,
-        ${fiscalBucketLabel(sql`e.posting_date`, buckets.useFiscal)} as bucket_label,
-        sum(l.amount) as total_amount,
-        array_agg(distinct d.id) as doc_ids,
-        sub.base_currency as func,
-        max(l.posting_date)::text as late
-      from journal_lines l
-      join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
-      join documents d on d.id = e.source_document_id and d.org_id = e.org_id
-      join accounts a on a.id = l.account_id and a.org_id = l.org_id
-      left join parties p on p.id = d.party_id and p.org_id = d.org_id
-      left join subsidiaries sub on sub.id = l.subsidiary_id and sub.org_id = l.org_id
-      ${fiscalBucketJoin(orgId, sql`e.posting_date`, buckets.useFiscal)}
-      where l.org_id = ${orgId} and d.voided_at is null
-        ${subsidiaryVisibleFilter(sql`l.subsidiary_id`, allowed)}
-        ${subsidiaryVisibleFilter(sql`d.subsidiary_id`, allowed)}
-        and e.status in ('posted', 'reversed') and e.book_id = ${statementBookExpr(orgId)}
-        and d.kind in (${spendKindsIn})
-        and a.type in ('expense', 'expense_other', 'expense_deferred', 'cogs')
-        and e.posting_date >= ${from} and e.posting_date <= ${to}
-        and d.party_id is not null
-      group by 1, 2, 3, 4, sub.base_currency
+      with spend as materialized (
+        select d.party_id as vendor_id,
+          (select p.display_name from parties p where p.id = d.party_id and p.org_id = d.org_id) as vendor_name,
+          ${fiscalBucketKey(sql`e.posting_date`, buckets.useFiscal)} as bucket,
+          ${fiscalBucketLabel(sql`e.posting_date`, buckets.useFiscal)} as bucket_label,
+          d.id as doc_id, l.amount, sub.base_currency as func, l.posting_date
+        ${spendBaseWithSubs(from, to, sql`e.posting_date`)} and d.party_id is not null
+      ), counts as (
+        select vendor_id, bucket, count(distinct doc_id) as transaction_count
+        from spend group by vendor_id, bucket
+      ), amounts as (
+        select vendor_id, coalesce(vendor_name, 'Unknown') as vendor_name, bucket, bucket_label, func,
+          sum(amount) as total_amount, max(posting_date)::text as late
+        from spend group by 1, 2, 3, 4, 5
+      )
+      select amounts.*, counts.transaction_count from amounts join counts using (vendor_id, bucket)
     `),
     // 3. Prior-YEAR buckets for YoY, keyed by the full bucket identity so a
     // window longer than twelve months can never collide two Januarys. The
     // matched prior bucket caps at the same elapsed offset when the report
     // ends mid-bucket (period-to-date compares with period-to-date).
     (analyticsSection('spend-velocity', ['overview','trends']) ? analyticsQuery<PriorYearRow>(sql`
-      select ${fiscalBucketKey(sql`e.posting_date`, buckets.useFiscal)} as bucket, sum(l.amount) as total_amount,
-        array_agg(distinct d.id) as doc_ids, sub.base_currency as func,
-        max(l.posting_date)::text as late
-      ${spendBaseWithSubs(pyFrom, pyTo)}
-      and (${fiscalBucketKey(sql`e.posting_date`, buckets.useFiscal)} != ${pyCapBucket} or e.posting_date <= ${pyCapDate})
-      group by 1, sub.base_currency
+      with spend as materialized (
+        select ${fiscalBucketKey(sql`e.posting_date`, buckets.useFiscal)} as bucket,
+          d.id as doc_id, l.amount, sub.base_currency as func, l.posting_date
+        ${spendBaseWithSubs(pyFrom, pyTo)}
+        and (${fiscalBucketKey(sql`e.posting_date`, buckets.useFiscal)} != ${pyCapBucket} or e.posting_date <= ${pyCapDate})
+      ), counts as (
+        select bucket, count(distinct doc_id) as transaction_count from spend group by bucket
+      ), amounts as (
+        select bucket, func, sum(amount) as total_amount, max(posting_date)::text as late
+        from spend group by bucket, func
+      )
+      select amounts.*, counts.transaction_count from amounts join counts using (bucket)
     `) : Promise.resolve({ rows: [] as PriorYearRow[] })),
     // 4. PO vs SO monthly (commitment cliff). Unposted document totals are
     // transaction currency: translate txn→presentation directly at each
@@ -679,8 +685,6 @@ export async function spendVelocityData(
   // Missing rate coverage fails closed.
   const ZERO = "0";
   const asDate = (v: unknown, fallback: string): string => String(v ?? fallback).slice(0, 10);
-  const unionIds = (...sets: (readonly string[] | null | undefined)[]): number =>
-    new Set(sets.flatMap((s) => [...(s ?? [])])).size;
   const bucketLabelOf = (bucket: string, label: string | null): string =>
     label ?? (buckets.useFiscal && !/^\d{4}-\d{2}$/.test(bucket) ? bucket : strings.monthLabel(bucket.slice(0, 7)));
   const acctCtx = await flowRates(orgId, acctRows.rows.map((r) => ({ func: r.func ?? null, date: asDate(r.late, to) })));
@@ -698,13 +702,9 @@ export async function spendVelocityData(
       cur.check_amount = add(String(cur.check_amount ?? 0), tr(r.check_amount));
       cur.credit_amount = add(String(cur.credit_amount ?? 0), tr(r.credit_amount));
       cur.total_amount = add(String(cur.total_amount ?? 0), tr(r.total_amount));
-      cur.doc_ids = [...new Set([...(cur.doc_ids ?? []), ...((r.doc_ids ?? []) as string[])])];
     }
   }
-  const acctFinal: AccountSpendRow[] = [...acctMerged.values()].map((r) => ({
-    ...r,
-    transaction_count: unionIds(r.doc_ids),
-  })).filter((r) => cmp(String(r.total_amount ?? 0), ZERO) > 0);
+  const acctFinal: AccountSpendRow[] = [...acctMerged.values()].filter((r) => cmp(String(r.total_amount ?? 0), ZERO) > 0);
 
   const vendCtx = await flowRates(orgId, vendRows.rows.map((r) => ({ func: r.func ?? null, date: asDate(r.late, to) })));
   const vendMerged = new Map<string, VendorSpendRow>();
@@ -717,13 +717,9 @@ export async function spendVelocityData(
       vendMerged.set(key, { ...r, total_amount: tr(r.total_amount) });
     } else {
       cur.total_amount = add(String(cur.total_amount ?? 0), tr(r.total_amount));
-      cur.doc_ids = [...new Set([...(cur.doc_ids ?? []), ...((r.doc_ids ?? []) as string[])])];
     }
   }
-  const vendFinal: VendorSpendRow[] = [...vendMerged.values()].map((r) => ({
-    ...r,
-    transaction_count: unionIds(r.doc_ids),
-  })).filter((r) => cmp(String(r.total_amount ?? 0), ZERO) > 0);
+  const vendFinal: VendorSpendRow[] = [...vendMerged.values()].filter((r) => cmp(String(r.total_amount ?? 0), ZERO) > 0);
 
   const pyCtx = await flowRates(orgId, pyRows.rows.map((r) => ({ func: r.func ?? null, date: asDate(r.late, pyTo) })));
   const pyMerged = new Map<string, PriorYearRow>();
@@ -736,12 +732,11 @@ export async function spendVelocityData(
       pyMerged.set(key, { ...r, total_amount: translated });
     } else {
       cur.total_amount = add(String(cur.total_amount ?? 0), translated);
-      cur.doc_ids = [...new Set([...(cur.doc_ids ?? []), ...((r.doc_ids ?? []) as string[])])];
     }
   }
   const pyByBucket = new Map<string, { amount: string; txns: number }>();
   for (const [key, r] of pyMerged) {
-    pyByBucket.set(key, { amount: String(r.total_amount ?? 0), txns: unionIds(r.doc_ids) });
+    pyByBucket.set(key, { amount: String(r.total_amount ?? 0), txns: Number(r.transaction_count) });
   }
   // Prior-bucket lookup: the same calendar month a year earlier, or the same
   // fiscal period number in the prior fiscal year. A missing prior bucket is
@@ -891,12 +886,13 @@ export async function spendVelocityData(
   };
 
   // ---- monthly trends w/ YoY ---------------------------------------------------
+  const bucketCounts = new Map(acctRows.rows.map((row) => [row.bucket, Number(row.bucket_transaction_count)]));
   const trendMap = new Map<string, { label: string; total: string; txns: number; bill: string; expense: string; vendors: Set<string> }>();
   for (const a of acctMap.values()) {
     for (const m of a.buckets) {
       let t = trendMap.get(m.bucket);
       if (!t) { t = { label: m.label, total: ZERO, txns: 0, bill: ZERO, expense: ZERO, vendors: new Set() }; trendMap.set(m.bucket, t); }
-      t.total = add(t.total, m.amount); t.txns += m.txns; t.bill = add(t.bill, m.bill); t.expense = add(t.expense, m.expense);
+      t.total = add(t.total, m.amount); t.txns = bucketCounts.get(m.bucket)!; t.bill = add(t.bill, m.bill); t.expense = add(t.expense, m.expense);
     }
   }
   for (const r of vendRows.rows) {

@@ -186,3 +186,33 @@ test('spend velocity fails closed when a functional has no spot coverage', { ski
     await withBypass(() => dropScratchOrg(org.orgId))
   }
 })
+
+
+test('a posted bill spanning accounts counts once in the bucket and once in each account', { skip: !env.OPENBOOKS_DB_URL }, async () => {
+  const org = await withBypass(() => createScratchOrg())
+  try {
+    await withBypass(async () => {
+      const docId = randomUUID(), entryId = randomUUID()
+      await db.execute(sql`insert into documents (id, org_id, kind, document_number, party_id, subsidiary_id, document_date, posting_date, currency, fx_rate, status, subtotal, tax_total, total, open_balance)
+        values (${docId}, ${org.orgId}, 'vendor_bill', 'BILL-SPLIT', ${org.vendorId}, ${org.subsidiaryId}, ${D}, ${D}, 'CAD', 1, 'draft', 100, 0, 100, 100)`)
+      await db.execute(sql`insert into journal_entries (id, org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, status, origin, source_document_id)
+        values (${entryId}, ${org.orgId}, ${org.bookId}, ${org.subsidiaryId}, 'BILL-SPLIT', ${D}, ${org.periodId}, 'draft', 'manual', ${docId})`)
+      await db.execute(sql`insert into journal_lines (id, org_id, entry_id, line_number, account_id, subsidiary_id, party_id, is_open_item, amount, currency, txn_amount, fx_rate)
+        values (${randomUUID()}, ${org.orgId}, ${entryId}, 1, ${org.accounts.ap}, ${org.subsidiaryId}, ${org.vendorId}, true, '-100', 'CAD', '-100', 1),
+          (${randomUUID()}, ${org.orgId}, ${entryId}, 2, ${org.accounts.cogs}, ${org.subsidiaryId}, ${org.vendorId}, false, '40', 'CAD', '40', 1),
+          (${randomUUID()}, ${org.orgId}, ${entryId}, 3, ${org.accounts.freight}, ${org.subsidiaryId}, ${org.vendorId}, false, '30', 'CAD', '30', 1),
+          (${randomUUID()}, ${org.orgId}, ${entryId}, 4, ${org.accounts.freight}, ${org.subsidiaryId}, ${org.vendorId}, false, '30', 'CAD', '30', 1)`)
+      await db.execute(sql`update journal_entries set status='posted', posted_at=now() where id=${entryId}`)
+      await db.execute(sql`update documents set status='posted', posted_entry_id=${entryId}, posting_period_id=${org.periodId} where id=${docId}`)
+    })
+    await pinClock('2026-07-15', async () => {
+      const data = await spendVelocityData(org.orgId, P, null)
+      assert.equal(data.summary.totalSpend, '100.0000')
+      assert.equal(data.monthlyTrends.find(row => row.month === '2026-07')?.transactionCount, 1)
+      const accounts = data.accountVelocity.filter(row => row.id === org.accounts.cogs || row.id === org.accounts.freight)
+      assert.equal(accounts.length, 2)
+      assert.ok(accounts.every(row => row.transactionCount === 1))
+      assert.equal(data.vendorVelocity.find(row => row.id === org.vendorId)?.transactionCount, 1)
+    })
+  } finally { await withBypass(() => dropScratchOrg(org.orgId)) }
+})
