@@ -13,7 +13,7 @@ const { sql } = await import('drizzle-orm')
 const { db, env, withBypass, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
 const { withSimClock: pinClock } = await import('@openbooks/engine/src/platform/clock.ts')
 const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
-const { bankingHome } = await import('./banking.ts')
+const { bankingHome, bankingReconCount } = await import('./banking.ts')
 
 const D = '2026-07-14'
 
@@ -64,6 +64,59 @@ test('banking cockpit translates every cash functional at the tile spot', { skip
         assert.equal(home.totalCash, '121597189939003.4255')
         const last = home.trend[home.trend.length - 1]!
         assert.equal(last.balance, '121597189939003.4255')
+      })
+    })
+  } finally {
+    await withBypass(() => dropScratchOrg(org.orgId))
+  }
+})
+
+/**
+ * The reconciliation tile reads the same roster rows as the cockpit, and a
+ * multi-functional account rides one row per currency leg: the count must
+ * dedupe by account (3 lines read 3, never 6) and tie the cockpit's own
+ * unmatchedLines exactly.
+ */
+test('reconciliation count dedupes a multi-functional account', { skip: !env.OPENBOOKS_DB_URL }, async () => {
+  const org = await withBypass(() => createScratchOrg())
+  const usSub = randomUUID()
+  try {
+    await withBypass(async () => {
+      await db.execute(sql`insert into subsidiaries (id, org_id, parent_id, name, base_currency, country, tax_ids, is_elimination, is_active, custom)
+        values (${usSub}, ${org.orgId}, ${org.subsidiaryId}, 'US Co', 'USD', 'US', '{}'::jsonb, false, true, '{}'::jsonb)`)
+      await db.execute(sql`insert into currencies (code, name, minor_units) values ('USD','US Dollar',2) on conflict (code) do nothing`)
+      await db.execute(sql`insert into fx_rates (org_id, from_currency, to_currency, as_of, rate_type, rate, source)
+        values (${org.orgId},'USD','CAD',${D}::date,'spot',1.35,'manual')`)
+      // Legs in two functionals on the SAME account → two roster rows.
+      const legs = [
+        [org.subsidiaryId, '100.00', 'CAD'],
+        [usSub, '50.00', 'USD'],
+      ] as const
+      for (const [sub, amt, cur] of legs) {
+        const entryId = randomUUID()
+        await db.execute(sql`insert into journal_entries (id, org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, status, origin)
+          values (${entryId}, ${org.orgId}, ${org.bookId}, ${sub}, ${`BANK-${cur}`}, ${D}, ${org.periodId}, 'draft', 'manual')`)
+        await db.execute(sql`insert into journal_lines (id, org_id, entry_id, line_number, account_id, subsidiary_id, amount, currency, txn_amount, fx_rate)
+          values (${randomUUID()}, ${org.orgId}, ${entryId}, 1, ${org.accounts.bank}, ${sub}, ${amt}, ${cur}, ${amt}, 1),
+                 (${randomUUID()}, ${org.orgId}, ${entryId}, 2, ${org.accounts.adjustment}, ${sub}, ${'-' + amt}, ${cur}, ${'-' + amt}, 1)`)
+        await db.execute(sql`update journal_entries set status='posted', posted_at=now() where id=${entryId}`)
+      }
+      // Three unmatched statement lines on that one account.
+      const stmtId = randomUUID()
+      await db.execute(sql`insert into bank_statements (id, org_id, account_id, source, statement_date, raw_file_ref)
+        values (${stmtId}, ${org.orgId}, ${org.accounts.bank}, 'manual', ${D}::date, 'audit-log:test#evidence=legacy-source-unavailable')`)
+      for (let i = 1; i <= 3; i++) {
+        await db.execute(sql`insert into bank_statement_lines (id, org_id, statement_id, account_id, line_number, posted_on, amount, currency)
+          values (${randomUUID()}, ${org.orgId}, ${stmtId}, ${org.accounts.bank}, ${i}, ${D}::date, '10.00', 'CAD')`)
+      }
+    })
+    await pinClock('2026-07-15', async () => {
+      await withOrgContext(org.orgId, async () => {
+        const home = await bankingHome(org.orgId)
+        assert.equal(home.accounts.filter((a) => a.id === org.accounts.bank).length, 1)
+        assert.equal(home.unmatchedLines, 3)
+        assert.equal(await bankingReconCount(org.orgId), 3)
+        assert.equal(await bankingReconCount(org.orgId), home.unmatchedLines)
       })
     })
   } finally {
