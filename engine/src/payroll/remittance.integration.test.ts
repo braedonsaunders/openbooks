@@ -22,6 +22,7 @@ import {
   RemittanceSourceIntegrityError,
 } from "./remittance.ts";
 import { PayrollError } from "./error.ts";
+import { upsertPayrollEmployerFact } from "./employer-fact-store.ts";
 import { attributePayRunEntity } from "./run-lifecycle.ts";
 import { calculatePayRun } from "./run-calculation.ts";
 import { commitPayRun } from "./run-commit.ts";
@@ -544,6 +545,9 @@ test(
           'CRA remittance account', 'regular', true)
         returning id`);
       assert.equal(filingAccount.rows.length, 1, "CRA remittance must have a filing account before payroll calculation");
+      await upsertPayrollEmployerFact({ orgId: org.orgId, actorId, filingAccountId,
+        country: "CA", factKey: "ei_employer_multiplier", effectiveFrom: "2026-01-01",
+        value: "1.4", changeReason: "Standard employer EI multiple for the fixture's CRA account" });
       const account = seedPostingAccount.bind(null, org.orgId);
       const wageExpense = await account("6000", "Wages expense", "expense");
       const netPayable = await account("2300", "Wages payable", "liability_current");
@@ -587,7 +591,7 @@ test(
         orgId: org.orgId, actorId, payScheduleId: scheduleId,
         periodStart: "2026-07-05", periodEnd: "2026-07-18",
       });
-      await calculatePayRun({ orgId: org.orgId, documentId: run.documentId, actorId });
+      assert.deepEqual((await calculatePayRun({ orgId: org.orgId, documentId: run.documentId, actorId })).errors, []);
       await commitPayRun({ orgId: org.orgId, documentId: run.documentId, actorId });
 
       const stub = ((await db.execute<{ gross: string; factors: Record<string, string> }>(sql`
@@ -1597,6 +1601,9 @@ test(
           'Historical liability account fixture', 'regular', true)
         returning id`);
       assert.equal(filingAccount.rows.length, 1, "historical-liability fixture must establish its filing account");
+      await upsertPayrollEmployerFact({ orgId: org.orgId, actorId, filingAccountId,
+        country: "CA", factKey: "ei_employer_multiplier", effectiveFrom: "2026-01-01",
+        value: "1.4", changeReason: "Standard employer EI multiple for the fixture's CRA account" });
       const vendorRole = await db.execute<{ party_id: string }>(sql`
         insert into vendor_roles (org_id, party_id, is_active, created_by, updated_by)
         values (${org.orgId}, ${org.vendorId}, true, ${actorId}, ${actorId})
@@ -1652,7 +1659,7 @@ test(
         const run = await createPayRun({
           orgId: org.orgId, actorId, payScheduleId: scheduleId, periodStart, periodEnd,
         });
-        await calculatePayRun({ orgId: org.orgId, documentId: run.documentId, actorId });
+        assert.deepEqual((await calculatePayRun({ orgId: org.orgId, documentId: run.documentId, actorId })).errors, []);
         await commitPayRun({ orgId: org.orgId, documentId: run.documentId, actorId });
         await db.execute(sql`update documents set status = 'approved' where id = ${run.documentId}`);
         await postDocument(run.documentId, {
