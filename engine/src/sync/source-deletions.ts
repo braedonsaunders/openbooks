@@ -41,6 +41,36 @@ type ImportedSourceDocument = {
   posted_entry_id: string | null;
 };
 
+/**
+ * A document belongs to the connection that stamped it. A document with no
+ * stamp (imported before connections recorded provenance) or with the stamp
+ * of a connection that no longer exists belongs to the organization's one
+ * live connection for the source, exactly as the sync run adopts it. While a
+ * second live connection of the same source exists, such a document belongs
+ * to neither, so one connection can never correct another's import.
+ */
+function ownedByConnection(input: { orgId: string; connectionId: string }) {
+  return sql`(
+    documents.custom->>'connectionId' = ${input.connectionId}
+    or (
+      not exists (
+        select 1 from connections stamped
+         where stamped.org_id = ${input.orgId}
+           and stamped.id::text = documents.custom->>'connectionId'
+      )
+      and not exists (
+        select 1
+          from connections self
+          join connections sibling
+            on sibling.org_id = self.org_id
+           and sibling.source = self.source
+           and sibling.id <> self.id
+         where self.id = ${input.connectionId} and self.org_id = ${input.orgId}
+      )
+    )
+  )`;
+}
+
 async function lockImportedSourceDocument(
   tx: SqlExecutor,
   input: {
@@ -55,12 +85,12 @@ async function lockImportedSourceDocument(
       from documents
      where org_id = ${input.orgId}
        and custom->>${input.refKey} = ${input.sourceRef}
-       and custom->>'connectionId' = ${input.connectionId}
+       and ${ownedByConnection(input)}
      limit 2
      for update`);
   if (documentResult.rows.length > 1) {
     throw new SourceDeletionResolutionError(
-      "multiple documents imported by this connection share the source reference",
+      "multiple documents owned by this connection share the source reference",
     );
   }
   return documentResult.rows[0] ?? null;
@@ -80,11 +110,11 @@ async function findImportedSourceDocument(
       from documents
      where org_id = ${input.orgId}
        and custom->>${input.refKey} = ${input.sourceRef}
-       and custom->>'connectionId' = ${input.connectionId}
+       and ${ownedByConnection(input)}
      limit 2`);
   if (documentResult.rows.length > 1) {
     throw new SourceDeletionResolutionError(
-      "multiple documents imported by this connection share the source reference",
+      "multiple documents owned by this connection share the source reference",
     );
   }
   return documentResult.rows[0] ?? null;

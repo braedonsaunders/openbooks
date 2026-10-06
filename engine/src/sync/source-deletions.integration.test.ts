@@ -512,6 +512,77 @@ test(
 );
 
 test(
+  "an import without live connection provenance is corrected by the only live connection and by none while a sibling exists",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const connectionId = randomUUID();
+      const siblingId = randomUUID();
+      const legacyDocument = randomUUID();
+      const staleDocument = randomUUID();
+      const legacyRef = `legacy-${randomUUID()}`;
+      const staleRef = `stale-${randomUUID()}`;
+      await db.execute(sql`
+        insert into connections
+          (id, org_id, source, display_name, status)
+        values (${connectionId}, ${org.orgId}, 'netsuite', 'NetSuite account', 'active')`);
+      await db.execute(sql`
+        insert into documents
+          (id, org_id, kind, status, document_number, document_date, currency,
+           subtotal, tax_total, total, custom)
+        values
+          (
+            ${legacyDocument}, ${org.orgId}, 'sales_order', 'approved',
+            'SO-LEGACY-IMPORT', ${org.date}, 'CAD', '25', '0', '25',
+            ${JSON.stringify({ nsId: legacyRef })}::jsonb
+          ),
+          (
+            ${staleDocument}, ${org.orgId}, 'sales_order', 'approved',
+            'SO-STALE-CONNECTION', ${org.date}, 'CAD', '30', '0', '30',
+            ${JSON.stringify({ nsId: staleRef, connectionId: randomUUID() })}::jsonb
+          )`);
+
+      const adopted = await mirrorSourceDeletion({
+        orgId: org.orgId,
+        source: "netsuite",
+        sourceRef: legacyRef,
+        connectionId,
+      });
+      assert.deepEqual(adopted, { documentId: legacyDocument, deleted: true });
+
+      await db.execute(sql`
+        insert into connections
+          (id, org_id, source, display_name, status)
+        values (${siblingId}, ${org.orgId}, 'netsuite', 'Second NetSuite account', 'active')`);
+      const ambiguous = await mirrorSourceDeletion({
+        orgId: org.orgId,
+        source: "netsuite",
+        sourceRef: staleRef,
+        connectionId,
+      });
+      assert.deepEqual(ambiguous, { documentId: null, deleted: false });
+
+      const statuses = (
+        await db.execute<{ id: string; status: string }>(sql`
+          select id, status
+            from documents
+           where org_id = ${org.orgId}
+             and id in (${legacyDocument}, ${staleDocument})
+           order by document_number
+        `)
+      ).rows;
+      assert.deepEqual(statuses, [
+        { id: legacyDocument, status: "voided" },
+        { id: staleDocument, status: "approved" },
+      ]);
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
+
+test(
   "re-resolving a source deletion updates its own tenant row and no other",
   { skip: !DB },
   async () => {
