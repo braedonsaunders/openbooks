@@ -6999,6 +6999,10 @@
       "title": "Remuneração",
       "description": "Arquitetura de cargos e faixas salariais, ciclos de mérito, planos de headcount custeados e transparência salarial. Os ciclos de mérito também exigem a Folha de pagamento."
     },
+    "compensationPackages": {
+      "title": "Pacotes de remuneração",
+      "description": "Pacotes de remuneração reutilizáveis, versões aprovadas e alocações opcionais. Desativar a configuração preserva as obrigações aprovadas da folha."
+    },
     "hrmTraining": {
       "title": "Treinamento",
       "description": "Cursos, sessões, convites, resultados e avaliações opcionais. A concessão de qualificações também exige Certificações e licenças."

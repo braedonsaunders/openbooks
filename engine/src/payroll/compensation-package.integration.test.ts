@@ -24,7 +24,7 @@ import { canonicalJson } from '../platform/canonical-json.ts';
 import { compensationPackageNativeSettlement, validateCompensationPackagePayrollPolicy } from './compensation-package-payroll-policy.ts';
 import { evaluateCompensationPackage } from './compensation-package.ts';
 
-const spec = { features: ["payroll", "hrm"], country: "CA", users: [
+const spec = { features: ["payroll", "hrm", "compensationPackages"], country: "CA", users: [
   { key: "authorId", name: "Package author", handle: "package_author", permissions: ["payroll.manage", "payroll.read", "hrm.compensation.approve"], link: true, partyKey: "authorPartyId" },
   { key: "approverId", name: "Independent approver", handle: "package_approver", permissions: ["hrm.compensation.approve", "payroll.read"], link: true, partyKey: "approverPartyId" },
   { key: "aliasId", name: "Author alternate login", handle: "package_alias", permissions: ["hrm.compensation.approve"], link: true },
@@ -109,6 +109,8 @@ test('payroll package sources require an effective approved employment assignmen
     assert.deepEqual(await compensationPackageRunSource(db, f.org.orgId, documentId), [source], 'run evidence resolves the exact employment preserved on its native stub');
     assert.deepEqual(await compensationPackageRunSource(db, f.org.orgId, documentId, new Set()), []);
     assert.deepEqual(await compensationPackageRunSource(db, f.org.orgId, randomUUID()), []);
+    await setFeatures(f.org.orgId, { compensationPackages: false });
+    assert.deepEqual(await compensationPackageEmploymentSource(db, query), [source], 'disabling package authoring cannot remove approved payroll obligations');
   });
 });
 
@@ -235,6 +237,9 @@ test("configuration writes enforce freshness, tenant and employer scope, currenc
     await setFeatures(f.org.orgId, { payroll: false });
     await assert.rejects(updateCompensationPackage({ ...base, expectedRevision: 1 }), /Payroll is disabled.*Company Settings/);
     await setFeatures(f.org.orgId, { payroll: true });
+    await setFeatures(f.org.orgId, { compensationPackages: false });
+    await assert.rejects(updateCompensationPackage({ ...base, expectedRevision: 1 }), /authoring is disabled.*Company Settings/);
+    await setFeatures(f.org.orgId, { compensationPackages: true });
     const retired = await updateCompensationPackage({ ...base, expectedRevision: 1, retire: true });
     assert.equal(retired.status, "retired");
     assert.equal((await getCompensationPackage(base)).versions.length, 1);

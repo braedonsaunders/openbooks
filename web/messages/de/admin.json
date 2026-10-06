@@ -6999,6 +6999,10 @@
       "title": "Vergütung",
       "description": "Stellenarchitektur und Gehaltsbänder, Leistungsrunden, kalkulierte Personalpläne und Entgelttransparenz. Leistungsrunden erfordern zusätzlich die Lohnabrechnung."
     },
+    "compensationPackages": {
+      "title": "Vergütungspakete",
+      "description": "Optionale wiederverwendbare Vergütungspakete, genehmigte Versionen und Mitarbeiterzuordnungen. Das Deaktivieren der Bearbeitung erhält genehmigte Zahlungsverpflichtungen."
+    },
     "hrmTraining": {
       "title": "Schulungen",
       "description": "Optionale Kurse, Termine, Einladungen, Ergebnisse und Rückmeldungen. Qualifikationsnachweise erfordern zusätzlich Zertifizierungen und Lizenzen."

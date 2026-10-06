@@ -37,7 +37,7 @@ export interface PreparedCompensationPackages {
   results: Map<string, { stages: { stage: 'earnings' | 'remaining'; evaluation: CompensationPackageEvaluation }[]; lines: Line[] }>;
 }
 
-/** Native payroll calls this inside its locked transaction; absent schema is maintenance, never a zero package calculation. */
+/** Adopted packages require complete storage; unused pre-upgrade modules preserve native payroll. */
 export async function prepareCompensationPackages(tx: SqlExecutor, context: CompensationPackagePayrollContext,
   lines: readonly Line[]): Promise<PreparedCompensationPackages> {
   let sources: CompensationPackageAssignmentSource[] = [];
@@ -218,14 +218,14 @@ export async function persistCompensationPackageCalculations(tx: SqlExecutor, pr
 export async function clearCompensationPackageCalculations(tx: SqlExecutor, context: {
   orgId: string; documentId: string; simulate: boolean;
 }): Promise<void> {
-  if (context.simulate) return;
+  if (context.simulate || await lockCompensationPackageConfiguration(tx, context.orgId) === null) return;
   // Empty evidence is expected for a first calculation or a run without assignments.
   // The schema's lifecycle trigger independently refuses removal from posted history.
   await tx.execute(sql`delete from payroll_compensation_calculations
     where org_id=${context.orgId} and pay_run_document_id=${context.documentId}`);
 }
 
-/** Native payroll must report an absent controlled rollout before producing any employee results. */
+/** Adopted or partially installed packages refuse before producing employee results. */
 export async function requireCompensationPackageConfiguration(tx: SqlExecutor, orgId: string): Promise<void> {
   try { await lockCompensationPackageConfiguration(tx, orgId); }
   catch (error) { throw compensationPackageSchemaRefusal(error) ?? error; }

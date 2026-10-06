@@ -6,7 +6,7 @@ const label = (key: string) => `compensationPackages.${key}`
 const options = (values: readonly string[]): SetupOption[] => values.map(value => ({ value, labelKey: label(`options.${value}`) }))
 const reason: SetupField = { key: 'reason', kind: 'textarea', required: true, resetOnEdit: true, labelKey: label('reason'), helpTextKey: label('reasonHint') }
 const dates: SetupField[] = [{ key: 'effectiveFrom', kind: 'date', required: true }, { key: 'effectiveTo', kind: 'date' }]
-const common = { groupKey: 'workforce', featureKey: 'payroll', orgScoped: true, actorCols: true, hasActive: false, rehomed: true, iconKey: 'banknote', importVia: 'none', allowDelete: false, writePermission: 'payroll.manage', mutationRevision: { requestKey: 'expectedRevision', rowColumn: 'revision' } } as const
+const common = { groupKey: 'workforce', featureKey: 'compensationPackages', orgScoped: true, actorCols: true, hasActive: false, rehomed: true, iconKey: 'banknote', importVia: 'none', allowDelete: false, writePermission: 'payroll.manage', mutationRevision: { requestKey: 'expectedRevision', rowColumn: 'revision' } } as const
 
 export const PAYROLL_COMPENSATION_PACKAGES_ENTITY: SetupEntity = {
   ...common, key: 'payroll-compensation-packages', table: 'payroll_compensation_packages', naturalKey: 'code',

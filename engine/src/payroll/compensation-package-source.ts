@@ -32,7 +32,7 @@ export interface CompensationPackageAssignmentSource {
 
 /** One statement resolves financial sources; the caller owns the surrounding native payroll transaction. */
 async function assignmentSources(tx: SqlExecutor, orgId: string, predicate: SQL, lockComponents = false): Promise<CompensationPackageAssignmentSource[]> {
-  await lockCompensationPackageConfiguration(tx, orgId);
+  if (await lockCompensationPackageConfiguration(tx, orgId) === null) return [];
   const sources = (await tx.execute<{ source: CompensationPackageAssignmentSource }>(sql`
     select jsonb_build_object(
       'assignmentId',a.id,'packageId',a.package_id,'packageCode',p.code,

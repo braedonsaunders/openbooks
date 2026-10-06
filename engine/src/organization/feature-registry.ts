@@ -290,6 +290,7 @@ export const FEATURES: FeatureDef[] = [
   // a deliberate adoption decision (TD1/W-4 profiles, control accounts,
   // schedules must be configured).
   { key: 'payroll', defaultEnabled: false, category: 'people', navModules: ['payroll'], recommends: ['timeTracking'] },
+  { key: 'compensationPackages', defaultEnabled: false, category: 'people', parentKey: 'payroll' },
   { key: 'expenses', defaultEnabled: true, category: 'people', navModules: ['expenses'] },
 
   // Industries — vertical solutions an org adopts as a whole.

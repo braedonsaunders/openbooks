@@ -11,7 +11,7 @@ import { organizationCurrencyAvailable } from "../organization/currency-options.
 import { subsidiaryVisibleFilter, ScopeNotFoundError } from "../organization/subsidiary-scope.ts";
 import { payrollPack } from "./packs.ts";
 import { PayrollError } from "./error.ts";
-import { compensationPackageSchemaRefusal } from './compensation-package-error.ts';
+import { CompensationPackageUnavailableError, compensationPackageSchemaRefusal } from './compensation-package-error.ts';
 import { canonicalCompensationPackageDefinition, compensationPackageAssignmentInputs, evaluateCompensationPackage, validateCompensationPackage, type CompensationPackageDefinition, type CompensationPackageEvaluationContext } from "./compensation-package.ts";
 import { compensationPackageComponentSources, type CompensationPackageComponentSource } from './compensation-package-components.ts';
 import { validateCompensationPackagePayrollPolicy, validateCompensationPackageCurrencyRounding } from './compensation-package-payroll-policy.ts';
@@ -95,7 +95,17 @@ async function packageTransaction<T>(orgId: string, action: () => Promise<T>): P
 }
 
 /** A row lock also detects a changed snapshot under REPEATABLE READ; a bare advisory lock cannot do that. */
-export async function lockCompensationPackageConfiguration(tx: SqlExecutor, orgId: string, mode: "read" | "write" = "read"): Promise<string> {
+export async function lockCompensationPackageConfiguration(tx: SqlExecutor, orgId: string, mode: "read" | "write" = "read"): Promise<string | null> {
+  const enabled = await lockAndCheckOrgFeature(tx, orgId, "compensationPackages");
+  const schema = (await tx.execute<{ present: number }>(sql`select count(*)::int as present from unnest(array[
+    to_regclass('public.payroll_compensation_configuration'),to_regclass('public.payroll_compensation_packages'),
+    to_regclass('public.payroll_compensation_versions'),to_regclass('public.payroll_compensation_assignments'),
+    to_regclass('public.payroll_compensation_calculations')]) as relations(value) where value is not null`)).rows[0];
+  // Before this optional module is adopted, a server without any of its tables
+  // has no package obligations. Partial schema and enabled-but-missing schema
+  // refuse. Present approved terms continue to resolve even when authoring is off.
+  if (schema?.present === 0 && !enabled && mode === "read") return null;
+  if (schema?.present !== 5) throw new CompensationPackageUnavailableError();
   const rows = (await tx.execute<{ revision: string }>(sql`select revision::text as revision from payroll_compensation_configuration
     where org_id=${orgId} ${mode === "write" ? sql`for update` : sql`for share`}`)).rows;
   if (rows.length !== 1) throw new PayrollError("Compensation configuration is missing — complete the database upgrade before calculating or saving payroll.");
@@ -104,6 +114,7 @@ export async function lockCompensationPackageConfiguration(tx: SqlExecutor, orgI
 async function begin(query: CompensationPackageActor, permission: string, write: boolean): Promise<ReadonlySet<string> | null> {
   if (!await actorHasPermission(db, query.orgId, query.actorId, permission)) throw new ScopeNotFoundError();
   if (!await lockAndCheckOrgFeature(db, query.orgId, "payroll")) throw new PayrollError("Payroll is disabled — enable it on Company Settings → Features before using compensation packages.");
+  if (!await lockAndCheckOrgFeature(db, query.orgId, "compensationPackages")) throw new PayrollError("Compensation package authoring is disabled — enable Compensation packages on Company Settings → Features; existing approved payroll obligations are preserved.");
   await lockCompensationPackageConfiguration(db, query.orgId, write ? "write" : "read");
   return actorAllowedSubsidiaryIds(db, query.orgId, query.actorId);
 }
