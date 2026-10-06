@@ -10,7 +10,7 @@ import { commitPayRun } from "./run-commit.ts";
 import { createPayRun, discardPayRun, payScheduleSubsidiaryProblem, rescopePayScheduleRuns } from "./run-lifecycle.ts";
 import { PayrollError } from "./error.ts";
 import { seedPayrollComponents } from "./run-setup.ts";
-import { createScratchOrg, dropScratchOrgReporting, seedFlowActors } from "../testing/fixtures.ts";
+import { createScratchOrg, dropScratchOrgReporting, seedFlowActors, seedPostingAccount } from "../testing/fixtures.ts";
 import { seedHiredEmployee, seedUsSuiAccount } from "./filing-test-fixtures.ts";
 import { US_PACK_RATES } from "./us/rates.ts";
 import { upsertStatutoryRate } from "./statutory-rates.ts";
@@ -30,18 +30,11 @@ interface Fixture {
 async function seedTwoEntityOrg(options: { scopedSchedule?: boolean } = {}): Promise<Fixture> {
   const org = await createScratchOrg();
   const actorId = (await seedFlowActors(org.orgId)).adminId;
-  const account = async (number: string, name: string, type: string) => {
-    const id = randomUUID();
-    await db.execute(sql`
-      insert into accounts (id, org_id, number, name, type, is_summary, is_active, eliminate,
-                            reconcilable, required_dimensions, custom, subsidiary_include_children)
-      values (${id}, ${org.orgId}, ${number}, ${name}, ${type}, false, true, false, false,
-              '[]'::jsonb, '{}'::jsonb, true)`);
-    return id;
-  };
+  const account = seedPostingAccount.bind(null, org.orgId);
   const wageExpense = await account("6000", "Wages expense", "expense");
   const burdenExpense = await account("6010", "Payroll burden", "expense");
   const netPayable = await account("2300", "Wages payable", "liability_current");
+  const vacationPayable = await account("2320", "Vacation payable", "liability_current");
   const irsPayable = await account("2330", "Federal payroll taxes payable", "liability_current");
   const futaPayable = await account("2340", "FUTA payable", "liability_current");
   const sutaPayable = await account("2350", "SUI payable", "liability_current");
@@ -53,6 +46,7 @@ async function seedTwoEntityOrg(options: { scopedSchedule?: boolean } = {}): Pro
         wageExpenseAccountId: wageExpense,
         burdenExpenseAccountId: burdenExpense,
         netPayAccountId: netPayable,
+        vacationPayableAccountId: vacationPayable,
         wagesTo: "expense",
         countries: ["US"],
       },

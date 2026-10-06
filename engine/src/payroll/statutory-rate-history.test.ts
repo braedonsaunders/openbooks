@@ -1,3 +1,4 @@
+import { seedCanadianPostingAccounts } from "../testing/payroll-posting-fixture.ts";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
@@ -178,33 +179,7 @@ interface CommittedFixture {
 async function seedCommittedRun(): Promise<CommittedFixture> {
   const org = await createScratchOrg();
   const actorId = (await seedFlowActors(org.orgId)).adminId;
-  const account = async (number: string, name: string, type: string) => {
-    const id = randomUUID();
-    await db.execute(sql`
-      insert into accounts (id, org_id, number, name, type, is_summary, is_active, eliminate,
-                            reconcilable, required_dimensions, custom, subsidiary_include_children)
-      values (${id}, ${org.orgId}, ${number}, ${name}, ${type}, false, true, false, false,
-              '[]'::jsonb, '{}'::jsonb, true)`);
-    return id;
-  };
-  const wageExpense = await account("6000", "Wages expense", "expense");
-  const burdenExpense = await account("6010", "Payroll burden", "expense");
-  const netPayable = await account("2300", "Wages payable", "liability_current_other");
-  const craPayable = await account("2310", "CRA remittances payable", "liability_current_other");
-  const vacationPayable = await account("2320", "Vacation payable", "liability_current_other");
-  await db.execute(sql`
-    update orgs set settings = settings || ${JSON.stringify({
-      payroll: {
-        wageExpenseAccountId: wageExpense,
-        burdenExpenseAccountId: burdenExpense,
-        netPayAccountId: netPayable,
-        cppPayableAccountId: craPayable,
-        eiPayableAccountId: craPayable,
-        taxPayableAccountId: craPayable,
-        vacationPayableAccountId: vacationPayable,
-        wagesTo: "expense",
-      },
-    })}::jsonb where id = ${org.orgId}`);
+  const { craPayable } = await seedCanadianPostingAccounts(org.orgId, { liabilityType: "liability_current_other", enablePayroll: false });
   await seedPayrollComponents(org.orgId, actorId, "CA");
   await db.execute(sql`
     insert into payroll_statutory_rates (org_id, country, rate_key, region, tax_year,

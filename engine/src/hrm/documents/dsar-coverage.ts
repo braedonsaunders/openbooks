@@ -102,6 +102,8 @@ export const DSAR_GATHERED_TABLES: readonly DsarGatheredTable[] = [
   { table: "it_addizionali_opening_balances", domain: "payroll", linkage: "direct" },
   { table: "employee_pay_components", domain: "payroll", linkage: "direct" },
   { table: "payroll_opening_balances", domain: "payroll", linkage: "direct" },
+  { table: "payroll_period_openings", domain: "payroll", linkage: "direct" },
+  { table: "payroll_employee_employer_assignments", domain: "payroll", linkage: "direct" },
   { table: "payroll_opening_program_bases", domain: "payroll", linkage: "direct" },
   { table: "payroll_opening_account_bases", domain: "payroll", linkage: "direct" },
   { table: "payroll_prior_stubs", domain: "payroll", linkage: "direct" },

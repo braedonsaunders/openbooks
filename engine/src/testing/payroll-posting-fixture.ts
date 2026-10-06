@@ -1,14 +1,15 @@
-import { seedPostingAccount, seedEnabledPayrollConfiguration } from "./fixtures.ts";
+import { seedPostingAccount, seedEnabledPayrollConfiguration, seedPayrollAccountingConfiguration } from "./fixtures.ts";
 
 /** Canadian account classifications and native payroll posting configuration. */
-export async function seedCanadianPostingAccounts(orgId: string) {
+export async function seedCanadianPostingAccounts(orgId: string, options: { liabilityType?: "liability_current" | "liability_current_other"; enablePayroll?: boolean } = {}) {
+  const liability = options.liabilityType ?? "liability_current";
   const account = seedPostingAccount.bind(null, orgId);
   const wageExpense = await account("6000", "Wages expense", "expense");
   const burdenExpense = await account("6010", "Payroll burden", "expense");
-  const netPayable = await account("2300", "Wages payable", "liability_current");
-  const craPayable = await account("2310", "CRA remittances payable", "liability_current");
-  const vacationPayable = await account("2320", "Vacation payable", "liability_current");
-  await seedEnabledPayrollConfiguration(orgId, {
+  const netPayable = await account("2300", "Wages payable", liability);
+  const craPayable = await account("2310", "CRA remittances payable", liability);
+  const vacationPayable = await account("2320", "Vacation payable", liability);
+  await (options.enablePayroll === false ? seedPayrollAccountingConfiguration : seedEnabledPayrollConfiguration)(orgId, {
     wageExpenseAccountId: wageExpense,
     burdenExpenseAccountId: burdenExpense,
     netPayAccountId: netPayable,

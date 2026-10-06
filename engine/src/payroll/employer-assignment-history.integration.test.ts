@@ -5,7 +5,8 @@ import { sql } from 'drizzle-orm';
 import { db, withBypassContext, withOrgContext, withOrgTransaction } from '../platform/db.ts';
 import { withSimClock } from '../platform/clock.ts';
 import { dropScratchOrgReporting } from '../testing/fixtures.ts';
-import { seedAdoption } from './filing-test-fixtures.ts';
+import { seedAdoption, seedHiredEmployee } from './filing-test-fixtures.ts';
+import { exportedPayrollEvidence } from '../testing/dsar-fixture.ts';
 import { upsertPayrollEmployerFact } from './employer-fact-store.ts';
 import { recordHistoricalEmployerAssignment, employeeEmployerAssignmentHistory, lockEmployerAssignmentProfiles } from './employer-assignment-history.ts';
 import { createPayRun } from './run-lifecycle.ts';
@@ -105,6 +106,21 @@ test('dated employer assignments change only their recorded pay dates, stale dra
         where org_id=${f.orgId} and table_name='payroll_employee_employer_assignments' and row_id=${saved.id}`)).rows;
       assert.equal(audit.length, 1); assert.equal(audit[0]!.actor_id, f.actorId);
       assert.equal(audit[0]!.changes.sourceReference, input.sourceReference);
+      const other = await seedHiredEmployee(f.orgId, f.actorId, { name: 'Other subject', subsidiaryId: f.subsidiaryId,
+        partySubsidiaryId: f.subsidiaryId, scheduleId: f.scheduleId, country: 'CA', province: 'ON',
+        payBasis: 'hourly', currency: 'CAD', rate: '30', rateBasis: 'hour' });
+      await recordHistoricalEmployerAssignment({ ...worker, employeePartyId: other.employeeId,
+        sourceReference: 'Other subject private assignment', dryRun: false });
+      const exported = await exportedPayrollEvidence({ orgId: f.orgId, actorId: f.actorId, partyId: f.employeeId });
+      assert.deepEqual(exported.employerAssignments.map(row => [row.assignment_kind, row.effective_from, row.source_reference]), [
+        ['filing_account', '2026-07-08', input.sourceReference], ['worker_comp', '2026-07-08', input.sourceReference],
+        ['filing_account', '2026-07-09', input.sourceReference],
+      ]);
+      assert.doesNotMatch(JSON.stringify(exported.employerAssignments), /Other subject private assignment/);
+      for (const row of exported.employerAssignments) for (const key of ['org_id', 'employee_party_id', 'created_by', 'updated_by']) {
+        assert.equal(Object.hasOwn(row, key), false, `assignment export excludes ${key}`);
+      }
+
     }));
   } finally { await withBypassContext(() => dropScratchOrgReporting(f.orgId)); }
 });

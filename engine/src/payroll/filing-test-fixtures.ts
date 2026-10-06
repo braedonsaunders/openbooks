@@ -1,3 +1,4 @@
+import { seedCanadianPostingAccounts } from "../testing/payroll-posting-fixture.ts";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
@@ -263,8 +264,8 @@ async function seedEmployee(
 ): Promise<{ employeeId: string; employmentId: string }> {
   const employeeId = randomUUID();
   await db.execute(sql`
-    insert into parties (id, org_id, kind, display_name, is_active, custom)
-    values (${employeeId}, ${fx.orgId}, 'person', ${options.name}, true, '{}'::jsonb)`);
+    insert into parties (id, org_id, kind, display_name, subsidiary_id, is_active, custom)
+    values (${employeeId}, ${fx.orgId}, 'person', ${options.name}, ${fx.subsidiaryId}, true, '{}'::jsonb)`);
   await db.execute(sql`
     insert into employee_roles (org_id, party_id, hired_on, is_active, created_by, updated_by)
     values (${fx.orgId}, ${employeeId}, ${options.hiredOn ?? "2020-01-06"}, true,
@@ -297,45 +298,7 @@ export async function seedAdoption(
   await db.execute(sql`insert into user_permission_overrides(org_id,user_id,permission,effect)
     values(${org.orgId},${actorId},'payroll.manage','grant')`);
 
-  const account = async (number: string, name: string, type: string) => {
-    const id = randomUUID();
-    await db.execute(sql`
-      insert into accounts (id, org_id, number, name, type, is_summary, is_active, eliminate,
-                            reconcilable, required_dimensions, custom, subsidiary_include_children)
-      values (${id}, ${org.orgId}, ${number}, ${name}, ${type}, false, true, false, false,
-              '[]'::jsonb, '{}'::jsonb, true)`);
-    return id;
-  };
-  const wageExpense = await account("6000", "Wages expense", "expense");
-  const burdenExpense = await account("6010", "Payroll burden", "expense");
-  const netPayable = await account(
-    "2300",
-    "Wages payable",
-    "liability_current_other",
-  );
-  const craPayable = await account(
-    "2310",
-    "CRA remittances payable",
-    "liability_current_other",
-  );
-  const vacationPayable = await account(
-    "2320",
-    "Vacation payable",
-    "liability_current_other",
-  );
-  await db.execute(sql`
-    update orgs set settings = settings || ${JSON.stringify({
-      payroll: {
-        wageExpenseAccountId: wageExpense,
-        burdenExpenseAccountId: burdenExpense,
-        netPayAccountId: netPayable,
-        cppPayableAccountId: craPayable,
-        eiPayableAccountId: craPayable,
-        taxPayableAccountId: craPayable,
-        vacationPayableAccountId: vacationPayable,
-        wagesTo: "expense",
-      },
-    })}::jsonb where id = ${org.orgId}`);
+  await seedCanadianPostingAccounts(org.orgId, { liabilityType: "liability_current_other", enablePayroll: false });
   await seedPayrollComponents(org.orgId, actorId, "CA");
   // Shared Ontario fixtures configure EHT so unrelated tests reach their own behavior.
   await seedOntarioEhtFixture(org.orgId, actorId);
