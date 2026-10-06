@@ -8,5 +8,6 @@ export type BaselineManifest = {
 };
 export function validateBaselineManifest(manifest: BaselineManifest, directory: string): number;
 export function releaseMigrationPlan(directory: string, generated: readonly string[]): { baseline: BaselineManifest | null; filenames: string[] };
+export function historicalMigrationPlan(directory: string, generated: readonly string[]): { baseline: BaselineManifest | null; filenames: string[] };
 export function assertBaselineHistory(baseline: BaselineManifest | null, recorded: { filename: string; sha256: string }[], applicationTablesPresent: boolean): void;
 export function migrationIdentityIsApplied(filename: string, recorded: { filename: string; sha256: string }[], baseline: BaselineManifest | null): boolean;

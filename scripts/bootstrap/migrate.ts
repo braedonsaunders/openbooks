@@ -11,7 +11,7 @@ import { sql } from "drizzle-orm"
 import { db, env, pool } from "../../engine/src/platform/db.ts"
 import { connectMigrationClient, describeBootstrapMigrationFailure, executeMigrationAttempt, executeMigrationBody, isLockNotAvailable, migrationLockConfig, migrationRetryDelayMs, migrationRunsWithoutTransaction, releaseMigrationClient, sanitizeMigrationContent } from "../bootstrap-migration-client.ts"
 import { PREFLIGHT_MIN_ORDINAL, earlierPendingCreatesObject, evaluatePreflight, formatFinding, ordinalOf as preflightOrdinalOf, preflightDecisionFor, preflightDirFor, preflightStatementTimeoutMs, readNoneReason, readPreflightSql, type PreflightFinding } from "../migration-preflight.ts"
-import { assertBaselineHistory, migrationIdentityIsApplied, releaseMigrationPlan } from "../migration-baseline-plan.mjs"
+import { assertBaselineHistory, historicalMigrationPlan, migrationIdentityIsApplied, releaseMigrationPlan } from "../migration-baseline-plan.mjs"
 
 async function executeTrackedMigration(
   filename: string,
@@ -426,7 +426,7 @@ export async function runUpgradeCheckMain(json: boolean, historicalMigrations = 
     if (activePlan.baseline && (await readAppliedMigrationFilenames()).has(activePlan.baseline.filename)) throw new Error("this database already uses the release baseline; run ordinary bootstrap without --historical-migrations");
   }
   const plan = historicalMigrations
-    ? { baseline: null, filenames: generated.map((name) => `generated/${name}`) }
+    ? historicalMigrationPlan(migrationsDir, generated)
     : activePlan;
   await assertReleaseBaselineReady(plan.baseline, ledgerPreexisted);
   const result = {
@@ -520,7 +520,7 @@ export async function migrate(historicalMigrations = false): Promise<void> {
     if (activePlan.baseline && (await readAppliedMigrationFilenames()).has(activePlan.baseline.filename)) throw new Error("this database already uses the release baseline; run ordinary bootstrap without --historical-migrations");
   }
   const plan = historicalMigrations
-    ? { baseline: null, filenames: generated.map((name) => `generated/${name}`) }
+    ? historicalMigrationPlan(migrationsDir, generated)
     : activePlan;
   // A legacy database must prove adoption before role refresh, preflights or
   // schema writes can reinterpret its installation history.
