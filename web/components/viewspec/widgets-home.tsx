@@ -23,8 +23,6 @@ import { DocsHome } from '../../app/(app)/docs/sections'
 import { DocArticleView } from '../../app/(app)/docs/[slug]/sections'
 import { LibraryEmptyIcon, ListingCard } from '../../app/(app)/apps/library/sections'
 import { DashboardHeader } from '../../app/(app)/dashboard/_dashboard-header'
-import { DashboardGridSlot } from './dashboard-grid-slot'
-import { DashboardEditSlot } from './dashboard-edit-slot'
 import { CustomizeDashboardHeader } from '../../app/(app)/dashboard/customize/sections'
 import { PlatformClient } from '../../app/(app)/sync/PlatformClient'
 import { BillingHistoryClient } from '../../app/(app)/sync/billing-history/BillingHistoryClient'
@@ -39,6 +37,19 @@ import { AppKeyCell } from '../../app/(app)/admin/apps/sections'
 import { Button } from '@openbooks/ui'
 import Link from 'next/link'
 import { str, type WidgetRenderer } from './widget-props'
+
+// The shared registry also renders entity and document pages. Resolve the
+// dashboard's server components only when that widget is requested, so their
+// analytics readers are not part of every unrelated page's initial module load.
+async function DashboardGridSlot() {
+  const { DashboardGridSlot: NativeDashboardGridSlot } = await import('./dashboard-grid-slot')
+  return <NativeDashboardGridSlot />
+}
+
+async function DashboardEditSlot() {
+  const { DashboardEditSlot: NativeDashboardEditSlot } = await import('./dashboard-edit-slot')
+  return <NativeDashboardEditSlot />
+}
 
 /** Home, discovery and presentation adapters: module home, hubs, dashboards, apps and docs. Compose native components without changing their props or boundaries. */
 export const HOME_WIDGETS = {
