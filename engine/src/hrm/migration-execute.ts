@@ -51,6 +51,7 @@ import {
   type SourcePersonRow,
 } from "./migration-preflight.ts";
 import { isUuid } from "../platform/uuid.ts";
+import { lockActorCommandAuthority } from "../organization/actor-command-authority.ts";
 
 /** Versioned identity for the evidence token and the report envelope. */
 export const EMPLOYMENT_MIGRATION_REF_PREFIX = "hrm-employment-migration/v1";
@@ -521,6 +522,13 @@ export async function executeEmploymentMigration(
         "without an explicit tenant scope",
     );
   }
+  if (appliedBy !== undefined) {
+    assertUuid(
+      appliedBy,
+      "applying actor",
+      "pass the applying user's id as a UUID (CLI: --applied-by=<uuid>)",
+    );
+  }
   for (const row of options.rows) {
     if (row.orgId !== orgId) {
       throw new EmploymentMigrationError(
@@ -532,6 +540,9 @@ export async function executeEmploymentMigration(
   }
 
   return withOrgTransaction(orgId, async () => {
+    const actorScope = appliedBy === undefined
+      ? null
+      : await lockActorCommandAuthority(db, orgId, appliedBy, null, "hrm.employment.manage");
     if (!dryRun) {
       // Serialize concurrent applies per org: without this two operators
       // could double-migrate the same persons past each other's evidence
@@ -611,6 +622,15 @@ export async function executeEmploymentMigration(
     });
 
     const preflight = preflightEmploymentMigration(withBindings, { appliedBy });
+    for (const row of preflight.rows) {
+      if (row.candidate !== null && actorScope !== null &&
+          !actorScope.has(row.candidate.employerSubsidiaryId)) {
+        throw new EmploymentMigrationError(
+          "The applying user cannot manage this employer — use an employment manager " +
+            "with access to the reviewed legal entity",
+        );
+      }
+    }
     // Pre-existing employment guard (HRM-MIGRATE-DUP-EMPLOYMENT): the HR path
     // may already have created an employment for the same natural key (org,
     // worker party, employer subsidiary) before the migration runs, and
@@ -914,7 +934,7 @@ export async function executeEmploymentMigration(
               row.sourceId === person.sourceId,
           )?.sourceVersion ?? "",
         );
-        await insertOne<{ id: string }>(
+        const change = await insertOne<{ id: string }>(
           `employment_changes insert for ${person.sourceNamespace}/${person.sourceId}`,
           sql`insert into employment_changes
                 (org_id, employment_id, revision, change_kind, prior_snapshot,
@@ -926,6 +946,27 @@ export async function executeEmploymentMigration(
                       'system', ${ref})
               returning id::text as id`,
         );
+        if (appliedBy !== undefined) {
+          await insertOne<{ id: string }>(
+            "employment migration actor audit",
+            sql`insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+              values (${orgId}, 'worker_employments', ${employment.id}::uuid, 'insert',
+                ${JSON.stringify({
+                  before: null,
+                  after: {
+                    workerPartyId: person.nativePartyId,
+                    employerSubsidiaryId: candidate.employerSubsidiaryId,
+                    status: candidate.status,
+                    effectiveFrom: candidate.effectiveFrom,
+                    serviceStart: person.serviceStart,
+                    historicalCoverage: person.historicalCoverage,
+                  },
+                  sourceReference: ref,
+                  employmentChangeId: change.id,
+                })}::jsonb,
+                ${appliedBy}::uuid) returning id::text as id`,
+          );
+        }
         written.set(bindingKey(person.sourceNamespace, person.sourceId), employment.id);
       }
       const completed: PersonMigrationResult[] = persons.map((person) => {
