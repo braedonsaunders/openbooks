@@ -117,14 +117,10 @@ export function payrollRunInputsResource(orgId: string): DataResource {
             if ('error' in row) throw new Error(row.error)
             if (duplicates.has(index)) throw new Error('This run, employee and component appear more than once — combine their amount and units into one input row')
             const input = { orgId, documentId: row.documentId, actorId: ctx.actorId,
-              allowedSubsidiaryIds: ctx.allowedSubsidiaryIds, mutation: row.mutation }
-            const result = await db.transaction(async runner => {
+              allowedSubsidiaryIds: ctx.allowedSubsidiaryIds, mutation: row.mutation, source: 'data_import' as const }
+            const result = await db.transaction(async () => {
               if (ctx.dryRun) return preflightPayRunAdjustment(input)
-              const saved = await mutatePayRunAdjustment(input)
-              if (saved.changed) await runner.execute(sql`insert into audit_log(org_id,table_name,row_id,action,changes,actor_id)
-                values (${orgId},'pay_run_adjustments',${row.mutation.idempotencyKey},'insert',
-                  ${JSON.stringify({ before: null, after: row.mutation, reason: row.mutation.note, source: 'data_import' })}::jsonb,${ctx.actorId})`)
-              return saved
+              return mutatePayRunAdjustment(input)
             })
             if (!result.replayed) outcome.created++
           } catch (error) {

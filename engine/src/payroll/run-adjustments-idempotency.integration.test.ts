@@ -96,6 +96,26 @@ test("replaying an adjustment add with the same key writes once", { skip: !DB },
     assert.equal(second.changed, false);
     assert.equal(second.replayed, true);
     assert.equal(await adjustmentCount(fx.orgId, fx.documentId), 1);
+    const events = async () => (await db.execute<{
+      action: string; actor_id: string;
+      changes: { before: { amount: string } | null; after: { amount: string } | null; reason: string };
+    }>(sql`select action,actor_id,changes from audit_log
+      where org_id=${fx.orgId} and table_name='pay_run_adjustments' and row_id=${key}
+      order by at,id`)).rows;
+    assert.deepEqual((await events()).map(e => [e.action, e.actor_id, e.changes.before, e.changes.after?.amount]),
+      [['insert', fx.actorId, null, '125.0000']]);
+    await mutatePayRunAdjustment({ orgId: fx.orgId, documentId: fx.documentId, actorId: fx.actorId,
+      reason: 'Source identity correction', mutation: { action: 'delete', adjustmentId: key } });
+    assert.equal(await adjustmentCount(fx.orgId, fx.documentId), 0);
+    const removed = (await events())[1]!;
+    assert.equal(removed.action, 'delete');
+    assert.equal(removed.actor_id, fx.actorId);
+    assert.equal(removed.changes.before?.amount, '125.0000');
+    assert.equal(removed.changes.after, null);
+    assert.equal(removed.changes.reason, 'Source identity correction');
+    await assert.rejects(mutatePayRunAdjustment({ orgId: fx.orgId, documentId: fx.documentId,
+      actorId: fx.actorId, mutation: { action: 'delete', adjustmentId: key } }), /not found/);
+    assert.equal((await events()).length, 2);
   } finally {
     await dropScratchOrg(fx.orgId);
   }
