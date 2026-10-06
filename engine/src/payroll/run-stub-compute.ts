@@ -1,3 +1,4 @@
+import { historicalWithholdingProfile } from './historical-withholding.ts';
 import { divideMoney } from './run-allocation.ts';
 import { prepareCompensationPackages, appendCompensationPackageStage, persistCompensationPackageCalculations } from './compensation-package-payroll.ts';
 import { ONE_OFF_RUN_TYPES } from "./run-contracts.ts";
@@ -80,7 +81,8 @@ export async function calculateStub(
     supplementalTaxMethod?: SupplementalTaxMethod;
   },
 ): Promise<StubComputation> {
-  const { orgId, actorId, documentId, run, emp, jurisdiction } = ctx;
+  const { orgId, actorId, documentId, run, emp: storedEmp, jurisdiction } = ctx;
+  let emp = storedEmp;
   const employeePartyId = emp.party_id!;
   const employmentId = emp.employment_id;
   if (!employmentId) {
@@ -145,9 +147,9 @@ export async function calculateStub(
   );
   const baseComponent = ctx.need("base_pay", "earning");
 
-  // The employee's tax certificates, read ONCE for the stub rather than once
+  // Recorded withholding answers, read ONCE for the stub rather than once
   // per statutory pass: the deduction-protection fixpoint runs the pass up to
-  // PROTECTION_MAX_PASSES times and an employee's signed forms do not change
+  // PROTECTION_MAX_PASSES times and the selected dated inputs do not change
   // between them.
   const filedCertificates = await storedTaxCertificates(tx, orgId, employeePartyId, country);
   // A certificate filed for another region — before the POST route scoped
@@ -167,9 +169,11 @@ export async function calculateStub(
       `${emp.display_name ?? employeePartyId}: ${mismatched.map((entry) => entry.message).join(" ")}`,
     );
   }
+  emp = historicalWithholdingProfile({ country, profile: emp, stored: storedCertificates, payDate: run.pay_date! });
   /**
    * One declared certificate, resolved against what is stored — the row the
-   * employee signed, else the profile column that predates the model, else the
+   * employee filed or the documented historical inputs, else the current
+   * profile column, else the
    * pack's declared default (a statutory fact, "no certificate on file is
    * withheld at single with zero allowances"), else null.
    *
