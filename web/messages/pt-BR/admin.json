@@ -6247,7 +6247,7 @@
       "inputName": "Nome da entrada",
       "inputType": "Tipo de valor",
       "source": "Origem do valor",
-      "sourceHint": "Escolha uma constante aprovada, um valor específico do funcionário ou um dado nativo da folha. As atribuições não podem substituir os dados nativos.",
+      "sourceHint": "Escolha uma constante aprovada, um valor do funcionário ou um dado nativo da folha. Dados nativos não podem ser substituídos. Regras de rendimentos usam o bruto anterior aos rendimentos do pacote; regras posteriores usam o bruto completo. O trabalho datado mantém suas datas; valores do período sem data são distribuídos pelos dias corridos cobertos.",
       "value": "Valor constante",
       "minimum": "Valor mínimo",
       "maximum": "Valor máximo",
@@ -6998,6 +6998,10 @@
     "hrmCompensation": {
       "title": "Remuneração",
       "description": "Arquitetura de cargos e faixas salariais, ciclos de mérito, planos de headcount custeados e transparência salarial. Os ciclos de mérito também exigem a Folha de pagamento."
+    },
+    "compensationPackages": {
+      "title": "Pacotes de remuneração",
+      "description": "Pacotes de remuneração reutilizáveis, versões aprovadas e alocações opcionais. Desativar a configuração preserva as obrigações aprovadas da folha."
     },
     "hrmTraining": {
       "title": "Treinamento",

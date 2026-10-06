@@ -12,6 +12,7 @@ import { type PayrollEmployerFact } from "./employer-facts.ts"
 import type { PayrollPackRates } from "./statutory-rates.ts"
 import type { PayrollEmployerLevyContext, PayrollEmployerLevyFactors, PayrollStatutoryComputeContext, PayrollWorkAllocation } from "./statutory-context.ts"
 import type { PayrollTaxYearSupport } from "./tax-years.ts"
+import type { PayrollPeriodOpeningTreatment } from "./period-opening-declaration.ts"
 
 /**
  * What a statutory amount is computed FROM. This is the property — and the
@@ -795,6 +796,8 @@ export interface PayrollCountryPack {
    * subtracts as "tax already withheld in the period".
    */
   supplementalPayTreatment?: PayrollSupplementalPayTreatment;
+  /** Exact previously paid period inputs; absent refuses prior-provider period admission. */
+  periodOpeningTreatment?: PayrollPeriodOpeningTreatment;
   /** What the generic pensionable/insurable flags mean here. See the type. */
   contributoryBases: PayrollContributoryBases;
   /**

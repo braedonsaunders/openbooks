@@ -139,3 +139,24 @@ test("malformed definitions and unbounded programs refuse before evaluation", ()
   refuses(() => compileCompensationRules(definition([{ ...rule("allowance", firstId, "base"), rounding: { ...rounding, scale: 5 } }]), components), /scale from 0 through 4/);
   refuses(() => compileCompensationRules(definition([rule("allowance", firstId, "base", " ")]), components), /empty condition.*remove it/);
 });
+
+test('registered cap quanta feed dependent rules and remain explicit in settlement evidence', () => {
+  for (const [scale, allowance, bonus] of [[3, '29.8860', '2.9890'], [4, '29.8865', '2.9887']] as const) {
+    const program = compileCompensationRules(definition([
+      { ...rule('allowance', firstId, 'base'), rounding: { ...rounding, scale } },
+      { ...rule('bonus', secondId, 'allowance * 0.1'), rounding: { ...rounding, scale } },
+    ]), components);
+    const result = program.evaluate({ base: '100' }, { amountCaps: { [firstId]: {
+      yearCap: '130.0099', context: { yearToDate: '100.1234', currencyMinorUnits: scale },
+    } } });
+    assert.deepEqual(result.lines.map(line => line.amount), [allowance, bonus]);
+    assert.equal(result.lines[0]!.evidence.settlement!.amountCaps!.context.currencyMinorUnits, scale);
+    assert.equal(result.lines[1]!.evidence.amountInputs.allowance, allowance.replace(/0+$/, '').replace(/\.$/, ''));
+  }
+  const program = compileCompensationRules(definition([rule('allowance', firstId, 'base')]), components);
+  for (const currencyMinorUnits of [undefined, null, 1.5, NaN]) {
+    refuses(() => program.evaluate({ base: '100' }, { amountCaps: { [firstId]: {
+      context: { currencyMinorUnits: currencyMinorUnits as number },
+    } } }), /rule "allowance".*supported currency precision.*registered payable quantum/);
+  }
+});

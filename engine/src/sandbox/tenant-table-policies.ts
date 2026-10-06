@@ -2,6 +2,21 @@
 export const TENANT_TABLE_POLICIES = {
   // Native offering inserts recreate these identities using the rebased native ids.
   "hrm_benefit_catalog": "skip:no-copy",
+  // Production device identities, roster decisions and source evidence are
+  // environment-specific. Sandboxes establish their own operational records.
+  "hrm_shift_templates": "skip:no-copy",
+  "hrm_shift_assignments": "skip:no-copy",
+  "hrm_shift_publications": "skip:no-copy",
+  "hrm_shifts": "skip:no-copy",
+  "hrm_shift_requests": "skip:no-copy",
+  "hrm_attendance_devices": "skip:no-copy",
+  "hrm_attendance_identities": "skip:no-copy",
+  "hrm_attendance_batches": "skip:no-copy",
+  "hrm_attendance_events": "skip:no-copy",
+  "hrm_attendance_watermarks": "skip:no-copy",
+  "hrm_attendance_observations": "skip:no-copy",
+  "hrm_attendance_event_claims": "skip:no-copy",
+  "hrm_attendance_observation_events": "skip:no-copy",
   // Transfer execution and source artifacts belong to their original environment.
   "data_transfer_jobs": "skip:no-copy",
   "data_transfer_chunks": "skip:no-copy",
@@ -510,6 +525,7 @@ export const TENANT_TABLE_POLICIES = {
   "payroll_opening_balance_components": "clone:catalog-uuid-rebase",
   "payroll_opening_account_bases": "clone:catalog-uuid-rebase",
   "payroll_opening_balances": "clone:catalog-uuid-rebase",
+  "payroll_period_openings": "clone:catalog-uuid-rebase",
   "payroll_opening_program_bases": "clone:catalog-uuid-rebase",
   "payroll_opening_sui_wages": "clone:catalog-uuid-rebase",
   "payroll_parallel_comparisons": "clone:catalog-uuid-rebase",

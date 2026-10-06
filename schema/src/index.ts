@@ -69,6 +69,7 @@ export * from "./qbd";
 export * from "./psp-settlements";
 export * from "./income-tax";
 export * from "./payroll";
+export * from "./payroll-period-openings";
 export * from "./payroll-entitlements";
 export * from "./work-schedules";
 export * from "./leases";
@@ -80,6 +81,7 @@ export * from "./benefit-catalog";
 export * from "./stored-value";
 export * from "./hrm-compensation";
 export * from "./hrm-training";
+export * from "./hrm-shifts";
 // HR-16 automations (0226) + action reasons and event verbs (0227).
 export * from "./hrm-automations";
 // HR-21 begin: AI rails tables (0232).

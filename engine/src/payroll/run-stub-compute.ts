@@ -1,3 +1,5 @@
+import { divideMoney } from './run-allocation.ts';
+import { prepareCompensationPackages, appendCompensationPackageStage, persistCompensationPackageCalculations } from './compensation-package-payroll.ts';
 import { ONE_OFF_RUN_TYPES } from "./run-contracts.ts";
 /**
  * Single-stub computation orchestrating the earning phases, statutory passes, and protection.
@@ -316,6 +318,17 @@ export async function calculateStub(
     currentEarningLines: lines,
   });
 
+  const compensationPackages = await prepareCompensationPackages(tx, {
+    orgId, actorId, documentId, employeePartyId, employmentId,
+    subsidiaryId: ctx.runContext.subsidiaryId ?? null, country, currency: run.doc_currency!,
+    periodStart: run.period_start!, periodEnd: run.period_end!, taxYear,
+    hourlyWage: payRate ? payRate.basis === 'hour' ? payRate.rate : divideMoney(payRate.rate, String(payRate.annualHours), 4) : null,
+    payScheduleId: run.pay_schedule_id!, oneOffRun, simulate: !!ctx.simulate,
+    assignedRows: assigned.rows, allowedSubsidiaryIds: ctx.allowedSubsidiaryIds,
+    unionAgreementId: emp.union_agreement_id ?? null, unionClassificationId: emp.union_classification_id ?? null,
+  }, lines);
+  await appendCompensationPackageStage(tx, compensationPackages, 'earnings', lines);
+
   await applyAssignedComponentLines(tx, {
     orgId, employeePartyId, employmentId, taxYear, documentId,
     assignedRows: assigned.rows, oneOffRun, lines,
@@ -444,6 +457,7 @@ export async function calculateStub(
   });
 
   await appendRecurringBenefitLines(tx, { ...recurringBenefitInput, stage: "remaining" });
+  await appendCompensationPackageStage(tx, compensationPackages, 'remaining', lines);
 
   await applyEarningPaymentKinds(tx, {
     orgId, subsidiaryId: ctx.runContext.subsidiaryId ?? null, currency: run.doc_currency!,
@@ -794,6 +808,8 @@ export async function calculateStub(
     employeePartyIds: [employeePartyId],
     simulate: ctx.simulate, movements: entitlementMovements, stubLineIds: entitlementLineIds,
   });
+
+  await persistCompensationPackageCalculations(tx, compensationPackages);
 
   return {
     employeePartyId, province, gross, net, employerCost,
