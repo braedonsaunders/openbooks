@@ -47,14 +47,15 @@ export async function GET() {
 `;
 
 function mockTest(extraDbExports, wiring) {
+  return hookedTest("db", `export const db = {};
+export const schema = {};
+${extraDbExports}`, wiring);
+}
+
+function hookedTest(name, body, wiring) {
   return `import { registerHooks } from "node:module";
 import test from "node:test";
-const mockSources = new Map([
-  ["mock:db", \`
-      export const db = {};
-      export const schema = {};
-${extraDbExports}    \`],
-]);
+const mockSources = new Map([["mock:${name}", \`${body}\`]]);
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
 ${wiring}
@@ -376,60 +377,23 @@ export async function parseJsonBody(request, schema) {
 }
 `;
 
-const JSON_DOUBLE_TEST = `import { registerHooks } from "node:module";
-import test from "node:test";
-const mockSources = new Map([
-  ["mock:json", \`
-      export const jsonObject = {}
-      export async function parseJsonBody(request) {
-        return { ok: true, data: await request.json() }
-      }
-    \`],
-]);
-const hooks = registerHooks({
-  resolve(specifier, context, nextResolve) {
-    const mocked = new Map([["@/lib/api/json", "mock:json"]]).get(specifier);
-    if (mocked) return { url: mocked, shortCircuit: true };
-    return nextResolve(specifier, context);
-  },
-  load(url, context, nextLoad) {
-    const source = mockSources.get(url);
-    if (source !== undefined) return { format: "module", source, shortCircuit: true };
-    return nextLoad(url, context);
-  },
-});
-const routeUrl = "./route.ts?fixture-tag";
-const { GET } = await import(routeUrl);
-hooks.deregister();
-test("route loads", async () => { await GET(); });
-`;
+const JSON_DOUBLE_TEST = hookedTest("json", `
+export const jsonObject = {}
+export async function parseJsonBody(request) {
+  return { ok: true, data: await request.json() }
+}
+`, `    const mocked = new Map([["@/lib/api/json", "mock:json"]]).get(specifier);
+    if (mocked) return { url: mocked, shortCircuit: true };`);
 
 const JSON_DOUBLE_ROUTE = `import { parseJsonBody } from "@/lib/api/json";
 export async function GET() { return parseJsonBody; }
 `;
 
-const MONEY_REEXPORT_TEST = `import { registerHooks } from "node:module";
-import test from "node:test";
-const mockSources = new Map([
-  ["mock:money", \`export * from "@openbooks/engine/src/money/money.ts"\`],
-]);
-const hooks = registerHooks({
-  resolve(specifier, context, nextResolve) {
-    const mocked = new Map([["@openbooks/engine/src/money/money.ts", "mock:money"]]).get(specifier);
-    if (mocked) return { url: mocked, shortCircuit: true };
-    return nextResolve(specifier, context);
-  },
-  load(url, context, nextLoad) {
-    const source = mockSources.get(url);
-    if (source !== undefined) return { format: "module", source, shortCircuit: true };
-    return nextLoad(url, context);
-  },
-});
-const routeUrl = "./route.ts?fixture-tag";
-const { GET } = await import(routeUrl);
-hooks.deregister();
-test("route loads", async () => { await GET(); });
-`;
+const MONEY_REEXPORT_TEST = hookedTest("money",
+  'export * from "@openbooks/engine/src/money/money.ts"',
+  `    const mocked = new Map([["@openbooks/engine/src/money/money.ts", "mock:money"]]).get(specifier);
+    if (mocked) return { url: mocked, shortCircuit: true };`,
+);
 
 const MONEY_ROUTE = `import { normalizeMoney } from "@openbooks/engine/src/money/money.ts";
 export async function GET() { return normalizeMoney; }
