@@ -13,7 +13,6 @@ import { payrollPeriodOpeningForEmployee } from './period-opening-reader.ts';
 import { CA_PERIOD_OPENING_TREATMENT } from './canada/period-openings.ts';
 
 import { setupPeriodOpeningFixture as setup, periodOpeningInput as input } from '../testing/payroll-period-openings-fixture.ts';
-type Fixture = Awaited<ReturnType<typeof setup>>;
 async function counts(orgId: string) {
   return (await db.execute<{ openings: number; audits: number; stubs: number; ledger: number }>(sql`select
     (select count(*)::int from payroll_period_openings where org_id=${orgId}) as openings,
