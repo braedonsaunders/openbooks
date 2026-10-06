@@ -7,7 +7,6 @@ import { flowRates } from "../fx-presentation";
 import { add, cmp, div, mulDecimal, neg } from "@openbooks/engine/src/money/money.ts";
 import { sql } from "drizzle-orm";
 import { addMonthsClamped, businessToday, calendarDaysBetween, utcDateFromParts } from "@openbooks/engine/src/platform/business-date.ts";
-import { db } from "@openbooks/engine/src/platform/db.ts";
 import { analyticsConfig, type ConfigValuesOf } from "./config";
 import { fiscalBucketJoin, fiscalBucketKey, fiscalBucketLabel, fiscalBucketScope, fiscalMonthlyBoxes } from "./fiscal-buckets";
 import { vendorStrings, type VendorStrings } from "./vendor-strings";

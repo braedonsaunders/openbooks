@@ -11,7 +11,7 @@ test('Redis lease renewal and publication enforce current ownership atomically',
   const { getReadCacheConnection, closeJobConnections } = await import('./connection')
   const { claimSharedCache, renewSharedCache, publishSharedCache, releaseSharedCache } = await import('./read-cache')
   const key = `openbooks:analytics:lease-test:${randomUUID()}`
-  let redis: Awaited<ReturnType<typeof getReadCacheConnection>>
+  let redis: Awaited<ReturnType<typeof getReadCacheConnection>> | null = null
   let admitted = false
   t.after(async () => {
     try { if (admitted && redis) await redis.del(key, `${key}:lease`) }

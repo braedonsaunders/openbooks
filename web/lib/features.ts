@@ -12,7 +12,6 @@ export { FEATURES, FEATURE_BY_KEY, featureEnabled, featureRequirements, type Fea
 // switchboard re-exports its key so every importer keeps working.
 export { featureGateLockKey } from '@openbooks/engine/src/organization/org-feature-lock.ts'
 
-import { orgFeatureState, isFeatureEnabled, subsidiaryFeatureEnabled, resolvedFeatureState } from '@openbooks/engine/organization/feature-state'
 export { orgFeatureState, isFeatureEnabled, subsidiaryFeatureEnabled, resolvedFeatureState } from '@openbooks/engine/organization/feature-state'
 
 /** The set of nav module keys hidden by disabled features (for the resolver). */

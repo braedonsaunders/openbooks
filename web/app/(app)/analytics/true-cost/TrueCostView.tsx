@@ -176,7 +176,6 @@ async function switchProfile(activeProfileId: string): Promise<ApiResult> {
 type CellRef = { catId: string; deptId: string }
 
 export function TrueCostView({ data: initialData, mode = 'analytics' }: { data: TrueCostData; mode?: TrueCostMode }) {
-  const rate = useRate()
   const catRate = useCategoryRate()
   const whole = useWholeNumber()
   const percent = usePercent()

@@ -5,7 +5,7 @@ import { currentAnalyticsRead, analyticsSection } from "./read-context";
 import { analyticsConfig } from "./config";
 import type { ConfigValuesOf } from "./config-spec";
 import { flowRates, MissingExchangeRateError, presentationCurrency, type FlowRates } from "../fx-presentation";
-import { add, cmp, mulDecimal, sum } from "@openbooks/engine/money";
+import { add, cmp, mulDecimal } from "@openbooks/engine/money";
 import { ForbiddenError, type Authz } from "../authz";
 import { sentinelAccessDenied } from "./sentinel-access";
 import { auditEventArgs, type ConformityCode, type SentinelStrings, sentinelStrings } from "./sentinel-strings";

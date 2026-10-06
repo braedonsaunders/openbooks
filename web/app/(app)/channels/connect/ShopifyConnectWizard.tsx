@@ -91,15 +91,18 @@ export function ShopifyConnectWizard() {
   // another tab, or the operator left mid-flow): the review endpoint
   // answers for any unaccepted channel, so reopening it here restores
   // the exact pending state instead of starting a second channel.
-  useEffect(() => {
-    if (!resumeChannel) return
+  const [resumed, setResumed] = useState<string | null>(null)
+  if (resumeChannel && resumeChannel !== resumed) {
+    setResumed(resumeChannel)
     setChannelId(resumeChannel)
     setStep('review')
-  }, [resumeChannel])
+  }
 
   useEffect(() => {
     if (step !== 'review' || !channelId || review) return
     const controller = new AbortController()
+    // Starting a review read clears the previous read's failure banner.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setReviewFailure(null)
     void waitForShopifyReview<Review>(channelId, {
       signal: controller.signal,
