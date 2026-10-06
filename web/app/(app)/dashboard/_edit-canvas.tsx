@@ -1,4 +1,5 @@
 import 'server-only'
+import { getLocale } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import type React from 'react'
@@ -106,8 +107,11 @@ export async function loadDashboardView(
   // derive the loader's query set from exactly the ids that survive it, so
   // a denied widget's reader never runs.
   const visibleIds = layout.widgets.map((w) => w.id).filter((id) => id in WIDGETS && allowedWidgetIds.has(id))
+  // Week labels on the forecast chart localize to the request locale — the
+  // position reader defaults to en-US without one.
+  const locale = await getLocale()
   const [metrics, cardNodes, apps] = await Promise.all([
-    loadDashboardMetrics(authz, visibleIds),
+    loadDashboardMetrics(authz, visibleIds, undefined, locale),
     loadInsightCardNodes(authz, layout.widgets.map((w) => w.id)),
     loadDashboardApps(authz),
   ])
@@ -159,8 +163,9 @@ export async function loadDashboardEditCanvas(
   const placed = new Set(layout.widgets.map((w) => w.id))
   const previewIds = Object.keys(WIDGETS).filter((id) => widgetAllowed(id) && (!WIDGETS[id]!.analyticsSource || placed.has(id)))
   const previewSet = new Set(previewIds)
+  const previewLocale = await getLocale()
   const [data, libraryCards, placedCardNodes, apps] = await Promise.all([
-    loadDashboardMetrics(authz, previewIds),
+    loadDashboardMetrics(authz, previewIds, undefined, previewLocale),
     canUseInsights ? loadPublishedInsightCards(authz.user.orgId) : Promise.resolve([] as LibraryCard[]),
     loadInsightCardNodes(
       authz,
