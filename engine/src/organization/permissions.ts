@@ -264,7 +264,13 @@ export const PERMISSION_CATALOGUE = [
   // Admin-only like the employment keys above.
   "hrm.certifications.read",
   "hrm.certifications.manage",
-  // HR-14 end
+  // Optional operational planning and device evidence use separate grants;
+  // access remains admin-only until an organization grants a scoped role.
+  "hrm.shifts.read",
+  "hrm.shifts.manage",
+  "hrm.shifts.approve",
+  "hrm.attendance.read",
+  "hrm.attendance.manage",
   // HR-19 begin: documents and surveys — the same confidentiality rule
   // as employment. documents.read sees HR documents, templates, retention
   // state and exports; documents.manage authors templates, issues/sends/
@@ -686,7 +692,11 @@ export const PERMISSION_GROUPS: {
       // self, team, construction, then certifications keys.
       { key: "hrm.certifications.read", labelKey: permissionLabelKey("hrm.certifications.read") },
       { key: "hrm.certifications.manage", labelKey: permissionLabelKey("hrm.certifications.manage") },
-      // HR-14 end
+      { key: "hrm.shifts.read", labelKey: permissionLabelKey("hrm.shifts.read") },
+      { key: "hrm.shifts.manage", labelKey: permissionLabelKey("hrm.shifts.manage") },
+      { key: "hrm.shifts.approve", labelKey: permissionLabelKey("hrm.shifts.approve") },
+      { key: "hrm.attendance.read", labelKey: permissionLabelKey("hrm.attendance.read") },
+      { key: "hrm.attendance.manage", labelKey: permissionLabelKey("hrm.attendance.manage") },
       // HR-19 begin: appended after the construction keys so the pinned
       // group order holds.
       { key: "hrm.documents.read", labelKey: permissionLabelKey("hrm.documents.read") },
