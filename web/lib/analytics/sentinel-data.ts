@@ -1,8 +1,7 @@
 import "server-only";
 import { sql, type SQL } from "drizzle-orm";
-import { db } from "@openbooks/engine/src/platform/db.ts";
 import { analyticsQuery } from "./query";
-import { analyticsSection } from "./read-context";
+import { currentAnalyticsRead, analyticsSection } from "./read-context";
 import { analyticsConfig } from "./config";
 import type { ConfigValuesOf } from "./config-spec";
 import { flowRates, MissingExchangeRateError, presentationCurrency, type FlowRates } from "../fx-presentation";
@@ -12,7 +11,7 @@ import { sentinelAccessDenied } from "./sentinel-access";
 import { auditEventArgs, type ConformityCode, type SentinelStrings, sentinelStrings } from "./sentinel-strings";
 import { RISK_SCORING } from "./sentinel-scoring";
 export { RISK_SCORING, type RiskScoreRule, type RiskScoringSection } from "./sentinel-scoring";
-import { addCalendarDays, addMonthsClamped, calendarDaysBetween } from "@openbooks/engine/src/platform/business-date.ts";
+import { addCalendarDays, addMonthsClamped, calendarDaysBetween } from "@openbooks/engine/platform/civil-date";
 import { englishCatalogMessage } from "./catalog-strings";
 
 /**
@@ -153,7 +152,7 @@ async function assertFloorCoverage(
   pres: string,
   scope: SQL,
 ): Promise<void> {
-  const funcs = await db.execute<{ func: string; mind: string }>(sql`
+  const funcs = await analyticsQuery<{ func: string; mind: string }>(sql`
     select coalesce(s.base_currency, ${pres}) as func,
            min(coalesce(d.document_date, d.posting_date))::text as mind
       from documents d
@@ -374,7 +373,7 @@ interface FlaggedDocumentRow extends Record<string, unknown> {
 interface DuplicateGroupRow extends Record<string, unknown> {
   party_id: string | null; party_name: string; kind: string; currency: string;
   amt: string; refkey: string; cnt: string | number;
-  first_date: string; last_date: string; span_days: string | number;
+  first_date: string; last_date: string; span_days: string | number; presented_total: string;
   members: Array<{
     docId: string; docNumber: string | null; reference: string; date: string;
     amount: string; currency: string; funcAmount: string; funcCcy: string; memo: string | null;
@@ -386,6 +385,7 @@ interface VendorStatisticRow extends FlaggedDocumentRow {
   full_count?: string | number;
 }
 interface SequentialRow extends Record<string, unknown> {
+  presented_total: string;
   party_id: string; party_name: string; span_days: string | number; cnt: string | number;
   currency: string;
   start_ref: string | number; end_ref: string | number;
@@ -427,6 +427,7 @@ export async function sentinelData(
   }
   const { from, to } = period;
   const t0 = Date.now();
+  const evidenceLimit = currentAnalyticsRead()?.slug === "sentinel" ? 8 : null;
   const kindsIn = sql.join(SPEND_KINDS.map((k) => sql`${k}`), sql`, `);
   const cfg = await analyticsConfig(orgId, "sentinel");
   const DUPLICATE_THRESHOLD_DAYS = cfg.duplicateDays;
@@ -459,7 +460,7 @@ export async function sentinelData(
   // Approval limits from the org's enabled Flows: condition nodes comparing
   // `total`, per subject kind. No amount condition anywhere means the
   // threshold-trap detector is unavailable by name — never "risk: Yes".
-  const flowRows = await db.execute<{ subject_kind: string; graph: unknown }>(sql`
+  const flowRows = await analyticsQuery<{ subject_kind: string; graph: unknown }>(sql`
     select subject_kind, graph from flows where org_id = ${orgId} and enabled
   `);
   const flowLimits = extractFlowAmountLimits(
@@ -474,7 +475,7 @@ export async function sentinelData(
   // Audit-trail window in the org's own time zone: day bounds are wall
   // midnight in the org zone, converted to instants for the comparison, so a
   // deletion near local midnight lands on the org's calendar day.
-  const timeZoneRow = await db.execute<{ tz: string | null }>(sql`
+  const timeZoneRow = await analyticsQuery<{ tz: string | null }>(sql`
     select settings ->> 'timeZone' as tz from orgs where id = ${orgId}
   `);
   const auditZone = timeZoneRow.rows[0]?.tz?.trim() ? timeZoneRow.rows[0]!.tz!.trim() : "UTC";
@@ -599,7 +600,7 @@ export async function sentinelData(
     // configured band below a real Flows limit for the document's kind. Rows
     // outside every band never reach the client; with no limits at all the
     // predicate is empty and the detector reports unavailable.
-    (analyticsQuery(sql`
+    (analyticsSection('sentinel', ['benford']) ? analyticsQuery(sql`
       select d.id, d.document_number, d.kind, coalesce(d.document_date, d.posting_date)::text as date,
         abs(d.total)::text as amount, d.currency as currency,
         round(abs(d.total) * d.fx_rate, 4)::text as func_amount,
@@ -628,7 +629,7 @@ export async function sentinelData(
         )
       order by abs(d.total) desc
       limit 100
-    `)),
+    `) : Promise.resolve({ rows: [] })),
 
     // Duplicates, or the named refusal when the floor is not configured. The
     // candidate set (payable documents at or above the floor) materializes
@@ -637,7 +638,7 @@ export async function sentinelData(
     // whose date span fits the duplicate window. Currency in the key kills the
     // cross-currency false positive; the reference in the key keeps recurring
     // same-amount invoices with distinct references out. Each group reports
-    // ONE finding with every member listed. Four legs share the qualified
+    // ONE finding with a bounded native evidence preview. Four legs share the qualified
     // set: the top groups for display (cut by count and span — exact and
     // currency-blind — then re-sorted by translated value below), the full
     // group count, the excess-copy buckets every value-at-risk figure is
@@ -675,10 +676,7 @@ export async function sentinelData(
         select party_id, kind, currency, amt, refkey,
           count(*) as cnt, min(ddate) as first_date, max(ddate) as last_date,
           (max(ddate) - min(ddate)) as span_days,
-          jsonb_agg(jsonb_build_object('docId', id, 'docNumber', document_number,
-            'reference', coalesce(reference_number, ''), 'date', ddate::text,
-            'amount', amt::text, 'currency', currency, 'funcAmount', func_amt::text,
-            'funcCcy', func_ccy, 'memo', memo) order by ddate, id) as members
+          sum(round(func_amt * pres_rate, 4))::text as presented_total
         from keyed
         group by party_id, kind, currency, amt, refkey
         having count(*) >= 2 and (max(ddate) - min(ddate)) <= ${DUPLICATE_THRESHOLD_DAYS}
@@ -687,40 +685,46 @@ export async function sentinelData(
         where (first_date between ${from} and ${to} or last_date between ${from} and ${to})
       ), top as (
         select * from qualified order by cnt desc, span_days asc, party_id, kind, currency, amt, refkey limit 50
-      ), ranked_members as (
-        select q.party_id, q.kind, q.currency, q.amt, q.refkey,
-          (m.m->>'docId') as doc_id, (m.m->>'funcAmount') as func_amt,
-          (m.m->>'funcCcy') as func_ccy, (m.m->>'date') as ddate,
-          row_number() over (partition by q.party_id, q.kind, q.currency, q.amt, q.refkey
-                             order by (m.m->>'funcAmount')::numeric desc) as rn_amt,
-          row_number() over (partition by q.party_id, q.kind, q.currency, q.amt, q.refkey
-                             order by (((m.m->>'date') between ${from} and ${to})) desc,
-                                      (m.m->>'date'), (m.m->>'docId')) as rn_anchor
-        from qualified q, jsonb_array_elements(q.members) as m(m)
+      ), ranked_members as materialized (
+        select k.*,
+          row_number() over (partition by k.party_id, k.kind, k.currency, k.amt, k.refkey
+                             order by k.func_amt desc, k.ddate, k.id) as rn_amt,
+          row_number() over (partition by k.party_id, k.kind, k.currency, k.amt, k.refkey
+                             order by (k.ddate between ${from} and ${to}) desc, k.ddate, k.id) as rn_anchor
+        from keyed k join qualified q using (party_id, kind, currency, amt, refkey)
       )
       select 'group' as src, t.party_id, coalesce(p.display_name, 'Unknown') as party_name,
         t.kind, t.currency, t.amt::text as amt, t.refkey, t.cnt, t.first_date::text as first_date,
-        t.last_date::text as last_date, t.span_days, t.members,
+        t.last_date::text as last_date, t.span_days,
+        (select jsonb_agg(jsonb_build_object('docId', m.id, 'docNumber', m.document_number,
+          'reference', coalesce(m.reference_number, ''), 'date', m.ddate::text,
+          'amount', m.amt::text, 'currency', m.currency, 'funcAmount', m.func_amt::text,
+          'funcCcy', m.func_ccy, 'memo', m.memo) order by
+          case when ${evidenceLimit}::int is null then 0 else m.rn_anchor end, m.ddate, m.id)
+         from (select k.* from ranked_members k
+           where k.party_id = t.party_id and k.kind = t.kind and k.currency = t.currency
+             and k.amt = t.amt and k.refkey = t.refkey
+           order by k.rn_anchor limit ${evidenceLimit}::int) m) as members,
         null::text as func_ccy, null::text as ddate, null::text as func_amt, null::text as doc_id,
-        null::bigint as group_count
+        null::bigint as group_count, t.presented_total
       from top t
       left join parties p on p.id = t.party_id and p.org_id = ${orgId}
       union all
       select 'agg', null::uuid, null::text, null::text, null::text, null::text, null::text,
         null::int, null::text, null::text, null::int, null::jsonb,
-        null::text, null::text, null::text, null::text, count(*)
+        null::text, null::text, null::text, null::text, count(*), null::text
       from qualified
       union all
       select 'buckets', null::uuid, null::text, null::text, null::text, null::text, null::text,
         null::int, null::text, null::text, null::int, null::jsonb,
-        func_ccy, ddate::text, sum(func_amt)::text, null::text, null::bigint
+        func_ccy, ddate::text, sum(func_amt)::text, null::text, null::bigint, null::text
       from (select func_ccy, ddate, func_amt::numeric as func_amt
             from ranked_members where rn_amt > 1) excess
       group by func_ccy, ddate
       union all
       select 'anchors', null::uuid, null::text, null::text, null::text, null::text, null::text,
         null::int, null::text, null::text, null::int, null::jsonb,
-        func_ccy, ddate, func_amt, doc_id, null::bigint
+        func_ccy, ddate::text, func_amt::text, id, null::bigint, null::text
       from ranked_members where rn_anchor = 1
     `)),
 
@@ -893,19 +897,28 @@ export async function sentinelData(
         select party_id, currency, island, count(*) as cnt,
           min(ref_num) as start_ref, max(ref_num) as end_ref,
           min(doc_date) as first_date, max(doc_date) as last_date,
-          (max(doc_date) - min(doc_date)) as span_days,
-          jsonb_agg(jsonb_build_object('docId', id, 'docNumber', document_number, 'reference', reference_number,
-            'date', doc_date::text, 'amount', amount, 'currency', currency,
-            'funcAmount', func_amount, 'funcCcy', func_ccy) order by ref_num) as invoices
+          (max(doc_date) - min(doc_date)) as span_days
         from numbered
         group by party_id, currency, island
         having count(*) >= ${SEQUENTIAL_MIN} and count(*) = count(distinct ref_num)
+      ), top as (
+        select * from islands where span_days >= ${SEQUENTIAL_MIN_DAYS_FOR_FLAG}
+        order by span_days desc, cnt desc, party_id, currency limit 50
       )
       select 'detail' as src, i.*, coalesce(p.display_name, 'Unknown') as party_name,
+        (select sum(round(n.func_amount::numeric * case when n.func_ccy = ${presentationCcy} then 1
+          else ${spotRateSql(sql`n.func_ccy`, sql`n.doc_date`, presentationCcy, orgId)} end, 4))::text
+         from numbered n where n.party_id = i.party_id and n.currency = i.currency and n.island = i.island) as presented_total,
+        (select jsonb_agg(jsonb_build_object('docId', n.id, 'docNumber', n.document_number, 'reference', n.reference_number,
+          'date', n.doc_date::text, 'amount', n.amount, 'currency', n.currency,
+          'funcAmount', n.func_amount, 'funcCcy', n.func_ccy) order by n.ref_num, n.id)
+         from (select * from numbered n
+           where n.party_id = i.party_id and n.currency = i.currency and n.island = i.island
+           order by n.ref_num, n.id limit ${evidenceLimit === null ? null : 12}::int) n) as invoices,
         -- The group count applies the same span gate as the display leg:
         -- islands below the minimum span are not sequential runs.
         (select count(*) from islands where span_days >= ${SEQUENTIAL_MIN_DAYS_FOR_FLAG}) as full_count
-      from islands i
+      from top i
       left join parties p on p.id = i.party_id and p.org_id = ${orgId}
       where i.span_days >= ${SEQUENTIAL_MIN_DAYS_FOR_FLAG}
       order by i.span_days desc, i.cnt desc, i.party_id, i.currency
@@ -1310,8 +1323,7 @@ export async function sentinelData(
       date: m.date, amount: m.amount, currency: m.currency,
       funcAmount: present(m.funcAmount, m.funcCcy, m.date), memo: m.memo,
     }));
-    const presented = members.map((m) => m.funcAmount);
-    const funcTotal = sum(presented.length > 0 ? presented : ["0.0000"]);
+    const funcTotal = r.presented_total;
     let score = dupRules.base.points + dupTierBump(funcTotal) + dupSpanBump(spanDays);
     if (sameReference) score += dupRules.sharedReference.points;
     return {
@@ -1337,12 +1349,12 @@ export async function sentinelData(
   const dupAmount = translateBuckets(dupValueBuckets);
   const duplicateUnavailable = duplicateFloor === null ? strings.duplicateFloorUnset : null;
 
-  // Compatibility projection for pair-shaped readers of the finding: every
-  // within-group ordered pair, so existing consumers keep working.
+  // Pair-shaped domain readers retain every pair. Native dashboards render
+  // the group projection and avoid quadratic compatibility allocations.
   // Same-currency and same-reference by construction — the cross-currency
   // false positive cannot appear here either.
   const dupPairs: DuplicatePair[] = [];
-  for (const g of dupGroups) {
+  for (const g of evidenceLimit === null ? dupGroups : []) {
     const ms = g.members;
     for (let i = 0; i < ms.length; i++) {
       for (let j = i + 1; j < ms.length; j++) {
@@ -1459,7 +1471,7 @@ export async function sentinelData(
       docId: inv.docId, docNumber: inv.docNumber, reference: inv.reference, date: inv.date,
       amount: inv.amount, currency: inv.currency, funcAmount: present(inv.funcAmount, inv.funcCcy, inv.date),
     }));
-    const totalAmount = sum(invoices.length > 0 ? invoices.map((inv) => inv.funcAmount) : ["0.0000"]);
+    const totalAmount = r.presented_total;
     let score = spanDays >= seqHighDays ? seqRules.highSpan.points : seqRules.baseSpan.points;
     score += Math.min(count * seqRules.perInvoice.perUnit, seqRules.perInvoice.cap);
     score += ladderBump(
@@ -1523,7 +1535,7 @@ export async function sentinelData(
   for (const g of dupGroups) {
     // The group scan includes the threshold-sized boundary on both sides of
     // the report period. Anchor the single group finding to its earliest
-    // in-period member; the reason lists the whole group.
+    // in-period member; the reason gives the full count and preview evidence.
     const inPeriod = g.members.filter((m) => m.date >= from && m.date <= to);
     const anchor = inPeriod[0] ?? g.members[0]!;
     const others = g.members.filter((m) => m.docId !== anchor.docId).map((m) => m.docNumber || m.docId).join(", ");

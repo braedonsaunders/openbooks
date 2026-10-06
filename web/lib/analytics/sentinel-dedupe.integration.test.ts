@@ -14,6 +14,7 @@ const { db, env, withBypass, withOrgContext } = await import('@openbooks/engine/
 const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
 const { sentinelData } = await import('./sentinel-data')
 const { analyticsConfig } = await import('./config.ts')
+const { withAnalyticsRead } = await import('./read-context')
 import type { DuplicateGroup } from './sentinel-data.ts'
 
 type Authz = Parameters<typeof sentinelData>[2]
@@ -56,13 +57,15 @@ async function configureDuplicateFloor(orgId: string) {
   })
 }
 
-async function runSentinel(orgId: string) {
+async function runSentinel(orgId: string, native = false) {
   const authz = {
     user: { orgId, id: randomUUID() },
     permissions: new Set(['*']),
     allowedSubsidiaryIds: null,
   } as unknown as Authz
-  return withOrgContext(orgId, () => sentinelData(orgId, P, authz))
+  return withOrgContext(orgId, () => native
+    ? withAnalyticsRead({ authz, slug: 'sentinel', projection: 'tab', tab: 'detection', locale: 'en', revision: 'evidence-test', observedAt: Date.now() }, () => sentinelData(orgId, P, authz))
+    : sentinelData(orgId, P, authz))
 }
 
 function groupsOf(data: Awaited<ReturnType<typeof sentinelData>>): DuplicateGroup[] {
@@ -142,4 +145,49 @@ test('sentinel duplicates report one finding per natural-key group', { skip: !en
   } finally {
     await withBypass(() => dropScratchOrg(org.orgId))
   }
+})
+
+
+test('native evidence is bounded while full duplicate counts, money, scores and anchors remain authoritative', { skip: !env.OPENBOOKS_DB_URL }, async () => {
+  const org = await withBypass(() => createScratchOrg())
+  try {
+    await seedVendorBills(org.orgId, org.subsidiaryId, 'Repeated Supplier Invoice', Array.from({ length: 20 }, (_, index) => ({
+      num: `COPY-${index}`, currency: 'CAD', fx: '1', total: '123.4567',
+      date: index < 10 ? '2026-06-29' : '2026-07-02', ref: 'INV-REPEATED',
+    })))
+    await configureDuplicateFloor(org.orgId)
+    const full = await runSentinel(org.orgId)
+    const native = await runSentinel(org.orgId, true)
+    assert.equal(full.duplicates.groups[0]?.members.length, 20)
+    assert.equal(native.duplicates.groups[0]?.members.length, 8)
+    assert.equal(native.duplicates.groups[0]?.count, 20)
+    assert.equal(native.duplicates.groups[0]?.funcTotal, '2469.1340')
+    assert.equal(native.duplicates.groups[0]?.funcTotal, full.duplicates.groups[0]?.funcTotal)
+    assert.equal(native.duplicates.groups[0]?.riskScore, full.duplicates.groups[0]?.riskScore)
+    assert.equal(native.summary.totalDuplicateAmount, full.summary.totalDuplicateAmount)
+    assert.equal(native.summary.flaggedCount, full.summary.flaggedCount)
+    assert.deepEqual(native.flagged.filter(row => row.flagType === 'duplicate').map(row => row.docId), full.flagged.filter(row => row.flagType === 'duplicate').map(row => row.docId))
+    assert.equal(native.duplicates.pairs.length, 0)
+    assert.equal(full.duplicates.pairs.length, 190)
+  } finally { await withBypass(() => dropScratchOrg(org.orgId)) }
+})
+
+test('sequential evidence limits retain the full run count and translated risk total', { skip: !env.OPENBOOKS_DB_URL }, async () => {
+  const org = await withBypass(() => createScratchOrg())
+  try {
+    await seedVendorBills(org.orgId, org.subsidiaryId, 'Long Invoice Run', Array.from({ length: 20 }, (_, index) => ({
+      num: `RUN-${index}`, currency: 'CAD', fx: '1', total: '100.0001',
+      date: index < 10 ? '2026-07-01' : '2026-07-15', ref: `INV-${100 + index}`,
+    })))
+    await configureDuplicateFloor(org.orgId)
+    const full = await runSentinel(org.orgId)
+    const native = await runSentinel(org.orgId, true)
+    assert.equal(native.sequential[0]?.count, 20)
+    assert.equal(native.sequential[0]?.invoices.length, 12)
+    assert.equal(native.sequential[0]?.totalAmount, '2000.0020')
+    assert.equal(native.sequential[0]?.riskScore, full.sequential[0]?.riskScore)
+    assert.equal(native.sequential[0]?.totalAmount, full.sequential[0]?.totalAmount)
+    assert.equal(native.summary.sequentialGroups, full.summary.sequentialGroups)
+    assert.equal(native.summary.totalAtRisk, full.summary.totalAtRisk)
+  } finally { await withBypass(() => dropScratchOrg(org.orgId)) }
 })
