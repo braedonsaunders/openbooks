@@ -26,7 +26,7 @@ export async function employeeEmployerAssignmentHistory(tx: Reader, input: {
   orgId: string; payDate: string; employeePartyIds: readonly string[];
 }): Promise<EmployerAssignmentSource[]> {
   if (!input.employeePartyIds.length || !await available(tx)) return [];
-  return (await tx.execute<EmployerAssignmentSource>(sql`select id::text, employee_party_id::text as "employeePartyId",
+  return (await tx.execute<EmployerAssignmentSource & Record<string, unknown>>(sql`select id::text, employee_party_id::text as "employeePartyId",
     subsidiary_id::text as "subsidiaryId", assignment_kind as kind, effective_from::text as "effectiveFrom", effective_to::text as "effectiveTo",
     filing_account_id::text as "filingAccountId",worker_comp_group_id::text as "workerCompGroupId",
     to_char(created_at at time zone 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as "createdAt",source_reference as "sourceReference"
@@ -80,6 +80,7 @@ export async function recordHistoricalEmployerAssignment(input: {
     || !['filing_account','worker_comp'].includes(input.kind) || input.allowedSubsidiaryIds === undefined || typeof input.dryRun !== 'boolean') {
     throw new PayrollError('Choose native employee and assignment IDs, declare the reviewed current value, and specify your legal-entity scope.');
   }
+  const allowedSubsidiaryIds = input.allowedSubsidiaryIds;
   if (!isIsoCalendarDate(input.effectiveFrom) || !isIsoCalendarDate(input.effectiveTo) || input.effectiveTo < input.effectiveFrom
     || input.effectiveFrom.slice(0,4) !== input.effectiveTo.slice(0,4) || Number(input.effectiveFrom.slice(0,4)) < 2000 || Number(input.effectiveFrom.slice(0,4)) > 2100) {
     throw new PayrollError('Enter a bounded historical employer assignment within one supported tax year (2000–2100).');
@@ -91,7 +92,7 @@ export async function recordHistoricalEmployerAssignment(input: {
     await requirePayrollFeature(tx,input.orgId);
     if (!await available(tx)) throw new PayrollError('Historical employer assignments are not installed — run the authorized database bootstrap before previewing this import.');
     await takeEmployeeTaxYearFences(tx,[employeeTaxYearFenceKey(input.orgId,input.employeePartyId,input.effectiveFrom.slice(0,4))]);
-    await lockScopeRows(tx,input.orgId,[{kind:'party',id:input.employeePartyId}],input.allowedSubsidiaryIds,'share');
+    await lockScopeRows(tx,input.orgId,[{kind:'party',id:input.employeePartyId}],allowedSubsidiaryIds,'share');
     await lockScopeRows(tx,input.orgId,[{kind:'party',id:input.employeePartyId}],authority,'share');
     if (input.effectiveTo>=await businessTodayInTx(tx,input.orgId)) throw new PayrollError('Historical assignments must end before today — use the employee payroll settings for current assignments.');
     const profile=(await tx.execute<{ country: string; subsidiary_id: string | null; filing_account_id: string | null }>(sql`
