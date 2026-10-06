@@ -630,7 +630,7 @@ jobs:
     needs: [scope, typecheck]
     if: github.event_name == 'workflow_dispatch' && needs.scope.outputs.browser == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
@@ -711,8 +711,11 @@ jobs:
             next-${{ runner.os }}-${{ hashFiles('package-lock.json') }}-
 
       - name: Build browser application
+        # The production image's compiler and heap budget (Dockerfile): a
+        # cold build after a lockfile change stays within the runner.
         env:
           OPENBOOKS_DB_URL: ${{ env.OPENBOOKS_RUNTIME_DB_URL }}
+          NODE_OPTIONS: --max-old-space-size=6144
         run: npm run build -w web
 
       - name: Save Next compiler cache
@@ -753,7 +756,7 @@ jobs:
     needs: [scope, typecheck]
     if: github.event_name == 'workflow_dispatch' && needs.scope.outputs.browser == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
@@ -870,8 +873,11 @@ jobs:
           done
 
       - name: Build browser application
+        # The production image's compiler and heap budget (Dockerfile): a
+        # cold build after a lockfile change stays within the runner.
         env:
           OPENBOOKS_DB_URL: ${{ env.OPENBOOKS_RUNTIME_DB_URL }}
+          NODE_OPTIONS: --max-old-space-size=6144
         run: npm run build -w web
 
       - name: Playwright workflow suites

@@ -447,8 +447,8 @@ test('each transaction module permission exposes only its own document kinds', a
     assert.deepEqual(boundKinds(query), expectedKinds, `${permission}: SQL kind allowlist`)
     assert.equal(
       query.text.match(/d\.kind in/g)?.length,
-      4,
-      `${permission}: both candidate legs, the exact-number leg, and the final read must be permission-filtered`,
+      5,
+      `${permission}: both candidate legs, the line-description leg, the exact-number leg, and the final read must be permission-filtered`,
     )
   }
 })
@@ -744,7 +744,7 @@ test('exact document numbers bypass the candidate cap and order first', async ()
   assert.match(query.text, /d\.document_number = \?/, 'exact-equality candidate leg')
   assert.match(
     query.text,
-    /order by \(d\.document_number = \?\) desc/,
+    /order by \(d\.document_number = \? or d\.external_ref = \?\) desc/,
     'exact matches order before fuzzy neighbors',
   )
   assert.ok(query.values.includes('VENDOR_PAYMENT'), 'exact leg binds the raw query')
