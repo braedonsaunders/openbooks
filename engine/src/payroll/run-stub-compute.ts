@@ -364,24 +364,6 @@ export async function calculateStub(
   const plans = await entitlementPlans(orgId, tx);
   // Resolved on the plan's ENGINE BINDING, never on its operator-typed code.
   const vacationPlan = vacationPlanOf(plans);
-  const vacationElection = emp.employment_id ? await resolveVacationTerms(tx, orgId, emp.employment_id, run.period_end!) : null;
-  if (vacationPlan && !vacationElection) throw new PayrollError(`${emp.display_name ?? employeePartyId} has no effective vacation terms; configure their vacation method and entitlement in Benefits before calculating payroll.`);
-  if (vacationElection && vacationElection.planId !== vacationPlan?.id) throw new PayrollError(`${emp.display_name ?? employeePartyId} has vacation terms assigned to a different or inactive program; activate their governing vacation program in Benefits before calculating payroll.`);
-  vacationPercent = vacationElection?.percentFloor ?? vacationPlan?.accrualValue ?? null;
-  const vacationMethod = vacationElection?.method ?? null;
-  assertVacationPlanResolved({ ...emp, vacation_percent: vacationPercent, vacation_method: vacationMethod }, vacationPlan, terminationRun);
-  const vacationTerms = vacationPlan ? await resolveServiceTier(tx, orgId, employeePartyId, run.period_end!, emp.employment_id ?? undefined) : null;
-  const vacationTier = vacationPlan ? vacationTerms?.planAccrualValues.get(vacationPlan.id) : null;
-  const paidLeave = vacationMethod === "paid_leave";
-  const personalDays = vacationElection?.annualDaysFloor;
-  const policyDays = vacationPlan ? vacationTerms?.planAnnualDays.get(vacationPlan.id) : null;
-  const annualDays = personalDays != null && (policyDays == null || cmp(personalDays, policyDays) > 0) ? personalDays : policyDays;
-  if (paidLeave && (annualDays == null || cmp(annualDays, "0") <= 0)) throw new PayrollError(`${emp.display_name ?? employeePartyId} has paid leave without an annual day allowance; enter their annual vacation days or configure the reached service tier.`);
-  // Personal vacation terms are a floor: progression must never erase a
-  // separately granted higher employee rate. Paid leave keeps salary running
-  // and never creates a second percentage payment or money-bank accrual.
-  if (paidLeave) vacationPercent = null;
-  else if (vacationTier != null && (vacationPercent == null || cmp(vacationTier, vacationPercent) > 0)) vacationPercent = vacationTier;
 
   // Ordinary cash is snapshotted before derived vacation and bank payouts.
   // Vacationable non-cash premiums then enter the native entitlement basis;
@@ -401,6 +383,30 @@ export async function calculateStub(
     oneOffRun, simulate: ctx.simulate, lines, entitlementMovements,
   };
   await appendRecurringBenefitLines(tx, { ...recurringBenefitInput, stage: "vacationable_earnings" });
+
+  const vacationElection = emp.employment_id ? await resolveVacationTerms(tx, orgId, emp.employment_id, run.period_end!) : null;
+  const vacationableEarnings = lines.some(line => line.kind === 'earning' && !line.accrualOnly &&
+    (line.vacationable ?? true) && line.componentId !== vacationPlan?.payoutComponentId && cmp(line.amount, '0') !== 0);
+  // No method or rate is needed to accrue zero on earnings explicitly excluded
+  // from vacation. Any eligible earning, including a non-cash benefit, or a
+  // final settlement still requires documented terms before calculation.
+  if (vacationPlan && !vacationElection && (vacationableEarnings || terminationRun)) throw new PayrollError(`${emp.display_name ?? employeePartyId} has no effective vacation terms; configure their vacation method and entitlement in Benefits before calculating payroll.`);
+  if (vacationElection && vacationElection.planId !== vacationPlan?.id) throw new PayrollError(`${emp.display_name ?? employeePartyId} has vacation terms assigned to a different or inactive program; activate their governing vacation program in Benefits before calculating payroll.`);
+  vacationPercent = vacationElection?.percentFloor ?? (vacationElection ? vacationPlan?.accrualValue ?? null : null);
+  const vacationMethod = vacationElection?.method ?? null;
+  assertVacationPlanResolved({ ...emp, vacation_percent: vacationPercent, vacation_method: vacationMethod }, vacationPlan, terminationRun);
+  const vacationTerms = vacationPlan && vacationElection ? await resolveServiceTier(tx, orgId, employeePartyId, run.period_end!, emp.employment_id ?? undefined) : null;
+  const vacationTier = vacationPlan ? vacationTerms?.planAccrualValues.get(vacationPlan.id) : null;
+  const paidLeave = vacationMethod === "paid_leave";
+  const personalDays = vacationElection?.annualDaysFloor;
+  const policyDays = vacationPlan ? vacationTerms?.planAnnualDays.get(vacationPlan.id) : null;
+  const annualDays = personalDays != null && (policyDays == null || cmp(personalDays, policyDays) > 0) ? personalDays : policyDays;
+  if (paidLeave && (annualDays == null || cmp(annualDays, "0") <= 0)) throw new PayrollError(`${emp.display_name ?? employeePartyId} has paid leave without an annual day allowance; enter their annual vacation days or configure the reached service tier.`);
+  // Personal vacation terms are a floor: progression must never erase a
+  // separately granted higher employee rate. Paid leave keeps salary running
+  // and never creates a second percentage payment or money-bank accrual.
+  if (paidLeave) vacationPercent = null;
+  else if (vacationTier != null && (vacationPercent == null || cmp(vacationTier, vacationPercent) > 0)) vacationPercent = vacationTier;
 
   await settleTerminationBankPayouts(tx, {
     orgId, documentId, payDate: run.pay_date!, employeePartyId, employmentId,
@@ -440,7 +446,7 @@ export async function calculateStub(
   vacationAccrued = await applyEntitlementPlanMovements(tx, {
     orgId, documentId, employeePartyId, payDate: run.pay_date!,
     employeeName: emp.display_name ?? employeePartyId,
-    employmentId: emp.employment_id ?? undefined, policyDate: run.period_end!, vacationPercent, payVacationInCash, excludeVacationAccrual: paidLeave, vacationPlan, plans,
+    employmentId: emp.employment_id ?? undefined, policyDate: run.period_end!, vacationPercent, payVacationInCash, excludeVacationAccrual: paidLeave || vacationElection === null, vacationPlan, plans,
     lines, entitlementMovements, entitlementWarnings,
   });
 
