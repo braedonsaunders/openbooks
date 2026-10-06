@@ -12,7 +12,7 @@
  *   as employer corroboration, filing_account_id recorded on the profile)
  *   with the schedule subsidiary carried as the payroll scope;
  * - the observable facts anchoring a CURRENT observation: the latest
- *   committed pay stub date, the latest approved timesheet week, and the
+ *   committed pay stub date, the latest positive net approved work date, and the
  *   entitlement ledger's latest movement date.
  *
  * Mapping rules (the classifier in ./migration-preflight.ts owns every
@@ -29,12 +29,11 @@
  *   (stored data only — never now(), so re-collection is byte-identical).
  *   Status is terminated when a termination event is recorded, else active.
  *   With NO anchor at all, a recorded employee_roles.terminated_on anchors a
- *   TERMINATED observation on its own (Braedon's ruling, 2026-09-21: "the
- *   others are old inactive employees" — the org already records when they
- *   left). The rule is one-directional by design: an absent terminated_on
+ *   TERMINATED observation on its own: the employer already records when
+ *   the employee left. The rule is one-directional by design: an absent terminated_on
  *   never implies active, and an active status still needs a pay stub,
- *   timesheet or entitlement anchor. Do not "finish" this into a symmetric
- *   rule: it would let an org with no payroll history migrate its whole
+ *   approved work entry or entitlement anchor. A symmetric rule would be
+ *   incorrect because it would let an org with no payroll history migrate its whole
  *   roster as active on no evidence at all.
  *   Activity dated AFTER the recorded termination is a genuine conflict this
  *   module cannot resolve: it is reported with status unknown and a
@@ -83,11 +82,10 @@ import { isUuid } from "../platform/uuid.ts";
 /** Source namespace for legacy-extracted employment evidence. */
 export const LEGACY_EMPLOYMENT_SOURCE_NAMESPACE = "legacy-extract";
 
-/** Collector contract version: a collector change drifts every binding. */
-/** Bumped when the collector's derivation rules change meaning (v2: a
- * recorded terminated_on anchors a terminated observation when nothing else
- * does), so a pinned collection names the rules it was collected under. */
-export const COLLECTOR_SOURCE_VERSION = "collect-v2";
+/** Approved work dates replace empty weekly headers; terminated observations
+ * are anchored no earlier than the recorded termination event. A pinned
+ * collection names these derivation rules without rewriting older bindings. */
+export const COLLECTOR_SOURCE_VERSION = "collect-v3";
 
 const EVIDENCE_HASH_VERSION = "openbooks/hrm-migration-collect/evidence/v1";
 
@@ -215,7 +213,7 @@ interface AnchorRecord {
   schedule_subsidiary_id: string | null;
 }
 
-interface WeekRecord {
+interface ActivityRecord {
   employee_party_id: string;
   anchor_date: string;
   anchor_id: string;
@@ -316,14 +314,17 @@ export async function collectLegacyEmployments(
        where s.org_id = ${orgId}
          and r.run_status = 'committed'
          and s.employee_party_id in (${partyList})`);
-    const weekRows = await selectAll<WeekRecord>(sql`
-      select w.employee_party_id::text as employee_party_id,
-             w.week_start::text as anchor_date, w.id::text as anchor_id
-        from timesheet_weeks w
-       where w.org_id = ${orgId}
-         and w.status = 'approved'
-         and w.employee_party_id in (${partyList})`);
-    const ledgerRows = await selectAll<WeekRecord>(sql`
+    // Empty approved weeks and zero-hour placeholders prove no work. Net
+    // corrections by employee and worked date before selecting an anchor.
+    const workRows = await selectAll<ActivityRecord>(sql`
+      select t.employee_party_id::text as employee_party_id,
+             t.worked_on::text as anchor_date, string_agg(t.id::text,'+' order by t.id) as anchor_id
+        from time_entries t
+       where t.org_id = ${orgId}
+         and t.status = 'approved'
+         and t.employee_party_id in (${partyList})
+       group by t.employee_party_id,t.worked_on having sum(t.hours)>0`);
+    const ledgerRows = await selectAll<ActivityRecord>(sql`
       select e.employee_party_id::text as employee_party_id,
              e.movement_date::text as anchor_date, e.id::text as anchor_id
         from entitlement_ledger e
@@ -331,7 +332,7 @@ export async function collectLegacyEmployments(
          and e.employee_party_id in (${partyList})`);
 
     const stubsByParty = groupAnchors(stubRows);
-    const weeksByParty = groupAnchors(weekRows);
+    const workByParty = groupAnchors(workRows);
     const ledgerByParty = groupAnchors(ledgerRows);
     const mappingByParty = new Map(mappings.map((mapping) => [mapping.partyId, mapping]));
 
@@ -354,7 +355,7 @@ export async function collectLegacyEmployments(
         profile,
         subsidiaryFacts,
         stubs: stubsByParty.get(role.party_id) ?? [],
-        weeks: weeksByParty.get(role.party_id) ?? [],
+        work: workByParty.get(role.party_id) ?? [],
         ledger: ledgerByParty.get(role.party_id) ?? [],
         mapping,
       });
@@ -388,7 +389,7 @@ interface Anchor {
   readonly scheduleSubsidiaryId: string | null;
 }
 
-function groupAnchors(rows: readonly (AnchorRecord | WeekRecord)[]): Map<string, Anchor[]> {
+function groupAnchors(rows: readonly (AnchorRecord | ActivityRecord)[]): Map<string, Anchor[]> {
   const grouped = new Map<string, Anchor[]>();
   for (const row of rows) {
     const anchor: Anchor = {
@@ -404,7 +405,7 @@ function groupAnchors(rows: readonly (AnchorRecord | WeekRecord)[]): Map<string,
 }
 
 interface AnchorSource {
-  readonly source: "pay_stubs" | "timesheet_weeks" | "entitlement_ledger";
+  readonly source: "pay_stubs" | "time_entries" | "entitlement_ledger";
   readonly anchors: readonly Anchor[];
 }
 
@@ -423,7 +424,7 @@ interface BuildRowInput {
   readonly profile: ProfileRecord | null;
   readonly subsidiaryFacts: readonly SubsidiaryFact[];
   readonly stubs: readonly Anchor[];
-  readonly weeks: readonly Anchor[];
+  readonly work: readonly Anchor[];
   readonly ledger: readonly Anchor[];
   readonly mapping: OperatorEmploymentMapping | null;
 }
@@ -466,7 +467,7 @@ function buildRow(input: BuildRowInput): SourcePersonRow {
 
   const sources: readonly AnchorSource[] = [
     { source: "pay_stubs", anchors: input.stubs },
-    { source: "timesheet_weeks", anchors: input.weeks },
+    { source: "time_entries", anchors: input.work },
     { source: "entitlement_ledger", anchors: input.ledger },
   ];
   const latestPerSource = sources.map((entry) => ({
@@ -515,16 +516,14 @@ function buildRow(input: BuildRowInput): SourcePersonRow {
     } else {
       observation = {
         status: termination !== null ? "terminated" : "active",
-        observedAt: `${anchorDate}T00:00:00Z`,
-        provenance: anchorProvenance,
+        observedAt: `${termination ?? anchorDate}T00:00:00Z`,
+        provenance: termination !== null && termination !== anchorDate
+          ? `${anchorProvenance}+employee_roles.terminated_on:${termination}` : anchorProvenance,
       };
     }
   } else if (role.terminated_on !== null) {
-    // No pay stub, timesheet or entitlement movement anchors this person, but
-    // the org recorded when they left. Braedon's ruling (2026-09-21): a
-    // recorded employee_roles.terminated_on ANCHORS a terminated observation
-    // ("the others are old inactive employees"); the strict rule was refusing
-    // to state something the org actually knows.
+    // No activity anchors this person, but the recorded termination is
+    // direct evidence of when the employment ended.
     //
     // ONE DIRECTION ONLY. An absent terminated_on never implies active — the
     // branch above still requires an activity anchor for that — because a

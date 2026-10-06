@@ -136,6 +136,11 @@ async function seedApprovedWeek(org: ScratchOrg, partyId: string, weekStart: str
   });
 }
 
+async function seedWork(org: ScratchOrg, partyId: string, workedOn: string, hours = '8', status = 'approved'): Promise<void> {
+  await withOrg(org.orgId, () => db.execute(sql`insert into time_entries(org_id,employee_party_id,worked_on,hours,status,is_billable,billing_status,costing_basis)
+    values(${org.orgId},${partyId},${workedOn}::date,${hours},${status},false,'unbilled','actual')`));
+}
+
 async function seedLedgerMovement(org: ScratchOrg, partyId: string, movementDate: string): Promise<void> {
   const planId = randomUUID();
   await withOrg(org.orgId, async () => {
@@ -182,7 +187,7 @@ test("clean employees collect to ready rows with observation candidates", { skip
     const activeRow = rowByParty(collected.rows, active.partyId);
     assert.ok(activeRow.role, "collected rows always carry the role inventory");
     assert.equal(activeRow.sourceId, active.roleId);
-    assert.equal(activeRow.sourceVersion, "collect-v2");
+    assert.equal(activeRow.sourceVersion, "collect-v3");
     assert.equal(activeRow.party.kind, "employee");
     assert.equal(activeRow.employer.assertedSubsidiaryId, org.subsidiaryId);
     assert.ok(
@@ -370,14 +375,15 @@ test("every anchor source maps to an observation", { skip }, async () => {
     const entitled = await seedEmployee(
       org, "Collector Entitled", { hiredOn: "2023-03-01" }, { scheduleId });
     await seedApprovedWeek(org, weekly.partyId, "2026-09-13");
+    await seedWork(org, weekly.partyId, "2026-09-14");
     await seedLedgerMovement(org, entitled.partyId, "2026-09-01");
 
     const collected = await collectLegacyEmployments(org.orgId);
     assert.equal(collected.rows.length, 2);
     const weeklyRow = rowByParty(collected.rows, weekly.partyId);
     assert.equal(weeklyRow.observation?.status, "active");
-    assert.equal(weeklyRow.observation?.observedAt, "2026-09-13T00:00:00Z");
-    assert.ok((weeklyRow.observation?.provenance ?? "").includes("timesheet_weeks"));
+    assert.equal(weeklyRow.observation?.observedAt, "2026-09-14T00:00:00Z");
+    assert.ok((weeklyRow.observation?.provenance ?? "").includes("time_entries"));
     const entitledRow = rowByParty(collected.rows, entitled.partyId);
     assert.equal(entitledRow.observation?.status, "active");
     assert.equal(entitledRow.observation?.observedAt, "2026-09-01T00:00:00Z");
@@ -445,7 +451,7 @@ test("a recorded terminated_on alone anchors a terminated observation that migra
       observedAt: "2019-11-30T00:00:00Z",
       provenance: "employee_roles.terminated_on",
     });
-    assert.equal(departedRow.sourceVersion, "collect-v2");
+    assert.equal(departedRow.sourceVersion, "collect-v3");
     // The asymmetry: the same absence of anchors with no termination date
     // yields nothing, never active.
     assert.equal(rowByParty(collected.rows, undated.partyId).observation, null);
@@ -678,4 +684,30 @@ test("two collections of one org are byte-identical", { skip }, async () => {
   } finally {
     await dropScratchOrg(org.orgId);
   }
+});
+
+
+test('empty weeks and nil or reversed hours cannot invent employment after termination; actual later work still refuses', { skip }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const person = await seedEmployee(org, 'Former employee', { hiredOn: '2024-01-01', terminatedOn: '2026-01-12' }, null);
+    await seedWork(org, person.partyId, '2026-01-09');
+    await seedApprovedWeek(org, person.partyId, '2026-01-18');
+    await seedWork(org, person.partyId, '2026-01-19', '0');
+    await seedWork(org, person.partyId, '2026-01-20', '8');
+    await seedWork(org, person.partyId, '2026-01-20', '-8');
+    await seedWork(org, person.partyId, '2026-01-21', '8', 'draft');
+    const before = rowByParty((await collectLegacyEmployments(org.orgId)).rows, person.partyId);
+    assert.equal(before.observation?.status, 'terminated');
+    assert.equal(before.observation?.observedAt, '2026-01-12T00:00:00Z');
+    assert.match(before.observation!.provenance, /time_entries:.*@2026-01-09.*employee_roles.terminated_on:2026-01-12/);
+    assert.equal(preflightEmploymentMigration([before]).rows[0]!.classification, 'ready');
+    await seedWork(org, person.partyId, '2026-01-22', '1');
+    const after = rowByParty((await collectLegacyEmployments(org.orgId)).rows, person.partyId);
+    assert.equal(after.observation?.status, 'unknown');
+    assert.equal(after.observation?.conflict?.activityDate, '2026-01-22');
+    const refusal = preflightEmploymentMigration([after]).rows[0]!;
+    assert.ok(refusal.issues.some(issue => issue.code === 'post_termination_activity'));
+    assert.ok(refusal.issues.some(issue => issue.detail.includes('2026-01-12') && issue.detail.includes('2026-01-22')));
+  } finally { await dropScratchOrg(org.orgId); }
 });
