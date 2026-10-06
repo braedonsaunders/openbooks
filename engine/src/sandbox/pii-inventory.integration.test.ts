@@ -3,7 +3,7 @@ import { test } from "node:test";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { loadCatalog } from "./catalog.ts";
-import { DEFAULT_POLICIES, type MaskTransform } from "./masking.ts";
+import { DEFAULT_POLICIES, maskExpr, type MaskTransform } from "./masking.ts";
 
 // D2b: table-driven PII inventory. The clone copies every column unless a
 // masking policy rewrites it, so a new sensitive column defaults to a
@@ -2562,4 +2562,17 @@ test("every masking policy names a real schema column with a legal transform", a
     if (!LEGAL_TRANSFORMS.has(p.transform)) bad.push(`${p.tableName}.${p.columnName} (unknown transform ${p.transform})`);
   }
   assert.deepEqual(bad, [], `masking policies that never fire: ${bad.join(", ")}`);
+  const sourceKey = "employee-review:987654321";
+  const policies = new Map(DEFAULT_POLICIES.filter((p) => p.tableName === "hrm_comp_cycles").map((p) => [p.columnName, p.transform]));
+  const evidenceColumn = { tableName: "hrm_comp_cycles", udtName: "jsonb", isNullable: true };
+  const masked = (await db.execute<{ source_key: string | null; source_evidence: unknown }>(sql`
+    select ${sql.raw(maskExpr("source_key", policies.get("source_key")!))} as source_key,
+           ${sql.raw(maskExpr("source_evidence", policies.get("source_evidence")!, "id", evidenceColumn))} as source_evidence
+      from (values (${sourceKey}::text, '{"employee":{"name":"Production Employee","governmentId":"987654321"}}'::jsonb),
+                   (null::text, null::jsonb)) as source(source_key, source_evidence)
+     order by source_key nulls last`)).rows;
+  assert.match(masked[0]!.source_key!, /^[a-f0-9]{32}$/);
+  assert.notEqual(masked[0]!.source_key, sourceKey);
+  assert.deepEqual(masked[0]!.source_evidence, { redacted: true });
+  assert.deepEqual(masked[1], { source_key: null, source_evidence: null });
 });
