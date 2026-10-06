@@ -125,6 +125,7 @@
       "next30": "30 prochains jours",
       "dpo": "Délai de paiement (DPO)",
       "dpoSub": "Jours moyens de paiement",
+      "dpoEmpty": "Aucun historique de paiement",
       "days": "{n} j"
     },
     "panels": {

@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { Pencil, Plus, SlidersHorizontal } from 'lucide-react'
@@ -112,15 +112,17 @@ export function CategoryManager({
   const [editIdx, setEditIdx] = useState<number | null>(null)
   const [draft, setDraft] = useState<ForecastCategory | null>(null)
 
-  // Authoritative list of raw configs (payloads carry computed rows).
-  const applyRemote = (j: unknown) => {
+  // Authoritative list of raw configs (payloads carry computed rows) —
+  // stable, so the mount fetch below lists real deps instead of disabling
+  // the rule.
+  const applyRemote = useCallback((j: unknown) => {
     if (j && Array.isArray((j as { categories?: unknown }).categories)) {
       setCats((j as { categories: ForecastCategory[] }).categories)
     }
     if (j && typeof (j as { revision?: unknown }).revision === 'number') {
       setRevision((j as { revision: number }).revision)
     }
-  }
+  }, [])
   const reload = async (): Promise<ForecastCategory[] | null> => {
     try {
       const r = await fetch('/api/analytics/cashflow/categories')
@@ -147,8 +149,7 @@ export function CategoryManager({
       })
       .then((j) => { applyRemote(j) })
       .catch(() => {})
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [applyRemote, tCommon])
 
   const glAccounts = accountOptions.filter((a) => !a.type || !['asset_bank', 'liability_card'].includes(a.type))
   const cardAccounts = accountOptions.filter((a) => a.type === 'liability_card')

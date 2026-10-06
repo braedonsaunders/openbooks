@@ -139,6 +139,7 @@
       "next30": "Próximos 30 días",
       "dso": "Días de ventas pendientes (DSO)",
       "dsoSub": "Promedio de días para cobrar",
+      "dsoEmpty": "Sin historial de cobros",
       "days": "{n} d",
       "asOf": "Al {date}"
     },

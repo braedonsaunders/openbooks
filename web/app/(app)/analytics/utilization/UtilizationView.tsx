@@ -183,8 +183,8 @@ function EntriesDrawer({ kind, id, name, sub, peer, from, to, onClose }: {
     fetch(`/api/analytics/utilization/entries?${kind}=${encodeURIComponent(id)}&from=${from}&to=${to}`)
       .then(async (r) => {
         // The entries route refuses with a NAMED 422 (e.g. "no spot rate
-        // for EUR to USD on or before DATE"): surface the refusal body, not
-        // just a generic load failure.
+        // for EUR→USD on or before DATE — add it at Setup → Exchange
+        // Rates"): surface the refusal body, not just a generic load failure.
         if (!r.ok) throw new Error(await refusalMessage(r))
         return r.json()
       })

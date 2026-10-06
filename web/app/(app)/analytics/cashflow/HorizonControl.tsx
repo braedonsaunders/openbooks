@@ -18,11 +18,17 @@ export function HorizonControl({ value }: { value: number }) {
     router.replace(`${pathname}?${next.toString()}`)
   }
 
+  // A configured default outside the presets still selects: without its own
+  // option the control would show a blank value for the horizon the page
+  // actually forecasts.
+  const options = CASH_HORIZON_PRESETS.includes(value as (typeof CASH_HORIZON_PRESETS)[number])
+    ? [...CASH_HORIZON_PRESETS]
+    : [...CASH_HORIZON_PRESETS, value].sort((a, b) => a - b)
   return (
     <label className="flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50/60 px-2.5 py-1.5 dark:border-slate-800 dark:bg-slate-900/40">
       <span className="text-[10px] font-semibold tracking-wider text-slate-400 uppercase dark:text-slate-500">{t('horizon.label')}</span>
       <Select value={String(value)} onChange={(e) => set(e.target.value)} triggerClassName="h-7 w-auto text-sm font-medium" aria-label={t('horizon.aria')}>
-        {CASH_HORIZON_PRESETS.map((weeks) => (
+        {options.map((weeks) => (
           <option key={weeks} value={String(weeks)}>{t('horizon.weeks', { count: weeks })}</option>
         ))}
       </Select>

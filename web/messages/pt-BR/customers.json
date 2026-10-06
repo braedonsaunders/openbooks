@@ -16,6 +16,7 @@
       "closedQuarter": "Faturado neste trimestre",
       "dso": "Prazo médio de recebimento",
       "dsoSub": "Dias médios para receber",
+      "dsoEmpty": "Sem histórico de recebimentos",
       "days": "{n} d",
       "activeCustomers": "Clientes ativos",
       "quotesOrders": "Orçamentos e pedidos abertos",

@@ -190,8 +190,7 @@ export function CashWeekFlyout({
     return () => {
       cancelled = true
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [week.weekStart, selectedSubsidiaryIds, horizonWeeks, fetched, fetchAttempt])
+  }, [week.weekStart, selectedSubsidiaryIds, horizonWeeks, fetched, fetchAttempt, tCommon])
   // Refused categories read as zeros but still get their tab: filtering on a
   // positive week would silently drop them, hiding the refusal.
   const weekCats = categories.filter((c) => c.unavailable !== undefined || compareMoney(c.weekly[weekIndex] ?? ZERO_MONEY, ZERO_MONEY) > 0)
@@ -702,8 +701,15 @@ function MethodPill({ method }: { method: string }) {
   }
   const m = map[base]
   const label = m ? t(m.key) : base
+  // The deferred week is a calendar date, not an identifier: render it in
+  // the request locale (noon-anchored UTC, like every other day label) so a
+  // German operator never reads an ISO stamp in a translated tooltip.
+  const locale = useLocale()
+  const deferredDay = deferred?.[1] !== undefined
+    ? new Date(`${deferred[1]}T12:00:00Z`).toLocaleDateString(locale, { dateStyle: 'medium', timeZone: 'UTC' })
+    : null
   return (
-    <span title={deferred?.[1] !== undefined ? `${label} (${t('deferredFrom', { date: deferred[1] })})` : label} className={cn('rounded-full px-2 py-0.5 text-[10px] font-semibold whitespace-nowrap', m?.cls ?? 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300')}>
+    <span title={deferredDay !== null ? `${label} (${t('deferredFrom', { date: deferredDay })})` : label} className={cn('rounded-full px-2 py-0.5 text-[10px] font-semibold whitespace-nowrap', m?.cls ?? 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300')}>
       {label}
     </span>
   )

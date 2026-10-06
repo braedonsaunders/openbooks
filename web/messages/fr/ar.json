@@ -139,6 +139,7 @@
       "next30": "30 prochains jours",
       "dso": "Délai moyen de paiement (DSO)",
       "dsoSub": "Jours moyens avant encaissement",
+      "dsoEmpty": "Aucun historique de recouvrement",
       "days": "{n} j",
       "asOf": "Au {date}"
     },

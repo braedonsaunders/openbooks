@@ -16,6 +16,7 @@
       "closedQuarter": "今四半期の請求額",
       "dso": "売掛回転日数",
       "dsoSub": "平均回収日数",
+      "dsoEmpty": "回収履歴なし",
       "days": "{n} 日",
       "activeCustomers": "アクティブな顧客",
       "quotesOrders": "未処理の見積・受注",

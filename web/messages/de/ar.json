@@ -139,6 +139,7 @@
       "next30": "Nächste 30 Tage",
       "dso": "Forderungslaufzeit (DSO)",
       "dsoSub": "Ø Tage bis Zahlung",
+      "dsoEmpty": "Noch keine Inkassohistorie",
       "days": "{n} T.",
       "asOf": "Stand {date}"
     },

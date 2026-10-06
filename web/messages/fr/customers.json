@@ -16,6 +16,7 @@
       "closedQuarter": "Facturé ce trimestre",
       "dso": "Délai d'encaissement",
       "dsoSub": "Jours moyens pour encaisser",
+      "dsoEmpty": "Aucun historique de recouvrement",
       "days": "{n} j",
       "activeCustomers": "Clients actifs",
       "quotesOrders": "Devis et commandes ouverts",

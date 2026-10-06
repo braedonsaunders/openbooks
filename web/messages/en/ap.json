@@ -207,6 +207,7 @@
       "next30": "Next 30 days",
       "dpo": "Days payable (DPO)",
       "dpoSub": "Avg days to pay",
+      "dpoEmpty": "No payment history yet",
       "days": "{n}d"
     },
     "panels": {

@@ -207,6 +207,7 @@
       "next30": "Nächste 30 Tage",
       "dpo": "Kreditorenlaufzeit (DPO)",
       "dpoSub": "Ø Tage bis zur Zahlung",
+      "dpoEmpty": "Noch keine Zahlungshistorie",
       "days": "{n} T"
     },
     "panels": {

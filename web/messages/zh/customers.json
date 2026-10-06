@@ -16,6 +16,7 @@
       "closedQuarter": "本季度已开票",
       "dso": "应收周转天数",
       "dsoSub": "平均回款天数",
+      "dsoEmpty": "暂无收款记录",
       "days": "{n} 天",
       "activeCustomers": "活跃客户",
       "quotesOrders": "未结报价与订单",

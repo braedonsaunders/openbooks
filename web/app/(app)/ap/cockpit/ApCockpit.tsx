@@ -62,7 +62,7 @@ export function ApCockpit({ data, canConfigure, canPay }: { data: ApPosition; ca
         <StatTile icon={TriangleAlert} accent="red" label={t('stats.overdue')} value={moneyCompact(data.overdue)} sub={t('stats.overdueSub', { count: data.overdueCount, pct: overduePct })} tone={compareMoney(data.overdue, '0.0000') > 0 ? 'negative' : 'neutral'} />
         <StatTile icon={CalendarClock} accent="amber" label={t('stats.dueThisWeek')} value={moneyCompact(data.dueThisWeek)} tone="warning" />
         <StatTile icon={CalendarRange} accent="sky" label={t('stats.next30')} value={moneyCompact(data.dueNext30)} />
-        <StatTile icon={Timer} accent="violet" label={t('stats.dpo')} value={data.dpo === null ? '—' : t('stats.days', { n: data.dpo })} sub={t('stats.dpoSub')} />
+        <StatTile icon={Timer} accent="violet" label={t('stats.dpo')} value={data.dpo === null ? '—' : t('stats.days', { n: data.dpo })} sub={data.dpo === null ? t('stats.dpoEmpty') : t('stats.dpoSub')} />
       </div>
 
       {data.unavailableCategories.length > 0 ? (

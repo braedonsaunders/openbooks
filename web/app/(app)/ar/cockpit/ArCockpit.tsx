@@ -156,7 +156,7 @@ export function ArCockpit({
           accent="violet"
           label={t("stats.dso")}
           value={data.dso === null ? "—" : t("stats.days", { n: data.dso })}
-          sub={t("stats.dsoSub")}
+          sub={data.dso === null ? t("stats.dsoEmpty") : t("stats.dsoSub")}
         />
       </div>
 
