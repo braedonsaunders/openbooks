@@ -1,4 +1,5 @@
 import { requireCompensationPackageConfiguration } from './compensation-package-payroll.ts';
+import { lockEmployerAssignmentProfiles } from './employer-assignment-history.ts';
 import { lockPayrollServiceConfiguration } from './service-credit.ts';
 import { assertRecurringBenefitsRunFresh } from './benefit-plan-inputs.ts';
 import { payrollSettings } from "./run-setup.ts";
@@ -395,6 +396,7 @@ export async function commitPayRun(input: {
         employeeTaxYearFenceKey(orgId, e.employee_party_id, run.tax_year),
       ),
     );
+    await lockEmployerAssignmentProfiles(tx, orgId, fencedEmployees.rows.map(e => e.employee_party_id));
     // Employer-aggregate room is shared across rosters, so the employee
     // fence above cannot serialize it: two runs on disjoint rosters hold no
     // common employee key. Every commit takes each declared per-run levy's
@@ -507,6 +509,7 @@ export async function commitPayRun(input: {
       changes.timeTypes ? "timeTypes" : null,
       changes.wages ? "wages" : null,
       changes.items ? "items" : null,
+      changes.roster ? "roster" : null,
     ].filter((reason): reason is string => reason !== null);
     if (payRunCalculationSourceDigest(currentSource) !== storedDigest) {
       throw new PayrollError(staleCalculationMessage(

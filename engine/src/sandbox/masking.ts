@@ -325,6 +325,8 @@ export const DEFAULT_POLICIES: MaskingPolicy[] = [
   { tableName: "payroll_compensation_packages", columnName: "name", transform: "redact" },
   { tableName: 'payroll_period_openings', columnName: 'source_reference', transform: 'redact' },
   { tableName: 'payroll_period_openings', columnName: 'reason', transform: 'redact' },
+  { tableName: 'payroll_employee_employer_assignments', columnName: 'source_reference', transform: 'redact' },
+  { tableName: 'payroll_employee_employer_assignments', columnName: 'reason', transform: 'redact' },
   { tableName: "payroll_compensation_packages", columnName: "description", transform: "redact" },
   { tableName: "payroll_compensation_packages", columnName: "reason", transform: "redact" },
   { tableName: "payroll_compensation_versions", columnName: "definition", transform: "null_out" },

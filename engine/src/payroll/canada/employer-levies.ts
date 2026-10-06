@@ -160,7 +160,10 @@ export async function applyCaEmployerLevies(
 
   // A current inactive employee role does not exempt earnings on an already
   // selected historical or final-payment run from its retained classification.
-  const wcbGroup = (await tx.execute<{ rate_percent: string | null; max_assessable: string | null }>(sql`
+  const wcbGroup = (await tx.execute<{ rate_percent: string | null; max_assessable: string | null }>(ctx.workerCompGroupId ? sql`
+    select rate_percent,max_assessable from worker_comp_groups
+     where org_id=${orgId} and id=${ctx.workerCompGroupId} for share
+  ` : sql`
     select g.rate_percent, g.max_assessable
       from employee_roles er
       join worker_comp_groups g on g.id = er.worker_comp_group_id and g.org_id = er.org_id and g.is_active
@@ -168,6 +171,9 @@ export async function applyCaEmployerLevies(
      limit 1
   `));
   const wcb = wcbGroup.rows[0];
+  if (ctx.workerCompGroupId && (!wcb || wcb.rate_percent === null || cmp(wcb.rate_percent, '0') < 0 || wcb.max_assessable !== null && cmp(wcb.max_assessable, '0') < 0)) {
+    throw new PayrollError(`${employeeName}: the dated worker-compensation group has no valid configured rate or assessable ceiling — review its rate and ceiling in Company Setup → Worker compensation groups before calculating.`);
+  }
   if (wcb?.rate_percent && cmp(wcb.rate_percent, "0") > 0) {
     // Committed stubs only. A calculated run is a draft that may be abandoned
     // or recalculated, and counting its assessable earnings lets unpaid

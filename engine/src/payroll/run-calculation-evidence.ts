@@ -1,3 +1,4 @@
+import { employeeEmployerAssignmentHistory, type EmployerAssignmentSource } from './employer-assignment-history.ts';
 import { compensationPackageRunSource, type CompensationPackageAssignmentSource } from './compensation-package-source.ts';
 import { payrollSubsidiaryScopeFilter, type PayrollSubsidiaryScope } from "./scope.ts";
 import { createHash } from "node:crypto";
@@ -62,11 +63,14 @@ export interface PayRunCalculationSourceSnapshot {
     updatedAt: string;
   }[];
   compensationPackages?: CompensationPackageAssignmentSource[];
+  employerAssignments?: EmployerAssignmentSource[];
   claimEntryIds: string[];
 }
 
 type CalculationSourceRow = {
   run_exists: boolean;
+  pay_date: string;
+  employee_party_ids: string[];
   time_entries: PayRunCalculationSourceSnapshot["timeEntries"];
   time_types: PayRunCalculationSourceSnapshot["timeTypes"];
   pay_rates: PayRunCalculationSourceSnapshot["payRates"];
@@ -99,7 +103,8 @@ export function parsePayRunCalculationSource(
       || !Array.isArray(snapshot.timeTypes)
       || !Array.isArray(snapshot.payRates)
       || !Array.isArray(snapshot.claimEntryIds)
-      || (Object.hasOwn(snapshot, 'compensationPackages') && !Array.isArray(snapshot.compensationPackages))) return null;
+      || (Object.hasOwn(snapshot, 'compensationPackages') && !Array.isArray(snapshot.compensationPackages))
+      || (Object.hasOwn(snapshot, 'employerAssignments') && !Array.isArray(snapshot.employerAssignments))) return null;
   // Snapshots stored before item routing existed carry no itemAccounts; they
   // read as "no mapped items", so the first post-upgrade commit compares
   // honestly and refuses with the items reason instead of a bare selection.
@@ -132,7 +137,7 @@ export async function payRunCalculationSource(
   const entryRowLock = lockSources ? sql`for update of te` : sql``;
   const result = (await executor.execute<CalculationSourceRow>(sql`
     with run_scope as materialized (
-      select r.org_id, r.document_id, r.period_start, r.period_end, r.run_type,
+      select r.org_id, r.document_id, r.period_start, r.period_end, r.pay_date, r.run_type,
              d.currency as run_currency, d.subsidiary_id
         from pay_runs r
         join documents d on d.id = r.document_id and d.org_id = r.org_id
@@ -256,6 +261,8 @@ export async function payRunCalculationSource(
         ) fx on true
     )
     select exists (select 1 from run_scope) as run_exists,
+           (select pay_date::text from run_scope) as pay_date,
+           coalesce((select jsonb_agg(employee_party_id::text order by employee_party_id) from stub_employees),'[]'::jsonb) as employee_party_ids,
            coalesce((
              select jsonb_agg(jsonb_build_object(
                'id', entry.id::text,
@@ -326,6 +333,7 @@ export async function payRunCalculationSource(
   `));
   const row = result.rows[0];
   if (!row?.run_exists) return null;
+  const employerAssignments = await employeeEmployerAssignmentHistory(executor, { orgId, payDate: row.pay_date, employeePartyIds: row.employee_party_ids ?? [] });
   const compensationPackages = await compensationPackageRunSource(executor, orgId, documentId, allowedSubsidiaryIds, lockSources);
   return {
     version: 1,
@@ -336,6 +344,7 @@ export async function payRunCalculationSource(
     // Keep the exact legacy digest when this employment population has no
     // approved package obligations; an empty new field would change history.
     ...(compensationPackages.length ? { compensationPackages } : {}),
+    ...(employerAssignments.length ? { employerAssignments } : {}),
     claimEntryIds: row.claim_entry_ids ?? [],
   };
 }
@@ -343,13 +352,14 @@ export async function payRunCalculationSource(
 export function payRunCalculationSourceChanges(
   stored: PayRunCalculationSourceSnapshot,
   current: PayRunCalculationSourceSnapshot,
-): { time: boolean; timeTypes: boolean; wages: boolean; items: boolean; compensationPackages: boolean } {
+): { time: boolean; timeTypes: boolean; wages: boolean; items: boolean; compensationPackages: boolean; roster: boolean } {
   return {
     time: canonicalJson(stored.timeEntries) !== canonicalJson(current.timeEntries)
       || canonicalJson(stored.claimEntryIds) !== canonicalJson(current.claimEntryIds),
     timeTypes: canonicalJson(stored.timeTypes) !== canonicalJson(current.timeTypes),
     wages: canonicalJson(stored.payRates) !== canonicalJson(current.payRates),
     compensationPackages: canonicalJson(stored.compensationPackages ?? []) !== canonicalJson(current.compensationPackages ?? []),
+    roster: canonicalJson(stored.employerAssignments ?? []) !== canonicalJson(current.employerAssignments ?? []),
     items: canonicalJson(stored.itemAccounts ?? []) !== canonicalJson(current.itemAccounts ?? []),
   };
 }
