@@ -194,7 +194,7 @@ test('period money drafts survive closing and reopening without inventing missin
   // An exiting drawer remains in the portal until its animation completes.
   // Reopen from the list after that exit, rather than editing its stale node.
   for (let attempt = 0; attempt < 100 && document.querySelector('[role="dialog"]'); attempt++) {
-    await act(tick)
+    await act(async () => { await tick() })
   }
   assert.equal(document.querySelector('[role="dialog"]'), null, 'the previous drawer must finish closing')
   await openEmployee()

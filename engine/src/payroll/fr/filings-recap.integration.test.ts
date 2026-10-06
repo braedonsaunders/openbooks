@@ -10,6 +10,8 @@ import { calculatePayRun } from "../run-calculation.ts";
 import { commitPayRun } from "../run-commit.ts";
 import { createPayRun } from "../run-lifecycle.ts";
 import { seedPayrollComponents } from "../run-setup.ts";
+import { upsertStatutoryRate } from "../statutory-rates.ts";
+import { FR_PACK_RATES } from "./statutory-rates.ts";
 import { createScratchOrg, dropScratchOrgReporting, seedFlowActors } from "../../testing/fixtures.ts";
 import { add } from "../../money/money.ts";
 import { parseFrRecapRowId } from "./filings.ts";
@@ -80,6 +82,15 @@ async function frPayrollOrg(): Promise<Fixture> {
   // Classified employer plus an explicit zero AT/MP rate: unclassified or
   // missing-regime employers refuse by name instead.
   await seedFrRecapEmployerFixture(org.orgId, actorId, org.subsidiaryId);
+  const filingAccountId = randomUUID();
+  await db.execute(sql`insert into payroll_filing_accounts
+    (id,org_id,subsidiary_id,country,program_type,account_number,name,is_default,created_by,updated_by)
+    values(${filingAccountId},${org.orgId},${org.subsidiaryId},'FR','fr_siret','73282932000074',
+      'French establishment',true,${actorId},${actorId})`);
+  // The declared ten-person establishment is below the eleven-person
+  // mobility threshold; record its explicit zero on its own SIRET account.
+  await upsertStatutoryRate({ orgId: org.orgId, actorId, rates: FR_PACK_RATES,
+    rateKey: 'fr_versement_mobilite', region: 'FR', filingAccountId, taxYear: 2026, values: { taux: '0' } });
   // AGIRC-ARRCO/CEG/CET are declared `external`: the org names its own
   // caisse on the components (the QC/Revenu-Québec precedent).
   const caisseId = randomUUID();
