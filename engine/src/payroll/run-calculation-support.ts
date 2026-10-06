@@ -5,6 +5,9 @@
  * math, transaction/lock sequencing, and refusal identity.
  */
 import { sql } from "drizzle-orm";
+import { cmp, mulRatio, sum } from "../money/money.ts";
+import { resolveWorkSchedule, scheduledHoursPerWeek } from "./work-schedules.ts";
+import type { Line } from "./run-stub-records.ts";
 import { db } from "../platform/db.ts";
 import { PayrollError } from "./error.ts";
 import { type StoredCertificate } from "./certificates.ts";
@@ -224,4 +227,34 @@ export async function resolvePayRate(
     rate: convertLaborWage(row.rate, fxSource.resolvedRate),
     currency: payCurrency,
   };
+}
+
+/** Contractual regular hours and worked extra hours for packs declaring this basis. */
+export async function resolveStubStatutoryHours(
+  tx: Pick<typeof db, "execute">,
+  input: { orgId: string; employeePartyId: string; payBasis: string | null;
+    periodStart: string; subsidiaryId: string; periodsPerYear: number; lines: readonly Line[] },
+): Promise<{ regular: string | null; extra: string }> {
+  const { orgId, employeePartyId, payBasis, periodStart, subsidiaryId, periodsPerYear: P, lines } = input;
+  const extra = sum(lines
+    .filter((line) => line.kind === "earning"
+      && (line.classification === "overtime" || line.classification === "double_time"))
+    .map((line) => line.hours ?? "0"));
+  let regular: string | null;
+  if (payBasis === "salary") {
+    const schedule = await resolveWorkSchedule(tx, orgId, employeePartyId, periodStart, { subsidiaryId });
+    const weeklyHours = schedule ? scheduledHoursPerWeek(schedule) : null;
+    const scheduleHours = weeklyHours === null ? null : mulRatio(weeklyHours, 52n, BigInt(P));
+    const observedHours = sum(lines
+      .filter((line) => line.kind === "earning"
+        && line.classification !== "overtime" && line.classification !== "double_time")
+      .map((line) => line.hours ?? "0"));
+    regular = scheduleHours ?? (cmp(observedHours, "0") > 0 ? observedHours : null);
+  } else {
+    regular = sum(lines
+      .filter((line) => line.kind === "earning"
+        && line.classification !== "overtime" && line.classification !== "double_time")
+      .map((line) => line.hours ?? "0"));
+  }
+  return { regular, extra };
 }
