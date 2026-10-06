@@ -31,6 +31,11 @@ export function useAnalyticsTab<T extends { data: unknown }, K extends string>(s
   const [attempt, retry] = useReducer((n: number) => n + 1, 0)
   const [refreshTick, refresh] = useReducer((n: number) => n + 1, 0)
   const [, rerender] = useReducer((n: number) => n + 1, 0)
+  // The per-source read cache lives in refs and resets during render when a
+  // new server observation arrives, so a superseded generation can never
+  // be written by a late read; the effect below compares generations by
+  // identity. Reading these refs during render is that deliberate reset.
+  /* eslint-disable react-hooks/refs */
   const source = useRef<unknown>(undefined)
   const cache = useRef(new Map<string, { props?: T; until: number; error?: string }>())
   if (source.current !== initial.data) {
@@ -39,6 +44,7 @@ export function useAnalyticsTab<T extends { data: unknown }, K extends string>(s
   }
   const generation = cache.current
   const entry = generation.get(key)
+  /* eslint-enable react-hooks/refs */
   const ready = !enabled || Boolean(entry?.props)
   const error = entry?.error
   useEffect(() => {
@@ -78,6 +84,7 @@ export function useAnalyticsTab<T extends { data: unknown }, K extends string>(s
     }
     void load()
     return () => { controller.abort(); if (timer !== undefined) window.clearTimeout(timer) }
+    // eslint-disable-next-line react-hooks/refs -- the generation is the render-time cache identity above
   }, [enabled, key, query, attempt, slug, tab, t, generation, refreshTick])
   const setTab = (next: K) => {
     if (!tabs.includes(next)) return

@@ -2,7 +2,7 @@ import "server-only";
 import { analyticsQuery } from "./query";
 import { analyticsSection } from "./read-context";
 import { sql } from "drizzle-orm";
-import { addMonthsClamped, utcDateFromParts } from "@openbooks/engine/platform/civil-date";
+import { utcDateFromParts } from "@openbooks/engine/platform/civil-date";
 import { abs, add, cmp, isZero, mulDecimal, neg, sum } from "@openbooks/engine/money";
 import { canonicalDecimal, compareDecimal } from "@openbooks/engine/money/decimal";
 import { flowRates } from "../fx-presentation";

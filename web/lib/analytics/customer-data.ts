@@ -10,7 +10,6 @@ import { getMoneyFormatter } from '../money-server'
 import { sql } from "drizzle-orm";
 import { addMonthsClamped, calendarDaysBetween } from "@openbooks/engine/platform/civil-date";
 import { businessToday } from "@openbooks/engine/platform/business-date";
-import { db } from "@openbooks/engine/platform/database";
 import { ANALYTICS_CONFIG, analyticsConfig } from "./config";
 import { checkSumsTo, type ConfigValuesOf } from "./config-spec";
 import { customerStrings, type CustomerStrings } from "./customer-strings";

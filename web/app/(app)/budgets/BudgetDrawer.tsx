@@ -174,7 +174,7 @@ export function BudgetDrawer({
       toast.error(t('workspace.saveFailed'))
       return false
     }
-  }, [dims, execute, initial.lines, scenario.id, t, toDisplay, toStorage, unsaved])
+  }, [dims, execute, initial.effectiveExtraDims, initial.lines, scenario.id, t, toDisplay, toStorage, unsaved])
 
   // Annual-total drafts keyed by account: while an annual figure is being
   // typed, the input is controlled and the totals below read the draft, so

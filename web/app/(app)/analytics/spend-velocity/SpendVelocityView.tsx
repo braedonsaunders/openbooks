@@ -32,7 +32,6 @@ import { InteractiveTableRow } from '@/components/interactive-table-row'
 
 // 'expenses' moved out: the expense-report analysis now lives on the /expenses dashboard.
 const TABS = ANALYTICS_TABS['spend-velocity']
-type Tab = (typeof TABS)[number]
 /** Velocity pill colouring from the org's own high/medium thresholds. */
 function velTone(v: number, hi: number, med: number) {
   if (v > hi) return 'bg-rose-100 text-rose-700 dark:bg-rose-950/50 dark:text-rose-400'

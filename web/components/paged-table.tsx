@@ -96,7 +96,12 @@ export function PagedTable<T>({
   const tp = useTranslations('ui.pagination')
   const [query, setQuery] = useState('')
   const [page, setPage] = useState(0)
-  useEffect(() => { setPage(0) }, [resetPageKey])
+  // Sorting changes restart paging: reset during render when the key moves.
+  const [pageKey, setPageKey] = useState(resetPageKey)
+  if (pageKey !== resetPageKey) {
+    setPageKey(resetPageKey)
+    setPage(0)
+  }
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()

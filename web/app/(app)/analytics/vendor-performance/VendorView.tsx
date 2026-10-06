@@ -26,7 +26,6 @@ import { escapeTooltipHtml, useAnalyticsMoney, toChartNumber } from '../_ui/form
 import { InteractiveTableRow } from '@/components/interactive-table-row'
 
 const TABS = ANALYTICS_TABS['vendor-performance']
-type Tab = (typeof TABS)[number]
 
 const TIER_STYLE: Record<SpendTier, string> = {
   strategic: 'bg-violet-100 text-violet-700 dark:bg-violet-950/60 dark:text-violet-300',

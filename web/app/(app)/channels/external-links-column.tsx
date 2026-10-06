@@ -7,7 +7,7 @@ import { UnlinkExternalLinkButton } from './UnlinkExternalLinkButton'
  * links render no button — their owning surface unlinks them.
  */
 export function externalLinkUnlinkColumn(canManage: boolean) {
-  return (column: SetupColumn, row: Record<string, unknown>) => {
+  return function renderExternalIdCell(column: SetupColumn, row: Record<string, unknown>) {
     if (column.key !== 'externalId') return undefined
     const channelId = typeof row.channel_id === 'string' ? row.channel_id : null
     return (
