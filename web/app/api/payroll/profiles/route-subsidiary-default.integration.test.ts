@@ -90,6 +90,7 @@ test('a hire that records a non-root subsidiary defaults the profile to that sub
         new Request('http://hire.local', { method: 'PATCH', body: JSON.stringify({
           kind: 'employee',
           displayName: 'Sean Murphy',
+          isActive: true,
           subsidiaryId: ieSub,
           additionalSubsidiaryIds: [],
           roles: { employee: { enabled: true, hiredOn: '2026-09-01' } },

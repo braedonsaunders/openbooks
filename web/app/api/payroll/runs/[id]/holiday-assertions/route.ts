@@ -42,7 +42,7 @@ const requestBodySchema = z.union([
   z.strictObject({ ...assertionTarget, occupationClass: z.string().trim().min(1) }),
   z.strictObject({ ...assertionTarget, absentWithoutConsent: z.boolean() }),
   entitlementAssertion,
-]).transform((body) => ({
+], { error: "File exactly one holiday assertion: commission-pay status, occupation class, absence without consent, or complete entitlement-day evidence. Use the employee and holiday shown on this pay run." }).transform((body) => ({
   employeePartyId: body.employeePartyId,
   holidayKey: body.holidayKey,
   holidayDate: body.holidayDate,
@@ -234,7 +234,7 @@ export const POST = defineRoute({
     // Through the shared boundary like every other mutation route, so the
     // financial-boundary guard holds: a route that parses its own body is a
     // route whose validation nobody can audit centrally.
-    const parsedBody = await parseJsonBody(req, requestBodySchema)
+    const parsedBody = await parseJsonBody(req, requestBodySchema, { status: 422 })
     if (!parsedBody.ok) return parsedBody.response
     const body = parsedBody.data
     const { employeePartyId, paidOnCommission, occupationClass } = body

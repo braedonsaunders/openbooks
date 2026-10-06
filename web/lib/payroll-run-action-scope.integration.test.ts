@@ -177,7 +177,7 @@ const consolidatedRows = [
         const { createPayRun } = await import("@openbooks/engine/src/payroll/run-lifecycle.ts");
         const { demandingHolidays, recordHolidayAssertion } = await import("@openbooks/engine/src/payroll/holiday-attestations.ts");
         const { payRunStaleness } = await import("@openbooks/engine/src/payroll/readiness.ts");
-        const { dropScratchOrgReporting, seedWorkerEmployment } = await import("@openbooks/engine/src/testing/fixtures.ts");
+        const { dropScratchOrgReporting, seedWorkerEmployment, seedPayrollProfile } = await import("@openbooks/engine/src/testing/fixtures.ts");
         const { POST } = await import("../app/api/payroll/runs/[id]/route");
         const assertionsRoute = await import("../app/api/payroll/runs/[id]/holiday-assertions/route");
         const profilesRoute = await import("../app/api/payroll/profiles/route");
@@ -316,13 +316,9 @@ const consolidatedRows = [
               values (${fx.orgId}, ${id}, 'CAD', '30', 'hour', '2020-01-01', true,
                       ${fx.actorId}, ${fx.actorId})`);
             const addedEmploymentId = await seedWorkerEmployment(fx.orgId, id, fx.subsidiaryId);
-            await db.execute(sql`
-              insert into employee_payroll_profiles (org_id, employee_party_id, employment_id, pay_schedule_id,
-                                                     province, pay_basis, country, federal_claim_code,
-                                                     provincial_claim_code, vacation_percent, vacation_method,
-                                                     is_active, created_by, updated_by)
-              values (${fx.orgId}, ${id}, ${addedEmploymentId}, ${fx.scheduleId}, ${province}, 'hourly', 'CA', 1, 1,
-                      '4', 'accrue', true, ${fx.actorId}, ${fx.actorId})`);
+            await seedPayrollProfile(fx.orgId, id, addedEmploymentId, fx.scheduleId, fx.actorId,
+              { province, payBasis: 'hourly', country: 'CA', federalClaimCode: 1, provincialClaimCode: 1 },
+              { percentFloor: '4', method: 'accrue' });
             return id;
           });
         }
@@ -580,6 +576,8 @@ const consolidatedRows = [
         test("commission status round-trips through profiles and omit keeps", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
           const fx = await withBypassContext(() => seedAdoption());
           try {
+            await withBypassContext(() => db.execute(sql`update parties set subsidiary_id=${fx.subsidiaryId}
+              where org_id=${fx.orgId} and id=${fx.employeeId}`));
             state.gate = runGate(fx);
             const gate = state.gate;
             assert.ok(gate);

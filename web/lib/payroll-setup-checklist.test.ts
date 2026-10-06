@@ -37,7 +37,7 @@ const checklistHooks = registerHooks({
     if (specifier === '@openbooks/engine/src/payroll/packs.ts') {
       return {
         shortCircuit: true,
-        url: `data:text/javascript,export async function packSlotState(orgId, installed, settings, regions) {
+        url: `data:text/javascript,export { payrollTaxYearForDate } from ${JSON.stringify(new URL("../../engine/src/payroll/pack-tax-years.ts", import.meta.url).href)}; export async function packSlotState(orgId, installed, settings, regions) {
           globalThis[Symbol.for('openbooks.payroll-checklist-wiring-test')].slotInputs.push({ orgId, installed, settings, regions });
           return globalThis[Symbol.for('openbooks.payroll-checklist-wiring-test')].slots;
         }`,
