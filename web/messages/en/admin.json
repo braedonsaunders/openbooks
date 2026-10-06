@@ -7611,7 +7611,7 @@
     "tiers": {
       "masked": "Masked full copy (recommended)",
       "full": "Full copy (unmasked)",
-      "dev": "Dev (customizations only)",
+      "dev": "Dev (customizations and chart of accounts)",
       "asOf": "As-of (books at a period close)",
       "unknown": "Unknown tier"
     },

@@ -16,8 +16,10 @@ test("clone selection refuses an unknown tier instead of selecting every table",
 test("clone selection preserves the reduced developer tier and full tiers", () => {
   const tables = [
     { name: "app_roles" },
+    { name: "accounts" },
+    { name: "account_group_members" },
     { name: "journal_entries" },
   ] as never[];
-  assert.deepEqual(selectCloneTables(tables, "dev").map((table) => table.name), ["app_roles"]);
-  assert.deepEqual(selectCloneTables(tables, "full").map((table) => table.name), ["app_roles", "journal_entries"]);
+  assert.deepEqual(selectCloneTables(tables, "dev").map((table) => table.name), ["app_roles", "accounts", "account_group_members"]);
+  assert.deepEqual(selectCloneTables(tables, "full").map((table) => table.name), ["app_roles", "accounts", "account_group_members", "journal_entries"]);
 });

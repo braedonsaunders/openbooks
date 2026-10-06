@@ -103,9 +103,10 @@ export async function rebaseClonedJsonReferences(args: {
     for (const subsidiary of subsidiaries) {
       const before = subsidiary.control_accounts;
       const after: Record<string, string> = {};
-      // Development sandboxes omit the account/ledger layer, just as their org
-      // control map is intentionally empty. The entity tree supports role scope.
-      if (args.tier !== "dev") {
+      // Account definitions can be copied without ledger history. Rebase only
+      // proven counterparts; a restricted developer copy without accounts
+      // clears the control map rather than retaining source-tenant identities.
+      if (args.tier !== "dev" || args.copiedTables.has("accounts")) {
         if (!before || typeof before !== "object" || Array.isArray(before)) throw new Error(`sandbox subsidiary ${subsidiary.id}: invalid control-account map`);
         for (const [key, value] of Object.entries(before)) {
           const target = typeof value === "string" ? ids.get(value.toLowerCase()) : undefined;

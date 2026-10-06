@@ -33,6 +33,9 @@ async function fixture(run: (org: Awaited<ReturnType<typeof createScratchOrg>>, 
 
 for (const tier of ["full", "masked", "as_of", "dev"] as const) {
   test(`${tier} sandbox preserves role visibility and rebases entity control accounts through refresh/reset`, enabled, async () => fixture(async (org, _actors, child) => {
+    const group = randomUUID();
+    await db.execute(sql`insert into account_groups(id,org_id,dimension,key,name) values(${group},${org.orgId},'reconciliation','pinned','Pinned account classification')`);
+    await db.execute(sql`insert into account_group_members(org_id,group_id,account_id,dimension) values(${org.orgId},${group},${org.accounts.ar},'reconciliation')`);
     const sandbox = await createSandbox({ productionOrgId: org.orgId, name: `JSON scope ${tier}`, tier, masked: tier === "masked", asOfPeriodId: tier === "as_of" ? org.periodId : null });
     const assertReferences = async () => {
       const entities = (await db.execute<{ id: string; parent_id: string | null; control_accounts: Record<string, string> }>(sql`select id,parent_id,control_accounts from subsidiaries where org_id=${sandbox.sandboxOrgId}`)).rows;
@@ -46,14 +49,11 @@ for (const tier of ["full", "masked", "as_of", "dev"] as const) {
         const allowed = await actorAllowedSubsidiaryIds(db, sandbox.sandboxOrgId, user);
         assert.deepEqual([...allowed!].sort(), (key === "scoped_tree" ? [root.id, branch.id] : [branch.id]).sort());
       }
-      if (tier === "dev") {
-        assert.deepEqual(branch.control_accounts, {});
-        assert.equal((await db.execute(sql`select id from accounts where org_id=${sandbox.sandboxOrgId}`)).rows.length, 0);
-        assert.equal((await db.execute(sql`select id from journal_entries where org_id=${sandbox.sandboxOrgId}`)).rows.length, 0);
-      } else {
-        assert.notEqual(branch.control_accounts.receivable, org.accounts.ar);
-        assert.equal((await db.execute(sql`select id from accounts where org_id=${sandbox.sandboxOrgId} and id=${branch.control_accounts.receivable}`)).rows.length, 1);
-      }
+      assert.notEqual(branch.control_accounts.receivable, org.accounts.ar);
+      assert.equal((await db.execute(sql`select id from accounts where org_id=${sandbox.sandboxOrgId} and id=${branch.control_accounts.receivable}`)).rows.length, 1);
+      const pins = (await db.execute(sql`select m.account_id from account_group_members m join account_groups g on g.org_id=m.org_id and g.id=m.group_id where m.org_id=${sandbox.sandboxOrgId} and g.dimension='reconciliation' and g.key='pinned'`)).rows;
+      assert.deepEqual(pins, [{ account_id: branch.control_accounts.receivable }]);
+      if (tier === "dev") for (const table of ['journal_entries', 'pay_runs', 'pay_stubs', 'entitlement_ledger']) assert.equal((await db.execute(sql`select id from ${sql.identifier(table)} where org_id=${sandbox.sandboxOrgId}`)).rows.length, 0);
       const evidence = (await db.execute(sql`select id from audit_log where org_id=${sandbox.sandboxOrgId} and changes->>'mode'='sandbox_json_reference_rebase'`)).rows;
       assert.ok(evidence.length >= 3);
     };

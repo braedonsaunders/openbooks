@@ -7611,7 +7611,7 @@
     "tiers": {
       "masked": "Copie complète masquée (recommandée)",
       "full": "Copie complète (non masquée)",
-      "dev": "Développement (personnalisations uniquement)",
+      "dev": "Développement (personnalisations et plan comptable)",
       "asOf": "À une date donnée (comptes à la clôture)",
       "unknown": "Niveau inconnu"
     },
