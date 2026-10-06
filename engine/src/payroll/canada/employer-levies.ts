@@ -158,11 +158,13 @@ export async function applyCaEmployerLevies(
   let hsfAmount: Money = "0" as Money;
   let hsfEarnings: Money = "0" as Money;
 
+  // A current inactive employee role does not exempt earnings on an already
+  // selected historical or final-payment run from its retained classification.
   const wcbGroup = (await tx.execute<{ rate_percent: string | null; max_assessable: string | null }>(sql`
     select g.rate_percent, g.max_assessable
       from employee_roles er
       join worker_comp_groups g on g.id = er.worker_comp_group_id and g.org_id = er.org_id and g.is_active
-     where er.org_id = ${orgId} and er.party_id = ${employeePartyId} and er.is_active
+     where er.org_id = ${orgId} and er.party_id = ${employeePartyId}
      limit 1
   `));
   const wcb = wcbGroup.rows[0];
