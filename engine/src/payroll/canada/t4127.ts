@@ -655,15 +655,13 @@ export function calculateT4127(input: T4127Input): T4127Result {
   };
 }
 
-/**
- * The per-period federal and provincial tax, each rounded half-up to the
- * cent on its own. CRA's payroll deductions calculator and bureau payroll
- * withhold the two as separate amounts, so the period's tax is the sum of
- * the rounded legs; rounding (T1 + T2) / P once drifts by a cent whenever
- * both remainders sit at or above the half cent.
- */
+/** T4127 Chapter 4, Step 6 rounds the combined (T1 + T2) / P deduction.
+ * Federal and provincial trace amounts must reconcile to that deduction:
+ * round the federal display amount and allocate the remainder to provincial.
+ * Independently rounding both legs changes the amount actually withheld. */
 export function periodTaxLegs(t1: bigint, t2: bigint, P: number): { federal: bigint; provincial: bigint } {
-  return { federal: divIntCents(t1, P), provincial: divIntCents(t2, P) };
+  const federal = divIntCents(t1, P);
+  return { federal, provincial: divIntCents(t1 + t2, P) - federal };
 }
 
 export type { EditionRates };
