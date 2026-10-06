@@ -772,6 +772,10 @@ async function main() {
         await run("baseline-adoption", "node", [...args, "--check"], { cwd: CANDIDATE, env });
         await run("baseline-adoption", "node", [...args, "--apply", "--actor", "release-verification", "--reason", "Verified historical upgrade and baseline cutover", "--backup", join(reportDir, "before-baseline-adoption.dump")], { cwd: CANDIDATE, env });
       });
+      // The historical chain stops at the release cut; the forward migrations
+      // above it apply through ordinary bootstrap, exactly as an operator
+      // deploys after adoption.
+      report.forward = await phase("forward", () => timedBootstrap("forward"));
     }
 
     await phase("ledger-complete", async () => {

@@ -149,8 +149,7 @@ test("an invalid same-named index in another schema never costs the valid public
       before.oid,
       "the public index must be the same index, not dropped and rebuilt because another schema's invalid copy shared its name",
     );
-    const stillShadowed = await query(`select 1 from pg_class c join pg_namespace n on n.oid = c.relnamespace
-      where n.nspname = '${SHADOW_SCHEMA}' and c.relname = 'contacts_name_trgm'`);
+    const stillShadowed = await query(`select 1 from pg_class c join pg_namespace n on n.oid = c.relnamespace where n.nspname = '${SHADOW_SCHEMA}' and c.relname = 'contacts_name_trgm'`);
     assert.equal(stillShadowed.length, 1, "another schema's index is not this migration's to drop");
   } finally {
     if (created) await query(`drop schema ${SHADOW_SCHEMA} cascade`);

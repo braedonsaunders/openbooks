@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import { assertBaselineCatalogsEqual, baselineDigest, baselineRegistrySql } from "./migration-baseline-catalog.mjs";
-import { assertBaselineHistory, migrationIdentityIsApplied, releaseMigrationPlan } from "./migration-baseline-plan.mjs";
+import { assertBaselineHistory, historicalMigrationPlan, migrationIdentityIsApplied, releaseMigrationPlan } from "./migration-baseline-plan.mjs";
 
 function fixture(context) {
   const directory = mkdtempSync(join(tmpdir(), "openbooks-baseline-test-"));
@@ -25,12 +25,14 @@ function fixture(context) {
 test("without a release cut every historical migration remains active", (context) => {
   const { directory, files } = fixture(context);
   assert.deepEqual(releaseMigrationPlan(directory, files).filenames, files.map((file) => `generated/${file}`));
+  assert.deepEqual(historicalMigrationPlan(directory, files).filenames, files.map((file) => `generated/${file}`));
 });
 
 test("a release cut applies one baseline and only the later forward migrations", (context) => {
   const { directory, files, publish } = fixture(context);
   publish();
   assert.deepEqual(releaseMigrationPlan(directory, files).filenames, ["baselines/alpha29.sql", "generated/0481_new.sql"]);
+  assert.deepEqual(historicalMigrationPlan(directory, files).filenames, ["generated/0001_baseline.sql", "generated/0480_last.sql"]);
 });
 
 test("a covered write cannot change after the baseline was verified", (context) => {

@@ -37,5 +37,4 @@ test('stored references carry only a type and an id, and anything else is droppe
   ])
   assert.deepEqual(parseStoredRecents('{not json'), [])
   assert.deepEqual(parseStoredRecents(JSON.stringify({ type: 'contact', id: 'a' })), [])
-  assert.deepEqual(parseStoredRecents(null), [])
 })

@@ -115,8 +115,10 @@ For an existing database that has not adopted the active release baseline, run
 `node --import tsx scripts/bootstrap.ts --historical-migrations --check --json`
 with its maintenance connection. Resolve every refusal, take a verified backup,
 then run the same command without `--check --json`. This explicit mode applies
-only the retained historical migration chain and refuses fresh databases or an
-already adopted baseline. It does not adopt the baseline. Follow the catalog
+only the retained historical migrations the release baseline covers, and
+refuses fresh databases or an already adopted baseline. It does not adopt the
+baseline. Migrations above the release cut apply afterwards through ordinary
+bootstrap, once the baseline is adopted. Follow the catalog
 verification and audited adoption steps above before ordinary deployment.
 
 The release rehearsal exercises this path on the oldest and latest supported

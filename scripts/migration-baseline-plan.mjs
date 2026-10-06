@@ -35,6 +35,20 @@ export function releaseMigrationPlan(directory, generated) {
   return { baseline, filenames: [baseline.filename, ...generated.filter((file) => Number(file.slice(0, 4)) > cutoff).map((file) => `generated/${file}`)] };
 }
 
+/**
+ * The retained chain an existing install replays before adopting the release
+ * baseline: exactly the migrations the baseline covers, so the upgraded
+ * schema can be compared with the baseline's catalog. Forward migrations
+ * above the cut apply afterwards through ordinary bootstrap, as on a fresh
+ * install. Without a release cut the whole chain is historical.
+ */
+export function historicalMigrationPlan(directory, generated) {
+  const release = releaseMigrationPlan(directory, generated);
+  if (!release.baseline) return release;
+  const covered = new Set(release.baseline.covered.map((entry) => entry.filename));
+  return { baseline: null, filenames: generated.map((file) => `generated/${file}`).filter((file) => covered.has(file)) };
+}
+
 export function assertBaselineHistory(baseline, recorded, applicationTablesPresent) {
   if (!baseline) return;
   const row = recorded.find((entry) => entry.filename === baseline.filename);
