@@ -16,8 +16,6 @@ test('stored statuses translate through their camelCase catalog key', () => {
 })
 
 test('pending approval never reads as the unrelated raw catalog key', () => {
-  // The catalog carries both `pendingApproval` and a raw `pending_approval`
-  // ("Submitted"); a stored pending_approval must read as pending approval.
   assert.notEqual(catalog.status.pending_approval, catalog.status.pendingApproval)
   assert.equal(statusLabel('pending_approval', translate, has), catalog.status.pendingApproval)
 })

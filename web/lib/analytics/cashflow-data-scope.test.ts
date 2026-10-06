@@ -48,6 +48,9 @@ const mocks = new Map<string, string>([
     export async function lineFunctional() { return "0.0000"; }
     export async function presentationCurrency() { return "USD"; }
     export async function presentationRates() { return new Map(); }
+    // Single-currency rows: translation through flowRates is the identity.
+    export async function flowRates() { return { base: "USD", rateAt: () => "1" }; }
+    export class MissingExchangeRateError extends Error {}
   `],
   ["mock:position", `export function buildTimeline() {
     return { weeks: [], totalInflows: "0.0000", totalOutflows: "0.0000", deferredBeyondHorizon: "0.0000" };
