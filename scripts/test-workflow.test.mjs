@@ -80,6 +80,8 @@ test('units, database shards and simulation run independently without omitted te
   // reset while still making progress), then 25 -> 35 when the migration
   // replay tests pushed one partition past 25 minutes, still passing.
   assert.match(integration, /timeout-minutes: 35/)
+  assert.match(integration, /timeout --signal=TERM --kill-after=10s 30m npm run test:integration/)
+  assert.match(integration, /--test-timeout=180000/)
   assert.doesNotMatch(integration, /--test-concurrency|continue-on-error/)
   assert.match(integration, /name: coverage-\$\{\{ matrix.shard \}\}/)
   assert.match(integration, /COLLECT_COVERAGE:.*github.event_name == 'workflow_dispatch'/)
