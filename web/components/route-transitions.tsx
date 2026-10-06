@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useSyncExternalStore, type ReactNode } from 'react'
 import { usePathname } from 'next/navigation'
-import { ViewTransition } from './view-transition'
+import { VIEW_SWITCH_TRANSITION, ViewTransition } from '@openbooks/ui'
 
 /**
  * Navigation motion for the authenticated app, built on React's
@@ -15,10 +15,13 @@ import { ViewTransition } from './view-transition'
  * Two layers:
  * - `RouteTransition` wraps the page pane. When the PATHNAME changes the old
  *   page lifts away and the new one (or its placeholder) rises in; when a
- *   placeholder then gives way, the real page rises into its place. Search
- *   and filter updates keep their pathname and stay still, so typing in a
- *   list search never animates the page. Nothing animates in a background
- *   tab, where the browser would abort the transition anyway.
+ *   placeholder then gives way, the real page rises into its place. A switch
+ *   between views of the same page — a tab, subtab or view selection, which
+ *   carries `VIEW_SWITCH_TRANSITION` — animates the same way, whether it
+ *   changes the address or only the page's state. Search, filter and sort
+ *   updates carry no type and stay still, so typing in a list search never
+ *   animates the page. Nothing animates in a background tab, where the
+ *   browser would abort the transition anyway.
  * - A report sheet on the reports hub and the report paper it opens share a
  *   transition name, so the card the reader clicked grows into the report
  *   and shrinks back into its place on the way back.
@@ -108,12 +111,13 @@ export function RouteTransition({ children }: { children: ReactNode }) {
   }, [pathname])
   // A navigation moves the old page out and the new one (or its
   // placeholder) in; once a placeholder is showing, the page that replaces
-  // it rises into place. Any other update of the pane stays still.
+  // it rises into place. A view switch on the same page moves like a
+  // navigation. Any other update of the pane stays still.
   const update = hidden
     ? 'none'
     : navigating
       ? { [REPORT_OPEN_TRANSITION]: 'route-recede', default: 'route-change' }
-      : revealing ? 'route-reveal' : 'none'
+      : revealing ? 'route-reveal' : { [VIEW_SWITCH_TRANSITION]: 'route-change', default: 'none' }
   return (
     <ViewTransition default="none" update={update}>
       {/* One box for the pane, so the page is captured as a single layer;
