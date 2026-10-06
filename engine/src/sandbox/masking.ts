@@ -46,7 +46,7 @@ export function maskExpr(
   col: string,
   transform: MaskTransform,
   idExpr = "id",
-  column?: { udtName: string; isNullable: boolean },
+  column?: { udtName: string; isNullable: boolean; tableName?: string },
 ): string {
   const q = `"${col}"`;
   const removed = column && !column.isNullable ? emptyValueSql(col, column) : "null";
@@ -65,6 +65,12 @@ export function maskExpr(
       // Deterministic ±50% jitter, preserves sign and numeric type.
       return `(case when ${q} is null then null else round(${q} * (0.5 + (abs(hashtext(${idExpr}::text)) % 1000) / 1000.0), 4) end)`;
     case "null_out":
+      // Historical compensation cycles require a source key and an object
+      // together. Remove the employee evidence while retaining its presence;
+      // native cycles without source evidence must remain without it.
+      if (column?.tableName === "hrm_comp_cycles" && col === "source_evidence" && column.udtName === "jsonb") {
+        return `(case when ${q} is null then null else '{"redacted":true}'::jsonb end)`;
+      }
       // information_return_filings_finalized requires payer_snapshot <> '{}'
       // on finalized/filed rows. Emptying the object would refuse the clone
       // INSERT and leave production tax ids in the sandbox if the operator
@@ -128,6 +134,8 @@ export async function loadMaskingPolicies(
  * fails unless each is masked here or explicitly allow-listed as
  * non-personal. Add a policy there before allow-listing anyone's identity. */
 export const DEFAULT_POLICIES: MaskingPolicy[] = [
+  { tableName: "hrm_comp_cycles", columnName: "source_key", transform: "hash" },
+  { tableName: "hrm_comp_cycles", columnName: "source_evidence", transform: "null_out" },
   // Checklist responses are employee-authored evidence; publication reasons may name people.
   { tableName: "hrm_process_steps", columnName: "response", transform: "null_out" },
   { tableName: "hrm_process_template_versions", columnName: "reason", transform: "redact" },

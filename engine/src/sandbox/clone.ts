@@ -279,7 +279,7 @@ function generateCopySql(
       // retried attempts mint their own keys.
       exprs.push("null");
     } else if (tableMask?.has(c.name)) {
-      exprs.push(`${maskExpr(c.name, tableMask.get(c.name)!, "id", c)} `);
+      exprs.push(`${maskExpr(c.name, tableMask.get(c.name)!, "id", { ...c, tableName: t.name })} `);
     } else if (opts.masked && (c.udtName === "jsonb" || c.udtName === "json") && c.name === "custom") {
       // Custom fields are arbitrary tenant-authored JSON and may contain PII
       // without a schema-level column for a masking policy to name. A masked
