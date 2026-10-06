@@ -2074,7 +2074,7 @@
       "runwayCritical": "严重",
       "runwayCaution": "注意",
       "runwayHealthy": "健康",
-      "refusedNote": "预测不含 {names} — 暂无预测，指标低估了支出。",
+      "refusedNote": "预测不含 {names} — 暂无预测，指标低估了支出。"
     },
     "panels": {
       "bridge": "现金桥",
