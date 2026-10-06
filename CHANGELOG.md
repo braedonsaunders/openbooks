@@ -22,8 +22,11 @@ changes; each release documents required operator action.
   filing-period starts, and FX rate age policies.
 - Extend payroll and workforce: benefit program identity and selected-hours
   components, entitlement bank drawdown, compensation packages and source
-  cycles, training delivery, business calendars, and component protection
-  classes.
+  cycles with approved compensation paid through native payroll under
+  currency-aware caps, prior-provider period payments within annual payroll
+  carry-in (native drawer, API and Data Import), optional governed rosters and
+  device attendance, training delivery, business calendars, and component
+  protection classes.
 - Rebuild Analytics dashboards on shared scoped aggregates, add demand
   forecasting, configurable aging bucket policies and explicit department
   billable expectations.
@@ -35,6 +38,12 @@ changes; each release documents required operator action.
   results re-checked against current permissions.
 - Fence the subscription drawer and its customer picker to the reader's
   subsidiaries.
+- Fix opening CRM opportunities, cash agent settlement statistics,
+  compensation cycle access order, and report subsidiary policies for channel,
+  contract cost and billing import entities.
+- Upgrade an install that has not adopted the alpha.29 release baseline by
+  replaying exactly the migrations and tenant-policy environment the baseline
+  was verified with, adopting it, then applying later migrations forward.
 
 Migrations 0482 through 0567 apply forward on the alpha.29 release baseline.
 Migration 0567 builds search indexes with `CREATE INDEX CONCURRENTLY` outside
