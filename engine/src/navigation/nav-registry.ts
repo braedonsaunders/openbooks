@@ -1092,7 +1092,11 @@ NAV_MODULES.push(
     ['payroll-retro', '/payroll/retro', 'Retroactive Pay', 'payroll.read', 'history'],
     ['payroll-parallel-run', '/payroll/parallel-run', 'Parallel Run', 'payroll.read', 'split'],
     ['payroll-work-locations', '/payroll/work-locations', 'Work Locations', 'payroll.manage', 'pin'],
-  ].map(([key, href, label, requiredPermission, iconKey]) => ({ key: key!, href: href!, label: label!, requiredPermission: requiredPermission!, iconKey: iconKey!, group: 'hrm' as const, subgroup: 'payroll-controls', featureKey: 'payroll', exact: true })),
+  ].map(([key, href, label, requiredPermission, iconKey]) => ({
+    key: key!, href: href!, label: label!, requiredPermission: requiredPermission!, iconKey: iconKey!, group: 'hrm' as const, subgroup: 'payroll-controls', featureKey: 'payroll', exact: true,
+    // Go-live tools stay on the Payroll strip; they are not everyday menu destinations.
+    ...(key === 'payroll-opening-balances' || key === 'payroll-parallel-run' ? { menuParent: 'payroll' } : {}),
+  })),
   { key: 'hrm-performance-settings', href: '/hrm/performance?tab=settings', label: 'Performance setup', iconKey: 'settings', group: 'hrm', subgroup: 'hrm-talent', requiredPermission: 'hrm.performance.manage', featureKey: 'hrmPerformance', menuParent: 'hrm-performance', exact: true },
   { key: 'hrm-change-requests', href: '/hrm/change-requests', label: 'Employment Changes', iconKey: 'user-cog', group: 'hrm', subgroup: 'workforce', requiredPermission: 'hrm.employment.read', featureKey: 'hrm' },
   { key: 'hrm-compliance', href: '/hrm/compliance', label: 'Workforce Compliance', iconKey: 'hard-hat', group: 'hrm', subgroup: 'workforce', requiredPermission: 'hrm.construction.read', featureKey: 'hrmConstructionCompliance' },
