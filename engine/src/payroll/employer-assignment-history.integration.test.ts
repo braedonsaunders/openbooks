@@ -7,6 +7,7 @@ import { withSimClock } from '../platform/clock.ts';
 import { dropScratchOrgReporting } from '../testing/fixtures.ts';
 import { seedAdoption, seedHiredEmployee } from './filing-test-fixtures.ts';
 import { exportedPayrollEvidence } from '../testing/dsar-fixture.ts';
+import { errorChainMatches } from '../testing/error-chain.ts';
 import { upsertPayrollEmployerFact } from './employer-fact-store.ts';
 import { recordHistoricalEmployerAssignment, employeeEmployerAssignmentHistory, lockEmployerAssignmentProfiles } from './employer-assignment-history.ts';
 import { createPayRun } from './run-lifecycle.ts';
@@ -75,7 +76,7 @@ test('dated employer assignments change only their recorded pay dates, stale dra
       await assert.rejects(recordHistoricalEmployerAssignment({ ...input, effectiveTo: '2026-07-21' }), /end before today/);
       await assert.rejects(recordHistoricalEmployerAssignment({ ...input, effectiveFrom: '2026-07-09', effectiveTo: '2026-07-09', expectedCurrentId: reduced }), /current.*differs/i);
       await assert.rejects(recordHistoricalEmployerAssignment({ ...input, allowedSubsidiaryIds: new Set() }));
-      await assert.rejects(db.transaction(tx => tx.execute(sql`update payroll_employee_employer_assignments set reason='Replacement' where org_id=${f.orgId} and id=${saved.id}`)), /immutable/i);
+      await assert.rejects(db.transaction(tx => tx.execute(sql`update payroll_employee_employer_assignments set reason='Replacement' where org_id=${f.orgId} and id=${saved.id}`)), error => errorChainMatches(error, /Dated employer assignment evidence is immutable.*controlled payroll correction/));
       for (const date of ['2026-07-07', '2026-07-09']) assert.deepEqual(await employeeEmployerAssignmentHistory(db, { orgId: f.orgId, payDate: date, employeePartyIds: [f.employeeId] }), []);
       await commitPayRun(command);
       const posted = await stub();

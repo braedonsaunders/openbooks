@@ -34,88 +34,37 @@ interface MembershipScenario {
   expectNamed?: RegExp;
 }
 
+function scopeCase(label: string, mutation: MembershipScenario["mutation"], expectNamed?: RegExp): MembershipScenario {
+  return { label, mutation, expectRefused: expectNamed !== undefined, expectNamed };
+}
+
 test("pay-run scope guard: native membership rules for include and exclude", { skip: !DB }, async () => {
   const fx = await scopeFixture();
   try {
     const strangerId = randomUUID();
     const rows: MembershipScenario[] = [
-      {
-        label: "active member included",
-        mutation: (f) => ({ action: "include", employeePartyId: f.activeId }),
-        expectRefused: false,
-      },
-      {
-        label: "active member excluded",
-        mutation: (f) => ({ action: "exclude", employeePartyId: f.activeId }),
-        expectRefused: false,
-      },
-      {
-        label: "deactivated member excluded (the newly permitted case)",
-        mutation: (f) => ({ action: "exclude", employeePartyId: f.deactivatedId }),
-        expectRefused: false,
-      },
-      {
-        label: "inactive-profile member excluded (the newly permitted case)",
-        mutation: (f) => ({ action: "exclude", employeePartyId: f.profileOffId }),
-        expectRefused: false,
-      },
-      {
-        label: "deactivated member included (must still refuse)",
-        mutation: (f) => ({ action: "include", employeePartyId: f.deactivatedId }),
-        expectRefused: true,
-        expectNamed: /employee "Deactivated Member" is not an active member.*deactivated/,
-      },
-      {
-        label: "inactive-profile member included (must still refuse)",
-        mutation: (f) => ({ action: "include", employeePartyId: f.profileOffId }),
-        expectRefused: true,
-        expectNamed: /employee "Profile Off Member" is not an active member.*profile.*inactive/,
-      },
-      {
-        label: "other-schedule member excluded (must still refuse)",
-        mutation: (f) => ({ action: "exclude", employeePartyId: f.otherEmployeeId }),
-        expectRefused: true,
-        expectNamed: /employee "Other Schedule Member" is not on this run's pay schedule/,
-      },
-      {
-        label: "other-schedule member included (must still refuse)",
-        mutation: (f) => ({ action: "include", employeePartyId: f.otherEmployeeId }),
-        expectRefused: true,
-        expectNamed: /employee "Other Schedule Member" is not an active member.*no payroll profile/,
-      },
-      {
-        label: "non-existent id excluded (must still refuse)",
-        mutation: () => ({ action: "exclude", employeePartyId: strangerId }),
-        expectRefused: true,
-        expectNamed: new RegExp(`employee "${strangerId}" is not on this run's pay schedule`),
-      },
-      {
-        label: "non-existent id included (must still refuse)",
-        mutation: () => ({ action: "include", employeePartyId: strangerId }),
-        expectRefused: true,
-        expectNamed: new RegExp(`employee "${strangerId}" is not an active member.*no employee with that id`),
-      },
-      {
-        label: "line adjustment for a deactivated member (must still refuse)",
-        mutation: (f) => ({
-          action: "add",
-          employeePartyId: f.deactivatedId,
-          componentId: f.componentId,
-          amount: "10.00",
-        }),
-        expectRefused: true,
-        expectNamed: /employee "Deactivated Member" is not an active member/,
-      },
-      {
-        label: "line adjustment for an active member",
-        mutation: (f) => ({
-          action: "add",
-          employeePartyId: f.activeId,
-          componentId: f.componentId,
-          amount: "10.00",
-        }),
-        expectRefused: false,
-      },
+      scopeCase("active member included", f => ({ action: "include", employeePartyId: f.activeId })),
+      scopeCase("active member excluded", f => ({ action: "exclude", employeePartyId: f.activeId })),
+      scopeCase("deactivated member excluded (the newly permitted case)", f => ({ action: "exclude", employeePartyId: f.deactivatedId })),
+      scopeCase("inactive-profile member excluded (the newly permitted case)", f => ({ action: "exclude", employeePartyId: f.profileOffId })),
+      scopeCase("deactivated member included (must still refuse)", f => ({ action: "include", employeePartyId: f.deactivatedId }),
+        /employee "Deactivated Member" is not an active member.*deactivated/),
+      scopeCase("inactive-profile member included (must still refuse)", f => ({ action: "include", employeePartyId: f.profileOffId }),
+        /employee "Profile Off Member" is not an active member.*profile.*inactive/),
+      scopeCase("other-schedule member excluded (must still refuse)", f => ({ action: "exclude", employeePartyId: f.otherEmployeeId }),
+        /employee "Other Schedule Member" is not on this run's pay schedule/),
+      scopeCase("other-schedule member included (must still refuse)", f => ({ action: "include", employeePartyId: f.otherEmployeeId }),
+        /employee "Other Schedule Member" is not an active member.*no payroll profile/),
+      scopeCase("non-existent id excluded (must still refuse)", () => ({ action: "exclude", employeePartyId: strangerId }),
+        new RegExp(`employee "${strangerId}" is not on this run's pay schedule`)),
+      scopeCase("non-existent id included (must still refuse)", () => ({ action: "include", employeePartyId: strangerId }),
+        new RegExp(`employee "${strangerId}" is not an active member.*no employee with that id`)),
+      scopeCase("line adjustment for a deactivated member (must still refuse)", f => ({
+        action: "add", employeePartyId: f.deactivatedId, componentId: f.componentId, amount: "10.00",
+      }), /employee "Deactivated Member" is not an active member/),
+      scopeCase("line adjustment for an active member", f => ({
+        action: "add", employeePartyId: f.activeId, componentId: f.componentId, amount: "10.00",
+      })),
     ];
     for (const row of rows) {
       const mutation = row.mutation(fx);
