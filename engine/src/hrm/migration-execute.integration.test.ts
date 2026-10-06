@@ -5,6 +5,7 @@ import { db, withBypassContext, withOrg } from "../platform/db.ts";
 import {
   createScratchOrg,
   dropScratchOrg,
+  seedFlowActors,
   type ScratchOrg,
 } from "../testing/fixtures.ts";
 import {
@@ -188,6 +189,7 @@ test("dry run writes nothing and plans would_migrate", { skip }, async () => {
 test("ready org migrates with digest-bound evidence; triggers accept without bypass", { skip }, async () => {
   const org = await createScratchOrg();
   try {
+    const actorId = (await seedFlowActors(org.orgId)).adminId;
     const first = await seedPerson(org, "mig-001");
     const secondParty = await mkParty(org.orgId, "Migration mig-002");
     // Observation-anchored but no service start: coverage stays unknown and
@@ -212,11 +214,25 @@ test("ready org migrates with digest-bound evidence; triggers accept without byp
       },
     };
     const report = await withOrg(org.orgId, () =>
-      executeEmploymentMigration({ orgId: org.orgId, rows: [first.row, secondRow] }),
+      executeEmploymentMigration({
+        orgId: org.orgId, rows: [first.row, secondRow], appliedBy: actorId,
+      }),
     );
     assert.equal(report.totals.migrated, 2);
     assert.equal(report.totals.refused, 0);
     assert.equal(report.persons.length, 2);
+    const audits = await withOrg(org.orgId, async () => {
+      const result = await db.execute<{
+        actor_id: string;
+        changes: { after: { historicalCoverage: string }; sourceReference: string };
+      }>(sql`select actor_id, changes from audit_log where org_id=${org.orgId}
+          and table_name='worker_employments' and action='insert'`);
+      return result.rows;
+    });
+    assert.equal(audits.length, 2);
+    assert.ok(audits.every((row) => row.actor_id === actorId &&
+      row.changes.after.historicalCoverage === "unknown" &&
+      row.changes.sourceReference.startsWith("hrm-employment-migration/v1")));
     assert.deepEqual(await tableCounts(org.orgId), {
       employments: 2,
       versions: 2,
