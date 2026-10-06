@@ -7611,7 +7611,7 @@
     "tiers": {
       "masked": "Cópia completa mascarada (recomendada)",
       "full": "Cópia completa (sem máscara)",
-      "dev": "Desenvolvimento (somente personalizações)",
+      "dev": "Desenvolvimento (personalizações e plano de contas)",
       "asOf": "Até uma data (livros no fechamento do período)",
       "unknown": "Nível desconhecido"
     },

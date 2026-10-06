@@ -7611,7 +7611,7 @@
     "tiers": {
       "masked": "Vollständige maskierte Kopie (empfohlen)",
       "full": "Vollständige Kopie (unmaskiert)",
-      "dev": "Entwicklung (nur Anpassungen)",
+      "dev": "Entwicklung (Anpassungen und Kontenplan)",
       "asOf": "Stichtag (Bücher zum Periodenabschluss)",
       "unknown": "Unbekannte Stufe"
     },

@@ -182,8 +182,7 @@ async function applySandboxOrgConfig(
   }
 }
 
-/** The user-built customization layer — the only tables a 'dev' sandbox copies,
- * and the set preserved across a "keep customizations" refresh / diffed on
+/** The user-built customization layer, preserved across a "keep customizations" refresh / diffed on
  * promotion. Names not present in the schema are skipped harmlessly. */
 export const CUSTOMIZATION_LAYER = new Set([
   "user_scripts",
@@ -348,11 +347,12 @@ export function selectCloneTables(
   onlyTables?: Set<string>,
 ): TableInfo[] {
   tier = validateSandboxTier(tier);
-  // Dev also needs the legal-entity tree so copied roles have real scope
-  // targets. Keep it outside CUSTOMIZATION_LAYER: refresh must refresh that
-  // reference data even when preserving role customizations.
+  // Copied roles need legal entities; pinned account classifications need
+  // their chart of accounts. These are definitions, not posted balances.
+  // Keep them outside CUSTOMIZATION_LAYER so refresh updates reference data
+  // without treating source account definitions as promotable customizations.
   let selected =
-    tier === "dev" ? tables.filter((t) => CUSTOMIZATION_LAYER.has(t.name) || t.name === "subsidiaries") : tables;
+    tier === "dev" ? tables.filter((t) => CUSTOMIZATION_LAYER.has(t.name) || t.name === "subsidiaries" || t.name === "accounts") : tables;
   if (onlyTables) selected = selected.filter((t) => onlyTables.has(t.name));
   return selected;
 }

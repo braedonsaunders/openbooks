@@ -7,32 +7,26 @@ import { loadCatalog } from "./catalog.ts";
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
 /**
- * C-40: the isolation proof must cover exactly the tables the clone tier
- * actually copied, derived from the clone plan. The old fixed trio
- * (journal_lines, accounts, accounting_periods) is never copied on a dev
- * tier, so proving those tables proved nothing while production counts kept
- * the total positive.
- *
- * These tests derive the sets from the live catalog the clone itself uses:
- * a dev tier carries the customization layer plus the legal-entity tree and
- * no ledger table; the full tier carries the ledger. Every verified table
- * is org-scoped (RLS-subject).
+ * Isolation covers the actual copy plan: developer copies contain settings,
+ * legal entities and account definitions, while full copies also carry the
+ * ledger. Every verified table is organization-scoped.
  */
 test("dev-tier verification set is the copied customization layer, never the ledger", { skip: !DB }, async () => {
   const tables = await cloneTierVerificationTables("dev");
   assert.ok(tables.length > 0, "a dev tier must verify a non-empty table set");
-  for (const ledger of ["journal_lines", "journal_entries", "accounts", "accounting_periods", "documents"]) {
+  for (const ledger of ["journal_lines", "journal_entries", "accounting_periods", "documents", "pay_runs", "pay_stubs"]) {
     assert.ok(!tables.includes(ledger), `dev tier never copies ${ledger}, so it must not be verified`);
   }
   assert.ok(tables.includes("subsidiaries"), "dev copies the legal-entity tree for role scope targets");
+  assert.ok(tables.includes("accounts"), "dev copies account definitions for pinned reporting classifications");
   assert.ok(
     tables.includes("saved_reports"),
     "dev copies the customization layer (saved_reports is a member)",
   );
   for (const name of tables) {
     assert.ok(
-      CUSTOMIZATION_LAYER.has(name) || name === "subsidiaries",
-      `dev verifies only what it copies: ${name} is outside the customization layer plus subsidiaries`,
+      CUSTOMIZATION_LAYER.has(name) || name === "subsidiaries" || name === "accounts",
+      `dev verifies only copied customization and reference definitions: ${name}`,
     );
   }
 });

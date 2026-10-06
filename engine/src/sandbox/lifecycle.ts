@@ -254,8 +254,8 @@ const UUID_VALUE =
  * sandbox would be a silent cross-tenant configuration reference.
  *
  * Only identities proven to be production-owned accounts and to have an exact
- * cloned counterpart survive. A customization-only sandbox has no cloned
- * accounts, so its control map is intentionally empty instead of dangling.
+ * cloned counterpart survive. If a restricted copy omits accounts, its
+ * control map is empty instead of retaining source-tenant references.
  */
 export async function rebaseSandboxControlAccounts(args: {
   productionOrgId: string;
