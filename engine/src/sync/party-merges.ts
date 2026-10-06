@@ -60,7 +60,28 @@ export interface PartyMergeResult {
  */
 const IMMUTABLE_PARTY_REFS: readonly (readonly [table: string, column: string])[] = [
   ["pay_run_benefit_allocations", "employee_party_id"],
+  // These subjects and authors are part of approved financial or independent
+  // approval evidence. Repointing them would change obligations or authorship;
+  // retaining them while moving their employment would split the identity.
+  ["payroll_compensation_assignments", "employee_party_id"],
+  ["payroll_period_openings", "employee_party_id"],
+  ["hrm_training_courses", "author_party_id"],
+  ["hrm_shift_templates", "author_party_id"],
+  ["hrm_shift_assignments", "author_party_id"],
+  ["hrm_shifts", "author_party_id"],
+  ["hrm_shift_requests", "author_party_id"],
 ];
+
+const IMMUTABLE_PARTY_REF_LABELS: Readonly<Record<string, string>> = {
+  pay_run_benefit_allocations: "native benefit payroll evidence",
+  payroll_compensation_assignments: "compensation assignment history",
+  payroll_period_openings: "prior-provider payroll period balances",
+  hrm_training_courses: "training course authorship evidence",
+  hrm_shift_templates: "shift template authorship evidence",
+  hrm_shift_assignments: "shift assignment authorship evidence",
+  hrm_shifts: "shift authorship evidence",
+  hrm_shift_requests: "shift request authorship evidence",
+};
 
 const SIMPLE_PARTY_REFS: readonly (readonly [table: string, column: string])[] = [
   ["addresses", "party_id"],
@@ -792,7 +813,7 @@ async function applyMergeTx(
   for (const [table, column] of IMMUTABLE_PARTY_REFS) {
     const referenced = (await tx.execute(sql`select id from ${sql.identifier(table)}
       where org_id=${orgId} and ${sql.identifier(column)}=${absorbedId} limit 1`)).rows;
-    if (referenced.length) throw new PartyMergeError("This employee has native benefit payroll evidence. Keep the employee identities separate to preserve its recorded payroll subject.");
+    if (referenced.length) throw new PartyMergeError(`This person has ${IMMUTABLE_PARTY_REF_LABELS[table]}. Keep the employee identities separate to preserve recorded subjects and authorship.`);
   }
 
   {
