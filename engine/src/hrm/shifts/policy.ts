@@ -183,7 +183,7 @@ export interface AttendancePolicy {
   readonly lateGraceSeconds: number;
   readonly earlyGraceSeconds: number;
 }
-export interface DeviceCheckIn {
+export type DeviceCheckIn = {
   readonly id: string;
   readonly kind: Exclude<ClockKind, "switch">;
   readonly occurredAt: string;

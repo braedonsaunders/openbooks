@@ -5,7 +5,7 @@ import { ScopeNotFoundError } from "../../organization/subsidiary-scope.ts";
 import { attendancePolicy, shiftPattern, ShiftError, requireUuid, type AttendancePolicy, type ShiftPattern, type ShiftSlot } from "./policy.ts";
 import { authorParty, creationReplay, db, expectedRevision, one, requestHash, scopedRow, shiftAuthority, shiftInteger, shiftText, shiftTransaction, sql, subsidiaryVisibleFilter, type ShiftActor } from "./store.ts";
 
-export interface ShiftTemplate {
+export type ShiftTemplate = {
   readonly id: string; readonly subsidiaryId: string; readonly normalWorkScheduleId: string; readonly code: string; readonly version: number;
   readonly name: string; readonly description: string | null; readonly effectiveFrom: string; readonly effectiveTo: string | null;
   readonly pattern: ShiftPattern; readonly attendancePolicy: AttendancePolicy | null; readonly definitionHash: string;

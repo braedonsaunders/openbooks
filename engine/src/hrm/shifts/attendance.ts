@@ -2,7 +2,7 @@ import { observeAttendance, requireShiftInstant, requireUuid, ShiftError, type A
 import { SHIFT_COLUMNS, type RosterShift } from "./roster.ts";
 import { creationReplay, db, expectedRevision, one, requestHash, scopedRow, shiftAuthority, shiftEmployment, shiftText, shiftTransaction, sql, type ShiftActor } from "./store.ts";
 
-export interface StoredAttendanceObservation extends Omit<AttendanceObservation,"eventIds"|"presenceMilliseconds"|"breakMilliseconds"|"status"> {
+export type StoredAttendanceObservation = Omit<AttendanceObservation,"eventIds"|"presenceMilliseconds"|"breakMilliseconds"|"status"> & {
   readonly id: string; readonly shiftId: string; readonly subsidiaryId: string; readonly employmentId: string; readonly workerPartyId: string;
   readonly status: AttendanceObservation["status"] | "voided"; readonly presenceMilliseconds: string | null; readonly breakMilliseconds: string | null;
   readonly supersedesId: string | null; readonly sourceEvidence: unknown;

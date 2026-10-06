@@ -76,10 +76,10 @@ export async function shiftEmployment(actor: ShiftActor, employmentId: string, p
   await shiftAuthority(actor, permission, subject.employerSubsidiaryId);
   return subject;
 }
-export async function scopedRow<T extends { subsidiaryId: string }>(actor: ShiftActor, table: ShiftTable, id: string, columns: SQL, permission: ShiftPermission, write: boolean | "none"): Promise<T> {
+export async function scopedRow<T extends Record<string, unknown> & { subsidiaryId: string }>(actor: ShiftActor, table: ShiftTable, id: string, columns: SQL, permission: ShiftPermission, write: boolean | "none"): Promise<T> {
   const scope = await shiftAuthority(actor, permission);
   const row = one((await db.execute<T>(sql`select ${columns} from ${sql.identifier(table)} where org_id=${actor.orgId} and id=${requireUuid(id, "Record")}
-    ${subsidiaryVisibleFilter(sql`subsidiary_id`, scope)} ${write === "none" ? sql`` : write ? sql`for update` : sql`for share`}`)).rows);
+    ${subsidiaryVisibleFilter(sql`subsidiary_id`, scope)} ${write === "none" ? sql`` : write ? sql`for update` : sql`for share`}`)).rows) as T;
   await shiftAuthority(actor, permission, row.subsidiaryId);
   return row;
 }
