@@ -36,17 +36,24 @@ export function releaseMigrationPlan(directory, generated) {
 }
 
 /**
- * The retained chain an existing install replays before adopting the release
- * baseline: exactly the migrations the baseline covers, so the upgraded
- * schema can be compared with the baseline's catalog. Forward migrations
- * above the cut apply afterwards through ordinary bootstrap, as on a fresh
- * install. Without a release cut the whole chain is historical.
+ * What an existing install replays before adopting the release baseline:
+ * exactly the migrations the baseline covers, under the tenant-policy
+ * environment the baseline was verified with, so the upgraded schema can be
+ * compared with the baseline's catalog. Forward migrations above the cut and
+ * the current policy environment apply afterwards through ordinary
+ * bootstrap, as on every adopted install. Without a release cut the whole
+ * chain is historical under the current environment.
  */
 export function historicalMigrationPlan(directory, generated) {
   const release = releaseMigrationPlan(directory, generated);
-  if (!release.baseline) return release;
+  if (!release.baseline) return { ...release, environment: "environments.sql" };
+  const environment = `${release.baseline.filename}.environments.sql`;
+  const path = join(directory, environment);
+  if (!existsSync(path) || baselineDigest(readFileSync(path)) !== release.baseline.environmentSha256) {
+    throw new Error(`${environment} is missing or differs from the tenant-policy environment ${release.baseline.filename} was verified with; restore it from the release that prepared the baseline`);
+  }
   const covered = new Set(release.baseline.covered.map((entry) => entry.filename));
-  return { baseline: null, filenames: generated.map((file) => `generated/${file}`).filter((file) => covered.has(file)) };
+  return { baseline: null, filenames: generated.map((file) => `generated/${file}`).filter((file) => covered.has(file)), environment };
 }
 
 export function assertBaselineHistory(baseline, recorded, applicationTablesPresent) {

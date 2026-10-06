@@ -28,6 +28,8 @@ mkdirSync(join(directory, "baselines"), { recursive: true });
 writeFileSync(join(directory, manifest.filename), baseline, { flag: "wx" });
 validateBaselineManifest(manifest, directory);
 writeFileSync(join(directory, `${manifest.filename}.catalog.json`), JSON.stringify(catalog, null, 2) + "\n", { flag: "wx" });
+// Historical replays reproduce the baseline under the policy environment it was verified with.
+writeFileSync(join(directory, `${manifest.filename}.environments.sql`), readFileSync(join(directory, "environments.sql")), { flag: "wx" });
 writeFileSync(join(directory, "baseline.json.pending"), JSON.stringify(manifest, null, 2) + "\n", { flag: "wx" });
 renameSync(join(directory, "baseline.json.pending"), join(directory, "baseline.json"));
 console.log(`activated ${manifest.filename}; ${manifest.covered.length} historical migrations remain immutable and are excluded from fresh-install replay`);
