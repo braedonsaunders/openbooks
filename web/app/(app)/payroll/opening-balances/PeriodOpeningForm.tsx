@@ -45,8 +45,11 @@ export function PeriodOpeningForm({ employeePartyId, employeeName, year, draft, 
   useEffect(() => {
     if (draft?.context && reload === 0) return
     const controller = new AbortController()
+    // A load marks itself busy and clears the previous load's failure.
+    /* eslint-disable react-hooks/set-state-in-effect */
     setBusy(true)
     setError(null)
+    /* eslint-enable react-hooks/set-state-in-effect */
     void apiJson<PayrollPeriodOpeningView>(`/api/payroll/period-openings?employeePartyId=${encodeURIComponent(employeePartyId)}&taxYear=${year}`,
       { signal: controller.signal }, t('loadFailed'))
       .then(context => {
