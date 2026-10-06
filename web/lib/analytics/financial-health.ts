@@ -7,7 +7,7 @@ import { statementBookExpr } from "../gl-summary";
 import { subsidiaryVisibleFilter } from "../subsidiaries";
 import { resolveOrgId } from "../org-scope";
 import { flowRates, presentationCurrency, presentationRates } from "../fx-presentation";
-import { add, cmp, mulDecimal, mulRatio, neg } from "@openbooks/engine/src/money/money.ts";
+import { add, cmp, mulDecimal, mulRatio, neg } from "@openbooks/engine/money";
 import { addCalendarDays, addMonthsClamped, inclusiveCalendarDays, calendarDaysBetween } from "@openbooks/engine/platform/civil-date";
 import { enactedIncomeTaxRate } from "@openbooks/engine/tax-returns";
 import { resolveAccountGroups } from "../account-groups";
@@ -133,12 +133,16 @@ export interface HealthFigures {
   headcount: number;
 }
 
+export type HealthPnlFigures = Pick<HealthFigures, 'revenue' | 'cogs' | 'grossProfit' | 'opex' | 'operatingIncome' | 'otherExpense' | 'netIncome'>;
+
 export interface FinancialHealth {
   period: { from: string; to: string; label: string; days: number; fiscalYearDays: number };
   prior: { from: string; to: string };
   currency: string;
   hasBalanceSheet: boolean;
   figures: HealthFigures;
+  /** Prior comparison from the same statement read; no second health evaluation. */
+  priorFigures: HealthPnlFigures;
   ratios: Record<RatioCategory, RatioResult[]>;
   categoryScores: CategoryScore[];
   /** null when nothing could be graded. */
@@ -660,6 +664,12 @@ export async function financialHealth(
       workingCapital, capitalEmployed, interestBearingDebt: debt, interestExpense, investedCapital,
       priorRevenue, priorOperatingIncome, revenueGrowth, operatingLeverage, rule40, breakevenRevenue,
       headcount,
+    },
+    priorFigures: {
+      revenue: priorPl.revenue, cogs: priorPl.cogs, grossProfit: priorPl.grossProfit,
+      opex: decimalSubtract(totalOf(priorPl.items, [...OPERATING_EXPENSE_TYPES]), priorTaxInOpex),
+      operatingIncome: priorOperatingIncome,
+      otherExpense: totalOf(priorPl.items, ['expense_other']), netIncome: priorPl.netIncome,
     },
     ratios,
     categoryScores,

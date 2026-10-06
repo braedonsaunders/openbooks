@@ -17,11 +17,12 @@ const mocks: Record<string, string> = {
   "../features": "export async function isFeatureEnabled(){return globalThis.__healthFailures.budgets}",
   "./config": "export async function analyticsConfig(){return {insightCriticalPercent:50,insightWarningPercent:75,revenueDeclineAlertPercent:15,revenueTrendAlertPercent:10,marginCompressionPoints:3,breakevenSafetyPercent:10,breakevenComfortPercent:30,budgetOnTrackPercent:10,budgetWatchPercent:25,segmentHhiWarning:1500,segmentHhiCritical:2500,operatingMarginTarget:15,forecastMethod:\"ets\",forecastHorizon:\"6\",forecastConfidence:\"90\",forecastSeasonality:\"auto\",forecastAdjustment:\"zero\",forecastEtsAlpha:0.3,forecastEtsBeta:0.1,forecastEtsGamma:0.2,forecastDampedPhi:0.9,forecastMa1:0.3,forecastSeasonalityMinCorr:0.3,forecastSeasonalityMinPeriods:24,anomalySigma:2}}",
   "./financial-health": `export async function priorFiscalWindow(){return {from:'2025-07-01',to:'2025-07-31'}}
-    export async function financialHealth(){const r=(n)=>Number(n).toFixed(4);return {ratios:{profitability:[],liquidity:[],solvency:[],efficiency:[],operating:[]},benchmarks:{targets:{}},figures:{
+    export async function financialHealth(){const r=(n)=>Number(n).toFixed(4);return {ratios:{profitability:[],liquidity:[],solvency:[],efficiency:[],operating:[]},benchmarks:{targets:{}},priorFigures:{revenue:'0.0000',cogs:'0.0000',grossProfit:'0.0000',opex:'0.0000',operatingIncome:'0.0000',otherExpense:'0.0000',netIncome:'0.0000'},figures:{
     revenue:r(0),cogs:r(0),grossProfit:r(0),opex:r(0),operatingIncome:r(0),otherIncome:r(0),otherExpense:r(0),netIncome:r(0),
     revenueGrowth:null,breakevenRevenue:null,operatingLeverage:null,rule40:null}}}`,
 };
 registerHooks({ resolve(specifier, context, next) {
+  if (specifier === "@openbooks/engine/platform/database" && context.parentURL?.endsWith("/analytics/query.ts")) return { shortCircuit: true, url: "data:text/javascript," + encodeURIComponent(mocks["@openbooks/engine/src/platform/db.ts"]!) };
   if (specifier in mocks) return { shortCircuit: true, url: 'data:text/javascript,' + encodeURIComponent(mocks[specifier]!) };
   return next(specifier, context);
 } });
