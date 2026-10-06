@@ -82,6 +82,7 @@
     "./payroll/withholding": "./src/payroll/public-withholding.ts",
     "./payroll/setup": "./src/payroll/public-setup.ts",
     "./payroll/inputs": "./src/payroll/public-inputs.ts",
+    "./payroll/period-openings": "./src/payroll/public-period-openings.ts",
     "./payroll/work-schedules": "./src/payroll/public-work-schedules.ts",
     "./payroll/compensation-packages": "./src/payroll/compensation-package-public.ts",
     "./payroll/non-cash-offsets": "./src/payroll/non-cash-offset-types.ts",

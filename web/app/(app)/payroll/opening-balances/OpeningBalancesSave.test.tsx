@@ -46,6 +46,7 @@ const { act } = await import('react')
 const { NextIntlClientProvider } = await import('next-intl')
 const messages = (await import('../../../../messages/en')).default
 const { OpeningBalancesView } = await import('./OpeningBalancesView')
+const { CA_PERIOD_OPENING_TREATMENT } = await import('@openbooks/engine/src/payroll/canada/period-openings.ts')
 
 const tick = () => new Promise((resolve) => setTimeout(resolve, 30))
 
@@ -148,6 +149,55 @@ async function click(button: HTMLButtonElement): Promise<void> {
     for (let i = 0; i < 10; i++) await tick()
   })
 }
+
+async function openPeriod(): Promise<void> {
+  await openEmployee()
+  const tab = [...document.querySelectorAll('button')].find(button => button.textContent === 'Prior-provider period')
+  assert.ok(tab, 'period evidence must be a subtab in the existing employee drawer')
+  await click(tab)
+}
+
+function periodContext() {
+  return { employeePartyId: 'emp-1', subsidiaryId: '11111111-1111-4111-8111-111111111111', employerName: 'Employer',
+    country: 'CA', baseCurrency: 'CAD', assignedScheduleId: '22222222-2222-4222-8222-222222222222',
+    annualUpdatedAt: '2026-01-08 10:00:00+00', fields: CA_PERIOD_OPENING_TREATMENT.fields,
+    currencies: [{ value: 'CAD', label: 'CAD' }], schedules: [{ id: '22222222-2222-4222-8222-222222222222', name: 'Weekly' }], record: null }
+}
+
+test('period load and retry retain the same employee drawer and surface a non-JSON refusal', async t => {
+  let requests = 0
+  await mount(t, () => ++requests === 1 ? new Response('gateway failure', { status: 502 }) : Response.json(periodContext()))
+  await openEmployee()
+  const shell = document.querySelector('[role="dialog"]')
+  await openPeriod()
+  assert.match(document.body.textContent ?? '', /Could not load period payments.*status 502/)
+  assert.equal(document.querySelector('[role="dialog"]'), shell)
+  const retry = [...document.querySelectorAll('button')].find(button => button.textContent === 'Reload current record')
+  assert.ok(retry); await click(retry)
+  assert.equal(document.querySelector('[role="dialog"]'), shell)
+  assert.equal(document.querySelectorAll('[role="dialog"]').length, 1)
+  assert.ok(document.querySelector('input[aria-label="Ada — Employee CPP/QPP already withheld (C)"]'))
+  assert.equal(successToasts().length, 0)
+})
+
+test('period money drafts survive closing and reopening without inventing missing zero amounts', async t => {
+  await mount(t, () => Response.json(periodContext()))
+  await openPeriod()
+  const field = document.querySelector('input[aria-label="Ada — Employee CPP/QPP already withheld (C)"]') as HTMLInputElement
+  assert.ok(field)
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set?.call(field, '11.63')
+    field.dispatchEvent(new window.Event('input', { bubbles: true })); await tick()
+  })
+  const done = [...document.querySelectorAll('button')].find(button => button.textContent === 'Done')
+  assert.ok(done); await click(done); await openEmployee()
+  assert.equal((document.querySelector('input[aria-label="Ada — Employee CPP/QPP already withheld (C)"]') as HTMLInputElement).value, '11.63')
+  const preview = [...document.querySelectorAll('button')].find(button => button.textContent === 'Preview period amounts')
+  assert.ok(preview); await click(preview)
+  assert.match(document.body.textContent ?? '', /CPP\/QPP pensionable earnings is empty/)
+  assert.equal(posted.filter(request => request.init?.method === 'POST').length, 0)
+  assert.equal(document.querySelectorAll('[role="dialog"]').length, 1)
+})
 
 test('a named 422 refusal lands in the error panel with its per-row reasons', async (t) => {
   const changeYear = await mountWith(t, () =>

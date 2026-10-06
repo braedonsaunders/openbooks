@@ -1411,6 +1411,29 @@
       "moneyHelp": "Le solde reporté, en dollars. Les banques sont stockées comme l’argent au taux où il a été gagné, et affichées en heures au salaire actuel de l’employé.",
       "hoursHelp": "Le solde reporté, en heures.",
       "oweHelp": "Un solde que L’EMPLOYÉ doit à l’employeur, donc négatif — saisissez −1200 pour un découvert de 1 200. Il est récupéré sur les paies futures jusqu’à atteindre exactement zéro."
+    },
+    "period": {
+      "title": "Période du fournisseur précédent",
+      "description": "Consignez les paiements déjà effectués par votre fournisseur précédent pour cette même période de paie. Ces montants doivent être inclus dans les soldes d’ouverture annuels et ne créent aucun paiement ni écriture supplémentaire.",
+      "loadFailed": "Impossible de charger les paiements de la période. Réessayez pour consulter les données actuelles.",
+      "saveFailed": "Les paiements de la période n’ont pas été enregistrés. Examinez le refus et réessayez.",
+      "annualRequired": "Enregistrez d’abord les soldes d’ouverture annuels vérifiés dans Cumul annuel, puis rechargez cette période.",
+      "annualDirty": "Enregistrez d’abord vos modifications des soldes annuels, puis rechargez et prévisualisez les montants de la période.",
+      "loading": "Chargement des paiements de la période…",
+      "reload": "Recharger les données actuelles",
+      "schedule": "Calendrier de paie",
+      "chooseSchedule": "Choisissez le calendrier de paie de l’employé",
+      "currency": "Devise",
+      "periodStart": "Début de la période",
+      "periodEnd": "Fin de la période",
+      "paidThrough": "Paiements du fournisseur précédent jusqu’au",
+      "explicitZeros": "Saisissez chaque montant vérifié, y compris un 0 explicite si aucun paiement n’a été effectué. Les champs vides ne valent pas zéro.",
+      "sourceReference": "Référence du document ou registre source",
+      "reason": "Motif de l’enregistrement ou de la correction",
+      "preview": "Prévisualiser les montants",
+      "save": "Enregistrer les montants",
+      "previewPassed": "Prévisualisation validée. Aucun paiement ni solde n’a été modifié. Vérifiez les montants avant de les enregistrer.",
+      "saved": "Montants enregistrés avec les justificatifs. Recalculez les paies provisoires concernées avant de les valider."
     }
   },
   "readiness": {
