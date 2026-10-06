@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useSyncExternalStore, type ReactNode } from 'react'
 import { usePathname } from 'next/navigation'
-import { VIEW_SWITCH_TRANSITION, ViewTransition } from '@openbooks/ui'
+import { VIEW_SWITCH_TRANSITION, ViewTransition, type ViewTransitionClass } from '@openbooks/ui'
 
 /**
  * Navigation motion for the authenticated app, built on React's
@@ -113,7 +113,7 @@ export function RouteTransition({ children }: { children: ReactNode }) {
   // placeholder) in; once a placeholder is showing, the page that replaces
   // it rises into place. A view switch on the same page moves like a
   // navigation. Any other update of the pane stays still.
-  const update = hidden
+  const update: ViewTransitionClass = hidden
     ? 'none'
     : navigating
       ? { [REPORT_OPEN_TRANSITION]: 'route-recede', default: 'route-change' }
