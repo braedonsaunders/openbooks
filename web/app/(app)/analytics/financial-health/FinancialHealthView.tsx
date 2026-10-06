@@ -1,5 +1,7 @@
 'use client'
 
+import { ANALYTICS_TABS } from '../../../../lib/analytics/dashboard-tabs'
+
 import { useAnalyticsTab, AnalyticsTabContent } from '../use-analytics-tab'
 
 import { RecordTabs } from '@/components/module-home/record-tabs'
@@ -24,7 +26,7 @@ import { DriversTab } from './tabs/DriversTab'
 import { RatiosTab } from './tabs/RatiosTab'
 import { ConfigurationTab } from './tabs/ConfigurationTab'
 
-const TABS = ['overview', 'margin', 'items', 'segments', 'forecast', 'scenarios', 'budget', 'drivers', 'ratios', 'configuration'] as const
+const TABS = ANALYTICS_TABS['financial-health']
 
 export function FinancialHealthView({
   data: initialData,

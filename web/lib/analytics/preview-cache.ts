@@ -1,7 +1,7 @@
 import 'server-only'
 import { createHash } from 'node:crypto'
 import { getLocale, getTranslations } from 'next-intl/server'
-import { readSharedCache, claimSharedCache, publishSharedCache, releaseSharedCache } from '@openbooks/jobs/read-cache'
+import { readSharedCache, claimSharedCache, renewSharedCache, publishSharedCache, releaseSharedCache } from '@openbooks/jobs/read-cache'
 import { ANALYTICS_PREVIEW_FRESHNESS_MS as FRESHNESS_MS, analyticsPreviewVersionKey as versionKey, analyticsLocalPreviewVersion } from './preview-invalidation'
 export { invalidateAnalyticsPreviews } from './preview-invalidation'
 import type { Authz } from '../authz'
@@ -112,7 +112,7 @@ export async function cachedAnalyticsRead<T>(authz: Authz, slug: string, query: 
     observeAnalyticsSource(result.observedAt)
     return structuredClone(result.data) as T
   }
-  if (pending.size >= 256) throw new AnalyticsPreviewBusyError()
+  if (pending.size >= 256) throw await busyRefusal()
   const action = (async () => {
     const shared = decoded(await readSharedCache(key))
     if (shared) { observeAnalyticsSource(shared.observedAt); remember(key, shared, Buffer.byteLength(JSON.stringify(shared))); return shared }
@@ -130,6 +130,16 @@ export async function cachedAnalyticsRead<T>(authz: Authz, slug: string, query: 
       }
       if (token === null) throw await busyRefusal()
     }
+    // Lease time includes waiting for aggregate admission. Refresh ownership
+    // throughout the read and always dispose the heartbeat after completion.
+    let renewing = false
+    const lease = token
+    const heartbeat = lease ? setInterval(() => {
+      if (renewing) return
+      renewing = true
+      void renewSharedCache(key, lease).finally(() => { renewing = false })
+    }, 30_000) : undefined
+    heartbeat?.unref()
     try {
       const value = options.admit === false ? await load() : await build(load)
       const observedAt = new Date(currentAnalyticsRead()?.observedAt ?? Date.now()).toISOString()
@@ -140,7 +150,10 @@ export async function cachedAnalyticsRead<T>(authz: Authz, slug: string, query: 
       const lifetime = Date.parse(observedAt) + FRESHNESS_MS - Date.now()
       if (token && bytes <= MAX_VALUE_BYTES && lifetime > 0) await publishSharedCache(key, token, encoded, lifetime)
       return envelope
-    } finally { if (token) await releaseSharedCache(key, token) }
+    } finally {
+      if (heartbeat) clearInterval(heartbeat)
+      if (token) await releaseSharedCache(key, token)
+    }
   })()
   pending.set(key, action)
   try {

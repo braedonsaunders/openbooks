@@ -2,9 +2,9 @@ import { defineRoute } from '@/lib/api/route'
 import { apiErrorResponse } from '@/lib/api/error-response'
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
-import { db } from "@openbooks/engine/src/platform/db.ts";
-import { isIsoCalendarDate } from "@openbooks/engine/src/platform/business-date.ts";
-import { mul, mulDecimal } from "@openbooks/engine/src/money/money.ts";
+import { analyticsQueryLive as analyticsQuery } from "../../../../../lib/analytics/query";
+import { isIsoCalendarDate } from "@openbooks/engine/platform/business-date";
+import { mul, mulDecimal } from "@openbooks/engine/money";
 import "../../../../../lib/feature-gates";
 import { flowRates, presentationCurrency } from "../../../../../lib/fx-presentation";
 import { isUuid } from "../../../../../lib/list-params";
@@ -85,7 +85,7 @@ export const GET = defineRoute({
       left join subsidiaries crs on crs.id = t.cost_rate_subsidiary_id and crs.org_id = t.org_id
       join orgs o on o.id = t.org_id`;
     const [page, totals, peerGroups, customerGroups] = await Promise.all([
-      db.execute(sql`
+      analyticsQuery(sql`
         select
           t.id,
           t.worked_on::text as date,
@@ -107,14 +107,14 @@ export const GET = defineRoute({
         order by t.worked_on desc, t.id desc
         limit ${limit + 1}
       `),
-      db.execute(sql`
+      analyticsQuery(sql`
         select count(*) as n,
           coalesce(sum(t.hours), 0)::text as hours,
           coalesce(sum(t.hours) filter (where t.is_billable), 0)::text as billable
         ${joins}
         where ${population}
       `),
-      db.execute(sql`
+      analyticsQuery(sql`
         select ${peerLabel} as label,
           coalesce(sum(t.hours), 0)::text as hours,
           coalesce(sum(t.hours) filter (where t.is_billable), 0)::text as billable
@@ -123,7 +123,7 @@ export const GET = defineRoute({
         group by 1
         order by sum(t.hours) desc
       `),
-      db.execute(sql`
+      analyticsQuery(sql`
         select ${customerLabel} as label,
           coalesce(sum(t.hours), 0)::text as hours,
           coalesce(sum(t.hours) filter (where t.is_billable), 0)::text as billable

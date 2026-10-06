@@ -1,5 +1,7 @@
 'use client'
 
+import { ANALYTICS_TABS } from '../../../../lib/analytics/dashboard-tabs'
+
 import { useAnalyticsTab, AnalyticsTabContent } from '../use-analytics-tab'
 
 import { RecordTabs } from '@/components/module-home/record-tabs'
@@ -61,7 +63,7 @@ import { InteractiveTableRow } from '@/components/interactive-table-row'
 import { cmp, neg, sum } from '@openbooks/engine/money'
 import type { MoneyValue } from '../../../../lib/money-format'
 
-const TABS = ['overview', 'health', 'segmentation', 'lifetime', 'churn', 'growth', 'profitability', 'configuration'] as const
+const TABS = ANALYTICS_TABS['customer-intelligence']
 
 /* ------------------------------------------------------------ badge styles */
 const PROFIT_TIER_STYLE: Record<ProfitTier, string> = {

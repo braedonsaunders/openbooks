@@ -1,6 +1,6 @@
 import "server-only";
 import { sql } from "drizzle-orm";
-import { db } from "@openbooks/engine/src/platform/db.ts";
+import { analyticsQuery } from "./query";
 import { presentationCurrency } from "../fx-presentation";
 import {
   configCurrencyKey,
@@ -31,7 +31,7 @@ export {
 /** Effective config for one dashboard: org overrides over defaults. */
 export async function analyticsConfig<D extends AnalyticsDashboard>(orgId: string, dashboard: D): Promise<ConfigValuesOf<D>> {
   const [r, presentation] = await Promise.all([
-    db.execute<{ cfg: unknown; currency: string | null }>(sql`
+    analyticsQuery<{ cfg: unknown; currency: string | null }>(sql`
       select settings -> 'analytics' -> ${dashboard} as cfg,
              settings -> 'analytics' ->> ${configCurrencyKey(dashboard)} as currency
         from orgs where id = ${orgId}

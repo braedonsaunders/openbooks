@@ -34,6 +34,15 @@ export async function claimSharedCache(key: string): Promise<string | null | und
   return claimed === 'OK' ? token : claimed
 }
 
+/** Extend only the current builder's lease. A slow aggregate or admission
+ * queue must not let another replica start the same work after 90 seconds. */
+export async function renewSharedCache(key: string, token: string): Promise<void> {
+  await bounded(async () => (await getReadCacheConnection())?.eval(`
+    if redis.call('GET', KEYS[1]) ~= ARGV[1] then return 0 end
+    return redis.call('PEXPIRE', KEYS[1], 90000)
+  `, 1, `${key}:lease`, token))
+}
+
 /** Only the current lease owner may publish; an expired builder cannot replace
  * a newer result. Comparison, publication and lease release are atomic. */
 export async function publishSharedCache(key: string, token: string, value: string, lifetimeMs: number): Promise<void> {

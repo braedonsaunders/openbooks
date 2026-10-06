@@ -5,7 +5,7 @@ export const ANALYTICS_TABS = {
   'true-cost': ['absorption', 'selling'],
   utilization: ['overview', 'intelligence', 'departments', 'items', 'titles', 'employees', 'config'],
   'customer-intelligence': ['overview', 'health', 'segmentation', 'lifetime', 'churn', 'growth', 'profitability', 'configuration'],
-  'vendor-performance': ['overview', 'payment', 'scorecard', 'matrix', 'vendors'],
+  'vendor-performance': ['overview', 'payment', 'scorecard', 'matrix', 'vendors', 'configuration'],
   'spend-velocity': ['overview', 'velocity', 'detectors', 'accounts', 'trends', 'config'],
   sentinel: ['overview', 'benford', 'analysis', 'detection', 'vendors', 'audit', 'config'],
 } as const

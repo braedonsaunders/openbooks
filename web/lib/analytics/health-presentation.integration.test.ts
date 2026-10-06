@@ -93,6 +93,8 @@ test('health dashboard translates every reader to presentation', { skip: !env.OP
   try {
     await withOrgContext(org.orgId, async () => {
       const data = await healthData(JULY, org.orgId, null)
+      assert.equal(data.pnlSummary.find(line => line.key === 'revenue')?.prior, data.priorFigures.revenue)
+      assert.equal(data.pnlSummary.find(line => line.key === 'operatingIncome')?.prior, data.priorFigures.operatingIncome)
       const july = data.monthly.find((m) => m.month === '2026-07')!
       assert.equal(july.revenue, '335.0000')
       // The scratch "cogs" account carries type 'expense', so the legs land

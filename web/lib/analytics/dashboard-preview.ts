@@ -1,4 +1,5 @@
 import 'server-only'
+import { withAuthzContext, requestAuthzContext } from '../authz-context'
 import { getTranslations } from 'next-intl/server'
 import { getMoneyFormatter } from '../money-server'
 import { toChartNumber } from '../chart-number'
@@ -15,9 +16,12 @@ export async function analyticsDashboardPreview(dashboard: AnalyticsDashboardDef
   const authz = await requirePermission('reports.read')
   if (authz.user.orgId !== orgId || !await analyticsDashboardAvailable(authz, dashboard)) throw new ForbiddenError(dashboard.permission ?? dashboard.feature ?? 'reports.read')
   const query = analyticsSourceQuery(sp)
-  const identity = await analyticsCacheIdentity(orgId)
-  return withAnalyticsRead({ authz, slug: dashboard.slug, tab: '', projection: 'summary', ...identity, observedAt: Date.now() }, () =>
-    cachedAnalyticsPreview(authz, dashboard.slug, query, () => buildDashboardPreview(dashboard, query, orgId)))
+  return withAuthzContext(authz, async () => {
+    const authority = requestAuthzContext()!
+    const identity = await analyticsCacheIdentity(orgId)
+    return withAnalyticsRead({ authz: authority, slug: dashboard.slug, tab: '', projection: 'summary', ...identity, observedAt: Date.now() }, () =>
+      cachedAnalyticsPreview(authority, dashboard.slug, query, () => buildDashboardPreview(dashboard, query, orgId)))
+  })
 }
 
 async function buildDashboardPreview(dashboard: AnalyticsDashboardDefinition, sp: Record<string, string | undefined>, orgId: string): Promise<AnalyticsPreview> {
