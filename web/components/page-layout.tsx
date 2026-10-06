@@ -4,7 +4,6 @@ import { useContext } from 'react'
 import { cn, PageHeaderNavigationProvider, PagePresentationContext } from '@openbooks/ui'
 import { FadeInBody, FadeInHeader } from './page-layout-motion'
 import { PageViewTabs } from './module-home/view-tabs'
-import { PageSheetTransition } from './route-transitions'
 
 /**
  * Default page wrapper for content-driven pages (dashboards, forms, etc).
@@ -22,13 +21,11 @@ export function PageContainer({
   const section = useContext(PagePresentationContext) === 'section'
   if (section) return <FadeInBody className={className}>{children}</FadeInBody>
   return (
-    <PageSheetTransition>
-      <div className="app-scroll flex-1 overflow-y-auto">
-        <FadeInBody className={cn('mx-auto w-full max-w-screen-2xl p-4 sm:p-6', className)}>
-          {children}
-        </FadeInBody>
-      </div>
-    </PageSheetTransition>
+    <div className="app-scroll flex-1 overflow-y-auto">
+      <FadeInBody className={cn('mx-auto w-full max-w-screen-2xl p-4 sm:p-6', className)}>
+        {children}
+      </FadeInBody>
+    </div>
   )
 }
 
@@ -76,13 +73,11 @@ export function ListPageLayout({
           <PageHeaderNavigationProvider navigation={<PageViewTabs />}>{header}</PageHeaderNavigationProvider>
         </FadeInHeader>
       </div>
-      <PageSheetTransition>
-        <div className={cn('min-h-0 flex-1', contained ? 'overflow-hidden' : 'app-scroll overflow-y-auto')}>
-          <FadeInBody className={cn('p-3 sm:p-6', contained ? 'flex min-h-0 flex-col overflow-hidden' : 'mx-auto max-w-screen-2xl', className)}>
-            {children}
-          </FadeInBody>
-        </div>
-      </PageSheetTransition>
+      <div className={cn('min-h-0 flex-1', contained ? 'overflow-hidden' : 'app-scroll overflow-y-auto')}>
+        <FadeInBody className={cn('p-3 sm:p-6', contained ? 'flex min-h-0 flex-col overflow-hidden' : 'mx-auto max-w-screen-2xl', className)}>
+          {children}
+        </FadeInBody>
+      </div>
     </div>
   )
 }
@@ -121,13 +116,11 @@ export function DetailPageLayout({
           {subtabs ? <div className="mt-2.5 sm:mt-4">{subtabs}</div> : null}
         </FadeInHeader>
       </div>
-      <PageSheetTransition>
-        <div className="app-scroll min-h-0 flex-1 overflow-y-auto">
-          <FadeInBody className={cn('mx-auto max-w-screen-2xl p-3 sm:p-6', className)}>
-            {children}
-          </FadeInBody>
-        </div>
-      </PageSheetTransition>
+      <div className="app-scroll min-h-0 flex-1 overflow-y-auto">
+        <FadeInBody className={cn('mx-auto max-w-screen-2xl p-3 sm:p-6', className)}>
+          {children}
+        </FadeInBody>
+      </div>
     </div>
   )
 }
