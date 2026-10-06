@@ -190,7 +190,14 @@ test('period money drafts survive closing and reopening without inventing missin
     field.dispatchEvent(new window.Event('input', { bubbles: true })); await tick()
   })
   const done = [...document.querySelectorAll('button')].find(button => button.textContent === 'Done')
-  assert.ok(done); await click(done); await openEmployee()
+  assert.ok(done); await click(done)
+  // An exiting drawer remains in the portal until its animation completes.
+  // Reopen from the list after that exit, rather than editing its stale node.
+  for (let attempt = 0; attempt < 100 && document.querySelector('[role="dialog"]'); attempt++) {
+    await act(tick)
+  }
+  assert.equal(document.querySelector('[role="dialog"]'), null, 'the previous drawer must finish closing')
+  await openEmployee()
   assert.equal((document.querySelector('input[aria-label="Ada — Employee CPP/QPP already withheld (C)"]') as HTMLInputElement).value, '11.63')
   const preview = [...document.querySelectorAll('button')].find(button => button.textContent === 'Preview period amounts')
   assert.ok(preview); await click(preview)

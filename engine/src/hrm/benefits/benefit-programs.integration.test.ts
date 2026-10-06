@@ -123,7 +123,7 @@ test("Benefits programs and payout controls", { skip: !process.env.OPENBOOKS_DB_
       name: code,
       family: "reward",
       approvalMode: "flows",
-      currency: "USD",
+      currency: "CAD",
       effectiveFrom: "2026-01-01",
       legalEntityId: ENTITY!,
       payComponentId: COMPONENT!,
@@ -144,10 +144,10 @@ test("Benefits programs and payout controls", { skip: !process.env.OPENBOOKS_DB_
   }
 
   function programFor(options: Partial<Parameters<typeof createBenefitProgram>[0]> & Pick<Parameters<typeof createBenefitProgram>[0], "code" | "name" | "family">) {
-    return createBenefitProgram({ orgId: ARTIFACT!.orgId, actorId: HRMGR!, currency: "USD", effectiveFrom: "2026-01-01", payComponentId: COMPONENT!, ...options });
+    return createBenefitProgram({ orgId: ARTIFACT!.orgId, actorId: HRMGR!, currency: "CAD", effectiveFrom: "2026-01-01", payComponentId: COMPONENT!, ...options });
   }
   function awardFor(programId: string, options: Pick<Parameters<typeof createBenefitAward>[0], "periodFrom"> & Partial<Parameters<typeof createBenefitAward>[0]>) {
-    return createBenefitAward({ orgId: ARTIFACT!.orgId, actorId: HRMGR!, employmentId: EMPLOYMENT!, currency: "USD", value: "100.0000", ...options, programId });
+    return createBenefitAward({ orgId: ARTIFACT!.orgId, actorId: HRMGR!, employmentId: EMPLOYMENT!, currency: "CAD", value: "100.0000", ...options, programId });
   }
   function activate(programId: string) {
     return activateBenefitProgram({ orgId: ARTIFACT!.orgId, actorId: HRMGR!, programId });
@@ -514,7 +514,7 @@ test("Benefits programs and payout controls", { skip: !process.env.OPENBOOKS_DB_
     const run = randomUUID();
     await db.execute(sql`insert into documents
       (id, org_id, kind, document_number, document_date, currency, subsidiary_id, status, subtotal, tax_total, total)
-      values (${run}, ${orgId}, 'pay_run', ${`PAY-${run}`}, '2026-03-14', 'USD', ${ENTITY}, 'draft', 0, 0, 0)`);
+      values (${run}, ${orgId}, 'pay_run', ${`PAY-${run}`}, '2026-03-14', 'CAD', ${ENTITY}, 'draft', 0, 0, 0)`);
     await db.execute(sql`insert into pay_runs
       (document_id, org_id, pay_schedule_id, period_start, period_end, pay_date, tax_year, run_status, run_type)
       values (${run}, ${orgId}, ${schedule}, '2026-03-01', '2026-03-14', '2026-03-20', 2026, 'draft', 'regular')`);
@@ -595,7 +595,7 @@ test("Benefits programs and payout controls", { skip: !process.env.OPENBOOKS_DB_
         employmentId: member.employmentId, effectiveFrom: "2026-01-01" });
     }
     const base = { orgId, actorId: HRMGR!, programId: program.id,
-      periodFrom: "2026-03-01", periodTo: "2026-03-31", value: "100.0000", currency: "USD" };
+      periodFrom: "2026-03-01", periodTo: "2026-03-31", value: "100.0000", currency: "CAD" };
     assert.equal((await createBenefitAward({ ...base, employmentId: consecutive.employmentId })).status, "draft");
     await assert.rejects(createBenefitAward({ ...base, employmentId: ended.employmentId,
       periodFrom: "2026-03-15", periodTo: "2026-03-15" }), /end dates exclude their day/);

@@ -24,6 +24,7 @@ const {
   dropScratchOrgReporting,
   seedFlowActors,
   seedWorkerEmployment,
+  seedVacationTerms,
 } = await import("@openbooks/engine/src/testing/fixtures.ts");
 
 /**
@@ -118,6 +119,7 @@ async function seedWorkforce(orgId: string, actorId: string, scheduleId: string,
                                            is_active, created_by, updated_by)
     values (${orgId}, ${employeeId}, ${amyEmploymentId}, ${scheduleId}, 'CA', 'ON', 'hourly', 1, 1,
             true, ${actorId}, ${actorId})`);
+  await seedVacationTerms(orgId, amyEmploymentId, actorId, '4', 'accrue');
   await db.execute(sql`
     insert into time_entries (org_id, employee_party_id, worked_on, hours, project_id, status,
                               is_billable, billing_status, costing_basis, created_by, updated_by)

@@ -34,7 +34,7 @@ for (const operation of ["create", "calculate", "dry-run", "simulate", "commit",
       await withOrgTransaction(fx.orgId, async () => {
         await assert.rejects(run(), /payroll feature is disabled/i);
         assert.deepEqual(await evidence(fx.orgId), before);
-      });
+      }, { isolationLevel: "REPEATABLE READ" });
       await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features,payroll}','true'::jsonb) where id=${fx.orgId}`);
       if (!operation.includes("opening") && operation !== "employer levies") assert.ok(await run(), "reenabling Payroll restores the operation against preserved data");
     } finally { await dropScratchOrgReporting(fx.orgId); }

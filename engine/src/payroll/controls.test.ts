@@ -19,6 +19,7 @@ import {
   DerivedEarningsError,
   type DerivedRule,
 } from "./derived-earnings.ts";
+import { seedPayrollComponents } from "./run-setup.ts";
 import { payRateIsUsable } from "./rate.ts";
 import { payRunReadiness, payRunStaleness } from "./readiness.ts";
 import { isCanadianSin, renderRoeXml, type RoeRecordToFile } from "./canada/roexml.ts";
@@ -92,6 +93,8 @@ async function seedPayRun(options: {
 } = {}): Promise<PayRunFixture> {
   const org = await createScratchOrg();
   const actorId = (await seedFlowActors(org.orgId)).adminId;
+  const country = options.country ?? "CA";
+  await seedPayrollComponents(org.orgId, actorId, country);
   const scheduleId = randomUUID();
   await seedPayrollSchedule(org.orgId, scheduleId, actorId, {
     name: 'Biweekly', frequency: 'biweekly', periodsPerYear: 26, anchorPeriodEnd: '2026-07-18',
@@ -112,9 +115,9 @@ async function seedPayRun(options: {
   const employmentId = await seedWorkerEmployment(
     org.orgId, employeeId, options.employeeSubsidiaryId ?? org.subsidiaryId);
   await seedPayrollProfile(org.orgId, employeeId, employmentId, scheduleId, actorId, {
-    province: 'ON', payBasis: options.payBasis ?? "hourly", country: options.country ?? "CA", federalClaimCode: 1,
+    province: 'ON', payBasis: options.payBasis ?? "hourly", country, federalClaimCode: 1,
     provincialClaimCode: 1,
-  }, { percentFloor: '4', method: 'accrue' });
+  }, country === 'CA' ? { percentFloor: '4', method: 'accrue' } : undefined);
 
 
   const documentId = randomUUID();
@@ -439,11 +442,10 @@ test(
 
       await db.execute(sql`
         update pay_runs set calculated_at = now() where document_id = ${run.documentId}`);
-      await db.execute(sql`
-        insert into entitlement_plans (org_id, code, name, unit, direction, accrual_method,
-                                       accrual_value, cap_behavior, is_active, created_by, updated_by)
-        values (${run.orgId}, 'VAC', 'Vacation', 'money', 'accrue', 'percent_of_earnings', '4',
-                'warn', true, ${run.actorId}, ${run.actorId})`);
+      const planEdit = await db.execute(sql`
+        update entitlement_plans set accrual_value='5', updated_by=${run.actorId}, updated_at=now()
+        where org_id=${run.orgId} and system_key='vacation' returning id`);
+      assert.equal(planEdit.rows.length, 1, 'the staleness proof changes the configured vacation program');
       assert.ok(
         (await payRunStaleness(run.orgId, run.documentId)).reasons.includes("entitlements"),
         "an entitlement plan moves accrual and payout amounts on the stub",

@@ -105,7 +105,7 @@ test(
         name: "Workflow rewards",
         family: "reward",
         approvalMode: "flows",
-        currency: "USD",
+        currency: "CAD",
         effectiveFrom: "2026-01-01",
         legalEntityId: org.subsidiaryId,
         payComponentId: component,
@@ -143,7 +143,7 @@ test(
         employmentId: employment,
         periodFrom: "2026-03-01",
         value,
-        currency: "USD",
+        currency: "CAD",
         sourceKey: randomUUID(),
       });
     }
@@ -368,7 +368,7 @@ test(
           name: "Exact amount reward",
           family: "reward",
           approvalMode: "flows",
-          currency: "USD",
+          currency: "CAD",
           effectiveFrom: "2026-01-01",
           legalEntityId: org.subsidiaryId,
           payComponentId: component,
@@ -412,7 +412,7 @@ test(
           employmentId: employment,
           periodFrom: "2026-03-01",
           value: highValue,
-          currency: "USD",
+          currency: "CAD",
         });
         assert.equal((await submit(draft.id)).status, "pending");
         await approve(draft.id);
@@ -634,7 +634,7 @@ test(
           code: `NONE${randomUUID().slice(0, 8)}`,
           name: "Recognition without approvals",
           family: "reward",
-          currency: "USD",
+          currency: "CAD",
           effectiveFrom: "2026-01-01",
           legalEntityId: org.subsidiaryId,
           payComponentId: component,
@@ -661,7 +661,7 @@ test(
           employmentId: employment,
           periodFrom: "2026-03-01",
           value: "75.0000",
-          currency: "USD",
+          currency: "CAD",
         });
         await rejectWrite(
           sql`update hrm_benefit_awards set status='approved' where org_id=${org.orgId} and id=${draft.id}`,

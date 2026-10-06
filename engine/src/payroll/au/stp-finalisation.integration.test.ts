@@ -97,7 +97,7 @@ test(
         });
         await seedPayrollProfile(org.orgId, employeeId, employmentId, scheduleId, actorId, {
           country: 'AU', province: province, payBasis: 'hourly',
-        }, { percentFloor: '0', method: 'accrue' });
+        });
 
         await db.execute(sql`
           insert into employee_tax_certificates (id, org_id, employee_party_id, country, certificate_key,

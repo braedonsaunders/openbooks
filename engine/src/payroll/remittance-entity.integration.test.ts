@@ -29,6 +29,7 @@ type EntityFixture = {
   expense: string;
   component: string;
   schedule: string;
+  filingAccountId: string;
 };
 
 async function seedEntityOrg(): Promise<EntityFixture> {
@@ -38,6 +39,10 @@ async function seedEntityOrg(): Promise<EntityFixture> {
   const expense = randomUUID();
   const component = randomUUID();
   const schedule = randomUUID();
+  const filingAccountId = randomUUID();
+  await db.execute(sql`insert into payroll_filing_accounts
+    (id,org_id,country,program_type,account_number,name,remitter_type,is_default,created_by,updated_by)
+    values(${filingAccountId},${org.orgId},'CA','ca_rp','123456789RP0092','CRA regular remitter','regular',true,${actorId},${actorId})`);
   await db.execute(sql`
     insert into accounts
       (id, org_id, number, name, type, is_summary, is_active, eliminate,
@@ -68,7 +73,7 @@ async function seedEntityOrg(): Promise<EntityFixture> {
     values
       (${schedule}, ${org.orgId}, 'Entity schedule', 'monthly', 12,
        '2026-09-30', 0, true, ${actorId}, ${actorId})`);
-  return { org, actorId, liability, expense, component, schedule };
+  return { org, actorId, liability, expense, component, schedule, filingAccountId };
 }
 
 async function newSchedule(fx: EntityFixture): Promise<string> {
@@ -120,6 +125,7 @@ async function addEntityAccrual(
   },
 ): Promise<{ documentId: string; documentNumber: string }> {
   const payDate = input.payDate ?? "2026-07-15";
+  const filingAccountId = input.filingAccountId === undefined ? fx.filingAccountId : input.filingAccountId;
   const scheduleId = await newSchedule(fx);
   const documentId = randomUUID();
   const documentNumber = input.docNumber ?? `PAY-${documentId.slice(0, 8).toUpperCase()}`;
@@ -156,7 +162,7 @@ async function addEntityAccrual(
     values (${stubId}, ${fx.org.orgId}, ${documentId}, ${employeeId}, ${employmentId}, 'ON', 12,
             ${payDate}, 2026, ${input.currency}, ${input.amount}, ${input.amount},
             ${input.amount}, ${input.amount}, ${input.amount}, '0', '{}'::jsonb,
-            ${input.filingAccountId ?? null}, ${input.filingAccountId ? "calculation" : "unknown"},
+            ${filingAccountId}, ${filingAccountId ? "calculation" : "unknown"},
             ${fx.actorId}, ${fx.actorId})`);
   await db.execute(sql`
     insert into pay_stub_lines
