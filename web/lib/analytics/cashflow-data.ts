@@ -124,7 +124,7 @@ export async function cashflowData(
     loadCategories(orgId),
     analyticsConfig(orgId, "cashflow"),
     fiscalStartMonth(orgId),
-    (analyticsQuery<AccountOptionRow>(sql`
+    (analyticsSection('cashflow', []) ? analyticsQuery<AccountOptionRow>(sql`
       select id, number, name from accounts
       where org_id = ${orgId} and is_summary = false
         ${subsidiaryVisibleFilter(sql`subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })}
