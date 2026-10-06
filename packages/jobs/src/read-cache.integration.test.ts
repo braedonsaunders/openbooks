@@ -8,20 +8,23 @@ test('Redis lease renewal and publication enforce current ownership atomically',
   const resourceId = process.env.OPENBOOKS_TEST_REDIS_RESOURCE_ID
   assert.match(resourceId ?? '', /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i, 'the disposable Redis resource needs an explicit UUID identity')
   const previous = process.env.OPENBOOKS_REDIS_URL
-  process.env.OPENBOOKS_REDIS_URL = testRedisUrl!
   const { getReadCacheConnection, closeJobConnections } = await import('./connection')
   const { claimSharedCache, renewSharedCache, publishSharedCache, releaseSharedCache } = await import('./read-cache')
   const key = `openbooks:analytics:lease-test:${randomUUID()}`
-  const redis = await getReadCacheConnection()
+  let redis: Awaited<ReturnType<typeof getReadCacheConnection>>
   let admitted = false
   t.after(async () => {
     try { if (admitted && redis) await redis.del(key, `${key}:lease`) }
     finally {
-      await closeJobConnections()
-      if (previous === undefined) delete process.env.OPENBOOKS_REDIS_URL
-      else process.env.OPENBOOKS_REDIS_URL = previous
+      try { await closeJobConnections() }
+      finally {
+        if (previous === undefined) delete process.env.OPENBOOKS_REDIS_URL
+        else process.env.OPENBOOKS_REDIS_URL = previous
+      }
     }
   })
+  process.env.OPENBOOKS_REDIS_URL = testRedisUrl!
+  redis = await getReadCacheConnection()
   assert.ok(redis, 'the explicit test Redis must connect; unavailable infrastructure is a failed partition')
   // Only disposable-service bootstrap writes this marker. The test first
   // reads it and refuses before any fixture mutation when identity differs.
