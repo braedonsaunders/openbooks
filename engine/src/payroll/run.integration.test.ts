@@ -1,3 +1,4 @@
+import { seedCanadianPostingAccounts, seedUnionPostingAccounts } from "../testing/payroll-posting-fixture.ts";
 import { seedEnabledPayrollConfiguration } from '../testing/fixtures.ts';
 import { seedPayrollSettings } from '../testing/fixtures.ts';
 import {
@@ -49,22 +50,7 @@ test(
     const actorId = (await seedFlowActors(org.orgId)).adminId;
     try {
       // Payroll GL accounts + settings
-      const account = seedPostingAccount.bind(null, org.orgId);
-      const wageExpense = await account("6000", "Wages expense", "expense");
-      const burdenExpense = await account("6010", "Payroll burden", "expense");
-      const netPayable = await account("2300", "Wages payable", "liability_current");
-      const craPayable = await account("2310", "CRA remittances payable", "liability_current");
-      const vacationPayable = await account("2320", "Vacation payable", "liability_current");
-      await seedEnabledPayrollConfiguration(org.orgId, {
-            wageExpenseAccountId: wageExpense,
-            burdenExpenseAccountId: burdenExpense,
-            netPayAccountId: netPayable,
-            cppPayableAccountId: craPayable,
-            eiPayableAccountId: craPayable,
-            taxPayableAccountId: craPayable,
-            vacationPayableAccountId: vacationPayable,
-            wagesTo: "expense",
-          });
+      const { burdenExpense, craPayable } = await seedCanadianPostingAccounts(org.orgId);
 
       await seedCanadianPayrollComponentsForTest(org.orgId, actorId);
 
@@ -282,19 +268,7 @@ test(
     const org = await createScratchOrg();
     const actorId = (await seedFlowActors(org.orgId)).adminId;
     try {
-      const account = seedPostingAccount.bind(null, org.orgId);
-      const wageExpense = await account("6000", "Wages expense", "expense");
-      const fringeExpense = await account("6020", "Union fringes", "expense");
-      const netPayable = await account("2300", "Wages payable", "liability_current");
-      const craPayable = await account("2310", "CRA payable", "liability_current");
-      const duesPayable = await account("2330", "Union dues payable", "liability_current");
-      const fringePayable = await account("2340", "Union fringes payable", "liability_current");
-      await seedEnabledPayrollConfiguration(org.orgId, {
-            wageExpenseAccountId: wageExpense, burdenExpenseAccountId: fringeExpense,
-            netPayAccountId: netPayable, cppPayableAccountId: craPayable,
-            eiPayableAccountId: craPayable, taxPayableAccountId: craPayable,
-            vacationPayableAccountId: craPayable, wagesTo: "expense",
-          });
+      const { fringeExpense, duesPayable, fringePayable } = await seedUnionPostingAccounts(org.orgId, true);
       await seedCanadianPayrollComponentsForTest(org.orgId, actorId);
 
       const agreementId = randomUUID();
@@ -311,7 +285,7 @@ test(
                 ${actorId}, ${actorId})`);
       await upsertUnionFringe(org.orgId, actorId, {
         agreementId, code: "DUES", name: "Working dues", calc: "percent_of_gross",
-        value: "2.5", paidBy: "employee", liabilityAccountId: duesPayable,
+        value: "2.5", paidBy: "employee", liabilityAccountId: duesPayable!,
       });
       await upsertUnionFringe(org.orgId, actorId, {
         agreementId, code: "PEN", name: "Pension fund", calc: "per_hour_worked",
@@ -433,18 +407,7 @@ test(
     const org = await createScratchOrg();
     const actorId = (await seedFlowActors(org.orgId)).adminId;
     try {
-      const account = seedPostingAccount.bind(null, org.orgId);
-      const wageExpense = await account("6000", "Wages expense", "expense");
-      const fringeExpense = await account("6020", "Union fringes", "expense");
-      const netPayable = await account("2300", "Wages payable", "liability_current");
-      const craPayable = await account("2310", "CRA payable", "liability_current");
-      const fringePayable = await account("2340", "Union fringes payable", "liability_current");
-      await seedEnabledPayrollConfiguration(org.orgId, {
-            wageExpenseAccountId: wageExpense, burdenExpenseAccountId: fringeExpense,
-            netPayAccountId: netPayable, cppPayableAccountId: craPayable,
-            eiPayableAccountId: craPayable, taxPayableAccountId: craPayable,
-            vacationPayableAccountId: craPayable, wagesTo: "expense",
-          });
+      const { fringeExpense, fringePayable } = await seedUnionPostingAccounts(org.orgId, false);
       await seedCanadianPayrollComponentsForTest(org.orgId, actorId);
 
       const agreementId = randomUUID();
@@ -1021,22 +984,7 @@ test(
     const org = await createScratchOrg();
     const actorId = (await seedFlowActors(org.orgId)).adminId;
     try {
-      const account = seedPostingAccount.bind(null, org.orgId);
-      const wageExpense = await account("6000", "Wages expense", "expense");
-      const burdenExpense = await account("6010", "Payroll burden", "expense");
-      const netPayable = await account("2300", "Wages payable", "liability_current");
-      const craPayable = await account("2310", "CRA remittances payable", "liability_current");
-      const vacationPayable = await account("2320", "Vacation payable", "liability_current");
-      await seedEnabledPayrollConfiguration(org.orgId, {
-            wageExpenseAccountId: wageExpense,
-            burdenExpenseAccountId: burdenExpense,
-            netPayAccountId: netPayable,
-            cppPayableAccountId: craPayable,
-            eiPayableAccountId: craPayable,
-            taxPayableAccountId: craPayable,
-            vacationPayableAccountId: vacationPayable,
-            wagesTo: "expense",
-          });
+      await seedCanadianPostingAccounts(org.orgId);
       await seedCanadianPayrollComponentsForTest(org.orgId, actorId);
 
       const employeeId = randomUUID();
@@ -1148,22 +1096,7 @@ test(
     const org = await createScratchOrg();
     const actorId = (await seedFlowActors(org.orgId)).adminId;
     try {
-      const account = seedPostingAccount.bind(null, org.orgId);
-      const wageExpense = await account("6000", "Wages expense", "expense");
-      const burdenExpense = await account("6010", "Payroll burden", "expense");
-      const netPayable = await account("2300", "Wages payable", "liability_current");
-      const craPayable = await account("2310", "CRA remittances payable", "liability_current");
-      const vacationPayable = await account("2320", "Vacation payable", "liability_current");
-      await seedEnabledPayrollConfiguration(org.orgId, {
-            wageExpenseAccountId: wageExpense,
-            burdenExpenseAccountId: burdenExpense,
-            netPayAccountId: netPayable,
-            cppPayableAccountId: craPayable,
-            eiPayableAccountId: craPayable,
-            taxPayableAccountId: craPayable,
-            vacationPayableAccountId: vacationPayable,
-            wagesTo: "expense",
-          });
+      await seedCanadianPostingAccounts(org.orgId);
       await seedCanadianPayrollComponentsForTest(org.orgId, actorId);
 
       const employeeId = randomUUID();
@@ -1426,22 +1359,7 @@ async function seedFencedRaceOrg(): Promise<{
 }> {
   const org = await createScratchOrg();
   const actorId = (await seedFlowActors(org.orgId)).adminId;
-  const account = seedPostingAccount.bind(null, org.orgId);
-  const wageExpense = await account("6000", "Wages expense", "expense");
-  const burdenExpense = await account("6010", "Payroll burden", "expense");
-  const netPayable = await account("2300", "Wages payable", "liability_current");
-  const craPayable = await account("2310", "CRA remittances payable", "liability_current");
-  const vacationPayable = await account("2320", "Vacation payable", "liability_current");
-  await seedEnabledPayrollConfiguration(org.orgId, {
-        wageExpenseAccountId: wageExpense,
-        burdenExpenseAccountId: burdenExpense,
-        netPayAccountId: netPayable,
-        cppPayableAccountId: craPayable,
-        eiPayableAccountId: craPayable,
-        taxPayableAccountId: craPayable,
-        vacationPayableAccountId: vacationPayable,
-        wagesTo: "expense",
-      });
+  await seedCanadianPostingAccounts(org.orgId);
   await seedCanadianPayrollComponentsForTest(org.orgId, actorId);
 
   const employeeId = randomUUID();

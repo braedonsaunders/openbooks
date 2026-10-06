@@ -3,9 +3,8 @@ import { randomUUID } from 'node:crypto'
 import test from 'node:test'
 import { sql } from 'drizzle-orm'
 import { db, withBypassContext } from '@openbooks/engine/src/platform/db.ts'
-import { createScratchOrg, dropScratchOrgReporting, seedFlowActors } from '@openbooks/engine/src/testing/fixtures.ts'
-import { createPayRun } from '@openbooks/engine/src/payroll/run-lifecycle.ts'
-import { seedPayrollComponents } from '@openbooks/engine/src/payroll/run-setup.ts'
+import { dropScratchOrgReporting } from '@openbooks/engine/src/testing/fixtures.ts'
+import { seedPayrollInputsFixture } from '@openbooks/engine/src/testing/payroll-inputs-fixture.ts'
 import { preflightPayRunAdjustment } from '@openbooks/engine/src/payroll/run-adjustments.ts'
 import { recurringBenefitsRunSource } from '@openbooks/engine/src/payroll/benefit-plan-inputs.ts'
 import { payrollRunInputsResource } from './payroll-run-inputs-resource'
@@ -25,22 +24,12 @@ test('payroll ledger projections cannot use the generic transaction importer in 
 })
 
 async function fixture() {
-  const { orgId, subsidiaryId } = await createScratchOrg()
-  const actorId = (await seedFlowActors(orgId)).adminId
-  await db.execute(sql`update orgs set settings=settings || '{"features":{"payroll":true}}'::jsonb where id=${orgId}`)
-  await seedPayrollComponents(orgId, actorId, 'CA')
-  const employeeId = randomUUID(), scheduleId = randomUUID()
-  await db.execute(sql`insert into parties(id,org_id,kind,display_name,short_code,is_active)
-    values (${employeeId},${orgId},'person','Import Employee','IMPORT-EE',true)`)
-  await db.execute(sql`insert into pay_schedules(id,org_id,name,frequency,periods_per_year,anchor_period_end,pay_date_offset_days,is_active,created_by,updated_by)
-    values (${scheduleId},${orgId},'Import Schedule','biweekly',26,'2026-07-18',3,true,${actorId},${actorId})`)
-  await db.execute(sql`insert into employee_payroll_profiles(org_id,employee_party_id,pay_schedule_id,country,province,pay_basis,is_active,created_by,updated_by)
-    values (${orgId},${employeeId},${scheduleId},'CA','ON','salary',true,${actorId},${actorId})`)
-  const run = await createPayRun({ orgId, actorId, payScheduleId: scheduleId, periodStart: '2026-07-05', periodEnd: '2026-07-18' })
-  const componentId = (await db.execute<{ id: string }>(sql`select id from pay_components where org_id=${orgId} and code='BONUS'`)).rows[0]!.id
-  const row = { run: run.documentId, employee: employeeId, component: 'BONUS', amount: '125.25', hours: '2.25', replaceComponent: true, note: 'Approved historical earnings input' }
+  const { orgId, subsidiaryId, actorId, employeeId, componentId, documentId } = await seedPayrollInputsFixture('Import', [
+    { name: 'Import Employee', shortCode: 'IMPORT-EE', claimCodes: null },
+  ])
+  const row = { run: documentId, employee: employeeId, component: 'BONUS', amount: '125.25', hours: '2.25', replaceComponent: true, note: 'Approved historical earnings input' }
   const context = { orgId, actorId, allowedSubsidiaryIds: null, dryRun: false }
-  return { orgId, actorId, employeeId, componentId, subsidiaryId, documentId: run.documentId, row, context, resource: payrollRunInputsResource(orgId) }
+  return { orgId, actorId, employeeId, componentId, subsidiaryId, documentId, row, context, resource: payrollRunInputsResource(orgId) }
 }
 
 test('pay run input import requires its bound organization, explicit scope, and separate payroll review', async () => {

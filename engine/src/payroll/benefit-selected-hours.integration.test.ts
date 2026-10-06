@@ -1,9 +1,6 @@
-import { seedPayrollAccountingConfiguration } from '../testing/fixtures.ts';
 import { validateBenefitContributionConfiguration } from "../hrm/benefits/contributions.ts";
-import {
-  seedPayrollSchedule, seedPayrollEmployeeRole, seedPayrollPerson,
-  seedPayrollProfile, seedPayrollWage, createScratchOrg, dropScratchOrgReporting, seedFlowActors, seedWorkerEmployment,
-} from "../testing/fixtures.ts";
+import { dropScratchOrgReporting } from "../testing/fixtures.ts";
+import { seedHourlyPayrollOrg as payrollOrg, seedHourlyPayrollEmployee as employee, type HourlyPayrollFixture as Fixture } from "../testing/payroll-hourly-fixture.ts";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
@@ -11,70 +8,10 @@ import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { calculatePayRun } from "./run-calculation.ts";
 import { createPayRun } from "./run-lifecycle.ts";
-import { seedPayrollComponents } from "./run-setup.ts";
-import { seedOntarioEhtFixture } from "./filing-test-fixtures.ts";
 
 /** Per-hour benefit contributions counted over an explicit component list. */
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
-
-interface Fixture {
-  orgId: string; subsidiaryId: string; actorId: string; scheduleId: string;
-  accounts: { burdenExpense: string; otherPayable: string };
-}
-
-async function account(orgId: string, number: string, name: string, type: string): Promise<string> {
-  const id = randomUUID();
-  await db.execute(sql`insert into accounts(id,org_id,number,name,type,is_active) values(${id},${orgId},${number},${name},${type},true)`);
-  return id;
-}
-
-async function payrollOrg(): Promise<Fixture> {
-  const org = await createScratchOrg();
-  const actorId = (await seedFlowActors(org.orgId)).adminId;
-  const accounts = {
-    wageExpense: await account(org.orgId, "6000", "Wages expense", "expense"),
-    burdenExpense: await account(org.orgId, "6010", "Payroll burden", "expense"),
-    netPayable: await account(org.orgId, "2300", "Wages payable", "liability_current"),
-    craPayable: await account(org.orgId, "2310", "CRA payable", "liability_current"),
-    vacationPayable: await account(org.orgId, "2320", "Vacation payable", "liability_current"),
-    otherPayable: await account(org.orgId, "2330", "Other payable", "liability_current"),
-  };
-  await seedPayrollAccountingConfiguration(org.orgId, {
-    wageExpenseAccountId: accounts.wageExpense,
-    burdenExpenseAccountId: accounts.burdenExpense,
-    netPayAccountId: accounts.netPayable,
-    cppPayableAccountId: accounts.craPayable,
-    eiPayableAccountId: accounts.craPayable,
-    taxPayableAccountId: accounts.craPayable,
-    vacationPayableAccountId: accounts.vacationPayable,
-    wagesTo: "expense",
-  });
-  await seedPayrollComponents(org.orgId, actorId, "CA");
-  await seedOntarioEhtFixture(org.orgId, actorId);
-  const scheduleId = randomUUID();
-  await seedPayrollSchedule(org.orgId, scheduleId, actorId, {
-    name: 'Weekly', frequency: 'weekly', periodsPerYear: 52, anchorPeriodEnd: '2026-07-18',
-    payDateOffsetDays: 3,
-  });
-  return { orgId: org.orgId, subsidiaryId: org.subsidiaryId, actorId, scheduleId, accounts };
-}
-
-async function employee(fx: Fixture, name: string): Promise<{ partyId: string; employmentId: string }> {
-  const id = randomUUID();
-  await seedPayrollPerson(fx.orgId, id, name);
-  await seedPayrollEmployeeRole(fx.orgId, id, { id: randomUUID(), workerCompGroupId: null, terminatedOn: null });
-  await seedPayrollWage(fx.orgId, id, fx.actorId, {
-    currency: "CAD", rate: "30", basis: "hour",
-    annualHours: "2080", effectiveFrom: '2026-01-01',
-  });
-  const employmentId = await seedWorkerEmployment(fx.orgId, id, fx.subsidiaryId);
-  await seedPayrollProfile(fx.orgId, id, employmentId, fx.scheduleId, fx.actorId, {
-    country: 'CA', province: 'ON', payBasis: "hourly", federalClaimCode: 1,
-    provincialClaimCode: 1,
-  }, { percentFloor: "4", method: 'accrue' });
-  return { partyId: id, employmentId };
-}
 
 async function earningComponent(fx: Fixture, code: string, kind = 'earning'): Promise<string> {
   const id = randomUUID();
@@ -96,6 +33,10 @@ test('selected-components hours count signed earning hours and ignore quantity u
     const stat = await earningComponent(fx, 'STAT8');
     const deposit = await earningComponent(fx, 'BANKDEPOSIT');
     const trips = await earningComponent(fx, 'TRIPS');
+    await db.execute(sql`insert into entitlement_plans(id,org_id,code,name,unit,direction,accrual_method,deposit_component_id,
+      liability_account_id,cap_behavior,is_active,created_by,updated_by)
+      values(${randomUUID()},${fx.orgId},'SELECTED_BANK','Banked selected hours','hours','accrue','manual',${deposit},
+        ${fx.accounts.vacationPayable},'warn',true,${fx.actorId},${fx.actorId})`);
     const planId = randomUUID(), enrollmentId = randomUUID();
     await db.execute(sql`insert into hrm_benefit_plans(id,org_id,code,name,kind,currency,employer_subsidiary_id,effective_from)
       values(${planId},${fx.orgId},'PENSION','Pension plan','retirement','CAD',${fx.subsidiaryId},'2026-01-01')`);

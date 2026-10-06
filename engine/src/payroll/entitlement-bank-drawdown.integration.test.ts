@@ -1,8 +1,5 @@
-import { seedPayrollAccountingConfiguration } from '../testing/fixtures.ts';
-import {
-  seedPayrollSchedule, seedPayrollEmployeeRole, seedPayrollPerson, seedPayrollTime,
-  seedPayrollProfile, seedPayrollWage, createScratchOrg, dropScratchOrgReporting, seedFlowActors, seedWorkerEmployment,
-} from "../testing/fixtures.ts";
+import { dropScratchOrgReporting } from "../testing/fixtures.ts";
+import { seedHourlyPayrollTime as hours, seedHourlyPayrollOrg as payrollOrg, seedHourlyPayrollEmployee as employee, type HourlyPayrollFixture as Fixture } from "../testing/payroll-hourly-fixture.ts";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
@@ -12,8 +9,6 @@ import { db } from "../platform/db.ts";
 import { calculatePayRun } from "./run-calculation.ts";
 import { commitPayRun } from "./run-commit.ts";
 import { createPayRun } from "./run-lifecycle.ts";
-import { seedPayrollComponents } from "./run-setup.ts";
-import { seedOntarioEhtFixture } from "./filing-test-fixtures.ts";
 import { entitlementBalances } from "./entitlements-db.ts";
 import { validateEntitlementPlanConfiguration } from "./entitlement-plan-config.ts";
 import { mutatePayRunAdjustment, preflightPayRunAdjustment } from "./run-adjustments.ts";
@@ -26,73 +21,6 @@ import { mutatePayRunAdjustment, preflightPayRunAdjustment } from "./run-adjustm
  */
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
-
-interface Fixture {
-  orgId: string; subsidiaryId: string; actorId: string; scheduleId: string;
-  accounts: { burdenExpense: string; otherPayable: string; vacationPayable: string };
-}
-
-async function account(orgId: string, number: string, name: string, type: string): Promise<string> {
-  const id = randomUUID();
-  await db.execute(sql`insert into accounts(id,org_id,number,name,type,is_active) values(${id},${orgId},${number},${name},${type},true)`);
-  return id;
-}
-
-async function payrollOrg(): Promise<Fixture> {
-  const org = await createScratchOrg();
-  const actorId = (await seedFlowActors(org.orgId)).adminId;
-  const accounts = {
-    wageExpense: await account(org.orgId, "6000", "Wages expense", "expense"),
-    burdenExpense: await account(org.orgId, "6010", "Payroll burden", "expense"),
-    netPayable: await account(org.orgId, "2300", "Wages payable", "liability_current"),
-    craPayable: await account(org.orgId, "2310", "CRA payable", "liability_current"),
-    vacationPayable: await account(org.orgId, "2320", "Vacation payable", "liability_current"),
-    otherPayable: await account(org.orgId, "2330", "Other payable", "liability_current"),
-  };
-  await seedPayrollAccountingConfiguration(org.orgId, {
-    wageExpenseAccountId: accounts.wageExpense,
-    burdenExpenseAccountId: accounts.burdenExpense,
-    netPayAccountId: accounts.netPayable,
-    cppPayableAccountId: accounts.craPayable,
-    eiPayableAccountId: accounts.craPayable,
-    taxPayableAccountId: accounts.craPayable,
-    vacationPayableAccountId: accounts.vacationPayable,
-    wagesTo: "expense",
-  });
-  await seedPayrollComponents(org.orgId, actorId, "CA");
-  await seedOntarioEhtFixture(org.orgId, actorId);
-  const scheduleId = randomUUID();
-  await seedPayrollSchedule(org.orgId, scheduleId, actorId, {
-    name: 'Weekly', frequency: 'weekly', periodsPerYear: 52, anchorPeriodEnd: '2026-07-18',
-    payDateOffsetDays: 3,
-  });
-  return { orgId: org.orgId, subsidiaryId: org.subsidiaryId, actorId, scheduleId, accounts };
-}
-
-async function employee(fx: Fixture, name: string): Promise<{ partyId: string; employmentId: string }> {
-  const id = randomUUID();
-  await seedPayrollPerson(fx.orgId, id, name);
-  await seedPayrollEmployeeRole(fx.orgId, id, { id: randomUUID(), workerCompGroupId: null, terminatedOn: null });
-  await seedPayrollWage(fx.orgId, id, fx.actorId, {
-    currency: "CAD", rate: "30", basis: "hour",
-    annualHours: "2080", effectiveFrom: '2026-01-01',
-  });
-  const employmentId = await seedWorkerEmployment(fx.orgId, id, fx.subsidiaryId);
-  await seedPayrollProfile(fx.orgId, id, employmentId, fx.scheduleId, fx.actorId, {
-    country: 'CA', province: 'ON', payBasis: "hourly", federalClaimCode: 1,
-    provincialClaimCode: 1,
-  }, { percentFloor: "4", method: 'accrue' });
-  return { partyId: id, employmentId };
-}
-
-async function hours(fx: Fixture, partyId: string, days: string[]): Promise<void> {
-  for (const day of days) {
-    await seedPayrollTime(fx.orgId, partyId, fx.actorId, {
-      workedOn: day, hours: '8', projectId: null, status: 'approved', isBillable: false,
-      billingStatus: 'unbilled', costingBasis: 'actual',
-    });
-  }
-}
 
 async function earningComponent(fx: Fixture, code: string): Promise<string> {
   const id = randomUUID();
