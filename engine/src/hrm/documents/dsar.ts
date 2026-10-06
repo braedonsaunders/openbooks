@@ -655,6 +655,11 @@ const PAYROLL_OPENING_BALANCES_DENIED_COLUMNS: ReadonlySet<string> = new Set([
   "updated_by",
 ]);
 
+// Dated assignment evidence is insert-only: its schema has a creator, not an updater.
+const PAYROLL_EMPLOYER_ASSIGNMENTS_DENIED_COLUMNS: ReadonlySet<string> = new Set([
+  "org_id", "employee_party_id", "created_by",
+]);
+
 const PAYROLL_PRIOR_STUBS_DENIED_COLUMNS: ReadonlySet<string> = new Set([
   "org_id",
   "employee_party_id",
@@ -1491,7 +1496,7 @@ export async function buildExport(orgId: string, exportId: string, opts?: { owne
          order by tax_year, period_start, paid_through, id
       `)).rows;
       payload.employerAssignments = (await db.execute<Record<string, unknown>>(sql`
-        select ${await heldDataProjection("payroll_employee_employer_assignments", PAYROLL_OPENING_BALANCES_DENIED_COLUMNS)}
+        select ${await heldDataProjection("payroll_employee_employer_assignments", PAYROLL_EMPLOYER_ASSIGNMENTS_DENIED_COLUMNS)}
           from payroll_employee_employer_assignments
          where org_id = ${orgId} and employee_party_id = ${partyId}
          order by effective_from, assignment_kind, id
