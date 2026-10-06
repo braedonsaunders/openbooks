@@ -3,6 +3,9 @@ import { canonicalDecimal } from "../money/exact-decimal.ts";
 import { decimalNullRefusal } from "../money/decimal-refusal.ts";
 import { isIsoCalendarDate } from "../platform/business-date.ts";
 import { db, inDbTransaction } from "../platform/db.ts";
+import { isUuid } from "../platform/uuid.ts";
+import { lockActorCommandAuthority } from "../organization/actor-command-authority.ts";
+import { lockScopeRows } from "../organization/subsidiary-scope.ts";
 import { lockAndCheckOrgFeature } from "../organization/org-feature-lock.ts";
 import { cmp, isZero, normalizeMoney } from "../money/money.ts";
 import { PayrollError } from "./error.ts";
@@ -76,6 +79,60 @@ async function lockParallelRunInputs(
 }
 
 export class ParallelRunStoreError extends PayrollError {}
+
+/** Correct an imported identity without replacing amounts or altering filed comparison evidence. */
+export async function correctPriorStubEmployee(input: {
+  orgId: string; actorId: string; stubId: string; expectedEmployeePartyId: string;
+  employeePartyId: string; expectedEmployeeLabel: string; reason: string; sourceReference: string;
+  allowedSubsidiaryIds: PayrollSubsidiaryScope; dryRun: boolean;
+}): Promise<{ changed: boolean }> {
+  if (![input.stubId, input.expectedEmployeePartyId, input.employeePartyId].every(isUuid)
+    || input.allowedSubsidiaryIds === undefined || typeof input.dryRun !== "boolean") {
+    throw new ParallelRunStoreError("Name the imported stub, reviewed employee identities and explicit legal-entity scope.");
+  }
+  const reason = input.reason.trim(), sourceReference = input.sourceReference.trim();
+  if (!reason || !sourceReference || reason.length > 2000 || sourceReference.length > 2000 || !input.expectedEmployeeLabel.trim()) {
+    throw new ParallelRunStoreError("Provide the source employee label, identity evidence and correction reason (1–2000 characters).");
+  }
+  return inDbTransaction(async tx => {
+    const authority = await lockActorCommandAuthority(tx, input.orgId, input.actorId, null, "payroll.manage");
+    if (!(await lockAndCheckOrgFeature(tx, input.orgId, "payroll"))) throw new ParallelRunStoreError("Payroll feature is disabled");
+    await lockParallelRunInputs(tx, input.orgId);
+    const subjects = [...new Set([input.expectedEmployeePartyId, input.employeePartyId])].sort().map(id => ({ kind: "party" as const, id }));
+    await lockScopeRows(tx, input.orgId, subjects, authority, "share");
+    await lockScopeRows(tx, input.orgId, subjects, input.allowedSubsidiaryIds, "share");
+    const before = (await tx.execute<Record<string, unknown>>(sql`select * from payroll_prior_stubs
+      where org_id=${input.orgId} and id=${input.stubId} for update`)).rows[0];
+    if (!before) throw new ParallelRunStoreError("The imported payroll stub is unavailable in this organization — export and review the register again.");
+    await assertPriorRegisterInScope(tx, input.orgId, String(before.register_id), authority);
+    await assertPriorRegisterInScope(tx, input.orgId, String(before.register_id), input.allowedSubsidiaryIds);
+    if (before.employee_label !== input.expectedEmployeeLabel) throw new ParallelRunStoreError("The source employee label changed — export and review the register before correcting its identity.");
+    const parties = (await tx.execute<{ id: string; subsidiary_id: string | null; employee: boolean }>(sql`
+      select p.id,p.subsidiary_id,exists(select 1 from employee_roles er where er.org_id=p.org_id and er.party_id=p.id) as employee
+      from parties p where p.org_id=${input.orgId} and p.id in (${input.expectedEmployeePartyId},${input.employeePartyId})`)).rows;
+    const previous = parties.find(p => p.id === input.expectedEmployeePartyId), target = parties.find(p => p.id === input.employeePartyId);
+    if (!previous?.subsidiary_id || !target?.employee || previous.subsidiary_id !== target.subsidiary_id) {
+      throw new ParallelRunStoreError("Select a verified employee of the same legal employer — this correction cannot transfer payroll between employers.");
+    }
+    if (before.employee_party_id === input.employeePartyId) return { changed: false };
+    if (before.employee_party_id !== input.expectedEmployeePartyId) throw new ParallelRunStoreError("The imported employee binding changed — export and review it before applying this correction.");
+    const conflict = (await tx.execute(sql`select id from payroll_prior_stubs where org_id=${input.orgId}
+      and register_id=${before.register_id as string} and employee_party_id=${input.employeePartyId}`)).rows[0];
+    if (conflict) throw new ParallelRunStoreError("This register already contains the verified employee — review both source rows; this correction cannot merge or discard payroll amounts.");
+    if (input.dryRun) return { changed: true };
+    const after = (await tx.execute<Record<string, unknown>>(sql`update payroll_prior_stubs
+      set employee_party_id=${input.employeePartyId},updated_at=now(),updated_by=${input.actorId}
+      where org_id=${input.orgId} and id=${input.stubId} and employee_party_id=${input.expectedEmployeePartyId} returning *`)).rows[0];
+    if (!after) throw new ParallelRunStoreError("The imported payroll identity could not be corrected — export and review the register again.");
+    const header = (await tx.execute(sql`update payroll_prior_registers set updated_at=now(),updated_by=${input.actorId}
+      where org_id=${input.orgId} and id=${before.register_id as string} returning id`)).rows[0];
+    if (!header) throw new ParallelRunStoreError("The source register is unavailable — the identity correction was not saved.");
+    await tx.execute(sql`insert into audit_log(org_id,table_name,row_id,action,changes,actor_id)
+      values(${input.orgId},'payroll_prior_stubs',${input.stubId},'update',
+      ${JSON.stringify({ before, after, reason, sourceReference, source: "prior payroll identity correction" })}::jsonb,${input.actorId})`);
+    return { changed: true };
+  });
+}
 
 /* ------------------------------------------------------------------ */
 /* The comparable slot vocabulary                                      */
