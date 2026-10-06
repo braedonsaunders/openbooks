@@ -11,7 +11,7 @@ import { waitForLockWaiter } from '@openbooks/engine/src/testing/lock-wait.ts';
 const state: { gate: { user: { orgId: string; id: string } } | null } = { gate: null };
 Object.assign(globalThis, { __setupEvidence: state });
 registerHooks({ resolve(specifier, context, next) {
-  if (specifier.endsWith('/lib/authz') && context.parentURL?.includes('/api/admin/setup/')) {
+  if (specifier === '@/lib/authz' || (specifier.endsWith('/lib/authz') && context.parentURL?.includes('/api/admin/setup/'))) {
     return { shortCircuit: true, url: 'data:text/javascript,export async function guardPermission(){return globalThis.__setupEvidence.gate}' };
   }
   return next(specifier, context);
