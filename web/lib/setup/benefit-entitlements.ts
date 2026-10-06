@@ -4,7 +4,7 @@ import type { SetupEntity } from './types'
 export function benefitEntitlementPresentation(entity: SetupEntity, creating = false): SetupEntity {
   const offer = ['code', 'name', 'unit', 'systemKey', 'direction']
   const accrual = ['accrualMethod', 'accrualValue', 'accrualComponentId', 'capBehavior']
-  const delivery = ['payoutComponentId', 'liabilityAccountId', 'isActive']
+  const delivery = ['payoutComponentId', 'depositComponentId', 'allowNegativeBalance', 'liabilityAccountId', 'isActive']
   return {
     ...entity,
     singularTitleKey: 'benefitBuilder.timeOff.title',
