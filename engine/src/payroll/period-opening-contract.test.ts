@@ -83,7 +83,9 @@ test('opening and native prior shares add once without mutating either input', (
 
 test('cross-year pay periods follow the paid-through tax year and reject impossible dates', () => {
   assertPeriodOpeningDates(opening);
-  for (const changed of [{ periodEnd: '2026-02-30' }, { periodStart: '2026-01-04' }, { paidThrough: '2026-01-02' }, { taxYear: 2025 }, { taxYear: 2026.5 }]) {
+  // The native pack resolves fiscal tax years; generic dates cannot impose a calendar year.
+  assertPeriodOpeningDates({ ...opening, taxYear: 2025 });
+  for (const changed of [{ periodEnd: '2026-02-30' }, { periodStart: '2026-01-04' }, { paidThrough: '2026-01-02' }, { taxYear: 2026.5 }]) {
     assert.throws(() => assertPeriodOpeningDates({ ...opening, ...changed }));
   }
 });

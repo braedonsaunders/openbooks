@@ -4,6 +4,7 @@ import type {
 } from "../pack-types.ts";
 import { CA_COMPUTE_FACTOR_LABELS, computeCaStatutory } from "./compute-statutory.ts";
 import { CA_SUPPLEMENTAL_PAY_TREATMENT } from "./supplemental-pay.ts";
+import { CA_PERIOD_OPENING_TREATMENT } from './period-openings.ts';
 import { T4127_FACTOR_LABELS } from "./t4127.ts";
 import { TP1015_FACTOR_LABELS } from "./quebec/tp1015.ts";
 import { CRA_REMITTANCE_SCHEDULE } from "./cra/remittance.ts";
@@ -109,6 +110,7 @@ export const CA_PAYROLL_PACK: PayrollCountryPack = {
   // than to anything new.
   retroactivePayTreatment: "non_periodic",
   supplementalPayTreatment: CA_SUPPLEMENTAL_PAY_TREATMENT,
+  periodOpeningTreatment: CA_PERIOD_OPENING_TREATMENT,
   contributoryBases: {
     pensionable: "CPP/QPP pensionable earnings (T4127 factor PI)",
     insurable: "EI insurable earnings (T4127 factor IE)",

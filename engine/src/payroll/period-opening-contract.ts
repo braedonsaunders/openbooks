@@ -36,8 +36,8 @@ export function assertPeriodOpeningDates(input: PayrollPeriodOpeningDates): void
   if (input.periodStart > input.periodEnd) {
     throw new PayrollError('Period end must be on or after period start');
   }
-  if (input.paidThrough < input.periodEnd || Number(input.paidThrough.slice(0, 4)) !== input.taxYear) {
-    throw new PayrollError('Paid through must be on or after period end and within the opening tax year');
+  if (input.paidThrough < input.periodEnd) {
+    throw new PayrollError('Paid through must be on or after period end');
   }
 }
 
@@ -159,7 +159,7 @@ export function periodOpeningAppliesToRun(
   if (!isIsoCalendarDate(run.payDate) || !isIsoCalendarDate(run.periodStart) || !isIsoCalendarDate(run.periodEnd) || run.periodStart > run.periodEnd) {
     throw new PayrollError(`Pay run ${run.label} has an invalid date range — review its payroll period and pay date`);
   }
-  if (run.taxYear !== opening.taxYear || Number(run.payDate.slice(0, 4)) !== run.taxYear) {
+  if (run.taxYear !== opening.taxYear) {
     throw new PayrollError(`Pay run ${run.label} and the period opening must use the same pay-date tax year`);
   }
   if (run.country !== opening.country || run.currency !== opening.currency || run.subsidiaryId !== opening.subsidiaryId) {

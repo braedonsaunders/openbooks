@@ -1,5 +1,8 @@
 import { requireCompensationPackageConfiguration, clearCompensationPackageCalculations } from './compensation-package-payroll.ts';
 import { recurringBenefitsRunSource } from './benefit-plan-inputs.ts';
+import { payrollPeriodOpeningPriors } from './period-opening-source.ts';
+import { mergePeriodOpeningPriors } from './period-opening-contract.ts';
+import { EMPTY_PERIOD_PRIORS } from './period-priors.ts';
 import { reresolveRunToSubsidiary } from "./run-lifecycle.ts";
 import { statutoryHolidayPayEnabled, ensureStatutoryHolidayComponents, ensureComponents, statutoryComponents } from "./run-setup.ts";
 /**
@@ -499,6 +502,17 @@ async function calculateInTransaction(input: CalculatePayRunInput): Promise<PayR
          and adjustment_type = 'exclude'
     `));
     const excluded = new Set(excludedRows.rows.map((r) => r.employee_party_id));
+
+    const openingPriors = await payrollPeriodOpeningPriors(tx, { orgId, pack: calcPack,
+      employeePartyIds: employees.rows.filter((employee) => !excluded.has(employee.party_id!)).map((employee) => employee.party_id!), periodic: PERIODIC_RUN_TYPES.has(runType),
+      run: { payScheduleId: periodIdentity.payScheduleId, periodStart: periodIdentity.periodStart, periodEnd: periodIdentity.periodEnd,
+        payDate: runContext.payDate, taxYear: runContext.taxYear, country: runContext.country, currency: runContext.currency,
+        subsidiaryId: runContext.subsidiaryId, label: periodIdentity.documentNumber },
+    });
+    for (const [employeeId, opening] of openingPriors) {
+      periodPriorsByEmployee.set(employeeId, mergePeriodOpeningPriors(periodPriorsByEmployee.get(employeeId) ?? EMPTY_PERIOD_PRIORS, opening));
+    }
+    assertSupplementalSupported(calcPack, runContext.country, runType, periodPriorsByEmployee.size > 0);
 
     const { eftFallbackToCheque } = await payrollPaymentMethodSettings(orgId);
     // The org wage expense default, read ONCE for the run in this
