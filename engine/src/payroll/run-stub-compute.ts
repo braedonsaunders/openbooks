@@ -13,7 +13,7 @@ import { db } from "../platform/db.ts";
 import { PayrollError } from "./error.ts";
 import { aggregateUsSupplementalWageAmounts } from "./supplemental-wages.ts";
 import { aggregateUsStatutoryExemptionAmounts } from "./statutory-exemptions.ts";
-import { add, cmp, div, mulRatio, neg, sum } from "../money/money.ts";
+import { add, cmp, div, neg, sum } from "../money/money.ts";
 import { payrollCertificate, resolveCertificate, revalidateStoredCertificates, type ResolvedCertificate } from "./certificates.ts";
 import { packRates, PayrollPackError, assertPayrollRegionSupported, type EmployeePayrollContext, type PayrollRunContext, type PayrollTaxBaseKey, type SupplementalTaxMethod } from "./packs.ts";
 import type { PayPeriodPriors } from "./period-priors.ts";
@@ -30,8 +30,7 @@ import { resolvePayrollPaymentMethod } from "./payment-method.ts";
 import { assertEarningsAssessedStable, dropIncomeAssessedLines, type EarningsAssessedLine } from "./limits.ts";
 import { reduceTaxBases } from "./treatment-bases.ts";
 import { assertVacationPlanResolved } from "./run-setup.ts";
-import { resolveWorkSchedule, scheduledHoursPerWeek } from "./work-schedules.ts";
-import { type StubComputation, storedTaxCertificates, resolvePayRate } from "./run-calculation-support.ts";
+import { type StubComputation, storedTaxCertificates, resolvePayRate, resolveStubStatutoryHours } from "./run-calculation-support.ts";
 import { type Line, installablePackOrThrow, insertPayStubRow, insertPayStubLineRows, persistEntitlementMovements, earningsAssessedSnapshot, resolveEmployeeJurisdiction, stampDepartmentExpenseAccounts } from "./run-stub-records.ts";
 import { appendPeriodicEarnings, appendRetroSettlementLines, appendDerivedEarningLines, appendStatutoryHolidayEarningLines, applyAssignedComponentLines, applyRunLineAdjustments, appendUnionFringeLines, applyEntitlementPlanMovements } from "./run-earning-lines.ts";
 import { applyBankDrawdown } from "./run-bank-drawdown.ts";
@@ -525,33 +524,10 @@ export async function calculateStub(
   // still contributes to the contributory base exactly once.
   const pensionableNonPeriodic = earning((l) => (l.pensionable ?? true) && (l.nonPeriodic ?? false));
 
-  let statutoryHours: { regular: string | null; extra: string } | undefined;
-  if (pack.statutoryHours?.basis === "contractual-plus-worked-extra") {
-    const extra = sum(lines
-      .filter((line) => line.kind === "earning"
-        && (line.classification === "overtime" || line.classification === "double_time"))
-      .map((line) => line.hours ?? "0"));
-    let regular: string | null;
-    if (emp.pay_basis === "salary") {
-      const schedule = await resolveWorkSchedule(
-        tx, orgId, employeePartyId, run.period_start!,
-        { subsidiaryId: ctx.runContext.subsidiaryId },
-      );
-      const weeklyHours = schedule ? scheduledHoursPerWeek(schedule) : null;
-      const scheduleHours = weeklyHours === null ? null : mulRatio(weeklyHours, 52n, BigInt(P));
-      const observedHours = sum(lines
-        .filter((line) => line.kind === "earning"
-          && line.classification !== "overtime" && line.classification !== "double_time")
-        .map((line) => line.hours ?? "0"));
-      regular = scheduleHours ?? (cmp(observedHours, "0") > 0 ? observedHours : null);
-    } else {
-      regular = sum(lines
-        .filter((line) => line.kind === "earning"
-          && line.classification !== "overtime" && line.classification !== "double_time")
-        .map((line) => line.hours ?? "0"));
-    }
-    statutoryHours = { regular, extra };
-  }
+  const statutoryHours = pack.statutoryHours?.basis === "contractual-plus-worked-extra"
+    ? await resolveStubStatutoryHours(tx, { orgId, employeePartyId, payBasis: emp.pay_basis,
+        periodStart: run.period_start!, subsidiaryId: ctx.runContext.subsidiaryId, periodsPerYear: P, lines })
+    : undefined;
 
   // Per-program bases for contribution programs the pack declares. Each
   // program accumulates its OWN base from the per-earning-type applicability
