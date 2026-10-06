@@ -10,6 +10,7 @@ import {
   markLegacy,
   seedAdoption,
 } from "../payroll/filing-test-fixtures.ts";
+import { upsertPayrollEmployerFact } from "../payroll/employer-fact-store.ts";
 import { commitPayRun } from "../payroll/run-commit.ts";
 import { createScratchOrg, dropScratchOrg, seedWorkerEmployment } from "../testing/fixtures.ts";
 
@@ -42,6 +43,18 @@ test(
   async () => {
     const fx = await seedAdoption();
     try {
+      const filingAccountId = randomUUID();
+      await db.execute(sql`insert into payroll_filing_accounts
+        (id, org_id, country, program_type, account_number, name, remitter_type, is_default, created_by, updated_by)
+        values (${filingAccountId}, ${fx.orgId}, 'CA', 'ca_rp', '123456789RP0091',
+          'CRA regular remitter', 'regular', true, ${fx.actorId}, ${fx.actorId})`);
+      await upsertPayrollEmployerFact({ orgId: fx.orgId, actorId: fx.actorId, filingAccountId,
+        country: "CA", factKey: "ei_employer_multiplier", effectiveFrom: "2026-01-01",
+        value: "1.4", changeReason: "Standard employer EI multiple for the fixture's CRA account" });
+      const profile = await db.execute(sql`update employee_payroll_profiles
+        set filing_account_id=${filingAccountId}
+        where org_id=${fx.orgId} and employee_party_id=${fx.employeeId} returning employee_party_id`);
+      assert.equal(profile.rows.length, 1, "the remittance fixture binds its employee to the declared CRA account");
       const { input } = await calculatedRun(fx);
       await commitPayRun(input);
 
@@ -50,7 +63,7 @@ test(
       // (the floor itself is covered by the threshold unit tests).
       const findings = await scan(fx.orgId, "1.0000");
       const due = findings.filter((finding) => finding.findingType === "payroll_remittance_due");
-      assert.ok(due.length > 0, `committed withholding surfaces dated groups, got ${fingerprints(findings)}`);
+      assert.ok(due.length > 0, `committed withholding surfaces dated groups, got ${JSON.stringify(findings.map(({ fingerprint, summary }) => ({ fingerprint, summary })))}`);
       for (const finding of due) {
         assert.equal(finding.agentKey, "payroll");
         assert.ok(finding.summary.dueDate, "every group carries its schedule due date");
