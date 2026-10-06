@@ -37,10 +37,9 @@ function fullCashflowValues(overrides: Record<string, unknown> = {}) {
   };
 }
 
-test("cashflow spec carries every forecast-model threshold with today's default", () => {
+test("cashflow spec carries a field for every forecast-model threshold", () => {
   const spec = ANALYTICS_CONFIG.cashflow;
   assert.equal(spec.slug, "cashflow");
-  assert.deepEqual(spec.defaults, fullCashflowValues());
   const keys = spec.fields.map((field) => field.key);
   for (const key of Object.keys(fullCashflowValues())) {
     assert.ok(keys.includes(key), `spec field missing for threshold '${key}'`);

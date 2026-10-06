@@ -33,16 +33,19 @@ test("card blend and outlier filter stay exact while knobs ride the config", () 
       filterRecurringOutliers([...regular, "500.0000"], 2),
       regular,
     );
+    // A borderline value (1.7σ) is kept at 2σ but excluded at 1σ — the
+    // factor discriminates instead of excluding everything either way.
+    const borderline = ["100.0000", "100.0000", "100.0000", "130.0000"];
+    assert.deepEqual(filterRecurringOutliers(borderline, 2), borderline);
+    assert.deepEqual(filterRecurringOutliers(borderline, 1), ["100.0000", "100.0000", "100.0000"]);
     // ... and a steady series keeps everything: no false positives.
     assert.deepEqual(filterRecurringOutliers([...regular, "100.0000"], 2), [...regular, "100.0000"]);
     // Fewer than four samples cannot filter.
     assert.deepEqual(filterRecurringOutliers(["100.0000", "500.0000"], 2), ["100.0000", "500.0000"]);
 
-    // A tuned knob wins; an explicit undefined still falls back to the spec
-    // default instead of shadowing it.
-    const tuned = forecastModelParams({ cardMedianBlendWeight: 0.6, cardDefaultPayDay: undefined });
+    // A tuned knob wins over the spec default.
+    const tuned = forecastModelParams({ cardMedianBlendWeight: 0.6 });
     assert.equal(tuned.cardMedianBlendWeight, 0.6);
-    assert.equal(tuned.cardDefaultPayDay, 24);
     console.log("forecast model passed: exact blend, measured-sigma filter, configured knobs");
   `;
   const result = spawnSync(

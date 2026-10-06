@@ -24,15 +24,16 @@ import type { ForecastCategory } from './core'
  */
 async function seedPayment(
   org: Awaited<ReturnType<typeof createScratchOrg>>,
-  input: { number: string; partyId: string; subsidiaryId: string | null; total: string },
+  input: { number: string; partyId: string; subsidiaryId: string | null; total: string; date?: string },
 ) {
+  const day = input.date ?? org.date
   await db.execute(sql`
     insert into documents(
       id, org_id, kind, document_number, party_id, subsidiary_id, document_date,
       posting_date, currency, fx_rate, status, subtotal, tax_total, total
     ) values (
       ${randomUUID()}, ${org.orgId}, 'vendor_payment', ${input.number}, ${input.partyId},
-      ${input.subsidiaryId}, ${org.date}, ${org.date}, 'CAD',
+      ${input.subsidiaryId}, ${day}, ${day}, 'CAD',
       '1', 'draft', ${input.total}, 0, ${input.total}
     )
   `)
@@ -112,6 +113,47 @@ test('unrestricted consolidated cash reads root-owned payments', { skip: !env.OP
       !denied.vendorOptions.some((v) => v.id === nullOnlyVendor),
       'a branch view hides the vendor known only through root-owned documents',
     )
+  } finally {
+    await withBypass(() => dropScratchOrg(scratch.orgId))
+  }
+})
+
+/**
+ * The recurring-cadence detector reads the same payment documents as the
+ * history median: a root-owned payment joins the cadence and the average
+ * in unrestricted consolidated views, and drops out without the limb.
+ */
+test('unrestricted consolidated cadence averages root-owned payments', { skip: !env.OPENBOOKS_DB_URL }, async () => {
+  const scratch = await withBypass(() => createScratchOrg())
+  try {
+    const branchId = randomUUID()
+    const day = (agoDays: number) =>
+      new Date(new Date(`${scratch.date}T00:00:00Z`).getTime() - agoDays * 86400000).toISOString().slice(0, 10)
+    await withBypass(async () => {
+      await db.execute(sql`
+        insert into subsidiaries (id, org_id, parent_id, name, base_currency, country)
+        values (${branchId}, ${scratch.orgId}, ${scratch.subsidiaryId}, 'Cash branch', 'CAD', 'CA')
+      `)
+      await seedPayment(scratch, { number: 'PAY-CAD-60', partyId: scratch.vendorId, subsidiaryId: branchId, total: '100', date: day(60) })
+      await seedPayment(scratch, { number: 'PAY-CAD-30', partyId: scratch.vendorId, subsidiaryId: branchId, total: '100', date: day(30) })
+      await seedPayment(scratch, { number: 'PAY-ROOT-0', partyId: scratch.vendorId, subsidiaryId: null, total: '400', date: day(0) })
+    })
+    const all = [scratch.subsidiaryId, branchId]
+    const cadenceCat: ForecastCategory = {
+      id: randomUUID(), name: 'Vendor cadence', direction: 'outflow', method: 'vendor_recurring_average',
+      partyIds: [scratch.vendorId], historyMonths: 12,
+    }
+    const consolidated = await withBypass(() => categoryWeekly(
+      scratch.orgId, { ...cadenceCat }, scratch.date, WEEKS,
+      { ...baseContext, subIds: all, includeNullSubsidiary: true },
+    ))
+    assert.equal(consolidated.meta.samples, 3, 'the consolidated cadence sees the root-owned payment')
+    assert.equal(consolidated.meta.avgAmount, '200.0000', 'the consolidated average prices the root-owned payment with the rest')
+    const bare = await withBypass(() => categoryWeekly(
+      scratch.orgId, { ...cadenceCat }, scratch.date, WEEKS, { ...baseContext, subIds: all },
+    ))
+    assert.equal(bare.meta.samples, 2, 'without the limb the root-owned payment drops out of the cadence')
+    assert.equal(bare.meta.avgAmount, '100.0000', 'without the limb the average prices the attributed payments only')
   } finally {
     await withBypass(() => dropScratchOrg(scratch.orgId))
   }
