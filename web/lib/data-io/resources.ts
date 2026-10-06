@@ -21,6 +21,7 @@ import {
 } from './prior-payroll-register-resource'
 import { PAYROLL_RUN_INPUTS_DESCRIPTOR, PAYROLL_RUN_INPUTS_KEY, payrollRunInputsResource } from './payroll-run-inputs-resource'
 import { PAYROLL_EMPLOYMENT_LINKS_DESCRIPTOR, PAYROLL_EMPLOYMENT_LINKS_KEY, payrollEmploymentLinksResource } from './payroll-employment-links-resource'
+import { PAYROLL_PERIOD_OPENINGS_DESCRIPTOR, PAYROLL_PERIOD_OPENINGS_KEY, payrollPeriodOpeningsResource } from './payroll-period-openings-resource'
 import { EMPLOYEE_WORKER_COMP_DESCRIPTOR, EMPLOYEE_WORKER_COMP_KEY, employeeWorkerCompResource } from './employee-worker-comp-resource'
 import {
   PAYROLL_EMPLOYER_LEVY_OPENINGS_DESCRIPTOR,
@@ -260,6 +261,7 @@ export async function listResources(orgId: string): Promise<ResourceDescriptor[]
   const payroll = featureEnabled(features, 'payroll')
     ? [
         PAYROLL_OPENING_BALANCES_DESCRIPTOR,
+        PAYROLL_PERIOD_OPENINGS_DESCRIPTOR,
         PAYROLL_OPENING_ENTITLEMENTS_DESCRIPTOR,
         PAYROLL_EMPLOYER_LEVY_OPENINGS_DESCRIPTOR,
         PRIOR_PAYROLL_REGISTER_DESCRIPTOR,
@@ -308,6 +310,10 @@ export async function getResource(
   if (key === PAYROLL_OPENING_BALANCES_KEY) {
     if (!(await orgFeatureEnabled(orgId, 'payroll'))) return null
     return bindReadScope(payrollOpeningBalancesResource(orgId), orgId, allowedSubsidiaryIds)
+  }
+  if (key === PAYROLL_PERIOD_OPENINGS_KEY) {
+    if (!(await orgFeatureEnabled(orgId, 'payroll'))) return null
+    return bindReadScope(payrollPeriodOpeningsResource(orgId), orgId, allowedSubsidiaryIds)
   }
   if (key === PAYROLL_OPENING_ENTITLEMENTS_KEY) {
     if (!(await orgFeatureEnabled(orgId, 'payroll'))) return null

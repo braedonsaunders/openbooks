@@ -6,41 +6,14 @@ import type { Client } from 'pg';
 import { waitForLockWaiter } from '../testing/lock-wait.ts';
 import { takeEmployeeTaxYearFences, employeeTaxYearFenceKey } from './fences.ts';
 import { db, withOrgTransaction } from '../platform/db.ts';
-import { DB, setupHarness, withHarness, seedEmployment, setFeatures } from '../testing/hrm-harness.ts';
-import { seedPayrollSchedule, seedPayrollProfile } from '../testing/fixtures.ts';
+import { DB, withHarness, setFeatures } from '../testing/hrm-harness.ts';
 import { saveOpeningBalances } from './opening-balances.ts';
 import { savePayrollPeriodOpening } from './period-opening-store.ts';
 import { payrollPeriodOpeningForEmployee } from './period-opening-reader.ts';
 import { CA_PERIOD_OPENING_TREATMENT } from './canada/period-openings.ts';
 
-const spec = { features: ['payroll', 'hrm'], country: 'CA', users: [
-  { key: 'authorId', name: 'Payroll operator', handle: 'period_opening_author', permissions: ['payroll.manage', 'payroll.read'], link: true },
-  { key: 'readerId', name: 'Payroll reviewer', handle: 'period_opening_reader', permissions: ['payroll.read'], link: true },
-] } as const;
-async function setup() {
-  return setupHarness(spec, async ({ org, authorId }) => {
-    const worker = await seedEmployment(org.orgId, org.subsidiaryId, { from: '2025-12-01' });
-    await db.execute(sql`update parties set subsidiary_id=${org.subsidiaryId} where org_id=${org.orgId} and id=${worker.workerPartyId}`);
-    const scheduleId = randomUUID();
-    await seedPayrollSchedule(org.orgId, scheduleId, authorId, { name: 'Weekly', frequency: 'weekly', periodsPerYear: 52, anchorPeriodEnd: '2026-01-03', payDateOffsetDays: 6 });
-    await seedPayrollProfile(org.orgId, worker.workerPartyId, worker.employmentId, scheduleId, authorId, { country: 'CA', province: 'ON', payBasis: 'hourly' });
-    await saveOpeningBalances({ orgId: org.orgId, actorId: authorId, taxYear: 2026,
-      rows: [{ employeePartyId: worker.workerPartyId, amounts: { pensionableYtd: '262.77', insurableYtd: '262.77', taxableYtd: '262.77', cppYtd: '11.63', eiYtd: '4.28' } }], allowedSubsidiaryIds: null });
-    const annual = (await db.execute<{ updated_at: string }>(sql`select updated_at::text as updated_at from payroll_opening_balances
-      where org_id=${org.orgId} and employee_party_id=${worker.workerPartyId} and tax_year=2026`)).rows[0]!;
-    const amounts = Object.fromEntries(CA_PERIOD_OPENING_TREATMENT.fields.map((field) => [field.key, '0']));
-    Object.assign(amounts, { pensionable: '262.77', insurable: '262.77', periodicIncome: '262.77', cpp: '11.63', ei: '4.28', enhancedCppPeriodic: '1.95' });
-    return { ...worker, scheduleId, annualVersion: annual.updated_at, amounts };
-  });
-}
+import { setupPeriodOpeningFixture as setup, periodOpeningInput as input } from '../testing/payroll-period-openings-fixture.ts';
 type Fixture = Awaited<ReturnType<typeof setup>>;
-function input(f: Fixture) {
-  return { orgId: f.org.orgId, actorId: f.authorId, employeePartyId: f.workerPartyId, taxYear: 2026,
-    subsidiaryId: f.org.subsidiaryId, payScheduleId: f.scheduleId, country: 'CA', currency: 'CAD',
-    periodStart: '2025-12-28', periodEnd: '2026-01-03', paidThrough: '2026-01-08', amounts: f.amounts,
-    sourceReference: 'Verified previous-provider payment register', reason: 'Record the paid period share within annual carry-in',
-    expectedRevision: null, expectedAnnualUpdatedAt: f.annualVersion, dryRun: false, allowedSubsidiaryIds: null };
-}
 async function counts(orgId: string) {
   return (await db.execute<{ openings: number; audits: number; stubs: number; ledger: number }>(sql`select
     (select count(*)::int from payroll_period_openings where org_id=${orgId}) as openings,
