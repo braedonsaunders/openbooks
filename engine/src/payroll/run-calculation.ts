@@ -63,6 +63,8 @@ export interface CapturedStub {
   gross: string;
   netPay: string;
   employerCost: string;
+  /** Statutory calculation evidence retained even when the preview rolls back. */
+  factors: Record<string, string>;
   lines: CapturedStubLine[];
 }
 
@@ -105,7 +107,7 @@ export async function captureCalculatedStubs(
   allowedSubsidiaryIds?: PayrollSubsidiaryScope,
 ): Promise<CapturedStub[]> {
   const rows = (await tx.execute<Record<string, string | number | null>>(sql`
-    select s.employee_party_id, s.province, s.gross, s.net_pay, s.employer_cost,
+    select s.employee_party_id, s.province, s.gross, s.net_pay, s.employer_cost, s.factors,
            l.component_id, c.system_key, l.kind, l.description, l.hours, l.rate, l.amount, l.payment_kind, l.non_cash_account_id,
            l.project_id, l.department_id, l.time_type_id, l.item_id,
            l.expense_account_id, l.expense_account_source, l.expense_account_evidence, l.sequence
@@ -128,6 +130,7 @@ export async function captureCalculatedStubs(
         gross: String(row.gross ?? "0"),
         netPay: String(row.net_pay ?? "0"),
         employerCost: String(row.employer_cost ?? "0"),
+        factors: row.factors as unknown as Record<string, string>,
         lines: [],
       };
       byEmployee.set(employeePartyId, stub);

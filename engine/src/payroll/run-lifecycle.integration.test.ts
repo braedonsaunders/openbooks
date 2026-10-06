@@ -471,6 +471,12 @@ describe("calculation-rollback", () => {
               assert.equal(cmp(result.stubs![0]!.gross, result.gross), 0);
               assert.equal(cmp(result.stubs![0]!.netPay, result.net), 0);
               assert.ok(result.stubs![0]!.lines.some((line) => line.kind === "earning" && cmp(line.amount, "240") === 0));
+              assert.equal(cmp(result.stubs![0]!.factors.I!, "240"), 0,
+                "preview retains statutory income evidence after its transaction rolls back");
+              const cpp = result.stubs![0]!.lines.find((line) => line.systemKey === "cpp");
+              assert.ok(cpp);
+              assert.equal(cmp(result.stubs![0]!.factors.C!, cpp.amount), 0,
+                "captured contribution evidence agrees with the actual preview deduction");
               assert.deepEqual(await evidence(fx.orgId), before, "preview must preserve IDs, values, and audit evidence");
             };
             if (ambient) {
