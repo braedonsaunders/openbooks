@@ -4257,6 +4257,7 @@
       "thresholdHelp": "0 = auto-detect (50% of the median payment)",
       "amount": "Amount ({code})",
       "frequency": "Frequency",
+      "frequencyPlaceholder": "Choose a frequency…",
       "frequencyWeekly": "Weekly",
       "frequencyBiweekly": "Bi-Weekly",
       "frequencyMonthly": "Monthly",

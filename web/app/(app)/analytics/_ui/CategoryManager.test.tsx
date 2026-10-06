@@ -60,6 +60,12 @@ function buttonNamed(name: string): HTMLButtonElement {
   return found[0]!;
 }
 
+function setNativeValue(el: HTMLInputElement | HTMLSelectElement, value: string, event: string) {
+  const proto = el instanceof window.HTMLSelectElement ? window.HTMLSelectElement.prototype : window.HTMLInputElement.prototype;
+  Object.getOwnPropertyDescriptor(proto, "value")!.set!.call(el, value);
+  el.dispatchEvent(new window.Event(event, { bubbles: true }));
+}
+
 const SERVER_CATEGORY = {
   id: "cat-branch-rent",
   name: "Branch rent",
@@ -151,11 +157,6 @@ test("a new draft names its frequency explicitly instead of showing one and savi
   const host = document.createElement("div");
   document.body.appendChild(host);
   const root = createRoot(host);
-  const setNativeValue = (el: HTMLInputElement | HTMLSelectElement, value: string, event: string) => {
-    const proto = el instanceof window.HTMLSelectElement ? window.HTMLSelectElement.prototype : window.HTMLInputElement.prototype;
-    Object.getOwnPropertyDescriptor(proto, "value")!.set!.call(el, value);
-    el.dispatchEvent(new window.Event(event, { bubbles: true }));
-  };
   try {
     await act(async () => {
       root.render(
@@ -198,6 +199,67 @@ test("a new draft names its frequency explicitly instead of showing one and savi
       "the saved draft must carry the cadence the select displayed",
     );
     assert.equal(capturedPut?.expectedRevision, 3, "the save must carry the revision it read");
+  } finally {
+    await act(async () => {
+      root.unmount();
+    });
+    host.remove();
+    restoreFetch();
+  }
+});
+
+test("a legacy row without frequency shows the placeholder and must choose", async () => {
+  // Legacy rows saved before the frequency refusal carry none while the
+  // engine forecasts them monthly: the editor must not display Weekly for
+  // them. The select starts empty on the placeholder, and the save carries
+  // the chosen cadence.
+  globalThis.__cmRouter = { push() {}, refresh() {} };
+  capturedPut = undefined as typeof capturedPut;
+  const { frequency: _dropped, ...legacy } = SERVER_CATEGORY;
+  const restoreFetch = scriptFetch((url, init) => {
+    if (url === "/api/analytics/cashflow/categories" && (!init?.method || init.method === "GET")) {
+      return Response.json({ categories: [legacy], revision: 7 });
+    }
+    if (url === "/api/analytics/cashflow/categories" && init?.method === "PUT") {
+      capturedPut = JSON.parse(String(init.body));
+      return Response.json({ ok: true, categories: capturedPut!.categories, revision: 8 });
+    }
+    return null;
+  });
+  const host = document.createElement("div");
+  document.body.appendChild(host);
+  const root = createRoot(host);
+  try {
+    await act(async () => {
+      root.render(
+        <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
+          <MoneyProvider currency="USD">
+            <BusinessDateProvider today="2026-09-01">
+              <CategoryManager vendorOptions={[]} accountOptions={[]} subsidiaryOptions={[]} initialCategories={[]} />
+            </BusinessDateProvider>
+          </MoneyProvider>
+        </NextIntlClientProvider>,
+      );
+      await tick();
+    });
+    await tick();
+    await tick();
+    await click(host.querySelector('button[title="Edit"]')!);
+    const freqSelect = [...host.querySelectorAll("select")].find((s) =>
+      [...s.options].some((o) => o.value === "monthly"),
+    ) as HTMLSelectElement;
+    assert.ok(freqSelect, "a manual draft must offer a frequency select");
+    assert.equal(freqSelect.value, "", "an unset frequency must show the placeholder, never Weekly");
+    await act(async () => {
+      setNativeValue(freqSelect, "monthly", "change");
+      await tick();
+    });
+    await click(buttonNamed("Save category"));
+    assert.equal(
+      capturedPut?.categories[0]?.frequency,
+      "monthly",
+      "the save must carry the chosen cadence",
+    );
   } finally {
     await act(async () => {
       root.unmount();

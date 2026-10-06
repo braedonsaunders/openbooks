@@ -4241,6 +4241,7 @@
       "subsidiaries": "子公司",
       "subsidiariesHelp": "受限子公司视图仅显示在此处归属的类别，未归属的手动和公式类别将在其中隐藏。",
       "searchSubsidiaries": "搜索子公司…",
+      "frequencyPlaceholder": "选择频率…",
       "frequencyWeekly": "每周",
       "glAccounts": "总账科目",
       "historyMonths": "历史月数",
