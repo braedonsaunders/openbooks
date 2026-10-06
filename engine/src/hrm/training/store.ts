@@ -83,8 +83,8 @@ async function transaction<T>(input: TrainingActor, fn: () => Promise<T>): Promi
 
 async function begin(input: TrainingActor, permission: "hrm.certifications.read" | "hrm.certifications.manage" | "hrm.self.read" | "hrm.self.request", subsidiaryId: string | null = null) {
   const scope = await lockActorCommandAuthority(db, input.orgId, input.actorId, subsidiaryId, permission);
-  if (!await lockAndCheckOrgFeature(db, input.orgId, "hrm") || !await lockAndCheckOrgFeature(db, input.orgId, "hrmCertifications")) {
-    throw new TrainingError("Training delivery is disabled — enable HRM and Certifications and licenses on Company Settings → Features; existing training history is preserved.");
+  if (!await lockAndCheckOrgFeature(db, input.orgId, "hrm") || !await lockAndCheckOrgFeature(db, input.orgId, "hrmTraining")) {
+    throw new TrainingError("Training delivery is disabled — enable HRM and Training delivery on Company Settings → Features; existing training history is preserved.");
   }
   return scope;
 }
@@ -151,6 +151,7 @@ export async function createTrainingCourse(input: TrainingActor & TrainingPolicy
     if (!identity.partyId) throw new TrainingError("Course authorship needs a native person identity — link your user to its person record before creating a course.");
     const hash = trainingRequestHash(definition), replay = await creationReplay<TrainingCourse>(input, "hrm_training_courses", id, hash, COURSE);
     if (replay) return replay;
+    if (definition.qualificationTypeId && !await lockAndCheckOrgFeature(db, input.orgId, "hrmCertifications")) throw new TrainingError("Qualification outcomes are disabled — enable Certifications and licenses on Company Settings → Features, or create a course without a qualification outcome.");
     const qualification = definition.qualificationTypeId ? (await db.execute<{ validityMonths: number | null; requiresEvidence: boolean }>(sql`select validity_months as "validityMonths",requires_evidence as "requiresEvidence"
       from hrm_qualification_types where org_id=${input.orgId} and id=${definition.qualificationTypeId} and is_active for share`)).rows[0] : null;
     if (definition.qualificationTypeId && !qualification) {

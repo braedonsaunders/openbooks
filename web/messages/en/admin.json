@@ -6994,6 +6994,22 @@
       "title": "Compensation",
       "description": "Job architecture and pay bands, merit cycles, costed headcount plans, and pay transparency. Merit cycles also need Payroll."
     },
+    "hrmTraining": {
+      "title": "Training delivery",
+      "description": "Optional courses, sessions, invitations, results and feedback. Qualification awards also require Certifications and licenses."
+    },
+    "hrmShiftPlanning": {
+      "title": "Shift planning",
+      "description": "Optional recurring schedules, employee assignments and a published roster. Payroll and time entry do not require a roster."
+    },
+    "hrmAttendance": {
+      "title": "Device attendance",
+      "description": "Optional device identities, source check-ins and synchronization completeness. Check-in collection does not require shift planning."
+    },
+    "hrmShiftClosing": {
+      "title": "Formal shift closing",
+      "description": "Optional review and closing of completed shifts against current attendance evidence. Requires Shift planning and Device attendance; publishing shifts does not require closing."
+    },
     "hrmCertifications": {
       "title": "Certifications and licenses",
       "description": "The worker qualification ledger: taxonomy, held credentials, dispatch requirements, and expiry alerts. Toggling never deletes data."

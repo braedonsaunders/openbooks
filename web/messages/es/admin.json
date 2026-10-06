@@ -6994,6 +6994,22 @@
       "title": "Retribución",
       "description": "Arquitectura de puestos y bandas salariales, ciclos de méritos, planes de plantilla costeados y transparencia salarial. Los ciclos de méritos también requieren Nómina."
     },
+    "hrmTraining": {
+      "title": "Formación",
+      "description": "Cursos, sesiones, invitaciones, resultados y comentarios opcionales. La emisión de cualificaciones también requiere Certificaciones y licencias."
+    },
+    "hrmShiftPlanning": {
+      "title": "Planificación de turnos",
+      "description": "Horarios recurrentes, asignaciones y cuadrante publicado opcionales. La nómina y el registro de horas no requieren un cuadrante."
+    },
+    "hrmAttendance": {
+      "title": "Asistencia por dispositivo",
+      "description": "Identidades de dispositivos, fichajes y seguimiento de sincronización opcionales. Recoger fichajes no requiere planificación de turnos."
+    },
+    "hrmShiftClosing": {
+      "title": "Cierre formal de turnos",
+      "description": "Revisión y cierre opcionales de turnos terminados con pruebas de asistencia actuales. Requiere Planificación de turnos y Asistencia por dispositivo; publicar turnos no requiere cerrarlos."
+    },
     "hrmCertifications": {
       "title": "Certificaciones y licencias",
       "description": "Registro de cualificaciones: taxonomía, credenciales, requisitos de asignación y alertas de vencimiento. Desactivar nunca borra datos."

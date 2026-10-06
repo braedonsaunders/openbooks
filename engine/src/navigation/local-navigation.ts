@@ -69,7 +69,7 @@ export const HRM_LOCAL_NAVIGATION: Record<'people' | 'hiring' | 'timeOff' | 'tal
     { href: '/hrm/processes/templates', iconKey: 'clipboard-check', ns: 'hrm', key: 'processes.templates.title', permission: 'hrm.process.manage', prefix: true },
     { href: '/hrm/documents', iconKey: 'files', ns: 'hrm', key: 'home.tabs.documents', permission: 'hrm.documents.read', feature: 'hrmDocuments' },
     { href: '/hrm/qualifications', iconKey: 'badge-check', ns: 'hrm', key: 'home.tabs.qualifications', permission: 'hrm.certifications.read', feature: 'hrmCertifications' },
-    { href: '/hrm/training', label: 'Training', iconKey: 'graduation-cap', ns: 'admin', key: 'setup.training.title', permission: 'hrm.certifications.read', feature: 'hrmCertifications' },
+    { href: '/hrm/training', label: 'Training', iconKey: 'graduation-cap', ns: 'admin', key: 'setup.training.title', permission: 'hrm.certifications.read', feature: 'hrmTraining' },
   ],
   hiring: [
     { href: '/hrm/recruiting', iconKey: 'user-search', ns: 'hrm', key: 'talentWorkspace.applications', permission: 'hrm.recruiting.read', feature: 'hrmRecruiting', carry: ['applicationStatus','opening','stage'] },
@@ -194,7 +194,7 @@ export const LOCAL_NAVIGATION: LocalNavigationSet[] = [
     ...['profile', 'checklists', 'reviews', 'benefits', 'team', 'compensation', 'documents'].map((tab) => ({ href: `/me/${tab}`, ns: 'hrm', key: `me.tabs.${tab}` })),
     { href: '/me/one-on-ones', ns: 'hrm', key: 'me.tabs.oneOnOnes' },
     { href: '/me/surveys', ns: 'hrm', key: 'me.tabs.openSurveys' },
-    { href: '/me/training', ns: 'hrm', key: 'me.tabs.training', feature: 'hrmCertifications', permission: 'hrm.self.read' },
+    { href: '/me/training', ns: 'hrm', key: 'me.tabs.training', feature: 'hrmTraining', permission: 'hrm.self.read' },
   ] },
   { id: 'payroll', label: 'Payroll', feature: 'payroll', tabs: [
     { href: '/payroll', ns: 'payroll', key: 'home.tabs.overview', permission: 'payroll.read' },

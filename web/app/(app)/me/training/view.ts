@@ -24,7 +24,7 @@ import { registeredListTable } from '@/lib/list/prepared-spec'
 export async function loadMeTraining(sp: Record<string, string | undefined> = {}) {
   const authz = await requirePermission('hrm.self.read')
   await requireFeatureEnabled(authz.user.orgId, 'hrm')
-  await requireFeatureEnabled(authz.user.orgId, 'hrmCertifications')
+  await requireFeatureEnabled(authz.user.orgId, 'hrmTraining')
   const [t, policy, locale, tabs] = await Promise.all([
     getTranslations('hrm.me.training'),
     getTranslations('admin.setup.training'),

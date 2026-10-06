@@ -26,7 +26,7 @@ registerHooks({
 const { POST: create } = await import('./courses/route')
 const { POST: transition, GET: read } = await import('./courses/[courseId]/route')
 const spec = {
-  features: ['hrm', 'hrmCertifications'],
+  features: ['hrm', 'hrmCertifications', 'hrmTraining'],
   users: [
     {
       key: 'authorId',

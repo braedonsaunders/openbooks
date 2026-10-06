@@ -20,25 +20,22 @@ test("distribution features are opt-in and declare their dependencies", () => {
   }
 });
 
-test("nonprofit is an opt-in industry feature owning one nav module", () => {
-  const def = FEATURE_BY_KEY.get("nonprofit");
-  assert.ok(def, "nonprofit must be registered before nonprofit routes gate on it");
-  assert.equal(def.defaultEnabled, false);
-  assert.equal(def.category, "industries");
-  assert.deepEqual(def.navModules, ["nonprofit"]);
-  assert.equal(featureEnabled({}, "nonprofit"), false);
-  assert.equal(featureEnabled({ nonprofit: true }, "nonprofit"), true);
-});
-
-test("allocations is an opt-in finance feature with no nav modules", () => {
-  const def = FEATURE_BY_KEY.get("allocations");
-  assert.ok(def, "allocations must be registered before sibling shards gate on it");
-  assert.equal(def.defaultEnabled, false);
-  assert.equal(def.category, "finance");
-  assert.deepEqual(def.navModules ?? [], []);
-  assert.equal(featureEnabled({}, "allocations"), false);
-  assert.equal(featureEnabled({ allocations: true }, "allocations"), true);
-});
+for (const [key, title, category, enabled, navModules] of [
+  ["nonprofit", "nonprofit is an opt-in industry feature owning one nav module", "industries", false, ["nonprofit"]],
+  ["allocations", "allocations is an opt-in finance feature with no nav modules", "finance", false, []],
+  ["homeAnnouncements", "home announcements is a default-on platform feature with no parent", "platform", true, []],
+] as const) {
+  test(title, () => {
+    const def = FEATURE_BY_KEY.get(key);
+    assert.ok(def, `${key} must be registered before its routes gate on it`);
+    assert.equal(def.defaultEnabled, enabled);
+    assert.equal(def.category, category);
+    assert.deepEqual(def.navModules ?? [], navModules);
+    assert.equal(def.parentKey, undefined);
+    assert.equal(featureEnabled({}, key), enabled);
+    assert.equal(featureEnabled({ [key]: !enabled }, key), !enabled);
+  });
+}
 
 test("contract costs are opt-in billing subordinate to revenue recognition", () => {
   const def = FEATURE_BY_KEY.get("contractCosts");
@@ -73,16 +70,6 @@ test("allocation binding-moment gates are subordinate to the parent", () => {
   }
 });
 
-
-test("home announcements is a default-on platform feature with no parent", () => {
-  const def = FEATURE_BY_KEY.get("homeAnnouncements");
-  assert.ok(def, "homeAnnouncements must be registered");
-  assert.equal(def.defaultEnabled, true);
-  assert.equal(def.category, "platform");
-  assert.equal(def.parentKey, undefined);
-  assert.equal(featureEnabled({}, "homeAnnouncements"), true);
-  assert.equal(featureEnabled({ homeAnnouncements: false }, "homeAnnouncements"), false);
-});
 
 test("automations is an opt-in platform feature under flows with four sub-features", () => {
   const def = FEATURE_BY_KEY.get("automations");
@@ -129,15 +116,23 @@ test("automations is an opt-in platform feature under flows with four sub-featur
   assert.equal(FEATURE_BY_KEY.has("automationExceptionApproval"), false);
 });
 
-// Each HRM module and field time capture is ONE switch: nothing may hang a
-// sub-switch under them. What a module does is on whenever the module is;
-// what a tenant tunes is configuration inside the module.
-test("HRM modules and field time capture carry no sub-switches", () => {
-  const singleSwitches = new Set([
-    "fieldTime",
-    ...FEATURES.filter((feature) => feature.parentKey === "hrm").map((feature) => feature.key),
-  ]);
+test("optional HRM operations preserve independent capabilities and explicit closing dependencies", () => {
+  const optional = ["hrmTraining", "hrmShiftPlanning", "hrmAttendance", "hrmShiftClosing"];
+  for (const key of optional) {
+    assert.equal(FEATURE_BY_KEY.get(key)?.defaultEnabled, false, `${key} must be opt-in`);
+    assert.equal(featureEnabled({}, key), false);
+    assert.equal(featureEnabled({ hrm: false, [key]: true, hrmShiftPlanning: true, hrmAttendance: true }, key), false);
+  }
+  const independent = { hrm: true, hrmCertifications: false, hrmTraining: true, hrmShiftPlanning: false, hrmAttendance: true };
+  assert.equal(featureEnabled(independent, "hrmTraining"), true);
+  assert.equal(featureEnabled(independent, "hrmAttendance"), true);
+  assert.equal(featureEnabled({ hrm: true, hrmCertifications: true }, "hrmTraining"), false);
+  assert.equal(featureEnabled({ hrm: true, hrmTraining: false, hrmCertifications: true }, "hrmCertifications"), true);
+  assert.equal(featureEnabled({ hrm: true, hrmShiftPlanning: true, hrmAttendance: false }, "hrmShiftPlanning"), true);
+  const closing = { hrm: true, hrmShiftPlanning: true, hrmAttendance: true, hrmShiftClosing: true };
+  assert.equal(featureEnabled(closing, "hrmShiftClosing"), true);
+  for (const dependency of ["hrmShiftPlanning", "hrmAttendance"]) assert.equal(featureEnabled({ ...closing, [dependency]: false }, "hrmShiftClosing"), false);
+  const singleSwitches = new Set(["fieldTime", ...FEATURES.filter(feature => feature.parentKey === "hrm").map(feature => feature.key)]);
   assert.ok(singleSwitches.has("hrmPerformance") && singleSwitches.has("hrmRecruiting"));
-  const nested = FEATURES.filter((feature) => feature.parentKey && singleSwitches.has(feature.parentKey));
-  assert.deepEqual(nested.map((feature) => feature.key), []);
+  assert.deepEqual(FEATURES.filter(feature => feature.parentKey && singleSwitches.has(feature.parentKey)).map(feature => feature.key), ["hrmShiftClosing"]);
 });

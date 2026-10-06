@@ -4,7 +4,7 @@ import { recordTrainingFeedback } from '@openbooks/engine/hrm/training'
 import { participantParams, feedbackBody, trainingCreateKey } from '../../../contracts'
 export const POST = defineRoute({
   permission: 'hrm.certifications.manage',
-  feature: 'hrmCertifications',
+  feature: 'hrmTraining',
   params: participantParams,
   body: feedbackBody,
   invalidBodyStatus: 422,

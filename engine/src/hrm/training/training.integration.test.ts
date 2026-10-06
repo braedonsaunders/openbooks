@@ -11,7 +11,7 @@ import { createTrainingCourse, transitionTrainingCourse, createTrainingSession, 
   respondTrainingInvitation, completeTrainingParticipant, voidTrainingOutcome, getTrainingParticipant, listTrainingCourses, listOwnTraining,
   recordTrainingFeedback, getTrainingCourse, getTrainingSession } from "./store.ts";
 
-const spec = { features: ["hrm", "hrmCertifications"], country: "CA", users: [
+const spec = { features: ["hrm", "hrmCertifications", "hrmTraining"], country: "CA", users: [
   { key: "authorId", name: "Course author", handle: "training_author", permissions: ["hrm.certifications.read", "hrm.certifications.manage"], link: true, partyKey: "authorPartyId" },
   { key: "reviewerId", name: "Course reviewer", handle: "training_reviewer", permissions: ["hrm.certifications.read", "hrm.certifications.manage"], link: true },
   { key: "aliasId", name: "Author alternate login", handle: "training_alias", permissions: ["hrm.certifications.manage"], link: true },
@@ -146,8 +146,11 @@ test("feature-off and altered retries refuse by name while preserving all existi
     assert.equal((await createTrainingCourse(f.request)).id, f.course.id);
     await assert.rejects(createTrainingCourse({ ...f.request, name: "Different request" }), /different content.*existing record is preserved/);
     await setFeatures(f.org.orgId, { hrmCertifications: false });
+    await assert.rejects(createTrainingCourse({ ...f.request, id: randomUUID(), code: "QUALIFIED" }), /Qualification outcomes are disabled.*Certifications/);
+    assert.equal((await createTrainingCourse({ ...f.request, id: randomUUID(), code: "DELIVERY", qualificationTypeId: null })).qualificationTypeId, null);
+    await setFeatures(f.org.orgId, { hrmTraining: false });
     await assert.rejects(listTrainingCourses(f.actor), /Training delivery is disabled.*Company Settings.*Features/);
-    assert.equal((await db.execute(sql`select id from hrm_training_courses where org_id=${f.org.orgId}`)).rows.length, 1);
+    assert.equal((await db.execute(sql`select id from hrm_training_courses where org_id=${f.org.orgId}`)).rows.length, 2);
   });
 });
 

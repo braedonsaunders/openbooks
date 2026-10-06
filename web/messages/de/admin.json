@@ -6994,6 +6994,22 @@
       "title": "Vergütung",
       "description": "Stellenarchitektur und Gehaltsbänder, Leistungsrunden, kalkulierte Personalpläne und Entgelttransparenz. Leistungsrunden erfordern zusätzlich die Lohnabrechnung."
     },
+    "hrmTraining": {
+      "title": "Schulungen",
+      "description": "Optionale Kurse, Termine, Einladungen, Ergebnisse und Rückmeldungen. Qualifikationsnachweise erfordern zusätzlich Zertifizierungen und Lizenzen."
+    },
+    "hrmShiftPlanning": {
+      "title": "Schichtplanung",
+      "description": "Optionale wiederkehrende Arbeitspläne, Mitarbeiterzuordnungen und veröffentlichte Dienstpläne. Lohnabrechnung und Zeiterfassung benötigen keinen Dienstplan."
+    },
+    "hrmAttendance": {
+      "title": "Gerätegestützte Anwesenheit",
+      "description": "Optionale Gerätekennungen, Zeitstempel und Nachweise der vollständigen Synchronisierung. Die Erfassung benötigt keine Schichtplanung."
+    },
+    "hrmShiftClosing": {
+      "title": "Formeller Schichtabschluss",
+      "description": "Optionale Prüfung und Abschluss beendeter Schichten anhand aktueller Anwesenheitsnachweise. Erfordert Schichtplanung und Gerätegestützte Anwesenheit; die Veröffentlichung benötigt keinen Abschluss."
+    },
     "hrmCertifications": {
       "title": "Zertifizierungen und Lizenzen",
       "description": "Qualifikationsregister der Mitarbeiter: Taxonomie, Nachweise, Einsatzanforderungen und Ablaufwarnungen. Umschalten löscht keine Daten."

@@ -265,6 +265,13 @@ export const FEATURES: FeatureDef[] = [
   // (where Project Scheduling is on) and equipment qualification
   // requirements (where Equipment is on). Toggling never deletes data.
   { key: 'hrmCertifications', defaultEnabled: false, category: 'people', parentKey: 'hrm' },
+  // Delivery is optional even for tenants maintaining a qualification ledger.
+  { key: 'hrmTraining', defaultEnabled: false, category: 'people', parentKey: 'hrm' },
+  // Planning and device attendance are independent; neither is a payroll prerequisite.
+  { key: 'hrmShiftPlanning', defaultEnabled: false, category: 'people', parentKey: 'hrm' },
+  { key: 'hrmAttendance', defaultEnabled: false, category: 'people', parentKey: 'hrm' },
+  // Formal completion review is an additional opt-in, never required to publish shifts.
+  { key: 'hrmShiftClosing', defaultEnabled: false, category: 'people', parentKey: 'hrmShiftPlanning', requiresAll: ['hrmAttendance'] },
   // HR documents — hire-to-retire documents with e-signature, retention
   // schedules with audited deletion, and subject-access exports. Toggling
   // never deletes data — rows stay and re-render when re-on.

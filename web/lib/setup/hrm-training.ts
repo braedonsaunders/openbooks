@@ -19,7 +19,7 @@ const employer: SetupField = {
 }
 const common = {
   groupKey: 'workforce',
-  featureKey: 'hrmCertifications',
+  featureKey: 'hrmTraining',
   orgScoped: true,
   actorCols: true,
   hasActive: false,
