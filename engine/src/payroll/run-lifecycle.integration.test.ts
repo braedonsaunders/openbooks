@@ -4,9 +4,6 @@ import {
   seedPayrollSchedule, seedPayrollEmployeeRole, seedPayrollPerson, seedPayrollTime, seedPayrollProfile, seedPayrollWage,
   createScratchOrg, dropScratchOrg, seedFlowActors, dropScratchOrgReporting, seedWorkerEmployment,
 } from "../testing/fixtures.ts";
-// Consolidated DB-test file: merged from sibling per-finding suites to
-// share one file's startup cost. Each describe block is one former file;
-// bodies are unchanged apart from import hoisting.
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test, { describe } from "node:test";
@@ -19,6 +16,41 @@ import { calculatePayRun } from "./run-calculation.ts";
 import { calculatedRun, seedAdoption, seedOntarioEhtFixture } from "./filing-test-fixtures.ts";
 import { commitPayRun } from "./run-commit.ts";
 import { cmp } from "../money/money.ts";
+/** Identical Ontario hourly employment and approved time for lifecycle calculations. */
+async function seedHourlyLifecycle(name: string, options: { monthly?: boolean; scheduleName?: string; terminatedOn?: string } = {}) {
+  const org = await createScratchOrg();
+  const actorId = (await seedFlowActors(org.orgId)).adminId;
+  await seedPayrollSettings(org.orgId, {
+    features: { payroll: true },
+  });
+  await seedPayrollComponents(org.orgId, actorId, "CA");
+  await seedOntarioEhtFixture(org.orgId, actorId);
+
+  const employeeId = randomUUID();
+  const scheduleId = randomUUID();
+  await seedPayrollPerson(org.orgId, employeeId, `${name} Employee`);
+  await seedPayrollEmployeeRole(org.orgId, employeeId, { id: randomUUID(), terminatedOn: options.terminatedOn ?? null });
+  await seedPayrollSchedule(org.orgId, scheduleId, actorId, {
+    name: options.scheduleName ?? `${name} Schedule`, frequency: options.monthly ? 'monthly' : 'biweekly',
+    periodsPerYear: options.monthly ? 12 : 26, anchorPeriodEnd: options.monthly ? '2026-07-31' : '2026-07-18',
+    payDateOffsetDays: 3,
+  });
+  await seedPayrollWage(org.orgId, employeeId, actorId, {
+    currency: 'CAD', rate: '30', basis: 'hour', annualHours: '2080', effectiveFrom: '2026-01-01',
+  });
+  // Hires carry an HRM employment or stub calculation refuses them.
+  const employmentId = await seedWorkerEmployment(org.orgId, employeeId, org.subsidiaryId);
+  await seedPayrollProfile(org.orgId, employeeId, employmentId, scheduleId, actorId, {
+    country: 'CA', province: 'ON', payBasis: 'hourly', federalClaimCode: 1, provincialClaimCode: 1,
+  }, { percentFloor: null, method: 'accrue' });
+
+  await seedPayrollTime(org.orgId, employeeId, actorId, {
+    workedOn: '2026-07-06', hours: '8', status: 'approved', isBillable: false, billingStatus: 'unbilled',
+    costingBasis: 'actual',
+  });
+
+  return { org, actorId, employeeId, scheduleId };
+}
 
 describe("run-lifecycle", () => {
 
@@ -135,35 +167,7 @@ describe("run-assignment-window", () => {
    * passed pre-flight and was then silently left off the cheque.)
    */
   test("an assignment ending mid-period is paid on the stub", { skip: !DB }, async () => {
-    const org = await createScratchOrg();
-    const actorId = (await seedFlowActors(org.orgId)).adminId;
-    await seedPayrollSettings(org.orgId, {
-        features: { payroll: true },
-      });
-    await seedPayrollComponents(org.orgId, actorId, "CA");
-    await seedOntarioEhtFixture(org.orgId, actorId);
-
-    const employeeId = randomUUID();
-    const scheduleId = randomUUID();
-    await seedPayrollPerson(org.orgId, employeeId, 'Window Employee');
-    await seedPayrollEmployeeRole(org.orgId, employeeId, { id: randomUUID(), terminatedOn: null });
-    await seedPayrollSchedule(org.orgId, scheduleId, actorId, {
-      name: 'Window Schedule', frequency: 'biweekly', periodsPerYear: 26, anchorPeriodEnd: '2026-07-18',
-      payDateOffsetDays: 3,
-    });
-    await seedPayrollWage(org.orgId, employeeId, actorId, {
-      currency: 'CAD', rate: '30', basis: 'hour', annualHours: '2080', effectiveFrom: '2026-01-01',
-    });
-    // Hires carry an HRM employment or stub calculation refuses them.
-    const employmentId = await seedWorkerEmployment(org.orgId, employeeId, org.subsidiaryId);
-    await seedPayrollProfile(org.orgId, employeeId, employmentId, scheduleId, actorId, {
-      country: 'CA', province: 'ON', payBasis: 'hourly', federalClaimCode: 1, provincialClaimCode: 1,
-    }, { percentFloor: null, method: 'accrue' });
-
-    await seedPayrollTime(org.orgId, employeeId, actorId, {
-      workedOn: '2026-07-06', hours: '8', status: 'approved', isBillable: false, billingStatus: 'unbilled',
-      costingBasis: 'actual',
-    });
+    const { org, actorId, employeeId, scheduleId } = await seedHourlyLifecycle('Window');
 
     const component = async (code: string): Promise<string> => {
       const id = randomUUID();
@@ -227,35 +231,7 @@ describe("run-assignment-window", () => {
    * component sum to exactly one period: never the sum of both full values.
    */
   test("a mid-month amendment pays each slice, never twice the component", { skip: !DB }, async () => {
-    const org = await createScratchOrg();
-    const actorId = (await seedFlowActors(org.orgId)).adminId;
-    await seedPayrollSettings(org.orgId, {
-        features: { payroll: true },
-      });
-    await seedPayrollComponents(org.orgId, actorId, "CA");
-    await seedOntarioEhtFixture(org.orgId, actorId);
-
-    const employeeId = randomUUID();
-    const scheduleId = randomUUID();
-    await seedPayrollPerson(org.orgId, employeeId, 'Amend Employee');
-    await seedPayrollEmployeeRole(org.orgId, employeeId, { id: randomUUID(), terminatedOn: null });
-    await seedPayrollSchedule(org.orgId, scheduleId, actorId, {
-      name: 'Amend Schedule', frequency: 'monthly', periodsPerYear: 12, anchorPeriodEnd: '2026-07-31',
-      payDateOffsetDays: 3,
-    });
-    await seedPayrollWage(org.orgId, employeeId, actorId, {
-      currency: 'CAD', rate: '30', basis: 'hour', annualHours: '2080', effectiveFrom: '2026-01-01',
-    });
-    // Hires carry an HRM employment or stub calculation refuses them.
-    const employmentId = await seedWorkerEmployment(org.orgId, employeeId, org.subsidiaryId);
-    await seedPayrollProfile(org.orgId, employeeId, employmentId, scheduleId, actorId, {
-      country: 'CA', province: 'ON', payBasis: 'hourly', federalClaimCode: 1, provincialClaimCode: 1,
-    }, { percentFloor: null, method: 'accrue' });
-
-    await seedPayrollTime(org.orgId, employeeId, actorId, {
-      workedOn: '2026-07-06', hours: '8', status: 'approved', isBillable: false, billingStatus: 'unbilled',
-      costingBasis: 'actual',
-    });
+    const { org, actorId, employeeId, scheduleId } = await seedHourlyLifecycle('Amend', { monthly: true });
 
     const componentId = randomUUID();
     await seedPayrollComponent(org.orgId, componentId, {
@@ -311,35 +287,7 @@ describe("run-entitlement-hours-payout", () => {
    * the ledger movement clearing the bank stays in the plan's unit.
    */
   test("a final pay values an hours bank at the wage", { skip: !DB }, async () => {
-    const org = await createScratchOrg();
-    const actorId = (await seedFlowActors(org.orgId)).adminId;
-    await seedPayrollSettings(org.orgId, {
-        features: { payroll: true },
-      });
-    await seedPayrollComponents(org.orgId, actorId, "CA");
-    await seedOntarioEhtFixture(org.orgId, actorId);
-
-    const employeeId = randomUUID();
-    const scheduleId = randomUUID();
-    await seedPayrollPerson(org.orgId, employeeId, 'Banked Employee');
-    await seedPayrollEmployeeRole(org.orgId, employeeId, { id: randomUUID(), terminatedOn: '2026-07-18' });
-    await seedPayrollSchedule(org.orgId, scheduleId, actorId, {
-      name: 'Bank Schedule', frequency: 'biweekly', periodsPerYear: 26, anchorPeriodEnd: '2026-07-18',
-      payDateOffsetDays: 3,
-    });
-    await seedPayrollWage(org.orgId, employeeId, actorId, {
-      currency: 'CAD', rate: '30', basis: 'hour', annualHours: '2080', effectiveFrom: '2026-01-01',
-    });
-    // Hires carry an HRM employment or stub calculation refuses them.
-    const employmentId = await seedWorkerEmployment(org.orgId, employeeId, org.subsidiaryId);
-    await seedPayrollProfile(org.orgId, employeeId, employmentId, scheduleId, actorId, {
-      country: 'CA', province: 'ON', payBasis: 'hourly', federalClaimCode: 1, provincialClaimCode: 1,
-    }, { percentFloor: null, method: 'accrue' });
-
-    await seedPayrollTime(org.orgId, employeeId, actorId, {
-      workedOn: '2026-07-06', hours: '8', status: 'approved', isBillable: false, billingStatus: 'unbilled',
-      costingBasis: 'actual',
-    });
+    const { org, actorId, employeeId, scheduleId } = await seedHourlyLifecycle('Banked', { scheduleName: 'Bank Schedule', terminatedOn: '2026-07-18' });
 
     const payoutComponentId = randomUUID();
     await seedPayrollComponent(org.orgId, payoutComponentId, {
