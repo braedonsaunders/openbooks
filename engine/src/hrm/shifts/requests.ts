@@ -5,7 +5,7 @@ import { requireShiftInstant, requireUuid, ShiftError } from "./policy.ts";
 import { SHIFT_COLUMNS, type RosterShift } from "./roster.ts";
 import { authorParty, creationReplay, db, expectedRevision, one, requestHash, scopedRow, shiftAuthority, shiftEmployment, shiftText, shiftTransaction, sql, subsidiaryVisibleFilter, type ShiftActor, type ShiftPermission } from "./store.ts";
 
-export interface ShiftRequest {
+export type ShiftRequest = {
   readonly id: string; readonly shiftId: string; readonly shiftRevision: number; readonly subsidiaryId: string;
   readonly employmentId: string; readonly workerPartyId: string; readonly kind: "release" | "change";
   readonly proposedStartsAt: string | null; readonly proposedEndsAt: string | null; readonly outcomeShiftId: string | null;

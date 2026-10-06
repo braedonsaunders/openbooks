@@ -4,12 +4,12 @@ import { attendancePolicy, recurringShiftOccurrences, shiftOccurrence, ShiftErro
 import { TEMPLATE_COLUMNS, shiftWindow, type ShiftTemplate } from "./templates.ts";
 import { authorParty, creationReplay, db, expectedRevision, one, requestHash, scopedRow, shiftAuthority, shiftEmployment, shiftText, shiftTransaction, sql, subsidiaryVisibleFilter, type ShiftActor } from "./store.ts";
 
-export interface ShiftAssignment {
+export type ShiftAssignment = {
   readonly id: string; readonly subsidiaryId: string; readonly employmentId: string; readonly workerPartyId: string; readonly templateId: string;
   readonly effectiveFrom: string; readonly effectiveTo: string | null; readonly status: "draft" | "approved" | "ended" | "cancelled"; readonly revision: number;
   readonly createdBy: string; readonly authorPartyId: string; readonly decidedBy: string | null; readonly decidedAt: string | null;
 }
-export interface RosterShift extends Omit<ShiftOccurrence,"durationSeconds"> {
+export type RosterShift = Omit<ShiftOccurrence,"durationSeconds"> & {
   readonly id: string; readonly subsidiaryId: string; readonly employmentId: string; readonly workerPartyId: string; readonly name: string;
   readonly templateId: string | null; readonly publicationId: string | null; readonly slotIndex: number | null; readonly supersedesId: string | null;
   readonly attendancePolicy: AttendancePolicy | null; readonly definitionHash: string; readonly status: "draft" | "published" | "closed" | "cancelled"; readonly revision: number;

@@ -52,7 +52,7 @@ test('recorded payroll subjects and approval authors refuse party merges before 
       ['hrm_shift_assignments', 'shift assignment authorship evidence'],
       ['hrm_shifts', 'shift authorship evidence'],
       ['hrm_shift_requests', 'shift request authorship evidence'],
-    ]) {
+    ] as const) {
       protectedTable = table!;
       queries.length = 0;
       await assert.rejects(applySourcePartyMerge({ orgId, absorbedId, survivorId, sourceName: 'native', absorbedRef: 'employee-a', survivorRef: 'employee-b', actorId: null, runId: null }), new RegExp(label + '.*Keep the employee identities separate'));

@@ -4,15 +4,15 @@ import { requireShiftInstant, requireUuid, ShiftError, type DeviceCheckIn } from
 import { shiftWindow } from "./templates.ts";
 import { creationReplay, db, expectedRevision, one, requestHash, scopedRow, shiftAuthority, shiftEmployment, shiftInteger, shiftText, shiftTransaction, sql, subsidiaryVisibleFilter, type ShiftActor } from "./store.ts";
 
-export interface AttendanceDevice {
+export type AttendanceDevice = {
   readonly id: string; readonly subsidiaryId: string; readonly code: string; readonly name: string; readonly timeZone: string;
   readonly isActive: boolean; readonly revision: number;
 }
-export interface AttendanceIdentity {
+export type AttendanceIdentity = {
   readonly id: string; readonly deviceId: string; readonly sourceWorkerId: string; readonly subsidiaryId: string;
   readonly employmentId: string; readonly workerPartyId: string; readonly effectiveFrom: string; readonly effectiveTo: string | null; readonly revision: number;
 }
-export interface AttendanceBatch { readonly id: string; readonly deviceId: string; readonly completeThrough: string | null; readonly eventCount: number }
+export type AttendanceBatch = { readonly id: string; readonly deviceId: string; readonly completeThrough: string | null; readonly eventCount: number }
 export const DEVICE_COLUMNS = sql`id,subsidiary_id as "subsidiaryId",code,name,time_zone as "timeZone",is_active as "isActive",revision`;
 const IDENTITY_COLUMNS = sql`id,device_id as "deviceId",source_worker_id as "sourceWorkerId",subsidiary_id as "subsidiaryId",employment_id as "employmentId",worker_party_id as "workerPartyId",effective_from::text as "effectiveFrom",effective_to::text as "effectiveTo",revision`;
 const BATCH_COLUMNS = sql`id,device_id as "deviceId",to_char(complete_through at time zone 'UTC','YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') as "completeThrough",event_count as "eventCount"`;
