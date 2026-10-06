@@ -119,7 +119,7 @@ async function loadOpportunitySnapshot(id: string, orgId: string, allowed?: Read
     db.execute(sql`
       select m.*, u.display_name as user_name, u.email as user_email
         from crm_opportunity_team_members m join parties u on u.id = m.employee_id and u.org_id=m.org_id
-       where m.opportunity_id = ${id} and m.org_id = ${orgId} order by m.is_primary desc, u.name`),
+       where m.opportunity_id = ${id} and m.org_id = ${orgId} order by m.is_primary desc, u.display_name`),
     db.execute(sql`
       select d.id, d.kind, d.document_number, d.document_date, d.status, d.currency, d.total
         from crm_opportunity_documents od join documents d on d.id = od.document_id and d.org_id = od.org_id

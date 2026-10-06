@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "next dev -p 4780",
     "typecheck": "node --max-old-space-size=6144 ../node_modules/typescript/bin/tsc --noEmit",
-    "build": "next build",
+    "build": "next build --webpack",
     "start": "next start -p 4780"
   },
   "dependencies": {

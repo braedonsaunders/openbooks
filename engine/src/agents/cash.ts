@@ -312,7 +312,7 @@ async function settlementStats(
       select party_id, settled_on, n, sum_days, sum_days_sq
         from party_payment_stats
        where org_id = ${orgId} and account_type = ${acctType}
-         and settled_on >= ${asOf}::date - ${historyDays}
+         and settled_on >= ${asOf}::date - ${historyDays}::int
          and settled_on <= ${asOf}::date
     )
     select party_id as id,
