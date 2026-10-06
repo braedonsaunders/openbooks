@@ -35,7 +35,7 @@ const assignments = await import('./[id]/assignments/route')
 const assignmentAction = await import('./[id]/assignments/[assignmentId]/route')
 const assignmentDecision = await import('./[id]/assignments/[assignmentId]/decision/route')
 
-const spec = { country: 'CA', features: ['payroll', 'hrm'], users: [
+const spec = { country: 'CA', features: ['payroll', 'hrm', 'compensationPackages'], users: [
   { key: 'authorId', name: 'Package author', handle: 'package_author', permissions: ['payroll.manage', 'payroll.read', 'hrm.compensation.approve'], link: true },
   { key: 'approverId', name: 'Package approver', handle: 'package_approver', permissions: ['payroll.read', 'hrm.compensation.approve'], link: true },
 ] } as const

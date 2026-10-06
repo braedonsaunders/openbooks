@@ -6999,6 +6999,10 @@
       "title": "Compensation",
       "description": "Job architecture and pay bands, merit cycles, costed headcount plans, and pay transparency. Merit cycles also need Payroll."
     },
+    "compensationPackages": {
+      "title": "Compensation packages",
+      "description": "Optional reusable employer pay packages, approved versions and employee assignments. Disabling authoring preserves approved payroll obligations."
+    },
     "hrmTraining": {
       "title": "Training delivery",
       "description": "Optional courses, sessions, invitations, results and feedback. Qualification awards also require Certifications and licenses."

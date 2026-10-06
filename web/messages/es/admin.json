@@ -6999,6 +6999,10 @@
       "title": "Retribución",
       "description": "Arquitectura de puestos y bandas salariales, ciclos de méritos, planes de plantilla costeados y transparencia salarial. Los ciclos de méritos también requieren Nómina."
     },
+    "compensationPackages": {
+      "title": "Paquetes de remuneración",
+      "description": "Paquetes de remuneración reutilizables, versiones aprobadas y asignaciones opcionales. Desactivar la configuración conserva las obligaciones de nómina aprobadas."
+    },
     "hrmTraining": {
       "title": "Formación",
       "description": "Cursos, sesiones, invitaciones, resultados y comentarios opcionales. La emisión de cualificaciones también requiere Certificaciones y licencias."

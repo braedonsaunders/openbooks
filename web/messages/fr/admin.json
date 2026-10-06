@@ -6999,6 +6999,10 @@
       "title": "Rémunération",
       "description": "Architecture des postes et fourchettes salariales, campagnes de mérite, plans d'effectifs chiffrés et transparence salariale. Les campagnes de mérite nécessitent aussi la Paie."
     },
+    "compensationPackages": {
+      "title": "Packages de rémunération",
+      "description": "Packages de rémunération réutilisables, versions approuvées et affectations facultatifs. Désactiver la configuration conserve les obligations de paie approuvées."
+    },
     "hrmTraining": {
       "title": "Formation",
       "description": "Cours, sessions, invitations, résultats et commentaires facultatifs. Les qualifications délivrées nécessitent aussi Certifications et licences."

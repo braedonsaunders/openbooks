@@ -131,6 +131,9 @@ test("optional HRM operations preserve independent capabilities and explicit clo
   assert.equal(featureEnabled({ hrm: true, hrmShiftPlanning: true, hrmAttendance: false }, "hrmShiftPlanning"), true);
   assert.equal(featureEnabled({ payroll: true, hrm: false }, "payroll"), true);
   assert.equal(featureEnabled({ projects: true, timeTracking: true, fieldTime: true, hrm: false }, "fieldTime"), true);
+  assert.equal(featureEnabled({}, "compensationPackages"), false);
+  assert.equal(featureEnabled({ payroll: true, hrm: false, compensationPackages: true }, "compensationPackages"), true);
+  assert.equal(featureEnabled({ payroll: false, compensationPackages: true }, "compensationPackages"), false);
   const closing = { hrm: true, hrmShiftPlanning: true, hrmAttendance: true, hrmShiftClosing: true };
   assert.equal(featureEnabled(closing, "hrmShiftClosing"), true);
   for (const dependency of ["hrmShiftPlanning", "hrmAttendance"]) assert.equal(featureEnabled({ ...closing, [dependency]: false }, "hrmShiftClosing"), false);

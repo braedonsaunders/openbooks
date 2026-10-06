@@ -4,6 +4,7 @@ import { notFound } from 'next/navigation'
 import { getTranslations } from 'next-intl/server'
 import { CompensationPackageUnavailableError, getCompensationPackage, listCompensationPackages } from '@openbooks/engine/payroll/compensation-packages'
 import { Alert } from '@openbooks/ui'
+import { requireFeatureEnabled } from '@/lib/feature-gates'
 import { can, requirePermission } from '@/lib/authz'
 import { pickString } from '@/lib/list-params'
 import { PAYROLL_COMPENSATION_PACKAGES_ENTITY, packageAssignmentPresentation, packageVersionPresentation } from '@/lib/setup/payroll-compensation-packages'
@@ -14,6 +15,7 @@ import { CompensationPackageActions, CompensationPackagePreview, PackageVersionP
 export async function CompensationPackagesSection({ sp }: { sp: Record<string, string | string[] | undefined> }) {
   const authz = await requirePermission('payroll.read'), t = await getTranslations('admin.setup')
   const actor = { orgId: authz.user.orgId, actorId: authz.user.id }
+  await requireFeatureEnabled(actor.orgId, 'compensationPackages')
   let packages: Awaited<ReturnType<typeof listCompensationPackages>>
   try { packages = await listCompensationPackages(actor) }
   catch (error) {
