@@ -9,7 +9,7 @@ import { createPortal } from 'react-dom'
 import { useTranslations } from 'next-intl'
 import { AnimatePresence, motion } from 'framer-motion'
 import { Menu, X } from 'lucide-react'
-import { Badge, useHydrated } from '@openbooks/ui'
+import { Badge, OverlayExit, useHydrated } from '@openbooks/ui'
 import { Logo } from './brand-logo'
 import { useMobileNav } from './mobile-nav'
 import { SidebarNav, type SidebarNavGroup } from './sidebar-nav'
@@ -52,7 +52,9 @@ export function MobileNavToggle({ groups }: { groups: SidebarNavGroup[] }) {
         ? createPortal(
             <AnimatePresence>
               {open ? (
-                <div className="fixed inset-0 z-50 lg:hidden">
+                <OverlayExit key="menu">
+                {(exiting) => (
+                <div data-overlay-exiting={exiting || undefined} className="fixed inset-0 z-50 lg:hidden">
                   <motion.div
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
@@ -97,6 +99,8 @@ export function MobileNavToggle({ groups }: { groups: SidebarNavGroup[] }) {
                     </div>
                   </motion.aside>
                 </div>
+                )}
+                </OverlayExit>
               ) : null}
             </AnimatePresence>,
             document.body,

@@ -505,6 +505,13 @@
   pointer-events: none;
 }
 
+/* A menu or drawer that is closing as a navigation starts is gone from both
+   captures, so it never lingers beneath the arriving page. Overlays mark
+   their exit with `OverlayExit` from @openbooks/ui. */
+:root:active-view-transition [data-overlay-exiting] {
+  visibility: hidden;
+}
+
 ::view-transition-group(root) {
   animation-duration: 200ms;
 }

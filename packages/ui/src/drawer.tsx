@@ -6,6 +6,7 @@ import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import { useTranslations } from 'next-intl'
 import { useHydrated } from './use-hydrated'
 import { nextDrawerShow, shouldCommitDrawerCloseNavigation } from './drawer-nav'
+import { OverlayExit } from './overlay-exit'
 import { cn } from './utils'
 
 // Z-INDEX SCALE (single source of truth)
@@ -53,11 +54,11 @@ const UNDER_SHEETS = [
 const SHEET_SPRING = { type: 'spring', damping: 32, stiffness: 320, mass: 0.8 } as const
 
 // The sheet's leading top corner is turned down, like the hub sheets on
-// hover. It arrives lifted, settles as the sheet lands, and lifts again while
-// the pointer rests on the backdrop. Sizes are the fold's leg in pixels.
-const FOLD_REST = 18
-const FOLD_LIFTED = 28
-const foldClip = (leg: number) => `polygon(${leg}px 0, 100% 0, 100% 100%, 0 100%, 0 ${leg}px)`
+// hover. The fold is fixed: it does not respond to the pointer, so the sheet
+// holds still while the reader works in it. The size is the fold's leg in
+// pixels.
+const FOLD = 28
+const FOLD_CLIP = `polygon(${FOLD}px 0, 100% 0, 100% 100%, 0 100%, 0 ${FOLD}px)`
 
 let openDrawerCount = 0
 let originalBodyOverflow: string | null = null
@@ -72,9 +73,8 @@ let originalBodyOverflow: string | null = null
  * top corner turned down. It slides in slightly askew and squares up as it
  * lands, and the sheets beneath fan out along its leading edge. A nested
  * drawer is laid on top of the stack: the covered sheet steps back so its
- * edge stays visible behind the new one. Pointing at the backdrop eases the
- * sheet toward its exit and lifts the corner, the cue that a click there sets
- * it aside. Reduced-motion users get the still stack.
+ * edge stays visible behind the new one. Reduced-motion users get the still
+ * stack.
  *
  * `title` is required: the panel is a `role="dialog"` and screen readers
  * announce it by its heading, so a drawer cannot mount unnamed. Opening one
@@ -156,9 +156,6 @@ export function Drawer({
   const panelRef = React.useRef<HTMLElement>(null)
   const reduceMotion = useReducedMotion() ?? false
   const paper = side === 'right'
-  // The pointer is over the backdrop: the sheet eases toward its exit.
-  const [settingAside, setSettingAside] = React.useState(false)
-  if (!open && settingAside) setSettingAside(false)
 
   React.useEffect(() => {
     if (!open) return
@@ -251,8 +248,10 @@ export function Drawer({
     <DrawerDepthContext.Provider value={depth}>
     <AnimatePresence onExitComplete={onExitComplete}>
       {mounted && open ? (
+        <OverlayExit key="drawer">
+        {(exiting) => (
         <div
-          key="drawer"
+          data-overlay-exiting={exiting || undefined}
           data-drawer-layer={stacked ? 'nested' : 'base'}
           data-drawer-depth={depth}
           style={{ zIndex: depth === 0 ? 50 : 54 + depth }}
@@ -273,8 +272,6 @@ export function Drawer({
             transition={{ duration: 0.15 }}
             className="absolute inset-0 bg-slate-900/40 backdrop-blur-[2px]"
             onClick={onClose}
-            onPointerEnter={(e) => { if (e.pointerType === 'mouse') setSettingAside(true) }}
-            onPointerLeave={() => setSettingAside(false)}
             aria-hidden="true"
           />
           <motion.div
@@ -323,29 +320,20 @@ export function Drawer({
           {/* The top sheet. Its shadow is cast by a separate layer because
               the turned corner clips the dialog, and a clip removes the
               element's own shadow with it. */}
-          <div
-            data-setting-aside={settingAside || undefined}
-            className={cn(
-              'group/sheet relative h-full',
-              paper &&
-                'transition-[translate] delay-150 duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] data-[setting-aside]:translate-x-1.5 motion-reduce:transition-none motion-reduce:data-[setting-aside]:translate-x-0',
-            )}
-          >
+          <div className="relative h-full">
           {paper ? (
             <span
               aria-hidden
-              className="absolute inset-0 shadow-2xl transition-shadow delay-150 duration-300 group-data-[setting-aside]/sheet:shadow-[0_25px_50px_-12px_rgb(0_0_0/0.25),-8px_0_24px_-12px_rgb(15_23_42/0.18)]"
+              className="absolute inset-0 shadow-[0_25px_50px_-12px_rgb(0_0_0/0.25),-8px_0_24px_-12px_rgb(15_23_42/0.18)]"
             />
           ) : null}
-          <motion.aside
+          <aside
             ref={panelRef}
             role="dialog"
             aria-modal="true"
             aria-labelledby={headingId}
             tabIndex={-1}
-            initial={paper ? { clipPath: foldClip(reduceMotion ? FOLD_REST : FOLD_LIFTED) } : undefined}
-            animate={paper ? { clipPath: foldClip(settingAside ? FOLD_LIFTED : FOLD_REST) } : undefined}
-            transition={{ duration: reduceMotion ? 0 : 0.35, delay: reduceMotion ? 0 : 0.15, ease: [0.22, 1, 0.36, 1] }}
+            style={paper ? { clipPath: FOLD_CLIP } : undefined}
             className={cn(
               'relative flex h-full flex-col overflow-hidden border-t border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900',
               side === 'left' ? 'border-r shadow-2xl' : 'border-l',
@@ -361,12 +349,9 @@ export function Drawer({
                   className="pointer-events-none absolute inset-y-0 left-0 z-10 w-2 bg-gradient-to-r from-slate-900/[0.035] to-transparent dark:from-black/20"
                 />
                 {/* The underside of the turned corner. */}
-                <motion.span
+                <span
                   aria-hidden
-                  initial={{ scale: reduceMotion ? FOLD_REST / FOLD_LIFTED : 1 }}
-                  animate={{ scale: settingAside ? 1 : FOLD_REST / FOLD_LIFTED }}
-                  transition={{ duration: reduceMotion ? 0 : 0.35, delay: reduceMotion ? 0 : 0.15, ease: [0.22, 1, 0.36, 1] }}
-                  style={{ width: FOLD_LIFTED, height: FOLD_LIFTED, originX: 0, originY: 0 }}
+                  style={{ width: FOLD, height: FOLD }}
                   className="pointer-events-none absolute top-0 left-0 z-20 rounded-br-[3px] bg-[linear-gradient(135deg,transparent_50%,var(--color-slate-200)_50%,var(--color-slate-100))] shadow-[1px_1px_2px_rgb(15_23_42/0.14)] dark:bg-[linear-gradient(135deg,transparent_50%,var(--color-slate-700)_50%,var(--color-slate-800))] dark:shadow-[1px_1px_2px_rgb(0_0_0/0.4)]"
                 />
               </>
@@ -469,11 +454,13 @@ export function Drawer({
                 {footer}
               </footer>
             ) : null}
-          </motion.aside>
+          </aside>
           </div>
           </div>
           </motion.div>
         </div>
+        )}
+        </OverlayExit>
       ) : null}
     </AnimatePresence>
     </DrawerDepthContext.Provider>,
