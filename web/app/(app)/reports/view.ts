@@ -6,7 +6,7 @@ import { getTranslations } from 'next-intl/server'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { frame, page, ref, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
 import { ensureReportDefinitions } from '@openbooks/engine/src/reports/ensure-report-definitions.ts'
-import { getAuthz, can } from '../../../lib/authz'
+import { getAuthz, can, type Authz } from '../../../lib/authz'
 import { isFeatureEnabled } from '../../../lib/features'
 import { hiddenReportEntityKeys } from '../../../lib/report-authz'
 import { savedReportPathVisible } from '../../../lib/report-feature-gates'
@@ -43,11 +43,23 @@ export interface ReportsHubData {
 }
 
 export async function loadReportsHub(): Promise<ReportsHubData> {
+  return reportsHubFor(await getAuthz(), { materialize: true })
+}
+
+/**
+ * The hub for a resolved reader. The page materialises the built-in catalog
+ * first; global search reads the same cards without that write (it runs per
+ * keystroke), so a built-in that no surface has materialised yet appears in
+ * search once the hub or builder has been opened.
+ */
+export async function reportsHubFor(
+  authz: Authz | null,
+  { materialize }: { materialize: boolean },
+): Promise<ReportsHubData> {
   const t = await getTranslations('reports')
   const tc = await getTranslations('analytics.trueCost')
   const tw = await getTranslations('warehouse')
   const tp = await getTranslations('payroll.supportReport')
-  const authz = await getAuthz()
   const canCreate = !!authz && (can(authz, 'reports.create') || can(authz, '*'))
 
   const orgId = authz?.user.orgId
@@ -58,7 +70,7 @@ export async function loadReportsHub(): Promise<ReportsHubData> {
   // hub with NO built-in reports on it: no Payroll group, no Human-resources
   // group, and nothing to say they were missing. The call is idempotent and
   // refuses to overwrite org-tuned rows.
-  if (orgId) await ensureReportDefinitions(orgId)
+  if (orgId && materialize) await ensureReportDefinitions(orgId)
   const emptySaved = Promise.resolve({ rows: [] as { id: string; name: string; path: string; params: Record<string, string> }[] })
   const emptyDefs = Promise.resolve({ rows: [] as { id: string; slug: string; name: string; description: string | null; kind: string; entity: string | null }[] })
   const [saved, custom, projectsEnabled, payrollEnabled, budgetsEnabled, ordersEnabled, inventoryEnabled, hiddenEntities, hrmEnabled, warehousingEnabled, resourcingEnabled] = await Promise.all([

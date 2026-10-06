@@ -30,6 +30,7 @@ export function AppShell({
   account,
   environments,
   groups,
+  searchScope,
   navMode = 'topbar',
   defaultCollapsed = false,
   createPermissions,
@@ -50,6 +51,8 @@ export function AppShell({
   /** Production org + its sandboxes, for the environment switcher. */
   environments: WorkspaceEnvironments
   groups: SidebarNavGroup[]
+  /** The signed-in user in this organization; scopes the search's recent results. */
+  searchScope: string
   /** Resolved app-menu layout (user preference, else org default, else topbar). */
   navMode?: NavMode
   defaultCollapsed?: boolean
@@ -90,11 +93,11 @@ export function AppShell({
                 <BrandHomeLink className="hidden lg:inline-flex" />
                 <TopNav groups={navigationGroups} />
                 <div className="flex-1 lg:hidden" />
-                <GlobalSearch className="hidden w-52 shrink-0 lg:block xl:w-64" navGroups={groups} />
-                <TopbarSearchToggle navGroups={groups} />
+                <GlobalSearch className="hidden w-52 shrink-0 lg:block xl:w-64" navGroups={groups} recentScope={searchScope} />
+                <TopbarSearchToggle navGroups={groups} recentScope={searchScope} />
               </>
             ) : (
-              <GlobalSearch className="mx-auto w-full max-w-lg flex-1" navGroups={groups} />
+              <GlobalSearch className="mx-auto w-full max-w-lg flex-1" navGroups={groups} recentScope={searchScope} />
             )}
             <div className="flex shrink-0 items-center gap-1">
               {docsItem ? <HeaderNavLink item={docsItem} /> : null}

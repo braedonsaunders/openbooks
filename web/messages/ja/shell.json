@@ -108,6 +108,8 @@
     "clear": "検索をクリア",
     "searching": "検索中…",
     "noMatches": "「{query}」に一致するものはありません",
+    "failed": "現在検索を利用できません。しばらくしてからもう一度お試しください。",
+    "recentFailed": "最近の結果を読み込めませんでした。入力して検索してください。",
     "navigate": "移動",
     "open": "開く",
     "close": "閉じる",
@@ -118,7 +120,22 @@
       "transactions": "取引",
       "accounts": "勘定",
       "items": "品目",
-      "projects": "プロジェクト"
+      "projects": "プロジェクト",
+      "recent": "最近",
+      "reports": "レポート",
+      "settings": "設定",
+      "help": "ヘルプ",
+      "opportunities": "商談",
+      "activities": "活動",
+      "subscriptions": "サブスクリプション",
+      "assets": "固定資産",
+      "equipment": "設備",
+      "timesheets": "タイムシート",
+      "records": "カスタムレコード",
+      "files": "ファイル",
+      "dashboards": "ダッシュボード",
+      "locations": "拠点",
+      "warehouses": "倉庫"
     }
   },
   "meta": {

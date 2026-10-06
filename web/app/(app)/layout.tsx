@@ -94,6 +94,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           }}
           environments={environments}
           groups={groups}
+          searchScope={`${authz.user.orgId}:${authz.user.id}`}
           navMode={navMode}
           defaultCollapsed={defaultCollapsed}
           createPermissions={{

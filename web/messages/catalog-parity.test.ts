@@ -3431,6 +3431,7 @@ const COGNATES = new Set<string>([
   'de:shell.accountMenu.roles.controller|Controller',
   'de:shell.accountMenu.sandbox|sandbox',
   'de:shell.apps.title|Apps',
+  'de:shell.globalSearch.groups.dashboards|Dashboards',
   'de:shell.notifications.kinds.flow|Flow',
   'de:shell.themeToggle.options.system|System',
   'es:shell.accountMenu.sandbox|sandbox',

@@ -108,6 +108,8 @@
     "clear": "清除搜索",
     "searching": "搜索中…",
     "noMatches": "没有匹配“{query}”的结果",
+    "failed": "搜索暂时不可用，请稍后重试。",
+    "recentFailed": "无法加载最近的结果。请输入内容进行搜索。",
     "navigate": "导航",
     "open": "打开",
     "close": "关闭",
@@ -118,7 +120,22 @@
       "transactions": "交易",
       "accounts": "科目",
       "items": "商品",
-      "projects": "项目"
+      "projects": "项目",
+      "recent": "最近",
+      "reports": "报表",
+      "settings": "设置",
+      "help": "帮助",
+      "opportunities": "商机",
+      "activities": "活动",
+      "subscriptions": "订阅",
+      "assets": "固定资产",
+      "equipment": "设备",
+      "timesheets": "工时表",
+      "records": "自定义记录",
+      "files": "文件",
+      "dashboards": "仪表板",
+      "locations": "地点",
+      "warehouses": "仓库"
     }
   },
   "meta": {

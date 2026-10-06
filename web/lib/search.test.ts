@@ -187,6 +187,23 @@ const mockSources = new Map<string, string>([
             }
             return { rows }
           }
+          // Recently opened documents re-resolve by id through the same
+          // kind allowlist and subsidiary fence as a search.
+          if (query.text.includes('and d.id = any(')) {
+            const idsIndex = (query.text.slice(0, query.text.indexOf('and d.id = any(')).match(/\?/g) ?? []).length
+            const ids = new Set(String(query.values[idsIndex]).slice(1, -1).split(','))
+            const knownKinds = new Set(state.documents.map((row) => row.kind))
+            const boundKinds = new Set(query.values.filter((value) => knownKinds.has(value)))
+            const subsidiaryIds = new Set(query.values
+              .filter((value, index) => index !== idsIndex && typeof value === 'string' && /^\{.*\}$/.test(value))
+              .flatMap((value) => value.slice(1, -1).split(',').filter(Boolean)))
+            let rows = state.documents.filter((row) => ids.has(row.id) && boundKinds.has(row.kind))
+            if (query.text.includes('and false')) rows = []
+            if (query.text.includes('d.subsidiary_id') && subsidiaryIds.size > 0) {
+              rows = rows.filter((row) => subsidiaryIds.has(row.subsidiary_id))
+            }
+            return { rows }
+          }
           if (!query.text.includes('with cand as')) return { rows: [] }
 
           const knownKinds = new Set(state.documents.map((row) => row.kind))
@@ -282,7 +299,7 @@ const hooks = registerHooks({
 })
 
 const searchUrl = './search.ts?permission-regression'
-const { globalSearch } = await import(searchUrl) as typeof import('./search.ts')
+const { globalSearch, resolveRecentCoreRecords } = await import(searchUrl) as typeof import('./search.ts')
 hooks.deregister()
 
 function authz(...permissions: string[]): Parameters<typeof globalSearch>[0] {
@@ -484,11 +501,11 @@ test('numeric amount candidates carry the same permission allowlist as text cand
   const query = transactionQuery()
   assert.equal(
     query.text.match(/d\.kind in/g)?.length,
-    5,
-    'text, party, amount, exact-number, and final result legs must all be permission-filtered',
+    6,
+    'text, party, line-description, amount, exact-number, and final result legs must all be permission-filtered',
   )
   for (const kind of expectedKinds) {
-    assert.equal(query.values.filter((value) => value === kind).length, 5, kind)
+    assert.equal(query.values.filter((value) => value === kind).length, 6, kind)
   }
 })
 
@@ -499,8 +516,8 @@ test('malformed comma amounts stay text queries instead of inventing a number', 
     const query = transactionQuery()
     assert.equal(
       query.text.match(/d\.kind in/g)?.length,
-      4,
-      `${ambiguous}: text, party, exact-number, and final legs only — no amount leg`,
+      5,
+      `${ambiguous}: text, party, line-description, exact-number, and final legs only — no amount leg`,
     )
     assert.ok(
       !query.values.some((value) => value === 12 || value === '12' || value === '12.34'),
@@ -517,7 +534,7 @@ test('well-formed amounts bind exactly, never through Number', async () => {
   reset()
   await globalSearch(authz('ap.read'), '9007199254740993')
   const big = transactionQuery()
-  assert.equal(big.text.match(/d\.kind in/g)?.length, 5, 'huge input still runs the amount leg')
+  assert.equal(big.text.match(/d\.kind in/g)?.length, 6, 'huge input still runs the amount leg')
   assert.ok(big.values.includes('9007199254740993'), 'amount binds exactly past 2^53')
   assert.ok(!big.values.some((value) => value === 9007199254740992), 'no rounded float bound')
 })
@@ -647,8 +664,8 @@ test('subsidiary restrictions fence documents before sensitive fields are return
   const query = transactionQuery()
   assert.equal(
     query.text.match(/d\.subsidiary_id = any/g)?.length,
-    4,
-    'both text candidates, the exact-number leg, and the final sensitive-field read must be subsidiary scoped',
+    5,
+    'both text candidates, the line-description leg, the exact-number leg, and the final sensitive-field read must be subsidiary scoped',
   )
   assert.ok(query.values.includes(`{${ALLOWED_SUBSIDIARY}}`))
 
@@ -820,4 +837,61 @@ test('journal entries keep the canonical line-visibility subsidiary rule', async
   assert.ok(entriesQuery, 'entries must be queried')
   assert.match(entriesQuery.text, /journal_lines visible/, 'canonical line-visibility fence')
   assert.doesNotMatch(entriesQuery.text, /\be\.subsidiary_id/, 'no header-subsidiary predicate')
+})
+
+test('contacts are found through their people and a migrated system id, inside the party fence', async () => {
+  reset()
+  await globalSearch(scopedAuthz([ALLOWED_SUBSIDIARY], 'parties.read'), 'needle')
+  const contacts = state.queries.find((query) => query.text.includes('select p.id, p.display_name'))
+  assert.ok(contacts)
+  assert.match(contacts.text, /from contacts c\s+join parties p on p\.id = c\.party_id/, 'contact people reach their party')
+  assert.match(contacts.text, /custom -> 'source' ->> 'externalId' = \?/, 'a migrated or mirrored id matches exactly')
+  assert.equal(
+    contacts.text.match(/p\.subsidiary_id is null or p\.subsidiary_id = any/g)?.length,
+    4,
+    'the name, contact-person and external-id legs and the final read must all be subsidiary scoped',
+  )
+  assert.doesNotMatch(contacts.text, /regexp_replace/, 'a word is not a phone number')
+  // Tax identifiers are sealed server-side: search must never match on them.
+  assert.doesNotMatch(contacts.text, /tax_ids|tin_encrypted|tin_last4|party_tax_ids/)
+})
+
+test('a query written like a phone number matches stored phones digit for digit', async () => {
+  reset()
+  await globalSearch(authz('parties.read'), '(555) 123-4567')
+  const contacts = state.queries.find((query) => query.text.includes('select p.id, p.display_name'))
+  assert.ok(contacts)
+  assert.match(contacts.text, /regexp_replace\(p\.phone, '\[\^0-9\]', '', 'g'\)/)
+  assert.match(contacts.text, /regexp_replace\(coalesce\(c\.mobile_phone, ''\)/)
+  assert.ok(contacts.values.includes('%5551234567%'), 'punctuation is ignored on both sides')
+})
+
+test('an integrator\'s own document reference resolves exactly, like a document number', async () => {
+  reset()
+  await globalSearch(authz('ap.read'), 'needle')
+  assert.match(transactionQuery().text, /\(d\.document_number = \? or d\.external_ref = \?\)/)
+})
+
+test('recent transactions re-resolve under the reader\'s current permissions and subsidiary scope', async () => {
+  const apKind = kindsForPermission('ap.read')[0]!
+  const arKind = kindsForPermission('ar.read')[0]!
+  const deniedDocument: SearchFixture = {
+    ...fixture(apKind),
+    id: `${apKind}-denied-subsidiary`,
+    memo: 'recent-denied:memo:confidential',
+    subsidiary_id: DENIED_SUBSIDIARY,
+  }
+  reset({ documents: [...BASE_DOCUMENTS, deniedDocument] })
+  const refs = [
+    { type: 'transaction' as const, id: apKind },
+    { type: 'transaction' as const, id: arKind },
+    { type: 'transaction' as const, id: deniedDocument.id },
+  ]
+  const hits = await resolveRecentCoreRecords(scopedAuthz([ALLOWED_SUBSIDIARY], 'ap.read'), refs)
+  assert.deepEqual(hits.map((hit) => hit.id), [apKind], 'only what the reader may open now resolves')
+  assert.ok(!JSON.stringify(hits).includes(deniedDocument.memo))
+
+  reset({ documents: [...BASE_DOCUMENTS, deniedDocument] })
+  assert.deepEqual(await resolveRecentCoreRecords(authz(), refs), [], 'a revoked permission resolves nothing')
+  assert.ok(!state.queries.some((query) => query.text.includes('from documents')), 'and reads nothing')
 })

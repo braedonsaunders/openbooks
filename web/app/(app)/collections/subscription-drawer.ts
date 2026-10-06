@@ -1,9 +1,10 @@
 import 'server-only'
 
-import { sql } from 'drizzle-orm'
+import { sql, type SQL } from 'drizzle-orm'
 import { db } from '@openbooks/engine/platform/database'
 import { can, requirePermission } from '../../../lib/authz'
 import { isUuid, mergeHref } from '../../../lib/list-params'
+import { subsidiaryVisibleFilter } from '../../../lib/subsidiaries'
 
 /**
  * Minimal subscription record for the subscription drawer (list-drawer
@@ -70,6 +71,16 @@ export async function loadSubscriptionDrawer(
   const rawId = typeof sp.subscription === 'string' ? sp.subscription : undefined
   const id = rawId && isUuid(rawId) ? rawId : undefined
   if (!id) return { drawer: null }
+  // A subscription belongs to its customer's legal entity, and customers are
+  // master data: an unassigned customer is org-wide. The drawer applies the
+  // same customer fence as the subscriptions list, so a restricted reader
+  // cannot open another entity's subscription (or browse its customers) by
+  // id; a reader with no subsidiaries sees none.
+  const allowed = authz.allowedSubsidiaryIds
+  const customerScope = (column: SQL) =>
+    allowed !== null && allowed.size === 0
+      ? sql` and false`
+      : subsidiaryVisibleFilter(column, allowed, { orgWideNull: true })
   const rows = (
     await db.execute<SubscriptionDrawerRow>(sql`
       select s.id, s.status, s.start_on::text as "startOn", s.next_bill_on::text as "nextBillOn",
@@ -89,7 +100,7 @@ export async function loadSubscriptionDrawer(
         left join parties py on py.id = s.payer_party_id and py.org_id = s.org_id
         left join documents d on d.id = s.last_invoice_id and d.org_id = s.org_id
         left join revenue_contracts rc on rc.subscription_id = s.id and rc.org_id = s.org_id
-       where s.org_id = ${orgId} and s.id = ${id}
+       where s.org_id = ${orgId} and s.id = ${id}${customerScope(sql`c.subsidiary_id`)}
        limit 1`)
   ).rows
   const row = rows[0]
@@ -101,7 +112,7 @@ export async function loadSubscriptionDrawer(
     ? (
         await db.execute<{ id: string; name: string }>(sql`
           select p.id, p.display_name as name from parties p
-           where p.org_id = ${orgId} and p.is_active
+           where p.org_id = ${orgId} and p.is_active${customerScope(sql`p.subsidiary_id`)}
              and exists (select 1 from customer_roles cr
                           where cr.org_id = p.org_id and cr.party_id = p.id and cr.is_active)
            order by p.display_name limit 500`)
