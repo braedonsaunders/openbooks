@@ -15,8 +15,9 @@ function fixture(context) {
   const files = ["0001_baseline.sql", "0480_last.sql", "0481_new.sql"];
   for (const file of files) writeFileSync(join(directory, "generated", file), `-- ${file}\n`);
   writeFileSync(join(directory, "baselines/alpha29.sql"), "-- release schema\n");
+  writeFileSync(join(directory, "baselines/alpha29.sql.environments.sql"), "-- policies\n");
   const baseline = { format: 1, verified: true, filename: "baselines/alpha29.sql",
-    baselineSha256: baselineDigest("-- release schema\n"), catalogSha256: baselineDigest("catalog"),
+    baselineSha256: baselineDigest("-- release schema\n"), catalogSha256: baselineDigest("catalog"), environmentSha256: baselineDigest("-- policies\n"),
     covered: files.slice(0,2).map((file) => ({ filename: `generated/${file}`, sha256: baselineDigest(`-- ${file}\n`) })) };
   const publish = () => writeFileSync(join(directory, "baseline.json"), JSON.stringify(baseline));
   return { directory, baseline, files, publish };
@@ -33,6 +34,8 @@ test("a release cut applies one baseline and only the later forward migrations",
   publish();
   assert.deepEqual(releaseMigrationPlan(directory, files).filenames, ["baselines/alpha29.sql", "generated/0481_new.sql"]);
   assert.deepEqual(historicalMigrationPlan(directory, files).filenames, ["generated/0001_baseline.sql", "generated/0480_last.sql"]);
+  writeFileSync(join(directory, "baselines/alpha29.sql.environments.sql"), "-- drifted policies\n");
+  assert.throws(() => historicalMigrationPlan(directory, files), /differs from the tenant-policy environment baselines\/alpha29.sql was verified with/);
 });
 
 test("a covered write cannot change after the baseline was verified", (context) => {

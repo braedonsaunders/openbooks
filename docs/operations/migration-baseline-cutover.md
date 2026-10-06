@@ -44,8 +44,8 @@ On the final committed tree, activate the verified candidate:
 node scripts/activate-migration-baseline.mjs /absolute/path/to/new-candidate alpha29
 ```
 
-This writes `baselines/alpha29.sql`, its catalog evidence, and the active
-manifest. It refuses changed SQL, missing coverage, an uncommitted migration
+This writes `baselines/alpha29.sql`, its catalog evidence, the tenant-policy
+environment it was verified with, and the active manifest. It refuses changed SQL, missing coverage, an uncommitted migration
 tree or a candidate prepared on another commit. Commit these artifacts with the
 release. Run the normal release checks, fresh installation, and upgrade
 rehearsals against that exact commit before tagging. The baseline is immutable

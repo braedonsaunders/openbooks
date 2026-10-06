@@ -86,8 +86,6 @@ test('ranking prefers an exact name, then a prefix, then a word inside the name'
 })
 
 test('matching ignores case and accents', () => {
-  const menu: SidebarNavGroup[] = [{
-    id: 'g', label: 'Comptabilité', iconKey: 'grid', items: [{ href: '/e', label: 'Écritures de journal', iconKey: 'grid' }],
-  }]
+  const menu: SidebarNavGroup[] = [{ id: 'g', label: 'Comptabilité', iconKey: 'grid', items: [{ href: '/e', label: 'Écritures de journal', iconKey: 'grid' }] }]
   assert.deepEqual(searchPages(buildPageIndex(menu), 'ecritures').map((hit) => hit.href), ['/e'])
 })

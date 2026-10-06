@@ -130,10 +130,12 @@ export async function requireBypassLoginRole(config: RuntimeDatabaseConfig): Pro
  * last ran. The file digest plus a live catalog drift check provide both
  * properties we need: changed policy code and newly added/unprotected tables
  * trigger a refresh, while an ordinary container restart performs no
- * AccessExclusive table-lock sweep.
+ * AccessExclusive table-lock sweep. A historical replay before baseline
+ * adoption passes the baseline's retained environment instead, so the
+ * replayed policies match the verified baseline catalog.
  */
-export async function applyRowLevelSecurity(): Promise<void> {
-  const file = join(migrationsDir, "environments.sql");
+export async function applyRowLevelSecurity(environment = "environments.sql"): Promise<void> {
+  const file = join(migrationsDir, environment);
   const content = readFileSync(file, "utf8");
   const digest = sha256(content);
   const state = (await db.execute<{

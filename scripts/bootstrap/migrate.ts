@@ -519,9 +519,8 @@ export async function migrate(historicalMigrations = false): Promise<void> {
     if (!ledgerPreexisted) throw new Error("--historical-migrations requires an existing migration ledger; use ordinary bootstrap for a fresh install");
     if (activePlan.baseline && (await readAppliedMigrationFilenames()).has(activePlan.baseline.filename)) throw new Error("this database already uses the release baseline; run ordinary bootstrap without --historical-migrations");
   }
-  const plan = historicalMigrations
-    ? historicalMigrationPlan(migrationsDir, generated)
-    : activePlan;
+  const historical = historicalMigrations ? historicalMigrationPlan(migrationsDir, generated) : null;
+  const plan = historical ?? activePlan;
   // A legacy database must prove adoption before role refresh, preflights or
   // schema writes can reinterpret its installation history.
   await assertReleaseBaselineReady(plan.baseline, ledgerPreexisted);
@@ -557,7 +556,10 @@ export async function migrate(historicalMigrations = false): Promise<void> {
       "[bootstrap] skipping payment-link at-rest seal: 0251 is not applied to this schema",
     );
   }
-  await applyRowLevelSecurity();
+  // A historical replay reproduces the baseline's own policy environment so
+  // adoption compares like with like; ordinary bootstrap then applies the
+  // current one.
+  await applyRowLevelSecurity(historical?.environment);
 }
 
 async function assertReleaseBaselineReady(baseline: ReturnType<typeof releaseMigrationPlan>["baseline"], ledgerExists: boolean): Promise<void> {
