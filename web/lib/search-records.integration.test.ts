@@ -32,7 +32,7 @@ function reader(orgId: string, permissions: string[], allowedSubsidiaryIds: Set<
 }
 
 async function seedAssets() {
-  const org = await createScratchOrg()
+  const org = await withBypassContext(() => createScratchOrg())
   const other = randomUUID()
   const categoryId = randomUUID()
   const inScope = randomUUID()

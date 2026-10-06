@@ -1,5 +1,3 @@
-import 'server-only'
-import { can, type Authz } from '../authz'
 import type { AccessLevel, FileViewer } from './types'
 
 /**
@@ -8,9 +6,15 @@ import type { AccessLevel, FileViewer } from './types'
  * documents.manage, else Viewer) plus resource_grants. AP intake stays with
  * its owning AP surface, so it is deliberately not readable here. Global
  * search uses the same viewer, so a file is offered exactly when the
- * Documents page would open it.
+ * Documents page would open it. Callers pass their own permission answers,
+ * so this stays free of the request-scoped authorization module.
  */
-export function documentsPageViewer(authz: Authz): FileViewer {
-  const baseline: AccessLevel = can(authz, 'documents.manage') ? 'manager' : 'viewer'
-  return { userId: authz.user.id, isAdmin: can(authz, '*'), baseline, allowedSubsidiaryIds: authz.allowedSubsidiaryIds }
+export function documentsPageViewer(reader: {
+  userId: string
+  isAdmin: boolean
+  canManage: boolean
+  allowedSubsidiaryIds: ReadonlySet<string> | null
+}): FileViewer {
+  const baseline: AccessLevel = reader.canManage ? 'manager' : 'viewer'
+  return { userId: reader.userId, isAdmin: reader.isAdmin, baseline, allowedSubsidiaryIds: reader.allowedSubsidiaryIds }
 }

@@ -2,10 +2,7 @@ import assert from 'node:assert/strict'
 import { registerHooks } from 'node:module'
 import test from 'node:test'
 
-// A subscription belongs to its customer's legal entity. The drawer opens by
-// id from the URL (and from global search), so it must apply the same
-// customer fence as the subscriptions list: a subsidiary-restricted reader
-// can neither open another entity's subscription nor browse its customers.
+// The drawer opens by id, so it applies the subscriptions list's customer fence.
 
 interface CapturedQuery {
   text: string
