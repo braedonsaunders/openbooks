@@ -84,9 +84,11 @@ export class ParallelRunStoreError extends PayrollError {}
 export async function correctPriorStubEmployee(input: {
   orgId: string; actorId: string; stubId: string; expectedEmployeePartyId: string;
   employeePartyId: string; expectedEmployeeLabel: string; reason: string; sourceReference: string;
+  expectedSourceEmployerId: string | null;
   allowedSubsidiaryIds: PayrollSubsidiaryScope; dryRun: boolean;
 }): Promise<{ changed: boolean }> {
   if (![input.stubId, input.expectedEmployeePartyId, input.employeePartyId].every(isUuid)
+    || input.expectedSourceEmployerId !== null && !isUuid(input.expectedSourceEmployerId)
     || input.allowedSubsidiaryIds === undefined || typeof input.dryRun !== "boolean") {
     throw new ParallelRunStoreError("Name the imported stub, reviewed employee identities and explicit legal-entity scope.");
   }
@@ -111,7 +113,11 @@ export async function correctPriorStubEmployee(input: {
       select p.id,p.subsidiary_id,exists(select 1 from employee_roles er where er.org_id=p.org_id and er.party_id=p.id) as employee
       from parties p where p.org_id=${input.orgId} and p.id in (${input.expectedEmployeePartyId},${input.employeePartyId})`)).rows;
     const previous = parties.find(p => p.id === input.expectedEmployeePartyId), target = parties.find(p => p.id === input.employeePartyId);
-    if (!previous?.subsidiary_id || !target?.employee || previous.subsidiary_id !== target.subsidiary_id) {
+    if (!previous || previous.subsidiary_id !== input.expectedSourceEmployerId) {
+      throw new ParallelRunStoreError("The reviewed source employer changed — export and review the imported identity before correcting it.");
+    }
+    // An unassigned legacy identity can be resolved explicitly; an existing employer cannot be transferred.
+    if (!target?.employee || !target.subsidiary_id || previous.subsidiary_id !== null && previous.subsidiary_id !== target.subsidiary_id) {
       throw new ParallelRunStoreError("Select a verified employee of the same legal employer — this correction cannot transfer payroll between employers.");
     }
     if (before.employee_party_id === input.employeePartyId) return { changed: false };
