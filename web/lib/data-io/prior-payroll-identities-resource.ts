@@ -19,6 +19,7 @@ const FIELDS: ResourceField[] = [
   { key: 'payDate', label: 'Source pay date', kind: 'date', readOnly: true },
   { key: 'expectedEmployeeLabel', label: 'Source employee label', kind: 'text', required: true },
   { key: 'expectedEmployeePartyId', label: 'Reviewed employee ID', kind: 'text', required: true },
+  { key: 'expectedSourceEmployerId', label: 'Reviewed source employer ID (or none)', kind: 'text', required: true },
   { key: 'employeePartyId', label: 'Verified employee ID', kind: 'text', required: true },
   { key: 'sourceReference', label: 'Identity source evidence', kind: 'long_text', required: true },
   { key: 'reason', label: 'Correction reason', kind: 'long_text', required: true },
@@ -35,6 +36,7 @@ export function priorPayrollIdentitiesResource(orgId: string): DataResource {
       const rows = (await readExportWindow<Record<string, CellValue>>(db, sql`
         select s.id::text as "stubId",r.name as register,r.pay_date::text as "payDate",
           s.employee_label as "expectedEmployeeLabel",s.employee_party_id::text as "expectedEmployeePartyId",
+          coalesce(p.subsidiary_id::text,'none') as "expectedSourceEmployerId",
           s.employee_party_id::text as "employeePartyId",''::text as "sourceReference",''::text as reason${transferId(ctx, sql`s.id`)}
         from payroll_prior_stubs s join payroll_prior_registers r on r.org_id=s.org_id and r.id=s.register_id
         join parties p on p.org_id=s.org_id and p.id=s.employee_party_id
@@ -54,9 +56,12 @@ export function priorPayrollIdentitiesResource(orgId: string): DataResource {
         try {
           if (duplicates.has(index)) throw new Error('Keep one reviewed identity correction per imported payroll stub')
           const row = rows[index]!
+          const expectedSourceEmployer = String(row.expectedSourceEmployerId ?? '').trim()
+          if (!expectedSourceEmployer) throw new Error('Declare the reviewed source employer ID; enter none only when the old identity has no employer assigned')
           const result = await correctPriorStubEmployee({
             orgId, actorId: ctx.actorId, stubId: String(row.stubId ?? '').trim(),
             expectedEmployeePartyId: String(row.expectedEmployeePartyId ?? '').trim(),
+            expectedSourceEmployerId: expectedSourceEmployer === 'none' ? null : expectedSourceEmployer,
             employeePartyId: String(row.employeePartyId ?? '').trim(),
             expectedEmployeeLabel: String(row.expectedEmployeeLabel ?? ''),
             sourceReference: String(row.sourceReference ?? '').trim(), reason: String(row.reason ?? '').trim(),

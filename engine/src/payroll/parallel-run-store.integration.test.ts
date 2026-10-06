@@ -136,6 +136,7 @@ test("reviewed prior-payroll identity corrections preserve money, serialize comp
     const auditCount = () => tableCount(f.orgId, "audit_log", "table_name = 'payroll_prior_stubs'");
     const baseline = await auditCount();
     const correction = { orgId: f.orgId, actorId: f.actorId, stubId, expectedEmployeePartyId: f.employeePartyId,
+      expectedSourceEmployerId: f.org.subsidiaryId,
       employeePartyId: target, expectedEmployeeLabel: "SOURCE-001", reason: "Correct source identity using dated employee crosswalk",
       sourceReference: "Prior provider employee SOURCE-001, verified employee master", allowedSubsidiaryIds: null, dryRun: true };
     assert.deepEqual(await correctPriorStubEmployee(correction), { changed: true });
@@ -171,6 +172,14 @@ test("reviewed prior-payroll identity corrections preserve money, serialize comp
       expectedEmployeeLabel: "SECOND-SOURCE", dryRun: false }), /already contains the verified employee/);
     assert.equal(await auditCount(), beforeConflict);
     assert.equal(await tableCount(f.orgId, "payroll_prior_stubs"), 2, "conflicting source amounts cannot be silently merged");
+    const remaining = winner === target ? alternative : target;
+    await db.execute(sql`update parties set subsidiary_id=null where org_id=${f.orgId} and id=${f.employeePartyId}`);
+    const legacyCorrection = { ...correction, stubId: duplicateId, employeePartyId: remaining, expectedEmployeeLabel: "SECOND-SOURCE", dryRun: false };
+    await assert.rejects(correctPriorStubEmployee(legacyCorrection), /reviewed source employer changed/);
+    assert.equal(await auditCount(), beforeConflict, "an undeclared missing employer cannot be silently accepted");
+    assert.deepEqual(await correctPriorStubEmployee({ ...legacyCorrection, expectedSourceEmployerId: null }), { changed: true });
+    assert.equal(await tableCount(f.orgId, "payroll_prior_stubs"), 2);
+    assert.equal(await auditCount(), beforeConflict + 1);
   } finally { await dropScratchOrgReporting(f.orgId); }
 });
 
