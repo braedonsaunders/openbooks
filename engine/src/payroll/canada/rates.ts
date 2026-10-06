@@ -113,7 +113,10 @@ export interface ProvincialRates {
   /** BC tax reduction S: lesser(T4, basic − (A − phaseStart) × phaseRate), 0 past phaseEnd. */
   bcReduction?: { basic: string; phaseStart: string; phaseEnd: string; phaseRate: string };
   /** Alberta K5P = ((K1P + K2P) − threshold) × rate, floor 0. */
-  k5p?: { threshold: string; rate: string };
+  k5p?: { threshold: string } & (
+    { rate: string; ratio?: never }
+    | { ratio: { numerator: string; denominator: string }; rate?: never }
+  );
   /** Yukon K4P (Canada employment amount at the provincial lowest rate). */
   hasK4p?: boolean;
 }

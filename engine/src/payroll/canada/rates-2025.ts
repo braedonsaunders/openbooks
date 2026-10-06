@@ -355,12 +355,9 @@ export const RATES_2025_JUL: EditionRates = {
       ],
       lowestRate: "0.06",
       // 121st ed. "What's new": K5P = ((K1P + K2P) − $3,600.00) × (0.04/0.06).
-      // 0.04/0.06 = 2/3 repeating; the engine multiplies at 6-decimal rate
-      // precision, and "0.666667" is provably cent-exact for every real input:
-      // K1P/K2P/threshold are all cent-quantized, and for any integer number
-      // of cents C, C×2/3 lands on a whole or third-cent (never within the
-      // 0.0033¢ band where the 7th-decimal truncation could flip rounding).
-      k5p: { threshold: "3600", rate: "0.666667" },
+      // Retain the published rate ratio; a finite decimal approximation
+      // would change the annual credit before the period tax is rounded.
+      k5p: { threshold: "3600", ratio: { numerator: "2", denominator: "3" } },
     },
     MB: {
       ...PROVINCES_2025_JAN.MB!,
