@@ -8,7 +8,8 @@ import { statementBookExpr } from "../gl-summary";
 import { REVENUE_TYPES } from "../reports/statements";
 import { getMoneyFormatter } from '../money-server'
 import { sql } from "drizzle-orm";
-import { addMonthsClamped, businessToday, calendarDaysBetween } from "@openbooks/engine/src/platform/business-date.ts";
+import { addMonthsClamped, calendarDaysBetween } from "@openbooks/engine/platform/civil-date";
+import { businessToday } from "@openbooks/engine/platform/business-date";
 import { db } from "@openbooks/engine/platform/database";
 import { ANALYTICS_CONFIG, analyticsConfig } from "./config";
 import { checkSumsTo, type ConfigValuesOf } from "./config-spec";
@@ -340,6 +341,8 @@ export interface CustomerData {
   };
   cohorts: { list: Cohort[]; overallRetention: number };
   insights: Insight[];
+  /** Reused by the native page; never calculated again by its view loader. */
+  profitability?: Profitability | null;
   /**
    * The effective scoring thresholds the dashboard ran on (org overrides
    * over defaults) — the view renders scoring copy and bands from these,
@@ -872,7 +875,7 @@ export interface CustomerAtRiskPreview {
 }
 
 export interface CustomerSummary {
-  kpis: Pick<CustomerData['kpis'], 'totalCustomers' | 'atRiskCount' | 'hhiScaled' | 'hhiLevel' | 'customersFor80Pct' | 'top5SharePct'> & { totalRevenue: string; totalInvoiced: string; atRiskRevenue: string };
+  kpis: Pick<CustomerData['kpis'], 'totalCustomers' | 'atRiskCount' | 'hhiScaled' | 'hhiLevel' | 'customersFor80Pct' | 'topCustomerShare' | 'top5SharePct'> & { totalRevenue: string; totalInvoiced: string; atRiskRevenue: string };
   /** The five highest churn scores by the shared at-risk comparator. */
   atRisk: CustomerAtRiskPreview[];
   growth: Pick<CustomerData['growth'], 'monthly'>;
@@ -1527,13 +1530,6 @@ async function readCustomerData(
   });
 
   /* ---- RFM () ---- */
-  const freqSorted = base.map((c) => c.txns).sort((a, b) => a - b);
-  const monSorted = base.map((c) => c.revenue).sort(cmp);
-  const freqP33 = percentile(freqSorted, 0.33);
-  const freqP66 = percentile(freqSorted, 0.66);
-  const monP33 = percentileExact(monSorted, 0.33);
-  const monP66 = percentileExact(monSorted, 0.66);
-
   const rfmOf = (c: Base) => {
     // Unknown recency never reads as fresh: it scores the stalest band so an
     // undated customer flags for attention instead of looking like a champion.
@@ -1631,6 +1627,183 @@ async function readCustomerData(
     return { cycle: cycle === null ? 0 : Math.round(cycle), overdue: Math.round(overdue), urgency, hasPattern };
   };
 
+  /* ---- concentration () ---- */
+  const totalRevenueExact = sum([...baseByParty.keys()].map((id) => ledgerByParty.get(id)?.recognized ?? "0"));
+  const totalInvoicedExact = sum([...baseByParty.values()].map((customer) => customer.revenue));
+  const totalRevenuePositive = cmp(totalRevenueExact, "0") > 0;
+  const nAll = base.length;
+  const byRevenue = base.map((c) => ({ c })).sort((a, b) => cmp(b.c.revenue, a.c.revenue));
+  const shareMap = new Map<string, { sharePct: number; risk: RiskLevel }>();
+  let cumulative = "0";
+  let customersFor80Pct = 0;
+  const shareTexts = new Map<string, string>();
+  byRevenue.forEach((e, i) => {
+    const shareText = totalRevenuePositive
+      ? evaluateAnalyticsRatio(e.c.revenue, totalRevenueExact, "percent", 2)
+      : "0.00";
+    if (shareText === null) throw new Error("CUSTOMER_REVENUE_SHARE_UNDEFINED");
+    const sharePct = Number(shareText);
+    const shareComparison = cmp(shareText, String(concCritical)) >= 0 ? "critical"
+      : cmp(shareText, String(concHigh)) >= 0 ? "high"
+        : cmp(shareText, String(concMedium)) >= 0 ? "medium" : "low";
+    const risk: RiskLevel = shareComparison;
+    cumulative = add(cumulative, shareText);
+    if (cmp(cumulative, String(concCoverage)) <= 0) customersFor80Pct = i + 1;
+    shareMap.set(e.c.id, { sharePct, risk });
+    shareTexts.set(e.c.id, shareText);
+  });
+  // HHI is a dimensionless index, not money: each share squares exactly and
+  // the single float crossing rounds once for the displayed integer.
+  const hhiExact = sum([...shareTexts.values()].map((share) => mulDecimal(share, share)));
+  const hhiScaled = Math.round(Number(hhiExact));
+  const hhiLevel: CustomerData["kpis"]["hhiLevel"] = hhiScaled >= hhiCritical ? "high" : hhiScaled >= hhiWarning ? "moderate" : "low";
+  const top10PctCount = Math.ceil(nAll * topSlice);
+  const top10ShareText = totalRevenuePositive
+    ? evaluateAnalyticsRatio(
+      sum(byRevenue.slice(0, top10PctCount).map((e) => e.c.revenue)),
+      totalRevenueExact,
+      "percent",
+      0,
+    )
+    : "0";
+  if (top10ShareText === null) throw new Error("TOP_CUSTOMER_REVENUE_SHARE_UNDEFINED");
+  const top10Share = Number(top10ShareText);
+  // The home tile states the top-five share the brief names: the same exact
+  // ratio off the same revenue rank, never a second computation downstream.
+  const top5ShareText = totalRevenuePositive
+    ? evaluateAnalyticsRatio(
+      sum(byRevenue.slice(0, 5).map((e) => e.c.revenue)),
+      totalRevenueExact,
+      "percent",
+      0,
+    )
+    : "0";
+  if (top5ShareText === null) throw new Error("TOP5_CUSTOMER_REVENUE_SHARE_UNDEFINED");
+  const top5Share = Number(top5ShareText);
+  const topCustomerShare = byRevenue[0] ? shareMap.get(byRevenue[0].c.id)!.sharePct : 0;
+
+  /* ---- growth () ---- */
+  // Monthly INVOICED revenue arrives per (month, functional, posting day):
+  // translate each day at its own spot rate, then merge per month. Distinct
+  // counts ride the separate month-grain query (they never merge across
+  // functionals). The recognized monthly series is built from the ledger
+  // legs just below.
+  const gLegs = growthRows.rows as unknown as CustomerGrowthSqlRow[];
+  const gCtx = await flowRates(orgId, gLegs.map((r) => ({
+    func: r.func ?? null, date: String(r.day).slice(0, 10),
+  })));
+  const gRevenue = new Map<string, string>();
+  for (const r of gLegs) {
+    const key = String(r.month);
+    gRevenue.set(key, add(gRevenue.get(key) ?? "0",
+      mulDecimal(String(r.revenue ?? 0), gCtx.rateAt(r.func ?? null, String(r.day).slice(0, 10)))));
+  }
+  interface GrowthCountRow { month: string; unique_customers: CustomerSqlNumeric; txn_count: CustomerSqlNumeric; new_customers: CustomerSqlNumeric }
+  const gCounts = new Map<string, GrowthCountRow>();
+  for (const r of growthCounts.rows as unknown as GrowthCountRow[]) {
+    gCounts.set(String(r.month), r);
+  }
+  // Recognized monthly: same leg pattern over the ledger month query. Months
+  // present in only one universe still appear (the other reads zero) so the
+  // timing gap between billing and recognition stays visible month by month.
+  interface GrowthLedgerRow { month: string; func: string | null; day: string; recognized: CustomerSqlNumeric }
+  const glLegs = growthLedgerRows.rows as unknown as GrowthLedgerRow[];
+  const glCtx = await flowRates(orgId, glLegs.map((r) => ({
+    func: r.func ?? null, date: String(r.day).slice(0, 10),
+  })));
+  const gRecognized = new Map<string, string>();
+  for (const r of glLegs) {
+    const key = String(r.month);
+    gRecognized.set(key, add(gRecognized.get(key) ?? "0",
+      mulDecimal(String(r.recognized ?? 0), glCtx.rateAt(r.func ?? null, String(r.day).slice(0, 10)))));
+  }
+  const gInvoiced = gRevenue;
+  const sparseRows = [...new Set([...gInvoiced.keys(), ...gRecognized.keys(), ...gCounts.keys()])]
+    .sort((a, b) => a.localeCompare(b))
+    .map((month) => ({
+      month,
+      invoiced: gInvoiced.get(month) ?? "0",
+      revenue: gRecognized.get(month) ?? "0",
+      counts: gCounts.get(month),
+    }));
+  // The windows below index by position, so the series must be dense: fill
+  // every month between the first and last activity with zeros. Skipping
+  // quiet months would slide year-on-year pairs off their calendar alignment
+  // and let a gap read as growth.
+  const gByMonth = new Map(sparseRows.map((r) => [r.month, r]));
+  const gRows: typeof sparseRows = [];
+  if (sparseRows.length > 0) {
+    const lastMonth = sparseRows[sparseRows.length - 1]!.month;
+    for (let m = sparseRows[0]!.month; m <= lastMonth; m = addMonthsClamped(`${m}-01`, 1).slice(0, 7)) {
+      gRows.push(gByMonth.get(m) ?? { month: m, invoiced: "0", revenue: "0", counts: undefined });
+    }
+  }
+  const revenues = gRows.map((r) => r.revenue).sort(cmp);
+  const medianRevenue = revenues.length ? revenues[Math.floor(revenues.length / 2)]! : "0";
+  const minRevenueThreshold = mulDecimal(medianRevenue, String(maturityFloor));
+  let prevRevenue: string | null = null;
+  const monthly: MonthlyGrowth[] = gRows.map((r) => {
+    const revenue = r.revenue;
+    const isMature = cmp(revenue, minRevenueThreshold) >= 0;
+    let growthRate: number | null = 0;
+    if (prevRevenue !== null && cmp(prevRevenue, minRevenueThreshold) > 0) {
+      const rateText = evaluateAnalyticsRatio(add(revenue, neg(prevRevenue)), prevRevenue, "percent", 1);
+      growthRate = rateText === null ? 0 : Number(rateText);
+      if (growthRate > momCapUp) growthRate = momCapUp;
+      if (growthRate < -momCapDown) growthRate = -momCapDown;
+    } else if (prevRevenue !== null && cmp(prevRevenue, "0") > 0 && cmp(revenue, minRevenueThreshold) > 0) {
+      growthRate = null; // ramp-up period
+    }
+    prevRevenue = revenue;
+    return {
+      month: r.month,
+      label: strings.monthLabel(r.month),
+      revenue,
+      invoiced: r.invoiced,
+      uniqueCustomers: Number(r.counts?.unique_customers ?? 0),
+      transactionCount: Number(r.counts?.txn_count ?? 0),
+      newCustomers: Number(r.counts?.new_customers ?? 0),
+      growthRate,
+      isMature,
+    };
+  });
+  // The home dashboard's widgets read this summary, never the full load:
+  // churn and concentration off the same base the dashboard scores, without
+  // lifetime cohorts, settlement detail, project profitability, DSO
+  // statistics or the intelligence composite.
+  if (preview) {
+    const previewScored = base.map((customer) => {
+      const churn = churnOf(customer);
+      return { id: customer.id, name: strings.displayCustomerName(customer.name), churnLevel: churn.level, churnScore: churn.score, revenue: customer.revenue };
+    });
+    const previewRisky = previewScored
+      .filter((r): r is typeof r & { churnLevel: "critical" | "high" } => r.churnLevel === "critical" || r.churnLevel === "high");
+    const previewAtRisk = [...previewRisky].sort(compareAtRiskCustomers).slice(0, 5);
+    return {
+      kpis: {
+        totalCustomers: base.length,
+        totalRevenue: totalRevenueExact,
+        totalInvoiced: totalInvoicedExact,
+        atRiskCount: previewRisky.length,
+        atRiskRevenue: sum(previewRisky.map((r) => r.revenue)),
+        hhiScaled,
+        hhiLevel,
+        customersFor80Pct,
+        topCustomerShare,
+        top5SharePct: top5Share,
+      },
+      atRisk: previewAtRisk,
+      growth: { monthly },
+      weightsError: null,
+    };
+  }
+  // Job-costed margins join `projects` after the period total exists, so the
+  // leak share divides by the scoped, customer-attributed total above — one
+  // extra round trip after the legs it reads, instead of beside them.
+  const profitData = preview || !analyticsSection('customer-intelligence', ['lifetime', 'profitability'])
+    ? null
+    : await customerProfitability(period, orgId, allowed, strings, totalRevenueExact);
+  const profitMap = new Map((profitData?.customers ?? []).map((c) => [c.customerId, c]));
   /* ---- friction / payment lookups ---- */
   // Credit value arrives per (party, functional, posting day): translate each
   // day at its own spot rate, then merge per party. Parties without invoice
@@ -1685,6 +1858,13 @@ async function readCustomerData(
   // No invoices means no payment rate — never a 0% that reads as "paid nothing".
   const paymentRate = totInvoices > 0 ? Math.round((totPaid / totInvoices) * 100) : null;
 
+  const freqSorted = base.map((c) => c.txns).sort((a, b) => a - b);
+  const monSorted = base.map((c) => c.revenue).sort(cmp);
+  const freqP33 = percentile(freqSorted, 0.33);
+  const freqP66 = percentile(freqSorted, 0.66);
+  const monP33 = percentileExact(monSorted, 0.33);
+  const monP66 = percentileExact(monSorted, 0.66);
+
   /* ---- assemble per-customer, CLV tiers by rank ---- */
   const enriched = base.map((c) => {
     const rfm = rfmOf(c);
@@ -1695,7 +1875,6 @@ async function readCustomerData(
   });
   // Tier assignment ranks by projected CLV.
   const byClv = [...enriched].sort((a, b) => cmp(b.clv.clv, a.clv.clv));
-  const nAll = byClv.length;
   const platinumCutoff = Math.ceil(nAll * tierPlatinum);
   const goldCutoff = Math.ceil(nAll * tierGold);
   const silverCutoff = Math.ceil(nAll * tierSilver);
@@ -1710,66 +1889,6 @@ async function readCustomerData(
     silver: byClv[silverCutoff - 1]?.clv.clv ?? "0",
     bronze: "0",
   };
-
-  /* ---- concentration () ---- */
-  const totalRevenueExact = sum([...baseByParty.keys()].map((id) => ledgerByParty.get(id)?.recognized ?? "0"));
-  const totalInvoicedExact = sum([...baseByParty.values()].map((customer) => customer.revenue));
-  // Job-costed margins join `projects` after the period total exists, so the
-  // leak share divides by the scoped, customer-attributed total above — one
-  // extra round trip after the legs it reads, instead of beside them.
-  const profitData = preview || !analyticsSection('customer-intelligence', ['lifetime', 'profitability'])
-    ? null
-    : await customerProfitability(period, orgId, allowed, strings, totalRevenueExact);
-  const profitMap = new Map((profitData?.customers ?? []).map((c) => [c.customerId, c]));
-  const totalRevenuePositive = cmp(totalRevenueExact, "0") > 0;
-  const byRevenue = [...enriched].sort((a, b) => cmp(b.c.revenue, a.c.revenue));
-  const shareMap = new Map<string, { sharePct: number; risk: RiskLevel }>();
-  let cumulative = "0";
-  let customersFor80Pct = 0;
-  const shareTexts = new Map<string, string>();
-  byRevenue.forEach((e, i) => {
-    const shareText = totalRevenuePositive
-      ? evaluateAnalyticsRatio(e.c.revenue, totalRevenueExact, "percent", 2)
-      : "0.00";
-    if (shareText === null) throw new Error("CUSTOMER_REVENUE_SHARE_UNDEFINED");
-    const sharePct = Number(shareText);
-    const shareComparison = cmp(shareText, String(concCritical)) >= 0 ? "critical"
-      : cmp(shareText, String(concHigh)) >= 0 ? "high"
-        : cmp(shareText, String(concMedium)) >= 0 ? "medium" : "low";
-    const risk: RiskLevel = shareComparison;
-    cumulative = add(cumulative, shareText);
-    if (cmp(cumulative, String(concCoverage)) <= 0) customersFor80Pct = i + 1;
-    shareMap.set(e.c.id, { sharePct, risk });
-    shareTexts.set(e.c.id, shareText);
-  });
-  // HHI is a dimensionless index, not money: each share squares exactly and
-  // the single float crossing rounds once for the displayed integer.
-  const hhiExact = sum([...shareTexts.values()].map((share) => mulDecimal(share, share)));
-  const hhiScaled = Math.round(Number(hhiExact));
-  const hhiLevel: CustomerData["kpis"]["hhiLevel"] = hhiScaled >= hhiCritical ? "high" : hhiScaled >= hhiWarning ? "moderate" : "low";
-  const top10PctCount = Math.ceil(nAll * topSlice);
-  const top10ShareText = totalRevenuePositive
-    ? evaluateAnalyticsRatio(
-      sum(byRevenue.slice(0, top10PctCount).map((e) => e.c.revenue)),
-      totalRevenueExact,
-      "percent",
-      0,
-    )
-    : "0";
-  if (top10ShareText === null) throw new Error("TOP_CUSTOMER_REVENUE_SHARE_UNDEFINED");
-  const top10Share = Number(top10ShareText);
-  // The home tile states the top-five share the brief names: the same exact
-  // ratio off the same revenue rank, never a second computation downstream.
-  const top5ShareText = totalRevenuePositive
-    ? evaluateAnalyticsRatio(
-      sum(byRevenue.slice(0, 5).map((e) => e.c.revenue)),
-      totalRevenueExact,
-      "percent",
-      0,
-    )
-    : "0";
-  if (top5ShareText === null) throw new Error("TOP5_CUSTOMER_REVENUE_SHARE_UNDEFINED");
-  const top5Share = Number(top5ShareText);
 
   // Nurture cut: the configured percentile of the CLV distribution — a
   // relative bar that moves with the book, never an absolute amount.
@@ -1905,118 +2024,6 @@ async function readCustomerData(
     };
   });
 
-  /* ---- growth () ---- */
-  // Monthly INVOICED revenue arrives per (month, functional, posting day):
-  // translate each day at its own spot rate, then merge per month. Distinct
-  // counts ride the separate month-grain query (they never merge across
-  // functionals). The recognized monthly series is built from the ledger
-  // legs just below.
-  const gLegs = growthRows.rows as unknown as CustomerGrowthSqlRow[];
-  const gCtx = await flowRates(orgId, gLegs.map((r) => ({
-    func: r.func ?? null, date: String(r.day).slice(0, 10),
-  })));
-  const gRevenue = new Map<string, string>();
-  for (const r of gLegs) {
-    const key = String(r.month);
-    gRevenue.set(key, add(gRevenue.get(key) ?? "0",
-      mulDecimal(String(r.revenue ?? 0), gCtx.rateAt(r.func ?? null, String(r.day).slice(0, 10)))));
-  }
-  interface GrowthCountRow { month: string; unique_customers: CustomerSqlNumeric; txn_count: CustomerSqlNumeric; new_customers: CustomerSqlNumeric }
-  const gCounts = new Map<string, GrowthCountRow>();
-  for (const r of growthCounts.rows as unknown as GrowthCountRow[]) {
-    gCounts.set(String(r.month), r);
-  }
-  // Recognized monthly: same leg pattern over the ledger month query. Months
-  // present in only one universe still appear (the other reads zero) so the
-  // timing gap between billing and recognition stays visible month by month.
-  interface GrowthLedgerRow { month: string; func: string | null; day: string; recognized: CustomerSqlNumeric }
-  const glLegs = growthLedgerRows.rows as unknown as GrowthLedgerRow[];
-  const glCtx = await flowRates(orgId, glLegs.map((r) => ({
-    func: r.func ?? null, date: String(r.day).slice(0, 10),
-  })));
-  const gRecognized = new Map<string, string>();
-  for (const r of glLegs) {
-    const key = String(r.month);
-    gRecognized.set(key, add(gRecognized.get(key) ?? "0",
-      mulDecimal(String(r.recognized ?? 0), glCtx.rateAt(r.func ?? null, String(r.day).slice(0, 10)))));
-  }
-  const gInvoiced = gRevenue;
-  const sparseRows = [...new Set([...gInvoiced.keys(), ...gRecognized.keys(), ...gCounts.keys()])]
-    .sort((a, b) => a.localeCompare(b))
-    .map((month) => ({
-      month,
-      invoiced: gInvoiced.get(month) ?? "0",
-      revenue: gRecognized.get(month) ?? "0",
-      counts: gCounts.get(month),
-    }));
-  // The windows below index by position, so the series must be dense: fill
-  // every month between the first and last activity with zeros. Skipping
-  // quiet months would slide year-on-year pairs off their calendar alignment
-  // and let a gap read as growth.
-  const gByMonth = new Map(sparseRows.map((r) => [r.month, r]));
-  const gRows: typeof sparseRows = [];
-  if (sparseRows.length > 0) {
-    const lastMonth = sparseRows[sparseRows.length - 1]!.month;
-    for (let m = sparseRows[0]!.month; m <= lastMonth; m = addMonthsClamped(`${m}-01`, 1).slice(0, 7)) {
-      gRows.push(gByMonth.get(m) ?? { month: m, invoiced: "0", revenue: "0", counts: undefined });
-    }
-  }
-  const revenues = gRows.map((r) => r.revenue).sort(cmp);
-  const medianRevenue = revenues.length ? revenues[Math.floor(revenues.length / 2)]! : "0";
-  const minRevenueThreshold = mulDecimal(medianRevenue, String(maturityFloor));
-  let prevRevenue: string | null = null;
-  const monthly: MonthlyGrowth[] = gRows.map((r) => {
-    const revenue = r.revenue;
-    const isMature = cmp(revenue, minRevenueThreshold) >= 0;
-    let growthRate: number | null = 0;
-    if (prevRevenue !== null && cmp(prevRevenue, minRevenueThreshold) > 0) {
-      const rateText = evaluateAnalyticsRatio(add(revenue, neg(prevRevenue)), prevRevenue, "percent", 1);
-      growthRate = rateText === null ? 0 : Number(rateText);
-      if (growthRate > momCapUp) growthRate = momCapUp;
-      if (growthRate < -momCapDown) growthRate = -momCapDown;
-    } else if (prevRevenue !== null && cmp(prevRevenue, "0") > 0 && cmp(revenue, minRevenueThreshold) > 0) {
-      growthRate = null; // ramp-up period
-    }
-    prevRevenue = revenue;
-    return {
-      month: r.month,
-      label: strings.monthLabel(r.month),
-      revenue,
-      invoiced: r.invoiced,
-      uniqueCustomers: Number(r.counts?.unique_customers ?? 0),
-      transactionCount: Number(r.counts?.txn_count ?? 0),
-      newCustomers: Number(r.counts?.new_customers ?? 0),
-      growthRate,
-      isMature,
-    };
-  });
-  // The home dashboard's widgets read this summary, never the full load:
-  // churn and concentration off the same base the dashboard scores, without
-  // lifetime cohorts, settlement detail, project profitability, DSO
-  // statistics or the intelligence composite.
-  const previewScored = base.map((customer) => {
-    const churn = churnOf(customer);
-    return { id: customer.id, name: strings.displayCustomerName(customer.name), churnLevel: churn.level, churnScore: churn.score, revenue: customer.revenue };
-  });
-  const previewRisky = previewScored
-    .filter((r): r is typeof r & { churnLevel: "critical" | "high" } => r.churnLevel === "critical" || r.churnLevel === "high");
-  const previewAtRisk = [...previewRisky].sort(compareAtRiskCustomers).slice(0, 5);
-  if (preview) return {
-    kpis: {
-      totalCustomers: base.length,
-      totalRevenue: totalRevenueExact,
-      totalInvoiced: totalInvoicedExact,
-      atRiskCount: previewRisky.length,
-      atRiskRevenue: sum(previewRisky.map((r) => r.revenue)),
-      hhiScaled,
-      hhiLevel,
-      customersFor80Pct,
-      topCustomerShare,
-    },
-    atRisk: previewAtRisk,
-    growth: { monthly },
-    weightsError: null,
-  };
   // The metric-only preview above deliberately skips payment statistics.
   // The full dashboard uses the canonical engine DSO, while customer rows
   // retain their own days-to-pay detail.
@@ -2174,7 +2181,6 @@ async function readCustomerData(
   const atRiskRevenue = sum(atRisk.map((r) => r.revenue));
   const totalProjectedClv = sum(rows.map((r) => r.clv));
   const overdueOrders = rows.filter((r) => r.daysOverdue > 0).length;
-  const topCustomerShare = byRevenue[0] ? shareMap.get(byRevenue[0].c.id)!.sharePct : 0;
 
   const insights: Insight[] = [];
   const fmtM = (n: string) => moneyCompact(n);
@@ -2234,6 +2240,7 @@ async function readCustomerData(
     growth: { monthly, yoyGrowth, avgMonthlyGrowth, medianMonthlyRevenue: medianRevenue, totalNewCustomers, trend },
     cohorts: { list: cohortList, overallRetention },
     insights,
+    profitability: profitData,
     config: cfg,
     weightsError: null,
   };

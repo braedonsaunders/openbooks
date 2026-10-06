@@ -64,7 +64,7 @@ stubModules({
   authz: { source: authzSource },
   features: false,
   extra: {
-    "@openbooks/engine/src/platform/db.ts": `
+    "@openbooks/engine/platform/database": `
       export * from ${JSON.stringify(import.meta.resolve("@openbooks/engine/src/platform/db.ts"))}
       const state = globalThis[Symbol.for('openbooks.benford-route-test')]
       const sqlText = globalThis.openbooksBenfordSqlText

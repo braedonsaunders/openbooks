@@ -1,7 +1,7 @@
 import "server-only";
 import { sql, type SQL } from "drizzle-orm";
-import { db } from "@openbooks/engine/src/platform/db.ts";
-import { add, mulDecimal } from "@openbooks/engine/src/money/money.ts";
+import { analyticsQuery } from "./analytics/query";
+import { add, mulDecimal } from "@openbooks/engine/money";
 
 /**
  * Presentation-currency translation for consolidated operational reads
@@ -30,7 +30,7 @@ import { add, mulDecimal } from "@openbooks/engine/src/money/money.ts";
 
 /** The org's base (functional) currency — the consolidated presentation currency. */
 export async function presentationCurrency(orgId: string): Promise<string> {
-  const r = await db.execute(
+  const r = await analyticsQuery(
     sql`select base_currency as "baseCurrency" from orgs where id = ${orgId}`,
   );
   const base = r.rows[0]?.baseCurrency;
@@ -91,7 +91,7 @@ export async function presentationRates(
   const rates = new Map<string, string>([[base, "1"]]);
   if (needed.length === 0) return rates;
   const list = `{${needed.join(",")}}`;
-  const r = await db.execute<{ from_currency: string; rate: string }>(
+  const r = await analyticsQuery<{ from_currency: string; rate: string }>(
     presentationSpotRatesSql(orgId, base, sql`select unnest(${list}::text[]) as ccy`, refDate),
   );
   for (const row of r.rows) rates.set(row.from_currency, row.rate);
@@ -109,7 +109,7 @@ export async function presentationRates(
  * trends) to presentation and sum. Each row translates at the document-date
  * spot — the flow doctrine's counterpart to the balance closing spot — so a
  * 30-day window spanning a rate move translates each day through its own
- * rate. One rate-timeline query per functional in view; missing coverage
+ * rate. One batched rate-timeline query for all functionals in view; missing coverage
  * fails closed. Amounts must already carry their first leg (e.g. documents
  * at `total * fx_rate`); `func` is the posting subsidiary's functional
  * currency (null = root = base).
@@ -137,7 +137,7 @@ export class MissingExchangeRateError extends Error {
 
 /**
  * Rate timelines covering every (functional, date) in `rows` — one
- * timeline query per functional in view. Callers translating several buckets
+ * batched query for all requested functionals. Callers translating several buckets
  * (trend weeks) share the one context; `translateFlows` covers single totals.
  */
 export async function flowRates(
@@ -156,46 +156,67 @@ export async function flowRates(
   const timelines = new Map<string, { asOf: string; rate: string }[]>();
   if (dated.length > 0) {
     const maxDate = dated.reduce((a, b) => (a > b.date ? a : b.date), dated[0]!.date);
-    const funcs = [...new Set(dated.map((r) => lineFunctional(r.func, base)))];
-    for (const func of funcs) {
-      const r = await db.execute<{ as_of: string; rate: string }>(sql`
-        select s.as_of::text as as_of, s.rate::text as rate from (
-          select as_of, rate, 0 as priority from fx_rates
-           where org_id = ${orgId} and from_currency = ${func}
-             and to_currency = ${base} and rate_type = 'spot'
-             and as_of <= ${maxDate}::date
-          union all
-          select as_of, (1 / rate)::numeric(19,10) as rate, 1 as priority from fx_rates
-           where org_id = ${orgId} and from_currency = ${base}
-             and to_currency = ${func} and rate_type = 'spot'
-             and as_of <= ${maxDate}::date
-        ) s
-       order by s.as_of desc, s.priority asc
-      `);
-      // Direct quotes win ties (same rule as the kernel lookup): keep the
-      // first row per date.
-      const seen = new Set<string>();
-      const timeline: { asOf: string; rate: string }[] = [];
-      for (const row of r.rows) {
-        if (seen.has(row.as_of)) continue;
-        seen.add(row.as_of);
-        timeline.push({ asOf: row.as_of, rate: row.rate });
-      }
-      timelines.set(func, timeline);
-    }
+    const minDate = dated.reduce((a, b) => (a < b.date ? a : b.date), dated[0]!.date);
+    const funcs = [...new Set(dated.map((r) => lineFunctional(r.func, base)))].sort();
+    const list = `{${funcs.join(",")}}`;
+    // Only requested-date coverage plus the preceding quote travels from
+    // PostgreSQL. Old rate history cannot amplify every card or tab payload.
+    const result = await analyticsQuery<{ func: string; as_of: string; rate: string }>(sql`
+      with needed as (select unnest(${list}::text[]) as func), quotes as (
+        select from_currency as func, as_of, rate, 0 as priority from fx_rates
+        where org_id = ${orgId} and from_currency = any(${list}::text[])
+          and to_currency = ${base} and rate_type = 'spot'
+          and as_of >= ${minDate}::date and as_of <= ${maxDate}::date
+        union all
+        select to_currency as func, as_of, (1 / rate)::numeric(19,10) as rate, 1 as priority from fx_rates
+        where org_id = ${orgId} and to_currency = any(${list}::text[])
+          and from_currency = ${base} and rate_type = 'spot'
+          and as_of >= ${minDate}::date and as_of <= ${maxDate}::date
+        union all
+        select n.func, prior.as_of, prior.rate, prior.priority from needed n
+        cross join lateral (
+          select * from (
+            (select as_of, rate, 0 as priority from fx_rates
+             where org_id = ${orgId} and from_currency = n.func and to_currency = ${base}
+               and rate_type = 'spot' and as_of < ${minDate}::date order by as_of desc limit 1)
+            union all
+            (select as_of, (1 / rate)::numeric(19,10) as rate, 1 as priority from fx_rates
+             where org_id = ${orgId} and from_currency = ${base} and to_currency = n.func
+               and rate_type = 'spot' and as_of < ${minDate}::date order by as_of desc limit 1)
+          ) candidates order by as_of desc, priority asc limit 1
+        ) prior
+      )
+      select distinct on (func, as_of) func, as_of::text as as_of, rate::text as rate
+      from quotes order by func, as_of desc, priority asc
+    `);
+    for (const func of funcs) timelines.set(func, []);
+    for (const row of result.rows) timelines.get(row.func)!.push({ asOf: row.as_of, rate: row.rate });
   }
+
   return {
     base,
     rateAt: (func, date) => {
       const resolved = lineFunctional(func, base);
       if (resolved === base) return "1";
-      const rate = timelines.get(resolved)!.find((t) => t.asOf <= date)?.rate;
+      const rate = flowRateOnOrBefore(timelines.get(resolved) ?? [], date);
       if (!rate) {
         throw new MissingExchangeRateError(resolved, base, date)
       }
       return rate;
     },
   };
+}
+
+/** Descending, date-unique spot timelines use logarithmic dated lookup.
+ * The SQL reader preserves the direct-quote tie rule before this lookup. */
+export function flowRateOnOrBefore(timeline: readonly { asOf: string; rate: string }[], date: string): string | undefined {
+  let first = 0, last = timeline.length;
+  while (first < last) {
+    const middle = first + Math.floor((last - first) / 2);
+    if (timeline[middle]!.asOf > date) first = middle + 1;
+    else last = middle;
+  }
+  return timeline[first]?.rate;
 }
 
 export async function translateFlows(

@@ -28,6 +28,11 @@ const redis = {
       if (await this.set(lease, '1', 'PX', Number(lifetime), 'NX')) return this.incr(String(key))
       return Number(await this.get(String(key)) ?? 0)
     }
+    if (script.includes("redis.call('PEXPIRE'")) {
+      if (await this.get(lease) !== args[0]) return 0
+      storage.set(lease, { value: String(args[0]), until: Date.now() + 90_000 })
+      return 1
+    }
     // The network double models Redis lease ownership; real Lua publication
     // is also exercised against an isolated Redis server during verification.
     const [keyOrToken, tokenOrValue, value, lifetime] = args

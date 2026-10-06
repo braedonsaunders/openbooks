@@ -1,5 +1,7 @@
 'use client'
 
+import { ANALYTICS_TABS } from '../../../../lib/analytics/dashboard-tabs'
+
 import { useAnalyticsTab, AnalyticsTabContent } from '../use-analytics-tab'
 import { RecordTabs } from '@/components/module-home/record-tabs'
 import { Table as SharedTable, TableBody as SharedTableBody, TableRow as SharedTableRow, TableCell as SharedTableCell, TableHeader as SharedTableHeader, TableHead as SharedTableHead } from "../../reports/ReportTable"
@@ -42,7 +44,7 @@ type Tab = 'categories' | 'matrix' | 'absorption' | 'selling' | 'config'
  */
 export type TrueCostMode = 'analytics' | 'setup'
 const MODE_TABS: Record<TrueCostMode, readonly Tab[]> = {
-  analytics: ['absorption', 'selling'],
+  analytics: ANALYTICS_TABS['true-cost'],
   setup: ['categories', 'matrix', 'config'],
 }
 const useRate = () => {

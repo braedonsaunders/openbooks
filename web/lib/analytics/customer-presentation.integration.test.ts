@@ -77,9 +77,10 @@ test('customer intelligence translates every revenue functional to presentation'
       assert.equal(byName.get('US Customer')?.priorRevenue, '130.0000')
       assert.equal(data.kpis.totalRevenue, '520.0000')
       const summary = await withOrgContext(scratch.orgId, () => customerSummaryData(P, scratch.orgId, null))
-      for (const key of ['totalCustomers', 'atRiskCount'] as const) assert.equal(summary.kpis[key], data.kpis[key], key)
+      for (const key of ['totalCustomers', 'atRiskCount', 'hhiScaled', 'hhiLevel', 'customersFor80Pct', 'topCustomerShare', 'top5SharePct'] as const) assert.equal(summary.kpis[key], data.kpis[key], key)
       assert.equal(summary.kpis.totalRevenue, '520.0000')
       assert.equal(summary.kpis.totalInvoiced, '520.0000')
+      assert.equal(summary.kpis.atRiskRevenue, data.kpis.atRiskRevenue)
       assert.deepEqual(summary.growth.monthly, data.growth.monthly)
 
     })

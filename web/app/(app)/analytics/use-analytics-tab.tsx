@@ -29,6 +29,7 @@ export function useAnalyticsTab<T extends { data: unknown }, K extends string>(s
   const query = analyticsQueryString(Object.fromEntries(search.entries()))
   const key = `${query}:${tab}`
   const [attempt, retry] = useReducer((n: number) => n + 1, 0)
+  const [refreshTick, refresh] = useReducer((n: number) => n + 1, 0)
   const [, rerender] = useReducer((n: number) => n + 1, 0)
   const source = useRef<unknown>(undefined)
   const cache = useRef(new Map<string, { props?: T; until: number; error?: string }>())
@@ -38,14 +39,24 @@ export function useAnalyticsTab<T extends { data: unknown }, K extends string>(s
   }
   const generation = cache.current
   const entry = generation.get(key)
-  const ready = !enabled || Boolean(entry?.props && entry.until > Date.now())
+  const ready = !enabled || Boolean(entry?.props)
   const error = entry?.error
   useEffect(() => {
     if (!enabled) return
     const cached = generation.get(key)
-    if (cached?.props && cached.until > Date.now()) return
+    let timer: ReturnType<typeof window.setTimeout> | undefined
+    const schedule = (until: number) => {
+      // Slow reads may finish after the source observation expires. Keep its
+      // timestamp and wait a freshness window before another read, rather
+      // than immediately looping on a value the shared cache cannot retain.
+      timer = window.setTimeout(refresh, Math.max(1, until - Date.now()))
+    }
+    if (cached?.props && cached.until > Date.now()) {
+      schedule(cached.until)
+      return () => { if (timer !== undefined) window.clearTimeout(timer) }
+    }
     const controller = new AbortController()
-    generation.delete(key)
+    if (!cached?.props) generation.delete(key)
     rerender()
     const load = async () => {
       try {
@@ -56,14 +67,18 @@ export function useAnalyticsTab<T extends { data: unknown }, K extends string>(s
         if ('refusal' in value && typeof value.refusal === 'string' && value.refusal) throw new Error(value.refusal)
         const returned = metadata(value.data)
         if (returned?.slug !== slug || returned.tab !== tab || returned.query !== query) throw new Error(t('loadError'))
-        if (!controller.signal.aborted) generation.set(key, { props: value as T, until: Date.parse(returned.observedAt) + 30_000 })
+        if (!controller.signal.aborted) {
+          const until = Date.parse(returned.observedAt) + 30_000
+          generation.set(key, { props: value as T, until })
+          schedule(until > Date.now() ? until : Date.now() + 30_000)
+        }
       } catch (failure) {
         if (!controller.signal.aborted) generation.set(key, { until: 0, error: failure instanceof Error ? failure.message : t('loadError') })
       } finally { if (!controller.signal.aborted && cache.current === generation) rerender() }
     }
     void load()
-    return () => controller.abort()
-  }, [enabled, key, query, attempt, slug, tab, t, generation])
+    return () => { controller.abort(); if (timer !== undefined) window.clearTimeout(timer) }
+  }, [enabled, key, query, attempt, slug, tab, t, generation, refreshTick])
   const setTab = (next: K) => {
     if (!tabs.includes(next)) return
     select(next)

@@ -1,9 +1,9 @@
 import { defineRoute } from '@/lib/api/route'
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
-import { db } from "@openbooks/engine/src/platform/db.ts";
-import { normalizeMoney } from "@openbooks/engine/src/money/money.ts";
-import { isIsoCalendarDate } from "@openbooks/engine/src/platform/business-date.ts";
+import { analyticsQueryLive as analyticsQuery } from "../../../../../lib/analytics/query";
+import { normalizeMoney } from "@openbooks/engine/money";
+import { isIsoCalendarDate } from "@openbooks/engine/platform/business-date";
 import "../../../../../lib/authz";
 import { sentinelAccessDenied } from "../../../../../lib/analytics/sentinel-access";
 import { subsidiaryVisibleFilter } from "../../../../../lib/subsidiaries";
@@ -64,7 +64,7 @@ export const GET = defineRoute({
         and ${leadExpr} = ${digit}
     `;
     const [detail, agg] = await Promise.all([
-      (db.execute(sql`
+      (analyticsQuery(sql`
         select d.id as doc_id, d.kind as doc_kind, d.document_number,
           coalesce(d.document_date, d.posting_date)::text as date, abs(d.total) as amount,
           d.currency as currency,
@@ -74,7 +74,7 @@ export const GET = defineRoute({
         order by abs(d.total) desc
         limit 500
       `)),
-      (db.execute(sql`select count(*) as n, coalesce(sum(abs(d.total)), 0) as total ${base}`)),
+      (analyticsQuery(sql`select count(*) as n, coalesce(sum(abs(d.total)), 0) as total ${base}`)),
     ]);
 
     return NextResponse.json({

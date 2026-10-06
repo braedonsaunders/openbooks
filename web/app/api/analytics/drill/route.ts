@@ -2,8 +2,8 @@ import { defineRoute } from '@/lib/api/route'
 import { apiErrorResponse } from '@/lib/api/error-response'
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
-import { db } from "@openbooks/engine/src/platform/db.ts";
-import { isIsoCalendarDate } from "@openbooks/engine/src/platform/business-date.ts";
+import { analyticsQueryLive as analyticsQuery } from "../../../../lib/analytics/query";
+import { isIsoCalendarDate } from "@openbooks/engine/platform/business-date";
 import { can } from "../../../../lib/authz";
 import { PAYROLL_RESTRICTED_PARTY_LABEL } from "../../../../lib/payroll-confidentiality";
 import { statementBookExpr } from "../../../../lib/gl-summary";
@@ -11,7 +11,7 @@ import { flowRates, presentationCurrency } from "../../../../lib/fx-presentation
 import { isUuid } from "../../../../lib/list-params";
 import { compareDecimal } from "../../../../lib/exact-decimal";
 import { subsidiaryVisibleFilter } from "../../../../lib/subsidiaries";
-import { add, mulDecimal } from "@openbooks/engine/src/money/money.ts";
+import { add, mulDecimal } from "@openbooks/engine/money";
 import { serializeLedgerDecimal } from "./ledger-decimal";
 import type { SQL } from "drizzle-orm";
 import { notFound } from "@/lib/api/responses";
@@ -171,7 +171,7 @@ export const GET = defineRoute({
       : sql`case when ${collapseLeg} then ${PAYROLL_RESTRICTED_PARTY_LABEL} else coalesce(p.display_name, 'No party') end`;
     if (account) {
       const [detail, monthly, byParty, agg] = await Promise.all([
-        (db.execute(sql`
+        (analyticsQuery(sql`
           select * from (
             (select e.posting_date::text as date, e.id as entry_id, l.amount,
               sub.base_currency as func,
@@ -185,19 +185,19 @@ export const GET = defineRoute({
           order by date desc, abs(amount) desc
           limit 1000
         `)),
-        (db.execute(sql`
+        (analyticsQuery(sql`
           select to_char(e.posting_date, 'YYYY-MM') as month, sub.base_currency as func,
             sum(l.amount) as amount, max(e.posting_date)::text as late
           ${accountWindow}
           group by 1, 2 order by 1, 2
         `)),
-        (db.execute(sql`
+        (analyticsQuery(sql`
           select ${partyName} as name, sub.base_currency as func,
             sum(l.amount) as amount, count(*) as n, max(e.posting_date)::text as late
           ${accountWindow}
           group by 1, 2 order by 1, 2
         `)),
-        (db.execute(sql`
+        (analyticsQuery(sql`
           select sub.base_currency as func, count(*) as n, coalesce(sum(l.amount), 0) as amount,
             max(e.posting_date)::text as late
           ${accountWindow}
@@ -290,7 +290,7 @@ export const GET = defineRoute({
          and coalesce(reversal_entry.posting_date::date, d.voided_at::date) between ${from}::date and ${to}::date ${docScope}
     `;
     const [detail, monthly, byKind, agg] = await Promise.all([
-      (db.execute(sql`
+      (analyticsQuery(sql`
         select ${docDate}::text as date,
           d.id as doc_id, d.kind as doc_kind, d.document_number as doc_number,
           e.id as entry_id, ${docLeg} as func_amount, ${docFunc} as func,
@@ -307,7 +307,7 @@ export const GET = defineRoute({
         order by ${docDate} desc, ${docLeg} desc
         limit 1000
       `)),
-      (db.execute(sql`
+      (analyticsQuery(sql`
         with events as (${docEvents})
         select to_char(events.event_date, 'YYYY-MM') as month, ${docFunc} as func,
           sum(${docLeg} * events.direction) as amount, max(events.event_date)::text as late
@@ -317,7 +317,7 @@ export const GET = defineRoute({
         where d.org_id = ${user.orgId} and d.party_id = ${party}
         group by 1, 2 order by 1, 2
       `)),
-      (db.execute(sql`
+      (analyticsQuery(sql`
         with events as (${docEvents})
         select d.kind as name, ${docFunc} as func, sum(${docLeg} * events.direction) as amount,
           sum(events.direction)::int as n, max(events.event_date)::text as late
@@ -327,7 +327,7 @@ export const GET = defineRoute({
         where d.org_id = ${user.orgId} and d.party_id = ${party}
         group by 1, 2 order by 1, 2
       `)),
-      (db.execute(sql`
+      (analyticsQuery(sql`
         with events as (${docEvents})
         select ${docFunc} as func, sum(events.direction)::int as n, coalesce(sum(${docLeg} * events.direction), 0) as amount,
           max(events.event_date)::text as late

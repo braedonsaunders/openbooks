@@ -1,4 +1,5 @@
 import 'server-only'
+import { withAuthzContext, requestAuthzContext } from '../authz-context'
 import { requirePermission, ForbiddenError } from '../authz'
 import { ANALYTICS_DASHBOARD_MAP, analyticsDashboardDenied } from './dashboard-catalog'
 import { requireFeatureEnabled } from '../feature-gates'
@@ -27,12 +28,15 @@ export async function readAnalyticsDashboard<S extends AnalyticsSlug>(slug: S, s
   if (definition.feature) await requireFeatureEnabled(authz.user.orgId, definition.feature)
   const tab = analyticsTab(slug, sp.tab)
   const query = analyticsSourceQuery(sp)
-  const identity = await analyticsCacheIdentity(authz.user.orgId)
-  const read = { authz, slug, tab, projection: 'tab' as const, ...identity, observedAt: Date.now() }
-  return withAnalyticsRead(read, async () => {
-    const result = await cachedAnalyticsRead<DashboardResult>(authz, `dashboard:${slug}`, { ...query, tab }, () => loaders[slug](query), { identity })
-    const observedAt = new Date(read.observedAt).toISOString()
-    const data = result.data ? { ...result.data, _analyticsRead: { slug, tab, observedAt, query: analyticsQueryString(query) } } : result.data
-    return { ...result, data, observedAt } as unknown as Awaited<ReturnType<typeof loaders[S]>> & { observedAt: string }
+  return withAuthzContext(authz, async () => {
+    const authority = requestAuthzContext()!
+    const identity = await analyticsCacheIdentity(authority.user.orgId)
+    const read = { authz: authority, slug, tab, projection: 'tab' as const, ...identity, observedAt: Date.now() }
+    return withAnalyticsRead(read, async () => {
+      const result = await cachedAnalyticsRead<DashboardResult>(authority, `dashboard:${slug}`, { ...query, tab }, () => loaders[slug](query), { identity })
+      const observedAt = new Date(read.observedAt).toISOString()
+      const data = result.data ? { ...result.data, _analyticsRead: { slug, tab, observedAt, query: analyticsQueryString(query) } } : result.data
+      return { ...result, data, observedAt } as unknown as Awaited<ReturnType<typeof loaders[S]>> & { observedAt: string }
+    })
   })
 }

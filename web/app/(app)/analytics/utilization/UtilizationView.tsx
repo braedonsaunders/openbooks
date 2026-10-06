@@ -1,5 +1,7 @@
 'use client'
 
+import { ANALYTICS_TABS } from '../../../../lib/analytics/dashboard-tabs'
+
 import { useAnalyticsTab, AnalyticsTabContent } from '../use-analytics-tab'
 
 import { RecordTabs } from '@/components/module-home/record-tabs'
@@ -30,7 +32,7 @@ import { InteractiveTableRow } from '@/components/interactive-table-row'
 
 /* ------------------------------------------------------------------ helpers */
 
-const TABS = ['overview', 'intelligence', 'departments', 'items', 'titles', 'employees', 'config'] as const
+const TABS = ANALYTICS_TABS['utilization']
 const pct1 = (v: number | null | undefined, d = 1) => (v == null || isNaN(v) ? '—' : `${Number(v).toFixed(d)}%`)
 /** Viewer-locale whole hours: one hook so every tab shares it. */
 function useHrs0() {

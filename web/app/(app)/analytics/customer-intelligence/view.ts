@@ -6,8 +6,7 @@ import { can, requirePermission } from '../../../../lib/authz'
 import { isFeatureEnabled } from '../../../../lib/features'
 import { resolvePeriod } from '../../../../lib/periods'
 import { parseReportQuery } from '../../../../lib/report-filters'
-import { analyticsSection } from '../../../../lib/analytics/read-context'
-import { customerData, customerProfitability, customerSummaryData } from '../../../../lib/analytics/customer-data'
+import { customerData, customerSummaryData } from '../../../../lib/analytics/customer-data'
 import { customerStrings } from '../../../../lib/analytics/customer-strings'
 import type { CustomerView } from './CustomerView'
 
@@ -68,9 +67,7 @@ export async function loadCustomerIntelligence(sp: Record<string, string | undef
     customerData({ from: period.from, to: period.to, label: period.label }, authz.user.orgId, authz.allowedSubsidiaryIds, strings),
     isFeatureEnabled(authz.user.orgId, 'projects'),
   ])
-  const profitability = analyticsSection('customer-intelligence', ['lifetime', 'profitability'])
-    ? await customerProfitability({ from: period.from, to: period.to }, authz.user.orgId, authz.allowedSubsidiaryIds, strings, data.kpis.totalRevenue)
-    : null
+  const { profitability = null, ...dashboardData } = data
 
   return {
     title: t('title'),
@@ -78,7 +75,7 @@ export async function loadCustomerIntelligence(sp: Record<string, string | undef
     periodLabel: period.label,
     profitability,
     projectsEnabled,
-    data,
+    data: dashboardData,
     canConfigure: authz.allowedSubsidiaryIds === null && can(authz, 'admin.setup.manage'),
   }
 }

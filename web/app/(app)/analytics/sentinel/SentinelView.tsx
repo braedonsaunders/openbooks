@@ -1,5 +1,7 @@
 'use client'
 
+import { ANALYTICS_TABS } from '../../../../lib/analytics/dashboard-tabs'
+
 import { useAnalyticsTab, AnalyticsTabContent } from '../use-analytics-tab'
 
 import { RecordTabs } from '@/components/module-home/record-tabs'
@@ -32,7 +34,7 @@ import { InteractiveTableRow } from '@/components/interactive-table-row'
 
 /* ------------------------------------------------------------------ helpers */
 
-const TABS = ['overview', 'benford', 'analysis', 'detection', 'vendors', 'audit', 'config'] as const
+const TABS = ANALYTICS_TABS.sentinel
 /** Viewer-locale integer grouping: one hook so every tab shares it. */
 function useNum() {
   const locale = useLocale()
