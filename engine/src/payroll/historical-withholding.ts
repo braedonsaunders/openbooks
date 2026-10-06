@@ -26,6 +26,7 @@ export async function recordHistoricalWithholding(input: {
   if (!isUuid(input.employeePartyId) || input.allowedSubsidiaryIds === undefined || typeof input.dryRun !== 'boolean') {
     throw new PayrollError('Choose a saved employee and an explicit legal-entity scope before importing historical withholding inputs.');
   }
+  const allowedSubsidiaryIds = input.allowedSubsidiaryIds;
   if (!isIsoCalendarDate(input.effectiveFrom) || !isIsoCalendarDate(input.effectiveTo) ||
       input.effectiveTo < input.effectiveFrom || input.effectiveFrom.slice(0, 4) !== input.effectiveTo.slice(0, 4)) {
     throw new PayrollError('Enter a bounded historical withholding window within one tax year.');
@@ -62,7 +63,7 @@ export async function recordHistoricalWithholding(input: {
     const authority = await lockActorCommandAuthority(tx, input.orgId, input.actorId, null, 'payroll.manage');
     await requirePayrollFeature(tx, input.orgId);
     await takeEmployeeTaxYearFences(tx, [employeeTaxYearFenceKey(input.orgId, input.employeePartyId, input.effectiveFrom.slice(0, 4))]);
-    await lockScopeRows(tx, input.orgId, [{ kind: 'party', id: input.employeePartyId }], input.allowedSubsidiaryIds, 'share');
+    await lockScopeRows(tx, input.orgId, [{ kind: 'party', id: input.employeePartyId }], allowedSubsidiaryIds, 'share');
     await lockScopeRows(tx, input.orgId, [{ kind: 'party', id: input.employeePartyId }], authority, 'share');
     if (input.effectiveTo >= await businessTodayInTx(tx, input.orgId)) throw new PayrollError('Historical inputs must end before today; edit the payroll profile for current or future withholding.');
     const profile = (await tx.execute<Record<string, unknown>>(sql`select * from employee_payroll_profiles

@@ -536,7 +536,7 @@ export async function calculateStub(
   const pensionableNonPeriodic = earning((l) => (l.pensionable ?? true) && (l.nonPeriodic ?? false));
 
   const statutoryHours = pack.statutoryHours?.basis === "contractual-plus-worked-extra"
-    ? await resolveStubStatutoryHours(tx, { orgId, employeePartyId, payBasis: emp.pay_basis,
+    ? await resolveStubStatutoryHours(tx, { orgId, employeePartyId, payBasis: emp.pay_basis ?? null,
         periodStart: run.period_start!, subsidiaryId: ctx.runContext.subsidiaryId, periodsPerYear: P, lines })
     : undefined;
 

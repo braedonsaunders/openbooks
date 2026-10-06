@@ -92,6 +92,7 @@ export async function correctPriorStubEmployee(input: {
     || input.allowedSubsidiaryIds === undefined || typeof input.dryRun !== "boolean") {
     throw new ParallelRunStoreError("Name the imported stub, reviewed employee identities and explicit legal-entity scope.");
   }
+  const allowedSubsidiaryIds = input.allowedSubsidiaryIds;
   const reason = input.reason.trim(), sourceReference = input.sourceReference.trim();
   if (!reason || !sourceReference || reason.length > 2000 || sourceReference.length > 2000 || !input.expectedEmployeeLabel.trim()) {
     throw new ParallelRunStoreError("Provide the source employee label, identity evidence and correction reason (1–2000 characters).");
@@ -102,12 +103,12 @@ export async function correctPriorStubEmployee(input: {
     await lockParallelRunInputs(tx, input.orgId);
     const subjects = [...new Set([input.expectedEmployeePartyId, input.employeePartyId])].sort().map(id => ({ kind: "party" as const, id }));
     await lockScopeRows(tx, input.orgId, subjects, authority, "share");
-    await lockScopeRows(tx, input.orgId, subjects, input.allowedSubsidiaryIds, "share");
+    await lockScopeRows(tx, input.orgId, subjects, allowedSubsidiaryIds, "share");
     const before = (await tx.execute<Record<string, unknown>>(sql`select * from payroll_prior_stubs
       where org_id=${input.orgId} and id=${input.stubId} for update`)).rows[0];
     if (!before) throw new ParallelRunStoreError("The imported payroll stub is unavailable in this organization — export and review the register again.");
     await assertPriorRegisterInScope(tx, input.orgId, String(before.register_id), authority);
-    await assertPriorRegisterInScope(tx, input.orgId, String(before.register_id), input.allowedSubsidiaryIds);
+    await assertPriorRegisterInScope(tx, input.orgId, String(before.register_id), allowedSubsidiaryIds);
     if (before.employee_label !== input.expectedEmployeeLabel) throw new ParallelRunStoreError("The source employee label changed — export and review the register before correcting its identity.");
     const parties = (await tx.execute<{ id: string; subsidiary_id: string | null; employee: boolean }>(sql`
       select p.id,p.subsidiary_id,exists(select 1 from employee_roles er where er.org_id=p.org_id and er.party_id=p.id) as employee

@@ -341,7 +341,7 @@ test("annual provincial credits retain precision through the low-income reductio
   for (const [income, insurable, cppWithheld, eiWithheld, K2P, provincial, total] of [
     ["394.25", "388.64", "23.46", "6.33", "67.8746", "0.38", "3.07"],
     ["410.60", "381.76", "20.43", "6.22", "60.9662", "3.36", "8.78"],
-  ]) {
+  ] as const) {
     const result = calculateT4127({ payDate: "2026-01-09", province: "ON", periodsPerYear: 52,
       ...cc1, income, insurable, cppWithheld, eiWithheld });
     assert.equal(result.factors.K1P, "655.9445");
