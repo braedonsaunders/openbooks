@@ -6,6 +6,7 @@ import { db } from "../platform/db.ts";
 import { cmp, neg, sum } from "../money/money.ts";
 import { setPackSlotAccount } from "./packs.ts";
 import { payrollRemittanceSummary } from "./remittance.ts";
+import { upsertPayrollEmployerFact } from "./employer-fact-store.ts";
 import { calculatePayRun } from "./run-calculation.ts";
 import { commitPayRun } from "./run-commit.ts";
 import { createPayRun } from "./run-lifecycle.ts";
@@ -79,10 +80,14 @@ test(
             rqRemittancePartyId: rqVendorId,
           },
         })}::jsonb where id = ${org.orgId}`);
+      const filingAccountId = randomUUID();
       await db.execute(sql`insert into payroll_filing_accounts
         (id, org_id, country, program_type, account_number, name, remitter_type, is_default, created_by, updated_by)
-        values (${randomUUID()}, ${org.orgId}, 'CA', 'ca_rp', '123456789RP0001', 'CRA payroll', 'regular', true, ${actorId}, ${actorId})`);
+        values (${filingAccountId}, ${org.orgId}, 'CA', 'ca_rp', '123456789RP0001', 'CRA payroll', 'regular', true, ${actorId}, ${actorId})`);
 
+      await upsertPayrollEmployerFact({ orgId: org.orgId, actorId, filingAccountId, country: "CA",
+        factKey: "ei_employer_multiplier", effectiveFrom: "2026-01-01", value: "1.4",
+        changeReason: "Standard employer EI multiple for the declared CRA account" });
       await seedPayrollComponents(org.orgId, actorId, "CA");
       await setPackSlotAccount(org.orgId, actorId, "CA", "qc_income_tax", qcPayable);
       await setPackSlotAccount(org.orgId, actorId, "CA", "hsf", hsfPayable);
@@ -126,8 +131,8 @@ test(
         periodStart: "2026-07-05", periodEnd: "2026-07-18",
       });
       const result = await calculatePayRun({ orgId: org.orgId, documentId: run.documentId, actorId });
-      assert.equal(result.employees, 2);
       assert.deepEqual(result.errors, []);
+      assert.equal(result.employees, 2);
 
       const stubs = (await db.execute<{ employee_party_id: string; factors: Record<string, string> }>(sql`
         select employee_party_id, factors from pay_stubs

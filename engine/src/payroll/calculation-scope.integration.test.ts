@@ -36,7 +36,7 @@ for (const scenario of ["existing snapshot", "fresh roster"] as const) {
       await withOrgTransaction(fx.orgId, async () => {
         await assert.rejects(calculatePayRun({ ...input, allowedSubsidiaryIds: new Set([fx.subsidiaryId]) }), /pay run not found/);
         assert.deepEqual(await snapshot(fx.orgId), before, "a caught scope refusal cannot rewrite any payroll evidence");
-      });
+      }, { isolationLevel: "REPEATABLE READ" });
       const allowed = { ...input, allowedSubsidiaryIds: new Set([fx.subsidiaryId, childId]) };
       const calculated = await calculatePayRun(allowed);
       assert.equal(calculated.employees, 1);
