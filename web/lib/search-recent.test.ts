@@ -17,7 +17,6 @@ test('a reopened result moves to the front once, and the list stays bounded', ()
   list = rememberRecent(list, { type: 'contact', id: 'party-5' })
   assert.deepEqual(list[0], { type: 'contact', id: 'party-5' })
   assert.equal(list.filter((entry) => entry.id === 'party-5').length, 1)
-  // The same id under another type is a different result.
   list = rememberRecent(list, { type: 'page', id: 'party-5' })
   assert.equal(list.filter((entry) => entry.id === 'party-5').length, 2)
 })
