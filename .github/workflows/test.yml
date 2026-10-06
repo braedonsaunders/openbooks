@@ -297,8 +297,11 @@ jobs:
           if [ "$COLLECT_COVERAGE" = true ]; then
             coverage=(--experimental-test-coverage --test-reporter=lcov --test-reporter-destination=lcov.info)
           fi
-          npm run test:integration -- "${coverage[@]}" \
-            --test-reporter=spec --test-reporter-destination=stdout 2>&1 | tee coverage.txt
+          # A stuck asynchronous test must fail by name and release the serial
+          # partition to later files. The outer bound leaves time to upload
+          # incomplete receipts when the process itself cannot finish.
+          timeout --signal=TERM --kill-after=10s 30m npm run test:integration -- "${coverage[@]}" \
+            --test-timeout=180000 --test-reporter=spec --test-reporter-destination=stdout 2>&1 | tee coverage.txt
       - name: Skips are declared, not silent
         # This partition HAS a database, so every `{ skip: !DB }` guard must
         # resolve to run. A skip means the wiring broke and the partition
