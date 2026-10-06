@@ -89,8 +89,8 @@ async function scopeFixture(): Promise<Fixture> {
 
 // Oracle: the membership guard verbatim from
 // engine/src/payroll/run-adjustments.ts at c640c73a3. The new path must agree
-// with it on every row EXCEPT the two deliberately widened ones (excluding an
-// inactive member), which the old code refused and the new code permits.
+// with it on the rows below except excluding an inactive member. Historical
+// inclusion with recorded termination is covered separately.
 async function oldGuardAccepts(orgId: string, employeeId: string, scheduleId: string): Promise<boolean> {
   const membership = (await db.execute(sql`
     select 1
@@ -267,4 +267,20 @@ test("pay-run scope guard: oracle table for the include/exclude asymmetry", { sk
   } finally {
     await dropScratchOrgReporting(fx.orgId);
   }
+});
+test('historical adjustments retain a former employee’s inactive status and require a period covered by recorded termination', { skip: !DB }, async () => {
+  const f = await scopeFixture();
+  try {
+    await db.execute(sql`insert into employee_roles(org_id,party_id,terminated_on,is_active)
+      values(${f.orgId},${f.deactivatedId},'2026-07-12',false)`);
+    const input = { orgId: f.orgId, actorId: f.actorId, documentId: f.documentId,
+      mutation: { action: 'add' as const, employeePartyId: f.deactivatedId, componentId: f.componentId,
+        amount: '100', note: 'Original historical payroll source' } };
+    assert.equal((await mutatePayRunAdjustment(input)).changed, true);
+    assert.equal((await db.execute<{ is_active: boolean }>(sql`select is_active from parties where org_id=${f.orgId} and id=${f.deactivatedId}`)).rows[0]!.is_active, false);
+    await db.execute(sql`update employee_roles set terminated_on='2026-07-04' where org_id=${f.orgId} and party_id=${f.deactivatedId}`);
+    await assert.rejects(mutatePayRunAdjustment(input), /Deactivated Member.*ended 2026-07-04.*review/i);
+    assert.equal((await db.execute<{ count: string }>(sql`select count(*)::text from pay_run_adjustments
+      where org_id=${f.orgId} and pay_run_document_id=${f.documentId} and adjustment_type='line'`)).rows[0]!.count, '1');
+  } finally { await dropScratchOrgReporting(f.orgId); }
 });
