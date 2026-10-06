@@ -18,8 +18,15 @@ import { cn } from './utils'
  *     {active === 'history'  ? <HistoryPanel/>  : null}
  *   </TabContent>
  *
- * Reduced-motion users get an instant swap.
+ * Reduced-motion users get an instant swap. So does every browser with the
+ * View Transitions API: a tab selection there is a view switch (see
+ * `switchView`), which the page or drawer already animates, and a second
+ * crossfade inside it would play the change twice.
  */
+const subscribeNothing = () => () => {}
+const hasViewTransitions = () => typeof document.startViewTransition === 'function'
+const noViewTransitionsOnServer = () => false
+
 export function TabContent({
   tabKey,
   children,
@@ -32,13 +39,15 @@ export function TabContent({
   duration?: number
 }) {
   const reduce = useReducedMotion()
+  const native = React.useSyncExternalStore(subscribeNothing, hasViewTransitions, noViewTransitionsOnServer)
+  const still = reduce || native
   return (
     <AnimatePresence mode="wait" initial={false}>
       <motion.div
         key={tabKey}
-        initial={reduce ? false : { opacity: 0, y: 4 }}
+        initial={still ? false : { opacity: 0, y: 4 }}
         animate={{ opacity: 1, y: 0 }}
-        exit={reduce ? { opacity: 1 } : { opacity: 0, y: -2 }}
+        exit={still ? { opacity: 1, transition: { duration: 0 } } : { opacity: 0, y: -2 }}
         transition={{ duration, ease: [0.22, 0.61, 0.36, 1] }}
         className={cn(className)}
       >

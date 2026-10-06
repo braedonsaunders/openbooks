@@ -3,6 +3,7 @@
 import { useId, useLayoutEffect, useRef, type KeyboardEvent, type ReactNode } from 'react'
 import { DrawerTabStrip } from '../drawer-tab-strip'
 import { SubtabNav } from '@braedonsaunders/appkit-ui'
+import { switchView } from '@openbooks/ui'
 
 /** The house record selector, with keyboard focus and optional panel ownership. */
 export function RecordTabs<T extends string>({ label, active, tabs, onChange, children, panelId, className }: {
@@ -17,6 +18,8 @@ export function RecordTabs<T extends string>({ label, active, tabs, onChange, ch
   const id = useId()
   const root = useRef<HTMLDivElement>(null)
   const contentId = panelId ?? (children !== undefined ? `${id}-panel` : undefined)
+  // Every selection is a view switch, so the panel change animates like a page change.
+  const select = (key: T) => switchView(() => onChange(key))
   useLayoutEffect(() => {
     const buttons = root.current?.querySelectorAll<HTMLElement>('button')
     buttons?.forEach((button, index) => {
@@ -43,13 +46,13 @@ export function RecordTabs<T extends string>({ label, active, tabs, onChange, ch
     else return
     event.preventDefault()
     const selected = available[next]!
-    onChange(selected.key)
+    select(selected.key)
     document.getElementById(`${id}-${selected.key}`)?.focus()
   }
 
   return <>
     <div ref={root} onKeyDown={onKeyDown} className={className}>
-      {contentId ? <SubtabNav tabs={tabs} active={active} onSelect={(key) => onChange(key as T)} ariaLabel={label} /> : <DrawerTabStrip tabs={tabs} activeKey={active} onSelect={onChange} ariaLabel={label} />}
+      {contentId ? <SubtabNav tabs={tabs} active={active} onSelect={(key) => select(key as T)} ariaLabel={label} /> : <DrawerTabStrip tabs={tabs} activeKey={active} onSelect={onChange} ariaLabel={label} />}
     </div>
     {children !== undefined ? <div id={contentId} role="tabpanel" aria-labelledby={`${id}-${active}`} tabIndex={0}>{children}</div> : null}
   </>

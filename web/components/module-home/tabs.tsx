@@ -4,7 +4,7 @@ import { useContext, useLayoutEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useLocale, useTranslations } from "next-intl";
 import { ChevronDown } from "lucide-react";
-import { cn, Popover } from "@openbooks/ui";
+import { cn, Popover, VIEW_SWITCH_TRANSITION } from "@openbooks/ui";
 import { visibleTopNavGroupCount } from "../../lib/top-nav-overflow";
 import { configureInlineTabs } from "./inline-tabs";
 import { ViewTabsContext, useManagedLocalNavigation } from "./navigation-context";
@@ -45,6 +45,7 @@ function Pill({ tab }: { tab: ModuleHomeTab }) {
   return (
     <Link
       href={tab.href as never}
+      transitionTypes={[VIEW_SWITCH_TRANSITION]}
       aria-current={active ? "page" : undefined}
       className={cn(PILL, active ? PILL_ACTIVE : PILL_IDLE)}
     >
@@ -258,6 +259,7 @@ export function ModuleHomeTabs({ tabs, placement = 'header', ariaLabel }: {
                   role="menuitem"
                   tabIndex={-1}
                   href={tab.href as never}
+                  transitionTypes={[VIEW_SWITCH_TRANSITION]}
                   onClick={() => setOpen(false)}
                   aria-current={tab.active ? "page" : undefined}
                   className={cn(

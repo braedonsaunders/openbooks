@@ -541,6 +541,20 @@
   animation: 380ms var(--route-ease-out) 40ms both route-settle-in;
 }
 
+/* A tab switch inside a drawer: the body's outgoing view steps aside and the
+   incoming one rises into place, a shorter version of a page change sized
+   for the sheet. */
+::view-transition-group(.drawer-view) {
+  animation-duration: 300ms;
+  animation-timing-function: var(--route-ease-out);
+}
+::view-transition-old(.drawer-view) {
+  animation: 120ms var(--route-ease-in) both route-fade-out;
+}
+::view-transition-new(.drawer-view) {
+  animation: 300ms var(--route-ease-out) 50ms both drawer-view-in;
+}
+
 /* Opening a report from the hub: the library recedes behind the sheet that
    is growing into the report, and the report's own chrome arrives once the
    paper has landed. */
@@ -612,6 +626,9 @@
 }
 @keyframes route-settle-in {
   from { opacity: 0; transform: translateY(18px); filter: blur(5px); }
+}
+@keyframes drawer-view-in {
+  from { opacity: 0; transform: translateY(8px); filter: blur(2px); }
 }
 @keyframes route-skeleton-out {
   to { opacity: 0; transform: scale(0.995); }

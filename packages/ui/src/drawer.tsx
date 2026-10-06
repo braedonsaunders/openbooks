@@ -7,6 +7,7 @@ import { useTranslations } from 'next-intl'
 import { useHydrated } from './use-hydrated'
 import { nextDrawerShow, shouldCommitDrawerCloseNavigation } from './drawer-nav'
 import { OverlayExit } from './overlay-exit'
+import { VIEW_SWITCH_TRANSITION, ViewTransition } from './view-transition'
 import { cn } from './utils'
 
 // Z-INDEX SCALE (single source of truth)
@@ -441,14 +442,18 @@ export function Drawer({
                 {subtabs}
               </div>
             ) : null}
-            <div
-              className={cn(
-                'app-scroll min-h-0 flex-1 text-slate-900 dark:text-slate-100',
-                bodyClassName ?? 'overflow-y-auto px-6 py-5',
-              )}
-            >
-              {children}
-            </div>
+            {/* Switching tabs inside the drawer animates the body the way a
+                page change animates the page; other updates stay still. */}
+            <ViewTransition default="none" update={{ [VIEW_SWITCH_TRANSITION]: 'drawer-view', default: 'none' }}>
+              <div
+                className={cn(
+                  'app-scroll min-h-0 flex-1 text-slate-900 dark:text-slate-100',
+                  bodyClassName ?? 'overflow-y-auto px-6 py-5',
+                )}
+              >
+                {children}
+              </div>
+            </ViewTransition>
             {footer ? (
               <footer className="flex items-center justify-end gap-2 border-t border-slate-200 bg-slate-50 px-6 py-3 dark:border-slate-800 dark:bg-slate-900/60">
                 {footer}
