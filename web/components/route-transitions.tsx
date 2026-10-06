@@ -113,16 +113,42 @@ export function RouteTransition({ children }: { children: ReactNode }) {
   // placeholder) in; once a placeholder is showing, the page that replaces
   // it rises into place. A view switch on the same page moves like a
   // navigation. Any other update of the pane stays still.
+  // The page's sheet (see `PageSheetTransition`) is lifted out of the pane
+  // and carries the motion; what stays in the pane — the page header and
+  // its tabs — only cross-dissolves, so the top of the page holds still.
   const update: ViewTransitionClass = hidden
     ? 'none'
     : navigating
-      ? { [REPORT_OPEN_TRANSITION]: 'route-recede', default: 'route-change' }
-      : revealing ? 'route-reveal' : { [VIEW_SWITCH_TRANSITION]: 'route-change', default: 'none' }
+      ? { [REPORT_OPEN_TRANSITION]: 'route-recede', default: 'page-hold' }
+      : revealing ? 'route-reveal' : { [VIEW_SWITCH_TRANSITION]: 'page-hold', default: 'none' }
   return (
     <ViewTransition default="none" update={update}>
       {/* One box for the pane, so the page is captured as a single layer;
           it keeps the main column's flex sizing for the page inside. */}
       <div data-route-pane className="flex min-h-0 flex-1 flex-col">{children}</div>
+    </ViewTransition>
+  )
+}
+
+/**
+ * The page's sheet: the working surface under the page header. It is lifted
+ * out of the pane during a page change or a view switch and moves as a sheet
+ * of paper, while the header above it holds still. A page change moves it
+ * with the `sheet-page` motion and a view switch with `sheet-view`; any other
+ * update leaves it still. Shared page layouts place it, once per page.
+ */
+export function PageSheetTransition({ children }: { children: ReactNode }) {
+  const hidden = useDocumentHidden()
+  const navigating = useRouteNavigating()
+  const page: ViewTransitionClass = hidden ? 'none' : { [VIEW_SWITCH_TRANSITION]: 'sheet-view', default: 'sheet-page' }
+  // A navigation that keeps this sheet mounted (the same page for another
+  // record) still turns the sheet; other in-place updates stay still.
+  const update: ViewTransitionClass = hidden
+    ? 'none'
+    : navigating ? page : { [VIEW_SWITCH_TRANSITION]: 'sheet-view', default: 'none' }
+  return (
+    <ViewTransition name="page-sheet" default="none" update={update} share={page} enter={page} exit={page}>
+      {children}
     </ViewTransition>
   )
 }
@@ -156,11 +182,16 @@ function pathOf(href: string) {
   return href.split(/[?#]/)[0]!
 }
 
-/** A stable view-transition name for one hub sheet (a valid CSS identifier). */
-export function reportSheetName(key: string) {
+/** A stable view-transition name for `key` (a valid CSS identifier). */
+export function stableTransitionName(prefix: string, key: string) {
   let hash = 2166136261
   for (let index = 0; index < key.length; index++) hash = Math.imul(hash ^ key.charCodeAt(index), 16777619)
-  return `report-sheet-${(hash >>> 0).toString(36)}`
+  return `${prefix}-${(hash >>> 0).toString(36)}`
+}
+
+/** A stable view-transition name for one hub sheet. */
+export function reportSheetName(key: string) {
+  return stableTransitionName('report-sheet', key)
 }
 
 /** Record that the sheet named `name` is opening the report at `href`. */

@@ -1,0 +1,149 @@
+/* Paper motion lab — temporary evaluation styles for choosing the page and
+   tab motion. Imported by the (app) layout; remove it and components/motion-lab.tsx once a motion is chosen. */
+
+:root {
+  --paper-ease: cubic-bezier(0.2, 0.9, 0.25, 1);
+}
+
+/* The page header and tabs hold still and only cross-dissolve. */
+::view-transition-group(.page-hold) { animation-duration: calc(var(--paper-t, 1) * 240ms); }
+::view-transition-old(.page-hold) { animation: calc(var(--paper-t, 1) * 150ms) var(--route-ease-in) both route-fade-out; }
+::view-transition-new(.page-hold) { animation: calc(var(--paper-t, 1) * 240ms) var(--route-ease-out) both route-fade-in; }
+
+/* The sheet. Normal compositing, so a sheet's shadow darkens what it passes
+   over instead of the default additive cross-fade washing it out. */
+::view-transition-group(.sheet-page),
+::view-transition-group(.sheet-view),
+html[data-paper-tab]::view-transition-group(.drawer-view) {
+  animation-duration: calc(var(--paper-t, 1) * 520ms);
+  animation-timing-function: var(--route-ease-out);
+}
+::view-transition-image-pair(.sheet-page),
+::view-transition-image-pair(.sheet-view),
+::view-transition-image-pair(.drawer-view) { isolation: isolate; }
+::view-transition-old(.sheet-page), ::view-transition-new(.sheet-page),
+::view-transition-old(.sheet-view), ::view-transition-new(.sheet-view),
+::view-transition-old(.drawer-view), ::view-transition-new(.drawer-view) { mix-blend-mode: normal; }
+
+/* The active tab pill glides to the chosen tab and settles with a hint of
+   spring. Switched off, it simply lands. */
+::view-transition-group(.tab-pill) {
+  animation-duration: calc(var(--paper-t, 1) * 440ms);
+  animation-timing-function: cubic-bezier(0.3, 1.25, 0.4, 1);
+}
+html[data-paper-pill="off"]::view-transition-group(.tab-pill) { animation: none; }
+html[data-paper-pill="off"]::view-transition-old(.tab-pill) { animation: none; opacity: 0; }
+html[data-paper-pill="off"]::view-transition-new(.tab-pill) { animation: none; }
+
+html[data-paper-page="current"]::view-transition-old(.sheet-page) { transform-origin: 50% 0; animation: calc(var(--paper-t, 1) * 200ms) var(--route-ease-in) calc(var(--paper-t, 1) * 0ms) both route-lift-out; }
+html[data-paper-page="current"]::view-transition-new(.sheet-page) {  animation: calc(var(--paper-t, 1) * 420ms) var(--route-ease-out) calc(var(--paper-t, 1) * 80ms) both route-settle-in; }
+html[data-paper-tab="current"]::view-transition-old(.sheet-view),
+html[data-paper-tab="current"]::view-transition-old(.drawer-view) { transform-origin: 50% 0; animation: calc(var(--paper-t, 1) * 200ms) var(--route-ease-in) calc(var(--paper-t, 1) * 0ms) both route-lift-out; }
+html[data-paper-tab="current"]::view-transition-new(.sheet-view),
+html[data-paper-tab="current"]::view-transition-new(.drawer-view) {  animation: calc(var(--paper-t, 1) * 420ms) var(--route-ease-out) calc(var(--paper-t, 1) * 80ms) both route-settle-in; }
+html[data-paper-page="lay-on"]::view-transition-old(.sheet-page) { transform-origin: 50% 0; animation: calc(var(--paper-t, 1) * 460ms) var(--route-ease-out) calc(var(--paper-t, 1) * 0ms) both paper-settle-back; }
+html[data-paper-page="lay-on"]::view-transition-new(.sheet-page) {  animation: calc(var(--paper-t, 1) * 480ms) var(--paper-ease) calc(var(--paper-t, 1) * 0ms) both paper-lay-on; }
+html[data-paper-tab="lay-on"]::view-transition-old(.sheet-view),
+html[data-paper-tab="lay-on"]::view-transition-old(.drawer-view) { transform-origin: 50% 0; animation: calc(var(--paper-t, 1) * 460ms) var(--route-ease-out) calc(var(--paper-t, 1) * 0ms) both paper-settle-back; }
+html[data-paper-tab="lay-on"]::view-transition-new(.sheet-view),
+html[data-paper-tab="lay-on"]::view-transition-new(.drawer-view) {  animation: calc(var(--paper-t, 1) * 480ms) var(--paper-ease) calc(var(--paper-t, 1) * 0ms) both paper-lay-on; }
+html[data-paper-page="shuffle"]::view-transition-old(.sheet-page) {  animation: calc(var(--paper-t, 1) * 480ms) var(--route-ease-out) calc(var(--paper-t, 1) * 0ms) both paper-shuffle-under; }
+html[data-paper-page="shuffle"]::view-transition-new(.sheet-page) { transform-origin: 0 0; animation: calc(var(--paper-t, 1) * 480ms) var(--paper-ease) calc(var(--paper-t, 1) * 0ms) both paper-shuffle-in; }
+html[data-paper-tab="shuffle"]::view-transition-old(.sheet-view),
+html[data-paper-tab="shuffle"]::view-transition-old(.drawer-view) {  animation: calc(var(--paper-t, 1) * 480ms) var(--route-ease-out) calc(var(--paper-t, 1) * 0ms) both paper-shuffle-under; }
+html[data-paper-tab="shuffle"]::view-transition-new(.sheet-view),
+html[data-paper-tab="shuffle"]::view-transition-new(.drawer-view) { transform-origin: 0 0; animation: calc(var(--paper-t, 1) * 480ms) var(--paper-ease) calc(var(--paper-t, 1) * 0ms) both paper-shuffle-in; }
+html[data-paper-tab="shuffle"]:active-view-transition-type(view-back)::view-transition-old(.sheet-view),
+html[data-paper-tab="shuffle"]:active-view-transition-type(view-back)::view-transition-old(.drawer-view) {  animation: calc(var(--paper-t, 1) * 480ms) var(--route-ease-out) calc(var(--paper-t, 1) * 0ms) both paper-shuffle-under-back; }
+html[data-paper-tab="shuffle"]:active-view-transition-type(view-back)::view-transition-new(.sheet-view),
+html[data-paper-tab="shuffle"]:active-view-transition-type(view-back)::view-transition-new(.drawer-view) { transform-origin: 100% 0; animation: calc(var(--paper-t, 1) * 480ms) var(--paper-ease) calc(var(--paper-t, 1) * 0ms) both paper-shuffle-in-back; }
+html[data-paper-page="turn"]::view-transition-old(.sheet-page) { transform-origin: 0 0; z-index: 1; animation: calc(var(--paper-t, 1) * 560ms) cubic-bezier(0.45, 0, 0.2, 1) calc(var(--paper-t, 1) * 0ms) both paper-turn-away; }
+html[data-paper-page="turn"]::view-transition-new(.sheet-page) {  animation: calc(var(--paper-t, 1) * 560ms) var(--route-ease-out) calc(var(--paper-t, 1) * 0ms) both paper-uncover; }
+html[data-paper-tab="turn"]::view-transition-old(.sheet-view),
+html[data-paper-tab="turn"]::view-transition-old(.drawer-view) { transform-origin: 0 0; z-index: 1; animation: calc(var(--paper-t, 1) * 560ms) cubic-bezier(0.45, 0, 0.2, 1) calc(var(--paper-t, 1) * 0ms) both paper-turn-away; }
+html[data-paper-tab="turn"]::view-transition-new(.sheet-view),
+html[data-paper-tab="turn"]::view-transition-new(.drawer-view) {  animation: calc(var(--paper-t, 1) * 560ms) var(--route-ease-out) calc(var(--paper-t, 1) * 0ms) both paper-uncover; }
+html[data-paper-tab="turn"]:active-view-transition-type(view-back)::view-transition-old(.sheet-view),
+html[data-paper-tab="turn"]:active-view-transition-type(view-back)::view-transition-old(.drawer-view) { transform-origin: 50% 0; z-index: auto; animation: calc(var(--paper-t, 1) * 560ms) var(--route-ease-out) calc(var(--paper-t, 1) * 0ms) both paper-cover; }
+html[data-paper-tab="turn"]:active-view-transition-type(view-back)::view-transition-new(.sheet-view),
+html[data-paper-tab="turn"]:active-view-transition-type(view-back)::view-transition-new(.drawer-view) { transform-origin: 0 0; animation: calc(var(--paper-t, 1) * 560ms) var(--paper-ease) calc(var(--paper-t, 1) * 0ms) both paper-turn-back; }
+html[data-paper-page="tear-off"]::view-transition-old(.sheet-page) { transform-origin: 50% 0; z-index: 1; animation: calc(var(--paper-t, 1) * 540ms) cubic-bezier(0.5, 0, 0.75, 0.5) calc(var(--paper-t, 1) * 0ms) both paper-tear-off; }
+html[data-paper-page="tear-off"]::view-transition-new(.sheet-page) {  animation: calc(var(--paper-t, 1) * 540ms) var(--route-ease-out) calc(var(--paper-t, 1) * 0ms) both paper-uncover; }
+html[data-paper-tab="tear-off"]::view-transition-old(.sheet-view),
+html[data-paper-tab="tear-off"]::view-transition-old(.drawer-view) { transform-origin: 50% 0; z-index: 1; animation: calc(var(--paper-t, 1) * 540ms) cubic-bezier(0.5, 0, 0.75, 0.5) calc(var(--paper-t, 1) * 0ms) both paper-tear-off; }
+html[data-paper-tab="tear-off"]::view-transition-new(.sheet-view),
+html[data-paper-tab="tear-off"]::view-transition-new(.drawer-view) {  animation: calc(var(--paper-t, 1) * 540ms) var(--route-ease-out) calc(var(--paper-t, 1) * 0ms) both paper-uncover; }
+html[data-paper-tab="tear-off"]:active-view-transition-type(view-back)::view-transition-old(.sheet-view),
+html[data-paper-tab="tear-off"]:active-view-transition-type(view-back)::view-transition-old(.drawer-view) { transform-origin: 50% 0; z-index: auto; animation: calc(var(--paper-t, 1) * 540ms) var(--route-ease-out) calc(var(--paper-t, 1) * 0ms) both paper-cover; }
+html[data-paper-tab="tear-off"]:active-view-transition-type(view-back)::view-transition-new(.sheet-view),
+html[data-paper-tab="tear-off"]:active-view-transition-type(view-back)::view-transition-new(.drawer-view) { transform-origin: 50% 0; animation: calc(var(--paper-t, 1) * 540ms) var(--paper-ease) calc(var(--paper-t, 1) * 0ms) both paper-tear-back; }
+html[data-paper-page="settle"]::view-transition-old(.sheet-page) {  animation: calc(var(--paper-t, 1) * 150ms) var(--route-ease-in) calc(var(--paper-t, 1) * 0ms) both route-fade-out; }
+html[data-paper-page="settle"]::view-transition-new(.sheet-page) {  animation: calc(var(--paper-t, 1) * 400ms) var(--route-ease-out) calc(var(--paper-t, 1) * 0ms) both paper-place; }
+html[data-paper-tab="settle"]::view-transition-old(.sheet-view),
+html[data-paper-tab="settle"]::view-transition-old(.drawer-view) {  animation: calc(var(--paper-t, 1) * 150ms) var(--route-ease-in) calc(var(--paper-t, 1) * 0ms) both route-fade-out; }
+html[data-paper-tab="settle"]::view-transition-new(.sheet-view),
+html[data-paper-tab="settle"]::view-transition-new(.drawer-view) {  animation: calc(var(--paper-t, 1) * 400ms) var(--route-ease-out) calc(var(--paper-t, 1) * 0ms) both paper-place; }
+
+/* Lay on: a fresh sheet slides up onto the stack; the old one settles back. */
+@keyframes paper-lay-on {
+  from { opacity: 0; transform: translateY(48px); border-radius: 12px 12px 0 0; box-shadow: 0 -18px 44px -14px rgb(15 23 42 / 0.3); }
+  30% { opacity: 1; }
+  to { transform: none; border-radius: 0; box-shadow: 0 0 0 0 rgb(15 23 42 / 0); }
+}
+@keyframes paper-settle-back {
+  60% { opacity: 0.55; }
+  to { opacity: 0; transform: scale(0.975) translateY(8px); filter: brightness(0.97) saturate(0.7); }
+}
+
+/* Shuffle: the drawer's own motion. The new sheet slides in from the side
+   slightly askew and squares up as it lands; the old one steps back. */
+@keyframes paper-shuffle-in {
+  from { opacity: 0; transform: translateX(16%) rotate(0.8deg); box-shadow: -22px 0 48px -18px rgb(15 23 42 / 0.32); }
+  35% { opacity: 1; }
+  to { transform: none; box-shadow: 0 0 0 0 rgb(15 23 42 / 0); }
+}
+@keyframes paper-shuffle-under { to { opacity: 0; transform: translateX(-3%) scale(0.985); filter: brightness(0.96); } }
+@keyframes paper-shuffle-in-back {
+  from { opacity: 0; transform: translateX(-16%) rotate(-0.8deg); box-shadow: 22px 0 48px -18px rgb(15 23 42 / 0.32); }
+  35% { opacity: 1; }
+  to { transform: none; box-shadow: 0 0 0 0 rgb(15 23 42 / 0); }
+}
+@keyframes paper-shuffle-under-back { to { opacity: 0; transform: translateX(3%) scale(0.985); filter: brightness(0.96); } }
+
+/* Turn: the top sheet is lifted by its corner and turned aside, uncovering
+   the next one. Going back lays a sheet back on from the same side. */
+@keyframes paper-turn-away {
+  0% { transform: none; box-shadow: 0 0 0 0 rgb(15 23 42 / 0); }
+  35% { box-shadow: 0 26px 60px -18px rgb(15 23 42 / 0.36); }
+  to { opacity: 0; transform: translateX(-55%) rotate(-5deg); box-shadow: 0 26px 60px -18px rgb(15 23 42 / 0.2); }
+}
+@keyframes paper-turn-back {
+  from { opacity: 0; transform: translateX(-55%) rotate(-5deg); box-shadow: 0 26px 60px -18px rgb(15 23 42 / 0.3); }
+  55% { opacity: 1; }
+  to { transform: none; box-shadow: 0 0 0 0 rgb(15 23 42 / 0); }
+}
+
+/* Tear off: the top sheet peels up from its bottom edge, like a page torn
+   from a pad. Going back drops a sheet down onto the pad. */
+@keyframes paper-tear-off {
+  0% { transform: perspective(1600px); box-shadow: 0 0 0 0 rgb(15 23 42 / 0); }
+  30% { transform: perspective(1600px) rotateX(8deg); box-shadow: 0 34px 56px -26px rgb(15 23 42 / 0.36); }
+  to { opacity: 0; transform: perspective(1600px) translateY(-24%) rotateX(26deg); box-shadow: 0 34px 56px -26px rgb(15 23 42 / 0.2); }
+}
+@keyframes paper-tear-back {
+  from { opacity: 0; transform: perspective(1600px) translateY(-24%) rotateX(26deg); box-shadow: 0 34px 56px -26px rgb(15 23 42 / 0.3); }
+  65% { opacity: 1; }
+  to { transform: perspective(1600px); box-shadow: 0 0 0 0 rgb(15 23 42 / 0); }
+}
+
+/* The sheet underneath, uncovered as the top one leaves (or covered as one
+   is laid back on). */
+@keyframes paper-uncover { from { opacity: 0.4; transform: scale(0.985); filter: brightness(0.94); } }
+@keyframes paper-cover { to { opacity: 0.2; transform: scale(0.985); filter: brightness(0.94); } }
+
+/* Settle: the new sheet is set down from a hair above the desk; its shadow
+   tightens as it lands. The quietest of the paper motions. */
+@keyframes paper-place {
+  from { opacity: 0; transform: translateY(-8px) scale(1.012); box-shadow: 0 28px 56px -20px rgb(15 23 42 / 0.32); }
+  to { box-shadow: 0 0 0 0 rgb(15 23 42 / 0); }
+}
