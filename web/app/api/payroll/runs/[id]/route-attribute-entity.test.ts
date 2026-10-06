@@ -69,6 +69,7 @@ const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(
   "@openbooks/engine/src/testing/fixtures.ts"
 );
 const { createPayRun } = await import("@openbooks/engine/src/payroll/run-lifecycle.ts");
+const { recurringBenefitsRunSource } = await import("@openbooks/engine/src/payroll/benefit-plan-inputs.ts");
 
 // Production scopes every route read through the request org; the mocked
 // authz stands in for the request here, so each route call runs inside the
@@ -138,8 +139,12 @@ test(
           await db.execute(sql`
             update documents set subsidiary_id = null
              where org_id = ${orgId} and id = ${run.documentId}`);
+          // This empty historical fixture has no recurring benefit subjects;
+          // preserve that fact through the same source reader as calculation.
+          const benefitSource = await recurringBenefitsRunSource(db, orgId, run.documentId);
+          assert.deepEqual(benefitSource, []);
           await db.execute(sql`
-            update pay_runs set run_status = 'committed'
+            update pay_runs set run_status = 'committed', benefit_source_snapshot=${JSON.stringify(benefitSource)}::jsonb
              where org_id = ${orgId} and document_id = ${run.documentId}`);
           return run.documentId;
         };
