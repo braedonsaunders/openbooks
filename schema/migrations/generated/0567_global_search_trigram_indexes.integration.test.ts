@@ -143,10 +143,9 @@ test("an invalid same-named index in another schema never costs the valid public
     await runFile();
 
     const after = await publicIndex("contacts_name_trgm");
-    assert.ok(after, "the valid public index must survive the cleanup");
-    assert.equal(after.valid, true);
+    assert.equal(after?.valid, true, "the valid public index must survive the cleanup");
     assert.equal(
-      after.oid,
+      after?.oid,
       before.oid,
       "the public index must be the same index, not dropped and rebuilt because another schema's invalid copy shared its name",
     );

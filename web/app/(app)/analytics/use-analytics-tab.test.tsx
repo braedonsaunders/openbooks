@@ -16,8 +16,7 @@ const tabs = ['overview', 'items'] as const
 type Props = { data: { label: string; _analyticsRead: { slug: string; tab: string; query: string; observedAt: string } } }
 let selected: ReturnType<typeof useAnalyticsTab<Props, typeof tabs[number]>>
 function Probe({ initial }: { initial: Props }) {
-  // The probe exposes the hook's latest result to the assertions.
-  // eslint-disable-next-line react-hooks/globals
+  // eslint-disable-next-line react-hooks/globals -- the probe exposes the hook's latest result to the assertions
   selected = useAnalyticsTab('financial-health', initial, tabs)
   return <div>{selected.loading ? 'loading' : selected.error ?? selected.props.data.label}</div>
 }
