@@ -31,7 +31,7 @@ const serverReady = () => false
 
 function readSettings(): Settings {
   try {
-    return { ...DEFAULTS, ...JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '{}') }
+    return { ...DEFAULTS, ...JSON.parse(window.localStorage.getItem(STORAGE_KEY) ?? '{}') }
   } catch {
     return DEFAULTS
   }
@@ -48,7 +48,11 @@ export function DrawerPaperLab() {
     root.dataset.drawerLook = settings.look
     root.dataset.drawerTone = settings.tone
     root.dataset.drawerGrain = settings.grain ? 'on' : 'off'
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(settings))
+    try {
+      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(settings))
+    } catch {
+      // The selected appearance still applies for this tab when storage is unavailable.
+    }
   }, [mounted, settings])
 
   if (!mounted) return null
