@@ -191,7 +191,7 @@ test(
 );
 
 test(
-  "a source cancellation with missing connector ownership remains unresolved",
+  "a source cancellation imported before connector provenance is mirrored by the only live connection",
   { skip: !DB, timeout: 180_000 },
   async () => {
     const o = await ctx();
@@ -207,6 +207,45 @@ test(
     // Older imports retained the source reference without connector ownership.
     await db.execute(sql`
       update documents set custom = custom - 'connectionId'
+       where org_id = ${o.orgId} and custom->>'qboId' = 'TST-1'`);
+    source.cancelled = true;
+    source.ledger.openUnpaid = null;
+    const run = await runSync(source, "cancelled-mirror-test", {
+      orgId: o.orgId,
+      connectionId,
+      since: new Date("2026-07-16T00:00:00.000Z"),
+      loadEntitiesFirst: false,
+    });
+    assert.deepEqual(run.autoResolvedDeletions, ["TST-1"]);
+    assert.deepEqual(run.deletedAtSource, []);
+    const [doc] = (await db.execute<{ status: string }>(sql`
+      select status from documents
+       where org_id = ${o.orgId} and custom->>'qboId' = 'TST-1'`)).rows;
+    assert.equal(doc?.status, "voided");
+  },
+);
+
+test(
+  "a source cancellation recorded against another live connection remains unresolved",
+  { skip: !DB, timeout: 180_000 },
+  async () => {
+    const o = await ctx();
+    const connectionId = await newConnection(o.orgId);
+    const otherConnectionId = randomUUID();
+    await db.execute(sql`
+      insert into connections (id, org_id, source, display_name)
+      values (${otherConnectionId}, ${o.orgId}, 'netsuite', 'Other source system')`);
+    const source = new CancelledInvoiceSource(o);
+    await runSync(source, "cancelled-mirror-test", {
+      kind: "full_migration",
+      orgId: o.orgId,
+      connectionId,
+      since: null,
+      loadEntitiesFirst: false,
+    });
+    await db.execute(sql`
+      update documents
+         set custom = jsonb_set(custom, '{connectionId}', to_jsonb(${otherConnectionId}::text))
        where org_id = ${o.orgId} and custom->>'qboId' = 'TST-1'`);
     source.cancelled = true;
     source.ledger.openUnpaid = null;
