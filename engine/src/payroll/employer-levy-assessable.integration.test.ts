@@ -158,6 +158,10 @@ test(
         orgId: org.orgId, actorId, payScheduleId: scheduleId,
         periodStart: "2026-07-05", periodEnd: "2026-07-18",
       });
+      // The selected run still owes premiums if the employee becomes inactive
+      // before calculation; retained classification and assessable pay govern.
+      await db.execute(sql`update employee_roles set is_active=false
+        where org_id=${org.orgId} and party_id=${workerId}`);
       const result = await calculatePayRun({ orgId: org.orgId, documentId: run.documentId, actorId });
       assert.deepEqual(result.errors, [], `calculation refused: ${JSON.stringify(result.errors)}`);
       assert.equal(result.employees, 2);
