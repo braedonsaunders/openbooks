@@ -6,17 +6,22 @@ export async function registerNodeInstrumentation() {
   await startTelemetry()
   const { assertSafeRuntimeDatabaseRole } = await import('@openbooks/engine/src/platform/db.ts')
   await assertSafeRuntimeDatabaseRole()
-  const { ensureScheduler } = await import('@openbooks/engine/src/scheduling/scheduler.ts')
   const { resolveWebSchedulerMode } = await import('@openbooks/engine/src/scheduling/mode.ts')
   const { registerContinuousCloseEnricher } = await import('@openbooks/engine/src/continuous-close/continuous-close.ts')
-  const { enrichContinuousCloseRun } = await import('./lib/assistant/continuous-close-agent')
-  registerContinuousCloseEnricher(enrichContinuousCloseRun)
+  // Manual close runs still receive enrichment when the web scheduler is off.
+  // Load the assistant's readers when enrichment is invoked, rather than during
+  // process startup for unrelated requests such as sign-in and entity lists.
+  registerContinuousCloseEnricher(async (input) => {
+    const { enrichContinuousCloseRun } = await import('./lib/assistant/continuous-close-agent')
+    return enrichContinuousCloseRun(input)
+  })
   // Scheduled work runs in the worker process (npm run worker), which calls
   // ensureScheduler() unconditionally. This web replica schedules only as an
   // explicit single-process opt-in (OPENBOOKS_RUN_SCHEDULER=1), and never
   // under `next dev` — see engine/src/scheduling/mode.ts.
   const decision = resolveWebSchedulerMode(process.env)
   if (decision.enabled) {
+    const { ensureScheduler } = await import('@openbooks/engine/src/scheduling/scheduler.ts')
     ensureScheduler()
     // HR-16 automation scan on the same 60-second topology (own advisory
     // claim key, same mode decision) — web-composed because no engine
