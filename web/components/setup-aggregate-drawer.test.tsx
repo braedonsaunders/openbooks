@@ -82,5 +82,5 @@ test('an in-flight nested decision blocks the native setup shell close and paren
   await act(async()=>{root.render(render(false));await tick()})
   await act(async()=>{details.click();await tick()})
   assert.equal(routes.length,1)
-  assert.ok(!routes[0]!.includes('setupTab=review'))
+  assert.ok(!(routes as string[])[0]!.includes('setupTab=review'))
 })

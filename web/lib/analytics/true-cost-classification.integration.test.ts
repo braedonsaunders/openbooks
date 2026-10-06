@@ -320,7 +320,7 @@ test('true cost per-FTE uses resolved annual hours, not 2080', { skip: !env.OPEN
       const rent = data.categories.find((c) => c.key === 'rent')!
       assert.ok(rent, 'rent category present')
       assert.equal(
-        rent.byDept[seed.deptIds[0]]?.rate,
+        rent.byDept[seed.deptIds[0]!]?.rate,
         200000,
         'per-FTE rate must be 100/hr x measured 2000 annual hours, not 208000 from an assumed 2080',
       )
@@ -412,7 +412,7 @@ test('true cost per-FTE annualizes a work schedule from its own cycle', { skip: 
       const rent = data.categories.find((c) => c.key === 'rent')!
       assert.ok(rent, 'rent category present')
       assert.equal(
-        rent.byDept[seed.deptIds[0]]?.rate,
+        rent.byDept[seed.deptIds[0]!]?.rate,
         208571.43,
         'per-FTE rate must be 100/hr x 40×365÷7 annual hours, not 208000 from a bare ×52',
       )

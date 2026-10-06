@@ -1,4 +1,5 @@
 import "server-only";
+import { db } from "@openbooks/engine/platform/database";
 import { analyticsQuery } from "./query";
 import { analyticsSection } from "./read-context";
 import { toChartNumber } from "../chart-number";
@@ -1625,7 +1626,8 @@ export async function trueCostData(
       priorBurdenExact = add(priorBurdenExact, String(r.amount ?? 0));
   }
   const priorComposite = priorBilled > 0 ? toChartNumber(div(priorBurdenExact, quantizeOverheadMoney(priorBilled))) : 0;
-  const compositeRateChangePct = priorComposite > 0 ? ((compositeRate - priorComposite) / priorComposite) * 100 : null;
+  // An unresolved composite has no change to report, only its refusal.
+  const compositeRateChangePct = priorComposite > 0 && compositeRate !== null ? ((compositeRate - priorComposite) / priorComposite) * 100 : null;
 
   // ---- monthly history + linear forecast ---------------------------------------------
   const months = [...new Set([...monthBurden.keys(), ...monthHours.keys()])].sort();

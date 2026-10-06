@@ -921,7 +921,7 @@ export interface ConcentrationSummary {
  * the period total, so with no revenue there is no concentration to state —
  * an HHI of 0 would read as "perfectly diversified".
  */
-export function concentrationOf(kpis: CustomerData["kpis"]): ConcentrationSummary | null {
+export function concentrationOf(kpis: Pick<CustomerData["kpis"], "totalRevenue" | "hhiScaled" | "hhiLevel" | "customersFor80Pct" | "top5SharePct">): ConcentrationSummary | null {
   if (cmp(kpis.totalRevenue, "0") <= 0) return null;
   return {
     hhi: kpis.hhiScaled,

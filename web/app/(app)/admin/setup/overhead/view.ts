@@ -67,7 +67,7 @@ export interface OverheadData {
   laborHref: string
   laborLabel: string
   actions: {
-    departments: { id: string; name: string; composite: number }[]
+    departments: { id: string; name: string; composite: number | null }[]
     projectTypes: { id: string; name: string }[]
     autoOpen: boolean
   }

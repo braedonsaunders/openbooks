@@ -773,7 +773,7 @@ function AbsorptionTab({ data }: { data: TrueCostData }) {
     const recovered = utilRecovery + viaRate + viaHours + viaCost
     const newGap = Math.min(0, k.gap ?? 0) + recovered
     const rateBump = k.billedHours > 0 ? viaRate / k.billedHours : 0
-    const extraHours = k.compositeRate > 0 ? viaHours / k.compositeRate : 0
+    const extraHours = k.compositeRate !== null && k.compositeRate > 0 ? viaHours / k.compositeRate : 0
     const costCutPct = k.totalOverhead > 0 ? (viaCost / k.totalOverhead) * 100 : 0
     const newAbsorption = k.totalOverhead > 0 ? (((k.burdenApplied ?? 0) + recovered) / k.totalOverhead) * 100 : 100
     return { recovered, newGap, rateBump, extraHours, costCutPct, newAbsorption, utilRecovery, coverage: gap > 0 ? (recovered / gap) * 100 : 100 }

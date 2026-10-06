@@ -106,6 +106,9 @@ const SETUP_KIND_MAP: Record<SetupField['kind'], ResourceField['kind']> = {
   object: 'long_text',
   objectArray: 'long_text',
   zonedDateTime: 'datetime',
+  // An IANA time zone identifier travels as its exact name; the shared
+  // setup coercer validates it on import.
+  timeZone: 'text',
   // String-list fields round-trip through the shared setup coercer.
   stringArray: 'long_text',
 }

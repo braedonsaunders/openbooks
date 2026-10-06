@@ -122,7 +122,7 @@ function dataWith(rows: CustomerRow[]): CustomerData {
   return {
     period: { from: '2026-07-01', to: '2026-07-31', label: 'Jul 2026' },
     rows,
-    intelligence: { score: 80, label: 'Strong', grade: 'A' },
+    intelligence: { score: 80, label: 'Strong', grade: 'A', championSaturation: 2 * ANALYTICS_CONFIG.customerIntelligence.defaults.tierPlatinumPct },
     // The live scoring model, not a partial fixture: every band and hint the
     // view renders reads this config, so the test exercises the same path.
     config: { ...ANALYTICS_CONFIG.customerIntelligence.defaults },
@@ -139,7 +139,7 @@ function dataWith(rows: CustomerRow[]): CustomerData {
       retentionRate: 92,
       paymentRate: 100,
       avgDaysToPay: 12,
-      top10PctShare: 42,
+      top10PctShare: 42, top5SharePct: 42,
       hhiScaled: 2000,
       hhiLevel: 'moderate',
       customersFor80Pct: 1,

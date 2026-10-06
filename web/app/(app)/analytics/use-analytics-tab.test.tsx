@@ -31,7 +31,7 @@ async function harness(t: TestContext) {
   const requests: { url: string; signal: AbortSignal; resolve(value: Response): void }[] = []
   Date.now = () => clock
   window.setTimeout = ((callback: () => void) => { const id = ++nextTimer; timers.set(id, callback); return id }) as typeof window.setTimeout
-  window.clearTimeout = (id) => { timers.delete(id) }
+  window.clearTimeout = (id) => { timers.delete(id as number) }
   globalThis.fetch = ((url: string, options: RequestInit) => new Promise<Response>(resolve => requests.push({ url, signal: options.signal!, resolve }))) as typeof fetch
   window.history.replaceState(null, '', '/analytics/financial-health?period=fy')
   const host = document.createElement('div'); document.body.appendChild(host)
