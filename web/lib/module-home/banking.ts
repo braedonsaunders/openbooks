@@ -55,9 +55,11 @@ const TREND_WEEKS = 13
 
 /**
  * The roster query shared by the workspace and the count-only path: one row
- * per active bank/card account with its balance leg and workflow state. The
- * unmatched-line count rides the same rows the workspace sums, so the
- * reconciliation tile and the cockpit tie by construction.
+ * per active bank/card account with its balance leg and workflow state — one
+ * row per (account, functional currency), because the balance lateral groups
+ * by functional. The unmatched-line count rides the same rows the workspace
+ * sums, and both readers dedupe by account id, so the reconciliation tile
+ * and the cockpit tie by construction.
  */
 async function bankRosterRows(
   orgId: string,
@@ -120,7 +122,20 @@ export async function bankingReconCount(
   subIds?: string[],
 ): Promise<number> {
   const rows = await bankRosterRows(orgId, subIds)
-  return rows.reduce((s, r) => s + Number(r.unmatched ?? 0), 0)
+  // The unmatched count is per account, not per currency leg: a
+  // multi-functional account rides several roster rows carrying the same
+  // count, so sum the first row per account — the same dedupe key the
+  // workspace folds its rows on — or the tile multiplies what the cockpit
+  // shows once.
+  const seen = new Set<string>()
+  let total = 0
+  for (const r of rows) {
+    const id = String(r.id)
+    if (seen.has(id)) continue
+    seen.add(id)
+    total += Number(r.unmatched ?? 0)
+  }
+  return total
 }
 
 export async function bankingHome(
