@@ -216,6 +216,7 @@ test("contract cost permissions are catalogued, grouped, and granted by duty", (
  * would gate a person's own record behind admin busywork.
  */
 test("hrm permissions are catalogued, grouped, and split between admin-only and every-role self keys", () => {
+  // Employer-scoped HR records and operational evidence stay admin-only by default.
   const keys: CataloguePermission[] = [
     "hrm.org_chart.read",
     "hrm.employment.read",
@@ -236,32 +237,23 @@ test("hrm permissions are catalogued, grouped, and split between admin-only and 
     "hrm.retention.read",
     "hrm.benefits.read",
     "hrm.benefits.manage",
-    // HR-12 begin
     "hrm.compensation.read",
     "hrm.compensation.manage",
     "hrm.compensation.approve",
-    // HR-12 end
     "hrm.team.read",
     "hrm.team.manage",
-    // HR-13 begin: construction read/manage stay admin-only like the
-    // employment keys — appended after the team keys so the pinned group
-    // order below holds.
     "hrm.construction.read",
     "hrm.construction.manage",
-    // HR-13 end
-    // HR-14 begin: certifications read/manage stay admin-only like the
-    // employment keys — appended after construction so the pinned group
-    // order below holds.
     "hrm.certifications.read",
     "hrm.certifications.manage",
-    // HR-14 end
-    // HR-19 begin: documents read/manage and surveys manage stay
-    // admin-only like the employment keys — appended after the
-    // construction keys so the pinned group order below holds.
+    "hrm.shifts.read",
+    "hrm.shifts.manage",
+    "hrm.shifts.approve",
+    "hrm.attendance.read",
+    "hrm.attendance.manage",
     "hrm.documents.read",
     "hrm.documents.manage",
     "hrm.surveys.manage",
-    // HR-19 end
   ];
   // HR-9 self keys: every login is a person, so every built-in role
   // carries them (admin via the catalogue spread, the rest explicitly).
