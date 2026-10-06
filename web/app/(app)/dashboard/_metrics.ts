@@ -481,10 +481,11 @@ export async function loadDashboardMetrics(
   readers: DashboardMoneyReaders = canonicalMoneyReaders,
   /**
    * Request locale for the cash position's week labels (chart-cash-forecast
-   * renders them). Defaults to en-US like the position reader — direct
-   * callers without a request scope keep the historical labels.
+   * renders them). The dashboard passes the viewer's locale; a direct caller
+   * that renders no labels may omit it and the cash position reader applies
+   * its own documented default.
    */
-  locale = 'en-US',
+  locale?: string,
 ): Promise<DashboardMetrics> {
   const orgId = authz.user.orgId
   const userId = authz.user.id
