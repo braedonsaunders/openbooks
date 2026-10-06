@@ -2,17 +2,15 @@ import "server-only";
 import { analyticsQuery } from "./query";
 import { analyticsSection } from "./read-context";
 import { sql } from "drizzle-orm";
-import { addMonthsClamped, utcDateFromParts } from "@openbooks/engine/src/platform/business-date.ts";
-import { db } from "@openbooks/engine/src/platform/db.ts";
-import { utcDateFromParts } from "@openbooks/engine/src/platform/business-date.ts";
-import { abs, add, cmp, isZero, mulDecimal, neg, sum } from "@openbooks/engine/src/money/money.ts";
-import { canonicalDecimal, compareDecimal } from "@openbooks/engine/src/money/exact-decimal.ts";
+import { addMonthsClamped, utcDateFromParts } from "@openbooks/engine/platform/civil-date";
+import { abs, add, cmp, isZero, mulDecimal, neg, sum } from "@openbooks/engine/money";
+import { canonicalDecimal, compareDecimal } from "@openbooks/engine/money/decimal";
 import { flowRates } from "../fx-presentation";
 import { defaultFiscalCalendarPeriods } from "../fiscal";
 import type { FiscalPeriod } from "@openbooks/reports";
 import { statementBookExpr } from "../gl-summary";
 import { subsidiaryVisibleFilter } from "../subsidiaries";
-import { financialHealth, priorFiscalWindow, type FinancialHealth, type HealthFigures } from "./financial-health";
+import { financialHealth, type FinancialHealth, type HealthFigures, type HealthPnlFigures } from "./financial-health";
 import { healthStrings, type HealthStrings } from "./health-strings";
 import { englishCatalogMessage } from "./catalog-strings";
 import { evaluateAnalyticsRatio } from "./analytics-ratio";
@@ -488,7 +486,7 @@ async function fiscalPeriodSeries(
   const bucket = (i: number) => `period_${i}`;
   const whens = trailing.map((p, i) => sql`when l.posting_date >= ${p.from}::date and l.posting_date <= ${endOf(p)}::date then ${bucket(i)}`);
   const ranges = trailing.map((p) => sql`(l.posting_date >= ${p.from}::date and l.posting_date <= ${endOf(p)}::date)`);
-  const r = ((await db.execute(sql`
+  const r = ((await analyticsQuery(sql`
     select (case ${sql.join(whens, sql` `)} end) as month,
       sub.base_currency as func,
       max(l.posting_date)::text as late,
@@ -834,8 +832,8 @@ async function itemAnalysis(orgId: string, from: string, to: string, allowed: Re
 }
 
 function buildPnlSummary(
-  f: HealthFigures,
-  prior: HealthFigures,
+  f: HealthPnlFigures,
+  prior: HealthPnlFigures,
   strings: HealthStrings = healthStrings(englishCatalogMessage, "en"),
 ): PnlLine[] {
   const line = (key: Parameters<HealthStrings["pnlLine"]>[0], current: string, priorV: string, strong?: boolean): PnlLine => ({
@@ -1029,7 +1027,6 @@ export async function healthData(
   const { money: formatMoney } = await getMoneyFormatter(orgId)
   const money = (value: string) => formatMoney(value, { maximumFractionDigits: 0 })
   const { from, to } = period;
-  const prior = await priorFiscalWindow(orgId, from, to);
 
   const budgetsOn = await isFeatureEnabled(orgId, "budgets");
   // One healthBands read serves the segment health dots, the client-side
@@ -1040,11 +1037,8 @@ export async function healthData(
   const emptyBudget = (tolerance: BudgetTolerance): BudgetVariance =>
     ({ scenario: null, rows: [], totals: { budget: "0.0000", actual: "0.0000", variance: "0.0000" }, tolerance });
 
-  const [base, priorBase, monthly, forecast, dept, cls, loc, drv, items, budget, policy] = await Promise.all([
+  const [base, monthly, forecast, dept, cls, loc, drv, items, budget, policy] = await Promise.all([
     financialHealth(period, orgId, allowedSubsidiaryIds, strings),
-    analyticsSection('financial-health', ['overview', 'margin'])
-      ? financialHealth({ from: prior.from, to: prior.to, label: "prior" }, orgId, allowedSubsidiaryIds, strings)
-      : Promise.resolve(null),
     monthlySeries(orgId, to, allowedSubsidiaryIds, 12, strings),
     forecastParams(orgId, to),
     analyticsSection('financial-health', ['segments']) ? segmentsBy(orgId, "department_id", "departments", from, to, allowedSubsidiaryIds, configured.segment, strings) : Promise.resolve([]),
@@ -1061,7 +1055,7 @@ export async function healthData(
   return {
     ...base,
     monthly,
-    pnlSummary: priorBase ? buildPnlSummary(base.figures, priorBase.figures, strings) : [],
+    pnlSummary: analyticsSection('financial-health', ['overview', 'margin']) ? buildPnlSummary(base.figures, base.priorFigures, strings) : [],
     marginFlow: buildMarginFlow(base.figures, strings),
     segments: { department: dept, class: cls, location: loc },
     drivers: drv,
