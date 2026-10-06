@@ -45,7 +45,7 @@ test('row cells retain the page scope at nested depths', () => {
   const result = RegisteredListBlockView({
     source: 'data_import_history',
     spec,
-    scope: { heading: 'Record', rows: [{ id: 'one', name: 'First' }] },
+    scope: { heading: 'Record', rows: [{ id: 'one', name: 'First' }], total: 1, currentPage: 1, perPage: 25 },
     searchParams: {},
   })
   assert.equal(result.props.columns[0].header, 'Record')
@@ -66,7 +66,7 @@ test('record identity comes from the source even when a saved layout supplies an
   const result = RegisteredListBlockView({
     source: 'data_import_history',
     spec,
-    scope: { rows: [{ id: 'stable-id', name: 'Mutable display name' }] },
+    scope: { rows: [{ id: 'stable-id', name: 'Mutable display name' }], total: 1, currentPage: 1, perPage: 25 },
     searchParams: {},
   })
   assert.equal(result.props.rowKey(result.props.rows[0], 0), 'stable-id')

@@ -131,7 +131,9 @@ const hooks = registerHooks({
     if (context.parentURL?.startsWith("mock:")) {
       return nextResolve(specifier, { ...context, parentURL: import.meta.url });
     }
-    if (specifier === './db.ts' && context.parentURL?.endsWith('/platform/accounting-books.ts')) {
+    // The shared analytics reader reads through the engine's public database entry.
+    if ((specifier === './db.ts' && context.parentURL?.endsWith('/platform/accounting-books.ts')) ||
+      (specifier === '@openbooks/engine/platform/database' && context.parentURL?.endsWith('/analytics/query.ts'))) {
       return { url: 'mock:db', shortCircuit: true };
     }
     const mocked = mockUrls.get(specifier);

@@ -216,8 +216,9 @@ test("the position table renders a vacancy refusal from each row", () => {
   const spec = positionsSpec(data);
   const grid = spec.body.find((block) => block.kind === "grid");
   assert.ok(grid && grid.kind === "grid");
-  const table = grid.blocks.find((block) => block.kind === "table");
-  assert.ok(table && table.kind === "table");
+  const list = grid.blocks.find((block) => block.kind === "widget" && block.widget === "registered-record-list");
+  const table = list?.kind === "widget" ? list.props?.table as Extract<(typeof grid.blocks)[number], { kind: "table" }> | undefined : undefined;
+  assert.ok(table && table.kind === "table", "the register renders through the shared registered list");
   const refusalColumn = table.columns.find((column) => column.header === "Vacancy refusal");
   assert.ok(refusalColumn, "the refusal has a visible table column");
   assert.deepEqual(refusalColumn.cell, { kind: "text", field: { $: "refusal" }, fallback: "—" });

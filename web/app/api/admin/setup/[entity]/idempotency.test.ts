@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { registerHooks } from "node:module";
 import { NextResponse } from "next/server";
+import { withPlatformDbTestSurface } from "../../../../../testing/stub-modules";
 
 // Idempotent SetupDrawer creates (POST /api/admin/setup/[entity]).
 //
@@ -64,33 +65,27 @@ const mockAuthz = `
   }
 `;
 
-const mockDb = `
+const mockDb = withPlatformDbTestSurface(`
   const state = globalThis[Symbol.for('openbooks.setup-idempotency-test')]
   async function execute(query) { return state.fakeExecute(query) }
   async function transaction(work) { return work({ execute }) }
   export const db = { execute, transaction }
   // Pass-throughs for engine modules loaded in the graph but never exercised
   // on these paths; anything reaching them throws through the fake instead.
-  export async function withBypass(fn) { return fn() }
-  export async function withBypassContext(fn) { return fn() }
   export async function withOrg(...args) { const fn = args[args.length - 1]; return fn() }
   export async function withOrgTransaction(...args) { const fn = args[args.length - 1]; return fn({ execute }) }
   export async function withOrgContext(...args) { const fn = args[args.length - 1]; return fn() }
   export async function withMaintenanceTransaction(...args) { const fn = args[args.length - 1]; return fn({ execute }) }
   export async function withTransactionSavepoint(...args) { const fn = args[args.length - 1]; return fn({ execute }) }
   export async function inDbTransaction(fn) { return fn({ execute }) }
-  export async function inExecutorTransaction(executor, fn) { return fn(executor) }
   export const env = {}
   export const pool = null
   export const longPool = null
   export const schema = {}
   export const orgContext = { getStore: () => undefined, run: (_store, fn) => fn() }
-  export function registerRequestOrgResolver() {}
-  export function currentRequestOrgResolver() { return null }
-  export function ambientTenantOrgId() { return null }
   export async function assertSafeRuntimeDatabaseRole() {}
   export async function connectGovernedReadClient() { throw new Error('no database in the idempotency test') }
-`;
+`);
 
 registerHooks({
   resolve(specifier, context, nextResolve) {

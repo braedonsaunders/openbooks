@@ -2500,7 +2500,8 @@
         "currency": "Währung",
         "amount": "Betrag",
         "entry_id": "Buchung",
-        "asset_id": "Anlagenschlüssel"
+        "asset_id": "Anlagenschlüssel",
+        "book_id": "Buch-ID"
       },
       "billing_import_reconciliation": {
         "run_id": "Importlauf (ID)",

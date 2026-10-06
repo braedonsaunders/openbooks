@@ -47,6 +47,9 @@ export const BILLING_IMPORT_REPORT_ENTITIES: ReportEntity[] = [
        where r.reconciliation is not null
     ) recon`,
     orgColumn: "recon.org_id",
+    // Import runs are organization-level evidence with no subsidiary, so no
+    // clamp applies; the sync grant and the feature switch are the gates.
+    subsidiaryScope: null,
     requiredPermission: "sync.run",
     featureKey: "billingHistoryImport",
     defaultPeriodField: null,

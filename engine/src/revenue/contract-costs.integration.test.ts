@@ -179,11 +179,10 @@ test(
         });
         assert.equal(run.posted, 1, `period ${name} posts one amortization`);
         assert.deepEqual(run.problems, []);
-        for (const entry of run.entries) {
-          const balance = await entryBalance(entry.entryId);
-          assert.equal(balance.lines, 2);
-          assert.equal(balance.balanced, true, "every amortization entry balances");
-        }
+        assert.equal(run.entries.length, 1, `period ${name} returns its amortization entry`);
+        const balance = await entryBalance(run.entries[0]!.entryId);
+        assert.equal(balance.lines, 2);
+        assert.equal(balance.balanced, true, `period ${name} amortization entry balances`);
       }
       const posted = (await db.execute<{ total: string }>(sql`
         select coalesce(sum(amount_minor), 0)::text as total

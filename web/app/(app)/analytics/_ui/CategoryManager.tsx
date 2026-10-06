@@ -410,7 +410,9 @@ export function CategoryManager({
                 </div>
                 <div>
                   <label className={labelCls}>{tForm('frequency')}</label>
-                  <Select value={draft.frequency ?? ''} onChange={(e) => set({ frequency: e.target.value as ForecastCategory['frequency'] })} placeholder={tForm('frequencyPlaceholder')} triggerClassName="h-8 text-sm">
+                  <Select value={draft.frequency ?? ''} onChange={(e) => set({ frequency: e.target.value as ForecastCategory['frequency'] })} triggerClassName="h-8 text-sm">
+                    {/* The empty choice keeps an unset cadence unset in the form control too, instead of reading as the first cadence. */}
+                    <option value="" disabled>{tForm('frequencyPlaceholder')}</option>
                     <option value="weekly">{tForm('frequencyWeekly')}</option>
                     <option value="biweekly">{tForm('frequencyBiweekly')}</option>
                     <option value="monthly">{tForm('frequencyMonthly')}</option>

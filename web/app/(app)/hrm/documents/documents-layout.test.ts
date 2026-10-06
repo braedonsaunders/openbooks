@@ -7,7 +7,7 @@ import test from 'node:test'
 const { documentsSpec } = await import('./view.ts')
 
 /**
- * /CK-32b: the signed-document rows were visually overlapped by the
+ * The signed-document rows were visually overlapped by the
  * Document templates section — elementFromPoint at a row-link centre hit
  * the templates TH/TD. The first fix removed the register grid's own
  * h-full, but the served build still failed: the real compressor is the
@@ -45,7 +45,8 @@ function bodyBlocks(): Block[] {
 function findBlocks(blocks: Block[], kind: string, out: Block[] = []): Block[] {
   for (const block of blocks) {
     if (block.kind === kind) out.push(block)
-    if (Array.isArray(block.blocks)) findBlocks(block.blocks, kind, out)
+    // A registered record list carries its table block in its widget props.
+    findBlocks([...(block.blocks ?? []), ...(block.props?.table ? [block.props.table as Block] : [])], kind, out)
   }
   return out
 }
@@ -63,7 +64,7 @@ function registerGrid(): Block {
   return registerGrids[0]!
 }
 
-test('CK-32b: the page body is not a viewport-locked flex column', () => {
+test('the page body is not a viewport-locked flex column', () => {
   const spec = documentsSpec(stubData() as never) as { bodyClassName?: unknown }
   const className = String(spec.bodyClassName ?? '')
   for (const clamp of ['h-full', 'h-screen', 'h-dvh', 'h-svh', 'max-h-', 'min-h-screen']) {

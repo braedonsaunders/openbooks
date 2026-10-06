@@ -56,6 +56,7 @@ function position(byCustomer: { partyId: string; partyName: string; amount: stri
     byCustomer,
     worklist: [],
     categories: [],
+    unavailableCategories: [],
     timeline: [],
   } as never;
 }

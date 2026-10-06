@@ -110,7 +110,7 @@ export function SubscriptionDrawer({ drawer, closeHref }: { drawer: Subscription
           </div>
           <div className="flex justify-between gap-4">
             <dt className="text-muted-foreground">{t('billing.autoPost')}</dt>
-            <dd>{drawer.autoPost ? common('yes') : common('no')}</dd>
+            <dd>{drawer.autoPost ? common('labels.yes') : common('labels.no')}</dd>
           </div>
         </dl>
         {drawer.canManage ? (

@@ -2500,7 +2500,8 @@
         "currency": "Currency",
         "amount": "Amount",
         "entry_id": "Journal entry",
-        "asset_id": "Asset key"
+        "asset_id": "Asset key",
+        "book_id": "Book ID"
       },
       "billing_import_reconciliation": {
         "run_id": "Import run (id)",

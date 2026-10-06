@@ -2500,7 +2500,8 @@
         "currency": "通貨",
         "amount": "金額",
         "entry_id": "仕訳",
-        "asset_id": "資産キー"
+        "asset_id": "資産キー",
+        "book_id": "帳簿ID"
       },
       "billing_import_reconciliation": {
         "run_id": "インポート実行 (ID)",

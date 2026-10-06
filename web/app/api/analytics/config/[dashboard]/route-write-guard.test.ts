@@ -79,7 +79,6 @@ const mockSources = new Map<string, string>([
 const mockUrls = new Map<string, string>([
   ["../../../../../lib/features", "mock:features"],
   ["../features", "mock:features"],
-  ["@openbooks/engine/src/platform/db.ts", "mock:db"],
 ]);
 let dbRealUrl = ''
 
@@ -89,8 +88,10 @@ registerHooks({
       const real = nextResolve(specifier, context).url;
       return { shortCircuit: true, format: "module", url: `data:text/javascript,${encodeURIComponent(`export { guardUnrestrictedScope } from ${JSON.stringify(real)}; const state = globalThis[Symbol.for('openbooks.analytics-config-write-guard-test')]; export async function guardPermission() { return { user: { orgId: 'org-1', id: 'user-1', roles: [] }, permissions: new Set(['*']), allowedSubsidiaryIds: state.allowedSubsidiaryIds }; }`)}` };
     }
-    if (specifier === "@openbooks/engine/src/platform/db.ts") {
-      dbRealUrl = nextResolve(specifier, context).url
+    // Presentation currency reads through the analytics reader's public database entry.
+    if (specifier === "@openbooks/engine/src/platform/db.ts" ||
+      (specifier === "@openbooks/engine/platform/database" && context.parentURL?.endsWith("/analytics/query.ts"))) {
+      dbRealUrl ||= nextResolve("@openbooks/engine/src/platform/db.ts", context).url
       return { url: "mock:db", shortCircuit: true }
     }
     const mocked = mockUrls.get(specifier);

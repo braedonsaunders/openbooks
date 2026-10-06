@@ -315,7 +315,7 @@ export function PlanVersionEntitlementsDrawer({
           </Field> : null}
           <Button variant="outline" onClick={onClose}>{actions("cancel")}</Button>
           {readReady ? <Button onClick={save} disabled={saving || loading || changedCount === 0}>
-            {saving ? t("saving") : `${et("saveGrants")} (${changedCount})`}
+            {saving ? actions("saving") : `${et("saveGrants")} (${changedCount})`}
           </Button> : null}
         </>
       }
@@ -576,7 +576,7 @@ export function SubscriptionEntitlementsDrawer({
             </div>
             <div>
               <Button onClick={saveOverride} disabled={saving || form.featureKey === "" || form.reason.trim() === ""}>
-                {saving ? t("saving") : et("saveOverride")}
+                {saving ? actions("saving") : et("saveOverride")}
               </Button>
             </div>
           </div>

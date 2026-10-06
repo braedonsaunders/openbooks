@@ -105,7 +105,7 @@ test('an empty account panel names the setup remedy and links to Banking', async
     totalInflows: '0.00', totalOutflows: '0.00', netChange: '0.00', projectedEnd: '3750.00',
     lowestCash: '3750.00', lowestWeek: '2026-09-24', burnRate: '0.00', runwayWeeks: null,
     runwayStatus: 'healthy', deferredBeyondHorizon: '0.00', dso: 0, dpo: 0,
-    arOutstanding: '0.00', apOutstanding: '0.00', arCoverage: null, categories: [],
+    arOutstanding: '0.00', apOutstanding: '0.00', arCoverage: null, categories: [], unavailableCategories: [],
     apSettings: { weeklyCap: '0.00', restrictToSafe: false }, vendorOptions: [], accountOptions: [], subsidiaryOptions: [],
   } as unknown as React.ComponentProps<typeof CashCockpit>['data']
 

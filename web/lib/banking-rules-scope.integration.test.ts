@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict'
+import { spawnSync } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
 import test from 'node:test'
 const { sql } = await import('drizzle-orm')
-const { withBypassContext, db, env } = await import('@openbooks/engine/src/platform/db.ts')
+const { withBypass, withBypassContext, db, env } = await import('@openbooks/engine/src/platform/db.ts')
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import('@openbooks/engine/src/testing/fixtures.ts')
 const { importStatement, startReconciliation } = await import('@openbooks/engine/src/banking/banking.ts')
 const { ScopeNotFoundError } = await import('@openbooks/engine/src/organization/subsidiary-scope.ts')
@@ -13,6 +14,7 @@ const {
   ensureOpenReconciliation,
   previewRules,
 } = await import('./banking-rules.ts')
+const { entityListSource } = await import('./list/entity-sources.ts')
 
 // Bank-rule services inherit the banking subsidiary boundary: every entry
 // point that resolves an account or a statement line refuses an out-of-scope
@@ -167,11 +169,7 @@ test('previewRules refuses an out-of-scope account without reading lines', { ski
 
 
 const consolidatedRows = [
-  { label: "banking list filter scope", register: async () => {
-        const { db, env, withBypass } = await import('@openbooks/engine/src/platform/db.ts')
-        const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
-        const { entityListSource } = await import('./list/entity-sources.ts')
-
+  { label: "banking list filter scope", register: () => {
         test('banking account filter options honor the caller subsidiary scope', { skip: !env.OPENBOOKS_DB_URL }, async () => {
           const scratch = await withBypass(() => createScratchOrg())
           try {
@@ -221,8 +219,7 @@ const consolidatedRows = [
           }
         })
   } },
-  { label: "banking rules", register: async () => {
-        const { spawnSync }=await import("node:child_process");
+  { label: "banking rules", register: () => {
         function runIntegrationSource(source: string): void {
           const result = spawnSync(
             process.execPath,
@@ -700,7 +697,7 @@ const consolidatedRows = [
   } },
 ] as const;
 
-for(const row of consolidatedRows) await row.register();
+for (const row of consolidatedRows) row.register();
 
 test('applyRulesToAccount reports a refused line and still applies the rest', { skip: !env.OPENBOOKS_DB_URL }, async () => {
   const fx = await fixture()

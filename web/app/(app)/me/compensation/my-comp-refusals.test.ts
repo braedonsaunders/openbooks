@@ -36,7 +36,8 @@ stubModules({
     const t = (key, params) => lookup(key);
     t.has = (key) => lookup(key) !== key;
     return t;
-  }`,
+  }
+  export async function getLocale() { return "en"; }`,
   authz: false,
   features: false,
 });

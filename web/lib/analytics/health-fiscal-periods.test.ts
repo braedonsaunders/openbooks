@@ -50,7 +50,9 @@ const mocks: Record<string, string> = {
     revenueGrowth:null,breakevenRevenue:null,operatingLeverage:null,rule40:null}}}`,
 };
 registerHooks({ resolve(specifier, context, next) {
-  if (specifier in mocks) return { shortCircuit: true, url: 'data:text/javascript,' + encodeURIComponent(mocks[specifier]!) };
+  if (specifier === "@openbooks/engine/platform/database" && context.parentURL?.endsWith("/analytics/query.ts")) specifier = "@openbooks/engine/src/platform/db.ts";
+  // Relative doubles stand in for web/lib siblings only; a package's own `./config` stays real.
+  if (specifier in mocks && (!specifier.startsWith(".") || context.parentURL?.includes("/web/lib/"))) return { shortCircuit: true, url: 'data:text/javascript,' + encodeURIComponent(mocks[specifier]!) };
   return next(specifier, context);
 } });
 const { healthData } = await import("./health-data");

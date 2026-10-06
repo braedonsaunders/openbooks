@@ -25,7 +25,10 @@ const dialect = new PgDialect()
 function elements(node: unknown): React.ReactElement<Record<string, unknown>>[] {
   if (Array.isArray(node)) return node.flatMap(elements)
   if (!React.isValidElement<Record<string, unknown>>(node)) return []
-  return [node, ...elements(node.props.children)]
+  // List tables render their row links through column cells.
+  const { rows, columns } = node.props as { rows?: unknown[]; columns?: { cell?: (row: unknown) => unknown }[] }
+  const cells = Array.isArray(rows) && Array.isArray(columns) ? rows.flatMap((row) => columns.map((column) => column.cell?.(row))) : []
+  return [node, ...elements(node.props.children), ...elements(cells)]
 }
 
 test('nested setup lists, edit selection and new values stay bound to the owning record', async () => {

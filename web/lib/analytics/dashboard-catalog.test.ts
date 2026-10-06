@@ -101,13 +101,12 @@ const hooks = registerHooks({
     return next(specifier, context)
   },
 })
+const { ModuleView } = await import('../../components/viewspec/module-view')
 test.after(() => {
   hooks.deregister()
   mock.restoreAll()
   Reflect.deleteProperty(globalThis, stateKey)
 })
-
-const { ModuleView } = await import('../../components/viewspec/module-view')
 
 interface DashboardPageProps {
   spec: PageSpec

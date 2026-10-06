@@ -74,10 +74,7 @@ const _hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
     const mocked = mockUrls.get(specifier)
     if (mocked) return { url: mocked, shortCircuit: true }
-    if (specifier.startsWith('@openbooks/forms-core') && context.parentURL) {
-      return nextResolve(new URL('../../../../../packages/forms-core/src/index.ts', context.parentURL).href, context)
-    }
-    return nextResolve(specifier)
+    return nextResolve(specifier, context)
   },
   load(url, context, nextLoad) {
     const source = mockSources.get(url)

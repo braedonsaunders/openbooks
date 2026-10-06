@@ -4,6 +4,7 @@ import { registeredListTable } from '../../../../../../lib/list/prepared-spec'
 import { getCycle, CompensationError } from '@openbooks/engine/hrm/compensation'
 import { notFound } from 'next/navigation'
 import { requireFeatureEnabled } from '../../../../../../lib/feature-gates'
+import { can } from '../../../../../../lib/authz'
 import {
   badge,
   column,
@@ -130,7 +131,9 @@ export function compCycleSpec(data: NonNullable<Awaited<ReturnType<typeof loadCo
 
 export async function compCycleTitle(cycleId: string): Promise<string> {
   const authz = await compensationAuthz()
-  if (!authz) notFound()
+  // The grant is decided before the feature remedy, so a reader without
+  // compensation access never learns which module switch is off.
+  if (!authz || !can(authz, 'hrm.compensation.read')) notFound()
   await requireFeatureEnabled(authz.user.orgId, 'hrmCompensation')
   try { return (await getCycle({ orgId: authz.user.orgId, actorId: authz.user.id, cycleId })).name }
   catch (error) { if (error instanceof CompensationError && error.code === 'NOT_FOUND') notFound(); throw error }
@@ -138,7 +141,7 @@ export async function compCycleTitle(cycleId: string): Promise<string> {
 
 export async function loadCompCyclePage(cycleId: string, sp: Record<string, string | undefined>) {
   const authz = await compensationAuthz()
-  if (!authz) notFound()
+  if (!authz || !can(authz, 'hrm.compensation.read')) notFound()
   await requireFeatureEnabled(authz.user.orgId, 'hrmCompensation')
   let cycle
   try { cycle = await getCycle({ orgId: authz.user.orgId, actorId: authz.user.id, cycleId }) }

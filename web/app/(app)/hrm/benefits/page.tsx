@@ -9,7 +9,6 @@ import { ProgramWorkspace } from './ProgramWorkspace'
 import { getBenefitsProgramWorkspace, BenefitsError, type BenefitsProgramWorkspace } from '@openbooks/engine/hrm/benefits'
 import { db } from '@openbooks/engine/platform/database'
 import { isUuid } from '../../../../lib/list-params'
-import { isFeatureEnabled } from '../../../../lib/features'
 import { notFound } from 'next/navigation'
 import { ModuleView } from '../../../../components/viewspec/module-view'
 import { benefitsSpec, benefitsTitle, loadBenefitsPage } from './view'
@@ -34,7 +33,8 @@ export default async function BenefitsPage({ searchParams }: {searchParams: Prom
     try { workspace = await getBenefitsProgramWorkspace(db, authz.user.orgId, authz.user.id, sp.program, {participantOffset:(pageNumber('participantsPage')-1)*100,activityOffset:(pageNumber('activityPage')-1)*100}) }
     catch (error) { if (error instanceof BenefitsError && error.code === 'NOT_FOUND') notFound(); if (!(error instanceof BenefitsError)) throw error; programRefusal=error.message }
   }
-  if ((workspace?.program.nativeKind === 'entitlement' || sp.kind === 'time_off') && !await isFeatureEnabled(authz.user.orgId,'payroll')) notFound()
+  // Time-off entitlements accrue through Payroll; a switched-off Payroll names that remedy.
+  if (workspace?.program.nativeKind === 'entitlement' || sp.kind === 'time_off') await requireFeatureEnabled(authz.user.orgId,'payroll')
   const data = await loadBenefitsPage(sp)
   if (programRefusal) { data.refusal={title:data.title,message:programRefusal}; data.hasContent=false }
   return <>

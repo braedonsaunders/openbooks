@@ -34,6 +34,10 @@ export const CONTRACT_COST_REPORT_ENTITIES: ReportEntity[] = [
            and je.status in ('posted', 'reversed')
       ) g on true`,
     orgColumn: "a.org_id",
+    // Assets carry no subsidiary: a capitalized cost belongs to its contract,
+    // not to a legal-entity posting scope, so no clamp applies, matching the
+    // contract cost asset list. The read grant and feature switch gate it.
+    subsidiaryScope: null,
     timeKey: "capitalized_on",
     columns: [
       { key: "id", label: "Asset key", kind: "uuid", expr: "a.id" },
@@ -95,6 +99,7 @@ export const CONTRACT_COST_REPORT_ENTITIES: ReportEntity[] = [
       { key: "currency", label: "Currency", kind: "text", expr: "jl.currency" },
       { key: "amount", label: "Amount", kind: "money", expr: "jl.amount", txnCurrency: true },
       { key: "entry_id", label: "Journal entry", kind: "uuid", expr: "jl.entry_id" },
+      { key: "book_id", label: "Book (id)", kind: "uuid", expr: "je.book_id" },
       { key: "asset_id", label: "Asset key", kind: "uuid", expr: "a.id" },
     ],
   },
