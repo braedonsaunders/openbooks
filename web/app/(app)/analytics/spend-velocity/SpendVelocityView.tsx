@@ -1,6 +1,7 @@
 'use client'
 
 import { useAnalyticsTab, AnalyticsTabContent } from '../use-analytics-tab'
+import { ANALYTICS_TABS } from '../../../../lib/analytics/dashboard-tabs'
 
 import { RecordTabs } from '@/components/module-home/record-tabs'
 
@@ -30,7 +31,7 @@ import { InteractiveTableRow } from '@/components/interactive-table-row'
 /* ------------------------------------------------------------------ helpers */
 
 // 'expenses' moved out: the expense-report analysis now lives on the /expenses dashboard.
-const TABS = ['overview', 'velocity', 'detectors', 'accounts', 'trends', 'config'] as const
+const TABS = ANALYTICS_TABS['spend-velocity']
 type Tab = (typeof TABS)[number]
 /** Velocity pill colouring from the org's own high/medium thresholds. */
 function velTone(v: number, hi: number, med: number) {

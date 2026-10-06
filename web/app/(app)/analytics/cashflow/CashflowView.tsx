@@ -1,6 +1,7 @@
 'use client'
 
 import { useAnalyticsTab, AnalyticsTabContent } from '../use-analytics-tab'
+import { ANALYTICS_TABS } from '../../../../lib/analytics/dashboard-tabs'
 
 import { RecordTabs } from '@/components/module-home/record-tabs'
 
@@ -37,7 +38,7 @@ import { categoryRefusalText } from '../_ui/category-refusal-text'
 // Analysis only — the interactive surfaces this view used to carry moved to
 // their operational homes at full fidelity: the weekly timeline + forecast
 // categories to Banking → Cash, the AP pay-selection rule to the AP cockpit.
-const TABS = ['overview', 'category'] as const
+const TABS = ANALYTICS_TABS.cashflow
 // Bucket colours key off the cash-core bucket codes (Current, 1-30, …),
 // which travel with the data and never localize.
 const BUCKET_COLORS: Record<string, string> = { Current: '#10b981', '1-30': '#14b8a6', '31-60': '#0ea5e9', '61-90': '#f59e0b', '90+': '#ef4444' }
