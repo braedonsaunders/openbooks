@@ -2,7 +2,8 @@
  *
  * Analytics routes emit `{error: message}` (see `web/lib/api/error-response.ts`
  * `apiErrorResponse`); surfacing only the HTTP status turns a named 422
- * ("no spot rate for EUR to USD on or before DATE") into a generic load
+ * ("no spot rate for EUR→USD on or before DATE — add it at Setup → Exchange
+ * Rates") into a generic load
  * failure. Falls back to the status when the body is unreadable or carries
  * no message.
  */

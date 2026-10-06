@@ -120,6 +120,7 @@
       "next30": "Próximos 30 días",
       "dpo": "Días de pago (DPO)",
       "dpoSub": "Días promedio de pago",
+      "dpoEmpty": "Sin historial de pagos",
       "days": "{n} d"
     },
     "panels": {

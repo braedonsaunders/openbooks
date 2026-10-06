@@ -16,6 +16,7 @@
       "closedQuarter": "Facturado este trimestre",
       "dso": "Días de cobro",
       "dsoSub": "Días promedio para cobrar",
+      "dsoEmpty": "Sin historial de cobros",
       "days": "{n} d",
       "activeCustomers": "Clientes activos",
       "quotesOrders": "Cotizaciones y pedidos abiertos",

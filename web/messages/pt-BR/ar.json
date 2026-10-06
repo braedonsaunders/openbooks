@@ -139,6 +139,7 @@
       "next30": "Próximos 30 dias",
       "dso": "Prazo médio de recebimento (DSO)",
       "dsoSub": "Média de dias para receber",
+      "dsoEmpty": "Sem histórico de recebimentos",
       "days": "{n} d",
       "asOf": "Em {date}"
     },

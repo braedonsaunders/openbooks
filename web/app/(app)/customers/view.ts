@@ -272,7 +272,7 @@ export async function loadCustomers(
     overdueLabel: t('home.vitals.overdue'),
     overdueSub: t('home.vitals.overdueSub', { count: data.overdueInvoices }),
     dsoLabel: t('home.vitals.dso'),
-    dsoSub: t('home.vitals.dsoSub'),
+    dsoSub: data.dso === null ? t('home.vitals.dsoEmpty') : t('home.vitals.dsoSub'),
     closedQuarterLabel: t('home.vitals.closedQuarter'),
     closedQuarterValue: moneyCompact(data.pipeline.closed),
     quotesOrdersLabel: t('home.vitals.quotesOrders'),

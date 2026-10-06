@@ -76,7 +76,7 @@ test('utilization entries drill refuses by name on missing FX coverage', async (
       );
       assert.equal(response.status, 422);
       const body = await response.json() as { error: string };
-      assert.equal(body.error, 'no spot rate for EUR→CAD on or before 2026-07-15');
+      assert.equal(body.error, 'no spot rate for EUR→CAD on or before 2026-07-15 — add it at Setup → Exchange Rates');
     });
   } finally {
     state.user = null;

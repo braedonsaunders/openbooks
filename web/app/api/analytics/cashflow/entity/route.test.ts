@@ -256,7 +256,7 @@ test("entity totalPaid refuses when a payment leg has no exchange rate", async (
   const response = await GET(request());
   assert.equal(response.status, 422);
   const body = await response.json();
-  assert.equal(body.error, "no spot rate for CAD→USD on or before 2026-08-12");
+  assert.equal(body.error, "no spot rate for CAD→USD on or before 2026-08-12 — add it at Setup → Exchange Rates");
 });
 
 // The drill's own live aggregate joined reversed entries without

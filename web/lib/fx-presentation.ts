@@ -98,8 +98,8 @@ export async function presentationRates(
   const missing = needed.filter((c) => !rates.has(c));
   if (missing.length > 0) {
     // One typed refusal for the cash tiles and forecast readers to catch
-    // exactly; several missing currencies report the first.
-    throw new MissingExchangeRateError(missing[0]!, base, refDate);
+    // exactly; every missing currency is named, never just the first.
+    throw new MissingExchangeRateError(missing[0]!, base, refDate, missing);
   }
   return rates;
 }
@@ -122,14 +122,23 @@ export interface FlowRates {
 
 export class MissingExchangeRateError extends Error {
   readonly status = 422
+  /** First missing functional — the structured readers key on this. */
   readonly func: string
+  /** Every missing functional — the message names them all, never just the first. */
+  readonly funcs: string[]
   readonly base: string
   readonly date: string
 
-  constructor(func: string, base: string, date: string) {
-    super(`no spot rate for ${func}→${base} on or before ${date}`)
+  constructor(func: string, base: string, date: string, funcs?: string[]) {
+    const all = funcs?.length ? [...new Set(funcs)] : [func]
+    super(
+      all.length === 1
+        ? `no spot rate for ${all[0]}→${base} on or before ${date} — add it at Setup → Exchange Rates`
+        : `no spot rates for ${all.map((f) => `${f}→${base}`).join(', ')} on or before ${date} — add them at Setup → Exchange Rates`,
+    )
     this.name = 'MissingExchangeRateError'
-    this.func = func
+    this.func = all[0]!
+    this.funcs = all
     this.base = base
     this.date = date
   }

@@ -16,6 +16,7 @@
       "closedQuarter": "Invoiced this quarter",
       "dso": "Days sales out",
       "dsoSub": "Avg days to collect",
+      "dsoEmpty": "No collection history yet",
       "days": "{n}d",
       "activeCustomers": "Active customers",
       "quotesOrders": "Open quotes & orders",

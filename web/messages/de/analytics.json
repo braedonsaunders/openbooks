@@ -2201,7 +2201,7 @@
       }
     },
     "unplacedAr": "{count, plural, one {# Rechnung hat} other {# Rechnungen haben}} weder Fälligkeitsdatum noch Zahlungshistorie · {total} nicht prognostiziert.",
-    "unplacedAp": "{count, plural, one {# Rechnung hat} other {# Rechnungen haben}} weder Fälligkeitsdatum noch Zahlungshistorie · {total} nicht prognostiziert."
+    "unplacedAp": "{count, plural, one {# Eingangsrechnung hat} other {# Eingangsrechnungen haben}} weder Fälligkeitsdatum noch Zahlungshistorie · {total} nicht prognostiziert."
   },
   "trueCost": {
     "title": "Echte Kosten",

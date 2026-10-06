@@ -119,7 +119,8 @@ export function DrillDrawer({ target, from, to, onClose }: { target: DrillTarget
     fetch(`/api/analytics/drill?${target.kind}=${target.id}&from=${from}&to=${to}`, { signal: ctrl.signal })
       .then(async (r) => {
         // The drill route refuses with a NAMED 422 (e.g. "no spot rate for
-        // EUR to USD on or before DATE"): surface the refusal body, not just
+        // EUR→USD on or before DATE — add it at Setup → Exchange Rates"):
+        // surface the refusal body, not just
         // the status, or the drawer reports a generic load failure.
         if (!r.ok) throw new Error(await refusalMessage(r))
         return r.json()
