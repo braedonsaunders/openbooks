@@ -10,6 +10,7 @@ import { DB, setupHarness, withHarness, seedEmployment, setFeatures } from '../t
 import { seedPayrollSchedule, seedPayrollProfile } from '../testing/fixtures.ts';
 import { saveOpeningBalances } from './opening-balances.ts';
 import { savePayrollPeriodOpening } from './period-opening-store.ts';
+import { payrollPeriodOpeningForEmployee } from './period-opening-reader.ts';
 import { CA_PERIOD_OPENING_TREATMENT } from './canada/period-openings.ts';
 
 const spec = { features: ['payroll', 'hrm'], country: 'CA', users: [
@@ -64,6 +65,15 @@ test('apply retains exact source amounts and one complete audit while replay cre
     const saved = await savePayrollPeriodOpening(input(f));
     assert.equal(saved.changed, true); assert.ok(saved.record);
     assert.equal(saved.record.amounts.cpp, '11.6300'); assert.equal(saved.record.revision, 1);
+    const view = await payrollPeriodOpeningForEmployee({ orgId: f.org.orgId, actorId: f.readerId,
+      employeePartyId: f.workerPartyId, taxYear: 2026, allowedSubsidiaryIds: null });
+    assert.deepEqual(view.record, saved.record);
+    assert.equal(view.annualUpdatedAt, saved.annualUpdatedAt);
+    assert.deepEqual(view.fields, CA_PERIOD_OPENING_TREATMENT.fields);
+    assert.ok(view.schedules.some(schedule => schedule.id === f.scheduleId));
+    assert.ok(view.currencies.some(currency => currency.value === 'CAD'));
+    await assert.rejects(payrollPeriodOpeningForEmployee({ orgId: f.org.orgId, actorId: f.readerId,
+      employeePartyId: f.workerPartyId, taxYear: 2026, allowedSubsidiaryIds: new Set() }), /unavailable in your payroll scope/);
     const after = await counts(f.org.orgId);
     assert.equal(after.openings, before.openings + 1); assert.equal(after.audits, before.audits + 1);
     assert.equal(after.stubs, before.stubs); assert.equal(after.ledger, before.ledger);

@@ -21,6 +21,7 @@ import { apiJson, ApiResponseError } from '../../../../lib/api-error'
 import { PagedTable } from '../../../../components/paged-table'
 import { RecordTabs } from '../../../../components/module-home/record-tabs'
 import { MoneyInput, moneyFieldError } from '../../../../components/money-input'
+import { PeriodOpeningForm, type PeriodOpeningDraft } from './PeriodOpeningForm'
 import type {
   OpeningBalanceRow,
   OpeningBalanceYear,
@@ -141,7 +142,9 @@ function OpeningBalancesYearView({
   const [skipped, setSkipped] = useState<SaveError[]>([])
   const [onlyMissing, setOnlyMissing] = useState(false)
   const [activeId, setActiveId] = useState<string | null>(null)
-  const [section, setSection] = useState<'ytd' | 'bases' | 'caps'>('ytd')
+  const [section, setSection] = useState<'ytd' | 'bases' | 'caps' | 'period'>('ytd')
+  const [periodDrafts, setPeriodDrafts] = useState<Record<string, PeriodOpeningDraft>>({})
+  const [periodBusy, setPeriodBusy] = useState(false)
   const workspace = useTranslations('payroll.openingBalances.workspace')
 
   const years = useMemo(() => {
@@ -320,16 +323,18 @@ function OpeningBalancesYearView({
     ? initial.rows.filter((r) => r.amounts === null && !r.locked)
     : initial.rows
   const activeRow = initial.rows.find((row) => row.employeePartyId === activeId)
+  const unsavedEmployeeCount = new Set([...dirtyIds, ...Object.entries(periodDrafts)
+    .filter(([, period]) => period.dirty).map(([employeeId]) => employeeId)]).size
   useEffect(() => {
-    onDirtyChange?.(dirtyIds.length)
-  }, [dirtyIds.length, onDirtyChange])
+    onDirtyChange?.(unsavedEmployeeCount)
+  }, [unsavedEmployeeCount, onDirtyChange])
   const missingCount = initial.rows.filter(
     (r) => r.amounts === null && !r.locked,
   ).length
   const lockedCount = initial.rows.filter((r) => r.locked).length
 
   const save = async () => {
-    if (dirtyIds.length === 0) return
+    if (dirtyIds.length === 0 || periodBusy || saving) return
     setSaving(true)
     setErrors([])
     const fallback = text('saveFailed', 'Nothing was saved.')
@@ -782,7 +787,7 @@ function OpeningBalancesYearView({
       <Drawer
         open={!!activeRow}
         onClose={() => {
-          if (!saving) setActiveId(null)
+          if (!saving && !periodBusy) setActiveId(null)
         }}
         title={activeRow?.employeeName ?? workspace('employees')}
         description={`${year} · ${[activeRow?.employeeNumber, activeRow?.country, activeRow?.province].filter(Boolean).join(' · ')}`}
@@ -791,7 +796,7 @@ function OpeningBalancesYearView({
           <RecordTabs
             label={workspace('balanceSections')}
             active={section}
-            onChange={setSection}
+            onChange={next => { if (!periodBusy) setSection(next) }}
             tabs={[
               { key: 'ytd', label: workspace('ytd') },
               {
@@ -807,6 +812,7 @@ function OpeningBalancesYearView({
                 label: workspace('caps'),
                 count: components.length,
               },
+              { key: 'period', label: t('openingBalances.period.title'), disabled: periodBusy },
             ]}
           />
         }
@@ -815,13 +821,13 @@ function OpeningBalancesYearView({
             <p className="text-xs text-slate-500">{workspace('draftHint')}</p>
             <Button
               variant="outline"
-              disabled={saving}
+              disabled={saving || periodBusy}
               onClick={() => setActiveId(null)}
             >
               {workspace('done')}
             </Button>
             {canManage && (
-              <Button disabled={saving || dirtyIds.length === 0} onClick={save}>
+              <Button disabled={saving || periodBusy || dirtyIds.length === 0} onClick={save}>
                 {saving
                   ? text('saving', 'Saving…')
                   : `${workspace('saveAll')} (${dirtyIds.length})`}
@@ -832,6 +838,13 @@ function OpeningBalancesYearView({
       >
         {activeRow && (
           <div className="space-y-5">
+            {section === 'period' && <PeriodOpeningForm
+              employeePartyId={activeRow.employeePartyId} employeeName={activeRow.employeeName} year={year}
+              draft={periodDrafts[activeRow.employeePartyId]} canManage={canManage} locked={activeRow.locked}
+              annualDirty={dirtyIds.includes(activeRow.employeePartyId)} onBusyChange={setPeriodBusy}
+              onChange={next => setPeriodDrafts(current => ({ ...current, [activeRow.employeePartyId]: next }))}
+              onSaved={() => router.refresh()}
+            />}
             {activeRow.locked && (
               <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm dark:border-slate-800 dark:bg-slate-900">
                 <Lock size={14} className="mr-2 inline" aria-hidden />
