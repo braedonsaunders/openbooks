@@ -14,9 +14,15 @@
 -- executes it statement by statement under its bounded lock_timeout. Every
 -- statement is idempotent (IF NOT EXISTS), and the DO block first drops this
 -- file's own INVALID indexes, which a failed CONCURRENTLY build leaves
--- behind and IF NOT EXISTS would otherwise skip forever. An INVALID index
--- answers no query, so dropping it contends with nothing. No row is read or
--- written beyond the index builds themselves.
+-- behind and IF NOT EXISTS would otherwise skip forever. The cleanup matches
+-- only these index names in the public schema on their intended tables, and
+-- drops them schema-qualified. A plain DROP INDEX takes an ACCESS EXCLUSIVE
+-- lock on the index's table for the moment of the drop: it waits behind
+-- in-flight readers and writers of that table, and blocks new ones while it
+-- waits, for at most the runner's lock_timeout, after which the statement
+-- fails and the migration can be retried. It runs only when an earlier
+-- attempt left an invalid index, so a clean first run takes no such lock. No
+-- row is read or written beyond the index builds themselves.
 
 -- openbooks: no-transaction
 
@@ -34,16 +40,19 @@ BEGIN
     SELECT c.relname
       FROM pg_index i
       JOIN pg_class c ON c.oid = i.indexrelid
+      JOIN pg_class t ON t.oid = i.indrelid
+      JOIN pg_namespace n ON n.oid = c.relnamespace
      WHERE NOT i.indisvalid
-       AND c.relname IN (
-         'document_lines_description_trgm',
-         'contacts_name_trgm',
-         'contacts_email_trgm',
-         'custom_records_search_text_trgm',
-         'custom_records_record_number_trgm'
+       AND n.nspname = 'public'
+       AND (c.relname, t.relname) IN (
+         ('document_lines_description_trgm', 'document_lines'),
+         ('contacts_name_trgm', 'contacts'),
+         ('contacts_email_trgm', 'contacts'),
+         ('custom_records_search_text_trgm', 'custom_records'),
+         ('custom_records_record_number_trgm', 'custom_records')
        )
   LOOP
-    EXECUTE format('DROP INDEX IF EXISTS %I', idx);
+    EXECUTE format('DROP INDEX IF EXISTS public.%I', idx);
   END LOOP;
 END
 $$;
