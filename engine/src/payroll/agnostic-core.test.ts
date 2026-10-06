@@ -845,7 +845,7 @@ test("stat pay: OFF is byte-identical, ON pays the declared formula, undeclared 
   // better reason: nobody has said what hours this employee normally works, and
   // the run will not invent them. Zed is refused by the undeclared gate with
   // the readiness blocker's own message.
-  assert.equal(onResult.employees, 2);
+  assert.equal(onResult.employees, 2, `holiday calculation refusals: ${JSON.stringify(onResult.errors)}`);
   assert.equal(onResult.errors.length, 2);
   const byName = new Map(onResult.errors.map((e) => [e.employee, e.message]));
   assert.match(byName.get("Morley Manitoba") ?? "", /no work schedule is in force/);
@@ -868,7 +868,7 @@ test("stat pay: OFF is byte-identical, ON pays the declared formula, undeclared 
   const withSchedule = await calculatePayRun({
     orgId, documentId: run2.documentId, actorId, holidayEligibility,
   });
-  assert.equal(withSchedule.employees, 3);
+  assert.equal(withSchedule.employees, 3, `holiday calculation refusals after recording the schedule: ${JSON.stringify(withSchedule.errors)}`);
   assert.equal(withSchedule.errors.length, 1, "only the undeclared jurisdiction is left");
   assert.equal(withSchedule.errors[0]!.employee, "Zed Offshore");
 

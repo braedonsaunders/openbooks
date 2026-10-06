@@ -682,7 +682,7 @@ test("the single_line exclusion keeps two live lines unseedable, so ambiguity ca
   );
 });
 
-test("the merge catalog needs no new lines: no 0186 FK targets parties(id)", { skip: !DB, timeout: 120_000 }, async () => {
+test("every party foreign key has an explicit merge or identity-preservation policy", { skip: !DB, timeout: 120_000 }, async () => {
   const { db } = await import("../platform/db.ts");
   const { PARTY_MERGE_REF_COVERAGE } = await import("../sync/party-merges.ts");
   const catalog = (await db.execute<{ tbl: string; col: string }>(sql`
