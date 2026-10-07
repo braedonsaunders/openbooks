@@ -3126,6 +3126,7 @@
       "effectiveTo": "Escolha uma data final válida (AAAA-MM-DD) ou deixe em aberto.",
       "dateOrder": "A data final deve ser igual ou posterior à inicial.",
       "fixedAmount": "Insira o valor fixo por beneficiário.",
+      "unitRate": "Informe o valor pago por cada hora aprovada ou unidade de transação.",
       "percentRate": "Insira o percentual aplicado à base medida.",
       "budgetAmount": "Insira o orçamento compartilhado entre beneficiários.",
       "metric": "Escolha a medida do incentivo.",

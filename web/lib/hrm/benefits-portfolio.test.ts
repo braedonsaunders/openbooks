@@ -119,7 +119,9 @@ test('decimal comma remedies preserve the intended amount and ambiguous commas n
 
 test('all validation remedies resolve in each supported catalog', () => {
   const keys = ['programCode', 'programName', 'currency', 'effectiveFrom', 'effectiveTo', 'dateOrder', 'fixedAmount', 'percentRate', 'budgetAmount', 'metric', 'scopeIds', 'sourceAccounts', 'periodBasis', 'payComponent', 'paymentDelay', 'awardProgram', 'awardRecipient', 'periodFrom', 'periodTo', 'awardValue', 'awardReason', 'memberEmployment', 'membershipFrom', 'legalEntity', 'weight']
-  for (const locale of locales) for (const key of keys) assert.ok(catalog(locale)(`portfolio.validation.${key}`).length > 0)
+  for (const locale of locales) for (const key of [...keys, 'unitRate']) assert.ok(catalog(locale)(`portfolio.validation.${key}`).length > 0)
+  const hourly = { ...emptyProgramDraft('incentive'), valuation: 'per_unit' as const, metric: 'approved_hours' as const, allocation: 'hours' as const }
+  assert.equal(validateProgramDraft(hourly).fixedAmount, 'portfolio.validation.unitRate')
 })
 
 
