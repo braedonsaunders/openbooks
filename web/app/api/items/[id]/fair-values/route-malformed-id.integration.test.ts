@@ -1,48 +1,17 @@
 import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
-import { registerHooks } from 'node:module'
 import test from 'node:test'
 
-// Fair-value PATCH and DELETE scope their row by the path item id but never
-// gate it: GET and POST both return 404 for a malformed item id while
-// PATCH/DELETE bind it straight into the uuid comparison and escape as a raw
-// Postgres throw (HTTP 500). Same intra-file contract on every verb.
-const state: { orgId: string; actorId: string } = { orgId: '', actorId: '' }
-Object.assign(globalThis, { __fairValuePathIdState: state })
-const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })
-registerHooks({
-  resolve(specifier, context, next) {
-    if (specifier === '../../../../../lib/feature-gates') return virtual(`
-      export async function guardFeaturePermission() {
-        const s = globalThis.__fairValuePathIdState;
-        return { user: { orgId: s.orgId, id: s.actorId }, permissions: [], allowedSubsidiaryIds: null };
-      }
-    `)
-    if (specifier === '../../../../../lib/authz') return virtual(`
-      export function guardUnrestrictedScope() { return null }
-    `)
-    return next(specifier, context)
-  },
-})
-const { db, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
+// Exercise the unchanged route with native permissions, feature state and validation.
+const { db } = await import('@openbooks/engine/src/platform/db.ts')
 const { sql } = await import('drizzle-orm')
-const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
-const { PATCH, DELETE } = await import('./route.ts')
+const { dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
+const { createFairValueFixture, callFairValueRoute } = await import('../../../../../lib/testing/fair-value-fixture.ts')
+let current: Awaited<ReturnType<typeof createFairValueFixture>>
 
-interface Fixture {
-  org: Awaited<ReturnType<typeof createScratchOrg>>
-  itemId: string
-  rowId: string
-}
-
-async function fixture(): Promise<Fixture> {
-  const org = await createScratchOrg()
-  state.orgId = org.orgId
-  state.actorId = randomUUID()
-  const itemId = (await db.execute<{ id: string }>(sql`
-    insert into items (org_id, kind, name, is_active)
-    values (${org.orgId}, 'service', 'Fair Value Item', true)
-    returning id`)).rows[0]!.id
+async function fixture() {
+  current = await createFairValueFixture()
+  const { org, itemId } = current
   const rowId = (await db.execute<{ id: string }>(sql`
     insert into fair_value_prices (org_id, item_id, currency, unit_price, is_active)
     values (${org.orgId}, ${itemId}, 'CAD', '10.0000', true)
@@ -50,32 +19,12 @@ async function fixture(): Promise<Fixture> {
   return { org, itemId, rowId }
 }
 
-async function patch(id: string, body: unknown): Promise<{ status: number; json: unknown }> {
-  try {
-    const response = await withOrgContext(state.orgId, () => PATCH(
-      new Request(`http://fv.test/api/items/${id}/fair-values`, {
-        method: 'PATCH',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify(body),
-      }),
-      { params: Promise.resolve({ id }) },
-    ))
-    return { status: response.status, json: await response.json().catch(() => null) }
-  } catch (error) {
-    return { status: 500, json: { thrown: error instanceof Error ? error.message : String(error) } }
-  }
+async function patch(id: string, body: unknown) {
+  return callFairValueRoute(current, 'PATCH', id, body)
 }
 
-async function remove(id: string, rowId: string): Promise<{ status: number; json: unknown }> {
-  try {
-    const response = await withOrgContext(state.orgId, () => DELETE(
-      new Request(`http://fv.test/api/items/${id}/fair-values?id=${rowId}`, { method: 'DELETE' }),
-      { params: Promise.resolve({ id }) },
-    ))
-    return { status: response.status, json: await response.json().catch(() => null) }
-  } catch (error) {
-    return { status: 500, json: { thrown: error instanceof Error ? error.message : String(error) } }
-  }
+async function remove(id: string, rowId: string) {
+  return callFairValueRoute(current, 'DELETE', id, undefined, rowId)
 }
 
 const validPatch = (rowId: string) => ({
@@ -84,21 +33,27 @@ const validPatch = (rowId: string) => ({
   unitPrice: '12.0000',
 })
 
-test('PATCH returns 404 for a malformed item id', async () => {
+test('PATCH refuses a malformed item id before any price mutation', async () => {
   const { org, rowId } = await fixture()
   try {
     const result = await patch('not-a-uuid', validPatch(rowId))
-    assert.equal(result.status, 404, `expected 404, got ${result.status}: ${JSON.stringify(result.json)}`)
+    assert.equal(result.status, 400, JSON.stringify(result.json))
+    assert.match(String((result.json as { error: string }).error), /valid id/)
+    const rows = (await db.execute<{ unit_price: string }>(sql`select unit_price::text as unit_price from fair_value_prices where id = ${rowId}`)).rows
+    assert.equal(rows[0]!.unit_price, '10.0000', 'malformed path leaves the existing selling price unchanged')
   } finally {
     await dropScratchOrg(org.orgId)
   }
 })
 
-test('DELETE returns 404 for a malformed item id', async () => {
+test('DELETE refuses a malformed item id before any price mutation', async () => {
   const { org, rowId } = await fixture()
   try {
     const result = await remove('not-a-uuid', rowId)
-    assert.equal(result.status, 404, `expected 404, got ${result.status}: ${JSON.stringify(result.json)}`)
+    assert.equal(result.status, 400, JSON.stringify(result.json))
+    assert.match(String((result.json as { error: string }).error), /valid id/)
+    const rows = (await db.execute<{ unit_price: string }>(sql`select unit_price::text as unit_price from fair_value_prices where id = ${rowId}`)).rows
+    assert.equal(rows[0]!.unit_price, '10.0000', 'malformed path leaves the existing selling price unchanged')
   } finally {
     await dropScratchOrg(org.orgId)
   }
