@@ -100,14 +100,13 @@ jobs:
       - run: npm ci
       - name: Test workflow contract
         run: node --import ./scripts/test-hooks.mjs --test scripts/test-workflow.test.mjs
-      - name: Product-neutrality audit
-        run: npm run check:product-neutrality
+      - name: Complete repository admission
+        # Run every source guard before typechecking and test fan-out. A
+        # partial admission can otherwise launch the expensive jobs while
+        # unit partitions refuse the same source before selecting any tests.
+        run: npm run check:static
       - name: Tenant policy bypass guard
         run: npm run check:rls-bypass-predicate
-      - name: Engine module boundaries
-        run: npm run check:engine-boundaries
-      - name: Source path references
-        run: npm run check:source-path-references
       - name: Typecheck every workspace
         # Fails the job if any workspace with a `typecheck` script errors;
         # workspaces without one are skipped by --if-present.
