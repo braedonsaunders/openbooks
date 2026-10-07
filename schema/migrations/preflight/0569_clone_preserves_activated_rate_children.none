@@ -1,0 +1,1 @@
+Function-only change preserves rate child ownership and immutability. The existing native clone authority and sandbox relationship require no data repair.
