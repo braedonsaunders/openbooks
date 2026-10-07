@@ -91,6 +91,7 @@ test('a hire that records a non-root subsidiary defaults the profile to that sub
           kind: 'employee',
           displayName: 'Sean Murphy',
           isActive: true,
+          changeReason: 'Activate the reviewed Dublin employee hire',
           subsidiaryId: ieSub,
           additionalSubsidiaryIds: [],
           roles: { employee: { enabled: true, hiredOn: '2026-09-01' } },

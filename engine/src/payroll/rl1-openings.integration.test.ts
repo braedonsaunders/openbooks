@@ -109,6 +109,15 @@ async function seedQcYear(): Promise<QcFixture> {
   const org = await createScratchOrg();
   const actorId = (await seedFlowActors(org.orgId)).adminId;
 
+  // Employee elections reference the scenario's declared vacation program;
+  // tax profiles do not provision organization policy implicitly.
+  await db.execute(sql`
+    insert into entitlement_plans (org_id, code, system_key, name, unit, direction,
+                                   accrual_method, accrual_value, cap_behavior, is_active,
+                                   created_by, updated_by)
+    values (${org.orgId}, 'VAC', 'vacation', 'Vacation', 'money', 'accrue',
+            'percent_of_earnings', '4.0000', 'warn', true, ${actorId}, ${actorId})`);
+
   const earningId = randomUUID();
   const qcTaxId = randomUUID();
   const unionId = randomUUID();
