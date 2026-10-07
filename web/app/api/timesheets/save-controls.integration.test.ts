@@ -25,7 +25,8 @@ async function fixture(requireApproval: boolean) {
   const actor = await createScratchUser(org.orgId, 'Timesheet auditor', 'reviewer')
   await db.execute(sql`update app_roles set permissions='["*"]'::jsonb where org_id=${org.orgId} and key='reviewer'`)
   session.user = { id: actor, orgId: org.orgId, name: 'Auditor', email: 'auditor@example.test', roles: [], isSuperAdmin: false, envKind: 'production', productionOrgId: org.orgId, homeOrgId: org.orgId, homeUserId: actor }
-  const employee = randomUUID(), project = randomUUID()
+  const nativeId = () => { const id = randomUUID(); return `${id.slice(0, 14)}f${id.slice(15)}` }
+  const employee = nativeId(), project = nativeId()
   await db.execute(sql`update orgs set settings = settings || ${JSON.stringify({
     features: { projects: true, timeTracking: true }, timesheets: { requireApproval },
     laborCosting: { mode: 'post', hoursPerDay: "8", annualHours: "2080", components: [] },
@@ -59,6 +60,8 @@ test('malformed weekly grids cannot erase existing hours', async () => {
     const before = (await f.snapshot()).rows
     assert.equal(before.length, 1)
     for (const body of [
+      { employee: "not-an-id" },
+      { rows: [{ ...f.row, projectId: "not-an-id" }] },
       { rows: [{ ...f.row, hours: {} }] },
       { rows: [{ ...f.row, hours: null }] },
       { rows: [{ projectId: f.project }] },
