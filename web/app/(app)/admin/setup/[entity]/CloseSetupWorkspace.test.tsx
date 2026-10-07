@@ -8,7 +8,7 @@ declare global {
 
 // jsdom first: the workspace reads browser globals at render.
 const { bootJsdomEnvironment } = await import('../../../../../testing/jsdom-env')
-await bootJsdomEnvironment({ url: 'http://localhost:4800/admin/setup/period-close?tab=periods', matchMediaMatches: false, scrollIntoView: false, resizeObserver: false })
+await bootJsdomEnvironment({ url: 'http://localhost:4800/admin/setup/period-close?tab=periods', matchMediaMatches: false, scrollIntoView: false })
 
 const { registerHooks } = await import('node:module')
 const { stubModules } = await import('../../../../../testing/stub-modules')
