@@ -166,6 +166,8 @@ test("project-type authoring preserves declared invoicing policies and refuses u
       assert.equal(refused.status, 422, JSON.stringify(await refused.clone().json()));
       const body = await refused.json();
       assert.ok(body.error);
+      if (profile.rollup.groups?.length === 0) assert.match(body.error, /needs at least one group/);
+      if (profile.rollup.groups?.[0]?.label === 'Everything') assert.match(body.error, /Everything.*matches every line.*give it a condition/);
       if (profile.notToExceedItemId === foreignItemId || profile.notToExceedItemId === retiredItemId || JSON.stringify(profile.rollup).includes(foreignItemId))
         assert.match(body.error, /choose an active company item/);
       assert.deepEqual(await read(), second);
