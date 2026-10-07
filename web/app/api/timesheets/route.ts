@@ -7,6 +7,7 @@ import { sql } from "drizzle-orm";
 import { db, withOrgTransaction } from "@openbooks/engine/src/platform/db.ts";
 import {
   lockScopeRow,
+  lockScopeRows,
   ScopeNotFoundError,
 } from "@openbooks/engine/src/organization/subsidiary-scope.ts";
 import { normalizeMoney } from "@openbooks/engine/src/money/money.ts";
@@ -61,6 +62,8 @@ function bad(error: string) {
 const STALE_WEEK_ERROR =
   "This week changed since you opened it — another editor saved first. " +
   "Reload the week and re-enter your hours; nothing was saved or overwritten.";
+
+class TimeLineEntityRefusal extends Error {}
 
 interface SaveRow {
   projectId?: string | null;
@@ -256,9 +259,8 @@ const save = defineRoute({
         const h = hoursOrNull(cells[i]);
         if (h === "invalid") return bad("Hours must be a non-negative number");
         if (h === null) continue;
-        // A row that carries hours must at least name a project (the job).
-        if (projectId === null)
-          return bad("Each line with hours needs a project");
+        if (projectId === null && isBillable)
+          return bad("Billable hours need a project; select the customer project or mark this work nonbillable");
         if (ownedRefs === undefined) {
           ownedRefs = await pinTimesheetLineRefs(
             orgId,
@@ -270,37 +272,11 @@ const save = defineRoute({
             },
             gate.allowedSubsidiaryIds,
           );
-          if (!ownedRefs || ownedRefs.projectId == null) {
+          if (!ownedRefs) {
             return bad("Invalid project, item, time type, or department");
           }
-          // Legal-entity isolation: a line posts its labor cost against its
-          // project's entity, so an employee of one subsidiary cannot book
-          // hours to another subsidiary's project. There is no intercompany
-          // time rule to reattribute the cost, so a cross-entity line is
-          // refused. Either side unscoped (null) keeps the existing
-          // attribution.
-          const entity = (
-            await db.execute<{
-              employee_sub: string | null;
-              project_sub: string | null;
-            }>(sql`
-          select (select subsidiary_id from parties
-                   where org_id = ${orgId} and id = ${ownedEmployee}) as employee_sub,
-                 (select subsidiary_id from projects
-                   where org_id = ${orgId} and id = ${ownedRefs.projectId}) as project_sub
-        `)
-          ).rows[0]!;
-          if (
-            entity.employee_sub != null &&
-            entity.project_sub != null &&
-            entity.employee_sub !== entity.project_sub
-          ) {
-            return bad(
-              "The project belongs to a different legal entity than the employee",
-            );
-          }
         }
-        if (!ownedRefs || ownedRefs.projectId == null) {
+        if (!ownedRefs) {
           return bad("Invalid project, item, time type, or department");
         }
         toPersist.push({
@@ -373,7 +349,14 @@ const save = defineRoute({
     try {
       projectsRefused = await withOrgTransaction(orgId, async () => {
         const tx = db;
-        await lockScopeRow(
+        // Canonical lock order is department, party, project. Shared locks
+        // pin legal-entity attribution through save and automatic approval.
+        const departmentScopes = await lockScopeRows(
+          tx, orgId,
+          toPersist.flatMap((p) => p.departmentId ? [{ kind: "department" as const, id: p.departmentId }] : []),
+          gate.allowedSubsidiaryIds, "share", { orgWideNull: true },
+        );
+        const employeeScope = await lockScopeRow(
           tx,
           orgId,
           "party",
@@ -381,6 +364,22 @@ const save = defineRoute({
           gate.allowedSubsidiaryIds,
           "share",
         );
+        const projectScopes = await lockScopeRows(
+          tx, orgId,
+          toPersist.flatMap((p) => p.projectId ? [{ kind: "project" as const, id: p.projectId }] : []),
+          gate.allowedSubsidiaryIds, "share",
+        );
+        for (const p of toPersist) {
+          const projectEntity = projectScopes.find((row) => row.id === p.projectId)?.subsidiaryId;
+          if (employeeScope.subsidiaryId != null && projectEntity != null && employeeScope.subsidiaryId !== projectEntity) {
+            throw new TimeLineEntityRefusal("The project belongs to a different legal entity than the employee");
+          }
+          const departmentEntity = departmentScopes.find((row) => row.id === p.departmentId)?.subsidiaryId;
+          const workEntity = projectEntity ?? employeeScope.subsidiaryId;
+          if (departmentEntity != null && workEntity != null && departmentEntity !== workEntity) {
+            throw new TimeLineEntityRefusal("The department belongs to a different legal entity than this work; select a department in the employee or project legal entity");
+          }
+        }
         // When approval is not required, saved entries land already approved, so
         // the replaceable set has to include those too — otherwise every save
         // would insert a second copy of the week's hours alongside the first.
@@ -575,6 +574,7 @@ const save = defineRoute({
         return false;
       });
     } catch (error) {
+      if (error instanceof TimeLineEntityRefusal) return bad(error.message);
       if (error instanceof ScopeNotFoundError)
         return notFound("record");
       throw error;
