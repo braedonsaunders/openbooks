@@ -32,6 +32,8 @@ for (const masked of [false, true]) test(`${masked ? "masked" : "full"} sandbox 
       from crm_opportunity_statuses where org_id=${org.orgId} and key in ('qualification','closed_won')`)).rows;
     const won = statuses.find(row => row.is_won)!.id;
     const open = statuses.find(row => !row.is_won)!.id;
+    assert.equal((await db.execute(sql`insert into customer_roles(org_id,party_id,created_by,updated_by)
+      values(${org.orgId},${org.customerId},${actor},${actor}) returning party_id`)).rows.length, 1);
     const invoice = randomUUID(), opportunity = randomUUID(), reopened = randomUUID();
     await db.execute(sql`insert into documents(id,org_id,kind,status,document_number,subsidiary_id,party_id,
       document_date,due_date,currency,fx_rate,subtotal,tax_total,total,created_by)
