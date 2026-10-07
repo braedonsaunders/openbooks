@@ -1,63 +1,20 @@
 import assert from 'node:assert/strict'
-import { randomUUID } from 'node:crypto'
-import { registerHooks } from 'node:module'
 import test from 'node:test'
 
-// Fair-value POST validates effectiveFrom/effectiveTo with a format-only
-// regex, so a shape-valid non-day such as February 30 sails through
-// validation and dies in Postgres as a raw DATE failure (HTTP 500) instead
-// of failing closed with the same 400 the junk-input path returns.
-const state: { orgId: string; actorId: string } = { orgId: '', actorId: '' }
-Object.assign(globalThis, { __fairValueDateState: state })
-const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })
-registerHooks({
-  resolve(specifier, context, next) {
-    // The route factory resolves its session gate through the "@/lib/…"
-    // spellings at request time; they must see the same test session as the
-    // route file's relative imports. Identical sources share one module
-    // instance across both spellings.
-    if (specifier === '../../../../../lib/feature-gates' || specifier === '@/lib/feature-gates') return virtual(`
-      export async function guardFeaturePermission() {
-        const s = globalThis.__fairValueDateState;
-        return { user: { orgId: s.orgId, id: s.actorId }, permissions: [], allowedSubsidiaryIds: null };
-      }
-    `)
-    if (specifier === '../../../../../lib/authz' || specifier === '@/lib/authz') return virtual(`
-      export function guardUnrestrictedScope() { return null }
-    `)
-    return next(specifier, context)
-  },
-})
-const { db, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
+// Exercise the unchanged route with native permissions, feature state and validation.
+const { db } = await import('@openbooks/engine/src/platform/db.ts')
 const { sql } = await import('drizzle-orm')
-const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
-const { POST } = await import('./route.ts')
+const { dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
+const { createFairValueFixture, callFairValueRoute } = await import('../../../../../lib/testing/fair-value-fixture.ts')
+let current: Awaited<ReturnType<typeof createFairValueFixture>>
 
 async function fixture() {
-  const org = await createScratchOrg()
-  state.orgId = org.orgId
-  state.actorId = randomUUID()
-  const itemId = (await db.execute<{ id: string }>(sql`
-    insert into items (org_id, kind, name, is_active)
-    values (${org.orgId}, 'service', 'Fair Value Item', true)
-    returning id`)).rows[0]!.id
-  return { org, itemId }
+  current = await createFairValueFixture()
+  return current
 }
 
-async function post(id: string, body: unknown): Promise<{ status: number; json: unknown }> {
-  try {
-    const response = await withOrgContext(state.orgId, () => POST(
-      new Request(`http://fv.test/api/items/${id}/fair-values`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify(body),
-      }),
-      { params: Promise.resolve({ id }) },
-    ))
-    return { status: response.status, json: await response.json().catch(() => null) }
-  } catch (error) {
-    return { status: 500, json: { thrown: error instanceof Error ? error.message : String(error) } }
-  }
+async function post(id: string, body: unknown) {
+  return callFairValueRoute(current, 'POST', id, body)
 }
 
 test('POST refuses malformed policy values without writing', async () => {
