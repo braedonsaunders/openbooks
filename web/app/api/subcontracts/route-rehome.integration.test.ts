@@ -95,15 +95,8 @@ test("POST rechecks the project scope after waiting out a concurrent rehome", as
       method: "POST", headers: { "content-type": "application/json" },
       body: JSON.stringify({ action: "updateSubcontract", id: subcontractId, title: "After race", originalCommitment: "100.00", defaultRetainagePercent: "10", expectedUpdatedAt }),
     }))).then((response) => { settled = true; return response; });
-    let waiting = 0;
-    const deadline = Date.now() + 10_000;
-    while (waiting === 0 && Date.now() < deadline) {
-      waiting = (await holder.query(`select count(*)::int as n from pg_locks blocked
-        where not blocked.granted and blocked.pid <> pg_backend_pid() and exists (select 1 from pg_locks mine where mine.granted and mine.pid = pg_backend_pid() and mine.locktype = blocked.locktype and mine.transactionid is not distinct from blocked.transactionid)`)).rows[0].n as number;
-      if (waiting === 0) await new Promise((resolve) => setTimeout(resolve, 100));
-    }
+    await waitForLockWaiter(holder, { label: "POST to wait on the locked project row" });
     assert.equal(settled, false, "POST must wait on the locked project row");
-    assert.ok(waiting > 0, "POST is blocked behind the project lock");
     await holder.query("update projects set subsidiary_id = $1 where id = $2", [subsidiaryB, projectId]);
     await holder.query("commit");
     const response = await pending;
