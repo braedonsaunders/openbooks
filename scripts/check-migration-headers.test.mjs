@@ -98,7 +98,6 @@ test("the runner supplies the exact published partial header without admitting c
   assert.deepEqual(scanMigrationFile(filename, content), []);
   const prelude = publishedMigrationSessionPrelude(`generated/${filename}`, content);
   assert.equal(prelude, `${HEADER.split("\n").slice(1).join("\n")}\n`);
-  assert.ok((prelude + content).endsWith(content), "session preparation leaves every published SQL byte intact");
   assert.equal(publishedMigrationSessionPrelude("generated/0576_other.sql", content), "");
   assert.equal(scanMigrationFile("0576_other.sql", content).filter(({ kind }) => kind === "header-missing").length, 4);
   for (const suffix of ["\n-- changed published bytes\n", "\nSET lock_timeout = 0;\n"]) {
