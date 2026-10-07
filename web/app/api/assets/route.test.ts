@@ -167,6 +167,10 @@ const mockDb = `
     if (orgId !== '${ORG_ID}') throw new Error('Asset fixture transaction requires its declared organization')
     return db.transaction(work)
   }
+  export async function withOrgContext(orgId, work) {
+    if (orgId !== '${ORG_ID}') throw new Error('Asset fixture context requires its declared organization')
+    return await work()
+  }
 `;
 
 stubModules({
