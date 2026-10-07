@@ -43,7 +43,7 @@ const remittanceFrequencyFields = Object.fromEntries(
     }),
   ]),
 )
-const payrollSettingsSchema = z.looseObject({
+const typedPayrollSettingsSchema = z.looseObject({
   wageExpenseAccountId: z.string().uuid().nullable().optional(),
   burdenExpenseAccountId: z.string().uuid().nullable().optional(),
   netPayAccountId: z.string().uuid().nullable().optional(),
@@ -400,6 +400,207 @@ export const GET = defineRoute({
   },
 })
 
+/** Preserve field, cause and remedy before the typed schema and before any write. */
+function payrollSettingsShapeRefusal(body: Record<string, unknown>): string | null {
+  const acceptedKeys = new Set<string>([
+    ...ACCOUNT_KEYS,
+    ...declaredRemittanceVendorSettingsKeys(),
+    ...declaredRemittanceFrequencySettingsKeys(),
+    'eftFallbackToCheque',
+    'supplementalTaxMethod',
+    'wagesTo',
+    't4Transmitter',
+    'stubPassword',
+    'countries',
+    'statutoryHolidayPay',
+    'slotAccounts',
+  ])
+  const unknownKey = Object.keys(body).find((key) => !acceptedKeys.has(key))
+  if (unknownKey) {
+    const remedy = unknownKey === 'craRemittanceFrequency'
+      ? 'set the CRA remitter type on its filing account in Payroll Setup → Filing accounts'
+      : 'remove the unknown key or use a setting declared by the payroll setup'
+    return `unknown payroll setting "${unknownKey}" — ${remedy}`
+  }
+
+  for (const key of ACCOUNT_KEYS) {
+    if (!(key in body)) continue
+    const v = body[key] ?? null
+    // Same accept/refuse set as before, split causes: a non-string is not an
+    // account reference at all, while a string that is not a uuid names a
+    // value no picker could have produced.
+    if (v !== null && typeof v !== 'string') {
+      return `invalid ${key}: must be an account id — got "${suppliedValue(v)}"; choose the account in Payroll setup → Accounts`
+    }
+    if (v !== null && !isUuid(v)) {
+      return `invalid ${key}: "${v}" is not an account id — choose the account in Payroll setup → Accounts`
+    }
+  }
+  // Statutory remittance vendors — exactly the settings keys the pack
+  // declarations name (the CRA vendor, the Revenu Québec vendor for the CA
+  // pack's QC-scoped components), never a literal list here.
+  for (const vendorKey of declaredRemittanceVendorSettingsKeys()) {
+    if (!(vendorKey in body)) continue
+    const party = body[vendorKey] ?? null
+    // Same accept/refuse set as before, split causes. The existence check
+    // below ("active vendor in this organization is required") still owns the
+    // unknown-but-well-formed id; these two own the malformed value.
+    if (party !== null && typeof party !== 'string') {
+      return `invalid ${vendorKey}: must be a vendor id — got "${suppliedValue(party)}"; choose an active vendor in this organization`
+    }
+    if (party !== null && !isUuid(party)) {
+      return `invalid ${vendorKey}: "${party}" is not a vendor id — choose an active vendor in this organization`
+    }
+  }
+  // Destination remittance frequencies — exactly the settings keys the pack
+  // schedules declare, each validated against its own schedule's bands (a
+  // CRA remitter type is never a valid RQ frequency and vice versa). Null
+  // clears back to the schedule default; anything else is refused at save
+  // time rather than silently dating bills from the default.
+  for (const frequencyKey of declaredRemittanceFrequencySettingsKeys()) {
+    if (!(frequencyKey in body)) continue
+    const value = body[frequencyKey] ?? null
+    if (value === null) continue
+    const schedule = remittanceScheduleForFrequencyKey(frequencyKey)
+    // Unreachable by construction: the key came off this very schedule list
+    // (both helpers derive from allRemittanceSchedules in packs.ts), so the
+    // find cannot miss. Fail closed without blaming the operator's value —
+    // a missing schedule is a declaration inconsistency, not bad input.
+    if (!schedule) {
+      return `invalid ${frequencyKey}: no remittance schedule declares "${frequencyKey}", so "${suppliedValue(value)}" cannot be checked — no value can be accepted for this setting right now`
+    }
+    const bands = schedule.frequencies.map((band) => `"${band.frequency}"`).join(', ')
+    if (typeof value !== 'string') {
+      return `invalid ${frequencyKey}: must be a frequency name — got "${suppliedValue(value)}"; choose one of ${bands}`
+    }
+    if (!remittanceFrequencyBand(schedule, value)) {
+      return `invalid ${frequencyKey}: "${value}" is not a frequency of this schedule — valid frequencies are ${bands}; frequencies belong to one schedule only, so a value from another schedule is never valid here`
+    }
+  }
+  if ('eftFallbackToCheque' in body) {
+    if (typeof body.eftFallbackToCheque !== 'boolean') {
+      return `invalid eftFallbackToCheque: must be true or false — got "${suppliedValue(body.eftFallbackToCheque)}"; pass true to fall back to a cheque when bank details are missing, or false to block the run instead`
+    }
+  }
+  if ('supplementalTaxMethod' in body) {
+    if (body.supplementalTaxMethod !== 'period_cumulative' && body.supplementalTaxMethod !== 'per_run') {
+      return `invalid supplementalTaxMethod: must be "period_cumulative" or "per_run" — got "${suppliedValue(body.supplementalTaxMethod)}"; pass one of those values or omit supplementalTaxMethod to leave the setting unchanged`
+    }
+  }
+  if ('wagesTo' in body) {
+    if (body.wagesTo !== 'expense' && body.wagesTo !== 'labor_clearing') {
+      return `invalid wagesTo: must be "expense" or "labor_clearing" — got "${suppliedValue(body.wagesTo)}"; pass one of those values or omit wagesTo to leave the setting unchanged`
+    }
+  }
+  if ('t4Transmitter' in body) {
+    const cfg = body.t4Transmitter
+    // Same accept/refuse set as before, split three ways: null, a list, and
+    // anything else that is not an object refuse with their own cause.
+    if (cfg === null) {
+      return 'invalid t4Transmitter: must be an object — got null; pass the transmitter details (bn, transmitterNumber, name, contactName, contactEmail, contactPhone) or omit it'
+    }
+    if (Array.isArray(cfg)) {
+      return 'invalid t4Transmitter: must be an object — got a list; pass the transmitter details (bn, transmitterNumber, name, contactName, contactEmail, contactPhone) or omit it'
+    }
+    if (typeof cfg !== 'object') {
+      return `invalid t4Transmitter: must be an object — got "${suppliedValue(cfg)}"; pass the transmitter details (bn, transmitterNumber, name, contactName, contactEmail, contactPhone) or omit it`
+    }
+    const keys = ['bn', 'transmitterNumber', 'name', 'contactName', 'contactEmail', 'contactPhone']
+    for (const key of keys) {
+      const v = (cfg as Record<string, unknown>)[key]
+      if (v != null && typeof v !== 'string') return `invalid t4Transmitter.${key}: must be text — got "${suppliedValue(v)}"; pass a string, null, or omit it`
+    }
+  }
+  if ('countries' in body) {
+    const countries = body.countries
+    // Same accept/refuse set as before, split causes: a non-list is not a
+    // country selection at all, while a list names WHICH entry no pack
+    // declares. The installed list comes from the pack registry itself —
+    // never a literal list here, so a new pack is nameable the moment it
+    // registers.
+    if (!Array.isArray(countries)) {
+      return `invalid countries: must be a list of installed country codes — got "${suppliedValue(countries)}"; pass the countries to install, or omit it`
+    }
+    const unknown = countries.find((c) => !Object.hasOwn(PAYROLL_COUNTRY_PACKS, String(c)))
+    if (unknown !== undefined) {
+      const installed = Object.keys(PAYROLL_COUNTRY_PACKS).join(', ')
+      return `invalid countries: "${suppliedValue(unknown)}" is not an installed payroll country — installed countries are: ${installed}; install the pack first (POST action "install-pack") or remove it`
+    }
+  }
+  if ('statutoryHolidayPay' in body) {
+    if (typeof body.statutoryHolidayPay !== 'boolean') {
+      return `invalid statutoryHolidayPay: must be true or false — got "${suppliedValue(body.statutoryHolidayPay)}"; pass true to enable statutory holiday pay, or false to leave gross pay unchanged`
+    }
+  }
+
+  if ('stubPassword' in body) {
+    const rawPolicy = body.stubPassword
+    // Same accept/refuse set as before, split three ways: null, a list, and
+    // anything else that is not an object refuse with their own cause.
+    if (rawPolicy === null) {
+      return 'invalid stubPassword: must be an object — got null; pass { enabled, expression } or omit it'
+    }
+    if (Array.isArray(rawPolicy)) {
+      return 'invalid stubPassword: must be an object — got a list; pass { enabled, expression } or omit it'
+    }
+    if (typeof rawPolicy !== 'object') {
+      return `invalid stubPassword: must be an object — got "${suppliedValue(rawPolicy)}"; pass { enabled, expression } or omit it`
+    }
+    const policy = rawPolicy as Record<string, unknown>
+    if (typeof policy.enabled !== 'boolean') return `invalid stubPassword.enabled: must be true or false — got "${suppliedValue(policy.enabled)}"; explicitly choose whether emailed pay stubs require encryption`
+    if (typeof policy.expression !== 'string') return `invalid stubPassword.expression: must be text — got "${suppliedValue(policy.expression)}"; enter the password expression or empty text when encryption is disabled`
+  }
+  if ('slotAccounts' in body) {
+    const slotAccounts = body.slotAccounts
+    // Same accept/refuse set as before, split causes at the top level and
+    // named by country and slot below — a caller sending a map cannot tell
+    // which entry failed from a bare field name.
+    if (slotAccounts === null) {
+      return 'invalid slotAccounts: must be an object mapping each country to its slot accounts — got null; pass { "<country>": { "<slot>": "<accountId|null>" } } or omit it'
+    }
+    if (Array.isArray(slotAccounts)) {
+      return 'invalid slotAccounts: must be an object mapping each country to its slot accounts — got a list; pass { "<country>": { "<slot>": "<accountId|null>" } } or omit it'
+    }
+    if (typeof slotAccounts !== 'object') {
+      return `invalid slotAccounts: must be an object mapping each country to its slot accounts — got "${suppliedValue(slotAccounts)}"; pass { "<country>": { "<slot>": "<accountId|null>" } } or omit it`
+    }
+    for (const [country, slots] of Object.entries(slotAccounts as Record<string, unknown>)) {
+      const pack = Object.hasOwn(PAYROLL_COUNTRY_PACKS, country) ? PAYROLL_COUNTRY_PACKS[country] : undefined
+      if (!pack) {
+        const installed = Object.keys(PAYROLL_COUNTRY_PACKS).join(', ')
+        return `invalid pack ${country}: no payroll pack is installed for "${country}" — installed countries are: ${installed}; install the pack first (POST action "install-pack") or remove the entry`
+      }
+      if (slots === null) {
+        return `invalid pack ${country}: slot accounts must be an object — got null; pass { "<slot>": "<accountId|null>" } for ${country} or remove the entry`
+      }
+      if (Array.isArray(slots)) {
+        return `invalid pack ${country}: slot accounts must be an object — got a list; pass { "<slot>": "<accountId|null>" } for ${country} or remove the entry`
+      }
+      if (typeof slots !== 'object') {
+        return `invalid pack ${country}: slot accounts must be an object — got "${suppliedValue(slots)}"; pass { "<slot>": "<accountId|null>" } for ${country} or remove the entry`
+      }
+      for (const [slotKey, accountId] of Object.entries(slots as Record<string, unknown>)) {
+        if (!pack.statutorySlots.some((slot) => slot.key === slotKey)) {
+          const declared = pack.statutorySlots.map((slot) => `"${slot.key}"`).join(', ')
+          return `invalid slot ${country}/${slotKey}: no statutory slot "${slotKey}" is declared for "${country}" — declared slots are: ${declared}; map each declared slot to an account id or null`
+        }
+        if (accountId !== null && typeof accountId !== 'string') {
+          return `invalid account for ${country}/${slotKey}: must be an account id or null — got "${suppliedValue(accountId)}"; choose the account in Payroll setup → Accounts, or pass null to clear it`
+        }
+        if (accountId !== null && !isUuid(accountId)) {
+          return `invalid account for ${country}/${slotKey}: "${accountId}" is not an account id — choose the account in Payroll setup → Accounts, or pass null to clear it`
+        }
+      }
+    }
+  }
+  return null
+}
+
+const payrollSettingsSchema = z.record(z.string(), z.unknown()).superRefine((body, ctx) => {
+  const message = payrollSettingsShapeRefusal(body)
+  if (message) ctx.addIssue({ code: 'custom', message })
+}).pipe(typedPayrollSettingsSchema)
+
 export const PUT = defineRoute({
   permission: 'payroll.manage',
   feature: 'payroll',
@@ -407,46 +608,12 @@ export const PUT = defineRoute({
     const scopeDenied = await guardRootSubsidiaryScope(gate)
     if (scopeDenied) return scopeDenied
     const orgId = gate.user.orgId
-    const parsedBody = await parseJsonBody(req, payrollSettingsSchema);
+    const parsedBody = await parseJsonBody(req, payrollSettingsSchema, { status: 422 });
     if (!parsedBody.ok) return parsedBody.response;
     const body = parsedBody.data
-    const acceptedKeys = new Set<string>([
-      ...ACCOUNT_KEYS,
-      ...declaredRemittanceVendorSettingsKeys(),
-      ...declaredRemittanceFrequencySettingsKeys(),
-      'eftFallbackToCheque',
-      'supplementalTaxMethod',
-      'wagesTo',
-      't4Transmitter',
-      'stubPassword',
-      'countries',
-      'statutoryHolidayPay',
-      'slotAccounts',
-    ])
-    const unknownKey = Object.keys(body).find((key) => !acceptedKeys.has(key))
-    if (unknownKey) {
-      const remedy = unknownKey === 'craRemittanceFrequency'
-        ? 'set the CRA remitter type on its filing account in Payroll Setup → Filing accounts'
-        : 'remove the unknown key or use a setting declared by the payroll setup'
-      return NextResponse.json({ error: `unknown payroll setting "${unknownKey}" — ${remedy}` }, { status: 422 })
-    }
-
     return withOrgTransaction(orgId, async () => {
     const settings: Record<string, unknown> = await currentPayrollBlob(orgId, true)
     const before = JSON.parse(JSON.stringify(settings)) as Record<string, unknown>
-    for (const key of ACCOUNT_KEYS) {
-      if (!(key in body)) continue
-      const v = body[key] ?? null
-      // Same accept/refuse set as before, split causes: a non-string is not an
-      // account reference at all, while a string that is not a uuid names a
-      // value no picker could have produced.
-      if (v !== null && typeof v !== 'string') {
-        return NextResponse.json({ error: `invalid ${key}: must be an account id — got "${suppliedValue(v)}"; choose the account in Payroll setup → Accounts` }, { status: 422 })
-      }
-      if (v !== null && !isUuid(v)) {
-        return NextResponse.json({ error: `invalid ${key}: "${v}" is not an account id — choose the account in Payroll setup → Accounts` }, { status: 422 })
-      }
-    }
     const validated = await validatePayrollAccounts(orgId, body)
     if (validated instanceof NextResponse) return validated
     const warnings: PayrollSettingsWarning[] = []
@@ -470,51 +637,10 @@ export const PUT = defineRoute({
           + 'in Payroll setup → Accounts before the next pay run commits.',
       })
     }
-    // Statutory remittance vendors — exactly the settings keys the pack
-    // declarations name (the CRA vendor, the Revenu Québec vendor for the CA
-    // pack's QC-scoped components), never a literal list here.
-    for (const vendorKey of declaredRemittanceVendorSettingsKeys()) {
-      if (!(vendorKey in body)) continue
-      const party = body[vendorKey] ?? null
-      // Same accept/refuse set as before, split causes. The existence check
-      // below ("active vendor in this organization is required") still owns the
-      // unknown-but-well-formed id; these two own the malformed value.
-      if (party !== null && typeof party !== 'string') {
-        return NextResponse.json({ error: `invalid ${vendorKey}: must be a vendor id — got "${suppliedValue(party)}"; choose an active vendor in this organization` }, { status: 422 })
-      }
-      if (party !== null && !isUuid(party)) {
-        return NextResponse.json({ error: `invalid ${vendorKey}: "${party}" is not a vendor id — choose an active vendor in this organization` }, { status: 422 })
-      }
-    }
     const vendorError = await validateRemittanceVendors(orgId, body)
     if (vendorError) return vendorError
     for (const vendorKey of declaredRemittanceVendorSettingsKeys()) {
       if (vendorKey in body) settings[vendorKey] = body[vendorKey] ?? null
-    }
-    // Destination remittance frequencies — exactly the settings keys the pack
-    // schedules declare, each validated against its own schedule's bands (a
-    // CRA remitter type is never a valid RQ frequency and vice versa). Null
-    // clears back to the schedule default; anything else is refused at save
-    // time rather than silently dating bills from the default.
-    for (const frequencyKey of declaredRemittanceFrequencySettingsKeys()) {
-      if (!(frequencyKey in body)) continue
-      const value = body[frequencyKey] ?? null
-      if (value === null) continue
-      const schedule = remittanceScheduleForFrequencyKey(frequencyKey)
-      // Unreachable by construction: the key came off this very schedule list
-      // (both helpers derive from allRemittanceSchedules in packs.ts), so the
-      // find cannot miss. Fail closed without blaming the operator's value —
-      // a missing schedule is a declaration inconsistency, not bad input.
-      if (!schedule) {
-        return NextResponse.json({ error: `invalid ${frequencyKey}: no remittance schedule declares "${frequencyKey}", so "${suppliedValue(value)}" cannot be checked — no value can be accepted for this setting right now` }, { status: 422 })
-      }
-      const bands = schedule.frequencies.map((band) => `"${band.frequency}"`).join(', ')
-      if (typeof value !== 'string') {
-        return NextResponse.json({ error: `invalid ${frequencyKey}: must be a frequency name — got "${suppliedValue(value)}"; choose one of ${bands}` }, { status: 422 })
-      }
-      if (!remittanceFrequencyBand(schedule, value)) {
-        return NextResponse.json({ error: `invalid ${frequencyKey}: "${value}" is not a frequency of this schedule — valid frequencies are ${bands}; frequencies belong to one schedule only, so a value from another schedule is never valid here` }, { status: 422 })
-      }
     }
     for (const frequencyKey of declaredRemittanceFrequencySettingsKeys()) {
       if (frequencyKey in body) settings[frequencyKey] = body[frequencyKey] ?? null
@@ -524,45 +650,13 @@ export const PUT = defineRoute({
     // else on the run. Turning it OFF is the deliberate strict posture — an
     // employee configured for EFT with no bank details blocks the run instead of
     // being paid on paper.
-    if ('eftFallbackToCheque' in body) {
-      if (typeof body.eftFallbackToCheque !== 'boolean') {
-        return NextResponse.json({ error: `invalid eftFallbackToCheque: must be true or false — got "${suppliedValue(body.eftFallbackToCheque)}"; pass true to fall back to a cheque when bank details are missing, or false to block the run instead` }, { status: 422 })
-      }
-      settings.eftFallbackToCheque = body.eftFallbackToCheque
-    }
-    if ('supplementalTaxMethod' in body) {
-      if (body.supplementalTaxMethod !== 'period_cumulative' && body.supplementalTaxMethod !== 'per_run') {
-        return NextResponse.json({ error: `invalid supplementalTaxMethod: must be "period_cumulative" or "per_run" — got "${suppliedValue(body.supplementalTaxMethod)}"; pass one of those values or omit supplementalTaxMethod to leave the setting unchanged` }, { status: 422 })
-      }
-      settings.supplementalTaxMethod = body.supplementalTaxMethod
-    }
-    if ('wagesTo' in body) {
-      if (body.wagesTo !== 'expense' && body.wagesTo !== 'labor_clearing') {
-        return NextResponse.json({
-          error: `invalid wagesTo: must be "expense" or "labor_clearing" — got "${suppliedValue(body.wagesTo)}"; pass one of those values or omit wagesTo to leave the setting unchanged`,
-        }, { status: 422 })
-      }
-      settings.wagesTo = body.wagesTo
-    }
+    if ('eftFallbackToCheque' in body) settings.eftFallbackToCheque = body.eftFallbackToCheque
+    if ('supplementalTaxMethod' in body) settings.supplementalTaxMethod = body.supplementalTaxMethod
+    if ('wagesTo' in body) settings.wagesTo = body.wagesTo
     if ('t4Transmitter' in body) {
-      const cfg = body.t4Transmitter
-      // Same accept/refuse set as before, split three ways: null, a list, and
-      // anything else that is not an object refuse with their own cause.
-      if (cfg === null) {
-        return NextResponse.json({ error: 'invalid t4Transmitter: must be an object — got null; pass the transmitter details (bn, transmitterNumber, name, contactName, contactEmail, contactPhone) or omit it' }, { status: 422 })
-      }
-      if (Array.isArray(cfg)) {
-        return NextResponse.json({ error: 'invalid t4Transmitter: must be an object — got a list; pass the transmitter details (bn, transmitterNumber, name, contactName, contactEmail, contactPhone) or omit it' }, { status: 422 })
-      }
-      if (typeof cfg !== 'object') {
-        return NextResponse.json({ error: `invalid t4Transmitter: must be an object — got "${suppliedValue(cfg)}"; pass the transmitter details (bn, transmitterNumber, name, contactName, contactEmail, contactPhone) or omit it` }, { status: 422 })
-      }
-      const keys = ['bn', 'transmitterNumber', 'name', 'contactName', 'contactEmail', 'contactPhone']
       const clean: Record<string, string> = {}
-      for (const key of keys) {
-        const v = (cfg as Record<string, unknown>)[key]
-        if (v != null && typeof v !== 'string') return NextResponse.json({ error: `invalid t4Transmitter.${key}: must be text — got "${suppliedValue(v)}"; pass a string, null, or omit it` }, { status: 422 })
-        if (typeof v === 'string' && v.trim()) clean[key] = v.trim()
+      for (const [key, value] of Object.entries(body.t4Transmitter!)) {
+        if (typeof value === 'string' && value.trim()) clean[key] = value.trim()
       }
       settings.t4Transmitter = clean
     }
@@ -572,17 +666,6 @@ export const PUT = defineRoute({
     // time rather than at stub-email time. No password is ever stored.
     if ('stubPassword' in body) {
       const rawPolicy = body.stubPassword
-      // Same accept/refuse set as before, split three ways: null, a list, and
-      // anything else that is not an object refuse with their own cause.
-      if (rawPolicy === null) {
-        return NextResponse.json({ error: 'invalid stubPassword: must be an object — got null; pass { enabled, expression } or omit it' }, { status: 422 })
-      }
-      if (Array.isArray(rawPolicy)) {
-        return NextResponse.json({ error: 'invalid stubPassword: must be an object — got a list; pass { enabled, expression } or omit it' }, { status: 422 })
-      }
-      if (typeof rawPolicy !== 'object') {
-        return NextResponse.json({ error: `invalid stubPassword: must be an object — got "${suppliedValue(rawPolicy)}"; pass { enabled, expression } or omit it` }, { status: 422 })
-      }
       const policy = rawPolicy as Record<string, unknown>
       const expression = typeof policy.expression === 'string' ? policy.expression.trim() : ''
       const enabled = policy.enabled === true
@@ -601,33 +684,11 @@ export const PUT = defineRoute({
       }
       settings.stubPassword = { enabled, expression }
     }
-    if ('countries' in body) {
-      const countries = body.countries
-      // Same accept/refuse set as before, split causes: a non-list is not a
-      // country selection at all, while a list names WHICH entry no pack
-      // declares. The installed list comes from the pack registry itself —
-      // never a literal list here, so a new pack is nameable the moment it
-      // registers.
-      if (!Array.isArray(countries)) {
-        return NextResponse.json({ error: `invalid countries: must be a list of installed country codes — got "${suppliedValue(countries)}"; pass the countries to install, or omit it` }, { status: 422 })
-      }
-      const unknown = countries.find((c) => !(String(c) in PAYROLL_COUNTRY_PACKS))
-      if (unknown !== undefined) {
-        const installed = Object.keys(PAYROLL_COUNTRY_PACKS).join(', ')
-        return NextResponse.json({ error: `invalid countries: "${suppliedValue(unknown)}" is not an installed payroll country — installed countries are: ${installed}; install the pack first (POST action "install-pack") or remove it` }, { status: 422 })
-      }
-      settings.countries = [...new Set(countries.map(String))]
-    }
+    if ('countries' in body) settings.countries = [...new Set(body.countries!)]
     // Statutory holiday pay (engine/src/payroll/run.ts phase 2). Org-level
     // gate; default OFF for tenants that predate the feature because it changes
     // gross pay.
-    if ('statutoryHolidayPay' in body) {
-      if (typeof body.statutoryHolidayPay !== 'boolean') {
-        return NextResponse.json({ error: `invalid statutoryHolidayPay: must be true or false — got "${suppliedValue(body.statutoryHolidayPay)}"; pass true to enable statutory holiday pay, or false to leave gross pay unchanged` }, { status: 422 })
-      }
-      settings.statutoryHolidayPay = body.statutoryHolidayPay
-    }
-
+    if ('statutoryHolidayPay' in body) settings.statutoryHolidayPay = body.statutoryHolidayPay
     // NOTE: the pre-scoping `us` / `ca` rate blobs are not accepted here. A SUI
     // rate is experience-rated per filing account, FUTA is scoped per state and
     // year, and each province levies its own employer health tax. The upgrade
@@ -636,44 +697,7 @@ export const PUT = defineRoute({
     // Pack-declared statutory slots: { [country]: { [slotKey]: accountId|null } }.
     // Writes land on the mapped components' liability accounts, never in the blob.
     if ('slotAccounts' in body) {
-      const slotAccounts = body.slotAccounts
-      // Same accept/refuse set as before, split causes at the top level and
-      // named by country and slot below — a caller sending a map cannot tell
-      // which entry failed from a bare field name.
-      if (slotAccounts === null) {
-        return NextResponse.json({ error: 'invalid slotAccounts: must be an object mapping each country to its slot accounts — got null; pass { "<country>": { "<slot>": "<accountId|null>" } } or omit it' }, { status: 422 })
-      }
-      if (Array.isArray(slotAccounts)) {
-        return NextResponse.json({ error: 'invalid slotAccounts: must be an object mapping each country to its slot accounts — got a list; pass { "<country>": { "<slot>": "<accountId|null>" } } or omit it' }, { status: 422 })
-      }
-      if (typeof slotAccounts !== 'object') {
-        return NextResponse.json({ error: `invalid slotAccounts: must be an object mapping each country to its slot accounts — got "${suppliedValue(slotAccounts)}"; pass { "<country>": { "<slot>": "<accountId|null>" } } or omit it` }, { status: 422 })
-      }
-      for (const [country, slots] of Object.entries(slotAccounts as Record<string, unknown>)) {
-        const pack = PAYROLL_COUNTRY_PACKS[country]
-        if (!pack) {
-          const installed = Object.keys(PAYROLL_COUNTRY_PACKS).join(', ')
-          return NextResponse.json({ error: `invalid pack ${country}: no payroll pack is installed for "${country}" — installed countries are: ${installed}; install the pack first (POST action "install-pack") or remove the entry` }, { status: 422 })
-        }
-        if (slots === null) {
-          return NextResponse.json({ error: `invalid pack ${country}: slot accounts must be an object — got null; pass { "<slot>": "<accountId|null>" } for ${country} or remove the entry` }, { status: 422 })
-        }
-        if (typeof slots !== 'object') {
-          return NextResponse.json({ error: `invalid pack ${country}: slot accounts must be an object — got "${suppliedValue(slots)}"; pass { "<slot>": "<accountId|null>" } for ${country} or remove the entry` }, { status: 422 })
-        }
-        for (const [slotKey, accountId] of Object.entries(slots as Record<string, unknown>)) {
-          if (!pack.statutorySlots.some((slot) => slot.key === slotKey)) {
-            const declared = pack.statutorySlots.map((slot) => `"${slot.key}"`).join(', ')
-            return NextResponse.json({ error: `invalid slot ${country}/${slotKey}: no statutory slot "${slotKey}" is declared for "${country}" — declared slots are: ${declared}; map each declared slot to an account id or null` }, { status: 422 })
-          }
-          if (accountId !== null && typeof accountId !== 'string') {
-            return NextResponse.json({ error: `invalid account for ${country}/${slotKey}: must be an account id or null — got "${suppliedValue(accountId)}"; choose the account in Payroll setup → Accounts, or pass null to clear it` }, { status: 422 })
-          }
-          if (accountId !== null && !isUuid(accountId)) {
-            return NextResponse.json({ error: `invalid account for ${country}/${slotKey}: "${accountId}" is not an account id — choose the account in Payroll setup → Accounts, or pass null to clear it` }, { status: 422 })
-          }
-        }
-      }
+      const slotAccounts = body.slotAccounts!
       const slotAccountsBefore = await currentSlotAccounts(
         orgId,
         slotAccounts as Record<string, Record<string, string | null>>,

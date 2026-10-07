@@ -244,6 +244,44 @@ test("the removed CRA organization frequency is refused before database access",
   }
 });
 
+test("payroll settings distinguish malformed JSON from named field refusals before database access", async () => {
+  authorize(randomUUID(), randomUUID());
+  try {
+    const malformed = await PUT(new Request("http://openbooks.test/api/payroll/settings", {
+      method: "PUT", headers: { "Content-Type": "application/json" }, body: "{",
+    }));
+    assert.equal(malformed.status, 400);
+    assert.equal((await malformed.json()).error, "invalid request body");
+    const invalid = await refusalOf(await PUT(request("PUT", {
+      statutoryHolidayPay: true, netPayAccountId: 42,
+    })));
+    assert.equal(invalid.status, 422);
+    assert.match(invalid.error, /invalid netPayAccountId.*"42".*Payroll setup → Accounts/);
+    const inherited = await refusalOf(await PUT(request("PUT", {
+      slotAccounts: { constructor: {} },
+    })));
+    assert.equal(inherited.status, 422);
+    assert.match(inherited.error, /invalid pack constructor.*no payroll pack.*remove the entry/);
+  } finally { routeState.authz = null; }
+});
+
+test("a malformed payroll slot leaves earlier valid settings, components and audits untouched", { skip: !DB }, async () => {
+  const fixture = await scratchPayrollOrg();
+  await withPayrollActor(fixture, async () => {
+    const snapshot = async () => withOrgContext(fixture.orgId, async () => (await db.execute(sql`select
+      (select jsonb_agg(to_jsonb(c) order by id) from pay_components c where org_id=${fixture.orgId}) as components,
+      (select jsonb_agg(to_jsonb(a) order by id) from audit_log a where org_id=${fixture.orgId}) as audits`)).rows);
+    const before = { payroll: await payrollState(fixture.orgId), records: await snapshot() };
+    const refused = await refusalOf(await PUT(request("PUT", {
+      wageExpenseAccountId: fixture.accounts.cogs, statutoryHolidayPay: true,
+      slotAccounts: { CA: { income_tax: "not-an-account" } },
+    })));
+    assert.equal(refused.status, 422);
+    assert.match(refused.error, /invalid account for CA\/income_tax.*not-an-account.*choose the account/);
+    assert.deepEqual({ payroll: await payrollState(fixture.orgId), records: await snapshot() }, before);
+  });
+});
+
 test(
   "slot-account mutations share the payroll settings transaction",
   { skip: !DB },
