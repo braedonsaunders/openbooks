@@ -510,7 +510,7 @@ settlementTest("transaction policies govern dated shares, group ceilings, approv
   };
   const source = await seedSource("2026-07-09");
   await activateBenefitProgram(command);
-  await refuses(() => saveBenefitTransactionPolicy({ ...command, expectedRevision: (await getBenefitProgram(db,h.org.orgId,h.settlerId,program.id)).revision }), /Only draft.*replacement/);
+  await refuses(async () => saveBenefitTransactionPolicy({ ...command, expectedRevision: (await getBenefitProgram(db,h.org.orgId,h.settlerId,program.id)).revision }), /Only draft.*replacement/);
   await assert.rejects(() => db.execute(sql`update hrm_benefit_transaction_positions set weight=3 where org_id=${h.org.orgId} and program_id=${program.id}`), error => errorChainMatches(error,/immutable.*replacement/));
   const query = settlementQuery(h, program.id), preview = await previewIncentiveSettlement(query);
   assert.equal(preview.computation.measuredValue, "1000.0000");
