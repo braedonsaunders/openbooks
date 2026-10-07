@@ -15,6 +15,7 @@ interface PrintRouteState {
   scopeCalls: string[]
   valueCalls: string[]
   templateCalls: Array<string | null>
+  designatedTemplateCalls: string[]
   templateResult: {
     compiledHtml: string
     paperSize: string
@@ -44,6 +45,7 @@ const state: PrintRouteState = {
   scopeCalls: [],
   valueCalls: [],
   templateCalls: [],
+  designatedTemplateCalls: [],
   templateResult: defaultTemplate,
   renderCalls: 0,
 }
@@ -83,6 +85,7 @@ const mockSources = new Map<string, string>([
     'store',
     `
       const state = globalThis[Symbol.for('openbooks.record-pdf-print-route-test')]
+      export async function loadRecordDesignatedTemplateName(_orgId, _docKind, id) { state.designatedTemplateCalls.push(id); return null }
       export async function resolvePdfTemplate(_orgId, _recordType, templateId) {
         state.templateCalls.push(templateId ?? null)
         return state.templateResult
@@ -151,6 +154,7 @@ function reset(): void {
   state.scopeCalls = []
   state.valueCalls = []
   state.templateCalls = []
+  state.designatedTemplateCalls = []
   state.templateResult = defaultTemplate
   state.renderCalls = 0
 }
@@ -168,6 +172,7 @@ test('a well-formed id prints on read authority', async () => {
   const response = await get('00000000-0000-4000-8000-00000000a001')
   assert.equal(response.status, 200)
   assert.equal(state.renderCalls, 1)
+  assert.deepEqual(state.designatedTemplateCalls, ['00000000-0000-4000-8000-00000000a001'])
   assert.deepEqual(state.templateCalls, [null], 'omitting the template query still resolves the default')
 })
 
@@ -207,6 +212,7 @@ test('a malformed id is refused exactly like a missing record, before scope or r
     assert.deepEqual(await response.json(), { error: 'record not found' })
     assert.deepEqual(state.scopeCalls, [], `"${bad}" never reaches the subsidiary lookup`)
     assert.deepEqual(state.valueCalls, [], `"${bad}" never reaches the record loader`)
+    assert.deepEqual(state.designatedTemplateCalls, [], `"${bad}" never reaches the record's template designation`)
     assert.equal(state.renderCalls, 0)
   }
 })
@@ -233,6 +239,7 @@ test('a malformed template id is refused exactly like a missing template, before
     assert.equal(response.status, 404, `"${bad}" must be a plain not-found`)
     assert.deepEqual(await response.json(), { error: 'template not found' })
     assert.deepEqual(state.templateCalls, [], `"${bad}" must never be bound to pdf_templates.id`)
+    assert.deepEqual(state.designatedTemplateCalls, [], `"${bad}" never reaches the record's template designation`)
     assert.equal(state.renderCalls, 0)
   }
 })
@@ -243,5 +250,6 @@ test('an explicitly empty template query is 404 template not found, not the defa
   assert.equal(response.status, 404, 'empty ?template= must not 200 with the default template')
   assert.deepEqual(await response.json(), { error: 'template not found' })
   assert.deepEqual(state.templateCalls, [], 'empty ?template= must never reach getPdfTemplate')
+  assert.deepEqual(state.designatedTemplateCalls, [], 'empty ?template= never reaches the record template designation')
   assert.equal(state.renderCalls, 0)
 })
