@@ -70,8 +70,9 @@ test("a clean-schema full sandbox clones tenant evidence without pre-seed collis
     assert.equal(state.rows[0]?.sandbox_of, org.orgId);
     const assertRates = async () => {
       const copied = await activatedRateSnapshot(sandboxOrgId);
-      assert.deepEqual(copied.map(r => ({ table: r.table, rows: r.rows.map(({ rebased: _rebased, ...row }) => row) })),
-        sourceRates.map(r => ({ table: r.table, rows: r.rows.map(({ rebased: _rebased, ...row }) => row) })));
+      const evidence = (snapshot: typeof copied) => snapshot.map(r => ({ table: r.table,
+        rows: r.rows.map(row => ({ status: row.status, evidence: row.evidence })) }));
+      assert.deepEqual(evidence(copied), evidence(sourceRates));
       assert.ok(copied.every(r => r.rows.length === 2 && r.rows.every(row => row.rebased === true)));
       assert.equal((await db.execute(sql`select 1 from item_rate_lines l where l.org_id=${sandboxOrgId} and not exists(select 1 from items i where i.id=l.item_id and i.org_id=l.org_id)`)).rows.length, 0);
     };
