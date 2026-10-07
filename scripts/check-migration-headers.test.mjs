@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
+import { publishedMigrationSessionPrelude, publishedMigrationSessionSettings } from "./migration-session-headers.mjs";
 import {
   LOCK_TIMEOUT_AMNESTY_MAX_ORDINAL,
   scanMigrationFile,
@@ -85,6 +86,29 @@ test("a missing header line is refused naming the missing SET", () => {
       "SET standard_conforming_strings",
     ],
   );
+});
+
+test("the runner supplies the exact published partial header without admitting changed or unrelated files", () => {
+  const filename = "0572_optional_custom_dimension_assignments.sql";
+  const content = readFileSync(new URL(`../schema/migrations/generated/${filename}`, import.meta.url), "utf8");
+  const settings = publishedMigrationSessionSettings(`generated/${filename}`, content);
+  assert.deepEqual(settings.map(({ name }) => name).sort(), [
+    "client_encoding", "client_min_messages", "idle_in_transaction_session_timeout", "standard_conforming_strings",
+  ]);
+  assert.deepEqual(scanMigrationFile(filename, content), []);
+  const prelude = publishedMigrationSessionPrelude(`generated/${filename}`, content);
+  assert.equal(prelude, `${HEADER.split("\n").slice(1).join("\n")}\n`);
+  assert.ok((prelude + content).endsWith(content), "session preparation leaves every published SQL byte intact");
+  assert.equal(publishedMigrationSessionPrelude("generated/0576_other.sql", content), "");
+  assert.equal(scanMigrationFile("0576_other.sql", content).filter(({ kind }) => kind === "header-missing").length, 4);
+  for (const suffix of ["\n-- changed published bytes\n", "\nSET lock_timeout = 0;\n"]) {
+    const changed = content + suffix;
+    assert.throws(() => publishedMigrationSessionPrelude(`generated/${filename}`, changed), /published digest.*forward migration/);
+    const findings = scanMigrationFile(filename, changed);
+    assert.ok(findings.some(({ kind }) => kind === "published-content-changed"));
+    assert.equal(findings.filter(({ kind }) => kind === "header-missing").length, 4);
+    if (suffix.includes("lock_timeout")) assert.ok(findings.some(({ kind }) => kind === "lock_timeout-zero"));
+  }
 });
 
 test("lock_timeout prose in comments is not code", () => {
