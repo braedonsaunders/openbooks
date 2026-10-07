@@ -399,14 +399,20 @@ test.describe("subscription to revenue", () => {
         await expect(row.getByText(fmtUSD(total)).first()).toBeVisible();
       }
 
-      // The configured ladder is visible on the collections dunning tab.
-      await page.goto("/collections");
-      await page.getByRole("button", { name: /dunning/i }).click();
+      // The policy list opens its configured reminder ladder in the native drawer.
+      await page.goto("/collections?view=policies");
       const policyName = t("W5 Standard");
-      await expect(page.getByText(policyName).first()).toBeVisible();
-      await expect(page.getByText("4 stages").first()).toBeVisible();
-      await expect(page.getByText("Day 7: Gentle reminder").first()).toBeVisible();
-      await expect(page.getByText("Day 60: Escalation").first()).toBeVisible();
+      const policyRow = page.locator("tr", { hasText: policyName });
+      await expect(policyRow.getByText(/4 stages/)).toBeVisible();
+      await policyRow.getByText(policyName, { exact: true }).click();
+      const policyDrawer = page.getByRole("dialog");
+      await expect(policyDrawer).toBeVisible();
+      await expect(policyDrawer.getByRole("textbox", { name: "Name", exact: true })).toHaveCount(5);
+      await expect(policyDrawer.getByRole("textbox", { name: "Days past due", exact: true })).toHaveCount(4);
+      await expect(policyDrawer.getByRole("textbox", { name: "Name", exact: true }).nth(1)).toHaveValue("Gentle reminder");
+      await expect(policyDrawer.getByRole("textbox", { name: "Days past due", exact: true }).nth(0)).toHaveValue("7");
+      await expect(policyDrawer.getByRole("textbox", { name: "Name", exact: true }).nth(4)).toHaveValue("Escalation");
+      await expect(policyDrawer.getByRole("textbox", { name: "Days past due", exact: true }).nth(3)).toHaveValue("60");
 
       S.orgId = await resolveOrgId();
       expect(S.orgId).toBeTruthy();
