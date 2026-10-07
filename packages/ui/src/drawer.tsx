@@ -307,7 +307,6 @@ export function Drawer({
                 <motion.span
                   key={index}
                   aria-hidden
-                  data-drawer-under={index}
                   initial={reduceMotion ? rest : { x: 0, y: 0, rotate: 0 }}
                   animate={rest}
                   exit={reduceMotion ? rest : { x: 0, y: 0, rotate: 0, transition: { duration: 0.12 } }}
@@ -320,7 +319,6 @@ export function Drawer({
                 />
               ))
             : null}
-          {paper ? <span aria-hidden data-drawer-backing className="pointer-events-none absolute inset-0 -z-10 hidden" /> : null}
           {/* The top sheet. Its shadow is cast by a separate layer because
               the turned corner clips the dialog, and a clip removes the
               element's own shadow with it. */}
@@ -328,7 +326,6 @@ export function Drawer({
           {paper ? (
             <span
               aria-hidden
-              data-drawer-cast
               className="absolute inset-0 shadow-[0_25px_50px_-12px_rgb(0_0_0/0.25),-8px_0_24px_-12px_rgb(15_23_42/0.18)]"
             />
           ) : null}
@@ -338,7 +335,6 @@ export function Drawer({
             aria-modal="true"
             aria-labelledby={headingId}
             tabIndex={-1}
-            data-drawer-paper={paper || undefined}
             style={paper ? { clipPath: FOLD_CLIP } : undefined}
             className={cn(
               'relative flex h-full flex-col overflow-hidden border-t border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900',
@@ -352,17 +348,14 @@ export function Drawer({
                     sheet reads as a surface resting on the ones beneath. */}
                 <span
                   aria-hidden
-                  data-drawer-edge
                   className="pointer-events-none absolute inset-y-0 left-0 z-10 w-2 bg-gradient-to-r from-slate-900/[0.035] to-transparent dark:from-black/20"
                 />
                 {/* The underside of the turned corner. */}
                 <span
                   aria-hidden
-                  data-drawer-fold
                   style={{ width: FOLD, height: FOLD }}
                   className="pointer-events-none absolute top-0 left-0 z-20 rounded-br-[3px] bg-[linear-gradient(135deg,transparent_50%,var(--color-slate-200)_50%,var(--color-slate-100))] shadow-[1px_1px_2px_rgb(15_23_42/0.14)] dark:bg-[linear-gradient(135deg,transparent_50%,var(--color-slate-700)_50%,var(--color-slate-800))] dark:shadow-[1px_1px_2px_rgb(0_0_0/0.4)]"
                 />
-                <span aria-hidden data-drawer-ornament className="pointer-events-none absolute inset-0 z-[5] hidden" />
               </>
             ) : null}
             {title || description || headerActions ? (
