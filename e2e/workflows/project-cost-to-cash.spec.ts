@@ -991,7 +991,7 @@ function sovFinancialProfile(): Json {
       {
         const drawer = page.locator('[role="dialog"]').first();
         await expect(drawer.getByText(`${t} Civic Library Build`).first()).toBeVisible();
-        await drawer.getByRole('tab', { name: 'Financials' }).click();
+        await drawer.getByRole('button', { name: 'Financials', exact: true }).click();
         // Label-scoped: each measure's value must sit in its own labeled row,
         // not merely somewhere in the drawer (contract and invoiced are both
         // 100,000.00 here, so bare text matching would prove nothing).
@@ -1007,7 +1007,7 @@ function sovFinancialProfile(): Json {
       await openDrawer(page, `/projects?project=${projectId}`);
       {
         const drawer = page.locator('[role="dialog"]').first();
-        await drawer.getByRole('tab', { name: 'Billing' }).click();
+        await drawer.getByRole('button', { name: 'Billing', exact: true }).click();
         await expect(drawer.getByText(inv2Number).first()).toBeVisible();
         const row = drawer.locator('div').filter({ hasText: 'Retainage held' }).filter({ hasText: fmtUSD(0n) }).last();
         await expect(row, 'billing tab shows nothing held after release').toBeVisible();
@@ -1015,7 +1015,7 @@ function sovFinancialProfile(): Json {
       await openDrawer(page, `/projects?project=${projectId}`);
       {
         const drawer = page.locator('[role="dialog"]').first();
-        await drawer.getByRole('tab', { name: 'Transactions' }).click();
+        await drawer.getByRole('button', { name: 'Transactions', exact: true }).click();
         // Every source document tagged to the job, with its own number:
         // the vendor bill, the equipment charge, the overhead journal, and
         // all three customer invoices. (Approved labour posts as a
@@ -1028,7 +1028,7 @@ function sovFinancialProfile(): Json {
       await openDrawer(page, `/projects?project=${projectId}`);
       {
         const drawer = page.locator('[role="dialog"]').first();
-        await drawer.getByRole('tab', { name: 'Hours & Time' }).click();
+        await drawer.getByRole('button', { name: 'Hours & Time', exact: true }).click();
         for (const [label, amount] of [
           ['Total hours', '40'],
           ['Labor cost', fmtUSD(toCents(M.labour))],
