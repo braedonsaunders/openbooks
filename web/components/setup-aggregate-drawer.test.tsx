@@ -94,11 +94,16 @@ test('transaction configuration tabs replace the active concept inside one nativ
   const dialog=document.querySelector('[role=dialog]');assert.ok(dialog);
   const sections=messages.admin.setup.transactionBenefits;
   assert.ok([...dialog.querySelectorAll('label')].some(label=>label.textContent?.includes(sections.fields.documentKind)));
+  assert.equal(button(sections.positions).disabled,false,'Existing configuration sections are views, not locked creation steps');
   await act(()=>button(sections.positions).click());
   assert.equal(document.querySelector('[role=dialog]'),dialog);assert.equal(document.querySelectorAll('[role=dialog]').length,1);
   assert.ok(![...dialog.querySelectorAll('label')].some(label=>label.textContent?.includes(sections.fields.documentKind)));
   assert.ok([...dialog.querySelectorAll('label')].some(label=>label.textContent?.includes(sections.fields.weight)));
   await act(()=>button(sections.responsibilities).click());
+  assert.ok(![...dialog.querySelectorAll('label')].some(label=>label.textContent?.includes(sections.fields.weight)));
+  assert.equal(document.querySelector('[role=dialog]'),dialog);
+  await act(()=>button(sections.source).click());
+  assert.ok([...dialog.querySelectorAll('label')].some(label=>label.textContent?.includes(sections.fields.documentKind)));
   assert.ok(![...dialog.querySelectorAll('label')].some(label=>label.textContent?.includes(sections.fields.weight)));
   assert.equal(document.querySelector('[role=dialog]'),dialog);
 });
