@@ -656,7 +656,7 @@ export function WeeklyGrid({
           <div className="grid min-w-fit" style={{ gridTemplateColumns: template }}>
             {/* header */}
             {[
-              { id: 'project', label: tCommon('labels.project'), required: true },
+              { id: 'project', label: tCommon('labels.project') },
               { id: 'item', label: t('labels.serviceItem') },
               { id: 'timeType', label: t('labels.timeType') },
               { id: 'department', label: tCommon('labels.department') },

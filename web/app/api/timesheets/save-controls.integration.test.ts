@@ -17,6 +17,8 @@ const { db, withOrgContext } = await import('@openbooks/engine/src/platform/db.t
 const { createScratchOrg, createScratchUser, dropScratchOrgReporting } = await import('@openbooks/engine/src/testing/fixtures.ts')
 const { waitForLockWaiter } = await import('@openbooks/engine/src/testing/lock-wait.ts')
 const { PUT } = await import('./route')
+const { POST: submitWeek } = await import('./submit/route')
+const { POST: approveWeek } = await import('./approve/route')
 const { loadWeek } = await import('./_lib')
 const { isIsoCalendarDate } = await import('@openbooks/engine/src/platform/business-date.ts')
 
@@ -107,6 +109,59 @@ test('saving immediately approved hours captures rates and posts configured labo
     // roll back the time insert as well as the journal work.
     await assert.rejects(f.save({ week: '2026-08-02' }), /no accounting period covers/)
     assert.deepEqual((await f.snapshot()).rows, before)
+  } finally { await f.close() }
+})
+
+test('nonbillable employee hours retain their department and dated wage without inventing project costs', async () => {
+  const f = await fixture(true)
+  try {
+    const department = randomUUID(), otherDepartment = randomUUID(), otherSub = randomUUID()
+    await db.execute(sql`insert into subsidiaries(id,org_id,parent_id,name,base_currency,country,is_active,custom)
+      values (${otherSub},${f.org.orgId},${f.org.subsidiaryId},'Other company','CAD','CA',true,'{}'::jsonb)`)
+    await db.execute(sql`insert into departments(id,org_id,subsidiary_id,name)
+      values (${department},${f.org.orgId},${f.org.subsidiaryId},'Administration'),
+        (${otherDepartment},${f.org.orgId},${otherSub},'Other company administration')`)
+    const row = { ...f.row, projectId: null, departmentId: department, isBillable: false, memo: 'Training' }
+    for (const invalid of [{ ...row, isBillable: true }, { ...row, departmentId: otherDepartment }]) {
+      const refusal = await f.save({ rows: [invalid] })
+      assert.equal(refusal.status, 422, await refusal.clone().text())
+      const message = ((await refusal.json()) as { error: string }).error
+      assert.match(message, invalid.isBillable ? /Billable hours need a project.*select.*or mark.*nonbillable/ : /department.*different legal entity.*select/)
+      assert.equal((await f.snapshot()).rows.length, 0)
+    }
+    assert.equal((await f.save({ rows: [row] })).status, 200)
+    const draft = (await f.snapshot()).rows[0]!
+    assert.equal(draft.status, 'draft')
+    assert.equal(draft.project_id, null)
+    assert.equal(draft.department_id, department)
+    const command = (action: typeof submitWeek) => withOrgContext(f.org.orgId, () => action(new Request('http://audit.local/api/timesheets', {
+      method: 'POST', body: JSON.stringify({ employee: f.employee, week: '2026-07-12' }),
+    })))
+    const submitted = await command(submitWeek)
+    assert.equal(submitted.status, 200, await submitted.clone().text())
+    const approved = await command(approveWeek)
+    assert.equal(approved.status, 200, await approved.clone().text())
+    const entry = (await f.snapshot()).rows[0]!
+    assert.equal(entry.id, draft.id)
+    assert.equal(entry.project_id, null)
+    assert.equal(entry.department_id, department)
+    assert.equal(entry.hours, '4.0000')
+    assert.equal(entry.status, 'approved')
+    assert.equal(entry.approved_by, f.actor)
+    assert.equal(entry.cost_rate, '30.0000')
+    assert.equal(entry.cost_rate_currency, 'CAD')
+    assert.equal(entry.cost_rate_subsidiary_id, f.org.subsidiaryId)
+    assert.equal(entry.bill_rate, null)
+    assert.equal(entry.cost_journal_entry_id, null)
+    assert.equal(entry.overhead_journal_entry_id, null)
+    const journals = (await db.execute(sql`select * from journal_entries where org_id=${f.org.orgId} order by id`)).rows
+    assert.equal(journals.length, 0)
+    const audit = (await db.execute(sql`select changes from audit_log where org_id=${f.org.orgId}
+      and table_name='timesheet_weeks' and actor_id=${f.actor} and changes->>'event'='approved'`)).rows
+    assert.equal(audit.length, 1)
+    assert.equal((await f.save({ rows: [row] })).status, 200)
+    assert.deepEqual((await f.snapshot()).rows, [entry])
+    assert.deepEqual((await db.execute(sql`select * from journal_entries where org_id=${f.org.orgId} order by id`)).rows, journals)
   } finally { await f.close() }
 })
 
