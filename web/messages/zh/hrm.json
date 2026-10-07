@@ -3126,6 +3126,7 @@
       "effectiveTo": "请选择有效的结束日期（YYYY-MM-DD），或留空。",
       "dateOrder": "结束日期不得早于开始日期。",
       "fixedAmount": "请输入每位受益人的固定金额。",
+      "unitRate": "请输入每个已批准工时或交易单位支付的金额。",
       "percentRate": "请输入应用于计量基数的百分比。",
       "budgetAmount": "请输入受益人共同分配的预算。",
       "metric": "请选择激励的计量指标。",

@@ -3126,6 +3126,7 @@
       "effectiveTo": "Choisissez une date de fin valide (AAAA-MM-JJ) ou laissez vide.",
       "dateOrder": "La fin doit être à la date de début ou après.",
       "fixedAmount": "Saisissez le montant fixe par bénéficiaire.",
+      "unitRate": "Saisissez le montant payé pour chaque heure approuvée ou unité de transaction.",
       "percentRate": "Saisissez le taux appliqué à la base mesurée.",
       "budgetAmount": "Saisissez le budget partagé entre les bénéficiaires.",
       "metric": "Choisissez la mesure de la prime.",

@@ -265,6 +265,9 @@ export function ProgramBuilderDrawer({
   const [errors, setErrors] = useState<FieldErrors>({})
   const [reason, setReason] = useState('')
   const [saving, setSaving] = useState(false)
+  const amountFieldKey = draft.valuation === 'per_unit'
+    ? draft.metric === 'approved_hours' ? 'portfolio.valuations.per_hour' : 'portfolio.valuations.per_unit'
+    : 'portfolio.builder.fields.fixedAmount'
 
   function close() {
     router.push(closeHref as never)
@@ -316,7 +319,7 @@ export function ProgramBuilderDrawer({
     for (const field of ['fixedAmount', 'percentRate', 'capAmount', 'budgetAmount', 'thresholdAmount'] as const) {
       const raw = draft[field].trim()
       if (stepFields(step).includes(field) && raw !== '' && canonicalDecimal(raw, 4) === null) {
-        const message = decimalFieldRefusal(raw, t(`portfolio.builder.fields.${field}`), t)
+        const message = decimalFieldRefusal(raw, t(field === 'fixedAmount' ? amountFieldKey : `portfolio.builder.fields.${field}`), t)
         setErrors({ [field]: message })
         return
       }
@@ -328,7 +331,7 @@ export function ProgramBuilderDrawer({
     for (const field of ['fixedAmount', 'percentRate', 'capAmount', 'budgetAmount', 'thresholdAmount'] as const) {
       const raw = draft[field].trim()
       if (raw !== '' && canonicalDecimal(raw, 4) === null) {
-        setErrors({ [field]: decimalFieldRefusal(raw, t(`portfolio.builder.fields.${field}`), t) })
+        setErrors({ [field]: decimalFieldRefusal(raw, t(field === 'fixedAmount' ? amountFieldKey : `portfolio.builder.fields.${field}`), t) })
         setStep('value')
         return
       }
@@ -389,7 +392,7 @@ export function ProgramBuilderDrawer({
   if (/^[A-Z]{3}$/.test(draft.currency)) {
     for (const field of ['fixedAmount', 'capAmount', 'budgetAmount', 'thresholdAmount'] as const) {
       if (draft[field] && canonicalDecimal(draft[field], 4) !== null) addSummary(
-        t(field === 'fixedAmount' && draft.valuation === 'per_unit' ? draft.metric === 'approved_hours' ? 'portfolio.valuations.per_hour' : 'portfolio.valuations.per_unit' : `portfolio.builder.fields.${field}`),
+        t(field === 'fixedAmount' ? amountFieldKey : `portfolio.builder.fields.${field}`),
         field === 'fixedAmount' && draft.valuation === 'per_unit' ? `${draft[field]} ${draft.currency}` : money(draft[field], { currency: draft.currency }),
       )
     }
@@ -516,7 +519,7 @@ export function ProgramBuilderDrawer({
             </div>
             {draft.valuation === 'fixed' || draft.valuation === 'per_unit' ? (
               <div>
-                <Label htmlFor="program-builder-fixed">{t(draft.valuation === 'per_unit' ? draft.metric === 'approved_hours' ? 'portfolio.valuations.per_hour' : 'portfolio.valuations.per_unit' : 'portfolio.builder.fields.fixedAmount')}</Label>
+                <Label htmlFor="program-builder-fixed">{t(amountFieldKey)}</Label>
                 <Input
                   id="program-builder-fixed"
                   inputMode="decimal"

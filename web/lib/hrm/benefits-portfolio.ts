@@ -208,7 +208,7 @@ export function validateProgramDraft(draft: ProgramDraft): FieldErrors {
     errors.effectiveTo = 'portfolio.validation.dateOrder'
   }
   if ((draft.valuation === 'fixed' || draft.valuation === 'per_unit') && draft.fixedAmount.trim() === '') {
-    errors.fixedAmount = 'portfolio.validation.fixedAmount'
+    errors.fixedAmount = draft.valuation === 'per_unit' ? 'portfolio.validation.unitRate' : 'portfolio.validation.fixedAmount'
   }
   if (draft.valuation === 'percent' && draft.percentRate.trim() === '') {
     errors.percentRate = 'portfolio.validation.percentRate'

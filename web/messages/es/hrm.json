@@ -3126,6 +3126,7 @@
       "effectiveTo": "Elija una fecha final válida (AAAA-MM-DD) o déjela abierta.",
       "dateOrder": "La fecha final debe ser igual o posterior al inicio.",
       "fixedAmount": "Introduzca el importe fijo por destinatario.",
+      "unitRate": "Introduzca el importe pagado por cada hora aprobada o unidad de transacción.",
       "percentRate": "Introduzca el porcentaje aplicado a la base medida.",
       "budgetAmount": "Introduzca el presupuesto compartido entre destinatarios.",
       "metric": "Elija la medida del incentivo.",

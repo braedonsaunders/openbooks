@@ -3126,6 +3126,7 @@
       "effectiveTo": "Choose a real end date (YYYY-MM-DD) or leave it open.",
       "dateOrder": "The end date must be on or after the start date.",
       "fixedAmount": "Enter the fixed amount each recipient receives.",
+      "unitRate": "Enter the amount paid for each approved hour or transaction unit.",
       "percentRate": "Enter the percent rate applied to the measured base.",
       "budgetAmount": "Enter the pool budget shared across recipients.",
       "metric": "Choose what the incentive is measured from.",

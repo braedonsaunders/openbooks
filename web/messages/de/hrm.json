@@ -3126,6 +3126,7 @@
       "effectiveTo": "Wählen Sie ein gültiges Enddatum (JJJJ-MM-TT) oder lassen Sie es offen.",
       "dateOrder": "Das Enddatum muss am oder nach dem Startdatum liegen.",
       "fixedAmount": "Geben Sie den Festbetrag je Empfänger ein.",
+      "unitRate": "Geben Sie den Betrag je genehmigter Stunde oder Transaktionseinheit ein.",
       "percentRate": "Geben Sie den Prozentsatz für die Bemessungsgrundlage ein.",
       "budgetAmount": "Geben Sie das gemeinsame Budget ein.",
       "metric": "Wählen Sie die Bemessung der Prämie.",
