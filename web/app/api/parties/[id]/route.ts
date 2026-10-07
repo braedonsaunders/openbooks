@@ -1,4 +1,4 @@
-import { parseJsonBody } from '@/lib/api/json'
+import { parseJsonBody, uuidId } from '@/lib/api/json'
 import { defineRoute } from '@/lib/api/route'
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
@@ -45,26 +45,26 @@ const partyPatchBody = z.object({
     backupRequired: z.boolean().nullable().optional(),
     backupType: z.enum(['costed_timesheets', 'timesheets_purchases', 'purchases', 'purchases_shop_time', 'quote_only', 'none']).nullable().optional(),
   }).strict().nullable().optional(),
-  subsidiaryId: z.string().uuid().nullable().optional(),
-  additionalSubsidiaryIds: z.array(z.string().uuid()).optional(),
+  subsidiaryId: uuidId.nullable().optional(),
+  additionalSubsidiaryIds: z.array(uuidId).optional(),
   roles: z.object({
     customer: z.object({
-      enabled: z.boolean().optional(), paymentTermsId: z.string().uuid().nullable().optional(),
+      enabled: z.boolean().optional(), paymentTermsId: uuidId.nullable().optional(),
       creditLimit: z.string().nullable().optional(), currency: z.string().nullable().optional(),
-      arAccountId: z.string().uuid().nullable().optional(), salesRepId: z.string().uuid().nullable().optional(),
-      taxCodeId: z.string().uuid().nullable().optional(), isOnHold: z.boolean().optional(), holdReason: z.string().nullable().optional(),
+      arAccountId: uuidId.nullable().optional(), salesRepId: uuidId.nullable().optional(),
+      taxCodeId: uuidId.nullable().optional(), isOnHold: z.boolean().optional(), holdReason: z.string().nullable().optional(),
     }).strict().optional(),
     vendor: z.object({
       enabled: z.boolean().optional(), paymentMethod: z.enum(PAYMENT_METHODS).nullable().optional(),
-      eftNotificationEmail: z.string().nullable().optional(), paymentTermsId: z.string().uuid().nullable().optional(),
+      eftNotificationEmail: z.string().nullable().optional(), paymentTermsId: uuidId.nullable().optional(),
       currency: z.string().nullable().optional(), is1099OrT4a: z.boolean().optional(),
-      apAccountId: z.string().uuid().nullable().optional(), defaultExpenseAccountId: z.string().uuid().nullable().optional(),
-      taxCodeId: z.string().uuid().nullable().optional(), isOnHold: z.boolean().optional(), holdReason: z.string().nullable().optional(),
+      apAccountId: uuidId.nullable().optional(), defaultExpenseAccountId: uuidId.nullable().optional(),
+      taxCodeId: uuidId.nullable().optional(), isOnHold: z.boolean().optional(), holdReason: z.string().nullable().optional(),
     }).strict().optional(),
     employee: z.object({
       enabled: z.boolean().optional(), employeeNumber: z.string().nullable().optional(), jobTitle: z.string().nullable().optional(),
-      departmentId: z.string().uuid().nullable().optional(), tradeId: z.string().uuid().nullable().optional(),
-      workerCompGroupId: z.string().uuid().nullable().optional(), hiredOn: z.string().nullable().optional(),
+      departmentId: uuidId.nullable().optional(), tradeId: uuidId.nullable().optional(),
+      workerCompGroupId: uuidId.nullable().optional(), hiredOn: z.string().nullable().optional(),
     }).strict().optional(),
   }).strict().optional(),
   addresses: z.array(z.object({

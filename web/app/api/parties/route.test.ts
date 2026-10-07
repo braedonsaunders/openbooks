@@ -302,7 +302,7 @@ test("a foreign role reference is refused as unknown, never persisted", async ()
   state.refExists = false;
   const response = await post("00000000-0000-4000-8000-00000000b007", {
     displayName: "Acme Corp",
-    roles: { customer: { enabled: true, paymentTermsId: "00000000-0000-4000-8000-00000000b008" } },
+    roles: { customer: { enabled: true, paymentTermsId: "00000000-0000-f000-0000-00000000b008" } },
   });
   assert.equal(response.status, 422);
   assert.deepEqual(await response.json(), { error: "Invalid customer payment terms", field: "roles" });

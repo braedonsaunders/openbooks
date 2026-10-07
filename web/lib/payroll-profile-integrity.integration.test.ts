@@ -47,8 +47,8 @@ for (const [label, fields] of cases) {
       await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}','{"payroll":true}'::jsonb) where id=${org.orgId}`);
       session.user = { id: actor, orgId: org.orgId, name: "Payroll controller", email: "payroll@scratch.test", roles: [], isSuperAdmin: false,
         envKind: "production", productionOrgId: org.orgId, homeOrgId: org.orgId, homeUserId: actor };
-      const employeeId = randomUUID();
-      const scheduleId = randomUUID();
+      const employeeId = randomUUID().replace(/^(.{14})./, "$1f");
+      const scheduleId = randomUUID().replace(/^(.{19})./, (_, prefix: string) => `${prefix}0`);
       await db.execute(sql`insert into parties(id,org_id,kind,display_name,subsidiary_id)
         values (${employeeId},${org.orgId},'person','Payroll fixture',${org.subsidiaryId})`);
       await db.execute(sql`insert into employee_roles(org_id,party_id) values (${org.orgId},${employeeId})`);
