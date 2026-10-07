@@ -187,6 +187,25 @@ test('barred configuration is refused by name on import and stores nothing', DB,
       assert.equal(outcome.failed, 1, `${entity.key} did not refuse`)
       assert.ok(message.includes(entity.key), `${entity.key} refusal must name the entity: ${message}`)
       assert.match(message, /cannot be imported/, `${entity.key} refusal must say import is barred`)
+      if (entity.key === 'dunning-policies') {
+        const seeded = (await db.execute<{ id: string }>(sql`
+          insert into dunning_policies (org_id, name, is_active, autopay_retry_offsets_days, autopay_insufficient_funds_offsets_days)
+          values (${org.orgId}, 'Complete policy export', false, '{2,7}', '{4}') returning id`)).rows
+        assert.equal(seeded.length, 1)
+        const policy = seeded[0]!
+        await db.execute(sql`insert into dunning_stages
+          (org_id, policy_id, sequence, name, offset_days, subject_template, body_template, escalate)
+          values (${org.orgId}, ${policy.id}, 2, 'Escalate', 14, 'Final reminder', 'Please pay', true),
+                 (${org.orgId}, ${policy.id}, 1, 'Reminder', 7, 'First reminder', 'Balance due', false)`)
+        const exported = (await setupResource(entity, org.orgId).read()).rows
+        assert.equal(exported.length, 1)
+        assert.deepEqual(JSON.parse(String(exported[0]!.retryOffsetsDays)), [{ days: 2 }, { days: 7 }])
+        assert.deepEqual(JSON.parse(String(exported[0]!.insufficientFundsOffsetsDays)), [{ days: 4 }])
+        assert.deepEqual(JSON.parse(String(exported[0]!.stages)), [
+          { sequence: 1, name: 'Reminder', offsetDays: 7, subjectTemplate: 'First reminder', bodyTemplate: 'Balance due', escalate: false },
+          { sequence: 2, name: 'Escalate', offsetDays: 14, subjectTemplate: 'Final reminder', bodyTemplate: 'Please pay', escalate: true },
+        ])
+      }
     }
   } finally {
     await dropScratchOrgReporting(org.orgId)

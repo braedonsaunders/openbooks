@@ -6,11 +6,23 @@ import { toSnake } from './registry'
 /** Read-side projection/source for registry fields stored in a child relation. */
 export function setupReadProjection(entity: SetupEntity, columns?: readonly string[]) {
   if (entity.key === 'dunning-policies') {
-    // The collection-policy form names retry fields without the storage
-    // namespace; resolve the same columns the native autopay writer saves.
-    const autopayColumns = new Set(['retry_offsets_days', 'insufficient_funds_offsets_days', 'expiry_notice_days', 'final_action'])
-    const projected = (columns?.length ? columns : [...autopayColumns]).map((column) =>
-      autopayColumns.has(column) ? `autopay_${column} as ${column}` : column)
+    // Export the complete policy in the same structured shape its native
+    // editor accepts, including ordered reminders and retry rows.
+    const structuredColumns: Record<string, string> = {
+      stages: `(select coalesce(jsonb_agg(jsonb_build_object(
+        'sequence', s.sequence, 'name', s.name, 'offsetDays', s.offset_days,
+        'subjectTemplate', s.subject_template, 'bodyTemplate', s.body_template,
+        'escalate', s.escalate) order by s.sequence), '[]'::jsonb)
+        from dunning_stages s where s.org_id = dunning_policies.org_id
+          and s.policy_id = dunning_policies.id) as stages`,
+      ...Object.fromEntries(['retry_offsets_days', 'insufficient_funds_offsets_days'].map((column) => [column,
+        `(select coalesce(jsonb_agg(jsonb_build_object('days', days) order by ordinal), '[]'::jsonb)
+          from unnest(autopay_${column}) with ordinality as retry(days, ordinal)) as ${column}`])),
+      expiry_notice_days: 'autopay_expiry_notice_days as expiry_notice_days',
+      final_action: 'autopay_final_action as final_action',
+    }
+    const projected = (columns?.length ? columns : Object.keys(structuredColumns)).map((column) =>
+      structuredColumns[column] ?? column)
     return sql.raw((columns?.length ? projected : ['*', ...projected]).join(', '))
   }
   if (entity.key === 'hrm-job-levels') {
