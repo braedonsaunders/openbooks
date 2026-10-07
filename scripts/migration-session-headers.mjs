@@ -11,13 +11,31 @@ const PUBLISHED_PARTIAL_HEADER = Object.freeze({
   ]),
 });
 
-/** Supply a published file's incomplete session header without changing its ledger identity. */
-export function publishedMigrationSessionSettings(filename, content) {
-  if (filename !== PUBLISHED_PARTIAL_HEADER.filename) return [];
-  if (createHash("sha256").update(content).digest("hex") !== PUBLISHED_PARTIAL_HEADER.sha256) {
+const PUBLISHED_RUNNER_LOCK_HEADER = Object.freeze({
+  filename: "generated/0580_clone_preserves_recorded_document_balances.sql",
+  sha256: "1ee33f04b4c0cfe6c1725d19d08cc613e593bbc2c63a499ae9e58b0b419ca59b",
+  settings: Object.freeze([]),
+  runnerOwnsLockTimeout: true,
+});
+
+function publishedSessionPolicy(filename, content) {
+  const policy = [PUBLISHED_PARTIAL_HEADER, PUBLISHED_RUNNER_LOCK_HEADER]
+    .find((entry) => entry.filename === filename);
+  if (!policy) return null;
+  if (createHash("sha256").update(content).digest("hex") !== policy.sha256) {
     throw new Error(`${filename} differs from its published digest — use the published bytes and make schema corrections through a new forward migration.`);
   }
-  return PUBLISHED_PARTIAL_HEADER.settings;
+  return policy;
+}
+
+/** Supply a published file's incomplete session header without changing its ledger identity. */
+export function publishedMigrationSessionSettings(filename, content) {
+  return publishedSessionPolicy(filename, content)?.settings ?? [];
+}
+
+/** Admit only reviewed immutable bytes whose file-level timeout the runner strips. */
+export function publishedMigrationUsesRunnerLockTimeout(filename, content) {
+  return publishedSessionPolicy(filename, content)?.runnerOwnsLockTimeout === true;
 }
 
 export function publishedMigrationSessionPrelude(filename, content) {

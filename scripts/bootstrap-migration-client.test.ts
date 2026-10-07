@@ -14,6 +14,7 @@ import { dirname, join } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 import type pg from "pg";
+import { publishedMigrationSessionPrelude } from "./migration-session-headers.mjs";
 import {
   DEFAULT_MIGRATION_LOCK_MAX_ATTEMPTS,
   DEFAULT_MIGRATION_LOCK_RETRY_BASE_MS,
@@ -270,16 +271,18 @@ test("sanitize and split stay linear on the published corpus and a 5 MB syntheti
  * runner only calls query(), so the double implements nothing else. */
 function recordingClient(
   onQuery?: (sql: string, calls: string[]) => Promise<unknown>,
-): { client: pg.PoolClient; calls: string[] } {
+): { client: pg.PoolClient; calls: string[]; parameters: unknown[][] } {
   const calls: string[] = [];
+  const parameters: unknown[][] = [];
   const client = {
-    query: async (sql: string) => {
+    query: async (sql: string, values?: unknown[]) => {
       calls.push(sql);
+      parameters.push(values ?? []);
       if (onQuery) await onQuery(sql, calls);
       return { rows: [], rowCount: 0 };
     },
   } as unknown as pg.PoolClient;
-  return { client, calls };
+  return { client, calls, parameters };
 }
 
 const RESUME_BODY = [
@@ -396,4 +399,23 @@ test("the published header spellings are neutralized exactly where the runner wo
   assert.match(clean, /SET statement_timeout = 0;/);
   assert.match(clean, /SET idle_in_transaction_session_timeout = 0;/);
   assert.match(clean, /CREATE UNIQUE INDEX IF NOT EXISTS payment_links_token_hash/);
+});
+
+test("the exact published balance migration executes under the bounded timeout and records its original digest", async () => {
+  const filename = "generated/0580_clone_preserves_recorded_document_balances.sql";
+  const content = readFileSync(join(generatedDir, filename.split("/")[1]!), "utf8");
+  const body = sanitizeMigrationContent(publishedMigrationSessionPrelude(filename, content) + content);
+  const { client, calls, parameters } = recordingClient();
+  await executeMigrationAttempt(client, {
+    filename, body, transactional: true, lock: migrationLockConfig({}),
+    digest: "1ee33f04b4c0cfe6c1725d19d08cc613e593bbc2c63a499ae9e58b0b419ca59b",
+    executeBody: executeMigrationBody,
+  });
+  assert.doesNotMatch(body, /SET\s+lock_timeout\s*=\s*0/i);
+  assert.ok(calls.some((statement) => /set local lock_timeout/i.test(statement) && statement.includes("5000")));
+  assert.equal(calls.filter((statement) => statement === body).length, 1);
+  const ledgerIndex = calls.findIndex((statement) => /insert into public\._applied_migrations/.test(statement));
+  assert.equal(calls.filter((statement) => /insert into public\._applied_migrations/.test(statement)).length, 1);
+  assert.ok(calls.indexOf(body) < ledgerIndex);
+  assert.deepEqual(parameters[ledgerIndex], [filename, "1ee33f04b4c0cfe6c1725d19d08cc613e593bbc2c63a499ae9e58b0b419ca59b"]);
 });
