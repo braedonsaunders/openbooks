@@ -38,6 +38,7 @@ async function matrixOrg(): Promise<string> {
 }
 
 async function auditOrg(orgId: string, label: string): Promise<string[]> {
+  const readContext = await matrixReadContext(orgId, await matrixActor(orgId))
   const list = await listResources(orgId)
   console.log(`MATRIX ${label} resources: ${list.length}`)
   const bad: string[] = []
@@ -50,7 +51,7 @@ async function auditOrg(orgId: string, label: string): Promise<string[]> {
     const fields = await resource.fields()
     const fieldKeys = fields.map((f) => f.key)
     const norm = new Set(fieldKeys.map((k) => k.toLowerCase().replace(/[^a-z0-9]/g, '')))
-    const read = await resource.read()
+    const read = await resource.read(readContext)
     const exportKeys = read.columns.map((c) => String(c.key))
     const unconsumable = exportKeys.filter(
       (k) => !norm.has(k.toLowerCase().replace(/[^a-z0-9]/g, '')),
@@ -85,6 +86,14 @@ async function matrixActor(orgId: string): Promise<string> {
   })
 }
 
+async function matrixReadContext(orgId: string, actorId: string) {
+  return withOrgContext(orgId, async () => {
+    const authz = await resolveAuthzByUserId(orgId, actorId)
+    assert.ok(authz, 'resource exports require a current native actor')
+    return { actorId, allowedSubsidiaryIds: authz.allowedSubsidiaryIds }
+  })
+}
+
 async function writeAll(
   orgId: string,
   actorId: string,
@@ -101,23 +110,39 @@ async function writeAll(
     if (key === 'bom-components') {
       assert.equal(dryRun, false, 'complete BOM adoption uses the native recipe command')
       assert.ok(rows.length > 0)
-      const assemblyCode = String(rows[0]!.assemblyItemId)
-      assert.ok(rows.every((row) => String(row.assemblyItemId) === assemblyCode))
+      const recipes = new Map<string, Record<string, unknown>[]>()
+      for (const row of rows) {
+        const assemblyCode = String(row.assemblyItemId)
+        const components = recipes.get(assemblyCode) ?? []
+        components.push(row)
+        recipes.set(assemblyCode, components)
+      }
       const items = (await db.execute<{ id: string; code: string }>(sql`
         select id, code from items where org_id = ${orgId}`)).rows
       const ids = new Map(items.map((item) => [item.code, item.id]))
       const { PUT } = await import('../../app/api/inventory/bom/route.ts')
-      const response = await withAuthzContext(authz, () => PUT(new Request('http://localhost/api/inventory/bom', {
-        method: 'PUT', body: JSON.stringify({ assemblyItemId: ids.get(assemblyCode), expectedVersion: null,
-          reason: 'Adopt the complete exported assembly recipe', components: rows.map(({ assemblyItemId: _assembly, componentItemId, ...line }) =>
-            ({ ...line, componentItemId: ids.get(String(componentItemId)) })) }),
-      })))
-      if (!response.ok) return { created: 0, updated: 0, failed: rows.length, errors: [{ message: (await response.json()).error }] }
-      const adopted = await response.json()
-      assert.equal(adopted.componentCount, rows.length)
-      return { created: adopted.componentCount, updated: 0, failed: 0, errors: [] }
+      const outcome: { created: number; updated: number; failed: number; errors: { message: string }[] } =
+        { created: 0, updated: 0, failed: 0, errors: [] }
+      // Each native command adopts one complete recipe. Null expectedVersion
+      // keeps insert-only replay from replacing an already adopted assembly.
+      for (const [assemblyCode, components] of [...recipes].sort(([a], [b]) => a.localeCompare(b))) {
+        const response = await withAuthzContext(authz, () => PUT(new Request('http://localhost/api/inventory/bom', {
+          method: 'PUT', body: JSON.stringify({ assemblyItemId: ids.get(assemblyCode), expectedVersion: null,
+            reason: 'Adopt the complete exported assembly recipe', components: components.map(({ assemblyItemId: _assembly, componentItemId, ...line }) =>
+              ({ ...line, componentItemId: ids.get(String(componentItemId)) })) }),
+        })))
+        if (!response.ok) {
+          outcome.failed += components.length
+          outcome.errors.push({ message: (await response.json()).error })
+          continue
+        }
+        const adopted = await response.json()
+        assert.equal(adopted.componentCount, components.length)
+        outcome.created += adopted.componentCount
+      }
+      return outcome
     }
-    return resource!.write(rows, mode, { orgId, actorId, dryRun, permissions: authz.permissions })
+    return resource!.write(rows, mode, { orgId, actorId, dryRun, permissions: authz.permissions, allowedSubsidiaryIds: authz.allowedSubsidiaryIds })
   })
 }
 
@@ -294,6 +319,8 @@ test(
       const orgB = await matrixOrg()
       try {
         const targetActorId = await matrixActor(orgB)
+        const sourceReadContext = await matrixReadContext(orgA, actorId)
+        const targetReadContext = await matrixReadContext(orgB, targetActorId)
         const { listResources: listRes } = await import('./resources.ts')
         const order = (await withOrgContext(orgA, () => listRes(orgA))).map((d) => d.key)
         // Migration runbook order: master data first (setup rows such as
@@ -307,8 +334,9 @@ test(
             k !== 'extension-settings' &&
             !k.startsWith('txn:') &&
             !k.startsWith('record:') &&
-            // Corrections name existing tenant-local source stubs; they cannot create them in another organization.
-            !['payroll-opening-balances', 'payroll-opening-entitlements', 'prior-payroll-register', 'prior-payroll-identities'].includes(k) &&
+            // Carry-in attributions and identity corrections depend on existing
+            // tenant-local payroll evidence; they cannot recreate it in another organization.
+            !['payroll-opening-balances', 'payroll-opening-entitlements', 'payroll-period-openings', 'prior-payroll-register', 'prior-payroll-identities'].includes(k) &&
             !k.startsWith('properties') &&
             k !== 'property-units' &&
             k !== 'property-leases' &&
@@ -323,8 +351,8 @@ test(
           const ra = await withOrgContext(orgA, () => getResource(orgA, key))
           const rb = await withOrgContext(orgB, () => getResource(orgB, key))
           assert.ok(ra && rb, `${key} resolves in both orgs`)
-          const a = await withOrgContext(orgA, () => ra!.read())
-          const b0 = await withOrgContext(orgB, () => rb!.read())
+          const a = await withOrgContext(orgA, () => ra!.read(sourceReadContext))
+          const b0 = await withOrgContext(orgB, () => rb!.read(targetReadContext))
           if (a.rows.length === 0) {
             // Vacuous is still asserted: an empty export must import nothing
             // into an empty resource (both orgs seed the same fixture).
@@ -343,7 +371,7 @@ test(
             first.created + first.failed, rows.length,
             `${key}: every row is created or refused (${first.created}+${first.failed}!=${rows.length})`,
           )
-          const b = await withOrgContext(orgB, () => rb!.read())
+          const b = await withOrgContext(orgB, () => rb!.read(targetReadContext))
           const norm = (rs: Record<string, unknown>[]) => rs.map(normalizeRow)
             .sort((x, y) => String(JSON.stringify(x)).localeCompare(String(JSON.stringify(y))))
           const normA = norm(rows)
@@ -357,7 +385,7 @@ test(
           console.log(`MATRIX DYNAMIC ${key}: second=${JSON.stringify({ created: second.created, updated: second.updated, failed: second.failed, errors: second.errors.map((e) => e.message).slice(0, 2) })}`)
           assert.equal(second.created, 0, `${key}: re-import must create nothing`)
           assert.equal(second.updated, 0, `${key}: re-import must update nothing`)
-          const b2 = await withOrgContext(orgB, () => rb!.read())
+          const b2 = await withOrgContext(orgB, () => rb!.read(targetReadContext))
           assert.deepEqual(
             norm(b2.rows as Record<string, unknown>[]), normB,
             `${key}: re-import must leave the org unchanged`,
