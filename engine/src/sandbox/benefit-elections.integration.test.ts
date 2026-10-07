@@ -81,6 +81,8 @@ async function seedElections(org: Awaited<ReturnType<typeof createScratchOrg>>, 
 for (const masked of [false, true]) test(`${masked ? "masked" : "full"} sandbox preserves approved Benefits elections and refuses fabricated history`, { skip: !DB }, async () => {
   const org = await createScratchOrg();
   const sandboxName = `Coverage ${randomUUID()}`;
+  let assertionFailed = false;
+  let assertionFailure: unknown;
   try {
     const actorId = await createScratchUser(org.orgId, "Sandbox owner", "admin");
     const { elections, approverId } = await seedElections(org, actorId);
@@ -202,10 +204,22 @@ for (const masked of [false, true]) test(`${masked ? "masked" : "full"} sandbox 
       assert.equal(ended.status, "ended", "the copied approval graph must support its ordinary native record action");
       assert.deepEqual(await sourceEvidence(org.orgId), original);
     }
+  } catch (error) {
+    assertionFailed = true;
+    assertionFailure = error;
+    throw error;
   } finally {
-    const shells = (await db.execute<{ id: string }>(sql`select id from sandboxes where production_org_id=${org.orgId} and name=${sandboxName}`)).rows;
-    assert.ok(shells.length <= 1);
-    for (const shell of shells) await deleteSandbox(shell.id);
-    await dropScratchOrg(org.orgId);
+    try {
+      const shells = (await db.execute<{ id: string }>(sql`select id from sandboxes where production_org_id=${org.orgId} and name=${sandboxName}`)).rows;
+      assert.ok(shells.length <= 1);
+      for (const shell of shells) await deleteSandbox(shell.id);
+      await dropScratchOrg(org.orgId);
+    } catch (cleanupFailure) {
+      if (assertionFailed) {
+        throw new AggregateError([assertionFailure, cleanupFailure],
+          "Benefits election assertions and sandbox cleanup both failed.", { cause: assertionFailure });
+      }
+      throw cleanupFailure;
+    }
   }
 });
