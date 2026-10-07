@@ -143,6 +143,11 @@ export class RefResolver {
   private spec(target: ResourceRefTarget):
     | { table: string; keyCol: string; idCol: string; orgScoped: boolean; labelExpr: string }
     | null {
+    // Scoped currency pickers still store the shared ISO code. Resolve its
+    // existence here; the setup writer enforces the employer's currency policy.
+    if (target.resource === 'benefit-currencies' || target.resource === 'compensation-currencies') {
+      return { table: 'currencies', keyCol: 'code', idCol: 'code', orgScoped: false, labelExpr: 'code' }
+    }
     if (target.resource === 'accounts') {
       return { table: 'accounts', keyCol: 'number', idCol: 'id', orgScoped: true, labelExpr: 'number' }
     }
