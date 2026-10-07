@@ -77,8 +77,8 @@ const dims = (d: Doc, l?: DocLine) => ({
   classId: l?.classId ?? d.classId,
   equipmentUnitId: l?.equipmentUnitId ?? null,
   extraDims: {
-    ...((d.extraDims ?? {}) as Record<string, string>),
-    ...((l?.extraDims ?? {}) as Record<string, string>),
+    ...((d.extraDims ?? {}) as Record<string, string | null>),
+    ...((l?.extraDims ?? {}) as Record<string, string | null>),
   },
 });
 
@@ -97,8 +97,8 @@ const taxControlDims = (d: Doc, l: DocLine) => ({
   classId: l.classId ?? d.classId,
   equipmentUnitId: null,
   extraDims: {
-    ...((d.extraDims ?? {}) as Record<string, string>),
-    ...((l.extraDims ?? {}) as Record<string, string>),
+    ...((d.extraDims ?? {}) as Record<string, string | null>),
+    ...((l.extraDims ?? {}) as Record<string, string | null>),
   },
 });
 
@@ -134,7 +134,7 @@ export function projectChargeKernelLines(
       classId: doc.classId,
       projectId: null,
       equipmentUnitId: line.equipmentUnitId,
-      extraDims: (doc.extraDims ?? {}) as Record<string, string>,
+      extraDims: (doc.extraDims ?? {}) as Record<string, string | null>,
     });
   }
   return out;

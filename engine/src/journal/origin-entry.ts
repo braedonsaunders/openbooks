@@ -42,7 +42,7 @@ export interface GlLine {
   /** Legal entity for this leg; defaults to the entry header subsidiary. */
   subsidiaryId?: string | null;
   /** Custom segment assignments — keys must be active custom segment definitions. */
-  extraDims?: Record<string, string> | null;
+  extraDims?: Record<string, string | null> | null;
   contributorKind?: "rule" | "script" | "app" | "intercompany" | null;
   /** Rule version / script / app id that contributed this line. */
   contributorRef?: string | null;

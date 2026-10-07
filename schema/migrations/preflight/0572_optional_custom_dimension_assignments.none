@@ -1,0 +1,1 @@
+Replaces validation functions without altering existing rows. Explicit blanks are accepted only for declared custom dimensions; account-required dimensions remain mandatory.

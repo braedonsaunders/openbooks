@@ -42,7 +42,7 @@ export interface PostSourceLine {
   classId?: string | null;
   projectId?: string | null;
   partyId?: string | null;
-  extraDims?: Record<string, string>;
+  extraDims?: Record<string, string | null>;
 }
 
 export interface PostableDocument {
@@ -836,7 +836,7 @@ export interface NetZeroPairSource {
   locationId?: string | null;
   classId?: string | null;
   partyId?: string | null;
-  extraDims?: Record<string, string>;
+  extraDims?: Record<string, string | null>;
 }
 
 /** One journal-ready line with its lineage drafts (journal ids stamped later). */

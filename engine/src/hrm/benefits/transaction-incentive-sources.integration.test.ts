@@ -3,6 +3,8 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { db } from "../../platform/db.ts";
+import { segmentRegistry, validateExtraDims } from "../../organization/segments.ts";
+import { postEntry } from "../../journal/post-entry.ts";
 import { errorChainMatches } from "../../testing/error-chain.ts";
 import { setupHarness, setFeatures, withHarness } from "../../testing/hrm-harness.ts";
 import { measureTransactionIncentiveSources as measure, type TransactionIncentiveSourceQuery } from "./transaction-incentive-sources.ts";
@@ -14,7 +16,7 @@ const SPEC = { users: [
 type Harness = Awaited<ReturnType<typeof setupHarness<typeof SPEC>>>;
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
-async function sources(h: Harness, opts: { missingGrouping?: boolean; draft?: boolean } = {}) {
+async function sources(h: Harness, opts: { missingGrouping?: boolean; nullOverride?: boolean; draft?: boolean } = {}) {
   const document = randomUUID(), first = randomUUID(), second = randomUUID(), segment = randomUUID(), header = randomUUID(), override = randomUUID();
   const key = `service_zone_${segment.slice(0, 8)}`;
   await setFeatures(h.org.orgId, { orders: true });
@@ -27,7 +29,7 @@ async function sources(h: Harness, opts: { missingGrouping?: boolean; draft?: bo
   for (const [index, id] of [first, second].entries()) await db.execute(sql`
     insert into document_lines (id, org_id, document_id, line_number, item_id, quantity, unit_price, amount, extra_dims)
     values (${id}, ${h.org.orgId}, ${document}, ${index + 1}, ${h.org.items.service}, '2.00200001', '10', '20.0200',
-      ${JSON.stringify(index === 1 && !opts.missingGrouping ? { [key]: override } : {})}::jsonb)`);
+      ${JSON.stringify(index === 1 && !opts.missingGrouping ? { [key]: opts.nullOverride ? null : override } : {})}::jsonb)`);
   if (!opts.draft) await db.execute(sql`update documents set status = 'approved' where org_id = ${h.org.orgId} and id = ${document}`);
   const query: TransactionIncentiveSourceQuery = { orgId: h.org.orgId, actorId: h.reader, legalEntityId: h.org.subsidiaryId,
     currency: "USD", documentKind: "sales_order", itemIds: [h.org.items.service], lineIds: [first, second], groupingSegmentId: segment };
@@ -67,9 +69,20 @@ test("transaction incentive source admission refuses unavailable authority, iden
     await setFeatures(h.org.orgId, { orders: true });
     const draft = await sources(h, { draft: true });
     await assert.rejects(() => measure(draft.query), /draft.*approved/);
-    const segmentKey = (await db.execute<{ key: string }>(sql`select key from segment_definitions where org_id=${h.org.orgId} and id=${s.segment}`)).rows[0]!.key;
-    await assert.rejects(() => db.execute(sql`update document_lines set extra_dims=${JSON.stringify({ [segmentKey]: null })}::jsonb where org_id=${h.org.orgId} and id=${s.second}`), error => errorChainMatches(error, /invalid custom segment assignment/), "native source writes reject an explicit null dimension before it can replace the header decision");
-    assert.equal((await measure(s.query)).lines.find(r => r.sourceId === s.second)?.groupId, s.override, "the rejected null write must preserve the recorded line override rather than resurrect its header group");
+    const blank = await sources(h, { nullOverride: true }), registry = await segmentRegistry(h.org.orgId);
+    const segmentKey = registry.find(r=>r.id===blank.segment)!.key;
+    for (const value of [null, ""]) assert.deepEqual(validateExtraDims({ [segmentKey]: value },registry), {ok:true,cleaned:{[segmentKey]:null}}, "a deliberate blank remains a key, distinct from inherited omission");
+    assert.deepEqual(validateExtraDims({},registry), {ok:true,cleaned:{}});
+    assert.deepEqual((await db.execute<{extra_dims:Record<string,unknown>}>(sql`select extra_dims from document_lines where org_id=${h.org.orgId} and id=${blank.second}`)).rows[0]!.extra_dims, {[segmentKey]:null});
+    await assert.rejects(()=>measure(blank.query), /no valid service_zone_.* assignment/, "persisted optional blank must not resurrect the header grouping for an incentive that requires it");
+    assert.equal((await measure({...blank.query,groupingSegmentId:null})).lines.length,2,"the optional blank does not make the transaction unavailable to other policies");
+    await assert.rejects(()=>db.execute(sql`select validate_extra_dims(${h.org.orgId},'{"unknown_optional_segment":null}'::jsonb,${h.org.subsidiaryId})`),error=>errorChainMatches(error,/unknown or inactive custom segment/),"null cannot bypass dimension ownership");
+    const entryId=randomUUID(), posting={id:entryId,orgId:h.org.orgId,bookId:h.org.bookId,subsidiaryId:h.org.subsidiaryId,entryNumber:entryId,postingDate:"2026-07-09",periodId:h.org.periodId,origin:"manual",currency:"CAD",lines:[{accountId:h.org.accounts.cogs,amount:"1.0000",extraDims:{[segmentKey]:null}},{accountId:h.org.accounts.revenue,amount:"-1.0000"}]};
+    await db.execute(sql`update accounts set required_dimensions=${JSON.stringify([segmentKey])}::jsonb where org_id=${h.org.orgId} and id=${h.org.accounts.cogs}`);
+    await assert.rejects(()=>postEntry(db,posting),error=>errorChainMatches(error,/requires segment/),"an account-required dimension must still refuse an explicit blank");
+    assert.equal((await db.execute(sql`select id from journal_entries where org_id=${h.org.orgId} and id=${entryId}`)).rows.length,0,"required-dimension refusal leaves no partial entry");
+    await db.execute(sql`update accounts set required_dimensions='[]'::jsonb where org_id=${h.org.orgId} and id=${h.org.accounts.cogs}`);
+    assert.equal((await postEntry(db,posting)).entryId,entryId,"the same optional blank may post on an account without that requirement");
     const missing = await sources(h, { missingGrouping: true });
     await assert.rejects(() => measure(missing.query), /no valid service_zone_.* assignment/, "a genuinely unassigned source must refuse rather than infer a grouping");
   });

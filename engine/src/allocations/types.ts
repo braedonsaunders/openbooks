@@ -115,7 +115,7 @@ export interface AllocationRuleTarget {
   classId?: string | null;
   projectId?: string | null;
   subsidiaryId?: string | null;
-  extraDims?: Record<string, string>;
+  extraDims?: Record<string, string | null>;
   /** Canonical decimal percent (0 < p <= 100) for fixed_percent basis. */
   fixedPercent?: string | null;
   /** Canonical decimal manual weight (>= 0). */

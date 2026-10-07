@@ -175,7 +175,9 @@
     "defaultForm": "Formulário padrão",
     "asOf": "Em",
     "unknownValue": "Valor desconhecido",
-    "loading": "Carregando…"
+    "loading": "Carregando…",
+    "inheritHeader": "Usar valor do cabeçalho",
+    "noDimensionValue": "Sem valor de dimensão"
   },
   "status": {
     "draft": "Rascunho",

@@ -175,7 +175,9 @@
     "defaultForm": "Default form",
     "asOf": "As of",
     "unknownValue": "Unknown value",
-    "loading": "Loading…"
+    "loading": "Loading…",
+    "inheritHeader": "Use header value",
+    "noDimensionValue": "No dimension value"
   },
   "status": {
     "draft": "Draft",

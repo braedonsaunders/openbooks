@@ -48,7 +48,7 @@ export interface KernelLine {
   classId?: string | null;
   equipmentUnitId?: string | null;
   /** Custom segment assignments keyed by segment_definitions.key. */
-  extraDims?: Record<string, string>;
+  extraDims?: Record<string, string | null>;
   paymentCardId?: string | null;
   taxCodeId?: string | null;
   memo?: string | null;

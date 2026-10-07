@@ -412,7 +412,7 @@ export async function applyOrderEdit(context: OrderEditContext, cfg: OrderHandle
   }
 
   let totals: { subtotal: string; taxTotal: string; total: string } | null = null
-  let preparedLines: (ReturnType<OrderEditServices['order']['computeOrderTotals']>['lines'][number] & { extraDims: Record<string, string> })[] | null = null
+  let preparedLines: (ReturnType<OrderEditServices['order']['computeOrderTotals']>['lines'][number] & { extraDims: Record<string, string | null> })[] | null = null
   if (body.lines) {
     // Same save shape as create: blank grid rows never persist, while any
     // populated row that cannot post refuses by line number.

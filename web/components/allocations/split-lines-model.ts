@@ -42,7 +42,7 @@ export interface AllocationLine {
   locationId?: string | null
   classId?: string | null
   subsidiaryId?: string | null
-  extraDims?: Record<string, string>
+  extraDims?: Record<string, string | null>
   taxCodeId?: string | null
   partyId?: string | null
   description?: string | null

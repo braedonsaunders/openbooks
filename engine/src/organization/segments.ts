@@ -122,18 +122,23 @@ export async function customSegmentOptions(
   return (await segmentRegistry(orgId, allowedSubsidiaryIds)).filter((segment) => segment.sourceKind === 'custom')
 }
 
-/** Keep only active custom values belonging to the supplied tenant registry. */
+/** An omitted key inherits its header; null explicitly clears that assignment. */
+export type CustomDimensionAssignments = Record<string, string | null>
+
+/** Keep registered choices and explicit blanks without resurrecting header defaults. */
 export function sanitizeExtraDims(
   value: unknown,
   registry: SegmentDefinitionOption[],
-): Record<string, string> {
+): CustomDimensionAssignments {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return {}
   const source = value as Record<string, unknown>
-  const clean: Record<string, string> = {}
+  const clean: CustomDimensionAssignments = {}
   for (const segment of registry) {
     if (segment.sourceKind !== 'custom') continue
     const selected = source[segment.key]
-    if (typeof selected === 'string' && segment.values.some((option) => option.id === selected)) {
+    if (Object.hasOwn(source, segment.key) && (selected === null || selected === '')) {
+      clean[segment.key] = null
+    } else if (typeof selected === 'string' && segment.values.some((option) => option.id === selected)) {
       clean[segment.key] = selected
     }
   }
@@ -143,7 +148,7 @@ export function sanitizeExtraDims(
 export function validateExtraDims(
   value: unknown,
   registry: SegmentDefinitionOption[],
-): { ok: true; cleaned: Record<string, string> } | { ok: false; error: string } {
+): { ok: true; cleaned: CustomDimensionAssignments } | { ok: false; error: string } {
   if (value == null) return { ok: true, cleaned: {} }
   if (typeof value !== 'object' || Array.isArray(value)) {
     return { ok: false, error: 'Custom segment assignments must be an object' }
@@ -164,7 +169,7 @@ export function validateExtraDims(
 /** Refuse segment values whose legal-entity restriction excludes a posting subsidiary. */
 export async function extraDimsSubsidiaryError(
   orgId: string,
-  value: Record<string, string>,
+  value: CustomDimensionAssignments,
   subsidiaryId: string,
   registry: SegmentDefinitionOption[],
   executor: Pick<typeof db, 'execute'> = db,

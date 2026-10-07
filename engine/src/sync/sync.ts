@@ -781,7 +781,7 @@ type StoredDocumentKeyRow = {
   memo: string | null;
   reference_number: string | null;
   ctrl: string | null;
-  extra_dims: Record<string, string>;
+  extra_dims: Record<string, string | null>;
   posted: boolean;
   status: string;
   currency: string;
@@ -806,7 +806,7 @@ type StoredLineKeyRow = {
   department_id: string | null;
   project_id: string | null;
   subsidiary_id: string | null;
-  extra_dims: Record<string, string>;
+  extra_dims: Record<string, string | null>;
   description: string | null;
   is_billable: boolean;
   markup_percent: string | null;

@@ -207,7 +207,7 @@ type TargetRow = {
   class_id: string | null;
   project_id: string | null;
   subsidiary_id: string | null;
-  extra_dims: Record<string, string> | null;
+  extra_dims: Record<string, string | null> | null;
   fixed_percent: string | null;
   weight: string | null;
   is_remainder: boolean;
@@ -561,7 +561,7 @@ async function readSources(
     class_id: string | null;
     project_id: string | null;
     party_id: string | null;
-    extra_dims: Record<string, string> | null;
+    extra_dims: Record<string, string | null> | null;
     amount: string;
     line_count: string;
   }>(sql`
@@ -1463,7 +1463,7 @@ async function reportDriverValueLookup(
     class_id: string | null;
     project_id: string | null;
     subsidiary_id: string | null;
-    extra_dims: Record<string, string> | null;
+    extra_dims: Record<string, string | null> | null;
   }>(sql`
     select id, department_id, location_id, class_id, project_id, subsidiary_id, extra_dims
       from allocation_rule_targets
