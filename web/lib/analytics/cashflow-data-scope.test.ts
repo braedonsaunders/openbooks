@@ -70,6 +70,9 @@ test("cashflow forecast excludes categories outside a restricted subsidiary view
   const result = await cashflowData("org", 4, "2026-09-01", new Set(["a"]));
 
   assert.deepEqual(result.categories.map((category) => category.id), ["subsidiary-a"]);
-  assert.equal(result.categories[0]?.total, "80.0000");
+  // September 1 is Tuesday: four of the current week's five business days
+  // remain, followed by three complete weeks (16 + 20 + 20 + 20).
+  assert.deepEqual(result.categories[0]?.weekly, ["16.0000", "20.0000", "20.0000", "20.0000"]);
+  assert.equal(result.categories[0]?.total, "76.0000");
   assert.equal(result.weeks.length, 4, "the native timeline retains the selected forecast horizon");
 });
