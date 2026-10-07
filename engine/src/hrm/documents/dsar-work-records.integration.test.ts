@@ -41,10 +41,10 @@ async function setup() {
       subjects.push({ ...worker, shift, identity });
     }
     await admitAttendanceBatch({ ...actor, id: randomUUID(), deviceId: device.id,
-      completeThrough: "2026-01-09T18:00:00Z", sourceEvidence: { source: "Original device export" },
+      completeThrough: "2026-01-09T18:00:00.000Z", sourceEvidence: { source: "Original device export" },
       reason: "Reviewed event admission", events: subjects.flatMap(subject => ["clock_in", "clock_out"].map((kind, index) => ({
         id: randomUUID(), sourceEventId: `${subject.workerPartyId}-${index}`, sourceWorkerId: subject.workerPartyId,
-        sourceVersion: 1, kind: kind as "clock_in" | "clock_out", occurredAt: `2026-01-09T${index ? "17" : "09"}:00:00Z`,
+        sourceVersion: 1, kind: kind as "clock_in" | "clock_out", occurredAt: `2026-01-09T${index ? "17" : "09"}:00:00.000Z`,
         supersedesId: null, sourcePayload: { worker: subject.workerPartyId, recordedByDevice: true },
       }))) });
     for (const subject of subjects) {
