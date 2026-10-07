@@ -122,15 +122,6 @@ const mockSources = new Map<string, string>([
      }`,
   ],
   [
-    // Empty defs: validation passes anything through cleaned, so the double
-    // is exact for the exercised inputs; the integration suite covers the
-    // real defs path against a live catalog.
-    "mock:custom-fields",
-    `export async function loadFieldDefs() { return [] }
-     export function validateCustomValues(_defs, values) { return { ok: true, cleaned: values ?? {} } }
-     export async function findUnownedCustomReferences() { return [] }`,
-  ],
-  [
     "mock:parties-lib",
     `export async function loadParty(id, orgId) {
        const state = globalThis[Symbol.for('openbooks.parties-route-test')]
@@ -151,6 +142,7 @@ const mockUrls = new Map<string, string>([
   ["./_lib", "mock:parties-lib"],
 ]);
 
+const databaseModuleUrl = new URL("../../../../engine/src/platform/db.ts", import.meta.url).href;
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
     // canonical-json.ts is a pure module with no imports of its own: there is
@@ -167,7 +159,8 @@ const hooks = registerHooks({
     }
     const mocked = mockUrls.get(specifier);
     if (mocked) return { url: mocked, shortCircuit: true };
-    return nextResolve(specifier, context);
+    const resolved = nextResolve(specifier, context);
+    return resolved.url === databaseModuleUrl ? { url: "mock:db", shortCircuit: true } : resolved;
   },
   load(url, context, nextLoad) {
     const source = mockSources.get(url);
