@@ -1,3 +1,6 @@
+import { guardRefusalMessage } from "../platform/database-refusal.ts";
+export { guardRefusalMessage } from "../platform/database-refusal.ts";
+
 /**
  * Staged sample-company provisioning failures (OM-14).
  *
@@ -111,36 +114,6 @@ export function sampleCompanyProvisioningBody(
   error: SampleCompanyProvisioningError,
 ): { error: string; stage: SampleCompanyProvisioningStage; message: string } {
   return { error: error.code, stage: error.stage, message: error.message };
-}
-
-/**
- * A deterministic database refusal: Postgres raise_exception (code P0001),
- * the channel every trigger guard uses to refuse with a message that names
- * its remedy. Retrying cannot help against a deterministic guard, so the
- * refusal must carry the guard's own message — never the stage's "you can
- * retry" text. Only the guard-authored first line passes through (driver
- * DETAIL/HINT fields stay server-side); anything without a P0001 code keeps
- * the fixed per-stage message with no internal detail.
- */
-export function guardRefusalMessage(error: unknown): string | undefined {
-  const probe = error as {
-    code?: unknown;
-    message?: unknown;
-    cause?: { code?: unknown; message?: unknown } | null;
-  } | null;
-  // The message must come from the level that carries the P0001 code: a
-  // driver wrapper's own message ("db execute failed") is internal detail,
-  // not the guard's refusal.
-  const level =
-    probe?.code === "P0001"
-      ? probe
-      : probe?.cause?.code === "P0001"
-        ? probe.cause
-        : undefined;
-  if (!level) return undefined;
-  const raw = typeof level.message === "string" ? level.message : undefined;
-  const firstLine = raw?.split("\n", 1)[0]?.trim();
-  return firstLine ? firstLine : undefined;
 }
 
 /**
