@@ -447,7 +447,7 @@ test("a failed refresh rolls back the wipe instead of leaving a partial sandbox"
         create function "${fault}"() returns trigger language plpgsql as $fn$
         begin
           if new.org_id = '${sandboxOrgId}'::uuid then
-            raise exception 'forced sandbox refresh clone failure';
+            raise exception using errcode='23514', message='forced sandbox refresh clone failure';
           end if;
           return new;
         end
@@ -460,7 +460,10 @@ test("a failed refresh rolls back the wipe instead of leaving a partial sandbox"
 
       await assert.rejects(
         refreshSandbox(sandboxId, { keepCustomizations: false }),
-        error => errorChainMatches(error, /forced sandbox refresh clone failure/),
+        error => {
+          assert.equal(error instanceof Error ? error.message : "", "forced sandbox refresh clone failure");
+          return errorChainMatches(error, /forced sandbox refresh clone failure/);
+        },
       );
 
       const after = (await db.execute<{ accounts: number; journal_entries: number }>(sql`
@@ -472,7 +475,12 @@ test("a failed refresh rolls back the wipe instead of leaving a partial sandbox"
       const status = (await db.execute<{ status: string; last_error: string | null }>(sql`
         select status, last_error from sandboxes where id = ${sandboxId}`)).rows[0];
       assert.equal(status?.status, "failed");
-      assert.match(status?.last_error ?? "", /Failed query: insert into "accounts"/);
+      assert.equal(status?.last_error, "forced sandbox refresh clone failure");
+      const failureAudit = (await db.execute<{ last_error: string }>(sql`
+        select changes->'after'->>'last_error' as last_error from audit_log
+        where org_id=${org.orgId} and row_id=${sandboxId} and changes->>'operation'='refresh_failed'
+        order by created_at desc limit 1`)).rows;
+      assert.deepEqual(failureAudit, [{ last_error: "forced sandbox refresh clone failure" }]);
     } finally {
       await db.execute(sql.raw(`drop trigger if exists "${fault}_trg" on accounts`));
       await db.execute(sql.raw(`drop function if exists "${fault}"()`));

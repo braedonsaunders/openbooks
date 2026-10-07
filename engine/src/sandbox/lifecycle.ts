@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { guardRefusalMessage } from "../platform/database-refusal.ts";
 import { sql } from "drizzle-orm";
 import { db, longPool, orgContext, schema, withBypassContext, withMaintenanceTransaction, withOrg, type MaintenanceTransactionOptions } from "../platform/db.ts";
 import {
@@ -29,6 +30,18 @@ import {
   assertTemplateSandboxSource,
   isSampleTemplateSource,
 } from "./source-validation.ts";
+
+/** Database query wrappers contain SQL and parameters rather than the guard's
+ * remedy. Keep the original cause for diagnostics and raise the authored
+ * refusal to the caller as well as the saved lifecycle evidence. */
+function sandboxOperationFailure(error: unknown): unknown {
+  const refusal = guardRefusalMessage(error, { includeRaisedCheckViolations: true });
+  if (refusal) return new Error(refusal, { cause: error });
+  if (error instanceof Error && error.name === "DrizzleQueryError") {
+    return new Error("Sandbox operation failed. Inspect the server logs for the cause before retrying.", { cause: error });
+  }
+  return error;
+}
 
 /** A zero-row sandbox lookup is a failure: the caller asked to act on a named id. */
 export function requireFoundSandbox<T>(
@@ -587,17 +600,18 @@ export async function createSandbox(input: CreateSandboxInput): Promise<{
        returning id`);
       if (!ready.rows[0]) throw new Error(`cannot mark sandbox ${sb.id} ready; provisioning state changed before clone completion`);
     } catch (err) {
+      const failure = sandboxOperationFailure(err);
       const failed = await db.execute<{ id: string }>(sql`
       update sandboxes
-         set status = 'failed', last_error = ${String(err instanceof Error ? err.message : err)},
+         set status = 'failed', last_error = ${String(failure instanceof Error ? failure.message : failure)},
              updated_at = now()
        where id = ${sb.id} and org_id = ${sandboxOrgId}
        returning id`);
       if (failed.rows[0]) {
         await withOrg(input.productionOrgId, () => auditSandboxLifecycle(input.productionOrgId, sb.id, "create_failed", authority,
-          { status: "provisioning" }, { status: "failed", last_error: String(err instanceof Error ? err.message : err) }));
+          { status: "provisioning" }, { status: "failed", last_error: String(failure instanceof Error ? failure.message : failure) }));
       }
-      throw err;
+      throw failure;
     }
     return { sandboxId: sb.id, sandboxOrgId };
   });
@@ -813,13 +827,14 @@ export async function refreshSandbox(
         );
       }
     } catch (err) {
+      const failure = sandboxOperationFailure(err);
       // Never clobber a deleter's mark or a newer refresh's proof token.
       // Zero rows is expected and benign only in that race — our own mark
       // is committed before the clone unit, so a clone failure matches.
       const failed = await withMaintenanceTransaction(null, async () => {
         const updated = await db.execute<{ id: string }>(sql`
           update sandboxes
-             set status = 'failed', last_error = ${String(err instanceof Error ? err.message : err)},
+             set status = 'failed', last_error = ${String(failure instanceof Error ? failure.message : failure)},
                  updated_at = now()
            where id = ${sandboxId} and org_id = ${s.org_id}
              and status <> 'deleting' and last_error = ${proofToken}
@@ -827,14 +842,14 @@ export async function refreshSandbox(
         if (updated.rows[0]) {
           await auditSandboxLifecycle(s.production_org_id, sandboxId, "refresh_failed", authority,
             { status: "refreshing", last_error: proofToken },
-            { status: "failed", last_error: String(err instanceof Error ? err.message : err) });
+            { status: "failed", last_error: String(failure instanceof Error ? failure.message : failure) });
         }
         return updated;
       });
-      if (!failed.rows[0] && err instanceof Error) {
-        err.message = `${err.message}; failed-status write matched 0 rows for sandbox ${sandboxId}`;
+      if (!failed.rows[0] && failure instanceof Error) {
+        failure.message = `${failure.message}; failed-status write matched 0 rows for sandbox ${sandboxId}`;
       }
-      throw err;
+      throw failure;
     } finally {
       await stopHeartbeat?.();
     }
@@ -971,17 +986,18 @@ export async function deleteSandbox(sandboxId: string, suppliedAuthority?: Sandb
     await withOrg(productionOrgId, () => auditSandboxLifecycle(productionOrgId, sandboxId, "delete_completed", authority,
       { status: "deleting" }, { status: "deleted" }));
   } catch (err) {
+    const failure = sandboxOperationFailure(err);
     const failed = await db.execute<{ id: string }>(sql`
       update sandboxes
-         set status = 'failed', last_error = ${String(err instanceof Error ? err.message : err)},
+         set status = 'failed', last_error = ${String(failure instanceof Error ? failure.message : failure)},
              updated_at = now()
        where id = ${sandboxId} and org_id = ${orgId}
        returning id`);
     if (failed.rows[0]) {
       await withOrg(productionOrgId, () => auditSandboxLifecycle(productionOrgId, sandboxId, "delete_failed", authority,
-        { status: "deleting" }, { status: "failed", last_error: String(err instanceof Error ? err.message : err) }));
+        { status: "deleting" }, { status: "failed", last_error: String(failure instanceof Error ? failure.message : failure) }));
     }
-    throw err;
+    throw failure;
   }
   });
 }
