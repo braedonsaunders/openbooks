@@ -87,11 +87,22 @@ for (const masked of [false, true]) test(`${masked ? "masked" : "full"} sandbox 
     const actorId = await createScratchUser(org.orgId, "Sandbox owner", "admin");
     const { elections, approverId } = await seedElections(org, actorId);
     const original = await sourceEvidence(org.orgId);
+    const originalCatalog = (await db.execute<{ evidence: string }>(sql`select to_jsonb(c)::text as evidence
+      from hrm_benefit_catalog c where org_id=${org.orgId} order by id`)).rows;
+    assert.equal(originalCatalog.length, 2);
     const created = await createSandbox({ productionOrgId: org.orgId, name: sandboxName,
       tier: masked ? "masked" : "full", masked, createdBy: actorId, lifecycleAuthority: { actorId } });
     const target = created.sandboxOrgId;
     const assertCopy = async () => {
       assert.equal((await db.execute<{ status: string }>(sql`select status from sandboxes where id=${created.sandboxId}`)).rows[0]!.status, "ready");
+      const catalog = (await db.execute<{ matched: boolean }>(sql`select
+        (c.id=ob_rebase(original.id,o.sandbox_seed) and c.insured_plan_id=c.id
+         and exists(select 1 from hrm_benefit_plans p where p.org_id=c.org_id and p.id=c.insured_plan_id)) as matched
+        from hrm_benefit_catalog c join orgs o on o.id=c.org_id
+        join hrm_benefit_catalog original on original.org_id=o.sandbox_of and c.id=ob_rebase(original.id,o.sandbox_seed)
+        where c.org_id=${target}`)).rows;
+      assert.equal(catalog.length, 2);
+      assert.ok(catalog.every(row => row.matched));
       const copied = (await db.execute<{ status: string; matched: boolean; protected: boolean; flow_bound: boolean }>(sql`
         select e.status,
           (e.id=ob_rebase(original.id,o.sandbox_seed) and e.plan_id=ob_rebase(original.plan_id,o.sandbox_seed)
@@ -143,8 +154,24 @@ for (const masked of [false, true]) test(`${masked ? "masked" : "full"} sandbox 
         where q.org_id=${target}`)).rows;
       assert.deepEqual(queue, [{ matched: true }]);
       assert.deepEqual(await sourceEvidence(org.orgId), original);
+      assert.deepEqual((await db.execute<{ evidence: string }>(sql`select to_jsonb(c)::text as evidence
+        from hrm_benefit_catalog c where org_id=${org.orgId} order by id`)).rows, originalCatalog);
     };
     await assertCopy();
+    for (const scope of [org.orgId, target]) {
+      await assert.rejects(withOrgTransaction(scope, () => db.execute(sql`
+        delete from hrm_benefit_catalog where org_id=${scope}`)),
+        error => errorChainMatches(error, /Program identity cannot be removed while its native offering exists/i));
+      await assert.rejects(withOrgTransaction(scope, () => db.execute(sql`
+        update hrm_benefit_catalog set updated_at=updated_at where org_id=${scope}`)),
+        error => errorChainMatches(error, /Program identity is immutable.*native program record/i));
+      await assert.rejects(withMaintenanceTransaction(null, async () => {
+        await db.execute(sql`select set_config('openbooks.clone','on',true),set_config('openbooks.migration','on',true),
+          set_config('openbooks.amend','on',true),set_config('openbooks.sandbox_wipe','on',true)`);
+        await db.execute(sql`delete from hrm_benefit_catalog where org_id=${scope}`);
+      }), error => errorChainMatches(error, /Program identity cannot be removed while its native offering exists/i));
+      await assertCopy();
+    }
     const inserts = [
       { table: "hrm_benefit_enrollments", patch: { id: randomUUID() }, refusal: /Create a benefit election.*plan approval setting/ },
       { table: "hrm_benefit_enrollments", patch: { employment_id: randomUUID() }, refusal: /Create a benefit election.*plan approval setting/ },
@@ -204,6 +231,15 @@ for (const masked of [false, true]) test(`${masked ? "masked" : "full"} sandbox 
       assert.equal(ended.status, "ended", "the copied approval graph must support its ordinary native record action");
       assert.deepEqual(await sourceEvidence(org.orgId), original);
     }
+    await deleteSandbox(created.sandboxId);
+    for (const table of [...evidenceTables, "hrm_benefit_catalog", "hrm_benefit_plans"] as const) {
+      assert.equal((await db.execute(sql`select 1 from ${sql.identifier(table)} where org_id=${target}`)).rows.length, 0,
+        `${table} must be removed by the native sandbox deletion`);
+    }
+    assert.equal((await db.execute(sql`select 1 from orgs where id=${target}`)).rows.length, 0);
+    assert.deepEqual(await sourceEvidence(org.orgId), original);
+    assert.deepEqual((await db.execute<{ evidence: string }>(sql`select to_jsonb(c)::text as evidence
+      from hrm_benefit_catalog c where org_id=${org.orgId} order by id`)).rows, originalCatalog);
   } catch (error) {
     assertionFailed = true;
     assertionFailure = error;
