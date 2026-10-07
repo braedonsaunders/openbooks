@@ -134,6 +134,10 @@ stubModules({
       export function ambientTenantOrgId() { return '${ORG_ID}' }
       export function withBypassContext(fn) { return fn() }
       export function withOrgContext(_orgId, fn) { return fn() }
+      export async function withOrgTransaction(orgId, work) {
+        if (orgId !== '${ORG_ID}') throw new Error('Journal fixture transaction requires its declared organization')
+        return db.transaction(work)
+      }
     `,
   extra: {
     "../../../lib/authz": `export async function guardPermission() {
