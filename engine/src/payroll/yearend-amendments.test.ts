@@ -762,6 +762,13 @@ async function seedT4Year(): Promise<T4Fixture> {
       },
     })}::jsonb where id = ${org.orgId}`);
 
+  // The declared employee election references a native report-only program.
+  await db.execute(sql`
+    insert into entitlement_plans (org_id, code, system_key, name, unit, direction,
+      accrual_method, accrual_value, report_only, cap_behavior, is_active, created_by, updated_by)
+    values (${org.orgId}, 'VAC', 'vacation', 'Vacation', 'money', 'accrue',
+      'percent_of_earnings', '4.0000', true, 'warn', true, ${actorId}, ${actorId})`);
+
   const employeeId = randomUUID();
   await seedPayrollPerson(org.orgId, employeeId, 'Grace Hopper', {
     subsidiaryId: org.subsidiaryId,
