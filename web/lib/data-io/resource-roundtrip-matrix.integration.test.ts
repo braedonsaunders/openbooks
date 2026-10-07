@@ -7,7 +7,6 @@
  * gated families (subsidiaries, property, payroll, expenses) are included.
  */
 import assert from 'node:assert/strict'
-import { randomUUID } from 'node:crypto'
 import test from 'node:test'
 import { sql } from 'drizzle-orm'
 
@@ -17,9 +16,11 @@ const { listResources, getResource } = (await import('./resources.ts')) as typeo
 const { guessMapping } = (await import('./parse.ts')) as typeof import('./parse.ts')
 
 const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
-const { createScratchOrg, dropScratchOrgReporting } = await import(
+const { createScratchOrg, createScratchUser, dropScratchOrgReporting } = await import(
   '@openbooks/engine/src/testing/fixtures.ts'
 )
+const { resolveAuthzByUserId } = await import('../authz-core.ts')
+const { withAuthzContext } = await import('../authz-context.ts')
 
 const DB = Boolean(process.env.OPENBOOKS_DB_URL)
 
@@ -75,6 +76,15 @@ function normalizeRow(row: Record<string, unknown>): Record<string, unknown> {
   return out
 }
 
+async function matrixActor(orgId: string): Promise<string> {
+  return withOrgContext(orgId, async () => {
+    const actorId = await createScratchUser(orgId, 'Resource Import Admin', 'resource-import-admin')
+    assert.equal((await db.execute(sql`insert into user_permission_overrides (org_id, user_id, permission, effect)
+      values (${orgId}, ${actorId}, '*', 'grant') returning id`)).rows.length, 1)
+    return actorId
+  })
+}
+
 async function writeAll(
   orgId: string,
   actorId: string,
@@ -85,7 +95,30 @@ async function writeAll(
 ): Promise<{ created: number; updated: number; failed: number; errors: { message: string }[]; warnings?: unknown }> {
   const resource = await withOrgContext(orgId, () => getResource(orgId, key))
   assert.ok(resource, `${key} resolves`)
-  return withOrgContext(orgId, () => resource!.write(rows, mode, { orgId, actorId, dryRun }))
+  return withOrgContext(orgId, async () => {
+    const authz = await resolveAuthzByUserId(orgId, actorId)
+    assert.ok(authz, 'resource writes require a current native actor')
+    if (key === 'bom-components') {
+      assert.equal(dryRun, false, 'complete BOM adoption uses the native recipe command')
+      assert.ok(rows.length > 0)
+      const assemblyCode = String(rows[0]!.assemblyItemId)
+      assert.ok(rows.every((row) => String(row.assemblyItemId) === assemblyCode))
+      const items = (await db.execute<{ id: string; code: string }>(sql`
+        select id, code from items where org_id = ${orgId}`)).rows
+      const ids = new Map(items.map((item) => [item.code, item.id]))
+      const { PUT } = await import('../../app/api/inventory/bom/route.ts')
+      const response = await withAuthzContext(authz, () => PUT(new Request('http://localhost/api/inventory/bom', {
+        method: 'PUT', body: JSON.stringify({ assemblyItemId: ids.get(assemblyCode), expectedVersion: null,
+          reason: 'Adopt the complete exported assembly recipe', components: rows.map(({ assemblyItemId: _assembly, componentItemId, ...line }) =>
+            ({ ...line, componentItemId: ids.get(String(componentItemId)) })) }),
+      })))
+      if (!response.ok) return { created: 0, updated: 0, failed: rows.length, errors: [{ message: (await response.json()).error }] }
+      const adopted = await response.json()
+      assert.equal(adopted.componentCount, rows.length)
+      return { created: adopted.componentCount, updated: 0, failed: 0, errors: [] }
+    }
+    return resource!.write(rows, mode, { orgId, actorId, dryRun, permissions: authz.permissions })
+  })
 }
 
 test(
@@ -94,7 +127,7 @@ test(
   async () => {
     const orgA = await matrixOrg()
     try {
-      const actorId = randomUUID()
+      const actorId = await matrixActor(orgA)
       // Seed org A through the product writers.
       const setupWest = await writeAll(orgA, actorId, 'subsidiaries', [
         { name: 'West Co', parentId: 'Main Co', baseCurrency: 'CAD', country: 'CA' },
@@ -166,12 +199,19 @@ test(
       assert.ok(assetNo, 'bootstrap CoA carries a 1xxx account')
       assert.ok(cogsNo, 'bootstrap CoA carries a 5xxx account')
       const prof = await writeAll(orgA, actorId, 'item-inventory-profiles', [
-        { itemId: 'WIDGET', assetAccountId: assetNo, cogsAccountId: cogsNo },
+        ...['WIDGET', 'ASSY-1', 'COMP-1'].map((itemId) => ({ itemId, assetAccountId: assetNo, cogsAccountId: cogsNo })),
       ], 'insert', false)
       assert.deepEqual(
         { created: prof.created, failed: prof.failed, errors: prof.errors },
-        { created: 1, failed: 0, errors: [] },
+        { created: 3, failed: 0, errors: [] },
       )
+      const recipeResource = await withOrgContext(orgA, () => getResource(orgA, 'bom-components'))
+      assert.ok(recipeResource)
+      const barred = await withOrgContext(orgA, () => recipeResource.write(
+        [{ assemblyItemId: 'ASSY-1', componentItemId: 'COMP-1', quantityPer: '1' }], 'insert', { orgId: orgA, actorId, dryRun: false }))
+      assert.equal(barred.created, 0)
+      assert.equal(barred.failed, 1)
+      assert.match(barred.errors[0]?.message ?? '', /bom-components cannot be imported.*complete recipe.*version.*reason.*audit/)
       const bom = await writeAll(orgA, actorId, 'bom-components', [
         { assemblyItemId: 'ASSY-1', componentItemId: 'COMP-1', quantityPer: '1' },
       ], 'insert', false)
@@ -253,6 +293,7 @@ test(
       // equality + idempotent re-import; empty ones report vacuous.
       const orgB = await matrixOrg()
       try {
+        const targetActorId = await matrixActor(orgB)
         const { listResources: listRes } = await import('./resources.ts')
         const order = (await withOrgContext(orgA, () => listRes(orgA))).map((d) => d.key)
         // Migration runbook order: master data first (setup rows such as
@@ -295,7 +336,7 @@ test(
             continue
           }
           const rows = a.rows as Record<string, unknown>[]
-          const first = await writeAll(orgB, actorId, key, rows, 'insert', false)
+          const first = await writeAll(orgB, targetActorId, key, rows, 'insert', false)
           console.log(`MATRIX DYNAMIC ${key}: rows=${rows.length} first=${JSON.stringify({ created: first.created, updated: first.updated, failed: first.failed, errors: first.errors.map((e) => e.message).slice(0, 2) })}`)
           assert.equal(first.updated, 0, `${key}: insert mode must never update`)
           assert.equal(
@@ -312,7 +353,7 @@ test(
             console.log(`MATRIX DYNAMIC ${key} B=${JSON.stringify(normB).slice(0, 1500)}`)
           }
           assert.deepEqual(normB, normA, `${key}: fresh-org import must equal the export`)
-          const second = await writeAll(orgB, actorId, key, rows, 'insert', false)
+          const second = await writeAll(orgB, targetActorId, key, rows, 'insert', false)
           console.log(`MATRIX DYNAMIC ${key}: second=${JSON.stringify({ created: second.created, updated: second.updated, failed: second.failed, errors: second.errors.map((e) => e.message).slice(0, 2) })}`)
           assert.equal(second.created, 0, `${key}: re-import must create nothing`)
           assert.equal(second.updated, 0, `${key}: re-import must update nothing`)
