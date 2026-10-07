@@ -407,6 +407,7 @@ test.describe("subscription to revenue", () => {
       await policyRow.getByText(policyName, { exact: true }).click();
       const policyDrawer = page.getByRole("dialog");
       await expect(policyDrawer).toBeVisible();
+      await policyDrawer.getByRole("button", { name: "Edit", exact: true }).click();
       await expect(policyDrawer.getByRole("textbox", { name: "Name", exact: true })).toHaveCount(5);
       await expect(policyDrawer.getByRole("textbox", { name: "Days past due", exact: true })).toHaveCount(4);
       await expect(policyDrawer.getByRole("textbox", { name: "Name", exact: true }).nth(1)).toHaveValue("Gentle reminder");
