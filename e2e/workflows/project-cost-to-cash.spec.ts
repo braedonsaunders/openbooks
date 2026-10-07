@@ -1020,9 +1020,8 @@ function sovFinancialProfile(): Json {
         // the vendor bill, the equipment charge, the overhead journal, and
         // all three customer invoices. (Approved labour posts as a
         // document-less GL entry, so it surfaces on Hours & Time, below.)
-        const text = await drawer.innerText();
         for (const needle of ['BILL-', 'CHG-', 'JE-', inv1Number, inv2Number, relNumber]) {
-          expect(text, `transactions show ${needle}`).toContain(needle);
+          await expect(drawer, `transactions show ${needle}`).toContainText(needle);
         }
       }
       await openDrawer(page, `/projects?project=${projectId}`);
