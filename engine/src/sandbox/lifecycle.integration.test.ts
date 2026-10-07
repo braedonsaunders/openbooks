@@ -174,8 +174,7 @@ test("a clean-schema full sandbox clones tenant evidence without pre-seed collis
 test("refresh rebuilds maintained aggregates instead of accumulating cloned rows", { skip: !DB }, async () => {
   const org = await createScratchOrg();
   const sandboxName = `Aggregate refresh ${randomUUID()}`;
-  let sandboxId: string | null = null;
-  try {
+  await withSandboxCleanup(org, sandboxName, async () => {
     const invoiceEntryId = randomUUID();
     const invoiceLineId = randomUUID();
     const paymentEntryId = randomUUID();
@@ -216,7 +215,7 @@ test("refresh rebuilds maintained aggregates instead of accumulating cloned rows
       tier: "full",
       masked: false,
     });
-    sandboxId = created.sandboxId;
+    const sandboxId = created.sandboxId;
 
     const aggregateSnapshot = async (): Promise<{ gl: unknown[]; payments: unknown[] }> => ({
       gl: (await db.execute(sql`
@@ -237,15 +236,7 @@ test("refresh rebuilds maintained aggregates instead of accumulating cloned rows
 
     await refreshSandbox(sandboxId, { keepCustomizations: false });
     assert.deepEqual(await aggregateSnapshot(), before, "refresh must rebuild, not double-count, maintained aggregates");
-  } finally {
-    if (sandboxId) await deleteSandbox(sandboxId).catch(() => undefined);
-    else {
-      const failed = (await db.execute<{ id: string }>(sql`
-        select id from sandboxes where production_org_id = ${org.orgId} and name = ${sandboxName}`));
-      for (const row of failed.rows) await deleteSandbox(row.id).catch(() => undefined);
-    }
-    await dropScratchOrg(org.orgId);
-  }
+  });
 });
 
 test("an as-of sandbox refuses posted activity after its cutoff instead of failing on a deferred foreign key", { skip: !DB }, async () => {
@@ -255,7 +246,7 @@ test("an as-of sandbox refuses posted activity after its cutoff instead of faili
   // violation. Refuse up front with an actionable error naming the cutoff.
   const org = await createScratchOrg();
   const sandboxName = `As-of cutoff ${randomUUID()}`;
-  try {
+  await withSandboxCleanup(org, sandboxName, async () => {
     const cal = (await db.execute<{ fiscal_calendar_id: string }>(sql`
       select fiscal_calendar_id from accounting_periods where id = ${org.periodId} and org_id = ${org.orgId}`)).rows[0]!.fiscal_calendar_id;
     const laterPeriodId = randomUUID();
@@ -285,14 +276,7 @@ test("an as-of sandbox refuses posted activity after its cutoff instead of faili
       // and the remedy that exists: a later cutoff or a full tier.
       /ending 2026-07-31.*calendar "Default".*dated after 2026-07-31.*or use a full tier/s,
     );
-  } finally {
-    const failed = (await db.execute<{ id: string }>(sql`
-      select id from sandboxes where production_org_id = ${org.orgId} and name = ${sandboxName}`));
-    for (const row of failed.rows) {
-      await deleteSandbox(row.id).catch(() => undefined);
-    }
-    await dropScratchOrg(org.orgId);
-  }
+  });
 });
 
 test("an as-of sandbox rejects missing or foreign cutoff periods", { skip: !DB }, async () => {
@@ -372,22 +356,7 @@ test("a failed refresh rolls back the wipe instead of leaving a partial sandbox"
 
     await assert.rejects(
       refreshSandbox(sandboxId, { keepCustomizations: false }),
-      (error: unknown) => {
-        let current: unknown = error;
-        while (current) {
-          if (
-            current instanceof Error &&
-            /forced sandbox refresh clone failure/.test(current.message)
-          ) {
-            return true;
-          }
-          current =
-            typeof current === "object" && current !== null
-              ? (current as { cause?: unknown }).cause
-              : undefined;
-        }
-        return false;
-      },
+      error => errorChainMatches(error, /forced sandbox refresh clone failure/),
     );
 
     const after = (await db.execute<{ accounts: number; journal_entries: number }>(sql`
@@ -742,10 +711,9 @@ test("a full sandbox clones payroll opening program bases with their rebased par
 test("a sandbox holding posted documents can be deleted without stranding its org", { skip: !DB }, async () => {
   const org = await createScratchOrg();
   const sandboxName = `DeletePosted ${randomUUID()}`;
-  let sandboxId: string | null = null;
-  try {
+  await withSandboxCleanup(org, sandboxName, async () => {
     const created = await createSandbox({ productionOrgId: org.orgId, name: sandboxName, tier: "full", masked: false });
-    sandboxId = created.sandboxId;
+    const sandboxId = created.sandboxId;
     const accountByNumber = async (number: string): Promise<string> =>
       (await db.execute<{ id: string }>(sql`select id::text as id from accounts where org_id = ${created.sandboxOrgId} and number = ${number}`)).rows[0]!.id;
     const customer = (await db.execute<{ id: string }>(sql`select id::text as id from parties where org_id = ${created.sandboxOrgId} and display_name = 'Acme Customer'`)).rows[0]!.id;
@@ -766,7 +734,6 @@ test("a sandbox holding posted documents can be deleted without stranding its or
       control: { ar: await accountByNumber("1100"), ap: await accountByNumber("2000"), bank: await accountByNumber("1000") },
     });
     await deleteSandbox(sandboxId);
-    sandboxId = null;
     const residue = (await db.execute<{ orgs: number; documents: number; entries: number }>(sql`
       select (select count(*)::int from orgs where id = ${created.sandboxOrgId}) as orgs,
              (select count(*)::int from documents where org_id = ${created.sandboxOrgId}) as documents,
@@ -778,23 +745,14 @@ test("a sandbox holding posted documents can be deleted without stranding its or
              (select count(*)::int from documents where org_id = ${org.orgId}) as documents
     `)).rows[0]!;
     assert.deepEqual(prod, { orgs: 1, documents: 0 });
-  } finally {
-    if (sandboxId) await deleteSandbox(sandboxId).catch(() => undefined);
-    else {
-      const failed = (await db.execute<{ id: string }>(sql`
-        select id from sandboxes where production_org_id = ${org.orgId} and name = ${sandboxName}`));
-      for (const row of failed.rows) await deleteSandbox(row.id).catch(() => undefined);
-    }
-    await dropScratchOrg(org.orgId);
-  }
+  });
 });
 
 test("deleteSandbox records delete_completed in the production org when the deleter runs under the sandbox org scope", { skip: !DB }, async () => {
   const org = await createScratchOrg();
   const sandboxName = `DeleteAuditScope ${randomUUID()}`;
   const systemReason = "delete-completed audit scope test";
-  let sandboxId: string | null = null;
-  try {
+  await withSandboxCleanup(org, sandboxName, async () => {
     const created = await createSandbox({
       productionOrgId: org.orgId,
       name: sandboxName,
@@ -802,15 +760,14 @@ test("deleteSandbox records delete_completed in the production org when the dele
       masked: false,
       lifecycleAuthority: { systemReason },
     });
-    sandboxId = created.sandboxId;
+    const sandboxId = created.sandboxId;
 
     // Mirror the sample-company compensation path: the deleter holds the
     // doomed sandbox org's tenant scope, so an unscoped completion audit
     // would be refused by RLS after the org row is gone.
     await withOrgContext(created.sandboxOrgId, () =>
-      deleteSandbox(sandboxId!, { systemReason }),
+      deleteSandbox(sandboxId, { systemReason }),
     );
-    sandboxId = null;
 
     const residue = (await db.execute<{ orgs: number }>(sql`
       select (select count(*)::int from orgs where id = ${created.sandboxOrgId}) as orgs
@@ -850,13 +807,5 @@ test("deleteSandbox records delete_completed in the production org when the dele
          and changes->>'operation' = 'delete_completed'
     `)).rows[0]!;
     assert.deepEqual(again, { count: 1 });
-  } finally {
-    if (sandboxId) await deleteSandbox(sandboxId).catch(() => undefined);
-    else {
-      const failed = (await db.execute<{ id: string }>(sql`
-        select id from sandboxes where production_org_id = ${org.orgId} and name = ${sandboxName}`));
-      for (const row of failed.rows) await deleteSandbox(row.id).catch(() => undefined);
-    }
-    await dropScratchOrg(org.orgId);
-  }
+  });
 });
