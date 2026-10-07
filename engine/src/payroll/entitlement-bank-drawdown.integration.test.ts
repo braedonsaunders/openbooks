@@ -334,7 +334,7 @@ test('one payout component settling two plans refuses naming both', { skip: !DB 
   } finally { await dropScratchOrgReporting(fx.orgId); }
 });
 
-test('plan settlement configuration refuses shared or non-earning components', { skip: !DB }, async () => {
+test('plan settlement configuration distinguishes accrued payouts from owed repayments', { skip: !DB }, async () => {
   const fx = await payrollOrg();
   try {
     const payout = await earningComponent(fx, 'VACPAY2');
@@ -348,8 +348,11 @@ test('plan settlement configuration refuses shared or non-earning components', {
     );
     await assert.rejects(
       () => validateEntitlementPlanConfiguration(db, fx.orgId, { payoutComponentId: dues, depositComponentId: null }),
-      /DUES2 is not an earning component — only earning components carry bank settlements/,
+      /DUES2 is not an earning component — only earning components carry accrued bank settlements/,
     );
     await validateEntitlementPlanConfiguration(db, fx.orgId, { payoutComponentId: payout, depositComponentId: null });
+    await validateEntitlementPlanConfiguration(db, fx.orgId, { direction: 'owe', payoutComponentId: dues, depositComponentId: null });
+    await assert.rejects(() => validateEntitlementPlanConfiguration(db, fx.orgId, { direction: 'owe', payoutComponentId: payout }), /Recovery component VACPAY2 is not a deduction — choose an employee deduction component/);
+    await assert.rejects(() => validateEntitlementPlanConfiguration(db, fx.orgId, { direction: 'owe', payoutComponentId: dues, depositComponentId: payout }), /leave the deposit component empty on the recovery plan/);
   } finally { await dropScratchOrgReporting(fx.orgId); }
 });
