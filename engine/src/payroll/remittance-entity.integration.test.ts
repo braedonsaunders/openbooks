@@ -236,7 +236,7 @@ test(
       assert.equal(cmp(group.slices[0]!.total, "1000.00"), 0);
 
       const bill = await createRemittanceBill(fx.org.orgId, fx.actorId, {
-        partyId: fx.org.vendorId, ...PERIOD,
+        partyId: fx.org.vendorId, ...PERIOD, filingAccountId: fx.filingAccountId,
       });
       const stamped = (await db.execute<{
         subsidiary_id: string; currency: string; total: string;
@@ -271,7 +271,7 @@ test(
       });
 
       const bill = await createRemittanceBill(fx.org.orgId, fx.actorId, {
-        partyId: fx.org.vendorId, ...PERIOD,
+        partyId: fx.org.vendorId, ...PERIOD, filingAccountId: fx.filingAccountId,
       });
       const stamped = (await db.execute<{
         subsidiary_id: string; currency: string; total: string;
@@ -357,16 +357,16 @@ test(
       // An unnamed call cannot pick an entity: it splits, it does not merge.
       await assert.rejects(
         createRemittanceBill(fx.org.orgId, fx.actorId, {
-          partyId: fx.org.vendorId, ...PERIOD,
+          partyId: fx.org.vendorId, ...PERIOD, filingAccountId: fx.filingAccountId,
         }),
         /spans 2 legal entities.*raise one bill per entity/,
       );
 
       const rootBill = await createRemittanceBill(fx.org.orgId, fx.actorId, {
-        partyId: fx.org.vendorId, ...PERIOD, subsidiaryId: fx.org.subsidiaryId,
+        partyId: fx.org.vendorId, ...PERIOD, filingAccountId: fx.filingAccountId, subsidiaryId: fx.org.subsidiaryId,
       });
       const childBill = await createRemittanceBill(fx.org.orgId, fx.actorId, {
-        partyId: fx.org.vendorId, ...PERIOD, subsidiaryId: child,
+        partyId: fx.org.vendorId, ...PERIOD, filingAccountId: fx.filingAccountId, subsidiaryId: child,
       });
       const stamped = (await db.execute<{ id: string; subsidiary_id: string; total: string }>(sql`
         select id, subsidiary_id, total from documents
@@ -414,10 +414,10 @@ test(
       // Different slices proceed independently — no deadlock, one bill each.
       const split = await Promise.all([
         createRemittanceBill(fx.org.orgId, fx.actorId, {
-          partyId: fx.org.vendorId, ...PERIOD, subsidiaryId: fx.org.subsidiaryId,
+          partyId: fx.org.vendorId, ...PERIOD, filingAccountId: fx.filingAccountId, subsidiaryId: fx.org.subsidiaryId,
         }),
         createRemittanceBill(fx.org.orgId, fx.actorId, {
-          partyId: fx.org.vendorId, ...PERIOD, subsidiaryId: child,
+          partyId: fx.org.vendorId, ...PERIOD, filingAccountId: fx.filingAccountId, subsidiaryId: child,
         }),
       ]);
       assert.equal(split.length, 2);
@@ -425,11 +425,11 @@ test(
       // The same slice twice serializes on the entity fence: exactly one bill.
       const again = await Promise.allSettled([
         createRemittanceBill(fx.org.orgId, fx.actorId, {
-          partyId: fx.org.vendorId, ...PERIOD,
+          partyId: fx.org.vendorId, ...PERIOD, filingAccountId: fx.filingAccountId,
           subsidiaryId: child,
         }),
         createRemittanceBill(fx.org.orgId, fx.actorId, {
-          partyId: fx.org.vendorId, ...PERIOD,
+          partyId: fx.org.vendorId, ...PERIOD, filingAccountId: fx.filingAccountId,
           subsidiaryId: child,
         }),
       ]);
@@ -464,7 +464,7 @@ test(
       assert.equal(groups[0]!.slices.length, 1);
 
       const bill = await createRemittanceBill(fx.org.orgId, fx.actorId, {
-        partyId: fx.org.vendorId, ...PERIOD,
+        partyId: fx.org.vendorId, ...PERIOD, filingAccountId: fx.filingAccountId,
       });
       const stamped = (await db.execute<{
         subsidiary_id: string; currency: string; memo: string; custom: { payrollRemittance: Record<string, unknown> };
