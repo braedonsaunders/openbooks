@@ -25,7 +25,8 @@ export interface BenefitTransactionPolicyQuery { readonly orgId: string; readonl
 const TABLES = ["hrm_benefit_transaction_responsibilities", "hrm_benefit_transaction_limits", "hrm_benefit_transaction_positions", "hrm_benefit_transaction_items", "hrm_benefit_transaction_policies"] as const;
 
 export async function requireTransactionPolicyStorage(exec: SqlExecutor): Promise<void> {
-  const rows = (await exec.execute<{ present: number }>(sql`select count(*)::int as present from pg_class c join pg_namespace n on n.oid=c.relnamespace where n.nspname='public' and c.relname=any(${[...TABLES]}) and c.relkind='r'`)).rows;
+  const names = sql`array[${sql.join(TABLES.map(name => sql`${name}`), sql`, `)}]::text[]`;
+  const rows = (await exec.execute<{ present: number }>(sql`select count(*)::int as present from pg_class c join pg_namespace n on n.oid=c.relnamespace where n.nspname='public' and c.relname=any(${names}) and c.relkind='r'`)).rows;
   if (rows[0]?.present !== TABLES.length) throw new BenefitsError("REFUSED", "Transaction benefit configuration is not installed — have the administrator upgrade through the native bootstrap runner before configuring or settling transaction programs; existing awards are preserved.");
 }
 
