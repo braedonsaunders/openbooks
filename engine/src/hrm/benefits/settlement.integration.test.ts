@@ -29,7 +29,6 @@ import {
   closeBenefitProgram,
 } from "./programs.ts";
 import {
-  getBenefitAward,
   submitBenefitAward,
 } from "./awards.ts";
 import {
