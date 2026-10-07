@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { test } from "node:test";
 import { sql } from "drizzle-orm";
-import { db } from "../platform/db.ts";
+import { db, withOrgContext } from "../platform/db.ts";
 import { createScratchOrg, dropScratchOrg } from "../testing/fixtures.ts";
 import { rebaseSandboxControlAccounts } from "./lifecycle.ts";
 import { runClone } from "./clone.ts";
@@ -14,6 +14,7 @@ test("control-account rebase uses the settings captured with the clone snapshot"
   const sandbox = await createScratchOrg();
   const seed = randomUUID();
   try {
+    await db.execute(sql`update orgs set env_kind = 'sandbox', sandbox_of = ${production.orgId}, sandbox_seed = ${seed} where id = ${sandbox.orgId}`);
     // Keep the target fixture's own account numbers distinct from the
     // deterministic copies; account numbers are unique within each org.
     await db.execute(sql`update accounts
@@ -37,15 +38,16 @@ test("control-account rebase uses the settings captured with the clone snapshot"
     await db.execute(sql`update orgs
       set settings = jsonb_set(settings, '{controlAccounts,ar}', to_jsonb(${production.accounts.fxGainLoss}::text))
       where id = ${production.orgId}`);
-    const rebased = await rebaseSandboxControlAccounts({
+    const rebased = await withOrgContext(production.orgId, () => rebaseSandboxControlAccounts({
       productionOrgId: production.orgId,
       sandboxOrgId: sandbox.orgId,
       seed,
       productionSettings: captured.sourceSettings,
-    });
+    }));
     const expected = (await db.execute<{ id: string }>(sql`
       select ob_rebase(${production.accounts.ar}::uuid, ${seed}::uuid)::text as id`)).rows[0]!.id;
     assert.equal(rebased.ar, expected, "refresh must map the captured account identity, not the newer live setting");
+    await assert.rejects(rebaseSandboxControlAccounts({ productionOrgId: production.orgId, sandboxOrgId: sandbox.orgId, seed: randomUUID() }), /owning source organization and clone seed/);
   } finally {
     await dropScratchOrg(sandbox.orgId);
     await dropScratchOrg(production.orgId);
