@@ -2860,13 +2860,15 @@
     "valuations": {
       "fixed": "Festbetrag",
       "percent": "Prozentsatz der Basis",
-      "pool": "Geteilter Topf"
+      "pool": "Geteilter Topf",
+      "per_unit": "Betrag je Einheit"
     },
     "metrics": {
       "revenue": "Umsatz",
       "gross_profit": "Rohertrag",
       "net_profit": "Reingewinn",
-      "approved_hours": "Genehmigte Stunden"
+      "approved_hours": "Genehmigte Stunden",
+      "transactions": "Genehmigte Transaktionen"
     },
     "scopes": {
       "company": "Gesamtes Unternehmen",
@@ -2876,7 +2878,8 @@
     "allocations": {
       "equal": "Gleiche Anteile",
       "hours": "Nach Stunden",
-      "role": "Nach Rollengewicht"
+      "role": "Nach Rollengewicht",
+      "responsibility": "Datierte Verantwortung"
     },
     "frequencies": {
       "monthly": "Monatlich",
@@ -3202,7 +3205,8 @@
       "employees": "Prüfen Sie Programme, Versicherungsschutz, Wahlen und gültige Bedingungen der Mitarbeiter. Die Abrechnung wendet die Programmregeln an.",
       "delivery": "Prüfen Sie bereite Zuwendungen, Leistungsbeiträge und Anspruchsbewegungen. Lohnabrechnung und externe Erfüllung behalten getrennte Nachweise."
     },
-    "configureApprovals": "Genehmigungen konfigurieren"
+    "configureApprovals": "Genehmigungen konfigurieren",
+    "transactionRules": "Transaktionsregeln"
   },
   "talentWorkspace": {
     "applications": "Bewerbungen",

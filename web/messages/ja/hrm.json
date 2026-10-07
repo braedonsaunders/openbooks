@@ -2860,13 +2860,15 @@
     "valuations": {
       "fixed": "固定額",
       "percent": "基準の割合",
-      "pool": "分配プール"
+      "pool": "分配プール",
+      "per_unit": "単位当たり金額"
     },
     "metrics": {
       "revenue": "売上",
       "gross_profit": "売上総利益",
       "net_profit": "純利益",
-      "approved_hours": "承認済み時間"
+      "approved_hours": "承認済み時間",
+      "transactions": "承認済み取引"
     },
     "scopes": {
       "company": "会社全体",
@@ -2876,7 +2878,8 @@
     "allocations": {
       "equal": "均等分配",
       "hours": "時間按分",
-      "role": "役割ウェイト"
+      "role": "役割ウェイト",
+      "responsibility": "期間付き担当"
     },
     "frequencies": {
       "monthly": "毎月",
@@ -3202,7 +3205,8 @@
       "employees": "従業員のプログラム、保障、選択内容、有効な条件を確認します。給与計算はプログラムのルールを適用します。",
       "delivery": "支給可能な付与、福利厚生の拠出、権利残高の変動を確認します。給与処理と外部提供はそれぞれの証拠を保持します。"
     },
-    "configureApprovals": "承認を設定"
+    "configureApprovals": "承認を設定",
+    "transactionRules": "取引ルール"
   },
   "talentWorkspace": {
     "applications": "応募",

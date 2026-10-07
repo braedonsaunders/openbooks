@@ -2860,13 +2860,15 @@
     "valuations": {
       "fixed": "Monto fijo",
       "percent": "Porcentaje de la base",
-      "pool": "Fondo compartido"
+      "pool": "Fondo compartido",
+      "per_unit": "Importe por unidad"
     },
     "metrics": {
       "revenue": "Ingresos",
       "gross_profit": "Utilidad bruta",
       "net_profit": "Utilidad neta",
-      "approved_hours": "Horas aprobadas"
+      "approved_hours": "Horas aprobadas",
+      "transactions": "Transacciones aprobadas"
     },
     "scopes": {
       "company": "Toda la empresa",
@@ -2876,7 +2878,8 @@
     "allocations": {
       "equal": "Partes iguales",
       "hours": "Por horas",
-      "role": "Por peso del rol"
+      "role": "Por peso del rol",
+      "responsibility": "Responsabilidad con fechas"
     },
     "frequencies": {
       "monthly": "Mensual",
@@ -3202,7 +3205,8 @@
       "employees": "Consulte programas, coberturas, elecciones y condiciones vigentes de cada empleado. La nómina aplica las reglas del programa.",
       "delivery": "Revise concesiones listas, aportaciones a beneficios y movimientos de derechos. La nómina y el cumplimiento externo conservan evidencia separada."
     },
-    "configureApprovals": "Configurar aprobaciones"
+    "configureApprovals": "Configurar aprobaciones",
+    "transactionRules": "Reglas de transacciones"
   },
   "talentWorkspace": {
     "applications": "Candidaturas",

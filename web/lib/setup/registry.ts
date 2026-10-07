@@ -16,6 +16,7 @@
  */
 
 import type { SetupEntity } from './types'
+import { BENEFIT_TRANSACTION_POLICY_ENTITY } from './benefit-transaction-policy'
 import { SETUP_GROUPS } from './types'
 import { COMPANY_ENTITIES } from './entities/company'
 import { CALENDAR_ENTITIES } from './entities/calendars'
@@ -47,6 +48,7 @@ export { SETUP_GROUPS }
 export { OVERHEAD_RATE_KINDS, LIEN_WAIVER_TYPES } from './options'
 
 export const SETUP_ENTITIES: SetupEntity[] = [
+  BENEFIT_TRANSACTION_POLICY_ENTITY,
   ...COMPANY_ENTITIES,
   ...CALENDAR_ENTITIES,
   ...ACCOUNTING_ENTITIES,

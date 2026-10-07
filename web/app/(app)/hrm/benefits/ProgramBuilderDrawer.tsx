@@ -283,6 +283,8 @@ export function ProgramBuilderDrawer({
   function set<K extends keyof ProgramDraft>(key: K, value: ProgramDraft[K]) {
     setDraft((current) => {
       const next = { ...current, [key]: value }
+      if (key === 'metric' && value === 'transactions') Object.assign(next, { valuation:'percent', allocation:'responsibility', metricScope:'company', scopeIds:[], sourceAccountIds:[], capAmount:'', budgetAmount:'', thresholdAmount:'' })
+      if (key === 'metric' && value !== 'transactions' && current.metric === 'transactions') Object.assign(next, { allocation:'equal', valuation:current.valuation === 'per_unit' ? 'percent' : current.valuation })
       if (key === 'legalEntityId' && !currencyOptions.some((option) => option.value === current.currency && (option.scopeValue === null || option.scopeValue === value))) next.currency = ''
       return next
     })
@@ -501,14 +503,15 @@ export function ProgramBuilderDrawer({
                 value={draft.valuation}
                 onChange={(e) => set('valuation', e.target.value as ProgramDraft['valuation'])}
               >
-                <option value="fixed">{t('portfolio.valuations.fixed')}</option>
+                <option value="fixed" disabled={draft.metric === 'transactions'}>{t('portfolio.valuations.fixed')}</option>
+                {draft.metric === 'transactions' ? <option value="per_unit">{t('portfolio.valuations.per_unit')}</option> : null}
                 {draft.family === 'incentive' || mode === 'edit' && draft.valuation === 'percent' ? <option value="percent">{t('portfolio.valuations.percent')}</option> : null}
-                {draft.family === 'incentive' || mode === 'edit' && draft.valuation === 'pool' ? <option value="pool">{t('portfolio.valuations.pool')}</option> : null}
+                {draft.family === 'incentive' || mode === 'edit' && draft.valuation === 'pool' ? <option value="pool" disabled={draft.metric === 'transactions'}>{t('portfolio.valuations.pool')}</option> : null}
               </Select>
             </div>
-            {draft.valuation === 'fixed' ? (
+            {draft.valuation === 'fixed' || draft.valuation === 'per_unit' ? (
               <div>
-                <Label htmlFor="program-builder-fixed">{t('portfolio.builder.fields.fixedAmount')}</Label>
+                <Label htmlFor="program-builder-fixed">{t(draft.valuation === 'per_unit' ? 'portfolio.valuations.per_unit' : 'portfolio.builder.fields.fixedAmount')}</Label>
                 <Input
                   id="program-builder-fixed"
                   inputMode="decimal"
@@ -561,6 +564,7 @@ export function ProgramBuilderDrawer({
                     <option value="gross_profit">{t('portfolio.metrics.gross_profit')}</option>
                     <option value="net_profit">{t('portfolio.metrics.net_profit')}</option>
                     <option value="approved_hours">{t('portfolio.metrics.approved_hours')}</option>
+                    <option value="transactions">{t('portfolio.metrics.transactions')}</option>
                   </Select>
                   <FieldError id="program-builder-metric-error" message={errors.metric} />
                 </div>
@@ -568,6 +572,7 @@ export function ProgramBuilderDrawer({
                   <Label htmlFor="program-builder-scope">{t('portfolio.builder.fields.metricScope')}</Label>
                   <Select
                     id="program-builder-scope"
+                    disabled={draft.metric === 'transactions'}
                     value={draft.metricScope}
                     onChange={(e) => { set('metricScope', e.target.value as ProgramDraft['metricScope']); set('scopeIds', []) }}
                   >
@@ -604,6 +609,7 @@ export function ProgramBuilderDrawer({
                 ) : null}
               </>
             ) : null}
+            {draft.metric !== 'transactions' ? <>
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <Label htmlFor="program-builder-cap">{t('portfolio.builder.fields.capAmount')}</Label>
@@ -623,6 +629,7 @@ export function ProgramBuilderDrawer({
                 <FieldError id="program-builder-thresholdAmount-error" message={errors.thresholdAmount} />
               </div> : null}
             </div>
+            </> : null}
           </fieldset>
         ) : null}
 
@@ -726,15 +733,17 @@ export function ProgramBuilderDrawer({
               <Label htmlFor="program-builder-allocation">{t('portfolio.builder.fields.allocation')}</Label>
               <Select
                 id="program-builder-allocation"
+                disabled={draft.metric === 'transactions'}
                 value={draft.allocation}
                 onChange={(e) => set('allocation', e.target.value as ProgramDraft['allocation'])}
               >
                 <option value="equal">{t('portfolio.allocations.equal')}</option>
                 <option value="hours">{t('portfolio.allocations.hours')}</option>
                 <option value="role">{t('portfolio.allocations.role')}</option>
+                {draft.metric === 'transactions' ? <option value="responsibility">{t('portfolio.allocations.responsibility')}</option> : null}
               </Select>
             </div> : null}
-            {draft.family === 'incentive' && draft.metric !== '' && draft.metric !== 'approved_hours' ? (
+            {draft.family === 'incentive' && draft.metric !== '' && draft.metric !== 'approved_hours' && draft.metric !== 'transactions' ? (
               <>
                 <OptionMultiPicker
                   id="program-builder-sources"

@@ -6,6 +6,7 @@ import { requirePermission, can } from '../../../../lib/authz'
 import { requireFeatureEnabled } from '../../../../lib/feature-gates'
 import { EmployeeBenefitsWorkspace } from './EmployeeBenefitsWorkspace'
 import { ProgramWorkspace } from './ProgramWorkspace'
+import { TransactionRulesDrawer } from './TransactionRulesDrawer'
 import { getBenefitsProgramWorkspace, BenefitsError, type BenefitsProgramWorkspace } from '@openbooks/engine/hrm/benefits'
 import { db } from '@openbooks/engine/platform/database'
 import { isUuid } from '../../../../lib/list-params'
@@ -19,6 +20,7 @@ export async function generateMetadata() { return { title: await benefitsTitle()
 /** The program catalog, employee relationships and delivery each have one native workspace. */
 export default async function BenefitsPage({ searchParams }: {searchParams: Promise<Record<string, string | undefined>>}) {
   const sp = await searchParams
+  if (sp.transactionRules && (!isUuid(sp.transactionRules) || sp.program || sp.plan)) notFound()
   if (sp.view && !['overview','programs','employees','delivery'].includes(sp.view)) notFound()
   if (sp.view === 'employees') return <EmployeeBenefitsWorkspace sp={sp} />
   const nativeCreate = sp.plan === 'new' || sp.program === 'new' && sp.kind === 'time_off'
@@ -39,6 +41,7 @@ export default async function BenefitsPage({ searchParams }: {searchParams: Prom
   if (programRefusal) { data.refusal={title:data.title,message:programRefusal}; data.hasContent=false }
   return <>
     <ModuleView spec={benefitsSpec(data)} data={data} searchParams={sp} trusted />
+    {sp.transactionRules ? <TransactionRulesDrawer authz={authz} programId={sp.transactionRules} /> : null}
     {workspace && workspace.program.nativeKind !== 'employer' ? <ProgramWorkspace authz={authz} workspace={workspace} sp={sp} /> : null}
     {nativeCreate ? <SetupEntitySection
       entity={sp.kind === 'time_off' ? benefitEntitlementPresentation(SETUP_ENTITY_BY_KEY.get('entitlement-plans')!,true) : benefitPlanPresentation(sp.kind as 'health'|'retirement',true)}

@@ -1,3 +1,4 @@
+import { refusal } from "../../testing/refusal.ts";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
@@ -86,16 +87,8 @@ function calc(input: Partial<ComputeIncentiveInput> = {}) {
   });
 }
 
-async function refuses(fn: () => unknown, pattern: RegExp): Promise<string> {
-  try {
-    await fn();
-  } catch (error) {
-    assert.ok(error instanceof BenefitsError, `expected BenefitsError, got ${error}`);
-    assert.match(error.message, pattern);
-    return error.message;
-  }
-  assert.fail("expected a refusal but the computation succeeded");
-}
+const refuses = async (fn: () => unknown, pattern: RegExp) =>
+  (await refusal(Promise.resolve().then(fn), BenefitsError, pattern)).message;
 
 
 const invalidComputations: [string, Partial<ComputeIncentiveInput>, RegExp[]][] = [

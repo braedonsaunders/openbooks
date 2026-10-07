@@ -1,3 +1,4 @@
+import { readTransactionPolicy, validateTransactionPolicy, requireTransactionPolicyStorage } from "./transaction-policy.ts";
 import { requireBenefitCurrency } from "./currency-options.ts";
 import { sql } from "drizzle-orm";
 import { db, withOrgTransaction, type SqlExecutor } from "../../platform/db.ts";
@@ -121,8 +122,8 @@ function asDelivery(value: unknown): BenefitDeliveryMethod {
 }
 
 function asValuation(value: unknown): BenefitValuation {
-  if (value === "fixed" || value === "percent" || value === "pool") return value;
-  throw new BenefitsError("INVALID_INPUT", "valuation is fixed, percent, or pool");
+  if (value === "fixed" || value === "percent" || value === "pool" || value === "per_unit") return value;
+  throw new BenefitsError("INVALID_INPUT", "valuation is fixed, percent, pool, or per_unit");
 }
 
 function asMetric(value: unknown): BenefitMetric | null {
@@ -131,13 +132,13 @@ function asMetric(value: unknown): BenefitMetric | null {
     value === "revenue" ||
     value === "gross_profit" ||
     value === "net_profit" ||
-    value === "approved_hours"
+    value === "approved_hours" || value === "transactions"
   ) {
     return value;
   }
   throw new BenefitsError(
     "INVALID_INPUT",
-    "metric is revenue, gross_profit, net_profit, or approved_hours",
+    "metric is revenue, gross_profit, net_profit, approved_hours, or transactions",
   );
 }
 
@@ -148,8 +149,8 @@ function asMetricScope(value: unknown): BenefitMetricScope | null {
 }
 
 function asAllocation(value: unknown): BenefitAllocation {
-  if (value === "equal" || value === "hours" || value === "role") return value;
-  throw new BenefitsError("INVALID_INPUT", "allocation is equal, hours, or role");
+  if (value === "equal" || value === "hours" || value === "role" || value === "responsibility") return value;
+  throw new BenefitsError("INVALID_INPUT", "allocation is equal, hours, role, or responsibility");
 }
 
 function asPeriodBasis(value: unknown): BenefitPeriodBasis | null {
@@ -423,6 +424,7 @@ interface ProgramRuleInput {
   readonly family: BenefitProgramFamily;
   readonly deliveryMethod: BenefitDeliveryMethod;
   readonly valuation: BenefitValuation;
+  readonly allocation: BenefitAllocation;
   readonly metric: BenefitMetric | null;
   readonly metricScope: BenefitMetricScope | null;
   readonly scopeIds: readonly string[];
@@ -438,6 +440,15 @@ interface ProgramRuleInput {
 
 /** Every advertised rule must resolve: missing pieces refuse by name. */
 function requireResolvableRules(code: string, rules: ProgramRuleInput): void {
+  if (rules.metric === "transactions") {
+    if (!(["incentive","custom"] as readonly string[]).includes(rules.family) || rules.metricScope !== "company" || rules.allocation !== "responsibility" || rules.deliveryMethod !== "payroll" || rules.scopeIds.length || rules.capAmount !== null || rules.thresholdAmount !== null || rules.budgetAmount !== null || !["percent","per_unit"].includes(rules.valuation)) {
+      throw new BenefitsError("INVALID_INPUT", "Transaction programs use payroll delivery, explicit transaction grouping and percent or per-unit valuation; configure ceilings in transaction rules instead of overlapping header caps, thresholds or budgets.");
+    }
+    if (rules.valuation === "percent" && (rules.percentRate === null || cmp(rules.percentRate,"0")<=0)) throw new BenefitsError("INVALID_INPUT","Configure a positive transaction percentage before activating this program.");
+    if (rules.valuation === "per_unit" && (rules.fixedAmount === null || cmp(rules.fixedAmount,"0")<=0)) throw new BenefitsError("INVALID_INPUT","Configure a positive amount per transaction unit before activating this program.");
+  } else if (rules.valuation === "per_unit" || rules.allocation === "responsibility") {
+    throw new BenefitsError("INVALID_INPUT","Per-unit valuation needs the transactions metric; select the native source rules before continuing.");
+  }
   if (rules.valuation === "fixed" && rules.fixedAmount === null) {
     throw new BenefitsError(
       "REFUSED",
@@ -572,7 +583,8 @@ async function requireProgramSourceAccounts(
   if (new Set(accountIds).size !== accountIds.length) {
     throw new BenefitsError("INVALID_INPUT", "a measurement account is selected more than once — select each source account once");
   }
-  const moneyMetric = metric !== null && metric !== "approved_hours";
+  if (metric === "transactions" && accountIds.length) throw new BenefitsError("INVALID_INPUT","Transaction programs measure their configured native source items — clear ledger measurement accounts and use Transaction rules instead of overlapping source definitions.");
+  const moneyMetric = metric !== null && metric !== "approved_hours" && metric !== "transactions";
   const ownExpense = moneyMetric && payComponentId !== null
     ? (await exec.execute<{ expense_account_id: string | null }>(sql`
         select expense_account_id from pay_components where org_id = ${orgId} and id = ${payComponentId}
@@ -775,6 +787,7 @@ export async function createBenefitProgram(query: CreateBenefitProgramQuery): Pr
     family,
     deliveryMethod,
     valuation,
+    allocation,
     metric,
     metricScope,
     scopeIds: query.scopeIds ?? [],
@@ -803,6 +816,7 @@ export async function createBenefitProgram(query: CreateBenefitProgramQuery): Pr
     await requireLegalEntityVisibleToActor(db, orgId, actorId, legalEntityId);
     await requireBenefitCurrency(db, orgId, currency, legalEntityId);
     await requireProgramPayComponent(db, orgId, code, payComponentId, deliveryMethod);
+    if (metric === "transactions") await requireTransactionPolicyStorage(db);
     await requireProgramSourceAccounts(db, orgId, code, legalEntityId, metric, query.sourceAccountIds ?? [], payComponentId);
     let insertedRows: Record<string, unknown>[];
     try {
@@ -966,6 +980,7 @@ export async function updateBenefitProgram(query: UpdateBenefitProgramQuery): Pr
       family: before.family,
       deliveryMethod: next.deliveryMethod,
       valuation: next.valuation,
+      allocation: next.allocation,
       metric: next.metric,
       metricScope: next.metricScope,
       scopeIds: next.scopeIds,
@@ -987,6 +1002,7 @@ export async function updateBenefitProgram(query: UpdateBenefitProgramQuery): Pr
       select account_id from hrm_benefit_program_sources where org_id = ${orgId} and program_id = ${programId} order by account_id
     `)).rows.map((row) => String(row.account_id));
     const selectedSourceIds = query.sourceAccountIds ?? previousSourceIds;
+    if (next.metric === "transactions") await requireTransactionPolicyStorage(db);
     await requireProgramSourceAccounts(db, orgId, before.code, next.legalEntityId, next.metric, selectedSourceIds, next.payComponentId);
     const updated = requireOneRow(
       (
@@ -1081,6 +1097,7 @@ async function setProgramStatus(
         family: before.family,
         deliveryMethod: before.deliveryMethod,
         valuation: before.valuation,
+        allocation: before.allocation,
         metric: before.metric,
         metricScope: before.metricScope,
         scopeIds: before.scopeIds,
@@ -1096,6 +1113,13 @@ async function setProgramStatus(
       await requireBenefitCurrency(db, orgId, before.currency, before.legalEntityId);
       await requireProgramPayComponent(db, orgId, before.code, before.payComponentId, before.deliveryMethod);
       await requireRoleMembershipWeights(db, orgId, programId, before.code, before.allocation);
+      if (before.metric === "transactions") {
+        if (before.allocation !== "responsibility") throw new BenefitsError("REFUSED","Transaction programs allocate through dated responsibilities — select responsibility allocation before activation.");
+        const policy=await readTransactionPolicy(db,orgId,programId);
+        if (!policy) throw new BenefitsError("REFUSED","Configure transaction source items, recipient positions, dated assignments and group ceiling decisions in this program's Transaction rules before activation.");
+        await validateTransactionPolicy(db,orgId,before.legalEntityId,policy,before.currency);
+        if (!policy.responsibilities.length || !policy.limits.length) throw new BenefitsError("REFUSED","Record dated recipient responsibilities and explicit group ceilings in Transaction rules before activation.");
+      }
       const storedAccounts = (
         await db.execute<{ account_id: string }>(sql`
           select account_id from hrm_benefit_program_sources
@@ -1106,7 +1130,7 @@ async function setProgramStatus(
       const needsMeasurementAccount =
         before.family === "incentive" &&
         before.metric !== null &&
-        before.metric !== "approved_hours";
+        before.metric !== "approved_hours" && before.metric !== "transactions";
       if (needsMeasurementAccount) {
         const shape = (await db.execute<{ income: number; costs: number }>(sql`
           select count(*) filter (where a.type = 'income')::int as income,

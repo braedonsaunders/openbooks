@@ -4784,13 +4784,15 @@
       "benefitValuation": {
         "fixed": "Fixo",
         "percent": "Percentual",
-        "pool": "Orçamento"
+        "pool": "Orçamento",
+        "per_unit": "Valor por unidade"
       },
       "benefitMetric": {
         "revenue": "Receita",
         "gross_profit": "Lucro bruto",
         "net_profit": "Lucro líquido",
-        "approved_hours": "Horas aprovadas"
+        "approved_hours": "Horas aprovadas",
+        "transactions": "Transações aprovadas"
       },
       "benefitMetricScope": {
         "company": "Empresa",
@@ -4800,7 +4802,8 @@
       "benefitAllocation": {
         "equal": "Igual",
         "hours": "Horas",
-        "role": "Papel"
+        "role": "Papel",
+        "responsibility": "Responsabilidade datada"
       },
       "benefitFrequency": {
         "monthly": "Mensal",
@@ -6422,6 +6425,51 @@
       "gap": "Este horário local não existe devido ao adiantamento do relógio; escolha outro.",
       "occurrence": "Deslocamento UTC",
       "repeated": "Esta hora ocorre duas vezes; escolha seu deslocamento UTC."
+    },
+    "transactionBenefits": {
+      "title": "Regras de transações",
+      "source": "Transações de origem",
+      "sourceHint": "Selecione itens, tipo de documento, data e agrupamento. Somente origens aprovadas ou contabilizadas são admitidas.",
+      "positions": "Participações dos beneficiários",
+      "positionsHint": "Defina funções do programa e seus pesos relativos, independentemente dos cargos profissionais.",
+      "responsibilities": "Atribuições datadas",
+      "responsibilitiesHint": "Associe cada grupo e função a um vínculo empregatício com datas explícitas. Cada origem exige todas as participações configuradas.",
+      "limits": "Tetos por grupo",
+      "limitsHint": "Escolha um teto monetário ou sem limite para cada grupo. As concessões anteriores do programa consomem o teto.",
+      "reason": "Motivo da alteração",
+      "reasonHint": "Explique a alteração. Todas as seções são salvas juntas; regras ativas exigem um programa substituto.",
+      "documentDate": "Data do documento",
+      "companyGrouping": "Sem agrupamento, utiliza-se o empregador responsável. Os grupos seguem a dimensão nativa ou personalizada selecionada.",
+      "fields": {
+        "documentKind": "Tipo de documento",
+        "dateBasis": "Base da data",
+        "groupingSegmentId": "Dimensão de agrupamento",
+        "itemIds": "Itens elegíveis",
+        "positions": "Participações dos beneficiários",
+        "key": "Código da função",
+        "name": "Nome da função",
+        "weight": "Peso da participação",
+        "responsibilities": "Atribuições datadas",
+        "groupId": "Grupo",
+        "positionKey": "Função beneficiária",
+        "employmentId": "Vínculo empregatício",
+        "effectiveFrom": "Vigente desde",
+        "effectiveTo": "Vigente até",
+        "limits": "Tetos por grupo",
+        "kind": "Decisão do teto",
+        "amount": "Valor do teto",
+        "reason": "Motivo"
+      },
+      "kinds": {
+        "sales_order": "Pedidos de venda",
+        "customer_invoice": "Faturas de clientes",
+        "field_ticket": "Registros de campo",
+        "quote": "Orçamentos"
+      },
+      "limitKinds": {
+        "none": "Sem limite",
+        "amount": "Teto monetário"
+      }
     }
   },
   "flows": {

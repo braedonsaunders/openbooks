@@ -289,6 +289,12 @@ export const TENANT_TABLE_POLICIES = {
   "hrm_benefit_program_scopes": "clone:catalog-uuid-rebase",
   "hrm_benefit_program_sources": "clone:catalog-uuid-rebase",
   "hrm_benefit_programs": "clone:catalog-uuid-rebase",
+  "hrm_benefit_transaction_policies": "clone:catalog-uuid-rebase",
+  "hrm_benefit_transaction_items": "clone:catalog-uuid-rebase",
+  "hrm_benefit_transaction_positions": "clone:catalog-uuid-rebase",
+  "hrm_benefit_transaction_responsibilities": "clone:catalog-uuid-rebase",
+  "hrm_benefit_transaction_limits": "clone:catalog-uuid-rebase",
+
   "hrm_calibration_entries": "clone:catalog-uuid-rebase",
   "hrm_calibration_events": "clone:catalog-uuid-rebase",
   "hrm_calibration_sessions": "clone:catalog-uuid-rebase",

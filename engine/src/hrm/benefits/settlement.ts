@@ -1,3 +1,4 @@
+import { measureTransactionSettlement, type TransactionSettlementSnapshot } from "./transaction-settlement.ts";
 import { createHash } from "node:crypto";
 import { canonicalDecimal } from "../../money/exact-decimal.ts";
 import { normalizeMoney } from "../../money/money.ts";
@@ -93,7 +94,7 @@ export interface IncentivePreview {
   readonly payableAfter: string;
   readonly currency: string;
   readonly minorUnits: number;
-  readonly measured: MoneySourceSnapshot | HoursSourceSnapshot;
+  readonly measured: MoneySourceSnapshot | HoursSourceSnapshot | TransactionSettlementSnapshot;
   readonly computation: IncentiveComputation;
   /** Recipient rows the actor may see (subsidiary scope fences the rest). */
   readonly visibleRecipients: ReadonlyArray<IncentiveComputation["recipients"][number]>;
@@ -202,7 +203,7 @@ async function loadSettlementContext(
   if (program.metric === null) {
     throw new BenefitsError(
       "REFUSED",
-      `program ${program.code} names no metric — fixed-amount awards are recorded directly, not settled through measurement; configure revenue, gross_profit, net_profit, or approved_hours to settle`,
+      `program ${program.code} names no metric — fixed-amount awards are recorded directly, not settled through measurement; configure revenue, gross_profit, net_profit, approved_hours, or transactions to settle`,
     );
   }
   if (program.legalEntityId === null) {
@@ -374,9 +375,14 @@ async function measureAndCompute(
   excluded: string[];
   moneySnapshot: MoneySourceSnapshot | null;
   hoursSnapshot: HoursSourceSnapshot | null;
+  transactionSnapshot?: TransactionSettlementSnapshot;
 }> {
   const { program } = ctx;
   const metric = program.metric!;
+  if (metric === "transactions") {
+    const result=await measureTransactionSettlement({orgId,actorId,program,members:ctx.members,minorUnits:ctx.minorUnits,basis:ctx.basis,periodFrom,periodTo});
+    return {...result,moneySnapshot:null,hoursSnapshot:null};
+  }
   const eligible = eligibleMembers(ctx.members, periodFrom, periodTo);
   const memberEmploymentIds = new Set<string>();
   for (const member of eligible) {
@@ -532,13 +538,14 @@ async function buildPreviewResult(
     computation: IncentiveComputation;
     moneySnapshot: MoneySourceSnapshot | null;
     hoursSnapshot: HoursSourceSnapshot | null;
+  transactionSnapshot?: TransactionSettlementSnapshot;
     excluded: string[];
   },
 ): Promise<IncentivePreview> {
   const visible = scope === null
     ? [...result.computation.recipients]
     : await fenceRecipients(orgId, scope, result.computation);
-  const measured = result.moneySnapshot ?? result.hoursSnapshot;
+  const measured = result.transactionSnapshot ?? result.moneySnapshot ?? result.hoursSnapshot;
   if (!measured) {
     throw new BenefitsError(
       "REFUSED",
@@ -611,6 +618,7 @@ async function buildPreview(
     computation: IncentiveComputation;
     moneySnapshot: MoneySourceSnapshot | null;
     hoursSnapshot: HoursSourceSnapshot | null;
+  transactionSnapshot?: TransactionSettlementSnapshot;
     excluded: string[];
   },
 ): Promise<IncentivePreview> {
@@ -777,7 +785,7 @@ export async function settleIncentivePeriod(query: SettleIncentivePeriodQuery): 
 export function buildSourceSnapshot(
   ctx: SettlementContext,
   query: PreviewIncentiveSettlementQuery,
-  result: { moneySnapshot: MoneySourceSnapshot | null; hoursSnapshot: HoursSourceSnapshot | null },
+  result: { moneySnapshot: MoneySourceSnapshot | null; hoursSnapshot: HoursSourceSnapshot | null; transactionSnapshot?: TransactionSettlementSnapshot },
   computation: IncentiveComputation,
   excluded: readonly string[],
 ): Record<string, unknown> {
@@ -795,19 +803,20 @@ export function buildSourceSnapshot(
     periodBasis: ctx.basis,
     fiscalCalendarId: ctx.fiscalCalendarId,
     projectCompletion: ctx.projectCompletion,
-    metric: money?.metric ?? "approved_hours",
-    scope: money?.scope ?? hours?.scope ?? null,
+    metric: result.transactionSnapshot?.metric ?? money?.metric ?? "approved_hours",
+    ...(result.transactionSnapshot ? { transaction: result.transactionSnapshot } : {}),
+    scope: result.transactionSnapshot?.scope ?? money?.scope ?? hours?.scope ?? null,
     measuredValue: computation.measuredValue,
     poolValue: computation.poolValue,
     currency: computation.currency,
     minorUnits: ctx.minorUnits,
     bookId: money?.bookId ?? null,
-    digest: money?.digest ?? createHash("sha256")
+    digest: result.transactionSnapshot?.digest ?? money?.digest ?? createHash("sha256")
       .update(`${hours?.entryIds.join(",") ?? ""}#${hours?.totalHours ?? ""}#${attribution}`, "utf8")
       .digest("hex"),
-    entryIds: [...(money?.entryIds ?? hours?.entryIds ?? [])].sort(),
-    entryCount: money?.entryCount ?? hours?.entryCount ?? 0,
-    lineCount: money?.lineCount ?? hours?.entryCount ?? 0,
+    entryIds: [...(result.transactionSnapshot ? new Set(result.transactionSnapshot.source.lines.map(line => line.documentId)) : money?.entryIds ?? hours?.entryIds ?? [])].sort(),
+    entryCount: result.transactionSnapshot?.entryCount ?? money?.entryCount ?? hours?.entryCount ?? 0,
+    lineCount: result.transactionSnapshot?.lineCount ?? money?.lineCount ?? hours?.entryCount ?? 0,
     maxStamp: money?.maxPostedAt ?? hours?.maxApprovedAt ?? null,
     revenueTotal: money?.revenueTotal ?? null,
     expenseTotal: money?.expenseTotal ?? null,

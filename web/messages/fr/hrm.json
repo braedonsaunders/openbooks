@@ -2860,13 +2860,15 @@
     "valuations": {
       "fixed": "Montant fixe",
       "percent": "Pourcentage de la base",
-      "pool": "Enveloppe partagée"
+      "pool": "Enveloppe partagée",
+      "per_unit": "Montant par unité"
     },
     "metrics": {
       "revenue": "Chiffre d'affaires",
       "gross_profit": "Marge brute",
       "net_profit": "Bénéfice net",
-      "approved_hours": "Heures approuvées"
+      "approved_hours": "Heures approuvées",
+      "transactions": "Transactions approuvées"
     },
     "scopes": {
       "company": "Toute l'entreprise",
@@ -2876,7 +2878,8 @@
     "allocations": {
       "equal": "Parts égales",
       "hours": "Aux heures",
-      "role": "Au poids du rôle"
+      "role": "Au poids du rôle",
+      "responsibility": "Responsabilité datée"
     },
     "frequencies": {
       "monthly": "Mensuelle",
@@ -3202,7 +3205,8 @@
       "employees": "Consultez les programmes, couvertures, choix et conditions applicables aux employés. La paie applique les règles du programme.",
       "delivery": "Consultez les attributions prêtes, cotisations et mouvements de droits. La paie et la réalisation externe conservent des preuves distinctes."
     },
-    "configureApprovals": "Configurer les approbations"
+    "configureApprovals": "Configurer les approbations",
+    "transactionRules": "Règles de transactions"
   },
   "talentWorkspace": {
     "applications": "Candidatures",

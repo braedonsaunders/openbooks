@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { setupAggregatePayload, setupDomainPayload } from './domain-payload'
 import { setupFieldOptions, setupFieldVisible, setupReferenceSources, type SetupEntity, type SetupField } from './types'
+import { BENEFIT_TRANSACTION_POLICY_ENTITY } from './benefit-transaction-policy'
 import { BILLING_ENTITIES } from './entities/billing'
 
 const policy = BILLING_ENTITIES.find((entity) => entity.key === 'dunning-policies')!
@@ -59,3 +60,15 @@ test('structured discriminants remove only explicitly inapplicable keys, preserv
   assert.deepEqual(setupDomainPayload(entity, { type: { kind: 'scalar', currency: 'CAD', evidence: 'retained' } }), { ok: true, body: { type: { kind: 'scalar', evidence: 'retained' } } })
   assert.deepEqual(setupDomainPayload(entity, { type: { kind: 'money', currency: 'CAD', evidence: 'retained' } }), { ok: true, body: { type: { kind: 'money', currency: 'CAD', evidence: 'retained' } } })
 })
+
+
+test('transaction rules retain exact shares, use live position choices and clear an inapplicable ceiling', () => {
+  const groupId='10000000-0000-4000-8000-000000000001', employmentId='10000000-0000-4000-8000-000000000002';
+  const values={documentKind:'sales_order',dateBasis:'document_date',groupingSegmentId:'',itemIds:[groupId],positions:[{key:'lead',name:'Lead',weight:'2.0000'}],responsibilities:[{groupId,positionKey:'lead',employmentId,effectiveFrom:'2026-01-01',effectiveTo:''}],limits:[{groupId,kind:'none',amount:'1,234'}],reason:'Record policy'};
+  const payload=setupDomainPayload(BENEFIT_TRANSACTION_POLICY_ENTITY,values,'update'); assert.ok(payload.ok);
+  assert.deepEqual(payload.body.limits,[{groupId,kind:'none',amount:null}]);
+  assert.deepEqual(payload.body.responsibilities,[{...values.responsibilities[0],effectiveTo:null}]);
+  const field=BENEFIT_TRANSACTION_POLICY_ENTITY.fields.find(field=>field.key==='responsibilities')!.fields!.find(field=>field.key==='positionKey')!;
+  assert.deepEqual(setupFieldOptions(field,values.responsibilities[0]!,values),[{value:'lead',label:'Lead'}]);
+  assert.equal(setupDomainPayload(BENEFIT_TRANSACTION_POLICY_ENTITY,{...values,responsibilities:[{...values.responsibilities[0],positionKey:'unknown'}]},'update').ok,false);
+});

@@ -4709,13 +4709,15 @@
       "benefitValuation": {
         "fixed": "Fijo",
         "percent": "Porcentaje",
-        "pool": "Bolsa"
+        "pool": "Bolsa",
+        "per_unit": "Importe por unidad"
       },
       "benefitMetric": {
         "revenue": "Ingresos",
         "gross_profit": "Margen bruto",
         "net_profit": "Beneficio neto",
-        "approved_hours": "Horas aprobadas"
+        "approved_hours": "Horas aprobadas",
+        "transactions": "Transacciones aprobadas"
       },
       "benefitMetricScope": {
         "company": "Empresa",
@@ -4725,7 +4727,8 @@
       "benefitAllocation": {
         "equal": "Igual",
         "hours": "Horas",
-        "role": "Rol"
+        "role": "Rol",
+        "responsibility": "Responsabilidad con fechas"
       },
       "benefitFrequency": {
         "monthly": "Mensual",
@@ -6422,6 +6425,51 @@
       "gap": "Esta hora local no existe por el adelanto del reloj; elija otra hora.",
       "occurrence": "Desfase UTC",
       "repeated": "Esta hora ocurre dos veces; elija su desfase UTC."
+    },
+    "transactionBenefits": {
+      "title": "Reglas de transacciones",
+      "source": "Transacciones de origen",
+      "sourceHint": "Seleccione artículos, tipo de documento, fecha y agrupación. Solo se admiten documentos aprobados o contabilizados.",
+      "positions": "Participaciones de destinatarios",
+      "positionsHint": "Defina puestos del programa y sus ponderaciones relativas, independientemente de los cargos laborales.",
+      "responsibilities": "Asignaciones con fechas",
+      "responsibilitiesHint": "Asigne cada grupo y puesto a una relación laboral con fechas explícitas. Cada origen requiere todas las participaciones.",
+      "limits": "Límites por grupo",
+      "limitsHint": "Indique un límite monetario o sin límite por grupo. Las adjudicaciones anteriores del programa consumen el límite.",
+      "reason": "Motivo de auditoría",
+      "reasonHint": "Explique el cambio. Todas las secciones se guardan juntas; las reglas activas requieren un programa sustituto.",
+      "documentDate": "Fecha del documento",
+      "companyGrouping": "Sin agrupación se utiliza el empleador responsable. Los grupos corresponden a la dimensión nativa o personalizada elegida.",
+      "fields": {
+        "documentKind": "Tipo de documento",
+        "dateBasis": "Base de fecha",
+        "groupingSegmentId": "Dimensión de agrupación",
+        "itemIds": "Artículos elegibles",
+        "positions": "Participaciones de destinatarios",
+        "key": "Código del puesto",
+        "name": "Nombre del puesto",
+        "weight": "Ponderación",
+        "responsibilities": "Asignaciones con fechas",
+        "groupId": "Grupo",
+        "positionKey": "Puesto destinatario",
+        "employmentId": "Relación laboral",
+        "effectiveFrom": "Vigente desde",
+        "effectiveTo": "Vigente hasta",
+        "limits": "Límites por grupo",
+        "kind": "Decisión de límite",
+        "amount": "Importe límite",
+        "reason": "Motivo"
+      },
+      "kinds": {
+        "sales_order": "Pedidos de venta",
+        "customer_invoice": "Facturas de clientes",
+        "field_ticket": "Partes de campo",
+        "quote": "Presupuestos"
+      },
+      "limitKinds": {
+        "none": "Sin límite",
+        "amount": "Límite monetario"
+      }
     }
   },
   "flows": {

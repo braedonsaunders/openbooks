@@ -938,6 +938,10 @@ const ALLOW_LISTED_NON_PERSONAL: ReadonlySet<string> = new Set([
   "hrm_applications.status",
   "hrm_apprentice_ratio_rules.measured",
   // Contribution units, lifecycle values and configuration labels identify no employee.
+  // Transaction source and ceiling selectors are fixed enumerations, not employee data.
+  "hrm_benefit_transaction_policies.document_kind",
+  "hrm_benefit_transaction_policies.date_basis",
+  "hrm_benefit_transaction_limits.limit_kind",
   "hrm_benefit_contribution_classes.class_key",
   "hrm_benefit_contribution_classes.name",
   "hrm_benefit_contribution_tiers.class_key",

@@ -16,6 +16,7 @@
  * same attempt inside the actor's lens still succeeds.
  */
 import assert from "node:assert/strict";
+export { refusal } from "./refusal.ts";
 import { test } from "node:test";
 import { sql, type SQL } from "drizzle-orm";
 import { db } from "../platform/db.ts";
@@ -136,26 +137,6 @@ export function scopeMatrix(rows: readonly MatrixRow[]): void {
 
 /** The uniform not-found wording scope denials share with unknown ids. */
 export const NOT_VISIBLE = /not visible in this organization/;
-
-/**
- * Await a refusal of the expected class and, when given, message; return
- * the error so the caller can assert its code or structural fields.
- */
-export async function refusal<E extends abstract new (...args: never[]) => Error>(
-  promise: Promise<unknown>,
-  expected: E,
-  message?: RegExp | string,
-): Promise<InstanceType<E>> {
-  try {
-    await promise;
-  } catch (error) {
-    assert.ok(error instanceof expected, `expected ${expected.name}, got ${String(error)}`);
-    if (typeof message === "string") assert.equal(error.message, message);
-    else if (message) assert.match(error.message, message);
-    return error as InstanceType<E>;
-  }
-  throw new Error(`expected a ${expected.name} refusal, the call succeeded`);
-}
 
 /**
  * A cross-entity target must refuse exactly like a fabricated one, so the

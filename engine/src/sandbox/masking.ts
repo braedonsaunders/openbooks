@@ -226,6 +226,16 @@ export const DEFAULT_POLICIES: MaskingPolicy[] = [
   { tableName: "hrm_benefit_awards", columnName: "void_reason", transform: "redact" },
   { tableName: "hrm_benefit_award_events", columnName: "reason", transform: "redact" },
   { tableName: "hrm_benefit_program_members", columnName: "role", transform: "redact" },
+  // Policy labels and reasons can contain employee names; keys are masked
+  // consistently across recipient positions and their dated assignments.
+  { tableName: "hrm_benefit_transaction_positions", columnName: "name", transform: "faker_name" },
+  { tableName: "hrm_benefit_transaction_positions", columnName: "position_key", transform: "hash" },
+  { tableName: "hrm_benefit_transaction_responsibilities", columnName: "position_key", transform: "hash" },
+  { tableName: "hrm_benefit_transaction_policies", columnName: "reason", transform: "redact" },
+  { tableName: "hrm_benefit_transaction_items", columnName: "reason", transform: "redact" },
+  { tableName: "hrm_benefit_transaction_positions", columnName: "reason", transform: "redact" },
+  { tableName: "hrm_benefit_transaction_responsibilities", columnName: "reason", transform: "redact" },
+  { tableName: "hrm_benefit_transaction_limits", columnName: "reason", transform: "redact" },
   { tableName: "hrm_benefit_programs", columnName: "name", transform: "faker_name" },
   { tableName: "hrm_benefit_programs", columnName: "description", transform: "redact" },
   // Operational reasons and obligation titles may name people. Goods-tax

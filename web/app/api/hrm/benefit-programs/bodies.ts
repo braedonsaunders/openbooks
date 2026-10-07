@@ -16,10 +16,10 @@ const uuidList = z.array(uuid).max(100).nullish();
 
 const family = z.enum(["reward", "allowance", "incentive", "custom"]);
 const delivery = z.enum(["payroll", "external"]);
-const valuation = z.enum(["fixed", "percent", "pool"]);
-const metric = z.enum(["revenue", "gross_profit", "net_profit", "approved_hours"]).nullish();
+const valuation = z.enum(["fixed", "percent", "pool", "per_unit"]);
+const metric = z.enum(["revenue", "gross_profit", "net_profit", "approved_hours", "transactions"]).nullish();
 const metricScope = z.enum(["company", "department", "project"]).nullish();
-const allocation = z.enum(["equal", "hours", "role"]);
+const allocation = z.enum(["equal", "hours", "role", "responsibility"]);
 const frequency = z.enum(["monthly", "quarterly", "annual", "project_complete", "manual"]);
 const periodBasis = z.enum(["calendar", "fiscal"]).nullish();
 

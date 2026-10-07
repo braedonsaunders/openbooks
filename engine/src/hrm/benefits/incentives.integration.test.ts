@@ -1,3 +1,4 @@
+import { refusal } from "../../testing/refusal.ts";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
@@ -79,16 +80,8 @@ async function seedTime(
   return id;
 }
 
-async function refuses(fn: () => Promise<unknown>, pattern: RegExp): Promise<string> {
-  try {
-    await fn();
-  } catch (error) {
-    assert.ok(error instanceof BenefitsError, `expected BenefitsError, got ${error}`);
-    assert.match((error as Error).message, pattern);
-    return (error as Error).message;
-  }
-  assert.fail("expected a refusal");
-}
+const refuses = async (fn: () => unknown, pattern: RegExp) =>
+  (await refusal(Promise.resolve().then(fn), BenefitsError, pattern)).message;
 
 test("net profit measures posted revenue minus the explicit expense set", { skip: !DB }, async () => {
   await withHarness(() => setupHarness(INCENTIVES_SPEC), async (h) => {
