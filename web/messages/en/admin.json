@@ -5940,7 +5940,8 @@
         "kind": {
           "employee_deduction": "Employee deduction",
           "employer_contribution": "Employer contribution",
-          "taxable_non_cash": "Taxable non-cash benefit"
+          "taxable_non_cash": "Taxable non-cash benefit",
+          "cash_earning": "Cash earning"
         },
         "basis": {
           "per_hour": "Per eligible hour",

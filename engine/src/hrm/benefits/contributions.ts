@@ -63,10 +63,11 @@ export async function validateBenefitContributionConfiguration(exec: SqlExecutor
   if (entity === 'benefit-contribution-rule-components') {
     const ruleId = requireId(body.ruleId, 'ruleId');
     const componentId = requireId(body.payComponentId, 'payComponentId');
-    const rule = requireOneRow((await exec.execute<{ plan_id: string; hours_basis: string | null; basis: string }>(sql`select plan_id,hours_basis,basis
+    const rule = requireOneRow((await exec.execute<{ plan_id: string; hours_basis: string | null; basis: string; pay_component_id: string }>(sql`select plan_id,hours_basis,basis,pay_component_id
       from hrm_benefit_contribution_rules where org_id=${orgId} and id=${ruleId} for update`)).rows, 'Counted contribution rule');
     if (String(body.planId ?? rule.plan_id) !== rule.plan_id) refuse('Counted components belong to the rule plan — choose a rule from this plan');
     if (rule.basis !== 'per_hour' || rule.hours_basis !== 'selected_components') refuse('Counted components belong to a per-hour selected-components rule — choose a rule that counts selected components');
+    if (componentId === rule.pay_component_id) refuse('A contribution cannot count its own output hours — select the original earning components whose worked hours determine its value');
     const component = requireOneRow((await exec.execute<{ kind: string; is_active: boolean; code: string; name: string }>(sql`select kind,is_active,code,name
       from pay_components where org_id=${orgId} and id=${componentId}`)).rows, 'Counted payroll component');
     if (!component.is_active) refuse(`Payroll component ${component.code} is inactive — re-enable it before counting its hours`);
@@ -93,9 +94,10 @@ export async function validateBenefitContributionConfiguration(exec: SqlExecutor
   const componentId = requireId(body.payComponentId, 'payComponentId');
   const component = requireOneRow((await exec.execute<Record<string, unknown>>(sql`select c.*,a.currency_restriction from pay_components c
     left join accounts a on a.org_id=c.org_id and a.id=c.non_cash_account_id where c.org_id=${orgId} and c.id=${componentId}`)).rows, 'Contribution payroll component');
-  const kind = body.kind === 'employee_deduction' ? 'deduction' : body.kind === 'employer_contribution' ? 'employer_contribution' : body.kind === 'taxable_non_cash' ? 'earning' : null;
-  if (kind === null || component.kind !== kind || !component.is_active || component.system_key != null) refuse('Link an active user payroll component matching the contribution kind: deduction, employer contribution, or taxable non-cash earning');
+  const kind = body.kind === 'employee_deduction' ? 'deduction' : body.kind === 'employer_contribution' ? 'employer_contribution' : ['taxable_non_cash','cash_earning'].includes(String(body.kind)) ? 'earning' : null;
+  if (kind === null || component.kind !== kind || !component.is_active || component.system_key != null) refuse('Link an active user payroll component matching the contribution kind: deduction, employer contribution, taxable non-cash earning, or cash earning');
   if (body.kind === 'taxable_non_cash' && (component.payment_kind !== 'non_cash' || component.taxable !== true || component.non_cash_account_id == null)) refuse('A taxable non-cash rule requires a taxable non-cash earning with its provider clearing or prepaid account — configure that native payroll component first');
+  if (body.kind === 'cash_earning' && component.payment_kind !== 'cash') refuse('A cash earning rule requires a cash earning component — select its native payroll component and declare tax and posting treatment there');
   if (component.currency_restriction != null && component.currency_restriction !== plan.currency) refuse('The non-cash clearing account uses another currency — select an account available to the benefit plan currency');
   const basis = body.basis;
   if (!['per_hour','per_period','per_month','per_year','percent_of_eligible_pay'].includes(String(basis))) refuse('Declare a contribution basis: per hour, per period, per month, per year, or percent of eligible pay');
@@ -106,16 +108,17 @@ export async function validateBenefitContributionConfiguration(exec: SqlExecutor
     // must not silently shrink the counted basis — the rule refuses until the
     // list names earning components again. A rule under creation has no links
     // yet; plan activation and the pay run refuse the empty list, not this save.
-    const links = (await exec.execute<{ code: string; name: string; kind: string; is_active: boolean }>(sql`select c.code,c.name,c.kind,c.is_active
+    const links = (await exec.execute<{ id: string; code: string; name: string; kind: string; is_active: boolean }>(sql`select c.id,c.code,c.name,c.kind,c.is_active
       from hrm_benefit_contribution_rule_components rc join pay_components c on c.org_id=rc.org_id and c.id=rc.pay_component_id
       where rc.org_id=${orgId} and rc.plan_id=${planId} and rc.rule_id=${body.id}::uuid
       order by c.code`)).rows;
     const bad = links.find(l => l.kind !== 'earning' || !l.is_active);
     if (bad) refuse(`Counted component ${bad.code} (${bad.name}) is no longer an active earning component — replace it before saving this rule`);
+    if (links.some(link => link.id === componentId)) refuse('A contribution cannot count its own output hours — select original earning components before changing its linked payroll component');
   }
 
   if (basis === 'percent_of_eligible_pay' && !['all_cash_earnings','regular_cash_earnings'].includes(String(body.payBasis))) refuse('Percent contributions need a declared cash earnings basis — choose all cash earnings or regular cash earnings');
-  if (body.kind === 'taxable_non_cash' && component.vacationable === true && basis === 'percent_of_eligible_pay' && body.payBasis === 'all_cash_earnings') refuse('This contribution creates a circular vacation-pay basis — choose regular cash earnings, which excludes derived vacation pay, or use an independent hourly or fixed-period premium');
+  if (kind === 'earning' && component.vacationable === true && basis === 'percent_of_eligible_pay' && body.payBasis === 'all_cash_earnings') refuse('This contribution creates a circular vacation-pay basis — choose regular cash earnings, which excludes derived vacation pay, or use an independent hourly or fixed-period premium');
   if (basis === 'per_month' && (!Number.isSafeInteger(body.monthsPerYear) || (body.monthsPerYear as number) <= 0 || (body.monthsPerYear as number) > 12)) refuse('Monthly annualization requires explicit months per year from 1 through 12');
   if (body.periodsPerYear != null && (!Number.isSafeInteger(body.periodsPerYear) || (body.periodsPerYear as number) <= 0 || (body.periodsPerYear as number) > 366)) refuse('Annualization periods per year must be a whole number from 1 through 366');
   if (!['none','calendar_days'].includes(String(body.proration))) refuse('Declare partial-period proration: none or calendar days');

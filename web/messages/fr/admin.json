@@ -5940,7 +5940,8 @@
         "kind": {
           "employee_deduction": "Retenue salariale",
           "employer_contribution": "Cotisation patronale",
-          "taxable_non_cash": "Avantage imposable non monétaire"
+          "taxable_non_cash": "Avantage imposable non monétaire",
+          "cash_earning": "Gain en espèces"
         },
         "basis": {
           "per_hour": "Par heure admissible",
