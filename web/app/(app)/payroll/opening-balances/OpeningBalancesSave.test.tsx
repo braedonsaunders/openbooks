@@ -197,8 +197,10 @@ test('period money drafts survive closing and reopening without inventing missin
     await act(async () => { await tick() })
   }
   assert.equal(document.querySelector('[role="dialog"]'), null, 'the previous drawer must finish closing')
-  await openEmployee()
-  assert.equal((document.querySelector('input[aria-label="Ada — Employee CPP/QPP already withheld (C)"]') as HTMLInputElement).value, '11.63')
+  await openPeriod()
+  const reopened = document.querySelector('input[aria-label="Ada — Employee CPP/QPP already withheld (C)"]') as HTMLInputElement | null
+  assert.ok(reopened, 'selecting the period subtab must restore the employee period draft')
+  assert.equal(reopened.value, '11.63')
   const preview = [...document.querySelectorAll('button')].find(button => button.textContent === 'Preview period amounts')
   assert.ok(preview); await click(preview)
   assert.match(document.body.textContent ?? '', /CPP\/QPP pensionable earnings is empty/)
