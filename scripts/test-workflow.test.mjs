@@ -422,6 +422,16 @@ test('the aggregator only tolerates a skipped partition on a scoped run', () => 
 
 test('tenant bypass policies gate routine checks and publishing independently', () => {
   const routine = topLevelJob('typecheck')
+  const admission = namedStep('Complete repository admission')
+  assert.match(admission, /run: npm run check:static/)
+  assert.doesNotMatch(admission, /if:|continue-on-error|\|\|\s*true/)
+  assert.ok(routine.indexOf('Complete repository admission') < routine.indexOf('Typecheck every workspace'),
+    'complete source admission must precede expensive workspace typechecking')
+  const commands = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).scripts
+  for (const command of ['check:rls-bypass-predicate', 'check:route-permission-coverage', 'check:test-source-pins']) {
+    assert.ok(commands['check:static'].split(' && ').includes(`npm run ${command}`),
+      `repository admission must execute ${command}`)
+  }
   assert.match(routine, /run: npm run check:rls-bypass-predicate/)
   const guard = namedStep('Tenant policy bypass guard')
   assert.doesNotMatch(guard, /if:|continue-on-error|\|\|\s*true/)
