@@ -19,13 +19,34 @@ import { isFeatureEnabled } from '../../../../../lib/features'
 import { notFound } from "@/lib/api/responses";
 import { canonicalDecimal } from '../../../../../lib/exact-decimal'
 import { moneyRefusal } from '../../../../../lib/payroll-decimal-refusal'
+import { uuidId } from '@/lib/api/json-schema'
+import { rollupProblems } from '@/lib/invoice-rollup'
 
-const invoicingProfileSchema = z.object({
+const rollupSchema = z.strictObject({
+  mode: z.enum(['none', 'by_group']),
+  groups: z.array(z.strictObject({
+    label: z.string().trim().min(1), itemId: uuidId.nullable().optional(),
+    isLabor: z.boolean().optional(), itemCategories: z.array(z.string()).optional(),
+    itemKinds: z.array(z.string()).optional(), sourceKinds: z.array(z.string()).optional(),
+  })).optional(),
+  keepDetail: z.boolean().optional(),
+}).superRefine((value, ctx) => {
+  for (const message of rollupProblems(value)) ctx.addIssue({ code: 'custom', message });
+});
+const invoicingProfileSchema = z.strictObject({
   billingProcedure: z.enum(["standard", "application_for_payment"]),
   allowedBases: z.array(z.string().min(1)).min(1), defaultBasis: z.string().min(1),
   lineBuilder: z.enum(["tm_actual", "milestone", "draw", "cost_plus"]),
   revenueAccount: z.enum(["item_income", "unbilled_receivable", "fixed"]),
   itemCategories: z.array(z.string()).optional(), itemKinds: z.array(z.string()).optional(), sourceKinds: z.array(z.string()).optional(),
+  recognition: z.enum(['as_invoiced', 'percent_complete_cost', 'milestone']).optional(),
+  markupPresentation: z.enum(['embedded', 'lump_sum']).optional(),
+  notToExceed: z.boolean().optional(), notToExceedItemId: uuidId.nullable().optional(),
+  costSourceKinds: z.array(z.string()).optional(),
+  rateCardLapse: z.enum(['block', 'carry_forward']).optional(),
+  ticketCostScope: z.enum(['ticket_only', 'ticket_or_period']).optional(),
+  lineGrouping: z.enum(['per_source_line', 'per_item']).optional(),
+  surchargeRounding: z.enum(['half_up', 'down']).optional(), rollup: rollupSchema.optional(),
 });
 const backupProfileSchema = z.object({ required: z.boolean(), defaultBackupType: z.string().min(1), allowedBackupTypes: z.array(z.string().min(1)).min(1) });
 const financialProfileSchema = z.json().superRefine((value, ctx) => {
@@ -58,7 +79,7 @@ const createBodySchema = z.object({
   description: z.string().nullable().optional(), sortOrder: z.number().int().optional(),
 });
 const updateBodySchema = z.object({
-  id: z.string().uuid(), billingMethod: z.enum(["time_and_materials", "fixed_price", "cost_plus"]),
+  id: uuidId, billingMethod: z.enum(["time_and_materials", "fixed_price", "cost_plus"]),
   name: z.string().trim().min(1).max(200).optional(), description: z.string().nullable().optional(),
   isActive: z.boolean().optional(), sortOrder: z.number().int().optional(),
   financialProfile: financialProfileSchema.optional(), financialEffectiveFrom: z.iso.date({ error: "financialEffectiveFrom must be a real calendar date in YYYY-MM-DD format" }).optional(),
@@ -68,6 +89,22 @@ const updateBodySchema = z.object({
 
 
 export const runtime = 'nodejs'
+
+class InvoicingItemRefusal extends Error {
+  readonly status = 422;
+}
+
+type ProjectTypeTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
+async function lockInvoicingItems(tx: ProjectTypeTransaction, orgId: string, profile: z.output<typeof invoicingProfileSchema>) {
+  const ids = [...new Set([profile.notToExceedItemId, ...(profile.rollup?.groups?.map(group => group.itemId) ?? [])]
+    .filter((id): id is string => typeof id === 'string'))].sort();
+  for (const id of ids) {
+    const result = await tx.execute<{ id: string }>(sql`
+      select id from items where org_id = ${orgId} and id = ${id} and is_active = true for share
+    `);
+    if (result.rows.length !== 1) throw new InvoicingItemRefusal(`Invoicing item ${id} is unavailable in this company; choose an active company item before saving the project type`);
+  }
+}
 
 /** Sort order rides into an integer column: refuse what Number() would turn
  * into NaN or a fractional/out-of-range value before any read or write. */
@@ -180,6 +217,7 @@ export const POST = defineRoute({
     }
     try {
       const id = await db.transaction(async (tx) => {
+        await lockInvoicingItems(tx, orgId, b.invoicingProfile)
         const r = (await tx.execute<{ id: string }>(sql`
           insert into project_types (org_id, key, name, description, is_built_in, is_active, sort_order,
             billing_method, invoicing_profile, backup_profile, created_by, updated_by)
@@ -289,6 +327,7 @@ export const PATCH = defineRoute({
            for update of pt
         `))
         if (!before.rows[0]) return false
+        if (b.invoicingProfile) await lockInvoicingItems(tx, orgId, b.invoicingProfile)
         const beforeInvoicing = before.rows[0].invoicing_profile as { allowedBases?: string[] } | null
         // Validation above establishes the invoicing shape when present.
         const invoicingBases = b.invoicingProfile
@@ -334,6 +373,7 @@ export const PATCH = defineRoute({
                      invoicing_profile, backup_profile
         `))
         const projectTypeBefore = { ...before.rows[0] }
+        if (after.rows.length !== 1) throw new InvoicingItemRefusal('The project type was not updated; reload the company record before saving')
         delete projectTypeBefore.financial_profile
         await tx.execute(sql`
           insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
