@@ -256,6 +256,7 @@ export function SetupWizard(props: {
       // home and name where setup resumes, instead of detouring into Setup.
       toast.success(t('skipped'))
       router.push('/dashboard')
+      router.refresh()
     } catch (error) {
       toast.error(error instanceof Error && error.message ? error.message : t('error'))
     } finally {
