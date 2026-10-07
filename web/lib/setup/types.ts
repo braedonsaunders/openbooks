@@ -151,6 +151,8 @@ export interface SetupField {
   max?: number
   /** select options; labelKey is under `admin.setup.options.*`. */
   options?: SetupOption[]
+  /** Named choices from another structured collection in this same record. */
+  optionsFromField?: { field: string; valueKey: string; labelKey: string }
   /** Replace `options` from a runtime registry on server surfaces. */
   optionsSource?: SetupDynamicOptionsSource
   /**
@@ -167,6 +169,8 @@ export interface SetupField {
   ref?: SetupRefSource
   /** Filter native reference choices by the live owning entity. */
   refScopeField?: string
+  /** Large reference sets use the native searchable tag picker, without free entry. */
+  searchableReferences?: boolean
   /**
    * Narrow an `accounts` ref to these account types, so the picker offers
    * only accounts the entity's write guard accepts. The guard stays the
@@ -237,7 +241,16 @@ export function setupFieldVisible(field: SetupField, values: Record<string, unkn
  * both resolve through this, so the picker can never offer what the server
  * refuses.
  */
-export function setupFieldOptions(field: SetupField, values: Record<string, unknown>): SetupOption[] {
+export function setupFieldOptions(field: SetupField, values: Record<string, unknown>, recordValues: Record<string, unknown> = values): SetupOption[] {
+  if (field.optionsFromField) {
+    const { field: source, valueKey, labelKey } = field.optionsFromField
+    const rows = setupFieldValue(recordValues, source)
+    return Array.isArray(rows) ? rows.flatMap(row => {
+      if (!row || typeof row !== 'object' || Array.isArray(row)) return []
+      const value = row[valueKey], label = row[labelKey]
+      return typeof value === 'string' && value.trim() ? [{ value, label: typeof label === 'string' && label.trim() ? label : value }] : []
+    }) : []
+  }
   const scoped = field.scopedOptions
   if (!scoped) return field.options ?? []
   const scope = String(setupFieldValue(values, scoped.scopeField) ?? '')
@@ -350,6 +363,8 @@ export interface SetupEntity {
   singularTitleKey?: string
   /** Optional guided creation using the same fields, validation and writer. */
   creationSteps?: { key: string; titleKey: string; descriptionKey: string; fields: string[] }[]
+  /** Peer configuration concepts replace one active record body in both read and edit modes. */
+  recordSections?: { key: string; titleKey: string; descriptionKey: string; fields: string[] }[]
   /** Authorized operational links shown by the shared record drawer. */
   recordLinks?: { href: string; label: string }[]
   /** Server-only presentation of native record-owned collections. */

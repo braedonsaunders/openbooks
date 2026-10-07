@@ -1,3 +1,4 @@
+import { seedPayrollBenefitProgram, seedBenefitRoleActors, approveBenefitFixture } from "../../testing/benefit-fixtures.ts";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
@@ -23,7 +24,6 @@ import {
   addLiveVersion,
 } from "../../testing/hrm-harness.ts";
 import { installEngineSeams } from "../../composition/install.ts";
-import { decideGate } from "../../flows/gates.ts";
 import { isUuid } from "../../platform/uuid.ts";
 import { BenefitsError } from "./errors.ts";
 import {
@@ -77,18 +77,12 @@ test("Benefits programs and payout controls", { skip: !process.env.OPENBOOKS_DB_
     await enableHrm(orgId);
     ENTITY = ARTIFACT.subsidiaryId;
     OTHER_ENTITY = await mkSecondSubsidiary(orgId, ENTITY!);
-    HRMGR = await mkHr(orgId, "Benefits Author", "benefits_author", null, [
-      "hrm.benefits.read",
-      "hrm.benefits.manage",
-    ]);
-    APPROVER = await mkHr(orgId, "Benefits Approver", "benefits_approver", null, [
-      "hrm.benefits.read",
-      "hrm.benefits.manage",
-    ]);
-    FINANCE = await mkHr(orgId, "Benefits Finance", "benefits_finance", null, [
-      "hrm.benefits.read",
-      "payroll.manage",
-    ]);
+    const actors = await seedBenefitRoleActors(orgId, {
+      author: { name: "Benefits Author", roleKey: "benefits_author", permissions: ["hrm.benefits.read", "hrm.benefits.manage"] },
+      approver: { name: "Benefits Approver", roleKey: "benefits_approver", permissions: ["hrm.benefits.read", "hrm.benefits.manage"] },
+      finance: { name: "Benefits Finance", roleKey: "benefits_finance", permissions: ["hrm.benefits.read", "payroll.manage"] },
+    });
+    HRMGR = actors.author; APPROVER = actors.approver; FINANCE = actors.finance;
     await grantPermissions(orgId, HRMGR, ["payroll.manage"]);
     installEngineSeams();
     const graph = { schemaVersion: 1, nodes: [
@@ -109,38 +103,15 @@ test("Benefits programs and payout controls", { skip: !process.env.OPENBOOKS_DB_
   }
 
   async function approveThroughWorkflow(orgId: string, actorId: string, awardId: string): Promise<void> {
-    const gate = (await db.execute<{id:string}>(sql`select id from flow_gates where org_id=${orgId} and subject_kind='hrm_benefit_award' and subject_id=${awardId} and status='pending'`)).rows[0];
-    assert.ok(gate);
-    await decideGate({gateId:gate.id,decision:"approved",userId:actorId});
+    await approveBenefitFixture({ orgId, actorId, awardId });
   }
 
   async function draftProgram(code: string, overrides: Record<string, unknown> = {}) {
     const orgId = ARTIFACT!.orgId;
-    const program = await createBenefitProgram({
-      orgId,
-      actorId: HRMGR!,
-      code,
-      name: code,
-      family: "reward",
-      approvalMode: "flows",
-      currency: "CAD",
-      effectiveFrom: "2026-01-01",
-      legalEntityId: ENTITY!,
-      payComponentId: COMPONENT!,
-      deliveryMethod: "payroll",
-      valuation: "fixed",
-      fixedAmount: "100.0000",
-      sourceAccountIds: [ACCOUNT!],
-      ...overrides,
-    });
-    await addProgramMembership({
-      orgId,
-      actorId: HRMGR!,
-      programId: program.id,
-      employmentId: EMPLOYMENT!,
-      effectiveFrom: "2026-01-01",
-    });
-    return program;
+    return seedPayrollBenefitProgram({ orgId, actorId: HRMGR!, subsidiaryId: ENTITY!, componentId: COMPONENT! }, {
+      code, name: code, family: "reward", approvalMode: "flows", valuation: "fixed",
+      fixedAmount: "100.0000", sourceAccountIds: [ACCOUNT!], ...overrides,
+    } as Parameters<typeof seedPayrollBenefitProgram>[1], { employmentIds: [EMPLOYMENT!], activate: false });
   }
 
   function programFor(options: Partial<Parameters<typeof createBenefitProgram>[0]> & Pick<Parameters<typeof createBenefitProgram>[0], "code" | "name" | "family">) {

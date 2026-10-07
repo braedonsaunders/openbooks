@@ -207,7 +207,7 @@ export function validateProgramDraft(draft: ProgramDraft): FieldErrors {
   ) {
     errors.effectiveTo = 'portfolio.validation.dateOrder'
   }
-  if (draft.valuation === 'fixed' && draft.fixedAmount.trim() === '') {
+  if ((draft.valuation === 'fixed' || draft.valuation === 'per_unit') && draft.fixedAmount.trim() === '') {
     errors.fixedAmount = 'portfolio.validation.fixedAmount'
   }
   if (draft.valuation === 'percent' && draft.percentRate.trim() === '') {
@@ -226,6 +226,7 @@ export function validateProgramDraft(draft: ProgramDraft): FieldErrors {
     draft.family === 'incentive' &&
     draft.metric !== '' &&
     draft.metric !== 'approved_hours' &&
+    draft.metric !== 'transactions' &&
     draft.sourceAccountIds.length === 0
   ) {
     errors.sourceAccountIds = 'portfolio.validation.sourceAccounts'

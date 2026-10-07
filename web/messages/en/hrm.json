@@ -2860,13 +2860,15 @@
     "valuations": {
       "fixed": "Fixed amount",
       "percent": "Percent of base",
-      "pool": "Shared pool"
+      "pool": "Shared pool",
+      "per_unit": "Amount per unit"
     },
     "metrics": {
       "revenue": "Revenue",
       "gross_profit": "Gross profit",
       "net_profit": "Net profit",
-      "approved_hours": "Approved hours"
+      "approved_hours": "Approved hours",
+      "transactions": "Approved transactions"
     },
     "scopes": {
       "company": "Whole company",
@@ -2876,7 +2878,8 @@
     "allocations": {
       "equal": "Equal shares",
       "hours": "By hours",
-      "role": "By role weight"
+      "role": "By role weight",
+      "responsibility": "Dated responsibility"
     },
     "frequencies": {
       "monthly": "Monthly",
@@ -3202,7 +3205,8 @@
       "employees": "View employee programs, coverage, elections and effective terms. Payroll applies the program rules.",
       "delivery": "Review ready grants, benefit contributions and entitlement movements. Payroll processing and external fulfillment retain separate evidence."
     },
-    "configureApprovals": "Configure approvals"
+    "configureApprovals": "Configure approvals",
+    "transactionRules": "Transaction rules"
   },
   "talentWorkspace": {
     "applications": "Applications",

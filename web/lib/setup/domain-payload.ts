@@ -9,7 +9,7 @@ export function setupDomainPayload(entity: SetupEntity, values: Record<string, u
   const keys = entity.mutationPath && phase ? phase === 'create' ? entity.mutationCreateKeys : entity.mutationUpdateKeys : undefined
   for (const field of entity.fields) {
     if (keys && !keys.includes(field.key)) continue
-    const result = coerceField(field, values[field.key])
+    const result = coerceField(field, values[field.key], true, values)
     if ('error' in result) return { ok: false, error: result.error }
     body[field.key] = typeof result.value === 'string' &&
       (field.kind === 'object' || field.kind === 'objectArray' || field.kind === 'json')

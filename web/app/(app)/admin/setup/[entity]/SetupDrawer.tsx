@@ -298,10 +298,10 @@ export function SetupDrawer({
   // component from a deduction to an earning drops its protection settings
   // from view (and from the required-field check) as the choice is made.
   const visibleFields = entity.fields.filter((field) => setupFieldVisible(field, form))
-  const steps = creating ? entity.creationSteps ?? [] : []
+  const steps = entity.recordSections ?? (creating ? entity.creationSteps ?? [] : [])
   const [stepIndex, setStepIndex] = useState(0)
   const currentStep = steps[stepIndex]
-  const reviewing = steps.length > 0 && stepIndex === steps.length
+  const reviewing = !entity.recordSections && steps.length > 0 && stepIndex === steps.length
   const displayedFields = currentStep ? visibleFields.filter((field) => currentStep.fields.includes(field.key)) : visibleFields
   function nextStep() {
     const error = validate(displayedFields)
@@ -311,10 +311,17 @@ export function SetupDrawer({
   }
 
   function validate(fields = visibleFields): string | null {
+    function problem(field: SetupField, message: string): string {
+      if (entity.recordSections && fields === visibleFields) {
+        const section = steps.findIndex(step => step.fields.includes(field.key))
+        if (section >= 0) setStepIndex(section)
+      }
+      return message
+    }
     for (const f of fields) {
-      if (f.kind === 'object' || f.kind === 'objectArray') {
-        const result = coerceField(f, form[f.key])
-        if ('error' in result) return result.error
+      if (f.kind === 'object' || f.kind === 'objectArray' || entity.recordSections && f.kind === 'multiref') {
+        const result = coerceField(f, form[f.key], true, form)
+        if ('error' in result) return problem(f, result.error)
       }
       if (!f.required || (f.kind === 'boolean' && !f.nullable) || f.kind === 'multiref') continue
       if (!creating && f.lockedOnEdit) continue
@@ -328,7 +335,7 @@ export function SetupDrawer({
       // legal input, never a missing requirement.
       if (f.keepDefault && (v === undefined || v === null || String(v).trim() === '')) continue
       if (v === undefined || v === null || String(v).trim() === '') {
-        return t('validation.required', { field: (f.label ?? t(f.labelKey ?? `fields.${f.key}`)) })
+        return problem(f, t('validation.required', { field: (f.label ?? t(f.labelKey ?? `fields.${f.key}`)) }))
       }
     }
     return null
@@ -570,13 +577,13 @@ export function SetupDrawer({
         {!creating && entity.recordLinks?.map((action) => <Button asChild key={action.href} variant="outline"><Link href={action.href}>{action.label}</Link></Button>)}
         {!creating && !entity.readOnly && entity.allowUpdate !== false && !editing ? <Button variant="outline" disabled={busy} onClick={beginEditing}>{tCommon('actions.edit')}</Button> : null}
         {chooser && !choosing ? <Button variant="outline" disabled={busy} onClick={() => setChoosing(true)}>{tCommon('actions.back')}</Button> : null}
-        {!choosing && !nestedTabActive && !entity.readOnly && (creating || entity.allowUpdate !== false) && editing && (!steps.length || reviewing) ? <Button disabled={busy} onClick={save}>
+        {!choosing && !nestedTabActive && !entity.readOnly && (creating || entity.allowUpdate !== false) && editing && (!steps.length || reviewing || Boolean(entity.recordSections)) ? <Button disabled={busy} onClick={save}>
           {busy ? tCommon('actions.saving') : creating ? tCommon('actions.create') : tCommon('actions.save')}
         </Button> : null}
         {!creating && editing ? <Button variant="outline" disabled={busy} onClick={() => void cancelEditing()}>{tCommon('actions.cancel')}</Button> : null}
       </>}
       footer={
-        steps.length ? <div className="flex w-full justify-between gap-2">
+        steps.length && !entity.recordSections ? <div className="flex w-full justify-between gap-2">
           <Button variant="outline" disabled={busy || stepIndex === 0} onClick={() => { setFieldError(null); setStepIndex((index) => index - 1) }}>{tCommon('actions.back')}</Button>
           {!reviewing ? <Button disabled={busy} onClick={nextStep}>{tCommon('actions.next')}</Button> : null}
         </div> : nestedTabActive ? undefined : !entity.readOnly && !creating && !entity.hasActive && entity.allowDelete !== false ? (
@@ -610,7 +617,7 @@ export function SetupDrawer({
         </p>
       ) : null}
       {steps.length ? <div className="mb-5 space-y-3">
-        <FormSteps steps={[...steps.map((step) => ({ key: step.key, label: t(step.titleKey) })), { key: 'review', label: t('benefitBuilder.review') }]} current={stepIndex} onChange={setStepIndex} label={entityTitle} />
+        <FormSteps steps={[...steps.map((step) => ({ key: step.key, label: t(step.titleKey) })), ...(!entity.recordSections ? [{ key: 'review', label: t('benefitBuilder.review') }] : [])]} current={stepIndex} onChange={setStepIndex} label={entityTitle} />
         {currentStep ? <div><h2 className="text-base font-semibold">{t(currentStep.titleKey)}</h2><p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{t(currentStep.descriptionKey)}</p></div> : null}
       </div> : null}
       <div className={entity.formSections ? "space-y-5" : undefined}>
@@ -730,6 +737,7 @@ export function FieldControl({
   refOptions,
   referenceOptions = {},
   formValues,
+  recordValues = formValues,
   t,
   moneyLocked,
 }: {
@@ -743,6 +751,8 @@ export function FieldControl({
   referenceOptions?: Record<string, RefOption[]>
   /** Live drawer values, so a scoped select follows its scope field. */
   formValues: Record<string, unknown>
+  /** Owning aggregate values remain available to structured child pickers. */
+  recordValues?: Record<string, unknown>
   t: ReturnType<typeof useTranslations>
   /** Precision-lock remedy for a money field; the input opens blank until deliberate re-entry. */
   moneyLocked?: string | null
@@ -767,13 +777,13 @@ export function FieldControl({
   const full = field.fullWidth ||
     field.kind === 'multiref' || field.kind === 'textarea' || field.kind === 'json' || field.kind === 'stringArray' || field.kind === 'object' || field.kind === 'objectArray'
   const wrap = full ? 'min-w-0 space-y-1.5 sm:col-span-2' : 'min-w-0 space-y-1.5'
-  const selectedOption = field.kind === 'select' ? setupFieldOptions(field, formValues).find(option => option.value === String(value)) : undefined
+  const selectedOption = field.kind === 'select' ? setupFieldOptions(field, formValues, recordValues).find(option => option.value === String(value)) : undefined
   const lockedDisplay = field.kind === 'ref'
     ? (refOptions.find((option) => option.value === String(value))?.label ?? value)
     : selectedOption ? setupOptionLabel(selectedOption, t)
       : field.kind === 'boolean' && value !== null && value !== undefined && value !== '' ? common(value === true || value === 'true' ? 'labels.yes' : 'labels.no')
         : ['decimal', 'percent', 'integer', 'money'].includes(field.kind) && value !== null && value !== undefined && value !== '' ? formatDecimal(locale, String(value), { maximumFractionDigits: field.decimalScale ?? SETUP_DECIMAL_SCALE })
-          : Array.isArray(value) ? value.join(', ') : value
+          : Array.isArray(value) ? value.map(item => field.kind === 'multiref' ? refOptions.find(option => option.value === String(item))?.label ?? item : item).join(', ') : value
 
 
   if (field.kind === 'zonedDateTime' && field.timeZoneField) return <div className={wrap}>
@@ -808,7 +818,7 @@ export function FieldControl({
       <div className="space-y-3">
         {entries.map((entry, index) => {
           const controls = <div className={field.itemTitleKey ? "grid gap-5 sm:grid-cols-2" : "grid gap-4 sm:grid-cols-2"}>
-            {(field.fields ?? []).filter((child) => setupFieldVisible(child, entry as Record<string, unknown>)).map((child) => <FieldControl key={child.key} field={child} value={(entry as Record<string, unknown>)[child.key]} onChange={(next) => changeEntry(index, child.key, next)} creating={creating} forceLocked={Boolean(locked)} refOptions={child.ref === 'countries' ? countries : child.ref ? referenceOptions[child.ref] ?? [] : []} referenceOptions={referenceOptions} formValues={entry as Record<string, unknown>} t={t} />)}
+            {(field.fields ?? []).filter((child) => setupFieldVisible(child, entry as Record<string, unknown>)).map((child) => <FieldControl key={child.key} field={child} value={(entry as Record<string, unknown>)[child.key]} onChange={(next) => changeEntry(index, child.key, next)} creating={creating} forceLocked={Boolean(locked)} refOptions={child.ref === 'countries' ? countries : child.ref ? referenceOptions[child.ref] ?? [] : []} referenceOptions={referenceOptions} formValues={entry as Record<string, unknown>} recordValues={recordValues} t={t} />)}
           </div>
           const remove = array && !locked ? <Button type="button" variant={field.itemTitleKey ? "ghost" : "outline"} size="sm" onClick={() => onChange(entries.filter((_, position) => position !== index))}><Trash2 size={14} />{t('structuredFields.removeRow')}</Button> : null
           if (field.itemTitleKey) return <InspectorPanel key={index} title={t(field.itemTitleKey, { number: index + 1 })} description={field.itemTitleField ? String((entry as Record<string, unknown>)[field.itemTitleField] ?? '') : undefined} actions={remove}>{controls}</InspectorPanel>
@@ -857,6 +867,7 @@ export function FieldControl({
 
   if (field.kind === 'multiref') {
     const selected: string[] = Array.isArray(value) ? value : []
+    if (field.searchableReferences) return <div className={wrap}><Label help={help}>{label}</Label><TagInput value={selected} onChange={onChange} options={refOptions} disabled={Boolean(locked)} allowNew={false} ariaLabel={label} /></div>
     return (
       <div className={wrap}>
         <Label help={help}>{label}</Label>
@@ -907,7 +918,7 @@ export function FieldControl({
   }
 
   if (field.kind === 'ref') {
-    const options: SelectOption[] = refOptions.filter((option) => !field.refScopeField || option.scopeValue == null || option.scopeValue === String(formValues[field.refScopeField] ?? '')).filter((option) => !field.refAccountTypes || option.value === String(value ?? '') || (option.accountType !== undefined && field.refAccountTypes.includes(option.accountType))).map((o) => ({ value: o.value, label: o.label }))
+    const options: SelectOption[] = refOptions.filter((option) => !field.refScopeField || option.scopeValue == null || option.scopeValue === String((Object.hasOwn(formValues, field.refScopeField) ? formValues : recordValues)[field.refScopeField] ?? '')).filter((option) => !field.refAccountTypes || option.value === String(value ?? '') || (option.accountType !== undefined && field.refAccountTypes.includes(option.accountType))).map((o) => ({ value: o.value, label: o.label }))
     return (
       <div className={wrap}>
         <Label help={help}>{label}{requiredMark}</Label>
@@ -947,7 +958,7 @@ export function FieldControl({
     // Scoped selects (pay-component treatments scoped by the component's
     // country) follow the live scope value — the same setupFieldOptions the
     // write path validates against, so the drawer offers exactly what saves.
-    const options = setupFieldOptions(field, formValues)
+    const options = setupFieldOptions(field, formValues, recordValues)
     return (
       <div className={wrap}>
         <Label help={help}>{label}{requiredMark}</Label>

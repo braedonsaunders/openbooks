@@ -1169,6 +1169,18 @@ export async function buildExport(orgId: string, exportId: string, opts?: { owne
          where org_id = ${orgId} and employment_id in (${benefitSubjectEmployments})
          order by effective_from, id
       `)).rows;
+      // The export identifies only this subject's dated position. Other
+      // recipient assignments and company source/cap totals remain private.
+      if ((await db.execute<{ installed: boolean }>(sql`select to_regclass('public.hrm_benefit_transaction_responsibilities') is not null as installed`)).rows[0]?.installed) {
+        payload.benefitTransactionResponsibilities = (await db.execute<Record<string, unknown>>(sql`
+          select r.id,r.program_id,r.employment_id,r.position_key,p.name as position_name,
+                 r.effective_from::text,r.effective_to::text
+           from hrm_benefit_transaction_responsibilities r
+           join hrm_benefit_transaction_positions p on p.org_id=r.org_id and p.program_id=r.program_id and p.position_key=r.position_key
+           where r.org_id=${orgId} and r.employment_id in (${benefitSubjectEmployments})
+           order by r.effective_from,r.id
+        `)).rows;
+      }
       // Export the subject's award and its policy identity. Company ledger
       // measurements remain in the controlled source snapshot, which is not
       // a personal record about the subject or a component of their payment.

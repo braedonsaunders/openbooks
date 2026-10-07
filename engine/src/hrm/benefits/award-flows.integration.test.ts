@@ -1,3 +1,4 @@
+import { seedPayrollBenefitProgram, seedBenefitRoleActors } from "../../testing/benefit-fixtures.ts";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
@@ -19,9 +20,7 @@ import { installEngineSeams } from "../../composition/install.ts";
 import { decideGate } from "../../flows/gates.ts";
 import { benefitAwardsFlowAdapter } from "../../flows/benefit-awards-adapter.ts";
 import {
-  createBenefitProgram,
   activateBenefitProgram,
-  addProgramMembership,
 } from "./programs.ts";
 import {
   createBenefitAward,
@@ -66,27 +65,12 @@ test(
       installEngineSeams();
       org = await createScratchOrg();
       await enableHrm(org.orgId);
-      author = await mkHr(
-        org.orgId,
-        "Benefits author",
-        "benefits_workflow_author",
-        null,
-        ["hrm.benefits.read", "hrm.benefits.manage", "payroll.manage"],
-      );
-      approver = await mkHr(
-        org.orgId,
-        "Benefits approver",
-        "benefits_workflow_approver",
-        null,
-        ["hrm.benefits.read", "hrm.benefits.manage"],
-      );
-      thirdActor = await mkHr(
-        org.orgId,
-        "Benefits submitter",
-        "benefits_workflow_submitter",
-        null,
-        ["hrm.benefits.read", "hrm.benefits.manage"],
-      );
+      const actors = await seedBenefitRoleActors(org.orgId, {
+        author: { name: "Benefits author", roleKey: "benefits_workflow_author", permissions: ["hrm.benefits.read", "hrm.benefits.manage", "payroll.manage"] },
+        approver: { name: "Benefits approver", roleKey: "benefits_workflow_approver", permissions: ["hrm.benefits.read", "hrm.benefits.manage"] },
+        submitter: { name: "Benefits submitter", roleKey: "benefits_workflow_submitter", permissions: ["hrm.benefits.read", "hrm.benefits.manage"] },
+      });
+      author = actors.author; approver = actors.approver; thirdActor = actors.submitter;
       employment = (await seedEmployment(org.orgId, org.subsidiaryId))
         .employmentId;
       component = await seedComponent(org.orgId, {
@@ -98,35 +82,10 @@ test(
           sql`insert into accounts (org_id,number,name,type,is_active,is_summary) values (${org.orgId},'6050','Benefits expense','expense',true,false) returning id`,
         )
       ).rows[0]!.id;
-      const created = await createBenefitProgram({
-        orgId: org.orgId,
-        actorId: author,
-        code: "WORKFLOW_REWARD",
-        name: "Workflow rewards",
-        family: "reward",
-        approvalMode: "flows",
-        currency: "CAD",
-        effectiveFrom: "2026-01-01",
-        legalEntityId: org.subsidiaryId,
-        payComponentId: component,
-        deliveryMethod: "payroll",
-        valuation: "pool",
-        budgetAmount: "1000000.0000",
-        sourceAccountIds: [account],
-      });
-      program = created.id;
-      await addProgramMembership({
-        orgId: org.orgId,
-        actorId: author,
-        programId: program,
-        employmentId: employment,
-        effectiveFrom: "2026-01-01",
-      });
-      await activateBenefitProgram({
-        orgId: org.orgId,
-        actorId: author,
-        programId: program,
-      });
+      program = (await seedPayrollBenefitProgram({ orgId: org.orgId, actorId: author, subsidiaryId: org.subsidiaryId, componentId: component }, {
+        code: "WORKFLOW_REWARD", name: "Workflow rewards", family: "reward", approvalMode: "flows",
+        valuation: "pool", budgetAmount: "1000000.0000", sourceAccountIds: [account],
+      }, { employmentIds: [employment] })).id;
     }
     t.beforeEach(async () => {
       if (DB)
@@ -361,34 +320,10 @@ test(
             sql`select id from accounts where org_id=${org.orgId} and number='6050'`,
           )
         ).rows[0]!.id;
-        const largeProgram = await createBenefitProgram({
-          orgId: org.orgId,
-          actorId: author,
-          code: "LARGE_EXACT_REWARD",
-          name: "Exact amount reward",
-          family: "reward",
-          approvalMode: "flows",
-          currency: "CAD",
-          effectiveFrom: "2026-01-01",
-          legalEntityId: org.subsidiaryId,
-          payComponentId: component,
-          deliveryMethod: "payroll",
-          valuation: "fixed",
-          fixedAmount: highValue,
-          sourceAccountIds: [account],
-        });
-        await addProgramMembership({
-          orgId: org.orgId,
-          actorId: author,
-          programId: largeProgram.id,
-          employmentId: employment,
-          effectiveFrom: "2026-01-01",
-        });
-        await activateBenefitProgram({
-          orgId: org.orgId,
-          actorId: author,
-          programId: largeProgram.id,
-        });
+        const largeProgram = await seedPayrollBenefitProgram({ orgId: org.orgId, actorId: author, subsidiaryId: org.subsidiaryId, componentId: component }, {
+          code: "LARGE_EXACT_REWARD", name: "Exact amount reward", family: "reward", approvalMode: "flows",
+          valuation: "fixed", fixedAmount: highValue, sourceAccountIds: [account],
+        }, { employmentIds: [employment] });
         await policy(
           [
             trigger,
@@ -628,32 +563,12 @@ test(
     await t.test(
       "default no-approval program submits once without a flow or human decision",
       async () => {
-        const created = await createBenefitProgram({
-          orgId: org.orgId,
-          actorId: author,
-          code: `NONE${randomUUID().slice(0, 8)}`,
-          name: "Recognition without approvals",
-          family: "reward",
-          currency: "CAD",
-          effectiveFrom: "2026-01-01",
-          legalEntityId: org.subsidiaryId,
-          payComponentId: component,
-          valuation: "pool",
-          budgetAmount: "1000.0000",
-        });
+        const created = await seedPayrollBenefitProgram({ orgId: org.orgId, actorId: author, subsidiaryId: org.subsidiaryId, componentId: component }, {
+          code: `NONE${randomUUID().slice(0, 8)}`, name: "Recognition without approvals", family: "reward",
+          valuation: "pool", budgetAmount: "1000.0000",
+        }, { employmentIds: [employment], activate: false });
         assert.equal(created.approvalMode, "none");
-        await addProgramMembership({
-          orgId: org.orgId,
-          actorId: author,
-          programId: created.id,
-          employmentId: employment,
-          effectiveFrom: "2026-01-01",
-        });
-        const active = await activateBenefitProgram({
-          orgId: org.orgId,
-          actorId: author,
-          programId: created.id,
-        });
+        const active = await activateBenefitProgram({ orgId: org.orgId, actorId: author, programId: created.id });
         const draft = await createBenefitAward({
           orgId: org.orgId,
           actorId: author,

@@ -142,6 +142,7 @@ function describeMetric(metric: BenefitMetric): string {
     case "gross_profit": return "gross profit";
     case "net_profit": return "net profit";
     case "approved_hours": return "approved hours";
+    case "transactions": return "commercial transactions";
   }
 }
 
@@ -213,7 +214,7 @@ export function describePeriodBasis(basis: IncentivePeriodBasis): string {
 }
 
 /** Eligible-period shape per measurement frequency; manual accepts any span. */
-function requirePeriodShape(
+export function requirePeriodShape(
   frequency: BenefitFrequency,
   from: string,
   to: string,
@@ -666,6 +667,8 @@ function requirePlainPercent(rate: string): { units: bigint; scale: bigint } {
  */
 function allocationWeightUnits(allocation: BenefitAllocation, share: IncentiveMemberShare): bigint {
   switch (allocation) {
+    case "responsibility":
+      throw new BenefitsError("REFUSED", "Dated responsibility allocation needs native transaction evidence — use the program transaction settlement action instead of membership-only valuation.");
     case "equal":
       return 1n;
     case "hours": {

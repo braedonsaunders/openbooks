@@ -486,6 +486,9 @@ async function recordAward(
         );
       }
     }
+    if (program.metric === "transactions" && adjustsAwardId === null && (origin !== "settlement" || query.settlementMeasurement?.transaction == null)) {
+      throw new BenefitsError("REFUSED", "Transaction programs record fresh awards through their native period settlement action — preview and settle approved sources before submitting their awards for approval; manual amounts cannot bypass source evidence or group ceilings.");
+    }
     const currencyDefinition = (await db.execute<{ minor_units: number }>(sql`
       select minor_units from currencies where code = ${currency}
     `)).rows[0];

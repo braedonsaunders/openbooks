@@ -2860,13 +2860,15 @@
     "valuations": {
       "fixed": "Valor fixo",
       "percent": "Percentual da base",
-      "pool": "Fundo compartilhado"
+      "pool": "Fundo compartilhado",
+      "per_unit": "Valor por unidade"
     },
     "metrics": {
       "revenue": "Receita",
       "gross_profit": "Lucro bruto",
       "net_profit": "Lucro líquido",
-      "approved_hours": "Horas aprovadas"
+      "approved_hours": "Horas aprovadas",
+      "transactions": "Transações aprovadas"
     },
     "scopes": {
       "company": "Empresa toda",
@@ -2876,7 +2878,8 @@
     "allocations": {
       "equal": "Partes iguais",
       "hours": "Por horas",
-      "role": "Por peso do papel"
+      "role": "Por peso do papel",
+      "responsibility": "Responsabilidade datada"
     },
     "frequencies": {
       "monthly": "Mensal",
@@ -3202,7 +3205,8 @@
       "employees": "Consulte programas, coberturas, escolhas e condições vigentes dos funcionários. A folha aplica as regras do programa.",
       "delivery": "Revise concessões prontas, contribuições e movimentos de direitos. A folha e a entrega externa mantêm evidências separadas."
     },
-    "configureApprovals": "Configurar aprovações"
+    "configureApprovals": "Configurar aprovações",
+    "transactionRules": "Regras de transações"
   },
   "talentWorkspace": {
     "applications": "Candidaturas",

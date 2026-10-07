@@ -4709,13 +4709,15 @@
       "benefitValuation": {
         "fixed": "Fixe",
         "percent": "Pourcentage",
-        "pool": "Enveloppe"
+        "pool": "Enveloppe",
+        "per_unit": "Montant par unité"
       },
       "benefitMetric": {
         "revenue": "Chiffre d’affaires",
         "gross_profit": "Marge brute",
         "net_profit": "Résultat net",
-        "approved_hours": "Heures approuvées"
+        "approved_hours": "Heures approuvées",
+        "transactions": "Transactions approuvées"
       },
       "benefitMetricScope": {
         "company": "Société",
@@ -4725,7 +4727,8 @@
       "benefitAllocation": {
         "equal": "Égal",
         "hours": "Heures",
-        "role": "Rôle"
+        "role": "Rôle",
+        "responsibility": "Responsabilité datée"
       },
       "benefitFrequency": {
         "monthly": "Mensuelle",
@@ -6422,6 +6425,51 @@
       "gap": "Cette heure locale n’existe pas lors du passage à l’heure d’été — choisissez une autre heure.",
       "occurrence": "Décalage UTC",
       "repeated": "Cette heure apparaît deux fois — choisissez son décalage UTC."
+    },
+    "transactionBenefits": {
+      "title": "Règles de transactions",
+      "source": "Transactions sources",
+      "sourceHint": "Choisissez les articles, le type de document, la date et le regroupement. Seuls les documents approuvés ou comptabilisés sont admis.",
+      "positions": "Parts des bénéficiaires",
+      "positionsHint": "Nommez les fonctions du programme et leurs pondérations relatives, indépendamment des titres de poste.",
+      "responsibilities": "Affectations datées",
+      "responsibilitiesHint": "Affectez chaque groupe et fonction à un emploi pour des dates explicites. Chaque source exige toutes les parts configurées.",
+      "limits": "Plafonds par groupe",
+      "limitsHint": "Choisissez un plafond monétaire ou aucun plafond par groupe. Les attributions antérieures du programme consomment le plafond.",
+      "reason": "Motif d’audit",
+      "reasonHint": "Expliquez la modification. Toutes les sections sont enregistrées ensemble; les règles actives nécessitent un programme de remplacement.",
+      "documentDate": "Date du document",
+      "companyGrouping": "Sans regroupement, l’employeur responsable est utilisé. Les groupes suivent la dimension native ou personnalisée sélectionnée.",
+      "fields": {
+        "documentKind": "Type de document",
+        "dateBasis": "Base de date",
+        "groupingSegmentId": "Dimension de regroupement",
+        "itemIds": "Articles admissibles",
+        "positions": "Parts des bénéficiaires",
+        "key": "Code de fonction",
+        "name": "Nom de fonction",
+        "weight": "Pondération de la part",
+        "responsibilities": "Affectations datées",
+        "groupId": "Groupe",
+        "positionKey": "Fonction bénéficiaire",
+        "employmentId": "Emploi",
+        "effectiveFrom": "Prend effet le",
+        "effectiveTo": "Prend fin le",
+        "limits": "Plafonds par groupe",
+        "kind": "Décision de plafond",
+        "amount": "Montant du plafond",
+        "reason": "Motif"
+      },
+      "kinds": {
+        "sales_order": "Commandes clients",
+        "customer_invoice": "Factures clients",
+        "field_ticket": "Bons de terrain",
+        "quote": "Devis"
+      },
+      "limitKinds": {
+        "none": "Sans plafond",
+        "amount": "Plafond monétaire"
+      }
     }
   },
   "flows": {

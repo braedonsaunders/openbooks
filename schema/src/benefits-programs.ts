@@ -35,15 +35,16 @@ export const BENEFIT_PROGRAM_FAMILIES = ["reward", "allowance", "incentive", "cu
 export const BENEFIT_PROGRAM_STATUSES = ["draft", "active", "closed"] as const;
 export const BENEFIT_PROGRAM_APPROVAL_MODES = ["none", "flows"] as const;
 export const BENEFIT_PROGRAM_DELIVERY = ["payroll", "external"] as const;
-export const BENEFIT_PROGRAM_VALUATION = ["fixed", "percent", "pool"] as const;
+export const BENEFIT_PROGRAM_VALUATION = ["fixed", "percent", "pool", "per_unit"] as const;
 export const BENEFIT_PROGRAM_METRICS = [
   "revenue",
   "gross_profit",
   "net_profit",
   "approved_hours",
+  "transactions",
 ] as const;
 export const BENEFIT_PROGRAM_SCOPES = ["company", "department", "project"] as const;
-export const BENEFIT_PROGRAM_ALLOCATIONS = ["equal", "hours", "role"] as const;
+export const BENEFIT_PROGRAM_ALLOCATIONS = ["equal", "hours", "role", "responsibility"] as const;
 export const BENEFIT_PROGRAM_FREQUENCIES = [
   "monthly",
   "quarterly",

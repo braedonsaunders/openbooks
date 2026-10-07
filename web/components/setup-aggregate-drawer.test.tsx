@@ -84,3 +84,21 @@ test('an in-flight nested decision blocks the native setup shell close and paren
   assert.equal(routes.length,1)
   assert.ok(!(routes as string[])[0]!.includes('setupTab=review'))
 })
+
+
+test('transaction configuration tabs replace the active concept inside one native drawer', async t => {
+  const {BENEFIT_TRANSACTION_POLICY_ENTITY}=await import('../lib/setup/benefit-transaction-policy');
+  const host=document.createElement('div');document.body.append(host);const root=createRoot(host);
+  t.after(async()=>{await act(()=>root.unmount());host.remove()});
+  await act(async()=>{root.render(<NextIntlClientProvider locale="en" timeZone="UTC" messages={messages}><MoneyProvider currency="CAD"><SetupDrawer entity={BENEFIT_TRANSACTION_POLICY_ENTITY} row={{id,revision:7,document_kind:'sales_order',date_basis:'document_date',grouping_segment_id:null,positions:[{key:'lead',name:'Lead',weight:'2.0000'}],responsibilities:[],limits:[],reason:''}} members={[]} refOptions={{}} closeHref="/hrm/benefits?view=programs" /></MoneyProvider></NextIntlClientProvider>);await tick()});
+  const dialog=document.querySelector('[role=dialog]');assert.ok(dialog);
+  const sections=messages.admin.setup.transactionBenefits;
+  assert.ok([...dialog.querySelectorAll('label')].some(label=>label.textContent?.includes(sections.fields.documentKind)));
+  await act(()=>button(sections.positions).click());
+  assert.equal(document.querySelector('[role=dialog]'),dialog);assert.equal(document.querySelectorAll('[role=dialog]').length,1);
+  assert.ok(![...dialog.querySelectorAll('label')].some(label=>label.textContent?.includes(sections.fields.documentKind)));
+  assert.ok([...dialog.querySelectorAll('label')].some(label=>label.textContent?.includes(sections.fields.weight)));
+  await act(()=>button(sections.responsibilities).click());
+  assert.ok(![...dialog.querySelectorAll('label')].some(label=>label.textContent?.includes(sections.fields.weight)));
+  assert.equal(document.querySelector('[role=dialog]'),dialog);
+});

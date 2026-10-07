@@ -2860,13 +2860,15 @@
     "valuations": {
       "fixed": "固定金额",
       "percent": "按基数比例",
-      "pool": "共享奖金池"
+      "pool": "共享奖金池",
+      "per_unit": "单位金额"
     },
     "metrics": {
       "revenue": "收入",
       "gross_profit": "毛利",
       "net_profit": "净利",
-      "approved_hours": "已批准工时"
+      "approved_hours": "已批准工时",
+      "transactions": "已批准交易"
     },
     "scopes": {
       "company": "全公司",
@@ -2876,7 +2878,8 @@
     "allocations": {
       "equal": "平均分配",
       "hours": "按工时",
-      "role": "按角色权重"
+      "role": "按角色权重",
+      "responsibility": "有效期责任"
     },
     "frequencies": {
       "monthly": "每月",
@@ -3202,7 +3205,8 @@
       "employees": "查看员工计划、保障、选择及有效条件。薪资处理按计划规则执行。",
       "delivery": "查看可发放的授予、福利缴款和权益变动。薪资处理与外部履约分别保留凭证。"
     },
-    "configureApprovals": "配置审批"
+    "configureApprovals": "配置审批",
+    "transactionRules": "交易规则"
   },
   "talentWorkspace": {
     "applications": "应聘",

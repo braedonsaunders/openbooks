@@ -421,6 +421,7 @@ export function ProgramDrawer({
             </span>
           </Alert>
         ) : null}
+        {program.metric === 'transactions' ? <Button asChild variant="outline"><Link href={`/hrm/benefits?view=programs&transactionRules=${program.id}` as never}>{t('portfolio.transactionRules')}</Link></Button> : null}
         <InspectorPanel title={program.familyLabel}><dl className="grid gap-x-4 gap-y-4 text-sm sm:grid-cols-2">
           <div>
             <dt className="text-xs text-slate-500 dark:text-slate-400">{t('portfolio.columns.status')}</dt>
@@ -450,7 +451,7 @@ export function ProgramDrawer({
           </>}
         </InspectorPanel>
 
-        {!drawer.drawerRefusal && program.family === 'incentive' && program.metric !== 'approved_hours' ? <div>
+        {!drawer.drawerRefusal && program.family === 'incentive' && program.metric !== 'approved_hours' && program.metric !== 'transactions' ? <div>
           <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t('portfolio.sourcesTitle')}</h3>
           {drawer.sources.length === 0 ? (
             <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{drawer.sourcesEmpty}</p>

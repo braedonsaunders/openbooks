@@ -4829,13 +4829,15 @@
       "benefitValuation": {
         "fixed": "固定",
         "percent": "率",
-        "pool": "総額"
+        "pool": "総額",
+        "per_unit": "単位当たり金額"
       },
       "benefitMetric": {
         "revenue": "売上",
         "gross_profit": "粗利",
         "net_profit": "純利益",
-        "approved_hours": "承認時間"
+        "approved_hours": "承認時間",
+        "transactions": "承認済み取引"
       },
       "benefitMetricScope": {
         "company": "全社",
@@ -4845,7 +4847,8 @@
       "benefitAllocation": {
         "equal": "均等",
         "hours": "時間",
-        "role": "役割"
+        "role": "役割",
+        "responsibility": "期間付き担当"
       },
       "benefitFrequency": {
         "monthly": "月次",
@@ -6422,6 +6425,51 @@
       "gap": "時計が進むため、この現地時刻は存在しません。別の時刻を選択してください。",
       "occurrence": "UTCオフセット",
       "repeated": "この時刻は2回発生します。UTCオフセットを選択してください。"
+    },
+    "transactionBenefits": {
+      "title": "取引ルール",
+      "source": "対象取引",
+      "sourceHint": "対象品目、伝票種類、日付基準、グループを選択します。承認済みまたは転記済みの取引のみ対象です。",
+      "positions": "受給者の配分",
+      "positionsHint": "職名とは別に、制度内の役割名と相対的な配分比率を設定します。",
+      "responsibilities": "期間付きの担当割当",
+      "responsibilitiesHint": "グループと役割を明示した期間の雇用関係に割り当てます。各取引にはすべての配分先が必要です。",
+      "limits": "グループ別上限",
+      "limitsHint": "グループごとに金額上限または上限なしを選択します。この制度の過去の支給決定額は上限から差し引かれます。",
+      "reason": "変更理由",
+      "reasonHint": "変更理由を記録します。全セクションを一括保存します。有効なルールの変更には後継制度が必要です。",
+      "documentDate": "伝票日付",
+      "companyGrouping": "グループを指定しない場合は責任を持つ雇用主を使用します。選択した標準またはカスタム分類に応じてグループが変わります。",
+      "fields": {
+        "documentKind": "伝票種類",
+        "dateBasis": "日付基準",
+        "groupingSegmentId": "グループ分類",
+        "itemIds": "対象品目",
+        "positions": "受給者の配分",
+        "key": "役割コード",
+        "name": "役割名",
+        "weight": "配分比率",
+        "responsibilities": "期間付きの担当割当",
+        "groupId": "グループ",
+        "positionKey": "受給役割",
+        "employmentId": "雇用関係",
+        "effectiveFrom": "開始日",
+        "effectiveTo": "終了日",
+        "limits": "グループ別上限",
+        "kind": "上限の設定",
+        "amount": "上限金額",
+        "reason": "理由"
+      },
+      "kinds": {
+        "sales_order": "販売注文",
+        "customer_invoice": "顧客請求書",
+        "field_ticket": "現場伝票",
+        "quote": "見積書"
+      },
+      "limitKinds": {
+        "none": "上限なし",
+        "amount": "金額上限"
+      }
     }
   },
   "flows": {

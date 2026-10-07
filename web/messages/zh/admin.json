@@ -4784,13 +4784,15 @@
       "benefitValuation": {
         "fixed": "固定",
         "percent": "比例",
-        "pool": "总额"
+        "pool": "总额",
+        "per_unit": "单位金额"
       },
       "benefitMetric": {
         "revenue": "营收",
         "gross_profit": "毛利",
         "net_profit": "净利",
-        "approved_hours": "批准工时"
+        "approved_hours": "批准工时",
+        "transactions": "已批准交易"
       },
       "benefitMetricScope": {
         "company": "公司",
@@ -4800,7 +4802,8 @@
       "benefitAllocation": {
         "equal": "平均",
         "hours": "工时",
-        "role": "角色"
+        "role": "角色",
+        "responsibility": "有效期责任"
       },
       "benefitFrequency": {
         "monthly": "按月",
@@ -6422,6 +6425,51 @@
       "gap": "夏令时切换导致该本地时间不存在，请选择其他时间。",
       "occurrence": "UTC 偏移量",
       "repeated": "该时间出现两次，请选择 UTC 偏移量。"
+    },
+    "transactionBenefits": {
+      "title": "交易规则",
+      "source": "来源交易",
+      "sourceHint": "选择适用品项、单据类型、日期依据和分组。仅允许已批准或已过账的来源。",
+      "positions": "受益人份额",
+      "positionsHint": "设置计划角色及相对份额权重，与员工职务名称无关。",
+      "responsibilities": "有效期分配",
+      "responsibilitiesHint": "将各分组和角色分配给具有明确日期的雇佣关系。每笔来源必须具备全部配置的份额。",
+      "limits": "分组上限",
+      "limitsHint": "为每个分组选择金额上限或不设限。本计划此前的奖励会占用该上限。",
+      "reason": "审计原因",
+      "reasonHint": "说明规则变更原因。所有部分一并保存；已生效规则需要通过替代计划变更。",
+      "documentDate": "单据日期",
+      "companyGrouping": "不指定分组时使用负责雇主。分组选项根据所选内置或自定义维度调整。",
+      "fields": {
+        "documentKind": "单据类型",
+        "dateBasis": "日期依据",
+        "groupingSegmentId": "分组维度",
+        "itemIds": "适用品项",
+        "positions": "受益人份额",
+        "key": "角色代码",
+        "name": "角色名称",
+        "weight": "份额权重",
+        "responsibilities": "有效期分配",
+        "groupId": "分组",
+        "positionKey": "受益角色",
+        "employmentId": "雇佣关系",
+        "effectiveFrom": "生效日期",
+        "effectiveTo": "结束日期",
+        "limits": "分组上限",
+        "kind": "上限决定",
+        "amount": "上限金额",
+        "reason": "原因"
+      },
+      "kinds": {
+        "sales_order": "销售订单",
+        "customer_invoice": "客户发票",
+        "field_ticket": "现场单据",
+        "quote": "报价单"
+      },
+      "limitKinds": {
+        "none": "不设限",
+        "amount": "金额上限"
+      }
     }
   },
   "flows": {

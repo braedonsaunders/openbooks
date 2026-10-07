@@ -1,3 +1,5 @@
+import { seedPayrollBenefitProgram, approveBenefitFixture as approveThroughWorkflow } from "../../testing/benefit-fixtures.ts";
+import { refusal } from "../../testing/refusal.ts";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
@@ -13,14 +15,17 @@ import {
   setFeatures,
   withHarness,
 } from "../../testing/hrm-harness.ts";
+import { getBenefitTransactionPolicy, saveBenefitTransactionPolicy, type BenefitTransactionPolicy } from "./transaction-policy.ts";
+import { exportedPayrollEvidence } from "../../testing/dsar-fixture.ts";
+import { errorChainMatches } from "../../testing/error-chain.ts";
 import { seedApprovalFlow } from "../../testing/fixtures.ts";
 import { installEngineSeams } from "../../composition/install.ts";
-import { decideGate } from "../../flows/gates.ts";
 import { BenefitsError } from "./errors.ts";
 import {
   activateBenefitProgram,
   addProgramMembership,
   createBenefitProgram,
+  getBenefitProgram,
   closeBenefitProgram,
 } from "./programs.ts";
 import {
@@ -53,7 +58,7 @@ const DB = !!process.env.OPENBOOKS_DB_URL;
 
 const SETTLE_SPEC = {
   users: [
-    { key: "settlerId", name: "Settle Operator", handle: "settle_operator", permissions: ["hrm.benefits.read", "hrm.benefits.manage", "gl.read"], link: true },
+    { key: "settlerId", name: "Settle Operator", handle: "settle_operator", permissions: ["hrm.benefits.read", "hrm.benefits.manage", "gl.read", "ar.read"], link: true },
     { key: "approverId", name: "Settle Approver", handle: "settle_approver", permissions: ["hrm.benefits.read", "hrm.benefits.manage", "gl.read"], link: true },
     { key: "financeId", name: "Settle Finance", handle: "settle_finance", permissions: ["hrm.benefits.read", "payroll.manage", "gl.read"], link: true },
     // Plain employee: self-service grants only, deliberately no HR grant.
@@ -72,41 +77,15 @@ async function setupHarness(spec: typeof SETTLE_SPEC): Promise<Harness> {
   return h;
 }
 
-async function approveThroughWorkflow(query: { orgId: string; actorId: string; awardId: string }) {
-  const gate = (await db.execute<{ id: string }>(sql`
-    select id from flow_gates where org_id = ${query.orgId} and subject_kind = 'hrm_benefit_award'
-      and subject_id = ${query.awardId} and status = 'pending'
-  `)).rows[0];
-  assert.ok(gate, "the configured approval policy must create a real pending gate");
-  await decideGate({ gateId: gate.id, userId: query.actorId, decision: "approved" });
-  return getBenefitAward(db, query.orgId, query.actorId, query.awardId);
-}
-
-async function seedProgram(h: Harness, overrides: Record<string, unknown> = {}) {
+async function seedProgram(h: Harness, overrides: Record<string, unknown> = {}, activate = true) {
   const component = await seedComponent(h.org.orgId, { kind: "earning", code: `INC_${randomUUID().slice(0, 6)}` });
-  const created = await createBenefitProgram({
-    orgId: h.org.orgId,
-    actorId: h.settlerId,
-    code: `QPS_${randomUUID().slice(0, 6)}`,
-    name: "Quarterly profit share",
-    family: "incentive",
-    approvalMode: "flows",
-    currency: "USD",
-    legalEntityId: h.org.subsidiaryId,
-    effectiveFrom: "2026-01-01",
-    payComponentId: component,
-    deliveryMethod: "payroll",
-    valuation: "percent",
-    metric: "net_profit",
-    metricScope: "company",
-    allocation: "equal",
-    percentRate: "10",
-    frequency: "manual",
-    periodBasis: "calendar",
-    sourceAccountIds: [h.org.accounts.revenue, h.org.accounts.cogs],
-    ...overrides,
-  } as Parameters<typeof createBenefitProgram>[0]);
-  return activateBenefitProgram({ orgId: h.org.orgId, actorId: h.settlerId, programId: created.id });
+  return seedPayrollBenefitProgram({ orgId: h.org.orgId, actorId: h.settlerId,
+    subsidiaryId: h.org.subsidiaryId, componentId: component, currency: "USD" }, {
+    code: `QPS_${randomUUID().slice(0, 6)}`, name: "Quarterly profit share", family: "incentive",
+    approvalMode: "flows", valuation: "percent", metric: "net_profit", metricScope: "company",
+    allocation: "equal", percentRate: "10", frequency: "manual", periodBasis: "calendar",
+    sourceAccountIds: [h.org.accounts.revenue, h.org.accounts.cogs], ...overrides,
+  } as Parameters<typeof seedPayrollBenefitProgram>[1], { activate });
 }
 
 function settlementTest(name: string, body: (h: Harness) => Promise<void>) {
@@ -154,16 +133,8 @@ async function awardCount(orgId: string): Promise<number> {
   `)).rows[0]!.n;
 }
 
-async function refuses(fn: () => Promise<unknown>, pattern: RegExp): Promise<string> {
-  try {
-    await fn();
-  } catch (error) {
-    assert.ok(error instanceof BenefitsError, `expected BenefitsError, got ${error}`);
-    assert.match((error as Error).message, pattern);
-    return (error as Error).message;
-  }
-  assert.fail("expected a refusal");
-}
+const refuses = async (fn: () => unknown, pattern: RegExp) =>
+  (await refusal(Promise.resolve().then(fn), BenefitsError, pattern)).message;
 
 settlementTest("settle records one draft award per payable recipient from posted profit", async (h) => {
   const { program, worker, query } = await seedSettlement(h, "Profit Crew");
@@ -504,4 +475,71 @@ settlementTest("project-completion awards require native closed projects and fre
   assert.equal((await settleIncentivePeriod(query)).awards[0]!.id, settled.awards[0]!.id);
   await postEntry(h, [{account: h.org.accounts.revenue, amount: "-100.0000", project: projectId}, {account: h.org.accounts.bank, amount: "100.0000"}], { date: "2026-08-15" });
   await refuses(() => settleIncentivePeriod({...query, periodFrom: "2026-08-01", periodTo: "2026-08-31"}), /completion was already settled/);
+});
+
+
+settlementTest("transaction policies govern dated shares, group ceilings, approval, delayed payroll and private recipient exports", async h => {
+  await setFeatures(h.org.orgId, { orders: true });
+  const program = await seedProgram(h, { metric: "transactions", allocation: "responsibility", sourceAccountIds: [], paymentDelayDays: 30 }, false);
+  const lead = await seedMember(h, program.id, { displayName: "Assigned Lead" });
+  const support = await seedMember(h, program.id, { displayName: "Assigned Support" });
+  const policy: BenefitTransactionPolicy = {
+    documentKind: "sales_order", dateBasis: "document_date", groupingSegmentId: null, itemIds: [h.org.items.service],
+    positions: [{ key: "lead", name: "Lead", weight: "2" }, { key: "support", name: "Support", weight: "1" }],
+    responsibilities: [["lead", lead.employmentId], ["support", support.employmentId]].map(([positionKey, employmentId]) => ({ groupId: h.org.subsidiaryId, positionKey: positionKey!, employmentId: employmentId!, effectiveFrom: "2026-01-01", effectiveTo: null })),
+    limits: [{ groupId: h.org.subsidiaryId, kind: "amount", amount: "60" }],
+  };
+  const revision = (await getBenefitProgram(db, h.org.orgId, h.settlerId, program.id)).revision;
+  const command = { orgId: h.org.orgId, actorId: h.settlerId, programId: program.id, expectedRevision: revision, policy, reason: "Record dated source and recipient policy" };
+  await refuses(() => saveBenefitTransactionPolicy({ ...command, policy: { ...policy, limits: [{ ...policy.limits[0]!, amount: "1,234" }] } }), /ambiguous/);
+  assert.equal(await getBenefitTransactionPolicy(command), null, "a refused policy has no partial configuration");
+  await refuses(() => saveBenefitTransactionPolicy({...command,policy:{...policy,responsibilities:[...policy.responsibilities,policy.responsibilities[0]!]}}}),/overlapping assignments/);
+  const saved = await saveBenefitTransactionPolicy(command);
+  assert.ok(saved.programRevision > revision);
+  assert.equal(saved.policy.limits[0]!.amount, "60.0000");
+  await refuses(() => saveBenefitTransactionPolicy(command), /changed.*reload/);
+  assert.ok((await db.execute(sql`select id from audit_log where org_id=${h.org.orgId} and table_name='hrm_benefit_transaction_responsibilities' and actor_id=${h.settlerId} and changes->>'reason'=${command.reason}`)).rows.length >= 2);
+  const seedSource = async (date: string) => {
+    const id = randomUUID(), line = randomUUID();
+    await db.execute(sql`insert into documents(id,org_id,subsidiary_id,kind,document_number,document_date,currency) values(${id},${h.org.orgId},${h.org.subsidiaryId},'sales_order',${id},${date}::date,'USD')`);
+    await db.execute(sql`insert into document_lines(id,org_id,document_id,line_number,item_id,quantity,unit_price,amount) values(${line},${h.org.orgId},${id},1,${h.org.items.service},'4','250','1000')`);
+    await db.execute(sql`update documents set status='approved' where org_id=${h.org.orgId} and id=${id}`);
+    return { id, line };
+  };
+  const source = await seedSource("2026-07-09");
+  await activateBenefitProgram(command);
+  await refuses(() => saveBenefitTransactionPolicy({ ...command, expectedRevision: (await getBenefitProgram(db,h.org.orgId,h.settlerId,program.id)).revision }), /Only draft.*replacement/);
+  await assert.rejects(() => db.execute(sql`update hrm_benefit_transaction_positions set weight=3 where org_id=${h.org.orgId} and program_id=${program.id}`), error => errorChainMatches(error,/immutable.*replacement/));
+  const query = settlementQuery(h, program.id), preview = await previewIncentiveSettlement(query);
+  assert.equal(preview.computation.measuredValue, "1000.0000");
+  assert.equal(preview.computation.totalAwarded, "60.0000");
+  assert.equal(preview.computation.recipients.find(r => r.employmentId === lead.employmentId)!.value, "40.0000");
+  assert.equal(preview.computation.recipients.find(r => r.employmentId === support.employmentId)!.value, "20.0000");
+  assert.equal(preview.payableAfter, "2026-08-30");
+  const settled = await settleIncentivePeriod(query);
+  assert.deepEqual((await settleIncentivePeriod(query)).awards.map(r => r.id), settled.awards.map(r => r.id));
+  const award = settled.awards.find(r => r.employmentId === lead.employmentId)!;
+  const stored = (await db.execute<{source_snapshot: {measurement:{settlement:{entryIds:string[];entryCount:number;lineCount:number;transaction:{source:{lines:{sourceId:string}[]}}}}}}>(sql`select source_snapshot from hrm_benefit_awards where org_id=${h.org.orgId} and id=${award.id}`)).rows[0]!.source_snapshot.measurement.settlement;
+  assert.deepEqual(stored.entryIds, [source.id]);
+  assert.equal(stored.entryCount, 1); assert.equal(stored.lineCount, 1);
+  assert.equal(stored.transaction.source.lines[0]!.sourceId, source.line);
+  await approveSettlementAward(h, award.id);
+  const early = await seedRun(h, lead.employmentId, lead.workerPartyId);
+  await refuses(() => queueAwardForPayRun({orgId:h.org.orgId,actorId:h.financeId,awardId:award.id,runDocumentId:early}), /payable after 2026-08-30/);
+  await db.execute(sql`update pay_runs set pay_date='2026-08-31' where org_id=${h.org.orgId} and document_id=${early}`);
+  const delivery = {orgId:h.org.orgId,actorId:h.financeId,awardId:award.id,runDocumentId:early};
+  const queued = await queueAwardForPayRun(delivery);
+  assert.equal((await queueAwardForPayRun(delivery)).adjustmentId, queued.adjustmentId);
+  assert.equal((await db.execute<{amount:string}>(sql`select amount::text from pay_run_adjustments where org_id=${h.org.orgId} and id=${queued.adjustmentId}`)).rows[0]!.amount, "40.0000");
+  await seedSource("2026-08-09");
+  const later = {...query,periodFrom:"2026-08-01",periodTo:"2026-08-31"};
+  assert.equal((await previewIncentiveSettlement(later)).computation.totalAwarded,"0.0000","pending and queued obligations both consume the configured group ceiling");
+  await refuses(()=>settleIncentivePeriod(later),/owes nothing/);
+  assert.equal(await awardCount(h.org.orgId),2);
+  const exported = await exportedPayrollEvidence({orgId:h.org.orgId,actorId:h.settlerId,partyId:lead.workerPartyId}) as unknown as {benefitTransactionResponsibilities:Record<string,unknown>[]};
+  assert.equal(exported.benefitTransactionResponsibilities.length,1);
+  const own = exported.benefitTransactionResponsibilities[0]!;
+  assert.equal(own.employment_id,lead.employmentId); assert.equal(own.position_name,"Lead");
+  assert.ok(!JSON.stringify(exported.benefitTransactionResponsibilities).includes(support.employmentId));
+  for (const key of ["group_id","reason","created_by","updated_by","source_snapshot","limits"]) assert.equal(own[key],undefined,"the subject export excludes company policy and operator data");
 });

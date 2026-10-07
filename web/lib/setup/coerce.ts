@@ -58,7 +58,7 @@ export function multirefField(entity: SetupEntity): SetupField | undefined {
  * `{ column, value }` pair, or an error string. Absent optional fields resolve
  * to null (so the column is written with its explicit empty value).
  */
-export function coerceField(field: SetupField, raw: unknown, fieldVisible = true): Coerced | { error: string } {
+export function coerceField(field: SetupField, raw: unknown, fieldVisible = true, recordValues: Record<string, unknown> = {}): Coerced | { error: string } {
   const present = raw !== undefined && raw !== null && raw !== ''
   // keepDefault columns are NOT NULL WITH a database default: a
   // blank is legal input that falls through to the default (each kind's
@@ -153,7 +153,7 @@ export function coerceField(field: SetupField, raw: unknown, fieldVisible = true
     }
     case 'select': {
       if (!present) return { column, value: field.required ? undefined : null }
-      const ok = field.options?.some((o) => o.value === String(raw))
+      const ok = (field.optionsFromField ? setupFieldOptions(field, recordValues, recordValues) : field.options)?.some((o) => o.value === String(raw))
       if (!ok) return { error: `${field.key} has an invalid value` }
       return { column, value: String(raw) }
     }
@@ -176,6 +176,12 @@ export function coerceField(field: SetupField, raw: unknown, fieldVisible = true
         || (target != null && target.refValue != null)
       if (!naturalKeyed && !isUuid(s)) return { error: `${field.key} must reference a valid record` }
       return { column, value: s }
+    }
+    case 'multiref': {
+      if (!present && !field.required) return { column, value: [] }
+      if (!Array.isArray(raw) || raw.some(value => !isUuid(value))) return { error: `${field.key} must contain selected native record IDs` }
+      if (new Set(raw).size !== raw.length || (field.required && raw.length === 0)) return { error: `${field.key} must contain a non-empty selection without duplicates` }
+      return { column, value: raw }
     }
     case 'stringArray': {
       // Accept a real array (the drawer's TagInput) or a JSON-encoded array
@@ -238,13 +244,14 @@ export function coerceField(field: SetupField, raw: unknown, fieldVisible = true
         const object = entry as Record<string, unknown>
         const value = { ...object }
         for (const child of field.fields ?? []) {
+          if (child.clearWhenHidden && !setupFieldVisible(child, object)) { value[child.key] = null; continue }
           if (child.omitWhenHidden && !setupFieldVisible(child, object)) { delete value[child.key]; continue }
           if (!setupFieldVisible(child, object) || object[child.key] === undefined) {
             if (child.required && setupFieldVisible(child, object)) return { error: `${field.key}${array ? ` row ${index + 1}` : ''}.${child.key} is required` }
             continue
           }
           if (object[child.key] != null && ['text', 'textarea', 'zonedDateTime'].includes(child.kind) && typeof object[child.key] !== 'string') return { error: `${field.key}${array ? ` row ${index + 1}` : ''}.${child.key} must be text` }
-          const result = coerceField(child, object[child.key])
+          const result = coerceField(child, object[child.key], true, recordValues)
           if ('error' in result) return { error: `${field.key}${array ? ` row ${index + 1}` : ''}: ${result.error}` }
           value[child.key] = (child.kind === 'object' || child.kind === 'objectArray' || (child.kind === 'stringArray' && child.arrayStorage !== 'text')) && typeof result.value === 'string' ? JSON.parse(result.value) : result.value
         }
@@ -326,7 +333,7 @@ export function buildRow(
     // country) validate against the options that apply to THIS row — the
     // same list the drawer offered for it via setupFieldOptions.
     const scoped = field.scopedOptions ? { ...field, options: setupFieldOptions(field, body) } : field
-    const res = coerceField(scoped, raw, setupFieldVisible(field, body))
+    const res = coerceField(scoped, raw, setupFieldVisible(field, body), body)
     if ('error' in res) return { error: res.error }
     if (res.value === undefined) continue // required select left unset on edit → skip
     // Never write null to a NOT-NULL-with-default column: on create, omit it so

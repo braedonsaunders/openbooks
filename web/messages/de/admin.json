@@ -4829,13 +4829,15 @@
       "benefitValuation": {
         "fixed": "Fest",
         "percent": "Prozent",
-        "pool": "Topf"
+        "pool": "Topf",
+        "per_unit": "Betrag je Einheit"
       },
       "benefitMetric": {
         "revenue": "Umsatz",
         "gross_profit": "Rohertrag",
         "net_profit": "Reingewinn",
-        "approved_hours": "Genehmigte Stunden"
+        "approved_hours": "Genehmigte Stunden",
+        "transactions": "Genehmigte Transaktionen"
       },
       "benefitMetricScope": {
         "company": "Unternehmen",
@@ -4845,7 +4847,8 @@
       "benefitAllocation": {
         "equal": "Gleich",
         "hours": "Stunden",
-        "role": "Rolle"
+        "role": "Rolle",
+        "responsibility": "Datierte Verantwortung"
       },
       "benefitFrequency": {
         "monthly": "Monatlich",
@@ -6422,6 +6425,51 @@
       "gap": "Diese Ortszeit existiert wegen der Zeitumstellung nicht — andere Uhrzeit wählen.",
       "occurrence": "UTC-Abweichung",
       "repeated": "Diese Stunde kommt zweimal vor — UTC-Abweichung wählen."
+    },
+    "transactionBenefits": {
+      "title": "Transaktionsregeln",
+      "source": "Quelltransaktionen",
+      "sourceHint": "Wählen Sie Artikel, Belegart, Datumsgrundlage und Gruppierung. Nur genehmigte oder gebuchte Quellen werden zugelassen.",
+      "positions": "Empfängeranteile",
+      "positionsHint": "Benennen Sie Programmrollen und ihre relativen Gewichte, unabhängig von Stellenbezeichnungen.",
+      "responsibilities": "Datierte Zuordnungen",
+      "responsibilitiesHint": "Ordnen Sie jede Gruppe und Rolle einem Beschäftigungsverhältnis mit ausdrücklichen Daten zu. Jede Quelle benötigt alle konfigurierten Anteile.",
+      "limits": "Gruppenobergrenzen",
+      "limitsHint": "Wählen Sie je Gruppe eine Geldobergrenze oder keine Begrenzung. Frühere Zuteilungen dieses Programms verbrauchen die Obergrenze.",
+      "reason": "Änderungsgrund",
+      "reasonHint": "Begründen Sie die Änderung. Alle Abschnitte werden gemeinsam gespeichert; aktive Regeln benötigen ein Ersatzprogramm.",
+      "documentDate": "Belegdatum",
+      "companyGrouping": "Ohne Gruppierung gilt der verantwortliche Arbeitgeber. Gruppen folgen der ausgewählten nativen oder benutzerdefinierten Dimension.",
+      "fields": {
+        "documentKind": "Belegart",
+        "dateBasis": "Datumsgrundlage",
+        "groupingSegmentId": "Gruppierungsdimension",
+        "itemIds": "Zulässige Artikel",
+        "positions": "Empfängeranteile",
+        "key": "Rollencode",
+        "name": "Rollenname",
+        "weight": "Anteilsgewicht",
+        "responsibilities": "Datierte Zuordnungen",
+        "groupId": "Gruppe",
+        "positionKey": "Empfängerrolle",
+        "employmentId": "Beschäftigungsverhältnis",
+        "effectiveFrom": "Gültig ab",
+        "effectiveTo": "Gültig bis",
+        "limits": "Gruppenobergrenzen",
+        "kind": "Begrenzungsentscheidung",
+        "amount": "Obergrenzenbetrag",
+        "reason": "Begründung"
+      },
+      "kinds": {
+        "sales_order": "Verkaufsaufträge",
+        "customer_invoice": "Kundenrechnungen",
+        "field_ticket": "Außendienstbelege",
+        "quote": "Angebote"
+      },
+      "limitKinds": {
+        "none": "Unbegrenzt",
+        "amount": "Geldobergrenze"
+      }
     }
   },
   "flows": {

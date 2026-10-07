@@ -36,6 +36,7 @@ const VALUATIONS = [
   { value: 'fixed', labelKey: 'options.benefitValuation.fixed' },
   { value: 'percent', labelKey: 'options.benefitValuation.percent' },
   { value: 'pool', labelKey: 'options.benefitValuation.pool' },
+  { value: 'per_unit', labelKey: 'options.benefitValuation.per_unit' },
 ]
 
 const METRICS = [
@@ -43,6 +44,7 @@ const METRICS = [
   { value: 'gross_profit', labelKey: 'options.benefitMetric.gross_profit' },
   { value: 'net_profit', labelKey: 'options.benefitMetric.net_profit' },
   { value: 'approved_hours', labelKey: 'options.benefitMetric.approved_hours' },
+  { value: 'transactions', labelKey: 'options.benefitMetric.transactions' },
 ]
 
 const METRIC_SCOPES = [
@@ -55,6 +57,7 @@ const ALLOCATIONS = [
   { value: 'equal', labelKey: 'options.benefitAllocation.equal' },
   { value: 'hours', labelKey: 'options.benefitAllocation.hours' },
   { value: 'role', labelKey: 'options.benefitAllocation.role' },
+  { value: 'responsibility', labelKey: 'options.benefitAllocation.responsibility' },
 ]
 
 const FREQUENCIES = [

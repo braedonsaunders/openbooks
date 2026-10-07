@@ -4784,13 +4784,15 @@
       "benefitValuation": {
         "fixed": "Fixed",
         "percent": "Percent",
-        "pool": "Pool"
+        "pool": "Pool",
+        "per_unit": "Amount per unit"
       },
       "benefitMetric": {
         "revenue": "Revenue",
         "gross_profit": "Gross profit",
         "net_profit": "Net profit",
-        "approved_hours": "Approved hours"
+        "approved_hours": "Approved hours",
+        "transactions": "Approved transactions"
       },
       "benefitMetricScope": {
         "company": "Company",
@@ -4800,7 +4802,8 @@
       "benefitAllocation": {
         "equal": "Equal",
         "hours": "Hours",
-        "role": "Role"
+        "role": "Role",
+        "responsibility": "Dated responsibility"
       },
       "benefitFrequency": {
         "monthly": "Monthly",
@@ -6422,6 +6425,51 @@
       "gap": "This local time does not exist because the clocks move forward — choose another time.",
       "occurrence": "UTC offset",
       "repeated": "This hour occurs twice — choose its UTC offset."
+    },
+    "transactionBenefits": {
+      "title": "Transaction rules",
+      "source": "Source transactions",
+      "sourceHint": "Choose eligible items, document type, date basis and grouping. Only approved or posted sources are admitted.",
+      "positions": "Recipient shares",
+      "positionsHint": "Name recipient positions and their relative share weights. These are program roles, independent of job titles.",
+      "responsibilities": "Dated assignments",
+      "responsibilitiesHint": "Assign each group and position to an employment for explicit dates. Every selected source needs all configured shares.",
+      "limits": "Group ceilings",
+      "limitsHint": "Choose a monetary ceiling or no limit for each assigned group. Earlier awards in this program consume the ceiling.",
+      "reason": "Audit reason",
+      "reasonHint": "Explain this rule change. All sections save together; active rules require a replacement program.",
+      "documentDate": "Document date",
+      "companyGrouping": "Leave grouping empty to use the responsible employer. Group choices follow the selected built-in or custom dimension.",
+      "fields": {
+        "documentKind": "Document type",
+        "dateBasis": "Date basis",
+        "groupingSegmentId": "Grouping dimension",
+        "itemIds": "Eligible items",
+        "positions": "Recipient shares",
+        "key": "Position code",
+        "name": "Position name",
+        "weight": "Share weight",
+        "responsibilities": "Dated assignments",
+        "groupId": "Group",
+        "positionKey": "Recipient position",
+        "employmentId": "Employment",
+        "effectiveFrom": "Effective from",
+        "effectiveTo": "Effective to",
+        "limits": "Group ceilings",
+        "kind": "Ceiling decision",
+        "amount": "Ceiling amount",
+        "reason": "Reason"
+      },
+      "kinds": {
+        "sales_order": "Sales orders",
+        "customer_invoice": "Customer invoices",
+        "field_ticket": "Field tickets",
+        "quote": "Quotes"
+      },
+      "limitKinds": {
+        "none": "No limit",
+        "amount": "Monetary ceiling"
+      }
     }
   },
   "flows": {
