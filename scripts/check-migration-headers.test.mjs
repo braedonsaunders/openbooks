@@ -56,6 +56,11 @@ test("a bounded lock_timeout passes the zero check (the runner still owns it)", 
     scanMigrationFile("0261_bounded.sql", `${HEADER}\nSET lock_timeout = '5s';\nselect 1;`),
     [],
   );
+  for (const unbounded of ["SET lock_timeout = 0;", "SET LOCAL lock_timeout TO '0ms';", "RESET lock_timeout;"]) {
+    const findings = scanMigrationFile("0261_bounded.sql", `${HEADER}\nSET lock_timeout = '5s';\n${unbounded}\nselect 1;`);
+    assert.equal(findings.length, 1, unbounded);
+    assert.equal(findings[0].kind, "lock_timeout-zero", unbounded);
+  }
 });
 
 test("set_config lock_timeout is refused at any value (the runner cannot strip it)", () => {
