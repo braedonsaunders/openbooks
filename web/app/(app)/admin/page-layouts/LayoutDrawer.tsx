@@ -337,6 +337,7 @@ export function LayoutDrawer({ drawer }: { drawer: PageLayoutDrawerData }) {
         return
       }
       toast.success(t('actions.removed'))
+      router.replace('/admin/page-layouts')
       router.refresh()
     } finally {
       setBusy(false)
