@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { sql } from "drizzle-orm";
-import { db } from "../platform/db.ts";
+import { db, withOrgTransaction } from "../platform/db.ts";
+import { recurringBenefitsRunSource } from "../payroll/benefit-plan-inputs.ts";
 import { decideGate } from "../flows/gates.ts";
 import { getBenefitAward } from "../hrm/benefits/awards.ts";
 import { activateBenefitProgram, addProgramMembership, createBenefitProgram, type CreateBenefitProgramQuery } from "../hrm/benefits/programs.ts";
@@ -60,4 +61,22 @@ export async function approveBenefitFixture(query: { orgId: string; actorId: str
   assert.ok(gate, message);
   await decideGate({ gateId: gate.id, userId: query.actorId, decision: "approved" });
   return getBenefitAward(db, query.orgId, query.actorId, query.awardId);
+}
+
+/** A committed-state negative fixture deliberately has no paid employee.
+ * Record the native empty recurring source, retaining the transition trigger;
+ * this fixture supplies no evidence that an award was delivered. */
+export async function seedCommittedBenefitRunWithoutStubs(orgId: string, documentId: string): Promise<void> {
+  await withOrgTransaction(orgId, async () => {
+    const source = await recurringBenefitsRunSource(db, orgId, documentId, true);
+    assert.deepEqual(source, [], "the missing-delivery fixture must have no employee stub source");
+    assert.equal((await db.execute<{ count: number }>(sql`
+      select count(*)::int as count from pay_run_benefit_allocations
+      where org_id=${orgId} and pay_run_document_id=${documentId}`)).rows[0]!.count, 0);
+    const updated = (await db.execute<{ document_id: string }>(sql`
+      update pay_runs set benefit_source_snapshot=${JSON.stringify(source)}::jsonb, run_status='committed'
+      where org_id=${orgId} and document_id=${documentId} and run_status='draft'
+      returning document_id`)).rows;
+    assert.deepEqual(updated.map(row => row.document_id), [documentId]);
+  });
 }

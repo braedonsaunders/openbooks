@@ -1,4 +1,4 @@
-import { seedPayrollBenefitProgram, seedBenefitRoleActors, approveBenefitFixture } from "../../testing/benefit-fixtures.ts";
+import { seedPayrollBenefitProgram, seedBenefitRoleActors, approveBenefitFixture, seedCommittedBenefitRunWithoutStubs } from "../../testing/benefit-fixtures.ts";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
@@ -509,7 +509,7 @@ test("Benefits programs and payout controls", { skip: !process.env.OPENBOOKS_DB_
 
   await t.test("committed run without the award's paid stub cannot report delivery or void", async () => {
     const { orgId, queued, run } = await queuedPayrollAward();
-    await db.execute(sql`update pay_runs set run_status = 'committed' where org_id = ${orgId} and document_id = ${run}`);
+    await seedCommittedBenefitRunWithoutStubs(orgId, run);
     await assert.rejects(recordPayrollDelivery({ orgId, actorId: FINANCE!, awardId: queued.award.id,
       payRunDocumentId: run, payRunAdjustmentId: queued.adjustmentId }), /no matching payroll representation.*review the employee.s inclusion and calculation.*does not prove this benefit was processed/);
     await assert.rejects(voidBenefitAward({ orgId, actorId: HRMGR!, awardId: queued.award.id, reason: "Cannot cancel paid run" }), /finalized pay run/);
