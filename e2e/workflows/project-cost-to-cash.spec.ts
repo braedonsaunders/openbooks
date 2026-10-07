@@ -632,6 +632,7 @@ function sovFinancialProfile(): Json {
       await apiOk(page, 'PUT', '/api/timesheets', {
         employee: employeeId,
         week: D('12'),
+        expectedRevision: str((await apiOk(page, 'GET', `/api/timesheets?employee=${employeeId}&week=${D('12')}`)).revision, 'week revision'),
         rows: [{
           projectId,
           itemId: labourItem,
