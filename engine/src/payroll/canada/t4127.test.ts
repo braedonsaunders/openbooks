@@ -176,7 +176,7 @@ const GOLDENS: Golden[] = [
   // ── Hand-worked stubs, 2025 ──────────────────────────────────────────────
   { year: 2025, label: "Manitoba biweekly $2,500, claim code 1", citation: `hand-worked, ${ED[120]}`,
     input: { payDate: "2025-02-13", province: "MB", periodsPerYear: 26, ...cc1, income: "2500.00" },
-    expected: { cpp: "140.74", cpp2: "0.00", ei: "41.00", eiEmployer: "57.40", periodicTax: "457.68" },
+    expected: { cpp: "140.74", cpp2: "0.00", ei: "41.00", eiEmployer: "57.40", periodicTax: "457.69" },
     expectedFactors: { F5: "23.6538", A: "64385.0012", K1: "2419.35", K2: "616.5363", K4: "220.65",
       T3: "6786.3889", T1: "6786.3889", K1P: "1724.6520", K2P: "443.9061", T4: "5113.5296", T2: "5113.5296" } },
   { year: 2025, label: "Manitoba no-TD1 default uses the January BPAMB", citation: `hand-worked, ${ED[120]}`,
@@ -204,7 +204,7 @@ const GOLDENS: Golden[] = [
   { year: 2026, label: "Ontario biweekly $2,000, claim code 1", citation: `hand-worked, ${ED[122]}`,
     input: { payDate: "2026-02-13", ...on26, income: "2000.00" },
     expected: { cpp: "110.99", cpp2: "0.00", ei: "32.60", eiEmployer: "45.64", f5: "18.65",
-      periodicTax: "254.83", totalTax: "254.83" },
+      periodicTax: "254.82", totalTax: "254.82" },
     // K2 = 0.14 × min(26 × 110.99 × 495/595, 3519.45) + 0.14 × min(26 × 32.60, 1123.07).
     expectedFactors: { A: "51515.0012", K2: "454.7678", T3: "4243.9124", T1: "4243.9124", T4: "1781.5218",
       V2: "600.00", T2: "2381.5218" } },
@@ -229,14 +229,14 @@ const GOLDENS: Golden[] = [
       ytd: { ei: "1120.00" } },
     expected: { ei: "3.07" } },
   // Unrounded annual credits give T1 = 5212.0183 and T2 = 2935.7756
-  // without the bonus. Step 6 rounds their combined deduction to 678.99;
-  // TF = 434.33 and the provincial remainder is 244.66.
+  // without the bonus. Step 6 rounds (5212.0183 + 2935.7756) / 12 to 678.98;
+  // TF = 434.33 and the provincial remainder is 244.65.
   { year: 2026, label: "bonus method: Ontario monthly $5,000 + $10,000 bonus", citation: `hand-worked, ${ED[122]}`,
     input: { payDate: "2026-03-31", province: "ON", periodsPerYear: 12, ...cc1, income: "5000.00",
       nonPeriodic: "10000.00" },
-    expected: { cpp: "875.15", f5A: "49.03", f5B: "98.05", periodicTax: "678.99", bonusTax: "2935.93",
-      totalTax: "3614.92" },
-    expectedFactors: { A: "69313.6080", A_step2: "59411.6640", K2: "649.9528", K2P: "234.4472", TF: "434.33", TP: "244.66" } },
+    expected: { cpp: "875.15", f5A: "49.03", f5B: "98.05", periodicTax: "678.98", bonusTax: "2935.93",
+      totalTax: "3614.91" },
+    expectedFactors: { A: "69313.6080", A_step2: "59411.6640", K2: "649.9528", K2P: "234.4472", TF: "434.33", TP: "244.65" } },
   { year: 2026, label: "bonus flat 15% when annual income is $5,000 or less", citation: `hand-worked, ${ED[122]}`,
     input: { payDate: "2026-03-06", province: "ON", periodsPerYear: 52, ...cc1, income: "50.00",
       nonPeriodic: "400.00" },
