@@ -1,13 +1,46 @@
--- Bound native sales-copy validation to an existing unique source number.
--- The indexed candidate still must match its rebased identity and every
--- recorded sales fact. Privileged clone authority, registered relationships,
--- ordinary capture and immutable evidence controls remain unchanged.
+-- Preserve recorded sales attribution, balances and revisions during native copying.
+-- An indexed, exact source match governs every insertion hook; ordinary
+-- posting and immutable sales-evidence controls remain unchanged.
 SET statement_timeout = 0;
 SET idle_in_transaction_session_timeout = 0;
 SET client_encoding = 'UTF8';
 SET standard_conforming_strings = on;
 SET client_min_messages = warning;
 SELECT pg_catalog.set_config('search_path', 'public, pg_catalog', false);
+
+-- Every insertion hook uses the same exact source predicate. Recorded null
+-- attribution and derived balances are history, not instructions to recapture
+-- today's customer assignment or advance the copied document revision.
+CREATE OR REPLACE FUNCTION public.sales_document_clone_matches(candidate public.documents)
+RETURNS boolean LANGUAGE sql STABLE SET search_path=public,pg_catalog AS $function$
+ SELECT EXISTS (
+    SELECT 1 FROM public.orgs target
+     JOIN public.sandboxes control ON control.org_id=target.id AND control.production_org_id=target.sandbox_of
+     JOIN public.orgs source ON source.id=target.sandbox_of
+     JOIN public.documents original ON original.org_id=source.id
+     WHERE public.openbooks_clone_authority() AND target.id=(candidate).org_id
+      AND target.env_kind='sandbox' AND target.sandbox_seed IS NOT NULL
+      AND original.kind=(candidate).kind AND original.document_number=(candidate).document_number
+      AND public.ob_rebase(original.id,target.sandbox_seed)=(candidate).id
+      AND (original.kind,original.document_number,original.revision_seq,original.status,
+           original.subtotal,original.total,original.tax_total,original.fx_rate,original.open_balance,
+           public.ob_rebase(original.party_id,target.sandbox_seed),
+           original.currency,original.document_date,original.posting_date,
+           original.updated_at,original.updated_by,
+           public.ob_rebase(original.sales_rep_id,target.sandbox_seed),
+           public.ob_rebase(original.sales_team_id,target.sandbox_seed),
+           public.ob_rebase(original.subsidiary_id,target.sandbox_seed),
+           public.ob_rebase(original.posted_entry_id,target.sandbox_seed),
+           public.ob_rebase(original.reversal_entry_id,target.sandbox_seed))
+       IS NOT DISTINCT FROM
+          ((candidate).kind,(candidate).document_number,(candidate).revision_seq,(candidate).status,
+           (candidate).subtotal,(candidate).total,(candidate).tax_total,(candidate).fx_rate,(candidate).open_balance,
+           (candidate).party_id,(candidate).currency,(candidate).document_date,(candidate).posting_date,
+           (candidate).updated_at,(candidate).updated_by,
+           (candidate).sales_rep_id,(candidate).sales_team_id,(candidate).subsidiary_id,
+           (candidate).posted_entry_id,(candidate).reversal_entry_id)
+ );
+$function$;
 
 CREATE OR REPLACE FUNCTION public.sales_capture_evidence() RETURNS trigger LANGUAGE plpgsql SET search_path=public,pg_catalog AS $function$
 DECLARE is_credit boolean:=false; is_reversal boolean:=false; old_won boolean:=false; new_won boolean:=false; prior public.crm_sales_evidence; metric_name text; source_name text; source_number_value text; value numeric; event_date date; clone_target record;
@@ -29,24 +62,8 @@ BEGIN
     AND target.sandbox_seed IS NOT NULL;
   IF FOUND THEN
    IF TG_TABLE_NAME='documents' THEN
-    PERFORM 1 FROM public.documents original
-     WHERE original.org_id=clone_target.sandbox_of
-      AND original.kind=NEW.kind AND original.document_number=NEW.document_number
-      AND public.ob_rebase(original.id,clone_target.sandbox_seed)=NEW.id
-      AND (original.kind,original.document_number,original.revision_seq,original.status,
-           original.subtotal,original.currency,original.document_date,original.posting_date,
-           original.updated_at,original.updated_by,
-           public.ob_rebase(original.sales_rep_id,clone_target.sandbox_seed),
-           public.ob_rebase(original.sales_team_id,clone_target.sandbox_seed),
-           public.ob_rebase(original.subsidiary_id,clone_target.sandbox_seed),
-           public.ob_rebase(original.posted_entry_id,clone_target.sandbox_seed),
-           public.ob_rebase(original.reversal_entry_id,clone_target.sandbox_seed))
-       IS NOT DISTINCT FROM
-          (NEW.kind,NEW.document_number,NEW.revision_seq,NEW.status,
-           NEW.subtotal,NEW.currency,NEW.document_date,NEW.posting_date,
-           NEW.updated_at,NEW.updated_by,
-           NEW.sales_rep_id,NEW.sales_team_id,NEW.subsidiary_id,
-           NEW.posted_entry_id,NEW.reversal_entry_id);
+    IF public.sales_document_clone_matches(NEW) THEN RETURN NEW; END IF;
+    RAISE EXCEPTION 'Sandbox sales sources must retain the original identity, revision, state, attribution, amount and dates; refresh from the recorded source instead of manufacturing historical sales evidence.' USING ERRCODE='23514';
    ELSE
     PERFORM 1 FROM public.crm_opportunities original
      WHERE original.org_id=clone_target.sandbox_of
@@ -110,4 +127,36 @@ BEGIN
   END IF;
  END IF;
  RETURN NEW;
+END $function$;
+
+CREATE OR REPLACE FUNCTION public.sales_document_attribution() RETURNS trigger
+LANGUAGE plpgsql SET search_path=public,pg_catalog AS $function$
+BEGIN
+ IF TG_OP='INSERT' AND NEW.kind IN ('customer_invoice','customer_credit')
+    AND public.sales_document_clone_matches(NEW) THEN
+  RETURN NEW;
+ END IF;
+ IF TG_OP='UPDATE' AND OLD.status IN ('posted','voided') AND (OLD.sales_rep_id IS DISTINCT FROM NEW.sales_rep_id OR OLD.sales_team_id IS DISTINCT FROM NEW.sales_team_id) THEN
+  RAISE EXCEPTION 'Posted sales attribution is immutable.' USING ERRCODE='23514';
+ END IF;
+ IF NEW.status='posted' AND (TG_OP='INSERT' OR OLD.status IS DISTINCT FROM 'posted') AND NEW.kind IN ('customer_invoice','customer_credit') AND NEW.sales_rep_id IS NULL THEN
+  SELECT c.sales_rep_id INTO NEW.sales_rep_id FROM public.customer_roles c WHERE c.org_id=NEW.org_id AND c.party_id=NEW.party_id;
+  IF NEW.sales_team_id IS NULL THEN
+   SELECT (v.definition->>'sales_team_id')::uuid INTO NEW.sales_team_id FROM public.crm_account_profiles cp
+    JOIN LATERAL(SELECT definition FROM public.crm_sales_territory_versions v WHERE v.org_id=cp.org_id AND v.territory_id=cp.territory_id AND v.effective_from<=COALESCE(NEW.posting_date,NEW.document_date) ORDER BY effective_from DESC,revision DESC LIMIT 1)v ON true
+    WHERE cp.org_id=NEW.org_id AND cp.party_id=NEW.party_id AND cp.sales_rep_id=NEW.sales_rep_id;
+  END IF;
+ END IF;
+ RETURN NEW;
+END $function$;
+
+CREATE OR REPLACE FUNCTION public.trg_document_open_balance() RETURNS trigger
+LANGUAGE plpgsql SET search_path=public,pg_catalog AS $function$
+BEGIN
+ IF TG_OP='INSERT' AND NEW.kind IN ('customer_invoice','customer_credit')
+    AND public.sales_document_clone_matches(NEW) THEN
+  RETURN NULL;
+ END IF;
+  PERFORM recompute_document_open_balance(NEW.id);
+  RETURN NULL;
 END $function$;

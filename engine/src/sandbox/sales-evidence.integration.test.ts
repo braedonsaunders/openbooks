@@ -42,6 +42,25 @@ for (const masked of [false, true]) test(`${masked ? "masked" : "full"} sandbox 
     await db.execute(sql`update documents set status='approved' where org_id=${org.orgId} and id=${invoice}`);
     await postDocument(invoice, { control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank } });
     assert.equal((await db.execute<{ status: string }>(sql`select status from documents where org_id=${org.orgId} and id=${invoice}`)).rows[0]!.status, "posted");
+    // Today's customer assignment must not reinterpret a posted invoice
+    // whose original sales attribution was unassigned.
+    const representative = randomUUID();
+    await db.execute(sql`insert into parties(id,org_id,kind,display_name,subsidiary_id)
+      values(${representative},${org.orgId},'employee','Current sales representative',${org.subsidiaryId})`);
+    await db.execute(sql`insert into employee_roles(org_id,party_id,is_sales_rep,sales_rep_since)
+      values(${org.orgId},${representative},true,'2020-01-01')`);
+    assert.equal((await db.execute(sql`update customer_roles set sales_rep_id=${representative}
+      where org_id=${org.orgId} and party_id=${org.customerId} returning party_id`)).rows.length, 1);
+    const documentFacts = (await db.execute<{ facts: unknown }>(sql`select jsonb_build_object(
+      'kind',kind,'document_number',document_number,'revision_seq',revision_seq,'status',status,
+      'subtotal',subtotal,'currency',currency,'document_date',document_date,'posting_date',posting_date,
+      'updated_at',updated_at,'updated_by',updated_by,'open_balance',open_balance,
+      'sales_rep_id',sales_rep_id,'sales_team_id',sales_team_id) as facts
+      from documents where org_id=${org.orgId} and id=${invoice}`)).rows;
+    assert.equal((documentFacts[0]!.facts as { sales_rep_id: unknown }).sales_rep_id, null);
+    assert.equal((await db.execute<{ matches: boolean }>(sql`select sales_document_clone_matches(d) as matches
+      from documents d where org_id=${org.orgId} and id=${invoice}`)).rows[0]!.matches, false,
+      "ordinary production records never acquire native clone authority");
     for (const id of [opportunity, reopened]) {
       await db.execute(sql`insert into crm_opportunities(id,org_id,opportunity_number,title,status_id,
         subsidiary_id,currency,projected_amount,closed_at,updated_by)
@@ -78,12 +97,40 @@ for (const masked of [false, true]) test(`${masked ? "masked" : "full"} sandbox 
         'source_number',case when ${masked} then md5(e.source_number) else e.source_number end) as evidence
         from crm_sales_evidence e join orgs o on o.sandbox_of=e.org_id
         where o.id=${target} order by ob_rebase(e.id,o.sandbox_seed)`)).rows;
+      const copiedDocument = (await db.execute<{ facts: unknown }>(sql`select jsonb_build_object(
+        'kind',d.kind,'document_number',d.document_number,'revision_seq',d.revision_seq,'status',d.status,
+        'subtotal',d.subtotal,'currency',d.currency,'document_date',d.document_date,'posting_date',d.posting_date,
+        'updated_at',d.updated_at,'updated_by',d.updated_by,'open_balance',d.open_balance,
+        'sales_rep_id',d.sales_rep_id,'sales_team_id',d.sales_team_id) as facts
+        from documents d join orgs o on o.id=d.org_id
+        where d.org_id=${target} and d.id=ob_rebase(${invoice}::uuid,o.sandbox_seed)`)).rows;
+      assert.deepEqual(copiedDocument, documentFacts,
+        "copy and refresh preserve unassigned attribution, balance, revision and exact recorded timestamps");
+      assert.deepEqual((await db.execute<{ facts: unknown }>(sql`select jsonb_build_object(
+        'kind',kind,'document_number',document_number,'revision_seq',revision_seq,'status',status,
+        'subtotal',subtotal,'currency',currency,'document_date',document_date,'posting_date',posting_date,
+        'updated_at',updated_at,'updated_by',updated_by,'open_balance',open_balance,
+        'sales_rep_id',sales_rep_id,'sales_team_id',sales_team_id) as facts
+        from documents where org_id=${org.orgId} and id=${invoice}`)).rows, documentFacts);
       assert.equal(actual.length, 5, "copying source records must not mint additional sales events");
       assert.deepEqual(actual, expected, "amounts, effective dates, revisions, creators, timestamps and reversal links preserve recorded history");
       assert.deepEqual(await sourceEvidence(), original);
       assert.equal((await db.execute<{ status: string }>(sql`select status from sandboxes where id=${created.sandboxId}`)).rows[0]!.status, "ready");
     };
     await assertCopy();
+    await withMaintenanceTransaction(null, async () => {
+      await cloneFlags();
+      const matches = (await db.execute<{ original: boolean; altered_balance: boolean; altered_attribution: boolean }>(sql`
+        select sales_document_clone_matches(d) as original,
+          sales_document_clone_matches(jsonb_populate_record(null::documents,
+            to_jsonb(d)||jsonb_build_object('open_balance',d.open_balance+1))) as altered_balance,
+          sales_document_clone_matches(jsonb_populate_record(null::documents,
+            to_jsonb(d)||jsonb_build_object('sales_rep_id',ob_rebase(${representative}::uuid,o.sandbox_seed)))) as altered_attribution
+        from documents d join orgs o on o.id=d.org_id
+        where d.org_id=${target} and d.id=ob_rebase(${invoice}::uuid,o.sandbox_seed)`)).rows[0]!;
+      assert.deepEqual(matches, { original: true, altered_balance: false, altered_attribution: false },
+        "privileged copying admits exact history and refuses substituted balances or current attribution");
+    });
     const beforeTarget = (await db.execute(sql`select * from crm_sales_evidence where org_id=${target} order by id`)).rows;
     // Preserve every other recorded fact so each substitution tests its own refusal.
     for (const [number, amount] of [[opportunity, "99.0000"], ["ALTERED-SOURCE-NUMBER", "10.1234"]] as const) {
