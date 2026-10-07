@@ -538,8 +538,8 @@ test.describe("inventory receipt to fulfillment to COGS to return", () => {
       }
       const { soId, soNumber } = await seedSalesOrder(page, "10", DAY);
 
-      // UI: pick, pack, ship — Convert to Shipment through the order drawer.
-      const ship = await uiConvert(page, `/sales-orders?order=${soId}`, "/api/sales-orders", soId, "Convert to Shipment", "sales_fulfillment");
+      // UI: pick, pack, ship — Convert to Fulfillment through the order drawer.
+      const ship = await uiConvert(page, `/sales-orders?order=${soId}`, "/api/sales-orders", soId, "Convert to Fulfillment", "sales_fulfillment");
       flow.ship1 = ship.id;
       expect(ship.documentNumber.startsWith("SHIP-"), ship.documentNumber).toBe(true);
       await page.goto("/sales-orders");
@@ -603,7 +603,7 @@ test.describe("inventory receipt to fulfillment to COGS to return", () => {
       const waited = page.waitForResponse(
         (r) => r.url().endsWith(`/api/sales-orders/${soId}/convert`) && r.request().method() === "POST",
       );
-      await page.locator("button", { hasText: "Convert to Shipment" }).click();
+      await page.locator("button", { hasText: "Convert to Fulfillment" }).click();
       const res = await waited;
       expect(res.status(), "overship refused").toBe(422);
       expect(await res.text()).toContain("insufficient stock");
@@ -628,7 +628,7 @@ test.describe("inventory receipt to fulfillment to COGS to return", () => {
     const { context, page } = await freshPage(browser, baseURL);
     try {
       const { soId, soNumber } = await seedSalesOrder(page, "2", DAY);
-      const ship = await uiConvert(page, `/sales-orders?order=${soId}`, "/api/sales-orders", soId, "Convert to Shipment", "sales_fulfillment");
+      const ship = await uiConvert(page, `/sales-orders?order=${soId}`, "/api/sales-orders", soId, "Convert to Fulfillment", "sales_fulfillment");
       flow.ship3 = ship.id;
       const inv = await uiConvert(page, `/sales-orders?order=${soId}`, "/api/sales-orders", soId, "Convert to Invoice", "customer_invoice");
       flow.inv3 = inv.id;

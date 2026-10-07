@@ -160,7 +160,7 @@ test.describe.serial("close to reporting", () => {
       // 5. Parties: two customers, one vendor. A party only transacts
       // with a non-root subsidiary listed on its entity record.
       async function party(role: string, name: string, extraSubs: string[] = []) {
-        const draft = ok(await api(req, origin, "POST", "/api/parties", { displayName: name, isActive: false, roles: { [role]: { enabled: true } } }), `${role} create`);
+        const draft = ok(await api(req, origin, "POST", "/api/parties", { displayName: name, isActive: false, roles: { [role]: { enabled: true } } }), `${role} create`, 201);
         const id = (draft.party as Record<string, string>).id!;
         const current = ok(await api(req, origin, "GET", `/api/parties/${id}`), `${role} fetch`);
         const party = current.party as Record<string, string>;
