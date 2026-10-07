@@ -97,6 +97,7 @@ const mockDb = `
     const seen = inspect(query)
     const text = seen.text
     const params = seen.params
+    if (text.includes('from custom_field_defs')) return { rows: [] }
     if (text.includes('pg_advisory_xact_lock')) return { rows: [{}] }
     if (text.includes('from subsidiaries')) {
       const wanted = state.subsidiaries.filter((row) => params.includes(row.id))
@@ -169,9 +170,9 @@ stubModules({
   intl: false,
   authz: false,
   features: false,
-  extra: {
-    "@openbooks/engine/src/platform/db.ts": `${mockDb}
+  database: `${mockDb}
      export async function withBypassContext(work) { return work() }`,
+  extra: {
     "../../../lib/feature-gates": `const state = globalThis[Symbol.for('openbooks.asset-create-route-test')]
      export async function guardFeaturePermission() {
        return {
@@ -251,6 +252,7 @@ test("Save inserts one tenant-scoped asset with one audit event", async () => {
   assert.equal(state.audits.length, 1);
   assert.equal(state.audits[0]!.row_id, KEY_A);
   assert.equal(state.audits[0]!.request_id, KEY_A);
+  assert.ok(state.queries.some((query) => query.includes("from custom_field_defs")), "native custom-field lookup uses the tracked database");
   const insertText =
     state.queries.find((q) => q.includes("insert into fixed_assets")) ?? "";
   assert.match(insertText, new RegExp(ORG_ID));

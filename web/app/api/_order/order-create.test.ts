@@ -19,6 +19,7 @@ const BUSINESS_DATE_URL = pathToFileURL(
     "business-date.ts",
   ),
 ).href;
+const PLATFORM_DB_URL = new URL("./db.ts", BUSINESS_DATE_URL).href;
 
 // Unsaved-create contract for POST /api/estimates, /api/sales-orders and
 // /api/purchase-orders (shared web/app/api/_order/create.ts): opening the
@@ -166,6 +167,7 @@ const mockDb = `
     const seen = inspect(query)
     const text = seen.text
     const params = seen.params.map(str)
+    if (text.includes('from segment_definitions')) return { rows: [] }
     if (text.includes('from number_sequences') || text.includes('into number_sequences')) {
       state.allocations += 1
       const prefix = params.find((p) => typeof p === 'string' && /-$/.test(p)) ?? 'X-'
@@ -392,15 +394,16 @@ const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
     const mocked = mockUrls.get(specifier);
     if (mocked) return { url: mocked, shortCircuit: true };
-    // The engine's document tax totals reach the database and clock through
-    // relative paths; route those two edges to the same doubles.
-    if (context.parentURL?.endsWith("/engine/src/ledger/document-totals.ts") && specifier === "../platform/db.ts") {
-      return { url: "mock:db", shortCircuit: true };
-    }
     if (context.parentURL?.endsWith("/engine/src/ledger/document-totals.ts") && specifier === "../platform/business-date.ts") {
       return { url: "mock:business-date", shortCircuit: true };
     }
-    return nextResolve(specifier, context);
+    const resolved = nextResolve(specifier, context);
+    // Segment and custom-field readers share the same tracked database as
+    // order persistence; their pure validators are not replaced.
+    if (resolved.url === PLATFORM_DB_URL) {
+      return { url: "mock:db", shortCircuit: true };
+    }
+    return resolved;
   },
   load(url, context, nextLoad) {
     const source = mockSources.get(url);
@@ -491,6 +494,7 @@ for (const { kind, createPerm, numberPrefix, path } of KINDS) {
     assert.equal(state.audits[0]!.row_id, KEY_A);
     assert.equal(state.audits[0]!.request_id, KEY_A);
     assert.equal(state.allocations, 1);
+    assert.ok(state.queries.some((query) => query.includes("from segment_definitions")), "native dimension lookup uses the tracked database");
   });
 
   test(`${kind}: exact replay is a 200 with no second row, number, or audit`, async () => {
