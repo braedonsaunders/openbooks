@@ -22,6 +22,11 @@ const LIST = "/admin/page-layouts";
 /** A cockpit with a deep, named outline, so hiding one block is observable. */
 const ROUTE = "/banking";
 
+async function findLayoutRow(page: Page) {
+  await page.locator("main").getByRole("searchbox", { name: "Search routes and modules" }).fill(ROUTE);
+  await expect(page.getByRole("link", { name: ROUTE, exact: true })).toBeVisible();
+}
+
 /**
  * Drop any layout this org has for the route under test.
  *
@@ -43,13 +48,13 @@ async function resetLayout(page: Page) {
 test.describe("page layouts", () => {
   test.describe.configure({ mode: "serial" });
 
-  test("the list names every customizable route and its status", async ({ browser, baseURL }) => {
+  test("the list finds a customizable route and its status", async ({ browser, baseURL }) => {
     const { context, page } = await authedContext(browser, baseURL);
     try {
       await page.goto(LIST);
       await dismissSetupWizard(page);
       await expect(page.locator("main")).toBeVisible();
-      await expect(page.getByRole("link", { name: ROUTE, exact: true })).toBeVisible();
+      await findLayoutRow(page);
       // The count is the honest headline: most routes are NOT customized, and
       // the screen should say so rather than implying everything is bespoke.
       await expect(page.getByText(/of \d+ pages customized/)).toBeVisible();
@@ -120,7 +125,8 @@ test.describe("page layouts", () => {
       await expect(reopened.getByText("banking-roster").first()).toBeVisible();
 
       await reopened.getByRole("button", { name: /remove customization/i }).click();
-      await expect(page.getByRole("link", { name: ROUTE, exact: true })).toBeVisible();
+      await expect(reopened).not.toBeVisible();
+      await findLayoutRow(page);
 
       // Restored, not merely deactivated in the database.
       await page.goto(ROUTE);

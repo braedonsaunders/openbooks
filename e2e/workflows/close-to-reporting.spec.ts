@@ -113,7 +113,7 @@ test.describe.serial("close to reporting", () => {
       //    controls, and the Projects parent gate the profitability report requires.
       ok(
         await api(req, origin, "PUT", "/api/admin/setup/features", {
-          features: { multiSubsidiary: true, advancedClose: true, projects: true },
+          features: { multiSubsidiary: true, advancedClose: true, projects: true, fixedAssets: true },
         }),
         "features",
       );
@@ -153,7 +153,7 @@ test.describe.serial("close to reporting", () => {
         const number = opt.label.split(" ")[0]!;
         SEED.accounts[number] = opt.value;
       }
-      for (const n of ["1000", "3000", "4000", "4100", "5000", "6100", "6300", "6500", "6600", "2100"]) {
+      for (const n of ["1000", "1500", "1510", "3000", "4000", "4100", "5000", "6100", "6300", "6500", "6600", "2100"]) {
         expect(SEED.accounts[n], `account ${n}`).toBeTruthy();
       }
 
@@ -260,7 +260,27 @@ test.describe.serial("close to reporting", () => {
 
       // 8. Equipment + depreciation: the product's depreciation run posts to
       //    every active book, which is how the adjusting book earns entries.
-      const assetDraft = ok(await api(req, origin, "POST", "/api/assets/draft", {}), "asset draft");
+      const expense = ok(await api(req, origin, "POST", "/api/accounts", {
+        number: "6590",
+        name: "Equipment Depreciation",
+        type: "expense",
+        subsidiaryId: SEED.rootSubId,
+      }), "depreciation expense account", 201);
+      const category = ok(await api(req, origin, "POST", "/api/admin/setup/asset-categories", {
+        name: "Commissary Equipment",
+        assetAccountId: SEED.accounts["1500"],
+        accumulatedDepreciationAccountId: SEED.accounts["1510"],
+        depreciationExpenseAccountId: field(expense.account as Record<string, unknown>, "id", "depreciation expense account"),
+        defaultMethod: "straight_line",
+        defaultLifeMonths: 12,
+        defaultConvention: "full_month",
+        isActive: true,
+      }), "asset category");
+      const assetDraft = ok(await api(req, origin, "POST", "/api/assets", {
+        name: "Commissary Server",
+        categoryId: field(category, "id", "asset category"),
+        subsidiaryId: SEED.rootSubId,
+      }), "asset draft", 201);
       SEED.assetId = assetDraft.id as string;
       const assetToken = await revisionToken(req, origin, `/api/assets/${SEED.assetId}`, (d) => field(d.asset as Record<string, unknown>, "updated_at", "asset"));
       ok(
