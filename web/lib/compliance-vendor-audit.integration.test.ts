@@ -6,7 +6,7 @@ import { sql } from "drizzle-orm";
 import { stubModules } from '../testing/stub-modules.ts'
 
 /**
- * Live-PostgreSQL regression for fnd_mtcbbunr_7k3wlv.  The vendor compliance
+ * Live-PostgreSQL regression for vendor compliance audit integrity. The vendor compliance
  * PATCH used to commit the role mutation and its audit row as two independent
  * statements.  These cases invoke the real route: a successful save records
  * exact stored before/after evidence, while a database-triggered audit failure
@@ -38,10 +38,7 @@ const hooks = registerHooks({
     // fixture helpers on one db module even when node_modules is shared.
     if (specifier.startsWith("@openbooks/engine/")) {
       const engineRoot = new URL("../../engine/", import.meta.url);
-      return {
-        url: new URL(specifier.slice("@openbooks/engine/".length), engineRoot).href,
-        shortCircuit: true,
-      };
+      return nextResolve(new URL(specifier.slice("@openbooks/engine/".length), engineRoot).href, context);
     }
     return nextResolve(specifier, context);
   },
