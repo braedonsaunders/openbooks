@@ -72,7 +72,7 @@ async function gatherCollections(orgId: string, collections: Collection[], proje
     const rows: Record<string, unknown>[] = [];
     let lastId: string | null = null;
     for (;;) {
-      const page = (await db.execute<Record<string, unknown> & { id: string }>(sql`
+      const page: (Record<string, unknown> & { id: string })[] = (await db.execute<Record<string, unknown> & { id: string }>(sql`
         select ${columns} from ${sql.identifier(collection.table)}
         where org_id=${orgId} and (${collection.where}) and (${lastId}::uuid is null or id>${lastId}::uuid)
         order by id limit 1000`)).rows;
