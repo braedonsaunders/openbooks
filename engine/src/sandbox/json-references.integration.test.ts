@@ -53,7 +53,7 @@ for (const tier of ["full", "masked", "as_of", "dev"] as const) {
       assert.equal((await db.execute(sql`select id from accounts where org_id=${sandbox.sandboxOrgId} and id=${branch.control_accounts.receivable}`)).rows.length, 1);
       const pins = (await db.execute(sql`select m.account_id from account_group_members m join account_groups g on g.org_id=m.org_id and g.id=m.group_id where m.org_id=${sandbox.sandboxOrgId} and g.dimension='reconciliation' and g.key='pinned'`)).rows;
       assert.deepEqual(pins, [{ account_id: branch.control_accounts.receivable }]);
-      if (tier === "dev") for (const table of ['journal_entries', 'pay_runs', 'pay_stubs', 'entitlement_ledger']) assert.equal((await db.execute(sql`select id from ${sql.identifier(table)} where org_id=${sandbox.sandboxOrgId}`)).rows.length, 0);
+      if (tier === "dev") for (const table of ['journal_entries', 'pay_runs', 'pay_stubs', 'entitlement_ledger']) assert.equal((await db.execute(sql`select 1 from ${sql.identifier(table)} where org_id=${sandbox.sandboxOrgId} limit 1`)).rows.length, 0);
       const evidence = (await db.execute(sql`select id from audit_log where org_id=${sandbox.sandboxOrgId} and changes->>'mode'='sandbox_json_reference_rebase'`)).rows;
       assert.ok(evidence.length >= 3);
     };
