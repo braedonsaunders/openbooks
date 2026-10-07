@@ -92,7 +92,12 @@ for (const scenario of scenarios) {
       const invalidFlag = scenario in flags;
       const expectedUpdatedAt = scenario.includes('missing') ? undefined : scenario.includes('truncated') ? revision.replace(/(\.\d{3})\d{3}Z$/, '$1Z') : revision;
       const response = scenario.includes('delete') ? await remove({ expectedUpdatedAt }) : await patch({ expectedUpdatedAt, ...(invalidFlag ? { enabled: flags[scenario] } : { name: 'Unreviewed edit' }) });
-      assert.equal(response.status, invalidFlag ? 422 : 409);
+      assert.equal(response.status, invalidFlag ? 400 : 409);
+      if (invalidFlag) {
+        const refusal = await response.json();
+        assert.ok(refusal.issues.some((issue: { path: string; message: string }) =>
+          issue.path === 'enabled' && /boolean/.test(issue.message)), 'the refusal names the boolean enable field');
+      }
       assert.deepEqual(await snapshot(), before);
     } finally {
       if (connected) await writer.query('rollback').catch(() => {});

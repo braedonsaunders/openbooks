@@ -32,7 +32,7 @@ export const runtime = 'nodejs'
  *
  * Graph saves are validated in two tiers:
  *   • STRUCTURAL (zod graph schema — malformed nodes/edges/caps) → 400
- *     {errors}; nothing is written.
+ *     field issues; nothing is written.
  *   • VOCABULARY / wiring lints (lintFlowGraphForSubject: unreachable nodes,
  *     triggers without an outgoing step, unknown fields/statuses,
  *     worker-trigger compatibility, …) → the graph still saves (authors keep

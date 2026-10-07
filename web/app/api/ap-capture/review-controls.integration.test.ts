@@ -83,7 +83,11 @@ test('capture review preserves an omitted document kind and validates supplied k
     assert.equal(result.status, 200, await result.clone().text())
     assert.equal(((await f.snapshot())[0]!.item as Record<string, unknown>).document_kind, 'vendor_credit')
     const before = await f.snapshot()
-    assert.equal((await f.patch({ documentKind: 'customer_invoice' })).status, 422)
+    const invalidKind = await f.patch({ documentKind: 'customer_invoice' })
+    assert.equal(invalidKind.status, 422)
+    const kindRefusal = await invalidKind.json()
+    assert.ok(kindRefusal.issues.some((issue: { path: string; message: string }) =>
+      issue.path === 'documentKind' && /vendor_bill.*vendor_credit/.test(issue.message)))
     assert.deepEqual(await f.snapshot(), before)
     assert.equal((await f.patch({ documentKind: 'vendor_bill' })).status, 200)
     assert.equal(((await f.snapshot())[0]!.item as Record<string, unknown>).document_kind, 'vendor_bill')
@@ -102,6 +106,9 @@ test('manual capture corrections refuse malformed financial values without chang
     ]) {
       const result = await f.patch({ normalized })
       assert.equal(result.status, 422)
+      const refusal = await result.json()
+      assert.ok(refusal.issues.some((issue: { path: string; message: string }) =>
+        issue.path.startsWith('normalized.') && issue.message.trim()), 'the refusal identifies the unreadable capture field')
       assert.deepEqual(await f.snapshot(), before)
     }
     assert.equal((await f.patch({})).status, 200, 'valid exact decimal edits remain usable')
