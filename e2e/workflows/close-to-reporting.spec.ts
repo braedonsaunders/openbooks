@@ -978,7 +978,7 @@ test.describe.serial("close to reporting", () => {
       await page
         .getByPlaceholder("Add a note about this publication\u2026")
         .fill(`Restated after the August freight accrual for ${P.name}`);
-      await page.getByRole("button", { name: "Publish package" }).click();
+      await Promise.all([acceptConfirm(page), page.getByRole("button", { name: "Publish package" }).click()]);
       await expectOkResponse(await republished, "re-publish package");
       const res2 = await page.request.get(`${baseURL}/api/close/runs/${SEED.runId}/binder`, {
         headers: { Origin: new URL(baseURL!).origin },
