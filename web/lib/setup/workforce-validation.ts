@@ -26,9 +26,10 @@ export const validateEntitlementPlan: SetupEntityValidationHook = async ({ body,
   const { PayrollError } = await import('@openbooks/engine/payroll/entitlements')
   let values = { ...body }
   if (rowId) {
-    const row = (await executor.execute<Record<string, unknown>>(sql`select payout_component_id, deposit_component_id from entitlement_plans where org_id=${orgId} and id=${rowId}`)).rows[0]
+    const row = (await executor.execute<Record<string, unknown>>(sql`select direction, payout_component_id, deposit_component_id from entitlement_plans where org_id=${orgId} and id=${rowId}`)).rows[0]
     if (!row) return 'Entitlement plan no longer exists; reopen Benefits programs'
     values = {
+      direction: row.direction,
       payoutComponentId: row.payout_component_id ?? null,
       depositComponentId: row.deposit_component_id ?? null,
       ...values,
