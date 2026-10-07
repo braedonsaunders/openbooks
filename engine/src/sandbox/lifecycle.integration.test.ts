@@ -599,8 +599,8 @@ test("a masked sandbox scrubs custom JSON and copied user credentials", { skip: 
 
 test("a full sandbox clones an org with live posted documents and lines", { skip: !DB }, async () => {
   const org = await createScratchOrg();
-  let sandboxId: string | null = null;
-  try {
+  const sandboxName = `CloneLines ${randomUUID()}`;
+  await withSandboxCleanup(org, sandboxName, async () => {
     const userId = await createScratchUser(org.orgId, `CloneLines ${randomUUID()}`, "accountant");
     const invoiceId = randomUUID();
     await db.execute(sql`insert into documents
@@ -614,31 +614,43 @@ test("a full sandbox clones an org with live posted documents and lines", { skip
       values (${org.orgId}, ${invoiceId}, 1, ${org.accounts.revenue}, '1', '100', '100', '0', '0')`);
     await db.execute(sql`update documents set status='approved' where id=${invoiceId} and org_id=${org.orgId}`);
     await postDocument(invoiceId, { control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank } });
-    const created = await createSandbox({ productionOrgId: org.orgId, name: `CloneLines ${randomUUID()}`, tier: "full", masked: false });
-    sandboxId = created.sandboxId;
+    const created = await createSandbox({ productionOrgId: org.orgId, name: sandboxName, tier: "full", masked: false });
     const counts = (await db.execute<{ documents: number; lines: number; entries: number }>(sql`
       select (select count(*)::int from documents where org_id = ${created.sandboxOrgId}) as documents,
              (select count(*)::int from document_lines where org_id = ${created.sandboxOrgId}) as lines,
              (select count(*)::int from journal_entries where org_id = ${created.sandboxOrgId}) as entries
     `)).rows[0]!;
     assert.deepEqual(counts, { documents: 1, lines: 1, entries: 1 });
-  } finally {
-    if (sandboxId) {
-      await deleteSandbox(sandboxId).catch(() => undefined);
-    } else {
-      // A failed create still records a 'failed' sandbox row pinning the org;
-      // remove it so the scratch org can drop.
-      const rows = (await db.execute<{ id: string }>(sql`select id from sandboxes where production_org_id = ${org.orgId}`)).rows;
-      for (const r of rows) await deleteSandbox(r.id).catch(() => undefined);
+    const evidence = async (orgId: string) => (await db.execute(sql`
+      select * from crm_sales_evidence where org_id=${orgId} order by id`)).rows;
+    const productionEvidence = await evidence(org.orgId);
+    assert.ok(productionEvidence.length > 0, "posting must produce actual sales evidence for the immutable guard");
+    for (const [target, operation, privileged] of [
+      [org.orgId, "DELETE", true], [created.sandboxOrgId, "DELETE", false], [created.sandboxOrgId, "UPDATE", true],
+    ] as const) {
+      const before = await evidence(target);
+      assert.ok(before.length > 0, "a refusal case must reach an existing evidence row");
+      const write = async () => {
+        await db.execute(sql`select set_config('openbooks.sandbox_wipe','on',true),
+          set_config('openbooks.migration','on',true),set_config('openbooks.amend','on',true)`);
+        await db.execute(operation === "DELETE"
+          ? sql`delete from crm_sales_evidence where org_id=${target}`
+          : sql`update crm_sales_evidence set amount=amount+1 where org_id=${target}`);
+      };
+      await assert.rejects(privileged ? withMaintenanceTransaction(null, write) : withOrgTransaction(target, write),
+        error => errorChainMatches(error, /Sales evidence is immutable.*controlled reversal workflow/));
+      assert.deepEqual(await evidence(target), before);
     }
-    await dropScratchOrg(org.orgId);
-  }
+    await deleteSandbox(created.sandboxId);
+    assert.deepEqual(await evidence(created.sandboxOrgId), []);
+    assert.deepEqual(await evidence(org.orgId), productionEvidence);
+  });
 });
 
 test("a full sandbox clones payroll opening program bases with their rebased parent", { skip: !DB }, async () => {
   const org = await createScratchOrg();
-  let sandboxId: string | null = null;
-  try {
+  const sandboxName = `Clone opening bases ${randomUUID()}`;
+  await withSandboxCleanup(org, sandboxName, async () => {
     const employeeId = randomUUID();
     const actorId = await createScratchUser(org.orgId, `CloneOpening ${randomUUID()}`, "accountant");
     await db.execute(sql`
@@ -658,11 +670,10 @@ test("a full sandbox clones payroll opening program bases with their rebased par
 
     const created = await createSandbox({
       productionOrgId: org.orgId,
-      name: `Clone opening bases ${randomUUID()}`,
+      name: sandboxName,
       tier: "full",
       masked: false,
     });
-    sandboxId = created.sandboxId;
 
     const cloned = (await db.execute<{
       source_id: string;
@@ -696,16 +707,7 @@ test("a full sandbox clones payroll opening program bases with their rebased par
     assert.notEqual(cloned.cloned_employee, cloned.source_employee);
     assert.equal(cloned.cloned_amount, cloned.source_amount);
     assert.equal(cloned.parent_count, 1, "the rebased program base must reference its cloned opening balance");
-  } finally {
-    if (sandboxId) await deleteSandbox(sandboxId).catch(() => undefined);
-    else {
-      const rows = (await db.execute(sql`
-        select id from sandboxes where production_org_id = ${org.orgId}
-      `)).rows as { id: string }[];
-      for (const row of rows) await deleteSandbox(row.id).catch(() => undefined);
-    }
-    await dropScratchOrg(org.orgId);
-  }
+  });
 });
 
 test("a sandbox holding posted documents can be deleted without stranding its org", { skip: !DB }, async () => {
