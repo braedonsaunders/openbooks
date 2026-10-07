@@ -181,8 +181,8 @@ test.describe.serial("close to reporting", () => {
       SEED.vendorAId = await party("vendor", "Northbeam Supplies");
 
       // 6. Project for the profitability report.
-      const projectDraft = ok(await api(req, origin, "POST", "/api/projects/draft", {}), "project draft");
-      SEED.projectId = projectDraft.id as string;
+      const projectDraft = ok(await api(req, origin, "POST", "/api/projects", { name: "Harbour Kitchen Refit", isActive: false }), "project create");
+      SEED.projectId = (projectDraft.project as Record<string, string>).id!;
       ok(
         await api(req, origin, "PATCH", `/api/projects/${SEED.projectId}`, {
           name: "Harbour Kitchen Refit",
