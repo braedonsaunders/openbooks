@@ -126,7 +126,7 @@ async function writeAll(
       // Each native command adopts one complete recipe. Null expectedVersion
       // keeps insert-only replay from replacing an already adopted assembly.
       for (const [assemblyCode, components] of [...recipes].sort(([a], [b]) => a.localeCompare(b))) {
-        const response = await withAuthzContext(authz, () => PUT(new Request('http://localhost/api/inventory/bom', {
+        const response: Response = await withAuthzContext(authz, () => PUT(new Request('http://localhost/api/inventory/bom', {
           method: 'PUT', body: JSON.stringify({ assemblyItemId: ids.get(assemblyCode), expectedVersion: null,
             reason: 'Adopt the complete exported assembly recipe', components: components.map(({ assemblyItemId: _assembly, componentItemId, ...line }) =>
               ({ ...line, componentItemId: ids.get(String(componentItemId)) })) }),
@@ -136,7 +136,7 @@ async function writeAll(
           outcome.errors.push({ message: (await response.json()).error })
           continue
         }
-        const adopted = await response.json()
+        const adopted: { componentCount: number } = await response.json()
         assert.equal(adopted.componentCount, components.length)
         outcome.created += adopted.componentCount
       }
