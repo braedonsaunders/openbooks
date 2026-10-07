@@ -163,6 +163,10 @@ const mockDb = `
     execute,
     transaction: async (work) => work({ execute }),
   }
+  export async function withOrgTransaction(orgId, work) {
+    if (orgId !== '${ORG_ID}') throw new Error('Asset fixture transaction requires its declared organization')
+    return db.transaction(work)
+  }
 `;
 
 stubModules({
