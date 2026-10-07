@@ -67,7 +67,7 @@ export interface PreparedExpenseLine {
   taxComponents: ReturnType<typeof computeBillTotals>['lines'][number]['taxComponents']
   departmentId: string | null
   projectId: string | null
-  extraDims: Record<string, string>
+  extraDims: Record<string, string | null>
   custom: Record<string, unknown>
 }
 
@@ -76,7 +76,7 @@ export interface PreparedExpenseEdit {
   headerCustom: Record<string, unknown> | null
   /** False = body omitted extra_dims (keep stored). */
   extraDimsProvided: boolean
-  extraDimsCleaned: Record<string, string>
+  extraDimsCleaned: Record<string, string | null>
   totals: { subtotal: string; taxTotal: string; total: string } | null
   preparedLines: PreparedExpenseLine[] | null
 }

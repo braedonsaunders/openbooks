@@ -1,5 +1,7 @@
 'use client'
 
+import { CLEAR_SEGMENT, INHERIT_SEGMENT, segmentCellValue, segmentAssignmentsFromCells } from '@/lib/segment-assignments'
+
 import { useMoney } from '@/components/money-provider'
 import { initialDrawerMode, type DrawerMode } from '@/lib/drawer-mode'
 import { isDocumentRevisionToken } from '@/lib/api/registry-data'
@@ -92,7 +94,7 @@ export interface JournalDoc extends Record<string, unknown> {
   entry_id: string | null
   document_number: string | null
   custom: Record<string, unknown>
-  extra_dims: Record<string, string>
+  extra_dims: Record<string, string | null>
 }
 
 /** Narrow the engine loader's untyped document row to the header fields
@@ -119,7 +121,7 @@ export function asJournalDoc(raw: Record<string, unknown>): JournalDoc {
     extra_dims: isLineMap(raw.extra_dims)
       ? Object.fromEntries(
           Object.entries(raw.extra_dims).filter(
-            (entry): entry is [string, string] => typeof entry[1] === 'string',
+            (entry): entry is [string, string | null] => entry[1] === null || typeof entry[1] === 'string',
           ),
         )
       : {},
@@ -197,6 +199,7 @@ export function isBlankJournalLine(row: Record<string, unknown>): boolean {
     return false
   }
   for (const [key, value] of Object.entries(row)) {
+    if (key.startsWith('seg_') && (value === INHERIT_SEGMENT || value === CLEAR_SEGMENT)) continue
     if ((key.startsWith('cf_') || key.startsWith('seg_')) && !isBlankJournalCell(value)) return false
   }
   return true
@@ -247,7 +250,7 @@ function toRow(l: Record<string, unknown>, lineDefs: CustomFieldDefClient[], seg
   const custom = isLineMap(l.custom) ? l.custom : null
   const extraDims = isLineMap(l.extra_dims) ? l.extra_dims : null
   for (const def of lineDefs) row[`cf_${def.key}`] = custom?.[def.key] ?? ''
-  for (const segment of segments) row[`seg_${segment.key}`] = extraDims?.[segment.key] ?? ''
+  for (const segment of segments) row[`seg_${segment.key}`] = segmentCellValue(extraDims, segment.key)
   return row
 }
 
@@ -376,7 +379,7 @@ function JournalDrawerBody({
   const [memo, setMemo] = useState<string>(doc.memo ?? '')
   const [subsidiaryId, setSubsidiaryId] = useState<string>(doc.subsidiary_id ?? '')
   const [customValues, setCustomValues] = useState<Record<string, unknown>>(doc.custom ?? {})
-  const [extraDims, setExtraDims] = useState<Record<string, string>>(doc.extra_dims ?? {})
+  const [extraDims, setExtraDims] = useState<Record<string, string | null>>(doc.extra_dims ?? {})
   const [rows, setRows] = useState<LineRow[]>(
     journal.lines.length > 0 ? journal.lines.map((l) => toRow(l, lineDefs, segments)) : [emptyLine(), emptyLine()],
   )
@@ -466,7 +469,7 @@ function JournalDrawerBody({
             projectId: r.projectId || null,
             // Intercompany line override (multi-subsidiary orgs only).
             subsidiaryId: multiSub ? r.subsidiaryId || null : undefined,
-            extraDims: Object.fromEntries(segments.map((segment) => [segment.key, r[`seg_${segment.key}`]]).filter(([, value]) => value !== '' && value != null)),
+            extraDims: segmentAssignmentsFromCells(r, segments.map(segment => segment.key)),
             custom: Object.fromEntries(
               lineDefs.map((d) => [d.key, r[`cf_${d.key}`]]).filter(([, v]) => v !== '' && v != null),
             ),
@@ -984,7 +987,7 @@ function JournalDrawerBody({
         label: segment.name,
         width: '150px',
         type: 'search-select',
-        options: segment.values.map((value) => ({ value: value.id, label: `${value.code ? `${value.code} · ` : ''}${value.name}` })),
+        options: [{ value: INHERIT_SEGMENT, label: tc('labels.inheritHeader') }, { value: CLEAR_SEGMENT, label: tc('labels.noDimensionValue') }, ...segment.values.map((value) => ({ value: value.id, label: `${value.code ? `${value.code} · ` : ''}${value.name}` }))],
         placeholder: '—',
       }))
       if (!layout) return [...Object.values(builtIn), ...segmentColumns, ...custom.values()]
@@ -1223,7 +1226,7 @@ function JournalDrawerBody({
                     <SearchSelect
                       options={segment.values.map((value) => ({ value: value.id, label: `${value.code ? `${value.code} · ` : ''}${value.name}` }))}
                       value={selected}
-                      onChange={(value) => setExtraDims((current) => ({ ...current, [segment.key]: value ?? '' }))}
+                      onChange={(value) => setExtraDims((current) => ({ ...current, [segment.key]: value || null }))}
                       placeholder="—"
                     />
                   ) : <p className="text-sm">{segment.values.find((value) => value.id === selected)?.name ?? '—'}</p>}

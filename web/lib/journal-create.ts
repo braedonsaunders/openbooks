@@ -213,7 +213,7 @@ export async function createManualJournal(input: {
     departmentId: string | null;
     projectId: string | null;
     subsidiaryId: string | null;
-    extraDims: Record<string, string>;
+    extraDims: Record<string, string | null>;
     custom: Record<string, unknown>;
   }[] = [];
   for (let i = 0; i < lines.length; i++) {

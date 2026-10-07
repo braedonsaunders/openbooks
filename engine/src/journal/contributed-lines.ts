@@ -18,7 +18,7 @@ export interface Coordinate {
   classId?: string | null;
   projectId?: string | null;
   partyId?: string | null;
-  extraDims?: Record<string, string>;
+  extraDims?: Record<string, string | null>;
 }
 
 /** A line a contributor adds to a posting transaction's own journal entry. */

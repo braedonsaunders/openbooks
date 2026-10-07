@@ -256,7 +256,7 @@ export async function createOrder(
     amount: string
     taxInputAmount: string
     taxAmount: string
-    extraDims: Record<string, string>
+    extraDims: Record<string, string | null>
   })[] = []
   const itemQuantities = overallItemQuantities(valid)
   for (let i = 0; i < computed.lines.length; i++) {

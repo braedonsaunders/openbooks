@@ -146,7 +146,7 @@ export interface AllocationTargetInput {
   classId?: string | null;
   projectId?: string | null;
   subsidiaryId?: string | null;
-  extraDims?: Record<string, string>;
+  extraDims?: Record<string, string | null>;
   fixedPercent?: string | null;
   weight?: string | null;
   isRemainder?: boolean;
@@ -435,9 +435,9 @@ function mapVersion(row: Prefixed, prefix: string): AllocationRuleVersion {
 
 function mapTarget(row: Prefixed, prefix: string): AllocationRuleTarget {
   const extra = get(row, prefix, "extra_dims");
-  const extraDims: Record<string, string> = {};
+  const extraDims: Record<string, string | null> = {};
   if (typeof extra === "object" && extra !== null && !Array.isArray(extra)) {
-    for (const [key, value] of Object.entries(extra as Record<string, unknown>)) extraDims[key] = String(value);
+    for (const [key, value] of Object.entries(extra as Record<string, unknown>)) extraDims[key] = value === null ? null : String(value);
   }
   return {
     id: String(get(row, prefix, "id")),

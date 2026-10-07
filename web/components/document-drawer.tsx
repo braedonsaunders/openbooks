@@ -1,5 +1,7 @@
 'use client'
 
+import { CLEAR_SEGMENT, INHERIT_SEGMENT, segmentCellValue, segmentAssignmentsFromCells } from '../lib/segment-assignments'
+
 import { quoteGoodsPlaceOfSupply } from '@openbooks/engine/tax/contracts'
 
 import { useMoney } from '@/components/money-provider'
@@ -248,7 +250,7 @@ export interface DocumentDoc extends Record<string, unknown> {
   subtotal: string
   subsidiary_id: string | null
   party_id: string | null
-  extra_dims: Record<string, string>
+  extra_dims: Record<string, string | null>
   document_number: string | null
   custom: Record<string, unknown>
 }
@@ -259,11 +261,11 @@ export interface DocumentDoc extends Record<string, unknown> {
 export function asDocumentDoc(raw: Record<string, unknown>): DocumentDoc {
   const text = (value: unknown): string | null =>
     typeof value === 'string' ? value : null
-  const dims = (value: unknown): Record<string, string> =>
+  const dims = (value: unknown): Record<string, string | null> =>
     isLineMap(value)
       ? Object.fromEntries(
           Object.entries(value).filter(
-            (entry): entry is [string, string] => typeof entry[1] === 'string',
+            (entry): entry is [string, string | null] => entry[1] === null || typeof entry[1] === 'string',
           ),
         )
       : {}
@@ -757,6 +759,7 @@ export function isBlankDrawerLine(row: Record<string, unknown>): boolean {
   }
   if (row.isBillable === true || row.taxOverridden === true || row.distributionLocked === true) return false
   for (const [key, value] of Object.entries(row)) {
+    if (key.startsWith('seg_') && (value === INHERIT_SEGMENT || value === CLEAR_SEGMENT)) continue
     if ((key.startsWith('cf_') || key.startsWith('seg_')) && !isBlankDrawerCell(value)) return false
   }
   return true
@@ -897,7 +900,7 @@ function toRow(l: Record<string, unknown>, lineDefs: CustomFieldDefClient[], seg
     inventoryReturn?.sourceReceiptMovementId ?? inventoryReturn?.sourceIssueMovementId,
   )
   for (const def of lineDefs) row[`cf_${def.key}`] = custom?.[def.key] ?? ''
-  for (const segment of segments) row[`seg_${segment.key}`] = extraDims?.[segment.key] ?? ''
+  for (const segment of segments) row[`seg_${segment.key}`] = segmentCellValue(extraDims, segment.key)
   return row
 }
 
@@ -1220,7 +1223,7 @@ export function DocumentDrawer({
       last4: typeof body.last4 === 'string' ? body.last4 : '',
     }
   }, [])
-  const [extraDims, setExtraDims] = useState<Record<string, string>>(doc.extra_dims ?? {})
+  const [extraDims, setExtraDims] = useState<Record<string, string | null>>(doc.extra_dims ?? {})
 
   // -- transfer: dedicated to/from + amount state ---------------------------
   const transferFromPayload = (
@@ -1781,11 +1784,7 @@ export function DocumentDrawer({
                 // tri-state's explicit edge (absent would mean "stored").
                 distributionKey: r.distributionKey || null,
                 distributionLocked: r.distributionLocked,
-                extraDims: Object.fromEntries(
-                  segments
-                    .map((segment) => [segment.key, r[`seg_${segment.key}`]])
-                    .filter(([, value]) => value !== '' && value != null),
-                ),
+                extraDims: segmentAssignmentsFromCells(r, segments.map(segment => segment.key)),
                 custom: Object.fromEntries(
                   lineDefs.map((d) => [d.key, r[`cf_${d.key}`]]).filter(([, v]) => v !== '' && v != null),
                 ),
@@ -2258,10 +2257,10 @@ export function DocumentDrawer({
         label: segment.name,
         width: '150px',
         type: 'search-select',
-        options: segment.values.map((value) => ({
+        options: [{ value: INHERIT_SEGMENT, label: tCommon('labels.inheritHeader') }, { value: CLEAR_SEGMENT, label: tCommon('labels.noDimensionValue') }, ...segment.values.map((value) => ({
           value: value.id,
           label: `${value.code ? `${value.code} · ` : ''}${value.name}`,
-        })),
+        }))],
         placeholder: '—',
       })
     }
@@ -3180,7 +3179,7 @@ export function DocumentDrawer({
                         label: `${value.code ? `${value.code} · ` : ''}${value.name}`,
                       }))}
                       value={selected}
-                      onChange={(value) => setExtraDims((current) => ({ ...current, [segment.key]: value ?? '' }))}
+                      onChange={(value) => setExtraDims((current) => ({ ...current, [segment.key]: value || null }))}
                       placeholder="—"
                     />
                   ) : (

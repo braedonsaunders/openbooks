@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
+import { CLEAR_SEGMENT, INHERIT_SEGMENT, segmentCellValue, segmentAssignmentsFromCells } from '../lib/segment-assignments'
 import {
   applyQtyPriceToRows,
+  asDocumentDoc,
   clearedDistributionFields,
   computeDocumentDrawerTotals,
   distributionFieldsOf,
@@ -58,6 +60,7 @@ const blankGridRow = () => ({
 test('only a truly blank placeholder row is blank', () => {
   assert.equal(isBlankDrawerLine(blankGridRow()), true)
   assert.equal(isBlankDrawerLine(row('', '')), true)
+  for (const value of [INHERIT_SEGMENT,CLEAR_SEGMENT]) assert.equal(isBlankDrawerLine({...blankGridRow(),seg_optional:value}),true)
   // An account alone is content: it rides to the server, which refuses the
   // missing amount by line name.
   assert.equal(isBlankDrawerLine(row('a', '   ')), false)
@@ -301,4 +304,12 @@ test('currency proof passes matching, unrestricted, unknown, and blank accounts'
   // Unknown accounts stay the server's call (fail open); blanks never judge.
   assert.equal(findCurrencyMismatchedAccount('USD', refs, restrictions), null)
   assert.equal(findCurrencyMismatchedAccount('', refs, restrictions), null)
+})
+
+test('optional dimension editor round-trips inherited, cleared and selected decisions', () => {
+  const cells={seg_inherited:segmentCellValue({},'inherited'),seg_cleared:segmentCellValue({cleared:null},'cleared'),seg_selected:segmentCellValue({selected:'native-value'},'selected')}
+  assert.deepEqual(segmentAssignmentsFromCells(cells,['inherited','cleared','selected']),{cleared:null,selected:'native-value'})
+  assert.deepEqual(asDocumentDoc({extra_dims:{cleared:null,selected:'native-value'}}).extra_dims,{cleared:null,selected:'native-value'},'reopening the header preserves an explicit blank')
+  assert.deepEqual(segmentAssignmentsFromCells({seg_selected:INHERIT_SEGMENT},['selected']),{})
+  assert.deepEqual(segmentAssignmentsFromCells({seg_selected:''},['selected']),{selected:null})
 })

@@ -65,7 +65,7 @@ export interface EntryLineInput {
   classId?: string | null;
   subsidiaryId?: string | null;
   stockLocationId?: string | null;
-  extraDims?: Record<string, string>;
+  extraDims?: Record<string, string | null>;
   custom?: Record<string, unknown>;
   isBillable?: boolean | null;
   /**
@@ -88,7 +88,7 @@ export interface EntryDocumentContext {
   locationId?: string | null;
   classId?: string | null;
   subsidiaryId?: string | null;
-  extraDims?: Record<string, string>;
+  extraDims?: Record<string, string | null>;
   /** Stored groups collapsing back to one line each. */
   unsplitDistributionGroups?: string[];
 }
@@ -113,7 +113,7 @@ export interface PlannedEntryLine {
   classId: string | null;
   subsidiaryId: string | null;
   stockLocationId: string | null;
-  extraDims: Record<string, string>;
+  extraDims: Record<string, string | null>;
   custom: Record<string, unknown>;
   isBillable: boolean | null;
   distributionGroupId: string | null;

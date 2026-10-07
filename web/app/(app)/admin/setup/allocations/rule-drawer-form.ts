@@ -343,7 +343,7 @@ export function targetToLine(target: {
   classId?: string | null
   projectId?: string | null
   subsidiaryId?: string | null
-  extraDims?: Record<string, string>
+  extraDims?: Record<string, string | null>
   fixedPercent?: string | null
   weight?: string | null
   isRemainder?: boolean
@@ -381,7 +381,7 @@ export function mergeLinesToTargets(
     id?: string
     sequence?: number
     subsidiaryId?: string | null
-    extraDims?: Record<string, string>
+    extraDims?: Record<string, string | null>
     label?: string | null
   }[],
   lines: AllocationLine[],
@@ -429,7 +429,7 @@ export function testLinePayload(form: {
   for (const [key, value] of Object.entries(form.dims)) {
     if (value !== undefined && value !== '') {
       if (key.startsWith('extra:')) {
-        const extraDims = (body['extraDims'] ?? {}) as Record<string, string>
+        const extraDims = (body['extraDims'] ?? {}) as Record<string, string | null>
         extraDims[key.slice(6)] = value
         body['extraDims'] = extraDims
       } else body[key] = value

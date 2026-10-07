@@ -175,7 +175,9 @@
     "defaultForm": "Formulaire par défaut",
     "asOf": "Au",
     "unknownValue": "Valeur inconnue",
-    "loading": "Chargement…"
+    "loading": "Chargement…",
+    "inheritHeader": "Utiliser la valeur d’en-tête",
+    "noDimensionValue": "Aucune valeur de dimension"
   },
   "status": {
     "draft": "Brouillon",

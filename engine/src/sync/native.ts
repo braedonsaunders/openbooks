@@ -33,7 +33,7 @@ export interface NativeDocLine {
   departmentId: string | null;
   projectId: string | null;
   /** Resolved custom segment value ids keyed by segment definition key. */
-  extraDims?: Record<string, string>;
+  extraDims?: Record<string, string | null>;
   /** Optional legal-entity override (advanced intercompany journals). */
   subsidiaryId?: string | null;
   description: string | null;
@@ -111,7 +111,7 @@ export interface NativeDocument {
   /** Per-document AR/AP/card control override (stored in custom). */
   controlAccountId: string | null;
   /** Header defaults for registry-defined custom segments. */
-  extraDims?: Record<string, string>;
+  extraDims?: Record<string, string | null>;
   /** Non-posting docs carry their totals (posting docs derive from the entry). */
   subtotal?: string;
   total?: string;

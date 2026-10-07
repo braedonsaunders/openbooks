@@ -48,7 +48,7 @@ export function glLineKey(line: {
   locationId?: string | null;
   classId?: string | null;
   equipmentUnitId?: string | null;
-  extraDims?: Record<string, string> | null;
+  extraDims?: Record<string, string | null> | null;
   taxCodeId?: string | null;
   paymentCardId?: string | null;
   dueDate?: string | null;

@@ -1,5 +1,7 @@
 'use client'
 
+import { CLEAR_SEGMENT, INHERIT_SEGMENT, segmentCellValue, segmentAssignmentsFromCells } from '@/lib/segment-assignments'
+
 import { useMoney } from '@/components/money-provider'
 import { initialDrawerMode, type DrawerMode } from '@/lib/drawer-mode'
 import { useLayoutEffect, useMemo, useRef, useState } from 'react'
@@ -156,7 +158,7 @@ export interface OrderDoc extends Record<string, unknown> {
   party_id: string | null
   party_name: string | null
   document_number: string | null
-  extra_dims: Record<string, string>
+  extra_dims: Record<string, string | null>
 }
 
 /** Narrow the engine loader's untyped document row to the header fields
@@ -166,11 +168,11 @@ export interface OrderDoc extends Record<string, unknown> {
 export function asOrderDoc(raw: Record<string, unknown>): OrderDoc {
   const text = (value: unknown): string | null =>
     typeof value === 'string' ? value : null
-  const dims = (value: unknown): Record<string, string> => {
+  const dims = (value: unknown): Record<string, string | null> => {
     if (!isLineMap(value)) return {}
     return Object.fromEntries(
       Object.entries(value).filter(
-        (entry): entry is [string, string] => typeof entry[1] === 'string',
+        (entry): entry is [string, string | null] => entry[1] === null || typeof entry[1] === 'string',
       ),
     )
   }
@@ -343,7 +345,7 @@ const emptyLine = (segments: SegmentOption[] = []): LineRow => ({
   stockLocationId: '',
   loadedPrice: null,
   promotionCode: '',
-  ...Object.fromEntries(segments.map((segment) => [`seg_${segment.key}`, ''])),
+  ...Object.fromEntries(segments.map((segment) => [`seg_${segment.key}`, INHERIT_SEGMENT])),
 })
 
 /** Line text columns are uuids/text-or-null; numerics are handled with String(). */
@@ -388,12 +390,7 @@ function projectLine(r: LineRow, segments: SegmentOption[]): Record<string, unkn
     departmentId: r.departmentId || null,
     projectId: r.projectId || null,
     stockLocationId: r.stockLocationId || null,
-    extraDims: Object.fromEntries(
-      segments
-        .filter((segment) => segment.showOnLines)
-        .map((segment) => [segment.key, r[`seg_${segment.key}`]])
-        .filter(([, value]) => value !== '' && value != null),
-    ),
+    extraDims: segmentAssignmentsFromCells(r, segments.map(segment => segment.key)),
   }
 }
 
@@ -416,7 +413,7 @@ function toRow(l: Record<string, unknown>, segments: SegmentOption[]): LineRow {
     stockLocationId: lineText(l.stock_location_id),
     loadedPrice: loadedPriceOf(l),
     promotionCode: lineText(l.promotion_code),
-    ...Object.fromEntries(segments.map((segment) => [`seg_${segment.key}`, extraDims?.[segment.key] ?? ''])),
+    ...Object.fromEntries(segments.map((segment) => [`seg_${segment.key}`, segmentCellValue(extraDims, segment.key)])),
   }
 }
 
@@ -554,7 +551,7 @@ export function OrderDrawer({
   const [departmentId, setDepartmentId] = useState<string>(doc.department_id ?? '')
   const [projectId, setProjectId] = useState<string>(doc.project_id ?? '')
   const [subsidiaryId, setSubsidiaryId] = useState<string>(doc.subsidiary_id ?? '')
-  const [extraDims, setExtraDims] = useState<Record<string, string>>(doc.extra_dims ?? {})
+  const [extraDims, setExtraDims] = useState<Record<string, string | null>>(doc.extra_dims ?? {})
   const [rows, setRows] = useState<LineRow[]>(
     order.lines.length > 0 ? order.lines.map((line) => toRow(line, segments)) : [emptyLine(segments)],
   )
@@ -1461,7 +1458,7 @@ export function OrderDrawer({
           label: segment.name,
           width: 'minmax(150px,1.2fr)',
           type: 'search-select',
-          options: segment.values.map((value) => ({ value: value.id, label: value.name })),
+          options: [{ value: INHERIT_SEGMENT, label: tCommon('labels.inheritHeader') }, { value: CLEAR_SEGMENT, label: tCommon('labels.noDimensionValue') }, ...segment.values.map((value) => ({ value: value.id, label: value.name }))],
           placeholder: '—',
         })),
       ]
@@ -1811,7 +1808,7 @@ export function OrderDrawer({
                     <SearchSelect
                       options={segment.values.map((value) => ({ value: value.id, label: value.name }))}
                       value={selected}
-                      onChange={(value) => setExtraDims((current) => ({ ...current, [segment.key]: value ?? '' }))}
+                      onChange={(value) => setExtraDims((current) => ({ ...current, [segment.key]: value || null }))}
                       placeholder="—"
                       clearable
                     />

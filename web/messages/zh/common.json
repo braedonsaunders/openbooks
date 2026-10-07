@@ -175,7 +175,9 @@
     "defaultForm": "默认表单",
     "asOf": "截至",
     "unknownValue": "未知值",
-    "loading": "加载中…"
+    "loading": "加载中…",
+    "inheritHeader": "使用单据头的值",
+    "noDimensionValue": "不设置维度值"
   },
   "status": {
     "draft": "草稿",

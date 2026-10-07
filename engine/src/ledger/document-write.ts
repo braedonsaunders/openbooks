@@ -896,9 +896,7 @@ async function planDocumentEntryAllocations(args: {
     classId: l.classId ?? null,
     subsidiaryId: null,
     stockLocationId: l.stockLocationId ?? null,
-    extraDims: Object.fromEntries(
-      Object.entries(l.extraDims ?? {}).filter(([, v]) => v !== null && v !== undefined),
-    ) as Record<string, string>,
+    extraDims: { ...(l.extraDims ?? {}) },
     custom: l.custom ?? {},
     isBillable: null,
     distributionKey: l.distributionKey ?? null,
@@ -1235,7 +1233,7 @@ export async function applyDocumentEdit(
   // distribution stamps rely on). Null = new line.
   let submittedLineKeys: (string | null)[] | null = null
   let preparedLines:
-    | { accountId: string; itemId: string | null; description: string | null; quantity: string | null; unit: string | null; unitPrice: string | null; amount: string; taxCodeId: string | null; taxGroupId: string | null; taxInputAmount: string; taxAmount: string; taxOverridden: boolean; taxComponents: ReturnType<typeof computeBillTotals>['lines'][number]['taxComponents']; nativeGoodsTax?: GoodsTaxSnapshot; providerQuote?: ReturnType<typeof computeBillTotals>['lines'][number]['providerQuote']; marketplaceFacilitator: string | null; partyId: string | null; departmentId: string | null; projectId: string | null; locationId: string | null; classId: string | null; stockLocationId: string | null; extraDims: Record<string, string>; custom: Record<string, unknown>; distributionGroupId: string | null; distributionRuleId: string | null; distributionVersionId: string | null; distributionLocked: boolean }[]
+    | { accountId: string; itemId: string | null; description: string | null; quantity: string | null; unit: string | null; unitPrice: string | null; amount: string; taxCodeId: string | null; taxGroupId: string | null; taxInputAmount: string; taxAmount: string; taxOverridden: boolean; taxComponents: ReturnType<typeof computeBillTotals>['lines'][number]['taxComponents']; nativeGoodsTax?: GoodsTaxSnapshot; providerQuote?: ReturnType<typeof computeBillTotals>['lines'][number]['providerQuote']; marketplaceFacilitator: string | null; partyId: string | null; departmentId: string | null; projectId: string | null; locationId: string | null; classId: string | null; stockLocationId: string | null; extraDims: Record<string, string | null>; custom: Record<string, unknown>; distributionGroupId: string | null; distributionRuleId: string | null; distributionVersionId: string | null; distributionLocked: boolean }[]
     | null = null
   if (body.lines) {
     // Charge lines are NOT editable through the generic line editor, and this
@@ -1592,7 +1590,7 @@ export async function applyDocumentEdit(
 
       const effectiveHeaderDims = headerDims?.cleaned ?? (
         locked.extraDims && typeof locked.extraDims === 'object' && !Array.isArray(locked.extraDims)
-          ? locked.extraDims as Record<string, string>
+          ? locked.extraDims as Record<string, string | null>
           : {}
       )
       const headerNeedsDimensionCheck =
@@ -1610,7 +1608,7 @@ export async function applyDocumentEdit(
           if (error) throw new DocumentEditError(422, `Line ${index + 1}: ${error}`)
         }
       } else if (body.subsidiaryId !== undefined && body.subsidiaryId !== locked.subsidiaryId) {
-        const existingDims = (await tx.execute<{ extra_dims: Record<string, string> | null }>(sql`
+        const existingDims = (await tx.execute<{ extra_dims: Record<string, string | null> | null }>(sql`
           select extra_dims from document_lines
            where org_id = ${orgId} and document_id = ${id}
            order by line_number

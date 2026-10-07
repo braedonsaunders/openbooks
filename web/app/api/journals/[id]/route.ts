@@ -244,7 +244,7 @@ export const PATCH = defineRoute({
     // fields and segments are org-configured and validated against live defs.
     // journal totals = sum of debits (positive line amounts); tax never applies
     let totalDebits: string | null = null
-    let preparedLines: { accountId: string; description: string | null; amount: string; partyId: string | null; departmentId: string | null; projectId: string | null; subsidiaryId: string | null; extraDims: Record<string, string>; custom: Record<string, unknown> }[] | null = null
+    let preparedLines: { accountId: string; description: string | null; amount: string; partyId: string | null; departmentId: string | null; projectId: string | null; subsidiaryId: string | null; extraDims: Record<string, string | null>; custom: Record<string, unknown> }[] | null = null
     if (body.lines) {
       const submitted = body.lines
       totalDebits = sum(submitted.map((line) => (toUnits(line.amount) > 0n ? line.amount : '0')))
@@ -348,7 +348,7 @@ export const PATCH = defineRoute({
           const targetSubsidiaryId = body.subsidiaryId ?? locked.subsidiaryId
           const effectiveHeaderDims = headerDims?.cleaned ?? (
             locked.extraDims && typeof locked.extraDims === 'object' && !Array.isArray(locked.extraDims)
-              ? locked.extraDims as Record<string, string>
+              ? locked.extraDims as Record<string, string | null>
               : {}
           )
           const headerNeedsDimensionCheck =
@@ -370,7 +370,7 @@ export const PATCH = defineRoute({
           } else if (body.subsidiaryId !== undefined && body.subsidiaryId !== locked.subsidiaryId) {
             const existingDims = (await tx.execute<{
               subsidiary_id: string | null
-              extra_dims: Record<string, string> | null
+              extra_dims: Record<string, string | null> | null
             }>(sql`
               select subsidiary_id, extra_dims from document_lines
                where org_id = ${user.orgId} and document_id = ${id}
