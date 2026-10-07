@@ -72,6 +72,10 @@ type Harness = Awaited<ReturnType<typeof setupBaseHarness<typeof SETTLE_SPEC>>>;
 async function setupHarness(spec: typeof SETTLE_SPEC): Promise<Harness> {
   installEngineSeams();
   const h = await setupBaseHarness(spec);
+  // These settlements and their posted source facts are denominated in USD.
+  // Declare that employer currency before native program authoring checks it.
+  await db.execute(sql`update subsidiaries set base_currency='USD'
+    where org_id=${h.org.orgId} and id=${h.org.subsidiaryId}`);
   await seedApprovalFlow(h.org.orgId, { subjectKind: "hrm_benefit_award",
     assignees: [{ type: "user", userId: h.approverId }], mode: "any", preventSelfApproval: true });
   return h;
