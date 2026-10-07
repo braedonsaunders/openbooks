@@ -617,7 +617,14 @@ export function SetupDrawer({
         </p>
       ) : null}
       {steps.length ? <div className="mb-5 space-y-3">
-        <FormSteps steps={[...steps.map((step) => ({ key: step.key, label: t(step.titleKey) })), ...(!entity.recordSections ? [{ key: 'review', label: t('benefitBuilder.review') }] : [])]} current={stepIndex} onChange={setStepIndex} label={entityTitle} />
+        {entity.recordSections ? (
+          <RecordTabs label={entityTitle} tabs={steps.map(step => ({ key: step.key, label: t(step.titleKey) }))} active={currentStep?.key ?? steps[0]!.key} onChange={key => {
+            const index = steps.findIndex(step => step.key === key)
+            if (index >= 0) setStepIndex(index)
+          }} />
+        ) : (
+          <FormSteps steps={[...steps.map((step) => ({ key: step.key, label: t(step.titleKey) })), { key: 'review', label: t('benefitBuilder.review') }]} current={stepIndex} onChange={setStepIndex} label={entityTitle} />
+        )}
         {currentStep ? <div><h2 className="text-base font-semibold">{t(currentStep.titleKey)}</h2><p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{t(currentStep.descriptionKey)}</p></div> : null}
       </div> : null}
       <div className={entity.formSections ? "space-y-5" : undefined}>
