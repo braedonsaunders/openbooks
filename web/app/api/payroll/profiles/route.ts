@@ -63,7 +63,7 @@ const optionalPackCount = z.union([z.number(), z.string()]).nullable().optional(
 const profileUuid = (field: string) => z.preprocess(
   (value) => value === '' ? null : value,
   z.string({ error: `${field} must be a UUID; choose a saved payroll record` })
-    .uuid({ error: `${field} must be a UUID; choose a saved payroll record` })
+    .refine(isUuid, { error: `${field} must be a UUID; choose a saved payroll record` })
     .nullable()
     .optional(),
 )
@@ -72,9 +72,9 @@ const profileUuid = (field: string) => z.preprocess(
 const optionalProfileMoney = z.unknown().nullable().optional()
 const profileBodySchema = z.strictObject({
   employeePartyId: z.string({ error: 'employeePartyId must be a UUID; select an active employee in this organization' })
-    .uuid({ error: 'employeePartyId must be a UUID; select an active employee in this organization' }),
+    .refine(isUuid, { error: 'employeePartyId must be a UUID; select an active employee in this organization' }),
   payScheduleId: z.string({ error: 'payScheduleId must be a UUID; select an active payroll schedule' })
-    .uuid({ error: 'payScheduleId must be a UUID; select an active payroll schedule' }),
+    .refine(isUuid, { error: 'payScheduleId must be a UUID; select an active payroll schedule' }),
   country: z.string().optional(),
   province: z.string().optional(),
   labourJurisdiction: z.string().nullable().optional(),

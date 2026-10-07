@@ -83,18 +83,17 @@ test(
       routeState.authz = { user: { orgId: org.orgId, id: adminId }, allowedSubsidiaryIds: null };
 
       const key = randomUUID();
-      const created = await POST(
-        postRequest(key, {
-          displayName: "Acme Corp",
-          kind: "company",
-          roles: { customer: { enabled: true } },
-        }),
-      );
+      const subsidiaryId = randomUUID().replace(/^(.{14})./, "$1f");
+      await db.execute(sql`insert into subsidiaries(id,org_id,name,parent_id,base_currency,country)
+        values (${subsidiaryId},${org.orgId},'Rebased employer',${org.subsidiaryId},'CAD','CA')`);
+      const body = { displayName: "Acme Corp", kind: "company", subsidiaryId, roles: { customer: { enabled: true } } };
+      const created = await POST(postRequest(key, body));
       assert.equal(created.status, 201);
-      const payload = (await created.json()) as { party: { id: string; display_name: string; is_active: boolean } };
+      const payload = (await created.json()) as { party: { id: string; display_name: string; is_active: boolean; subsidiary_id: string } };
       assert.equal(payload.party.id, key);
       assert.equal(payload.party.display_name, "Acme Corp");
       assert.equal(payload.party.is_active, true);
+      assert.equal(payload.party.subsidiary_id, subsidiaryId, "a rebased PostgreSQL UUID remains an owned reference");
 
       const role = (
         await db.execute<{ party_id: string }>(sql`
@@ -109,13 +108,7 @@ test(
       assert.equal(audits[0]?.actor_id, adminId, "the audit row carries the actor");
 
       // Same request replays to the same party without a second audit event.
-      const replay = await POST(
-        postRequest(key, {
-          displayName: "Acme Corp",
-          kind: "company",
-          roles: { customer: { enabled: true } },
-        }),
-      );
+      const replay = await POST(postRequest(key, body));
       assert.equal(replay.status, 200);
       assert.equal((await auditInserts(org.orgId, key)).length, 1, "a replay writes no second audit row");
 
