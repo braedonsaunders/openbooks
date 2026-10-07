@@ -156,7 +156,9 @@ export const PATCH = defineRoute({
     const params = Promise.resolve(routeParams);
     const { id } = await params
     if (!isUuid(id)) return notFound("record")
-    const parsedBody = await parseJsonBody(request, requestBodySchema);
+    // Review-field refusals retain the established 422 contract. Malformed
+    // JSON still fails at the shared parser's 400 boundary.
+    const parsedBody = await parseJsonBody(request, requestBodySchema, { status: 422 });
     if (!parsedBody.ok) return parsedBody.response;
     const body = parsedBody.data
     // Mandatory optimistic-concurrency evidence (same contract as document,
