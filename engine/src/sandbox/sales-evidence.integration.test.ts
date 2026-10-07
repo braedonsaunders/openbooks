@@ -6,6 +6,8 @@ import { db, withMaintenanceTransaction, withOrgTransaction } from "../platform/
 import { installEngineSeams } from "../composition/install.ts";
 import { ensureCrmDefaults } from "../crm/crm.ts";
 import { postDocument } from "../ledger/posting-document.ts";
+import { createPaymentDocument, updateDraftPayment } from "../payments/payment-documents.ts";
+import { postPaymentWithApplications } from "../payments/payment-posting.ts";
 import { createScratchOrg, createScratchUser, dropScratchOrg } from "../testing/fixtures.ts";
 import { enableFeatures } from "../testing/hrm-harness.ts";
 import { errorChainMatches } from "../testing/error-chain.ts";
@@ -44,6 +46,24 @@ for (const masked of [false, true]) test(`${masked ? "masked" : "full"} sandbox 
     await db.execute(sql`update documents set status='approved' where org_id=${org.orgId} and id=${invoice}`);
     await postDocument(invoice, { control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank } });
     assert.equal((await db.execute<{ status: string }>(sql`select status from documents where org_id=${org.orgId} and id=${invoice}`)).rows[0]!.status, "posted");
+    const openLine = (await db.execute<{ id: string }>(sql`select id from journal_lines
+      where org_id=${org.orgId} and entry_id=(select posted_entry_id from documents where id=${invoice})
+        and is_open_item`)).rows[0]!.id;
+    const payment = await createPaymentDocument({ allowedSubsidiaryIds: null, orgId: org.orgId,
+      kind: "customer_payment", createdBy: actor, partyId: org.customerId, bankAccountId: org.accounts.bank,
+      subsidiaryId: org.subsidiaryId, documentDate: org.date, currency: "CAD", fxRate: "1" });
+    await updateDraftPayment(payment.id, { bankAccountId: org.accounts.bank, allocations: [{ openLineId: openLine,
+      sourceTransactionAmount: "40", targetTransactionAmount: "40", settlementRate: "1",
+      settlementRateSource: "same_currency", settlementRateReference: "Recorded partial settlement" }] },
+      actor, org.orgId, { allowedSubsidiaryIds: null });
+    assert.equal((await db.execute(sql`update documents set status='approved',submitted_by=${actor},submitted_at=now()
+      where org_id=${org.orgId} and id=${payment.id} returning id`)).rows.length, 1);
+    await postPaymentWithApplications(payment.id, undefined, actor);
+    const originalSettlement = (await db.execute<{ facts: unknown }>(sql`select to_jsonb(a) as facts
+      from applications a where org_id=${org.orgId} order by id`)).rows;
+    assert.equal(originalSettlement.length, 1);
+    assert.equal((await db.execute<{ balance: string }>(sql`select open_balance::text as balance
+      from documents where org_id=${org.orgId} and id=${invoice}`)).rows[0]!.balance, "60.1200");
     // Today's customer assignment must not reinterpret a posted invoice
     // whose original sales attribution was unassigned.
     const representative = randomUUID();
@@ -116,6 +136,20 @@ for (const masked of [false, true]) test(`${masked ? "masked" : "full"} sandbox 
         from documents where org_id=${org.orgId} and id=${invoice}`)).rows, documentFacts);
       assert.equal(actual.length, 5, "copying source records must not mint additional sales events");
       assert.deepEqual(actual, expected, "amounts, effective dates, revisions, creators, timestamps and reversal links preserve recorded history");
+      const copiedSettlement = (await db.execute<{ facts: unknown }>(sql`select to_jsonb(a) as facts
+        from applications a where org_id=${target} order by id`)).rows;
+      const expectedSettlement = (await db.execute<{ facts: unknown }>(sql`select to_jsonb(a)||jsonb_build_object(
+        'id',ob_rebase(a.id,o.sandbox_seed),'org_id',o.id,
+        'from_line_id',ob_rebase(a.from_line_id,o.sandbox_seed),'to_line_id',ob_rebase(a.to_line_id,o.sandbox_seed),
+        'fx_gain_loss_entry_id',ob_rebase(a.fx_gain_loss_entry_id,o.sandbox_seed),
+        'settlement_fx_rate_id',ob_rebase(a.settlement_fx_rate_id,o.sandbox_seed)) as facts
+        from applications a join orgs o on o.sandbox_of=a.org_id where o.id=${target}
+        order by ob_rebase(a.id,o.sandbox_seed)`)).rows;
+      assert.deepEqual(copiedSettlement, expectedSettlement,
+        "settlement amounts, currencies, dates, actors and soft-reversal state retain exact recorded evidence");
+      assert.deepEqual((await db.execute<{ facts: unknown }>(sql`select to_jsonb(a) as facts
+        from applications a where org_id=${org.orgId} order by id`)).rows, originalSettlement);
+
       assert.deepEqual(await sourceEvidence(), original);
       assert.equal((await db.execute<{ status: string }>(sql`select status from sandboxes where id=${created.sandboxId}`)).rows[0]!.status, "ready");
     };
@@ -132,6 +166,35 @@ for (const masked of [false, true]) test(`${masked ? "masked" : "full"} sandbox 
         where d.org_id=${target} and d.id=ob_rebase(${invoice}::uuid,o.sandbox_seed)`)).rows[0]!;
       assert.deepEqual(matches, { original: true, altered_balance: false, altered_attribution: false },
         "privileged copying admits exact history and refuses substituted balances or current attribution");
+    });
+    await withMaintenanceTransaction(null, async () => {
+      await cloneFlags();
+      const line = (await db.execute<{ exact: boolean; changed_amount: boolean; changed_identity: boolean; foreign_org: boolean; unsupported_relation: boolean }>(sql`select
+        document_balance_clone_child_matches(d,'journal_lines'::regclass,to_jsonb(l)) as exact,
+        document_balance_clone_child_matches(d,'journal_lines'::regclass,to_jsonb(l)||jsonb_build_object('txn_amount',l.txn_amount+1)) as changed_amount,
+        document_balance_clone_child_matches(d,'journal_lines'::regclass,to_jsonb(l)||jsonb_build_object('id',${randomUUID()}::uuid)) as changed_identity,
+        document_balance_clone_child_matches(d,'journal_lines'::regclass,to_jsonb(l)||jsonb_build_object('org_id',${randomUUID()}::uuid)) as foreign_org,
+        document_balance_clone_child_matches(d,'documents'::regclass,to_jsonb(l)) as unsupported_relation
+        from documents d join journal_lines l on l.org_id=d.org_id and l.entry_id=d.posted_entry_id
+        join orgs o on o.id=d.org_id where d.org_id=${target} and d.id=ob_rebase(${invoice}::uuid,o.sandbox_seed)
+        and l.is_open_item`)).rows[0]!;
+      assert.deepEqual(line, { exact: true, changed_amount: false, changed_identity: false, foreign_org: false, unsupported_relation: false });
+      const settlement = (await db.execute<{ exact: boolean; changed_amount: boolean; changed_endpoint: boolean }>(sql`select
+        document_balance_clone_child_matches(d,'applications'::regclass,to_jsonb(a)) as exact,
+        document_balance_clone_child_matches(d,'applications'::regclass,to_jsonb(a)||jsonb_build_object('target_transaction_amount',a.target_transaction_amount+1)) as changed_amount,
+        document_balance_clone_child_matches(d,'applications'::regclass,to_jsonb(a)||jsonb_build_object('to_line_id',${randomUUID()}::uuid)) as changed_endpoint
+        from documents d join journal_lines l on l.org_id=d.org_id and l.entry_id=d.posted_entry_id
+        join applications a on a.org_id=l.org_id and a.to_line_id=l.id join orgs o on o.id=d.org_id
+        where d.org_id=${target} and d.id=ob_rebase(${invoice}::uuid,o.sandbox_seed)`)).rows[0]!;
+      assert.deepEqual(settlement, { exact: true, changed_amount: false, changed_endpoint: false });
+    });
+    await withOrgTransaction(target, async () => {
+      await cloneFlags();
+      assert.equal((await db.execute<{ matches: boolean }>(sql`select document_balance_clone_child_matches(
+        d,'journal_lines'::regclass,to_jsonb(l)) as matches from documents d
+        join journal_lines l on l.org_id=d.org_id and l.entry_id=d.posted_entry_id
+        join orgs o on o.id=d.org_id where d.org_id=${target} and d.id=ob_rebase(${invoice}::uuid,o.sandbox_seed)
+        and l.is_open_item`)).rows[0]!.matches, false, "ordinary forged flags do not grant historical balance-copy authority");
     });
     const beforeTarget = (await db.execute(sql`select * from crm_sales_evidence where org_id=${target} order by id`)).rows;
     // Preserve every other recorded fact so each substitution tests its own refusal.
@@ -175,6 +238,15 @@ for (const masked of [false, true]) test(`${masked ? "masked" : "full"} sandbox 
       where org_id=${target} and event_kind='reversal' and source_id=${identities.opportunity}`)).rows[0]!.count, 1);
     assert.deepEqual((await db.execute(sql`select * from crm_sales_evidence where org_id=${target}
       and id in (${sql.join(beforeTarget.map(row => sql`${row.id}`), sql`,`)}) order by id`)).rows, beforeTarget);
+    await withMaintenanceTransaction(null, async () => {
+      await cloneFlags();
+      assert.equal((await db.execute(sql`update applications set unapplied_at=clock_timestamp()
+        where org_id=${target} and unapplied_at is null returning id`)).rows.length, 1);
+    });
+    assert.equal((await db.execute<{ balance: string }>(sql`select d.open_balance::text as balance
+      from documents d join orgs o on o.id=d.org_id where d.org_id=${target}
+      and d.id=ob_rebase(${invoice}::uuid,o.sandbox_seed)`)).rows[0]!.balance, "100.1200",
+      "ordinary unapplication still refreshes the balance under privileged clone flags");
     await refreshSandbox(created.sandboxId, { keepCustomizations: false, authority: { actorId: actor } });
     await assertCopy();
     await deleteSandbox(created.sandboxId, { actorId: actor });
