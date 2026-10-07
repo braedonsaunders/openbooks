@@ -74,6 +74,7 @@ const moduleMocks: Record<string, string> = {
 };
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
+    if (specifier === "./config" && !context.parentURL?.startsWith(new URL("./", import.meta.url).href)) return nextResolve(specifier, context);
     if (moduleMocks[specifier]) return { shortCircuit: true, url: moduleMocks[specifier] };
     return nextResolve(specifier, context);
   },

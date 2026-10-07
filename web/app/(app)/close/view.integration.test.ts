@@ -33,22 +33,6 @@ registerHooks({
   resolve(specifier, context, next) {
 
     if (specifier === 'next-intl/server') return virtual(translationsMock)
-    if (specifier === '@braedonsaunders/appkit-viewspec') return virtual(`
-      export const badge = () => ({});
-      export const column = () => ({});
-      export const field = {};
-      export const grid = () => ({});
-      export const page = () => ({});
-      export const pageHeader = () => ({});
-      export const pagination = () => ({});
-      export const ref = () => () => ({});
-      export const rootRef = () => () => ({});
-      export const table = () => ({});
-      export const text = () => ({});
-      export const widget = () => ({});
-      export const widgetBlock = () => ({});
-      export const widgetCell = () => ({});
-    `)
     if (specifier === '../../../lib/close-scope') return virtual(`
       export function guardCloseScope() { return null }
     `)
