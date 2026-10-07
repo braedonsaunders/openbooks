@@ -50,7 +50,8 @@ test("missing source decisions and malformed financial inputs refuse by identity
     [[{ ...fact("line-a", "10"), occurredOn: "2026-02-01" }], unlimited, /line-a.*outside/],
     [[{ ...fact("line-a", "10"), occurredOn: "2026-02-30" }], unlimited, /date for line-a.*real YYYY-MM-DD/],
     [[fact("credit-a", "-1")], unlimited, /credit-a.*adjusting award/],
-    [[fact("line-a", "1,234")], unlimited, /amount for line-a.*exact decimal/],
+    [[fact("line-a", "1,234")], unlimited, /amount for line-a.*ambiguous.*1234.*1\.234/],
+    [[{ ...fact("line-a", "1"), quantity: "12,34" }], unlimited, /quantity for line-a.*decimal point.*12,34.*12\.34/],
   ];
   for (const [facts, groups, message] of cases) assert.throws(() => computeTransactionIncentive(policy, facts, groups), message);
   assert.throws(() => computeTransactionIncentive({ ...policy, minorUnits: Number.NaN }, [], []), /registered.*minor units/);
