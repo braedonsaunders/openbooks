@@ -70,6 +70,9 @@ async function seedElections(org: Awaited<ReturnType<typeof createScratchOrg>>, 
       from hrm_benefit_enrollments e join worker_employments w on w.org_id=e.org_id and w.id=e.employment_id
       join hrm_benefit_contribution_rules r on r.org_id=e.org_id and r.plan_id=e.plan_id and r.kind='employee_deduction'
       where e.org_id=${org.orgId} and e.id=${elections[0]} returning id`)).rows.length, 1);
+    // Validate the retained row's deferred tenant references before restoring
+    // its INSERT guard; PostgreSQL refuses ALTER TABLE with pending events.
+    await db.execute(sql`set constraints all immediate`);
     await db.execute(sql`alter table hrm_benefit_payroll_inputs enable trigger benefit_monthly_queue_retired_trigger`);
   });
   return { elections, approverId };
