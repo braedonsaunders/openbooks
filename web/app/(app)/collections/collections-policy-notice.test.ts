@@ -27,6 +27,7 @@ stubModules({
   },
   features: true,
   extra: {
+    '../../../lib/custom-reports': `export async function builtInReportDefinitionId(orgId, slug) { if (orgId !== 'org-1' || slug !== 'collection-recovery-rate') throw new Error('unexpected report definition lookup'); return '00000000-0000-4000-8000-000000000001' }`,
     '@openbooks/engine/src/platform/db.ts': `export const db = { execute: async () => ({ rows: [] }) }`,
     '@openbooks/engine/platform/business-date': `export async function businessToday(){return '2026-10-05'}`,
     '@openbooks/engine/payments/autopay':
