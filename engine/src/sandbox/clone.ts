@@ -247,6 +247,14 @@ function generateCopySql(
       exprs.push(`ob_rebase("id", '${seed}')`);
     } else if (c.name === "org_id") {
       exprs.push(`'${sbx}'::uuid`);
+    } else if (c.isUuid && ["hrm_benefit_enrollments", "hrm_benefit_enrollment_terms", "hrm_benefit_payroll_inputs"].includes(t.name)) {
+      // Historical creator/elector fields can predate their tenant FKs.
+      // Keep the complete election graph, including its actor identities,
+      // on the same deterministic sandbox mapping as the guarded source row.
+      exprs.push(`(case when "${c.name}" is null then null else ob_rebase("${c.name}", '${seed}') end)`);
+    } else if (c.isUuid && ["flow_runs", "flow_gates"].includes(t.name) && ["created_by", "updated_by", "decided_by"].includes(c.name) && !fkTarget && !t.forceRebase.has(c.name)) {
+      exprs.push(`(case when "subject_kind"='hrm_benefit_enrollment' and "${c.name}" is not null ` +
+        `then ob_rebase("${c.name}", '${seed}') else "${c.name}" end)`);
     } else if (c.isUuid && fkTarget && retainedTenantTables.has(fkTarget)) {
       if (!c.isNullable) {
         throw new Error(
@@ -279,6 +287,15 @@ function generateCopySql(
       exprs.push("null");
     } else if (tableMask?.has(c.name)) {
       exprs.push(`${maskExpr(c.name, tableMask.get(c.name)!, "id", { ...c, tableName: t.name })} `);
+    } else if (t.name === "hrm_benefit_enrollments" && c.name === "submission_snapshot") {
+      exprs.push(`public.benefit_clone_submission_evidence("submission_snapshot", '${seed}'::uuid)`);
+    } else if (t.name === "hrm_benefit_enrollments" && c.name === "decision_snapshot") {
+      exprs.push(`public.benefit_clone_decision_evidence("decision_snapshot", '${seed}'::uuid)`);
+    } else if (t.name === "flow_runs" && c.name === "context") {
+      // The copied election and its pinned workflow must name the same
+      // sandbox plan, employment and contribution rules before any UPDATE.
+      exprs.push(`(case when "subject_kind"='hrm_benefit_enrollment' ` +
+        `then public.benefit_clone_submission_evidence("context", '${seed}'::uuid) else "context" end)`);
     } else if (opts.masked && (c.udtName === "jsonb" || c.udtName === "json") && c.name === "custom") {
       // Custom fields are arbitrary tenant-authored JSON and may contain PII
       // without a schema-level column for a masking policy to name. A masked

@@ -65,6 +65,12 @@ export function maskExpr(
       // Deterministic ±50% jitter, preserves sign and numeric type.
       return `(case when ${q} is null then null else round(${q} * (0.5 + (abs(hashtext(${idExpr}::text)) % 1000) / 1000.0), 4) end)`;
     case "null_out":
+      // An approved override must retain the presence of its reason alongside
+      // its approver and timestamp. Remove the prose without fabricating a
+      // missing approval or breaking the existing evidence constraint.
+      if (column?.tableName === "hrm_benefit_enrollment_terms" && col === "override_reason") {
+        return `(case when ${q} is null then null else 'REDACTED' end)`;
+      }
       // Historical compensation cycles require a source key and an object
       // together. Remove the employee evidence while retaining its presence;
       // native cycles without source evidence must remain without it.
