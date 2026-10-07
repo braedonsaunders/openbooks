@@ -724,7 +724,7 @@ export async function sentinelData(
       union all
       select 'anchors', null::uuid, null::text, null::text, null::text, null::text, null::text,
         null::int, null::text, null::text, null::int, null::jsonb,
-        func_ccy, ddate::text, func_amt::text, id, null::bigint, null::text
+        func_ccy, ddate::text, func_amt::text, id::text, null::bigint, null::text
       from ranked_members where rn_anchor = 1
     `)),
 
