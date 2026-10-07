@@ -458,7 +458,7 @@ test(
 );
 
 test(
-  "a single-subsidiary org bills exactly as before, stamped from its slice",
+  "a single-subsidiary remittance bill preserves its entity and names the filing account",
   { skip: !DB },
   async () => {
     const fx = await seedEntityOrg();
@@ -481,7 +481,8 @@ test(
          where org_id = ${fx.org.orgId} and id = ${bill.documentId}`)).rows[0]!;
       assert.equal(stamped.subsidiary_id, fx.org.subsidiaryId);
       assert.equal(stamped.currency, "CAD");
-      assert.equal(stamped.memo, "Payroll remittance 2026-07-01 – 2026-07-31");
+      assert.equal(stamped.memo, "Payroll remittance 2026-07-01 – 2026-07-31 · 123456789RP0092");
+      assert.equal(stamped.custom.payrollRemittance.filingAccountId, fx.filingAccountId);
       assert.equal(
         stamped.custom.payrollRemittance.subsidiaryId,
         fx.org.subsidiaryId,
