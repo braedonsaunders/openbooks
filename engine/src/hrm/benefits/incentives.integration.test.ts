@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { db } from "../../platform/db.ts";
+import { seedBenefitIncentivePosting as postEntry } from "../../testing/benefit-incentive-posting.ts";
 import { toUnits } from "../../money/money.ts";
 import { setupHarness, withHarness, grantPermissions, mkDepartment, seedEmployment, setFeatures, restrictRole, mkSecondSubsidiary } from "../../testing/hrm-harness.ts";
 import { BenefitsError } from "./errors.ts";
@@ -41,44 +42,6 @@ async function extraExpenseAccount(orgId: string): Promise<string> {
     values (${id}, ${orgId}, ${`X${number}_${id.slice(0, 4)}`}, 'Supplies', 'expense', false, true, false, false, '{}'::jsonb)
   `);
   return id;
-}
-
-async function postEntry(
-  h: Harness,
-  lines: ReadonlyArray<{ account: string; amount: string; department?: string | null; project?: string | null }>,
-  opts: { date?: string; status?: string; currency?: string; subsidiary?: string; periodId?: string } = {},
-): Promise<string> {
-  const entry = randomUUID();
-  const date = opts.date ?? "2026-07-15";
-  // Native posting order: draft header, then lines, then post — posted
-  // lines are immutable and the deferred balance guard sees the entry
-  // whole at commit. A requested draft status keeps the entry draft.
-  await db.transaction(async (tx) => {
-    await tx.execute(sql`
-      insert into journal_entries
-        (id, org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, status, origin)
-      values (${entry}, ${h.org.orgId}, ${h.org.bookId}, ${opts.subsidiary ?? h.org.subsidiaryId},
-              ${entry}, ${date}::date, ${opts.periodId ?? h.org.periodId}, 'draft', 'manual')
-    `);
-    let n = 0;
-    for (const line of lines) {
-      n += 1;
-      await tx.execute(sql`
-        insert into journal_lines
-          (org_id, entry_id, line_number, account_id, subsidiary_id, amount, currency,
-           txn_amount, fx_rate, department_id, project_id)
-        values (${h.org.orgId}, ${entry}, ${n}, ${line.account}, ${opts.subsidiary ?? h.org.subsidiaryId},
-                ${line.amount}, ${opts.currency ?? "USD"}, ${line.amount}, 1,
-                ${line.department ?? null}::uuid, ${line.project ?? null}::uuid)
-      `);
-    }
-    if ((opts.status ?? "posted") === "posted") {
-      await tx.execute(sql`
-        update journal_entries set status = 'posted', posted_at = now() where id = ${entry}
-      `);
-    }
-  });
-  return entry;
 }
 
 async function moneyConfig(h: Harness, overrides: Partial<MoneySourceConfig> = {}): Promise<MoneySourceConfig> {
