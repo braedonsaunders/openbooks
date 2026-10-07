@@ -1,69 +1,19 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { registerHooks } from "node:module";
 import test from "node:test";
 import { sql } from "drizzle-orm";
+import type { Authz } from "@/lib/authz-core";
+import { stubModules } from "../../../../../testing/stub-modules.ts";
 
 /**
  * The vendor compliance PATCH seals TINs and audits before/after evidence,
- * but it never checked the party's subsidiary against the caller's fence —
- * every sibling mutation (party PATCH, bank-account writes) refuses
- * out-of-scope parties as not-found. A subsidiary-restricted
- * compliance.manage holder could overwrite or clear the TIN and compliance
- * classification of a hidden-entity vendor. These cases invoke the real
- * route with a restricted fence.
+ * and refuses an out-of-scope party as not-found. These cases resolve the
+ * actual user's role grants and subsidiary fence before invoking the
+ * native route, without replacing its permission or scope predicates.
  */
-const stateKey = Symbol.for("openbooks.compliance-vendor-scope-test");
-interface RouteState {
-  authz: {
-    user: { orgId: string; id: string };
-    permissions: Set<string>;
-    allowedSubsidiaryIds: ReadonlySet<string> | null;
-  } | null;
-}
-const routeState: RouteState = { authz: null };
-;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
-
-const mockAuthz = `
-  const state = globalThis[Symbol.for('openbooks.compliance-vendor-scope-test')]
-  export async function guardPermission(_permission) {
-    if (!state.authz) return new Response(null, { status: 403 })
-    return state.authz
-  }
-  export function guardSubsidiaryScope(authz, subsidiaryId, opts = {}) {
-    const allowed = authz.allowedSubsidiaryIds
-    const orgWideNull = opts.orgWideNull === true
-    if (allowed === null) return null
-    if ((subsidiaryId === null || subsidiaryId === undefined) && orgWideNull) return null
-    if (typeof subsidiaryId === 'string' && allowed.has(subsidiaryId)) return null
-    return new Response(JSON.stringify({ error: 'not_found' }), { status: 404 })
-  }
-`;
-
-const mockCompliance = `
-  export async function guardComplianceFeature(_orgId) { return null }
-`;
-
-const hooks = registerHooks({
-  resolve(specifier, context, nextResolve) {
-    if (specifier === "@/lib/authz") return { url: "mock:compliance-scope-authz", shortCircuit: true };
-    if (specifier === "@/lib/compliance") return { url: "mock:compliance-scope-gate", shortCircuit: true };
-    if (specifier.startsWith("@openbooks/engine/")) {
-      const engineRoot = new URL("../../../../../../engine/", import.meta.url);
-      return nextResolve(new URL(specifier.slice("@openbooks/engine/".length), engineRoot).href, context);
-    }
-    return nextResolve(specifier, context);
-  },
-  load(url, context, nextLoad) {
-    if (url === "mock:compliance-scope-authz") {
-      return { format: "module", source: mockAuthz, shortCircuit: true };
-    }
-    if (url === "mock:compliance-scope-gate") {
-      return { format: "module", source: mockCompliance, shortCircuit: true };
-    }
-    return nextLoad(url, context)
-  },
-});
+// Node supplies no page-navigation environment; all authorization, feature,
+// subsidiary scope, parsing, persistence and audit machinery stays native.
+stubModules({ navigation: true });
 
 const routeUrl = "./route.ts?compliance-vendor-scope-test";
 const { PATCH } = (await import(routeUrl)) as typeof import("./route.ts");
@@ -71,20 +21,26 @@ const { db, withBypass, withOrgContext } = await import("@openbooks/engine/src/p
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import(
   "@openbooks/engine/src/testing/fixtures.ts",
 );
-hooks.deregister();
-
+const { resolveAuthzByUserId } = await import("@/lib/authz-core");
+const { withAuthzContext } = await import("@/lib/authz-context");
 
 interface Fixture {
   orgId: string;
   rootSubsidiaryId: string;
   hiddenPartyId: string;
   actorId: string;
+  authz: Authz | null;
 }
 
 async function seed(): Promise<Fixture> {
   return withBypass(async () => {
     const org = await createScratchOrg();
     const actorId = await createScratchUser(org.orgId, "Compliance Manager", "compliance_manager");
+    const feature = await db.execute<{ id: string }>(sql`
+      update orgs set settings = jsonb_set(settings, '{features}',
+        coalesce(settings->'features', '{}'::jsonb) || '{"subcontractorCompliance":true}'::jsonb)
+       where id = ${org.orgId} returning id`);
+    assert.equal(feature.rows.length, 1, "the native compliance feature must be enabled for this fixture");
     const branchId = randomUUID();
     const hiddenPartyId = randomUUID();
     await db.execute(sql`
@@ -104,31 +60,42 @@ async function seed(): Promise<Fixture> {
       values
         (${org.orgId}, ${hiddenPartyId}, '1099-MISC', 'individual',
          'sealed-original', '0000', 'ssn', false, false, ${actorId}, ${actorId})`);
-    return { orgId: org.orgId, rootSubsidiaryId: org.subsidiaryId, hiddenPartyId, actorId };
+    return { orgId: org.orgId, rootSubsidiaryId: org.subsidiaryId, hiddenPartyId, actorId, authz: null };
   });
 }
 
-function authorize(fixture: Fixture, allowedSubsidiaryIds: ReadonlySet<string> | null): void {
-  routeState.authz = {
-    user: { orgId: fixture.orgId, id: fixture.actorId },
-    permissions: new Set(["compliance.manage"]),
-    allowedSubsidiaryIds,
-  };
+async function authorize(fixture: Fixture, allowedSubsidiaryIds: ReadonlySet<string> | null): Promise<void> {
+  fixture.authz = await withOrgContext(fixture.orgId, async () => {
+    const restriction = allowedSubsidiaryIds === null
+      ? { mode: "all" }
+      : { mode: "list", subsidiaryIds: [...allowedSubsidiaryIds] };
+    const role = await db.execute<{ id: string }>(sql`
+      update app_roles set permissions = '["compliance.manage"]'::jsonb,
+        subsidiary_restriction = ${JSON.stringify(restriction)}::jsonb
+       where org_id = ${fixture.orgId} and key = 'compliance_manager' returning id`);
+    assert.equal(role.rows.length, 1, "the fixture must configure its assigned native role");
+    return resolveAuthzByUserId(fixture.orgId, fixture.actorId);
+  });
+  assert.ok(fixture.authz, "the native resolver must admit the active fixture actor");
+  assert.ok(fixture.authz.permissions.has("compliance.manage"));
+  assert.deepEqual(fixture.authz.allowedSubsidiaryIds, allowedSubsidiaryIds);
 }
 
 function patch(
   fixture: Fixture,
   body: unknown,
 ): Promise<Response> {
+  const authority = fixture.authz;
+  assert.ok(authority, "resolve the fixture actor's current authority before calling the route");
   return withOrgContext(fixture.orgId, () =>
-    PATCH(
+    withAuthzContext(authority, () => PATCH(
       new Request(`http://openbooks.test/api/compliance/vendors/${fixture.hiddenPartyId}`, {
         method: "PATCH",
         headers: { "content-type": "application/json" },
         body: JSON.stringify(body),
       }),
       { params: Promise.resolve({ partyId: fixture.hiddenPartyId }) },
-    ),
+    )),
   );
 }
 
@@ -146,7 +113,7 @@ test(
   async () => {
     const fixture = await seed();
     try {
-      authorize(fixture, new Set([fixture.rootSubsidiaryId]));
+      await authorize(fixture, new Set([fixture.rootSubsidiaryId]));
       const response = await patch(fixture, {
         tin: "222-33-4444",
         tinType: "ein",
@@ -156,7 +123,7 @@ test(
       assert.deepEqual(await tinState(fixture), { last4: "0000", type: "ssn" });
 
       // Unrestricted callers keep the established behavior.
-      authorize(fixture, null);
+      await authorize(fixture, null);
       const allowed = await patch(fixture, {
         tin: "222-33-4444",
         tinType: "ein",
@@ -165,7 +132,6 @@ test(
       assert.equal(allowed.status, 200);
       assert.deepEqual(await tinState(fixture), { last4: "4444", type: "ein" });
     } finally {
-      routeState.authz = null;
       await dropScratchOrg(fixture.orgId);
     }
   },
@@ -174,12 +140,11 @@ test(
 test(
   "a vendor TIN save audits secret-free before/after snapshots under the same lock",
   async () => {
-    // Replacement cover for the deleted source pin on the audit envelope:
-    // the route locks vendor_roles, snapshots tin_present/tin_last4 without
-    // ever persisting ciphertext, and answers with row identity alone.
+    // The route locks vendor_roles, snapshots tin_present/tin_last4 without
+    // persisting ciphertext, and answers with row identity alone.
     const fixture = await seed();
     try {
-      authorize(fixture, null);
+      await authorize(fixture, null);
       const response = await patch(fixture, {
         tin: "222-33-4444",
         tinType: "ein",
@@ -216,7 +181,6 @@ test(
         "the prior ciphertext is not persisted in the trail",
       );
     } finally {
-      routeState.authz = null;
       await dropScratchOrg(fixture.orgId);
     }
   },
