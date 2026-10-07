@@ -7,6 +7,7 @@ import { db, withOrgTransaction } from "../../platform/db.ts";
 import { DB, setupHarness, withHarness, seedEmployment, setFeatures } from "../../testing/hrm-harness.ts";
 import { createQualificationType, updateQualificationType } from "../qualifications/types.ts";
 import { verifyQualification } from "../qualifications/qualifications.ts";
+import { exportedSubjectEvidence } from "../../testing/dsar-fixture.ts";
 import { createTrainingCourse, transitionTrainingCourse, createTrainingSession, transitionTrainingSession, inviteTrainingParticipant,
   respondTrainingInvitation, completeTrainingParticipant, voidTrainingOutcome, getTrainingParticipant, listTrainingCourses, listOwnTraining,
   recordTrainingFeedback, getTrainingCourse, getTrainingSession } from "./store.ts";
@@ -99,7 +100,12 @@ test("session capacity is serialized, discarded invitations free a place, and un
 
 test("employee responses, feedback history and list context remain limited to the native linked employee", { skip: !DB }, async () => {
   await withHarness(setup, async f => {
-    const { participant } = await delivery(f);
+    const { participant, session } = await delivery(f, { start: false });
+    const other = await seedEmployment(f.org.orgId, f.org.subsidiaryId, { from: "2026-01-01" });
+    const neighbor = await inviteTrainingParticipant({ ...f.actor, id: randomUUID(), sessionId: session.id,
+      employmentId: other.employmentId, reason: "Separate employee invitation" });
+    await transitionTrainingSession({ ...f.actor, sessionId: session.id, expectedRevision: session.revision,
+      action: "start", reason: "Scheduled instruction began" });
     await assert.rejects(getTrainingParticipant({ ...f.actor, actorId: f.outsiderId, participantId: participant.id, audience: "self" }), /not found/);
     const own = await listOwnTraining({ ...f.actor, actorId: f.employeeId });
     assert.equal(own.length, 1); assert.equal(own[0]!.id, participant.id); assert.equal(own[0]!.sessionName, "January safety training");
@@ -114,6 +120,23 @@ test("employee responses, feedback history and list context remain limited to th
     assert.deepEqual(detail.feedback.map(row => row.rating), [4, 5]);
     await assert.rejects(recordTrainingFeedback({ ...firstInput, id: randomUUID(), rating: 3 }), /Feedback changed.*latest entry/);
     await assert.rejects(recordTrainingFeedback({ ...firstInput, id: randomUUID(), actorId: f.outsiderId }), /not found/);
+    const exported = await exportedSubjectEvidence({ orgId: f.org.orgId, actorId: f.authorId, partyId: f.employeePartyId }, ["qualifications"]);
+    const participants = exported.trainingParticipants as Record<string, unknown>[];
+    assert.deepEqual(participants.map(row => row.id), [participant.id]);
+    assert.equal(participants[0]!.attendance_seconds, 3600);
+    assert.equal(participants[0]!.score, 80);
+    assert.equal(participants[0]!.status, "completed");
+    assert.deepEqual((exported.trainingFeedback as Record<string, unknown>[]).map(row => row.rating).sort(), [4, 5]);
+    assert.equal((exported.trainingSessions as Record<string, unknown>[])[0]!.name, "January safety training");
+    assert.equal((exported.trainingCourses as Record<string, unknown>[])[0]!.name, "Workplace safety course");
+    for (const key of ["trainingParticipants", "trainingFeedback", "trainingSessions", "trainingCourses"]) {
+      for (const row of exported[key] as Record<string, unknown>[]) {
+        for (const column of ["org_id", "employment_id", "created_by", "updated_by", "author_party_id", "decided_by"]) {
+          assert.ok(!(column in row), `${key} must withhold operator and subject linkage ${column}`);
+        }
+      }
+    }
+    assert.ok(!JSON.stringify(participants).includes(neighbor.id), "the same session does not expose another learner");
   });
 });
 
