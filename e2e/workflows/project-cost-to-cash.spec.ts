@@ -574,8 +574,8 @@ function sovFinancialProfile(): Json {
         backupProfile: { required: false, defaultBackupType: 'none', allowedBackupTypes: ['none'] },
       });
       const typeId = str(typeRes.id, 'project type id');
-      const projDraft = await apiOk(page, 'POST', '/api/projects/draft', {});
-      const projectId = str(projDraft.id, 'project id');
+      const projDraft = await apiOk(page, 'POST', '/api/projects', { name: `${t} Civic Library Build`, isActive: false });
+      const projectId = str((projDraft.project as Json).id, 'project id');
       await apiOk(page, 'PATCH', `/api/projects/${projectId}`, {
         name: `${t} Civic Library Build`,
         code: `${t}-LIB`.toUpperCase().slice(0, 24),
