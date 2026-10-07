@@ -460,6 +460,12 @@ async function wipeSandbox(sandboxOrgId: string, tableNames: Set<string>): Promi
       }
     }
     const remove = async (name: string) => {
+      // Program identities belong to their native offerings. The three
+      // catalog foreign keys delete them through ON DELETE CASCADE after
+      // the offering is gone; direct deletion would correctly refuse while
+      // that offering still exists. Preserve identities for offerings that
+      // are outside this wipe's selected tables.
+      if (name === "hrm_benefit_catalog") return;
       const t = byName.get(name)!;
       if (t.hasOrgId) {
         await db.execute(sql`delete from ${sql.identifier(name)} where org_id = ${sandboxOrgId}`);
