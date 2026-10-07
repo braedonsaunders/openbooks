@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { isoDate } from "@/lib/api/json";
+import { isoDate, uuidId } from "@/lib/api/json";
 import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
@@ -18,7 +18,7 @@ import {
   weekWindow,
 } from "../_lib";
 const postBodySchema0 = z.strictObject({
-  employee: z.string().uuid("employee must be a valid id"),
+  employee: uuidId,
   week: isoDate("week must be a valid calendar date"),
 });
 

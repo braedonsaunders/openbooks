@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { isoDate } from "@/lib/api/json";
+import { isoDate, uuidId } from "@/lib/api/json";
 import { defineRoute } from "@/lib/api/route";
 import { notFound, unprocessable } from "@/lib/api/responses";
 import { NextResponse } from "next/server";
@@ -33,13 +33,13 @@ import {
   weekWindow,
 } from "./_lib";
 const saveBodySchema = z.strictObject({
-  employee: z.string().uuid("employee must be a valid id"),
+  employee: uuidId,
   week: isoDate("week must be a valid calendar date"),
   rows: z.array(z.strictObject({
-    projectId: z.string().uuid("projectId must be a valid id").nullable().optional(),
-    itemId: z.string().uuid("itemId must be a valid id").nullable().optional(),
-    timeTypeId: z.string().uuid("timeTypeId must be a valid id").nullable().optional(),
-    departmentId: z.string().uuid("departmentId must be a valid id").nullable().optional(),
+    projectId: uuidId.nullable().optional(),
+    itemId: uuidId.nullable().optional(),
+    timeTypeId: uuidId.nullable().optional(),
+    departmentId: uuidId.nullable().optional(),
     isBillable: z.boolean().optional(),
     memo: z.string().max(2000).nullable().optional(),
     hours: z.array(z.union([z.string(), z.number().finite(), z.null()])).length(7),

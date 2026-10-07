@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { defineRoute } from "@/lib/api/route";
-import { isoDate } from "@/lib/api/json";
+import { isoDate, uuidId } from "@/lib/api/json";
 import { apiErrorResponse } from "@/lib/api/error-response";
 import { NextResponse } from "next/server";
 import { isUuid } from "../../../../lib/list-params";
@@ -18,9 +18,9 @@ import {
 } from "../_lib";
 import { notFound } from "@/lib/api/responses";
 const postBodySchema0 = z.union([
-  z.strictObject({ entryId: z.string().uuid("entryId must be a valid id") }),
+  z.strictObject({ entryId: uuidId }),
   z.strictObject({
-    employee: z.string().uuid("employee must be a valid id"),
+    employee: uuidId,
     week: isoDate("week must be a valid calendar date"),
   }),
 ]);
