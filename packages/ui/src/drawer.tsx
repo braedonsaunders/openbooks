@@ -57,8 +57,9 @@ const SHEET_SPRING = { type: 'spring', damping: 32, stiffness: 320, mass: 0.8 } 
 // The sheet's leading top corner is turned down, like the hub sheets on
 // hover. The fold is fixed: it does not respond to the pointer, so the sheet
 // holds still while the reader works in it. The size is the fold's leg in
-// pixels.
-const FOLD = 28
+// pixels, kept inside the header's 24px inset so the corner never reaches
+// the title.
+const FOLD = 20
 const FOLD_CLIP = `polygon(${FOLD}px 0, 100% 0, 100% 100%, 0 100%, 0 ${FOLD}px)`
 
 let openDrawerCount = 0
