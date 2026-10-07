@@ -89,6 +89,7 @@ test('units, database shards and simulation run independently without omitted te
   assert.match(simulation, /harness --/)
   assert.match(simulation, /services:/)
   for (const job of ['unit', 'database', 'simulation']) {
+    assert.match(topLevelJob(job), /prepare-ci-apt\.sh "\$\{\{ runner\.environment \}\}"[\s\S]*apt-get update/)
     assert.match(
       topLevelJob(job),
       /if: github\.event_name == 'workflow_dispatch' && needs\.scope\.outputs\.code == 'true'/,
@@ -103,6 +104,7 @@ test('browser suites fan out and claim every workflow spec exactly once', () => 
   // minutes. Pinned so the fan-out stays a decision rather than drift.
   const app = topLevelJob('e2e-app')
   for (const job of ['e2e-app', 'e2e-workflows']) {
+    assert.match(topLevelJob(job), /prepare-ci-apt\.sh "\$\{\{ runner\.environment \}\}"[\s\S]*playwright install --with-deps chromium/)
     assert.match(
       topLevelJob(job),
       /if: github\.event_name == 'workflow_dispatch' && needs\.scope\.outputs\.browser == 'true'/,
