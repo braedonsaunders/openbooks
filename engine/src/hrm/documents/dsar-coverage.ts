@@ -1,7 +1,7 @@
 import type { DsarModule } from "./dsar.ts";
 
 /**
- * C-79 structural DSAR coverage: the personal-data inventory for HR
+ * Structural DSAR coverage: the personal-data inventory for HR
  * subject-access exports, derived from the live schema rather than a
  * hand-kept module list.
  *
@@ -66,6 +66,16 @@ export const DSAR_GATHERED_TABLES: readonly DsarGatheredTable[] = [
   { table: "crew_time_batch_lines", domain: "time", linkage: "direct" },
   { table: "timesheet_weeks", domain: "time", linkage: "direct" },
   { table: "field_ticket_labor_lines", domain: "time", linkage: "direct" },
+  { table: "hrm_shift_templates", domain: "time", linkage: "transitive" },
+  { table: "hrm_shift_assignments", domain: "time", linkage: "direct" },
+  { table: "hrm_shift_publications", domain: "time", linkage: "transitive" },
+  { table: "hrm_shifts", domain: "time", linkage: "direct" },
+  { table: "hrm_shift_requests", domain: "time", linkage: "direct" },
+  { table: "hrm_attendance_identities", domain: "time", linkage: "direct" },
+  { table: "hrm_attendance_events", domain: "time", linkage: "direct" },
+  { table: "hrm_attendance_observations", domain: "time", linkage: "direct" },
+  { table: "hrm_attendance_event_claims", domain: "time", linkage: "transitive" },
+  { table: "hrm_attendance_observation_events", domain: "time", linkage: "transitive" },
   { table: "hrm_reviews", domain: "reviews", linkage: "direct" },
   { table: "hrm_review_answers", domain: "reviews", linkage: "transitive" },
   { table: "hrm_goals", domain: "reviews", linkage: "direct" },
@@ -115,6 +125,8 @@ export const DSAR_GATHERED_TABLES: readonly DsarGatheredTable[] = [
   { table: "pay_run_holiday_assertions", domain: "payroll", linkage: "direct" },
   { table: "labor_cost_rates", domain: "payroll", linkage: "direct" },
   { table: "work_schedules", domain: "payroll", linkage: "direct" },
+  { table: "payroll_compensation_assignments", domain: "payroll", linkage: "direct" },
+  { table: "payroll_compensation_calculations", domain: "payroll", linkage: "direct" },
   { table: "hrm_candidates", domain: "recruiting", linkage: "direct" },
   { table: "hrm_candidate_consents", domain: "recruiting", linkage: "transitive" },
   { table: "hrm_applications", domain: "recruiting", linkage: "transitive" },
@@ -128,6 +140,10 @@ export const DSAR_GATHERED_TABLES: readonly DsarGatheredTable[] = [
   { table: "hrm_interview_panel", domain: "recruiting", linkage: "direct" },
   { table: "hrm_worker_qualifications", domain: "qualifications", linkage: "direct" },
   { table: "hrm_qualification_events", domain: "qualifications", linkage: "transitive" },
+  { table: "hrm_training_participants", domain: "qualifications", linkage: "direct" },
+  { table: "hrm_training_sessions", domain: "qualifications", linkage: "transitive" },
+  { table: "hrm_training_courses", domain: "qualifications", linkage: "transitive" },
+  { table: "hrm_training_feedback", domain: "qualifications", linkage: "transitive" },
   { table: "hrm_comp_statements", domain: "statements", linkage: "direct" },
   { table: "hrm_comp_cycle_lines", domain: "statements", linkage: "direct" },
   { table: "hrm_pay_information_requests", domain: "statements", linkage: "direct" },

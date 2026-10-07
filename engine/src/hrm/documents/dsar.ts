@@ -17,6 +17,7 @@ import { storeCabinetFile } from "./cabinet.ts";
 import { buildStoredZip, type ZipEntry } from "./zip-store.ts";
 import { decryptRespondentLink } from "../surveys/responses.ts";
 import { dsarCoverageManifest } from "./dsar-coverage.ts";
+import { gatherCompensationRecords, gatherTrainingRecords, gatherWorkRecords } from "./dsar-work-records.ts";
 
 /**
  * HR-19 data-subject (DSAR) exports.
@@ -947,6 +948,7 @@ export async function buildExport(orgId: string, exportId: string, opts?: { owne
     });
 
     await gather("time", async () => {
+      Object.assign(payload, await gatherWorkRecords(orgId, partyId, heldDataProjection));
       // Keyset-paginated (worked_on, id): a bare LIMIT would silently
       // truncate a long-serving worker's history while the export still
       // reports ready. Pages of 1000 keep each statement bounded no
@@ -1313,6 +1315,7 @@ export async function buildExport(orgId: string, exportId: string, opts?: { owne
       }
     }
     await gather("payroll", async () => {
+      Object.assign(payload, await gatherCompensationRecords(orgId, partyId, heldDataProjection));
       // The persisted stub records (snapshots at calculate time — the
       // payroll read seam), never live re-resolution. Stubs paginate by
       // (pay_date, id) and lines fetch per stub chunk: a lifetime of pay
@@ -1747,6 +1750,17 @@ export async function buildExport(orgId: string, exportId: string, opts?: { owne
     });
 
     await gather("qualifications", async () => {
+      Object.assign(payload, await gatherTrainingRecords(orgId, partyId, heldDataProjection));
+      for (const participant of payload.trainingParticipants as { id: string; evidence_file_id: string | null }[]) {
+        if (!participant.evidence_file_id) continue;
+        const fetched = await fetchExportFileBytes(orgId, participant.evidence_file_id);
+        if (!fetched) {
+          omittedQualificationFiles.push({ id: participant.id, title: `training evidence ${participant.id.slice(0, 8)}`,
+            reason: "the cabinet file's bytes are missing — the file record exists but no retrievable bytes remain" });
+          continue;
+        }
+        entries.push({ name: `qualifications/training-evidence-${participant.id}.${fetched.extension ?? "bin"}`, data: fetched.bytes });
+      }
       const qualifications = (await db.execute<
         Record<string, unknown> & { id: string; evidence_file_id: string | null }
       >(sql`

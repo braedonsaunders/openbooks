@@ -23,6 +23,7 @@ import type { Line } from './run-stub-records.ts';
 import { canonicalJson } from '../platform/canonical-json.ts';
 import { compensationPackageNativeSettlement, validateCompensationPackagePayrollPolicy } from './compensation-package-payroll-policy.ts';
 import { evaluateCompensationPackage } from './compensation-package.ts';
+import { exportedPayrollEvidence } from '../testing/dsar-fixture.ts';
 
 const spec = { features: ["payroll", "hrm", "compensationPackages"], country: "CA", users: [
   { key: "authorId", name: "Package author", handle: "package_author", permissions: ["payroll.manage", "payroll.read", "hrm.compensation.approve"], link: true, partyKey: "authorPartyId" },
@@ -381,7 +382,7 @@ test('native package stages preserve base pay and final calculation evidence wit
       assert.equal(lines.length, 2, 'the later phase cannot repeat the allowance');
       lines[1]!.amount = parseMoney('290');
       await persistCompensationPackageCalculations(db, prepared);
-      const evidence = (await db.execute<{ result: { finalLines: { amount: string }[] }; source: { definitionHash: string } }>(sql`
+      const evidence = (await db.execute<{ result: { finalLines: { amount: string }[] }; source: { definitionHash: string; inputs: Record<string, string | boolean> } }>(sql`
         select result_snapshot as result,source_snapshot as source from payroll_compensation_calculations
         where org_id=${f.org.orgId} and pay_run_document_id=${context.documentId}`)).rows;
       assert.equal(evidence.length, 1);
@@ -394,6 +395,20 @@ test('native package stages preserve base pay and final calculation evidence wit
       await persistCompensationPackageCalculations(db, simulated);
       assert.equal((await db.execute(sql`select id from payroll_compensation_calculations where org_id=${f.org.orgId}`)).rows.length, 1,
         'simulation cannot rewrite preserved evidence');
+      const exported = await exportedPayrollEvidence({ orgId: f.org.orgId, actorId: f.authorId, partyId: context.employeePartyId });
+      const assignments = exported.compensationAssignments as Record<string, unknown>[];
+      const calculations = exported.compensationCalculations as Record<string, unknown>[];
+      assert.equal(assignments.length, 1);
+      assert.equal(calculations.length, 1);
+      assert.equal(calculations[0]!.pay_run_document_id, context.documentId);
+      assert.deepEqual(calculations[0]!.result_snapshot, evidence[0]!.result);
+      assert.equal((calculations[0]!.source_snapshot as Record<string, unknown>).definitionHash, f.version.definitionHash);
+      assert.deepEqual(assignments[0]!.inputs, evidence[0]!.source.inputs, 'personal terms retain the saved native source values');
+      for (const row of [...assignments, ...calculations]) {
+        for (const column of ['org_id', 'employment_id', 'employee_party_id', 'created_by', 'updated_by', 'submitted_by', 'decided_by', 'authorship']) {
+          assert.ok(!(column in row), `compensation exports withhold ${column}`);
+        }
+      }
     });
   });
 });
