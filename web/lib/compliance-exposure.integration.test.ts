@@ -16,10 +16,7 @@ const hooks = registerHooks({
     // Resolve this worktree's engine directly, even when node_modules is shared.
     if (specifier.startsWith('@openbooks/engine/')) {
       const engineRoot = new URL('../../engine/', import.meta.url)
-      return {
-        url: new URL(specifier.slice('@openbooks/engine/'.length), engineRoot).href,
-        shortCircuit: true,
-      }
+      return nextResolve(new URL(specifier.slice('@openbooks/engine/'.length), engineRoot).href, context)
     }
     return nextResolve(specifier, context)
   },
@@ -334,10 +331,7 @@ const hooks = registerHooks({
     // Resolve this worktree's engine directly, even when node_modules is shared.
     if (specifier.startsWith('@openbooks/engine/')) {
       const engineRoot = new URL('../../engine/', import.meta.url)
-      return {
-        url: new URL(specifier.slice('@openbooks/engine/'.length), engineRoot).href,
-        shortCircuit: true,
-      }
+      return nextResolve(new URL(specifier.slice('@openbooks/engine/'.length), engineRoot).href, context)
     }
     return nextResolve(specifier, context)
   },
