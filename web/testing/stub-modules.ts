@@ -63,6 +63,8 @@ export interface FeaturesStubOptions {
 }
 
 export interface StubModulesOptions {
+  /** Database boundary source, including native readers' relative imports. */
+  database?: string;
   navigation?: boolean | string | NavigationStubOptions;
   intl?: boolean | string;
   authz?: boolean | string | AuthzStubOptions;
@@ -75,6 +77,7 @@ export interface StubModulesOptions {
 }
 
 const NAVIGATION_DEFAULT_PATH = "/";
+const PLATFORM_DB_URL = new URL("../../engine/src/platform/db.ts", import.meta.url).href;
 
 function navigationSource(pathname: string, routerSource?: string): string {
   const safe = pathname.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
@@ -226,9 +229,13 @@ export function stubModules(options: StubModulesOptions = {}): void {
     } else features = featuresSource(options.features.enabled ?? null);
   }
   const extra = options.extra ?? {};
+  const platformDbOverride = options.database;
 
   registerHooks({
     resolve(specifier, context, next) {
+      if (platformDbOverride !== undefined && specifier === "@openbooks/engine/src/platform/db.ts") {
+        return virtual(platformDbOverride);
+      }
       if (navigation !== null && specifier === "next/navigation") {
         return virtual(navigation);
       }
@@ -245,7 +252,14 @@ export function stubModules(options: StubModulesOptions = {}): void {
       if (override !== undefined) {
         return virtual(override);
       }
-      return next(specifier, context);
+      const resolved = next(specifier, context);
+      // A declared database double also owns native readers' relative imports
+      // of that same module. Validation and domain modules stay real.
+      if (platformDbOverride !== undefined && resolved.url === PLATFORM_DB_URL
+        && context.parentURL !== virtual(platformDbOverride).url) {
+        return virtual(platformDbOverride);
+      }
+      return resolved;
     },
   });
 }
