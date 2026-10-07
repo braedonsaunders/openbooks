@@ -129,8 +129,10 @@ test("employee responses, feedback history and list context remain limited to th
     assert.deepEqual((exported.trainingFeedback as Record<string, unknown>[]).map(row => row.rating).sort(), [4, 5]);
     assert.equal((exported.trainingSessions as Record<string, unknown>[])[0]!.name, "January safety training");
     assert.equal((exported.trainingCourses as Record<string, unknown>[])[0]!.name, "Workplace safety course");
-    for (const key of ["trainingParticipants", "trainingFeedback", "trainingSessions", "trainingCourses"]) {
-      for (const row of exported[key] as Record<string, unknown>[]) {
+    for (const [key, count] of [["trainingParticipants", 1], ["trainingFeedback", 2], ["trainingSessions", 1], ["trainingCourses", 1]] as const) {
+      const rows = exported[key] as Record<string, unknown>[];
+      assert.equal(rows.length, count, `${key} retains all subject evidence before checking withheld columns`);
+      for (const row of rows) {
         for (const column of ["org_id", "employment_id", "created_by", "updated_by", "author_party_id", "decided_by"]) {
           assert.ok(!(column in row), `${key} must withhold operator and subject linkage ${column}`);
         }

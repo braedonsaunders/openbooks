@@ -60,6 +60,8 @@ async function setup() {
 test("native subject ZIP retains work and device evidence while excluding neighboring workers, tenants and audit operators", { skip: !DB }, async () => {
   await withHarness(setup, async f => {
     await withHarness(setup, async foreign => {
+      assert.equal(f.subjects.length, 2, "the device has both the subject and a neighboring worker");
+      assert.equal(foreign.subjects.length, 2, "the foreign tenant has both independently bound workers");
       const subject = f.subjects[0]!;
       const neighbor = f.subjects[1]!;
       const exported = await exportedSubjectEvidence({ orgId: f.org.orgId, actorId: f.authorId, partyId: subject.workerPartyId }, ["time"]);
