@@ -1,5 +1,4 @@
 import 'server-only'
-import { redirect } from 'next/navigation'
 import { NextResponse } from 'next/server'
 import type { Authz } from './authz'
 import { guardPermission } from './authz'
@@ -14,7 +13,12 @@ import { notFound } from "@/lib/api/responses";
  */
 
 export async function requireFeatureEnabled(orgId: string, featureKey: string): Promise<void> {
-  if (!(await isFeatureEnabled(orgId, featureKey))) redirect(featureRequiredHref(featureKey))
+  if (!(await isFeatureEnabled(orgId, featureKey))) {
+    // Navigation belongs to the page boundary; API feature guards also run
+    // in native background commands without a client router runtime.
+    const { redirect } = await import('next/navigation')
+    redirect(featureRequiredHref(featureKey))
+  }
 }
 
 /**
