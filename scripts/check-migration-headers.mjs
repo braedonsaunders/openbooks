@@ -121,9 +121,9 @@ export function stripSqlComments(source) {
   return out;
 }
 
-function lockTimeoutSetting(code) {
-  const match = /set(?:\s+(?:session|local))?\s+lock_timeout\s*(?:=|to\b)\s*([^;\s]+)/i.exec(code);
-  return match ? match[1].replace(/^'|'$/g, "") : null;
+function lockTimeoutSettings(code) {
+  return [...code.matchAll(/set(?:\s+(?:session|local))?\s+lock_timeout\s*(?:=|to\b)\s*([^;\s]+)/gi)]
+    .map((match) => match[1].replace(/^'|'$/g, ""));
 }
 
 function isZeroTimeout(value) {
@@ -147,8 +147,8 @@ export function scanMigrationFile(filename, content) {
   } catch (error) {
     findings.push({ file: filename, kind: "published-content-changed", value: error.message });
   }
-  const setting = lockTimeoutSetting(code);
-  if ((setting !== null && isZeroTimeout(setting)) || /reset\s+lock_timeout\s*;?/i.test(code)) {
+  const setting = lockTimeoutSettings(code).find(isZeroTimeout) ?? null;
+  if (setting !== null || /reset\s+lock_timeout\s*;?/i.test(code)) {
     findings.push({
       file: filename,
       kind: "lock_timeout-zero",
