@@ -1,2 +1,14 @@
-/** Registry aggregate address retains the program identity and native command. */
-export { runtime, GET, PATCH } from "../../benefit-programs/[id]/transaction-rules/route";
+import { defineRoute } from "@/lib/api/route";
+import { readTransactionPolicy, writeTransactionPolicy, transactionPolicyParams, transactionPolicyBody } from "../handlers";
+
+export const runtime = "nodejs";
+
+export const GET = defineRoute({
+  permission: "hrm.benefits.read", feature: "hrm", params: transactionPolicyParams,
+  handler: readTransactionPolicy,
+});
+
+export const PATCH = defineRoute({
+  permission: "hrm.benefits.manage", feature: "hrm", params: transactionPolicyParams, body: transactionPolicyBody,
+  handler: writeTransactionPolicy,
+});
