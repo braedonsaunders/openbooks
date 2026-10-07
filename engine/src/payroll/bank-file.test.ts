@@ -28,7 +28,7 @@ import {
   payRunBankFileEntitlement,
   releasePayRunBankFile,
 } from "./bank-file-artifact.ts";
-import { packStatutoryComponents, setPackSlotAccount } from "./packs.ts";
+import { setPackSlotAccount } from "./packs.ts";
 import { US_PACK_RATES } from "./us/rates.ts";
 import { upsertStatutoryRate } from "./statutory-rates.ts";
 import { calculatePayRun } from "./run-calculation.ts";
@@ -566,78 +566,6 @@ const account = async (orgId: string, number: string, name: string, type: string
   return seedPostingAccount(orgId, number, name, type);
 };
 
-/**
- * Seed the payroll components, tolerating a dev database whose
- * `pay_components_system_key` CHECK predates the in-flight statutory-holiday
- * components (the payroll-core work stream owns those components AND folding
- * the widened constraint into 0001_baseline.sql — this file must not alter a
- * shared constraint). Postgres evaluates CHECK constraints before ON CONFLICT
- * resolution, so on such a database `seedPayrollComponents` cannot complete at
- * all; the catch seeds the same set by hand, minus the two statutory-holiday
- * rows, plus the Vacation entitlement plan the runs accrue under. These tests
- * never enable statutory holiday pay, so the missing pair is never resolved by
- * a run; once the widened constraint lands, the catch never fires and the one
- * real seeder is the only path.
- */
-async function seedComponentsTolerantly(
-  orgId: string, actorId: string, country: "CA" | "US",
-): Promise<void> {
-  const causedBy = (error: unknown, pattern: RegExp): boolean => {
-    let current: unknown = error;
-    while (current) {
-      if (pattern.test(String((current as Error).message ?? ""))) return true;
-      current = (current as { cause?: unknown }).cause;
-    }
-    return false;
-  };
-  try {
-    await seedPayrollComponents(orgId, actorId, country);
-  } catch (error) {
-    if (!causedBy(error, /pay_components_system_key/)) throw error;
-    const rows = [
-      { code: "BASE", name: "Base pay", kind: "earning", systemKey: "base_pay", basis: "per_hour", sequence: 10 },
-      { code: "OT", name: "Overtime", kind: "earning", systemKey: "overtime", basis: "per_hour", sequence: 20 },
-      { code: "BONUS", name: "Bonus", kind: "earning", systemKey: "bonus", nonPeriodic: true, vacationable: false, sequence: 30 },
-      { code: "VACPAY", name: "Vacation pay", kind: "earning", systemKey: "vacation_payout", vacationable: false, sequence: 40 },
-      ...packStatutoryComponents(country).map((c) => ({
-        code: c.code, name: c.name, kind: c.kind as string, systemKey: c.systemKey,
-        sequence: c.sequence, country,
-      })),
-    ] as {
-      code: string; name: string; kind: string; systemKey: string; sequence: number;
-      basis?: string; nonPeriodic?: boolean; vacationable?: boolean; country?: string;
-    }[];
-    for (const c of rows) {
-      await db.execute(sql`
-        insert into pay_components (org_id, code, name, kind, system_key, country, basis, taxable,
-                                    pensionable, insurable, vacationable, non_periodic, sequence,
-                                    created_by, updated_by)
-        values (${orgId}, ${c.code}, ${c.name}, ${c.kind}, ${c.systemKey}, ${c.country ?? null},
-                ${c.basis ?? "fixed_amount"}, true, true, true, ${c.vacationable ?? true},
-                ${c.nonPeriodic ?? false}, ${c.sequence}, ${actorId}, ${actorId})
-        on conflict (org_id, code) do nothing`);
-    }
-    // The Vacation plan the seeder would have provisioned beside the
-    // components — without it an accruing employee is a named calc error.
-    await db.execute(sql`
-      insert into entitlement_plans (org_id, code, system_key, name, unit, direction, accrual_method,
-                                     accrual_value, accrual_component_id, payout_component_id,
-                                     liability_account_id, cap_behavior, is_active,
-                                     created_by, updated_by)
-      select ${orgId}, 'VAC', 'vacation', 'Vacation', 'money', 'accrue', 'percent_of_earnings', '4',
-             (select id from pay_components
-               where org_id = ${orgId} and system_key = 'vacation_accrual' limit 1),
-             (select id from pay_components
-               where org_id = ${orgId} and system_key = 'vacation_payout' limit 1),
-             (select (settings#>>'{payroll,vacationPayableAccountId}')::uuid
-                from orgs where id = ${orgId}),
-             'warn', true, ${actorId}, ${actorId}
-       where not exists (
-         select 1 from entitlement_plans where org_id = ${orgId} and system_key = 'vacation'
-       )`);
-  }
-}
-
 /** The tenant originator secrets each rail's profile carries, for fixtures. */
 const ORIGINATOR_SECRETS = {
   nacha: {
@@ -714,7 +642,22 @@ async function payrollOrg(
         vacationPayableAccountId: accounts.vacationPayable,
         wagesTo: "expense",
       });
-  await seedComponentsTolerantly(org.orgId, actorId, country);
+  await seedPayrollComponents(org.orgId, actorId, country);
+  if (country === "US") {
+    // This rail scenario has no vacation entitlement; the declared election
+    // references an explicit zero-rate program instead of an absent plan.
+    const vacation = await db.execute<{ id: string }>(sql`
+      insert into entitlement_plans (org_id, code, system_key, name, unit, direction,
+        accrual_method, accrual_value, payout_component_id, liability_account_id,
+        cap_behavior, is_active, created_by, updated_by)
+      select ${org.orgId}, 'VAC', 'vacation', 'Vacation', 'money', 'accrue',
+        'percent_of_earnings', '0.0000', id, ${accounts.vacationPayable},
+        'warn', true, ${actorId}, ${actorId}
+      from pay_components where org_id=${org.orgId} and system_key='vacation_payout'
+        and country is null and kind='earning'
+      returning id`);
+    assert.equal(vacation.rows.length, 1, "the declared zero-rate vacation program must be created");
+  }
   if (country === "CA") {
     await seedOntarioEhtFixture(org.orgId, actorId);
   }
