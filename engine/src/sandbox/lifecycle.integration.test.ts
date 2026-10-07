@@ -2,18 +2,48 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { test } from "node:test";
 import { sql } from "drizzle-orm";
-import { db, withOrgContext } from "../platform/db.ts";
+import { db, withMaintenanceTransaction, withOrgContext, withOrgTransaction } from "../platform/db.ts";
+import { errorChainMatches } from "../testing/error-chain.ts";
 import { createScratchOrg, createScratchUser, dropScratchOrg } from "../testing/fixtures.ts";
 import { postDocument } from "../ledger/posting-document.ts";
 import { createSandbox, deleteSandbox, refreshSandbox, resetSandbox } from "./lifecycle.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
+const rateChildren = ["item_rate_lines", "labor_rate_terms", "labor_rate_adjustments", "labor_rate_version_policies", "labor_rate_version_scopes"] as const;
+
+async function seedActivatedRateChildren(org: Awaited<ReturnType<typeof createScratchOrg>>): Promise<void> {
+  for (const status of ["active", "retired"]) {
+    const book = randomUUID(), version = randomUUID();
+    await db.execute(sql`insert into item_rate_books(id,org_id,code,name,currency) values(${book},${org.orgId},${status},${status},'CAD')`);
+    await db.execute(sql`insert into item_rate_versions(id,org_id,rate_book_id,effective_from) values(${version},${org.orgId},${book},'2026-01-01')`);
+    await db.execute(sql`insert into item_rate_lines(org_id,version_id,item_id,unit_code,unit_name,base_quantity,cost_rate,bill_rate) values(${org.orgId},${version},${org.items.service},'hour','Hour','1','37.1250','78.5000')`);
+    await db.execute(sql`insert into labor_rate_terms(org_id,version_id,code,label,content) values(${org.orgId},${version},'TERMS','Rate conditions','Approved service conditions')`);
+    await db.execute(sql`insert into labor_rate_adjustments(org_id,version_id,code,name,category,calculation,value) values(${org.orgId},${version},'TRAVEL','Travel allowance','travel','fixed','12.5000')`);
+    await db.execute(sql`insert into labor_rate_version_policies(org_id,version_id,derivation_policy) values(${org.orgId},${version},'time_type_multipliers')`);
+    await db.execute(sql`insert into labor_rate_version_scopes(org_id,version_id,scope_type,scope_value_text) values(${org.orgId},${version},'other','Service work')`);
+    await db.execute(sql`update item_rate_versions set status=${status} where org_id=${org.orgId} and id=${version}`);
+  }
+}
+
+async function activatedRateSnapshot(orgId: string) {
+  return Promise.all(rateChildren.map(async table => ({ table, rows: (await db.execute(sql`
+    select v.status, to_jsonb(c)-'id'-'org_id'-'version_id'-'item_id' as evidence,
+           (c.id<>source.id and c.version_id<>source.version_id) as rebased
+      from ${sql.identifier(table)} c join item_rate_versions v on v.id=c.version_id and v.org_id=c.org_id
+      left join ${sql.identifier(table)} source on source.org_id=(select sandbox_of from orgs where id=${orgId})
+        and to_jsonb(source)-'id'-'org_id'-'version_id'-'item_id'=to_jsonb(c)-'id'-'org_id'-'version_id'-'item_id'
+        and exists(select 1 from item_rate_versions sv where sv.id=source.version_id and sv.status=v.status)
+     where c.org_id=${orgId} order by v.status`)).rows })));
+}
+
 test("a clean-schema full sandbox clones tenant evidence without pre-seed collisions or residue", { skip: !DB }, async () => {
   const org = await createScratchOrg();
   const sandboxName = `Lifecycle ${randomUUID()}`;
   await withSandboxCleanup(org, sandboxName, async () => {
     const actorId = await createScratchUser(org.orgId, `Sandbox owner ${randomUUID()}`, "admin");
+    await seedActivatedRateChildren(org);
+    const sourceRates = await activatedRateSnapshot(org.orgId);
     const created = await withOrgContext(org.orgId, () => createSandbox({
       productionOrgId: org.orgId,
       name: sandboxName,
@@ -38,6 +68,35 @@ test("a clean-schema full sandbox clones tenant evidence without pre-seed collis
     assert.ok(Number(state.rows[0]?.storage_rows) > 0);
     assert.equal(state.rows[0]?.env_kind, "sandbox");
     assert.equal(state.rows[0]?.sandbox_of, org.orgId);
+    const assertRates = async () => {
+      const copied = await activatedRateSnapshot(sandboxOrgId);
+      assert.deepEqual(copied.map(r => ({ table: r.table, rows: r.rows.map(({ rebased: _rebased, ...row }) => row) })),
+        sourceRates.map(r => ({ table: r.table, rows: r.rows.map(({ rebased: _rebased, ...row }) => row) })));
+      assert.ok(copied.every(r => r.rows.length === 2 && r.rows.every(row => row.rebased === true)));
+      assert.equal((await db.execute(sql`select 1 from item_rate_lines l where l.org_id=${sandboxOrgId} and not exists(select 1 from items i where i.id=l.item_id and i.org_id=l.org_id)`)).rows.length, 0);
+    };
+    await assertRates();
+    for (const status of ["active", "retired"]) {
+      const version = (await db.execute<{ id: string }>(sql`select id from item_rate_versions where org_id=${sandboxOrgId} and status=${status}`)).rows[0]!.id;
+      const sourceVersion = (await db.execute<{ id: string }>(sql`select id from item_rate_versions where org_id=${org.orgId} and status=${status}`)).rows[0]!.id;
+      for (const [query, pattern, privileged] of [
+        [sql`insert into labor_rate_terms(org_id,version_id,code,label,content) values(${sandboxOrgId},${version},'EXTRA','Extra','Unreviewed')`, /immutable/i, false],
+        [sql`update labor_rate_terms set content='Changed' where org_id=${sandboxOrgId} and version_id=${version}`, /immutable/i, true],
+        [sql`delete from labor_rate_terms where org_id=${sandboxOrgId} and version_id=${version}`, /immutable/i, true],
+        [sql`insert into labor_rate_terms(org_id,version_id,code,label,content) values(${sandboxOrgId},${sourceVersion},'FOREIGN','Foreign','Wrong parent')`, /tenant-owned version/i, true],
+        [sql`insert into labor_rate_terms(org_id,version_id,code,label,content) values(${sandboxOrgId},${randomUUID()},'MISSING','Missing','Unknown parent')`, /tenant-owned version/i, true],
+        [sql`insert into labor_rate_terms(org_id,version_id,code,label,content) values(${org.orgId},${sourceVersion},'EXTRA','Extra','Changed production')`, /immutable/i, true],
+      ] as const) {
+        const write = async () => {
+          // Flags alone cannot grant clone authority to an ordinary tenant role.
+          await db.execute(sql`select set_config('openbooks.clone','on',true),set_config('openbooks.migration','on',true),set_config('openbooks.amend','on',true)`);
+          await db.execute(query);
+        };
+        await assert.rejects(privileged ? withMaintenanceTransaction(null, write) : withOrgTransaction(sandboxOrgId, write),
+          error => errorChainMatches(error, pattern));
+      }
+    }
+    await assertRates();
 
     const controls = (await db.execute<{ key: string; account_id: string; org_id: string | null }>(sql`
       select control.key, control.value as account_id, account.org_id
@@ -84,6 +143,7 @@ test("a clean-schema full sandbox clones tenant evidence without pre-seed collis
     const refreshed = (await db.execute<{ status: string; last_error: string | null }>(sql`
       select status, last_error from sandboxes where id = ${sandboxId}`));
     assert.deepEqual(refreshed.rows, [{ status: "ready", last_error: null }]);
+    await assertRates();
     const refreshedControls = await db.execute(sql`
       select count(*)::int as count
         from orgs sandbox
