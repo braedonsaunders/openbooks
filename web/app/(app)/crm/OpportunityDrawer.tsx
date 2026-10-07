@@ -65,7 +65,25 @@ export function OpportunityDrawer({ data, statuses, accounts, contacts, owners, 
   // token) so the next save cannot overwrite unseen work.
   const [revision,setRevision]=useState(row.updated_at)
   async function save(){ if(!form.title.trim()) return toast.error(t('validation.titleRequired')); setBusy(true); try { const { currency, ...fields }=form; const result=await apiJson<{ error?: string; code?: string; opportunity?: { updated_at?: string } }>(`/api/crm/opportunities/${row.id}`,{method:'PATCH',headers:{'content-type':'application/json'},body:JSON.stringify({...fields,partyId:form.partyId||null,primaryContactId:form.primaryContactId||null,ownerUserId:form.ownerUserId||null,salesRepId:form.salesRepId||null,salesTeamId:form.salesTeamId||null,leadSourceId:form.leadSourceId||null,expectedCloseDate:form.expectedCloseDate||null,probability:Number(form.probability),...(multiCurrency ? { currency } : {}),lines,expectedUpdatedAt:revision})}); if(typeof result?.opportunity?.updated_at==='string'){setRevision(result.opportunity.updated_at);setSavedSnapshot(JSON.stringify({form,lines}))} toast.success(tc('feedback.saved')); router.refresh() }catch(error){if(error instanceof ApiResponseError&&error.code==='win_loss_reason_required')setLossReasonError(true);toast.error(error instanceof Error?error.message:tc('feedback.saveFailed'))}finally{setBusy(false)} }
-  async function estimate(){if(isDirty){toast.error(t('opportunities.saveFirstForEstimate'));return}setBusy(true);try{const result=await apiJson<{id:string}>(`/api/crm/opportunities/${row.id}/estimate`,{method:'POST',headers:{'Idempotency-Key':crypto.randomUUID()}},t('opportunities.estimateFailed'));toast.success(t('opportunities.estimateCreated'));router.push(`/estimates?estimate=${result?.id}&mode=edit`)}catch{toast.error(t('opportunities.estimateFailed'));setBusy(false)}}
+  async function estimate() {
+    if (isDirty) {
+      toast.error(t('opportunities.saveFirstForEstimate'))
+      return
+    }
+    setBusy(true)
+    try {
+      const result = await apiJson<{ id: string }>(
+        `/api/crm/opportunities/${row.id}/estimate`,
+        { method: 'POST', headers: { 'Idempotency-Key': crypto.randomUUID() } },
+        t('opportunities.estimateFailed'),
+      )
+      toast.success(t('opportunities.estimateCreated'))
+      router.push(`/estimates?estimate=${result?.id}&mode=edit`)
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : t('opportunities.estimateFailed'))
+      setBusy(false)
+    }
+  }
   // The estimate endpoint converts the STORED revision, so the button stays
   // available only when the visible state is saved: an account-less click
   // would 422 with no recovery path in this drawer, and a dirty click would
