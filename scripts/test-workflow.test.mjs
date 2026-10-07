@@ -117,6 +117,8 @@ test('browser suites fan out and claim every workflow spec exactly once', () => 
   assert.match(workflows, /fail-fast: false/)
   assert.doesNotMatch(namedStep('Playwright app suite'), /continue-on-error/)
   assert.doesNotMatch(namedStep('Playwright workflow suites'), /continue-on-error/)
+  assert.match(namedStep('Playwright workflow suites'), /PLAYWRIGHT_HTML_OUTPUT_DIR="playwright-report\/\$\{spec\}"/)
+  assert.match(namedStep('Playwright workflow suites'), /--output="test-results\/\$\{spec\}"/)
 
   // The matrix is the only thing deciding which workflow suites run at all, so
   // a typo here would drop a suite silently and still green the job — the same
