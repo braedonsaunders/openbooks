@@ -15,6 +15,7 @@ import { commitPayRun } from "./run-commit.ts";
 import { setPackSlotAccount } from "./packs.ts";
 import { createPayRun } from "./run-lifecycle.ts";
 import { seedPayrollComponents } from "./run-setup.ts";
+import { recurringBenefitSource } from "./benefit-plan-inputs.ts";
 import { seedOntarioEhtFixture } from "./filing-test-fixtures.ts";
 import { upsertUnionFringe } from "./union.ts";
 import { requestDocumentVoid } from '../ledger/document-void.ts';
@@ -66,6 +67,10 @@ test('native recurring elections produce taxable non-cash, employer cost and emp
       submission_snapshot=public.benefit_enrollment_submission_source(org_id,id),updated_by=${fx.actorId},
       decision_snapshot=jsonb_build_object('outcome','approved','mode','not_required','approvalMode','none','planId',plan_id),status='active'
       where org_id=${fx.orgId} and id=${enrollmentId}`);
+    const source = await recurringBenefitSource(db, { orgId: fx.orgId, employmentId,
+      subsidiaryId: fx.subsidiaryId, periodStart: '2026-07-12', periodEnd: '2026-07-18' });
+    assert.deepEqual(source.currencyPrecisions, [{ code: 'CAD', minor_units: 2 }],
+      'effective recurring elections use the registered payable currency quantum');
     const run=await createPayRun({orgId:fx.orgId,actorId:fx.actorId,payScheduleId:fx.scheduleId,periodStart:'2026-07-12',periodEnd:'2026-07-18'});
     const calculate=()=>calculatePayRun({orgId:fx.orgId,actorId:fx.actorId,documentId:run.documentId});
     assert.deepEqual((await calculate()).errors,[]);
