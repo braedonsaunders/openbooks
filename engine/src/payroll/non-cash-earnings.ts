@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import type { db } from "../platform/db.ts";
-import { add, neg, sum } from "../money/money.ts";
+import { add, cmp, neg, sum } from "../money/money.ts";
 import { PayrollError } from "./error.ts";
 import { NON_CASH_CONTRA_EXPENSE_TYPES, NON_CASH_OFFSET_ACCOUNT_TYPES } from "./non-cash-offset-types.ts";
 import type { Line } from "./run-stub-records.ts";
@@ -30,6 +30,27 @@ export function nonCashEarnings(lines: readonly Pick<Line, "kind" | "amount" | "
 
 export function cashGrossEarnings(gross: string, lines: readonly Pick<Line, "kind" | "amount" | "paymentKind" | "accrualOnly">[]): string {
   return add(gross, neg(nonCashEarnings(lines)));
+}
+
+/** Completed stub totals preserve cash deductions, refundable credits and employer-only cost. */
+export function payableStubTotals(gross: string, lines: readonly Line[]): { net: string; nonCash: string; employerCost: string } {
+  const deductions = sum(lines.filter((l) => l.kind === "deduction").map((l) => l.amount));
+  // Refundable employment credits (a `credit` line) are money the employer
+  // pays the employee through payroll: they INCREASE net pay. Employer cost
+  // below deliberately excludes them — the employer reclaims the credit from
+  // the tax authority (F24 compensation for IT), so the P&L cost is nil and
+  // the GL projection debits the reclaimed liability instead (see payRunGlLegs).
+  const credits = sum(lines.filter((l) => l.kind === "credit").map((l) => l.amount));
+  const nonCash = nonCashEarnings(lines);
+  const net = add(add(cashGrossEarnings(gross, lines), neg(deductions)), credits);
+  if (cmp(net, "0") < 0) throw new PayrollError(cmp(nonCash, "0") !== 0
+    ? `cash pay cannot cover required deductions (${net} remaining after ${nonCash} of non-cash benefits) — add sufficient cash earnings to this editable pay run or move the benefit to a run with sufficient cash pay; taxes cannot be skipped`
+    : `net pay is negative (${net})`);
+  const employerCost = sum(
+    lines.filter((l) => l.kind === "employer_contribution").map((l) => l.amount),
+  );
+
+  return { net, nonCash, employerCost };
 }
 
 /**

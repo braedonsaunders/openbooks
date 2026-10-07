@@ -14,7 +14,7 @@ import { db } from "../platform/db.ts";
 import { PayrollError } from "./error.ts";
 import { aggregateUsSupplementalWageAmounts } from "./supplemental-wages.ts";
 import { aggregateUsStatutoryExemptionAmounts } from "./statutory-exemptions.ts";
-import { add, cmp, div, neg, sum } from "../money/money.ts";
+import { cmp, div, sum } from "../money/money.ts";
 import { payrollCertificate, resolveCertificate, revalidateStoredCertificates, type ResolvedCertificate } from "./certificates.ts";
 import { packRates, PayrollPackError, assertPayrollRegionSupported, type EmployeePayrollContext, type PayrollRunContext, type PayrollTaxBaseKey, type SupplementalTaxMethod } from "./packs.ts";
 import type { PayPeriodPriors } from "./period-priors.ts";
@@ -39,7 +39,7 @@ import { settleTerminationBankPayouts, appendCashVacationPay } from "./run-final
 import { assignmentOverlapsPeriod } from "./assignment-windows.ts";
 import { settleDeductionProtection, recordProtectionShortfalls } from "./run-protection.ts";
 import { resolveProtectionExemptFloors } from "./protection-classes.ts";
-import { applyEarningPaymentKinds, cashGrossEarnings, nonCashEarnings } from "./non-cash-earnings.ts";
+import { applyEarningPaymentKinds, payableStubTotals } from "./non-cash-earnings.ts";
 import { appendRecurringBenefitLines } from './benefit-plan-inputs.ts';
 export async function calculateStub(
   tx: Pick<typeof db, "execute">,
@@ -747,22 +747,8 @@ export async function calculateStub(
     Object.assign(factors, settlementFactors);
   }
 
-  const deductions = sum(lines.filter((l) => l.kind === "deduction").map((l) => l.amount));
-  // Refundable employment credits (a `credit` line) are money the employer
-  // pays the employee through payroll: they INCREASE net pay. Employer cost
-  // below deliberately excludes them — the employer reclaims the credit from
-  // the tax authority (F24 compensation for IT), so the P&L cost is nil and
-  // the GL projection debits the reclaimed liability instead (see payRunGlLegs).
-  const credits = sum(lines.filter((l) => l.kind === "credit").map((l) => l.amount));
-  const nonCash = nonCashEarnings(lines);
-  const net = add(add(cashGrossEarnings(gross, lines), neg(deductions)), credits);
-  if (cmp(net, "0") < 0) throw new PayrollError(cmp(nonCash, "0") !== 0
-    ? `cash pay cannot cover required deductions (${net} remaining after ${nonCash} of non-cash benefits) — add sufficient cash earnings to this editable pay run or move the benefit to a run with sufficient cash pay; taxes cannot be skipped`
-    : `net pay is negative (${net})`);
+  const { net, nonCash, employerCost } = payableStubTotals(gross, lines);
   if (cmp(nonCash, "0") !== 0) factors.NON_CASH_EARNINGS = nonCash;
-  const employerCost = sum(
-    lines.filter((l) => l.kind === "employer_contribution").map((l) => l.amount),
-  );
 
   // The rail is snapshotted, like the province and the claim amounts: a later
   // edit to the party or the profile must not change how a pay that has
