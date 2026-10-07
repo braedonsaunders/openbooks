@@ -804,6 +804,7 @@ test.describe("subscription to revenue", () => {
       // empty state carries its as-of date (review.nothingDue), the review
       // counts zero lines to post, and Confirm stays blocked — the review
       // itself posts nothing.
+      await drawerA.getByRole("button", { name: "Obligations", exact: true }).click();
       const runButton = drawerA.getByRole("button", { name: /run recognition/i });
       await runButton.click();
       const review = page.locator('[role="dialog"]', { has: page.locator("#recognition-as-of") });
