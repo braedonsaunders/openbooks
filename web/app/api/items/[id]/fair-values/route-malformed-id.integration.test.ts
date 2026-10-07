@@ -6,7 +6,7 @@ import test from 'node:test'
 const { db } = await import('@openbooks/engine/src/platform/db.ts')
 const { sql } = await import('drizzle-orm')
 const { dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
-const { createFairValueFixture, callFairValueRoute } = await import('../../../../../lib/testing/fair-value-fixture.ts')
+const { createFairValueFixture, callFairValueRoute } = await import('../../../../../testing/fair-value-fixture.ts')
 let current: Awaited<ReturnType<typeof createFairValueFixture>>
 
 async function fixture() {
