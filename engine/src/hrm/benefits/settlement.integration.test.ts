@@ -493,7 +493,9 @@ settlementTest("transaction policies govern dated shares, group ceilings, approv
   const command = { orgId: h.org.orgId, actorId: h.settlerId, programId: program.id, expectedRevision: revision, policy, reason: "Record dated source and recipient policy" };
   await refuses(() => saveBenefitTransactionPolicy({ ...command, policy: { ...policy, limits: [{ ...policy.limits[0]!, amount: "1,234" }] } }), /ambiguous/);
   assert.equal(await getBenefitTransactionPolicy(command), null, "a refused policy has no partial configuration");
-  await refuses(() => saveBenefitTransactionPolicy({...command,policy:{...policy,responsibilities:[...policy.responsibilities,policy.responsibilities[0]!]}}}),/overlapping assignments/);
+  await refuses(() => saveBenefitTransactionPolicy({ ...command, policy: {
+    ...policy, responsibilities: [...policy.responsibilities, policy.responsibilities[0]!],
+  } }), /overlapping assignments/);
   const saved = await saveBenefitTransactionPolicy(command);
   assert.ok(saved.programRevision > revision);
   assert.equal(saved.policy.limits[0]!.amount, "60.0000");
