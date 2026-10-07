@@ -97,6 +97,10 @@ const mockSources = new Map<string, string>([
           },
         }),
       }
+      export async function withOrgContext(orgId, work) {
+        if (orgId !== '${ORG_ID}') throw new Error('Fixture context requires the declared organization')
+        return await work()
+      }
       export async function withOrgTransaction(orgId, work) {
         if (orgId !== '${ORG_ID}') throw new Error('Fixture transaction requires the declared organization')
         return db.transaction(work)
