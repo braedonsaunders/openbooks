@@ -398,8 +398,8 @@ test.describe('bank to books: feed to reconciliation to cash application', () =>
       S.rootSubId = str(probeDoc.subsidiary_id, 'root subsidiary');
       await apiOk(page, 'DELETE', `/api/journals/${probeId}`, { expectedUpdatedAt: str(probeDoc.updated_at, 'probe revision') });
 
-      const pd = await apiOk(page, 'POST', '/api/parties/draft', { role: 'customer' });
-      S.customerId = str(pd.id, 'party id');
+      const pd = await apiOk(page, 'POST', '/api/parties', { displayName: S.customerName, isActive: false, roles: { customer: { enabled: true } } });
+      S.customerId = str((pd.party as Json).id, 'party id');
       const pg = await apiOk(page, 'GET', `/api/parties/${S.customerId}`);
       const pa = await api(page, 'PATCH', `/api/parties/${S.customerId}`, {
         displayName: S.customerName, isActive: true, changeReason: 'e2e bank-to-books customer',

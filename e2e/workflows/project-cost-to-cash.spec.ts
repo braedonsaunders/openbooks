@@ -494,8 +494,8 @@ function sovFinancialProfile(): Json {
 
       // -- 2. Parties: customer, vendor, and a site employee with an active role.
       async function party(role: string, name: string, extra?: Json) {
-        const draft = await apiOk(page, 'POST', '/api/parties/draft', { role });
-        const id = str(draft.id, `${role} id`);
+        const draft = await apiOk(page, 'POST', '/api/parties', { displayName: name, kind: role === 'employee' ? 'person' : 'company', isActive: false, roles: { [role]: { enabled: true } } });
+        const id = str((draft.party as Json).id, `${role} id`);
         const current = await apiOk(page, 'GET', `/api/parties/${id}`);
         await apiOk(page, 'PATCH', `/api/parties/${id}`, {
           displayName: name,

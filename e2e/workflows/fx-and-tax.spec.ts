@@ -182,8 +182,8 @@ async function createAccount(page: Page, name: string, type: string, number: str
 }
 
 async function createParty(page: Page, role: string, displayName: string): Promise<string> {
-  const draft = await apiOk(page, 'POST', '/api/parties/draft', { role });
-  const id = str(draft.id, 'party id');
+  const draft = await apiOk(page, 'POST', '/api/parties', { displayName, isActive: false, roles: { [role]: { enabled: true } } });
+  const id = str((draft.party as Json).id, 'party id');
   const current = await apiOk(page, 'GET', `/api/parties/${id}`);
   const party = current.party as Json;
   await apiOk(page, 'PATCH', `/api/parties/${id}`, {
