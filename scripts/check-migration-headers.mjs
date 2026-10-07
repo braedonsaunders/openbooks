@@ -3,7 +3,9 @@
  * Repo-wide audit: new migrations must not disarm the runner's bounded
  * lock_timeout, and must carry the standard session header. An immutable
  * published file with an incomplete header may receive reviewed settings
- * from the canonical runner, pinned to its exact filename and digest.
+ * from the canonical runner, pinned to its exact filename and digest. The
+ * same reviewed policy can retain an immutable lock header while the runner
+ * strips that setting and imposes its bounded timeout.
  *
  * Every migration used to run with `SET lock_timeout = 0` in its own body,
  * each in one transaction while the old stack keeps serving traffic — an
@@ -12,8 +14,9 @@
  * (ordinal <= 0251) are immutable, so the runner strips their file-level
  * lock_timeout statements and imposes its own bound instead. That amnesty
  * ends at 0251: any migration with a HIGHER ordinal that sets lock_timeout
- * to 0 (or resets it to the unbounded default) is refused here, because the
- * author could simply have omitted it and let the runner's bound govern.
+ * to 0 (or resets it to the unbounded default) is refused here unless its
+ * exact published bytes have reviewed runner-owned timeout handling. New
+ * authoring must omit that setting and let the runner's bound govern.
  *
  * A new migration violates when EITHER holds (checked on the body with SQL
  * comments stripped, so prose mentioning lock_timeout does not count):
@@ -39,7 +42,7 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { publishedMigrationSessionSettings } from "./migration-session-headers.mjs";
+import { publishedMigrationSessionSettings, publishedMigrationUsesRunnerLockTimeout } from "./migration-session-headers.mjs";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const GENERATED_DIR = join(ROOT, "schema", "migrations", "generated");
@@ -142,13 +145,15 @@ export function scanMigrationFile(filename, content) {
   const findings = [];
   const code = stripSqlComments(content);
   let suppliedSettings = [];
+  let runnerOwnsPublishedLockTimeout = false;
   try {
     suppliedSettings = publishedMigrationSessionSettings(`generated/${filename}`, content).map(({ name }) => name);
+    runnerOwnsPublishedLockTimeout = publishedMigrationUsesRunnerLockTimeout(`generated/${filename}`, content);
   } catch (error) {
     findings.push({ file: filename, kind: "published-content-changed", value: error.message });
   }
   const setting = lockTimeoutSettings(code).find(isZeroTimeout) ?? null;
-  if (setting !== null || /reset\s+lock_timeout\s*;?/i.test(code)) {
+  if (!runnerOwnsPublishedLockTimeout && (setting !== null || /reset\s+lock_timeout\s*;?/i.test(code))) {
     findings.push({
       file: filename,
       kind: "lock_timeout-zero",

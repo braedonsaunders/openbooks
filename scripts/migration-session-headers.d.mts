@@ -4,3 +4,5 @@ export function publishedMigrationSessionSettings(
 ): readonly { readonly name: string; readonly sql: string }[];
 
 export function publishedMigrationSessionPrelude(filename: string, content: string): string;
+
+export function publishedMigrationUsesRunnerLockTimeout(filename: string, content: string): boolean;

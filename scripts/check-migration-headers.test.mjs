@@ -3,7 +3,7 @@ import { mkdtempSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { publishedMigrationSessionPrelude, publishedMigrationSessionSettings } from "./migration-session-headers.mjs";
+import { publishedMigrationSessionPrelude, publishedMigrationSessionSettings, publishedMigrationUsesRunnerLockTimeout } from "./migration-session-headers.mjs";
 import {
   LOCK_TIMEOUT_AMNESTY_MAX_ORDINAL,
   scanMigrationFile,
@@ -123,6 +123,22 @@ test("lock_timeout prose in comments is not code", () => {
     "select 1;",
   ].join("\n");
   assert.deepEqual(scanMigrationFile("0261_prose.sql", content), []);
+});
+
+test("exact published lock header retains identity under the runner bound; changed and unrelated bytes refuse", () => {
+  const filename = "0580_clone_preserves_recorded_document_balances.sql";
+  const content = readFileSync(new URL(`../schema/migrations/generated/${filename}`, import.meta.url), "utf8");
+  assert.equal(publishedMigrationUsesRunnerLockTimeout(`generated/${filename}`, content), true);
+  assert.deepEqual(scanMigrationFile(filename, content), []);
+  assert.equal(publishedMigrationSessionPrelude(`generated/${filename}`, content), "");
+  assert.equal(publishedMigrationUsesRunnerLockTimeout("generated/0581_other.sql", content), false);
+  assert.equal(scanMigrationFile("0581_other.sql", content).filter(({ kind }) => kind === "lock_timeout-zero").length, 1);
+  for (const changed of [content + "\n-- changed bytes\n", content.replace("SET lock_timeout = 0;", "RESET lock_timeout;")]) {
+    assert.throws(() => publishedMigrationSessionPrelude(`generated/${filename}`, changed), /published digest.*forward migration/);
+    const findings = scanMigrationFile(filename, changed);
+    assert.ok(findings.some(({ kind }) => kind === "published-content-changed"));
+    assert.ok(findings.some(({ kind }) => kind === "lock_timeout-zero"));
+  }
 });
 
 test("the amnesty covers 0251 exactly and nothing above it", () => {
