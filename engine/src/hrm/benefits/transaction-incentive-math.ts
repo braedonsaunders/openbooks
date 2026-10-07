@@ -1,4 +1,5 @@
 import { canonicalDecimal } from "../../money/exact-decimal.ts";
+import { decimalNullRefusal } from "../../money/decimal-refusal.ts";
 import { apportion, fromUnits, roundDiv, toUnits } from "../../money/money.ts";
 import { fromQuantityUnits, QUANTITY_SCALE, toQuantityUnits } from "../../money/quantity.ts";
 import { InvalidCivilDateError, parseCivilDate } from "../temporal.ts";
@@ -64,7 +65,7 @@ function refuse(message: string): never {
 function units(value: string, label: string): bigint {
   const canonical = canonicalDecimal(value, 4);
   if (canonical === null) {
-    throw new BenefitsError("INVALID_INPUT", `${label} is not an exact decimal with at most four fraction digits — review the recorded amount before valuing transactions`);
+    throw new BenefitsError("INVALID_INPUT", decimalNullRefusal(label, "an exact decimal", value, 4));
   }
   return toUnits(canonical);
 }
@@ -160,7 +161,7 @@ export function computeTransactionIncentive(
     if (fact.currency !== policy.currency) refuse(`transaction ${sourceId} uses ${fact.currency}, not ${policy.currency} — select a program in that currency; an incentive never invents an exchange rate`);
     if (!limits.has(groupId)) refuse(`group ${groupId} has no limit decision — configure its ceiling or explicitly select no limit`);
     const amount = units(fact.amount, `amount for ${sourceId}`), canonicalQuantity = canonicalDecimal(fact.quantity, 8);
-    if (canonicalQuantity === null) throw new BenefitsError("INVALID_INPUT", `quantity for ${sourceId} is not an exact decimal with at most eight fraction digits — review its native transaction quantity`);
+    if (canonicalQuantity === null) throw new BenefitsError("INVALID_INPUT", decimalNullRefusal(`quantity for ${sourceId}`, "an exact quantity", fact.quantity, 8));
     const quantity = toQuantityUnits(canonicalQuantity);
     if (amount < 0n || quantity < 0n) refuse(`transaction ${sourceId} is a credit or reversal — review its original award and create an adjusting award; a fresh positive settlement cannot reinterpret negative sources`);
     const base = policy.valuation === "percent_of_amount" ? amount : quantity;
