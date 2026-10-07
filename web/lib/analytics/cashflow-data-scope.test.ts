@@ -1,11 +1,10 @@
 import assert from "node:assert/strict";
 import { registerHooks } from "node:module";
 import test from "node:test";
-import { sql } from "drizzle-orm";
 
 const stateKey = Symbol.for("openbooks.cashflow-data-scope-test");
 const state: { categories: Record<string, unknown>[] } = { categories: [] };
-Object.assign(globalThis, { [stateKey]: state, __cashflowSqlEmpty: sql`` });
+Object.assign(globalThis, { [stateKey]: state });
 
 function sqlText(query: unknown): string {
   const chunks = (query as { queryChunks?: unknown[] })?.queryChunks;
@@ -20,67 +19,41 @@ function sqlText(query: unknown): string {
 }
 Object.assign(globalThis, { __cashflowSqlText: sqlText });
 
-const mocks = new Map<string, string>([
-  ["mock:db", `
+const boundaries = new Map<string, string>([
+  [new URL("./query.ts", import.meta.url).href, `
     const state = globalThis[Symbol.for("openbooks.cashflow-data-scope-test")];
-    const text = globalThis.__cashflowSqlText;
-    export const db = { execute: async (query) =>
-      text(query).includes("as cats from orgs")
-        ? { rows: [{ cats: state.categories }] }
-        : { rows: [] } };
+    export async function analyticsQuery(query) {
+      const text = globalThis.__cashflowSqlText(query);
+      if (text.includes("as cats from orgs")) return { rows: [{ cats: state.categories }] };
+      if (text.includes('base_currency as "baseCurrency"')) return { rows: [{ baseCurrency: "USD" }] };
+      return { rows: [] };
+    }
   `],
-  ["mock:business-date", `
-    export * from ${JSON.stringify(new URL("../../../engine/src/platform/civil-date.ts", import.meta.url).href)};
+  [new URL("../../../engine/src/platform/business-date.ts", import.meta.url).href, `
+    export * from ${JSON.stringify(new URL("../../../engine/src/platform/business-date.ts", import.meta.url).href + "?native")};
     export async function businessToday() { return "2026-09-01"; }
   `],
-  ["mock:cadence", `
-    export function advanceAnchoredMonth(date) { return date; }
+  [new URL("../cash/open-items.ts", import.meta.url).href, `export async function openItems() { return []; }`],
+  [new URL("../fiscal.ts", import.meta.url).href, `
+    export async function fiscalStartMonth() { return 1; }
+    export async function defaultFiscalCalendarPeriods() { return null; }
   `],
-  ["mock:config", `export async function analyticsConfig() { return { weeklyApCap: "0.0000", restrictToSafe: 0 }; }`],
-  ["mock:subsidiaries", `export function subsidiaryVisibleFilter() { return globalThis.__cashflowSqlEmpty; }`],
-  ["mock:open-items", `export async function openItems() { return []; }`],
-  ["mock:money-server", `export async function getMoneyFormatter() { return { money: String, moneyCompact: String }; }`],
-  ["mock:org-scope", `export async function resolveOrgId(orgId) { return orgId ?? "org"; }`],
-  ["mock:format", `export function monthYearLabel() { return "Sep 2026"; }`],
-  ["mock:formula", `export function evaluateFormula() { return "0.0000"; }`],
-  ["mock:gl-summary", `export function statementBookExpr() { return globalThis.__cashflowSqlEmpty; }`],
-  ["mock:fx-presentation", `
-    export async function lineFunctional() { return "0.0000"; }
-    export async function presentationCurrency() { return "USD"; }
-    export async function presentationRates() { return new Map(); }
-    // Single-currency rows: translation through flowRates is the identity.
-    export async function flowRates() { return { base: "USD", rateAt: () => "1" }; }
-    export class MissingExchangeRateError extends Error {}
+  [new URL("../money-server.ts", import.meta.url).href, `
+    import { createMoneyFormatter } from ${JSON.stringify(new URL("../money-format.ts", import.meta.url).href)};
+    export async function getMoneyFormatter() { return createMoneyFormatter("en-US", "USD"); }
   `],
-  ["mock:position", `export function buildTimeline() {
-    return { weeks: [], totalInflows: "0.0000", totalOutflows: "0.0000", deferredBeyondHorizon: "0.0000" };
-  }`],
+  [new URL("../org-scope.ts", import.meta.url).href, `
+    export async function resolveOrgId(orgId) {
+      if (orgId !== "org") throw new Error("Unexpected cashflow fixture organization");
+      return orgId;
+    }
+  `],
 ]);
-
-const moduleMocks: Record<string, string> = {
-  "@openbooks/engine/src/platform/db.ts": "mock:db",
-  "@openbooks/engine/src/platform/business-date.ts": "mock:business-date",
-  "@openbooks/engine/src/billing/cadence.ts": "mock:cadence",
-  "./config": "mock:config",
-  "../subsidiaries": "mock:subsidiaries",
-  "./open-items": "mock:open-items",
-  "../money-server": "mock:money-server",
-  "../org-scope": "mock:org-scope",
-  "../format": "mock:format",
-  "./formula": "mock:formula",
-  "../gl-summary": "mock:gl-summary",
-  "../fx-presentation": "mock:fx-presentation",
-  "../cash/cash-position": "mock:position",
-};
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === "./config" && !context.parentURL?.startsWith(new URL("./", import.meta.url).href)) return nextResolve(specifier, context);
-    if (moduleMocks[specifier]) return { shortCircuit: true, url: moduleMocks[specifier] };
-    return nextResolve(specifier, context);
-  },
-  load(url, context, nextLoad) {
-    const source = mocks.get(url);
-    return source === undefined ? nextLoad(url, context) : { format: "module", source, shortCircuit: true };
+    const resolved = nextResolve(specifier, context);
+    const source = boundaries.get(resolved.url);
+    return source === undefined ? resolved : { shortCircuit: true, url: "data:text/javascript," + encodeURIComponent(source) };
   },
 });
 
@@ -97,4 +70,6 @@ test("cashflow forecast excludes categories outside a restricted subsidiary view
   const result = await cashflowData("org", 4, "2026-09-01", new Set(["a"]));
 
   assert.deepEqual(result.categories.map((category) => category.id), ["subsidiary-a"]);
+  assert.equal(result.categories[0]?.total, "80.0000");
+  assert.equal(result.weeks.length, 4, "the native timeline retains the selected forecast horizon");
 });
