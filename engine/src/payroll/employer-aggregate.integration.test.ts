@@ -14,7 +14,7 @@ import { commitPayRun } from "./run-commit.ts";
 import { createPayRun } from "./run-lifecycle.ts";
 import { seedPayrollComponents } from "./run-setup.ts";
 import { seedOntarioEhtFixture } from "./filing-test-fixtures.ts";
-import { createScratchOrg, dropScratchOrgReporting, seedFlowActors, seedWorkerEmployment } from "../testing/fixtures.ts";
+import { createScratchOrg, dropScratchOrgReporting, seedFlowActors, seedWorkerEmployment, seedVacationTerms } from "../testing/fixtures.ts";
 
 /** Integration wiring for synthetic CA-pack employer-aggregate declarations. */
 
@@ -77,6 +77,7 @@ async function seedHarness(orgId: string, actorId: string): Promise<{ ehtPayable
   const burdenExpense = await account("6010", "Payroll burden", "expense");
   const netPayable = await account("2300", "Wages payable", "liability_current");
   const craPayable = await account("2310", "CRA remittances payable", "liability_current");
+  const vacationPayable = await account("2320", "Vacation payable", "liability_current");
   const ehtPayable = await account("2340", "EHT payable", "liability_current");
   await db.execute(sql`
     update orgs set settings = settings || ${JSON.stringify({
@@ -87,6 +88,7 @@ async function seedHarness(orgId: string, actorId: string): Promise<{ ehtPayable
         cppPayableAccountId: craPayable,
         eiPayableAccountId: craPayable,
         taxPayableAccountId: craPayable,
+        vacationPayableAccountId: vacationPayable,
         wagesTo: "expense",
       },
     })}::jsonb where id = ${orgId}`);
@@ -117,13 +119,15 @@ async function makeEmployee(
     insert into labor_cost_rates (org_id, employee_party_id, currency, rate, basis, effective_from,
                                   is_active, created_by, updated_by)
     values (${orgId}, ${employeeId}, 'CAD', ${hourlyRate}, 'hour', '2026-01-01', true, ${actorId}, ${actorId})`);
-  // Stub calculation refuses employees without an HRM employment (NOT NULL since 0374), so the hire carries one.
+  // The native employment owns both the tax profile and its vacation election.
+  const employmentId = await seedWorkerEmployment(orgId, employeeId, subsidiaryId);
   await db.execute(sql`
     insert into employee_payroll_profiles (org_id, employee_party_id, employment_id, pay_schedule_id, country, province,
                                            pay_basis, federal_claim_code, provincial_claim_code,
                                            is_active, created_by, updated_by)
-    values (${orgId}, ${employeeId}, ${await seedWorkerEmployment(orgId, employeeId, subsidiaryId)}, ${scheduleId}, 'CA', 'ON', 'hourly', 1, 1,
+    values (${orgId}, ${employeeId}, ${employmentId}, ${scheduleId}, 'CA', 'ON', 'hourly', 1, 1,
             true, ${actorId}, ${actorId})`);
+  await seedVacationTerms(orgId, employmentId, actorId, "4", "accrue");
   return employeeId;
 }
 
