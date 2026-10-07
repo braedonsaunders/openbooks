@@ -547,6 +547,7 @@ test.describe("inventory receipt to fulfillment to COGS to return", () => {
       // The shipment is linked from its order's drawer (fulfillments are
       // operational documents, not rows on the orders list).
       await openDrawer(page, `/sales-orders?order=${soId}`);
+      await page.locator('[role="dialog"]').first().getByRole("button", { name: "Origin / Converted into", exact: true }).click();
       await expect(page.locator('[role="dialog"]').first()).toContainText(ship.documentNumber);
 
       // UI: invoice the shipment, submit, post.
