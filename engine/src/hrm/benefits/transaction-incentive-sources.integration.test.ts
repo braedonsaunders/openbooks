@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { db } from "../../platform/db.ts";
+import { errorChainMatches } from "../../testing/error-chain.ts";
 import { setupHarness, setFeatures, withHarness } from "../../testing/hrm-harness.ts";
 import { measureTransactionIncentiveSources as measure, type TransactionIncentiveSourceQuery } from "./transaction-incentive-sources.ts";
 
@@ -13,7 +14,7 @@ const SPEC = { users: [
 type Harness = Awaited<ReturnType<typeof setupHarness<typeof SPEC>>>;
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
-async function sources(h: Harness, opts: { nullOverride?: boolean; draft?: boolean } = {}) {
+async function sources(h: Harness, opts: { missingGrouping?: boolean; draft?: boolean } = {}) {
   const document = randomUUID(), first = randomUUID(), second = randomUUID(), segment = randomUUID(), header = randomUUID(), override = randomUUID();
   const key = `service_zone_${segment.slice(0, 8)}`;
   await setFeatures(h.org.orgId, { orders: true });
@@ -22,11 +23,11 @@ async function sources(h: Harness, opts: { nullOverride?: boolean; draft?: boole
   for (const [id, name] of [[header, "North"], [override, "South"]]) await db.execute(sql`
     insert into segment_values (id, org_id, segment_id, name) values (${id}, ${h.org.orgId}, ${segment}, ${name})`);
   await db.execute(sql`insert into documents (id, org_id, subsidiary_id, kind, document_number, document_date, currency, extra_dims)
-    values (${document}, ${h.org.orgId}, ${h.org.subsidiaryId}, 'sales_order', ${document}, '2026-07-09', 'USD', ${JSON.stringify({ [key]: header })}::jsonb)`);
+    values (${document}, ${h.org.orgId}, ${h.org.subsidiaryId}, 'sales_order', ${document}, '2026-07-09', 'USD', ${JSON.stringify(opts.missingGrouping ? {} : { [key]: header })}::jsonb)`);
   for (const [index, id] of [first, second].entries()) await db.execute(sql`
     insert into document_lines (id, org_id, document_id, line_number, item_id, quantity, unit_price, amount, extra_dims)
     values (${id}, ${h.org.orgId}, ${document}, ${index + 1}, ${h.org.items.service}, '2.00200001', '10', '20.0200',
-      ${JSON.stringify(index === 1 ? { [key]: opts.nullOverride ? null : override } : {})}::jsonb)`);
+      ${JSON.stringify(index === 1 && !opts.missingGrouping ? { [key]: override } : {})}::jsonb)`);
   if (!opts.draft) await db.execute(sql`update documents set status = 'approved' where org_id = ${h.org.orgId} and id = ${document}`);
   const query: TransactionIncentiveSourceQuery = { orgId: h.org.orgId, actorId: h.reader, legalEntityId: h.org.subsidiaryId,
     currency: "USD", documentKind: "sales_order", itemIds: [h.org.items.service], lineIds: [first, second], groupingSegmentId: segment };
@@ -66,7 +67,10 @@ test("transaction incentive source admission refuses unavailable authority, iden
     await setFeatures(h.org.orgId, { orders: true });
     const draft = await sources(h, { draft: true });
     await assert.rejects(() => measure(draft.query), /draft.*approved/);
-    const missing = await sources(h, { nullOverride: true });
-    await assert.rejects(() => measure(missing.query), /no valid service_zone_.* assignment/, "an explicit null line dimension must not fall back to the header group");
+    const segmentKey = (await db.execute<{ key: string }>(sql`select key from segment_definitions where org_id=${h.org.orgId} and id=${s.segment}`)).rows[0]!.key;
+    await assert.rejects(() => db.execute(sql`update document_lines set extra_dims=${JSON.stringify({ [segmentKey]: null })}::jsonb where org_id=${h.org.orgId} and id=${s.second}`), error => errorChainMatches(error, /invalid custom segment assignment/), "native source writes reject an explicit null dimension before it can replace the header decision");
+    assert.equal((await measure(s.query)).lines.find(r => r.sourceId === s.second)?.groupId, s.override, "the rejected null write must preserve the recorded line override rather than resurrect its header group");
+    const missing = await sources(h, { missingGrouping: true });
+    await assert.rejects(() => measure(missing.query), /no valid service_zone_.* assignment/, "a genuinely unassigned source must refuse rather than infer a grouping");
   });
 });
