@@ -2,8 +2,8 @@ import assert from 'node:assert/strict'
 import { sql } from 'drizzle-orm'
 import { db, withOrgContext } from '@openbooks/engine/src/platform/db.ts'
 import { createScratchOrg, createScratchUser, dropScratchOrgReporting } from '@openbooks/engine/src/testing/fixtures.ts'
-import { resolveAuthzByUserId } from '../authz-core.ts'
-import { withAuthzContext } from '../authz-context.ts'
+import { resolveAuthzByUserId } from '../lib/authz-core.ts'
+import { withAuthzContext } from '../lib/authz-context.ts'
 
 /** Native item, active actor and explicit grants for dated selling-price commands. */
 export async function createFairValueFixture() {
@@ -37,7 +37,7 @@ export async function callFairValueRoute(
   return withOrgContext(fixture.org.orgId, async () => {
     const authz = await resolveAuthzByUserId(fixture.org.orgId, fixture.actorId)
     assert.ok(authz, 'the request actor is active and resolves through native authorization')
-    const routes = await import('../../app/api/items/[id]/fair-values/route.ts')
+    const routes = await import('../app/api/items/[id]/fair-values/route.ts')
     const request = new Request(`http://fv.test/api/items/${id}/fair-values${rowId ? `?id=${rowId}` : ''}`, {
       method, headers: { 'content-type': 'application/json' },
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
