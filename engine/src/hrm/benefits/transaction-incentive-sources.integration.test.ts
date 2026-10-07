@@ -2,12 +2,13 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
-import { db } from "../../platform/db.ts";
+import { db, withOrgTransaction } from "../../platform/db.ts";
 import { segmentRegistry, validateExtraDims } from "../../organization/segments.ts";
 import { postEntry } from "../../journal/post-entry.ts";
 import { errorChainMatches } from "../../testing/error-chain.ts";
 import { setupHarness, setFeatures, withHarness } from "../../testing/hrm-harness.ts";
 import { measureTransactionIncentiveSources as measure, type TransactionIncentiveSourceQuery } from "./transaction-incentive-sources.ts";
+import { requireTransactionPolicyStorage } from "./transaction-policy.ts";
 
 const SPEC = { users: [
   { key: "reader", name: "Transaction Benefits Reader", handle: "transaction_benefits_reader", permissions: ["hrm.benefits.read", "ar.read"], link: true },
@@ -15,6 +16,17 @@ const SPEC = { users: [
 ] } as const;
 type Harness = Awaited<ReturnType<typeof setupHarness<typeof SPEC>>>;
 const DB = !!process.env.OPENBOOKS_DB_URL;
+
+test("transaction benefit storage admission leaves the native ambient transaction usable", { skip: !DB }, async () => {
+  await withHarness(() => setupHarness(SPEC), async h => {
+    await withOrgTransaction(h.org.orgId, async () => {
+      await requireTransactionPolicyStorage(db);
+      const result = await db.execute<{ id: string }>(sql`select id from orgs where id=${h.org.orgId}`);
+      assert.equal(result.rows[0]?.id, h.org.orgId, "storage admission must not abort the transaction used by award delivery and payroll");
+      await requireTransactionPolicyStorage(db);
+    });
+  });
+});
 
 async function sources(h: Harness, opts: { missingGrouping?: boolean; nullOverride?: boolean; draft?: boolean } = {}) {
   const document = randomUUID(), first = randomUUID(), second = randomUUID(), segment = randomUUID(), header = randomUUID(), override = randomUUID();
