@@ -991,7 +991,7 @@ function sovFinancialProfile(): Json {
       {
         const drawer = page.locator('[role="dialog"]').first();
         await expect(drawer.getByText(`${t} Civic Library Build`).first()).toBeVisible();
-        await drawer.getByRole('button', { name: 'Financials', exact: true }).click();
+        await drawer.getByRole('button', { name: 'Financials & budget', exact: true }).click();
         // Label-scoped: each measure's value must sit in its own labeled row,
         // not merely somewhere in the drawer (contract and invoiced are both
         // 100,000.00 here, so bare text matching would prove nothing).
