@@ -209,12 +209,13 @@ test(
 
       // Global registered targets keep natural-key behavior (currencies are
       // shared), but a UUID must still name an existing row — never blind.
-      const currencyTarget = { resource: 'currencies', by: 'code' }
-      const cad = await resolverA.resolveId(currencyTarget, 'CAD')
-      assert.equal(cad, 'CAD')
-      assert.equal(await resolverA.resolveId(currencyTarget, 'ZZZ'), null)
-      assert.equal(await resolverA.resolveId(currencyTarget, randomUUID()), null)
-      assert.equal(await resolverA.resolveLabel(currencyTarget, 'CAD'), 'CAD')
+      for (const resource of ['currencies', 'benefit-currencies', 'compensation-currencies']) {
+        const currencyTarget = { resource, by: 'code' }
+        assert.equal(await resolverA.resolveId(currencyTarget, 'CAD'), 'CAD')
+        assert.equal(await resolverA.resolveId(currencyTarget, 'ZZZ'), null)
+        assert.equal(await resolverA.resolveId(currencyTarget, randomUUID()), null)
+        assert.equal(await resolverA.resolveLabel(currencyTarget, 'CAD'), 'CAD')
+      }
 
       // Truly unknown targets fail closed instead of persisting blind — and
       // inherited Object keys must never reach dynamic SQL as a role table.
