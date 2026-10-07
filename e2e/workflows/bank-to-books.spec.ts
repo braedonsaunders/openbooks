@@ -159,6 +159,7 @@ async function openDrawer(page: Page, drawerUrl: string) {
   await dismissSetupWizard(page);
   const drawer = page.locator('[role="dialog"]').first();
   await expect(drawer).toBeVisible();
+  await expect(page.locator('[role="dialog"]')).toHaveCount(1);
   return drawer;
 }
 
@@ -189,8 +190,7 @@ async function seedReceiptHeader(page: Page, documentDate: string): Promise<{ pa
  * item count and total — before anything posts.
  */
 async function uiApplyAndPost(page: Page, payId: string, amount: string, expectedItems: number, expectedTotal: string): Promise<void> {
-  await openDrawer(page, `/receipts?payment=${payId}`);
-  const drawer = page.locator('[role="dialog"]').first();
+  const drawer = await openDrawer(page, `/receipts?payment=${payId}`);
   await drawer.getByRole('button', { name: 'Edit', exact: true }).click();
   await drawer.getByPlaceholder('Amount received').fill(amount);
   {

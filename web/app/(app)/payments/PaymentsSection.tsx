@@ -75,8 +75,15 @@ export async function PaymentsSection({
     mode: undefined,
     form: undefined,
   })
+  // Persisted receipts belong to the shared list host, including server deep
+  // links. A separate server drawer would cover the host's second dialog.
+  const nativeDrawer = !creating && kind === 'customer_payment' && flyout?.mode === 'record'
+    ? { widget: 'payment-drawer' as const, drawer: {
+        flyout, basePath, closeHref, initialMode: pickString(sp.mode) === 'edit' ? 'edit' : 'view',
+      } }
+    : null
   let drawer: React.ReactNode = null
-  if (flyout) {
+  if (flyout && !nativeDrawer) {
     const openPayment = flyout.mode === 'record' ? flyout.payment : null
     drawer = (
       <PaymentDrawer
@@ -106,6 +113,7 @@ export async function PaymentsSection({
       canManage={canManage}
       sp={sp}
       drawer={drawer}
+      nativeDrawer={nativeDrawer}
       emptyAction={canCreate ? <NewPaymentButton kind={kind} basePath={basePath} label={newLabel} /> : undefined}
     />
   )
