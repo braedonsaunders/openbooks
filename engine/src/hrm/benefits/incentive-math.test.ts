@@ -90,6 +90,41 @@ function calc(input: Partial<ComputeIncentiveInput> = {}) {
 const refuses = async (fn: () => unknown, pattern: RegExp) =>
   (await refusal(Promise.resolve().then(fn), BenefitsError, pattern)).message;
 
+test("hourly incentives value approved member hours once at the registered currency precision", async () => {
+  const hourly = program({ valuation: "per_unit", metric: "approved_hours", allocation: "hours", percentRate: null, fixedAmount: "0.3333", frequency: "manual" });
+  const input: ComputeIncentiveInput = { program: hourly, periodBasis: CALENDAR, minorUnits: 2,
+    measured: measured({ metric: "approved_hours", currency: null, value: "20", periodFrom: "2026-07-01", periodTo: "2026-07-31" }),
+    shares: [
+      { employmentId: "emp-b", weight: null, hours: "3", effectiveFrom: "2026-07-10", effectiveTo: null },
+      { employmentId: "emp-a", weight: null, hours: "1.5", effectiveFrom: "2026-01-01", effectiveTo: null },
+      { employmentId: "emp-zero", weight: null, hours: "0", effectiveFrom: "2026-01-01", effectiveTo: null },
+    ] };
+  const result = computeIncentiveAwards(input);
+  assert.deepEqual(result.recipients.map(r => [r.employmentId, r.value]), [["emp-a", "0.5000"], ["emp-b", "1.0000"]]);
+  assert.equal(result.totalAwarded, "1.5000");
+  assert.equal(result.excludedZero.length, 1);
+  assert.deepEqual(computeIncentiveAwards({ ...input, shares: [...input.shares].reverse() }), result);
+  assert.equal(computeIncentiveAwards({ ...input, minorUnits: 0 }).totalAwarded, "1.0000");
+  assert.equal(computeIncentiveAwards({ ...input, minorUnits: 3 }).totalAwarded, "1.5000");
+  assert.equal(computeIncentiveAwards({ ...input, minorUnits: 4 }).totalAwarded, "1.4999");
+  const capped = computeIncentiveAwards({ ...input, program: { ...hourly, capAmount: "0.75" } });
+  assert.equal(capped.totalAwarded, "1.2500"); assert.equal(capped.recipients[1]!.capped, true);
+  assert.match(result.recipients[1]!.explanation, /3\.0000 approved hours.*0\.3333.*1\.0000/);
+  for (const [patch, message] of [
+    [{ program: { ...hourly, allocation: "equal" } }, /hours allocation/],
+    [{ program: { ...hourly, fixedAmount: null } }, /amount per approved hour/],
+    [{ program: { ...hourly, fixedAmount: "0" } }, /positive/],
+    [{ program: { ...hourly, percentRate: "5" } }, /overlapping percentage/],
+    [{ program: { ...hourly, budgetAmount: "1" } }, /exceed.*budget/],
+    [{ shares: [{ ...input.shares[0]!, hours: null }] }, /no approved-hour evidence/],
+    [{ shares: [{ ...input.shares[0]!, hours: "-1" }] }, /negative approved hours/],
+    [{ shares: [{ ...input.shares[0]!, hours: "21" }] }, /exceed.*measured/],
+    [{ shares: [input.shares[0]!, input.shares[0]!] }, /more than once/],
+  ] satisfies [Partial<ComputeIncentiveInput>, RegExp][]) {
+    await refuses(() => computeIncentiveAwards({ ...input, ...patch }), message);
+  }
+});
+
 
 const invalidComputations: [string, Partial<ComputeIncentiveInput>, RegExp[]][] = [
   [
@@ -487,16 +522,20 @@ test("configured cash finer than payable precision refuses instead of rounding",
   );
 });
 
-test("non-plain decimals refuse before they reach the ledger kernel", async () => {
+test("non-plain decimals retain their specific remedy before reaching the ledger kernel", async () => {
   // Scientific notation, over-scale fractions, symbols, and separators have
   // no plain-decimal reading and refuse; padded and signed forms normalize.
-  for (const bad of ["1E3", "5.00001", "$5.00", "1,000"]) {
+  for (const [bad, remedy] of [
+    ["1E3", /scientific notation/], ["5.00001", /at most 4 decimal places/],
+    ["$5.00", /currency symbol/], ["1,000", /ambiguous.*1000.*1\.000/],
+    ["12,34", /write.*12\.34/],
+  ] as const) {
     await refuses(
       () => calc({
         program: program({ valuation: "fixed", fixedAmount: bad, frequency: "manual" }),
       measured: measured({ periodFrom: "2026-02-01", periodTo: "2026-02-28" }),
     }),
-      /exact plain decimal/,
+      remedy,
     );
   }
 });

@@ -2861,7 +2861,8 @@
       "fixed": "Fixed amount",
       "percent": "Percent of base",
       "pool": "Shared pool",
-      "per_unit": "Amount per unit"
+      "per_unit": "Amount per unit",
+      "per_hour": "Amount per approved hour"
     },
     "metrics": {
       "revenue": "Revenue",

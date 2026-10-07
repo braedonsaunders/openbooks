@@ -2861,7 +2861,8 @@
       "fixed": "Monto fijo",
       "percent": "Porcentaje de la base",
       "pool": "Fondo compartido",
-      "per_unit": "Importe por unidad"
+      "per_unit": "Importe por unidad",
+      "per_hour": "Importe por hora aprobada"
     },
     "metrics": {
       "revenue": "Ingresos",

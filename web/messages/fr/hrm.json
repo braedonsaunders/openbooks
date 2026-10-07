@@ -2861,7 +2861,8 @@
       "fixed": "Montant fixe",
       "percent": "Pourcentage de la base",
       "pool": "Enveloppe partagée",
-      "per_unit": "Montant par unité"
+      "per_unit": "Montant par unité",
+      "per_hour": "Montant par heure approuvée"
     },
     "metrics": {
       "revenue": "Chiffre d'affaires",

@@ -2861,7 +2861,8 @@
       "fixed": "Valor fixo",
       "percent": "Percentual da base",
       "pool": "Fundo compartilhado",
-      "per_unit": "Valor por unidade"
+      "per_unit": "Valor por unidade",
+      "per_hour": "Valor por hora aprovada"
     },
     "metrics": {
       "revenue": "Receita",

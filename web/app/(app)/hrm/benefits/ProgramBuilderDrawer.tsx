@@ -285,6 +285,8 @@ export function ProgramBuilderDrawer({
       const next = { ...current, [key]: value }
       if (key === 'metric' && value === 'transactions') Object.assign(next, { valuation:'percent', allocation:'responsibility', metricScope:'company', scopeIds:[], sourceAccountIds:[], capAmount:'', budgetAmount:'', thresholdAmount:'' })
       if (key === 'metric' && value !== 'transactions' && current.metric === 'transactions') Object.assign(next, { allocation:'equal', valuation:current.valuation === 'per_unit' ? 'percent' : current.valuation })
+      if (key === 'valuation' && value === 'per_unit' && current.metric === 'approved_hours') Object.assign(next, { allocation:'hours', percentRate:'', deliveryMethod:'payroll' })
+      if (key === 'metric' && current.metric === 'approved_hours' && current.valuation === 'per_unit' && value !== 'approved_hours' && value !== 'transactions') next.valuation = 'percent'
       if (key === 'legalEntityId' && !currencyOptions.some((option) => option.value === current.currency && (option.scopeValue === null || option.scopeValue === value))) next.currency = ''
       return next
     })
@@ -383,10 +385,13 @@ export function ProgramBuilderDrawer({
   addSummary(t('portfolio.builder.fields.name'), draft.name.trim())
   addSummary(t('portfolio.builder.fields.code'), draft.code.trim())
   addSummary(t('portfolio.builder.fields.legalEntity'), subsidiaryOptions.find((option) => option.value === draft.legalEntityId)?.label ?? '')
-  addSummary(t('portfolio.builder.fields.valuation'), t(`portfolio.valuations.${draft.valuation}`))
+  addSummary(t('portfolio.builder.fields.valuation'), t(draft.valuation === 'per_unit' && draft.metric === 'approved_hours' ? 'portfolio.valuations.per_hour' : `portfolio.valuations.${draft.valuation}`))
   if (/^[A-Z]{3}$/.test(draft.currency)) {
     for (const field of ['fixedAmount', 'capAmount', 'budgetAmount', 'thresholdAmount'] as const) {
-      if (draft[field] && canonicalDecimal(draft[field], 4) !== null) addSummary(t(`portfolio.builder.fields.${field}`), money(draft[field], { currency: draft.currency }))
+      if (draft[field] && canonicalDecimal(draft[field], 4) !== null) addSummary(
+        t(field === 'fixedAmount' && draft.valuation === 'per_unit' ? draft.metric === 'approved_hours' ? 'portfolio.valuations.per_hour' : 'portfolio.valuations.per_unit' : `portfolio.builder.fields.${field}`),
+        field === 'fixedAmount' && draft.valuation === 'per_unit' ? `${draft[field]} ${draft.currency}` : money(draft[field], { currency: draft.currency }),
+      )
     }
   }
   if (draft.percentRate) addSummary(t('portfolio.builder.fields.percentRate'), `${draft.percentRate}%`)
@@ -504,14 +509,14 @@ export function ProgramBuilderDrawer({
                 onChange={(e) => set('valuation', e.target.value as ProgramDraft['valuation'])}
               >
                 <option value="fixed" disabled={draft.metric === 'transactions'}>{t('portfolio.valuations.fixed')}</option>
-                {draft.metric === 'transactions' ? <option value="per_unit">{t('portfolio.valuations.per_unit')}</option> : null}
+                {draft.metric === 'transactions' || draft.metric === 'approved_hours' ? <option value="per_unit">{t(draft.metric === 'approved_hours' ? 'portfolio.valuations.per_hour' : 'portfolio.valuations.per_unit')}</option> : null}
                 {draft.family === 'incentive' || mode === 'edit' && draft.valuation === 'percent' ? <option value="percent">{t('portfolio.valuations.percent')}</option> : null}
                 {draft.family === 'incentive' || mode === 'edit' && draft.valuation === 'pool' ? <option value="pool" disabled={draft.metric === 'transactions'}>{t('portfolio.valuations.pool')}</option> : null}
               </Select>
             </div>
             {draft.valuation === 'fixed' || draft.valuation === 'per_unit' ? (
               <div>
-                <Label htmlFor="program-builder-fixed">{t(draft.valuation === 'per_unit' ? 'portfolio.valuations.per_unit' : 'portfolio.builder.fields.fixedAmount')}</Label>
+                <Label htmlFor="program-builder-fixed">{t(draft.valuation === 'per_unit' ? draft.metric === 'approved_hours' ? 'portfolio.valuations.per_hour' : 'portfolio.valuations.per_unit' : 'portfolio.builder.fields.fixedAmount')}</Label>
                 <Input
                   id="program-builder-fixed"
                   inputMode="decimal"
@@ -733,7 +738,7 @@ export function ProgramBuilderDrawer({
               <Label htmlFor="program-builder-allocation">{t('portfolio.builder.fields.allocation')}</Label>
               <Select
                 id="program-builder-allocation"
-                disabled={draft.metric === 'transactions'}
+                disabled={draft.metric === 'transactions' || draft.valuation === 'per_unit'}
                 value={draft.allocation}
                 onChange={(e) => set('allocation', e.target.value as ProgramDraft['allocation'])}
               >
@@ -783,7 +788,7 @@ export function ProgramBuilderDrawer({
                 onChange={(e) => { set('deliveryMethod', e.target.value as ProgramDraft['deliveryMethod']); set('payComponentId', '') }}
               >
                 <option value="payroll">{t('portfolio.delivery.payroll')}</option>
-                <option value="external">{t('portfolio.delivery.external')}</option>
+                <option value="external" disabled={draft.family === 'incentive'}>{t('portfolio.delivery.external')}</option>
               </Select>
               <FieldError id="program-builder-payComponentId-error" message={errors.payComponentId} />
             </div>

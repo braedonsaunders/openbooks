@@ -446,8 +446,18 @@ function requireResolvableRules(code: string, rules: ProgramRuleInput): void {
     }
     if (rules.valuation === "percent" && (rules.percentRate === null || cmp(rules.percentRate,"0")<=0)) throw new BenefitsError("INVALID_INPUT","Configure a positive transaction percentage before activating this program.");
     if (rules.valuation === "per_unit" && (rules.fixedAmount === null || cmp(rules.fixedAmount,"0")<=0)) throw new BenefitsError("INVALID_INPUT","Configure a positive amount per transaction unit before activating this program.");
-  } else if (rules.valuation === "per_unit" || rules.allocation === "responsibility") {
-    throw new BenefitsError("INVALID_INPUT","Per-unit valuation needs the transactions metric; select the native source rules before continuing.");
+  } else if (rules.valuation === "per_unit") {
+    if (rules.metric !== "approved_hours" || rules.allocation !== "hours" || rules.family !== "incentive" || rules.deliveryMethod !== "payroll") {
+      throw new BenefitsError("INVALID_INPUT", "An hourly incentive requires approved hours, hours allocation and payroll delivery; select those rules or configure transaction-based units instead.");
+    }
+    if (rules.fixedAmount === null || cmp(rules.fixedAmount, "0") <= 0) {
+      throw new BenefitsError("INVALID_INPUT", "Configure a positive amount per approved hour before activating this program.");
+    }
+    if (rules.percentRate !== null) {
+      throw new BenefitsError("INVALID_INPUT", "An hourly incentive uses its amount per approved hour; clear the overlapping percentage before continuing.");
+    }
+  } else if (rules.allocation === "responsibility") {
+    throw new BenefitsError("INVALID_INPUT", "Responsibility allocation requires transaction source rules; select the transactions metric before continuing.");
   }
   if (rules.valuation === "fixed" && rules.fixedAmount === null) {
     throw new BenefitsError(

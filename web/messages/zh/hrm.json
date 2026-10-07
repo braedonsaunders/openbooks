@@ -2861,7 +2861,8 @@
       "fixed": "固定金额",
       "percent": "按基数比例",
       "pool": "共享奖金池",
-      "per_unit": "单位金额"
+      "per_unit": "单位金额",
+      "per_hour": "每个已批准工时的金额"
     },
     "metrics": {
       "revenue": "收入",

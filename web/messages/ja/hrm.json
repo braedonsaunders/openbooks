@@ -2861,7 +2861,8 @@
       "fixed": "固定額",
       "percent": "基準の割合",
       "pool": "分配プール",
-      "per_unit": "単位当たり金額"
+      "per_unit": "単位当たり金額",
+      "per_hour": "承認済み時間あたりの金額"
     },
     "metrics": {
       "revenue": "売上",

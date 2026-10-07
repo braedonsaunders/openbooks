@@ -2861,7 +2861,8 @@
       "fixed": "Festbetrag",
       "percent": "Prozentsatz der Basis",
       "pool": "Geteilter Topf",
-      "per_unit": "Betrag je Einheit"
+      "per_unit": "Betrag je Einheit",
+      "per_hour": "Betrag je genehmigter Stunde"
     },
     "metrics": {
       "revenue": "Umsatz",
