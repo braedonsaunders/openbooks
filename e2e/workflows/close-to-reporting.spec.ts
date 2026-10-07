@@ -968,17 +968,21 @@ test.describe.serial("close to reporting", () => {
       );
       await Promise.all([acceptConfirm(page), page.getByRole("button", { name: "Lock period" }).click()]);
       await expectOkResponse(await relocked, "re-lock period");
-      const republished = page.waitForResponse(
-        (r) => r.url().endsWith(`/api/close/runs/${SEED.runId}`) && r.request().method() === "POST",
-      );
       await page.goto(`/close?run=${SEED.runId}&stage=publish`);
       // A re-publication after a controlled reopen is a restatement: the
       // engine refuses it without a note and the wizard keeps the button
       // disabled until one is entered.
-      await page
-        .getByPlaceholder("Add a note about this publication\u2026")
-        .fill(`Restated after the August freight accrual for ${P.name}`);
-      await Promise.all([acceptConfirm(page), page.getByRole("button", { name: "Publish package" }).click()]);
+      const publicationNote = page.getByRole("textbox", { name: "Publication note", exact: true });
+      const publishPackage = page.getByRole("button", { name: "Publish package", exact: true });
+      await expect(publicationNote).toHaveCount(1);
+      await expect(publicationNote).toBeVisible();
+      await expect(publishPackage).toBeDisabled();
+      await publicationNote.fill(`Restated after the August freight accrual for ${P.name}`);
+      await expect(publishPackage).toBeEnabled();
+      const republished = page.waitForResponse(
+        (r) => r.url().endsWith(`/api/close/runs/${SEED.runId}`) && r.request().method() === "POST",
+      );
+      await Promise.all([acceptConfirm(page), publishPackage.click()]);
       await expectOkResponse(await republished, "re-publish package");
       const res2 = await page.request.get(`${baseURL}/api/close/runs/${SEED.runId}/binder`, {
         headers: { Origin: new URL(baseURL!).origin },
