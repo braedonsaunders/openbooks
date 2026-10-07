@@ -85,14 +85,19 @@ for (const masked of [false, true]) test(`${masked ? "masked" : "full"} sandbox 
     };
     await assertCopy();
     const beforeTarget = (await db.execute(sql`select * from crm_sales_evidence where org_id=${target} order by id`)).rows;
-    // Native authority alone cannot substitute an amount on a copied source.
-    await assert.rejects(withMaintenanceTransaction(null, async () => {
-      await cloneFlags();
-      assert.equal((await db.execute(sql`delete from crm_opportunities where org_id=${target} and id=${identities.opportunity} returning id`)).rows.length, 1);
-      await db.execute(sql`insert into crm_opportunities(id,org_id,opportunity_number,title,status_id,subsidiary_id,currency,projected_amount,closed_at)
-        values(${identities.opportunity},${target},${opportunity},'Altered copy',${identities.won},${identities.subsidiary},'CAD','99.0000',${org.date}::date)`);
-    }), error => errorChainMatches(error, /Sandbox sales sources must retain.*amount and dates.*refresh from the recorded source/));
-    await assertCopy();
+    // Preserve every other recorded fact so each substitution tests its own refusal.
+    for (const [number, amount] of [[opportunity, "99.0000"], ["ALTERED-SOURCE-NUMBER", "10.1234"]] as const) {
+      await assert.rejects(withMaintenanceTransaction(null, async () => {
+        await cloneFlags();
+        assert.equal((await db.execute(sql`delete from crm_opportunities where org_id=${target} and id=${identities.opportunity} returning id`)).rows.length, 1);
+        await db.execute(sql`insert into crm_opportunities select (jsonb_populate_record(null::crm_opportunities,
+          to_jsonb(original)||jsonb_build_object('id',${identities.opportunity}::uuid,'org_id',${target}::uuid,
+            'status_id',${identities.won}::uuid,'subsidiary_id',${identities.subsidiary}::uuid,
+            'opportunity_number',${number}::text,'projected_amount',${amount}::numeric))).*
+          from crm_opportunities original where original.org_id=${org.orgId} and original.id=${opportunity}`);
+      }), error => errorChainMatches(error, /Sandbox sales sources must retain.*amount and dates.*refresh from the recorded source/));
+      await assertCopy();
+    }
     await assert.rejects(withMaintenanceTransaction(null, async () => {
       await cloneFlags();
       await db.execute(sql`insert into crm_opportunities(org_id,opportunity_number,title,status_id,subsidiary_id,currency,projected_amount,closed_at)

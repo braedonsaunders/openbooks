@@ -1,0 +1,1 @@
+Only the existing sales capture function is replaced. Existing non-null unique tenant kind/document-number and tenant opportunity-number keys bound the candidate lookup before unchanged rebased identity and full sales-fact checks. No table, index, constraint, trigger binding, authorization, ordinary capture or tenant data changes.
