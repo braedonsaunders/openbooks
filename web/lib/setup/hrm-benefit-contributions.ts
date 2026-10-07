@@ -10,11 +10,11 @@ export const BENEFIT_CONTRIBUTION_ENTITIES: SetupEntity[] = [
   {
     ...common, key: 'benefit-contribution-rules', table: 'hrm_benefit_contribution_rules', parentRecords: parent,
     hasActive: true, orderBy: 'position',
-    columns: [{ key: 'name', kind: 'text' }, { key: 'kind', labelKey: 'benefitContributions.fields.kind', kind: 'badge', options: options('kind', ['employee_deduction', 'employer_contribution', 'taxable_non_cash']) }, { key: 'basis', labelKey: 'benefitContributions.fields.basis', kind: 'badge', options: options('basis', ['per_hour', 'per_period', 'per_month', 'per_year', 'percent_of_eligible_pay']) }, { key: 'rate', labelKey: 'benefitContributions.fields.rate', kind: 'number' }, { key: 'effectiveFrom', kind: 'date' }, { key: 'isActive', kind: 'badge-active' }],
+    columns: [{ key: 'name', kind: 'text' }, { key: 'kind', labelKey: 'benefitContributions.fields.kind', kind: 'badge', options: options('kind', ['employee_deduction', 'employer_contribution', 'taxable_non_cash', 'cash_earning']) }, { key: 'basis', labelKey: 'benefitContributions.fields.basis', kind: 'badge', options: options('basis', ['per_hour', 'per_period', 'per_month', 'per_year', 'percent_of_eligible_pay']) }, { key: 'rate', labelKey: 'benefitContributions.fields.rate', kind: 'number' }, { key: 'effectiveFrom', kind: 'date' }, { key: 'isActive', kind: 'badge-active' }],
     fields: [planField,
       { key: 'ruleKey', labelKey: 'benefitContributions.fields.ruleKey', kind: 'text', required: true, lockedOnEdit: true },
       { key: 'name', kind: 'text', required: true },
-      { key: 'kind', labelKey: 'benefitContributions.fields.kind', kind: 'select', required: true, options: options('kind', ['employee_deduction', 'employer_contribution', 'taxable_non_cash']), helpTextKey: 'benefitContributions.componentHint' },
+      { key: 'kind', labelKey: 'benefitContributions.fields.kind', kind: 'select', required: true, options: options('kind', ['employee_deduction', 'employer_contribution', 'taxable_non_cash', 'cash_earning']), helpTextKey: 'benefitContributions.componentHint' },
       { key: 'payComponentId', labelKey: 'benefitContributions.fields.payComponentId', kind: 'ref', ref: 'pay-components', required: true, helpTextKey: 'benefitContributions.componentHint' },
       { key: 'basis', labelKey: 'benefitContributions.fields.basis', kind: 'select', required: true, options: options('basis', ['per_hour', 'per_period', 'per_month', 'per_year', 'percent_of_eligible_pay']) },
       { key: 'rateFormula', kind: 'select', required: true, options: options('formula', ['elected_rate', 'hourly_wage_percent', 'matching_election']), helpTextKey: 'benefitContributions.formulaHint' },

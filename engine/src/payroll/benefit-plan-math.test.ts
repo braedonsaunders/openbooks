@@ -5,7 +5,7 @@ import { computePlanMovement } from './entitlements-movement-kernel.ts';
 import type { EntitlementPlan } from './entitlements-types.ts';
 const rule: RecurringBenefitRule = { id:'rule',planId:'plan',ruleKey:'savings',name:'Savings',kind:'employer_contribution',payComponentId:'component',basis:'per_hour',rate:'1',rateFormula:'elected_rate',hoursBasis:'all_paid',payBasis:null,monthsPerYear:null,periodsPerYear:null,proration:'none',matchRuleId:null,requiresMatchEligibility:false,enforcePolicyCap:false,position:0,effectiveFrom:'2026-01-01',effectiveTo:null,runApplicability:'all_pay_runs',unpaidPeriodTreatment:'charge',arrearsPlanId:null,arrearsRecoveryPeriods:null };
 const term: RecurringBenefitTerm = { id:'term',enrollmentId:'enrollment',ruleId:'rule',electionMode:'fixed',electedRate:'1.2345678912',declaredPeriodsPerYear:null,effectiveFrom:'2026-01-01',effectiveTo:null,overrideReason:null,overrideApprovedBy:null,overrideApprovedAt:null };
-const basis: RecurringBenefitBasis = { hours:'40',eligiblePay:'1200',hourlyWage:'30',periodsPerYear:52,coveredDays:7,periodDays:7,matchEligible:true,tier:{id:'tier',minimumServiceYears:1,employerMaxPercent:'3.5',employeeMatchRatio:'2'},matchingElectedRate:null };
+const basis: RecurringBenefitBasis = { hours:'40',eligiblePay:'1200',hourlyWage:'30',periodsPerYear:52,currencyMinorUnits:2,coveredDays:7,periodDays:7,matchEligible:true,tier:{id:'tier',minimumServiceYears:1,employerMaxPercent:'3.5',employeeMatchRatio:'2'},matchingElectedRate:null };
 test('fixed contributions preserve the elected precision and do not follow increasing ceilings', () => {
   for (const wage of ['30','50','100']) assert.equal(recurringBenefitAmount(rule,term,{...basis,hourlyWage:wage}).amount,'49.3800');
   assert.equal(recurringBenefitAmount(rule,term,basis).rate,'1.2345678912');
@@ -44,8 +44,25 @@ test('selected-components hours price the elected rate over the counted signed h
   assert.throws(() => recurringBenefitAmount({ ...selected, selectedComponentIds: [] }, term, basis), /no counted earning components are selected — list the earning components whose hours count/);
   assert.throws(() => recurringBenefitAmount({ ...selected, selectedComponentIds: undefined }, term, basis), /no counted earning components are selected/);
 });
+test('cash earning elections price only the supplied eligible hours and preserve covered-period math', () => {
+  const incentive = { ...rule, kind: 'cash_earning' as const, hoursBasis: 'selected_components' as const, selectedComponentIds: ['overtime', 'double_time'], proration: 'calendar_days' as const };
+  assert.equal(recurringBenefitAmount(incentive, { ...term, electedRate: '5' }, { ...basis, hours: '10', coveredDays: 3 }).amount, '50.0000');
+  assert.equal(recurringBenefitAmount(incentive, { ...term, electedRate: '5' }, { ...basis, hours: '0' }).amount, '0.0000');
+  assert.equal(recurringBenefitAmount(incentive, { ...term, electionMode: 'follows_policy', electedRate: null }, { ...basis, hours: '10' }).amount, '10.0000');
+  assert.throws(() => recurringBenefitAmount({ ...incentive, selectedComponentIds: [] }, term, basis), /list the earning components whose hours count/);
+});
 test('an undeclared hours basis names every lawful choice', () => {
   assert.throws(() => recurringBenefitAmount({ ...rule, hoursBasis: null }, term, basis), /choose all paid, regular paid, scheduled paid, or selected-components hours/);
+});
+test('contributions use the registered payable quantum before eligibility or zero amounts', () => {
+  const election = { ...term, electedRate: '1.2345678912' };
+  for (const [currencyMinorUnits, amount] of [[0, '1.0000'], [2, '1.2300'], [3, '1.2350'], [4, '1.2346']] as const) {
+    assert.equal(recurringBenefitAmount({ ...rule, kind: 'cash_earning' }, election, { ...basis, hours: '1', currencyMinorUnits }).amount, amount);
+  }
+  for (const precision of [undefined, null, NaN, -1, 1.5, 5]) {
+    assert.throws(() => recurringBenefitAmount({ ...rule, requiresMatchEligibility: true }, election,
+      { ...basis, hours: '0', matchEligible: false, currencyMinorUnits: precision as number }), /payable currency precision.*registered currency precision/);
+  }
 });
 test('unpaid coverage uses the native owe bank and recovers the declared prior periods plus current coverage', () => {
   const plan: EntitlementPlan = {id:'recovery',code:'RECOVERY',systemKey:null,name:'Benefit recovery',unit:'money',direction:'owe',accrualMethod:'manual',accrualValue:null,accrualComponentId:null,payoutComponentId:'deduction',depositComponentId:null,allowNegativeBalance:false,liabilityAccountId:null,capBehavior:'warn'};

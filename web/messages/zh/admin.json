@@ -5940,7 +5940,8 @@
         "kind": {
           "employee_deduction": "员工扣款",
           "employer_contribution": "雇主缴款",
-          "taxable_non_cash": "应税非现金福利"
+          "taxable_non_cash": "应税非现金福利",
+          "cash_earning": "现金收入"
         },
         "basis": {
           "per_hour": "每适用工时",

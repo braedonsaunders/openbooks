@@ -5940,7 +5940,8 @@
         "kind": {
           "employee_deduction": "Desconto do funcionário",
           "employer_contribution": "Contribuição patronal",
-          "taxable_non_cash": "Benefício tributável não monetário"
+          "taxable_non_cash": "Benefício tributável não monetário",
+          "cash_earning": "Remuneração em dinheiro"
         },
         "basis": {
           "per_hour": "Por hora elegível",

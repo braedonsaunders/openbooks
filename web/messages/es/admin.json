@@ -5940,7 +5940,8 @@
         "kind": {
           "employee_deduction": "Deducción del empleado",
           "employer_contribution": "Aportación del empleador",
-          "taxable_non_cash": "Beneficio imponible no monetario"
+          "taxable_non_cash": "Beneficio imponible no monetario",
+          "cash_earning": "Remuneración en efectivo"
         },
         "basis": {
           "per_hour": "Por hora elegible",

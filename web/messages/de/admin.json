@@ -5940,7 +5940,8 @@
         "kind": {
           "employee_deduction": "Mitarbeiterabzug",
           "employer_contribution": "Arbeitgeberbeitrag",
-          "taxable_non_cash": "Steuerpflichtige Sachleistung"
+          "taxable_non_cash": "Steuerpflichtige Sachleistung",
+          "cash_earning": "Barvergütung"
         },
         "basis": {
           "per_hour": "Pro anrechenbarer Stunde",

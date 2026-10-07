@@ -3,7 +3,7 @@ import { add, cmp, neg, sum, mulDecimalFactors, mulPercent, mulRatio, roundMoney
 import { compareDecimal, divideDecimal, multiplyDecimal } from '../money/exact-decimal.ts';
 import { PayrollError } from './error.ts';
 
-export type BenefitContributionKind = 'employee_deduction' | 'employer_contribution' | 'taxable_non_cash';
+export type BenefitContributionKind = 'employee_deduction' | 'employer_contribution' | 'taxable_non_cash' | 'cash_earning';
 export type BenefitContributionBasis = 'per_hour' | 'per_period' | 'per_month' | 'per_year' | 'percent_of_eligible_pay';
 export interface RecurringBenefitRule {
   id: string; planId: string; ruleKey: string; name: string; kind: BenefitContributionKind;
@@ -31,6 +31,7 @@ export interface BenefitContributionTier {
 }
 export interface RecurringBenefitBasis {
   hours: string; eligiblePay: string; hourlyWage: string | null; periodsPerYear: number;
+  currencyMinorUnits: number;
   coveredDays: number; periodDays: number; matchEligible: boolean | null;
   tier: BenefitContributionTier | null; matchingElectedRate: string | null;
 }
@@ -38,6 +39,9 @@ export interface RecurringBenefitBasis {
 /** Fixed elections never progress when a ceiling changes. A ceiling binds only when policy declares it. */
 export function recurringBenefitAmount(rule: RecurringBenefitRule, term: RecurringBenefitTerm, basis: RecurringBenefitBasis): { amount: Money; rate: string; maximumRate: string | null } {
   const refuse = (message: string): never => { throw new PayrollError(`Benefit rule ${rule.ruleKey}: ${message}`); };
+  if (!Number.isInteger(basis.currencyMinorUnits) || basis.currencyMinorUnits < 0 || basis.currencyMinorUnits > 4) {
+    refuse('the payable currency precision is unknown or unsupported — resolve its registered currency precision before calculating');
+  }
   if (rule.requiresMatchEligibility && basis.matchEligible === null) refuse('matching eligibility is unknown — record the employee election eligibility before calculating payroll');
   if (rule.requiresMatchEligibility && !basis.matchEligible) return { amount: parseMoney('0'), rate: '0', maximumRate: null };
   const tierRequired = rule.rateFormula !== 'elected_rate' && term.electionMode === 'follows_policy' || rule.enforcePolicyCap;
@@ -99,7 +103,7 @@ export function recurringBenefitAmount(rule: RecurringBenefitRule, term: Recurri
     if (basis.periodDays <= 0) refuse('the pay period is empty — choose a valid inclusive pay period');
     amount = mulRatio(amount, BigInt(basis.coveredDays), BigInt(basis.periodDays));
   }
-  return { amount: parseMoney(roundMoney(amount, 2)), rate: canonicalRate, maximumRate };
+  return { amount: parseMoney(roundMoney(amount, basis.currencyMinorUnits)), rate: canonicalRate, maximumRate };
 }
 
 export interface BenefitRecoveryLedgerEntry { id: string; planId: string; documentId: string | null; movementDate: string; kind: string; amount: string }

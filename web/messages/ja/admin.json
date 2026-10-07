@@ -5940,7 +5940,8 @@
         "kind": {
           "employee_deduction": "従業員控除",
           "employer_contribution": "雇用主拠出",
-          "taxable_non_cash": "課税対象現物給付"
+          "taxable_non_cash": "課税対象現物給付",
+          "cash_earning": "現金支給"
         },
         "basis": {
           "per_hour": "対象時間当たり",

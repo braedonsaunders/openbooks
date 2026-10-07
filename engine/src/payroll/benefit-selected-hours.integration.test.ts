@@ -8,6 +8,7 @@ import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { calculatePayRun } from "./run-calculation.ts";
 import { createPayRun } from "./run-lifecycle.ts";
+import { sum } from "../money/money.ts";
 
 /** Per-hour benefit contributions counted over an explicit component list. */
 
@@ -42,7 +43,8 @@ test('selected-components hours count signed earning hours and ignore quantity u
       values(${planId},${fx.orgId},'PENSION','Pension plan','retirement','CAD',${fx.subsidiaryId},'2026-01-01')`);
     await db.execute(sql`insert into hrm_benefit_enrollments(id,org_id,employment_id,plan_id,status,effective_from,currency)
       values(${enrollmentId},${fx.orgId},${employmentId},${planId},'elected','2026-01-01','CAD')`);
-    const employerRuleId = randomUUID(), employeeRuleId = randomUUID();
+    const employerRuleId = randomUUID(), employeeRuleId = randomUUID(), cashRuleId = randomUUID();
+    const cashComponentId = await earningComponent(fx, 'HOURS_INCENTIVE');
     const employerComponentId = randomUUID(), employeeComponentId = randomUUID();
     await db.execute(sql`insert into pay_components(id,org_id,code,name,kind,country,taxable,pensionable,insurable,vacationable,
       tax_treatment,payment_kind,expense_account_id,liability_account_id)
@@ -53,17 +55,21 @@ test('selected-components hours count signed earning hours and ignore quantity u
     for (const [ruleId, code, role, componentId] of [
       [employerRuleId, 'PENSION_ER', 'employer_contribution', employerComponentId],
       [employeeRuleId, 'PENSION_EE', 'employee_deduction', employeeComponentId],
+      [cashRuleId, 'HOURS_INCENTIVE', 'cash_earning', cashComponentId],
     ] as const) {
       await db.execute(sql`insert into hrm_benefit_contribution_rules(id,org_id,plan_id,rule_key,name,kind,pay_component_id,basis,rate,rate_formula,hours_basis,
         proration,effective_from,run_applicability)
         values(${ruleId},${fx.orgId},${planId},${code},${code},${role},${componentId},'per_hour',0,'elected_rate','selected_components','none','2026-01-01','all_pay_runs')`);
-      for (const counted of [regular, overtime, doubletime, stat, deposit]) {
+      for (const counted of role === 'cash_earning' ? [overtime, doubletime] : [regular, overtime, doubletime, stat, deposit]) {
         await db.execute(sql`insert into hrm_benefit_contribution_rule_components(org_id,plan_id,rule_id,pay_component_id)
           values(${fx.orgId},${planId},${ruleId},${counted})`);
       }
+      const rate = role === 'cash_earning' ? '5' : code === 'PENSION_ER' ? '1.54' : '11.00';
       await db.execute(sql`insert into hrm_benefit_enrollment_terms(id,org_id,enrollment_id,rule_id,election_mode,elected_rate,effective_from,source_decimal,provenance)
-        values(${randomUUID()},${fx.orgId},${enrollmentId},${ruleId},'fixed',${code === 'PENSION_ER' ? '1.54' : '11.00'},'2026-01-01',${code === 'PENSION_ER' ? '1.54' : '11.00'},'{"source":"approved payroll election"}'::jsonb)`);
+        values(${randomUUID()},${fx.orgId},${enrollmentId},${ruleId},'fixed',${rate},'2026-01-01',${rate},'{"source":"approved payroll election"}'::jsonb)`);
     }
+    await assert.rejects(() => validateBenefitContributionConfiguration(db, fx.orgId, 'benefit-contribution-rule-components',
+      { planId, ruleId: cashRuleId, payComponentId: cashComponentId }), /cannot count its own output hours.*original earning components/);
     await db.execute(sql`update hrm_benefit_enrollments set submitted_by=${fx.actorId},submitted_at=now(),
       submission_snapshot=public.benefit_enrollment_submission_source(org_id,id),updated_by=${fx.actorId},
       decision_snapshot=jsonb_build_object('outcome','approved','mode','not_required','approvalMode','none','planId',plan_id),status='active'
@@ -87,6 +93,28 @@ test('selected-components hours count signed earning hours and ignore quantity u
     const amounts = new Map(rows.map(l => [l.code, l.amount]));
     assert.equal(amounts.get('PENSION_ER'), '58.5200', '38 counted hours at 1.54');
     assert.equal(amounts.get('PENSION_EE'), '418.0000', '38 counted hours at 11.00');
+    const incentive = (await db.execute<{ amount: string; hours: string | null; vacationable: boolean }>(sql`select l.amount::text,l.hours::text,c.vacationable from pay_stub_lines l join pay_stubs s on s.org_id=l.org_id and s.id=l.stub_id
+      join pay_components c on c.org_id=l.org_id and c.id=l.component_id
+      where s.org_id=${fx.orgId} and s.pay_run_document_id=${run.documentId} and l.component_id=${cashComponentId}`)).rows;
+    assert.deepEqual(incentive, [{ amount: '50.0000', hours: null, vacationable: true }], 'Ten original overtime hours are valued once without duplicating worked hours');
+    const allocation = (await db.execute<{ amount: string; source_snapshot: { basis: { hours: string; currencyMinorUnits: number }; rule: { kind: string } } }>(sql`select amount::text,source_snapshot from pay_run_benefit_allocations
+      where org_id=${fx.orgId} and pay_run_document_id=${run.documentId} and rule_id=${cashRuleId}`)).rows;
+    assert.equal(allocation.length, 1);
+    assert.equal(allocation[0]!.source_snapshot.basis.hours, '10.0000');
+    assert.equal(allocation[0]!.source_snapshot.basis.currencyMinorUnits, 2);
+    assert.equal(allocation[0]!.source_snapshot.rule.kind, 'cash_earning');
+    const earningHours = (await db.execute<{ hours: string }>(sql`select l.hours::text from pay_stub_lines l join pay_stubs s on s.org_id=l.org_id and s.id=l.stub_id
+      where s.org_id=${fx.orgId} and s.pay_run_document_id=${run.documentId} and l.kind='earning' and l.hours is not null`)).rows;
+    assert.equal(sum(earningHours.map(row => row.hours)), '38.0000');
+    const replay = await calculatePayRun({ orgId: fx.orgId, actorId: fx.actorId, documentId: run.documentId });
+    assert.deepEqual(replay.errors, []);
+    assert.equal((await db.execute(sql`select id from pay_run_benefit_allocations where org_id=${fx.orgId} and pay_run_document_id=${run.documentId} and rule_id=${cashRuleId}`)).rows.length, 1);
+    // A provider amount and an elected native earning cannot both own the same payout.
+    await db.execute(sql`insert into pay_run_adjustments(org_id,pay_run_document_id,employee_party_id,adjustment_type,component_id,amount) values(${fx.orgId},${run.documentId},${partyId},'line',${cashComponentId},'50')`);
+    const duplicate = await calculatePayRun({ orgId: fx.orgId, actorId: fx.actorId, documentId: run.documentId });
+    assert.equal(duplicate.errors.length, 1);
+    assert.match(duplicate.errors[0]!.message, /HOURS_INCENTIVE.*sole source.*never added twice/);
+    assert.equal((await db.execute(sql`select id from pay_run_benefit_allocations where org_id=${fx.orgId} and pay_run_document_id=${run.documentId} and rule_id=${cashRuleId}`)).rows.length, 0, 'Refused calculation cannot retain a partial incentive allocation');
   } finally { await dropScratchOrgReporting(fx.orgId); }
 });
 

@@ -30,6 +30,7 @@ interface EnrollmentSource {
 }
 export interface RecurringBenefitSource {
   employmentId: string; enrollments: EnrollmentSource[];
+  currencyPrecisions: { code: string; minor_units: number }[];
   service: Awaited<ReturnType<typeof resolveEmploymentServiceCredit>> | null;
   workSchedule: Awaited<ReturnType<typeof resolveWorkSchedule>> | null;
 }
@@ -94,7 +95,11 @@ export async function recurringBenefitSource(tx: Executor, args: {
     const subject = (await tx.execute<{ worker_party_id: string }>(sql`select worker_party_id from worker_employments where org_id=${orgId} and id=${employmentId}`)).rows[0];
     if (subject) workSchedule = await resolveWorkSchedule(tx, orgId, subject.worker_party_id, periodEnd);
   }
-  return { employmentId, enrollments: rows, service, workSchedule };
+  const currencies = [...new Set(rows.map(e => e.currency))].sort();
+  const currencyPrecisions = currencies.length ? (await tx.execute<{ code: string; minor_units: number }>(sql`
+    select code,minor_units from currencies where code=any(${currencies}::text[]) order by code for share
+  `)).rows : [];
+  return { employmentId, enrollments: rows, currencyPrecisions, service, workSchedule };
 }
 
 function coveredBaseLines(lines: readonly Line[], from: string, to: string, periodStart: string, periodEnd: string): Line[] {
@@ -116,6 +121,8 @@ export async function appendRecurringBenefitLines(tx: Executor, args: {
   for (const enrollment of source.enrollments) {
     if (enrollment.employerSubsidiaryId !== null && enrollment.employerSubsidiaryId !== args.subsidiaryId) throw new PayrollError(`Benefit plan ${enrollment.planCode} belongs to another legal entity — end the mismatched enrollment and elect a plan available to the employee employer`);
     if (enrollment.currency !== args.currency) throw new PayrollError(`Benefit plan ${enrollment.planCode} is in ${enrollment.currency}, while payroll pays ${args.currency} — elect a plan in the pay-run currency; contributions never guess an exchange rate`);
+    const currencyMinorUnits = source.currencyPrecisions.find(c => c.code === enrollment.currency)?.minor_units;
+    if (currencyMinorUnits === undefined) throw new PayrollError(`Benefit plan ${enrollment.planCode} has no registered payable precision for ${enrollment.currency} — configure its currency before calculating payroll`);
     if (!enrollment.rules.length) throw new PayrollError(`Benefit plan ${enrollment.planCode} has no effective contribution rules — configure its Contributions for the pay period before calculating payroll`);
     if (!enrollment.terms.length && enrollment.rules.length) throw new PayrollError(`Benefit plan ${enrollment.planCode} has no contribution election terms — record the employee elections before calculating payroll`);
     for (const term of enrollment.terms) {
@@ -130,17 +137,21 @@ export async function appendRecurringBenefitLines(tx: Executor, args: {
         recoveryOwners.add(rule.arrearsPlanId);
       }
       const component = enrollment.components.find(c => String(c.id) === rule.payComponentId);
-      const requiredKind = rule.kind === 'employee_deduction' ? 'deduction' : rule.kind === 'taxable_non_cash' ? 'earning' : 'employer_contribution';
+      const requiredKind = rule.kind === 'employee_deduction' ? 'deduction' : ['taxable_non_cash','cash_earning'].includes(rule.kind) ? 'earning' : 'employer_contribution';
       if (!component || !component.is_active || component.kind !== requiredKind || component.system_key != null ||
           component.country != null && component.country !== args.country ||
-          rule.kind === 'taxable_non_cash' && (component.payment_kind !== 'non_cash' || component.taxable !== true)) {
-        throw new PayrollError(`Benefit rule ${rule.ruleKey} requires an active ${requiredKind}${rule.kind === 'taxable_non_cash' ? ' with taxable non-cash treatment' : ''} component for ${args.country} — correct the linked payroll component`);
+          rule.kind === 'taxable_non_cash' && (component.payment_kind !== 'non_cash' || component.taxable !== true) ||
+          rule.kind === 'cash_earning' && component.payment_kind !== 'cash') {
+        throw new PayrollError(`Benefit rule ${rule.ruleKey} requires an active ${requiredKind}${rule.kind === 'taxable_non_cash' ? ' with taxable non-cash treatment' : rule.kind === 'cash_earning' ? ' with cash treatment' : ''} component for ${args.country} — correct the linked payroll component`);
       }
-      const vacationableEarning = rule.kind === 'taxable_non_cash' && component.vacationable === true;
+      const vacationableEarning = requiredKind === 'earning' && component.vacationable === true;
       if (vacationableEarning && rule.basis === 'percent_of_eligible_pay' && rule.payBasis === 'all_cash_earnings') {
         throw new PayrollError(`Benefit rule ${rule.ruleKey} creates a circular vacation-pay basis — choose regular cash earnings, which excludes derived vacation pay, or use an independent hourly or fixed-period premium`);
       }
       if ((args.stage === 'vacationable_earnings') !== vacationableEarning) continue;
+      if (rule.kind === 'cash_earning' && originalLines.some(line => line.componentId === rule.payComponentId && cmp(line.amount,'0') !== 0)) {
+        throw new PayrollError(`Benefit rule ${rule.ruleKey} also has a supplied earning for its output component — retain the existing input or the approved Benefits election as the sole source before recalculating; cash incentives are never added twice`);
+      }
       const duplicate = (await tx.execute<{ id: string }>(sql`select id from employee_pay_components where org_id=${args.orgId}
         and employee_party_id=${args.employeePartyId} and component_id=${rule.payComponentId} and is_active
         and (employment_id is null or employment_id=${args.employmentId}) and effective_from<=${to}::date
@@ -161,6 +172,7 @@ export async function appendRecurringBenefitLines(tx: Executor, args: {
       // hours, so listing one matches nothing; a listed deduction or
       // contribution is refused by name instead of silently under-counting.
       if (rule.hoursBasis === 'selected_components') {
+        if (rule.selectedComponentIds?.includes(rule.payComponentId)) throw new PayrollError(`Benefit rule ${rule.ruleKey} counts its own output — select original earning components in its Counted components before calculating`);
         for (const selected of rule.selectedComponents ?? []) {
           if (selected.kind !== 'earning') throw new PayrollError(`Benefit rule ${rule.ruleKey} counts ${selected.code} (${selected.name}), which is not an earning component — list only earning components whose hours count`);
         }
@@ -174,7 +186,7 @@ export async function appendRecurringBenefitLines(tx: Executor, args: {
       const tier = source.service ? enrollment.tiers.filter(t => meetsServiceYears(source.service!, t.minimumServiceYears)).at(-1) ?? null : null;
       const matchingTerm = enrollment.terms.find(t => t.ruleId === rule.matchRuleId && t.effectiveFrom <= from && (t.effectiveTo === null || t.effectiveTo >= to));
       const basis = { hours: sum(hourLines.map(l => l.hours ?? '0')), eligiblePay: sum(payLines.map(l => l.amount)), hourlyWage: args.hourlyWage,
-        periodsPerYear: args.periodsPerYear, ...assignmentCoveredDays({ effectiveFrom: from, effectiveTo: to, periodStart: args.periodStart, periodEnd: args.periodEnd }),
+        periodsPerYear: args.periodsPerYear, currencyMinorUnits, ...assignmentCoveredDays({ effectiveFrom: from, effectiveTo: to, periodStart: args.periodStart, periodEnd: args.periodEnd }),
         matchEligible: enrollment.matchEligible, tier, matchingElectedRate: matchingTerm?.electionMode === 'fixed' ? matchingTerm.electedRate : null };
       let result = recurringBenefitAmount(rule, term, basis);
       const cap = { basis: rule.basis === 'per_hour' ? 'per_hour' as const : rule.basis === 'percent_of_eligible_pay' ? 'percent_of_gross' as const : 'fixed_amount' as const,
@@ -182,7 +194,7 @@ export async function appendRecurringBenefitLines(tx: Executor, args: {
         basisCapAmountPerPeriod: component.basis_cap_amount_per_period as string | null, basisCapAmountPerYear: component.basis_cap_amount_per_year as string | null };
       if (cap.basisCapHoursPerPeriod != null || cap.basisCapAmountPerPeriod != null || cap.basisCapAmountPerYear != null) {
         const capped = applyBasisCaps(cap, rule.basis === 'per_hour' ? basis.hours : rule.basis === 'percent_of_eligible_pay' ? basis.eligiblePay : result.amount, {
-          lines: cappableHourLines(hourLines), yearToDate: cap.basisCapAmountPerYear == null ? '0' : await componentYearToDate(tx, {
+          currencyMinorUnits, lines: cappableHourLines(hourLines), yearToDate: cap.basisCapAmountPerYear == null ? '0' : await componentYearToDate(tx, {
             orgId: args.orgId,employeePartyId: args.employeePartyId,taxYear: args.taxYear,componentId: rule.payComponentId,excludeRunDocumentId: args.documentId }) });
         if (rule.basis === 'per_hour') { basis.hours = capped; result = recurringBenefitAmount(rule, term, basis); }
         else if (rule.basis === 'percent_of_eligible_pay') { basis.eligiblePay = capped; result = recurringBenefitAmount(rule, term, basis); }
@@ -225,7 +237,11 @@ export async function appendRecurringBenefitLines(tx: Executor, args: {
       const benefitLine: Line | null = cmp(result.amount, '0') !== 0 ? {
         entitlementMovementKey: rule.arrearsPlanId !== null ? `${rule.arrearsPlanId}:repayment` : undefined,
         componentId: rule.payComponentId, kind: requiredKind, description: `${enrollment.planCode}: ${rule.name}`,
-        amount: result.amount, rate: result.rate, paymentKind: component.payment_kind as Line['paymentKind'], nonCashAccountId: component.non_cash_account_id as string | null, hours: rule.basis === 'per_hour' ? basis.hours : undefined,
+        amount: result.amount, rate: result.rate, paymentKind: component.payment_kind as Line['paymentKind'], nonCashAccountId: component.non_cash_account_id as string | null,
+        // The source hours are already paid on their original earning lines.
+        // A cash incentive values those hours without creating worked hours
+        // again for insurability, pension contributions or entitlement banks.
+        hours: rule.basis === 'per_hour' && rule.kind !== 'cash_earning' ? basis.hours : undefined,
         earnedFrom: from, earnedTo: to, sequence: Number(component.sequence),
         taxable: component.taxable as boolean, pensionable: component.pensionable as boolean, insurable: component.insurable as boolean,
         vacationable: component.vacationable as boolean, nonPeriodic: component.non_periodic as boolean,
@@ -265,6 +281,6 @@ export async function recurringBenefitsRunSource(tx: Executor, orgId: string, do
 export async function assertRecurringBenefitsRunFresh(tx: Executor, orgId: string, documentId: string, stored: unknown): Promise<void> {
   const current = await recurringBenefitsRunSource(tx, orgId, documentId, true);
   if (!Array.isArray(stored) || canonicalJson(current) !== canonicalJson(stored)) {
-    throw new PayrollError('Benefit contribution elections, policy, service, or payroll component treatment changed after calculation — recalculate the pay run before committing');
+    throw new PayrollError('Benefit contribution elections, policy, service, currency precision, or payroll component treatment changed after calculation — recalculate the pay run before committing');
   }
 }
