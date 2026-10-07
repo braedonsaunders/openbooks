@@ -479,7 +479,7 @@ test("a failed refresh rolls back the wipe instead of leaving a partial sandbox"
       const failureAudit = (await db.execute<{ last_error: string }>(sql`
         select changes->'after'->>'last_error' as last_error from audit_log
         where org_id=${org.orgId} and row_id=${sandboxId} and changes->>'operation'='refresh_failed'
-        order by created_at desc limit 1`)).rows;
+        order by at desc, id desc limit 1`)).rows;
       assert.deepEqual(failureAudit, [{ last_error: "forced sandbox refresh clone failure" }]);
     } finally {
       await db.execute(sql.raw(`drop trigger if exists "${fault}_trg" on accounts`));
