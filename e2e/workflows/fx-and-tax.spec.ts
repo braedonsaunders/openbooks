@@ -965,15 +965,18 @@ async function windowTax(page: Page, seed: TaxSeed, from: string, to: string, co
       }
       expect(runId, 'close run started').toBeTruthy();
 
-      // The filing month has no foreign exposure (all tax documents are USD),
-      // so the close's revaluation is a measured no-op; run it through the
-      // wizard's own button, then the manual financial review to completion.
+      // The tax documents are USD, but the earlier foreign invoice remains
+      // open. Supply a current closing spot rate before measuring that exposure
+      // through the wizard, then complete the manual financial review.
       // The close monitors the bank: a reconcilable account with activity and
       // no signed-off reconciliation through period end blocks attestation.
       // Import the March receipt as a statement, match it, and sign off
       // through the filing month — the product's real bank path, as the
       // close-to-reporting suite does.
       const fxSeed = await seedFx(page);
+      await apiOk(page, 'POST', '/api/admin/setup/fx-rates', {
+        asOf: to, fromCurrency: fxSeed.fx, toCurrency: 'USD', rateType: 'spot', rate: '1.3000',
+      });
       const reconCsv = ['date,description,amount', `${isoDate(fxSeed.m1, 12)},Customer receipt,1250.00`].join('\n');
       const imported = await apiOk(page, 'POST', '/api/banking/import', {
         source: 'csv', mode: 'import', text: reconCsv, accountId: fxSeed.bankId,
@@ -1002,6 +1005,9 @@ async function windowTax(page: Page, seed: TaxSeed, from: string, to: string, co
         await revalButton.click();
         const res = await revalued;
         expect(res.status(), await res.text()).toBe(200);
+        const result = await res.json() as Json;
+        expect(result.problems, 'a revaluation refusal must stop the close workflow').toEqual([]);
+        expect(result.problemDetails).toEqual([]);
       }
       // Revalidate so the computed tasks (bank, FX) re-read the fresh
       // reconciliation and revaluation before attestation — the same route
