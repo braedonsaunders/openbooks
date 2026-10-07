@@ -435,7 +435,7 @@ test.describe('quote-to-cash workflows', () => {
 
       // UI: fulfil the sales order (F-t07-002: an Approved order used to be
       // a dead end — Convert to Invoice 422'd with no fulfil control).
-      const fulfil = await uiConvert(page, `/sales-orders?order=${so.id}`, '/api/sales-orders', so.id, 'Convert to Shipment', 'sales_fulfillment');
+      const fulfil = await uiConvert(page, `/sales-orders?order=${so.id}`, '/api/sales-orders', so.id, 'Convert to Fulfillment', 'sales_fulfillment');
       expect(fulfil.documentNumber.startsWith('SHIP-'), fulfil.documentNumber).toBe(true);
 
       // UI: convert the sales order to a customer invoice, submit, post.

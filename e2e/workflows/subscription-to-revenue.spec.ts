@@ -203,7 +203,7 @@ test.describe("subscription to revenue", () => {
     email: string,
   ): Promise<string> {
     const req = page.request;
-    const draft = ok(await api(req, baseURL, "POST", "/api/parties", { displayName: name, isActive: false, roles: { customer: { enabled: true } } }), "party create");
+    const draft = ok(await api(req, baseURL, "POST", "/api/parties", { displayName: name, isActive: false, roles: { customer: { enabled: true } } }), "party create", 201);
     const id = str((draft.party as Record<string, unknown>).id);
     const current = ok(await api(req, baseURL, "GET", `/api/parties/${id}`), "party fetch");
     ok(

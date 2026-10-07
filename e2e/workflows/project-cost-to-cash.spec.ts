@@ -806,7 +806,8 @@ function sovFinancialProfile(): Json {
       await openDrawer(page, `/projects?project=${projectId}`);
       {
         const drawer = page.locator('[role="dialog"]').first();
-        await drawer.getByRole('tab', { name: 'Billing' }).click();
+        await drawer.getByRole('button', { name: 'Billing', exact: true }).click();
+        await expect(drawer.getByRole('button', { name: 'Billing', exact: true })).toHaveAttribute('aria-pressed', 'true');
         const row = drawer.locator('div').filter({ hasText: 'Retainage held' }).filter({ hasText: fmtUSD(toCents(M.app1Ret)) }).last();
         await expect(row, 'billing tab shows 4,000 held').toBeVisible();
       }
