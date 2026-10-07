@@ -107,9 +107,9 @@ for (const route of routes) {
       // Payroll deliberately defaults off. Adopt it through the authoritative
       // switchboard for this one render case, then restore the prior gate.
       if (route === '/admin/setup/payroll') {
-        await page.goto('/admin/setup/features')
+        await page.goto('/admin/setup/features?tab=people')
         await dismissSetupWizard(page)
-        await page.goto('/admin/setup/features')
+        await page.goto('/admin/setup/features?tab=people')
         const payroll = page.getByRole('switch', { name: 'Payroll', exact: true })
         if ((await payroll.getAttribute('aria-checked')) === 'false') {
           restorePayrollDisabled = true
