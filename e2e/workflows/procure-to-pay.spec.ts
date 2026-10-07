@@ -469,8 +469,8 @@ test.describe("procure-to-pay workflows", () => {
 
   // --- scenario helpers -------------------------------------------------------
   async function createVendor(page: Page, displayName: string, extra?: Json): Promise<string> {
-    const draft = await api(page, "POST", "/api/parties/draft", { role: "vendor" });
-    const id = str(req(draft, "POST /api/parties/draft").id, "vendor id");
+    const draft = await api(page, "POST", "/api/parties", { displayName, isActive: false, roles: { vendor: { enabled: true } } });
+    const id = str((req(draft, "POST /api/parties").party as Json).id, "vendor id");
     const got = await api(page, "GET", `/api/parties/${id}`);
     req(await api(page, "PATCH", `/api/parties/${id}`, {
       displayName,
@@ -954,8 +954,8 @@ test.describe("procure-to-pay workflows", () => {
       req(await api(page, "POST", "/api/documents/actions", { action: "post", documentId: creditId }), "POST credit post");
 
       // Employee with an approved bank account and a $150 expense report.
-      const empDraft = await api(page, "POST", "/api/parties/draft", { role: "employee" });
-      const employeeId = str(req(empDraft, "POST parties/draft employee").id, "employee id");
+      const empDraft = await api(page, "POST", "/api/parties", { displayName: `P2P Field Tech ${TAG}`, kind: "person", isActive: false, roles: { employee: { enabled: true } } });
+      const employeeId = str((req(empDraft, "POST parties employee").party as Json).id, "employee id");
       const empGet = await api(page, "GET", `/api/parties/${employeeId}`);
       req(await api(page, "PATCH", `/api/parties/${employeeId}`, {
         displayName: `P2P Field Tech ${TAG}`,

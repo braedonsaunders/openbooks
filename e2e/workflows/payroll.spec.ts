@@ -416,8 +416,8 @@ async function createEmployee(
   base: string,
   country: string,
 ): Promise<string> {
-  const draft = ok(await api(rq, ctx.baseURL, "POST", "/api/parties/draft", { role: "employee" }), `draft ${base}`);
-  const id = field(draft, "id");
+  const draft = ok(await api(rq, ctx.baseURL, "POST", "/api/parties", { displayName: employeeName(base), kind: "person", isActive: false, roles: { employee: { enabled: true } } }), `create ${base}`);
+  const id = field(draft["party"] as Record<string, unknown>, "id");
   const current = (await rq.get(`/api/parties/${id}`).then((r) => r.json())) as {
     party: { updated_at: string };
   };
@@ -500,11 +500,11 @@ test.describe.serial("payroll run to remittance to year-end", () => {
         );
         ctx.acct[key] = field(created["account"] as Record<string, unknown>, "id");
       }
-      // Remittance vendors: draft vendor → named + active.
+      // Remittance vendors: create a named inactive party, then activate it.
       ctx.vendor = {};
       for (const key of ["cra", "rq", "irs"]) {
-        const draft = ok(await api(rq, ctx.baseURL, "POST", "/api/parties/draft", { role: "vendor" }), `draft ${key}`);
-        const id = field(draft, "id");
+        const draft = ok(await api(rq, ctx.baseURL, "POST", "/api/parties", { displayName: `${TAG} ${key.toUpperCase()}`, kind: "company", isActive: false, roles: { vendor: { enabled: true } } }), `create ${key}`);
+        const id = field(draft["party"] as Record<string, unknown>, "id");
         const current = (await rq.get(`/api/parties/${id}`).then((r) => r.json())) as {
           party: { updated_at: string };
         };

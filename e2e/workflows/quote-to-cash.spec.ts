@@ -186,9 +186,9 @@ async function seedScenario(
     { 'Idempotency-Key': crypto.randomUUID() });
   expect(bank.status, JSON.stringify(bank.body).slice(0, 200)).toBe(201);
   const bankId = str((bank.body.account as Json).id, 'bankId');
-  const pd = await api(page, 'POST', '/api/parties/draft', { role: 'customer' });
-  expect(pd.status).toBe(200);
-  const partyId = str(pd.body.id);
+  const pd = await api(page, 'POST', '/api/parties', { displayName: `${t} Customer`, isActive: false, roles: { customer: { enabled: true } } });
+  expect(pd.status).toBe(201);
+  const partyId = str((pd.body.party as Json).id);
   const pg = await api(page, 'GET', `/api/parties/${partyId}`);
   expect(pg.status).toBe(200);
   const pa = await api(page, 'PATCH', `/api/parties/${partyId}`, {

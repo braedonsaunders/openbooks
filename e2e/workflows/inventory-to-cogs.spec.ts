@@ -353,8 +353,8 @@ test.describe("inventory receipt to fulfillment to COGS to return", () => {
       }), "PUT /api/items/[id]/costing");
 
       async function createParty(role: string, displayName: string): Promise<string> {
-        const pDraft = await api(page, "POST", "/api/parties/draft", { role });
-        const id = str(req(pDraft, "POST /api/parties/draft").id, `${role} id`);
+        const pDraft = await api(page, "POST", "/api/parties", { displayName, isActive: false, roles: { [role]: { enabled: true } } });
+        const id = str((req(pDraft, "POST /api/parties").party as Json).id, `${role} id`);
         const got = await api(page, "GET", `/api/parties/${id}`);
         req(await api(page, "PATCH", `/api/parties/${id}`, {
           displayName,
