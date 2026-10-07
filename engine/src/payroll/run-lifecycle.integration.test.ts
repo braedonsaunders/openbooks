@@ -369,6 +369,10 @@ describe("calculation-rollback", () => {
         await withOrgTransaction(fx.orgId, async () => {
           await db.execute(sql`update parties set custom=custom || '{"callerWork":true}'::jsonb
             where org_id=${fx.orgId} and id=${fx.employeeId}`);
+          const baseline = await calculatePayRun({ ...input, dryRun: true });
+          assert.equal(baseline.employees, 1, "the ambient fixture must reach the employee before fault injection");
+          assert.deepEqual(baseline.errors, []);
+          assert.deepEqual(await evidence(fx.orgId), before, "the pre-fault preview must preserve calculation evidence");
           // The fault occurs after the employee header has been written. DDL
           // is confined to this marked fixture database and caller transaction;
           // success drops it, while any failed assertion rolls it back.
@@ -383,7 +387,7 @@ describe("calculation-rollback", () => {
             for each row when (new.org_id=${sql.raw(`'${fx.orgId}'::uuid`)}) execute function ${fault}()`);
           await assert.rejects(calculatePayRun(input), (error: unknown) => {
             assert.ok(errorChainMatches(error, /Injected payroll line persistence refusal/),
-              "the original server refusal must survive instead of a later aborted-transaction query");
+              new Error("The original payroll persistence refusal was not raised; inspect the caught cause", { cause: error }));
             assert.equal(errorChainMatches(error, /current transaction is aborted/), false);
             return true;
           });

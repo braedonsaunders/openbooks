@@ -1,4 +1,4 @@
-import { seedPayrollBenefitProgram, approveBenefitFixture as approveThroughWorkflow } from "../../testing/benefit-fixtures.ts";
+import { seedPayrollBenefitProgram, approveBenefitFixture as approveThroughWorkflow, seedCommittedBenefitRunWithoutStubs } from "../../testing/benefit-fixtures.ts";
 import { refusal } from "../../testing/refusal.ts";
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -337,16 +337,23 @@ settlementTest("hourly incentives retain dated approved time through settlement,
   const preview = await previewIncentiveSettlement(query);
   assert.equal(preview.computation.measuredValue, "3.0000");
   assert.equal(preview.computation.totalAwarded, "0.3300", "sum member hours before rounding; rounding the two lines would incorrectly pay 0.34");
+  assert.deepEqual((preview.sourceSnapshot.entryIds as string[]).slice().sort(), entries.slice(0, 3).sort());
   assert.equal(await awardCount(h.org.orgId), 0, "preview creates no obligation");
-  const settled = await settleIncentivePeriod(query);
+  await refuses(() => settleIncentivePeriod(query), /no program .* membership covers this employment/);
+  assert.equal(await awardCount(h.org.orgId), 0, "an uncovered award span records no obligation");
+  // Preview retains the whole month's source and dated member attribution;
+  // the payable award itself covers only the member's enrolled span.
+  const coveredQuery = { ...query, periodFrom: "2026-07-10" };
+  const settled = await settleIncentivePeriod(coveredQuery);
   const award = settled.awards[0]!;
   assert.equal(award.value, "0.3300");
-  assert.deepEqual((await settleIncentivePeriod(query)).awards.map(a => a.id), [award.id]);
+  assert.deepEqual((await settleIncentivePeriod(coveredQuery)).awards.map(a => a.id), [award.id]);
   assert.equal(await awardCount(h.org.orgId), 1);
   const source = (await db.execute<{ source_snapshot: Record<string, Record<string, Record<string, unknown>>> }>(sql`
     select source_snapshot from hrm_benefit_awards where org_id=${h.org.orgId} and id=${award.id}`)).rows[0]!.source_snapshot.measurement!.settlement!;
   assert.deepEqual(source.hoursAttribution, [{ employmentId: worker.employmentId, hours: "1.0000" }]);
-  assert.deepEqual((source.entryIds as string[]).sort(), entries.slice(0, 3).sort());
+  assert.deepEqual((source.entryIds as string[]).sort(), entries.slice(1, 3).sort());
+  assert.equal(source.measuredValue, "1.0000");
   await refuses(() => updateBenefitProgram({ orgId:h.org.orgId,actorId:h.settlerId,programId:program.id,
     fixedAmount:"4",reason:"Change hourly price" }), /active.*immutable|close.*replacement/i);
   assert.equal((await getBenefitProgram(db, h.org.orgId, h.settlerId, program.id)).fixedAmount, "0.3333");
@@ -392,9 +399,7 @@ settlementTest("approved awards queue onto a draft run as one idempotent adjustm
     }),
     /only after the run is committed|pending run proves no payout|is draft/i,
   );
-  await db.execute(sql`
-    update pay_runs set run_status = 'committed' where org_id = ${h.org.orgId} and document_id = ${runDocumentId}
-  `);
+  await seedCommittedBenefitRunWithoutStubs(h.org.orgId, runDocumentId);
   await refuses(() => confirmAwardPayrollDelivery({
     orgId: h.org.orgId, actorId: h.financeId, awardId: award.id,
     runDocumentId, adjustmentId: queued.adjustmentId,
