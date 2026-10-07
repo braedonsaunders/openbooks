@@ -135,7 +135,7 @@ const invalidComputations: [string, Partial<ComputeIncentiveInput>, RegExp[]][] 
   [
     "a measured loss refuses instead of sharing the loss",
     { measured: measured({ value: "-500.0000" }) },
-    [/loss/, /explicit loss rule/],
+    [/loss \(-500\.0000\)/, /2026-01-01\.\.2026-03-31/, /program QPS does not support automatic loss sharing/, /review the source measure or settle a period with a nonnegative measured value/],
   ],
   [
     "a budget overrun refuses with both figures",

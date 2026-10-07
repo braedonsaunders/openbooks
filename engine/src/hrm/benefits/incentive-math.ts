@@ -446,7 +446,7 @@ export function computeIncentiveAwards(input: ComputeIncentiveInput): IncentiveC
   if (moneyMetric && measuredUnits < 0n) {
     throw new BenefitsError(
       "REFUSED",
-      `the measured ${describeMetric(measured.metric)} for ${measured.periodFrom}..${measured.periodTo} is a loss (${measuredValue}) — losses are never auto-shared; record an explicit loss rule or settle a period that earned`,
+      `the measured ${describeMetric(measured.metric)} for ${measured.periodFrom}..${measured.periodTo} is a loss (${measuredValue}) — program ${program.code} does not support automatic loss sharing; review the source measure or settle a period with a nonnegative measured value`,
     );
   }
   const currency = moneyMetric ? measured.currency! : program.currency;
