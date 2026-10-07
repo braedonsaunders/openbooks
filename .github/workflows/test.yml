@@ -908,7 +908,12 @@ jobs:
             # credential, swap only the dbname to this suite's clone.
             OPENBOOKS_DB_URL="postgres://openbooks_app:${OPENBOOKS_DB_PASSWORD}@localhost:5433/openbooks_e2e_${pair##*:}" \
             OPENBOOKS_BYPASS_DB_URL="${OPENBOOKS_BYPASS_DB_URL%/*}/openbooks_e2e_${pair##*:}" \
-              npx playwright test --project workflows --workers=1 "e2e/workflows/${spec}.spec.ts" || status=1
+            PLAYWRIGHT_HTML_OUTPUT_DIR="playwright-report/${spec}" \
+              npx playwright test --project workflows --workers=1 --output="test-results/${spec}" "e2e/workflows/${spec}.spec.ts" || status=1
+            if [ -f e2e-server.log ]; then
+              mkdir -p "test-results/${spec}"
+              cp e2e-server.log "test-results/${spec}/e2e-server.log"
+            fi
             echo "::endgroup::"
           done
           exit $status
