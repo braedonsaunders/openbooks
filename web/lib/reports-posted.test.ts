@@ -5,56 +5,86 @@ import test from "node:test";
 // Unit partition: no database. The DB-backed posted-reports contracts
 // (parallel-book isolation, truncation, one-book readers) live in
 // reports-posted.integration.test.ts. What stays here drives the real
-// resolveFormulaTaxRate against a scripted runner: configured rates
-// resolve, absent/invalid/negative configs refuse by name, and a revision
-// dated before its update is treated as absent.
+// resolveFormulaTaxRate and the native enacted-rate reader against a database
+// boundary: configured rates resolve, invalid/negative rates refuse, and
+// configuration outside its effective dates is treated as absent.
 test("formula TAX_RATE resolves configured rates and fails closed", () => {
   const source = `
     import assert from "node:assert/strict";
-    import { resolveFormulaTaxRate } from "./web/lib/cash/core.ts";
-
-    const fixtures = new Map([
-      ["org-gst", { defaultRatePercent: "5", updatedAt: "2026-08-01" }],
-      ["org-bc", { defaultRatePercent: "12", updatedAt: "2026-08-01" }],
-      ["org-revision", { defaultRatePercent: "9", updatedAt: "2026-08-01" }],
-      ["org-malformed", { defaultRatePercent: "not-a-rate", updatedAt: "2026-08-01" }],
-      ["org-negative", { defaultRatePercent: "-1", updatedAt: "2026-08-01" }],
-      ["org-empty", { defaultRatePercent: "", updatedAt: "2026-08-01" }],
-    ]);
-    const runner = {
+    import { registerHooks } from "node:module";
+    import { pathToFileURL } from "node:url";
+    import { PgDialect } from "drizzle-orm/pg-core";
+    const dialect = new PgDialect();
+    const fixtures = [
+      ["org-standard", null, "federal", "5", "2026-08-01", null],
+      ["org-stacked", null, "federal", "7", "2026-08-01", null],
+      ["org-stacked", "sub-province", "provincial", "5", "2026-08-01", null],
+      ["org-revision", null, "federal", "9", "2026-08-01", "2026-08-31"],
+      ["org-malformed", null, "federal", "not-a-rate", "2026-08-01", null],
+      ["org-negative", null, "federal", "-1", "2026-08-01", null],
+      ["org-zero", null, "federal", "0", "2026-08-01", null],
+    ];
+    globalThis.__reportRateDatabase = {
       async execute(query) {
-        const chunks = Array.isArray(query.queryChunks) ? query.queryChunks : [];
-        const params = chunks.filter((chunk) => typeof chunk === "string");
-        const [orgId, asOfIso] = params;
-        const fixture = fixtures.get(orgId);
-        if (!fixture || asOfIso < fixture.updatedAt) return { rows: [] };
-        return { rows: [{ defaultRatePercent: fixture.defaultRatePercent }] };
+        const rendered = dialect.sqlToQuery(query);
+        assert.match(rendered.sql, /from income_tax_rates/);
+        assert.match(rendered.sql, /where org_id =/);
+        assert.match(rendered.sql, /and is_active/);
+        assert.match(rendered.sql, /subsidiary_id is not distinct from/);
+        const [orgId, asOfIso, throughIso, subsidiaryId] = rendered.params;
+        assert.equal(asOfIso, throughIso);
+        return { rows: fixtures.filter(([org, sub, , , from, to]) =>
+          org === orgId && sub === subsidiaryId && from <= asOfIso && (to === null || to >= asOfIso)
+        ).map(([, , jurisdiction, rate]) => ({ jurisdiction, rate })) };
       },
     };
-    assert.equal(await resolveFormulaTaxRate("org-gst", "2026-08-31", runner), 0.05);
-    assert.equal(await resolveFormulaTaxRate("org-bc", "2026-08-31", runner), 0.12);
+    const dbUrl = pathToFileURL(process.cwd() + "/engine/src/platform/db.ts").href;
+    const nativeDbUrl = dbUrl + "?report-native";
+    const hooks = registerHooks({ resolve(specifier, context, nextResolve) {
+      const resolved = nextResolve(specifier, context);
+      if (resolved.url !== dbUrl) return resolved;
+      return { shortCircuit: true, url: "data:text/javascript," + encodeURIComponent(
+        "export * from " + JSON.stringify(nativeDbUrl) + "; export const db = globalThis.__reportRateDatabase;"
+      ) };
+    } });
+    try {
+    const { resolveFormulaTaxRate } = await import("./web/lib/cash/core.ts");
+    assert.equal(await resolveFormulaTaxRate("org-standard", "2026-08-31"), "0.05");
+    assert.equal(await resolveFormulaTaxRate("org-stacked", "2026-08-31", "sub-province"), "0.12");
+    assert.equal(await resolveFormulaTaxRate("org-stacked", "2026-08-31", "sub-other"), "0.07");
+    assert.equal(await resolveFormulaTaxRate("org-zero", "2026-08-31"), "0");
 
     await assert.rejects(
-      resolveFormulaTaxRate("org-missing", "2026-08-31", runner),
-      /requires an enabled manual tax-rate provider with settings\\.defaultRatePercent/,
+      resolveFormulaTaxRate("org-missing", "2026-08-31"),
+      /no enacted income tax rate.*org-missing.*2026-08-31.*Setup.*Income tax rates/,
     );
     await assert.rejects(
-      resolveFormulaTaxRate("org-malformed", "2026-08-31", runner),
-      /has an invalid settings\\.defaultRatePercent/,
+      resolveFormulaTaxRate("org-malformed", "2026-08-31"),
+      /not a decimal number.*not-a-rate/,
     );
     await assert.rejects(
-      resolveFormulaTaxRate("org-negative", "2026-08-31", runner),
-      /has an invalid settings\\.defaultRatePercent/,
+      resolveFormulaTaxRate("org-negative", "2026-08-31"),
+      /federal.*negative rate.*-1.*correct the income tax rate configuration/,
     );
     await assert.rejects(
-      resolveFormulaTaxRate("org-empty", "2026-08-31", runner),
-      /requires an enabled manual tax-rate provider with settings\\.defaultRatePercent/,
+      resolveFormulaTaxRate("org-empty", "2026-08-31"),
+      /no enacted income tax rate.*org-empty.*Setup.*Income tax rates/,
     );
-    assert.equal(await resolveFormulaTaxRate("org-revision", "2026-08-01", runner), 0.09);
+    assert.equal(await resolveFormulaTaxRate("org-revision", "2026-08-01"), "0.09");
+    assert.equal(await resolveFormulaTaxRate("org-revision", "2026-08-31"), "0.09");
     await assert.rejects(
-      resolveFormulaTaxRate("org-revision", "2026-07-31", runner),
-      /requires an enabled manual tax-rate provider with settings\\.defaultRatePercent/,
+      resolveFormulaTaxRate("org-revision", "2026-07-31"),
+      /no enacted income tax rate.*org-revision.*2026-07-31/,
     );
+    await assert.rejects(
+      resolveFormulaTaxRate("org-revision", "2026-09-01"),
+      /no enacted income tax rate.*org-revision.*2026-09-01/,
+    );
+    } finally {
+      hooks.deregister();
+      const native = await import(nativeDbUrl);
+      await Promise.all([native.pool.end(), native.longPool.end()]);
+    }
   `;
   const result = spawnSync(
     process.execPath,
