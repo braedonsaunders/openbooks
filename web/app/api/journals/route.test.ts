@@ -20,6 +20,7 @@ const SUB_ID = "00000000-0000-4000-8000-00000000c003";
 const ACC_DEBIT = "00000000-0000-4000-8000-00000000c004";
 const ACC_CREDIT = "00000000-0000-4000-8000-00000000c005";
 const PARTY_ID = "00000000-0000-4000-8000-00000000c006";
+const ISO_DATE_URL = new URL("../../../../engine/src/platform/iso-date.ts", import.meta.url).href;
 
 interface RouteState {
   requestKey: string | null;
@@ -32,6 +33,7 @@ interface RouteState {
   auditAfter: unknown;
   sequenceAllocations: number;
   auditInserts: number;
+  databaseQueries: string[];
   transactionQueries: string[];
 }
 
@@ -46,6 +48,7 @@ const state: RouteState = {
   auditAfter: null,
   sequenceAllocations: 0,
   auditInserts: 0,
+  databaseQueries: [],
   transactionQueries: [],
 };
 (globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = state;
@@ -74,8 +77,7 @@ stubModules({
   intl: false,
   authz: false,
   features: false,
-  extra: {
-    "@openbooks/engine/src/platform/db.ts": `
+  database: `
       const state = globalThis[Symbol.for('openbooks.journals-route-test')]
       const sqlText = globalThis.openbooksJournalsSqlText
       // The shared claim helper reads through sql.identifier, whose chunk
@@ -89,6 +91,8 @@ stubModules({
       }
       function respond(query) {
         const text = sqlText(query)
+        state.databaseQueries.push(text)
+        if (text.includes('from custom_field_defs') || text.includes('from segment_definitions')) return { rows: [] }
         if (text.includes('pg_advisory_xact_lock')) return { rows: [{}] }
         if (text.includes('insert into number_sequences')) {
           state.sequenceAllocations++
@@ -131,6 +135,7 @@ stubModules({
       export function withBypassContext(fn) { return fn() }
       export function withOrgContext(_orgId, fn) { return fn() }
     `,
+  extra: {
     "../../../lib/authz": `export async function guardPermission() {
        return { user: { orgId: '${ORG_ID}', id: '${USER_ID}' }, allowedSubsidiaryIds: null }
      }
@@ -150,15 +155,7 @@ stubModules({
        return { doc: { id, org_id: orgId, kind: 'journal', document_number: 'JE-000007' }, lines: [] }
      }`,
     "@openbooks/engine/src/platform/business-date.ts": `export async function businessToday() { return globalThis[Symbol.for('openbooks.journals-route-test')].clockDate }
-     // Custom-field validation runs REAL and reads its date predicate from
-     // this same module, so the double carries the real rule rather than a
-     // stub that would let any string through.
-     export function isIsoCalendarDate(value) {
-       if (typeof value !== 'string' || !/^\\d{4}-\\d{2}-\\d{2}$/.test(value)) return false
-       const [y, m, d] = value.split('-').map(Number)
-       const date = new Date(Date.UTC(y, m - 1, d))
-       return date.getUTCFullYear() === y && date.getUTCMonth() === m - 1 && date.getUTCDate() === d
-     }`,
+     export { isIsoCalendarDate } from '${ISO_DATE_URL}'`,
   },
 });
 
@@ -176,6 +173,7 @@ function reset(): void {
   state.auditAfter = null;
   state.sequenceAllocations = 0;
   state.auditInserts = 0;
+  state.databaseQueries.length = 0;
   state.transactionQueries.length = 0;
 }
 
@@ -245,6 +243,8 @@ test("journal creation replays only the exact request for an idempotency key", a
   });
   captureAuditAfter();
   assert.equal(state.auditInserts, 1);
+  assert.ok(state.databaseQueries.some((query) => query.includes("from custom_field_defs")), "native custom-field lookup uses the tracked database");
+  assert.ok(state.databaseQueries.some((query) => query.includes("from segment_definitions")), "native dimension lookup uses the tracked database");
 
   const replay = await post(key, BALANCED);
   assert.equal(replay.status, 200);

@@ -10,15 +10,16 @@ import { registerHooks } from "node:module";
  * per-file `registerHooks` call; the shapes drifted apart while the behavior
  * under test stayed the same.
  *
- * `stubModules` registers one resolve hook covering the four shapes. An
+ * `stubModules` registers one resolve hook covering the selected boundaries. An
  * option left out (or passed `false`) stubs nothing: the call only covers
  * what the test names, so it never shadows the test's own hook or replaces
  * a module the test expects to be real. Pass `true` for the most common
  * stub used across the suite, or a stricter shape (a source string, or the
  * pathname/permissions/enabled knobs) when the test needs different
- * behavior. Anything the four shapes do not cover (a capturing database
- * stand-in, a per-test router script) stays in the test through `extra` or
- * its own hook.
+ * behavior. A `database` source intercepts the native platform database through
+ * both its public alias and its resolved relative imports, without replacing
+ * domain or validation modules. Other boundaries (a per-test router script,
+ * for example) stay in the test through `extra` or its own hook.
  *
  * Every source here, `extra` included, is served as a `data:` URL module.
  * A `data:` URL has no base path, so an `extra` source must be
