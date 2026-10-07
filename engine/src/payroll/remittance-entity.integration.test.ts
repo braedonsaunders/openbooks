@@ -43,6 +43,14 @@ async function seedEntityOrg(): Promise<EntityFixture> {
   await db.execute(sql`insert into payroll_filing_accounts
     (id,org_id,country,program_type,account_number,name,remitter_type,is_default,created_by,updated_by)
     values(${filingAccountId},${org.orgId},'CA','ca_rp','123456789RP0092','CRA regular remitter','regular',true,${actorId},${actorId})`);
+  const destination = await db.execute<{ id: string }>(sql`
+    update orgs
+       set settings = jsonb_set(
+         jsonb_set(coalesce(settings, '{}'::jsonb), '{payroll}',
+           coalesce(settings->'payroll', '{}'::jsonb)),
+         '{payroll,craRemittancePartyId}', to_jsonb(${org.vendorId}::text))
+     where id = ${org.orgId} returning id`);
+  assert.equal(destination.rows.length, 1, "the accruing entity fixture must declare its CRA remittance destination");
   await db.execute(sql`
     insert into accounts
       (id, org_id, number, name, type, is_summary, is_active, eliminate,
@@ -302,7 +310,7 @@ test(
           (id, org_id, country, program_type, account_number, name, remitter_type,
            subsidiary_id, is_default)
         values (${accountId}, ${fx.org.orgId}, 'CA', 'ca_rp', '111222333RP0001',
-                'Head office program', 'regular', ${fx.org.subsidiaryId}, true)`);
+                'Head office program', 'regular', ${fx.org.subsidiaryId}, false)`);
       const run = await addEntityAccrual(fx, {
         subsidiaryId: child, currency: "CAD", amount: "250.00", filingAccountId: accountId,
       });
