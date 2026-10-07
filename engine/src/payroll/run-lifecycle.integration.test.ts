@@ -395,7 +395,7 @@ describe("calculation-rollback", () => {
             "caught calculation failure must restore the previous stubs, lines, totals and source evidence");
           await db.execute(sql`drop trigger ${fault} on pay_stub_lines`);
           await db.execute(sql`drop function ${fault}()`);
-        });
+        }, { isolationLevel: "REPEATABLE READ" });
         assert.equal((await db.execute<{ marker: boolean }>(sql`select (custom->>'callerWork')::boolean as marker
           from parties where org_id=${fx.orgId} and id=${fx.employeeId}`)).rows[0]!.marker, true,
         "recovering the failed calculation must preserve earlier caller work");
