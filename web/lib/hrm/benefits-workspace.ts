@@ -224,6 +224,7 @@ function programValueLabel(program: BenefitProgram, amount: (value: string, curr
   if (program.valuation === 'fixed' && program.fixedAmount !== null) {
     return amount(program.fixedAmount, program.currency)
   }
+  if (program.valuation === 'per_unit' && program.fixedAmount !== null) return `${program.fixedAmount} ${program.currency}`
   if (program.valuation === 'percent' && program.percentRate !== null) return `${program.percentRate}%`
   if (program.valuation === 'pool' && program.budgetAmount !== null) {
     return amount(program.budgetAmount, program.currency)
@@ -580,7 +581,7 @@ export async function loadBenefitsPortfolio(
         if (value !== null && value !== '') policyLines.push({ label: t(`portfolio.builder.fields.${key}`), value })
       }
       policy('legalEntity', subsidiaries.rows.find((entity) => entity.id === found.legalEntityId)?.name ?? null)
-      policy('valuation', t(`portfolio.valuations.${found.valuation}`))
+      policy('valuation', t(found.valuation === 'per_unit' && found.metric === 'approved_hours' ? 'portfolio.valuations.per_hour' : `portfolio.valuations.${found.valuation}`))
       for (const field of ['capAmount', 'budgetAmount', 'thresholdAmount'] as const) {
         if (found[field] !== null) policy(field, amountLabel(found[field], found.currency))
       }

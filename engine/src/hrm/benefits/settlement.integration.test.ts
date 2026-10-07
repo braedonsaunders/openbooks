@@ -4,7 +4,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
-import { neg } from "../../money/money.ts";
+import { neg, toUnits } from "../../money/money.ts";
 import { db } from "../../platform/db.ts";
 import { seedBenefitIncentivePosting as postEntry } from "../../testing/benefit-incentive-posting.ts";
 import {
@@ -27,6 +27,7 @@ import {
   createBenefitProgram,
   getBenefitProgram,
   closeBenefitProgram,
+  updateBenefitProgram,
 } from "./programs.ts";
 import {
   submitBenefitAward,
@@ -311,6 +312,53 @@ async function seedRun(h: Harness, employmentId: string, workerPartyId: string, 
   `);
   return documentId;
 }
+
+settlementTest("hourly incentives retain dated approved time through settlement, approval and delayed payroll queue", async (h) => {
+  const policy = { valuation: "per_unit", metric: "approved_hours", allocation: "hours", percentRate: null,
+    fixedAmount: "0.3333", sourceAccountIds: [], paymentDelayDays: 30 };
+  await refuses(() => seedProgram(h, { ...policy, allocation: "equal" }, false), /hours allocation/);
+  assert.equal(await awardCount(h.org.orgId), 0);
+  const program = await seedProgram(h, policy);
+  const worker = await seedMember(h, program.id, { displayName: "Hourly incentive member" }, "2026-07-10");
+  const entries: string[] = [];
+  for (const [date, hours, status] of [
+    ["2026-07-09", "2", "approved"], ["2026-07-15", "0.5", "approved"],
+    ["2026-07-15", "0.5", "approved"], ["2026-07-15", "100", "draft"],
+  ] as const) {
+    const id = randomUUID(); entries.push(id);
+    await db.execute(sql`insert into time_entries (id,org_id,employee_party_id,worked_on,hours,status,approved_at)
+      values (${id},${h.org.orgId},${worker.workerPartyId},${date}::date,${hours},${status},${status === "approved" ? new Date() : null})`);
+  }
+  const query = settlementQuery(h, program.id);
+  const preview = await previewIncentiveSettlement(query);
+  assert.equal(preview.computation.measuredValue, "3.0000");
+  assert.equal(preview.computation.totalAwarded, "0.3300", "sum member hours before rounding; rounding the two lines would incorrectly pay 0.34");
+  assert.equal(await awardCount(h.org.orgId), 0, "preview creates no obligation");
+  const settled = await settleIncentivePeriod(query);
+  const award = settled.awards[0]!;
+  assert.equal(award.value, "0.3300");
+  assert.deepEqual((await settleIncentivePeriod(query)).awards.map(a => a.id), [award.id]);
+  assert.equal(await awardCount(h.org.orgId), 1);
+  const source = (await db.execute<{ source_snapshot: Record<string, Record<string, Record<string, unknown>>> }>(sql`
+    select source_snapshot from hrm_benefit_awards where org_id=${h.org.orgId} and id=${award.id}`)).rows[0]!.source_snapshot.measurement!.settlement!;
+  assert.deepEqual(source.hoursAttribution, [{ employmentId: worker.employmentId, hours: "1.0000" }]);
+  assert.deepEqual((source.entryIds as string[]).sort(), entries.slice(0, 3).sort());
+  await refuses(() => updateBenefitProgram({ orgId:h.org.orgId,actorId:h.settlerId,programId:program.id,
+    fixedAmount:"4",reason:"Change hourly price" }), /active.*immutable|close.*replacement/i);
+  assert.equal((await getBenefitProgram(db, h.org.orgId, h.settlerId, program.id)).fixedAmount, "0.3333");
+  const runDocumentId = await seedRun(h, worker.employmentId, worker.workerPartyId);
+  const delivery = { orgId:h.org.orgId, actorId:h.financeId, awardId:award.id, runDocumentId };
+  await refuses(() => queueAwardForPayRun(delivery), /approved|approval/i);
+  await approveSettlementAward(h, award.id);
+  await refuses(() => queueAwardForPayRun(delivery), /payable after 2026-08-30/);
+  await db.execute(sql`update pay_runs set pay_date='2026-08-31' where org_id=${h.org.orgId} and document_id=${runDocumentId}`);
+  const queued = await queueAwardForPayRun(delivery);
+  assert.equal((await queueAwardForPayRun(delivery)).adjustmentId, queued.adjustmentId);
+  const inputs = (await db.execute<{ amount:string; hours:string|null }>(sql`
+    select amount::text,hours::text from pay_run_adjustments where org_id=${h.org.orgId} and id=${queued.adjustmentId}`)).rows;
+  assert.equal(inputs.length, 1); assert.equal(inputs[0]!.amount, "0.3300");
+  assert.ok(inputs[0]!.hours === null || toUnits(inputs[0]!.hours) === 0n, "an incentive payout never creates more worked hours");
+});
 
 settlementTest("approved awards queue onto a draft run as one idempotent adjustment", async (h) => {
   const { worker, query } = await seedSettlement(h, "Queue Crew");

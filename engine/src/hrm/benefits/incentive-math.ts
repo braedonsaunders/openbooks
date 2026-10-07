@@ -1,4 +1,5 @@
 import { canonicalDecimal } from "../../money/exact-decimal.ts";
+import { decimalNullRefusal } from "../../money/decimal-refusal.ts";
 import { apportion, fromUnits, normalizeMoney, roundDiv, toUnits } from "../../money/money.ts";
 import { daysInCivilMonth } from "../../platform/civil-date.ts";
 import { InvalidCivilDateError, parseCivilDate } from "../temporal.ts";
@@ -14,7 +15,7 @@ import type {
 import { BenefitsError } from "./errors.ts";
 
 /**
- * Pure incentive valuation math: fixed awards, percent-of-measure awards,
+ * Pure incentive valuation math: fixed awards, approved-hour unit prices, percent-of-measure awards,
  * and shared-pool apportionment over dated membership.
  *
  * Every amount crosses as an exact canonical decimal string
@@ -59,7 +60,7 @@ function requireCanonicalDecimal(value: string, label: string): string {
   if (canonicalDecimal(value, 4) === null) {
     throw new BenefitsError(
       "INVALID_INPUT",
-      `${label} ${JSON.stringify(value)} is not an exact plain decimal — record digits like "1234.56" with at most 4 fraction digits, never exponents, separators, or symbols`,
+      decimalNullRefusal(label, "an exact decimal", value, 4),
     );
   }
   try {
@@ -401,10 +402,10 @@ export function computeIncentiveAwards(input: ComputeIncentiveInput): IncentiveC
     }
   }
   const valuation: BenefitValuation = program.valuation;
-  if (valuation !== "fixed" && valuation !== "percent" && valuation !== "pool") {
+  if (valuation !== "fixed" && valuation !== "percent" && valuation !== "pool" && valuation !== "per_unit") {
     throw new BenefitsError(
       "INVALID_INPUT",
-      `valuation ${JSON.stringify(valuation)} is unknown — configure fixed, percent, or pool with no silent default`,
+      `valuation ${JSON.stringify(valuation)} is unknown — configure fixed, percent, pool, or per-unit valuation with no silent default`,
     );
   }
   if (measured.metric !== "revenue" && measured.metric !== "gross_profit" &&
@@ -425,6 +426,16 @@ export function computeIncentiveAwards(input: ComputeIncentiveInput): IncentiveC
   requirePeriodShape(program.frequency, measured.periodFrom, measured.periodTo, periodBasis);
   const measuredValue = requireCanonicalDecimal(measured.value, "measured value");
   const measuredUnits = toUnits(measuredValue);
+  let hourlyRate: bigint | null = null;
+  if (valuation === "per_unit") {
+    if (program.metric !== "approved_hours" || measured.metric !== "approved_hours" || program.allocation !== "hours" || program.family !== "incentive" || program.deliveryMethod !== "payroll" || program.percentRate !== null) {
+      throw new BenefitsError("INVALID_INPUT", "Per-hour awards require approved hours, hours allocation and payroll delivery without an overlapping percentage; correct the program rules before settling.");
+    }
+    if (program.fixedAmount === null) throw new BenefitsError("REFUSED", `program ${program.code} names no amount per approved hour — configure its hourly incentive rate before settling`);
+    hourlyRate = toUnits(requireCanonicalDecimal(program.fixedAmount, "amount per approved hour"));
+    if (hourlyRate <= 0n) throw new BenefitsError("INVALID_INPUT", "The amount per approved hour must be positive; configure a positive rate before settling.");
+    if (measuredUnits < 0n) throw new BenefitsError("REFUSED", "Approved hours cannot be negative; correct the approved time before settling an hourly incentive.");
+  }
   const moneyMetric = isMoneyMetric(measured.metric);
   if (moneyMetric && measured.currency === null) {
     throw new BenefitsError(
@@ -483,6 +494,37 @@ export function computeIncentiveAwards(input: ComputeIncentiveInput): IncentiveC
       "REFUSED",
       `no member is eligible for ${measured.periodFrom}..${measured.periodTo} — check program membership dates cover the period before settling`,
     );
+  }
+
+  if (valuation === "per_unit") {
+    if (shareById.size !== shares.length) throw new BenefitsError("REFUSED", "An employment appears more than once in the hourly award evidence; preview separate dated membership spans before settling.");
+    const recipients: IncentiveRecipientResult[] = [];
+    const excludedZero: string[] = [];
+    let attributedHours = 0n;
+    for (const share of [...shares].sort((a, b) => a.employmentId < b.employmentId ? -1 : a.employmentId > b.employmentId ? 1 : 0)) {
+      if (share.hours === null) throw new BenefitsError("REFUSED", `${share.employmentId} has no approved-hour evidence — record and approve the member's time before settling`);
+      const hours = toUnits(requireCanonicalDecimal(share.hours, `approved hours for ${share.employmentId}`));
+      if (hours < 0n) throw new BenefitsError("REFUSED", `${share.employmentId} has negative approved hours — correct the approved time before settling`);
+      attributedHours += hours;
+      // Hours and unit price both have four decimal places. Round their
+      // product directly to payable units once, after summing member hours.
+      const gross = roundDiv(hours * hourlyRate!, 10000n * quantum);
+      if (gross === 0n) {
+        excludedZero.push(`${share.employmentId}: ${share.hours} approved hours rounds to zero at payable precision — excluded, never zero-awarded`);
+        continue;
+      }
+      const capped = capMinor !== null && gross > capMinor;
+      const value = capped ? capMinor! : gross;
+      recipients.push({ employmentId: share.employmentId, share: `${fromUnits(hours)} hours`,
+        grossValue: fromMinor(gross), value: fromMinor(value), capped,
+        explanation: `${share.employmentId}${describeShareSpan(share)}: ${fromUnits(hours)} approved hours × ${program.fixedAmount} ${currency}/hour = ${fromMinor(gross)}${capped ? ` capped to ${fromMinor(value)}` : ""}` });
+    }
+    if (attributedHours > measuredUnits) throw new BenefitsError("REFUSED", "Attributed member hours exceed the measured approved hours; remeasure the native time evidence before settling.");
+    const total = fromMinor(recipients.reduce((sum, recipient) => sum + toMinor(toUnits(recipient.value)), 0n));
+    assertBudget(program, total, summary);
+    return { measuredValue, poolValue: "0.0000", thresholdMet: true, recipients, excludedZero,
+      totalAwarded: total, undistributed: "0.0000", currency,
+      summaryLines: [...summary, `${recipients.length} hourly award(s) at ${program.fixedAmount} ${currency}/hour totalling ${total}`, ...excludedZero] };
   }
 
   // Fixed awards: one amount per eligible member (hours allocation additionally
