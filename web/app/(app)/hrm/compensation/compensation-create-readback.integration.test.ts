@@ -42,7 +42,7 @@ registerHooks({
         url:
           "data:text/javascript," +
           encodeURIComponent(
-            `export async function getTranslations(ns) {
+            `export async function getLocale(){return 'en'} export async function getTranslations(ns) {
               const catalogs = globalThis.__compReadbackCatalogs;
               const catalog = ns === 'shell.routeState' ? catalogs.routeState : ns === 'admin' ? catalogs.admin : ns === 'nav' ? catalogs.nav : catalogs.hrm;
               const lookup = (key) => {

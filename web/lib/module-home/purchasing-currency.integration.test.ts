@@ -1,22 +1,9 @@
 import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
-import { registerHooks } from 'node:module'
+import { stubModules } from '../../testing/stub-modules'
 import test from 'node:test'
 
-registerHooks({
-  resolve(specifier, _context, next) {
-    // purchasingHome translates its unknown-vendor fallback through
-    // next-intl: outside a request (here) the catalog resolves to the key
-    // itself — the money assertions below never read a name.
-    if (specifier === 'next-intl/server') {
-      return {
-        shortCircuit: true,
-        url: 'data:text/javascript,' + encodeURIComponent('export async function getTranslations(){return (key) => key}'),
-      }
-    }
-    return next(specifier)
-  },
-})
+stubModules({ intl: true })
 
 const { sql } = await import('drizzle-orm')
 const { toUnits } = await import('@openbooks/engine/src/money/money.ts')
