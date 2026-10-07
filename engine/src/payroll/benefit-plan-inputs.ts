@@ -96,8 +96,9 @@ export async function recurringBenefitSource(tx: Executor, args: {
     if (subject) workSchedule = await resolveWorkSchedule(tx, orgId, subject.worker_party_id, periodEnd);
   }
   const currencies = [...new Set(rows.map(e => e.currency))].sort();
+  const currencyCodes = sql`array[${sql.join(currencies.map(code => sql`${code}`), sql`, `)}]::text[]`;
   const currencyPrecisions = currencies.length ? (await tx.execute<{ code: string; minor_units: number }>(sql`
-    select code,minor_units from currencies where code=any(${currencies}::text[]) order by code for share
+    select code,minor_units from currencies where code=any(${currencyCodes}) order by code for share
   `)).rows : [];
   return { employmentId, enrollments: rows, currencyPrecisions, service, workSchedule };
 }
