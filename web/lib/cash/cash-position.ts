@@ -255,9 +255,9 @@ export async function cashPosition(
   const [arItems, apItems, arStats, apStats, banks, catConfigs, accountRows, vendorRows, subsidiaryRows, model, fiscalStart, fiscalCalendar] = await Promise.all([
     openItems(orgId, "ar", asOfIso, subIds),
     openItems(orgId, "ap", asOfIso, subIds),
-    paymentStats("ar", asOfIso, subIds),
-    paymentStats("ap", asOfIso, subIds),
-    bankBalances(asOfIso, subIds),
+    paymentStats("ar", asOfIso, subIds, orgId),
+    paymentStats("ap", asOfIso, subIds, orgId),
+    bankBalances(asOfIso, subIds, orgId),
     loadCategories(orgId),
     db.execute<{ id: string; number: string | null; name: string; type: string }>(sql`
       select id, number, name, type from accounts
