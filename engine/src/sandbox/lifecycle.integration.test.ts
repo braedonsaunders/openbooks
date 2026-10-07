@@ -12,17 +12,17 @@ const DB = !!process.env.OPENBOOKS_DB_URL;
 test("a clean-schema full sandbox clones tenant evidence without pre-seed collisions or residue", { skip: !DB }, async () => {
   const org = await createScratchOrg();
   const sandboxName = `Lifecycle ${randomUUID()}`;
-  let sandboxId: string | null = null;
-  let sandboxOrgId: string | null = null;
-  try {
-    const created = await createSandbox({
+  await withSandboxCleanup(org, sandboxName, async () => {
+    const actorId = await createScratchUser(org.orgId, `Sandbox owner ${randomUUID()}`, "admin");
+    const created = await withOrgContext(org.orgId, () => createSandbox({
       productionOrgId: org.orgId,
       name: sandboxName,
       tier: "full",
       masked: false,
-    });
-    sandboxId = created.sandboxId;
-    sandboxOrgId = created.sandboxOrgId;
+      createdBy: actorId, lifecycleAuthority: { actorId },
+    }));
+    const sandboxId = created.sandboxId;
+    const sandboxOrgId = created.sandboxOrgId;
 
     const state = (await db.execute<{
         status: string;
@@ -57,6 +57,10 @@ test("a clean-schema full sandbox clones tenant evidence without pre-seed collis
           !Object.values(org.accounts).includes(row.account_id),
       ),
     );
+    const audit = await withOrgContext(created.sandboxOrgId, () => db.execute<{ actor_id: string }>(sql`
+      select actor_id from audit_log where org_id = ${created.sandboxOrgId}
+        and row_id = ${created.sandboxOrgId} and changes ->> 'mode' = 'sandbox_control_account_rebase'`));
+    assert.deepEqual(audit.rows, [{ actor_id: actorId }]);
 
     const segments = (await db.execute<{ key: string; source_id: string; clone_id: string }>(sql`
       select source.key,
@@ -97,27 +101,13 @@ test("a clean-schema full sandbox clones tenant evidence without pre-seed collis
     );
 
     await deleteSandbox(sandboxId);
-    sandboxId = null;
     const residue = (await db.execute<{ orgs: number; segments: number; entries: number }>(sql`
       select
         (select count(*)::int from orgs where id = ${sandboxOrgId}) as orgs,
         (select count(*)::int from segment_definitions where org_id = ${sandboxOrgId}) as segments,
         (select count(*)::int from journal_entries where org_id = ${sandboxOrgId}) as entries`));
     assert.deepEqual(residue.rows, [{ orgs: 0, segments: 0, entries: 0 }]);
-  } finally {
-    if (sandboxId) {
-      await deleteSandbox(sandboxId).catch(() => undefined);
-    } else {
-      const failed = (await db.execute<{ id: string }>(sql`
-        select id from sandboxes
-         where production_org_id = ${org.orgId}
-           and name = ${sandboxName}`));
-      for (const row of failed.rows) {
-        await deleteSandbox(row.id).catch(() => undefined);
-      }
-    }
-    await dropScratchOrg(org.orgId);
-  }
+  });
 });
 
 test("refresh rebuilds maintained aggregates instead of accumulating cloned rows", { skip: !DB }, async () => {
@@ -429,7 +419,7 @@ test("refresh and reset leave a sandbox as credential-free and inert as create d
     await db.execute(sql`
       update orgs set settings = coalesce(settings, '{}'::jsonb) || '{"email":{"provider":"smtp"}}'::jsonb where id = ${org.orgId}`);
 
-    const created = await createSandbox({ productionOrgId: org.orgId, name: sandboxName, tier: "full", masked: false });
+    const created = await withOrgContext(org.orgId, () => createSandbox({ productionOrgId: org.orgId, name: sandboxName, tier: "full", masked: false }));
     handle.sandboxId = created.sandboxId;
 
     const inert = async (): Promise<Record<string, unknown>> =>

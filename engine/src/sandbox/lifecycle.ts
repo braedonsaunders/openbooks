@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
-import { db, longPool, orgContext, schema, withMaintenanceTransaction, withOrg, type MaintenanceTransactionOptions } from "../platform/db.ts";
+import { db, longPool, orgContext, schema, withBypassContext, withMaintenanceTransaction, withOrg, type MaintenanceTransactionOptions } from "../platform/db.ts";
 import {
   assertUuid,
   deferredDeletionTables,
@@ -271,105 +271,119 @@ export async function rebaseSandboxControlAccounts(args: {
    */
   productionSettings?: Record<string, unknown> | null;
 }): Promise<Record<string, string>> {
-  // With an in-snapshot settings capture, the production half comes from the
-  // caller and only the sandbox half is read; otherwise both halves are read
-  // live (the refresh path).
-  let productionControls: Record<string, unknown> | null | undefined;
-  if (args.productionSettings != null) {
-    productionControls = args.productionSettings["controlAccounts"] as
-      | Record<string, unknown>
-      | null
-      | undefined;
-  } else {
-    const prodRow = (
-      await db.execute(sql`
-      select production.settings -> 'controlAccounts' as production_controls
-        from orgs production
-       where production.id = ${args.productionOrgId}
-    `)
-    ).rows[0]?.production_controls as Record<string, unknown> | null | undefined;
-    if (prodRow === undefined) throw new Error("sandbox control-account rebase target not found");
-    productionControls = prodRow;
-  }
-  const sandboxRow = (
-    await db.execute(sql`
-    select settings -> 'controlAccounts' as sandbox_controls
-      from orgs
-     where id = ${args.sandboxOrgId}
-  `)
-  ).rows[0] as { sandbox_controls: Record<string, unknown> | null } | undefined;
-  if (!sandboxRow) throw new Error("sandbox control-account rebase target not found");
-
-  const sourceControls = productionControls ?? {};
-  const sourceIds = [
-    ...new Set(
-      Object.values(sourceControls).filter(
-        (value): value is string =>
-          typeof value === "string" && UUID_VALUE.test(value),
-      ),
-    ),
-  ];
-  const mapped = new Map<string, string>();
-  if (sourceIds.length > 0) {
-    const result = await db.execute(sql`
-      select source.id::text as source_id,
-             target.id::text as sandbox_id
-        from accounts source
-        join accounts target
-          on target.id = ob_rebase(source.id, ${args.seed}::uuid)
-         and target.org_id = ${args.sandboxOrgId}
-       where source.org_id = ${args.productionOrgId}
-         and source.id = any(${`{${sourceIds.join(",")}}`}::uuid[])
-    `);
-    for (const account of result.rows as Array<{
-      source_id: string;
-      sandbox_id: string;
-    }>) {
-      mapped.set(account.source_id, account.sandbox_id);
+  // The source and its clone are different tenants. Resolve both account
+  // sets and record the clone's change in one trusted maintenance transaction;
+  // a source-scoped caller cannot see the clone's accounts through RLS.
+  return withMaintenanceTransaction(null, async () => {
+    await lockLedgerSetupFence(db, args.sandboxOrgId, "exclusive");
+    const owned = (await db.execute<{ id: string }>(sql`
+      select id from orgs where id = ${args.sandboxOrgId}
+        and env_kind = 'sandbox' and sandbox_of = ${args.productionOrgId}
+        and sandbox_seed = ${args.seed}::uuid for update`)).rows[0];
+    if (!owned) throw new Error("sandbox control-account rebase requires the owning source organization and clone seed");
+    // With an in-snapshot settings capture, the production half comes from the
+    // caller and only the sandbox half is read; otherwise both halves are read
+    // live (the refresh path).
+    let productionControls: Record<string, unknown> | null | undefined;
+    if (args.productionSettings != null) {
+      productionControls = args.productionSettings["controlAccounts"] as
+        | Record<string, unknown>
+        | null
+        | undefined;
+    } else {
+      const prodRow = (
+        await db.execute(sql`
+        select production.settings -> 'controlAccounts' as production_controls
+          from orgs production
+         where production.id = ${args.productionOrgId}
+      `)
+      ).rows[0]?.production_controls as Record<string, unknown> | null | undefined;
+      if (prodRow === undefined) throw new Error("sandbox control-account rebase target not found");
+      productionControls = prodRow;
     }
-  }
-
-  const rebased = Object.fromEntries(
-    Object.entries(sourceControls).flatMap(([key, value]) => {
-      if (typeof value !== "string" || !UUID_VALUE.test(value)) return [];
-      const sandboxId = mapped.get(value);
-      return sandboxId ? [[key, sandboxId]] : [];
-    }),
-  );
-  const before = sandboxRow.sandbox_controls ?? {};
-  if (JSON.stringify(before) === JSON.stringify(rebased)) return rebased;
-
-  const requestId = randomUUID();
-  await db.transaction(async (tx) => {
-    await lockLedgerSetupFence(tx, args.sandboxOrgId, "exclusive");
-    await tx.execute(sql`
-      update orgs
-         set settings = jsonb_set(
-               coalesce(settings, '{}'::jsonb),
-               '{controlAccounts}',
-               ${JSON.stringify(rebased)}::jsonb,
-               true
-             ),
-             updated_at = now(),
-             updated_by = ${args.actorId ?? null}
+    const sandboxRow = (
+      await db.execute(sql`
+      select settings -> 'controlAccounts' as sandbox_controls
+        from orgs
        where id = ${args.sandboxOrgId}
-    `);
-    await tx.execute(sql`
-      insert into audit_log
-        (org_id, table_name, row_id, action, changes, actor_id, request_id)
-      values (
-        ${args.sandboxOrgId}, 'orgs', ${args.sandboxOrgId}, 'update',
-        ${JSON.stringify({
-          mode: "sandbox_control_account_rebase",
-          productionOrgId: args.productionOrgId,
-          before,
-          after: rebased,
-        })}::jsonb,
-        ${args.actorId ?? null}, ${requestId}
-      )
-    `);
+    `)
+    ).rows[0] as { sandbox_controls: Record<string, unknown> | null } | undefined;
+    if (!sandboxRow) throw new Error("sandbox control-account rebase target not found");
+
+    const sourceControls = productionControls ?? {};
+    const sourceIds = [
+      ...new Set(
+        Object.values(sourceControls).filter(
+          (value): value is string =>
+            typeof value === "string" && UUID_VALUE.test(value),
+        ),
+      ),
+    ];
+    const mapped = new Map<string, string>();
+    if (sourceIds.length > 0) {
+      const result = await db.execute(sql`
+        select source.id::text as source_id,
+               target.id::text as sandbox_id
+          from accounts source
+          join accounts target
+            on target.id = ob_rebase(source.id, ${args.seed}::uuid)
+           and target.org_id = ${args.sandboxOrgId}
+         where source.org_id = ${args.productionOrgId}
+           and source.id = any(${`{${sourceIds.join(",")}}`}::uuid[])
+      `);
+      for (const account of result.rows as Array<{
+        source_id: string;
+        sandbox_id: string;
+      }>) {
+        mapped.set(account.source_id, account.sandbox_id);
+      }
+    }
+
+    const rebased = Object.fromEntries(
+      Object.entries(sourceControls).flatMap(([key, value]) => {
+        if (typeof value !== "string" || !UUID_VALUE.test(value)) return [];
+        const sandboxId = mapped.get(value);
+        return sandboxId ? [[key, sandboxId]] : [];
+      }),
+    );
+    const before = sandboxRow.sandbox_controls ?? {};
+    if (JSON.stringify(before) === JSON.stringify(rebased)) return rebased;
+
+    const requestId = randomUUID();
+    await db.transaction(async (tx) => {
+      const updated = await tx.execute<{ id: string }>(sql`
+        update orgs
+           set settings = jsonb_set(
+                 coalesce(settings, '{}'::jsonb),
+                 '{controlAccounts}',
+                 ${JSON.stringify(rebased)}::jsonb,
+                 true
+               ),
+               updated_at = now(),
+               updated_by = ${args.actorId ?? null}
+         where id = ${args.sandboxOrgId}
+           and env_kind = 'sandbox' and sandbox_of = ${args.productionOrgId}
+           and sandbox_seed = ${args.seed}::uuid
+         returning id
+      `);
+      if (!updated.rows[0]) throw new Error("sandbox control-account rebase target changed before saving");
+      await tx.execute(sql`
+        insert into audit_log
+          (org_id, table_name, row_id, action, changes, actor_id, request_id)
+        values (
+          ${args.sandboxOrgId}, 'orgs', ${args.sandboxOrgId}, 'update',
+          ${JSON.stringify({
+            mode: "sandbox_control_account_rebase",
+            productionOrgId: args.productionOrgId,
+            before,
+            after: rebased,
+          })}::jsonb,
+          ${args.actorId ?? null}, ${requestId}
+        )
+      `);
+    });
+    return rebased;
   });
-  return rebased;
 }
 
 /** Delete a sandbox's copied rows for `tables` (org tables + org-less children).
@@ -539,11 +553,13 @@ export async function createSandbox(input: CreateSandboxInput): Promise<{
       // marks the sandbox failed (catch below), never a ready sandbox whose
       // cabinet 404s. Masked clones are a no-op here by construction — their
       // rows carry the tombstone kind, never 's3'.
-      await copyClonedFileObjects({
+      // bypass: cross-org-by-design — the attachment mapping reads the
+      // validated production source and the clone created by this command.
+      await withBypassContext(() => copyClonedFileObjects({
         productionOrgId: input.productionOrgId,
         sandboxOrgId,
         seed,
-      });
+      }));
       await rebaseSandboxControlAccounts({
         productionOrgId: input.productionOrgId,
         sandboxOrgId,
@@ -553,7 +569,7 @@ export async function createSandbox(input: CreateSandboxInput): Promise<{
         // from the same configuration the sandbox settings came from.
         productionSettings: result.sourceSettings,
       });
-      await neuterSandbox(sandboxOrgId);
+      await withOrg(sandboxOrgId, () => neuterSandbox(sandboxOrgId));
       // Prove tenant isolation on the clone before it is marked ready.
       // withOrg opens its own bypass-off transactions even when the caller
       // holds withBypassContext (ALS bypass, no pinned connection).
