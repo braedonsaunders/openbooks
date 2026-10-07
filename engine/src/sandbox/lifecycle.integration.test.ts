@@ -4,7 +4,11 @@ import { test } from "node:test";
 import { sql } from "drizzle-orm";
 import { db, withMaintenanceTransaction, withOrgContext, withOrgTransaction } from "../platform/db.ts";
 import { errorChainMatches } from "../testing/error-chain.ts";
-import { createScratchOrg, createScratchUser, dropScratchOrg } from "../testing/fixtures.ts";
+import {
+  assertDedicatedFixtureDatabase, hasEphemeralDatabaseMarker,
+  createScratchOrg, createScratchUser, dropScratchOrg,
+  seedPayrollPerson, seedPayrollProfile, seedPayrollSchedule, seedWorkerEmployment,
+} from "../testing/fixtures.ts";
 import { postDocument } from "../ledger/posting-document.ts";
 import { createSandbox, deleteSandbox, refreshSandbox, resetSandbox } from "./lifecycle.ts";
 
@@ -37,12 +41,62 @@ async function activatedRateSnapshot(orgId: string) {
      where c.org_id=${orgId} order by v.status`)).rows })));
 }
 
+async function seedHistoricalPayrollProfiles(org: Awaited<ReturnType<typeof createScratchOrg>>, actorId: string) {
+  const schedules = [randomUUID(), randomUUID()];
+  for (const [index, scheduleId] of schedules.entries()) {
+    await seedPayrollSchedule(org.orgId, scheduleId, actorId, {
+      name: `Historical weekly payroll ${index}`, frequency: "weekly", periodsPerYear: 52,
+      anchorPeriodEnd: "2026-01-03", payDateOffsetDays: 5,
+    });
+  }
+  const profiles = [
+    { percent: "4.0000", method: "accrue" },
+    { percent: null, method: "pay_each_period" },
+    { percent: "6.0000", method: null },
+  ];
+  const ids: string[] = [];
+  for (const [index] of profiles.entries()) {
+    const id = randomUUID(), person = randomUUID();
+    await seedPayrollPerson(org.orgId, person, `Historical payroll employee ${index}`, { subsidiaryId: org.subsidiaryId });
+    const employment = await seedWorkerEmployment(org.orgId, person, org.subsidiaryId);
+    await seedPayrollProfile(org.orgId, person, employment, schedules[index === 0 ? 0 : 1]!, actorId,
+      { id, country: "CA", province: "ON", payBasis: "hourly" });
+    ids.push(id);
+  }
+  // Reconstruct retained pre-Vacation-terms storage only on the explicitly
+  // disposable database. The table lock and trigger change are transactional;
+  // no other session can write while the evidence guard is disabled.
+  await assertDedicatedFixtureDatabase();
+  await withMaintenanceTransaction(null, async () => {
+    const marker = (await db.execute<{ marker: string | null }>(sql`
+      select shobj_description(oid,'pg_database') as marker from pg_database where datname=current_database()`)).rows[0]?.marker;
+    assert.equal(hasEphemeralDatabaseMarker(marker, process.env.OPENBOOKS_TEST_DB_MARKER), true);
+    await db.execute(sql`alter table employee_payroll_profiles disable trigger payroll_profile_vacation_evidence`);
+    for (const [index, profile] of profiles.entries()) {
+      const changed = await db.execute(sql`update employee_payroll_profiles
+        set vacation_percent=${profile.percent},vacation_method=${profile.method}
+        where org_id=${org.orgId} and id=${ids[index]} returning id`);
+      assert.equal(changed.rows.length, 1);
+    }
+    await db.execute(sql`alter table employee_payroll_profiles enable trigger payroll_profile_vacation_evidence`);
+  });
+}
+
+async function historicalProfileSnapshot(orgId: string) {
+  return (await db.execute<{ id: string; employee_party_id: string; employment_id: string; pay_schedule_id: string;
+    vacation_percent: string | null; vacation_method: string | null; evidence: Record<string, unknown> }>(sql`
+    select id,employee_party_id,employment_id,pay_schedule_id,vacation_percent::text,vacation_method,to_jsonb(p) as evidence
+      from employee_payroll_profiles p where org_id=${orgId} order by id`)).rows;
+}
+
 test("a clean-schema full sandbox clones tenant evidence without pre-seed collisions or residue", { skip: !DB }, async () => {
   const org = await createScratchOrg();
   const sandboxName = `Lifecycle ${randomUUID()}`;
   await withSandboxCleanup(org, sandboxName, async () => {
     const actorId = await createScratchUser(org.orgId, `Sandbox owner ${randomUUID()}`, "admin");
     await seedActivatedRateChildren(org);
+    await seedHistoricalPayrollProfiles(org, actorId);
+    const originalProfiles = await historicalProfileSnapshot(org.orgId);
     const sourceRates = await activatedRateSnapshot(org.orgId);
     const created = await withOrgContext(org.orgId, () => createSandbox({
       productionOrgId: org.orgId,
@@ -77,6 +131,57 @@ test("a clean-schema full sandbox clones tenant evidence without pre-seed collis
       assert.equal((await db.execute(sql`select 1 from item_rate_lines l where l.org_id=${sandboxOrgId} and not exists(select 1 from items i where i.id=l.item_id and i.org_id=l.org_id)`)).rows.length, 0);
     };
     await assertRates();
+    const assertProfiles = async () => {
+      const copied = (await db.execute<{ matched: boolean }>(sql`
+        select (copied.id<>original.id and copied.org_id<>original.org_id
+          and copied.employee_party_id=ob_rebase(original.employee_party_id,target.sandbox_seed)
+          and copied.employment_id=ob_rebase(original.employment_id,target.sandbox_seed)
+          and copied.pay_schedule_id=ob_rebase(original.pay_schedule_id,target.sandbox_seed)
+          and copied.vacation_percent is not distinct from original.vacation_percent
+          and copied.vacation_method is not distinct from original.vacation_method) as matched
+        from employee_payroll_profiles original join orgs target on target.id=${sandboxOrgId}
+        join employee_payroll_profiles copied on copied.org_id=target.id and copied.id=ob_rebase(original.id,target.sandbox_seed)
+        where original.org_id=${org.orgId}`)).rows;
+      assert.equal(originalProfiles.length, 3);
+      assert.equal((await historicalProfileSnapshot(sandboxOrgId)).length, 3);
+      assert.equal(copied.length, 3);
+      assert.ok(copied.every(row => row.matched));
+      assert.deepEqual(await historicalProfileSnapshot(org.orgId), originalProfiles);
+    };
+    await assertProfiles();
+    const copiedProfiles = await historicalProfileSnapshot(sandboxOrgId);
+    const first = copiedProfiles.find(p => p.vacation_percent === "4.0000" && p.vacation_method === "accrue");
+    const second = copiedProfiles.find(p => p.vacation_method === "pay_each_period");
+    assert.ok(first && second);
+    const insert = (scope: string, id: string, person: string, employment: string, schedule: string,
+      percent: string | null, method: string | null) => sql`
+      insert into employee_payroll_profiles(id,org_id,employee_party_id,employment_id,pay_schedule_id,country,province,pay_basis,vacation_percent,vacation_method)
+      values(${id},${scope},${person},${employment},${schedule},'CA','ON','hourly',${percent},${method})`;
+    const firstOriginal = originalProfiles.find(p => p.vacation_percent === first.vacation_percent && p.vacation_method === first.vacation_method)!;
+    const refusal = /Configure vacation through employee Vacation terms/;
+    for (const [query, scope, privileged, replace] of [
+      [insert(sandboxOrgId,first.id,first.employee_party_id,first.employment_id,first.pay_schedule_id,first.vacation_percent,first.vacation_method),sandboxOrgId,false,true],
+      [insert(org.orgId,randomUUID(),firstOriginal.employee_party_id,firstOriginal.employment_id,firstOriginal.pay_schedule_id,first.vacation_percent,first.vacation_method),org.orgId,true,false],
+      [insert(sandboxOrgId,randomUUID(),first.employee_party_id,first.employment_id,first.pay_schedule_id,first.vacation_percent,first.vacation_method),sandboxOrgId,true,true],
+      [insert(sandboxOrgId,first.id,second.employee_party_id,second.employment_id,first.pay_schedule_id,first.vacation_percent,first.vacation_method),sandboxOrgId,true,true],
+      [insert(sandboxOrgId,first.id,first.employee_party_id,first.employment_id,second.pay_schedule_id,first.vacation_percent,first.vacation_method),sandboxOrgId,true,true],
+      [insert(sandboxOrgId,first.id,first.employee_party_id,first.employment_id,first.pay_schedule_id,'7.0000',first.vacation_method),sandboxOrgId,true,true],
+      [insert(sandboxOrgId,first.id,first.employee_party_id,first.employment_id,first.pay_schedule_id,first.vacation_percent,'pay_each_period'),sandboxOrgId,true,true],
+    ] as const) {
+      const write = async () => {
+        await db.execute(sql`select set_config('openbooks.clone','on',true),set_config('openbooks.migration','on',true),set_config('openbooks.amend','on',true)`);
+        if (replace) assert.equal((await db.execute(sql`delete from employee_payroll_profiles where org_id=${sandboxOrgId} and id=${first.id} returning id`)).rows.length, 1);
+        await db.execute(query);
+      };
+      await assert.rejects(privileged ? withMaintenanceTransaction(null, write) : withOrgTransaction(scope, write),
+        error => errorChainMatches(error, refusal));
+      await assertProfiles();
+    }
+    await assert.rejects(withMaintenanceTransaction(null, async () => {
+      await db.execute(sql`select set_config('openbooks.clone','on',true),set_config('openbooks.migration','on',true),set_config('openbooks.amend','on',true)`);
+      await db.execute(sql`update employee_payroll_profiles set vacation_percent='7.0000' where org_id=${sandboxOrgId} and id=${first.id}`);
+    }), error => errorChainMatches(error, /vacation fields preserve historical evidence/));
+    await assertProfiles();
     for (const status of ["active", "retired"]) {
       const version = (await db.execute<{ id: string }>(sql`select id from item_rate_versions where org_id=${sandboxOrgId} and status=${status}`)).rows[0]!.id;
       const sourceVersion = (await db.execute<{ id: string }>(sql`select id from item_rate_versions where org_id=${org.orgId} and status=${status}`)).rows[0]!.id;
@@ -98,6 +203,7 @@ test("a clean-schema full sandbox clones tenant evidence without pre-seed collis
       }
     }
     await assertRates();
+    await assertProfiles();
 
     const controls = (await db.execute<{ key: string; account_id: string; org_id: string | null }>(sql`
       select control.key, control.value as account_id, account.org_id
@@ -145,6 +251,7 @@ test("a clean-schema full sandbox clones tenant evidence without pre-seed collis
       select status, last_error from sandboxes where id = ${sandboxId}`));
     assert.deepEqual(refreshed.rows, [{ status: "ready", last_error: null }]);
     await assertRates();
+    await assertProfiles();
     const refreshedControls = await db.execute(sql`
       select count(*)::int as count
         from orgs sandbox
