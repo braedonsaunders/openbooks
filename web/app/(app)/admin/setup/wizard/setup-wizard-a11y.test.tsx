@@ -204,12 +204,14 @@ test("company selections are stated as announced text and track changes", async 
  * names where setup resumes, instead of detouring into Setup. */
 test("skipping lands on the canonical home naming the resume", async (t) => {
   const { host, root } = mount();
+  globalThis.__wizardPath = "/dashboard";
   const pushes: string[] = [];
+  let refreshes = 0;
   globalThis.__wizardRouter = {
     push(url: string) {
       pushes.push(url);
     },
-    refresh() {},
+    refresh() { refreshes++; },
   };
   const prior = globalThis.fetch;
   globalThis.fetch = (async () => Response.json({ ok: true })) as typeof fetch;
@@ -231,6 +233,7 @@ test("skipping lands on the canonical home naming the resume", async (t) => {
   await tick();
   await tick();
   assert.deepEqual(pushes, ["/dashboard"], "Skip lands on the canonical home, never Setup");
+  assert.equal(refreshes, 1, "Skip rereads durable deferral even when already on the dashboard");
   const successes = (globalThis.__wizardToasts ?? []).filter((toast) => toast.kind === "success");
   assert.equal(successes.length, 1, "Skip names the resume in exactly one toast");
   assert.match(successes[0]!.message, /Company Setup/, "the toast says setup resumes from Company Setup");
