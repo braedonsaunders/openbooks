@@ -153,7 +153,7 @@ test.describe("page layouts", () => {
         .getByRole("button", { name: /hide/i })
         .click();
 
-      await dialog.getByRole("tab", { name: /^preview$/i }).click();
+      await dialog.getByRole("button", { name: /^preview$/i }).click();
       const [previewTab] = await Promise.all([
         context.waitForEvent("page"),
         dialog.getByRole("button", { name: /open preview/i }).click(),
@@ -227,7 +227,7 @@ test.describe("page layouts", () => {
 
       await page.goto(`${LIST}?route=${encodeURIComponent(ROUTE)}`);
       const dialog = page.getByRole("dialog");
-      await dialog.getByRole("tab", { name: /^history$/i }).click();
+      await dialog.getByRole("button", { name: /^history$/i }).click();
 
       // The live version is marked and offers no Restore: restoring what is
       // already live is a no-op dressed up as an action.
@@ -260,7 +260,7 @@ test.describe("page layouts", () => {
       await page.goto(`${LIST}?route=${encodeURIComponent(ROUTE)}`);
       await dismissSetupWizard(page);
       const dialog = page.getByRole("dialog");
-      await dialog.getByRole("tab", { name: /advanced/i }).click();
+      await dialog.getByRole("button", { name: /^advanced$/i }).click();
 
       const editor = dialog.getByRole("textbox", { name: /advanced/i });
       await editor.fill(
