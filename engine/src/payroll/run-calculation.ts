@@ -14,7 +14,7 @@ import { statutoryHolidayPayEnabled, ensureStatutoryHolidayComponents, ensureCom
  */
 import { lockAndCheckPayrollRunPopulation, payrollSubsidiaryInScope, payrollSubsidiaryScopeFilter, type PayrollSubsidiaryScope } from "./scope.ts";
 import { employeeTaxYearFenceKey, takeEmployeeTaxYearFences } from "./fences.ts";
-import { sql } from "drizzle-orm";
+import { DrizzleQueryError, sql } from "drizzle-orm";
 import { db, withTransactionSavepoint } from "../platform/db.ts";
 import { PayrollError } from "./error.ts";
 import { lockAndCheckOrgFeature } from "../organization/org-feature-lock.ts";
@@ -592,7 +592,10 @@ async function calculateInTransaction(input: CalculatePayRunInput): Promise<PayR
             filingAccountNumber: emp.filing_account_number ?? null,
           },
         });
-        const result = await calculateStub(tx, {
+        // A named employee refusal must leave no partial stub or allocation.
+        // Database failures abort the entire calculation and retain their
+        // original cause; they cannot become acknowledgeable exclusions.
+        const result = await withTransactionSavepoint(tx, () => calculateStub(tx, {
           orgId, actorId, documentId, run, emp, runContext, jurisdiction,
           periodsPerYear: P, employerEmployeeCount: employerCount, need, components: components.rows,
           wageExpenseAccountId: runWageExpenseAccountId,
@@ -604,7 +607,7 @@ async function calculateInTransaction(input: CalculatePayRunInput): Promise<PayR
           allowedSubsidiaryIds: input.allowedSubsidiaryIds,
           periodPriors: periodPriorsByEmployee.get(emp.party_id!),
           supplementalTaxMethod,
-        });
+        }));
         grossTotal = add(grossTotal, result.gross);
         netTotal = add(netTotal, result.net);
         employerTotal = add(employerTotal, result.employerCost);
@@ -636,6 +639,7 @@ async function calculateInTransaction(input: CalculatePayRunInput): Promise<PayR
           });
         }
       } catch (error) {
+        if (error instanceof DrizzleQueryError) throw error;
         errors.push({
           employeePartyId: emp.party_id!,
           employee: name,

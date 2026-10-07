@@ -2,7 +2,7 @@ import { seedPayrollSettings } from '../testing/fixtures.ts';
 import { seedPayrollComponent } from '../testing/fixtures.ts';
 import {
   seedPayrollSchedule, seedPayrollEmployeeRole, seedPayrollPerson, seedPayrollTime, seedPayrollProfile, seedPayrollWage,
-  createScratchOrg, dropScratchOrg, seedFlowActors, dropScratchOrgReporting, seedWorkerEmployment,
+  createScratchOrg, dropScratchOrg, seedFlowActors, dropScratchOrgReporting, seedWorkerEmployment, assertDedicatedFixtureDatabase,
 } from "../testing/fixtures.ts";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
@@ -16,6 +16,7 @@ import { calculatePayRun } from "./run-calculation.ts";
 import { calculatedRun, seedAdoption, seedOntarioEhtFixture } from "./filing-test-fixtures.ts";
 import { commitPayRun } from "./run-commit.ts";
 import { cmp } from "../money/money.ts";
+import { errorChainMatches } from "../testing/error-chain.ts";
 /** Identical Ontario hourly employment and approved time for lifecycle calculations. */
 async function seedHourlyLifecycle(name: string, options: { monthly?: boolean; scheduleName?: string; terminatedOn?: string } = {}) {
   const org = await createScratchOrg();
@@ -355,6 +356,49 @@ describe("calculation-rollback", () => {
       'time',(select jsonb_agg(to_jsonb(t) order by id) from time_entries t where org_id=${orgId})
     ) as state`)).rows[0]!.state;
   }
+
+  test("an employee SQL failure raises its original cause and restores calculation evidence inside an ambient transaction",
+    { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+      await assertDedicatedFixtureDatabase();
+      const fx = await seedAdoption();
+      const faultName = `payroll_line_failure_${randomUUID().replaceAll("-", "")}`;
+      const fault = sql.identifier(faultName);
+      try {
+        const { input } = await calculatedRun(fx);
+        const before = await evidence(fx.orgId);
+        await withOrgTransaction(fx.orgId, async () => {
+          await db.execute(sql`update parties set custom=custom || '{"callerWork":true}'::jsonb
+            where org_id=${fx.orgId} and id=${fx.employeeId}`);
+          // The fault occurs after the employee header has been written. DDL
+          // is confined to this marked fixture database and caller transaction;
+          // success drops it, while any failed assertion rolls it back.
+          await db.execute(sql`create function ${fault}() returns trigger language plpgsql as $$
+            begin
+              if not exists(select 1 from pay_stubs where org_id=new.org_id and id=new.stub_id) then
+                raise exception 'The payroll persistence fault did not reach the employee header';
+              end if;
+              raise exception 'Injected payroll line persistence refusal' using errcode='23514';
+            end $$`);
+          await db.execute(sql`create trigger ${fault} after insert on pay_stub_lines
+            for each row when (new.org_id=${sql.raw(`'${fx.orgId}'::uuid`)}) execute function ${fault}()`);
+          await assert.rejects(calculatePayRun(input), (error: unknown) => {
+            assert.ok(errorChainMatches(error, /Injected payroll line persistence refusal/),
+              "the original server refusal must survive instead of a later aborted-transaction query");
+            assert.equal(errorChainMatches(error, /current transaction is aborted/), false);
+            return true;
+          });
+          assert.deepEqual(await evidence(fx.orgId), before,
+            "caught calculation failure must restore the previous stubs, lines, totals and source evidence");
+          await db.execute(sql`drop trigger ${fault} on pay_stub_lines`);
+          await db.execute(sql`drop function ${fault}()`);
+        });
+        assert.equal((await db.execute<{ marker: boolean }>(sql`select (custom->>'callerWork')::boolean as marker
+          from parties where org_id=${fx.orgId} and id=${fx.employeeId}`)).rows[0]!.marker, true,
+        "recovering the failed calculation must preserve earlier caller work");
+        assert.deepEqual(await evidence(fx.orgId), before);
+        assert.deepEqual((await calculatePayRun(input)).errors, [], "the native calculation recovers after the fault is removed");
+      } finally { await dropScratchOrgReporting(fx.orgId); }
+    });
 
   test("a caught late payroll commit refusal restores all evidence in an ambient transaction",
     { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
