@@ -11,7 +11,10 @@ test('Insight cards and dashboards remain editable after publishing', async ({
   async function mutate(path: string, method: 'POST' | 'DELETE') {
     const result = await page.evaluate(
       async ({ path, method }) => {
-        const response = await fetch(path, { method })
+        const response = await fetch(path, {
+          method,
+          ...(method === 'POST' ? { headers: { 'Content-Type': 'application/json', 'Idempotency-Key': crypto.randomUUID() }, body: '{}' } : {}),
+        })
         return { status: response.status, text: await response.text() }
       },
       { path, method },
@@ -39,7 +42,7 @@ test('Insight cards and dashboards remain editable after publishing', async ({
       expect(deferred.status(), await deferred.text()).toBe(200)
       await expect(wizard).toBeHidden()
     }
-    const cardResponse = await mutate('/api/insights/cards/draft', 'POST')
+    const cardResponse = await mutate('/api/insights/cards', 'POST')
     expect(cardResponse.ok(), await cardResponse.text()).toBe(true)
     const card = await cardResponse.json()
     created.push(`/api/insights/cards/${card.id}`)
@@ -96,7 +99,7 @@ test('Insight cards and dashboards remain editable after publishing', async ({
       'Monthly spend by department',
       'Browser regression card',
     )
-    const boardResponse = await mutate('/api/insights/dashboards/draft', 'POST')
+    const boardResponse = await mutate('/api/insights/dashboards', 'POST')
     expect(boardResponse.ok(), await boardResponse.text()).toBe(true)
     const board = await boardResponse.json()
     created.push(`/api/insights/dashboards/${board.id}`)
