@@ -72,6 +72,10 @@ const routes = [...new Set(discoverRoutes(APP_DIR))]
   .filter((route) => !SKIP[route])
   .sort()
 
+// Each route has its own browser context. Let the existing CI partitions split
+// this file instead of assigning every route to one indivisible test group.
+test.describe.configure({ mode: 'parallel' })
+
 test('the route list was actually discovered', () => {
   // Guards the discovery itself. If the walk breaks, every route test below
   // would pass vacuously by testing nothing.
