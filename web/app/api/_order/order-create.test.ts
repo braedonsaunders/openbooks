@@ -59,6 +59,8 @@ interface DocRow {
 }
 
 interface LineRow {
+  id: string;
+  org_id: string;
   document_id: string;
   line_number: number;
   account_id: string | null;
@@ -257,10 +259,16 @@ const mockDb = `
         throw { code: '23503', message: 'foreign key violation' }
       }
       state.lines.push({
+        id: 'line-' + (state.lines.length + 1), org_id: params[0],
         document_id: params[1], line_number: params[2], account_id: params[4],
         quantity: params[6], unit_price: params[8], amount: params[9],
       })
       return { rows: [{ id: 'line-' + state.lines.length }] }
+    }
+    if (text.includes('from document_lines') && text.includes('marketplace_facilitator')) {
+      return { rows: state.lines
+        .filter((line) => params.includes(line.org_id) && params.includes(line.id))
+        .map(() => ({ marketplaceFacilitator: null })) }
     }
     if (text.includes('insert into audit_log')) {
       state.audits.push({
@@ -297,7 +305,7 @@ const mockDb = `
       const rows = state.lines.filter((l) => params.includes(l.document_id))
       return {
         rows: rows.map((l) => ({
-          id: 'line-' + l.line_number, line_number: l.line_number,
+          id: l.id, line_number: l.line_number,
           item_id: null, account_id: l.account_id, description: null,
           quantity: l.quantity, unit: null, unit_price: l.unit_price,
           amount: l.amount, tax_code_id: null, tax_group_id: null,
@@ -490,11 +498,13 @@ for (const { kind, createPerm, numberPrefix, path } of KINDS) {
     assert.equal(data.lines.length, 1);
     assert.equal(state.docs.length, 1);
     assert.equal(state.docs[0]!.org_id, ORG_ID);
+    assert.equal(state.lines[0]!.org_id, ORG_ID);
     assert.equal(state.audits.length, 1);
     assert.equal(state.audits[0]!.row_id, KEY_A);
     assert.equal(state.audits[0]!.request_id, KEY_A);
     assert.equal(state.allocations, 1);
     assert.ok(state.queries.some((query) => query.includes("from segment_definitions")), "native dimension lookup uses the tracked database");
+    assert.ok(state.queries.some((query) => query.includes('marketplace_facilitator') && query.includes('from document_lines')), "native tax evidence resolves its just-saved tenant line");
   });
 
   test(`${kind}: exact replay is a 200 with no second row, number, or audit`, async () => {
