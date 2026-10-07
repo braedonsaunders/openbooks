@@ -16,6 +16,7 @@ const mocks: Record<string, string> = {
     revenueGrowth:null,breakevenRevenue:null,operatingLeverage:null,rule40:null}}}`,
 };
 registerHooks({ resolve(specifier, context, next) {
+  if (specifier === "./config" && !context.parentURL?.startsWith(new URL("./", import.meta.url).href)) return next(specifier, context);
   if (specifier === "@openbooks/engine/platform/database" && context.parentURL?.endsWith("/analytics/query.ts")) return { shortCircuit: true, url: "data:text/javascript," + encodeURIComponent(mocks["@openbooks/engine/src/platform/db.ts"]!) };
   if (specifier in mocks) return { shortCircuit: true, url: 'data:text/javascript,' + encodeURIComponent(mocks[specifier]!) };
   return next(specifier, context);

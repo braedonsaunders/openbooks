@@ -16,6 +16,7 @@ const mocks: Record<string, string> = {
   "./financial-health": "export async function priorFiscalWindow(){return {from:'2025-07-01',to:'2025-07-31'}} export async function financialHealth(){return {ratios:{},benchmarks:{targets:{}},figures:{}}}",
 };
 registerHooks({ resolve(specifier, context, next) {
+  if (specifier === "./config" && !context.parentURL?.startsWith(new URL("./", import.meta.url).href)) return next(specifier, context);
   if (specifier in mocks) return { shortCircuit: true, url: 'data:text/javascript,' + encodeURIComponent(mocks[specifier]!) };
   return next(specifier, context);
 } });
