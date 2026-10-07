@@ -5,6 +5,14 @@ import { toSnake } from './registry'
 
 /** Read-side projection/source for registry fields stored in a child relation. */
 export function setupReadProjection(entity: SetupEntity, columns?: readonly string[]) {
+  if (entity.key === 'dunning-policies') {
+    // The collection-policy form names retry fields without the storage
+    // namespace; resolve the same columns the native autopay writer saves.
+    const autopayColumns = new Set(['retry_offsets_days', 'insufficient_funds_offsets_days', 'expiry_notice_days', 'final_action'])
+    const projected = (columns?.length ? columns : [...autopayColumns]).map((column) =>
+      autopayColumns.has(column) ? `autopay_${column} as ${column}` : column)
+    return sql.raw((columns?.length ? projected : ['*', ...projected]).join(', '))
+  }
   if (entity.key === 'hrm-job-levels') {
     const base = sql.raw(columns?.length ? columns.join(', ') : '*')
     const weights = EQUAL_VALUE_CRITERIA_SLOTS.map(([criterion, slot]) => sql`
