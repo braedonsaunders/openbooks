@@ -4,6 +4,7 @@ import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { neg } from "../../money/money.ts";
 import { db } from "../../platform/db.ts";
+import { seedBenefitIncentivePosting as postEntry } from "../../testing/benefit-incentive-posting.ts";
 import {
   linkPerson,
   seedComponent,
@@ -79,37 +80,6 @@ async function approveThroughWorkflow(query: { orgId: string; actorId: string; a
   assert.ok(gate, "the configured approval policy must create a real pending gate");
   await decideGate({ gateId: gate.id, userId: query.actorId, decision: "approved" });
   return getBenefitAward(db, query.orgId, query.actorId, query.awardId);
-}
-
-async function postEntry(
-  h: Harness,
-  lines: ReadonlyArray<{ account: string; amount: string; project?: string }>,
-  date = "2026-07-15",
-): Promise<string> {
-  const entry = randomUUID();
-  // Native posting order: draft header, then lines, then post.
-  await db.transaction(async (tx) => {
-    await tx.execute(sql`
-      insert into journal_entries
-        (id, org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, status, origin)
-      values (${entry}, ${h.org.orgId}, ${h.org.bookId}, ${h.org.subsidiaryId},
-              ${entry}, ${date}::date, ${h.org.periodId}, 'draft', 'manual')
-    `);
-    let n = 0;
-    for (const line of lines) {
-      n += 1;
-      await tx.execute(sql`
-        insert into journal_lines
-          (org_id, entry_id, line_number, account_id, subsidiary_id, amount, currency, txn_amount, fx_rate, project_id)
-        values (${h.org.orgId}, ${entry}, ${n}, ${line.account}, ${h.org.subsidiaryId},
-                ${line.amount}, 'USD', ${line.amount}, 1, ${line.project ?? null}::uuid)
-      `);
-    }
-    await tx.execute(sql`
-      update journal_entries set status = 'posted', posted_at = now() where id = ${entry}
-    `);
-  });
-  return entry;
 }
 
 async function seedProgram(h: Harness, overrides: Record<string, unknown> = {}) {
@@ -532,6 +502,6 @@ settlementTest("project-completion awards require native closed projects and fre
   assert.equal(completion[0]!.projectId, projectId);
   assert.equal(completion[0]!.status, "closed");
   assert.equal((await settleIncentivePeriod(query)).awards[0]!.id, settled.awards[0]!.id);
-  await postEntry(h, [{account: h.org.accounts.revenue, amount: "-100.0000", project: projectId}, {account: h.org.accounts.bank, amount: "100.0000"}], "2026-08-15");
+  await postEntry(h, [{account: h.org.accounts.revenue, amount: "-100.0000", project: projectId}, {account: h.org.accounts.bank, amount: "100.0000"}], { date: "2026-08-15" });
   await refuses(() => settleIncentivePeriod({...query, periodFrom: "2026-08-01", periodTo: "2026-08-31"}), /completion was already settled/);
 });
