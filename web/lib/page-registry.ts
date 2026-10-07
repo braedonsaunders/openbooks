@@ -2056,6 +2056,18 @@ export const PAGE_REGISTRY: Readonly<Record<string, PageRegistryEntry>> = {
       }
     },
   },
+  '/me/training': {
+    route: '/me/training',
+    segments: [],
+    searchParams: true,
+    module: async () => {
+      const m = await import('../app/(app)/me/training/view')
+      return {
+        load: (input) => m.loadMeTraining(input.searchParams ?? {}),
+        spec: (data) => m.meTrainingSpec(data as never),
+      }
+    },
+  },
   '/nonprofit': {
     route: '/nonprofit',
     segments: [],
