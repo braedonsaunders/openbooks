@@ -12,6 +12,7 @@ import { db, env, pool } from "../../engine/src/platform/db.ts"
 import { connectMigrationClient, describeBootstrapMigrationFailure, executeMigrationAttempt, executeMigrationBody, isLockNotAvailable, migrationLockConfig, migrationRetryDelayMs, migrationRunsWithoutTransaction, releaseMigrationClient, sanitizeMigrationContent } from "../bootstrap-migration-client.ts"
 import { PREFLIGHT_MIN_ORDINAL, earlierPendingCreatesObject, evaluatePreflight, formatFinding, ordinalOf as preflightOrdinalOf, preflightDecisionFor, preflightDirFor, preflightStatementTimeoutMs, readNoneReason, readPreflightSql, type PreflightFinding } from "../migration-preflight.ts"
 import { assertBaselineHistory, historicalMigrationPlan, migrationIdentityIsApplied, releaseMigrationPlan } from "../migration-baseline-plan.mjs"
+import { publishedMigrationSessionPrelude } from "../migration-session-headers.mjs"
 
 async function executeTrackedMigration(
   filename: string,
@@ -38,7 +39,9 @@ async function executeTrackedMigration(
   // a half-applied non-idempotent migration would run its body twice.
   const started = Date.now();
   const lock = migrationLockConfig(env);
-  const body = sanitizeMigrationContent(content);
+  // The ledger digest still identifies the original immutable file. Supply
+  // only its reviewed session settings before applying the bounded lock policy.
+  const body = sanitizeMigrationContent(publishedMigrationSessionPrelude(filename, content) + content);
   const transactional = !migrationRunsWithoutTransaction(content);
   let attempt = 0;
   for (;;) {

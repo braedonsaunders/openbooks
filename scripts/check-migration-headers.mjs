@@ -1,7 +1,9 @@
 #!/usr/bin/env node
 /**
  * Repo-wide audit: new migrations must not disarm the runner's bounded
- * lock_timeout, and must carry the standard session header.
+ * lock_timeout, and must carry the standard session header. An immutable
+ * published file with an incomplete header may receive reviewed settings
+ * from the canonical runner, pinned to its exact filename and digest.
  *
  * Every migration used to run with `SET lock_timeout = 0` in its own body,
  * each in one transaction while the old stack keeps serving traffic — an
@@ -28,7 +30,8 @@
  *          idle_in_transaction_session_timeout, client_encoding,
  *          standard_conforming_strings, client_min_messages). lock_timeout
  *          is deliberately NOT part of the required header — the runner owns
- *          it now.
+ *          it now. Only exact published bytes registered in the runner's
+ *          shared session-header policy can receive missing settings there.
  *
  * The file list is derived from schema/migrations/generated (never
  * hand-listed), so a new migration is checked the moment it lands.
@@ -36,6 +39,7 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { publishedMigrationSessionSettings } from "./migration-session-headers.mjs";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const GENERATED_DIR = join(ROOT, "schema", "migrations", "generated");
@@ -137,6 +141,12 @@ export function scanMigrationFile(filename, content) {
   if (!Number.isInteger(ordinal) || ordinal <= LOCK_TIMEOUT_AMNESTY_MAX_ORDINAL) return [];
   const findings = [];
   const code = stripSqlComments(content);
+  let suppliedSettings = [];
+  try {
+    suppliedSettings = publishedMigrationSessionSettings(`generated/${filename}`, content).map(({ name }) => name);
+  } catch (error) {
+    findings.push({ file: filename, kind: "published-content-changed", value: error.message });
+  }
   const setting = lockTimeoutSetting(code);
   if ((setting !== null && isZeroTimeout(setting)) || /reset\s+lock_timeout\s*;?/i.test(code)) {
     findings.push({
@@ -150,7 +160,8 @@ export function scanMigrationFile(filename, content) {
     findings.push({ file: filename, kind: "lock_timeout-set_config", value: setConfig });
   }
   const missing = REQUIRED_HEADER_SETTINGS.filter(
-    (name) => !new RegExp(`(^|\\s)SET\\s+(?:(?:SESSION|LOCAL)\\s+)?${name}\\b`, "i").test(code),
+    (name) => !suppliedSettings.includes(name)
+      && !new RegExp(`(^|\\s)SET\\s+(?:(?:SESSION|LOCAL)\\s+)?${name}\\b`, "i").test(code),
   );
   for (const name of missing) {
     findings.push({ file: filename, kind: "header-missing", value: `SET ${name}` });
