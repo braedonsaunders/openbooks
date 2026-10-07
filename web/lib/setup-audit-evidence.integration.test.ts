@@ -1,11 +1,12 @@
 import assert from 'node:assert/strict';
+import { seedSetupActor, setupWriteSender } from '../testing/setup-write-fixture.ts';
 import { randomUUID } from 'node:crypto';
 import { registerHooks } from 'node:module';
 import test from 'node:test';
 import pg from 'pg';
 import { sql } from 'drizzle-orm';
 import { db, env } from '@openbooks/engine/src/platform/db.ts';
-import { createScratchOrg, dropScratchOrg, seedFlowActors, type ScratchOrg } from '@openbooks/engine/src/testing/fixtures.ts';
+import { createScratchOrg, dropScratchOrg, type ScratchOrg } from '@openbooks/engine/src/testing/fixtures.ts';
 import { waitForLockWaiter } from '@openbooks/engine/src/testing/lock-wait.ts';
 
 const state: { gate: { user: { orgId: string; id: string } } | null } = { gate: null };
@@ -18,18 +19,8 @@ registerHooks({ resolve(specifier, context, next) {
 } });
 const { POST, PATCH, DELETE } = await import('../app/api/admin/setup/[entity]/route');
 
-async function authenticate(org: ScratchOrg) {
-  const actorId = (await seedFlowActors(org.orgId)).adminId;
-  state.gate = { user: { orgId: org.orgId, id: actorId } };
-  await db.execute(sql`update orgs set settings=jsonb_set(coalesce(settings,'{}'::jsonb),'{features}',coalesce(settings->'features','{}'::jsonb)||'{"multiSubsidiary":true}'::jsonb) where id=${org.orgId}`);
-  return actorId;
-}
-function send(method: 'POST'|'PATCH'|'DELETE', entity: string, body: Record<string,unknown>) {
-  const request = new Request(`http://audit.local/api/admin/setup/${entity}${method==='DELETE' ? '?id='+body.id : ''}`, {
-    method, headers: { 'Content-Type':'application/json', ...(method==='POST' ? { 'Idempotency-Key': randomUUID() } : {}) }, ...(method==='DELETE' ? {} : {body:JSON.stringify(body)}),
-  });
-  return ({POST,PATCH,DELETE})[method](request,{params:Promise.resolve({entity})});
-}
+const authenticate = (org: ScratchOrg) => seedSetupActor(org, state);
+const send = setupWriteSender({ POST, PATCH, DELETE });
 const json = (value: unknown) => JSON.parse(JSON.stringify(value));
 async function row(table: string, id: string) {
   return (await db.execute(sql`select * from ${sql.identifier(table)} where id=${id}`)).rows[0];

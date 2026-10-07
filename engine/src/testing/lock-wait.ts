@@ -1,8 +1,9 @@
 /** Rendezvous for lock-wait race tests: wait until a concurrent backend parks
  * on a lock held by the caller's open transaction.
  *
- * Poll pg_locks for an ungranted waiter whose (locktype, transactionid)
- * matches a granted lock on this backend. pg_stat_activity must not be used
+ * Poll ungranted pg_locks waiters whose live pg_blocking_pids include this
+ * backend. Matching transaction IDs alone cannot distinguish advisory or
+ * relation locks, whose transaction IDs are null. pg_stat_activity must not be used
  * for this: inside an open transaction its rows pin to the transaction's
  * first statistics snapshot, so a poll loop whose first read runs before the
  * waiter blocks misses every later poll for the whole rendezvous. pg_locks
@@ -13,10 +14,8 @@
 import type { Client } from "pg";
 
 const WAITER_SQL = `select count(*)::int as n from pg_locks blocked
-  where not blocked.granted and blocked.pid <> pg_backend_pid() and exists (
-    select 1 from pg_locks mine where mine.granted and mine.pid = pg_backend_pid()
-    and mine.locktype = blocked.locktype
-    and mine.transactionid is not distinct from blocked.transactionid)`;
+  where not blocked.granted and blocked.pid <> pg_backend_pid()
+    and pg_backend_pid() = any(pg_blocking_pids(blocked.pid))`;
 
 export interface LockWaiterOptions {
   timeoutMs?: number;
@@ -36,7 +35,7 @@ export async function waitForLockWaiter(
     if (Date.now() >= deadline) {
       throw new Error(
         `timed out after ${timeoutMs}ms waiting for ${label} to park on this transaction's lock: ` +
-          `no ungranted pg_locks waiter was observed, so it either never reached the locked row or settled before blocking`,
+          `no waiter blocked by this backend was observed, so it either never reached the lock or settled before blocking`,
       );
     }
     await new Promise((resolve) => setTimeout(resolve, intervalMs));
