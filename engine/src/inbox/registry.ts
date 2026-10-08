@@ -126,75 +126,62 @@ export async function listInbox(
   ctx: InboxListContext,
   opts?: { kinds?: InboxKind[]; cache?: Map<string, InboxItem[]>; page?: InboxPage; notices?: InboxSourceNotice[] },
 ): Promise<InboxItem[]> {
-  const kinds = opts?.kinds ?? inboxAdapterKinds();
-  const out: InboxItem[] = [];
-  for (const kind of kinds) {
-    const adapter = adapterFor(kind);
-    if (!adapter) continue;
-    const cacheKey = `${ctx.orgId}:${ctx.actorId}:${kind}`;
-    const cached = opts?.cache?.get(cacheKey);
-    if (cached) {
-      out.push(...cached);
-      continue;
-    }
-    // A paged read is a window, not the working list: it bypasses the
-    // cache and is never reused for acting. Acting prefers the source's
-    // direct lookup and only falls back to the bounded window the list
-    // renders (unpaged means the source default, not the whole table).
-    if (opts?.page) {
-      try {
-        out.push(...(await adapter.list(ctx, opts.page)));
-      } catch (error) {
-        recordSourceFailure(kind, error, opts?.notices);
-      }
-      continue;
-    }
-    try {
-      const items = await adapter.list(ctx);
-      opts?.cache?.set(cacheKey, items);
-      out.push(...items);
-    } catch (error) {
-      recordSourceFailure(kind, error, opts?.notices);
-    }
-  }
-  return out.sort(compareInboxItems);
+  const legs = await readSources(ctx, opts?.kinds, opts?.cache, async (adapter, cacheKey) => {
+    if (opts?.page) return adapter.list(ctx, opts.page);
+    const items = await adapter.list(ctx);
+    opts?.cache?.set(cacheKey, items);
+    return items;
+  }, opts?.notices);
+  return legs.flat().sort(compareInboxItems);
 }
 
 export async function countInbox(
   ctx: InboxListContext,
   opts?: { kinds?: InboxKind[]; cache?: Map<string, InboxItem[]>; notices?: InboxSourceNotice[] },
 ): Promise<number> {
-  const kinds = opts?.kinds ?? inboxAdapterKinds();
-  let total = 0;
-  for (const kind of kinds) {
+  const legs = await readSources(ctx, opts?.kinds, opts?.cache, async (adapter, cacheKey) => {
+    if (adapter.count) return adapter.count(ctx);
+    const items = await adapter.list(ctx);
+    opts?.cache?.set(cacheKey, items);
+    return items.length;
+  }, opts?.notices);
+  return legs.reduce<number>((total, leg) => total + (typeof leg === "number" ? leg : leg.length), 0);
+}
+
+/**
+ * Read every requested source concurrently. Sources are independent and each
+ * runs through its own gate, so the slowest source bounds the read instead of
+ * the sum of all of them. A cached leg is served from the request cache; a
+ * failed leg contributes nothing and names itself in `notices`, recorded in
+ * source order so the surface renders them deterministically.
+ */
+async function readSources<T>(
+  ctx: InboxListContext,
+  requested: InboxKind[] | undefined,
+  cache: Map<string, InboxItem[]> | undefined,
+  read: (adapter: InboxAdapter, cacheKey: string) => Promise<T>,
+  notices: InboxSourceNotice[] | undefined,
+): Promise<(T | InboxItem[])[]> {
+  const kinds = requested ?? inboxAdapterKinds();
+  const settled = await Promise.all(kinds.map(async (kind) => {
     const adapter = adapterFor(kind);
-    if (!adapter) continue;
+    if (!adapter) return null;
     const cacheKey = `${ctx.orgId}:${ctx.actorId}:${kind}`;
-    const cached = opts?.cache?.get(cacheKey);
-    if (cached) {
-      total += cached.length;
-      continue;
-    }
-    // A real count never materializes rows: sources with a list window
-    // report their full pending count, so the badge stops undercounting
-    // past the window. Sources without one fall back to the list length.
-    // A failing source counts nothing rather than refusing the badge, and
-    // names itself in the caller's notices collector (when supplied) so
-    // the badge can show a degraded state instead of a silently low
-    // count; unexpected failures log here too.
+    const cached = cache?.get(cacheKey);
+    if (cached) return { value: cached as T | InboxItem[] };
     try {
-      if (adapter.count) {
-        total += await adapter.count(ctx);
-        continue;
-      }
-      const items = await adapter.list(ctx);
-      opts?.cache?.set(cacheKey, items);
-      total += items.length;
+      return { value: await read(adapter, cacheKey) as T | InboxItem[] };
     } catch (error) {
-      recordSourceFailure(kind, error, opts?.notices);
+      return { kind, error };
     }
+  }));
+  const values: (T | InboxItem[])[] = [];
+  for (const leg of settled) {
+    if (!leg) continue;
+    if ("error" in leg) recordSourceFailure(leg.kind, leg.error, notices);
+    else values.push(leg.value);
   }
-  return total;
+  return values;
 }
 
 /**
