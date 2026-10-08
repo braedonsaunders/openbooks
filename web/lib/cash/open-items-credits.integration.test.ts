@@ -5,6 +5,7 @@ const { sql } = await import('drizzle-orm')
 const { db, env, withBypass, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
 const { assertDedicatedFixtureDatabase, createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
 const { datedAppliedAmountSql } = await import('@openbooks/engine/src/records/balance-due.ts')
+const { cmp } = await import('@openbooks/engine/src/money/money.ts')
 const { postDocument } = await import("@openbooks/engine/src/ledger/posting-document.ts");
 const { openItems } = await import('./open-items')
 
@@ -98,7 +99,8 @@ test('open items consume a foreign credit through its source leg', { skip: !env.
         (await db.execute<{ source: string; target: string }>(sql`select
           ${datedAppliedAmountSql(scratch.orgId, sql`${creditLine}::uuid`, asOf!)}::text as source,
           ${datedAppliedAmountSql(scratch.orgId, sql`${invLine}::uuid`, asOf!)}::text as target`)).rows[0]!)
-      assert.deepEqual(consumed, { source: expectedSource, target: expectedTarget })
+      assert.equal(cmp(consumed.source, expectedSource!), 0)
+      assert.equal(cmp(consumed.target, expectedTarget!), 0)
     }
     const foreignConsumption = await withOrgContext(scratch.orgId, async () =>
       (await db.execute<{ amount: string }>(sql`select
