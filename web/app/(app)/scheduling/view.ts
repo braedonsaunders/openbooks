@@ -8,7 +8,7 @@ import { businessTimeZone, businessToday } from '@openbooks/engine/src/platform/
 import { isIsoCalendarDate } from '@openbooks/engine/src/platform/iso-date.ts'
 import { subsidiaryVisibleFilter } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
 import { enabledBoardKinds, listBoards, type ScheduleBoard } from '@openbooks/engine/src/schedule-boards/boards.ts'
-import { ScheduleError } from '@openbooks/engine/src/schedule-boards/errors.ts'
+import { ScheduleError, scheduleDatabaseRefusal } from '@openbooks/engine/src/schedule-boards/errors.ts'
 import { loadBoardWindow, type BoardWindow } from '@openbooks/engine/src/schedule-boards/window.ts'
 import { can, getAuthz } from '../../../lib/authz'
 import { accessDeniedHref } from '../../../lib/gate-targets'
@@ -42,7 +42,16 @@ export async function loadSchedulingPage(searchParams: Record<string, string | s
   if (!canPeople && !canTasks) return redirect(accessDeniedHref({ permission: kinds.people ? 'hrm.shifts.read' : 'projects.read' }))
 
   const t = await getTranslations('scheduling')
-  const [boards, today, timeZone] = await Promise.all([listBoards(actor), businessToday(orgId), businessTimeZone(orgId)])
+  const [today, timeZone] = await Promise.all([businessToday(orgId), businessTimeZone(orgId)])
+  let boards: ScheduleBoard[] = []
+  let upgrade: { message: string; remedy: string | null } | null = null
+  try {
+    boards = await listBoards(actor)
+  } catch (error) {
+    const refusal = scheduleDatabaseRefusal(error)
+    if (!(refusal instanceof ScheduleError)) throw error
+    upgrade = { message: refusal.message, remedy: refusal.remedy ?? null }
+  }
   const usable = boards.filter((board) => (board.rowKind === 'people' ? canPeople : canTasks))
   const requested = pickString(searchParams.board)
   const requestedProjectId = pickString(searchParams.project)
@@ -68,7 +77,7 @@ export async function loadSchedulingPage(searchParams: Record<string, string | s
     description: t('description'),
     boards: usable.map(({ id, code, name, rowKind }) => ({ id, code, name, rowKind })),
     today,
-    refusal: null,
+    refusal: upgrade,
     canManageProjects: can(authz, 'projects.manage'),
     canConfigure,
     timeZone,
