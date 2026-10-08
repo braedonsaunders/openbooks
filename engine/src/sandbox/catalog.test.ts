@@ -142,6 +142,22 @@ test("sandbox insertion orders trigger-required parents inside a deferrable FK c
   assert.ok(order.indexOf("field_ticket_labor_snapshots") < order.indexOf("field_ticket_labor_lines"));
 });
 
+test("sandbox insertion retains assignment ownership order through employment history cycles", () => {
+  const nodes = ["employment_assignment_versions", "employment_assignments", "employment_changes", "worker_employment_versions", "worker_employments"];
+  const refs: Record<string, Record<string, string>> = {
+    employment_assignment_versions: { assignment_id: "employment_assignments", closed_by_change_id: "employment_changes", employment_id: "worker_employments" },
+    employment_assignments: { employment_id: "worker_employments" },
+    employment_changes: { assignment_id: "employment_assignments", employment_id: "worker_employments" },
+    worker_employment_versions: { closed_by_change_id: "employment_changes", employment_id: "worker_employments" },
+    worker_employments: { current_version_id: "worker_employment_versions" },
+  };
+  const tables = nodes.map(name => ({ ...table("NO ACTION"), name, fks: refs[name]!, hardFks: {} }));
+  const order = insertionOrder({ tables, tenantTables: tables, rebaseSet: new Set(nodes) });
+  assert.ok(order.indexOf("employment_assignments") < order.indexOf("employment_assignment_versions"));
+  assert.ok(order.indexOf("employment_assignments") < order.indexOf("employment_changes"));
+  assert.equal(new Set(order).size, nodes.length);
+});
+
 /**
  * The boundary guard that makes the wipe's one remaining raw-SQL interpolation
  * (PARENT_FILTER's org id) provably safe: a value that passes here is a

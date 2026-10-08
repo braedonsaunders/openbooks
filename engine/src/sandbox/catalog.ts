@@ -32,6 +32,9 @@ const TRIGGER_INSERT_COLUMN_PARENTS: Readonly<Record<string, string>> = {
   subsidiary_id: "subsidiaries",
 };
 const TRIGGER_INSERT_TABLE_PARENTS: Readonly<Record<string, readonly string[]>> = {
+  // Assignment ownership is checked before the deferred tenant FKs resolve.
+  employment_assignment_versions: ["employment_assignments"],
+  employment_changes: ["employment_assignments"],
   // Field Ticket ownership and provenance guards read these rows immediately.
   // Deferred FKs cannot admit child-first writes inside the cyclic tail.
   field_tickets: ["documents", "parties", "users"],
