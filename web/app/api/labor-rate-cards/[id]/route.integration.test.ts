@@ -211,6 +211,46 @@ function put(fixture: Fixture, body: Record<string, unknown>): Promise<Response>
 }
 
 test.after(() => hooks.deregister())
+
+test('labor card saves refuse unowned kept lines and missing registration without changing either tenant', async () => {
+  await withSeededFixture(async fixture => withSeededFixture(async foreign => {
+    const snapshot = (orgId: string) => withOrgContext(orgId, async () =>
+      (await db.execute(sql`select jsonb_build_object(
+        'books',(select coalesce(jsonb_agg(to_jsonb(b) order by b.id),'[]'::jsonb) from item_rate_books b where b.org_id=${orgId}),
+        'versions',(select coalesce(jsonb_agg(to_jsonb(v) order by v.id),'[]'::jsonb) from item_rate_versions v where v.org_id=${orgId}),
+        'policies',(select coalesce(jsonb_agg(to_jsonb(p) order by p.id),'[]'::jsonb) from labor_rate_version_policies p where p.org_id=${orgId}),
+        'lines',(select coalesce(jsonb_agg(to_jsonb(l) order by l.id),'[]'::jsonb) from item_rate_lines l where l.org_id=${orgId}),
+        'scopes',(select coalesce(jsonb_agg(to_jsonb(s) order by s.id),'[]'::jsonb) from labor_rate_version_scopes s where s.org_id=${orgId}),
+        'adjustments',(select coalesce(jsonb_agg(to_jsonb(a) order by a.id),'[]'::jsonb) from labor_rate_adjustments a where a.org_id=${orgId}),
+        'targets',(select coalesce(jsonb_agg(to_jsonb(t) order by t.id),'[]'::jsonb) from labor_rate_adjustment_targets t where t.org_id=${orgId}),
+        'terms',(select coalesce(jsonb_agg(to_jsonb(t) order by t.id),'[]'::jsonb) from labor_rate_terms t where t.org_id=${orgId}),
+        'audit',(select coalesce(jsonb_agg(to_jsonb(a) order by a.id),'[]'::jsonb) from audit_log a where a.org_id=${orgId})
+      ) as state`)).rows[0]!.state)
+    const before = await snapshot(fixture.orgId)
+    const foreignBefore = await snapshot(foreign.orgId)
+    for (const invalidLine of [randomUUID(), foreign.storedLineIds[0]!]) {
+      const body = putBody(fixture)
+      body.lines[0]!.id = invalidLine
+      const response = await withOrgContext(fixture.orgId, () => put(fixture, body))
+      assert.equal(response.status, 422)
+      assert.deepEqual(await response.json(), { errorCode: 'item' })
+      assert.deepEqual(await snapshot(fixture.orgId), before, 'a refused retained line cannot prune prices or partially rename the book')
+      assert.deepEqual(await snapshot(foreign.orgId), foreignBefore)
+    }
+    await withBypass(async () => {
+      const removed = await db.execute(sql`delete from labor_rate_version_policies
+        where org_id=${fixture.orgId} and version_id=${fixture.versionId} returning id`)
+      assert.equal(removed.rows.length, 1)
+    })
+    const unregisteredBefore = await snapshot(fixture.orgId)
+    const missing = await withOrgContext(fixture.orgId, () => put(fixture, putBody(fixture)))
+    assert.equal(missing.status, 404)
+    assert.deepEqual(await missing.json(), { errorCode: 'notFound' })
+    assert.deepEqual(await snapshot(fixture.orgId), unregisteredBefore, 'a missing labor policy cannot be reported as saved or created implicitly')
+    assert.deepEqual(await snapshot(foreign.orgId), foreignBefore)
+  }))
+})
+
 test(
   "PUT saves multi-element item/customer/location/line collections against live Postgres",
   async () => {
