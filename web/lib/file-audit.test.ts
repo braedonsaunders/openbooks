@@ -12,7 +12,7 @@ test('purging a file records an immutable delete event with its reason', async (
   const executor = {
     async execute(query: Parameters<typeof dialect.sqlToQuery>[0]) {
       statement = dialect.sqlToQuery(query)
-      return { rows: [] }
+      return { rows: [{ id: 'audit-1' }] }
     },
   }
 
@@ -53,4 +53,9 @@ test('an audit insert failure rejects the file operation', async () => {
     }),
     (error) => error === failure,
   )
+})
+
+test('a file mutation cannot succeed when its required audit writes zero rows', async () => {
+  await assert.rejects(recordFileEvent({ orgId: 'org-1',actorId: 'user-1',table: 'files',rowId: 'file-1',action: 'upload',
+    executor: { execute: async () => ({ rows: [] }) } as unknown as SqlExecutor }),/did not persist/)
 })

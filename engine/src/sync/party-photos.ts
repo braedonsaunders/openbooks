@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto'
 import { sql } from 'drizzle-orm'
-import { db, withOrgContext } from '../platform/db.ts'
+import { db, orgContext, withOrgContext } from '../platform/db.ts'
 import { actorHasPermission } from '../organization/actor-permissions.ts'
 import { actorAllowedSubsidiaryIds } from '../organization/actor-subsidiaries.ts'
 import { readPartyPhoto, storePartyPhoto, type ConnectorPhotoSource } from '../organization/party-photos.ts'
@@ -35,7 +35,7 @@ export async function syncSourcePartyPhotos(source: MigrationSource, options: {
 }): Promise<PartyPhotoSummary> {
   if (!source.partyPhotos || !source.partyPhotoContent || !source.photoSourceAccount) throw new Error('The connector does not expose native employee photos')
   if (!/^[a-z][a-z0-9_-]{0,63}$/i.test(source.refKey)) throw new Error('Photo connector refKey is invalid')
-  return withOrgContext(options.orgId, async () => {
+  const run = async () => {
     if (options.actorId) {
       for (const permission of ['sync.run', 'parties.read', 'parties.manage']) {
         if (!await actorHasPermission(db, options.orgId, options.actorId, permission)) throw new Error(`Employee photo synchronization requires ${permission}`)
@@ -127,5 +127,11 @@ export async function syncSourcePartyPhotos(source: MigrationSource, options: {
       }
     }
     return summary
-  })
+  }
+  const active = orgContext.getStore()
+  if (active?.txDb) {
+    if (!active.bypass && active.orgId !== options.orgId) throw new Error('Employee photos cannot change organization inside an active transaction')
+    return run()
+  }
+  return withOrgContext(options.orgId, run)
 }
