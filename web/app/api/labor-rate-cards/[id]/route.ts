@@ -322,6 +322,10 @@ export const PUT = defineRoute({
   }
   try {
     await db.transaction(async (tx) => {
+      // Shared book saves take this fence before book/version row locks.
+      // Using the same order prevents an editor and replacement from waiting
+      // on each other's header and version locks.
+      await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`item-rate-books:${orgId}`}, 0))`);
       const current = (await tx.execute<{ rate_book_id: string }>(
         sql`select v.rate_book_id from item_rate_versions v
           join labor_rate_version_policies p on p.version_id=v.id and p.org_id=v.org_id
