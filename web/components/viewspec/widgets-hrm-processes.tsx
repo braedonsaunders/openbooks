@@ -1,7 +1,9 @@
 import type { ComponentProps } from 'react'
-import { NewHrmButton } from '../../app/(app)/hrm/NewHrmButton'
-import { ProcessCreateDrawer } from '../../app/(app)/hrm/processes/ProcessCreateDrawer'
-import { ProcessNewMenu } from '../../app/(app)/hrm/processes/ProcessNewMenu'
+import {
+  NewHrmButton,
+  ProcessCreateDrawer,
+  ProcessNewMenu,
+} from './native-widgets.client'
 import { str, type WidgetRenderer } from './widget-props'
 
 /** HRM process authoring entry points, isolated so registry families stay bounded. */

@@ -1,19 +1,24 @@
 import { type ComponentProps } from 'react'
 import { IdentityCell, ActingCell, AccessControlCell } from '../../app/(app)/platform/access/sections'
-import { GrantAccessForm } from '../../app/(app)/platform/_components/GrantAccessForm'
+import {
+  GrantAccessForm,
+  NewRoleButton,
+  NotificationsInbox,
+  NotificationsMarkAllRead,
+  InviteUserButton,
+  NewKeyButton,
+  KeyDrawer,
+  NewEndpointButton,
+  WebhookEndpointDrawer,
+} from './native-widgets.client'
 import { EmailSubjectCell, EmailEvidenceCell } from '../../app/(app)/platform/email-log/sections'
 import { PlatformUserHeader, GrantActingCell, GrantControlCell, NoGrantsBody, IdentityRecordCard } from '../../app/(app)/platform/users/[id]/sections'
 import { AdminRolesTable } from '../../app/(app)/admin/roles/sections'
-import { NewRoleButton } from '../../app/(app)/admin/roles/RoleEditor'
 import { AuditRowsTable, AuditEventFlyout, AuditDocsLink } from '../../app/(app)/admin/audit/sections'
-import { NotificationsInbox, NotificationsMarkAllRead } from '../../app/(app)/notifications/NotificationsInbox'
 import { AdminHubCard } from '../../app/(app)/admin/sections'
 import { AdminUsersTable } from '../../app/(app)/admin/users/sections'
-import { InviteUserButton } from '../../app/(app)/admin/users/InviteDialog'
 import { UserIdentityCell, UserRolesCell, UserGrantsCell, UserManageCell } from '../../app/(app)/platform/users/sections'
 import { OrgNameCell, OrgEnvironmentCell, OrgLocaleCell, OrgUsersCell, OrgOpenCell } from '../../app/(app)/platform/organizations/sections'
-import { NewKeyButton, KeyDrawer } from '../../app/(app)/admin/api-keys/KeyDrawer'
-import { NewEndpointButton, WebhookEndpointDrawer } from '../../app/(app)/admin/webhooks/EndpointDrawer'
 import { str, num, type WidgetRenderer } from './widget-props'
 
 /** Platform identity, access and administration adapters. Compose native components without changing their props or boundaries. */

@@ -1,14 +1,18 @@
 import { type ComponentProps, type ReactNode } from 'react'
 import { ResourceCell, RowCountsCell } from '../../app/(app)/data/import/history/sections'
-import { CurrencyBasisControl, type CurrencyOption } from '../../app/(app)/reports/aging/currency-basis'
+import {
+  CurrencyBasisControl,
+  DateRangeFilter,
+  SearchSelectFilter,
+  FilterChips,
+  SearchInput,
+  ShowInactivesToggle,
+} from './native-widgets.client'
+import { type CurrencyOption } from "../../app/(app)/reports/aging/currency-basis"
 import { Settings, ArrowLeft, Plus, Gauge, History, ScanLine } from 'lucide-react'
 import { KpiStrip } from '../kpi-strip'
-import { DateRangeFilter } from '../date-range-filter'
 import { ForecastSectionHeading, ForecastFilters } from '../../app/(app)/crm/forecasts/sections'
-import { SearchSelectFilter, FilterChips } from '../filter-bar'
 import { ListToolbar } from '../list-toolbar'
-import { SearchInput } from '../search-input'
-import { ShowInactivesToggle } from '../show-inactives-toggle'
 import { Badge, Button } from '@openbooks/ui'
 import Link from 'next/link'
 import { num, str, type WidgetRenderer } from './widget-props'

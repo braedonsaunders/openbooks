@@ -1,43 +1,49 @@
 import { type ComponentProps } from 'react'
 import { SetupSectionSlot } from './setup-section-slot'
-import { NavEditor } from '../../app/(app)/admin/navigation/NavEditor'
-import { FeaturesWorkspace } from '../../app/(app)/admin/setup/features/FeaturesWorkspace'
-import { EmailSettingsForm } from '../../app/(app)/admin/email/EmailSettingsForm'
-import { AiSettingsForm } from '../../app/(app)/admin/ai/AiSettingsForm'
-import { AiGovernanceSection } from '../../app/(app)/admin/ai/AiGovernanceSection'
-import { InvoicingSettingsWorkspace } from '../../app/(app)/admin/setup/invoicing/InvoicingSettingsWorkspace'
-import { TemplatesList } from '../../app/(app)/admin/pdf-templates/TemplatesList'
-import PdfTemplateEditor from '../../app/(app)/admin/pdf-templates/[id]/PdfTemplateEditor'
-import FlowBuilder from '../../app/(app)/admin/flows/[id]/FlowBuilder'
-import { SandboxManager } from '../../app/(app)/admin/sandboxes/SandboxManager'
-import { ChangeSetDrawer } from '../../app/(app)/admin/sandboxes/change-sets/ChangeSetDrawer'
-import { PaymentProvidersClient } from '../../app/(app)/admin/setup/payment-providers/PaymentProvidersClient'
-import { ProjectTypesWorkspace } from '../../app/(app)/admin/setup/project-types/ProjectTypesWorkspace'
-import { ReviewTemplateIndex } from '../../app/(app)/admin/setup/review-templates/ReviewTemplateIndex'
-import { ReviewTemplateBuilder } from '../../app/(app)/admin/setup/review-templates/ReviewTemplateBuilder'
-import { PipelineIndex } from '../../app/(app)/admin/setup/hiring-pipelines/PipelineIndex'
-import { PipelineBuilder } from '../../app/(app)/admin/setup/hiring-pipelines/PipelineBuilder'
+import {
+  NavEditor,
+  FeaturesWorkspace,
+  EmailSettingsForm,
+  AiSettingsForm,
+  AiGovernanceSection,
+  InvoicingSettingsWorkspace,
+  TemplatesList,
+  PdfTemplateEditor,
+  FlowBuilder,
+  SandboxManager,
+  ChangeSetDrawer,
+  PaymentProvidersClient,
+  ProjectTypesWorkspace,
+  ReviewTemplateIndex,
+  ReviewTemplateBuilder,
+  PipelineIndex,
+  PipelineBuilder,
+  ApiConsole,
+  SetupWizard,
+  BackupManager,
+  AutomationBuilder,
+  NewSetupButton,
+  TaxReturnLibrary,
+  FormDesigner,
+  NewFormButton,
+  ListViewDesigner,
+  NewListViewButton,
+  FieldDrawer,
+  NewFieldButton,
+  LayoutDrawer,
+  CloseWizard,
+  NewScriptButton,
+  ScriptDrawer,
+} from './native-widgets.client'
 import { SecurityPageContent } from '../../app/(app)/settings/security/sections'
-import { ApiConsole } from '../../app/(app)/api-docs/ApiConsole'
-import { SetupWizard } from '../../app/(app)/admin/setup/wizard/SetupWizard'
-import { BackupManager } from '../../app/(app)/admin/backups/BackupManager'
 import { OverheadApplicationTabSlot, OverheadLifecycleTabSlot, OverheadModelBody, OverheadModelHeader, OverheadRatesTabSlot } from '../../app/(app)/admin/setup/overhead/sections'
 import { AllocationsDriversTabSlot, AllocationsRuleDrawerSlot, AllocationsRulesTabSlot, AllocationsRunsTabSlot, AllocationsSetupHeader } from '../../app/(app)/admin/setup/allocations/sections'
 import { SetupReadinessCheckCard, SetupReadinessHero } from '../../app/(app)/admin/setup/readiness/sections'
 import { FlowNameCell, FlowLastRunCell, FlowRowActionsCell, NewFlowButton as NewFlowListButton } from '../../app/(app)/admin/flows/sections'
-import { AutomationBuilder } from '../../app/(app)/admin/automations/[id]/AutomationBuilder'
 import { AutomationLastRunCell, AutomationNameCell, AutomationApprovalSettingsSection, AutomationRowActionsCell, NewAutomationListButton } from '../../app/(app)/admin/automations/sections'
-import { NewSetupButton } from '../../app/(app)/admin/setup/[entity]/SetupDrawer'
-import { TaxReturnLibrary } from '../../app/(app)/admin/setup/[entity]/TaxReturnLibrary'
 import { SetupBadgeLinkCell, SetupCloseSlot, SetupCodeCell, SetupCompanySlot, SetupDescription, SetupDrawerSlot, SetupFxSlot, SetupTaxProviderSlot } from '../../app/(app)/admin/setup/[entity]/sections'
-import { FormDesigner, NewFormButton } from '../../app/(app)/admin/customization/FormDesigner'
-import { ListViewDesigner, NewViewButton as NewListViewButton } from '../../app/(app)/admin/customization/ListViewDesigner'
 import { CustomizationTabs, FormDefaultCell, ViewScopeCell } from '../../app/(app)/admin/customization/sections'
 import { BookOpen } from 'lucide-react'
-import { FieldDrawer, NewFieldButton } from '../../app/(app)/admin/custom-fields/FieldDrawer'
-import { LayoutDrawer } from '../../app/(app)/admin/page-layouts/LayoutDrawer'
-import { CloseWizard } from '../../app/(app)/close/CloseWizard'
-import { NewScriptButton, ScriptDrawer } from '../../app/(app)/admin/scripts/ScriptDrawer'
 import { Button } from '@openbooks/ui'
 import Link from 'next/link'
 import { num, str, type WidgetRenderer } from './widget-props'

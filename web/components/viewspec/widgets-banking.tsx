@@ -1,28 +1,34 @@
 import { type ComponentProps } from 'react'
-import { AccountsRosterPanel } from '../../app/(app)/banking/AccountsRoster'
+import {
+  AccountsRosterPanel,
+  MatchWorkspace,
+  CashCockpit,
+  BankFeedsClient,
+  NewSetupRecordButton,
+  PaymentOperationsEditor,
+  PaymentScheduleNextRun,
+  ReconcileWorkspace,
+  PspSettlementsWorkspace,
+  PayoutsWorkspace,
+  PspDisputeReviewDrawer,
+  PayoutLineDrawer,
+  NewPaymentButton,
+  NewRuleButton,
+  RunRulesButton,
+  RuleDrawer,
+  ImportStatementButton,
+  ImportAccountPicker,
+  StartReconciliationButton,
+} from './native-widgets.client'
 import { BankingAttentionList } from '../../app/(app)/banking/sections'
 import { ListChecks } from 'lucide-react'
-import { MatchWorkspace } from '../../app/(app)/banking/match/MatchWorkspace'
-import { CashCockpit } from '../../app/(app)/banking/cash/CashCockpit'
-import { BankFeedsClient } from '../../app/(app)/admin/setup/bank-feeds/BankFeedsClient'
-import { NewSetupRecordButton, PaymentOperationsEditor, PaymentScheduleNextRun } from '../../app/(app)/admin/setup/payment-operations/sections'
 import { ReconcileStats, ReconcileStatusBadge } from '../../app/(app)/banking/[accountId]/reconcile/[reconciliationId]/sections'
-import { ReconcileWorkspace } from '../../app/(app)/banking/[accountId]/reconcile/[reconciliationId]/ReconcileWorkspace'
-import { PspSettlementsWorkspace } from '../../app/(app)/banking/psp-settlements/sections'
-import { PayoutsWorkspace } from '../../app/(app)/banking/payouts/sections'
-import { PspDisputeReviewDrawer } from '../../app/(app)/banking/psp-settlements/reviews/ReviewDrawer'
-import { PayoutLineDrawer } from '../../app/(app)/banking/payouts/unmatched/PayoutLineDrawer'
 import { PaymentsSectionSlot, RunsSectionSlot } from './payments-slots'
 import { ViewTabs as PaymentsViewTabs } from '../../app/(app)/payments/sections'
 import { ReceiptsViewTabs } from '../../app/(app)/receipts/sections'
-import { NewPaymentButton } from '../../app/(app)/payments/NewPaymentButton'
 import { Plus } from 'lucide-react'
 import { BankFeedPanel } from '../../app/(app)/banking/imports/sections'
-import { NewRuleButton, RunRulesButton, RuleDrawer } from '../../app/(app)/banking/rules/RuleDrawer'
 import { AccountStats, UnmatchedCountCell, ReconActionCell } from '../../app/(app)/banking/[accountId]/sections'
-import { ImportStatementButton } from '../../app/(app)/banking/[accountId]/ImportStatementButton'
-import { ImportAccountPicker } from '../../app/(app)/banking/imports/ImportAccountPicker'
-import { StartReconciliationButton } from '../../app/(app)/banking/[accountId]/StartReconciliationButton'
 import { StatementDrawer } from '../../app/(app)/banking/[accountId]/StatementDrawer'
 import { Button } from '@openbooks/ui'
 import Link from 'next/link'

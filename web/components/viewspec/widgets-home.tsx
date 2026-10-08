@@ -1,21 +1,29 @@
 import { NativeExtension } from '../../app/(app)/apps/[key]/NativeExtension'
 import { type ComponentProps } from 'react'
-import { SubsidiarySwitcher } from '../subsidiary-switcher'
+import {
+  SubsidiarySwitcher,
+  TrendChart,
+  NewViewButton,
+  ViewStudio,
+  NewDashboardButton,
+  NewCardButton,
+  CardStudio,
+  NewTypeButton,
+  QueryConsole,
+  PlatformClient,
+  BillingHistoryClient,
+  ChannelsConsole,
+  ShopifyConnectWizard,
+  DashboardBuilder,
+  AppKeyCell,
+} from './native-widgets.client'
 import { ModuleHomeTabs, LiveDirectory } from '../module-home/ui'
-import { TrendChart } from '../../app/(app)/analytics/_ui/charts'
 import { ApPulse, AttentionList, CommitmentsSection, DirectorySection } from '../../app/(app)/purchasing/sections'
 import { ViewNameCell, ViewActionsCell } from '../../app/(app)/knowledge/views/sections'
-import { NewViewButton } from '../../app/(app)/knowledge/views/NewViewButton'
-import { ViewStudio } from '../../app/(app)/knowledge/views/ViewStudio'
 import { DashboardNameCell } from '../../app/(app)/insights/dashboards/sections'
-import { NewDashboardButton } from '../../app/(app)/insights/dashboards/NewDashboardButton'
 import { InsightsTabs } from '../../app/(app)/insights/InsightsTabs'
 import { CardNameCell, VizCell } from '../../app/(app)/insights/sections'
-import { NewCardButton } from '../../app/(app)/insights/NewCardButton'
-import { CardStudio } from '../../app/(app)/insights/CardStudio'
 import { studioInstanceKey } from '../../app/(app)/insights/card-save'
-import { NewTypeButton } from '../../app/(app)/records/types/NewTypeButton'
-import { QueryConsole } from '../../app/(app)/query/sections'
 import { HealthHero } from '../../app/(app)/accounting/sections'
 import { BuildHubCard } from '../../app/(app)/admin/build/sections'
 import { Library } from 'lucide-react'
@@ -24,16 +32,10 @@ import { DocArticleView } from '../../app/(app)/docs/[slug]/sections'
 import { LibraryEmptyIcon, ListingCard } from '../../app/(app)/apps/library/sections'
 import { DashboardHeader } from '../../app/(app)/dashboard/_dashboard-header'
 import { CustomizeDashboardHeader } from '../../app/(app)/dashboard/customize/sections'
-import { PlatformClient } from '../../app/(app)/sync/PlatformClient'
-import { BillingHistoryClient } from '../../app/(app)/sync/billing-history/BillingHistoryClient'
-import { ChannelsConsole } from '../../app/(app)/channels/ChannelsConsole'
 import { ChannelWorkspace } from '../../app/(app)/channels/[id]/ChannelWorkspace'
-import { ShopifyConnectWizard } from '../../app/(app)/channels/connect/ShopifyConnectWizard'
 import { AppNotice, AppRuntimeChrome } from '../../app/(app)/apps/[key]/sections'
-import { DashboardBuilder } from '../../app/(app)/insights/dashboards/[id]/DashboardBuilder'
 import { PlatformNotice, PlatformTile } from '../../app/(app)/platform/sections'
 import { AppLauncherCard, AppsEmptyIcon, AppsLauncherButton } from '../../app/(app)/apps/sections'
-import { AppKeyCell } from '../../app/(app)/admin/apps/sections'
 import { Button } from '@openbooks/ui'
 import Link from 'next/link'
 import { str, type WidgetRenderer } from './widget-props'

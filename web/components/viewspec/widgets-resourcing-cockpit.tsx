@@ -1,8 +1,10 @@
 import Link from 'next/link'
 import type { ComponentProps } from 'react'
-import { HomeStatTile } from '../module-home/client'
+import {
+  HomeStatTile,
+  BusySeasonSection,
+} from './native-widgets.client'
 import { TieOutSection } from '../../app/(app)/resourcing/sections'
-import { BusySeasonSection } from '../../app/(app)/resourcing/BusySeasonSection'
 import { type WidgetRenderer } from './widget-props'
 
 /**

@@ -1,8 +1,31 @@
 import { type ComponentProps } from 'react'
-import { ExportMenu } from '../../app/(app)/reports/ExportMenu'
-import { SaveViewButton } from '../../app/(app)/reports/SaveViewButton'
-import { ScheduleReportButton } from '../../app/(app)/reports/ScheduleReportButton'
-import { StatementMatrixTable } from '../../app/(app)/reports/StatementMatrixTable'
+import {
+  ExportMenu,
+  SaveViewButton,
+  ScheduleReportButton,
+  StatementMatrixTable,
+  AnalyticsHub,
+  ReportsHub,
+  ReportBuilder,
+  DeliveryPanel,
+  ReportFilterBar,
+  CashflowView,
+  HorizonControl,
+  CustomerView,
+  FinancialHealthView,
+  SentinelView,
+  SpendVelocityView,
+  UtilizationView,
+  ReceivablesView,
+  VendorView,
+  TrueCostView,
+  ProjectProfitabilityTable,
+  ResultView,
+  PaperView,
+  NewReportButton,
+  CustomReportActions,
+  NlAskPanel,
+} from './native-widgets.client'
 import { JournalEntryHeading } from '../../app/(app)/reports/journal/sections'
 import { AccountHeading, EntryCell } from '../../app/(app)/reports/general-ledger/sections'
 import { PartyHeading } from '../../app/(app)/reports/registers/sections'
@@ -10,29 +33,8 @@ import { PartyLinkCell } from '../../app/(app)/reports/aging/sections'
 import { AgingStrip } from '../../app/(app)/reports/statements/[partyId]/sections'
 import { StatementRows, ReconciliationNote } from '../../app/(app)/reports/StatementRows'
 import { ReportNameCell } from '../../app/(app)/reports/custom/sections'
-import { AnalyticsHub } from '../../app/(app)/analytics/AnalyticsHub'
-import { ReportsHub } from '../../app/(app)/reports/ReportsHub'
 import { BalanceCheck } from '../../app/(app)/reports/balance-sheet/sections'
-import { ReportBuilder } from '../../app/(app)/reports/custom/builder/[id]/ReportBuilder'
-import { DeliveryPanel } from '../../app/(app)/reports/custom/run/[id]/delivery/DeliveryPanel'
-import { ReportFilterBar } from '../../app/(app)/reports/ReportFilterBar'
-import { CashflowView } from '../../app/(app)/analytics/cashflow/CashflowView'
-import { HorizonControl } from '../../app/(app)/analytics/cashflow/HorizonControl'
-import { CustomerView } from '../../app/(app)/analytics/customer-intelligence/CustomerView'
-import { FinancialHealthView } from '../../app/(app)/analytics/financial-health/FinancialHealthView'
-import { SentinelView } from '../../app/(app)/analytics/sentinel/SentinelView'
-import { SpendVelocityView } from '../../app/(app)/analytics/spend-velocity/SpendVelocityView'
-import { UtilizationView } from '../../app/(app)/analytics/utilization/UtilizationView'
-import { ReceivablesView } from '../../app/(app)/analytics/receivables-intelligence/ReceivablesView'
-import { VendorView } from '../../app/(app)/analytics/vendor-performance/VendorView'
-import { TrueCostView } from '../../app/(app)/analytics/true-cost/TrueCostView'
-import { ProjectProfitabilityTable } from '../../app/(app)/reports/project-profitability/ProjectProfitabilityTable'
 import { SavedViewHeader, SavedViewMeta } from '../../app/(app)/knowledge/views/[id]/sections'
-import { ResultView } from '../../app/(app)/reports/custom/ResultView'
-import { PaperView } from '../../app/(app)/reports/PaperView'
-import { NewReportButton } from '../../app/(app)/reports/custom/NewReportButton'
-import { CustomReportActions } from '../../app/(app)/reports/custom/CustomReportActions'
-import { NlAskPanel } from '../../app/(app)/reports/custom/NlAskPanel'
 import { str, num, stringRecord, type WidgetRenderer } from './widget-props'
 
 /** Reporting adapters. Compose native components without changing their props or boundaries. */

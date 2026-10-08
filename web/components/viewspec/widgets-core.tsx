@@ -17,7 +17,7 @@ import {
   Trash2,
   BellRing,
 } from 'lucide-react'
-import { OpportunityKanbanBoard } from '../../app/(app)/crm/OpportunityKanban'
+import { OpportunityKanbanBoard } from './native-widgets.client'
 import { RecordListSlot } from './record-list-slot'
 import { EntityListSlot } from './entity-list-slot'
 import { RegisteredListBlockView } from './registered-list'

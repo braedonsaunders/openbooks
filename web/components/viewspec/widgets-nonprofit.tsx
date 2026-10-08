@@ -1,7 +1,9 @@
-import { EncumbranceDrawer } from '../../app/(app)/nonprofit/encumbrances/EncumbranceDrawer'
-import { FundDrawer } from '../../app/(app)/nonprofit/funds/FundDrawer'
-import { GrantDrawer } from '../../app/(app)/nonprofit/grants/GrantDrawer'
-import { ReleaseDrawer } from '../../app/(app)/nonprofit/releases/ReleaseDrawer'
+import {
+  EncumbranceDrawer,
+  FundDrawer,
+  GrantDrawer,
+  ReleaseDrawer,
+} from './native-widgets.client'
 import type { EncumbranceDrawerData } from '../../app/(app)/nonprofit/encumbrances/view'
 import type { FundDrawerData } from '../../app/(app)/nonprofit/funds/view'
 import type { GrantDrawerData } from '../../app/(app)/nonprofit/grants/view'

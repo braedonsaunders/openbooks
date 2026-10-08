@@ -1,5 +1,5 @@
 import { PerformanceSetupSection } from '../../app/(app)/admin/setup/performance/sections'
-import { SuccessionPlanDrawer } from '../../app/(app)/hrm/performance/SuccessionPlanDrawer'
+import { SuccessionPlanDrawer } from './native-widgets.client'
 import type { ComponentProps } from 'react'
 import {
   CalibrationDistributionShell,

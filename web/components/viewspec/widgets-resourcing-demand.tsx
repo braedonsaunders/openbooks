@@ -1,5 +1,5 @@
 import type { ComponentProps } from 'react'
-import { DemandDrawer } from '../../app/(app)/resourcing/demand/DemandDrawer'
+import { DemandDrawer } from './native-widgets.client'
 import type { WidgetRenderer } from './widget-props'
 
 /** Demand-list widgets. */

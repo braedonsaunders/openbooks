@@ -1,19 +1,22 @@
 import { Fragment, type ComponentProps } from 'react'
-import { AssistantApp } from '../assistant/assistant-app'
-import { MigrationWorkspace, type MigrationWorkspaceProps } from '../migration/migration-workspace'
-import { ChatMarkdown } from '../assistant/markdown'
+import {
+  AssistantApp,
+  MigrationWorkspace,
+  ChatMarkdown,
+  AgentsPackActions,
+  AgentPolicyForm,
+  AgentsRunActions,
+  AgentsTriageKeys,
+  AgentsBriefingActions,
+  WorkItemDrawer,
+  NarrativeDrawer,
+} from './native-widgets.client'
+import { type MigrationWorkspaceProps } from "../migration/migration-workspace"
 import { AgentsLastRunCell } from '../../app/(app)/admin/setup/agents/AgentsLastRunCell'
-import { AgentsPackActions } from '../../app/(app)/admin/setup/agents/AgentsPackActions'
 import { AgentsPackFindings } from '../../app/(app)/admin/setup/agents/AgentsPackFindings'
 import { AgentsPackCard } from '../../app/(app)/admin/setup/agents/library/AgentsPackCard'
-import { AgentPolicyForm } from '../../app/(app)/admin/setup/agents/[agentKey]/AgentPolicyForm'
-import { AgentsRunActions } from '../../app/(app)/admin/setup/agents/activity/AgentsRunActions'
-import { AgentsTriageKeys } from '../../app/(app)/agents/AgentsTriageKeys'
-import { AgentsBriefingActions } from '../../app/(app)/agents/AgentsBriefingActions'
 import { KpiStrip } from '../kpi-strip'
 import { TabNav, Metric, ReportsCardHeading, NarrativeEntry, FindingCell } from '../../app/(app)/continuous-close/sections'
-import { WorkItemDrawer } from '../../app/(app)/continuous-close/WorkItemDrawer'
-import { NarrativeDrawer } from '../../app/(app)/continuous-close/NarrativeDrawer'
 import { Badge } from '@openbooks/ui'
 import { num, str, type WidgetRenderer } from './widget-props'
 

@@ -1,10 +1,17 @@
 import type { ComponentProps } from 'react'
 
-import { DocumentsDrawer, DocumentsGenerateDialog } from '../../app/(app)/hrm/documents/sections'
-import { SurveysAuthorDialog, SurveysDrawer } from '../../app/(app)/hrm/surveys/sections'
-import { OrgChartPerson, OrgChartTree } from '../../app/(app)/hrm/org-chart/sections'
-import { MeDocumentActions, MeExportDialog, MeExportDownload } from '../../app/(app)/me/documents/sections'
-import { MeSurveyRespond } from '../../app/(app)/me/surveys/sections'
+import {
+  DocumentsDrawer,
+  DocumentsGenerateDialog,
+  SurveysAuthorDialog,
+  SurveysDrawer,
+  OrgChartPerson,
+  OrgChartTree,
+  MeDocumentActions,
+  MeExportDialog,
+  MeExportDownload,
+  MeSurveyRespond,
+} from './native-widgets.client'
 
 import { str, type WidgetRenderer } from './widget-props'
 

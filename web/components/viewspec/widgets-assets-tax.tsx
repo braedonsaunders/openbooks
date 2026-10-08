@@ -3,20 +3,26 @@ import { DepreciationSetupHeader } from '../../app/(app)/admin/setup/depreciatio
 import { TaxAuthorityConnectionsSlot, TaxSetupGuideSlot, TaxSetupHeader } from '../../app/(app)/admin/setup/tax-setup/sections'
 import { EquipmentHeaderLinks } from '../../app/(app)/assets/equipment/sections'
 import { ProvisionRunsTable } from '../../app/(app)/tax/provisions/sections'
-import { ProvisionComputeButton } from '../../app/(app)/tax/provisions/ProvisionComputeButton'
-import { NewEquipmentButton } from '../../app/(app)/assets/equipment/NewEquipmentButton'
-import { EquipmentDrawer } from '../../app/(app)/assets/equipment/EquipmentDrawer'
+import {
+  ProvisionComputeButton,
+  NewEquipmentButton,
+  EquipmentDrawer,
+  ProvisionDifferencesSection,
+  ProvisionFrameworkBadge,
+  ProvisionPostButton,
+  ProvisionReconSection,
+  ProvisionStatusBadge,
+  OssConsole,
+  ProviderActivityDrawer,
+  NewAssetButton,
+  RunDepreciationButton,
+  AssetDrawer,
+  TaxPoolsView,
+} from './native-widgets.client'
 import { KpiStrip } from '../kpi-strip'
 import { TaxDepreciationHeader, TaxDepreciationOverviewSlot } from '../../app/(app)/admin/setup/tax-depreciation/sections'
-import { ProvisionDifferencesSection, ProvisionFrameworkBadge, ProvisionPostButton, ProvisionReconSection, ProvisionStatusBadge } from '../../app/(app)/tax/provisions/[id]/sections'
 import { TaxFilingDrawer, TaxHistoryTable, TaxPageHeader, TaxPageShell, TaxPreparePanel, TaxTabPanels, TaxTabs } from '../../app/(app)/tax/sections'
-import { OssConsole } from '../../app/(app)/tax/oss/OssConsole'
-import { ProviderActivityDrawer } from '../../app/(app)/tax/ProviderActivityDrawer'
 import { AssetsTabs, AssetsDocLink, AssetsEquipmentLink } from '../../app/(app)/assets/sections'
-import { NewAssetButton } from '../../app/(app)/assets/NewAssetButton'
-import { RunDepreciationButton } from '../../app/(app)/assets/RunDepreciationButton'
-import { AssetDrawer } from '../../app/(app)/assets/AssetDrawer'
-import { TaxPoolsView } from '../../app/(app)/assets/tax-pools/TaxPoolsView'
 import { str, type WidgetRenderer } from './widget-props'
 
 /** Assets, depreciation and tax adapters. Compose native components without changing their props or boundaries. */

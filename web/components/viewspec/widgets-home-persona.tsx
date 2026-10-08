@@ -1,5 +1,5 @@
 import type { ComponentProps } from 'react'
-import { InboxTaskList } from '../../app/(app)/inbox/InboxTaskList'
+import { InboxTaskList } from './native-widgets.client'
 import { str, type WidgetRenderer } from './widget-props'
 
 /**
