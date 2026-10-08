@@ -442,6 +442,12 @@ export function FieldTicketDrawer(props: FieldTicketDrawerProps) {
 
   function onFillFromSchedule() {
     if (!schedulePreview || !schedulePreview.timeTypes.some((type) => type.id === scheduleTimeTypeId) || !editable || busy) return
+    if (!props.timeTypes.some((type) => type.id === scheduleTimeTypeId)
+      || schedulePreview.scheduled.some((work) => !props.employees.some((employee) => employee.id === work.workerPartyId)
+        || (work.projectTaskId !== null && !projectTasks.some((task) => task.id === work.projectTaskId)))) {
+      setScheduleError(tScheduling('prefill.reload'))
+      return
+    }
     const result = fillTicketFromSchedule(grid, schedulePreview.scheduled, {
       projectId, days, timeTypeId: scheduleTimeTypeId,
     })
