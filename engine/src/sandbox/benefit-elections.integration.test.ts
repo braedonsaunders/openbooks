@@ -13,7 +13,8 @@ import { createSandbox, deleteSandbox, refreshSandbox } from "./lifecycle.ts";
 
 installEngineSeams();
 const DB = !!process.env.OPENBOOKS_DB_URL;
-const evidenceTables = ["hrm_benefit_enrollments", "hrm_benefit_enrollment_terms", "hrm_benefit_payroll_inputs"] as const;
+const evidenceTables = ["hrm_benefit_enrollments", "hrm_benefit_enrollment_terms", "hrm_benefit_payroll_inputs",
+  "employment_assignments", "employment_assignment_versions", "employment_changes"] as const;
 
 async function sourceEvidence(orgId: string) {
   return Promise.all(evidenceTables.map(async table => ({ table, rows: (await db.execute<{ evidence: string }>(sql`
@@ -30,6 +31,14 @@ async function seedElections(org: Awaited<ReturnType<typeof createScratchOrg>>, 
   const elections: string[] = [];
   for (const approvalMode of ["none", "flows"] as const) {
     const employment = await seedEmployment(org.orgId, org.subsidiaryId, { displayName: `Coverage ${approvalMode}` });
+    const assignment = (await db.execute<{ id: string }>(sql`insert into employment_assignments
+      (org_id,employment_id,assignment_key) values(${org.orgId},${employment.employmentId},'primary') returning id`)).rows[0]!.id;
+    assert.equal((await db.execute(sql`insert into employment_assignment_versions
+      (org_id,assignment_id,employment_id,version_no,fte,is_primary,effective_from)
+      values(${org.orgId},${assignment},${employment.employmentId},1,'1.0000',true,'2020-01-01') returning id`)).rows.length, 1);
+    assert.equal((await db.execute(sql`insert into employment_changes
+      (org_id,employment_id,assignment_id,revision,change_kind,prior_snapshot,reason,recorded_by)
+      values(${org.orgId},${employment.employmentId},${assignment},1,'created','{}','Declared primary assignment',${actorId}) returning id`)).rows.length, 1);
     const plan = await seedPlan(org.orgId, { currency: "CAD", approval_mode: approvalMode });
     const terms = (await seededContributionTerms(org.orgId, plan.planId)).map(term => ({ ...term,
       sourceDecimal: term.electedRate, provenance: { reason: "Signed coverage election", sourceIdentity: "private-election-reference" } }));
@@ -103,6 +112,20 @@ for (const masked of [false, true]) test(`${masked ? "masked" : "full"} sandbox 
         where c.org_id=${target}`)).rows;
       assert.equal(catalog.length, 2);
       assert.ok(catalog.every(row => row.matched));
+      const assignments = (await db.execute<{ matched: boolean }>(sql`select
+        (v.assignment_id=ob_rebase(original.assignment_id,o.sandbox_seed)
+         and v.employment_id=ob_rebase(original.employment_id,o.sandbox_seed)
+         and a.employment_id=v.employment_id and v.version_no=original.version_no
+         and v.fte=original.fte and v.is_primary=original.is_primary
+         and v.effective_from=original.effective_from and v.effective_to is not distinct from original.effective_to
+         and exists(select 1 from employment_changes c where c.org_id=v.org_id
+           and c.assignment_id=a.id and c.employment_id=v.employment_id and c.change_kind='created')) as matched
+        from employment_assignment_versions v join orgs o on o.id=v.org_id
+        join employment_assignments a on a.org_id=v.org_id and a.id=v.assignment_id
+        join employment_assignment_versions original on original.org_id=o.sandbox_of and v.id=ob_rebase(original.id,o.sandbox_seed)
+        where v.org_id=${target}`)).rows;
+      assert.equal(assignments.length, 2);
+      assert.ok(assignments.every(row => row.matched));
       const copied = (await db.execute<{ status: string; matched: boolean; protected: boolean; flow_bound: boolean }>(sql`
         select e.status,
           (e.id=ob_rebase(original.id,o.sandbox_seed) and e.plan_id=ob_rebase(original.plan_id,o.sandbox_seed)
@@ -157,6 +180,12 @@ for (const masked of [false, true]) test(`${masked ? "masked" : "full"} sandbox 
       assert.deepEqual((await db.execute<{ evidence: string }>(sql`select to_jsonb(c)::text as evidence
         from hrm_benefit_catalog c where org_id=${org.orgId} order by id`)).rows, originalCatalog);
     };
+    await assertCopy();
+    await assert.rejects(withOrgTransaction(target, () => db.execute(sql`insert into employment_assignment_versions
+      (org_id,assignment_id,employment_id,version_no,fte,is_primary,effective_from)
+      select ${target},${randomUUID()},employment_id,2,'1.0000',false,'2026-04-01'
+      from employment_assignments where org_id=${target} limit 1`)),
+      error => errorChainMatches(error, /assignment must exist in the same organization/));
     await assertCopy();
     for (const scope of [org.orgId, target]) {
       await assert.rejects(withOrgTransaction(scope, () => db.execute(sql`
