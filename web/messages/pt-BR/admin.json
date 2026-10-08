@@ -6073,6 +6073,10 @@
         "unpaid": {
           "charge": "Cobrar o período",
           "carry": "Acumular para recuperação"
+        },
+        "hoursCoverage": {
+          "earned_dates": "Datas de ganho",
+          "pay_period_end": "Elegibilidade no fim do período"
         }
       },
       "waitingMonthsHint": "Use meses ou dias, não ambos. Meses seguem a data de admissão.",
@@ -6092,7 +6096,9 @@
         "recoveryRuleId": "Dedução de recuperação",
         "premiumRuleId": "Prêmio do empregador"
       },
-      "recoverySourceHint": "Vincule este prêmio à dedução do empregado que acumula e recupera a cobertura sem remuneração. Um prêmio só pode pertencer a uma dedução de recuperação."
+      "recoverySourceHint": "Vincule este prêmio à dedução do empregado que acumula e recupera a cobertura sem remuneração. Um prêmio só pode pertencer a uma dedução de recuperação.",
+      "hoursCoverage": "Elegibilidade de horas",
+      "hoursCoverageHint": "As datas de ganho contam apenas horas cobertas pela inscrição, eleição e regra. Para uma contribuição por hora, a elegibilidade no fim do período usa os termos vigentes nessa data e as unidades pagas nesta folha para o período. Selecione apenas quando o plano definir essa política."
     },
     "serviceCredit": {
       "calendarMonths": "Meses civis",

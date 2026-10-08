@@ -12,4 +12,5 @@ export const HRM_ENROLLMENT_STATUSES = [
 export const BENEFIT_CONTRIBUTION_KINDS = ['employee_deduction', 'employer_contribution', 'taxable_non_cash', 'cash_earning'] as const;
 export const BENEFIT_CONTRIBUTION_BASES = ['per_hour', 'per_period', 'per_month', 'per_year', 'percent_of_eligible_pay'] as const;
 export const BENEFIT_CONTRIBUTION_RATE_FORMULAS = ['elected_rate', 'hourly_wage_percent', 'matching_election'] as const;
+export const BENEFIT_HOURS_COVERAGE = ['earned_dates', 'pay_period_end'] as const;
 export const BENEFIT_CONTRIBUTION_ELECTION_MODES = ['fixed', 'follows_policy'] as const;

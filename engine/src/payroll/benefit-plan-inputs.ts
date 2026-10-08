@@ -10,6 +10,7 @@ import { add, sum, cmp } from '../money/money.ts';
 import { canonicalJson } from './run-calculation-evidence.ts';
 import { assignmentCoveredDays } from './assignment-windows.ts';
 import { coveredPayrollLines } from './covered-payroll-lines.ts';
+import { benefitCoverageWindow } from './benefit-coverage-window.ts';
 import { PayrollError } from './error.ts';
 import { cappableHourLines, programApplicabilityFromExclusions, type Line } from './run-stub-records.ts';
 import { benefitCoverageRecoveryAmount, recurringBenefitAmount, type BenefitRecoveryLedgerEntry, type RecurringBenefitRule, type RecurringBenefitTerm, type BenefitContributionTier } from './benefit-plan-math.ts';
@@ -64,7 +65,7 @@ export async function recurringBenefitSource(tx: Executor, args: {
         and t.effective_from<=${periodEnd}::date and (t.effective_to is null or t.effective_to>=${periodStart}::date)),'[]'::jsonb),
       'rules',coalesce((select jsonb_agg(jsonb_build_object(
         'id',r.id,'planId',r.plan_id,'ruleKey',r.rule_key,'name',r.name,'kind',r.kind,'payComponentId',r.pay_component_id,
-        'basis',r.basis,'rate',r.rate::text,'rateFormula',r.rate_formula,'hoursBasis',r.hours_basis,'payBasis',r.pay_basis,
+        'basis',r.basis,'rate',r.rate::text,'rateFormula',r.rate_formula,'hoursBasis',r.hours_basis,'hoursCoverage',r.hours_coverage,'payBasis',r.pay_basis,
         'selectedComponentIds',coalesce((select jsonb_agg(rc.pay_component_id order by rc.pay_component_id)
           from hrm_benefit_contribution_rule_components rc where rc.org_id=r.org_id and rc.rule_id=r.id),'[]'::jsonb),
         'selectedComponents',coalesce((select jsonb_agg(jsonb_build_object('id',c.id,'kind',c.kind,'code',c.code,'name',c.name) order by c.code)
@@ -138,9 +139,9 @@ export async function appendRecurringBenefitLines(tx: Executor, args: {
       const rule = enrollment.rules.find(r => r.id === term.ruleId);
       if (!rule) throw new PayrollError(`Benefit plan ${enrollment.planCode} election names an inactive or out-of-date rule — end the election terms or provide an effective replacement rule`);
       if (args.oneOffRun && rule.runApplicability === 'regular_only') continue;
-      const from = [args.periodStart, enrollment.effectiveFrom, term.effectiveFrom, rule.effectiveFrom].sort().at(-1)!;
-      const to = [args.periodEnd, enrollment.effectiveTo, term.effectiveTo, rule.effectiveTo].filter((v): v is string => v !== null).sort()[0]!;
-      if (from > to) continue;
+      const coverage = benefitCoverageWindow({ rule, enrollment, term, periodStart: args.periodStart, periodEnd: args.periodEnd });
+      if (coverage === null) continue;
+      const { from, to, earningsFrom, earningsTo } = coverage;
       if (rule.arrearsPlanId !== null) {
         if (recoveryOwners.has(rule.arrearsPlanId)) throw new PayrollError(`Benefit recovery bank has more than one covered policy term in this pay period — make its successor election effective at the next pay-period boundary`);
         recoveryOwners.add(rule.arrearsPlanId);
@@ -166,9 +167,9 @@ export async function appendRecurringBenefitLines(tx: Executor, args: {
         and (employment_id is null or employment_id=${args.employmentId}) and effective_from<=${to}::date
         and (effective_to is null or effective_to>=${from}::date) limit 1`)).rows[0];
       if (duplicate) throw new PayrollError(`Benefit rule ${rule.ruleKey} also has a recurring payroll component assignment — end that duplicate assignment so the Benefits election remains the contribution source`);
-      const baseLines = coveredBaseLines(originalLines, from, to, args.periodStart, args.periodEnd);
+      const baseLines = coveredBaseLines(originalLines, earningsFrom, earningsTo, args.periodStart, args.periodEnd);
       if (rule.hoursBasis === 'scheduled_paid' && args.payBasis === 'salary' && !args.oneOffRun) {
-        const scheduled = source.workSchedule ? scheduledHoursBetween(source.workSchedule, from, to) : null;
+        const scheduled = source.workSchedule ? scheduledHoursBetween(source.workSchedule, earningsFrom, earningsTo) : null;
         if (scheduled === null) throw new PayrollError(`Benefit rule ${rule.ruleKey} needs the employee's scheduled paid hours — configure a native work schedule before calculating`);
         const salaryLine = baseLines.find(l => l.description === 'Salary');
         if (!salaryLine) throw new PayrollError(`Benefit rule ${rule.ruleKey} has no paid salary earnings — use actual paid hours or correct the salary inputs`);
@@ -191,7 +192,7 @@ export async function appendRecurringBenefitLines(tx: Executor, args: {
       const hourLines = rule.hoursBasis === 'regular_paid' ? baseLines.filter(regular)
         : selected !== null ? baseLines.filter(l => l.componentId !== null && selected.has(l.componentId)) : baseLines;
       const payLines = rule.payBasis === 'regular_cash_earnings'
-        ? coveredBaseLines(args.regularCashLines, from, to, args.periodStart, args.periodEnd).filter(regular) : baseLines;
+        ? coveredBaseLines(args.regularCashLines, earningsFrom, earningsTo, args.periodStart, args.periodEnd).filter(regular) : baseLines;
       const tier = source.service ? enrollment.tiers.filter(t => meetsServiceYears(source.service!, t.minimumServiceYears)).at(-1) ?? null : null;
       const matchingTerm = enrollment.terms.find(t => t.ruleId === rule.matchRuleId && t.effectiveFrom <= from && (t.effectiveTo === null || t.effectiveTo >= to));
       const basis = { hours: sum(hourLines.map(l => l.hours ?? '0')), eligiblePay: sum(payLines.map(l => l.amount)), hourlyWage: args.hourlyWage,
@@ -266,7 +267,7 @@ export async function appendRecurringBenefitLines(tx: Executor, args: {
         const inserted = (await tx.execute<{ id: string }>(sql`insert into pay_run_benefit_allocations
           (org_id,pay_run_document_id,employment_id,employee_party_id,enrollment_id,rule_id,term_id,period_from,period_to,amount,currency,source_snapshot,created_by,updated_by)
           values (${args.orgId},${args.documentId},${args.employmentId},${args.employeePartyId},${enrollment.id},${rule.id},${term.id},${from}::date,${to}::date,
-          ${result.amount},${args.currency},${JSON.stringify({ rule, term, basis, result, coverageAmount, insuredCoverageAmount, insuredPremiums, component, service: source.service?.sourceSnapshot ?? null })}::jsonb,${args.actorId},${args.actorId}) returning id`)).rows;
+          ${result.amount},${args.currency},${JSON.stringify({ rule, term, coverage, basis, result, coverageAmount, insuredCoverageAmount, insuredPremiums, component, service: source.service?.sourceSnapshot ?? null })}::jsonb,${args.actorId},${args.actorId}) returning id`)).rows;
         if (inserted.length !== 1) throw new PayrollError(`Benefit rule ${rule.ruleKey} was not recorded — retry calculation; a payable contribution must carry its allocation evidence`);
         if (benefitLine) benefitLine.benefitAllocationId = inserted[0]!.id;
       }

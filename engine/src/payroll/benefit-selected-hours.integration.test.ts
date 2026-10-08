@@ -9,6 +9,7 @@ import { db } from "../platform/db.ts";
 import { calculatePayRun } from "./run-calculation.ts";
 import { createPayRun } from "./run-lifecycle.ts";
 import { sum } from "../money/money.ts";
+import { errorChainMatches } from "../testing/error-chain.ts";
 
 /** Per-hour benefit contributions counted over an explicit component list. */
 
@@ -153,5 +154,71 @@ test('a selected-components rule with no listed components refuses with its reme
         { planId, ruleId, payComponentId: deductionId }),
       /DUESX.*is not an earning component/,
     );
+  } finally { await dropScratchOrgReporting(fx.orgId); }
+});
+
+test('period-end hourly policy counts paid units once while default coverage retains its dated slice', { skip: !DB }, async () => {
+  const fx = await payrollOrg();
+  try {
+    await db.execute(sql`update pay_schedules set frequency='weekly',periods_per_year=52 where org_id=${fx.orgId} and id=${fx.scheduleId}`);
+    const { partyId, employmentId } = await employee(fx, 'Period-end Hours Employee');
+    const units = await earningComponent(fx, 'PAID_UNITS');
+    const planId = randomUUID(), enrollmentId = randomUUID();
+    await db.execute(sql`insert into hrm_benefit_plans(id,org_id,code,name,kind,currency,employer_subsidiary_id,effective_from)
+      values(${planId},${fx.orgId},'PERIOD_END','Period-end contribution','retirement','CAD',${fx.subsidiaryId},'2026-01-01')`);
+    await db.execute(sql`insert into hrm_benefit_enrollments(id,org_id,employment_id,plan_id,status,effective_from,effective_to,currency)
+      values(${enrollmentId},${fx.orgId},${employmentId},${planId},'elected','2026-07-18','2026-07-18','CAD')`);
+    const rules: { id: string; componentId: string; mode: string }[] = [];
+    for (const mode of ['earned_dates', 'pay_period_end']) {
+      const componentId = await earningComponent(fx, `CONTRIBUTION_${mode}`, 'employer_contribution');
+      const ruleId = randomUUID();
+      const body = { planId, ruleKey: mode, name: mode, kind: 'employer_contribution', payComponentId: componentId,
+        basis: 'per_hour', rate: '1.54', rateFormula: 'elected_rate', hoursBasis: 'selected_components', hoursCoverage: mode,
+        proration: 'none', runApplicability: 'all_pay_runs', unpaidPeriodTreatment: 'charge', effectiveFrom: '2026-01-01' };
+      await validateBenefitContributionConfiguration(db, fx.orgId, 'benefit-contribution-rules', body);
+      await assert.rejects(() => validateBenefitContributionConfiguration(db, fx.orgId, 'benefit-contribution-rules',
+        { ...body, hoursCoverage: 'unknown' }), /Declare hour eligibility/);
+      await assert.rejects(() => validateBenefitContributionConfiguration(db, fx.orgId, 'benefit-contribution-rules',
+        { ...body, basis: 'per_period', hoursCoverage: 'pay_period_end' }), /requires a per-hour basis/);
+      await db.execute(sql`insert into hrm_benefit_contribution_rules(id,org_id,plan_id,rule_key,name,kind,pay_component_id,basis,rate,rate_formula,hours_basis,hours_coverage,proration,effective_from,run_applicability)
+        values(${ruleId},${fx.orgId},${planId},${mode},${mode},'employer_contribution',${componentId},'per_hour','1.54','elected_rate','selected_components',${mode},'none','2026-01-01','all_pay_runs')`);
+      await db.execute(sql`insert into hrm_benefit_contribution_rule_components(org_id,plan_id,rule_id,pay_component_id)
+        values(${fx.orgId},${planId},${ruleId},${units})`);
+      await db.execute(sql`insert into hrm_benefit_enrollment_terms(id,org_id,enrollment_id,rule_id,election_mode,elected_rate,effective_from,effective_to)
+        values(${randomUUID()},${fx.orgId},${enrollmentId},${ruleId},'fixed','1.54','2026-07-18','2026-07-18')`);
+      rules.push({ id: ruleId, componentId, mode });
+    }
+    await db.execute(sql`update hrm_benefit_enrollments set submitted_by=${fx.actorId},submitted_at=now(),
+      submission_snapshot=public.benefit_enrollment_submission_source(org_id,id),updated_by=${fx.actorId},
+      decision_snapshot=jsonb_build_object('outcome','approved','mode','not_required','approvalMode','none','planId',plan_id),status='active'
+      where org_id=${fx.orgId} and id=${enrollmentId}`);
+    const submission = (await db.execute<{ source: { contributions: { hoursCoverage: string }[] } }>(sql`select submission_snapshot as source from hrm_benefit_enrollments where org_id=${fx.orgId} and id=${enrollmentId}`)).rows[0]!.source;
+    assert.deepEqual(submission.contributions.map(row => row.hoursCoverage).sort(), ['earned_dates', 'pay_period_end'], 'Native approval evidence includes the selected hour eligibility');
+    await assert.rejects(() => db.transaction(async tx => {
+      await tx.execute(sql`update hrm_benefit_contribution_rules set hours_coverage='pay_period_end' where org_id=${fx.orgId} and id=${rules[0]!.id}`);
+    }), error => errorChainMatches(error, /submitted election evidence/));
+    const run = await createPayRun({ orgId: fx.orgId, actorId: fx.actorId, payScheduleId: fx.scheduleId, periodStart: '2026-07-12', periodEnd: '2026-07-18' });
+    await db.execute(sql`insert into pay_run_adjustments(org_id,pay_run_document_id,employee_party_id,adjustment_type,component_id,amount,hours)
+      values(${fx.orgId},${run.documentId},${partyId},'line',${units},'700','14')`);
+    const before = (await db.execute(sql`select id,amount::text,hours::text from pay_run_adjustments where org_id=${fx.orgId} and pay_run_document_id=${run.documentId} order by id`)).rows;
+    for (let pass = 0; pass < 2; pass++) {
+      const result = await calculatePayRun({ orgId: fx.orgId, actorId: fx.actorId, documentId: run.documentId });
+      assert.deepEqual(result.errors, []);
+      const allocations = (await db.execute<{ rule_id: string; amount: string; source_snapshot: { basis: { hours: string }; coverage: { earningsFrom: string; earningsTo: string } } }>(sql`
+        select rule_id,amount::text,source_snapshot from pay_run_benefit_allocations where org_id=${fx.orgId} and pay_run_document_id=${run.documentId}`)).rows;
+      assert.equal(allocations.length, 2, 'Recalculation records each elected contribution once');
+      for (const rule of rules) {
+        const allocation = allocations.find(row => row.rule_id === rule.id)!;
+        assert.equal(allocation.amount, rule.mode === 'pay_period_end' ? '21.5600' : '3.0800');
+        assert.equal(allocation.source_snapshot.basis.hours, rule.mode === 'pay_period_end' ? '14.0000' : '2.0000');
+        assert.equal(allocation.source_snapshot.coverage.earningsFrom, rule.mode === 'pay_period_end' ? '2026-07-12' : '2026-07-18');
+      }
+    }
+    assert.deepEqual((await db.execute(sql`select id,amount::text,hours::text from pay_run_adjustments where org_id=${fx.orgId} and pay_run_document_id=${run.documentId} order by id`)).rows, before, 'Policy selection never rewrites paid units');
+    const next = await createPayRun({ orgId: fx.orgId, actorId: fx.actorId, payScheduleId: fx.scheduleId, periodStart: '2026-07-19', periodEnd: '2026-07-25' });
+    await db.execute(sql`insert into pay_run_adjustments(org_id,pay_run_document_id,employee_party_id,adjustment_type,component_id,amount,hours)
+      values(${fx.orgId},${next.documentId},${partyId},'line',${units},'700','14')`);
+    assert.deepEqual((await calculatePayRun({ orgId: fx.orgId, actorId: fx.actorId, documentId: next.documentId })).errors, []);
+    assert.equal((await db.execute(sql`select id from pay_run_benefit_allocations where org_id=${fx.orgId} and pay_run_document_id=${next.documentId}`)).rows.length, 0, 'An ended election is not reused for a later period');
   } finally { await dropScratchOrgReporting(fx.orgId); }
 });

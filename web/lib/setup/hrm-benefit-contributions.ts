@@ -20,6 +20,7 @@ export const BENEFIT_CONTRIBUTION_ENTITIES: SetupEntity[] = [
       { key: 'rateFormula', kind: 'select', required: true, options: options('formula', ['elected_rate', 'hourly_wage_percent', 'matching_election']), helpTextKey: 'benefitContributions.formulaHint' },
       { key: 'rate', labelKey: 'benefitContributions.fields.rate', kind: 'decimal', required: true, helpTextKey: 'benefitContributions.rateHint' },
       { key: 'hoursBasis', kind: 'select', required: true, options: options('hours', ['all_paid', 'regular_paid', 'scheduled_paid', 'selected_components']), showWhen: { field: 'basis', in: ['per_hour'] } },
+      { key: 'hoursCoverage', kind: 'select', required: true, defaultValue: 'earned_dates', labelKey: 'benefitContributions.hoursCoverage', options: options('hoursCoverage', ['earned_dates', 'pay_period_end']), helpTextKey: 'benefitContributions.hoursCoverageHint' },
       { key: 'payBasis', kind: 'select', required: true, options: options('pay', ['all_cash_earnings', 'regular_cash_earnings']), showWhen: { field: 'basis', in: ['percent_of_eligible_pay'] } },
       { key: 'monthsPerYear', kind: 'integer', required: true, min: 1, max: 12, showWhen: { field: 'basis', in: ['per_month'] } },
       { key: 'periodsPerYear', kind: 'integer', min: 1, max: 366, helpTextKey: 'benefitContributions.annualizationHint', showWhen: { field: 'basis', in: ['per_month', 'per_year'] } },

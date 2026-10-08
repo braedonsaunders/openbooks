@@ -6073,6 +6073,10 @@
         "unpaid": {
           "charge": "Cobrar el período",
           "carry": "Acumular para recuperación"
+        },
+        "hoursCoverage": {
+          "earned_dates": "Fechas de devengo",
+          "pay_period_end": "Elegibilidad al cierre del período"
         }
       },
       "waitingMonthsHint": "Use meses o días, no ambos. Los meses siguen la fecha de contratación.",
@@ -6092,7 +6096,9 @@
         "recoveryRuleId": "Deducción de recuperación",
         "premiumRuleId": "Prima del empleador"
       },
-      "recoverySourceHint": "Vincule esta prima a la deducción del empleado que acumula y recupera la cobertura sin sueldo. Cada prima solo puede pertenecer a una deducción de recuperación."
+      "recoverySourceHint": "Vincule esta prima a la deducción del empleado que acumula y recupera la cobertura sin sueldo. Cada prima solo puede pertenecer a una deducción de recuperación.",
+      "hoursCoverage": "Elegibilidad de horas",
+      "hoursCoverageHint": "Las fechas de devengo cuentan solo horas cubiertas por la inscripción, la elección y la regla. Para una contribución por hora, la elegibilidad al cierre usa las condiciones vigentes al final del período y las unidades pagadas en esta nómina para ese período. Selecciónela solo si el plan establece esa política."
     },
     "serviceCredit": {
       "calendarMonths": "Meses naturales",

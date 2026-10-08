@@ -2,6 +2,7 @@ import { parseMoney, parseRate, type Money } from '../money/brands.ts';
 import { add, cmp, neg, sum, mulDecimalFactors } from '../money/money.ts';
 import { compareDecimal, divideDecimal, multiplyDecimal } from '../money/exact-decimal.ts';
 import { PayrollError } from './error.ts';
+import type { BenefitHoursCoverage } from './benefit-coverage-window.ts';
 
 export type BenefitContributionKind = 'employee_deduction' | 'employer_contribution' | 'taxable_non_cash' | 'cash_earning';
 export type BenefitContributionBasis = 'per_hour' | 'per_period' | 'per_month' | 'per_year' | 'percent_of_eligible_pay';
@@ -10,6 +11,8 @@ export interface RecurringBenefitRule {
   payComponentId: string; basis: BenefitContributionBasis; rate: string;
   rateFormula: 'elected_rate' | 'hourly_wage_percent' | 'matching_election';
   hoursBasis: 'all_paid' | 'regular_paid' | 'scheduled_paid' | 'selected_components' | null;
+  /** Defaults to dated earning allocation; period-end policy counts this run's paid units. */
+  hoursCoverage?: BenefitHoursCoverage;
   /** Earning components whose signed stub hours count, when hoursBasis is 'selected_components'. */
   selectedComponentIds?: readonly string[];
   payBasis: 'all_cash_earnings' | 'regular_cash_earnings' | null;

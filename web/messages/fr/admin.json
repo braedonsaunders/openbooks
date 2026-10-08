@@ -6073,6 +6073,10 @@
         "unpaid": {
           "charge": "Facturer la période",
           "carry": "Reporter pour récupération"
+        },
+        "hoursCoverage": {
+          "earned_dates": "Dates des gains",
+          "pay_period_end": "Admissibilité en fin de période"
         }
       },
       "waitingMonthsHint": "Utilisez les mois civils ou les jours, pas les deux. Les mois suivent la date d’embauche.",
@@ -6092,7 +6096,9 @@
         "recoveryRuleId": "Retenue de recouvrement",
         "premiumRuleId": "Prime patronale"
       },
-      "recoverySourceHint": "Associez cette prime à la retenue salariale qui reporte et recouvre la couverture non rémunérée. Une prime ne peut être liée qu’à une seule retenue."
+      "recoverySourceHint": "Associez cette prime à la retenue salariale qui reporte et recouvre la couverture non rémunérée. Une prime ne peut être liée qu’à une seule retenue.",
+      "hoursCoverage": "Admissibilité des heures",
+      "hoursCoverageHint": "Les dates de gains comptent uniquement les heures couvertes par l’adhésion, le choix et la règle. Pour une cotisation horaire, l’admissibilité en fin de période utilise les modalités en vigueur à cette date et les unités payées dans cette paie pour la période. Choisissez-la uniquement si le régime prévoit cette politique."
     },
     "serviceCredit": {
       "calendarMonths": "Mois civils",
