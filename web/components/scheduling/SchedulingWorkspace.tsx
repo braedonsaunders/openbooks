@@ -230,7 +230,7 @@ function BoardShell(props: SchedulingWorkspaceProps & { board: ScheduleBoard; on
         </SchedulingAlert>
       ) : null}
       {people && view === 'grid' && legend.length ? (
-        <div className="flex min-w-0 shrink-0 flex-nowrap items-center gap-1.5 overflow-x-auto px-1 py-1">
+        <div className="flex min-w-0 shrink-0 flex-nowrap items-center gap-1.5 overflow-x-auto px-1 pb-4 pt-1">
           {legend.map((slot) => (
             <button
               key={slot.key}
