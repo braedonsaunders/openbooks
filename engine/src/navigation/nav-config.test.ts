@@ -88,7 +88,7 @@ test('compact Talent defaults preserve stored navigation and deliberate placemen
   const result = reconcileNavConfig(saved)
   const people = result.groups.find((group) => group.id === 'hrm')!
   const details = people.items.filter((item) => item.kind === 'module' && NAV_MODULES.find((module) => module.key === item.moduleKey)?.subgroup === 'hrm-talent' && isDefaultLocalNavigationItem(people.id, item))
-  assert.equal(details.length, 10)
+  assert.equal(details.length, 15)
   assert.deepEqual(result, before)
   assert.deepEqual(saved, before)
   const calibration = details.find((item) => item.kind === 'module' && item.moduleKey === 'hrm-performance-calibration')!

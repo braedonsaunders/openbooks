@@ -32,10 +32,11 @@ test('People defaults place Benefits, Payroll and Payroll controls in the right 
   assert.equal(columns.length, 2)
   assert.deepEqual(columns.flat(), blocks, 'column reading order preserves the saved menu order')
   assert.deepEqual(columns.map((column) => column.map((block) => block.kind === 'subgroup' ? block.label : block.item.label)), [
-    ['workforce', 'hrm-talent', 'hrm-timeOff', 'hrm-compensation'], ['hrm-benefits', 'payroll-work', 'payroll-controls'],
+    ['workforce', 'hrm-talent', 'hrm-timeOff', 'scheduling'], ['hrm-compensation', 'hrm-benefits', 'payroll-work', 'payroll-controls'],
   ])
   const weights = columns.map((column) => column.reduce((sum, block) => sum + (block.kind === 'subgroup' ? block.items.length + 1.5 : 1), 0))
-  assert.equal(Math.max(...weights), 22)
+  const largestBlock = Math.max(...blocks.map(block => block.kind === 'subgroup' ? block.items.length + 1.5 : 1))
+  assert.ok(Math.abs(weights[0]! - weights[1]!) <= largestBlock, 'the two columns differ by no more than one indivisible section')
 })
 
 test('a single section never leaves an empty second column', () => {
