@@ -1,11 +1,43 @@
 import { CompensationWorkspace } from '../../app/(app)/hrm/compensation/CompensationWorkspace'
 import { EquityWorkspace } from '../../app/(app)/hrm/compensation/equity/EquityWorkspace'
-import {ConversationCreate} from '../../app/(app)/hrm/performance/conversations/ConversationCreate'
-import {GoalEditor} from '../../app/(app)/hrm/performance/goals/GoalEditor'
-import {ApplicationReview} from '../../app/(app)/hrm/recruiting/ApplicationReview'
-import {ReviewTemplateDesigner} from '../../app/(app)/hrm/performance/ReviewTemplateDesigner'
-import { WindowsManagerDrawer } from '../../app/(app)/hrm/benefits/WindowsManagerDrawer'
-import { CandidatePoolCreateDrawer } from '../../app/(app)/hrm/recruiting/CandidatePoolCreateDrawer'
+import {
+  ConversationCreate,
+  GoalEditor,
+  ApplicationReview,
+  ReviewTemplateDesigner,
+  WindowsManagerDrawer,
+  CandidatePoolCreateDrawer,
+  ChangeRequestRowActions,
+  HrmVerbChip,
+  ChangeRequestDetailDialog,
+  ProposeChangeDialog,
+  LeaveDialog,
+  QualificationDialog,
+  QualificationRequirementManager,
+  QualificationRequirementRemove,
+  ComplianceActions,
+  GenerateDialog,
+  WindowDialog,
+  WindowDrawer,
+  AwardBuilderDrawer,
+  AwardDrawer,
+  BenefitTypeCards,
+  ProgramBuilderDrawer,
+  ProgramDrawer,
+  InstallEmployeeApp,
+  AiDraftDrawer,
+  BenefitChangeDialog,
+  BenefitElectDialog,
+  GoalProgressDialog,
+  ProfileDialog,
+  ReviewAcknowledgeButton,
+  StepCompleteButton,
+  LeaveCalendar,
+  CompensationSettingsForm,
+  CycleMoveButtons,
+  PlanLineApproveButton,
+  LeaveBalances,
+} from './native-widgets.client'
 import type { ComponentProps } from 'react'
 import {
   HrmBenefitsPanel,
@@ -20,42 +52,16 @@ import {
 } from '../../app/(app)/hrm/sections'
 import { PositionDrawer } from '../../app/(app)/hrm/positions/sections'
 import { RecruitingDrawer } from '../../app/(app)/hrm/recruiting/sections'
-import { ChangeRequestRowActions, HrmVerbChip } from '../../app/(app)/hrm/change-requests/ChangeRequestRowActions'
-import { ChangeRequestDetailDialog } from '../../app/(app)/hrm/change-requests/ChangeRequestDetailDialog'
-import { ProposeChangeDialog } from '../../app/(app)/hrm/change-requests/ProposeChangeDialog'
-import { LeaveDialog } from '../../app/(app)/hrm/leave/LeaveDialog'
 // HR-14 begin: qualification islands (verbatim adapters only).
-import { QualificationDialog } from '../../app/(app)/hrm/qualifications/QualificationDialog'
-import { QualificationRequirementManager, QualificationRequirementRemove } from '../../app/(app)/hrm/qualifications/RequirementManager'
 // HR-14 end
 // HR-13 begin: construction-compliance islands (verbatim adapters only).
-import { ComplianceActions } from '../../app/(app)/hrm/compliance/ComplianceActions'
-import { GenerateDialog } from '../../app/(app)/hrm/compliance/GenerateDialog'
 // HR-13 end
-import { WindowDialog } from '../../app/(app)/hrm/benefits/WindowDialog'
-import { WindowDrawer } from '../../app/(app)/hrm/benefits/WindowDrawer'
-import { AwardBuilderDrawer } from '../../app/(app)/hrm/benefits/AwardBuilderDrawer'
-import { AwardDrawer } from '../../app/(app)/hrm/benefits/AwardDrawer'
-import { BenefitTypeCards } from '../../app/(app)/hrm/benefits/BenefitsOverview'
 import { AwardPortfolioTable, ProgramPortfolioTable, BenefitDeliveryTable } from '../../app/(app)/hrm/benefits/PortfolioTables'
-import { ProgramBuilderDrawer } from '../../app/(app)/hrm/benefits/ProgramBuilderDrawer'
-import { ProgramDrawer } from '../../app/(app)/hrm/benefits/ProgramDrawer'
 import { HrmFacts } from '../../app/(app)/me/sections'
-import { InstallEmployeeApp } from '../../app/(app)/me/InstallEmployeeApp'
 // HR-21 begin: the Explain drawer (verbatim adapter only).
 import { ExplainDrawer } from '../../app/(app)/me/sections'
-import { AiDraftDrawer } from '../../app/(app)/hrm/ai/AiDraftDrawer'
 // HR-21 end
-import {
-  BenefitChangeDialog,
-  BenefitElectDialog,
-  GoalProgressDialog,
-  ProfileDialog,
-  ReviewAcknowledgeButton,
-  StepCompleteButton,
-} from '../../app/(app)/me/islands'
 import { ProcessDrawer } from '../../app/(app)/hrm/processes/sections'
-import { LeaveCalendar } from '../../app/(app)/hrm/leave/LeaveCalendar'
 import { CycleDialog, CycleDrawer, ExitDrawer, ReviewDrawer } from '../../app/(app)/hrm/performance/sections'
 import {
   CompCycleDialog,
@@ -67,12 +73,6 @@ import {
   PlacementBar,
   PlacementSummary,
 } from '../../app/(app)/hrm/compensation/sections'
-import {
-  CompensationSettingsForm,
-  CycleMoveButtons,
-  PlanLineApproveButton,
-} from '../../app/(app)/hrm/compensation/islands'
-import { LeaveBalances } from '../../app/(app)/hrm/my-leave/LeaveBalances'
 import { num, str, type WidgetRenderer } from './widget-props'
 
 /** HR workspace adapters; lifecycle permissions remain owned by the rendered components. */

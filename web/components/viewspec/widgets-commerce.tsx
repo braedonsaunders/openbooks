@@ -1,46 +1,50 @@
-import { NativeListDrawer } from '../native-list-drawer'
+import {
+  NativeListDrawer,
+  ArCockpit,
+  SubcontractsWorkspace,
+  ApCockpit,
+  AttemptDrawer,
+  RecoveryDashboard,
+  ExpensesDashboard,
+  ContractDrawer,
+  RunRecognitionButton,
+  ContractCostDrawer,
+  ContractCostWorkspace,
+  CapitalizeButton,
+  ImportCommissionsButton,
+  RunAmortizationButton,
+  PreBillingWorkspace,
+  PropertyManagementWorkspace,
+  CaptureList,
+  CaptureReviewDrawer,
+  CaptureUploadButton,
+  NewItemButton,
+  NewMovementButton,
+  InventoryActionDrawer,
+  NewExpenseButton,
+  ExpenseActions,
+  NewOrderButton,
+  NewOrderRedirect,
+  StoredValueDrawer,
+  StoredValueIssueDrawer,
+  NewProjectButton,
+  NewProjectRedirect,
+  ProjectDrawer,
+  DemandPlanActions,
+  DemandSuggestionDrawer,
+  ChannelOrderDrawerSlot,
+  ChannelReplayAll,
+  ChannelPostingForm,
+} from './native-widgets.client'
 import { type ComponentProps } from 'react'
 import { ModuleHomeTabs } from '../module-home/ui'
 import { RelationshipsSection, ArPulse as CustomerArPulse } from '../../app/(app)/customers/sections'
-import { ArCockpit } from '../../app/(app)/ar/cockpit/ArCockpit'
-import { SubcontractsWorkspace } from '../../app/(app)/subcontracts/SubcontractsWorkspace'
-import { ApCockpit } from '../../app/(app)/ap/cockpit/ApCockpit'
 import { ApHeaderActions } from '../../app/(app)/ap/sections'
 import { CollectionsShell } from '../../app/(app)/collections/sections'
-import { AttemptDrawer } from '../../app/(app)/collections/AttemptDrawer'
-import { RecoveryDashboard } from '../../app/(app)/collections/RecoveryDashboard'
-import { ExpensesDashboard } from '../../app/(app)/expenses/ExpensesDashboard'
-import { ContractDrawer } from '../../app/(app)/revenue/ContractDrawer'
-import { RunRecognitionButton } from '../../app/(app)/revenue/RunRecognitionButton'
-import { ContractCostDrawer } from '../../app/(app)/revenue/contract-costs/ContractCostDrawer'
-import { ContractCostWorkspace } from '../../app/(app)/revenue/contract-costs/ContractCostWorkspace'
-import { CapitalizeButton } from '../../app/(app)/revenue/contract-costs/CapitalizeButton'
-import { ImportCommissionsButton } from '../../app/(app)/revenue/contract-costs/ImportCommissionsButton'
-import { RunAmortizationButton } from '../../app/(app)/revenue/contract-costs/RunAmortizationButton'
-import { PreBillingWorkspace } from '../../app/(app)/projects/pre-billing/PreBillingWorkspace'
-import { PropertyManagementWorkspace } from '../../app/(app)/property-management/PropertyManagementWorkspace'
-import { CaptureList } from '../../app/(app)/ap/capture/sections'
-import { CaptureReviewDrawer } from '../../app/(app)/ap/capture/CaptureReviewDrawer'
-import { CaptureUploadButton } from '../../app/(app)/ap/capture/CaptureUploadButton'
 import { ItemDrawer } from '../../app/(app)/items/ItemDrawer'
 import { ItemDrawerSlot } from '../../app/(app)/items/ItemDrawerSlot'
-import { NewItemButton } from '../../app/(app)/items/NewItemButton'
-import { NewMovementButton } from '../../app/(app)/inventory/NewMovementButton'
-import { InventoryActionDrawer } from '../../app/(app)/inventory/InventoryActionDrawer'
-import { NewExpenseButton } from '../../app/(app)/expenses/NewExpenseButton'
-import { ExpenseActions } from '../../app/(app)/expenses/ExpenseActions'
 import { buildListDrawerHref } from '../../lib/list-params'
-import { NewOrderButton } from '../../app/(app)/_order/NewOrderButton'
-import { NewOrderRedirect } from '../../app/(app)/_order/NewOrderRedirect'
-import { StoredValueDrawer, StoredValueIssueDrawer } from '../../app/(app)/stored-value/StoredValueDrawers'
-import { NewProjectButton } from '../../app/(app)/projects/NewProjectButton'
-import { NewProjectRedirect } from '../../app/(app)/projects/NewProjectRedirect'
-import { ProjectDrawer } from '../../app/(app)/projects/ProjectDrawer'
 import Link from 'next/link'
-import { DemandPlanActions } from '../../app/(app)/inventory/planning/DemandPlanActions'
-import { DemandSuggestionDrawer } from '../../app/(app)/inventory/planning/DemandSuggestionDrawer'
-import { ChannelOrderDrawerSlot, ChannelReplayAll } from '../../app/(app)/channels/ChannelWidgets'
-import { ChannelPostingForm } from '../../app/(app)/channels/ChannelPostingForm'
 import type { ChannelOrderDrawerData } from '../../app/(app)/channels/order-detail'
 import { str, type WidgetRenderer } from './widget-props'
 

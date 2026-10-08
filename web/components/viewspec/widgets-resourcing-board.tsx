@@ -1,7 +1,9 @@
 import type { ComponentProps } from 'react'
-import { StaffingBoard } from '../../app/(app)/resourcing/board/StaffingBoard'
-import { DemandRail } from '../../app/(app)/resourcing/board/DemandRail'
-import { AssignmentDrawer } from '../../app/(app)/resourcing/AssignmentDrawer'
+import {
+  StaffingBoard,
+  DemandRail,
+  AssignmentDrawer,
+} from './native-widgets.client'
 import { type WidgetRenderer } from './widget-props'
 
 /** Resourcing board, demand and assignment-drawer adapters. */

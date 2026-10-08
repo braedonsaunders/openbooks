@@ -1,7 +1,9 @@
 import type { ComponentProps } from 'react'
-import { ClockControls } from '../field-time/ClockControls'
-import { CrewWorkspace } from '../field-time/CrewWorkspace'
-import { FieldTimeSetup } from '../field-time/FieldTimeSetup'
+import {
+  ClockControls,
+  CrewWorkspace,
+  FieldTimeSetup,
+} from './native-widgets.client'
 import { str, type WidgetRenderer } from './widget-props';
 
 /**

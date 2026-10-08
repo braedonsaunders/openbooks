@@ -1,5 +1,5 @@
 import type { ComponentProps } from 'react'
-import { RequestDrawer } from '../../app/(app)/resourcing/requests/RequestDrawer'
+import { RequestDrawer } from './native-widgets.client'
 
 type RequestDrawerProps = ComponentProps<typeof RequestDrawer>
 

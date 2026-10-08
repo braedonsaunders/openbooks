@@ -1,35 +1,37 @@
-import { NativeListDrawer } from '../native-list-drawer'
+import {
+  NativeListDrawer,
+  TypeBuilderDrawer,
+  SalesWorkspace,
+  CrmSetupWorkspace,
+  ExportClient,
+  ImportWizard,
+  InternalBillingDrawer,
+  TrashList,
+  FolderTree,
+  FileList,
+  FileDrawer,
+  FolderDrawer,
+  UploadButton,
+  NewFolderButton,
+  WeeklyGrid,
+  CrmNewButton,
+  OpportunityDrawer,
+  OpportunityViewSwitcher,
+  ActivityDrawer,
+  NewRecordButton,
+  RecordDrawer,
+  DocumentRowActions,
+  NewDocumentButton,
+  NewPartyButton,
+  PartyDrawer,
+} from './native-widgets.client'
 import { type ComponentProps } from 'react'
 import { RecordCountCell, InNavCell } from '../../app/(app)/records/types/sections'
-import { TypeBuilderDrawer } from '../../app/(app)/records/types/TypeBuilderDrawer'
 import { PartyRolesCell } from '../../app/(app)/parties/sections'
-import { SalesWorkspace } from '../../app/(app)/crm/sales/SalesWorkspace'
-import { CrmSetupWorkspace } from '../../app/(app)/admin/setup/crm/CrmSetupWorkspace'
-import { ExportClient } from '../../app/(app)/data/export/ExportClient'
-import { ImportWizard } from '../../app/(app)/data/import/ImportWizard'
-import { InternalBillingDrawer } from '../../app/(app)/internal-billing/InternalBillingDrawer'
-import { TrashList } from '../../app/(app)/documents/trash/TrashList'
 import { TrashBackLink } from '../../app/(app)/documents/trash/sections'
-import { FolderTree } from '../../app/(app)/documents/FolderTree'
-import { FileList } from '../../app/(app)/documents/FileList'
-import { FileDrawer } from '../../app/(app)/documents/FileDrawer'
-import { FolderDrawer } from '../../app/(app)/documents/FolderDrawer'
-import { UploadButton } from '../../app/(app)/documents/UploadButton'
-import { NewFolderButton } from '../../app/(app)/documents/NewFolderButton'
 import { DocumentsActions, DocumentsBreadcrumb, DocumentsLinkNotice } from '../../app/(app)/documents/sections'
-import { WeeklyGrid } from '../../app/(app)/timesheets/WeeklyGrid'
-import { CrmNewButton } from '../../app/(app)/crm/CrmNewButton'
-import { OpportunityDrawer } from '../../app/(app)/crm/OpportunityDrawer'
-import { OpportunityViewSwitcher } from '../../app/(app)/crm/OpportunityKanban'
-import { ActivityDrawer } from '../../app/(app)/crm/ActivityDrawer'
 import { ForecastKpiGroup, ForecastExcludedNote, ManageQuotasButton, QuotaEmptyAction, ForecastSnapshotAction } from '../../app/(app)/crm/forecasts/sections'
-import { NewRecordButton } from '../../app/(app)/records/[typeKey]/NewRecordButton'
-import { RecordDrawer } from '../../app/(app)/records/[typeKey]/RecordDrawer'
-import { DocumentRowActions } from '../document-row-actions'
-import { NewDocumentButton } from '../new-document-button'
 import { DOC_KINDS } from '../../lib/document-kinds'
-import { NewPartyButton } from '../../app/(app)/parties/NewPartyButton'
-import { PartyDrawer } from '../../app/(app)/parties/PartyDrawer'
 import { RelatedTxnSlot } from './related-txn-slot'
 import { Badge } from '@openbooks/ui'
 import Link from 'next/link'

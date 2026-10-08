@@ -1,6 +1,8 @@
 import type { ComponentProps } from 'react'
-import { MySchedule } from '../scheduling/MySchedule'
-import { SchedulingWorkspace } from '../scheduling/SchedulingWorkspace'
+import {
+  MySchedule,
+  SchedulingWorkspace,
+} from './native-widgets.client'
 import { type WidgetRenderer } from './widget-props'
 
 /** The unified scheduling workspace: people boards and task boards. */

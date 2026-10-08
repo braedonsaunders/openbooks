@@ -1,28 +1,31 @@
 import { type ComponentProps } from 'react'
-import { Pagination } from '../pagination'
+import {
+  Pagination,
+  LienWaiverToolbar,
+  LienWaiverDrawer,
+  NewFilingButton,
+  ApprovalsTable,
+  DelegationBanner,
+  OutOfOfficeButton,
+  AccountsHierarchyTable,
+  AccountDrawer,
+  NewAccountButton,
+  FilingWorksheet,
+  NewBudgetButton,
+  BudgetDrawer,
+  JournalDrawer,
+  JournalEntryDrawer,
+  NewJournalButton,
+  MatrixFilters,
+  VendorComplianceDrawer,
+} from './native-widgets.client'
 import { WaiverNumberCell } from '../../app/(app)/compliance/lien-waivers/sections'
-import { LienWaiverToolbar } from '../../app/(app)/compliance/lien-waivers/LienWaiverToolbar'
-import { LienWaiverDrawer } from '../../app/(app)/compliance/lien-waivers/LienWaiverDrawer'
-import { NewFilingButton } from '../../app/(app)/compliance/information-returns/NewFilingButton'
 import { VendorComplianceMatrix } from '../../app/(app)/compliance/vendors/Matrix'
 import { KindChips, ApprovalEngineCell, SubmittedDocumentCell } from '../../app/(app)/inbox/sections'
-import { ApprovalsTable } from '../../app/(app)/inbox/ApprovalsTable'
-import { DelegationBanner, OutOfOfficeButton } from '../../app/(app)/inbox/DelegationControls'
 import { AccountNameCell, AccountRegisterCell } from '../../app/(app)/accounts/sections'
-import { AccountsHierarchyTable } from '../../app/(app)/accounts/AccountsHierarchyTable'
-import { AccountDrawer } from '../../app/(app)/accounts/AccountDrawer'
-import { NewAccountButton } from '../../app/(app)/accounts/NewAccountButton'
-import { FilingWorksheet } from '../../app/(app)/compliance/information-returns/[id]/FilingWorksheet'
 import { BlockedBillsSection, ComplianceSetupBanner, ExpiringVendorsSection, ReadinessPanel, WaiversPanel } from '../../app/(app)/compliance/sections'
-import { NewBudgetButton } from '../../app/(app)/budgets/NewBudgetButton'
-import { BudgetDrawer } from '../../app/(app)/budgets/BudgetDrawer'
 import { CloseActionCell, CloseReadinessCell, CloseStatusCell, SingleBookLabel } from '../../app/(app)/close/sections'
 import { JournalDraftsPanel } from '../../app/(app)/journal/sections'
-import { JournalDrawer } from '../../app/(app)/journal/JournalDrawer'
-import { JournalEntryDrawer } from '../../app/(app)/journal/JournalEntryDrawer'
-import { NewJournalButton } from '../../app/(app)/journal/NewJournalButton'
-import { MatrixFilters } from '../../app/(app)/compliance/vendors/MatrixFilters'
-import { VendorComplianceDrawer } from '../../app/(app)/compliance/vendors/VendorComplianceDrawer'
 import { Button } from '@openbooks/ui'
 import Link from 'next/link'
 import { str, num, stringRecord, type WidgetRenderer } from './widget-props'

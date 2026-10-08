@@ -1,25 +1,28 @@
-import { OpeningBalancesWorkspace } from '../../app/(app)/payroll/opening-balances/OpeningBalancesWorkspace'
+import {
+  OpeningBalancesWorkspace,
+  RetroWorkspace,
+  YearEndView,
+  SeparationsView,
+  OpeningBalancesView,
+  EntitlementOpeningsView,
+  EmployerLevyOpeningsView,
+  ParallelRunView,
+  WorkLocationsView,
+  LaborCostingWorkspace,
+  RunWizard,
+  NewRunButton,
+  AnomalyDrawer,
+  AnomalyScanButton,
+} from './native-widgets.client'
 import { CompensationPackagesSection } from '../../app/(app)/admin/setup/payroll/CompensationPackagesSection'
 import { type ComponentProps } from 'react'
-import { RetroWorkspace } from '../../app/(app)/payroll/retro/RetroWorkspace'
 import { RemittanceApNote, RemittancesView } from '../../app/(app)/payroll/remittances/sections'
-import { YearEndView } from '../../app/(app)/payroll/year-end/YearEndView'
-import { SeparationsView } from '../../app/(app)/payroll/separations/SeparationsView'
-import { OpeningBalancesView } from '../../app/(app)/payroll/opening-balances/OpeningBalancesView'
-import { EntitlementOpeningsView } from '../../app/(app)/payroll/opening-balances/EntitlementOpeningsView'
-import { EmployerLevyOpeningsView } from '../../app/(app)/payroll/opening-balances/EmployerLevyOpeningsView'
-import { ParallelRunView } from '../../app/(app)/payroll/parallel-run/ParallelRunView'
-import { WorkLocationsView } from '../../app/(app)/payroll/work-locations/WorkLocationsView'
-import { LaborCostingWorkspace } from '../../app/(app)/admin/setup/labor-costing/LaborCostingWorkspace'
 import { LaborPricingHeading, LaborPricingView } from '../../app/(app)/admin/setup/labor-pricing/sections'
-import { RunWizard } from '../../app/(app)/payroll/runs/[id]/RunWizard'
 import { PayrollSetupHeader, PayrollSetupBanner, PayrollSetupTabs, PacksTabSlot, AccountsTabSlot, PaydayTabSlot, RatesTabSlot, EmployerFactsTabSlot, WorkSchedulesTabSlot, DerivedPreviewTabSlot, HolidaysTabSlot, HolidayCalendarTabSlot } from '../../app/(app)/admin/setup/payroll/sections'
 import { Sparkles } from 'lucide-react'
 import { cn } from '@openbooks/ui'
 import { PayrollChecklistBanner, PayrollPreviousRun, PayrollManageLinks, PayrollScheduleList, type PayrollPreviousRunProps, type PayrollScheduleListProps } from '../../app/(app)/payroll/sections'
-import { NewRunButton } from '../../app/(app)/payroll/_ui/NewRunButton'
 // HR-21 begin: anomaly checks islands (verbatim adapters only).
-import { AnomalyDrawer, AnomalyScanButton } from '../../app/(app)/payroll/anomalies/islands'
 // HR-21 end
 import { ArrowUpRight } from 'lucide-react'
 import { BookOpen } from 'lucide-react'

@@ -1,11 +1,14 @@
-import { NativeListDrawer } from '../native-list-drawer'
+import {
+  NativeListDrawer,
+  NewWarehouseButton,
+  NewWarehouseDrawer,
+  PutawayQueue,
+  WarehousesPanel,
+  ReplenishmentProposals,
+  NewPickListDrawer,
+  BulkBuyClient,
+} from './native-widgets.client'
 import { type ComponentProps } from 'react'
-import { NewWarehouseButton, NewWarehouseDrawer } from '../../app/(app)/warehouse/NewWarehouseDrawer'
-import { PutawayQueue } from '../../app/(app)/warehouse/PutawayQueue'
-import { WarehousesPanel } from '../../app/(app)/warehouse/WarehousesPanel'
-import { ReplenishmentProposals } from '../../app/(app)/reports/replenishment/ReplenishmentProposals'
-import { NewPickListDrawer } from '../../app/(app)/picks/NewPickListDrawer'
-import { BulkBuyClient } from '../../app/(app)/shipments/labels/BulkBuyClient'
 import { str, type WidgetRenderer } from './widget-props'
 
 /** Warehouse adapters: the cockpit's tie-out hero, putaway queue and create

@@ -1,5 +1,5 @@
 import type { ComponentProps } from 'react'
-import { RetainerDrawer } from '../../app/(app)/resourcing/retainers/RetainerDrawer'
+import { RetainerDrawer } from './native-widgets.client'
 
 type RetainerDrawerProps = ComponentProps<typeof RetainerDrawer>
 
