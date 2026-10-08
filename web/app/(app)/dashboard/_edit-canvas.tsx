@@ -113,7 +113,7 @@ export async function loadDashboardView(
   const [metrics, cardNodes, apps] = await Promise.all([
     loadDashboardMetrics(authz, visibleIds, undefined, locale),
     loadInsightCardNodes(authz, layout.widgets.map((w) => w.id)),
-    loadDashboardApps(authz),
+    layout.widgets.some(widget => appKeyFromWidgetId(widget.id)) ? loadDashboardApps(authz) : Promise.resolve([]),
   ])
 
   const nodes: Record<string, React.ReactNode> = {}

@@ -4,7 +4,7 @@ import { actorAllowedSubsidiaryIds } from "../organization/actor-subsidiaries.ts
 import { featureEnabled } from "../organization/feature-registry.ts";
 import {
   assertUnrestrictedScope,
-  lockScopeRows,
+  lockEmploymentScopeRows,
   ScopeNotFoundError,
   subsidiaryScopeAllows,
 } from "../organization/subsidiary-scope.ts";
@@ -401,23 +401,24 @@ export async function lockEmploymentsForScope(
   const orderedIds = [...new Set(ids)].sort();
   if (orderedIds.length === 0) return [];
   const allowed = await actorAllowedSubsidiaryIds(exec, scope.orgId, scope.actorId);
-  const subjects: TrustedEmploymentSubject[] = [];
-  for (const id of orderedIds) {
-    try {
-      await lockScopeRows(exec, scope.orgId, [{ kind: "employment", id }], allowed, "update");
-      subjects.push(await loadTrustedEmploymentSubject(exec, scope.orgId, id));
-    } catch (error) {
-      if (error instanceof ScopeNotFoundError) {
-        if (scope.outOfScope === "filter") continue;
-        throw new HrmAuthorizationError(
-          "Employment is not visible in this organization and legal-entity scope.",
-        );
-      }
-      if (scope.outOfScope === "filter" && error instanceof HrmAuthorizationError) continue;
-      throw error;
+  try {
+    const rows = await lockEmploymentScopeRows(exec, scope.orgId, orderedIds, allowed, scope.outOfScope);
+    return rows.map<TrustedEmploymentSubject>(row => ({
+      id: row.id,
+      orgId: row.orgId,
+      workerPartyId: row.workerPartyId,
+      employerSubsidiaryId: row.subsidiaryId,
+      revision: row.revision,
+      [trustedHrmSubject]: true,
+    }));
+  } catch (error) {
+    if (error instanceof ScopeNotFoundError) {
+      throw new HrmAuthorizationError(
+        "Employment is not visible in this organization and legal-entity scope.",
+      );
     }
+    throw error;
   }
-  return subjects;
 }
 
 /** Employer-scope half of every gate: the actor must see the employer entity. */

@@ -139,7 +139,8 @@ export async function loadPayouts(
 
   // Unreconciled payouts: posted batches whose bank legs match no statement
   // line yet — the same derivation the drawer tie-out reads.
-  const unreconciled = (await db.execute<{ count: string }>(sql`
+  const [unreconciledResult, unmatchedResult, inTransitResult, queueResult, batchesResult] = await Promise.all([
+    db.execute<{ count: string }>(sql`
     select count(*)::text as count from psp_settlement_batches b
      where b.org_id = ${orgId} and b.status = 'posted'${subsidiaryFilter}
        and not exists (
@@ -148,21 +149,20 @@ export async function loadPayouts(
           where m.org_id = b.org_id and jl.entry_id = b.journal_entry_id
             and jl.account_id = b.bank_account_id
        )
-  `)).rows[0]
-  const unmatched = (await db.execute<{ count: string }>(sql`
+  `),
+    db.execute<{ count: string }>(sql`
     select count(*)::text as count from psp_settlement_lines l
       join psp_settlement_batches b on b.org_id = l.org_id and b.id = l.batch_id
      where l.org_id = ${orgId} and l.document_id is null
        and l.kind in ('charge', 'refund', 'dispute', 'dispute_reversal')${subsidiaryFilter}
-  `)).rows[0]
-  const inTransit = (await db.execute<{ count: string; total: string | null }>(sql`
+  `),
+    db.execute<{ count: string; total: string | null }>(sql`
     select count(*)::text as count, sum(a.amount)::text as total
       from psp_payout_accruals a
       join psp_settlement_batches b on b.org_id = a.org_id and b.id = a.batch_id
      where a.org_id = ${orgId} and a.status = 'accrued'${subsidiaryFilter}
-  `)).rows[0]
-
-  const queue = (await db.execute<PayoutQueueRow>(sql`
+  `),
+    db.execute<PayoutQueueRow>(sql`
     select l.id as "lineId", l.batch_id as "batchId", b.provider,
            b.external_ref as "externalRef", b.settlement_date::text as "settlementDate",
            l.kind, l.amount::text as amount, l.currency
@@ -172,9 +172,8 @@ export async function loadPayouts(
        and l.kind in ('charge', 'refund', 'dispute', 'dispute_reversal')${subsidiaryFilter}
      order by b.settlement_date desc, l.line_number
      limit 25
-  `)).rows
-
-  const batches = (await db.execute<{
+  `),
+    db.execute<{
     id: string
     provider: string
     externalRef: string
@@ -195,25 +194,33 @@ export async function loadPayouts(
      where b.org_id = ${orgId}${subsidiaryFilter}
      order by b.settlement_date desc, b.created_at desc
      limit 50
-  `)).rows
+  `),
+  ])
+  const unreconciled = unreconciledResult.rows[0]
+  const unmatched = unmatchedResult.rows[0]
+  const inTransit = inTransitResult.rows[0]
+  const queue = queueResult.rows
+  const batches = batchesResult.rows
 
   const batchIds = batches.map((row) => row.id)
-  const tied = batchIds.length > 0
-    ? new Set((await db.execute<{ id: string }>(sql`
+  const [tiedRows, accruedRows]: [{ rows: { id: string }[] }, { rows: { batch_id: string }[] }] = batchIds.length > 0
+    ? await Promise.all([
+      db.execute<{ id: string }>(sql`
         select distinct b.id from psp_settlement_batches b
           join journal_lines jl on jl.org_id = b.org_id and jl.entry_id = b.journal_entry_id
           join reconciliation_matches m on m.org_id = jl.org_id and m.journal_line_id = jl.id
          where b.org_id = ${orgId} and b.id = any(${`{${batchIds.join(',')}}`}::uuid[])
            and jl.account_id = b.bank_account_id
-      `)).rows.map((row) => row.id))
-    : new Set<string>()
-  const accrued = batchIds.length > 0
-    ? new Set((await db.execute<{ batch_id: string }>(sql`
+      `),
+      db.execute<{ batch_id: string }>(sql`
         select distinct batch_id from psp_payout_accruals
          where org_id = ${orgId} and status = 'accrued'
            and batch_id = any(${`{${batchIds.join(',')}}`}::uuid[])
-      `)).rows.map((row) => row.batch_id))
-    : new Set<string>()
+      `),
+    ])
+    : [{ rows: [] }, { rows: [] }]
+  const tied = new Set(tiedRows.rows.map((row) => row.id))
+  const accrued = new Set(accruedRows.rows.map((row) => row.batch_id))
 
   const batchRows: PayoutBatchRow[] = batches.map((row) => ({
     id: row.id,

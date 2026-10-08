@@ -94,12 +94,14 @@ export async function loadBankingImports(
   const canImport = can(authz, 'banking.reconcile')
   // The import picker and the operational panel name only the caller's own
   // subsidiaries' accounts, mirroring the feed API's list filter.
-  const reconAccounts = canImport
-    ? (await listReconcilableBankAccounts(authz.user.orgId))
-        .filter((a) => subsidiaryScopeAllows(authz.allowedSubsidiaryIds, a.subsidiaryId))
-    : []
-  const feeds = feedsEnabled
-    ? ((await db.execute<FeedRow>(sql`
+  const [reconAccounts, feeds] = await Promise.all([
+    canImport
+      ? listReconcilableBankAccounts(authz.user.orgId).then(accounts =>
+        accounts.filter((a) => subsidiaryScopeAllows(authz.allowedSubsidiaryIds, a.subsidiaryId)),
+      )
+      : [],
+    feedsEnabled
+      ? db.execute<FeedRow>(sql`
         select c.name, c.provider, c.status, c.last_sync_at, c.last_attempt_at, c.last_error, c.is_active,
                a.number as account_number, a.name as account_name
           from bank_feed_connections c
@@ -107,8 +109,9 @@ export async function loadBankingImports(
          where c.org_id = ${authz.user.orgId} and c.provider in ('plaid','gocardless','truelayer')
            ${subsidiaryVisibleFilter(sql`a.subsidiary_id`, authz.allowedSubsidiaryIds)}
          order by c.created_at desc
-      `))).rows
-    : []
+      `).then(result => result.rows)
+      : [],
+  ])
 
   const neverLabel = t('bankFeeds.operational.never')
   // With no reconcilable account there is nothing to import INTO: the empty

@@ -116,6 +116,12 @@ export const POST = defineRoute({
       // restricted reader's ledger sources arrive pre-collapsed per
       // (entry, account, currency) before any caller filter, dimension, sort,
       // or limit, so no card can isolate one employee's pay.
+      const [labels, today, catalog, startMonth] = await Promise.all([
+        insightLabelResolver(),
+        businessToday(gate.user.orgId),
+        reportEntityCatalog(gate),
+        fiscalStartMonth(gate.user.orgId),
+      ]);
       const result = await runInsightQuery(
         pool,
         query,
@@ -123,11 +129,11 @@ export const POST = defineRoute({
         gate.allowedSubsidiaryIds === null
           ? null
           : [...gate.allowedSubsidiaryIds],
-        await insightLabelResolver(),
-        await businessToday(gate.user.orgId),
+        labels,
+        today,
         allowedBookIds,
-        await reportEntityCatalog(gate),
-        await fiscalStartMonth(gate.user.orgId),
+        catalog,
+        startMonth,
       );
       return NextResponse.json(result);
     } catch (e) {

@@ -44,7 +44,6 @@ import {
   sumMoney,
   weekStart,
   ZERO_MONEY,
-  type ForecastModelParams,
   type OpenItem,
   type PaymentStats,
 } from '@/lib/cash/core'
@@ -551,7 +550,25 @@ export async function loadDashboardMetrics(
   // the cockpit shows. Gated on the single widget-feature map: with the
   // feature off the reader never runs and the tile renders its empty state.
   const wantResourcing = need('resourcingPulse') && (await widgetFeatureOn(orgId, 'resourcing-pulse'))
-  const [totals, banks, baseCurrency, arItems, apItems, recon, expenses, closeReadiness, arStats, apStats, pl, runway, recentEntries, draftDocuments, unifiedApprovals, agentFindings, resourcingPulse] = await Promise.all([
+  const personaKeys = [
+    'inboxTasksTop', 'inboxApprovalsTop', 'inboxCount', 'payTile', 'balances',
+    'whosOut', 'upcoming', 'celebrations', 'announcements', 'teamSteps',
+    'teamNudges', 'teamHeadcount', 'teamQuals', 'adminAttention',
+    'workflowErrors', 'adminCalendar',
+  ] as const
+  const personaNeeded = new Set<keyof PersonaMetrics>(personaKeys.filter(key => needed.has(key)))
+  let period: Promise<ResolvedPeriod> | null = null
+  const widgetContext: DashboardWidgetContext = {
+    authz,
+    orgId,
+    today,
+    subsidiaryIds: subIds,
+    allowedSubsidiaryIds: authz.allowedSubsidiaryIds,
+    period: () => (period ??= resolvePeriod(undefined, { orgId, today })),
+    cashPosition: cashPositionOnce,
+  }
+  const wantExpected = need('expectedReceipts30d', 'expectedPayments30d')
+  const [totals, banks, baseCurrency, arItems, apItems, recon, expenses, closeReadiness, arStats, apStats, pl, runway, recentEntries, draftDocuments, unifiedApprovals, agentFindings, resourcingPulse, expectedModel, persona, financial, cash, customers, vendors, projects, risk] = await Promise.all([
     // Posted-ledger line count and integrity sum come from the maintained
     // gl_month_activity aggregate — counting/summing the raw lines scanned the
     // whole ledger on every dashboard render.
@@ -774,6 +791,14 @@ export async function loadDashboardMetrics(
           overallocatedWeeks: home.overallocatedWeeks,
         }))
       : Promise.resolve(null),
+    wantExpected ? cashflowModel(orgId) : Promise.resolve(forecastModelParams({})),
+    loadPersonaMetrics(authz, personaNeeded),
+    loadFinancialWidgetMetrics(widgetContext, need),
+    loadCashWidgetMetrics(widgetContext, need),
+    loadCustomerWidgetMetrics(widgetContext, need),
+    loadVendorWidgetMetrics(widgetContext, need),
+    loadProjectWidgetMetrics(widgetContext, need),
+    loadRiskWidgetMetrics(widgetContext, need),
   ])
 
   const t = totals.rows[0]!
@@ -798,8 +823,6 @@ export async function loadDashboardMetrics(
   // 29–30) and silently drop predictions the cut-off would keep. The
   // organization's forecast-model knobs ride along, so a tuned push ladder
   // moves the tile and the cockpit together.
-  const wantExpected = need('expectedReceipts30d') || need('expectedPayments30d')
-  const expectedModel: ForecastModelParams = wantExpected ? await cashflowModel(orgId) : forecastModelParams({})
   const forecast30d = (items: OpenItem[], stats: PaymentStats | null): string | null => {
     if (!stats) return null
     const asOf = parseISO(today)
@@ -858,38 +881,6 @@ export async function loadDashboardMetrics(
     })
     .map((row) => ({ ...row, href: approvalRecordHref(row.targetKind, row.targetId) }))
   const agent = (agentFindings as unknown as { rows: Array<{ open: number; proposals: number; last_run: string | Date | null }> }).rows[0]!
-  // HR-15 persona fields: only the fields the visible widgets render are
-  // queried — a denied widget's reader never runs.
-  const personaKeys = [
-    'inboxTasksTop', 'inboxApprovalsTop', 'inboxCount', 'payTile', 'balances',
-    'whosOut', 'upcoming', 'celebrations', 'announcements', 'teamSteps',
-    'teamNudges', 'teamHeadcount', 'teamQuals', 'adminAttention',
-    'workflowErrors', 'adminCalendar',
-  ] as const
-  const personaNeeded = new Set<keyof PersonaMetrics>(
-    personaKeys.filter((key) => needed.has(key)),
-  )
-  // Analytics widget readers: each module reads only the fields its visible
-  // widgets list, over the caller's scope and the dashboards' opening period.
-  let period: Promise<ResolvedPeriod> | null = null
-  const widgetContext: DashboardWidgetContext = {
-    authz,
-    orgId,
-    today,
-    subsidiaryIds: subIds,
-    allowedSubsidiaryIds: authz.allowedSubsidiaryIds,
-    period: () => (period ??= resolvePeriod(undefined, { orgId, today })),
-    cashPosition: cashPositionOnce,
-  }
-  const [persona, financial, cash, customers, vendors, projects, risk] = await Promise.all([
-    loadPersonaMetrics(authz, personaNeeded),
-    loadFinancialWidgetMetrics(widgetContext, need),
-    loadCashWidgetMetrics(widgetContext, need),
-    loadCustomerWidgetMetrics(widgetContext, need),
-    loadVendorWidgetMetrics(widgetContext, need),
-    loadProjectWidgetMetrics(widgetContext, need),
-    loadRiskWidgetMetrics(widgetContext, need),
-  ])
   return {
     baseCurrency,
     journalLineCount: Number(t.journal_lines),

@@ -294,23 +294,31 @@ async function loadItems(
   oneOnOneId: string,
   authorPartyId: string | null,
 ): Promise<OneOnOneItemDTO[]> {
-  const rows = (await db.execute<StoredItem>(sql`
-    select id, kind, author_party_id, body, visibility, status,
+  return (await loadItemsByMeeting(db, orgId, [oneOnOneId], authorPartyId)).get(oneOnOneId.toLowerCase()) ?? [];
+}
+
+async function loadItemsByMeeting(
+  db: SqlExecutor,
+  orgId: string,
+  oneOnOneIds: readonly string[],
+  authorPartyId: string | null,
+): Promise<Map<string, OneOnOneItemDTO[]>> {
+  const items = new Map<string, OneOnOneItemDTO[]>();
+  if (!oneOnOneIds.length) return items;
+  const rows = (await db.execute<StoredItem & { one_on_one_id: string }>(sql`
+    select one_on_one_id, id, kind, author_party_id, body, visibility, status,
            assignee_party_id, due_on::text as due_on, position,
            carried_from_item_id::text as carried_from_item_id
       from hrm_one_on_one_items
-     where org_id = ${orgId} and one_on_one_id = ${oneOnOneId}
-     order by position, created_at
+     where org_id = ${orgId}
+       and one_on_one_id in (${sql.join(oneOnOneIds.map(id => sql`${id}::uuid`), sql`, `)})
+     order by one_on_one_id, position, created_at
   `)).rows;
-  return rows
-    .filter((row) => {
-      // Private items are readable only by their author — enforced at
-      // read, never in the UI alone. HR sees shared content but never
-      // another person's private notes either: private means author only.
-      if (row.visibility === "private" && row.author_party_id !== authorPartyId) return false;
-      return true;
-    })
-    .map((row) => ({
+  for (const row of rows) {
+    // Private notes stay author-only for both lists and selected meetings.
+    if (row.visibility === "private" && row.author_party_id !== authorPartyId) continue;
+    const meetingItems = items.get(row.one_on_one_id) ?? [];
+    meetingItems.push({
       id: row.id,
       kind: row.kind,
       authorPartyId: row.author_party_id,
@@ -321,7 +329,10 @@ async function loadItems(
       dueOn: row.due_on,
       position: row.position,
       carriedFromItemId: row.carried_from_item_id,
-    }));
+    });
+    items.set(row.one_on_one_id, meetingItems);
+  }
+  return items;
 }
 
 function toDTO(one: StoredOneOnOne, items: readonly OneOnOneItemDTO[]): OneOnOneDTO {
@@ -875,7 +886,7 @@ export async function listOneOnOnes(args: {
       { orgId, actorId, outOfScope: "filter" },
     );
     const visibleEmploymentIds = new Set(visibleEmployments.map((employment) => employment.id));
-    const out: OneOnOneDTO[] = [];
+    const visibleMeetings: StoredOneOnOne[] = [];
     for (const raw of rows) {
       const one: StoredOneOnOne = { ...raw, recurrence: (raw.recurrence ?? null) as StoredOneOnOne["recurrence"] };
       if (!visibleEmploymentIds.has(one.report_employment_id)) continue;
@@ -892,9 +903,10 @@ export async function listOneOnOnes(args: {
           (person.partyId === one.manager_party_id || person.partyId === one.report_party_id)) ||
         (own.includes(one.manager_employment_id) && team.includes(one.report_employment_id));
       if (!visible) continue;
-      out.push(toDTO(one, await loadItems(db, orgId, one.id, person.partyId)));
+      visibleMeetings.push(one);
     }
-    return out;
+    const items = await loadItemsByMeeting(db, orgId, visibleMeetings.map(one => one.id), person.partyId);
+    return visibleMeetings.map(one => toDTO(one, items.get(one.id) ?? []));
   });
 }
 

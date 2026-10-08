@@ -145,14 +145,16 @@ export async function vendorData(
   const { from, to } = period;
   const pFrom = priorYear(from);
   const pTo = priorYear(to);
-  const today = await businessToday(orgId);
+  const [today, config, buckets] = await Promise.all([
+    businessToday(orgId),
+    analyticsConfig(orgId, "vendorPerformance"),
+    fiscalBucketScope(orgId),
+  ]);
   const ref = to < today ? to : today;
   const end = new Date(to + "T00:00:00Z");
   // utcDateFromParts keeps literal years 0001-0099 that Date.UTC would remap
   // onto 1900-1999.
   const start = utcDateFromParts(end.getUTCFullYear(), end.getUTCMonth() - 11, 1);
-  const config = await analyticsConfig(orgId, "vendorPerformance");
-  const buckets = await fiscalBucketScope(orgId);
   // The trend window opens twelve calendar months back — but a fiscal
   // series names whole declared periods, so a straddling first period
   // would read as one partial box under a full-period name. Open at the
@@ -304,22 +306,21 @@ export async function vendorData(
   // then merge per party in presentation. Day counts stay exact — days
   // re-average from summed day-diffs, weighted by paid bills below.
   const spendRowsTyped = spendRows.rows;
-  const spendCtx = await flowRates(orgId, [
+  const flowCtx = await flowRates(orgId, [
     ...spendRowsTyped.map((r) => ({ func: r.func ?? null, date: String(r.late ?? to).slice(0, 10) })),
     ...spendRowsTyped.filter((r) => r.prior_spend != null).map((r) => ({ func: r.func ?? null, date: String(r.late_prior ?? pTo).slice(0, 10) })),
+    ...payRows.rows.map((r) => ({ func: r.func ?? null, date: String(r.late_dt ?? to).slice(0, 10) })),
+    ...monthRows.rows.map((r) => ({ func: r.func ?? null, date: String(r.late ?? to).slice(0, 10) })),
   ]);
   const spendByParty = new Map<string, { name: string; spend: string; priorSpend: string }>();
   for (const r of spendRowsTyped) {
     const cur = spendByParty.get(String(r.id)) ?? { name: strings.displayVendorName(String(r.name)), spend: "0", priorSpend: "0" };
-    cur.spend = add(cur.spend, mulDecimal(String(r.spend ?? 0), spendCtx.rateAt(r.func ?? null, String(r.late ?? to).slice(0, 10))));
+    cur.spend = add(cur.spend, mulDecimal(String(r.spend ?? 0), flowCtx.rateAt(r.func ?? null, String(r.late ?? to).slice(0, 10))));
     if (r.prior_spend != null) {
-      cur.priorSpend = add(cur.priorSpend, mulDecimal(String(r.prior_spend), spendCtx.rateAt(r.func ?? null, String(r.late_prior ?? pTo).slice(0, 10))));
+      cur.priorSpend = add(cur.priorSpend, mulDecimal(String(r.prior_spend), flowCtx.rateAt(r.func ?? null, String(r.late_prior ?? pTo).slice(0, 10))));
     }
     spendByParty.set(String(r.id), cur);
   }
-  const payCtx = await flowRates(orgId, payRows.rows.map((r) => ({
-    func: r.func ?? null, date: String(r.late_dt ?? to).slice(0, 10),
-  })));
   const paidByParty = new Map<string, { paidBills: number; onTime: number; daysSum: number; lateSpend: string; undated: number }>();
   for (const r of payRows.rows) {
     const cur = paidByParty.get(String(r.id)) ?? { paidBills: 0, onTime: 0, daysSum: 0, lateSpend: "0", undated: 0 };
@@ -327,18 +328,15 @@ export async function vendorData(
     cur.onTime += Number(r.on_time ?? 0);
     cur.daysSum += Number(r.days_sum ?? 0);
     cur.lateSpend = add(cur.lateSpend, mulDecimal(String(r.late_amount ?? 0),
-      payCtx.rateAt(r.func ?? null, String(r.late_dt ?? to).slice(0, 10))));
+      flowCtx.rateAt(r.func ?? null, String(r.late_dt ?? to).slice(0, 10))));
     cur.undated += Number(r.undated ?? 0);
     paidByParty.set(String(r.id), cur);
   }
-  const monthCtx = await flowRates(orgId, monthRows.rows.map((r) => ({
-    func: r.func ?? null, date: String(r.late ?? to).slice(0, 10),
-  })));
   const spendByBucket = new Map<string, string>();
   for (const r of monthRows.rows) {
     const key = String(r.bucket);
     spendByBucket.set(key, add(spendByBucket.get(key) ?? "0",
-      mulDecimal(String(r.spend ?? 0), monthCtx.rateAt(r.func ?? null, String(r.late ?? to).slice(0, 10)))));
+      mulDecimal(String(r.spend ?? 0), flowCtx.rateAt(r.func ?? null, String(r.late ?? to).slice(0, 10)))));
   }
   const bucketLabels = new Map<string, string>();
   for (const r of monthRows.rows) {
