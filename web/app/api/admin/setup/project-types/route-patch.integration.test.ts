@@ -36,7 +36,7 @@ registerHooks({
 const { db, withBypassContext } = await import("@openbooks/engine/src/platform/db.ts");
 const { sql } = await import("drizzle-orm");
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/src/testing/fixtures.ts");
-const { POST, PATCH } = await import("./route");
+const { POST, PATCH, DELETE } = await import("./route");
 const { BUILTIN_PROJECT_TYPES } = await import("@openbooks/schema");
 
 const patchJson = (body: unknown) =>
@@ -135,7 +135,7 @@ test("project-type authoring preserves declared invoicing policies and refuses u
     const { id } = await created.json() as { id: string };
     const read = () => withBypassContext(async () => {
       const row = await db.execute<{ invoicing_profile: unknown }>(sql`select invoicing_profile from project_types where org_id = ${org.orgId} and id = ${id}`);
-      const audits = await db.execute<{ action: string; actor_id: string; changes: { before?: { invoicing_profile: unknown }; after: { invoicingProfile?: unknown; invoicing_profile?: unknown } } }>(sql`
+      const audits = await db.execute<{ action: string; actor_id: string; changes: { before?: { invoicing_profile: unknown; is_active?: boolean }; after: { invoicingProfile?: unknown; invoicing_profile?: unknown; is_active?: boolean } } }>(sql`
         select action, actor_id, changes from audit_log where org_id = ${org.orgId} and table_name = 'project_types' and row_id = ${id} order by at, id`);
       return { profile: row.rows[0]!.invoicing_profile, audits: audits.rows };
     });
@@ -172,6 +172,18 @@ test("project-type authoring preserves declared invoicing policies and refuses u
         assert.match(body.error, /choose an active company item/);
       assert.deepEqual(await read(), second);
     }
+    const archived = await DELETE(new Request(`http://audit.local/api/admin/setup/project-types?id=${id}`, { method: 'DELETE' }));
+    assert.equal(archived.status, 200, JSON.stringify(await archived.clone().json()));
+    assert.equal((await typeRow(org.orgId, id)).is_active, false);
+    const final = await read();
+    assert.deepEqual(final.profile, changed);
+    assert.equal(final.audits.length, 3);
+    const archive = final.audits.find(audit => audit.action === 'archive')!;
+    assert.equal(archive.actor_id, state.user.id);
+    assert.equal(archive.changes.before!.is_active, true);
+    assert.equal(archive.changes.after.is_active, false);
+    assert.deepEqual(archive.changes.before!.invoicing_profile, changed);
+    assert.deepEqual(archive.changes.after.invoicing_profile, changed);
   } finally {
     await withBypassContext(() => dropScratchOrg(org.orgId));
     await withBypassContext(() => dropScratchOrg(neighbor.orgId));

@@ -90,7 +90,7 @@ const updateBodySchema = z.object({
 
 export const runtime = 'nodejs'
 
-class InvoicingItemRefusal extends Error {
+class ProjectTypeWriteRefusal extends Error {
   readonly status = 422;
 }
 
@@ -102,7 +102,7 @@ async function lockInvoicingItems(tx: ProjectTypeTransaction, orgId: string, pro
     const result = await tx.execute<{ id: string }>(sql`
       select id from items where org_id = ${orgId} and id = ${id} and is_active = true for share
     `);
-    if (result.rows.length !== 1) throw new InvoicingItemRefusal(`Invoicing item ${id} is unavailable in this company; choose an active company item before saving the project type`);
+    if (result.rows.length !== 1) throw new ProjectTypeWriteRefusal(`Invoicing item ${id} is unavailable in this company; choose an active company item before saving the project type`);
   }
 }
 
@@ -164,11 +164,12 @@ async function legacyDELETE(req: Request) {
       select * from project_types where id = ${id} and org_id = ${orgId} for update
     `))
     if (!before.rows[0]) return null
-    await tx.execute(sql`update project_types set is_active = false, updated_at = now(), updated_by = ${gate.user.id} where id = ${id} and org_id = ${orgId}`)
+    const after = await tx.execute(sql`update project_types set is_active = false, updated_at = now(), updated_by = ${gate.user.id} where id = ${id} and org_id = ${orgId} returning *`)
+    if (after.rows.length !== 1) throw new ProjectTypeWriteRefusal('The project type was not archived; reload the company record before archiving')
     await tx.execute(sql`
       insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
       values (${orgId}, 'project_types', ${id}, 'archive',
-              ${JSON.stringify({ before: before.rows[0] })}, ${gate.user.id})`)
+              ${JSON.stringify({ before: before.rows[0], after: after.rows[0] })}, ${gate.user.id})`)
     return true
   })
   if (result === null) return notFound("record")
@@ -373,7 +374,7 @@ export const PATCH = defineRoute({
                      invoicing_profile, backup_profile
         `))
         const projectTypeBefore = { ...before.rows[0] }
-        if (after.rows.length !== 1) throw new InvoicingItemRefusal('The project type was not updated; reload the company record before saving')
+        if (after.rows.length !== 1) throw new ProjectTypeWriteRefusal('The project type was not updated; reload the company record before saving')
         delete projectTypeBefore.financial_profile
         await tx.execute(sql`
           insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
