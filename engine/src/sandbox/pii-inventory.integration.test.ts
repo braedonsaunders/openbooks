@@ -2119,7 +2119,6 @@ const ALLOW_LISTED_NON_PERSONAL: ReadonlySet<string> = new Set([
   "schedule_boards.row_kind",
   "schedule_boards.resource_kind", // constrained native equipment/location enumeration
   "schedule_boards.time_zone",
-  "schedule_boards.views",
   "schedule_codes.category",
   "schedule_codes.code",
   "schedule_codes.color",
