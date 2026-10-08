@@ -2,6 +2,21 @@
 
 ## Development throughput and combined verification
 
+At least 95% of agent working time must go to writing product code, diagnosing
+and fixing defects, configuring or operating the application, and completing
+business workflows such as payroll. Defect diagnosis and implementation belong
+in this 95%. CI, build and test execution, orchestration, monitoring, and other
+auxiliary administration may consume at most 5% of agent working time.
+
+Batch coherent ready changes instead of launching a massive suite after every
+small commit. Choose focused checks for the changed behavior, its direct callers,
+and relevant isolation, refusal, accounting and rollback controls. Run broad
+suites in the background at substantial milestones or release requirements;
+continue productive work rather than repeatedly polling or waiting on CI.
+Unrelated known failures must not block scoped business work. Retain each
+reused result's original source SHA and partition; never present it as a fresh
+pass on a different tree.
+
 Independent builds and test runs are prohibited on every machine. Integrate
 ready changes into one agreed source tree, then perform one coordinated build
 and test pass against that combined tree. Do not run separate per-feature,
