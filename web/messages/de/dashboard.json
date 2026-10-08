@@ -241,7 +241,9 @@
     "remove": "Widget entfernen",
     "cardMissing": "Karte nicht verfügbar",
     "unknownWidget": "Unbekanntes Widget: {id}",
-    "analyticsPreview": "Die aktuellen Werte erscheinen hier, sobald Sie das Layout speichern."
+    "analyticsPreview": "Die aktuellen Werte erscheinen hier, sobald Sie das Layout speichern.",
+    "previewUnavailable": "Dieses Widget ist nicht mehr verfügbar. Prüfen Sie seine Funktions- und Berechtigungseinstellungen.",
+    "previewFailed": "Dieses Widget konnte nicht geladen werden. Versuchen Sie es erneut, um die Werte zu aktualisieren."
   },
   "palette": {
     "title": "Widgets",

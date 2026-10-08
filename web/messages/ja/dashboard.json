@@ -241,7 +241,9 @@
     "remove": "ウィジェットを削除",
     "cardMissing": "カードは利用できません",
     "unknownWidget": "不明なウィジェット: {id}",
-    "analyticsPreview": "レイアウトを保存すると、ここに最新の数値が表示されます。"
+    "analyticsPreview": "レイアウトを保存すると、ここに最新の数値が表示されます。",
+    "previewUnavailable": "このウィジェットは利用できなくなりました。機能と権限の設定を確認してください。",
+    "previewFailed": "このウィジェットを読み込めませんでした。再試行して数値を更新してください。"
   },
   "palette": {
     "title": "ウィジェット",

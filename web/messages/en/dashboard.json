@@ -241,7 +241,9 @@
     "remove": "Remove widget",
     "cardMissing": "Card unavailable",
     "unknownWidget": "Unknown widget: {id}",
-    "analyticsPreview": "Live figures appear here once you save the layout."
+    "analyticsPreview": "Live figures appear here once you save the layout.",
+    "previewUnavailable": "This widget is no longer available. Review its feature and permission settings.",
+    "previewFailed": "Couldn't load this widget. Retry to refresh its figures."
   },
   "palette": {
     "title": "Widgets",

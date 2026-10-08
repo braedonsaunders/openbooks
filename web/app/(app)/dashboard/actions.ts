@@ -1,14 +1,14 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { getTranslations } from 'next-intl/server'
+import { getLocale, getTranslations } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { can, getAuthz } from '@/lib/authz'
 import { NAV_MODULES } from '@/lib/nav/registry'
 import { hiddenQuickActionIdsForOrg, resolveDashboardDefault } from './_load-layout'
-import { canSeeInsightCards } from './_widget-access'
-import { resolveAllowedWidgetIds } from './widget-features'
+import { canSeeInsightCards, canSeeWidget } from './_widget-access'
+import { resolveAllowedWidgetIds, widgetFeatureOn } from './widget-features'
 import { featureEnabled, hiddenNavModules, resolvedFeatureState } from '@/lib/features'
 import {
   CURATED_QUICK_ACTIONS,
@@ -21,6 +21,21 @@ import { DashboardLayoutInputSchema, filterPersistableDashboardWidgets } from '.
 import type { DashboardLayoutData } from '@openbooks/schema'
 import { listApps } from '@/lib/apps/store'
 import { appWidgetId } from '@/lib/apps/surfaces'
+import { WIDGETS } from './_widget-registry'
+import { loadDashboardMetrics, pruneDashboardMetrics } from './_metrics'
+
+export async function loadDashboardWidgetPreview(widgetId: unknown) {
+  const authz = await getAuthz()
+  if (!authz || typeof widgetId !== 'string' || !Object.hasOwn(WIDGETS, widgetId) || !canSeeWidget(authz, widgetId)) {
+    return { ok: false as const }
+  }
+  // A preview is a separate read: the initial palette's permission and
+  // feature decisions cannot authorize a tile added later in the draft.
+  if (!(await widgetFeatureOn(authz.user.orgId, widgetId))) return { ok: false as const }
+  const locale = await getLocale()
+  const metrics = await loadDashboardMetrics(authz, [widgetId], undefined, locale)
+  return { ok: true as const, data: pruneDashboardMetrics(metrics, [widgetId]) }
+}
 
 export async function saveDashboardLayout(input: unknown) {
   const authz = await getAuthz()

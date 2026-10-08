@@ -115,7 +115,7 @@ export function usePathname() { return '/' }
 export function useSearchParams() { return new URLSearchParams() }`;
 const DYNAMIC_MOCK = `export default function dynamic() { return function DynamicStub(p) { return p.children ?? null } }`;
 const SONNER_MOCK = `export const toast = { success(m) { (globalThis.__dashToasts ?? []).push({ kind: 'success', message: String(m) }) }, error(m) { (globalThis.__dashToasts ?? []).push({ kind: 'error', message: String(m) }) } }; export function Toaster() { return null }`;
-const ACTIONS_MOCK = `export async function saveDashboardLayout() { return { ok: true } } export async function resetDashboardLayout() { return { ok: true } }`;
+const ACTIONS_MOCK = `export async function saveDashboardLayout() { return { ok: true } } export async function resetDashboardLayout() { return { ok: true } } export async function loadDashboardWidgetPreview() { return { ok: false } }`;
 const PROMPT_MOCK = `export async function promptDialog() { const answers = globalThis.__promptAnswers ?? []; return answers.length > 0 ? answers.shift() : null }`;
 const CONFIRM_MOCK = `export async function confirmDialog() { return globalThis.__confirmAnswer ?? true }`;
 
@@ -136,7 +136,7 @@ registerHooks({
     if (specifier === "sonner") {
       return { shortCircuit: true, url: "data:text/javascript," + encodeURIComponent(SONNER_MOCK) };
     }
-    if (specifier.endsWith("dashboard/actions")) {
+    if (specifier.endsWith("dashboard/actions") || (specifier === "./actions" && /\/dashboard\/_(?:dashboard-grid|deferred-widget-preview)\.tsx$/.test(context.parentURL ?? ""))) {
       return { shortCircuit: true, url: "data:text/javascript," + encodeURIComponent(ACTIONS_MOCK) };
     }
     if (specifier.endsWith("/lib/prompt")) {

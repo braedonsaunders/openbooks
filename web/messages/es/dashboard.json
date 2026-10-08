@@ -241,7 +241,9 @@
     "remove": "Quitar widget",
     "cardMissing": "Tarjeta no disponible",
     "unknownWidget": "Widget desconocido: {id}",
-    "analyticsPreview": "Las cifras en vivo aparecen aquí cuando guarde el diseño."
+    "analyticsPreview": "Las cifras en vivo aparecen aquí cuando guarde el diseño.",
+    "previewUnavailable": "Este widget ya no está disponible. Revisa su configuración de funciones y permisos.",
+    "previewFailed": "No se pudo cargar este widget. Reintenta para actualizar sus datos."
   },
   "palette": {
     "title": "Widgets",

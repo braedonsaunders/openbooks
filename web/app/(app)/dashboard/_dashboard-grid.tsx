@@ -32,6 +32,7 @@ import { resetDashboardLayout, saveDashboardLayout } from './actions'
 import { isUuid } from '@/lib/list-params'
 import { appWidgetId, isAppWidgetId } from '@/lib/apps/surfaces'
 import type { DashboardApp } from './_app-widget'
+import { DeferredWidgetPreview } from './_deferred-widget-preview'
 
 const Responsive = dynamic(() => import('react-grid-layout').then((m) => m.Responsive), {
   ssr: false,
@@ -291,7 +292,9 @@ export function DashboardGrid({
         hiddenActionIds={hiddenQuickActionIds}
       />
     ) : (
-      nodes[id]
+      nodes[id] ?? (mode === 'edit' && Object.hasOwn(WIDGETS, id)
+        ? <DeferredWidgetPreview key={id} widgetId={id} />
+        : null)
     )
 
   if (mode === 'view' && viewport !== 'desktop') {

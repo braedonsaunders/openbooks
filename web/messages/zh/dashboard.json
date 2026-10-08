@@ -241,7 +241,9 @@
     "remove": "移除小组件",
     "cardMissing": "卡片不可用",
     "unknownWidget": "未知小组件：{id}",
-    "analyticsPreview": "保存布局后，这里将显示实时数据。"
+    "analyticsPreview": "保存布局后，这里将显示实时数据。",
+    "previewUnavailable": "此小组件已不可用。请检查其功能和权限设置。",
+    "previewFailed": "无法加载此小组件。请重试以刷新数据。"
   },
   "palette": {
     "title": "小组件",
