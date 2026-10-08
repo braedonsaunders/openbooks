@@ -204,7 +204,7 @@ function BoardShell(props: SchedulingWorkspaceProps & { board: ScheduleBoard; on
 
   return (
     <div className="flex h-full min-h-0 min-w-0 flex-col gap-2">
-      <div className="flex min-w-0 shrink-0 flex-nowrap items-center gap-1.5 overflow-x-auto pb-2" role="toolbar" aria-label={t('toolbar.board')}>
+      <div className="flex min-w-0 shrink-0 flex-nowrap items-center gap-1.5 overflow-x-auto pb-4" role="toolbar" aria-label={t('toolbar.board')}>
         {props.contextProjectId?<Button asChild variant="ghost" size="sm" className="h-8 shrink-0 px-2"><Link href={`/projects?row=${props.contextProjectId}&tab=schedule`} aria-label={t('toolbar.returnProject')}><ChevronLeft className="h-4 w-4" /></Link></Button>:null}
         <Select value={board.code} onChange={(event) => props.onSwitchBoard(event.target.value)} className="h-8 w-36 shrink-0 text-xs font-medium sm:w-48" aria-label={t('toolbar.board')}>
           {props.boards.map((candidate) => <option key={candidate.id} value={candidate.code}>{candidate.name}</option>)}
