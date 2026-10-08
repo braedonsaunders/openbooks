@@ -452,7 +452,7 @@ test('historical status draft saves and reopens without losing the source or cha
       onClose={() => {}} onSaved={() => { saved++ }} /></BusinessDateProvider>)
   try {
     await act(async () => { root.render(render(null)); await sleep(50) })
-    assert.equal((document.querySelector('#cr-status-mode') as HTMLSelectElement).value, 'historical')
+    assert.equal(document.querySelector('#cr-status-mode')?.textContent, hrmMessages.employment.changeRequests.historicalObservation)
     assert.equal((document.querySelector('#cr-source-reference') as HTMLInputElement).value, payload.historicalObservation.sourceReference)
     assert.equal((document.querySelector('#cr-effective-to') as HTMLInputElement).required, true)
     const save = [...document.querySelectorAll('button')].find(b => b.textContent === hrmMessages.employment.changeRequests.saveDraft)!
@@ -468,8 +468,13 @@ test('historical status draft saves and reopens without losing the source or cha
     await act(async () => { unchangedSave.click(); await sleep(50) })
     assert.equal(saved, 2)
     assert.equal(requests.length, 1, 'unchanged reopen skips the PATCH and never bumps the saved proposal')
-    const mode = document.querySelector('#cr-status-mode') as HTMLSelectElement
-    await act(async () => { mode.value = 'ordinary'; mode.dispatchEvent(new window.Event('change', { bubbles: true })) })
+    const mode = document.querySelector('#cr-status-mode') as HTMLButtonElement
+    await act(async () => { mode.click(); await sleep(50) })
+    const ordinaryOption = [...document.querySelectorAll<HTMLButtonElement>('[role="option"]')]
+      .find(option => option.textContent?.trim() === hrmMessages.employment.changeRequests.ordinaryStatusChange)
+    assert.ok(ordinaryOption, 'the native dropdown offers the ordinary status mode')
+    await act(async () => { ordinaryOption.click(); await sleep(50) })
+    assert.equal(mode.textContent, hrmMessages.employment.changeRequests.ordinaryStatusChange)
     assert.equal(document.querySelector('#cr-source-reference'), null)
     assert.equal((document.querySelector('#cr-effective-to') as HTMLInputElement).required, false)
     await act(async () => { unchangedSave.click(); await sleep(50) })
