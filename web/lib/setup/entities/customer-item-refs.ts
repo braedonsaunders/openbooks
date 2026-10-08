@@ -1,5 +1,5 @@
 import 'server-only'
-import { validateScheduleBoardWrite, validateScheduleCodeWrite } from './scheduling'
+import { validateScheduleBoardWrite, validateScheduleCodeWrite } from '../scheduling-validation'
 import { sql } from 'drizzle-orm'
 import { validateIdentifierUnit } from '@openbooks/engine/src/inventory/item-identifiers.ts'
 import { validateCustomerItemRef } from '@openbooks/engine/src/sales/customer-item-refs.ts'
