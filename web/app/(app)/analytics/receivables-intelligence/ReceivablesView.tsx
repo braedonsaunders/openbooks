@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { useLocale, useTranslations } from 'next-intl'
-import { ArrowUpRight, Banknote, Clock, AlertCircle, Users, PieChart, CalendarClock, Info } from 'lucide-react'
+import { ArrowUpRight, Banknote, Clock, AlertCircle, Users, PieChart, CalendarClock } from 'lucide-react'
 import { neg } from '@openbooks/engine/money'
 import { RecordTabs } from '@/components/module-home/record-tabs'
 import { ANALYTICS_TABS } from '../../../../lib/analytics/dashboard-tabs'
@@ -101,9 +101,8 @@ export function ReceivablesView({ data: initialData, canOpenCustomers = false }:
               </Panel>
             </>}
           </>}
-          <div className="flex flex-wrap items-start justify-between gap-3 rounded-xl bg-teal-50 p-4 text-xs leading-relaxed text-teal-900 dark:bg-teal-950/30 dark:text-teal-200">
-            <p className="flex max-w-3xl gap-2"><Info size={15} className="mt-0.5 shrink-0" /><span>{t('methodology', { currency: data.currency, terms: money(s.missingTerms) })}</span></p>
-            <Link href={reportHref} className="inline-flex shrink-0 items-center gap-1 font-semibold underline underline-offset-4">{t('openReport')}<ArrowUpRight size={14} /></Link>
+          <div className="flex justify-end">
+            <Link href={reportHref} className="inline-flex items-center gap-1 text-xs font-medium text-teal-600 hover:underline dark:text-teal-400">{t('openReport')}<ArrowUpRight size={14} /></Link>
           </div>
         </div>
       </AnalyticsTabContent>
