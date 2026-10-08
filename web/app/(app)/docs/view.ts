@@ -2,8 +2,8 @@ import 'server-only'
 
 import { getTranslations } from 'next-intl/server'
 import { page, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
-import { categoriesWithArticles, getArticle } from '../../../lib/docs'
-import type { DocsHomeContent } from './sections'
+import { categoriesWithArticles, getArticle, type DocArticle } from '../../../lib/docs'
+import type { DocArticleSummary, DocsHomeContent } from './sections'
 
 /**
  * Documentation home, split into a loader and a spec.
@@ -26,6 +26,10 @@ export interface DocsData {
   content: DocsHomeContent
 }
 
+function articleSummary({ slug, title, summary }: DocArticle): DocArticleSummary {
+  return { slug, title, summary }
+}
+
 export async function loadDocsHome(): Promise<DocsData> {
   const t = await getTranslations('docs')
   const groups = categoriesWithArticles().map(({ category, articles }) => ({
@@ -34,11 +38,12 @@ export async function loadDocsHome(): Promise<DocsData> {
       title: t(category.titleKey),
       description: t(category.descriptionKey),
     },
-    articles,
+    articles: articles.map(articleSummary),
   }))
   const startHere = ['welcome', 'quick-start', 'migration-and-cutover']
     .map(getArticle)
     .filter((article): article is NonNullable<typeof article> => Boolean(article))
+    .map(articleSummary)
   const switching = groups.find(({ category }) => category.key === 'switching')?.articles ?? []
 
   return {

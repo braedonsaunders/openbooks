@@ -3,9 +3,11 @@ import { ArrowRight, BookOpenCheck, Compass, Replace } from 'lucide-react'
 
 import type { DocArticle, DocCategory } from '../../../lib/docs'
 
+export type DocArticleSummary = Pick<DocArticle, 'slug' | 'title' | 'summary'>
+
 export interface DocsHomeGroup {
   category: DocCategory
-  articles: DocArticle[]
+  articles: DocArticleSummary[]
 }
 
 export interface DocsHomeContent {
@@ -19,9 +21,9 @@ export interface DocsHomeContent {
   browseTitle: string
   browseSubtitle: string
   articleCount: string
-  startHereArticles: DocArticle[]
+  startHereArticles: DocArticleSummary[]
   switchingShortTitles: string[]
-  switchingArticles: DocArticle[]
+  switchingArticles: DocArticleSummary[]
   groups: DocsHomeGroup[]
 }
 
