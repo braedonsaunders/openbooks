@@ -28,11 +28,11 @@ async function subcontractsEnabled(orgId: string): Promise<boolean> {
 }
 
 async function preBillingEnabled(orgId: string): Promise<boolean> {
-  const [projects, wip] = await Promise.all([
+  const [projects, preBilling] = await Promise.all([
     isFeatureEnabled(orgId, "projects"),
     isFeatureEnabled(orgId, "preBilling"),
   ]);
-  return projects && wip;
+  return projects && preBilling;
 }
 
 const searchSubcontracts: AssistantToolDef = {
@@ -252,7 +252,7 @@ const getSubcontract: AssistantToolDef = {
   },
 };
 
-const listPrebills: AssistantToolDef = {
+const listPrebillsTool: AssistantToolDef = {
   name: "list_prebills",
   description:
     "Pre-billing worksheets by project: status, original/proposed/adjustment bill amounts, cost, and the converted invoice link. Same rows the Pre-billing workspace lists. Read-only.",
@@ -356,7 +356,7 @@ const preBillingAnalyticsTool: AssistantToolDef = {
 export const SUBCONTRACTS_TOOLS: AssistantToolDef[] = [
   searchSubcontracts,
   getSubcontract,
-  listPrebills,
+  listPrebillsTool,
   getPrebill,
   preBillingAnalyticsTool,
 ];

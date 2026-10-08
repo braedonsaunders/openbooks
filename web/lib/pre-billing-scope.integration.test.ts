@@ -450,8 +450,8 @@ const consolidatedRows = [
               for (const prebill of created) assert.equal(prebill.sourceCount, LINES_EACH)
               const numbers = created.map((prebill) => prebill.worksheetNumber).sort()
               assert.deepEqual(numbers, [
-                'Pre-billing-00001', 'Pre-billing-00002', 'Pre-billing-00003', 'Pre-billing-00004',
-                'Pre-billing-00005', 'Pre-billing-00006', 'Pre-billing-00007', 'Pre-billing-00008',
+                'PB-00001', 'PB-00002', 'PB-00003', 'PB-00004',
+                'PB-00005', 'PB-00006', 'PB-00007', 'PB-00008',
               ])
               assert.equal((await db.execute<{ n: number }>(sql`select count(*)::int as n from prebills where org_id=${org.orgId}`)).rows[0]!.n, WRITERS)
             } finally { await dropScratchOrg(org.orgId) }
