@@ -150,3 +150,21 @@ test('slow statements include costly single executions with normalized values', 
   })
   assert.equal(JSON.stringify(route).includes('tenant-secret'), false)
 })
+
+test('long queries sharing a CTE stay distinct while parameter changes keep the same shape', () => {
+  const prefix = `with wages as (select ${'salary, '.repeat(120)} employee_id from rates where org_id = `
+  const counts = `${prefix}'company-a') select count(*) from wages`
+  const sameCounts = `${prefix}'company-b') select count(*) from wages`
+  const groups = `${prefix}'company-a') select currency, avg(salary) from wages group by currency`
+  assert.equal(normalizeStatement(counts), normalizeStatement(sameCounts))
+  assert.notEqual(normalizeStatement(counts), normalizeStatement(groups))
+  assert.ok(normalizeStatement(groups).length <= 600)
+  assert.ok(!normalizeStatement(groups).includes('company-a'))
+  const { profile, within, advance } = harness()
+  within({ key: {}, route: '/hrm/compensation' }, [[counts, 20], [sameCounts, 30], [groups, 40]])
+  advance(1_000)
+  const route = profile.summarize()!.routes[0]!
+  assert.equal(route.roundTrips.max, 3)
+  assert.equal(route.slowStatements.length, 2)
+  assert.deepEqual(route.repeatedStatements.map(row => [row.executions, row.repeats]), [[2, 1]])
+})

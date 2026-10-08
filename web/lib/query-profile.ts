@@ -1,5 +1,6 @@
 import "server-only";
 import { appendFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
 import { workAsyncStorage } from "next/dist/server/app-render/work-async-storage.external";
 import { registerQueryObserver } from "@openbooks/engine/src/platform/query-observer.ts";
 
@@ -116,7 +117,12 @@ export function normalizeStatement(text: string): string {
     .replace(/\?(?:\s*,\s*\?)+/g, "?, ...")
     .replace(/\((?:\?|\?, \.\.\.)\)(?:\s*,\s*\((?:\?|\?, \.\.\.)\))+/g, "(?, ...), ...")
     .trim();
-  return shape.length > MAX_STATEMENT_LENGTH ? `${shape.slice(0, MAX_STATEMENT_LENGTH)}…` : shape;
+  if (shape.length <= MAX_STATEMENT_LENGTH) return shape;
+  // Keep long queries with a shared CTE distinct without recording literals
+  // or retaining an unbounded display string in each request's tallies.
+  const digest = createHash("sha256").update(shape).digest("hex").slice(0, 16);
+  const suffix = `… [${digest}]`;
+  return `${shape.slice(0, MAX_STATEMENT_LENGTH - suffix.length)}${suffix}`;
 }
 
 const round = (value: number) => Math.round(value * 100) / 100;
