@@ -8,7 +8,7 @@ import { CHIP_COLORS, chipStyle } from './BookingChip'
 import { SourceRecordChip } from './SourceRecord'
 import type { BoardSourceRecord } from '@openbooks/engine/src/schedule-boards/source-history.ts'
 import { TargetPicker } from './TargetPicker'
-import { cellKey, indexAbsences, initials, targetHue, type BoardEntry, type BoardTarget, type SpanInput } from './model'
+import { cellKey, indexAbsences, initials, presentedBoardEntries, targetHue, type BoardEntry, type BoardTarget, type SpanInput } from './model'
 import type { BoardController } from './use-board'
 import type { BoardWindow } from '@openbooks/engine/src/schedule-boards/window.ts'
 
@@ -37,7 +37,7 @@ export function TargetsView({ controller, window: board, today, onOpenEntry, onO
   const personName = useMemo(() => new Map(board.rows.map((person) => [person.subjectId, person.name])), [board.rows])
   const absences = useMemo(() => indexAbsences(board.absences), [board.absences])
 
-  const live = useMemo(() => board.entries.filter((entry) => !replaced.has(entry.id)), [board.entries, replaced])
+  const live = useMemo(() => presentedBoardEntries(board).filter((entry) => !replaced.has(entry.id)), [board.entries, board.sourceRecords, replaced])
   const rows = useMemo(() => {
     const byTarget = new Map<string, { target: BoardTarget; cells: Map<string, BoardEntry[]>; people: Set<string> }>()
     for (const entry of live) {
@@ -64,9 +64,10 @@ export function TargetsView({ controller, window: board, today, onOpenEntry, onO
 
   const bookedOn = useMemo(() => {
     const set = new Set<string>()
-    for (const entry of live) set.add(cellKey(entry.subjectId, entry.startsOn))
+    // Linked source presentation does not release a native booking's availability.
+    for (const entry of board.entries) if (!replaced.has(entry.id)) set.add(cellKey(entry.subjectId, entry.startsOn))
     return set
-  }, [live])
+  }, [board.entries, replaced])
   const available = useMemo(() => board.rows.filter((person) => !bookedOn.has(cellKey(person.subjectId, railDate)) && !(absences.get(cellKey(person.subjectId, railDate)) ?? []).length), [absences, board.rows, bookedOn, railDate])
 
   const span: SpanInput = board.board.grain === 'day' || !board.board.dayPolicyKnown ? { mode: 'day' } : { mode: 'timed', starts: board.board.dayStarts, ends: board.board.dayEnds, breakMinutes: board.board.dayBreakMinutes }

@@ -82,6 +82,7 @@ export interface BoardSourceRecord {
   readonly notes: string | null;
   readonly visibleInSource: boolean;
   readonly recordedAt: string;
+  readonly linkedEntryId?: string | null;
   readonly color: string | null;
 }
 
@@ -95,9 +96,9 @@ export async function readBoardSourceHistory(actor: ScheduleActor, boardId: stri
       throw new ScheduleError('Choose a valid source history date range.');
     const records = (await db.execute<Omit<BoardSourceRecord,'color'>>(sql`select r.id,r.source_system as "sourceSystem",r.source_dataset as "sourceDataset",
       r.source_key as "sourceKey",r.worker_party_id as "workerPartyId",r.on_date::text as "onDate",r.label,r.source_result as result,
-      r.source_notes as notes,r.visible_in_source as "visibleInSource",r.created_at::text as "recordedAt"
+      r.source_notes as notes,r.visible_in_source as "visibleInSource",r.created_at::text as "recordedAt",r.linked_entry_id as "linkedEntryId"
       from schedule_source_records r join parties p on p.org_id=r.org_id and p.id=r.worker_party_id
-      where r.org_id=${actor.orgId} and r.board_id=${board.id} and r.disposition='recorded' and r.on_date between ${from} and ${through}
+      where r.org_id=${actor.orgId} and r.board_id=${board.id} and r.disposition in ('recorded','linked') and r.on_date between ${from} and ${through}
       ${subsidiaryVisibleFilter(sql`p.subsidiary_id`,allowed)}
       and not exists(select 1 from schedule_source_records n where n.org_id=r.org_id and n.supersedes_id=r.id)
       order by r.on_date,r.source_key,r.id`)).rows;

@@ -6,7 +6,7 @@ import { Select, cn } from '@openbooks/ui'
 import { CHIP_COLORS, chipStyle } from './BookingChip'
 import { SourceRecordChip } from './SourceRecord'
 import type { BoardSourceRecord } from '@openbooks/engine/src/schedule-boards/source-history.ts'
-import { targetHue, targetShortLabel, type BoardEntry, type BoardTarget } from './model'
+import { targetHue, targetShortLabel, presentedBoardEntries, type BoardEntry, type BoardTarget } from './model'
 import type { BoardWindow } from '@openbooks/engine/src/schedule-boards/window.ts'
 
 /** The month at a glance: who is where each day, or one person's month. */
@@ -23,16 +23,17 @@ export function CalendarView({ window: board, month, today, onOpenEntry, onOpenS
   const [open, setOpen] = useState<string | null>(null)
   const replaced = useMemo(() => new Set(board.replaced), [board.replaced])
   const names = useMemo(() => new Map(board.rows.map((person) => [person.subjectId, person.name])), [board.rows])
+  const presented = useMemo(() => presentedBoardEntries(board), [board.entries, board.sourceRecords])
   const byDate = useMemo(() => {
     const map = new Map<string, BoardEntry[]>()
-    for (const entry of board.entries) {
+    for (const entry of presented) {
       if (replaced.has(entry.id) || (personId && entry.subjectId !== personId)) continue
       const list = map.get(entry.startsOn) ?? []
       list.push(entry)
       map.set(entry.startsOn, list)
     }
     return map
-  }, [board.entries, personId, replaced])
+  }, [presented, personId, replaced])
   const sourceByDate = useMemo(() => {
     const map = new Map<string, Map<string, BoardSourceRecord[]>>()
     for (const record of board.sourceRecords ?? []) {

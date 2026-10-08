@@ -1,4 +1,4 @@
-import type { BoardWindow, BoardEntry, BoardRow } from './model'
+import { presentedBoardEntries, type BoardWindow, type BoardEntry, type BoardRow } from './model'
 
 export const bookingLegendKey = (entry: BoardEntry) => entry.target ? `label:${entry.target.code ?? entry.target.label}` : null
 export const sourceLegendKey = (label: string | null) => label === null ? null : `label:${label}`
@@ -13,7 +13,7 @@ export function boardLegend(board: BoardWindow) {
     const slot = slots.get(key) ?? { key, label, color, people: new Set<string>() }
     slot.people.add(person); slots.set(key, slot)
   }
-  for (const entry of board.entries) if (!replaced.has(entry.id) && days.has(entry.startsOn))
+  for (const entry of presentedBoardEntries(board)) if (!replaced.has(entry.id) && days.has(entry.startsOn))
     add(bookingLegendKey(entry), entry.target?.code ?? entry.target?.label ?? null, entry.target?.color ?? null, entry.subjectId)
   for (const record of board.sourceRecords ?? []) if (days.has(record.onDate))
     add(sourceLegendKey(record.label), record.label, record.color, record.workerPartyId)
@@ -23,9 +23,10 @@ export function boardLegend(board: BoardWindow) {
 /** Search and a selected value narrow rows together; hover only highlights cells. */
 export function filterBoardRows(board: BoardWindow, search: string, selected: string | null): readonly BoardRow[] {
   const query = search.trim().toLowerCase()
+  const entries = presentedBoardEntries(board)
   const selectedPeople = selected ? boardLegend(board).find(slot => slot.key === selected)?.people ?? new Set<string>() : null
   return board.rows.filter(person => (!selectedPeople || selectedPeople.has(person.subjectId)) && (!query
     || `${person.name} ${person.jobTitle ?? ''} ${person.tradeName ?? ''}`.toLowerCase().includes(query)
-    || board.entries.some(entry => entry.subjectId === person.subjectId && entry.target && `${entry.target.code ?? ''} ${entry.target.label}`.toLowerCase().includes(query))
+    || entries.some(entry => entry.subjectId === person.subjectId && entry.target && `${entry.target.code ?? ''} ${entry.target.label}`.toLowerCase().includes(query))
     || (board.sourceRecords ?? []).some(record => record.workerPartyId === person.subjectId && `${record.label ?? ''} ${record.result ?? ''}`.toLowerCase().includes(query))))
 }

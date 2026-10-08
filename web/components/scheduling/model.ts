@@ -8,6 +8,12 @@ import type { BoardAbsence, BoardEntry, BoardRow, BoardTarget, BoardWindow } fro
 
 export type { BoardChange, BookingFields, ChangeResult, SpanInput, BoardAbsence, BoardEntry, BoardRow, BoardTarget, BoardWindow }
 
+/** Literal imported evidence is shown once, without presenting its linked booking again. */
+export function presentedBoardEntries(board: BoardWindow): readonly BoardEntry[] {
+  const linked = new Set((board.sourceRecords ?? []).flatMap(record => record.linkedEntryId ? [record.linkedEntryId] : []))
+  return linked.size ? board.entries.filter(entry => !linked.has(entry.id)) : board.entries
+}
+
 export interface CellAddress {
   readonly row: number
   readonly col: number

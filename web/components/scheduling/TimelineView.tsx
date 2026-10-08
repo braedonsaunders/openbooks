@@ -8,7 +8,7 @@ import { CHIP_COLORS, chipStyle } from './BookingChip'
 import { SourceRecordChip } from './SourceRecord'
 import type { BoardSourceRecord } from '@openbooks/engine/src/schedule-boards/source-history.ts'
 import { TargetPicker, type PickedTarget } from './TargetPicker'
-import { formatMinutes, groupRows, initials, targetHue, targetShortLabel, type BoardEntry, type GroupBy } from './model'
+import { formatMinutes, groupRows, initials, presentedBoardEntries, targetHue, targetShortLabel, type BoardEntry, type GroupBy } from './model'
 import type { BoardController } from './use-board'
 import type { BoardWindow } from '@openbooks/engine/src/schedule-boards/window.ts'
 
@@ -40,6 +40,7 @@ export function TimelineView({ controller, window: board, groupBy, search, today
   const t = useTranslations('scheduling')
   const locale = useLocale()
   const [zoom, setZoom] = useState(board.days.length <= 3 ? 3 : board.days.length <= 7 ? 2 : 1)
+  const presented = useMemo(() => presentedBoardEntries(board), [board.entries, board.sourceRecords])
   const rowHeight = (board.sourceRecords?.length ?? 0) > 0 ? ROW_H + 26 : ROW_H
   const hourW = ZOOMS[zoom]!
   const dayW = hourW * 24
@@ -238,7 +239,7 @@ export function TimelineView({ controller, window: board, groupBy, search, today
               }
               const person = item.person!
               const row = item.personIndex!
-              const entries = board.entries.filter((entry) => entry.subjectId === person.subjectId && !replaced.has(entry.id))
+              const entries = presented.filter((entry) => entry.subjectId === person.subjectId && !replaced.has(entry.id))
               return (
                 <div key={item.key} className="absolute left-0 border-b border-slate-100 dark:border-slate-800/70" style={{ top, height: rowHeight, width }}>
                   <div className="sticky left-0 z-[5] flex h-full items-center gap-2 border-r border-slate-100 bg-white px-3 dark:border-slate-800 dark:bg-slate-950" style={{ width: NAME_W }}>

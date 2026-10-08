@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { boardLegend, filterBoardRows } from './legend'
-import type { BoardWindow } from './model'
+import { presentedBoardEntries, type BoardWindow } from './model'
 
 const window = {
   board: { showWeekends: false }, replaced: ['old'],
@@ -25,4 +25,15 @@ test('a value pill filters to matching booking and literal-history people withou
   assert.deepEqual(filterBoardRows(window, 'Literal instruction', 'label:SHOP').map(row => row.subjectId), ['two'])
   assert.deepEqual(filterBoardRows(window, '', null).map(row => row.subjectId), ['one', 'two', 'three'])
   assert.deepEqual(filterBoardRows(window, '', 'label:missing'), [])
+})
+
+
+test('linked literal source observations replace only the matching booking presentation and preserve native entries', () => {
+  const board = { ...window, sourceRecords: [{ workerPartyId: 'one', onDate: '2026-10-08', label: 'SHOP/ N', result: null, color: null, linkedEntryId: 'booking' }] } as unknown as BoardWindow
+  const original = [...board.entries]
+  assert.deepEqual(presentedBoardEntries(board).map(entry => entry.id), ['old'])
+  assert.deepEqual(board.entries, original)
+  assert.deepEqual(boardLegend(board).map(slot => slot.label), ['SHOP/ N'])
+  assert.deepEqual(filterBoardRows(board, '', 'label:SHOP/ N').map(row => row.subjectId), ['one'])
+  assert.deepEqual(presentedBoardEntries({ ...board, sourceRecords: [] }), original)
 })
