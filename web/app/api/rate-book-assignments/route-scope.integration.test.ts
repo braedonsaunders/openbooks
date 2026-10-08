@@ -140,10 +140,10 @@ test("GET hides another subsidiary's customer and project assignments", async ()
     state.allowedSubsidiaryIds = new Set([org.subsidiaryId]);
     const hiddenCustomer = await get(`customerId=${custB}`);
     assert.equal(hiddenCustomer.status, 404);
-    assert.deepEqual(await hiddenCustomer.json(), { errorCode: "notFound" });
+    assert.deepEqual(await hiddenCustomer.json(), { error: "not_found" });
     const hiddenProject = await get(`projectId=${projB}`);
     assert.equal(hiddenProject.status, 404);
-    assert.deepEqual(await hiddenProject.json(), { errorCode: "notFound" });
+    assert.deepEqual(await hiddenProject.json(), { error: "not_found" });
     const visible = await get(`customerId=${custA}`);
     assert.equal(visible.status, 200);
     assert.deepEqual(((await visible.json()) as { assignments: unknown[] }).assignments, []);
@@ -164,14 +164,14 @@ test("POST cannot price another subsidiary's project or customer", async () => {
       dateBasis: "usage_date", isActive: true,
     });
     assert.equal(onProject.status, 404);
-    assert.deepEqual(await onProject.json(), { errorCode: "notFound" });
+    assert.deepEqual(await onProject.json(), { error: "not_found" });
     const onCustomer = await send(POST, {
       rateBookId: bookId, customerId: custB,
       effectiveFrom: "2026-07-01", effectiveTo: "2026-12-31",
       dateBasis: "usage_date", isActive: true,
     });
     assert.equal(onCustomer.status, 404);
-    assert.deepEqual(await onCustomer.json(), { errorCode: "notFound" });
+    assert.deepEqual(await onCustomer.json(), { error: "not_found" });
     assert.equal(await assignmentCount(org.orgId), before, "refused creates write nothing");
   } finally {
     state.allowedSubsidiaryIds = null;
