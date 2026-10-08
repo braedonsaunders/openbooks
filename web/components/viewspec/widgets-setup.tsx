@@ -334,7 +334,9 @@ export const SETUP_WIDGETS = {
   'overhead-rates-tab': (props) => (
     <OverheadRatesTabSlot {...(props as ComponentProps<typeof OverheadRatesTabSlot>)} />
   ),
-  'overhead-lifecycle-tab': () => <OverheadLifecycleTabSlot />,
+  'overhead-lifecycle-tab': (props) => (
+    <OverheadLifecycleTabSlot {...(props as ComponentProps<typeof OverheadLifecycleTabSlot>)} />
+  ),
   'overhead-application-tab': () => <OverheadApplicationTabSlot />,
 
   /* --- allocations setup ------------------------------------------------------ */

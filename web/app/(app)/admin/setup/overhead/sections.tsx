@@ -14,6 +14,7 @@ import { getAuthz, guardRootSubsidiaryScope } from '../../../../../lib/authz'
 import { currentPublishedRates } from '../../../../../lib/overhead-publish'
 import { businessToday, parseIsoDate } from '@openbooks/engine/src/platform/business-date.ts'
 import { trueCostData } from '../../../../../lib/analytics/true-cost-data'
+import { isFeatureEnabled } from '../../../../../lib/features'
 import {
   countUnappliedOverheadTime,
   listOverheadApplications,
@@ -45,12 +46,9 @@ async function getRootScopeAuthz() {
  * page.tsx imports it back so there is one implementation —
  * the payroll-sections precedent.
  *
- * The four tab bodies each render through a SLOT below that re-derives the
- * org id from the session — a spec must never carry an org id, a user id or
- * an Authz. The model body re-runs the loader's own data query (same window,
- * same inputs) rather than receiving rows through the spec; the rates,
- * lifecycle and application slots re-derive `today`, the published card and
- * the ledger rows the same way.
+ * Session-derived slots retain their own scope gates. The model and
+ * lifecycle share the loader's live department calculation with the header;
+ * the lifecycle slot reads the current published card independently.
  */
 
 export function OverheadModelHeader({
@@ -184,16 +182,26 @@ export async function OverheadRatesTabSlot({
 }
 
 /** Lifecycle tab slot: mode/cadence switch plus the drift table. */
-export async function OverheadLifecycleTabSlot() {
+export async function OverheadLifecycleTabSlot({ departments }: { departments?: DeptRate[] } = {}) {
   const authz = await getRootScopeAuthz()
   if (!authz) return null
   const orgId = authz.user.orgId
-  const today = await businessToday(orgId)
-  const fromDate = parseIsoDate(today)
-  fromDate.setUTCFullYear(fromDate.getUTCFullYear() - 1)
-  const from = fromDate.toISOString().slice(0, 10)
-  const [data, lifecycleRes, publishedRates] = await Promise.all([
-    trueCostData(orgId, { from, to: today, label: 'TTM' }, authz.allowedSubsidiaryIds),
+  const liveDepartments = async () => {
+    if (departments) {
+      // Retain the slot's Projects gate when presentation rows are supplied.
+      if (!(await isFeatureEnabled(orgId, 'projects'))) throw new Error('projects feature is disabled')
+      return departments
+    }
+    // Stored layouts may still place this widget without department props.
+    // Resolve the same native calculation for that composition.
+    const today = await businessToday(orgId)
+    const fromDate = parseIsoDate(today)
+    fromDate.setUTCFullYear(fromDate.getUTCFullYear() - 1)
+    const from = fromDate.toISOString().slice(0, 10)
+    return (await trueCostData(orgId, { from, to: today, label: 'TTM' }, authz.allowedSubsidiaryIds)).departments
+  }
+  const [live, lifecycleRes, publishedRates] = await Promise.all([
+    liveDepartments(),
     db.execute<{ c: { mode?: string; cadence?: string } | null }>(sql`
       select settings->'overheadRateLifecycle' as c from orgs where id = ${orgId}`),
     currentPublishedRates(orgId),
@@ -203,7 +211,7 @@ export async function OverheadLifecycleTabSlot() {
     mode: (['manual', 'scheduled', 'live'].includes(lifecycleCfg.mode ?? '') ? lifecycleCfg.mode : 'manual') as 'manual' | 'scheduled' | 'live',
     cadence: (lifecycleCfg.cadence === 'quarterly' ? 'quarterly' : 'monthly') as 'monthly' | 'quarterly',
   }
-  const drift: DriftRow[] = data.departments
+  const drift: DriftRow[] = live
     .filter((d) => (d.composite ?? 0) > 0 || publishedRates.has(d.id))
     .map((d) => ({ id: d.id, name: d.name, live: d.composite == null ? null : Math.round(d.composite * 100) / 100, published: publishedRates.get(d.id) ?? null }))
   return <OverheadLifecycle mode={lifecycle.mode} cadence={lifecycle.cadence} drift={drift} />
