@@ -323,9 +323,17 @@ export const PUT = defineRoute({
   try {
     await db.transaction(async (tx) => {
       const current = (await tx.execute<{ rate_book_id: string }>(
-        sql`select v.rate_book_id from item_rate_versions v where v.id=${id} and v.org_id=${orgId} for update`,
+        sql`select v.rate_book_id from item_rate_versions v
+          join labor_rate_version_policies p on p.version_id=v.id and p.org_id=v.org_id
+          where v.id=${id} and v.org_id=${orgId} for update of v,p`,
       ));
       if (!current.rows[0]) throw new Error("notFound");
+      if (lineIds.size) {
+        const kept = (await tx.execute<{ id: string }>(sql`
+          select id from item_rate_lines where org_id=${orgId} and version_id=${id}
+           and id=any(${uuidArray([...lineIds])}::uuid[]) for update`)).rows;
+        if (kept.length !== lineIds.size) throw new Error("item");
+      }
       const before = (await tx.execute<{ snapshot: unknown }>(sql`select jsonb_build_object(
         'version',(select to_jsonb(v) from item_rate_versions v where v.id=${id} and v.org_id=${orgId}),
         'book',(select to_jsonb(b) from item_rate_books b where b.id=${current.rows[0].rate_book_id} and b.org_id=${orgId}),
@@ -497,14 +505,16 @@ export const PUT = defineRoute({
 
       // An undefined currency splices as empty text inside a sql template,
       // so the keep-vs-overwrite branch must select whole statements.
-      await tx.execute(
+      const savedBook = await tx.execute(
         body.currency === undefined
-          ? sql`update item_rate_books set name=${cardName},code=${cardCode},updated_at=now(),updated_by=${gate.user.id} where id=${current.rows[0].rate_book_id} and org_id=${orgId}`
-          : sql`update item_rate_books set name=${cardName},code=${cardCode},currency=${body.currency},updated_at=now(),updated_by=${gate.user.id} where id=${current.rows[0].rate_book_id} and org_id=${orgId}`,
+          ? sql`update item_rate_books set name=${cardName},code=${cardCode},updated_at=now(),updated_by=${gate.user.id} where id=${current.rows[0].rate_book_id} and org_id=${orgId} returning id`
+          : sql`update item_rate_books set name=${cardName},code=${cardCode},currency=${body.currency},updated_at=now(),updated_by=${gate.user.id} where id=${current.rows[0].rate_book_id} and org_id=${orgId} returning id`,
       );
-      await tx.execute(
-        sql`update labor_rate_version_policies set derivation_policy=${body.derivation_policy},updated_at=now(),updated_by=${gate.user.id} where version_id=${id} and org_id=${orgId}`,
+      if (savedBook.rows.length !== 1) throw new Error("notFound");
+      const savedPolicy = await tx.execute(
+        sql`update labor_rate_version_policies set derivation_policy=${body.derivation_policy},updated_at=now(),updated_by=${gate.user.id} where version_id=${id} and org_id=${orgId} returning id`,
       );
+      if (savedPolicy.rows.length !== 1) throw new Error("notFound");
 
       await tx.execute(
         sql`delete from labor_rate_version_scopes where version_id=${id} and org_id=${orgId}`,
@@ -523,11 +533,12 @@ export const PUT = defineRoute({
           sql`delete from item_rate_lines where version_id=${id} and org_id=${orgId}`,
         );
       for (const [sortOrder, line] of lines.entries()) {
-        if (line.id)
-          await tx.execute(
-            sql`update item_rate_lines set item_id=${line.itemId ? line.itemId : sql`item_id`},bill_rate=${line.regular || null},time_type_bill_rates=${JSON.stringify(line.timeTypeRates ?? {})}::jsonb,sort_order=${sortOrder},updated_at=now(),updated_by=${gate.user.id} where id=${line.id} and version_id=${id} and org_id=${orgId}`,
+        if (line.id) {
+          const savedLine = await tx.execute(
+            sql`update item_rate_lines set item_id=${line.itemId ? line.itemId : sql`item_id`},bill_rate=${line.regular || null},time_type_bill_rates=${JSON.stringify(line.timeTypeRates ?? {})}::jsonb,sort_order=${sortOrder},updated_at=now(),updated_by=${gate.user.id} where id=${line.id} and version_id=${id} and org_id=${orgId} returning id`,
           );
-        else
+          if (savedLine.rows.length !== 1) throw new Error("item");
+        } else
           await tx.execute(
             sql`insert into item_rate_lines(org_id,version_id,item_id,unit_code,unit_name,base_quantity,bill_rate,time_type_bill_rates,sort_order,created_by,updated_by) values(${orgId},${id},${line.itemId},'hour','Hour',1,${line.regular || null},${JSON.stringify(line.timeTypeRates ?? {})}::jsonb,${sortOrder},${gate.user.id},${gate.user.id})`,
           );
@@ -572,13 +583,15 @@ export const PUT = defineRoute({
       // The version row moves last: rate_version_child_guard only allows
       // child writes while the stored status is still draft, so a save that
       // activates the card must finish rewriting children first.
-      await tx.execute(
-        sql`update item_rate_versions set effective_from=${body.effective_from},effective_to=${body.effective_to || null},status=${body.status},custom=${JSON.stringify(customValidation.cleaned)}::jsonb,updated_at=now(),updated_by=${gate.user.id} where id=${id} and org_id=${orgId}`,
+      const savedVersion = await tx.execute(
+        sql`update item_rate_versions set effective_from=${body.effective_from},effective_to=${body.effective_to || null},status=${body.status},custom=${JSON.stringify(customValidation.cleaned)}::jsonb,updated_at=now(),updated_by=${gate.user.id} where id=${id} and org_id=${orgId} returning id`,
       );
+      if (savedVersion.rows.length !== 1) throw new Error("notFound");
 
-      await tx.execute(
-        sql`insert into audit_log(org_id,table_name,row_id,action,changes,actor_id) values(${orgId},'item_rate_versions',${id},'update',${JSON.stringify({ before: before.rows[0]?.snapshot, after: body })}::jsonb,${gate.user.id})`,
+      const audit = await tx.execute(
+        sql`insert into audit_log(org_id,table_name,row_id,action,changes,actor_id) values(${orgId},'item_rate_versions',${id},'update',${JSON.stringify({ before: before.rows[0]?.snapshot, after: body })}::jsonb,${gate.user.id}) returning id`,
       );
+      if (audit.rows.length !== 1) throw new Error("save");
     });
     return NextResponse.json({ ok: true, id });
   } catch (cause) {
