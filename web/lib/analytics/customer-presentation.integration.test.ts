@@ -11,7 +11,7 @@ registerHooks({ resolve(specifier, context, next) {
 const { sql } = await import('drizzle-orm')
 const { db, env, withBypass, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
 const { withSimClock: pinClock } = await import('@openbooks/engine/src/platform/clock.ts')
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
+const { assertDedicatedFixtureDatabase, createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
 const { postDocument } = await import("@openbooks/engine/src/ledger/posting-document.ts");
 const { customerData, customerSummaryData } = await import('./customer-data')
 const { projectCustomerDashboard } = await import('./overview-projection')
@@ -19,6 +19,7 @@ const { withAnalyticsRead } = await import('./read-context')
 import type { Authz } from '../authz'
 
 test('customer overview keeps the complete financial population while detail tabs retain every customer', { skip: !env.OPENBOOKS_DB_URL }, async () => {
+  await assertDedicatedFixtureDatabase()
   const org = await withBypass(() => createScratchOrg())
   try {
     const actor = await withBypass(() => createScratchUser(org.orgId, 'Customer Controller', 'admin'))
@@ -31,6 +32,10 @@ test('customer overview keeps the complete financial population while detail tab
           values (${customer}, ${org.orgId}, 'customer', ${`Customer ${i}`}, ${org.subsidiaryId}, true, '{}'::jsonb)`)
         await invoice(org.orgId, actor, org.subsidiaryId, customer, String(i + 1), 'CAD', '1', org.date, org.accounts)
       }
+      const changed = await db.execute(sql`update orgs
+        set settings=jsonb_set(settings, '{fiscalYearStartMonth}', '4'::jsonb)
+        where id=${org.orgId} returning id`)
+      assert.equal(changed.rows.length, 1)
     })
     await pinClock('2026-07-15', () => withOrgContext(org.orgId, async () => {
       const period = { from: '2026-07-01', to: '2026-07-31', label: 'July 2026' }
@@ -38,6 +43,7 @@ test('customer overview keeps the complete financial population while detail tab
       assert.equal(full.rows.length, 13)
       assert.equal(full.kpis.totalRevenue, '91.0000')
       assert.equal(full.kpis.totalInvoiced, '91.0000')
+      assert.equal(full.cohorts.list[0]?.year, '2027', 'cohorts retain the configured April fiscal boundary')
       const sourceOrder = full.rows.map(row => row.id)
       const authz = { user: { orgId: org.orgId }, permissions: new Set(['reports.read']), allowedSubsidiaryIds: null } as Authz
       const read = { authz, slug: 'customer-intelligence', projection: 'tab' as const, tab: 'overview', locale: 'en', revision: 'test', observedAt: Date.now() }
@@ -51,6 +57,22 @@ test('customer overview keeps the complete financial population while detail tab
       }
       assert.strictEqual(withAnalyticsRead({ ...read, projection: 'summary' }, () => projectCustomerDashboard(full)), full)
       assert.strictEqual(withAnalyticsRead({ ...read, slug: 'vendor-performance' }, () => projectCustomerDashboard(full)), full)
+      const { registerQueryObserver } = await import('@openbooks/engine/src/platform/query-observer.ts')
+      for (const tab of ['overview', 'growth', 'configuration']) {
+        const statements: string[] = []
+        const close = registerQueryObserver(statement => statements.push(statement))
+        let selected
+        try {
+          selected = await withAnalyticsRead({ ...read, tab, revision: randomUUID() }, () => customerData(period, org.orgId, null))
+        } finally { close() }
+        assert.equal(statements.filter(statement => statement.includes("settings->>'fiscalYearStartMonth'")).length,
+          tab === 'growth' ? 1 : 0, 'only the cohort view reads its fiscal grouping policy')
+        assert.deepEqual(selected.cohorts, tab === 'growth' ? full.cohorts : { list: [], overallRetention: 0 })
+        assert.equal(selected.kpis.totalRevenue, full.kpis.totalRevenue)
+        assert.equal(selected.kpis.totalInvoiced, full.kpis.totalInvoiced)
+        assert.deepEqual(selected.rows.map(row => [row.id, row.revenue, row.invoicedRevenue]),
+          full.rows.map(row => [row.id, row.revenue, row.invoicedRevenue]))
+      }
       const empty = await customerData(period, org.orgId, new Set())
       assert.deepEqual(withAnalyticsRead(read, () => projectCustomerDashboard(empty)), empty)
     }))
