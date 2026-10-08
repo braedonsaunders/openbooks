@@ -9,6 +9,7 @@ import { Button, Input, Label, cn } from '@openbooks/ui'
 import { cmp as compareMoney } from '@openbooks/engine/src/money/money.ts'
 import { useBusinessToday } from '@/components/business-date-provider'
 import { useMoney } from '@/components/money-provider'
+import { ApiResponseError, throwApiErrorIfNotOk } from '@/lib/api-error'
 
 export interface DeptRate {
   id: string
@@ -67,7 +68,7 @@ export function OverheadActions({ departments, projectTypes, autoOpen }: { depar
     const res = await fetch('/api/admin/setup/overhead', {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
     })
-    if (!res.ok) throw new Error(t('errors.requestFailed'))
+    await throwApiErrorIfNotOk(res, t('errors.requestFailed'))
   }
 
   async function publish() {
@@ -80,7 +81,7 @@ export function OverheadActions({ departments, projectTypes, autoOpen }: { depar
       toast.success(t('publishDone'))
       setOpen(null)
       router.refresh()
-    } catch { toast.error(t('errors.requestFailed')) } finally { setBusy(false) }
+    } catch (error) { toast.error(error instanceof ApiResponseError ? error.message : t('errors.requestFailed')) } finally { setBusy(false) }
   }
 
   async function finishWizard() {
@@ -107,7 +108,7 @@ export function OverheadActions({ departments, projectTypes, autoOpen }: { depar
       setOpen(null)
       setStep(0)
       router.refresh()
-    } catch { toast.error(t('errors.requestFailed')) } finally { setBusy(false) }
+    } catch (error) { toast.error(error instanceof ApiResponseError ? error.message : t('errors.requestFailed')) } finally { setBusy(false) }
   }
 
   const rateTable = (
