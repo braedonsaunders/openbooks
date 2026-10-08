@@ -3,7 +3,7 @@ import test, { type TestContext } from 'node:test'
 import { bootJsdomEnvironment } from '../../../testing/jsdom-env'
 import { stubModules } from '../../../testing/stub-modules'
 
-await bootJsdomEnvironment({ url: 'http://localhost/analytics/financial-health?period=fy' })
+await bootJsdomEnvironment({ url: 'http://localhost/analytics/financial-health?period=this_fiscal_year' })
 stubModules({ navigation: 'export function useSearchParams(){return new URLSearchParams(window.location.search)}' })
 const React = await import('react')
 Object.assign(globalThis, { React })
@@ -33,7 +33,7 @@ async function harness(t: TestContext) {
   window.setTimeout = ((callback: () => void) => { const id = ++nextTimer; timers.set(id, callback); return id }) as typeof window.setTimeout
   window.clearTimeout = (id) => { timers.delete(id as number) }
   globalThis.fetch = ((url: string, options: RequestInit) => new Promise<Response>(resolve => requests.push({ url, signal: options.signal!, resolve }))) as typeof fetch
-  window.history.replaceState(null, '', '/analytics/financial-health?period=fy')
+  window.history.replaceState(null, '', '/analytics/financial-health?period=this_fiscal_year')
   const host = document.createElement('div'); document.body.appendChild(host)
   const root = createRoot(host)
   t.after(async () => {
@@ -42,7 +42,7 @@ async function harness(t: TestContext) {
     window.setTimeout = originalSet; window.clearTimeout = originalClear
     assert.equal(timers.size, 0, 'unmount disposes the refresh timer')
   })
-  const initial = payload('initial', 'overview', 'period=fy', clock)
+  const initial = payload('initial', 'overview', 'period=this_fiscal_year', clock)
   const render = () => act(async () => root.render(<NextIntlClientProvider locale="en" messages={messages}><Probe initial={initial} /></NextIntlClientProvider>))
   await render()
   return { host, requests, render, now: () => clock, advance: async () => {
@@ -58,7 +58,7 @@ test('an open tab refreshes after expiry and retains its body while the next sou
   await h.advance()
   assert.equal(h.requests.length, 1)
   assert.equal(h.host.textContent, 'initial')
-  await act(async () => h.requests[0]!.resolve(Response.json(payload('refreshed', 'overview', 'period=fy', h.now()))))
+  await act(async () => h.requests[0]!.resolve(Response.json(payload('refreshed', 'overview', 'period=this_fiscal_year', h.now()))))
   assert.equal(h.host.textContent, 'refreshed')
   assert.equal(h.requests.length, 1, 'resolution must not cause an immediate fetch loop')
 })
@@ -70,7 +70,7 @@ test('changing the selected tab aborts its superseded read and ignores a late re
   assert.equal(h.host.textContent, 'loading')
   await act(async () => selected.setTab('overview')); await h.render()
   assert.ok(h.requests[0]!.signal.aborted)
-  await act(async () => h.requests[0]!.resolve(Response.json(payload('old items', 'items', 'period=fy', h.now()))))
+  await act(async () => h.requests[0]!.resolve(Response.json(payload('old items', 'items', 'period=this_fiscal_year', h.now()))))
   assert.equal(h.host.textContent, 'initial')
 })
 
@@ -81,6 +81,6 @@ test('a source refusal is shown by name and retry opens one new request', async 
   assert.equal(h.host.textContent, 'Configure the statement book before reading this period.')
   await act(async () => selected.retry())
   assert.equal(h.requests.length, 2)
-  await act(async () => h.requests[1]!.resolve(Response.json(payload('items', 'items', 'period=fy', h.now()))))
+  await act(async () => h.requests[1]!.resolve(Response.json(payload('items', 'items', 'period=this_fiscal_year', h.now()))))
   assert.equal(h.host.textContent, 'items')
 })

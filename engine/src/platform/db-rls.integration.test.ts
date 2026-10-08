@@ -148,98 +148,104 @@ test("database access without an explicit organization context fails closed", { 
  * unscoped — deny-by-default, zero rows, no error. This asserts the real pool
  * path against a real database, in the exact call shape that was broken.
  *
- * Read-only: it counts what is already there and never writes.
+ * A scoped fixture guarantees a nonempty population so bypass cannot pass
+ * vacuously against an empty isolated database.
  */
 test("withBypassContext routes through the dedicated bypass database role", { skip: !DB }, async () => {
-  // env, not process.env: db.ts resolves the connection string from the
-  // repo-root .env as well, and this must be the SAME database the pool uses.
-  const bypassUrl = env.OPENBOOKS_BYPASS_DB_URL ?? env.OPENBOOKS_TEST_ADMIN_DB_URL
-    ?? env.OPENBOOKS_MIGRATION_DB_URL ?? env.OPENBOOKS_DB_URL!;
-  const privileged = new pg.Client({ connectionString: bypassUrl });
-  await privileged.connect();
-  let expected: number;
+  const fixture = await withBypass(() => createScratchOrg());
   try {
-    const counted = await privileged.query<{ n: number }>("select count(*)::int as n from orgs");
-    expected = Number(counted.rows[0]!.n);
-  } finally {
-    await privileged.end().catch(() => {});
-  }
-  // Anti-vacuous-pass guard: comparing 0 against 0 is exactly the failure this
-  // test exists to catch, so an empty database makes the check inconclusive
-  // rather than green.
-  assert.ok(expected > 0, "no orgs present — this assertion cannot distinguish bypass from denial");
-
-  // The call shape that silently returned zero rows: the callback hands back
-  // drizzle's un-started thenable instead of awaiting it.
-  const viaHelper = (await withBypassContext(() =>
-    db.execute(sql`select count(*)::int as n from orgs`),
-  )) as unknown as { rows: { n: number }[] };
-  assert.equal(
-    Number(viaHelper.rows[0]!.n),
-    expected,
-    "withBypassContext did not carry bypass to the pool — org-spanning reads are silently empty",
-  );
-
-  // The scope must also be observable at the mechanism level, not just through
-  // one row count: inspect the authenticated database role selected by the
-  // context rather than a GUC that used to claim it granted privileges.
-  const scopedRole = await withBypassContext(() =>
-    db.execute<{ current_user: string }>(sql`select current_user`),
-  );
-  assert.equal(scopedRole.rows[0]!.current_user, new URL(bypassUrl).username,
-    "withBypassContext did not route its pooled statements to the configured bypass role");
-
-  // Outside any scope the posture is deny-by-default — but "deny" is a
-  // property of the database ROLE, not of the GUCs alone. The trusted-test
-  // harness (test-database-bypass.ts, loaded by `npm test`) turns bypass on
-  // globally, so under it an unscoped read legitimately sees every org and
-  // asserting anything about rows would test the harness, not the posture.
-  if (!process.env.OPENBOOKS_TRUSTED_TEST_BYPASS) {
-    // With no context anywhere, the wrapper must bracket every pooled
-    // statement with the fail-closed GUCs.
-    const unscopedGucs = await db.execute<{ org: string; bypass: string }>(
-      sql`select current_setting('app.current_org', true) as org,
-                 current_setting('app.bypass_rls', true) as bypass`,
-    );
-    assert.deepEqual(
-      { org: unscopedGucs.rows[0]!.org, bypass: unscopedGucs.rows[0]!.bypass },
-      { org: "", bypass: "off" },
-      "an unscoped pooled query did not apply the deny-by-default GUCs",
-    );
-
-    // An unscoped read must never see MORE than an explicitly denied session
-    // on the same connection string. The old assertion here demanded zero
-    // rows outright, which is unsatisfiable rather than protective on an
-    // exempt login: PostgreSQL exempts superuser and BYPASSRLS sessions from
-    // row security even under FORCE ROW LEVEL SECURITY, so no set_config
-    // combination can show them fewer rows. Test databases therefore transfer
-    // ownership to the constrained runtime role at provision time, so the
-    // pool login here is RLS-subject and the denied count below is zero —
-    // that is the original end-to-end proof. On a database whose login is
-    // still an exempt bootstrap superuser (an untransferred container), both
-    // counts equal the full table by server semantics; production is kept
-    // honest separately: bootstrap provisions openbooks_app as
-    // NOSUPERUSER/NOBYPASSRLS and assertSafeRuntimeDatabaseRole refuses to
-    // start a production process on any role that could bypass tenant RLS.
-    const denied = new pg.Client({ connectionString: env.OPENBOOKS_DB_URL });
-    await denied.connect();
-    let deniedCount: number;
+    // env, not process.env: db.ts resolves the connection string from the
+    // repo-root .env as well, and this must be the SAME database the pool uses.
+    const bypassUrl = env.OPENBOOKS_BYPASS_DB_URL ?? env.OPENBOOKS_TEST_ADMIN_DB_URL
+      ?? env.OPENBOOKS_MIGRATION_DB_URL ?? env.OPENBOOKS_DB_URL!;
+    const privileged = new pg.Client({ connectionString: bypassUrl });
+    await privileged.connect();
+    let expected: number;
     try {
-      await denied.query(
-        "select set_config('app.current_org', '', false), set_config('app.bypass_rls', 'off', false)",
-      );
-      const counted = await denied.query<{ n: number }>("select count(*)::int as n from orgs");
-      deniedCount = Number(counted.rows[0]!.n);
+      const counted = await privileged.query<{ n: number }>("select count(*)::int as n from orgs");
+      expected = Number(counted.rows[0]!.n);
     } finally {
-      await denied.end().catch(() => {});
+      await privileged.end().catch(() => {});
     }
-    const unscoped = await db.execute<{ n: number }>(
-      sql`select count(*)::int as n from orgs`,
-    );
+    // Anti-vacuous-pass guard: comparing 0 against 0 is exactly the failure this
+    // test exists to catch, so an empty database makes the check inconclusive
+    // rather than green.
+    assert.ok(expected > 0, "no orgs present — this assertion cannot distinguish bypass from denial");
+
+    // The call shape that silently returned zero rows: the callback hands back
+    // drizzle's un-started thenable instead of awaiting it.
+    const viaHelper = (await withBypassContext(() =>
+      db.execute(sql`select count(*)::int as n from orgs`),
+    )) as unknown as { rows: { n: number }[] };
     assert.equal(
-      Number(unscoped.rows[0]!.n),
-      deniedCount,
-      "an unscoped pooled read saw more than an explicitly denied session on the same role",
+      Number(viaHelper.rows[0]!.n),
+      expected,
+      "withBypassContext did not carry bypass to the pool — org-spanning reads are silently empty",
     );
+
+    // The scope must also be observable at the mechanism level, not just through
+    // one row count: inspect the authenticated database role selected by the
+    // context rather than a GUC that used to claim it granted privileges.
+    const scopedRole = await withBypassContext(() =>
+      db.execute<{ current_user: string }>(sql`select current_user`),
+    );
+    assert.equal(scopedRole.rows[0]!.current_user, new URL(bypassUrl).username,
+      "withBypassContext did not route its pooled statements to the configured bypass role");
+
+    // Outside any scope the posture is deny-by-default — but "deny" is a
+    // property of the database ROLE, not of the GUCs alone. The trusted-test
+    // harness (test-database-bypass.ts, loaded by `npm test`) turns bypass on
+    // globally, so under it an unscoped read legitimately sees every org and
+    // asserting anything about rows would test the harness, not the posture.
+    if (!process.env.OPENBOOKS_TRUSTED_TEST_BYPASS) {
+      // With no context anywhere, the wrapper must bracket every pooled
+      // statement with the fail-closed GUCs.
+      const unscopedGucs = await db.execute<{ org: string; bypass: string }>(
+        sql`select current_setting('app.current_org', true) as org,
+                   current_setting('app.bypass_rls', true) as bypass`,
+      );
+      assert.deepEqual(
+        { org: unscopedGucs.rows[0]!.org, bypass: unscopedGucs.rows[0]!.bypass },
+        { org: "", bypass: "off" },
+        "an unscoped pooled query did not apply the deny-by-default GUCs",
+      );
+
+      // An unscoped read must never see MORE than an explicitly denied session
+      // on the same connection string. The old assertion here demanded zero
+      // rows outright, which is unsatisfiable rather than protective on an
+      // exempt login: PostgreSQL exempts superuser and BYPASSRLS sessions from
+      // row security even under FORCE ROW LEVEL SECURITY, so no set_config
+      // combination can show them fewer rows. Test databases therefore transfer
+      // ownership to the constrained runtime role at provision time, so the
+      // pool login here is RLS-subject and the denied count below is zero —
+      // that is the original end-to-end proof. On a database whose login is
+      // still an exempt bootstrap superuser (an untransferred container), both
+      // counts equal the full table by server semantics; production is kept
+      // honest separately: bootstrap provisions openbooks_app as
+      // NOSUPERUSER/NOBYPASSRLS and assertSafeRuntimeDatabaseRole refuses to
+      // start a production process on any role that could bypass tenant RLS.
+      const denied = new pg.Client({ connectionString: env.OPENBOOKS_DB_URL });
+      await denied.connect();
+      let deniedCount: number;
+      try {
+        await denied.query(
+          "select set_config('app.current_org', '', false), set_config('app.bypass_rls', 'off', false)",
+        );
+        const counted = await denied.query<{ n: number }>("select count(*)::int as n from orgs");
+        deniedCount = Number(counted.rows[0]!.n);
+      } finally {
+        await denied.end().catch(() => {});
+      }
+      const unscoped = await db.execute<{ n: number }>(
+        sql`select count(*)::int as n from orgs`,
+      );
+      assert.equal(
+        Number(unscoped.rows[0]!.n),
+        deniedCount,
+        "an unscoped pooled read saw more than an explicitly denied session on the same role",
+      );
+    }
+  } finally {
+    await withBypass(() => dropScratchOrg(fixture.orgId));
   }
 });
