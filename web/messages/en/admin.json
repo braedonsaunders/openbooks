@@ -6073,6 +6073,10 @@
         "unpaid": {
           "charge": "Charge the period",
           "carry": "Carry for recovery"
+        },
+        "hoursCoverage": {
+          "earned_dates": "Earning dates",
+          "pay_period_end": "Eligibility at pay-period end"
         }
       },
       "waitingMonthsHint": "Use calendar months or days, not both. Calendar months follow the employee’s hire-date anniversary.",
@@ -6092,7 +6096,9 @@
         "recoveryRuleId": "Recovery deduction",
         "premiumRuleId": "Employer premium"
       },
-      "recoverySourceHint": "Link this premium to the employee deduction that carries and recovers unpaid coverage. A premium can belong to only one recovery deduction."
+      "recoverySourceHint": "Link this premium to the employee deduction that carries and recovers unpaid coverage. A premium can belong to only one recovery deduction.",
+      "hoursCoverage": "Hour eligibility",
+      "hoursCoverageHint": "Earning dates count only hours within enrollment, election and rule coverage. For a per-hour contribution, pay-period-end eligibility uses the terms effective on the period end and counts this run’s paid units across the period. Choose it only when the plan explicitly uses that policy."
     },
     "serviceCredit": {
       "calendarMonths": "Calendar months",

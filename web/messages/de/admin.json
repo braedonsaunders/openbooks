@@ -6073,6 +6073,10 @@
         "unpaid": {
           "charge": "Periode berechnen",
           "carry": "Zur Rückforderung vortragen"
+        },
+        "hoursCoverage": {
+          "earned_dates": "Verdienstdaten",
+          "pay_period_end": "Berechtigung am Periodenende"
         }
       },
       "waitingMonthsHint": "Verwenden Sie Monate oder Tage, nicht beides. Monate folgen dem Eintrittsdatum.",
@@ -6092,7 +6096,9 @@
         "recoveryRuleId": "Rückzahlungsabzug",
         "premiumRuleId": "Arbeitgeberprämie"
       },
-      "recoverySourceHint": "Verknüpfen Sie die Prämie mit dem Arbeitnehmerabzug für unbezahlte Versicherungszeiten. Eine Prämie kann nur einem Rückzahlungsabzug zugeordnet sein."
+      "recoverySourceHint": "Verknüpfen Sie die Prämie mit dem Arbeitnehmerabzug für unbezahlte Versicherungszeiten. Eine Prämie kann nur einem Rückzahlungsabzug zugeordnet sein.",
+      "hoursCoverage": "Stundenberechtigung",
+      "hoursCoverageHint": "Nach Verdienstdatum zählen nur Stunden innerhalb der Gültigkeit von Teilnahme, Wahl und Regel. Bei einem stündlichen Beitrag verwendet die Berechtigung am Periodenende die dann gültigen Bedingungen und die in dieser Abrechnung bezahlten Einheiten der Periode. Nur wählen, wenn der Plan diese Regel ausdrücklich vorsieht."
     },
     "serviceCredit": {
       "calendarMonths": "Kalendermonate",

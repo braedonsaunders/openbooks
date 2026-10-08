@@ -6073,6 +6073,10 @@
         "unpaid": {
           "charge": "当期收取",
           "carry": "结转待补收"
+        },
+        "hoursCoverage": {
+          "earned_dates": "收入日期",
+          "pay_period_end": "工资期末适用条件"
         }
       },
       "waitingMonthsHint": "选择日历月或天数，不能同时使用。日历月按入职日期周年计算。",
@@ -6092,7 +6096,9 @@
         "recoveryRuleId": "追回扣款",
         "premiumRuleId": "雇主保费"
       },
-      "recoverySourceHint": "将此保费关联到负责结转和追回无薪期间保障费用的员工扣款规则。每项保费只能关联一项追回扣款规则。"
+      "recoverySourceHint": "将此保费关联到负责结转和追回无薪期间保障费用的员工扣款规则。每项保费只能关联一项追回扣款规则。",
+      "hoursCoverage": "工时适用条件",
+      "hoursCoverageHint": "按收入日期时，仅计算参保、选择和规则有效期内的工时。按小时缴费选择期末适用条件时，使用工资期末有效的条款，并计算本次工资支付的该期间单位。仅在计划明确采用此政策时选择。"
     },
     "serviceCredit": {
       "calendarMonths": "日历月",

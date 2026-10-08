@@ -102,6 +102,14 @@ export async function validateBenefitContributionConfiguration(exec: SqlExecutor
   const basis = body.basis;
   if (!['per_hour','per_period','per_month','per_year','percent_of_eligible_pay'].includes(String(basis))) refuse('Declare a contribution basis: per hour, per period, per month, per year, or percent of eligible pay');
   decimal(body, 'rate');
+  const previous = typeof body.id === 'string' ? (await exec.execute<{ hours_coverage: string; submitted: boolean }>(sql`select r.hours_coverage,
+    exists(select 1 from hrm_benefit_enrollment_terms t join hrm_benefit_enrollments e on e.org_id=t.org_id and e.id=t.enrollment_id
+      where t.org_id=r.org_id and t.rule_id=r.id and e.submission_snapshot is not null) as submitted
+    from hrm_benefit_contribution_rules r where r.org_id=${orgId} and r.id=${body.id}::uuid for update`)).rows[0] : undefined;
+  const hoursCoverage = body.hoursCoverage === undefined ? previous?.hours_coverage ?? 'earned_dates' : body.hoursCoverage;
+  if (!['earned_dates', 'pay_period_end'].includes(String(hoursCoverage))) refuse('Declare hour eligibility: earning dates or eligibility at pay-period end');
+  if (hoursCoverage === 'pay_period_end' && basis !== 'per_hour') refuse('Pay-period-end hour eligibility requires a per-hour basis — choose earning-date eligibility before changing to another contribution basis');
+  if (previous?.submitted && previous.hours_coverage !== hoursCoverage) refuse('Hour eligibility has submitted election evidence — preserve this rule and create an effective-dated replacement rule with new election terms');
   if (basis === 'per_hour' && !['all_paid','regular_paid','scheduled_paid','selected_components'].includes(String(body.hoursBasis))) refuse('Per-hour contributions need a declared eligible hours basis — choose all paid, regular paid, scheduled paid, or selected-components hours');
   if (basis === 'per_hour' && String(body.hoursBasis ?? '') === 'selected_components' && typeof body.id === 'string') {
     // Links are owned rows, so a component retired or converted after linking
