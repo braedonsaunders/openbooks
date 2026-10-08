@@ -11,7 +11,7 @@ import { cumulativeReceivableMaturity, receivablesRatio } from '../../../../lib/
 import { AnalyticsTabContent, useAnalyticsTab } from '../use-analytics-tab'
 import { KpiCard } from '../_ui/KpiCard'
 import { Panel } from '../_ui/Panel'
-import { Donut, DivergingBar, TrendChart } from '../_ui/charts'
+import { Donut, DivergingBar, TrendChart, Waterfall } from '../_ui/charts'
 import { useAnalyticsMoney, toChartNumber } from '../_ui/format'
 import { RelatedPartyLink } from '../../../../components/related-party-link'
 
@@ -47,7 +47,11 @@ export function ReceivablesView({ data: initialData, canOpenCustomers = false }:
                   <Donut data={s.aging.map((r) => ({ name: t(`aging.${r.index}`), value: toChartNumber(r.gross) })).filter((r) => r.value > 0)} height={250} />
                 </Panel>
                 <Panel title={t('panels.balanceBridge')} icon={Banknote} className="lg:col-span-2">
-                  <DivergingBar labels={[t('kpi.gross'), t('kpi.credits'), t('kpi.outstanding')]} values={[toChartNumber(s.gross), toChartNumber(neg(s.credits)), toChartNumber(s.outstanding)]} height={250} />
+                  <Waterfall steps={[
+                    { label: t('kpi.gross'), amount: toChartNumber(s.gross), kind: 'start' },
+                    { label: t('kpi.credits'), amount: toChartNumber(neg(s.credits)), kind: 'deduct' },
+                    { label: t('kpi.outstanding'), amount: toChartNumber(s.outstanding), kind: 'total' },
+                  ]} height={250} />
                 </Panel>
               </div>
               <div className="grid gap-3 md:grid-cols-3">
@@ -80,6 +84,7 @@ export function ReceivablesView({ data: initialData, canOpenCustomers = false }:
                     <p className="mt-3 text-2xl font-bold tabular-nums">{money(r.net)}</p>
                     <p className="mt-1 text-xs text-amber-600 dark:text-amber-400">{t('customerShare', { share: percent(receivablesRatio(r.gross, s.gross)), overdue: money(r.overdue) })}</p>
                     <p className="mt-1 text-xs text-slate-500">{t('documents', { count: r.documents })} · {t('kpi.credits')}: {money(r.credits)}</p>
+                    <p className="mt-2 text-xs font-medium text-rose-600 dark:text-rose-400">{t('kpi.severe')}: {money(r.severe)}</p>
                   </>
                   const className = 'rounded-xl border border-slate-200 bg-white p-4 text-left shadow-sm transition hover:border-teal-400 focus-visible:outline-2 focus-visible:outline-teal-500 dark:border-slate-800 dark:bg-slate-900'
                   return r.id && read.props.canOpenCustomers ? <RelatedPartyLink key={r.id} partyId={r.id} role="customer" className={className}>{content}</RelatedPartyLink>

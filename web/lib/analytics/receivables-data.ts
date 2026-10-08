@@ -84,7 +84,8 @@ async function calculateSummary(source: SQL, currency: string, asOf: string): Pr
     top5: string; aging: ReceivableCohort[]; maturity: ReceivableCohort[]; missing: string[]
   }>(sql`with ${source},
     customer_balances as (
-      select party_id, sum(greatest(amount, 0)) as gross from translated group by party_id
+      select party_id, sum(greatest(amount, 0)) as gross from translated
+      where party_id is not null group by party_id
     ),
     cohorts as (
       select *, ${agingIndex} as aging_index,
@@ -113,7 +114,7 @@ async function calculateSummary(source: SQL, currency: string, asOf: string): Pr
            coalesce(sum(greatest(amount, 0)) filter (where due_date is null), 0)::text as missing_terms,
            count(distinct doc_id)::int as documents,
            count(distinct party_id)::int as customers,
-           coalesce((select sum(gross) from (select gross from customer_balances order by gross desc, party_id nulls last limit 5) top), 0)::text as top5,
+           coalesce((select sum(gross) from (select gross from customer_balances order by gross desc, party_id limit 5) top), 0)::text as top5,
            coalesce((select jsonb_agg(aging order by index) from aging), '[]'::jsonb) as aging,
            coalesce((select jsonb_agg(maturity order by index) from maturity), '[]'::jsonb) as maturity,
            coalesce((select jsonb_agg(currency order by currency) from missing), '[]'::jsonb) as missing

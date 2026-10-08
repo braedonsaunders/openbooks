@@ -5,6 +5,7 @@ import { can, requirePermission } from '../../../../lib/authz'
 import { resolvePeriod } from '../../../../lib/periods'
 import { parseReportQuery } from '../../../../lib/report-filters'
 import { receivablesData, type ReceivablesData } from '../../../../lib/analytics/receivables-data'
+import { AGING_PERIOD_PRESETS, agingPeriodPreset } from '../../../../lib/aging-periods'
 
 export interface ReceivablesIntelligenceData {
   title: string
@@ -17,7 +18,7 @@ export interface ReceivablesIntelligenceData {
 export async function loadReceivablesIntelligence(sp: Record<string, string | undefined>): Promise<ReceivablesIntelligenceData> {
   await requirePermission('reports.read')
   const authz = await requirePermission('ar.read')
-  const q = parseReportQuery({ ...sp, period: sp.period ?? 'today' })
+  const q = parseReportQuery({ ...sp, period: agingPeriodPreset(sp.period) })
   const [t, locale, period] = await Promise.all([
     getTranslations('analytics.receivables'), getLocale(),
     resolvePeriod(q.period, { customFrom: q.from, customTo: q.to, orgId: authz.user.orgId }),
@@ -31,7 +32,7 @@ export async function loadReceivablesIntelligence(sp: Record<string, string | un
  * one rich dashboard body. Statements remain in the Reports hub. */
 export function receivablesIntelligenceSpec(data: ReceivablesIntelligenceData): PageSpec {
   return page({ route: '/analytics/receivables-intelligence', layout: 'list',
-    header: [frame('analytics-header', [widgetBlock('report-period-filter', { defaultPeriod: 'today' })], {
+    header: [frame('analytics-header', [widgetBlock('report-period-filter', { defaultPeriod: 'today', periodPresets: AGING_PERIOD_PRESETS })], {
       title: data.title, periodLabel: data.periodLabel, backLabel: data.backLabel,
     })],
     body: [widgetBlock('receivables-view', { data: data.data, canOpenCustomers: data.canOpenCustomers })],

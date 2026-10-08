@@ -4,6 +4,7 @@ import { receivablesRatio, cumulativeReceivableMaturity } from './receivables-me
 import { analyticsDashboardDenied, ANALYTICS_DASHBOARD_MAP } from './dashboard-catalog'
 import { analyticsQueryString, analyticsSourceQuery } from './query-params'
 import { agingBucketIndex, agingBasisDate } from '../aging-basis'
+import { AGING_PERIOD_PRESETS, agingPeriodPreset } from '../aging-periods'
 
 test('shared aging retains the historical 90-day boundary and due-date precedence', () => {
   for (let days = -10; days <= 120; days++) {
@@ -35,10 +36,15 @@ test('the receivables dashboard requires both analytics and receivables grants w
   assert.equal(definition.feature, undefined)
 })
 
-test('receivables page and lazy tabs share a today default while explicit periods remain unchanged', () => {
+test('receivables page and lazy tabs share point-in-time periods while explicit custom dates remain unchanged', () => {
   assert.equal(analyticsSourceQuery({}, 'receivables-intelligence').period, 'today')
   assert.equal(analyticsQueryString({}, 'receivables-intelligence'), 'period=today')
   assert.notEqual(analyticsSourceQuery({}).period, 'today')
+  for (const preset of AGING_PERIOD_PRESETS) assert.equal(agingPeriodPreset(preset), preset)
+  for (const preset of ['this_fiscal_year', 'next_month', 'this_month', 'unknown']) {
+    assert.equal(agingPeriodPreset(preset), 'today')
+    assert.equal(analyticsQueryString({ period: preset }, 'receivables-intelligence'), 'period=today')
+  }
   const custom = { period: 'custom', from: '2026-08-01', to: '2026-08-31' }
   assert.deepEqual(analyticsSourceQuery({ ...custom, tab: 'customers', relatedParty: 'private' }, 'receivables-intelligence'), custom)
 })
