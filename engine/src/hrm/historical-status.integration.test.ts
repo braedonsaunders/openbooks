@@ -7,6 +7,7 @@ import { DB, gateOf, mkSecondSubsidiary, seedEmployment, seedFlow, seedPlan, see
 import { createChangeRequestDraft, getChangeRequest, submitChangeRequest } from './change-requests.ts';
 import { electEnrollment } from './benefits/enrollments.ts';
 import { decideGate } from '../flows/gates.ts';
+import { correctEmploymentChange } from '../automations/event-verbs.ts';
 import { installEngineSeams } from '../composition/install.ts';
 
 installEngineSeams();
@@ -67,6 +68,11 @@ test('approved historical status fills one documented day, preserves current his
     assert.equal(audits[0]!.changes.before, null);
     assert.deepEqual(audits[0]!.changes.after, after[1]);
     assert.equal(audits[0]!.changes.sourceReference, observation.historicalObservation.sourceReference);
+    await db.execute(sql`update orgs set settings=jsonb_set(settings,'{hrmCorrectRequiresReapproval}','false'::jsonb) where id=${h.org.orgId}`);
+    await assert.rejects(correctEmploymentChange({ orgId: h.org.orgId, actorId: h.author,
+      changeId: applied.appliedEmploymentChangeId!, reason: 'Review status evidence', correctedFields: { status: 'on_leave' } }),
+      /bounded status change request/);
+    assert.deepEqual(await versions(h.org.orgId, employmentId), after, 'direct correction never selects the unrelated current episode');
     assert.equal((await db.execute<{ n: number }>(sql`select count(*)::int as n from hrm_processes where org_id=${h.org.orgId}`)).rows[0]!.n, 0);
     await assert.rejects(async () => decideGate({ gateId: (await gateOf(stale.id)).id, decision: 'approved', userId: h.approver }), /employment changed|revision|stale/i);
     assert.equal((await versions(h.org.orgId, employmentId)).length, 2);
@@ -79,6 +85,17 @@ test('approved historical status fills one documented day, preserves current his
     const elected = await electEnrollment({ orgId: h.org.orgId, actorId: h.author, employmentId, planId, windowId,
       effectiveFrom: '2020-01-03', effectiveTo: '2020-01-03', contributionTerms: await seededContributionTerms(h.org.orgId, planId) });
     assert.equal(elected.status, 'active');
+    // A later ordinary status change allocates beyond all recorded versions,
+    // not just the overlapping current version whose sequence is still1.
+    const ordinary = await createChangeRequestDraft({ orgId: h.org.orgId, actorId: h.author, employmentId,
+      payload: { kind: 'status_change', status: 'on_leave', effectiveFrom: '2026-08-09' } });
+    await submitChangeRequest({ orgId: h.org.orgId, actorId: h.author, requestId: ordinary.id, reason: 'Change the current status independently' });
+    await decideGate({ gateId: (await gateOf(ordinary.id)).id, decision: 'approved', userId: h.approver });
+    const continued = await versions(h.org.orgId, employmentId);
+    assert.deepEqual(continued[1], after[1], 'the historical observation remains unchanged');
+    assert.equal(continued[2]!.version_no, 3);
+    assert.equal(continued[2]!.status, 'on_leave');
+    assert.equal(continued[0]!.superseded_by, 3);
   });
 });
 
