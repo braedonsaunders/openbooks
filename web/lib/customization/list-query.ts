@@ -55,6 +55,7 @@ export const DOCUMENT_SORTS: Record<string, SQL> = {
   total: DOC_AMOUNT_EXPR,
   balance: sql`d.open_balance`,
   status: sql`d.status`,
+  work_completed: sql`d.work_completed_on`,
 }
 
 /**
@@ -81,6 +82,7 @@ export const DOCUMENT_BUILT_IN_EXPR: Record<string, SQL> = {
   total: DOC_AMOUNT_EXPR,
   open_balance: sql`d.open_balance`,
   status: sql`d.status`,
+  work_completed_on: sql`d.work_completed_on`,
 }
 
 const SHOW_IN_LIST_BY_KEY = (defs: CustomFieldDef[]) =>

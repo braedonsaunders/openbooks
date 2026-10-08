@@ -155,7 +155,8 @@
     "hrm-benefits-employees": "Leistungen",
     "hrm-benefits-delivery": "Bereitstellung",
     "hrm-training": "Schulung",
-    "scheduling": "Einsatzplanung"
+    "scheduling": "Einsatzplanung",
+    "internal-billing": "Interne Verrechnung"
   },
   "groups": {
     "workforce": "Belegschaft",

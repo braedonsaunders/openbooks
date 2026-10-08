@@ -1,0 +1,61 @@
+{
+  "title": "Facturación interna",
+  "description": "Factura trabajo entre departamentos, proyectos y subsidiarias. Cada regla decide cómo el movimiento queda fuera de los totales de la empresa.",
+  "list": {
+    "new": "Nueva facturación interna",
+    "emptyTitle": "Aún no hay facturación interna",
+    "emptyDescription": "Registra el trabajo que una parte del negocio hace para otra, para que se acredite y cargue al departamento, proyecto o subsidiaria correctos."
+  },
+  "fields": {
+    "rule": "Regla",
+    "from": "De",
+    "rate": "Tarifa",
+    "billable": "Facturable",
+    "billRate": "Tarifa de facturación"
+  },
+  "drawer": {
+    "newTitle": "Nueva facturación interna",
+    "description": "Elige quién presta el trabajo y quién lo recibe.",
+    "from": "De",
+    "to": "Para",
+    "chooseRule": "Elige una regla",
+    "noRules": "Aún no hay reglas de facturación interna. Agrega una en Configuración → Facturación interna.",
+    "none": "Ninguno",
+    "sameAsFrom": "Igual que De",
+    "chooseSubsidiary": "Elige una subsidiaria",
+    "addLine": "Agregar línea",
+    "removeLine": "Quitar línea",
+    "saveDraft": "Guardar borrador",
+    "journalEntry": "Asiento contable",
+    "total": "Total",
+    "billed": "Facturado al cliente"
+  },
+  "void": {
+    "title": "Anular facturación interna",
+    "message": "Se revierte la contabilización. Una línea facturada a un cliente debe liberarse antes anulando o eliminando esa factura.",
+    "reason": "Motivo"
+  },
+  "feedback": {
+    "saved": "Borrador guardado",
+    "posted": "Contabilizado",
+    "pendingApproval": "Enviado para aprobación",
+    "voided": "Anulado",
+    "saveFailed": "No se pudo guardar el borrador.",
+    "postFailed": "No se pudo contabilizar el documento.",
+    "voidFailed": "No se pudo anular el documento."
+  },
+  "methods": {
+    "revenue_credit": {
+      "label": "Crédito de la venta al departamento",
+      "description": "El departamento que hizo el trabajo recibe el crédito por el ingreso; los ingresos de la empresa no se cuentan dos veces."
+    },
+    "cost_transfer": {
+      "label": "Traspaso de costo",
+      "description": "Traslada el costo al departamento o proyecto que usó el trabajo; el costo de la empresa no cambia."
+    },
+    "intercompany_sale": {
+      "label": "Venta entre empresas del grupo",
+      "description": "Una subsidiaria vende a otra; ambos lados se eliminan en la consolidación."
+    }
+  }
+}

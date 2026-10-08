@@ -102,7 +102,9 @@
     "fulfillmentShort": "Fulfill",
     "returnAuthorization": "Return authorization",
     "returnAuthorizationShort": "RMA",
-    "payRun": "Pay run"
+    "payRun": "Pay run",
+    "internalBilling": "Internal billing",
+    "internalBillingShort": "Internal"
   },
   "labels": {
     "name": "Name",
@@ -171,6 +173,9 @@
     "finalInvoice": "Final invoice",
     "paymentHold": "Payment hold",
     "expectedPayDate": "Expected pay date",
+    "workCompletedOn": "Work completed",
+    "workFrom": "Work from",
+    "workTo": "Work to",
     "openBalance": "Open balance",
     "defaultForm": "Default form",
     "asOf": "As of",

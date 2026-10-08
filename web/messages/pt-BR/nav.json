@@ -155,7 +155,8 @@
     "hrm-benefits-employees": "Benefícios",
     "hrm-benefits-delivery": "Entrega",
     "hrm-training": "Treinamento",
-    "scheduling": "Programação"
+    "scheduling": "Programação",
+    "internal-billing": "Faturamento interno"
   },
   "groups": {
     "workforce": "Força de trabalho",

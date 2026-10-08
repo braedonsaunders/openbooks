@@ -3412,6 +3412,11 @@
         "title": "Códigos de planificación",
         "singularTitle": "Código de planificación",
         "description": "Códigos para asignar trabajo que no corresponde a un cliente ni a un proyecto, como días de formación o de taller, y para los días en que las personas no trabajan."
+      },
+      "internal-billing": {
+        "title": "Facturación interna",
+        "description": "Reglas con vigencia para facturar entre departamentos, proyectos y subsidiarias, y cómo cada una queda fuera de los totales de la empresa.",
+        "singularTitle": "Regla de facturación interna"
       }
     },
     "fields": {
@@ -6524,6 +6529,55 @@
       "limitKinds": {
         "none": "Sin límite",
         "amount": "Límite monetario"
+      }
+    },
+    "internalBilling": {
+      "formDescription": "Una regla indica cómo se registra la facturación interna. Para cambiar el tratamiento, agrega una nueva versión desde una fecha posterior.",
+      "sections": {
+        "rule": "Regla",
+        "advanced": "Avanzado",
+        "advancedHelp": "Se sugirieron cuentas para este tipo de regla. Confírmalas e indica cuándo se aplica la regla.",
+        "reason": "Motivo del cambio"
+      },
+      "fields": {
+        "code": "Código",
+        "name": "Nombre",
+        "method": "Tratamiento",
+        "description": "Descripción",
+        "debitAccountId": "Cuenta receptora (débito)",
+        "creditAccountId": "Cuenta proveedora (crédito)",
+        "effectiveFrom": "Vigente desde",
+        "effectiveTo": "Vigente hasta",
+        "billableByDefault": "Facturable de forma predeterminada",
+        "isActive": "Activa",
+        "reason": "Motivo"
+      },
+      "help": {
+        "code": "Los documentos eligen una regla por su código; cada versión del código se aplica a sus propias fechas.",
+        "debitAccountId": "Se carga al departamento, proyecto o subsidiaria que recibe.",
+        "creditAccountId": "Se acredita al departamento, proyecto o subsidiaria que presta el trabajo.",
+        "effectiveTo": "Déjalo vacío para mantener la versión vigente hasta que empiece una posterior.",
+        "billableByDefault": "Las nuevas líneas con un proyecto receptor se facturan al cliente de ese proyecto.",
+        "isActive": "Desactiva una versión agregada por error. Una versión ya usada por documentos contabilizados se cierra con una fecha de fin.",
+        "reason": "Se registra en el historial de auditoría junto con el cambio."
+      },
+      "methods": {
+        "revenue_credit": {
+          "label": "Crédito de la venta al departamento",
+          "description": "El departamento que hizo el trabajo recibe el crédito por el ingreso; los ingresos de la empresa no se cuentan dos veces."
+        },
+        "cost_transfer": {
+          "label": "Traspaso de costo",
+          "description": "Traslada el costo al departamento o proyecto que usó el trabajo; el costo de la empresa no cambia."
+        },
+        "intercompany_sale": {
+          "label": "Venta entre empresas del grupo",
+          "description": "Una subsidiaria vende a otra; ambos lados se eliminan en la consolidación."
+        }
+      },
+      "chooser": {
+        "title": "¿Qué hace esta regla?",
+        "description": "Elige el tratamiento. Las cuentas y fechas se completan por ti y puedes cambiarlas en Avanzado."
       }
     }
   },

@@ -49,9 +49,10 @@ export async function loadFieldTicketDrawerData({
     ? sql` and ${sql.raw(column)} = ${ticketSubsidiaryId}`
     : sql``
 
-  const [equipmentEnabled, inventoryEnabled, today] = await Promise.all([
+  const [equipmentEnabled, inventoryEnabled, progressEnabled, today] = await Promise.all([
     isFeatureEnabled(orgId, 'equipment'),
     isFeatureEnabled(orgId, 'inventory'),
+    isFeatureEnabled(orgId, 'projectProgress'),
     businessToday(orgId),
   ])
   // Inventory and Equipment stay on stored ticket lines. The picker only
@@ -137,7 +138,8 @@ export async function loadFieldTicketDrawerData({
          limit 2000`),
       ticket.projectId
         ? db.execute<(FieldTicketDrawerProps['projectTasks'])[number]>(sql`
-            select id, code, name, status, estimated_hours as "estimatedHours"
+            select id, code, name, status, estimated_hours as "estimatedHours",
+                   budget_quantity::text as "budgetQuantity", budget_unit as "budgetUnit"
               from project_tasks
              where org_id = ${orgId} and project_id = ${ticket.projectId}
                ${ticketSubsidiaryId ? sql`and exists (
@@ -176,6 +178,7 @@ export async function loadFieldTicketDrawerData({
     projectTasks: projectTasks.rows,
     equipmentUnits: equipmentUnits.rows,
     equipmentEnabled,
+    progressEnabled,
     layout: resolvedForm.layout,
     availableLayouts: resolvedForm.available,
     currentLayoutId: resolvedForm.row?.id ?? null,

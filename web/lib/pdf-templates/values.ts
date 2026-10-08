@@ -174,7 +174,8 @@ async function loadDocumentValues(
     select l.line_number, l.description, l.quantity, l.unit, l.unit_price, l.amount, l.tax_amount,
            l.service_party_id, sp.display_name as service_party_name,
            coalesce(nullif(trim(concat(acc.number, ' ', acc.name)), ''), acc.name) as account_name,
-           i.name as item_name, cir.customer_sku
+           i.name as item_name, cir.customer_sku,
+           l.work_from::text as work_from, l.work_to::text as work_to
       from document_lines l
       left join accounts acc on acc.id = l.account_id and acc.org_id = l.org_id
       left join items i on i.id = l.item_id and i.org_id = l.org_id
@@ -234,6 +235,8 @@ async function loadDocumentValues(
       tax_amount: l.tax_amount === null || l.tax_amount === undefined || isZero(String(l.tax_amount)) ? '' : money(String(l.tax_amount)),
       amount: money(String(l.amount ?? '0')),
       service_party_name: l.service_party_name ?? '',
+      work_from: fmtDate(l.work_from, locale),
+      work_to: fmtDate(l.work_to, locale),
     }
     const servicePartyId = l.service_party_id as string | null
     if (servicePartyId) {
@@ -264,6 +267,7 @@ async function loadDocumentValues(
     document_number: doc.document_number ?? '',
     document_date: fmtDate(doc.document_date, locale),
     due_date: fmtDate(doc.due_date, locale),
+    work_completed_on: fmtDate(doc.work_completed_on, locale),
     reference_number: doc.reference_number ?? '',
     status: fmtStatus(doc.status),
     memo: doc.memo ?? '',

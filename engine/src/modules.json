@@ -76,7 +76,7 @@
       ]
     },
     "billing": {
-      "description": "Generated billing: recurring templates, subscription billing, advanced subscriptions and SaaS plan entitlements.",
+      "description": "Generated billing: recurring templates, subscription billing, advanced subscriptions and SaaS plan entitlements, and the quote lifecycle from signature and activation to project award.",
       "dependsOn": [
         "banking",
         "delivery",
@@ -89,6 +89,7 @@
         "organization",
         "periods",
         "platform",
+        "projects",
         "records",
         "revenue",
         "scripting",
@@ -128,6 +129,7 @@
         "payments",
         "periods",
         "platform",
+        "projects",
         "records"
       ]
     },
@@ -299,6 +301,18 @@
         "payroll",
         "platform",
         "projects",
+        "records"
+      ]
+    },
+    "internal-billing": {
+      "description": "Internal billing between departments, projects and subsidiaries: effective-dated rules and the internal billing document writer, posted through the native lifecycle.",
+      "dependsOn": [
+        "flows",
+        "journal",
+        "ledger",
+        "money",
+        "organization",
+        "platform",
         "records"
       ]
     },
@@ -474,10 +488,12 @@
       "description": "Project accounting: financials and profiles, recognition, project revenue, labor costing, overhead, construction billing, subcontracts, field-ticket labor evidence, billing source integrity.",
       "dependsOn": [
         "allocations",
+        "compliance",
         "fx",
         "journal",
         "money",
         "organization",
+        "periods",
         "platform",
         "records",
         "revenue"

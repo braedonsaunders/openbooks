@@ -46,6 +46,7 @@ import { isFeatureEnabled, orgFeatureState, checkProjectsWriteEnabled } from '..
 import { findUnownedCustomReferences, loadFieldDefs, validateCustomValues } from '../records/custom-fields.ts'
 import { extraDimsSubsidiaryError, segmentRegistry, validateExtraDims } from '../organization/segments.ts'
 import { resolveExternalRefPair } from '../records/external-ref.ts'
+import { documentWorkDatesRefusal } from '../records/work-period.ts'
 import { businessToday, isIsoCalendarDate } from '../platform/business-date.ts'
 import { isUuid } from '../platform/uuid.ts'
 import {
@@ -899,6 +900,8 @@ async function planDocumentEntryAllocations(args: {
     extraDims: { ...(l.extraDims ?? {}) },
     custom: l.custom ?? {},
     isBillable: null,
+    workFrom: l.workFrom,
+    workTo: l.workTo,
     distributionKey: l.distributionKey ?? null,
     distributionGroupId: l.distributionGroupId ?? null,
     distributionLocked: l.distributionLocked ?? null,
@@ -1004,6 +1007,8 @@ export async function applyDocumentEdit(
       throw new DocumentEditError(422, `invalid ${headerDateNames[i]} — expected YYYY-MM-DD`)
     }
   }
+  const workDatesRefusal = documentWorkDatesRefusal(current.kind, body.workCompletedOn, body.lines)
+  if (workDatesRefusal) throw new DocumentEditError(422, workDatesRefusal)
   const headerRefs = [body.partyId, body.paymentCardId, body.departmentId, body.projectId, body.locationId, body.classId] as const
   const headerRefNames = ['partyId', 'paymentCardId', 'departmentId', 'projectId', 'locationId', 'classId'] as const
   for (let i = 0; i < headerRefs.length; i++) {
@@ -1233,7 +1238,7 @@ export async function applyDocumentEdit(
   // distribution stamps rely on). Null = new line.
   let submittedLineKeys: (string | null)[] | null = null
   let preparedLines:
-    | { accountId: string; itemId: string | null; description: string | null; quantity: string | null; unit: string | null; unitPrice: string | null; amount: string; taxCodeId: string | null; taxGroupId: string | null; taxInputAmount: string; taxAmount: string; taxOverridden: boolean; taxComponents: ReturnType<typeof computeBillTotals>['lines'][number]['taxComponents']; nativeGoodsTax?: GoodsTaxSnapshot; providerQuote?: ReturnType<typeof computeBillTotals>['lines'][number]['providerQuote']; marketplaceFacilitator: string | null; partyId: string | null; departmentId: string | null; projectId: string | null; locationId: string | null; classId: string | null; stockLocationId: string | null; extraDims: Record<string, string | null>; custom: Record<string, unknown>; distributionGroupId: string | null; distributionRuleId: string | null; distributionVersionId: string | null; distributionLocked: boolean }[]
+    | { accountId: string; itemId: string | null; description: string | null; quantity: string | null; unit: string | null; unitPrice: string | null; amount: string; taxCodeId: string | null; taxGroupId: string | null; taxInputAmount: string; taxAmount: string; taxOverridden: boolean; taxComponents: ReturnType<typeof computeBillTotals>['lines'][number]['taxComponents']; nativeGoodsTax?: GoodsTaxSnapshot; providerQuote?: ReturnType<typeof computeBillTotals>['lines'][number]['providerQuote']; marketplaceFacilitator: string | null; partyId: string | null; departmentId: string | null; projectId: string | null; locationId: string | null; classId: string | null; workFrom?: string | null; workTo?: string | null; stockLocationId: string | null; extraDims: Record<string, string | null>; custom: Record<string, unknown>; distributionGroupId: string | null; distributionRuleId: string | null; distributionVersionId: string | null; distributionLocked: boolean }[]
     | null = null
   if (body.lines) {
     // Charge lines are NOT editable through the generic line editor, and this
@@ -1255,6 +1260,11 @@ export async function applyDocumentEdit(
         `${current.kind} lines carry an immutable rate snapshot and cannot be edited here; ` +
           `change them on the source record`,
       )
+    }
+    // Internal billing lines carry their rule's accounts and are validated
+    // against the rule's method by their own writer.
+    if (current.kind === 'internal_billing') {
+      throw new DocumentEditError(422, 'internal billing lines are edited in Internal billing, which applies the rule in effect')
     }
     // Native provenance is never caller-supplied (echoed or forged): strip
     // it here and from the validated output; trusted evidence is re-attached
@@ -1507,6 +1517,8 @@ export async function applyDocumentEdit(
         projectId: l.projectId ?? null,
         locationId: l.locationId ?? null,
         classId: l.classId ?? null,
+        workFrom: l.workFrom,
+        workTo: l.workTo,
         stockLocationId: l.stockLocationId ?? null,
         extraDims: lineDims.cleaned,
         custom: lv.cleaned,
@@ -1937,11 +1949,14 @@ export async function applyDocumentEdit(
           billRate: string | null
           billAmount: string | null
           promotionId: string | null
+          workFrom: string | null
+          workTo: string | null
         }>(sql`
           select id, time_entry_id as "timeEntryId", employee_id as "employeeId",
                  time_type_id as "timeTypeId", equipment_unit_id as "equipmentUnitId",
                  rate_version_id as "rateVersionId",
-                 bill_rate::text as "billRate", bill_amount::text as "billAmount", promotion_id as "promotionId"
+                 bill_rate::text as "billRate", bill_amount::text as "billAmount", promotion_id as "promotionId",
+                 work_from::text as "workFrom", work_to::text as "workTo"
             from document_lines
            where document_id = ${id} and org_id = ${orgId}
            order by line_number
@@ -1969,6 +1984,9 @@ export async function applyDocumentEdit(
           // snapshot keep null rather than inventing one.
           const billRate = carry?.billRate != null ? (l.unitPrice ?? l.amount) : null
           const billAmount = carry?.billAmount != null ? l.amount : null
+          // A line submitted without its work period keeps the one it had
+          // (generated invoices carry it); submitting either bound sets both.
+          const workPeriodSubmitted = l.workFrom !== undefined || l.workTo !== undefined
           const inserted = (await tx.execute<{ id: string }>(sql`
             insert into document_lines (org_id, document_id, line_number, account_id, item_id, description,
                                         quantity, unit, unit_price, amount, tax_code_id, tax_group_id, tax_input_amount,
@@ -1978,7 +1996,8 @@ export async function applyDocumentEdit(
                                         distribution_group_id, distribution_rule_id, distribution_version_id,
                                         distribution_locked,
                                         time_entry_id, employee_id, time_type_id,
-                                        equipment_unit_id, rate_version_id, bill_rate, bill_amount, promotion_id)
+                                        equipment_unit_id, rate_version_id, bill_rate, bill_amount, promotion_id,
+                                        work_from, work_to)
             values (${orgId}, ${id}, ${i + 1}, ${l.accountId}, ${l.itemId}, ${l.description},
                     ${l.quantity ?? '1'}, ${l.unit}, ${l.unitPrice ?? l.amount}, ${l.amount},
                     ${l.taxCodeId}, ${l.taxGroupId}, ${l.taxInputAmount}, ${l.taxAmount}, ${l.taxOverridden}, ${l.marketplaceFacilitator},
@@ -1988,7 +2007,9 @@ export async function applyDocumentEdit(
                     ${l.distributionLocked},
                     ${carry?.timeEntryId ?? null}, ${carry?.employeeId ?? null}, ${carry?.timeTypeId ?? null},
                     ${carry?.equipmentUnitId ?? null}, ${carry?.rateVersionId ?? null}, ${billRate}, ${billAmount},
-                    ${promotionsByLine.get(submittedLineKeys?.[i] ?? '') ?? null})
+                    ${promotionsByLine.get(submittedLineKeys?.[i] ?? '') ?? null},
+                    ${workPeriodSubmitted ? l.workFrom ?? null : carry?.workFrom ?? null},
+                    ${workPeriodSubmitted ? l.workTo ?? null : carry?.workTo ?? null})
             returning id
           `))
           insertedLineIds.push(inserted.rows[0]!.id)
@@ -2131,6 +2152,7 @@ export async function applyDocumentEdit(
           extra_dims = ${headerDims ? JSON.stringify(headerDims.cleaned) : sql`extra_dims`}::jsonb,
           subsidiary_id = ${targetSubsidiaryId},
           expected_pay_date = ${body.expectedPayDate !== undefined ? body.expectedPayDate : sql`expected_pay_date`},
+          work_completed_on = ${body.workCompletedOn !== undefined ? body.workCompletedOn : sql`work_completed_on`},
           payment_hold_reason = ${body.paymentHoldReason !== undefined ? body.paymentHoldReason : sql`payment_hold_reason`},
           internal_notes = ${body.internalNotes !== undefined ? body.internalNotes : sql`internal_notes`},
           billing_method = ${body.billingMethod !== undefined ? body.billingMethod : sql`billing_method`},

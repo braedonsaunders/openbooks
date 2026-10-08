@@ -3,6 +3,8 @@ import 'server-only'
 import { payrollSupportReportData } from './payroll-support-report'
 import { PayrollSupportReportRefusal } from './payroll-support-report-contract'
 import { trueCostExportData } from './analytics/true-cost-report'
+import { earnedValueExportData } from './earned-value-report'
+import { projectBudgetExportData } from './project-budget-report'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import {
@@ -96,6 +98,8 @@ export const REPORT_KINDS = [
   'budget',
   'partner-statement',
   'project-profitability',
+  'project-budget-vs-actual',
+  'earned-value',
   'true-cost',
   'availability',
   'replenishment',
@@ -143,6 +147,10 @@ export function statementPageHref(statement: { kind?: string; params?: Record<st
       return '/reports/journal'
     case 'project-profitability':
       return '/reports/project-profitability'
+    case 'project-budget-vs-actual':
+      return '/reports/project-budget-vs-actual'
+    case 'earned-value':
+      return '/reports/earned-value'
     case 'true-cost':
       return '/reports/true-cost'
     case 'availability':
@@ -230,6 +238,18 @@ export async function resolveReport(kind: ReportKind, p: URLSearchParams, ctx: R
   // consolidated view; they take the same read permission as their pages, and
   // an engine refusal (an order line in a unit its item cannot convert) keeps
   // its remedy.
+  // Earned value reads project operational cost and progress; it takes the
+  // projects read grant and the reader's legal-entity scope.
+  if (kind === 'earned-value') {
+    if (!can(authz, 'projects.read')) throw new ReportResolutionError('this report needs permission to read projects')
+    return { render: 'data', data: await earnedValueExportData(authz, p, period) }
+  }
+  // Budget vs actual reads one project's budgets and job cost, within the
+  // reader's legal-entity scope.
+  if (kind === 'project-budget-vs-actual') {
+    if (!can(authz, 'projects.read')) throw new ReportResolutionError('this report needs permission to read projects')
+    return { render: 'data', data: await projectBudgetExportData(authz, p, period) }
+  }
   if (kind === 'availability' || kind === 'replenishment') {
     if (!can(authz, 'items.read')) throw new ReportResolutionError('this report needs permission to read items')
     try {

@@ -7,6 +7,7 @@ import { SalesWorkspace } from '../../app/(app)/crm/sales/SalesWorkspace'
 import { CrmSetupWorkspace } from '../../app/(app)/admin/setup/crm/CrmSetupWorkspace'
 import { ExportClient } from '../../app/(app)/data/export/ExportClient'
 import { ImportWizard } from '../../app/(app)/data/import/ImportWizard'
+import { InternalBillingDrawer } from '../../app/(app)/internal-billing/InternalBillingDrawer'
 import { TrashList } from '../../app/(app)/documents/trash/TrashList'
 import { TrashBackLink } from '../../app/(app)/documents/trash/sections'
 import { FolderTree } from '../../app/(app)/documents/FolderTree'
@@ -43,6 +44,14 @@ export const RECORDS_WIDGETS = {
   'data-export': () => <ExportClient />,
   /** The wizard owns its step state; its loader supplies the permitted return destination. */
   'import-wizard': (props) => <ImportWizard backHref={str(props, 'backHref')} backLabel={str(props, 'backLabel')} />,
+
+  /* --- internal billing ------------------------------------------------------------- */
+  /** Keyed per record so opening another document starts from its own state. */
+  'internal-billing-drawer': (props) => {
+    const drawer = props.drawer as ComponentProps<typeof InternalBillingDrawer> | null | undefined
+    if (!drawer) return null
+    return <InternalBillingDrawer key={drawer.detail?.document.id ?? 'new'} {...drawer} />
+  },
 
   /* --- document trash --------------------------------------------------------------- */
   /** Not `pageHeader({ back })`: that slot renders UiBackLink (`← label`),

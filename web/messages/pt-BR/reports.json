@@ -42,7 +42,9 @@
       "resourcingCapacityDemandTitle": "Capacidade e demanda",
       "resourcingCapacityDemandDescription": "Compara a capacidade líquida com a demanda nominal, genérica e ponderada do pipeline.",
       "resourcingEngagementTitle": "Previsão de projetos",
-      "resourcingEngagementDescription": "Prevê horas, receita, custo de mão de obra e margem por mês e moeda."
+      "resourcingEngagementDescription": "Prevê horas, receita, custo de mão de obra e margem por mês e moeda.",
+      "projectBudgetVsActualTitle": "Orçado vs. realizado do projeto",
+      "projectBudgetVsActualDescription": "Orçamento original e atual comparados às horas e ao custo realizados, por tarefa."
     },
     "groups": {
       "financial": "Demonstrações Financeiras",
@@ -3071,6 +3073,7 @@
       "disposal": "Baixa",
       "revaluation": "Reavaliação",
       "revenue_recognition": "Reconhecimento de receita",
+      "revenue_accrual": "Provisão de receita não faturada",
       "inventory": "Estoque",
       "lease": "Arrendamento",
       "allocation": "Alocação",
@@ -3178,5 +3181,68 @@
       "purchase_order": "Pedidos de compra"
     },
     "note": "A conversão é rastreada por vínculos de transações; vínculos históricos da origem podem exigir migração."
+  },
+  "earnedValue": {
+    "title": "Valor agregado",
+    "description": "Orçamento, percentual concluído, valor agregado, custo real e estimativas por projeto e tarefa.",
+    "hubDescription": "Percentual concluído, CPI e estimativa no término por projeto e tarefa.",
+    "asOf": "Em {date}",
+    "note": "O custo real é a mão de obra aprovada e os documentos de custo lançados atribuídos por tarefa; custo sem tarefa conta apenas no total do projeto. O percentual concluído usa a quantidade executada, depois o progresso do cronograma e depois custo a custo.",
+    "search": "Pesquisar projeto ou tarefa…",
+    "allProjects": "Todos os projetos ativos",
+    "projectTotal": "Total do projeto",
+    "empty": "Nenhum projeto com tarefas corresponde a estes filtros.",
+    "columns": {
+      "project": "Projeto",
+      "task": "Tarefa",
+      "basis": "Base",
+      "percent": "% concluído",
+      "bac": "Orçamento (BAC)",
+      "ev": "Agregado (EV)",
+      "ac": "Real (AC)",
+      "cpi": "CPI",
+      "etc": "Para concluir (ETC)",
+      "eac": "No término (EAC)",
+      "vac": "Variação (VAC)"
+    },
+    "basis": {
+      "quantity": "Quantidade executada",
+      "schedule": "Progresso do cronograma",
+      "cost": "Custo a custo",
+      "none": "Não medido"
+    }
+  },
+  "projectBudget": {
+    "title": "Orçado vs. realizado do projeto",
+    "description": "O orçamento original (vendido), o orçamento atual e as horas e o custo realizados de cada tarefa, com a variação em relação a cada orçamento.",
+    "asOf": "Em {date}",
+    "chooseProject": "Escolha um projeto",
+    "chooseProjectHint": "Escolha um projeto para comparar seu orçamento com as horas e o custo realizados.",
+    "unassigned": "Não atribuído a uma tarefa",
+    "total": "Total",
+    "empty": "Este projeto ainda não tem tarefas.",
+    "originalFromSource": "Orçamento original de {source}, registrado em {date}. A variação é orçado menos realizado: negativa indica estouro.",
+    "originalFromWbs": "Orçamento original da estrutura analítica, registrado em {date}. A variação é orçado menos realizado: negativa indica estouro.",
+    "noOriginal": "Nenhum orçamento original foi registrado para este projeto; defina uma linha de base na estrutura analítica. A variação é orçado menos realizado.",
+    "priceNote": "Preço: original {original} · atual {current} · faturado até a data {invoiced}. O custo realizado é o tempo aprovado à taxa de custo mais o custo de obra lançado.",
+    "columns": {
+      "project": "Projeto",
+      "task": "Tarefa",
+      "originalHours": "Horas originais",
+      "currentHours": "Horas atuais",
+      "actualHours": "Horas realizadas",
+      "originalCost": "Custo original",
+      "currentCost": "Custo atual",
+      "actualCost": "Custo realizado",
+      "varianceToOriginal": "Variação vs. original",
+      "varianceToCurrent": "Variação vs. atual",
+      "originalPrice": "Preço original",
+      "currentPrice": "Preço atual"
+    },
+    "summary": {
+      "originalPrice": "Preço original",
+      "currentPrice": "Preço atual",
+      "invoicedToDate": "Faturado até a data"
+    }
   }
 }

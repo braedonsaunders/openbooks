@@ -120,14 +120,20 @@ async function countRows(query: ReturnType<typeof sql>): Promise<number> {
 /** Poll until the expected number of document lifecycle commands waits on a row lock. */
 async function waitForDocumentLockWaiters(expected: number): Promise<void> {
   for (let attempt = 0; attempt < 400; attempt++) {
+    // Read the lock table, not the statement text: pg_stat_activity truncates
+    // long statements, so a wide row-locking select can lose its FOR UPDATE.
+    // A backend queued on a held row lock waits on the holder's transaction
+    // id (first in line) or on the tuple lock of the documents row.
     const waiting = await db.execute<{ count: number }>(sql`
-      select count(*)::int as count
-        from pg_stat_activity
-       where datname = current_database()
-         and state = 'active'
-         and wait_event_type = 'Lock'
-         and query ilike '%documents%'
-         and query ilike '%for update%'`);
+      select count(distinct activity.pid)::int as count
+        from pg_stat_activity activity
+        join pg_locks lock on lock.pid = activity.pid and not lock.granted
+       where activity.datname = current_database()
+         and activity.state = 'active'
+         and activity.wait_event_type = 'Lock'
+         and activity.query ilike '%documents%'
+         and (lock.locktype = 'transactionid'
+              or (lock.locktype = 'tuple' and lock.relation = 'public.documents'::regclass))`);
     if (Number(waiting.rows[0]?.count ?? 0) >= expected) return;
     await new Promise((resolve) => setTimeout(resolve, 25));
   }

@@ -114,6 +114,10 @@ export const documents = pgTable(
     voidRequestedAt: timestamp("void_requested_at", { withTimezone: true }),
     voidRequestedBy: uuid("void_requested_by"),
     voidReversalDate: date("void_reversal_date"),
+    /** Date the invoiced work was completed. */
+    workCompletedOn: date("work_completed_on"),
+    /** Accounting treatment of an internal_billing document. */
+    internalBillingRuleId: uuid("internal_billing_rule_id"),
     /** Explicit adjustment-period override for the void's reversal journals (0333); null resolves by date. */
     voidReversalPeriodId: uuid("void_reversal_period_id"),
     reversalEntryId: uuid("reversal_entry_id"),
@@ -394,7 +398,7 @@ export const documentLines = pgTable(
     projectId: uuid("project_id"),
     locationId: uuid("location_id"),
     classId: uuid("class_id"),
-    /** Line-level subsidiary override — intercompany journals only. */
+    /** Line-level subsidiary override — intercompany journals and internal billing receivers only. */
     subsidiaryId: uuid("subsidiary_id"),
     /** Line overrides for custom segment assignments. */
     extraDims: jsonb("extra_dims").notNull().default({}),
@@ -448,6 +452,11 @@ export const documentLines = pgTable(
     costAmount: money("cost_amount"),
     billAmount: money("bill_amount"),
     recoveryAccountId: uuid("recovery_account_id"),
+    /** Project task (cost code) the line belongs to. */
+    projectTaskId: uuid("project_task_id"),
+    /** Period the charged work was performed. */
+    workFrom: date("work_from"),
+    workTo: date("work_to"),
 
     // Order-state denormalization (orders → fulfillment → billing chain).
     // These are commercial quantities, not posted money amounts: preserve the

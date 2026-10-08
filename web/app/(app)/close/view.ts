@@ -273,6 +273,8 @@ async function loadCloseWizard(
     subsidiaryEnabled,
     multiCurrency: featureEnabled(featureState, 'multiCurrency'),
     advancedClose: featureEnabled(featureState, 'advancedClose'),
+    canPostGl: can(authz, 'gl.post'),
+    unbilledRevenueAccrual: featureEnabled(featureState, 'unbilledRevenueAccrual'),
   }
 }
 

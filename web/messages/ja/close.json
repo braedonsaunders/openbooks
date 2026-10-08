@@ -152,6 +152,10 @@
       "title": "収益認識が未記帳のままです",
       "message": "{count, plural, one {# 件の予定済み認識明細が未記帳のままです。} other {# 件の予定済み認識明細が未記帳のままです。}}"
     },
+    "unbilled-revenue-unaccrued": {
+      "title": "未請求収益の見越計上が最新ではありません",
+      "message": "{count, plural, other {# 件のプロジェクト見越計上に転記または設定の修正が必要です。}}"
+    },
     "fx-missing": {
       "title": "為替レートが不足しています",
       "message": "{count, plural, one {# 件の取引通貨に使用可能な期末スポットレートがありません。} other {# 件の取引通貨に使用可能な期末スポットレートがありません。}}"
@@ -373,6 +377,10 @@
     "recognition-posted": {
       "title": "収益認識を記帳する",
       "description": "予定済みの収益認識を実行し、例外を解消します。"
+    },
+    "unbilled-revenue-accrued": {
+      "title": "未請求収益を見越計上する",
+      "description": "期末までに実施済みで未請求のタイム＆マテリアル作業を見越計上します。翌期間の初日に自動で振り戻されます。"
     },
     "fx-ready": {
       "title": "為替カバレッジを検証する",
@@ -855,5 +863,30 @@
   "problems": {
     "subsidiaryMissing": "子会社 {subsidiaryId} が存在しません。",
     "entityFailed": "{name}：{detail}"
+  },
+  "unbilledAccrual": {
+    "loading": "未請求作業を計算しています…",
+    "loadFailed": "未請求収益の見越計上を計算できませんでした。",
+    "retry": "再試行",
+    "dates": "{period}：{accrualDate} に計上、{reversalDate} に振り戻し",
+    "datesNoReversal": "{period}：{accrualDate} に計上",
+    "empty": "期末時点で未請求のタイム＆マテリアル作業はありません。",
+    "unbilled": "期末時点の未請求額",
+    "toPost": "転記額",
+    "projectsLabel": "プロジェクト",
+    "projects": "{count, plural, other {# 件のプロジェクト}}",
+    "blocked": "転記前に解決してください",
+    "review": "確認",
+    "columns": {
+      "project": "プロジェクト",
+      "unbilled": "未請求",
+      "accrued": "計上済み",
+      "toPost": "転記額"
+    },
+    "post": "見越計上を転記",
+    "upToDate": "最新",
+    "posted": "未請求収益の見越計上を転記しました。",
+    "postFailed": "見越計上を転記できませんでした。",
+    "postPermission": "見越計上の転記には仕訳の転記権限が必要です。"
   }
 }

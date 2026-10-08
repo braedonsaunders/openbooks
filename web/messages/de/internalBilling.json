@@ -1,0 +1,61 @@
+{
+  "title": "Interne Verrechnung",
+  "description": "Leistungen zwischen Abteilungen, Projekten und Tochtergesellschaften verrechnen. Jede Regel legt fest, wie die Bewegung aus den Unternehmenssummen herausgehalten wird.",
+  "list": {
+    "new": "Neue interne Verrechnung",
+    "emptyTitle": "Noch keine internen Verrechnungen",
+    "emptyDescription": "Erfassen Sie Leistungen, die ein Unternehmensbereich für einen anderen erbringt, damit die richtige Abteilung, das richtige Projekt oder die richtige Tochtergesellschaft gutgeschrieben und belastet wird."
+  },
+  "fields": {
+    "rule": "Regel",
+    "from": "Von",
+    "rate": "Satz",
+    "billable": "Abrechenbar",
+    "billRate": "Abrechnungssatz"
+  },
+  "drawer": {
+    "newTitle": "Neue interne Verrechnung",
+    "description": "Wählen Sie, wer die Leistung erbringt und wer sie erhält.",
+    "from": "Von",
+    "to": "An",
+    "chooseRule": "Regel auswählen",
+    "noRules": "Es gibt noch keine Regeln für die interne Verrechnung. Legen Sie eine unter Einrichtung → Interne Verrechnung an.",
+    "none": "Keine",
+    "sameAsFrom": "Wie bei Von",
+    "chooseSubsidiary": "Tochtergesellschaft auswählen",
+    "addLine": "Zeile hinzufügen",
+    "removeLine": "Zeile entfernen",
+    "saveDraft": "Entwurf speichern",
+    "journalEntry": "Buchungssatz",
+    "total": "Summe",
+    "billed": "An Kunden abgerechnet"
+  },
+  "void": {
+    "title": "Interne Verrechnung stornieren",
+    "message": "Die Buchung wird storniert. Eine an einen Kunden abgerechnete Zeile muss zuerst durch Stornieren oder Löschen dieser Rechnung freigegeben werden.",
+    "reason": "Grund"
+  },
+  "feedback": {
+    "saved": "Entwurf gespeichert",
+    "posted": "Gebucht",
+    "pendingApproval": "Zur Genehmigung eingereicht",
+    "voided": "Storniert",
+    "saveFailed": "Der Entwurf konnte nicht gespeichert werden.",
+    "postFailed": "Das Dokument konnte nicht gebucht werden.",
+    "voidFailed": "Das Dokument konnte nicht storniert werden."
+  },
+  "methods": {
+    "revenue_credit": {
+      "label": "Umsatzgutschrift für die Abteilung",
+      "description": "Die Abteilung, die die Arbeit geleistet hat, erhält den Umsatz gutgeschrieben; der Umsatz des Unternehmens wird nicht doppelt gezählt."
+    },
+    "cost_transfer": {
+      "label": "Kostenumbuchung",
+      "description": "Kosten werden der Abteilung oder dem Projekt belastet, das die Leistung genutzt hat; die Kosten des Unternehmens bleiben unverändert."
+    },
+    "intercompany_sale": {
+      "label": "Konzerninterner Verkauf",
+      "description": "Eine Tochtergesellschaft verkauft an eine andere; beide Seiten werden bei der Konsolidierung eliminiert."
+    }
+  }
+}

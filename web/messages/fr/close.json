@@ -152,6 +152,10 @@
       "title": "La constatation des produits reste à comptabiliser",
       "message": "{count, plural, one {# ligne de constatation planifiée reste à comptabiliser.} other {# lignes de constatation planifiées restent à comptabiliser.}}"
     },
+    "unbilled-revenue-unaccrued": {
+      "title": "La régularisation des produits non facturés n’est pas à jour",
+      "message": "{count, plural, one {# régularisation de projet doit être comptabilisée ou sa configuration corrigée.} other {# régularisations de projet doivent être comptabilisées ou leur configuration corrigée.}}"
+    },
     "fx-missing": {
       "title": "Des taux de change manquent",
       "message": "{count, plural, one {# devise d’opération n’a pas de taux au comptant utilisable en fin de période.} other {# devises d’opération n’ont pas de taux au comptant utilisable en fin de période.}}"
@@ -373,6 +377,10 @@
     "recognition-posted": {
       "title": "Comptabiliser la constatation des produits",
       "description": "Exécuter la constatation planifiée des produits et résoudre les exceptions."
+    },
+    "unbilled-revenue-accrued": {
+      "title": "Régulariser les produits non facturés",
+      "description": "Régularisez les travaux en régie réalisés à la fin de la période mais pas encore facturés ; l’écriture est contrepassée le premier jour de la période suivante."
     },
     "fx-ready": {
       "title": "Valider la couverture de change",
@@ -855,5 +863,30 @@
   "problems": {
     "subsidiaryMissing": "La filiale {subsidiaryId} n’existe pas.",
     "entityFailed": "{name} : {detail}"
+  },
+  "unbilledAccrual": {
+    "loading": "Calcul des travaux non facturés…",
+    "loadFailed": "Impossible de calculer la régularisation des produits non facturés.",
+    "retry": "Réessayer",
+    "dates": "{period} : régularisé le {accrualDate}, contrepassé le {reversalDate}",
+    "datesNoReversal": "{period} : régularisé le {accrualDate}",
+    "empty": "Aucun travail en régie non facturé à la fin de la période.",
+    "unbilled": "Non facturé en fin de période",
+    "toPost": "À comptabiliser",
+    "projectsLabel": "Projets",
+    "projects": "{count, plural, one {# projet} other {# projets}}",
+    "blocked": "À résoudre avant de comptabiliser",
+    "review": "Examiner",
+    "columns": {
+      "project": "Projet",
+      "unbilled": "Non facturé",
+      "accrued": "Régularisé",
+      "toPost": "À comptabiliser"
+    },
+    "post": "Comptabiliser la régularisation",
+    "upToDate": "À jour",
+    "posted": "Régularisation des produits non facturés comptabilisée.",
+    "postFailed": "Impossible de comptabiliser la régularisation.",
+    "postPermission": "La comptabilisation de la régularisation nécessite l’autorisation de comptabiliser des écritures."
   }
 }

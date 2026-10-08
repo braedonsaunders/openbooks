@@ -62,7 +62,8 @@
     "fund_release": "Fondsfreigabe",
     "collection_attempt": "Einzugsversuch",
     "tax_provider_transaction": "Steueranbieter-Übermittlung",
-    "psp_settlement_line_unmatched": "Nicht zugeordnete Auszahlungszeile"
+    "psp_settlement_line_unmatched": "Nicht zugeordnete Auszahlungszeile",
+    "internal_billing": "Interne Verrechnung"
   },
   "resourcing": {
     "fields": {

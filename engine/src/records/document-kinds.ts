@@ -157,6 +157,15 @@ const DOC_KIND_ENTRIES: Record<string, Omit<DocKindConfig, 'permNamespace'>> = {
     partyRole: null, accountTypes: null, hasTax: false, hasDueDate: false, hasReference: true,
     fundingSource: null, isOpenItem: false, showsBalance: false, directPost: true,
   },
+  // Internal billing — one part of the business bills another (department,
+  // project or subsidiary). Posts DR receiver / CR provider under an
+  // effective-dated rule (engine/src/ledger/internal-billing-policy.ts).
+  // Internal (no party); direct-post.
+  internal_billing: {
+    kind: 'internal_billing', closeModule: 'gl', family: 'gl', numberPrefix: 'IB-', i18n: 'banking',
+    partyRole: null, accountTypes: null, hasTax: false, hasDueDate: false, hasReference: true,
+    fundingSource: null, isOpenItem: false, showsBalance: false, directPost: true,
+  },
   // Pay run: committed payroll GL projection (signed lines, like a journal).
   // Lines are machine-built by engine/src/payroll/run.ts commitPayRun — the
   // drawer never edits them; the payroll workspace is the editing surface.

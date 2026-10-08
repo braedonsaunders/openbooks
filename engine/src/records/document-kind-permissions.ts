@@ -27,6 +27,7 @@ export const DOCUMENT_PERMISSION_NAMESPACE: Readonly<Record<string, DocumentPerm
   deposit: "gl",
   transfer: "gl",
   project_charge: "gl",
+  internal_billing: "gl",
   pay_run: "gl",
 };
 

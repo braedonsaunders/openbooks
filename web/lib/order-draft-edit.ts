@@ -7,6 +7,7 @@ import { isUuid } from './list-params';
 import { overallItemQuantities, resolveLinePriceBasis, selectPostableOrderLines, type OrderLineInput } from '../app/api/_order/line-selection';
 import { cmp } from '@openbooks/engine/src/money/money.ts';
 import { isIsoCalendarDate } from '@openbooks/engine/src/platform/business-date.ts';
+import { documentWorkDatesRefusal } from '@openbooks/engine/records/work-period';
 import { listScopedAccountOptions, listScopedDepartmentOptions, listScopedPartyOptions, listScopedProjectOptions } from './scoped-options';
 import { notFound } from './api/responses';
 import type { OrderKind } from './order-cycle';
@@ -52,6 +53,8 @@ export interface OrderPatchBody {
   partyId?: string | null;
   documentDate?: string;
   dueDate?: string | null;
+  /** When the ordered work was completed (sales orders). */
+  workCompletedOn?: string | null;
   /**
    * The originating external system's id for this order and which system
    * minted it. Both or neither; the v1 API stamps the storefront reference
@@ -190,6 +193,9 @@ export async function applyOrderEdit(context: OrderEditContext, cfg: OrderHandle
       }
     }
   }
+
+  const workDatesRefusal = documentWorkDatesRefusal(cfg.kind, body.workCompletedOn, body.lines)
+  if (workDatesRefusal) throw new OrderEditError(422, { error: workDatesRefusal })
 
   const suppliedLineRefs = body.lines ?? []
   const [partyOptions, departmentOptions, projectOptions, accountOptions] = await Promise.all([
@@ -562,12 +568,14 @@ export async function applyOrderEdit(context: OrderEditContext, cfg: OrderHandle
           insert into document_lines (org_id, document_id, line_number, item_id, account_id, description,
                                       quantity, unit, unit_price, amount, tax_code_id, tax_group_id,
                                       tax_input_amount, tax_amount,
-                                      department_id, project_id, stock_location_id, extra_dims, price_basis)
+                                      department_id, project_id, stock_location_id, extra_dims, price_basis,
+                                      work_from, work_to)
           values (${user.orgId}, ${id}, ${i + 1}, ${l.itemId ?? null}, ${l.accountId ?? null},
                   ${l.description ?? null}, ${l.quantity ?? '0'}, ${l.unit ?? null}, ${l.unitPrice ?? '0'},
                   ${l.amount}, ${l.taxCodeId ?? null}, ${l.taxGroupId ?? null}, ${l.taxInputAmount}, ${l.taxAmount},
                   ${l.departmentId ?? null}, ${l.projectId ?? null}, ${l.stockLocationId ?? null}, ${JSON.stringify(l.extraDims)}::jsonb,
-                  ${l.priceBasis == null ? null : JSON.stringify(l.priceBasis)}::jsonb)
+                  ${l.priceBasis == null ? null : JSON.stringify(l.priceBasis)}::jsonb,
+                  ${l.workFrom ?? null}, ${l.workTo ?? null})
           returning id
         `))
         await services.bills.persistLineTaxComponents(tx, {
@@ -584,6 +592,7 @@ export async function applyOrderEdit(context: OrderEditContext, cfg: OrderHandle
         party_id = ${body.partyId !== undefined ? body.partyId : services.platform.sql`party_id`},
         document_date = coalesce(${body.documentDate ?? null}, document_date),
         due_date = ${body.dueDate !== undefined ? body.dueDate : services.platform.sql`due_date`},
+        work_completed_on = ${body.workCompletedOn !== undefined ? body.workCompletedOn : services.platform.sql`work_completed_on`},
         external_ref = ${external.action === 'set' ? external.ref : external.action === 'clear' ? null : services.platform.sql`external_ref`},
         external_source = ${external.action === 'set' ? external.source : external.action === 'clear' ? null : services.platform.sql`external_source`},
         memo = ${body.memo !== undefined ? body.memo : services.platform.sql`memo`},
@@ -621,6 +630,7 @@ export async function applyOrderEdit(context: OrderEditContext, cfg: OrderHandle
       || body.partyId !== undefined
       || body.documentDate !== undefined
       || body.dueDate !== undefined
+      || body.workCompletedOn !== undefined
       || body.memo !== undefined
       || body.departmentId !== undefined
       || body.projectId !== undefined

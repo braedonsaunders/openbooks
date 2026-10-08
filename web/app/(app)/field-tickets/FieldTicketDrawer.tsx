@@ -47,6 +47,9 @@ type Opt = {
   code: string | null
   status: string
   estimatedHours: string | null
+  /** Production is reported in the task's budget unit, only on tasks that carry one. */
+  budgetQuantity?: string | null
+  budgetUnit?: string | null
 }; type EquipmentOpt = Opt & {
   unitNumber: string
   chargeItemId: string
@@ -79,7 +82,18 @@ interface LineRow {
   bill_rate: string | null
   bill_amount: string | null
   equipment_name: string | null
+  project_task_name?: string | null
   rate_components: { rateLineId: string | null; unitCode: string; unitName: string; quantity: string; rate: string; amount: string }[]
+}
+
+interface ProductionRow {
+  id: string
+  projectTaskId: string
+  taskCode: string | null
+  taskName: string
+  quantity: string
+  unit: string
+  note: string | null
 }
 
 interface RateUnitOpt {
@@ -137,6 +151,8 @@ export interface TicketPayload {
     invoiceNumber: string | null
     invoiceStatus: string | null
   }[]
+  /** Production quantities reported on the ticket (Progress tracking). */
+  production?: ProductionRow[]
 }
 
 export interface GridRow {
@@ -252,6 +268,8 @@ export interface FieldTicketDrawerProps {
   projectTasks: ProjectTaskOpt[]
   equipmentUnits: EquipmentOpt[]
   equipmentEnabled: boolean
+  /** Projects → Progress tracking: the ticket reports production per task. */
+  progressEnabled?: boolean
   layout?: FormLayoutConfig
   availableLayouts?: { id: string; name: string; isDefault?: boolean }[]
   currentLayoutId?: string | null
@@ -351,6 +369,11 @@ export function FieldTicketDrawer(props: FieldTicketDrawerProps) {
   const [lineAmount, setLineAmount] = useState('')
   const [lineEquipment, setLineEquipment] = useState('')
   const [lineOperator, setLineOperator] = useState('')
+  const [lineTask, setLineTask] = useState('')
+  // Add-production form: the unit is the task's budget unit, never typed.
+  const [prodTask, setProdTask] = useState('')
+  const [prodQty, setProdQty] = useState('')
+  const [prodNote, setProdNote] = useState('')
   const [lineRateUnit, setLineRateUnit] = useState('')
   const [lineRateUnits, setLineRateUnits] = useState<RateUnitOpt[]>([])
   const [lineRateLoading, setLineRateLoading] = useState(false)
@@ -397,6 +420,7 @@ export function FieldTicketDrawer(props: FieldTicketDrawerProps) {
   const requestedSection = searchParams.get('transactionTab')
   const [activeSection, setActiveSection] = useState(() =>
     requestedSection === 'time' || requestedSection === 'items' || requestedSection === 'tasks' || requestedSection === 'related'
+      || requestedSection === 'production'
       ? requestedSection
       : 'details',
   )
@@ -627,10 +651,11 @@ export function FieldTicketDrawer(props: FieldTicketDrawerProps) {
     if (await call(
       'POST',
       { action: 'add-line', itemId: lineItem, quantity: lineQty, rateUnitCode: lineRateUnit || null, equipmentUnitId: lineEquipment || null,
-        employeeId: (lineEquipment && lineOperator) || null },
+        employeeId: (lineEquipment && lineOperator) || null, projectTaskId: lineTask || null },
       { preserveDraft: true },
     )) {
       setLineItem('')
+      setLineTask('')
       setLineQty('1')
       setLineRate('')
       setLineAmount('')
@@ -640,6 +665,24 @@ export function FieldTicketDrawer(props: FieldTicketDrawerProps) {
       setLineRateUnits([])
       setLineRateSource('')
       setLineComponents([])
+    }
+  }
+
+  const productionTasks = projectTasks.filter((task) => task.budgetUnit)
+  const prodUnit = productionTasks.find((task) => task.id === prodTask)?.budgetUnit ?? ''
+  const prodQtyValid = /^\d+(\.\d{1,8})?$/.test(prodQty.trim()) && /[1-9]/.test(prodQty)
+
+  async function addProduction() {
+    if (!prodTask || !prodUnit || !prodQtyValid) return
+    if (headerDirty && !(await saveHeader())) return
+    if (await call(
+      'POST',
+      { action: 'add-quantity', projectTaskId: prodTask, quantity: prodQty.trim(), unit: prodUnit, note: prodNote.trim() || null },
+      { preserveDraft: true },
+    )) {
+      setProdTask('')
+      setProdQty('')
+      setProdNote('')
     }
   }
 
@@ -1007,6 +1050,7 @@ export function FieldTicketDrawer(props: FieldTicketDrawerProps) {
         { key: 'time', label: t('editor.tabs.time') },
         { key: 'items', label: t('editor.tabs.items') },
         ...(projectTasks.length > 0 ? [{ key: 'tasks', label: t('editor.tabs.tasks') }] : []),
+        ...(props.progressEnabled && projectId ? [{ key: 'production', label: t('editor.tabs.production') }] : []),
         { key: 'related', label: t('editor.tabs.related') },
       ]}
       activeTab={activeSection}
@@ -1375,6 +1419,22 @@ export function FieldTicketDrawer(props: FieldTicketDrawerProps) {
                   />
                 </div>
               ) : null}
+              {projectTasks.length > 0 ? (
+                <div className="min-w-0 md:col-span-2">
+                  <Label id={`${headerFieldId}-line-task-label`}>{t('editor.lines.task')}</Label>
+                  <SearchSelect
+                    id={`${headerFieldId}-line-task`}
+                    ariaLabelledBy={`${headerFieldId}-line-task-label`}
+                    options={[{ value: '', label: t('editor.lines.noTask') }, ...projectTasks.map((task) => ({
+                      value: task.id,
+                      label: task.code ? `${task.code} · ${task.name}` : task.name,
+                    }))]}
+                    value={lineTask}
+                    onChange={(value) => setLineTask(value ?? '')}
+                    placeholder={t('editor.lines.noTask')}
+                  />
+                </div>
+              ) : null}
               {lineRateSource ? (
                 <div className="text-xs text-slate-500 md:col-span-3 dark:text-slate-400">
                   {t(`editor.lines.rateSource.${lineRateSource}`)}
@@ -1406,7 +1466,7 @@ export function FieldTicketDrawer(props: FieldTicketDrawerProps) {
                 {ticket.lines.map((l) => (
                   <SharedTableRow key={l.id} className="border-t border-slate-100 dark:border-slate-800">
                     <SharedTableCell className="py-1.5 pr-2"><div>{l.item_name ?? '—'}</div>{l.equipment_name ? <div className="text-xs text-slate-500">{l.equipment_name}</div> : null}</SharedTableCell>
-                    <SharedTableCell className="py-1.5 pr-2 text-slate-500"><div>{l.description ?? '—'}</div>{l.rate_components?.length ? <div className="text-xs">{l.rate_components.map((component) => `${Number(component.quantity)} ${component.unitName}`).join(' + ')}</div> : null}</SharedTableCell>
+                    <SharedTableCell className="py-1.5 pr-2 text-slate-500"><div>{l.description ?? '—'}</div>{l.project_task_name ? <div className="text-xs">{t('editor.lines.taskLabel', { task: l.project_task_name })}</div> : null}{l.rate_components?.length ? <div className="text-xs">{l.rate_components.map((component) => `${Number(component.quantity)} ${component.unitName}`).join(' + ')}</div> : null}</SharedTableCell>
                     <SharedTableCell className="py-1.5 pr-2 text-right tabular-nums">
                       {Number(l.quantity)} {l.rate_components?.length === 1 ? l.rate_components[0]!.unitName : (l.unit ?? '')}
                     </SharedTableCell>
@@ -1441,6 +1501,95 @@ export function FieldTicketDrawer(props: FieldTicketDrawerProps) {
             </Button>
           ) : null}
         </section> : null}
+
+        {activeSection === 'production' && props.progressEnabled ? (
+          <section className="space-y-3">
+            <div>
+              <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t('editor.production.title')}</h3>
+              <p className="text-xs text-slate-500 dark:text-slate-400">{t('editor.production.hint')}</p>
+            </div>
+            {editable ? (
+              productionTasks.length === 0 ? (
+                <p className="rounded-md bg-slate-50 p-2.5 text-xs text-slate-600 dark:bg-slate-900 dark:text-slate-300">{t('editor.production.noBudgetedTasks')}</p>
+              ) : (
+                <div className="grid w-full items-end gap-3 md:grid-cols-[minmax(14rem,1fr)_8rem_6rem]">
+                  <div className="min-w-0">
+                    <Label id={`${headerFieldId}-prod-task-label`}>{t('editor.production.task')}</Label>
+                    <SearchSelect
+                      id={`${headerFieldId}-prod-task`}
+                      ariaLabelledBy={`${headerFieldId}-prod-task-label`}
+                      options={productionTasks.map((task) => ({
+                        value: task.id,
+                        label: task.code ? `${task.code} · ${task.name}` : task.name,
+                      }))}
+                      value={prodTask}
+                      onChange={(value) => setProdTask(value ?? '')}
+                      placeholder={t('editor.production.pickTask')}
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor={`${headerFieldId}-prod-qty`}>{t('editor.production.quantity')}</Label>
+                    <Input
+                      id={`${headerFieldId}-prod-qty`}
+                      inputMode="decimal"
+                      className="text-right tabular-nums"
+                      value={prodQty}
+                      onChange={(event) => setProdQty(event.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor={`${headerFieldId}-prod-unit`}>{t('editor.production.unit')}</Label>
+                    <Input id={`${headerFieldId}-prod-unit`} readOnly value={prodUnit || '—'} className="cursor-not-allowed bg-slate-100 text-slate-700 dark:bg-slate-900 dark:text-slate-300" />
+                  </div>
+                  <div className="md:col-span-3">
+                    <Label htmlFor={`${headerFieldId}-prod-note`}>{t('editor.production.note')}</Label>
+                    <Input id={`${headerFieldId}-prod-note`} value={prodNote} maxLength={500} onChange={(event) => setProdNote(event.target.value)} />
+                  </div>
+                  <div className="md:col-span-3">
+                    <Button size="sm" variant="outline" disabled={busy || !prodTask || !prodQtyValid} onClick={() => void addProduction()}>
+                      <Plus size={14} /> {t('editor.production.add')}
+                    </Button>
+                  </div>
+                </div>
+              )
+            ) : null}
+            {(ticket.production ?? []).length === 0 ? (
+              !editable ? <p className="py-3 text-center text-sm text-slate-400">{t('editor.production.empty')}</p> : null
+            ) : (
+              <SharedTable className="w-full text-sm">
+                <SharedTableHeader>
+                  <SharedTableRow className="text-left text-xs text-slate-500 dark:text-slate-400">
+                    <SharedTableHead className="py-1 pr-2 font-medium">{t('editor.production.task')}</SharedTableHead>
+                    <SharedTableHead className="py-1 pr-2 text-right font-medium">{t('editor.production.quantity')}</SharedTableHead>
+                    <SharedTableHead className="py-1 pr-2 font-medium">{t('editor.production.note')}</SharedTableHead>
+                    {editable && <SharedTableHead className="w-8" />}
+                  </SharedTableRow>
+                </SharedTableHeader>
+                <SharedTableBody>
+                  {(ticket.production ?? []).map((row) => (
+                    <SharedTableRow key={row.id} className="border-t border-slate-100 dark:border-slate-800">
+                      <SharedTableCell className="py-1.5 pr-2">{row.taskCode ? `${row.taskCode} · ${row.taskName}` : row.taskName}</SharedTableCell>
+                      <SharedTableCell className="py-1.5 pr-2 text-right tabular-nums">{row.quantity.replace(/\.?0+$/, '')} {row.unit}</SharedTableCell>
+                      <SharedTableCell className="py-1.5 pr-2 text-slate-500">{row.note ?? '—'}</SharedTableCell>
+                      {editable && (
+                        <SharedTableCell className="py-1.5 text-right">
+                          <button
+                            type="button"
+                            aria-label={t('editor.production.remove')}
+                            className="rounded p-1 text-slate-400 hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-950"
+                            onClick={() => void call('POST', { action: 'remove-quantity', quantityId: row.id }, { preserveDraft: true })}
+                          >
+                            <Trash2 size={13} />
+                          </button>
+                        </SharedTableCell>
+                      )}
+                    </SharedTableRow>
+                  ))}
+                </SharedTableBody>
+              </SharedTable>
+            )}
+          </section>
+        ) : null}
 
         {activeSection === 'tasks' ? (
           <section className="space-y-3">

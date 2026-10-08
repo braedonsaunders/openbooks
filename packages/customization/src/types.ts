@@ -208,6 +208,8 @@ export interface FieldMeta {
   locked?: boolean
   /** The form designer may toggle `required` for this field. */
   requiredOverridable?: boolean
+  /** Available in the form designer but off the default form until shown. */
+  defaultHidden?: boolean
 }
 
 export type ListColumnKind =

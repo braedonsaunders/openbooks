@@ -1,6 +1,7 @@
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { recognitionAccounts } from '@openbooks/engine/src/projects/recognition.ts'
+import { projectBudgetComparison } from '@openbooks/engine/src/projects/budget-baselines.ts'
 import { projectTimeSummary, projectUnbilled } from '../../../lib/project-costing'
 import { resolveProjectFinancials } from '../../../lib/project-financials'
 import { loadProjectType } from '../../../lib/project-type'
@@ -159,6 +160,10 @@ export async function loadProjectCockpit(
       : Promise.resolve({ rows: [] }),
   ])
 
+  // Budget versus actual (the original sold budget, the working budget and
+  // actuals to date); invoiced to date comes from the financials above.
+  const budget = await projectBudgetComparison(orgId, projectId, { allowedSubsidiaryIds: scope, includeInvoiced: false })
+
   const charges = chargeRes.rows
   const items = itemRes.rows
   const equipment = equipmentRes.rows
@@ -197,6 +202,16 @@ export async function loadProjectCockpit(
       overheadIncludedInTotalCost: projectType.financialProfile.totalCost.components.includes('overhead'),
       pricingMethod: projectType.financialProfile.totalPrice.method,
       contractValue: financials.contractValue,
+      budgetVsActual: {
+        reportHref: `/reports/project-budget-vs-actual?project=${encodeURIComponent(projectId)}`,
+        originalSource: budget.original?.sourceDocumentNumber ?? null,
+        originalCapturedAt: budget.original?.createdAt ?? null,
+        original: budget.totals.original,
+        current: budget.totals.current,
+        actual: { hours: budget.totals.actual.hours, cost: budget.totals.actual.cost },
+        invoicedToDate: String(financials.measures.invoiced_to_date ?? '0'),
+        asOf: budget.asOf,
+      },
     },
     projectType: { key: projectType.key, name: projectType.name },
     time,

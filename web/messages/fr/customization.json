@@ -62,7 +62,8 @@
     "fund_release": "Versement du fonds",
     "collection_attempt": "Tentative de recouvrement",
     "tax_provider_transaction": "Envoi au prestataire fiscal",
-    "psp_settlement_line_unmatched": "Ligne de versement non rattachée"
+    "psp_settlement_line_unmatched": "Ligne de versement non rattachée",
+    "internal_billing": "Facturation interne"
   },
   "resourcing": {
     "fields": {

@@ -38,7 +38,7 @@
     "createFailed": "创建工单失败"
   },
   "editor": {
-    "tabs": { "time": "工时", "items": "项目", "tasks": "任务", "related": "关联" },
+    "tabs": { "time": "工时", "items": "项目", "tasks": "任务", "related": "关联", "production": "产量" },
     "periodLocked": "更改工单周期前，请先删除已录入的工时。",
     "back": "现场工单",
     "submit": "提交",
@@ -116,7 +116,10 @@
       "add": "添加行",
       "remove": "删除行",
       "empty": "暂无行。",
-      "itemRequired": "请选择项目", "rateFailed": "无法解析项目费率", "projectLoadFailed": "无法加载项目", "reloadFailed": "无法重新加载工单"
+      "itemRequired": "请选择项目", "rateFailed": "无法解析项目费率", "projectLoadFailed": "无法加载项目", "reloadFailed": "无法重新加载工单",
+      "task": "任务",
+      "noTask": "无任务",
+      "taskLabel": "任务：{task}"
     },
     "tasks": { "title": "项目任务", "hint": "可用于班组工时归集的 WBS 任务。", "code": "编码", "task": "任务", "estimatedHours": "预计工时" },
     "totals": {
@@ -155,6 +158,19 @@
     "discard": "舍弃草稿",
     "discardConfirm": "舍弃这份空草稿？已有工时、行或签名的草稿会被保留 — 只有空无一物的草稿会被删除。",
     "discardFailed": "舍弃草稿失败。",
-    "discarded": "草稿已舍弃。"
+    "discarded": "草稿已舍弃。",
+    "production": {
+      "title": "产量",
+      "hint": "本工单按任务完成的数量。审批后记为项目进度。",
+      "noBudgetedTasks": "此项目没有设置预算数量的任务。请在项目的工作分解中为任务设置以报告产量。",
+      "task": "任务",
+      "pickTask": "选择任务",
+      "quantity": "数量",
+      "unit": "单位",
+      "note": "备注",
+      "add": "添加产量",
+      "empty": "未报告产量。",
+      "remove": "删除产量行"
+    }
   }
 }

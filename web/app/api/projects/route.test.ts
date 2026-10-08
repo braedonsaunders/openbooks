@@ -61,8 +61,7 @@ stubModules({
   intl: false,
   authz: true,
   features: false,
-  extra: {
-    "@openbooks/engine/src/platform/db.ts": `
+  database: `
       const state = globalThis[Symbol.for('openbooks.projects-route-test')]
       const sqlText = globalThis.openbooksProjectsSqlText
       function respond(query) {
@@ -96,23 +95,14 @@ stubModules({
         transaction: async (work) => work(txClient),
       }
       export async function withOrgTransaction(_orgId, work) { return work() }
-    `,
-    "../../../lib/authz": `export async function guardPermission() {
-       return { user: { orgId: '${ORG_ID}', id: '${USER_ID}' }, allowedSubsidiaryIds: null }
-     }
-     export function guardSubsidiaryScope() { return undefined }
-     export function subsidiariesInScope() { return true }`,
+  `,
+  extra: {
     "@/lib/feature-gates": `const state = globalThis[Symbol.for('openbooks.projects-route-test')]
      class FeatureDisabled extends Error { status = 404 }
      export async function guardFeaturePermission() {
        if (!state.projectGate) throw new FeatureDisabled('projects feature is disabled')
        return { user: { orgId: '${ORG_ID}', id: '${USER_ID}' }, allowedSubsidiaryIds: null }
      }`,
-    "../../../lib/features": `export async function isFeatureEnabled() { return true }
-     export async function acquireFeatureGateLock() {}`,
-    "../../../lib/custom-fields": `export async function loadFieldDefs() { return [] }
-     export function validateCustomValues(_defs, values) { return { ok: true, cleaned: values ?? {} } }
-     export async function findUnownedCustomReferences() { return [] }`,
     "./_lib": `export async function loadProject(id, orgId) {
        const state = globalThis[Symbol.for('openbooks.projects-route-test')]
        if (!state.inserted || id !== state.requestKey) return null

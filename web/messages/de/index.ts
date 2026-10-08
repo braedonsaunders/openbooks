@@ -42,6 +42,7 @@ import home from './home.json'
 import hrm from './hrm.json'
 import inbox from './inbox.json'
 import insights from './insights.json'
+import internalBilling from './internalBilling.json'
 import inventory from './inventory.json'
 import items from './items.json'
 import journal from './journal.json'
@@ -119,6 +120,7 @@ export default {
   hrm,
   inbox,
   insights,
+  internalBilling,
   inventory,
   items,
   journal,

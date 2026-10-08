@@ -124,4 +124,16 @@ export const STANDARD_STATEMENT_DEFINITIONS: StandardStatementDefinition[] = [
     description: 'Per-project revenue, cost and margin with approved job hours; ties to the P&L.',
     statementKind: 'project-profitability',
   },
+  {
+    slug: 'project-budget-vs-actual',
+    name: 'Project Budget vs Actual',
+    description: 'Per-task original (sold) budget, current budget and actual hours and cost for one project, with variances, as of a date.',
+    statementKind: 'project-budget-vs-actual',
+  },
+  {
+    slug: 'earned-value',
+    name: 'Earned Value',
+    description: 'Per-project and per-task budget, percent complete, earned value, actual cost, CPI and estimates at completion as of a date.',
+    statementKind: 'earned-value',
+  },
 ]

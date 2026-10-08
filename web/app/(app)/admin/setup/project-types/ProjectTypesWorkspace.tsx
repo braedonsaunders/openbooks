@@ -75,7 +75,7 @@ const LINE_BUILDERS = ['tm_actual', 'milestone', 'draw', 'cost_plus']
 const REVENUE_ACCTS = ['item_income', 'unbilled_receivable', 'fixed']
 const RECOGNITIONS = ['as_invoiced', 'percent_complete_cost', 'milestone']
 const BACKUP_TYPES = ['costed_timesheets', 'timesheets_purchases', 'purchases', 'purchases_shop_time', 'quote_only', 'none']
-const MEASURE_KEYS: PnlLine['measure'][] = ['invoiced_to_date', 'revenue_posted', 'could_be_invoiced', 'total_price', 'actual_cost', 'labor_cost', 'overhead', 'committed_cost', 'total_cost', 'billable_value', 'unbilled_billable', 'cost_budget', 'remaining_budget', 'gross_profit', 'margin_pct']
+const MEASURE_KEYS: PnlLine['measure'][] = ['invoiced_to_date', 'revenue_posted', 'could_be_invoiced', 'total_price', 'actual_cost', 'labor_cost', 'overhead', 'committed_cost', 'total_cost', 'billable_value', 'unbilled_billable', 'cost_budget', 'original_budget_cost', 'original_budget_price', 'remaining_budget', 'earned_value', 'estimate_at_completion', 'cost_to_complete', 'gross_profit', 'margin_pct']
 const VARIANTS = ['line', 'subtotal', 'total']
 
 function EnumField({ label, value, options, onChange, disabled = false }: { label: string; value: string; options: string[]; onChange: (v: string) => void; disabled?: boolean }) {

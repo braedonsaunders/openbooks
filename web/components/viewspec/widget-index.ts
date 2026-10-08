@@ -332,6 +332,7 @@ export const WIDGET_FAMILY: Readonly<Record<string, WidgetFamily>> = {
   'inbox-task-list': 'home-persona',
   'insights-dashboard-builder': 'home',
   'insights-tabs': 'home',
+  'internal-billing-drawer': 'records',
   'inventory-action-drawer': 'commerce',
   'invite-user': 'platform',
   'invoicing-setup-workspace': 'setup',

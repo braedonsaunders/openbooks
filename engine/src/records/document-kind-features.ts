@@ -13,4 +13,5 @@ export const DOC_KIND_FEATURE: Partial<Record<string, string>> = {
   field_ticket: "fieldTickets",
   pay_run: "payroll",
   project_charge: "projects",
+  internal_billing: "internalBilling",
 };

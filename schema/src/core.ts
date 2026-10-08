@@ -7,6 +7,7 @@ import {
   jsonb,
   pgTable,
   text,
+  timestamp,
   uniqueIndex,
   uuid
 } from "drizzle-orm/pg-core";
@@ -157,6 +158,10 @@ export const projects = pgTable(
     startsOn: date("starts_on"),
     endsOn: date("ends_on"),
     notes: text("notes"),
+    /** The quote this project was awarded from (one project per quote). */
+    awardedFromDocumentId: uuid("awarded_from_document_id"),
+    awardedAt: timestamp("awarded_at", { withTimezone: true }),
+    awardedBy: uuid("awarded_by"),
   },
   (t) => [
     uniqueIndex("projects_org_id_id_unique").on(t.orgId, t.id),

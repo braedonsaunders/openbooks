@@ -2,6 +2,7 @@
 
 import { useMoney } from '@/components/money-provider'
 import { useState, type ReactNode } from 'react'
+import Link from 'next/link'
 import { useTranslations } from 'next-intl'
 import { Card, CardContent, cn } from '@openbooks/ui'
 import type { PnlLine } from '@openbooks/schema'
@@ -33,6 +34,84 @@ export interface FinancialsData {
   pricingMethod: PricingMethod
   /** The saved Contract value — a reference figure, not the priced total (except for fixed-price types). */
   contractValue: string
+  /** Original (sold) versus current budget versus actual, project totals. */
+  budgetVsActual?: BudgetVsActualSummary | null
+}
+
+interface BudgetFigures { hours: string; cost: string; price: string }
+
+export interface BudgetVsActualSummary {
+  reportHref: string
+  originalSource: string | null
+  originalCapturedAt: string | null
+  /** Null until an original budget is captured. */
+  original: BudgetFigures | null
+  current: BudgetFigures
+  actual: { hours: string; cost: string }
+  invoicedToDate: string
+  asOf: string
+}
+
+/** Hours without trailing fractional zeros ("24.0000" → "24"). */
+function hoursText(value: string): string {
+  return value.includes('.') ? value.replace(/0+$/, '').replace(/\.$/, '') : value
+}
+
+/**
+ * The sold budget beside the working budget and what has been spent, at a
+ * glance; the per-task view is the Project budget vs actual report.
+ */
+function BudgetVsActualCard({ data }: { data: BudgetVsActualSummary }) {
+  const { money } = useMoney()
+  const t = useTranslations('projects.budget')
+  const dash = '—'
+  const rows: { label: string; original: string; current: string; actual: string; actualLabel?: string }[] = [
+    { label: t('card.hours'), original: data.original ? hoursText(data.original.hours) : dash, current: hoursText(data.current.hours), actual: hoursText(data.actual.hours) },
+    { label: t('card.cost'), original: data.original ? money(data.original.cost) : dash, current: money(data.current.cost), actual: money(data.actual.cost) },
+    { label: t('card.price'), original: data.original ? money(data.original.price) : dash, current: money(data.current.price), actual: money(data.invoicedToDate), actualLabel: t('card.invoiced') },
+  ]
+  return (
+    <Card>
+      <CardContent className="p-0">
+        <div className="flex items-baseline justify-between gap-4 border-b border-slate-200 px-4 py-3 dark:border-slate-800">
+          <div className="min-w-0">
+            <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t('card.title')}</h2>
+            <p className="text-xs text-slate-500 dark:text-slate-400">
+              {data.original
+                ? data.originalSource ? t('card.soldOn', { source: data.originalSource }) : t('card.originalFromWbs')
+                : t('card.noOriginal')}
+            </p>
+          </div>
+          <Link href={data.reportHref} className="shrink-0 text-xs font-medium text-teal-700 hover:underline dark:text-teal-300">
+            {t('card.openReport')}
+          </Link>
+        </div>
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="text-[11px] uppercase tracking-wider text-slate-400 dark:text-slate-500">
+              <th className="px-4 py-2 text-left font-semibold"><span className="sr-only">{t('card.measure')}</span></th>
+              <th className="px-4 py-2 text-right font-semibold">{t('card.original')}</th>
+              <th className="px-4 py-2 text-right font-semibold">{t('card.current')}</th>
+              <th className="px-4 py-2 text-right font-semibold">{t('card.actual')}</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
+            {rows.map((row) => (
+              <tr key={row.label}>
+                <th scope="row" className="px-4 py-2 text-left font-normal text-slate-600 dark:text-slate-300">{row.label}</th>
+                <td className="px-4 py-2 text-right tabular-nums text-slate-700 dark:text-slate-200">{row.original}</td>
+                <td className="px-4 py-2 text-right tabular-nums text-slate-700 dark:text-slate-200">{row.current}</td>
+                <td className="px-4 py-2 text-right tabular-nums text-slate-900 dark:text-slate-100">
+                  {row.actual}
+                  {row.actualLabel ? <span className="ml-1 text-[11px] text-slate-400 dark:text-slate-500">{row.actualLabel}</span> : null}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </CardContent>
+    </Card>
+  )
 }
 
 /** Measures that read better as "good when positive, bad when negative". */
@@ -259,6 +338,8 @@ export function FinancialsTab({ data }: {
           </CardContent>
         </Card>
       ) : null}
+
+      {data.budgetVsActual ? <BudgetVsActualCard data={data.budgetVsActual} /> : null}
 
       {/* Cost breakdown — subtabs, never side-by-side (repository conventions). */}
       <div className="space-y-3">

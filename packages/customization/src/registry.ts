@@ -94,6 +94,25 @@ const INVOICE_HEADER_EXTRAS: FieldMeta[] = [
   { key: "is_final_invoice", labelKey: "common.labels.finalInvoice", level: "header", kind: "boolean" },
 ];
 
+/** Work dates on documents that bill work: the header records when the
+ *  invoiced work was completed; the line work period is available in the
+ *  form designer but off the default grid. */
+const WORK_COMPLETED_HEADER: FieldMeta = { key: "work_completed_on", labelKey: "common.labels.workCompletedOn", level: "header", kind: "date" };
+const WORK_PERIOD_LINE_FIELDS: FieldMeta[] = [
+  { key: "work_from", labelKey: "common.labels.workFrom", level: "line", kind: "date", defaultHidden: true },
+  { key: "work_to", labelKey: "common.labels.workTo", level: "line", kind: "date", defaultHidden: true },
+];
+const CUSTOMER_LINE_FIELDS: RecordTypeMeta["lineFields"] = [...TRANSACTION_LINE_FIELDS, ...WORK_PERIOD_LINE_FIELDS];
+
+/** Party list columns plus the optional work-completed date for customer billing. */
+function workBillingListColumns(numberLabelKey: string, partyLabelKey: string): ListColumnMeta[] {
+  const columns = partyListColumns(numberLabelKey, partyLabelKey);
+  columns.splice(columns.length - 1, 0, {
+    key: "work_completed_on", labelKey: "common.labels.workCompletedOn", kind: "date", sortable: true, sortKey: "work_completed", defaultHidden: true,
+  });
+  return columns;
+}
+
 /** Status filter shared by the approval-flow kinds (bill/invoice/credits). */
 const APPROVAL_STATUS_FILTER: ListFilterMeta = {
   key: "status",
@@ -219,13 +238,14 @@ const CUSTOMER_INVOICE: RecordTypeMeta = {
     { key: "party_id", labelKey: "common.labels.customer", level: "header", kind: "entity_ref", required: true, locked: true },
     { key: "document_date", labelKey: "common.labels.date", level: "header", kind: "date" },
     { key: "due_date", labelKey: "ar.drawer.dueDate", level: "header", kind: "date" },
+    WORK_COMPLETED_HEADER,
     { key: "reference_number", labelKey: "ar.drawer.reference", level: "header", kind: "text" },
     { key: "memo", labelKey: "common.labels.memo", level: "header", kind: "long_text" },
     ...COMMON_HEADER_EXTRAS,
     ...INVOICE_HEADER_EXTRAS,
   ],
-  lineFields: TRANSACTION_LINE_FIELDS,
-  listColumns: partyListColumns("ar.list.columns.invoice", "common.labels.customer"),
+  lineFields: CUSTOMER_LINE_FIELDS,
+  listColumns: workBillingListColumns("ar.list.columns.invoice", "common.labels.customer"),
   listFilters: [
     APPROVAL_STATUS_FILTER,
     { key: "party_id", labelKey: "common.labels.customer", kind: "entity_ref", operators: OPERATORS_BY_KIND.entity_ref, entitySource: "customer" },
@@ -240,8 +260,8 @@ const CUSTOMER_CREDIT: RecordTypeMeta = {
   labelKey: "customization.recordTypes.customer_credit",
   category: "transaction",
   headerFields: CUSTOMER_INVOICE.headerFields,
-  lineFields: TRANSACTION_LINE_FIELDS,
-  listColumns: partyListColumns("common.labels.number", "common.labels.customer"),
+  lineFields: CUSTOMER_LINE_FIELDS,
+  listColumns: workBillingListColumns("common.labels.number", "common.labels.customer"),
   listFilters: CUSTOMER_INVOICE.listFilters,
 };
 
@@ -366,6 +386,51 @@ const PROJECT_CHARGE: RecordTypeMeta = {
   ],
   listColumns: [],
   listFilters: [],
+};
+
+/** Internal billing: one part of the business bills another. The header is
+ * the provider ("From"); each line names its receiver ("To"). The rule fixes
+ * the accounts, so lines carry no account field. */
+const INTERNAL_BILLING: RecordTypeMeta = {
+  key: "internal_billing",
+  labelKey: "customization.recordTypes.internal_billing",
+  category: "transaction",
+  featureKey: "internalBilling",
+  defaultSort: { sortKey: "date", dir: "desc" },
+  headerFields: [
+    { key: "internal_billing_rule_id", labelKey: "internalBilling.fields.rule", level: "header", kind: "entity_ref", required: true, locked: true },
+    { key: "document_date", labelKey: "common.labels.date", level: "header", kind: "date" },
+    { key: "subsidiary_id", labelKey: "common.labels.subsidiary", level: "header", kind: "entity_ref" },
+    { key: "department_id", labelKey: "common.labels.department", level: "header", kind: "dimension" },
+    { key: "project_id", labelKey: "common.labels.project", level: "header", kind: "dimension" },
+    { key: "reference_number", labelKey: "common.labels.reference", level: "header", kind: "text" },
+    { key: "memo", labelKey: "common.labels.memo", level: "header", kind: "long_text" },
+  ],
+  lineFields: [
+    { key: "item_id", labelKey: "common.labels.item", level: "line", kind: "entity_ref" },
+    { key: "description", labelKey: "common.labels.description", level: "line", kind: "text" },
+    { key: "quantity", labelKey: "common.labels.quantity", level: "line", kind: "number" },
+    { key: "unit_price", labelKey: "internalBilling.fields.rate", level: "line", kind: "currency" },
+    { key: "amount", labelKey: "common.labels.amount", level: "line", kind: "amount", required: true },
+    { key: "department_id", labelKey: "common.labels.department", level: "line", kind: "dimension" },
+    { key: "project_id", labelKey: "common.labels.project", level: "line", kind: "dimension" },
+    { key: "is_billable", labelKey: "internalBilling.fields.billable", level: "line", kind: "boolean" },
+  ],
+  listColumns: [
+    { key: "document_number", labelKey: "common.labels.number", kind: "reference", sortable: true, sortKey: "number", locked: true },
+    { key: "document_date", labelKey: "common.labels.date", kind: "date", sortable: true, sortKey: "date" },
+    { key: "rule_name", labelKey: "internalBilling.fields.rule", kind: "text" },
+    { key: "provider_name", labelKey: "internalBilling.fields.from", kind: "text" },
+    { key: "reference_number", labelKey: "common.labels.reference", kind: "text" },
+    { key: "total", labelKey: "common.labels.total", kind: "amount", sortable: true, sortKey: "total", defaultWidth: 120 },
+    { key: "status", labelKey: "common.labels.status", kind: "status", sortable: true, sortKey: "status", defaultWidth: 120 },
+    { key: "_actions", labelKey: "common.labels.actions", kind: "actions", defaultWidth: 44 },
+  ],
+  listFilters: [
+    APPROVAL_STATUS_FILTER,
+    DATE_FILTER,
+    { key: "reference_number", labelKey: "common.labels.reference", kind: "text", operators: OPERATORS_BY_KIND.text },
+  ],
 };
 
 const CHECK: RecordTypeMeta = {
@@ -554,7 +619,12 @@ const CUSTOMER_PAYMENT = paymentRecordType("customer_payment", "common.labels.cu
  * owns an independent form even though the shared OrderDrawer renders them.
  * Conversion progress ("Converted %") lives in a report, not the list.
  */
-function orderRecordType(key: string, partyLabelKey: string, entitySource: string): RecordTypeMeta {
+function orderRecordType(
+  key: string,
+  partyLabelKey: string,
+  entitySource: string,
+  extras: { header?: FieldMeta[]; lines?: FieldMeta[] } = {},
+): RecordTypeMeta {
   return {
     key,
     labelKey: `customization.recordTypes.${key}`,
@@ -564,11 +634,12 @@ function orderRecordType(key: string, partyLabelKey: string, entitySource: strin
       { key: "party_id", labelKey: partyLabelKey, level: "header", kind: "entity_ref", required: true, locked: true },
       { key: "document_date", labelKey: "common.labels.date", level: "header", kind: "date" },
       { key: "due_date", labelKey: "common.labels.dueDate", level: "header", kind: "date" },
+      ...(extras.header ?? []),
       { key: "memo", labelKey: "common.labels.memo", level: "header", kind: "long_text" },
       { key: "department_id", labelKey: "common.labels.department", level: "header", kind: "dimension" },
       { key: "project_id", labelKey: "common.labels.project", level: "header", kind: "dimension" },
     ],
-    lineFields: ORDER_LINE_FIELDS,
+    lineFields: [...ORDER_LINE_FIELDS, ...(extras.lines ?? [])],
     listColumns: [
       { key: "document_number", labelKey: "common.labels.number", kind: "reference", sortable: true, sortKey: "number", locked: true },
       { key: "party_name", labelKey: partyLabelKey, kind: "text", sortable: true, sortKey: "party" },
@@ -598,7 +669,10 @@ function orderRecordType(key: string, partyLabelKey: string, entitySource: strin
 }
 
 const QUOTE = orderRecordType("quote", "common.labels.customer", "customer");
-const SALES_ORDER = orderRecordType("sales_order", "common.labels.customer", "customer");
+const SALES_ORDER = orderRecordType("sales_order", "common.labels.customer", "customer", {
+  header: [{ ...WORK_COMPLETED_HEADER, defaultHidden: true }],
+  lines: WORK_PERIOD_LINE_FIELDS,
+});
 const PURCHASE_ORDER = orderRecordType("purchase_order", "common.labels.vendor", "vendor");
 
 /** Party-role records share one native parties row, but each role owns a
@@ -2028,6 +2102,7 @@ const PROJECT: RecordTypeMeta = {
         { key: "work_breakdown", labelKey: "projects.cockpit.tabs.work_breakdown" },
         { key: "schedule", labelKey: "projects.cockpit.tabs.schedule", featureKey: "projectScheduling" },
         { key: "staffing", labelKey: "projects.cockpit.tabs.staffing", featureKey: "resourcing" },
+        { key: "progress", labelKey: "projects.cockpit.tabs.progress", featureKey: "projectProgress" },
       ],
     },
     { key: "cost_time", labelKey: "projects.cockpit.tabs.cost_time" },
@@ -2772,6 +2847,7 @@ export const RECORD_TYPES: RecordTypeMeta[] = [
   CARD_CHARGE,
   CARD_REFUND,
   PROJECT_CHARGE,
+  INTERNAL_BILLING,
   CHECK,
   DEPOSIT,
   TRANSFER,

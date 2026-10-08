@@ -95,7 +95,8 @@ export async function loadOrder(
            l.tax_amount, l.quantity_billed, l.quantity_fulfilled, l.quantity_cancelled,
            l.department_id, l.project_id, l.stock_location_id, l.extra_dims, l.price_basis,
            i.name as item_name, a.number as account_number, a.name as account_name, tc.code as tax_code,
-           l.promotion_id, pr.code as promotion_code
+           l.promotion_id, pr.code as promotion_code,
+           l.work_from::text as work_from, l.work_to::text as work_to
       from document_lines l
       left join items i on i.id = l.item_id and i.org_id = l.org_id
       left join accounts a on a.id = l.account_id and a.org_id = l.org_id

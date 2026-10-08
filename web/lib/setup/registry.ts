@@ -21,6 +21,7 @@ import { SETUP_GROUPS } from './types'
 import { COMPANY_ENTITIES } from './entities/company'
 import { CALENDAR_ENTITIES } from './entities/calendars'
 import { ACCOUNTING_ENTITIES } from './entities/accounting'
+import { INTERNAL_BILLING_RULES_ENTITY } from './entities/internal-billing'
 import { TAX_ENTITIES } from './entities/taxes'
 import { DIMENSION_ENTITIES } from './entities/dimensions'
 import { BILLING_ENTITIES } from './entities/billing'
@@ -52,6 +53,7 @@ export const SETUP_ENTITIES: SetupEntity[] = [
   BENEFIT_TRANSACTION_POLICY_ENTITY,
   ...COMPANY_ENTITIES,
   ...ACCOUNTING_ENTITIES,
+  INTERNAL_BILLING_RULES_ENTITY,
   ...CALENDAR_ENTITIES,
   ...TAX_ENTITIES,
   ...DIMENSION_ENTITIES,

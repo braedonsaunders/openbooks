@@ -3412,6 +3412,11 @@
         "title": "Codes de planification",
         "singularTitle": "Code de planification",
         "description": "Codes pour affecter un travail qui n’est ni un client ni un projet, comme des journées de formation ou d’atelier, et pour les jours où les personnes ne travaillent pas."
+      },
+      "internal-billing": {
+        "title": "Facturation interne",
+        "description": "Règles datées pour la facturation entre services, projets et filiales, et la façon dont chacune reste hors des totaux de l'entreprise.",
+        "singularTitle": "Règle de facturation interne"
       }
     },
     "fields": {
@@ -6524,6 +6529,55 @@
       "limitKinds": {
         "none": "Sans plafond",
         "amount": "Plafond monétaire"
+      }
+    },
+    "internalBilling": {
+      "formDescription": "Une règle indique comment la facturation interne est enregistrée. Pour changer le traitement, ajoutez une nouvelle version à partir d'une date ultérieure.",
+      "sections": {
+        "rule": "Règle",
+        "advanced": "Avancé",
+        "advancedHelp": "Des comptes ont été suggérés pour ce type de règle. Confirmez-les et indiquez quand la règle s'applique.",
+        "reason": "Motif de la modification"
+      },
+      "fields": {
+        "code": "Code",
+        "name": "Nom",
+        "method": "Traitement",
+        "description": "Description",
+        "debitAccountId": "Compte du bénéficiaire (débit)",
+        "creditAccountId": "Compte du fournisseur (crédit)",
+        "effectiveFrom": "En vigueur à partir du",
+        "effectiveTo": "En vigueur jusqu'au",
+        "billableByDefault": "Facturable par défaut",
+        "isActive": "Active",
+        "reason": "Motif"
+      },
+      "help": {
+        "code": "Les documents choisissent une règle par son code ; chaque version du code s'applique à ses propres dates.",
+        "debitAccountId": "Imputé au service, au projet ou à la filiale bénéficiaire.",
+        "creditAccountId": "Crédité au service, au projet ou à la filiale qui fournit le travail.",
+        "effectiveTo": "Laissez vide pour garder la version en vigueur jusqu'au début d'une suivante.",
+        "billableByDefault": "Les nouvelles lignes avec un projet bénéficiaire sont refacturées au client de ce projet.",
+        "isActive": "Désactivez une version ajoutée par erreur. Une version déjà utilisée par des documents comptabilisés est plutôt clôturée par une date de fin.",
+        "reason": "Enregistré dans la piste d'audit avec la modification."
+      },
+      "methods": {
+        "revenue_credit": {
+          "label": "Crédit de la vente au service",
+          "description": "Le service qui a réalisé le travail reçoit le chiffre d'affaires ; le chiffre d'affaires de l'entreprise n'est pas compté deux fois."
+        },
+        "cost_transfer": {
+          "label": "Transfert de coût",
+          "description": "Le coût est imputé au service ou au projet qui a utilisé le travail ; le coût de l'entreprise reste inchangé."
+        },
+        "intercompany_sale": {
+          "label": "Vente intragroupe",
+          "description": "Une filiale vend à une autre ; les deux côtés sont éliminés en consolidation."
+        }
+      },
+      "chooser": {
+        "title": "Que fait cette règle ?",
+        "description": "Choisissez le traitement. Les comptes et les dates sont préremplis et modifiables dans Avancé."
       }
     }
   },

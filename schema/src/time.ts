@@ -292,6 +292,11 @@ export const projectTasks = pgTable(
       .default("open"),
     estimatedHours: money("estimated_hours"),
     estimatedCost: money("estimated_cost"),
+    /** Current price (revenue) budget; the sold budget lives in project_budget_baselines. */
+    estimatedPrice: money("estimated_price"),
+    /** Budgeted production quantity in `budgetUnit`; installed quantities accumulate in project_progress_entries. */
+    budgetQuantity: numeric("budget_quantity", { precision: 28, scale: 8 }),
+    budgetUnit: text("budget_unit"),
 
     // --- Scheduling (null unless the project is scheduled) ------------------
     description: text("description"),

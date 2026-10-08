@@ -114,9 +114,10 @@ export async function loadProjects(
   // The Schedule and Staffing tabs are Projects sub-capabilities: resolved on
   // the server so a client-side layout choice can never surface a gated
   // feature. Staffing additionally needs the reader grant.
-  const [schedulingEnabled, resourcingEnabled, locale] = await Promise.all([
+  const [schedulingEnabled, resourcingEnabled, progressEnabled, locale] = await Promise.all([
     isFeatureEnabled(orgId, 'projectScheduling'),
     isFeatureEnabled(orgId, 'resourcing').then((enabled) => enabled && can(authz, 'resourcing.read')),
+    isFeatureEnabled(orgId, 'projectProgress'),
     getLocale(),
   ])
 
@@ -194,6 +195,7 @@ export async function loadProjects(
             projectTypes,
             schedulingEnabled,
             resourcingEnabled,
+            progressEnabled,
             locale,
             initialTab: creating ? 'overview' : (pickString(sp.projectTab) ?? 'overview'),
             createMode: creating,

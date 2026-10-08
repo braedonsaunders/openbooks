@@ -15,12 +15,17 @@ const MEASURES = new Set([
   "billable_value",
   "unbilled_billable",
   "cost_budget",
+  "original_budget_cost",
+  "original_budget_price",
   "total_price",
   "could_be_invoiced",
   "total_cost",
   "gross_profit",
   "margin_pct",
   "remaining_budget",
+  "earned_value",
+  "estimate_at_completion",
+  "cost_to_complete",
 ]);
 const TOTAL_COST_COMPONENTS = new Set([
   "actual_cost",

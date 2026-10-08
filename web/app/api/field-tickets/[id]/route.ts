@@ -22,6 +22,7 @@ import {
   updateTicketHeader,
 } from '../../../../lib/field-tickets'
 import { sendTicketForSignature } from '../../../../lib/field-ticket-signing'
+import { addTicketQuantity, removeTicketQuantity } from '../../../../lib/field-ticket-production'
 import { notFound } from "@/lib/api/responses";
 
 
@@ -55,8 +56,14 @@ const ticketActionBody = z.discriminatedUnion('action', [
     action: z.literal('add-line'), expectedRevision: z.string().min(1), itemId: z.string().uuid(), quantity: z.string().min(1),
     equipmentUnitId: z.string().uuid().nullable().optional(), rateUnitCode: z.string().nullable().optional(),
     employeeId: z.string().uuid().nullable().optional(), description: z.string().nullable().optional(),
+    projectTaskId: z.string().uuid().nullable().optional(),
   }).strict(),
   z.object({ action: z.literal('remove-line'), expectedRevision: z.string().min(1), lineId: z.string().uuid() }).strict(),
+  z.object({
+    action: z.literal('add-quantity'), expectedRevision: z.string().min(1), projectTaskId: z.string().uuid(),
+    quantity: z.string().min(1).max(40), unit: z.string().min(1).max(32), note: z.string().max(500).nullable().optional(),
+  }).strict(),
+  z.object({ action: z.literal('remove-quantity'), expectedRevision: z.string().min(1), quantityId: z.string().uuid() }).strict(),
   z.object({ action: z.literal('submit') }).strict(),
   z.object({ action: z.literal('send-signature'), to: z.string().min(1), message: z.string().nullable().optional() }).strict(),
 ])
@@ -207,9 +214,16 @@ export const POST = defineRoute({
   // record scope first so forbidden tickets always remain indistinguishable
   // 404s, even when the request body is malformed or stale.
   const preflightRevision = body.action === 'save-grid' || body.action === 'patch' || body.action === 'add-line' || body.action === 'remove-line'
+    || body.action === 'add-quantity' || body.action === 'remove-quantity'
     ? await requireRevision(body.expectedRevision)
     : null
   if (preflightRevision instanceof NextResponse) return preflightRevision
+  // Production reporting is a Progress tracking capability: answered as
+  // missing while that feature is off, exactly like a disabled route.
+  if ((body.action === 'add-quantity' || body.action === 'remove-quantity')
+    && !(await isFeatureEnabled(orgId, 'projectProgress'))) {
+    return notFound("record")
+  }
 
   try {
     if (body.action === 'save-grid') {
@@ -257,10 +271,20 @@ export const POST = defineRoute({
         equipmentUnitId,
         employeeId: body.employeeId ?? null,
         description: body.description ?? null,
+        projectTaskId: body.projectTaskId ?? null,
       }, expectedRevision, gate.allowedSubsidiaryIds ?? null)
     } else if (body.action === 'remove-line') {
       const expectedRevision = preflightRevision as string
       await removeTicketLine(orgId, id, body.lineId, expectedRevision, gate.allowedSubsidiaryIds ?? null)
+    } else if (body.action === 'add-quantity') {
+      await addTicketQuantity(orgId, userId, id, {
+        projectTaskId: body.projectTaskId,
+        quantity: body.quantity,
+        unit: body.unit,
+        note: body.note ?? null,
+      }, preflightRevision as string, gate.allowedSubsidiaryIds ?? null)
+    } else if (body.action === 'remove-quantity') {
+      await removeTicketQuantity(orgId, userId, id, body.quantityId, preflightRevision as string, gate.allowedSubsidiaryIds ?? null)
     } else if (body.action === 'submit') {
       await submitFieldTicket(orgId, userId, id)
     } else if (body.action === 'send-signature') {

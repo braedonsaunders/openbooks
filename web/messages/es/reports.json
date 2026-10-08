@@ -42,7 +42,9 @@
       "resourcingCapacityDemandTitle": "Capacidad y demanda",
       "resourcingCapacityDemandDescription": "Compara la capacidad neta con la demanda asignada, genérica y ponderada del embudo.",
       "resourcingEngagementTitle": "Previsión de proyectos",
-      "resourcingEngagementDescription": "Horas, ingresos, costes laborales y margen previstos por mes y moneda."
+      "resourcingEngagementDescription": "Horas, ingresos, costes laborales y margen previstos por mes y moneda.",
+      "projectBudgetVsActualTitle": "Presupuesto del proyecto frente a real",
+      "projectBudgetVsActualDescription": "Presupuesto original y actual frente a horas y coste reales, por tarea."
     },
     "groups": {
       "financial": "Estados financieros",
@@ -3051,6 +3053,7 @@
       "disposal": "Baja",
       "revaluation": "Revalorización",
       "revenue_recognition": "Reconocimiento de ingresos",
+      "revenue_accrual": "Devengo de ingresos no facturados",
       "inventory": "Inventario",
       "lease": "Arrendamiento",
       "allocation": "Asignación",
@@ -3178,5 +3181,68 @@
       "purchase_order": "Órdenes de compra"
     },
     "note": "La conversión se rastrea mediante enlaces de transacciones; los enlaces históricos del origen pueden requerir migración."
+  },
+  "earnedValue": {
+    "title": "Valor ganado",
+    "description": "Presupuesto, porcentaje completado, valor ganado, costo real y estimaciones por proyecto y tarea.",
+    "hubDescription": "Porcentaje completado, CPI y estimación a la conclusión por proyecto y tarea.",
+    "asOf": "Al {date}",
+    "note": "El costo real es la mano de obra aprobada y los documentos de costo contabilizados atribuidos por tarea; el costo sin tarea solo cuenta en el total del proyecto. El porcentaje completado usa la cantidad instalada, luego el avance del cronograma y luego costo a costo.",
+    "search": "Buscar proyecto o tarea…",
+    "allProjects": "Todos los proyectos activos",
+    "projectTotal": "Total del proyecto",
+    "empty": "Ningún proyecto con tareas coincide con estos filtros.",
+    "columns": {
+      "project": "Proyecto",
+      "task": "Tarea",
+      "basis": "Base",
+      "percent": "% completado",
+      "bac": "Presupuesto (BAC)",
+      "ev": "Ganado (EV)",
+      "ac": "Real (AC)",
+      "cpi": "CPI",
+      "etc": "Por completar (ETC)",
+      "eac": "A la conclusión (EAC)",
+      "vac": "Variación (VAC)"
+    },
+    "basis": {
+      "quantity": "Cantidad instalada",
+      "schedule": "Avance del cronograma",
+      "cost": "Costo a costo",
+      "none": "Sin medir"
+    }
+  },
+  "projectBudget": {
+    "title": "Presupuesto del proyecto frente a real",
+    "description": "El presupuesto original (vendido), el presupuesto actual y las horas y el coste reales de cada tarea, con la desviación frente a cada presupuesto.",
+    "asOf": "A {date}",
+    "chooseProject": "Elija un proyecto",
+    "chooseProjectHint": "Elija un proyecto para comparar su presupuesto con las horas y el coste reales.",
+    "unassigned": "Sin asignar a una tarea",
+    "total": "Total",
+    "empty": "Este proyecto aún no tiene tareas.",
+    "originalFromSource": "Presupuesto original de {source}, registrado el {date}. La desviación es presupuesto menos real: negativa indica un exceso.",
+    "originalFromWbs": "Presupuesto original del desglose del trabajo, registrado el {date}. La desviación es presupuesto menos real: negativa indica un exceso.",
+    "noOriginal": "No se ha registrado un presupuesto original para este proyecto; fije una línea base en su desglose del trabajo. La desviación es presupuesto menos real.",
+    "priceNote": "Precio: original {original} · actual {current} · facturado a la fecha {invoiced}. El coste real es el tiempo aprobado a tarifa de coste más el coste de obra contabilizado.",
+    "columns": {
+      "project": "Proyecto",
+      "task": "Tarea",
+      "originalHours": "Horas originales",
+      "currentHours": "Horas actuales",
+      "actualHours": "Horas reales",
+      "originalCost": "Coste original",
+      "currentCost": "Coste actual",
+      "actualCost": "Coste real",
+      "varianceToOriginal": "Desviación frente al original",
+      "varianceToCurrent": "Desviación frente al actual",
+      "originalPrice": "Precio original",
+      "currentPrice": "Precio actual"
+    },
+    "summary": {
+      "originalPrice": "Precio original",
+      "currentPrice": "Precio actual",
+      "invoicedToDate": "Facturado a la fecha"
+    }
   }
 }

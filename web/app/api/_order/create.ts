@@ -23,6 +23,7 @@ import {
 } from './lib'
 import { overallItemQuantities, resolveLinePriceBasis, selectPostableOrderLines, type OrderLineInput } from './line-selection'
 import { notFound } from "@/lib/api/responses";
+import { documentWorkDatesRefusal } from '@openbooks/engine/records/work-period'
 
 /**
  * Shared collection-POST for the three order-cycle modules (quote /
@@ -98,6 +99,8 @@ export async function createOrder(
   if (body.dueDate !== undefined && body.dueDate !== null && !isIsoCalendarDate(body.dueDate)) {
     return bad('Due date must be a valid calendar date (YYYY-MM-DD)')
   }
+  const workDatesRefusal = documentWorkDatesRefusal(cfg.kind, body.workCompletedOn, body.lines)
+  if (workDatesRefusal) return bad(workDatesRefusal)
 
   // The order's subsidiary is resolved BEFORE any write: a restricted caller
   // omitting it would otherwise insert documents.subsidiary_id NULL (plus an
@@ -330,9 +333,11 @@ export async function createOrder(
       project_id: l.projectId ?? null,
       stock_location_id: l.stockLocationId ?? null,
       extra_dims: l.extraDims ?? {},
+      ...(l.workFrom || l.workTo ? { work_from: l.workFrom ?? null, work_to: l.workTo ?? null } : {}),
     })),
   }
   if (body.documentDate !== undefined) match.document_date = body.documentDate
+  if (body.workCompletedOn) match.work_completed_on = body.workCompletedOn
   const snapshot = {
     id: requestId,
     org_id: user.orgId,
@@ -389,12 +394,12 @@ export async function createOrder(
       // competing writer, and a missing returned row throws below.
       const inserted = (await tx.execute<{ id: string }>(sql`
         insert into documents
-          (id, org_id, kind, document_number, party_id, document_date, due_date,
+          (id, org_id, kind, document_number, party_id, document_date, due_date, work_completed_on,
            currency, status, subsidiary_id, department_id, project_id,
            extra_dims, memo, subtotal, tax_total, total, created_by, updated_by)
         values
           (${requestId}, ${user.orgId}, ${cfg.kind}, ${documentNumber},
-           ${body.partyId ?? null}, ${documentDate}, ${body.dueDate ?? null},
+           ${body.partyId ?? null}, ${documentDate}, ${body.dueDate ?? null}, ${body.workCompletedOn ?? null},
            ${currency}, 'draft', ${subsidiaryId ?? null},
            ${body.departmentId ?? null}, ${body.projectId ?? null},
            ${JSON.stringify(headerDims ? headerDims.cleaned : {})}::jsonb,
@@ -411,12 +416,14 @@ export async function createOrder(
           insert into document_lines (org_id, document_id, line_number, item_id, account_id, description,
                                       quantity, unit, unit_price, amount, tax_code_id, tax_group_id,
                                       tax_input_amount, tax_amount,
-                                      department_id, project_id, stock_location_id, extra_dims, price_basis)
+                                      department_id, project_id, stock_location_id, extra_dims, price_basis,
+                                      work_from, work_to)
           values (${user.orgId}, ${requestId}, ${i + 1}, ${l.itemId ?? null}, ${l.accountId ?? null},
                   ${l.description ?? null}, ${l.quantity ?? '0'}, ${l.unit ?? null}, ${l.unitPrice ?? '0'},
                   ${l.amount}, ${l.taxCodeId ?? null}, ${l.taxGroupId ?? null}, ${l.taxInputAmount}, ${l.taxAmount},
                   ${l.departmentId ?? null}, ${l.projectId ?? null}, ${l.stockLocationId ?? null}, ${JSON.stringify(l.extraDims)}::jsonb,
-                  ${l.priceBasis == null ? null : JSON.stringify(l.priceBasis)}::jsonb)
+                  ${l.priceBasis == null ? null : JSON.stringify(l.priceBasis)}::jsonb,
+                  ${l.workFrom ?? null}, ${l.workTo ?? null})
           returning id
         `))
         await persistLineTaxComponents(tx, {

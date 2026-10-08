@@ -66,7 +66,8 @@ export async function loadDocument(id: string, orgId: string) {
            l.stock_location_id, l.extra_dims, l.custom,
            l.distribution_group_id, l.distribution_rule_id, l.distribution_version_id,
            l.distribution_locked, ar.name as distribution_rule_name,
-           l.promotion_id, pr.code as promotion_code
+           l.promotion_id, pr.code as promotion_code,
+           l.work_from::text as work_from, l.work_to::text as work_to
       from document_lines l
       left join allocation_rules ar on ar.id = l.distribution_rule_id and ar.org_id = l.org_id
       left join promotions pr on pr.id = l.promotion_id and pr.org_id = l.org_id

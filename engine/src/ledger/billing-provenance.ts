@@ -77,6 +77,34 @@ export async function assertBillingReleasable(tx: SqlExecutor, orgId: string, do
 }
 
 /**
+ * Customer invoices that currently bill this document's cost lines: every
+ * non-voided invoice holding a line that a source line's billed_by_line_id
+ * points at. A cost source billed this way keeps its cost until the invoice
+ * lets it go; voiding or deleting the invoice releases the link.
+ */
+export async function liveInvoicesBillingDocument(
+  runner: SqlExecutor,
+  orgId: string,
+  documentId: string,
+): Promise<string[]> {
+  return (await runner.execute<{ document_number: string }>(sql`
+    select distinct invoice.document_number
+      from document_lines source
+      join document_lines billed on billed.org_id = source.org_id and billed.id = source.billed_by_line_id
+      join documents invoice on invoice.org_id = billed.org_id and invoice.id = billed.document_id
+     where source.org_id = ${orgId} and source.document_id = ${documentId}
+       -- Live entries only: a voided invoice has released what it billed.
+       and invoice.status <> 'voided'
+     order by invoice.document_number
+  `)).rows.map((row) => row.document_number);
+}
+
+/** The operator remedy for voiding a cost that an invoice still bills. */
+export function billedCostSourceRefusal(invoiceNumbers: readonly string[]): string {
+  return `This cost is billed on invoice ${invoiceNumbers.join(", ")}; void or delete that invoice first`;
+}
+
+/**
  * Release the billing provenance a generated invoice consumed. Called when a
  * generated `customer_invoice` is voided or deleted so its billed time entries /
  * cost lines become billable again and the originating billing request reopens.
@@ -187,6 +215,13 @@ export async function releaseBillingProvenance(
           'reason', ${audit.reason}::text), ${audit.actorId}::uuid
         from released
     `);
+    // Billed source lines sit on approved or posted documents, whose lines
+    // the immutability guard freezes. Clearing the billed-link is provenance
+    // metadata, not a financial edit, so it uses the same paired
+    // transaction-local authority the invoice generator uses to set it, and
+    // clears it again immediately.
+    await tx.execute(sql`set local openbooks.migration = on`);
+    await tx.execute(sql`set local openbooks.amend = on`);
     await tx.execute(sql`
       with source as (
         select id, billed_by_line_id
@@ -208,6 +243,8 @@ export async function releaseBillingProvenance(
           'reason', ${audit.reason}::text), ${audit.actorId}::uuid
         from released
     `);
+    await tx.execute(sql`set local openbooks.migration = off`);
+    await tx.execute(sql`set local openbooks.amend = off`);
   }
   await tx.execute(sql`
     update billing_schedules set billing_request_id = null

@@ -102,7 +102,9 @@
     "fulfillmentShort": "Erfüllung",
     "returnAuthorization": "Rückgabegenehmigung",
     "returnAuthorizationShort": "RMA",
-    "payRun": "Lohnlauf"
+    "payRun": "Lohnlauf",
+    "internalBilling": "Interne Verrechnung",
+    "internalBillingShort": "Intern"
   },
   "labels": {
     "name": "Name",
@@ -171,6 +173,9 @@
     "finalInvoice": "Schlussrechnung",
     "paymentHold": "Zahlungssperre",
     "expectedPayDate": "Voraussichtliches Zahlungsdatum",
+    "workCompletedOn": "Leistung erbracht am",
+    "workFrom": "Leistung von",
+    "workTo": "Leistung bis",
     "openBalance": "Offener Saldo",
     "defaultForm": "Standardformular",
     "asOf": "Zum",

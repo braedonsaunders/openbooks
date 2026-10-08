@@ -152,6 +152,10 @@
       "title": "Queda reconocimiento de ingresos sin contabilizar",
       "message": "{count, plural, one {Queda # línea de reconocimiento programada sin contabilizar.} other {Quedan # líneas de reconocimiento programadas sin contabilizar.}}"
     },
+    "unbilled-revenue-unaccrued": {
+      "title": "El devengo de ingresos no facturados no está al día",
+      "message": "{count, plural, one {# devengo de proyecto requiere contabilizarse o corregir la configuración.} other {# devengos de proyecto requieren contabilizarse o corregir la configuración.}}"
+    },
     "fx-missing": {
       "title": "Faltan tipos de cambio",
       "message": "{count, plural, one {# moneda de transacción no tiene un tipo de cierre utilizable.} other {# monedas de transacción no tienen un tipo de cierre utilizable.}}"
@@ -373,6 +377,10 @@
     "recognition-posted": {
       "title": "Contabilizar el reconocimiento de ingresos",
       "description": "Ejecute el reconocimiento de ingresos programado y resuelva las excepciones."
+    },
+    "unbilled-revenue-accrued": {
+      "title": "Devengar ingresos no facturados",
+      "description": "Devengue el trabajo por tiempo y materiales realizado al cierre del periodo y aún no facturado; se revierte el primer día del periodo siguiente."
     },
     "fx-ready": {
       "title": "Validar cobertura cambiaria",
@@ -855,5 +863,30 @@
   "problems": {
     "subsidiaryMissing": "La subsidiaria {subsidiaryId} no existe.",
     "entityFailed": "{name}: {detail}"
+  },
+  "unbilledAccrual": {
+    "loading": "Calculando el trabajo no facturado…",
+    "loadFailed": "No se pudo calcular el devengo de ingresos no facturados.",
+    "retry": "Reintentar",
+    "dates": "{period}: se devenga el {accrualDate} y se revierte el {reversalDate}",
+    "datesNoReversal": "{period}: se devenga el {accrualDate}",
+    "empty": "No hay trabajo por tiempo y materiales sin facturar al cierre del periodo.",
+    "unbilled": "No facturado al cierre",
+    "toPost": "Por contabilizar",
+    "projectsLabel": "Proyectos",
+    "projects": "{count, plural, one {# proyecto} other {# proyectos}}",
+    "blocked": "Resuelva antes de contabilizar",
+    "review": "Revisar",
+    "columns": {
+      "project": "Proyecto",
+      "unbilled": "No facturado",
+      "accrued": "Devengado",
+      "toPost": "Por contabilizar"
+    },
+    "post": "Contabilizar devengo",
+    "upToDate": "Al día",
+    "posted": "Devengo de ingresos no facturados contabilizado.",
+    "postFailed": "No se pudo contabilizar el devengo.",
+    "postPermission": "Contabilizar el devengo requiere permiso para contabilizar asientos."
   }
 }

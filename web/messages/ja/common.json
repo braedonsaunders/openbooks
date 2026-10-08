@@ -102,7 +102,9 @@
     "fulfillmentShort": "出荷実績",
     "returnAuthorization": "返品承認",
     "returnAuthorizationShort": "RMA",
-    "payRun": "給与計算"
+    "payRun": "給与計算",
+    "internalBilling": "社内請求",
+    "internalBillingShort": "社内"
   },
   "labels": {
     "name": "名前",
@@ -171,6 +173,9 @@
     "finalInvoice": "最終請求書",
     "paymentHold": "支払保留",
     "expectedPayDate": "支払予定日",
+    "workCompletedOn": "作業完了日",
+    "workFrom": "作業開始日",
+    "workTo": "作業終了日",
     "openBalance": "未決済残高",
     "defaultForm": "既定のフォーム",
     "asOf": "基準日",

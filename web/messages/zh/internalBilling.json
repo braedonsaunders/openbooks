@@ -1,0 +1,61 @@
+{
+  "title": "内部计费",
+  "description": "在部门、项目和子公司之间计费。每条规则决定这笔往来如何不影响公司总额。",
+  "list": {
+    "new": "新建内部计费",
+    "emptyTitle": "尚无内部计费",
+    "emptyDescription": "记录业务中一个部分为另一个部分完成的工作，让正确的部门、项目或子公司获得入账并承担费用。"
+  },
+  "fields": {
+    "rule": "规则",
+    "from": "提供方",
+    "rate": "单价",
+    "billable": "可计费",
+    "billRate": "计费单价"
+  },
+  "drawer": {
+    "newTitle": "新建内部计费",
+    "description": "选择提供工作的一方和接收工作的一方。",
+    "from": "提供方",
+    "to": "接收方",
+    "chooseRule": "选择规则",
+    "noRules": "尚无内部计费规则。请在 设置 → 内部计费 中添加。",
+    "none": "无",
+    "sameAsFrom": "与提供方相同",
+    "chooseSubsidiary": "选择子公司",
+    "addLine": "添加行",
+    "removeLine": "删除行",
+    "saveDraft": "保存草稿",
+    "journalEntry": "会计分录",
+    "total": "合计",
+    "billed": "已向客户计费"
+  },
+  "void": {
+    "title": "作废内部计费",
+    "message": "过账将被冲回。已向客户计费的行需先作废或删除该发票以释放。",
+    "reason": "原因"
+  },
+  "feedback": {
+    "saved": "草稿已保存",
+    "posted": "已过账",
+    "pendingApproval": "已提交审批",
+    "voided": "已作废",
+    "saveFailed": "无法保存草稿。",
+    "postFailed": "无法过账该单据。",
+    "voidFailed": "无法作废该单据。"
+  },
+  "methods": {
+    "revenue_credit": {
+      "label": "部门销售入账",
+      "description": "完成工作的部门获得收入入账；公司总收入不会重复计算。"
+    },
+    "cost_transfer": {
+      "label": "成本转移",
+      "description": "将成本转给使用该工作的部门或项目；公司总成本不变。"
+    },
+    "intercompany_sale": {
+      "label": "集团内部销售",
+      "description": "一家子公司向另一家子公司销售；双方在合并时抵销。"
+    }
+  }
+}

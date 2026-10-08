@@ -1,11 +1,12 @@
 import { lockRevenueContract } from "../revenue/recognition.ts";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
-import { cmp, formatMoney, mulRatio, normalizeMoney, toUnits } from "../money/money.ts";
+import { add, cmp, formatMoney, mulRatio, normalizeMoney, toUnits } from "../money/money.ts";
 import { canonicalDecimal } from "../money/exact-decimal.ts";
 import { buildAllRecognitionSchedulesInTransaction, legacyRebuildBlock, revenueRecognitionFeatureEnabled } from "../revenue/recognition.ts";
 import { recognitionAccounts } from "./recognition.ts";
 import { lockAndCheckOrgFeature } from "../organization/org-feature-lock.ts";
+import { loadEarnedValue } from "./earned-value.ts";
 
 /**
  * Fixed-price project revenue through the ARM pipeline (source platform-shaped).
@@ -163,6 +164,9 @@ export async function syncProjectRevenueContractsInTransaction(
   // an org that never uses Projects must not warn on every recognition run.
   const projectsOn = await lockAndCheckOrgFeature(tx, orgId, "projects");
   const recognitionOn = await revenueRecognitionFeatureEnabled(tx, orgId);
+  // With Progress tracking on, recorded estimates to complete replace the
+  // static task budget as the cost-to-cost denominator (see below).
+  const progressOn = projectsOn && await lockAndCheckOrgFeature(tx, orgId, "projectProgress");
 
   // `undefined` is the unrestricted policy; a present (including empty) list
   // is a restricted policy. Keep the empty case fail-closed rather than
@@ -304,7 +308,20 @@ export async function syncProjectRevenueContractsInTransaction(
                      and e.book_id = ${primary.id}
                      and l.subsidiary_id = ${owner.id} and e.posting_date <= ${asOfDate}::date
                      and (a.type in ('expense','cogs','expense_other','expense_deferred') ${laborWipScope})), 0) as actual`));
-      const measured = costToCostPercent(cc.rows[0]?.budget ?? "0", cc.rows[0]?.actual ?? "0");
+      // Estimated total cost (ASC 606 input method): once the project carries
+      // estimates to complete, the denominator is cost to date plus the
+      // estimate to complete of every task (the latest forecast on or before
+      // the as-of date, else the task's remaining budget). A rising estimate
+      // therefore lowers percent complete; the schedule rebuild books the
+      // cumulative catch-up. Without forecasts the task budget stands.
+      let estimatedTotal = cc.rows[0]?.budget ?? "0";
+      if (progressOn) {
+        const [earned] = await loadEarnedValue(tx, orgId, { asOf: asOfDate, projectIds: [p.id], allowedSubsidiaryIds: null });
+        if (earned?.hasForecasts) {
+          estimatedTotal = add(normalizeMoney(cc.rows[0]?.actual ?? "0"), earned.totals.estimateToComplete);
+        }
+      }
+      const measured = costToCostPercent(estimatedTotal, cc.rows[0]?.actual ?? "0");
       if (measured === null) {
         // Missing estimates leave progress unmeasurable. Refusing here keeps
         // the existing obligation and schedules exactly as they were instead

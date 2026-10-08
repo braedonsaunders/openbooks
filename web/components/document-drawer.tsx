@@ -147,6 +147,9 @@ interface LineRow extends Record<string, unknown> {
   projectId: string
   locationId: string
   classId: string
+  /** First and last day of the work the line bills (YYYY-MM-DD or blank). */
+  workFrom: string
+  workTo: string
   /** Warehouse for inventory receipt/issue effects; blank unless the line's
    *  item is stocked. */
   stockLocationId: string
@@ -241,6 +244,7 @@ export interface DocumentDoc extends Record<string, unknown> {
   is_final_invoice: boolean
   internal_notes: string | null
   expected_pay_date: string | null
+  work_completed_on: string | null
   entry_id: string | null
   department_id: string | null
   class_id: string | null
@@ -292,6 +296,7 @@ export function asDocumentDoc(raw: Record<string, unknown>): DocumentDoc {
     is_final_invoice: raw.is_final_invoice === true,
     internal_notes: text(raw.internal_notes),
     expected_pay_date: text(raw.expected_pay_date),
+    work_completed_on: text(raw.work_completed_on),
     entry_id: text(raw.entry_id),
     department_id: text(raw.department_id),
     class_id: text(raw.class_id),
@@ -695,6 +700,8 @@ const emptyLine = (): LineRow => ({
   projectId: '',
   locationId: '',
   classId: '',
+  workFrom: '',
+  workTo: '',
   stockLocationId: '',
   returnSourceMovementId: '',
   taxProfileId: '',
@@ -743,6 +750,8 @@ export function isBlankDrawerLine(row: Record<string, unknown>): boolean {
     'projectId',
     'locationId',
     'classId',
+    'workFrom',
+    'workTo',
     'stockLocationId',
     'returnSourceMovementId',
     'taxProfileId',
@@ -879,6 +888,8 @@ function toRow(l: Record<string, unknown>, lineDefs: CustomFieldDefClient[], seg
     projectId: lineText(l.project_id),
     locationId: lineText(l.location_id),
     classId: lineText(l.class_id),
+    workFrom: lineText(l.work_from),
+    workTo: lineText(l.work_to),
     stockLocationId: lineText(l.stock_location_id),
     // Overwritten below from native return evidence when the line carries it.
     returnSourceMovementId: '',
@@ -1186,6 +1197,10 @@ export function DocumentDrawer({
   const [classId, setClassId] = useState<string>(doc.class_id ?? '')
   const [subsidiaryId, setSubsidiaryId] = useState<string>(doc.subsidiary_id ?? '')
   const [expectedPayDate, setExpectedPayDate] = useState<string>(doc.expected_pay_date ?? '')
+  // Customer billing kinds carry when the invoiced work was completed and
+  // each line's work period; generated invoices arrive with them stamped.
+  const carriesWorkDates = config.kind === 'customer_invoice' || config.kind === 'customer_credit'
+  const [workCompletedOn, setWorkCompletedOn] = useState<string>(doc.work_completed_on ?? '')
   const [paymentHoldReason, setPaymentHoldReason] = useState<string>(doc.payment_hold_reason ?? '')
   const [internalNotes, setInternalNotes] = useState<string>(doc.internal_notes ?? '')
   const [billingMethod, setBillingMethod] = useState<string>(doc.billing_method ?? '')
@@ -1713,6 +1728,7 @@ export function DocumentDrawer({
       // Only sent in multi-subsidiary orgs (undefined drops out of the JSON body).
       subsidiaryId: multiSub ? subsidiaryId || null : undefined,
       expectedPayDate: expectedPayDate || null,
+      ...(carriesWorkDates ? { workCompletedOn: workCompletedOn || null } : {}),
       paymentHoldReason: paymentHoldReason || null,
       internalNotes: internalNotes || null,
       billingMethod: billingMethod || null,
@@ -1758,6 +1774,7 @@ export function DocumentDrawer({
                 projectId: r.projectId || null,
                 locationId: r.locationId || null,
                 classId: r.classId || null,
+                ...(carriesWorkDates ? { workFrom: r.workFrom || null, workTo: r.workTo || null } : {}),
                 stockLocationId: r.stockLocationId || null,
                 // Tri-state, and only on kinds that can return stock: absent
                 // preserves the stored selection, null clears it, an object
@@ -1791,7 +1808,7 @@ export function DocumentDrawer({
               })),
           }),
     }
-  }, [isTransfer, transfer, partyId, paymentCardId, documentDate, dueDate, referenceNumber, memo, postingDate, departmentId, projectIdHeader, locationId, classId, subsidiaryId, multiSub, expectedPayDate, paymentHoldReason, internalNotes, billingMethod, isFinalInvoice, customValues, extraDims, rows, lineDefs, segments, config, taxByProfile, returnSourceColumn, returnSources, marketplaceColumn])
+  }, [isTransfer, transfer, partyId, paymentCardId, documentDate, dueDate, referenceNumber, memo, postingDate, departmentId, projectIdHeader, locationId, classId, subsidiaryId, multiSub, expectedPayDate, carriesWorkDates, workCompletedOn, paymentHoldReason, internalNotes, billingMethod, isFinalInvoice, customValues, extraDims, rows, lineDefs, segments, config, taxByProfile, returnSourceColumn, returnSources, marketplaceColumn])
 
   const [dirty, setDirty] = useState(false)
   useEffect(() => {
@@ -1858,6 +1875,7 @@ export function DocumentDrawer({
     setClassId(sourceDoc.class_id ?? '')
     setSubsidiaryId(sourceDoc.subsidiary_id ?? '')
     setExpectedPayDate(sourceDoc.expected_pay_date ?? '')
+    setWorkCompletedOn(sourceDoc.work_completed_on ?? '')
     setPaymentHoldReason(sourceDoc.payment_hold_reason ?? '')
     setInternalNotes(sourceDoc.internal_notes ?? '')
     setBillingMethod(sourceDoc.billing_method ?? '')
@@ -2433,6 +2451,8 @@ export function DocumentDrawer({
         key: 'taxProfileId', width: '110px', type: 'select',
         options: [{ value: '', label: nativeGoods ? tCommon('nativeGoodsTax.automatic') : t('drawer.noTax') }, ...taxProfiles.map((profile) => ({ value: profile.value, label: profile.code ?? '' }))],
       },
+      work_from: { key: 'workFrom', width: '130px', type: 'text', placeholder: 'YYYY-MM-DD' },
+      work_to: { key: 'workTo', width: '130px', type: 'text', placeholder: 'YYYY-MM-DD' },
       amount: { key: 'amount', width: '120px', type: 'amount', align: 'right', required: true },
       tax_amount: {
         key: 'taxAmount', width: '120px', type: 'tax', align: 'right', computeTax: lineTax,
@@ -2456,6 +2476,8 @@ export function DocumentDrawer({
       location_id: tCommon('labels.location'),
       class_id: tCommon('labels.class'),
       tax_code_id: tCommon('labels.tax'),
+      work_from: tCommon('labels.workFrom'),
+      work_to: tCommon('labels.workTo'),
       amount: tCommon('labels.amount'),
       tax_amount: t('drawer.taxAmountColumn'),
     }
@@ -2508,6 +2530,7 @@ export function DocumentDrawer({
       case 'class_id': return tCommon('labels.class')
       case 'subsidiary_id': return tCommon('labels.subsidiary')
       case 'expected_pay_date': return tCommon('labels.expectedPayDate')
+      case 'work_completed_on': return tCommon('labels.workCompletedOn')
       case 'payment_hold_reason': return tCommon('labels.paymentHold')
       case 'internal_notes': return tCommon('labels.internalNotes')
       case 'billing_method': return tCommon('labels.billingMethod')
@@ -2619,6 +2642,16 @@ export function DocumentDrawer({
             {isEditable ? (
               <Input type="date" value={expectedPayDate} onChange={(e) => setExpectedPayDate(e.target.value)} />
             ) : (<p className="text-sm">{doc.expected_pay_date ?? '—'}</p>)}
+          </>
+        )
+      case 'work_completed_on':
+        if (!carriesWorkDates) return null
+        return (
+          <>
+            <FieldLabel fieldName={label}>{label}</FieldLabel>
+            {isEditable ? (
+              <Input type="date" value={workCompletedOn} onChange={(e) => setWorkCompletedOn(e.target.value)} />
+            ) : (<p className="text-sm">{doc.work_completed_on ?? '—'}</p>)}
           </>
         )
       case 'department_id':

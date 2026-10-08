@@ -152,6 +152,10 @@
       "title": "Umsatzrealisierung bleibt ungebucht",
       "message": "{count, plural, one {# geplante Realisierungszeile bleibt ungebucht.} other {# geplante Realisierungszeilen bleiben ungebucht.}}"
     },
+    "unbilled-revenue-unaccrued": {
+      "title": "Abgrenzung nicht fakturierter Umsätze ist nicht aktuell",
+      "message": "{count, plural, one {# Projektabgrenzung muss gebucht oder in der Konfiguration korrigiert werden.} other {# Projektabgrenzungen müssen gebucht oder in der Konfiguration korrigiert werden.}}"
+    },
     "fx-missing": {
       "title": "Wechselkurse fehlen",
       "message": "{count, plural, one {# Transaktionswährung hat keinen verwendbaren Stichtags-Kassakurs.} other {# Transaktionswährungen haben keinen verwendbaren Stichtags-Kassakurs.}}"
@@ -373,6 +377,10 @@
     "recognition-posted": {
       "title": "Umsatzrealisierung buchen",
       "description": "Führen Sie die geplante Umsatzrealisierung durch und lösen Sie Ausnahmen auf."
+    },
+    "unbilled-revenue-accrued": {
+      "title": "Nicht fakturierte Umsätze abgrenzen",
+      "description": "Bis zum Periodenende erbrachte, aber noch nicht fakturierte Leistungen nach Aufwand abgrenzen; die Abgrenzung wird am ersten Tag der Folgeperiode storniert."
     },
     "fx-ready": {
       "title": "Wechselkursabdeckung validieren",
@@ -855,5 +863,30 @@
   "problems": {
     "subsidiaryMissing": "Tochtergesellschaft {subsidiaryId} existiert nicht.",
     "entityFailed": "{name}: {detail}"
+  },
+  "unbilledAccrual": {
+    "loading": "Nicht fakturierte Leistungen werden berechnet…",
+    "loadFailed": "Die Abgrenzung nicht fakturierter Umsätze konnte nicht berechnet werden.",
+    "retry": "Erneut versuchen",
+    "dates": "{period}: Abgrenzung zum {accrualDate}, Storno am {reversalDate}",
+    "datesNoReversal": "{period}: Abgrenzung zum {accrualDate}",
+    "empty": "Zum Periodenende gibt es keine nicht fakturierten Leistungen nach Aufwand.",
+    "unbilled": "Nicht fakturiert zum Periodenende",
+    "toPost": "Zu buchen",
+    "projectsLabel": "Projekte",
+    "projects": "{count, plural, one {# Projekt} other {# Projekte}}",
+    "blocked": "Vor dem Buchen beheben",
+    "review": "Prüfen",
+    "columns": {
+      "project": "Projekt",
+      "unbilled": "Nicht fakturiert",
+      "accrued": "Abgegrenzt",
+      "toPost": "Zu buchen"
+    },
+    "post": "Abgrenzung buchen",
+    "upToDate": "Aktuell",
+    "posted": "Abgrenzung nicht fakturierter Umsätze gebucht.",
+    "postFailed": "Die Abgrenzung konnte nicht gebucht werden.",
+    "postPermission": "Zum Buchen der Abgrenzung ist die Berechtigung zum Buchen von Journaleinträgen erforderlich."
   }
 }

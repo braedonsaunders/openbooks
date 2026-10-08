@@ -152,6 +152,10 @@
       "title": "收入确认仍未过账",
       "message": "{count, plural, one {仍有 # 条计划确认行未过账。} other {仍有 # 条计划确认行未过账。}}"
     },
+    "unbilled-revenue-unaccrued": {
+      "title": "未开票收入计提不是最新的",
+      "message": "{count, plural, other {# 项项目计提需要过账或修正配置。}}"
+    },
     "fx-missing": {
       "title": "缺少外币汇率",
       "message": "{count, plural, one {有 # 种交易货币没有可用的期末即期汇率。} other {有 # 种交易货币没有可用的期末即期汇率。}}"
@@ -373,6 +377,10 @@
     "recognition-posted": {
       "title": "过账收入确认",
       "description": "运行计划收入确认并处理异常。"
+    },
+    "unbilled-revenue-accrued": {
+      "title": "计提未开票收入",
+      "description": "计提截至期末已完成但尚未开票的工时与材料工作；该计提于下一期间首日自动冲回。"
     },
     "fx-ready": {
       "title": "校验外币汇率覆盖情况",
@@ -855,5 +863,30 @@
   "problems": {
     "subsidiaryMissing": "子公司 {subsidiaryId} 不存在。",
     "entityFailed": "{name}：{detail}"
+  },
+  "unbilledAccrual": {
+    "loading": "正在计算未开票工作…",
+    "loadFailed": "无法计算未开票收入计提。",
+    "retry": "重试",
+    "dates": "{period}：于 {accrualDate} 计提，于 {reversalDate} 冲回",
+    "datesNoReversal": "{period}：于 {accrualDate} 计提",
+    "empty": "期末没有未开票的工时与材料工作。",
+    "unbilled": "期末未开票",
+    "toPost": "待过账",
+    "projectsLabel": "项目",
+    "projects": "{count, plural, other {# 个项目}}",
+    "blocked": "过账前请先解决",
+    "review": "查看明细",
+    "columns": {
+      "project": "项目",
+      "unbilled": "未开票",
+      "accrued": "已计提",
+      "toPost": "待过账"
+    },
+    "post": "过账计提",
+    "upToDate": "已是最新",
+    "posted": "未开票收入计提已过账。",
+    "postFailed": "无法过账计提。",
+    "postPermission": "过账计提需要过账日记账分录的权限。"
   }
 }

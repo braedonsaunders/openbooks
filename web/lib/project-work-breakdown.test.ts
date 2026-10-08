@@ -20,6 +20,9 @@ test('WBS input validation is strict and preserves exact four-decimal values', (
       status: 'open',
       estimatedHours: '12.125',
       estimatedCost: '101.2300',
+      estimatedPrice: '2500',
+      budgetQuantity: '120.5',
+      budgetUnit: ' m ',
     }),
     {
       code: '01.20',
@@ -27,14 +30,22 @@ test('WBS input validation is strict and preserves exact four-decimal values', (
       status: 'open',
       estimatedHours: '12.1250',
       estimatedCost: '101.2300',
+      estimatedPrice: '2500.0000',
+      budgetQuantity: '120.50000000',
+      budgetUnit: 'm',
     },
   )
+  // Leaving the production pair out keeps the stored pair untouched.
+  assert.equal('budgetQuantity' in parseWorkBreakdownTaskInput({ name: 'Trenching' }), false)
 
   for (const input of [
     { name: '' },
     { name: 'Invalid status', status: 'draft' },
     { name: 'Negative hours', estimatedHours: '-1' },
     { name: 'Negative cost', estimatedCost: '-0.01' },
+    { name: 'Negative price', estimatedPrice: '-5' },
+    { name: 'Quantity without its unit', budgetQuantity: '5' },
+    { name: 'Zero quantity', budgetQuantity: '0', budgetUnit: 'm' },
     { name: 'Unknown field', postedAmount: '1.00' },
   ]) {
     assert.throws(
@@ -312,6 +323,7 @@ async function runWorkBreakdownScopeTest(): Promise<void> {
         status: 'open',
         estimatedHours: '1.0000',
         estimatedCost: '50.0000',
+        estimatedPrice: null,
       },
     }),
     (error: unknown) => error instanceof ProjectWorkBreakdownError && error.status === 404,
@@ -330,6 +342,7 @@ async function runWorkBreakdownScopeTest(): Promise<void> {
         status: 'open',
         estimatedHours: '3.0000',
         estimatedCost: '150.0000',
+        estimatedPrice: null,
       },
     }),
     (error: unknown) => error instanceof ProjectWorkBreakdownError && error.status === 404,
@@ -357,6 +370,7 @@ async function runWorkBreakdownScopeTest(): Promise<void> {
       status: 'open',
       estimatedHours: '1.0000',
       estimatedCost: '50.0000',
+      estimatedPrice: null,
     },
   })
   assert.equal(created.name, 'Allowed create')
@@ -373,6 +387,7 @@ async function runWorkBreakdownScopeTest(): Promise<void> {
       status: 'open',
       estimatedHours: '3.0000',
       estimatedCost: '150.0000',
+      estimatedPrice: null,
     },
   })
   assert.equal(updated.name, 'Allowed update')

@@ -3540,6 +3540,11 @@
         "title": "スケジュールコード",
         "singularTitle": "スケジュールコード",
         "description": "研修日や工場作業日など、顧客やプロジェクトに該当しない作業の割り当てと、勤務しない日に使うコード。"
+      },
+      "internal-billing": {
+        "title": "社内請求",
+        "description": "部門、プロジェクト、子会社間の請求に関する有効期間付きルールと、それぞれを会社全体の合計に影響させない方法。",
+        "singularTitle": "社内請求ルール"
       }
     },
     "fields": {
@@ -6524,6 +6529,55 @@
       "limitKinds": {
         "none": "上限なし",
         "amount": "金額上限"
+      }
+    },
+    "internalBilling": {
+      "formDescription": "ルールは社内請求の記録方法を定めます。処理を変更するには、後の日付から新しいバージョンを追加します。",
+      "sections": {
+        "rule": "ルール",
+        "advanced": "詳細設定",
+        "advancedHelp": "この種類のルールに合う勘定科目が提案されています。確認し、ルールの適用期間を設定してください。",
+        "reason": "変更理由"
+      },
+      "fields": {
+        "code": "コード",
+        "name": "名称",
+        "method": "処理方法",
+        "description": "説明",
+        "debitAccountId": "受領側勘定（借方）",
+        "creditAccountId": "提供側勘定（貸方）",
+        "effectiveFrom": "適用開始日",
+        "effectiveTo": "適用終了日",
+        "billableByDefault": "既定で請求対象",
+        "isActive": "有効",
+        "reason": "理由"
+      },
+      "help": {
+        "code": "伝票はコードでルールを選びます。コードの各バージョンはそれぞれの期間に適用されます。",
+        "debitAccountId": "受領する部門、プロジェクト、子会社に計上されます。",
+        "creditAccountId": "作業を提供する部門、プロジェクト、子会社に計上されます。",
+        "effectiveTo": "空欄の場合、後のバージョンが始まるまで有効です。",
+        "billableByDefault": "受領プロジェクトのある新しい行は、そのプロジェクトの顧客に請求されます。",
+        "isActive": "誤って追加したバージョンを無効化します。転記済み伝票で使用されたバージョンは、代わりに終了日で締めます。",
+        "reason": "変更とともに監査証跡に記録されます。"
+      },
+      "methods": {
+        "revenue_credit": {
+          "label": "部門への売上計上",
+          "description": "作業を行った部門に売上を計上します。会社全体の売上は二重計上されません。"
+        },
+        "cost_transfer": {
+          "label": "原価振替",
+          "description": "作業を利用した部門またはプロジェクトに原価を振り替えます。会社全体の原価は変わりません。"
+        },
+        "intercompany_sale": {
+          "label": "グループ会社間売上",
+          "description": "子会社間で販売します。双方とも連結時に消去されます。"
+        }
+      },
+      "chooser": {
+        "title": "このルールの目的は？",
+        "description": "処理方法を選択します。勘定科目と日付は自動入力され、詳細設定で変更できます。"
       }
     }
   },

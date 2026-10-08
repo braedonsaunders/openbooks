@@ -18,6 +18,9 @@ export type ProjectTaskRow = {
   status: string
   estimated_hours: string | null
   estimated_cost: string | null
+  estimated_price: string | null
+  budget_quantity: string | null
+  budget_unit: string | null
   updated_at: string
 }
 
@@ -84,7 +87,7 @@ export async function loadProject(
       // can echo it back as expectedUpdatedAt (a 3-digit ISO round-trip
       // fails the revision pattern and every edit 422s).
       const tasks = await db.execute<ProjectTaskRow>(sql`
-        select id, code, name, status, estimated_hours, estimated_cost, ${documentRevisionSql(sql`updated_at`)} as updated_at
+        select id, code, name, status, estimated_hours, estimated_cost, estimated_price, budget_quantity, budget_unit, ${documentRevisionSql(sql`updated_at`)} as updated_at
           from project_tasks
          where project_id = ${id} and org_id = ${orgId}
          order by code nulls last, name

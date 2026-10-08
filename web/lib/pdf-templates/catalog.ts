@@ -86,6 +86,17 @@ const LINE_FIELDS: PdfMergeField[] = [
 
 const LINES_COLLECTION: PdfCollection = { key: 'lines', label: 'Line items', fields: LINE_FIELDS }
 
+/** Documents that bill work state when it was completed and each line's work period. */
+const WORK_COMPLETED_FIELD: PdfMergeField = { key: 'work_completed_on', label: 'Work completed', sample: 'Jul 31, 2026' }
+const WORK_LINES_COLLECTION: PdfCollection = {
+  ...LINES_COLLECTION,
+  fields: [
+    ...LINE_FIELDS,
+    { key: 'work_from', label: 'Work from', sample: 'Jul 1, 2026' },
+    { key: 'work_to', label: 'Work to', sample: 'Jul 31, 2026' },
+  ],
+}
+
 /**
  * Grouped-by-service-party layout for consolidated invoices: one entry per
  * service customer with its lines nested underneath plus exact subtotals.
@@ -115,6 +126,7 @@ function docType(meta: {
   hasReference: boolean
   extraFields?: PdfMergeField[]
   groupedLines?: boolean
+  workPeriod?: boolean
 }): PdfRecordTypeMeta {
   return {
     key: meta.key,
@@ -128,10 +140,11 @@ function docType(meta: {
       ...(meta.hasReference ? [REFERENCE_FIELD] : []),
       ...(meta.hasParty ? PARTY_FIELDS : []),
       ...(meta.extraFields ?? []),
+      ...(meta.workPeriod ? [WORK_COMPLETED_FIELD] : []),
       ...(meta.hasDue ? DUE_FIELDS : []),
       ...DOC_COMMON.slice(4),
     ],
-    collections: [LINES_COLLECTION, ...(meta.groupedLines ? [LINE_GROUPS_COLLECTION] : [])],
+    collections: [meta.workPeriod ? WORK_LINES_COLLECTION : LINES_COLLECTION, ...(meta.groupedLines ? [LINE_GROUPS_COLLECTION] : [])],
   }
 }
 
@@ -504,12 +517,12 @@ const PAYROLL_CHEQUE: PdfRecordTypeMeta = {
 
 /** Every record type a PDF template can target, in nav order. */
 export const PDF_RECORD_TYPES: PdfRecordTypeMeta[] = [
-  docType({ key: 'customer_invoice', docTitle: 'Invoice', partyHeading: 'Bill to', readPermission: 'ar.read', hasParty: true, hasDue: true, hasReference: true, groupedLines: true }),
-  docType({ key: 'customer_credit', docTitle: 'Credit Memo', partyHeading: 'Bill to', readPermission: 'ar.read', hasParty: true, hasDue: true, hasReference: true }),
+  docType({ key: 'customer_invoice', docTitle: 'Invoice', partyHeading: 'Bill to', readPermission: 'ar.read', hasParty: true, hasDue: true, hasReference: true, groupedLines: true, workPeriod: true }),
+  docType({ key: 'customer_credit', docTitle: 'Credit Memo', partyHeading: 'Bill to', readPermission: 'ar.read', hasParty: true, hasDue: true, hasReference: true, workPeriod: true }),
   docType({ key: 'cash_sale', docTitle: 'Sales Receipt', partyHeading: 'Sold to', readPermission: 'cash_sales.read', hasParty: true, hasDue: false, hasReference: true }),
   docType({ key: 'cash_refund', docTitle: 'Refund Receipt', partyHeading: 'Refunded to', readPermission: 'cash_sales.read', hasParty: true, hasDue: false, hasReference: true }),
   docType({ key: 'quote', docTitle: 'Quote', partyHeading: 'Prepared for', readPermission: 'ar.read', hasParty: true, hasDue: false, hasReference: true }),
-  docType({ key: 'sales_order', docTitle: 'Sales Order', partyHeading: 'Sold to', readPermission: 'ar.read', hasParty: true, hasDue: false, hasReference: true }),
+  docType({ key: 'sales_order', docTitle: 'Sales Order', partyHeading: 'Sold to', readPermission: 'ar.read', hasParty: true, hasDue: false, hasReference: true, workPeriod: true }),
   docType({ key: 'purchase_order', docTitle: 'Purchase Order', partyHeading: 'Vendor', readPermission: 'ap.read', hasParty: true, hasDue: false, hasReference: true, extraFields: [
     { key: 'ship_to_name', label: 'Ship-to name', sample: 'Acme — Site 4 receiving' },
     { key: 'ship_to_address', label: 'Ship-to address', sample: '400 King St W, Suite 300, Toronto, ON M5V 1K2, CA' },

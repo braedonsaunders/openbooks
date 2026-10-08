@@ -24,6 +24,9 @@ type TaskRow = {
   status: TaskStatus
   estimated_hours: string | null
   estimated_cost: string | null
+  estimated_price: string | null
+  budget_quantity: string | null
+  budget_unit: string | null
   updated_at: string
 };
 
@@ -37,6 +40,21 @@ async function assertProjectsEnabledTx(tx: Executor, orgId: string): Promise<voi
   await acquireFeatureGateLock(orgId, tx)
   if (!(await lockAndCheckOrgFeature(tx, orgId, 'projects'))) {
     throw new ProjectWorkBreakdownError('Projects feature is disabled', 404)
+  }
+}
+
+/**
+ * Production quantities belong to Progress tracking (a child of Projects):
+ * a write that sets or clears them refuses while the feature is off,
+ * re-checked under the caller's transaction, so disabling the feature
+ * preserves the recorded quantities. Leaving them out keeps the stored pair.
+ */
+async function assertProductionQuantityAllowed(tx: Executor, orgId: string, input: WorkBreakdownTaskInput): Promise<void> {
+  if (input.budgetQuantity === undefined) return
+  if (!(await lockAndCheckOrgFeature(tx, orgId, 'projectProgress'))) {
+    throw new ProjectWorkBreakdownError(
+      'Production quantities need Progress tracking — turn it on in Company Settings → Features',
+    )
   }
 }
 
@@ -68,6 +86,9 @@ export interface WorkBreakdownTaskClient {
   status: TaskStatus
   estimatedHours: string
   estimatedCost: string
+  estimatedPrice: string
+  budgetQuantity: string
+  budgetUnit: string
   updatedAt: string
 }
 
@@ -79,6 +100,9 @@ function clientTask(row: TaskRow): WorkBreakdownTaskClient {
     status: row.status,
     estimatedHours: row.estimated_hours ?? '',
     estimatedCost: row.estimated_cost ?? '',
+    estimatedPrice: row.estimated_price ?? '',
+    budgetQuantity: row.budget_quantity ?? '',
+    budgetUnit: row.budget_unit ?? '',
     updatedAt: row.updated_at,
   }
 }
@@ -108,7 +132,7 @@ async function taskSnapshot(
   lock = false,
 ): Promise<TaskRow | null> {
   const result = (await exec.execute<TaskRow>(sql`
-    select t.id, t.project_id, t.code, t.name, t.status, t.estimated_hours, t.estimated_cost, ${documentRevisionSql(sql`t.updated_at`)} as updated_at
+    select t.id, t.project_id, t.code, t.name, t.status, t.estimated_hours, t.estimated_cost, t.estimated_price, t.budget_quantity, t.budget_unit, ${documentRevisionSql(sql`t.updated_at`)} as updated_at
       from project_tasks t
       join projects p on p.id = t.project_id and p.org_id = t.org_id
      where t.id = ${taskId} and t.project_id = ${projectId} and t.org_id = ${orgId}
@@ -156,7 +180,7 @@ export async function loadWorkBreakdownTasks(
   await assertProjectsEnabled(orgId)
   await assertProject(db, orgId, projectId, allowedSubsidiaryIds)
   const result = (await db.execute<TaskRow>(sql`
-    select t.id, t.project_id, t.code, t.name, t.status, t.estimated_hours, t.estimated_cost, ${documentRevisionSql(sql`t.updated_at`)} as updated_at
+    select t.id, t.project_id, t.code, t.name, t.status, t.estimated_hours, t.estimated_cost, t.estimated_price, t.budget_quantity, t.budget_unit, ${documentRevisionSql(sql`t.updated_at`)} as updated_at
       from project_tasks t
       join projects p on p.id = t.project_id and p.org_id = t.org_id
      where t.project_id = ${projectId} and t.org_id = ${orgId}
@@ -178,21 +202,23 @@ export async function createWorkBreakdownTask(args: {
     // The project row is the transaction-scoped sequencing lock for its WBS.
     // Concurrent creates cannot both observe the same max(schedule_order).
     await assertProject(tx, args.orgId, args.projectId, args.allowedSubsidiaryIds, 'update')
+    await assertProductionQuantityAllowed(tx, args.orgId, args.input)
     const created = (await tx.execute<TaskRow>(sql`
       insert into project_tasks (
-        org_id, project_id, code, name, status, estimated_hours, estimated_cost,
-        schedule_order, created_by, updated_by
+        org_id, project_id, code, name, status, estimated_hours, estimated_cost, estimated_price,
+        budget_quantity, budget_unit, schedule_order, created_by, updated_by
       )
       values (
         ${args.orgId}, ${args.projectId}, ${args.input.code}, ${args.input.name},
-        ${args.input.status}, ${args.input.estimatedHours}, ${args.input.estimatedCost},
+        ${args.input.status}, ${args.input.estimatedHours}, ${args.input.estimatedCost}, ${args.input.estimatedPrice},
+        ${args.input.budgetQuantity ?? null}, ${args.input.budgetUnit ?? null},
         coalesce((
           select max(schedule_order) + 1 from project_tasks
            where org_id = ${args.orgId} and project_id = ${args.projectId}
         ), 1),
         ${args.actorId}, ${args.actorId}
       )
-      returning id, project_id, code, name, status, estimated_hours, estimated_cost, ${documentRevisionSql(sql`updated_at`)} as updated_at
+      returning id, project_id, code, name, status, estimated_hours, estimated_cost, estimated_price, budget_quantity, budget_unit, ${documentRevisionSql(sql`updated_at`)} as updated_at
     `))
     const after = created.rows[0]
     if (!after) throw new ProjectWorkBreakdownError('Task could not be created', 500)
@@ -246,8 +272,11 @@ export async function updateWorkBreakdownTask(args: {
       to: args.input.status,
       estimatedHoursChanged: !sameTaskDecimal(before.estimated_hours, args.input.estimatedHours),
       estimatedCostChanged: !sameTaskDecimal(before.estimated_cost, args.input.estimatedCost),
+      estimatedPriceChanged: !sameTaskDecimal(before.estimated_price, args.input.estimatedPrice),
       reason: args.reason ?? null,
     })
+    await assertProductionQuantityAllowed(tx, args.orgId, args.input)
+    const quantityUnchanged = args.input.budgetQuantity === undefined
 
     // The locked snapshot comparison preserves every PostgreSQL microsecond.
     // Advance the token even when multiple writes share a transaction clock.
@@ -258,6 +287,9 @@ export async function updateWorkBreakdownTask(args: {
              status = ${args.input.status},
              estimated_hours = ${args.input.estimatedHours},
              estimated_cost = ${args.input.estimatedCost},
+             estimated_price = ${args.input.estimatedPrice},
+             budget_quantity = ${quantityUnchanged ? sql`budget_quantity` : sql`${args.input.budgetQuantity ?? null}`},
+             budget_unit = ${quantityUnchanged ? sql`budget_unit` : sql`${args.input.budgetUnit ?? null}`},
              updated_at = greatest(clock_timestamp(), updated_at + interval '1 microsecond'),
              updated_by = ${args.actorId}
        where id = ${args.taskId}
@@ -268,7 +300,7 @@ export async function updateWorkBreakdownTask(args: {
             where p.id = project_tasks.project_id and p.org_id = project_tasks.org_id
               ${projectSubsidiaryFilter(args.allowedSubsidiaryIds, sql`p.subsidiary_id`)}
          )
-       returning id, project_id, code, name, status, estimated_hours, estimated_cost, ${documentRevisionSql(sql`updated_at`)} as updated_at
+       returning id, project_id, code, name, status, estimated_hours, estimated_cost, estimated_price, budget_quantity, budget_unit, ${documentRevisionSql(sql`updated_at`)} as updated_at
     `))
     const after = updated.rows[0]
     if (!after) {

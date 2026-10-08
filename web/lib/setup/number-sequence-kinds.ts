@@ -35,6 +35,7 @@ const BUILT_IN_NUMBER_SEQUENCE_KINDS: NumberSequenceKindOption[] = [
   { value: 'journal', label: 'Journal entry' },
   { value: 'field_ticket', label: 'Field ticket' },
   { value: 'project_charge', label: 'Project charge' },
+  { value: 'internal_billing', label: 'Internal billing' },
   { value: 'payment_run', label: 'Payment run' },
   { value: 'pay_run', label: 'Pay run' },
   { value: 'payroll_cheque', label: 'Pay cheque' },

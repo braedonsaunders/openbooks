@@ -8,6 +8,7 @@ import { resolveFxRateAgeLimit } from "../fx/rate-age-policy.ts";
 import { commerceCloseChecks, type CommerceCloseCheck } from "./commerce-close.ts";
 import { sourceEvidencePolicyActive } from "../banking/banking.ts";
 import { defaultPostingSubsidiaryId, loadSubsidiaryContext } from "../organization/subsidiaries.ts";
+import { unbilledAccrualReadiness } from "../projects/unbilled-accrual.ts";
 const nonPostingKindList = () => sql.join(NON_POSTING_DOCUMENT_KINDS.map((k) => sql`${k}`), sql`, `);
 
 type ReadinessCheck = {
@@ -378,6 +379,21 @@ export async function readinessChecks(
     });
   }
 
+  // The unbilled revenue accrual is current when a run would post nothing:
+  // the accrual engine's own preview decides, so the step and the poster
+  // agree to the cent. Only runs that carry the task pay for the valuation.
+  let unbilledAccrual: { applies: boolean; pendingKeys: number; problem: string | null } = {
+    applies: false, pendingKeys: 0, problem: null,
+  };
+  const unbilledAccrualTask = (
+    await db.execute<{ id: string }>(sql`
+      select id from close_run_tasks
+       where run_id = ${runId} and org_id = ${orgId} and key = 'unbilled-revenue-accrued' limit 1`)
+  ).rows[0];
+  if (unbilledAccrualTask) {
+    unbilledAccrual = await unbilledAccrualReadiness(orgId, ctx.period_id, scoped ? subsidiaryIds : undefined);
+  }
+
   const threshold = variancePolicy.rows[0] ?? {
     amount: "10000.0000",
     percent: 20,
@@ -478,6 +494,16 @@ export async function readinessChecks(
       title: "close.diagnostics.recognition-unposted.title",
       message: "close.diagnostics.recognition-unposted.message",
       count: Number(recognition.rows[0]?.count ?? 0),
+    },
+    {
+      code: "unbilled-revenue-unaccrued",
+      taskKey: "unbilled-revenue-accrued",
+      category: "revenue",
+      severity: "error",
+      title: "close.diagnostics.unbilled-revenue-unaccrued.title",
+      message: "close.diagnostics.unbilled-revenue-unaccrued.message",
+      count: unbilledAccrual.applies ? unbilledAccrual.pendingKeys : 0,
+      details: unbilledAccrual.problem ? { problem: unbilledAccrual.problem } : undefined,
     },
     {
       code: "fx-missing",

@@ -92,6 +92,7 @@ const FEATURE_API_DIRS: Record<string, string[]> = {
   advancedSubscriptions: ['app/api/subscriptions/advanced'],
   revenueRecognition: ['app/api/revenue', 'app/api/items/[id]/fair-values'],
   wipBilling: ['app/api/wip-billing'],
+  unbilledRevenueAccrual: ['app/api/close/unbilled-revenue-accrual'],
   propertyManagement: ['app/api/property-management'],
   projectScheduling: ['app/api/project-schedule'],
   subcontracts: ['app/api/subcontracts'],
