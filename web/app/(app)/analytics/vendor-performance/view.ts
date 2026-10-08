@@ -6,6 +6,7 @@ import { can, requirePermission } from '../../../../lib/authz'
 import { resolvePeriod } from '../../../../lib/periods'
 import { parseReportQuery } from '../../../../lib/report-filters'
 import { vendorData } from '../../../../lib/analytics/vendor-data'
+import { projectVendorDashboard } from '../../../../lib/analytics/vendor-projection'
 import { vendorStrings } from '../../../../lib/analytics/vendor-strings'
 import type { VendorView } from './VendorView'
 
@@ -54,7 +55,7 @@ export async function loadVendorPerformance(sp: Record<string, string | undefine
     title: t('title'),
     backLabel: t('backToHub'),
     periodLabel: period.label,
-    data,
+    data: projectVendorDashboard(data),
     canConfigure: authz.allowedSubsidiaryIds === null && can(authz, 'admin.setup.manage'),
   }
 }

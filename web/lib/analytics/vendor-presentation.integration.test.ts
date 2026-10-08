@@ -15,9 +15,57 @@ const { withSimClock: pinClock } = await import('@openbooks/engine/src/platform/
 const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
 const { voidReportDocument } = await import('../../testing/document-void.ts')
 const { vendorData } = await import('./vendor-data')
+const { projectVendorDashboard } = await import('./vendor-projection')
+const { withAnalyticsRead } = await import('./read-context')
+import type { Authz } from '../authz'
 
 const D = '2026-07-14'
 const P = { from: '2026-07-01', to: '2026-07-31', label: 'July 2026' }
+
+test('vendor overview bounds chart rows without changing translated portfolio totals or detail reads', { skip: !env.OPENBOOKS_DB_URL }, async () => {
+  const { org } = await seedTwoCurrencySpend()
+  try {
+    await withBypass(async () => {
+      for (let i = 0; i < 11; i++) {
+        const vendor = randomUUID()
+        const entry = randomUUID()
+        await db.execute(sql`insert into parties (id, org_id, kind, display_name, subsidiary_id, is_active, custom)
+          values (${vendor}, ${org.orgId}, 'vendor', ${`Supplier ${i}`}, ${org.subsidiaryId}, true, '{}'::jsonb)`)
+        await db.execute(sql`insert into vendor_roles (id, org_id, party_id)
+          values (${randomUUID()}, ${org.orgId}, ${vendor})`)
+        await db.execute(sql`insert into journal_entries (id, org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, status, origin)
+          values (${entry}, ${org.orgId}, ${org.bookId}, ${org.subsidiaryId}, ${`SUPPLIER-${i}`}, ${D}, ${org.periodId}, 'draft', 'manual')`)
+        await db.execute(sql`insert into journal_lines (id, org_id, entry_id, line_number, account_id, subsidiary_id, party_id, amount, currency, txn_amount, fx_rate)
+          values (${randomUUID()}, ${org.orgId}, ${entry}, 1, ${org.accounts.cogs}, ${org.subsidiaryId}, ${vendor}, 1, 'CAD', 1, 1),
+                 (${randomUUID()}, ${org.orgId}, ${entry}, 2, ${org.accounts.bank}, ${org.subsidiaryId}, ${vendor}, -1, 'CAD', -1, 1)`)
+        await db.execute(sql`update journal_entries set status='posted', posted_at=now() where id=${entry}`)
+      }
+    })
+    await pinClock('2026-07-15', () => withOrgContext(org.orgId, async () => {
+      const full = await vendorData(P, org.orgId, null)
+      assert.equal(full.rows.length, 13)
+      assert.equal(full.totals.spend, '246.0000')
+      assert.equal(full.totals.priorSpend, '130.0000')
+      const authz = { user: { orgId: org.orgId }, permissions: new Set(['reports.read']), allowedSubsidiaryIds: null } as Authz
+      const read = { authz, slug: 'vendor-performance', projection: 'tab' as const, tab: 'overview', locale: 'en', revision: 'test', observedAt: Date.now() }
+      const overview = withAnalyticsRead(read, () => projectVendorDashboard(full))
+      assert.deepEqual(overview.rows, full.rows.slice(0, 10))
+      assert.deepEqual({ ...overview, rows: full.rows }, full, 'every portfolio figure, breakdown and month retains the complete translated population')
+      assert.equal(full.rows.length, 13, 'projection cannot mutate the source used by other readers')
+      assert.strictEqual(projectVendorDashboard(full), full, 'direct readers retain all vendors')
+      for (const tab of ['payment', 'scorecard', 'matrix', 'vendors', 'configuration']) {
+        assert.strictEqual(withAnalyticsRead({ ...read, tab }, () => projectVendorDashboard(full)), full)
+      }
+      assert.strictEqual(withAnalyticsRead({ ...read, projection: 'summary' }, () => projectVendorDashboard(full)), full)
+      assert.strictEqual(withAnalyticsRead({ ...read, slug: 'customer-intelligence' }, () => projectVendorDashboard(full)), full)
+      const empty = await vendorData(P, org.orgId, new Set())
+      const emptyOverview = withAnalyticsRead(read, () => projectVendorDashboard(empty))
+      assert.deepEqual(emptyOverview, empty, 'an empty subsidiary lens remains empty')
+    }))
+  } finally {
+    await withBypass(() => dropScratchOrg(org.orgId))
+  }
+})
 
 async function seedTwoCurrencySpend() {
   const org = await withBypass(() => createScratchOrg())
