@@ -102,6 +102,10 @@ test("task filters share one live population and every subsequent read resolves 
     taskSource('document_signature', 'normal'),
     taskSource('notification', 'overdue'),
   ]);
+  assert.deepEqual(await inboxTaskFilters(ctx, false), {
+    filters: { all: [], my_tasks: [], signatures: [], notices: [], overdue: [] }, notices: [],
+  });
+  assert.equal(reads.size, 0, 'an inactive task view must not read or retain task records');
   const first = await inboxTaskFilters(ctx);
   assert.equal(first.filters.all.length, 3);
   assert.deepEqual(first.filters.my_tasks.map((item) => item.kind), ['hrm_process_step']);

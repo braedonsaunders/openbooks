@@ -71,10 +71,11 @@ export const INBOX_TASK_KINDS: InboxKind[] = [
 
 export type InboxTaskFilter = "all" | "my_tasks" | "signatures" | "notices" | "overdue";
 
-/** One live task population supplies every presentation filter on the page. */
-export async function inboxTaskFilters(ctx: InboxListContext) {
+/** The selected task view reads one live population for every presentation filter.
+ * Other views retain native badge counts without materializing hidden task rows. */
+export async function inboxTaskFilters(ctx: InboxListContext, selected = true) {
   const notices: InboxSourceNotice[] = [];
-  const items = await listInbox(ctx, { kinds: INBOX_TASK_KINDS, notices });
+  const items = selected ? await listInbox(ctx, { kinds: INBOX_TASK_KINDS, notices }) : [];
   const filters: Record<InboxTaskFilter, InboxItem[]> = {
     all: items,
     my_tasks: items.filter((item) => INBOX_FILTER_KINDS.my_tasks!.includes(item.kind)),
