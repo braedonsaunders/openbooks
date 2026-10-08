@@ -14,6 +14,8 @@ const enabled = { skip: !process.env.OPENBOOKS_DB_URL };
 async function fixture(run: (org: Awaited<ReturnType<typeof createScratchOrg>>, actors: string[], child: string) => Promise<void>) {
   const org = await createScratchOrg();
   try {
+    assert.equal((await db.execute(sql`insert into vendor_roles(org_id,party_id)
+      values(${org.orgId},${org.vendorId}) returning party_id`)).rows.length, 1);
     const actors: string[] = [];
     for (const name of ["Creator", "Reviewer", "Approver", "Applier"]) actors.push(await createScratchUser(org.orgId, name, "admin"));
     await db.execute(sql`update app_roles set permissions='["*"]'::jsonb where org_id=${org.orgId} and key='admin'`);
