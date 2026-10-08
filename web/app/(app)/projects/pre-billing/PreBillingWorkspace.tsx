@@ -158,9 +158,9 @@ export function PreBillingWorkspace({
   }
 
   return (
-    <div className="space-y-4">
+    <div className="min-w-0 max-w-full space-y-4">
       <div className="flex flex-wrap items-center gap-2">
-        <div className="relative min-w-56 flex-1 sm:max-w-sm">
+        <div className="relative min-w-0 basis-56 flex-1 sm:max-w-sm">
           <Search className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
           <Input
             aria-label={t("toolbar.search")}
@@ -211,7 +211,7 @@ export function PreBillingWorkspace({
           ) : undefined}
         />
       ) : view === "board" ? (
-        <div className="-mx-1 flex gap-3 overflow-x-auto px-1 pb-2" role="list" aria-label={t("board.aria")}>
+        <div className="grid min-w-0 grid-cols-[repeat(auto-fit,minmax(min(100%,16rem),1fr))] items-start gap-3 pb-2" role="list" aria-label={t("board.aria")}>
           {columns.map((column) => (
             <BoardLane
               key={column}
@@ -294,16 +294,16 @@ function BoardLane({
     <section
       role="listitem"
       aria-label={t(`stages.${column}`)}
-      className="flex w-72 shrink-0 flex-col rounded-xl border border-slate-200 bg-slate-50/70 dark:border-slate-800 dark:bg-slate-900/40"
+      className="flex min-w-0 flex-col rounded-xl border border-slate-200 bg-slate-50/70 dark:border-slate-800 dark:bg-slate-900/40"
     >
-      <header className="flex items-baseline justify-between gap-2 border-b border-slate-200 px-3 py-2.5 dark:border-slate-800">
-        <h3 className="flex items-center gap-2 text-sm font-semibold text-slate-900 dark:text-slate-100">
+      <header className="flex flex-wrap items-baseline justify-between gap-2 border-b border-slate-200 px-3 py-2.5 dark:border-slate-800">
+        <h3 className="flex min-w-0 flex-wrap items-center gap-2 break-words text-sm font-semibold text-slate-900 dark:text-slate-100">
           {t(`stages.${column}`)}
           <span className="rounded-full bg-white px-1.5 text-xs tabular-nums text-slate-500 shadow-sm dark:bg-slate-800 dark:text-slate-400">
             {count}
           </span>
         </h3>
-        <span className="text-xs font-medium tabular-nums text-slate-500 dark:text-slate-400">{money(total)}</span>
+        <span className="min-w-0 break-words text-xs font-medium tabular-nums text-slate-500 dark:text-slate-400">{money(total)}</span>
       </header>
       <div className="flex max-h-[calc(100vh-16rem)] min-h-24 flex-col gap-2 overflow-y-auto p-2">
         {count === 0 ? (
@@ -347,8 +347,8 @@ function UnbilledCard({
     <article className="rounded-lg border border-dashed border-slate-300 bg-white p-3 dark:border-slate-700 dark:bg-slate-950">
       <p className="truncate text-sm font-semibold text-slate-900 dark:text-slate-100">{row.customerName ?? row.projectName}</p>
       <p className="truncate text-xs text-slate-500 dark:text-slate-400">{row.projectName}</p>
-      <p className="mt-2 text-lg font-semibold tabular-nums text-slate-950 dark:text-slate-50">{money(row.unbilledAmount)}</p>
-      <div className="mt-1 flex items-center justify-between gap-2">
+      <p className="mt-2 break-words text-lg font-semibold tabular-nums text-slate-950 dark:text-slate-50">{money(row.unbilledAmount)}</p>
+      <div className="mt-1 flex flex-wrap items-center justify-between gap-2">
         <span className={cn(
           "inline-flex items-center gap-1 text-xs",
           ageDays > 60 ? "text-red-600 dark:text-red-400" : ageDays > 30 ? "text-amber-700 dark:text-amber-300" : "text-slate-500",
@@ -387,7 +387,7 @@ function PackageCard({ row, money, onOpen }: { row: PrebillListRow; money: (valu
           {row.invoiceNumber ?? row.worksheetNumber}
         </span>
       </div>
-      <p className="mt-2 text-lg font-semibold tabular-nums text-slate-950 dark:text-slate-50">
+      <p className="mt-2 break-words text-lg font-semibold tabular-nums text-slate-950 dark:text-slate-50">
         {money(row.stage === "invoiced" || row.stage === "sent" || row.stage === "paid"
           ? row.invoiceTotal ?? row.proposedBillAmount
           : row.proposedBillAmount)}
