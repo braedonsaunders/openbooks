@@ -207,7 +207,7 @@ jobs:
           ADDITIONAL_SMOKE_FILES: ${{ inputs.additional_smoke_files }}
         shell: bash
         run: |
-          set -o pipefail
+          set -euo pipefail
           smoke=(
             engine/src/platform/db-rls.integration.test.ts
             engine/src/ledger/kernel-constraints.integration.test.ts
@@ -218,29 +218,54 @@ jobs:
           )
           # Batch-specific native controls run against this same source and
           # database, alongside the mandatory financial release controls.
+          additional=()
           if [ -n "$ADDITIONAL_SMOKE_FILES" ]; then
-            read -r -a additional <<< "$ADDITIONAL_SMOKE_FILES"
+            read -r -a additional <<< "${ADDITIONAL_SMOKE_FILES//$'\n'/ }"
             for file in "${additional[@]}"; do
               if [[ ! "$file" =~ ^(engine|web|scripts|schema|packages)/[a-zA-Z0-9_./-]+\.test\.(ts|tsx|mjs|js)$ ]] \
                 || [[ "$file" == *..* ]] || [ ! -f "$file" ]; then
                 echo "Additional smoke controls must name existing repository test files: $file" >&2
                 exit 1
               fi
-              smoke+=("$file")
             done
           fi
-          node --import ./scripts/test-output-drain.mjs \
-            --import tsx \
-            --import ./scripts/test-hooks.mjs \
-            --import ./engine/src/testing/database-bypass.ts \
-            --test --test-force-exit --test-concurrency=1 \
-            --test-reporter=spec --test-reporter-destination=stdout \
-            --test-reporter=tap --test-reporter-destination=smoke.tap \
-            --test-reporter=./scripts/test-hooks.mjs --test-reporter-destination=smoke-registration.jsonl \
-            "${smoke[@]}" 2>&1 | tee smoke-spec.txt
-          node -e 'const s=require("fs").readFileSync("smoke.tap","utf8"); if (/# SKIP(?:\s|$)/im.test(s)) { console.error("FATAL: smoke tests skipped — DB wiring is broken"); process.exit(1); } if (/^not ok \d+ - /m.test(s)) { console.error("FATAL: smoke recorded a failing test"); process.exit(1); } if (!/^# fail 0$/m.test(s)) { console.error("FATAL: smoke did not report zero failures"); process.exit(1); } if (!/^ok \d+ - /m.test(s)) { console.error("FATAL: smoke ran zero tests"); process.exit(1); } console.log("smoke ok: release financial checks executed against the database");'
-          node -e 'require("fs").writeFileSync("smoke-selection.json", JSON.stringify({ files: process.argv.slice(1) }))' "${smoke[@]}"
-          node scripts/verify-test-registration.mjs smoke-selection.json smoke-registration.jsonl
+          run_controls() {
+            local receipt="$1"; shift
+            node -e 'require("fs").writeFileSync(process.argv[1], JSON.stringify({ files: process.argv.slice(2) }))' "$receipt-selection.json" "$@"
+            node --import ./scripts/test-output-drain.mjs \
+              --import tsx \
+              --import ./scripts/test-hooks.mjs \
+              --import ./engine/src/testing/database-bypass.ts \
+              --test --test-force-exit --test-concurrency=1 \
+              --test-reporter=spec --test-reporter-destination=stdout \
+              --test-reporter=tap --test-reporter-destination="$receipt.tap" \
+              --test-reporter=./scripts/test-hooks.mjs --test-reporter-destination="$receipt-registration.jsonl" \
+              "$@" 2>&1 | tee "$receipt-spec.txt"
+            node -e 'const s=require("fs").readFileSync(process.argv[1],"utf8"); if (/# SKIP(?:\s|$)/im.test(s) || /^not ok \d+ - /m.test(s) || !/^# fail 0$/m.test(s) || !/^ok \d+ - /m.test(s)) { console.error("FATAL: selected controls failed, skipped or registered no tests"); process.exit(1); }' "$receipt.tap"
+            node scripts/verify-test-registration.mjs "$receipt-selection.json" "$receipt-registration.jsonl"
+          }
+          run_controls smoke "${smoke[@]}"
+          if [ "${#additional[@]}" -gt 0 ]; then
+            # Retained-history fixtures need owner authority for their marked,
+            # disposable database only. Ordinary product transactions still use
+            # the constrained runtime login; financial smoke keeps its separate
+            # non-superuser bypass login and receipt above.
+            OPENBOOKS_BYPASS_DB_URL=postgres://openbooks_owner:openbooks-owner-release-test-password@localhost:5433/openbooks_release \
+              run_controls focused "${additional[@]}"
+          fi
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: release-control-receipts
+          path: |
+            smoke*.tap
+            smoke*.txt
+            smoke*.json
+            smoke*.jsonl
+            focused*.tap
+            focused*.txt
+            focused*.json
+            focused*.jsonl
 
   container-security:
     needs: verify
