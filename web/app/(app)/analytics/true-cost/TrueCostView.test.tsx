@@ -26,6 +26,9 @@ const { MoneyProvider } = await import('../../../../components/money-provider')
 const { Toaster } = await import('sonner')
 const { renderToStaticMarkup } = await import('react-dom/server')
 const { TrueCostView } = await import('./TrueCostView')
+const { TrueCostSetupView } = await import('../../admin/setup/overhead/TrueCostSetupView')
+const { trueCostSetupData } = await import('../../../../lib/analytics/true-cost-setup-data')
+const { analyticsQueryString } = await import('../../../../lib/analytics/query-params')
 
 const tick = () => new Promise((resolve) => setTimeout(resolve, 30))
 
@@ -185,4 +188,53 @@ test('the Categories tab renders the burden-dimension guidance when no category 
   )
   assert.match(html, /burden/, 'the empty state must name the burden dimension')
   assert.match(html, /href="\/admin\/setup\/account-groups"/, 'the empty state must link category authoring')
+})
+
+test('the bounded Setup payload retains every native editor body and composite refusal without employee selling rows', () => {
+  const data = fixture()
+  data.labor = {
+    employees: Array.from({ length: 128 }, (_, i) => ({
+      id: `employee-${i}`, name: `Technician ${i}`, deptId: null, deptName: 'Operations',
+      title: 'Technician', rate: 42, hours: 160,
+    })),
+    count: 128, min: 38, max: 46, weighted: 42, unratedHours: '2.0000',
+    premiumPresets: [{ id: 'overtime', name: 'Overtime', classification: 'overtime', multiplier: '1.5000' }],
+  }
+  data.monthly = [{ month: '2026-07', label: 'Jul', burden: '900.0000', billedHours: 100, rate: 9, byCategory: { rent: 9 }, byDept: {} }]
+  data.forecast = [{ month: '2026-08', label: 'Aug', rate: 9 }]
+  const original = structuredClone(data)
+  const projected = trueCostSetupData(data)
+  assert.ok(!('employees' in projected.labor))
+  assert.ok(!('monthly' in projected))
+  assert.ok(!('forecast' in projected))
+  assert.equal(projected.labor.count, 128)
+  assert.equal(projected.labor.weighted, 42)
+  assert.equal(projected.labor.unratedHours, '2.0000')
+  assert.deepEqual(projected.labor.premiumPresets, data.labor.premiumPresets)
+  assert.ok(JSON.stringify(projected).length < JSON.stringify(data).length / 2,
+    'the serialized Setup boundary must omit the unused employee population')
+  const render = (ui: ReactElement) => renderToStaticMarkup(
+    <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
+      <MoneyProvider currency="USD">{ui}</MoneyProvider>
+    </NextIntlClientProvider>,
+  )
+  for (const refused of [false, true]) {
+    const model = structuredClone(data)
+    if (refused) {
+      model.compositeRefusal = { code: 'mixedUnits', message: 'Category formats must match before publishing.' }
+      model.kpis.compositeRate = null
+      model.totals.overall = null
+    }
+    for (const tab of ['categories', 'matrix', 'config']) {
+      const selected = Object.assign(model, { _analyticsRead: {
+        slug: 'true-cost', tab, observedAt: new Date().toISOString(), query: analyticsQueryString({}, 'true-cost'),
+      } })
+      const full = render(<TrueCostView data={selected} mode="setup" />)
+      const bounded = render(<TrueCostSetupView data={trueCostSetupData(selected)} />)
+      assert.equal(bounded, full, `${tab} must preserve its native controls and displayed values`)
+      assert.ok(!bounded.includes('aria-busy="true"'), `${tab} must render its body rather than a loading placeholder`)
+      if (refused) assert.ok(bounded.includes('Category formats must match before publishing.'))
+    }
+  }
+  assert.deepEqual(data, original, 'projection must not change the Analytics/report source')
 })

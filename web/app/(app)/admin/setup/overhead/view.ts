@@ -6,7 +6,8 @@ import { sql } from 'drizzle-orm'
 import { businessToday, parseIsoDate } from '@openbooks/engine/src/platform/business-date.ts'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { requirePermission } from '../../../../../lib/authz'
-import { trueCostData, type TrueCostData } from '../../../../../lib/analytics/true-cost-data'
+import { trueCostData } from '../../../../../lib/analytics/true-cost-data'
+import { trueCostSetupData, type TrueCostSetupData } from '../../../../../lib/analytics/true-cost-setup-data'
 import { requireProjectsFeature } from '../../../../../lib/projects-gate'
 import { grid, page, ref, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
 
@@ -80,7 +81,7 @@ export interface OverheadData {
   onApplication: boolean
   steps: OverheadStep[]
   policies: OverheadPolicy[]
-  trueCost: TrueCostData | null;
+  trueCost: TrueCostSetupData | null;
   refusal: string | null;
 }
 
@@ -205,7 +206,7 @@ export async function loadOverhead(
       name: r.name,
       methodLabel: methodLabel(r.overhead),
     })),
-    trueCost: data,
+    trueCost: data === null ? null : trueCostSetupData(data),
     refusal,
   }
 }

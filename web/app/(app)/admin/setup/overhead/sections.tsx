@@ -4,12 +4,12 @@ import 'server-only'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { BookOpen } from 'lucide-react'
-import { TrueCostView } from '../../../analytics/true-cost/TrueCostView'
+import { TrueCostSetupView } from './TrueCostSetupView'
 import { OverheadActions, type DeptRate, type TypeOpt } from './OverheadActions'
 import { OverheadApplication, type ApplicationRow } from './OverheadApplication'
 import { OverheadLifecycle, type DriftRow } from './OverheadLifecycle'
 import { RatesTab } from './RatesTab'
-import type { TrueCostData } from '../../../../../lib/analytics/true-cost-data'
+import type { TrueCostSetupData } from '../../../../../lib/analytics/true-cost-setup-data'
 import { getAuthz, guardRootSubsidiaryScope } from '../../../../../lib/authz'
 import { currentPublishedRates } from '../../../../../lib/overhead-publish'
 import { businessToday, parseIsoDate } from '@openbooks/engine/src/platform/business-date.ts'
@@ -124,7 +124,7 @@ export function OverheadModelBody({
 }: {
   steps: OverheadStep[]
   policies: OverheadPolicy[]
-  trueCost: TrueCostData
+  trueCost: TrueCostSetupData
 }) {
   return (
     <>
@@ -164,7 +164,7 @@ export function OverheadModelBody({
           </span>
         ))}
       </div>
-      <TrueCostView data={trueCost} mode="setup" />
+      <TrueCostSetupView data={trueCost} />
     </>
   )
 }
