@@ -543,6 +543,65 @@ async function scratchPayrollOrg(): Promise<{
   });
 }
 
+test("payroll settings save native PostgreSQL identifiers with scoped accounts, vendors and statutory slots", { skip: !DB }, async () => {
+  const fixture = await scratchPayrollOrg();
+  await withPayrollActor(fixture, async () => {
+    // Native sandbox identifiers preserve UUID shape without RFC version bits.
+    const nativeId = () => randomUUID().replace(/^(.{14})./, "$1e");
+    const expenseId = nativeId(), payableId = nativeId(), vendorId = nativeId(), missingId = nativeId();
+    await withBypass(async () => {
+      const accounts = await db.execute(sql`insert into accounts(id,org_id,number,name,type,is_active) values
+        (${expenseId},${fixture.orgId},'6111','Payroll expense','expense',true),
+        (${payableId},${fixture.orgId},'2311','Payroll payable','liability_current_other',true) returning id`);
+      assert.equal(accounts.rows.length, 2);
+      const party = await db.execute(sql`insert into parties(id,org_id,kind,display_name,is_active,custom)
+        values(${vendorId},${fixture.orgId},'vendor','Payroll remittance',true,'{}'::jsonb) returning id`);
+      assert.equal(party.rows.length, 1);
+      const role = await db.execute(sql`insert into vendor_roles(org_id,party_id,is_active)
+        values(${fixture.orgId},${vendorId},true) returning party_id`);
+      assert.equal(role.rows.length, 1);
+    });
+    assert.equal((await POST(request("POST", { action: "install-pack", country: "CA" }))).status, 200);
+    const before = await payrollState(fixture.orgId);
+    const selected = {
+      wageExpenseAccountId: expenseId, burdenExpenseAccountId: expenseId,
+      netPayAccountId: payableId, cppPayableAccountId: payableId, eiPayableAccountId: payableId,
+      taxPayableAccountId: payableId, vacationPayableAccountId: payableId, craRemittancePartyId: vendorId,
+    };
+    const slots = { CA: { income_tax: payableId } };
+    assert.equal((await PUT(request("PUT", { ...selected, slotAccounts: slots }))).status, 200);
+    const after = await payrollState(fixture.orgId);
+    assert.deepEqual(after.settings, { ...before.settings, ...selected });
+    assert.equal(after.taxAccount, payableId);
+    const snapshot = async () => withOrgContext(fixture.orgId, async () => (await db.execute(sql`select
+      (select jsonb_agg(to_jsonb(a) order by id) from audit_log a where org_id=${fixture.orgId}) as audits,
+      (select jsonb_agg(to_jsonb(c) order by id) from pay_components c where org_id=${fixture.orgId}) as components`)).rows);
+    const evidence = await snapshot();
+    const audits = evidence[0]!.audits as Array<{ table_name: string; actor_id: string;
+      changes: { before?: unknown; after?: { payroll?: Record<string, unknown>; payrollSlotAccounts?: unknown } } }>;
+    const saved = audits.find((row) => row.table_name === "orgs" && row.actor_id === fixture.actorId
+      && row.changes.after?.payroll?.wageExpenseAccountId === expenseId);
+    assert.ok(saved, "native save records actor-attributed settings");
+    assert.deepEqual(saved.changes, { before: { payroll: before.settings }, after: { payroll: after.settings } });
+    const slotAudit = audits.find((row) => row.table_name === "pay_components" && row.actor_id === fixture.actorId
+      && row.changes.after?.payrollSlotAccounts);
+    assert.ok(slotAudit, "native slot save records the actor and selected counterparts");
+    assert.deepEqual(slotAudit.changes.after?.payrollSlotAccounts, slots);
+    for (const [body, message] of [
+      [{ wageExpenseAccountId: missingId }, /Wage expense:.*not in this organization's chart/],
+      [{ craRemittancePartyId: missingId }, /invalid craRemittancePartyId: active vendor in this organization/],
+      [{ netPayAccountId: "not-an-id" }, /invalid netPayAccountId.*not an account id/],
+      [{ slotAccounts: { CA: { income_tax: "not-an-id" } } }, /invalid account for CA\/income_tax/],
+    ] as const) {
+      const refused = await refusalOf(await PUT(request("PUT", body)));
+      assert.equal(refused.status, 422);
+      assert.match(refused.error, message);
+      assert.deepEqual(await payrollState(fixture.orgId), after);
+      assert.deepEqual(await snapshot(), evidence);
+    }
+  });
+});
+
 test(
   "payroll account settings refuse by named cause",
   { skip: !DB },
