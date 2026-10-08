@@ -134,7 +134,7 @@ async function seedArchitecture(orgId: string, hrId: string) {
   return { family, level, band };
 }
 
-test("HR-12 architecture refuses duplicate codes and unconfigured families", { skip: !DB }, async () => {
+test("HR-12 architecture preserves unconfigured criteria and refuses duplicate codes and unavailable families", { skip: !DB }, async () => {
   await withHarness(() => setupHarness(COMPENSATION_SPEC), async (h) => {
     const { org } = h;
     const family = await createJobFamily({ orgId: org.orgId, actorId: h.hrId, code: "ENG", name: "Engineering" });
@@ -143,10 +143,11 @@ test("HR-12 architecture refuses duplicate codes and unconfigured families", { s
       createJobFamily({ orgId: org.orgId, actorId: h.hrId, code: "ENG", name: "Duplicate" }),
       (e: unknown) => e instanceof CompensationError && /already exists/.test(e.message),
     );
-    // Levels need at least one equal-value criterion — the directive rule.
+    const unconfigured = await createJobLevel({ orgId: org.orgId, actorId: h.hrId, familyId: family.id, code: 'IC1', name: 'One', rank: 1, equalValueCriteria: [] });
+    assert.deepEqual(unconfigured.equalValueCriteria, [], 'creating a level never invents assessment weights');
     await assert.rejects(
-      createJobLevel({ orgId: org.orgId, actorId: h.hrId, familyId: family.id, code: "IC1", name: "One", rank: 1, equalValueCriteria: [] }),
-      /at least one equal-value criterion/,
+      createJobLevel({ orgId: org.orgId, actorId: h.hrId, familyId: family.id, code: 'IC2', name: 'Two', rank: 2, equalValueCriteria: [{ criterion: 'skills', weight: '0' }] }),
+      /positive weight/,
     );
     await assert.rejects(
       createJobLevel({ orgId: org.orgId, actorId: h.hrId, familyId: randomUUID(), code: "IC1", name: "One", rank: 1, equalValueCriteria: [{ criterion: "skills", weight: "1" }] }),
