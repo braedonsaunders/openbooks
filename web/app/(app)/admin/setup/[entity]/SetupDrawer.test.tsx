@@ -536,11 +536,11 @@ test('option-backed board views reopen as named choices and edit through native 
   assert.ok(label)
   const selectedValues = label.parentElement!.nextElementSibling
   assert.ok(selectedValues, 'the field label is followed by its read-only selected options')
-  assert.deepEqual([...selectedValues.children].map(option => option.textContent?.trim()), ['Grid', 'Calendar'])
+  assert.deepEqual([...selectedValues.children].map(option => option.textContent?.trim()), ['Grid', 'Month'])
   assert.doesNotMatch(selectedValues.textContent ?? '', /grid,|Grid,/)
   await act(async () => { clickButton('Edit').click(); await tick() })
   const choices = [...document.querySelectorAll('fieldset label')]
-  assert.deepEqual(choices.map(node => node.textContent?.trim()), ['Grid', 'Targets', 'Timeline', 'Calendar'])
+  assert.deepEqual(choices.map(node => node.textContent?.trim()), ['Grid', 'Targets', 'Timeline', 'Month'])
   const targets = choices.find(node => node.textContent?.trim() === 'Targets')!.querySelector('input')!
   await act(async () => { targets.click(); await tick() })
   await clickSave(false)
