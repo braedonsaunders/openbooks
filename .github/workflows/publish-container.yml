@@ -250,7 +250,8 @@ jobs:
             # disposable database only. Ordinary product transactions still use
             # the constrained runtime login; financial smoke keeps its separate
             # non-superuser bypass login and receipt above.
-            OPENBOOKS_BYPASS_DB_URL=postgres://openbooks_owner:openbooks-owner-release-test-password@localhost:5433/openbooks_release \
+            OPENBOOKS_TEST_DB_ISOLATED=1 \
+              OPENBOOKS_BYPASS_DB_URL=postgres://openbooks_owner:openbooks-owner-release-test-password@localhost:5433/openbooks_release \
               run_controls focused "${additional[@]}"
           fi
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
