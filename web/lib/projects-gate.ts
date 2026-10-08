@@ -1,13 +1,16 @@
 import 'server-only'
 
-import { redirect } from 'next/navigation'
 import { NextResponse } from 'next/server'
 import { isFeatureEnabled } from './features'
 
 /** Page-boundary enforcement for every Projects-domain surface. Navigation
  * hiding is presentation only; this guard is the authoritative control. */
 export async function requireProjectsFeature(orgId: string): Promise<void> {
-  if (!(await isFeatureEnabled(orgId, 'projects'))) redirect('/admin/setup/features')
+  if (!(await isFeatureEnabled(orgId, 'projects'))) {
+    // Native API commands share these guards without loading a client router.
+    const { redirect } = await import('next/navigation')
+    redirect('/admin/setup/features')
+  }
 }
 
 /** API-boundary enforcement for every Projects-domain mutation and query. A
@@ -27,5 +30,4 @@ export async function guardProjectSchedulingFeature(orgId: string): Promise<Next
   if (await isFeatureEnabled(orgId, 'projectScheduling')) return null
   return NextResponse.json({ error: 'project scheduling feature is disabled' }, { status: 404 })
 }
-
 

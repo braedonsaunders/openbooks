@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { registerHooks } from "node:module";
-import { pathToFileURL } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import test from "node:test";
 
 /**
@@ -45,6 +46,26 @@ const patchJson = (body: unknown) =>
     headers: { "content-type": "application/json" },
     body: JSON.stringify(body),
   });
+
+test("native project-type commands load under the React server runtime without a client router", () => {
+  const result = spawnSync(process.execPath, [
+    '--conditions=react-server', '--import=tsx', '--input-type=module',
+  ], {
+    cwd: process.cwd(), encoding: 'utf8', timeout: 30_000,
+    env: { ...process.env, TSX_TSCONFIG_PATH: fileURLToPath(new URL('../../../../../tsconfig.json', import.meta.url)) },
+    input: `
+      import assert from 'node:assert/strict';
+      import React from 'react';
+      assert.equal(React.createContext, undefined, 'the native command must use the server React export');
+      const route = await import('./web/app/api/admin/setup/project-types/route.ts');
+      for (const method of ['GET', 'POST', 'PATCH', 'DELETE']) assert.equal(typeof route[method], 'function');
+      const { pool } = await import('./engine/src/platform/db.ts');
+      await pool.end();
+    `,
+  });
+  assert.equal(result.error, undefined);
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+});
 
 const STANDARD_PROFILE = {
   billingProcedure: "standard",
