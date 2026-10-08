@@ -7,6 +7,7 @@ import { Button, Skeleton } from '@openbooks/ui'
 import { readApiErrorMessage } from '../../../lib/api-error'
 import { analyticsQueryString } from '../../../lib/analytics/query-params'
 import type { AnalyticsSlug } from '../../../lib/analytics/dashboard-tabs'
+import { useDocumentHidden } from '../../../lib/use-document-hidden'
 
 type ReadMeta = { slug: string; tab: string; observedAt: string; query: string }
 function metadata(data: unknown): ReadMeta | undefined {
@@ -20,6 +21,7 @@ function metadata(data: unknown): ReadMeta | undefined {
  * superseded requests cannot overwrite the selected view. */
 export function useAnalyticsTab<T extends { data: unknown }, K extends string>(slug: AnalyticsSlug, initial: T, tabs: readonly K[]) {
   const search = useSearchParams()
+  const hidden = useDocumentHidden()
   const t = useTranslations('analytics.hub')
   const meta = metadata(initial.data)
   const enabled = meta?.slug === slug
@@ -48,7 +50,7 @@ export function useAnalyticsTab<T extends { data: unknown }, K extends string>(s
   const ready = !enabled || Boolean(entry?.props)
   const error = entry?.error
   useEffect(() => {
-    if (!enabled) return
+    if (!enabled || hidden) return
     const cached = generation.get(key)
     let timer: number | undefined
     const schedule = (until: number) => {
@@ -85,7 +87,7 @@ export function useAnalyticsTab<T extends { data: unknown }, K extends string>(s
     void load()
     return () => { controller.abort(); if (timer !== undefined) window.clearTimeout(timer) }
     // eslint-disable-next-line react-hooks/refs -- the generation is the render-time cache identity above
-  }, [enabled, key, query, attempt, slug, tab, t, generation, refreshTick])
+  }, [enabled, hidden, key, query, attempt, slug, tab, t, generation, refreshTick])
   const setTab = (next: K) => {
     if (!tabs.includes(next)) return
     select(next)

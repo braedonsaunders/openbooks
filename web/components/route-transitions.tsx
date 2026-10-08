@@ -3,6 +3,7 @@
 import { useEffect, useState, useSyncExternalStore, type ReactNode } from 'react'
 import { usePathname } from 'next/navigation'
 import { DRAWER_VIEW_SWITCH_TRANSITION, VIEW_SWITCH_TRANSITION, ViewTransition, type ViewTransitionClass } from '@openbooks/ui'
+import { useDocumentHidden } from '../lib/use-document-hidden'
 
 /**
  * Navigation motion for the authenticated app, built on React's
@@ -58,22 +59,6 @@ const readSettled = () => settledPathname
 const readSkeletonShowing = () => mountedSkeletons > 0
 const readNothingOnServer = () => null
 const readFalseOnServer = () => false
-
-const subscribeVisibility = (listener: () => void) => {
-  document.addEventListener('visibilitychange', listener)
-  return () => document.removeEventListener('visibilitychange', listener)
-}
-const readHidden = () => document.visibilityState === 'hidden'
-
-/**
- * True while the tab is in the background. The browser refuses to run a view
- * transition for a hidden document, so every boundary here stands down
- * rather than start one that will be aborted — a slow page that arrives
- * while the reader is in another tab simply appears.
- */
-function useDocumentHidden(): boolean {
-  return useSyncExternalStore(subscribeVisibility, readHidden, readFalseOnServer)
-}
 
 /**
  * True while rendering the page a navigation is moving to. A component that
