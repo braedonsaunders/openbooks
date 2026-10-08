@@ -157,6 +157,7 @@
       "title": "Lohnsätze",
       "hint": "Vertraulicher Vergütungsverlauf. Ein neuer Satz beendet den vorherigen automatisch am Vortag seines Gültigkeitsbeginns.",
       "documentation": "Dokumentation",
+      "payrollPolicy": "Entgeltberechnungsrichtlinie",
       "rate": "Satz",
       "currency": "Währung",
       "basis": "Basis",
@@ -189,7 +190,9 @@
       "payrollAmountRounding": "Rundung des Lohnbetrags",
       "dimensionGroupRounding": "Je Dimensionsgruppe",
       "timeEntryRounding": "Je Zeiteintrag",
-      "roundingEffectiveDateHint": "Gilt für Lohnstunden dieser datierten Vergütung; Gehaltszahlungen und genehmigte Projektkosten bleiben unverändert."
+      "roundingEffectiveDateHint": "Gilt für Lohnstunden dieser datierten Vergütung; Gehaltszahlungen und genehmigte Projektkosten bleiben unverändert.",
+      "payrollRatePrecisionHelp": "Rundet den Stundensatz nach Überstunden- oder anderen Entgeltfaktoren, bevor die Stunden bewertet werden. Der erfasste Grundsatz bleibt unverändert.",
+      "payrollAmountRoundingHelp": "Jeden Zeiteintrag vor der Addition runden oder passende Lohn- und Buchhaltungsdimensionen vor der Rundung auf Währungscent zusammenfassen."
     },
     "payComponents": {
       "title": "Wiederkehrende Lohnkomponenten",
@@ -446,7 +449,8 @@
         "title": "Gehaltsentwicklung",
         "subtitle": "{count, plural, one {# Satz} other {# Sätze}} seit {from}",
         "lastChange": "{percent} % bei der letzten Änderung",
-        "ariaLabel": "Jahresgehalt im Zeitverlauf"
+        "ariaLabel": "Jahresgehalt im Zeitverlauf",
+        "keyboardHint": "Mit den Pfeiltasten links und rechts können Sie Datum und Betrag prüfen. Pos1 wählt den ersten Satz, Ende den neuesten."
       },
       "history": {
         "empty": "Noch keine mitarbeiterspezifischen Lohnsätze.",

@@ -157,6 +157,7 @@
       "title": "Taxas salariais",
       "hint": "Histórico confidencial de remuneração. Uma nova taxa encerra automaticamente a anterior no dia que antecede sua vigência.",
       "documentation": "Documentação",
+      "payrollPolicy": "Política de folha de pagamento",
       "rate": "Taxa",
       "currency": "Moeda",
       "basis": "Base",
@@ -189,7 +190,9 @@
       "payrollAmountRounding": "Arredondamento do valor da folha",
       "dimensionGroupRounding": "Por grupo de dimensões",
       "timeEntryRounding": "Por registro de horas",
-      "roundingEffectiveDateHint": "Aplica-se às horas da folha desta remuneração com vigência; salários e custos de projeto aprovados permanecem inalterados."
+      "roundingEffectiveDateHint": "Aplica-se às horas da folha desta remuneração com vigência; salários e custos de projeto aprovados permanecem inalterados.",
+      "payrollRatePrecisionHelp": "Arredonda a taxa horária após os multiplicadores de horas extras ou outros pagamentos, antes de calcular o valor das horas. Não altera a taxa base registrada.",
+      "payrollAmountRoundingHelp": "Arredondar cada lançamento de horas antes de somar, ou somar as dimensões salariais e contábeis correspondentes antes de arredondar aos centavos."
     },
     "payComponents": {
       "title": "Componentes salariais recorrentes",
@@ -446,7 +449,8 @@
         "title": "Evolução salarial",
         "subtitle": "{count, plural, one {# taxa} other {# taxas}} desde {from}",
         "lastChange": "{percent}% na última alteração",
-        "ariaLabel": "Salário anual ao longo do tempo"
+        "ariaLabel": "Salário anual ao longo do tempo",
+        "keyboardHint": "Use as setas para a esquerda e a direita para consultar datas e valores. Home seleciona a primeira taxa; End, a mais recente."
       },
       "history": {
         "empty": "Ainda não há taxas específicas do funcionário.",

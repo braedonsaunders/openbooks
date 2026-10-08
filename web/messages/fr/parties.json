@@ -154,6 +154,7 @@
       "title": "Taux de rémunération",
       "hint": "Historique confidentiel de la rémunération. Un nouveau taux ferme automatiquement le taux précédent la veille de sa prise d’effet.",
       "documentation": "Documentation",
+      "payrollPolicy": "Politique de paie",
       "rate": "Taux",
       "currency": "Devise",
       "basis": "Base",
@@ -186,7 +187,9 @@
       "payrollAmountRounding": "Arrondi du montant de paie",
       "dimensionGroupRounding": "Par groupe de dimensions",
       "timeEntryRounding": "Par saisie de temps",
-      "roundingEffectiveDateHint": "Applicable aux heures de paie de ce taux daté ; les salaires et les coûts de projet approuvés restent inchangés."
+      "roundingEffectiveDateHint": "Applicable aux heures de paie de ce taux daté ; les salaires et les coûts de projet approuvés restent inchangés.",
+      "payrollRatePrecisionHelp": "Arrondit le taux horaire après les multiplicateurs des heures supplémentaires ou autres rémunérations, avant de calculer le montant des heures. Le taux de base enregistré reste inchangé.",
+      "payrollAmountRoundingHelp": "Arrondir chaque entrée de temps avant de les additionner, ou totaliser les dimensions salariales et comptables correspondantes avant d’arrondir aux cents."
     },
     "payComponents": {
       "title": "Éléments de paie récurrents",
@@ -446,7 +449,8 @@
         "title": "Évolution salariale",
         "subtitle": "{count, plural, one {# taux} other {# taux}} depuis le {from}",
         "lastChange": "{percent} % au dernier changement",
-        "ariaLabel": "Salaire annuel au fil du temps"
+        "ariaLabel": "Salaire annuel au fil du temps",
+        "keyboardHint": "Utilisez les flèches gauche et droite pour consulter les dates et les montants. Début sélectionne le premier taux ; Fin, le plus récent."
       },
       "history": {
         "empty": "Aucun taux propre à l'employé pour l'instant.",

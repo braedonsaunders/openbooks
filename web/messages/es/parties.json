@@ -154,6 +154,7 @@
       "title": "Tarifas salariales",
       "hint": "Historial confidencial de remuneración. Una tarifa nueva cierra automáticamente la anterior el día previo a su entrada en vigor.",
       "documentation": "Documentación",
+      "payrollPolicy": "Política de nómina",
       "rate": "Tarifa",
       "currency": "Moneda",
       "basis": "Base",
@@ -186,7 +187,9 @@
       "payrollAmountRounding": "Redondeo del importe de nómina",
       "dimensionGroupRounding": "Por grupo de dimensiones",
       "timeEntryRounding": "Por registro de tiempo",
-      "roundingEffectiveDateHint": "Se aplica a las horas de nómina de esta tarifa con vigencia; no cambia los salarios ni los costes de proyecto aprobados."
+      "roundingEffectiveDateHint": "Se aplica a las horas de nómina de esta tarifa con vigencia; no cambia los salarios ni los costes de proyecto aprobados.",
+      "payrollRatePrecisionHelp": "Redondea la tarifa por hora después de aplicar los multiplicadores de horas extra u otros pagos, antes de valorar las horas. No cambia la tarifa base registrada.",
+      "payrollAmountRoundingHelp": "Redondear cada registro de tiempo antes de sumar, o sumar las dimensiones salariales y contables coincidentes antes de redondear a céntimos."
     },
     "payComponents": {
       "title": "Componentes salariales recurrentes",
@@ -446,7 +449,8 @@
         "title": "Evolución salarial",
         "subtitle": "{count, plural, one {# tarifa} other {# tarifas}} desde el {from}",
         "lastChange": "{percent} % en el último cambio",
-        "ariaLabel": "Salario anual a lo largo del tiempo"
+        "ariaLabel": "Salario anual a lo largo del tiempo",
+        "keyboardHint": "Use las flechas izquierda y derecha para consultar fechas e importes. Inicio selecciona la primera tarifa; Fin, la más reciente."
       },
       "history": {
         "empty": "Aún no hay tarifas propias del empleado.",

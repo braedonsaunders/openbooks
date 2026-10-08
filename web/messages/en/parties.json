@@ -154,6 +154,7 @@
       "title": "Wage rates",
       "hint": "Confidential compensation history. A new rate automatically closes the prior rate the day before it starts.",
       "documentation": "Documentation",
+      "payrollPolicy": "Payroll policy",
       "rate": "Rate",
       "currency": "Currency",
       "basis": "Basis",
@@ -186,7 +187,9 @@
       "payrollAmountRounding": "Payroll amount rounding",
       "dimensionGroupRounding": "Per dimension group",
       "timeEntryRounding": "Per time entry",
-      "roundingEffectiveDateHint": "Applies to payroll hours under this dated wage; salary payments and approved job costs are unchanged."
+      "roundingEffectiveDateHint": "Applies to payroll hours under this dated wage; salary payments and approved job costs are unchanged.",
+      "payrollRatePrecisionHelp": "Rounds the hourly rate after overtime or other pay multipliers, before hours are priced. It does not change the recorded base rate.",
+      "payrollAmountRoundingHelp": "Round each time entry before adding, or total matching wage and accounting dimensions before rounding to currency cents."
     },
     "payComponents": {
       "title": "Recurring pay components",
@@ -446,7 +449,8 @@
         "title": "Pay progression",
         "subtitle": "{count, plural, one {# rate} other {# rates}} since {from}",
         "lastChange": "{percent}% at the last change",
-        "ariaLabel": "Annual pay over time"
+        "ariaLabel": "Annual pay over time",
+        "keyboardHint": "Use the left and right arrow keys to inspect dates and amounts. Home selects the first rate; End selects the latest rate."
       },
       "history": {
         "empty": "No employee-specific pay rates yet.",

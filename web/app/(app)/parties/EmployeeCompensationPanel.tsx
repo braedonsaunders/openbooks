@@ -1,15 +1,20 @@
 'use client'
 
-import { useId, useState, type ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
+import dynamic from 'next/dynamic'
 import { useFormatter, useLocale, useTranslations } from 'next-intl'
 import { AlertTriangle, ArrowDownRight, ArrowUpRight, Gift, Landmark, PiggyBank, Plane, ShieldCheck, Sparkles, Wallet } from 'lucide-react'
 import type { CompensationCategory, TotalCompensation } from '@openbooks/engine/hrm/compensation'
+import { escapeTooltipHtml, exactCurrencyCoordinate } from '@openbooks/analytics'
 import { Badge, cn, Select } from '@openbooks/ui'
 import { DrawerTabStrip } from '../../../components/drawer-tab-strip'
 import { useDrawerResource } from '../../../components/use-drawer-resource'
 import { useMoney } from '../../../components/money-provider'
 import { formatDecimal } from '../../../lib/money-format'
 import { EmployeeWageRates } from './EmployeeWageRates'
+import { PagedTable } from '../../../components/paged-table'
+
+const CompensationChart = dynamic(() => import('@openbooks/analytics/viz').then((module) => module.InsightChart), { ssr: false })
 
 export type CompensationSubTab = 'total' | 'rates' | 'variable'
 
@@ -99,7 +104,7 @@ export function EmployeeCompensationPanel({
         )
       ) : null}
       <div hidden={subTab !== 'rates'} className="space-y-6">
-        {canReadTotal && data && data.history.length > 0 ? <PayProgression data={data} /> : null}
+        {canReadTotal && data && data.history.length > 0 && (ratesVisited || subTab === 'rates') ? <PayProgression data={data} /> : null}
         {canManageWages && (ratesVisited || subTab === 'rates') ? <EmployeeWageRates partyId={partyId} /> : null}
         {!canManageWages && canReadTotal && data ? <RateHistoryList data={data} /> : null}
       </div>
@@ -181,7 +186,7 @@ function TotalCompensationView({ data, basis, onBasisChange }: { data: TotalComp
 
   return (
     <div className="space-y-6">
-      <section className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-teal-700 via-teal-600 to-emerald-600 p-5 text-white shadow-sm dark:from-teal-900 dark:via-teal-800 dark:to-emerald-900">
+      <section className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-slate-900 via-teal-950 to-slate-900 p-5 text-white shadow-sm">
         <div className="pointer-events-none absolute -top-16 -right-16 h-48 w-48 rounded-full bg-white/10 blur-2xl" aria-hidden />
         <div className="relative flex flex-wrap items-start justify-between gap-3">
           <div>
@@ -401,7 +406,7 @@ function RecurringRow({ item, basis, currency, muted = false }: {
 
 /** Annual pay over time as a step chart, newest change called out. */
 function PayProgression({ data, compact = false }: { data: TotalCompensation; compact?: boolean }) {
-  const fillId = useId()
+  const chartLabels = useTranslations('insights.viz')
   const t = useTranslations('parties.drawer.compensation')
   const format = useFormatter()
   const locale = useLocale()
@@ -409,23 +414,8 @@ function PayProgression({ data, compact = false }: { data: TotalCompensation; co
   const { money } = useMoney(currency || undefined)
   const points = [...data.history].filter((row) => row.currency === currency).reverse()
   if (points.length === 0) return null
-  const values = points.map((row) => Number(row.annual))
-  const max = Math.max(...values)
-  const min = Math.min(...values)
-  const span = max - min || max || 1
-  const width = 560
-  const height = compact ? 72 : 112
-  const pad = 6
-  const x = (index: number) => points.length === 1 ? width / 2 : pad + (index * (width - pad * 2)) / (points.length - 1)
-  const y = (value: number) => height - pad - ((value - (max === min ? 0 : min)) / span) * (height - pad * 2)
-  let path = ''
-  points.forEach((_, index) => {
-    const px = x(index)
-    const py = y(values[index]!)
-    path += index === 0 ? `M ${px} ${py}` : ` H ${px} V ${py}`
-  })
-  const area = `${path} H ${x(points.length - 1)} V ${height} H ${x(0)} Z`
-  const latest = data.history[0]!
+  const values = points.map((row) => exactCurrencyCoordinate(row.annual))
+  const latest = points[points.length - 1]!
   const first = points[0]!
   const date = (value: string) => format.dateTime(new Date(`${value}T12:00:00Z`), { dateStyle: 'medium', timeZone: 'UTC' })
   const change = latest.changePercent
@@ -448,64 +438,96 @@ function PayProgression({ data, compact = false }: { data: TotalCompensation; co
           ) : null}
         </div>
       </header>
-      <svg viewBox={`0 0 ${width} ${height}`} className="mt-3 h-auto w-full" role="img" aria-label={t('progression.ariaLabel')}>
-        <defs>
-          <linearGradient id={fillId} x1="0" x2="0" y1="0" y2="1">
-            <stop offset="0%" stopColor="currentColor" stopOpacity="0.18" />
-            <stop offset="100%" stopColor="currentColor" stopOpacity="0" />
-          </linearGradient>
-        </defs>
-        <g className="text-teal-600 dark:text-teal-400">
-          <path d={area} fill={`url(#${fillId})`} />
-          <path d={path} fill="none" stroke="currentColor" strokeWidth={2} vectorEffect="non-scaling-stroke" strokeLinejoin="round" />
-          {points.map((row, index) => (
-            <circle key={row.id} cx={x(index)} cy={y(values[index]!)} r={3.5} fill="currentColor">
-              <title>{`${date(row.effectiveFrom)} · ${money(row.annual, { currency: row.currency })}`}</title>
-            </circle>
-          ))}
-        </g>
-      </svg>
+      {values.some((value) => value === null) ? (
+        <p className="mt-3 text-sm text-slate-500 dark:text-slate-400">{chartLabels('empty.unsupportedMoneyPrecision')}</p>
+      ) : (
+        <CompensationChart
+          className="mt-3 rounded-md focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-500"
+          height={compact ? 96 : 180}
+          inspection={{
+            label: t('progression.ariaLabel'),
+            instructions: t('progression.keyboardHint'),
+            points: points.map((row) => `${date(row.effectiveFrom)} · ${money(row.annual, { currency: row.currency })} ${t('basis.per.year')}`),
+          }}
+          option={{
+            grid: { top: 12, right: 12, bottom: compact ? 12 : 32, left: 12, containLabel: !compact },
+            xAxis: {
+              type: 'category',
+              data: points.map((row) => date(row.effectiveFrom)),
+              boundaryGap: false,
+              axisLabel: { show: !compact, color: '#94a3b8', hideOverlap: true },
+              axisLine: { lineStyle: { color: 'rgba(148,163,184,0.3)' } },
+              axisTick: { show: false },
+            },
+            yAxis: {
+              type: 'value', scale: true,
+              axisLabel: { show: false },
+              splitLine: { lineStyle: { color: 'rgba(148,163,184,0.18)' } },
+            },
+            tooltip: {
+              trigger: 'axis', confine: true,
+              axisPointer: { type: 'line' },
+              formatter: (params: unknown) => {
+                const point = (Array.isArray(params) ? params[0] : params) as { dataIndex?: number } | undefined
+                const row = typeof point?.dataIndex === 'number' ? points[point.dataIndex] : undefined
+                return row ? `${escapeTooltipHtml(date(row.effectiveFrom))}<br/>${escapeTooltipHtml(money(row.annual, { currency: row.currency }))} ${escapeTooltipHtml(t('basis.per.year'))}` : ''
+              },
+            },
+            series: [{
+              type: 'line', step: 'end', data: values,
+              symbol: 'circle', symbolSize: 7,
+              lineStyle: { color: '#0d9488', width: 3 },
+              itemStyle: { color: '#0d9488', borderColor: '#0f766e', borderWidth: 1 },
+              areaStyle: { color: 'rgba(20,184,166,0.12)' },
+              emphasis: { scale: true, itemStyle: { borderWidth: 3 } },
+            }],
+          }}
+        />
+      )}
     </section>
   )
 }
 
 function RateHistoryList({ data }: { data: TotalCompensation }) {
   const t = useTranslations('parties.drawer.compensation')
+  const wages = useTranslations('parties.drawer.wages')
   const format = useFormatter()
   const locale = useLocale()
   const labels = useBasisLabels()
   const { money } = useMoney(data.base?.currency || data.history[0]?.currency || undefined)
   const date = (value: string) => format.dateTime(new Date(`${value}T12:00:00Z`), { dateStyle: 'medium', timeZone: 'UTC' })
-  if (data.history.length === 0) {
-    return <p className="text-sm text-slate-500 dark:text-slate-400">{t('history.empty')}</p>
-  }
   return (
-    <ol className="relative space-y-4 border-l border-slate-200 pl-5 dark:border-slate-800">
-      {data.history.map((row) => (
-        <li key={row.id} className="relative">
-          <span className={cn('absolute top-1.5 -left-[25px] h-2.5 w-2.5 rounded-full ring-4 ring-white dark:ring-slate-900', row.current ? 'bg-teal-600' : 'bg-slate-300 dark:bg-slate-600')} aria-hidden />
-          <div className="flex flex-wrap items-baseline justify-between gap-2">
-            <p className="text-sm font-medium tabular-nums text-slate-900 dark:text-slate-100">
-              {money(row.rate, { currency: row.currency, maximumFractionDigits: 4 })}
-              <span className="ml-1 font-normal text-slate-500 dark:text-slate-400">{labels.per(row.basis)}</span>
+    <PagedTable
+      rows={[...data.history]}
+      rowKey={(row) => row.id}
+      rowClassName={(row) => row.current ? 'bg-teal-50/80 dark:bg-teal-950/30' : undefined}
+      pageSize={10}
+      searchable
+      empty={<p className="py-6 text-center text-sm text-slate-500 dark:text-slate-400">{t('history.empty')}</p>}
+      columns={[
+        {
+          key: 'rate', header: wages('rate'), align: 'right',
+          search: (row) => `${row.rate} ${row.currency} ${labels.per(row.basis)} ${row.notes ?? ''} ${row.cycle?.name ?? ''} ${row.cycle?.reason ?? ''}`,
+          cell: (row) => <div className="space-y-1">
+            <div className="inline-flex items-center gap-2 tabular-nums">
+              {money(row.rate, { currency: row.currency, currencyDisplay: 'code', maximumFractionDigits: 4 })}
+              <span className="text-xs text-slate-500 dark:text-slate-400">{labels.per(row.basis)}</span>
+              {row.current ? <Badge variant="success">{wages('current')}</Badge> : null}
+            </div>
+            <p className="text-xs text-slate-500 dark:text-slate-400 tabular-nums">
+              {t('history.equivalent', { hourly: money(row.hourly, { currency: row.currency }), annual: money(row.annual, { currency: row.currency }) })}
+              {row.changePercent !== null ? ` · ${formatDecimal(locale, row.changePercent, { maximumFractionDigits: 2, signDisplay: 'exceptZero' })}%` : ''}
             </p>
-            <p className="text-xs text-slate-500 dark:text-slate-400">
-              {row.effectiveTo ? t('history.window', { from: date(row.effectiveFrom), to: date(row.effectiveTo) }) : t('history.since', { from: date(row.effectiveFrom) })}
-            </p>
-          </div>
-          <p className="text-xs text-slate-500 dark:text-slate-400 tabular-nums">
-            {t('history.equivalent', { hourly: money(row.hourly, { currency: row.currency }), annual: money(row.annual, { currency: row.currency }) })}
-            {row.changePercent !== null ? ` · ${formatDecimal(locale, row.changePercent, { maximumFractionDigits: 2, signDisplay: 'exceptZero' })}%` : ''}
-          </p>
-          {row.cycle || row.notes ? (
-            <p className="mt-0.5 text-xs text-slate-600 dark:text-slate-300">
+            {row.cycle || row.notes ? <p className="text-xs text-slate-600 dark:text-slate-300">
               {row.cycle ? <Badge variant="outline" className="mr-1.5">{row.cycle.name}</Badge> : null}
               {row.cycle?.reason ?? row.notes}
-            </p>
-          ) : null}
-        </li>
-      ))}
-    </ol>
+            </p> : null}
+          </div>,
+        },
+        { key: 'from', header: wages('effectiveFrom'), search: (row) => row.effectiveFrom, cell: (row) => <span className="tabular-nums">{date(row.effectiveFrom)}</span> },
+        { key: 'to', header: wages('effectiveTo'), search: (row) => row.effectiveTo ?? '', cell: (row) => <span className="tabular-nums">{row.effectiveTo ? date(row.effectiveTo) : '—'}</span> },
+      ]}
+    />
   )
 }
 

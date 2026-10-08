@@ -1,12 +1,11 @@
 'use client'
 
-import { PayrollWageRoundingFields } from '../../../components/payroll-wage-rounding-fields'
 import { type PayrollAmountRounding } from '@openbooks/engine/src/projects/payroll-wage-rounding.ts'
 
 import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useFormatter, useTranslations } from 'next-intl'
-import { BookOpen, Plus, Trash2 } from 'lucide-react'
+import { BookOpen, Plus, SlidersHorizontal, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Badge, Button, Input, Label, Select } from '@openbooks/ui'
 import { useBusinessToday } from '../../../components/business-date-provider'
@@ -85,8 +84,6 @@ export function EmployeeWageRates({ partyId }: { partyId: string }) {
   const [currency, setCurrency] = useState('')
   const [basis, setBasis] = useState<PayRateBasis>('hour')
   const [annualHours, setAnnualHours] = useState('2080')
-  const [payrollRateScale, setPayrollRateScale] = useState(4)
-  const [payrollAmountRounding, setPayrollAmountRounding] = useState<PayrollAmountRounding>('dimension_group')
   const [effectiveFrom, setEffectiveFrom] = useState(today)
 
   // Fetch chain: every state update sits in a promise continuation (the fetch
@@ -99,11 +96,6 @@ export function EmployeeWageRates({ partyId }: { partyId: string }) {
         if (!response.ok) throw new Error('load failed')
         return (response.json() as Promise<RatesResponse>).then((next) => {
           setData(next)
-          if (signal) {
-            const governing = next.rates.find((row) => row.is_current) ?? next.rates[0]
-            setPayrollRateScale(governing?.payroll_rate_scale ?? 4)
-            setPayrollAmountRounding(governing?.payroll_amount_rounding ?? 'dimension_group')
-          }
           setCurrency((current) => (current && next.currencies.includes(current) ? current : next.defaultCurrency))
         })
       })
@@ -185,6 +177,8 @@ export function EmployeeWageRates({ partyId }: { partyId: string }) {
       toast.error(t('effectiveFromRequired'))
       return
     }
+    // Omit payroll rounding terms so the native command inherits the policy
+    // governing this effective date, including corrections and backdated rates.
     const saved = await mutate({
       action: 'save-rate',
       employeePartyId: partyId,
@@ -196,8 +190,6 @@ export function EmployeeWageRates({ partyId }: { partyId: string }) {
       rate: amount,
       basis,
       annualHours: hours,
-      payrollRateScale,
-      payrollAmountRounding,
       effectiveFrom,
     }, t('saved'))
     if (saved) setRate('')
@@ -215,14 +207,15 @@ export function EmployeeWageRates({ partyId }: { partyId: string }) {
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t('title')}</h3>
-          <p className="text-xs text-slate-500 dark:text-slate-400">{t('hint')}</p>
         </div>
-        <Link
-          href="/docs/labor-costing"
-          className="flex items-center gap-1 text-xs font-medium text-teal-700 hover:underline dark:text-teal-300"
-        >
-          <BookOpen size={13} aria-hidden /> {t('documentation')}
-        </Link>
+        <div className="flex flex-wrap gap-3">
+          <Link href="/admin/setup/labor-costing" className="flex items-center gap-1 text-xs font-medium text-teal-700 hover:underline dark:text-teal-300">
+            <SlidersHorizontal size={13} aria-hidden /> {t('payrollPolicy')}
+          </Link>
+          <Link href="/docs/labor-costing" className="flex items-center gap-1 text-xs font-medium text-teal-700 hover:underline dark:text-teal-300">
+            <BookOpen size={13} aria-hidden /> {t('documentation')}
+          </Link>
+        </div>
       </div>
 
       {actionError ? (
@@ -231,76 +224,76 @@ export function EmployeeWageRates({ partyId }: { partyId: string }) {
         </p>
       ) : null}
 
-      <div className="flex flex-wrap items-end gap-2 rounded-lg border border-slate-200 bg-slate-50/70 p-3 dark:border-slate-700 dark:bg-slate-900/60" inert={busy}>
-        <div>
-          <Label htmlFor="employee-wage-rate">{t('rate')}</Label>
-          <Input
-            id="employee-wage-rate"
-            type="number"
-            min="0"
-            step="0.0001"
-            className="w-32"
-            value={rate}
-            onChange={(event) => setRate(event.target.value)}
-          />
-        </div>
-        {data && data.currencies.length > 1 ? (
+      <div className="overflow-x-auto rounded-lg border border-slate-200 bg-slate-50/70 p-3 dark:border-slate-700 dark:bg-slate-900/60" inert={busy}>
+        <div className="flex min-w-max flex-nowrap items-end gap-3">
           <div>
-            <Label htmlFor="employee-wage-currency">{t('currency')}</Label>
-            <Select
-              id="employee-wage-currency"
-              className="w-28"
-              value={currency}
-              onChange={(event) => setCurrency(event.target.value)}
-            >
-              {data.currencies.map((code) => <option key={code} value={code}>{code}</option>)}
-            </Select>
-          </div>
-        ) : null}
-        <div>
-          <Label htmlFor="employee-wage-basis">{t('basis')}</Label>
-          <Select
-            id="employee-wage-basis"
-            className="w-36"
-            value={basis}
-            onChange={(event) => {
-              if (isPayRateBasis(event.target.value)) setBasis(event.target.value)
-            }}
-          >
-            {PAY_RATE_BASES.map((value) => (
-              <option key={value} value={value}>{t(BASIS_LABEL_KEYS[value])}</option>
-            ))}
-          </Select>
-        </div>
-        {isTimePayRateBasis(basis) ? (
-          <div>
-            <Label htmlFor="employee-wage-annual-hours">{t('annualHours')}</Label>
+            <Label htmlFor="employee-wage-rate" help={t('hint')}>{t('rate')}</Label>
             <Input
-              id="employee-wage-annual-hours"
+              id="employee-wage-rate"
               type="number"
-              min="0.0001"
-              step="0.01"
-              className="w-32"
-              value={annualHours}
-              onChange={(event) => setAnnualHours(event.target.value)}
+              min="0"
+              step="0.0001"
+              className="w-28"
+              value={rate}
+              onChange={(event) => setRate(event.target.value)}
             />
           </div>
-        ) : null}
-        <PayrollWageRoundingFields idPrefix="employee-wage" rateScale={payrollRateScale} amountRounding={payrollAmountRounding}
-          onChange={(scale, rounding) => { setPayrollRateScale(scale); setPayrollAmountRounding(rounding) }} />
-        <div>
-          <Label htmlFor="employee-wage-effective-from">{t('effectiveFrom')}</Label>
-          <Input
-            id="employee-wage-effective-from"
-            type="date"
-            className="w-40"
-            value={effectiveFrom}
-            onChange={(event) => setEffectiveFrom(event.target.value)}
-          />
+          {data && data.currencies.length > 1 ? (
+            <div>
+              <Label htmlFor="employee-wage-currency">{t('currency')}</Label>
+              <Select
+                id="employee-wage-currency"
+                className="w-20"
+                value={currency}
+                onChange={(event) => setCurrency(event.target.value)}
+              >
+                {data.currencies.map((code) => <option key={code} value={code}>{code}</option>)}
+              </Select>
+            </div>
+          ) : null}
+          <div>
+            <Label htmlFor="employee-wage-basis">{t('basis')}</Label>
+            <Select
+              id="employee-wage-basis"
+              className="w-32"
+              value={basis}
+              onChange={(event) => {
+                if (isPayRateBasis(event.target.value)) setBasis(event.target.value)
+              }}
+            >
+              {PAY_RATE_BASES.map((value) => (
+                <option key={value} value={value}>{t(BASIS_LABEL_KEYS[value])}</option>
+              ))}
+            </Select>
+          </div>
+          {isTimePayRateBasis(basis) ? (
+            <div>
+              <Label htmlFor="employee-wage-annual-hours">{t('annualHours')}</Label>
+              <Input
+                id="employee-wage-annual-hours"
+                type="number"
+                min="0.0001"
+                step="0.01"
+                className="w-24"
+                value={annualHours}
+                onChange={(event) => setAnnualHours(event.target.value)}
+              />
+            </div>
+          ) : null}
+          <div>
+            <Label htmlFor="employee-wage-effective-from">{t('effectiveFrom')}</Label>
+            <Input
+              id="employee-wage-effective-from"
+              type="date"
+              className="w-36"
+              value={effectiveFrom}
+              onChange={(event) => setEffectiveFrom(event.target.value)}
+            />
+          </div>
+          <Button size="sm" onClick={() => void addRate()} disabled={busy || data === null}>
+            <Plus size={14} aria-hidden /> {t('add')}
+          </Button>
         </div>
-        <Button size="sm" onClick={() => void addRate()} disabled={busy || data === null}>
-          <Plus size={14} aria-hidden /> {t('add')}
-        </Button>
       </div>
 
       {loadError ? (
@@ -345,9 +338,6 @@ export function EmployeeWageRates({ partyId }: { partyId: string }) {
                       })}
                       <span className="text-xs text-slate-500 dark:text-slate-400">{t(BASIS_LABEL_KEYS[row.basis])}</span>
                       {row.is_current ? <Badge variant="success">{t('current')}</Badge> : null}
-                    </span>
-                    <span className="text-xs text-slate-500 dark:text-slate-400">
-                      {t('decimalPlaces', { count: row.payroll_rate_scale ?? 4 })} · {t(row.payroll_amount_rounding === 'time_entry' ? 'timeEntryRounding' : 'dimensionGroupRounding')}
                     </span>
                     {equivalents ? (
                       <span className="text-xs text-slate-500 tabular-nums dark:text-slate-400">

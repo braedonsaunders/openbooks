@@ -11,6 +11,46 @@ import { createPayRun } from "./run-lifecycle.ts";
 import { assertPayRunNotStale } from "./readiness.ts";
 import { payRunCalculationSource, payRunCalculationSourceDigest } from "./run-calculation-evidence.ts";
 
+test("omitted wage rounding terms inherit the policy at the saved date rather than the latest policy", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+  const fx = await seedHourlyPayrollOrg();
+  try {
+    const { partyId } = await seedHourlyPayrollEmployee(fx, "Dated wage policy inheritance");
+    const wage = {
+      orgId: fx.orgId, actorId: fx.actorId,
+      scope: { employeePartyId: partyId, jobTitle: null, tradeId: null, departmentId: null, subsidiaryId: null },
+      currency: "CAD", basis: "hour" as const, rate: "35.25", annualHours: "2080", notes: null,
+      reason: "Preserve the effective payroll policy during a wage change",
+    };
+    const save = (terms: { effectiveFrom: string; rate?: string; payrollRateScale?: number; payrollAmountRounding?: "dimension_group" | "time_entry" }) =>
+      withOrgTransaction(fx.orgId, () => supersedeLaborCostRate({ ...wage, ...terms }));
+    await save({ effectiveFrom: "2026-01-01" });
+    await save({ effectiveFrom: "2026-07-12", payrollRateScale: 2, payrollAmountRounding: "time_entry" });
+    await save({ effectiveFrom: "2026-08-01", rate: "36.25" });
+    await save({ effectiveFrom: "2026-03-01", rate: "35.50" });
+    await save({ effectiveFrom: "2026-07-12", rate: "35.75" });
+    const rows = (await db.execute<{
+      effective_from: string; effective_to: string | null; rate: string;
+      payroll_rate_scale: number; payroll_amount_rounding: string;
+    }>(sql`select effective_from::text, effective_to::text, rate::text, payroll_rate_scale, payroll_amount_rounding
+      from labor_cost_rates where org_id=${fx.orgId} and employee_party_id=${partyId} order by effective_from`)).rows;
+    assert.deepEqual(rows, [
+      { effective_from: "2026-01-01", effective_to: "2026-02-28", rate: "35.2500", payroll_rate_scale: 4, payroll_amount_rounding: "dimension_group" },
+      { effective_from: "2026-03-01", effective_to: "2026-07-11", rate: "35.5000", payroll_rate_scale: 4, payroll_amount_rounding: "dimension_group" },
+      { effective_from: "2026-07-12", effective_to: "2026-07-31", rate: "35.7500", payroll_rate_scale: 2, payroll_amount_rounding: "time_entry" },
+      { effective_from: "2026-08-01", effective_to: null, rate: "36.2500", payroll_rate_scale: 2, payroll_amount_rounding: "time_entry" },
+    ]);
+    const audits = (await db.execute<{ actor_id: string; changes: { after: { payrollRateScale: number; payrollAmountRounding: string } } }>(sql`
+      select actor_id, changes from audit_log where org_id=${fx.orgId} and table_name='labor_cost_rates'
+        and changes->>'reason'=${wage.reason} order by at,id`)).rows;
+    assert.equal(audits.length, 5);
+    assert.ok(audits.every((audit) => audit.actor_id === fx.actorId));
+    assert.deepEqual(audits.map((audit) => [audit.changes.after.payrollRateScale, audit.changes.after.payrollAmountRounding]),
+      [[4, "dimension_group"], [2, "time_entry"], [2, "time_entry"], [4, "dimension_group"], [2, "time_entry"]]);
+  } finally {
+    await dropScratchOrgReporting(fx.orgId);
+  }
+});
+
 test("dated wage rounding reaches native stubs, audits, replay and stale-calculation refusal", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
   const fx = await seedHourlyPayrollOrg();
   try {

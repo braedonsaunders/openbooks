@@ -125,18 +125,6 @@ function setNativeSelect(select: HTMLSelectElement, value: string) {
   select.dispatchEvent(new window.Event("change", { bubbles: true }));
 }
 
-async function setSelectChoice(id: string, value: string) {
-  const trigger = document.getElementById(id);
-  assert.ok(trigger, `the wage form must offer ${id}`);
-  const select = trigger.closest("span")?.querySelector("select");
-  assert.ok(select instanceof window.HTMLSelectElement, "the shared Select must retain its native change proxy");
-  await act(async () => {
-    setNativeSelect(select, value);
-    await tick();
-  });
-  await tick();
-}
-
 async function setRate(value: string) {
   const input = document.querySelector("#employee-wage-rate") as HTMLInputElement | null;
   assert.ok(input, "the form must offer a rate input");
@@ -176,22 +164,26 @@ async function clickAdd() {
   await tick();
 }
 
-test("adding a rate posts canonical decimal strings and clears the form", async (t) => {
+test("adding a rate preserves decimal text and leaves the dated payroll policy to the native command", async (t) => {
   const posted: PostedRate[] = [];
-  const { done } = await renderRates(posted, []);
+  const { done } = await renderRates(posted, [], [{
+    id: "existing-rate", rate: "11.125", currency: "CAD", basis: "hour",
+    annual_hours: "2080", effective_from: "2026-01-01", effective_to: null,
+    notes: null, is_current: true, payroll_rate_scale: 2, payroll_amount_rounding: "time_entry",
+  }]);
   t.after(done);
+  assert.equal(document.getElementById("employee-wage-precision"), null);
+  assert.equal(document.getElementById("employee-wage-rounding"), null);
   await setRate("0012.3456");
   await setYearlyBasis("02080.1250");
-  await setSelectChoice("employee-wage-precision", "2");
-  await setSelectChoice("employee-wage-rounding", "time_entry");
   await clickAdd();
 
   assert.equal(posted.length, 1, "one submit must post one payload");
   const body = posted[0]?.body;
   assert.ok(body, "the post must carry a payload");
   assert.equal(body.action, "save-rate");
-  assert.equal(body.payrollRateScale, 2);
-  assert.equal(body.payrollAmountRounding, "time_entry");
+  assert.equal(Object.hasOwn(body, "payrollRateScale"), false, "a basic save must not reset the inherited rate precision");
+  assert.equal(Object.hasOwn(body, "payrollAmountRounding"), false, "a basic save must not reset the inherited amount rounding");
   assert.equal(body.rate, "12.3456");
   assert.equal(typeof body.rate, "string", "the rate must stay decimal text, never a float");
   assert.equal(body.annualHours, "2080.125");
