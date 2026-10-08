@@ -568,9 +568,37 @@ export async function trueCostData(
     // priced total needs no translation. This prices absorption for
     // report_only orgs (the default), which never carry applied journals;
     // posted legs always win when they exist.
+    // The standard selection kernel depends only on organization, worked
+    // day and department. Aggregate eligible hours on those same dimensions
+    // before selecting rates; numeric sums retain exact per-entry pricing.
     analyticsQuery(sql`
-      select coalesce(sum(t.hours * card.rate), 0) as priced, count(*) as entries
-      from time_entries t
+      with card_drivers as materialized (
+        select t.org_id, t.worked_on, t.department_id,
+               sum(t.hours) as hours, count(*) as entries
+          from time_entries t
+         where t.org_id = ${orgId} ${timeScope} and t.worked_on >= ${from} and t.worked_on <= ${to}
+           and t.status = 'approved' and t.project_id is not null and t.costing_basis = 'actual'
+           and (t.custom ->> ${OVERHEAD_ZERO_APPLIED_MARKER}) is distinct from 'true'
+           and not exists (
+             select 1 from projects p
+             join project_types pt on pt.id = p.project_type_id and pt.org_id = t.org_id
+            where p.id = t.project_id and p.org_id = t.org_id
+              and (
+                select v.financial_profile->'overhead'->>'method'
+                  from project_financial_profile_versions v
+                 where v.org_id = t.org_id
+                   and v.project_type_id = pt.id
+                   and v.effective_from <= t.worked_on
+                   and (v.effective_to is null or v.effective_to >= t.worked_on)
+                 order by v.effective_from desc
+                 limit 1
+              ) = 'none'
+           )
+         group by t.org_id, t.worked_on, t.department_id
+      )
+      select coalesce(sum(t.hours * card.rate), 0) as priced,
+             coalesce(sum(t.entries), 0) as entries
+        from card_drivers t
       join lateral (
         select coalesce(sum(r.rate_percent), 0) as rate
           from overhead_rates r
@@ -581,24 +609,6 @@ export async function trueCostData(
              departmentId: sql`t.department_id`,
            }, { method: "standard" })}
       ) card on true
-     where t.org_id = ${orgId} ${timeScope} and t.worked_on >= ${from} and t.worked_on <= ${to}
-       and t.status = 'approved' and t.project_id is not null and t.costing_basis = 'actual'
-       and (t.custom ->> ${OVERHEAD_ZERO_APPLIED_MARKER}) is distinct from 'true'
-       and not exists (
-         select 1 from projects p
-         join project_types pt on pt.id = p.project_type_id and pt.org_id = t.org_id
-        where p.id = t.project_id and p.org_id = t.org_id
-          and (
-            select v.financial_profile->'overhead'->>'method'
-              from project_financial_profile_versions v
-             where v.org_id = t.org_id
-               and v.project_type_id = pt.id
-               and v.effective_from <= t.worked_on
-               and (v.effective_to is null or v.effective_to >= t.worked_on)
-             order by v.effective_from desc
-             limit 1
-          ) = 'none'
-       )
     `),
     // Prior-window billed/total hours per department: the utilization scope
     // excludes departments with zero billable hours across current + prior
