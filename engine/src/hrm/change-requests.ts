@@ -1071,6 +1071,32 @@ async function resolveRequestScope(orgId: string, actorId: string) {
   };
 }
 
+function requestVisibilityWhere(
+  query: CountChangeRequestsQuery,
+  orgId: string,
+  scope: Awaited<ReturnType<typeof resolveRequestScope>>,
+) {
+  return sql`r.org_id = ${orgId}
+    ${query.employmentId ? sql`and r.employment_id = ${query.employmentId}` : sql``}
+    ${query.status ? sql`and r.status = ${query.status}` : sql``}
+    and exists (
+      select 1 from worker_employments e
+      where e.org_id = r.org_id and e.id = r.employment_id
+        and (${scope.subsidiaryFilter} or ${scope.ownProfileFilter})
+    )`;
+}
+
+function requestListLimit(query: ListChangeRequestsQuery): number {
+  if (query.status !== undefined && !(LIST_STATUSES as readonly string[]).includes(query.status)) {
+    throw invalidStatusError(query.status);
+  }
+  const limit = query.limit ?? 100;
+  if (!Number.isSafeInteger(limit) || limit < 1 || limit > 500) {
+    throw new HrmChangeRequestError("INVALID_PAYLOAD", "limit must be an integer from 1 to 500");
+  }
+  return limit;
+}
+
 /**
  * List requests newest-first with access predicates applied before the
  * limit. Restricted HR sees only its legal entities, plus its own profile
@@ -1079,25 +1105,12 @@ async function resolveRequestScope(orgId: string, actorId: string) {
 export async function listChangeRequests(query: ListChangeRequestsQuery): Promise<ChangeRequestDTO[]> {
   const orgId = requireOrgId(query.orgId);
   const actorId = requireActorId(query.actorId);
-  if (query.status !== undefined && !(LIST_STATUSES as readonly string[]).includes(query.status)) {
-    throw invalidStatusError(query.status);
-  }
-  const limit = query.limit ?? 100;
-  if (!Number.isSafeInteger(limit) || limit < 1 || limit > 500) {
-    throw new HrmChangeRequestError("INVALID_PAYLOAD", "limit must be an integer from 1 to 500");
-  }
+  const limit = requestListLimit(query);
   return withOrgTransaction(orgId, async () => {
-    const { subsidiaryFilter, ownProfileFilter } = await resolveRequestScope(orgId, actorId);
+    const scope = await resolveRequestScope(orgId, actorId);
     const rows = (await db.execute<RequestRow>(sql`
       select ${REQUEST_COLUMNS} from hrm_employment_change_requests r
-       where r.org_id = ${orgId}
-         ${query.employmentId ? sql`and r.employment_id = ${query.employmentId}` : sql``}
-         ${query.status ? sql`and r.status = ${query.status}` : sql``}
-         and exists (
-           select 1 from worker_employments e
-            where e.org_id = r.org_id and e.id = r.employment_id
-              and (${subsidiaryFilter} or ${ownProfileFilter})
-         )
+       where ${requestVisibilityWhere(query, orgId, scope)}
        order by r.created_at desc, r.id desc
        limit ${limit}
     `)).rows;
@@ -1125,19 +1138,41 @@ export async function countChangeRequests(query: CountChangeRequestsQuery): Prom
     throw invalidStatusError(query.status);
   }
   return withOrgTransaction(orgId, async () => {
-    const { subsidiaryFilter, ownProfileFilter } = await resolveRequestScope(orgId, actorId);
+    const scope = await resolveRequestScope(orgId, actorId);
     const rows = (await db.execute<{ n: string }>(sql`
       select count(*) as n from hrm_employment_change_requests r
-       where r.org_id = ${orgId}
-         ${query.employmentId ? sql`and r.employment_id = ${query.employmentId}` : sql``}
-         ${query.status ? sql`and r.status = ${query.status}` : sql``}
-         and exists (
-           select 1 from worker_employments e
-            where e.org_id = r.org_id and e.id = r.employment_id
-              and (${subsidiaryFilter} or ${ownProfileFilter})
-         )
+       where ${requestVisibilityWhere(query, orgId, scope)}
     `)).rows;
     return Number(rows[0]?.n ?? 0);
+  });
+}
+
+/** One scoped statement resolves the exact queue total and its bounded preview. */
+export async function listChangeRequestsWithTotal(
+  query: ListChangeRequestsQuery,
+): Promise<{ rows: ChangeRequestDTO[]; total: number }> {
+  const orgId = requireOrgId(query.orgId);
+  const actorId = requireActorId(query.actorId);
+  const limit = requestListLimit(query);
+  return withOrgTransaction(orgId, async () => {
+    const scope = await resolveRequestScope(orgId, actorId);
+    const result = await db.execute<{ n: string; rows: RequestRow[] }>(sql`
+      with visible as materialized (
+        select r.id, r.created_at from hrm_employment_change_requests r
+        where ${requestVisibilityWhere(query, orgId, scope)}
+      ), page as (
+        select ${REQUEST_COLUMNS} from hrm_employment_change_requests r
+        where r.org_id = ${orgId} and r.id in (
+          select id from visible order by created_at desc, id desc limit ${limit}
+        )
+      )
+      select (select count(*)::text from visible) as n,
+        coalesce((select jsonb_agg(to_jsonb(page) order by page.created_at desc, page.id desc)
+          from page), '[]'::jsonb) as rows
+    `);
+    const row = result.rows[0];
+    if (!row) throw new HrmChangeRequestError("REFUSED", "change request queue could not be resolved");
+    return { total: Number(row.n), rows: row.rows.map(toDTO) };
   });
 }
 

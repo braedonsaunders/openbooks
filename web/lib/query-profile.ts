@@ -13,7 +13,8 @@ import { registerQueryObserver } from "@openbooks/engine/src/platform/query-obse
  * on). Each minute the profiler appends one JSON line covering the requests
  * that completed in that window: per route, the request count, mean and p95
  * database round trips and summed database time per request, and the ten
- * statements most often repeated within a single request.
+ * statements most often repeated within a single request and the ten
+ * statement shapes consuming the most database time.
  *
  * Statements are recorded only in normalized form: literals, numbers and
  * placeholders become `?`, so neither parameter values nor inline tenant data
@@ -64,6 +65,7 @@ export interface RouteQueryProfile {
   roundTrips: { mean: number; p95: number; max: number };
   dbMs: { mean: number; p95: number; max: number; total: number };
   repeatedStatements: RepeatedStatement[];
+  slowStatements: { statement: string; executions: number; totalDbMs: number; meanDbMs: number }[];
 }
 
 export interface QueryProfileSummary {
@@ -234,6 +236,15 @@ export function createQueryProfile(options: QueryProfileOptions) {
           .sort(([, a], [, b]) => b.repeats - a.repeats || b.totalDbMs - a.totalDbMs)
           .slice(0, TOP_REPEATED_STATEMENTS)
           .map(([statement, entry]) => ({ statement, ...entry, totalDbMs: round(entry.totalDbMs) })),
+        slowStatements: [...window.statements]
+          .sort(([, a], [, b]) => b.totalDbMs - a.totalDbMs)
+          .slice(0, TOP_REPEATED_STATEMENTS)
+          .map(([statement, entry]) => ({
+            statement,
+            executions: entry.executions,
+            totalDbMs: round(entry.totalDbMs),
+            meanDbMs: round(entry.totalDbMs / entry.executions),
+          })),
       };
     });
     routeProfiles.sort((a, b) => b.dbMs.total - a.dbMs.total || a.route.localeCompare(b.route));
