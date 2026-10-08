@@ -11,8 +11,13 @@ export const SCHEDULING_WIDGETS = {
     const workspace = props as unknown as ComponentProps<typeof SchedulingWorkspace>
     return <SchedulingWorkspace {...workspace} />
   },
-  'scheduling-my-schedule': (props) => {
-    const schedule = props as unknown as ComponentProps<typeof MySchedule>
-    return <MySchedule {...schedule} />
-  },
+  'scheduling-my-schedule': (props) => (
+    <MySchedule
+      entries={props.entries as ComponentProps<typeof MySchedule>['entries']}
+      from={props.from as ComponentProps<typeof MySchedule>['from']}
+      through={props.through as ComponentProps<typeof MySchedule>['through']}
+      today={props.today as ComponentProps<typeof MySchedule>['today']}
+      refusal={props.refusal as ComponentProps<typeof MySchedule>['refusal']}
+    />
+  ),
 } satisfies Record<string, WidgetRenderer>
