@@ -5,7 +5,7 @@ import { ArrowRight, BadgeCheck, MapPin } from 'lucide-react'
 import { Button, Card, CardContent } from '@openbooks/ui'
 import type { SupportedCountry } from '@openbooks/engine/src/tax/pack-provisioning.ts'
 import { AuthorityConnectionsClient, type AuthorityConnectionView } from './AuthorityConnectionsClient'
-import { TaxSetupGuide } from './TaxSetupGuide'
+import { TaxSetupGuide } from '../../../../../components/viewspec/native-widgets.client'
 
 /**
  * Shared chrome for the tax-setup workspace, plus the guide slot.

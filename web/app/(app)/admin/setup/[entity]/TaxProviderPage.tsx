@@ -1,5 +1,5 @@
 import { readTaxRateProviderConfigView } from '@openbooks/engine/tax'
-import { TaxProviderForm } from './TaxProviderForm'
+import { TaxProviderForm } from '../../../../../components/viewspec/native-widgets.client'
 
 export async function TaxProviderPage({ orgId }: { orgId: string }) {
   const config = await readTaxRateProviderConfigView(orgId)
