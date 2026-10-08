@@ -44,6 +44,14 @@ test('Pre-billing honours the caller subsidiary scope end to end', {skip:!proces
       assert.deepEqual((await wip.listPreBillingProjects(org.orgId, visible)).map((p) => p.id), [project])
       assert.equal((await wip.preBillingAnalytics(org.orgId, org.date, restricted)).aging.current, '0')
       assert.equal((await wip.preBillingAnalytics(org.orgId, org.date, visible)).aging.current, '200.0000')
+      const restrictedSources = await wip.listPreBillingWorkspaceSources(org.orgId, restricted)
+      assert.deepEqual(restrictedSources, { projects: [], unbilled: [] })
+      const workspaceSources = await wip.listPreBillingWorkspaceSources(org.orgId, visible)
+      assert.deepEqual(workspaceSources.projects.map(row => row.id), [project])
+      assert.deepEqual(workspaceSources.unbilled.map(row => ({ id: row.projectId, amount: row.unbilledAmount })),
+        [{ id: project, amount: '200.0000' }])
+      assert.deepEqual(workspaceSources.unbilled, await wip.listUnbilledProjects(org.orgId, visible))
+      assert.deepEqual(await wip.listPreBillingWorkspaceSources(org.orgId, new Set()), { projects: [], unbilled: [] })
       // Create
       await assert.rejects(wip.createPrebill(org.orgId, preparer, period, restricted), notFound)
       assert.equal((await db.execute<{ n: number }>(sql`select count(*)::int as n from prebills where org_id=${org.orgId}`)).rows[0]!.n, 0)

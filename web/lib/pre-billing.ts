@@ -2106,13 +2106,17 @@ export type UnbilledProjectRow = {
 }
 
 /**
- * Projects with unbilled work that no open worksheet has claimed yet — the
- * board's "to prebill" column and the population a bill run prepares.
+ * Read scoped project choices and unclaimed work together, so the workspace
+ * uses the same eligible-project population for its board and bill-run form.
  */
-export async function listUnbilledProjects(orgId: string, scope: SubsidiaryScope = null): Promise<UnbilledProjectRow[]> {
+export async function listPreBillingWorkspaceSources(orgId: string, scope: SubsidiaryScope = null): Promise<{
+  projects: PreBillingProjectOption[]
+  unbilled: UnbilledProjectRow[]
+}> {
   await assertPreBillingEnabled(orgId)
-  const eligible = new Set((await listPreBillingProjects(orgId, scope)).map((project) => project.id))
-  const rows = (await db.execute<UnbilledProjectRow>(sql`
+  const [projects, result] = await Promise.all([
+    listPreBillingProjects(orgId, scope),
+    db.execute<UnbilledProjectRow>(sql`
     ${eligiblePreBillingSources(orgId, scope)}
     select source.project_id as "projectId", project.name as "projectName",
            customer.display_name as "customerName", coalesce(type.name, '') as "projectTypeName",
@@ -2126,8 +2130,14 @@ export async function listUnbilledProjects(orgId: string, scope: SubsidiaryScope
      where source.capped_available_value > 0
      group by source.project_id, project.name, customer.display_name, type.name
      order by min(source.source_date), project.name
-  `)).rows
-  return rows.filter((row) => eligible.has(row.projectId))
+  `),
+  ])
+  const eligible = new Set(projects.map((project) => project.id))
+  return { projects, unbilled: result.rows.filter((row) => eligible.has(row.projectId)) }
+}
+
+export async function listUnbilledProjects(orgId: string, scope: SubsidiaryScope = null): Promise<UnbilledProjectRow[]> {
+  return (await listPreBillingWorkspaceSources(orgId, scope)).unbilled
 }
 
 export interface BillRunInput {
