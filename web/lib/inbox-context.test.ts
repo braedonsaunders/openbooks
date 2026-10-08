@@ -24,12 +24,12 @@ const hooks = registerHooks({
       format: "module", shortCircuit: true, source: `
         import assert from 'node:assert/strict';
         const state = globalThis[Symbol.for('openbooks.inbox-count-test')];
-        export async function approvalWorklistPageForAuthz(authz, page) {
+        export async function approvalWorklistCountForAuthz(authz) {
           assert.equal(authz.user.orgId, state.orgId);
           assert.equal(authz.user.id, state.actorId);
-          assert.deepEqual(page, {limit: 1, offset: 0});
+          assert.deepEqual([...authz.allowedSubsidiaryIds], ['sub-1']);
           state.approvalReads++;
-          return {total: state.approvalTotal, items: []};
+          return state.approvalTotal;
         }
       `,
     };

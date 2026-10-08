@@ -3,12 +3,14 @@ import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
-import { worklistApprovals } from "./approval-worklist.ts";
+import { worklistApprovals, worklistApprovalsCount, worklistApprovalsPage, type WorklistPageScope } from "./approval-worklist.ts";
+import { createDelegation, revokeDelegation } from "./delegations.ts";
 import { submitForApproval } from "./submit.ts";
 import { OUTBOUND_PAYMENT_RUN_SUBJECT_KIND } from "./payment-runs-adapter.ts";
 import { submitPaymentRun } from "../payments/operations.ts";
 import {
   createScratchOrg,
+  assertDedicatedFixtureDatabase,
   dropScratchOrg,
   seedApprovalFlow,
   seedDraftDocument,
@@ -25,6 +27,16 @@ import {
  * gate), and never shows a caller their own submissions.
  */
 const DB = !!process.env.OPENBOOKS_DB_URL;
+
+async function assertCountMatchesWorklist(orgId: string, userId: string, scope: WorklistPageScope): Promise<number> {
+  const count = await worklistApprovalsCount(orgId, userId, scope);
+  const page = await worklistApprovalsPage(orgId, userId, scope, { limit: 1, offset: 0 });
+  assert.equal(count, page.total, "badge and paged worklist count the same scoped union");
+  const items = await worklistApprovals(orgId, userId, scope);
+  const visible = scope.includeFlows === false ? items.filter((item) => item.kind === "budget") : items;
+  assert.equal(count, visible.length, "count includes every visible item without the page limit");
+  return count;
+}
 
 /** A payment run submitted into its approval flow by `submitterId`. */
 async function seedSubmittedRun(orgId: string, bankId: string, submitterId: string): Promise<string> {
@@ -52,6 +64,7 @@ async function seedSubmittedRun(orgId: string, bankId: string, submitterId: stri
 }
 
 test("unified worklist shows gates, gateless documents, and payment runs", { skip: !DB }, async () => {
+  await assertDedicatedFixtureDatabase();
   const org = await createScratchOrg();
   try {
     const actors = await seedFlowActors(org.orgId);
@@ -88,6 +101,12 @@ test("unified worklist shows gates, gateless documents, and payment runs", { ski
     const runGate = items.find((item) => item.kind === "flow_gate" && item.gate.subjectId === runId);
     assert.equal(runGate?.kind === "flow_gate" && runGate.gate.subjectKind, OUTBOUND_PAYMENT_RUN_SUBJECT_KIND,
       "a payment run awaiting approval appears through its gate");
+    assert.equal(await assertCountMatchesWorklist(org.orgId, actors.approver1Id, {
+      roles: ["approver"], allowedSubsidiaryIds: null,
+    }), 3);
+    assert.equal(await assertCountMatchesWorklist(org.orgId, actors.approver1Id, {
+      roles: ["approver"], allowedSubsidiaryIds: [],
+    }), 0, "an empty legal-entity scope withholds both document and gate counts");
 
     // The submitter cannot approve their own work anywhere.
     const own = await worklistApprovals(org.orgId, actors.submitterId, {
@@ -95,6 +114,31 @@ test("unified worklist shows gates, gateless documents, and payment runs", { ski
       allowedSubsidiaryIds: null,
     });
     assert.deepEqual(own, [], "submitter sees none of their own submissions");
+    assert.equal(await assertCountMatchesWorklist(org.orgId, actors.submitterId, {
+      roles: ["accountant"], allowedSubsidiaryIds: null,
+    }), 0);
+
+    const delegateScope = { roles: ["approver"], allowedSubsidiaryIds: null };
+    const beforeDelegation = await assertCountMatchesWorklist(org.orgId, actors.approver2Id, delegateScope);
+    const now = (await db.execute<{ now: Date | string }>(sql`select now() as now`)).rows[0]!.now;
+    const nowMs = now instanceof Date ? now.getTime() : +new Date(now);
+    const start = new Date(nowMs - 60_000);
+    const end = new Date(nowMs + 3_600_000);
+    const delegate = () => createDelegation({
+      orgId: org.orgId, fromUserId: actors.approver1Id, toUserId: actors.approver2Id,
+      startsAt: start, endsAt: end, reason: "Approval coverage",
+    });
+    const first = await delegate();
+    const overlapping = await delegate();
+    assert.equal(await assertCountMatchesWorklist(org.orgId, actors.approver2Id, delegateScope),
+      beforeDelegation + 2, "overlapping delegations count each borrowed gate once");
+    assert.equal(await assertCountMatchesWorklist(org.orgId, actors.approver1Id, delegateScope), 3,
+      "the principal retains the same direct gate population");
+    await revokeDelegation(org.orgId, first.delegation.id, actors.approver1Id);
+    assert.equal(await assertCountMatchesWorklist(org.orgId, actors.approver2Id, delegateScope), beforeDelegation + 2);
+    await revokeDelegation(org.orgId, overlapping.delegation.id, actors.approver1Id);
+    assert.equal(await assertCountMatchesWorklist(org.orgId, actors.approver2Id, delegateScope), beforeDelegation,
+      "the next count observes native revocation without a cached delegation grant");
   } finally {
     await dropScratchOrg(org.orgId);
   }
@@ -131,6 +175,7 @@ async function seedPendingBudget(
  * approvers — never for the submitter, never twice when a gate does exist.
  */
 test("unified worklist shows gateless pending budgets", { skip: !DB }, async () => {
+  await assertDedicatedFixtureDatabase();
   const org = await createScratchOrg();
   try {
     const actors = await seedFlowActors(org.orgId);
@@ -157,6 +202,12 @@ test("unified worklist shows gateless pending budgets", { skip: !DB }, async () 
       assert.equal(row.budget.total, "140000.0000");
     }
     assert.equal(byId.get(draftId)?.kind, undefined, "draft budgets must not appear");
+    assert.equal(await assertCountMatchesWorklist(org.orgId, actors.approver1Id, {
+      roles: ["approver"], allowedSubsidiaryIds: null, includeBudgets: true,
+    }), 1);
+    assert.equal(await assertCountMatchesWorklist(org.orgId, actors.approver1Id, {
+      roles: ["approver"], allowedSubsidiaryIds: null, includeBudgets: true, includeFlows: false,
+    }), 1, "the budgets grant independently admits the gateless budget leg");
 
     // Without the budgets grant the leg stays out of the worklist.
     const unscoped = await worklistApprovals(org.orgId, actors.approver1Id, {
@@ -164,6 +215,9 @@ test("unified worklist shows gateless pending budgets", { skip: !DB }, async () 
       allowedSubsidiaryIds: null,
     });
     assert.ok(!unscoped.some((item) => item.kind === "budget"), "budget leg needs includeBudgets");
+    assert.equal(await assertCountMatchesWorklist(org.orgId, actors.approver1Id, {
+      roles: ["approver"], allowedSubsidiaryIds: null,
+    }), 0);
 
     // The submitter cannot approve their own budget.
     const own = await worklistApprovals(org.orgId, actors.submitterId, {
@@ -172,6 +226,9 @@ test("unified worklist shows gateless pending budgets", { skip: !DB }, async () 
       includeBudgets: true,
     });
     assert.ok(!own.some((item) => item.id === pendingId), "submitter must not see their own budget");
+    assert.equal(await assertCountMatchesWorklist(org.orgId, actors.submitterId, {
+      roles: ["accountant"], allowedSubsidiaryIds: null, includeBudgets: true,
+    }), 0);
 
     // A gated budget rides its gate, never a second budget row.
     const { flowId } = await seedApprovalFlow(org.orgId, {
@@ -200,6 +257,9 @@ test("unified worklist shows gateless pending budgets", { skip: !DB }, async () 
     const dupes = rerouted.filter((item) => item.id === pendingId || (item.kind === "flow_gate" && item.gate.subjectId === pendingId));
     assert.equal(dupes.length, 1, "gated budget must appear exactly once");
     assert.equal(dupes[0]?.kind, "flow_gate", "gated budget must appear through its gate");
+    assert.equal(await assertCountMatchesWorklist(org.orgId, actors.approver1Id, {
+      roles: ["approver"], allowedSubsidiaryIds: null, includeBudgets: true,
+    }), 1, "a routed budget is counted only through its live gate");
   } finally {
     await dropScratchOrg(org.orgId);
   }

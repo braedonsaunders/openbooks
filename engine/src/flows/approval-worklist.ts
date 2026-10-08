@@ -245,6 +245,41 @@ function worklistMergeMs(item: UnifiedApproval): number {
   return +new Date(row.submittedAt ?? row.createdAt);
 }
 
+function sumKindCounts(counts: Map<string, number>): number {
+  let total = 0;
+  for (const count of counts.values()) total += count;
+  return total;
+}
+
+function worklistCounts(
+  orgId: string,
+  userId: string,
+  scope: WorklistPageScope,
+  { kind, query, overdue }: Pick<WorklistPage, "kind" | "query" | "overdue"> = {},
+): Promise<[Map<string, number>, Map<string, number>, number]> {
+  return Promise.all([
+    scope.includeFlows !== false
+      ? worklistGateKindCounts(orgId, userId, scope.roles, scope.allowedSubsidiaryIds, kind, query, overdue)
+      : Promise.resolve(new Map<string, number>()),
+    scope.includeFlows !== false && !overdue
+      ? worklistDocumentKindCounts(orgId, userId, scope.allowedSubsidiaryIds, kind, query)
+      : Promise.resolve(new Map<string, number>()),
+    scope.includeBudgets === true && (kind == null || kind === "budget_scenario") && !overdue
+      ? worklistBudgetCount(orgId, userId, kind, query)
+      : Promise.resolve(0),
+  ]);
+}
+
+/** Exact badge totals through the page's native predicates, without fetching rows. */
+export async function worklistApprovalsCount(
+  orgId: string,
+  userId: string,
+  scope: WorklistPageScope = {},
+): Promise<number> {
+  const [gates, documents, budgets] = await worklistCounts(orgId, userId, scope);
+  return sumKindCounts(gates) + sumKindCounts(documents) + budgets;
+}
+
 /**
  * One server-side page over the approvals union. Every leg fetches its
  * leading offset+limit rows in merge order with SQL LIMIT (plus GROUP BY
@@ -278,17 +313,7 @@ export async function worklistApprovalsPage(
       ? worklistBudgets(orgId, userId, { prefix, kind, query })
       : Promise.resolve([]),
   ]);
-  const [gateCounts, documentCounts, budgetCount] = await Promise.all([
-    includeFlows
-      ? worklistGateKindCounts(orgId, userId, scope.roles, scope.allowedSubsidiaryIds, kind, query, overdue)
-      : Promise.resolve(new Map<string, number>()),
-    includeFlows && !overdue
-      ? worklistDocumentKindCounts(orgId, userId, scope.allowedSubsidiaryIds, kind, query)
-      : Promise.resolve(new Map<string, number>()),
-    includeBudgets && !skipBudgets && !overdue
-      ? worklistBudgetCount(orgId, userId, kind, query)
-      : Promise.resolve(0),
-  ]);
+  const [gateCounts, documentCounts, budgetCount] = await worklistCounts(orgId, userId, scope, { kind, query, overdue });
   // Kind chips ignore the kind filter (same as the unpaged page), so a
   // filtered read re-runs the aggregates unpredicated for the chips.
   const [chipGateCounts, chipDocumentCounts, chipBudgetCount] = filtered
@@ -313,11 +338,6 @@ export async function worklistApprovalsPage(
       (a.kind < b.kind ? -1 : a.kind > b.kind ? 1 : 0) ||
       (a.id < b.id ? -1 : a.id > b.id ? 1 : 0),
   );
-  const sum = (counts: Map<string, number>): number => {
-    let n = 0;
-    for (const v of counts.values()) n += v;
-    return n;
-  };
   const kindCounts = new Map<string, number>();
   for (const counts of [chipGateCounts, chipDocumentCounts]) {
     for (const [k, v] of counts) kindCounts.set(k, (kindCounts.get(k) ?? 0) + v);
@@ -327,7 +347,7 @@ export async function worklistApprovalsPage(
   }
   return {
     items: merged.slice(page.offset, page.offset + page.limit),
-    total: sum(gateCounts) + sum(documentCounts) + budgetCount,
+    total: sumKindCounts(gateCounts) + sumKindCounts(documentCounts) + budgetCount,
     kindCounts,
   };
 }
