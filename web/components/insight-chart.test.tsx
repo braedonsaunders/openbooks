@@ -5,14 +5,20 @@ import { stubModules } from '../testing/stub-modules'
 
 declare global {
   var __chartCalls: { action: string; value?: Record<string, unknown> }[]
+  var __chartLoadGate: Promise<void>
+  var __chartInitFailure: Error | undefined
 }
 
 await bootJsdomEnvironment()
+let releaseRenderer!: () => void
+globalThis.__chartLoadGate = new Promise<void>((resolve) => { releaseRenderer = resolve })
 stubModules({ extra: {
-  echarts: `export function init(){
+  echarts: `await globalThis.__chartLoadGate;
+  export function init(){
+    if(globalThis.__chartInitFailure) throw globalThis.__chartInitFailure;
     globalThis.__chartCalls.push({action:'init'});
     return {
-      setOption(){globalThis.__chartCalls.push({action:'setOption'})},
+      setOption(value){globalThis.__chartCalls.push({action:'setOption',value})},
       dispatchAction(value){globalThis.__chartCalls.push({action:'dispatch',value})},
       resize(){},
       dispose(){globalThis.__chartCalls.push({action:'dispose'})}
@@ -24,6 +30,46 @@ Object.assign(globalThis, { React })
 const { act } = React
 const { createRoot } = await import('react-dom/client')
 const { InsightChart } = await import('../../packages/analytics/src/viz/InsightChart')
+
+test('renderer loading retains current options and focused inspection and never initializes an unmounted chart', async () => {
+  globalThis.__chartCalls = []
+  const host = document.createElement('div')
+  const cancelledHost = document.createElement('div')
+  document.body.append(host, cancelledHost)
+  const root = createRoot(host)
+  const cancelledRoot = createRoot(cancelledHost)
+  let cancelledUnmounted = false
+  const inspection = { label: 'Annual pay', instructions: 'Use arrow keys', points: ['Jan 1 · CAD 70,000.01', 'Apr 1 · CAD 72,500.25'] }
+  const latest = { series: [{ type: 'line', data: [70000.01, 72500.25] }] }
+  try {
+    await act(async () => {
+      root.render(<InsightChart option={{ series: [] }} inspection={inspection} />)
+      cancelledRoot.render(<InsightChart option={{ series: [] }} />)
+    })
+    assert.equal(globalThis.__chartCalls.length, 0)
+    await act(async () => {
+      host.querySelector<HTMLElement>('[role="group"]')!.focus()
+      root.render(<InsightChart option={latest} inspection={inspection} />)
+      cancelledRoot.unmount()
+      cancelledUnmounted = true
+    })
+    assert.equal(host.querySelector('[aria-live="polite"]')?.textContent, inspection.points[1])
+    await act(async () => { releaseRenderer(); await globalThis.__chartLoadGate })
+    assert.equal(globalThis.__chartCalls.filter((call) => call.action === 'init').length, 1)
+    assert.deepEqual(globalThis.__chartCalls.find((call) => call.action === 'setOption')?.value, latest)
+    assert.deepEqual(globalThis.__chartCalls.find((call) => call.value?.type === 'showTip')?.value,
+      { type: 'showTip', seriesIndex: 0, dataIndex: 1 })
+  } finally {
+    releaseRenderer()
+    await act(async () => {
+      root.unmount()
+      if (!cancelledUnmounted) cancelledRoot.unmount()
+    })
+    host.remove()
+    cancelledHost.remove()
+  }
+  assert.equal(globalThis.__chartCalls.filter((call) => call.action === 'dispose').length, 1)
+})
 
 async function renderChart(inspection?: { label: string; instructions: string; points: string[] }) {
   globalThis.__chartCalls = []
@@ -68,6 +114,36 @@ test('charts without inspection retain their existing canvas and dispose their r
     assert.equal(globalThis.__chartCalls.filter((call) => call.action === 'setOption').length, 1)
   } finally {
     await done()
+  }
+  assert.equal(globalThis.__chartCalls.filter((call) => call.action === 'dispose').length, 1)
+})
+
+test('renderer initialization failures retain their cause at the caller boundary and a remount can recover', async () => {
+  const cause = new Error('Canvas renderer unavailable')
+  let caught: unknown
+  class Boundary extends React.Component<{ children: React.ReactNode }, { failed: boolean }> {
+    state = { failed: false }
+    static getDerivedStateFromError() { return { failed: true } }
+    componentDidCatch(error: unknown) { caught = error }
+    render() { return this.state.failed ? <div role="alert">Chart unavailable</div> : this.props.children }
+  }
+  const host = document.createElement('div')
+  document.body.append(host)
+  const root = createRoot(host, { onCaughtError() {} })
+  globalThis.__chartCalls = []
+  try {
+    globalThis.__chartInitFailure = cause
+    await act(async () => root.render(<Boundary key="failed"><InsightChart option={{ series: [] }} /></Boundary>))
+    assert.equal(caught, cause)
+    assert.equal(host.querySelector('[role="alert"]')?.textContent, 'Chart unavailable')
+    globalThis.__chartInitFailure = undefined
+    await act(async () => root.render(<Boundary key="retry"><InsightChart option={{ series: [] }} /></Boundary>))
+    assert.equal(host.querySelector('[role="alert"]'), null)
+    assert.equal(globalThis.__chartCalls.filter((call) => call.action === 'init').length, 1)
+  } finally {
+    globalThis.__chartInitFailure = undefined
+    await act(async () => root.unmount())
+    host.remove()
   }
   assert.equal(globalThis.__chartCalls.filter((call) => call.action === 'dispose').length, 1)
 })

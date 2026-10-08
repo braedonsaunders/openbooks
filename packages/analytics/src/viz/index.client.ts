@@ -1,5 +1,5 @@
 // @openbooks/analytics/viz — the client rendering surface for insight cards.
-// CLIENT ONLY: pulls in echarts + React. Import from `'use client'` modules.
+// CLIENT ONLY: React rendering; ECharts loads when a chart mounts.
 
 export { InsightChart } from './InsightChart'
 export { InsightResultView } from './InsightResultView'
