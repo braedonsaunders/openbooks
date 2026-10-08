@@ -7,8 +7,7 @@ import { isFeatureEnabled } from '../../../../lib/features'
 import { isUuid, pickString } from '../../../../lib/list-params'
 import {
   listPrebills,
-  listUnbilledProjects,
-  listPreBillingProjects,
+  listPreBillingWorkspaceSources,
   loadPrebill,
   prebillApprovalFlowsConfigured,
 } from '../../../../lib/pre-billing'
@@ -65,10 +64,9 @@ export async function loadPreBilling(
   await requirePreBillingFeature(authz.user.orgId)
   const orgId = authz.user.orgId
   const selectedId = pickString(sp.prebill)
-  const [prebills, unbilled, projects, rawSelected, customerPortalEnabled, approvalFlowsConfigured] = await Promise.all([
+  const [prebills, sources, rawSelected, customerPortalEnabled, approvalFlowsConfigured] = await Promise.all([
     listPrebills(orgId, undefined, authz.allowedSubsidiaryIds),
-    listUnbilledProjects(orgId, authz.allowedSubsidiaryIds),
-    listPreBillingProjects(orgId, authz.allowedSubsidiaryIds),
+    listPreBillingWorkspaceSources(orgId, authz.allowedSubsidiaryIds),
     selectedId && isUuid(selectedId) ? loadPrebill(orgId, selectedId, authz.allowedSubsidiaryIds) : null,
     isFeatureEnabled(orgId, 'customerPortal'),
     prebillApprovalFlowsConfigured(orgId),
@@ -90,8 +88,8 @@ export async function loadPreBilling(
     title: 'Pre-billing',
     description: 'Turn unbilled work into reviewed, approved invoice packages — and deliver them with their backup.',
     prebills,
-    unbilled,
-    projects,
+    unbilled: sources.unbilled,
+    projects: sources.projects,
     selected,
     canManage: can(authz, 'projects.manage'),
     canCreateInvoice: can(authz, 'ar.create'),
