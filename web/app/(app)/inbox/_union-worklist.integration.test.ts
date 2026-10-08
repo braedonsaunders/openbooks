@@ -198,6 +198,13 @@ for (const tab of ["mine", "all"] as const) {
       });
       assert.equal(counts.count, 2, "one personal approval plus one own unread notice; other actors' notices are excluded");
       assert.equal(counts.count, data.tabs.find((t) => t.key === "mine")!.count! + data.tabs.find((t) => t.key === "tasks")!.count!);
+      assert.deepEqual(data.taskRows, [], 'approval views do not materialize hidden personal task records');
+      const tasks = await withOrgContext(org.orgId, () => loadApprovals({ tab: 'tasks' }));
+      assert.ok(tasks);
+      assert.deepEqual(tasks.approvalRows, [], 'the task view does not materialize hidden approval rows');
+      assert.equal(tasks.tabs.find((t) => t.key === 'mine')!.count, counts.approvals);
+      assert.equal(tasks.tabs.find((t) => t.key === 'tasks')!.count, counts.tasks);
+      assert.deepEqual(tasks.taskRows.map((row) => row.title), ['Your notice']);
       const filtered = await withOrgContext(org.orgId, () => loadApprovals({ q: "no matching approval" }));
       assert.equal(filtered!.approvalRows.length, 0);
       assert.equal(filtered!.tabs.find((t) => t.key === "mine")!.count, counts.approvals, "search changes the rows, not the personal-work badge");

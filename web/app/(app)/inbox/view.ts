@@ -270,7 +270,7 @@ export async function loadApprovals(
   // offset+limit rows in SQL and the total/chips come from aggregates, so no
   // request ever scans a whole leg. Same reader family as the dashboard tile
   // (approvalWorklistForAuthz), same doorway, same per-item shape.
-  const unionPage = mayApprove
+  const unionPage = mayApprove && onApprovals
     ? await approvalWorklistPageForAuthz(authz, {
         limit: perPage,
         offset,
