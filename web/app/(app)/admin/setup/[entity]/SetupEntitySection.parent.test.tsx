@@ -18,7 +18,7 @@ stubModules({
 const React = await import('react')
 Object.assign(globalThis, { React })
 const { SetupEntitySection, setupRecordTabs } = await import('./SetupEntitySection.tsx')
-const { SetupDrawer } = await import('./SetupDrawer.tsx')
+const { SetupDrawer } = await import('../../../../../components/viewspec/native-widgets.client')
 const { SETUP_ENTITY_BY_KEY } = await import('../../../../../lib/setup/registry.ts')
 const dialect = new PgDialect()
 

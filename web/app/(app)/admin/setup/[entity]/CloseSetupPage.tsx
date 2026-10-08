@@ -16,7 +16,7 @@ import {
   type ReportDescriptor,
 } from "../../../../../lib/close/report-descriptor";
 import { clamp, pickString } from "../../../../../lib/list-params";
-import { CloseSetupWorkspace } from "./CloseSetupWorkspace";
+import { CloseSetupWorkspace } from '../../../../../components/viewspec/native-widgets.client'
 import type {
   AutomationRow,
   BlueprintRow,
