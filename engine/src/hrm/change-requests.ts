@@ -36,6 +36,8 @@ import {
 } from "./self-service/profile-schema.ts";
 import { loadMyAddress } from "./self-service/self-read.ts";
 import { inputGuards } from "./input-guards.ts";
+import { businessTodayInTx } from "../platform/business-date.ts";
+import { takeEmployeeConfigurationFence } from "../payroll/fences.ts";
 
 /**
  * Governed HRM employment change-request service (slice A).
@@ -184,9 +186,15 @@ const statusChangePayloadSchema = z
     status: z.enum(EMPLOYMENT_STATUSES),
     effectiveFrom: civilDate("effectiveFrom"),
     effectiveTo: civilDate("effectiveTo").nullable().default(null),
+    historicalObservation: z.object({
+      sourceReference: z.string().trim().min(1, "sourceReference must not be blank").max(2000),
+    }).strict().optional(),
   })
   .strict()
   .superRefine((payload, ctx) => {
+    if (payload.historicalObservation && payload.effectiveTo === null) {
+      ctx.addIssue({ code: "custom", message: "a historical status observation needs an exclusive end date" });
+    }
     try {
       makeEffectiveInterval(payload.effectiveFrom, payload.effectiveTo);
     } catch (error) {
@@ -639,6 +647,9 @@ async function assertKindPreconditions(
       "BAD_STATE",
       "this employment has no effective version yet — file a hire before changing it",
     );
+  }
+  if (payload.kind === "status_change" && payload.historicalObservation) {
+    await assertHistoricalStatusWindow(exec, orgId, employmentId, payload);
   }
   if (payload.kind === "termination" && live.every((version) => version.status === "terminated")) {
     throw new HrmChangeRequestError(
@@ -1383,6 +1394,10 @@ async function applyApprovedRequest(
                       reporting_relationships_change_tenant_fkey deferred
   `);
 
+  if (payload.kind === "status_change" && payload.historicalObservation) {
+    await assertHistoricalStatusWindow(exec, orgId, request.employment_id, payload);
+  }
+
   // (1) Re-read the aggregate under lock and refuse a stale proposal: the
   // live revision must still equal the authored expectation.
   const aggregate = (await exec.execute<{ revision: number }>(sql`
@@ -1425,6 +1440,8 @@ async function applyApprovedRequest(
   // each branch below — all in this one transaction.
   if (payload.kind === "hire") {
     await applyHire(exec, { orgId, actorId, request, payload, newRevision, recordedAt });
+  } else if (payload.kind === "status_change" && payload.historicalObservation) {
+    await applyHistoricalStatusObservation(exec, { orgId, actorId, request, payload, newRevision, recordedAt });
   } else if (payload.kind === "status_change" || payload.kind === "termination") {
     await applyEmploymentVersionChange(exec, { orgId, actorId, request, payload, newRevision, recordedAt });
   } else if (payload.kind === "position_assignment") {
@@ -1667,6 +1684,84 @@ async function applyHire(
       trigger: hireTrigger,
     });
   }
+  await linkAppliedEvidence(exec, { orgId, actorId, request, newRevision, changeId });
+  await bumpAggregateRevision(exec, { orgId, actorId, request, expected: newRevision - 1, next: newRevision });
+}
+
+/** Historical observations fill only documented gaps; they never supersede a status. */
+async function assertHistoricalStatusWindow(
+  exec: SqlExecutor,
+  orgId: string,
+  employmentId: string,
+  payload: StatusChangePayload,
+): Promise<void> {
+  const end = payload.effectiveTo;
+  if (!payload.historicalObservation || end === null || end > await businessTodayInTx(exec, orgId)) {
+    throw new HrmChangeRequestError("REFUSED", "Record a bounded historical status window ending before the current business day; use an ordinary status change for current employment.");
+  }
+  const subject = (await exec.execute<{ worker_party_id: string }>(sql`
+    select worker_party_id from worker_employments where org_id=${orgId} and id=${employmentId}
+  `)).rows[0];
+  if (!subject) throw new HrmChangeRequestError("NOT_FOUND", "Select a saved employment in this organization.");
+  // Payroll calculation and commit take this employee-wide fence before
+  // their year locks, so a committed-period check cannot race a commit.
+  await takeEmployeeConfigurationFence(exec, orgId, subject.worker_party_id);
+  const live = await liveEmploymentVersions(exec, orgId, employmentId);
+  if (!live.length || live.some(version => effectiveOverlaps(version, payload.effectiveFrom, end))) {
+    throw new HrmChangeRequestError("REFUSED", "A historical observation must fill an uncovered employment window; review the existing status history without overwriting it.");
+  }
+  const committed = (await exec.execute<{ pay_date: string }>(sql`
+    select r.pay_date::text from pay_runs r
+    join pay_stubs s on s.org_id=r.org_id and s.pay_run_document_id=r.document_id
+    join documents d on d.org_id=r.org_id and d.id=r.document_id
+    where r.org_id=${orgId} and s.employee_party_id=${subject.worker_party_id}
+      and r.run_status='committed' and d.status<>'voided'
+      and ((r.period_start<${end}::date and r.period_end>=${payload.effectiveFrom}::date)
+        or (r.pay_date>=${payload.effectiveFrom}::date and r.pay_date<${end}::date))
+    limit 1
+  `)).rows[0];
+  if (committed) {
+    throw new HrmChangeRequestError("REFUSED", `Payroll dated ${committed.pay_date} is committed for this employment window; preserve its status evidence and use a governed correction.`);
+  }
+}
+
+async function applyHistoricalStatusObservation(
+  exec: SqlExecutor,
+  args: {
+    orgId: string; actorId: string; request: RequestRow; payload: StatusChangePayload;
+    newRevision: number; recordedAt: DbInstant;
+  },
+): Promise<void> {
+  const { orgId, actorId, request, payload, newRevision, recordedAt } = args;
+  // The aggregate is now locked. Repeat the overlap check so another HRM
+  // approval cannot insert a version between the initial check and this lock.
+  await assertHistoricalStatusWindow(exec, orgId, request.employment_id, payload);
+  const sequence = (await exec.execute<{ next: number }>(sql`
+    select coalesce(max(version_no),0)+1 as next from worker_employment_versions
+    where org_id=${orgId} and employment_id=${request.employment_id}
+  `)).rows[0]?.next;
+  if (!sequence) throw new HrmChangeRequestError("REFUSED", "The employment version sequence is unavailable; reload the history.");
+  const changeId = await insertEmploymentChange(exec, {
+    orgId, employmentId: request.employment_id, assignmentId: null, revision: newRevision,
+    changeKind: "status_changed", closedVersions: [],
+    priorSnapshot: { historicalObservation: payload.historicalObservation,
+      observedStatus: payload.status, effectiveFrom: payload.effectiveFrom, effectiveTo: payload.effectiveTo },
+    reason: request.reason ?? "", action: request.action ?? null, reasonCode: request.reason_code ?? null, actorId,
+  });
+  const inserted = (await exec.execute<{ id: string; after: Record<string, unknown> }>(sql`
+    insert into worker_employment_versions
+      (org_id,employment_id,version_no,status,effective_from,effective_to,recorded_at,created_by,updated_by)
+    values (${orgId},${request.employment_id},${sequence},${payload.status},${payload.effectiveFrom}::date,
+      ${payload.effectiveTo}::date,${recordedAt},${actorId},${actorId})
+    returning id,to_jsonb(worker_employment_versions) as after
+  `)).rows[0];
+  if (!inserted) throw new HrmChangeRequestError("REFUSED", "The historical status observation was not saved; nothing applied.");
+  const audited = (await exec.execute<{ id: string }>(sql`insert into audit_log(org_id,table_name,row_id,action,changes,actor_id)
+    values (${orgId},'worker_employment_versions',${inserted.id},'insert',
+      ${JSON.stringify({ before: null, after: inserted.after, kind: "historical_status_observation",
+        sourceReference: payload.historicalObservation!.sourceReference, reason: request.reason,
+        employmentChangeId: changeId, requestId: request.id })}::jsonb,${actorId}) returning id`)).rows;
+  if (audited.length !== 1) throw new HrmChangeRequestError("REFUSED", "The historical status audit was not recorded; nothing applied.");
   await linkAppliedEvidence(exec, { orgId, actorId, request, newRevision, changeId });
   await bumpAggregateRevision(exec, { orgId, actorId, request, expected: newRevision - 1, next: newRevision });
 }

@@ -347,7 +347,12 @@
       "defaultEditReason": "Informations du salarié mises à jour",
       "employeeEditTitle": "Modifier le salarié",
       "appliedToast": "Salarié mis à jour",
-      "employeeEditDescription": "Enregistrez une modification avec une date d’effet. Le workflow configuré l’applique immédiatement ou la soumet à approbation."
+      "employeeEditDescription": "Enregistrez une modification avec une date d’effet. Le workflow configuré l’applique immédiatement ou la soumet à approbation.",
+      "statusModeLabel": "Enregistrement du statut",
+      "ordinaryStatusChange": "Changement de statut",
+      "historicalObservation": "Observation historique du statut",
+      "sourceReferenceLabel": "Référence de la source datée",
+      "historicalObservationHelp": "Enregistrez uniquement les dates passées attestées dans un intervalle non couvert. La date de fin est exclusive : une observation du 3 janvier se termine le 4 janvier. Les versions, dates d’embauche et statut actuel restent inchangés. Les approbations et contrôles de paie comptabilisée restent applicables."
     },
     "exit": {
       "title": "Fiche de sortie",

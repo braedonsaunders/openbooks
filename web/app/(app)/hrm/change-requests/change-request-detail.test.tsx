@@ -405,3 +405,80 @@ test('a read-only viewer sees the draft detail with no Edit, Submit or Withdraw'
     await unmount()
   }
 })
+
+test('historical status review shows its dated source and bounded window', async () => {
+  const { unmount } = await mountDialog({
+    requestId: REQUEST_ID, closeHref: '/hrm/change-requests', subject: null,
+    fetchHandler: url => url === `/api/hrm/change-requests/${REQUEST_ID}` ? Response.json({ request: {
+      ...draftHire(), payload: { kind: 'status_change', status: 'active', effectiveFrom: '2020-01-03', effectiveTo: '2020-01-04',
+        historicalObservation: { sourceReference: 'Original dated employment declaration' } },
+    } }) : null,
+  })
+  try {
+    assert.match(textOf(), /Historical status observation/)
+    assert.match(textOf(), /Dated source reference/)
+    assert.match(textOf(), /Original dated employment declaration/)
+    assert.match(textOf(), /2020-01-03/)
+    assert.match(textOf(), /2020-01-04/)
+  } finally { await unmount() }
+})
+
+test('historical status draft saves and reopens without losing the source or changing the ordinary status payload', async () => {
+  const { ChangeRequestDrawer } = await import('../ChangeRequestDrawer')
+  const { BusinessDateProvider } = await import('../../../../components/business-date-provider')
+  globalThis.__detailRouter = { push() {}, refresh() {}, pushes: [] }
+  const requests: { url: string; method: string; body: unknown }[] = []
+  const originalFetch = globalThis.fetch
+  const employmentId = randomUUID()
+  const savedId = randomUUID()
+  const payload = { kind: 'status_change', status: 'active', effectiveFrom: '2020-01-03', effectiveTo: '2020-01-04',
+    historicalObservation: { sourceReference: 'Original dated employment declaration' } }
+  let saved = 0
+  globalThis.fetch = (async (input, init) => {
+    const url = String(input)
+    const method = init?.method ?? 'GET'
+    const body = typeof init?.body === 'string' ? JSON.parse(init.body) : null
+    if (method !== 'GET') requests.push({ url, method, body })
+    if (url === '/api/hrm/action-reasons') return Response.json({ reasons: [] })
+    if (url === '/api/hrm/change-requests' && method === 'POST') return Response.json({ request: { id: savedId } })
+    return Response.json({ rows: [] })
+  }) as typeof fetch
+  const host = document.createElement('div')
+  document.body.appendChild(host)
+  const root = createRoot(host)
+  const render = (initialRequest: { id: string; payload: Record<string, unknown> } | null) =>
+    provider(<BusinessDateProvider today="2026-10-08"><ChangeRequestDrawer key={initialRequest?.id ?? 'new'}
+      employmentId={employmentId} initialRequest={initialRequest} initialValues={payload} departmentOptions={[]}
+      onClose={() => {}} onSaved={() => { saved++ }} /></BusinessDateProvider>)
+  try {
+    await act(async () => { root.render(render(null)); await sleep(50) })
+    assert.equal((document.querySelector('#cr-status-mode') as HTMLSelectElement).value, 'historical')
+    assert.equal((document.querySelector('#cr-source-reference') as HTMLInputElement).value, payload.historicalObservation.sourceReference)
+    assert.equal((document.querySelector('#cr-effective-to') as HTMLInputElement).required, true)
+    const save = [...document.querySelectorAll('button')].find(b => b.textContent === hrmMessages.employment.changeRequests.saveDraft)!
+    assert.ok(save)
+    await act(async () => { save.click(); await sleep(50) })
+    assert.equal(saved, 1)
+    assert.deepEqual(requests, [{ url: '/api/hrm/change-requests', method: 'POST', body: { employmentId, payload } }])
+    await act(async () => { root.render(render({ id: savedId, payload })); await sleep(50) })
+    assert.equal((document.querySelector('#cr-source-reference') as HTMLInputElement).value, payload.historicalObservation.sourceReference)
+    assert.equal((document.querySelector('#cr-effective-from') as HTMLInputElement).value, '2020-01-03')
+    assert.equal((document.querySelector('#cr-effective-to') as HTMLInputElement).value, '2020-01-04')
+    const unchangedSave = [...document.querySelectorAll('button')].find(b => b.textContent === hrmMessages.employment.changeRequests.saveChanges)!
+    await act(async () => { unchangedSave.click(); await sleep(50) })
+    assert.equal(saved, 2)
+    assert.equal(requests.length, 1, 'unchanged reopen skips the PATCH and never bumps the saved proposal')
+    const mode = document.querySelector('#cr-status-mode') as HTMLSelectElement
+    await act(async () => { mode.value = 'ordinary'; mode.dispatchEvent(new window.Event('change', { bubbles: true })) })
+    assert.equal(document.querySelector('#cr-source-reference'), null)
+    assert.equal((document.querySelector('#cr-effective-to') as HTMLInputElement).required, false)
+    await act(async () => { unchangedSave.click(); await sleep(50) })
+    const { historicalObservation: _source, ...ordinary } = payload
+    assert.deepEqual(requests[1], { url: `/api/hrm/change-requests/${savedId}`, method: 'PATCH', body: { payload: ordinary } },
+      'only an explicit mode change removes observation metadata from the proposal')
+  } finally {
+    await act(async () => { root.unmount() })
+    host.remove()
+    globalThis.fetch = originalFetch
+  }
+})

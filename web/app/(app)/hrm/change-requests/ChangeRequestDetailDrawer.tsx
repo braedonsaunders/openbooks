@@ -237,6 +237,11 @@ export function ChangeRequestDetailDrawer({
     : null)
   take('effectiveFrom', t('employment.changeRequests.effectiveFromLabel'), asText(payload.effectiveFrom))
   take('effectiveTo', t('employment.changeRequests.effectiveToLabel'), asText(payload.effectiveTo))
+  if (payload.historicalObservation && typeof payload.historicalObservation === 'object') {
+    const observation = payload.historicalObservation as { sourceReference?: unknown }
+    take('historicalObservation', t('employment.changeRequests.statusModeLabel'), t('employment.changeRequests.historicalObservation'))
+    take('sourceReference', t('employment.changeRequests.sourceReferenceLabel'), asText(observation.sourceReference))
+  }
   take('effectiveDate', t('employment.changeRequests.effectiveDateLabel'), asText(payload.effectiveDate))
   take('assignmentKey', t('employment.changeRequests.assignmentKeyLabel'), asText(payload.assignmentKey))
   take('jobTitle', t('employment.changeRequests.jobTitleLabel'), asText(payload.jobTitle))
@@ -282,7 +287,7 @@ export function ChangeRequestDetailDrawer({
     })
   }
   const knownKeys = new Set([
-    'kind', 'status', 'effectiveFrom', 'effectiveTo', 'effectiveDate', 'assignmentKey', 'jobTitle',
+    'historicalObservation', 'kind', 'status', 'effectiveFrom', 'effectiveTo', 'effectiveDate', 'assignmentKey', 'jobTitle',
     'departmentId', 'locationId', 'fte', 'isPrimary', 'managerEmploymentId', 'positionId',
   ])
   for (const [key, value] of Object.entries(payload)) {

@@ -137,7 +137,7 @@ const IN_SERVICE_STATUSES = ["active", "on_leave"] as const;
 /** The covering version on a date, or a refusal naming what the date needs. */
 function coveringVersion(versions: readonly LiveVersion[], date: string): LiveVersion {
   const covering = versions.filter(
-    (version) => version.effectiveFrom <= date && (version.effectiveTo === null || version.effectiveTo >= date),
+    (version) => version.effectiveFrom <= date && (version.effectiveTo === null || version.effectiveTo > date),
   );
   if (covering.length === 0) {
     throw new BenefitsError(

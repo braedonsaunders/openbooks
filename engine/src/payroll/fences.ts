@@ -12,11 +12,16 @@ import type { db } from "../platform/db.ts";
  * not started yet. Keys are taken in sorted order so overlapping rosters
  * queue instead of deadlocking mid-set.
  */
+const employeeConfigurationFenceKey = (
+  orgId: string,
+  employeePartyId: string | null | undefined,
+): string => `payroll-run-ytd:${orgId}:${employeePartyId}`;
+
 export const employeeTaxYearFenceKey = (
   orgId: string,
   employeePartyId: string | null | undefined,
   taxYear: number | string | null | undefined,
-): string => `payroll-run-ytd:${orgId}:${employeePartyId}:${taxYear}`;
+): string => `${employeeConfigurationFenceKey(orgId, employeePartyId)}:${taxYear}`;
 
 /**
  * Employer × tax-year × levy fence.
@@ -43,6 +48,15 @@ async function takeFences(
   for (const key of [...new Set(keys)].sort()) {
     await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${key}, 0))`);
   }
+}
+
+/** Serialize configuration that can affect any statutory year for one employee. */
+export async function takeEmployeeConfigurationFence(
+  tx: Pick<typeof db, "execute">,
+  orgId: string,
+  employeePartyId: string,
+): Promise<void> {
+  await takeFences(tx, [employeeConfigurationFenceKey(orgId, employeePartyId)]);
 }
 
 export async function takeEmployeeTaxYearFences(
