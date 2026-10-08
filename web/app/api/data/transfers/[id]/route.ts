@@ -15,7 +15,8 @@ export const GET = defineRoute({ authorize: authorizeTransfers, feature: transfe
   }),
 })
 export const POST = defineRoute({ authorize: authorizeTransfers, feature: transferFeature, params,
-  body: z.object({ action: z.enum(['finish-upload', 'preview', 'commit', 'cancel', 'retry']), revision: z.number().int().positive(),
+  body: z.object({ action: z.enum(['finish-upload', 'select-resource', 'preview', 'commit', 'cancel', 'retry']), revision: z.number().int().positive(),
+    resource: z.string().min(1).max(200).optional(),
     approvalHash: z.string().regex(/^[a-f0-9]{64}$/).optional(),
     options: z.object({ mapping: z.record(z.string(), z.string()), importMode: z.enum(['insert', 'upsert']), post: z.boolean() }).optional(),
   }),

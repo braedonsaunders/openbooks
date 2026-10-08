@@ -219,5 +219,164 @@
     }
   },
   "confirmRetainSourceDeletion": "Quellseitig gelöschte Buchung {ref} in OpenBooks behalten und als Controller-Entscheidung protokollieren?",
-  "confirmVoidSourceDeletion": "Quellseitig gelöschte Buchung {ref} stornieren und ungültig machen? Dies bucht eine Gegenbuchung und kann von diesem Bildschirm aus nicht rückgängig gemacht werden."
+  "confirmVoidSourceDeletion": "Quellseitig gelöschte Buchung {ref} stornieren und ungültig machen? Dies bucht eine Gegenbuchung und kann von diesem Bildschirm aus nicht rückgängig gemacht werden.",
+  "migrationAssistant": {
+    "title": "Migrationsassistent",
+    "placeholder": "Sagen Sie mir, wo Ihre Buchhaltung heute geführt wird, oder legen Sie eine Exportdatei ab…",
+    "entry": {
+      "plan": "Migration planen",
+      "wizard": "Umzug mit dem Migrationsassistenten planen",
+      "sync": "Migrationsassistenten fragen"
+    },
+    "attach": {
+      "label": "Exportdatei anhängen",
+      "unsupported": "Hängen Sie eine CSV-, Excel- (.xlsx) oder JSON-Datei an.",
+      "noImport": "Ihre Rolle darf keine Datensätze importieren, daher können hier keine Dateien bereitgestellt werden.",
+      "uploading": "{name} wird hochgeladen…",
+      "reading": "{name} wird gelesen…",
+      "message": "Ich habe „{name}“ angehängt (Importdatei {id}, {rows, plural, one {# Zeile} other {# Zeilen}}).",
+      "messageStillReading": "Ich habe „{name}“ angehängt (Importdatei {id}); sie wird noch gelesen.",
+      "failed": "{name} konnte nicht gelesen werden: {reason}"
+    },
+    "welcome": {
+      "kicker": "Migrationsassistent",
+      "title": "Holen wir Ihre Buchhaltung herüber",
+      "description": "Sagen Sie mir, was Sie heute verwenden. Ich richte die Verbindung oder die Tabellenimporte ein, probe den Umzug, prüfe jeden Saldo gegen Ihr bisheriges System und begleite Sie durch die Umstellung. Sie genehmigen jede Änderung.",
+      "fromWizard": "Sie haben im Einrichtungsassistenten angegeben, dass Sie eine bestehende Buchhaltung übernehmen. Wählen Sie, wie sie übernommen werden soll.",
+      "start": "Starten",
+      "dropHint": "Legen Sie jederzeit einen CSV- oder Excel-Export in der Unterhaltung ab.",
+      "unsure": {
+        "label": "Unsicher? Helfen Sie mir bei der Wahl",
+        "prompt": "Ich bin nicht sicher, welcher Migrationsansatz zu uns passt. Fragen Sie mich, was Sie wissen müssen, und empfehlen Sie einen."
+      },
+      "paths": {
+        "cutover": {
+          "title": "Zu einem Umstellungsdatum wechseln",
+          "description": "Migrieren Sie die Historie über einen Konnektor, prüfen Sie sie auf den Cent genau und gehen Sie dann produktiv.",
+          "prompt": "Wir möchten zu einem Umstellungsdatum vollständig auf OpenBooks wechseln. Führen Sie mich durch die Migration."
+        },
+        "mirror": {
+          "title": "Mein aktuelles System spiegeln",
+          "description": "Halten Sie diese Bücher mit Ihrem derzeitigen System synchron, während Sie evaluieren oder parallel arbeiten.",
+          "prompt": "Ich möchte unser aktuelles Buchhaltungssystem in OpenBooks spiegeln, während wir evaluieren. Helfen Sie mir bei der Einrichtung."
+        },
+        "spreadsheet": {
+          "title": "Meine Daten aus Tabellen übernehmen",
+          "description": "Für jedes System: Exportieren Sie Ihre Listen und Salden, und ich ordne sie zu, validiere und importiere sie.",
+          "prompt": "Für unser aktuelles System gibt es keinen Konnektor. Helfen Sie mir bei der Migration aus Tabellenexporten."
+        },
+        "fresh": {
+          "title": "Neu beginnen",
+          "description": "Keine Historie zu übernehmen. Richten Sie die Grundlagen und Eröffnungssalden ein und gehen Sie dann produktiv.",
+          "prompt": "Wir beginnen neu und haben keine Historie zu migrieren. Was benötigen wir für den Produktivstart?"
+        }
+      }
+    },
+    "plan": {
+      "title": "Ihre Migration",
+      "toggle": "Migrationsplan",
+      "refresh": "Plan aktualisieren",
+      "loadFailed": "Der Migrationsplan konnte nicht geladen werden.",
+      "source": "Quelle",
+      "cutover": "Umstellung",
+      "notSet": "Nicht festgelegt",
+      "spreadsheetSource": "Tabellenexporte",
+      "live": "Produktiv seit {date}",
+      "measuredAt": "Gemessen um {time}",
+      "path": {
+        "none": "Wählen Sie, wie Ihre Buchhaltung übernommen wird",
+        "mirror": "Aktuelles System spiegeln",
+        "cutover": "Konnektor-Migration und Umstellung",
+        "spreadsheet": "Migration aus Tabellen",
+        "fresh": "Neubeginn"
+      }
+    },
+    "stages": {
+      "plan": "Umzug planen",
+      "foundation": "Unternehmensgrundlagen",
+      "sourceConnector": "Bisheriges System verbinden",
+      "sourceFiles": "Stammdaten importieren",
+      "rehearse": "Migration proben",
+      "loadConnector": "Historie laden",
+      "loadFiles": "Eröffnungssalden",
+      "verify": "Gegen die Quelle prüfen",
+      "mirror": "Spiegelung fortführen",
+      "cutover": "Abschlussprüfungen und Umstellung",
+      "live": "Produktiv"
+    },
+    "stageState": {
+      "current": "Jetzt"
+    },
+    "stageOpen": "Öffnen",
+    "runStatus": {
+      "none": "Noch nicht ausgeführt",
+      "running": "Wird ausgeführt…",
+      "ok": "Abgeschlossen und geprüft",
+      "ok_with_errors": "Mit Fehlern abgeschlossen",
+      "failed": "Fehlgeschlagen"
+    },
+    "connectionStatus": {
+      "unconfigured": "wartet auf Zugangsdaten",
+      "active": "verbunden",
+      "paused": "pausiert",
+      "error": "erfordert Aufmerksamkeit"
+    },
+    "journalStatus": {
+      "draft": "Entwurf",
+      "posted": "gebucht"
+    },
+    "schedules": {
+      "hourly": "stündlich",
+      "every_6_hours": "alle 6 Stunden",
+      "daily": "täglich",
+      "weekly": "wöchentlich"
+    },
+    "details": {
+      "planEmpty": "Sagen Sie dem Assistenten, was Sie heute verwenden.",
+      "foundationReady": "{accounts, plural, one {# Konto bereit} other {# Konten bereit}}",
+      "foundationWaiting": "Schließen Sie die Unternehmenseinrichtung und die Sammelkonten ab.",
+      "connection": "Verbindung {name} · {status}",
+      "noConnection": "Noch keine Verbindung.",
+      "imports": "{count, plural, one {# Liste importiert} other {# Listen importiert}}",
+      "noImports": "Noch keine Listen importiert.",
+      "postedEntries": "{count, plural, one {# gebuchter Beleg} other {# gebuchte Belege}}",
+      "openingJournal": "Journalbuchung {number} · {status}",
+      "noOpeningJournal": "Noch keine Eröffnungsbuchung.",
+      "verification": "{matches} von {accounts} Konten stimmen überein · {openMatches} von {openChecked} offenen Posten stimmen überein",
+      "verifyFiles": "Forderungen, Verbindlichkeiten und das Verrechnungskonto müssen abgestimmt sein.",
+      "mirrorOn": "Spiegelung {schedule}",
+      "mirrorOff": "Spiegelung aus",
+      "noCutover": "Legen Sie das Umstellungsdatum fest."
+    },
+    "checks": {
+      "title": "Abschlussprüfungen",
+      "run": "Prüfungen ausführen",
+      "rerun": "Erneut ausführen",
+      "running": "Wird gemessen…",
+      "hint": "Misst das Hauptbuch an allem, was der Produktivstart erfordert.",
+      "required": "Erforderlich",
+      "advisory": "Empfohlen",
+      "ready": "Alle erforderlichen Prüfungen sind bestanden. Bitten Sie den Assistenten, den Produktivstart zu erfassen.",
+      "blocked": "{count, plural, one {# erforderliche Prüfung ist offen.} other {# erforderliche Prüfungen sind offen.}}",
+      "live": "Der Produktivstart ist mit diesen Prüfungen erfasst.",
+      "state": {
+        "pass": "Bestanden",
+        "fail": "Erfordert Aufmerksamkeit",
+        "pending": "Noch nicht messbar",
+        "not_applicable": "Nicht zutreffend"
+      },
+      "items": {
+        "foundation": "Unternehmensgrundlagen sind vollständig",
+        "cutoverDate": "Umstellungsdatum ist festgelegt",
+        "sourceVerified": "Letzter Quelllauf exakt geprüft",
+        "syncedThroughCutover": "Quelle bis zum Umstellungsdatum erfasst",
+        "mirrorStopped": "Spiegelung beendet",
+        "openingJournalPosted": "Eröffnungsbuchung gebucht",
+        "openingClearingZero": "Eröffnungs-Verrechnungskonto steht auf null",
+        "receivablesTie": "Forderungen stimmen mit offenen Ausgangsrechnungen überein",
+        "payablesTie": "Verbindlichkeiten stimmen mit offenen Eingangsrechnungen überein",
+        "periodsLocked": "Perioden vor der Umstellung sind gesperrt"
+      }
+    }
+  }
 }

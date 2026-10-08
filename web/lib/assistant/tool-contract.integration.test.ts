@@ -63,6 +63,8 @@ for (const tool of READ_TOOLS) {
 const EMPTY_STORE: Record<string, string> = {
   get_journal_entry: "entry_not_found",
   get_document: "document_not_found",
+  inspect_import_file: "Transfer not found.",
+  preview_opening_balances: "Transfer not found.",
   run_report: "report_not_found",
   get_budget_scenario: "budget_scenario_not_found",
   get_bank_reconciliation: "reconciliation_not_found",
@@ -258,6 +260,8 @@ test("assistant read-tool contract harness", DB_ONLY, async (t) => {
         get_budget_scenario: { scenarioId: randomUUID() },
         get_journal_entry: { entryId: randomUUID() },
         get_document: { documentId: randomUUID() },
+        inspect_import_file: { transferId: randomUUID() },
+        preview_opening_balances: { transferId: randomUUID(), columns: { account: "Account", amount: "Amount" }, documentDate: "2026-09-30" },
         get_bank_reconciliation: { reconciliationId: randomUUID() },
         get_pay_run: { documentId: randomUUID() },
         payroll_year_end: { taxYear: 2026 },

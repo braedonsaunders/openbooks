@@ -163,5 +163,27 @@
     "choose": "Choisir un transfert…",
     "loadFailed": "Impossible de charger les transferts récents.",
     "lastActivity": "Dernière activité : {time}"
+  },
+  "templates": {
+    "hint": "Partez d’un modèle vierge contenant les colonnes de cette ressource :",
+    "downloadXlsx": "Modèle Excel",
+    "downloadCsv": "Fichier CSV",
+    "required": "Obligatoire",
+    "optional": "Facultatif",
+    "reference": "Désignez l’enregistrement {resource} par son champ {by}.",
+    "options": "L’une des valeurs suivantes : {options}",
+    "kind": {
+      "text": "Texte",
+      "long_text": "Texte, éventuellement sur plusieurs lignes",
+      "number": "Un nombre simple, par exemple 1250.5",
+      "currency": "Un montant exact sans symbole ni séparateur, par exemple 1250.50",
+      "percent": "Un pourcentage sous forme de nombre simple, par exemple 7.5",
+      "boolean": "true ou false",
+      "date": "Une date au format YYYY-MM-DD",
+      "datetime": "Une date et une heure au format YYYY-MM-DDTHH:MM",
+      "select": "L’une des valeurs proposées",
+      "multiselect": "Valeurs proposées séparées par des virgules",
+      "reference": "La valeur d’identification de l’enregistrement référencé"
+    }
   }
 }

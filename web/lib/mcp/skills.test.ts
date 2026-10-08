@@ -72,6 +72,8 @@ const TOOL_NAMES = toolNamesFrom(
   "../assistant/tools-property.ts",
   "../assistant/tools-time.ts",
   "../assistant/tools-expenses.ts",
+  "../assistant/tools-migration.ts",
+  "../application/migration-tools.ts",
 );
 
 // Snake_case terms in playbook prose that are deliberately not tool names.
@@ -80,6 +82,7 @@ const NON_TOOL_TERMS = new Set([
   "customer_payment",
   "same_currency", // settlementRateSource value
   "invalid_input", // error code agents will see
+  "full_migration", // start_migration_run mode value
 ]);
 
 const SNAKE_CASE = /\b[a-z][a-z0-9]*(?:_[a-z0-9]+)+\b/g;

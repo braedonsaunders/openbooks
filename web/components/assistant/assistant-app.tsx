@@ -4,7 +4,7 @@
 // composer. Streams via the UI-message protocol (readUIMessageStream) so the
 // SAME parts[] renderer serves live tokens and reloaded transcripts.
 
-import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, useTransition } from 'react'
+import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, useTransition, type ComponentType, type ReactNode } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
@@ -17,8 +17,10 @@ import {
 } from 'ai'
 import {
   ArrowDown,
+  Loader2,
   Menu,
   MoreHorizontal,
+  Paperclip,
   Pencil,
   Plus,
   Send,
@@ -27,7 +29,8 @@ import {
   Trash2,
   X,
 } from 'lucide-react'
-import { Button, EmptyState, cn } from '@openbooks/ui'
+import type { ConversationScope } from '@/lib/assistant/conversation-scopes'
+import { Button, Drawer, EmptyState, cn, useMediaQuery } from '@openbooks/ui'
 import { confirmDialog } from '@/lib/confirm'
 import { MessageParts } from './message-parts'
 import {
@@ -111,6 +114,39 @@ export type ConversationSummary = { id: string; title: string; updatedAt: string
 const MAX_PROMPT_CHARS = 32_000
 const TITLE_MAX_CHARS = 120
 
+/**
+ * A focused workspace built on the assistant: its own conversation scope and
+ * route, a purpose-built welcome, a live side panel, and optional file
+ * attachments. Streaming, reattach, stop and history behave exactly as in
+ * the general assistant because they are the same component.
+ */
+export interface AssistantWorkspace {
+  mode: ConversationScope
+  /** New-conversation route; a conversation lives at `${basePath}/${id}`. */
+  basePath: string
+  title: string
+  placeholder?: string
+  /** Replaces the default welcome on an empty conversation; `onPick` sends a prompt. */
+  welcome?: ComponentType<{ onPick: (text: string) => void }>
+  /** Side panel shown beside the thread on wide screens, and as an overlay below them. */
+  aside?: ReactNode
+  asideLabel?: string
+  /** Stage a dropped or chosen file and return the message that announces it. */
+  attach?: {
+    accept: string
+    label: string
+    stage: (file: File, onProgress: (label: string) => void) => Promise<string>
+  }
+  /** Runs after each turn settles: tools may have changed what the side panel shows. */
+  onTurnSettled?: () => void
+}
+
+/** Conversation routes default to the general assistant; other scopes travel explicitly. */
+function scopedUrl(url: string, scope: ConversationScope): string {
+  if (scope === 'assistant') return url
+  return `${url}${url.includes('?') ? '&' : '?'}scope=${scope}`
+}
+
 export function toChatMessage(message: StoredMessage): ChatMessage {
   const storedParts = message.data?.parts
   const data = message.data as { kind?: unknown; status?: unknown } | null
@@ -139,6 +175,7 @@ export function AssistantApp({
   aiEnabled,
   initialPrompt,
   initialFindingId,
+  workspace,
 }: {
   conversations: ConversationSummary[]
   activeId: string | null
@@ -150,7 +187,11 @@ export function AssistantApp({
   initialPrompt?: string
   /** Finding id passed via /assistant?finding= (the workbench "Ask about this"). */
   initialFindingId?: string
+  workspace?: AssistantWorkspace
 }) {
+  const scope: ConversationScope = workspace?.mode ?? 'assistant'
+  const basePath = workspace?.basePath ?? '/assistant'
+  const onTurnSettled = workspace?.onTurnSettled
   const t = useTranslations('assistant')
   const admin = useTranslations('admin.ai')
   const common = useTranslations('common.actions')
@@ -277,7 +318,7 @@ export function AssistantApp({
 
   const refreshConversations = useCallback(async () => {
     try {
-      const res = await fetch('/api/assistant/conversations')
+      const res = await fetch(scopedUrl('/api/assistant/conversations', scope))
       if (!res.ok) return
       const body = (await res.json()) as { items: ConversationSummary[] }
       // The server list is authoritative, except threads this client created
@@ -296,7 +337,7 @@ export function AssistantApp({
     } catch {
       // best-effort — the sidebar simply stays stale
     }
-  }, [])
+  }, [scope])
 
   // Fold fresh loader payloads into the sidebar on navigation and refresh.
   // State otherwise wins forever (useState seeds once), so a remount served
@@ -326,7 +367,7 @@ export function AssistantApp({
     }
     try {
       const res = await fetch(
-        `/api/assistant/conversations/${convId}?before=${encodeURIComponent(headId)}&limit=1`,
+        scopedUrl(`/api/assistant/conversations/${convId}?before=${encodeURIComponent(headId)}&limit=1`, scope),
       )
       if (!res.ok) return
       const body = (await res.json()) as { messages: StoredMessage[]; hasOlder: boolean }
@@ -335,7 +376,7 @@ export function AssistantApp({
       // best-effort — a failed probe hides the button rather than erroring
       setHasOlder(false)
     }
-  }, [])
+  }, [scope])
 
   async function loadOlder() {
     const viewport = viewportRef.current
@@ -350,7 +391,7 @@ export function AssistantApp({
     setError(null)
     try {
       const res = await fetch(
-        `/api/assistant/conversations/${currentId}?before=${encodeURIComponent(first.id)}&limit=${MESSAGE_PAGE_SIZE}`,
+        scopedUrl(`/api/assistant/conversations/${currentId}?before=${encodeURIComponent(first.id)}&limit=${MESSAGE_PAGE_SIZE}`, scope),
       )
       if (!res.ok) throw new Error()
       const body = (await res.json()) as { messages: StoredMessage[]; hasOlder: boolean }
@@ -399,7 +440,7 @@ export function AssistantApp({
     let cancelled = false
     void (async () => {
       try {
-        const res = await fetch(`/api/assistant/conversations/${activeId}`)
+        const res = await fetch(scopedUrl(`/api/assistant/conversations/${activeId}`, scope))
         if (!res.ok || cancelled || prevActiveIdRef.current !== activeId) return
         const body = (await res.json()) as { messages: StoredMessage[] }
         const server = body.messages.map(toChatMessage)
@@ -422,7 +463,7 @@ export function AssistantApp({
     return () => {
       cancelled = true
     }
-  }, [activeId, initialMessages, jumpToLatest, pendingKey])
+  }, [activeId, initialMessages, jumpToLatest, pendingKey, scope])
 
   // Follow a server-running turn this view did not start (page reload, a turn
   // started in another tab): poll its event log until terminal, then adopt
@@ -451,7 +492,7 @@ export function AssistantApp({
         syncTurn({ conversationId, status: status as 'running', parts: body.run.parts, revision: body.run.revision })
         if (status !== 'running' && !cancelled) {
           try {
-            const t = await fetch(`/api/assistant/conversations/${conversationId}`)
+            const t = await fetch(scopedUrl(`/api/assistant/conversations/${conversationId}`, scope))
             if (t.ok && !cancelled) {
               const adopted = ((await t.json()) as { messages: StoredMessage[] }).messages.map(toChatMessage)
               setMessages(adopted)
@@ -462,6 +503,7 @@ export function AssistantApp({
           }
           settleTurn(conversationId)
           runIds.delete(conversationId)
+          onTurnSettled?.()
         }
       } catch {
         // transient: the next tick retries
@@ -474,7 +516,7 @@ export function AssistantApp({
       window.clearInterval(timer)
       if (runIds.get(conversationId) === runId) runIds.delete(conversationId)
     }
-  }, [currentId, messages, viewKey])
+  }, [currentId, messages, viewKey, scope, onTurnSettled])
 
   const send = useCallback(
     async (rawText: string) => {
@@ -510,7 +552,7 @@ export function AssistantApp({
         const res = await fetch('/api/assistant/chat', {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ conversationId, prompt: text, ...(findingId ? { findingId } : {}) }),
+          body: JSON.stringify({ conversationId, prompt: text, ...(findingId ? { findingId } : {}), ...(scope !== 'assistant' ? { mode: scope } : {}) }),
           signal: ac.signal,
         })
         const responseConversationId = res.headers.get('x-conversation-id')
@@ -524,7 +566,7 @@ export function AssistantApp({
             setPendingKey(null)
             setCurrentId(responseConversationId)
             // Reflect the new thread in the URL without unmounting the stream.
-            window.history.replaceState(null, '', `/assistant/${responseConversationId}`)
+            window.history.replaceState(null, '', `${basePath}/${responseConversationId}`)
             // Instant sidebar: pin the new thread at the top with the same
             // provisional title the server stored; the end-of-turn refresh
             // reconciles it against the server list.
@@ -589,7 +631,7 @@ export function AssistantApp({
           // completed stream stays visible until the host reaches the floor.
           await new Promise((resolve) => window.setTimeout(resolve, 150))
           try {
-            const res = await fetch(`/api/assistant/conversations/${resolvedConversationId}`)
+            const res = await fetch(scopedUrl(`/api/assistant/conversations/${resolvedConversationId}`, scope))
             if (res.ok && viewKeyRef.current === resolvedConversationId) {
               const body = (await res.json()) as { messages: StoredMessage[] }
               const server = body.messages.map(toChatMessage)
@@ -630,6 +672,7 @@ export function AssistantApp({
           completeTurn(turnKey, lastParts)
         }
         if (mountedRef.current) void refreshConversations()
+        onTurnSettled?.()
         // The server generates the thread title after the stream closes, so
         // the refresh above usually still shows the placeholder: one delayed
         // second pass picks the generated title up. Bounded to the thread's
@@ -651,7 +694,7 @@ export function AssistantApp({
         }
       }
     },
-    [aiEnabled, currentId, findingId, jumpToLatest, probeHasOlder, refreshConversations, scrollToBottom, t],
+    [aiEnabled, basePath, currentId, findingId, jumpToLatest, onTurnSettled, probeHasOlder, refreshConversations, scope, scrollToBottom, t],
   )
 
   // Auto-send a prompt passed via ?q= (from the ⌘K launcher) once per distinct
@@ -696,7 +739,7 @@ export function AssistantApp({
     const clean = title.trim()
     if (!clean) return
     try {
-      const res = await fetch(`/api/assistant/conversations/${id}`, {
+      const res = await fetch(scopedUrl(`/api/assistant/conversations/${id}`, scope), {
         method: 'PATCH',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ title: clean }),
@@ -719,7 +762,7 @@ export function AssistantApp({
     rememberDeletedConversation(id)
     setConvos((items) => removeConversationRow(items, id))
     try {
-      const res = await fetch(`/api/assistant/conversations/${id}`, { method: 'DELETE' })
+      const res = await fetch(scopedUrl(`/api/assistant/conversations/${id}`, scope), { method: 'DELETE' })
       if (!res.ok) throw new Error()
     } catch {
       // Restore-on-failure: forget the tombstone first so the next sync or
@@ -744,11 +787,28 @@ export function AssistantApp({
     dropTurn(id)
     runIdsRef.current.delete(id)
     if (id === currentId) {
-      router.push('/assistant')
+      router.push(basePath)
     } else {
       startTransition(() => router.refresh())
     }
   }
+
+  // Workspace attachments: the host stages the file (durably, through its own
+  // native upload) and returns the message announcing it, which is sent as
+  // the user's turn so the agent can read the staged file with its tools.
+  const [attachStatus, setAttachStatus] = useState<string | null>(null)
+  const stageAttachment = workspace?.attach?.stage
+  const attachFile = useCallback((file: File) => {
+    if (!stageAttachment) return
+    setError(null)
+    setAttachStatus(file.name)
+    void stageAttachment(file, (label) => setAttachStatus(label))
+      .then((message) => { setAttachStatus(null); void send(message) })
+      .catch((reason: unknown) => {
+        setAttachStatus(null)
+        setError(reason instanceof Error ? reason.message : t('errors.failed'))
+      })
+  }, [send, stageAttachment, t])
 
   const suggestions = [
     t('suggestions.s1'),
@@ -761,7 +821,7 @@ export function AssistantApp({
     <div className="flex h-full min-h-0 flex-col">
       <div className="shrink-0 p-3">
         {aiEnabled ? (
-          <Link href="/assistant" className="block">
+          <Link href={basePath} className="block">
             <Button variant="outline" className="w-full justify-start gap-2">
               <Plus className="h-4 w-4" />
               {t('newChat')}
@@ -815,7 +875,7 @@ export function AssistantApp({
               return (
                 <li key={c.id} className="group relative">
                   <Link
-                    href={`/assistant/${c.id}`}
+                    href={`${basePath}/${c.id}`}
                     className={cn(
                       'flex items-center gap-2 rounded-md px-2 py-1.5 text-sm',
                       active
@@ -868,16 +928,24 @@ export function AssistantApp({
     </div>
   )
 
+  // A workspace keeps history behind its header button so the thread and the
+  // side panel own the width; the general assistant shows it as a column.
+  const historyColumn = !workspace
+  const WorkspaceWelcome = workspace?.welcome
+  const [asideOpen, setAsideOpen] = useState(false)
+  const wideWorkspace = useMediaQuery('(min-width: 1280px)')
   return (
     <div className="flex h-full min-h-0 flex-1">
       {/* Desktop sidebar */}
-      <aside className="hidden min-h-0 w-72 shrink-0 overflow-hidden border-r border-slate-200 bg-white lg:flex lg:flex-col dark:border-slate-800 dark:bg-slate-900">
-        {sidebar}
-      </aside>
+      {historyColumn ? (
+        <aside className="hidden min-h-0 w-72 shrink-0 overflow-hidden border-r border-slate-200 bg-white lg:flex lg:flex-col dark:border-slate-800 dark:bg-slate-900">
+          {sidebar}
+        </aside>
+      ) : null}
 
       {/* Mobile sidebar drawer */}
       {sidebarOpen ? (
-        <div className="fixed inset-0 z-40 lg:hidden">
+        <div className={cn('fixed inset-0 z-40', historyColumn && 'lg:hidden')}>
           <div
             className="absolute inset-0 bg-slate-900/40 backdrop-blur-[2px]"
             onClick={() => setSidebarOpen(false)}
@@ -894,15 +962,34 @@ export function AssistantApp({
           <button
             type="button"
             onClick={() => setSidebarOpen(true)}
-            className="rounded-md p-1.5 text-slate-500 hover:bg-slate-100 lg:hidden dark:text-slate-400 dark:hover:bg-slate-800"
+            className={cn('rounded-md p-1.5 text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800', historyColumn && 'lg:hidden')}
             aria-label={t('openHistory')}
           >
             <Menu className="h-5 w-5" />
           </button>
           <div className="flex items-center gap-2 text-sm font-medium text-slate-700 dark:text-slate-200">
             <Sparkles className="h-4 w-4 text-teal-600 dark:text-teal-400" />
-            {t('title')}
+            {workspace?.title ?? t('title')}
           </div>
+          {workspace ? (
+            <div className="ml-auto flex items-center gap-1">
+              {workspace.aside ? (
+                <button
+                  type="button"
+                  onClick={() => setAsideOpen(true)}
+                  className="rounded-md px-2 py-1 text-xs font-medium text-teal-700 hover:bg-teal-50 xl:hidden dark:text-teal-300 dark:hover:bg-teal-950/40"
+                >
+                  {workspace.asideLabel}
+                </button>
+              ) : null}
+              {aiEnabled && visibleMessages.length > 0 ? (
+                <Link href={basePath} className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800">
+                  <Plus className="h-3.5 w-3.5" />
+                  {t('newChat')}
+                </Link>
+              ) : null}
+            </div>
+          ) : null}
         </header>
 
         <div ref={viewportRef} onScroll={onViewportScroll} className="app-scroll min-h-0 flex-1 overflow-y-auto">
@@ -919,7 +1006,9 @@ export function AssistantApp({
                 </button>
               </div>
             ) : null}
-            {visibleMessages.length === 0 ? (
+            {visibleMessages.length === 0 && WorkspaceWelcome && aiEnabled ? (
+              <WorkspaceWelcome onPick={sendToComposer} />
+            ) : visibleMessages.length === 0 ? (
               <Welcome
                 suggestions={suggestions}
                 onPick={(s) => void send(s)}
@@ -1009,9 +1098,11 @@ export function AssistantApp({
                 streaming={streaming}
                 sendLabel={t('send')}
                 stopLabel={t('stop')}
-                placeholder={t('placeholder')}
+                placeholder={workspace?.placeholder ?? t('placeholder')}
                 onSend={sendToComposer}
                 onStop={stop}
+                attach={workspace?.attach ? { accept: workspace.attach.accept, label: workspace.attach.label, onFile: attachFile } : undefined}
+                attachStatus={attachStatus}
               />
               </div>
             )}
@@ -1023,6 +1114,19 @@ export function AssistantApp({
           </div>
         </div>
       </div>
+      {workspace?.aside && wideWorkspace ? (
+        <aside
+          className="flex min-h-0 w-[26rem] shrink-0 flex-col overflow-hidden border-l border-slate-200 bg-slate-50/70 dark:border-slate-800 dark:bg-slate-950/60"
+        >
+          {workspace.aside}
+        </aside>
+      ) : workspace?.aside ? (
+        <Drawer open={asideOpen} onClose={() => setAsideOpen(false)}
+          title={workspace.asideLabel ?? workspace.title} size="sm" stacked={false}
+          bodyClassName="flex min-h-0 flex-col overflow-hidden p-0">
+          {workspace.aside}
+        </Drawer>
+      ) : null}
     </div>
   )
 }
@@ -1041,6 +1145,8 @@ const AssistantComposer = memo(function AssistantComposer({
   placeholder,
   onSend,
   onStop,
+  attach,
+  attachStatus,
 }: {
   streaming: boolean
   sendLabel: string
@@ -1048,8 +1154,17 @@ const AssistantComposer = memo(function AssistantComposer({
   placeholder: string
   onSend: (text: string) => void
   onStop: () => void
+  attach?: { accept: string; label: string; onFile: (file: File) => void }
+  attachStatus?: string | null
 }) {
   const [draft, setDraft] = useState('')
+  const [dragging, setDragging] = useState(false)
+  const fileRef = useRef<HTMLInputElement>(null)
+  const staging = Boolean(attachStatus)
+  function takeFiles(files: FileList | null) {
+    const file = files?.[0]
+    if (file && attach && !staging && !streaming) attach.onFile(file)
+  }
   function submitDraft(raw: string) {
     if (!raw.trim()) return
     onSend(raw)
@@ -1062,7 +1177,47 @@ const AssistantComposer = memo(function AssistantComposer({
     }
   }
   return (
-    <div className="flex items-center gap-1.5 rounded-2xl border border-slate-300 bg-white p-1.5 shadow-sm focus-within:border-teal-500 focus-within:ring-2 focus-within:ring-teal-500/20 dark:border-slate-700 dark:bg-slate-950">
+    <div className="space-y-1.5">
+    {attachStatus ? (
+      <div role="status" className="flex items-center gap-2 rounded-xl border border-teal-200 bg-teal-50 px-2.5 py-1 text-xs text-teal-900 dark:border-teal-900 dark:bg-teal-950/30 dark:text-teal-200">
+        <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" />
+        <span className="min-w-0 flex-1 truncate">{attachStatus}</span>
+      </div>
+    ) : null}
+    <div
+      onDragOver={attach ? (event) => { event.preventDefault(); setDragging(true) } : undefined}
+      onDragLeave={attach ? () => setDragging(false) : undefined}
+      onDrop={attach ? (event) => { event.preventDefault(); setDragging(false); takeFiles(event.dataTransfer.files) } : undefined}
+      className={cn(
+        'flex items-center gap-1.5 rounded-2xl border border-slate-300 bg-white p-1.5 shadow-sm focus-within:border-teal-500 focus-within:ring-2 focus-within:ring-teal-500/20 dark:border-slate-700 dark:bg-slate-950',
+        dragging && 'border-teal-500 ring-2 ring-teal-500/30',
+      )}
+    >
+      {attach ? (
+        <>
+          <input
+            ref={fileRef}
+            type="file"
+            accept={attach.accept}
+            className="sr-only"
+            tabIndex={-1}
+            aria-hidden="true"
+            onChange={(event) => { takeFiles(event.target.files); event.target.value = '' }}
+          />
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8 shrink-0 rounded-xl text-slate-500"
+            onClick={() => fileRef.current?.click()}
+            disabled={staging || streaming}
+            aria-label={attach.label}
+            title={attach.label}
+          >
+            <Paperclip className="h-4 w-4" />
+          </Button>
+        </>
+      ) : null}
       <textarea
         value={draft}
         onChange={(e) => setDraft(e.target.value)}
@@ -1095,6 +1250,7 @@ const AssistantComposer = memo(function AssistantComposer({
           <Send className="h-4 w-4" />
         </Button>
       )}
+    </div>
     </div>
   )
 })

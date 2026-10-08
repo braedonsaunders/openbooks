@@ -56,6 +56,7 @@ import {
 } from '@/lib/workspace-profile'
 import { initialPayrollPack, packDescription, packTitle, type WizardPayrollPack, type WizardT } from './payroll-pack-display'
 import type { SetupLaunchAction } from '@/lib/setup-launch-actions'
+import { MIGRATION_WORKSPACE_HREF } from '@/lib/migration/links'
 import { documentCreateHref } from '@/lib/document-kinds'
 
 // ─── Types ────────────────────────────────────────────────────────────────
@@ -1485,11 +1486,17 @@ function DoneStep({ t, sampleOrgId, bookStart, actions, onNavigate }: {
   actions: SetupLaunchAction[]
   onNavigate: (href: string) => void
 }) {
+  const tMigration = useTranslations('sync.migrationAssistant')
   const destinations: Record<SetupLaunchAction, string> = {
     invoice: documentCreateHref('/ar/invoices', 'customer_invoice'),
+    assistant: MIGRATION_WORKSPACE_HREF,
     migrate: '/sync', statement: '/banking/imports', demo: '/admin/setup/company#sample-companies',
   }
-  const preferred: SetupLaunchAction = bookStart === 'migrate' ? 'migrate' : 'invoice'
+  // Bringing existing books starts in the migration assistant, which leads to
+  // the connector or the imports; starting fresh offers it after the first invoice.
+  const preferred: SetupLaunchAction = bookStart === 'migrate'
+    ? actions.includes('assistant') ? 'assistant' : 'migrate'
+    : 'invoice'
   const ordered = [preferred, ...actions.filter((action) => action !== preferred)]
     .filter((action) => actions.includes(action) && !(sampleOrgId && action === 'demo'))
   return (
@@ -1535,7 +1542,7 @@ function DoneStep({ t, sampleOrgId, bookStart, actions, onNavigate }: {
             className={cn('rounded-lg border px-4 py-3 text-sm font-medium', index === 0
               ? 'border-teal-600 bg-teal-600 text-white hover:bg-teal-700'
               : 'border-slate-200 text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800')}>
-            {t(`done.actions.${action}`)}
+            {action === 'assistant' ? tMigration('entry.wizard') : t(`done.actions.${action}`)}
           </button>
         ))}
         <button type="button" onClick={() => onNavigate('/admin/setup/readiness')} className="py-2 text-sm text-teal-700 underline dark:text-teal-300">

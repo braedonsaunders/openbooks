@@ -1024,6 +1024,30 @@ export const PAGE_REGISTRY: Readonly<Record<string, PageRegistryEntry>> = {
       }
     },
   },
+  '/migrate': {
+    route: '/migrate',
+    segments: [],
+    searchParams: true,
+    module: async () => {
+      const m = await import('../app/(app)/migrate/view')
+      return {
+        load: (input) => m.loadMigrationWorkspace(input.searchParams ?? {}),
+        spec: (data) => m.migrationWorkspaceSpec(data as never),
+      }
+    },
+  },
+  '/migrate/[id]': {
+    route: '/migrate/[id]',
+    segments: ['id'],
+    searchParams: false,
+    module: async () => {
+      const m = await import('../app/(app)/migrate/[id]/view')
+      return {
+        load: (input) => m.loadMigrationConversation(segment(input, 'id')),
+        spec: (data) => m.migrationConversationSpec(data as never),
+      }
+    },
+  },
   '/banking': {
     route: '/banking',
     segments: [],

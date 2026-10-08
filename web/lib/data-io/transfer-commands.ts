@@ -31,11 +31,39 @@ async function transition(job: StoredTransfer, state: StoredTransfer['state'], a
   await recordTransferEvent(job, action, state, { beforeOptions: job.options, options, previousRevision: job.revision, sourceHash: job.sourceHash, approvalHash: job.approvalHash })
   await updateImportHistory(await loadTransfer(job.orgId, job.id), state)
 }
+/**
+ * Choose the resource a staged source imports into. Parsing is independent
+ * of the resource, so a staged file can be re-targeted before validation —
+ * the migration assistant stages a dropped file first and selects the
+ * resource after reading its headers. The new resource's authority is
+ * checked exactly as at creation, its field definitions and schema identity
+ * replace the old ones, and any prior mapping, preview and approval are
+ * discarded so a commit can only approve a preview of the selected resource.
+ */
+async function selectResource(authz: Authz, job: StoredTransfer, key: string) {
+  if (job.kind !== 'import' || !['mapping', 'ready'].includes(job.state)) throw new TransferRefusal('Select the import resource after the file is staged and before validation or commit starts.')
+  if (key === job.resource) return
+  const { resource } = await transferAuthority({ ...job, resource: key, options: {} }, authz)
+  const fields = await resource.fields(), columns = await resource.columns()
+  await db.execute(sql`delete from data_transfer_issues where org_id=${job.orgId} and job_id=${job.id} and phase='preview'`)
+  await db.execute(sql`delete from data_transfer_keys where org_id=${job.orgId} and job_id=${job.id}`)
+  const result = await db.execute(sql`update data_transfer_jobs set resource_key=${key},fields=${JSON.stringify(fields)}::jsonb,
+    schema_hash=${digest(canonical({ fields, columns }))},options='{}'::jsonb,preview=${JSON.stringify(emptyOutcome())}::jsonb,approval_hash=null,
+    processed_rows=0,state='mapping',revision=revision+1,updated_at=now(),claim_token=null,claim_until=null,error=null
+    where org_id=${job.orgId} and id=${job.id} and revision=${job.revision} returning id`)
+  if (result.rows.length !== 1) throw new TransferRefusal('The transfer changed concurrently — reload its current status before retrying.')
+  const history = await db.execute(sql`update import_jobs set resource_key=${key},resource_label=${resource.descriptor.label},status='mapping'
+    where org_id=${job.orgId} and id=${job.id} returning id`)
+  if (history.rows.length !== 1) throw new Error('Import history checkpoint did not persist')
+  await recordTransferEvent(job, 'resource-selected', 'mapping', { beforeResource: job.resource, resource: key, previousRevision: job.revision, sourceHash: job.sourceHash })
+}
+
 export async function commandTransfer(authz: Authz, id: string, input: {
-  action: 'finish-upload' | 'preview' | 'commit' | 'cancel' | 'retry'
+  action: 'finish-upload' | 'select-resource' | 'preview' | 'commit' | 'cancel' | 'retry'
   revision: number
   approvalHash?: string
   options?: TransferOptions
+  resource?: string
 }) {
   const job = await loadTransfer(authz.user.orgId, id, true)
   const { resource } = await transferAuthority(job, authz)
@@ -49,6 +77,9 @@ export async function commandTransfer(authz: Authz, id: string, input: {
     if (result.rows.length !== 1) throw new TransferRefusal('Cancellation did not persist — reload the transfer and retry.')
     await recordTransferEvent(job, 'cancellation-requested', active ? job.state : 'cancelled', { committed: job.outcome, checkpoint: job.processedRows })
     if (!active) await updateImportHistory(job, 'cancelled')
+  } else if (input.action === 'select-resource') {
+    if (!input.resource) throw new TransferRefusal('Name the resource this file imports into.', 422)
+    await selectResource(authz, job, input.resource)
   } else if (input.action === 'finish-upload') {
     if (job.state !== 'uploading' || job.uploadedBytes !== job.bytes || !job.bytes) throw new TransferRefusal('The source upload is incomplete — upload its remaining file parts before continuing.')
     await transition(job, 'parsing', 'upload-completed')

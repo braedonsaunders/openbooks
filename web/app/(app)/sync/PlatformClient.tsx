@@ -18,7 +18,9 @@ import {
   BookOpen,
   Paperclip,
   Calculator,
+  Sparkles,
 } from "lucide-react";
+import { MIGRATION_WORKSPACE_HREF } from "@/lib/migration/links";
 import Link from "next/link";
 import { readApiErrorMessage } from "../../../lib/api-error";
 import { confirmDialog } from "@/lib/confirm";
@@ -218,7 +220,7 @@ export function PlatformClient() {
   // and a transport failure offers a retry instead of spinning forever.
   const [loadError, setLoadError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null); // `${id}:${action}`
-  const [drawer, setDrawer] = useState<{ editing: Connection | null } | null>(
+  const [drawer, setDrawer] = useState<{ editing: Connection | null; presetSource?: string } | null>(
     null,
   );
   // The GET payload says whether the caller may reconfigure connections
@@ -226,6 +228,21 @@ export function PlatformClient() {
   // as manageable; the API still refuses run-only callers, so the worst
   // case is a failed edit, never a hidden control for a manager.
   const canManage = data?.canManage !== false;
+  // `?connect=<source>` (the migration assistant's connect link) opens a new
+  // connection for that source once the manifest has loaded. Read once at
+  // mount; closing or saving the drawer consumes it.
+  const [connectRequest, setConnectRequest] = useState<string | null>(() =>
+    typeof window === "undefined" ? null : new URLSearchParams(window.location.search).get("connect"));
+  const openDrawer = drawer ?? (connectRequest && data && canManage ? { editing: null, presetSource: connectRequest } : null);
+  const closeDrawer = () => {
+    setDrawer(null);
+    if (connectRequest) {
+      setConnectRequest(null);
+      const url = new URL(window.location.href);
+      url.searchParams.delete("connect");
+      window.history.replaceState(window.history.state, "", url.pathname + url.search + url.hash);
+    }
+  };
 
   // Fetch chain: every state update sits in a promise continuation (the fetch
   // response), never synchronously in the effect body.
@@ -709,9 +726,16 @@ export function PlatformClient() {
           title={t("title")}
           description={t("description")}
           actions={canManage ? (
-            <Button onClick={() => setDrawer({ editing: null })}>
-              <Plus size={15} /> {t("connections.add")}
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button asChild variant="outline">
+                <Link href={MIGRATION_WORKSPACE_HREF}>
+                  <Sparkles size={15} /> {t("migrationAssistant.entry.sync")}
+                </Link>
+              </Button>
+              <Button onClick={() => setDrawer({ editing: null })}>
+                <Plus size={15} /> {t("connections.add")}
+              </Button>
+            </div>
           ) : undefined}
         />
       }
@@ -1060,13 +1084,14 @@ export function PlatformClient() {
 
       {data ? (
         <ConnectionDrawer
-          open={drawer !== null}
-          onClose={() => setDrawer(null)}
+          open={openDrawer !== null}
+          onClose={closeDrawer}
           sourceTypes={data.sourceTypes}
           currencies={data.currencies}
-          editing={drawer?.editing}
+          editing={openDrawer?.editing}
+          presetSource={openDrawer?.presetSource}
           onSaved={() => {
-            setDrawer(null);
+            closeDrawer();
             void load();
           }}
         />
@@ -1182,6 +1207,7 @@ function ConnectionDrawer({
   sourceTypes,
   currencies,
   editing,
+  presetSource,
   onSaved,
 }: {
   open: boolean;
@@ -1190,6 +1216,8 @@ function ConnectionDrawer({
   currencies: Currency[];
   /** When set, the drawer edits this connection instead of creating one. */
   editing?: Connection | null;
+  /** A new connection opened for this source (the migration assistant's connect link). */
+  presetSource?: string;
   onSaved: () => void;
 }) {
   const t = useTranslations("sync");
@@ -1226,7 +1254,7 @@ function ConnectionDrawer({
       setSecrets({});
       setPostedChangePolicy(editing.postedChangePolicy);
     } else {
-      setSource("");
+      setSource(presetSource && sourceTypes.some((type) => type.source === presetSource) ? presetSource : "");
       setDisplayName("");
       setConfig({});
       setSecrets({});

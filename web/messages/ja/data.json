@@ -163,5 +163,27 @@
     "choose": "転送を選択…",
     "loadFailed": "最近の転送を読み込めませんでした。",
     "lastActivity": "最終更新: {time}"
+  },
+  "templates": {
+    "hint": "このリソースの列を含む空のテンプレートから始めます：",
+    "downloadXlsx": "Excel テンプレート",
+    "downloadCsv": "CSV ファイル",
+    "required": "必須",
+    "optional": "任意",
+    "reference": "{resource} レコードを {by} で指定してください。",
+    "options": "次のいずれか：{options}",
+    "kind": {
+      "text": "テキスト",
+      "long_text": "テキスト（複数行可）",
+      "number": "通常の数値（例：1250.5）",
+      "currency": "記号や区切り文字を含まない正確な金額（例：1250.50）",
+      "percent": "通常の数値で表したパーセンテージ（例：7.5）",
+      "boolean": "true または false",
+      "date": "YYYY-MM-DD 形式の日付",
+      "datetime": "YYYY-MM-DDTHH:MM 形式の日時",
+      "select": "一覧の値のいずれか",
+      "multiselect": "カンマ区切りの一覧の値",
+      "reference": "参照先レコードの識別値"
+    }
   }
 }

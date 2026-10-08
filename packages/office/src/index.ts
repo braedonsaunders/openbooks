@@ -742,3 +742,4 @@ function truncate(s: string, max: number): string {
 }
 
 export { readSheetRows, createDataXlsxStream } from './data-stream'
+export { importTemplateXlsx, type ImportTemplateColumn } from './import-template'

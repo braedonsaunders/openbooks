@@ -163,5 +163,27 @@
     "choose": "选择传输…",
     "loadFailed": "无法加载最近的传输。",
     "lastActivity": "最近活动：{time}"
+  },
+  "templates": {
+    "hint": "从包含此资源各列的空白模板开始：",
+    "downloadXlsx": "Excel 模板",
+    "downloadCsv": "CSV 文件",
+    "required": "必填",
+    "optional": "选填",
+    "reference": "按 {by} 指定 {resource} 记录。",
+    "options": "可选值之一：{options}",
+    "kind": {
+      "text": "文本",
+      "long_text": "文本，可跨多行",
+      "number": "普通数字，例如 1250.5",
+      "currency": "不含符号或分隔符的精确金额，例如 1250.50",
+      "percent": "以普通数字表示的百分比，例如 7.5",
+      "boolean": "true 或 false",
+      "date": "日期，格式为 YYYY-MM-DD",
+      "datetime": "日期和时间，格式为 YYYY-MM-DDTHH:MM",
+      "select": "所列值之一",
+      "multiselect": "以逗号分隔的所列值",
+      "reference": "被引用记录的标识值"
+    }
   }
 }

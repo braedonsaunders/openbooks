@@ -219,5 +219,164 @@
     }
   },
   "confirmRetainSourceDeletion": "ソースで削除された取引 {ref} をOpenBooksに保持し、管理者の判断として記録しますか？",
-  "confirmVoidSourceDeletion": "ソースで削除された取引 {ref} を振り戻して無効化しますか？会計上の振戻仕訳が記帳され、この画面からは元に戻せません。"
+  "confirmVoidSourceDeletion": "ソースで削除された取引 {ref} を振り戻して無効化しますか？会計上の振戻仕訳が記帳され、この画面からは元に戻せません。",
+  "migrationAssistant": {
+    "title": "移行アシスタント",
+    "placeholder": "現在の帳簿がどこにあるかお知らせいただくか、エクスポートファイルをドロップしてください…",
+    "entry": {
+      "plan": "移行を計画する",
+      "wizard": "移行アシスタントで移行を計画する",
+      "sync": "移行アシスタントに質問する"
+    },
+    "attach": {
+      "label": "エクスポートファイルを添付",
+      "unsupported": "CSV、Excel（.xlsx）、または JSON ファイルを添付してください。",
+      "noImport": "お使いのロールにはレコードのインポート権限がないため、ここでファイルを準備できません。",
+      "uploading": "{name} をアップロードしています…",
+      "reading": "{name} を読み込んでいます…",
+      "message": "「{name}」を添付しました（インポートファイル {id}、{rows, plural, other {# 行}}）。",
+      "messageStillReading": "「{name}」を添付しました（インポートファイル {id}）。まだ読み込み中です。",
+      "failed": "{name} を読み込めませんでした：{reason}"
+    },
+    "welcome": {
+      "kicker": "移行アシスタント",
+      "title": "帳簿の移行を始めましょう",
+      "description": "現在お使いのシステムをお知らせください。接続またはスプレッドシートのインポートを設定し、移行のリハーサルを行い、すべての残高を以前のシステムと照合したうえで、切替までご案内します。すべての変更はお客様が承認します。",
+      "fromWizard": "セットアップウィザードで既存の帳簿を移行するとご回答いただきました。移行方法を選択してください。",
+      "start": "開始",
+      "dropHint": "CSV または Excel のエクスポートファイルは、いつでも会話にドロップできます。",
+      "unsure": {
+        "label": "迷っていますか？選択を手伝ってください",
+        "prompt": "どの移行方法が当社に合うかわかりません。必要な情報を質問したうえで、おすすめの方法を提案してください。"
+      },
+      "paths": {
+        "cutover": {
+          "title": "切替日に移行する",
+          "description": "コネクタで履歴を移行し、端数まで正確に照合してから本番稼働します。",
+          "prompt": "切替日に OpenBooks へ完全に移行したいと考えています。移行の手順を案内してください。"
+        },
+        "mirror": {
+          "title": "現在のシステムをミラーする",
+          "description": "評価中や並行運用中も、現在お使いのシステムとこの帳簿を同期させます。",
+          "prompt": "評価期間中、現在の会計システムを OpenBooks にミラーしたいと考えています。設定を手伝ってください。"
+        },
+        "spreadsheet": {
+          "title": "スプレッドシートからデータを取り込む",
+          "description": "どのシステムにも対応します。リストと残高をエクスポートしていただければ、マッピング、検証、インポートを行います。",
+          "prompt": "現在のシステムにはコネクタがありません。スプレッドシートのエクスポートからの移行を手伝ってください。"
+        },
+        "fresh": {
+          "title": "新規に開始する",
+          "description": "移行する履歴はありません。基盤と期首残高を設定してから本番稼働します。",
+          "prompt": "移行する履歴はなく、新規に開始します。本番稼働には何が必要ですか？"
+        }
+      }
+    },
+    "plan": {
+      "title": "移行の状況",
+      "toggle": "計画",
+      "refresh": "計画を更新",
+      "loadFailed": "移行計画を読み込めませんでした。",
+      "source": "移行元",
+      "cutover": "切替",
+      "notSet": "未設定",
+      "spreadsheetSource": "スプレッドシートのエクスポート",
+      "live": "{date} から本番稼働中",
+      "measuredAt": "{time} に測定",
+      "path": {
+        "none": "帳簿の移行方法を選択",
+        "mirror": "現在のシステムをミラー",
+        "cutover": "コネクタによる移行と切替",
+        "spreadsheet": "スプレッドシートによる移行",
+        "fresh": "新規開始"
+      }
+    },
+    "stages": {
+      "plan": "移行を計画",
+      "foundation": "会社の基盤",
+      "sourceConnector": "以前のシステムを接続",
+      "sourceFiles": "マスターデータをインポート",
+      "rehearse": "移行をリハーサル",
+      "loadConnector": "履歴を読み込む",
+      "loadFiles": "期首残高",
+      "verify": "移行元と照合",
+      "mirror": "ミラーを継続",
+      "cutover": "最終チェックと切替",
+      "live": "本番稼働"
+    },
+    "stageState": {
+      "current": "現在"
+    },
+    "stageOpen": "開く",
+    "runStatus": {
+      "none": "未実行",
+      "running": "実行中…",
+      "ok": "完了・検証済み",
+      "ok_with_errors": "完了（エラーあり）",
+      "failed": "失敗"
+    },
+    "connectionStatus": {
+      "unconfigured": "認証情報待ち",
+      "active": "接続済み",
+      "paused": "一時停止中",
+      "error": "要対応"
+    },
+    "journalStatus": {
+      "draft": "下書き",
+      "posted": "転記済み"
+    },
+    "schedules": {
+      "hourly": "毎時",
+      "every_6_hours": "6 時間ごと",
+      "daily": "毎日",
+      "weekly": "毎週"
+    },
+    "details": {
+      "planEmpty": "現在お使いのシステムをアシスタントにお知らせください。",
+      "foundationReady": "{accounts, plural, other {# 件の勘定科目が準備完了}}",
+      "foundationWaiting": "会社の設定と統制勘定の設定を完了してください。",
+      "connection": "{name} 接続 · {status}",
+      "noConnection": "まだ接続がありません。",
+      "imports": "{count, plural, other {# 件のリストをインポート済み}}",
+      "noImports": "まだリストがインポートされていません。",
+      "postedEntries": "{count, plural, other {# 件の転記済み仕訳}}",
+      "openingJournal": "仕訳 {number} · {status}",
+      "noOpeningJournal": "期首残高の仕訳はまだありません。",
+      "verification": "{accounts} 件中 {matches} 件の勘定科目が一致 · {openChecked} 件中 {openMatches} 件の未決済項目が一致",
+      "verifyFiles": "売掛金、買掛金、仮勘定の残高が一致している必要があります。",
+      "mirrorOn": "ミラー：{schedule}",
+      "mirrorOff": "ミラー停止中",
+      "noCutover": "切替日を設定してください。"
+    },
+    "checks": {
+      "title": "最終チェック",
+      "run": "チェックを実行",
+      "rerun": "再実行",
+      "running": "測定中…",
+      "hint": "本番稼働に必要なすべての要件に照らして元帳を測定します。",
+      "required": "必須",
+      "advisory": "推奨",
+      "ready": "すべての必須チェックに合格しました。アシスタントに本番稼働の記録を依頼してください。",
+      "blocked": "{count, plural, other {未完了の必須チェックが # 件あります。}}",
+      "live": "本番稼働はこれらのチェック結果とともに記録されています。",
+      "state": {
+        "pass": "合格",
+        "fail": "要対応",
+        "pending": "まだ測定できません",
+        "not_applicable": "該当なし"
+      },
+      "items": {
+        "foundation": "会社の基盤が完成している",
+        "cutoverDate": "切替日が設定されている",
+        "sourceVerified": "最新の移行元実行が完全に一致することを検証済み",
+        "syncedThroughCutover": "切替日まで移行元のデータを取り込み済み",
+        "mirrorStopped": "ミラーが停止している",
+        "openingJournalPosted": "期首残高仕訳が転記済み",
+        "openingClearingZero": "期首仮勘定の残高がゼロ",
+        "receivablesTie": "売掛金が未決済の請求書と一致",
+        "payablesTie": "買掛金が未払いの仕入請求書と一致",
+        "periodsLocked": "切替日より前の期間がロックされている"
+      }
+    }
+  }
 }

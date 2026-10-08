@@ -136,6 +136,20 @@ export const CORE_TOOL_MODULES: Record<string, string> = {
   list_page_layout_history: "records",
   restore_page_layout: "records",
   clear_page_layout: "records",
+  // Migrating into these books: plan, connectors, imports, opening balances, go-live.
+  get_migration_plan: "migration",
+  list_migration_sources: "migration",
+  list_import_templates: "migration",
+  inspect_import_file: "migration",
+  preview_opening_balances: "migration",
+  run_cutover_checks: "migration",
+  update_migration_plan: "migration",
+  start_migration_run: "migration",
+  set_connection_mirror: "migration",
+  prepare_import: "migration",
+  commit_import: "migration",
+  draft_opening_balances: "migration",
+  record_go_live: "migration",
   // Feature-less tools owned by a flagged module's domain.
   search_items: "inventory",
   get_item: "inventory",
@@ -217,6 +231,11 @@ export const MODULE_KEYWORDS: Record<string, string[]> = {
   bankFeeds: ["bank feed"],
   apps: ["app package", "app draft", "manifest"],
   records: ["records", "record type", "custom field", "page layout", "custom record"],
+  migration: [
+    "migrate", "migrating", "migration", "mirror", "mirroring", "cutover", "cut over", "go live",
+    "go-live", "opening balance", "opening balances", "import template", "import file", "conversion",
+    "previous system", "old system", "connector", "switching",
+  ],
   documents: ["payment", "payments", "pay vendor", "pay bill", "pay invoice", "post", "posted", "posting", "void", "correction", "submit", "refund"],
 };
 

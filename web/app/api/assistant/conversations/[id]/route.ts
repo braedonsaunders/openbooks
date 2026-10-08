@@ -13,10 +13,13 @@ import { createDbOwnedRunStore } from "../../../../../lib/assistant/owned-runs-d
 import { markTitleRenamed } from "../../../../../lib/assistant/conversation-title";
 import { notFound } from "@/lib/api/responses";
 import { isUuid } from "@openbooks/engine/src/platform/uuid.ts";
+import { conversationScope } from "../../../../../lib/assistant/conversation-scopes";
+
+/** The conversation's scope from `?scope=`; the general assistant when absent. */
+const scopeOf = (req: Request) => conversationScope(new URL(req.url).searchParams.get("scope"));
 
 export const runtime = "nodejs";
 
-const SCOPE = "assistant";
 const renameBody = z.object({ title: z.string().trim().min(1) }).strict();
 
 /**
@@ -30,7 +33,7 @@ export const GET = defineRoute({
   params: z.object({ id: z.string().uuid() }),
   handler: async ({ request: req, authz: gate, params }) => {
   const { id } = params;
-  if (!(await ownsConversation(gate, id, SCOPE))) {
+  if (!(await ownsConversation(gate, id, scopeOf(req)))) {
     return notFound("record");
   }
   const { searchParams } = new URL(req.url);
@@ -52,9 +55,9 @@ export const PATCH = defineRoute({
   feature: { none: "Assistant access is controlled by assistant permissions and provider configuration." },
   params: z.object({ id: z.string().uuid() }),
   body: renameBody,
-  handler: async ({ authz: gate, params, body }) => {
+  handler: async ({ request, authz: gate, params, body }) => {
   const { id } = params;
-  const renamed = await renameConversation(gate, id, SCOPE, body.title);
+  const renamed = await renameConversation(gate, id, scopeOf(request), body.title);
   if (!renamed) return notFound("record");
   // A user rename wins forever: record the source so a later turn never
   // overwrites it with a generated title. Best-effort, never throws.
@@ -67,12 +70,13 @@ export const DELETE = defineRoute({
   permission: "assistant.use",
   feature: { none: "Assistant access is controlled by assistant permissions and provider configuration." },
   params: z.object({ id: z.string().uuid() }),
-  handler: async ({ authz: gate, params }) => {
+  handler: async ({ request, authz: gate, params }) => {
   const { id } = params;
+  const scope = scopeOf(request);
   // Stop its live run first so it cannot write past the cascade; other
   // conversations' runs are untouched (different rows, different runs).
   await abortActiveRun(createDbOwnedRunStore(gate), id);
-  const deleted = await deleteConversation(gate, id, SCOPE);
+  const deleted = await deleteConversation(gate, id, scope);
   if (!deleted) return notFound("record");
   return NextResponse.json({ ok: true });
   },

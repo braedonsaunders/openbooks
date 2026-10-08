@@ -163,5 +163,27 @@
     "choose": "Elegir una transferencia…",
     "loadFailed": "No se pudieron cargar las transferencias recientes.",
     "lastActivity": "Última actividad: {time}"
+  },
+  "templates": {
+    "hint": "Empiece con una plantilla en blanco con las columnas de este recurso:",
+    "downloadXlsx": "Plantilla de Excel",
+    "downloadCsv": "Archivo CSV",
+    "required": "Obligatorio",
+    "optional": "Opcional",
+    "reference": "Identifique el registro de {resource} por su {by}.",
+    "options": "Uno de los siguientes: {options}",
+    "kind": {
+      "text": "Texto",
+      "long_text": "Texto, puede ocupar varias líneas",
+      "number": "Un número simple, como 1250.5",
+      "currency": "Un importe exacto sin símbolos ni separadores, como 1250.50",
+      "percent": "Un porcentaje como número simple, como 7.5",
+      "boolean": "true o false",
+      "date": "Una fecha con formato YYYY-MM-DD",
+      "datetime": "Una fecha y hora con formato YYYY-MM-DDTHH:MM",
+      "select": "Uno de los valores indicados",
+      "multiselect": "Valores indicados separados por comas",
+      "reference": "El valor identificativo del registro referenciado"
+    }
   }
 }

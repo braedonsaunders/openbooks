@@ -255,5 +255,164 @@
         "Copy the Client ID, generate a Client Secret, paste both into this form, save, then click Connect."
       ]
     }
+  },
+  "migrationAssistant": {
+    "title": "Migration assistant",
+    "placeholder": "Tell me where your books live today, or drop an export file…",
+    "entry": {
+      "plan": "Plan the migration",
+      "wizard": "Plan my move with the migration assistant",
+      "sync": "Ask the migration assistant"
+    },
+    "attach": {
+      "label": "Attach an export file",
+      "unsupported": "Attach a CSV, Excel (.xlsx) or JSON file.",
+      "noImport": "Your role cannot import records, so files cannot be staged here.",
+      "uploading": "Uploading {name}…",
+      "reading": "Reading {name}…",
+      "message": "I attached “{name}” (import file {id}, {rows, plural, one {# row} other {# rows}}).",
+      "messageStillReading": "I attached “{name}” (import file {id}); it is still being read.",
+      "failed": "{name} could not be read: {reason}"
+    },
+    "welcome": {
+      "kicker": "Migration assistant",
+      "title": "Let’s move your books in",
+      "description": "Tell me what you use today. I’ll set up the connection or the spreadsheet imports, rehearse the move, verify every balance against your previous system, and take you through cutover. You approve every change.",
+      "fromWizard": "You told the setup wizard you’re bringing existing books. Pick how they should arrive.",
+      "start": "Start",
+      "dropHint": "Drop a CSV or Excel export into the conversation at any time.",
+      "unsure": {
+        "label": "Not sure? Help me choose",
+        "prompt": "I’m not sure which migration approach fits us. Ask me what you need to know and recommend one."
+      },
+      "paths": {
+        "cutover": {
+          "title": "Switch over on a cutover date",
+          "description": "Migrate history through a connector, verify it to the cent, then go live.",
+          "prompt": "We want to switch to OpenBooks completely on a cutover date. Walk me through the migration."
+        },
+        "mirror": {
+          "title": "Mirror my current system",
+          "description": "Keep these books synchronized with the system you use now while you evaluate or run in parallel.",
+          "prompt": "I’d like to mirror our current accounting system into OpenBooks while we evaluate. Help me set it up."
+        },
+        "spreadsheet": {
+          "title": "Bring my data from spreadsheets",
+          "description": "For any system: export your lists and balances, and I’ll map, validate and import them.",
+          "prompt": "Our current system has no connector. Help me migrate from spreadsheet exports."
+        },
+        "fresh": {
+          "title": "Start fresh",
+          "description": "No history to bring. Set up the foundation and opening balances, then go live.",
+          "prompt": "We’re starting fresh with no history to migrate. What do we need to go live?"
+        }
+      }
+    },
+    "plan": {
+      "title": "Your migration",
+      "toggle": "Plan",
+      "refresh": "Refresh the plan",
+      "loadFailed": "The migration plan could not be loaded.",
+      "source": "From",
+      "cutover": "Cutover",
+      "notSet": "Not set",
+      "spreadsheetSource": "Spreadsheet exports",
+      "live": "Live since {date}",
+      "measuredAt": "Measured at {time}",
+      "path": {
+        "none": "Choose how your books arrive",
+        "mirror": "Mirror the current system",
+        "cutover": "Connector migration and cutover",
+        "spreadsheet": "Spreadsheet migration",
+        "fresh": "Fresh start"
+      }
+    },
+    "stages": {
+      "plan": "Plan the move",
+      "foundation": "Company foundation",
+      "sourceConnector": "Connect the previous system",
+      "sourceFiles": "Import master data",
+      "rehearse": "Rehearse the migration",
+      "loadConnector": "Load the history",
+      "loadFiles": "Opening balances",
+      "verify": "Verify against the source",
+      "mirror": "Keep mirroring",
+      "cutover": "Final checks and cutover",
+      "live": "Live"
+    },
+    "stageState": {
+      "current": "Now"
+    },
+    "stageOpen": "Open",
+    "runStatus": {
+      "none": "Not run yet",
+      "running": "Running…",
+      "ok": "Completed and verified",
+      "ok_with_errors": "Completed with errors",
+      "failed": "Failed"
+    },
+    "connectionStatus": {
+      "unconfigured": "awaiting credentials",
+      "active": "connected",
+      "paused": "paused",
+      "error": "needs attention"
+    },
+    "journalStatus": {
+      "draft": "draft",
+      "posted": "posted"
+    },
+    "schedules": {
+      "hourly": "hourly",
+      "every_6_hours": "every 6 hours",
+      "daily": "daily",
+      "weekly": "weekly"
+    },
+    "details": {
+      "planEmpty": "Tell the assistant what you use today.",
+      "foundationReady": "{accounts, plural, one {# account} other {# accounts}} ready",
+      "foundationWaiting": "Finish the company setup and control accounts.",
+      "connection": "{name} · {status}",
+      "noConnection": "No connection yet.",
+      "imports": "{count, plural, one {# list imported} other {# lists imported}}",
+      "noImports": "No lists imported yet.",
+      "postedEntries": "{count, plural, one {# posted entry} other {# posted entries}}",
+      "openingJournal": "Journal {number} · {status}",
+      "noOpeningJournal": "No opening balance journal yet.",
+      "verification": "{matches} of {accounts} accounts match · {openMatches} of {openChecked} open items match",
+      "verifyFiles": "Receivables, payables and the clearing account must tie out.",
+      "mirrorOn": "Mirroring {schedule}",
+      "mirrorOff": "Mirror off",
+      "noCutover": "Set the cutover date."
+    },
+    "checks": {
+      "title": "Final checks",
+      "run": "Run checks",
+      "rerun": "Run again",
+      "running": "Measuring…",
+      "hint": "Measures the ledger against everything go-live requires.",
+      "required": "Required",
+      "advisory": "Recommended",
+      "ready": "Every required check passes. Ask the assistant to record go-live.",
+      "blocked": "{count, plural, one {# required check is open.} other {# required checks are open.}}",
+      "live": "Go-live is recorded with these checks.",
+      "state": {
+        "pass": "Passed",
+        "fail": "Needs attention",
+        "pending": "Not measurable yet",
+        "not_applicable": "Not applicable"
+      },
+      "items": {
+        "foundation": "Company foundation is complete",
+        "cutoverDate": "Cutover date is set",
+        "sourceVerified": "Latest source run verified exactly",
+        "syncedThroughCutover": "Source captured through the cutover date",
+        "mirrorStopped": "Mirror stopped",
+        "openingJournalPosted": "Opening balance journal posted",
+        "openingClearingZero": "Opening clearing account is zero",
+        "receivablesTie": "Receivables tie to open invoices",
+        "payablesTie": "Payables tie to open bills",
+        "periodsLocked": "Periods before the cutover are locked"
+      }
+    }
   }
 }

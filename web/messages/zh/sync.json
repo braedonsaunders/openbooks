@@ -219,5 +219,164 @@
     }
   },
   "confirmRetainSourceDeletion": "在 OpenBooks 中保留源端删除的交易 {ref}，并记录为管理层决定？",
-  "confirmVoidSourceDeletion": "冲销并作废源端删除的交易 {ref}？这将记账一笔会计冲销，且无法在此页面撤销。"
+  "confirmVoidSourceDeletion": "冲销并作废源端删除的交易 {ref}？这将记账一笔会计冲销，且无法在此页面撤销。",
+  "migrationAssistant": {
+    "title": "迁移助手",
+    "placeholder": "告诉我您目前的账簿在哪个系统中，或拖入导出文件…",
+    "entry": {
+      "plan": "规划迁移",
+      "wizard": "使用迁移助手规划迁移",
+      "sync": "咨询迁移助手"
+    },
+    "attach": {
+      "label": "附加导出文件",
+      "unsupported": "请附加 CSV、Excel（.xlsx）或 JSON 文件。",
+      "noImport": "您的角色无权导入记录，因此无法在此暂存文件。",
+      "uploading": "正在上传 {name}…",
+      "reading": "正在读取 {name}…",
+      "message": "我附加了“{name}”（导入文件 {id}，{rows, plural, other {# 行}}）。",
+      "messageStillReading": "我附加了“{name}”（导入文件 {id}），仍在读取中。",
+      "failed": "无法读取 {name}：{reason}"
+    },
+    "welcome": {
+      "kicker": "迁移助手",
+      "title": "开始迁移您的账簿",
+      "description": "告诉我您目前使用的系统。我会设置连接或电子表格导入、演练迁移、将每项余额与原系统逐一核对，并引导您完成切换。每项更改都由您批准。",
+      "fromWizard": "您在设置向导中表示要迁入现有账簿。请选择迁入方式。",
+      "start": "开始",
+      "dropHint": "可随时将 CSV 或 Excel 导出文件拖入对话。",
+      "unsure": {
+        "label": "不确定？帮我选择",
+        "prompt": "我不确定哪种迁移方式适合我们。请询问您需要了解的信息，并推荐一种方式。"
+      },
+      "paths": {
+        "cutover": {
+          "title": "在切换日期完成切换",
+          "description": "通过连接器迁移历史数据，精确核对到分，然后上线。",
+          "prompt": "我们希望在切换日期完全改用 OpenBooks。请引导我完成迁移。"
+        },
+        "mirror": {
+          "title": "镜像我当前的系统",
+          "description": "在评估或并行运行期间，使这些账簿与您当前使用的系统保持同步。",
+          "prompt": "我想在评估期间将我们当前的会计系统镜像到 OpenBooks。请帮我完成设置。"
+        },
+        "spreadsheet": {
+          "title": "从电子表格导入数据",
+          "description": "适用于任何系统：导出您的列表和余额，我会进行映射、校验并导入。",
+          "prompt": "我们当前的系统没有连接器。请帮我通过电子表格导出文件迁移。"
+        },
+        "fresh": {
+          "title": "全新开始",
+          "description": "无需迁移历史数据。设置基础配置和期初余额，然后上线。",
+          "prompt": "我们全新开始，没有需要迁移的历史数据。上线需要准备什么？"
+        }
+      }
+    },
+    "plan": {
+      "title": "您的迁移",
+      "toggle": "计划",
+      "refresh": "刷新计划",
+      "loadFailed": "无法加载迁移计划。",
+      "source": "来源",
+      "cutover": "切换",
+      "notSet": "未设置",
+      "spreadsheetSource": "电子表格导出",
+      "live": "自 {date} 起上线",
+      "measuredAt": "测量时间：{time}",
+      "path": {
+        "none": "选择账簿迁入方式",
+        "mirror": "镜像当前系统",
+        "cutover": "连接器迁移与切换",
+        "spreadsheet": "电子表格迁移",
+        "fresh": "全新开始"
+      }
+    },
+    "stages": {
+      "plan": "规划迁移",
+      "foundation": "公司基础配置",
+      "sourceConnector": "连接原系统",
+      "sourceFiles": "导入主数据",
+      "rehearse": "演练迁移",
+      "loadConnector": "加载历史数据",
+      "loadFiles": "期初余额",
+      "verify": "与来源核对",
+      "mirror": "持续镜像",
+      "cutover": "最终检查与切换",
+      "live": "已上线"
+    },
+    "stageState": {
+      "current": "当前"
+    },
+    "stageOpen": "打开",
+    "runStatus": {
+      "none": "尚未运行",
+      "running": "运行中…",
+      "ok": "已完成并核验",
+      "ok_with_errors": "已完成，但有错误",
+      "failed": "失败"
+    },
+    "connectionStatus": {
+      "unconfigured": "等待凭据",
+      "active": "已连接",
+      "paused": "已暂停",
+      "error": "需要处理"
+    },
+    "journalStatus": {
+      "draft": "草稿",
+      "posted": "已过账"
+    },
+    "schedules": {
+      "hourly": "每小时",
+      "every_6_hours": "每 6 小时",
+      "daily": "每天",
+      "weekly": "每周"
+    },
+    "details": {
+      "planEmpty": "告诉助手您目前使用的系统。",
+      "foundationReady": "{accounts, plural, other {# 个科目已就绪}}",
+      "foundationWaiting": "请完成公司设置和控制科目。",
+      "connection": "{name} 连接 · {status}",
+      "noConnection": "尚无连接。",
+      "imports": "{count, plural, other {已导入 # 个列表}}",
+      "noImports": "尚未导入列表。",
+      "postedEntries": "{count, plural, other {# 笔已过账分录}}",
+      "openingJournal": "日记账 {number} · {status}",
+      "noOpeningJournal": "尚无期初余额日记账。",
+      "verification": "{accounts} 个科目中 {matches} 个一致 · {openChecked} 个未清项中 {openMatches} 个一致",
+      "verifyFiles": "应收账款、应付账款和过渡科目必须核对一致。",
+      "mirrorOn": "镜像：{schedule}",
+      "mirrorOff": "镜像已关闭",
+      "noCutover": "请设置切换日期。"
+    },
+    "checks": {
+      "title": "最终检查",
+      "run": "运行检查",
+      "rerun": "重新运行",
+      "running": "测量中…",
+      "hint": "对照上线的全部要求测量总账。",
+      "required": "必需",
+      "advisory": "建议",
+      "ready": "所有必需检查均已通过。请让助手记录上线。",
+      "blocked": "{count, plural, other {# 项必需检查尚未完成。}}",
+      "live": "上线已随这些检查结果一并记录。",
+      "state": {
+        "pass": "已通过",
+        "fail": "需要处理",
+        "pending": "暂无法测量",
+        "not_applicable": "不适用"
+      },
+      "items": {
+        "foundation": "公司基础配置已完成",
+        "cutoverDate": "已设置切换日期",
+        "sourceVerified": "最近一次来源运行已精确核验",
+        "syncedThroughCutover": "来源数据已采集至切换日期",
+        "mirrorStopped": "镜像已停止",
+        "openingJournalPosted": "期初余额日记账已过账",
+        "openingClearingZero": "期初过渡科目余额为零",
+        "receivablesTie": "应收账款与未结发票一致",
+        "payablesTie": "应付账款与未结账单一致",
+        "periodsLocked": "切换日期之前的期间已锁定"
+      }
+    }
+  }
 }
