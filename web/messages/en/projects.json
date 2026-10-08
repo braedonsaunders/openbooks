@@ -82,7 +82,7 @@
     },
     "backup": {
       "none": "None",
-      "costed_timesheets": "Costed timesheets",
+      "costed_timesheets": "Labour backup",
       "timesheets_purchases": "Timesheets + purchases",
       "purchases": "Purchases",
       "purchases_shop_time": "Purchases + shop time",

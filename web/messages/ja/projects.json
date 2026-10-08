@@ -82,7 +82,7 @@
     },
     "backup": {
       "none": "なし",
-      "costed_timesheets": "原価計算済みタイムシート",
+      "costed_timesheets": "作業明細",
       "timesheets_purchases": "タイムシート + 購買",
       "purchases": "購買",
       "purchases_shop_time": "購買 + 工場時間",

@@ -184,7 +184,7 @@ invoice template). Overrides resolve in this order, most specific wins:
 project type  →  customer  →  project
 ~~~
 
-So a type might default to time-selection billing with costed-timesheet backup,
+So a type might default to time-selection billing with customer labour backup,
 a particular customer might require purchases-only backup, and one of that
 customer's projects might override the default basis again. Set customer-level
 preferences on the customer record; set project-level preferences on the project.
@@ -197,7 +197,7 @@ The Backup tab controls the invoice backup package — the supporting pages
 attached to an invoice:
 
 - **Required** — whether an invoice for this type needs backup by default.
-- **Default backup type** — the default package format (costed timesheets,
+- **Default backup type** — the default package format (labour backup,
   timesheets + purchases, purchases only, purchases + shop time, quote only, none).
 - **Allowed backup types** — the formats a user may choose from on the billing
   request. The request form is constrained to this set.

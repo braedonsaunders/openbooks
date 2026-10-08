@@ -82,7 +82,7 @@
     },
     "backup": {
       "none": "Keiner",
-      "costed_timesheets": "Bewertete Zeiterfassungen",
+      "costed_timesheets": "Arbeitsnachweis",
       "timesheets_purchases": "Zeiterfassungen + Einkäufe",
       "purchases": "Einkäufe",
       "purchases_shop_time": "Einkäufe + Werkstattzeit",

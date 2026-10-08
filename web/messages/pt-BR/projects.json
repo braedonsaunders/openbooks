@@ -82,7 +82,7 @@
     },
     "backup": {
       "none": "Nenhuma",
-      "costed_timesheets": "Folhas de horas com custo",
+      "costed_timesheets": "Comprovante de mão de obra",
       "timesheets_purchases": "Folhas de horas + compras",
       "purchases": "Compras",
       "purchases_shop_time": "Compras + horas de oficina",

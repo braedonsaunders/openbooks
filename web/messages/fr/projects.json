@@ -82,7 +82,7 @@
     },
     "backup": {
       "none": "Aucun",
-      "costed_timesheets": "Feuilles de temps chiffrées",
+      "costed_timesheets": "Justificatif de main-d’œuvre",
       "timesheets_purchases": "Feuilles + achats",
       "purchases": "Achats",
       "purchases_shop_time": "Achats + temps d'atelier",

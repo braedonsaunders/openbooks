@@ -541,7 +541,12 @@ const consolidatedRows = [
             })
             const { uploadAndAttach } = await import('./file-cabinet')
             await withOrgContext(org.orgId, () => uploadAndAttach({ orgId: org.orgId, targetTable: 'documents', targetId: source, filename: 'Source.pdf', contentType: 'application/pdf', bytes: (globalThis as typeof globalThis & { __billingBackupStubPdf: Buffer }).__billingBackupStubPdf, createdBy: actor }))
-            await assert.rejects(withOrgContext(org.orgId, () => assembleInvoiceBackup(org.orgId, actor, generated.id, 'purchases', null)), (error) => error instanceof InvoiceBackupSourceAccessError && error.permission === 'ap.read')
+            for (const recipe of ['purchases', 'timesheets_purchases', 'purchases_shop_time'] as const) {
+              await assert.rejects(
+                withOrgContext(org.orgId, () => assembleInvoiceBackup(org.orgId, actor, generated.id, recipe, null)),
+                (error) => error instanceof InvoiceBackupSourceAccessError && error.permission === 'ap.read',
+              )
+            }
             await assert.rejects(
               withOrgContext(org.orgId, () => requireInvoiceBackup(org.orgId, generated.id)),
               /requires a backup packet/,
@@ -565,38 +570,89 @@ const consolidatedRows = [
 
 for (const row of consolidatedRows) await row.register();
 
-const invoiceBackupPrecisionCases = [{ label: "invoice backup precision", register: async () => {
-test('costed invoice backup preserves cents in large exact cost totals',{skip:!process.env.OPENBOOKS_DB_URL},async()=>{
-  const root=pathToFileURL(process.cwd()+'/').href;
-  const capture={html:''};
-  Object.assign(globalThis,{__backupPrecisionCapture:capture});
-  const pdfStub={shortCircuit:true,url:'data:text/javascript,'+encodeURIComponent(`export * from '${root}packages/pdf/src/index.ts';export async function renderHtmlDocumentPdf(input){globalThis.__backupPrecisionCapture.html=input.bodyHtml;throw new Error("captured timesheet HTML")}`)};
-  const hooks=registerHooks({resolve(specifier,context,next){
-    if(context.parentURL?.includes('/web/lib/invoice-backup.ts')){
-      if(specifier==='@openbooks/pdf')return pdfStub;
-      if(specifier==='./pdf-templates/store')return {shortCircuit:true,url:'data:text/javascript,export async function resolvePdfTemplate(){return null}'};
-      if(specifier==='./money-server')return {shortCircuit:true,url:'data:text/javascript,'+encodeURIComponent(`import {createMoneyFormatter} from '${root}web/lib/money-format.ts';export async function getMoneyFormatter(_org,currency){return createMoneyFormatter('en-CA',currency)}`)};
+// Capture the native renderer boundary; packet storage is never reached.
+for (const recipe of ['costed_timesheets', 'timesheets_purchases', 'purchases_shop_time'] as const) {
+  test(`${recipe} customer labour page excludes internal costs and preserves exact invoice allocations`, { skip: !DB }, async () => {
+    const capture = { html: '' }
+    Object.assign(globalThis, { __backupPrecisionCapture: capture })
+    const capturePdf = {
+      shortCircuit: true as const,
+      url: 'data:text/javascript,' + encodeURIComponent([
+        `export * from '${root}packages/pdf/src/index.ts'`,
+        'export async function renderHtmlDocumentPdf(input) { globalThis.__backupPrecisionCapture.html = input.bodyHtml; throw new Error("captured labour HTML") }',
+      ].join(';')),
     }
-    return next(specifier,context);
-  }});
-  const org=await withBypassContext(()=>createScratchOrg());
-  try{
-    const invoiceBackupModule: string = './invoice-backup?backup-precision';
-    const {assembleInvoiceBackup}=await import(invoiceBackupModule) as typeof import('./invoice-backup');
-    const {createMoneyFormatter}=await import('./money-format');
-    const {actor,invoice}=await withBypassContext(async()=>{
-      const actor=await createScratchUser(org.orgId,'Backup controller','reviewer');
-      const invoice=randomUUID(),line=randomUUID(),employee=randomUUID();
-      await db.execute(sql`insert into parties(id,org_id,kind,display_name,subsidiary_id) values (${employee},${org.orgId},'employee','Backup worker',${org.subsidiaryId})`);
-      await db.execute(sql`insert into documents(id,org_id,kind,document_number,document_date,subsidiary_id,party_id,currency) values (${invoice},${org.orgId},'customer_invoice',${invoice},${org.date},${org.subsidiaryId},${org.customerId},'CAD')`);
-      await db.execute(sql`insert into document_lines(id,org_id,document_id,line_number,account_id,quantity,unit_price,amount) values (${line},${org.orgId},${invoice},1,${org.accounts.revenue},2,1,2)`);
-      for(const cost of ['999999999999999.9000','0.0400'])await db.execute(sql`insert into time_entries(org_id,employee_party_id,worked_on,hours,cost_rate,cost_rate_currency,cost_rate_subsidiary_id,bill_rate,invoiced_by_line_id,billing_status,is_billable,status) values (${org.orgId},${employee},${org.date},1,${cost},'CAD',${org.subsidiaryId},1,${line},'billed',true,'approved')`);
-      return {actor,invoice};
-    });
-    await assert.rejects(withOrgContext(org.orgId,()=>assembleInvoiceBackup(org.orgId,actor,invoice,'costed_timesheets',null)),/captured timesheet HTML/);
-    const footer=capture.html.split('<tfoot>')[1];
-    assert.ok(footer,'the actual timesheet renderer received a totals footer');
-    assert.ok(footer.includes(createMoneyFormatter('en-CA','CAD').money('999999999999999.9400')),footer);
-  }finally{hooks.deregister();delete (globalThis as typeof globalThis & {__backupPrecisionCapture?:unknown}).__backupPrecisionCapture;await withBypassContext(()=>dropScratchOrg(org.orgId));}
-});
-}}] as const; for (const row of invoiceBackupPrecisionCases) await row.register();
+    const hooks = registerHooks({
+      resolve(specifier, context, next) {
+        if (context.parentURL?.includes('/web/lib/invoice-backup.ts')) {
+          if (specifier === '@openbooks/pdf') return capturePdf
+          if (specifier === './pdf-templates/store') return {
+            shortCircuit: true,
+            url: 'data:text/javascript,export async function resolvePdfTemplate(){return null}',
+          }
+          if (specifier === './money-server') return {
+            shortCircuit: true,
+            url: 'data:text/javascript,' + encodeURIComponent(`import {createMoneyFormatter} from '${root}web/lib/money-format.ts';export async function getMoneyFormatter(_org,currency){return createMoneyFormatter('en-CA',currency)}`),
+          }
+        }
+        return next(specifier, context)
+      },
+    })
+    const { org, actor, project } = await setup()
+    try {
+      const invoiceBackupModule: string = `./invoice-backup?customer-labour-${recipe}`
+      const { assembleInvoiceBackup, InvoiceBackupNotFoundError } = await import(invoiceBackupModule) as typeof import('./invoice-backup')
+      const { createMoneyFormatter } = await import('./money-format')
+      const invoice = await withBypassContext(async () => {
+        const invoice = randomUUID(), line = randomUUID(), employee = randomUUID()
+        await db.execute(sql`
+          insert into parties(id, org_id, kind, display_name, subsidiary_id)
+          values (${employee}, ${org.orgId}, 'employee', 'Backup worker', ${org.subsidiaryId})`)
+        await db.execute(sql`
+          insert into documents(id, org_id, kind, document_number, document_date, subsidiary_id, party_id, project_id, currency)
+          values (${invoice}, ${org.orgId}, 'customer_invoice', ${invoice}, ${org.date}, ${org.subsidiaryId}, ${org.customerId}, ${project}, 'CAD')`)
+        await db.execute(sql`
+          insert into document_lines(id, org_id, document_id, line_number, account_id, quantity, unit_price, amount)
+          values (${line}, ${org.orgId}, ${invoice}, 1, ${org.accounts.revenue}, 2, 1, '900719925474099.1234')`)
+        for (const cost of ['999999999999999.9000', '0.0400']) {
+          await db.execute(sql`
+            insert into time_entries(org_id, employee_party_id, worked_on, hours, cost_rate,
+              cost_rate_currency, cost_rate_subsidiary_id, bill_rate, invoiced_by_line_id,
+              billing_status, is_billable, status)
+            values (${org.orgId}, ${employee}, ${org.date}, 1, ${cost}, 'CAD', ${org.subsidiaryId},
+              1, ${line}, 'billed', true, 'approved')`)
+        }
+        return invoice
+      })
+      await assert.rejects(
+        withOrgContext(org.orgId, () => assembleInvoiceBackup(org.orgId, actor, invoice, recipe, new Set())),
+        InvoiceBackupNotFoundError,
+      )
+      assert.equal(capture.html, '', 'an invoice outside entity scope never reaches the renderer')
+      await assert.rejects(
+        withOrgContext(org.orgId, () => assembleInvoiceBackup(org.orgId, actor, invoice, recipe, null)),
+        /captured labour HTML/,
+      )
+      const html = capture.html
+      assert.ok(html.includes(`<h1>${recipe === 'purchases_shop_time' ? 'Shop Labour Backup' : 'Labour Backup'}</h1>`))
+      assert.doesNotMatch(html, /cost(?:ed)?(?:[ _]rate|[ _]amount|[ _]total)?/i)
+      const format = createMoneyFormatter('en-CA', 'CAD')
+      for (const internal of ['999999999999999.9000', '0.0400', '999999999999999.9400']) {
+        assert.equal(html.includes(internal), false)
+        assert.equal(html.includes(format.money(internal)), false)
+        assert.equal(html.includes(format.money(internal, { maximumFractionDigits: 4 })), false)
+      }
+      const allocated = format.money('450359962737049.5617', { maximumFractionDigits: 4 })
+      assert.equal(html.split(allocated).length - 1, 2, 'both entries retain their exact allocated billed amount')
+      const footer = html.split('<tfoot>')[1]
+      assert.ok(footer, 'the native renderer receives the customer totals footer')
+      assert.ok(footer.includes(format.money('900719925474099.1234', { maximumFractionDigits: 4 })), footer)
+      assert.equal(await backupRowCount(org, invoice), 0, 'content capture does not persist a packet')
+    } finally {
+      hooks.deregister()
+      delete (globalThis as typeof globalThis & { __backupPrecisionCapture?: unknown }).__backupPrecisionCapture
+      session.user = null
+      await withBypassContext(() => dropScratchOrg(org.orgId))
+    }
+  })
+}
