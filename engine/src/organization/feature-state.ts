@@ -15,6 +15,16 @@ export async function orgFeatureState(orgId: string, executor: SqlExecutor = db)
  * agree with the Features page and the setup-entity gate. */
 export async function isFeatureEnabled(orgId: string, key: string, executor: SqlExecutor = db): Promise<boolean> {
   const state = await orgFeatureState(orgId, executor)
+  return featureEnabledFromState(orgId, key, state, executor)
+}
+
+/** Resolve one feature from an already-read state using the native data defaults. */
+export async function featureEnabledFromState(
+  orgId: string,
+  key: string,
+  state: FeatureState,
+  executor: SqlExecutor = db,
+): Promise<boolean> {
   if (key === 'multiSubsidiary') return resolveMultiSubsidiary(orgId, state, executor)
   if (key === 'multiCurrency') return resolveMultiCurrency(orgId, state, executor)
   return featureEnabled(state, key)
