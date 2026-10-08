@@ -241,7 +241,9 @@
     "remove": "Retirer le widget",
     "cardMissing": "Carte indisponible",
     "unknownWidget": "Widget inconnu : {id}",
-    "analyticsPreview": "Les chiffres en direct s’affichent ici dès que vous enregistrez la disposition."
+    "analyticsPreview": "Les chiffres en direct s’affichent ici dès que vous enregistrez la disposition.",
+    "previewUnavailable": "Ce widget n’est plus disponible. Vérifiez ses paramètres de fonctionnalité et d’autorisation.",
+    "previewFailed": "Impossible de charger ce widget. Réessayez pour actualiser ses données."
   },
   "palette": {
     "title": "Widgets",

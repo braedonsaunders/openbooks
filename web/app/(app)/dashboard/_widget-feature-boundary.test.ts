@@ -27,7 +27,7 @@ registerHooks({
         export async function loadDashboardLayout(){return {layout:{widgets:[{id:'resourcing-pulse',x:0,y:0,w:3,h:2},{id:'kpi-journal-lines',x:3,y:0,w:3,h:2}]},role:'reader',hiddenQuickActionIds:[]}}
         export async function resolveDashboardDefault(){return {sourceKey:'reader'}}`)
     }
-    if (s === './_metrics' && c.parentURL?.endsWith('/_edit-canvas.tsx')) {
+    if (s === './_metrics' && (c.parentURL?.endsWith('/_edit-canvas.tsx') || c.parentURL?.endsWith('/dashboard/actions.ts'))) {
       return wrap('web/app/(app)/dashboard/_metrics.ts', `export async function loadDashboardMetrics(authz,ids){globalThis.__dashboardFeatureBoundary.metrics.push(ids);return {}}`)
     }
     if (s === '@openbooks/engine/src/platform/db.ts' && c.parentURL?.endsWith('/dashboard/actions.ts')) {
@@ -71,7 +71,7 @@ const tile = (id: string) => ({ id, x: 0, y: 0, w: 3, h: 2 })
 const { DashboardGridSlot } = await import('../../../components/viewspec/dashboard-grid-slot.tsx')
 const { DashboardEditSlot } = await import('../../../components/viewspec/dashboard-edit-slot.tsx')
 const { loadDashboardView, loadDashboardEditCanvas } = await import('./_edit-canvas.tsx')
-const { saveDashboardLayout } = await import('./actions.ts')
+const { saveDashboardLayout, loadDashboardWidgetPreview } = await import('./actions.ts')
 
 test('feature-off prunes an existing pulse tile from the layout', async () => {
   // The defect, pinned: permission alone still sees the tile, so any
@@ -150,6 +150,39 @@ test('both canvas loaders obey the supplied set without querying features', asyn
   }
   assert.deepEqual(boundary.metrics, [['kpi-journal-lines'], ['kpi-journal-lines']])
   assert.deepEqual(boundary.features, [])
+})
+
+test('the edit canvas reads only placed tiles while keeping unplaced widgets addable', async () => {
+  Object.assign(boundary, { enabled: true, features: [], metrics: [] })
+  const allowed = new Set(['kpi-journal-lines', 'resourcing-pulse'])
+  const result = await loadDashboardEditCanvas(reader, { widgets: [tile('kpi-journal-lines')] }, { allowedWidgetIds: allowed })
+  assert.deepEqual(boundary.metrics, [['kpi-journal-lines']])
+  assert.deepEqual(Object.keys(result.nodes), ['kpi-journal-lines'])
+  assert.equal(allowed.has('resourcing-pulse'), true)
+})
+
+test('a draft preview checks live identity, permission and feature before reading just its tile', async () => {
+  Object.assign(boundary, { enabled: true, features: [], metrics: [] })
+  Object.assign(globalThis, { __dashboardFeatureReader: reader })
+  try {
+    assert.equal((await loadDashboardWidgetPreview('resourcing-pulse')).ok, true)
+    assert.deepEqual(boundary.metrics, [['resourcing-pulse']])
+    boundary.enabled = false
+    assert.deepEqual(await loadDashboardWidgetPreview('resourcing-pulse'), { ok: false })
+    boundary.enabled = true
+    Object.assign(globalThis, { __dashboardFeatureReader: noGrant })
+    assert.deepEqual(await loadDashboardWidgetPreview('resourcing-pulse'), { ok: false })
+    Object.assign(globalThis, { __dashboardFeatureReader: null })
+    assert.deepEqual(await loadDashboardWidgetPreview('kpi-journal-lines'), { ok: false })
+    Object.assign(globalThis, { __dashboardFeatureReader: reader })
+    for (const id of ['__proto__', 'toString', 'unknown', { id: 'kpi-journal-lines' }]) {
+      assert.deepEqual(await loadDashboardWidgetPreview(id), { ok: false })
+    }
+    assert.deepEqual(boundary.metrics, [['resourcing-pulse']], 'denied reads never reach the metric loader')
+    assert.equal(boundary.features.filter((key) => key === 'resourcing').length, 2, 'each permitted preview has its own live feature read')
+  } finally {
+    Object.assign(globalThis, { __dashboardFeatureReader: reader })
+  }
 })
 
 test('the save action persists only widgets allowed by the feature decision', async () => {

@@ -156,12 +156,11 @@ export async function loadDashboardEditCanvas(
   const widgetAllowed = (id: string) => opts.allowedWidgetIds.has(id)
   const canUseInsights = can(authz, 'insights.read')
 
-  // Widgets extracted from Analytics dashboards run that dashboard's loaders.
-  // Placed ones preview live; the rest of the palette shows a named
-  // placeholder until the layout is saved, so opening the editor never runs
-  // every dashboard's computation just to fill the gallery.
+  // Only placed widgets need figures when the editor opens. Built-in tiles
+  // added to the draft load their preview through a fresh server boundary;
+  // unplaced Analytics tiles retain their save-to-preview composition.
   const placed = new Set(layout.widgets.map((w) => w.id))
-  const previewIds = Object.keys(WIDGETS).filter((id) => widgetAllowed(id) && (!WIDGETS[id]!.analyticsSource || placed.has(id)))
+  const previewIds = Object.keys(WIDGETS).filter((id) => widgetAllowed(id) && placed.has(id))
   const previewSet = new Set(previewIds)
   const previewLocale = await getLocale()
   const [data, libraryCards, placedCardNodes, apps] = await Promise.all([
@@ -178,7 +177,7 @@ export async function loadDashboardEditCanvas(
   for (const id of Object.keys(WIDGETS)) {
     if (!widgetAllowed(id)) continue
     if (!previewSet.has(id)) {
-      nodes[id] = <AnalyticsWidgetPreview key={id} widgetId={id} />
+      if (WIDGETS[id]!.analyticsSource) nodes[id] = <AnalyticsWidgetPreview key={id} widgetId={id} />
       continue
     }
     nodes[id] = (

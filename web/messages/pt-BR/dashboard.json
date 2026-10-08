@@ -241,7 +241,9 @@
     "remove": "Remover widget",
     "cardMissing": "Cartão indisponível",
     "unknownWidget": "Widget desconhecido: {id}",
-    "analyticsPreview": "Os números em tempo real aparecem aqui assim que você salvar o layout."
+    "analyticsPreview": "Os números em tempo real aparecem aqui assim que você salvar o layout.",
+    "previewUnavailable": "Este widget não está mais disponível. Revise as configurações de recursos e permissões.",
+    "previewFailed": "Não foi possível carregar este widget. Tente novamente para atualizar os dados."
   },
   "palette": {
     "title": "Widgets",

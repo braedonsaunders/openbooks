@@ -33,13 +33,13 @@ const LAYOUT: DashboardLayoutData = {
   widgets: [{ id: 'kpi-cash-balance', x: 0, y: 0, w: 3, h: 2 }],
 };
 
-async function mountGrid(layout: DashboardLayoutData = LAYOUT) {
+async function mountGrid(layout: DashboardLayoutData = LAYOUT, deferred = false) {
   return mountDashboard(
     <DashboardGrid
       initialLayout={layout}
       nodes={{
         'kpi-cash-balance': <div>Cash tile</div>,
-        'kpi-journal-lines': <div>Journal tile</div>,
+        ...(!deferred ? { 'kpi-journal-lines': <div>Journal tile</div> } : {}),
       }}
       role="admin"
       mode="edit"
@@ -89,6 +89,22 @@ test('adding a widget scrolls it into view with a highlight', async () => {
   } finally {
     await unmount()
   }
+})
+
+test('adding an unloaded widget keeps the draft tile and its remove control through a preview refusal', async () => {
+  const { host, unmount } = await mountGrid(LAYOUT, true)
+  try {
+    await click(paletteToggle()!)
+    await click(paletteAdd('Journal lines')!)
+    assert.match(host.textContent ?? '', /Review its feature and permission settings/)
+    assert.equal(rings().length, 1)
+    const refusal = [...host.querySelectorAll('div')].findLast((element) =>
+      element.textContent?.includes('Review its feature and permission settings') && element.querySelector('button[aria-label="Remove widget"]'))
+    assert.ok(refusal)
+    await click(refusal.querySelector('button[aria-label="Remove widget"]') as HTMLButtonElement)
+    assert.doesNotMatch(host.textContent ?? '', /Review its feature and permission settings/)
+    assert.ok(paletteAdd('Journal lines'), 'removing a refused preview returns the widget to the palette')
+  } finally { await unmount() }
 })
 
 test('a rapid double add appends the widget once', async () => {
