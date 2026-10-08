@@ -1,28 +1,38 @@
 import 'server-only'
 import { getTranslations } from 'next-intl/server'
-import { LOCAL_NAVIGATION, applyLocalNavigationPreferences } from '@openbooks/engine/navigation'
-import { reconcileNavConfig } from '@openbooks/engine/navigation'
+import { LOCAL_NAVIGATION, applyLocalNavigationPreferences, type LocalNavigationPreferences } from '@openbooks/engine/navigation'
 import { can, type Authz } from '../authz'
 import { featureEnabled, resolvedFeatureState } from '../features'
 import { defaultNavConfig, MODULE_BY_KEY } from './registry'
-import { readNavigationConfig } from './config'
+import { navigationExtensionContributions, savedNavigationConfig } from './config'
 import { visibleNavigationHref } from './access'
 import type { ViewTabGroup, ViewTabOwnership } from '../../components/module-home/view-tab-match'
-import { listActiveExtensionContributions } from '@openbooks/engine/extensions/navigation'
+
+// The registered workspaces and their message namespaces are static.
+const WORKSPACES = LOCAL_NAVIGATION.filter((set) => !set.inline)
+const NAMESPACES = [...new Set(LOCAL_NAVIGATION.flatMap((set) => set.tabs.map((tab) => tab.ns)))]
 
 /** Resolve every native local workspace once, from the same menu snapshot. */
-export async function resolveLocalNavigation(authz: Authz): Promise<{ groups: ViewTabGroup[]; ownership: ViewTabOwnership[]; preferences: import('@openbooks/engine/navigation').LocalNavigationPreferences }> {
-  const [saved, state, extensions] = await Promise.all([readNavigationConfig(authz.user.orgId), resolvedFeatureState(authz.user.orgId), listActiveExtensionContributions(authz.user.orgId)])
-  const config = saved?.config.version === 2 ? reconcileNavConfig(saved.config) : defaultNavConfig()
+export async function resolveLocalNavigation(authz: Authz): Promise<{ groups: ViewTabGroup[]; ownership: ViewTabOwnership[]; preferences: LocalNavigationPreferences }> {
+  const [saved, state, extensions, translators] = await Promise.all([
+    savedNavigationConfig(authz.user.orgId),
+    resolvedFeatureState(authz.user.orgId),
+    navigationExtensionContributions(authz.user.orgId),
+    Promise.all(NAMESPACES.map(async (namespace) => [namespace, await getTranslations(namespace as never)] as const)),
+  ])
+  const config = saved ?? defaultNavConfig()
   const menuByHref = new Map(config.groups.flatMap((group) => group.items.flatMap((item) => {
     if (item.kind !== 'module') return []
     const module = MODULE_BY_KEY.get(item.moduleKey)
     return module ? [[module.href, { item, module }] as const] : []
   })))
-  const namespaces = [...new Set(LOCAL_NAVIGATION.flatMap((set) => set.tabs.map((tab) => tab.ns)))]
-  const translations = new Map(await Promise.all(namespaces.map(async (namespace) => [namespace, await getTranslations(namespace as never)] as const)))
+  // Extension destinations appear only where the saved menu placed them.
+  const placedLinks = new Map(config.groups.flatMap((group) => group.items.flatMap((item) =>
+    item.kind === 'link' && item.extensionKey ? [[`${item.extensionKey}\n${item.href}`, item] as const] : [],
+  )).reverse())
+  const translations = new Map(translators)
   const ownership: ViewTabOwnership[] = []
-  const groups = LOCAL_NAVIGATION.filter((set) => !set.inline).filter((set) => !set.feature || featureEnabled(state, set.feature)).map((set, group) => {
+  const groups = WORKSPACES.filter((set) => !set.feature || featureEnabled(state, set.feature)).map((set, group) => {
     const tabs = set.tabs.filter((tab) => {
       const menu = menuByHref.get(tab.href)
       return !menu?.item.hidden && (tab.permissionsAny ? tab.permissionsAny.some((permission) => can(authz, permission)) : !tab.permission || can(authz, tab.permission)) && (!tab.feature || featureEnabled(state, tab.feature)) && (!tab.requiredFeatures || tab.requiredFeatures.every(feature => featureEnabled(state, feature)))
@@ -45,8 +55,8 @@ export async function resolveLocalNavigation(authz: Authz): Promise<{ groups: Vi
       const definition = entry.contribution
       if (definition.kind !== 'nav' || definition.workspaceKey !== set.id || (definition.requiredPermission && !can(authz, definition.requiredPermission))) return []
       if (!visibleNavigationHref(definition.href, (permission) => !permission || can(authz, permission), state)) return []
-      const placed = config.groups.flatMap((group) => group.items).find((item) => item.kind === 'link' && item.extensionKey === entry.extensionKey && item.href === definition.href)
-      if (!placed || placed.hidden || placed.kind !== 'link') return []
+      const placed = placedLinks.get(`${entry.extensionKey}\n${definition.href}`)
+      if (!placed || placed.hidden) return []
       return [{ href: definition.href, label: placed.label, carry: ['sub', 'book'], sharedCarry: ['sub', 'book'], navigationSet: set.id }]
     })
     ownership.push(...set.tabs.map((tab) => ({ href: tab.href, prefix: tab.prefix, group })), ...extensionTabs.map((tab) => ({ href: tab.href, group })))

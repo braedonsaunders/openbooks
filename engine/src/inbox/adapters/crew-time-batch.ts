@@ -11,10 +11,8 @@
 import { sql } from "drizzle-orm";
 import { CREW_TIME_BATCH_SUBJECT_KIND } from "../../flows/crew-batches-adapter.ts";
 import { decideGate, delegateGate } from "../../flows/gates.ts";
-import { worklistApprovals } from "../../flows/approval-worklist.ts";
-import { lockAndCheckOrgFeature } from "../../organization/org-feature-lock.ts";
 import { FIELD_TIME_FEATURE } from "../../hrm/field-time/settings.ts";
-import { actorPartyId, toWorklistScope } from "../guard.ts";
+import { actorPartyId, actorPendingGates, orgFeatureOn, toWorklistScope } from "../guard.ts";
 import { db, type SqlExecutor } from "../../platform/db.ts";
 import { parseDelegationReason } from "../delegation.ts";
 import type { InboxAdapter } from "../registry.ts";
@@ -34,12 +32,10 @@ export const crewTimeBatchAdapter: InboxAdapter = {
     // Gate first: with crew entry off the inbox must not touch crew tables
     // at all — no worklist scan for crew gates, no own-batch query.
     const exec: SqlExecutor = ctx.exec ?? db;
-    if (!(await lockAndCheckOrgFeature(exec, ctx.orgId, FIELD_TIME_FEATURE))) return [];
+    if (!(await orgFeatureOn(ctx, FIELD_TIME_FEATURE))) return [];
     const out: InboxItem[] = [];
-    const approvals = await worklistApprovals(ctx.orgId, ctx.actorId, toWorklistScope(ctx));
-    for (const item of approvals) {
-      if (item.kind !== "flow_gate" || item.gate.subjectKind !== CREW_TIME_BATCH_SUBJECT_KIND) continue;
-      const gate = item.gate;
+    for (const gate of await actorPendingGates(ctx)) {
+      if (gate.subjectKind !== CREW_TIME_BATCH_SUBJECT_KIND) continue;
       const dueAt = gate.escalateAt ? new Date(gate.escalateAt).toISOString() : null;
       out.push({
         id: inboxItemId("crew_time_batch", `gate:${gate.id}`),
@@ -58,7 +54,7 @@ export const crewTimeBatchAdapter: InboxAdapter = {
         source: { kind: "crew_time_batch_gate", id: gate.id },
       });
     }
-    const partyId = await actorPartyId(ctx.orgId, ctx.actorId);
+    const partyId = await actorPartyId(ctx);
     if (partyId) {
       const batches = (await exec.execute<OwnBatchRow>(sql`
         select b.id::text as id, b.worked_on::text as worked_on, b.status,

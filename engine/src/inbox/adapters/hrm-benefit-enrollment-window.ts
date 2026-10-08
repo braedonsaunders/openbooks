@@ -9,10 +9,9 @@
  */
 
 import { sql } from "drizzle-orm";
-import { actorPartyId } from "../guard.ts";
 import { findEmploymentsByParty } from "../../hrm/employment-read.ts";
 import { db } from "../../platform/db.ts";
-import { hrmOn } from "../guard.ts";
+import { actorPartyId, hrmOn } from "../guard.ts";
 import type { InboxAdapter } from "../registry.ts";
 import type { InboxItem, InboxListContext } from "../types.ts";
 import { inboxItemId, priorityForDueDate } from "../types.ts";
@@ -26,8 +25,8 @@ type WindowRow = {
 export const hrmBenefitEnrollmentWindowAdapter: InboxAdapter = {
   kind: "hrm_benefit_enrollment_window",
   async list(ctx: InboxListContext): Promise<InboxItem[]> {
-    if (!(await hrmOn(db, ctx.orgId))) return [];
-    const partyId = await actorPartyId(ctx.orgId, ctx.actorId);
+    if (!(await hrmOn(ctx))) return [];
+    const partyId = await actorPartyId(ctx);
     if (!partyId) return [];
     const employmentIds = await findEmploymentsByParty({
       orgId: ctx.orgId,
@@ -41,7 +40,7 @@ export const hrmBenefitEnrollmentWindowAdapter: InboxAdapter = {
         from hrm_enrollment_windows w
        where w.org_id = ${ctx.orgId}
          and w.status = 'open'
-         and w.closes_on >= current_date
+         and w.closes_on >= ${ctx.asOf}::date
          and exists (
            select 1
              from worker_employments emp

@@ -14,7 +14,7 @@ import {
   withBypass,
   withBypassContext,
 } from "@openbooks/engine/src/platform/db.ts";
-import { resolveActiveEnv } from "./org-access";
+import { homeEnvironment, resolveActiveEnv } from "./org-access";
 import { setRequestOrg } from "./request-org";
 import { sealSecret, SecretIntegrityError, unsealSecret } from "./secrets";
 import {
@@ -201,28 +201,16 @@ export async function validateSessionToken(token: string | undefined): Promise<V
   const hash = tokenHash(token!);
   // bypass: identity-bootstrap — a session cookie is resolved to its identity before any organization scope exists.
   return withBypassContext(async () => {
-    const result = (await db.execute<ValidatedSession>(sql`
-      select s.user_id as "userId", s.id as "sessionId", s.expires_at as "expiresAt",
-             s.auth_method as "authMethod"
-        from auth_sessions s
-        join users u on u.id = s.user_id and u.is_active
-       where s.id = ${parsed.sessionId}
-         and s.user_id = ${parsed.userId}
-         and s.token_hash = ${hash}
-         and s.revoked_at is null
-         and s.expires_at > now()
-       limit 1
-    `));
-    const row = result.rows[0];
-    if (!row) return null;
-    const stamped = await db.execute(sql`
+    // Validation and the activity stamp are one statement: a revocation that
+    // commits first is re-checked by the update and refuses the session.
+    const result = await db.execute<ValidatedSession>(sql`
       update auth_sessions s
          set last_seen_at = case
            when s.last_seen_at < now() - interval '5 minutes' then now()
            else s.last_seen_at
          end
-       where s.id = ${row.sessionId}
-         and s.user_id = ${row.userId}
+       where s.id = ${parsed.sessionId}
+         and s.user_id = ${parsed.userId}
          and s.token_hash = ${hash}
          and s.revoked_at is null
          and s.expires_at > now()
@@ -230,10 +218,10 @@ export async function validateSessionToken(token: string | undefined): Promise<V
            select 1 from users u
             where u.id = s.user_id and u.is_active
          )
-       returning s.id
+       returning s.user_id as "userId", s.id as "sessionId", s.expires_at as "expiresAt",
+                 s.auth_method as "authMethod"
     `);
-    if (!stamped.rows[0]) return null;
-    return row;
+    return result.rows[0] ?? null;
   });
 }
 
@@ -1321,33 +1309,50 @@ export async function currentUser(): Promise<SessionUser | null> {
 const renderUser = cache(async (sessionToken: string | undefined, envToken: string | undefined): Promise<SessionUser | null> => {
   const session = await renderSession(sessionToken);
   if (!session) return null;
+  // The home organization's name and the home identity's roles travel with
+  // it: most requests act in the home organization and need nothing more.
   // bypass: identity-bootstrap — the session's home identity row can live in a different organization than the active one.
   const home = await withBypassContext(async () => {
-    const result = (await db.execute<{ id: string; email: string; name: string; orgId: string; isSuperAdmin: boolean }>(sql`
-      select id, email, name, org_id as "orgId", is_super_admin as "isSuperAdmin"
-        from users where id = ${session.userId} and is_active
-    `));
+    const result = await db.execute<{
+      id: string; email: string; name: string; orgId: string; isSuperAdmin: boolean; orgName: string | null;
+      homeRoles: { key: string; name: string }[];
+    }>(sql`
+      select u.id, u.email, u.name, u.org_id as "orgId", u.is_super_admin as "isSuperAdmin",
+             o.name as "orgName",
+             coalesce((
+               select jsonb_agg(jsonb_build_object('key', r.key, 'name', r.name) order by r.is_built_in desc, r.name, r.key)
+                 from role_assignments assignment
+                 join app_roles r on r.id = assignment.role_id and r.org_id = assignment.org_id
+                where assignment.org_id = u.org_id
+                  and assignment.user_id = u.id
+             ), '[]'::jsonb) as "homeRoles"
+        from users u
+        left join orgs o on o.id = u.org_id
+       where u.id = ${session.userId} and u.is_active
+    `);
     return result.rows[0];
   });
   if (!home) return null;
 
   const homeUser = { id: home.id, orgId: home.orgId, isSuperAdmin: !!home.isSuperAdmin };
   const activeOrgId = verifyEnvToken(envToken);
-  const activeEnvironment = (await resolveActiveEnv(homeUser, activeOrgId))
-    ?? (await resolveActiveEnv(homeUser, null))!;
+  const activeEnvironment = (activeOrgId && activeOrgId !== homeUser.orgId ? await resolveActiveEnv(homeUser, activeOrgId) : null)
+    ?? homeEnvironment(homeUser, home.orgName ?? undefined);
   setRequestOrg(activeEnvironment.orgId);
-  // bypass: identity-bootstrap — roles are resolved for the active environment before the request's organization scope is in force.
-  const roles = await withBypassContext(async () => {
-    const result = (await db.execute<{ key: string; name: string }>(sql`
-      select r.key, r.name
-        from role_assignments assignment
-        join app_roles r on r.id = assignment.role_id and r.org_id = assignment.org_id
-       where assignment.org_id = ${activeEnvironment.orgId}
-         and assignment.user_id = ${activeEnvironment.actingUserId}
-       order by r.is_built_in desc, r.name, r.key
-    `));
-    return result.rows;
-  });
+  const roles = activeEnvironment.orgId === homeUser.orgId && activeEnvironment.actingUserId === homeUser.id
+    ? home.homeRoles
+    // bypass: identity-bootstrap — roles are resolved for the active environment before the request's organization scope is in force.
+    : await withBypassContext(async () => {
+      const result = await db.execute<{ key: string; name: string }>(sql`
+        select r.key, r.name
+          from role_assignments assignment
+          join app_roles r on r.id = assignment.role_id and r.org_id = assignment.org_id
+         where assignment.org_id = ${activeEnvironment.orgId}
+           and assignment.user_id = ${activeEnvironment.actingUserId}
+         order by r.is_built_in desc, r.name, r.key
+      `);
+      return result.rows;
+    });
   if (!homeUser.isSuperAdmin && roles.length === 0) return null;
   return {
     id: activeEnvironment.actingUserId,

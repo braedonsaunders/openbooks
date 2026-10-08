@@ -5,30 +5,21 @@
  * Both adapters are live reads over the HR-21 ledger tables (migration
  * 0232), projected through the actor's own gates — the inbox never
  * widens visibility. Table presence is probed explicitly through the
- * information schema (never by catching errors): while 0232 has not
+ * catalog (never by catching errors): while 0232 has not
  * landed the adapters list nothing and the inbox stays up. Items carry
  * no actions — the work happens in the checks queue (/payroll/anomalies)
  * and the ledger (/admin/ai), which the subject hrefs open.
  */
 
-import { sql } from "drizzle-orm";
-import { actorHasPermission } from "../../organization/actor-permissions.ts";
-import { lockAndCheckOrgFeature } from "../../organization/org-feature-lock.ts";
 import { listFlags } from "../../hrm/ai/anomalies.ts";
 import { overdueReviews } from "../../hrm/ai/governance.ts";
 import { loadAiRailsSettings } from "../../hrm/ai/settings.ts";
 import { db } from "../../platform/db.ts";
+import { actorPermissionOn, orgFeatureOn, sourceTableInstalled } from "../guard.ts";
 import type { InboxAdapter } from "../registry.ts";
 import type { InboxItem, InboxListContext } from "../types.ts";
 import { inboxItemId } from "../types.ts";
 import { InboxError } from "../registry.ts";
-
-async function tableLanded(table: string): Promise<boolean> {
-  const found = (await db.execute<{ exists: boolean }>(sql`
-    select to_regclass(${`public.${table}`}) is not null as exists
-  `)).rows[0]?.exists;
-  return found === true;
-}
 
 const KIND_LABELS: Record<string, string> = {
   terminated_with_pay: "Terminated with pay",
@@ -53,9 +44,9 @@ const KIND_LABELS: Record<string, string> = {
 export const payrollAnomalyBlockAdapter: InboxAdapter = {
   kind: "payroll_anomaly_block",
   async list(ctx: InboxListContext): Promise<InboxItem[]> {
-    if (!(await lockAndCheckOrgFeature(db, ctx.orgId, "payroll"))) return [];
-    if (!(await tableLanded("payroll_anomaly_flags"))) return [];
-    if (!(await actorHasPermission(db, ctx.orgId, ctx.actorId, "payroll.manage"))) return [];
+    if (!(await orgFeatureOn(ctx, "payroll"))) return [];
+    if (!(await sourceTableInstalled("payroll_anomaly_flags"))) return [];
+    if (!(await actorPermissionOn(ctx, "payroll.manage"))) return [];
     // The checks queue owns the read (and its legal-entity lens): the
     // inbox projects the same open blocks the actor may open, never more.
     const rows = (await listFlags(db, {
@@ -85,9 +76,9 @@ export const payrollAnomalyBlockAdapter: InboxAdapter = {
 export const aiCapabilityReviewAdapter: InboxAdapter = {
   kind: "ai_capability_review",
   async list(ctx: InboxListContext): Promise<InboxItem[]> {
-    if (!(await lockAndCheckOrgFeature(db, ctx.orgId, "aiGovernanceLedger"))) return [];
-    if (!(await tableLanded("ai_capabilities"))) return [];
-    if (!(await actorHasPermission(db, ctx.orgId, ctx.actorId, "admin.setup.manage"))) return [];
+    if (!(await orgFeatureOn(ctx, "aiGovernanceLedger"))) return [];
+    if (!(await sourceTableInstalled("ai_capabilities"))) return [];
+    if (!(await actorPermissionOn(ctx, "admin.setup.manage"))) return [];
     const settings = await loadAiRailsSettings(db, ctx.orgId);
     const overdue = await overdueReviews(db, ctx.orgId, settings.reviewMonths);
     return overdue.map((cap) => ({

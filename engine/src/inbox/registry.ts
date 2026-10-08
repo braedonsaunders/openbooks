@@ -13,6 +13,7 @@
 import type { InboxItem, InboxKind, InboxListContext } from "./types.ts";
 import { compareInboxItems } from "./types.ts";
 import { HrmAuthorizationError } from "../hrm/authorization.ts";
+import { beginInboxRead } from "./read-memo.ts";
 
 /**
  * A read window for one source. Applies per source (not to the merged
@@ -126,9 +127,10 @@ export async function listInbox(
   ctx: InboxListContext,
   opts?: { kinds?: InboxKind[]; cache?: Map<string, InboxItem[]>; page?: InboxPage; notices?: InboxSourceNotice[] },
 ): Promise<InboxItem[]> {
-  const legs = await readSources(ctx, opts?.kinds, opts?.cache, async (adapter, cacheKey) => {
-    if (opts?.page) return adapter.list(ctx, opts.page);
-    const items = await adapter.list(ctx);
+  const read = beginInboxRead(ctx);
+  const legs = await readSources(read, opts?.kinds, opts?.page ? undefined : opts?.cache, async (adapter, cacheKey) => {
+    if (opts?.page) return adapter.list(read, opts.page);
+    const items = await adapter.list(read);
     opts?.cache?.set(cacheKey, items);
     return items;
   }, opts?.notices);
@@ -139,9 +141,10 @@ export async function countInbox(
   ctx: InboxListContext,
   opts?: { kinds?: InboxKind[]; cache?: Map<string, InboxItem[]>; notices?: InboxSourceNotice[] },
 ): Promise<number> {
-  const legs = await readSources(ctx, opts?.kinds, opts?.cache, async (adapter, cacheKey) => {
-    if (adapter.count) return adapter.count(ctx);
-    const items = await adapter.list(ctx);
+  const read = beginInboxRead(ctx);
+  const legs = await readSources(read, opts?.kinds, opts?.cache, async (adapter, cacheKey) => {
+    if (adapter.count) return adapter.count(read);
+    const items = await adapter.list(read);
     opts?.cache?.set(cacheKey, items);
     return items.length;
   }, opts?.notices);
@@ -151,7 +154,8 @@ export async function countInbox(
 /**
  * Read every requested source concurrently. Sources are independent and each
  * runs through its own gate, so the slowest source bounds the read instead of
- * the sum of all of them. A cached leg is served from the request cache; a
+ * the sum of all of them. The actor facts the sources share resolve once per
+ * read through the read memo. A cached leg is served from the request cache; a
  * failed leg contributes nothing and names itself in `notices`, recorded in
  * source order so the surface renders them deterministically.
  */
@@ -166,7 +170,16 @@ async function readSources<T>(
   const settled = await Promise.all(kinds.map(async (kind) => {
     const adapter = adapterFor(kind);
     if (!adapter) return null;
-    const cacheKey = `${ctx.orgId}:${ctx.actorId}:${kind}`;
+    const cacheKey = JSON.stringify({
+      orgId: ctx.orgId, actorId: ctx.actorId, asOf: ctx.asOf, kind,
+      // Missing scope asks the native reader to resolve authority; explicit
+      // null means unrestricted. Object fields preserve that distinction.
+      scope: {
+        roles: ctx.scope?.roles,
+        allowedSubsidiaryIds: ctx.scope?.allowedSubsidiaryIds,
+        includeBudgets: ctx.scope?.includeBudgets,
+      },
+    });
     const cached = cache?.get(cacheKey);
     if (cached) return { value: cached as T | InboxItem[] };
     try {
@@ -196,6 +209,8 @@ export async function actOnInboxItem(
   actionKey: string,
   reason?: string | null,
 ): Promise<void> {
+  // Discard any registry-read memo before re-resolving write authority.
+  ctx = { ...ctx };
   const sep = itemId.indexOf(":");
   if (sep < 0) throw new InboxError("NOT_FOUND", "inbox item not found");
   const kind = itemId.slice(0, sep);

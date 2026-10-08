@@ -1,13 +1,13 @@
 import 'server-only'
-import { listActiveExtensionContributions } from '@openbooks/engine/src/extensions/projections.ts'
+import { cache } from 'react'
 import { sql } from 'drizzle-orm'
 import { featureEnabled, hiddenNavModules, resolvedFeatureState } from '../features'
-import { featureAwareNavConfig, isDefaultLocalNavigationItem, reconcileNavConfig } from '@openbooks/engine/navigation'
+import { featureAwareNavConfig, isDefaultLocalNavigationItem } from '@openbooks/engine/navigation'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import type { SidebarNavGroup } from '../../components/sidebar-nav'
 import { essentialsWorkspace } from '../workspace-presentation'
 import { essentialsNavConfig } from './essentials'
-import { readNavigationConfig } from './config'
+import { navigationExtensionContributions, savedNavigationConfig } from './config'
 import { visibleNavigationHref } from './access'
 export { navPathname } from './access'
 import {
@@ -20,6 +20,7 @@ import {
   defaultNavConfig,
   type NavGroupKey,
   type NavAppOption,
+  type OrgNavConfig,
 } from './registry'
 
 /**
@@ -67,6 +68,31 @@ export function resolveModuleShortLabel(
   }
 }
 
+// Group header navigation: a registry group's module home is reachable with any of these.
+const GROUP_HOME_PERMISSIONS: Partial<Record<NavGroupKey, readonly string[]>> = {
+  customers: ['ar.read', 'crm.read', 'crm.opportunities.read', 'parties.read'],
+  purchasing: ['ap.read', 'parties.read', 'expenses.read'],
+  banking: ['banking.read'], accounting: ['gl.read', 'close.read', 'reports.read'],
+  insights: ['reports.read'], hrm: ['hrm.employment.read'], settings: [...ADMIN_HUB_PERMISSIONS],
+}
+
+/** Installed apps offered as menu destinations; read once per render. */
+const installedNavigationApps = cache(async (orgId: string) => (await db.execute<NavAppOption>(sql`
+  select a.key,
+         coalesce(nullif(v.manifest #>> '{nav,label}', ''), a.name) as name,
+         coalesce(nullif(v.manifest #>> '{nav,icon}', ''), a.icon_key) as "iconKey"
+    from apps a
+    join app_versions v on v.id = a.active_version_id and v.org_id = a.org_id
+   where a.org_id = ${orgId} and a.status = 'installed'
+   order by a.sort_order, a.name
+`)).rows)
+
+/** The layout an organization starts from when it has not saved one. */
+async function navigationConfig(orgId: string): Promise<OrgNavConfig> {
+  return await savedNavigationConfig(orgId)
+    ?? (await essentialsWorkspace(orgId) ? essentialsNavConfig() : defaultNavConfig())
+}
+
 export async function resolveNav(
   orgId: string,
   can: (permission: string | undefined) => boolean,
@@ -74,26 +100,17 @@ export async function resolveNav(
   t: (key: string) => string,
   has?: (key: string) => boolean,
 ): Promise<SidebarNavGroup[]> {
-  const [r, appResult, featureState, extensionContributions] = await Promise.all([
-    readNavigationConfig(orgId),
-    db.execute<NavAppOption>(sql`
-      select a.key,
-             coalesce(nullif(v.manifest #>> '{nav,label}', ''), a.name) as name,
-             coalesce(nullif(v.manifest #>> '{nav,icon}', ''), a.icon_key) as "iconKey"
-        from apps a
-        join app_versions v on v.id = a.active_version_id and v.org_id = a.org_id
-       where a.org_id = ${orgId} and a.status = 'installed'
-       order by a.sort_order, a.name
-    `),
+  // Every source is independent; the layout and module homes share each read
+  // within a render.
+  const [baseConfig, apps, featureState, extensionContributions, recordTypes] = await Promise.all([
+    navigationConfig(orgId),
+    installedNavigationApps(orgId),
     resolvedFeatureState(orgId),
-    listActiveExtensionContributions(orgId),
+    navigationExtensionContributions(orgId),
+    can('records.read') ? navigationRecordTypes(orgId) : [],
   ])
-  const saved = r?.config
-  const baseConfig = saved?.version === 2
-    ? reconcileNavConfig(saved)
-    : await essentialsWorkspace(orgId) ? essentialsNavConfig() : defaultNavConfig()
   const config = featureAwareNavConfig(baseConfig, featureEnabled(featureState, 'hrm'))
-  const appByKey = new Map(appResult.rows.map((app) => [app.key, app]))
+  const appByKey = new Map(apps.map((app) => [app.key, app]))
   const featureHiddenModules = hiddenNavModules(featureState)
 
   const groups: SidebarNavGroup[] = []
@@ -178,13 +195,8 @@ export async function resolveNav(
       // Group header navigation: registry groups with a module home get a
       // groupHref (custom org groups never match and stay plain toggles).
       const home = NAV_GROUP_HOMES[g.id as NavGroupKey]
-      const homePermission: Record<string, string[]> = {
-        customers: ['ar.read', 'crm.read', 'crm.opportunities.read', 'parties.read'],
-        purchasing: ['ap.read', 'parties.read', 'expenses.read'],
-        banking: ['banking.read'], accounting: ['gl.read', 'close.read', 'reports.read'],
-        insights: ['reports.read'], hrm: ['hrm.employment.read'], settings: [...ADMIN_HUB_PERMISSIONS],
-      }
-      const groupHref = home && (!homePermission[g.id] || homePermission[g.id]!.some((permission) => can(permission))) && (g.id !== 'hrm' || featureEnabled(featureState, 'hrm')) ? home : undefined
+      const homePermissions = GROUP_HOME_PERMISSIONS[g.id as NavGroupKey]
+      const groupHref = home && (!homePermissions || homePermissions.some((permission) => can(permission))) && (g.id !== 'hrm' || featureEnabled(featureState, 'hrm')) ? home : undefined
       groups.push({
         id: g.id,
         label: defaultGroup && g.label === defaultGroup.label ? t(`groups.${g.id}`) : g.label,
@@ -195,7 +207,10 @@ export async function resolveNav(
     }
   }
 
-  const recordItems = await recordTypeNavItems(orgId, can, roleKeys)
+  // A record type restricted to roles is visible to its audience; admins always pass.
+  const recordItems = recordTypes
+    .filter((type) => !type.allowed_roles || type.allowed_roles.length === 0 || roleKeys.includes('admin') || roleKeys.some((key) => type.allowed_roles!.includes(key)))
+    .map((type) => ({ href: `/records/${type.key}`, label: type.plural_name, iconKey: type.icon_key }))
   if (recordItems.length > 0) {
     groups.push({
       id: 'records',
@@ -209,46 +224,26 @@ export async function resolveNav(
 }
 
 /**
- * Dynamic nav entries for published custom record types flagged show_in_nav:
- * one item per generated module (/records/<key>), visible to records.read
- * holders and filtered by each type's allowed_roles audience (admins always
- * pass). Wrapped in try/catch so a database without the custom_record_types
- * table yet (pre-migration) degrades to "no Records group" instead of
- * breaking the whole shell.
+ * Published custom record types flagged show_in_nav: one destination per
+ * generated module (/records/<key>), visible to records.read holders. A
+ * database without the custom_record_types table yet (pre-migration)
+ * degrades to "no Records group" instead of breaking the whole shell.
  */
-async function recordTypeNavItems(
-  orgId: string,
-  can: (permission: string | undefined) => boolean,
-  roleKeys: readonly string[],
-): Promise<SidebarNavGroup['items']> {
-  if (!can('records.read')) return []
+const navigationRecordTypes = cache(async (orgId: string) => {
   try {
-    const r = (await db.execute<{
-        key: string
-        plural_name: string
-        icon_key: string
-        allowed_roles: string[] | null
-      }>(sql`
+    return (await db.execute<{
+      key: string
+      plural_name: string
+      icon_key: string
+      allowed_roles: string[] | null
+    }>(sql`
       select key, plural_name, icon_key, allowed_roles
         from custom_record_types
        where org_id = ${orgId} and status = 'published' and show_in_nav
        order by sort_order, plural_name
-    `))
-    return r.rows
-      .filter(
-        (t) =>
-          !t.allowed_roles ||
-          t.allowed_roles.length === 0 ||
-          roleKeys.includes('admin') ||
-          roleKeys.some((key) => t.allowed_roles!.includes(key)),
-      )
-      .map((t) => ({
-        href: `/records/${t.key}`,
-        label: t.plural_name,
-        iconKey: t.icon_key,
-      }))
+    `)).rows
   } catch {
     // custom_record_types not migrated yet — the shell must keep rendering.
     return []
   }
-}
+})
