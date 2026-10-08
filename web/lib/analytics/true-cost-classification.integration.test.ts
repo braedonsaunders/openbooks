@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
 import { registerHooks } from 'node:module'
-import test from 'node:test'
+import test, { before } from 'node:test'
 
 registerHooks({
   resolve(specifier, _context, next) {
@@ -14,11 +14,18 @@ registerHooks({
 
 const { sql } = await import('drizzle-orm')
 const { db, env, withBypass, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
-const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
+const { createScratchOrg, dropScratchOrg, assertDedicatedFixtureDatabase } = await import('@openbooks/engine/src/testing/fixtures.ts')
 const { JULY, withTrueCostOrg } = await import('@openbooks/engine/src/testing/true-cost-fixtures.ts')
 const { trueCostData } = await import('./true-cost-data')
+const { withAnalyticsRead } = await import('./read-context')
+
+before(async () => { if (env.OPENBOOKS_DB_URL) await assertDedicatedFixtureDatabase() })
 
 const load = (orgId: string) => trueCostData(orgId, JULY, null)
+const loadSelected = (orgId: string, tab: string, projection: 'tab' | 'summary' = 'tab') => withAnalyticsRead({
+  authz: { user: { orgId, id: randomUUID() }, permissions: new Set(['reports.read']), allowedSubsidiaryIds: null } as unknown as import('../authz').Authz,
+  slug: 'true-cost', projection, tab, locale: 'en', revision: randomUUID(), observedAt: Date.now(),
+}, () => load(orgId))
 const RENT = { number: '7850', name: 'Rent' }
 const rentJournal = (tag: string, amount: string, dept: number | null = 0) => ({
   entry: tag,
@@ -295,8 +302,29 @@ test('true cost cascading refuses by name with no costed labor and no base rate'
       assert.equal(data.totals.overall, null)
       assert.equal(data.categories.length, 1)
       assert.equal(data.config.compositeMethod, 'cascading')
+      const selected = await loadSelected(seed.org.orgId, 'categories')
+      assert.deepEqual(selected.compositeRefusal, data.compositeRefusal)
+      assert.equal(selected.totals.overall, null)
     },
   )
+})
+
+test('selected true cost views retain the measured cascading labour base', { skip: !env.OPENBOOKS_DB_URL }, async () => {
+  await withTrueCostOrg({
+    employees: [{ name: 'Costed Worker', dept: 0, hours: '8', rate: '4' }],
+    burdenAccounts: [RENT], journals: [rentJournal('CASCADE-VIEW', '800')],
+    profile: { name: 'Cascading', compositeMethod: 'cascading' },
+  }, async (seed) => {
+    const full = await load(seed.org.orgId)
+    assert.equal(full.compositeRefusal, null)
+    assert.equal(full.departments[0]?.composite, 100)
+    for (const [projection, tab] of [['tab', 'categories'], ['tab', 'matrix'], ['summary', '']] as const) {
+      const selected = await loadSelected(seed.org.orgId, tab, projection)
+      assert.deepEqual(selected.compositeRefusal, full.compositeRefusal)
+      assert.deepEqual(selected.departments, full.departments)
+      assert.deepEqual(selected.totals, full.totals)
+    }
+  })
 })
 
 /**
@@ -324,6 +352,11 @@ test('true cost per-FTE uses resolved annual hours, not 2080', { skip: !env.OPEN
         200000,
         'per-FTE rate must be 100/hr x measured 2000 annual hours, not 208000 from an assumed 2080',
       )
+      for (const [projection, tab] of [['tab', 'categories'], ['tab', 'matrix'], ['summary', '']] as const) {
+        const selected = await loadSelected(seed.org.orgId, tab, projection)
+        assert.deepEqual(selected.categories.find((c) => c.key === 'rent')?.byDept, rent.byDept)
+        assert.deepEqual(selected.compositeRefusal, data.compositeRefusal)
+      }
     },
   )
 })
@@ -353,6 +386,9 @@ test('true cost per-FTE refuses by name with no annual hours', { skip: !env.OPEN
       assert.ok(data.compositeRefusal?.message.includes('labor cost rates'), 'the refusal must name the remedy')
       assert.equal(rent.rate, null)
       assert.equal(data.kpis.compositeRate, null)
+      const selected = await loadSelected(seed.org.orgId, 'categories')
+      assert.deepEqual(selected.compositeRefusal, data.compositeRefusal)
+      assert.equal(selected.categories.find((c) => c.key === 'rent')?.rate, null)
     },
   )
 })
