@@ -442,6 +442,12 @@ export async function trueCostData(
   // unavailable message names the remedy.
   const appliedAccountId = appliedSettings.accountId;
   const appliedFilter = sql`e.origin = 'overhead_applied' and l.project_id is not null`;
+  // Employee facts also supply the measured labour base and annual-hours
+  // divisor. A selected view may omit selling rows, but not policy inputs.
+  const employeeInputsRequired = analyticsSection('true-cost', ["selling"])
+    || cfg.profile.compositeMethod === "cascading"
+    || Object.values(cfg.profile.categorySettings).some((setting) => setting.rateFormat === "per_fte")
+    || cfg.profile.customCategories.some((category) => category.rateFormat === "per_fte");
   const [acctRows, hoursRows, empRows, priorRows, priorTimeRows, appliedRows, cardPricedRows, priorDeptHoursRows, deptRows, baseRows, hcRows, premiumRows] = await Promise.all([
     // Expense account totals per account × department × month × functional —
     // journal legs arrive stamped in their line entity's functional and
@@ -484,7 +490,7 @@ export async function trueCostData(
     // Per-employee weighted labour rate + dominant dept/labour class. Cost
     // legs arrive per (employee, functional) so the rate translates before
     // the division — a cross-currency average of raw rates is meaningless.
-    (analyticsSection('true-cost', ["selling"]) ? analyticsQuery(sql`
+    (employeeInputsRequired ? analyticsQuery(sql`
       with per_emp as (
         select t.employee_party_id, coalesce(p.display_name, 'Unknown') as name,
           coalesce(t.cost_rate_currency, crs.base_currency, o.base_currency) as func,
