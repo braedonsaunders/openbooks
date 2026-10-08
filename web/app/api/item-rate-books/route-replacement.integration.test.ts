@@ -36,6 +36,7 @@ const { POST } = (await import(bookRouteUrl)) as typeof import('./route')
 
 const { withBypassContext, withOrgContext, db } = await import('@openbooks/engine/src/platform/db.ts')
 const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
+const { resolveItemRate } = await import('../../../lib/item-rates.ts')
 test.after(() => hooks.deregister())
 
 
@@ -80,6 +81,80 @@ async function lineCount(orgId: string, versionId: string) {
   return (await withOrgContext(orgId, () => db.execute<{ count: string }>(sql`
     select count(*)::text as count from item_rate_lines where org_id = ${orgId} and version_id = ${versionId}`))).rows[0]!.count
 }
+
+test('bounded rate versions retain expiry gaps and resolve only their recorded windows', async () => {
+  const { org, book } = await fixture()
+  try {
+    const project = randomUUID()
+    await withBypassContext(() => db.execute(sql`
+      insert into projects (id,org_id,subsidiary_id,code,name,customer_id,status,is_active,custom)
+      values (${project},${org.orgId},${org.subsidiaryId},'BOUNDED','Bounded rates',${org.customerId},'active',true,'{}'::jsonb)`))
+    await withBypassContext(() => db.execute(sql`
+      insert into item_rate_book_assignments (org_id,rate_book_id,project_id,date_basis,is_active)
+      values (${org.orgId},${book},${project},'usage_date',true)`))
+    const post = (effectiveFrom: string, effectiveTo: string | null) => bookPost({
+      id: book, code: 'REPLACE', name: 'Replacement book', replaceRates: true,
+      effectiveFrom, effectiveTo, lines: tiers(org.items.service),
+    })
+    const original = await post('2025-01-01', '2025-12-31')
+    assert.equal(original.status, 200, await original.text())
+    const before = (await activeVersions(org.orgId, book))[0]!
+    const originalLines = await withOrgContext(org.orgId, () => db.execute(sql`
+      select * from item_rate_lines where org_id=${org.orgId} and version_id=${before.id} order by id`))
+    const replacement = await post('2026-02-01', '2026-02-28')
+    assert.equal(replacement.status, 200, await replacement.text())
+    const versions = await activeVersions(org.orgId, book)
+    assert.deepEqual(versions[0], before, 'a later version cannot extend the prior expiry into the gap')
+    assert.equal(versions[1]!.effective_to, '2026-02-28')
+    assert.deepEqual((await withOrgContext(org.orgId, () => db.execute(sql`
+      select * from item_rate_lines where org_id=${org.orgId} and version_id=${before.id} order by id`))).rows, originalLines.rows)
+    const resolve = (onDate: string) => resolveItemRate({
+      orgId: org.orgId, projectId: project, itemId: org.items.service, onDate, baseQuantity: '1',
+    })
+    assert.equal((await resolve('2025-12-31'))?.rateVersionId, before.id)
+    assert.equal(await resolve('2026-01-15'), null, 'an intentional unpriced gap must stay unpriced')
+    assert.equal((await resolve('2026-02-28'))?.rateVersionId, versions[1]!.id)
+    assert.equal(await resolve('2026-03-01'), null)
+    const open = await post('2026-03-01', null)
+    assert.equal(open.status, 200, await open.text())
+    assert.equal((await activeVersions(org.orgId, book))[2]!.effective_to, null)
+    const audits = (await withOrgContext(org.orgId, () => db.execute<{
+      actor_id: string; changes: { effectiveTo: string | null; closedVersion: unknown };
+    }>(sql`select actor_id,changes from audit_log where org_id=${org.orgId} and table_name='item_rate_versions' order by at,id`))).rows
+    assert.equal(audits.length, 3)
+    assert.ok(audits.every((audit) => audit.actor_id === org.orgId))
+    assert.deepEqual(audits.map((audit) => audit.changes.effectiveTo), ['2025-12-31', '2026-02-28', null])
+    assert.ok(audits.every((audit) => audit.changes.closedVersion === null), 'previous ended versions were not changed')
+  } finally {
+    routeState.gate = null
+    await dropScratchOrg(org.orgId)
+  }
+})
+
+test('invalid or reversed version end dates refuse before header, pricing or audit changes', async () => {
+  const { org, book } = await fixture()
+  try {
+    const snapshot = async () => withOrgContext(org.orgId, () => db.execute(sql`
+      select jsonb_build_object(
+        'book',(select to_jsonb(b) from item_rate_books b where b.org_id=${org.orgId} and b.id=${book}),
+        'versions',(select jsonb_agg(to_jsonb(v) order by id) from item_rate_versions v where v.org_id=${org.orgId} and v.rate_book_id=${book}),
+        'profiles',(select jsonb_agg(to_jsonb(p) order by id) from item_rate_profiles p where p.org_id=${org.orgId}),
+        'lines',(select jsonb_agg(to_jsonb(l) order by id) from item_rate_lines l where l.org_id=${org.orgId}),
+        'audit',(select jsonb_agg(to_jsonb(a) order by id) from audit_log a where a.org_id=${org.orgId})
+      ) as evidence`))
+    const before = (await snapshot()).rows
+    for (const effectiveTo of ['2026-02-30', '2025-12-31', 'tomorrow']) {
+      const refused = await bookPost({ id: book, code: 'REPLACE', name: 'Changed name', replaceRates: true,
+        effectiveFrom: '2026-01-01', effectiveTo, lines: tiers(org.items.service) })
+      assert.equal(refused.status, 422)
+      assert.match(String((await refused.json()).error), /Effective to.*real calendar date.*on or after/)
+      assert.deepEqual((await snapshot()).rows, before)
+    }
+  } finally {
+    routeState.gate = null
+    await dropScratchOrg(org.orgId)
+  }
+})
 
 /**
  * PRC4: a partly filled row is refused by index naming the missing field,
@@ -145,6 +220,9 @@ test('an empty replacement refuses without the flag and clears with it', async (
       select effective_to::text from item_rate_versions
        where org_id = ${org.orgId} and rate_book_id = ${book} and effective_from = '2026-01-01'`))).rows[0]
     assert.equal(String(closed!.effective_to).slice(0, 10), '2026-01-31')
+    const closure = (await withOrgContext(org.orgId, () => db.execute<{ changes: { closedVersion: unknown } }>(sql`
+      select changes from audit_log where org_id=${org.orgId} and table_name='item_rate_versions' and row_id=${live.id}`))).rows[0]!
+    assert.deepEqual(closure.changes.closedVersion, { id: versions[0]!.id, before: { effectiveTo: null }, after: { effectiveTo: '2026-01-31' } })
   } finally {
     routeState.gate = null
     await dropScratchOrg(org.orgId)

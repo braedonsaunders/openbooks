@@ -5,7 +5,7 @@ import { RecordTabs } from '@/components/module-home/record-tabs'
 import { useBusinessToday } from '@/components/business-date-provider'
 import { useRouter } from 'next/navigation'
 import { useMemo, useRef, useState } from 'react'
-import { useTranslations } from 'next-intl'
+import { useFormatter, useTranslations } from 'next-intl'
 import { Plus, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button, Input, Label, SearchSelect, Select, UrlDrawer } from '@openbooks/ui'
@@ -69,6 +69,7 @@ function responseError(body: unknown, fallback: string): string {
 export function RateBookDrawer({
   row,
   latestEffectiveFrom,
+  latestEffectiveTo,
   lines: initialLines,
   items,
   currencies,
@@ -78,6 +79,7 @@ export function RateBookDrawer({
 }: {
   row: Record<string, unknown> | null
   latestEffectiveFrom: string | null
+  latestEffectiveTo?: string | null
   lines: RateBookLine[]
   items: RateBookItemOption[]
   currencies: LineGridOption[]
@@ -89,6 +91,7 @@ export function RateBookDrawer({
   const tRates = useTranslations('items.rates')
   const tSetup = useTranslations('admin.setup')
   const common = useTranslations('common')
+  const format = useFormatter()
   const router = useRouter()
   const today = useBusinessToday()
   const creating = row == null
@@ -97,7 +100,9 @@ export function RateBookDrawer({
   const [currency, setCurrency] = useState(String(row?.currency ?? baseCurrency))
   const [isDefault, setIsDefault] = useState(Boolean(row?.is_default))
   const [isActive, setIsActive] = useState(row ? Boolean(row.is_active) : true)
-  const [effectiveFrom, setEffectiveFrom] = useState(latestEffectiveFrom ? addOneDay(latestEffectiveFrom) : today)
+  const [initialEffectiveFrom] = useState(() => latestEffectiveFrom ? addOneDay(latestEffectiveFrom) : today)
+  const [effectiveFrom, setEffectiveFrom] = useState(initialEffectiveFrom)
+  const [effectiveTo, setEffectiveTo] = useState('')
   const nextLineKey = useRef(initialLines.length)
   const [lines, setLines] = useState<EditableRateBookLine[]>(() => initialLines.map((line, index) => ({
     ...line,
@@ -108,7 +113,7 @@ export function RateBookDrawer({
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const initialLineSignature = useMemo(() => signature(initialLines), [initialLines])
-  const ratesChanged = signature(lines) !== initialLineSignature
+  const ratesChanged = signature(lines) !== initialLineSignature || effectiveFrom !== initialEffectiveFrom || effectiveTo !== ''
 
   const itemOptions = useMemo<LineGridOption[]>(() => items.map((item) => ({
     value: item.id,
@@ -248,6 +253,7 @@ export function RateBookDrawer({
           isActive,
           replaceRates: ratesChanged,
           effectiveFrom,
+          effectiveTo: effectiveTo || null,
           ...(confirmEmptyReplacement ? { confirmEmptyReplacement: true } : {}),
           lines: lines.map(({ clientKey: _clientKey, ...line }) => line),
         }),
@@ -300,9 +306,14 @@ export function RateBookDrawer({
             <div>
               <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t('ratesTitle')}</h3>
               <p className="text-xs text-slate-500 dark:text-slate-400">{t('ratesHelp')}</p>
+              {latestEffectiveFrom ? <p className="mt-1 text-xs text-slate-600 dark:text-slate-300">
+                {t('latestVersion')} · {tRates('effectiveFrom')}: {format.dateTime(new Date(`${latestEffectiveFrom}T12:00:00Z`), { dateStyle: 'medium', timeZone: 'UTC' })}
+                {' · '}{tRates('effectiveTo')}: {latestEffectiveTo ? format.dateTime(new Date(`${latestEffectiveTo}T12:00:00Z`), { dateStyle: 'medium', timeZone: 'UTC' }) : '—'}
+              </p> : null}
             </div>
             <div className="flex flex-wrap items-end gap-2">
-              <div className="w-44 space-y-1.5"><Label>{tRates('effectiveFrom')}</Label><Input type="date" value={effectiveFrom} onChange={(event) => setEffectiveFrom(event.target.value)} /></div>
+              <div className="w-44 space-y-1.5"><Label htmlFor="rate-book-effective-from">{tRates('effectiveFrom')}</Label><Input id="rate-book-effective-from" type="date" value={effectiveFrom} onChange={(event) => setEffectiveFrom(event.target.value)} /></div>
+              <div className="w-44 space-y-1.5"><Label htmlFor="rate-book-effective-to" help={t('effectiveToHelp')}>{tRates('effectiveTo')}</Label><Input id="rate-book-effective-to" type="date" min={effectiveFrom || undefined} value={effectiveTo} onChange={(event) => setEffectiveTo(event.target.value)} /></div>
               <Button type="button" variant="outline" onClick={addLine}><Plus size={15} />{t('addItem')}</Button>
             </div>
           </div>

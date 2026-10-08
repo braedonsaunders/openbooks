@@ -23,6 +23,7 @@ const rateBookBody = z.object({
   replaceRates: z.boolean().optional(),
   confirmEmptyReplacement: z.boolean().optional(),
   effectiveFrom: z.string().optional(),
+  effectiveTo: z.string().nullable().optional(),
   lines: z.array(z.object({
     itemId: z.string().optional(), unitCode: z.string().optional(), unitName: z.string().optional(),
     baseQuantity: z.string().optional(), costRate: z.string().optional(), billRate: z.string().optional(),
@@ -55,10 +56,14 @@ export const POST = defineRoute({
 
   const replaceRates = body.replaceRates === true
   const effectiveFrom = String(body.effectiveFrom ?? '')
+  const effectiveTo = body.effectiveTo?.trim() || null
   const validated = replaceRates ? validateRateBookLines(body.lines) : { lines: [] as ValidRateBookLine[] }
   if ('error' in validated) return NextResponse.json({ error: validated.error }, { status: 422 })
   if (replaceRates && !isIsoCalendarDate(effectiveFrom)) {
     return NextResponse.json({ error: 'Effective from must be a real calendar date in YYYY-MM-DD format.' }, { status: 422 })
+  }
+  if (replaceRates && effectiveTo !== null && (!isIsoCalendarDate(effectiveTo) || effectiveTo < effectiveFrom)) {
+    return NextResponse.json({ error: 'Effective to must be a real calendar date on or after effective from, or empty for an open-ended version.' }, { status: 422 })
   }
   // Activating a version with zero lines would silently wipe every rate in
   // the book from the new date. Refuse it unless the operator explicitly
@@ -102,8 +107,8 @@ export const POST = defineRoute({
       if (!bookId) throw new Error('Rate book was not saved.')
       if (!replaceRates) return { id: bookId }
 
-      const latest = (await tx.execute<{ id: string; effective_from: string }>(sql`
-        select id, effective_from
+      const latest = (await tx.execute<{ id: string; effective_from: string; effective_to: string | null }>(sql`
+        select id, effective_from, effective_to
           from item_rate_versions
          where org_id = ${gate.user.orgId} and rate_book_id = ${bookId} and status = 'active'
          order by effective_from desc
@@ -135,19 +140,27 @@ export const POST = defineRoute({
         }
       }
 
-      if (latest) {
-        const closed = await tx.execute(sql`
+      // A new version may shorten an existing window, never extend an expired
+      // version across a deliberately unpriced gap.
+      let closedVersion: { id: string; before: { effectiveTo: string | null }; after: { effectiveTo: string } } | null = null
+      if (latest && (latest.effective_to === null || effectiveFrom <= String(latest.effective_to).slice(0, 10))) {
+        const closed = await tx.execute<{ id: string; effective_to: string }>(sql`
           update item_rate_versions
              set effective_to = (${effectiveFrom}::date - interval '1 day')::date,
                  updated_at = now(), updated_by = ${gate.user.id}
            where id = ${latest.id} and org_id = ${gate.user.orgId} and status = 'active'
-           returning id`)
+           returning id, effective_to::text`)
         if (closed.rows.length !== 1) throw new Error('The current rate version changed while you were editing. Reload the rate book and try again.')
+        closedVersion = {
+          id: latest.id,
+          before: { effectiveTo: latest.effective_to === null ? null : String(latest.effective_to).slice(0, 10) },
+          after: { effectiveTo: closed.rows[0]!.effective_to },
+        }
       }
 
       const version = (await tx.execute<{ id: string }>(sql`
-        insert into item_rate_versions (org_id, rate_book_id, effective_from, status, created_by, updated_by)
-        values (${gate.user.orgId}, ${bookId}, ${effectiveFrom}, 'draft', ${gate.user.id}, ${gate.user.id})
+        insert into item_rate_versions (org_id, rate_book_id, effective_from, effective_to, status, created_by, updated_by)
+        values (${gate.user.orgId}, ${bookId}, ${effectiveFrom}, ${effectiveTo}, 'draft', ${gate.user.id}, ${gate.user.id})
         returning id`)).rows[0]
       if (!version) throw new Error('The new rate version was not created.')
 
@@ -197,13 +210,14 @@ export const POST = defineRoute({
          where id = ${version.id} and org_id = ${gate.user.orgId} and status = 'draft'
          returning id`)
       if (activated.rows.length !== 1) throw new Error('The new rate version could not be activated. Reload the rate book and try again.')
-      await tx.execute(sql`
+      const audited = await tx.execute(sql`
         insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
         values (
           ${gate.user.orgId}, 'item_rate_versions', ${version.id}, 'insert',
-          ${JSON.stringify({ rateBookId: bookId, effectiveFrom, lineCount: validated.lines.length })}::jsonb,
+          ${JSON.stringify({ rateBookId: bookId, effectiveFrom, effectiveTo, lineCount: validated.lines.length, closedVersion })}::jsonb,
           ${gate.user.id}
-        )`)
+        ) returning id`)
+      if (audited.rows.length !== 1) throw new Error('The rate version audit was not saved. Reload the rate book and try again.')
       return { id: bookId, versionId: version.id }
     })
     return NextResponse.json(result)
