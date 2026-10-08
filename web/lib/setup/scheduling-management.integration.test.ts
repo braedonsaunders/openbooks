@@ -16,6 +16,8 @@ test('module board deletion archives the native board, retains source evidence a
   try {
     const actorId = await withBypassContext(async () => {
       const id = (await seedFlowActors(org.orgId)).adminId
+      const grants = await db.execute(sql`update app_roles set permissions='["admin.setup.manage","hrm.shifts.read","hrm.shifts.approve"]'::jsonb where org_id=${org.orgId} and key='admin' returning id`)
+      assert.equal(grants.rows.length, 1, 'the native role receives the actual Setup and scheduling command grants')
       await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||'{"hrm":true,"hrmShiftPlanning":true}'::jsonb) where id=${org.orgId}`)
       return id
     })
