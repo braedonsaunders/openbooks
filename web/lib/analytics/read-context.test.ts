@@ -9,6 +9,7 @@ test('direct domain reads retain their full contract while summaries skip all de
   assert.equal(analyticsSection('financial-health', ['budget']), true)
   await withAnalyticsRead(context('financial-health', 'summary', ''), async () => {
     assert.equal(analyticsSection('financial-health', ['overview', 'items', 'budget']), false)
+    assert.equal(analyticsSection('financial-health', ['overview'], { summary: true }), true)
     assert.equal(analyticsSection('cashflow', ['category']), true)
   })
 })
@@ -19,6 +20,8 @@ test('selected tabs load their own sections and concurrent organizations cannot 
     assert.equal(currentAnalyticsRead()!.authz.user.orgId, slug)
     assert.equal(analyticsSection(slug, ['overview']), true)
     assert.equal(analyticsSection(slug, ['budget', 'category']), false)
+    assert.equal(analyticsSection(slug, ['budget'], { summary: true }), false,
+      'summary demand cannot admit an unselected tab')
   })))
   assert.equal(currentAnalyticsRead(), undefined)
 })

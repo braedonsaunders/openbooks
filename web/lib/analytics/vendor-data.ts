@@ -145,6 +145,7 @@ export async function vendorData(
   const { from, to } = period;
   const pFrom = priorYear(from);
   const pTo = priorYear(to);
+  const includeMonthly = analyticsSection('vendor-performance', ['overview'], { summary: true });
   const [today, config, buckets] = await Promise.all([
     businessToday(orgId),
     analyticsConfig(orgId, "vendorPerformance"),
@@ -225,7 +226,7 @@ export async function vendorData(
        group by party_id
       having sum(direction) <> 0
     `) : Promise.resolve({rows:[]})),
-    analyticsQuery<MonthSpendRow>(sql`
+    (includeMonthly ? analyticsQuery<MonthSpendRow>(sql`
       with ew as materialized (
         select id, org_id, posting_date from journal_entries
          where org_id = ${orgId} and posting_date >= ${startIso} and posting_date <= ${to}
@@ -246,7 +247,7 @@ export async function vendorData(
         ${subsidiaryVisibleFilter(sql`l.subsidiary_id`, allowed)}
         and a.type in ('cogs','expense','expense_deferred') and l.party_id is not null
       group by 1, 2, sub.base_currency
-    `),
+    `) : Promise.resolve({ rows: [] })),
     // Payment behaviour: collapse applications to one row per AP open-item
     // line before rolling up by vendor. A bill paid in installments must still
     // contribute one paid bill, one on-time decision, and one days-to-pay
@@ -437,7 +438,7 @@ export async function vendorData(
     return { ...r, sharePct, tier, score, grade: gradeOf(score, config), performance, quadrant, unratedReason };
   });
 
-  const monthly: MonthSpend[] = buckets.useFiscal
+  const monthly: MonthSpend[] = !includeMonthly ? [] : buckets.useFiscal
     ? fiscalMonthlyBoxes(buckets.periods, startIso, to, spendByBucket, zero, bucketLabels, (ym) => strings.monthLabel(ym))
     : Array.from({ length: 12 }, (_, i) => {
         const dt = utcDateFromParts(start.getUTCFullYear(), start.getUTCMonth() + i, 1);

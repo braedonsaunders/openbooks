@@ -23,7 +23,9 @@ export function observeAnalyticsSource(at: string): void {
 
 /** Direct domain readers retain their full contract. Dashboard requests only
  * resolve the sections belonging to the selected view. */
-export function analyticsSection(slug: string, tabs: readonly string[]): boolean {
+export function analyticsSection(slug: string, tabs: readonly string[], options: { summary?: boolean } = {}): boolean {
   const read = context.getStore()
-  return !read || read.slug !== slug || (read.projection === 'tab' && tabs.includes(read.tab))
+  return !read || read.slug !== slug || (read.projection === 'summary'
+    ? options.summary === true
+    : tabs.includes(read.tab))
 }
