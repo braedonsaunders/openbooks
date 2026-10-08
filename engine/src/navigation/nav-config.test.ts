@@ -36,6 +36,25 @@ test('deliberate placements, labels, links, and local preferences survive new de
   assert.equal(result.groups.flatMap((group) => group.items).filter((item) => item.kind === 'module' && item.moduleKey === 'employees').length, 1)
 })
 
+test('inherited Pre-billing starts Sell & Collect without replacing saved choices', () => {
+  const saved = defaultNavConfig()
+  const customers = saved.groups.find((group) => group.id === 'customers')!
+  const operations = saved.groups.find((group) => group.id === 'operations')!
+  customers.items = customers.items.filter((item) => item.kind !== 'module' || item.moduleKey !== 'pre-billing')
+  operations.items.push({ kind: 'module', moduleKey: 'pre-billing', label: 'Billing review', hidden: true, mobile: true })
+  const before = structuredClone(saved)
+  const result = reconcileNavConfig(saved)
+  const billing = result.groups.find((group) => group.id === 'customers')!.items.filter((item) => item.kind === 'module' && NAV_MODULES.find((module) => module.key === item.moduleKey)?.subgroup === 'sell-collect')
+  assert.deepEqual(billing[0], operations.items.at(-1))
+  assert.deepEqual(billing.slice(1), customers.items.filter((item) => item.kind === 'module' && NAV_MODULES.find((module) => module.key === item.moduleKey)?.subgroup === 'sell-collect'))
+  assert.equal(result.groups.flatMap((group) => group.items).filter((item) => item.kind === 'module' && item.moduleKey === 'pre-billing').length, 1)
+  assert.deepEqual(saved, before)
+  assert.deepEqual(reconcileNavConfig(result), result)
+  const explicit = structuredClone(saved)
+  Object.assign(explicit.groups.find((group) => group.id === 'operations')!.items.at(-1)!, { placement: 'custom' })
+  assert.deepEqual(reconcileNavConfig(explicit), explicit, 'deliberate company placement remains authoritative')
+})
+
 test('HR promotion and its disabled fallback preserve independent payroll ownership', () => {
   const config = defaultNavConfig()
   const before = structuredClone(config)
