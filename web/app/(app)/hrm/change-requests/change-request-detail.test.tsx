@@ -16,7 +16,7 @@ declare global {
 
 // jsdom first: the drawer reads browser globals at render.
 const { bootJsdomEnvironment } = await import('../../../../testing/jsdom-env')
-await bootJsdomEnvironment({ url: 'http://localhost:4800/hrm/change-requests', matchMediaMatches: false, resizeObserver: false })
+await bootJsdomEnvironment({ url: 'http://localhost:4800/hrm/change-requests', matchMediaMatches: false, resizeObserver: false, event: 'jsdom' })
 
 const { registerHooks } = await import('node:module')
 const { stubModules } = await import('../../../../testing/stub-modules')
