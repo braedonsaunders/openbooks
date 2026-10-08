@@ -957,6 +957,7 @@ async function readCustomerData(
   period: CustomerPeriod, orgId: string, allowed: ReadonlySet<string> | null,
   strings: CustomerStrings, preview: boolean,
 ): Promise<CustomerData | CustomerSummary> {
+  const includeCohorts = !preview && analyticsSection('customer-intelligence', ['growth']);
   const [{ moneyCompact }, today, cfg] = await Promise.all([
     getMoneyFormatter(orgId),
     businessToday(orgId),
@@ -1117,7 +1118,7 @@ async function readCustomerData(
   const cohortActiveMonths = cfg.cohortActiveMonths!;
   const overdueInsightAt = cfg.overdueInsightCount!;
 
-  const [baseRows, frictionRows, paymentRows, growthRows, growthCounts, cohortRows, ledgerRows, cohortLedgerRows, dsoStats] = await Promise.all([
+  const [baseRows, frictionRows, paymentRows, growthRows, growthCounts, cohortRows, ledgerRows, cohortLedgerRows, dsoStats, cohortFyStart] = await Promise.all([
     // Base customer metrics — the header query over CustInvc(+CashSale):
     // per-customer invoice count / INVOICED revenue / first-last dates /
     // recency / tenure. This is the billing-activity population the ledger
@@ -1237,7 +1238,7 @@ async function readCustomerData(
     // Cohorts — lifetime per-customer first/last order + lifetime revenue;
     // grouped into join-year cohorts below (active = ordered in last 6 months).
     // Lifetime revenue translates per posting date below.
-    (preview || !analyticsSection('customer-intelligence', ['growth']) ? Promise.resolve({ rows: [] }) : analyticsQuery(sql`
+    (!includeCohorts ? Promise.resolve({ rows: [] }) : analyticsQuery(sql`
       with movement as (${customerDocumentMovements(orgId, ['customer_invoice'], allowed)})
       select movement.party_id as id, movement.func,
         movement.event_date::date as day,
@@ -1324,7 +1325,7 @@ async function readCustomerData(
     `)),
     // Lifetime recognized per customer, for cohorts (lifetime invoiced stays
     // on the document query above).
-    (preview || !analyticsSection('customer-intelligence', ['growth']) ? Promise.resolve({ rows: [] }) : analyticsQuery(sql`
+    (!includeCohorts ? Promise.resolve({ rows: [] }) : analyticsQuery(sql`
       with ew as materialized (
         select id, posting_date, origin
           from journal_entries
@@ -1361,6 +1362,8 @@ async function readCustomerData(
     // trailing mean the cash cockpit, cashflow analytics, MCP cashflow tool,
     // and get_vitals read — never a second per-customer grain computed here.
     preview ? Promise.resolve(null) : paymentStats("ar", ref, allowed ? [...allowed] : undefined, orgId),
+    // Fiscal grouping belongs to the cohort read and can resolve alongside its legs.
+    includeCohorts ? fiscalStartMonth(orgId) : Promise.resolve(null),
   ]);
 
   /* ---- recognized revenue + recon (ledger universe, per party) ---- */
@@ -2061,18 +2064,19 @@ async function readCustomerData(
   // Cohorts group by the org's fiscal year of first order, never the
   // calendar slice: a January-start book matches either way, but any other
   // fiscal calendar would silently mis-cohort its boundary customers.
-  const cohortFyStart = await fiscalStartMonth(orgId);
-  for (const p of cohortByParty.values()) {
-    const year = String(fiscalYearOf(p.first.slice(0, 10), cohortFyStart));
-    const isActive = p.last >= activeCut;
-    lifetimeCustomers++;
-    if (isActive) lifetimeActive++;
-    let c = cohortMap.get(year);
-    if (!c) { c = { year, totalCustomers: 0, activeCustomers: 0, retentionRate: 0, totalRevenue: "0", avgRevenue: "0", totalInvoiced: "0" }; cohortMap.set(year, c); }
-    c.totalCustomers++;
-    if (isActive) c.activeCustomers++;
-    c.totalRevenue = add(c.totalRevenue, p.revenue);
-    c.totalInvoiced = add(c.totalInvoiced, p.invoiced);
+  if (cohortFyStart !== null) {
+    for (const p of cohortByParty.values()) {
+      const year = String(fiscalYearOf(p.first.slice(0, 10), cohortFyStart));
+      const isActive = p.last >= activeCut;
+      lifetimeCustomers++;
+      if (isActive) lifetimeActive++;
+      let c = cohortMap.get(year);
+      if (!c) { c = { year, totalCustomers: 0, activeCustomers: 0, retentionRate: 0, totalRevenue: "0", avgRevenue: "0", totalInvoiced: "0" }; cohortMap.set(year, c); }
+      c.totalCustomers++;
+      if (isActive) c.activeCustomers++;
+      c.totalRevenue = add(c.totalRevenue, p.revenue);
+      c.totalInvoiced = add(c.totalInvoiced, p.invoiced);
+    }
   }
   const cohortList = [...cohortMap.values()]
     .map((c) => ({

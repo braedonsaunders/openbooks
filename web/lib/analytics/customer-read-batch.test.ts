@@ -86,6 +86,7 @@ test('customer read batches all flow sources and preserves dated exact revenue a
   assert.equal(data.cohorts.list[0]?.totalRevenue, '220.0000')
   assert.equal(data.cohorts.list[0]?.totalInvoiced, '220.0000')
   assert.equal(data.growth.monthly[0]?.revenue, '220.0000')
+  assert.equal(state.queries.filter(query => query.sql.includes("settings->>'fiscalYearStartMonth'")).length, 1)
   assert.equal(state.queries.some((query) => query.sql.includes('select to_char(e.posting_date')), false,
     'monthly recognition reuses the scoped customer ledger read')
   const movementQueries = state.queries.filter((query) => query.sql.includes('with movement as'))
@@ -100,6 +101,8 @@ test('customer preview retains exact dated revenue without reading cohort histor
   assert.equal(state.quotes, 1)
   assert.equal(data.kpis.totalRevenue, '220.0000')
   assert.equal(state.queries.some((query) => query.sql.includes('as lifetime_revenue')), false)
+  assert.equal(state.queries.some(query => query.sql.includes("settings->>'fiscalYearStartMonth'")), false,
+    'the summary does not read a fiscal grouping policy without cohorts')
 })
 
 test('customer batch refuses missing early coverage even when a later rate exists', async () => {
