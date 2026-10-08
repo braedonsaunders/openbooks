@@ -357,6 +357,21 @@ test('true cost per-FTE uses resolved annual hours, not 2080', { skip: !env.OPEN
         assert.deepEqual(selected.categories.find((c) => c.key === 'rent')?.byDept, rent.byDept)
         assert.deepEqual(selected.compositeRefusal, data.compositeRefusal)
       }
+      // A custom category can be the only annual-hours consumer.
+      const customId = randomUUID()
+      const written = await db.execute(sql`update orgs set settings =
+        jsonb_set(jsonb_set(settings, '{analytics,trueCost,profiles,0,categorySettings}', '{}'::jsonb),
+          '{analytics,trueCost,profiles,0,customCategories}', ${JSON.stringify([{
+            id: customId, name: 'Annual allowance', color: null, type: 'manual',
+            allocationBase: 'billed_hours', rateFormat: 'per_fte', includeInComposite: false,
+            manualConfig: { entryMode: 'fixed_total', fixedTotal: '800' },
+          }])}::jsonb)
+        where id = ${seed.org.orgId} returning id`)
+      assert.equal(written.rows.length, 1)
+      const customFull = (await load(seed.org.orgId)).categories.find((c) => c.id === customId)!
+      assert.equal(customFull.byDept[seed.deptIds[0]!]!.rate, 200000)
+      const customSelected = await loadSelected(seed.org.orgId, 'categories')
+      assert.deepEqual(customSelected.categories.find((c) => c.id === customId)?.byDept, customFull.byDept)
     },
   )
 })

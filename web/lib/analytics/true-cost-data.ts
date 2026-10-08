@@ -444,10 +444,11 @@ export async function trueCostData(
   const appliedFilter = sql`e.origin = 'overhead_applied' and l.project_id is not null`;
   // Employee facts also supply the measured labour base and annual-hours
   // divisor. A selected view may omit selling rows, but not policy inputs.
+  const annualHoursRequired = Object.values(cfg.profile.categorySettings).some((setting) => setting.rateFormat === "per_fte")
+    || cfg.profile.customCategories.some((category) => category.rateFormat === "per_fte");
   const employeeInputsRequired = analyticsSection('true-cost', ["selling"])
     || cfg.profile.compositeMethod === "cascading"
-    || Object.values(cfg.profile.categorySettings).some((setting) => setting.rateFormat === "per_fte")
-    || cfg.profile.customCategories.some((category) => category.rateFormat === "per_fte");
+    || annualHoursRequired;
   const [acctRows, hoursRows, empRows, priorRows, priorTimeRows, appliedRows, cardPricedRows, priorDeptHoursRows, deptRows, baseRows, hcRows, premiumRows] = await Promise.all([
     // Expense account totals per account × department × month × functional —
     // journal legs arrive stamped in their line entity's functional and
@@ -805,7 +806,7 @@ export async function trueCostData(
   let overallAnnualHours: string | null = null;
   {
     const empIds = [...empHoursExact.keys()];
-    if (empIds.length > 0) {
+    if (annualHoursRequired && empIds.length > 0) {
       const [rateAnnual, roleRows, schedules] = await Promise.all([
         resolveAnnualHoursMany(orgId, empIds, to),
         db.execute<{ party_id: string; job_title: string | null; trade_id: string | null; department_id: string | null; subsidiary_id: string | null }>(sql`
