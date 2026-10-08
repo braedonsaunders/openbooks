@@ -17,6 +17,7 @@ import {
   sourcePermission,
 } from "@openbooks/analytics";
 import { can } from "../../../../lib/authz";
+import { withAuthzContext } from "@/lib/authz-context";
 import { reportEntityCatalog } from "@/lib/custom-record-report-catalog";
 import {
   InsightBookScopeError,
@@ -116,12 +117,12 @@ export const POST = defineRoute({
       // restricted reader's ledger sources arrive pre-collapsed per
       // (entry, account, currency) before any caller filter, dimension, sort,
       // or limit, so no card can isolate one employee's pay.
-      const [labels, today, catalog, startMonth] = await Promise.all([
+      const [labels, today, catalog, startMonth] = await withAuthzContext(gate, () => Promise.all([
         insightLabelResolver(),
         businessToday(gate.user.orgId),
         reportEntityCatalog(gate),
         fiscalStartMonth(gate.user.orgId),
-      ]);
+      ]));
       const result = await runInsightQuery(
         pool,
         query,
