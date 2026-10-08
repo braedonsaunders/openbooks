@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
 import test from 'node:test'
 import { sql } from 'drizzle-orm'
+import { cmp } from '@openbooks/engine/src/money/money.ts'
 import { db, withBypassContext, withOrgContext } from '@openbooks/engine/src/platform/db.ts'
 import { createScratchOrg, dropScratchOrg, seedFlowActors } from '@openbooks/engine/src/testing/fixtures.ts'
 import { withAuthzContext } from '../../../lib/authz-context.ts'
@@ -35,7 +36,7 @@ test('native bill-only books retain unknown cost, explicit pins and earlier vers
       where l.org_id=${org.orgId} and l.version_id=${versionId}`))
     const before = (await read()).rows as { line: { cost_rate: null; bill_rate: string }; profile: { pricing_policy: string } }[]
     assert.equal(before[0]!.line.cost_rate, null)
-    assert.equal(String(before[0]!.line.bill_rate), '80.0000')
+    assert.equal(cmp(String(before[0]!.line.bill_rate), '80'), 0)
     assert.equal(before[0]!.profile.pricing_policy, 'explicit')
     const project = randomUUID(), worker = randomUUID(), entry = randomUUID()
     await withBypassContext(async () => {
@@ -50,7 +51,8 @@ test('native bill-only books retain unknown cost, explicit pins and earlier vers
         values(${entry},${org.orgId},${worker},'2025-06-01',2,${org.items.service},${project},'draft',true,'unbilled','{}'::jsonb,${actorId},${actorId})`)
     })
     const billing = await withOrgContext(org.orgId, () => snapshotTimeBillRates(org.orgId, [entry], { dryRun: true }))
-    assert.equal(billing.get(entry), '80.0000', 'billing uses the authored rate without inventing cost')
+    assert.ok(billing.has(entry))
+    assert.equal(cmp(billing.get(entry)!, '80'), 0, 'billing uses the authored rate without inventing cost')
     await assert.rejects(resolveItemRate({ orgId: org.orgId, projectId: project, itemId: org.items.service,
       onDate: '2025-06-01', baseQuantity: '2' }), /No cost rates are configured/)
     const invalid = await post({ id: bookId, code: 'BILL-ONLY', name: 'Changed name', replaceRates: true,
@@ -60,7 +62,9 @@ test('native bill-only books retain unknown cost, explicit pins and earlier vers
       effectiveFrom: '2026-01-01', lines: [{ ...line, costRate: '0', pricingPolicy: 'lowest_cost' }] })
     assert.equal(next.status, 200)
     assert.deepEqual((await read()).rows, before, 'a new known cost or policy cannot reinterpret the prior version')
-    assert.equal((await withOrgContext(org.orgId, () => snapshotTimeBillRates(org.orgId, [entry], { dryRun: true }))).get(entry), '80.0000')
+    const preservedBilling = await withOrgContext(org.orgId, () => snapshotTimeBillRates(org.orgId, [entry], { dryRun: true }))
+    assert.ok(preservedBilling.has(entry))
+    assert.equal(cmp(preservedBilling.get(entry)!, '80'), 0)
     await assert.rejects(resolveItemRate({ orgId: org.orgId, projectId: project, itemId: org.items.service,
       onDate: '2025-06-01', baseQuantity: '2' }), /No cost rates are configured/)
     const audits = (await withOrgContext(org.orgId, () => db.execute<{ actor_id: string }>(sql`
