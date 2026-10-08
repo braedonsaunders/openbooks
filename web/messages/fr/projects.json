@@ -378,7 +378,7 @@
     "carry_forward": "Facturer selon la dernière grille",
     "customerReview": "Validation client avant facturation"
   },
-  "wipBilling": {
+  "preBilling": {
     "toolbar": {
       "search": "Rechercher clients, projets, feuilles",
       "board": "Tableau",

@@ -5329,7 +5329,7 @@
         "openVendorPayApplications": "{count, plural, one {# 份进行中的供应商付款申请} other {# 份进行中的供应商付款申请}}",
         "activeSubcontractPaymentControls": "{count, plural, one {# 项有效分包付款管控} other {# 项有效分包付款管控}}",
         "openPrebills": "{count, plural, one {# 笔待完工预开票} other {# 笔待完工预开票}}",
-        "activeWipHolds": "{count, plural, one {# 项有效在产冻结} other {# 项有效在产冻结}}",
+        "activePrebillHolds": "{count, plural, one {# 项有效预账单暂缓} other {# 项有效预账单暂缓}}",
         "activePropertyLeases": "{count, plural, one {# 份有效物业租约} other {# 份有效物业租约}}",
         "securityDepositTransactions": "{count, plural, one {# 笔保证金交易} other {# 笔保证金交易}}",
         "revenueSchedules": "{count, plural, one {# 份递延收入计划} other {# 份递延收入计划}}",
@@ -7032,7 +7032,7 @@
       "title": "分包合同与进度开票",
       "description": "供应商承诺、分包变更、供应商 SOV 与付款申请、应付保留款、释放、联合支票与付款冻结。"
     },
-    "wipBilling": {
+    "preBilling": {
       "title": "预开票",
       "description": "将未开票的项目工作转为经过审核的发票包：批量预开票、有依据的调整和暂缓、通过流程审批、可选的门户客户审核，以及附带支持文件的发票发送。"
     },

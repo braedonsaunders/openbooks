@@ -8,12 +8,12 @@ import { isUuid, pickString } from '../../../../lib/list-params'
 import {
   listPrebills,
   listUnbilledProjects,
-  listWipProjects,
+  listPreBillingProjects,
   loadPrebill,
   prebillApprovalFlowsConfigured,
-} from '../../../../lib/wip-billing'
-import { requireWipBillingFeature } from '../../../../lib/wip-billing-gate'
-import type { WipBillingWorkspace } from './WipBillingWorkspace'
+} from '../../../../lib/pre-billing'
+import { requirePreBillingFeature } from '../../../../lib/pre-billing-gate'
+import type { PreBillingWorkspace } from './PreBillingWorkspace'
 
 /**
  * Pre-billing, split into a loader and a spec.
@@ -31,15 +31,15 @@ import type { WipBillingWorkspace } from './WipBillingWorkspace'
  * booleans.
  */
 
-type WipBillingWorkspaceProps = Parameters<typeof WipBillingWorkspace>[0]
+type PreBillingWorkspaceProps = Parameters<typeof PreBillingWorkspace>[0]
 
-export interface WipBillingData {
+export interface PreBillingData {
   title: string
   description: string
-  prebills: WipBillingWorkspaceProps['prebills']
-  unbilled: WipBillingWorkspaceProps['unbilled']
-  projects: WipBillingWorkspaceProps['projects']
-  selected: WipBillingWorkspaceProps['selected']
+  prebills: PreBillingWorkspaceProps['prebills']
+  unbilled: PreBillingWorkspaceProps['unbilled']
+  projects: PreBillingWorkspaceProps['projects']
+  selected: PreBillingWorkspaceProps['selected']
   canManage: boolean
   canCreateInvoice: boolean
   customerPortalEnabled: boolean
@@ -57,18 +57,18 @@ function isoInstantOrNull(value: string | Date | null): string | null {
   return value == null ? null : isoInstant(value)
 }
 
-export async function loadWipBilling(
+export async function loadPreBilling(
   sp: Record<string, string | string[] | undefined>,
-): Promise<WipBillingData> {
+): Promise<PreBillingData> {
   const authz = await requirePermission('projects.read')
-  await requireFeatureEnabled(authz.user.orgId, 'wipBilling')
-  await requireWipBillingFeature(authz.user.orgId)
+  await requireFeatureEnabled(authz.user.orgId, 'preBilling')
+  await requirePreBillingFeature(authz.user.orgId)
   const orgId = authz.user.orgId
   const selectedId = pickString(sp.prebill)
   const [prebills, unbilled, projects, rawSelected, customerPortalEnabled, approvalFlowsConfigured] = await Promise.all([
     listPrebills(orgId, undefined, authz.allowedSubsidiaryIds),
     listUnbilledProjects(orgId, authz.allowedSubsidiaryIds),
-    listWipProjects(orgId, authz.allowedSubsidiaryIds),
+    listPreBillingProjects(orgId, authz.allowedSubsidiaryIds),
     selectedId && isUuid(selectedId) ? loadPrebill(orgId, selectedId, authz.allowedSubsidiaryIds) : null,
     isFeatureEnabled(orgId, 'customerPortal'),
     prebillApprovalFlowsConfigured(orgId),
@@ -100,18 +100,18 @@ export async function loadWipBilling(
   }
 }
 
-const f = ref<WipBillingData>()
+const f = ref<PreBillingData>()
 
-export function wipBillingSpec(data: WipBillingData): PageSpec {
+export function preBillingSpec(data: PreBillingData): PageSpec {
   return page({
-    route: '/projects/wip-billing',
+    route: '/projects/pre-billing',
     layout: 'list',
     header: [pageHeader({ title: f('title'), description: f('description') })],
     body: [
       // The whole workspace, placed through one widget: it owns the board,
       // the drawers, the editable line inputs and every fetch mutation, so
       // splitting it would strand client state from the actions it drives.
-      widgetBlock('wip-billing-workspace', {
+      widgetBlock('pre-billing-workspace', {
         prebills: data.prebills,
         unbilled: data.unbilled,
         projects: data.projects,

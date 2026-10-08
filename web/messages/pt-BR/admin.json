@@ -5329,7 +5329,7 @@
         "openVendorPayApplications": "{count, plural, one {# medição de fornecedor em andamento} other {# medições de fornecedor em andamento}}",
         "activeSubcontractPaymentControls": "{count, plural, one {# controle de pagamento de subcontrato ativo} other {# controles de pagamento de subcontrato ativos}}",
         "openPrebills": "{count, plural, one {# pré-fatura aguardando conclusão} other {# pré-faturas aguardando conclusão}}",
-        "activeWipHolds": "{count, plural, one {# trava de WIP ativa} other {# travas de WIP ativas}}",
+        "activePrebillHolds": "{count, plural, one {# retenção de pré-faturamento ativa} other {# retenções de pré-faturamento ativas}}",
         "activePropertyLeases": "{count, plural, one {# locação ativa} other {# locações ativas}}",
         "securityDepositTransactions": "{count, plural, one {# transação de caução} other {# transações de caução}}",
         "revenueSchedules": "{count, plural, one {# cronograma de receita diferida} other {# cronogramas de receita diferida}}",
@@ -7032,7 +7032,7 @@
       "title": "Subcontratos e faturamento de progresso",
       "description": "Compromissos com fornecedores, alterações de subcontrato, SOVs e medições de fornecedores, retenções a pagar, liberações, cheques conjuntos e travas de pagamento."
     },
-    "wipBilling": {
+    "preBilling": {
       "title": "Pré-faturamento",
       "description": "Transforme o trabalho de projeto não faturado em pacotes de fatura revisados: ciclos de faturamento, ajustes e retenções com evidências, aprovação por Fluxos, revisão opcional do cliente no portal e envio de faturas com comprovantes."
     },

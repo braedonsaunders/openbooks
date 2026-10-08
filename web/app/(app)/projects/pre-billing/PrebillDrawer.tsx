@@ -44,8 +44,8 @@ import { canonicalDecimal } from "../../../../lib/exact-decimal";
 import { decimalCmp, decimalSum } from "../../../../lib/statement-format";
 import { useViewerFormat } from "../../../../lib/viewer-format";
 import { prebillStage } from "../../../../lib/pre-billing-stages";
-import type { PrebillDetail, PrebillLineRow } from "../../../../lib/wip-billing";
-import { requestJson, STAGE_TONE } from "./WipBillingWorkspace";
+import type { PrebillDetail, PrebillLineRow } from "../../../../lib/pre-billing";
+import { requestJson, STAGE_TONE } from "./PreBillingWorkspace";
 
 type Panel = "reopen" | "void" | "send" | "deliver" | null;
 
@@ -67,7 +67,7 @@ export function PrebillDrawer({
   customerPortalEnabled: boolean;
   onClose: () => void;
 }) {
-  const t = useTranslations("projects.wipBilling");
+  const t = useTranslations("projects.preBilling");
   const router = useRouter();
   const { money } = useMoney();
   const { dateTime } = useViewerFormat();
@@ -93,7 +93,7 @@ export function PrebillDrawer({
   async function act(action: string, body: Record<string, unknown>, success: (result: Record<string, unknown>) => string) {
     setBusy(action);
     try {
-      const result = await requestJson(`/api/wip-billing/${prebill.id}`, {
+      const result = await requestJson(`/api/pre-billing/${prebill.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action, ...body }),
@@ -113,7 +113,7 @@ export function PrebillDrawer({
   async function convert() {
     setBusy("convert");
     try {
-      const result = await requestJson<{ documentNumber: string }>(`/api/wip-billing/${prebill.id}/convert`, { method: "POST" });
+      const result = await requestJson<{ documentNumber: string }>(`/api/pre-billing/${prebill.id}/convert`, { method: "POST" });
       toast.success(t("toasts.converted", { documentNumber: result.documentNumber }));
       router.refresh();
     } catch (error) {
@@ -317,7 +317,7 @@ function StatusNotice({
   stage: ReturnType<typeof prebillStage>;
   dateTime: (value: string) => string;
 }) {
-  const t = useTranslations("projects.wipBilling");
+  const t = useTranslations("projects.preBilling");
   if (prebill.status === "draft" && prebill.customerDecision === "disputed") {
     return (
       <Alert variant="destructive">
@@ -369,7 +369,7 @@ function StatusNotice({
 }
 
 function InvoicePreview({ prebill, lines, money }: { prebill: PrebillDetail; lines: PrebillLineRow[]; money: (value: string) => string }) {
-  const t = useTranslations("projects.wipBilling");
+  const t = useTranslations("projects.preBilling");
   const subtotal = decimalSum(lines.map((line) => line.proposedBillAmount));
   const margin = decimalSum([subtotal, `-${prebill.costAmount}`]);
   return (
@@ -478,7 +478,7 @@ function ActionPanel({
   onCancel: () => void;
   onSubmit: () => void;
 }) {
-  const t = useTranslations("projects.wipBilling");
+  const t = useTranslations("projects.preBilling");
   const needsReason = panel === "reopen" || panel === "void";
   return (
     <section
@@ -532,7 +532,7 @@ function PrebillLine({
   onChanged: () => void;
   money: (value: string) => string;
 }) {
-  const t = useTranslations("projects.wipBilling");
+  const t = useTranslations("projects.preBilling");
   const [amount, setAmount] = useState(line.proposedBillAmount);
   const [reason, setReason] = useState(line.adjustmentReason ?? "");
   const [evidence, setEvidence] = useState(line.adjustmentEvidence.join(", "));
@@ -622,7 +622,7 @@ function PrebillLine({
                 <Button
                   size="sm"
                   disabled={saving}
-                  onClick={() => patch(`/api/wip-billing/${prebillId}/lines/${line.id}`, {
+                  onClick={() => patch(`/api/pre-billing/${prebillId}/lines/${line.id}`, {
                     proposedBillAmount: amount,
                     adjustmentReason: reason,
                     adjustmentEvidence: splitList(evidence),
@@ -647,7 +647,7 @@ function PrebillLine({
                   <Button
                     size="sm"
                     disabled={!holdReason.trim() || saving}
-                    onClick={() => patch(`/api/wip-billing/${prebillId}/lines/${line.id}`, {
+                    onClick={() => patch(`/api/pre-billing/${prebillId}/lines/${line.id}`, {
                       action: "hold",
                       reason: holdReason.trim(),
                       evidence: splitList(holdEvidence),
@@ -673,7 +673,7 @@ function PrebillLine({
                   <Button
                     size="sm"
                     disabled={!holdReason.trim() || saving}
-                    onClick={() => patch(`/api/wip-billing/holds/${line.holdId}`, { reason: holdReason.trim() }, t("lineToasts.holdReleased"))}
+                    onClick={() => patch(`/api/pre-billing/holds/${line.holdId}`, { reason: holdReason.trim() }, t("lineToasts.holdReleased"))}
                   >
                     {t("line.release")}
                   </Button>

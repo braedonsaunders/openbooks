@@ -352,7 +352,7 @@ export const DSAR_EXCLUDED_TABLES: readonly DsarExcludedTable[] = [
     table: "crew_time_batches",
     reason: "foreman-side capture envelopes; ops time capture.",
   },
-  { table: "wip_prebill_lines", reason: "construction billing detail. Ops remit." },
+  { table: "prebill_lines", reason: "construction billing detail. Ops remit." },
   { table: "hrm_benefit_transaction_policies", reason: "Employer incentive policy configuration; dated subject responsibilities and awards are exported without other recipients or company source measurements." },
   { table: "hrm_benefit_transaction_items", reason: "Employer incentive policy configuration; dated subject responsibilities and awards are exported without other recipients or company source measurements." },
   { table: "hrm_benefit_transaction_positions", reason: "Employer incentive policy configuration; dated subject responsibilities and awards are exported without other recipients or company source measurements." },

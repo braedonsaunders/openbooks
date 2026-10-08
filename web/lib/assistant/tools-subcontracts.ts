@@ -4,18 +4,18 @@ import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/platform/db.ts";
 import { isFeatureEnabled } from "../features";
 import { subsidiaryVisibleFilter } from "../subsidiaries";
-import { listPrebills, loadPrebill, wipAnalytics } from "../wip-billing";
+import { listPrebills, loadPrebill, preBillingAnalytics } from "../pre-billing";
 import type { AssistantToolDef, ToolResult } from "./types";
 import { dateInput, money, uuidInput } from "./tools-shared";
 
 /**
- * Subcontract + WIP-billing reads. Subcontracts are vendor-side project
+ * Subcontract + Pre-billing reads. Subcontracts are vendor-side project
  * commitments (GET `api/subcontracts`: `ap.read` plus the projects AND
  * subcontracts features; every listing scopes to the project subsidiary).
- * WIP prebills reuse the governed library `web/lib/wip-billing.ts`
- * (`listPrebills`, `loadPrebill`, `wipAnalytics`) — the exact services the
- * WIP routes call — under `projects.read` (prebills) and `reports.read`
- * (analytics) plus the wipBilling feature. Customer-side holdback already
+ * Pre-billing reuse the governed library `web/lib/pre-billing.ts`
+ * (`listPrebills`, `loadPrebill`, `preBillingAnalytics`) — the exact services the
+ * Pre-billing routes call — under `projects.read` (prebills) and `reports.read`
+ * (analytics) plus the preBilling feature. Customer-side holdback already
  * exists (`retainage_balances`); subcontractor holdback is the payable side.
  */
 
@@ -27,10 +27,10 @@ async function subcontractsEnabled(orgId: string): Promise<boolean> {
   return projects && subcontracts;
 }
 
-async function wipBillingEnabled(orgId: string): Promise<boolean> {
+async function preBillingEnabled(orgId: string): Promise<boolean> {
   const [projects, wip] = await Promise.all([
     isFeatureEnabled(orgId, "projects"),
-    isFeatureEnabled(orgId, "wipBilling"),
+    isFeatureEnabled(orgId, "preBilling"),
   ]);
   return projects && wip;
 }
@@ -252,20 +252,20 @@ const getSubcontract: AssistantToolDef = {
   },
 };
 
-const listWipPrebills: AssistantToolDef = {
-  name: "list_wip_prebills",
+const listPrebills: AssistantToolDef = {
+  name: "list_prebills",
   description:
-    "WIP and prebilling worksheets by project: status, original/proposed/adjustment bill amounts, cost, and the converted invoice link. Same rows the WIP workspace lists. Read-only.",
+    "Pre-billing worksheets by project: status, original/proposed/adjustment bill amounts, cost, and the converted invoice link. Same rows the Pre-billing workspace lists. Read-only.",
   category: "search",
   gate: { mode: "anyOf", perms: ["projects.read"] },
-  feature: "wipBilling",
+  feature: "preBilling",
   inputSchema: z.object({
     projectId: uuidInput.optional().describe("Restrict to one project"),
     limit: z.number().int().min(1).max(100).optional().describe("Default 25"),
   }),
   execute: async (raw, authz): Promise<ToolResult> => {
-    if (!(await wipBillingEnabled(authz.user.orgId))) {
-      return { ok: false, error: "wipBilling_feature_disabled" };
+    if (!(await preBillingEnabled(authz.user.orgId))) {
+      return { ok: false, error: "preBilling_feature_disabled" };
     }
     const a = raw as { projectId?: string; limit?: number };
     const limit = Math.min(a.limit ?? 25, 100);
@@ -284,25 +284,25 @@ const listWipPrebills: AssistantToolDef = {
         returned: Math.min(rows.length, limit),
         truncated: rows.length > limit,
         items: rows.slice(0, limit).map((r) => monetize(r as unknown as Record<string, unknown>)),
-        href: "/projects/wip-billing",
+        href: "/projects/pre-billing",
       },
     };
   },
 };
 
-const getWipPrebill: AssistantToolDef = {
-  name: "get_wip_prebill",
+const getPrebill: AssistantToolDef = {
+  name: "get_prebill",
   description:
-    "One WIP worksheet by id: header, cost/billing lines with holds and adjustments, lifecycle events, and submission/approval/conversion state. Same payload the WIP drawer renders. Read-only.",
+    "One Pre-billing worksheet by id: header, cost/billing lines with holds and adjustments, lifecycle events, and submission/approval/conversion state. Same payload the Pre-billing drawer renders. Read-only.",
   category: "read",
   gate: { mode: "anyOf", perms: ["projects.read"] },
-  feature: "wipBilling",
+  feature: "preBilling",
   inputSchema: z.object({
-    id: uuidInput.describe("Worksheet id from list_wip_prebills"),
+    id: uuidInput.describe("Worksheet id from list_prebills"),
   }),
   execute: async (raw, authz): Promise<ToolResult> => {
-    if (!(await wipBillingEnabled(authz.user.orgId))) {
-      return { ok: false, error: "wipBilling_feature_disabled" };
+    if (!(await preBillingEnabled(authz.user.orgId))) {
+      return { ok: false, error: "preBilling_feature_disabled" };
     }
     const a = raw as { id: string };
     const detail = await loadPrebill(authz.user.orgId, a.id, authz.allowedSubsidiaryIds);
@@ -323,30 +323,30 @@ const getWipPrebill: AssistantToolDef = {
           proposedBillAmount: money(l.proposedBillAmount),
           adjustmentAmount: money(l.adjustmentAmount),
         })),
-        href: "/projects/wip-billing",
+        href: "/projects/pre-billing",
       },
     };
   },
 };
 
-const wipAnalyticsTool: AssistantToolDef = {
-  name: "wip_analytics",
+const preBillingAnalyticsTool: AssistantToolDef = {
+  name: "pre_billing_analytics",
   description:
-    "WIP health analytics as of a date: unbilled aging buckets, held amounts, billed-vs-original realization, write-downs, and long-held WIP. Same figures the WIP analytics route returns. Read-only.",
+    "Pre-billing health analytics as of a date: unbilled aging buckets, held amounts, billed-vs-original realization, write-downs, and long-held Pre-billing. Same figures the Pre-billing analytics route returns. Read-only.",
   category: "read",
   gate: { mode: "anyOf", perms: ["reports.read"] },
-  feature: "wipBilling",
+  feature: "preBilling",
   inputSchema: z.object({
     asOf: dateInput.optional().describe("Default today"),
   }),
   execute: async (raw, authz): Promise<ToolResult> => {
-    if (!(await wipBillingEnabled(authz.user.orgId))) {
-      return { ok: false, error: "wipBilling_feature_disabled" };
+    if (!(await preBillingEnabled(authz.user.orgId))) {
+      return { ok: false, error: "preBilling_feature_disabled" };
     }
     const a = raw as { asOf?: string };
     try {
-      const analytics = await wipAnalytics(authz.user.orgId, a.asOf, authz.allowedSubsidiaryIds);
-      return { ok: true, data: { ...analytics, href: "/projects/wip-billing" } };
+      const analytics = await preBillingAnalytics(authz.user.orgId, a.asOf, authz.allowedSubsidiaryIds);
+      return { ok: true, data: { ...analytics, href: "/projects/pre-billing" } };
     } catch (error) {
       return { ok: false, error: error instanceof Error ? error.message.slice(0, 200) : "tool_failed" };
     }
@@ -356,7 +356,7 @@ const wipAnalyticsTool: AssistantToolDef = {
 export const SUBCONTRACTS_TOOLS: AssistantToolDef[] = [
   searchSubcontracts,
   getSubcontract,
-  listWipPrebills,
-  getWipPrebill,
-  wipAnalyticsTool,
+  listPrebills,
+  getPrebill,
+  preBillingAnalyticsTool,
 ];

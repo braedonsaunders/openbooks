@@ -109,7 +109,7 @@ const KIND_KEYS = [
 ]
 
 // Approval subjects that are not documents but still carry a catalog label.
-const SUBJECT_LABEL_KEYS = [...KIND_KEYS, 'wip_prebill']
+const SUBJECT_LABEL_KEYS = [...KIND_KEYS, 'prebill']
 
 export interface SubmittedListRow {
   key: string

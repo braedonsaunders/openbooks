@@ -5,19 +5,19 @@ const { db, withBypassContext } = await import('@openbooks/engine/src/platform/d
 const { sql } = await import('drizzle-orm')
 const { BUILTIN_PROJECT_TYPES } = await import('@openbooks/schema')
 const { createScratchOrg, seedFlowActors, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
-const wip = await import('./wip-billing')
+const wip = await import('./pre-billing')
 
 /**
- * WIP prebilling is project-scoped work: every read and write must honour the
+ * Pre-billing is project-scoped work: every read and write must honour the
  * caller's subsidiary scope. A worksheet on a hidden project is invisible in
  * lists and analytics, unreachable by id (404 — the same answer as a missing
  * id), and cannot be created, edited, held, transitioned, or converted.
  */
-test('WIP prebilling honours the caller subsidiary scope end to end', {skip:!process.env.OPENBOOKS_DB_URL}, async () => {
+test('Pre-billing honours the caller subsidiary scope end to end', {skip:!process.env.OPENBOOKS_DB_URL}, async () => {
   await withBypassContext(async () => {
     const org = await createScratchOrg()
     try {
-      await db.execute(sql`update orgs set settings = jsonb_set(settings, '{features,wipBilling}', 'true'::jsonb, true) where id = ${org.orgId}`)
+      await db.execute(sql`update orgs set settings = jsonb_set(settings, '{features,preBilling}', 'true'::jsonb, true) where id = ${org.orgId}`)
       const actors = await seedFlowActors(org.orgId)
       const preparer = actors.adminId, approver = actors.approver1Id
       const tm = BUILTIN_PROJECT_TYPES.find((t) => t.key === 'time_and_materials')!
@@ -29,7 +29,7 @@ test('WIP prebilling honours the caller subsidiary scope end to end', {skip:!pro
         values (${org.orgId},${typeId},'2000-01-01',${JSON.stringify(tm.financialProfile)}::jsonb,'scratch fixture baseline')`)
       // The project lives in the OTHER subsidiary; the restricted caller sees only the root.
       await db.execute(sql`insert into projects(id,org_id,subsidiary_id,code,name,customer_id,project_type_id,status,is_active,custom)
-        values (${project},${org.orgId},${other},'WIP','Hidden WIP job',${org.customerId},${typeId},'active',true,'{}'::jsonb)`)
+        values (${project},${org.orgId},${other},'Pre-billing','Hidden Pre-billing job',${org.customerId},${typeId},'active',true,'{}'::jsonb)`)
       await db.execute(sql`insert into parties(id,org_id,kind,display_name,subsidiary_id) values (${employee},${org.orgId},'employee','Billable worker',${other})`)
       await db.execute(sql`insert into time_entries(id,org_id,employee_party_id,worked_on,hours,project_id,item_id,is_billable,status,bill_rate,bill_rate_currency)
         values (${entry},${org.orgId},${employee},${org.date},'2.0000',${project},${org.items.service},true,'approved','100.0000','CAD')`)
@@ -37,16 +37,16 @@ test('WIP prebilling honours the caller subsidiary scope end to end', {skip:!pro
       const restricted = new Set([org.subsidiaryId])
       const visible = new Set([org.subsidiaryId, other])
       const period = { projectId: project, periodEnd: org.date }
-      const notFound = (error: unknown) => error instanceof wip.WipBillingError && error.status === 404
+      const notFound = (error: unknown) => error instanceof wip.PreBillingError && error.status === 404
 
       // Reads
-      assert.deepEqual((await wip.listWipProjects(org.orgId, restricted)).map((p) => p.id), [])
-      assert.deepEqual((await wip.listWipProjects(org.orgId, visible)).map((p) => p.id), [project])
-      assert.equal((await wip.wipAnalytics(org.orgId, org.date, restricted)).aging.current, '0')
-      assert.equal((await wip.wipAnalytics(org.orgId, org.date, visible)).aging.current, '200.0000')
+      assert.deepEqual((await wip.listPreBillingProjects(org.orgId, restricted)).map((p) => p.id), [])
+      assert.deepEqual((await wip.listPreBillingProjects(org.orgId, visible)).map((p) => p.id), [project])
+      assert.equal((await wip.preBillingAnalytics(org.orgId, org.date, restricted)).aging.current, '0')
+      assert.equal((await wip.preBillingAnalytics(org.orgId, org.date, visible)).aging.current, '200.0000')
       // Create
       await assert.rejects(wip.createPrebill(org.orgId, preparer, period, restricted), notFound)
-      assert.equal((await db.execute<{ n: number }>(sql`select count(*)::int as n from wip_prebills where org_id=${org.orgId}`)).rows[0]!.n, 0)
+      assert.equal((await db.execute<{ n: number }>(sql`select count(*)::int as n from prebills where org_id=${org.orgId}`)).rows[0]!.n, 0)
       const prebill = await wip.createPrebill(org.orgId, preparer, period, visible)
       assert.equal(prebill.sourceCount, 1)
       // Lists and by-id loads
@@ -61,8 +61,8 @@ test('WIP prebilling honours the caller subsidiary scope end to end', {skip:!pro
       await assert.rejects(wip.updatePrebillLine(org.orgId, preparer, prebill.id, lineId, { proposedBillAmount: '150.0000', adjustmentReason: 'scope', adjustmentEvidence: ['note'] }, restricted, { expectedRevision: detail!.lines[0]!.updatedAt }), notFound)
       await assert.rejects(wip.holdPrebillLine(org.orgId, preparer, prebill.id, lineId, 'Disputed', [], restricted), notFound)
       const hold = await wip.holdPrebillLine(org.orgId, preparer, prebill.id, lineId, 'Disputed', [], visible)
-      await assert.rejects(wip.releaseWipHold(org.orgId, preparer, hold.id, 'Resolved', restricted), notFound)
-      await wip.releaseWipHold(org.orgId, preparer, hold.id, 'Resolved', visible)
+      await assert.rejects(wip.releasePrebillHold(org.orgId, preparer, hold.id, 'Resolved', restricted), notFound)
+      await wip.releasePrebillHold(org.orgId, preparer, hold.id, 'Resolved', visible)
       // Workflow
       await assert.rejects(wip.transitionPrebill(org.orgId, preparer, prebill.id, 'submit', undefined, restricted), notFound)
       // With no approval flow configured, submitting approves the worksheet.
@@ -76,20 +76,20 @@ test('WIP prebilling honours the caller subsidiary scope end to end', {skip:!pro
       assert.equal(converted.idempotent, false)
       // The converted worksheet stays hidden too.
       assert.equal(await wip.loadPrebill(org.orgId, prebill.id, restricted), null)
-      assert.equal((await wip.wipAnalytics(org.orgId, org.date, restricted)).realization.billed, '0')
-      assert.equal((await wip.wipAnalytics(org.orgId, org.date, visible)).realization.billed, '200.0000')
+      assert.equal((await wip.preBillingAnalytics(org.orgId, org.date, restricted)).realization.billed, '0')
+      assert.equal((await wip.preBillingAnalytics(org.orgId, org.date, visible)).realization.billed, '200.0000')
     } finally { await dropScratchOrg(org.orgId) }
   })
 })
 
 test('prebill line edits refuse proposed amounts wider than numeric(19,4)', {skip:!process.env.OPENBOOKS_DB_URL}, async () => {
-  // wip_prebill_lines.proposed_bill_amount is numeric(19,4): a pasted
+  // prebill_lines.proposed_bill_amount is numeric(19,4): a pasted
   // 20-digit figure cleared the exact-decimal check and died in the update
   // with a storage error. Fail closed with a named error instead.
   await withBypassContext(async () => {
     const org = await createScratchOrg()
     try {
-      await db.execute(sql`update orgs set settings = jsonb_set(settings, '{features,wipBilling}', 'true'::jsonb, true) where id = ${org.orgId}`)
+      await db.execute(sql`update orgs set settings = jsonb_set(settings, '{features,preBilling}', 'true'::jsonb, true) where id = ${org.orgId}`)
       const actors = await seedFlowActors(org.orgId)
       const preparer = actors.adminId
       const tm = BUILTIN_PROJECT_TYPES.find((t) => t.key === 'time_and_materials')!
@@ -99,7 +99,7 @@ test('prebill line edits refuse proposed amounts wider than numeric(19,4)', {ski
       await db.execute(sql`insert into project_financial_profile_versions(org_id,project_type_id,effective_from,financial_profile,reason)
         values (${org.orgId},${typeId},'2000-01-01',${JSON.stringify(tm.financialProfile)}::jsonb,'magnitude fixture')`)
       await db.execute(sql`insert into projects(id,org_id,subsidiary_id,code,name,customer_id,project_type_id,status,is_active,custom)
-        values (${project},${org.orgId},${org.subsidiaryId},'WIPMAG','Magnitude WIP job',${org.customerId},${typeId},'active',true,'{}'::jsonb)`)
+        values (${project},${org.orgId},${org.subsidiaryId},'WIPMAG','Magnitude Pre-billing job',${org.customerId},${typeId},'active',true,'{}'::jsonb)`)
       await db.execute(sql`insert into parties(id,org_id,kind,display_name,subsidiary_id) values (${employee},${org.orgId},'employee','Magnitude worker',${org.subsidiaryId})`)
       await db.execute(sql`insert into time_entries(id,org_id,employee_party_id,worked_on,hours,project_id,item_id,is_billable,status,bill_rate,bill_rate_currency)
         values (${entry},${org.orgId},${employee},${org.date},'2.0000',${project},${org.items.service},true,'approved','100.0000','CAD')`)
@@ -110,7 +110,7 @@ test('prebill line edits refuse proposed amounts wider than numeric(19,4)', {ski
       const edit: { adjustmentReason: string; adjustmentEvidence: string[] } = { adjustmentReason: 'magnitude', adjustmentEvidence: ['note'] }
       await assert.rejects(
         wip.updatePrebillLine(org.orgId, preparer, prebill.id, lineId, { proposedBillAmount: '99999999999999999999', ...edit }, null, revision),
-        (error: unknown) => error instanceof wip.WipBillingError && /out of range/.test(error.message),
+        (error: unknown) => error instanceof wip.PreBillingError && /out of range/.test(error.message),
         'an oversized proposed amount should fail closed with a named error',
       )
       const untouched = await wip.loadPrebill(org.orgId, prebill.id, null)
@@ -124,7 +124,7 @@ test('prebill line edits refuse proposed amounts wider than numeric(19,4)', {ski
 })
 
 /**
- * H-WIP-REHOME: a concurrent project A→B rehome must not let an A-only
+ * H-Pre-billing-REHOME: a concurrent project A→B rehome must not let an A-only
  * caller keep reading or writing the worksheet. The project row is locked
  * and scope is rechecked inside every transaction (share for the detail
  * read, update for line/transition/convert writes), so post-rehome calls
@@ -134,7 +134,7 @@ test('a project rehome out of scope hides the worksheet from reads and writes', 
   await withBypassContext(async () => {
     const org = await createScratchOrg()
     try {
-      await db.execute(sql`update orgs set settings = jsonb_set(settings, '{features,wipBilling}', 'true'::jsonb, true) where id = ${org.orgId}`)
+      await db.execute(sql`update orgs set settings = jsonb_set(settings, '{features,preBilling}', 'true'::jsonb, true) where id = ${org.orgId}`)
       const actors = await seedFlowActors(org.orgId)
       const preparer = actors.adminId, approver = actors.approver1Id
       const tm = BUILTIN_PROJECT_TYPES.find((t) => t.key === 'time_and_materials')!
@@ -145,14 +145,14 @@ test('a project rehome out of scope hides the worksheet from reads and writes', 
       await db.execute(sql`insert into project_financial_profile_versions(org_id,project_type_id,effective_from,financial_profile,reason)
         values (${org.orgId},${typeId},'2000-01-01',${JSON.stringify(tm.financialProfile)}::jsonb,'rehome fixture')`)
       await db.execute(sql`insert into projects(id,org_id,subsidiary_id,code,name,customer_id,project_type_id,status,is_active,custom)
-        values (${project},${org.orgId},${org.subsidiaryId},'WIPRE','Rehome WIP job',${org.customerId},${typeId},'active',true,'{}'::jsonb)`)
+        values (${project},${org.orgId},${org.subsidiaryId},'WIPRE','Rehome Pre-billing job',${org.customerId},${typeId},'active',true,'{}'::jsonb)`)
       await db.execute(sql`insert into parties(id,org_id,kind,display_name,subsidiary_id) values (${employee},${org.orgId},'employee','Rehome worker',${org.subsidiaryId})`)
       await db.execute(sql`insert into time_entries(id,org_id,employee_party_id,worked_on,hours,project_id,item_id,is_billable,status,bill_rate,bill_rate_currency)
         values (${entry},${org.orgId},${employee},${org.date},'2.0000',${project},${org.items.service},true,'approved','100.0000','CAD')`)
 
       const restricted = new Set([org.subsidiaryId])
       const both = new Set([org.subsidiaryId, other])
-      const notFound = (error: unknown) => error instanceof wip.WipBillingError && error.status === 404
+      const notFound = (error: unknown) => error instanceof wip.PreBillingError && error.status === 404
       const prebill = await wip.createPrebill(org.orgId, preparer, { projectId: project, periodEnd: org.date }, restricted)
       const lineId = (await wip.loadPrebill(org.orgId, prebill.id, restricted))!.lines[0]!.id
       const deferred = () => {
@@ -172,7 +172,7 @@ test('a project rehome out of scope hides the worksheet from reads and writes', 
           if (waiting) return
           await new Promise((resolve) => setTimeout(resolve, 10))
         }
-        assert.fail('WIP hold mutation must wait on the locked project scope row')
+        assert.fail('Pre-billing hold mutation must wait on the locked project scope row')
       }
       const raceRehome = async (subsidiaryId: string, work: () => Promise<unknown>) => {
         const locked = deferred()
@@ -199,14 +199,14 @@ test('a project rehome out of scope hides the worksheet from reads and writes', 
       // project after the project commits into B.
       const createRace = await raceRehome(other, () => wip.holdPrebillLine(org.orgId, preparer, prebill.id, lineId, 'Create race', [], restricted))
       assert.ok('error' in createRace && notFound(createRace.error))
-      assert.equal((await db.execute<{ n: number }>(sql`select count(*)::int as n from wip_holds where org_id = ${org.orgId} and source_id = ${entry} and released_at is null`)).rows[0]!.n, 0)
+      assert.equal((await db.execute<{ n: number }>(sql`select count(*)::int as n from prebill_holds where org_id = ${org.orgId} and source_id = ${entry} and released_at is null`)).rows[0]!.n, 0)
       await db.execute(sql`update projects set subsidiary_id = ${org.subsidiaryId} where id = ${project} and org_id = ${org.orgId}`)
       const hold = await wip.holdPrebillLine(org.orgId, preparer, prebill.id, lineId, 'Release race', [], restricted)
-      const releaseRace = await raceRehome(other, () => wip.releaseWipHold(org.orgId, preparer, hold.id, 'Release race', restricted))
+      const releaseRace = await raceRehome(other, () => wip.releasePrebillHold(org.orgId, preparer, hold.id, 'Release race', restricted))
       assert.ok('error' in releaseRace && notFound(releaseRace.error))
-      assert.equal((await db.execute<{ released_at: string | null }>(sql`select released_at from wip_holds where org_id = ${org.orgId} and id = ${hold.id}`)).rows[0]!.released_at, null)
+      assert.equal((await db.execute<{ released_at: string | null }>(sql`select released_at from prebill_holds where org_id = ${org.orgId} and id = ${hold.id}`)).rows[0]!.released_at, null)
       await db.execute(sql`update projects set subsidiary_id = ${org.subsidiaryId} where id = ${project} and org_id = ${org.orgId}`)
-      await wip.releaseWipHold(org.orgId, preparer, hold.id, 'Restore test fixture', restricted)
+      await wip.releasePrebillHold(org.orgId, preparer, hold.id, 'Restore test fixture', restricted)
       await wip.transitionPrebill(org.orgId, preparer, prebill.id, 'submit', undefined, restricted)
 
       // The concurrent rehome commits: the project (and its worksheet) now
@@ -240,7 +240,7 @@ const consolidatedRows = [
         const { sql } = await import('drizzle-orm')
         const { BUILTIN_PROJECT_TYPES } = await import('@openbooks/schema')
         const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
-        const wip = await import('./wip-billing')
+        const wip = await import('./pre-billing')
 
         const enabled = { skip: !process.env.OPENBOOKS_DB_URL }
 
@@ -261,7 +261,7 @@ const consolidatedRows = [
               await db.execute(sql`insert into project_financial_profile_versions(org_id,project_type_id,effective_from,financial_profile,reason)
                 values (${org.orgId},${typeId},'2000-01-01',${JSON.stringify(tm.financialProfile)}::jsonb,'capacity fixture')`)
               await db.execute(sql`insert into projects(id,org_id,subsidiary_id,code,name,customer_id,project_type_id,status,is_active,custom)
-                values (${project},${org.orgId},${org.subsidiaryId},'WIP-CAP','Capacity job',${org.customerId},${typeId},'active',true,'{}'::jsonb)`)
+                values (${project},${org.orgId},${org.subsidiaryId},'Pre-billing-CAP','Capacity job',${org.customerId},${typeId},'active',true,'{}'::jsonb)`)
               await db.execute(sql`insert into documents(id,org_id,kind,document_number,party_id,subsidiary_id,project_id,document_date,posting_date,currency,fx_rate,status,subtotal,tax_total,total)
                 values (${doc},${org.orgId},'customer_invoice',${'INV-'+doc},${org.customerId},${org.subsidiaryId},${project},${org.date},${org.date},'CAD',1,'draft','1000','0','1000')`)
               await db.execute(sql`insert into document_lines(id,org_id,document_id,line_number,item_id,account_id,description,quantity,unit_price,amount,is_billable,project_id)
@@ -288,7 +288,7 @@ const consolidatedRows = [
         const { sql } = await import('drizzle-orm')
         const { BUILTIN_PROJECT_TYPES } = await import('@openbooks/schema')
         const { createScratchOrg, seedFlowActors, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
-        const wip = await import('./wip-billing')
+        const wip = await import('./pre-billing')
 
         const enabled = { skip: !process.env.OPENBOOKS_DB_URL }
 
@@ -303,7 +303,7 @@ const consolidatedRows = [
           await withBypassContext(async () => {
             const org = await createScratchOrg()
             try {
-              await db.execute(sql`update orgs set settings = jsonb_set(settings, '{features,wipBilling}', 'true'::jsonb, true) where id = ${org.orgId}`)
+              await db.execute(sql`update orgs set settings = jsonb_set(settings, '{features,preBilling}', 'true'::jsonb, true) where id = ${org.orgId}`)
               const preparer = (await seedFlowActors(org.orgId)).adminId
               const tm = BUILTIN_PROJECT_TYPES.find((t) => t.key === 'time_and_materials')!
               const typeId = randomUUID(), project = randomUUID(), employee = randomUUID()
@@ -312,7 +312,7 @@ const consolidatedRows = [
               await db.execute(sql`insert into project_financial_profile_versions(org_id,project_type_id,effective_from,financial_profile,reason)
                 values (${org.orgId},${typeId},'2000-01-01',${JSON.stringify(tm.financialProfile)}::jsonb,'revision fixture')`)
               await db.execute(sql`insert into projects(id,org_id,subsidiary_id,code,name,customer_id,project_type_id,status,is_active,custom)
-                values (${project},${org.orgId},${org.subsidiaryId},'WIP-REV','Revision job',${org.customerId},${typeId},'active',true,'{}'::jsonb)`)
+                values (${project},${org.orgId},${org.subsidiaryId},'Pre-billing-REV','Revision job',${org.customerId},${typeId},'active',true,'{}'::jsonb)`)
               await db.execute(sql`insert into parties(id,org_id,kind,display_name,subsidiary_id) values (${employee},${org.orgId},'employee','Revision worker',${org.subsidiaryId})`)
               await db.execute(sql`insert into time_entries(id,org_id,employee_party_id,worked_on,hours,project_id,item_id,is_billable,status,bill_rate,bill_rate_currency)
                 values (${randomUUID()},${org.orgId},${employee},${org.date},'2.0000',${project},${org.items.service},true,'approved','100.0000','CAD')`)
@@ -337,7 +337,7 @@ const consolidatedRows = [
                   adjustmentReason: 'Discount the client insists on',
                   adjustmentEvidence: ['phone call'],
                 }, null, { expectedRevision: staleToken }),
-                (error: unknown) => error instanceof wip.WipBillingError && (error as { status?: number }).status === 409,
+                (error: unknown) => error instanceof wip.PreBillingError && (error as { status?: number }).status === 409,
               )
               const live = (await wip.loadPrebill(org.orgId, prebill.id, null))!.lines[0]!
               assert.equal(live.proposedBillAmount, '250.0000')
@@ -350,7 +350,7 @@ const consolidatedRows = [
         const { sql } = await import('drizzle-orm')
         const { BUILTIN_PROJECT_TYPES } = await import('@openbooks/schema')
         const { createScratchOrg, seedFlowActors, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
-        const wip = await import('./wip-billing')
+        const wip = await import('./pre-billing')
 
         const enabled = { skip: !process.env.OPENBOOKS_DB_URL }
 
@@ -364,7 +364,7 @@ const consolidatedRows = [
           await withBypassContext(async () => {
             const org = await createScratchOrg()
             try {
-              await db.execute(sql`update orgs set settings = jsonb_set(settings, '{features,wipBilling}', 'true'::jsonb, true) where id = ${org.orgId}`)
+              await db.execute(sql`update orgs set settings = jsonb_set(settings, '{features,preBilling}', 'true'::jsonb, true) where id = ${org.orgId}`)
               const preparer = (await seedFlowActors(org.orgId)).adminId
               const tm = BUILTIN_PROJECT_TYPES.find((t) => t.key === 'time_and_materials')!
               const financialProfile = {
@@ -377,7 +377,7 @@ const consolidatedRows = [
               await db.execute(sql`insert into project_financial_profile_versions(org_id,project_type_id,effective_from,financial_profile,reason)
                 values (${org.orgId},${typeId},'2000-01-01',${JSON.stringify(financialProfile)}::jsonb,'credit fixture')`)
               await db.execute(sql`insert into projects(id,org_id,subsidiary_id,code,name,customer_id,project_type_id,status,is_active,custom)
-                values (${project},${org.orgId},${org.subsidiaryId},'WIP-CR','Credit-only job',${org.customerId},${typeId},'active',true,'{}'::jsonb)`)
+                values (${project},${org.orgId},${org.subsidiaryId},'Pre-billing-CR','Credit-only job',${org.customerId},${typeId},'active',true,'{}'::jsonb)`)
               await db.execute(sql`insert into documents(id,org_id,kind,document_number,party_id,subsidiary_id,project_id,document_date,posting_date,currency,fx_rate,status,subtotal,tax_total,total)
                 values (${doc},${org.orgId},'vendor_credit',${'CR-'+doc},${org.vendorId},${org.subsidiaryId},${project},${org.date},${org.date},'CAD',1,'draft','100','0','100')`)
               await db.execute(sql`insert into document_lines(id,org_id,document_id,line_number,item_id,account_id,description,quantity,unit_price,amount,is_billable)
@@ -386,9 +386,9 @@ const consolidatedRows = [
 
               await assert.rejects(
                 wip.createPrebill(org.orgId, preparer, { projectId: project, periodEnd: org.date }, null),
-                (error: unknown) => error instanceof wip.WipBillingError,
+                (error: unknown) => error instanceof wip.PreBillingError,
               )
-              assert.equal((await db.execute<{ n: number }>(sql`select count(*)::int as n from wip_prebills where org_id=${org.orgId}`)).rows[0]!.n, 0)
+              assert.equal((await db.execute<{ n: number }>(sql`select count(*)::int as n from prebills where org_id=${org.orgId}`)).rows[0]!.n, 0)
             } finally { await dropScratchOrg(org.orgId) }
           })
         })
@@ -398,12 +398,12 @@ const consolidatedRows = [
         const { sql } = await import('drizzle-orm')
         const { BUILTIN_PROJECT_TYPES } = await import('@openbooks/schema')
         const { createScratchOrg, seedFlowActors, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
-        const wip = await import('./wip-billing')
+        const wip = await import('./pre-billing')
 
         /**
-         * Worksheet numbers are unique per ORGANIZATION (wip_prebills_org_number)
+         * Worksheet numbers are unique per ORGANIZATION (prebills_org_number)
          * but createPrebill serialised only per PROJECT
-         * (pg_advisory_xact_lock on `wip-prebill:{org}:{project}`). Two reviewers
+         * (pg_advisory_xact_lock on `prebill:{org}:{project}`). Two reviewers
          * creating worksheets for DIFFERENT projects at the same time both read the
          * same org-wide max()+1 and the loser dies on the unique index (500). The
          * numbering read must serialise org-wide, like billing-request numbers do.
@@ -412,7 +412,7 @@ const consolidatedRows = [
           await withBypassContext(async () => {
             const org = await createScratchOrg()
             try {
-              await db.execute(sql`update orgs set settings = jsonb_set(settings, '{features,wipBilling}', 'true'::jsonb, true) where id = ${org.orgId}`)
+              await db.execute(sql`update orgs set settings = jsonb_set(settings, '{features,preBilling}', 'true'::jsonb, true) where id = ${org.orgId}`)
               const actors = await seedFlowActors(org.orgId)
               const preparer = actors.adminId
               const tm = BUILTIN_PROJECT_TYPES.find((t) => t.key === 'time_and_materials')!
@@ -427,14 +427,14 @@ const consolidatedRows = [
               // the org-wide worksheet counter. Each worksheet carries enough lines
               // that the work between the max()+1 read and commit is wide: with no
               // org-wide serialisation, several writers' reads land inside another
-              // writer's uncommitted window and collide on wip_prebills_org_number.
+              // writer's uncommitted window and collide on prebills_org_number.
               const WRITERS = 8
               const LINES_EACH = 25
               const projectIds: string[] = []
               for (let i = 0; i < WRITERS; i++) {
                 const project = randomUUID(), employee = randomUUID()
                 await db.execute(sql`insert into projects(id,org_id,subsidiary_id,code,name,customer_id,project_type_id,status,is_active,custom)
-                  values (${project},${org.orgId},${org.subsidiaryId},${`WIP-RACE-${i}`},${`Race job ${i}`},${org.customerId},${typeId},'active',true,'{}'::jsonb)`)
+                  values (${project},${org.orgId},${org.subsidiaryId},${`Pre-billing-RACE-${i}`},${`Race job ${i}`},${org.customerId},${typeId},'active',true,'{}'::jsonb)`)
                 await db.execute(sql`insert into parties(id,org_id,kind,display_name,subsidiary_id) values (${employee},${org.orgId},'employee',${`Race worker ${i}`},${org.subsidiaryId})`)
                 for (let j = 0; j < LINES_EACH; j++) {
                   await db.execute(sql`insert into time_entries(id,org_id,employee_party_id,worked_on,hours,project_id,item_id,is_billable,status,bill_rate,bill_rate_currency)
@@ -450,10 +450,10 @@ const consolidatedRows = [
               for (const prebill of created) assert.equal(prebill.sourceCount, LINES_EACH)
               const numbers = created.map((prebill) => prebill.worksheetNumber).sort()
               assert.deepEqual(numbers, [
-                'WIP-00001', 'WIP-00002', 'WIP-00003', 'WIP-00004',
-                'WIP-00005', 'WIP-00006', 'WIP-00007', 'WIP-00008',
+                'Pre-billing-00001', 'Pre-billing-00002', 'Pre-billing-00003', 'Pre-billing-00004',
+                'Pre-billing-00005', 'Pre-billing-00006', 'Pre-billing-00007', 'Pre-billing-00008',
               ])
-              assert.equal((await db.execute<{ n: number }>(sql`select count(*)::int as n from wip_prebills where org_id=${org.orgId}`)).rows[0]!.n, WRITERS)
+              assert.equal((await db.execute<{ n: number }>(sql`select count(*)::int as n from prebills where org_id=${org.orgId}`)).rows[0]!.n, WRITERS)
             } finally { await dropScratchOrg(org.orgId) }
           })
         })
@@ -463,10 +463,10 @@ const consolidatedRows = [
         const { sql } = await import('drizzle-orm')
         const { BUILTIN_PROJECT_TYPES } = await import('@openbooks/schema')
         const { createScratchOrg, seedFlowActors, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
-        const wip = await import('./wip-billing')
+        const wip = await import('./pre-billing')
 
         /**
-         * WIP conversion settles whole minor units by largest remainder: two
+         * Pre-billing conversion settles whole minor units by largest remainder: two
          * approved 0.0050 draws must invoice as 0.01 + 0.00 (total 0.01), not as
          * two independently rounded 0.01 lines (total 0.02 — a total nobody
          * approved). The invoice lines sum to the approved total exactly.
@@ -475,7 +475,7 @@ const consolidatedRows = [
           await withBypassContext(async () => {
             const org = await createScratchOrg()
             try {
-              await db.execute(sql`update orgs set settings = jsonb_set(settings, '{features,wipBilling}', 'true'::jsonb, true) where id = ${org.orgId}`)
+              await db.execute(sql`update orgs set settings = jsonb_set(settings, '{features,preBilling}', 'true'::jsonb, true) where id = ${org.orgId}`)
               const actors = await seedFlowActors(org.orgId)
               const preparer = actors.adminId
               const tm = BUILTIN_PROJECT_TYPES.find((t) => t.key === 'time_and_materials')!
@@ -485,7 +485,7 @@ const consolidatedRows = [
               await db.execute(sql`insert into project_financial_profile_versions(org_id,project_type_id,effective_from,financial_profile,reason)
                 values (${org.orgId},${typeId},'2000-01-01',${JSON.stringify(tm.financialProfile)}::jsonb,'rounding fixture')`)
               await db.execute(sql`insert into projects(id,org_id,subsidiary_id,code,name,customer_id,project_type_id,status,is_active,custom)
-                values (${project},${org.orgId},${org.subsidiaryId},'WIPROUND','Rounding WIP job',${org.customerId},${typeId},'active',true,'{}'::jsonb)`)
+                values (${project},${org.orgId},${org.subsidiaryId},'WIPROUND','Rounding Pre-billing job',${org.customerId},${typeId},'active',true,'{}'::jsonb)`)
               await db.execute(sql`insert into parties(id,org_id,kind,display_name,subsidiary_id) values (${randomUUID()},${org.orgId},'employee','Rounding worker',${org.subsidiaryId})`)
               const worker = (await db.execute<{id:string}>(sql`select id from parties where org_id=${org.orgId} and display_name='Rounding worker'`)).rows[0]!.id
               // Two billable hours pricing just over half a cent each.
@@ -531,7 +531,7 @@ const consolidatedRows = [
         const { sql } = await import('drizzle-orm')
         const { BUILTIN_PROJECT_TYPES } = await import('@openbooks/schema')
         const { createScratchOrg, seedFlowActors, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
-        const wip = await import('./wip-billing')
+        const wip = await import('./pre-billing')
 
         const enabled = { skip: !process.env.OPENBOOKS_DB_URL }
         type Fixture = { org: Awaited<ReturnType<typeof createScratchOrg>>; actor: string; approver: string; project: string; prebill: string; entry: string }
@@ -540,20 +540,20 @@ const consolidatedRows = [
           await withBypassContext(async () => {
             const org = await createScratchOrg()
             try {
-              await db.execute(sql`update orgs set settings = jsonb_set(settings, '{features,wipBilling}', 'true'::jsonb, true) where id = ${org.orgId}`)
+              await db.execute(sql`update orgs set settings = jsonb_set(settings, '{features,preBilling}', 'true'::jsonb, true) where id = ${org.orgId}`)
               const actors = await seedFlowActors(org.orgId)
               const profile = BUILTIN_PROJECT_TYPES.find((type) => type.key === 'time_and_materials')!
               const typeId = randomUUID(), project = randomUUID(), employee = randomUUID(), entry = randomUUID()
               const accountId = account === 'missing' ? null : org.accounts[account]
               await db.execute(sql`update items set income_account_id=${accountId} where org_id=${org.orgId} and id=${org.items.service}`)
               await db.execute(sql`insert into project_types(id,org_id,key,name,billing_method,invoicing_profile,backup_profile)
-                values(${typeId},${org.orgId},'wip_account_policy','WIP account policy','time_and_materials',${JSON.stringify(profile.invoicingProfile)}::jsonb,${JSON.stringify(profile.backupProfile)}::jsonb)`)
+                values(${typeId},${org.orgId},'wip_account_policy','Pre-billing account policy','time_and_materials',${JSON.stringify(profile.invoicingProfile)}::jsonb,${JSON.stringify(profile.backupProfile)}::jsonb)`)
               await db.execute(sql`insert into project_financial_profile_versions(org_id,project_type_id,effective_from,financial_profile,reason)
-                values(${org.orgId},${typeId},'2000-01-01',${JSON.stringify(profile.financialProfile)}::jsonb,'Scratch WIP account policy')`)
+                values(${org.orgId},${typeId},'2000-01-01',${JSON.stringify(profile.financialProfile)}::jsonb,'Scratch Pre-billing account policy')`)
               await db.execute(sql`insert into projects(id,org_id,subsidiary_id,code,name,customer_id,project_type_id,status,is_active,custom)
-                values(${project},${org.orgId},${org.subsidiaryId},'WAC','WIP account job',${org.customerId},${typeId},'active',true,'{}'::jsonb)`)
+                values(${project},${org.orgId},${org.subsidiaryId},'WAC','Pre-billing account job',${org.customerId},${typeId},'active',true,'{}'::jsonb)`)
               await db.execute(sql`insert into parties(id,org_id,kind,display_name,subsidiary_id)
-                values(${employee},${org.orgId},'employee','WIP worker',${org.subsidiaryId})`)
+                values(${employee},${org.orgId},'employee','Pre-billing worker',${org.subsidiaryId})`)
               await db.execute(sql`insert into time_entries(id,org_id,employee_party_id,worked_on,hours,project_id,item_id,is_billable,status,bill_rate,bill_rate_currency)
                 values(${entry},${org.orgId},${employee},${org.date},'2.0000',${project},${org.items.service},true,'approved','100.1234','CAD')`)
               const prebill = await wip.createPrebill(org.orgId, actors.adminId, { projectId: project, periodEnd: org.date })
@@ -566,14 +566,14 @@ const consolidatedRows = [
 
         async function snapshot(f: Fixture) {
           return (await db.execute(sql`select
-            (select jsonb_agg(to_jsonb(w) order by w.id) from wip_prebills w where w.org_id=${f.org.orgId}) as worksheets,
-            (select jsonb_agg(to_jsonb(l) order by l.id) from wip_prebill_lines l where l.org_id=${f.org.orgId}) as source_snapshots,
+            (select jsonb_agg(to_jsonb(w) order by w.id) from prebills w where w.org_id=${f.org.orgId}) as worksheets,
+            (select jsonb_agg(to_jsonb(l) order by l.id) from prebill_lines l where l.org_id=${f.org.orgId}) as source_snapshots,
             (select jsonb_agg(to_jsonb(t) order by t.id) from time_entries t where t.org_id=${f.org.orgId}) as time_sources,
             (select jsonb_agg(to_jsonb(r) order by r.id) from billing_requests r where r.org_id=${f.org.orgId}) as requests,
             (select jsonb_agg(to_jsonb(d) order by d.id) from documents d where d.org_id=${f.org.orgId}) as documents,
             (select jsonb_agg(to_jsonb(l) order by l.id) from document_lines l where l.org_id=${f.org.orgId}) as document_lines,
             (select jsonb_agg(to_jsonb(n) order by n.id) from number_sequences n where n.org_id=${f.org.orgId}) as numbers,
-            (select jsonb_agg(to_jsonb(e) order by e.id) from wip_prebill_events e where e.org_id=${f.org.orgId}) as events,
+            (select jsonb_agg(to_jsonb(e) order by e.id) from prebill_events e where e.org_id=${f.org.orgId}) as events,
             (select jsonb_agg(to_jsonb(a) order by a.id) from audit_log a where a.org_id=${f.org.orgId}) as audit
           `)).rows[0]
         }
@@ -581,7 +581,7 @@ const consolidatedRows = [
         async function refused(f: Fixture, message: RegExp) {
           const before = await snapshot(f)
           await assert.rejects(wip.convertPrebill(f.org.orgId, f.actor, f.prebill), (error: unknown) =>
-            error instanceof wip.WipBillingError && message.test(error.message) && /void this prebill.*new prebill for approval/.test(error.message))
+            error instanceof wip.PreBillingError && message.test(error.message) && /void this prebill.*new prebill for approval/.test(error.message))
           assert.deepEqual(await snapshot(f), before, 'refusal preserves source, numbering, invoice, requests, and audit evidence')
         }
 
@@ -601,7 +601,7 @@ const consolidatedRows = [
           assert.deepEqual(await snapshot(f), beforeRetry)
         }
 
-        test('WIP conversion refuses missing frozen account despite available chart revenue without writes', enabled, async () => fixture('missing', async (f) => {
+        test('Pre-billing conversion refuses missing frozen account despite available chart revenue without writes', enabled, async () => fixture('missing', async (f) => {
           await refused(f, /line 1 has no configured income account/)
           await withBypassContext(() => (db.execute(sql`update items set income_account_id=${f.org.accounts.revenue} where org_id=${f.org.orgId} and id=${f.org.items.service}`)))
           await wip.transitionPrebill(f.org.orgId, f.actor, f.prebill, 'void', 'Correct source accounting configuration')
@@ -611,33 +611,33 @@ const consolidatedRows = [
         }))
 
         for (const kind of ['inactive', 'summary'] as const) {
-          test(`WIP conversion refuses ${kind} frozen account without writes`, enabled, async () => fixture('revenue', async (f) => {
+          test(`Pre-billing conversion refuses ${kind} frozen account without writes`, enabled, async () => fixture('revenue', async (f) => {
             if (kind === 'inactive') await withBypassContext(() => (db.execute(sql`update accounts set is_active=false where org_id=${f.org.orgId} and id=${f.org.accounts.revenue}`)))
             else await withBypassContext(() => (db.execute(sql`update accounts set is_summary=true where org_id=${f.org.orgId} and id=${f.org.accounts.revenue}`)))
             await refused(f, /line 1 requires an active, non-summary account in this organization/)
           }))
         }
 
-        test('WIP conversion refuses a foreign organization account snapshot without writes', enabled, async () => fixture('revenue', async (f) => {
+        test('Pre-billing conversion refuses a foreign organization account snapshot without writes', enabled, async () => fixture('revenue', async (f) => {
           const other = await withBypassContext(() => (createScratchOrg()))
           try {
             // Defer the existing FK inside this fixture transaction so the service's
             // independent tenant check is exercised before restoring the valid source.
             await withOrgTransaction(f.org.orgId, async () => {
-              await db.execute(sql`set constraints wip_prebill_line_income_org_fk deferred`)
-              await withOrg(f.org.orgId, () => db.execute(sql`update wip_prebill_lines set income_account_id=${other.accounts.revenue} where org_id=${f.org.orgId} and prebill_id=${f.prebill}`))
+              await db.execute(sql`set constraints prebill_line_income_org_fk deferred`)
+              await withOrg(f.org.orgId, () => db.execute(sql`update prebill_lines set income_account_id=${other.accounts.revenue} where org_id=${f.org.orgId} and prebill_id=${f.prebill}`))
               await refused(f, /line 1 requires an active, non-summary account in this organization/)
-              await withOrg(f.org.orgId, () => db.execute(sql`update wip_prebill_lines set income_account_id=${f.org.accounts.revenue} where org_id=${f.org.orgId} and prebill_id=${f.prebill}`))
+              await withOrg(f.org.orgId, () => db.execute(sql`update prebill_lines set income_account_id=${f.org.accounts.revenue} where org_id=${f.org.orgId} and prebill_id=${f.prebill}`))
             })
           } finally { await dropScratchOrg(other.orgId) }
         }))
 
-        test('WIP conversion preserves approved account when source item policy changes and retries idempotently', enabled, async () => fixture('revenue', async (f) => {
+        test('Pre-billing conversion preserves approved account when source item policy changes and retries idempotently', enabled, async () => fixture('revenue', async (f) => {
           await withBypassContext(() => (db.execute(sql`update items set income_account_id=${f.org.accounts.recognized} where org_id=${f.org.orgId} and id=${f.org.items.service}`)))
           await convertedWith(f, f.org.accounts.revenue)
         }))
 
-        test('WIP conversion preserves explicit non-income account policy', enabled, async () => fixture('invAsset', async (f) => {
+        test('Pre-billing conversion preserves explicit non-income account policy', enabled, async () => fixture('invAsset', async (f) => {
           await convertedWith(f, f.org.accounts.invAsset)
         }))
   } },
@@ -646,9 +646,9 @@ const consolidatedRows = [
         const { sql } = await import('drizzle-orm')
         const { BUILTIN_PROJECT_TYPES } = await import('@openbooks/schema')
         const { createScratchOrg, seedFlowActors, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
-        const { createPrebill, WipBillingError } = await import('./wip-billing')
+        const { createPrebill, PreBillingError } = await import('./pre-billing')
 
-        test('WIP service refuses direct creation when WIP Billing is disabled', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+        test('Pre-billing service refuses direct creation when Pre-billing is disabled', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
           await withBypassContext(async () => {
             const org = await createScratchOrg()
             try {
@@ -660,20 +660,20 @@ const consolidatedRows = [
               const timeEntryId = randomUUID()
               await db.execute(sql`
                 insert into project_types(id, org_id, key, name, billing_method, invoicing_profile, backup_profile)
-                values (${typeId}, ${org.orgId}, 'wip_gate', 'WIP gate', 'time_and_materials',
+                values (${typeId}, ${org.orgId}, 'wip_gate', 'Pre-billing gate', 'time_and_materials',
                         ${JSON.stringify(profile.invoicingProfile)}::jsonb, ${JSON.stringify(profile.backupProfile)}::jsonb)
               `)
               await db.execute(sql`
                 insert into project_financial_profile_versions(org_id, project_type_id, effective_from, financial_profile, reason)
-                values (${org.orgId}, ${typeId}, '2000-01-01', ${JSON.stringify(profile.financialProfile)}::jsonb, 'WIP gate test')
+                values (${org.orgId}, ${typeId}, '2000-01-01', ${JSON.stringify(profile.financialProfile)}::jsonb, 'Pre-billing gate test')
               `)
               await db.execute(sql`
                 insert into projects(id, org_id, subsidiary_id, code, name, customer_id, project_type_id, status, is_active, custom)
-                values (${projectId}, ${org.orgId}, ${org.subsidiaryId}, 'WIP-GATE', 'WIP gate project', ${org.customerId}, ${typeId}, 'active', true, '{}'::jsonb)
+                values (${projectId}, ${org.orgId}, ${org.subsidiaryId}, 'Pre-billing-GATE', 'Pre-billing gate project', ${org.customerId}, ${typeId}, 'active', true, '{}'::jsonb)
               `)
               await db.execute(sql`
                 insert into parties(id, org_id, kind, display_name, subsidiary_id)
-                values (${employeeId}, ${org.orgId}, 'employee', 'WIP gate worker', ${org.subsidiaryId})
+                values (${employeeId}, ${org.orgId}, 'employee', 'Pre-billing gate worker', ${org.subsidiaryId})
               `)
               await db.execute(sql`
                 insert into time_entries(id, org_id, employee_party_id, worked_on, hours, project_id, item_id,
@@ -684,10 +684,10 @@ const consolidatedRows = [
 
               await assert.rejects(
                 createPrebill(org.orgId, actor, { projectId, periodEnd: org.date }),
-                (error: unknown) => error instanceof WipBillingError && error.status === 404 && /Pre-billing is turned off/i.test(error.message),
+                (error: unknown) => error instanceof PreBillingError && error.status === 404 && /Pre-billing is turned off/i.test(error.message),
               )
               assert.equal(
-                (await db.execute<{ n: number }>(sql`select count(*)::int as n from wip_prebills where org_id=${org.orgId}`)).rows[0]!.n,
+                (await db.execute<{ n: number }>(sql`select count(*)::int as n from prebills where org_id=${org.orgId}`)).rows[0]!.n,
                 0,
               )
             } finally {
@@ -716,7 +716,7 @@ const { sql } = await import('drizzle-orm')
 const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
 const { BUILTIN_PROJECT_TYPES } = await import('@openbooks/schema')
 const { createScratchOrg, createScratchUser, seedFlowActors, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
-const wip = await import('./wip-billing')
+const wip = await import('./pre-billing')
 const headerRoute = await import('../app/api/projects/[id]/route')
 const enabled = { skip: !process.env.OPENBOOKS_DB_URL }
 
@@ -731,7 +731,7 @@ test('converting after a switch to NTE enforces the new ceiling', enabled, async
   await withBypassContext(async () => {
     const org = await createScratchOrg()
     try {
-      await db.execute(sql`update orgs set settings = jsonb_set(settings, '{features,wipBilling}', 'true'::jsonb, true) where id = ${org.orgId}`)
+      await db.execute(sql`update orgs set settings = jsonb_set(settings, '{features,preBilling}', 'true'::jsonb, true) where id = ${org.orgId}`)
       const preparer = (await seedFlowActors(org.orgId)).adminId
       const approver = await createScratchUser(org.orgId, 'Billing approver', 'admin')
       await db.execute(sql`update app_roles set permissions='["*"]'::jsonb where org_id=${org.orgId} and key in ('admin','reviewer')`)
@@ -791,14 +791,14 @@ const consolidatedRows = [
         const { sql } = await import('drizzle-orm')
         const { BUILTIN_PROJECT_TYPES } = await import('@openbooks/schema')
         const { createScratchOrg, seedFlowActors, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
-        const wip = await import('./wip-billing')
+        const wip = await import('./pre-billing')
 
         const enabled = { skip: !process.env.OPENBOOKS_DB_URL }
 
         /**
          * An NTE job whose contract ceiling was never entered has an UNKNOWN cap, not
          * a zero cap. Billing-request invoicing and Financials both read it that way
-         * (no ceiling ⇒ no cap); WIP prebilling must agree instead of refusing every
+         * (no ceiling ⇒ no cap); Pre-billing must agree instead of refusing every
          * worksheet while a real ceiling blocks nothing elsewhere. A consumed ceiling
          * still blocks.
          */
@@ -806,7 +806,7 @@ const consolidatedRows = [
           await withBypassContext(async () => {
             const org = await createScratchOrg()
             try {
-              await db.execute(sql`update orgs set settings = jsonb_set(settings, '{features,wipBilling}', 'true'::jsonb, true) where id = ${org.orgId}`)
+              await db.execute(sql`update orgs set settings = jsonb_set(settings, '{features,preBilling}', 'true'::jsonb, true) where id = ${org.orgId}`)
               const preparer = (await seedFlowActors(org.orgId)).adminId
               const nte = BUILTIN_PROJECT_TYPES.find((t) => t.key === 'not_to_exceed')!
               const typeId = randomUUID()

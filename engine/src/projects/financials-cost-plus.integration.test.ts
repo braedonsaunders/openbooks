@@ -15,7 +15,7 @@ const costPlusProfile = BUILTIN_PROJECT_TYPES.find((t) => t.key === "cost_plus")
 /**
  * A cost-plus profile whose project carries no job markup must price billable
  * value at cost plus the profile's default markup — the same fallback the WIP
- * prebill pricer (`priceWipSource` → 200 at 15% = 230) and the WIP analytics
+ * prebill pricer (`pricePreBillingSource` → 200 at 15% = 230) and the WIP analytics
  * rollup already apply. The Financials P&L must agree with both.
  */
 test("cost-plus billable value falls back to the profile default markup", { skip: !DB }, async () => {

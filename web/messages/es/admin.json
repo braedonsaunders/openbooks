@@ -5236,7 +5236,7 @@
         "activeSubcontractPaymentControls": "{count, plural, one {# control de pago de subcontrato activo} other {# controles de pago de subcontrato activos}}",
         "activeSubcontracts": "{count, plural, one {# subcontrato activo} other {# subcontratos activos}}",
         "activeSubscriptions": "{count, plural, one {# suscripción activa} other {# suscripciones activas}}",
-        "activeWipHolds": "{count, plural, one {# retención de trabajo en curso activa} other {# retenciones de trabajo en curso activas}}",
+        "activePrebillHolds": "{count, plural, one {# retención de prefacturación activa} other {# retenciones de prefacturación activas}}",
         "advancedSubscriptionContracts": "{count, plural, one {# contrato de suscripción versionado activo} other {# contratos de suscripción versionados activos}}",
         "assets": "{count, plural, one {# activo fijo} other {# activos fijos}}",
         "bankStatements": "{count, plural, one {# extracto bancario} other {# extractos bancarios}}",
@@ -7108,7 +7108,7 @@
       "title": "Subcontratos y facturación de avance",
       "description": "Compromisos con proveedores, cambios de subcontratos, programas de valores y solicitudes de pago de proveedores, retenciones en garantía por pagar, liberaciones, cheques conjuntos y retenciones de pago."
     },
-    "wipBilling": {
+    "preBilling": {
       "title": "Prefacturación",
       "description": "Convierta el trabajo de proyecto no facturado en paquetes de factura revisados: ciclos de facturación, ajustes y retenciones con evidencia, aprobación mediante Flujos, revisión opcional del cliente en el portal y envío de facturas con soporte."
     },

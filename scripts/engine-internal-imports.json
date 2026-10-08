@@ -981,7 +981,7 @@
   "web/app/api/warehouses/[id]/putaway/route.ts": {"engine/src/inventory/action-idempotency.ts":1,"engine/src/inventory/putaway.ts":1,"engine/src/inventory/warehouses.ts":1,"engine/src/platform/business-date.ts":1,"engine/src/platform/db.ts":1},
   "web/app/api/warehouses/[id]/route.ts": {"engine/src/inventory/putaway.ts":1,"engine/src/inventory/warehouses.ts":1,"engine/src/platform/db.ts":1},
   "web/app/api/warehouses/route.ts": {"engine/src/inventory/warehouses.ts":1,"engine/src/platform/db.ts":1},
-  "web/app/api/wip-billing/[id]/lines/[lineId]/route.ts": {"engine/src/money/money.ts":1,"engine/src/records/revision.ts":1},
+  "web/app/api/pre-billing/[id]/lines/[lineId]/route.ts": {"engine/src/money/money.ts":1,"engine/src/records/revision.ts":1},
   "web/app/api/work-schedules/route.ts": {"engine/src/organization/subsidiary-scope.ts":1,"engine/src/payroll/work-schedules.ts":1,"engine/src/platform/business-date.ts":1,"engine/src/platform/db.ts":1},
   "web/app/book/[token]/page.tsx": {"engine/src/hrm/recruiting/scheduling.ts":1},
   "web/app/careers/[orgSlug]/page.tsx": {"engine/src/platform/db.ts":1},
@@ -1376,8 +1376,8 @@
   "web/lib/time-policy.ts": {"engine/src/platform/db.ts":1},
   "web/lib/timesheet-approval-release.ts": {"engine/src/flows/timesheet-weeks-adapter.ts":1,"engine/src/platform/db.ts":1},
   "web/lib/views.ts": {"engine/src/platform/db.ts":1},
-  "web/lib/wip-billing-policy.ts": {"engine/src/money/money.ts":1},
-  "web/lib/wip-billing.ts": {"engine/src/money/money.ts":1,"engine/src/organization/org-feature-lock.ts":1,"engine/src/organization/subsidiary-scope.ts":1,"engine/src/platform/business-date.ts":1,"engine/src/platform/db.ts":1,"engine/src/records/revision.ts":1,"engine/src/tax/persist.ts":1,"engine/src/tax/tax.ts":1},
+  "web/lib/pre-billing-policy.ts": {"engine/src/money/money.ts":1},
+  "web/lib/pre-billing.ts": {"engine/src/money/money.ts":1,"engine/src/organization/org-feature-lock.ts":1,"engine/src/organization/subsidiary-scope.ts":1,"engine/src/platform/business-date.ts":1,"engine/src/platform/db.ts":1,"engine/src/records/revision.ts":1,"engine/src/tax/persist.ts":1,"engine/src/tax/tax.ts":1},
   "web/lib/work-schedule-days.ts": {"engine/src/money/money.ts":1},
   "web/lib/workspace-presentation.ts": {"engine/src/platform/db.ts":1}
 }

@@ -378,7 +378,7 @@
     "carry_forward": "Mit letzter Preisliste abrechnen",
     "customerReview": "Kundenprüfung vor der Rechnungsstellung"
   },
-  "wipBilling": {
+  "preBilling": {
     "toolbar": {
       "search": "Kunden, Projekte, Arbeitsblätter suchen",
       "board": "Board",

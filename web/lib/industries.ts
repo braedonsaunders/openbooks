@@ -268,7 +268,7 @@ export const INDUSTRIES: IndustryDef[] = [
       equipment: false,
       subscriptionBilling: true,
       revenueRecognition: true,
-      wipBilling: true,
+      preBilling: true,
     },
     coa: [
       ...standardBank(),
@@ -330,7 +330,7 @@ export const INDUSTRIES: IndustryDef[] = [
       // same certificate-of-insurance and 1099 obligations as a contractor.
       subcontractorCompliance: true,
       subcontracts: true,
-      wipBilling: true,
+      preBilling: true,
     },
     coa: [
       { number: '1000', name: 'Operating Account', type: 'asset_bank', reconcilable: true },
@@ -463,7 +463,7 @@ export const INDUSTRIES: IndustryDef[] = [
       equipment: false,
       subscriptionBilling: false,
       revenueRecognition: true,
-      wipBilling: true,
+      preBilling: true,
     },
     coa: [
       ...standardBank(),

@@ -56,7 +56,7 @@ const ROUTES = [
   '/reports/trial-balance',
   '/reports/general-ledger',
   '/projects',
-  '/projects/wip-billing',
+  '/projects/pre-billing',
   '/field-tickets',
   '/subcontracts',
   '/payroll',

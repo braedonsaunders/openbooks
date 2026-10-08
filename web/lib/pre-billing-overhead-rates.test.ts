@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import type { FinancialProfile } from '@openbooks/schema'
-const { rateEngineOverhead } = await import('./wip-billing')
+const { rateEngineOverhead } = await import('./pre-billing')
 
 const profile = (patch: Partial<FinancialProfile> = {}): FinancialProfile => ({
   invoicedToDate: { docKinds: ['customer_invoice'], creditKinds: ['customer_credit'] },
@@ -51,9 +51,9 @@ const source = {
  * Department specificity is per rate KIND — the same rule the postings use
  * (`overheadRateAppliesToTimeEntry`): a department percent row steps aside
  * only org-wide percent rows, never an org-wide per-hour row. Otherwise the
- * WIP loaded cost understates the burden the ledger will carry.
+ * Pre-billing loaded cost understates the burden the ledger will carry.
  */
-test('WIP rate-engine overhead keeps org-wide rows of kinds the department does not set', () => {
+test('Pre-billing rate-engine overhead keeps org-wide rows of kinds the department does not set', () => {
   const rates = [
     { department_id: null, rate_kind: 'per_hour' as const, rate: '10', effective_from: '2026-01-01', effective_to: null },
     { department_id: 'dept-D', rate_kind: 'percent' as const, rate: '50', effective_from: '2026-01-01', effective_to: null },
@@ -62,7 +62,7 @@ test('WIP rate-engine overhead keeps org-wide rows of kinds the department does 
   assert.equal(rateEngineOverhead(source, profile(), rates), '40.0000')
 })
 
-test('WIP rate-engine overhead lets a department row of the same kind win', () => {
+test('Pre-billing rate-engine overhead lets a department row of the same kind win', () => {
   const rates = [
     { department_id: null, rate_kind: 'per_hour' as const, rate: '10', effective_from: '2026-01-01', effective_to: null },
     { department_id: 'dept-D', rate_kind: 'per_hour' as const, rate: '15', effective_from: '2026-01-01', effective_to: null },
@@ -70,7 +70,7 @@ test('WIP rate-engine overhead lets a department row of the same kind win', () =
   assert.equal(rateEngineOverhead(source, profile(), rates), '30.0000')
 })
 
-test('WIP rate-engine overhead falls back to org-wide rows without a department row', () => {
+test('Pre-billing rate-engine overhead falls back to org-wide rows without a department row', () => {
   const rates = [
     { department_id: null, rate_kind: 'per_hour' as const, rate: '10', effective_from: '2026-01-01', effective_to: null },
   ]

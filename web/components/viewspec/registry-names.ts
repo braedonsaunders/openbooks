@@ -601,7 +601,7 @@ export const WIDGET_NAMES: ReadonlySet<string> = new Set([
   'new-webhook-endpoint',
   'webhook-endpoint-drawer',
   'warehouses-panel',
-  'wip-billing-workspace',
+  'pre-billing-workspace',
   'work-item-drawer',
   'year-end-workspace',
 ])

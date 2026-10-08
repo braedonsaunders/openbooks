@@ -90,7 +90,7 @@ const EMPTY_STORE: Record<string, string> = {
   get_asset: "not_found",
   get_equipment: "not_found",
   get_subcontract: "not_found",
-  get_wip_prebill: "not_found",
+  get_prebill: "not_found",
   // HR-19: the survey read refuses an unknown survey by name, and the
   // refusal reaches the caller through hrmRefusal unchanged.
   hrm_survey_results: "survey is not visible in this organization",
@@ -197,7 +197,7 @@ const HARNESS_FEATURES = [
   "fixedAssets",
   "equipment",
   "subcontracts",
-  "wipBilling",
+  "preBilling",
   "propertyManagement",
   "timeTracking",
   "fieldTickets",
@@ -301,7 +301,7 @@ test("assistant read-tool contract harness", DB_ONLY, async (t) => {
         asset_tax_pools: { taxYear: 2025 },
         get_equipment: { id: randomUUID() },
         get_subcontract: { id: randomUUID() },
-        get_wip_prebill: { id: randomUUID() },
+        get_prebill: { id: randomUUID() },
         get_warehouse: { id: randomUUID() },
         get_pick_list: { id: randomUUID() },
         get_shipment: { id: randomUUID() },

@@ -41,7 +41,7 @@
     "close_run": "fechamento de período",
     "budget_scenario": "orçamento",
     "hrm_employment_change_request": "alteração de emprego",
-    "wip_prebill": "pré-fatura"
+    "prebill": "pré-fatura"
   },
   "decide": {
     "rejectionReason": "Motivo da rejeição:",

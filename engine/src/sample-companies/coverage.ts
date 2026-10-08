@@ -19,7 +19,7 @@ export const DEMO_FEATURE_EVIDENCE: Record<string, DemoFeatureEvidence> = {
   onlinePayments: { ...configuration("psp_provider_configs"), limitation: "Payment credentials must be configured; no real charges are made." },
   projects: workflow("projects"), timeTracking: workflow("time_entries"), fieldTime: configuration("time_kiosks"),
   fieldTickets: workflow("field_tickets"), projectScheduling: workflow("project_tasks", "schedule_calendars"),
-  subcontracts: workflow("subcontracts", "subcontract_sov_lines"), wipBilling: workflow("wip_prebills"),
+  subcontracts: workflow("subcontracts", "subcontract_sov_lines"), preBilling: workflow("prebills"),
   resourcing: workflow("res_demand_lines"), resourceRequests: workflow("res_requests"), retainerBilling: workflow("res_retainers"),
   payroll: { ...configuration("pay_schedules", "employee_payroll_profiles", "pay_components", "pay_runs"), limitation: "US pack installed. Employer registrations, employee pay terms, and statutory inputs must be reviewed before calculation." },
   hrm: workflow("worker_employments", "worker_employment_versions"), hrmCompensation: configuration("hrm_pay_bands"),

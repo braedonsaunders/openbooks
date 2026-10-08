@@ -2380,15 +2380,15 @@ export const PAGE_REGISTRY: Readonly<Record<string, PageRegistryEntry>> = {
       }
     },
   },
-  '/projects/wip-billing': {
-    route: '/projects/wip-billing',
+  '/projects/pre-billing': {
+    route: '/projects/pre-billing',
     segments: [],
     searchParams: true,
     module: async () => {
-      const m = await import('../app/(app)/projects/wip-billing/view')
+      const m = await import('../app/(app)/projects/pre-billing/view')
       return {
-        load: (input) => m.loadWipBilling(input.searchParams ?? {}),
-        spec: (data) => m.wipBillingSpec(data as never),
+        load: (input) => m.loadPreBilling(input.searchParams ?? {}),
+        spec: (data) => m.preBillingSpec(data as never),
       }
     },
   },

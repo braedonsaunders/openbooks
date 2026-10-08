@@ -5371,7 +5371,7 @@
         "activeSubcontractPaymentControls": "{count, plural, one {# aktive Zahlungssteuerung für Nachunternehmer} other {# aktive Zahlungssteuerungen für Nachunternehmer}}",
         "activeSubcontracts": "{count, plural, one {# aktiver Nachunternehmervertrag} other {# aktive Nachunternehmerverträge}}",
         "activeSubscriptions": "{count, plural, one {# aktives Abonnement} other {# aktive Abonnements}}",
-        "activeWipHolds": "{count, plural, one {# aktive WIP-Sperre} other {# aktive WIP-Sperren}}",
+        "activePrebillHolds": "{count, plural, one {# aktive Vorabrechnungssperre} other {# aktive Vorabrechnungssperren}}",
         "advancedSubscriptionContracts": "{count, plural, one {# aktiver versionierter Abonnementvertrag} other {# aktive versionierte Abonnementverträge}}",
         "assets": "{count, plural, one {# Anlagegut} other {# Anlagegüter}}",
         "bankStatements": "{count, plural, one {# Kontoauszug} other {# Kontoauszüge}}",
@@ -6988,7 +6988,7 @@
       "title": "Nachunternehmer und Abschlagsrechnung",
       "description": "Lieferantenverpflichtungen, Nachunternehmeränderungen, Lieferanten-SOVs und Abschlagsrechnungen, Einbehaltverbindlichkeiten, Freigaben, Gemeinschaftsschecks und Zahlungssperren."
     },
-    "wipBilling": {
+    "preBilling": {
       "title": "Vorabrechnung",
       "description": "Machen Sie aus unberechneter Projektarbeit geprüfte Rechnungspakete: Abrechnungsläufe, belegte Anpassungen und Zurückhaltungen, Genehmigung über Flows, optionale Kundenprüfung im Portal und Rechnungsversand mit Nachweisen."
     },

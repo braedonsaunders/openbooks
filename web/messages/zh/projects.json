@@ -378,7 +378,7 @@
     "carry_forward": "按最近一版费率卡开票",
     "customerReview": "开票前的客户审核"
   },
-  "wipBilling": {
+  "preBilling": {
     "toolbar": {
       "search": "搜索客户、项目、工作表",
       "board": "看板",

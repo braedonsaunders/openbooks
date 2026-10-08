@@ -96,7 +96,7 @@ export function recommendWorkspaceFeatures(args: {
     state.projectScheduling = false
     state.timeTracking = false
     state.subcontracts = false
-    state.wipBilling = false
+    state.preBilling = false
   }
   if (!state.subscriptionBilling) state.advancedSubscriptions = false
   if (!state.flows) state.advancedClose = false

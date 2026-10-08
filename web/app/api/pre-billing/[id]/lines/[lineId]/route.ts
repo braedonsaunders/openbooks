@@ -6,7 +6,7 @@ import { normalizeMoney } from '@openbooks/engine/src/money/money.ts'
 import { canonicalDecimal } from '../../../../../../lib/exact-decimal'
 import { moneyRefusal } from '../../../../../../lib/payroll-decimal-refusal'
 import { isUuid } from '../../../../../../lib/list-params'
-import { holdPrebillLine, updatePrebillLine } from '../../../../../../lib/wip-billing'
+import { holdPrebillLine, updatePrebillLine } from '../../../../../../lib/pre-billing'
 import { isDocumentRevisionToken } from '@openbooks/engine/src/records/revision.ts'
 import { notFound } from "@/lib/api/responses";
 const PATCHBodySchema1 = z.discriminatedUnion('action', [
@@ -31,7 +31,7 @@ function exactMoney(value: unknown): string | null {
 
 export const PATCH = defineRoute({
   permission: 'projects.manage',
-  feature: 'wipBilling',
+  feature: 'preBilling',
   body: PATCHBodySchema1,
   handler: async ({ request: _req, authz: routeAuthz, params: routeParams, body: routeBody }) => {
     const params = Promise.resolve(routeParams as { id: string; lineId: string });

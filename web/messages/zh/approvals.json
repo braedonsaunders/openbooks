@@ -41,7 +41,7 @@
     "close_run": "期间结账",
     "budget_scenario": "预算",
     "hrm_employment_change_request": "雇佣变更",
-    "wip_prebill": "预开票单"
+    "prebill": "预开票单"
   },
   "decide": {
     "rejectionReason": "驳回原因：",

@@ -9,8 +9,8 @@ import {
   loadPrebill,
   sendPrebillToCustomer,
   transitionPrebill,
-} from '../../../../lib/wip-billing'
-import { guardWipBillingFeature } from '../../../../lib/wip-billing-gate'
+} from '../../../../lib/pre-billing'
+import { guardPreBillingFeature } from '../../../../lib/pre-billing-gate'
 import { notFound } from "@/lib/api/responses";
 
 // Approval decisions are not actions here: a submitted worksheet is decided
@@ -34,7 +34,7 @@ export const runtime = 'nodejs'
 
 export const GET = defineRoute({
   permission: 'projects.read',
-  feature: 'wipBilling',
+  feature: 'preBilling',
   handler: async ({ request: _req, authz: routeAuthz, params: routeParams }) => {
     const params = Promise.resolve(routeParams as { id: string });
     const gate = routeAuthz;
@@ -53,7 +53,7 @@ export const PATCH = defineRoute({
     const body = routeBody as PatchBody
     const gate = await guardPermission(permissionFor(body.action))
     if (gate instanceof NextResponse) return gate
-    const feature = await guardWipBillingFeature(gate.user.orgId)
+    const feature = await guardPreBillingFeature(gate.user.orgId)
     if (feature) return feature
     const { id } = await params
     if (!isUuid(id)) return notFound("record")

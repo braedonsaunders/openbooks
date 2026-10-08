@@ -39,7 +39,7 @@ import type {
   PrebillDetail,
   PrebillListRow,
   UnbilledProjectRow,
-} from "../../../../lib/wip-billing";
+} from "../../../../lib/pre-billing";
 import { PrebillDrawer } from "./PrebillDrawer";
 
 type ProjectOption = {
@@ -84,7 +84,7 @@ export async function requestJson<T = Record<string, unknown>>(url: string, init
  * does not use (approval routing, customer review) stay hidden until a
  * worksheet reaches them, so a small business sees draft → ready → invoiced.
  */
-export function WipBillingWorkspace({
+export function PreBillingWorkspace({
   prebills,
   unbilled,
   projects,
@@ -103,7 +103,7 @@ export function WipBillingWorkspace({
   customerPortalEnabled: boolean;
   approvalFlowsConfigured: boolean;
 }) {
-  const t = useTranslations("projects.wipBilling");
+  const t = useTranslations("projects.preBilling");
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -283,7 +283,7 @@ function BoardLane({
   onPrebill: (projectId: string) => void;
   onShowAll: (stage: PrebillStage) => void;
 }) {
-  const t = useTranslations("projects.wipBilling");
+  const t = useTranslations("projects.preBilling");
   const closed = column === "paid";
   const shown = closed ? rows.slice(0, CLOSED_CARD_LIMIT) : rows;
   const count = column === "unbilled" ? unbilled.length : rows.length;
@@ -340,7 +340,7 @@ function UnbilledCard({
   canManage: boolean;
   onPrebill: (projectId: string) => void;
 }) {
-  const t = useTranslations("projects.wipBilling");
+  const t = useTranslations("projects.preBilling");
   const today = useBusinessToday();
   const ageDays = Math.max(0, Math.round((Date.parse(today) - Date.parse(row.oldestWorkDate)) / 86_400_000));
   return (
@@ -367,7 +367,7 @@ function UnbilledCard({
 }
 
 function PackageCard({ row, money, onOpen }: { row: PrebillListRow; money: (value: string) => string; onOpen: (id: string) => void }) {
-  const t = useTranslations("projects.wipBilling");
+  const t = useTranslations("projects.preBilling");
   const disputed = row.stage === "draft" && row.customerDecision === "disputed";
   return (
     <button
@@ -451,7 +451,7 @@ function PrebillTable({
   selectedId: string | null;
   money: (value: string) => string;
 }) {
-  const t = useTranslations("projects.wipBilling");
+  const t = useTranslations("projects.preBilling");
   const counts = new Map<PrebillStage, number>();
   for (const row of rows) counts.set(row.stage, (counts.get(row.stage) ?? 0) + 1);
   // "All" is every stage still in motion; closed stages are their own filters.
@@ -471,7 +471,7 @@ function PrebillTable({
         ))}
       </div>
       <PagedTable
-        source="projects_wip_prebills"
+        source="projects_prebills"
         rows={filtered}
         rowKey={(row) => row.id}
         emptyAsRow
@@ -572,7 +572,7 @@ function BillRunDrawer({
   onClose: () => void;
   onFinished: (firstPrebillId: string | null) => void;
 }) {
-  const t = useTranslations("projects.wipBilling");
+  const t = useTranslations("projects.preBilling");
   const today = useBusinessToday();
   const [periodEnd, setPeriodEnd] = useState(today);
   const [periodStart, setPeriodStart] = useState("");
@@ -596,7 +596,7 @@ function BillRunDrawer({
   async function run() {
     setBusy(true);
     try {
-      const outcome = await requestJson<BillRunResult>("/api/wip-billing/runs", {
+      const outcome = await requestJson<BillRunResult>("/api/pre-billing/runs", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

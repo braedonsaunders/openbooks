@@ -378,7 +378,7 @@
     "carry_forward": "Facturar con la última tarifa",
     "customerReview": "Revisión del cliente antes de facturar"
   },
-  "wipBilling": {
+  "preBilling": {
     "toolbar": {
       "search": "Buscar clientes, proyectos, hojas",
       "board": "Tablero",

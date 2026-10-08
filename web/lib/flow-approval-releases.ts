@@ -82,14 +82,14 @@ export async function registerFlowApprovalReleaseHandlers(): Promise<void> {
   // decides who approves; this supplies what approval means for a worksheet —
   // freezing its lines as approved, or returning it to draft with the
   // approver's reason attached.
-  registerFlowApprovalReleaseHandler('wip_prebill', async ({
+  registerFlowApprovalReleaseHandler('prebill', async ({
     subjectId,
     outcome,
     comment,
     ctx,
   }) => {
     if (!ctx.userId) throw new Error('pre-billing approval needs an acting user')
-    const { releasePrebillApproval } = await import('./wip-billing')
+    const { releasePrebillApproval } = await import('./pre-billing')
     await releasePrebillApproval(ctx.orgId, ctx.userId, subjectId, outcome, comment)
   })
 }

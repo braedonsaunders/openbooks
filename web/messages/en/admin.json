@@ -5329,7 +5329,7 @@
         "openVendorPayApplications": "{count, plural, one {# vendor pay application in progress} other {# vendor pay applications in progress}}",
         "activeSubcontractPaymentControls": "{count, plural, one {# active subcontract payment control} other {# active subcontract payment controls}}",
         "openPrebills": "{count, plural, one {# prebill awaiting completion} other {# prebills awaiting completion}}",
-        "activeWipHolds": "{count, plural, one {# active WIP hold} other {# active WIP holds}}",
+        "activePrebillHolds": "{count, plural, one {# active prebill hold} other {# active prebill holds}}",
         "activePropertyLeases": "{count, plural, one {# active property lease} other {# active property leases}}",
         "securityDepositTransactions": "{count, plural, one {# security-deposit transaction} other {# security-deposit transactions}}",
         "revenueSchedules": "{count, plural, one {# deferred-revenue schedule} other {# deferred-revenue schedules}}",
@@ -7032,7 +7032,7 @@
       "title": "Subcontracts & AP progress billing",
       "description": "Vendor commitments, subcontract changes, vendor SOVs and pay applications, retainage payable, releases, joint checks, and payment holds."
     },
-    "wipBilling": {
+    "preBilling": {
       "title": "Pre-billing",
       "description": "Turn unbilled project work into reviewed invoice packages: bill runs, write-ups and holds with evidence, approval through Flows, optional customer review in the portal, and invoice delivery with backup."
     },

@@ -441,7 +441,7 @@ function sovFinancialProfile(): Json {
           closeCadence: 'monthly',
         },
       });
-      await apiOk(page, 'PUT', '/api/admin/setup/features', { features: { wipBilling: true } });
+      await apiOk(page, 'PUT', '/api/admin/setup/features', { features: { preBilling: true } });
 
       // Root subsidiary: a fresh journal draft defaults to it (probe deleted).
       const probeDraftId = str((await apiOk(page, 'POST', '/api/journals/draft', {})).id, 'probe draft');
@@ -1039,7 +1039,7 @@ function sovFinancialProfile(): Json {
 
       // -- 10. Source-line WIP prebilling refuses the AIA procedure (guard proof).
       {
-        const prebill = await api(page, 'POST', '/api/wip-billing', { projectId, periodEnd: MO.to });
+        const prebill = await api(page, 'POST', '/api/pre-billing', { projectId, periodEnd: MO.to });
         expect(prebill.status, 'AIA prebilling refused').toBe(422);
         expect(JSON.stringify(prebill.body)).toContain('applications for payment instead of source-line prebilling');
       }

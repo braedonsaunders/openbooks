@@ -13,7 +13,7 @@ import type { AgentFinding } from "./types.ts";
  * Project-margin pack: the SAME ranking row the project margin report ranks
  * (web/lib/project-ranking.ts `rankProjects` with default args — org-wide,
  * activity-filtered), plus the WIP billing service's own unbilled-work
- * predicates (web/lib/wip-billing.ts) aged past a cutoff. Findings link the
+ * predicates (web/lib/pre-billing.ts) aged past a cutoff. Findings link the
  * projects cockpit for review. A margin that flips sign reads the previously
  * persisted margin off the stable fingerprint, so the card can say so.
  * Proposes nothing executable: no prebill-creation tool exists, so — like the
@@ -171,7 +171,7 @@ async function staleUnbilledByProject(orgId: string, cutoff: string): Promise<St
          and te.billing_status = 'unbilled'
          and te.worked_on <= ${cutoff}
          and not exists (
-               select 1 from wip_holds hold
+               select 1 from prebill_holds hold
                 where hold.org_id = ${orgId}
                   and hold.source_type = 'time_entry'
                   and hold.source_id = te.id
@@ -179,13 +179,13 @@ async function staleUnbilledByProject(orgId: string, cutoff: string): Promise<St
              )
          and not exists (
                select 1
-                 from wip_prebill_lines reserved
-                 join wip_prebills worksheet
+                 from prebill_lines reserved
+                 join prebills worksheet
                    on worksheet.org_id = reserved.org_id and worksheet.id = reserved.prebill_id
                 where reserved.org_id = ${orgId}
                   and reserved.source_type = 'time_entry'
                   and reserved.time_entry_id = te.id
-                  and worksheet.status in ('draft', 'review', 'approved')
+                  and worksheet.status in ('draft', 'review', 'approved', 'customer_review')
              )
     ),
     aged_documents as (
@@ -205,7 +205,7 @@ async function staleUnbilledByProject(orgId: string, cutoff: string): Promise<St
          and line.billed_by_line_id is null
          and doc.document_date <= ${cutoff}
          and not exists (
-               select 1 from wip_holds hold
+               select 1 from prebill_holds hold
                 where hold.org_id = ${orgId}
                   and hold.source_type = 'document_line'
                   and hold.source_id = line.id
@@ -213,13 +213,13 @@ async function staleUnbilledByProject(orgId: string, cutoff: string): Promise<St
              )
          and not exists (
                select 1
-                 from wip_prebill_lines reserved
-                 join wip_prebills worksheet
+                 from prebill_lines reserved
+                 join prebills worksheet
                    on worksheet.org_id = reserved.org_id and worksheet.id = reserved.prebill_id
                 where reserved.org_id = ${orgId}
                   and reserved.source_type = 'document_line'
                   and reserved.document_line_id = line.id
-                  and worksheet.status in ('draft', 'review', 'approved')
+                  and worksheet.status in ('draft', 'review', 'approved', 'customer_review')
              )
     ),
     combined as (

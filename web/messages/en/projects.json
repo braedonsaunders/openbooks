@@ -378,7 +378,7 @@
     "carry_forward": "Bill at the last card",
     "customerReview": "Customer review before invoicing"
   },
-  "wipBilling": {
+  "preBilling": {
     "toolbar": {
       "search": "Search customers, projects, worksheets",
       "board": "Board",
