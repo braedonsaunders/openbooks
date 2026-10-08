@@ -262,11 +262,10 @@ export function overheadSpec(data: OverheadData): PageSpec {
           when: f('onRates'),
         },
         // Lifecycle tab: mode/cadence switch plus the live-vs-published drift
-        // table. Drift money formatting happens in the slot (it owns the
-        // money hooks the spec cannot name). No props: all state is
-        // org-derived — the payroll tab-slot precedent.
+        // table. Share the header's department projection; configuration
+        // and the published card remain session-derived in the slot.
         {
-          ...widgetBlock('overhead-lifecycle-tab', {}),
+          ...widgetBlock('overhead-lifecycle-tab', data.trueCost === null ? {} : { departments: data.actions.departments }),
           when: f('onLifecycle'),
         },
         // Application tab: mode switch, account picker, backfill prompt and
