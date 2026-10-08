@@ -4,6 +4,12 @@ export async function registerNodeInstrumentation() {
   // no-op otherwise (see engine telemetry.ts). First, so boot is observable.
   const { startTelemetry } = await import('@openbooks/engine/src/platform/telemetry.ts')
   await startTelemetry()
+  // Per-route database profile (see lib/query-profile.ts). Off by default:
+  // when the flag is unset neither the profiler nor its observer is loaded.
+  if (process.env.OPENBOOKS_QUERY_PROFILE === '1') {
+    const { startQueryProfile } = await import('./lib/query-profile')
+    startQueryProfile(process.env)
+  }
   const { assertSafeRuntimeDatabaseRole } = await import('@openbooks/engine/src/platform/db.ts')
   await assertSafeRuntimeDatabaseRole()
   const { resolveWebSchedulerMode } = await import('@openbooks/engine/src/scheduling/mode.ts')
