@@ -15,6 +15,8 @@ test("control-account rebase uses the settings captured with the clone snapshot"
   const seed = randomUUID();
   try {
     await db.execute(sql`update orgs set env_kind = 'sandbox', sandbox_of = ${production.orgId}, sandbox_seed = ${seed} where id = ${sandbox.orgId}`);
+    await db.execute(sql`insert into sandboxes(org_id,production_org_id,name,tier,masked,status)
+      values(${sandbox.orgId},${production.orgId},'Captured configuration','full',false,'ready')`);
     // Keep the target fixture's own account numbers distinct from the
     // deterministic copies; account numbers are unique within each org.
     await db.execute(sql`update accounts
