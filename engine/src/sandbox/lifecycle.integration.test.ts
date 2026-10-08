@@ -246,10 +246,19 @@ test("a clean-schema full sandbox clones tenant evidence without pre-seed collis
     assert.equal(new Set(segments.rows.map((row) => row.key)).size, segments.rows.length);
     assert.ok(segments.rows.every((row) => row.source_id !== row.clone_id));
 
+    const addedItem = randomUUID();
+    assert.equal((await db.execute(sql`insert into items(id,org_id,kind,code,name)
+      values(${addedItem},${org.orgId},'service',${`REFRESH-${addedItem}`},
+        'Refreshed service item') returning id`)).rows.length, 1);
     await refreshSandbox(sandboxId, { keepCustomizations: false });
-    const refreshed = (await db.execute<{ status: string; last_error: string | null }>(sql`
-      select status, last_error from sandboxes where id = ${sandboxId}`));
-    assert.deepEqual(refreshed.rows, [{ status: "ready", last_error: null }]);
+    const refreshed = (await db.execute<{ status: string; last_error: string | null; storage_rows: number }>(sql`
+      select status, last_error, storage_rows from sandboxes where id = ${sandboxId}`));
+    assert.equal(refreshed.rows[0]?.status, "ready");
+    assert.equal(refreshed.rows[0]?.last_error, null);
+    assert.ok(Number(refreshed.rows[0]?.storage_rows) > Number(state.rows[0]?.storage_rows),
+      "a proven refresh publishes the fresh copied-row count instead of retaining the creation count");
+    assert.equal((await db.execute(sql`select item.id from items item join orgs target on target.id=item.org_id
+      where item.org_id=${sandboxOrgId} and item.id=ob_rebase(${addedItem}::uuid,target.sandbox_seed)`)).rows.length, 1);
     await assertRates();
     await assertProfiles();
     const refreshedControls = await db.execute(sql`

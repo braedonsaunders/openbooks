@@ -748,7 +748,7 @@ export async function refreshSandbox(
       // left untouched.
       if (s.masked) await seedDefaultMaskingPolicies(s.production_org_id);
 
-      await inRefreshTransaction(async () => {
+      const copiedRows = await inRefreshTransaction(async () => {
         if (tier === "as_of" && !s.as_of_period_id) throw new Error("as-of sandbox requires a cutoff period");
         // Only the cutoff period ID crosses into the clone: runClone resolves
         // its calendar and end date inside the shared snapshot transaction,
@@ -784,6 +784,7 @@ export async function refreshSandbox(
         // Status stays 'refreshing' through commit. The proof cannot run inside
         // this unit: the pinned connection uses the dedicated bypass role, so a
         // ready write here would publish the clone before isolation is proven.
+        return result.rowsCopied;
       }, {
         isolationLevel: "REPEATABLE READ",
         // The same-sandbox lock is already held by withSandboxRefreshLock
@@ -834,7 +835,8 @@ export async function refreshSandbox(
       const markedReady = await withMaintenanceTransaction(null, async () => {
         const updated = await db.execute<{ id: string }>(sql`
           update sandboxes
-             set status = 'ready', last_refresh_at = now(), last_error = null, updated_at = now()
+             set status = 'ready', storage_rows = ${copiedRows}, last_refresh_at = now(),
+                 last_error = null, updated_at = now()
            where id = ${sandboxId} and org_id = ${s.org_id}
              and status = 'refreshing' and last_error = ${proofToken}
            returning id`);
