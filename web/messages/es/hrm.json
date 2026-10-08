@@ -347,7 +347,12 @@
       "defaultEditReason": "Datos del empleado actualizados",
       "employeeEditTitle": "Editar empleado",
       "appliedToast": "Empleado actualizado",
-      "employeeEditDescription": "Guarda un cambio con fecha de vigencia. El flujo configurado lo aplica inmediatamente o lo envía a aprobación."
+      "employeeEditDescription": "Guarda un cambio con fecha de vigencia. El flujo configurado lo aplica inmediatamente o lo envía a aprobación.",
+      "statusModeLabel": "Registro de estado",
+      "ordinaryStatusChange": "Cambio de estado",
+      "historicalObservation": "Observación histórica del estado",
+      "sourceReferenceLabel": "Referencia a la fuente fechada",
+      "historicalObservationHelp": "Registre solo las fechas pasadas documentadas en un intervalo sin cobertura. La fecha final es exclusiva: una observación del 3 de enero termina el 4 de enero. Se conservan las versiones, fechas de contratación y estado actual. Se mantienen las aprobaciones y controles de nómina contabilizada."
     },
     "exit": {
       "title": "Registro de salida",

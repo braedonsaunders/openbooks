@@ -347,7 +347,12 @@
       "defaultEditReason": "Dados do funcionário atualizados",
       "employeeEditTitle": "Editar funcionário",
       "appliedToast": "Funcionário atualizado",
-      "employeeEditDescription": "Salve uma alteração com data de vigência. O fluxo configurado aplica imediatamente ou encaminha para aprovação."
+      "employeeEditDescription": "Salve uma alteração com data de vigência. O fluxo configurado aplica imediatamente ou encaminha para aprovação.",
+      "statusModeLabel": "Registro de situação",
+      "ordinaryStatusChange": "Alteração de situação",
+      "historicalObservation": "Observação histórica da situação",
+      "sourceReferenceLabel": "Referência à fonte datada",
+      "historicalObservationHelp": "Registre somente datas passadas comprovadas em um intervalo sem cobertura. A data final é exclusiva: uma observação de 3 de janeiro termina em 4 de janeiro. Versões, datas de admissão e situação atual permanecem inalteradas. Aprovações e controles da folha contabilizada continuam aplicáveis."
     },
     "exit": {
       "title": "Registro de saída",

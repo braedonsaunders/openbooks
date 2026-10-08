@@ -347,7 +347,12 @@
       "defaultEditReason": "Employee details updated",
       "employeeEditTitle": "Edit employee",
       "appliedToast": "Employee updated",
-      "employeeEditDescription": "Save an effective-dated employee update. Your configured workflow applies it immediately or routes it for approval."
+      "employeeEditDescription": "Save an effective-dated employee update. Your configured workflow applies it immediately or routes it for approval.",
+      "statusModeLabel": "Status record",
+      "ordinaryStatusChange": "Status change",
+      "historicalObservation": "Historical status observation",
+      "sourceReferenceLabel": "Dated source reference",
+      "historicalObservationHelp": "Record only the past dates supported by the source, in an uncovered interval. The end date is exclusive: a January 3 observation ends January 4. Existing versions, hire dates and current status stay unchanged. Approval and committed-payroll controls still apply."
     },
     "exit": {
       "title": "Exit record",

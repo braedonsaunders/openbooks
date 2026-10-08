@@ -347,7 +347,12 @@
       "defaultEditReason": "従業員情報を更新",
       "employeeEditTitle": "従業員を編集",
       "appliedToast": "従業員を更新しました",
-      "employeeEditDescription": "適用日付きの変更を保存します。設定されたワークフローに従って即時適用するか、承認に回します。"
+      "employeeEditDescription": "適用日付きの変更を保存します。設定されたワークフローに従って即時適用するか、承認に回します。",
+      "statusModeLabel": "状態の記録",
+      "ordinaryStatusChange": "状態の変更",
+      "historicalObservation": "過去の状態の記録",
+      "sourceReferenceLabel": "日付付きの資料参照",
+      "historicalObservationHelp": "資料で確認できる過去の日付のみ、既存の記録がない期間に記録します。終了日は含みません。1月3日の記録は1月4日で終了します。既存の履歴、入社日、現在の状態は変更されません。承認と確定済み給与の保護は引き続き適用されます。"
     },
     "exit": {
       "title": "退職記録",

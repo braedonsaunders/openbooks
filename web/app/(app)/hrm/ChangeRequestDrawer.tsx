@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
-import { Button, Drawer, Input, Label, SearchSelect, Select, Textarea } from '@openbooks/ui'
+import { Button, Drawer, FieldHelp, Input, Label, SearchSelect, Select, Textarea } from '@openbooks/ui'
 import { readApiErrorMessage } from '../../../lib/api-error'
 import { useDirtyClose } from '../../../lib/use-dirty-close'
 import { useBusinessToday } from '../../../components/business-date-provider'
@@ -122,6 +122,10 @@ export function ChangeRequestDrawer({
   const [status, setStatus] = useState(asText(initialPayload.status) || 'active')
   const [effectiveFrom, setEffectiveFrom] = useState(asText(initialPayload.effectiveFrom) || today)
   const [effectiveTo, setEffectiveTo] = useState(asText(initialPayload.effectiveTo))
+  const [historicalObservation, setHistoricalObservation] = useState(Boolean(initialPayload.historicalObservation))
+  const [sourceReference, setSourceReference] = useState(asText(
+    (initialPayload.historicalObservation as { sourceReference?: unknown } | undefined)?.sourceReference,
+  ))
   const [effectiveDate, setEffectiveDate] = useState(asText(initialPayload.effectiveDate) || today)
   const [assignmentKey, setAssignmentKey] = useState(asText(initialPayload.assignmentKey))
   const [jobTitle, setJobTitle] = useState(asText(initialPayload.jobTitle))
@@ -169,6 +173,8 @@ export function ChangeRequestDrawer({
       status,
       effectiveFrom,
       effectiveTo,
+      historicalObservation,
+      sourceReference,
       effectiveDate,
       assignmentKey,
       jobTitle,
@@ -190,6 +196,8 @@ export function ChangeRequestDrawer({
       status,
       effectiveFrom,
       effectiveTo,
+      historicalObservation,
+      sourceReference,
       effectiveDate,
       assignmentKey,
       jobTitle,
@@ -366,6 +374,8 @@ export function ChangeRequestDrawer({
         status,
         effectiveFrom,
         ...(effectiveTo.trim() ? { effectiveTo: effectiveTo.trim() } : {}),
+        ...(kind === 'status_change' && historicalObservation
+          ? { historicalObservation: { sourceReference: sourceReference.trim() } } : {}),
       }
     }
     if (kind === 'termination') {
@@ -644,6 +654,24 @@ export function ChangeRequestDrawer({
 
         {kind === 'hire' || kind === 'status_change' ? (
           <>
+            {kind === 'status_change' && <>
+              <div className="space-y-1.5">
+                <Label htmlFor="cr-status-mode" className="inline-flex items-center gap-1">
+                  {t('employment.changeRequests.statusModeLabel')}
+                  <FieldHelp help={t('employment.changeRequests.historicalObservationHelp')} />
+                </Label>
+                <Select id="cr-status-mode" value={historicalObservation ? 'historical' : 'ordinary'}
+                  disabled={busy} onChange={event => setHistoricalObservation(event.target.value === 'historical')}>
+                  <option value="ordinary">{t('employment.changeRequests.ordinaryStatusChange')}</option>
+                  <option value="historical">{t('employment.changeRequests.historicalObservation')}</option>
+                </Select>
+              </div>
+              {historicalObservation && <div className="space-y-1.5">
+                <Label htmlFor="cr-source-reference">{t('employment.changeRequests.sourceReferenceLabel')}</Label>
+                <Input id="cr-source-reference" value={sourceReference} maxLength={2000} required disabled={busy}
+                  onChange={event => setSourceReference(event.target.value)} />
+              </div>}
+            </>}
             <div className="space-y-1.5">
               <Label htmlFor="cr-status">{t('employment.changeRequests.statusLabel')}</Label>
               <Select
@@ -676,14 +704,15 @@ export function ChangeRequestDrawer({
               <input
                 id="cr-effective-to"
                 type="date"
+                required={kind === 'status_change' && historicalObservation}
                 value={effectiveTo}
                 disabled={busy}
                 onChange={(event) => setEffectiveTo(event.target.value)}
                 className="w-full rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-sm text-slate-900 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
               />
-              <p className="text-xs text-slate-500 dark:text-slate-400">
+              {!(kind === 'status_change' && historicalObservation) && <p className="text-xs text-slate-500 dark:text-slate-400">
                 {t('employment.changeRequests.effectiveToHint')}
-              </p>
+              </p>}
             </div>
           </>
         ) : null}

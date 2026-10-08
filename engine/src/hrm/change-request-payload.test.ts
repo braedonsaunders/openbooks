@@ -101,3 +101,19 @@ test("termination needs a real civil date", () => {
   assert.equal(codeOf(() => validateChangePayload({ kind: "termination" })), "INVALID_PAYLOAD");
   assert.equal(codeOf(() => validateChangePayload({ kind: "termination", effectiveDate: "2026-02-30" })), "INVALID_PAYLOAD");
 });
+
+test('historical status observations bind a real bounded window and a nonblank dated source', () => {
+  const base = { kind: 'status_change', status: 'active', effectiveFrom: '2020-01-03', effectiveTo: '2020-01-04',
+    historicalObservation: { sourceReference: '  Dated declaration January 3  ' } };
+  const parsed = validateChangePayload(base);
+  assert.equal(parsed.kind, 'status_change');
+  if (parsed.kind !== 'status_change') throw new Error('unreachable');
+  assert.deepEqual(parsed.historicalObservation, { sourceReference: 'Dated declaration January 3' });
+  for (const payload of [
+    { ...base, effectiveTo: null },
+    { ...base, effectiveTo: '2020-01-03' },
+    { ...base, historicalObservation: { sourceReference: ' ' } },
+    { ...base, historicalObservation: { sourceReference: 'Declaration', hireDate: '2019-01-01' } },
+    { ...base, kind: 'hire' },
+  ]) assert.equal(codeOf(() => validateChangePayload(payload)), 'INVALID_PAYLOAD');
+});

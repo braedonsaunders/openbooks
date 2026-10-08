@@ -347,7 +347,12 @@
       "defaultEditReason": "员工信息已更新",
       "employeeEditTitle": "编辑员工",
       "appliedToast": "员工已更新",
-      "employeeEditDescription": "保存带生效日期的员工更新。配置的工作流将立即应用或提交审批。"
+      "employeeEditDescription": "保存带生效日期的员工更新。配置的工作流将立即应用或提交审批。",
+      "statusModeLabel": "状态记录",
+      "ordinaryStatusChange": "状态变更",
+      "historicalObservation": "历史状态记录",
+      "sourceReferenceLabel": "注明日期的来源引用",
+      "historicalObservationHelp": "仅在没有现有记录的区间内，记录来源证实的过去日期。结束日期不包含在区间内：1月3日的记录于1月4日结束。现有版本、入职日期和当前状态保持不变。审批及已过账工资保护仍然适用。"
     },
     "exit": {
       "title": "离职记录",

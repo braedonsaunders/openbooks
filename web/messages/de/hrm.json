@@ -347,7 +347,12 @@
       "defaultEditReason": "Mitarbeiterdaten aktualisiert",
       "employeeEditTitle": "Mitarbeiter bearbeiten",
       "appliedToast": "Mitarbeiter aktualisiert",
-      "employeeEditDescription": "Eine Änderung mit Gültigkeitsdatum speichern. Ihr Workflow wendet sie sofort an oder leitet sie zur Genehmigung weiter."
+      "employeeEditDescription": "Eine Änderung mit Gültigkeitsdatum speichern. Ihr Workflow wendet sie sofort an oder leitet sie zur Genehmigung weiter.",
+      "statusModeLabel": "Statusaufzeichnung",
+      "ordinaryStatusChange": "Statusänderung",
+      "historicalObservation": "Historische Statusbeobachtung",
+      "sourceReferenceLabel": "Datierter Quellenverweis",
+      "historicalObservationHelp": "Erfassen Sie nur belegte vergangene Tage in einer Lücke. Das Enddatum ist exklusiv: Eine Beobachtung vom 3. Januar endet am 4. Januar. Bestehende Versionen, Einstellungsdaten und der aktuelle Status bleiben erhalten. Genehmigungen und Kontrollen für verbuchte Abrechnungen gelten weiterhin."
     },
     "exit": {
       "title": "Austrittsdatensatz",
