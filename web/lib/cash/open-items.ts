@@ -7,7 +7,7 @@ import { mulDecimal } from '@openbooks/engine/money'
 // bare @openbooks/* to the main checkout, so a new engine module would not
 // resolve until merge; a relative import binds this checkout everywhere.
 import { AP_OPEN_ITEM_KINDS, AR_OPEN_ITEM_KINDS } from '../../../engine/src/records/open-item-kinds.ts'
-import { appliedLegAmountExpr } from '../../../engine/src/records/balance-due.ts'
+import { datedAppliedAmountSql } from '../../../engine/src/records/balance-due.ts'
 import { asOfPostedEntryLateral } from '../../../engine/src/records/open-item-scopes.ts'
 import { lineFunctional, presentationCurrency, presentationRates } from '../fx-presentation'
 import { apOpenAccountScope, arOpenAccountScope } from '../ledger-scope'
@@ -81,13 +81,7 @@ export async function openItemSourceQuery(
       select jl.id, jl.party_id, jl.entry_id, je.posting_date as tran_date, jl.due_date,
              d.id as doc_id, d.kind as doc_kind, d.document_number as doc_number,
              sub.base_currency as func,
-             (case when d.kind = ${creditKind} then -1 else 1 end) * (abs(jl.amount) - coalesce((
-               select sum(${appliedLegAmountExpr("x", sql`jl.id`, "base")}) from applications x
-                where x.org_id = ${orgId}
-                  and (x.to_line_id = jl.id or x.from_line_id = jl.id)
-                  and x.applied_on <= ${asOf}
-                  and (x.unapplied_at is null or x.unapplied_at::date > ${asOf}::date)
-             ), 0)) as remaining
+             (case when d.kind = ${creditKind} then -1 else 1 end) * (abs(jl.amount) - ${datedAppliedAmountSql(orgId, sql`jl.id`, asOf)}) as remaining
         from documents d
         ${asOfPostedEntryLateral(orgId, asOf)}
         join journal_entries book_entry on book_entry.id = je.id and book_entry.org_id = je.org_id and book_entry.book_id = ${bookId}
