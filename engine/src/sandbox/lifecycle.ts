@@ -280,8 +280,7 @@ export async function rebaseSandboxControlAccounts(args: {
    * Production settings captured inside the clone snapshot (runClone returns
    * them). When provided, the rebase derives from the same snapshot the
    * sandbox settings came from instead of re-reading production after the
-   * clone committed. Refresh omits this and keeps its long-standing
-   * current-production read.
+   * clone committed.
    */
   productionSettings?: Record<string, unknown> | null;
 }): Promise<Record<string, string>> {
@@ -773,6 +772,7 @@ export async function refreshSandbox(
           productionOrgId: s.production_org_id,
           sandboxOrgId: s.org_id,
           seed: sandboxSeed,
+          actorId: authority.actorId,
           productionSettings: result.sourceSettings,
         });
         // The re-copy just rehydrated every integration/credential row from
