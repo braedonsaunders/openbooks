@@ -49,10 +49,11 @@ export async function loadFieldTicketDrawerData({
     ? sql` and ${sql.raw(column)} = ${ticketSubsidiaryId}`
     : sql``
 
-  const [equipmentEnabled, inventoryEnabled, progressEnabled, today] = await Promise.all([
+  const [equipmentEnabled, inventoryEnabled, progressEnabled, schedulingEnabled, today] = await Promise.all([
     isFeatureEnabled(orgId, 'equipment'),
     isFeatureEnabled(orgId, 'inventory'),
     isFeatureEnabled(orgId, 'projectProgress'),
+    isFeatureEnabled(orgId, 'hrmShiftPlanning'),
     businessToday(orgId),
   ])
   // Inventory and Equipment stay on stored ticket lines. The picker only
@@ -179,6 +180,7 @@ export async function loadFieldTicketDrawerData({
     equipmentUnits: equipmentUnits.rows,
     equipmentEnabled,
     progressEnabled,
+    schedulingEnabled,
     layout: resolvedForm.layout,
     availableLayouts: resolvedForm.available,
     currentLayoutId: resolvedForm.row?.id ?? null,

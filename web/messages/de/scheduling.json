@@ -238,7 +238,8 @@
     "nothing": "Jeder geplante Tag hat bereits Stunden.",
     "filled": "{count, plural, one {# Tag aus dem Plan übernommen.} other {# Tage aus dem Plan übernommen.}} {skipped, plural, =0 {} one {# Tag hatte bereits Stunden.} other {# Tage hatten bereits Stunden.}} Prüfen und speichern.",
     "crewFilled": "{count, plural, one {# Person aus dem Plan hinzugefügt.} other {# Personen aus dem Plan hinzugefügt.}} Prüfen Sie die Stunden und speichern Sie die Zeilen.",
-    "crewNothing": "Alle heute für dieses Projekt eingeplanten Personen stehen bereits auf dem Bogen."
+    "crewNothing": "Alle heute für dieses Projekt eingeplanten Personen stehen bereits auf dem Bogen.",
+    "timeType": "Reguläre Zeitart auswählen"
   },
   "notify": {
     "subject": "Ihr Plan hat sich geändert – {board}",

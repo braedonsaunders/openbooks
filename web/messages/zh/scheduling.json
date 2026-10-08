@@ -238,7 +238,8 @@
     "nothing": "所有已排程的日期都已有工时。",
     "filled": "已从排程填充{count, plural, other { # 天}}。{skipped, plural, =0 {} other {# 天已有工时。}}请检查并保存。",
     "crewFilled": "已从排程添加{count, plural, other { # 人}}。请检查工时并保存各行。",
-    "crewNothing": "今天安排到此项目的所有人员都已在表中。"
+    "crewNothing": "今天安排到此项目的所有人员都已在表中。",
+    "timeType": "选择正常工时类型"
   },
   "notify": {
     "subject": "您的排程已变更——{board}",
