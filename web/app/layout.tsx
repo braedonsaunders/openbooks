@@ -69,7 +69,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   const nonce = requestHeaders.get('x-nonce') ?? undefined
   // The browser loads the catalog as its own cached resource rather than in
   // this payload; start that request before the scripts that need it.
-  const { version } = publishClientCatalog(messages)
+  const { version } = publishClientCatalog(locale as Locale, messages)
   const catalogUrl = clientCatalogUrl(locale as Locale, version)
   preload(catalogUrl, { as: 'fetch', crossOrigin: 'anonymous' })
   return (

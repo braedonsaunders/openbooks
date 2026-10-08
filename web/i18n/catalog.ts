@@ -77,13 +77,14 @@ export function clientCatalogUrl(locale: Locale, version: string): string {
 const PUBLISHED_CATALOGS = Symbol.for("openbooks.i18n.client-catalogs");
 
 /**
- * Make a catalog version available to server rendering of client components,
+ * Make a locale's catalog available to server rendering of client components,
  * which runs in this process after the root layout but cannot receive the
- * catalog through props without also sending it to the browser.
+ * catalog through props without also sending it to the browser. Only the
+ * latest version per locale is kept, so edited catalogs do not accumulate.
  */
-export function publishClientCatalog(messages: Messages): SerializedCatalog {
+export function publishClientCatalog(locale: Locale, messages: Messages): SerializedCatalog {
   const catalog = serializeCatalog(messages);
-  const store = globalThis as { [PUBLISHED_CATALOGS]?: Map<string, Messages> };
-  (store[PUBLISHED_CATALOGS] ??= new Map()).set(catalog.version, messages);
+  const store = globalThis as { [PUBLISHED_CATALOGS]?: Map<string, { version: string; messages: Messages }> };
+  (store[PUBLISHED_CATALOGS] ??= new Map()).set(locale, { version: catalog.version, messages });
   return catalog;
 }
