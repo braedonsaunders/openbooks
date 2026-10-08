@@ -21,8 +21,8 @@ const requestBodySchema = z.strictObject({
   factKey: z.string().trim().min(1).max(120),
   effectiveFrom: z.string().refine(isIsoCalendarDate, 'effectiveFrom must be a real calendar date (YYYY-MM-DD)'),
   effectiveThrough: z.string().refine(isIsoCalendarDate, 'effectiveThrough must be a real calendar date (YYYY-MM-DD)').nullable().optional(),
-  filingAccountId: z.string().uuid({ error: 'filingAccountId must be a valid payroll filing account id' }).nullable().optional(),
-  subsidiaryId: z.string().uuid({ error: 'subsidiaryId must be a valid legal entity id' }).nullable().optional(),
+  filingAccountId: z.string().refine(isUuid, { error: 'filingAccountId must be a valid payroll filing account id' }).nullable().optional(),
+  subsidiaryId: z.string().refine(isUuid, { error: 'subsidiaryId must be a valid legal entity id' }).nullable().optional(),
   value: z.string().trim().min(1, 'value is required').max(500),
   changeReason: z.string().trim().min(1, 'changeReason is required').max(2000),
 })

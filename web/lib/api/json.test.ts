@@ -204,6 +204,7 @@ test("exactMoney accepts decimal strings and refuses JSON numbers to preserve pr
 
 test("uuidId accepts only canonical uuids", () => {
   assert.equal(uuidId.parse("01890a5d-ac96-774b-bcce-b302099a8057"), "01890a5d-ac96-774b-bcce-b302099a8057");
+  assert.equal(uuidId.parse("db76ccd6-d8a3-ead7-42d2-6279dd4ea029"), "db76ccd6-d8a3-ead7-42d2-6279dd4ea029");
   assert.throws(() => uuidId.parse("not-a-uuid"));
   assert.throws(() => uuidId.parse(""));
   assert.throws(() => uuidId.parse(123));

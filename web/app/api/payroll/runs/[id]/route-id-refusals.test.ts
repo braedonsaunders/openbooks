@@ -185,6 +185,18 @@ async function errorOf(body: unknown): Promise<{ status: number; error: string }
   return { status: res.status, error: parsed.error ?? '' }
 }
 
+test('single adjustment preserves native rebased employee and component identities', async () => {
+  reset()
+  const employeePartyId = 'db76ccd6-d8a3-ead7-42d2-6279dd4ea029'
+  const componentId = '17ead58a-01df-a411-0031-43714689801a'
+  const response = await post(validAdd({ employeePartyId, componentId }))
+  assert.equal(response.status, 200)
+  assert.equal(routeState.adjustmentCalls.length, 1)
+  const call = routeState.adjustmentCalls[0] as { mutation: { employeePartyId: string; componentId: string } }
+  assert.equal(call.mutation.employeePartyId, employeePartyId)
+  assert.equal(call.mutation.componentId, componentId)
+})
+
 // ---------------------------------------------------------------------------
 // holidayEligibility: five causes, one collapsed 'invalid holidayEligibility'
 // ---------------------------------------------------------------------------

@@ -1,3 +1,4 @@
+import { uuidId } from "@/lib/api/json-schema"
 import { z } from 'zod'
 import { defineRoute } from '@/lib/api/route'
 import { apiErrorResponse } from '@/lib/api/error-response'
@@ -19,10 +20,10 @@ import { guardPayrollEmployees } from '../subsidiary-scope'
 import { notFound } from "@/lib/api/responses";
 
 const retroInput = z.object({
-  payScheduleId: z.string().uuid(),
+  payScheduleId: uuidId,
   payDate: z.string().refine(isIsoCalendarDate, 'payDate must be a real calendar date (YYYY-MM-DD)'),
-  employeePartyIds: z.array(z.string().uuid()).optional(),
-  excludeSourcePayRunDocumentIds: z.array(z.string().uuid()).optional(),
+  employeePartyIds: z.array(uuidId).optional(),
+  excludeSourcePayRunDocumentIds: z.array(uuidId).optional(),
 })
 const requestBodySchema = z.discriminatedUnion('action', [
   retroInput.extend({ action: z.literal('propose') }),

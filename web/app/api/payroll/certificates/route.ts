@@ -1,3 +1,4 @@
+import { uuidId } from "@/lib/api/json-schema"
 import {prepareWithholdingRecordWrite} from "@openbooks/engine/payroll/withholding";
 import { defineRoute } from '@/lib/api/route'
 import { parseJsonBody } from "@/lib/api/json";
@@ -41,7 +42,7 @@ export const dynamic = 'force-dynamic'
  */
 
 const certificateBodySchema = z.strictObject({
-  employeePartyId: z.string().uuid(),
+  employeePartyId: uuidId,
   country: z.string().min(1),
   certificateKey: z.string().trim().min(1),
   region: z.string().nullable().optional(),

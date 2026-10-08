@@ -95,21 +95,28 @@ test('save lists, overlaps refuse, and consumed rows end but never delete', { sk
     state.authz = { user: { orgId: org.orgId, id: actorId }, permissions: new Set(['payroll.manage']), allowedSubsidiaryIds: null }
     await withBypassContext(() => seedPayrollComponents(org.orgId, actorId, 'CA'))
     await withBypassContext(() => seedOntarioEhtFixture(org.orgId, actorId))
-    const partyId = randomUUID()
+    const nativeIds = await withBypassContext(() => db.execute<{ id: string }>(sql`
+      select id::text as id from (
+        select public.ob_rebase(md5(n::text)::uuid, ${org.orgId}::uuid) as id, n
+          from generate_series(1, 32) as series(n)
+      ) candidates
+      where id::text !~ '^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
+      order by n limit 3`))
+    assert.equal(nativeIds.rows.length, 3)
+    const [partyId, scheduleId, componentId] = nativeIds.rows.map(row => row.id) as [string, string, string]
+    assert.equal(new Set([partyId, scheduleId, componentId]).size, 3)
     await withBypassContext(async () => {
       await seedPayrollPerson(org.orgId, partyId, 'Route Assignment Employee')
       await seedPayrollEmployeeRole(org.orgId, partyId, { id: randomUUID(), workerCompGroupId: null, terminatedOn: null })
       await seedPayrollWage(org.orgId, partyId, actorId, { currency: 'CAD', rate: '30', basis: 'hour', annualHours: '2080', effectiveFrom: '2026-01-01' })
     })
     const employmentId = await withBypassContext(() => seedWorkerEmployment(org.orgId, partyId, org.subsidiaryId))
-    const scheduleId = randomUUID()
     await withBypassContext(async () => {
       await seedPayrollSchedule(org.orgId, scheduleId, actorId, { name: 'Weekly', frequency: 'weekly', periodsPerYear: 52, anchorPeriodEnd: '2026-07-18', payDateOffsetDays: 3 })
       await seedPayrollProfile(org.orgId, partyId, employmentId, scheduleId, actorId,
         { country: 'CA', province: 'ON', payBasis: 'hourly', federalClaimCode: 1, provincialClaimCode: 1 },
         { percentFloor: '4', method: 'accrue' })
     })
-    const componentId = randomUUID()
     await withBypassContext(() => db.execute(sql`insert into pay_components(id,org_id,code,name,kind,country,taxable,pensionable,insurable,vacationable,
       tax_treatment,payment_kind,basis,value) values(${componentId},${org.orgId},'ROUTECOMP','Route component','deduction','CA',true,true,true,false,'none','cash','fixed_amount','25')`))
 

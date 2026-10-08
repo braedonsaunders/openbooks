@@ -1,3 +1,4 @@
+import { uuidId } from "@/lib/api/json-schema"
 import { z } from 'zod'
 import { defineRoute } from '@/lib/api/route'
 import { apiErrorResponse } from '@/lib/api/error-response'
@@ -21,8 +22,8 @@ import { subsidiaryVisibleFilter } from '../../../../lib/subsidiaries'
 import { notFound } from "@/lib/api/responses";
 
 const requestBodySchema = z.strictObject({
-  registerId: z.string().uuid(),
-  payRunDocumentId: z.string().uuid(),
+  registerId: uuidId,
+  payRunDocumentId: uuidId,
 })
 
 

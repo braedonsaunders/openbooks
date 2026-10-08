@@ -1,3 +1,4 @@
+import { uuidId } from "@/lib/api/json-schema"
 import { z } from 'zod'
 import { defineRoute } from '@/lib/api/route'
 import { apiErrorResponse } from '@/lib/api/error-response'
@@ -30,7 +31,7 @@ const requestBodySchema = z.strictObject({
   }, 'movementDate must be a real calendar date (YYYY-MM-DD)'),
   note: z.string().trim().max(2000).nullable().optional(),
   rows: z.array(z.strictObject({
-    employeePartyId: z.string().uuid(),
+    employeePartyId: uuidId,
     amounts: z.record(z.string(), entitlementAmount).optional(),
   })),
 })

@@ -1,3 +1,4 @@
+import { uuidId } from "@/lib/api/json-schema"
 import { z } from 'zod'
 import { defineRoute } from '@/lib/api/route'
 import { apiErrorResponse } from '@/lib/api/error-response'
@@ -33,7 +34,7 @@ const requestBodySchema = z.strictObject({
   rateKey: z.string().trim().min(1).max(120),
   region: z.string().trim().max(80).nullable().optional(),
   subRegion: z.string().trim().max(120).nullable().optional(),
-  filingAccountId: z.union([z.string().uuid(), z.literal(''), z.null()]).optional(),
+  filingAccountId: z.union([uuidId, z.literal(''), z.null()]).optional(),
   taxYear: z.union([z.number().int(), z.string().regex(/^\d{4}$/, 'taxYear must be a four-digit year')]),
   values: z.record(z.string(), z.union([z.string(), z.boolean()])),
 })

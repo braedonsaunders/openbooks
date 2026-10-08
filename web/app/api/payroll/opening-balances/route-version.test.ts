@@ -154,6 +154,18 @@ test('POST threads each row loader-served version into the save', async () => {
   assert.equal(routeState.saveCalls[0]!.rows[0]!.updatedAt, '2026-09-01 00:00:00+00')
 })
 
+test('POST retains the native rebased employee identity and opening revision', async () => {
+  reset()
+  const employeePartyId = 'db76ccd6-d8a3-ead7-42d2-6279dd4ea029'
+  const updatedAt = '2026-09-01 00:00:00+00'
+  const res = await post({ taxYear: 2026, rows: [{ employeePartyId, amounts: {}, updatedAt }] })
+  assert.equal(res.status, 200)
+  assert.equal(routeState.saveCalls.length, 1)
+  assert.equal(routeState.saveCalls[0]!.rows[0]!.employeePartyId, employeePartyId)
+  assert.equal(routeState.saveCalls[0]!.rows[0]!.updatedAt, updatedAt)
+  assert.deepEqual(routeState.saveCalls[0]!.allowedSubsidiaryIds, new Set(['sub-a']))
+})
+
 test('POST passes the restricted subsidiary scope into the opening-balance writer', async () => {
   reset()
   const allowedSubsidiaryIds = new Set(['sub-a'])

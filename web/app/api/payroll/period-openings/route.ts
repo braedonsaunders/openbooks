@@ -1,3 +1,4 @@
+import { uuidId } from "@/lib/api/json-schema"
 import { z } from 'zod'
 import { NextResponse } from 'next/server'
 import { defineRoute } from '@/lib/api/route'
@@ -9,13 +10,13 @@ import { moneyRefusal } from '@/lib/payroll-decimal-refusal'
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 
-const querySchema = z.strictObject({ employeePartyId: z.string().uuid(), taxYear: z.coerce.number().int().min(2000).max(2100) })
+const querySchema = z.strictObject({ employeePartyId: uuidId, taxYear: z.coerce.number().int().min(2000).max(2100) })
 const amount = z.string().superRefine((value, context) => {
   if (canonicalDecimal(value, 4) === null) context.addIssue({ code: 'custom', message: moneyRefusal('Period-opening amount', value) })
 })
 const bodySchema = z.strictObject({
-  employeePartyId: z.string().uuid(), taxYear: z.number().int().min(2000).max(2100),
-  subsidiaryId: z.string().uuid(), payScheduleId: z.string().uuid(), country: z.string().regex(/^[A-Z]{2}$/), currency: z.string().regex(/^[A-Z]{3}$/),
+  employeePartyId: uuidId, taxYear: z.number().int().min(2000).max(2100),
+  subsidiaryId: uuidId, payScheduleId: uuidId, country: z.string().regex(/^[A-Z]{2}$/), currency: z.string().regex(/^[A-Z]{3}$/),
   periodStart: z.string(), periodEnd: z.string(), paidThrough: z.string(),
   amounts: z.record(z.string(), amount), sourceReference: z.string().trim().min(1).max(2000), reason: z.string().trim().min(1).max(2000),
   expectedRevision: z.number().int().positive().nullable(), expectedAnnualUpdatedAt: z.string().min(1), dryRun: z.boolean(),
