@@ -131,7 +131,7 @@ export const SCHEDULING_ENTITIES: SetupEntity[] = [
     orderBy: 'sort_order, code',
     hasActive: true,
     allowDelete: false,
-    featureKey: 'hrmShiftPlanning',
+    featureKeysAny: ['hrmShiftPlanning', 'projectScheduling'],
     docSlug: 'scheduling',
     columns: [
       { key: 'code', kind: 'code' },
@@ -193,7 +193,10 @@ export const validateScheduleBoardWrite: SetupEntityValidationHook = async ({ bo
   return null
 }
 
-export const validateScheduleCodeWrite: SetupEntityValidationHook = async ({ body }) => {
+export const validateScheduleCodeWrite: SetupEntityValidationHook = async ({ body, executor, orgId }) => {
+  const people = await lockAndCheckOrgFeature(executor, orgId, 'hrm') && await lockAndCheckOrgFeature(executor, orgId, 'hrmShiftPlanning')
+  const projects = await lockAndCheckOrgFeature(executor, orgId, 'projects') && await lockAndCheckOrgFeature(executor, orgId, 'projectScheduling')
+  if (!people && !projects) return 'Enable Scheduling or Project Scheduling in Company Settings → Features before configuring booking codes.'
   if (body.code !== undefined && !/^[A-Z0-9][A-Z0-9/&+._-]{0,15}$/.test(String(body.code))) {
     return 'Codes are up to 16 capital letters, digits or / & + . _ -, such as TRAIN or SHOP.'
   }
