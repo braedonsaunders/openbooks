@@ -130,3 +130,46 @@ test("B2-NAV-1: the badge clears when the count route is unreachable", async () 
     await badge.done();
   }
 });
+
+test('background badges stop reads, abort superseded counts and obtain fresh authority on return', async (t) => {
+  const visibility = Object.getOwnPropertyDescriptor(document, 'visibilityState')
+  const prior = globalThis.fetch
+  let hidden = true
+  Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => hidden ? 'hidden' : 'visible' })
+  const requests: { signal: AbortSignal; resolve(response: Response): void }[] = []
+  globalThis.fetch = ((_url: unknown, options: RequestInit) => new Promise<Response>((resolve) => {
+    requests.push({ signal: options.signal!, resolve })
+  })) as typeof fetch
+  const host = document.createElement('div')
+  document.body.append(host)
+  const root = createRoot(host)
+  t.after(async () => {
+    await act(async () => root.unmount())
+    host.remove()
+    globalThis.fetch = prior
+    if (visibility) Object.defineProperty(document, 'visibilityState', visibility)
+    else delete (document as { visibilityState?: string }).visibilityState
+  })
+  const setHidden = async (value: boolean) => {
+    hidden = value
+    await act(async () => document.dispatchEvent(new window.Event('visibilitychange')))
+  }
+  await act(async () => root.render(<NextIntlClientProvider locale="en" messages={messagesEn} timeZone="UTC"><NavCountBadge source="/api/inbox/count" /></NextIntlClientProvider>))
+  assert.equal(requests.length, 0)
+  await setHidden(false)
+  assert.equal(requests.length, 1)
+  await setHidden(true)
+  assert.equal(requests[0]!.signal.aborted, true)
+  await setHidden(false)
+  assert.equal(requests.length, 2)
+  await act(async () => requests[1]!.resolve(Response.json({ count: 7, partial: true })))
+  assert.match(host.innerHTML, /7!/)
+  await act(async () => requests[0]!.resolve(Response.json({ count: 99 })))
+  assert.match(host.innerHTML, /7!/)
+  assert.doesNotMatch(host.innerHTML, /99/)
+  await setHidden(true)
+  assert.equal(host.innerHTML, '')
+  await setHidden(false)
+  await act(async () => requests[2]!.resolve(new Response('Revoked', { status: 403 })))
+  assert.equal(host.innerHTML, '', 'returning to a refused authority clears the former count')
+})

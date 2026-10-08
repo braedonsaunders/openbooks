@@ -9,19 +9,29 @@
 
 import { useEffect, useState } from 'react'
 import { useTranslations } from 'next-intl'
+import { useDocumentHidden } from '../lib/use-document-hidden'
 
 const POLL_MS = 60_000
 
 export function NavCountBadge({ source }: { source: string }) {
   const t = useTranslations('shell.topNav')
+  const hidden = useDocumentHidden()
   const [count, setCount] = useState<number | null>(null)
   const [partial, setPartial] = useState(false)
 
   useEffect(() => {
+    if (hidden) {
+      setCount(null)
+      return
+    }
     let alive = true
+    let loading = false
+    const controller = new AbortController()
     async function load() {
+      if (loading) return
+      loading = true
       try {
-        const res = await fetch(source, { headers: { Accept: 'application/json' } })
+        const res = await fetch(source, { headers: { Accept: 'application/json' }, signal: controller.signal })
         if (!res.ok) {
           // The route is down or refusing: clear any previous count rather
           // than badge a stale number nobody can verify.
@@ -37,15 +47,18 @@ export function NavCountBadge({ source }: { source: string }) {
       } catch {
         // Unreachable route: clear rather than badge a guess.
         if (alive) setCount(null)
+      } finally {
+        loading = false
       }
     }
     load()
     const timer = setInterval(load, POLL_MS)
     return () => {
       alive = false
+      controller.abort()
       clearInterval(timer)
     }
-  }, [source])
+  }, [source, hidden])
 
   if (count === null || count <= 0) return null
   // A partial count names a source that failed to load: the badge keeps
