@@ -471,33 +471,41 @@ export async function employeeTotalCompensation(query: {
      and r.run_status = 'committed' and d.status <> 'voided'`;
   const variablePredicate = sql`l.kind = 'earning' and (coalesce(c.non_periodic, false) or r.run_type = 'bonus' or c.system_key = 'bonus')`;
   const windowFrom = (await db.execute<{ from: string }>(sql`select ((${asOf}::date - interval '1 year') + interval '1 day')::date::text as "from"`)).rows[0]!.from;
-  const [statutoryRows, variableRows, awardRows] = payrollEnabled
-    ? await Promise.all([
-        db.execute<{ key: string; name: string; currency: string; amount: string }>(sql`
-          select coalesce(c.id::text, l.description) as key, coalesce(c.name, l.description) as name,
-                 s.currency_code as currency, sum(l.amount)::text as amount
-          ${committedStubs}
-            and l.kind = 'employer_contribution' and c.system_key is not null
-            and s.pay_date between ${windowFrom}::date and ${asOf}::date
-          group by 1, 2, 3 having sum(l.amount) <> 0 order by 2`),
-        db.execute<{ pay_date: string; name: string; run_type: string; currency: string; amount: string }>(sql`
-          select s.pay_date::text as pay_date, coalesce(c.name, l.description) as name, r.run_type,
-                 s.currency_code as currency, l.amount::text as amount
-          ${committedStubs} and ${variablePredicate}
-          order by s.pay_date desc, l.id limit 200`),
-        db.execute<{ id: string; program: string | null; period_from: string; currency: string; value: string; status: string }>(sql`
-          select a.id::text as id, a.program_snapshot->>'name' as program, a.period_from::text as period_from,
-                 a.currency, a.value::text as value, a.status
-            from hrm_benefit_awards a
-           where a.org_id = ${orgId} and a.employment_id = ${selected.id} and a.status <> 'voided'
-           order by a.period_from desc, a.created_at desc limit 100`),
-      ])
-    : [{ rows: [] }, { rows: [] }, { rows: [] }];
+  type VariableRow = { pay_date: string; name: string; run_type: string; currency: string; amount: string };
+  const variableColumns = sql`select s.pay_date::text as pay_date, coalesce(c.name, l.description) as name,
+    r.run_type, s.currency_code as currency, l.amount::text as amount`;
+  const [statutoryRows, variableRows, variableHistoryRows, awardRows] = await Promise.all([
+    payrollEnabled ? db.execute<{ key: string; name: string; currency: string; amount: string }>(sql`
+      select coalesce(c.id::text, l.description) as key, coalesce(c.name, l.description) as name,
+             s.currency_code as currency, sum(l.amount)::text as amount
+      ${committedStubs}
+        and l.kind = 'employer_contribution' and c.system_key is not null
+        and s.pay_date between ${windowFrom}::date and ${asOf}::date
+      group by 1, 2, 3 having sum(l.amount) <> 0 order by 2`) : Promise.resolve({ rows: [] }),
+    // The annual amount and payment count include every line in the window;
+    // the display limit on history must never truncate financial totals.
+    payrollEnabled ? db.execute<VariableRow>(sql`
+      ${variableColumns}
+      ${committedStubs} and ${variablePredicate}
+        and s.pay_date between ${windowFrom}::date and ${asOf}::date
+      order by s.pay_date desc, l.id`) : Promise.resolve({ rows: [] }),
+    payrollEnabled ? db.execute<VariableRow>(sql`
+      ${variableColumns}
+      ${committedStubs} and ${variablePredicate}
+      order by s.pay_date desc, l.id limit 200`) : Promise.resolve({ rows: [] }),
+    db.execute<{ id: string; program: string | null; period_from: string; currency: string; value: string; status: string }>(sql`
+      select a.id::text as id, a.program_snapshot->>'name' as program, a.period_from::text as period_from,
+             a.currency, a.value::text as value, a.status
+        from hrm_benefit_awards a
+       where a.org_id = ${orgId} and a.employment_id = ${selected.id} and a.status <> 'voided'
+       order by a.period_from desc, a.created_at desc limit 100`),
+  ]);
 
-  const variableHistory: CompensationVariablePayment[] = variableRows.rows.map((row) => ({
+  const variablePayment = (row: VariableRow): CompensationVariablePayment => ({
     payDate: row.pay_date.slice(0, 10), name: row.name, runType: row.run_type, currency: row.currency, amount: row.amount,
-  }));
-  const variable = variableHistory.filter((row) => row.payDate >= windowFrom && row.payDate <= asOf);
+  });
+  const variableHistory = variableHistoryRows.rows.map(variablePayment);
+  const variable = variableRows.rows.map(variablePayment);
   const statutory: CompensationActualLine[] = statutoryRows.rows.map((row) => ({
     key: row.key, name: row.name, currency: row.currency, amount: row.amount,
   }));
