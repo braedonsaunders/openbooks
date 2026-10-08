@@ -82,7 +82,7 @@
     },
     "backup": {
       "none": "无",
-      "costed_timesheets": "计价工时表",
+      "costed_timesheets": "人工明细",
       "timesheets_purchases": "工时表 + 采购",
       "purchases": "采购",
       "purchases_shop_time": "采购 + 车间工时",

@@ -82,7 +82,7 @@
     },
     "backup": {
       "none": "Ninguno",
-      "costed_timesheets": "Partes de horas costeados",
+      "costed_timesheets": "Respaldo de mano de obra",
       "timesheets_purchases": "Partes + compras",
       "purchases": "Compras",
       "purchases_shop_time": "Compras + tiempo de taller",

@@ -20,12 +20,12 @@ export function provenanceOf(tpl: ResolvedPdfTemplate): { id: string | null; rev
 import { loadPdfRecordValues } from './pdf-templates/values'
 import { mergeAndPrintPdf } from './pdf-templates/render'
 import { getMoneyFormatter } from './money-server'
-import type { MoneyFormatter } from './money-format'
+import { formatDecimal, type MoneyFormatter } from './money-format'
 
 /**
  * Invoice backup PDF package — the native implementation of the
  * getInvoiceBackupPDF (a source platform front-end there). Assembles, in a configurable
- * order, the invoice PDF + a costed-timesheet page + the vendor-bill/receipt
+ * order, the invoice PDF + a customer labour page + the vendor-bill/receipt
  * attachments of the cost documents the invoice billed, merges them with pdf-lib,
  * and stores the package in the file cabinet attached to the invoice document.
  *
@@ -193,19 +193,16 @@ async function addImagePage(out: PDFDocument, bytes: Buffer, contentType: string
   }
 }
 
-/** Render the costed-timesheet page (billed time with cost + bill columns). */
+/** Customer labour rows contain billing evidence, never internal costing. */
 type MoneyInput = string | number | null | undefined
 
-interface CostedTimesheetRow extends Record<string, unknown> {
+export interface CustomerLabourRow extends Record<string, unknown> {
   time_entry_id: string
   line_id: string
-  worked_on: string | Date
+  worked_on: string
   employee: string
   hours: MoneyInput
-  cost_rate: MoneyInput
   bill_rate: MoneyInput
-  cost_amount: MoneyInput
-  total_cost: MoneyInput
   line_amount: MoneyInput
   native_bill_amount: MoneyInput
   item: string
@@ -238,27 +235,14 @@ export function allocateTimesheetBillAmounts(input: TimesheetBillAllocation): st
   return allocateProportionally(lineAmount, weights)
 }
 
-async function costedTimesheetPdf(orgId: string, documentId: string, invoiceNumber: string, projectName: string, title: string, format: MoneyFormatter): Promise<Buffer | null> {
-  const { money } = format
-  const rows = (await db.execute<CostedTimesheetRow>(sql`
-    select te.id as time_entry_id, dl.id as line_id,
-           te.worked_on, coalesce(pty.display_name, '') as employee, te.hours,
-           te.cost_rate, te.bill_rate,
-           te.hours * coalesce(te.cost_rate, 0) as cost_amount,
-           sum(te.hours * coalesce(te.cost_rate, 0)) over () as total_cost,
-           dl.amount as line_amount,
-           round(te.hours * coalesce(te.bill_rate, 0), 4) as native_bill_amount,
-           coalesce(i.name, '') as item
-      from time_entries te
-      join document_lines dl on dl.id = te.invoiced_by_line_id and dl.org_id = te.org_id
-      left join parties pty on pty.id = te.employee_party_id and pty.org_id = te.org_id
-      left join items i on i.id = te.item_id and i.org_id = te.org_id
-     where dl.document_id = ${documentId} and te.org_id = ${orgId}
-     order by te.worked_on, employee, te.id
-  `))
-  if (rows.rows.length === 0) return null
-
-  const entries = rows.rows.map((row) => ({ ...row, bill_amount: '0.0000' }))
+/** Allocate invoice lines without carrying internal source fields into render data. */
+export function projectCustomerLabourBackup(rows: readonly CustomerLabourRow[]) {
+  const entries = rows.map((row) => ({
+    time_entry_id: row.time_entry_id, line_id: row.line_id, worked_on: row.worked_on,
+    employee: row.employee, item: row.item, hours: String(row.hours ?? '0'),
+    bill_rate: row.bill_rate, line_amount: row.line_amount, native_bill_amount: row.native_bill_amount,
+    bill_amount: '0.0000',
+  }))
   type TimesheetGroup = { lineAmount: MoneyInput; indexes: number[]; nativeBillAmounts: MoneyInput[] }
   const groups = new Map<string, TimesheetGroup>()
   entries.forEach((row, index) => {
@@ -277,15 +261,29 @@ async function costedTimesheetPdf(orgId: string, documentId: string, invoiceNumb
   }
 
   const totals = entries.reduce(
-    (a, r) => ({ hours: a.hours + Number(r.hours ?? 0), bill: add(a.bill, r.bill_amount) }),
-    { hours: 0, bill: '0.0000' },
+    (a, r) => ({ hours: add(a.hours, r.hours), bill: add(a.bill, r.bill_amount) }),
+    { hours: '0.0000', bill: '0.0000' },
   )
+  return { entries, totals }
+}
+
+/** Shared customer-facing labour page for the published labour and shop recipes. */
+export function customerLabourBackupHtml(
+  rows: readonly CustomerLabourRow[],
+  invoiceNumber: string,
+  projectName: string,
+  title: 'Labour Backup' | 'Shop Labour Backup',
+  format: MoneyFormatter,
+): string {
+  // Allocated ledger shares and fractional rates retain their stored precision.
+  const money = (value: MoneyInput) => format.money(value, { maximumFractionDigits: 4 })
+  const hours = (value: string) => formatDecimal(format.locale, value, { minimumFractionDigits: 2, maximumFractionDigits: 4 })
+  const { entries, totals } = projectCustomerLabourBackup(rows)
   const body = entries
     .map(
       (r) => `<tr>
       <td>${esc(r.worked_on)}</td><td>${esc(r.employee)}</td><td>${esc(r.item)}</td>
-      <td class="n">${new Intl.NumberFormat(format.locale, { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number(r.hours ?? 0))}</td>
-      <td class="n">${money(r.cost_rate)}</td><td class="n">${money(r.cost_amount)}</td>
+      <td class="n">${hours(r.hours)}</td>
       <td class="n">${money(r.bill_rate)}</td><td class="n">${money(r.bill_amount)}</td></tr>`,
     )
     .join('')
@@ -304,11 +302,31 @@ async function costedTimesheetPdf(orgId: string, documentId: string, invoiceNumb
     <div class="sub">${esc(projectName)} &middot; Invoice ${esc(invoiceNumber)}</div>
     <table>
       <thead><tr><th>Date</th><th>Employee</th><th>Service</th><th class="n">Hours</th>
-        <th class="n">Cost rate</th><th class="n">Cost</th><th class="n">Bill rate</th><th class="n">Amount</th></tr></thead>
+        <th class="n">Bill rate</th><th class="n">Amount</th></tr></thead>
       <tbody>${body}</tbody>
-      <tfoot><tr><td colspan="3">Total</td><td class="n">${new Intl.NumberFormat(format.locale, { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(totals.hours)}</td><td></td>
-        <td class="n">${money(rows.rows[0]!.total_cost)}</td><td></td><td class="n">${money(totals.bill)}</td></tr></tfoot>
+      <tfoot><tr><td colspan="3">Total</td><td class="n">${hours(totals.hours)}</td><td></td><td class="n">${money(totals.bill)}</td></tr></tfoot>
     </table>`
+  return html
+}
+
+async function customerLabourPdf(orgId: string, documentId: string, invoiceNumber: string, projectName: string, title: 'Labour Backup' | 'Shop Labour Backup', format: MoneyFormatter): Promise<Buffer | null> {
+  const rows = (await db.execute<CustomerLabourRow>(sql`
+    select te.id as time_entry_id, dl.id as line_id,
+           te.worked_on::text as worked_on, coalesce(pty.display_name, '') as employee, te.hours,
+           te.bill_rate,
+           dl.amount as line_amount,
+           round(te.hours * coalesce(te.bill_rate, 0), 4) as native_bill_amount,
+           coalesce(i.name, '') as item
+      from time_entries te
+      join document_lines dl on dl.id = te.invoiced_by_line_id and dl.org_id = te.org_id
+      left join parties pty on pty.id = te.employee_party_id and pty.org_id = te.org_id
+      left join items i on i.id = te.item_id and i.org_id = te.org_id
+     where dl.document_id = ${documentId} and te.org_id = ${orgId}
+     order by te.worked_on, employee, te.id
+  `))
+  if (rows.rows.length === 0) return null
+
+  const html = customerLabourBackupHtml(rows.rows, invoiceNumber, projectName, title, format)
   return renderHtmlDocumentPdf({ bodyHtml: html, paperSize: 'letter', orientation: 'landscape', marginMm: 12, headerHtml: null, footerHtml: null })
 }
 
@@ -360,8 +378,8 @@ export async function assembleInvoiceBackup(
         manifest.push({ kind, pages, template: provenanceOf(tpl) })
       }
     } else if (kind === 'costed_timesheets' || kind === 'shop_time') {
-      const title = kind === 'shop_time' ? 'Shop Labour Backup' : 'Costed Timesheet'
-      const buf = await costedTimesheetPdf(orgId, documentId, inv.document_number, inv.project_name, title, format)
+      const title = kind === 'shop_time' ? 'Shop Labour Backup' : 'Labour Backup'
+      const buf = await customerLabourPdf(orgId, documentId, inv.document_number, inv.project_name, title, format)
       if (buf) {
         const pages = await mergePdfInto(out, buf)
         manifest.push({ kind, pages })
