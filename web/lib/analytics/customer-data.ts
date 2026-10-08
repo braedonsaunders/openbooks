@@ -956,19 +956,21 @@ async function readCustomerData(
   period: CustomerPeriod, orgId: string, allowed: ReadonlySet<string> | null,
   strings: CustomerStrings, preview: boolean,
 ): Promise<CustomerData | CustomerSummary> {
-  const { moneyCompact } = await getMoneyFormatter(orgId)
+  const [{ moneyCompact }, today, cfg] = await Promise.all([
+    getMoneyFormatter(orgId),
+    businessToday(orgId),
+    analyticsConfig(orgId, "customerIntelligence"),
+  ])
   const { from, to } = period;
   const pFrom = priorYearIso(from);
   const pTo = priorYearIso(to);
   // Recency/overdue are measured "as of now", never a future period end.
-  const today = await businessToday(orgId);
   const ref = to < today ? to : today;
 
   // The scoring model ships with the standard scoring as its defaults, but
   // every band the tiles render reads the live config: editing the grade
   // ladder moves the health bands with it, so the defaults reproduce the
   // standard scoring only until someone reconfigures them.
-  const cfg = await analyticsConfig(orgId, "customerIntelligence");
   const refusal = weightsRefusal(cfg, strings);
   if (refusal) {
     if (preview) {
@@ -1420,7 +1422,9 @@ async function readCustomerData(
   // same per-date pattern the document measures use, so FX handling cannot
   // diverge. flowRates fails closed on a missing rate: no silent 1:1.
   const ledgerLegs = ledgerRows.rows as unknown as LedgerSqlRow[];
-  const ledgerCtx = await flowRates(orgId, ledgerLegs.map((r) => ({
+  const flowLegs = [ledgerRows, baseRows, growthRows, growthLedgerRows, frictionRows, cohortRows, cohortLedgerRows]
+    .flatMap(result => result.rows as unknown as { func: string | null; day: string }[]);
+  const flowCtx = await flowRates(orgId, flowLegs.map((r) => ({
     func: r.func ?? null, date: String(r.day).slice(0, 10),
   })));
   const ledgerByParty = new Map<string, LedgerParty>();
@@ -1432,7 +1436,7 @@ async function readCustomerData(
     const cur = ledgerByParty.get(r.id) ?? zeroLedger();
     const day = String(r.day).slice(0, 10);
     const at = (v: CustomerSqlNumeric) =>
-      mulDecimal(String(v ?? 0), ledgerCtx.rateAt(r.func ?? null, day));
+      mulDecimal(String(v ?? 0), flowCtx.rateAt(r.func ?? null, day));
     cur.recognized = add(cur.recognized, at(r.recognized));
     if (r.prior_recognized != null) {
       cur.priorRecognized = add(cur.priorRecognized, at(r.prior_recognized));
@@ -1461,14 +1465,11 @@ async function readCustomerData(
   // whose translated movement nets to nothing with no transactions stay out,
   // exactly like the query-level filter this replaces.
   const baseLegs = baseRows.rows as unknown as CustomerBaseSqlRow[];
-  const baseCtx = await flowRates(orgId, baseLegs.map((r) => ({
-    func: r.func ?? null, date: String(r.day).slice(0, 10),
-  })));
   const baseByParty = new Map<string, { name: string; revenue: string; txns: number; first: string | null; last: string | null }>();
   for (const r of baseLegs) {
     const cur = baseByParty.get(r.id) ?? { name: String(r.name), revenue: "0", txns: 0, first: null as string | null, last: null as string | null };
     const day = String(r.day).slice(0, 10);
-    cur.revenue = add(cur.revenue, mulDecimal(String(r.revenue ?? 0), baseCtx.rateAt(r.func ?? null, day)));
+    cur.revenue = add(cur.revenue, mulDecimal(String(r.revenue ?? 0), flowCtx.rateAt(r.func ?? null, day)));
     cur.txns += Number(r.txn_count ?? 0);
     if (!cur.first || day < cur.first) cur.first = day;
     if (!cur.last || day > cur.last) cur.last = day;
@@ -1688,14 +1689,11 @@ async function readCustomerData(
   // functionals). The recognized monthly series is built from the ledger
   // legs just below.
   const gLegs = growthRows.rows as unknown as CustomerGrowthSqlRow[];
-  const gCtx = await flowRates(orgId, gLegs.map((r) => ({
-    func: r.func ?? null, date: String(r.day).slice(0, 10),
-  })));
   const gRevenue = new Map<string, string>();
   for (const r of gLegs) {
     const key = String(r.month);
     gRevenue.set(key, add(gRevenue.get(key) ?? "0",
-      mulDecimal(String(r.revenue ?? 0), gCtx.rateAt(r.func ?? null, String(r.day).slice(0, 10)))));
+      mulDecimal(String(r.revenue ?? 0), flowCtx.rateAt(r.func ?? null, String(r.day).slice(0, 10)))));
   }
   interface GrowthCountRow { month: string; unique_customers: CustomerSqlNumeric; txn_count: CustomerSqlNumeric; new_customers: CustomerSqlNumeric }
   const gCounts = new Map<string, GrowthCountRow>();
@@ -1707,14 +1705,11 @@ async function readCustomerData(
   // timing gap between billing and recognition stays visible month by month.
   interface GrowthLedgerRow { month: string; func: string | null; day: string; recognized: CustomerSqlNumeric }
   const glLegs = growthLedgerRows.rows as unknown as GrowthLedgerRow[];
-  const glCtx = await flowRates(orgId, glLegs.map((r) => ({
-    func: r.func ?? null, date: String(r.day).slice(0, 10),
-  })));
   const gRecognized = new Map<string, string>();
   for (const r of glLegs) {
     const key = String(r.month);
     gRecognized.set(key, add(gRecognized.get(key) ?? "0",
-      mulDecimal(String(r.recognized ?? 0), glCtx.rateAt(r.func ?? null, String(r.day).slice(0, 10)))));
+      mulDecimal(String(r.recognized ?? 0), flowCtx.rateAt(r.func ?? null, String(r.day).slice(0, 10)))));
   }
   const gInvoiced = gRevenue;
   const sparseRows = [...new Set([...gInvoiced.keys(), ...gRecognized.keys(), ...gCounts.keys()])]
@@ -1808,15 +1803,12 @@ async function readCustomerData(
   // day at its own spot rate, then merge per party. Parties without invoice
   // orders stay out, exactly like the query-level filter this replaces.
   const frictionLegs = frictionRows.rows as unknown as CustomerFrictionSqlRow[];
-  const frictionCtx = await flowRates(orgId, frictionLegs.map((r) => ({
-    func: r.func ?? null, date: String(r.day).slice(0, 10),
-  })));
   const frictionByParty = new Map<string, { credits: number; orders: number; creditValue: string }>();
   for (const r of frictionLegs) {
     const cur = frictionByParty.get(r.id) ?? { credits: 0, orders: 0, creditValue: "0" };
     cur.credits += Number(r.credit_count ?? 0);
     cur.orders += Number(r.order_count ?? 0);
-    cur.creditValue = add(cur.creditValue, mulDecimal(String(r.credit_value ?? 0), frictionCtx.rateAt(r.func ?? null, String(r.day).slice(0, 10))));
+    cur.creditValue = add(cur.creditValue, mulDecimal(String(r.credit_value ?? 0), flowCtx.rateAt(r.func ?? null, String(r.day).slice(0, 10))));
     frictionByParty.set(r.id, cur);
   }
   for (const [id, f] of frictionByParty) {
@@ -2078,9 +2070,6 @@ async function readCustomerData(
   // stays document-based.
   interface CohortLeg { id: string; func: string | null; day: string; first_order: unknown; last_order: unknown; lifetime_revenue: CustomerSqlNumeric }
   const cohortLegs = cohortRows.rows as unknown as CohortLeg[];
-  const cohortCtx = await flowRates(orgId, cohortLegs.map((r) => ({
-    func: r.func ?? null, date: String(r.day).slice(0, 10),
-  })));
   const cohortByParty = new Map<string, { first: string; last: string; revenue: string; invoiced: string }>();
   for (const r of cohortLegs) {
     const first = String(r.first_order).slice(0, 10);
@@ -2089,14 +2078,11 @@ async function readCustomerData(
     if (first < cur.first) cur.first = first;
     if (last > cur.last) cur.last = last;
     cur.invoiced = add(cur.invoiced, mulDecimal(String(r.lifetime_revenue ?? 0),
-      cohortCtx.rateAt(r.func ?? null, String(r.day).slice(0, 10))));
+      flowCtx.rateAt(r.func ?? null, String(r.day).slice(0, 10))));
     cohortByParty.set(r.id, cur);
   }
   interface CohortLedgerLeg { id: string; func: string | null; day: string; recognized: CustomerSqlNumeric }
   const cohortLedgerLegs = cohortLedgerRows.rows as unknown as CohortLedgerLeg[];
-  const cohortLedgerCtx = await flowRates(orgId, cohortLedgerLegs.map((r) => ({
-    func: r.func ?? null, date: String(r.day).slice(0, 10),
-  })));
   for (const r of cohortLedgerLegs) {
     const cur = cohortByParty.get(r.id);
     // Recognition without any invoice history has no cohort to join (cohorts
@@ -2104,7 +2090,7 @@ async function readCustomerData(
     // still counts it, so no money is lost, only uncohortable.
     if (!cur) continue;
     cur.revenue = add(cur.revenue, mulDecimal(String(r.recognized ?? 0),
-      cohortLedgerCtx.rateAt(r.func ?? null, String(r.day).slice(0, 10))));
+      flowCtx.rateAt(r.func ?? null, String(r.day).slice(0, 10))));
   }
   const cohortMap = new Map<string, Cohort>();
   let lifetimeCustomers = 0, lifetimeActive = 0;
