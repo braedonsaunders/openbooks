@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import { add, cmp, mulDecimal, neg, normalizeMoney, sum } from "../money/money.ts";
 import { AP_OPEN_ITEM_KINDS, AR_OPEN_ITEM_KINDS } from "../records/open-item-kinds.ts";
-import { appliedLegAmountExpr } from "../records/balance-due.ts";
+import { datedAppliedAmountSql } from "../records/balance-due.ts";
 import { apOpenAccountScope, asOfPostedEntryLateral } from "../records/open-item-scopes.ts";
 import { addCalendarDays, businessToday, calendarDaysBetween, parseIsoDate } from "../platform/business-date.ts";
 import {
@@ -205,13 +205,7 @@ async function sideOpenItems(
       select jl.id, jl.party_id, je.posting_date as tran_date, jl.due_date,
              d.kind as doc_kind, d.document_number as doc_number,
              sub.base_currency as func,
-             (case when d.kind = ${creditKind} then -1 else 1 end) * (abs(jl.amount) - coalesce((
-               select sum(${appliedLegAmountExpr("x", sql`jl.id`, "base")}) from applications x
-                where x.org_id = ${orgId}
-                  and (x.to_line_id = jl.id or x.from_line_id = jl.id)
-                  and x.applied_on <= ${asOf}
-                  and (x.unapplied_at is null or x.unapplied_at::date > ${asOf}::date)
-             ), 0)) as remaining
+             (case when d.kind = ${creditKind} then -1 else 1 end) * (abs(jl.amount) - ${datedAppliedAmountSql(orgId, sql`jl.id`, asOf)}) as remaining
         from documents d
         ${asOfPostedEntryLateral(orgId, asOf)}
         join journal_lines jl on jl.entry_id = je.id and jl.org_id = je.org_id and jl.is_open_item and ${lineFilter}

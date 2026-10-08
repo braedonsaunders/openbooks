@@ -3,7 +3,8 @@ import { randomUUID } from 'node:crypto'
 import test from 'node:test'
 const { sql } = await import('drizzle-orm')
 const { db, env, withBypass, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
+const { assertDedicatedFixtureDatabase, createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
+const { datedAppliedAmountSql } = await import('@openbooks/engine/src/records/balance-due.ts')
 const { postDocument } = await import("@openbooks/engine/src/ledger/posting-document.ts");
 const { openItems } = await import('./open-items')
 
@@ -66,6 +67,7 @@ test('open items net unapplied vendor credits against AP bills', { skip: !env.OP
  * both legs mixes denominations and leaves a false remainder.
  */
 test('open items consume a foreign credit through its source leg', { skip: !env.OPENBOOKS_DB_URL }, async () => {
+  await assertDedicatedFixtureDatabase()
   const scratch = await withBypass(() => createScratchOrg())
   try {
     const actor = await withBypass(() => createScratchUser(scratch.orgId, 'Credit Controller', 'admin'))
@@ -85,11 +87,30 @@ test('open items consume a foreign credit through its source leg', { skip: !env.
       return { invId, creditLine: lineOf(creditId), invLine: lineOf(invId) }
     })
     assert.ok(invId && creditLine && invLine)
+    const applicationsBefore = await withOrgContext(scratch.orgId, async () =>
+      (await db.execute(sql`select * from applications where org_id=${scratch.orgId} order by id`)).rows)
+    for (const [asOf, expectedSource, expectedTarget] of [
+      ['2026-07-11', '0', '0'],
+      ['2026-07-12', '27', '25'],
+      ['2026-07-31', '27', '25'],
+    ]) {
+      const consumed = await withOrgContext(scratch.orgId, async () =>
+        (await db.execute<{ source: string; target: string }>(sql`select
+          ${datedAppliedAmountSql(scratch.orgId, sql`${creditLine}::uuid`, asOf!)}::text as source,
+          ${datedAppliedAmountSql(scratch.orgId, sql`${invLine}::uuid`, asOf!)}::text as target`)).rows[0]!)
+      assert.deepEqual(consumed, { source: expectedSource, target: expectedTarget })
+    }
+    const foreignConsumption = await withOrgContext(scratch.orgId, async () =>
+      (await db.execute<{ amount: string }>(sql`select
+        ${datedAppliedAmountSql(randomUUID(), sql`${creditLine}::uuid`, '2026-07-31')}::text as amount`)).rows[0]!)
+    assert.equal(foreignConsumption.amount, '0', 'a tenant mismatch cannot consume another organization’s application')
     const items = await withOrgContext(scratch.orgId, () => openItems(scratch.orgId, 'ar', '2026-07-31'))
     const credit = items.find((item) => item.docKind === 'customer_credit')
     assert.equal(credit?.remaining, '-54.0000')
     const invoice = items.find((item) => item.docKind === 'customer_invoice')
     assert.equal(invoice?.remaining, '75.0000')
+    assert.deepEqual(await withOrgContext(scratch.orgId, async () =>
+      (await db.execute(sql`select * from applications where org_id=${scratch.orgId} order by id`)).rows), applicationsBefore)
   } finally {
     await withBypass(() => dropScratchOrg(scratch.orgId))
   }

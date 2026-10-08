@@ -30,6 +30,27 @@ export function appliedLegAmountExpr(
   return sql`case when ${a}.from_line_id = ${lineId} then ${a}.${fromCol} else ${a}.${toCol} end`;
 }
 
+/** Dated functional consumption through two indexed application legs. Source
+ * and target retain their own carrying amounts; a coincident leg contributes
+ * only once, with the source precedence of appliedLegAmountExpr. */
+export function datedAppliedAmountSql(orgId: string, lineId: SQL, asOf: string): SQL {
+  return sql`coalesce((
+    select sum(consumed.amount) from (
+      select ${appliedLegAmountExpr("x", lineId, "base")} as amount
+        from applications x
+       where x.org_id = ${orgId} and x.from_line_id = ${lineId}
+         and x.applied_on <= ${asOf}
+         and (x.unapplied_at is null or x.unapplied_at::date > ${asOf}::date)
+      union all
+      select ${appliedLegAmountExpr("x", lineId, "base")} as amount
+        from applications x
+       where x.org_id = ${orgId} and x.to_line_id = ${lineId} and x.from_line_id <> ${lineId}
+         and x.applied_on <= ${asOf}
+         and (x.unapplied_at is null or x.unapplied_at::date > ${asOf}::date)
+    ) consumed
+  ), 0)`;
+}
+
 /**
  * The live "what is still due on this document" applied-amount subquery, in
  * both denominations the callers need. Every surface that names a document
