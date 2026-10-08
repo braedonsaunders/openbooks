@@ -133,7 +133,9 @@ test("a staged board publishes all changes together, or none when one is blocked
   assert.equal(await statusOf(f.org.orgId, b.id), "draft");
 
   await applyBoardChanges({ ...actor(f), boardId: f.staged, changes: [{ op: "cancel", id: a.id, expectedRevision: 1 }] });
-  assert.deepEqual(await publishBoard({ ...actor(f), boardId: f.staged, from: "2026-10-11", through: "2026-10-17" }), { published: 1 });
+  assert.deepEqual(await publishBoard({ ...actor(f), boardId: f.staged, from: "2026-10-11", through: "2026-10-17" }), {
+    published: 1, notices: [], boardName: "Board PLANT",
+  });
   assert.equal(await statusOf(f.org.orgId, b.id), "published");
 }));
 
