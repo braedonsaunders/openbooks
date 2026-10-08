@@ -23,6 +23,7 @@ export type InsightChartProps = {
 export function InsightChart({ option, height, className, inspection }: InsightChartProps) {
   const ref = useRef<HTMLDivElement | null>(null)
   const chartRef = useRef<ECharts | null>(null)
+  const rendererRef = useRef<Awaited<ReturnType<typeof loadChartRenderer>> | null>(null)
   const observerRef = useRef<ResizeObserver | null>(null)
   const pendingInspection = useRef<{ seriesIndex: number; dataIndex: number } | null>(null)
   const [rendererFailure, setRendererFailure] = useState<{ cause: unknown } | null>(null)
@@ -35,6 +36,7 @@ export function InsightChart({ option, height, className, inspection }: InsightC
       observerRef.current = null
       chartRef.current?.dispose()
       chartRef.current = null
+      rendererRef.current = null
     }
   }, [])
 
@@ -44,14 +46,21 @@ export function InsightChart({ option, height, className, inspection }: InsightC
     let cancelled = false
     // Shared pages can reference chart components without mounting a chart.
     // Fetch the renderer only when there is a canvas to initialize.
-    // Resolve on option changes too: a studio edit can introduce a series
-    // outside the native bundle without recreating the mounted canvas.
+    // Resolve on option changes too: ECharts fixes its processors at init,
+    // so switching bundles recreates the instance inside the same container.
     void loadChartRenderer(option).then((echarts) => {
       if (cancelled) return
+      if (chartRef.current && rendererRef.current !== echarts) {
+        observerRef.current?.disconnect()
+        observerRef.current = null
+        chartRef.current.dispose()
+        chartRef.current = null
+      }
       let chart = chartRef.current
       if (!chart) {
         chart = echarts.init(element, undefined, { renderer: 'canvas' })
         chartRef.current = chart
+        rendererRef.current = echarts
         observerRef.current = new ResizeObserver(() => chartRef.current?.resize())
         observerRef.current.observe(element)
       }
@@ -67,6 +76,7 @@ export function InsightChart({ option, height, className, inspection }: InsightC
       observerRef.current = null
       chartRef.current?.dispose()
       chartRef.current = null
+      rendererRef.current = null
       setRendererFailure({ cause })
     })
     return () => {

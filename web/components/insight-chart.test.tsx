@@ -23,7 +23,7 @@ const rendererBoundary = `await globalThis.__chartLoadGate;
       dispose(){globalThis.__chartCalls.push({action:'dispose'})}
     }
   }`
-stubModules({ extra: { echarts: rendererBoundary, './native-chart-renderer': rendererBoundary } })
+stubModules({ extra: { echarts: rendererBoundary, './native-chart-renderer': `// Native canvas boundary\n${rendererBoundary}` } })
 const React = await import('react')
 Object.assign(globalThis, { React })
 const { act } = React
@@ -145,4 +145,30 @@ test('renderer initialization failures retain their cause at the caller boundary
     host.remove()
   }
   assert.equal(globalThis.__chartCalls.filter((call) => call.action === 'dispose').length, 1)
+})
+
+test('a later non-native series rebuilds processors without losing the focused inspection shell', async () => {
+  globalThis.__chartCalls = []
+  const host = document.createElement('div')
+  document.body.append(host)
+  const root = createRoot(host)
+  const inspection = { label: 'Projected value', instructions: 'Use arrow keys', points: ['Jul 1 · CAD 42.00'] }
+  try {
+    await act(async () => root.render(<InsightChart option={{ series: [{ type: 'pie', data: [{ value: 42 }] }] }} inspection={inspection} />))
+    const shell = host.querySelector<HTMLElement>('[role="group"]')!
+    await act(async () => shell.focus())
+    const next = { series: [{ type: 'gauge', data: [{ value: 42 }] }] }
+    await act(async () => root.render(<InsightChart option={next} inspection={inspection} />))
+    assert.equal(host.querySelector('[role="group"]'), shell)
+    assert.equal(document.activeElement, shell)
+    assert.equal(globalThis.__chartCalls.filter(call => call.action === 'init').length, 2)
+    assert.equal(globalThis.__chartCalls.filter(call => call.action === 'dispose').length, 1)
+    assert.deepEqual(globalThis.__chartCalls.filter(call => call.action === 'setOption').at(-1)?.value, next)
+    assert.deepEqual(globalThis.__chartCalls.filter(call => call.value?.type === 'showTip').at(-1)?.value,
+      { type: 'showTip', seriesIndex: 0, dataIndex: 0 })
+  } finally {
+    await act(async () => root.unmount())
+    host.remove()
+  }
+  assert.equal(globalThis.__chartCalls.filter(call => call.action === 'dispose').length, 2)
 })
