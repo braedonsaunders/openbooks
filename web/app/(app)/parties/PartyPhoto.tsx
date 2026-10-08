@@ -64,6 +64,8 @@ export function PartyPhoto({
       const body = await response.json() as { photoFileId: string }
       onChange(body.photoFileId)
       toast.success(t('updated'))
+    } catch {
+      toast.error(t('uploadFailed'))
     } finally {
       setBusy(false)
       if (input.current) input.current.value = ''
@@ -81,6 +83,8 @@ export function PartyPhoto({
       }
       onChange(null)
       toast.success(t('removed'))
+    } catch {
+      toast.error(t('removeFailed'))
     } finally {
       setBusy(false)
     }

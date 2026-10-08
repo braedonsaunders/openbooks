@@ -401,6 +401,7 @@ function RecurringRow({ item, basis, currency, muted = false }: {
 
 /** Annual pay over time as a step chart, newest change called out. */
 function PayProgression({ data, compact = false }: { data: TotalCompensation; compact?: boolean }) {
+  const fillId = useId()
   const t = useTranslations('parties.drawer.compensation')
   const format = useFormatter()
   const locale = useLocale()
@@ -424,7 +425,6 @@ function PayProgression({ data, compact = false }: { data: TotalCompensation; co
     path += index === 0 ? `M ${px} ${py}` : ` H ${px} V ${py}`
   })
   const area = `${path} H ${x(points.length - 1)} V ${height} H ${x(0)} Z`
-  const fillId = useId()
   const latest = data.history[0]!
   const first = points[0]!
   const date = (value: string) => format.dateTime(new Date(`${value}T12:00:00Z`), { dateStyle: 'medium', timeZone: 'UTC' })

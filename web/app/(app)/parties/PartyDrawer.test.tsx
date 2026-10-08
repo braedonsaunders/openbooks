@@ -363,6 +363,31 @@ test("read mode names the kind instead of offering the control", async (t) => {
   );
 });
 
+test("a failed photo removal keeps the photo and allows retry", async (t) => {
+  let attempts = 0;
+  const { done } = await renderDrawer({
+    payload: { ...VENDOR_PAYLOAD, party: { ...VENDOR_PAYLOAD.party, photo_file_id: "photo-1" } },
+    fetchHandler: (url, init) => {
+      if (url.endsWith("/photo") && init?.method === "DELETE") {
+        attempts += 1;
+        if (attempts === 1) throw new TypeError("Network unavailable");
+        return Response.json({ photoFileId: null });
+      }
+      return null;
+    },
+  });
+  t.after(done);
+  const remove = () => document.querySelector<HTMLButtonElement>(`button[aria-label="${en("parties.drawer.photo.remove")}"]`);
+  assert.ok(remove());
+  await act(async () => { remove()!.click(); await tick(); });
+  assert.deepEqual(globalThis.__partyToasts, [{ kind: "error", message: en("parties.drawer.photo.removeFailed") }]);
+  assert.ok(remove(), "a failed request must retain the current photo");
+  assert.equal(remove()!.disabled, false, "the operator must be able to retry");
+  await act(async () => { remove()!.click(); await tick(); });
+  assert.equal(attempts, 2);
+  assert.equal(remove(), null, "the successful retry must clear the photo through the drawer state");
+});
+
 test("the rail lists every panel once with overview first", async (t) => {
   const { done } = await renderDrawer({ initialTab: "overview" });
   t.after(done);
