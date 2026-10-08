@@ -198,7 +198,7 @@ export async function OverheadLifecycleTabSlot({ departments }: { departments?: 
     const fromDate = parseIsoDate(today)
     fromDate.setUTCFullYear(fromDate.getUTCFullYear() - 1)
     const from = fromDate.toISOString().slice(0, 10)
-    return (await trueCostData(orgId, { from, to: today, label: 'TTM' }, authz.allowedSubsidiaryIds)).departments
+    return (await trueCostData(orgId, { from, to: today, label: 'TTM' }, authz.allowedSubsidiaryIds, undefined, { includePriorComparison: false })).departments
   }
   const [live, lifecycleRes, publishedRates] = await Promise.all([
     liveDepartments(),

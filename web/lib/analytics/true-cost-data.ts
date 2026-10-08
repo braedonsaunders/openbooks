@@ -392,6 +392,7 @@ export async function trueCostData(
   period: { from: string; to: string; label: string },
   allowedSubsidiaryIds: ReadonlySet<string> | null,
   strings: TrueCostStrings = trueCostStrings(englishCatalogMessage, "en"),
+  options: { includePriorComparison?: boolean } = {},
 ): Promise<TrueCostData> {
   if (!(await isFeatureEnabled(orgId, "projects"))) throw new Error("projects feature is disabled")
   const ids = allowedSubsidiaryIds === null ? null : [...allowedSubsidiaryIds]
@@ -449,6 +450,10 @@ export async function trueCostData(
   const employeeInputsRequired = analyticsSection('true-cost', ["selling"])
     || cfg.profile.compositeMethod === "cascading"
     || annualHoursRequired;
+  // Setup presents current allocation and publication inputs, without the
+  // dashboard comparison chip. Its prior utilization window remains required.
+  const priorComparisonRequired = options.includePriorComparison !== false
+    && analyticsSection('true-cost', ["absorption", "selling"]);
   const [acctRows, hoursRows, empRows, priorRows, priorTimeRows, appliedRows, cardPricedRows, priorDeptHoursRows, deptRows, baseRows, hcRows, premiumRows] = await Promise.all([
     // Expense account totals per account × department × month × functional —
     // journal legs arrive stamped in their line entity's functional and
@@ -527,7 +532,7 @@ export async function trueCostData(
       where pe.hours > 0
     `) : Promise.resolve({rows:[]})),
     // Prior equal window: per-account expense (classified below) + billed hours.
-    (analyticsSection('true-cost', ["absorption","selling"]) ? analyticsQuery(sql`
+    (priorComparisonRequired ? analyticsQuery(sql`
       select l.account_id, sub.base_currency as func, max(e.posting_date)::text as late,
         sum(l.amount) as amount,
         (select coalesce(sum(t.hours) filter (where t.is_billable), 0) from time_entries t
@@ -542,7 +547,7 @@ export async function trueCostData(
     `) : Promise.resolve({rows:[]})),
     // Prior-window non-billable labour cost per functional: the scalar
     // subselect above cannot carry legs, so it travels on its own query.
-    (analyticsSection('true-cost', ["absorption","selling"]) ? analyticsQuery(sql`
+    (priorComparisonRequired ? analyticsQuery(sql`
       select coalesce(t.cost_rate_currency, crs.base_currency, o.base_currency) as func,
         max(t.worked_on)::text as late,
         coalesce(sum(t.hours * coalesce(t.cost_rate, 0)) filter (where t.is_billable is not true), 0) as nonbill_cost
