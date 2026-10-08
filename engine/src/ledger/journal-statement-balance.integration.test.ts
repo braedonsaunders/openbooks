@@ -4,7 +4,7 @@ import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db, withMaintenanceTransaction, withOrgTransaction, withTransactionSavepoint } from "../platform/db.ts";
 import { errorChainMatches } from "../testing/error-chain.ts";
-import { createScratchOrg, dropScratchOrgReporting } from "../testing/fixtures.ts";
+import { createScratchOrg, dropScratchOrg } from "../testing/fixtures.ts";
 
 test("bulk journal balance checks keep each entry, subsidiary and configured segment independent and roll back refusals", {
   skip: !process.env.OPENBOOKS_DB_URL,
@@ -163,7 +163,7 @@ test("bulk journal balance checks keep each entry, subsidiary and configured seg
     failure=error;
     throw error;
   } finally {
-    try { await dropScratchOrgReporting(org.orgId); }
+    try { await dropScratchOrg(org.orgId); }
     catch (cleanup) {
       if (failure) throw new AggregateError([failure,cleanup],"Journal balance fixture cleanup failed",{ cause: failure });
       throw cleanup;
