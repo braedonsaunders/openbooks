@@ -9,6 +9,7 @@ import { withAnalyticsRead } from './read-context'
 import { analyticsSourceQuery, analyticsQueryString } from './query-params'
 
 const loaders = {
+  'receivables-intelligence': async (sp: Record<string, string | undefined>) => (await import('../../app/(app)/analytics/receivables-intelligence/view')).loadReceivablesIntelligence(sp),
   'financial-health': async (sp: Record<string, string | undefined>) => (await import('../../app/(app)/analytics/financial-health/view')).loadFinancialHealth(sp),
   cashflow: async (sp: Record<string, string | undefined>) => (await import('../../app/(app)/analytics/cashflow/view')).loadCashflow(sp),
   'true-cost': async (sp: Record<string, string | undefined>) => (await import('../../app/(app)/analytics/true-cost/view')).loadTrueCost(sp),
@@ -27,7 +28,7 @@ export async function readAnalyticsDashboard<S extends AnalyticsSlug>(slug: S, s
   if (denied) throw new ForbiddenError(denied)
   if (definition.feature) await requireFeatureEnabled(authz.user.orgId, definition.feature)
   const tab = analyticsTab(slug, sp.tab)
-  const query = analyticsSourceQuery(sp)
+  const query = analyticsSourceQuery(sp, slug)
   return withAuthzContext(authz, async () => {
     const authority = requestAuthzContext()!
     const identity = await analyticsCacheIdentity(authority.user.orgId)

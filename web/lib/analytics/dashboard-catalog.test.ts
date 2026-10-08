@@ -28,6 +28,7 @@ mock.method(pg.Pool.prototype, 'connect', refuseDatabaseAccess)
 // Page composition runs with the actual loaders and spec builders. Only
 // database-backed analytics reads and request services are isolated here.
 const dataReads: Record<string, { slug: string; exports: string[] }> = {
+  'receivables-data': { slug: 'receivables-intelligence', exports: ['receivablesData'] },
   'health-data': { slug: 'financial-health', exports: ['healthData', 'healthSummaryData'] },
   'cashflow-data': { slug: 'cashflow', exports: ['cashflowData'] },
   'true-cost-data': { slug: 'true-cost', exports: ['trueCostData'] },
@@ -48,7 +49,7 @@ const hooks = registerHooks({
             export async function requirePermission() {
               return {
                 user: { orgId: 'org', id: 'user' },
-                permissions: new Set(['reports.read', 'admin.audit.read', 'admin.setup.manage']),
+                permissions: new Set(['ar.read', 'reports.read', 'admin.audit.read', 'admin.setup.manage']),
                 allowedSubsidiaryIds: null,
               };
             }
@@ -116,6 +117,7 @@ interface DashboardPageProps {
 }
 
 const nativeWidgets: Record<string, string> = {
+  'receivables-intelligence': 'receivables-view',
   'financial-health': 'financial-health-view',
   cashflow: 'cashflow-view',
   'true-cost': 'true-cost-view',

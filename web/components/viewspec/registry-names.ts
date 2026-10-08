@@ -587,6 +587,7 @@ export const WIDGET_NAMES: ReadonlySet<string> = new Set([
   'user-roles-cell',
   'utilization-view',
   'vendor-compliance-drawer',
+  'receivables-view',
   'vendor-view',
   'view-actions-cell',
   'view-name-cell',

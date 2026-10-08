@@ -15,6 +15,7 @@ export interface AnalyticsDashboardDefinition {
 }
 const services = ['professional_services', 'engineering_architecture', 'accounting_firm', 'construction_contractor']
 export const ANALYTICS_DASHBOARDS: readonly AnalyticsDashboardDefinition[] = [
+  { slug: 'receivables-intelligence', group: 'cash', icon: 'Banknote', titleKey: 'receivables', permission: 'ar.read', industries: [] },
   { slug: 'financial-health', group: 'finance', icon: 'Activity', titleKey: 'financialHealth', industries: [] },
   { slug: 'cashflow', group: 'cash', icon: 'Wallet', titleKey: 'cashflow', industries: [] },
   { slug: 'true-cost', group: 'projects', icon: 'Coins', titleKey: 'trueCost', feature: 'projects', industries: services },

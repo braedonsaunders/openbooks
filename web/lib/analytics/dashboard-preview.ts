@@ -15,7 +15,7 @@ import { currentAnalyticsRead, withAnalyticsRead } from './read-context'
 export async function analyticsDashboardPreview(dashboard: AnalyticsDashboardDefinition, sp: Record<string, string | undefined>, orgId: string): Promise<AnalyticsPreview> {
   const authz = await requirePermission('reports.read')
   if (authz.user.orgId !== orgId || !await analyticsDashboardAvailable(authz, dashboard)) throw new ForbiddenError(dashboard.permission ?? dashboard.feature ?? 'reports.read')
-  const query = analyticsSourceQuery(sp)
+  const query = analyticsSourceQuery(sp, dashboard.slug)
   return withAuthzContext(authz, async () => {
     const authority = requestAuthzContext()!
     const identity = await analyticsCacheIdentity(orgId)
@@ -43,6 +43,11 @@ async function buildDashboardPreview(dashboard: AnalyticsDashboardDefinition, sp
   const trend = (label: string, points: (number | string)[], labels: string[]): AnalyticsPreviewChart | undefined => points.length > 1 ? { kind: 'sparkline', label, points: points.map((p) => typeof p === "number" ? p : toChartNumber(p)), from: labels[0]!, to: labels[labels.length - 1]! } : undefined
   const result = (periodLabel: string, metrics: AnalyticsPreview['metrics'], notice?: string): AnalyticsPreview => ({ ...(chart ? { chart } : {}), periodLabel, metrics, observedAt: new Date(currentAnalyticsRead()?.observedAt ?? Date.now()).toISOString(), ...(notice ? { notice } : {}) })
   switch (dashboard.slug) {
+    case 'receivables-intelligence': {
+      const { data, periodLabel } = await (await import('../../app/(app)/analytics/receivables-intelligence/view')).loadReceivablesIntelligence(sp)
+      chart = { kind: 'donut', label: t('receivables.panels.aging'), slices: data.summary.aging.map((row) => ({ name: t(`receivables.aging.${row.index}`), value: toChartNumber(row.gross) })).filter((row) => row.value > 0) }
+      return result(periodLabel, [metric('receivables.kpi.outstanding', fmt.money(data.summary.outstanding)), metric('receivables.kpi.overdue', fmt.money(data.summary.overdue)), metric('receivables.kpi.overdueShare', data.summary.overdueShare === null ? '—' : share(Number(data.summary.overdueShare))), metric('receivables.kpi.averageDays', number(data.summary.averageOverdueDays))])
+    }
     case 'financial-health': {
       const { data, periodLabel } = await (await import('../../app/(app)/analytics/financial-health/view')).loadFinancialHealthPreview(sp)
       chart = trend(t('financialHealth.kpi.revenue'), data.monthly.map((month) => toChartNumber(month.revenue)), data.monthly.map((month) => month.label))

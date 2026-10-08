@@ -26,7 +26,7 @@ export function useAnalyticsTab<T extends { data: unknown }, K extends string>(s
   const [localTab, select] = useState<K>(tabs[0]!)
   const requested = search.get('tab') ?? meta?.tab
   const tab = enabled ? tabs.find((value) => value === requested) ?? tabs[0]! : localTab
-  const query = analyticsQueryString(Object.fromEntries(search.entries()))
+  const query = analyticsQueryString(Object.fromEntries(search.entries()), slug)
   const key = `${query}:${tab}`
   const [attempt, retry] = useReducer((n: number) => n + 1, 0)
   const [refreshTick, refresh] = useReducer((n: number) => n + 1, 0)

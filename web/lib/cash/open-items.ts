@@ -1,8 +1,8 @@
 import 'server-only'
 import { sql } from 'drizzle-orm'
-import { activePostingPrimaryBookId } from '@openbooks/engine/src/platform/accounting-books.ts'
+import { activePostingPrimaryBookId } from '@openbooks/engine/platform/database'
 import { analyticsQuery } from '../analytics/query'
-import { mulDecimal } from '@openbooks/engine/src/money/money.ts'
+import { mulDecimal } from '@openbooks/engine/money'
 // Relative (not the bare workspace specifier): worktree node_modules resolves
 // bare @openbooks/* to the main checkout, so a new engine module would not
 // resolve until merge; a relative import binds this checkout everywhere.
@@ -41,12 +41,15 @@ interface OpenItemQueryRow extends Record<string, unknown> {
   func: string | null
 }
 
-export async function openItems(
+/** Shared historical control-line population. Consumers aggregate in SQL
+ * before transferring data; scope, reversals and dated applications remain
+ * identical to the operational cash reader. */
+export async function openItemSourceQuery(
   orgId: string,
   side: Side,
   asOf: string,
   subIds?: string[],
-): Promise<OpenItem[]> {
+) {
   const creditKind = side === 'ap' ? 'vendor_credit' : 'customer_credit'
   // Bills/invoices carry the side's normal sign; credit memos carry the
   // opposite sign on the same control account. Both are open items: an
@@ -70,7 +73,7 @@ export async function openItems(
   // after the date that were open on it. The applied sum reads each leg
   // through its own carrying column (shared engine helper — never a bare
   // sum for both legs, which mixes denominations on cross-currency credits).
-  const result = (await analyticsQuery<OpenItemQueryRow>(sql`
+  return sql`
     with oi as (
       select jl.id, jl.party_id, jl.entry_id, je.posting_date as tran_date, jl.due_date,
              d.id as doc_id, d.kind as doc_kind, d.document_number as doc_number,
@@ -100,7 +103,16 @@ export async function openItems(
       from oi
       left join parties p on p.id = oi.party_id and p.org_id = ${orgId}
      where oi.remaining <> 0
-  `))
+  `
+}
+
+export async function openItems(
+  orgId: string,
+  side: Side,
+  asOf: string,
+  subIds?: string[],
+): Promise<OpenItem[]> {
+  const result = await analyticsQuery<OpenItemQueryRow>(await openItemSourceQuery(orgId, side, asOf, subIds))
   // `remaining` nets in the line entity's functional currency (legs are
   // stamped functional; the shared leg-split helper reads the target leg in
   // amount and the consumed leg in source_amount, and the sign filter keeps

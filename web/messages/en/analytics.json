@@ -29,7 +29,9 @@
       "cashflowTitle": "Cash Flow",
       "cashflowDesc": "Weekly cash forecast, runway and AP/AR aging",
       "resourceCapacityTitle": "Resource capacity",
-      "resourceCapacityDesc": "Forecast staffing capacity, committed bookings and pipeline demand"
+      "resourceCapacityDesc": "Forecast staffing capacity, committed bookings and pipeline demand",
+      "receivablesTitle": "Receivables Intelligence",
+      "receivablesDesc": "Delinquency, customer exposure, credits and contractual maturity"
     },
     "addAnalytics": "Add analytics",
     "libraryTitle": "Your analytics library",
@@ -4336,5 +4338,65 @@
     "forbidden": "Saving requires the Setup permission.",
     "saveFailed": "Save failed",
     "loadFailed": "The thresholds could not be loaded."
+  },
+  "receivables": {
+    "title": "Receivables Intelligence",
+    "backToHub": "Back to Analytics",
+    "asOf": "As of {date}",
+    "grossBasis": "Before unapplied credits",
+    "weightedBasis": "Balance-weighted days past due",
+    "openCustomerBasis": "Customers with an open balance",
+    "documents": "Open documents: {count}",
+    "cohort": "Documents: {count} · Weighted days: {days}",
+    "topCustomers": "Top 12 by overdue exposure",
+    "unassigned": "Unassigned customer",
+    "customerShare": "{share} of gross receivables · {overdue} overdue",
+    "contractualBasis": "Contractual due dates, not predicted receipts",
+    "methodology": "Balances are reconstructed as of the selected period end, in {currency} at closing spot rates. Credits are shown separately. {terms} has no due date and ages from posting. The due ladder is contractual, not a collection forecast.",
+    "openReport": "Open Aging report",
+    "emptyTitle": "No open receivables",
+    "emptyBody": "No posted receivables remain open at this date within your legal-entity scope.",
+    "kpi": {
+      "outstanding": "Net receivables",
+      "overdue": "Gross overdue",
+      "overdueShare": "Overdue share",
+      "averageDays": "Average overdue days",
+      "gross": "Gross receivables",
+      "credits": "Unapplied credits",
+      "customers": "Customers with open items",
+      "severe": "90+ day exposure",
+      "top5": "Top-five concentration"
+    },
+    "panels": {
+      "aging": "Aging composition",
+      "balanceBridge": "Gross-to-net position",
+      "agingBalances": "Gross balance by age",
+      "agingCredits": "Credits by age",
+      "customerExposure": "Customer collection exposure",
+      "maturity": "Contractual due ladder",
+      "cumulative": "Cumulative gross balance due"
+    },
+    "tabs": {
+      "overview": "Overview",
+      "aging": "Delinquency",
+      "customers": "Customers",
+      "maturity": "Maturity"
+    },
+    "aging": {
+      "0": "Current",
+      "1": "1–30 days",
+      "2": "31–60 days",
+      "3": "61–89 days",
+      "4": "90+ days"
+    },
+    "maturity": {
+      "0": "Past due",
+      "1": "Due in 0–7 days",
+      "2": "Due in 8–14 days",
+      "3": "Due in 15–30 days",
+      "4": "Due in 31–60 days",
+      "5": "Due in 61–90 days",
+      "6": "Due after 90 days"
+    }
   }
 }

@@ -29,7 +29,9 @@
       "cashflowTitle": "现金流",
       "cashflowDesc": "每周现金预测、资金续航与应付/应收账龄",
       "resourceCapacityTitle": "资源容量",
-      "resourceCapacityDesc": "预测人员容量、已确认分配和销售机会带来的需求"
+      "resourceCapacityDesc": "预测人员容量、已确认分配和销售机会带来的需求",
+      "receivablesTitle": "应收账款洞察",
+      "receivablesDesc": "逾期、客户敞口、贷项和合同到期情况"
     },
     "addAnalytics": "添加分析",
     "libraryTitle": "您的分析库",
@@ -4336,5 +4338,65 @@
     "forbidden": "保存需要设置权限。",
     "saveFailed": "保存失败",
     "loadFailed": "无法加载阈值。"
+  },
+  "receivables": {
+    "title": "应收账款洞察",
+    "backToHub": "返回分析",
+    "asOf": "截至 {date}",
+    "grossBasis": "抵扣未核销贷项之前",
+    "weightedBasis": "按余额加权的逾期天数",
+    "openCustomerBasis": "有未结余额的客户",
+    "documents": "未结单据：{count}",
+    "cohort": "单据：{count} · 加权天数：{days}",
+    "topCustomers": "逾期敞口最高的12位客户",
+    "unassigned": "未分配客户",
+    "customerShare": "占应收总额 {share} · 逾期 {overdue}",
+    "contractualBasis": "合同到期日，并非收款预测",
+    "methodology": "余额按所选期间末重建，并按期末即期汇率折算为 {currency}。贷项单独列示。未设置到期日的 {terms} 从过账日计算账龄。到期分布依据合同，不代表收款预测。",
+    "openReport": "打开账龄报表",
+    "emptyTitle": "没有未结应收账款",
+    "emptyBody": "在您的法人权限范围内，截至该日没有已过账且未结清的应收账款。",
+    "kpi": {
+      "outstanding": "应收净额",
+      "overdue": "逾期总额",
+      "overdueShare": "逾期占比",
+      "averageDays": "平均逾期天数",
+      "gross": "应收总额",
+      "credits": "未核销贷项",
+      "customers": "有未结项目的客户",
+      "severe": "逾期90天以上敞口",
+      "top5": "前五大客户集中度"
+    },
+    "panels": {
+      "aging": "账龄构成",
+      "balanceBridge": "总额至净额构成",
+      "agingBalances": "按账龄列示总余额",
+      "agingCredits": "按账龄列示贷项",
+      "customerExposure": "客户收款敞口",
+      "maturity": "合同到期分布",
+      "cumulative": "累计到期总余额"
+    },
+    "tabs": {
+      "overview": "概览",
+      "aging": "逾期分析",
+      "customers": "客户",
+      "maturity": "到期情况"
+    },
+    "aging": {
+      "0": "未到期",
+      "1": "1–30天",
+      "2": "31–60天",
+      "3": "61–89天",
+      "4": "90天及以上"
+    },
+    "maturity": {
+      "0": "已逾期",
+      "1": "0–7天内到期",
+      "2": "8–14天内到期",
+      "3": "15–30天内到期",
+      "4": "31–60天内到期",
+      "5": "61–90天内到期",
+      "6": "90天后到期"
+    }
   }
 }

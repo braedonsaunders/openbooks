@@ -760,6 +760,18 @@ export const PAGE_REGISTRY: Readonly<Record<string, PageRegistryEntry>> = {
       }
     },
   },
+  '/analytics/receivables-intelligence': {
+    route: '/analytics/receivables-intelligence',
+    segments: [],
+    searchParams: true,
+    module: async () => {
+      const m = await import('../app/(app)/analytics/receivables-intelligence/view')
+      return {
+        load: (input) => m.loadReceivablesIntelligence(input.searchParams ?? {}),
+        spec: (data) => m.receivablesIntelligenceSpec(data as never),
+      }
+    },
+  },
   '/analytics/customer-intelligence': {
     route: '/analytics/customer-intelligence',
     segments: [],
