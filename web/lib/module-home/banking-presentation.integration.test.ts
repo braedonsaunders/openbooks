@@ -14,6 +14,7 @@ const { db, env, withBypass, withOrgContext } = await import('@openbooks/engine/
 const { withSimClock: pinClock } = await import('@openbooks/engine/src/platform/clock.ts')
 const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
 const { bankingHome, bankingReconCount } = await import('./banking.ts')
+const { registerQueryObserver } = await import('@openbooks/engine/src/platform/query-observer.ts')
 
 const D = '2026-07-14'
 
@@ -72,10 +73,9 @@ test('banking cockpit translates every cash functional at the tile spot', { skip
 })
 
 /**
- * The reconciliation tile reads the same roster rows as the cockpit, and a
- * multi-functional account rides one row per currency leg: the count must
- * dedupe by account (3 lines read 3, never 6) and tie the cockpit's own
- * unmatchedLines exactly.
+ * A multi-functional account rides one roster row per currency leg, but
+ * each unmatched statement line contributes once to the tile. Reading this
+ * queue must not require journal balances or exchange-rate coverage.
  */
 test('reconciliation count dedupes a multi-functional account', { skip: !env.OPENBOOKS_DB_URL }, async () => {
   const org = await withBypass(() => createScratchOrg())
@@ -101,13 +101,13 @@ test('reconciliation count dedupes a multi-functional account', { skip: !env.OPE
                  (${randomUUID()}, ${org.orgId}, ${entryId}, 2, ${org.accounts.adjustment}, ${sub}, ${'-' + amt}, ${cur}, ${'-' + amt}, 1)`)
         await db.execute(sql`update journal_entries set status='posted', posted_at=now() where id=${entryId}`)
       }
-      // Three unmatched statement lines on that one account.
+      // Three unmatched lines and one matched line on that one account.
       const stmtId = randomUUID()
       await db.execute(sql`insert into bank_statements (id, org_id, account_id, source, statement_date, raw_file_ref)
         values (${stmtId}, ${org.orgId}, ${org.accounts.bank}, 'manual', ${D}::date, 'audit-log:test#evidence=legacy-source-unavailable')`)
-      for (let i = 1; i <= 3; i++) {
-        await db.execute(sql`insert into bank_statement_lines (id, org_id, statement_id, account_id, line_number, posted_on, amount, currency)
-          values (${randomUUID()}, ${org.orgId}, ${stmtId}, ${org.accounts.bank}, ${i}, ${D}::date, '10.00', 'CAD')`)
+      for (let i = 1; i <= 4; i++) {
+        await db.execute(sql`insert into bank_statement_lines (id, org_id, statement_id, account_id, line_number, posted_on, amount, currency, match_status)
+          values (${randomUUID()}, ${org.orgId}, ${stmtId}, ${org.accounts.bank}, ${i}, ${D}::date, '10.00', 'CAD', ${i === 4 ? 'matched' : 'unmatched'})`)
       }
     })
     await pinClock('2026-07-15', async () => {
@@ -117,6 +117,27 @@ test('reconciliation count dedupes a multi-functional account', { skip: !env.OPE
         assert.equal(home.unmatchedLines, 3)
         assert.equal(await bankingReconCount(org.orgId), 3)
         assert.equal(await bankingReconCount(org.orgId), home.unmatchedLines)
+        const journalBefore = (await db.execute(sql`select * from journal_lines where org_id=${org.orgId} order by id`)).rows
+        await db.execute(sql`delete from fx_rates where org_id=${org.orgId}`)
+        const statements: string[] = []
+        const stopObserving = registerQueryObserver((statement) => statements.push(statement))
+        try {
+          assert.equal(await bankingReconCount(org.orgId), 3,
+            'unmatched lines must remain readable without FX coverage')
+        } finally {
+          stopObserving()
+        }
+        assert.equal(statements.filter((statement) => /from bank_statement_lines/i.test(statement)).length, 1)
+        assert.ok(!statements.some((statement) => /journal_lines|journal_entries|reconciliations|accounting_books|fx_rates/i.test(statement)),
+          'a count-only tile must not read monetary balances or reconciliation history')
+        await db.execute(sql`update accounts set subsidiary_id=${org.subsidiaryId} where org_id=${org.orgId} and id=${org.accounts.bank}`)
+        assert.equal(await bankingReconCount(org.orgId, [org.subsidiaryId]), 3)
+        assert.equal(await bankingReconCount(org.orgId, [usSub]), 0, 'a hidden account contributes no statement lines')
+        assert.equal(await bankingReconCount(org.orgId, []), 0, 'an empty viewed scope must not widen to an owned account')
+        assert.equal(await bankingReconCount(randomUUID()), 0, 'another organization cannot expose this account')
+        await db.execute(sql`update accounts set is_active=false where org_id=${org.orgId} and id=${org.accounts.bank}`)
+        assert.equal(await bankingReconCount(org.orgId), 0, 'inactive accounts stay outside roster membership')
+        assert.deepEqual((await db.execute(sql`select * from journal_lines where org_id=${org.orgId} order by id`)).rows, journalBefore)
       })
     })
   } finally {
