@@ -1,3 +1,5 @@
+import { uuidId } from "@/lib/api/json-schema";
+import { PAYROLL_AMOUNT_ROUNDING } from "@openbooks/engine/src/projects/payroll-wage-rounding.ts";
 import { z } from "zod";
 import { defineRoute } from "@/lib/api/route";
 import { apiErrorResponse } from '@/lib/api/error-response'
@@ -53,14 +55,14 @@ const laborSettingsSchema = z.object({
   annualHours: decimalText("annualHours", "a number of hours").nullable().optional(),
   components: z.array(componentSchema).max(100).optional(), allowUnratedTime: z.boolean().optional(),
 });
-const accountFields = { laborWip: z.string().uuid().nullable().optional(), laborClearing: z.string().uuid().nullable().optional(), payrollVariance: z.string().uuid().nullable().optional() };
+const accountFields = { laborWip: uuidId.nullable().optional(), laborClearing: uuidId.nullable().optional(), payrollVariance: uuidId.nullable().optional() };
 const settingsBodySchema = z.object({ settings: laborSettingsSchema, ...accountFields });
 const postBodySchema = z.discriminatedUnion("action", [
-  z.object({ action: z.literal("save-rate"), currency: z.string().regex(/^[A-Z]{3}$/), rate: decimalText("rate", "an exact decimal rate"), effectiveFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), basis: z.enum(PAY_RATE_BASES).optional(), annualHours: decimalText("annualHours", "a number of hours").nullable().optional(), employeePartyId: z.string().uuid().nullable().optional(), jobTitle: z.string().trim().max(160).nullable().optional(), tradeId: z.string().uuid().nullable().optional(), departmentId: z.string().uuid().nullable().optional(), subsidiaryId: z.string().uuid().nullable().optional(), notes: z.string().max(500).nullable().optional(), reason: z.string().trim().max(500).optional() }),
-  z.object({ action: z.literal("end-rate"), id: z.string().uuid(), effectiveTo: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(), reason: z.string().trim().max(500).optional() }),
-  z.object({ action: z.literal("delete-rate"), id: z.string().uuid(), reason: z.string().trim().max(500).optional() }),
-  z.object({ action: z.literal("reconcile"), periodStart: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), periodEnd: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), subsidiaryId: z.string().uuid() }),
-  z.object({ action: z.literal("post-variance"), periodStart: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), periodEnd: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), subsidiaryId: z.string().uuid() }),
+  z.object({ action: z.literal("save-rate"), currency: z.string().regex(/^[A-Z]{3}$/), rate: decimalText("rate", "an exact decimal rate"), effectiveFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), basis: z.enum(PAY_RATE_BASES).optional(), annualHours: decimalText("annualHours", "a number of hours").nullable().optional(), payrollRateScale: z.number().int().min(0).max(4).optional(), payrollAmountRounding: z.enum(PAYROLL_AMOUNT_ROUNDING).optional(), employeePartyId: uuidId.nullable().optional(), jobTitle: z.string().trim().max(160).nullable().optional(), tradeId: uuidId.nullable().optional(), departmentId: uuidId.nullable().optional(), subsidiaryId: uuidId.nullable().optional(), notes: z.string().max(500).nullable().optional(), reason: z.string().trim().max(500).optional() }),
+  z.object({ action: z.literal("end-rate"), id: uuidId, effectiveTo: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(), reason: z.string().trim().max(500).optional() }),
+  z.object({ action: z.literal("delete-rate"), id: uuidId, reason: z.string().trim().max(500).optional() }),
+  z.object({ action: z.literal("reconcile"), periodStart: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), periodEnd: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), subsidiaryId: uuidId }),
+  z.object({ action: z.literal("post-variance"), periodStart: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), periodEnd: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), subsidiaryId: uuidId }),
 ]);
 
 
@@ -314,7 +316,7 @@ async function legacyGET(req: Request) {
     const today = await businessToday(gate.user.orgId)
     const [rates, org, currencies] = await Promise.all([
       db.execute<Record<string, unknown>>(sql`
-        select id, rate, currency, basis, annual_hours, effective_from::text as effective_from,
+        select id, rate, currency, basis, annual_hours, payroll_rate_scale, payroll_amount_rounding, effective_from::text as effective_from,
                effective_to::text as effective_to, notes,
                effective_from <= ${today} and (effective_to is null or effective_to >= ${today}) as is_current
           from labor_cost_rates
@@ -646,6 +648,8 @@ export const POST = defineRoute({
             currency,
             basis,
             annualHours,
+            payrollRateScale: body.payrollRateScale,
+            payrollAmountRounding: body.payrollAmountRounding,
             notes: body.notes ? String(body.notes).slice(0, 500) : null,
             reason,
           })

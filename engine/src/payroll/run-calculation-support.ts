@@ -1,3 +1,4 @@
+import { requirePayrollWageRounding, type PayrollWageRounding } from "../projects/payroll-wage-rounding.ts";
 /**
  * Calculation support queries: headcount, stored tax certificates, and the FX/pay-rate source.
  *
@@ -183,16 +184,16 @@ export async function resolvePayRate(
   tx: Pick<typeof db, "execute">, orgId: string, employeePartyId: string, onDate: string,
   /** Functional currency of the run (the run document's currency). */
   payCurrency: string | null,
-): Promise<{ basis: PayRateBasis; rate: string; annualHours: string; currency: string } | null> {
+): Promise<({ basis: PayRateBasis; rate: string; annualHours: string; currency: string } & PayrollWageRounding) | null> {
   const r = (await tx.execute<{
       id: string; basis: string; rate: string;
-      annual_hours: string; currency: string;
+      annual_hours: string; currency: string; payroll_rate_scale: number; payroll_amount_rounding: string;
     }>(sql`
     select * from ${effectivePayRateSql({
       org: sql`${orgId}`,
       employee: sql`${employeePartyId}`,
       onDate: sql`${onDate}`,
-      selectList: sql`w.id, w.basis, w.rate, w.annual_hours, w.currency`,
+      selectList: sql`w.id, w.basis, w.rate, w.annual_hours, w.currency, w.payroll_rate_scale, w.payroll_amount_rounding`,
     })} as rate
   `));
   const selected = r.rows[0];
@@ -202,9 +203,9 @@ export async function resolvePayRate(
   // waits behind this row or raises a serialization failure; it can never
   // produce a stub from one version and fingerprint another.
   const locked = (await tx.execute<{
-      basis: string; rate: string; annual_hours: string; currency: string;
+      basis: string; rate: string; annual_hours: string; currency: string; payroll_rate_scale: number; payroll_amount_rounding: string;
     }>(sql`
-    select basis, rate::text as rate, annual_hours::text as annual_hours, currency
+    select basis, rate::text as rate, annual_hours::text as annual_hours, currency, payroll_rate_scale, payroll_amount_rounding
       from labor_cost_rates
      where org_id = ${orgId} and id = ${selected.id}
      for update
@@ -212,6 +213,7 @@ export async function resolvePayRate(
   const row = locked.rows[0];
   if (!row) return null;
   const resolved = {
+    ...requirePayrollWageRounding(row.payroll_rate_scale, row.payroll_amount_rounding),
     basis: requirePayRateBasis(row.basis), rate: row.rate, annualHours: row.annual_hours, currency: row.currency,
   };
   if (!payCurrency || !row.currency || row.currency === payCurrency) return resolved;

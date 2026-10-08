@@ -183,7 +183,13 @@
       "endToday": "今天截止",
       "delete": "删除工资费率",
       "confirmEnd": "要让此工资费率于今天截止吗？",
-      "confirmDelete": "要删除此工资费率吗？已计成本的工时会保留其已保存费率。"
+      "confirmDelete": "要删除此工资费率吗？已计成本的工时会保留其已保存费率。",
+      "payrollRatePrecision": "工资单价精度",
+      "decimalPlaces": "{count}位小数",
+      "payrollAmountRounding": "工资金额舍入",
+      "dimensionGroupRounding": "按维度组",
+      "timeEntryRounding": "按工时记录",
+      "roundingEffectiveDateHint": "适用于此生效日期工资的计薪工时；固定薪资和已批准的项目成本保持不变。"
     },
     "payComponents": {
       "title": "固定工资组成",

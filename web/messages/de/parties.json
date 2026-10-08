@@ -183,7 +183,13 @@
       "endToday": "Heute beenden",
       "delete": "Lohnsatz löschen",
       "confirmEnd": "Diesen Lohnsatz heute beenden?",
-      "confirmDelete": "Diesen Lohnsatz löschen? Bereits kalkulierte Zeiten behalten den gespeicherten Satz."
+      "confirmDelete": "Diesen Lohnsatz löschen? Bereits kalkulierte Zeiten behalten den gespeicherten Satz.",
+      "payrollRatePrecision": "Dezimalstellen des Lohnsatzes",
+      "decimalPlaces": "{count} Dezimalstellen",
+      "payrollAmountRounding": "Rundung des Lohnbetrags",
+      "dimensionGroupRounding": "Je Dimensionsgruppe",
+      "timeEntryRounding": "Je Zeiteintrag",
+      "roundingEffectiveDateHint": "Gilt für Lohnstunden dieser datierten Vergütung; Gehaltszahlungen und genehmigte Projektkosten bleiben unverändert."
     },
     "payComponents": {
       "title": "Wiederkehrende Lohnkomponenten",

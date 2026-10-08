@@ -170,12 +170,18 @@ test("adding a rate posts canonical decimal strings and clears the form", async 
   t.after(done);
   await setRate("0012.3456");
   await setYearlyBasis("02080.1250");
+  await act(async () => {
+    setNativeSelect(document.querySelector("#employee-wage-precision") as HTMLSelectElement, "2");
+    setNativeSelect(document.querySelector("#employee-wage-rounding") as HTMLSelectElement, "time_entry");
+  });
   await clickAdd();
 
   assert.equal(posted.length, 1, "one submit must post one payload");
   const body = posted[0]?.body;
   assert.ok(body, "the post must carry a payload");
   assert.equal(body.action, "save-rate");
+  assert.equal(body.payrollRateScale, 2);
+  assert.equal(body.payrollAmountRounding, "time_entry");
   assert.equal(body.rate, "12.3456");
   assert.equal(typeof body.rate, "string", "the rate must stay decimal text, never a float");
   assert.equal(body.annualHours, "2080.125");

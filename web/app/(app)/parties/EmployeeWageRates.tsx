@@ -1,5 +1,8 @@
 'use client'
 
+import { PayrollWageRoundingFields } from '../../../components/payroll-wage-rounding-fields'
+import { type PayrollAmountRounding } from '@openbooks/engine/src/projects/payroll-wage-rounding.ts'
+
 import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useFormatter, useTranslations } from 'next-intl'
@@ -25,6 +28,8 @@ interface RateRow {
   rate: string
   currency: string
   basis: PayRateBasis
+  payroll_rate_scale: number
+  payroll_amount_rounding: PayrollAmountRounding
   annual_hours: string
   effective_from: string
   effective_to: string | null
@@ -80,6 +85,8 @@ export function EmployeeWageRates({ partyId }: { partyId: string }) {
   const [currency, setCurrency] = useState('')
   const [basis, setBasis] = useState<PayRateBasis>('hour')
   const [annualHours, setAnnualHours] = useState('2080')
+  const [payrollRateScale, setPayrollRateScale] = useState(4)
+  const [payrollAmountRounding, setPayrollAmountRounding] = useState<PayrollAmountRounding>('dimension_group')
   const [effectiveFrom, setEffectiveFrom] = useState(today)
 
   // Fetch chain: every state update sits in a promise continuation (the fetch
@@ -92,6 +99,11 @@ export function EmployeeWageRates({ partyId }: { partyId: string }) {
         if (!response.ok) throw new Error('load failed')
         return (response.json() as Promise<RatesResponse>).then((next) => {
           setData(next)
+          if (signal) {
+            const governing = next.rates.find((row) => row.is_current) ?? next.rates[0]
+            setPayrollRateScale(governing?.payroll_rate_scale ?? 4)
+            setPayrollAmountRounding(governing?.payroll_amount_rounding ?? 'dimension_group')
+          }
           setCurrency((current) => (current && next.currencies.includes(current) ? current : next.defaultCurrency))
         })
       })
@@ -184,6 +196,8 @@ export function EmployeeWageRates({ partyId }: { partyId: string }) {
       rate: amount,
       basis,
       annualHours: hours,
+      payrollRateScale,
+      payrollAmountRounding,
       effectiveFrom,
     }, t('saved'))
     if (saved) setRate('')
@@ -272,6 +286,8 @@ export function EmployeeWageRates({ partyId }: { partyId: string }) {
             />
           </div>
         ) : null}
+        <PayrollWageRoundingFields idPrefix="employee-wage" rateScale={payrollRateScale} amountRounding={payrollAmountRounding}
+          onChange={(scale, rounding) => { setPayrollRateScale(scale); setPayrollAmountRounding(rounding) }} />
         <div>
           <Label htmlFor="employee-wage-effective-from">{t('effectiveFrom')}</Label>
           <Input
@@ -329,6 +345,9 @@ export function EmployeeWageRates({ partyId }: { partyId: string }) {
                       })}
                       <span className="text-xs text-slate-500 dark:text-slate-400">{t(BASIS_LABEL_KEYS[row.basis])}</span>
                       {row.is_current ? <Badge variant="success">{t('current')}</Badge> : null}
+                    </span>
+                    <span className="text-xs text-slate-500 dark:text-slate-400">
+                      {t('decimalPlaces', { count: row.payroll_rate_scale ?? 4 })} · {t(row.payroll_amount_rounding === 'time_entry' ? 'timeEntryRounding' : 'dimensionGroupRounding')}
                     </span>
                     {equivalents ? (
                       <span className="text-xs text-slate-500 tabular-nums dark:text-slate-400">

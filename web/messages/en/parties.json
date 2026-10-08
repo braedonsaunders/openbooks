@@ -180,7 +180,13 @@
       "endToday": "End today",
       "delete": "Delete wage rate",
       "confirmEnd": "End this wage rate today?",
-      "confirmDelete": "Delete this wage rate? Previously costed time keeps its saved rate."
+      "confirmDelete": "Delete this wage rate? Previously costed time keeps its saved rate.",
+      "payrollRatePrecision": "Payroll rate precision",
+      "decimalPlaces": "{count} decimal places",
+      "payrollAmountRounding": "Payroll amount rounding",
+      "dimensionGroupRounding": "Per dimension group",
+      "timeEntryRounding": "Per time entry",
+      "roundingEffectiveDateHint": "Applies to payroll hours under this dated wage; salary payments and approved job costs are unchanged."
     },
     "payComponents": {
       "title": "Recurring pay components",

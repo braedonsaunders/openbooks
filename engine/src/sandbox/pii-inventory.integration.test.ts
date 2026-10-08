@@ -1412,6 +1412,7 @@ const ALLOW_LISTED_NON_PERSONAL: ReadonlySet<string> = new Set([
   "journal_lines.unit",
   "labor_cost_rates.basis",
   "labor_cost_rates.currency",
+  "labor_cost_rates.payroll_amount_rounding",
   "labor_cost_rates.job_title",
   "labor_cost_rates.notes",
   "labor_rate_adjustment_targets.target_type",

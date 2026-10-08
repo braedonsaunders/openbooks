@@ -1,3 +1,4 @@
+import { requirePayrollWageRounding, type PayrollAmountRounding } from "./payroll-wage-rounding.ts";
 import { sql, type SQL } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { isPayRateBasis, PAY_RATE_BASES, type PayRateBasis } from "./pay-rate-basis.ts";
@@ -36,6 +37,8 @@ export type LaborCostRateRow = {
   currency: string;
   basis: string;
   annualHours: string;
+  payrollRateScale: number;
+  payrollAmountRounding: PayrollAmountRounding;
   effectiveFrom: string;
   effectiveTo: string | null;
   notes: string | null;
@@ -43,7 +46,8 @@ export type LaborCostRateRow = {
 }
 
 export const LABOR_COST_RATE_ROW_COLUMNS = sql`id, rate::text as rate, currency, basis,
-       annual_hours::text as "annualHours", effective_from::text as "effectiveFrom",
+       annual_hours::text as "annualHours", payroll_rate_scale as "payrollRateScale",
+       payroll_amount_rounding as "payrollAmountRounding", effective_from::text as "effectiveFrom",
        effective_to::text as "effectiveTo", notes, is_active as "isActive"`;
 
 /**
@@ -76,6 +80,9 @@ export interface SupersedeLaborCostRateQuery {
   readonly basis: PayRateBasis;
   /** Normalized numeric(19,4) decimal string, > 0. */
   readonly annualHours: string;
+  /** Omitted terms retain the preceding wage policy, or the existing first-wage defaults. */
+  readonly payrollRateScale?: number;
+  readonly payrollAmountRounding?: PayrollAmountRounding;
   readonly notes: string | null;
   /** Attributable reason carried on the audit row (caller supplies the default). */
   readonly reason: string;
@@ -120,12 +127,15 @@ export async function supersedeLaborCostRate(
   if (scopeMembers.length > 1) fail("at most one wage scope member may be set");
   if (!isPayRateBasis(query.basis)) fail(`basis must be one of ${PAY_RATE_BASES.join(", ")}`);
 
+  if (query.payrollRateScale !== undefined) requirePayrollWageRounding(query.payrollRateScale, query.payrollAmountRounding ?? "dimension_group");
+  if (query.payrollAmountRounding !== undefined) requirePayrollWageRounding(query.payrollRateScale ?? 4, query.payrollAmountRounding);
+
   // Deterministic same-scope serialization BEFORE any read: a concurrent
   // start blocks here until this scope's writer commits, so two starts
   // can neither race the close nor double-book the timeline.
   await db.execute(laborCostRateScopeLock(orgId, scope));
 
-  // Exact before-state: every active row this save will close or correct.
+  // Exact before-state: the same-start correction and active predecessor.
   const before = await db.execute<LaborCostRateRow>(sql`
     select ${LABOR_COST_RATE_ROW_COLUMNS}
       from labor_cost_rates
@@ -135,11 +145,26 @@ export async function supersedeLaborCostRate(
        and trade_id is not distinct from ${scope.tradeId}
        and department_id is not distinct from ${scope.departmentId}
        and subsidiary_id is not distinct from ${scope.subsidiaryId}
-       and is_active
        and (effective_from = ${effectiveFrom}::date
-            or (effective_from < ${effectiveFrom}::date
+            or (is_active and effective_from < ${effectiveFrom}::date
                 and (effective_to is null or effective_to >= ${effectiveFrom}::date)))
      order by effective_from`);
+
+  const predecessor = await db.execute<{ payrollRateScale: number; payrollAmountRounding: PayrollAmountRounding }>(sql`
+    select payroll_rate_scale as "payrollRateScale", payroll_amount_rounding as "payrollAmountRounding"
+      from labor_cost_rates
+     where org_id = ${orgId} and (is_active or effective_from = ${effectiveFrom}::date)
+       and employee_party_id is not distinct from ${scope.employeePartyId}
+       and lower(job_title) is not distinct from lower(${scope.jobTitle})
+       and trade_id is not distinct from ${scope.tradeId}
+       and department_id is not distinct from ${scope.departmentId}
+       and subsidiary_id is not distinct from ${scope.subsidiaryId}
+       and effective_from <= ${effectiveFrom}::date
+     order by effective_from desc limit 1 for update`);
+  const rounding = requirePayrollWageRounding(
+    query.payrollRateScale ?? predecessor.rows[0]?.payrollRateScale ?? 4,
+    query.payrollAmountRounding ?? predecessor.rows[0]?.payrollAmountRounding ?? "dimension_group",
+  );
 
   // Close the previous open row in this scope the day before the new
   // start, then upsert (same scope + same start = correction in place).
@@ -172,9 +197,9 @@ export async function supersedeLaborCostRate(
   const upserted = await db.execute<LaborCostRateRow>(sql`
     insert into labor_cost_rates
       (org_id, employee_party_id, job_title, trade_id, department_id, subsidiary_id, currency,
-       rate, basis, annual_hours, effective_from, effective_to, notes, created_by, updated_by)
+       rate, basis, annual_hours, payroll_rate_scale, payroll_amount_rounding, effective_from, effective_to, notes, created_by, updated_by)
     values (${orgId}, ${scope.employeePartyId}, ${scope.jobTitle}, ${scope.tradeId}, ${scope.departmentId}, ${scope.subsidiaryId}, ${query.currency},
-            ${query.rate}, ${query.basis}, ${query.annualHours}, ${effectiveFrom},
+            ${query.rate}, ${query.basis}, ${query.annualHours}, ${rounding.payrollRateScale}, ${rounding.payrollAmountRounding}, ${effectiveFrom},
             (case when ${successorFrom}::date is null then null else (${successorFrom}::date - 1) end),
             ${query.notes}, ${actorId}, ${actorId})
     on conflict (org_id,
@@ -188,6 +213,7 @@ export async function supersedeLaborCostRate(
     -- row's window: resetting effective_to here would reopen the row
     -- past its successor and trip the overlap exclusion.
     do update set rate = excluded.rate, currency = excluded.currency, basis = excluded.basis, annual_hours = excluded.annual_hours,
+                  payroll_rate_scale = excluded.payroll_rate_scale, payroll_amount_rounding = excluded.payroll_amount_rounding,
                   notes = excluded.notes, is_active = true,
                   updated_at = now(), updated_by = ${actorId}
               where labor_cost_rates.org_id = ${orgId}

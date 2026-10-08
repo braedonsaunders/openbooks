@@ -35,6 +35,9 @@ export interface PayRunCalculationSourceSnapshot {
     basis: string | null;
     rate: string | null;
     annualHours: string | null;
+    /** Existing four-place/group defaults omit these keys to retain stored digests. */
+    payrollRateScale?: number;
+    payrollAmountRounding?: string;
     currency: string | null;
     effectiveFrom: string | null;
     effectiveTo: string | null;
@@ -212,10 +215,10 @@ export async function payRunCalculationSource(
       select employee.employee_party_id, employee.pay_basis,
              employee.run_currency,
              wage.id as rate_id, wage.basis, wage.rate, wage.annual_hours,
-             wage.currency, wage.effective_from, wage.effective_to, wage.updated_at
+             wage.currency, wage.payroll_rate_scale, wage.payroll_amount_rounding, wage.effective_from, wage.effective_to, wage.updated_at
         from stub_employees employee
         left join lateral (
-          select w.id, w.basis, w.rate, w.annual_hours, w.currency,
+          select w.id, w.basis, w.rate, w.annual_hours, w.currency, w.payroll_rate_scale, w.payroll_amount_rounding,
                  w.effective_from, w.effective_to, w.updated_at
             from labor_cost_rates w
            where w.org_id = ${orgId}
@@ -322,7 +325,10 @@ export async function payRunCalculationSource(
                  'resolvedRate', fx.resolved_rate::text,
                  'updatedAt', to_char(fx.updated_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')
                ) end
-             ) order by rate.employee_party_id)
+             ) || case when rate.payroll_rate_scale <> 4 or rate.payroll_amount_rounding <> 'dimension_group'
+                  then jsonb_build_object('payrollRateScale', rate.payroll_rate_scale,
+                    'payrollAmountRounding', rate.payroll_amount_rounding)
+                  else '{}'::jsonb end order by rate.employee_party_id)
                from locked_rates rate
                left join locked_fx fx on fx.employee_party_id = rate.employee_party_id
            ), '[]'::jsonb) as pay_rates,

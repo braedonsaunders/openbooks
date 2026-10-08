@@ -180,7 +180,13 @@
       "endToday": "Finalizar hoy",
       "delete": "Eliminar tarifa salarial",
       "confirmEnd": "¿Finalizar esta tarifa salarial hoy?",
-      "confirmDelete": "¿Eliminar esta tarifa salarial? El tiempo ya costeado conserva la tarifa guardada."
+      "confirmDelete": "¿Eliminar esta tarifa salarial? El tiempo ya costeado conserva la tarifa guardada.",
+      "payrollRatePrecision": "Precisión de la tarifa de nómina",
+      "decimalPlaces": "{count} decimales",
+      "payrollAmountRounding": "Redondeo del importe de nómina",
+      "dimensionGroupRounding": "Por grupo de dimensiones",
+      "timeEntryRounding": "Por registro de tiempo",
+      "roundingEffectiveDateHint": "Se aplica a las horas de nómina de esta tarifa con vigencia; no cambia los salarios ni los costes de proyecto aprobados."
     },
     "payComponents": {
       "title": "Componentes salariales recurrentes",
