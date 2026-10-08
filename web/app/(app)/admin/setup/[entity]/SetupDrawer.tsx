@@ -258,6 +258,11 @@ export function SetupDrawer({
     setForm((current) => {
       const next = { ...current, [key]: value }
       for (const field of entity.fields) {
+        if (field.scopedOptions?.scopeField === key) {
+          const allowed = new Set(setupFieldOptions(field, next).map(option => option.value))
+          if (field.kind === 'stringArray') next[field.key] = (Array.isArray(next[field.key]) ? next[field.key] as string[] : []).filter(item => allowed.has(item))
+          else if (field.kind === 'select' && !allowed.has(String(next[field.key] ?? ''))) next[field.key] = ''
+        }
         if (field.refScopeField !== key || !field.ref) continue
         if (!(refOptions[field.ref] ?? []).some((option) => option.value === next[field.key] && (option.scopeValue == null || option.scopeValue === String(value ?? '')))) next[field.key] = ''
       }

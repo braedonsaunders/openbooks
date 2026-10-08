@@ -343,3 +343,29 @@ for (const kind of ['equipment','location'] as const) test(`${kind} reservations
   assert.equal(wrong.results[0]?.ok,false);
   assert.equal(wrong.results[0] && !wrong.results[0].ok ? wrong.results[0].code : null,'schedule_wrong_subject');
 }));
+
+
+test('linked source dates expose literal values while native booking rows and their audit history remain unchanged', enabled, async () => fixture(async f => {
+  const booked = day(f, f.ana, '2026-10-15', { kind: 'code', id: f.codeId });
+  const unrelated = day(f, f.ben, '2026-10-15', { kind: 'code', id: f.codeId });
+  await applyBoardChanges({ ...actor(f), boardId: f.live, changes: [booked, unrelated] });
+  const before = await loadBoardWindow({ ...actor(f), boardId: f.live, from: '2026-10-15', through: '2026-10-15' });
+  const entryAudits = () => withBypassContext(() => db.execute(sql`select * from audit_log where org_id=${f.org.orgId} and table_name='schedule_entries' and row_id=any(${sql.param([booked.id,unrelated.id])}::uuid[]) order by id`));
+  const beforeAudits = await entryAudits();
+  const payload = { id: 18, label: 'TRAIN/ N', result: 'Original source detail', notes: 'Literal instructions' };
+  const batch: SourceScheduleBatch = { sourceSystem: 'Prior scheduling', sourceDataset: 'manpower', captureHash: sourceHistoryHash([payload]), rows: [{
+    sourceKey: '18', sourceHash: sourceHistoryHash(payload), payload, disposition: 'linked', boardId: f.live, workerPartyId: f.ana,
+    onDate: '2026-10-15', label: payload.label, result: payload.result, notes: payload.notes, visibleInSource: true,
+    linkedEntryId: booked.id, expectedPriorId: null, reason: 'Retain original literal source observation without duplicating its linked booking.',
+  }] };
+  const preview = await previewSourceHistory(actor(f), batch);
+  await importSourceHistory(actor(f), batch, preview.approvalHash);
+  const after = await loadBoardWindow({ ...actor(f), boardId: f.live, from: '2026-10-15', through: '2026-10-15' });
+  assert.deepEqual(after.entries, before.entries);
+  assert.deepEqual((await entryAudits()).rows, beforeAudits.rows);
+  assert.equal(after.sourceRecords?.length, 1);
+  assert.equal(after.sourceRecords?.[0]?.label, payload.label);
+  assert.equal(after.sourceRecords?.[0]?.result, payload.result);
+  assert.equal(after.sourceRecords?.[0]?.notes, payload.notes);
+  assert.equal(after.sourceRecords?.[0]?.linkedEntryId, booked.id);
+}));

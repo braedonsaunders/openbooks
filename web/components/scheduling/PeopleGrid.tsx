@@ -11,7 +11,7 @@ import type { BoardSourceRecord } from '@openbooks/engine/src/schedule-boards/so
 import { TargetPicker, type PickedTarget } from './TargetPicker'
 import { searchTargets } from './api'
 import {
-  cellKey, clampCell, dayTotals, entryTemplate, formatMinutes, groupRows, indexAbsences, indexEntries, initials,
+  cellKey, clampCell, dayTotals, entryTemplate, formatMinutes, groupRows, indexAbsences, indexEntries, initials, presentedBoardEntries,
   rectCells, selectionRect, targetHue, tilePattern, type BoardChange, type BoardEntry, type BoardRow, type CellAddress,
   type ClipCell, type GroupBy, type Rect, type Selection, type SpanInput,
 } from './model'
@@ -50,7 +50,8 @@ export function PeopleGrid({ controller, window: board, groupBy, search, compact
   const footerH = board.board.showTotals ? FOOTER_H : 0
   const days = useMemo(() => board.days.filter((day) => board.board.showWeekends || !day.isWeekend), [board.days, board.board.showWeekends])
   const dates = useMemo(() => days.map((day) => day.date), [days])
-  const index = useMemo(() => indexEntries(board.entries), [board.entries])
+  const presented = useMemo(() => presentedBoardEntries(board), [board.entries, board.sourceRecords])
+  const index = useMemo(() => indexEntries(presented), [presented])
   const sourceIndex = useMemo(() => {
     const out = new Map<string, BoardSourceRecord[]>()
     for (const record of board.sourceRecords ?? []) {
@@ -115,12 +116,12 @@ export function PeopleGrid({ controller, window: board, groupBy, search, compact
   const personMinutes = useMemo(() => {
     const out = new Map<string, number>()
     const shown = new Set(dates)
-    for (const entry of board.entries) {
+    for (const entry of presented) {
       if (!shown.has(entry.startsOn) || replaced.has(entry.id) || entry.target?.counts === false) continue
       out.set(entry.subjectId, (out.get(entry.subjectId) ?? 0) + entry.workedMinutes)
     }
     return out
-  }, [board.entries, dates, replaced])
+  }, [presented, dates, replaced])
 
   const editableIn = useCallback((cell: CellAddress): BoardEntry[] => {
     const person = persons[cell.row]

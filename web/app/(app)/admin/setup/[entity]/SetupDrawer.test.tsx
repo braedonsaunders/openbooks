@@ -547,3 +547,27 @@ test('option-backed board views reopen as named choices and edit through native 
   await clickSave(false)
   assert.deepEqual((seen[0]!.body as Record<string, unknown>).views, ['grid', 'calendar', 'targets'])
 })
+
+
+test('changing a board family removes hidden incompatible view selections before choosing native task views', async t => {
+  const board = SETUP_ENTITY_BY_KEY.get('schedule-boards')!
+  const viewLabels = adminCatalog.options!.scheduleView as unknown as Record<string, string>
+  const presentation = { ...board, fields: board.fields.filter(field => ['rowKind', 'views', 'defaultView'].includes(field.key)), formSections: undefined }
+  const { seen } = await mountDrawer(t, { id: '00000000-0000-4000-8000-000000000124', row_kind: 'people', views: ['grid', 'calendar'], default_view: 'grid' },
+    () => Response.json({ id: '00000000-0000-4000-8000-000000000124' }), 'schedule-boards', undefined, undefined, presentation)
+  const selects = [...document.querySelectorAll('select')]
+  const rowKind = selects.find(select => [...select.options].some(option => option.value === 'people'))!
+  await act(async () => { rowKind.value = 'tasks'; rowKind.dispatchEvent(new window.Event('change', { bubbles: true })); await tick() })
+  const choices = [...document.querySelectorAll('fieldset label')]
+  assert.deepEqual(choices.map(node => node.textContent?.trim()), [viewLabels.gantt, viewLabels.progress])
+  assert.ok(choices.every(node => !(node.querySelector('input') as HTMLInputElement).checked))
+  const defaultView = [...document.querySelectorAll('select')].find(select => [...select.options].some(option => option.value === 'gantt'))!
+  assert.equal(defaultView.value, '')
+  const gantt = choices.find(node => node.textContent?.trim() === viewLabels.gantt)!.querySelector('input')!
+  await act(async () => { gantt.click(); defaultView.value = 'gantt'; defaultView.dispatchEvent(new window.Event('change', { bubbles: true })); await tick() })
+  await clickSave(false)
+  const body = seen[0]!.body as Record<string, unknown>
+  assert.equal(body.rowKind, 'tasks')
+  assert.deepEqual(body.views, ['gantt'])
+  assert.equal(body.defaultView, 'gantt')
+})
