@@ -105,17 +105,40 @@ test("sandbox insertion orders trigger-required parents inside a deferrable FK c
   snapshots.name = "field_ticket_labor_snapshots";
   snapshots.fks = { field_ticket_id: "documents" };
   snapshots.hardFks = {};
+  const tickets = table("NO ACTION");
+  tickets.name = "field_tickets";
+  tickets.fks = { document_id: "documents", submitted_by: "users" };
+  tickets.hardFks = {};
+  const signatures = table("NO ACTION");
+  signatures.name = "field_ticket_signatures";
+  signatures.fks = { field_ticket_id: "documents", signature_file_id: "files" };
+  signatures.hardFks = {};
+  const users = table("NO ACTION");
+  users.name = "users";
+  users.fks = {};
+  users.hardFks = {};
+  const files = table("NO ACTION");
+  files.name = "files";
+  files.fks = {};
+  files.hardFks = {};
   const documents = table("NO ACTION");
   documents.name = "documents";
   documents.fks = { labor_snapshot_id: "field_ticket_labor_snapshots" };
   documents.hardFks = {};
 
+  const tables = [laborLines, snapshots, signatures, tickets, documents, users, files];
   const order = insertionOrder({
-    tables: [laborLines, snapshots, documents],
-    tenantTables: [laborLines, snapshots, documents],
+    tables,
+    tenantTables: tables,
     rebaseSet: new Set(),
   });
   assert.ok(order.indexOf("documents") < order.indexOf("field_ticket_labor_lines"));
+  assert.ok(order.indexOf("documents") < order.indexOf("field_tickets"));
+  assert.ok(order.indexOf("users") < order.indexOf("field_tickets"));
+  assert.ok(order.indexOf("field_tickets") < order.indexOf("field_ticket_labor_snapshots"));
+  assert.ok(order.indexOf("users") < order.indexOf("field_ticket_labor_snapshots"));
+  assert.ok(order.indexOf("field_tickets") < order.indexOf("field_ticket_signatures"));
+  assert.ok(order.indexOf("files") < order.indexOf("field_ticket_signatures"));
   assert.ok(order.indexOf("field_ticket_labor_snapshots") < order.indexOf("field_ticket_labor_lines"));
 });
 

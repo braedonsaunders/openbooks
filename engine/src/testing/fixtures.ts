@@ -1056,10 +1056,10 @@ const CORE_B = [
 ];
 
 /**
- * Evidence tables whose delete guards have NO sandbox-wipe bypass (they raise
- * unconditionally). When rows exist the only teardown path is disabling the
- * specific guard trigger for the duration of one transaction — the ALTER takes
- * an exclusive lock, so concurrent writers wait and never see the gap.
+ * Retained evidence requiring dedicated fixture teardown. Native sandbox
+ * exemptions do not authorize deleting the scratch source organization.
+ * Disable only its listed guard for one transaction; the ALTER takes an
+ * exclusive lock, so concurrent writers wait and never see the gap.
  */
 const GUARDED_EVIDENCE: { table: string; trigger: string }[] = [
   // Approved plans are immutable even during sandbox wipes. Delete cells
@@ -1068,6 +1068,7 @@ const GUARDED_EVIDENCE: { table: string; trigger: string }[] = [
   { table: "budget_scenarios", trigger: "budget_scenario_guard" },
   { table: "field_ticket_labor_lines", trigger: "field_ticket_labor_line_immutable" },
   { table: "field_ticket_labor_snapshots", trigger: "field_ticket_labor_snapshot_retention" },
+  { table: "field_ticket_signatures", trigger: "field_ticket_signature_immutable" },
   // Dunning delivery evidence is append-only with no sandbox-wipe escape;
   // its trigger honors only the session bypass flag, which pooled
   // connections never carry, so scratch reset/drop disables it here.

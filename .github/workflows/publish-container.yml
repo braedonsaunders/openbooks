@@ -13,6 +13,10 @@ on:
       commit_sha:
         description: Full commit SHA to verify and publish
         required: true
+      additional_smoke_files:
+        description: Space-separated existing test files for the coordinated source batch
+        required: false
+        default: ""
 
 permissions:
   contents: read
@@ -200,6 +204,7 @@ jobs:
           TSX_TSCONFIG_PATH: ${{ github.workspace }}/web/tsconfig.json
           OPENBOOKS_TRUSTED_TEST_BYPASS: "1"
           OPENBOOKS_DB_URL: postgres://openbooks_app:openbooks-runtime-release-test-password@localhost:5433/openbooks_release
+          ADDITIONAL_SMOKE_FILES: ${{ inputs.additional_smoke_files }}
         shell: bash
         run: |
           set -o pipefail
@@ -211,6 +216,19 @@ jobs:
             web/lib/assistant/tools-orders.integration.test.ts
             engine/src/provisioning/built-in-role-seed.integration.test.ts
           )
+          # Batch-specific native controls run against this same source and
+          # database, alongside the mandatory financial release controls.
+          if [ -n "$ADDITIONAL_SMOKE_FILES" ]; then
+            read -r -a additional <<< "$ADDITIONAL_SMOKE_FILES"
+            for file in "${additional[@]}"; do
+              if [[ ! "$file" =~ ^(engine|web|scripts|schema|packages)/[a-zA-Z0-9_./-]+\.test\.(ts|tsx|mjs|js)$ ]] \
+                || [[ "$file" == *..* ]] || [ ! -f "$file" ]; then
+                echo "Additional smoke controls must name existing repository test files: $file" >&2
+                exit 1
+              fi
+              smoke+=("$file")
+            done
+          fi
           node --import ./scripts/test-output-drain.mjs \
             --import tsx \
             --import ./scripts/test-hooks.mjs \
