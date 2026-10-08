@@ -10,26 +10,27 @@ import type { Authz } from '../authz'
 import { openItems } from '../cash/open-items'
 import { MissingExchangeRateError } from '../fx-presentation'
 import { receivablesData } from './receivables-data'
+import { receivablesIntelligenceData } from './receivables-intelligence-data'
 import { withAnalyticsRead } from './read-context'
 
 const AS_OF = '2026-07-31'
 type Org = Awaited<ReturnType<typeof createScratchOrg>>
 
 async function postReceivable(org: Org, actor: string, input: {
-  amount: string; due: string | null; party?: string; subsidiary?: string; currency?: string; credit?: boolean
+  amount: string; due: string | null; party?: string; subsidiary?: string; currency?: string; credit?: boolean; receipt?: boolean
 }) {
   const id = randomUUID()
   await db.execute(sql`insert into documents
     (id, org_id, kind, status, document_number, subsidiary_id, party_id, document_date, due_date, currency, fx_rate, subtotal, tax_total, total, created_by)
-    values (${id}, ${org.orgId}, ${input.credit ? 'customer_credit' : 'customer_invoice'}, 'draft', ${id},
+    values (${id}, ${org.orgId}, ${input.receipt ? 'customer_payment' : input.credit ? 'customer_credit' : 'customer_invoice'}, 'draft', ${id},
       ${input.subsidiary ?? org.subsidiaryId}, ${input.party ?? org.customerId}, ${org.date}, ${input.due},
       ${input.currency ?? 'CAD'}, 1, ${input.amount}, 0, ${input.amount}, ${actor})`)
   await db.execute(sql`insert into document_lines
     (org_id, document_id, line_number, account_id, quantity, unit_price, amount, tax_amount, tax_input_amount)
-    values (${org.orgId}, ${id}, 1, ${org.accounts.revenue}, 1, ${input.amount}, ${input.amount}, 0, ${input.amount})`)
+    values (${org.orgId}, ${id}, 1, ${input.receipt ? org.accounts.bank : org.accounts.revenue}, 1, ${input.amount}, ${input.amount}, 0, ${input.amount})`)
   const approved = await db.execute(sql`update documents set status = 'approved' where org_id = ${org.orgId} and id = ${id} returning id`)
   assert.equal(approved.rows.length, 1, 'the fixture document must reach its approved state before posting')
-  await postDocument(id, { control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank } })
+  return await postDocument(id, { control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank } })
 }
 
 async function withFixture(action: (org: Org, actor: string) => Promise<void>) {
@@ -153,5 +154,70 @@ test('foreign-functional receivables round each line before grouping and refuse 
       assert.match(error.message, /Setup → Exchange Rates/)
       return true
     }))
+  })
+})
+
+
+test('collection portfolio uses contractual dates, exact cash recovery and bounded server-side search', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+  await withFixture(async (org, actor) => {
+    let invoiceLine = '', receiptLine = '', creditLine = ''
+    await withBypassContext(async () => {
+      const invoice = await postReceivable(org, actor, { amount: '100.0001', due: '2026-05-01' })
+      const receipt = await postReceivable(org, actor, { amount: '40.0000', due: null, receipt: true })
+      const credit = await postReceivable(org, actor, { amount: '20.0000', due: null, credit: true })
+      const openLine = async (entry: string) => (await db.execute<{ id: string }>(sql`select id from journal_lines where org_id=${org.orgId} and entry_id=${entry} and is_open_item`)).rows[0]!.id
+      invoiceLine = await openLine(invoice); receiptLine = await openLine(receipt); creditLine = await openLine(credit)
+      for (const [line, amount, date] of [[receiptLine, '40.0000', '2026-07-20'], [creditLine, '20.0000', '2026-07-21']] as const) {
+        await db.execute(sql`insert into applications
+          (org_id, from_line_id, to_line_id, amount, applied_on, source_amount, source_transaction_amount, source_transaction_currency,
+           target_transaction_amount, target_transaction_currency, settlement_rate, settlement_rate_source, settlement_rate_reference)
+          values (${org.orgId}, ${line}, ${invoiceLine}, ${amount}, ${date}, ${amount}, ${amount}, 'CAD', ${amount}, 'CAD', 1, 'same_currency', 'Receivables cash and credit evidence')`)
+      }
+      await postReceivable(org, actor, { amount: '10.0000', due: null })
+    })
+    await withOrgContext(org.orgId, async () => {
+      const result = await receivablesIntelligenceData(org.orgId, '2026-07-16', AS_OF, null)
+      assert.equal(result.summary.overdue, '40.0001', 'undated receivables must not become contractually late')
+      assert.equal(result.summary.missingTerms, '10.0000')
+      assert.equal(result.summary.opening, '100.0001')
+      assert.equal(result.summary.recovered, '40.0000', 'credit applications are not cash recovered')
+      assert.equal(result.summary.remaining, '40.0001')
+      assert.equal(result.summary.otherChange, '20.0000', 'noncash reductions remain a separate bridge component')
+      assert.notEqual(result.summary.onTimeShare, null, 'late cash has an eligible denominator')
+      assert.equal(Number(result.summary.onTimeShare), 0, 'an eligible window with only late receipts is zero, not unknown')
+      assert.equal(result.customers[0]!.observations, 1, 'partial cash applications count distinct invoice observations')
+      assert.equal(result.customers[0]!.deteriorating, false, 'absent baseline history must not invent deterioration')
+      const denied = await receivablesIntelligenceData(org.orgId, '2026-07-16', AS_OF, new Set())
+      assert.equal(denied.summary.overdue, '0.0000'); assert.equal(denied.summary.recovered, '0.0000'); assert.equal(denied.summary.onTimeShare, null)
+      assert.deepEqual(denied.customers, [])
+      const before = await receivablesIntelligenceData(org.orgId, '2026-07-16', '2026-07-19', null)
+      assert.equal(before.summary.overdue, '100.0001'); assert.equal(before.summary.recovered, '0.0000')
+    })
+  })
+})
+
+test('customer pagination and search preserve complete portfolio metrics and clamp stale pages', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+  await withFixture(async (org, actor) => {
+    await withBypassContext(async () => {
+      for (let index = 1; index <= 26; index++) {
+        const party = randomUUID()
+        await db.execute(sql`insert into parties (id, org_id, kind, display_name, is_active, custom)
+          values (${party}, ${org.orgId}, 'customer', ${`Portfolio customer ${index}`}, true, '{}'::jsonb)`)
+        await postReceivable(org, actor, { amount: '1.0001', due: '2026-07-01', party })
+      }
+    })
+    await withOrgContext(org.orgId, async () => {
+      const first = await receivablesIntelligenceData(org.orgId, '2026-07-01', AS_OF, null)
+      assert.equal(first.customerTotal, 26); assert.equal(first.customers.length, 24)
+      const second = await receivablesIntelligenceData(org.orgId, '2026-07-01', AS_OF, null, { customerPage: '10000' })
+      assert.equal(second.customerPage, 2); assert.equal(second.customers.length, 2)
+      assert.deepEqual(second.summary, first.summary)
+      const found = await receivablesIntelligenceData(org.orgId, '2026-07-01', AS_OF, null, { customerQ: 'Portfolio customer 26' })
+      assert.equal(found.customerTotal, 1); assert.equal(found.customers[0]?.name, 'Portfolio customer 26')
+      const selectedItems = await openItems(org.orgId, 'ar', AS_OF, undefined, found.customers[0]!.id!)
+      assert.equal(selectedItems.length, 1, 'customer drawers must fetch only the selected customer’s open items')
+      assert.equal(selectedItems[0]?.partyId, found.customers[0]?.id)
+      assert.deepEqual(found.summary, first.summary, 'customer search must not silently narrow portfolio headline metrics')
+    })
   })
 })

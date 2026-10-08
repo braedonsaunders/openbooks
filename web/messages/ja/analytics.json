@@ -31,7 +31,7 @@
       "resourceCapacityTitle": "リソースキャパシティ",
       "resourceCapacityDesc": "人員キャパシティ、確定済みの割当、商談に基づく需要を予測",
       "receivablesTitle": "売掛金インテリジェンス",
-      "receivablesDesc": "延滞、顧客別残高、貸方残高と契約上の支払期日を分析"
+      "receivablesDesc": "顧客の支払傾向、債権回収、与信状況"
     },
     "addAnalytics": "分析を追加",
     "libraryTitle": "分析ライブラリ",
@@ -4365,7 +4365,11 @@
       "credits": "未消込の貸方残高",
       "customers": "未決済項目のある顧客",
       "severe": "90日以上の延滞残高",
-      "top5": "上位5顧客への集中度"
+      "top5": "上位5顧客への集中度",
+      "attention": "注意が必要な期限超過額",
+      "deteriorating": "支払が遅くなった顧客",
+      "recovery": "期限超過債権の現金回収率",
+      "onTime": "期限内入金割合"
     },
     "panels": {
       "aging": "滞留期間別構成",
@@ -4374,13 +4378,24 @@
       "agingCredits": "滞留期間別の貸方残高",
       "customerExposure": "顧客別の回収リスク残高",
       "maturity": "契約上の支払期日分布",
-      "cumulative": "期日別の累積総残高"
+      "cumulative": "期日別の累積総残高",
+      "behavior": "支払時期の分布",
+      "behaviorTrend": "支払傾向の推移",
+      "paymentMap": "債権と支払の悪化",
+      "recoveryBridge": "期首期限超過債権の回収",
+      "cohortRecovery": "期首延滞区分別の回収",
+      "appliedCash": "充当済み顧客入金",
+      "delivery": "督促の送信状況",
+      "reminderCoverage": "回収の対応範囲",
+      "creditWatch": "与信の監視"
     },
     "tabs": {
-      "overview": "概要",
-      "aging": "延滞分析",
       "customers": "顧客",
-      "maturity": "支払期日"
+      "behavior": "支払傾向",
+      "recovery": "回収状況",
+      "collections": "督促",
+      "credit": "与信状況",
+      "configuration": "設定"
     },
     "aging": {
       "0": "期日前",
@@ -4397,6 +4412,128 @@
       "4": "31～60日以内の期日",
       "5": "61～90日以内の期日",
       "6": "90日超の期日"
-    }
+    },
+    "futurePeriod": "会社の営業日以前に開始する期間を選択してください。",
+    "search": "顧客を検索…",
+    "filter": "回収の兆候",
+    "portfolio": "顧客ポートフォリオ",
+    "portfolioHint": "未回収債権のある顧客 {count} 件 · 回収の根拠に基づく優先順",
+    "noCustomers": "該当する顧客がありません",
+    "noCustomersHint": "検索条件または兆候フィルターを変更してください。",
+    "showing": "{total} 件中 {from}–{to} 件",
+    "previous": "前のページ",
+    "next": "次のページ",
+    "customerCount": "顧客 {count} 件",
+    "exposure": "期限超過債権 {amount}",
+    "recovered": "現金回収額 {amount}",
+    "behaviorWindow": "入金額による加重 · 直近 {days} 日",
+    "cashWeighted": "充当入金額による加重",
+    "daysBeyondTerms": "請求期限からの日数",
+    "mapHint": "このページで比較可能な履歴が十分にある顧客",
+    "changeLabel": "期限超過日数の変化",
+    "baselineHint": "直近 {days} 日とその前の {days} 日を比較 · 各期間で請求書 {count} 件以上",
+    "noOpening": "期首の期限超過債権なし",
+    "noOpeningHint": "期首時点で期限超過となった、期日のある正の債権はありません。",
+    "fixedCohort": "期首に期限超過の請求書",
+    "openingOverdue": "期首期限超過額",
+    "cashRecovered": "現金回収額",
+    "otherChanges": "その他の残高変動",
+    "stillOpen": "未回収残高",
+    "appliedCash": "充当済み顧客入金",
+    "appliedCashHint": "選択期間内に請求書へ充当された記帳済み入金",
+    "deliveryHint": "文書ごとの送信結果",
+    "reminderCoverage": "督促の送信範囲",
+    "coverageCount": "期限超過請求書 {total} 件中 {sent} 件に督促送信済み",
+    "failedExposure": "送信問題のある期限超過債権",
+    "deliveryRemedy": "請求連絡先と督促の送信失敗を確認してください。",
+    "coverageScope": "対象は標準の督促であり、すべての顧客連絡ではありません。送信待ちや失敗は送信済みに含めず、他の連絡手段を推測しません。",
+    "deliveryCustomers": "顧客の回収状況",
+    "creditCurrentOnly": "与信管理は現在の設定を反映します",
+    "creditCurrentHint": "現在の営業日を選び、現在の与信限度額と保留を現在の債権と比較してください。過去の与信方針は推測しません。",
+    "reviewCurrent": "現在の与信を確認",
+    "creditHeld": "保留中の顧客",
+    "creditExceeded": "限度額超過",
+    "creditConfigured": "限度額設定済み",
+    "excess": "限度額超過 {amount}",
+    "creditBasis": "未回収債権と未請求受注の与信負担",
+    "dataDate": "{date} 時点の債権 · {currency}",
+    "openCustomer": "顧客 {name} を開く",
+    "overdue": "期限超過",
+    "openExposure": "未回収債権 {amount}",
+    "paymentSparkline": "観測された支払時期の推移",
+    "changeDays": "{days} 日",
+    "insufficientHistory": "比較履歴が不足",
+    "recentPayment": "直近の期限超過日数",
+    "baselinePayment": "基準期間の期限超過日数",
+    "dayValue": "{days} 日",
+    "observationCount": "観測請求書：直近 {recent} 件 · 基準 {baseline} 件",
+    "noFlags": "回収上の注意事項なし",
+    "customerDocuments": "未決文書 {count} 件",
+    "customerCredits": "未充当クレジット {amount}",
+    "creditLimit": "限度額 {amount}",
+    "oldestDays": "最長期限超過 {days} 日",
+    "recoveredOf": "{opening} のうち {cash} を回収",
+    "behavior": {
+      "0": "期限内・前倒し",
+      "1": "1～7日遅延",
+      "2": "8～30日遅延",
+      "3": "30日超の遅延"
+    },
+    "recoveryCohort": {
+      "0": "1～30日延滞",
+      "1": "31～60日延滞",
+      "2": "61～89日延滞",
+      "3": "90日以上延滞"
+    },
+    "notice": {
+      "sent": "送信済み",
+      "failed": "失敗",
+      "suppressed": "送信抑止",
+      "staged": "送信待ち"
+    },
+    "reasons": {
+      "deteriorating": "支払傾向の悪化",
+      "severe": "重大な延滞",
+      "delivery": "督促送信の問題",
+      "terms": "期日未設定",
+      "held": "与信保留",
+      "credit": "与信限度額を超過"
+    },
+    "signals": {
+      "all": "すべての顧客",
+      "deteriorating": "支払の悪化",
+      "severe": "重大な延滞",
+      "delivery": "送信の問題",
+      "terms": "期日未設定",
+      "held": "与信保留"
+    },
+    "config": {
+      "baselineDays": {
+        "label": "支払比較期間",
+        "help": "直近と基準の各支払期間の日数。"
+      },
+      "minObservations": {
+        "label": "最低観測請求書数",
+        "help": "各比較期間に必要な、日付のある入金充当の請求書数。"
+      },
+      "deteriorationDays": {
+        "label": "支払悪化のしきい値",
+        "help": "入金額加重の期限超過日数がこの増加幅を超えると警告します。"
+      },
+      "severeDays": {
+        "label": "重大延滞のしきい値",
+        "help": "回収上の注意が必要な契約上の延滞日数。"
+      },
+      "reminderDays": {
+        "label": "督促観測期間",
+        "help": "送信結果と督促範囲に含める直近の日数。"
+      }
+    },
+    "headroom": "利用可能な与信",
+    "lastNotice": "最新の督促：{date}",
+    "historicalDelivery": "過去の表示は送信済み督促の根拠を示します。変更される失敗状態の過去データは利用できません。",
+    "noPaymentHistory": "この観測期間に日付のある入金充当はありません。",
+    "noReminders": "この期間に督促の送信証拠はありません。",
+    "noComparableHistory": "グラフに表示できる比較可能な支払履歴が不足しています。"
   }
 }

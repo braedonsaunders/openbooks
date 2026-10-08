@@ -31,7 +31,7 @@
       "resourceCapacityTitle": "Capacité des ressources",
       "resourceCapacityDesc": "Prévisions de capacité des équipes, affectations confirmées et demande issue des opportunités commerciales",
       "receivablesTitle": "Analyse des créances clients",
-      "receivablesDesc": "Retards, exposition client, avoirs et échéances contractuelles"
+      "receivablesDesc": "Comportements de paiement des clients, recouvrement et exposition de crédit"
     },
     "addAnalytics": "Ajouter des analyses",
     "libraryTitle": "Votre bibliothèque d’analyses",
@@ -2522,8 +2522,8 @@
       "bannerSubMarkup": "{margin} de majoration sur le coût",
       "overtime": "Heures supplémentaires",
       "doubleTime": "Taux double",
-      "presetHint": "Pr\u00e9r\u00e9glages de vos types de temps",
-      "presetTitle": "Utiliser {name} \u00d7{multiplier}",
+      "presetHint": "Préréglages de vos types de temps",
+      "presetTitle": "Utiliser {name} ×{multiplier}",
       "explorerTarget": "{mode} cible",
       "markupPctLabel": "Majoration %",
       "per1kLabel": "Par millier d’heures"
@@ -4365,7 +4365,11 @@
       "credits": "Avoirs non imputés",
       "customers": "Clients avec postes ouverts",
       "severe": "Exposition à plus de 90 jours",
-      "top5": "Concentration des cinq premiers"
+      "top5": "Concentration des cinq premiers",
+      "attention": "Échu nécessitant une attention",
+      "deteriorating": "Clients payant plus lentement",
+      "recovery": "Recouvrement en espèces",
+      "onTime": "Part encaissée à temps"
     },
     "panels": {
       "aging": "Répartition par ancienneté",
@@ -4374,13 +4378,24 @@
       "agingCredits": "Avoirs par ancienneté",
       "customerExposure": "Exposition au recouvrement par client",
       "maturity": "Échéancier contractuel",
-      "cumulative": "Solde brut cumulé à échéance"
+      "cumulative": "Solde brut cumulé à échéance",
+      "behavior": "Répartition des délais de paiement",
+      "behaviorTrend": "Évolution des délais de paiement",
+      "paymentMap": "Exposition et dégradation des paiements",
+      "recoveryBridge": "Recouvrement des créances initiales",
+      "cohortRecovery": "Recouvrement par retard initial",
+      "appliedCash": "Encaissements clients affectés",
+      "delivery": "Remise des relances",
+      "reminderCoverage": "Couverture du recouvrement",
+      "creditWatch": "Surveillance du crédit"
     },
     "tabs": {
-      "overview": "Vue d’ensemble",
-      "aging": "Retards",
       "customers": "Clients",
-      "maturity": "Échéances"
+      "behavior": "Comportement de paiement",
+      "recovery": "Recouvrement",
+      "collections": "Relances",
+      "credit": "Exposition de crédit",
+      "configuration": "Paramètres"
     },
     "aging": {
       "0": "Non échu",
@@ -4397,6 +4412,128 @@
       "4": "Échéance sous 31–60 jours",
       "5": "Échéance sous 61–90 jours",
       "6": "Échéance après 90 jours"
-    }
+    },
+    "futurePeriod": "Choisissez une période commençant au plus tard à la date métier de l’entreprise.",
+    "search": "Rechercher des clients…",
+    "filter": "Indicateurs de recouvrement",
+    "portfolio": "Portefeuille clients",
+    "portfolioHint": "{count} clients avec des créances ouvertes · priorité selon les éléments de recouvrement",
+    "noCustomers": "Aucun client correspondant",
+    "noCustomersHint": "Modifiez la recherche ou le filtre pour explorer le portefeuille.",
+    "showing": "{from}–{to} sur {total} clients",
+    "previous": "Page précédente",
+    "next": "Page suivante",
+    "customerCount": "{count} clients",
+    "exposure": "{amount} de créances échues",
+    "recovered": "{amount} encaissés",
+    "behaviorWindow": "Pondéré par les encaissements · {days} derniers jours",
+    "cashWeighted": "Pondéré par les encaissements affectés",
+    "daysBeyondTerms": "Jours au-delà de l’échéance",
+    "mapHint": "Clients de cette page disposant d’un historique comparable suffisant",
+    "changeLabel": "Variation du retard en jours",
+    "baselineHint": "{days} derniers jours contre les {days} jours précédents · au moins {count} factures par période",
+    "noOpening": "Aucune créance échue à l’ouverture",
+    "noOpeningHint": "Aucune créance positive avec échéance n’était en retard au début de la période.",
+    "fixedCohort": "Factures échues à l’ouverture",
+    "openingOverdue": "Échu à l’ouverture",
+    "cashRecovered": "Encaissements recouvrés",
+    "otherChanges": "Autres variations du solde",
+    "stillOpen": "Solde restant",
+    "appliedCash": "Encaissements clients affectés",
+    "appliedCashHint": "Encaissements comptabilisés et affectés aux factures pendant la période",
+    "deliveryHint": "Résultats de remise par document",
+    "reminderCoverage": "Couverture des relances",
+    "coverageCount": "{sent} factures échues sur {total} ont reçu une relance",
+    "failedExposure": "Créances échues avec échec de remise",
+    "deliveryRemedy": "Vérifiez les contacts de facturation et les échecs de remise des relances.",
+    "coverageScope": "La couverture porte sur les relances natives, pas sur tous les contacts. Les envois en attente ou échoués ne sont pas remis. Les autres canaux ne sont pas déduits.",
+    "deliveryCustomers": "Contexte de recouvrement client",
+    "creditCurrentOnly": "Les contrôles de crédit reflètent les paramètres actuels",
+    "creditCurrentHint": "Sélectionnez la date métier actuelle pour comparer les limites et blocages actuels aux créances actuelles. Aucune politique historique n’est déduite.",
+    "reviewCurrent": "Examiner le crédit actuel",
+    "creditHeld": "Clients bloqués",
+    "creditExceeded": "Au-dessus de la limite",
+    "creditConfigured": "Avec une limite définie",
+    "excess": "{amount} au-dessus de la limite",
+    "creditBasis": "Créances ouvertes et engagements des commandes non facturées",
+    "dataDate": "Exposition au {date} · {currency}",
+    "openCustomer": "Ouvrir le client {name}",
+    "overdue": "Échu",
+    "openExposure": "{amount} de créances ouvertes",
+    "paymentSparkline": "Évolution observée des délais de paiement",
+    "changeDays": "{days} jours",
+    "insufficientHistory": "Historique comparatif insuffisant",
+    "recentPayment": "Retard récent en jours",
+    "baselinePayment": "Retard de référence en jours",
+    "dayValue": "{days} jours",
+    "observationCount": "Factures observées : {recent} récentes · {baseline} de référence",
+    "noFlags": "Aucun indicateur d’attention",
+    "customerDocuments": "{count} documents ouverts",
+    "customerCredits": "{amount} d’avoirs non affectés",
+    "creditLimit": "Limite {amount}",
+    "oldestDays": "Retard maximal : {days} jours",
+    "recoveredOf": "{cash} recouvrés sur {opening}",
+    "behavior": {
+      "0": "À temps / en avance",
+      "1": "Retard de 1 à 7 jours",
+      "2": "Retard de 8 à 30 jours",
+      "3": "Retard de plus de 30 jours"
+    },
+    "recoveryCohort": {
+      "0": "Retard de 1 à 30 jours",
+      "1": "Retard de 31 à 60 jours",
+      "2": "Retard de 61 à 89 jours",
+      "3": "Retard de 90 jours ou plus"
+    },
+    "notice": {
+      "sent": "Envoyé",
+      "failed": "Échec",
+      "suppressed": "Envoi empêché",
+      "staged": "En attente"
+    },
+    "reasons": {
+      "deteriorating": "Paiements en dégradation",
+      "severe": "Retard important",
+      "delivery": "Problème de remise",
+      "terms": "Échéances manquantes",
+      "held": "Blocage de crédit",
+      "credit": "Limite de crédit dépassée"
+    },
+    "signals": {
+      "all": "Tous les clients",
+      "deteriorating": "Paiements en dégradation",
+      "severe": "Retard important",
+      "delivery": "Problèmes de remise",
+      "terms": "Échéances manquantes",
+      "held": "Crédit bloqué"
+    },
+    "config": {
+      "baselineDays": {
+        "label": "Période de comparaison des paiements",
+        "help": "Nombre de jours dans chaque période récente et de référence."
+      },
+      "minObservations": {
+        "label": "Nombre minimal de factures",
+        "help": "Factures avec encaissements datés requises dans chaque période."
+      },
+      "deteriorationDays": {
+        "label": "Seuil de dégradation des paiements",
+        "help": "Retard supplémentaire pondéré par les encaissements signalant une dégradation."
+      },
+      "severeDays": {
+        "label": "Seuil de retard important",
+        "help": "Jours de retard contractuel nécessitant une attention."
+      },
+      "reminderDays": {
+        "label": "Période des relances",
+        "help": "Derniers jours inclus dans les résultats de remise et la couverture."
+      }
+    },
+    "headroom": "Crédit disponible",
+    "lastNotice": "Dernière relance : {date}",
+    "historicalDelivery": "Les vues historiques montrent les relances remises ; les anciens états d’échec modifiables ne sont pas disponibles.",
+    "noPaymentHistory": "Aucun encaissement daté affecté dans cette période.",
+    "noReminders": "Aucune preuve de remise de relance dans cette période.",
+    "noComparableHistory": "Historique de paiement comparable insuffisant pour afficher le graphique."
   }
 }

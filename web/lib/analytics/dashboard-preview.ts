@@ -45,8 +45,8 @@ async function buildDashboardPreview(dashboard: AnalyticsDashboardDefinition, sp
   switch (dashboard.slug) {
     case 'receivables-intelligence': {
       const { data, periodLabel } = await (await import('../../app/(app)/analytics/receivables-intelligence/view')).loadReceivablesIntelligence(sp)
-      chart = { kind: 'donut', label: t('receivables.panels.aging'), slices: data.summary.aging.map((row) => ({ name: t(`receivables.aging.${row.index}`), value: toChartNumber(row.gross) })).filter((row) => row.value > 0) }
-      return result(periodLabel, [metric('receivables.kpi.outstanding', fmt.money(data.summary.outstanding)), metric('receivables.kpi.overdue', fmt.money(data.summary.overdue)), metric('receivables.kpi.overdueShare', data.summary.overdueShare === null ? '—' : share(Number(data.summary.overdueShare))), metric('receivables.kpi.averageDays', number(data.summary.averageOverdueDays))])
+      chart = { kind: 'donut', label: t('receivables.panels.behavior'), slices: data.summary.behavior.map((row) => ({ name: t(`receivables.behavior.${row.index}`), value: toChartNumber(row.amount) })).filter((row) => row.value > 0) }
+      return result(periodLabel, [metric('receivables.kpi.attention', fmt.money(data.summary.attention)), metric('receivables.kpi.deteriorating', number(data.summary.deterioratingCustomers)), metric('receivables.kpi.recovery', data.summary.recoveryShare === null ? '—' : share(Number(data.summary.recoveryShare))), metric('receivables.kpi.onTime', data.summary.onTimeShare === null ? '—' : share(Number(data.summary.onTimeShare)))])
     }
     case 'financial-health': {
       const { data, periodLabel } = await (await import('../../app/(app)/analytics/financial-health/view')).loadFinancialHealthPreview(sp)

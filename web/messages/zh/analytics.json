@@ -31,7 +31,7 @@
       "resourceCapacityTitle": "资源容量",
       "resourceCapacityDesc": "预测人员容量、已确认分配和销售机会带来的需求",
       "receivablesTitle": "应收账款洞察",
-      "receivablesDesc": "逾期、客户敞口、贷项和合同到期情况"
+      "receivablesDesc": "客户付款习惯、催收回收与信用敞口"
     },
     "addAnalytics": "添加分析",
     "libraryTitle": "您的分析库",
@@ -4365,7 +4365,11 @@
       "credits": "未核销贷项",
       "customers": "有未结项目的客户",
       "severe": "逾期90天以上敞口",
-      "top5": "前五大客户集中度"
+      "top5": "前五大客户集中度",
+      "attention": "需要关注的逾期款",
+      "deteriorating": "付款变慢的客户",
+      "recovery": "逾期现金回收率",
+      "onTime": "按时收款比例"
     },
     "panels": {
       "aging": "账龄构成",
@@ -4374,13 +4378,24 @@
       "agingCredits": "按账龄列示贷项",
       "customerExposure": "客户收款敞口",
       "maturity": "合同到期分布",
-      "cumulative": "累计到期总余额"
+      "cumulative": "累计到期总余额",
+      "behavior": "付款时点分布",
+      "behaviorTrend": "付款行为趋势",
+      "paymentMap": "敞口与付款恶化",
+      "recoveryBridge": "期初逾期款回收",
+      "cohortRecovery": "按期初逾期程度回收",
+      "appliedCash": "已核销客户收款",
+      "delivery": "提醒送达情况",
+      "reminderCoverage": "催收覆盖情况",
+      "creditWatch": "信用监控"
     },
     "tabs": {
-      "overview": "概览",
-      "aging": "逾期分析",
       "customers": "客户",
-      "maturity": "到期情况"
+      "behavior": "付款行为",
+      "recovery": "回收情况",
+      "collections": "催收",
+      "credit": "信用敞口",
+      "configuration": "配置"
     },
     "aging": {
       "0": "未到期",
@@ -4397,6 +4412,128 @@
       "4": "31–60天内到期",
       "5": "61–90天内到期",
       "6": "90天后到期"
-    }
+    },
+    "futurePeriod": "请选择开始日期不晚于公司业务日期的期间。",
+    "search": "搜索客户…",
+    "filter": "催收信号",
+    "portfolio": "客户组合",
+    "portfolioHint": "{count} 位客户有未结应收款 · 按催收证据排序",
+    "noCustomers": "没有匹配的客户",
+    "noCustomersHint": "调整搜索条件或信号筛选以查看客户。",
+    "showing": "共 {total} 位客户，显示 {from}–{to}",
+    "previous": "上一页",
+    "next": "下一页",
+    "customerCount": "{count} 位客户",
+    "exposure": "逾期敞口 {amount}",
+    "recovered": "已收回现金 {amount}",
+    "behaviorWindow": "按收款金额加权 · 最近 {days} 天",
+    "cashWeighted": "按已核销现金加权",
+    "daysBeyondTerms": "超过发票到期日的天数",
+    "mapHint": "本页具有足够可比历史的客户",
+    "changeLabel": "逾期天数变化",
+    "baselineHint": "最近 {days} 天与前 {days} 天比较 · 每个期间至少 {count} 张发票",
+    "noOpening": "期初无逾期应收款",
+    "noOpeningHint": "期初没有已到期的正额应收款。",
+    "fixedCohort": "期初逾期发票",
+    "openingOverdue": "期初逾期金额",
+    "cashRecovered": "已回收现金",
+    "otherChanges": "其他余额变化",
+    "stillOpen": "仍未结清",
+    "appliedCash": "已核销客户收款",
+    "appliedCashHint": "所选期间内已入账并核销到发票的现金",
+    "deliveryHint": "单据送达结果",
+    "reminderCoverage": "逾期提醒覆盖率",
+    "coverageCount": "{total} 张逾期发票中有 {sent} 张已收到提醒",
+    "failedExposure": "存在送达问题的逾期款",
+    "deliveryRemedy": "检查客户开票联系人和提醒发送失败。",
+    "coverageScope": "覆盖率仅衡量系统提醒，并非所有客户联系。排队中或失败的消息不计为已送达，也不推断其他联系渠道。",
+    "deliveryCustomers": "客户催收情况",
+    "creditCurrentOnly": "信用控制反映当前设置",
+    "creditCurrentHint": "选择当前业务日期，将当前信用额度和冻结状态与当前应收款比较。不推断历史信用政策。",
+    "reviewCurrent": "查看当前信用",
+    "creditHeld": "已冻结客户",
+    "creditExceeded": "超过设定额度",
+    "creditConfigured": "已设置信用额度",
+    "excess": "超额 {amount}",
+    "creditBasis": "未结应收款及未开票订单承诺",
+    "dataDate": "截至 {date} 的敞口 · {currency}",
+    "openCustomer": "打开客户 {name}",
+    "overdue": "逾期",
+    "openExposure": "未结应收款 {amount}",
+    "paymentSparkline": "实际付款时点趋势",
+    "changeDays": "{days} 天",
+    "insufficientHistory": "对比历史不足",
+    "recentPayment": "近期逾期天数",
+    "baselinePayment": "基准逾期天数",
+    "dayValue": "{days} 天",
+    "observationCount": "观察发票数：近期 {recent} · 基准 {baseline}",
+    "noFlags": "无催收关注信号",
+    "customerDocuments": "{count} 份未结单据",
+    "customerCredits": "未核销贷项 {amount}",
+    "creditLimit": "额度 {amount}",
+    "oldestDays": "最长逾期 {days} 天",
+    "recoveredOf": "已回收 {cash}，期初 {opening}",
+    "behavior": {
+      "0": "按时或提前",
+      "1": "逾期1–7天",
+      "2": "逾期8–30天",
+      "3": "逾期超过30天"
+    },
+    "recoveryCohort": {
+      "0": "逾期1–30天",
+      "1": "逾期31–60天",
+      "2": "逾期61–89天",
+      "3": "逾期90天以上"
+    },
+    "notice": {
+      "sent": "已发送",
+      "failed": "失败",
+      "suppressed": "已抑制",
+      "staged": "排队中"
+    },
+    "reasons": {
+      "deteriorating": "付款习惯恶化",
+      "severe": "严重逾期",
+      "delivery": "提醒送达问题",
+      "terms": "缺少到期日",
+      "held": "信用冻结",
+      "credit": "超出信用额度"
+    },
+    "signals": {
+      "all": "所有客户",
+      "deteriorating": "付款恶化",
+      "severe": "严重逾期",
+      "delivery": "送达问题",
+      "terms": "缺少到期日",
+      "held": "信用冻结"
+    },
+    "config": {
+      "baselineDays": {
+        "label": "付款比较窗口",
+        "help": "近期和基准付款窗口各自的天数。"
+      },
+      "minObservations": {
+        "label": "最低发票观察数",
+        "help": "每个比较窗口所需的具有日期的现金核销发票数。"
+      },
+      "deteriorationDays": {
+        "label": "付款恶化阈值",
+        "help": "触发恶化标记的现金加权逾期天数增量。"
+      },
+      "severeDays": {
+        "label": "严重逾期阈值",
+        "help": "需要催收关注的合同逾期天数。"
+      },
+      "reminderDays": {
+        "label": "提醒观察窗口",
+        "help": "提醒送达结果和覆盖率所包含的最近天数。"
+      }
+    },
+    "headroom": "可用信用额度",
+    "lastNotice": "最近提醒：{date}",
+    "historicalDelivery": "历史视图显示已送达提醒的证据；过去可变的失败状态不可用。",
+    "noPaymentHistory": "此观察窗口没有带日期的现金核销记录。",
+    "noReminders": "此窗口没有提醒送达证据。",
+    "noComparableHistory": "可比客户付款历史不足，无法绘图。"
   }
 }

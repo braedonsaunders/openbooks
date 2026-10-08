@@ -31,7 +31,7 @@
       "resourceCapacityTitle": "Ressourcenkapazität",
       "resourceCapacityDesc": "Prognose der Personalkapazität, verbindlichen Ressourcenzuweisungen und Nachfrage aus der Vertriebspipeline",
       "receivablesTitle": "Forderungsanalyse",
-      "receivablesDesc": "Zahlungsverzug, Kundenexposition, Gutschriften und vertragliche Fälligkeiten"
+      "receivablesDesc": "Zahlungsverhalten der Kunden, Forderungseinzug und Kreditrisiko"
     },
     "addAnalytics": "Analysen hinzufügen",
     "libraryTitle": "Ihre Analysebibliothek",
@@ -2523,7 +2523,7 @@
       "overtime": "Überstunden",
       "doubleTime": "Doppelter Satz",
       "presetHint": "Vorgaben aus Ihren Zeitarten",
-      "presetTitle": "{name} \u00d7{multiplier} \u00fcbernehmen",
+      "presetTitle": "{name} ×{multiplier} übernehmen",
       "explorerTarget": "Ziel-{mode}",
       "markupPctLabel": "Aufschlag %",
       "per1kLabel": "Je 1.000 Stunden"
@@ -4365,7 +4365,11 @@
       "credits": "Nicht verrechnete Gutschriften",
       "customers": "Kunden mit offenen Posten",
       "severe": "Bestand ab 90 Verzugstagen",
-      "top5": "Konzentration der fünf größten"
+      "top5": "Konzentration der fünf größten",
+      "attention": "Überfällig mit Handlungsbedarf",
+      "deteriorating": "Langsamer zahlende Kunden",
+      "recovery": "Einzug überfälliger Forderungen",
+      "onTime": "Pünktlicher Zahlungsanteil"
     },
     "panels": {
       "aging": "Altersstruktur",
@@ -4374,13 +4378,24 @@
       "agingCredits": "Gutschriften nach Alter",
       "customerExposure": "Inkassoexposition je Kunde",
       "maturity": "Vertragliche Fälligkeitsstruktur",
-      "cumulative": "Kumulierter fälliger Bruttosaldo"
+      "cumulative": "Kumulierter fälliger Bruttosaldo",
+      "behavior": "Verteilung der Zahlungszeitpunkte",
+      "behaviorTrend": "Zahlungsverhalten im Zeitverlauf",
+      "paymentMap": "Forderungen und Zahlungsverzögerung",
+      "recoveryBridge": "Einzug anfänglicher Rückstände",
+      "cohortRecovery": "Einzug nach anfänglichem Verzug",
+      "appliedCash": "Zugeordnete Kundenzahlungen",
+      "delivery": "Mahnungszustellung",
+      "reminderCoverage": "Einzugsabdeckung",
+      "creditWatch": "Kreditüberwachung"
     },
     "tabs": {
-      "overview": "Übersicht",
-      "aging": "Zahlungsverzug",
       "customers": "Kunden",
-      "maturity": "Fälligkeit"
+      "behavior": "Zahlungsverhalten",
+      "recovery": "Rückgewinnung",
+      "collections": "Mahnungen",
+      "credit": "Kreditrisiko",
+      "configuration": "Einstellungen"
     },
     "aging": {
       "0": "Nicht fällig",
@@ -4397,6 +4412,128 @@
       "4": "Fällig in 31–60 Tagen",
       "5": "Fällig in 61–90 Tagen",
       "6": "Fällig nach 90 Tagen"
-    }
+    },
+    "futurePeriod": "Wählen Sie einen Zeitraum, der spätestens am Geschäftstag des Unternehmens beginnt.",
+    "search": "Kunden suchen…",
+    "filter": "Einzugssignale",
+    "portfolio": "Kundenportfolio",
+    "portfolioHint": "{count} Kunden mit offenen Forderungen · nach Einzugsnachweisen priorisiert",
+    "noCustomers": "Keine passenden Kunden",
+    "noCustomersHint": "Ändern Sie die Suche oder den Signalfilter.",
+    "showing": "{from}–{to} von {total} Kunden",
+    "previous": "Vorherige Seite",
+    "next": "Nächste Seite",
+    "customerCount": "{count} Kunden",
+    "exposure": "{amount} überfällige Forderungen",
+    "recovered": "{amount} eingezogene Zahlungen",
+    "behaviorWindow": "Zahlungsgewichtet · letzte {days} Tage",
+    "cashWeighted": "Nach zugeordneten Zahlungen gewichtet",
+    "daysBeyondTerms": "Tage nach Rechnungsfälligkeit",
+    "mapHint": "Kunden dieser Seite mit ausreichender Vergleichshistorie",
+    "changeLabel": "Änderung der Verzugstage",
+    "baselineHint": "Letzte {days} Tage gegenüber vorherigen {days} Tagen · mindestens {count} Rechnungen je Zeitraum",
+    "noOpening": "Keine anfänglich überfälligen Forderungen",
+    "noOpeningHint": "Zu Periodenbeginn waren keine positiven Forderungen mit Fälligkeit überfällig.",
+    "fixedCohort": "Zu Periodenbeginn überfällige Rechnungen",
+    "openingOverdue": "Anfangs überfällig",
+    "cashRecovered": "Eingezogene Zahlungen",
+    "otherChanges": "Sonstige Saldoänderungen",
+    "stillOpen": "Noch offen",
+    "appliedCash": "Zugeordnete Kundenzahlungen",
+    "appliedCashHint": "Gebuchte, im gewählten Zeitraum Rechnungen zugeordnete Zahlungen",
+    "deliveryHint": "Zustellstatus je Beleg",
+    "reminderCoverage": "Abdeckung durch Mahnungen",
+    "coverageCount": "{sent} von {total} überfälligen Rechnungen erhielten eine Mahnung",
+    "failedExposure": "Überfällig mit Zustellproblemen",
+    "deliveryRemedy": "Prüfen Sie Rechnungskontakte und fehlgeschlagene Mahnungszustellungen.",
+    "coverageScope": "Die Abdeckung erfasst native Mahnungen, nicht sämtliche Kundenkontakte. Wartende und fehlgeschlagene Sendungen gelten nicht als zugestellt. Andere Kanäle werden nicht angenommen.",
+    "deliveryCustomers": "Einzugskontext der Kunden",
+    "creditCurrentOnly": "Kreditkontrollen zeigen aktuelle Einstellungen",
+    "creditCurrentHint": "Wählen Sie den aktuellen Geschäftstag, um aktuelle Limits und Sperren mit aktuellen Forderungen zu vergleichen. Historische Kreditrichtlinien werden nicht abgeleitet.",
+    "reviewCurrent": "Aktuellen Kredit prüfen",
+    "creditHeld": "Gesperrte Kunden",
+    "creditExceeded": "Über dem Kreditlimit",
+    "creditConfigured": "Mit festgelegtem Limit",
+    "excess": "{amount} über dem Limit",
+    "creditBasis": "Offene Forderungen und nicht fakturierte Auftragsverpflichtungen",
+    "dataDate": "Forderungsstand am {date} · {currency}",
+    "openCustomer": "Kunden {name} öffnen",
+    "overdue": "Überfällig",
+    "openExposure": "{amount} offene Forderungen",
+    "paymentSparkline": "Beobachtete Zahlungsentwicklung",
+    "changeDays": "{days} Tage",
+    "insufficientHistory": "Unzureichende Vergleichshistorie",
+    "recentPayment": "Aktuelle Verzugstage",
+    "baselinePayment": "Verzugstage im Vergleichszeitraum",
+    "dayValue": "{days} Tage",
+    "observationCount": "Beobachtete Rechnungen: {recent} aktuell · {baseline} Vergleich",
+    "noFlags": "Keine Einzugswarnzeichen",
+    "customerDocuments": "{count} offene Belege",
+    "customerCredits": "{amount} nicht zugeordnete Gutschriften",
+    "creditLimit": "Limit {amount}",
+    "oldestDays": "Ältester Verzug: {days} Tage",
+    "recoveredOf": "{cash} von {opening} eingezogen",
+    "behavior": {
+      "0": "Pünktlich / früh",
+      "1": "1–7 Tage verspätet",
+      "2": "8–30 Tage verspätet",
+      "3": "Mehr als 30 Tage verspätet"
+    },
+    "recoveryCohort": {
+      "0": "1–30 Tage überfällig",
+      "1": "31–60 Tage überfällig",
+      "2": "61–89 Tage überfällig",
+      "3": "Mindestens 90 Tage überfällig"
+    },
+    "notice": {
+      "sent": "Gesendet",
+      "failed": "Fehlgeschlagen",
+      "suppressed": "Unterdrückt",
+      "staged": "In Warteschlange"
+    },
+    "reasons": {
+      "deteriorating": "Zahlungsverhalten verschlechtert",
+      "severe": "Starker Zahlungsverzug",
+      "delivery": "Zustellproblem",
+      "terms": "Fälligkeiten fehlen",
+      "held": "Kreditsperre",
+      "credit": "Kreditlimit überschritten"
+    },
+    "signals": {
+      "all": "Alle Kunden",
+      "deteriorating": "Zahlungen verschlechtern sich",
+      "severe": "Starker Zahlungsverzug",
+      "delivery": "Zustellprobleme",
+      "terms": "Fälligkeiten fehlen",
+      "held": "Kredit gesperrt"
+    },
+    "config": {
+      "baselineDays": {
+        "label": "Vergleichszeitraum der Zahlungen",
+        "help": "Tage je aktuellem und vorherigem Zahlungszeitraum."
+      },
+      "minObservations": {
+        "label": "Mindestzahl beobachteter Rechnungen",
+        "help": "Rechnungen mit datierten Zahlungszuordnungen je Vergleichszeitraum."
+      },
+      "deteriorationDays": {
+        "label": "Schwelle der Zahlungsverschlechterung",
+        "help": "Zusätzliche zahlungsgewichtete Verzugstage für eine Warnung."
+      },
+      "severeDays": {
+        "label": "Schwelle für starken Verzug",
+        "help": "Vertragliche Verzugstage mit Einzugshandlungsbedarf."
+      },
+      "reminderDays": {
+        "label": "Beobachtungszeitraum der Mahnungen",
+        "help": "Letzte Tage für Zustellstatus und Mahnungsabdeckung."
+      }
+    },
+    "headroom": "Verfügbarer Kredit",
+    "lastNotice": "Letzte Mahnung: {date}",
+    "historicalDelivery": "Historische Ansichten zeigen zugestellte Mahnungen; frühere veränderliche Fehlerzustände sind nicht verfügbar.",
+    "noPaymentHistory": "Keine datierten Zahlungszuordnungen in diesem Zeitraum.",
+    "noReminders": "Keine Mahnungszustellnachweise in diesem Zeitraum.",
+    "noComparableHistory": "Nicht genügend vergleichbare Zahlungshistorie für das Diagramm."
   }
 }

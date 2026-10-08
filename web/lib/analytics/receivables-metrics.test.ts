@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { receivablesRatio, cumulativeReceivableMaturity } from './receivables-metrics'
+import { receivablesRatio, cumulativeReceivableMaturity, collectionCustomerReasons, sparklineCoordinates, CollectionPeriodError } from './receivables-metrics'
 import { analyticsDashboardDenied, ANALYTICS_DASHBOARD_MAP } from './dashboard-catalog'
 import { analyticsQueryString, analyticsSourceQuery } from './query-params'
 import { agingBucketIndex, agingBasisDate } from '../aging-basis'
@@ -36,15 +36,33 @@ test('the receivables dashboard requires both analytics and receivables grants w
   assert.equal(definition.feature, undefined)
 })
 
-test('receivables page and lazy tabs share point-in-time periods while explicit custom dates remain unchanged', () => {
-  assert.equal(analyticsSourceQuery({}, 'receivables-intelligence').period, 'today')
-  assert.equal(analyticsQueryString({}, 'receivables-intelligence'), 'period=today')
-  assert.notEqual(analyticsSourceQuery({}).period, 'today')
-  for (const preset of AGING_PERIOD_PRESETS) assert.equal(agingPeriodPreset(preset), preset)
-  for (const preset of ['this_fiscal_year', 'next_month', 'this_month', 'unknown']) {
-    assert.equal(agingPeriodPreset(preset), 'today')
-    assert.equal(analyticsQueryString({ period: preset }, 'receivables-intelligence'), 'period=today')
+test('receivables behavior windows and server-side portfolio filters share a canonical lazy-tab identity', () => {
+  assert.deepEqual(analyticsSourceQuery({}, 'receivables-intelligence'), analyticsSourceQuery({}))
+  for (const period of ['today', 'this_month', 'last_month', 'this_fiscal_year']) {
+    assert.equal(analyticsSourceQuery({ period }, 'receivables-intelligence').period, period)
   }
-  const custom = { period: 'custom', from: '2026-08-01', to: '2026-08-31' }
-  assert.deepEqual(analyticsSourceQuery({ ...custom, tab: 'customers', relatedParty: 'private' }, 'receivables-intelligence'), custom)
+  const custom = { period: 'custom', from: '2026-07-01', to: '2026-07-31' }
+  assert.deepEqual(analyticsSourceQuery({ ...custom, tab: 'customers', relatedParty: 'private', customerQ: '  Acme  ', customerPage: '-2', signal: 'deteriorating' }, 'receivables-intelligence'),
+    { ...custom, customerQ: 'Acme', customerPage: '1', signal: 'deteriorating' })
+  assert.equal(analyticsSourceQuery({ period: 'custom', signal: 'unknown' }, 'receivables-intelligence').signal, undefined)
+  assert.equal(analyticsQueryString({ ...custom, customerQ: 'A & B', customerPage: '2' }, 'receivables-intelligence'), 'period=custom&customerQ=A+%26+B&customerPage=2&from=2026-07-01&to=2026-07-31')
+  for (const preset of AGING_PERIOD_PRESETS) assert.equal(agingPeriodPreset(preset), preset)
+  assert.equal(agingPeriodPreset('this_fiscal_year'), 'today', 'the native aging report retains its point-in-time convention')
+})
+
+test('collection flags retain independent exact evidence and distinguish absent credit limits', () => {
+  const healthy = { deteriorating: false, severe: '0.0000', failed: 0, suppressed: 0, missingTerms: '0.0000', held: false }
+  assert.deepEqual(collectionCustomerReasons(healthy), [])
+  assert.deepEqual(collectionCustomerReasons({ ...healthy, deteriorating: true, severe: '0.0001', suppressed: 1, missingTerms: '0.0001', held: true, creditLimit: '999999999999999.9998', committed: '999999999999999.9999' }),
+    ['deteriorating', 'severe', 'delivery', 'terms', 'held', 'credit'])
+  assert.deepEqual(collectionCustomerReasons({ ...healthy, creditLimit: null, committed: '100.0000' }), [])
+  assert.deepEqual(collectionCustomerReasons({ ...healthy, creditLimit: '100.0000', committed: '100.0000' }), [])
+})
+
+test('payment sparklines preserve unknown observations and handle flat and early-payment histories', () => {
+  assert.deepEqual(sparklineCoordinates([null, 12, null]), [])
+  assert.deepEqual(sparklineCoordinates([null, null]), [])
+  assert.deepEqual(sparklineCoordinates([5, 5]), [{ x: 2, y: 16 }, { x: 98, y: 16 }])
+  assert.deepEqual(sparklineCoordinates([-5, null, 15]), [{ x: 2, y: 28 }, { x: 98, y: 4 }])
+  assert.equal(new CollectionPeriodError('Select a historical period').status, 422)
 })

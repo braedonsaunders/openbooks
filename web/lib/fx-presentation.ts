@@ -50,7 +50,7 @@ export function lineFunctional(
 
 /** Shared direct-or-inverse closing spot selection. Direct rates win ties;
  * callers supply the needed currencies as a SQL relation with a ccy column. */
-export function presentationSpotRatesSql(orgId: string, base: string, currencies: SQL, refDate: string): SQL {
+export function presentationSpotRatesSql(orgId: string, base: string, currencies: SQL, refDate: string | SQL): SQL {
   return sql`
     select distinct on (s.from_currency) s.from_currency, s.rate::text as rate
       from (
