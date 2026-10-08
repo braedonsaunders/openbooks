@@ -14,6 +14,50 @@ const { withSimClock: pinClock } = await import('@openbooks/engine/src/platform/
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
 const { postDocument } = await import("@openbooks/engine/src/ledger/posting-document.ts");
 const { customerData, customerSummaryData } = await import('./customer-data')
+const { projectCustomerDashboard } = await import('./overview-projection')
+const { withAnalyticsRead } = await import('./read-context')
+import type { Authz } from '../authz'
+
+test('customer overview keeps the complete financial population while detail tabs retain every customer', { skip: !env.OPENBOOKS_DB_URL }, async () => {
+  const org = await withBypass(() => createScratchOrg())
+  try {
+    const actor = await withBypass(() => createScratchUser(org.orgId, 'Customer Controller', 'admin'))
+    const customers: string[] = []
+    await withBypass(async () => {
+      for (let i = 0; i < 13; i++) {
+        const customer = i === 0 ? org.customerId : randomUUID()
+        customers.push(customer)
+        if (i > 0) await db.execute(sql`insert into parties (id, org_id, kind, display_name, subsidiary_id, is_active, custom)
+          values (${customer}, ${org.orgId}, 'customer', ${`Customer ${i}`}, ${org.subsidiaryId}, true, '{}'::jsonb)`)
+        await invoice(org.orgId, actor, org.subsidiaryId, customer, String(i + 1), 'CAD', '1', org.date, org.accounts)
+      }
+    })
+    await pinClock('2026-07-15', () => withOrgContext(org.orgId, async () => {
+      const period = { from: '2026-07-01', to: '2026-07-31', label: 'July 2026' }
+      const full = await customerData(period, org.orgId, null)
+      assert.equal(full.rows.length, 13)
+      assert.equal(full.kpis.totalRevenue, '91.0000')
+      assert.equal(full.kpis.totalInvoiced, '91.0000')
+      const sourceOrder = full.rows.map(row => row.id)
+      const authz = { user: { orgId: org.orgId }, permissions: new Set(['reports.read']), allowedSubsidiaryIds: null } as Authz
+      const read = { authz, slug: 'customer-intelligence', projection: 'tab' as const, tab: 'overview', locale: 'en', revision: 'test', observedAt: Date.now() }
+      const overview = withAnalyticsRead(read, () => projectCustomerDashboard(full))
+      assert.deepEqual(overview.rows.map(row => row.id), customers.slice(3).reverse(), 'the chart receives the ten largest revenues')
+      assert.deepEqual({ ...overview, rows: full.rows }, full, 'KPIs, intelligence, insights, cohorts and breakdowns retain all customers')
+      assert.deepEqual(full.rows.map(row => row.id), sourceOrder, 'overview ranking cannot change the native health ordering')
+      assert.strictEqual(projectCustomerDashboard(full), full)
+      for (const tab of ['health', 'segmentation', 'lifetime', 'churn', 'growth', 'profitability', 'configuration']) {
+        assert.strictEqual(withAnalyticsRead({ ...read, tab }, () => projectCustomerDashboard(full)), full)
+      }
+      assert.strictEqual(withAnalyticsRead({ ...read, projection: 'summary' }, () => projectCustomerDashboard(full)), full)
+      assert.strictEqual(withAnalyticsRead({ ...read, slug: 'vendor-performance' }, () => projectCustomerDashboard(full)), full)
+      const empty = await customerData(period, org.orgId, new Set())
+      assert.deepEqual(withAnalyticsRead(read, () => projectCustomerDashboard(empty)), empty)
+    }))
+  } finally {
+    await withBypass(() => dropScratchOrg(org.orgId))
+  }
+})
 
 async function invoice(orgId: string, actor: string, subsidiaryId: string, partyId: string, revenue: string, currency: string, fxRate: string, date: string, accounts: { ar: string; ap: string; bank: string; revenue: string }) {
   const id = randomUUID()

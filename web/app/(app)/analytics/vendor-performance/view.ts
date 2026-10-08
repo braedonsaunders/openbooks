@@ -6,7 +6,7 @@ import { can, requirePermission } from '../../../../lib/authz'
 import { resolvePeriod } from '../../../../lib/periods'
 import { parseReportQuery } from '../../../../lib/report-filters'
 import { vendorData } from '../../../../lib/analytics/vendor-data'
-import { projectVendorDashboard } from '../../../../lib/analytics/vendor-projection'
+import { projectVendorDashboard } from '../../../../lib/analytics/overview-projection'
 import { vendorStrings } from '../../../../lib/analytics/vendor-strings'
 import type { VendorView } from './VendorView'
 

@@ -15,7 +15,7 @@ const { withSimClock: pinClock } = await import('@openbooks/engine/src/platform/
 const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
 const { voidReportDocument } = await import('../../testing/document-void.ts')
 const { vendorData } = await import('./vendor-data')
-const { projectVendorDashboard } = await import('./vendor-projection')
+const { projectVendorDashboard } = await import('./overview-projection')
 const { withAnalyticsRead } = await import('./read-context')
 import type { Authz } from '../authz'
 

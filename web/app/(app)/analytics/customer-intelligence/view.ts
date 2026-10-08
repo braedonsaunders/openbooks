@@ -8,6 +8,7 @@ import { resolvePeriod } from '../../../../lib/periods'
 import { parseReportQuery } from '../../../../lib/report-filters'
 import { customerData, customerSummaryData } from '../../../../lib/analytics/customer-data'
 import { customerStrings } from '../../../../lib/analytics/customer-strings'
+import { projectCustomerDashboard } from '../../../../lib/analytics/overview-projection'
 import type { CustomerView } from './CustomerView'
 
 /**
@@ -75,7 +76,7 @@ export async function loadCustomerIntelligence(sp: Record<string, string | undef
     periodLabel: period.label,
     profitability,
     projectsEnabled,
-    data: dashboardData,
+    data: projectCustomerDashboard(dashboardData),
     canConfigure: authz.allowedSubsidiaryIds === null && can(authz, 'admin.setup.manage'),
   }
 }
