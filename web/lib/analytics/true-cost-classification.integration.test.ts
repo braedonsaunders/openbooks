@@ -639,6 +639,10 @@ test('Setup retains current allocation and publication facts without reading the
     assert.equal(captured[0]!.filter(comparisonLabor).length, 1)
     assert.equal(captured[1]!.filter(comparisonExpense).length, 0)
     assert.equal(captured[1]!.filter(comparisonLabor).length, 0)
+    const accountPopulation = (statement: string) => statement.includes('select id, number, name, type from accounts where is_summary = false')
+    assert.equal(captured[0]!.filter(accountPopulation).length, 1)
+    assert.equal(captured[1]!.filter(accountPopulation).length, 1,
+      'burden and direct-labour classification share one fresh scoped account population')
     assert.ok(captured[1]!.some(statement => statement.includes('sum(t.hours)') && statement.includes('group by 1')),
       'Setup still resolves department utilization and current policy drivers')
   })
