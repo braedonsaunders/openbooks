@@ -90,3 +90,41 @@ test(
     }
   },
 );
+
+test(
+  "touched-entry FX validation retains bounds with repeated selectors and empty input",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const posted = await withOrgContext(org.orgId, () => postEntry(db, {
+        ...baseInput(org, `fx-selector-${randomUUID()}`),
+        lines: [
+          { accountId: org.accounts.bank, amount: "10.0001", txnAmount: "10.0000", fxRate: "1" },
+          { accountId: org.accounts.cogs, amount: "-10.0001", txnAmount: "-10.0001", fxRate: "1" },
+        ],
+      }));
+      const selectors = [...Array.from({ length: 128 }, () => posted.entryId), randomUUID(), null];
+      await withOrgContext(org.orgId, async () => {
+        const before = (await db.execute(sql`select * from journal_lines
+          where org_id=${org.orgId} and entry_id=${posted.entryId} order by id`)).rows;
+        // The repeated identities preserve the same lawful 0.0001 deviation
+        // at the exact two-line boundary, in both posting-message contexts.
+        for (const newPosting of [true, false]) {
+          await db.execute(sql`select public.journal_lines_check_fx_residual_entries(
+            ${sql.param(selectors)}::uuid[],${newPosting})`);
+          await db.execute(sql`select public.journal_lines_check_fx_residual_entries(
+            array[]::uuid[],${newPosting})`);
+        }
+        await db.execute(sql`select public.journal_lines_check_fx_residual_entries(
+          ${sql.param(selectors)}::uuid[])`);
+        const after = (await db.execute(sql`select * from journal_lines
+          where org_id=${org.orgId} and entry_id=${posted.entryId} order by id`)).rows;
+        assert.deepEqual(after, before);
+        assert.equal(after.length, 2);
+      });
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);

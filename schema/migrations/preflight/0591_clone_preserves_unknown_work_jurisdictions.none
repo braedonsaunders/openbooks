@@ -1,0 +1,1 @@
+Preserves recorded null work regions only for privileged, source-bound sandbox INSERT copies. Ordinary inserts, UPDATE history guards, and existing constraints remain unchanged; retained rows are not rewritten.

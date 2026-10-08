@@ -1,0 +1,1 @@
+Query-only implementation change preserves existing FX deviations, subsidiary bounds, input multiplicity and refusal conditions; no row migration, tighter constraint or new historical prerequisite is introduced.
