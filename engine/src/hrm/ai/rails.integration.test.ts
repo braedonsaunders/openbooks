@@ -9,7 +9,7 @@ import {
   dropScratchOrg,
   type ScratchOrg,
 } from "../../testing/fixtures.ts";
-import { listDecisions, logDecision, syncCapabilities, updateCapability, updateCapabilityForOrg } from "./governance.ts";
+import { listDecisions, listDecisionsPage, logDecision, syncCapabilities, updateCapability, updateCapabilityForOrg } from "./governance.ts";
 import {
   checkPayrollFinalizeAllowed,
   flagsForEmployment,
@@ -18,11 +18,12 @@ import {
   scanAnomalies,
   transitionFlag,
 } from "./anomalies.ts";
+import { ScopeNotFoundError } from "../../organization/subsidiary-scope.ts";
+import { ensureAiRailsSettingsForOrg } from "./settings.ts";
 import { explainPay } from "./explain-pay.ts";
 
 /**
- * HR-21 AI rails DB coverage (integration partition, gating box runs
- * this file): migration tables with RLS, the append-only decision trigger,
+ * Native workforce assistance coverage: migration tables with RLS, the append-only decision trigger,
  * capability sync with down-only autonomy, idempotent anomaly scans with
  * suppression, the finalize refusal, and the explain-pay trace with diff.
  * Decision logging is proven per service by counting ai_decisions rows.
@@ -63,6 +64,26 @@ async function setup(): Promise<Harness> {
   await enableFeatures(org.orgId, ["hrm", "payroll", "aiGovernanceLedger"]);
   return { org, adminId };
 }
+
+
+test("native workforce policy provisioning retains saved thresholds and refuses missing authority", { skip: !DB }, async () => {
+  const { org, adminId } = await setup();
+  try {
+    await ensureAiRailsSettingsForOrg(org.orgId, adminId);
+    await db.execute(sql`update ai_rails_settings set z_threshold=4.25, retro_threshold=725, bias_terms=array['sample phrase']::text[], review_months=6 where org_id=${org.orgId}`);
+    await ensureAiRailsSettingsForOrg(org.orgId, adminId);
+    const saved = (await db.execute<{ z: string; retro: string; terms: string[]; months: number }>(sql`
+      select z_threshold::text as z,retro_threshold::text as retro,bias_terms as terms,review_months as months from ai_rails_settings where org_id=${org.orgId}`)).rows[0]!;
+    assert.equal(Number(saved.z), 4.25);
+    assert.equal(Number(saved.retro), 725);
+    assert.deepEqual(saved.terms, ['sample phrase']);
+    assert.equal(saved.months, 6);
+    const denied = await createScratchUser(org.orgId, 'Policy reader', 'policy_reader');
+    await assert.rejects(ensureAiRailsSettingsForOrg(org.orgId, denied), (error) => error instanceof ScopeNotFoundError);
+    const unchanged = (await db.execute(sql`select z_threshold::text as z,retro_threshold::text as retro,bias_terms as terms,review_months as months from ai_rails_settings where org_id=${org.orgId}`)).rows[0];
+    assert.deepEqual(unchanged, saved);
+  } finally { await dropScratchOrg(org.orgId); }
+});
 
 test("migration tables exist with org isolation RLS", { skip: !DB }, async () => {
   const { org } = await setup();
@@ -421,11 +442,11 @@ test("inbox adapters surface blocking checks and overdue reviews through the act
     const reviews = await aiCapabilityReviewAdapter.list(ctx);
     assert.ok(reviews.length >= 1, "unreviewed capabilities must nudge");
     assert.equal(reviews[0]?.kind, "ai_capability_review");
-    assert.equal(reviews[0]?.subjectHref, "/admin/ai");
+    assert.equal(reviews[0]?.subjectHref, "/admin/setup/ai-capabilities");
     assert.match(reviews[0]?.subtitle ?? "", /never reviewed/);
     await assert.rejects(
       aiCapabilityReviewAdapter.act(ctx, "x", "review"),
-      /record the review in the ledger/,
+      /record the review in Assistant action reviews/,
     );
 
     // An actor without either grant sees neither list (no leak, no error).
@@ -650,6 +671,20 @@ test("ai ledger fences employment subjects and carries no pay values", { skip: !
       "pay_period:-",
       `payroll_anomaly_flag:${flagA}`,
     ]);
+
+    // Paged rows, counts and exports must use the same subject fence.
+    const scopedFirst = await listDecisionsPage(db, { orgId: org.orgId, actorId: hrScopedA, limit: 2 });
+    const scopedSecond = await listDecisionsPage(db, { orgId: org.orgId, actorId: hrScopedA, limit: 2, offset: 2 });
+    assert.equal(scopedFirst.total, 4);
+    assert.equal(scopedSecond.total, 4);
+    assert.equal(new Set([...scopedFirst.decisions, ...scopedSecond.decisions].map((row) => row.id)).size, 4);
+    assert.deepEqual([...scopedFirst.decisions, ...scopedSecond.decisions].map((row) => `${row.subjectKind}:${row.subjectId ?? '-'}`).sort(), await kindsOf(hrScopedA));
+    const filtered = await listDecisionsPage(db, { orgId: org.orgId, actorId: setupOnly, capabilityKey: 'hrmPayrollAnomalies', limit: 1 });
+    assert.equal(filtered.total, 1);
+    assert.equal(filtered.decisions[0]?.subjectKind, 'pay_period');
+    assert.equal('inputDigest' in scopedFirst.decisions[0]!, false);
+    assert.equal('outputDigest' in scopedFirst.decisions[0]!, false);
+    await assert.rejects(listDecisionsPage(db, { orgId: org.orgId, actorId: setupOnly, limit: 0 }), /page size/);
 
     // Unrestricted payroll manager: the whole ledger.
     const payrollFull = await mkReader("Payroll ledger", "ledger_payroll",

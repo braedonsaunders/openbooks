@@ -4,10 +4,9 @@ import { sql } from 'drizzle-orm'
 import { getTranslations } from 'next-intl/server'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { flagsForEmployment, listFlags, type FlagRow } from '@openbooks/engine/src/hrm/ai/anomalies.ts'
-import { AI_CAPABILITIES } from '@openbooks/engine/src/hrm/ai/registry.ts'
-import { ensureAiRailsSettings } from '@openbooks/engine/src/hrm/ai/settings.ts'
+import { AI_CAPABILITIES, AI_AUTONOMY_LADDER, autonomyRank } from '@openbooks/engine/src/hrm/ai/registry.ts'
 import { explainPayslip, type ExplainPayTrace } from '@openbooks/engine/src/hrm/ai/explain-pay.ts'
-import { listCapabilities, listDecisions, overdueReviews, type CapabilityRow, type DecisionRow } from '@openbooks/engine/src/hrm/ai/governance.ts'
+import { listCapabilities, overdueReviews, type CapabilityRow } from '@openbooks/engine/src/hrm/ai/governance.ts'
 import { loadAiRailsSettings } from '@openbooks/engine/src/hrm/ai/settings.ts'
 import { actorPartyOf } from '@openbooks/engine/src/hrm/self-service/actor.ts'
 import { can, type Authz } from '../authz'
@@ -15,7 +14,7 @@ import { isFeatureEnabled } from '../features'
 import { groupTabs } from '../../components/module-home/group-tabs'
 
 /**
- * HR-21 AI rails web loaders. Pages stay thin: every loader resolves
+ * Workforce assistance web loaders. Pages stay thin: every loader resolves
  * display cells through the deterministic services (never prose), caps
  * lists, and returns refusals as data the spec renders intact.
  */
@@ -59,6 +58,11 @@ export interface AnomalyChecksData {
   emptyTitle: string;
   emptyDescription: string;
   allLabel: string;
+  emptyLabel: string;
+  declarationSavedLabel: string;
+  reviewRecordedLabel: string;
+  registryRefreshedLabel: string;
+  codeMaximumLabel: string;
   severityLabel: string;
   kindLabel: string;
   statusLabel: string;
@@ -427,27 +431,25 @@ export interface AiLedgerData {
   saveLabel: string;
   failedLabel: string;
   allLabel: string;
+  emptyLabel: string;
+  declarationSavedLabel: string;
+  reviewRecordedLabel: string;
+  registryRefreshedLabel: string;
+  codeMaximumLabel: string;
   capabilityColumns: { capability: string; autonomy: string; reviewer: string; notice: string; reviewed: string; enabled: string };
   decisionColumns: { when: string; capability: string; summary: string; outcome: string; reviewer: string };
-  capabilities: (CapabilityRow & { noticeLabel: string; reviewedLabel: string; enabledLabel: string })[];
-  decisions: DecisionRow[];
+  capabilities: (CapabilityRow & { noticeLabel: string; reviewedLabel: string; enabledLabel: string; autonomyOptions: { value: string; label: string }[]; codeMaximum: string })[];
   overdue: CapabilityRow[];
   reviewMonths: number;
   settings: { zThreshold: number; retroThreshold: string; cohortKey: string; reviewMonths: number };
 }
 
-/** Governance ledger section for /admin/ai. */
+/** Native action-limit configuration, separate from provider credentials. */
 export async function loadAiLedger(authz: Authz): Promise<AiLedgerData> {
   const orgId = authz.user.orgId;
   const t = await getTranslations('admin');
-  // The ledger page ensures the singleton settings row so the Setup
-  // section always has a row to edit (new orgs have none until now).
-  await ensureAiRailsSettings(db, orgId);
-  const [capabilities, decisions, settings] = await Promise.all([
+  const [capabilities, settings] = await Promise.all([
     listCapabilities(db, orgId),
-    // Fenced per row in the service, like the ledger API and CSV export:
-    // a restricted setup admin sees no out-of-scope employment subjects.
-    listDecisions(db, { orgId, actorId: authz.user.id, limit: 50 }),
     loadAiRailsSettings(db, orgId),
   ]);
   const overdue = await overdueReviews(db, orgId, settings.reviewMonths);
@@ -465,6 +467,11 @@ export async function loadAiLedger(authz: Authz): Promise<AiLedgerData> {
     saveLabel: t('aiLedger.save'),
     failedLabel: t('aiLedger.failed'),
     allLabel: t('aiLedger.all'),
+    emptyLabel: t('aiLedger.empty'),
+    declarationSavedLabel: t('aiLedger.declarationSaved'),
+    reviewRecordedLabel: t('aiLedger.reviewRecorded'),
+    registryRefreshedLabel: t('aiLedger.registryRefreshed'),
+    codeMaximumLabel: t('aiLedger.codeMaximum'),
     capabilityColumns: {
       capability: t('aiLedger.columns.capability'),
       autonomy: t('aiLedger.columns.autonomy'),
@@ -482,13 +489,14 @@ export async function loadAiLedger(authz: Authz): Promise<AiLedgerData> {
     },
     capabilities: capabilities.map((c) => ({
       ...c,
+      codeMaximum: AI_CAPABILITIES.has(c.key) ? t(`aiLedger.levels.${AI_CAPABILITIES.get(c.key)!.maxAutonomy}`) : t('aiLedger.notRegistered'),
+      autonomyOptions: AI_AUTONOMY_LADDER.filter((level) => autonomyRank(level) <= autonomyRank(AI_CAPABILITIES.get(c.key)?.maxAutonomy ?? 'read_only') || level === c.autonomy).map((value) => ({ value, label: t(`aiLedger.levels.${value}`) })),
       // The catalog notice text itself, not just its flag — this is the
       // line users see wherever the capability surfaces.
       noticeLabel: c.noticeRequired ? (AI_CAPABILITIES.get(c.key)?.noticeText ?? t('aiLedger.noticeRequired')) : '—',
       reviewedLabel: c.lastReviewedAt ?? t('aiLedger.neverReviewed'),
       enabledLabel: c.enabled ? t('aiLedger.enabled') : t('aiLedger.disabled'),
     })),
-    decisions,
     overdue,
     reviewMonths: settings.reviewMonths,
     settings: {

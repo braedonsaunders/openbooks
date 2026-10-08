@@ -1,34 +1,25 @@
 'use client'
 
-import { Table as SharedTable, TableHeader as SharedTableHeader, TableRow as SharedTableRow, TableHead as SharedTableHead, TableBody as SharedTableBody, TableCell as SharedTableCell } from "@openbooks/ui"
+import { PagedTable } from '../../../../components/paged-table'
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Button, Input, Select } from '@openbooks/ui'
 import { readApiErrorMessage } from '../../../../lib/api-error'
 import type { AiLedgerData } from '../../../../lib/hrm/ai-rails'
 
-const AUTONOMIES = ['read_only', 'draft', 'propose', 'act_with_confirmation'] as const
-
-/**
- * HR-21 AI governance ledger section on /admin/ai. Capabilities table
- * (autonomy select down-only, reviewer edit, review stamp, read-only
- * effective Features status, sync-from-registry) and the decisions log with
- * capability filter chips and CSV export. Every mutation goes through
- * the existing /api/admin/ai-* routes with their setup-grant gates and
- * refusals rendered inline. Renders nothing without the setup grant —
- * the loader passes null and the providers card stands alone.
- */
+/** Native review declarations use the existing audited capability command; runtime authority remains in native actions. */
 export function AiGovernanceSection({ ledger }: { ledger: AiLedgerData | null }) {
   const router = useRouter()
   const [reviewers, setReviewers] = useState<Record<string, string>>({})
-  const [capFilter, setCapFilter] = useState<string>('')
   const [busy, setBusy] = useState(false)
+  const [saved, setSaved] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   if (!ledger) return null
 
   const patch = async (body: Record<string, unknown>): Promise<void> => {
     setBusy(true)
     setError(null)
+    setSaved(null)
     try {
       const res = await fetch('/api/admin/ai-capabilities', {
         method: 'PATCH',
@@ -40,6 +31,7 @@ export function AiGovernanceSection({ ledger }: { ledger: AiLedgerData | null })
         setBusy(false)
         return
       }
+      setSaved(body.markReviewed ? ledger.reviewRecordedLabel : ledger.declarationSavedLabel)
       router.refresh()
     } catch {
       setError(ledger.failedLabel)
@@ -51,6 +43,7 @@ export function AiGovernanceSection({ ledger }: { ledger: AiLedgerData | null })
   const sync = async (): Promise<void> => {
     setBusy(true)
     setError(null)
+    setSaved(null)
     try {
       const res = await fetch('/api/admin/ai-capabilities', { method: 'POST' })
       if (!res.ok) {
@@ -58,6 +51,7 @@ export function AiGovernanceSection({ ledger }: { ledger: AiLedgerData | null })
         setBusy(false)
         return
       }
+      setSaved(ledger.registryRefreshedLabel)
       router.refresh()
     } catch {
       setError(ledger.failedLabel)
@@ -67,156 +61,35 @@ export function AiGovernanceSection({ ledger }: { ledger: AiLedgerData | null })
   }
 
   const capabilities = [...ledger.capabilities].sort((a, b) => a.key.localeCompare(b.key))
-  const capKeys = [...new Set(ledger.decisions.map((d) => d.capabilityKey))].sort()
-  const decisions = capFilter ? ledger.decisions.filter((d) => d.capabilityKey === capFilter) : ledger.decisions
-
   return (
-    <div className="space-y-6">
-      <div>
-        <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">{ledger.title}</h2>
-        <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{ledger.description}</p>
-      </div>
+    <div className="space-y-4">
       {ledger.overdue.length > 0 ? (
-        <div className="rounded-xl border border-amber-200/80 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-800/60 dark:bg-amber-950/40 dark:text-amber-300">
+        <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-300">
           <p className="font-semibold">{ledger.overdueTitle}</p>
-          <p className="mt-1">
-            {ledger.overdueDescription}: {ledger.overdue.map((c) => c.key).join(', ')}
-          </p>
+          <p>{ledger.overdueDescription}: {ledger.overdue.map((cap) => cap.name).join(', ')}</p>
         </div>
       ) : null}
-      {error ? (
-        <p role="alert" className="text-sm text-red-600 dark:text-red-400">
-          {error}
-        </p>
-      ) : null}
-      <section>
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{ledger.capabilitiesTitle}</h3>
-          <Button size="sm" variant="outline" disabled={busy} onClick={() => void sync()}>
-            {ledger.syncLabel}
-          </Button>
-        </div>
-        <div className="mt-2 overflow-x-auto rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
-          <SharedTable className="w-full text-sm">
-            <SharedTableHeader>
-              <SharedTableRow className="border-b border-slate-200 text-left text-xs text-slate-500 dark:border-slate-800 dark:text-slate-400">
-                <SharedTableHead className="px-3 py-2">{ledger.capabilityColumns.capability}</SharedTableHead>
-                <SharedTableHead className="px-3 py-2">{ledger.capabilityColumns.autonomy}</SharedTableHead>
-                <SharedTableHead className="px-3 py-2">{ledger.capabilityColumns.reviewer}</SharedTableHead>
-                <SharedTableHead className="px-3 py-2">{ledger.capabilityColumns.notice}</SharedTableHead>
-                <SharedTableHead className="px-3 py-2">{ledger.capabilityColumns.reviewed}</SharedTableHead>
-                <SharedTableHead className="px-3 py-2">{ledger.capabilityColumns.enabled}</SharedTableHead>
-              </SharedTableRow>
-            </SharedTableHeader>
-            <SharedTableBody>
-              {capabilities.map((cap) => (
-                <SharedTableRow key={cap.key} className="border-t border-slate-100 dark:border-slate-800">
-                  <SharedTableCell className="px-3 py-2">
-                    <span className="font-medium">{cap.name}</span>
-                    <span className="block text-xs text-slate-500 dark:text-slate-400">{cap.purpose}</span>
-                  </SharedTableCell>
-                  <SharedTableCell className="px-3 py-2">
-                    <Select
-                      value={cap.autonomy}
-                      disabled={busy}
-                      onChange={(e) => void patch({ key: cap.key, autonomy: e.target.value })}
-                    >
-                      {AUTONOMIES.map((level) => (
-                        <option key={level} value={level}>
-                          {level}
-                        </option>
-                      ))}
-                    </Select>
-                  </SharedTableCell>
-                  <SharedTableCell className="px-3 py-2">
-                    <div className="flex items-center gap-1">
-                      <Input
-                        value={reviewers[cap.key] ?? cap.reviewerRole ?? ''}
-                        disabled={busy}
-                        onChange={(e) => setReviewers((prev) => ({ ...prev, [cap.key]: e.target.value }))}
-                        aria-label={ledger.capabilityColumns.reviewer}
-                      />
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        disabled={busy}
-                        onClick={() =>
-                          void patch({ key: cap.key, reviewerRole: reviewers[cap.key] ?? cap.reviewerRole ?? '' })
-                        }
-                      >
-                        {ledger.saveLabel}
-                      </Button>
-                    </div>
-                  </SharedTableCell>
-                  <SharedTableCell className="px-3 py-2 text-xs text-slate-500 dark:text-slate-400">{cap.noticeLabel}</SharedTableCell>
-                  <SharedTableCell className="px-3 py-2 text-xs text-slate-500 dark:text-slate-400">
-                    {cap.reviewedLabel}
-                    <span className="block">
-                      <Button size="sm" variant="outline" disabled={busy} onClick={() => void patch({ key: cap.key, markReviewed: true })}>
-                        {ledger.reviewLabel}
-                      </Button>
-                    </span>
-                  </SharedTableCell>
-                  <SharedTableCell className="px-3 py-2 text-xs">
-                    {cap.enabledLabel}
-                  </SharedTableCell>
-                </SharedTableRow>
-              ))}
-            </SharedTableBody>
-          </SharedTable>
-        </div>
-      </section>
-      <section>
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{ledger.decisionsTitle}</h3>
-          <a
-            href={`/api/admin/ai-decisions?format=csv${capFilter ? `&capabilityKey=${encodeURIComponent(capFilter)}` : ''}`}
-            className="text-sm font-medium text-teal-700 dark:text-teal-300"
-          >
-            {ledger.exportLabel}
-          </a>
-        </div>
-        <div className="mt-2 flex flex-wrap gap-1.5">
-          <Button size="sm" variant={capFilter === '' ? undefined : 'outline'} disabled={busy} onClick={() => setCapFilter('')}>
-            {ledger.allLabel}
-          </Button>
-          {capKeys.map((key) => (
-            <Button
-              key={key}
-              size="sm"
-              variant={capFilter === key ? undefined : 'outline'}
-              disabled={busy}
-              onClick={() => setCapFilter(key)}
-            >
-              {key}
-            </Button>
-          ))}
-        </div>
-        <div className="mt-2 overflow-x-auto rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
-          <SharedTable className="w-full text-sm">
-            <SharedTableHeader>
-              <SharedTableRow className="border-b border-slate-200 text-left text-xs text-slate-500 dark:border-slate-800 dark:text-slate-400">
-                <SharedTableHead className="px-3 py-2">{ledger.decisionColumns.when}</SharedTableHead>
-                <SharedTableHead className="px-3 py-2">{ledger.decisionColumns.capability}</SharedTableHead>
-                <SharedTableHead className="px-3 py-2">{ledger.decisionColumns.summary}</SharedTableHead>
-                <SharedTableHead className="px-3 py-2">{ledger.decisionColumns.outcome}</SharedTableHead>
-                <SharedTableHead className="px-3 py-2">{ledger.decisionColumns.reviewer}</SharedTableHead>
-              </SharedTableRow>
-            </SharedTableHeader>
-            <SharedTableBody>
-              {decisions.map((d) => (
-                <SharedTableRow key={d.id} className="border-t border-slate-100 dark:border-slate-800">
-                  <SharedTableCell className="whitespace-nowrap px-3 py-2 tabular-nums">{d.recordedAt.slice(0, 16).replace('T', ' ')}</SharedTableCell>
-                  <SharedTableCell className="px-3 py-2">{d.capabilityKey}</SharedTableCell>
-                  <SharedTableCell className="px-3 py-2">{d.outputSummary}</SharedTableCell>
-                  <SharedTableCell className="px-3 py-2">{d.outcome}</SharedTableCell>
-                  <SharedTableCell className="px-3 py-2">{d.humanReviewer ?? '—'}</SharedTableCell>
-                </SharedTableRow>
-              ))}
-            </SharedTableBody>
-          </SharedTable>
-        </div>
-      </section>
+      {error ? <p role="alert" className="text-sm text-red-600 dark:text-red-400">{error}</p> : null}
+      {saved ? <p role="status" className="text-sm text-teal-700 dark:text-teal-300">{saved}</p> : null}
+      <PagedTable source="assistant_action_limits" rows={capabilities} rowKey={(cap) => cap.key} searchable pageSize={10}
+        empty={ledger.emptyLabel}
+        toolbarAfter={<Button size="sm" variant="outline" disabled={busy} onClick={() => void sync()}>{ledger.syncLabel}</Button>}
+        columns={[
+          { key: 'capability', search: (cap) => `${cap.name} ${cap.purpose}`, header: ledger.capabilityColumns.capability, cell: (cap) => <div><span className="font-medium">{cap.name}</span><p className="text-xs text-slate-500">{cap.purpose}</p></div> },
+          { key: 'autonomy', header: ledger.capabilityColumns.autonomy, cell: (cap) => <div className="space-y-1"><Select aria-label={`${ledger.capabilityColumns.autonomy}: ${cap.name}`} value={cap.autonomy} disabled={busy}
+            onChange={(event) => void patch({ key: cap.key, autonomy: event.target.value })}>
+            {cap.autonomyOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+          </Select><p className="text-xs text-slate-500">{ledger.codeMaximumLabel}: {cap.codeMaximum}</p></div> },
+          { key: 'reviewer', header: ledger.capabilityColumns.reviewer, cell: (cap) => <div className="flex items-center gap-1">
+            <Input value={reviewers[cap.key] ?? cap.reviewerRole ?? ''} disabled={busy}
+              onChange={(event) => setReviewers((previous) => ({ ...previous, [cap.key]: event.target.value }))}
+              aria-label={`${ledger.capabilityColumns.reviewer}: ${cap.name}`} />
+            <Button size="sm" variant="outline" disabled={busy} onClick={() => void patch({ key: cap.key, reviewerRole: reviewers[cap.key] ?? cap.reviewerRole ?? '' })}>{ledger.saveLabel}</Button>
+          </div> },
+          { key: 'notice', header: ledger.capabilityColumns.notice, cell: (cap) => <span className="text-xs text-slate-500">{cap.noticeLabel}</span> },
+          { key: 'reviewed', header: ledger.capabilityColumns.reviewed, cell: (cap) => <div className="space-y-1 text-xs"><span>{cap.reviewedLabel}</span><Button size="sm" variant="outline" disabled={busy} onClick={() => void patch({ key: cap.key, markReviewed: true })}>{ledger.reviewLabel}</Button></div> },
+          { key: 'enabled', header: ledger.capabilityColumns.enabled, cell: (cap) => cap.enabledLabel },
+        ]} />
     </div>
   )
 }

@@ -1713,7 +1713,9 @@
       "current": "{id} (actual)",
       "hint": "Cargue la lista de modelos con su clave API, o escriba un id de modelo manualmente.",
       "idPlaceholder": "id del modelo"
-    }
+    },
+    "workforceSettings": "Ajustes de revisión de personal",
+    "actionLimits": "Revisión de acciones del asistente"
   },
   "setup": {
     "builder": {
@@ -3080,9 +3082,9 @@
         "description": "Una etapa ordenada de una plantilla: criba, entrevista, evaluación, oferta, contratado o rechazado."
       },
       "ai-rails-settings": {
-        "title": "Ajustes de rieles de IA",
-        "singularTitle": "Ajuste de rieles de IA",
-        "description": "Umbrales de análisis, cohortes de referencia, términos de sesgo declarados y la cadencia de revisión del registro para los rieles deterministas de RR. HH."
+        "title": "Controles de personal y redacción",
+        "singularTitle": "Controles de personal y redacción",
+        "description": "Controles deterministas de nómina y horas, términos de borradores e intervalos de revisión. No cambian los cálculos de nómina ni conectan un proveedor de IA."
       },
       "hrm-action-reasons": {
         "title": "Motivos de acción",
@@ -3417,6 +3419,11 @@
         "title": "Códigos de planificación",
         "singularTitle": "Código de planificación",
         "description": "Códigos para asignar trabajo que no corresponde a un cliente ni a un proyecto, como días de formación o de taller, y para los días en que las personas no trabajan."
+      },
+      "ai-capabilities": {
+        "title": "Revisión de acciones del asistente",
+        "singularTitle": "Revisión de acciones del asistente",
+        "description": "Declaraciones y responsables de revisión de acciones registradas. Los máximos del código y controles nativos siguen siendo la autoridad."
       }
     },
     "fields": {
@@ -6626,7 +6633,15 @@
     },
     "archive": "Archivar",
     "confirmArchive": "¿Archivar este registro? Su historial seguirá disponible.",
-    "archived": "Registro archivado"
+    "archived": "Registro archivado",
+    "aiPolicy": {
+      "checksTitle": "Controles",
+      "checksDescription": "Umbrales y grupos de referencia para controles deterministas de nómina y horas. Estos controles no llaman a un modelo.",
+      "draftingTitle": "Redacción",
+      "draftingDescription": "Palabras y frases para revisión humana en borradores basados en registros. Nunca se envían automáticamente.",
+      "reviewsTitle": "Revisiones",
+      "reviewsDescription": "Frecuencia de revisión de los límites de acciones y avisos por los administradores."
+    }
   },
   "flows": {
     "title": "Flujos",
@@ -7789,17 +7804,17 @@
     }
   },
   "aiLedger": {
-    "title": "Gobernanza de IA",
-    "description": "Capacidades, sus techos de autonomía y el registro inmutable de cada respuesta asistida por IA.",
-    "capabilitiesTitle": "Capacidades",
-    "decisionsTitle": "Decisiones",
+    "title": "Revisión de acciones del asistente",
+    "description": "Declaraciones y responsables de revisión de acciones registradas. Los máximos del código y controles nativos siguen siendo la autoridad.",
+    "capabilitiesTitle": "Declaraciones de revisión",
+    "decisionsTitle": "Actividad",
     "overdueTitle": "Revisiones vencidas",
     "overdueDescription": "Estas capacidades superaron su cadencia de revisión",
     "export": "Exportar CSV",
-    "sync": "Sincronizar registro",
+    "sync": "Actualizar acciones disponibles",
     "syncDone": "Registro sincronizado.",
     "review": "Registrar revisión",
-    "save": "Guardar",
+    "save": "Guardar declaración",
     "failed": "No se pudo guardar el cambio.",
     "enabled": "Activada",
     "disabled": "Desactivada",
@@ -7807,7 +7822,7 @@
     "noticeRequired": "Aviso requerido",
     "neverReviewed": "Nunca revisada",
     "columns": {
-      "autonomy": "Autonomía",
+      "autonomy": "Nivel declarado",
       "capability": "Capacidad",
       "enabled": "Activada",
       "notice": "Aviso",
@@ -7816,7 +7831,31 @@
       "reviewer": "Revisor",
       "summary": "Resumen",
       "when": "Cuándo"
-    }
+    },
+    "activityDescription": "Referencias de acciones y resultados de revisión humana. Los permisos de los registros también limitan el total y la exportación.",
+    "empty": "No hay acciones registradas. Actualice las acciones sin cambiar los límites existentes.",
+    "activityEmpty": "Ninguna actividad coincide con estos filtros.",
+    "exportPage": "Exportar esta página",
+    "authorityHelp": "Estas declaraciones no desactivan controles ni cambian la autoridad del asistente. Las acciones nativas aplican sus máximos, permisos, funciones y revisión humana obligatoria.",
+    "featuresLink": "Funciones de empresa",
+    "levels": {
+      "read_only": "Solo lectura",
+      "draft": "Solo borrador",
+      "propose": "Proponer para revisión",
+      "act_with_confirmation": "Actuar con confirmación"
+    },
+    "outcomes": {
+      "shown": "Mostrado",
+      "accepted": "Aceptado",
+      "edited": "Editado",
+      "rejected": "Rechazado",
+      "expired": "Caducado"
+    },
+    "declarationSaved": "Declaración guardada. Los permisos, controles y autoridad del asistente no cambiaron.",
+    "reviewRecorded": "Revisión registrada.",
+    "registryRefreshed": "Catálogo actualizado. Se conservaron las declaraciones existentes.",
+    "codeMaximum": "Máximo del código",
+    "notRegistered": "No registrado"
   },
   "sandboxManager": {
     "newEnvironment": "Nuevo entorno",

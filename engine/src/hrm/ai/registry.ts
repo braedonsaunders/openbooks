@@ -9,9 +9,11 @@ import { autonomyRaiseRefused, unknownCapability } from "./errors.ts";
  * row — they are not feature switches. Each capability rides the module
  * that owns its data (`featureKey`); there is no separate AI switch.
  *
- * Autonomy ladder (ascending): read_only < draft < propose <
+ * Code action levels (ascending): read_only < draft < propose <
  * act_with_confirmation. There is no autonomous level — the code maximum
- * is act_with_confirmation and an org may only edit autonomy DOWN.
+ * is act_with_confirmation. The organization mirror stores review declarations
+ * within that maximum; editing a declaration does not change runtime authority.
+ * Native actions enforce their own permissions, features and human-review lifecycle.
  */
 
 export const AI_AUTONOMY_LADDER = [
@@ -30,7 +32,7 @@ export interface AiCapabilityDef {
   readonly purpose: string;
   /** Tables/tools the capability reads. */
   readonly dataScope: readonly string[];
-  /** Code maximum autonomy — orgs may only lower it. */
+  /** Code maximum action level; organization review declarations cannot exceed it. */
   readonly maxAutonomy: AiAutonomy;
   /** Role expected to review the capability on its cadence. */
   readonly reviewerRole: string;

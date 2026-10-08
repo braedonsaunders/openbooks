@@ -258,10 +258,8 @@ export const WORKFORCE_ENTITIES: SetupEntity[] = [
   // rehomed onto the project page and the Timesheets setup surface.
   PROJECT_GEOFENCES_ENTITY,
   TIME_KIOSKS_ENTITY,
-  // HR-21 begin: AI rails thresholds, cohort, bias terms and review
-  // cadence. Declared in ./hrm-ai-rails.ts; rehomed onto /admin/ai.
+  // Organization workforce checks and drafting policy use the shared Setup record.
   AI_RAILS_SETTINGS_ENTITY,
-  // HR-21 end
   {
     key: 'pay-schedules',
     table: 'pay_schedules',

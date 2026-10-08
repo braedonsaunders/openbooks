@@ -1,8 +1,11 @@
 import { sql } from "drizzle-orm";
-import type { SqlExecutor } from "../../platform/db.ts";
+import { db, withOrgTransaction, type SqlExecutor } from "../../platform/db.ts";
+import { lockActorCommandAuthority } from "../../organization/actor-command-authority.ts";
+import { lockAndCheckOrgFeature } from "../../organization/org-feature-lock.ts";
+import { AiRailsError } from "./errors.ts";
 
 /**
- * HRM AI rails (HR-21) org settings. The thresholds, cohort key, bias
+ * Workforce assistance settings. The thresholds, cohort key, bias
  * terms and review cadence are org-declared (Setup owns the UI); the
  * scan reads them here so a missing row falls back to safe defaults
  * instead of refusing — defaults are conservative (z=3, retro=500).
@@ -26,8 +29,7 @@ export const DEFAULT_AI_RAILS_SETTINGS: AiRailsSettings = {
 
 /**
  * Ensure the org's singleton settings row exists (defaults from the table).
- * New orgs have no row until something ensures it — the ledger page calls
- * this on view so the Setup section always has a row to edit. `on
+ * The configuration surface provisions the row before editing. `on
  * conflict do nothing` is the expected steady state (concurrent first
  * views), never a dropped write.
  */
@@ -37,6 +39,18 @@ export async function ensureAiRailsSettings(exec: SqlExecutor, orgId: string): P
     values (${orgId}::uuid)
     -- An existing organization settings row retains its operator configuration.
     on conflict (org_id) do nothing`);
+}
+
+/** Provision configuration only at its authorized Setup boundary, retaining existing values. */
+export async function ensureAiRailsSettingsForOrg(orgId: string, actorId: string): Promise<void> {
+  await withOrgTransaction(orgId, async () => {
+    const allowed = await lockActorCommandAuthority(db, orgId, actorId, null, 'admin.setup.manage');
+    if (allowed !== null) throw new AiRailsError('ai_forbidden', 'Organization workforce policy requires unrestricted subsidiary access');
+    if (!await lockAndCheckOrgFeature(db, orgId, 'aiGovernanceLedger')) {
+      throw new AiRailsError('ai_feature_off', 'Enable AI governance ledger in Company Settings → Features to configure workforce review policy');
+    }
+    await ensureAiRailsSettings(db, orgId);
+  });
 }
 
 export async function loadAiRailsSettings(

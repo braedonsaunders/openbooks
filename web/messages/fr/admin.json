@@ -1713,7 +1713,9 @@
       "current": "{id} (actuel)",
       "hint": "Chargez la liste des modèles avec votre clé API, ou saisissez un identifiant de modèle manuellement.",
       "idPlaceholder": "identifiant du modèle"
-    }
+    },
+    "workforceSettings": "Paramètres de révision du personnel",
+    "actionLimits": "Révisions des actions de l’assistant"
   },
   "setup": {
     "builder": {
@@ -3080,9 +3082,9 @@
         "description": "Une étape ordonnée d'un modèle : présélection, entretien, évaluation, offre, embauché ou refusé."
       },
       "ai-rails-settings": {
-        "title": "Paramètres des garde-fous IA",
-        "singularTitle": "Paramètre des garde-fous IA",
-        "description": "Seuils d'analyse, cohortes de référence, termes de biais déclarés et rythme de révision du registre pour les garde-fous RH déterministes."
+        "title": "Contrôles du personnel et rédaction",
+        "singularTitle": "Contrôles du personnel et rédaction",
+        "description": "Contrôles déterministes de paie et de temps, termes à vérifier dans les brouillons et intervalles de révision. Ces paramètres ne modifient pas les calculs de paie ni la connexion au fournisseur IA."
       },
       "hrm-action-reasons": {
         "title": "Motifs d'action",
@@ -3417,6 +3419,11 @@
         "title": "Codes de planification",
         "singularTitle": "Code de planification",
         "description": "Codes pour affecter un travail qui n’est ni un client ni un projet, comme des journées de formation ou d’atelier, et pour les jours où les personnes ne travaillent pas."
+      },
+      "ai-capabilities": {
+        "title": "Révisions des actions de l’assistant",
+        "singularTitle": "Révisions des actions de l’assistant",
+        "description": "Déclarations et responsabilités de révision des actions enregistrées. Les limites du code et les contrôles natifs restent applicables."
       }
     },
     "fields": {
@@ -6626,7 +6633,15 @@
     },
     "archive": "Archiver",
     "confirmArchive": "Archiver cet enregistrement ? Son historique reste disponible.",
-    "archived": "Enregistrement archivé"
+    "archived": "Enregistrement archivé",
+    "aiPolicy": {
+      "checksTitle": "Contrôles",
+      "checksDescription": "Seuils et groupes de référence pour les contrôles déterministes de paie et de temps. Aucun modèle IA n’est appelé.",
+      "draftingTitle": "Rédaction",
+      "draftingDescription": "Mots et expressions à vérifier dans les brouillons fondés sur les dossiers. Aucun brouillon n’est envoyé automatiquement.",
+      "reviewsTitle": "Révisions",
+      "reviewsDescription": "Fréquence de révision des limites des actions et des avis par les administrateurs."
+    }
   },
   "flows": {
     "title": "Flux",
@@ -7789,17 +7804,17 @@
     }
   },
   "aiLedger": {
-    "title": "Gouvernance IA",
-    "description": "Capacités, leurs plafonds d'autonomie et le registre immuable de chaque réponse assistée par IA.",
-    "capabilitiesTitle": "Capacités",
-    "decisionsTitle": "Décisions",
+    "title": "Révisions des actions de l’assistant",
+    "description": "Déclarations et responsabilités de révision des actions enregistrées. Les limites du code et les contrôles natifs restent applicables.",
+    "capabilitiesTitle": "Déclarations de révision",
+    "decisionsTitle": "Activité",
     "overdueTitle": "Revues en retard",
     "overdueDescription": "Ces capacités ont dépassé leur cadence de revue",
     "export": "Exporter CSV",
-    "sync": "Synchroniser le registre",
+    "sync": "Actualiser les actions disponibles",
     "syncDone": "Registre synchronisé.",
     "review": "Consigner la revue",
-    "save": "Enregistrer",
+    "save": "Enregistrer la déclaration",
     "failed": "La modification n'a pas pu être enregistrée.",
     "enabled": "Activée",
     "disabled": "Désactivée",
@@ -7807,7 +7822,7 @@
     "noticeRequired": "Mention requise",
     "neverReviewed": "Jamais revue",
     "columns": {
-      "autonomy": "Autonomie",
+      "autonomy": "Niveau déclaré",
       "capability": "Capacité",
       "enabled": "Activée",
       "notice": "Mention",
@@ -7816,7 +7831,31 @@
       "reviewer": "Relecteur",
       "summary": "Résumé",
       "when": "Quand"
-    }
+    },
+    "activityDescription": "Références des actions et résultats des révisions humaines. Les permissions des dossiers limitent aussi le total et l’export.",
+    "empty": "Aucune action enregistrée. Actualisez les actions disponibles sans modifier les limites existantes.",
+    "activityEmpty": "Aucune activité ne correspond aux filtres.",
+    "exportPage": "Exporter cette page",
+    "authorityHelp": "Ces déclarations ne désactivent pas les contrôles et ne changent pas les droits de l’assistant. Les actions natives appliquent leurs limites, permissions, fonctionnalités et validations humaines.",
+    "featuresLink": "Fonctionnalités de l’entreprise",
+    "levels": {
+      "read_only": "Lecture seule",
+      "draft": "Brouillon uniquement",
+      "propose": "Proposer pour révision",
+      "act_with_confirmation": "Agir avec confirmation"
+    },
+    "outcomes": {
+      "shown": "Affiché",
+      "accepted": "Accepté",
+      "edited": "Modifié",
+      "rejected": "Rejeté",
+      "expired": "Expiré"
+    },
+    "declarationSaved": "Déclaration enregistrée. Les permissions, contrôles et droits de l’assistant restent inchangés.",
+    "reviewRecorded": "Révision enregistrée.",
+    "registryRefreshed": "Catalogue actualisé. Les déclarations existantes sont conservées.",
+    "codeMaximum": "Maximum du code",
+    "notRegistered": "Non enregistré"
   },
   "sandboxManager": {
     "newEnvironment": "Nouvel environnement",

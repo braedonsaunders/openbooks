@@ -1,3 +1,5 @@
+import { redirect } from 'next/navigation'
+import { aiSettingsDestination } from '../../../../lib/setup/ai-settings-links'
 import { getTranslations } from 'next-intl/server'
 import { ModuleView } from '../../../../components/viewspec/module-view'
 import { loadAdminAi, adminAiSpec } from './view'
@@ -17,6 +19,8 @@ export async function generateMetadata() {
  */
 export default async function AiSettingsPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const sp = await searchParams
+  const destination = aiSettingsDestination(sp)
+  if (destination) redirect(destination)
   const data = await loadAdminAi(sp)
   return <ModuleView spec={adminAiSpec(data)} data={data} searchParams={sp} trusted />
 }

@@ -27,6 +27,26 @@ test('agents is a first-party setup group served by custom pages, not generic en
   assert.deepEqual(claimed.map((entity) => entity.key), [])
 })
 
+test('workforce policy and native action limits have separate reachable Setup homes', () => {
+  const policy = SETUP_ENTITY_BY_KEY.get('ai-rails-settings')!
+  assert.equal(policy.rehomed, undefined)
+  assert.equal(policy.table, 'ai_rails_settings')
+  assert.equal(policy.idColumn, 'org_id')
+  assert.equal(policy.allowCreate, false)
+  assert.equal(policy.allowDelete, false)
+  assert.equal(policy.featureKey, 'aiGovernanceLedger')
+  assert.deepEqual(policy.recordSections?.map((section) => section.fields), [
+    ['zThreshold', 'retroThreshold', 'cohortKey'], ['biasTerms'], ['reviewMonths'],
+  ])
+  const limits = SETUP_ENTITY_BY_KEY.get('ai-capabilities')!
+  assert.equal(limits.readOnly, true, 'generic CRUD cannot bypass native capability commands')
+  assert.equal(limits.importVia, 'none')
+  assert.equal(limits.featureKey, 'aiGovernanceLedger')
+  assert.equal(setupEntityHref(limits), '/admin/setup/ai-capabilities')
+  assert.ok(setupEntitiesByGroup().get('workforce')?.some((entity) => entity.key === policy.key))
+  assert.ok(setupEntitiesByGroup().get('company')?.some((entity) => entity.key === limits.key))
+})
+
 test('record-owned setup collections leave the rail and declare their parent bindings', () => {
   const taxRates = SETUP_ENTITY_BY_KEY.get('tax-rates')
   const taxBoxes = SETUP_ENTITY_BY_KEY.get('tax-report-lines')

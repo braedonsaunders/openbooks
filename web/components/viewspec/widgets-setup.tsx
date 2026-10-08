@@ -207,7 +207,7 @@ export const SETUP_WIDGETS = {
       initial={props.initial as ComponentProps<typeof AiSettingsForm>['initial']}
     />
   ),
-  /** HR-21 governance ledger: the section null-guards without the setup grant. */
+  /** Advanced Setup controls remain separate from the provider form. */
   'ai-governance-ledger': (props) => (
     <AiGovernanceSection ledger={(props.ledger as ComponentProps<typeof AiGovernanceSection>['ledger']) ?? null} />
   ),
