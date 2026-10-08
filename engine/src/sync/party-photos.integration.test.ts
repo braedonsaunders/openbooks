@@ -14,8 +14,13 @@ const GIF = Buffer.from('R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA
 
 async function fixture() {
   const org = await createScratchOrg()
-  const actorId = await createScratchUser(org.orgId, 'Photo administrator', 'admin')
+  const actorId = await createScratchUser(org.orgId, 'Photo operator', 'photo_operator')
   const rows = await withOrg(org.orgId, async () => {
+    const grants = await db.execute(sql`update app_roles set permissions='["sync.run","parties.read","parties.manage"]'::jsonb
+      where org_id=${org.orgId} and key='photo_operator' returning id`)
+    assert.equal(grants.rows.length,1)
+    const principal = (await db.execute<{ is_active: boolean }>(sql`select is_active from users where org_id=${org.orgId} and id=${actorId}`)).rows[0]
+    assert.equal(principal?.is_active,true)
     const connection = (await db.execute<{ id: string }>(sql`
       insert into connections (org_id,source,display_name,auth_kind,status,config)
       values (${org.orgId},'netsuite','Photo source','token','active','{"account":"photo-account","baseCurrency":"CAD"}'::jsonb) returning id`)).rows[0]!

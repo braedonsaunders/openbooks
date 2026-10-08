@@ -3,7 +3,7 @@ import { z } from 'zod'
 import { defineRoute } from '../../../../../lib/api/route'
 import { isUuid } from '../../../../../lib/list-params'
 import { notFound } from '@/lib/api/responses'
-import { blobResponse } from '../../../../../lib/blob-response'
+import { partyPhotoResponse } from '../../../../../lib/party-photo-response'
 import { isMaskedFileContentError } from '../../../../../lib/file-storage'
 import { MAX_PARTY_PHOTO_BYTES, PARTY_PHOTO_CONTENT_TYPES, readPartyPhoto, removePartyPhoto, storePartyPhoto } from '@openbooks/engine/src/organization/party-photos.ts'
 import { ScopeNotFoundError } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
@@ -20,9 +20,7 @@ export const GET = defineRoute({
     try {
       const photo = await readPartyPhoto({ orgId: authz.user.orgId, actorId: authz.user.id, partyId: id })
       if (!photo) return notFound('photo')
-      return blobResponse(request, { filename: photo.name, contentType: photo.content_type, bytes: photo.bytes, versionId: photo.version_id }, {
-        immutable: new URL(request.url).searchParams.get('v') === photo.file_id, fallbackName: 'photo',
-      })
+      return partyPhotoResponse(request,photo)
     } catch (error) {
       if (error instanceof ScopeNotFoundError || isMaskedFileContentError(error)) return notFound('photo')
       throw error
