@@ -154,7 +154,8 @@
     "hrm-performance-templates": "Formulaires d’évaluation",
     "hrm-benefits-employees": "Avantages",
     "hrm-benefits-delivery": "Exécution",
-    "hrm-training": "Formation"
+    "hrm-training": "Formation",
+    "scheduling": "Planification"
   },
   "modulesShort": {
     "hrm-performance-cycles": "Gérer les évaluations",
@@ -219,7 +220,8 @@
     "inbox-views": "Boîte de réception",
     "me-views": "Moi",
     "crm-sales": "Ventes",
-    "hrm-compensation": "Rémunération"
+    "hrm-compensation": "Rémunération",
+    "scheduling": "Planification"
   },
   "localWorkspaces": {
     "collections-views": "Recouvrement",

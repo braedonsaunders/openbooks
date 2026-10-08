@@ -187,6 +187,7 @@ export const LOCAL_NAVIGATION: LocalNavigationSet[] = [
   { id: 'me-views', label: 'Me', inline: true, tabs: [
     { href: '/me', ns: 'hrm', key: 'me.tabs.overview' },
     { href: '/hrm/my-leave', ns: 'hrm', key: 'me.tabs.leave' },
+    { href: '/me/schedule', ns: 'scheduling', key: 'mine.tab', feature: 'hrmShiftPlanning' },
     ...['profile', 'checklists', 'reviews', 'benefits', 'team', 'compensation', 'documents'].map((tab) => ({ href: `/me/${tab}`, ns: 'hrm', key: `me.tabs.${tab}` })),
     { href: '/me/one-on-ones', ns: 'hrm', key: 'me.tabs.oneOnOnes' },
     { href: '/me/surveys', ns: 'hrm', key: 'me.tabs.openSurveys' },

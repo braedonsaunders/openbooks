@@ -3530,6 +3530,16 @@
         "title": "Altersstufen",
         "singularTitle": "Altersstufe",
         "description": "Tagesgrenzen, die aus Überfälligkeitstagen Altersstufen machen, mit Gültigkeitsdatum. Ohne Richtlinie gelten die Stufen 30/60/90."
+      },
+      "schedule-boards": {
+        "title": "Plantafeln",
+        "singularTitle": "Plantafel",
+        "description": "Plantafeln für die Einplanung von Personen und Projektaufgaben: wen jede Plantafel umfasst, wie sie aussieht und wie ihre Einplanungen veröffentlicht werden."
+      },
+      "schedule-codes": {
+        "title": "Plancodes",
+        "singularTitle": "Plancode",
+        "description": "Codes für Arbeit, die keinem Kunden oder Projekt zugeordnet ist, etwa Schulungs- oder Werkstatttage, sowie für Tage, an denen Personen nicht arbeiten."
       }
     },
     "fields": {
@@ -4078,7 +4088,22 @@
       "weekendDays": "Wochenendtage",
       "holidayCountry": "Feiertagsland",
       "boundaries": "Grenzwerte",
-      "holidayRegion": "Feiertagsregion"
+      "holidayRegion": "Feiertagsregion",
+      "rowKind": "Pläne",
+      "grain": "Einplanungsart",
+      "views": "Ansichten",
+      "defaultView": "Öffnet in",
+      "rangeDays": "Angezeigte Tage",
+      "showWeekends": "Wochenenden anzeigen",
+      "timeZone": "Zeitzone",
+      "dayStarts": "Tagesbeginn",
+      "dayEnds": "Tagesende",
+      "dayBreakMinutes": "Pause (Minuten)",
+      "publishPolicy": "Veröffentlichung",
+      "prefillTimesheets": "Stundenzettel vorbelegen",
+      "prefillCrewTime": "Teamzeit vorbelegen",
+      "prefillFieldTickets": "Regieberichte vorbelegen",
+      "notifyAssignees": "Personen per E-Mail über ihre Änderungen informieren"
     },
     "fieldHelp": {
       "fxRateMaxAgeDays": "Tage zwischen dem neuesten verwendbaren Kurs und dem Periodenende, ab denen Bewertung und Konsolidierung den Kurs ablehnen. Stichtagskurse zählen ab dem Datum des Kassakurses zum Periodenende, Durchschnittskurse ab der neuesten einbezogenen Notierung. Standard ohne Richtlinie: 31 Tage.",
@@ -4224,7 +4249,23 @@
       "businessCalendarWeekendDays": "ISO-Wochentage als JSON-Liste, zum Beispiel [6, 7] für Samstag und Sonntag. Eine leere Liste bedeutet, dass kein Wochentag ein Wochenendtag ist.",
       "businessCalendarHolidayCountry": "Feiertage stammen aus genau einem Arbeitskalender: dem des Landes oder dem seiner Region, wo das Land einen Kalender je Region führt (Region unten setzen). Ein Land ohne erfasstes Paket ist nicht wählbar — speichern Sie ohne Feiertagsland für reine Wochenendregeln.",
       "agingBucketBoundaries": "Aufsteigende Tageszahlen als JSON-Liste, zum Beispiel [30, 60, 90]. Die letzte Grenze eröffnet die letzte Stufe: 90 Tage Überfälligkeit sind bereits 90+.",
-      "businessCalendarHolidayRegion": "Regionskennzeichen für den Arbeits-Feiertagskalender: ON für Ontario (niemals CA-ON). Wo neben regionalen Kalendern ein Bundeskalender steht, benennt FEDERAL den Bundeskalender. Leer lassen, wo das Land einen einzigen Kalender führt; ein Land mit regionalen Kalendern erfordert die Angabe."
+      "businessCalendarHolidayRegion": "Regionskennzeichen für den Arbeits-Feiertagskalender: ON für Ontario (niemals CA-ON). Wo neben regionalen Kalendern ein Bundeskalender steht, benennt FEDERAL den Bundeskalender. Leer lassen, wo das Land einen einzigen Kalender führt; ein Land mit regionalen Kalendern erfordert die Angabe.",
+      "scheduleBoardCode": "Ein kurzes Kürzel für Links und Importe, etwa FIELD oder PLANT-A.",
+      "scheduleBoardRowKind": "Personalplantafeln planen Mitarbeitende ein; Aufgabenplantafeln planen Projektaufgaben in einem Gantt-Diagramm. Dies lässt sich nach dem Anlegen der Plantafel nicht mehr ändern.",
+      "scheduleBoardProject": "Beschränken Sie eine Aufgabenplantafel auf ein Projekt, oder lassen Sie das Feld leer, um alle aktiven Projekte im Bereich aufzulisten.",
+      "scheduleBoardViews": "Die Ansichten dieser Plantafel. Personalplantafeln: Raster, Zeitachse, nach Auftrag und Monat. Aufgabenplantafeln: Gantt-Diagramm und Fortschritt.",
+      "scheduleBoardRangeDays": "Wie viele Tage eine Personalplantafel gleichzeitig anzeigt: 1, 3, 7, 14, 21, 28, 35 oder 42.",
+      "scheduleBoardWeekStartsOn": "Der erste angezeigte Tag jeder Woche: 0 ist Sonntag, 1 ist Montag, bis 6 für Samstag.",
+      "scheduleBoardGrain": "Ganze Tage planen jede Person für den Arbeitstag der Plantafel ein; Stundenschichten planen Beginn- und Endzeiten ein.",
+      "scheduleBoardDayStarts": "Der Arbeitstag für ganztägige Einplanungen, als 24-Stunden-Uhrzeit wie 07:00.",
+      "scheduleBoardPublishPolicy": "Plantafeln mit sofortiger Veröffentlichung veröffentlichen jede Einplanung, sobald sie erfolgt. Plantafeln mit gemeinsamer Veröffentlichung sammeln Änderungen, bis jemand mit Freigaberechten sie veröffentlicht.",
+      "scheduleBoardPrefillTimesheets": "Veröffentlichte Einplanungen auf dieser Plantafel erscheinen im Wochenstundenzettel jeder Person als geplante Zeit, die sie mit einem Klick übernehmen und dann bestätigen oder korrigieren kann.",
+      "scheduleBoardPrefillCrewTime": "Veröffentlichte Projekteinplanungen auf dieser Plantafel schlagen im Teamzeitbogen des Vorarbeiters für dieses Projekt und diesen Tag die eingeplante Kolonne und ihre Stunden vor, die sich mit einem Klick übernehmen lassen.",
+      "scheduleBoardPrefillFieldTickets": "Veröffentlichte Projekteinplanungen auf dieser Plantafel schlagen im Regiebericht dieses Projekts die eingeplante Kolonne und ihre Stunden für den Berichtszeitraum vor, die sich mit einem Klick übernehmen lassen.",
+      "scheduleBoardNotifyAssignees": "Senden Sie jeder Person eine Zusammenfassung per E-Mail, wenn sich ihre veröffentlichten Einplanungen auf dieser Plantafel ändern.",
+      "scheduleCode": "Bis zu 16 Großbuchstaben, Ziffern oder / & + . _ -, etwa TRAIN, SHOP oder FORCED.",
+      "scheduleCodeCategory": "Arbeitscodes zählen als geplante Zeit. Codes für Nichtverfügbarkeit kennzeichnen einen Tag, an dem die Person nicht arbeitet, ohne eine Abwesenheit zu erfassen.",
+      "scheduleCodeColor": "Die Farbe, in der Einplanungen mit diesem Code angezeigt werden, als Hex-Wert wie #38bdf8."
     },
     "options": {
       "storedValueKind": {
@@ -4927,6 +4968,30 @@
         "friday": "Freitag",
         "saturday": "Samstag",
         "sunday": "Sonntag"
+      },
+      "scheduleRowKind": {
+        "people": "Personen",
+        "tasks": "Projektaufgaben"
+      },
+      "scheduleGrain": {
+        "day": "Ganze Tage",
+        "timed": "Stundenschichten"
+      },
+      "scheduleView": {
+        "grid": "Raster",
+        "targets": "Nach Auftrag",
+        "timeline": "Zeitachse",
+        "calendar": "Monat",
+        "gantt": "Gantt-Diagramm",
+        "progress": "Fortschritt"
+      },
+      "schedulePublishPolicy": {
+        "live": "Sofort",
+        "staged": "Gemeinsam veröffentlichen"
+      },
+      "scheduleCodeCategory": {
+        "work": "Arbeit",
+        "unavailable": "Nicht im Dienst"
       }
     },
     "bankFeeds": {
@@ -5831,7 +5896,15 @@
       "payComponentTaxability": "Steuern und Abgaben",
       "payComponentTaxabilityHelp": "Welche Abzüge, gesetzlichen Beiträge und Urlaubsrückstellungen diese Lohnart berücksichtigt.",
       "payComponentAccounting": "Buchhaltung",
-      "payComponentAccountingHelp": "Auf welches Hauptbuchkonto der Betrag gebucht wird und an wen er abgeführt wird."
+      "payComponentAccountingHelp": "Auf welches Hauptbuchkonto der Betrag gebucht wird und an wen er abgeführt wird.",
+      "scheduleBoardIdentity": "Plantafel",
+      "scheduleBoardScope": "Wen sie umfasst",
+      "scheduleBoardScopeHelp": "Personalplantafeln listen Mitarbeitende des ausgewählten Rechtsträgers, der Abteilung und des Standorts auf. Lassen Sie ein Feld leer, um alle einzubeziehen.",
+      "scheduleBoardDisplay": "Anzeige",
+      "scheduleBoardBooking": "Einplanung",
+      "scheduleBoardBookingHelp": "Ganztägige Einplanungen verwenden diese Arbeitszeiten in der Zeitzone der Plantafel.",
+      "scheduleBoardAutomation": "Automatisierung",
+      "scheduleBoardAutomationHelp": "Was geschieht, nachdem eine Einplanung auf dieser Plantafel veröffentlicht wurde."
     },
     "segmentValues": {
       "builtinLink": "{name} öffnen",
@@ -7038,8 +7111,8 @@
       "description": "Optionale Kurse, Termine, Einladungen, Ergebnisse und Rückmeldungen. Qualifikationsnachweise erfordern zusätzlich Zertifizierungen und Lizenzen."
     },
     "hrmShiftPlanning": {
-      "title": "Schichtplanung",
-      "description": "Optionale wiederkehrende Arbeitspläne, Mitarbeiterzuordnungen und veröffentlichte Dienstpläne. Lohnabrechnung und Zeiterfassung benötigen keinen Dienstplan."
+      "title": "Einsatzplanung",
+      "description": "Plantafeln zur Einplanung von Personen tage- oder schichtweise, mit Abwesenheiten, Feiertagen und Veröffentlichung. Lohnabrechnung und Zeiterfassung setzen keinen Plan voraus."
     },
     "hrmAttendance": {
       "title": "Gerätegestützte Anwesenheit",

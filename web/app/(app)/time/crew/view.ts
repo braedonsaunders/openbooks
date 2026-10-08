@@ -27,6 +27,7 @@ import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
 import { FieldTimeError } from '@openbooks/engine/src/hrm/field-time/errors.ts'
 import { listCrewBatches, getBatchDetail } from '@openbooks/engine/src/hrm/field-time/reads.ts'
 import { loadFieldTimeSettings } from '@openbooks/engine/src/hrm/field-time/settings.ts'
+import { scheduledWork } from '@openbooks/engine/src/schedule-boards/prefill.ts'
 
 /**
  * The foreman crew page: batches per project per day as a shared
@@ -236,8 +237,15 @@ async function crewWorkspaceData(
            where org_id = ${orgId} and status = 'active' order by unit_number limit 200`)
         : Promise.resolve({ rows: [] as { id: string; name: string }[] }),
     ])
+    // Boards that pre-fill crew time offer the people booked to this project
+    // on this day; the foreman adds them and saves through the batch command.
+    const scheduledCrew = detail.status === 'draft' || detail.status === 'rejected'
+      ? (await scheduledWork({ orgId, use: 'crew', projectId: detail.projectId, from: detail.workedOn, through: detail.workedOn }))
+        .map((work) => ({ employeePartyId: work.workerPartyId, employeeName: work.workerName, hours: work.hours, projectTaskId: work.projectTaskId ?? '' }))
+      : []
     workspace = {
       batchId: detail.id,
+      scheduledCrew,
       status: statusLabel(detail.status),
       locked: detail.status !== 'draft' && detail.status !== 'rejected',
       initialLines: detail.lines.map((line) => ({

@@ -3477,6 +3477,16 @@
         "title": "Faixas de vencimento",
         "singularTitle": "Política de faixas de vencimento",
         "description": "Limites de dias que convertem dias em atraso em faixas de vencimento, com vigência. Sem política, aplicam-se as faixas 30/60/90."
+      },
+      "schedule-boards": {
+        "title": "Quadros de programação",
+        "singularTitle": "Quadro de programação",
+        "description": "Quadros para programar pessoas e tarefas de projetos: quem cada quadro abrange, como ele é exibido e como suas alocações são publicadas."
+      },
+      "schedule-codes": {
+        "title": "Códigos de programação",
+        "singularTitle": "Código de programação",
+        "description": "Códigos para alocar trabalhos que não são de um cliente nem de um projeto, como dias de treinamento ou de oficina, e para dias em que as pessoas não trabalham."
       }
     },
     "fields": {
@@ -4025,7 +4035,22 @@
       "weekendDays": "Dias de fim de semana",
       "holidayCountry": "País dos feriados",
       "boundaries": "Limites",
-      "holidayRegion": "Região dos feriados"
+      "holidayRegion": "Região dos feriados",
+      "rowKind": "Programações",
+      "grain": "Tipo de alocação",
+      "views": "Visualizações",
+      "defaultView": "Abre em",
+      "rangeDays": "Dias exibidos",
+      "showWeekends": "Exibir fins de semana",
+      "timeZone": "Fuso horário",
+      "dayStarts": "Início do expediente",
+      "dayEnds": "Fim do expediente",
+      "dayBreakMinutes": "Intervalo (minutos)",
+      "publishPolicy": "Publicação",
+      "prefillTimesheets": "Preencher folhas de horas",
+      "prefillCrewTime": "Preencher horas da equipe",
+      "prefillFieldTickets": "Preencher boletins de campo",
+      "notifyAssignees": "Enviar a cada pessoa suas alterações por e-mail"
     },
     "fieldHelp": {
       "fxRateMaxAgeDays": "Dias entre a taxa utilizável mais recente e o fim do período a partir dos quais a reavaliação e a consolidação recusam a taxa. Taxas de fechamento contam a partir da data da taxa à vista de fim de período; taxas médias, a partir da cotação mais recente incluída na média. Padrão sem política: 31 dias.",
@@ -4171,7 +4196,23 @@
       "businessCalendarWeekendDays": "Dias da semana ISO como lista JSON, por exemplo [6, 7] para sábado e domingo. Uma lista vazia indica que nenhum dia é fim de semana.",
       "businessCalendarHolidayCountry": "Os feriados vêm de um único calendário de trabalho: o do país ou o de sua região onde o país mantém um por região (informe a região abaixo). Um país sem pacote transcrito não pode ser usado — salve sem país de feriados apenas para fins de semana.",
       "agingBucketBoundaries": "Contagens de dias ascendentes como lista JSON, por exemplo [30, 60, 90]. O último limite abre a última faixa: 90 dias em atraso já são 90+.",
-      "businessCalendarHolidayRegion": "Qualificador de região que seleciona o calendário de trabalho: ON para Ontário (nunca CA-ON). Onde um calendário federal convive com calendários regionais, FEDERAL nomeia o calendário federal. Deixe vazio onde o país mantém um único calendário; um país de calendários regionais o exige."
+      "businessCalendarHolidayRegion": "Qualificador de região que seleciona o calendário de trabalho: ON para Ontário (nunca CA-ON). Onde um calendário federal convive com calendários regionais, FEDERAL nomeia o calendário federal. Deixe vazio onde o país mantém um único calendário; um país de calendários regionais o exige.",
+      "scheduleBoardCode": "Um código curto para links e importações, como FIELD ou PLANT-A.",
+      "scheduleBoardRowKind": "Quadros de pessoas alocam funcionários; quadros de tarefas programam tarefas de projetos em um gráfico de Gantt. Isso não pode ser alterado depois que o quadro é criado.",
+      "scheduleBoardProject": "Limite um quadro de tarefas a um projeto ou deixe em branco para listar todos os projetos ativos do escopo.",
+      "scheduleBoardViews": "As visualizações oferecidas por este quadro. Quadros de pessoas: grade, linha do tempo, por serviço e mês. Quadros de tarefas: gráfico de Gantt e andamento.",
+      "scheduleBoardRangeDays": "Quantos dias um quadro de pessoas exibe de uma vez: 1, 3, 7, 14, 21, 28, 35 ou 42.",
+      "scheduleBoardWeekStartsOn": "O primeiro dia de cada semana exibida: 0 é domingo, 1 é segunda-feira, até 6 para sábado.",
+      "scheduleBoardGrain": "Dias inteiros alocam cada pessoa durante o expediente do quadro; turnos por hora alocam horários de início e término.",
+      "scheduleBoardDayStarts": "O expediente usado nas alocações de dia inteiro, no formato de 24 horas, como 07:00.",
+      "scheduleBoardPublishPolicy": "Quadros de publicação imediata publicam cada alocação assim que ela é feita. Quadros de publicação em conjunto acumulam as alterações até que alguém com permissão de aprovação as publique.",
+      "scheduleBoardPrefillTimesheets": "As alocações publicadas neste quadro aparecem na folha de horas semanal de cada pessoa como tempo programado, que ela pode adicionar com um clique e depois confirmar ou corrigir.",
+      "scheduleBoardPrefillCrewTime": "As alocações de projeto publicadas neste quadro oferecem à folha de horas da equipe do encarregado, para aquele projeto e dia, a equipe e as horas alocadas, adicionadas com um clique.",
+      "scheduleBoardPrefillFieldTickets": "As alocações de projeto publicadas neste quadro oferecem ao boletim de campo daquele projeto a equipe e as horas alocadas para o período do boletim, adicionadas com um clique.",
+      "scheduleBoardNotifyAssignees": "Envia a cada pessoa um resumo por e-mail quando suas alocações publicadas neste quadro mudam.",
+      "scheduleCode": "Até 16 letras maiúsculas, dígitos ou / & + . _ -, como TRAIN, SHOP ou FORCED.",
+      "scheduleCodeCategory": "Códigos de trabalho contam como tempo programado. Códigos de indisponibilidade marcam um dia em que a pessoa não trabalha, sem registrar ausência.",
+      "scheduleCodeColor": "A cor em que as alocações com este código são exibidas, como valor hexadecimal, por exemplo #38bdf8."
     },
     "options": {
       "storedValueKind": {
@@ -4874,6 +4915,30 @@
         "friday": "sexta-feira",
         "saturday": "sábado",
         "sunday": "domingo"
+      },
+      "scheduleRowKind": {
+        "people": "Pessoas",
+        "tasks": "Tarefas de projeto"
+      },
+      "scheduleGrain": {
+        "day": "Dias inteiros",
+        "timed": "Turnos por hora"
+      },
+      "scheduleView": {
+        "grid": "Grade",
+        "targets": "Por serviço",
+        "timeline": "Linha do tempo",
+        "calendar": "Mês",
+        "gantt": "Gráfico de Gantt",
+        "progress": "Andamento"
+      },
+      "schedulePublishPolicy": {
+        "live": "Imediata",
+        "staged": "Publicar em conjunto"
+      },
+      "scheduleCodeCategory": {
+        "work": "Trabalho",
+        "unavailable": "Sem expediente"
       }
     },
     "payroll": {
@@ -5759,7 +5824,15 @@
       "payComponentTaxability": "Impostos e contribuições",
       "payComponentTaxabilityHelp": "Quais retenções, contribuições obrigatórias e provisões de férias esta rubrica compõe.",
       "payComponentAccounting": "Contabilidade",
-      "payComponentAccountingHelp": "Em qual conta do razão o valor é lançado e a quem é recolhido."
+      "payComponentAccountingHelp": "Em qual conta do razão o valor é lançado e a quem é recolhido.",
+      "scheduleBoardIdentity": "Quadro",
+      "scheduleBoardScope": "Quem ele abrange",
+      "scheduleBoardScopeHelp": "Quadros de pessoas listam os funcionários da entidade jurídica, do departamento e do local selecionados. Deixe um campo em branco para incluir todos.",
+      "scheduleBoardDisplay": "Exibição",
+      "scheduleBoardBooking": "Alocação",
+      "scheduleBoardBookingHelp": "As alocações de dia inteiro usam este expediente no fuso horário do quadro.",
+      "scheduleBoardAutomation": "Automação",
+      "scheduleBoardAutomationHelp": "O que acontece depois que uma alocação é publicada neste quadro."
     },
     "constructionRateEditor": {
       "tab": "Escopo e tarifas"
@@ -7038,8 +7111,8 @@
       "description": "Cursos, sessões, convites, resultados e avaliações opcionais. A concessão de qualificações também exige Certificações e licenças."
     },
     "hrmShiftPlanning": {
-      "title": "Planejamento de turnos",
-      "description": "Escalas recorrentes, alocações e escala publicada opcionais. A folha e o registro de horas não exigem uma escala."
+      "title": "Programação",
+      "description": "Quadros de programação para alocar pessoas por dia ou por turno, com ausências, feriados e publicação. A folha e o registro de horas não exigem uma programação."
     },
     "hrmAttendance": {
       "title": "Presença por dispositivo",

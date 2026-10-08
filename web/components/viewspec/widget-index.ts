@@ -35,6 +35,7 @@ export const WIDGET_FAMILIES = [
   'resourcing-demand',
   'resourcing-requests',
   'resourcing-retainers',
+  'scheduling',
   'setup',
   'warehouse',
 ] as const
@@ -539,6 +540,8 @@ export const WIDGET_FAMILY: Readonly<Record<string, WidgetFamily>> = {
   'saved-view-header': 'reporting',
   'saved-view-meta': 'reporting',
   'schedule-report': 'reporting',
+  'scheduling-my-schedule': 'scheduling',
+  'scheduling-workspace': 'scheduling',
   'script-drawer': 'setup',
   'search-input': 'controls',
   'search-select-filter': 'controls',

@@ -14,6 +14,7 @@ export type { EmailOut }
 export { shipmentTrackingEmail } from './shipment-tracking'
 export { returnReceivedEmail, returnDecisionEmail } from './return-authorization'
 export { portalMagicLinkEmail } from './portal-magic-link'
+export { scheduleChangeEmail } from './schedule-change'
 export { billingReviewRequestEmail } from './billing-review'
 
 // --- Flow / approval emails (engine/src/flows) -------------------------------

@@ -1,0 +1,260 @@
+{
+  "title": "Planification",
+  "description": "Planifiez qui va où et quand — les équipes à la journée, les quarts à l’heure et les calendriers de projet — sur des tableaux adaptés au fonctionnement de votre entreprise.",
+  "views": {
+    "grid": "Grille",
+    "targets": "Par chantier",
+    "timeline": "Chronologie",
+    "calendar": "Mois",
+    "gantt": "Diagramme de Gantt",
+    "progress": "Avancement"
+  },
+  "kinds": {
+    "customer": "Client",
+    "project": "Projet",
+    "location": "Emplacement",
+    "code": "Code de planification"
+  },
+  "groupBy": {
+    "none": "Aucun regroupement",
+    "department": "Par département",
+    "trade": "Par corps de métier",
+    "jobTitle": "Par intitulé de poste"
+  },
+  "toolbar": {
+    "board": "Tableau",
+    "peopleBoards": "Tableaux du personnel",
+    "taskBoards": "Tableaux de tâches",
+    "views": "Vues",
+    "previous": "Précédent",
+    "next": "Suivant",
+    "today": "Aujourd’hui",
+    "range": "Jours affichés",
+    "days": "{count, plural, one {# jour} other {# jours}}",
+    "search": "Rechercher des personnes ou des chantiers",
+    "groupBy": "Regrouper les lignes",
+    "density": "Basculer les lignes compactes",
+    "undo": "Annuler",
+    "undoWhat": "Annuler {what}",
+    "redo": "Rétablir",
+    "settings": "Paramètres du tableau",
+    "newBoard": "Nouveau tableau"
+  },
+  "empty": {
+    "title": "Configurez votre premier tableau",
+    "description": "Un tableau est un planning pour une partie de votre activité : une équipe affectée à la journée, une équipe en quarts ou vos calendriers de projet.",
+    "create": "Créer un tableau",
+    "askAdmin": "Demandez à un administrateur de créer un tableau de planification dans Configuration."
+  },
+  "grid": {
+    "label": "Grille de planification",
+    "people": "{count, plural, one {# personne} other {# personnes}}",
+    "hours": "Heures",
+    "onSite": "Affecté",
+    "holiday": "Jour férié",
+    "ungrouped": "Non attribué",
+    "borrowed": "En renfort",
+    "fromElsewhere": "Affecté ici depuis {department}",
+    "fillHandle": "Faites glisser pour répéter la sélection",
+    "noPeople": "Personne ne fait partie du périmètre de ce tableau.",
+    "noMatch": "Personne ne correspond à la recherche.",
+    "selected": "{count} cellules sélectionnées — saisissez pour toutes les affecter, Suppr pour les vider, Ctrl+D ou Ctrl+R pour recopier",
+    "hint": "Cliquez sur une cellule et saisissez un code pour affecter. Faites glisser sur plusieurs cellules pour en affecter plusieurs à la fois ; collez directement depuis un tableur.",
+    "readOnly": "Vous pouvez consulter ce tableau. L’affectation nécessite l’autorisation de gérer les plannings.",
+    "saving": "Enregistrement…",
+    "clearSpotlight": "Afficher tous les chantiers"
+  },
+  "chip": {
+    "unassigned": "Aucune destination",
+    "draft": "Pas encore publié",
+    "elsewhere": "Affecté sur {board}",
+    "leave": "{type} : {hours} heures d’absence"
+  },
+  "picker": {
+    "placeholder": "Saisissez un code, un client, un projet ou un emplacement",
+    "results": "Destinations correspondantes",
+    "cells": "{count} cellules",
+    "detail": "Précision : {detail}",
+    "unavailable": "Ne travaille pas",
+    "searching": "Recherche…",
+    "none": "Aucun résultat. Vérifiez le code ou créez d’abord le client, le projet ou le code de planification.",
+    "hint": "Ajoutez /detail ou une plage horaire comme 6-14:30",
+    "keys": "↑↓ choisir · Enter affecter · Esc annuler"
+  },
+  "menu": {
+    "book": "Affecter…",
+    "details": "Modifier les précisions",
+    "split": "Diviser en deux demi-journées",
+    "copy": "Copier",
+    "cut": "Couper",
+    "paste": "Coller",
+    "fillDown": "Recopier vers le bas",
+    "fillRight": "Recopier vers la droite",
+    "clear": "Effacer les affectations"
+  },
+  "history": {
+    "book": "l’affectation à {target}",
+    "clear": "{count, plural, one {la suppression d’une affectation} other {la suppression de # affectations}}",
+    "paste": "{count, plural, one {le collage d’une cellule} other {le collage de # cellules}}",
+    "fill": "la recopie",
+    "copy": "la copie d’une affectation",
+    "move": "le déplacement vers {name}",
+    "split": "la division de la journée",
+    "edit": "la modification d’une affectation",
+    "reschedule": "la replanification",
+    "discard": "{count, plural, one {l’abandon d’une modification} other {l’abandon de # modifications}}"
+  },
+  "notices": {
+    "someRefused": "{count} modifications sur {total} n’ont pas été enregistrées : {reason}",
+    "skippedLeave": "{count, plural, one {Un jour avec une absence enregistrée a été ignoré.} other {# jours avec une absence enregistrée ont été ignorés.}}",
+    "skippedLeaveRemedy": "Modifiez l’absence via sa demande si la personne travaille.",
+    "copied": "{count, plural, one {Une cellule copiée.} other {# cellules copiées.}}",
+    "unknownCodes": "{count, plural, one {Ce code n’a pas été reconnu : {codes}.} other {# codes n’ont pas été reconnus : {codes}.}}",
+    "unknownCodesRemedy": "Ajoutez-les comme codes de planification, clients ou projets, puis collez à nouveau.",
+    "published": "{count, plural, one {Une modification publiée.} other {# modifications publiées.}}",
+    "dismiss": "Fermer"
+  },
+  "publish": {
+    "pending": "{count, plural, one {# modification non publiée} other {# modifications non publiées}} pour {people, plural, one {# personne} other {# personnes}}",
+    "explain": "Les personnes les verront dès que vous publierez.",
+    "action": "Publier",
+    "discard": "Abandonner les modifications"
+  },
+  "drawer": {
+    "title": "Affectation",
+    "save": "Enregistrer",
+    "remove": "Supprimer l’affectation",
+    "updatedBy": "Dernière modification par {name}",
+    "otherBoard": "Cette affectation appartient à {board}. Ouvrez ce tableau pour la modifier.",
+    "readOnly": "Vous pouvez consulter cette affectation. Sa modification nécessite l’autorisation de gérer les plannings.",
+    "draft": "Cette modification n’est pas encore publiée.",
+    "where": "Où",
+    "pickTarget": "Choisissez où va cette personne",
+    "change": "Modifier",
+    "task": "Tâche",
+    "noTask": "Projet entier",
+    "detail": "Précision",
+    "detailPlaceholder": "Zone, unité ou consigne",
+    "when": "Quand",
+    "wholeDay": "Journée entière ({hours})",
+    "customHours": "Définir les heures",
+    "starts": "Début",
+    "ends": "Fin",
+    "break": "Pause (minutes)",
+    "overnight": "Se termine le lendemain.",
+    "booked": "{hours} affectées après la pause.",
+    "repeat": "Affecter aussi le",
+    "notes": "Remarques",
+    "notesPlaceholder": "Ce que l’équipe doit savoir"
+  },
+  "targets": {
+    "where": "Chantier",
+    "count": "{count} personnes",
+    "add": "Ajouter un chantier",
+    "empty": "Rien n’est encore affecté sur ces dates.",
+    "available": "Disponibles",
+    "allBooked": "Tout le monde est affecté ou absent ce jour-là."
+  },
+  "timeline": {
+    "zoomIn": "Zoom avant",
+    "zoomOut": "Zoom arrière"
+  },
+  "calendar": {
+    "person": "Afficher",
+    "everyone": "Tout le monde",
+    "onLeave": "{count} absents",
+    "more": "{count} de plus"
+  },
+  "tasks": {
+    "searchProjects": "Rechercher un projet",
+    "noCustomer": "Aucun client",
+    "noProjects": "Aucun projet actif ne fait partie du périmètre de ce tableau.",
+    "pickProject": "Choisissez un projet.",
+    "openInScheduling": "Ouvrir dans Planification"
+  },
+  "progress": {
+    "task": "Tâche",
+    "budget": "Heures budgétées",
+    "actual": "Heures réelles",
+    "complete": "Achèvement",
+    "completeFor": "Pourcentage d’achèvement de {task}",
+    "earned": "Heures acquises",
+    "factor": "Productivité",
+    "toComplete": "Heures restantes",
+    "estimate": "À l’achèvement",
+    "variance": "Écart",
+    "pending": "+{hours} en attente",
+    "used": "{percent} % des heures budgétées consommées",
+    "noTasks": "Ce projet n’a pas encore de tâches. Ajoutez-les dans le diagramme de Gantt ou dans la structure du projet.",
+    "explain": "Les heures acquises correspondent au pourcentage d’achèvement × les heures budgétées. La productivité correspond aux heures acquises ÷ les heures réelles : au-dessus de 1,00, le travail est en avance sur le budget. Les heures restantes supposent que le rythme actuel se maintient. Les heures réelles comptent le temps approuvé."
+  },
+  "newBoard": {
+    "title": "Nouveau tableau",
+    "description": "Choisissez la façon dont cette partie de l’entreprise planifie. Tout reste modifiable dans les paramètres du tableau.",
+    "presets": {
+      "dispatch": {
+        "title": "Répartition journalière",
+        "description": "Envoyez des personnes chez un client, sur un site ou sur un chantier pour la journée. Une grille de deux semaines dans laquelle vous saisissez directement ; les modifications s’appliquent immédiatement."
+      },
+      "shifts": {
+        "title": "Planning des quarts",
+        "description": "Quarts partiels à l’heure pour les magasins, cuisines et accueils. Préparez la semaine, puis publiez-la."
+      },
+      "continuous": {
+        "title": "Exploitation 24 h/24",
+        "description": "Quarts de jour et de nuit qui passent minuit, planifiés quatre semaines à la fois pour les usines et les équipes en continu."
+      },
+      "projects": {
+        "title": "Calendrier de projet",
+        "description": "Les tâches du projet dans un diagramme de Gantt avec dépendances et chemin critique, ainsi que l’avancement de la production."
+      }
+    },
+    "name": "Nom",
+    "namePlaceholder": "Équipes terrain",
+    "code": "Code court",
+    "subsidiary": "Entité juridique",
+    "allSubsidiaries": "Toutes les entités juridiques",
+    "department": "Département",
+    "allDepartments": "Tous les départements",
+    "location": "Emplacement",
+    "allLocations": "Tous les emplacements",
+    "project": "Projet",
+    "allProjects": "Tous les projets actifs",
+    "afterwards": "Les heures d’affectation, la publication et le préremplissage des feuilles de temps peuvent être modifiés à tout moment dans les paramètres du tableau.",
+    "cancel": "Annuler",
+    "create": "Créer le tableau"
+  },
+  "errors": {
+    "load": "Le planning n’a pas pu être chargé.",
+    "save": "La modification n’a pas pu être enregistrée.",
+    "publish": "Le tableau n’a pas pu être publié.",
+    "search": "La recherche n’a pas pu aboutir."
+  },
+  "prefill": {
+    "fill": "Remplir depuis le planning",
+    "timesheetHint": "Ajoute aux jours vides les heures de vos affectations publiées. Vérifiez-les, puis enregistrez.",
+    "crewHint": "Ajoute les personnes affectées à ce projet ce jour-là. Vérifiez les heures, puis enregistrez les lignes.",
+    "ticketHint": "Ajoute l’équipe affectée à ce projet sur la période du bon. Vérifiez les heures, puis enregistrez.",
+    "nothing": "Chaque jour planifié a déjà des heures.",
+    "filled": "{count, plural, one {# jour rempli depuis le planning.} other {# jours remplis depuis le planning.}} {skipped, plural, =0 {} one {# jour avait déjà des heures.} other {# jours avaient déjà des heures.}} Vérifiez et enregistrez.",
+    "crewFilled": "{count, plural, one {# personne ajoutée depuis le planning.} other {# personnes ajoutées depuis le planning.}} Vérifiez les heures et enregistrez les lignes.",
+    "crewNothing": "Toutes les personnes affectées à ce projet aujourd’hui figurent déjà sur la feuille."
+  },
+  "notify": {
+    "subject": "Votre planning a changé — {board}",
+    "intro": "Bonjour {name}, {count, plural, one {un jour de votre planning a changé.} other {# jours de votre planning ont changé.}}",
+    "booked": "{date} : affecté à {target} {hours}",
+    "changed": "{date} : désormais {target} {hours}",
+    "removed": "{date} : retiré de {target}",
+    "link": "Voir votre planning",
+    "footer": "Vous recevez ce message parce que {board} prévient les personnes lorsque leur planning change.",
+    "noTransport": "L’e-mail n’est pas configuré : les personnes ont donc été prévenues uniquement dans OpenBooks. Configurez l’e-mail dans Administration → E-mail."
+  },
+  "mine": {
+    "tab": "Planning",
+    "title": "Mon planning",
+    "description": "Où et quand vous êtes affecté, tel que publié par vos planificateurs.",
+    "summary": "{days, plural, one {# jour affecté} other {# jours affectés}} · {hours}",
+    "empty": "Aucune affectation pour vous du {from} au {through}."
+  }
+}

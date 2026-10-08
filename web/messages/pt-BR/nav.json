@@ -154,7 +154,8 @@
     "hrm-performance-templates": "Formulários de avaliação",
     "hrm-benefits-employees": "Benefícios",
     "hrm-benefits-delivery": "Entrega",
-    "hrm-training": "Treinamento"
+    "hrm-training": "Treinamento",
+    "scheduling": "Programação"
   },
   "groups": {
     "workforce": "Força de trabalho",
@@ -208,7 +209,8 @@
     "inbox-views": "Caixa de entrada",
     "me-views": "Eu",
     "crm-sales": "Vendas",
-    "hrm-compensation": "Remuneração"
+    "hrm-compensation": "Remuneração",
+    "scheduling": "Programação"
   },
   "modulesShort": {
     "hrm-performance-cycles": "Gerenciar avaliações",

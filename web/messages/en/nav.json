@@ -154,7 +154,8 @@
     "hrm-performance-templates": "Review forms",
     "hrm-benefits-employees": "Benefits",
     "hrm-benefits-delivery": "Delivery",
-    "hrm-training": "Training"
+    "hrm-training": "Training",
+    "scheduling": "Scheduling"
   },
   "modulesShort": {
     "hrm-performance-cycles": "Manage reviews",
@@ -219,7 +220,8 @@
     "inbox-views": "Inbox",
     "me-views": "Me",
     "crm-sales": "Sales",
-    "hrm-compensation": "Compensation"
+    "hrm-compensation": "Compensation",
+    "scheduling": "Scheduling"
   },
   "localWorkspaces": {
     "collections-views": "Collections",

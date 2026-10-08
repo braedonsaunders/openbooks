@@ -154,7 +154,8 @@
     "hrm-performance-templates": "Beurteilungsformulare",
     "hrm-benefits-employees": "Leistungen",
     "hrm-benefits-delivery": "Bereitstellung",
-    "hrm-training": "Schulung"
+    "hrm-training": "Schulung",
+    "scheduling": "Einsatzplanung"
   },
   "groups": {
     "workforce": "Belegschaft",
@@ -208,7 +209,8 @@
     "inbox-views": "Posteingang",
     "me-views": "Ich",
     "crm-sales": "Vertrieb",
-    "hrm-compensation": "Vergütung"
+    "hrm-compensation": "Vergütung",
+    "scheduling": "Einsatzplanung"
   },
   "modulesShort": {
     "hrm-performance-cycles": "Beurteilungen verwalten",

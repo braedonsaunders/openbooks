@@ -31,6 +31,7 @@ import { INVENTORY_ENTITIES } from './entities/inventory'
 import { WAREHOUSE_ENTITIES } from './entities/warehouses'
 import { SHIPPING_ENTITIES } from './entities/shipping'
 import { WORKFORCE_ENTITIES } from './entities/workforce'
+import { SCHEDULING_ENTITIES } from './entities/scheduling'
 import { HRM_PROCESS_ENTITIES } from './entities/hrm-processes'
 import { ASSET_ENTITIES } from './entities/assets'
 import { CURRENCY_ENTITIES } from './entities/currency'
@@ -62,6 +63,7 @@ export const SETUP_ENTITIES: SetupEntity[] = [
   ...WAREHOUSE_ENTITIES,
   ...SHIPPING_ENTITIES,
   ...WORKFORCE_ENTITIES,
+  ...SCHEDULING_ENTITIES,
   ...HRM_PROCESS_ENTITIES,
   ...ASSET_ENTITIES,
   ...CURRENCY_ENTITIES,

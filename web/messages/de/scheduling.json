@@ -1,0 +1,260 @@
+{
+  "title": "Einsatzplanung",
+  "description": "Planen Sie, wer wann wohin geht – Kolonnen tageweise, Schichten stundenweise und Projektterminpläne – auf Plantafeln, die zur Arbeitsweise Ihres Unternehmens passen.",
+  "views": {
+    "grid": "Raster",
+    "targets": "Nach Auftrag",
+    "timeline": "Zeitachse",
+    "calendar": "Monat",
+    "gantt": "Gantt-Diagramm",
+    "progress": "Fortschritt"
+  },
+  "kinds": {
+    "customer": "Kunde",
+    "project": "Projekt",
+    "location": "Standort",
+    "code": "Plancode"
+  },
+  "groupBy": {
+    "none": "Keine Gruppierung",
+    "department": "Nach Abteilung",
+    "trade": "Nach Gewerk",
+    "jobTitle": "Nach Stellenbezeichnung"
+  },
+  "toolbar": {
+    "board": "Plantafel",
+    "peopleBoards": "Personalplantafeln",
+    "taskBoards": "Aufgabenplantafeln",
+    "views": "Ansichten",
+    "previous": "Zurück",
+    "next": "Weiter",
+    "today": "Heute",
+    "range": "Angezeigte Tage",
+    "days": "{count, plural, one {# Tag} other {# Tage}}",
+    "search": "Personen oder Aufträge suchen",
+    "groupBy": "Zeilen gruppieren",
+    "density": "Kompakte Zeilen umschalten",
+    "undo": "Rückgängig",
+    "undoWhat": "{what} rückgängig machen",
+    "redo": "Wiederholen",
+    "settings": "Einstellungen der Plantafel",
+    "newBoard": "Neue Plantafel"
+  },
+  "empty": {
+    "title": "Richten Sie Ihre erste Plantafel ein",
+    "description": "Eine Plantafel ist ein Plan für einen Teil Ihres Unternehmens: eine tageweise eingeplante Kolonne, ein Team im Schichtbetrieb oder Ihre Projektterminpläne.",
+    "create": "Plantafel erstellen",
+    "askAdmin": "Bitten Sie einen Administrator, in der Einrichtung eine Plantafel anzulegen."
+  },
+  "grid": {
+    "label": "Planungsraster",
+    "people": "{count, plural, one {# Person} other {# Personen}}",
+    "hours": "Stunden",
+    "onSite": "Eingeplant",
+    "holiday": "Feiertag",
+    "ungrouped": "Nicht zugeordnet",
+    "borrowed": "Ausgeliehen",
+    "fromElsewhere": "Hier eingeplant aus {department}",
+    "fillHandle": "Ziehen, um die Auswahl zu wiederholen",
+    "noPeople": "Im Bereich dieser Plantafel befindet sich niemand.",
+    "noMatch": "Niemand entspricht der Suche.",
+    "selected": "{count} Zellen ausgewählt – tippen, um alle einzuplanen, Entf zum Leeren, Ctrl+D oder Ctrl+R zum Ausfüllen",
+    "hint": "Klicken Sie auf eine Zelle und geben Sie einen Code ein, um einzuplanen. Ziehen Sie über mehrere Zellen, um viele auf einmal einzuplanen; fügen Sie Daten direkt aus einer Tabellenkalkulation ein.",
+    "readOnly": "Sie können diese Plantafel ansehen. Zum Einplanen benötigen Sie die Berechtigung zur Verwaltung von Plänen.",
+    "saving": "Wird gespeichert…",
+    "clearSpotlight": "Alle Aufträge anzeigen"
+  },
+  "chip": {
+    "unassigned": "Kein Ziel",
+    "draft": "Noch nicht veröffentlicht",
+    "elsewhere": "Eingeplant auf {board}",
+    "leave": "{type}: {hours} Stunden Abwesenheit"
+  },
+  "picker": {
+    "placeholder": "Code, Kunde, Projekt oder Standort eingeben",
+    "results": "Passende Ziele",
+    "cells": "{count} Zellen",
+    "detail": "Zusatzangabe: {detail}",
+    "unavailable": "Nicht im Dienst",
+    "searching": "Suche läuft…",
+    "none": "Keine Treffer. Prüfen Sie den Code oder legen Sie zuerst den Kunden, das Projekt oder den Plancode an.",
+    "hint": "Fügen Sie /detail oder einen Zeitraum wie 6-14:30 hinzu",
+    "keys": "↑↓ auswählen · Enter einplanen · Esc abbrechen"
+  },
+  "menu": {
+    "book": "Einplanen…",
+    "details": "Angaben bearbeiten",
+    "split": "In zwei halbe Tage teilen",
+    "copy": "Kopieren",
+    "cut": "Ausschneiden",
+    "paste": "Einfügen",
+    "fillDown": "Nach unten ausfüllen",
+    "fillRight": "Nach rechts ausfüllen",
+    "clear": "Einplanungen löschen"
+  },
+  "history": {
+    "book": "Einplanung für {target}",
+    "clear": "{count, plural, one {Entfernen einer Einplanung} other {Entfernen von # Einplanungen}}",
+    "paste": "{count, plural, one {Einfügen einer Zelle} other {Einfügen von # Zellen}}",
+    "fill": "Ausfüllen",
+    "copy": "Kopieren einer Einplanung",
+    "move": "Verschieben zu {name}",
+    "split": "Teilen des Tages",
+    "edit": "Bearbeiten einer Einplanung",
+    "reschedule": "Umplanen",
+    "discard": "{count, plural, one {Verwerfen einer Änderung} other {Verwerfen von # Änderungen}}"
+  },
+  "notices": {
+    "someRefused": "{count} von {total} Änderungen wurden nicht gespeichert: {reason}",
+    "skippedLeave": "{count, plural, one {Ein Tag mit erfasster Abwesenheit wurde übersprungen.} other {# Tage mit erfasster Abwesenheit wurden übersprungen.}}",
+    "skippedLeaveRemedy": "Ändern Sie die Abwesenheit über den zugehörigen Antrag, falls die Person arbeitet.",
+    "copied": "{count, plural, one {Eine Zelle kopiert.} other {# Zellen kopiert.}}",
+    "unknownCodes": "{count, plural, one {Dieser Code wurde nicht erkannt: {codes}.} other {# Codes wurden nicht erkannt: {codes}.}}",
+    "unknownCodesRemedy": "Legen Sie sie als Plancodes, Kunden oder Projekte an und fügen Sie dann erneut ein.",
+    "published": "{count, plural, one {Eine Änderung veröffentlicht.} other {# Änderungen veröffentlicht.}}",
+    "dismiss": "Schließen"
+  },
+  "publish": {
+    "pending": "{count, plural, one {# unveröffentlichte Änderung} other {# unveröffentlichte Änderungen}} für {people, plural, one {# Person} other {# Personen}}",
+    "explain": "Die Personen sehen diese Änderungen, sobald Sie veröffentlichen.",
+    "action": "Veröffentlichen",
+    "discard": "Änderungen verwerfen"
+  },
+  "drawer": {
+    "title": "Einplanung",
+    "save": "Speichern",
+    "remove": "Einplanung entfernen",
+    "updatedBy": "Zuletzt geändert von {name}",
+    "otherBoard": "Diese Einplanung gehört zu {board}. Öffnen Sie diese Plantafel, um sie zu ändern.",
+    "readOnly": "Sie können diese Einplanung ansehen. Zum Ändern benötigen Sie die Berechtigung zur Verwaltung von Plänen.",
+    "draft": "Diese Änderung ist noch nicht veröffentlicht.",
+    "where": "Wo",
+    "pickTarget": "Wählen Sie, wohin diese Person geht",
+    "change": "Ändern",
+    "task": "Aufgabe",
+    "noTask": "Gesamtes Projekt",
+    "detail": "Zusatzangabe",
+    "detailPlaceholder": "Bereich, Einheit oder Anweisung",
+    "when": "Wann",
+    "wholeDay": "Ganzer Tag ({hours})",
+    "customHours": "Zeiten festlegen",
+    "starts": "Beginn",
+    "ends": "Ende",
+    "break": "Pause (Minuten)",
+    "overnight": "Endet am Folgetag.",
+    "booked": "{hours} nach Abzug der Pause eingeplant.",
+    "repeat": "Auch einplanen am",
+    "notes": "Notizen",
+    "notesPlaceholder": "Was die Kolonne wissen muss"
+  },
+  "targets": {
+    "where": "Auftrag",
+    "count": "{count} Personen",
+    "add": "Auftrag hinzufügen",
+    "empty": "In diesem Zeitraum ist noch nichts eingeplant.",
+    "available": "Verfügbar",
+    "allBooked": "An diesem Tag sind alle eingeplant oder abwesend."
+  },
+  "timeline": {
+    "zoomIn": "Vergrößern",
+    "zoomOut": "Verkleinern"
+  },
+  "calendar": {
+    "person": "Anzeigen",
+    "everyone": "Alle",
+    "onLeave": "{count} abwesend",
+    "more": "{count} weitere"
+  },
+  "tasks": {
+    "searchProjects": "Projekt suchen",
+    "noCustomer": "Kein Kunde",
+    "noProjects": "Im Bereich dieser Plantafel gibt es keine aktiven Projekte.",
+    "pickProject": "Wählen Sie ein Projekt.",
+    "openInScheduling": "In der Einsatzplanung öffnen"
+  },
+  "progress": {
+    "task": "Aufgabe",
+    "budget": "Budgetstunden",
+    "actual": "Ist-Stunden",
+    "complete": "Fertigstellung",
+    "completeFor": "Fertigstellungsgrad für {task}",
+    "earned": "Verdiente Stunden",
+    "factor": "Produktivität",
+    "toComplete": "Reststunden",
+    "estimate": "Bei Fertigstellung",
+    "variance": "Abweichung",
+    "pending": "+{hours} ausstehend",
+    "used": "{percent} % der Budgetstunden verbraucht",
+    "noTasks": "Dieses Projekt hat noch keine Aufgaben. Legen Sie sie im Gantt-Diagramm oder im Projektstrukturplan an.",
+    "explain": "Verdiente Stunden sind Fertigstellungsgrad × Budgetstunden. Produktivität ist verdiente ÷ Ist-Stunden: Über 1,00 liegt die Arbeit vor dem Budget. Reststunden setzen voraus, dass das bisherige Tempo anhält. Ist-Stunden zählen genehmigte Zeit."
+  },
+  "newBoard": {
+    "title": "Neue Plantafel",
+    "description": "Wählen Sie, wie dieser Unternehmensbereich plant. Alles bleibt in den Einstellungen der Plantafel anpassbar.",
+    "presets": {
+      "dispatch": {
+        "title": "Tagesdisposition",
+        "description": "Personen tageweise zu einem Kunden, einer Baustelle oder einem Auftrag schicken. Ein Zwei-Wochen-Raster zum direkten Eintippen; Änderungen gelten sofort."
+      },
+      "shifts": {
+        "title": "Schichtplan",
+        "description": "Stundenweise Teilschichten für Filialen, Küchen und Empfangstheken. Stellen Sie die Woche zusammen und veröffentlichen Sie sie dann."
+      },
+      "continuous": {
+        "title": "Rund-um-die-Uhr-Betrieb",
+        "description": "Tag- und Nachtschichten über Mitternacht hinweg, jeweils für vier Wochen geplant – für Werke und Teams im Dauerbetrieb."
+      },
+      "projects": {
+        "title": "Projektterminplan",
+        "description": "Projektaufgaben in einem Gantt-Diagramm mit Abhängigkeiten und kritischem Pfad sowie Produktionsfortschritt."
+      }
+    },
+    "name": "Bezeichnung",
+    "namePlaceholder": "Baukolonnen",
+    "code": "Kürzel",
+    "subsidiary": "Rechtsträger",
+    "allSubsidiaries": "Alle Rechtsträger",
+    "department": "Abteilung",
+    "allDepartments": "Alle Abteilungen",
+    "location": "Standort",
+    "allLocations": "Alle Standorte",
+    "project": "Projekt",
+    "allProjects": "Alle aktiven Projekte",
+    "afterwards": "Einplanungszeiten, Veröffentlichung und Vorbelegung der Stundenzettel lassen sich jederzeit in den Einstellungen der Plantafel ändern.",
+    "cancel": "Abbrechen",
+    "create": "Plantafel erstellen"
+  },
+  "errors": {
+    "load": "Der Plan konnte nicht geladen werden.",
+    "save": "Die Änderung konnte nicht gespeichert werden.",
+    "publish": "Die Plantafel konnte nicht veröffentlicht werden.",
+    "search": "Die Suche konnte nicht abgeschlossen werden."
+  },
+  "prefill": {
+    "fill": "Aus dem Plan übernehmen",
+    "timesheetHint": "Übernimmt die Stunden aus Ihren veröffentlichten Einplanungen in leere Tage. Prüfen Sie sie und speichern Sie dann.",
+    "crewHint": "Fügt die Personen hinzu, die an diesem Tag für dieses Projekt eingeplant sind. Prüfen Sie die Stunden und speichern Sie dann die Zeilen.",
+    "ticketHint": "Fügt die Kolonne hinzu, die im Berichtszeitraum für dieses Projekt eingeplant ist. Prüfen Sie die Stunden und speichern Sie dann.",
+    "nothing": "Jeder geplante Tag hat bereits Stunden.",
+    "filled": "{count, plural, one {# Tag aus dem Plan übernommen.} other {# Tage aus dem Plan übernommen.}} {skipped, plural, =0 {} one {# Tag hatte bereits Stunden.} other {# Tage hatten bereits Stunden.}} Prüfen und speichern.",
+    "crewFilled": "{count, plural, one {# Person aus dem Plan hinzugefügt.} other {# Personen aus dem Plan hinzugefügt.}} Prüfen Sie die Stunden und speichern Sie die Zeilen.",
+    "crewNothing": "Alle heute für dieses Projekt eingeplanten Personen stehen bereits auf dem Bogen."
+  },
+  "notify": {
+    "subject": "Ihr Plan hat sich geändert – {board}",
+    "intro": "Hallo {name}, {count, plural, one {ein Tag in Ihrem Plan hat sich geändert.} other {# Tage in Ihrem Plan haben sich geändert.}}",
+    "booked": "{date}: eingeplant bei {target} {hours}",
+    "changed": "{date}: jetzt {target} {hours}",
+    "removed": "{date}: entfernt von {target}",
+    "link": "Ihren Plan ansehen",
+    "footer": "Sie erhalten diese Nachricht, weil {board} Personen benachrichtigt, wenn sich ihr Plan ändert.",
+    "noTransport": "E-Mail ist nicht eingerichtet, daher wurden die Personen nur in OpenBooks benachrichtigt. Richten Sie E-Mail unter Administration → E-Mail ein."
+  },
+  "mine": {
+    "tab": "Einsatzplan",
+    "title": "Mein Einsatzplan",
+    "description": "Wo und wann Sie eingeplant sind, wie von Ihren Disponenten veröffentlicht.",
+    "summary": "{days, plural, one {# Tag eingeplant} other {# Tage eingeplant}} · {hours}",
+    "empty": "Vom {from} bis {through} ist für Sie nichts eingeplant."
+  }
+}
