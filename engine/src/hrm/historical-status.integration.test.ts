@@ -3,7 +3,7 @@ import test from 'node:test';
 import { randomUUID } from 'node:crypto';
 import { sql } from 'drizzle-orm';
 import { db } from '../platform/db.ts';
-import { DB, gateOf, seedEmployment, seedFlow, seedPlan, seedWindow, seededContributionTerms, setupHarness, withHarness } from '../testing/hrm-harness.ts';
+import { DB, gateOf, mkSecondSubsidiary, seedEmployment, seedFlow, seedPlan, seedWindow, seededContributionTerms, setupHarness, withHarness } from '../testing/hrm-harness.ts';
 import { createChangeRequestDraft, getChangeRequest, submitChangeRequest } from './change-requests.ts';
 import { electEnrollment } from './benefits/enrollments.ts';
 import { decideGate } from '../flows/gates.ts';
@@ -26,9 +26,14 @@ async function versions(orgId: string, employmentId: string) {
 test('approved historical status fills one documented day, preserves current history and admits only that Benefits date', { skip: !DB }, async () => {
   await withHarness(() => setupHarness(SPEC), async h => {
     await seedFlow(h.org.orgId, h.approver);
-    const { employmentId } = await seedEmployment(h.org.orgId, h.org.subsidiaryId, { from: '2026-08-09' });
+    const { employmentId, workerPartyId } = await seedEmployment(h.org.orgId, h.org.subsidiaryId, { from: '2026-08-09' });
     // Service inception is independent evidence, not inferred from the observation.
     await db.execute(sql`update worker_employments set service_start='2019-01-01', service_start_provenance='Independent service declaration' where id=${employmentId}`);
+    // Another legal employer's committed stub must not govern this employment's gap.
+    const otherSubsidiary = await mkSecondSubsidiary(h.org.orgId, h.org.subsidiaryId, { currency: 'USD', country: 'US' });
+    const otherEmployment = await seedEmployment(h.org.orgId, otherSubsidiary, { workerPartyId });
+    const otherRun = await committedFixture(h.org.orgId, otherSubsidiary, h.author, workerPartyId, otherEmployment.employmentId);
+    const otherHistory = (await db.execute(sql`select to_jsonb(s) as row from pay_stubs s where pay_run_document_id=${otherRun}`)).rows;
     const before = await versions(h.org.orgId, employmentId);
     const aggregateBefore = (await db.execute<{ service_start: string; service_start_provenance: string }>(sql`
       select service_start::text,service_start_provenance from worker_employments where id=${employmentId}`)).rows[0];
@@ -43,6 +48,7 @@ test('approved historical status fills one documented day, preserves current his
     assert.equal(applied.status, 'applied');
     assert.equal(applied.appliedEmploymentRevision, 2);
     const after = await versions(h.org.orgId, employmentId);
+    assert.deepEqual((await db.execute(sql`select to_jsonb(s) as row from pay_stubs s where pay_run_document_id=${otherRun}`)).rows, otherHistory);
     assert.deepEqual(after[0], before[0], 'no old version is closed, rewritten or linked to a successor');
     assert.equal(after.length, 2);
     assert.equal(after[1]!.status, 'active');
