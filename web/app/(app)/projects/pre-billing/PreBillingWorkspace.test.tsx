@@ -121,7 +121,7 @@ test('unbilled table action opens the native Bill run with that project selected
   const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value')!.set!
   await act(async () => {
     setter.call(notes, 'Review cutoff with the project manager')
-    notes.dispatchEvent(new Event('input', { bubbles: true }))
+    notes.dispatchEvent(new window.Event('input', { bubbles: true }))
     await tick()
     window.history.pushState(null, '', '/projects/pre-billing?stage=unbilled')
     await tick()
