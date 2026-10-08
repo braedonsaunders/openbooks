@@ -273,5 +273,16 @@
     "description": "Où et quand vous êtes affecté, tel que publié par vos planificateurs.",
     "summary": "{days, plural, one {# jour affecté} other {# jours affectés}} · {hours}",
     "empty": "Aucune affectation pour vous du {from} au {through}."
+  },
+  "source": {
+    "explanation": "Les données de planification importées sont en lecture seule. Elles conservent la date et les instructions sans créer de temps travaillé, modifier le statut du salarié ni réserver de disponibilité.",
+    "unknownHours": "La source ne fournit pas les heures.",
+    "hidden": "Cette ligne était masquée dans le tableau d’origine ; elle est conservée.",
+    "multiple": "La source conserve {count} enregistrements pour cette personne et cette date. Aucun remplacement n’est supposé.",
+    "select": "Choisir un enregistrement source",
+    "label": "Libellé source",
+    "result": "Description source",
+    "hours": "Heures",
+    "origin": "Source"
   }
 }

@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { generateCopySql, type CloneOptions } from './clone.ts';
 import type { TableInfo } from './catalog.ts';
+import { DEFAULT_POLICIES } from './masking.ts';
 
 const opts: CloneOptions = {
   productionOrgId: '65fa9dc7-228f-4e19-8bf1-17d52efeb78d', sandboxOrgId: '47df30a3-4fd1-4570-bb67-09641053ee3b',
@@ -27,4 +28,20 @@ test('masked board copies clear tenant-authored color values while full copies r
   assert.ok(full.includes('"cell_color_rules"'));
   assert.match(masked,/'\[\]'::jsonb/);
   assert.equal(masked.split('"cell_color_rules"').length,2);
+});
+
+test('source scheduling history rebases every native reference and removes source identities and prose from masked copies',()=> {
+  const records:TableInfo={name:'schedule_source_records',hasOrgId:true,hasId:true,
+    columns:['id','org_id','board_id','worker_party_id','subsidiary_id','linked_entry_id','supersedes_id','created_by'].map(name=>({name,isUuid:true,udtName:'uuid',isNullable:name!=='id'&&name!=='org_id'})).concat([
+      {name:'source_key',isUuid:false,udtName:'text',isNullable:false},
+      {name:'source_payload',isUuid:false,udtName:'jsonb',isNullable:false},
+      {name:'label',isUuid:false,udtName:'text',isNullable:true},
+    ]),fks:{board_id:'schedule_boards',worker_party_id:'parties',subsidiary_id:'subsidiaries',linked_entry_id:'schedule_entries',supersedes_id:'schedule_source_records',created_by:'users'},
+    hardFks:{},fkDeleteRules:{},forceRebase:new Set()};
+  const rebase=new Set(['schedule_source_records','schedule_boards','parties','subsidiaries','schedule_entries','users']);
+  const policies=new Map([['schedule_source_records',new Map(DEFAULT_POLICIES.filter(p=>p.tableName==='schedule_source_records').map(p=>[p.columnName,p.transform]))]]);
+  const full=generateCopySql(records,opts,rebase,new Set(),policies,null)!;
+  const masked=generateCopySql(records,{...opts,masked:true},rebase,new Set(),policies,null)!;
+  for(const column of ['board_id','worker_party_id','subsidiary_id','linked_entry_id','supersedes_id','created_by']) assert.ok(full.includes(`ob_rebase("${column}"`));
+  assert.match(masked,/md5\("source_key"::text\)/);assert.match(masked,/'\{\}'::jsonb/);assert.match(masked,/REDACTED/);
 });

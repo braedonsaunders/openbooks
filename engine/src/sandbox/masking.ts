@@ -140,6 +140,14 @@ export async function loadMaskingPolicies(
  * fails unless each is masked here or explicitly allow-listed as
  * non-personal. Add a policy there before allow-listing anyone's identity. */
 export const DEFAULT_POLICIES: MaskingPolicy[] = [
+  { tableName: "schedule_source_records", columnName: "source_system", transform: "hash" },
+  { tableName: "schedule_source_records", columnName: "source_dataset", transform: "hash" },
+  { tableName: "schedule_source_records", columnName: "source_key", transform: "hash" },
+  { tableName: "schedule_source_records", columnName: "source_payload", transform: "null_out" },
+  { tableName: "schedule_source_records", columnName: "label", transform: "redact" },
+  { tableName: "schedule_source_records", columnName: "source_result", transform: "redact" },
+  { tableName: "schedule_source_records", columnName: "source_notes", transform: "redact" },
+  { tableName: "schedule_source_records", columnName: "reason", transform: "redact" },
   { tableName: "hrm_comp_cycles", columnName: "source_key", transform: "hash" },
   { tableName: "hrm_comp_cycles", columnName: "source_evidence", transform: "null_out" },
   // Checklist responses are employee-authored evidence; publication reasons may name people.

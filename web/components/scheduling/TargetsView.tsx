@@ -5,6 +5,8 @@ import { useLocale, useTranslations } from 'next-intl'
 import { Plus, Users } from 'lucide-react'
 import { cn } from '@openbooks/ui'
 import { CHIP_COLORS, chipStyle } from './BookingChip'
+import { SourceRecordChip } from './SourceRecord'
+import type { BoardSourceRecord } from '@openbooks/engine/src/schedule-boards/source-history.ts'
 import { TargetPicker } from './TargetPicker'
 import { cellKey, indexAbsences, initials, targetHue, type BoardEntry, type BoardTarget, type SpanInput } from './model'
 import type { BoardController } from './use-board'
@@ -18,11 +20,12 @@ const keyOf = (target: Pick<BoardTarget, 'kind' | 'id'>) => `${target.kind}:${ta
  * stacked in each day. Drag people from the rail onto a job and day to book
  * them, or between days and jobs to move them.
  */
-export function TargetsView({ controller, window: board, today, onOpenEntry }: {
+export function TargetsView({ controller, window: board, today, onOpenEntry, onOpenSourceRecord }: {
   controller: BoardController
   window: BoardWindow
   today: string
   onOpenEntry: (entry: BoardEntry) => void
+  onOpenSourceRecord: (record: BoardSourceRecord) => void
 }) {
   const t = useTranslations('scheduling')
   const locale = useLocale()
@@ -50,6 +53,14 @@ export function TargetsView({ controller, window: board, today, onOpenEntry }: {
     for (const target of extraTargets) if (!byTarget.has(keyOf(target))) byTarget.set(keyOf(target), { target, cells: new Map(), people: new Set() })
     return [...byTarget.values()].sort((a, b) => Number(a.target.kind === 'code') - Number(b.target.kind === 'code') || b.people.size - a.people.size || (a.target.code ?? a.target.label).localeCompare(b.target.code ?? b.target.label))
   }, [extraTargets, live])
+  const sourceRows = useMemo(() => {
+    const groups = new Map<string, BoardSourceRecord[]>()
+    for (const record of board.sourceRecords ?? []) {
+      const label = record.label ?? ''; const records = groups.get(label) ?? []
+      records.push(record); groups.set(label,records)
+    }
+    return [...groups.entries()].sort(([a],[b])=>a.localeCompare(b))
+  }, [board.sourceRecords])
 
   const bookedOn = useMemo(() => {
     const set = new Set<string>()
@@ -58,7 +69,7 @@ export function TargetsView({ controller, window: board, today, onOpenEntry }: {
   }, [live])
   const available = useMemo(() => board.rows.filter((person) => !bookedOn.has(cellKey(person.subjectId, railDate)) && !(absences.get(cellKey(person.subjectId, railDate)) ?? []).length), [absences, board.rows, bookedOn, railDate])
 
-  const span: SpanInput = board.board.grain === 'day' ? { mode: 'day' } : { mode: 'timed', starts: board.board.dayStarts, ends: board.board.dayEnds, breakMinutes: board.board.dayBreakMinutes }
+  const span: SpanInput = board.board.grain === 'day' || !board.board.dayPolicyKnown ? { mode: 'day' } : { mode: 'timed', starts: board.board.dayStarts, ends: board.board.dayEnds, breakMinutes: board.board.dayBreakMinutes }
   const weekday = useMemo(() => new Intl.DateTimeFormat(locale, { weekday: 'short', day: 'numeric', timeZone: 'UTC' }), [locale])
 
   async function drop(event: DragEvent<HTMLElement>, target: BoardTarget, date: string) {
@@ -93,6 +104,19 @@ export function TargetsView({ controller, window: board, today, onOpenEntry }: {
             </tr>
           </thead>
           <tbody>
+            {sourceRows.map(([label,records]) => <tr key={`source-${label}`}>
+              <td className="sticky left-0 z-[5] max-w-[250px] border-b bg-white px-3 py-2 align-top dark:bg-slate-950">
+                <div className="truncate font-semibold" title={label}>{label || '—'}</div>
+                <div className="text-[11px] text-slate-500">{t('source.unknownHours')}</div>
+              </td>
+              {days.map(day => <td key={day.date} className="border-b border-l p-1 align-top">
+                <div className="flex flex-col gap-0.5">{records.filter(r=>r.onDate===day.date).map(record=>
+                  <div key={record.id} title={personName.get(record.workerPartyId)}>
+                    <span className="block truncate text-[10px] text-slate-500">{personName.get(record.workerPartyId) ?? '—'}</span>
+                    <SourceRecordChip records={[record]} compact onOpen={onOpenSourceRecord} />
+                  </div>)}</div>
+              </td>)}
+            </tr>)}
             {rows.map((row) => {
               const hue = targetHue(row.target)
               return (
@@ -153,7 +177,7 @@ export function TargetsView({ controller, window: board, today, onOpenEntry }: {
                     <Plus className="h-3.5 w-3.5" />{t('targets.add')}
                   </button>
                 ) : null}
-                {rows.length === 0 ? <p className="py-6 text-center text-sm text-slate-500">{t('targets.empty')}</p> : null}
+                {rows.length === 0 && sourceRows.length === 0 ? <p className="py-6 text-center text-sm text-slate-500">{t('targets.empty')}</p> : null}
               </td>
             </tr>
           </tbody>

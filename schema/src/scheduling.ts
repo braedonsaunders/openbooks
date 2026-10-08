@@ -43,6 +43,7 @@ export const scheduleBoards = pgTable("schedule_boards", {
   weekStartsOn: smallint("week_starts_on").notNull().default(0),
   showWeekends: boolean("show_weekends").notNull().default(true),
   timeZone: text("time_zone").notNull(),
+  dayPolicyKnown: boolean('day_policy_known').notNull().default(true),
   dayStarts: time("day_starts").notNull().default("07:00"),
   dayEnds: time("day_ends").notNull().default("15:30"),
   dayBreakMinutes: smallint("day_break_minutes").notNull().default(30),
@@ -117,4 +118,21 @@ export const scheduleEntries = pgTable("schedule_entries", {
 }, (t) => [
   uniqueIndex("schedule_entries_org_id_id_key").on(t.orgId, t.id),
   uniqueIndex("schedule_entries_org_id_supersedes_id_key").on(t.orgId, t.supersedesId),
+]);
+
+/** Date-only source observations and reviewed native links; never worked time. */
+export const scheduleSourceRecords = pgTable("schedule_source_records", {
+  id: id(), orgId: orgRef(), sourceSystem: text('source_system').notNull(),
+  sourceDataset: text('source_dataset').notNull(), sourceKey: text('source_key').notNull(),
+  sourceHash: text('source_hash').notNull(), assessmentHash: text('assessment_hash').notNull(),
+  captureHash: text('capture_hash').notNull(), sourcePayload: jsonb('source_payload').notNull(),
+  disposition: text('disposition', { enum: ['recorded','linked','exception'] }).notNull(),
+  boardId: uuid('board_id'), workerPartyId: uuid('worker_party_id'), subsidiaryId: uuid('subsidiary_id'),
+  onDate: date('on_date'), label: text('label'), sourceResult: text('source_result'), sourceNotes: text('source_notes'),
+  visibleInSource: boolean('visible_in_source').notNull(), linkedEntryId: uuid('linked_entry_id'),
+  supersedesId: uuid('supersedes_id'), reason: text('reason').notNull(),
+  createdAt: timestamp('created_at', { withTimezone:true }).notNull().defaultNow(), createdBy: uuid('created_by').notNull(),
+}, t => [
+  uniqueIndex('schedule_source_records_org_id_id_key').on(t.orgId,t.id),
+  uniqueIndex('schedule_source_records_org_id_supersedes_id_key').on(t.orgId,t.supersedesId),
 ]);

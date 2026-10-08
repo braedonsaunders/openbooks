@@ -4060,7 +4060,8 @@
       "showTotals": "Show bottom totals",
       "cellColorRules": "Cell color rules",
       "field": "Field",
-      "match": "Match"
+      "match": "Match",
+      "dayPolicyKnown": "Working-day hours are configured"
     },
     "fieldHelp": {
       "fxRateMaxAgeDays": "Days between the newest usable rate and the period end beyond which revaluation and consolidation refuse the rate. Closing rates count from the date of the period-end spot rate; average rates from the newest quote averaged. Default when no policy is set: 31 days.",
@@ -4225,7 +4226,8 @@
       "scheduleCodeColor": "The colour bookings with this code show in, as a hex value such as #38bdf8.",
       "scheduleWeekendDays": "Choose days to shade when no business calendar covers the date. A business calendar takes precedence.",
       "scheduleShowTotals": "Show booked rows and actual booked hours, after configured breaks.",
-      "scheduleCellColorRules": "Rules are evaluated in order; the first case-insensitive match sets the cell color. Use six-digit hex colors such as #38bdf8."
+      "scheduleCellColorRules": "Rules are evaluated in order; the first case-insensitive match sets the cell color. Use six-digit hex colors such as #38bdf8.",
+      "scheduleBoardDayPolicyKnown": "Turn off when only source dates are known. Imported history remains visible without hours; normal whole-day booking refuses until actual start, end and break are configured."
     },
     "options": {
       "storedValueKind": {

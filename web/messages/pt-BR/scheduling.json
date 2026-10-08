@@ -273,5 +273,16 @@
     "description": "Onde e quando você está alocado, conforme publicado pelos seus programadores.",
     "summary": "{days, plural, one {# dia alocado} other {# dias alocados}} · {hours}",
     "empty": "Não há nada alocado para você de {from} a {through}."
+  },
+  "source": {
+    "explanation": "Os dados importados são somente leitura. Preservam a data e as instruções sem criar horas trabalhadas, alterar o status do funcionário ou reservar disponibilidade.",
+    "unknownHours": "A origem não forneceu as horas.",
+    "hidden": "Esta linha estava oculta no quadro original; ela foi preservada.",
+    "multiple": "A origem mantém {count} registros para esta pessoa e data. Não se presume que um substitua outro.",
+    "select": "Selecionar registro de origem",
+    "label": "Rótulo de origem",
+    "result": "Descrição de origem",
+    "hours": "Horas",
+    "origin": "Origem"
   }
 }

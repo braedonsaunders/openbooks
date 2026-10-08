@@ -12,6 +12,7 @@ import { subsidiaryVisibleFilter } from "../organization/subsidiary-scope.ts";
 import { BusinessCalendarMissingError, businessCalendarOver } from "../payroll/business-calendars.ts";
 import { getBoard, boardAuthority, type ScheduleActor, type ScheduleBoard } from "./boards.ts";
 import { bookingColor } from "./display.ts";
+import { readBoardSourceHistory, type BoardSourceRecord } from "./source-history.ts";
 import { ScheduleError, scheduleDatabaseRefusal } from "./errors.ts";
 import { datesBetween, localClock, requireDate } from "./spans.ts";
 
@@ -108,6 +109,7 @@ export interface BoardWindow {
   readonly replaced: readonly string[];
   readonly absences: readonly BoardAbsence[];
   readonly codes: readonly BoardCode[];
+  readonly sourceRecords?: readonly BoardSourceRecord[];
   readonly canManage: boolean;
   readonly canPublish: boolean;
 }
@@ -200,9 +202,8 @@ async function resourceRows(board: ScheduleBoard, orgId: string, allowed: Readon
     ${board.resourceKind === "equipment" ? sql`r.unit_number` : sql`r.code`} as "shortCode", null::text as "jobTitle",
     null::uuid as "departmentId", null::text as "departmentName", null::text as "tradeName", (${inScope}) as "inScope"
     from ${sql.identifier(table)} r where r.org_id = ${orgId}
-      and ${board.resourceKind === "equipment" ? sql`r.status = 'active' and (r.in_service_on is null or r.in_service_on <= ${through})` : sql`r.is_active`}
       ${subsidiaryVisibleFilter(sql`r.subsidiary_id`, allowed, { orgWideNull: true })}
-      and ((${inScope}) or exists (select 1 from schedule_entries x where x.org_id = r.org_id and x.board_id = ${board.id}
+      and ((${board.resourceKind === "equipment" ? sql`r.status = 'active' and (r.in_service_on is null or r.in_service_on <= ${through})` : sql`r.is_active`} and (${inScope})) or exists (select 1 from schedule_entries x where x.org_id = r.org_id and x.board_id = ${board.id}
         and ${bookedColumn} = r.id and x.status <> 'cancelled' and x.starts_on <= ${through} and x.ends_on >= ${from}))
     order by r.name, r.id`)).rows;
 }
@@ -226,16 +227,18 @@ async function readBoardWindow(actor: ScheduleActor & { boardId: string; from: s
            er.department_id as "departmentId", d.name as "departmentName", tr.name as "tradeName",
            (${boardScopeFilter(board, orgId, from)}) as "inScope"
       from parties p
-      join employee_roles er on er.org_id = p.org_id and er.party_id = p.id
+      left join employee_roles er on er.org_id = p.org_id and er.party_id = p.id
       left join departments d on d.org_id = er.org_id and d.id = er.department_id
       left join trades tr on tr.org_id = er.org_id and tr.id = er.trade_id
-     where p.org_id = ${orgId} and p.is_active and er.is_active
-       and (er.hired_on is null or er.hired_on <= ${through})
-       and (er.terminated_on is null or er.terminated_on >= ${from})
+     where p.org_id = ${orgId}
        ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, allowed)}
-       and ((${boardScopeFilter(board, orgId, from)}) or exists (
-         select 1 from schedule_entries x where x.org_id = p.org_id and x.board_id = ${board.id} and x.worker_party_id = p.id
-            and x.status <> 'cancelled' and x.starts_on <= ${through} and x.ends_on >= ${from}))
+       and ((p.is_active and er.is_active and (er.hired_on is null or er.hired_on <= ${through})
+         and (er.terminated_on is null or er.terminated_on >= ${from}) and (${boardScopeFilter(board, orgId, from)}))
+         or exists (select 1 from schedule_entries x where x.org_id = p.org_id and x.board_id = ${board.id} and x.worker_party_id = p.id
+            and x.status <> 'cancelled' and x.starts_on <= ${through} and x.ends_on >= ${from})
+         or exists (select 1 from schedule_source_records h where h.org_id=p.org_id and h.board_id=${board.id}
+           and h.worker_party_id=p.id and h.disposition='recorded' and h.on_date between ${from} and ${through}
+           and not exists(select 1 from schedule_source_records n where n.org_id=h.org_id and n.supersedes_id=h.id)))
      order by p.display_name, p.id
   `)).rows;
 
@@ -286,5 +289,6 @@ async function readBoardWindow(actor: ScheduleActor & { boardId: string; from: s
     };
   });
 
-  return { board, from, through, days, calendarNotice, rows, entries, replaced, absences, codes, canManage, canPublish };
+  const sourceRecords = board.rowKind === 'people' ? await readBoardSourceHistory(actor, board.id, from, through) : [];
+  return { board, from, through, days, calendarNotice, rows, entries, sourceRecords, replaced, absences, codes, canManage, canPublish };
 }

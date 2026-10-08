@@ -5,6 +5,8 @@ import { useLocale, useTranslations } from 'next-intl'
 import { ZoomIn, ZoomOut } from 'lucide-react'
 import { Button, cn } from '@openbooks/ui'
 import { CHIP_COLORS, chipStyle } from './BookingChip'
+import { SourceRecordChip } from './SourceRecord'
+import type { BoardSourceRecord } from '@openbooks/engine/src/schedule-boards/source-history.ts'
 import { TargetPicker, type PickedTarget } from './TargetPicker'
 import { formatMinutes, groupRows, initials, targetHue, targetShortLabel, type BoardEntry, type GroupBy } from './model'
 import type { BoardController } from './use-board'
@@ -26,17 +28,19 @@ type Drag =
   | { kind: 'create'; row: number; startMinute: number; endMinute: number }
 
 /** Hours across the window: shifts as bars, overnight work crossing midnight. */
-export function TimelineView({ controller, window: board, groupBy, search, today, onOpenEntry }: {
+export function TimelineView({ controller, window: board, groupBy, search, today, onOpenEntry, onOpenSourceRecord }: {
   controller: BoardController
   window: BoardWindow
   groupBy: GroupBy
   search: string
   today: string
   onOpenEntry: (entry: BoardEntry) => void
+  onOpenSourceRecord: (record: BoardSourceRecord) => void
 }) {
   const t = useTranslations('scheduling')
   const locale = useLocale()
   const [zoom, setZoom] = useState(board.days.length <= 3 ? 3 : board.days.length <= 7 ? 2 : 1)
+  const rowHeight = (board.sourceRecords?.length ?? 0) > 0 ? ROW_H + 26 : ROW_H
   const hourW = ZOOMS[zoom]!
   const dayW = hourW * 24
   const dates = board.days.map((day) => day.date)
@@ -54,11 +58,11 @@ export function TimelineView({ controller, window: board, groupBy, search, today
     const out = items.map((item) => {
       const top = y
       if (item.kind === 'person') personTop.set(item.personIndex!, top)
-      y += item.kind === 'group' ? 26 : ROW_H
+      y += item.kind === 'group' ? 26 : rowHeight
       return top
     })
     return { out, personTop, height: y }
-  }, [items])
+  }, [items, rowHeight])
 
   const scrollRef = useRef<HTMLDivElement>(null)
   const [drag, setDrag] = useState<Drag | null>(null)
@@ -68,8 +72,8 @@ export function TimelineView({ controller, window: board, groupBy, search, today
   useEffect(() => {
     const element = scrollRef.current
     const index = dayIndex.get(today) ?? 0
-    if (element) element.scrollLeft = Math.max(0, index * dayW + clockMinutes(board.board.dayStarts) / 60 * hourW - 2 * hourW)
-  }, [board.board.dayStarts, board.from, dayIndex, dayW, hourW, today])
+    if (element) element.scrollLeft = Math.max(0, index * dayW + (board.board.dayPolicyKnown ? clockMinutes(board.board.dayStarts) / 60 * hourW : 0) - 2 * hourW)
+  }, [board.board.dayStarts, board.board.dayPolicyKnown, board.from, dayIndex, dayW, hourW, today])
 
   const minuteAt = (clientX: number) => {
     const element = scrollRef.current!
@@ -79,7 +83,7 @@ export function TimelineView({ controller, window: board, groupBy, search, today
   const rowAt = (clientY: number) => {
     const element = scrollRef.current!
     const y = clientY - element.getBoundingClientRect().top + element.scrollTop - HEADER_H
-    for (const [row, top] of tops.personTop) if (y >= top && y < top + ROW_H) return row
+    for (const [row, top] of tops.personTop) if (y >= top && y < top + rowHeight) return row
     return null
   }
 
@@ -216,10 +220,10 @@ export function TimelineView({ controller, window: board, groupBy, search, today
                   className={cn('pointer-events-none absolute inset-y-0 border-l border-slate-200 dark:border-slate-800', day.isWeekend && 'bg-slate-50/60 dark:bg-slate-900/40', day.isHoliday && 'bg-rose-50/50 dark:bg-rose-950/20')}
                   style={{ left: NAME_W + i * dayW, width: dayW }}
                 >
-                  <div
+                  {board.board.dayPolicyKnown ? <div
                     className="absolute inset-y-0 bg-teal-500/[0.04]"
                     style={{ left: clockMinutes(board.board.dayStarts) / 60 * hourW, width: (clockMinutes(board.board.dayEnds) - clockMinutes(board.board.dayStarts)) / 60 * hourW }}
-                  />
+                  /> : null}
                 </div>
               )
             })}
@@ -236,7 +240,7 @@ export function TimelineView({ controller, window: board, groupBy, search, today
               const row = item.personIndex!
               const entries = board.entries.filter((entry) => entry.subjectId === person.subjectId && !replaced.has(entry.id))
               return (
-                <div key={item.key} className="absolute left-0 border-b border-slate-100 dark:border-slate-800/70" style={{ top, height: ROW_H, width }}>
+                <div key={item.key} className="absolute left-0 border-b border-slate-100 dark:border-slate-800/70" style={{ top, height: rowHeight, width }}>
                   <div className="sticky left-0 z-[5] flex h-full items-center gap-2 border-r border-slate-100 bg-white px-3 dark:border-slate-800 dark:bg-slate-950" style={{ width: NAME_W }}>
                     <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-slate-100 text-[9px] font-bold text-slate-600 dark:bg-slate-800 dark:text-slate-300">{initials(person.name)}</span>
                     <span className="truncate text-xs font-medium text-slate-800 dark:text-slate-100">{person.name}</span>
@@ -255,10 +259,16 @@ export function TimelineView({ controller, window: board, groupBy, search, today
                       const day = dayIndex.get(absence.onDate)
                       if (day === undefined) return null
                       return (
-                        <div key={`${absence.onDate}-${absence.leaveTypeCode}`} className="absolute inset-y-1 rounded-md border border-amber-300/70 bg-amber-50/80 px-1 text-[10px] font-semibold text-amber-800 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200" style={{ left: day * dayW + 2, width: dayW - 4 }} title={absence.leaveTypeName}>
+                        <div key={`${absence.onDate}-${absence.leaveTypeCode}`} className="absolute top-1 h-[32px] rounded-md border border-amber-300/70 bg-amber-50/80 px-1 text-[10px] font-semibold text-amber-800 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200" style={{ left: day * dayW + 2, width: dayW - 4 }} title={absence.leaveTypeName}>
                           {absence.leaveTypeCode}
                         </div>
                       )
+                    })}
+                    {dates.map((date,day) => {
+                      const records = (board.sourceRecords ?? []).filter(r => r.workerPartyId === person.subjectId && r.onDate === date)
+                      return records.length ? <div key={`source-${date}`} className="absolute bottom-1 z-[1] flex h-[22px]" style={{ left:day*dayW+2,width:dayW-4 }}>
+                        <SourceRecordChip records={records} compact onOpen={onOpenSourceRecord} />
+                      </div> : null
                     })}
                     {entries.map((entry) => {
                       const pos = position(entry)
@@ -283,7 +293,7 @@ export function TimelineView({ controller, window: board, groupBy, search, today
                           onDoubleClick={() => onOpenEntry(entry)}
                           style={{ ...chipStyle(targetHue(entry.target), entry.target?.color), left, width: Math.max(barWidth, 6), transform: offsetY ? `translateY(${offsetY}px)` : undefined }}
                           className={cn(
-                            'absolute inset-y-1 flex items-center overflow-hidden rounded-md border px-1.5 text-[11px] font-semibold shadow-sm',
+                            'absolute top-1 flex h-[32px] items-center overflow-hidden rounded-md border px-1.5 text-[11px] font-semibold shadow-sm',
                             CHIP_COLORS,
                             entry.status === 'draft' && 'border-dashed',
                             !editable && 'opacity-60',

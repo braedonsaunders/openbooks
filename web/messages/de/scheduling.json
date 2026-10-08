@@ -273,5 +273,16 @@
     "description": "Wo und wann Sie eingeplant sind, wie von Ihren Disponenten veröffentlicht.",
     "summary": "{days, plural, one {# Tag eingeplant} other {# Tage eingeplant}} · {hours}",
     "empty": "Vom {from} bis {through} ist für Sie nichts eingeplant."
+  },
+  "source": {
+    "explanation": "Importierte Planungsdaten sind schreibgeschützt. Datum und Anweisungen bleiben erhalten, ohne Arbeitszeit, Mitarbeiterstatus oder neue Verfügbarkeit zu ändern.",
+    "unknownHours": "Die Quelle enthält keine Stundenangaben.",
+    "hidden": "Diese Zeile war im ursprünglichen Board ausgeblendet; sie bleibt erhalten.",
+    "multiple": "Die Quelle enthält {count} Datensätze für diese Person und dieses Datum. Keiner wird als Ersatz eines anderen angenommen.",
+    "select": "Quelldatensatz auswählen",
+    "label": "Quellbezeichnung",
+    "result": "Quellbeschreibung",
+    "hours": "Stunden",
+    "origin": "Quelle"
   }
 }

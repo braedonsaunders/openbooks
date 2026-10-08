@@ -5,6 +5,8 @@ import { useLocale, useTranslations } from 'next-intl'
 import { ClipboardPaste, Copy, Eraser, Pencil, Scissors, SquareSplitHorizontal, Trash2 } from 'lucide-react'
 import { ContextMenu, cn, useContextMenu, type ContextMenuEntry } from '@openbooks/ui'
 import { AbsenceChip, BookingChip } from './BookingChip'
+import { SourceRecordChip } from './SourceRecord'
+import type { BoardSourceRecord } from '@openbooks/engine/src/schedule-boards/source-history.ts'
 import { TargetPicker, type PickedTarget } from './TargetPicker'
 import { searchTargets } from './api'
 import {
@@ -31,6 +33,7 @@ export interface GridProps {
   readonly spotlight: string | null
   readonly onSpotlight: (key: string | null) => void
   readonly onOpenEntry: (entry: BoardEntry) => void
+  readonly onOpenSourceRecord: (record: BoardSourceRecord) => void
   readonly today: string
 }
 
@@ -39,7 +42,7 @@ type Clip = { block: ClipCell[][]; text: string }
 const newId = () => crypto.randomUUID()
 const targetKey = (entry: BoardEntry) => (entry.target ? `${entry.target.kind}:${entry.target.id}` : 'none')
 
-export function PeopleGrid({ controller, window: board, groupBy, search, compact, spotlight, onSpotlight, onOpenEntry, today }: GridProps) {
+export function PeopleGrid({ controller, window: board, groupBy, search, compact, spotlight, onSpotlight, onOpenEntry, onOpenSourceRecord, today }: GridProps) {
   const t = useTranslations('scheduling')
   const locale = useLocale()
   const menu = useContextMenu()
@@ -48,6 +51,14 @@ export function PeopleGrid({ controller, window: board, groupBy, search, compact
   const days = useMemo(() => board.days.filter((day) => board.board.showWeekends || !day.isWeekend), [board.days, board.board.showWeekends])
   const dates = useMemo(() => days.map((day) => day.date), [days])
   const index = useMemo(() => indexEntries(board.entries), [board.entries])
+  const sourceIndex = useMemo(() => {
+    const out = new Map<string, BoardSourceRecord[]>()
+    for (const record of board.sourceRecords ?? []) {
+      const key = cellKey(record.workerPartyId, record.onDate)
+      const rows = out.get(key) ?? []; rows.push(record); out.set(key, rows)
+    }
+    return out
+  }, [board.sourceRecords])
   const absences = useMemo(() => indexAbsences(board.absences), [board.absences])
   const replaced = useMemo(() => new Set(board.replaced), [board.replaced])
 
@@ -58,8 +69,10 @@ export function PeopleGrid({ controller, window: board, groupBy, search, compact
       if (person.name.toLowerCase().includes(query) || (person.jobTitle ?? '').toLowerCase().includes(query) || (person.tradeName ?? '').toLowerCase().includes(query)) return true
       return board.entries.some((entry) => entry.subjectId === person.subjectId && entry.target
         && `${entry.target.code ?? ''} ${entry.target.label}`.toLowerCase().includes(query))
+        || (board.sourceRecords ?? []).some(record => record.workerPartyId === person.subjectId
+          && `${record.label ?? ''} ${record.result ?? ''}`.toLowerCase().includes(query))
     })
-  }, [board.entries, board.rows, search])
+  }, [board.entries, board.rows, board.sourceRecords, search])
   const { items, persons } = useMemo(() => groupRows(people, groupBy, t('grid.ungrouped')), [groupBy, people, t])
   const offsets = useMemo(() => {
     const tops: number[] = []
@@ -132,7 +145,7 @@ export function PeopleGrid({ controller, window: board, groupBy, search, compact
     return Boolean(person && date && (absences.get(cellKey(person.subjectId, date)) ?? []).length)
   }, [absences, dates, persons])
 
-  const defaultSpan = useCallback((): SpanInput => board.board.grain === 'day'
+  const defaultSpan = useCallback((): SpanInput => board.board.grain === 'day' || !board.board.dayPolicyKnown
     ? { mode: 'day' }
     : { mode: 'timed', starts: board.board.dayStarts, ends: board.board.dayEnds, breakMinutes: board.board.dayBreakMinutes }, [board.board])
 
@@ -653,6 +666,7 @@ export function PeopleGrid({ controller, window: board, groupBy, search, compact
                   dates={dates}
                   boardId={board.board.id}
                   index={index}
+                  sourceIndex={sourceIndex}
                   absences={absences}
                   replaced={replaced}
                   compact={compact}
@@ -661,6 +675,7 @@ export function PeopleGrid({ controller, window: board, groupBy, search, compact
                   minutes={personMinutes.get(person.subjectId) ?? 0}
                   onDragStartChip={onDragStartChip}
                   onOpenEntry={onOpenEntry}
+                  onOpenSourceRecord={onOpenSourceRecord}
                   onHoverTarget={setHoverTarget}
                 />
               )
@@ -685,6 +700,7 @@ export function PeopleGrid({ controller, window: board, groupBy, search, compact
             </div>
             {days.map((day) => {
               const total = totals.get(day.date)
+              const hasSourceDates = (board.sourceRecords ?? []).some(r => r.onDate === day.date)
               return (
                 <div
                   key={day.date}
@@ -692,8 +708,10 @@ export function PeopleGrid({ controller, window: board, groupBy, search, compact
                   style={{ width: dayW }}
                   title={total?.byTarget.map((slot) => `${slot.target.code ?? slot.target.label}: ${slot.people}`).join('\n')}
                 >
-                  <span className="text-sm font-semibold tabular-nums text-slate-800 dark:text-slate-100">{total?.people ?? 0}</span>
-                  <span className="text-[10px] tabular-nums text-slate-400">{formatMinutes(total?.minutes ?? 0)}</span>
+                  <span className="text-sm font-semibold tabular-nums text-slate-800 dark:text-slate-100">{hasSourceDates ? '—' : total?.people ?? 0}</span>
+                  <span className="text-[10px] tabular-nums text-slate-400" title={hasSourceDates ? t('source.unknownHours') : undefined}>
+                    {hasSourceDates ? '—' : formatMinutes(total?.minutes ?? 0)}
+                  </span>
                 </div>
               )
             })}
@@ -740,8 +758,8 @@ export function PeopleGrid({ controller, window: board, groupBy, search, compact
 }
 
 function PersonRow({
-  person, top, rowH, dayW, contentW, dates, boardId, index, absences, replaced, compact, spotlight, canManage, minutes,
-  onDragStartChip, onOpenEntry, onHoverTarget,
+  person, top, rowH, dayW, contentW, dates, boardId, index, sourceIndex, absences, replaced, compact, spotlight, canManage, minutes,
+  onDragStartChip, onOpenEntry, onOpenSourceRecord, onHoverTarget,
 }: {
   person: BoardRow
   top: number
@@ -751,6 +769,7 @@ function PersonRow({
   dates: readonly string[]
   boardId: string
   index: ReadonlyMap<string, BoardEntry[]>
+  sourceIndex: ReadonlyMap<string, BoardSourceRecord[]>
   absences: ReadonlyMap<string, import('./model').BoardAbsence[]>
   replaced: ReadonlySet<string>
   compact: boolean
@@ -759,6 +778,7 @@ function PersonRow({
   minutes: number
   onDragStartChip: (event: DragEvent<HTMLDivElement>, entry: BoardEntry) => void
   onOpenEntry: (entry: BoardEntry) => void
+  onOpenSourceRecord: (record: BoardSourceRecord) => void
   onHoverTarget: (key: string | null) => void
 }) {
   const t = useTranslations('scheduling')
@@ -794,6 +814,7 @@ function PersonRow({
         return (
           <div key={date} role="gridcell" className="flex items-center gap-0.5 px-[3px]" style={{ width: dayW, backgroundColor: entries.find((entry) => entry.target?.color && !replaced.has(entry.id))?.target?.color ? `color-mix(in srgb, ${entries.find((entry) => entry.target?.color && !replaced.has(entry.id))!.target!.color} 20%, transparent)` : undefined }}>
             {leave.map((absence) => <AbsenceChip key={`${absence.leaveTypeCode}`} absence={absence} compact={compact} />)}
+            <SourceRecordChip records={sourceIndex.get(key) ?? []} compact={compact} onOpen={onOpenSourceRecord} />
             {entries.map((entry) => (
               <BookingChip
                 key={entry.id}
@@ -813,7 +834,9 @@ function PersonRow({
         )
       })}
       <div className="sticky right-0 flex items-center justify-end border-l border-slate-100 bg-white px-3 text-xs font-semibold tabular-nums text-slate-600 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-300" style={{ width: TOTAL_W }}>
-        {minutes ? formatMinutes(minutes) : <span className="text-slate-300 dark:text-slate-700">—</span>}
+        {dates.some(date => sourceIndex.has(cellKey(person.subjectId,date)))
+          ? <span title={t('source.unknownHours')}>—</span>
+          : minutes ? formatMinutes(minutes) : <span className="text-slate-300 dark:text-slate-700">—</span>}
       </div>
     </div>
   )

@@ -4,15 +4,18 @@ import { useMemo, useState } from 'react'
 import { useLocale, useTranslations } from 'next-intl'
 import { Select, cn } from '@openbooks/ui'
 import { CHIP_COLORS, chipStyle } from './BookingChip'
+import { SourceRecordChip } from './SourceRecord'
+import type { BoardSourceRecord } from '@openbooks/engine/src/schedule-boards/source-history.ts'
 import { targetHue, targetShortLabel, type BoardEntry, type BoardTarget } from './model'
 import type { BoardWindow } from '@openbooks/engine/src/schedule-boards/window.ts'
 
 /** The month at a glance: who is where each day, or one person's month. */
-export function CalendarView({ window: board, month, today, onOpenEntry }: {
+export function CalendarView({ window: board, month, today, onOpenEntry, onOpenSourceRecord }: {
   window: BoardWindow
   month: string
   today: string
   onOpenEntry: (entry: BoardEntry) => void
+  onOpenSourceRecord: (record: BoardSourceRecord) => void
 }) {
   const t = useTranslations('scheduling')
   const locale = useLocale()
@@ -30,6 +33,16 @@ export function CalendarView({ window: board, month, today, onOpenEntry }: {
     }
     return map
   }, [board.entries, personId, replaced])
+  const sourceByDate = useMemo(() => {
+    const map = new Map<string, Map<string, BoardSourceRecord[]>>()
+    for (const record of board.sourceRecords ?? []) {
+      if (personId && record.workerPartyId !== personId) continue
+      const people = map.get(record.onDate) ?? new Map<string, BoardSourceRecord[]>()
+      people.set(record.workerPartyId, [...(people.get(record.workerPartyId) ?? []), record])
+      map.set(record.onDate, people)
+    }
+    return map
+  }, [board.sourceRecords, personId])
   const leaveByDate = useMemo(() => {
     const map = new Map<string, number>()
     for (const absence of board.absences) if (!personId || absence.workerPartyId === personId) map.set(absence.onDate, (map.get(absence.onDate) ?? 0) + 1)
@@ -68,6 +81,10 @@ export function CalendarView({ window: board, month, today, onOpenEntry }: {
           const inMonth = day.date.slice(0, 7) === month
           const expanded = open === day.date
           const leave = leaveByDate.get(day.date) ?? 0
+          const sourceGroups = [...(sourceByDate.get(day.date)?.values() ?? [])]
+          const sourceLimit = expanded ? sourceGroups.length : Math.min(4, sourceGroups.length)
+          const bookingLimit = expanded ? groups.size : Math.max(0, 4 - sourceLimit)
+          const remaining = sourceGroups.length + groups.size - sourceLimit - bookingLimit
           return (
             <div key={day.date} className={cn('relative min-w-0 border-b border-l border-slate-100 p-1.5 dark:border-slate-800', day.isWeekend && 'bg-slate-200/50 dark:bg-slate-800/60', !inMonth && 'text-slate-400', day.isHoliday && 'bg-rose-50/60 dark:bg-rose-950/20')}>
               <button type="button" onClick={() => setOpen(expanded ? null : day.date)} className="flex w-full items-center justify-between">
@@ -77,7 +94,9 @@ export function CalendarView({ window: board, month, today, onOpenEntry }: {
                 {leave ? <span className="rounded bg-amber-100 px-1 text-[9px] font-semibold text-amber-800 dark:bg-amber-950 dark:text-amber-200">{t('calendar.onLeave', { count: leave })}</span> : null}
               </button>
               <div className="mt-1 space-y-0.5">
-                {[...groups.values()].slice(0, expanded ? undefined : 4).map((group) => (
+                {sourceGroups.slice(0, sourceLimit).map(records =>
+                  <SourceRecordChip key={records[0]!.workerPartyId} records={records} compact workerName={!personId ? names.get(records[0]!.workerPartyId) : undefined} onOpen={onOpenSourceRecord} />)}
+                {[...groups.values()].slice(0, bookingLimit).map((group) => (
                   <div key={group.target ? group.target.id : 'none'}>
                     <button
                       type="button"
@@ -101,8 +120,8 @@ export function CalendarView({ window: board, month, today, onOpenEntry }: {
                     ) : null}
                   </div>
                 ))}
-                {!expanded && groups.size > 4 ? (
-                  <button type="button" onClick={() => setOpen(day.date)} className="px-1 text-[10px] font-medium text-teal-700 hover:underline dark:text-teal-300">{t('calendar.more', { count: groups.size - 4 })}</button>
+                {!expanded && remaining > 0 ? (
+                  <button type="button" onClick={() => setOpen(day.date)} className="px-1 text-[10px] font-medium text-teal-700 hover:underline dark:text-teal-300">{t('calendar.more', { count: remaining })}</button>
                 ) : null}
               </div>
             </div>

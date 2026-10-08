@@ -3985,7 +3985,8 @@
       "showTotals": "Mostrar totales inferiores",
       "cellColorRules": "Reglas de color",
       "field": "Campo",
-      "match": "Coincidencia"
+      "match": "Coincidencia",
+      "dayPolicyKnown": "Horario diario configurado"
     },
     "fieldHelp": {
       "fxRateMaxAgeDays": "Días entre el tipo utilizable más reciente y el cierre del período a partir de los cuales la revaluación y la consolidación rechazan el tipo. Los tipos de cierre se cuentan desde la fecha del tipo al contado de cierre; los promedio, desde la cotización más reciente promediada. Valor predeterminado sin política: 31 días.",
@@ -4150,7 +4151,8 @@
       "scheduleCodeColor": "El color con el que se muestran las asignaciones con este código, como valor hexadecimal, por ejemplo #38bdf8.",
       "scheduleWeekendDays": "Días a sombrear si no hay calendario laboral aplicable. El calendario tiene prioridad.",
       "scheduleShowTotals": "Mostrar filas y horas reservadas después de las pausas configuradas.",
-      "scheduleCellColorRules": "La primera coincidencia sin distinguir mayúsculas establece el color. Use colores hexadecimales de seis dígitos, como #38bdf8."
+      "scheduleCellColorRules": "La primera coincidencia sin distinguir mayúsculas establece el color. Use colores hexadecimales de seis dígitos, como #38bdf8.",
+      "scheduleBoardDayPolicyKnown": "Desactive si solo se conocen las fechas. El historial sigue visible sin horas; configure el inicio, fin y descanso antes de reservar un día."
     },
     "options": {
       "storedValueKind": {

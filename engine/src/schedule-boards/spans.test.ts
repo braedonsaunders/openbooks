@@ -5,6 +5,10 @@ import { datesBetween, daySpan, timedSpan, windowStart, workedMinutes } from "./
 
 const day = { timeZone: "America/Toronto", dayStarts: "07:00", dayEnds: "15:30", dayBreakMinutes: 30 };
 
+test('date-only board history cannot manufacture a working day from placeholder hours',()=> {
+  assert.throws(()=>daySpan({...day,dayPolicyKnown:false},'2020-01-02'),/no authoritative working-day hours/);
+});
+
 test("whole-day totals use configured eight, ten and sixteen hour days after breaks", () => {
   for (const [dayEnds, expected] of [["15:30", 480], ["17:30", 600], ["23:30", 960]] as const) {
     const span = daySpan({ ...day, dayEnds }, "2026-10-08");
