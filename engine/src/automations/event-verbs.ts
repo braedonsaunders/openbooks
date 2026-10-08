@@ -537,6 +537,10 @@ export async function correctEmploymentChange(input: {
       // and enforce its employer scope on the write runner — the bare
       // permission check above cannot see cross-subsidiary corrections.
       await requireHrmEmploymentManage(db, input.orgId, input.actorId, target.employmentId);
+      if (target.priorSnapshot && typeof target.priorSnapshot === "object" &&
+          "historicalObservation" in target.priorSnapshot) {
+        throw new EventVerbError("Correct a historical observation with a bounded status change request for its documented window; direct correction cannot choose a different employment episode.");
+      }
       await refuseWhenDependent(db, input.orgId, target);
       const recordedAt = new Date();
       const newRevision = (await currentAggregateRevision(db, input.orgId, target.employmentId)) + 1;

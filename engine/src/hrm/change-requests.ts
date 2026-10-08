@@ -1727,6 +1727,16 @@ async function assertHistoricalStatusWindow(
   }
 }
 
+/** Sequence allocation covers the entire recorded chain, including disjoint windows. */
+async function nextEmploymentVersionNumber(exec: SqlExecutor, orgId: string, employmentId: string): Promise<number> {
+  const next = (await exec.execute<{ next: number }>(sql`
+    select coalesce(max(version_no),0)+1 as next from worker_employment_versions
+    where org_id=${orgId} and employment_id=${employmentId}
+  `)).rows[0]?.next;
+  if (!next) throw new HrmChangeRequestError("REFUSED", "The employment version sequence is unavailable; reload the history.");
+  return next;
+}
+
 async function applyHistoricalStatusObservation(
   exec: SqlExecutor,
   args: {
@@ -1738,11 +1748,7 @@ async function applyHistoricalStatusObservation(
   // The aggregate is now locked. Repeat the overlap check so another HRM
   // approval cannot insert a version between the initial check and this lock.
   await assertHistoricalStatusWindow(exec, orgId, request.employment_id, payload);
-  const sequence = (await exec.execute<{ next: number }>(sql`
-    select coalesce(max(version_no),0)+1 as next from worker_employment_versions
-    where org_id=${orgId} and employment_id=${request.employment_id}
-  `)).rows[0]?.next;
-  if (!sequence) throw new HrmChangeRequestError("REFUSED", "The employment version sequence is unavailable; reload the history.");
+  const sequence = await nextEmploymentVersionNumber(exec, orgId, request.employment_id);
   const changeId = await insertEmploymentChange(exec, {
     orgId, employmentId: request.employment_id, assignmentId: null, revision: newRevision,
     changeKind: "status_changed", closedVersions: [],
@@ -1814,7 +1820,7 @@ async function applyEmploymentVersionChange(
       "this employment is already terminated — a second termination is a duplicate, not an update",
     );
   }
-  const successorNo = Math.max(...overlapping.map((version) => version.version_no)) + 1;
+  const successorNo = await nextEmploymentVersionNumber(exec, orgId, request.employment_id);
   const changeId = await insertEmploymentChange(exec, {
     orgId,
     employmentId: request.employment_id,
