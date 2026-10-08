@@ -13,8 +13,9 @@ test("bulk journal balance checks keep each entry, subsidiary and configured seg
   let failure: unknown;
   try {
     const child = randomUUID();
-    await db.execute(sql`insert into subsidiaries(id,org_id,parent_id,code,name,currency,is_active)
-      values(${child},${org.orgId},${org.subsidiaryId},'BRANCH','Branch','CAD',true)`);
+    const branch = await db.execute(sql`insert into subsidiaries(id,org_id,parent_id,name,base_currency,country,is_active)
+      values(${child},${org.orgId},${org.subsidiaryId},'Branch','CAD','CA',true) returning id`);
+    assert.equal(branch.rows.length,1);
     const evidence = async () => (await db.execute<{ evidence: unknown }>(sql`
       select jsonb_build_object(
         'entries',(select coalesce(jsonb_agg(to_jsonb(e) order by e.id),'[]'::jsonb)
