@@ -591,12 +591,14 @@ export interface SetupGroup {
   iconKey: string
 }
 
-// Section order in the left rail. `company` holds the single (special-cased)
-// Company & Accounting settings tab; the rest are registry-driven.
+// Section order in the left rail. `company` holds organization identity,
+// structure and the Features switchboard; `apps` lists one settings page per
+// installed app and closes the rail ahead of Import & Export.
 export const SETUP_GROUPS: SetupGroup[] = [
   { key: 'company', iconKey: 'building' },
   { key: 'accounting', iconKey: 'calendar' },
   { key: 'taxes', iconKey: 'receipt' },
+  { key: 'banking', iconKey: 'landmark' },
   { key: 'dimensions', iconKey: 'layers' },
   { key: 'projects', iconKey: 'briefcase' },
   { key: 'compliance', iconKey: 'shield' },
@@ -608,4 +610,5 @@ export const SETUP_GROUPS: SetupGroup[] = [
   { key: 'assets', iconKey: 'landmark' },
   { key: 'currency', iconKey: 'coins' },
   { key: 'agents', iconKey: 'sparkles' },
+  { key: 'apps', iconKey: 'box' },
 ]

@@ -218,11 +218,13 @@ export function ExtensionDrawer({
                 <Button asChild variant="outline">
                   <Link href="/admin/navigation">{t('navigation')}</Link>
                 </Button>
-                <Button asChild variant="outline">
-                  <Link href="/admin/setup/extension-settings">
-                    {t('settings')}
-                  </Link>
-                </Button>
+                {app.manifest?.contributions?.some((contribution) => contribution.kind === 'setting') ? (
+                  <Button asChild variant="outline">
+                    <Link href={`/admin/setup/apps/${encodeURIComponent(app.key)}`}>
+                      {t('settings')}
+                    </Link>
+                  </Button>
+                ) : null}
                 <Button asChild variant="outline">
                   <Link href="/admin/roles">{t('roles')}</Link>
                 </Button>

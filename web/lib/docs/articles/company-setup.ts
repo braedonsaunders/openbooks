@@ -12,16 +12,15 @@ export const setupCompanyGroup: DocArticle = {
   category: 'administration',
   order: 10,
   summary:
-    'Organization identity, control accounts, subsidiaries, intercompany mapping, features, bank feeds, payments, and CRM defaults.',
-  updated: '2026-09-27',
+    'Organization identity, control accounts, the Features switchboard, subsidiaries, and home announcements.',
+  updated: '2026-10-07',
   keywords: [
     'company',
     'organization',
     'control accounts',
     'subsidiaries',
-    'intercompany',
     'features',
-    'bank feeds',
+    'announcements',
     'base currency',
     'fiscal year',
   ],
@@ -72,39 +71,29 @@ the data returns if you re-enable it. A feature whose data is load-bearing for
 the ledger or an open operational obligation cannot be turned off until that
 dependency is resolved.
 
-## Subsidiaries and Intercompany Pairs
+## Subsidiaries
 
-With **multi-subsidiary** enabled:
+With **multi-subsidiary** enabled, **Subsidiaries** form the legal-entity tree.
+Each entity's **base currency** is locked after creation so functional currency
+cannot drift once books exist. Mark elimination entities used only for
+consolidation. Intercompany pairs and ownership interests are accounting
+policy and live in the **Accounting** group.
 
-- **Subsidiaries** form the legal-entity tree. Each entity's **base currency**
-  is locked after creation so functional currency cannot drift once books exist.
-  Mark elimination entities used only for consolidation.
-- **Intercompany Pairs** map the **due-from** and **due-to** accounts used when a
-  single transaction crosses two subsidiaries.
-- **Subsidiary Ownership** records an effective-dated interest for each child.
-  Choose full, proportionate, or equity-method treatment and configure the
-  investment, equity-income, distribution, NCI, goodwill, and fair-value
-  accounts. Full consolidation below 100% requires NCI accounts. Acquisition
-  policy becomes immutable after it has produced consolidation evidence; end
-  the interest and create a new dated policy instead of rewriting history.
+## Announcements
 
-At close, the consolidation action derives exact period FX rates, posts
-acquisition/NCI or equity-method adjustments into the elimination entity, then
-posts intercompany eliminations. Rerunning reverses the prior effective
-adjustments before replacing them. Consolidated reports exclude equity-method
-entities, apply exact ownership weights to proportionately consolidated
-entities, and include elimination entries for fully consolidated entities.
+**Announcements** (when enabled) publish company notices to the home page for a
+chosen audience between a start and an optional end date.
 
-## Bank Feeds, Payments & Banking, and CRM
+## Other settings
 
-- **Bank Feeds** (when enabled) configures the automated statement connections
-  that feed the Banking module.
-- **Payments & Banking** holds payment-method, remittance, and banking operation
-  defaults used by pay runs and receipts.
-- **CRM** sets pipeline and relationship defaults for the Customers workspace.
-
-Search for an existing definition before creating one, use stable codes, and
-test a change with a small transaction before relying on it.
+- Business calendars, aging buckets, intercompany pairs, and ownership
+  interests are in **Accounting**.
+- Bank feeds, payment providers, payment profiles, formats, schedules, and
+  corporate cards are in **Banking & payments**. Debit mandates are kept on
+  each customer record.
+- Account statuses, opportunity stages, lead sources, and promotions are in
+  **Sales & CRM**.
+- Settings declared by installed apps are in **App settings**, one page per app.
 `,
 }
 
@@ -113,14 +102,15 @@ export const setupAccountingGroup: DocArticle = {
   title: 'Setup: Accounting',
   category: 'administration',
   order: 11,
-  summary: 'Accounting books and the governed period-close configuration.',
-  updated: '2026-07-27',
-  keywords: ['accounting books', 'primary book', 'period close', 'close policy', 'multi-book'],
+  summary: 'Period close, accounting books, business calendars, aging buckets, allocations, and consolidation policy.',
+  updated: '2026-10-07',
+  keywords: ['accounting books', 'primary book', 'period close', 'close policy', 'multi-book', 'business calendar', 'aging buckets', 'intercompany', 'ownership', 'consolidation'],
   related: ['setup-company-group', 'financial-reports', 'company-settings'],
   body: `# Setup: Accounting
 
-The **Accounting** group configures the books that postings land in and the
-governed process that closes each period.
+The **Accounting** group configures the books that postings land in, the
+governed process that closes each period, and the effective-dated policies that
+reports and consolidation read.
 
 ## Period Close
 
@@ -145,6 +135,45 @@ Use a secondary (non-primary) book for a tax or alternate-GAAP view that runs
 different policies — for example, a different depreciation method per category
 (see **Assets → Book Depreciation Policies**). Archiving a book preserves its
 history while preventing new selection.
+
+## Business Calendars
+
+A **Business Calendar** sets the week start, weekend days, and the country whose
+statutory holidays apply. A calendar without a subsidiary is the organization
+default; a subsidiary row overrides it for that entity. Versions are
+effective-dated, so a change applies from its start date without reinterpreting
+earlier periods. Forecasts and dashboards read this calendar.
+
+## Aging Bucket Policies
+
+An **Aging Bucket Policy** lists the ascending day boundaries that turn days past
+due into aging buckets for receivables and payables. Policies are
+effective-dated; without one, the standard 30/60/90 buckets apply.
+
+## Allocations
+
+**Allocations** distribute pooled costs to targets on a driver: splits at entry,
+contributions at posting, and period sweeps.
+
+## Intercompany Pairs and Ownership Interests
+
+With **multi-subsidiary** enabled:
+
+- **Intercompany Pairs** map the **due-from** and **due-to** accounts used when a
+  single transaction crosses two subsidiaries.
+- **Subsidiary Ownership** records an effective-dated interest for each child.
+  Choose full, proportionate, or equity-method treatment and configure the
+  investment, equity-income, distribution, NCI, goodwill, and fair-value
+  accounts. Full consolidation below 100% requires NCI accounts. Acquisition
+  policy becomes immutable after it has produced consolidation evidence; end
+  the interest and create a new dated policy instead of rewriting history.
+
+At close, the consolidation action derives exact period FX rates, posts
+acquisition/NCI or equity-method adjustments into the elimination entity, then
+posts intercompany eliminations. Rerunning reverses the prior effective
+adjustments before replacing them. Consolidated reports exclude equity-method
+entities, apply exact ownership weights to proportionately consolidated
+entities, and include elimination entries for fully consolidated entities.
 `,
 }
 
@@ -322,16 +351,16 @@ recognition run — see **Revenue Recognition**.
 
 export const setupWorkforceGroup: DocArticle = {
   slug: 'setup-workforce-group',
-  title: 'Setup: Workforce',
+  title: 'Setup: Human resources',
   category: 'administration',
   order: 17,
   summary: 'Time types and worker-compensation groups used by timesheets and labor costing.',
-  updated: '2026-07-21',
-  keywords: ['workforce', 'time type', 'worker comp', 'billable', 'cost multiplier', 'bill multiplier', 'labor'],
+  updated: '2026-10-07',
+  keywords: ['human resources', 'HR', 'workforce', 'time type', 'worker comp', 'billable', 'cost multiplier', 'bill multiplier', 'labor'],
   related: ['labor-costing', 'labor-pricing', 'company-settings'],
-  body: `# Setup: Workforce
+  body: `# Setup: Human resources
 
-The **Workforce** group configures how time is classified and how workers are
+The **Human resources** group configures how time is classified and how workers are
 grouped for insurance costing. Both feed timesheets, field tickets, and the labor
 costing engine.
 
@@ -543,16 +572,124 @@ own: every finding is a review list with the exact rows behind it.
 `,
 }
 
+export const setupBankingGroup: DocArticle = {
+  slug: 'setup-banking-group',
+  title: 'Setup: Banking & payments',
+  category: 'administration',
+  order: 12.5,
+  summary: 'Bank feeds, payment providers, payment profiles, formats, schedules, and corporate cards.',
+  updated: '2026-10-07',
+  keywords: ['bank feeds', 'payment providers', 'payment profile', 'payment format', 'payment schedule', 'NACHA', 'SEPA', 'CPA 005', 'corporate cards', 'debit mandates'],
+  related: ['setup-company-group', 'setup-accounting-group', 'company-settings'],
+  body: `# Setup: Banking & payments
+
+The **Banking & payments** group configures how money moves in and out of your
+bank accounts.
+
+## Connections
+
+- **Bank Feeds** (when enabled) configures the automated statement connections
+  that feed the Banking module.
+- **Payment Providers** (when online payments are enabled) configures the hosted
+  checkout providers behind customer payment links on invoices. Payout and fee
+  reconciliation stays under **Banking → PSP settlements**.
+
+## Payment files
+
+- **Bank profiles** pair a bank account with a payment format, the originator
+  credentials your bank issues, and how files are delivered (SFTP or manual
+  download). Credentials are stored encrypted and never shown again after save.
+- **Payment formats** are the file layouts for each payment rail. Built-in
+  formats cover the common rails; a custom format carries its own formatter
+  script.
+- **Payment schedules** run on a schedule against a bank profile, select bills
+  due within the window you set, and create the payment run as a draft or
+  submit it for approval.
+
+## Corporate cards
+
+**Corporate Cards** are company-liability cards that fund expense-report lines,
+one row per card.
+
+Debit mandates — a customer's authorization to collect from their bank
+account — are kept on each customer record under **Debit mandates**.
+`,
+}
+
+export const setupSalesGroup: DocArticle = {
+  slug: 'setup-sales-group',
+  title: 'Setup: Sales & CRM',
+  category: 'administration',
+  order: 15.5,
+  summary: 'Account statuses, opportunity stages, lead sources, and promotions.',
+  updated: '2026-10-07',
+  keywords: ['CRM', 'account status', 'lifecycle', 'opportunity stage', 'pipeline', 'lead source', 'promotions', 'discount codes'],
+  related: ['setup-company-group', 'setup-billing-group'],
+  body: `# Setup: Sales & CRM
+
+The **Sales & CRM** group holds the lists the Customers workspace and sales
+documents choose from. Each list is its own page.
+
+## CRM
+
+With CRM enabled:
+
+- **Account statuses** are the lifecycle statuses for leads, prospects, and
+  customers, ordered by sequence within each stage, and mark which statuses
+  count as qualified.
+- **Opportunity stages** carry a win probability and forecast category, and can
+  require lines, a primary contact, a positive amount, or a win/loss reason
+  before an opportunity enters them.
+- **Lead sources** record where leads come from for attribution and reporting.
+
+Sales teams, territories, and quotas are managed in the Customers workspace
+under **Sales**.
+
+## Promotions
+
+**Promotions** (when enabled) define discount codes and campaigns applied to
+sales document lines.
+`,
+}
+
+export const setupAppSettingsGroup: DocArticle = {
+  slug: 'setup-app-settings-group',
+  title: 'Setup: App settings',
+  category: 'administration',
+  order: 20.5,
+  summary: 'One settings page for each installed app that declares settings.',
+  updated: '2026-10-07',
+  keywords: ['apps', 'app settings', 'extensions', 'installed apps', 'configuration'],
+  related: ['setup-company-group'],
+  body: `# Setup: App settings
+
+The **App settings** group lists one page for each installed app that declares
+settings. Apps that declare none do not appear, and the group is hidden when no
+installed app has settings.
+
+Each page lists the settings the app declares with their current values. Editing
+a value requires a reason; the change is audited and takes effect from the
+moment it is saved, while prior values are kept with their effective dates so
+earlier activity is still read against the value that applied at the time.
+
+Install, update, and remove apps under **Settings → Apps**. An app's **Settings**
+button opens its page here.
+`,
+}
+
 export const companySetupGroupArticles: DocArticle[] = [
   setupCompanyGroup,
   setupAccountingGroup,
   setupTaxesGroup,
+  setupBankingGroup,
   setupDimensionsGroup,
   setupBillingGroup,
+  setupSalesGroup,
   setupRevenueGroup,
   setupWorkforceGroup,
   setupAssetsGroup,
   setupCurrencyGroup,
   setupProjectsGroup,
   setupAgentsGroup,
+  setupAppSettingsGroup,
 ]

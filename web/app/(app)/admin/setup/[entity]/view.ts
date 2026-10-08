@@ -1,5 +1,6 @@
 import 'server-only'
-import { loadExtensionSettingRows } from '../../../../../lib/setup/extension-settings'
+import { listAppSettingPages, loadExtensionSettingRows } from '../../../../../lib/setup/extension-settings'
+import { appSettingsHref } from '../../../../../lib/setup/rail'
 import { loadHomeAnnouncementRows } from '../../../../../lib/setup/home-announcements'
 
 import { notFound } from 'next/navigation'
@@ -88,6 +89,8 @@ export interface SetupLibraryPack {
 
 export interface SetupEntityData {
   entityKey: string
+  /** List, pagination and drawer links resolve against this page path. */
+  basePath: string
   isCompany: boolean
   isPeriodClose: boolean
   isFxProvider: boolean
@@ -170,9 +173,17 @@ function cellDisplay(
 export async function loadSetupEntity(
   entityKey: string,
   sp: Record<string, string | string[] | undefined>,
+  scope: { appKey?: string } = {},
 ): Promise<SetupEntityData> {
   const authz = await requirePermission('admin.setup.manage')
   const { orgId } = authz.user
+  // App settings are served one installed app per page; the combined
+  // extension-settings list has no standalone page of its own.
+  const app = scope.appKey === undefined
+    ? null
+    : entityKey === 'extension-settings' && authz.allowedSubsidiaryIds === null
+      ? (await listAppSettingPages(orgId)).find((candidate) => candidate.key === scope.appKey) ?? notFound()
+      : notFound()
 
   const isCompany = entityKey === 'company'
   const isPeriodClose = entityKey === 'period-close'
@@ -190,7 +201,7 @@ export async function loadSetupEntity(
   }
 
   const baseEntity = isCompany || isPeriodClose || isFxProvider || isTaxProvider ? undefined : SETUP_ENTITY_BY_KEY.get(entityKey)
-  if (!isCompany && !isPeriodClose && !isFxProvider && !isTaxProvider && (!baseEntity || baseEntity.nestedUnder || baseEntity.parentRecords?.length || baseEntity.rehomed)) {
+  if (!isCompany && !isPeriodClose && !isFxProvider && !isTaxProvider && (!baseEntity || baseEntity.nestedUnder || baseEntity.parentRecords?.length || (baseEntity.rehomed && !app))) {
     notFound()
   }
   const features = await resolvedFeatureState(orgId)
@@ -232,7 +243,7 @@ export async function loadSetupEntity(
     ${list.q && searchColumns.length ? sql`and (${sql.join(searchColumns, sql` or `)})` : sql``}`
     : sql``
   const moduleRows = entity?.dataSource === 'extension-settings'
-    ? (authz.allowedSubsidiaryIds !== null ? [] : await loadExtensionSettingRows(orgId)).filter((row) => !list.q || Object.values(row).some((value) => String(value).toLowerCase().includes(list.q!.toLowerCase()))) : null
+    ? (authz.allowedSubsidiaryIds !== null ? [] : await loadExtensionSettingRows(orgId, app?.key)).filter((row) => !list.q || Object.values(row).some((value) => String(value).toLowerCase().includes(list.q!.toLowerCase()))) : null
   // HR-15: home announcements list from org settings JSON.
   const announcementRows = entity?.dataSource === 'home-announcements'
     ? (authz.allowedSubsidiaryIds !== null ? [] : await loadHomeAnnouncementRows(orgId)).filter((row) => !list.q || [row.title, row.body ?? ''].some((value) => String(value).toLowerCase().includes(list.q!.toLowerCase())))
@@ -263,9 +274,13 @@ export async function loadSetupEntity(
   }
 
   const idColumn = entity?.idColumn ?? 'id'
+  const basePath = app ? appSettingsHref(app.key) : `/admin/setup/${entityKey}`
+  // On an app's own page the app is the page, so its key is not a column.
+  const listColumns = (entity?.columns ?? []).filter((c) => !(app && c.key === 'extensionKey'))
 
   return {
     entityKey,
+    basePath,
     isCompany,
     isPeriodClose,
     isFxProvider,
@@ -273,8 +288,8 @@ export async function loadSetupEntity(
     isRegistryList,
     canReopen,
     currentParams: sp,
-    title: entity ? t(`entities.${entity.key}.title`) : '',
-    description: entity ? t(`entities.${entity.key}.description`) : '',
+    title: app ? app.name : entity ? t(`entities.${entity.key}.title`) : '',
+    description: app ? t('entities.extension-settings.appDescription') : entity ? t(`entities.${entity.key}.description`) : '',
     docHref: entity?.docSlug ? `/docs/${entity.docSlug}` : null,
     learnMore: t('learnMore'),
     newLabel: t('new'),
@@ -287,7 +302,7 @@ export async function loadSetupEntity(
     libraryCloseHref: mergeHref('/admin/setup/tax-return-forms', sp, { library: undefined }),
     searchPlaceholder: t('searchPlaceholder'),
     hasActiveToggle: Boolean(entity?.hasActive),
-    columns: (entity?.columns ?? []).map((c) => ({
+    columns: listColumns.map((c) => ({
       key: c.key,
       kind: c.kind,
       header: t(`fields.${c.key}`),
@@ -295,9 +310,9 @@ export async function loadSetupEntity(
     rows: entity
       ? rows.map((row) => {
           const rowId = String(row[idColumn])
-          const href = mergeHref(`/admin/setup/${entity.key}`, sp, { row: rowId })
+          const href = mergeHref(basePath, sp, { row: rowId })
           const cells: Record<string, SetupListCell> = {}
-          for (const c of entity.columns) {
+          for (const c of listColumns) {
             const { display, badgeVariant } = cellDisplay(c, row, refLabels, t, locale)
             cells[c.key] = {
               display,
@@ -426,7 +441,7 @@ export function setupEntitySpec(data: SetupEntityData): PageSpec {
             widgetBlock(
               'show-inactives-toggle',
               {
-                basePath: `/admin/setup/${data.entityKey}`,
+                basePath: data.basePath,
                 currentParams: data.currentParams,
               },
               f('hasActiveToggle'),
@@ -445,7 +460,7 @@ export function setupEntitySpec(data: SetupEntityData): PageSpec {
             ],
           ),
           pagination({
-            basePath: `/admin/setup/${data.entityKey}`,
+            basePath: data.basePath,
             total: f('total'),
             page: f('currentPage'),
             perPage: f('perPage'),

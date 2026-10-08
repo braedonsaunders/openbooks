@@ -424,6 +424,18 @@ export const PAGE_REGISTRY: Readonly<Record<string, PageRegistryEntry>> = {
       }
     },
   },
+  '/admin/setup/apps/[appKey]': {
+    route: '/admin/setup/apps/[appKey]',
+    segments: ['appKey'],
+    searchParams: true,
+    module: async () => {
+      const m = await import('../app/(app)/admin/setup/apps/[appKey]/view')
+      return {
+        load: (input) => m.loadAppSettings(segment(input, 'appKey'), input.searchParams ?? {}),
+        spec: (data) => m.appSettingsSpec(data as never),
+      }
+    },
+  },
   '/admin/setup/bank-feeds': {
     route: '/admin/setup/bank-feeds',
     segments: [],
@@ -760,18 +772,6 @@ export const PAGE_REGISTRY: Readonly<Record<string, PageRegistryEntry>> = {
       }
     },
   },
-  '/analytics/receivables-intelligence': {
-    route: '/analytics/receivables-intelligence',
-    segments: [],
-    searchParams: true,
-    module: async () => {
-      const m = await import('../app/(app)/analytics/receivables-intelligence/view')
-      return {
-        load: (input) => m.loadReceivablesIntelligence(input.searchParams ?? {}),
-        spec: (data) => m.receivablesIntelligenceSpec(data as never),
-      }
-    },
-  },
   '/analytics/customer-intelligence': {
     route: '/analytics/customer-intelligence',
     segments: [],
@@ -779,7 +779,7 @@ export const PAGE_REGISTRY: Readonly<Record<string, PageRegistryEntry>> = {
     module: async () => {
       const m = await import('../app/(app)/analytics/customer-intelligence/view')
       return {
-        load: (input) => m.loadCustomerIntelligence(input.searchParams ?? {}),
+        load: (input) => m.loadCustomerIntelligencePreview(input.searchParams ?? {}),
         spec: (data) => m.customerIntelligenceSpec(data as never),
       }
     },
@@ -791,8 +791,20 @@ export const PAGE_REGISTRY: Readonly<Record<string, PageRegistryEntry>> = {
     module: async () => {
       const m = await import('../app/(app)/analytics/financial-health/view')
       return {
-        load: (input) => m.loadFinancialHealth(input.searchParams ?? {}),
+        load: (input) => m.loadFinancialHealthPreview(input.searchParams ?? {}),
         spec: (data) => m.financialHealthSpec(data as never),
+      }
+    },
+  },
+  '/analytics/receivables-intelligence': {
+    route: '/analytics/receivables-intelligence',
+    segments: [],
+    searchParams: true,
+    module: async () => {
+      const m = await import('../app/(app)/analytics/receivables-intelligence/view')
+      return {
+        load: (input) => m.loadReceivablesIntelligence(input.searchParams ?? {}),
+        spec: (data) => m.receivablesIntelligenceSpec(data as never),
       }
     },
   },
@@ -2464,18 +2476,6 @@ export const PAGE_REGISTRY: Readonly<Record<string, PageRegistryEntry>> = {
       }
     },
   },
-  '/reports/payroll-support': {
-    route: '/reports/payroll-support',
-    segments: [],
-    searchParams: true,
-    module: async () => {
-      const m = await import('../app/(app)/reports/payroll-support/view')
-      return {
-        load: (input) => m.loadPayrollSupport(input.searchParams ?? {}),
-        spec: (data) => m.payrollSupportSpec(data as never),
-      }
-    },
-  },
   '/reports/availability': {
     route: '/reports/availability',
     segments: [],
@@ -2629,6 +2629,18 @@ export const PAGE_REGISTRY: Readonly<Record<string, PageRegistryEntry>> = {
       return {
         load: (input) => m.loadPartners(input.searchParams ?? {}),
         spec: (data) => m.partnersSpec(data as never),
+      }
+    },
+  },
+  '/reports/payroll-support': {
+    route: '/reports/payroll-support',
+    segments: [],
+    searchParams: true,
+    module: async () => {
+      const m = await import('../app/(app)/reports/payroll-support/view')
+      return {
+        load: (input) => m.loadPayrollSupport(input.searchParams ?? {}),
+        spec: (data) => m.payrollSupportSpec(data as never),
       }
     },
   },

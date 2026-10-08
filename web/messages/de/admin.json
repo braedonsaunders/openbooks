@@ -2432,16 +2432,18 @@
       "company": "Unternehmen",
       "accounting": "Buchhaltung",
       "taxes": "Steuern",
+      "banking": "Bank & Zahlungen",
       "dimensions": "Dimensionen",
       "billing": "Fakturierung & Nummerierung",
-      "sales": "Verkauf",
-      "workforce": "Personal",
+      "sales": "Vertrieb & CRM",
+      "workforce": "Personalwesen",
       "assets": "Anlagen",
       "currency": "Währung",
       "revenue": "Umsatz",
       "inventory": "Lagerbestand",
       "projects": "Projekte",
       "agents": "Agenten",
+      "apps": "App-Einstellungen",
       "compliance": "Compliance"
     },
     "fxProvider": {
@@ -2537,26 +2539,26 @@
       "commitOff": "Aus"
     },
     "paymentOperations": {
-      "title": "Zahlungen & Banking",
-      "description": "Konfigurieren Sie Zahlungswege, Finanzierungsprofile, Zeitpläne, Genehmigungen, Zustellung und Lastschriftmandate.",
       "tabs": {
         "profiles": "Bankprofile",
         "formats": "Zahlungsformate",
-        "schedules": "Zeitpläne",
-        "mandates": "Lastschriftmandate"
+        "schedules": "Zahlungspläne"
+      },
+      "descriptions": {
+        "profiles": "Bankkonten, Zahlungsformate und Übermittlungseinstellungen für die Erstellung von Zahlungsdateien.",
+        "formats": "Dateilayouts für jedes Zahlungsverfahren, einschließlich benutzerdefinierter Formatierungsskripte.",
+        "schedules": "Wiederkehrende Läufe, die fällige Rechnungen auswählen und Zahlungsläufe als Entwurf oder zur Genehmigung anlegen."
       },
       "search": {
         "profiles": "Profile suchen…",
         "formats": "Formate suchen…",
-        "schedules": "Zeitpläne suchen…",
-        "mandates": "Mandate suchen…"
+        "schedules": "Zeitpläne suchen…"
       },
       "state": "Status",
       "new": {
         "profiles": "Neues Profil",
         "formats": "Neues benutzerdefiniertes Format",
-        "schedules": "Neuer Zeitplan",
-        "mandates": "Neues Mandat"
+        "schedules": "Neuer Zeitplan"
       },
       "columns": {
         "name": "Name",
@@ -2571,20 +2573,11 @@
         "profile": "Profil",
         "cron": "Zeitplan",
         "nextRun": "Nächster Lauf",
-        "action": "Aktion",
-        "reference": "Referenz",
-        "party": "Gegenpartei",
-        "scheme": "Verfahren",
-        "signedOn": "Unterzeichnet",
-        "expiresOn": "Läuft ab"
+        "action": "Aktion"
       },
       "states": {
         "active": "Aktiv",
-        "archived": "Archiviert",
-        "pending": "Ausstehend",
-        "suspended": "Ausgesetzt",
-        "revoked": "Widerrufen",
-        "expired": "Abgelaufen"
+        "archived": "Archiviert"
       },
       "rails": {
         "cpa005_credit": "CPA-005 Gutschrift",
@@ -2605,12 +2598,6 @@
       "actions": {
         "create_draft": "Entwurf erstellen",
         "submit_for_approval": "Zur Genehmigung einreichen"
-      },
-      "schemes": {
-        "nacha": "NACHA",
-        "sepa_core": "SEPA Core",
-        "sepa_b2b": "SEPA B2B",
-        "custom": "Benutzerdefiniert"
       },
       "fields": {
         "name": "Name",
@@ -2634,15 +2621,7 @@
         "cron": "Zeitplan",
         "cronHint": "Wählen Sie eine Vorgabe oder geben Sie einen benutzerdefinierten Zeitplan (Cron-Syntax) für volle Kontrolle ein.",
         "timezone": "Zeitzone",
-        "action": "Bei Fälligkeit",
-        "party": "Gegenpartei",
-        "partyBankAccount": "Genehmigtes Bankkonto",
-        "scheme": "Mandatsverfahren",
-        "reference": "Mandatsreferenz",
-        "status": "Status",
-        "signedOn": "Unterzeichnet am",
-        "validFrom": "Gültig ab",
-        "expiresOn": "Läuft ab am"
+        "action": "Bei Fälligkeit"
       },
       "approvalHint": "Die Genehmigung von Zahlungsläufen wird in <flows>Flows</flows> eingerichtet. Ohne Zahlungslauf-Flow werden eingereichte Läufe sofort genehmigt.",
       "secretFields": {
@@ -2696,20 +2675,17 @@
         "new": {
           "profiles": "Neues Bankprofil",
           "formats": "Neues benutzerdefiniertes Zahlungsformat",
-          "schedules": "Neuer Zahlungszeitplan",
-          "mandates": "Neues Lastschriftmandat"
+          "schedules": "Neuer Zahlungszeitplan"
         },
         "edit": {
           "profiles": "Bankprofil bearbeiten",
           "formats": "Zahlungsformat bearbeiten",
-          "schedules": "Zahlungszeitplan bearbeiten",
-          "mandates": "Lastschriftmandat bearbeiten"
+          "schedules": "Zahlungszeitplan bearbeiten"
         },
         "description": {
           "profiles": "Verbinden Sie ein Finanzierungskonto mit einem Zahlungsweg und einer Zustellungsrichtlinie.",
           "formats": "Definieren Sie Dateimetadaten und Sandbox-JavaScript für ein benutzerdefiniertes Bankformat.",
-          "schedules": "Wählen Sie berechtigte Transaktionen nach einem wiederholbaren Zeitplan aus.",
-          "mandates": "Erfassen Sie die erforderliche Autorisierung zum Einzug von Geldern von einer Gegenpartei."
+          "schedules": "Wählen Sie berechtigte Transaktionen nach einem wiederholbaren Zeitplan aus."
         }
       },
       "select": "Auswählen…",
@@ -2872,10 +2848,6 @@
       },
       "sftp": {
         "title": "SFTP"
-      },
-      "payment-operations": {
-        "title": "Zahlungen & Banking",
-        "description": "Zahlungsformate, Finanzierungsprofile, Zeitpläne und Lastschriftmandate."
       },
       "account-groups": {
         "title": "Kontengruppen",
@@ -3194,7 +3166,8 @@
       },
       "extension-settings": {
         "title": "App-Einstellungen",
-        "description": "Konfigurieren Sie Einstellungen, die von installierten Apps deklariert werden. Änderungen erhalten frühere Werte und deren Wirksamkeitsdaten."
+        "description": "Konfigurieren Sie Einstellungen, die von installierten Apps deklariert werden. Änderungen erhalten frühere Werte und deren Wirksamkeitsdaten.",
+        "appDescription": "Von dieser App deklarierte Einstellungen. Änderungen bewahren frühere Werte und deren Gültigkeitsdaten."
       },
       "leave-types": {
         "title": "Urlaubsarten",
@@ -7115,6 +7088,18 @@
     "quoteToCash": {
       "title": "Angebot-zu-Abo",
       "description": "SaaS-Angebote mit Rampenpreisen, Rabattgenehmigung, E-Signatur und Aktivierung per Klick."
+    },
+    "internalBilling": {
+      "title": "Interne Verrechnung",
+      "description": "Leistungen zwischen Abteilungen, Projekten oder Tochtergesellschaften verrechnen. Jede Regel legt die Behandlung fest: Umsatzgutschrift für die leistende Abteilung, Kostenumlage oder konzerninterner Verkauf mit Eliminierung bei der Konsolidierung."
+    },
+    "projectProgress": {
+      "title": "Fortschritt & Earned Value",
+      "description": "Produktionsmengen budgetieren, eingebaute Mengen erfassen (auch aus Arbeitsscheinen), Restkosten prognostizieren und Earned Value sowie Verbrauchsrate auswerten."
+    },
+    "unbilledRevenueAccrual": {
+      "title": "Abgrenzung nicht fakturierter Umsätze",
+      "description": "Zum Periodenende erbrachte, noch nicht fakturierte Leistungen nach Aufwand abgrenzen; die Abgrenzung wird am ersten Tag der Folgeperiode automatisch storniert."
     }
   },
   "extensions": {

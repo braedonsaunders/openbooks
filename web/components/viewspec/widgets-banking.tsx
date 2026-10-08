@@ -5,7 +5,7 @@ import { ListChecks } from 'lucide-react'
 import { MatchWorkspace } from '../../app/(app)/banking/match/MatchWorkspace'
 import { CashCockpit } from '../../app/(app)/banking/cash/CashCockpit'
 import { BankFeedsClient } from '../../app/(app)/admin/setup/bank-feeds/BankFeedsClient'
-import { NewSetupRecordButton, PaymentOperationsEditor, PaymentOperationsTabs, PaymentScheduleNextRun } from '../../app/(app)/admin/setup/payment-operations/sections'
+import { NewSetupRecordButton, PaymentOperationsEditor, PaymentScheduleNextRun } from '../../app/(app)/admin/setup/payment-operations/sections'
 import { ReconcileStats, ReconcileStatusBadge } from '../../app/(app)/banking/[accountId]/reconcile/[reconciliationId]/sections'
 import { ReconcileWorkspace } from '../../app/(app)/banking/[accountId]/reconcile/[reconciliationId]/ReconcileWorkspace'
 import { PspSettlementsWorkspace } from '../../app/(app)/banking/psp-settlements/sections'
@@ -76,11 +76,6 @@ export const BANKING_WIDGETS = {
   ),
 
   /* --- payment operations ------------------------------------------------------ */
-  'payment-operations-tabs': (props) => (
-    <PaymentOperationsTabs
-      tabs={(props.tabs as ComponentProps<typeof PaymentOperationsTabs>['tabs']) ?? []}
-    />
-  ),
   /** `link-button`'s closed icon map has no `plus`, and this action carries
    *  one — so it gets its own entry rather than widening that map for a
    *  single caller. */

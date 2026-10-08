@@ -3,10 +3,20 @@ import 'server-only'
 import { getExtensionSettings, listActiveExtensionContributions, updateExtensionSetting } from '@openbooks/engine/src/extensions/projections.ts'
 import type { SetupEntity } from './types'
 
-/** Extension declarations use the existing setup list and drawer through this data adapter. */
-export async function loadExtensionSettingRows(orgId: string) {
+/** Installed apps that declare at least one setting: one Setup page each, ordered by name. */
+export async function listAppSettingPages(orgId: string): Promise<{ key: string; name: string }[]> {
+  const apps = new Map<string, string>()
+  for (const { extensionKey, extensionName, contribution } of await listActiveExtensionContributions(orgId)) {
+    if (contribution.kind === 'setting') apps.set(extensionKey, extensionName)
+  }
+  return [...apps].map(([key, name]) => ({ key, name })).sort((a, b) => a.name.localeCompare(b.name) || a.key.localeCompare(b.key))
+}
+
+/** Extension declarations use the existing setup list and drawer through this
+ *  data adapter. `appKey` narrows the rows to one installed app's settings. */
+export async function loadExtensionSettingRows(orgId: string, appKey?: string) {
   const [declarations, values] = await Promise.all([listActiveExtensionContributions(orgId), getExtensionSettings(orgId)])
-  return declarations.flatMap(({ extensionKey, versionId, contribution }) => contribution.kind !== 'setting' ? [] : [{
+  return declarations.flatMap(({ extensionKey, versionId, contribution }) => contribution.kind !== 'setting' || (appKey !== undefined && extensionKey !== appKey) ? [] : [{
     id: `${extensionKey}:${contribution.key}`, extension_key: extensionKey, setting_key: contribution.key,
     name: contribution.label, description: contribution.description ?? '', value_type: contribution.valueType,
     value: values[extensionKey]?.[contribution.key] ?? null, extension_version_id: versionId,

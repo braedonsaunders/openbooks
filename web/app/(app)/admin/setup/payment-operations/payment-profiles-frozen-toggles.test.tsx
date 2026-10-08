@@ -65,7 +65,6 @@ const EMPTY_OPTIONS: EditorProps['options'] = {
   subsidiaries: [],
   sftpServers: [],
   profiles: [],
-  parties: [],
   currencies: [],
 }
 

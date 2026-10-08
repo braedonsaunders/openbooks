@@ -60,7 +60,8 @@
       "relationship": "Relationship",
       "paymentMethods": "Payment methods",
       "externalIds": "External IDs",
-      "billing": "Billing"
+      "billing": "Billing",
+      "debitMandates": "Debit mandates"
     },
     "autopay": {
       "heading": "Payment methods",
@@ -108,6 +109,46 @@
       "moveUp": "Move earlier in the backup order",
       "moveDown": "Move later in the backup order",
       "reorderFailed": "The backup order could not be changed."
+    },
+    "debitMandates": {
+      "heading": "Debit mandates",
+      "description": "Signed authorizations to collect from this customer's bank account by direct debit. Collections use the most recently signed active mandate that is valid on the collection date.",
+      "new": "New mandate",
+      "newTitle": "New debit mandate",
+      "editTitle": "Edit debit mandate",
+      "drawerDescription": "Record the authorization this customer signed to collect funds from their bank account.",
+      "lockedNote": "The bank account, scheme, and reference are fixed once a mandate is recorded.",
+      "noApprovedAccounts": "This customer has no approved bank account. Add one on the party's <link>Accounting tab</link>; it becomes selectable once approved.",
+      "empty": "No debit mandates on file.",
+      "select": "Select…",
+      "saved": "Debit mandate saved",
+      "saveFailed": "Could not save the debit mandate.",
+      "loadFailed": "Could not load debit mandates.",
+      "fields": {
+        "bankAccount": "Approved bank account",
+        "scheme": "Mandate scheme",
+        "reference": "Mandate reference",
+        "signedOn": "Signed on",
+        "validFrom": "Valid from",
+        "expiresOn": "Expires on"
+      },
+      "columns": {
+        "bankAccount": "Bank account"
+      },
+      "states": {
+        "pending": "Pending",
+        "active": "Active",
+        "suspended": "Suspended",
+        "revoked": "Revoked",
+        "expired": "Expired"
+      },
+      "schemes": {
+        "custom": "Custom"
+      },
+      "validation": {
+        "bankAccount": "Choose an approved bank account for the mandate.",
+        "reference": "Enter the mandate reference."
+      }
     },
     "wages": {
       "title": "Wage rates",

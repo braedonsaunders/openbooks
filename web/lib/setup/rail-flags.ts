@@ -2,6 +2,7 @@ import 'server-only'
 import { can, type Authz } from '../authz'
 import { featureEnabled, type FeatureState } from '../features'
 import { SETUP_ENTITIES, resolveSetupEntityGate } from './registry'
+import { listAppSettingPages } from './extension-settings'
 import type { SetupRailFlags } from './rail'
 
 /**
@@ -9,11 +10,17 @@ import type { SetupRailFlags } from './rail'
  * once. The Setup workspace renders its rail from these and global search
  * offers the same Setup pages, so both answer from one decision.
  */
-export function setupRailFlags(authz: Authz, features: FeatureState): SetupRailFlags {
+export async function setupRailFlags(authz: Authz, features: FeatureState): Promise<SetupRailFlags> {
+  const canManageSetup = can(authz, 'admin.setup.manage')
+  // App settings are organization-wide, so subsidiary-scoped administrators
+  // have no app settings pages to open.
+  const appSettings = canManageSetup && authz.allowedSubsidiaryIds === null && featureEnabled(features, 'apps')
+    ? await listAppSettingPages(authz.user.orgId)
+    : []
   return {
     canExport: can(authz, 'data.export'),
     canImport: can(authz, 'data.import'),
-    canManageSetup: can(authz, 'admin.setup.manage'),
+    canManageSetup,
     canReadPayrollPackages: can(authz, 'payroll.read') && featureEnabled(features, 'payroll'),
     canManagePerformance: can(authz, 'hrm.performance.manage') && featureEnabled(features, 'hrm') && featureEnabled(features, 'hrmPerformance'),
     canManageCompensation: can(authz, 'hrm.compensation.manage') && authz.allowedSubsidiaryIds === null && featureEnabled(features, 'hrmCompensation'),
@@ -30,5 +37,6 @@ export function setupRailFlags(authz: Authz, features: FeatureState): SetupRailF
     shippingEnabled: featureEnabled(features, 'shippingHub'),
     payrollEnabled: featureEnabled(features, 'payroll'),
     hrmEnabled: featureEnabled(features, 'hrm'),
+    appSettings,
   }
 }

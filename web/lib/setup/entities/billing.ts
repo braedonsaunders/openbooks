@@ -132,7 +132,7 @@ export const BILLING_ENTITIES: SetupEntity[] = [
     // product gets built-in treatment.
     key: 'payment-cards',
     table: 'payment_cards',
-    groupKey: 'accounting',
+    groupKey: 'banking',
     iconKey: 'payments',
     orgScoped: true,
     actorCols: true,

@@ -237,72 +237,46 @@
   },
   "setup": {
     "title": "CRM",
-    "description": "Configura estados, etapas de oportunidad, orígenes, territorios, equipos y cuotas para este inquilino.",
     "sequence": "Secuencia",
-    "priority": "Prioridad",
-    "defaultOwner": "Responsable predeterminado",
-    "manager": "Gerente",
     "empty": "No hay registros de configuración coincidentes.",
     "openRecord": "Abrir {name}",
     "percent": "{value} %",
-    "memberCount": "{count, plural, one {# miembro} other {# miembros}}",
     "created": "Registro de configuración de CRM creado",
     "updated": "Registro de configuración de CRM actualizado",
     "new": {
       "accountStatuses": "Nuevo estado de cuenta",
       "opportunityStatuses": "Nueva etapa de oportunidad",
-      "sources": "Nuevo origen de cliente potencial",
-      "territories": "Nuevo territorio",
-      "teams": "Nuevo equipo de ventas",
-      "quotas": "Nueva cuota"
+      "sources": "Nuevo origen de cliente potencial"
     },
     "search": {
       "accountStatuses": "Buscar estados de cuenta",
       "opportunityStatuses": "Buscar etapas de oportunidad",
-      "sources": "Buscar orígenes de clientes potenciales",
-      "territories": "Buscar territorios",
-      "teams": "Buscar equipos de ventas",
-      "quotas": "Buscar cuotas"
+      "sources": "Buscar orígenes de clientes potenciales"
     },
     "drawer": {
       "new": {
         "accountStatuses": "Nuevo estado de cuenta",
         "opportunityStatuses": "Nueva etapa de oportunidad",
-        "sources": "Nuevo origen de cliente potencial",
-        "territories": "Nuevo territorio",
-        "teams": "Nuevo equipo de ventas",
-        "quotas": "Nueva cuota"
+        "sources": "Nuevo origen de cliente potencial"
       },
       "edit": {
         "accountStatuses": "Editar estado de cuenta",
         "opportunityStatuses": "Editar etapa de oportunidad",
-        "sources": "Editar origen de cliente potencial",
-        "territories": "Editar territorio",
-        "teams": "Editar equipo de ventas",
-        "quotas": "Editar cuota"
+        "sources": "Editar origen de cliente potencial"
       },
       "description": {
         "accountStatuses": "Controla la clasificación del ciclo de vida y el comportamiento de calificación.",
         "opportunityStatuses": "Controla la probabilidad, la previsión y el comportamiento de cierre del canal.",
-        "sources": "Mantén los orígenes de adquisición normalizados utilizados en CRM.",
-        "territories": "Configura la propiedad y las reglas de asignación deterministas.",
-        "teams": "Asigna un gerente y los miembros activos de este equipo de ventas.",
-        "quotas": "Establece un objetivo de período para un representante o equipo de ventas."
+        "sources": "Mantén los orígenes de adquisición normalizados utilizados en CRM."
       }
     },
     "fields": {
       "name": "Nombre",
-      "matchMode": "Coincidencia de reglas",
-      "rules": "Reglas de asignación (JSON)",
-      "members": "Miembros del equipo",
-      "targetType": "Tipo de objetivo",
       "isQualified": "Estado calificado",
       "isClosed": "Estado cerrado",
       "isWon": "Estado ganado",
       "isDefault": "Predeterminado",
       "isActive": "Activo",
-      "rulesHint": "Opcional. Cada regla compara un campo con un valor para dirigir prospectos aquí. Campos: region, country, annualRevenue. Operadores: equals, contains, in, gte, lte.",
-      "rulesPlaceholder": "['{ \"field\": \"region\", \"operator\": \"equals\", \"value\": \"West\" }']",
       "requiresLines": "Exigir líneas",
       "requiresPrimaryContact": "Exigir contacto principal",
       "requiresPositiveAmount": "Exigir importe positivo",
@@ -314,25 +288,18 @@
       "yes": "Sí",
       "no": "No"
     },
-    "matchModes": {
-      "all": "Cumplir todas las reglas",
-      "any": "Cumplir cualquier regla"
-    },
-    "targetTypes": {
-      "user": "Representante de ventas",
-      "team": "Equipo de ventas"
-    },
     "validation": {
-      "nameRequired": "Introduce un nombre.",
-      "invalidRules": "Las reglas de asignación deben ser una matriz JSON válida."
+      "nameRequired": "Introduce un nombre."
     },
     "tabs": {
       "accountStatuses": "Estados de cuentas",
       "opportunityStatuses": "Etapas de oportunidades",
-      "sources": "Orígenes de clientes potenciales",
-      "territories": "Territorios",
-      "teams": "Equipos de ventas",
-      "quotas": "Cuotas"
+      "sources": "Orígenes de clientes potenciales"
+    },
+    "descriptions": {
+      "accountStatuses": "Estados del ciclo de vida para leads, prospectos y clientes, y cuáles cuentan como calificados.",
+      "opportunityStatuses": "Etapas del embudo con probabilidad de cierre, categoría de pronóstico y requisitos para entrar en ellas.",
+      "sources": "De dónde provienen los leads, para atribución e informes."
     },
     "columns": {
       "name": "Nombre",
@@ -341,18 +308,9 @@
       "probability": "Probabilidad",
       "default_forecast_category": "Categoría de previsión",
       "description": "Descripción",
-      "priority": "Prioridad",
-      "owner_name": "Responsable",
-      "manager_name": "Gerente",
-      "period_start": "Inicio del período",
-      "period_end": "Fin del período",
-      "amount": "Importe",
       "is_qualified": "Calificado",
       "is_closed": "Cerrado",
-      "is_active": "Estado",
-      "member_count": "Miembros",
-      "target_name": "Objetivo",
-      "currency": "Moneda"
+      "is_active": "Estado"
     }
   },
   "validation": {

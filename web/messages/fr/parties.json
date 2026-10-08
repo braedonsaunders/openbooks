@@ -60,7 +60,8 @@
       "relationship": "Relation",
       "paymentMethods": "Moyens de paiement",
       "externalIds": "Identifiants externes",
-      "billing": "Facturation"
+      "billing": "Facturation",
+      "debitMandates": "Mandats de prélèvement"
     },
     "autopay": {
       "heading": "Moyens de paiement",
@@ -108,6 +109,46 @@
       "moveUp": "Avancer dans l'ordre de secours",
       "moveDown": "Reculer dans l'ordre de secours",
       "reorderFailed": "L'ordre de secours n'a pas pu être modifié."
+    },
+    "debitMandates": {
+      "heading": "Mandats de prélèvement",
+      "description": "Autorisations signées pour prélever sur le compte bancaire de ce client. Les prélèvements utilisent le mandat actif signé le plus récemment et valide à la date de prélèvement.",
+      "new": "Nouveau mandat",
+      "newTitle": "Nouveau mandat de prélèvement",
+      "editTitle": "Modifier le mandat de prélèvement",
+      "drawerDescription": "Consignez l’autorisation signée par ce client pour prélever des fonds sur son compte bancaire.",
+      "lockedNote": "Le compte bancaire, le régime et la référence sont figés une fois le mandat enregistré.",
+      "noApprovedAccounts": "Ce client n’a aucun compte bancaire approuvé. Ajoutez-en un dans l’<link>onglet Comptabilité</link> du tiers ; il deviendra sélectionnable une fois approuvé.",
+      "empty": "Aucun mandat de prélèvement enregistré.",
+      "select": "Sélectionner…",
+      "saved": "Mandat de prélèvement enregistré",
+      "saveFailed": "Impossible d’enregistrer le mandat de prélèvement.",
+      "loadFailed": "Impossible de charger les mandats de prélèvement.",
+      "fields": {
+        "bankAccount": "Compte bancaire approuvé",
+        "scheme": "Régime du mandat",
+        "reference": "Référence du mandat",
+        "signedOn": "Signé le",
+        "validFrom": "Valide à partir du",
+        "expiresOn": "Expire le"
+      },
+      "columns": {
+        "bankAccount": "Compte bancaire"
+      },
+      "states": {
+        "pending": "En attente",
+        "active": "Actif",
+        "suspended": "Suspendu",
+        "revoked": "Révoqué",
+        "expired": "Expiré"
+      },
+      "schemes": {
+        "custom": "Personnalisé"
+      },
+      "validation": {
+        "bankAccount": "Choisissez un compte bancaire approuvé pour le mandat.",
+        "reference": "Saisissez la référence du mandat."
+      }
     },
     "wages": {
       "title": "Taux de rémunération",

@@ -247,7 +247,6 @@
     "setup-depreciation": "帳簿減価償却",
     "setup-tax-depreciation": "税務減価償却",
     "setup-overhead": "間接費",
-    "setup-payments": "支払と銀行取引",
     "crm-sales": "営業",
     "hrm-compensation": "報酬"
   }

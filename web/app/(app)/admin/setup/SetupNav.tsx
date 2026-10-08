@@ -2,10 +2,11 @@
 
 import type { ReactNode } from 'react'
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
+import { usePathname, useSearchParams } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import {
   BookOpen,
+  Box,
   Briefcase,
   Building2,
   Calendar,
@@ -35,11 +36,12 @@ import {
   Workflow,
 } from 'lucide-react'
 import { cn } from '@openbooks/ui'
-import { setupRail, type SetupRailFlags } from '../../../../lib/setup/rail'
+import { setupRail, setupRailItemLabel, type SetupRailFlags } from '../../../../lib/setup/rail'
 
 // iconKey → lucide component. Keys come from the registry (SETUP_GROUPS / entities).
 const ICONS: Record<string, ReactNode> = {
   'book-open': <BookOpen size={15} />,
+  box: <Box size={15} />,
   briefcase: <Briefcase size={15} />,
   building: <Building2 size={15} />,
   receipt: <Receipt size={15} />,
@@ -73,6 +75,15 @@ const ICONS: Record<string, ReactNode> = {
 /** Index pages whose per-record builder pages live beneath them. */
 const BUILDER_INDEXES = new Set(['/admin/setup/review-templates', '/admin/setup/hiring-pipelines'])
 
+/** A query-addressed entry (one view of a shared page) is active when its own
+ *  query values match; a plain entry matches the path alone. */
+function railItemActive(href: string, pathname: string, search: URLSearchParams): boolean {
+  const [path, query] = href.split('?')
+  if (pathname !== path) return BUILDER_INDEXES.has(href) && pathname.startsWith(`${href}/`)
+  if (!query) return true
+  return [...new URLSearchParams(query)].every(([key, value]) => search.get(key) === value)
+}
+
 /**
  * Left rail for the Setup workspace — grouped list of tabs, one per registry
  * entity plus the special-cased Company tab, followed by the Import & Export
@@ -85,6 +96,7 @@ export function SetupNav(flags: SetupRailFlags) {
   const t = useTranslations('admin.setup')
   const tAll = useTranslations()
   const pathname = usePathname()
+  const search = useSearchParams()
   const rail = setupRail(flags)
   const label = (key: string) => tAll(key as never)
 
@@ -103,7 +115,7 @@ export function SetupNav(flags: SetupRailFlags) {
               <ul className="flex flex-row gap-1 sm:flex-col sm:gap-0 sm:space-y-0.5">
                 {group.items.map((item) => {
                   // Builder index pages stay highlighted on their per-record pages.
-                  const active = pathname === item.href || (BUILDER_INDEXES.has(item.href) && pathname.startsWith(`${item.href}/`))
+                  const active = railItemActive(item.href, pathname, search)
                   return (
                     <li key={item.href} className="shrink-0">
                       <Link
@@ -119,7 +131,7 @@ export function SetupNav(flags: SetupRailFlags) {
                         <span className={cn('shrink-0', active ? 'text-teal-600 dark:text-teal-300' : 'text-slate-400')}>
                           {ICONS[item.iconKey] ?? <Tag size={15} />}
                         </span>
-                        <span className="truncate">{label(item.labelKey)}</span>
+                        <span className="truncate">{setupRailItemLabel(item, label)}</span>
                       </Link>
                     </li>
                   )
@@ -136,7 +148,7 @@ export function SetupNav(flags: SetupRailFlags) {
             </h3>
             <ul className="flex flex-row gap-1 sm:flex-col sm:gap-0 sm:space-y-0.5">
               {rail.data.items.map((item) => {
-                const active = pathname === item.href
+                const active = railItemActive(item.href, pathname, search)
                 return (
                   <li key={item.href} className="shrink-0">
                     <Link
@@ -152,7 +164,7 @@ export function SetupNav(flags: SetupRailFlags) {
                       <span className={cn('shrink-0', active ? 'text-teal-600 dark:text-teal-300' : 'text-slate-400')}>
                         {ICONS[item.iconKey] ?? <Tag size={15} />}
                       </span>
-                      <span className="truncate">{label(item.labelKey)}</span>
+                      <span className="truncate">{setupRailItemLabel(item, label)}</span>
                     </Link>
                   </li>
                 )

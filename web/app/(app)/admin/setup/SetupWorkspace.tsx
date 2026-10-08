@@ -18,6 +18,7 @@ export async function SetupWorkspace({
 }) {
   const t = await getTranslations('admin')
   const features = await resolvedFeatureState(authz.user.orgId)
+  const railFlags = await setupRailFlags(authz, features)
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -34,7 +35,7 @@ export async function SetupWorkspace({
           gets full width; sm and up keep the side-by-side rail untouched. */}
       <div className="flex min-h-0 flex-1 flex-col sm:flex-row">
         <aside className="app-scroll w-full shrink-0 overflow-x-auto border-b border-slate-200 bg-white p-2 sm:w-52 sm:overflow-y-auto sm:border-r sm:border-b-0 sm:p-3 lg:w-60 dark:border-slate-800 dark:bg-slate-900">
-          <SetupNav {...setupRailFlags(authz, features)} />
+          <SetupNav {...railFlags} />
         </aside>
         <div className="app-scroll min-h-0 min-w-0 flex-1 overflow-y-auto bg-slate-50 dark:bg-slate-950">
           <div className="mx-auto w-full max-w-5xl p-4 sm:p-6">

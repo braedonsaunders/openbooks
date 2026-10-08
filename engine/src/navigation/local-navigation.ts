@@ -168,12 +168,6 @@ export const LOCAL_NAVIGATION: LocalNavigationSet[] = [
     { href: '/admin/setup/overhead?view=lifecycle', ns: 'admin', key: 'setup.entities.overhead-model.tabs.lifecycle' },
     { href: '/admin/setup/overhead?view=application', ns: 'admin', key: 'setup.entities.overhead-model.tabs.application' },
   ] },
-  { id: 'setup-payments', label: 'Payment Operations', inline: true, tabs: [
-    { href: '/admin/setup/payment-operations?view=profiles', ns: 'admin', key: 'setup.paymentOperations.tabs.profiles' },
-    { href: '/admin/setup/payment-operations?view=formats', ns: 'admin', key: 'setup.paymentOperations.tabs.formats' },
-    { href: '/admin/setup/payment-operations?view=schedules', ns: 'admin', key: 'setup.paymentOperations.tabs.schedules' },
-    { href: '/admin/setup/payment-operations?view=mandates', ns: 'admin', key: 'setup.paymentOperations.tabs.mandates' },
-  ] },
   { id: 'journal-views', label: 'Journals', inline: true, tabs: [
     { href: '/journal', ns: 'journal', key: 'list.entriesTab' },
     { href: '/journal?journalTab=drafts', ns: 'journal', key: 'list.draftsTab' },

@@ -237,67 +237,41 @@
   },
   "setup": {
     "title": "CRM",
-    "description": "Configure status de ciclo de vida, estágios de oportunidade, origens de lead, territórios, equipes de vendas e cotas.",
     "sequence": "Sequência",
-    "priority": "Prioridade",
-    "defaultOwner": "Responsável padrão",
-    "manager": "Gerente",
     "empty": "Nenhum registro de configuração correspondente.",
     "openRecord": "Abrir {name}",
     "percent": "{value}%",
-    "memberCount": "{count, plural, one {# membro} other {# membros}}",
     "created": "Registro de configuração do CRM criado",
     "updated": "Registro de configuração do CRM atualizado",
     "new": {
       "accountStatuses": "Novo status de conta",
       "opportunityStatuses": "Novo estágio de oportunidade",
-      "sources": "Nova origem de lead",
-      "territories": "Novo território",
-      "teams": "Nova equipe de vendas",
-      "quotas": "Nova cota"
+      "sources": "Nova origem de lead"
     },
     "search": {
       "accountStatuses": "Buscar status de conta",
       "opportunityStatuses": "Buscar estágios de oportunidade",
-      "sources": "Buscar origens de lead",
-      "territories": "Buscar territórios",
-      "teams": "Buscar equipes de vendas",
-      "quotas": "Buscar cotas"
+      "sources": "Buscar origens de lead"
     },
     "drawer": {
       "new": {
         "accountStatuses": "Novo status de conta",
         "opportunityStatuses": "Novo estágio de oportunidade",
-        "sources": "Nova origem de lead",
-        "territories": "Novo território",
-        "teams": "Nova equipe de vendas",
-        "quotas": "Nova cota"
+        "sources": "Nova origem de lead"
       },
       "edit": {
         "accountStatuses": "Editar status de conta",
         "opportunityStatuses": "Editar estágio de oportunidade",
-        "sources": "Editar origem de lead",
-        "territories": "Editar território",
-        "teams": "Editar equipe de vendas",
-        "quotas": "Editar cota"
+        "sources": "Editar origem de lead"
       },
       "description": {
         "accountStatuses": "Controle a classificação do ciclo de vida do relacionamento e o comportamento de qualificação.",
         "opportunityStatuses": "Controle a probabilidade do pipeline, o tratamento de previsão e o comportamento de fechamento.",
-        "sources": "Mantenha as origens de aquisição normalizadas usadas em todo o CRM.",
-        "territories": "Configure regras de responsabilidade e roteamento determinístico.",
-        "teams": "Atribua um gerente e os membros ativos desta equipe de vendas.",
-        "quotas": "Defina uma meta de período para um representante de vendas ou equipe."
+        "sources": "Mantenha as origens de aquisição normalizadas usadas em todo o CRM."
       }
     },
     "fields": {
       "name": "Nome",
-      "matchMode": "Correspondência de regras",
-      "rules": "Regras de roteamento",
-      "rulesHint": "Opcional. Cada regra compara um campo com um valor para direcionar leads aqui. Campos: region, country, annualRevenue. Operadores: equals, contains, in, gte, lte.",
-      "rulesPlaceholder": "['{ \"field\": \"region\", \"operator\": \"equals\", \"value\": \"West\" }']",
-      "members": "Membros da equipe",
-      "targetType": "Tipo de meta",
       "isQualified": "Status qualificado",
       "isClosed": "Status fechado",
       "isWon": "Status ganho",
@@ -314,25 +288,18 @@
       "yes": "Sim",
       "no": "Não"
     },
-    "matchModes": {
-      "all": "Corresponder a todas as regras",
-      "any": "Corresponder a qualquer regra"
-    },
-    "targetTypes": {
-      "user": "Representante de vendas",
-      "team": "Equipe de vendas"
-    },
     "validation": {
-      "nameRequired": "Informe um nome.",
-      "invalidRules": "As regras de roteamento devem ser um array JSON válido."
+      "nameRequired": "Informe um nome."
     },
     "tabs": {
       "accountStatuses": "Status de conta",
       "opportunityStatuses": "Estágios de oportunidade",
-      "sources": "Origens de lead",
-      "territories": "Territórios",
-      "teams": "Equipes de vendas",
-      "quotas": "Cotas"
+      "sources": "Origens de lead"
+    },
+    "descriptions": {
+      "accountStatuses": "Status de ciclo de vida para leads, prospects e clientes, e quais contam como qualificados.",
+      "opportunityStatuses": "Etapas do funil com probabilidade de ganho, categoria de previsão e requisitos para entrar nelas.",
+      "sources": "De onde vêm os leads, para atribuição e relatórios."
     },
     "columns": {
       "name": "Nome",
@@ -341,18 +308,9 @@
       "probability": "Probabilidade",
       "default_forecast_category": "Categoria de previsão",
       "description": "Descrição",
-      "priority": "Prioridade",
-      "owner_name": "Responsável",
-      "manager_name": "Gerente",
-      "period_start": "Início do período",
-      "period_end": "Fim do período",
-      "amount": "Valor",
       "is_qualified": "Qualificado",
       "is_closed": "Fechado",
-      "is_active": "Status",
-      "member_count": "Membros",
-      "target_name": "Meta",
-      "currency": "Moeda"
+      "is_active": "Status"
     }
   },
   "validation": {

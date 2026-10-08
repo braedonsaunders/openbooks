@@ -1,11 +1,13 @@
 /** Setup-registry company entities (split from registry.ts; pure moves only). */
 import type { SetupEntity } from '../types'
-import { CONSOLIDATION_METHODS, HOME_ANNOUNCEMENT_AUDIENCES, NCI_MEASUREMENTS } from '../options'
+import { HOME_ANNOUNCEMENT_AUDIENCES } from '../options'
 
 export const COMPANY_ENTITIES: SetupEntity[] = [
   {
-    key: 'extension-settings', table: 'orgs', dataSource: 'extension-settings', groupKey: 'company', iconKey: 'box',
-    orgScoped: true, hasActive: false, allowCreate: false, allowDelete: false,
+    // Settings declared by installed apps. Each app has its own page under
+    // /admin/setup/apps/[appKey]; there is no combined standalone page.
+    key: 'extension-settings', table: 'orgs', dataSource: 'extension-settings', groupKey: 'apps', iconKey: 'box',
+    orgScoped: true, hasActive: false, allowCreate: false, allowDelete: false, rehomed: true,
     columns: [{ key: 'extensionKey', kind: 'code' }, { key: 'settingKey', kind: 'code' }, { key: 'name', kind: 'text' }, { key: 'value', kind: 'text' }],
     fields: [
       { key: 'extensionKey', kind: 'text', lockedOnEdit: true },
@@ -65,76 +67,6 @@ export const COMPANY_ENTITIES: SetupEntity[] = [
       { key: 'baseCurrency', kind: 'text', required: true, lockedOnEdit: true },
       { key: 'country', kind: 'country', required: true },
       { key: 'isElimination', kind: 'boolean' },
-      { key: 'isActive', kind: 'boolean' },
-    ],
-  },
-  {
-    // Intercompany pairs — the due-from/due-to account mapping used when a
-    // transaction crosses two subsidiaries.
-    key: 'intercompany-pairs',
-    table: 'intercompany_pairs',
-    actorCols: true,
-    groupKey: 'company',
-    iconKey: 'layers',
-    featureKey: 'multiSubsidiary',
-    orgScoped: true,
-    orderBy: 'created_at',
-    hasActive: true,
-    columns: [
-      { key: 'fromSubsidiaryId', kind: 'ref', ref: 'subsidiaries' },
-      { key: 'toSubsidiaryId', kind: 'ref', ref: 'subsidiaries' },
-      { key: 'dueFromAccountId', kind: 'ref', ref: 'accounts' },
-      { key: 'dueToAccountId', kind: 'ref', ref: 'accounts' },
-      { key: 'isActive', kind: 'badge-active' },
-    ],
-    fields: [
-      { key: 'fromSubsidiaryId', kind: 'ref', ref: 'subsidiaries', required: true },
-      { key: 'toSubsidiaryId', kind: 'ref', ref: 'subsidiaries', required: true },
-      { key: 'dueFromAccountId', kind: 'ref', ref: 'accounts', required: true },
-      { key: 'dueToAccountId', kind: 'ref', ref: 'accounts', required: true },
-      { key: 'isActive', kind: 'boolean' },
-    ],
-  },
-  {
-    key: 'subsidiary-ownership-interests',
-    table: 'subsidiary_ownership_interests',
-    actorCols: true,
-    groupKey: 'company',
-    iconKey: 'percent',
-    featureKey: 'multiSubsidiary',
-    orgScoped: true,
-    orderBy: 'subsidiary_id, effective_from desc',
-    hasActive: true,
-    docSlug: 'company-setup',
-    columns: [
-      { key: 'parentSubsidiaryId', kind: 'ref', ref: 'subsidiaries' },
-      { key: 'subsidiaryId', kind: 'ref', ref: 'subsidiaries' },
-      { key: 'method', kind: 'badge', options: CONSOLIDATION_METHODS },
-      { key: 'ownershipPercent', kind: 'percent' },
-      { key: 'effectiveFrom', kind: 'date' },
-      { key: 'isActive', kind: 'badge-active' },
-    ],
-    fields: [
-      { key: 'parentSubsidiaryId', kind: 'ref', ref: 'subsidiaries', required: true, lockedOnEdit: true },
-      { key: 'subsidiaryId', kind: 'ref', ref: 'subsidiaries', required: true, lockedOnEdit: true },
-      { key: 'effectiveFrom', kind: 'date', required: true, lockedOnEdit: true },
-      { key: 'effectiveTo', kind: 'date' },
-      { key: 'ownershipPercent', kind: 'percent', required: true },
-      { key: 'method', kind: 'select', options: CONSOLIDATION_METHODS, required: true, keepDefault: true },
-      { key: 'acquisitionDate', kind: 'date', required: true },
-      { key: 'acquisitionCost', kind: 'decimal', required: true, keepDefault: true },
-      { key: 'fairValueNetAssets', kind: 'decimal', required: true, keepDefault: true },
-      { key: 'acquisitionRate', kind: 'decimal', required: true, keepDefault: true },
-      { key: 'nciMeasurement', kind: 'select', options: NCI_MEASUREMENTS, required: true, keepDefault: true },
-      { key: 'nciFairValue', kind: 'decimal' },
-      { key: 'investmentAccountId', kind: 'ref', ref: 'accounts', required: true },
-      { key: 'equityIncomeAccountId', kind: 'ref', ref: 'accounts', required: true },
-      { key: 'distributionAccountId', kind: 'ref', ref: 'accounts' },
-      { key: 'distributionIncomeAccountId', kind: 'ref', ref: 'accounts' },
-      { key: 'nciEquityAccountId', kind: 'ref', ref: 'accounts' },
-      { key: 'nciIncomeAccountId', kind: 'ref', ref: 'accounts' },
-      { key: 'goodwillAccountId', kind: 'ref', ref: 'accounts' },
-      { key: 'fairValueAdjustmentAccountId', kind: 'ref', ref: 'accounts' },
       { key: 'isActive', kind: 'boolean' },
     ],
   },

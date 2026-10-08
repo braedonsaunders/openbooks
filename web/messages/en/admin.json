@@ -2183,17 +2183,19 @@
       "company": "Company",
       "accounting": "Accounting",
       "taxes": "Taxes",
+      "banking": "Banking & payments",
       "dimensions": "Dimensions",
       "billing": "Billing & numbering",
-      "sales": "Sales",
-      "workforce": "Workforce",
+      "sales": "Sales & CRM",
+      "workforce": "Human resources",
       "assets": "Assets",
       "currency": "Currency",
       "revenue": "Revenue",
       "inventory": "Inventory",
       "projects": "Projects",
       "compliance": "Compliance",
-      "agents": "Agents"
+      "agents": "Agents",
+      "apps": "App settings"
     },
     "agents": {
       "nav": {
@@ -2492,26 +2494,26 @@
       "commitOff": "Off"
     },
     "paymentOperations": {
-      "title": "Payments & Banking",
-      "description": "Configure payment rails, funding profiles, schedules, approvals, delivery, and debit mandates.",
       "tabs": {
         "profiles": "Bank profiles",
         "formats": "Payment formats",
-        "schedules": "Schedules",
-        "mandates": "Debit mandates"
+        "schedules": "Payment schedules"
+      },
+      "descriptions": {
+        "profiles": "Bank accounts, payment formats and delivery settings used to originate payment files.",
+        "formats": "File layouts for each payment rail, including custom formatter scripts.",
+        "schedules": "Recurring runs that select due bills and create payment runs as drafts or for approval."
       },
       "search": {
         "profiles": "Search profiles…",
         "formats": "Search formats…",
-        "schedules": "Search schedules…",
-        "mandates": "Search mandates…"
+        "schedules": "Search schedules…"
       },
       "state": "State",
       "new": {
         "profiles": "New profile",
         "formats": "New custom format",
-        "schedules": "New schedule",
-        "mandates": "New mandate"
+        "schedules": "New schedule"
       },
       "columns": {
         "name": "Name",
@@ -2526,20 +2528,11 @@
         "profile": "Profile",
         "cron": "Schedule",
         "nextRun": "Next run",
-        "action": "Action",
-        "reference": "Reference",
-        "party": "Counterparty",
-        "scheme": "Scheme",
-        "signedOn": "Signed",
-        "expiresOn": "Expires"
+        "action": "Action"
       },
       "states": {
         "active": "Active",
-        "archived": "Archived",
-        "pending": "Pending",
-        "suspended": "Suspended",
-        "revoked": "Revoked",
-        "expired": "Expired"
+        "archived": "Archived"
       },
       "rails": {
         "cpa005_credit": "CPA-005 credit",
@@ -2560,12 +2553,6 @@
       "actions": {
         "create_draft": "Create draft",
         "submit_for_approval": "Submit for approval"
-      },
-      "schemes": {
-        "nacha": "NACHA",
-        "sepa_core": "SEPA Core",
-        "sepa_b2b": "SEPA B2B",
-        "custom": "Custom"
       },
       "fields": {
         "name": "Name",
@@ -2589,15 +2576,7 @@
         "cron": "Schedule",
         "cronHint": "Pick a preset, or enter a custom schedule (cron syntax) for full control.",
         "timezone": "Time zone",
-        "action": "When due",
-        "party": "Counterparty",
-        "partyBankAccount": "Approved bank account",
-        "scheme": "Mandate scheme",
-        "reference": "Mandate reference",
-        "status": "Status",
-        "signedOn": "Signed on",
-        "validFrom": "Valid from",
-        "expiresOn": "Expires on"
+        "action": "When due"
       },
       "approvalHint": "Payment-run approval is set up in <flows>Flows</flows>. Without a payment-run flow, submitted runs are approved immediately.",
       "secretFields": {
@@ -2651,20 +2630,17 @@
         "new": {
           "profiles": "New bank profile",
           "formats": "New custom payment format",
-          "schedules": "New payment schedule",
-          "mandates": "New debit mandate"
+          "schedules": "New payment schedule"
         },
         "edit": {
           "profiles": "Edit bank profile",
           "formats": "Edit payment format",
-          "schedules": "Edit payment schedule",
-          "mandates": "Edit debit mandate"
+          "schedules": "Edit payment schedule"
         },
         "description": {
           "profiles": "Connect a funding account to a payment rail and delivery policy.",
           "formats": "Define file metadata and sandboxed JavaScript for a custom bank format.",
-          "schedules": "Select eligible transactions on a repeatable schedule.",
-          "mandates": "Record the authorization required to collect funds from a counterparty."
+          "schedules": "Select eligible transactions on a repeatable schedule."
         }
       },
       "select": "Select…",
@@ -2865,10 +2841,6 @@
       },
       "sftp": {
         "title": "SFTP"
-      },
-      "payment-operations": {
-        "title": "Payments & Banking",
-        "description": "Payment formats, funding profiles, schedules, and debit mandates."
       },
       "account-groups": {
         "title": "Account Groups",
@@ -3149,7 +3121,8 @@
       },
       "extension-settings": {
         "title": "App settings",
-        "description": "Configure settings declared by installed apps. Changes preserve prior values and their effective dates."
+        "description": "Configure settings declared by installed apps. Changes preserve prior values and their effective dates.",
+        "appDescription": "Settings this app declares. Changes keep prior values and their effective dates."
       },
       "leave-types": {
         "title": "Leave types",
@@ -7115,6 +7088,18 @@
     "quoteToCash": {
       "title": "Quote-to-cash",
       "description": "Ramp-priced SaaS quotes with discount approval, e-signature, and one-click subscription activation."
+    },
+    "internalBilling": {
+      "title": "Internal billing",
+      "description": "Bill work between departments, projects or subsidiaries. Each rule sets the treatment: credit the providing department with the sale, transfer cost, or record an intercompany sale that eliminates on consolidation."
+    },
+    "projectProgress": {
+      "title": "Progress & earned value",
+      "description": "Budget production quantities, record installed quantities (also from field tickets), forecast cost to complete, and report earned value and burn rate."
+    },
+    "unbilledRevenueAccrual": {
+      "title": "Unbilled revenue accrual",
+      "description": "At period end, accrue time-and-materials work performed but not yet invoiced, reversing automatically on the first day of the next period."
     }
   },
   "backupsManager": {

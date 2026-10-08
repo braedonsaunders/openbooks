@@ -36,7 +36,7 @@ test('company administrators return to Company Settings, including wildcard gran
 test('CRM setup managers return to their accessible Setup tab', () => {
   const destination = dataWorkspaceNavigation(new Set(['crm.setup.manage', 'data.import']))
   assert.equal(destination.showSetup, true)
-  assert.equal(destination.backHref, '/admin/setup/crm')
+  assert.equal(destination.backHref, '/admin/setup/crm?tab=accountStatuses')
 })
 
 test('import-only operators return to the dashboard without being gated by Setup', async () => {

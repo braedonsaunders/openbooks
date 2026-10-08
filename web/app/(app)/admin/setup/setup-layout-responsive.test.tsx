@@ -78,11 +78,27 @@ test('feature-gated entries follow their flags, never the install', () => {
   assert.ok(on.includes('/admin/setup/payroll'), 'payroll links its surface once enabled')
 })
 
-test('CRM setup managers keep only their authorized setup entry', () => {
+test('CRM setup managers keep only their authorized setup entries', () => {
   const html = hrefs(renderNav({ ...BASE_PROPS, canManageSetup: false, canManageCrm: true }))
-  assert.ok(html.includes('/admin/setup/crm'), 'the CRM entry survives without the permission')
+  for (const tab of ['accountStatuses', 'opportunityStatuses', 'sources']) {
+    assert.ok(html.includes(`/admin/setup/crm?tab=${tab}`), `the ${tab} page survives without the setup permission`)
+  }
+  assert.ok(!html.includes('/admin/setup/promotions'), 'sibling Sales & CRM entries hide without the permission')
   assert.ok(!html.includes('/admin/setup/account-groups'), 'registry entities hide without the permission')
   assert.ok(!html.includes('/admin/setup/company'), 'the Company tab hides without the permission')
+})
+
+test('each installed app with settings gets its own page, labelled by the app', () => {
+  const none = renderNav(BASE_PROPS)
+  assert.ok(!hrefs(none).some((href) => href.startsWith('/admin/setup/apps/')), 'no app settings pages without apps')
+  assert.ok(!none.includes('App settings'), 'the App settings group hides when no app declares settings')
+  const html = renderNav({ ...BASE_PROPS, appSettings: [{ key: 'crew-board', name: 'Crew Board' }, { key: 'site-log', name: 'Site Log' }] })
+  const shown = hrefs(html)
+  assert.ok(shown.includes('/admin/setup/apps/crew-board') && shown.includes('/admin/setup/apps/site-log'))
+  assert.ok(html.includes('Crew Board') && html.includes('Site Log'), 'entries carry the app name')
+  assert.ok(!shown.includes('/admin/setup/extension-settings'), 'the combined settings list is not a rail page')
+  const denied = hrefs(renderNav({ ...BASE_PROPS, canManageSetup: false, canManageCrm: true, appSettings: [{ key: 'crew-board', name: 'Crew Board' }] }))
+  assert.ok(!denied.includes('/admin/setup/apps/crew-board'), 'app settings require setup management')
 })
 
 

@@ -191,6 +191,7 @@ export async function loadParties(
     requestedPartyTab === 'relationship' ||
     requestedPartyTab === 'paymentMethods' ||
     requestedPartyTab === 'billing' ||
+    requestedPartyTab === 'debitMandates' ||
     requestedPartyTab === 'wages'
       ? requestedPartyTab
       : 'overview'
@@ -450,6 +451,11 @@ export async function loadParties(
           consolidatedBilling: consolidatedBillingEnabled
             && (role === 'customer' || (!role && openParty?.customer != null))
             ? { canManage: can(authz, 'documents.manage') }
+            : null,
+          // Debit mandates ride the grant the mandate routes enforce plus
+          // the persisted customer role row; null hides the tab.
+          debitMandates: can(authz, 'admin.setup.manage') && (role === 'customer' || !role) && openParty?.customer != null
+            ? { partyId: String(openParty.party.id) }
             : null,
           multiCurrency,
           complianceEnabled,

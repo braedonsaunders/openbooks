@@ -63,7 +63,8 @@
       "relationship": "Beziehung",
       "paymentMethods": "Zahlungsmethoden",
       "externalIds": "Externe IDs",
-      "billing": "Abrechnung"
+      "billing": "Abrechnung",
+      "debitMandates": "Lastschriftmandate"
     },
     "autopay": {
       "heading": "Zahlungsmethoden",
@@ -111,6 +112,46 @@
       "moveUp": "In der Ersatzreihenfolge nach oben verschieben",
       "moveDown": "In der Ersatzreihenfolge nach unten verschieben",
       "reorderFailed": "Die Ersatzreihenfolge konnte nicht geändert werden."
+    },
+    "debitMandates": {
+      "heading": "Lastschriftmandate",
+      "description": "Unterzeichnete Ermächtigungen zum Einzug vom Bankkonto dieses Kunden per Lastschrift. Einzüge verwenden das zuletzt unterzeichnete aktive Mandat, das am Einzugsdatum gültig ist.",
+      "new": "Neues Mandat",
+      "newTitle": "Neues Lastschriftmandat",
+      "editTitle": "Lastschriftmandat bearbeiten",
+      "drawerDescription": "Erfassen Sie die von diesem Kunden unterzeichnete Ermächtigung zum Einzug von seinem Bankkonto.",
+      "lockedNote": "Bankkonto, Verfahren und Referenz sind nach dem Erfassen eines Mandats unveränderlich.",
+      "noApprovedAccounts": "Dieser Kunde hat kein genehmigtes Bankkonto. Fügen Sie eines auf dem <link>Tab „Buchhaltung“</link> des Geschäftspartners hinzu; nach der Genehmigung ist es auswählbar.",
+      "empty": "Keine Lastschriftmandate hinterlegt.",
+      "select": "Auswählen…",
+      "saved": "Lastschriftmandat gespeichert",
+      "saveFailed": "Das Lastschriftmandat konnte nicht gespeichert werden.",
+      "loadFailed": "Lastschriftmandate konnten nicht geladen werden.",
+      "fields": {
+        "bankAccount": "Genehmigtes Bankkonto",
+        "scheme": "Mandatsverfahren",
+        "reference": "Mandatsreferenz",
+        "signedOn": "Unterzeichnet am",
+        "validFrom": "Gültig ab",
+        "expiresOn": "Läuft ab am"
+      },
+      "columns": {
+        "bankAccount": "Bankkonto"
+      },
+      "states": {
+        "pending": "Ausstehend",
+        "active": "Aktiv",
+        "suspended": "Ausgesetzt",
+        "revoked": "Widerrufen",
+        "expired": "Abgelaufen"
+      },
+      "schemes": {
+        "custom": "Benutzerdefiniert"
+      },
+      "validation": {
+        "bankAccount": "Wählen Sie ein genehmigtes Bankkonto für das Mandat.",
+        "reference": "Geben Sie die Mandatsreferenz ein."
+      }
     },
     "wages": {
       "title": "Lohnsätze",

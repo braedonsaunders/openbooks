@@ -237,67 +237,41 @@
   },
   "setup": {
     "title": "CRM",
-    "description": "配置生命周期状态、商机阶段、线索来源、区域、销售团队和配额。",
     "sequence": "序号",
-    "priority": "优先级",
-    "defaultOwner": "默认负责人",
-    "manager": "经理",
     "empty": "无匹配的配置记录。",
     "openRecord": "打开 {name}",
     "percent": "{value}%",
-    "memberCount": "{count, plural, one {# 名成员} other {# 名成员}}",
     "created": "CRM 配置记录已创建",
     "updated": "CRM 配置记录已更新",
     "new": {
       "accountStatuses": "新建客户状态",
       "opportunityStatuses": "新建商机阶段",
-      "sources": "新建线索来源",
-      "territories": "新建区域",
-      "teams": "新建销售团队",
-      "quotas": "新建配额"
+      "sources": "新建线索来源"
     },
     "search": {
       "accountStatuses": "搜索客户状态",
       "opportunityStatuses": "搜索商机阶段",
-      "sources": "搜索线索来源",
-      "territories": "搜索区域",
-      "teams": "搜索销售团队",
-      "quotas": "搜索配额"
+      "sources": "搜索线索来源"
     },
     "drawer": {
       "new": {
         "accountStatuses": "新建客户状态",
         "opportunityStatuses": "新建商机阶段",
-        "sources": "新建线索来源",
-        "territories": "新建区域",
-        "teams": "新建销售团队",
-        "quotas": "新建配额"
+        "sources": "新建线索来源"
       },
       "edit": {
         "accountStatuses": "编辑客户状态",
         "opportunityStatuses": "编辑商机阶段",
-        "sources": "编辑线索来源",
-        "territories": "编辑区域",
-        "teams": "编辑销售团队",
-        "quotas": "编辑配额"
+        "sources": "编辑线索来源"
       },
       "description": {
         "accountStatuses": "控制客户关系生命周期分类和资格鉴定行为。",
         "opportunityStatuses": "控制销售管道概率、预测处理和成交行为。",
-        "sources": "维护 CRM 中通用的标准化获客来源。",
-        "territories": "配置归属和确定性分派规则。",
-        "teams": "为该销售团队指定经理和在职成员。",
-        "quotas": "为一名销售代表或团队设定期间目标。"
+        "sources": "维护 CRM 中通用的标准化获客来源。"
       }
     },
     "fields": {
       "name": "名称",
-      "matchMode": "规则匹配",
-      "rules": "分派规则",
-      "rulesHint": "可选。每条规则将某个字段与某个值进行匹配，以将线索分派至此。字段：region、country、annualRevenue。运算符：equals、contains、in、gte、lte。",
-      "rulesPlaceholder": "['{ \"field\": \"region\", \"operator\": \"equals\", \"value\": \"West\" }']",
-      "members": "团队成员",
-      "targetType": "目标类型",
       "isQualified": "已鉴定状态",
       "isClosed": "已成交状态",
       "isWon": "赢单状态",
@@ -314,25 +288,18 @@
       "yes": "是",
       "no": "否"
     },
-    "matchModes": {
-      "all": "匹配所有规则",
-      "any": "匹配任一规则"
-    },
-    "targetTypes": {
-      "user": "销售代表",
-      "team": "销售团队"
-    },
     "validation": {
-      "nameRequired": "请输入名称。",
-      "invalidRules": "分派规则必须是有效的 JSON 数组。"
+      "nameRequired": "请输入名称。"
     },
     "tabs": {
       "accountStatuses": "客户状态",
       "opportunityStatuses": "商机阶段",
-      "sources": "线索来源",
-      "territories": "区域",
-      "teams": "销售团队",
-      "quotas": "配额"
+      "sources": "线索来源"
+    },
+    "descriptions": {
+      "accountStatuses": "潜在客户、意向客户和客户的生命周期状态,以及哪些状态视为已合格。",
+      "opportunityStatuses": "管道阶段,包括赢单概率、预测类别和进入条件。",
+      "sources": "潜在客户来源,用于归因和报告。"
     },
     "columns": {
       "name": "名称",
@@ -341,18 +308,9 @@
       "probability": "赢单概率",
       "default_forecast_category": "预测类别",
       "description": "说明",
-      "priority": "优先级",
-      "owner_name": "负责人",
-      "manager_name": "经理",
-      "period_start": "期间开始",
-      "period_end": "期间结束",
-      "amount": "金额",
       "is_qualified": "已鉴定",
       "is_closed": "已成交",
-      "is_active": "状态",
-      "member_count": "成员",
-      "target_name": "目标",
-      "currency": "币种"
+      "is_active": "状态"
     }
   },
   "validation": {

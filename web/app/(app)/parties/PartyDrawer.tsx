@@ -6,6 +6,7 @@ import { ContactForm, AddressForm } from './PartyContactForms'
 import { BankAccountsPanel } from './PartyBankAccountsPanel'
 import { PartyPaymentMethodsPanel } from './PartyPaymentMethodsPanel'
 import { PartyAutopayPanel } from './PartyAutopayPanel'
+import { PartyDebitMandatesPanel } from './PartyDebitMandatesPanel'
 import { EmployeeBenefitsPanel } from './EmployeeBenefitsPanel'
 import { ActivitySublist } from './PartyActivitySublist'
 import { TransactionSublist } from './PartyTransactionSublist'
@@ -79,6 +80,7 @@ export function PartyDrawer({
   role,
   autopay = null,
   consolidatedBilling = null,
+  debitMandates = null,
   initialTab = 'overview',
   initialMode = 'view',
   basePath = '/parties',
@@ -168,6 +170,11 @@ export function PartyDrawer({
    *  consolidatedBilling feature is off or the record is not a customer),
    *  so the tab never renders without the read surface behind it. */
   consolidatedBilling?: { canManage: boolean } | null
+  /** Direct-debit mandates for a persisted customer record. Null = gated
+   *  (the viewer lacks admin.setup.manage, the grant the mandate routes
+   *  enforce, or the record has no customer role), so the tab never renders
+   *  without the read surface behind it. */
+  debitMandates?: { partyId: string } | null
   initialTab?: PartyTab
   initialMode?: DrawerMode
   basePath?: string
@@ -227,6 +234,10 @@ export function PartyDrawer({
   // button, the deep-link fallback, and the panel, so a stale
   // ?partyTab=store-credit can never strand the drawer on a missing panel.
   const showStoreCreditTab = storedValue != null && (role === 'customer' || (!role && payload.customer != null))
+  // Debit mandates ride the customer ROLE row of a persisted record: the
+  // loader passes null unless the viewer holds the mandate grant, and the
+  // same predicate gates the tab button and the ?partyTab= deep link.
+  const showDebitMandatesTab = debitMandates != null && !createMode && payload.customer != null && (role === 'customer' || !role)
   // External storefront identities ride the customer record the same way:
   // the server passes the rendered tab (null = gated), so the button never
   // appears without the identity surface behind it.
@@ -261,6 +272,7 @@ export function PartyDrawer({
     (initialTab === 'compliance' && !showComplianceTab) ||
     (initialTab === 'paymentMethods' && !showPaymentMethodsTab) ||
     (initialTab === 'store-credit' && !showStoreCreditTab) ||
+    (initialTab === 'debitMandates' && !showDebitMandatesTab) ||
     (initialTab === 'billing' && !showBillingTab) ||
     (initialTab === 'employment' && !showEmploymentTab)
       ? 'overview'
@@ -997,6 +1009,7 @@ export function PartyDrawer({
     ...(showBillingTab && !createMode ? [{ key: 'billing' as const, label: t('tabs.billing') }] : []),
     ...(showPaymentMethodsTab ? [{ key: 'paymentMethods' as const, label: t('tabs.paymentMethods') }] : []),
     ...(showStoreCreditTab ? [{ key: 'store-credit' as const, label: tsv('customer.tabLabel') }] : []),
+    ...(showDebitMandatesTab ? [{ key: 'debitMandates' as const, label: t('tabs.debitMandates') }] : []),
     { key: 'transactions', label: t('tabs.transactions'), count: payload.transactionSummary.count },
     ...(role === 'customer' && canReadActivities ? [{ key: 'activities' as const, label: t('tabs.activities') }] : []),
     { key: 'contacts', label: t('tabs.contacts'), count: contacts.length },
@@ -1656,6 +1669,9 @@ export function PartyDrawer({
         ) : null}
         {tab === 'store-credit' && showStoreCreditTab && storedValue ? (
           <StoreCreditPanel balances={storedValue.balances} />
+        ) : null}
+        {tab === 'debitMandates' && showDebitMandatesTab && debitMandates ? (
+          <PartyDebitMandatesPanel partyId={debitMandates.partyId} />
         ) : null}
         {tab === 'pricing' && taxIds && !isPlaceholderName ? (
           <PartyTaxIdSection partyId={taxIds.partyId} canManage={taxIds.canManage} />

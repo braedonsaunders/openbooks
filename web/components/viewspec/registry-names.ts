@@ -429,7 +429,6 @@ export const WIDGET_NAMES: ReadonlySet<string> = new Set([
   'pay-run-row-actions',
   'pay-run-wizard',
   'payment-operations-editor',
-  'payment-operations-tabs',
   'payment-providers-workspace',
   'payment-runs-section',
   'payment-schedule-next-run',

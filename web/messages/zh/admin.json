@@ -2183,17 +2183,19 @@
       "company": "公司",
       "accounting": "会计",
       "taxes": "税务",
+      "banking": "银行与付款",
       "dimensions": "维度",
       "billing": "计费与编号",
-      "sales": "销售",
-      "workforce": "劳动力",
+      "sales": "销售与 CRM",
+      "workforce": "人力资源",
       "assets": "资产",
       "currency": "货币",
       "revenue": "收入",
       "inventory": "库存",
       "projects": "项目",
       "compliance": "合规",
-      "agents": "智能体"
+      "agents": "智能体",
+      "apps": "应用设置"
     },
     "agents": {
       "nav": {
@@ -2492,26 +2494,26 @@
       "commitOff": "关"
     },
     "paymentOperations": {
-      "title": "付款与银行业务",
-      "description": "配置付款通道、资金档案、计划、审批、交付和扣款授权。",
       "tabs": {
         "profiles": "银行档案",
         "formats": "付款格式",
-        "schedules": "计划",
-        "mandates": "扣款授权"
+        "schedules": "付款计划"
+      },
+      "descriptions": {
+        "profiles": "用于生成付款文件的银行账户、付款格式和传送设置。",
+        "formats": "各付款通道的文件布局,包括自定义格式化脚本。",
+        "schedules": "定期运行,选择到期账单并以草稿或待审批方式创建付款批次。"
       },
       "search": {
         "profiles": "搜索档案……",
         "formats": "搜索格式……",
-        "schedules": "搜索计划……",
-        "mandates": "搜索授权……"
+        "schedules": "搜索计划……"
       },
       "state": "状态",
       "new": {
         "profiles": "新建档案",
         "formats": "新建自定义格式",
-        "schedules": "新建计划",
-        "mandates": "新建授权"
+        "schedules": "新建计划"
       },
       "columns": {
         "name": "名称",
@@ -2526,20 +2528,11 @@
         "profile": "档案",
         "cron": "计划",
         "nextRun": "下次运行",
-        "action": "操作",
-        "reference": "引用",
-        "party": "对手方",
-        "scheme": "方案",
-        "signedOn": "签署",
-        "expiresOn": "到期"
+        "action": "操作"
       },
       "states": {
         "active": "启用",
-        "archived": "已归档",
-        "pending": "待处理",
-        "suspended": "已暂停",
-        "revoked": "已吊销",
-        "expired": "已过期"
+        "archived": "已归档"
       },
       "rails": {
         "cpa005_credit": "CPA-005 贷记",
@@ -2560,12 +2553,6 @@
       "actions": {
         "create_draft": "创建草稿",
         "submit_for_approval": "提交审批"
-      },
-      "schemes": {
-        "nacha": "NACHA",
-        "sepa_core": "SEPA Core",
-        "sepa_b2b": "SEPA B2B",
-        "custom": "自定义"
       },
       "fields": {
         "name": "名称",
@@ -2589,15 +2576,7 @@
         "cron": "计划",
         "cronHint": "选择一个预设，或输入自定义计划（cron 语法）以完全控制。",
         "timezone": "时区",
-        "action": "到期时",
-        "party": "对手方",
-        "partyBankAccount": "已批准的银行账户",
-        "scheme": "授权方案",
-        "reference": "授权引用",
-        "status": "状态",
-        "signedOn": "签署于",
-        "validFrom": "生效自",
-        "expiresOn": "到期于"
+        "action": "到期时"
       },
       "approvalHint": "付款批次的审批在<flows>流程</flows>中设置。没有付款批次流程时，提交的批次会立即获批。",
       "secretFields": {
@@ -2651,20 +2630,17 @@
         "new": {
           "profiles": "新建银行档案",
           "formats": "新建自定义付款格式",
-          "schedules": "新建付款计划",
-          "mandates": "新建扣款授权"
+          "schedules": "新建付款计划"
         },
         "edit": {
           "profiles": "编辑银行档案",
           "formats": "编辑付款格式",
-          "schedules": "编辑付款计划",
-          "mandates": "编辑扣款授权"
+          "schedules": "编辑付款计划"
         },
         "description": {
           "profiles": "将资金账户连接到付款通道和交付策略。",
           "formats": "为自定义银行格式定义文件元数据和沙箱化 JavaScript。",
-          "schedules": "按可重复的计划选择符合条件的交易。",
-          "mandates": "记录从对手方收取资金所需的授权。"
+          "schedules": "按可重复的计划选择符合条件的交易。"
         }
       },
       "select": "选择……",
@@ -2865,10 +2841,6 @@
       },
       "sftp": {
         "title": "SFTP"
-      },
-      "payment-operations": {
-        "title": "付款与银行业务",
-        "description": "付款格式、资金档案、计划和扣款授权。"
       },
       "account-groups": {
         "title": "科目组",
@@ -3149,7 +3121,8 @@
       },
       "extension-settings": {
         "title": "应用设置",
-        "description": "配置已安装应用声明的设置。更改会保留原值及其生效日期。"
+        "description": "配置已安装应用声明的设置。更改会保留原值及其生效日期。",
+        "appDescription": "此应用声明的设置。更改会保留以前的值及其生效日期。"
       },
       "leave-types": {
         "title": "休假类型",
@@ -7115,6 +7088,18 @@
     "quoteToCash": {
       "title": "报价转订阅",
       "description": "阶梯定价的 SaaS 报价，含折扣审批、电子签署和一键激活订阅。"
+    },
+    "internalBilling": {
+      "title": "内部计费",
+      "description": "在部门、项目或子公司之间计费。每条规则设定处理方式：将销售记入提供服务的部门、转移成本，或记录在合并时抵销的集团内部销售。"
+    },
+    "projectProgress": {
+      "title": "进度与挣值",
+      "description": "为生产数量编制预算，记录已安装数量（也可来自现场工单），预测完工尚需成本，并报告挣值与消耗速率。"
+    },
+    "unbilledRevenueAccrual": {
+      "title": "未开票收入预提",
+      "description": "期末预提已完成但尚未开票的工时与材料工作，并于下期第一天自动冲回。"
     }
   },
   "backupsManager": {
