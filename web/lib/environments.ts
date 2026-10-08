@@ -47,8 +47,9 @@ export async function shellEnvironments(authz: Authz): Promise<WorkspaceEnvironm
 
   // bypass: user-keyed-lookup — the environment switcher lists sandboxes of every organization this person can reach.
   return withBypassContext(async () => {
-    const tenants: TenantGroup[] = [];
-    for (const o of accessible) {
+    // Each reachable organization resolves independently; read them together
+    // so the shell waits for the slowest one rather than their sum.
+    const tenants: TenantGroup[] = await Promise.all(accessible.map(async (o) => {
       let sandboxes: EnvOption[] = [];
       if (o.envKind === "production") {
         const candidates = (await db.execute<{ orgId: string; name: string; status: string; tier: string }>(sql`
@@ -63,13 +64,13 @@ export async function shellEnvironments(authz: Authz): Promise<WorkspaceEnvironm
         ));
         sandboxes = enterable.filter((sandbox): sandbox is EnvOption => sandbox !== null);
       }
-      tenants.push({
+      return {
         productionOrgId: o.orgId,
         productionOrgName: o.name,
         envKind: o.envKind,
         sandboxes,
-      });
-    }
+      };
+    }));
     const currentName =
       authz.user.envKind === "production" || authz.user.envKind === "preview"
         ? tenants.find((t) => t.productionOrgId === authz.user.productionOrgId)?.productionOrgName ??
