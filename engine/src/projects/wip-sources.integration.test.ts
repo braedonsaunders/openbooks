@@ -40,9 +40,9 @@ test("WIP ceilings preserve line project precedence, invoice fallback, credits a
         lines: readonly [string | null, string][]) => {
         const id = randomUUID();
         await db.execute(sql`insert into documents
-          (id,org_id,subsidiary_id,kind,status,document_number,document_date,currency,project_id,party_id)
+          (id,org_id,subsidiary_id,kind,status,document_number,document_date,currency,project_id,party_id,void_reason)
           values(${id},${org.orgId},${org.subsidiaryId},${kind},${status},${`INV-${id}`},
-            ${date},'CAD',${project},${org.customerId})`);
+            ${date},'CAD',${project},${org.customerId},${status === 'voided' ? 'Cancelled duplicate invoice' : null})`);
         for (const [index, [lineProject, amount]] of lines.entries()) {
           await db.execute(sql`insert into document_lines
             (id,org_id,document_id,line_number,account_id,amount,project_id)
