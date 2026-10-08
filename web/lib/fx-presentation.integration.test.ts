@@ -4,7 +4,7 @@ import test from 'node:test'
 import { sql } from 'drizzle-orm'
 import { db, withOrgContext } from '@openbooks/engine/src/platform/db.ts'
 import { mulDecimal } from '@openbooks/engine/src/money/money.ts'
-import { presentationAmountSql } from './fx-presentation'
+import { presentationAmountSql, withPresentationCurrencyRead } from './fx-presentation'
 
 test('SQL presentation matches exact bigint conversion at positive and negative ties and beyond safe integers', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
   const amounts = ['0.0001', '-0.0001', '1.2345', '-1.2345', '9007199254740993.0001', '-9007199254740993.0001']
@@ -34,7 +34,7 @@ test('batched dated rates preserve preceding coverage, inverse quotes and direct
           (${org.orgId}, 'USD', 'CAD', '2026-02-21', 'spot', 1.6, 'manual'),
           (${org.orgId}, 'EUR', 'CAD', '2026-02-15', 'spot', 1.7, 'manual')`)
     })
-    await withOrgContext(org.orgId, async () => {
+    await withOrgContext(org.orgId, () => withPresentationCurrencyRead(async () => {
       const rates = await flowRates(org.orgId, [
         { func: 'USD', date: '2026-02-01' }, { func: 'USD', date: '2026-02-20' },
         { func: 'USD', date: '2026-02-28' }, { func: 'EUR', date: '2026-02-20' },
@@ -45,6 +45,6 @@ test('batched dated rates preserve preceding coverage, inverse quotes and direct
       assert.equal(rates.rateAt('EUR', '2026-02-20'), '1.7000000000')
       const uncovered = await flowRates(org.orgId, [{ func: 'EUR', date: '2026-02-01' }])
       assert.throws(() => uncovered.rateAt('EUR', '2026-02-01'), MissingExchangeRateError)
-    })
+    }))
   } finally { await withBypass(() => dropScratchOrg(org.orgId)) }
 })

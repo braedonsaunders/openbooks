@@ -1,4 +1,5 @@
 import "server-only";
+import { AsyncLocalStorage } from "node:async_hooks";
 import { sql, type SQL } from "drizzle-orm";
 import { analyticsQuery } from "./analytics/query";
 import { add, mulDecimal } from "@openbooks/engine/money";
@@ -30,6 +31,25 @@ import { add, mulDecimal } from "@openbooks/engine/money";
 
 /** The org's base (functional) currency — the consolidated presentation currency. */
 export async function presentationCurrency(orgId: string): Promise<string> {
+  const read = presentationRead.getStore();
+  if (!read) return readPresentationCurrency(orgId);
+  let known = read.get(orgId);
+  if (!known) {
+    known = readPresentationCurrency(orgId);
+    read.set(orgId, known);
+  }
+  return known;
+}
+
+const presentationRead = new AsyncLocalStorage<Map<string, Promise<string>>>();
+
+/** Share the native presentation currency within one composed read. Each
+ * new read and every direct call resolves configuration afresh. */
+export function withPresentationCurrencyRead<T>(action: () => Promise<T>): Promise<T> {
+  return presentationRead.run(new Map(), action);
+}
+
+async function readPresentationCurrency(orgId: string): Promise<string> {
   const r = await analyticsQuery(
     sql`select base_currency as "baseCurrency" from orgs where id = ${orgId}`,
   );
