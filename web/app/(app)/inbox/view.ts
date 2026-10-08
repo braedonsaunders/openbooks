@@ -601,7 +601,7 @@ export async function loadApprovals(
   const taskNoticeByKind = new Map<string, string>()
   for (const notice of counts.notices)
     taskNoticeByKind.set(notice.kind, notice.message)
-  const { filters: taskFilters, notices: listNotices } = await inboxTaskFilters(ctx)
+  const { filters: taskFilters, notices: listNotices } = await inboxTaskFilters(ctx, tab === 'tasks')
   for (const notice of listNotices) taskNoticeByKind.set(notice.kind, notice.message)
   const tasksActive = taskFilters[filter]
   // Named per-source notices for the legs that refused or failed, in stable
