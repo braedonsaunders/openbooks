@@ -190,7 +190,15 @@ test('inactive employees retain source-date history without reactivation, hours,
   assert.equal(window.sourceRecords?.[0]?.label,'Literal/N');assert.equal(window.sourceRecords?.[0]?.visibleInSource,false);
   const state=await withBypassContext(()=>db.execute<{is_active:boolean}>(sql`select is_active from parties where org_id=${f.org.orgId} and id=${f.ana}`));
   assert.equal(state.rows[0]?.is_active,false);
-  await assert.rejects(withBypassContext(()=>db.execute(sql`update schedule_source_records set label='Changed' where org_id=${f.org.orgId} and id=${first[0]!.id}`)),/immutable/);
+  await assert.rejects(withBypassContext(()=>db.execute(sql`update schedule_source_records set label='Changed' where org_id=${f.org.orgId} and id=${first[0]!.id}`)),(error:unknown)=> {
+    const cause = error instanceof Error ? error.cause : null;
+    assert.ok(cause instanceof Error);
+    assert.equal((cause as Error & {code?:string}).code,'23514');
+    assert.match(cause.message,/immutable/);
+    return true;
+  });
+  const unchanged=await withBypassContext(()=>db.execute<{label:string}>(sql`select label from schedule_source_records where org_id=${f.org.orgId} and id=${first[0]!.id}`));
+  assert.equal(unchanged.rows[0]?.label,'Literal/N');
   const work=await scheduledWork({orgId:f.org.orgId,use:'timesheets',workerPartyId:f.ana,from:'2020-01-01',through:'2020-01-03'});
   assert.deepEqual(work,[]);
   await withBypassContext(()=>db.execute(sql`update orgs set settings=jsonb_set(settings,'{features,hrmShiftPlanning}','false'::jsonb) where id=${f.org.orgId}`));
