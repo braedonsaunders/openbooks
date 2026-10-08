@@ -15,12 +15,13 @@ const React = await import('react')
 Object.assign(globalThis, { React })
 const { renderToReadableStream } = await import('react-dom/server')
 const { NextIntlClientProvider } = await import('next-intl')
+const { default: catalog } = await import('../../messages/en')
 const native = await import('./native-widgets.client')
 imports.length = 0
 
 test('native widget implementations load only when placed and retain their server-rendered controls', async () => {
   assert.equal(imports.length, 0)
-  const messages = { analytics: { cashflow: { horizon: { label: 'Forecast horizon', aria: 'Forecast horizon', weeks: '{count} weeks' } } } }
+  const messages = { ...catalog, analytics: { ...catalog.analytics, cashflow: { ...catalog.analytics.cashflow, horizon: { label: 'Forecast horizon', aria: 'Forecast horizon', weeks: '{count} weeks' } } } }
   const stream = await renderToReadableStream(<NextIntlClientProvider locale="en" timeZone="UTC" messages={messages}><native.HorizonControl value={19} /></NextIntlClientProvider>)
   await stream.allReady
   const html = await new Response(stream).text()
