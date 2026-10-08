@@ -6,11 +6,7 @@ import { db, type SqlExecutor } from '@openbooks/engine/src/platform/db.ts'
 
 // --- helpers ----------------------------------------------------------------
 
-export function deriveExtension(filename: string): string | null {
-  const dot = filename.lastIndexOf('.')
-  if (dot < 0 || dot === filename.length - 1) return null
-  return filename.slice(dot + 1).toLowerCase()
-}
+export { deriveExtension } from '@openbooks/engine/src/platform/file-names.ts'
 
 /**
  * Resolve the set of folder ids hidden from this viewer — private folders owned

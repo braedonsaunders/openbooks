@@ -1,6 +1,6 @@
 import 'server-only'
 import { sql } from 'drizzle-orm'
-import { db, type SqlExecutor } from '@openbooks/engine/src/platform/db.ts'
+import { db } from '@openbooks/engine/src/platform/db.ts'
 
 /**
  * File Cabinet activity logging — writes to the shared immutable `audit_log`.
@@ -11,52 +11,7 @@ import { db, type SqlExecutor } from '@openbooks/engine/src/platform/db.ts'
  * Pass `executor` (a transaction) so evidence commits or rolls back atomically
  * with the mutation it describes; without one it writes on the pooled db.
  */
-export type FileEvent =
-  | 'create'
-  | 'upload'
-  | 'rename'
-  | 'move'
-  | 'replace'
-  | 'delete'
-  | 'purge'
-  | 'restore'
-  | 'update'
-  | 'share'
-  | 'unshare'
-
-const EVENT_ACTION: Record<FileEvent, 'insert' | 'update' | 'delete'> = {
-  create: 'insert',
-  upload: 'insert',
-  rename: 'update',
-  move: 'update',
-  replace: 'update',
-  delete: 'delete',
-  purge: 'delete',
-  restore: 'update',
-  update: 'update',
-  share: 'update',
-  unshare: 'update',
-}
-
-export async function recordFileEvent(input: {
-  orgId: string
-  actorId: string | null
-  table: 'folders' | 'files' | 'file_attachments'
-  rowId: string
-  action: FileEvent
-  changes?: Record<string, unknown>
-  /** Transaction seam (same shape as recordTransactionAudit's runner): pass the
-   *  caller's tx so a failed insert rolls back the mutation it evidences. */
-  executor?: SqlExecutor
-}): Promise<void> {
-  const executor = input.executor ?? db
-  await executor.execute(sql`
-    insert into audit_log (org_id, table_name, row_id, action, changes, actor_id, at)
-    values (${input.orgId}, ${input.table}, ${input.rowId}, ${EVENT_ACTION[input.action]},
-            ${JSON.stringify({ event: input.action, ...(input.changes ?? {}) })}::jsonb,
-            ${input.actorId}, now())
-  `)
-}
+export { recordFileEvent, type FileEvent } from '@openbooks/engine/src/platform/file-audit.ts'
 
 export type FileActivityEntry = {
   id: string
