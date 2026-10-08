@@ -393,9 +393,7 @@
       "configureProjectTypes": "配置项目类型"
     },
     "board": {
-      "aria": "预开票阶段",
-      "showAll": "显示全部 {count} 项",
-      "closedSummary": "显示最近 {shown} 条，共 {count} 条。表格包含所有匹配项。"
+      "aria": "预开票阶段"
     },
     "stages": {
       "unbilled": "待预开票",
@@ -436,8 +434,7 @@
       "open": "未收 {amount}"
     },
     "table": {
-      "stageFilter": "按阶段筛选",
-      "allOpen": "全部未完成",
+      "stageFilter": "工作流程阶段",
       "emptyTitle": "此阶段没有内容",
       "emptyDescription": "请选择其他阶段或清除搜索。",
       "worksheet": "工作表",
@@ -446,7 +443,7 @@
       "stage": "阶段",
       "amount": "金额",
       "openBalance": "未收余额",
-      "scope": "待预开票行是项目，其他行是工作表。数量和总额随搜索条件变化。所有未完成项不包含已付款和已作废项。",
+      "scope": "待预开票列出项目，其他阶段列出工作表。数量和总额按搜索条件及所选阶段显示。",
       "total": "匹配工作的总额"
     },
     "billRun": {

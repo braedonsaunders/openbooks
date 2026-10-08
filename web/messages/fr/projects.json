@@ -393,9 +393,7 @@
       "configureProjectTypes": "Configurer les types de projet"
     },
     "board": {
-      "aria": "Étapes de préfacturation",
-      "showAll": "Afficher les {count}",
-      "closedSummary": "Affichage des {shown} derniers sur {count}. Le tableau comprend tous les résultats."
+      "aria": "Étapes de préfacturation"
     },
     "stages": {
       "unbilled": "À préfacturer",
@@ -436,8 +434,7 @@
       "open": "{amount} restant"
     },
     "table": {
-      "stageFilter": "Filtrer par étape",
-      "allOpen": "Toutes les ouvertes",
+      "stageFilter": "Étape du processus",
       "emptyTitle": "Rien à cette étape",
       "emptyDescription": "Choisissez une autre étape ou effacez la recherche.",
       "worksheet": "Feuille",
@@ -446,7 +443,7 @@
       "stage": "Étape",
       "amount": "Montant",
       "openBalance": "Solde restant",
-      "scope": "Les lignes à préfacturer sont des projets ; les autres sont des feuilles de travail. Les nombres et totaux suivent la recherche. Tous les ouverts exclut Payé et Annulé.",
+      "scope": "À préfacturer affiche les projets ; les autres étapes affichent les feuilles de travail. Les nombres et totaux suivent la recherche et l’étape sélectionnée.",
       "total": "Total du travail correspondant"
     },
     "billRun": {

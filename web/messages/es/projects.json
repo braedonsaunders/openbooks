@@ -393,9 +393,7 @@
       "configureProjectTypes": "Configurar tipos de proyecto"
     },
     "board": {
-      "aria": "Etapas de prefacturación",
-      "showAll": "Ver las {count}",
-      "closedSummary": "Se muestran los últimos {shown} de {count}. La tabla incluye todas las coincidencias."
+      "aria": "Etapas de prefacturación"
     },
     "stages": {
       "unbilled": "Por prefacturar",
@@ -436,8 +434,7 @@
       "open": "{amount} pendiente"
     },
     "table": {
-      "stageFilter": "Filtrar por etapa",
-      "allOpen": "Todas las abiertas",
+      "stageFilter": "Etapa del flujo de trabajo",
       "emptyTitle": "Nada en esta etapa",
       "emptyDescription": "Elija otra etapa o borre la búsqueda.",
       "worksheet": "Hoja",
@@ -446,7 +443,7 @@
       "stage": "Etapa",
       "amount": "Importe",
       "openBalance": "Saldo pendiente",
-      "scope": "Las filas pendientes de prefacturación son proyectos; las demás son hojas de trabajo. Los recuentos y totales siguen la búsqueda. Todos los abiertos excluye Pagado y Anulado.",
+      "scope": "Por prefacturar muestra proyectos; las demás etapas muestran hojas de trabajo. Los recuentos y totales siguen la búsqueda y la etapa seleccionada.",
       "total": "Total del trabajo coincidente"
     },
     "billRun": {

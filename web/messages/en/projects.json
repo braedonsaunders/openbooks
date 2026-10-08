@@ -393,12 +393,10 @@
       "configureProjectTypes": "Configure project types"
     },
     "board": {
-      "aria": "Pre-billing stages",
-      "showAll": "Show all {count}",
-      "closedSummary": "Showing the latest {shown} of {count}. The table includes every match."
+      "aria": "Pre-billing stages"
     },
     "stages": {
-      "unbilled": "To prebill",
+      "unbilled": "To pre-bill",
       "draft": "Draft",
       "review": "In approval",
       "ready": "Ready to invoice",
@@ -436,8 +434,7 @@
       "open": "{amount} open"
     },
     "table": {
-      "stageFilter": "Filter by stage",
-      "allOpen": "All open",
+      "stageFilter": "Workflow stage",
       "emptyTitle": "Nothing in this stage",
       "emptyDescription": "Pick another stage, or clear the search.",
       "worksheet": "Worksheet",
@@ -446,7 +443,7 @@
       "stage": "Stage",
       "amount": "Amount",
       "openBalance": "Open balance",
-      "scope": "To prebill rows are projects; other rows are worksheets. Counts and totals follow the search. All open excludes Paid and Void.",
+      "scope": "To pre-bill lists projects; other stages list worksheets. Counts and totals follow the search and selected stage.",
       "total": "Total matching work"
     },
     "billRun": {
