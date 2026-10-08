@@ -35,7 +35,7 @@ test('same-route server navigation shows the native logo while preserving conten
   await act(async () => onRouterTransitionStart('/projects/pre-billing?stage=approved'))
   await waitForFeedback()
   assert.equal(content.querySelectorAll('[data-navigation-pending]').length, 1)
-  assert.ok(content.querySelector('[data-navigation-pending] svg .brand-stroke-loop'))
+  assert.ok(content.querySelector('[data-navigation-pending] svg .brand-stroke-draw'))
   assert.equal(content.querySelector('[role="status"]')?.textContent, 'Loading…')
   assert.equal(content.querySelector('input'), input)
   assert.equal(input.value, 'Unsaved worksheet')

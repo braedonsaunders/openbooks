@@ -294,6 +294,62 @@
   }
 }
 
+/* Pending feedback belongs to the content pane; the application shell and
+   mounted form state stay in place beneath a soft, non-interactive veil. */
+.page-pending-surface {
+  isolation: isolate;
+  background: radial-gradient(ellipse at center, rgb(240 253 250 / 0.86), rgb(248 250 252 / 0.62) 42%, rgb(226 232 240 / 0.32));
+  backdrop-filter: blur(1.5px);
+  animation: page-pending-in 180ms ease-out both;
+}
+.dark .page-pending-surface {
+  background: radial-gradient(ellipse at center, rgb(19 78 74 / 0.42), rgb(15 23 42 / 0.68) 42%, rgb(2 6 23 / 0.48));
+}
+.page-pending-logo {
+  position: relative;
+  width: 5rem;
+  height: 5rem;
+  filter: drop-shadow(0 3px 8px rgb(15 118 110 / 0.12));
+}
+.page-pending-logo::before {
+  content: "";
+  position: absolute;
+  inset: -1rem;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgb(45 212 191 / 0.18), rgb(45 212 191 / 0.06) 48%, transparent 72%);
+  animation: page-pending-halo 3.2s ease-in-out infinite;
+}
+.dark .page-pending-logo::before {
+  background: radial-gradient(circle, rgb(45 212 191 / 0.22), rgb(45 212 191 / 0.08) 48%, transparent 72%);
+}
+.page-pending-logo .brand-stroke-draw {
+  animation:
+    brand-draw 0.5s cubic-bezier(0.4, 0, 0.2, 1) var(--bd, 0s) backwards,
+    brand-cycle 4.8s linear calc(var(--bd, 0s) + 2.4s) infinite;
+}
+.page-pending-logo .brand-ray-draw {
+  animation:
+    brand-draw 0.35s ease-out var(--bd, 0s) backwards,
+    brand-ray-cycle 4.8s linear calc(var(--bd, 0s) + 2.4s) infinite,
+    brand-pulse 2s ease-in-out var(--bp, 0s) infinite;
+}
+@keyframes page-pending-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes page-pending-halo {
+  0%, 100% { opacity: 0.65; transform: scale(0.94); }
+  50% { opacity: 1; transform: scale(1.06); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .page-pending-surface,
+  .page-pending-logo::before,
+  .page-pending-logo .brand-stroke-draw,
+  .page-pending-logo .brand-ray-draw {
+    animation: none;
+  }
+}
+
 /* Published rich-text rendering (RichContent): hide editing artifacts — comment
    highlights and tracked deletions — and show insertions as plain accepted text,
    matching the PDF output. */
