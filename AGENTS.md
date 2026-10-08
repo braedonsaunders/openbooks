@@ -1,289 +1,86 @@
 # Repository Engineering Standards
 
-## Development throughput and combined verification
+## Working priorities and verification
 
-At least 95% of agent working time must go to writing product code, diagnosing
-and fixing defects, configuring or operating the application, and completing
-business workflows such as payroll. Defect diagnosis and implementation belong
-in this 95%. CI, build and test execution, orchestration, monitoring, and other
-auxiliary administration may consume at most 5% of agent working time.
+- Spend at least **95% of agent working time** implementing product code, diagnosing and fixing defects, or configuring and operating the application and business workflows. CI, build/test execution, orchestration, monitoring and auxiliary administration are capped at **5%**. Defect diagnosis and fixes belong in the 95%.
+- Batch coherent changes into **one agreed source tree and one coordinated verification pass**. Independent per-feature, per-thread or per-worktree builds, tests, typechecks, browser QA and CI are prohibited on every machine. Use focused checks for changed behavior and its callers; run broad suites in the background at substantial milestones or release requirements, not after every small commit.
+- Continue productive work while checks run. Unrelated known failures do not block scoped business work. Report unrun or incomplete checks accurately; every passing result identifies its actual source SHA and partition. Reused evidence retains its original identity.
+- Keep shared applications, source synchronization, tunnels and databases running. Stop only jobs you own, through normal controls. Preserve others' uncommitted and unpushed work; never reset shared refs or overwrite unrelated changes. Pass these policies to workers and successors.
 
-Batch coherent ready changes instead of launching a massive suite after every
-small commit. Choose focused checks for the changed behavior, its direct callers,
-and relevant isolation, refusal, accounting and rollback controls. Run broad
-suites in the background at substantial milestones or release requirements;
-continue productive work rather than repeatedly polling or waiting on CI.
-Unrelated known failures must not block scoped business work. Retain each
-reused result's original source SHA and partition; never present it as a fresh
-pass on a different tree.
+## Financial-institution-grade ERP
 
-Independent builds and test runs are prohibited on every machine. Integrate
-ready changes into one agreed source tree, then perform one coordinated build
-and test pass against that combined tree. Do not run separate per-feature,
-per-thread, or per-worktree builds, tests, browser QA, typechecks, verification
-matrices, or CI passes.
+Every product, data-model, architecture, API, UI and security decision must preserve financial integrity, auditability, deterministic behavior and long-term operability.
 
-Continue source implementation and review, write necessary tests, and checkpoint
-coherent commits for integration. Report pending verification accurately; do
-not claim unrun checks passed. Stop only verification jobs you own through their
-normal controls, preserving source and evidence. Keep the shared development
-application, source synchronization, tunnels, and databases running. Available
-memory or a scheduler slot does not authorize independent verification. Pass
-this rule to current workers and successors before they begin work.
+- Enforce organization and legal-entity isolation, permissions and feature dependencies in services and APIs, not only the UI.
+- Keep accounting balanced, deterministic and idempotent. Posted history is immutable; correct it through governed reversals or adjusting entries.
+- Audit material configuration and transactions with actor, timestamp, before/after state and an appropriate reason.
+- Define lifecycle transitions, approvals, segregation of duties and concurrency controls explicitly.
+- Effective-date financial policies so changes cannot reinterpret historical transactions. Maintain one authoritative source for each policy; avoid overlapping configuration and company-specific hardcoding.
+- Use exact decimal/currency arithmetic, never floating-point financial calculations. Missing required configuration must refuse explicitly, not silently become zero or a fallback.
+- Preserve tenant data through backward-compatible migrations and controlled, recoverable rollout procedures.
+
+## Architecture and code ownership
+
+| Location | Responsibility |
+| --- | --- |
+| `engine/src/<module>/` | Domain services and invariants; modules and dependencies declared in `engine/src/modules.json` |
+| `web/app/`, `web/components/`, `web/lib/` | Pages, API boundaries, shared UI and application composition |
+| `schema/src/`, `schema/migrations/` | Database definitions and versioned migrations |
+| `packages/` | Shared capabilities such as reports, PDF output and email templates |
+| `docs/design/engine-modules.md` | Engine dependency and module-boundary rules |
+
+- No files at `engine/src` root. Import only declared modules; unused dependencies and module cycles are prohibited. Extract internals within their module and place shared types/constants in a lower dependency layer.
+- Reuse native commands and domain services across UI, API, imports and jobs; do not duplicate financial logic or bypass their authorization and lifecycle controls.
+- Use typed request schemas and native identifier/date/decimal helpers. Validate references against the actual subject, organization, legal entity, jurisdiction and effective date.
+
+## Writes, refusals and tests
+
+- Check affected rows. A required write matching zero rows is a failure; success must be observable through the native read/resolution path. Use `ON CONFLICT DO NOTHING` only for an explicitly documented benign conflict.
+- Propagate domain refusals to the operator with an actionable, supported remedy. Check response status before parsing error bodies; preserve the original cause rather than replacing it with an unrelated error.
+- Fail closed when resource identity or required configuration is unknown. Comments and remedies must describe mechanisms that actually exist.
+- Test meaningful invariants, realistic refusals, isolation, replay, rollback and concurrency where relevant. Mock external boundaries, not pure validation or domain logic. A selected test file registering zero tests is a failure.
+- When changing algorithms or refusal conditions, review properties of the old behavior beyond the import graph. When consolidating implementations, preserve the behavioral coverage of both.
 
 ## Shared database migrations
 
-Apply migrations to shared evaluation and deployed databases only through the
-authorized native bootstrap/migration runner, which records each published
-filename and digest in the migration ledger. Do not execute migration files or
-ad-hoc schema DDL directly through a database client on those databases.
+- Apply shared/deployed database changes only through the authorized native bootstrap/migration runner, which records published filename and digest. Never execute migration SQL or ad-hoc schema DDL directly against these databases.
+- Published migration bytes are immutable. Reserve forward changes through the existing allocation mechanism; retain verified backup and relevant before/after preservation evidence.
+- If objects exist without matching ledger entries, stop and preserve them and tenant data. Compare all affected columns, constraints, indexes, functions and triggers with published SQL before proposing reconciliation. Obtain the database owner's approval; never fabricate ledger entries or drop/recreate objects to force progress.
 
-If schema objects exist without a matching ledger entry, stop the rollout and
-preserve the objects and tenant data. Compare every affected column, constraint,
-index, function and trigger with the exact published migration before proposing
-ledger reconciliation. Obtain the database owner's approval for that
-reconciliation; do not invent an application record, rewrite published bytes,
-or drop and recreate existing objects to make the runner proceed. Pass this
-rule to current workers and successors.
+## Professional product code
 
-## Financial-institution-grade ERP standard
+- Code, comments, test titles, migrations and documentation must read as public SaaS engineering. Comments explain product guarantees and reasons, not incident stories or development history.
+- Keep internal tracking IDs, agent/thread identities and work-process terminology out of the product tree. Internal audits, triage and verification reports belong outside the repository.
+- Migration comments describe only the schema change and rationale. Prefer concise durable standards over anecdotes and repeated explanations.
 
-All product, domain, data-model, code, API, UI, security, workflow, and architecture decisions in this repository must meet financial-institution-grade enterprise ERP standards. Prefer financial integrity, explicit controls, auditability, deterministic behavior, and long-term operability over implementation convenience.
+## Feature gates and configuration
 
-At minimum, designs and implementations must preserve:
+- **Company Settings → Features** is the single authoritative organization-level switchboard. Module settings may show effective status and link to it, but must not persist another gate.
+- Projects is the parent gate for all project capabilities, including costing, billing, project types, progress billing, retainage, labor pricing/reporting and Field Tickets. Enforce parent/child dependencies in navigation, pages, APIs, services, jobs and configuration writes. Disabling features preserves data and audit history.
+- Configurable policies belong in the Setup registry with editable UI and explicit scope/effective dates, not hardcoded business-specific behavior.
 
-- strict organization and legal-entity isolation;
-- balanced, deterministic, idempotent accounting and posting behavior;
-- immutable posted history, with corrections performed through controlled reversals or adjusting entries;
-- complete audit evidence for material configuration and transactional changes, including actor, timestamp, before/after state, and reason where appropriate;
-- explicit lifecycle states, transition rules, approvals, permissions, segregation of duties, and safe concurrency controls;
-- effective-dated configuration where changing a rule could otherwise reinterpret historical transactions;
-- precise decimal and currency handling with no floating-point financial arithmetic;
-- enforced invariants and feature dependencies at the domain/service and API boundaries, not only by hiding UI;
-- backward-compatible migrations, preserved tenant data, and reversible operational rollout plans;
-- clear ownership and a single source of truth for every financial policy and configuration value.
+## Reuse-first: shared product machinery
 
-Do not introduce silent financial fallbacks, ambiguous overlapping configuration, UI-only enforcement, destructive feature toggles, or parallel sources of truth.
+Before building a surface, identify its existing exemplar and use the same composition. Extend shared components when needed; do not fork lists, reports, drawers or settings screens.
 
-## A refusal that is computed must be raised
+| Need | Native machinery / exemplar |
+| --- | --- |
+| Reports and tabular analysis | `report_definitions` + `packages/reports`; `ReportFilterBar`, `ReportPaper`/`PaperView`, `ExportMenu`, `SaveViewButton`; `web/app/(app)/reports/pnl/page.tsx` |
+| Lists | `RecordListView` for documents; `PagedTable` + list source registry for other records |
+| Module landing | Module-home cockpit and group tabs in `web/components/module-home/`; Purchasing exemplar |
+| Record detail | `UrlDrawer` / `Drawer`; native party and document drawers |
+| Settings | `web/lib/setup/registry.ts`, `/admin/setup`, `SetupEntitySection` |
+| API boundaries | `defineRoute` in `web/lib/api/route.ts`; native permission, feature and typed-body contracts |
+| Organization context | `engine/src/platform/db.ts` context/transaction helpers; native authorization in `web/lib/authz-core.ts` and `web/lib/authz-context.ts` |
+| Printable output | `web/lib/pdf-templates/` + `packages/pdf`; invoice PDF composition |
+| Outbound email | `packages/emails` + `engine/src/delivery/email-config.ts` |
+| Menus and prompts | `ContextMenu` / `useContextMenu`, `promptDialog` |
+| People and companies | Native `parties` model and role views; no parallel roster |
+| Financial arithmetic | Bigint helpers in `engine/src/money/money.ts` |
+| Decimal refusals | `web/lib/payroll-decimal-refusal.ts`: `decimalNullRefusal`, `decimalNullCause`, `suppliedValue`; no second classifier or separator coercion |
 
-This repository's most common defect is not a wrong answer. It is a CORRECT
-answer that never reaches anyone. The code detects the problem, composes an
-accurate message naming the remedy, and then the refusal is dropped on the way
-out — so the operator sees success, or silence, or an error about something
-else entirely. Six instances were found in six unrelated subsystems in a single
-night:
-
-- a partially-refused pay run committed and posted anyway;
-- an unconfigured SUI rate accrued 0.00 instead of refusing by name;
-- a mis-scoped statutory rate saved, reported `{ok}`, and resolved to `null`,
-  so the engine priced the levy as unconfigured forever;
-- one country's payroll component silently absorbed another's via
-  `on conflict do nothing`, and each remap erased the other's;
-- a New York certificate could be filed against a California employee, so the
-  employee withheld by the wrong state's table;
-- a delete refusal was delivered as a 500 and the client called `res.json()`
-  before checking `res.ok`, so the operator read a JSON parse error and no
-  human has ever seen the message.
-
-The rules that follow are not style. Each one is a place a refusal was lost.
-
-- **A write that matches zero rows is a failure, not a success.** Check the
-  affected row count and throw. Under RLS an unscoped `UPDATE`/`DELETE`
-  silently matches nothing and reports success — the most dangerous shape here.
-- **Never report `{ok}` for work whose effect no read can observe.** If a save
-  stores a row that resolution cannot find, the save was not a save.
-- **`on conflict do nothing` must be justified in a comment or not used.** It
-  is the quietest way to drop a write. Say why a conflict is expected and
-  benign, or handle it.
-- **Fail closed on unconfigured inputs that are always owed.** Prefer refusing
-  by name over accruing zero. Zero is indistinguishable from "correctly nil".
-- **Validate against the subject, not only the declaration.** A form scoped to
-  a jurisdiction must be checked against the EMPLOYEE's jurisdiction, not only
-  against its own metadata.
-- **Error bodies are checked before they are parsed.** `if (!res.ok)` first,
-  always; `await res.json()` on an error path turns a refusal into a parse
-  error.
-- **Prose asserting a guarantee is a claim about code.** A comment saying a
-  lock prevents X, or a message saying "do X instead", is load-bearing: it is
-  the only evidence a reader has that the mechanism exists. Verify it against
-  the code, and when the code changes, THE CLAIM IS PART OF THE CHANGE. These
-  survive review because a claim about an ABSENT mechanism contradicts nothing
-  — there is no code to compare it against, and absence is invisible. That is
-  why "review more carefully" does not catch them: the reviewer is checking for
-  contradiction, and there is none to find. Confirm the mechanism exists.
-- **A refusal must name the remedy, and the remedy must exist.** This is the
-  sharpest case of the rule above, because a user ACTS on a remedy: a wrong
-  comment misleads the next author, but a wrong remedy makes the operator
-  destroy the thing the refusal was protecting, holding the product's own
-  instructions. Before writing "do X instead", read the code that does X.
-
-Corresponding test rules, because every one of the above was green somewhere:
-
-- A file reporting ZERO tests is a failure, not a pass. A test double missing
-  an export the module imports makes that module fail to LINK, and the runner
-  reports no tests rather than a failure.
-- A red-proof shows the test FIRES; it does not show the failure MESSAGE is
-  usable. The message is the entire product of a failing test — nobody reads a
-  passing assertion. A conformance test whose red said `declared by both CA and
-  CA` named the country twice and identified neither schedule, and was read as
-  success because the red arrived on cue. Corollary: a SYNTHETIC collision
-  proves the assertion fires, a REALISTIC one proves the message reads —
-  duplicating the same object cannot expose a message that fails to tell two
-  objects apart.
-- A test double that cannot produce the REFUSAL is not a test of the refusal.
-  This is the quiet complement of the rule above: a double missing an export
-  fails loudly, but a double that is too PERMISSIVE reports passes. A
-  `parseJsonBody` stub taking `(request)` instead of `(request, schema)` and
-  returning `{ ok: true }` unconditionally made every boundary test in two
-  files hollow — only the two asserting a 400 ever revealed it. Never double a
-  PURE function: it has nothing to isolate, so the copy can only drift from
-  the original. Mock the database, the clock, the network, authz — not
-  validation.
-- A guard's own tests must assert the property worth guarding, never the
-  guard's current reach. If a guard test would still pass when the guard goes
-  blind, it is not testing the guard. A control that reads an ambient
-  environment variable must treat UNSET as unknown and fail closed: an apply
-  guard keyed on `NODE_ENV !== "production"` proceeds when nothing is set,
-  which is precisely the state a hand-run maintenance script is in. Prefer
-  deciding from the resource the operator had to name explicitly — the
-  database URL — over a process variable they can forget.
-- Any commit changing an ALGORITHM or a REFUSAL CONDITION must be grepped for
-  tests asserting PROPERTIES of the old behaviour, separately from tests that
-  IMPORT the changed code. The import graph will not find them.
-- When two changes independently implement the same surface, the loser's tests
-  are the spec for what the winner must not drop. Run them against the winner
-  before deleting them. The trigger is two implementations of one surface —
-  not a git conflict, which is merely the easy case.
-- Every green names the TREE it was measured on, by sha, and the PARTITION it
-  ran in. A green whose tree no longer exists is not evidence, and a count
-  without a partition means nothing here: DB-owned tests skip silently in the
-  unit partition. `git reset --hard origin/main` on a ref shared across
-  worktrees discards other agents' unpushed commits and deletes their tracked
-  files — run `git log --oneline origin/main..main` first and treat a
-  non-empty result as someone's work, not debris.
-
-## Engine modules are bounded
-
-`engine/src` is a set of declared modules (one directory each, manifest at
-`engine/src/modules.json`, rules in `docs/design/engine-modules.md`). No file
-lives at `engine/src` root; a module imports only the modules it declares;
-declared-but-unused edges and any import cycle between modules are refused by
-`npm run check:engine-boundaries`. Extract internals into the same module as
-their source; put a shared constant or type LOWER rather than adding an upward
-edge.
-
-## Code reads as a professional product
-
-This is a public SaaS codebase. Everything in the tree, including code, comments,
-test titles, migration SQL, docs and CHANGELOG, must read as professional
-product engineering to an outside reader.
-
-- Never write internal work-tracking identifiers into the tree: finding or
-  ticket ids (for example `I5-platform-23`, `AC-webui-3`, `CI4-...`), agent or
-  thread ids, or process vocabulary such as fleet, shard, wave, coordinator or
-  integrator. Those belong in commit messages and the issue tracker only.
-- A comment explains the product reason in plain language: what the code
-  guarantees and why. It does not record who found a bug, in which audit
-  pass, or under which ticket.
-- Migrations are fingerprinted once published, so a careless comment in one is
-  permanent. Keep migration comments to the schema change and its rationale.
-- Internal reports (audits, verification write-ups, defect trackers, triage
-  notes) never live in the repository. `.gitignore` excludes their usual
-  locations.
-
-## Feature-gate hierarchy
-
-Every organization-level feature gate must live on the single authoritative **Company Settings → Features** switchboard, without exceptions. Module-specific settings pages may display effective feature status and link to the Features page, but must not expose a second switch or persist a parallel gate. The main Projects gate on the Features page is the authoritative parent gate for the entire Projects domain.
-
-Project capabilities such as job costing, project types, project billing, construction-style progress billing, schedules of values, change orders, applications for payment, retainage, labor costing/pricing, project reporting, and Field Tickets are subordinate Projects capabilities. Their gates, where a separate gate exists, must also live on the Features page and must not be independently available when the Projects parent gate is off. Enforce that dependency in the Features UI, navigation, pages, APIs, services/jobs, and configuration writes. Turning a feature off must preserve its data and audit history.
-
-## Reuse-first: never rebuild what the app already has
-
-Every module composes the SAME shared machinery. A new feature that hand-rolls
-its own list, report, filter bar, drawer, or settings screen is wrong even if
-it works. Before building ANY new user-facing surface, name the existing
-exemplar page and copy its composition exactly — "looks similar" is not the
-bar; it must BE the same component.
-
-| Need | Use | Exemplar |
-| --- | --- | --- |
-| Any report | Report engine: `report_definitions` + `packages/reports` entities/built-ins, rendered by `ReportFilterBar` + `ReportPaper`/`PaperView` + `ExportMenu` + `SaveViewButton` | `web/app/(app)/reports/pnl/page.tsx` |
-| Any list page | `RecordListView` (documents) or `PagedTable` + list source registry | any documents list |
-| Module landing | Module-home cockpit + group-tabs strip (`web/components/module-home/`) | `/purchasing` |
-| Record detail popups | `UrlDrawer` / `Drawer` flyouts — never expanded table rows | party/document drawers |
-| Org settings | Setup registry (`web/lib/setup/registry.ts`) → `/admin/setup` tabs, or `SetupEntitySection` rehomed onto the module | tax setup |
-| Printable record output | PDF template designer (`web/lib/pdf-templates/*` + `packages/pdf`) | invoice PDFs |
-| Outbound email | `packages/emails` templates + per-org transport (`engine/src/delivery/email-config.ts`) | record send dialog |
-| Menus/prompts | `ContextMenu`/`useContextMenu`, `promptDialog` | existing usages |
-| People/companies | The native `parties` model + role views (`/entities/employees` …) — never a parallel roster | entities pages |
-| Numbers | `engine/src/money/money.ts` bigint helpers — never floats | everywhere |
-| Refusing an unreadable amount | `web/lib/payroll-decimal-refusal.ts` (`decimalNullRefusal`, `decimalNullCause`, `suppliedValue`) — **never a second decimal classifier** | `payroll/profiles`, `payroll/runs/[id]` |
-
-**Why that last row is a rule and not a preference.** `canonicalDecimal` returns
-null for SEVEN different reasons — too many decimal places, thousands
-separator, decimal comma, ambiguous comma, currency symbol, scientific
-notation, genuinely non-numeric — and they need seven different remedies. The
-dangerous one: seven of the fourteen payroll packs are decimal-comma locales
-(IT, FR, DE, NL, ES, PL, BR), so `12,34` is twelve-thirty-four written
-CORRECTLY, and telling that operator to "remove the thousands separator" makes
-them enter 1234 — a **100x error in a payroll amount**. `1.234,56` is worse: the
-naive advice walks them to 1.2346 for 1234.56, a 1000x error. The rule that
-resolves it is "when a dot and a comma both appear, the LAST one is the decimal
-point", and a genuinely ambiguous `1,234` must be refused as ambiguous with
-both readings named rather than guessed. That logic took three rounds to get
-right and is covered by tests. Never strip or coerce a separator to be helpful:
-refuse with a precise remedy, because guessing what someone meant is how you
-store a number nobody typed.
-
-Corollaries:
-
-- Tabular/analytical output is a **report** in the report engine — first-class
-  in the Reports hub with the native filter bar (period picker included),
-  never a bespoke screen. Module pages may LINK to it; module-specific UI
-  stays in the module.
-- Anything reasonably configurable is a Setup-registry setting with an
-  editable UI — never hardcoded.
-- New UI matches house chrome: `PageHeader`, the group-tab switcher in the
-  same position as sibling pages, shared layouts (`ListPageLayout` /
-  `DetailPageLayout`), one house-style New button, no duplicate header actions.
-- When a shared component almost fits, extend it (new prop/slot) — never fork
-  it or approximate it with local markup.
-- **Related concepts belong together through a clear parent–child workflow,
-  never through two stacked tables.** Keep the parent in context and reveal
-  its children when the operator selects it: use the shared record drawer or
-  a focused master–detail pane with an explicit selected-parent heading.
-  Child records must be scoped to that parent, and changing the selection
-  must change the child context. Prefer this composition when it makes the
-  relationship easier to understand and reduces navigation.
-- **One independent entity or concept table per active body.** Separate
-  unrelated or peer concepts with the shared tab/subtab machinery, or open
-  related records in a drawer. Never stack independent tables, grids, or
-  entity-list sections vertically. Channel posting accounts, location
-  mappings, and ad spend are peer Settings concepts. Product-family variants
-  and pricing need a clear parent–child interaction or separate drawer tabs.
-  Cards, headings, and collapsed disclosures do not make stacked concept
-  tables acceptable. Summary values and controls for the active concept may
-  sit beside its table; another independent table needs its own active view.
-- Review the rendered composition, including lists hidden inside child
-  components, rather than approving each component in isolation. Before
-  calling a page or drawer complete, name each concept and its relationship.
-  Verify that tabs replace the active body, or that selecting a parent opens
-  only that parent's children with the relationship visibly named. Check
-  populated and empty states at both desktop viewport sizes. Preserve URL
-  navigation, permissions, drafts, and create/save/reopen flows.
-- An asynchronously loaded record uses **one drawer shell**. A native record
-  component that owns its dialog mounts once its full payload is ready (see
-  `web/components/list-drawer-host.tsx`); never wrap it in a loading dialog.
-  A host that owns the shell keeps that shell mounted through
-  loading, success, refusal and retry. Use `web/components/async-url-drawer.tsx`
-  for URL-driven async drawers; change its body and chrome when data arrives.
-  Never branch between a skeleton `Drawer`/`UrlDrawer` and a loaded component
-  that creates a second drawer. The request key identifies the record, not
-  the loading phase. Verify that the same dialog DOM node survives resolution
-  and retry, with focus and scroll lock retained. The audit event host at
-  `web/app/(app)/admin/audit/AuditEventHost.tsx` is the exemplar.
-
-Litmus test before writing code: "Which existing screen already does this kind
-of thing, and am I using its exact components?" If you cannot name the
-exemplar file, stop and go find it.
+- Analytical tables are first-class reports in the Reports hub with native filters and period selection. Module pages link to them.
+- Match house chrome: `PageHeader`, group tabs, `ListPageLayout` / `DetailPageLayout`, one primary New action.
+- Show **one independent concept per active body**. Peer concepts use tabs that replace the body. Related children use a selected-parent drawer or master–detail view, visibly scoped to that parent; never stack independent tables.
+- Async records use **one drawer shell** through loading, success, refusal and retry. Use `web/components/async-url-drawer.tsx` for host-owned shells or `web/components/list-drawer-host.tsx` for record-owned shells; `web/app/(app)/admin/audit/AuditEventHost.tsx` is the host exemplar.
+- Review populated and empty compositions at relevant desktop sizes, including nested components. Preserve URL navigation, permissions, drafts, create/save/reopen flows, focus and scroll lock.
