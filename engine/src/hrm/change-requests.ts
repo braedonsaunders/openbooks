@@ -1699,8 +1699,8 @@ async function assertHistoricalStatusWindow(
   if (!payload.historicalObservation || end === null || end > await businessTodayInTx(exec, orgId)) {
     throw new HrmChangeRequestError("REFUSED", "Record a bounded historical status window ending before the current business day; use an ordinary status change for current employment.");
   }
-  const subject = (await exec.execute<{ worker_party_id: string }>(sql`
-    select worker_party_id from worker_employments where org_id=${orgId} and id=${employmentId}
+  const subject = (await exec.execute<{ worker_party_id: string; employer_subsidiary_id: string }>(sql`
+    select worker_party_id,employer_subsidiary_id from worker_employments where org_id=${orgId} and id=${employmentId}
   `)).rows[0];
   if (!subject) throw new HrmChangeRequestError("NOT_FOUND", "Select a saved employment in this organization.");
   // Payroll calculation and commit take this employee-wide fence before
@@ -1715,7 +1715,9 @@ async function assertHistoricalStatusWindow(
     join pay_stubs s on s.org_id=r.org_id and s.pay_run_document_id=r.document_id
     join documents d on d.org_id=r.org_id and d.id=r.document_id
     where r.org_id=${orgId} and s.employee_party_id=${subject.worker_party_id}
-      and r.run_status='committed' and d.status<>'voided'
+      and (s.employment_id=${employmentId} or (s.employment_id is null
+        and (d.subsidiary_id=${subject.employer_subsidiary_id} or d.subsidiary_id is null)))
+      and r.run_status='committed'  and d.status<>'voided'
       and ((r.period_start<${end}::date and r.period_end>=${payload.effectiveFrom}::date)
         or (r.pay_date>=${payload.effectiveFrom}::date and r.pay_date<${end}::date))
     limit 1
