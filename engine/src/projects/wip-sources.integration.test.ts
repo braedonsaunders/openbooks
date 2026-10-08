@@ -41,14 +41,20 @@ test("WIP ceilings preserve line project precedence, invoice fallback, credits a
         lines: readonly [string | null, string][]) => {
         const id = randomUUID();
         await db.execute(sql`insert into documents
-          (id,org_id,subsidiary_id,kind,status,document_number,document_date,currency,project_id,party_id,void_reason,voided_at,voided_by)
-          values(${id},${org.orgId},${org.subsidiaryId},${kind},${status},${`INV-${id}`},
-            ${date},'CAD',${project},${org.customerId},${status === 'voided' ? 'Cancelled duplicate invoice' : null},
-            ${status === 'voided' ? new Date('2026-07-15T12:00:00Z') : null},${status === 'voided' ? voidActor : null})`);
+          (id,org_id,subsidiary_id,kind,status,document_number,document_date,currency,project_id,party_id)
+          values(${id},${org.orgId},${org.subsidiaryId},${kind},'draft',${`INV-${id}`},
+            ${date},'CAD',${project},${org.customerId})`);
         for (const [index, [lineProject, amount]] of lines.entries()) {
           await db.execute(sql`insert into document_lines
             (id,org_id,document_id,line_number,account_id,amount,project_id)
             values(${randomUUID()},${org.orgId},${id},${index + 1},${org.accounts.revenue},${amount},${lineProject})`);
+        }
+        if (status === 'voided') {
+          const updated = await db.execute<{ id: string }>(sql`update documents
+            set status='voided', void_reason='Cancelled duplicate invoice',
+                voided_at='2026-07-15T12:00:00Z', voided_by=${voidActor}
+            where org_id=${org.orgId} and id=${id} returning id`);
+          assert.deepEqual(updated.rows.map(row => row.id), [id]);
         }
       };
       // A nonnull line project takes precedence even when its invoice belongs
