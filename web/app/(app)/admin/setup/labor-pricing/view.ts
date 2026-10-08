@@ -1,6 +1,6 @@
 import 'server-only'
 
-import { sql } from 'drizzle-orm'
+import { sql, type SQL } from 'drizzle-orm'
 import { getTranslations } from 'next-intl/server'
 import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
 import { db } from '@openbooks/engine/src/platform/db.ts'
@@ -54,10 +54,12 @@ export async function loadLaborPricing(
   // features page rather than rendering an empty shell.
   await requireProjectsFeature(authz.user.orgId)
   const orgId = authz.user.orgId
-  const today = await businessToday(orgId)
-  const subsidiaryUiEnabled = await subsidiaryFeatureEnabled(orgId)
-  const multiCurrency = await isFeatureEnabled(orgId, 'multiCurrency')
-  const t = await getTranslations('laborPricing')
+  const [today, subsidiaryUiEnabled, multiCurrency, t] = await Promise.all([
+    businessToday(orgId),
+    subsidiaryFeatureEnabled(orgId),
+    isFeatureEnabled(orgId, 'multiCurrency'),
+    getTranslations('laborPricing'),
+  ])
   const list = parseListParams(sp, {
     sort: 'effective',
     allowedSorts: ['effective'] as const,
@@ -67,6 +69,11 @@ export async function loadLaborPricing(
   const cardParam = pickString(sp.card)
   const selectedId =
     cardParam && cardParam !== 'new' && isUuid(cardParam) ? cardParam : null
+  // Editing options are consumed only by the selected-card drawer. Creation
+  // uses the native command and navigates to that card before editing it.
+  const drawerQuery = (query: SQL) => selectedId
+    ? db.execute(query)
+    : Promise.resolve({ rows: [] })
   const timeParam = pickString(sp.time)
   const timeFilter = timeParam === 'scheduled' || timeParam === 'expired' || timeParam === 'all' ? timeParam : 'active'
   const dimensionParam = pickString(sp.dimension)
@@ -165,43 +172,43 @@ export async function loadLaborPricing(
       join labor_rate_version_policies p on p.version_id=v.id and p.org_id=v.org_id
       where v.id=${selectedId} and v.org_id=${orgId}`)
       : Promise.resolve({ rows: [] }),
-    db.execute(
+    drawerQuery(
       sql`select id,name,kind,category from items where org_id=${orgId} and is_active order by name`,
     ),
-    db.execute(
+    drawerQuery(
       sql`select id,name,bill_multiplier from time_types where org_id=${orgId} and is_active order by bill_multiplier,name`,
     ),
-    db.execute(
+    drawerQuery(
       sql`select id,name from departments where org_id=${orgId} and is_active order by name`,
     ),
     db.execute(
       sql`select id,name,base_currency as currency from subsidiaries where org_id=${orgId} and is_active and not is_elimination order by name`,
     ),
-    db.execute(
+    drawerQuery(
       sql`select id,name from locations where org_id=${orgId} and is_active order by name`,
     ),
-    db.execute(
+    drawerQuery(
       sql`select id,name from classes where org_id=${orgId} and is_active order by name`,
     ),
-    db.execute(
+    drawerQuery(
       sql`select id,name from trades where org_id=${orgId} and is_active order by name`,
     ),
-    db.execute(
+    drawerQuery(
       sql`select distinct trim(job_title) name from employee_roles where org_id=${orgId} and is_active and nullif(trim(job_title),'') is not null order by name`,
     ),
-    db.execute(
+    drawerQuery(
       sql`select id,name from projects where org_id=${orgId} and is_active order by name`,
     ),
-    db.execute(
+    drawerQuery(
       sql`select p.id,p.display_name name from parties p join customer_roles c on c.party_id=p.id and c.org_id=${orgId} and c.is_active where p.org_id=${orgId} and p.is_active order by p.display_name`,
     ),
-    db.execute(
+    drawerQuery(
       sql`select distinct kind value from items where org_id=${orgId} and is_active and nullif(trim(kind),'') is not null order by value`,
     ),
-    db.execute(
+    drawerQuery(
       sql`select distinct category value from items where org_id=${orgId} and is_active and nullif(trim(category),'') is not null order by value`,
     ),
-    db.execute(
+    drawerQuery(
       sql`select distinct kind value from documents where org_id=${orgId} order by value`,
     ),
     db.execute(

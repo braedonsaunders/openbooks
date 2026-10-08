@@ -139,7 +139,12 @@ const SOURCES = {
     route: '/admin/page-layouts',
     rowsField: 'rows',
     rowKeyField: 'id',
-    mode: 'loaded',
+    mode: 'server',
+    paging: {
+      totalField: 'total',
+      pageField: 'currentPage',
+      perPageField: 'perPage',
+    },
   },
   admin_sandboxes: {
     route: '/admin/sandboxes',

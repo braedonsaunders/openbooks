@@ -10,6 +10,7 @@ import {
   link,
   page,
   pageHeader,
+  pagination,
   ref,
   rootRef,
   text,
@@ -17,7 +18,7 @@ import {
   type PageSpec,
 } from '@braedonsaunders/appkit-viewspec'
 import { requirePermission } from '../../../../lib/authz'
-import { pickString } from '../../../../lib/list-params'
+import { buildListDrawerHref, parseListParams, pickString } from '../../../../lib/list-params'
 import { NAV_GROUPS, NAV_MODULES } from '../../../../lib/nav/registry'
 import {
   describeFields,
@@ -29,7 +30,6 @@ import {
   PAGE_ROUTES,
 } from '../../../../lib/page-registry'
 import { listPageSpecs, loadPageSpec } from '../../../../lib/page-specs'
-import { RENDER_REGISTRIES } from '../../../../components/viewspec/registries'
 import type { PageSpec as Spec } from '@braedonsaunders/appkit-viewspec'
 
 /**
@@ -51,8 +51,6 @@ import type { PageSpec as Spec } from '@braedonsaunders/appkit-viewspec'
  * reports that instead of its layout — no escalation, and no separate
  * code path that could drift from what the page really does.
  */
-
-const registries = RENDER_REGISTRIES
 
 /** Nav label and group for a route, longest matching href first. */
 const NAV_BY_HREF = [...NAV_MODULES].sort(
@@ -120,6 +118,9 @@ export interface PageLayoutsData {
   emptyLabel: string
   summary: string
   rows: PageLayoutRow[]
+  total: number
+  currentPage: number
+  perPage: number
   drawerOpen: boolean
   drawer: PageLayoutDrawerData | null
 }
@@ -146,9 +147,10 @@ async function readLayout(
   t: Awaited<ReturnType<typeof getTranslations>>,
 ): Promise<PageLayoutDrawerData> {
   const entry = PAGE_REGISTRY[route]!
+  const { RENDER_REGISTRIES } = await import('../../../../components/viewspec/registries')
   // The reader's own layout wins here exactly as it does at render, so the
   // editor opens on the layout they are actually looking at.
-  const stored = await loadPageSpec(orgId, route, registries, userId)
+  const stored = await loadPageSpec(orgId, route, RENDER_REGISTRIES, userId)
   const base: PageLayoutDrawerData = {
     route,
     builtIn: null,
@@ -209,15 +211,18 @@ export async function loadPageLayouts(
   sp: Record<string, string | string[] | undefined>,
 ): Promise<PageLayoutsData> {
   const authz = await requirePermission('admin.customization.manage')
-  const t = await getTranslations('admin.pageLayouts')
-  const tHub = await getTranslations('admin.hub')
+  const [t, tHub, stored] = await Promise.all([
+    getTranslations('admin.pageLayouts'),
+    getTranslations('admin.hub'),
+    listPageSpecs(authz.user.orgId, authz.user.id),
+  ])
 
   // The org's layouts plus this reader's own — never a colleague's, which is
   // nobody else's business.
-  const stored = await listPageSpecs(authz.user.orgId, authz.user.id)
   const byRoute = new Map(stored.map((row) => [row.route, row]))
 
-  const search = (pickString(sp.q) ?? '').trim().toLowerCase()
+  const params = parseListParams(sp, { sort: 'route', allowedSorts: ['route'], perPage: 25 })
+  const search = (params.q ?? '').trim().toLowerCase()
   const status = pickString(sp.status) ?? ''
 
   const rows: PageLayoutRow[] = PAGE_ROUTES.map((route) => {
@@ -228,7 +233,7 @@ export async function loadPageLayouts(
       route,
       module,
       group,
-      href: `/admin/page-layouts?route=${encodeURIComponent(route)}`,
+      href: buildListDrawerHref('/admin/page-layouts', sp, 'route', route),
       statusLabel: override
         ? override.userId
           ? t('status.personal')
@@ -289,7 +294,10 @@ export async function loadPageLayouts(
       customized: byRoute.size,
       total: PAGE_ROUTES.length,
     }),
-    rows,
+    rows: rows.slice((params.page - 1) * params.perPage, params.page * params.perPage),
+    total: rows.length,
+    currentPage: params.page,
+    perPage: params.perPage,
     drawerOpen: drawerRoute !== null,
     drawer: drawerRoute
       ? await readLayout(
@@ -357,6 +365,12 @@ export function pageLayoutsSpec(data: PageLayoutsData): PageSpec {
             className: MUTED,
           }),
         ],
+      }),
+      pagination({
+        basePath: '/admin/page-layouts',
+        total: f('total'),
+        page: f('currentPage'),
+        perPage: f('perPage'),
       }),
       widgetBlock('page-layout-summary', { text: data.summary }),
       widgetBlock(
