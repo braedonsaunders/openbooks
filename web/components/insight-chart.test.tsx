@@ -12,8 +12,7 @@ declare global {
 await bootJsdomEnvironment()
 let releaseRenderer!: () => void
 globalThis.__chartLoadGate = new Promise<void>((resolve) => { releaseRenderer = resolve })
-stubModules({ extra: {
-  echarts: `await globalThis.__chartLoadGate;
+const rendererBoundary = `await globalThis.__chartLoadGate;
   export function init(){
     if(globalThis.__chartInitFailure) throw globalThis.__chartInitFailure;
     globalThis.__chartCalls.push({action:'init'});
@@ -23,8 +22,8 @@ stubModules({ extra: {
       resize(){},
       dispose(){globalThis.__chartCalls.push({action:'dispose'})}
     }
-  }`,
-} })
+  }`
+stubModules({ extra: { echarts: rendererBoundary, './native-chart-renderer': rendererBoundary } })
 const React = await import('react')
 Object.assign(globalThis, { React })
 const { act } = React

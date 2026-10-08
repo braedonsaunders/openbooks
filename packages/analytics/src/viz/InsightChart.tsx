@@ -3,6 +3,7 @@
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from 'react'
 import type { ECharts, EChartsCoreOption } from 'echarts'
 import type { EChartsOption } from '../viz'
+import { loadChartRenderer } from './chart-renderer'
 
 export type InsightChartProps = {
   option: EChartsOption
@@ -22,35 +23,39 @@ export type InsightChartProps = {
 export function InsightChart({ option, height, className, inspection }: InsightChartProps) {
   const ref = useRef<HTMLDivElement | null>(null)
   const chartRef = useRef<ECharts | null>(null)
-  const latestOption = useRef(option)
-  latestOption.current = option
+  const observerRef = useRef<ResizeObserver | null>(null)
   const pendingInspection = useRef<{ seriesIndex: number; dataIndex: number } | null>(null)
   const [rendererFailure, setRendererFailure] = useState<{ cause: unknown } | null>(null)
   const instructionsId = useId()
   const [inspectedIndex, setInspectedIndex] = useState<number | null>(null)
 
   useEffect(() => {
+    return () => {
+      observerRef.current?.disconnect()
+      observerRef.current = null
+      chartRef.current?.dispose()
+      chartRef.current = null
+    }
+  }, [])
+
+  useEffect(() => {
     const element = ref.current
     if (!element) return
     let cancelled = false
-    let chart: ECharts | undefined
-    let observer: ResizeObserver | undefined
-    const dispose = () => {
-      observer?.disconnect()
-      observer = undefined
-      if (chartRef.current === chart) chartRef.current = null
-      chart?.dispose()
-      chart = undefined
-    }
     // Shared pages can reference chart components without mounting a chart.
     // Fetch the renderer only when there is a canvas to initialize.
-    void import('echarts').then((echarts) => {
+    // Resolve on option changes too: a studio edit can introduce a series
+    // outside the native bundle without recreating the mounted canvas.
+    void loadChartRenderer(option).then((echarts) => {
       if (cancelled) return
-      chart = echarts.init(element, undefined, { renderer: 'canvas' })
-      chartRef.current = chart
-      chart.setOption(latestOption.current as EChartsCoreOption, { notMerge: true })
-      observer = new ResizeObserver(() => chart?.resize())
-      observer.observe(element)
+      let chart = chartRef.current
+      if (!chart) {
+        chart = echarts.init(element, undefined, { renderer: 'canvas' })
+        chartRef.current = chart
+        observerRef.current = new ResizeObserver(() => chartRef.current?.resize())
+        observerRef.current.observe(element)
+      }
+      chart.setOption(option as EChartsCoreOption, { notMerge: true })
       const point = pendingInspection.current
       if (point) {
         chart.dispatchAction({ type: 'highlight', ...point })
@@ -58,20 +63,15 @@ export function InsightChart({ option, height, className, inspection }: InsightC
       }
     }).catch((cause: unknown) => {
       if (cancelled) return
-      dispose()
+      observerRef.current?.disconnect()
+      observerRef.current = null
+      chartRef.current?.dispose()
+      chartRef.current = null
       setRendererFailure({ cause })
     })
     return () => {
       cancelled = true
-      dispose()
     }
-  }, [])
-
-  useEffect(() => {
-    const chart = chartRef.current
-    if (!chart) return
-    // `notMerge` so removing a series/axis between previews doesn't linger.
-    chart.setOption(option as EChartsCoreOption, { notMerge: true })
   }, [option])
 
   const inspect = (index: number) => {
