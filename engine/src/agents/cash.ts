@@ -198,8 +198,10 @@ async function sideOpenItems(
   // name the same doorway as the cockpit, never re-list it (P5.1).
   const kinds = side === "ap" ? AP_OPEN_ITEM_KINDS : AR_OPEN_ITEM_KINDS;
   const kindFilter = sql`d.kind in (${sql.join(kinds.map((kind) => sql`${kind}`), sql`, `)})`;
+  // The projection and nonzero filter share one dated application sum per
+  // control line rather than evaluating the same correlated aggregate twice.
   const res = await db.execute<Record<string, unknown>>(sql`
-    with oi as (
+    with oi as materialized (
       select jl.id, jl.party_id, je.posting_date as tran_date, jl.due_date,
              d.kind as doc_kind, d.document_number as doc_number,
              sub.base_currency as func,
