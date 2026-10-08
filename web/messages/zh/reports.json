@@ -42,7 +42,9 @@
       "resourcingCapacityDemandTitle": "产能与需求",
       "resourcingCapacityDemandDescription": "比较净产能与指定人员、通用及加权销售管道需求。",
       "resourcingEngagementTitle": "项目预测",
-      "resourcingEngagementDescription": "按月份和币种预测工时、收入、人工成本和利润。"
+      "resourcingEngagementDescription": "按月份和币种预测工时、收入、人工成本和利润。",
+      "projectBudgetVsActualTitle": "项目预算与实际",
+      "projectBudgetVsActualDescription": "按任务对比原始预算、当前预算与实际工时和成本。"
     },
     "groups": {
       "financial": "财务报表",
@@ -3071,6 +3073,7 @@
       "disposal": "处置",
       "revaluation": "重估",
       "revenue_recognition": "收入确认",
+      "revenue_accrual": "未开票收入计提",
       "inventory": "库存",
       "lease": "租赁",
       "allocation": "分摊",
@@ -3178,5 +3181,68 @@
       "purchase_order": "采购订单"
     },
     "note": "转换通过交易关联进行跟踪；历史来源关联可能需要迁移。"
+  },
+  "earnedValue": {
+    "title": "挣值",
+    "description": "按项目和任务列示预算、完成百分比、挣值、实际成本和估算。",
+    "hubDescription": "按项目和任务列示完成百分比、CPI 和完工估算。",
+    "asOf": "截至 {date}",
+    "note": "实际成本为按任务归集的已批准人工及已过账成本单据；无任务的成本仅计入项目合计。完成百分比依次采用已完成数量、进度计划完成度、成本比例。",
+    "search": "搜索项目或任务…",
+    "allProjects": "所有活动项目",
+    "projectTotal": "项目合计",
+    "empty": "没有符合筛选条件且含任务的项目。",
+    "columns": {
+      "project": "项目",
+      "task": "任务",
+      "basis": "依据",
+      "percent": "完成百分比",
+      "bac": "预算 (BAC)",
+      "ev": "挣值 (EV)",
+      "ac": "实际 (AC)",
+      "cpi": "CPI",
+      "etc": "尚需 (ETC)",
+      "eac": "完工 (EAC)",
+      "vac": "偏差 (VAC)"
+    },
+    "basis": {
+      "quantity": "已完成数量",
+      "schedule": "进度计划完成度",
+      "cost": "成本比例",
+      "none": "未计量"
+    }
+  },
+  "projectBudget": {
+    "title": "项目预算与实际",
+    "description": "每项任务的原始（售出）预算、当前预算以及实际工时和成本，并列出与各预算的差异。",
+    "asOf": "截至 {date}",
+    "chooseProject": "选择项目",
+    "chooseProjectHint": "选择一个项目，将其预算与实际工时和成本进行比较。",
+    "unassigned": "未分配到任务",
+    "total": "合计",
+    "empty": "此项目尚无任务。",
+    "originalFromSource": "原始预算来自 {source}，于 {date} 记录。差异为预算减实际：负值表示超支。",
+    "originalFromWbs": "原始预算来自工作分解，于 {date} 记录。差异为预算减实际：负值表示超支。",
+    "noOriginal": "此项目尚未记录原始预算；请在其工作分解中设定基线。差异为预算减实际。",
+    "priceNote": "价格：原始 {original} · 当前 {current} · 截至目前已开票 {invoiced}。实际成本为按成本费率计的已批准工时加上已过账的项目成本。",
+    "columns": {
+      "project": "项目",
+      "task": "任务",
+      "originalHours": "原始工时",
+      "currentHours": "当前工时",
+      "actualHours": "实际工时",
+      "originalCost": "原始成本",
+      "currentCost": "当前成本",
+      "actualCost": "实际成本",
+      "varianceToOriginal": "与原始差异",
+      "varianceToCurrent": "与当前差异",
+      "originalPrice": "原始价格",
+      "currentPrice": "当前价格"
+    },
+    "summary": {
+      "originalPrice": "原始价格",
+      "currentPrice": "当前价格",
+      "invoicedToDate": "截至目前已开票"
+    }
   }
 }

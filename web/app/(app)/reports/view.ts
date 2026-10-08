@@ -60,6 +60,7 @@ export async function reportsHubFor(
   const tc = await getTranslations('analytics.trueCost')
   const tw = await getTranslations('warehouse')
   const tp = await getTranslations('payroll.supportReport')
+  const tev = await getTranslations('reports.earnedValue')
   const canCreate = !!authz && (can(authz, 'reports.create') || can(authz, '*'))
 
   const orgId = authz?.user.orgId
@@ -101,6 +102,10 @@ export async function reportsHubFor(
     authz ? isFeatureEnabled(authz.user.orgId, 'warehousing') : Promise.resolve(false),
     authz && can(authz, 'resourcing.read') ? isFeatureEnabled(authz.user.orgId, 'resourcing') : Promise.resolve(false),
   ])
+  // Projects → Progress tracking gates the Earned value report.
+  const progressEnabled = projectsEnabled && authz && can(authz, 'projects.read')
+    ? await isFeatureEnabled(authz.user.orgId, 'projectProgress')
+    : false
 
   // Hide definitions over permission-gated or feature-off entities from
   // users who could not run them anyway. A payroll built-in must not fall
@@ -285,7 +290,9 @@ export async function reportsHubFor(
       label: t('hub.groups.projects'),
       accent: 'sky',
       cards: [card('projectProfitability', '/reports/project-profitability', 'Coins', 'chart'),
-        { href: '/reports/true-cost', title: tc('title'), desc: tc('summary.compositeRate'), icon: 'Calculator', form: 'statement' }],
+        card('projectBudgetVsActual', '/reports/project-budget-vs-actual', 'Target', 'list'),
+        { href: '/reports/true-cost', title: tc('title'), desc: tc('summary.compositeRate'), icon: 'Calculator', form: 'statement' },
+        ...(progressEnabled ? [{ href: '/reports/earned-value', title: tev('title'), desc: tev('hubDescription'), icon: 'Gauge', form: 'list' as const }] : [])],
     } satisfies HubGroup] : []),
     ...(resourcingEnabled ? [{
       key: 'resourcing',
@@ -339,6 +346,7 @@ export async function reportsHubFor(
         ...saved.rows.filter((s) =>
           savedReportPathVisible(s.path, {
             projects: projectsEnabled,
+            projectProgress: progressEnabled,
             budgets: budgetsEnabled,
             orders: ordersEnabled,
             inventory: inventoryEnabled,

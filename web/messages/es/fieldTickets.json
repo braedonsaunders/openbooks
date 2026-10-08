@@ -42,7 +42,8 @@
       "time": "Tiempo",
       "items": "Artículos",
       "tasks": "Tareas",
-      "related": "Relacionados"
+      "related": "Relacionados",
+      "production": "Producción"
     },
     "periodLocked": "Elimine las horas ingresadas antes de cambiar el período.",
     "back": "Partes de obra",
@@ -124,7 +125,10 @@
       "itemRequired": "Elija un artículo", "rateFailed": "No se pudo resolver la tarifa del artículo", "projectLoadFailed": "No se pudo cargar el proyecto", "reloadFailed": "No se pudo recargar el ticket",
       "operator": "Operario",
       "noOperator": "No registrado",
-      "inferredPolicy": "Política inferida antes de la actualización — verifíquela antes de facturar"
+      "inferredPolicy": "Política inferida antes de la actualización — verifíquela antes de facturar",
+      "task": "Tarea",
+      "noTask": "Sin tarea",
+      "taskLabel": "Tarea: {task}"
     },
     "tasks": {
       "title": "Tareas del proyecto",
@@ -169,6 +173,19 @@
     "discard": "Descartar el borrador",
     "discardConfirm": "¿Descartar este borrador vacío? Un borrador que ya contiene horas, líneas o firmas se conserva — solo desaparece un borrador sin ningún contenido.",
     "discardFailed": "No se pudo descartar el borrador.",
-    "discarded": "Borrador descartado."
+    "discarded": "Borrador descartado.",
+    "production": {
+      "title": "Producción",
+      "hint": "Cantidades instaladas en este parte, por tarea. La aprobación las registra como avance del proyecto.",
+      "noBudgetedTasks": "Ninguna tarea de este proyecto tiene cantidad presupuestada. Defínala en el desglose de trabajo del proyecto para informar la producción.",
+      "task": "Tarea",
+      "pickTask": "Elegir una tarea",
+      "quantity": "Cantidad",
+      "unit": "Unidad",
+      "note": "Nota",
+      "add": "Agregar producción",
+      "empty": "No se informó producción.",
+      "remove": "Quitar línea de producción"
+    }
   }
 }

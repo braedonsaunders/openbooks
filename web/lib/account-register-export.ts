@@ -40,6 +40,7 @@ const DOC_TYPE_KEYS: Record<string, string> = {
   card_charge: 'cardCharge',
   card_refund: 'cardRefund',
   project_charge: 'projectCharge',
+  internal_billing: 'internalBilling',
   field_ticket: 'fieldTicket',
 }
 

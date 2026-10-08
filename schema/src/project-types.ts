@@ -38,12 +38,20 @@ export type ProjectMeasureKey =
   | "billable_value"
   | "unbilled_billable"
   | "cost_budget"
+  // The original (sold) budget: baseline 1's cost and price.
+  | "original_budget_cost"
+  | "original_budget_price"
   | "total_price"
   | "could_be_invoiced"
   | "total_cost"
   | "gross_profit"
   | "margin_pct"
-  | "remaining_budget";
+  | "remaining_budget"
+  // Earned value (Progress tracking): budgeted cost of work performed,
+  // estimated total cost, and the estimate to complete.
+  | "earned_value"
+  | "estimate_at_completion"
+  | "cost_to_complete";
 
 /** How `actual_cost` selects GL cost. Either raw account types or a
  *  named account-group dimension (reusing web/lib/account-groups). */

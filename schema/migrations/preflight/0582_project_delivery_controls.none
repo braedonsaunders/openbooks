@@ -1,0 +1,1 @@
+Schema-only migration: new tables and nullable columns with no data backfill. No tenant data repair is required.

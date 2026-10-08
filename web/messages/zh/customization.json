@@ -62,7 +62,8 @@
     "fund_release": "资金发放",
     "collection_attempt": "托收尝试",
     "tax_provider_transaction": "税费服务商提交",
-    "psp_settlement_line_unmatched": "未关联的付款明细"
+    "psp_settlement_line_unmatched": "未关联的付款明细",
+    "internal_billing": "内部计费"
   },
   "resourcing": {
     "fields": {

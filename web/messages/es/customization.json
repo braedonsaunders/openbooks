@@ -62,7 +62,8 @@
     "fund_release": "Liberación de fondos",
     "collection_attempt": "Intento de cobro",
     "tax_provider_transaction": "Envío al proveedor fiscal",
-    "psp_settlement_line_unmatched": "Línea de pago sin vincular"
+    "psp_settlement_line_unmatched": "Línea de pago sin vincular",
+    "internal_billing": "Facturación interna"
   },
   "resourcing": {
     "fields": {

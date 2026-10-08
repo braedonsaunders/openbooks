@@ -152,6 +152,10 @@
       "title": "Revenue recognition remains unposted",
       "message": "{count, plural, one {# scheduled recognition line remains unposted.} other {# scheduled recognition lines remain unposted.}}"
     },
+    "unbilled-revenue-unaccrued": {
+      "title": "Unbilled revenue accrual is not current",
+      "message": "{count, plural, one {# project accrual needs posting or a configuration fix.} other {# project accruals need posting or a configuration fix.}}"
+    },
     "fx-missing": {
       "title": "Foreign-exchange rates are missing",
       "message": "{count, plural, one {# transaction currency has no usable period-end spot rate.} other {# transaction currencies have no usable period-end spot rate.}}"
@@ -373,6 +377,10 @@
     "recognition-posted": {
       "title": "Post revenue recognition",
       "description": "Run scheduled revenue recognition and resolve exceptions."
+    },
+    "unbilled-revenue-accrued": {
+      "title": "Accrue unbilled revenue",
+      "description": "Accrue time-and-materials work performed by period end but not yet invoiced; it reverses on the first day of the next period."
     },
     "fx-ready": {
       "title": "Validate foreign-exchange coverage",
@@ -855,5 +863,30 @@
   "problems": {
     "subsidiaryMissing": "Subsidiary {subsidiaryId} does not exist.",
     "entityFailed": "{name}: {detail}"
+  },
+  "unbilledAccrual": {
+    "loading": "Calculating unbilled work…",
+    "loadFailed": "Could not calculate the unbilled revenue accrual.",
+    "retry": "Retry",
+    "dates": "{period}: accrues on {accrualDate}, reverses on {reversalDate}",
+    "datesNoReversal": "{period}: accrues on {accrualDate}",
+    "empty": "No unbilled time-and-materials work at period end.",
+    "unbilled": "Unbilled at period end",
+    "toPost": "To post",
+    "projectsLabel": "Projects",
+    "projects": "{count, plural, one {# project} other {# projects}}",
+    "blocked": "Resolve before posting",
+    "review": "Review",
+    "columns": {
+      "project": "Project",
+      "unbilled": "Unbilled",
+      "accrued": "Accrued",
+      "toPost": "To post"
+    },
+    "post": "Post accrual",
+    "upToDate": "Up to date",
+    "posted": "Unbilled revenue accrual posted.",
+    "postFailed": "Could not post the accrual.",
+    "postPermission": "Posting the accrual requires permission to post journal entries."
   }
 }

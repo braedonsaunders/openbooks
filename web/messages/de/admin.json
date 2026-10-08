@@ -3540,6 +3540,11 @@
         "title": "Plancodes",
         "singularTitle": "Plancode",
         "description": "Codes für Arbeit, die keinem Kunden oder Projekt zugeordnet ist, etwa Schulungs- oder Werkstatttage, sowie für Tage, an denen Personen nicht arbeiten."
+      },
+      "internal-billing": {
+        "title": "Interne Verrechnung",
+        "description": "Zeitlich gültige Regeln für Verrechnungen zwischen Abteilungen, Projekten und Tochtergesellschaften und wie jede aus den Unternehmenssummen herausgehalten wird.",
+        "singularTitle": "Regel für interne Verrechnung"
       }
     },
     "fields": {
@@ -6524,6 +6529,55 @@
       "limitKinds": {
         "none": "Unbegrenzt",
         "amount": "Geldobergrenze"
+      }
+    },
+    "internalBilling": {
+      "formDescription": "Eine Regel legt fest, wie interne Verrechnungen erfasst werden. Ändern Sie die Behandlung, indem Sie eine neue Version ab einem späteren Datum hinzufügen.",
+      "sections": {
+        "rule": "Regel",
+        "advanced": "Erweitert",
+        "advancedHelp": "Für diese Art von Regel wurden Konten vorgeschlagen. Bestätigen Sie sie und legen Sie fest, ab wann die Regel gilt.",
+        "reason": "Grund für die Änderung"
+      },
+      "fields": {
+        "code": "Code",
+        "name": "Name",
+        "method": "Behandlung",
+        "description": "Beschreibung",
+        "debitAccountId": "Empfängerkonto (Soll)",
+        "creditAccountId": "Leistendes Konto (Haben)",
+        "effectiveFrom": "Gültig ab",
+        "effectiveTo": "Gültig bis",
+        "billableByDefault": "Standardmäßig abrechenbar",
+        "isActive": "Aktiv",
+        "reason": "Grund"
+      },
+      "help": {
+        "code": "Dokumente wählen eine Regel über ihren Code; jede Version des Codes gilt für ihren eigenen Zeitraum.",
+        "debitAccountId": "Wird der empfangenden Abteilung, dem Projekt oder der Tochtergesellschaft belastet.",
+        "creditAccountId": "Wird der leistenden Abteilung, dem Projekt oder der Tochtergesellschaft gutgeschrieben.",
+        "effectiveTo": "Leer lassen, damit die Version gilt, bis eine spätere beginnt.",
+        "billableByDefault": "Neue Zeilen mit einem empfangenden Projekt werden an den Kunden dieses Projekts weiterberechnet.",
+        "isActive": "Deaktivieren Sie eine versehentlich angelegte Version. Eine bereits von gebuchten Dokumenten verwendete Version wird stattdessen mit einem Enddatum abgeschlossen.",
+        "reason": "Wird mit der Änderung im Prüfprotokoll gespeichert."
+      },
+      "methods": {
+        "revenue_credit": {
+          "label": "Umsatzgutschrift für die Abteilung",
+          "description": "Die Abteilung, die die Arbeit geleistet hat, erhält den Umsatz gutgeschrieben; der Umsatz des Unternehmens wird nicht doppelt gezählt."
+        },
+        "cost_transfer": {
+          "label": "Kostenumbuchung",
+          "description": "Kosten werden der Abteilung oder dem Projekt belastet, das die Leistung genutzt hat; die Kosten des Unternehmens bleiben unverändert."
+        },
+        "intercompany_sale": {
+          "label": "Konzerninterner Verkauf",
+          "description": "Eine Tochtergesellschaft verkauft an eine andere; beide Seiten werden bei der Konsolidierung eliminiert."
+        }
+      },
+      "chooser": {
+        "title": "Was bewirkt diese Regel?",
+        "description": "Wählen Sie die Behandlung. Konten und Daten werden vorausgefüllt und können unter Erweitert geändert werden."
       }
     }
   },

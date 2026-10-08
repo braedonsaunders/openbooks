@@ -242,7 +242,7 @@ test('the project cockpit ships a customizable tab list', () => {
   ])
   assert.deepEqual(
     layout.tabs?.find((tab) => tab.key === 'project_management')?.subtabs?.map((tab) => tab.key),
-    ['work_breakdown', 'schedule', 'staffing'],
+    ['work_breakdown', 'schedule', 'staffing', 'progress'],
   )
   assert.equal(
     layout.tabs?.every((tab) => tab.visible),

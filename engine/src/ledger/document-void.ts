@@ -15,8 +15,9 @@ import {
   recordTransactionAudit,
   type TransactionAuditSnapshot,
 } from "../records/transaction-audit.ts";
-import { assertBillingReleasable, BillingReleaseRefusedError, releaseCamBillingProvenance, releaseBillingProvenance, releaseConvertedOrderQuantities, releaseVendorBillProvenance } from "./billing-provenance.ts";
+import { assertBillingReleasable, billedCostSourceRefusal, BillingReleaseRefusedError, liveInvoicesBillingDocument, releaseCamBillingProvenance, releaseBillingProvenance, releaseConvertedOrderQuantities, releaseVendorBillProvenance } from "./billing-provenance.ts";
 import { projectRetainageHeldSql } from "../projects/construction-billing.ts";
+import { reverseFieldTicketProgressInTransaction } from "../projects/progress.ts";
 import { add, cmp, neg } from "../money/money.ts";
 import { InventoryError } from "../inventory/contracts.ts";
 import { reverseInventoryMovement } from "../inventory/reversal.ts";
@@ -40,7 +41,8 @@ export type DocumentVoidCode =
   | "stale-revision"
   | "reversal-period-uncovered"
   | "reversal-period-closed"
-  | "retainer-drawdowns-posted";
+  | "retainer-drawdowns-posted"
+  | "billed-on-invoice";
 
 export class DocumentVoidError extends Error {
   constructor(
@@ -306,6 +308,18 @@ async function runBeforeVoidScripts(input: {
 }
 
 /**
+ * A cost source (vendor bill, expense report, card charge, check, project
+ * charge, internal billing, order) whose lines a live customer invoice still
+ * bills keeps its cost: voiding it would leave the customer billed for a cost
+ * that no longer exists. The invoice is voided or deleted first, which
+ * releases the link.
+ */
+async function refuseBilledCostSourceVoid(runner: SqlExecutor, orgId: string, documentId: string): Promise<void> {
+  const invoices = await liveInvoicesBillingDocument(runner, orgId, documentId);
+  if (invoices.length > 0) throw new DocumentVoidError(billedCostSourceRefusal(invoices), 422, "billed-on-invoice");
+}
+
+/**
  * Request a controlled cancellation/void. `before_void` flow gates are the
  * approval authority. The document remains posted while gates wait; the final
  * aggregate approval invokes completeRequestedDocumentVoid through the
@@ -347,6 +361,7 @@ export async function requestDocumentVoid(
     // underneath a later draw refuses here, before the reservation and any
     // approval routing, so the operator sees the later draws named.
     await refuseDrawReleaseBehindLaterDraws(db, input.orgId, input.documentId);
+    await refuseBilledCostSourceVoid(db, input.orgId, input.documentId);
     if (current.status === "posted") await assertPostingEffectsCompleteForVoid(db, input.orgId, input.documentId);
     // This compare-and-set is the single-winner claim. PostgreSQL locks the
     // aggregate row and rechecks the predicate after a concurrent waiter
@@ -805,6 +820,9 @@ export async function completeRequestedDocumentVoid(
       // Completion-time backstop for the request-path check above: a release
       // landing between request and completion is refused here instead.
       await refuseUnavailablePayRunVoid(tx, orgId, documentId);
+      // The document stays posted while void approvals wait, so an invoice
+      // may have billed its cost in the meantime.
+      await refuseBilledCostSourceVoid(tx, orgId, documentId);
 
       // Discover the source entry and all currently live application endpoints
       // before taking locks. lockApplicationEvidence then acquires the shared
@@ -999,6 +1017,18 @@ export async function completeRequestedDocumentVoid(
           voidKind: String(doc.kind),
           actorId: String(doc.void_requested_by),
           reversalDate: String(doc.void_reversal_date),
+          reason: String(doc.void_reason),
+        });
+      }
+
+      if (kind === "field_ticket") {
+        // A voided ticket's approved production no longer evidences installed
+        // work: append the exact reversal of each entry it recorded.
+        await reverseFieldTicketProgressInTransaction(tx, {
+          orgId,
+          actorId: String(doc.void_requested_by),
+          ticketId: documentId,
+          entryDate: String(doc.void_reversal_date),
           reason: String(doc.void_reason),
         });
       }

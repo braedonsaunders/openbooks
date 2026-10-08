@@ -42,7 +42,9 @@
       "resourcingCapacityDemandTitle": "Kapazität und Bedarf",
       "resourcingCapacityDemandDescription": "Nettokapazität mit namentlichen, allgemeinen und gewichteten Pipeline-Bedarfen vergleichen.",
       "resourcingEngagementTitle": "Auftragsprognose",
-      "resourcingEngagementDescription": "Prognostizierte Stunden, Umsätze, Arbeitskosten und Margen nach Monat und Währung."
+      "resourcingEngagementDescription": "Prognostizierte Stunden, Umsätze, Arbeitskosten und Margen nach Monat und Währung.",
+      "projectBudgetVsActualTitle": "Projektbudget vs. Ist",
+      "projectBudgetVsActualDescription": "Ursprüngliches und aktuelles Budget gegenüber Ist-Stunden und -Kosten, je Aufgabe."
     },
     "groups": {
       "financial": "Finanzberichte",
@@ -3071,6 +3073,7 @@
       "disposal": "Abgang",
       "revaluation": "Neubewertung",
       "revenue_recognition": "Umsatzrealisierung",
+      "revenue_accrual": "Abgrenzung nicht fakturierter Umsätze",
       "inventory": "Bestand",
       "lease": "Leasing",
       "allocation": "Umlage",
@@ -3178,5 +3181,68 @@
       "purchase_order": "Bestellungen"
     },
     "note": "Die Konversion wird über Transaktionsverknüpfungen verfolgt; historische Quellverknüpfungen müssen möglicherweise migriert werden."
+  },
+  "earnedValue": {
+    "title": "Fertigstellungswert",
+    "description": "Budget, Fertigstellungsgrad, Fertigstellungswert, Istkosten und Prognosen je Projekt und Aufgabe.",
+    "hubDescription": "Fertigstellungsgrad, CPI und prognostizierte Gesamtkosten je Projekt und Aufgabe.",
+    "asOf": "Stand {date}",
+    "note": "Istkosten sind genehmigte Arbeitszeit und gebuchte Kostenbelege je Aufgabe; Kosten ohne Aufgabe zählen nur in der Projektsumme. Der Fertigstellungsgrad nutzt die eingebaute Menge, dann den Terminfortschritt, dann das Kostenverhältnis.",
+    "search": "Projekt oder Aufgabe suchen…",
+    "allProjects": "Alle aktiven Projekte",
+    "projectTotal": "Projektsumme",
+    "empty": "Keine Projekte mit Aufgaben entsprechen diesen Filtern.",
+    "columns": {
+      "project": "Projekt",
+      "task": "Aufgabe",
+      "basis": "Grundlage",
+      "percent": "% fertig",
+      "bac": "Budget (BAC)",
+      "ev": "Fertigstellungswert (EV)",
+      "ac": "Ist (AC)",
+      "cpi": "CPI",
+      "etc": "Rest (ETC)",
+      "eac": "Gesamt (EAC)",
+      "vac": "Abweichung (VAC)"
+    },
+    "basis": {
+      "quantity": "Eingebaute Menge",
+      "schedule": "Terminfortschritt",
+      "cost": "Kostenverhältnis",
+      "none": "Nicht gemessen"
+    }
+  },
+  "projectBudget": {
+    "title": "Projektbudget vs. Ist",
+    "description": "Ursprüngliches (verkauftes) Budget, aktuelles Budget sowie Ist-Stunden und -Kosten jeder Aufgabe, mit der Abweichung zu jedem Budget.",
+    "asOf": "Stand {date}",
+    "chooseProject": "Projekt wählen",
+    "chooseProjectHint": "Wählen Sie ein Projekt, um sein Budget mit den Ist-Stunden und -Kosten zu vergleichen.",
+    "unassigned": "Keiner Aufgabe zugeordnet",
+    "total": "Summe",
+    "empty": "Dieses Projekt hat noch keine Aufgaben.",
+    "originalFromSource": "Ursprüngliches Budget aus {source}, erfasst am {date}. Abweichung ist Budget minus Ist: negativ bedeutet Überschreitung.",
+    "originalFromWbs": "Ursprüngliches Budget aus dem Projektstrukturplan, erfasst am {date}. Abweichung ist Budget minus Ist: negativ bedeutet Überschreitung.",
+    "noOriginal": "Für dieses Projekt wurde kein ursprüngliches Budget erfasst; legen Sie im Projektstrukturplan einen Basisplan fest. Abweichung ist Budget minus Ist.",
+    "priceNote": "Preis: ursprünglich {original} · aktuell {current} · bisher fakturiert {invoiced}. Ist-Kosten sind genehmigte Zeit zum Kostensatz plus gebuchte Projektkosten.",
+    "columns": {
+      "project": "Projekt",
+      "task": "Aufgabe",
+      "originalHours": "Ursprüngliche Stunden",
+      "currentHours": "Aktuelle Stunden",
+      "actualHours": "Ist-Stunden",
+      "originalCost": "Ursprüngliche Kosten",
+      "currentCost": "Aktuelle Kosten",
+      "actualCost": "Ist-Kosten",
+      "varianceToOriginal": "Abweichung zum Ursprung",
+      "varianceToCurrent": "Abweichung zum aktuellen Budget",
+      "originalPrice": "Ursprünglicher Preis",
+      "currentPrice": "Aktueller Preis"
+    },
+    "summary": {
+      "originalPrice": "Ursprünglicher Preis",
+      "currentPrice": "Aktueller Preis",
+      "invoicedToDate": "Bisher fakturiert"
+    }
   }
 }

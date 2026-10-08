@@ -155,7 +155,8 @@
     "hrm-benefits-employees": "Benefits",
     "hrm-benefits-delivery": "Delivery",
     "hrm-training": "Training",
-    "scheduling": "Scheduling"
+    "scheduling": "Scheduling",
+    "internal-billing": "Internal Billing"
   },
   "modulesShort": {
     "hrm-performance-cycles": "Manage reviews",

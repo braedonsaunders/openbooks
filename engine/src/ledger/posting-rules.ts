@@ -4,6 +4,7 @@ import { addMoney, negMoney, parseMoney, sumMoney, type Money } from "../money/b
 import { type Doc, type DocLine, type KernelLine, type PostingDeps, type ExpenseSettlement, PostingError } from "../journal/posting-contracts.ts";
 import { assertCashTendersPresent, assertTendersMatchTotal } from "../sales/cash-tenders.ts";
 import { componentsForLine, assertTaxControlAccount } from "./posting-tax-policy.ts";
+import { internalBillingKernelLines, InternalBillingPolicyError } from "./internal-billing-policy.ts";
 /**
  * An AR/AP journal line participates in the subledger only when it identifies
  * the customer/vendor whose balance it changes. source platform permits direct GL
@@ -934,4 +935,20 @@ export const RULES: Record<string, RuleFn> = {
    * NOT posted here (revenue posts at invoice time).
    */
   project_charge: projectChargeKernelLines,
+
+  /**
+   * Internal billing: each line debits the rule's debit account with the
+   * receiver's dimensions and credits the rule's credit account with the
+   * provider's (see internal-billing-policy.ts). An intercompany sale lands
+   * its debit in the receiving subsidiary; the kernel then adds the
+   * due-to/due-from legs. Policy refusals surface as posting refusals.
+   */
+  internal_billing: (doc, lines, deps) => {
+    try {
+      return internalBillingKernelLines(doc, lines, deps.internalBilling);
+    } catch (error) {
+      if (error instanceof InternalBillingPolicyError) throw new PostingError(error.message);
+      throw error;
+    }
+  },
 };

@@ -3487,6 +3487,11 @@
         "title": "排程代码",
         "singularTitle": "排程代码",
         "description": "用于安排不属于客户或项目的工作（如培训日或车间日），以及标记人员不工作的日期。"
+      },
+      "internal-billing": {
+        "title": "内部计费",
+        "description": "用于部门、项目和子公司之间计费的生效日期规则，以及每条规则如何不影响公司总额。",
+        "singularTitle": "内部计费规则"
       }
     },
     "fields": {
@@ -6524,6 +6529,55 @@
       "limitKinds": {
         "none": "不设限",
         "amount": "金额上限"
+      }
+    },
+    "internalBilling": {
+      "formDescription": "规则决定内部计费的记账方式。要更改处理方式，请从较晚的日期添加新版本。",
+      "sections": {
+        "rule": "规则",
+        "advanced": "高级",
+        "advancedHelp": "已为此类规则推荐科目。请确认，并设置规则的适用日期。",
+        "reason": "变更原因"
+      },
+      "fields": {
+        "code": "代码",
+        "name": "名称",
+        "method": "处理方式",
+        "description": "描述",
+        "debitAccountId": "接收方科目（借方）",
+        "creditAccountId": "提供方科目（贷方）",
+        "effectiveFrom": "生效日期",
+        "effectiveTo": "失效日期",
+        "billableByDefault": "默认可计费",
+        "isActive": "启用",
+        "reason": "原因"
+      },
+      "help": {
+        "code": "单据按代码选择规则；该代码的每个版本适用于各自的日期。",
+        "debitAccountId": "记入接收的部门、项目或子公司。",
+        "creditAccountId": "记入提供工作的部门、项目或子公司。",
+        "effectiveTo": "留空则该版本一直有效，直到后续版本开始。",
+        "billableByDefault": "带有接收项目的新行会向该项目的客户计费。",
+        "isActive": "停用误添加的版本。已被过账单据使用的版本应改为设置结束日期。",
+        "reason": "与变更一起记录在审计记录中。"
+      },
+      "methods": {
+        "revenue_credit": {
+          "label": "部门销售入账",
+          "description": "完成工作的部门获得收入入账；公司总收入不会重复计算。"
+        },
+        "cost_transfer": {
+          "label": "成本转移",
+          "description": "将成本转给使用该工作的部门或项目；公司总成本不变。"
+        },
+        "intercompany_sale": {
+          "label": "集团内部销售",
+          "description": "一家子公司向另一家子公司销售；双方在合并时抵销。"
+        }
+      },
+      "chooser": {
+        "title": "这条规则的作用是什么？",
+        "description": "选择处理方式。科目和日期会自动填写，可在高级中修改。"
       }
     }
   },

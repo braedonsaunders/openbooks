@@ -38,7 +38,7 @@
     "createFailed": "チケットを作成できませんでした"
   },
   "editor": {
-    "tabs": { "time": "時間", "items": "明細", "tasks": "タスク", "related": "関連" },
+    "tabs": { "time": "時間", "items": "明細", "tasks": "タスク", "related": "関連", "production": "出来高" },
     "periodLocked": "入力済みの時間を削除してから、チケットの期間を変更してください。",
     "back": "フィールドチケット",
     "submit": "提出する",
@@ -116,7 +116,10 @@
       "add": "明細を追加",
       "remove": "明細を削除",
       "empty": "明細はまだありません。",
-      "itemRequired": "品目を選択してください", "rateFailed": "品目の単価を解決できませんでした", "projectLoadFailed": "プロジェクトを読み込めませんでした", "reloadFailed": "チケットを再読み込みできませんでした"
+      "itemRequired": "品目を選択してください", "rateFailed": "品目の単価を解決できませんでした", "projectLoadFailed": "プロジェクトを読み込めませんでした", "reloadFailed": "チケットを再読み込みできませんでした",
+      "task": "タスク",
+      "noTask": "タスクなし",
+      "taskLabel": "タスク: {task}"
     },
     "tasks": { "title": "プロジェクトタスク", "hint": "このプロジェクトで作業員の時間にコーディング可能なWBSタスクです。", "code": "コード", "task": "タスク", "estimatedHours": "見積時間" },
     "totals": {
@@ -155,6 +158,19 @@
     "discard": "下書きを破棄",
     "discardConfirm": "この空の下書きを破棄しますか？時間、明細、署名がすでにある下書きは保持され、何もない下書きのみ削除されます。",
     "discardFailed": "下書きを破棄できませんでした。",
-    "discarded": "下書きを破棄しました。"
+    "discarded": "下書きを破棄しました。",
+    "production": {
+      "title": "出来高",
+      "hint": "この伝票で施工した数量（タスク別）。承認時にプロジェクトの進捗として記録されます。",
+      "noBudgetedTasks": "このプロジェクトには予算数量のあるタスクがありません。出来高を報告するには、プロジェクトの作業分解でタスクに設定してください。",
+      "task": "タスク",
+      "pickTask": "タスクを選択",
+      "quantity": "数量",
+      "unit": "単位",
+      "note": "メモ",
+      "add": "出来高を追加",
+      "empty": "出来高の報告はありません。",
+      "remove": "出来高行を削除"
+    }
   }
 }

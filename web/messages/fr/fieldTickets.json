@@ -42,7 +42,8 @@
       "time": "Temps",
       "items": "Articles",
       "tasks": "Tâches",
-      "related": "Associés"
+      "related": "Associés",
+      "production": "Production"
     },
     "periodLocked": "Supprimez les heures saisies avant de modifier la période.",
     "back": "Bons de régie",
@@ -124,7 +125,10 @@
       "itemRequired": "Choisissez un article", "rateFailed": "Résolution du tarif impossible", "projectLoadFailed": "Chargement du projet impossible", "reloadFailed": "Rechargement du ticket impossible",
       "operator": "Opérateur",
       "noOperator": "Non renseigné",
-      "inferredPolicy": "Règle déduite avant la mise à niveau — à vérifier avant la facturation"
+      "inferredPolicy": "Règle déduite avant la mise à niveau — à vérifier avant la facturation",
+      "task": "Tâche",
+      "noTask": "Aucune tâche",
+      "taskLabel": "Tâche : {task}"
     },
     "tasks": {
       "title": "Tâches du projet",
@@ -169,6 +173,19 @@
     "discard": "Abandonner le brouillon",
     "discardConfirm": "Abandonner ce brouillon vide ? Un brouillon qui contient déjà des heures, des lignes ou des signatures est conservé — seul un brouillon sans aucun contenu est supprimé.",
     "discardFailed": "Impossible d'abandonner le brouillon.",
-    "discarded": "Brouillon abandonné."
+    "discarded": "Brouillon abandonné.",
+    "production": {
+      "title": "Production",
+      "hint": "Quantités réalisées sur ce bon, par tâche. L’approbation les enregistre comme avancement du projet.",
+      "noBudgetedTasks": "Aucune tâche de ce projet n’a de quantité budgétée. Définissez-la dans l’organigramme des tâches du projet pour déclarer la production.",
+      "task": "Tâche",
+      "pickTask": "Choisir une tâche",
+      "quantity": "Quantité",
+      "unit": "Unité",
+      "note": "Note",
+      "add": "Ajouter la production",
+      "empty": "Aucune production déclarée.",
+      "remove": "Supprimer la ligne de production"
+    }
   }
 }

@@ -3487,6 +3487,11 @@
         "title": "Schedule codes",
         "singularTitle": "Schedule code",
         "description": "Codes for booking work that is not a customer or project, such as training or shop days, and for days people are not working."
+      },
+      "internal-billing": {
+        "title": "Internal billing",
+        "description": "Effective-dated rules for billing between departments, projects and subsidiaries, and how each stays out of company totals.",
+        "singularTitle": "Internal billing rule"
       }
     },
     "fields": {
@@ -6524,6 +6529,55 @@
       "limitKinds": {
         "none": "No limit",
         "amount": "Monetary ceiling"
+      }
+    },
+    "internalBilling": {
+      "formDescription": "A rule says how internal billing is recorded. Change the treatment by adding a new version from a later date.",
+      "sections": {
+        "rule": "Rule",
+        "advanced": "Advanced",
+        "advancedHelp": "Accounts were suggested for this kind of rule. Confirm them, and set when the rule applies.",
+        "reason": "Reason for the change"
+      },
+      "fields": {
+        "code": "Code",
+        "name": "Name",
+        "method": "Treatment",
+        "description": "Description",
+        "debitAccountId": "Receiving account (debit)",
+        "creditAccountId": "Providing account (credit)",
+        "effectiveFrom": "Effective from",
+        "effectiveTo": "Effective to",
+        "billableByDefault": "Billable by default",
+        "isActive": "Active",
+        "reason": "Reason"
+      },
+      "help": {
+        "code": "Documents choose a rule by its code; each version of the code applies to its own dates.",
+        "debitAccountId": "Charged to the receiving department, project or subsidiary.",
+        "creditAccountId": "Credited to the providing department, project or subsidiary.",
+        "effectiveTo": "Leave empty to keep the version in effect until a later one starts.",
+        "billableByDefault": "New lines with a receiving project are billed on to that project's customer.",
+        "isActive": "Deactivate a version that was added by mistake. A version already used by posted documents is closed with an end date instead.",
+        "reason": "Recorded in the audit trail with the change."
+      },
+      "methods": {
+        "revenue_credit": {
+          "label": "Department credit for the sale",
+          "description": "The department that did the work is credited with the revenue; company revenue is not counted twice."
+        },
+        "cost_transfer": {
+          "label": "Cost transfer",
+          "description": "Move cost to the department or project that used the work; company cost is unchanged."
+        },
+        "intercompany_sale": {
+          "label": "Intercompany sale",
+          "description": "One subsidiary sells to another; both sides eliminate on consolidation."
+        }
+      },
+      "chooser": {
+        "title": "What does this rule do?",
+        "description": "Choose the treatment. Accounts and dates are filled in for you and can be changed under Advanced."
       }
     }
   },

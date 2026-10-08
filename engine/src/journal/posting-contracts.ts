@@ -145,6 +145,46 @@ export interface PostingDeps {
    * read documents.custom for settlement.
    */
   cashTenders?: CashPostingTender[];
+  /**
+   * The internal billing treatment an internal_billing document posts
+   * under: the rule version it names, both rule accounts, and the
+   * providing legal entity. Resolved at the posting boundary.
+   */
+  internalBilling?: InternalBillingPostingContext;
+}
+
+/** Account facts the internal billing policy checks. */
+export interface InternalBillingAccountFacts {
+  id: string;
+  /** Number and name, for refusals. */
+  label: string;
+  type: string;
+  eliminate: boolean;
+  isActive: boolean;
+  isSummary: boolean;
+}
+
+/** One internal billing rule version as the posting kernel consumes it. */
+export interface InternalBillingRuleFacts {
+  id: string;
+  code: string;
+  name: string;
+  method: "revenue_credit" | "cost_transfer" | "intercompany_sale";
+  debitAccountId: string;
+  creditAccountId: string;
+  effectiveFrom: string;
+  effectiveTo: string | null;
+  isActive: boolean;
+}
+
+export interface InternalBillingPostingContext {
+  rule: InternalBillingRuleFacts;
+  debitAccount: InternalBillingAccountFacts;
+  creditAccount: InternalBillingAccountFacts;
+  /** The document's subsidiary, or the root when the header names none. */
+  providerSubsidiaryId: string;
+  /** Company Settings → Features → Multi-subsidiary. */
+  multiSubsidiary: boolean;
 }
 
 /**

@@ -29,7 +29,8 @@ export const GET = defineRoute({
   if (denied) return denied
 
   const tasks = (await db.execute<Record<string, unknown>>(sql`
-    select id, code, name, status, estimated_hours as "estimatedHours"
+    select id, code, name, status, estimated_hours as "estimatedHours",
+                   budget_quantity::text as "budgetQuantity", budget_unit as "budgetUnit"
       from project_tasks
      where org_id = ${gate.user.orgId} and project_id = ${projectId}
      order by code nulls last, name

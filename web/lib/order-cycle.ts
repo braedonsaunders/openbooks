@@ -35,11 +35,13 @@ import { issueSalesOrder } from '@openbooks/engine/src/sales/sales-orders.ts'
 import { openQuantitySql, orderedNetOfCancelledSql } from '@openbooks/engine/src/records/order-line-remainders.ts'
 import { activeStockLocations, resolveLineStockLocation } from './stock-locations'
 import { isUuid } from './list-params'
+import { WORK_PERIOD_DOCUMENT_KINDS } from '@openbooks/engine/records/work-period'
 
 export { ORDER_KINDS, CONVERSION_TARGETS }
 export type { OrderKind }
 
 type OrderSourceRow = Record<string, unknown> & {
+  work_completed_on?: string | null
   id: string
   kind: string
   status: string
@@ -59,6 +61,8 @@ type OrderSourceRow = Record<string, unknown> & {
 }
 
 type OrderConvertLineRow = Record<string, unknown> & {
+  work_from?: string | null
+  work_to?: string | null
   id: string
   line_number: number
   item_id: string | null
@@ -1586,7 +1590,8 @@ export async function convertOrder(
     }
     const src = (await tx.execute<OrderSourceRow>(sql`
       select id, kind, status, party_id, currency, fx_rate, document_date, due_date,
-             subsidiary_id, department_id, project_id, location_id, class_id, extra_dims, memo, billing_method
+             subsidiary_id, department_id, project_id, location_id, class_id, extra_dims, memo, billing_method,
+             work_completed_on::text as work_completed_on
         from documents where id = ${sourceId} and org_id = ${orgId} for update
     `))
     const doc = src.rows[0]
@@ -1615,6 +1620,7 @@ export async function convertOrder(
              dl.department_id, dl.project_id, dl.location_id, dl.class_id, dl.extra_dims,
              dl.stock_location_id, dl.is_billable, dl.quantity_billed, dl.quantity_fulfilled,
              dl.quantity_cancelled, dl.price_basis,
+             dl.work_from::text as work_from, dl.work_to::text as work_to,
              i.kind as item_kind, i.income_account_id as item_income_account_id
         from document_lines dl left join items i on i.id = dl.item_id and i.org_id = dl.org_id
        where dl.document_id = ${sourceId} and dl.org_id = ${orgId}
@@ -1713,15 +1719,17 @@ export async function convertOrder(
 
     const convertedAmounts: string[] = []
     const convertedTaxes: string[] = []
+    // Work dates follow the order onto a document that also bills work.
+    const carriesWorkDates = WORK_PERIOD_DOCUMENT_KINDS.has(target.kind)
     const created = (await tx.execute<{ id: string }>(sql`
       insert into documents (org_id, kind, document_number, party_id, document_date, due_date,
                              currency, fx_rate, status, subsidiary_id, department_id, project_id, location_id,
-                             class_id, extra_dims, billing_method, memo, subtotal, tax_total, total, created_by)
+                             class_id, extra_dims, billing_method, memo, subtotal, tax_total, total, work_completed_on, created_by)
       values (${orgId}, ${target.kind}, ${documentNumber}, ${doc.party_id},
               ${documentDate}, ${doc.due_date}, ${doc.currency},
               ${doc.fx_rate}, ${targetStatus}, ${doc.subsidiary_id}, ${doc.department_id}, ${doc.project_id},
               ${doc.location_id}, ${doc.class_id}, ${JSON.stringify(doc.extra_dims ?? {})}::jsonb, ${doc.billing_method}, ${doc.memo},
-              '0', '0', '0', ${userId})
+              '0', '0', '0', ${carriesWorkDates ? doc.work_completed_on ?? null : null}, ${userId})
       returning id
     `)).rows[0]!
     const newId = created.id
@@ -1760,7 +1768,8 @@ export async function convertOrder(
       const inserted = (await tx.execute<{ id: string }>(sql`
         insert into document_lines (org_id, document_id, line_number, item_id, account_id, description,
               quantity, unit, unit_price, amount, tax_code_id, tax_group_id, tax_amount, marketplace_facilitator, department_id, project_id,
-              location_id, class_id, extra_dims, stock_location_id, is_billable, custom, created_by, price_basis)
+              location_id, class_id, extra_dims, stock_location_id, is_billable, custom, created_by, price_basis,
+              work_from, work_to)
         values (${orgId}, ${newId}, ${lineNo}, ${l.item_id}, ${convertedAccountOf(l)}, ${l.description},
               ${coveredQty}, ${l.unit}, ${l.unit_price}, ${amount},
               ${l.tax_code_id}, ${l.tax_group_id}, ${taxAmount}, ${l.marketplace_facilitator}, ${l.department_id}, ${l.project_id},
@@ -1772,7 +1781,8 @@ export async function convertOrder(
                 // receiving the stock a second time.
                 ...(doc.kind === 'purchase_order' && target.kind === 'vendor_bill' ? { purchaseOrderLineId: l.id } : {}),
                 convertedFrom: { documentId: sourceId, lineId: l.id, quantity: coveredQty },
-              })}::jsonb, ${userId}, ${l.price_basis == null ? null : JSON.stringify(l.price_basis)}::jsonb)
+              })}::jsonb, ${userId}, ${l.price_basis == null ? null : JSON.stringify(l.price_basis)}::jsonb,
+              ${carriesWorkDates ? l.work_from ?? null : null}, ${carriesWorkDates ? l.work_to ?? null : null})
         returning id
       `))
       const newLineId = inserted.rows[0]!.id

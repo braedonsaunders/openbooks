@@ -294,6 +294,22 @@ const SOURCES: Record<string, DocListSource> = {
     },
   }),
   purchase_order: documentSource({ recordType: 'purchase_order', kinds: ['purchase_order'], drawerParam: 'order', partyRole: 'vendor' }),
+  // Internal billing: the rule and the providing side ("From") are the
+  // document's identity; there is no party.
+  internal_billing: documentSource({
+    recordType: 'internal_billing',
+    kinds: ['internal_billing'],
+    drawerParam: 'doc',
+    joins: sql`left join internal_billing_rules ibr on ibr.id = d.internal_billing_rule_id and ibr.org_id = d.org_id
+               left join departments ibdept on ibdept.id = d.department_id and ibdept.org_id = d.org_id
+               left join projects ibproj on ibproj.id = d.project_id and ibproj.org_id = d.org_id
+               left join subsidiaries ibsub on ibsub.id = d.subsidiary_id and ibsub.org_id = d.org_id`,
+    builtInExpr: {
+      ...DOCUMENT_BUILT_IN_EXPR,
+      rule_name: sql`ibr.name`,
+      provider_name: sql`coalesce(ibdept.name, coalesce(ibproj.code || ' · ' || ibproj.name, ibproj.name), ibsub.name)`,
+    },
+  }),
   // Fulfillment — pick lists and shipments, each opened in its own drawer.
   pick_list: fulfillmentSource('pick_list', 'pick'),
   shipment: fulfillmentSource('shipment', 'shipment'),

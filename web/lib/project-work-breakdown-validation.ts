@@ -1,5 +1,5 @@
 import { isDocumentRevisionToken } from '@openbooks/engine/src/records/revision.ts'
-import { normalizeMoney } from '@openbooks/engine/src/money/money.ts'
+import { normalizeDecimal, normalizeMoney } from '@openbooks/engine/src/money/money.ts'
 import { canonicalDecimal } from './exact-decimal'
 
 const TASK_STATUSES = ['open', 'complete', 'cancelled'] as const
@@ -11,6 +11,15 @@ export interface WorkBreakdownTaskInput {
   status: TaskStatus
   estimatedHours: string | null
   estimatedCost: string | null
+  /** Current price (revenue) budget. */
+  estimatedPrice: string | null
+  /**
+   * Budgeted production quantity and its unit, set together or not at all.
+   * Undefined leaves the stored pair unchanged (the editor shows the pair only
+   * while Progress tracking is on).
+   */
+  budgetQuantity?: string | null
+  budgetUnit?: string | null
 }
 
 export class ProjectWorkBreakdownError extends Error {
@@ -55,6 +64,7 @@ export function assertTaskTransition(args: {
   to: TaskStatus
   estimatedHoursChanged: boolean
   estimatedCostChanged: boolean
+  estimatedPriceChanged?: boolean
   reason: string | null
 }): void {
   if (!TASK_TRANSITIONS[args.from].includes(args.to)) {
@@ -68,7 +78,7 @@ export function assertTaskTransition(args: {
   }
   const wasClosed = (CLOSED_STATUSES as readonly string[]).includes(args.from)
   const reopening = wasClosed && args.to === 'open'
-  const budgetChangedOnClosed = wasClosed && (args.estimatedHoursChanged || args.estimatedCostChanged)
+  const budgetChangedOnClosed = wasClosed && (args.estimatedHoursChanged || args.estimatedCostChanged || args.estimatedPriceChanged === true)
   if ((reopening || budgetChangedOnClosed) && !args.reason) {
     throw new ProjectWorkBreakdownError(
       reopening
@@ -130,13 +140,31 @@ function nonnegativeDecimal(value: unknown, label: string): string | null {
   return normalized
 }
 
+/** Positive numeric(28,8) production quantity, or null. */
+function productionQuantity(value: unknown): string | null {
+  if (value == null || value === '') return null
+  if (typeof value !== 'string' && typeof value !== 'number') {
+    throw new ProjectWorkBreakdownError('Production quantity must be a number')
+  }
+  const exact = canonicalDecimal(value, 8)
+  if (exact === null) throw new ProjectWorkBreakdownError('Production quantity must be a number with at most 8 decimals')
+  const normalized = normalizeDecimal(exact, 8)
+  if (normalized.startsWith('-') || /^0\.0+$/.test(normalized)) {
+    throw new ProjectWorkBreakdownError('Production quantity must be more than zero')
+  }
+  if (normalized.split('.')[0]!.replace(/^0+/, '').length > 20) {
+    throw new ProjectWorkBreakdownError('Production quantity is too large')
+  }
+  return normalized
+}
+
 /** Validate the complete WBS editor payload before opening a transaction. */
 export function parseWorkBreakdownTaskInput(input: unknown): WorkBreakdownTaskInput {
   if (!input || typeof input !== 'object' || Array.isArray(input)) {
     throw new ProjectWorkBreakdownError('Task details are required')
   }
   const body = input as Record<string, unknown>
-  const allowed = new Set(['code', 'name', 'status', 'estimatedHours', 'estimatedCost'])
+  const allowed = new Set(['code', 'name', 'status', 'estimatedHours', 'estimatedCost', 'estimatedPrice', 'budgetQuantity', 'budgetUnit'])
   const unknown = Object.keys(body).find((key) => !allowed.has(key))
   if (unknown) throw new ProjectWorkBreakdownError(`Unknown task field: ${unknown}`)
 
@@ -152,12 +180,21 @@ export function parseWorkBreakdownTaskInput(input: unknown): WorkBreakdownTaskIn
     throw new ProjectWorkBreakdownError('Invalid task status')
   }
 
+  const quantitySupplied = body.budgetQuantity !== undefined || body.budgetUnit !== undefined
+  const budgetQuantity = productionQuantity(body.budgetQuantity)
+  const budgetUnit = optionalText(body.budgetUnit, 32, 'Production unit')
+  if (quantitySupplied && (budgetQuantity === null) !== (budgetUnit === null)) {
+    throw new ProjectWorkBreakdownError('Enter both a production quantity and its unit, or neither')
+  }
+
   return {
     code: optionalText(body.code, 80, 'Task code'),
     name,
     status: status as TaskStatus,
     estimatedHours: nonnegativeDecimal(body.estimatedHours, 'Estimated hours'),
     estimatedCost: nonnegativeDecimal(body.estimatedCost, 'Estimated cost'),
+    estimatedPrice: nonnegativeDecimal(body.estimatedPrice, 'Estimated price'),
+    ...(quantitySupplied ? { budgetQuantity, budgetUnit } : {}),
   }
 }
 

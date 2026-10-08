@@ -37,6 +37,10 @@ export interface DocumentLineInput extends BillLineInput {
   projectId?: string | null
   locationId?: string | null
   classId?: string | null
+  /** First and last day of the work this line bills (customer invoices,
+   *  credits and sales orders). Either may be absent; both must be ordered. */
+  workFrom?: string | null
+  workTo?: string | null
   /** Warehouse used by inventory receipt or issue effects for this line. */
   stockLocationId?: string | null
   /**
@@ -107,6 +111,9 @@ export interface DocumentEditInput {
   extraDims?: Record<string, string | null>
   subsidiaryId?: string | null
   expectedPayDate?: string | null
+  /** Date the invoiced work was completed (customer invoices, credits and
+   *  sales orders). Informational: never a posting or recognition date. */
+  workCompletedOn?: string | null
   paymentHoldReason?: string | null
   internalNotes?: string | null
   billingMethod?: string | null

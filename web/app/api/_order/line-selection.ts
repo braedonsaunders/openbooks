@@ -17,6 +17,9 @@ export interface OrderLineInput {
   projectId?: string | null
   /** Warehouse relieve/fulfil effects use for a stocked line. */
   stockLocationId?: string | null
+  /** Work period the line bills (sales orders); either bound may be absent. */
+  workFrom?: string | null
+  workTo?: string | null
   extraDims?: Record<string, string | null>
   /**
    * Non-null signals that the line came from a catalog price preview. Save

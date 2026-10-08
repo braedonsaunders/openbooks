@@ -35,6 +35,7 @@ import { resolveStoredValueLiabilityByLine, resolveStoreCreditLiability } from "
 import { resolveCashPostingTenders, TenderRefusal } from "../sales/document-tenders.ts";
 import { resolveProviderTaxPlans, resolveShipToSnapshot } from "./posting-provider-tax.ts";
 import { applySubsidiaries } from "./posting-subsidiaries.ts";
+import { resolveInternalBillingPostingContext } from "./internal-billing-posting.ts";
 
 import { postingEffectSubsidiaryId } from "./posting-dispatch.ts";
 import type { PostDocumentOptions } from "../journal/posting-contracts.ts";
@@ -231,6 +232,13 @@ export async function prepareDocumentPosting(documentId: string, deps: PostingDe
     .from(schema.documentLines)
     .where(and(eq(schema.documentLines.documentId, documentId), eq(schema.documentLines.orgId, doc.orgId)))
     .orderBy(asc(schema.documentLines.lineNumber));
+
+  if (doc.kind === "internal_billing" && !deps.internalBilling) {
+    deps = {
+      ...deps,
+      internalBilling: await resolveInternalBillingPostingContext(db, doc, lines, { enforceFeatures: !deps.migration }),
+    };
+  }
 
   try {
     await assertGeneratedBillingPostable(db, doc.orgId, documentId, { document: doc, lines });

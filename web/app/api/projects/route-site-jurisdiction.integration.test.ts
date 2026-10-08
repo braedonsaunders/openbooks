@@ -30,10 +30,13 @@ const mockAuthz = `
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier.endsWith("/lib/authz")) {
+    // Match the resolved module, not the import spelling: the route factory's
+    // feature gate imports the same authz module through a relative path.
+    const resolved = nextResolve(specifier, context);
+    if (resolved.url.endsWith("/web/lib/authz.ts")) {
       return { url: "mock:authz", shortCircuit: true };
     }
-    return nextResolve(specifier, context);
+    return resolved;
   },
   load(url, context, nextLoad) {
     if (url === "mock:authz") {

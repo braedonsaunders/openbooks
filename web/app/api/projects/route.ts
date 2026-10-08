@@ -1,33 +1,24 @@
 import { z } from 'zod'
 import { NextResponse } from 'next/server'
-import { sql } from 'drizzle-orm'
-import { db, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
 import { defineRoute } from '@/lib/api/route'
 import { exactMoney, uuidId } from '@/lib/api/json'
 import { unprocessable } from '@/lib/api/responses'
-import { resolveIdempotentReplay } from '@/lib/api/idempotency'
-import { guardSubsidiaryScope, subsidiariesInScope } from '../../../lib/authz'
 import { isUuid } from '../../../lib/list-params'
-import { findUnownedCustomReferences, loadFieldDefs, validateCustomValues } from '../../../lib/custom-fields'
 import { loadProject } from './_lib'
-import { normalizeMoney } from '@openbooks/engine/src/money/money.ts'
-import { canonicalDecimal } from '../../../lib/exact-decimal'
-import { moneyRefusal } from '../../../lib/payroll-decimal-refusal'
-import { isIsoCalendarDate } from '@openbooks/engine/src/platform/business-date.ts'
-import { normalizeSubdivisionCode } from '@openbooks/engine/src/compliance/lien-jurisdictions.ts'
-import { listScopedPartyOptions } from '../../../lib/scoped-options'
-import { acquireFeatureGateLock, isFeatureEnabled } from '../../../lib/features'
 import { notFound } from "@/lib/api/responses";
+import {
+  createProject,
+  PROJECT_STATUSES,
+  ProjectCreateError,
+} from '@openbooks/engine/src/projects/project-create.ts'
 
-
-const STATUSES = ['quoted', 'awarded', 'active', 'substantially_complete', 'closed', 'cancelled'] as const
 
 const projectCreateBody = z.object({
   name: z.string(),
   tasks: z.array(z.object({ name: z.string(), code: z.string().nullable().optional() })).optional(),
   isActive: z.boolean().optional(),
   subsidiaryIncludeChildren: z.boolean().optional(),
-  status: z.enum(STATUSES).optional(),
+  status: z.enum(PROJECT_STATUSES).optional(),
   customerId: uuidId.nullable().optional(),
   foremanId: uuidId.nullable().optional(),
   managerId: uuidId.nullable().optional(),
@@ -53,46 +44,6 @@ function bad(error: string, field?: string, status = 422) {
   return unprocessable(error, { ...(field ? { field } : {}), status: status as 400 | 422 })
 }
 
-/** Trimmed string or null ('' and non-strings collapse to null). */
-function strOrNull(v: unknown): string | null {
-  if (typeof v !== 'string') return null
-  const s = v.trim()
-  return s === '' ? null : s
-}
-
-function uuidOrNull(v: unknown): string | null | 'invalid' {
-  const s = strOrNull(v)
-  if (s === null) return null
-  return isUuid(s) ? s : 'invalid'
-}
-
-/** Exact numeric(19,4) money string, null, or 'invalid'. */
-function moneyOrNull(v: unknown): string | null | 'invalid' {
-  if (v === null || v === undefined || v === '') return null
-  const exact = canonicalDecimal(v, 4)
-  if (exact === null) return 'invalid'
-  // canonicalDecimal bounds scale, not magnitude: a pasted 20-digit figure
-  // would otherwise sail through and die in Postgres as a raw numeric
-  // overflow (HTTP 500). contract_value is numeric(19,4): 15 whole digits.
-  if (exact.replace(/^[+-]/, '').split('.')[0]!.replace(/^0+/, '').length > 15) return 'invalid'
-  try {
-    return normalizeMoney(exact)
-  } catch {
-    return 'invalid'
-  }
-}
-
-function asRecord(v: unknown): Record<string, unknown> {
-  return typeof v === 'object' && v !== null && !Array.isArray(v) ? (v as Record<string, unknown>) : {}
-}
-
-async function partyExists(id: string, orgId: string): Promise<boolean> {
-  const r = (await db.execute(
-    sql`select 1 from parties where id = ${id} and org_id = ${orgId}`,
-  ))
-  return !!r.rows[0]
-}
-
 /**
  * Create one tenant-owned project.
  *
@@ -102,14 +53,10 @@ async function partyExists(id: string, orgId: string): Promise<boolean> {
  * payload is a 409, never the older project returned as though it matched.
  *
  * This is the only write path for new projects: the list opens an unsaved
- * drawer (zero writes) and this endpoint persists it exactly once.
- *
- * The write runs under the org's feature-gate fence with the `projects` gate
- * re-checked inside the same transaction: the entry guard above read the gate
- * outside any transaction, so a concurrent feature disable could otherwise
- * commit between that read and this write and strand an active project under a
- * disabled feature. The fence is the same one the disable path holds while it
- * re-evaluates its blockers, so exactly one side wins.
+ * drawer (zero writes) and this endpoint persists it exactly once through the
+ * engine's createProject command, which validates every reference, takes the
+ * feature-gate fence, re-checks the `projects` gate and the caller's
+ * legal-entity scope in the same transaction, and audits the create.
  */
 export const POST = defineRoute({
   permission: 'projects.manage',
@@ -124,250 +71,25 @@ export const POST = defineRoute({
   if (body.tasks !== undefined) {
     return bad('Work breakdown tasks must be changed through the project task endpoint', 'tasks')
   }
-  // Flags ride raw into boolean columns: PostgreSQL would silently coerce
-  // spellings like 'off'/'on' or throw 22P02 on anything else. Refuse
-  // non-booleans like every other flag write.
-  if (body.isActive !== undefined && typeof body.isActive !== 'boolean') {
-    return bad('isActive must be a boolean', 'isActive', 400)
-  }
-  if (body.subsidiaryIncludeChildren !== undefined && typeof body.subsidiaryIncludeChildren !== 'boolean') {
-    return bad('subsidiaryIncludeChildren must be a boolean', 'subsidiaryIncludeChildren', 400)
-  }
 
-  if (body.status !== undefined && !STATUSES.includes(body.status as (typeof STATUSES)[number])) {
-    return bad('Invalid status', 'status')
-  }
-  const status = typeof body.status === 'string' ? body.status : 'active'
-
-  // A nameless record must never persist: the draft flow stored a 'New
-  // project' sentinel, this flow refuses it, so a create can never mint a
-  // placeholder that reads as "correctly inactive".
-  const name = strOrNull(body.name) ?? ''
-  if (!name || name === 'New project') {
-    return bad('name_required', 'name')
-  }
-  const isActive = body.isActive !== false
-
-  let customerId: string | null = null
-  if (body.customerId !== undefined) {
-    const v = uuidOrNull(body.customerId)
-    if (v === 'invalid') return bad('Invalid customer', 'customerId')
-    if (v !== null && !(await partyExists(v, user.orgId))) return bad('Customer not found', 'customerId')
-    customerId = v
-  }
-  let foremanId: string | null = null
-  if (body.foremanId !== undefined) {
-    const v = uuidOrNull(body.foremanId)
-    if (v === 'invalid') return bad('Invalid foreman', 'foremanId')
-    if (v !== null && !(await partyExists(v, user.orgId))) return bad('Foreman not found', 'foremanId')
-    foremanId = v
-  }
-  let managerId: string | null = null
-  if (body.managerId !== undefined) {
-    const v = uuidOrNull(body.managerId)
-    if (v === 'invalid') return bad('Invalid manager', 'managerId')
-    if (v !== null && !(await partyExists(v, user.orgId))) return bad('Manager not found', 'managerId')
-    managerId = v
-  }
-  // The picker only offers subsidiary-visible parties: the write must agree,
-  // so an out-of-scope customer/foreman/manager is refused by name instead
-  // of persisting a cross-subsidiary link the caller can never see again.
-  if (customerId !== null || foremanId !== null || managerId !== null) {
-    const visiblePartyIds = new Set(
-      (await listScopedPartyOptions(user.orgId, gate.allowedSubsidiaryIds, { activeOnly: true })).map((row) => row.id),
+  let created: boolean
+  try {
+    const result = await createProject(
+      { orgId: user.orgId, actorId: user.id, allowedSubsidiaryIds: gate.allowedSubsidiaryIds },
+      requestId,
+      body,
     )
-    if (customerId !== null && !visiblePartyIds.has(customerId)) {
-      return bad(`project customer "${customerId}" is not visible in your subsidiary scope`, 'customerId')
-    }
-    if (foremanId !== null && !visiblePartyIds.has(foremanId)) {
-      return bad(`project foreman "${foremanId}" is not visible in your subsidiary scope`, 'foremanId')
-    }
-    if (managerId !== null && !visiblePartyIds.has(managerId)) {
-      return bad(`project manager "${managerId}" is not visible in your subsidiary scope`, 'managerId')
-    }
+    created = result.created
+  } catch (error) {
+    if (!(error instanceof ProjectCreateError)) throw error
+    if (error.status === 404) return error.code === 'feature_disabled' ? notFound('project') : notFound('record')
+    // The idempotency conflict keeps its typed code and remedy for the factory.
+    if (error.status === 409) throw error
+    return bad(error.message, error.field, error.status)
   }
-
-  let subsidiaryId: string | null = null
-  if (body.subsidiaryId !== undefined) {
-    const value = uuidOrNull(body.subsidiaryId)
-    if (value === 'invalid') return bad('Invalid subsidiary', 'subsidiaryId')
-    if (!subsidiariesInScope(gate, [value])) return bad('Subsidiary not found', 'subsidiaryId')
-    if (value) {
-      const subsidiary = ((await db.execute(sql`
-        select 1 from subsidiaries
-         where id = ${value} and org_id = ${user.orgId} and is_active and not is_elimination`)))
-      if (!subsidiary.rows.length) return bad('Subsidiary not found', 'subsidiaryId')
-    }
-    subsidiaryId = value
-  }
-  const subsidiaryIncludeChildren =
-    body.subsidiaryIncludeChildren !== undefined ? body.subsidiaryIncludeChildren === true : true
-
-  let startsOn: string | null = null
-  if (body.startsOn !== undefined) {
-    const s = strOrNull(body.startsOn)
-    if (s !== null && !isIsoCalendarDate(s)) return bad('Invalid start date', 'startsOn')
-    startsOn = s
-  }
-  let endsOn: string | null = null
-  if (body.endsOn !== undefined) {
-    const s = strOrNull(body.endsOn)
-    if (s !== null && !isIsoCalendarDate(s)) return bad('Invalid end date', 'endsOn')
-    endsOn = s
-  }
-
-  // Native project-level invoicing override (a real column, not custom jsonb).
-  const invoicingRaw = body.invoicingPreference
-  const invoicingPreference =
-    invoicingRaw == null || (typeof invoicingRaw === 'object' && Object.values(invoicingRaw).every((v) => v == null))
-      ? null
-      : invoicingRaw as Record<string, unknown>
-
-  const defs = await loadFieldDefs('projects')
-  const customResult = validateCustomValues(defs, asRecord(body.custom))
-  // The validator names the field in each error ("Label is required"): echo
-  // the first one so a required custom field names itself instead of
-  // refusing as an anonymous invalid_custom_fields.
-  if (!customResult.ok) return bad(Object.values(customResult.errors)[0] ?? 'invalid_custom_fields', 'custom')
-  // Reference custom values are uuid-SHAPED at this point but nothing proves
-  // the referenced row belongs to the caller: refuse foreign or dangling ids
-  // instead of persisting a cross-tenant pointer.
-  const unowned = await findUnownedCustomReferences(user.orgId, defs, customResult.cleaned)
-  if (unowned.length > 0) return bad('unknown_custom_reference', 'custom')
-  const custom = customResult.cleaned
-
-  const contractValue = body.contractValue === undefined ? null : moneyOrNull(body.contractValue)
-  if (contractValue === 'invalid') return bad(moneyRefusal('Contract value', body.contractValue), 'contractValue')
-
-  // Where the improved property sits, as an ISO 3166-2 subdivision code:
-  // lien waivers release payment only when their jurisdiction matches it,
-  // so an unknown code refuses here instead of storing unusable text.
-  let siteJurisdiction: string | null = null
-  if (body.siteJurisdiction !== undefined && body.siteJurisdiction !== null && body.siteJurisdiction !== '') {
-    const canonical = normalizeSubdivisionCode(body.siteJurisdiction)
-    if (!canonical) {
-      return bad(`unknown site jurisdiction ${JSON.stringify(body.siteJurisdiction)} — use an ISO 3166-2 subdivision code (e.g. US-CA)`, 'siteJurisdiction')
-    }
-    siteJurisdiction = canonical
-  }
-
-  // Project type governs the billing classifier (its own billing_method column);
-  // the project only stores the type reference.
-  let projectTypeId: string | null = null
-  if (body.projectTypeId !== undefined) {
-    const v = uuidOrNull(body.projectTypeId)
-    if (v === 'invalid') return bad('Invalid project type', 'projectTypeId')
-    projectTypeId = v
-    if (v) {
-      const pt = (await db.execute(sql`select 1 from project_types where id = ${v} and org_id = ${user.orgId} and is_active`))
-      if (pt.rows.length === 0) return bad('Unknown project type', 'projectTypeId')
-    }
-  }
-
-  const snapshot = {
-    id: requestId,
-    org_id: user.orgId,
-    name,
-    code: strOrNull(body.code),
-    customer_id: customerId,
-    foreman_id: foremanId,
-    manager_id: managerId,
-    subsidiary_id: subsidiaryId,
-    subsidiary_include_children: subsidiaryIncludeChildren,
-    status,
-    project_type_id: projectTypeId,
-    invoicing_preference: invoicingPreference,
-    customer_po_number: strOrNull(body.customerPoNumber),
-    contract_value: contractValue,
-    starts_on: startsOn,
-    ends_on: endsOn,
-    notes: strOrNull(body.notes),
-    site_jurisdiction: siteJurisdiction,
-    is_active: isActive,
-    custom,
-  }
-
-  let created = false
-  let featureRefused = false
-  let scopeRefused = false
-  await withOrgTransaction(user.orgId, async () => {
-    // Serialize against feature toggles, then re-ask the gate the entry guard
-    // already asked: its answer may be stale by the time this write lands.
-    await acquireFeatureGateLock(user.orgId)
-    if (!(await isFeatureEnabled(user.orgId, 'projects'))) {
-      featureRefused = true
-      return
-    }
-    if (guardSubsidiaryScope(gate, subsidiaryId)) {
-      scopeRefused = true
-      return
-    }
-    const inserted = (await db.execute<{ id: string }>(sql`
-      insert into projects
-        (id, org_id, name, code, customer_id, foreman_id, manager_id,
-         subsidiary_id, subsidiary_include_children, status, project_type_id,
-         invoicing_preference, customer_po_number, contract_value,
-         starts_on, ends_on, notes, site_jurisdiction, is_active, custom, created_by, updated_by)
-      values
-        (${requestId}, ${user.orgId}, ${name}, ${strOrNull(body.code)},
-         ${customerId}, ${foremanId}, ${managerId},
-         ${subsidiaryId}, ${subsidiaryIncludeChildren}, ${status}, ${projectTypeId},
-         ${invoicingPreference === null ? sql`null` : sql`${JSON.stringify(invoicingPreference)}::jsonb`},
-         ${strOrNull(body.customerPoNumber)}, ${contractValue},
-         ${startsOn}, ${endsOn}, ${strOrNull(body.notes)}, ${siteJurisdiction}, ${isActive},
-         ${JSON.stringify(custom)}::jsonb, ${user.id}, ${user.id})
-      -- A retry is accepted only after the existing audited create payload is verified below.
-      on conflict (id) do nothing
-      returning id
-    `))
-    if (!inserted.rows[0]) {
-      const prior = (await db.execute<{ id: string }>(sql`
-        select id from projects
-         where id = ${requestId} and org_id = ${user.orgId}
-      `))
-      if (!prior.rows[0]) {
-        scopeRefused = true
-        return
-      }
-      // Compare replays with the immutable create snapshot in the insert
-      // audit event, rather than today's project row, so an unchanged retry
-      // still succeeds even when a later PATCH has legitimately edited it.
-      const replay = await resolveIdempotentReplay(db, {
-        orgId: user.orgId,
-        table: 'projects',
-        key: requestId,
-        match: snapshot,
-      })
-      if (replay !== 'replay') throw new ProjectCreateConflict()
-      created = false
-      return
-    }
-    // Header creation moves billing caps, ownership, and legal-entity scope,
-    // so it carries the same audit row every other material project write does.
-    await db.execute(sql`
-      insert into audit_log (org_id, table_name, row_id, action, changes, actor_id, request_id)
-      values (${user.orgId}, 'projects', ${requestId}, 'insert',
-              ${JSON.stringify({ before: null, after: snapshot })}::jsonb, ${user.id}, ${requestId})
-    `)
-    created = true
-  })
-  if (featureRefused) {
-    return notFound('project')
-  }
-  if (scopeRefused) return notFound("record")
 
   const payload = await loadProject(requestId, user.orgId, gate.allowedSubsidiaryIds)
   if (!payload) return bad('save_failed', undefined, 500)
   return NextResponse.json(payload, { status: created ? 201 : 200 })
   },
 })
-
-class ProjectCreateConflict extends Error {
-  readonly status = 409 as const
-  readonly code = 'idempotency_key_conflict' as const
-  readonly remedy = 'Close and reopen the project form to retry with a fresh idempotency key.'
-
-  constructor() {
-    super('idempotency_key_conflict')
-  }
-}

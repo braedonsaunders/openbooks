@@ -12,6 +12,7 @@ export type DefaultCloseFeatureContext = {
   multiCurrency: boolean;
   multiSubsidiary: boolean;
   salesChannels: boolean;
+  unbilledRevenueAccrual: boolean;
 };
 
 /**
@@ -43,6 +44,7 @@ export async function defaultCloseFeatureContext(
     multiCurrency: await dataDependentFeatureDefault(executor, orgId, "multiCurrency", features),
     multiSubsidiary: await dataDependentFeatureDefault(executor, orgId, "multiSubsidiary", features),
     salesChannels: featureEnabled(features, "salesChannels"),
+    unbilledRevenueAccrual: featureEnabled(features, "unbilledRevenueAccrual"),
   };
 }
 
@@ -58,6 +60,7 @@ export function defaultCloseStepEnabled(
   if (key === "commerce-complete") return features.salesChannels;
   if (key === "depreciation-posted") return features.fixedAssets;
   if (key === "recognition-posted") return features.revenueRecognition;
+  if (key === "unbilled-revenue-accrued") return features.unbilledRevenueAccrual;
   if (["fx-ready", "fx-revalued"].includes(key)) return features.multiCurrency;
   if (["intercompany-balanced", "consolidation"].includes(key)) return features.multiSubsidiary;
   return true;

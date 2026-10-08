@@ -49,7 +49,9 @@ export function reportEntityFeatureKey(query: unknown): string | null {
 export const STATEMENT_KIND_FEATURE: Partial<Record<string, string>> = {
   'payroll-support': 'payroll',
   'project-profitability': 'projects',
+  'project-budget-vs-actual': 'projects',
   'true-cost': 'projects',
+  'earned-value': 'projectProgress',
   budget: 'budgets',
   availability: 'warehousing',
   replenishment: 'warehousing',

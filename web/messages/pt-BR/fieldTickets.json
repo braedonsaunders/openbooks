@@ -38,7 +38,7 @@
     "createFailed": "Não foi possível criar o boletim"
   },
   "editor": {
-    "tabs": { "time": "Tempo", "items": "Itens", "tasks": "Tarefas", "related": "Relacionados" },
+    "tabs": { "time": "Tempo", "items": "Itens", "tasks": "Tarefas", "related": "Relacionados", "production": "Produção" },
     "periodLocked": "Remova as horas lançadas antes de alterar o período do boletim.",
     "back": "Boletins de campo",
     "submit": "Enviar",
@@ -116,7 +116,10 @@
       "add": "Adicionar linha",
       "remove": "Remover linha",
       "empty": "Nenhuma linha ainda.",
-      "itemRequired": "Escolha um item", "rateFailed": "Não foi possível resolver a tarifa do item", "projectLoadFailed": "Não foi possível carregar o projeto", "reloadFailed": "Não foi possível recarregar o ticket"
+      "itemRequired": "Escolha um item", "rateFailed": "Não foi possível resolver a tarifa do item", "projectLoadFailed": "Não foi possível carregar o projeto", "reloadFailed": "Não foi possível recarregar o ticket",
+      "task": "Tarefa",
+      "noTask": "Sem tarefa",
+      "taskLabel": "Tarefa: {task}"
     },
     "tasks": { "title": "Tarefas do projeto", "hint": "Tarefas WBS disponíveis para apropriar as horas da equipe neste projeto.", "code": "Código", "task": "Tarefa", "estimatedHours": "Horas estimadas" },
     "totals": {
@@ -155,6 +158,19 @@
     "discard": "Descartar rascunho",
     "discardConfirm": "Descartar este rascunho vazio? Um rascunho que já tenha horas, linhas ou assinaturas é mantido — só sai o rascunho sem nada.",
     "discardFailed": "Não foi possível descartar o rascunho.",
-    "discarded": "Rascunho descartado."
+    "discarded": "Rascunho descartado.",
+    "production": {
+      "title": "Produção",
+      "hint": "Quantidades executadas nesta ficha, por tarefa. A aprovação as registra como progresso do projeto.",
+      "noBudgetedTasks": "Nenhuma tarefa deste projeto tem quantidade orçada. Defina-a na estrutura analítica do projeto para informar a produção.",
+      "task": "Tarefa",
+      "pickTask": "Escolha uma tarefa",
+      "quantity": "Quantidade",
+      "unit": "Unidade",
+      "note": "Observação",
+      "add": "Adicionar produção",
+      "empty": "Nenhuma produção informada.",
+      "remove": "Remover linha de produção"
+    }
   }
 }

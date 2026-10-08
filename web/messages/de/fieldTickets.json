@@ -38,7 +38,7 @@
     "createFailed": "Der Bericht konnte nicht erstellt werden"
   },
   "editor": {
-    "tabs": { "time": "Zeit", "items": "Positionen", "tasks": "Aufgaben", "related": "Verknüpft" },
+    "tabs": { "time": "Zeit", "items": "Positionen", "tasks": "Aufgaben", "related": "Verknüpft", "production": "Leistung" },
     "periodLocked": "Entfernen Sie erfasste Stunden, bevor Sie den Zeitraum des Berichts ändern.",
     "back": "Regieberichte",
     "submit": "Einreichen",
@@ -116,7 +116,10 @@
       "add": "Zeile hinzufügen",
       "remove": "Zeile entfernen",
       "empty": "Noch keine Zeilen.",
-      "itemRequired": "Wählen Sie eine Position", "rateFailed": "Positionssatz konnte nicht ermittelt werden", "projectLoadFailed": "Projekt konnte nicht geladen werden", "reloadFailed": "Ticket konnte nicht neu geladen werden"
+      "itemRequired": "Wählen Sie eine Position", "rateFailed": "Positionssatz konnte nicht ermittelt werden", "projectLoadFailed": "Projekt konnte nicht geladen werden", "reloadFailed": "Ticket konnte nicht neu geladen werden",
+      "task": "Aufgabe",
+      "noTask": "Keine Aufgabe",
+      "taskLabel": "Aufgabe: {task}"
     },
     "tasks": { "title": "Projektaufgaben", "hint": "PSP-Aufgaben, auf die Mannschaftsstunden dieses Projekts kontiert werden können.", "code": "Code", "task": "Aufgabe", "estimatedHours": "Geplante Stunden" },
     "totals": {
@@ -155,6 +158,19 @@
     "discard": "Entwurf verwerfen",
     "discardConfirm": "Diesen leeren Entwurf verwerfen? Ein Entwurf, der bereits Stunden, Zeilen oder Unterschriften trägt, bleibt erhalten — nur ein Entwurf ohne Inhalt wird entfernt.",
     "discardFailed": "Der Entwurf konnte nicht verworfen werden.",
-    "discarded": "Entwurf verworfen."
+    "discarded": "Entwurf verworfen.",
+    "production": {
+      "title": "Leistung",
+      "hint": "Auf diesem Nachweis eingebaute Mengen je Aufgabe. Mit der Genehmigung werden sie als Projektfortschritt erfasst.",
+      "noBudgetedTasks": "Keine Aufgabe dieses Projekts hat eine budgetierte Menge. Legen Sie sie im Strukturplan des Projekts fest, um Leistung zu melden.",
+      "task": "Aufgabe",
+      "pickTask": "Aufgabe wählen",
+      "quantity": "Menge",
+      "unit": "Einheit",
+      "note": "Notiz",
+      "add": "Leistung hinzufügen",
+      "empty": "Keine Leistung gemeldet.",
+      "remove": "Leistungszeile entfernen"
+    }
   }
 }

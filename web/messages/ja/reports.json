@@ -42,7 +42,9 @@
       "resourcingCapacityDemandTitle": "稼働能力と需要",
       "resourcingCapacityDemandDescription": "正味稼働能力を担当者指定、一般、加重パイプラインの需要と比較します。",
       "resourcingEngagementTitle": "案件予測",
-      "resourcingEngagementDescription": "月および通貨別に、予定時間、売上、労務費、利益を予測します。"
+      "resourcingEngagementDescription": "月および通貨別に、予定時間、売上、労務費、利益を予測します。",
+      "projectBudgetVsActualTitle": "プロジェクト予算と実績",
+      "projectBudgetVsActualDescription": "タスク別の当初予算・現行予算と実績時間・原価の比較。"
     },
     "groups": {
       "financial": "財務諸表",
@@ -3071,6 +3073,7 @@
       "disposal": "除却",
       "revaluation": "再評価",
       "revenue_recognition": "収益認識",
+      "revenue_accrual": "未請求収益の見越計上",
       "inventory": "在庫",
       "lease": "リース",
       "allocation": "配賦",
@@ -3178,5 +3181,68 @@
       "purchase_order": "発注書"
     },
     "note": "変換は取引リンクで追跡されます。履歴上の移行元リンクは移行が必要な場合があります。"
+  },
+  "earnedValue": {
+    "title": "出来高",
+    "description": "プロジェクト・タスク別の予算、完了率、出来高、実績コスト、見積。",
+    "hubDescription": "プロジェクト・タスク別の完了率、CPI、完成時総見積。",
+    "asOf": "{date} 時点",
+    "note": "実績コストは承認済み労務と計上済み原価伝票をタスク別に集計したものです。タスクのない原価はプロジェクト合計にのみ含まれます。完了率は施工数量、次にスケジュール進捗、次に原価比例を使用します。",
+    "search": "プロジェクトまたはタスクを検索…",
+    "allProjects": "すべての有効なプロジェクト",
+    "projectTotal": "プロジェクト合計",
+    "empty": "条件に一致するタスク付きプロジェクトはありません。",
+    "columns": {
+      "project": "プロジェクト",
+      "task": "タスク",
+      "basis": "基準",
+      "percent": "完了率",
+      "bac": "予算 (BAC)",
+      "ev": "出来高 (EV)",
+      "ac": "実績 (AC)",
+      "cpi": "CPI",
+      "etc": "残作業 (ETC)",
+      "eac": "完成時 (EAC)",
+      "vac": "差異 (VAC)"
+    },
+    "basis": {
+      "quantity": "施工数量",
+      "schedule": "スケジュール進捗",
+      "cost": "原価比例",
+      "none": "未測定"
+    }
+  },
+  "projectBudget": {
+    "title": "プロジェクト予算と実績",
+    "description": "各タスクの当初（受注）予算、現行予算、実績時間と実績原価、および各予算との差異。",
+    "asOf": "{date} 時点",
+    "chooseProject": "プロジェクトを選択",
+    "chooseProjectHint": "予算と実績時間・原価を比較するプロジェクトを選択してください。",
+    "unassigned": "タスク未割当",
+    "total": "合計",
+    "empty": "このプロジェクトにはまだタスクがありません。",
+    "originalFromSource": "当初予算は {source} から {date} に記録。差異は予算から実績を引いた値で、マイナスは超過です。",
+    "originalFromWbs": "当初予算は作業分解から {date} に記録。差異は予算から実績を引いた値で、マイナスは超過です。",
+    "noOriginal": "このプロジェクトの当初予算は記録されていません。作業分解でベースラインを設定してください。差異は予算から実績を引いた値です。",
+    "priceNote": "価格：当初 {original} · 現行 {current} · 請求済 {invoiced}。実績原価は承認済み時間×原価単価と計上済みの工事原価の合計です。",
+    "columns": {
+      "project": "プロジェクト",
+      "task": "タスク",
+      "originalHours": "当初時間",
+      "currentHours": "現行時間",
+      "actualHours": "実績時間",
+      "originalCost": "当初原価",
+      "currentCost": "現行原価",
+      "actualCost": "実績原価",
+      "varianceToOriginal": "当初との差異",
+      "varianceToCurrent": "現行との差異",
+      "originalPrice": "当初価格",
+      "currentPrice": "現行価格"
+    },
+    "summary": {
+      "originalPrice": "当初価格",
+      "currentPrice": "現行価格",
+      "invoicedToDate": "請求済額"
+    }
   }
 }

@@ -584,6 +584,17 @@ export const NAV_MODULES: NavModule[] = [
     recordTarget: { kind: 'query', param: 'entry' },
   },
   {
+    key: 'internal-billing',
+    href: '/internal-billing',
+    label: 'Internal Billing',
+    iconKey: 'split',
+    group: 'accounting',
+    subgroup: 'ledger',
+    requiredPermission: 'gl.read',
+    featureKey: 'internalBilling',
+    recordTarget: { kind: 'query', param: 'doc' },
+  },
+  {
     key: 'accounts',
     href: '/accounts',
     label: 'Chart of Accounts',
@@ -1230,6 +1241,8 @@ export const DEFAULT_NAV_ORDER: Record<NavGroupKey, readonly string[]> = {
     'accounting-changes',
     'provisions',
     'nonprofit',
+    // Within the ledger section, after Journals and Chart of Accounts.
+    'internal-billing',
   ],
   insights: ['reports', 'analytics', 'insights', 'saved-searches'],
   settings: [

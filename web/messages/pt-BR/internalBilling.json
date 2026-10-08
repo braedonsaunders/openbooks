@@ -1,0 +1,61 @@
+{
+  "title": "Faturamento interno",
+  "description": "Fature trabalho entre departamentos, projetos e subsidiárias. Cada regra define como a movimentação fica fora dos totais da empresa.",
+  "list": {
+    "new": "Novo faturamento interno",
+    "emptyTitle": "Ainda não há faturamento interno",
+    "emptyDescription": "Registre o trabalho que uma parte da empresa faz para outra, para que o departamento, projeto ou subsidiária corretos sejam creditados e cobrados."
+  },
+  "fields": {
+    "rule": "Regra",
+    "from": "De",
+    "rate": "Taxa",
+    "billable": "Faturável",
+    "billRate": "Taxa de faturamento"
+  },
+  "drawer": {
+    "newTitle": "Novo faturamento interno",
+    "description": "Escolha quem fornece o trabalho e quem o recebe.",
+    "from": "De",
+    "to": "Para",
+    "chooseRule": "Escolha uma regra",
+    "noRules": "Ainda não há regras de faturamento interno. Adicione uma em Configuração → Faturamento interno.",
+    "none": "Nenhum",
+    "sameAsFrom": "Igual a De",
+    "chooseSubsidiary": "Escolha uma subsidiária",
+    "addLine": "Adicionar linha",
+    "removeLine": "Remover linha",
+    "saveDraft": "Salvar rascunho",
+    "journalEntry": "Lançamento contábil",
+    "total": "Total",
+    "billed": "Faturado ao cliente"
+  },
+  "void": {
+    "title": "Anular faturamento interno",
+    "message": "O lançamento é estornado. Uma linha faturada a um cliente precisa ser liberada antes, anulando ou excluindo essa fatura.",
+    "reason": "Motivo"
+  },
+  "feedback": {
+    "saved": "Rascunho salvo",
+    "posted": "Lançado",
+    "pendingApproval": "Enviado para aprovação",
+    "voided": "Anulado",
+    "saveFailed": "Não foi possível salvar o rascunho.",
+    "postFailed": "Não foi possível lançar o documento.",
+    "voidFailed": "Não foi possível anular o documento."
+  },
+  "methods": {
+    "revenue_credit": {
+      "label": "Crédito da venda ao departamento",
+      "description": "O departamento que fez o trabalho recebe o crédito pela receita; a receita da empresa não é contada duas vezes."
+    },
+    "cost_transfer": {
+      "label": "Transferência de custo",
+      "description": "Transfere o custo para o departamento ou projeto que usou o trabalho; o custo da empresa não muda."
+    },
+    "intercompany_sale": {
+      "label": "Venda intercompanhia",
+      "description": "Uma subsidiária vende para outra; os dois lados são eliminados na consolidação."
+    }
+  }
+}

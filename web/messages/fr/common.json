@@ -102,7 +102,9 @@
     "fulfillmentShort": "Exéc.",
     "returnAuthorization": "Autorisation de retour",
     "returnAuthorizationShort": "RMA",
-    "payRun": "Cycle de paie"
+    "payRun": "Cycle de paie",
+    "internalBilling": "Facturation interne",
+    "internalBillingShort": "Interne"
   },
   "labels": {
     "name": "Nom",
@@ -171,6 +173,9 @@
     "finalInvoice": "Facture finale",
     "paymentHold": "Blocage du paiement",
     "expectedPayDate": "Date de paiement prévue",
+    "workCompletedOn": "Travaux achevés le",
+    "workFrom": "Travaux du",
+    "workTo": "Travaux au",
     "openBalance": "Solde impayé",
     "defaultForm": "Formulaire par défaut",
     "asOf": "Au",

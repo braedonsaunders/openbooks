@@ -255,6 +255,10 @@ export async function loadRelatedTransactionDrawerData({
         layout: resolvedForm.layout,
         quoteToCashEnabled:
           orderKind === 'quote' ? await isFeatureEnabled(authz.user.orgId, 'quoteToCash') : false,
+        quoteAwardEnabled:
+          orderKind === 'quote' && can(authz, 'projects.manage')
+            ? (await isFeatureEnabled(authz.user.orgId, 'projects')) && (await isFeatureEnabled(authz.user.orgId, 'orders'))
+            : false,
       },
     }
   }

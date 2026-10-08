@@ -42,7 +42,9 @@
       "resourcingCapacityDemandTitle": "Capacity versus demand",
       "resourcingCapacityDemandDescription": "Compare net capacity with named, generic, and weighted pipeline demand.",
       "resourcingEngagementTitle": "Engagement forecast",
-      "resourcingEngagementDescription": "Forecast assignment hours, revenue, labor cost, and margin by month and currency."
+      "resourcingEngagementDescription": "Forecast assignment hours, revenue, labor cost, and margin by month and currency.",
+      "projectBudgetVsActualTitle": "Project Budget vs Actual",
+      "projectBudgetVsActualDescription": "Original and current budget against actual hours and cost, by task."
     },
     "groups": {
       "financial": "Financial Statements",
@@ -3071,6 +3073,7 @@
       "disposal": "Disposal",
       "revaluation": "Revaluation",
       "revenue_recognition": "Revenue recognition",
+      "revenue_accrual": "Unbilled revenue accrual",
       "inventory": "Inventory",
       "lease": "Lease",
       "allocation": "Allocation",
@@ -3178,5 +3181,68 @@
       "purchase_order": "Purchase orders"
     },
     "note": "Conversion is tracked via transaction links; historical source links may require migration."
+  },
+  "earnedValue": {
+    "title": "Earned Value",
+    "description": "Budget, percent complete, earned value, actual cost and estimates per project and task.",
+    "hubDescription": "Percent complete, CPI and estimate at completion by project and task.",
+    "asOf": "As of {date}",
+    "note": "Actual cost is approved labor and posted cost documents attributed by task; cost with no task counts only in the project total. Percent complete uses installed quantity, then schedule progress, then cost to cost.",
+    "search": "Search project or task…",
+    "allProjects": "All active projects",
+    "projectTotal": "Project total",
+    "empty": "No projects with tasks match these filters.",
+    "columns": {
+      "project": "Project",
+      "task": "Task",
+      "basis": "Basis",
+      "percent": "% complete",
+      "bac": "Budget (BAC)",
+      "ev": "Earned (EV)",
+      "ac": "Actual (AC)",
+      "cpi": "CPI",
+      "etc": "To complete (ETC)",
+      "eac": "At completion (EAC)",
+      "vac": "Variance (VAC)"
+    },
+    "basis": {
+      "quantity": "Installed quantity",
+      "schedule": "Schedule progress",
+      "cost": "Cost to cost",
+      "none": "Not measured"
+    }
+  },
+  "projectBudget": {
+    "title": "Project Budget vs Actual",
+    "description": "Each task's original (sold) budget, current budget and actual hours and cost, with the variance against each budget.",
+    "asOf": "As of {date}",
+    "chooseProject": "Choose a project",
+    "chooseProjectHint": "Choose a project to compare its budget with actual hours and cost.",
+    "unassigned": "Unassigned to a task",
+    "total": "Total",
+    "empty": "This project has no tasks yet.",
+    "originalFromSource": "Original budget from {source}, captured {date}. Variance is budget minus actual: negative is an overrun.",
+    "originalFromWbs": "Original budget from the work breakdown, captured {date}. Variance is budget minus actual: negative is an overrun.",
+    "noOriginal": "No original budget has been captured for this project; set a baseline on its work breakdown. Variance is budget minus actual.",
+    "priceNote": "Price: original {original} · current {current} · invoiced to date {invoiced}. Actual cost is approved time at cost rate plus posted job cost.",
+    "columns": {
+      "project": "Project",
+      "task": "Task",
+      "originalHours": "Original hours",
+      "currentHours": "Current hours",
+      "actualHours": "Actual hours",
+      "originalCost": "Original cost",
+      "currentCost": "Current cost",
+      "actualCost": "Actual cost",
+      "varianceToOriginal": "Variance to original",
+      "varianceToCurrent": "Variance to current",
+      "originalPrice": "Original price",
+      "currentPrice": "Current price"
+    },
+    "summary": {
+      "originalPrice": "Original price",
+      "currentPrice": "Current price",
+      "invoicedToDate": "Invoiced to date"
+    }
   }
 }

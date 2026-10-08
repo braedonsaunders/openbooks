@@ -66,6 +66,7 @@ export interface EstimateDrawer {
   barcodeScanningEnabled: boolean
   promotionsEnabled: boolean
   quoteToCashEnabled: boolean
+  quoteAwardEnabled: boolean
 }
 
 export interface EstimatesData {
@@ -236,6 +237,9 @@ export async function loadEstimates(
           barcodeScanningEnabled,
           promotionsEnabled: await isFeatureEnabled(authz.user.orgId, 'promotions'),
           quoteToCashEnabled: await isFeatureEnabled(authz.user.orgId, 'quoteToCash'),
+          // Awarding creates a project: it needs Projects on and the
+          // project-management grant (this page already gates Orders).
+          quoteAwardEnabled: can(authz, 'projects.manage') && (await isFeatureEnabled(authz.user.orgId, 'projects')),
         }
       : null
 

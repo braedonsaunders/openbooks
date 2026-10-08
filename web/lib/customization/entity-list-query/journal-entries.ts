@@ -49,6 +49,7 @@ export const JOURNAL_GL_NATIVE_ORIGINS = [
   "depreciation",
   "disposal",
   "revenue_recognition",
+  "revenue_accrual",
   "fx_settlement",
   "translation",
   "intercompany",

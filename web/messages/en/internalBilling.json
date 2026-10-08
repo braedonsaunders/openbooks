@@ -1,0 +1,61 @@
+{
+  "title": "Internal billing",
+  "description": "Bill work between departments, projects and subsidiaries. Each rule decides how the movement stays out of company totals.",
+  "list": {
+    "new": "New internal billing",
+    "emptyTitle": "No internal billing yet",
+    "emptyDescription": "Record work one part of the business does for another, so the right department, project or subsidiary is credited and charged."
+  },
+  "fields": {
+    "rule": "Rule",
+    "from": "From",
+    "rate": "Rate",
+    "billable": "Billable",
+    "billRate": "Bill rate"
+  },
+  "drawer": {
+    "newTitle": "New internal billing",
+    "description": "Choose who provides the work and who receives it.",
+    "from": "From",
+    "to": "To",
+    "chooseRule": "Choose a rule",
+    "noRules": "There are no internal billing rules yet. Add one in Setup → Internal billing.",
+    "none": "None",
+    "sameAsFrom": "Same as From",
+    "chooseSubsidiary": "Choose a subsidiary",
+    "addLine": "Add line",
+    "removeLine": "Remove line",
+    "saveDraft": "Save draft",
+    "journalEntry": "Journal entry",
+    "total": "Total",
+    "billed": "Billed to customer"
+  },
+  "void": {
+    "title": "Void internal billing",
+    "message": "The posting is reversed. A line billed to a customer must be released by voiding or deleting that invoice first.",
+    "reason": "Reason"
+  },
+  "feedback": {
+    "saved": "Draft saved",
+    "posted": "Posted",
+    "pendingApproval": "Submitted for approval",
+    "voided": "Voided",
+    "saveFailed": "The draft could not be saved.",
+    "postFailed": "The document could not be posted.",
+    "voidFailed": "The document could not be voided."
+  },
+  "methods": {
+    "revenue_credit": {
+      "label": "Department credit for the sale",
+      "description": "The department that did the work is credited with the revenue; company revenue is not counted twice."
+    },
+    "cost_transfer": {
+      "label": "Cost transfer",
+      "description": "Move cost to the department or project that used the work; company cost is unchanged."
+    },
+    "intercompany_sale": {
+      "label": "Intercompany sale",
+      "description": "One subsidiary sells to another; both sides eliminate on consolidation."
+    }
+  }
+}

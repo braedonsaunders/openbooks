@@ -1287,6 +1287,12 @@ async function dropDisposableOrgEscaped(orgId: string, kind: DisposableOrgKind):
       where user_id in (select id from users where org_id = ${orgId})`);
     await tx.execute(sql`update users set is_active = false where org_id = ${orgId}`);
     await tx.execute(sql`update inventory_movements set status = 'pending' where org_id = ${orgId} and status = 'posted'`);
+    // projects.awarded_from_document_id and documents.project_id reference
+    // each other; clear the award provenance so documents can be deleted
+    // before projects.
+    await tx.execute(sql`
+      update projects set awarded_from_document_id = null, awarded_at = null, awarded_by = null
+       where org_id = ${orgId} and awarded_from_document_id is not null`);
     // Remove capture evidence before its protected source files. These guards
     // are unconditional; use the same exact-trigger, scoped transaction as
     // other immutable fixture evidence. The locked disposable-org identity

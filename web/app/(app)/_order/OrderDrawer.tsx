@@ -31,6 +31,7 @@ import { ApprovalHistory } from '../../../components/approval-history'
 import { DropShipAssessmentButton } from './DropShipAssessmentButton'
 import { OrderBackorders } from './OrderBackorders'
 import { QuoteCashSection } from './QuoteCashSection'
+import { QuoteAwardAction } from './QuoteAwardAction'
 import { CONVERSION_TARGETS, type OrderKind } from '../../../lib/order-kinds'
 import { HeaderFields } from '../../../components/transaction-form/header-fields'
 import type { FormLayoutConfig, HeaderFieldPlacement } from '@openbooks/customization'
@@ -74,6 +75,9 @@ interface LineRow extends Record<string, unknown> {
   taxProfileId: string
   departmentId: string
   projectId: string
+  /** Work period the line bills (sales orders), YYYY-MM-DD or blank. */
+  workFrom: string
+  workTo: string
   /** Warehouse for fulfil/receipt effects; blank unless the line's item is
    *  stocked. */
   stockLocationId: string
@@ -150,6 +154,7 @@ export interface OrderDoc extends Record<string, unknown> {
   department_id: string | null
   memo: string | null
   due_date: string | null
+  work_completed_on: string | null
   document_date: string | null
   updated_at: string
   subtotal: string
@@ -186,6 +191,7 @@ export function asOrderDoc(raw: Record<string, unknown>): OrderDoc {
     department_id: text(raw.department_id),
     memo: text(raw.memo),
     due_date: text(raw.due_date),
+    work_completed_on: text(raw.work_completed_on),
     document_date: text(raw.document_date),
     updated_at: text(raw.updated_at) ?? '',
     subtotal: text(raw.subtotal) ?? '0',
@@ -342,6 +348,8 @@ const emptyLine = (segments: SegmentOption[] = []): LineRow => ({
   taxProfileId: '',
   departmentId: '',
   projectId: '',
+  workFrom: '',
+  workTo: '',
   stockLocationId: '',
   loadedPrice: null,
   promotionCode: '',
@@ -389,6 +397,8 @@ function projectLine(r: LineRow, segments: SegmentOption[]): Record<string, unkn
     taxGroupId: r.taxProfileId.startsWith('group:') ? r.taxProfileId.slice(6) : null,
     departmentId: r.departmentId || null,
     projectId: r.projectId || null,
+    workFrom: r.workFrom || null,
+    workTo: r.workTo || null,
     stockLocationId: r.stockLocationId || null,
     extraDims: segmentAssignmentsFromCells(r, segments.map(segment => segment.key)),
   }
@@ -410,6 +420,8 @@ function toRow(l: Record<string, unknown>, segments: SegmentOption[]): LineRow {
     taxProfileId: l.tax_group_id ? `group:${l.tax_group_id}` : l.tax_code_id ? `code:${l.tax_code_id}` : '',
     departmentId: lineText(l.department_id),
     projectId: lineText(l.project_id),
+    workFrom: lineText(l.work_from),
+    workTo: lineText(l.work_to),
     stockLocationId: lineText(l.stock_location_id),
     loadedPrice: loadedPriceOf(l),
     promotionCode: lineText(l.promotion_code),
@@ -452,6 +464,7 @@ export function OrderDrawer({
   customerItemRefs = [],
   promotionsEnabled = false,
   quoteToCashEnabled = false,
+  quoteAwardEnabled = false,
 }: {
   order: OrderPayload
   initialMode?: DrawerMode
@@ -507,6 +520,10 @@ export function OrderDrawer({
    *  The tab's routes enforce the feature again. Defaults off so a caller
    *  that never resolves the feature cannot surface a tab that only fails. */
   quoteToCashEnabled?: boolean
+  /** Offer Award on an issued quote: the page resolved Projects and Orders
+   *  on and the project-management grant. The award route enforces all
+   *  three again. */
+  quoteAwardEnabled?: boolean
 }) {
   const { money } = useMoney()
   const t = useTranslations('purchaseOrders.shared')
@@ -547,6 +564,7 @@ export function OrderDrawer({
   const [partyId, setPartyId] = useState<string>(doc.party_id ?? '')
   const [documentDate, setDocumentDate] = useState<string>(doc.document_date ?? '')
   const [dueDate, setDueDate] = useState<string>(doc.due_date ?? '')
+  const [workCompletedOn, setWorkCompletedOn] = useState<string>(doc.work_completed_on ?? '')
   const [memo, setMemo] = useState<string>(doc.memo ?? '')
   const [departmentId, setDepartmentId] = useState<string>(doc.department_id ?? '')
   const [projectId, setProjectId] = useState<string>(doc.project_id ?? '')
@@ -819,6 +837,7 @@ export function OrderDrawer({
       partyId: partyId || null,
       documentDate: documentDate || undefined,
       dueDate: dueDate || null,
+      ...(kind === 'sales_order' ? { workCompletedOn: workCompletedOn || null } : {}),
       memo,
       departmentId: departmentId || null,
       projectId: projectId || null,
@@ -826,7 +845,7 @@ export function OrderDrawer({
       extraDims,
       lines: rows.filter(orderLineIsPopulated).map((r) => projectLine(r, segments)),
     }),
-    [partyId, documentDate, dueDate, memo, departmentId, projectId, subsidiaryId, subsidiaries.length, extraDims, rows, segments],
+    [partyId, documentDate, dueDate, kind, workCompletedOn, memo, departmentId, projectId, subsidiaryId, subsidiaries.length, extraDims, rows, segments],
   )
   // Track unsaved edits (no autosave — Save is an explicit button). Adjusted
   // during render (same committed value, no extra render).
@@ -874,6 +893,7 @@ export function OrderDrawer({
     setPartyId(doc.party_id ?? '')
     setDocumentDate(doc.document_date ?? '')
     setDueDate(doc.due_date ?? '')
+    setWorkCompletedOn(doc.work_completed_on ?? '')
     setMemo(doc.memo ?? '')
     setDepartmentId(doc.department_id ?? '')
     setProjectId(doc.project_id ?? '')
@@ -1386,6 +1406,8 @@ export function OrderDrawer({
         key: 'projectId', label: tCommon('labels.project'), width: 'minmax(150px,1.2fr)', type: 'search-select',
         options: projects.map((project) => ({ value: project.id, label: project.name ?? '' })), placeholder: '—',
       },
+      work_from: { key: 'workFrom', label: tCommon('labels.workFrom'), width: '130px', type: 'text', placeholder: 'YYYY-MM-DD' },
+      work_to: { key: 'workTo', label: tCommon('labels.workTo'), width: '130px', type: 'text', placeholder: 'YYYY-MM-DD' },
       tax_code_id: {
         key: 'taxProfileId',
         label: tCommon('labels.tax'),
@@ -1416,7 +1438,9 @@ export function OrderDrawer({
         },
       },
       }
-      const placed = !layout ? Object.values(builtIn) : layout.lines.columns.flatMap((placement) => {
+      // The work period is opt-in through the form designer: without a
+      // layout it stays off the grid.
+      const placed = !layout ? Object.entries(builtIn).filter(([key]) => key !== 'work_from' && key !== 'work_to').map(([, column]) => column) : layout.lines.columns.flatMap((placement) => {
         if (!placement.visible) return []
         const base = builtIn[placement.key]
         if (!base) return []
@@ -1477,6 +1501,9 @@ export function OrderDrawer({
         return <><FieldLabel fieldName={label || t('dateLabel', { kind })}>{label || t('dateLabel', { kind })}</FieldLabel>{isEditable ? <Input type="date" value={documentDate} onChange={(event) => setDocumentDate(event.target.value)} /> : <p className="text-sm">{doc.document_date}</p>}</>
       case 'due_date':
         return <><FieldLabel fieldName={label || t('expiryLabel', { kind })}>{label || t('expiryLabel', { kind })}</FieldLabel>{isEditable ? <Input type="date" value={dueDate} onChange={(event) => setDueDate(event.target.value)} /> : <p className="text-sm">{doc.due_date ?? '—'}</p>}</>
+      case 'work_completed_on':
+        if (kind !== 'sales_order') return null
+        return <><FieldLabel fieldName={label || tCommon('labels.workCompletedOn')}>{label || tCommon('labels.workCompletedOn')}</FieldLabel>{isEditable ? <Input type="date" value={workCompletedOn} onChange={(event) => setWorkCompletedOn(event.target.value)} /> : <p className="text-sm">{doc.work_completed_on ?? '—'}</p>}</>
       case 'department_id':
         return <><FieldLabel fieldName={label || tCommon('labels.department')}>{label || tCommon('labels.department')}</FieldLabel>{isEditable ? <SearchSelect options={[{ value: '', label: '—' }, ...departments.map((department) => ({ value: department.id, label: department.name ?? '' }))]} value={departmentId} onChange={(value) => setDepartmentId(value ?? '')} placeholder="—" /> : <p className="text-sm">{departments.find((department) => department.id === doc.department_id)?.name ?? '—'}</p>}</>
       case 'project_id':
@@ -1540,8 +1567,11 @@ export function OrderDrawer({
               {busy ? tCommon('actions.saving') : tCommon('actions.save')}
             </Button>
           </>
-        ) : (canManage || canCreateDropShipPurchaseOrder || canConfirmDropShip) ? (
+        ) : (canManage || canCreateDropShipPurchaseOrder || canConfirmDropShip || (kind === 'quote' && quoteAwardEnabled)) ? (
           <>
+            {kind === 'quote' && quoteAwardEnabled && !createMode ? (
+              <QuoteAwardAction quoteId={String(doc.id)} docStatus={doc.status} />
+            ) : null}
             {canManage ? (
               <>
                 <PdfButton recordType={kind} recordId={String(doc.id)} />

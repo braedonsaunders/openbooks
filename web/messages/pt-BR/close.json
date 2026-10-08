@@ -152,6 +152,10 @@
       "title": "Reconhecimento de receita permanece não lançado",
       "message": "{count, plural, one {# linha de reconhecimento agendada permanece não lançada.} other {# linhas de reconhecimento agendadas permanecem não lançadas.}}"
     },
+    "unbilled-revenue-unaccrued": {
+      "title": "A provisão de receita não faturada não está atualizada",
+      "message": "{count, plural, one {# provisão de projeto precisa ser lançada ou ter a configuração corrigida.} other {# provisões de projeto precisam ser lançadas ou ter a configuração corrigida.}}"
+    },
     "fx-missing": {
       "title": "Faltam taxas de câmbio",
       "message": "{count, plural, one {# moeda de transação não tem taxa spot de fim de período utilizável.} other {# moedas de transação não têm taxa spot de fim de período utilizável.}}"
@@ -373,6 +377,10 @@
     "recognition-posted": {
       "title": "Lançar reconhecimento de receita",
       "description": "Execute o reconhecimento de receita agendado e resolva as exceções."
+    },
+    "unbilled-revenue-accrued": {
+      "title": "Provisionar receita não faturada",
+      "description": "Provisione o trabalho por tempo e materiais realizado até o fim do período e ainda não faturado; a provisão é estornada no primeiro dia do período seguinte."
     },
     "fx-ready": {
       "title": "Validar cobertura de câmbio",
@@ -855,5 +863,30 @@
   "problems": {
     "subsidiaryMissing": "A subsidiária {subsidiaryId} não existe.",
     "entityFailed": "{name}: {detail}"
+  },
+  "unbilledAccrual": {
+    "loading": "Calculando o trabalho não faturado…",
+    "loadFailed": "Não foi possível calcular a provisão de receita não faturada.",
+    "retry": "Tentar novamente",
+    "dates": "{period}: provisiona em {accrualDate} e estorna em {reversalDate}",
+    "datesNoReversal": "{period}: provisiona em {accrualDate}",
+    "empty": "Não há trabalho por tempo e materiais não faturado no fim do período.",
+    "unbilled": "Não faturado no fim do período",
+    "toPost": "A lançar",
+    "projectsLabel": "Projetos",
+    "projects": "{count, plural, one {# projeto} other {# projetos}}",
+    "blocked": "Resolva antes de lançar",
+    "review": "Revisar",
+    "columns": {
+      "project": "Projeto",
+      "unbilled": "Não faturado",
+      "accrued": "Provisionado",
+      "toPost": "A lançar"
+    },
+    "post": "Lançar provisão",
+    "upToDate": "Atualizado",
+    "posted": "Provisão de receita não faturada lançada.",
+    "postFailed": "Não foi possível lançar a provisão.",
+    "postPermission": "Lançar a provisão requer permissão para lançar lançamentos contábeis."
   }
 }

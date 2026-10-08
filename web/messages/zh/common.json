@@ -102,7 +102,9 @@
     "fulfillmentShort": "履约",
     "returnAuthorization": "退货授权",
     "returnAuthorizationShort": "RMA",
-    "payRun": "工资核算"
+    "payRun": "工资核算",
+    "internalBilling": "内部计费",
+    "internalBillingShort": "内部"
   },
   "labels": {
     "name": "名称",
@@ -171,6 +173,9 @@
     "finalInvoice": "最终发票",
     "paymentHold": "付款暂挂",
     "expectedPayDate": "预计付款日期",
+    "workCompletedOn": "工作完成日期",
+    "workFrom": "工作起始日",
+    "workTo": "工作截止日",
     "openBalance": "未结余额",
     "defaultForm": "默认表单",
     "asOf": "截至",

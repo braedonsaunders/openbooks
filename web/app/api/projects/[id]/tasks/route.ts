@@ -15,7 +15,11 @@ import { notFound } from "@/lib/api/responses";
 
 
 const taskParams = z.object({ id: z.string() })
-const taskBody = z.object({ code: z.string().nullable().optional(), name: z.string().trim().min(1), status: z.enum(["open", "complete", "cancelled"]).optional(), estimatedHours: z.string().nullable().optional(), estimatedCost: z.string().nullable().optional() })
+const taskBody = z.object({
+  code: z.string().nullable().optional(), name: z.string().trim().min(1), status: z.enum(["open", "complete", "cancelled"]).optional(),
+  estimatedHours: z.string().nullable().optional(), estimatedCost: z.string().nullable().optional(), estimatedPrice: z.string().nullable().optional(),
+  budgetQuantity: z.string().nullable().optional(), budgetUnit: z.string().nullable().optional(),
+})
 
 async function errorResponse(error: unknown): Promise<NextResponse> {
   if (error instanceof ProjectWorkBreakdownError) {

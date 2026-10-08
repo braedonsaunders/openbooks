@@ -53,6 +53,14 @@ export const FEATURES: FeatureDef[] = [
   { key: 'bankFeeds', defaultEnabled: false, category: 'finance' },
   { key: 'fixedAssets', defaultEnabled: true, category: 'finance', navModules: ['assets', 'leases', 'tax-depreciation'] },
   { key: 'budgets', defaultEnabled: true, category: 'finance', navModules: ['budgets'] },
+  // Internal billing: one part of the business bills another — department
+  // to department, project to project, or subsidiary to subsidiary. Each
+  // rule states how the movement stays out of consolidated revenue and cost
+  // (a department revenue credit, a cost transfer, or an eliminated
+  // intercompany sale). Billing a project additionally needs Projects,
+  // enforced at that boundary rather than by a parent gate, because
+  // department and entity billing stand on their own.
+  { key: 'internalBilling', defaultEnabled: false, category: 'finance', navModules: ['internal-billing'] },
   // Allocation kernel (docs/design/allocation-kernel.md): one versioned rule
   // model bound at three moments — entry distributions, posting
   // contributions, period sweeps. Off by default: switching it on is a
@@ -200,6 +208,14 @@ export const FEATURES: FeatureDef[] = [
   // rendering and writing, never data.
   { key: 'fieldTime', defaultEnabled: false, category: 'projects', navModules: ['timesheets'], parentKey: 'timeTracking', requiresAll: ['projects'] },
   { key: 'fieldTickets', defaultEnabled: false, category: 'projects', navModules: ['field-tickets'], parentKey: 'projects' },
+  // Progress and earned value: budgeted production quantities on tasks,
+  // installed quantities (entered or reported on field tickets), estimates to
+  // complete, and earned value, cost-to-complete and burn reporting. The sold
+  // budget and quote-versus-actual comparison are core Projects.
+  { key: 'projectProgress', defaultEnabled: false, category: 'projects', parentKey: 'projects' },
+  // Period-end accrual of time-and-materials work performed but not yet
+  // invoiced, posted with its reversal on the first day of the next period.
+  { key: 'unbilledRevenueAccrual', defaultEnabled: false, category: 'projects', parentKey: 'projects' },
   // Project scheduling: critical-path Gantt, working calendars, baselines and
   // resource levelling. Off by default — a schedule is a planning instrument,
   // not an accounting one, and orgs that only job-cost projects should not

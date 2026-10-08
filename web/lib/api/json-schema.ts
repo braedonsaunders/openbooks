@@ -80,6 +80,8 @@ export const orderCreateLineBody = z.object({
   departmentId: nullableUuidId.optional(),
   projectId: nullableUuidId.optional(),
   stockLocationId: nullableUuidId.optional(),
+  workFrom: isoDate().nullable().optional(),
+  workTo: isoDate().nullable().optional(),
   extraDims: z.record(z.string(), z.string().nullable()).optional(),
   // Preview provenance only signals that the line was catalog priced. Save
   // derives its authoritative basis from the server's item-price resolver;
@@ -97,6 +99,7 @@ export const orderCreateBody = z.object({
   partyId: nullableUuidId.optional(),
   documentDate: isoDate().optional(),
   dueDate: isoDate().nullable().optional(),
+  workCompletedOn: isoDate().nullable().optional(),
   memo: z.string().nullable().optional(),
   departmentId: nullableUuidId.optional(),
   projectId: nullableUuidId.optional(),

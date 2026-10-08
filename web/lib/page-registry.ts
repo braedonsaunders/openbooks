@@ -1888,6 +1888,18 @@ export const PAGE_REGISTRY: Readonly<Record<string, PageRegistryEntry>> = {
       }
     },
   },
+  '/internal-billing': {
+    route: '/internal-billing',
+    segments: [],
+    searchParams: true,
+    module: async () => {
+      const m = await import('../app/(app)/internal-billing/view')
+      return {
+        load: (input) => m.loadInternalBillingPage(input.searchParams ?? {}),
+        spec: (data) => m.internalBillingSpec(data as never),
+      }
+    },
+  },
   '/inventory': {
     route: '/inventory',
     segments: [],
@@ -2596,6 +2608,18 @@ export const PAGE_REGISTRY: Readonly<Record<string, PageRegistryEntry>> = {
       }
     },
   },
+  '/reports/earned-value': {
+    route: '/reports/earned-value',
+    segments: [],
+    searchParams: true,
+    module: async () => {
+      const m = await import('../app/(app)/reports/earned-value/view')
+      return {
+        load: (input) => m.loadEarnedValueReport(input.searchParams ?? {}),
+        spec: (data) => m.earnedValueSpec(data as never),
+      }
+    },
+  },
   '/reports/general-ledger': {
     route: '/reports/general-ledger',
     segments: [],
@@ -2665,6 +2689,18 @@ export const PAGE_REGISTRY: Readonly<Record<string, PageRegistryEntry>> = {
       return {
         load: (input) => m.loadPnl(input.searchParams ?? {}),
         spec: (data) => m.pnlSpec(data as never),
+      }
+    },
+  },
+  '/reports/project-budget-vs-actual': {
+    route: '/reports/project-budget-vs-actual',
+    segments: [],
+    searchParams: true,
+    module: async () => {
+      const m = await import('../app/(app)/reports/project-budget-vs-actual/view')
+      return {
+        load: (input) => m.loadProjectBudgetReport(input.searchParams ?? {}),
+        spec: (data) => m.projectBudgetSpec(data as never),
       }
     },
   },

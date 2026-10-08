@@ -9,6 +9,7 @@ import {
   type FieldTicketLaborEvidenceLine,
 } from '@openbooks/engine/src/projects/field-ticket-labor-evidence.ts'
 import { mul, div, isZero, add, sum, cmp, normalizeMoney } from '@openbooks/engine/src/money/money.ts'
+import { recordFieldTicketProgressInTransaction } from '@openbooks/engine/src/projects/progress.ts'
 import { businessToday, isIsoCalendarDate } from '@openbooks/engine/src/platform/business-date.ts'
 import { nextDocumentNumber } from "./bills.ts";
 import { documentRevisionCounterSql } from "../../engine/src/records/revision.ts";
@@ -594,6 +595,8 @@ export async function addTicketLine(
      * front of the machine while they fill it in. */
     employeeId?: string | null
     description?: string | null
+    /** The project task the line's cost is attributed to (optional). */
+    projectTaskId?: string | null
   },
   expectedRevision: string,
   allowedSubsidiaryIds: ReadonlySet<string> | null = null,
@@ -639,6 +642,7 @@ async function addTicketLineUnlocked(
     itemId: string; quantity: string | number; rateUnitCode?: string | null; equipmentUnitId?: string | null
     employeeId?: string | null
     description?: string | null
+    projectTaskId?: string | null
   },
   tx: TicketTransaction,
   allowedSubsidiaryIds: ReadonlySet<string> | null,
@@ -664,6 +668,14 @@ async function addTicketLineUnlocked(
   const quantity = exactTicketQuantity(input.quantity)
 
   if (!doc.project_id) throw new FieldTicketError('Choose a project before adding items')
+  if (input.projectTaskId) {
+    // The line's cost lands on this task when the ticket's charge posts, so
+    // the task must belong to the ticket's own project.
+    const task = (await tx.execute(sql`
+      select 1 from project_tasks
+       where id = ${input.projectTaskId} and org_id = ${orgId} and project_id = ${doc.project_id}`)).rows[0]
+    if (!task) throw new FieldTicketError('Choose a task of this ticket’s project')
+  }
   // Item lines on a project ticket feed project billing, so a disable
   // racing this insert must refuse one side or the other.
   if (!(await checkProjectsWriteEnabled(orgId, tx))) {
@@ -754,12 +766,12 @@ async function addTicketLineUnlocked(
     insert into document_lines (org_id, document_id, line_number, item_id, description, quantity, unit, unit_price, amount,
                                 project_id, is_billable, equipment_unit_id, employee_id, rate_version_id, rate_presentation,
                                 base_quantity, base_unit, cost_rate, bill_rate, cost_amount, bill_amount,
-                                field_ticket_id, created_by, updated_by)
+                                field_ticket_id, project_task_id, created_by, updated_by)
     values (${orgId}, ${ticketId}, ${next.rows[0]!.n}, ${input.itemId}, ${input.description ?? item.rows[0].name},
             ${quantity}, ${transactionUnit}, ${billRate}, ${billAmount}, ${doc.project_id}, true, ${input.equipmentUnitId ?? null},
             ${input.employeeId ?? null},
             ${resolved?.rateVersionId ?? null}, ${resolved?.invoicePresentation ?? 'summary'}, ${baseQuantity}, ${baseUnit},
-            ${costRate}, ${billRate}, ${costAmount}, ${billAmount}, ${ticketId}, ${userId}, ${userId}) returning id`))
+            ${costRate}, ${billRate}, ${costAmount}, ${billAmount}, ${ticketId}, ${input.projectTaskId ?? null}, ${userId}, ${userId}) returning id`))
   const components = [
     ...(resolved?.cost.components ?? [{ rateLineId: null, unitCode: baseUnit, unitName: baseUnit, quantity, rate: costRate, amount: costAmount }]).map((c) => ({ ...c, role: 'cost' })),
     ...(resolved?.bill.components ?? [{ rateLineId: null, unitCode: baseUnit, unitName: baseUnit, quantity, rate: billRate, amount: billAmount }]).map((c) => ({ ...c, role: 'bill' })),
@@ -1161,6 +1173,22 @@ export async function submitFieldTicket(orgId: string, userId: string, ticketId:
     if (Number(countsRow.hours) === 0 && Number(countsRow.lines) === 0) {
       throw new FieldTicketError('Add hours or lines before submitting')
     }
+    // Production is recorded as progress on approval, which needs Progress
+    // tracking: refuse now rather than strand the approval.
+    const production = (await db.execute<{ count: string; other_project: string }>(sql`
+      select count(*)::text as count,
+             count(*) filter (where t.project_id is distinct from ${doc.project_id}::uuid)::text as other_project
+        from field_ticket_quantities q
+        join project_tasks t on t.id = q.project_task_id and t.org_id = q.org_id
+       where q.org_id = ${orgId} and q.field_ticket_id = ${ticketId}`)).rows[0]
+    if (Number(production?.count ?? '0') > 0 && !(await isFeatureEnabled(orgId, 'projectProgress'))) {
+      throw new FieldTicketError(
+        'This ticket reports production but Progress tracking is off — turn it on under Projects in Company Settings → Features, or remove the production lines',
+      )
+    }
+    if (Number(production?.other_project ?? '0') > 0) {
+      throw new FieldTicketError('Some production lines name tasks of another project — remove them and report production against this ticket’s project')
+    }
 
     await db.execute(sql`
       update field_tickets
@@ -1244,9 +1272,10 @@ export async function releaseFieldTicketApproval(
       bill_rate: string | null; cost_amount: string | null; bill_amount: string | null; equipment_unit_id: string | null;
       employee_id: string | null;
       rate_version_id: string | null; rate_presentation: 'summary' | 'rate_components' | null;
-      base_quantity: string | null; base_unit: string | null }>(sql`
+      base_quantity: string | null; base_unit: string | null; project_task_id: string | null }>(sql`
     select id, item_id, description, quantity, unit, cost_rate, bill_rate, cost_amount, bill_amount,
-           equipment_unit_id, employee_id, rate_version_id, rate_presentation, base_quantity, base_unit
+           equipment_unit_id, employee_id, rate_version_id, rate_presentation, base_quantity, base_unit,
+           project_task_id
       from document_lines
      where document_id = ${ticketId} and org_id = ${orgId} and item_id is not null`))
   let chargeDocumentId = doc.fieldTicket.chargeDocumentId ?? null
@@ -1295,6 +1324,9 @@ export async function releaseFieldTicketApproval(
             // recorded on the ticket and dropped here would be captured and
             // still unpayable.
             employeeId: l.employee_id,
+            // The task the ticket attributed the line to rides onto the
+            // charge line, where earned value reads task actual cost.
+            projectTaskId: l.project_task_id,
             costRate: hasSnapshot ? null : l.cost_rate,
             billRate: hasSnapshot ? null : l.bill_rate,
             rateSnapshot: hasSnapshot ? {
@@ -1326,6 +1358,15 @@ export async function releaseFieldTicketApproval(
     chargeDocumentId = charge.id
   }
 
+  // Approved production becomes installed progress, once per ticket.
+  const production = await recordFieldTicketProgressInTransaction(db, {
+    orgId,
+    actorId: userId,
+    ticketId,
+    projectId: doc.project_id,
+    entryDate: doc.fieldTicket.periodEnd,
+  })
+
   await db.execute(sql`
     update documents set status = 'approved', updated_at = now(), updated_by = ${userId}
      where id = ${ticketId} and org_id = ${orgId}`)
@@ -1338,6 +1379,7 @@ export async function releaseFieldTicketApproval(
     laborSnapshotRevision: laborSnapshot.revision,
     operationalTimeStatusUnchanged: true,
     chargeDocumentId,
+    productionEntriesRecorded: production.recorded,
   })
 }
 
@@ -1444,7 +1486,7 @@ export async function loadFieldTicket(
     db.execute<TicketLineRow>(sql`
       select dl.id, dl.item_id, i.name as item_name, dl.description, dl.quantity, dl.unit, dl.unit_price, dl.amount,
              dl.cost_rate, dl.bill_rate, dl.cost_amount, dl.bill_amount, dl.base_unit, dl.rate_version_id,
-             dl.rate_presentation, dl.equipment_unit_id,
+             dl.rate_presentation, dl.equipment_unit_id, dl.project_task_id, lt.name as project_task_name,
              case when eu.id is null then null else eu.unit_number || ' · ' || eu.name end as equipment_name,
              coalesce((select jsonb_agg(jsonb_build_object(
                'rateLineId', c.rate_line_id, 'unitCode', c.unit_code, 'unitName', c.unit_name,
@@ -1453,6 +1495,7 @@ export async function loadFieldTicket(
                where c.document_line_id = dl.id and c.org_id = dl.org_id and c.role = 'bill'), '[]'::jsonb) as rate_components
         from document_lines dl
         left join items i on i.id = dl.item_id and i.org_id = dl.org_id
+        left join project_tasks lt on lt.id = dl.project_task_id and lt.org_id = dl.org_id
         left join equipment_units eu on eu.id = dl.equipment_unit_id and eu.org_id = dl.org_id${legalEntityFilter('eu.subsidiary_id', false)}
        where dl.document_id = ${ticketId} and dl.org_id = ${orgId}
          ${legalEntityFilter('dl.subsidiary_id')}
@@ -1574,6 +1617,24 @@ export async function loadFieldTicket(
     }
   }
   const latestRequest = requestRows.rows[0]
+  const production = (await db.execute<{
+    id: string; project_task_id: string; task_code: string | null; task_name: string
+    quantity: string; unit: string; note: string | null
+  }>(sql`
+    select q.id, q.project_task_id, t.code as task_code, t.name as task_name,
+           q.quantity::text as quantity, q.unit, q.note
+      from field_ticket_quantities q
+      join project_tasks t on t.id = q.project_task_id and t.org_id = q.org_id
+     where q.org_id = ${orgId} and q.field_ticket_id = ${ticketId}
+     order by q.created_at, q.id`)).rows.map((row): TicketProductionRow => ({
+    id: row.id,
+    projectTaskId: row.project_task_id,
+    taskCode: row.task_code,
+    taskName: row.task_name,
+    quantity: row.quantity,
+    unit: row.unit,
+    note: row.note,
+  }))
   const fieldTicket: FieldTicketData = {
     ...doc.fieldTicket,
     signatures: Object.keys(signatures).length ? signatures : undefined,
@@ -1613,7 +1674,19 @@ export async function loadFieldTicket(
     grandTotal: add(laborTotal, linesTotal),
     links: linkRows.rows,
     billingRequests: billingRequestRows.rows,
+    production,
   }
+}
+
+/** Production reported on a ticket; recorded as project progress on approval. */
+export interface TicketProductionRow {
+  id: string
+  projectTaskId: string
+  taskCode: string | null
+  taskName: string
+  quantity: string
+  unit: string
+  note: string | null
 }
 
 export interface TicketEntryRow {
@@ -1654,6 +1727,8 @@ export type TicketLineRow = {
   rate_version_id: string | null
   rate_presentation: 'summary' | 'rate_components' | null
   equipment_unit_id: string | null
+  project_task_id: string | null
+  project_task_name: string | null
   equipment_name: string | null
   rate_components: { rateLineId: string | null; unitCode: string; unitName: string; quantity: string; rate: string; amount: string }[]
 };

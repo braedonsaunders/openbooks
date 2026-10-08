@@ -65,6 +65,7 @@ export * from "./crm-core";
 export * from "./crm-sales";
 export * from "./project-types";
 export * from "./project-financial-adjustments";
+export * from "./project-delivery";
 export * from "./qbd";
 export * from "./psp-settlements";
 export * from "./income-tax";

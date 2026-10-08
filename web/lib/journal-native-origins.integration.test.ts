@@ -33,6 +33,7 @@ const NATIVE_ORIGINS = [
   'labor_burden',
   'depreciation',
   'revenue_recognition',
+  'revenue_accrual',
   'fx_settlement',
   'translation',
   // Migration true-ups (TRUEUP-*) are standalone engine journals:

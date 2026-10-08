@@ -102,7 +102,9 @@
     "fulfillmentShort": "Cumpl.",
     "returnAuthorization": "Autorización de devolución",
     "returnAuthorizationShort": "RMA",
-    "payRun": "Ciclo de nómina"
+    "payRun": "Ciclo de nómina",
+    "internalBilling": "Facturación interna",
+    "internalBillingShort": "Interna"
   },
   "labels": {
     "name": "Nombre",
@@ -171,6 +173,9 @@
     "finalInvoice": "Factura final",
     "paymentHold": "Retención de pago",
     "expectedPayDate": "Fecha de pago prevista",
+    "workCompletedOn": "Trabajo completado",
+    "workFrom": "Trabajo desde",
+    "workTo": "Trabajo hasta",
     "openBalance": "Saldo pendiente",
     "defaultForm": "Formulario predeterminado",
     "asOf": "Al",

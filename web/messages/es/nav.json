@@ -155,7 +155,8 @@
     "hrm-benefits-employees": "Beneficios",
     "hrm-benefits-delivery": "Entrega",
     "hrm-training": "Capacitación",
-    "scheduling": "Planificación"
+    "scheduling": "Planificación",
+    "internal-billing": "Facturación interna"
   },
   "modulesShort": {
     "hrm-performance-cycles": "Gestionar evaluaciones",

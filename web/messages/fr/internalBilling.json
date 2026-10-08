@@ -1,0 +1,61 @@
+{
+  "title": "Facturation interne",
+  "description": "Facturez le travail entre services, projets et filiales. Chaque règle détermine comment le mouvement reste hors des totaux de l'entreprise.",
+  "list": {
+    "new": "Nouvelle facturation interne",
+    "emptyTitle": "Aucune facturation interne pour l'instant",
+    "emptyDescription": "Enregistrez le travail qu'une partie de l'entreprise réalise pour une autre, afin de créditer et d'imputer le bon service, projet ou filiale."
+  },
+  "fields": {
+    "rule": "Règle",
+    "from": "De",
+    "rate": "Taux",
+    "billable": "Facturable",
+    "billRate": "Taux de facturation"
+  },
+  "drawer": {
+    "newTitle": "Nouvelle facturation interne",
+    "description": "Choisissez qui fournit le travail et qui le reçoit.",
+    "from": "De",
+    "to": "À",
+    "chooseRule": "Choisir une règle",
+    "noRules": "Aucune règle de facturation interne pour l'instant. Ajoutez-en une dans Paramètres → Facturation interne.",
+    "none": "Aucun",
+    "sameAsFrom": "Identique à De",
+    "chooseSubsidiary": "Choisir une filiale",
+    "addLine": "Ajouter une ligne",
+    "removeLine": "Supprimer la ligne",
+    "saveDraft": "Enregistrer le brouillon",
+    "journalEntry": "Écriture comptable",
+    "total": "Total",
+    "billed": "Facturé au client"
+  },
+  "void": {
+    "title": "Annuler la facturation interne",
+    "message": "La comptabilisation est contrepassée. Une ligne facturée à un client doit d'abord être libérée en annulant ou en supprimant cette facture.",
+    "reason": "Motif"
+  },
+  "feedback": {
+    "saved": "Brouillon enregistré",
+    "posted": "Comptabilisé",
+    "pendingApproval": "Soumis pour approbation",
+    "voided": "Annulé",
+    "saveFailed": "Le brouillon n'a pas pu être enregistré.",
+    "postFailed": "Le document n'a pas pu être comptabilisé.",
+    "voidFailed": "Le document n'a pas pu être annulé."
+  },
+  "methods": {
+    "revenue_credit": {
+      "label": "Crédit de la vente au service",
+      "description": "Le service qui a réalisé le travail reçoit le chiffre d'affaires ; le chiffre d'affaires de l'entreprise n'est pas compté deux fois."
+    },
+    "cost_transfer": {
+      "label": "Transfert de coût",
+      "description": "Le coût est imputé au service ou au projet qui a utilisé le travail ; le coût de l'entreprise reste inchangé."
+    },
+    "intercompany_sale": {
+      "label": "Vente intragroupe",
+      "description": "Une filiale vend à une autre ; les deux côtés sont éliminés en consolidation."
+    }
+  }
+}

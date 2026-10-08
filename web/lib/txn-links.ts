@@ -29,6 +29,7 @@ export const TRANSACTION_MODULE_BY_KIND = Object.freeze({
   field_ticket: 'field-tickets',
   journal: 'journal',
   project_charge: 'projects',
+  internal_billing: 'internal-billing',
   pay_run: 'payroll',
 } as const)
 

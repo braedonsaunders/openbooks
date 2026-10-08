@@ -52,6 +52,8 @@ export interface ChargeLineInput {
   /** Bill rate per unit (T&M price). Defaults to the item's default_rate. */
   billRate?: string | null
   description?: string | null
+  /** Project task the line's cost is attributed to; must belong to the charge's project. */
+  projectTaskId?: string | null
   /** Target project-COGS account (debit). Defaults to the item's expense account. */
   accountId?: string | null
   isBillable?: boolean
@@ -357,18 +359,25 @@ export async function createProjectCharge(
       if (!isZero(costAmount) && it.cost_recovery_account_id === accountId) {
         throw new ChargeError(`Item "${it.name}" must use different cost and recovery accounts`)
       }
+      if (line.projectTaskId) {
+        const task = (await tx.execute(sql`
+          select 1 from project_tasks
+           where id = ${line.projectTaskId} and org_id = ${orgId} and project_id = ${input.projectId}
+        `)).rows[0]
+        if (!task) throw new ChargeError('The line task must belong to the charge’s project')
+      }
       const isBillable = line.isBillable ?? true
       const [insertedLine] = (await tx.execute(sql`
         insert into document_lines (org_id, document_id, line_number, item_id, account_id, description,
               quantity, unit, unit_price, amount, is_billable, project_id, equipment_unit_id, employee_id, rate_version_id,
               rate_presentation, base_quantity, base_unit, cost_rate, bill_rate, cost_amount, bill_amount,
-              recovery_account_id, field_ticket_id, created_by)
+              recovery_account_id, field_ticket_id, project_task_id, created_by)
         values (${orgId}, ${docId}, ${lineNo}, ${line.itemId}, ${accountId}, ${line.description ?? it.name},
               ${quantity}, ${resolved?.transactionUnitCode ?? resolved?.baseUnit ?? it.unit ?? null}, ${costRate}, ${costAmount}, ${isBillable}, ${input.projectId},
               ${line.equipmentUnitId ?? null}, ${line.employeeId ?? null}, ${resolved?.rateVersionId ?? null}, ${resolved?.invoicePresentation ?? 'summary'},
               ${resolved?.baseQuantity != null ? exactQuantity(resolved.baseQuantity, 'Base quantity') : quantity}, ${resolved?.baseUnit ?? it.unit ?? null},
               ${costRate}, ${billRate}, ${costAmount}, ${billAmount}, ${it.cost_recovery_account_id ?? null},
-              ${input.fieldTicketId ?? null}, ${userId})
+              ${input.fieldTicketId ?? null}, ${line.projectTaskId ?? null}, ${userId})
         returning id
       `)).rows as { id: string }[]
 

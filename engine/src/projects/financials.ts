@@ -7,6 +7,8 @@ import { add, cmp, fromUnits, isZero, mul, mulDecimal, mulPercent, neg, normaliz
 import { directSubcontractOpenCommitment } from './subcontract-commitments.ts'
 import { overheadRateAppliesToTimeEntry } from '../allocations/overhead-post.ts'
 import { businessToday } from '../platform/business-date.ts'
+import { orgFeatureEnabled } from '../organization/org-feature-lock.ts'
+import { loadEarnedValue } from './earned-value.ts'
 
 /**
  * Profile-driven project financials — the configurable successor to the hardcoded
@@ -203,16 +205,21 @@ async function resolveProjectFinancialsInSnapshot(
   profile: FinancialProfile,
 ): Promise<ProjectFinancials> {
   // Project header (contract value + markup + billing method).
-  const projRow = (await db.execute<{ contract_value: string; markup_percent: string; project_type: string | null; cost_budget: string }>(sql`
+  const projRow = (await db.execute<{ contract_value: string; markup_percent: string; project_type: string | null; cost_budget: string; original_budget_cost: string; original_budget_price: string }>(sql`
     select coalesce(p.contract_value, 0) as contract_value,
            coalesce((p.custom->>'markupPercent')::numeric, 0) as markup_percent,
            coalesce(pt.key, 'time_and_materials') as project_type,
-           coalesce((select sum(t.estimated_cost) from project_tasks t where t.project_id = p.id and t.org_id = p.org_id), 0) as cost_budget
+           coalesce((select sum(t.estimated_cost) from project_tasks t where t.project_id = p.id and t.org_id = p.org_id), 0) as cost_budget,
+           -- The original (sold) budget is baseline 1; zero until one is captured.
+           coalesce((select b.total_cost from project_budget_baselines b
+                      where b.org_id = p.org_id and b.project_id = p.id and b.sequence = 1), 0) as original_budget_cost,
+           coalesce((select b.total_price from project_budget_baselines b
+                      where b.org_id = p.org_id and b.project_id = p.id and b.sequence = 1), 0) as original_budget_price
       from projects p
       left join project_types pt on pt.id = p.project_type_id and pt.org_id = p.org_id
      where p.id = ${projectId} and p.org_id = ${orgId}
   `))
-  const proj = projRow.rows[0] ?? { contract_value: '0', markup_percent: '0', project_type: null, cost_budget: '0' }
+  const proj = projRow.rows[0] ?? { contract_value: '0', markup_percent: '0', project_type: null, cost_budget: '0', original_budget_cost: '0', original_budget_price: '0' }
   const contractValue = amount(proj.contract_value)
   const projectMarkupPercent = amount(proj.markup_percent)
   const costBudget = profile.costBudget.source === 'wbs_estimates' ? amount(proj.cost_budget) : '0.0000'
@@ -306,6 +313,12 @@ async function resolveProjectFinancialsInSnapshot(
          and d.status in (${kindList(committedStatuses.length ? committedStatuses : ['__none__'])})
          and (
            d.kind = 'project_charge'
+           -- Internal billing commits cost to the line's own receiving
+           -- project; a department credit carries no project cost.
+           or (d.kind = 'internal_billing' and dl.project_id = ${projectId}
+               and exists (select 1 from internal_billing_rules ibr
+                            where ibr.org_id = d.org_id and ibr.id = d.internal_billing_rule_id
+                              and ibr.method <> 'revenue_credit'))
            or (
              d.kind in (${kindList(committedKinds.length ? committedKinds : ['__none__'])})
              and (coalesce(dl.quantity,0) = 0 or dl.quantity_billed is null or dl.quantity_billed < dl.quantity)
@@ -340,7 +353,7 @@ async function resolveProjectFinancialsInSnapshot(
              max(coalesce(d.document_date, d.posting_date))::text as late,
              coalesce(sum(round((
                case
-                 when d.kind = 'project_charge' then coalesce(dl.bill_amount, 0)
+                 when d.kind in ('project_charge', 'internal_billing') then coalesce(dl.bill_amount, 0)
                  when dl.bill_amount is not null then
                    ${signedDocumentAmount(sql`d.kind`, sql`dl.bill_amount`)}
                  else
@@ -359,7 +372,7 @@ async function resolveProjectFinancialsInSnapshot(
              * d.fx_rate, 4)), 0) as total_cost,
              coalesce(sum(round((
                case
-                 when d.kind = 'project_charge' then coalesce(dl.bill_amount, 0)
+                 when d.kind in ('project_charge', 'internal_billing') then coalesce(dl.bill_amount, 0)
                  when dl.bill_amount is not null then
                    ${signedDocumentAmount(sql`d.kind`, sql`dl.bill_amount`)}
                  else
@@ -384,6 +397,7 @@ async function resolveProjectFinancialsInSnapshot(
          and dl.is_billable
          and d.status in (${kindList(billableCostStatuses.length ? billableCostStatuses : ['__none__'])})
          and (d.kind = 'project_charge'
+           or (d.kind = 'internal_billing' and dl.project_id = ${projectId})
            or d.kind in (${kindList(billableCostKinds.length ? billableCostKinds : ['__none__'])}))
        group by 1`))
   // laborCost — resolved per profile source (payroll JE / time rate / group).
@@ -668,6 +682,10 @@ async function resolveProjectFinancialsInSnapshot(
     : 0
   const remainingBudget = add(costBudget, neg(totalCost))
 
+  // Earned-value measures (Progress tracking): as of the business day, on
+  // this report's snapshot. Zero while the feature is off.
+  const earned = await earnedValueMeasures(orgId, projectId)
+
   const measures: Record<string, string | number> = {
     invoiced_to_date: invoicedToDate,
     revenue_posted: revenuePosted,
@@ -686,6 +704,8 @@ async function resolveProjectFinancialsInSnapshot(
     billable_cost_value: totalLineBill,
     unbilled_billable: unbilledBillable,
     cost_budget: costBudget,
+    original_budget_cost: amount(proj.original_budget_cost),
+    original_budget_price: amount(proj.original_budget_price),
     total_price: totalPrice,
     total_price_adjustment: adjustments.total_price,
     could_be_invoiced: couldBeInvoiced,
@@ -695,6 +715,9 @@ async function resolveProjectFinancialsInSnapshot(
     gross_profit_adjustment: adjustments.gross_profit,
     margin_pct: marginPct,
     remaining_budget: remainingBudget,
+    earned_value: earned.earnedValue,
+    estimate_at_completion: earned.estimateAtCompletion,
+    cost_to_complete: earned.costToComplete,
   }
 
   const costByCategory = new Map<string, string>()
@@ -716,6 +739,25 @@ async function resolveProjectFinancialsInSnapshot(
     documents: docTranslated.map((r) => ({ id: r.id, kind: r.kind, documentNumber: r.documentNumber, documentDate: r.documentDate, status: r.status, partyName: r.partyName, amount: amount(r.amount) })),
     projectType: proj.project_type,
     contractValue,
+  }
+}
+
+async function earnedValueMeasures(
+  orgId: string,
+  projectId: string,
+): Promise<{ earnedValue: string; estimateAtCompletion: string; costToComplete: string }> {
+  const zero = { earnedValue: '0.0000', estimateAtCompletion: '0.0000', costToComplete: '0.0000' }
+  if (!(await orgFeatureEnabled(orgId, 'projectProgress', db))) return zero
+  const [project] = await loadEarnedValue(db, orgId, {
+    asOf: await businessToday(orgId),
+    projectIds: [projectId],
+    allowedSubsidiaryIds: null,
+  })
+  if (!project) return zero
+  return {
+    earnedValue: project.totals.earnedValue,
+    estimateAtCompletion: project.totals.estimateAtCompletion,
+    costToComplete: project.totals.estimateToComplete,
   }
 }
 

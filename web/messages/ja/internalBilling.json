@@ -1,0 +1,61 @@
+{
+  "title": "社内請求",
+  "description": "部門、プロジェクト、子会社の間で作業を請求します。各ルールが、会社全体の合計に影響させない方法を決めます。",
+  "list": {
+    "new": "新規社内請求",
+    "emptyTitle": "社内請求はまだありません",
+    "emptyDescription": "事業の一部が別の部分のために行った作業を記録し、適切な部門、プロジェクト、子会社に計上・負担させます。"
+  },
+  "fields": {
+    "rule": "ルール",
+    "from": "提供元",
+    "rate": "単価",
+    "billable": "請求対象",
+    "billRate": "請求単価"
+  },
+  "drawer": {
+    "newTitle": "新規社内請求",
+    "description": "作業の提供元と受領先を選択します。",
+    "from": "提供元",
+    "to": "受領先",
+    "chooseRule": "ルールを選択",
+    "noRules": "社内請求ルールはまだありません。設定 → 社内請求で追加してください。",
+    "none": "なし",
+    "sameAsFrom": "提供元と同じ",
+    "chooseSubsidiary": "子会社を選択",
+    "addLine": "行を追加",
+    "removeLine": "行を削除",
+    "saveDraft": "下書きを保存",
+    "journalEntry": "仕訳",
+    "total": "合計",
+    "billed": "顧客に請求済み"
+  },
+  "void": {
+    "title": "社内請求を無効化",
+    "message": "転記は取り消されます。顧客に請求済みの行は、先にその請求書を無効化または削除して解放する必要があります。",
+    "reason": "理由"
+  },
+  "feedback": {
+    "saved": "下書きを保存しました",
+    "posted": "転記しました",
+    "pendingApproval": "承認申請しました",
+    "voided": "無効化しました",
+    "saveFailed": "下書きを保存できませんでした。",
+    "postFailed": "伝票を転記できませんでした。",
+    "voidFailed": "伝票を無効化できませんでした。"
+  },
+  "methods": {
+    "revenue_credit": {
+      "label": "部門への売上計上",
+      "description": "作業を行った部門に売上を計上します。会社全体の売上は二重計上されません。"
+    },
+    "cost_transfer": {
+      "label": "原価振替",
+      "description": "作業を利用した部門またはプロジェクトに原価を振り替えます。会社全体の原価は変わりません。"
+    },
+    "intercompany_sale": {
+      "label": "グループ会社間売上",
+      "description": "子会社間で販売します。双方とも連結時に消去されます。"
+    }
+  }
+}

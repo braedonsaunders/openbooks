@@ -41,6 +41,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import { WizardLayout } from "../../../components/page-layout";
+import { UnbilledAccrualPanel } from "./UnbilledAccrualPanel";
 
 /**
  * Close-wizard rows. Each list reads a different query (see view.ts), so
@@ -167,6 +168,9 @@ type Props = {
   subsidiaryEnabled: boolean;
   multiCurrency: boolean;
   advancedClose: boolean;
+  /** May post general-ledger journals (the unbilled revenue accrual). */
+  canPostGl?: boolean;
+  unbilledRevenueAccrual?: boolean;
 };
 
 const STAGES = [
@@ -841,6 +845,9 @@ function TaskCard(props: Props & { task: CloseTaskRow }) {
             {t("actions.runRevaluation")}
           </Button>
         ) : null}
+        {props.unbilledRevenueAccrual && props.task.key === "unbilled-revenue-accrued" ? (
+          <UnbilledAccrualPanel periodId={props.run.period_id} canPost={props.canPostGl === true} />
+        ) : null}
         {props.canRun &&
         props.subsidiaryEnabled &&
         props.task.key === "consolidation" &&
@@ -862,7 +869,7 @@ function TaskCard(props: Props & { task: CloseTaskRow }) {
         ) : null}
         {actionHref &&
         !["complete", "waived"].includes(props.task.status) &&
-        !["fx-revalued", "consolidation"].includes(props.task.key) ? (
+        !["fx-revalued", "consolidation", "unbilled-revenue-accrued"].includes(props.task.key) ? (
           <Button variant="outline" size="sm" asChild>
             <Link href={(actionHref)}>
               <ExternalLink size={14} />

@@ -66,6 +66,9 @@
     "./projects/rate-adjustment-pricing": "./src/projects/rate-adjustment-pricing.ts",
     "./projects/rate-adjustment-types": "./src/projects/rate-adjustment-types.ts",
     "./projects/invoice-rollup": "./src/projects/invoice-rollup.ts",
+    "./projects/wip-sources": "./src/projects/wip-sources.ts",
+    "./projects/unbilled-accrual": "./src/projects/unbilled-accrual.ts",
+    "./records/work-period": "./src/records/work-period.ts",
     "./platform/sql-bindings": "./src/platform/pg-array.ts",
     "./documents/totals": "./src/ledger/public-document-totals.ts",
     "./src/*": "./src/*",
@@ -150,6 +153,7 @@
     "./testing/hrm": "./src/testing/public-hrm.ts",
     "./platform/time-zone": "./src/platform/time-zone.ts",
     "./payroll/business-calendars": "./src/payroll/business-calendars.ts",
-    "./documents/posting-effects-errors": "./src/ledger/posting-effects-errors.ts"
+    "./documents/posting-effects-errors": "./src/ledger/posting-effects-errors.ts",
+    "./internal-billing": "./src/internal-billing/public.ts"
   }
 }

@@ -324,6 +324,7 @@ export const WIDGET_NAMES: ReadonlySet<string> = new Set([
   'inbox-task-list',
   'insights-dashboard-builder',
   'insights-tabs',
+  'internal-billing-drawer',
   'inventory-action-drawer',
   'invite-user',
   'invoicing-setup-workspace',

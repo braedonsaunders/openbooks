@@ -82,6 +82,7 @@ export const DOC_TYPE_META: Record<string, DocTypeMeta> = {
   card_charge: meta('cardCharge', 'cardChargeShort', <CreditCard className={ICON} />, P.rose),
   card_refund: meta('cardRefund', 'cardRefundShort', <CreditCard className={ICON} />, P.pink),
   project_charge: meta('projectCharge', 'projectChargeShort', <ReceiptText className={ICON} />, P.indigo),
+  internal_billing: meta('internalBilling', 'internalBillingShort', <ArrowLeftRight className={ICON} />, P.slate),
   field_ticket: meta('fieldTicket', 'fieldTicketShort', <ClipboardCheck className={ICON} />, P.cyan),
   pick_list: meta('pickList', 'pickListShort', <ListChecks className={ICON} />, P.teal),
   shipment: meta('shipment', 'shipmentShort', <Truck className={ICON} />, P.sky),

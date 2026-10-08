@@ -68,6 +68,7 @@ const DOCUMENT_CLOSE_MODULES = {
   deposit: "banking",
   transfer: "banking",
   project_charge: "gl",
+  internal_billing: "gl",
   pay_run: "gl",
   // Non-drawer kinds.
   customer_payment: "ar",

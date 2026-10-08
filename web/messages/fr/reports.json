@@ -42,7 +42,9 @@
       "resourcingCapacityDemandTitle": "Capacité et demande",
       "resourcingCapacityDemandDescription": "Compare la capacité nette à la demande nominative, générique et pondérée du pipeline.",
       "resourcingEngagementTitle": "Prévision des missions",
-      "resourcingEngagementDescription": "Prévision des heures, revenus, coûts de main-d’œuvre et marges par mois et devise."
+      "resourcingEngagementDescription": "Prévision des heures, revenus, coûts de main-d’œuvre et marges par mois et devise.",
+      "projectBudgetVsActualTitle": "Budget du projet vs réel",
+      "projectBudgetVsActualDescription": "Budget initial et actuel par rapport aux heures et coûts réels, par tâche."
     },
     "groups": {
       "financial": "États financiers",
@@ -3051,6 +3053,7 @@
       "disposal": "Sortie d’actif",
       "revaluation": "Réévaluation",
       "revenue_recognition": "Constatation du revenu",
+      "revenue_accrual": "Régularisation des produits non facturés",
       "inventory": "Stock",
       "lease": "Contrat de location",
       "allocation": "Affectation",
@@ -3178,5 +3181,68 @@
       "purchase_order": "Bons de commande"
     },
     "note": "La conversion est suivie via les liens de transactions ; les liens historiques de la source peuvent nécessiter une migration."
+  },
+  "earnedValue": {
+    "title": "Valeur acquise",
+    "description": "Budget, pourcentage d’achèvement, valeur acquise, coût réel et estimations par projet et par tâche.",
+    "hubDescription": "Pourcentage d’achèvement, CPI et estimation à l’achèvement par projet et par tâche.",
+    "asOf": "Au {date}",
+    "note": "Le coût réel correspond à la main-d’œuvre approuvée et aux pièces de coût comptabilisées, affectées par tâche ; un coût sans tâche ne compte que dans le total du projet. Le pourcentage d’achèvement utilise la quantité réalisée, puis l’avancement du planning, puis les coûts engagés.",
+    "search": "Rechercher un projet ou une tâche…",
+    "allProjects": "Tous les projets actifs",
+    "projectTotal": "Total du projet",
+    "empty": "Aucun projet avec des tâches ne correspond à ces filtres.",
+    "columns": {
+      "project": "Projet",
+      "task": "Tâche",
+      "basis": "Base",
+      "percent": "% achevé",
+      "bac": "Budget (BAC)",
+      "ev": "Acquis (EV)",
+      "ac": "Réel (AC)",
+      "cpi": "CPI",
+      "etc": "Reste à faire (ETC)",
+      "eac": "À l’achèvement (EAC)",
+      "vac": "Écart (VAC)"
+    },
+    "basis": {
+      "quantity": "Quantité réalisée",
+      "schedule": "Avancement du planning",
+      "cost": "Coûts engagés",
+      "none": "Non mesuré"
+    }
+  },
+  "projectBudget": {
+    "title": "Budget du projet vs réel",
+    "description": "Le budget initial (vendu), le budget actuel et les heures et coûts réels de chaque tâche, avec l'écart par rapport à chaque budget.",
+    "asOf": "Au {date}",
+    "chooseProject": "Choisir un projet",
+    "chooseProjectHint": "Choisissez un projet pour comparer son budget aux heures et coûts réels.",
+    "unassigned": "Non affecté à une tâche",
+    "total": "Total",
+    "empty": "Ce projet n'a pas encore de tâches.",
+    "originalFromSource": "Budget initial issu de {source}, enregistré le {date}. L'écart est le budget moins le réel : négatif signale un dépassement.",
+    "originalFromWbs": "Budget initial issu de l'organigramme des tâches, enregistré le {date}. L'écart est le budget moins le réel : négatif signale un dépassement.",
+    "noOriginal": "Aucun budget initial n'a été enregistré pour ce projet ; fixez une référence dans son organigramme des tâches. L'écart est le budget moins le réel.",
+    "priceNote": "Prix : initial {original} · actuel {current} · facturé à ce jour {invoiced}. Le coût réel correspond au temps approuvé au taux de coût plus les coûts de chantier comptabilisés.",
+    "columns": {
+      "project": "Projet",
+      "task": "Tâche",
+      "originalHours": "Heures initiales",
+      "currentHours": "Heures actuelles",
+      "actualHours": "Heures réelles",
+      "originalCost": "Coût initial",
+      "currentCost": "Coût actuel",
+      "actualCost": "Coût réel",
+      "varianceToOriginal": "Écart vs initial",
+      "varianceToCurrent": "Écart vs actuel",
+      "originalPrice": "Prix initial",
+      "currentPrice": "Prix actuel"
+    },
+    "summary": {
+      "originalPrice": "Prix initial",
+      "currentPrice": "Prix actuel",
+      "invoicedToDate": "Facturé à ce jour"
+    }
   }
 }

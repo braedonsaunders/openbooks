@@ -53,6 +53,15 @@ export const GET = defineRoute({
   if ((kind === 'availability' || kind === 'replenishment') && !(await isFeatureEnabled(gate.user.orgId, 'warehousing'))) {
     return notFound('record')
   }
+  if (kind === 'project-budget-vs-actual') {
+    if (!can(gate, 'projects.read')) return NextResponse.json({ error: 'you do not have access to this data' }, { status: 403 })
+    const feature = await guardProjectsFeature(gate.user.orgId)
+    if (feature) return feature
+  }
+  if (kind === 'earned-value') {
+    if (!can(gate, 'projects.read')) return NextResponse.json({ error: 'you do not have access to this data' }, { status: 403 })
+    if (!(await isFeatureEnabled(gate.user.orgId, 'projectProgress'))) return notFound('record')
+  }
   if (kind.startsWith('resourcing-')) {
     if (!can(gate, 'resourcing.read')) return NextResponse.json({ error: 'you do not have access to this data' }, { status: 403 })
     if (!(await isFeatureEnabled(gate.user.orgId, 'resourcing'))) return notFound('record')

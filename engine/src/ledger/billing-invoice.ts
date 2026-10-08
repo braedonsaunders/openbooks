@@ -9,6 +9,7 @@ import { roundCurrencyMoney } from '../fx/currencies.ts'
 import { subsidiaryVisibleFilter } from '../organization/subsidiary-scope.ts'
 import { projectContractCapacityUsed } from '../projects/contract-capacity.ts'
 import { businessToday } from '../platform/business-date.ts'
+import { presentedWorkPeriods, workCompletedOn } from '../records/work-period.ts'
 
 /** The day the invoice is cut, or the period it closes. */
 async function invoiceDateOf(orgId: string, req: { cutoff_date?: string | null }): Promise<string> {
@@ -581,6 +582,9 @@ export async function generateInvoiceFromBillingRequest(
           ) rc on true
          where dl.org_id = ${orgId}
            and coalesce(dl.project_id, d.project_id) = ${req.project_id}
+           -- An internal billing header names the PROVIDER's project; only a
+           -- line's own receiving project is billed for it.
+           and (d.kind <> 'internal_billing' or dl.project_id = ${req.project_id})
            -- An ORDER line is a commitment to bill the customer: that is what
            -- ordering the work means, so it carries no separate billable flag
            -- and source systems do not set one. Requiring the flag silently
@@ -589,6 +593,7 @@ export async function generateInvoiceFromBillingRequest(
            and dl.billed_by_line_id is null
            and ((true ${automaticCostScope}) ${sourceDocumentIds.length ? sql`or dl.document_id = any(${`{${sourceDocumentIds.join(',')}}`}::uuid[])` : sql``})
            and ((d.kind = 'project_charge' and d.status in ('approved','posted'))
+             or (d.kind = 'internal_billing' and d.status = 'posted')
              or (d.status in ('posted','approved') and d.kind = any(${`{${costKinds.join(",")}}`}::text[])))
       `))
 
@@ -596,7 +601,9 @@ export async function generateInvoiceFromBillingRequest(
         throw new BillingError('Selected costs include subsidiaries outside your access')
       }
       for (const cl of costRows.rows) {
-        const isProjectCharge = cl.kind === 'project_charge'
+        // Project charges and billable internal billing lines carry their own
+        // snapshotted bill rate and amount; other cost lines bill at cost plus markup.
+        const isProjectCharge = cl.kind === 'project_charge' || cl.kind === 'internal_billing'
         // A markup recorded ON THE LINE is the deal struck for that line and
         // wins outright — including an explicit zero, which bills at cost. Only
         // a line that says nothing falls back to the project's configured markup.
@@ -1002,6 +1009,9 @@ export async function generateInvoiceFromBillingRequest(
       ]),
     )
     const presentedLines = rolled.presented
+    // Each presented line spans the work dates of the detail it bills; the
+    // invoice records the latest as its work-completed date.
+    const workPeriods = presentedWorkPeriods(built.map((line) => line.workedOn ?? null), rolled.presentedIndexOf, presentedLines.length)
     const validatedAccounts = new Set<string>()
     for (const line of [...built, ...presentedLines]) {
       if (!line.accountId) {
@@ -1077,12 +1087,12 @@ export async function generateInvoiceFromBillingRequest(
     const created = (await tx.execute<{ id: string }>(sql`
       insert into documents (org_id, kind, document_number, party_id, document_date, currency,
                              status, project_id, subsidiary_id, billing_method, is_final_invoice,
-                             reference_number, memo, subtotal, tax_total, total, created_by)
+                             reference_number, memo, subtotal, tax_total, total, work_completed_on, created_by)
       values (${orgId}, 'customer_invoice', ${documentNumber}, ${project.customer_id},
               ${invoiceDate}, ${currency}, 'draft', ${req.project_id},
               ${project.subsidiary_id}, ${billingMethod === 'cost_plus' ? 'time_and_materials' : billingMethod},
               ${req.invoice_type === 'final'}, ${req.customer_po ?? project.customer_po_number},
-              ${req.invoice_description}, '0', '0', '0', ${userId})
+              ${req.invoice_description}, '0', '0', '0', ${workCompletedOn(workPeriods)}, ${userId})
       returning id
     `)).rows[0]!
     const invoiceId = created.id
@@ -1098,12 +1108,14 @@ export async function generateInvoiceFromBillingRequest(
         insert into document_lines (org_id, document_id, line_number, item_id, account_id, description,
               quantity, unit, unit_price, amount, tax_code_id, tax_input_amount, tax_amount, tax_overridden,
               employee_id, time_entry_id, time_type_id,
-              is_billable, equipment_unit_id, rate_version_id, bill_rate, bill_amount, department_id, project_id, created_by)
+              is_billable, equipment_unit_id, rate_version_id, bill_rate, bill_amount, department_id, project_id,
+              work_from, work_to, created_by)
         values (${orgId}, ${invoiceId}, ${lineNo}, ${l.itemId}, ${l.accountId}, ${l.description},
               ${l.quantity}, ${l.unit ?? null}, ${l.unitPrice}, ${tax.amount}, ${l.taxCodeId},
               ${tax.taxInputAmount}, ${tax.taxAmount}, ${tax.taxOverridden}, ${l.employeeId},
               ${l.timeEntryId}, ${l.timeTypeId}, true, ${l.equipmentUnitId ?? null}, ${l.rateVersionId ?? null},
-              ${l.unitPrice}, ${tax.amount}, ${l.departmentId ?? null}, ${req.project_id}, ${userId})
+              ${l.unitPrice}, ${tax.amount}, ${l.departmentId ?? null}, ${req.project_id},
+              ${workPeriods[index]?.workFrom ?? null}, ${workPeriods[index]?.workTo ?? null}, ${userId})
         returning id
       `)).rows[0]!
       await persistLineTaxComponents(tx, { orgId, documentLineId: String(line.id), components: tax.taxComponents, actorId: userId })

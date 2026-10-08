@@ -1,5 +1,7 @@
 import 'server-only'
 import { projectContractCapacityUsed } from '@openbooks/engine/projects/billing-pricing'
+import { eligibleWipSourcesSql } from '@openbooks/engine/projects/wip-sources'
+import { workCompletedOn, workPeriodOf } from '@openbooks/engine/records/work-period'
 export { projectContractCapacityUsed } from '@openbooks/engine/projects/billing-pricing'
 
 import { sql } from 'drizzle-orm'
@@ -231,6 +233,7 @@ interface WipPrebillLineRow extends Record<string, unknown> {
   document_line_id: string | null
   document_id: string | null
   project_id: string
+  source_date: string
   item_id: string | null
   income_account_id: string | null
   description: string | null
@@ -1473,13 +1476,14 @@ export async function convertPrebill(orgId: string, actorId: string, id: string,
       insert into documents (
         org_id, kind, document_number, party_id, document_date, currency, status,
         project_id, subsidiary_id, billing_method, is_final_invoice, reference_number,
-        memo, subtotal, tax_total, total, custom, created_by, updated_by
+        memo, subtotal, tax_total, total, custom, work_completed_on, created_by, updated_by
       ) values (
         ${orgId}, 'customer_invoice', ${invoiceNumber}, ${worksheet.customer_id}, ${worksheet.period_end},
         ${worksheet.currency}, 'draft', ${worksheet.project_id}, ${worksheet.subsidiary_id},
         ${worksheet.billing_method === 'fixed_price' ? 'fixed_price' : 'time_and_materials'}, false,
         ${worksheet.customer_po_number}, ${`Created from ${worksheet.worksheet_number}`},
         '0', '0', '0', ${JSON.stringify({ prebillId: id, billingRequestId, policy: policySnapshot })}::jsonb,
+        ${workCompletedOn(lines.rows.map((line) => workPeriodOf([line.source_date])))},
         ${actorId}, ${actorId}
       ) returning id
     `))
@@ -1513,7 +1517,7 @@ export async function convertPrebill(orgId: string, actorId: string, id: string,
           org_id, document_id, line_number, item_id, account_id, description,
           quantity, unit, unit_price, amount, tax_code_id, tax_amount, department_id, project_id,
           employee_id, time_entry_id, time_type_id, is_billable, bill_rate, bill_amount,
-          custom, created_by, updated_by
+          work_from, work_to, custom, created_by, updated_by
         ) values (
           ${orgId}, ${invoiceId}, ${index + 1}, ${line.item_id}, ${accountId}, ${line.description},
           ${line.quantity}, ${line.unit},
@@ -1521,7 +1525,7 @@ export async function convertPrebill(orgId: string, actorId: string, id: string,
           ${amount}, ${line.tax_code_id}, ${taxAmount}, ${line.department_id}, ${worksheet.project_id},
           ${line.employee_party_id}, ${line.time_entry_id}, ${line.time_type_id}, true,
           case when ${line.quantity}::numeric = 0 then ${amount}::numeric else ${amount}::numeric / ${line.quantity}::numeric end,
-          ${amount},
+          ${amount}, ${line.source_date}, ${line.source_date},
           ${JSON.stringify({ prebillLineId: line.id, originalBillAmount: line.original_bill_amount, adjustmentAmount: line.adjustment_amount })}::jsonb,
           ${actorId}, ${actorId}
         ) returning id
@@ -1580,113 +1584,9 @@ export interface WipAnalytics {
   leakage: { writeDowns: string; heldOver90: string; total: string }
 }
 
+/** WIP analytics read the one engine valuation of unbilled project work. */
 function eligibleWipSources(orgId: string, scope: SubsidiaryScope) {
-  return sql`
-    with raw_sources as (
-      select 'time_entry'::text as source_type, te.id as source_id, te.project_id,
-             te.worked_on as source_date, te.hours::numeric as quantity,
-             round(te.hours * coalesce(te.cost_rate, 0), 4) as direct_cost,
-             round(te.hours * coalesce(te.bill_rate, item.default_rate, 0), 4) as native_bill,
-             null::text as document_kind, null::text as document_status
-        from time_entries te
-        left join items item on item.org_id = te.org_id and item.id = te.item_id
-       where te.org_id = ${orgId} and te.status = 'approved' and te.is_billable
-         and te.billing_status = 'unbilled'
-      union all
-      select 'document_line'::text, line.id, coalesce(line.project_id, document.project_id),
-             document.document_date, case when document.kind = 'project_charge' then line.quantity else 1 end,
-             case when document.kind = 'project_charge' then coalesce(line.cost_amount, line.amount)
-                  when document.kind in ('vendor_credit', 'card_refund') then -line.amount else line.amount end,
-             case when document.kind = 'project_charge' then coalesce(line.bill_amount, 0)
-                  when line.bill_amount is not null then case when document.kind in ('vendor_credit', 'card_refund') then -line.bill_amount else line.bill_amount end
-                  when line.markup_percent is not null then round((case when document.kind in ('vendor_credit', 'card_refund') then -line.amount else line.amount end) * (1 + line.markup_percent / 100), 4)
-                  else round((case when document.kind in ('vendor_credit', 'card_refund') then -line.amount else line.amount end) * coalesce(nullif(line.cost_multiplier, 0), 1), 4) end,
-             document.kind, document.status
-        from document_lines line
-        join documents document on document.org_id = line.org_id and document.id = line.document_id
-       where line.org_id = ${orgId} and line.is_billable and line.billed_by_line_id is null
-         and coalesce(line.project_id, document.project_id) is not null
-    ), policy_sources as (
-      select source.*, project.contract_value,
-             coalesce((project.custom->>'markupPercent')::numeric, 0) as project_markup,
-             type.invoicing_profile,
-             coalesce(version.financial_profile, latest.financial_profile) as profile
-        from raw_sources source
-        join projects project on project.org_id = ${orgId} and project.id = source.project_id
-          and project.status not in ('closed', 'cancelled')
-          ${subsidiaryVisibleFilter(sql`project.subsidiary_id`, scope)}
-        join project_types type on type.org_id = ${orgId} and type.id = project.project_type_id and type.is_active
-        left join lateral (
-          select policy.financial_profile
-            from project_financial_profile_versions policy
-           where policy.org_id = ${orgId} and policy.project_type_id = type.id
-             and policy.effective_from <= source.source_date
-             and (policy.effective_to is null or policy.effective_to >= source.source_date)
-           order by policy.effective_from desc limit 1
-        ) version on true
-        left join lateral (
-          select policy.financial_profile
-            from project_financial_profile_versions policy
-           where policy.org_id = ${orgId} and policy.project_type_id = type.id
-           order by policy.effective_from desc limit 1
-        ) latest on true
-       where latest.financial_profile is not null
-         and coalesce(type.invoicing_profile->>'billingProcedure', 'standard') = 'standard'
-         and type.invoicing_profile->>'lineBuilder' in ('tm_actual', 'cost_plus')
-         and (type.invoicing_profile->'allowedBases' ? 'time_selection'
-           or type.invoicing_profile->'allowedBases' ? 'date_range')
-    ), valued_sources as (
-      select source.*,
-             case when source.profile#>>'{billableValue,timeRate}' = 'cost_times_markup'
-                  then round(source.direct_cost * (1 + coalesce(nullif(source.project_markup, 0), nullif(source.profile#>>'{totalPrice,defaultMarkupPercent}', '')::numeric, 0) / 100), 4)
-                  else source.native_bill end as source_value,
-             exists(select 1 from wip_holds hold where hold.org_id=${orgId}
-                      and hold.source_type=source.source_type and hold.source_id=source.source_id
-                      and hold.released_at is null) as held,
-             exists(select 1 from wip_prebill_lines reserved
-                      join wip_prebills worksheet on worksheet.org_id=reserved.org_id and worksheet.id=reserved.prebill_id
-                     where reserved.org_id=${orgId} and reserved.source_type=source.source_type
-                       and coalesce(reserved.time_entry_id,reserved.document_line_id)=source.source_id
-                       and worksheet.status in ('draft','review','approved')) as reserved
-        from policy_sources source
-       where (source.source_type='time_entry'
-              and coalesce((source.profile#>>'{billableValue,includeUnbilledTime}')::boolean, true))
-          or (source.source_type='document_line'
-              and coalesce((source.profile#>>'{billableValue,includeUnbilledCostLines}')::boolean, true)
-              and (source.document_kind='project_charge'
-                   or coalesce(source.profile#>'{billableValue,costSourceKinds}', '["vendor_bill","expense_report","card_charge","check"]'::jsonb) ? source.document_kind)
-              and coalesce(source.profile#>'{billableValue,costSourceStatuses}', '["approved","posted"]'::jsonb) ? source.document_status)
-    ), available_sources as (
-      select source.*,
-             case when source.held or source.reserved then 0 else source.source_value end as available_value,
-             case when source.profile#>>'{totalPrice,method}' = 'not_to_exceed' then greatest(
-               coalesce(source.contract_value,0)
-               - coalesce((select sum(case when invoice.kind = any(array(select jsonb_array_elements_text(coalesce(source.profile#>'{invoicedToDate,creditKinds}','["customer_credit"]'::jsonb)))) then -line.amount else line.amount end)
-                             from document_lines line join documents invoice on invoice.org_id=line.org_id and invoice.id=line.document_id
-                            where line.org_id=${orgId} and coalesce(line.project_id,invoice.project_id)=source.project_id
-                              and invoice.status<>'voided'
-                              and invoice.kind = any(array(select jsonb_array_elements_text(coalesce(source.profile#>'{invoicedToDate,docKinds}','["customer_invoice"]'::jsonb) || coalesce(source.profile#>'{invoicedToDate,creditKinds}','["customer_credit"]'::jsonb))))),0)
-               - coalesce((select sum(worksheet.proposed_bill_amount) from wip_prebills worksheet
-                            where worksheet.org_id=${orgId} and worksheet.project_id=source.project_id
-                              and worksheet.status in ('draft','review','approved')),0),
-               0
-             ) else null end as remaining_cap
-        from valued_sources source
-    ), ordered_sources as (
-      select source.*,
-             coalesce(sum(source.available_value) over (
-               partition by source.project_id order by source.source_date, source.source_type, source.source_id
-               rows between unbounded preceding and 1 preceding
-             ),0) as prior_available
-        from available_sources source
-    ), eligible_sources as (
-      select source.*,
-             case when source.remaining_cap is null then source.available_value
-                  when source.available_value < 0 then source.available_value
-                  else greatest(least(source.available_value, source.remaining_cap-source.prior_available),0) end as capped_available_value
-        from ordered_sources source
-    )
-  `
+  return eligibleWipSourcesSql(orgId, scope)
 }
 
 export async function wipAnalytics(orgId: string, asOf?: string, scope: SubsidiaryScope = null): Promise<WipAnalytics> {

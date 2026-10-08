@@ -17,6 +17,7 @@ import { resolveStoredValueLiabilityByLine, resolveStoreCreditLiability } from "
 import { resolveCashPostingTenders, TenderRefusal } from "../sales/document-tenders.ts";
 import { resolveMarketplaceClearingForDocument } from "./posting-tax-policy.ts";
 import { applySubsidiaries } from "./posting-subsidiaries.ts";
+import { resolveInternalBillingPostingContext } from "./internal-billing-posting.ts";
 import { resolvePostingPeriod } from "./posting-period.ts";
 import { glProjectionScopeUnchanged, buildProjection, glLineKey, glProjectionKey } from "./posting-projection.ts";
 export interface SourceCorrectionAuthorization {
@@ -184,6 +185,13 @@ export async function regenerateGlImpactTx(
     .from(schema.documentLines)
     .where(and(eq(schema.documentLines.documentId, documentId), eq(schema.documentLines.orgId, doc.orgId)))
     .orderBy(asc(schema.documentLines.lineNumber));
+
+  if (doc.kind === "internal_billing" && !deps.internalBilling) {
+    deps = {
+      ...deps,
+      internalBilling: await resolveInternalBillingPostingContext(tx, doc, lines, { enforceFeatures: false }),
+    };
+  }
 
   const [entry] = await tx
     .select()

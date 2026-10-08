@@ -68,6 +68,9 @@ export interface EntryLineInput {
   extraDims?: Record<string, string | null>;
   custom?: Record<string, unknown>;
   isBillable?: boolean | null;
+  /** Work period the line bills; every exploded child bills the same work. */
+  workFrom?: string | null;
+  workTo?: string | null;
   /**
    * Marketplace collecting this line's tax. Explosion splits one sale across
    * dimensions, so every child inherits the parent's collector verbatim.
@@ -116,6 +119,9 @@ export interface PlannedEntryLine {
   extraDims: Record<string, string | null>;
   custom: Record<string, unknown>;
   isBillable: boolean | null;
+  /** Absent preserves the stored work period of the line being re-saved. */
+  workFrom?: string | null;
+  workTo?: string | null;
   distributionGroupId: string | null;
   distributionRuleId: string | null;
   distributionVersionId: string | null;
@@ -497,6 +503,8 @@ export function explodeDocumentLine(
     extraDims: { ...(line.extraDims ?? {}), ...(t.extraDims ?? {}) },
     custom: line.custom ?? {},
     isBillable: line.isBillable ?? null,
+    workFrom: line.workFrom,
+    workTo: line.workTo,
     distributionGroupId: groupId,
     distributionRuleId: ruleInEffect.rule.id,
     distributionVersionId: version.id,
@@ -536,6 +544,8 @@ function plainLine(line: EntryLineInput): PlannedEntryLine {
     extraDims: { ...(line.extraDims ?? {}) },
     custom: line.custom ?? {},
     isBillable: line.isBillable ?? null,
+    workFrom: line.workFrom,
+    workTo: line.workTo,
     distributionGroupId: null,
     distributionRuleId: null,
     distributionVersionId: null,

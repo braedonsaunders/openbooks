@@ -38,7 +38,7 @@
     "createFailed": "Could not create the ticket"
   },
   "editor": {
-    "tabs": { "time": "Time", "items": "Items", "tasks": "Tasks", "related": "Related" },
+    "tabs": { "time": "Time", "items": "Items", "tasks": "Tasks", "related": "Related", "production": "Production" },
     "periodLocked": "Remove entered hours before changing the ticket period.",
     "back": "Field tickets",
     "submit": "Submit",
@@ -116,7 +116,10 @@
       "add": "Add line",
       "remove": "Remove line",
       "empty": "No lines yet.",
-      "itemRequired": "Pick an item", "rateFailed": "Could not resolve the item rate", "projectLoadFailed": "Could not load the project", "reloadFailed": "Could not reload the ticket"
+      "itemRequired": "Pick an item", "rateFailed": "Could not resolve the item rate", "projectLoadFailed": "Could not load the project", "reloadFailed": "Could not reload the ticket",
+      "task": "Task",
+      "noTask": "No task",
+      "taskLabel": "Task: {task}"
     },
     "tasks": { "title": "Project tasks", "hint": "WBS tasks available for coding crew hours on this project.", "code": "Code", "task": "Task", "estimatedHours": "Estimated hours" },
     "totals": {
@@ -155,6 +158,19 @@
     "discard": "Discard draft",
     "discardConfirm": "Discard this empty draft? A draft that already carries hours, lines, or signatures is kept — only a draft with nothing on it goes away.",
     "discardFailed": "Could not discard the draft.",
-    "discarded": "Draft discarded."
+    "discarded": "Draft discarded.",
+    "production": {
+      "title": "Production",
+      "hint": "Quantities installed on this ticket, per task. Approval records them as project progress.",
+      "noBudgetedTasks": "No task on this project has a budgeted quantity. Set one on the task in the project's Work breakdown to report production.",
+      "task": "Task",
+      "pickTask": "Choose a task",
+      "quantity": "Quantity",
+      "unit": "Unit",
+      "note": "Note",
+      "add": "Add production",
+      "empty": "No production reported.",
+      "remove": "Remove production line"
+    }
   }
 }

@@ -810,10 +810,10 @@ export async function generatePayApplicationInvoice(
     const documentNumber = await nextNumber(tx, orgId, "customer_invoice", "INV-");
     const invoice = (await tx.execute<{ id: string }>(sql`
       insert into documents (org_id, kind, document_number, party_id, document_date, currency, status,
-                             project_id, subsidiary_id, memo, subtotal, tax_total, total, created_by)
+                             project_id, subsidiary_id, memo, subtotal, tax_total, total, work_completed_on, created_by)
       values (${orgId}, 'customer_invoice', ${documentNumber}, ${project.customer_id},
               ${app.period_end}, ${project.currency}, 'draft', ${app.project_id}, ${project.subsidiary_id},
-              ${`Application for Payment #${app.application_number}`}, '0', '0', '0', ${userId})
+              ${`Application for Payment #${app.application_number}`}, '0', '0', '0', ${app.period_end}, ${userId})
       returning id
     `));
     const invoiceId = invoice.rows[0]!.id;

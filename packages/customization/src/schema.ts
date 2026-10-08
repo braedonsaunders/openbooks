@@ -541,7 +541,7 @@ export function defaultFormLayout(recordType: RecordTypeKey): FormLayoutConfig {
           label: null,
           fields: meta.headerFields.map<HeaderFieldPlacement>((f) => ({
             key: f.key,
-            visible: true,
+            visible: f.defaultHidden !== true,
             required: f.required ? true : null,
             labelOverride: null,
             colSpan: spanMap[f.key] ?? null,
@@ -552,7 +552,7 @@ export function defaultFormLayout(recordType: RecordTypeKey): FormLayoutConfig {
     lines: {
       columns: meta.lineFields.map<LineColumnPlacement>((f) => ({
         key: f.key,
-        visible: true,
+        visible: f.defaultHidden !== true,
         width: null,
         labelOverride: null,
       })),
