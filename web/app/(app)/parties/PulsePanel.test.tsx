@@ -113,3 +113,17 @@ test('pulse panel reports a withheld timeline instead of no activity', () => {
   assert.ok(markup.includes('Not available with your access.'))
   assert.ok(!markup.includes('No recorded activities'))
 })
+
+
+test('pulse history renders one complete server window with native table headers', () => {
+  const timeline: CustomerPulseData['timeline'] = Array.from({ length: 30 }, (_, index) => ({
+    id: `invoice-${index}`, type: 'invoice', title: `History invoice ${index}`,
+    description: null, amount: '10.0000', currency: 'CAD', status: 'draft', timestamp: '2026-07-15',
+  }))
+  const markup = render({ party: baseParty, sections: { ar: true, crm: false, projects: false },
+    ...arSections, timeline, timelinePage: { total: 70, page: 2, perPage: 30, q: '', dir: 'desc' } })
+  assert.ok(markup.includes('<table'), 'interaction history uses a real table')
+  assert.ok(markup.includes('Description') && markup.includes('Amount') && markup.includes('Status') && markup.includes('Date'))
+  assert.equal((markup.match(/History invoice /g) ?? []).length, 30, 'a server page is neither truncated nor duplicated in the browser')
+  assert.ok(markup.includes('History invoice 29'))
+})

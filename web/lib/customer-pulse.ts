@@ -1,18 +1,24 @@
 import 'server-only'
 
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/platform/db.ts'
-import { businessToday, parseIsoDate } from '@openbooks/engine/src/platform/business-date.ts'
-import { add, cmp, div, fromUnits, mul, mulDecimal, mulRate, neg, normalizeMoney, roundDiv, toUnits } from '@openbooks/engine/src/money/money.ts'
+import { db } from '@openbooks/engine/platform/database'
+import { businessToday } from '@openbooks/engine/platform/business-date'
+import { parseIsoDate } from '@openbooks/engine/platform/civil-date'
+import { add, cmp, div, fromUnits, mul, mulDecimal, mulRate, neg, normalizeMoney, roundDiv, toUnits } from '@openbooks/engine/money'
 import { flowRates, lineFunctional, presentationCurrency, presentationRates, translateFlows } from './fx-presentation'
 import { openItems } from './cash/open-items'
 import { paymentStats } from './cash/core'
 import { isFeatureEnabled } from './features'
 import { resolveProjectFinancials } from './project-financials'
 import { loadProjectType } from './project-type'
-import { crmActivityScope, crmOpportunityScope, crmSharedScope } from './crm-scope'
+import { crmOpportunityScope, crmSharedScope } from './crm-scope'
 import { subsidiaryVisibleFilter } from './subsidiaries'
 import { customerOrderCommitmentsSource } from './customer-credit'
+import { loadCustomerPulseTimeline } from './customer-pulse-timeline'
+import type { CustomerPulseTimelineItem, CustomerPulseTimelinePage } from './customer-pulse-timeline-params'
+import type { CustomerPulseSections } from './customer-pulse-sections'
+export { pulseSectionsFor } from './customer-pulse-sections'
+export type { CustomerPulseSections } from './customer-pulse-sections'
 
 /**
  * Money travels as canonical numeric(19,4) decimal strings (house bigint
@@ -32,46 +38,6 @@ export interface CustomerAgingBreakdown {
   days90Plus: PulseMoney
   totalOpen: PulseMoney
   totalOverdue: PulseMoney
-}
-
-/**
- * Which pulse sections the caller may see. The pulse is a combined payload
- * across domains, so one read permission cannot unlock all of it:
- *
- *   - `ar` covers receivables telemetry (aging, credit terms and headroom,
- *     payment history) and every commercial-document timeline entry
- *     (quotes, sales orders, invoices, payments) — the same `ar.read` the
- *     standalone statement and order surfaces require.
- *   - `crm` covers the relationship side (opportunity pipeline, activity
- *     timeline) — the `crm.accounts.read` the account drawer requires.
- *   - `projects` covers the delivery rollup — `projects.read`.
- *
- * Subsidiary/record scope inside each section is the same scope helper the
- * standalone endpoint for that section enforces; gating here never re-derives
- * it. Sections the caller cannot see are OMITTED from the payload — never
- * nulled with data-shaped defaults, which would read as genuine zeros.
- */
-export interface CustomerPulseSections {
-  ar: boolean
-  crm: boolean
-  projects: boolean
-}
-
-/**
- * Map effective permissions to pulse sections. Returns null when the caller
- * may see nothing at all — the route turns that into a 403 naming the
- * permissions that would grant access.
- */
-export function pulseSectionsFor(
-  covers: (permission: string) => boolean,
-): CustomerPulseSections | null {
-  const sections: CustomerPulseSections = {
-    ar: covers('ar.read'),
-    crm: covers('crm.accounts.read'),
-    projects: covers('projects.read'),
-  }
-  if (!sections.ar && !sections.crm && !sections.projects) return null
-  return sections
 }
 
 /**
@@ -164,17 +130,8 @@ export interface CustomerPulseData {
    * payments) ride the AR section. A caller with neither section gets an
    * empty timeline rather than anyone else's entries.
    */
-  timeline: Array<{
-    id: string
-    type: 'activity' | 'estimate' | 'sales_order' | 'invoice' | 'payment' | 'stage_event'
-    title: string
-    description: string | null
-    amount?: PulseMoney
-    currency?: string
-    timestamp: string
-    status?: string
-    reference?: string
-  }>
+  timeline: CustomerPulseTimelineItem[]
+  timelinePage?: Omit<CustomerPulseTimelinePage, 'rows'>
 }
 
 export async function loadCustomerPulse(
@@ -182,6 +139,7 @@ export async function loadCustomerPulse(
   orgId: string,
   allowedSubsidiaryIds?: ReadonlySet<string> | null,
   sections?: CustomerPulseSections,
+  timelineSearch: Record<string, string | string[] | undefined> = { pulseHistoryPerPage: '50' },
 ): Promise<CustomerPulseData | null> {
   // No sections means no access: callers must resolve permissions through
   // pulseSectionsFor first. Defaulting to everything here would reintroduce
@@ -471,91 +429,9 @@ export async function loadCustomerPulse(
     }
   }
 
-  // 7. Unified Activity & Document Timeline, permission-filtered. CRM
-  // activities ride the CRM section; commercial documents (quotes, sales
-  // orders, invoices, payments) ride the AR section — quotes and sales
-  // orders require ar.read on their standalone surfaces, so a CRM-only
-  // caller must not read them here either.
-  const timelineItems: NonNullable<CustomerPulseData['timeline']> = []
-
-  if (sections.crm) {
-    const activitiesRes = await db.execute<{
-      id: string
-      kind: string
-      subject: string
-      body: string | null
-      status: string
-      timestamp: string
-    }>(sql`
-      select a.id, a.kind, a.subject, a.body, a.status,
-             coalesce(a.starts_at, a.due_at, a.created_at)::text as timestamp
-        from crm_activities a
-        join crm_activity_links l on l.activity_id = a.id and l.org_id = a.org_id
-       where l.org_id = ${orgId}
-         and l.subject_kind = 'account'
-         and l.subject_id = ${partyId}
-         and not a.is_private
-         ${crmActivityScope(allowedSubsidiaryIds)}
-       order by coalesce(a.starts_at, a.due_at, a.created_at) desc
-       limit 25
-    `)
-
-    for (const a of activitiesRes.rows) {
-      timelineItems.push({
-        id: a.id,
-        type: 'activity',
-        title: a.subject,
-        description: a.body,
-        status: a.status,
-        timestamp: a.timestamp,
-      })
-    }
-  }
-
-  if (sections.ar) {
-    const documentsRes = await db.execute<{
-      id: string
-      kind: string
-      document_number: string
-      document_date: string
-      status: string
-      currency: string
-      total: string
-      memo: string | null
-    }>(sql`
-      select d.id, d.kind, d.document_number, d.document_date::text,
-             d.status, d.currency, d.total::text, d.memo
-        from documents d
-       where d.org_id = ${orgId}
-         and d.party_id = ${partyId}
-         and d.kind in ('quote', 'sales_order', 'customer_invoice', 'customer_payment')
-         ${subsidiaryVisibleFilter(sql`d.subsidiary_id`, allowedSubsidiaryIds ?? null)}
-       order by d.document_date desc, d.created_at desc
-       limit 35
-    `)
-
-    for (const d of documentsRes.rows) {
-      let type: NonNullable<CustomerPulseData['timeline']>[number]['type'] = 'invoice'
-      if (d.kind === 'quote') type = 'estimate'
-      else if (d.kind === 'sales_order') type = 'sales_order'
-      else if (d.kind === 'customer_payment') type = 'payment'
-
-      timelineItems.push({
-        id: d.id,
-        type,
-        title: `${d.document_number} (${d.kind.replace('_', ' ')})`,
-        description: d.memo,
-        amount: normalizeMoney(d.total),
-        currency: d.currency,
-        status: d.status,
-        timestamp: d.document_date,
-        reference: d.document_number,
-      })
-    }
-  }
-
-  // Sort unified feed chronologically desc
-  timelineItems.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+  const timelinePage = await loadCustomerPulseTimeline(partyId, orgId, allowedSubsidiaryIds, sections, timelineSearch)
+  if (!timelinePage) return null
+  const { rows: timeline, ...timelinePagination } = timelinePage
 
   return {
     party,
@@ -565,6 +441,7 @@ export async function loadCustomerPulse(
     ...(paymentMetrics !== undefined ? { paymentMetrics } : null),
     ...(pipeline !== undefined ? { pipeline } : null),
     ...(projects !== undefined ? { projects } : null),
-    timeline: timelineItems.slice(0, 50),
+    timeline,
+    timelinePage: timelinePagination,
   }
 }

@@ -1,15 +1,12 @@
 'use client'
-import { cmp } from '@openbooks/engine/src/money/money.ts'
+import type { ReactNode } from 'react'
+import { cmp, roundDiv, toUnits } from '@openbooks/engine/money'
 
 import {
   Building,
   Clock,
-  FileText,
   Mail,
   Phone,
-  Receipt,
-  TrendingUp,
-  Briefcase,
   ShieldAlert,
 } from 'lucide-react'
 import { useTranslations } from 'next-intl'
@@ -18,9 +15,9 @@ import {
   Card,
   cn,
 } from '@openbooks/ui'
-import { roundDiv, toUnits } from '@openbooks/engine/src/money/money.ts'
 import { useMoney } from '@/components/money-provider'
 import type { CustomerPulseData } from '../../../lib/customer-pulse'
+import { PulseHistoryTable } from './PulseHistoryTable'
 
 function billedPercent(billed: string, contract: string): string {
   const denominator = toUnits(contract)
@@ -58,7 +55,7 @@ function RestrictedCard({ title, className }: { title: string; className?: strin
   )
 }
 
-export function PulsePanel({ data }: { data: CustomerPulseData }) {
+export function PulsePanel({ data, history }: { data: CustomerPulseData; history?: ReactNode }) {
   const { party, sections, aging, credit, paymentMetrics, pipeline, projects, timeline } = data
   const t = useTranslations('crm.pulse')
   const tc = useTranslations('common')
@@ -67,10 +64,6 @@ export function PulsePanel({ data }: { data: CustomerPulseData }) {
   // at least one timeline-carrying section; otherwise entries were withheld
   // for access and the panel must say so instead of reporting no activity.
   const timelineWithheld = timeline.length === 0 && !sections.ar && !sections.crm
-  // Document statuses have their own catalog; anything it does not name keeps
-  // the stored value rather than rendering a raw message key.
-  const statusLabel = (value: string) =>
-    tc.has(`status.${value}` as never) ? tc(`status.${value}` as never) : value.replace(/_/g, ' ')
 
   return (
     <div className="space-y-6">
@@ -339,57 +332,9 @@ export function PulsePanel({ data }: { data: CustomerPulseData }) {
         <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">{t('timelineTitle')}</h3>
         <p className="mt-0.5 text-xs text-slate-500">{t('timelineDescription')}</p>
 
-        <div className="mt-4 divide-y divide-slate-100 border-t border-slate-100 dark:divide-slate-800 dark:border-slate-800">
-          {timeline.map((item) => {
-            let icon = <FileText className="h-4 w-4 text-blue-500" />
-            if (item.type === 'activity') icon = <Clock className="h-4 w-4 text-indigo-500" />
-            else if (item.type === 'estimate') icon = <Briefcase className="h-4 w-4 text-amber-500" />
-            else if (item.type === 'sales_order') icon = <TrendingUp className="h-4 w-4 text-cyan-500" />
-            else if (item.type === 'invoice') icon = <FileText className="h-4 w-4 text-rose-500" />
-            else if (item.type === 'payment') icon = <Receipt className="h-4 w-4 text-emerald-500" />
-
-            return (
-              <div key={item.id} className="flex items-start justify-between py-3 text-xs">
-                <div className="flex items-start gap-3">
-                  <div className="mt-0.5 rounded-full bg-slate-100 p-1.5 dark:bg-slate-800">
-                    {icon}
-                  </div>
-                  <div>
-                    <div className="font-semibold text-slate-900 dark:text-slate-100">
-                      {item.title}
-                    </div>
-                    {item.description && (
-                      <p className="mt-0.5 line-clamp-1 text-slate-500">
-                        {item.description}
-                      </p>
-                    )}
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-3 text-right">
-                  {item.amount !== undefined && (
-                    <span className="font-bold text-slate-900 dark:text-slate-100">
-                      {money(item.amount, { currency: item.currency || party.currency })}
-                    </span>
-                  )}
-                  {item.status && (
-                    <Badge variant="secondary" className="text-[10px] uppercase">
-                      {statusLabel(item.status)}
-                    </Badge>
-                  )}
-                  <span className="w-20 text-slate-400">
-                    {item.timestamp.slice(0, 10)}
-                  </span>
-                </div>
-              </div>
-            )
-          })}
-
-          {timeline.length === 0 && (
-            <div className="py-8 text-center text-xs text-slate-400">
-              {timelineWithheld ? t('restrictedNotice') : t('timelineEmpty')}
-            </div>
-          )}
+        <div className="mt-4">
+          {history ?? <PulseHistoryTable rows={timeline} currency={party.currency} withheld={timelineWithheld}
+            state={data.timelinePage ?? { total: timeline.length, page: 1, perPage: 50 }} />}
         </div>
       </Card>
     </div>

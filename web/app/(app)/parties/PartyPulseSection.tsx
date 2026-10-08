@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { Skeleton } from '@openbooks/ui'
 import { PulsePanel } from './PulsePanel'
+import { CustomerPulseHistory } from './CustomerPulseHistory'
 import type { CustomerPulseData } from '../../../lib/customer-pulse'
 import { readApiErrorMessage } from '../../../lib/api-error'
 
@@ -62,5 +63,7 @@ export function PartyPulseSection({ partyId }: { partyId: string }) {
     )
   }
 
-  return <PulsePanel data={data} />
+  return <PulsePanel data={data} history={data.timelinePage ? <CustomerPulseHistory key={partyId}
+    partyId={partyId} currency={data.party.currency} initialPage={{ ...data.timelinePage, rows: data.timeline }}
+    withheld={!data.sections.ar && !data.sections.crm} /> : undefined} />
 }
