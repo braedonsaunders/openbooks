@@ -91,6 +91,24 @@ test('manual photos and removals survive ongoing source synchronization', { skip
   } finally { await dropScratchOrg(f.orgId) }
 })
 
+test('a removed connector photo pointer is preserved rather than silently reinstalled', { skip: !DB }, async () => {
+  const f = await fixture()
+  try {
+    const first = await storePartyPhoto({ ...f,filename: 'source.png',bytes: PNG })
+    const removed = await withOrg(f.orgId, () => db.execute(sql`update parties set photo_file_id=null
+      where org_id=${f.orgId} and id=${f.partyId} and photo_file_id=${first.photoFileId} returning id`))
+    assert.equal(removed.rows.length,1)
+    const before = await counts(f.orgId,f.partyId)
+    const replay = await syncSourcePartyPhotos(adapter(),{ ...f,runId: null,execute: true })
+    assert.equal(replay.conflicts,1)
+    assert.equal(replay.attached,0)
+    assert.equal(replay.errors,0)
+    assert.match(replay.details[0]!.reason!,/pointer was removed or changed/)
+    assert.equal(await readPartyPhoto(f),null)
+    assert.deepEqual(await counts(f.orgId,f.partyId),before)
+  } finally { await dropScratchOrg(f.orgId) }
+})
+
 test('a concurrent photo change and a changed stable employee identity refuse source replacement', { skip: !DB }, async () => {
   const f = await fixture()
   try {

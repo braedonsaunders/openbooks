@@ -119,6 +119,9 @@ export async function storePartyPhoto(input: {
           && ownership.connectionId === source.connectionId && ownership.externalId === source.externalId
           && ownership.account?.replaceAll('_','-').toLowerCase() === source.account.replaceAll('_','-').toLowerCase()
           && ownership.fileId === party.photo_file_id
+        if (ownership?.mode === 'connector' && !owned) {
+          return { status: 'conflict' as const, photoFileId: party.photo_file_id, reason: 'The connector-owned photo pointer was removed or changed. Its attachment history is preserved; review the employee photo before replacing it.' }
+        }
         if (ownership?.mode === 'user' || (party.photo_file_id && !owned)) {
           return { status: 'conflict' as const, photoFileId: party.photo_file_id, reason: 'A user-managed photo or removal is preserved.' }
         }
