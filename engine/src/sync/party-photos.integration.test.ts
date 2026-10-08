@@ -154,6 +154,22 @@ test('normal master-data migration invokes photo synchronization after employee 
   } finally { await dropScratchOrg(f.orgId) }
 })
 
+test('photo synchronization sees a newly adopted employee inside the owning master-data transaction', { skip: !DB }, async () => {
+  const f = await fixture()
+  try {
+    const source = adapter()
+    source.partyPhotos = async () => [{ partyRef: '102',fileRef: '502' }]
+    const stats = await withOrg(f.orgId, () => loadEntities(source,f.orgId,null,undefined,
+      { connectionId: f.connectionId,runId: f.connectionId,actorId: f.actorId,sourceName: 'netsuite' },
+      [{ resource: 'parties',records: [{ sourceRef: '102',fields: { displayName: 'New source employee',kind: 'person',employeeRole: {} } }] }],
+      undefined,{ employeeRefs: ['102'] }))
+    assert.equal(stats.parties!.created,1)
+    assert.equal(stats.employee_photos!.photos!.attached,1)
+    assert.equal(stats.employee_photos!.photos!.verified,1)
+    assert.equal(stats.employee_photos!.failed,0)
+  } finally { await dropScratchOrg(f.orgId) }
+})
+
 test('scoped employee refresh lands source service dates and preserves other inactive employees', { skip: !DB }, async () => {
   const f = await fixture()
   try {
