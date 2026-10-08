@@ -27,6 +27,21 @@ function harness() {
   }
 }
 
+test('a render-only window retains timestamps and reports open database profiles separately', () => {
+  const { profile, advance, within } = harness()
+  assert.equal(profile.summarize(), null)
+  within({ key: {}, route: '/(app)/dashboard' }, [['select 1', 2]])
+  advance(500)
+  const summary = profile.summarize(false, true)
+  assert.ok(summary)
+  assert.equal(summary.windowStart, new Date(0).toISOString())
+  assert.equal(summary.windowEnd, new Date(500).toISOString())
+  assert.equal(summary.openRequests, 1)
+  assert.deepEqual(summary.routes, [], 'an unfinished database profile is not paired with a completed render')
+  advance(500)
+  assert.equal(profile.summarize()?.routes[0]?.requests, 1)
+})
+
 test('normalization removes every literal and placeholder so no value reaches the profile', () => {
   const shape = normalizeStatement(`
     select "t1"."id", t2.amount -- tenant 'Acme Ltd'

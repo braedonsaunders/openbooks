@@ -6,7 +6,8 @@
  * through the @opentelemetry/api no-op until `startTelemetry()` registers a
  * real SDK. Boot happens where the background processes are assembled (the
  * standalone worker's `main()` and Next's nodejs instrumentation) and only
- * when a shared or signal-specific OTLP endpoint is set, so enabling
+ * when a shared or signal-specific OTLP endpoint or an explicit local span
+ * processor is configured, so enabling
  * observability is a deployment concern, never a code change. Any OTLP/HTTP
  * receiver (Grafana Agent/Alloy, Jaeger, Datadog OTel gateway, …) speaks the
  * same protocol; there is deliberately no vendor SDK here.
@@ -40,6 +41,8 @@ import {
   type Histogram,
   type Span,
 } from "@opentelemetry/api";
+import type { SpanProcessor } from "@opentelemetry/sdk-trace-base";
+export type { SpanProcessor } from "@opentelemetry/sdk-trace-base";
 
 export const TELEMETRY_SCOPE = "openbooks.engine";
 
@@ -247,18 +250,22 @@ let bootPromise: Promise<boolean> | null = null;
 const shutdowns: Array<() => Promise<void>> = [];
 
 /**
- * Register the OTLP/HTTP SDK once per process when configured. Returns whether
+ * Register the SDK once per process for configured OTLP/HTTP signals and local
+ * span processors. Local processors must be supplied on the first enabled call
+ * because the provider's processor list is immutable. Returns whether
  * anything was registered. Disabled calls are free and leave no state; a
  * second enabled call is a no-op (the API globals cannot be swapped), and a
  * failed boot is logged loudly but never fatal — losing telemetry must not
  * take accounting down with it.
  */
-export function startTelemetry(env: TelemetryEnv = process.env): Promise<boolean> {
-  if (!telemetryEnabled(env)) return Promise.resolve(false);
-  if (!enabledExportEndpoint(env, "traces") && !enabledExportEndpoint(env, "metrics")) {
+export function startTelemetry(
+  env: TelemetryEnv = process.env,
+  localSpanProcessors: readonly SpanProcessor[] = [],
+): Promise<boolean> {
+  if (!localSpanProcessors.length && !enabledExportEndpoint(env, "traces") && !enabledExportEndpoint(env, "metrics")) {
     return Promise.resolve(false);
   }
-  bootPromise ??= boot(env).catch((error) => {
+  bootPromise ??= boot(env, localSpanProcessors).catch((error) => {
     console.error(
       JSON.stringify({
         event: "telemetry.start_failed",
@@ -289,7 +296,7 @@ function parseHeaders(raw: string | undefined): Record<string, string> {
   return headers;
 }
 
-async function boot(env: TelemetryEnv): Promise<boolean> {
+async function boot(env: TelemetryEnv, localSpanProcessors: readonly SpanProcessor[]): Promise<boolean> {
   const tracesEndpoint = enabledExportEndpoint(env, "traces");
   const metricsEndpoint = enabledExportEndpoint(env, "metrics");
   const tracesOn = tracesEndpoint !== undefined;
@@ -313,21 +320,26 @@ async function boot(env: TelemetryEnv): Promise<boolean> {
   // honors exactly the environment this call was given.
   const exporterDefaults = { headers: parseHeaders(env.OTEL_EXPORTER_OTLP_HEADERS) };
 
-  if (tracesOn) {
+  if (tracesOn || localSpanProcessors.length) {
     // v2 SDKs dropped provider.register(): globals are set through the API.
     const provider = new traceSdk.BasicTracerProvider({
       resource,
       spanProcessors: [
-        new traceSdk.BatchSpanProcessor(
+        ...localSpanProcessors,
+        ...(tracesOn ? [new traceSdk.BatchSpanProcessor(
           new tracesExporter.OTLPTraceExporter({
             ...exporterDefaults,
             url: tracesEndpoint,
           }),
-        ),
+        )] : []),
       ],
     });
-    trace.setGlobalTracerProvider(provider);
-    shutdowns.push(() => provider.shutdown());
+    if (trace.setGlobalTracerProvider(provider)) {
+      shutdowns.push(() => provider.shutdown());
+    } else {
+      await provider.shutdown();
+      throw new Error("A trace provider is already registered; local span processors could not be installed.");
+    }
   }
 
   if (metricsOn) {
@@ -354,6 +366,7 @@ async function boot(env: TelemetryEnv): Promise<boolean> {
       signals: [
         ...(tracesOn ? ["traces"] : []),
         ...(metricsOn ? ["metrics"] : []),
+        ...(localSpanProcessors.length ? ["local-traces"] : []),
       ].join(","),
     }),
   );

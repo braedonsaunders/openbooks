@@ -1,15 +1,18 @@
 /** Node-only OpenBooks process services registered by Next.js instrumentation. */
+import type { SpanProcessor } from '@openbooks/engine/src/platform/telemetry.ts'
+
 export async function registerNodeInstrumentation() {
-  // OTel traces/metrics when OTEL_EXPORTER_OTLP_ENDPOINT is configured; a free
-  // no-op otherwise (see engine telemetry.ts). First, so boot is observable.
   const { startTelemetry } = await import('@openbooks/engine/src/platform/telemetry.ts')
-  await startTelemetry()
   // Per-route database profile (see lib/query-profile.ts). Off by default:
   // when the flag is unset neither the profiler nor its observer is loaded.
+  const localSpanProcessors: SpanProcessor[] = []
   if (process.env.OPENBOOKS_QUERY_PROFILE === '1') {
     const { startQueryProfile } = await import('./lib/query-profile')
-    startQueryProfile(process.env)
+    localSpanProcessors.push(startQueryProfile(process.env))
   }
+  // Install local profiling and configured OTLP exporters in one provider,
+  // before application boot. With neither configured this remains a no-op.
+  await startTelemetry(process.env, localSpanProcessors)
   const { assertSafeRuntimeDatabaseRole } = await import('@openbooks/engine/src/platform/db.ts')
   await assertSafeRuntimeDatabaseRole()
   const { resolveWebSchedulerMode } = await import('@openbooks/engine/src/scheduling/mode.ts')
