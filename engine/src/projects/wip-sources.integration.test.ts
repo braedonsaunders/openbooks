@@ -4,7 +4,7 @@ import test from "node:test";
 import { sql } from "drizzle-orm";
 import { BUILTIN_PROJECT_TYPES } from "@openbooks/schema";
 import { db, withBypassContext, withOrgContext } from "../platform/db.ts";
-import { assertDedicatedFixtureDatabase, createScratchOrg, dropScratchOrg } from "../testing/fixtures.ts";
+import { assertDedicatedFixtureDatabase, createScratchOrg, createScratchUser, dropScratchOrg } from "../testing/fixtures.ts";
 import { eligibleWipSourcesSql } from "./wip-sources.ts";
 
 test("WIP ceilings preserve line project precedence, invoice fallback, credits and period cutoffs", {
@@ -17,6 +17,7 @@ test("WIP ceilings preserve line project precedence, invoice fallback, credits a
       const nte = BUILTIN_PROJECT_TYPES.find((type) => type.key === "not_to_exceed")!;
       const typeId = randomUUID(), employee = randomUUID();
       const projects = [randomUUID(), randomUUID()];
+      const voidActor = await createScratchUser(org.orgId, "Invoice administrator", "invoice_admin");
       await db.execute(sql`insert into project_types
         (id,org_id,key,name,billing_method,invoicing_profile,backup_profile)
         values(${typeId},${org.orgId},'not_to_exceed','Capped work','time_and_materials',
@@ -40,9 +41,10 @@ test("WIP ceilings preserve line project precedence, invoice fallback, credits a
         lines: readonly [string | null, string][]) => {
         const id = randomUUID();
         await db.execute(sql`insert into documents
-          (id,org_id,subsidiary_id,kind,status,document_number,document_date,currency,project_id,party_id,void_reason)
+          (id,org_id,subsidiary_id,kind,status,document_number,document_date,currency,project_id,party_id,void_reason,voided_at,voided_by)
           values(${id},${org.orgId},${org.subsidiaryId},${kind},${status},${`INV-${id}`},
-            ${date},'CAD',${project},${org.customerId},${status === 'voided' ? 'Cancelled duplicate invoice' : null})`);
+            ${date},'CAD',${project},${org.customerId},${status === 'voided' ? 'Cancelled duplicate invoice' : null},
+            ${status === 'voided' ? new Date('2026-07-15T12:00:00Z') : null},${status === 'voided' ? voidActor : null})`);
         for (const [index, [lineProject, amount]] of lines.entries()) {
           await db.execute(sql`insert into document_lines
             (id,org_id,document_id,line_number,account_id,amount,project_id)
