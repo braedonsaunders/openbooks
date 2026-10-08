@@ -393,7 +393,9 @@ function wagesSection(): HTMLElement {
 function payrollPanel(): HTMLElement {
   const strip = document.querySelector(`nav[aria-label="${en("parties.drawer.payrollTabs.ariaLabel")}"]`);
   assert.ok(strip, "the payroll tab must render its sub-tab strip");
-  return strip.parentElement as HTMLElement;
+  const panel = strip.closest("[hidden], .space-y-6");
+  assert.ok(panel, "the payroll sub-tab strip must sit inside the payroll panel");
+  return panel as HTMLElement;
 }
 
 test("a visited compensation tab stays mounted while another shows", async (t) => {

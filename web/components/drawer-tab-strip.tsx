@@ -1,7 +1,7 @@
 'use client'
 
 import type { ReactNode } from 'react'
-import { useSwitchView } from '@openbooks/ui'
+import { useOwnTabBaseline, useSwitchView } from '@openbooks/ui'
 
 /**
  * A labelled group of pressed buttons for drawer panels. These panels do not
@@ -9,6 +9,9 @@ import { useSwitchView } from '@openbooks/ui'
  * activation and expose the selected panel as pressed instead of claiming tab semantics.
  * A selection is a view switch: the enclosing drawer's body animates like a
  * page change while the page and any drawer beneath it stay still.
+ * Nested in a drawer body the strip draws its own baseline and spacing, so
+ * the active underline never runs into the content below; the drawer's
+ * header row and page layouts frame their strips themselves.
  */
 export function DrawerTabStrip<T extends string>({
   tabs,
@@ -22,7 +25,8 @@ export function DrawerTabStrip<T extends string>({
   ariaLabel: string
 }) {
   const switchView = useSwitchView()
-  return (
+  const ownBaseline = useOwnTabBaseline()
+  const strip = (
     <nav className="-mb-px flex gap-1 overflow-x-auto" aria-label={ariaLabel}>
       {tabs.map((tab) => (
         <button
@@ -43,4 +47,5 @@ export function DrawerTabStrip<T extends string>({
       ))}
     </nav>
   )
+  return ownBaseline ? <div className="mb-4 border-b border-slate-200 dark:border-slate-800">{strip}</div> : strip
 }

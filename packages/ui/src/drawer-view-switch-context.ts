@@ -8,3 +8,10 @@ import * as React from 'react'
  * the UI barrel is imported by server components.
  */
 export const DrawerViewSwitchContext = React.createContext<string | null>(null)
+
+/**
+ * True inside a drawer's header tab row, which draws the baseline its tabs
+ * sit on. A tab strip anywhere else — a sub-view inside a drawer body —
+ * draws its own baseline and keeps clear of the content beneath it.
+ */
+export const DrawerSubtabSlotContext = React.createContext(false)

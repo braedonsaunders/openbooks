@@ -870,7 +870,7 @@ export function ProjectDrawer({
 
       {tab === 'project_management' ? (
         <div>
-          <RecordTabs label={t('cockpit.tabs.project_management')} tabs={managementTabs} active={managementTab} onChange={setManagementTab} className="mb-5 border-b border-slate-200 dark:border-slate-800" />
+          <RecordTabs label={t('cockpit.tabs.project_management')} tabs={managementTabs} active={managementTab} onChange={setManagementTab} />
           {managementTab === 'work_breakdown' ? (
             <WorkBreakdownTab
               projectId={String(pr.id)}

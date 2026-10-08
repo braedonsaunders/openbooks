@@ -103,7 +103,7 @@ export function PartyPhoto({
         <span
           aria-hidden
           className={cn(
-            'absolute inset-0 grid place-items-center bg-slate-900/45 text-white opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100',
+            'absolute inset-0 grid place-items-center bg-slate-900/45 text-white opacity-0 transition-opacity group-hover:opacity-100 group-has-[:focus-visible]:opacity-100',
             shape === 'round' ? 'rounded-full' : 'rounded-lg',
             busy && 'opacity-100',
           )}
@@ -118,7 +118,7 @@ export function PartyPhoto({
           onClick={() => void remove()}
           aria-label={t('remove')}
           title={t('remove')}
-          className="absolute -top-1 -right-1 grid h-5 w-5 place-items-center rounded-full bg-white text-slate-600 opacity-0 shadow ring-1 ring-slate-200 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 hover:text-red-600 dark:bg-slate-800 dark:text-slate-300 dark:ring-slate-700"
+          className="absolute -top-1 -right-1 grid h-5 w-5 place-items-center rounded-full bg-white text-slate-600 opacity-0 shadow ring-1 ring-slate-200 transition-opacity group-hover:opacity-100 group-has-[:focus-visible]:opacity-100 hover:text-red-600 dark:bg-slate-800 dark:text-slate-300 dark:ring-slate-700"
         >
           <X className="h-3 w-3" aria-hidden />
         </button>

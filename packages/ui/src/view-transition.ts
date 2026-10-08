@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { DrawerViewSwitchContext } from './drawer-view-switch-context'
+import { DrawerSubtabSlotContext, DrawerViewSwitchContext } from './drawer-view-switch-context'
 
 /** A view-transition class, or a class per transition type. */
 export type ViewTransitionClass = string | Record<string, string>
@@ -47,6 +47,18 @@ export const VIEW_SWITCH_TRANSITION = 'view-switch'
 export const DRAWER_VIEW_SWITCH_TRANSITION = 'drawer-view-switch'
 
 export { DrawerViewSwitchContext }
+
+/**
+ * Whether a tab strip must draw its own baseline: true inside a drawer body,
+ * where nothing else separates the strip from the content beneath it. The
+ * drawer's header tab row and page layouts frame their strips themselves.
+ */
+export function useOwnTabBaseline(): boolean {
+  const inDrawer = React.useContext(DrawerViewSwitchContext) !== null
+  const inHeaderRow = React.useContext(DrawerSubtabSlotContext)
+  return inDrawer && !inHeaderRow
+}
+export { DrawerSubtabSlotContext }
 
 /** The type a drawer's body animates on: unique to that drawer instance. */
 export function drawerViewSwitchType(drawerId: string): string {

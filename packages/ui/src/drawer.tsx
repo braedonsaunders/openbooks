@@ -7,7 +7,7 @@ import { useTranslations } from 'next-intl'
 import { useHydrated } from './use-hydrated'
 import { nextDrawerShow, shouldCommitDrawerCloseNavigation } from './drawer-nav'
 import { OverlayExit } from './overlay-exit'
-import { DrawerViewSwitchContext, drawerViewSwitchType, ViewTransition } from './view-transition'
+import { DrawerSubtabSlotContext, DrawerViewSwitchContext, drawerViewSwitchType, ViewTransition } from './view-transition'
 import { cn } from './utils'
 
 // Z-INDEX SCALE (single source of truth)
@@ -448,7 +448,7 @@ export function Drawer({
             ) : null}
             {subtabs ? (
               <div className="shrink-0 border-b border-slate-200 bg-white px-6 dark:border-slate-800 dark:bg-slate-900">
-                {subtabs}
+                <DrawerSubtabSlotContext.Provider value={true}>{subtabs}</DrawerSubtabSlotContext.Provider>
               </div>
             ) : null}
             {/* Switching tabs inside this drawer animates its body the way a
