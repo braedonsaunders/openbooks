@@ -8,6 +8,7 @@ import { sql } from "drizzle-orm";
 import pg from "pg";
 import * as schema from "@openbooks/schema";
 import { resolveDatabaseEnvironment } from "./db-environment.ts";
+import { activeQueryObserver, notifyQueryObserver } from "./query-observer.ts";
 import { runtimeDatabaseRoleCheckRequired } from "./runtime-database-role.ts";
 
 export { runtimeDatabaseRoleCheckRequired } from "./runtime-database-role.ts";
@@ -184,6 +185,10 @@ longPool.on("error", (err) => {
  * The pool hands the same connection out again without resetting `query`, so
  * each connection is wrapped once: the queue belongs to the connection, not to
  * one checkout.
+ *
+ * The same wrapper reports each statement to the registered query observer
+ * (see query-observer.ts), timed from when it reaches the connection rather
+ * than from when it joined the queue, so the duration is database time.
  */
 const serializedClients = new WeakSet<pg.PoolClient>();
 function serializeClientQueries(client: pg.PoolClient): void {
@@ -197,7 +202,19 @@ function serializeClientQueries(client: pg.PoolClient): void {
     if (typeof args[args.length - 1] === "function" || typeof first?.submit === "function") {
       return query(...args);
     }
-    const run = () => query(...args);
+    const run = () => {
+      const observer = activeQueryObserver();
+      if (!observer) return query(...args);
+      const input = args[0] as string | { text?: unknown } | null | undefined;
+      const statement = typeof input === "string" ? input : input?.text;
+      const started = performance.now();
+      const observe = () => {
+        if (typeof statement === "string") notifyQueryObserver(observer, statement, performance.now() - started);
+      };
+      const pending = query(...args) as Promise<unknown>;
+      pending.then(observe, observe);
+      return pending;
+    };
     const result = tail.then(run, run);
     tail = result.then(settle, settle);
     return result;
