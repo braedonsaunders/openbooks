@@ -47,7 +47,7 @@ import {
   type OpenItem,
   type PaymentStats,
 } from '@/lib/cash/core'
-import { presentationCurrency } from '@/lib/fx-presentation'
+import { presentationCurrency, withPresentationCurrencyRead } from '@/lib/fx-presentation'
 import { approvalRecordHref } from '@/lib/approvals-links'
 import { WIDGETS } from './_widget-registry'
 import { subsidiaryVisibleFilter } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
@@ -484,6 +484,15 @@ export async function loadDashboardMetrics(
    * that renders no labels may omit it and the cash position reader applies
    * its own documented default.
    */
+  locale?: string,
+): Promise<DashboardMetrics> {
+  return withPresentationCurrencyRead(() => readDashboardMetrics(authz, widgetIds, readers, locale))
+}
+
+async function readDashboardMetrics(
+  authz: Authz,
+  widgetIds: readonly string[],
+  readers: DashboardMoneyReaders,
   locale?: string,
 ): Promise<DashboardMetrics> {
   const orgId = authz.user.orgId
