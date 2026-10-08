@@ -3,6 +3,7 @@ import { cache } from "react";
 import { sql } from "drizzle-orm";
 import { db, withBypassContext, withOrgContext } from "@openbooks/engine/src/platform/db.ts";
 import { currentSession, currentUser } from "./auth";
+import { requestAuthzContext } from "./authz-context";
 import { DEFAULT_LOCALE, isLocale, type Locale } from "../i18n/config";
 import { canonicalTimeZone } from "@openbooks/engine/src/platform/time-zone.ts";
 
@@ -13,13 +14,28 @@ import { canonicalTimeZone } from "@openbooks/engine/src/platform/time-zone.ts";
  * Everything else — DB failures, Next's digested prerender bailouts — still
  * throws, so authenticated resolution and fail-closed behavior are unchanged.
  */
-const requestUser = cache(async () =>
-  currentUser().catch((error: unknown) => {
+const requestUser = cache(async () => {
+  return currentUser().catch((error: unknown) => {
     if (typeof error === 'object' && error !== null && 'digest' in error) throw error;
     if (error instanceof Error && /outside a request scope/i.test(error.message)) return null;
     throw error;
-  }),
-);
+  });
+});
+
+// React's render cache does not memoize route-handler calls. Display facts
+// share the native authority frame, which is freshly copied for each read.
+const presentationFacts = new WeakMap<object, Map<string, Promise<unknown>>>();
+function presentationFact<T>(key: string, load: () => Promise<T>): Promise<T> {
+  const verified = requestAuthzContext();
+  if (!verified) return load();
+  let facts = presentationFacts.get(verified);
+  if (!facts) { facts = new Map(); presentationFacts.set(verified, facts); }
+  const known = facts.get(key);
+  if (known) return known as Promise<T>;
+  const pending = load();
+  facts.set(key, pending);
+  return pending;
+}
 
 /**
  * The active locale for this request: the user's personal choice
@@ -29,9 +45,9 @@ const requestUser = cache(async () =>
  * safe tenant default to read without an organization identity. Cached per
  * request — the i18n request config and the account menu both ask.
  */
-export const resolveLocale = cache(async (): Promise<Locale> => {
+async function readLocale(): Promise<Locale> {
   // Off-request requestUser() is null (see above), so this stays anonymous.
-  const activeUser = await requestUser();
+  const activeUser = requestAuthzContext()?.user ?? await requestUser();
   if (activeUser) {
     // bypass: user-keyed-lookup — the viewer's own locale preference, read outside the request's organization scope.
     const r = await withBypassContext(async () => (await db.execute(sql`
@@ -49,7 +65,11 @@ export const resolveLocale = cache(async (): Promise<Locale> => {
   }
 
   return DEFAULT_LOCALE;
-});
+}
+const renderLocale = cache(readLocale);
+export function resolveLocale(): Promise<Locale> {
+  return requestAuthzContext() ? presentationFact("locale", readLocale) : renderLocale();
+}
 
 /**
  * The user's stored locale preference (null = inherit the tenant default),
@@ -72,8 +92,8 @@ export const userLocalePreference = cache(async (): Promise<Locale | null> => {
  * and the NextIntl client provider use the same tenant policy. An invalid
  * stored zone is configuration corruption and must be fixed explicitly.
  */
-export const resolveTimeZone = cache(async (): Promise<string> => {
-  const activeUser = await requestUser();
+async function readTimeZone(): Promise<string> {
+  const activeUser = requestAuthzContext()?.user ?? await requestUser();
   if (!activeUser) return "UTC";
   const r = await withOrgContext(activeUser.orgId, async () => (await db.execute(sql`
       select settings ->> 'timeZone' as time_zone
@@ -87,4 +107,8 @@ export const resolveTimeZone = cache(async (): Promise<string> => {
     throw new Error(`Organization time zone ${JSON.stringify(stored)} is invalid; correct Company Settings → Time zone.`);
   }
   return canonical;
-});
+}
+const renderTimeZone = cache(readTimeZone);
+export function resolveTimeZone(): Promise<string> {
+  return requestAuthzContext() ? presentationFact("time-zone", readTimeZone) : renderTimeZone();
+}

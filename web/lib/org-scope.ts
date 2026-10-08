@@ -2,6 +2,7 @@ import 'server-only'
 import { sql } from 'drizzle-orm'
 import { cache } from 'react'
 import { db } from '@openbooks/engine/src/platform/db.ts'
+import { requestAuthzContext } from './authz-context'
 
 /**
  * Resolve the tenant id before querying `orgs`, which cannot be protected by
@@ -32,6 +33,8 @@ async function requestOrgIdFromSession(): Promise<string | null> {
 
 export async function resolveOrgId(orgId?: string | null): Promise<string> {
   if (orgId) return orgId
+  const verified = requestAuthzContext()
+  if (verified) return verified.user.orgId
   try {
     return await requestOrgId()
   } catch {
