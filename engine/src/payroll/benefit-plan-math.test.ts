@@ -32,6 +32,22 @@ test('monthly premiums explicitly annualize twelve months over fifty-two weekly 
   assert.equal(recurringBenefitAmount({...monthly,proration:'calendar_days'},election,{...basis,coveredDays:3,periodDays:7}).amount,'4.2900');
   assert.throws(()=>recurringBenefitAmount({...monthly,periodsPerYear:26},election,basis),/annualization is not declared.*record the exact periods per year/);
 });
+test('contributions round elected precision and coverage once at the payable quantum', () => {
+  const elected = (electedRate: string) => ({ ...term, electedRate });
+  assert.equal(recurringBenefitAmount({ ...rule, basis: 'per_period' }, elected('6.49499'), basis).amount, '6.4900');
+  assert.equal(recurringBenefitAmount(rule, elected('0.649499'), { ...basis, hours: '10' }).amount, '6.4900');
+  assert.equal(recurringBenefitAmount(rule, elected('0.649499'), { ...basis, hours: '-10' }).amount, '-6.4900');
+  assert.equal(recurringBenefitAmount({ ...rule, basis: 'percent_of_eligible_pay', payBasis: 'all_cash_earnings' },
+    elected('5'), { ...basis, eligiblePay: '129.8998' }).amount, '6.4900');
+  assert.equal(recurringBenefitAmount({ ...rule, basis: 'per_month', monthsPerYear: 12, periodsPerYear: 52 },
+    elected('28.1449'), basis).amount, '6.4900');
+  assert.equal(recurringBenefitAmount({ ...rule, basis: 'per_period', proration: 'calendar_days' },
+    elected('9.09299'), { ...basis, coveredDays: 5 }).amount, '6.4900');
+  assert.equal(recurringBenefitAmount({ ...rule, basis: 'per_period' }, elected('6.495'), basis).amount, '6.5000');
+  for (const [currencyMinorUnits, rate, amount] of [[0, '2.49999', '2.0000'], [3, '1.23449999', '1.2340'], [4, '1.23449999', '1.2345']] as const) {
+    assert.equal(recurringBenefitAmount({ ...rule, basis: 'per_period' }, elected(rate), { ...basis, currencyMinorUnits }).amount, amount);
+  }
+});
 test('hour and earnings bases scale only once over partial periods', () => {
   assert.equal(recurringBenefitAmount({...rule,proration:'calendar_days'},{...term,electedRate:'2'},{...basis,hours:'16',coveredDays:3}).amount,'32.0000');
   assert.equal(recurringBenefitAmount({...rule,basis:'percent_of_eligible_pay',payBasis:'all_cash_earnings',proration:'calendar_days'},{...term,electedRate:'5'},{...basis,eligiblePay:'600',coveredDays:3}).amount,'30.0000');

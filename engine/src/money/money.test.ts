@@ -40,6 +40,18 @@ test("mulRatio allocates exact partial carrying values", () => {
   assert.equal(toUnits(mulRatio("100.0000", 5n, 6n)) + toUnits("16.6667"), toUnits("100.0000"));
 });
 
+test("decimal factors combine annualization and currency rounding without intermediate money rounding", () => {
+  assert.equal(mulDecimalFactors("1", ["6.49499"], { decimalPlaces: 2 }), "6.4900");
+  assert.equal(mulDecimalFactors("1", ["28.1449"], { numerator: 12n, denominator: 52n, decimalPlaces: 2 }), "6.4900");
+  assert.equal(mulDecimalFactors("-1", ["28.1449"], { numerator: 12n, denominator: 52n, decimalPlaces: 2 }), "-6.4900");
+  assert.equal(mulDecimalFactors("1", ["6.495"], { decimalPlaces: 2 }), "6.5000");
+  assert.equal(mulDecimalFactors("1", ["6.49499"]), "6.4950");
+  assert.equal(mulDecimalFactors("1", ["6.49499"], { numerator: 0n, denominator: 7n, decimalPlaces: 2 }), "0.0000");
+  assert.throws(() => mulDecimalFactors("1", ["2"], { denominator: 0n }), /denominator must be greater than zero/);
+  assert.throws(() => mulDecimalFactors("1", ["2"], { numerator: -1n }), /numerator cannot be negative/);
+  assert.throws(() => mulDecimalFactors("1", ["2"], { decimalPlaces: 5 }), /decimalPlaces/);
+});
+
 test("prorateDays prices covered days, clamps coverage, zeroes degenerate periods", () => {
   // 15 of 31 July days of a 3000.00 allowance.
   assert.equal(prorateDays("3000.0000", 15, 31), "1451.6129");
