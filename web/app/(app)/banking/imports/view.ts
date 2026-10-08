@@ -15,7 +15,7 @@ import { can, requirePermission, subsidiaryScopeAllows } from '../../../../lib/a
 import { listReconcilableBankAccounts } from '../../../../lib/banking-accounts'
 import { subsidiaryVisibleFilter } from '../../../../lib/subsidiaries'
 import { featureEnabled, resolvedFeatureState } from '../../../../lib/features'
-import { mapBankFeedRows } from './sections'
+import { mapBankFeedRows } from './feed-rows'
 
 /**
  * Statement import history, split into a loader and a spec.

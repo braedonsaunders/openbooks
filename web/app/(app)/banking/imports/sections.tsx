@@ -1,7 +1,11 @@
+'use client'
+
 import Link from 'next/link'
 import { useViewerFormat } from '@/lib/viewer-format'
 import { useTranslations } from 'next-intl'
 import { Badge } from '@openbooks/ui'
+import type { BankFeedRow } from './feed-rows'
+export type { BankFeedRow, FeedConnectionRow } from './feed-rows'
 
 /**
  * The live bank-feed connections panel on the statement import page.
@@ -12,47 +16,6 @@ import { Badge } from '@openbooks/ui'
  * raw feed rows plus labels and every decision lives here, in one
  * implementation shared by the native page and the spec path.
  */
-
-export interface FeedConnectionRow {
-  name: string
-  provider: string
-  status: string
-  last_sync_at: string | null
-  last_attempt_at: string | null
-  last_error: string | null
-  is_active: boolean
-  account_number: string | null
-  account_name: string
-}
-
-export interface BankFeedRow {
-  name: string
-  provider: string
-  accountNumber: string | null
-  accountName: string
-  status: string
-  statusConnected: boolean
-  showPaused: boolean
-  lastSyncAt: string | null
-  lastAttemptAt: string | null
-  lastError: string | null
-}
-
-/** Loader-resolved flags; date formatting stays with the render, as native. */
-export function mapBankFeedRows(feeds: FeedConnectionRow[]): BankFeedRow[] {
-  return feeds.map((feed) => ({
-    name: feed.name,
-    provider: feed.provider,
-    accountNumber: feed.account_number,
-    accountName: feed.account_name,
-    status: feed.status,
-    statusConnected: feed.status === 'connected',
-    showPaused: !feed.is_active,
-    lastSyncAt: feed.last_sync_at,
-    lastAttemptAt: feed.last_attempt_at,
-    lastError: feed.last_error,
-  }))
-}
 
 export interface BankFeedPanelProps {
   title: string

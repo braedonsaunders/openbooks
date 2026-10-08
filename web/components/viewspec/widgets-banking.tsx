@@ -19,6 +19,7 @@ import {
   ImportStatementButton,
   ImportAccountPicker,
   StartReconciliationButton,
+  BankFeedPanel,
 } from './native-widgets.client'
 import { BankingAttentionList } from '../../app/(app)/banking/sections'
 import { ListChecks } from 'lucide-react'
@@ -27,7 +28,6 @@ import { PaymentsSectionSlot, RunsSectionSlot } from './payments-slots'
 import { ViewTabs as PaymentsViewTabs } from '../../app/(app)/payments/sections'
 import { ReceiptsViewTabs } from '../../app/(app)/receipts/sections'
 import { Plus } from 'lucide-react'
-import { BankFeedPanel } from '../../app/(app)/banking/imports/sections'
 import { AccountStats, UnmatchedCountCell, ReconActionCell } from '../../app/(app)/banking/[accountId]/sections'
 import { StatementDrawer } from '../../app/(app)/banking/[accountId]/StatementDrawer'
 import { Button } from '@openbooks/ui'

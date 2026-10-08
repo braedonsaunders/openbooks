@@ -34,6 +34,7 @@ export const AutomationBuilder = dynamic(() => import("../../app/(app)/admin/aut
 export const AwardBuilderDrawer = dynamic(() => import("../../app/(app)/hrm/benefits/AwardBuilderDrawer").then(module => module.AwardBuilderDrawer))
 export const AwardDrawer = dynamic(() => import("../../app/(app)/hrm/benefits/AwardDrawer").then(module => module.AwardDrawer))
 export const BackupManager = dynamic(() => import("../../app/(app)/admin/backups/BackupManager").then(module => module.BackupManager))
+export const BankFeedPanel = dynamic(() => import("../../app/(app)/banking/imports/sections").then(module => module.BankFeedPanel))
 export const BankFeedsClient = dynamic(() => import("../../app/(app)/admin/setup/bank-feeds/BankFeedsClient").then(module => module.BankFeedsClient))
 export const BenefitChangeDialog = dynamic(() => import("../../app/(app)/me/islands").then(module => module.BenefitChangeDialog))
 export const BenefitElectDialog = dynamic(() => import("../../app/(app)/me/islands").then(module => module.BenefitElectDialog))
