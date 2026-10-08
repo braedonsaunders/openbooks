@@ -3,6 +3,7 @@ import {
   decideDocumentApproval,
   DocumentApprovalError,
   worklistApprovals,
+  worklistApprovalsCount,
   worklistApprovalsPage,
   type WorklistBudget,
   type WorklistDocument,
@@ -48,15 +49,9 @@ export async function listApprovalWorklist(context: ApplicationContext): Promise
  * path, mirroring the worklist.
  */
 export async function approvalWorklistForAuthz(authz: Authz): Promise<ApprovalWorklistItem[]> {
-  const orgId = authz.user.orgId;
-  const flowsOn = await isFeatureEnabled(orgId, "flows");
-  const mayFlows = flowsOn && can(authz, "flows.approve");
-  const budgetsOn = await isFeatureEnabled(orgId, "budgets");
-  const mayBudgets = budgetsOn && can(authz, "budgets.approve");
-  if (!mayFlows && !mayBudgets) {
-    if (!flowsOn) return [];
-    throw forbidden("flows.approve");
-  }
+  const scope = await approvalWorklistScopeForAuthz(authz);
+  if (!scope) return [];
+  const { orgId, mayFlows, mayBudgets } = scope;
   const items = await worklistApprovals(orgId, authz.user.id, {
     roles: authz.user.roles.map((role) => role.key),
     allowedSubsidiaryIds: authz.allowedSubsidiaryIds,
@@ -94,15 +89,9 @@ export async function approvalWorklistPageForAuthz(
   authz: Authz,
   window: ApprovalWorklistWindow,
 ): Promise<{ items: ApprovalWorklistItem[]; total: number; kindCounts: Map<string, number> }> {
-  const orgId = authz.user.orgId;
-  const flowsOn = await isFeatureEnabled(orgId, "flows");
-  const mayFlows = flowsOn && can(authz, "flows.approve");
-  const budgetsOn = await isFeatureEnabled(orgId, "budgets");
-  const mayBudgets = budgetsOn && can(authz, "budgets.approve");
-  if (!mayFlows && !mayBudgets) {
-    if (!flowsOn) return { items: [], total: 0, kindCounts: new Map() };
-    throw forbidden("flows.approve");
-  }
+  const scope = await approvalWorklistScopeForAuthz(authz);
+  if (!scope) return { items: [], total: 0, kindCounts: new Map() };
+  const { orgId, mayFlows, mayBudgets } = scope;
   const page = await worklistApprovalsPage(
     orgId,
     authz.user.id,
@@ -125,6 +114,33 @@ export async function approvalWorklistPageForAuthz(
     }
   }
   return { items: out, total: page.total, kindCounts: page.kindCounts };
+}
+
+async function approvalWorklistScopeForAuthz(authz: Authz) {
+  const orgId = authz.user.orgId;
+  const [flowsOn, budgetsOn] = await Promise.all([
+    isFeatureEnabled(orgId, "flows"),
+    isFeatureEnabled(orgId, "budgets"),
+  ]);
+  const mayFlows = flowsOn && can(authz, "flows.approve");
+  const mayBudgets = budgetsOn && can(authz, "budgets.approve");
+  if (!mayFlows && !mayBudgets) {
+    if (!flowsOn) return null;
+    throw forbidden("flows.approve");
+  }
+  return { orgId, mayFlows, mayBudgets };
+}
+
+/** Count the same approval union while retaining live feature and grant checks. */
+export async function approvalWorklistCountForAuthz(authz: Authz): Promise<number> {
+  const scope = await approvalWorklistScopeForAuthz(authz);
+  if (!scope) return 0;
+  return worklistApprovalsCount(scope.orgId, authz.user.id, {
+    roles: authz.user.roles.map((role) => role.key),
+    allowedSubsidiaryIds: authz.allowedSubsidiaryIds,
+    includeFlows: scope.mayFlows,
+    includeBudgets: scope.mayBudgets,
+  });
 }
 
 export interface DecideApprovalInput {

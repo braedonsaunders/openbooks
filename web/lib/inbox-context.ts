@@ -76,8 +76,7 @@ export async function inboxCounts(authz: Authz, ctx: InboxListContext) {
   const notices: InboxSourceNotice[] = [];
   const [approvals, tasks] = await Promise.all([
     maySeeUnion(authz)
-      ? import("./application/approvals").then(({ approvalWorklistPageForAuthz }) =>
-          approvalWorklistPageForAuthz(authz, { limit: 1, offset: 0 }).then((page) => page.total))
+      ? import("./application/approvals").then(({ approvalWorklistCountForAuthz }) => approvalWorklistCountForAuthz(authz))
       : Promise.resolve(0),
     countInbox(ctx, { kinds: INBOX_TASK_KINDS, notices }),
   ]);

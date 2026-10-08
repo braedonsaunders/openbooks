@@ -8,12 +8,13 @@ import test from "node:test";
 // saw Flows gates, so an approver saw [] while documents sat pending.
 const { sql } = await import("drizzle-orm");
 const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
-const { createScratchOrg, dropScratchOrg, seedApprovalFlow, seedDraftDocument, seedFlowActors } = await import("@openbooks/engine/src/testing/fixtures.ts");
+const { assertDedicatedFixtureDatabase, createScratchOrg, dropScratchOrg, seedApprovalFlow, seedDraftDocument, seedFlowActors } = await import("@openbooks/engine/src/testing/fixtures.ts");
 const { submitForApproval } = await import("@openbooks/engine/src/flows/submit.ts");
 const { OUTBOUND_PAYMENT_RUN_SUBJECT_KIND } = await import("@openbooks/engine/src/flows/payment-runs-adapter.ts");
 const { submitPaymentRun } = await import("@openbooks/engine/src/payments/operations.ts");
 const { installEngineSeams } = await import("@openbooks/engine/src/composition/install.ts");
-const { decideApproval, listApprovalWorklist } = await import("./approvals.ts");
+const { approvalWorklistCountForAuthz, approvalWorklistPageForAuthz, decideApproval, listApprovalWorklist } = await import("./approvals.ts");
+const { ApplicationError } = await import("./errors.ts");
 const { orgVitals } = await import("./vitals.ts");
 const { resolveApprovalSubjects } = await import("../approval-subjects.ts");
 type ApplicationContext = import("./context.ts").ApplicationContext;
@@ -89,6 +90,7 @@ async function docStatus(id: string): Promise<string | null> {
 }
 
 test("worklist unifies gates, gateless documents, and payment runs; vitals counts the same set", { skip: !DB }, async () => {
+  await assertDedicatedFixtureDatabase();
   const org = await withBypassContext(() => createScratchOrg());
   try {
     const actors = await withBypassContext(() => seedFlowActors(org.orgId));
@@ -106,6 +108,27 @@ test("worklist unifies gates, gateless documents, and payment runs; vitals count
     assert.ok(!kinds.has(ids.gatedId), "gated document not duplicated as a document row");
     const vitals = await withOrgContext(org.orgId, () => orgVitals(approver));
     assert.deepEqual(vitals.approvals, { available: true, pending: items.length }, "vitals counts the unified set");
+    const count = () => withOrgContext(org.orgId, () => approvalWorklistCountForAuthz(approver.authz));
+    assert.equal(await count(), items.length, "the badge counts gates and all gateless documents");
+    const page = await withOrgContext(org.orgId, () => approvalWorklistPageForAuthz(approver.authz, { limit: 1, offset: 0 }));
+    assert.equal(page.items.length, 1);
+    assert.equal(page.total, await count(), "badge total is independent of the visible page window");
+    assert.equal(await withOrgContext(org.orgId, () => approvalWorklistCountForAuthz({
+      ...approver.authz, allowedSubsidiaryIds: new Set(),
+    })), 0, "an empty legal-entity scope cannot reveal pending counts");
+    await assert.rejects(withOrgContext(org.orgId, () => approvalWorklistCountForAuthz({
+      ...approver.authz, permissions: new Set(),
+    })), (error: unknown) => error instanceof ApplicationError && error.status === 403 &&
+      error.details?.permission === "flows.approve", "revoked approval grants refuse the next count");
+    await withBypassContext(() => db.execute(sql`update orgs
+      set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{features}',
+        coalesce(settings->'features', '{}'::jsonb) || '{"flows":false,"budgets":false}'::jsonb)
+      where id = ${org.orgId}`));
+    assert.equal(await count(), 0, "disabling the organization features is observed on the next count");
+    await withBypassContext(() => db.execute(sql`update orgs
+      set settings = jsonb_set(settings, '{features}', settings->'features' || '{"flows":true}'::jsonb)
+      where id = ${org.orgId}`));
+    assert.equal(await count(), items.length, "re-enabling Flows restores the original pending population");
     // The benchmark case: an admin holding no assignment sees no gates, but
     // must still see the gateless work instead of [].
     const admin = ctxFor(org.orgId, actors.adminId, ["admin"], ["flows.approve", "ap.approve"]);
@@ -116,6 +139,7 @@ test("worklist unifies gates, gateless documents, and payment runs; vitals count
       items.filter((item) => item.kind === "document").length,
       "admin still sees every gateless approval",
     );
+    assert.equal(await withOrgContext(org.orgId, () => approvalWorklistCountForAuthz(admin.authz)), adminItems.length);
   } finally {
     await dropScratchOrg(org.orgId);
   }
