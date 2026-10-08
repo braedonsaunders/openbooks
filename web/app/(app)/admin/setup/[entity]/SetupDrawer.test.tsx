@@ -529,6 +529,7 @@ test('a cancelled re-entry restores the precision lock for the next save', async
 
 test('option-backed board views reopen as named choices and edit through native selected options', async (t) => {
   const board = SETUP_ENTITY_BY_KEY.get('schedule-boards')!
+  const viewLabels = adminCatalog.options!.scheduleView as unknown as Record<string, string>
   const presentation = { ...board, fields: board.fields.filter(field => ['rowKind', 'views', 'defaultView'].includes(field.key)), formSections: undefined }
   const { seen } = await mountDrawer(t, { id: '00000000-0000-4000-8000-000000000123', row_kind: 'people', views: ['grid', 'calendar'], default_view: 'grid' },
     () => Response.json({ id: '00000000-0000-4000-8000-000000000123' }), 'schedule-boards', undefined, undefined, presentation, false)
@@ -536,12 +537,12 @@ test('option-backed board views reopen as named choices and edit through native 
   assert.ok(label)
   const selectedValues = label.parentElement!.nextElementSibling
   assert.ok(selectedValues, 'the field label is followed by its read-only selected options')
-  assert.deepEqual([...selectedValues.children].map(option => option.textContent?.trim()), ['Grid', 'Month'])
+  assert.deepEqual([...selectedValues.children].map(option => option.textContent?.trim()), [viewLabels.grid, viewLabels.calendar])
   assert.doesNotMatch(selectedValues.textContent ?? '', /grid,|Grid,/)
   await act(async () => { clickButton('Edit').click(); await tick() })
   const choices = [...document.querySelectorAll('fieldset label')]
-  assert.deepEqual(choices.map(node => node.textContent?.trim()), ['Grid', 'Targets', 'Timeline', 'Month'])
-  const targets = choices.find(node => node.textContent?.trim() === 'Targets')!.querySelector('input')!
+  assert.deepEqual(choices.map(node => node.textContent?.trim()), [viewLabels.grid, viewLabels.targets, viewLabels.timeline, viewLabels.calendar])
+  const targets = choices.find(node => node.textContent?.trim() === viewLabels.targets)!.querySelector('input')!
   await act(async () => { targets.click(); await tick() })
   await clickSave(false)
   assert.deepEqual((seen[0]!.body as Record<string, unknown>).views, ['grid', 'calendar', 'targets'])
