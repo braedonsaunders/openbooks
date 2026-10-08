@@ -3156,17 +3156,17 @@
       "hrm-job-families": {
         "title": "Familles d'emplois",
         "singularTitle": "Famille d'emplois",
-        "description": "Les métiers de l'organisation — codes stables regroupant les niveaux."
+        "description": "Regroupez les postes similaires en familles de métiers."
       },
       "hrm-job-levels": {
         "title": "Niveaux",
         "singularTitle": "Niveau",
-        "description": "Un échelon par grille avec rang et critères d'égale valeur déclarés."
+        "description": "Définissez les niveaux de poste et les critères utilisés pour les comparer."
       },
       "hrm-pay-bands": {
         "title": "Fourchettes",
         "singularTitle": "Fourchette",
-        "description": "Lignes versionnées de salaire CIBLE par périmètre : tout changement est une ligne nouvelle."
+        "description": "Définissez des fourchettes de rémunération avec des dates de prise d’effet. Les fourchettes précédentes restent disponibles dans l’historique."
       },
       "hrm-competency-frameworks": {
         "title": "Référentiels de compétences",

@@ -3284,17 +3284,17 @@
       "hrm-job-families": {
         "title": "Berufsfamilien",
         "singularTitle": "Berufsfamilie",
-        "description": "Die Gewerke des Unternehmens — stabile Codes, die Ebenen zu Leitern bündeln."
+        "description": "Fassen Sie verwandte Tätigkeiten zu Berufsfamilien zusammen."
       },
       "hrm-job-levels": {
         "title": "Ebenen",
         "singularTitle": "Ebene",
-        "description": "Je eine Sprosse pro Leiter mit Rang und erklärten Gleichwertigkeitskriterien."
+        "description": "Definieren Sie Stellenstufen und die Kriterien für ihren Vergleich."
       },
       "hrm-pay-bands": {
         "title": "Bänder",
         "singularTitle": "Band",
-        "description": "Versionierte SOLL-Sätze je Geltung: Änderungen sind neue Zeilen, nie Überschreibungen."
+        "description": "Legen Sie Vergütungsspannen mit Gültigkeitsdaten fest. Frühere Spannen bleiben im Verlauf verfügbar."
       },
       "hrm-competency-frameworks": {
         "title": "Kompetenzrahmen",

@@ -826,7 +826,7 @@
       },
       "hrm_pay_bands": {
         "label": "バンド",
-        "description": "有効バンドごとに1行：レベル、範囲、通貨、基準、最小/目標/最大。"
+        "description": "職務レベル、法人、通貨、適用日ごとに最低・目標・最高給与を確認します。"
       },
       "hrm_comp_cycle_lines": {
         "label": "昇給明細",

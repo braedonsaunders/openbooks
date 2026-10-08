@@ -826,7 +826,7 @@
       },
       "hrm_pay_bands": {
         "label": "薪酬带宽",
-        "description": "每个有效带宽一行：级别、范围、币种、基准与最小/目标/最大值。"
+        "description": "按岗位级别、法律实体、币种和生效日期查看最低、目标及最高薪酬。"
       },
       "hrm_comp_cycle_lines": {
         "label": "调薪明细",

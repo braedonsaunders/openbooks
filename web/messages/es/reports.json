@@ -826,7 +826,7 @@
       },
       "hrm_pay_bands": {
         "label": "Bandas",
-        "description": "Una fila por banda vigente: nivel, ámbito, moneda, base y mínimo/objetivo/máximo."
+        "description": "Revise los salarios mínimo, objetivo y máximo por nivel de puesto, entidad legal, moneda y fecha de vigencia."
       },
       "hrm_comp_cycle_lines": {
         "label": "Líneas de mérito",

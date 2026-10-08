@@ -3284,17 +3284,17 @@
       "hrm-job-families": {
         "title": "職種ファミリー",
         "singularTitle": "職種ファミリー",
-        "description": "組織の職種 — レベルを束ねる安定コード。"
+        "description": "関連する職種を職種グループにまとめます。"
       },
       "hrm-job-levels": {
         "title": "レベル",
         "singularTitle": "レベル",
-        "description": "ラダーごとの段位。ランクと等価基準を宣言。"
+        "description": "職務レベルと、レベルを比較するための基準を定義します。"
       },
       "hrm-pay-bands": {
         "title": "バンド",
         "singularTitle": "バンド",
-        "description": "範囲別のバージョン管理された想定給与。変更は新規行。"
+        "description": "適用日を指定して給与範囲を設定します。以前の給与範囲は履歴で確認できます。"
       },
       "hrm-competency-frameworks": {
         "title": "コンピテンシーフレームワーク",
