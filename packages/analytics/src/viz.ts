@@ -70,7 +70,7 @@ function isCurrency(col: ResultColumn | undefined): boolean {
 /** ECharts needs a Number coordinate. Accept currency only when that Number
  * round-trips to the same ledger units; otherwise refuse the chart instead of
  * drawing a different amount. Tooltips continue to use the original string. */
-function exactCurrencyCoordinate(value: unknown): number | null {
+export function exactCurrencyCoordinate(value: unknown): number | null {
   if (typeof value !== 'string') return null
   const units = (raw: string): bigint | null => {
     const match = /^([+-]?)(\d+)(?:\.(\d*))?$/.exec(raw.trim())
@@ -90,7 +90,7 @@ function exactCurrencyCoordinate(value: unknown): number | null {
  * tenant-controlled (vendor, customer, account names) — raw interpolation
  * would execute as stored XSS. The `exact` fragment is a formatted number
  * and needs no escaping. */
-function escapeTooltipHtml(value: unknown): string {
+export function escapeTooltipHtml(value: unknown): string {
   return String(value ?? '')
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')

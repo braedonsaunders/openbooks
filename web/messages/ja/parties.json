@@ -157,6 +157,7 @@
       "title": "賃金レート",
       "hint": "機密の報酬履歴です。新しいレートを追加すると、その発効日の前日に以前のレートが自動終了します。",
       "documentation": "ドキュメント",
+      "payrollPolicy": "給与計算ポリシー",
       "rate": "レート",
       "currency": "通貨",
       "basis": "基準",
@@ -189,7 +190,9 @@
       "payrollAmountRounding": "給与金額の丸め",
       "dimensionGroupRounding": "ディメンショングループごと",
       "timeEntryRounding": "時間記録ごと",
-      "roundingEffectiveDateHint": "この有効日付き賃金の給与時間に適用します。固定給と承認済みのプロジェクト原価は変更されません。"
+      "roundingEffectiveDateHint": "この有効日付き賃金の給与時間に適用します。固定給と承認済みのプロジェクト原価は変更されません。",
+      "payrollRatePrecisionHelp": "時間外手当などの倍率を適用した時給を、時間数による金額計算の前に丸めます。記録された基本単価は変更しません。",
+      "payrollAmountRoundingHelp": "各時間入力の金額を丸めてから合計するか、賃金・会計の区分が一致する金額を合計してから通貨の最小単位に丸めます。"
     },
     "payComponents": {
       "title": "定期支給項目",
@@ -446,7 +449,8 @@
         "title": "給与の推移",
         "subtitle": "{from} 以降 {count, plural, other {# 件のレート}}",
         "lastChange": "前回の改定で {percent}%",
-        "ariaLabel": "年間給与の推移"
+        "ariaLabel": "年間給与の推移",
+        "keyboardHint": "左右の矢印キーで日付と金額を確認できます。Homeで最初の単価、Endで最新の単価を選択します。"
       },
       "history": {
         "empty": "従業員個別の賃金レートはまだありません。",

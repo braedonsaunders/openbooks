@@ -157,6 +157,7 @@
       "title": "工资费率",
       "hint": "机密薪酬历史。新费率生效后，上一费率会自动截止到生效日前一天。",
       "documentation": "文档",
+      "payrollPolicy": "工资计算政策",
       "rate": "费率",
       "currency": "币种",
       "basis": "计薪基准",
@@ -189,7 +190,9 @@
       "payrollAmountRounding": "工资金额舍入",
       "dimensionGroupRounding": "按维度组",
       "timeEntryRounding": "按工时记录",
-      "roundingEffectiveDateHint": "适用于此生效日期工资的计薪工时；固定薪资和已批准的项目成本保持不变。"
+      "roundingEffectiveDateHint": "适用于此生效日期工资的计薪工时；固定薪资和已批准的项目成本保持不变。",
+      "payrollRatePrecisionHelp": "在应用加班或其他薪酬倍数后、按工时计价前对时薪进行舍入。不会更改已记录的基本费率。",
+      "payrollAmountRoundingHelp": "先对每条工时记录的金额舍入再求和，或先按相同的工资和会计维度汇总再舍入到货币最小单位。"
     },
     "payComponents": {
       "title": "固定工资组成",
@@ -446,7 +449,8 @@
         "title": "薪资变化",
         "subtitle": "自 {from} 起 {count, plural, other {# 个标准}}",
         "lastChange": "上次调整 {percent}%",
-        "ariaLabel": "年薪随时间变化"
+        "ariaLabel": "年薪随时间变化",
+        "keyboardHint": "使用左右方向键查看日期和金额。Home 选择第一条费率，End 选择最新费率。"
       },
       "history": {
         "empty": "尚无员工个人工资标准。",
