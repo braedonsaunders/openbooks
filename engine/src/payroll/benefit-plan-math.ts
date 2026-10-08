@@ -1,5 +1,5 @@
 import { parseMoney, parseRate, type Money } from '../money/brands.ts';
-import { add, cmp, neg, sum, mulDecimalFactors, mulPercent, mulRatio, roundMoney } from '../money/money.ts';
+import { add, cmp, neg, sum, mulDecimalFactors } from '../money/money.ts';
 import { compareDecimal, divideDecimal, multiplyDecimal } from '../money/exact-decimal.ts';
 import { PayrollError } from './error.ts';
 
@@ -74,25 +74,30 @@ export function recurringBenefitAmount(rule: RecurringBenefitRule, term: Recurri
   if (rule.enforcePolicyCap && maximumRate !== null && compareDecimal(rate, maximumRate) > 0 && !(term.overrideReason && term.overrideApprovedBy && term.overrideApprovedAt)) {
     refuse(`elected hourly rate ${rate} exceeds the declared maximum ${maximumRate} — record an independently approved override or amend the election`);
   }
-  let amount: string;
+  let amountBase = '1';
+  const factors: string[] = [canonicalRate];
+  let numerator = 1n;
+  let denominator = 1n;
   switch (rule.basis) {
     case 'per_hour':
       if (!rule.hoursBasis) refuse('eligible hours are undeclared — choose all paid, regular paid, scheduled paid, or selected-components hours');
       if (rule.hoursBasis === 'selected_components' && (rule.selectedComponentIds?.length ?? 0) === 0) refuse('no counted earning components are selected — list the earning components whose hours count');
-      amount = mulDecimalFactors('1', [canonicalRate, basis.hours]);
+      factors.push(basis.hours);
       break;
     case 'percent_of_eligible_pay':
       if (!rule.payBasis) refuse('eligible earnings are undeclared — choose the cash earnings basis');
-      amount = mulPercent(basis.eligiblePay, canonicalRate);
+      amountBase = basis.eligiblePay;
+      denominator = 100n;
       break;
-    case 'per_period': amount = mulDecimalFactors('1', [canonicalRate]); break;
+    case 'per_period': break;
     case 'per_month':
     case 'per_year': {
       const periods = term.declaredPeriodsPerYear ?? rule.periodsPerYear;
       if (!periods || periods !== basis.periodsPerYear) refuse(`annualization is not declared for this ${basis.periodsPerYear}-period schedule — record the exact periods per year on the rule or election`);
       const months = rule.basis === 'per_month' ? rule.monthsPerYear : 1;
       if (!months) refuse('monthly annualization is undeclared — record months per year');
-      amount = mulRatio(mulDecimalFactors('1', [canonicalRate]), BigInt(months!), BigInt(periods!));
+      numerator = BigInt(months!);
+      denominator = BigInt(periods!);
       break;
     }
     default: return refuse('the contribution basis is unsupported — configure one of the native recurring contribution bases');
@@ -101,9 +106,16 @@ export function recurringBenefitAmount(rule: RecurringBenefitRule, term: Recurri
   // rates alone require calendar-day proration; applying it to hours doubles it.
   if (rule.proration === 'calendar_days' && !['per_hour', 'percent_of_eligible_pay'].includes(rule.basis)) {
     if (basis.periodDays <= 0) refuse('the pay period is empty — choose a valid inclusive pay period');
-    amount = mulRatio(amount, BigInt(basis.coveredDays), BigInt(basis.periodDays));
+    numerator *= BigInt(basis.coveredDays);
+    denominator *= BigInt(basis.periodDays);
   }
-  return { amount: parseMoney(roundMoney(amount, basis.currencyMinorUnits)), rate: canonicalRate, maximumRate };
+  // Keep the elected rate, annualization and coverage exact until the
+  // payable currency boundary; ledger rounding followed by currency
+  // rounding can otherwise increase a contribution by one minor unit.
+  const amount = mulDecimalFactors(amountBase, factors, {
+    numerator, denominator, decimalPlaces: basis.currencyMinorUnits,
+  });
+  return { amount: parseMoney(amount), rate: canonicalRate, maximumRate };
 }
 
 export interface BenefitRecoveryLedgerEntry { id: string; planId: string; documentId: string | null; movementDate: string; kind: string; amount: string }

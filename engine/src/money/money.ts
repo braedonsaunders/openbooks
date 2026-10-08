@@ -191,15 +191,28 @@ export function div(a: string, b: string): string {
   return fromUnits(negative ? -quotient : quotient);
 }
 
-/** Multiply money by one or more exact decimal factors (up to 10dp each). */
-export function mulDecimalFactors(amount: string, factors: readonly (string | number)[]): string {
-  let numerator = toUnits(amount);
-  let denominator = 1n;
+/** Multiply exact factors and a ratio, rounding once to the requested money quantum. */
+export function mulDecimalFactors(amount: string, factors: readonly (string | number)[], options: {
+  numerator?: bigint;
+  denominator?: bigint;
+  decimalPlaces?: number;
+} = {}): string {
+  const decimalPlaces = options.decimalPlaces ?? 4;
+  if (!Number.isInteger(decimalPlaces) || decimalPlaces < 0 || decimalPlaces > 4) {
+    throw new Error("decimalPlaces must be an integer from 0 through 4");
+  }
+  const ratioNumerator = options.numerator ?? 1n;
+  const ratioDenominator = options.denominator ?? 1n;
+  if (ratioNumerator < 0n) throw new Error("ratio numerator cannot be negative");
+  if (ratioDenominator <= 0n) throw new Error("ratio denominator must be greater than zero");
+  let numerator = toUnits(amount) * ratioNumerator;
+  let denominator = ratioDenominator;
   for (const factor of factors) {
     numerator *= decimalFactorUnits(factor);
     denominator *= RATE_SCALE;
   }
-  return fromUnits(roundDiv(numerator, denominator));
+  const quantum = 10n ** BigInt(4 - decimalPlaces);
+  return fromUnits(roundDiv(numerator, denominator * quantum) * quantum);
 }
 
 export function mulDecimal(amount: string, factor: string | number): string {
