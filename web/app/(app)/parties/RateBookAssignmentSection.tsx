@@ -11,7 +11,10 @@ import { Alert, Badge, Button, Card, CardContent, Input, Label, Select } from '@
 import { useAppAction } from '@/lib/use-app-action'
 import { confirmDialog } from '@/lib/confirm'
 
-interface RateBook { id: string; name: string; currency: string; is_default: boolean; latest_version_id: string | null }
+interface RateBook {
+  id: string; name: string; currency: string; is_default: boolean; latest_version_id: string | null
+  versions?: { id: string; effective_from: string; effective_to: string | null }[]
+}
 interface Assignment {
   id: string
   rate_book_id: string
@@ -22,6 +25,7 @@ interface Assignment {
   date_basis: 'usage_date'|'project_start'
   is_active: boolean
   rate_version_id: string | null
+  pinned_rate_version_id?: string | null
 }
 
 const field = 'space-y-1.5'
@@ -29,9 +33,8 @@ const field = 'space-y-1.5'
 /**
  * Effective-dated rate-book override for one customer or project, re-homed from
  * the Setup workspace onto the record. Lists assignments via
- * /api/rate-book-assignments and mutates through the shared setup CRUD API
- * (which enforces scope + date-overlap rules). Hides itself for users without
- * admin.setup.manage (the read endpoint 403s).
+ * /api/rate-book-assignments, whose native writes enforce project permissions,
+ * tenant and subsidiary scope, version ownership and date-overlap rules.
  */
 export function RateBookAssignmentSection({
   scope,
@@ -60,7 +63,7 @@ export function RateBookAssignmentSection({
   const [page, setPage] = useState(1)
   const [total, setTotal] = useState(0)
   const [perPage, setPerPage] = useState(5)
-  const [form, setForm] = useState<{ id: string | null; rateBookId: string; effectiveFrom: string; effectiveTo: string; dateBasis:'usage_date'|'project_start'; isActive: boolean } | null>(null)
+  const [form, setForm] = useState<{ id: string | null; rateBookId: string; rateVersionId: string; effectiveFrom: string; effectiveTo: string; dateBasis:'usage_date'|'project_start'; isActive: boolean } | null>(null)
   const loadGeneration = useRef(0)
 
   const scopeParam = scope === 'customer' ? `customerId=${scopeId}` : `projectId=${scopeId}`
@@ -131,6 +134,7 @@ export function RateBookAssignmentSection({
     setForm({
       id: null,
       rateBookId: rateBooks.find((b) => b.is_default)?.id ?? rateBooks[0]?.id ?? '',
+      rateVersionId: '',
       effectiveFrom: '',
       effectiveTo: '',
       dateBasis: scope === 'customer' ? 'project_start' : 'usage_date',
@@ -141,6 +145,7 @@ export function RateBookAssignmentSection({
     setForm({
       id: a.id,
       rateBookId: a.rate_book_id,
+      rateVersionId: a.pinned_rate_version_id ?? '',
       effectiveFrom: a.effective_from ? String(a.effective_from).slice(0, 10) : '',
       effectiveTo: a.effective_to ? String(a.effective_to).slice(0, 10) : '',
       dateBasis: a.date_basis,
@@ -157,6 +162,7 @@ export function RateBookAssignmentSection({
     const body: Record<string, unknown> = {
       ...scopeBody,
       rateBookId: form.rateBookId,
+      rateVersionId: form.rateVersionId || null,
       effectiveFrom: form.effectiveFrom || null,
       effectiveTo: form.effectiveTo || null,
       dateBasis: form.dateBasis,
@@ -207,6 +213,7 @@ export function RateBookAssignmentSection({
     )
   }
   const canEditAssignments = canManage && editable
+  const versions = rateBooks.find(book => book.id === form?.rateBookId)?.versions ?? []
   const pages = Math.max(1, Math.ceil(total / perPage))
   const pricingHref = (versionId: string) => {
     const returnQuery = searchParams.toString()
@@ -263,6 +270,20 @@ export function RateBookAssignmentSection({
               <Select value={form.rateBookId} onChange={(e) => setForm({ ...form, rateBookId: e.target.value })}>
                 {rateBooks.map((b) => (
                   <option key={b.id} value={b.id}>{b.name} · {b.currency}</option>
+                ))}
+              </Select>
+            </div>
+            <div className={`${field} lg:col-span-2`}>
+              <Label help={t('rateVersionHelp')}>{t('rateVersion')}</Label>
+              <Select name="rateVersionId" aria-label={t('rateVersion')} value={form.rateVersionId} onChange={(e) => setForm({ ...form, rateVersionId: e.target.value })}>
+                <option value="">{t('automaticVersion')}</option>
+                {form.rateVersionId && !versions.some(version => version.id === form.rateVersionId) ? (
+                  <option value={form.rateVersionId}>{t('unavailableVersion')}</option>
+                ) : null}
+                {versions.map(version => (
+                  <option key={version.id} value={version.id}>
+                    {String(version.effective_from).slice(0, 10)} · {version.effective_to ? String(version.effective_to).slice(0, 10) : t('openEnded')}
+                  </option>
                 ))}
               </Select>
             </div>

@@ -101,7 +101,7 @@ export const POST = defineRoute({
       const bookId = await saveSetupBook(entity, gate.user.orgId, gate.user.id, {
         code, name,
         ...(body.currency !== undefined ? { currency: String(body.currency) } : {}),
-        isDefault: body.isDefault === true,
+        ...(body.isDefault !== undefined ? { isDefault: body.isDefault } : {}),
         isActive: body.isActive !== false,
       }, tx, id ? { id } : {})
       if (!bookId) throw new Error('Rate book was not saved.')
