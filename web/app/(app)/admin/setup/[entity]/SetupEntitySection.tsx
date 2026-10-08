@@ -378,13 +378,14 @@ export async function SetupEntitySection({
         const bookId = open.row ? String(open.row.id) : null
         const [versionResult, itemsResult, orgResult] = await Promise.all([
           bookId
-            ? db.execute<{ id: string; effective_from: string; effective_to: string | null }>(sql`
-                select id, effective_from, effective_to
-                  from item_rate_versions
-                 where org_id = ${orgId} and rate_book_id = ${bookId} and status = 'active'
-                 order by effective_from desc
+            ? db.execute<{ id: string; effective_from: string; effective_to: string | null; labor_derivation_policy: 'explicit' | 'time_type_multipliers' | null }>(sql`
+                select v.id, v.effective_from, v.effective_to, p.derivation_policy as labor_derivation_policy
+                  from item_rate_versions v
+                  left join labor_rate_version_policies p on p.org_id = v.org_id and p.version_id = v.id
+                 where v.org_id = ${orgId} and v.rate_book_id = ${bookId} and v.status = 'active'
+                 order by v.effective_from desc
                  limit 1`)
-            : Promise.resolve({ rows: [] as { id: string; effective_from: string; effective_to: string | null }[] }),
+            : Promise.resolve({ rows: [] as { id: string; effective_from: string; effective_to: string | null; labor_derivation_policy: 'explicit' | 'time_type_multipliers' | null }[] }),
           db.execute<{ id: string; code: string | null; name: string; kind: string; unit: string | null; is_active: boolean }>(sql`
             select id, code, name, kind, unit, is_active
               from items
@@ -415,6 +416,7 @@ export async function SetupEntitySection({
         return {
           latestEffectiveFrom: version?.effective_from ? String(version.effective_from).slice(0, 10) : null,
           latestEffectiveTo: version?.effective_to ? String(version.effective_to).slice(0, 10) : null,
+          latestLaborDerivationPolicy: version?.labor_derivation_policy ?? null,
           lines: linesResult.rows.map((line): RateBookLine => ({
             itemId: String(line.item_id),
             unitCode: String(line.unit_code),
@@ -559,6 +561,7 @@ export async function SetupEntitySection({
           row={open.row as Record<string, unknown> | null}
           latestEffectiveFrom={rateBookDrawerData.latestEffectiveFrom}
           latestEffectiveTo={rateBookDrawerData.latestEffectiveTo}
+          latestLaborDerivationPolicy={rateBookDrawerData.latestLaborDerivationPolicy}
           lines={rateBookDrawerData.lines}
           items={rateBookDrawerData.items}
           currencies={refOptions.currencies ?? []}

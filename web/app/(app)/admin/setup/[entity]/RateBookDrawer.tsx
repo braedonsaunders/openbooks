@@ -70,6 +70,7 @@ export function RateBookDrawer({
   row,
   latestEffectiveFrom,
   latestEffectiveTo,
+  latestLaborDerivationPolicy = null,
   lines: initialLines,
   items,
   currencies,
@@ -80,6 +81,7 @@ export function RateBookDrawer({
   row: Record<string, unknown> | null
   latestEffectiveFrom: string | null
   latestEffectiveTo?: string | null
+  latestLaborDerivationPolicy?: 'explicit' | 'time_type_multipliers' | null
   lines: RateBookLine[]
   items: RateBookItemOption[]
   currencies: LineGridOption[]
@@ -89,6 +91,7 @@ export function RateBookDrawer({
 }) {
   const t = useTranslations('items.rateBookDrawer')
   const tRates = useTranslations('items.rates')
+  const tLabor = useTranslations('laborPricing')
   const tSetup = useTranslations('admin.setup')
   const common = useTranslations('common')
   const format = useFormatter()
@@ -103,6 +106,7 @@ export function RateBookDrawer({
   const [initialEffectiveFrom] = useState(() => latestEffectiveFrom ? addOneDay(latestEffectiveFrom) : today)
   const [effectiveFrom, setEffectiveFrom] = useState(initialEffectiveFrom)
   const [effectiveTo, setEffectiveTo] = useState('')
+  const [laborDerivationPolicy, setLaborDerivationPolicy] = useState(latestLaborDerivationPolicy ?? '')
   const nextLineKey = useRef(initialLines.length)
   const [lines, setLines] = useState<EditableRateBookLine[]>(() => initialLines.map((line, index) => ({
     ...line,
@@ -114,6 +118,7 @@ export function RateBookDrawer({
   const [error, setError] = useState('')
   const initialLineSignature = useMemo(() => signature(initialLines), [initialLines])
   const ratesChanged = signature(lines) !== initialLineSignature || effectiveFrom !== initialEffectiveFrom || effectiveTo !== ''
+    || laborDerivationPolicy !== (latestLaborDerivationPolicy ?? '')
 
   const itemOptions = useMemo<LineGridOption[]>(() => items.map((item) => ({
     value: item.id,
@@ -255,6 +260,7 @@ export function RateBookDrawer({
           replaceRates: ratesChanged,
           effectiveFrom,
           effectiveTo: effectiveTo || null,
+          ...(ratesChanged && laborDerivationPolicy ? { laborDerivationPolicy } : {}),
           ...(confirmEmptyReplacement ? { confirmEmptyReplacement: true } : {}),
           lines: lines.map(({ clientKey: _clientKey, ...line }) => line),
         }),
@@ -313,6 +319,15 @@ export function RateBookDrawer({
               </p> : null}
             </div>
             <div className="flex flex-wrap items-end gap-2">
+              <div className="w-60 space-y-1.5">
+                <Label htmlFor="rate-book-labor-policy" help={t('laborPolicyHelp')}>{t('laborPolicy')}</Label>
+                <Select id="rate-book-labor-policy" value={laborDerivationPolicy}
+                  onChange={event => setLaborDerivationPolicy(event.target.value)}>
+                  <option value="" disabled={latestLaborDerivationPolicy !== null}>{t('itemPricingOnly')}</option>
+                  <option value="explicit">{tLabor('derivations.explicit')}</option>
+                  <option value="time_type_multipliers">{tLabor('derivations.time_type_multipliers')}</option>
+                </Select>
+              </div>
               <div className="w-44 space-y-1.5"><Label htmlFor="rate-book-effective-from">{tRates('effectiveFrom')}</Label><Input id="rate-book-effective-from" type="date" value={effectiveFrom} onChange={(event) => setEffectiveFrom(event.target.value)} /></div>
               <div className="w-44 space-y-1.5"><Label htmlFor="rate-book-effective-to" help={t('effectiveToHelp')}>{tRates('effectiveTo')}</Label><Input id="rate-book-effective-to" type="date" min={effectiveFrom || undefined} value={effectiveTo} onChange={(event) => setEffectiveTo(event.target.value)} /></div>
               <Button type="button" variant="outline" onClick={addLine}><Plus size={15} />{t('addItem')}</Button>

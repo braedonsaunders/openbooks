@@ -216,6 +216,9 @@
     "tierAuto": "Automatisch"
   },
   "rateBookDrawer": {
+    "laborPolicy": "Preisregel für Arbeit",
+    "itemPricingOnly": "Nur Artikelpreise",
+    "laborPolicyHelp": "Registrieren Sie diese Version für Arbeitsleistungen bei Kunden oder Projekten. Ersatzversionen behalten die bestehende Regel bei; eine Änderung erzeugt eine neue Version mit Gültigkeitsdatum.",
     "newTitle": "Neues Preisbuch",
     "editTitle": "{name} bearbeiten",
     "description": "Verwalten Sie den Preisbuchkopf und den vollständigen, datierten Artikelpreissatz gemeinsam.",

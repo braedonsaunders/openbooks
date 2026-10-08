@@ -213,6 +213,9 @@
     "tierAuto": "auto"
   },
   "rateBookDrawer": {
+    "laborPolicy": "Politique tarifaire de main-d’œuvre",
+    "itemPricingOnly": "Tarifs des articles uniquement",
+    "laborPolicyHelp": "Enregistrez cette version pour les tarifs de main-d’œuvre des clients ou projets. Les versions suivantes conservent la politique existante ; sa modification crée une nouvelle version datée.",
     "newTitle": "Nouveau catalogue de tarifs",
     "editTitle": "Modifier {name}",
     "description": "Gérez ensemble l'en-tête et la grille complète des tarifs d'articles datés.",

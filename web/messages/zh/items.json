@@ -203,6 +203,9 @@
     "tierAuto": "自动"
   },
   "rateBookDrawer": {
+    "laborPolicy": "人工定价策略",
+    "itemPricingOnly": "仅物料定价",
+    "laborPolicyHelp": "将此版本登记为客户或项目的人工定价。替换版本保留现有策略；更改策略将创建一个具有新生效日期的版本。",
     "newTitle": "新建费率簿",
     "editTitle": "编辑{name}",
     "description": "统一维护费率簿基本信息及完整的生效日期项目费率表。",

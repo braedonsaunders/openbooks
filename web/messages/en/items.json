@@ -264,6 +264,9 @@
     "tierAuto": "auto"
   },
   "rateBookDrawer": {
+    "laborPolicy": "Labor pricing policy",
+    "itemPricingOnly": "Item pricing only",
+    "laborPolicyHelp": "Register this version for customer or project labor pricing. Replacements retain the existing labor policy; changing it creates a new effective-dated version.",
     "newTitle": "New rate book",
     "editTitle": "Edit {name}",
     "description": "Maintain the rate-book header and its complete effective-dated item rate schedule together.",
