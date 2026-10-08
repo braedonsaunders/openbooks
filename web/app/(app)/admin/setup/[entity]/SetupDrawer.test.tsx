@@ -549,23 +549,33 @@ test('option-backed board views reopen as named choices and edit through native 
 })
 
 
-test('changing a board family removes hidden incompatible view selections before choosing native task views', async t => {
+test('choosing a new board family removes hidden incompatible views before selecting native task views', async t => {
   const board = SETUP_ENTITY_BY_KEY.get('schedule-boards')!
   const viewLabels = adminCatalog.options!.scheduleView as unknown as Record<string, string>
   const presentation = { ...board, fields: board.fields.filter(field => ['rowKind', 'views', 'defaultView'].includes(field.key)), formSections: undefined }
-  const { seen } = await mountDrawer(t, { id: '00000000-0000-4000-8000-000000000124', row_kind: 'people', views: ['grid', 'calendar'], default_view: 'grid' },
-    () => Response.json({ id: '00000000-0000-4000-8000-000000000124' }), 'schedule-boards', undefined, undefined, presentation)
+  const { seen } = await mountDrawer(t, null,
+    () => Response.json({ id: '00000000-0000-4000-8000-000000000124' }), 'schedule-boards', { rowKind: 'people', views: ['grid', 'calendar'], defaultView: 'grid' }, undefined, presentation)
   const selects = [...document.querySelectorAll('select')]
-  const rowKind = selects.find(select => [...select.options].some(option => option.value === 'people'))!
+  const rowKind = selects.find(select => [...select.options].some(option => option.value === 'people'))
+  assert.ok(rowKind, 'the new board exposes its native family choice')
   await act(async () => { rowKind.value = 'tasks'; rowKind.dispatchEvent(new window.Event('change', { bubbles: true })); await tick() })
   const choices = [...document.querySelectorAll('fieldset label')]
   assert.deepEqual(choices.map(node => node.textContent?.trim()), [viewLabels.gantt, viewLabels.progress])
   assert.ok(choices.every(node => !(node.querySelector('input') as HTMLInputElement).checked))
-  const defaultView = [...document.querySelectorAll('select')].find(select => [...select.options].some(option => option.value === 'gantt'))!
+  const defaultView = [...document.querySelectorAll('select')].find(select => [...select.options].some(option => option.value === 'gantt'))
+  assert.ok(defaultView, 'the default view uses the selected task family options')
   assert.equal(defaultView.value, '')
+  await clickSave(true)
+  assert.deepEqual(seen, [], 'hidden people views cannot satisfy the new family required views')
+  assert.equal(alertText(), requiredCopy(FIELD_LABEL.views!))
   const gantt = choices.find(node => node.textContent?.trim() === viewLabels.gantt)!.querySelector('input')!
-  await act(async () => { gantt.click(); defaultView.value = 'gantt'; defaultView.dispatchEvent(new window.Event('change', { bubbles: true })); await tick() })
-  await clickSave(false)
+  await act(async () => { gantt.click(); await tick() })
+  await clickSave(true)
+  assert.deepEqual(seen, [], 'the incompatible people default is cleared for an explicit supported choice')
+  assert.equal(alertText(), requiredCopy(FIELD_LABEL.defaultView!))
+  await act(async () => { defaultView.value = 'gantt'; defaultView.dispatchEvent(new window.Event('change', { bubbles: true })); await tick() })
+  await clickSave(true)
+  assert.equal(seen[0]!.method, 'POST')
   const body = seen[0]!.body as Record<string, unknown>
   assert.equal(body.rowKind, 'tasks')
   assert.deepEqual(body.views, ['gantt'])
