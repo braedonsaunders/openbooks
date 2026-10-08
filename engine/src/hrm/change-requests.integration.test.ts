@@ -26,6 +26,7 @@ import {
   getChangeRequest,
   HrmChangeRequestError,
   listChangeRequests,
+  listChangeRequestsWithTotal,
   submitChangeRequest,
   updateChangeRequestPayload,
   withdrawChangeRequest,
@@ -772,6 +773,10 @@ test("change-request list applies subsidiary scope before its visible-row limit"
     assert.deepEqual(new Set(allVisible.map((request) => request.id)), new Set([visibleRequest.id, ownProfileRequest.id]));
     // The dashboard tile counts through the same scope predicates, never the preview length.
     assert.equal(await countChangeRequests({ orgId: h.org.orgId, actorId: scopedReader }), 2);
+    const preview = await listChangeRequestsWithTotal({ orgId: h.org.orgId, actorId: scopedReader, limit: 1 });
+    assert.equal(preview.total, 2);
+    assert.equal(preview.rows.length, 1);
+    assert.ok(allVisible.some((row) => row.id === preview.rows[0]!.id));
   });
 });
 

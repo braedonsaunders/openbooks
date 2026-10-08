@@ -135,3 +135,18 @@ test('an enabled profiler refuses to start without an output file', () => {
     /requires OPENBOOKS_QUERY_PROFILE_FILE/,
   )
 })
+
+test('slow statements include costly single executions with normalized values', () => {
+  const { profile, within, advance } = harness()
+  within({ key: {}, route: '/projects/pre-billing' }, [
+    ["select payload from requests where org_id = 'tenant-secret'", 8_000],
+    ['select 1', 2], ['select 2', 3],
+  ])
+  advance(1_000)
+  const route = profile.summarize()!.routes[0]!
+  assert.equal(route.repeatedStatements.some((row) => row.statement.includes('payload')), false)
+  assert.deepEqual(route.slowStatements[0], {
+    statement: 'select payload from requests where org_id = ?', executions: 1, totalDbMs: 8_000, meanDbMs: 8_000,
+  })
+  assert.equal(JSON.stringify(route).includes('tenant-secret'), false)
+})

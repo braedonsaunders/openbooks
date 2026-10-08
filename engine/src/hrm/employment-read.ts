@@ -1061,6 +1061,15 @@ export async function loadHeadcountAsOf(exec: SqlExecutor, query: HeadcountQuery
   const actorId = requireId(query.actorId, "actorId");
   validateAsOf(query.effectiveDate, query.knownAt);
   const source = await loadHeadcountTemporalSource(exec, orgId, actorId);
+  return headcountFromTemporalSource(exec, query, orgId, source);
+}
+
+async function headcountFromTemporalSource(
+  exec: SqlExecutor,
+  query: HeadcountQuery,
+  orgId: string,
+  source: HeadcountTemporalSource,
+): Promise<HeadcountDTO> {
   const counted = resolveCountedEmployments(source, orgId, query.effectiveDate, query.knownAt);
   if (counted.length === 0) {
     // Nothing in service at the as-of point: a resolved zero, and never an
@@ -1152,6 +1161,13 @@ export async function loadHeadcountTotalsAsOf(
 ): Promise<HeadcountTotalsDTO> {
   const orgId = requireId(query.orgId, "orgId");
   const actorId = requireId(query.actorId, "actorId");
+  validateHeadcountDates(query);
+
+  const source = await loadHeadcountTemporalSource(exec, orgId, actorId);
+  return headcountTotalsFromTemporalSource(query, orgId, source);
+}
+
+function validateHeadcountDates(query: HeadcountTotalsQuery): void {
   if (!Array.isArray(query.effectiveDates) || query.effectiveDates.length === 0) {
     throw new EmploymentReadError("effectiveDates must contain at least one civil date");
   }
@@ -1161,8 +1177,13 @@ export async function loadHeadcountTotalsAsOf(
     );
   }
   for (const effectiveDate of query.effectiveDates) validateAsOf(effectiveDate, query.knownAt);
+}
 
-  const source = await loadHeadcountTemporalSource(exec, orgId, actorId);
+function headcountTotalsFromTemporalSource(
+  query: HeadcountTotalsQuery,
+  orgId: string,
+  source: HeadcountTemporalSource,
+): HeadcountTotalsDTO {
   return {
     orgId,
     knownAt: query.knownAt,
@@ -1170,6 +1191,26 @@ export async function loadHeadcountTotalsAsOf(
       effectiveDate,
       total: resolveCountedEmployments(source, orgId, effectiveDate, query.knownAt).length,
     })),
+  };
+}
+
+export interface HeadcountOverviewQuery extends HeadcountQuery {
+  readonly effectiveDates: readonly string[];
+}
+
+/** Current groups and the comparable trend share one authorized census. */
+export async function loadHeadcountOverviewAsOf(
+  exec: SqlExecutor,
+  query: HeadcountOverviewQuery,
+): Promise<{ headcount: HeadcountDTO; totals: HeadcountTotalsDTO }> {
+  const orgId = requireId(query.orgId, "orgId");
+  const actorId = requireId(query.actorId, "actorId");
+  validateAsOf(query.effectiveDate, query.knownAt);
+  validateHeadcountDates(query);
+  const source = await loadHeadcountTemporalSource(exec, orgId, actorId);
+  return {
+    headcount: await headcountFromTemporalSource(exec, query, orgId, source),
+    totals: headcountTotalsFromTemporalSource(query, orgId, source),
   };
 }
 
@@ -1192,6 +1233,15 @@ export async function getHeadcountTotalsAsOf(query: HeadcountTotalsQuery): Promi
   return withOrgTransaction(orgId, async () => {
     await assertHrmFeatureOn(db, orgId);
     return loadHeadcountTotalsAsOf(db, query);
+  });
+}
+
+/** The cockpit's current groups and history resolve under one native gate. */
+export async function getHeadcountOverviewAsOf(query: HeadcountOverviewQuery) {
+  const orgId = requireId(query.orgId, "orgId");
+  return withOrgTransaction(orgId, async () => {
+    await assertHrmFeatureOn(db, orgId);
+    return loadHeadcountOverviewAsOf(db, query);
   });
 }
 

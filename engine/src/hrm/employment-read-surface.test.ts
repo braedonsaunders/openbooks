@@ -8,6 +8,7 @@ import {
   loadEmploymentEpisodes,
   loadHeadcountAsOf,
   loadHeadcountTotalsAsOf,
+  loadHeadcountOverviewAsOf,
 } from "./employment-read.ts";
 import { HrmAuthorizationError } from "./authorization.ts";
 import type { SqlExecutor } from "../platform/db.ts";
@@ -413,6 +414,39 @@ test("headcount series refuses an unbounded date list before reading", async () 
     /at most 24 dates/,
   );
   assert.equal(reads, 0);
+});
+
+test("headcount overview shares one scoped temporal census for current groups and history", async () => {
+  const state = emptyState();
+  const actor = seedReader(state);
+  state.users.get(actor)!.restriction = { mode: "list", subsidiaryIds: [SUB_A] };
+  const local = seedEmployment(state, { workerPartyId: randomUUID() });
+  const foreign = seedEmployment(state, { workerPartyId: randomUUID(), employerSubsidiaryId: SUB_B });
+  state.versions.set(local.id, [activeVersion({ effectiveFrom: "2026-05-01" })]);
+  state.assignments.set(local.id, [primaryAssignment()]);
+  state.versions.set(foreign.id, [activeVersion(), activeVersion({ versionNo: 2 })]);
+  const statements: string[] = [];
+  const base = fakeExec(state, ORG);
+  const exec: SqlExecutor = { execute: (async (query: unknown) => {
+    statements.push(sqlText(query));
+    return base.execute(query as never);
+  }) as SqlExecutor["execute"] };
+  const result = await loadHeadcountOverviewAsOf(exec, {
+    orgId: ORG, actorId: actor, ...ASOF, effectiveDates: ["2026-03-31", ASOF.effectiveDate],
+  });
+  assert.equal(result.headcount.total, 1);
+  assert.equal(result.headcount.groups[0]?.departmentName, "Sales");
+  assert.deepEqual(result.totals.points, [
+    { effectiveDate: "2026-03-31", total: 0 },
+    { effectiveDate: ASOF.effectiveDate, total: 1 },
+  ]);
+  for (const table of ["worker_employments", "worker_employment_versions", "employment_assignment_versions"]) {
+    assert.equal(statements.filter((text) => text.includes(`from ${table}`)).length, 1, table);
+  }
+  state.users.get(actor)!.grants = [];
+  await assert.rejects(loadHeadcountOverviewAsOf(exec, {
+    orgId: ORG, actorId: actor, ...ASOF, effectiveDates: [ASOF.effectiveDate],
+  }), HrmAuthorizationError);
 });
 
 test("headcount counts on-leave but not offered, suspended, or terminated revisions", async () => {

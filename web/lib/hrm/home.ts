@@ -4,9 +4,9 @@ import { getTranslations } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { businessToday, utcDateFromParts } from '@openbooks/engine/src/platform/business-date.ts'
-import { getHeadcountAsOf, getHeadcountTotalsAsOf } from '@openbooks/engine/src/hrm/employment-read.ts'
+import { getHeadcountOverviewAsOf } from '@openbooks/engine/src/hrm/employment-read.ts'
 import { HrmAuthorizationError } from '@openbooks/engine/src/hrm/authorization.ts'
-import { countChangeRequests, HrmChangeRequestError, listChangeRequests } from '@openbooks/engine/src/hrm/change-requests.ts'
+import { HrmChangeRequestError, listChangeRequestsWithTotal } from '@openbooks/engine/src/hrm/change-requests.ts'
 import { getVacancyAsOf } from '@openbooks/engine/src/hrm/positions-read.ts'
 import { loadRecruitingOverview } from '@openbooks/engine/src/hrm/recruiting/recruiting-read.ts'
 import { getOnboardingOverview } from '@openbooks/engine/src/hrm/processes-read.ts'
@@ -26,7 +26,7 @@ import { loadQualificationAttention } from './qualifications'
  * Human Resources module home — one read for the workspace landing cockpit:
  * headcount as-of today by employer subsidiary and department from the
  * canonical HRM read service, plus the live directory. No direct table
- * reads: every figure comes from getHeadcountAsOf, which resolves each
+ * reads: every figure comes from getHeadcountOverviewAsOf, which resolves each
  * employment through the temporal primitives under the hrm gate and the
  * actor's subsidiary scope.
  */
@@ -302,8 +302,7 @@ export async function loadHrmHome(authz: Authz): Promise<HrmHomeData> {
   // panel's latency, not the sum of every panel. Each underlying service
   // retains its own gate, permission, tenant scope, and refusal behavior.
   const [
-    headcount,
-    historicalHeadcount,
+    headcountOverview,
     multiSubsidiary,
     vacancy,
     queueLoad,
@@ -317,8 +316,7 @@ export async function loadHrmHome(authz: Authz): Promise<HrmHomeData> {
     tabs,
     benefitsPanel,
   ] = await Promise.all([
-    getHeadcountAsOf({ orgId, actorId: authz.user.id, effectiveDate, knownAt }),
-    getHeadcountTotalsAsOf({ orgId, actorId: authz.user.id, effectiveDates: historicalDates, knownAt }),
+    getHeadcountOverviewAsOf({ orgId, actorId: authz.user.id, effectiveDate, effectiveDates: historicalDates, knownAt }),
     isMultiSubsidiary(orgId),
     canReadPositions
       ? getVacancyAsOf({ orgId, actorId: authz.user.id, effectiveDate, knownAt })
@@ -329,10 +327,9 @@ export async function loadHrmHome(authz: Authz): Promise<HrmHomeData> {
         // preview: an older pending request must not vanish because the
         // newest mixed-status rows filled the fetch window. The five-row
         // preview is itself status-filtered so it always shows real work.
-        const [rows, pendingTotal] = await Promise.all([
-          listChangeRequests({ orgId, actorId: authz.user.id, status: 'pending_approval', limit: HOME_PENDING_SHOWN }),
-          countChangeRequests({ orgId, actorId: authz.user.id, status: 'pending_approval' }),
-        ])
+        const { rows, total: pendingTotal } = await listChangeRequestsWithTotal({
+          orgId, actorId: authz.user.id, status: 'pending_approval', limit: HOME_PENDING_SHOWN,
+        })
         return {
           rows,
           pendingTotal,
@@ -417,6 +414,8 @@ export async function loadHrmHome(authz: Authz): Promise<HrmHomeData> {
     hrmGroupTabs(authz, '/hrm'),
     loadBenefitsPanel(authz),
   ])
+
+  const { headcount, totals: historicalHeadcount } = headcountOverview
 
   // Twelve month-end headcounts through the same canonical temporal read,
   // ending on today. Historical points share one authorized census and one
