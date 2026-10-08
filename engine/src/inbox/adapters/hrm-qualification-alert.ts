@@ -35,29 +35,36 @@ type AlertRow = {
   expiry_on: string;
 };
 
+async function qualificationAlertSource(ctx: InboxListContext) {
+  if (!(await hrmOn(ctx))) return null;
+  if (!(await sourceTableInstalled(HR14_TABLE))) return null;
+  const partyId = await actorPartyId(ctx);
+  if (!partyId) return null;
+  return sql`
+    from public.hrm_worker_qualifications q
+    join public.worker_employments e
+      on e.org_id = q.org_id and e.id = q.employment_id
+    join public.hrm_qualification_types t
+      on t.org_id = q.org_id and t.id = q.type_id
+    where q.org_id = ${ctx.orgId}
+      and e.worker_party_id = ${partyId}
+      and q.status = 'valid'
+      and q.expires_on is not null
+      and q.expires_on <= ${ctx.asOf}::date + 30`;
+}
+
 export const hrmQualificationAlertAdapter: InboxAdapter = {
   kind: "hrm_qualification_alert",
   async list(ctx: InboxListContext): Promise<InboxItem[]> {
-    if (!(await hrmOn(ctx))) return [];
-    if (!(await sourceTableInstalled(HR14_TABLE))) return [];
-    const partyId = await actorPartyId(ctx);
-    if (!partyId) return [];
+    const source = await qualificationAlertSource(ctx);
+    if (!source) return [];
     // The HR-14 read contract: stored valid rows with a dated expiry
     // inside the alert window, through the actor's employments (never a
     // caller-supplied worker). Expired rows sort first — they already
     // refuse gated work.
     const rows = (await db.execute<AlertRow>(sql`
       select q.id::text as id, t.name as name, q.expires_on::text as expiry_on
-        from public.hrm_worker_qualifications q
-        join public.worker_employments e
-          on e.org_id = q.org_id and e.id = q.employment_id
-        join public.hrm_qualification_types t
-          on t.org_id = q.org_id and t.id = q.type_id
-       where q.org_id = ${ctx.orgId}
-         and e.worker_party_id = ${partyId}
-         and q.status = 'valid'
-         and q.expires_on is not null
-         and q.expires_on <= ${ctx.asOf}::date + 30
+        ${source}
        order by q.expires_on, q.id
        limit 20
     `)).rows;
@@ -76,6 +83,12 @@ export const hrmQualificationAlertAdapter: InboxAdapter = {
         source: { kind: "hrm_worker_qualification", id: row.id },
       } satisfies InboxItem;
     });
+  },
+  async count(ctx: InboxListContext): Promise<number> {
+    const source = await qualificationAlertSource(ctx);
+    if (!source) return 0;
+    const rows = await db.execute<{ n: number }>(sql`select count(*)::int as n ${source}`);
+    return rows.rows[0]?.n ?? 0;
   },
   async act(): Promise<void> {
     throw new Error("qualification renewal happens in the qualifications surface — open it and renew there");
