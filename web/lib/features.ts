@@ -14,6 +14,7 @@ export { FEATURES, FEATURE_BY_KEY, featureEnabled, featureRequirements, type Fea
 export { featureGateLockKey } from '@openbooks/engine/src/organization/org-feature-lock.ts'
 
 import {
+  featureEnabledFromState,
   isFeatureEnabled as readFeatureEnabled,
   orgFeatureState as readOrgFeatureState,
   resolvedFeatureState as readResolvedFeatureState,
@@ -25,8 +26,14 @@ export { subsidiaryFeatureEnabled } from '@openbooks/engine/organization/feature
 // once; actions, route handlers and calls bound to a transaction executor read
 // live, because React's request cache applies only while rendering.
 const renderFeatureState = cache((orgId: string) => readOrgFeatureState(orgId))
-const renderResolvedFeatureState = cache((orgId: string) => readResolvedFeatureState(orgId))
-const renderFeatureEnabled = cache((orgId: string, key: string) => readFeatureEnabled(orgId, key))
+const renderFeatureEnabled = cache(async (orgId: string, key: string) =>
+  featureEnabledFromState(orgId, key, await renderFeatureState(orgId)))
+const renderResolvedFeatureState = cache(async (orgId: string) => {
+  const state = await renderFeatureState(orgId)
+  const multiSubsidiary = await renderFeatureEnabled(orgId, 'multiSubsidiary')
+  const multiCurrency = await renderFeatureEnabled(orgId, 'multiCurrency')
+  return { ...state, multiSubsidiary, multiCurrency }
+})
 
 /** Load the org's feature state (raw overrides; combine with featureEnabled). */
 export async function orgFeatureState(orgId: string, executor?: SqlExecutor): Promise<FeatureState> {
