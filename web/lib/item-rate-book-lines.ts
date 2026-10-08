@@ -2,7 +2,7 @@ import { cmp, normalizeMoney } from '@openbooks/engine/src/money/money.ts'
 import { parseItemRateDecimal } from './item-rate-numerics'
 import { isUuid } from './list-params'
 
-const POLICIES = new Set(['capped_ladder', 'lowest_cost'])
+const POLICIES = new Set(['explicit', 'capped_ladder', 'lowest_cost'])
 const PRESENTATIONS = new Set(['rate_components', 'summary'])
 
 export interface RateBookInputLine {
@@ -25,7 +25,7 @@ export interface ValidRateBookLine {
   unitCode: string
   unitName: string
   baseQuantity: string
-  costRate: string
+  costRate: string | null
   billRate: string
   baseUnit: string
   pricingPolicy: string
@@ -77,7 +77,7 @@ export function validateRateBookLines(input: unknown): { lines: ValidRateBookLin
     keys.add(key)
 
     const parsedQuantity = parseItemRateDecimal(raw.baseQuantity)
-    const parsedCost = parseItemRateDecimal(raw.costRate)
+    const parsedCost = isBlankField(raw.costRate) ? { value: null } : parseItemRateDecimal(raw.costRate)
     const parsedBill = parseItemRateDecimal(raw.billRate)
     const entries = [parsedQuantity, parsedCost, parsedBill]
     if (entries.some((entry) => 'error' in entry && entry.error !== 'too-wide')) {
@@ -94,7 +94,7 @@ export function validateRateBookLines(input: unknown): { lines: ValidRateBookLin
     const baseQuantity = parsedQuantity.value
     const costRate = parsedCost.value
     const billRate = parsedBill.value
-    if (cmp(baseQuantity, '0') <= 0 || cmp(costRate, '0') < 0 || cmp(billRate, '0') < 0) {
+    if (cmp(baseQuantity, '0') <= 0 || (costRate !== null && cmp(costRate, '0') < 0) || cmp(billRate, '0') < 0) {
       return { error: `${row}: base quantities must be positive and rates must be non-negative.` }
     }
 
@@ -123,7 +123,7 @@ export function validateRateBookLines(input: unknown): { lines: ValidRateBookLin
     }
     lines.push({
       rowNumber: position, itemId, unitCode, unitName, baseQuantity,
-      costRate: normalizeMoney(costRate), billRate: normalizeMoney(billRate),
+      costRate: costRate === null ? null : normalizeMoney(costRate), billRate: normalizeMoney(billRate),
       baseUnit, pricingPolicy, invoicePresentation, timeTypeBillRates: {},
     })
   }

@@ -8,7 +8,7 @@ import { useMemo, useRef, useState } from 'react'
 import { useFormatter, useTranslations } from 'next-intl'
 import { Plus, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
-import { Button, Input, Label, SearchSelect, Select, UrlDrawer } from '@openbooks/ui'
+import { Button, FieldHelp, Input, Label, SearchSelect, Select, UrlDrawer } from '@openbooks/ui'
 import { PagedTable, type PagedColumn } from '../../../../../components/paged-table'
 import type { LineGridOption } from '../../../../../components/line-grid'
 import { confirmDialog } from '@/lib/confirm'
@@ -184,12 +184,12 @@ export function RateBookDrawer({
       cell: (line) => <Input className="min-w-24 text-right tabular-nums" inputMode="decimal" value={line.baseQuantity} onChange={(event) => updateLine(line.clientKey, { baseQuantity: event.target.value })} />,
     },
     {
-      key: 'costRate', header: tRates('costRate'), align: 'right',
-      cell: (line) => <Input className="min-w-24 text-right tabular-nums" inputMode="decimal" value={line.costRate} onChange={(event) => updateLine(line.clientKey, { costRate: event.target.value })} />,
+      key: 'costRate', header: <span className="inline-flex items-center gap-1">{tRates('costRate')}<FieldHelp help={tRates('costRateHelp')} /></span>, align: 'right',
+      cell: (line) => <Input className="min-w-24 text-right tabular-nums" inputMode="decimal" value={line.costRate} placeholder="—" aria-label={tRates('costRate')} onChange={(event) => updateLine(line.clientKey, { costRate: event.target.value })} />,
     },
     {
       key: 'billRate', header: tRates('billRate'), align: 'right',
-      cell: (line) => <Input className="min-w-24 text-right tabular-nums" inputMode="decimal" value={line.billRate} onChange={(event) => updateLine(line.clientKey, { billRate: event.target.value })} />,
+      cell: (line) => <Input className="min-w-24 text-right tabular-nums" inputMode="decimal" value={line.billRate} aria-label={tRates('billRate')} onChange={(event) => updateLine(line.clientKey, { billRate: event.target.value })} />,
     },
     {
       key: 'baseUnit', header: tRates('baseUnit'), search: (line) => line.baseUnit,
@@ -199,6 +199,7 @@ export function RateBookDrawer({
       key: 'policy', header: tRates('policy'),
       cell: (line) => (
         <Select className="min-w-40" value={line.pricingPolicy} onChange={(event) => updateLine(line.clientKey, { pricingPolicy: event.target.value })}>
+          <option value="explicit">{tRates('policies.explicit')}</option>
           <option value="capped_ladder">{tRates('policies.capped_ladder')}</option>
           <option value="lowest_cost">{tRates('policies.lowest_cost')}</option>
         </Select>
@@ -342,7 +343,7 @@ function emptyRateBookLine(): RateBookLine {
     unitCode: '',
     unitName: '',
     baseQuantity: '1',
-    costRate: '0',
+    costRate: '',
     billRate: '0',
     baseUnit: '',
     pricingPolicy: 'capped_ladder',

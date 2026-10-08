@@ -188,6 +188,7 @@
       "month": "Mes"
     },
     "policies": {
+      "explicit": "Explícita",
       "capped_ladder": "Escala con topes",
       "lowest_cost": "Combinación de menor costo"
     },
@@ -199,6 +200,7 @@
     "unitName": "Nombre de unidad",
     "baseQuantity": "Cantidad base",
     "costRate": "Tarifa de costo",
+    "costRateHelp": "Déjalo vacío si el costo es desconocido. Introduce 0 solo para un costo cero declarado. La facturación usa su propia tarifa; los cálculos de costo requieren una tarifa configurada.",
     "billRate": "Tarifa de facturación",
     "addUnit": "Agregar unidad tarifaria",
     "saveFailed": "No se pudieron guardar las tarifas",

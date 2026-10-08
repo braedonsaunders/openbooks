@@ -239,6 +239,7 @@
       "month": "Month"
     },
     "policies": {
+      "explicit": "Explicit",
       "capped_ladder": "Capped ladder",
       "lowest_cost": "Lowest-cost combination"
     },
@@ -250,6 +251,7 @@
     "unitName": "Unit name",
     "baseQuantity": "Base quantity",
     "costRate": "Cost rate",
+    "costRateHelp": "Leave blank when cost is unknown. Enter 0 only for a declared zero cost. Billing can use its own rate; calculations requiring cost refuse until it is configured.",
     "billRate": "Bill rate",
     "addUnit": "Add rate unit",
     "saveFailed": "Could not save rates",

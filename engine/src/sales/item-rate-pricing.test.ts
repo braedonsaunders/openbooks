@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { priceCappedLadder, priceLowestCost, priceSelectedRateUnit, type RateTier } from "./item-rate-pricing.ts";
+import { priceItemRate, priceCappedLadder, priceLowestCost, priceSelectedRateUnit, type RateTier } from "./item-rate-pricing.ts";
 
 const threeTier: RateTier[] = [
   { id: "day", unitCode: "day", unitName: "Day", baseQuantity: "1", costRate: "0", billRate: "100" },
@@ -61,4 +61,13 @@ test("fractional package money rounds once without dropping small usage", () => 
   assert.equal(tiny.amount, '0.0100');
   assert.equal(tiny.components.length, 1);
   assert.deepEqual(tiny.components[0]!.quantityRatio, { numerator: '1', denominator: '30000' });
+});
+
+
+test("explicit profiles preserve base-quantity pricing and unknown costs refuse only cost calculation", () => {
+  const billOnly = threeTier.map((tier) => ({ ...tier, costRate: null }));
+  assert.deepEqual(priceItemRate("3", billOnly, "bill", "explicit"), priceCappedLadder("3", billOnly, "bill"));
+  assert.equal(priceSelectedRateUnit("2", billOnly[1]!, "bill").amount, "500.0000");
+  assert.throws(() => priceItemRate("3", billOnly, "cost", "explicit"), /No cost rates are configured/);
+  assert.equal(priceItemRate("3", threeTier, "cost", "explicit").amount, "0.0000");
 });

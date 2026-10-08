@@ -72,3 +72,22 @@ test('a non-object rate line is refused, never skipped', () => {
   assert.ok('error' in result)
   assert.match(result.error, /^Row 1: rate line must be an object/)
 })
+
+
+test('unknown cost remains distinct from a declared zero for explicit rate profiles', () => {
+  for (const costRate of [undefined, null, '', '   ']) {
+    const result = validateRateBookLines([line({ costRate, pricingPolicy: 'explicit' })])
+    assert.ok('lines' in result)
+    assert.equal(result.lines[0]!.costRate, null)
+    assert.equal(result.lines[0]!.billRate, '100.0000')
+    assert.equal(result.lines[0]!.pricingPolicy, 'explicit')
+  }
+  const zero = validateRateBookLines([line({ costRate: '0' })])
+  assert.ok('lines' in zero)
+  assert.equal(zero.lines[0]!.costRate, '0.0000')
+  for (const costRate of ['-0.0001', '1.00001', 'unknown']) {
+    assert.ok('error' in validateRateBookLines([line({ costRate })]))
+  }
+  assert.ok('error' in validateRateBookLines([line({ billRate: '' })]))
+  assert.ok('error' in validateRateBookLines([line({ pricingPolicy: 'unknown' })]))
+})
