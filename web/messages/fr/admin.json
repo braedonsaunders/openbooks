@@ -3403,6 +3403,11 @@
         "singularTitle": "Politique de tranches d'ancienneté",
         "description": "Seuils de jours qui convertissent les jours échus en tranches d'ancienneté, avec dates de validité. Sans politique, les tranches 30/60/90 s'appliquent."
       },
+      "internal-billing": {
+        "title": "Facturation interne",
+        "description": "Règles datées pour la facturation entre services, projets et filiales, et la façon dont chacune reste hors des totaux de l'entreprise.",
+        "singularTitle": "Règle de facturation interne"
+      },
       "schedule-boards": {
         "title": "Tableaux de planification",
         "singularTitle": "Tableau de planification",
@@ -3412,11 +3417,6 @@
         "title": "Codes de planification",
         "singularTitle": "Code de planification",
         "description": "Codes pour affecter un travail qui n’est ni un client ni un projet, comme des journées de formation ou d’atelier, et pour les jours où les personnes ne travaillent pas."
-      },
-      "internal-billing": {
-        "title": "Facturation interne",
-        "description": "Règles datées pour la facturation entre services, projets et filiales, et la façon dont chacune reste hors des totaux de l'entreprise.",
-        "singularTitle": "Règle de facturation interne"
       }
     },
     "fields": {

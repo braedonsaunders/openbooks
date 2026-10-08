@@ -3403,6 +3403,11 @@
         "singularTitle": "Política de antigüedad",
         "description": "Límites de días que convierten los días vencidos en tramos de antigüedad, con fecha de vigencia. Sin política se aplican los tramos 30/60/90."
       },
+      "internal-billing": {
+        "title": "Facturación interna",
+        "description": "Reglas con vigencia para facturar entre departamentos, proyectos y subsidiarias, y cómo cada una queda fuera de los totales de la empresa.",
+        "singularTitle": "Regla de facturación interna"
+      },
       "schedule-boards": {
         "title": "Tableros de planificación",
         "singularTitle": "Tablero de planificación",
@@ -3412,11 +3417,6 @@
         "title": "Códigos de planificación",
         "singularTitle": "Código de planificación",
         "description": "Códigos para asignar trabajo que no corresponde a un cliente ni a un proyecto, como días de formación o de taller, y para los días en que las personas no trabajan."
-      },
-      "internal-billing": {
-        "title": "Facturación interna",
-        "description": "Reglas con vigencia para facturar entre departamentos, proyectos y subsidiarias, y cómo cada una queda fuera de los totales de la empresa.",
-        "singularTitle": "Regla de facturación interna"
       }
     },
     "fields": {

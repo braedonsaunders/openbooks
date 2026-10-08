@@ -155,8 +155,8 @@
     "hrm-benefits-employees": "福利厚生",
     "hrm-benefits-delivery": "給付処理",
     "hrm-training": "研修",
-    "scheduling": "スケジュール管理",
-    "internal-billing": "社内請求"
+    "internal-billing": "社内請求",
+    "scheduling": "スケジュール管理"
   },
   "groups": {
     "workforce": "従業員体制",

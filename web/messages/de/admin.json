@@ -3531,6 +3531,11 @@
         "singularTitle": "Altersstufe",
         "description": "Tagesgrenzen, die aus Überfälligkeitstagen Altersstufen machen, mit Gültigkeitsdatum. Ohne Richtlinie gelten die Stufen 30/60/90."
       },
+      "internal-billing": {
+        "title": "Interne Verrechnung",
+        "description": "Zeitlich gültige Regeln für Verrechnungen zwischen Abteilungen, Projekten und Tochtergesellschaften und wie jede aus den Unternehmenssummen herausgehalten wird.",
+        "singularTitle": "Regel für interne Verrechnung"
+      },
       "schedule-boards": {
         "title": "Plantafeln",
         "singularTitle": "Plantafel",
@@ -3540,11 +3545,6 @@
         "title": "Plancodes",
         "singularTitle": "Plancode",
         "description": "Codes für Arbeit, die keinem Kunden oder Projekt zugeordnet ist, etwa Schulungs- oder Werkstatttage, sowie für Tage, an denen Personen nicht arbeiten."
-      },
-      "internal-billing": {
-        "title": "Interne Verrechnung",
-        "description": "Zeitlich gültige Regeln für Verrechnungen zwischen Abteilungen, Projekten und Tochtergesellschaften und wie jede aus den Unternehmenssummen herausgehalten wird.",
-        "singularTitle": "Regel für interne Verrechnung"
       }
     },
     "fields": {

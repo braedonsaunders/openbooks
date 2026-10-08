@@ -3478,6 +3478,11 @@
         "singularTitle": "Política de faixas de vencimento",
         "description": "Limites de dias que convertem dias em atraso em faixas de vencimento, com vigência. Sem política, aplicam-se as faixas 30/60/90."
       },
+      "internal-billing": {
+        "title": "Faturamento interno",
+        "description": "Regras com vigência para faturar entre departamentos, projetos e subsidiárias, e como cada uma fica fora dos totais da empresa.",
+        "singularTitle": "Regra de faturamento interno"
+      },
       "schedule-boards": {
         "title": "Quadros de programação",
         "singularTitle": "Quadro de programação",
@@ -3487,11 +3492,6 @@
         "title": "Códigos de programação",
         "singularTitle": "Código de programação",
         "description": "Códigos para alocar trabalhos que não são de um cliente nem de um projeto, como dias de treinamento ou de oficina, e para dias em que as pessoas não trabalham."
-      },
-      "internal-billing": {
-        "title": "Faturamento interno",
-        "description": "Regras com vigência para faturar entre departamentos, projetos e subsidiárias, e como cada uma fica fora dos totais da empresa.",
-        "singularTitle": "Regra de faturamento interno"
       }
     },
     "fields": {

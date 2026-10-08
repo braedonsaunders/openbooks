@@ -155,8 +155,8 @@
     "hrm-benefits-employees": "福利",
     "hrm-benefits-delivery": "发放",
     "hrm-training": "培训",
-    "scheduling": "排程",
-    "internal-billing": "内部计费"
+    "internal-billing": "内部计费",
+    "scheduling": "排程"
   },
   "groups": {
     "workforce": "员工队伍",

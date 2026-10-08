@@ -3478,6 +3478,11 @@
         "singularTitle": "Aging bucket policy",
         "description": "Day boundaries that turn days-past-due into aging buckets, effective-dated. Without a policy the 30/60/90 buckets apply."
       },
+      "internal-billing": {
+        "title": "Internal billing",
+        "description": "Effective-dated rules for billing between departments, projects and subsidiaries, and how each stays out of company totals.",
+        "singularTitle": "Internal billing rule"
+      },
       "schedule-boards": {
         "title": "Schedule boards",
         "singularTitle": "Schedule board",
@@ -3487,11 +3492,6 @@
         "title": "Schedule codes",
         "singularTitle": "Schedule code",
         "description": "Codes for booking work that is not a customer or project, such as training or shop days, and for days people are not working."
-      },
-      "internal-billing": {
-        "title": "Internal billing",
-        "description": "Effective-dated rules for billing between departments, projects and subsidiaries, and how each stays out of company totals.",
-        "singularTitle": "Internal billing rule"
       }
     },
     "fields": {
