@@ -23,6 +23,7 @@ const { act } = await import('react')
 const { NextIntlClientProvider } = await import('next-intl')
 const messages = (await import('../../../../messages/en')).default
 const { MoneyProvider } = await import('../../../../components/money-provider')
+const { BusinessDateProvider } = await import('../../../../components/business-date-provider')
 const { Toaster } = await import('sonner')
 const { renderToStaticMarkup } = await import('react-dom/server')
 const { TrueCostView } = await import('./TrueCostView')
@@ -215,7 +216,7 @@ test('the bounded Setup payload retains every native editor body and composite r
     'the serialized Setup boundary must omit the unused employee population')
   const render = (ui: ReactElement) => renderToStaticMarkup(
     <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
-      <MoneyProvider currency="USD">{ui}</MoneyProvider>
+      <MoneyProvider currency="USD"><BusinessDateProvider today="2026-07-31">{ui}</BusinessDateProvider></MoneyProvider>
     </NextIntlClientProvider>,
   )
   for (const refused of [false, true]) {
