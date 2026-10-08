@@ -179,6 +179,16 @@ export const NAV_MODULES: NavModule[] = [
     requiredPermission: 'parties.read',
   },
   {
+    key: 'pre-billing',
+    href: '/projects/pre-billing',
+    label: 'Pre-billing',
+    iconKey: 'clipboard-check',
+    group: 'customers',
+    subgroup: 'sell-collect',
+    requiredPermission: 'projects.read',
+    featureKey: 'preBilling',
+  },
+  {
     key: 'estimates',
     href: '/estimates',
     label: 'Estimates',
@@ -725,16 +735,6 @@ export const NAV_MODULES: NavModule[] = [
     group: 'hrm',
     subgroup: 'workforce',
     requiredPermission: 'parties.read',
-  },
-  {
-    key: 'pre-billing',
-    href: '/projects/pre-billing',
-    label: 'Pre-billing',
-    iconKey: 'clipboard-check',
-    group: 'operations',
-    subgroup: 'delivery',
-    requiredPermission: 'projects.read',
-    featureKey: 'preBilling',
   },
   {
     key: 'timesheets',
