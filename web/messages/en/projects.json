@@ -394,7 +394,8 @@
     },
     "board": {
       "aria": "Pre-billing stages",
-      "showAll": "Show all {count}"
+      "showAll": "Show all {count}",
+      "closedSummary": "Showing the latest {shown} of {count}. The table includes every match."
     },
     "stages": {
       "unbilled": "To prebill",
@@ -415,7 +416,8 @@
       "customer": "Prebills the customer is reviewing appear here.",
       "invoiced": "Invoices waiting to be posted or sent appear here.",
       "sent": "Delivered invoices awaiting payment appear here.",
-      "paid": "Paid invoices appear here."
+      "paid": "Paid invoices appear here.",
+      "void": "Voided worksheets and invoices appear here."
     },
     "card": {
       "oldest": "Oldest work {days, plural, one {# day} other {# days}} ago",
@@ -443,7 +445,9 @@
       "period": "Period",
       "stage": "Stage",
       "amount": "Amount",
-      "openBalance": "Open balance"
+      "openBalance": "Open balance",
+      "scope": "To prebill rows are projects; other rows are worksheets. Counts and totals follow the search. All open excludes Paid and Void.",
+      "total": "Total matching work"
     },
     "billRun": {
       "title": "Bill run",

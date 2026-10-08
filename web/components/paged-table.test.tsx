@@ -301,3 +301,37 @@ test("a button-role record row opens from its cells and keyboard without treatin
     host.remove();
   }
 });
+
+test('row interactivity scopes click and keyboard opens without changing the default table contract', async (t) => {
+  const host = document.createElement('div')
+  document.body.appendChild(host)
+  const root = createRoot(host)
+  const opened: string[] = []
+  t.after(async () => { await act(async () => root.unmount()); host.remove() })
+  await act(async () => {
+    root.render(<NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
+      <PagedTable source="projects_prebills"
+        rows={[{ id: 'readonly', name: 'Unbilled project' }, { id: 'open', name: 'Worksheet' }]}
+        columns={[{ key: 'name', header: 'Work', cell: (row) => row.name }]}
+        rowKey={(row) => row.id} empty="Empty"
+        onRowClick={(row) => opened.push(row.id)} rowInteractive={(row) => row.id === 'open'} />
+    </NextIntlClientProvider>)
+    await tick()
+  })
+  const rows = host.querySelectorAll<HTMLTableRowElement>('tbody tr')
+  assert.equal(rows[0]!.getAttribute('tabindex'), null)
+  assert.equal(rows[0]!.getAttribute('role'), null)
+  assert.equal(rows[1]!.getAttribute('tabindex'), '0')
+  await act(async () => {
+    rows[0]!.click()
+    rows[0]!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+    await tick()
+  })
+  assert.deepEqual(opened, [])
+  await act(async () => {
+    rows[1]!.click()
+    rows[1]!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+    await tick()
+  })
+  assert.deepEqual(opened, ['open', 'open'])
+})

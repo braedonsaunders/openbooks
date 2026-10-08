@@ -394,7 +394,8 @@
     },
     "board": {
       "aria": "Phasen der Vorabrechnung",
-      "showAll": "Alle {count} anzeigen"
+      "showAll": "Alle {count} anzeigen",
+      "closedSummary": "Die neuesten {shown} von {count} werden angezeigt. Die Tabelle enthält alle Treffer."
     },
     "stages": {
       "unbilled": "Vorabzurechnen",
@@ -415,7 +416,8 @@
       "customer": "Vorabrechnungen, die der Kunde prüft, erscheinen hier.",
       "invoiced": "Rechnungen, die gebucht oder versendet werden müssen, erscheinen hier.",
       "sent": "Versendete Rechnungen, die auf Zahlung warten, erscheinen hier.",
-      "paid": "Bezahlte Rechnungen erscheinen hier."
+      "paid": "Bezahlte Rechnungen erscheinen hier.",
+      "void": "Stornierte Arbeitsblätter und Rechnungen erscheinen hier."
     },
     "card": {
       "oldest": "Älteste Leistung vor {days, plural, one {# Tag} other {# Tagen}}",
@@ -443,7 +445,9 @@
       "period": "Zeitraum",
       "stage": "Phase",
       "amount": "Betrag",
-      "openBalance": "Offener Betrag"
+      "openBalance": "Offener Betrag",
+      "scope": "Zu fakturierende Zeilen sind Projekte; andere Zeilen sind Arbeitsblätter. Anzahlen und Summen folgen der Suche. Alle offenen schließt Bezahlt und Storniert aus.",
+      "total": "Summe der passenden Arbeit"
     },
     "billRun": {
       "title": "Abrechnungslauf",

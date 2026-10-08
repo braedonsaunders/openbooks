@@ -394,7 +394,8 @@
     },
     "board": {
       "aria": "Etapas de prefacturación",
-      "showAll": "Ver las {count}"
+      "showAll": "Ver las {count}",
+      "closedSummary": "Se muestran los últimos {shown} de {count}. La tabla incluye todas las coincidencias."
     },
     "stages": {
       "unbilled": "Por prefacturar",
@@ -415,7 +416,8 @@
       "customer": "Las prefacturas que el cliente está revisando aparecen aquí.",
       "invoiced": "Las facturas pendientes de contabilizar o enviar aparecen aquí.",
       "sent": "Las facturas enviadas pendientes de pago aparecen aquí.",
-      "paid": "Las facturas pagadas aparecen aquí."
+      "paid": "Las facturas pagadas aparecen aquí.",
+      "void": "Aquí aparecen las hojas y facturas anuladas."
     },
     "card": {
       "oldest": "Trabajo más antiguo hace {days, plural, one {# día} other {# días}}",
@@ -443,7 +445,9 @@
       "period": "Periodo",
       "stage": "Etapa",
       "amount": "Importe",
-      "openBalance": "Saldo pendiente"
+      "openBalance": "Saldo pendiente",
+      "scope": "Las filas pendientes de prefacturación son proyectos; las demás son hojas de trabajo. Los recuentos y totales siguen la búsqueda. Todos los abiertos excluye Pagado y Anulado.",
+      "total": "Total del trabajo coincidente"
     },
     "billRun": {
       "title": "Ciclo de facturación",

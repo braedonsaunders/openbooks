@@ -53,6 +53,7 @@ export function PagedTable<T>({
   rowLabel,
   rowRole,
   rowSelected,
+  rowInteractive,
   contained = false,
   resetPageKey,
 }: {
@@ -86,6 +87,8 @@ export function PagedTable<T>({
   rowLabel?: (row: T) => string
   rowRole?: 'link' | 'button'
   rowSelected?: (row: T) => boolean
+  /** Only actionable rows receive click and keyboard-open behavior. */
+  rowInteractive?: (row: T) => boolean
   contained?: boolean
   /** Sorting changes restart paging without discarding the search query. */
   resetPageKey?: string
@@ -202,6 +205,7 @@ export function PagedTable<T>({
         rowLabel={rowLabel}
         rowRole={rowRole}
         rowSelected={rowSelected}
+        rowInteractive={rowInteractive}
         selectionHeader={
           selection ? (
             <TableHead className="w-10">
