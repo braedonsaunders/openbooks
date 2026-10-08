@@ -103,11 +103,11 @@ test('every workflow selection and view round-trip retain ordered Kanban cards a
   const screen = await mount({ prebills: populatedWorksheets() })
   t.after(screen.close)
   assert.deepEqual(tabs(screen.host).map((tab) => tab.textContent?.trim()), stageLabels.map((label) => `${label}1`))
-  const originalColumns = lanes(screen.host)
   for (const [stage, label] of stages) {
+    const columnsBeforeSelection = lanes(screen.host)
     await click(stageTab(screen.host, stage))
     assertBoard(screen.host, stage)
-    assert.deepEqual(lanes(screen.host), originalColumns, 'stage selection preserves the full Kanban composition')
+    lanes(screen.host).forEach((column, index) => assert.equal(column, columnsBeforeSelection[index], 'stage selection preserves its mounted Kanban column'))
     assert.equal(screen.host.querySelectorAll('[role="listitem"] article').length, 1)
     assert.equal(screen.host.querySelectorAll('[role="listitem"] button').length, 6)
     assert.ok(!screen.host.textContent?.includes('PB-paid') && !screen.host.textContent?.includes('PB-void'))
