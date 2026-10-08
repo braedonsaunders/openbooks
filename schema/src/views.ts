@@ -1,11 +1,12 @@
-import { index, jsonb, pgTable, text, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import { check, index, jsonb, pgTable, text, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 import { auditColumns, id, orgRef } from "./helpers";
 
 /**
  * Views — the source platform Saved Search analogue, under the Knowledge menu. A view
  * is a named, shareable query over the same entity catalog as
  * @openbooks/reports (ledger_lines, documents, parties, accounts): detail rows
- * OR a grouped summary, with a nested and/or filter tree, sort, and a row cap.
+ * OR a grouped summary, with a nested and/or filter tree, ordered sorts, and a row cap.
  * The query plan is THE SAME ReportCustomQuery type the report studio stores —
  * executed by the SAME compiler/executor (runCustomQuery) — so views and custom
  * reports share one proven, injection-safe query engine instead of a duplicate.
@@ -34,7 +35,7 @@ export const savedViews = pgTable(
     description: text("description"),
     /**
      * The ReportCustomQuery plan (@openbooks/reports types.ts): entity, mode,
-     * columns, breakouts, measures, filters (nested and/or tree), sort, limit.
+     * columns, breakouts, measures, filters (nested and/or tree), sorts, limit.
      * Validated by validateCustomQuery on every write.
      */
     query: jsonb("query").$type<Record<string, unknown>>().notNull(),
@@ -55,6 +56,7 @@ export const savedViews = pgTable(
     ...auditColumns,
   },
   (t) => [
+    check("saved_views_canonical_sort_model", sql`jsonb_typeof(${t.query}) = 'object' and not (${t.query} ? 'sort') and (not (${t.query} ? 'sorts') or jsonb_typeof(${t.query}->'sorts') = 'array')`),
     uniqueIndex("saved_views_org_slug").on(t.orgId, t.slug),
     index("saved_views_org_scope").on(t.orgId, t.scope),
     index("saved_views_org_owner").on(t.orgId, t.ownerId),
