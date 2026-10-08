@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { SCHEDULING_ENTITIES, validateScheduleBoardWrite, validateScheduleCodeWrite } from './scheduling'
+import { SCHEDULING_ENTITIES } from './scheduling'
 
 test('board settings descriptors can cross the server/client boundary without executable hooks', () => {
   function assertSerializable(value: unknown): void {
@@ -9,6 +9,4 @@ test('board settings descriptors can cross the server/client boundary without ex
   }
   assertSerializable(SCHEDULING_ENTITIES)
   assert.deepEqual(JSON.parse(JSON.stringify(SCHEDULING_ENTITIES)), SCHEDULING_ENTITIES)
-  assert.equal(typeof validateScheduleBoardWrite, 'function')
-  assert.equal(typeof validateScheduleCodeWrite, 'function')
 })
