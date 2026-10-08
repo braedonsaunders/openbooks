@@ -16,9 +16,10 @@ import { componentYearToDate as openingComponentYtd } from "./opening-balances.t
 import { loadActiveDerivedRules, resolveDerivedEarnings } from "./derived-earnings.ts";
 import { entitlementMoneyValue, planMovementsForStub, type EntitlementPlan, type EntitlementWarning } from "./entitlements.ts";
 import { applyBasisCaps } from "./limits.ts";
-import { divideMoney, allocateProportionally } from "./run-allocation.ts";
+import { allocateProportionally } from "./run-allocation.ts";
 import { type Line, programApplicabilityFromExclusions, statutoryHolidayLinesForStub, earningsBase, totalHours, earningJobBuckets, cappableHourLines, resolveEarningExpenseAccount } from "./run-stub-records.ts";
 import { resolvePayRate } from "./run-calculation-support.ts";
+import { payrollHourlyWage, salaryPeriodPay } from "./rate.ts";
 import { assignmentCoveredDays, assignmentCoversPeriod } from "./assignment-windows.ts";
 import { assertComponentServiceEligibility } from "./entitlements-component-eligibility.ts";
 import { assertBankDepositAdjustment } from "./run-bank-input.ts";
@@ -46,20 +47,17 @@ export async function appendPeriodicEarnings(
     // no periodic earnings — adjustments (bonus) or settled retro differences
     // (retro, immediately below) carry the whole cheque
   } else if (emp.pay_basis === "salary") {
-    // Exact annual ÷ periods, rounded once (see divideMoney).
-    const periodSalary = divideMoney(payRate!.rate, String(P), 2);
+    // Exact annual amount ÷ periods, rounded once (see salaryPeriodPay).
+    const periodSalary = salaryPeriodPay(payRate!, P);
     lines.push({
       componentId: baseComponent.id as string, kind: "earning", description: "Salary",
       amount: periodSalary, sequence: 10,
       programApplicability: programApplicabilityFromExclusions(baseComponent.program_exclusions),
     });
   } else {
-    // Exact annual ÷ annual hours. This quotient IS the stored four-decimal
-    // hourly wage, so a float reciprocal's error does not wash out — it is
-    // multiplied by every hour on every stub, always the same direction.
-    const hourlyWage = payRate!.basis === "hour"
-      ? payRate!.rate
-      : divideMoney(payRate!.rate, String(payRate!.annualHours), 4);
+    // Exact annual amount ÷ annual hours (see payrollHourlyWage): the
+    // quotient is multiplied by every hour on every stub.
+    const hourlyWage = payrollHourlyWage(payRate!);
     const time = (await tx.execute<{
         id: string; hours: string; worked_on: string; project_id: string | null; department_id: string | null;
         time_type_id: string | null; item_id: string | null;

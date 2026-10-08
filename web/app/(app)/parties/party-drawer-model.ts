@@ -13,6 +13,7 @@ interface PartyApiRecord {
   kind: string; email: string | null; phone: string | null; website: string | null;
   subsidiary_id: string | null; is_active: boolean; updated_at: string;
   custom: Record<string, unknown> | null; invoicing_preference: InvoicingPref | null
+  photo_file_id?: string | null
 }
 interface CustomerApiRecord {
   is_active: boolean; payment_terms_id: string | null; credit_limit: string | number | null;
@@ -179,7 +180,7 @@ export const serializeContacts = (rows: ContactRow[]) => rows.map((row) => {
  * that named nothing. Here the party owns the whole strip and hands the shell
  * a controlled tab; `overview` is the shell's `details` slot, renamed.
  */
-export type PartyTab = 'overview' | 'invoicing' | 'pricing' | 'billing' | 'paymentMethods' | 'store-credit' | 'debitMandates' | 'transactions' | 'activities' | 'contacts' | 'addresses' | 'accounting' | 'compliance' | 'wages' | 'payroll' | 'benefits' | 'employment' | 'pulse' | 'relationship' | 'external-ids' | 'attachments' | 'audit'
+export type PartyTab = 'overview' | 'invoicing' | 'pricing' | 'billing' | 'paymentMethods' | 'store-credit' | 'debitMandates' | 'transactions' | 'activities' | 'contacts' | 'addresses' | 'accounting' | 'compliance' | 'compensation' | 'payroll' | 'benefits' | 'employment' | 'pulse' | 'relationship' | 'external-ids' | 'attachments' | 'audit'
 
 /** The rail key the shared shell knows the leading tab by. */
 const SHELL_DETAILS_TAB = 'details'

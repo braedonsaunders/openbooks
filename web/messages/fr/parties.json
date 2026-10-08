@@ -52,7 +52,7 @@
       "addresses": "Adresses",
       "accounting": "Comptabilité",
       "compliance": "Conformité",
-      "wages": "Taux de rémunération",
+      "compensation": "Rémunération",
       "invoicing": "Facturation",
       "pricing": "Tarification",
       "payroll": "Paie",
@@ -158,8 +158,13 @@
       "currency": "Devise",
       "basis": "Base",
       "perHour": "Par heure",
+      "perWeek": "Par semaine",
+      "perBiweekly": "Toutes les deux semaines",
+      "perSemimonth": "Deux fois par mois",
+      "perMonth": "Par mois",
       "perYear": "Par année",
       "annualHours": "Heures annuelles",
+      "equivalents": "≈ {hourly} par heure · {annual} par an",
       "effectiveFrom": "En vigueur à partir du",
       "effectiveTo": "En vigueur jusqu’au",
       "add": "Ajouter un taux",
@@ -343,7 +348,143 @@
       "saveFailed": "Échec de l’enregistrement de la classe de conformité.",
       "viewMatrix": "Ouvrir la matrice de conformité"
     },
-    "addActivity": "Ajouter une activité"
+    "addActivity": "Ajouter une activité",
+    "compensation": {
+      "tabs": {
+        "ariaLabel": "Vues de la rémunération",
+        "total": "Rémunération globale",
+        "rates": "Taux de salaire",
+        "variable": "Primes et récompenses"
+      },
+      "employment": "Emploi",
+      "noRate": {
+        "title": "Aucun taux de salaire",
+        "body": "Enregistrez un taux dans l'onglet Taux de salaire pour voir la rémunération globale."
+      },
+      "basis": {
+        "ariaLabel": "Afficher les montants par",
+        "short": {
+          "hour": "Horaire",
+          "week": "Hebdomadaire",
+          "biweekly": "Aux deux semaines",
+          "semimonth": "Bimensuel",
+          "month": "Mensuel",
+          "year": "Annuel"
+        },
+        "per": {
+          "hour": "de l'heure",
+          "week": "par semaine",
+          "biweekly": "aux deux semaines",
+          "semimonth": "deux fois par mois",
+          "month": "par mois",
+          "year": "par an"
+        }
+      },
+      "hero": {
+        "title": "Rémunération globale",
+        "perHour": "{amount} de l'heure, tout compris",
+        "perYear": "{amount} par an, tout compris"
+      },
+      "composition": {
+        "ariaLabel": "Composition de la rémunération globale"
+      },
+      "segments": {
+        "base": "Salaire de base",
+        "variable": "Primes",
+        "retirement": "Retraite",
+        "health": "Santé et assurances",
+        "allowance": "Allocations",
+        "other": "Autres avantages",
+        "statutory": "Charges patronales légales"
+      },
+      "stats": {
+        "base": "Salaire de base",
+        "benefits": "Avantages et allocations",
+        "projected": "Projeté selon les choix actuels",
+        "statutoryAndVariable": "Charges légales et primes",
+        "trailing": "Réel, 12 derniers mois",
+        "payrollOff": "Nécessite la Paie"
+      },
+      "base": {
+        "title": "Salaire de base",
+        "scope": {
+          "employee": "Taux de l'employé",
+          "job_title": "Selon le taux du poste",
+          "trade": "Selon le taux du métier",
+          "department": "Selon le taux du service",
+          "subsidiary": "Selon le taux de la filiale",
+          "org": "Selon le taux de l'entreprise"
+        },
+        "since": "Depuis le {date}",
+        "hoursFromRate": "Converti sur {hours} heures par an, comme convenu pour ce taux",
+        "hoursFromSettings": "Converti sur {hours} heures par an, la norme de l'entreprise",
+        "schedule": "Payé selon {name} ({periods} périodes de paie par an)"
+      },
+      "benefits": {
+        "title": "Avantages et allocations payés par l'employeur",
+        "subtitle": "Projetés sur un an selon les choix actuels et les éléments de paie récurrents",
+        "empty": "Aucun avantage ni allocation payé par l'employeur n'est en vigueur."
+      },
+      "employeePaid": {
+        "title": "Cotisations de l'employé",
+        "subtitle": "Payées par l'employé et non comptées dans la rémunération globale"
+      },
+      "statutory": {
+        "title": "Charges patronales légales",
+        "subtitle": "Réelles selon la paie validée, du {from} au {to}",
+        "empty": "Aucune charge patronale légale payée sur cette période."
+      },
+      "otherCurrency": "Certains montants sont dans une autre devise que {currency} et sont listés sans être ajoutés au total.",
+      "notPriced": "Non évalué",
+      "progression": {
+        "title": "Évolution salariale",
+        "subtitle": "{count, plural, one {# taux} other {# taux}} depuis le {from}",
+        "lastChange": "{percent} % au dernier changement",
+        "ariaLabel": "Salaire annuel au fil du temps"
+      },
+      "history": {
+        "empty": "Aucun taux propre à l'employé pour l'instant.",
+        "window": "Du {from} au {to}",
+        "since": "Depuis le {from}",
+        "equivalent": "{hourly} de l'heure · {annual} par an"
+      },
+      "variable": {
+        "payrollOff": "Les primes proviennent de la paie validée — activez la Paie pour les voir.",
+        "trailing": "Primes, 12 derniers mois",
+        "window": "Depuis le {from}",
+        "payments": "Versements",
+        "paymentsHint": "Au cours des 12 derniers mois",
+        "pending": "Récompenses en cours",
+        "pendingHint": "Pas encore versées",
+        "historyTitle": "Primes et paiements ponctuels",
+        "empty": "Aucune prime ni paiement ponctuel pour l'instant.",
+        "runTypes": {
+          "bonus": "Paie de primes",
+          "supplemental": "Paie supplémentaire",
+          "termination": "Paie de fin d'emploi",
+          "retro": "Paie rétroactive",
+          "other": "Paie hors cycle"
+        },
+        "awardsTitle": "Récompenses",
+        "awardsSubtitle": "Récompenses et incitatifs enregistrés dans Avantages",
+        "awardFallback": "Récompense",
+        "awardStatus": {
+          "delivered": "Versée",
+          "rejected": "Refusée",
+          "pending": "En cours"
+        }
+      }
+    },
+    "photo": {
+      "add": "Ajouter une photo",
+      "change": "Changer la photo",
+      "remove": "Retirer la photo",
+      "removeConfirm": "Retirer cette photo ? Elle reste dans les pièces jointes de la fiche.",
+      "uploadFailed": "Impossible de téléverser la photo",
+      "removeFailed": "Impossible de retirer la photo",
+      "updated": "Photo mise à jour",
+      "removed": "Photo retirée"
+    }
   },
   "rateBookAssignments": {
     "title": "Tarification de la main-d’œuvre",

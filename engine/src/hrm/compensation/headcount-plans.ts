@@ -3,6 +3,7 @@ import { isCivilDate } from "../temporal.ts";
 import { sql } from "drizzle-orm";
 import { db, withOrgTransaction } from "../../platform/db.ts";
 import { resolveWage, laborCostingSettings } from "../../projects/labor-costing.ts";
+import { annualPayRate, requirePayRateBasis } from "../../projects/pay-rate-basis.ts";
 import { add, cmp, isZero, mul, mulDecimal, normalizeDecimal, normalizeMoney } from "../../money/money.ts";
 import {
   loadCompensationLens,
@@ -308,6 +309,30 @@ function requirePositionPlanFactsMatch(
 }
 
 /**
+ * The incumbent's annual rate from the winning wage row itself: a
+ * time-based row annualizes through its own cadence (a yearly wage is used
+ * verbatim, never divided by annual hours and re-multiplied), an hourly row
+ * through the org's annual hours.
+ */
+async function incumbentAnnualRate(
+  orgId: string,
+  wage: { rateId: string },
+  orgAnnualHours: number,
+): Promise<string> {
+  const row = (await db.execute<{ rate: string; basis: string }>(sql`
+    select rate::text as rate, basis
+      from labor_cost_rates
+     where org_id = ${orgId} and id = ${wage.rateId}`)).rows[0];
+  if (!row) {
+    throw new CompensationError(
+      "STALE_REVISION",
+      "the incumbent's wage rate moved while the line was costed — cost the line again; nothing was saved",
+    );
+  }
+  return annualPayRate(row.rate, requirePayRateBasis(row.basis), String(orgAnnualHours));
+}
+
+/**
  * Cost one line: the band target for the line's level scope (or the
  * incumbent payroll-side rate when no band covers it), scaled by
  * planned FTE, loaded with burden. Every input lands in cost_basis.
@@ -366,7 +391,7 @@ async function costLine(
         );
       }
       basis = "incumbent_rate";
-      annualTarget = mul(wage.wage, String(settings.annualHours));
+      annualTarget = await incumbentAnnualRate(orgId, wage, settings.annualHours);
     } else {
       throw new CompensationError(
         "REFUSED",
@@ -387,7 +412,7 @@ async function costLine(
       );
     }
     basis = "incumbent_rate";
-    annualTarget = mul(wage.wage, String(settings.annualHours));
+    annualTarget = await incumbentAnnualRate(orgId, wage, settings.annualHours);
   } else {
     throw new CompensationError(
       "REFUSED",

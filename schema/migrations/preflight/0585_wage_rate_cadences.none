@@ -1,0 +1,1 @@
+This migration only widens the labor_cost_rates basis check constraint; every existing row is hour or year and already satisfies the new constraint, so no data is read, rewritten or at risk.

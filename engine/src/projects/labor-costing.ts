@@ -23,6 +23,7 @@ import {
   recognitionAccounts,
   reverseProjectGlEntryWithinTransaction,
 } from "./recognition.ts";
+import { hourlyPayRate, requirePayRateBasis, type PayRateBasis } from "./pay-rate-basis.ts";
 
 export class LaborCostingFeatureDisabledError extends Error {
   constructor() {
@@ -252,7 +253,7 @@ export async function laborCostingSettingsInTx(
 }
 
 export interface ResolvedWage {
-  /** Hourly wage (annual rates already divided by annualHours). */
+  /** Hourly wage (time-based rates already converted through annual hours). */
   wage: string;
   currency: string;
   scope:
@@ -266,11 +267,12 @@ export interface ResolvedWage {
  * within a scope the latest effective_from ≤ workedOn wins. Returns null when
  * no rate covers the date.
  *
- * A year-basis winning row annualizes through its own annual_hours; only
+ * A time-based winning row (weekly, biweekly, semimonthly, monthly or
+ * yearly) converts to an hourly wage through its own annual_hours; only
  * when that stored value is missing or non-positive does the caller's
  * `annualHoursDefault` apply — and it must be the org's labor-costing
  * `settings.annualHours`, passed explicitly. There is no literal fallback:
- * an assumed divisor would price every yearly rate it touches.
+ * an assumed divisor would price every time-based rate it touches.
  */
 export async function resolveWage(
   orgId: string,
@@ -351,15 +353,17 @@ export async function resolveWage(
      limit 1`));
   const row = r.rows[0];
   if (!row) return null;
+  const basis = requirePayRateBasis(row.basis);
   const wage =
-    row.basis === "year"
-      ? div(
+    basis === "hour"
+      ? String(row.rate)
+      : hourlyPayRate(
           String(row.rate),
+          basis,
           cmp(String(row.annual_hours), "0") > 0
             ? String(row.annual_hours)
             : String(opts.annualHoursDefault),
-        )
-      : String(row.rate);
+        );
   return { wage, currency: row.currency, scope: row.scope, rateId: row.id };
 }
 
@@ -368,10 +372,11 @@ export async function resolveWage(
  * each employee's winning `labor_cost_rates.annual_hours` under the same
  * scope priority `resolveWage` uses (employee > job title > trade >
  * department > subsidiary > org; latest effective_from wins) — among
- * `basis = 'year'` rows only. Hourly rows carry the column default, not a
- * measured divisor, so they never resolve: employees covered only by
- * hourly rows — or by no row at all — are absent from the map, and the
- * caller refuses by name when nothing resolves instead of assuming 2080.
+ * time-based rows only (every basis except `hour`), whose annual hours are
+ * the divisor their wage converts through. Hourly rows carry the column
+ * default, not a measured divisor, so they never resolve: employees covered
+ * only by hourly rows — or by no row at all — are absent from the map, and
+ * the caller refuses by name when nothing resolves instead of assuming 2080.
  */
 export async function resolveAnnualHoursMany(
   orgId: string,
@@ -388,7 +393,7 @@ export async function resolveAnnualHoursMany(
                    from employee_roles where org_id = ${orgId}) er on er.party_id = emp.id
       left join parties p on p.org_id = ${orgId} and p.id = emp.id
       left join labor_cost_rates r on r.org_id = ${orgId} and r.is_active
-        and r.basis = 'year'
+        and r.basis <> 'hour'
         and r.effective_from <= ${onDate}::date
         and (r.effective_to is null or r.effective_to >= ${onDate}::date)
         and (r.employee_party_id = emp.id
@@ -417,11 +422,11 @@ export interface StandardLaborRate {
   rateId: string;
   /** The winning row's effective_from (YYYY-MM-DD). */
   effectiveFrom: string;
-  /** The stored rate, raw: annual when basis is "year" (the caller divides
-   * by annualHours), hourly otherwise. Never pre-converted here. */
+  /** The stored rate, raw, in its own basis (the caller converts a
+   * time-based rate through annualHours). Never pre-converted here. */
   rate: string;
   currency: string;
-  basis: "hour" | "year";
+  basis: PayRateBasis;
   annualHours: string;
   scope: "department" | "subsidiary" | "org";
 }
@@ -513,7 +518,7 @@ export async function resolveStandardLaborRateInTx(
     effectiveFrom: String(row.effective_from).slice(0, 10),
     rate: String(row.rate),
     currency: row.currency,
-    basis: row.basis === "year" ? "year" : "hour",
+    basis: requirePayRateBasis(row.basis),
     annualHours: String(row.annual_hours),
     scope: row.scope,
   };

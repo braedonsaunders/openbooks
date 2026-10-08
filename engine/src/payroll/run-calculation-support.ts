@@ -12,6 +12,7 @@ import { db } from "../platform/db.ts";
 import { PayrollError } from "./error.ts";
 import { type StoredCertificate } from "./certificates.ts";
 import { effectivePayRateSql } from "./rate.ts";
+import { requirePayRateBasis, type PayRateBasis } from "../projects/pay-rate-basis.ts";
 import { convertLaborWage } from "../projects/labor-costing.ts";
 import { type EntitlementWarning } from "./entitlements.ts";
 export interface StubComputation {
@@ -182,9 +183,9 @@ export async function resolvePayRate(
   tx: Pick<typeof db, "execute">, orgId: string, employeePartyId: string, onDate: string,
   /** Functional currency of the run (the run document's currency). */
   payCurrency: string | null,
-): Promise<{ basis: "hour" | "year"; rate: string; annualHours: string; currency: string } | null> {
+): Promise<{ basis: PayRateBasis; rate: string; annualHours: string; currency: string } | null> {
   const r = (await tx.execute<{
-      id: string; basis: "hour" | "year"; rate: string;
+      id: string; basis: string; rate: string;
       annual_hours: string; currency: string;
     }>(sql`
     select * from ${effectivePayRateSql({
@@ -201,7 +202,7 @@ export async function resolvePayRate(
   // waits behind this row or raises a serialization failure; it can never
   // produce a stub from one version and fingerprint another.
   const locked = (await tx.execute<{
-      basis: "hour" | "year"; rate: string; annual_hours: string; currency: string;
+      basis: string; rate: string; annual_hours: string; currency: string;
     }>(sql`
     select basis, rate::text as rate, annual_hours::text as annual_hours, currency
       from labor_cost_rates
@@ -211,7 +212,7 @@ export async function resolvePayRate(
   const row = locked.rows[0];
   if (!row) return null;
   const resolved = {
-    basis: row.basis, rate: row.rate, annualHours: row.annual_hours, currency: row.currency,
+    basis: requirePayRateBasis(row.basis), rate: row.rate, annualHours: row.annual_hours, currency: row.currency,
   };
   if (!payCurrency || !row.currency || row.currency === payCurrency) return resolved;
 

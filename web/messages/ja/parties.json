@@ -55,7 +55,7 @@
       "addresses": "住所",
       "accounting": "会計",
       "compliance": "コンプライアンス",
-      "wages": "賃金レート",
+      "compensation": "報酬",
       "invoicing": "請求",
       "pricing": "価格",
       "payroll": "給与",
@@ -161,8 +161,13 @@
       "currency": "通貨",
       "basis": "基準",
       "perHour": "時給",
+      "perWeek": "週給",
+      "perBiweekly": "隔週給",
+      "perSemimonth": "月2回払い",
+      "perMonth": "月給",
       "perYear": "年給",
       "annualHours": "年間労働時間",
+      "equivalents": "≈ 時給 {hourly} · 年額 {annual}",
       "effectiveFrom": "発効日",
       "effectiveTo": "終了日",
       "add": "レートを追加",
@@ -343,7 +348,143 @@
     "workerCompGroup": "労災グループ",
     "customForm": "レコードフォーム",
     "manageForms": "レコードフォームをカスタマイズ",
-    "addActivity": "アクティビティを追加"
+    "addActivity": "アクティビティを追加",
+    "compensation": {
+      "tabs": {
+        "ariaLabel": "報酬ビュー",
+        "total": "総報酬",
+        "rates": "賃金レート",
+        "variable": "賞与・表彰"
+      },
+      "employment": "雇用",
+      "noRate": {
+        "title": "賃金レートがまだありません",
+        "body": "総報酬を表示するには、[賃金レート] タブでレートを登録してください。"
+      },
+      "basis": {
+        "ariaLabel": "金額の表示単位",
+        "short": {
+          "hour": "時給",
+          "week": "週給",
+          "biweekly": "隔週",
+          "semimonth": "半月",
+          "month": "月給",
+          "year": "年額"
+        },
+        "per": {
+          "hour": "/時間",
+          "week": "/週",
+          "biweekly": "/2週間",
+          "semimonth": "/半月",
+          "month": "/月",
+          "year": "/年"
+        }
+      },
+      "hero": {
+        "title": "総報酬",
+        "perHour": "すべて込みで 1 時間あたり {amount}",
+        "perYear": "すべて込みで年間 {amount}"
+      },
+      "composition": {
+        "ariaLabel": "総報酬の内訳"
+      },
+      "segments": {
+        "base": "基本給",
+        "variable": "賞与",
+        "retirement": "退職給付",
+        "health": "健康・保険",
+        "allowance": "手当",
+        "other": "その他の福利厚生",
+        "statutory": "法定事業主負担"
+      },
+      "stats": {
+        "base": "基本給",
+        "benefits": "福利厚生・手当",
+        "projected": "現在の選択内容からの見込み",
+        "statutoryAndVariable": "法定負担と賞与",
+        "trailing": "実績（過去 12 か月）",
+        "payrollOff": "給与計算が必要です"
+      },
+      "base": {
+        "title": "基本給",
+        "scope": {
+          "employee": "従業員個別レート",
+          "job_title": "職名のレートを適用",
+          "trade": "職種のレートを適用",
+          "department": "部門のレートを適用",
+          "subsidiary": "子会社のレートを適用",
+          "org": "会社のレートを適用"
+        },
+        "since": "{date} から",
+        "hoursFromRate": "このレートで合意した年間 {hours} 時間で換算",
+        "hoursFromSettings": "会社標準の年間 {hours} 時間で換算",
+        "schedule": "{name} で支給（年 {periods} 回）"
+      },
+      "benefits": {
+        "title": "事業主負担の福利厚生・手当",
+        "subtitle": "現在の選択内容と定期支給項目から 1 年分を見込み",
+        "empty": "適用中の事業主負担の福利厚生・手当はありません。"
+      },
+      "employeePaid": {
+        "title": "従業員の拠出",
+        "subtitle": "従業員が負担し、総報酬には含めません"
+      },
+      "statutory": {
+        "title": "法定事業主負担",
+        "subtitle": "確定済み給与の実績（{from}～{to}）",
+        "empty": "この期間に法定事業主負担の支払いはありません。"
+      },
+      "otherCurrency": "{currency} 以外の通貨の金額は一覧に表示されますが、合計には含めません。",
+      "notPriced": "算定不可",
+      "progression": {
+        "title": "給与の推移",
+        "subtitle": "{from} 以降 {count, plural, other {# 件のレート}}",
+        "lastChange": "前回の改定で {percent}%",
+        "ariaLabel": "年間給与の推移"
+      },
+      "history": {
+        "empty": "従業員個別の賃金レートはまだありません。",
+        "window": "{from}～{to}",
+        "since": "{from} から",
+        "equivalent": "時間あたり {hourly} · 年間 {annual}"
+      },
+      "variable": {
+        "payrollOff": "賞与は確定済みの給与から読み取ります。表示するには給与計算を有効にしてください。",
+        "trailing": "賞与（過去 12 か月）",
+        "window": "{from} 以降",
+        "payments": "支払回数",
+        "paymentsHint": "過去 12 か月",
+        "pending": "進行中の表彰",
+        "pendingHint": "未支給",
+        "historyTitle": "賞与・一時金",
+        "empty": "賞与や一時金の支払いはまだありません。",
+        "runTypes": {
+          "bonus": "賞与計算",
+          "supplemental": "追加計算",
+          "termination": "退職時計算",
+          "retro": "遡及計算",
+          "other": "臨時計算"
+        },
+        "awardsTitle": "表彰",
+        "awardsSubtitle": "福利厚生に記録された報奨・インセンティブ",
+        "awardFallback": "表彰",
+        "awardStatus": {
+          "delivered": "支給済み",
+          "rejected": "却下",
+          "pending": "進行中"
+        }
+      }
+    },
+    "photo": {
+      "add": "写真を追加",
+      "change": "写真を変更",
+      "remove": "写真を削除",
+      "removeConfirm": "この写真を削除しますか？レコードの添付ファイルには残ります。",
+      "uploadFailed": "写真をアップロードできませんでした",
+      "removeFailed": "写真を削除できませんでした",
+      "updated": "写真を更新しました",
+      "removed": "写真を削除しました"
+    }
   },
   "rateBookAssignments": {
     "title": "レートブック割当",

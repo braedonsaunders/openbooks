@@ -9,6 +9,16 @@ import { FilterChips } from '../../../../../../components/filter-bar'
 import { formatDecimal } from '../../../../../../lib/money-format'
 import { pickString } from '../../../../../../lib/list-params'
 import type { Authz } from '../../../../../../lib/authz'
+import type { PayRateBasis } from '@openbooks/engine/projects/pay-rate-basis'
+
+const SOURCE_BASIS_LABEL_KEYS: Record<PayRateBasis, string> = {
+  hour: 'hourly',
+  week: 'weekly',
+  biweekly: 'biweekly',
+  semimonth: 'semimonthly',
+  month: 'monthly',
+  year: 'annual',
+}
 
 /** Original employee review evidence is immutable and independent of native payroll actions. */
 export async function SourceCycleWorkspace({ cycle, authz, searchParams }: {
@@ -31,7 +41,7 @@ export async function SourceCycleWorkspace({ cycle, authz, searchParams }: {
       <div className="flex flex-wrap items-center gap-3"><Badge variant="outline">{t('status')}</Badge>
         <span>{t('effectiveDate')}: {cycle.effectiveOn ?? t('unknownDate')}</span>
         {evidence?.recordedOn ? <span>{t('recordedDate')}: {evidence.recordedOn}</span> : null}
-        {evidence ? <span>{evidence.currency} · {t(evidence.basis === 'hour' ? 'hourly' : 'annual')}</span> : null}
+        {evidence ? <span>{evidence.currency} · {t(SOURCE_BASIS_LABEL_KEYS[evidence.basis])}</span> : null}
       </div>
       {evidence ? <p className="text-xs text-slate-500 break-words">{evidence.sourcePath.split('/').at(-1)} · {evidence.sheet} · SHA-256 {evidence.sha256}</p> : null}
     </div>

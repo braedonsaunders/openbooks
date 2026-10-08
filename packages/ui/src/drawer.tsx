@@ -7,7 +7,7 @@ import { useTranslations } from 'next-intl'
 import { useHydrated } from './use-hydrated'
 import { nextDrawerShow, shouldCommitDrawerCloseNavigation } from './drawer-nav'
 import { OverlayExit } from './overlay-exit'
-import { VIEW_SWITCH_TRANSITION, ViewTransition } from './view-transition'
+import { DrawerViewSwitchContext, drawerViewSwitchType, ViewTransition } from './view-transition'
 import { cn } from './utils'
 
 // Z-INDEX SCALE (single source of truth)
@@ -89,6 +89,7 @@ export function Drawer({
   onClose,
   title,
   description,
+  leading,
   size = 'md',
   side = 'right',
   children,
@@ -106,6 +107,8 @@ export function Drawer({
   /** Required accessible name for the dialog, rendered as its heading. */
   title: React.ReactNode
   description?: React.ReactNode
+  /** Shown before the heading — a record's photo or logo. Decorative; the title names the dialog. */
+  leading?: React.ReactNode
   size?: DrawerSize
   side?: DrawerSide
   children: React.ReactNode
@@ -145,6 +148,7 @@ export function Drawer({
     throw new Error('Drawer: a non-empty title is required so the dialog exposes an accessible name.')
   }
   const headingId = React.useId()
+  const viewSwitchType = drawerViewSwitchType(headingId)
 
   // Fullscreen toggle: every flyout can expand to the full viewport (source platform
   // "expand" affordance). Width animates via the max-width transition below;
@@ -248,6 +252,7 @@ export function Drawer({
   // edge. See the off-screen-drawer bug.
   return createPortal(
     <DrawerDepthContext.Provider value={depth}>
+    <DrawerViewSwitchContext.Provider value={viewSwitchType}>
     <AnimatePresence onExitComplete={onExitComplete}>
       {mounted && open ? (
         <OverlayExit key="drawer">
@@ -360,15 +365,18 @@ export function Drawer({
             ) : null}
             {title || description || headerActions ? (
               <header className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3 border-b border-slate-200 px-6 py-4 dark:border-slate-800">
-                <div className="min-w-52 flex-1 space-y-0.5">
-                  {title ? (
-                    <h2 id={headingId} className="truncate text-base font-semibold text-slate-900 dark:text-slate-100">
-                      {title}
-                    </h2>
-                  ) : null}
-                  {description ? (
-                    <p className="text-sm text-slate-500 dark:text-slate-400">{description}</p>
-                  ) : null}
+                <div className="flex min-w-52 flex-1 items-center gap-3">
+                  {leading ? <div className="shrink-0">{leading}</div> : null}
+                  <div className="min-w-0 flex-1 space-y-0.5">
+                    {title ? (
+                      <h2 id={headingId} className="truncate text-base font-semibold text-slate-900 dark:text-slate-100">
+                        {title}
+                      </h2>
+                    ) : null}
+                    {description ? (
+                      <p className="text-sm text-slate-500 dark:text-slate-400">{description}</p>
+                    ) : null}
+                  </div>
                 </div>
                 <div className="flex shrink-0 items-center gap-2">
                   {headerActions ? (
@@ -443,9 +451,11 @@ export function Drawer({
                 {subtabs}
               </div>
             ) : null}
-            {/* Switching tabs inside the drawer animates the body the way a
-                page change animates the page; other updates stay still. */}
-            <ViewTransition default="none" update={{ [VIEW_SWITCH_TRANSITION]: 'drawer-view', default: 'none' }}>
+            {/* Switching tabs inside this drawer animates its body the way a
+                page change animates the page. The switch carries this
+                drawer's own type, so the page and any drawer beneath stay
+                still; other updates stay still too. */}
+            <ViewTransition default="none" update={{ [viewSwitchType]: 'drawer-view', default: 'none' }}>
               <div
                 className={cn(
                   'app-scroll min-h-0 flex-1 text-slate-900 dark:text-slate-100',
@@ -469,6 +479,7 @@ export function Drawer({
         </OverlayExit>
       ) : null}
     </AnimatePresence>
+    </DrawerViewSwitchContext.Provider>
     </DrawerDepthContext.Provider>,
     document.body,
   )
@@ -494,6 +505,7 @@ export function UrlDrawer({
   closeHref,
   title,
   description,
+  leading,
   size,
   children,
   footer,
@@ -515,6 +527,7 @@ export function UrlDrawer({
   /** Required accessible name for the dialog, rendered as its heading. */
   title: React.ReactNode
   description?: React.ReactNode
+  leading?: React.ReactNode
   size?: DrawerSize
   children: React.ReactNode
   footer?: React.ReactNode
@@ -621,6 +634,7 @@ export function UrlDrawer({
       onExitComplete={afterExit}
       title={title}
       description={description}
+      leading={leading}
       size={size}
       footer={footer}
       headerActions={headerActions}

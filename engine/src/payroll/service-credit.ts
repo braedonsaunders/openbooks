@@ -62,9 +62,10 @@ export function meetsServiceYears(credit: EmploymentServiceCredit, minimumYears:
   if (credit.serviceDays.startsWith('-')) return false;
   return units(credit.serviceDays) >= BigInt(minimumYears) * 365n * SCALE;
 }
-export async function resolveEmploymentServiceCredit(executor: Pick<typeof db, 'execute'>, input: { orgId: string; employmentId: string; asOf: string }): Promise<EmploymentServiceCredit | null> {
+/** `lock: false` reads without serializing against configuration writers, for read-only estimates. */
+export async function resolveEmploymentServiceCredit(executor: Pick<typeof db, 'execute'>, input: { orgId: string; employmentId: string; asOf: string; lock?: boolean }): Promise<EmploymentServiceCredit | null> {
   parseIsoDate(input.asOf);
-  await lockPayrollServiceConfiguration(executor, input.orgId);
+  if (input.lock !== false) await lockPayrollServiceConfiguration(executor, input.orgId);
   const rows = await executor.execute<Record<string, unknown>>(sql`
     select c.id, c.convention, c.as_of_date, c.credited_days::text, c.credited_months, c.source_snapshot, e.service_start
     from worker_employments e left join payroll_service_credits c on c.org_id = e.org_id and c.employment_id = e.id

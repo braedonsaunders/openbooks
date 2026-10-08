@@ -192,9 +192,9 @@ export async function loadParties(
     requestedPartyTab === 'paymentMethods' ||
     requestedPartyTab === 'billing' ||
     requestedPartyTab === 'debitMandates' ||
-    requestedPartyTab === 'wages'
+    requestedPartyTab === 'compensation'
       ? requestedPartyTab
-      : 'overview'
+      : requestedPartyTab === 'wages' ? 'compensation' : 'overview'
   const params = parseListParams(sp, {
     sort: 'name',
     dir: 'asc',

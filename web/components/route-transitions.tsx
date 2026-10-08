@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useSyncExternalStore, type ReactNode } from 'react'
 import { usePathname } from 'next/navigation'
-import { VIEW_SWITCH_TRANSITION, ViewTransition, type ViewTransitionClass } from '@openbooks/ui'
+import { DRAWER_VIEW_SWITCH_TRANSITION, VIEW_SWITCH_TRANSITION, ViewTransition, type ViewTransitionClass } from '@openbooks/ui'
 
 /**
  * Navigation motion for the authenticated app, built on React's
@@ -112,11 +112,13 @@ export function RouteTransition({ children }: { children: ReactNode }) {
   // A navigation moves the old page out and the new one (or its
   // placeholder) in; once a placeholder is showing, the page that replaces
   // it rises into place. A view switch on the same page moves like a
-  // navigation. Any other update of the pane stays still.
+  // navigation. A drawer's own view switch — even one that rewrites the
+  // address — leaves the page still: the pane would otherwise be captured
+  // as a layer painted over the drawer. Any other update stays still.
   const update: ViewTransitionClass = hidden
     ? 'none'
     : navigating
-      ? { [REPORT_OPEN_TRANSITION]: 'route-recede', default: 'route-change' }
+      ? { [DRAWER_VIEW_SWITCH_TRANSITION]: 'none', [REPORT_OPEN_TRANSITION]: 'route-recede', default: 'route-change' }
       : revealing ? 'route-reveal' : { [VIEW_SWITCH_TRANSITION]: 'route-change', default: 'none' }
   return (
     <ViewTransition default="none" update={update}>

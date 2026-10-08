@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { allocateDocumentNumber } from "../records/numbering.ts";
-import { add, cmp, div, isZero, mul, neg, normalizeMoney, toUnits, fromUnits } from "../money/money.ts";
+import { add, cmp, isZero, mul, neg, normalizeMoney, toUnits, fromUnits } from "../money/money.ts";
 import type { SqlExecutor } from "../platform/db.ts";
 import { businessTodayInTx } from "../platform/business-date.ts";
 import { loadSubsidiaryContext, SubsidiaryError, type SubsidiaryContext } from "../organization/subsidiaries.ts";
@@ -28,6 +28,7 @@ import { inventoryRequestHash } from "../inventory/action-idempotency.ts";
 import type { Runner } from "../inventory/contracts.ts";
 import { assertInventoryAccountsPostable } from "../inventory/journal.ts";
 import { periodForDate, primaryBookId, subsidiaryCurrency } from "../inventory/position.ts";
+import { hourlyPayRate } from "../projects/pay-rate-basis.ts";
 import { explodeBom } from "./bom-explode.ts";
 import { assertManufacturingFeature } from "./gate.ts";
 import { ManufacturingError, ManufacturingNotFoundError } from "./errors.ts";
@@ -651,9 +652,9 @@ async function resolveOperationLabor(
   if (!wageCurrency) {
     refuse(`Standard labor rate ${rate.rateId} carries an unusable currency.`, "standard_labor_currency_invalid", "Fix the rate's currency in Company Settings → Labor costing.");
   }
-  // Annual source rates stay annual in the frozen evidence; the hourly wage
-  // divides once by the row's own annual-hours evidence.
-  const hourlyWage = rate.basis === "year" ? div(rate.rate, rate.annualHours) : rate.rate;
+  // Time-based source rates stay in their own basis in the frozen evidence;
+  // the hourly wage converts once through the row's own annual-hours evidence.
+  const hourlyWage = hourlyPayRate(rate.rate, rate.basis, rate.annualHours);
   const fxKey = `${wageCurrency}|${functionalCurrency}`;
   let quote = caches.fx.get(fxKey);
   if (quote === undefined) {

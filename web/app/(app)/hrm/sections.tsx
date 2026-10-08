@@ -11,45 +11,13 @@
 import Link from 'next/link'
 import type { ReactNode } from 'react'
 import { cn } from '@openbooks/ui'
+import { PartyAvatar } from '../../../components/party-avatar'
 
 /* --- Shared cockpit pieces ------------------------------------------------ */
 
-const AVATAR_TONES = [
-  'bg-teal-100 text-teal-700 dark:bg-teal-950/70 dark:text-teal-300',
-  'bg-indigo-100 text-indigo-700 dark:bg-indigo-950/70 dark:text-indigo-300',
-  'bg-violet-100 text-violet-700 dark:bg-violet-950/70 dark:text-violet-300',
-  'bg-amber-100 text-amber-700 dark:bg-amber-950/70 dark:text-amber-300',
-  'bg-sky-100 text-sky-700 dark:bg-sky-950/70 dark:text-sky-300',
-  'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/70 dark:text-emerald-300',
-  'bg-rose-100 text-rose-700 dark:bg-rose-950/70 dark:text-rose-300',
-] as const
-
-/**
- * Initials avatar for a person row. The tone is derived from the name so the
- * same person keeps the same colour on every panel of the cockpit.
- */
+/** Initials avatar for a person row, shared with every party surface. */
 export function PersonAvatar({ name, className }: { name: string | null; className?: string }) {
-  const label = (name ?? '').trim()
-  const initials = label
-    .split(/\s+/)
-    .filter((part) => /^\p{L}/u.test(part))
-    .slice(0, 2)
-    .map((part) => part[0]!.toUpperCase())
-    .join('')
-  let hash = 0
-  for (const char of label) hash = (hash * 31 + char.charCodeAt(0)) >>> 0
-  return (
-    <span
-      aria-hidden
-      className={cn(
-        'grid h-8 w-8 shrink-0 place-items-center rounded-full text-[11px] font-semibold',
-        AVATAR_TONES[hash % AVATAR_TONES.length],
-        className,
-      )}
-    >
-      {initials || '·'}
-    </span>
-  )
+  return <PartyAvatar name={name} className={className} />
 }
 
 const CHIP_TONES = {

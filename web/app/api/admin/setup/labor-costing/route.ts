@@ -30,6 +30,7 @@ import {
   supersedeLaborCostRate,
 } from '@openbooks/engine/src/projects/labor-cost-rates.ts'
 import { normalizeMoney } from '@openbooks/engine/src/money/money.ts'
+import { PAY_RATE_BASES } from '@openbooks/engine/projects/pay-rate-basis'
 import { decimalNullRefusal } from '@openbooks/engine/src/money/decimal-refusal.ts'
 import { canonicalDecimal, compareDecimal } from '../../../../../lib/exact-decimal'
 import { guardProjectsFeature } from '../../../../../lib/projects-gate'
@@ -55,7 +56,7 @@ const laborSettingsSchema = z.object({
 const accountFields = { laborWip: z.string().uuid().nullable().optional(), laborClearing: z.string().uuid().nullable().optional(), payrollVariance: z.string().uuid().nullable().optional() };
 const settingsBodySchema = z.object({ settings: laborSettingsSchema, ...accountFields });
 const postBodySchema = z.discriminatedUnion("action", [
-  z.object({ action: z.literal("save-rate"), currency: z.string().regex(/^[A-Z]{3}$/), rate: decimalText("rate", "an exact decimal rate"), effectiveFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), basis: z.enum(["hour", "year"]).optional(), annualHours: decimalText("annualHours", "a number of hours").nullable().optional(), employeePartyId: z.string().uuid().nullable().optional(), jobTitle: z.string().trim().max(160).nullable().optional(), tradeId: z.string().uuid().nullable().optional(), departmentId: z.string().uuid().nullable().optional(), subsidiaryId: z.string().uuid().nullable().optional(), notes: z.string().max(500).nullable().optional(), reason: z.string().trim().max(500).optional() }),
+  z.object({ action: z.literal("save-rate"), currency: z.string().regex(/^[A-Z]{3}$/), rate: decimalText("rate", "an exact decimal rate"), effectiveFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), basis: z.enum(PAY_RATE_BASES).optional(), annualHours: decimalText("annualHours", "a number of hours").nullable().optional(), employeePartyId: z.string().uuid().nullable().optional(), jobTitle: z.string().trim().max(160).nullable().optional(), tradeId: z.string().uuid().nullable().optional(), departmentId: z.string().uuid().nullable().optional(), subsidiaryId: z.string().uuid().nullable().optional(), notes: z.string().max(500).nullable().optional(), reason: z.string().trim().max(500).optional() }),
   z.object({ action: z.literal("end-rate"), id: z.string().uuid(), effectiveTo: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(), reason: z.string().trim().max(500).optional() }),
   z.object({ action: z.literal("delete-rate"), id: z.string().uuid(), reason: z.string().trim().max(500).optional() }),
   z.object({ action: z.literal("reconcile"), periodStart: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), periodEnd: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), subsidiaryId: z.string().uuid() }),
@@ -581,7 +582,7 @@ export const POST = defineRoute({
         return NextResponse.json({ error: 'invalid rate' }, { status: 422 })
       }
       const rate = normalizeMoney(rateRaw)
-      const basis = body.basis === 'year' ? 'year' : 'hour'
+      const basis = body.basis ?? 'hour'
       const annualHoursRaw = body.annualHours == null || body.annualHours === ''
         ? '2080'
         : canonicalDecimal(body.annualHours, 4)

@@ -5,6 +5,7 @@ import { CompensationError } from './errors.ts';
 import { businessToday } from '../../platform/business-date.ts';
 import { requireAggregateCompensationRead } from '../authorization.ts';
 import { requireActorId, requireOrgId } from '../recruiting/input.ts';
+import type { PayRateBasis } from '../../projects/pay-rate-basis.ts';
 
 export interface CompensationWageSummary {
   asOf: string;
@@ -12,10 +13,14 @@ export interface CompensationWageSummary {
   covered: number;
   missing: number;
   ambiguous: number;
-  groups: { currency: string; basis: 'hour' | 'year'; workers: number; average: string; min: string; max: string }[];
+  groups: { currency: string; basis: PayRateBasis; workers: number; average: string; min: string; max: string }[];
 }
 
-/** Actual employee wages, with no annualization, FX conversion or policy-rate substitution. */
+/**
+ * Actual employee wages, with no annualization, FX conversion or policy-rate
+ * substitution: each group averages wages quoted in one currency and one
+ * cadence (hour, week, two weeks, half-month, month or year).
+ */
 export async function compensationWageSummary(query: { orgId: string; actorId: string }): Promise<CompensationWageSummary> {
   const orgId = requireOrgId(query.orgId);
   const actorId = requireActorId(query.actorId);
@@ -42,7 +47,7 @@ export async function compensationWageSummary(query: { orgId: string; actorId: s
       select count(*)::int as workers, count(*) filter (where matches = 1)::int as covered,
         count(*) filter (where matches = 0)::int as missing,
         count(*) filter (where matches > 1)::int as ambiguous from wages`),
-    db.execute<{ currency: string; basis: 'hour' | 'year'; workers: number; average: string; min: string; max: string }>(sql`${wages}
+    db.execute<{ currency: string; basis: PayRateBasis; workers: number; average: string; min: string; max: string }>(sql`${wages}
       select currency, basis, count(*)::int as workers, round(avg(rate), 4)::text as average,
         min(rate)::text as min, max(rate)::text as max
       from wages where matches = 1 group by currency, basis order by currency, basis`),

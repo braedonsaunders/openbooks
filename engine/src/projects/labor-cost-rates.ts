@@ -1,5 +1,6 @@
 import { sql, type SQL } from "drizzle-orm";
 import { db } from "../platform/db.ts";
+import { isPayRateBasis, PAY_RATE_BASES, type PayRateBasis } from "./pay-rate-basis.ts";
 
 /**
  * Canonical labor_cost_rates writer (extracted from the Labor Costing
@@ -71,7 +72,8 @@ export interface SupersedeLaborCostRateQuery {
   /** Normalized numeric(19,4) decimal string, >= 0. */
   readonly rate: string;
   readonly currency: string;
-  readonly basis: "hour" | "year";
+  /** The cadence the rate is quoted in (see pay-rate-basis.ts). */
+  readonly basis: PayRateBasis;
   /** Normalized numeric(19,4) decimal string, > 0. */
   readonly annualHours: string;
   readonly notes: string | null;
@@ -116,7 +118,7 @@ export async function supersedeLaborCostRate(
   // At most one scope member (the labor_cost_rates_one_scope storage
   // rule): none set is the org-wide fallback wage, never an error.
   if (scopeMembers.length > 1) fail("at most one wage scope member may be set");
-  if (query.basis !== "hour" && query.basis !== "year") fail("basis must be hour or year");
+  if (!isPayRateBasis(query.basis)) fail(`basis must be one of ${PAY_RATE_BASES.join(", ")}`);
 
   // Deterministic same-scope serialization BEFORE any read: a concurrent
   // start blocks here until this scope's writer commits, so two starts

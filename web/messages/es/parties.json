@@ -52,7 +52,7 @@
       "addresses": "Direcciones",
       "accounting": "Contabilidad",
       "compliance": "Cumplimiento",
-      "wages": "Tarifas salariales",
+      "compensation": "Compensación",
       "invoicing": "Facturación",
       "pricing": "Precios",
       "payroll": "Nómina",
@@ -158,8 +158,13 @@
       "currency": "Moneda",
       "basis": "Base",
       "perHour": "Por hora",
+      "perWeek": "Por semana",
+      "perBiweekly": "Cada dos semanas",
+      "perSemimonth": "Dos veces al mes",
+      "perMonth": "Por mes",
       "perYear": "Por año",
       "annualHours": "Horas anuales",
+      "equivalents": "≈ {hourly} por hora · {annual} por año",
       "effectiveFrom": "Vigente desde",
       "effectiveTo": "Vigente hasta",
       "add": "Agregar tarifa",
@@ -343,7 +348,143 @@
       "saveFailed": "No se pudo guardar la clase de cumplimiento.",
       "viewMatrix": "Abrir la matriz de cumplimiento"
     },
-    "addActivity": "Añadir actividad"
+    "addActivity": "Añadir actividad",
+    "compensation": {
+      "tabs": {
+        "ariaLabel": "Vistas de compensación",
+        "total": "Compensación total",
+        "rates": "Tarifas salariales",
+        "variable": "Bonos y premios"
+      },
+      "employment": "Empleo",
+      "noRate": {
+        "title": "Aún no hay tarifa salarial",
+        "body": "Registre una tarifa en la pestaña Tarifas salariales para ver la compensación total."
+      },
+      "basis": {
+        "ariaLabel": "Mostrar importes por",
+        "short": {
+          "hour": "Por hora",
+          "week": "Semanal",
+          "biweekly": "Quincenal",
+          "semimonth": "Bimensual",
+          "month": "Mensual",
+          "year": "Anual"
+        },
+        "per": {
+          "hour": "por hora",
+          "week": "por semana",
+          "biweekly": "cada dos semanas",
+          "semimonth": "dos veces al mes",
+          "month": "al mes",
+          "year": "al año"
+        }
+      },
+      "hero": {
+        "title": "Compensación total",
+        "perHour": "{amount} por hora, todo incluido",
+        "perYear": "{amount} al año, todo incluido"
+      },
+      "composition": {
+        "ariaLabel": "De qué se compone la compensación total"
+      },
+      "segments": {
+        "base": "Salario base",
+        "variable": "Bonos",
+        "retirement": "Jubilación",
+        "health": "Salud y seguros",
+        "allowance": "Asignaciones",
+        "other": "Otros beneficios",
+        "statutory": "Cargas patronales legales"
+      },
+      "stats": {
+        "base": "Salario base",
+        "benefits": "Beneficios y asignaciones",
+        "projected": "Proyectado según las elecciones actuales",
+        "statutoryAndVariable": "Cargas legales y bonos",
+        "trailing": "Real, últimos 12 meses",
+        "payrollOff": "Requiere Nómina"
+      },
+      "base": {
+        "title": "Salario base",
+        "scope": {
+          "employee": "Tarifa del empleado",
+          "job_title": "Según la tarifa del puesto",
+          "trade": "Según la tarifa del oficio",
+          "department": "Según la tarifa del departamento",
+          "subsidiary": "Según la tarifa de la filial",
+          "org": "Según la tarifa de la empresa"
+        },
+        "since": "Desde el {date}",
+        "hoursFromRate": "Convertido a {hours} horas al año, según lo acordado en esta tarifa",
+        "hoursFromSettings": "Convertido a {hours} horas al año, el estándar de la empresa",
+        "schedule": "Se paga según {name} ({periods} periodos de pago al año)"
+      },
+      "benefits": {
+        "title": "Beneficios y asignaciones pagados por el empleador",
+        "subtitle": "Proyectados a un año según las elecciones actuales y los conceptos de nómina recurrentes",
+        "empty": "No hay beneficios ni asignaciones pagados por el empleador vigentes."
+      },
+      "employeePaid": {
+        "title": "Aportaciones del empleado",
+        "subtitle": "Pagadas por el empleado y no incluidas en la compensación total"
+      },
+      "statutory": {
+        "title": "Cargas patronales legales",
+        "subtitle": "Reales según la nómina confirmada, del {from} al {to}",
+        "empty": "No se pagaron cargas patronales legales en este periodo."
+      },
+      "otherCurrency": "Algunos importes están en una moneda distinta de {currency} y se listan sin sumarse al total.",
+      "notPriced": "Sin valorar",
+      "progression": {
+        "title": "Evolución salarial",
+        "subtitle": "{count, plural, one {# tarifa} other {# tarifas}} desde el {from}",
+        "lastChange": "{percent} % en el último cambio",
+        "ariaLabel": "Salario anual a lo largo del tiempo"
+      },
+      "history": {
+        "empty": "Aún no hay tarifas propias del empleado.",
+        "window": "Del {from} al {to}",
+        "since": "Desde el {from}",
+        "equivalent": "{hourly} por hora · {annual} al año"
+      },
+      "variable": {
+        "payrollOff": "Los bonos se leen de la nómina confirmada; active Nómina para verlos.",
+        "trailing": "Bonos, últimos 12 meses",
+        "window": "Desde el {from}",
+        "payments": "Pagos",
+        "paymentsHint": "En los últimos 12 meses",
+        "pending": "Premios en curso",
+        "pendingHint": "Aún no pagados",
+        "historyTitle": "Bonos y pagos únicos",
+        "empty": "Aún no hay bonos ni pagos únicos.",
+        "runTypes": {
+          "bonus": "Nómina de bonos",
+          "supplemental": "Nómina complementaria",
+          "termination": "Nómina de finiquito",
+          "retro": "Nómina retroactiva",
+          "other": "Nómina fuera de ciclo"
+        },
+        "awardsTitle": "Premios",
+        "awardsSubtitle": "Recompensas e incentivos registrados en Beneficios",
+        "awardFallback": "Premio",
+        "awardStatus": {
+          "delivered": "Pagado",
+          "rejected": "Rechazado",
+          "pending": "En curso"
+        }
+      }
+    },
+    "photo": {
+      "add": "Añadir foto",
+      "change": "Cambiar foto",
+      "remove": "Quitar foto",
+      "removeConfirm": "¿Quitar esta foto? Se conserva en los adjuntos del registro.",
+      "uploadFailed": "No se pudo subir la foto",
+      "removeFailed": "No se pudo quitar la foto",
+      "updated": "Foto actualizada",
+      "removed": "Foto quitada"
+    }
   },
   "rateBookAssignments": {
     "title": "Precios de mano de obra",

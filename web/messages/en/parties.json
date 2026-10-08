@@ -53,7 +53,7 @@
       "addresses": "Addresses",
       "accounting": "Accounting",
       "compliance": "Compliance",
-      "wages": "Wage rates",
+      "compensation": "Compensation",
       "payroll": "Payroll",
       "employment": "Employment",
       "pulse": "Pulse",
@@ -158,8 +158,13 @@
       "currency": "Currency",
       "basis": "Basis",
       "perHour": "Per hour",
+      "perWeek": "Per week",
+      "perBiweekly": "Every two weeks",
+      "perSemimonth": "Twice a month",
+      "perMonth": "Per month",
       "perYear": "Per year",
       "annualHours": "Annual hours",
+      "equivalents": "≈ {hourly} per hour · {annual} per year",
       "effectiveFrom": "Effective from",
       "effectiveTo": "Effective to",
       "add": "Add rate",
@@ -343,7 +348,143 @@
       "saveFailed": "Saving the compliance class failed.",
       "viewMatrix": "Open the compliance matrix"
     },
-    "addActivity": "Add activity"
+    "addActivity": "Add activity",
+    "compensation": {
+      "tabs": {
+        "ariaLabel": "Compensation views",
+        "total": "Total compensation",
+        "rates": "Pay rates",
+        "variable": "Bonuses & awards"
+      },
+      "employment": "Employment",
+      "noRate": {
+        "title": "No pay rate yet",
+        "body": "Record a pay rate on the Pay rates tab to see total compensation."
+      },
+      "basis": {
+        "ariaLabel": "Show amounts per",
+        "short": {
+          "hour": "Hourly",
+          "week": "Weekly",
+          "biweekly": "Biweekly",
+          "semimonth": "Semi-monthly",
+          "month": "Monthly",
+          "year": "Annual"
+        },
+        "per": {
+          "hour": "per hour",
+          "week": "per week",
+          "biweekly": "every two weeks",
+          "semimonth": "twice a month",
+          "month": "per month",
+          "year": "per year"
+        }
+      },
+      "hero": {
+        "title": "Total compensation",
+        "perHour": "{amount} per hour, everything included",
+        "perYear": "{amount} per year, everything included"
+      },
+      "composition": {
+        "ariaLabel": "What total compensation is made of"
+      },
+      "segments": {
+        "base": "Base pay",
+        "variable": "Bonuses",
+        "retirement": "Retirement",
+        "health": "Health & insurance",
+        "allowance": "Allowances",
+        "other": "Other benefits",
+        "statutory": "Employer statutory costs"
+      },
+      "stats": {
+        "base": "Base pay",
+        "benefits": "Benefits & allowances",
+        "projected": "Projected from current elections",
+        "statutoryAndVariable": "Statutory costs & bonuses",
+        "trailing": "Actual, last 12 months",
+        "payrollOff": "Requires Payroll"
+      },
+      "base": {
+        "title": "Base pay",
+        "scope": {
+          "employee": "Employee rate",
+          "job_title": "From the job title rate",
+          "trade": "From the trade rate",
+          "department": "From the department rate",
+          "subsidiary": "From the subsidiary rate",
+          "org": "From the company rate"
+        },
+        "since": "Since {date}",
+        "hoursFromRate": "Converted at {hours} hours a year, as agreed on this rate",
+        "hoursFromSettings": "Converted at {hours} hours a year, the company standard",
+        "schedule": "Paid on {name} ({periods} pay periods a year)"
+      },
+      "benefits": {
+        "title": "Employer-paid benefits & allowances",
+        "subtitle": "Projected for a year from current elections and recurring pay items",
+        "empty": "No employer-paid benefits or allowances are in effect."
+      },
+      "employeePaid": {
+        "title": "Employee contributions",
+        "subtitle": "Paid by the employee and not counted in total compensation"
+      },
+      "statutory": {
+        "title": "Employer statutory costs",
+        "subtitle": "Actual from committed payroll, {from} to {to}",
+        "empty": "No employer statutory costs were paid in this period."
+      },
+      "otherCurrency": "Some amounts are in another currency than {currency} and are listed without being added to the total.",
+      "notPriced": "Not priced",
+      "progression": {
+        "title": "Pay progression",
+        "subtitle": "{count, plural, one {# rate} other {# rates}} since {from}",
+        "lastChange": "{percent}% at the last change",
+        "ariaLabel": "Annual pay over time"
+      },
+      "history": {
+        "empty": "No employee-specific pay rates yet.",
+        "window": "{from} to {to}",
+        "since": "Since {from}",
+        "equivalent": "{hourly} per hour · {annual} per year"
+      },
+      "variable": {
+        "payrollOff": "Bonuses are read from committed payroll — enable Payroll to see them.",
+        "trailing": "Bonuses, last 12 months",
+        "window": "Since {from}",
+        "payments": "Payments",
+        "paymentsHint": "In the last 12 months",
+        "pending": "Awards in progress",
+        "pendingHint": "Not yet paid",
+        "historyTitle": "Bonus and one-time payments",
+        "empty": "No bonus or one-time payments yet.",
+        "runTypes": {
+          "bonus": "Bonus run",
+          "supplemental": "Supplemental run",
+          "termination": "Termination run",
+          "retro": "Retroactive run",
+          "other": "Off-cycle run"
+        },
+        "awardsTitle": "Awards",
+        "awardsSubtitle": "Rewards and incentives recorded in Benefits",
+        "awardFallback": "Award",
+        "awardStatus": {
+          "delivered": "Paid",
+          "rejected": "Declined",
+          "pending": "In progress"
+        }
+      }
+    },
+    "photo": {
+      "add": "Add photo",
+      "change": "Change photo",
+      "remove": "Remove photo",
+      "removeConfirm": "Remove this photo? It stays in the record's attachments.",
+      "uploadFailed": "Could not upload the photo",
+      "removeFailed": "Could not remove the photo",
+      "updated": "Photo updated",
+      "removed": "Photo removed"
+    }
   },
   "rateBookAssignments": {
     "title": "Labor Pricing",

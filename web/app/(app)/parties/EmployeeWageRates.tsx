@@ -11,12 +11,20 @@ import { useMoney } from '../../../components/money-provider'
 import { PagedTable } from '../../../components/paged-table'
 import { canonicalDecimal, compareDecimal } from '../../../lib/exact-decimal'
 import { confirmDialog } from '@/lib/confirm'
+import {
+  PAY_RATE_BASES,
+  annualPayRate,
+  hourlyPayRate,
+  isPayRateBasis,
+  isTimePayRateBasis,
+  type PayRateBasis,
+} from '@openbooks/engine/projects/pay-rate-basis'
 
 interface RateRow {
   id: string
   rate: string
   currency: string
-  basis: 'hour' | 'year'
+  basis: PayRateBasis
   annual_hours: string
   effective_from: string
   effective_to: string | null
@@ -28,6 +36,30 @@ interface RatesResponse {
   rates: RateRow[]
   currencies: string[]
   defaultCurrency: string
+}
+
+const BASIS_LABEL_KEYS: Record<PayRateBasis, 'perHour' | 'perWeek' | 'perBiweekly' | 'perSemimonth' | 'perMonth' | 'perYear'> = {
+  hour: 'perHour',
+  week: 'perWeek',
+  biweekly: 'perBiweekly',
+  semimonth: 'perSemimonth',
+  month: 'perMonth',
+  year: 'perYear',
+}
+
+/**
+ * The hourly and annual equivalents of a stored rate, through the shared
+ * pay-rate conversion. A row whose annual hours cannot convert has none.
+ */
+function rateEquivalents(row: RateRow): { hourly: string; annual: string } | null {
+  try {
+    return {
+      hourly: hourlyPayRate(row.rate, row.basis, row.annual_hours),
+      annual: annualPayRate(row.rate, row.basis, row.annual_hours),
+    }
+  } catch {
+    return null
+  }
 }
 
 /** Confidential employee compensation history, gated by admin.setup.manage. */
@@ -46,7 +78,7 @@ export function EmployeeWageRates({ partyId }: { partyId: string }) {
   const [actionError, setActionError] = useState<string | null>(null)
   const [rate, setRate] = useState('')
   const [currency, setCurrency] = useState('')
-  const [basis, setBasis] = useState<'hour' | 'year'>('hour')
+  const [basis, setBasis] = useState<PayRateBasis>('hour')
   const [annualHours, setAnnualHours] = useState('2080')
   const [effectiveFrom, setEffectiveFrom] = useState(today)
 
@@ -129,8 +161,11 @@ export function EmployeeWageRates({ partyId }: { partyId: string }) {
       toast.error(t('rateRequired'))
       return
     }
-    const hours = basis === 'year' ? canonicalDecimal(annualHours, 4) : '2080'
-    if (hours === null || (basis === 'year' && compareDecimal(hours, '0') <= 0)) {
+    // Annual hours convert a time-based rate to its hourly cost; an hourly
+    // rate keeps the column default.
+    const timeBased = isTimePayRateBasis(basis)
+    const hours = timeBased ? canonicalDecimal(annualHours, 4) : '2080'
+    if (hours === null || (timeBased && compareDecimal(hours, '0') <= 0)) {
       toast.error(t('annualHoursRequired'))
       return
     }
@@ -214,13 +249,16 @@ export function EmployeeWageRates({ partyId }: { partyId: string }) {
             id="employee-wage-basis"
             className="w-36"
             value={basis}
-            onChange={(event) => setBasis(event.target.value as 'hour' | 'year')}
+            onChange={(event) => {
+              if (isPayRateBasis(event.target.value)) setBasis(event.target.value)
+            }}
           >
-            <option value="hour">{t('perHour')}</option>
-            <option value="year">{t('perYear')}</option>
+            {PAY_RATE_BASES.map((value) => (
+              <option key={value} value={value}>{t(BASIS_LABEL_KEYS[value])}</option>
+            ))}
           </Select>
         </div>
-        {basis === 'year' ? (
+        {isTimePayRateBasis(basis) ? (
           <div>
             <Label htmlFor="employee-wage-annual-hours">{t('annualHours')}</Label>
             <Input
@@ -271,24 +309,35 @@ export function EmployeeWageRates({ partyId }: { partyId: string }) {
               key: 'rate',
               header: t('rate'),
               align: 'right',
-              search: (row) => row.rate,
-              cell: (row) => (
-                <span className="inline-flex items-center gap-2 tabular-nums">
-                  {money(row.rate, {
-                    currency: row.currency,
-                    currencyDisplay: 'code',
-                    minimumFractionDigits: 2,
-                    maximumFractionDigits: 4,
-                  })}
-                  {row.is_current ? <Badge variant="success">{t('current')}</Badge> : null}
-                </span>
-              ),
-            },
-            {
-              key: 'basis',
-              header: t('basis'),
-              search: (row) => row.basis === 'year' ? t('perYear') : t('perHour'),
-              cell: (row) => row.basis === 'year' ? t('perYear') : t('perHour'),
+              search: (row) => `${row.rate} ${t(BASIS_LABEL_KEYS[row.basis])}`,
+              cell: (row) => {
+                const equivalents = rateEquivalents(row)
+                const amount = (value: string) => money(value, {
+                  currency: row.currency,
+                  currencyDisplay: 'code',
+                  minimumFractionDigits: 2,
+                  maximumFractionDigits: 2,
+                })
+                return (
+                  <span className="inline-flex flex-col items-end">
+                    <span className="inline-flex items-center gap-2 tabular-nums">
+                      {money(row.rate, {
+                        currency: row.currency,
+                        currencyDisplay: 'code',
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 4,
+                      })}
+                      <span className="text-xs text-slate-500 dark:text-slate-400">{t(BASIS_LABEL_KEYS[row.basis])}</span>
+                      {row.is_current ? <Badge variant="success">{t('current')}</Badge> : null}
+                    </span>
+                    {equivalents ? (
+                      <span className="text-xs text-slate-500 tabular-nums dark:text-slate-400">
+                        {t('equivalents', { hourly: amount(equivalents.hourly), annual: amount(equivalents.annual) })}
+                      </span>
+                    ) : null}
+                  </span>
+                )
+              },
             },
             {
               key: 'from',

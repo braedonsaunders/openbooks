@@ -1,5 +1,4 @@
 import { historicalWithholdingProfile } from './historical-withholding.ts';
-import { divideMoney } from './run-allocation.ts';
 import { prepareCompensationPackages, appendCompensationPackageStage, persistCompensationPackageCalculations } from './compensation-package-payroll.ts';
 import { ONE_OFF_RUN_TYPES } from "./run-contracts.ts";
 /**
@@ -14,7 +13,7 @@ import { db } from "../platform/db.ts";
 import { PayrollError } from "./error.ts";
 import { aggregateUsSupplementalWageAmounts } from "./supplemental-wages.ts";
 import { aggregateUsStatutoryExemptionAmounts } from "./statutory-exemptions.ts";
-import { cmp, div, sum } from "../money/money.ts";
+import { cmp, sum } from "../money/money.ts";
 import { payrollCertificate, resolveCertificate, revalidateStoredCertificates, type ResolvedCertificate } from "./certificates.ts";
 import { packRates, PayrollPackError, assertPayrollRegionSupported, type EmployeePayrollContext, type PayrollRunContext, type PayrollTaxBaseKey, type SupplementalTaxMethod } from "./packs.ts";
 import type { PayPeriodPriors } from "./period-priors.ts";
@@ -24,7 +23,7 @@ import { assessStubAggregateLevies } from "./employer-aggregate-priors.ts";
 import { assertSettlementFactorsMergeable, settleAnnualSettlement } from "./annual-settlement-run.ts";
 import { EMPTY_EMPLOYER_LEVY_FACTORS } from "./statutory-context.ts";
 import { type StatutoryHolidayEligibilityFacts } from "./holidays.ts";
-import { payRateIsUsable } from "./rate.ts";
+import { payRateIsUsable, payrollHourlyWage } from "./rate.ts";
 import { alternateDayPlanOf, assertComponentServiceEligibility, entitlementPlans, planMovementsForStub, resolveVacationTerms, resolveServiceTier, vacationPlanOf, type EntitlementWarning } from "./entitlements.ts";
 import { grantRemembranceAlternateDay } from "./remembrance-grants.ts";
 import { resolvePayrollPaymentMethod } from "./payment-method.ts";
@@ -214,7 +213,7 @@ export async function calculateStub(
   // passed readiness green and then threw here.
   if (!oneOffRun && !payRateIsUsable(emp.pay_basis!, payRate)) {
     throw new PayrollError(payRate
-      ? "salaried employee has no annual labor cost rate (employee scope)"
+      ? "salaried employee has only an hourly labor cost rate (employee scope); a salary needs a rate per week, two weeks, half-month, month or year"
       : "no labor cost rate covers this employee for the period");
   }
 
@@ -325,7 +324,7 @@ export async function calculateStub(
     orgId, actorId, documentId, employeePartyId, employmentId,
     subsidiaryId: ctx.runContext.subsidiaryId ?? null, country, currency: run.doc_currency!,
     periodStart: run.period_start!, periodEnd: run.period_end!, taxYear,
-    hourlyWage: payRate ? payRate.basis === 'hour' ? payRate.rate : divideMoney(payRate.rate, String(payRate.annualHours), 4) : null,
+    hourlyWage: payRate ? payrollHourlyWage(payRate) : null,
     payScheduleId: run.pay_schedule_id!, oneOffRun, terminationRun: runType === "termination", simulate: !!ctx.simulate,
     assignedRows: assigned.rows, allowedSubsidiaryIds: ctx.allowedSubsidiaryIds,
     unionAgreementId: emp.union_agreement_id ?? null, unionClassificationId: emp.union_classification_id ?? null,
@@ -379,7 +378,7 @@ export async function calculateStub(
     orgId, actorId, documentId, employmentId, employeePartyId, regularCashLines,
     subsidiaryId: ctx.runContext.subsidiaryId ?? null, currency: run.doc_currency!, country,
     periodStart: run.period_start!, periodEnd: run.period_end!, periodsPerYear: P,
-    hourlyWage: payRate ? payRate.basis === 'hour' ? payRate.rate : div(payRate.rate, payRate.annualHours) : null,
+    hourlyWage: payRate ? payrollHourlyWage(payRate) : null,
     payBasis: emp.pay_basis!, payDate: run.pay_date!, taxYear,
     oneOffRun, simulate: ctx.simulate, lines, entitlementMovements,
   };

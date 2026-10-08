@@ -4,7 +4,8 @@ import { actorHasPermission } from "../../organization/actor-permissions.ts";
 import { actorAllowedSubsidiaryIds } from "../../organization/actor-subsidiaries.ts";
 import { db, withOrgTransaction } from "../../platform/db.ts";
 import { laborCostingSettings, laborFxQuote, resolveWage, type LaborFxQuote } from "../../projects/labor-costing.ts";
-import { mul, mulRate } from "../../money/money.ts";
+import { mulRate } from "../../money/money.ts";
+import { annualPayRate, isPayRateBasis, PAY_RATE_BASES } from "../../projects/pay-rate-basis.ts";
 import { compareDecimal } from "../../money/exact-decimal.ts";
 import {
   HrmAuthorizationError,
@@ -381,11 +382,12 @@ export async function computeGapSnapshot(query: {
       if (!wage) continue;
       const group = await comparisonGroupFor(orgId, attributeKey, employment.worker_party_id);
       if (group !== query.groupA && group !== query.groupB) continue;
-      // Native annualization from the versioned wage row itself — a year
-      // wage already IS its annual (used verbatim, never divided and
-      // re-multiplied), an hour wage annualises with the row's own
-      // annual-hours. The org's current annualHours never enters: it is
-      // config, and config edits must not reinterpret a worker's annual.
+      // Native annualization from the versioned wage row itself — a
+      // time-based wage annualizes through its own cadence (a year wage is
+      // used verbatim, never divided and re-multiplied), an hour wage
+      // annualises with the row's own annual-hours. The org's current
+      // annualHours never enters: it is config, and config edits must not
+      // reinterpret a worker's annual.
       const rateRow = (await db.execute<{ rate: string; basis: string; annual_hours: string }>(sql`
         select rate::text as rate, basis, annual_hours::text as annual_hours
           from labor_cost_rates where org_id = ${orgId} and id = ${wage.rateId}`)).rows[0];
@@ -395,15 +397,10 @@ export async function computeGapSnapshot(query: {
           "a wage rate moved while the snapshot was computed — rerun the snapshot; nothing was saved",
         );
       }
-      let nativeAnnual: string;
-      if (rateRow.basis === "year") {
-        nativeAnnual = rateRow.rate;
-      } else if (rateRow.basis === "hour") {
-        nativeAnnual = mul(rateRow.rate, rateRow.annual_hours);
-      } else {
+      if (!isPayRateBasis(rateRow.basis)) {
         throw new CompensationError(
           "REFUSED",
-          `wage basis ${JSON.stringify(rateRow.basis)} is not hour or year — correct the labor cost rate before measuring gaps`,
+          `wage basis ${JSON.stringify(rateRow.basis)} is not a supported pay cadence (${PAY_RATE_BASES.join(", ")}) — correct the labor cost rate before measuring gaps`,
         );
       }
       const nativeHours = Number(rateRow.annual_hours);
@@ -413,6 +410,7 @@ export async function computeGapSnapshot(query: {
           "a wage annual-hours is not a positive finite number — correct the labor cost rate before measuring gaps",
         );
       }
+      const nativeAnnual = annualPayRate(rateRow.rate, rateRow.basis, rateRow.annual_hours);
       // Convert to the reporting currency with the as-of spot quote,
       // oriented once. Same-currency needs no quote; a missing quote
       // refuses by name — never 1:1, never omitted.
