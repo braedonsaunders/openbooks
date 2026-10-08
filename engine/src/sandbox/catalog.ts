@@ -22,8 +22,8 @@ export const SANDBOX_CYCLE_BREAKERS: Record<string, readonly string[]> = {
 };
 
 /**
- * Trigger-enforced ownership references that are intentionally not backed by
-   * ordinary foreign keys. They still constrain bulk INSERT order because the
+ * Trigger-enforced ownership references, including deferred foreign keys.
+ * They still constrain bulk INSERT order because the
  * BEFORE trigger resolves the referenced row immediately. Keep this map small
  * and explicit: inferred references without an enforcing trigger must not
  * reintroduce the deferrable documents↔journal_entries cycle.
@@ -32,9 +32,11 @@ const TRIGGER_INSERT_COLUMN_PARENTS: Readonly<Record<string, string>> = {
   subsidiary_id: "subsidiaries",
 };
 const TRIGGER_INSERT_TABLE_PARENTS: Readonly<Record<string, readonly string[]>> = {
-  // Cross-row checks in field_ticket_labor_line_integrity_guard read these
-  // parents immediately. Several related tables participate in deferrable FK
-  // cycles, so their trigger dependencies must also order the cyclic tail.
+  // Field Ticket ownership and provenance guards read these rows immediately.
+  // Deferred FKs cannot admit child-first writes inside the cyclic tail.
+  field_tickets: ["documents", "parties", "users"],
+  field_ticket_labor_snapshots: ["field_tickets", "documents", "users"],
+  field_ticket_signatures: ["field_tickets", "files"],
   field_ticket_labor_lines: [
     "field_ticket_labor_snapshots",
     "documents",
