@@ -55,6 +55,17 @@ export function reconcileNavConfig(saved: OrgNavConfig): OrgNavConfig {
   for (const module of NAV_MODULES) {
     if (!present.has(module.key)) ensureGroup(module.group).items.push({ kind: 'module', moduleKey: module.key })
   }
+  // Inherited Pre-billing belongs at the start of the customer billing
+  // workflow. Explicit editor placements and every other item's order survive.
+  for (const group of groups) {
+    if (group.id !== 'operations' && group.id !== 'customers') continue
+    const index = group.items.findIndex((item) => item.kind === 'module' && item.moduleKey === 'pre-billing' && item.placement !== 'custom')
+    if (index < 0) continue
+    const [item] = group.items.splice(index, 1)
+    const customers = ensureGroup('customers')
+    const firstBilling = customers.items.findIndex((candidate) => candidate.kind === 'module' && MODULE_BY_KEY.get(candidate.moduleKey)?.subgroup === 'sell-collect')
+    customers.items.splice(firstBilling < 0 ? customers.items.length : firstBilling, 0, item!)
+  }
   for (const group of groups) {
     if (!addedGroups.has(group.id)) continue
     const order = defaults.groups.find((candidate) => candidate.id === group.id)!.items

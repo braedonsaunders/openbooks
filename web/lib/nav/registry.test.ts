@@ -41,7 +41,7 @@ test('default workspaces follow the approved journey-oriented information archit
   assert.deepEqual(DEFAULT_NAV_ORDER.customers, [
     'customers', 'crm-activities', 'crm-opportunities', 'crm-forecasts',
     'crm-sales', 'crm-sales-representatives', 'crm-sales-teams', 'crm-sales-quotas', 'crm-sales-territories',
-    'ar-invoices', 'cash-sales', 'sales-orders', 'estimates', 'receipts', 'channels', 'collections', 'ar',
+    'pre-billing', 'ar-invoices', 'cash-sales', 'sales-orders', 'estimates', 'receipts', 'channels', 'collections', 'ar',
     // Modules the canonical order does not place explicitly follow it, in declaration order.
     'stored-value',
   ])
