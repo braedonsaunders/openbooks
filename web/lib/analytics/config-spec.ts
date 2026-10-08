@@ -107,6 +107,17 @@ export const FORECAST_ADJUSTMENTS: ReadonlyArray<{ code: string; factor: number 
 ];
 
 export const ANALYTICS_CONFIG = {
+  receivables: {
+    slug: "receivables-intelligence",
+    defaults: { baselineDays: 90, minObservations: 3, deteriorationDays: 7, severeDays: 90, reminderDays: 30 },
+    fields: [
+      num("baselineDays", "analytics.receivables.config.baselineDays", 7, 365, 1, true),
+      num("minObservations", "analytics.receivables.config.minObservations", 2, 100, 1, true),
+      num("deteriorationDays", "analytics.receivables.config.deteriorationDays", 1, 120, 1, true),
+      num("severeDays", "analytics.receivables.config.severeDays", 1, 365, 1, true),
+      num("reminderDays", "analytics.receivables.config.reminderDays", 1, 365, 1, true),
+    ],
+  },
   financialHealth: {
     slug: "financial-health",
     // Starting targets an organization replaces with its own industry's.

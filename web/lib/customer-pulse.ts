@@ -12,6 +12,7 @@ import { resolveProjectFinancials } from './project-financials'
 import { loadProjectType } from './project-type'
 import { crmActivityScope, crmOpportunityScope, crmSharedScope } from './crm-scope'
 import { subsidiaryVisibleFilter } from './subsidiaries'
+import { customerOrderCommitmentsSource } from './customer-credit'
 
 /**
  * Money travels as canonical numeric(19,4) decimal strings (house bigint
@@ -273,7 +274,7 @@ export async function loadCustomerPulse(
   if (sections.ar) {
     // 2. Open AR items and aging buckets
     const [allOpenItems, stats] = await Promise.all([
-      openItems(orgId, 'ar', asOf, allowedSubArray),
+      openItems(orgId, 'ar', asOf, allowedSubArray, partyId),
       paymentStats('ar', asOf, allowedSubArray, orgId),
     ])
 
@@ -320,18 +321,9 @@ export async function loadCustomerPulse(
     // first leg (d.fx_rate) and translates functional→base at the
     // document-date spot (flow doctrine), so a mixed-currency book lands in
     // the presentation base instead of summing raw across currencies.
-    const unbilledRows = (await db.execute<{ date: string; func: string | null; amount: string }>(sql`
-      select d.document_date::text as date, sub.base_currency as func,
-             round(d.total * d.fx_rate, 4)::text as amount
-        from documents d
-        left join subsidiaries sub on sub.id = d.subsidiary_id and sub.org_id = d.org_id
-       where d.org_id = ${orgId}
-         and d.party_id = ${partyId}
-         and d.kind = 'sales_order'
-         and d.status in ('pending_approval', 'approved')
-         and d.voided_at is null
-         ${subsidiaryVisibleFilter(sql`d.subsidiary_id`, allowedSubsidiaryIds ?? null)}
-    `)).rows
+    const unbilledRows = (await db.execute<{ date: string; func: string | null; amount: string }>(
+      customerOrderCommitmentsSource(orgId, allowedSubsidiaryIds ?? null, partyId),
+    )).rows
     const unbilledOrdersBalance = await translateFlows(orgId, unbilledRows)
 
     // Remaining credit headroom, exact: limit minus committed (open plus

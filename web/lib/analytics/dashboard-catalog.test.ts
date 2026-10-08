@@ -29,6 +29,7 @@ mock.method(pg.Pool.prototype, 'connect', refuseDatabaseAccess)
 // database-backed analytics reads and request services are isolated here.
 const dataReads: Record<string, { slug: string; exports: string[] }> = {
   'receivables-data': { slug: 'receivables-intelligence', exports: ['receivablesData'] },
+  'receivables-intelligence-data': { slug: 'receivables-intelligence', exports: ['receivablesIntelligenceData'] },
   'health-data': { slug: 'financial-health', exports: ['healthData', 'healthSummaryData'] },
   'cashflow-data': { slug: 'cashflow', exports: ['cashflowData'] },
   'true-cost-data': { slug: 'true-cost', exports: ['trueCostData'] },
@@ -67,6 +68,7 @@ const hooks = registerHooks({
           `),
         }
       }
+      if (specifier === '@openbooks/engine/platform/business-date') return { shortCircuit: true, url: 'data:text/javascript,export async function businessToday(){return "2026-07-31"}' }
       if (specifier === 'next-intl/server') {
         return {
           shortCircuit: true,

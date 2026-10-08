@@ -31,7 +31,7 @@
       "resourceCapacityTitle": "Resource capacity",
       "resourceCapacityDesc": "Forecast staffing capacity, committed bookings and pipeline demand",
       "receivablesTitle": "Receivables Intelligence",
-      "receivablesDesc": "Delinquency, customer exposure, credits and contractual maturity"
+      "receivablesDesc": "Customer payment patterns, collection recovery and credit exposure"
     },
     "addAnalytics": "Add analytics",
     "libraryTitle": "Your analytics library",
@@ -2523,7 +2523,7 @@
       "overtime": "Overtime",
       "doubleTime": "Double Time",
       "presetHint": "Presets from your time types",
-      "presetTitle": "Use {name} \u00d7{multiplier}",
+      "presetTitle": "Use {name} ×{multiplier}",
       "explorerTarget": "Target {mode}",
       "markupPctLabel": "Markup %",
       "per1kLabel": "Per 1K Hours"
@@ -4365,7 +4365,11 @@
       "credits": "Unapplied credits",
       "customers": "Customers with open items",
       "severe": "90+ day exposure",
-      "top5": "Top-five concentration"
+      "top5": "Top-five concentration",
+      "attention": "Overdue needing attention",
+      "deteriorating": "Slower-paying customers",
+      "recovery": "Overdue cash recovery",
+      "onTime": "On-time cash share"
     },
     "panels": {
       "aging": "Aging composition",
@@ -4374,13 +4378,24 @@
       "agingCredits": "Credits by age",
       "customerExposure": "Customer collection exposure",
       "maturity": "Contractual due ladder",
-      "cumulative": "Cumulative gross balance due"
+      "cumulative": "Cumulative gross balance due",
+      "behavior": "Payment timing distribution",
+      "behaviorTrend": "Payment behavior over time",
+      "paymentMap": "Exposure and payment deterioration",
+      "recoveryBridge": "Opening overdue recovery",
+      "cohortRecovery": "Recovery by opening delinquency",
+      "appliedCash": "Applied customer cash",
+      "delivery": "Reminder delivery",
+      "reminderCoverage": "Collection coverage",
+      "creditWatch": "Credit watch"
     },
     "tabs": {
-      "overview": "Overview",
-      "aging": "Delinquency",
       "customers": "Customers",
-      "maturity": "Maturity"
+      "behavior": "Payment behavior",
+      "recovery": "Recovery",
+      "collections": "Collections",
+      "credit": "Credit exposure",
+      "configuration": "Configuration"
     },
     "aging": {
       "0": "Current",
@@ -4397,6 +4412,128 @@
       "4": "Due in 31–60 days",
       "5": "Due in 61–90 days",
       "6": "Due after 90 days"
-    }
+    },
+    "futurePeriod": "Choose a period beginning on or before the company’s business date.",
+    "search": "Search customers…",
+    "filter": "Collection signals",
+    "portfolio": "Customer portfolio",
+    "portfolioHint": "{count} customers with open receivables · prioritized by collection evidence",
+    "noCustomers": "No customers match",
+    "noCustomersHint": "Adjust the search or signal filter to explore the portfolio.",
+    "showing": "{from}–{to} of {total} customers",
+    "previous": "Previous page",
+    "next": "Next page",
+    "customerCount": "{count} customers",
+    "exposure": "{amount} overdue exposure",
+    "recovered": "{amount} cash recovered",
+    "behaviorWindow": "Cash-weighted · trailing {days} days",
+    "cashWeighted": "Weighted by applied cash",
+    "daysBeyondTerms": "Days beyond invoice terms",
+    "mapHint": "Customers shown on this page with sufficient comparable history",
+    "changeLabel": "Change in days beyond terms",
+    "baselineHint": "Recent {days} days versus preceding {days} days · minimum {count} invoices in each window",
+    "noOpening": "No opening overdue cohort",
+    "noOpeningHint": "No dated positive receivables were overdue when this period began.",
+    "fixedCohort": "Invoices overdue at period opening",
+    "openingOverdue": "Opening overdue",
+    "cashRecovered": "Cash recovered",
+    "otherChanges": "Other balance changes",
+    "stillOpen": "Still open",
+    "appliedCash": "Applied customer cash",
+    "appliedCashHint": "Posted cash applied to invoices within the selected period",
+    "deliveryHint": "Document delivery outcomes",
+    "reminderCoverage": "Overdue reminder coverage",
+    "coverageCount": "{sent} of {total} overdue invoices received a reminder",
+    "failedExposure": "Overdue with delivery issues",
+    "deliveryRemedy": "Review customer billing contacts and native reminder delivery failures.",
+    "coverageScope": "Coverage measures native reminders, not all customer contact. Queued and failed notices are not delivered. Other collection channels are not inferred.",
+    "deliveryCustomers": "Customer collection context",
+    "creditCurrentOnly": "Credit controls reflect current settings",
+    "creditCurrentHint": "Choose the current business date to review current credit limits and holds against current receivables. Historical credit policy is not inferred.",
+    "reviewCurrent": "Review current credit",
+    "creditHeld": "Customers on hold",
+    "creditExceeded": "Above configured limit",
+    "creditConfigured": "With configured limits",
+    "excess": "{amount} above limit",
+    "creditBasis": "Open AR plus unbilled order commitments",
+    "dataDate": "Exposure as of {date} · {currency}",
+    "openCustomer": "Open customer {name}",
+    "overdue": "Overdue",
+    "openExposure": "{amount} open receivables",
+    "paymentSparkline": "Observed payment timing trend",
+    "changeDays": "{days} days",
+    "insufficientHistory": "Insufficient comparison history",
+    "recentPayment": "Recent days beyond terms",
+    "baselinePayment": "Baseline days beyond terms",
+    "dayValue": "{days} days",
+    "observationCount": "Invoices observed: {recent} recent · {baseline} baseline",
+    "noFlags": "No collection attention flags",
+    "customerDocuments": "{count} open documents",
+    "customerCredits": "{amount} unapplied credits",
+    "creditLimit": "Limit {amount}",
+    "oldestDays": "Oldest {days} days overdue",
+    "recoveredOf": "{cash} recovered of {opening}",
+    "behavior": {
+      "0": "On time / early",
+      "1": "1–7 days late",
+      "2": "8–30 days late",
+      "3": "Over 30 days late"
+    },
+    "recoveryCohort": {
+      "0": "1–30 days overdue",
+      "1": "31–60 days overdue",
+      "2": "61–89 days overdue",
+      "3": "90+ days overdue"
+    },
+    "notice": {
+      "sent": "Sent",
+      "failed": "Failed",
+      "suppressed": "Suppressed",
+      "staged": "Queued"
+    },
+    "reasons": {
+      "deteriorating": "Worsening payment pattern",
+      "severe": "Severe delinquency",
+      "delivery": "Reminder delivery issue",
+      "terms": "Missing due dates",
+      "held": "Credit hold",
+      "credit": "Credit limit exceeded"
+    },
+    "signals": {
+      "all": "All customers",
+      "deteriorating": "Payment deteriorating",
+      "severe": "Severe delinquency",
+      "delivery": "Delivery issues",
+      "terms": "Missing due dates",
+      "held": "On credit hold"
+    },
+    "config": {
+      "baselineDays": {
+        "label": "Payment comparison window",
+        "help": "Days in each recent/baseline payment window."
+      },
+      "minObservations": {
+        "label": "Minimum invoice observations",
+        "help": "Invoices with dated cash applications required in each comparison window."
+      },
+      "deteriorationDays": {
+        "label": "Payment deterioration threshold",
+        "help": "Additional cash-weighted days beyond terms that flag deterioration."
+      },
+      "severeDays": {
+        "label": "Severe delinquency threshold",
+        "help": "Contractual days overdue that require collection attention."
+      },
+      "reminderDays": {
+        "label": "Reminder observation window",
+        "help": "Trailing days included in reminder delivery outcomes and coverage."
+      }
+    },
+    "headroom": "Credit headroom",
+    "lastNotice": "Latest reminder: {date}",
+    "historicalDelivery": "Historical views show delivered reminder evidence; past mutable failure states are unavailable.",
+    "noPaymentHistory": "No dated cash applications in this observation window.",
+    "noReminders": "No reminder delivery evidence in this window.",
+    "noComparableHistory": "Not enough comparable customer payment history to plot."
   }
 }

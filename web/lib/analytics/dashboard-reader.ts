@@ -36,7 +36,7 @@ export async function readAnalyticsDashboard<S extends AnalyticsSlug>(slug: S, s
     return withAnalyticsRead(read, async () => {
       const result = await cachedAnalyticsRead<DashboardResult>(authority, `dashboard:${slug}`, { ...query, tab }, () => loaders[slug](query), { identity })
       const observedAt = new Date(read.observedAt).toISOString()
-      const data = result.data ? { ...result.data, _analyticsRead: { slug, tab, observedAt, query: analyticsQueryString(query) } } : result.data
+      const data = result.data ? { ...result.data, _analyticsRead: { slug, tab, observedAt, query: analyticsQueryString(query, slug) } } : result.data
       return { ...result, data, observedAt } as unknown as Awaited<ReturnType<typeof loaders[S]>> & { observedAt: string }
     })
   })

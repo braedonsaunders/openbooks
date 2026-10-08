@@ -49,6 +49,7 @@ export async function openItemSourceQuery(
   side: Side,
   asOf: string,
   subIds?: string[],
+  partyId?: string,
 ) {
   const creditKind = side === 'ap' ? 'vendor_credit' : 'customer_credit'
   // Bills/invoices carry the side's normal sign; credit memos carry the
@@ -96,6 +97,7 @@ export async function openItemSourceQuery(
          and (d.status = 'posted' or (d.voided_at is not null and d.voided_at::date > ${asOf}::date))
          and ${kindFilter}
          ${subScope(sql`jl.subsidiary_id`, subIds)}
+         ${partyId === undefined ? sql`` : sql`and jl.party_id = ${partyId}`}
     )
     select oi.id, oi.entry_id, oi.doc_id, oi.doc_kind, oi.doc_number, oi.party_id,
            coalesce(p.display_name, 'Unspecified') as party_name,
@@ -111,8 +113,9 @@ export async function openItems(
   side: Side,
   asOf: string,
   subIds?: string[],
+  partyId?: string,
 ): Promise<OpenItem[]> {
-  const result = await analyticsQuery<OpenItemQueryRow>(await openItemSourceQuery(orgId, side, asOf, subIds))
+  const result = await analyticsQuery<OpenItemQueryRow>(await openItemSourceQuery(orgId, side, asOf, subIds, partyId))
   // `remaining` nets in the line entity's functional currency (legs are
   // stamped functional; the shared leg-split helper reads the target leg in
   // amount and the consumed leg in source_amount, and the sign filter keeps

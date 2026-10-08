@@ -31,7 +31,7 @@
       "resourceCapacityTitle": "Capacidade de recursos",
       "resourceCapacityDesc": "Previsão da capacidade da equipe, alocações confirmadas e demanda das oportunidades comerciais",
       "receivablesTitle": "Análise de contas a receber",
-      "receivablesDesc": "Inadimplência, exposição por cliente, créditos e vencimentos contratuais"
+      "receivablesDesc": "Padrões de pagamento dos clientes, recuperação e exposição de crédito"
     },
     "addAnalytics": "Adicionar análises",
     "libraryTitle": "Sua biblioteca de análises",
@@ -4365,7 +4365,11 @@
       "credits": "Créditos não aplicados",
       "customers": "Clientes com itens em aberto",
       "severe": "Exposição de 90 dias ou mais",
-      "top5": "Concentração dos cinco maiores"
+      "top5": "Concentração dos cinco maiores",
+      "attention": "Vencido que exige atenção",
+      "deteriorating": "Clientes pagando mais devagar",
+      "recovery": "Recuperação do vencido",
+      "onTime": "Parcela de dinheiro pontual"
     },
     "panels": {
       "aging": "Composição por vencimento",
@@ -4374,13 +4378,24 @@
       "agingCredits": "Créditos por idade",
       "customerExposure": "Exposição de cobrança por cliente",
       "maturity": "Estrutura contratual de vencimentos",
-      "cumulative": "Saldo bruto acumulado a vencer"
+      "cumulative": "Saldo bruto acumulado a vencer",
+      "behavior": "Distribuição dos prazos de pagamento",
+      "behaviorTrend": "Comportamento de pagamento no tempo",
+      "paymentMap": "Exposição e deterioração dos pagamentos",
+      "recoveryBridge": "Recuperação do vencido inicial",
+      "cohortRecovery": "Recuperação por atraso inicial",
+      "appliedCash": "Recebimentos de clientes aplicados",
+      "delivery": "Entrega de lembretes",
+      "reminderCoverage": "Cobertura da cobrança",
+      "creditWatch": "Monitoramento de crédito"
     },
     "tabs": {
-      "overview": "Visão geral",
-      "aging": "Inadimplência",
       "customers": "Clientes",
-      "maturity": "Vencimentos"
+      "behavior": "Comportamento de pagamento",
+      "recovery": "Recuperação",
+      "collections": "Cobrança",
+      "credit": "Exposição de crédito",
+      "configuration": "Configurações"
     },
     "aging": {
       "0": "A vencer",
@@ -4397,6 +4412,128 @@
       "4": "Vence em 31–60 dias",
       "5": "Vence em 61–90 dias",
       "6": "Vence após 90 dias"
-    }
+    },
+    "futurePeriod": "Escolha um período que comece até a data operacional da empresa.",
+    "search": "Buscar clientes…",
+    "filter": "Sinais de cobrança",
+    "portfolio": "Carteira de clientes",
+    "portfolioHint": "{count} clientes com recebíveis em aberto · priorizados por evidências de cobrança",
+    "noCustomers": "Nenhum cliente corresponde",
+    "noCustomersHint": "Ajuste a busca ou o filtro para explorar a carteira.",
+    "showing": "{from}–{to} de {total} clientes",
+    "previous": "Página anterior",
+    "next": "Próxima página",
+    "customerCount": "{count} clientes",
+    "exposure": "{amount} de exposição vencida",
+    "recovered": "{amount} recuperados em dinheiro",
+    "behaviorWindow": "Ponderado por recebimentos · últimos {days} dias",
+    "cashWeighted": "Ponderado pelo dinheiro aplicado",
+    "daysBeyondTerms": "Dias após o vencimento",
+    "mapHint": "Clientes desta página com histórico comparável suficiente",
+    "changeLabel": "Variação dos dias de atraso",
+    "baselineHint": "Últimos {days} dias contra os {days} anteriores · mínimo de {count} faturas por período",
+    "noOpening": "Sem saldo vencido inicial",
+    "noOpeningHint": "Não havia recebíveis positivos com vencimento atrasado no início do período.",
+    "fixedCohort": "Faturas vencidas no início",
+    "openingOverdue": "Vencido no início",
+    "cashRecovered": "Dinheiro recuperado",
+    "otherChanges": "Outras mudanças no saldo",
+    "stillOpen": "Ainda em aberto",
+    "appliedCash": "Recebimentos de clientes aplicados",
+    "appliedCashHint": "Dinheiro contabilizado e aplicado a faturas no período",
+    "deliveryHint": "Resultados de entrega por documento",
+    "reminderCoverage": "Cobertura de lembretes",
+    "coverageCount": "{sent} de {total} faturas vencidas receberam lembrete",
+    "failedExposure": "Vencido com problemas de entrega",
+    "deliveryRemedy": "Revise os contatos de faturamento e as falhas na entrega de lembretes.",
+    "coverageScope": "A cobertura mede lembretes nativos, não todos os contatos. Mensagens em fila ou com falha não foram entregues. Outros canais não são inferidos.",
+    "deliveryCustomers": "Contexto de cobrança dos clientes",
+    "creditCurrentOnly": "Os controles de crédito refletem as configurações atuais",
+    "creditCurrentHint": "Escolha a data operacional atual para comparar limites e bloqueios atuais com recebíveis atuais. Políticas históricas não são inferidas.",
+    "reviewCurrent": "Revisar crédito atual",
+    "creditHeld": "Clientes bloqueados",
+    "creditExceeded": "Acima do limite",
+    "creditConfigured": "Com limites definidos",
+    "excess": "{amount} acima do limite",
+    "creditBasis": "Recebíveis abertos e compromissos de pedidos não faturados",
+    "dataDate": "Exposição em {date} · {currency}",
+    "openCustomer": "Abrir cliente {name}",
+    "overdue": "Vencido",
+    "openExposure": "{amount} em recebíveis abertos",
+    "paymentSparkline": "Tendência observada de pagamento",
+    "changeDays": "{days} dias",
+    "insufficientHistory": "Histórico comparativo insuficiente",
+    "recentPayment": "Dias recentes após vencimento",
+    "baselinePayment": "Dias de referência após vencimento",
+    "dayValue": "{days} dias",
+    "observationCount": "Faturas observadas: {recent} recentes · {baseline} de referência",
+    "noFlags": "Sem sinais de atenção na cobrança",
+    "customerDocuments": "{count} documentos em aberto",
+    "customerCredits": "{amount} em créditos não aplicados",
+    "creditLimit": "Limite {amount}",
+    "oldestDays": "Maior atraso: {days} dias",
+    "recoveredOf": "{cash} recuperados de {opening}",
+    "behavior": {
+      "0": "Em dia / antecipado",
+      "1": "1–7 dias de atraso",
+      "2": "8–30 dias de atraso",
+      "3": "Mais de 30 dias de atraso"
+    },
+    "recoveryCohort": {
+      "0": "1–30 dias vencido",
+      "1": "31–60 dias vencido",
+      "2": "61–89 dias vencido",
+      "3": "90 dias ou mais vencido"
+    },
+    "notice": {
+      "sent": "Enviado",
+      "failed": "Falhou",
+      "suppressed": "Suprimido",
+      "staged": "Na fila"
+    },
+    "reasons": {
+      "deteriorating": "Piora no padrão de pagamento",
+      "severe": "Atraso grave",
+      "delivery": "Problema na entrega",
+      "terms": "Sem data de vencimento",
+      "held": "Crédito bloqueado",
+      "credit": "Limite de crédito excedido"
+    },
+    "signals": {
+      "all": "Todos os clientes",
+      "deteriorating": "Pagamentos piorando",
+      "severe": "Atraso grave",
+      "delivery": "Problemas de entrega",
+      "terms": "Sem vencimento",
+      "held": "Crédito bloqueado"
+    },
+    "config": {
+      "baselineDays": {
+        "label": "Janela de comparação de pagamentos",
+        "help": "Dias de cada período recente e de referência."
+      },
+      "minObservations": {
+        "label": "Mínimo de faturas observadas",
+        "help": "Faturas com aplicações de dinheiro datadas exigidas por período."
+      },
+      "deteriorationDays": {
+        "label": "Limite de piora dos pagamentos",
+        "help": "Dias adicionais de atraso ponderados que indicam piora."
+      },
+      "severeDays": {
+        "label": "Limite de atraso grave",
+        "help": "Dias de atraso contratual que exigem atenção."
+      },
+      "reminderDays": {
+        "label": "Janela de observação de lembretes",
+        "help": "Dias recentes incluídos nos resultados e na cobertura de entrega."
+      }
+    },
+    "headroom": "Crédito disponível",
+    "lastNotice": "Último lembrete: {date}",
+    "historicalDelivery": "Visões históricas mostram lembretes entregues; estados anteriores de falha mutáveis não estão disponíveis.",
+    "noPaymentHistory": "Sem aplicações de dinheiro datadas nesta janela.",
+    "noReminders": "Sem evidências de entrega de lembretes nesta janela.",
+    "noComparableHistory": "Histórico comparável de pagamentos insuficiente para o gráfico."
   }
 }
