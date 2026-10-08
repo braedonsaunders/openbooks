@@ -158,6 +158,25 @@ test("sandbox insertion retains assignment ownership order through employment hi
   assert.equal(new Set(order).size, nodes.length);
 });
 
+test("sandbox insertion resolves project adjustment ownership inside the deferred document cycle", () => {
+  const nodes = ["project_financial_adjustments", "project_overhead_adjustments",
+    "project_financial_profile_versions", "projects", "documents", "project_types"];
+  const refs: Record<string, Record<string, string>> = {
+    project_financial_adjustments: { project_id: "projects", reverses_adjustment_id: "project_financial_adjustments" },
+    project_overhead_adjustments: { project_id: "projects", reverses_adjustment_id: "project_overhead_adjustments" },
+    project_financial_profile_versions: { project_type_id: "project_types" },
+    projects: { source_document_id: "documents", project_type_id: "project_types" },
+    documents: { project_id: "projects" },
+    project_types: { current_version_id: "project_financial_profile_versions" },
+  };
+  const tables = nodes.map(name => ({ ...table("NO ACTION"), name, fks: refs[name]!, hardFks: {} }));
+  const order = insertionOrder({ tables, tenantTables: tables, rebaseSet: new Set(nodes) });
+  assert.ok(order.indexOf("projects") < order.indexOf("project_financial_adjustments"));
+  assert.ok(order.indexOf("projects") < order.indexOf("project_overhead_adjustments"));
+  assert.ok(order.indexOf("project_types") < order.indexOf("project_financial_profile_versions"));
+  assert.equal(new Set(order).size, nodes.length);
+});
+
 /**
  * The boundary guard that makes the wipe's one remaining raw-SQL interpolation
  * (PARENT_FILTER's org id) provably safe: a value that passes here is a

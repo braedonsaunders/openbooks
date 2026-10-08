@@ -336,17 +336,19 @@ export function generateCopySql(
     }
   }
 
-  // The subsidiary BEFORE trigger requires its parent to exist already.
-  // Deferred FKs cannot repair child-first insertion, and heap/index scan order
-  // changes after ordinary edits. Order the entire hierarchy by ancestor depth.
-  const tree = t.name === "subsidiaries" ? `with recursive source_tree as (
-    select id, 0 as depth from subsidiaries where org_id = '${prod}' and parent_id is null
+  // Immediate ownership and reversal guards require ancestors to exist already.
+  // Heap/index order and UUID chronology cannot determine retained lineage.
+  const parentColumn = t.name === "subsidiaries" ? "parent_id"
+    : ["project_financial_adjustments", "project_overhead_adjustments"].includes(t.name)
+      ? "reverses_adjustment_id" : null;
+  const tree = parentColumn ? `with recursive source_tree as (
+    select id, 0 as depth from "${t.name}" where org_id = '${prod}' and "${parentColumn}" is null
     union all
-    select child.id, parent.depth + 1 from subsidiaries child
-      join source_tree parent on parent.id = child.parent_id where child.org_id = '${prod}'
+    select child.id, parent.depth + 1 from "${t.name}" child
+      join source_tree parent on parent.id = child."${parentColumn}" where child.org_id = '${prod}'
   ) ` : "";
-  const order = t.name === "subsidiaries"
-    ? ` order by (select depth from source_tree where source_tree.id = subsidiaries.id), id`
+  const order = parentColumn
+    ? ` order by (select depth from source_tree where source_tree.id = "${t.name}".id), id`
     : "";
   // Component insertion creates an empty one-to-one classification row.
   // Its expected conflict must copy every source classification, rather than
