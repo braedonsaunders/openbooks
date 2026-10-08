@@ -5,12 +5,13 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
-import { ArrowLeft, ArrowRight, CheckCircle2, FileUp, Upload } from 'lucide-react'
+import { ArrowLeft, ArrowRight, CheckCircle2, Download, FileUp, Upload } from 'lucide-react'
 import { Alert, Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Label, PageHeader, Select, Textarea, cn } from '@openbooks/ui'
 import { dataResourceLabel, dataFieldLabel } from '../../../../lib/data-io/labels'
 import { WizardLayout } from '../../../../components/page-layout'
 import { readApiErrorMessage } from '../../../../lib/api-error'
 import { guessMapping } from '../../../../lib/data-io/mapping'
+import { templateHref } from '../../../../lib/data-io/template-links'
 import { requestTransfer, transferCommand, uploadTransfer, useTransferJob } from '../../../../lib/data-io/transfer-client'
 import { DataTransferStatus } from '../../../../components/data-transfer-status'
 import { DataTransferPicker } from '../../../../components/data-transfer-picker'
@@ -288,6 +289,15 @@ export function ImportWizard({ backHref = '/', backLabel }: { backHref?: string;
                   </optgroup>
                 ))}
               </Select>
+              {resource ? (
+                <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                  <span>{t('templates.hint')}</span>
+                  <a className="inline-flex items-center gap-1 font-medium text-teal-700 hover:underline dark:text-teal-300" href={templateHref(resource, 'xlsx')} download>
+                    <Download aria-hidden="true" className="h-3.5 w-3.5" />{t('templates.downloadXlsx')}
+                  </a>
+                  <a className="font-medium text-teal-700 hover:underline dark:text-teal-300" href={templateHref(resource, 'csv')} download>{t('templates.downloadCsv')}</a>
+                </p>
+              ) : null}
             </div>
             <div className="space-y-3 rounded-lg border border-dashed border-slate-300 bg-slate-50 p-5 dark:border-slate-700 dark:bg-slate-950/50">
               <div className="flex items-start gap-3">

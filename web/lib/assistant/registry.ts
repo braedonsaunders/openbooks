@@ -54,6 +54,7 @@ import { META_TOOLS } from "./tools-meta";
 import { WRITE_TOOLS } from "./tools-write";
 import { ALLOCATIONS_TOOLS } from "./tools-allocations";
 import { RESOURCING_TOOLS } from "./tools-resourcing";
+import { MIGRATION_TOOLS } from "./tools-migration";
 import type { AssistantToolDef, ToolResult, ToolTier } from "./types";
 import { safeApplicationToolError } from "./tool-errors";
 
@@ -97,6 +98,7 @@ export const ASSISTANT_TOOLS: readonly AssistantToolDef[] = [
   ...META_TOOLS,
   ...ALLOCATIONS_TOOLS,
   ...RESOURCING_TOOLS,
+  ...MIGRATION_TOOLS,
   ...WRITE_TOOLS,
 ];
 
@@ -305,10 +307,13 @@ export async function buildChatTurn(
   features: FeatureState | null | undefined,
   message: string,
   priorNames: readonly string[] = [],
+  /** Modules a workspace always sends, e.g. migration tools in the migration workspace. */
+  workspaceModules: readonly string[] = [],
 ): Promise<ChatTurn> {
-  const scope = createTurnScope(
-    preRouteModules(message, priorNames, (name) => moduleOfTool(name, featureOfTool(name))),
-  );
+  const scope = createTurnScope([...new Set([
+    ...preRouteModules(message, priorNames, (name) => moduleOfTool(name, featureOfTool(name))),
+    ...workspaceModules,
+  ])].sort());
   const tools = await buildToolRegistryAsync(authz, features, {
     onActivateModules: (modules) => activateTurnModules(scope, modules),
   });

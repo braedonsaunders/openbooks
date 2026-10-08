@@ -172,10 +172,25 @@ const mockSources = new Map<string, string>([
   ],
 ]);
 
+// The shared connection command imports the engine's public contracts; the
+// sync contract re-exports the connection, credential and mirror-schedule
+// pieces mocked individually above.
+mockSources.set("mock:engine-sync", [
+  mockSources.get("mock:connection"),
+  mockSources.get("mock:secrets"),
+  mockSources.get("mock:mirror"),
+  "export async function terminateConnectionSessions() {}",
+].join("\n"));
+const CONTRACT_MOCKS: Record<string, string> = {
+  "@openbooks/engine/platform/database": "mock:db",
+  "@openbooks/engine/platform/business-date": "mock:business-date",
+  "@openbooks/engine/sync": "mock:engine-sync",
+};
+
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    const mocked =
-      specifier === "../../../../../lib/authz"
+    const mocked = CONTRACT_MOCKS[specifier] ??
+      (specifier === "../../../../../lib/authz"
           ? "mock:authz"
           : specifier === "@openbooks/engine/src/platform/db.ts"
             ? "mock:db"
@@ -193,7 +208,7 @@ const hooks = registerHooks({
                         ? "mock:storage"
                         : specifier === "drizzle-orm"
                           ? "mock:drizzle"
-                          : undefined;
+                          : undefined);
     if (mocked) return { url: mocked, shortCircuit: true };
     return nextResolve(specifier, context);
   },

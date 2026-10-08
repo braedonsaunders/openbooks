@@ -1,5 +1,6 @@
 import { Fragment, type ComponentProps } from 'react'
 import { AssistantApp } from '../assistant/assistant-app'
+import { MigrationWorkspace, type MigrationWorkspaceProps } from '../migration/migration-workspace'
 import { ChatMarkdown } from '../assistant/markdown'
 import { AgentsLastRunCell } from '../../app/(app)/admin/setup/agents/AgentsLastRunCell'
 import { AgentsPackActions } from '../../app/(app)/admin/setup/agents/AgentsPackActions'
@@ -180,6 +181,21 @@ export const AGENTS_WIDGETS = {
       aiEnabled={props.aiEnabled === true}
       initialPrompt={str(props, 'initialPrompt')}
       initialFindingId={str(props, 'initialFindingId')}
+    />
+  ),
+
+  /** The migration workspace: migration-scoped assistant beside the measured plan. */
+  'migration-workspace': (props) => (
+    <MigrationWorkspace
+      conversations={(props.conversations as MigrationWorkspaceProps['conversations']) ?? []}
+      activeId={str(props, 'activeId') ?? null}
+      initialMessages={(props.initialMessages as MigrationWorkspaceProps['initialMessages']) ?? []}
+      canWrite={props.canWrite === true}
+      canConfigureAi={props.canConfigureAi === true}
+      aiEnabled={props.aiEnabled === true}
+      canImport={props.canImport === true}
+      journey={props.journey as MigrationWorkspaceProps['journey']}
+      initialPrompt={str(props, 'initialPrompt')}
     />
   ),
 

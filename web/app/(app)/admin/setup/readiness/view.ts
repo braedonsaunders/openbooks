@@ -1,12 +1,10 @@
 import 'server-only'
 
-import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/platform/db.ts'
 import { field, grid, page, ref, repeat, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
 import { getTranslations } from 'next-intl/server'
 import { requirePermission } from '../../../../../lib/authz'
-import { JOURNAL_ENTRY_TABLE, journalScopeWhere } from '../../../../../lib/customization/entity-list-query/journal-entries'
-import { onboardingStatus } from '../../../../../lib/onboarding'
+import { loadReadinessSnapshot } from '../../../../../lib/setup/readiness-snapshot'
+import { MIGRATION_WORKSPACE_HREF } from '../../../../../lib/migration/links'
 import type { SetupReadinessCheck } from './sections'
 
 /**
@@ -50,64 +48,11 @@ export interface SetupReadinessData {
   checks: SetupReadinessCheck[]
 }
 
-/** The setup-readiness org snapshot: profile columns plus `::int` counts. */
-type ReadinessOrgRow = {
-  name: string
-  legal_name: string | null
-  base_currency: string
-  country: string
-  settings: unknown
-  currencies: number
-  roots: number
-  accounts: number
-  books: number
-  periods: number
-  payment_terms: number
-  tax_codes: number
-  bank_accounts: number
-  posted_entries: number
-  completed_closes: number
-}
-
 export async function loadSetupReadiness(): Promise<SetupReadinessData> {
   const { user } = await requirePermission('admin.setup.manage')
   const t = await getTranslations('admin')
-  const result = (await db.execute<ReadinessOrgRow>(sql`
-    select o.name, o.legal_name, o.base_currency, o.country, o.settings,
-      (select count(*)::int from currencies) as currencies,
-      (select count(*)::int from subsidiaries s where s.org_id=o.id and s.parent_id is null) as roots,
-      (select count(*)::int from accounts a where a.org_id=o.id and a.is_active and not a.is_summary) as accounts,
-      (select count(*)::int from accounting_books b where b.org_id=o.id and b.is_active) as books,
-      (select count(*)::int from accounting_periods p where p.org_id=o.id) as periods,
-      (select count(*)::int from payment_terms pt where pt.org_id=o.id and pt.is_active) as payment_terms,
-      (select count(*)::int from tax_codes tc where tc.org_id=o.id and tc.is_active) as tax_codes,
-      (select count(*)::int from accounts a where a.org_id=o.id and a.is_active and a.reconcilable) as bank_accounts,
-      (select count(*)::int from ${sql.raw(`${JOURNAL_ENTRY_TABLE} e`)} where ${journalScopeWhere(user.orgId)}) as posted_entries,
-      (select count(*)::int from close_runs cr where cr.org_id=o.id and cr.status in ('closed','published')) as completed_closes
-    from orgs o where o.id=${user.orgId}
-  `))
-  // The authed org always exists; the zeroed fallback only keeps the guide
-  // rendering degraded (rather than crashing) if it ever does not.
-  const org: ReadinessOrgRow = result.rows[0] ?? {
-    name: '',
-    legal_name: null,
-    base_currency: '',
-    country: '',
-    settings: {},
-    currencies: 0,
-    roots: 0,
-    accounts: 0,
-    books: 0,
-    periods: 0,
-    payment_terms: 0,
-    tax_codes: 0,
-    bank_accounts: 0,
-    posted_entries: 0,
-    completed_closes: 0,
-  }
-  const settings = (org.settings ?? {}) as Record<string, unknown>
-  const workspaceProfile = (settings.workspaceProfile ?? {}) as Record<string, unknown>
-  const bookStart = workspaceProfile.bookStart === 'migrate' ? 'migrate' : 'fresh'
+  const tMigration = await getTranslations('sync.migrationAssistant')
+  const { org, workspaceProfile, bookStart, foundationReady, profileReady } = await loadReadinessSnapshot(user.orgId)
   const taxPosition = ['registered', 'not_registered', 'unsure'].includes(String(workspaceProfile.taxPosition))
     ? String(workspaceProfile.taxPosition)
     : 'unsure'
@@ -121,11 +66,6 @@ export async function loadSetupReadiness(): Promise<SetupReadinessData> {
     : workspaceProfile.monthlyActivity === 'steady'
       ? t('setup.guide.activity.steady')
       : t('setup.guide.activity.light')
-  const control = (settings.controlAccounts ?? {}) as Record<string, unknown>
-  const foundationReady = org?.currencies > 0 && org?.roots === 1 && org?.accounts > 0
-    && org?.books > 0 && org?.periods > 0 && Boolean(control.ar && control.ap && control.bank)
-  const profileReady = onboardingStatus(settings) === 'complete' && Boolean(settings.workspaceProfile)
-
   const checks: Omit<SetupReadinessCheck, 'indexLabel' | 'stateLabel'>[] = [
     {
       title: t('setup.guide.profile.title'),
@@ -179,8 +119,8 @@ export async function loadSetupReadiness(): Promise<SetupReadinessData> {
         : org?.posted_entries > 0
           ? t('setup.guide.opening.descMigratePosted', { count: org!.posted_entries })
           : t('setup.guide.opening.descMigrateEmpty'),
-      href: bookStart === 'migrate' && org.posted_entries === 0 ? '/sync' : '/journal',
-      action: bookStart === 'fresh' ? t('setup.guide.opening.actionFreshLedger') : org?.posted_entries > 0 ? t('setup.guide.opening.actionMigrateJournal') : t('setup.wizard.done.actions.migrate'),
+      href: bookStart === 'migrate' && org.posted_entries === 0 ? MIGRATION_WORKSPACE_HREF : '/journal',
+      action: bookStart === 'fresh' ? t('setup.guide.opening.actionFreshLedger') : org?.posted_entries > 0 ? t('setup.guide.opening.actionMigrateJournal') : tMigration('entry.plan'),
       state: bookStart === 'fresh' ? 'complete' : org?.posted_entries > 0 ? 'review' : 'waiting',
     },
     {

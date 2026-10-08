@@ -15,6 +15,15 @@ export interface ProposedApplicationCommand {
   confirmToken: string
 }
 
+/** Window event dispatched after a command card is applied, so live side panels re-read state. */
+export const APPLICATION_COMMAND_APPLIED_EVENT = 'openbooks:application-command-applied'
+
+/** Best-effort notice to live panels; the command is already applied whether or not anyone listens. */
+function announceApplied(toolName: string) {
+  if (typeof window === 'undefined' || typeof window.CustomEvent !== 'function') return
+  window.dispatchEvent(new window.CustomEvent(APPLICATION_COMMAND_APPLIED_EVENT, { detail: { toolName } }))
+}
+
 export function applicationCommandFromOutput(output: unknown): ProposedApplicationCommand | null {
   if (!output || typeof output !== 'object') return null
   const data = (output as { data?: unknown }).data
@@ -64,7 +73,9 @@ export function ApplicationCommandCard({ proposal }: { proposal: ProposedApplica
       } catch (error) {
         setError(error instanceof ApiResponseError ? error.message : t('failed'))
         setState('error')
+        return
       }
+      announceApplied(proposal.toolName)
     })
   }
 

@@ -220,5 +220,164 @@
     }
   },
   "confirmRetainSourceDeletion": "Conserver la transaction {ref} supprimée à la source dans OpenBooks et consigner la décision du contrôleur ?",
-  "confirmVoidSourceDeletion": "Contre-passer et annuler la transaction {ref} supprimée à la source ? Une contre-passation comptable sera comptabilisée et ne pourra pas être annulée depuis cet écran."
+  "confirmVoidSourceDeletion": "Contre-passer et annuler la transaction {ref} supprimée à la source ? Une contre-passation comptable sera comptabilisée et ne pourra pas être annulée depuis cet écran.",
+  "migrationAssistant": {
+    "title": "Assistant de migration",
+    "placeholder": "Indiquez-moi où se trouve votre comptabilité aujourd’hui, ou déposez un fichier d’export…",
+    "entry": {
+      "plan": "Planifier la migration",
+      "wizard": "Planifier ma migration avec l’assistant de migration",
+      "sync": "Demander à l’assistant de migration"
+    },
+    "attach": {
+      "label": "Joindre un fichier d’export",
+      "unsupported": "Joignez un fichier CSV, Excel (.xlsx) ou JSON.",
+      "noImport": "Votre rôle ne permet pas d’importer des enregistrements ; les fichiers ne peuvent donc pas être préparés ici.",
+      "uploading": "Téléversement de {name}…",
+      "reading": "Lecture de {name}…",
+      "message": "J’ai joint « {name} » (fichier d’import {id}, {rows, plural, one {# ligne} other {# lignes}}).",
+      "messageStillReading": "J’ai joint « {name} » (fichier d’import {id}) ; sa lecture est toujours en cours.",
+      "failed": "Impossible de lire {name} : {reason}"
+    },
+    "welcome": {
+      "kicker": "Assistant de migration",
+      "title": "Transférons votre comptabilité",
+      "description": "Dites-moi ce que vous utilisez aujourd’hui. Je configurerai la connexion ou les imports de tableurs, répéterai la migration, vérifierai chaque solde par rapport à votre ancien système et vous accompagnerai jusqu’à la bascule. Vous approuvez chaque modification.",
+      "fromWizard": "Vous avez indiqué à l’assistant de configuration que vous reprenez une comptabilité existante. Choisissez comment elle doit être transférée.",
+      "start": "Commencer",
+      "dropHint": "Déposez à tout moment un export CSV ou Excel dans la conversation.",
+      "unsure": {
+        "label": "Vous hésitez ? Aidez-moi à choisir",
+        "prompt": "Je ne sais pas quelle approche de migration nous convient. Posez-moi les questions nécessaires et recommandez-en une."
+      },
+      "paths": {
+        "cutover": {
+          "title": "Basculer à une date définie",
+          "description": "Migrez l’historique via un connecteur, vérifiez-le au centime près, puis passez en production.",
+          "prompt": "Nous voulons passer entièrement à OpenBooks à une date de bascule. Guidez-moi tout au long de la migration."
+        },
+        "mirror": {
+          "title": "Synchroniser mon système actuel en miroir",
+          "description": "Gardez cette comptabilité synchronisée avec le système que vous utilisez actuellement pendant votre évaluation ou une exploitation en parallèle.",
+          "prompt": "J’aimerais mettre en place une synchronisation miroir de notre système comptable actuel vers OpenBooks pendant notre évaluation. Aidez-moi à la configurer."
+        },
+        "spreadsheet": {
+          "title": "Importer mes données depuis des tableurs",
+          "description": "Pour tout système : exportez vos listes et vos soldes, et je les associerai aux bons champs, les validerai et les importerai.",
+          "prompt": "Notre système actuel n’a pas de connecteur. Aidez-moi à migrer à partir d’exports de tableurs."
+        },
+        "fresh": {
+          "title": "Repartir de zéro",
+          "description": "Aucun historique à reprendre. Mettez en place les fondations et les soldes d’ouverture, puis passez en production.",
+          "prompt": "Nous repartons de zéro sans historique à migrer. De quoi avons-nous besoin pour la mise en production ?"
+        }
+      }
+    },
+    "plan": {
+      "title": "Votre migration",
+      "toggle": "Plan de migration",
+      "refresh": "Actualiser le plan",
+      "loadFailed": "Le plan de migration n’a pas pu être chargé.",
+      "source": "Source",
+      "cutover": "Bascule",
+      "notSet": "Non définie",
+      "spreadsheetSource": "Exports de tableurs",
+      "live": "En production depuis le {date}",
+      "measuredAt": "Mesuré à {time}",
+      "path": {
+        "none": "Choisissez comment votre comptabilité sera transférée",
+        "mirror": "Synchronisation miroir du système actuel",
+        "cutover": "Migration par connecteur et bascule",
+        "spreadsheet": "Migration par tableurs",
+        "fresh": "Nouveau départ"
+      }
+    },
+    "stages": {
+      "plan": "Planifier la migration",
+      "foundation": "Fondations de la société",
+      "sourceConnector": "Connecter l’ancien système",
+      "sourceFiles": "Importer les données de référence",
+      "rehearse": "Répéter la migration",
+      "loadConnector": "Charger l’historique",
+      "loadFiles": "Soldes d’ouverture",
+      "verify": "Vérifier par rapport à la source",
+      "mirror": "Maintenir la synchronisation miroir",
+      "cutover": "Contrôles finaux et bascule",
+      "live": "En production"
+    },
+    "stageState": {
+      "current": "En cours"
+    },
+    "stageOpen": "Ouvrir",
+    "runStatus": {
+      "none": "Pas encore exécuté",
+      "running": "Exécution en cours…",
+      "ok": "Terminé et vérifié",
+      "ok_with_errors": "Terminé avec des erreurs",
+      "failed": "Échec"
+    },
+    "connectionStatus": {
+      "unconfigured": "en attente des identifiants",
+      "active": "connecté",
+      "paused": "en pause",
+      "error": "intervention requise"
+    },
+    "journalStatus": {
+      "draft": "brouillon",
+      "posted": "comptabilisé"
+    },
+    "schedules": {
+      "hourly": "toutes les heures",
+      "every_6_hours": "toutes les 6 heures",
+      "daily": "chaque jour",
+      "weekly": "chaque semaine"
+    },
+    "details": {
+      "planEmpty": "Indiquez à l’assistant ce que vous utilisez aujourd’hui.",
+      "foundationReady": "{accounts, plural, one {# compte prêt} other {# comptes prêts}}",
+      "foundationWaiting": "Terminez la configuration de la société et des comptes collectifs.",
+      "connection": "Connexion {name} · {status}",
+      "noConnection": "Aucune connexion pour l’instant.",
+      "imports": "{count, plural, one {# liste importée} other {# listes importées}}",
+      "noImports": "Aucune liste importée pour l’instant.",
+      "postedEntries": "{count, plural, one {# écriture comptabilisée} other {# écritures comptabilisées}}",
+      "openingJournal": "Pièce de journal {number} · {status}",
+      "noOpeningJournal": "Aucune écriture de soldes d’ouverture pour l’instant.",
+      "verification": "{matches} comptes sur {accounts} concordent · {openMatches} éléments ouverts sur {openChecked} concordent",
+      "verifyFiles": "Les comptes clients, les comptes fournisseurs et le compte d’attente doivent concorder.",
+      "mirrorOn": "Synchronisation miroir {schedule}",
+      "mirrorOff": "Synchronisation miroir désactivée",
+      "noCutover": "Définissez la date de bascule."
+    },
+    "checks": {
+      "title": "Contrôles finaux",
+      "run": "Lancer les contrôles",
+      "rerun": "Relancer",
+      "running": "Mesure en cours…",
+      "hint": "Mesure le grand livre par rapport à toutes les exigences de la mise en production.",
+      "required": "Obligatoire",
+      "advisory": "Recommandé",
+      "ready": "Tous les contrôles obligatoires sont réussis. Demandez à l’assistant d’enregistrer la mise en production.",
+      "blocked": "{count, plural, one {# contrôle obligatoire reste ouvert.} other {# contrôles obligatoires restent ouverts.}}",
+      "live": "La mise en production est enregistrée avec ces contrôles.",
+      "state": {
+        "pass": "Réussi",
+        "fail": "Intervention requise",
+        "pending": "Pas encore mesurable",
+        "not_applicable": "Sans objet"
+      },
+      "items": {
+        "foundation": "Les fondations de la société sont complètes",
+        "cutoverDate": "La date de bascule est définie",
+        "sourceVerified": "La dernière exécution depuis la source est vérifiée au centime près",
+        "syncedThroughCutover": "Source capturée jusqu’à la date de bascule",
+        "mirrorStopped": "Synchronisation miroir arrêtée",
+        "openingJournalPosted": "Écriture de soldes d’ouverture comptabilisée",
+        "openingClearingZero": "Le compte d’attente d’ouverture est à zéro",
+        "receivablesTie": "Les comptes clients concordent avec les factures ouvertes",
+        "payablesTie": "Les comptes fournisseurs concordent avec les factures fournisseurs ouvertes",
+        "periodsLocked": "Les périodes antérieures à la bascule sont verrouillées"
+      }
+    }
+  }
 }

@@ -361,6 +361,7 @@ export const WIDGET_FAMILY: Readonly<Record<string, WidgetFamily>> = {
   'match-workspace': 'banking',
   'matrix-filters': 'operations',
   'metric-tile': 'agents',
+  'migration-workspace': 'agents',
   'module-home-tabs': 'home',
   'narrative-drawer': 'agents',
   'narrative-entry': 'agents',

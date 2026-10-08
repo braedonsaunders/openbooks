@@ -1,3 +1,5 @@
+import { MIGRATION_PLAYBOOK } from "../assistant/migration-prompt";
+
 /**
  * The MCP skill pack: operating playbooks shipped on the surface itself as
  * readable resources (openbooks://skills/<slug>), so any agent — Claude
@@ -16,6 +18,11 @@ export interface McpSkill {
 }
 
 export const MCP_SKILLS: readonly McpSkill[] = [
+  {
+    slug: "migrate-into-openbooks", title: "Migrate an organization into OpenBooks",
+    description: "Plan, rehearse, load, verify, cut over and go live from a previous system by connector or spreadsheets.",
+    body: ["# Migrate into OpenBooks", "", MIGRATION_PLAYBOOK].join("\n"),
+  },
   {
     slug: "build-an-app", title: "Build and revise an app",
     description: "Author a package, preview an unpublished draft, and activate its reviewed fingerprint.",

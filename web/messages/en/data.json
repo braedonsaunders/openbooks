@@ -163,5 +163,27 @@
     "choose": "Choose a transfer…",
     "loadFailed": "Could not load recent transfers.",
     "lastActivity": "Last activity: {time}"
+  },
+  "templates": {
+    "hint": "Start from a blank template with this resource’s columns:",
+    "downloadXlsx": "Excel template",
+    "downloadCsv": "CSV",
+    "required": "Required",
+    "optional": "Optional",
+    "reference": "Name the {resource} record by its {by}.",
+    "options": "One of: {options}",
+    "kind": {
+      "text": "Text",
+      "long_text": "Text, may span lines",
+      "number": "A plain number, such as 1250.5",
+      "currency": "An exact amount without symbols or separators, such as 1250.50",
+      "percent": "A percentage as a plain number, such as 7.5",
+      "boolean": "true or false",
+      "date": "A date as YYYY-MM-DD",
+      "datetime": "A date and time as YYYY-MM-DDTHH:MM",
+      "select": "One of the listed values",
+      "multiselect": "Listed values separated by commas",
+      "reference": "The referenced record’s identifying value"
+    }
   }
 }

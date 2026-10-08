@@ -55,6 +55,9 @@ import {
 } from "../../../../lib/ai-conversations";
 import { loadFindingContext } from "../../../../lib/agents/finding-context";
 import { isUuid } from "@openbooks/engine/src/platform/uuid.ts";
+import { CONVERSATION_SCOPES, conversationScope } from "../../../../lib/assistant/conversation-scopes";
+import { migrationModeSection } from "../../../../lib/assistant/migration-prompt";
+import { loadMigrationJourney } from "../../../../lib/migration/journey";
 
 /**
  * The agentic turn endpoint.
@@ -68,13 +71,16 @@ export const dynamic = "force-dynamic";
 // Agent turns run a multi-step tool loop — far longer than a single completion.
 export const maxDuration = 300;
 
-const SCOPE = "assistant";
 const MAX_PROMPT_CHARS = 32_000;
+const MIGRATION_STEP_BUDGET = 16;
+/** Tool modules the migration workspace always sends beside the core set. */
+const MIGRATION_WORKSPACE_MODULES = ["migration", "setup", "ledger", "close"];
 const TURN_FAILURE_MESSAGE = "The assistant could not complete this response. Please try again.";
 const chatRequestBody = z.object({
   conversationId: z.string().uuid().nullable().optional(),
   prompt: z.string().max(MAX_PROMPT_CHARS),
   findingId: z.string().uuid().nullable().optional(),
+  mode: z.enum(CONVERSATION_SCOPES).optional(),
 }).strict();
 
 function conversationResponse(
@@ -113,6 +119,13 @@ export const POST = defineRoute({
   }
   const prompt = input.prompt.trim();
   if (!prompt) return new Response("Empty prompt", { status: 400 });
+  // The migration workspace is organization-wide setup work: its playbook
+  // and plan snapshot are only assembled for unrestricted setup administrators.
+  const SCOPE = conversationScope(input.mode);
+  const migrationMode = SCOPE === "migration";
+  if (migrationMode && (!can(authz, "admin.setup.manage") || authz.allowedSubsidiaryIds !== null)) {
+    return new Response("Forbidden", { status: 403 });
+  }
 
   // Resolve / create the conversation. Only the OWNER may send a turn.
   let conversationId = input.conversationId ?? null;
@@ -182,10 +195,19 @@ export const POST = defineRoute({
       windowPins = foldPartsIntoPins(windowPins, message.parts);
     }
     const priorNames = collectPriorToolNames(historyView);
-    const maxSteps = resolveStepBudget(prompt, priorNames, resolveModule);
+    // A migration turn reads the plan before acting, so it keeps the larger budget.
+    const maxSteps = migrationMode
+      ? Math.max(MIGRATION_STEP_BUDGET, resolveStepBudget(prompt, priorNames, resolveModule))
+      : resolveStepBudget(prompt, priorNames, resolveModule);
 
     const findingContext = findingId ? await loadFindingContext(authz, findingId) : null;
-    const system = assistantSystemPrompt({
+    const migrationSection = migrationMode
+      ? migrationModeSection(await loadMigrationJourney(authz.user.orgId).catch((error: unknown) => {
+        console.warn("[assistant/chat] migration snapshot unavailable", error);
+        return null;
+      }))
+      : null;
+    const baseSystem = assistantSystemPrompt({
       orgName: aiConfig?.org?.name ?? null,
       baseCurrency: org.rows[0]?.base_currency ?? null,
       userName: authz.user.name,
@@ -200,6 +222,7 @@ export const POST = defineRoute({
         findingContext?.section ?? "",
       ],
     });
+    const system = migrationSection ? `${baseSystem}\n\n${migrationSection}` : baseSystem;
 
     // Older turns' tool parts ride as compact summaries; the UI keeps full parts.
     const budgeted = applyHistoryBudget(historyView);
@@ -208,7 +231,7 @@ export const POST = defineRoute({
     // typed activation) while each step only SENDS core ∪ pre-routed ∪
     // activated tools. Model-facing outputs are compacted; the streamed and
     // persisted parts keep the full results.
-    const turn = await buildChatTurn(authz, features, prompt, priorNames);
+    const turn = await buildChatTurn(authz, features, prompt, priorNames, migrationMode ? MIGRATION_WORKSPACE_MODULES : []);
     const tools = withModelCompaction(turn.tools);
 
     let modelMessages;

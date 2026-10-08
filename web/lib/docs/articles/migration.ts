@@ -7,7 +7,7 @@ export const migrationAndCutover: DocArticle = {
   order: 1,
   summary:
     'Plan source extraction, mapping, trial loads, reconciliation, parallel operation, final delta, and cutover.',
-  updated: '2026-07-20',
+  updated: '2026-10-07',
   keywords: [
     'migration',
     'implementation',
@@ -17,12 +17,39 @@ export const migrationAndCutover: DocArticle = {
     'history',
     'mapping',
     'delta',
+    'migration assistant',
+    'go live',
+    'import template',
   ],
   related: ['migrate-with-a-connector', 'quick-start', 'reconciliation-before-cutover', 'data-imports'],
   body: `# Migration and Cutover
 
 A migration is complete only when users can perform their work and the new books
 are proven. Loading rows is one step in a controlled cutover.
+
+## Let the migration assistant lead
+
+**Company Setup → [Migration assistant](/migrate)** runs the whole move as a
+conversation beside a live migration plan. Tell it what you use today and it
+recommends a path — mirror the current system, migrate through a connector and
+cut over, bring spreadsheets, or start fresh — then does the work with you:
+
+- opens the secure connection form for your source (credentials are entered
+  only there, never in the conversation);
+- rehearses with a read-only preflight, loads history, and reports the trial
+  balance and open-item verification exactly as the run measured it;
+- hands you blank Excel or CSV templates generated from each resource's live
+  fields, or reads an export you drop into the conversation, proposes the
+  mapping, and validates it before anything is imported;
+- drafts the opening trial balance as a journal you review and post, refusing
+  an unbalanced file instead of plugging the difference;
+- measures the final cutover checks and records go-live only when every
+  required check passes.
+
+Every change it proposes is a review card; nothing changes until you apply it,
+and each one runs through the same command, permission and audit trail as the
+screen it replaces. The plan beside the conversation reads the same measured
+state, so it works even without an AI provider.
 
 ## Start with a connector
 

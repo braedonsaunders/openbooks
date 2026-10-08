@@ -163,5 +163,27 @@
     "choose": "Übertragung auswählen…",
     "loadFailed": "Letzte Übertragungen konnten nicht geladen werden.",
     "lastActivity": "Letzte Aktivität: {time}"
+  },
+  "templates": {
+    "hint": "Beginnen Sie mit einer leeren Vorlage mit den Spalten dieser Ressource:",
+    "downloadXlsx": "Excel-Vorlage",
+    "downloadCsv": "CSV-Datei",
+    "required": "Pflichtfeld",
+    "optional": "Kein Pflichtfeld",
+    "reference": "Bezeichnen Sie den Datensatz vom Typ {resource} anhand des Felds {by}.",
+    "options": "Einer der Werte: {options}",
+    "kind": {
+      "text": "Freitext",
+      "long_text": "Text, auch mehrzeilig",
+      "number": "Eine einfache Zahl, z. B. 1250.5",
+      "currency": "Ein exakter Betrag ohne Symbole oder Trennzeichen, z. B. 1250.50",
+      "percent": "Ein Prozentsatz als einfache Zahl, z. B. 7.5",
+      "boolean": "true oder false",
+      "date": "Ein Datum im Format YYYY-MM-DD",
+      "datetime": "Datum und Uhrzeit im Format YYYY-MM-DDTHH:MM",
+      "select": "Einer der aufgeführten Werte",
+      "multiselect": "Aufgeführte Werte, durch Kommas getrennt",
+      "reference": "Der identifizierende Wert des referenzierten Datensatzes"
+    }
   }
 }

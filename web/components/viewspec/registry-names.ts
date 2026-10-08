@@ -353,6 +353,7 @@ export const WIDGET_NAMES: ReadonlySet<string> = new Set([
   'match-workspace',
   'matrix-filters',
   'metric-tile',
+  'migration-workspace',
   'module-home-tabs',
   'native-extension',
   'narrative-drawer',

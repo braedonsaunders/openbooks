@@ -219,5 +219,164 @@
     }
   },
   "confirmRetainSourceDeletion": "Manter no OpenBooks a transação {ref} excluída na origem e registrar como decisão do controller?",
-  "confirmVoidSourceDeletion": "Reverter e anular a transação {ref} excluída na origem? Isso lança uma reversão contábil e não pode ser desfeito nesta tela."
+  "confirmVoidSourceDeletion": "Reverter e anular a transação {ref} excluída na origem? Isso lança uma reversão contábil e não pode ser desfeito nesta tela.",
+  "migrationAssistant": {
+    "title": "Assistente de migração",
+    "placeholder": "Diga onde sua contabilidade está hoje ou solte aqui um arquivo de exportação…",
+    "entry": {
+      "plan": "Planejar a migração",
+      "wizard": "Planejar minha mudança com o assistente de migração",
+      "sync": "Perguntar ao assistente de migração"
+    },
+    "attach": {
+      "label": "Anexar um arquivo de exportação",
+      "unsupported": "Anexe um arquivo CSV, Excel (.xlsx) ou JSON.",
+      "noImport": "Sua função não permite importar registros; por isso, não é possível preparar arquivos aqui.",
+      "uploading": "Enviando {name}…",
+      "reading": "Lendo {name}…",
+      "message": "Anexei “{name}” (arquivo de importação {id}, {rows, plural, one {# linha} other {# linhas}}).",
+      "messageStillReading": "Anexei “{name}” (arquivo de importação {id}); a leitura ainda está em andamento.",
+      "failed": "Não foi possível ler {name}: {reason}"
+    },
+    "welcome": {
+      "kicker": "Assistente de migração",
+      "title": "Vamos trazer sua contabilidade",
+      "description": "Conte o que você usa hoje. Vou configurar a conexão ou as importações de planilhas, ensaiar a mudança, conferir cada saldo com o seu sistema anterior e acompanhar você até a virada. Você aprova cada alteração.",
+      "fromWizard": "Você informou ao assistente de configuração que está trazendo uma contabilidade existente. Escolha como ela deve chegar.",
+      "start": "Começar",
+      "dropHint": "Solte uma exportação CSV ou Excel na conversa a qualquer momento.",
+      "unsure": {
+        "label": "Em dúvida? Ajude-me a escolher",
+        "prompt": "Não sei qual abordagem de migração é a ideal para nós. Pergunte o que precisar saber e recomende uma."
+      },
+      "paths": {
+        "cutover": {
+          "title": "Migrar em uma data de virada",
+          "description": "Migre o histórico por meio de um conector, confira-o centavo por centavo e depois faça a entrada em produção.",
+          "prompt": "Queremos mudar completamente para o OpenBooks em uma data de virada. Conduza-me pela migração."
+        },
+        "mirror": {
+          "title": "Espelhar meu sistema atual",
+          "description": "Mantenha esta contabilidade sincronizada com o sistema que você usa hoje enquanto avalia ou opera em paralelo.",
+          "prompt": "Gostaria de espelhar nosso sistema contábil atual no OpenBooks enquanto avaliamos. Ajude-me a configurar o espelhamento."
+        },
+        "spreadsheet": {
+          "title": "Trazer meus dados de planilhas",
+          "description": "Para qualquer sistema: exporte suas listas e saldos, e eu vou mapeá-los, validá-los e importá-los.",
+          "prompt": "Nosso sistema atual não tem conector. Ajude-me a migrar a partir de exportações de planilhas."
+        },
+        "fresh": {
+          "title": "Começar do zero",
+          "description": "Nenhum histórico a trazer. Configure a base e os saldos de abertura e depois faça a entrada em produção.",
+          "prompt": "Estamos começando do zero, sem histórico para migrar. Do que precisamos para a entrada em produção?"
+        }
+      }
+    },
+    "plan": {
+      "title": "Sua migração",
+      "toggle": "Plano",
+      "refresh": "Atualizar o plano",
+      "loadFailed": "Não foi possível carregar o plano de migração.",
+      "source": "Origem",
+      "cutover": "Virada",
+      "notSet": "Não definida",
+      "spreadsheetSource": "Exportações de planilhas",
+      "live": "Em produção desde {date}",
+      "measuredAt": "Medido às {time}",
+      "path": {
+        "none": "Escolha como sua contabilidade vai chegar",
+        "mirror": "Espelhar o sistema atual",
+        "cutover": "Migração por conector e virada",
+        "spreadsheet": "Migração por planilhas",
+        "fresh": "Começo do zero"
+      }
+    },
+    "stages": {
+      "plan": "Planejar a mudança",
+      "foundation": "Base da empresa",
+      "sourceConnector": "Conectar o sistema anterior",
+      "sourceFiles": "Importar dados mestres",
+      "rehearse": "Ensaiar a migração",
+      "loadConnector": "Carregar o histórico",
+      "loadFiles": "Saldos de abertura",
+      "verify": "Conferir com a origem",
+      "mirror": "Manter o espelhamento",
+      "cutover": "Verificações finais e virada",
+      "live": "Em produção"
+    },
+    "stageState": {
+      "current": "Agora"
+    },
+    "stageOpen": "Abrir",
+    "runStatus": {
+      "none": "Ainda não executado",
+      "running": "Em execução…",
+      "ok": "Concluído e verificado",
+      "ok_with_errors": "Concluído com erros",
+      "failed": "Falhou"
+    },
+    "connectionStatus": {
+      "unconfigured": "aguardando credenciais",
+      "active": "conectado",
+      "paused": "pausado",
+      "error": "requer atenção"
+    },
+    "journalStatus": {
+      "draft": "rascunho",
+      "posted": "lançado"
+    },
+    "schedules": {
+      "hourly": "a cada hora",
+      "every_6_hours": "a cada 6 horas",
+      "daily": "diariamente",
+      "weekly": "semanalmente"
+    },
+    "details": {
+      "planEmpty": "Diga ao assistente o que você usa hoje.",
+      "foundationReady": "{accounts, plural, one {# conta pronta} other {# contas prontas}}",
+      "foundationWaiting": "Conclua a configuração da empresa e das contas de controle.",
+      "connection": "Conexão {name} · {status}",
+      "noConnection": "Nenhuma conexão ainda.",
+      "imports": "{count, plural, one {# lista importada} other {# listas importadas}}",
+      "noImports": "Nenhuma lista importada ainda.",
+      "postedEntries": "{count, plural, one {# lançamento efetuado} other {# lançamentos efetuados}}",
+      "openingJournal": "Lançamento {number} · {status}",
+      "noOpeningJournal": "Nenhum lançamento de saldos de abertura ainda.",
+      "verification": "{matches} de {accounts} contas conferem · {openMatches} de {openChecked} itens em aberto conferem",
+      "verifyFiles": "Contas a receber, contas a pagar e a conta transitória devem estar conciliadas.",
+      "mirrorOn": "Espelhamento {schedule}",
+      "mirrorOff": "Espelhamento desativado",
+      "noCutover": "Defina a data de virada."
+    },
+    "checks": {
+      "title": "Verificações finais",
+      "run": "Executar verificações",
+      "rerun": "Executar novamente",
+      "running": "Medindo…",
+      "hint": "Mede o razão em relação a tudo o que a entrada em produção exige.",
+      "required": "Obrigatória",
+      "advisory": "Recomendada",
+      "ready": "Todas as verificações obrigatórias foram aprovadas. Peça ao assistente para registrar a entrada em produção.",
+      "blocked": "{count, plural, one {# verificação obrigatória está pendente.} other {# verificações obrigatórias estão pendentes.}}",
+      "live": "A entrada em produção foi registrada com estas verificações.",
+      "state": {
+        "pass": "Aprovada",
+        "fail": "Requer atenção",
+        "pending": "Ainda não mensurável",
+        "not_applicable": "Não se aplica"
+      },
+      "items": {
+        "foundation": "A base da empresa está completa",
+        "cutoverDate": "A data de virada está definida",
+        "sourceVerified": "A última execução da origem foi conferida com exatidão",
+        "syncedThroughCutover": "Origem capturada até a data de virada",
+        "mirrorStopped": "Espelhamento interrompido",
+        "openingJournalPosted": "Lançamento de saldos de abertura efetuado",
+        "openingClearingZero": "A conta transitória de abertura está zerada",
+        "receivablesTie": "Contas a receber conferem com as faturas em aberto",
+        "payablesTie": "Contas a pagar conferem com as contas de fornecedores em aberto",
+        "periodsLocked": "Os períodos anteriores à virada estão bloqueados"
+      }
+    }
+  }
 }

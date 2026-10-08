@@ -1,4 +1,5 @@
 import { SETUP_GROUPS, setupEntitiesByGroup } from './registry'
+import { MIGRATION_WORKSPACE_HREF } from '../migration/links'
 
 /**
  * The Company Setup rail as data: every Setup page a reader may open, grouped
@@ -113,6 +114,7 @@ export function setupRail({
         : group.key === 'company'
         ? [
             { href: '/admin/setup/readiness', labelKey: 'admin.setup.readiness.navTitle', iconKey: 'gauge' },
+            { href: MIGRATION_WORKSPACE_HREF, labelKey: 'sync.migrationAssistant.title', iconKey: 'workflow' },
             { href: '/admin/setup/wizard', labelKey: 'admin.setup.features.runWizard', iconKey: 'sparkles' },
             { href: '/admin/setup/company', labelKey: 'admin.setup.entities.company.title', iconKey: 'building' },
             { href: '/admin/setup/company#sample-companies', labelKey: 'data.import.sample.industry', iconKey: 'sparkles' },
