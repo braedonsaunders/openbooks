@@ -73,7 +73,7 @@ export function TargetsView({ controller, window: board, search, today, onOpenEn
     for (const entry of board.entries) if (!replaced.has(entry.id)) set.add(cellKey(entry.subjectId, entry.startsOn))
     return set
   }, [board.entries, replaced])
-  const available = useMemo(() => board.rows.filter((person) => !bookedOn.has(cellKey(person.subjectId, railDate)) && !(absences.get(cellKey(person.subjectId, railDate)) ?? []).length), [absences, board.rows, bookedOn, railDate])
+  const available = useMemo(() => board.rows.filter((person) => visibleSubjects.has(person.subjectId) && !bookedOn.has(cellKey(person.subjectId, railDate)) && !(absences.get(cellKey(person.subjectId, railDate)) ?? []).length), [absences, board.rows, bookedOn, railDate, visibleSubjects])
 
   const span: SpanInput = board.board.grain === 'day' || !board.board.dayPolicyKnown ? { mode: 'day' } : { mode: 'timed', starts: board.board.dayStarts, ends: board.board.dayEnds, breakMinutes: board.board.dayBreakMinutes }
   const weekday = useMemo(() => new Intl.DateTimeFormat(locale, { weekday: 'short', day: 'numeric', timeZone: 'UTC' }), [locale])

@@ -131,6 +131,8 @@ test('literal source target rows put only the person in day chips and keep nativ
   )
   const chip = host.querySelector('tbody button')!
   assert.equal(chip.textContent, 'Alex')
+  assert.match(host.querySelector('aside')!.textContent ?? '', /Alex/)
+  assert.ok(!host.querySelector('aside')!.textContent?.includes('Blair'))
   assert.match(host.querySelector('tbody td')!.textContent ?? '', /SHOP\/ N/)
   await act(async () => {
     ;(chip as HTMLButtonElement).click()
@@ -268,6 +270,9 @@ test('the header owns search/settings and timeline zoom while More exposes exact
   )
   const toolbar = host.querySelector('[role="toolbar"]')!
   assert.equal(host.querySelectorAll('[role="toolbar"]').length, 1)
+  assert.ok(toolbar.classList.contains('flex-nowrap'))
+  assert.ok(toolbar.classList.contains('overflow-x-auto'))
+  assert.ok(toolbar.classList.contains('pb-4'), 'scrollbar space stays below header hit targets')
   const search = toolbar.querySelector('input[aria-label]')!
   const settings = toolbar.querySelector('a[aria-label]')!
   assert.ok(
