@@ -17,7 +17,7 @@
 
 import { sql } from "drizzle-orm";
 import { db } from "../../platform/db.ts";
-import type { InboxAdapter } from "../registry.ts";
+import type { InboxAdapter, InboxPage } from "../registry.ts";
 import type { InboxItem, InboxListContext } from "../types.ts";
 import { inboxItemId } from "../types.ts";
 
@@ -28,36 +28,42 @@ type TicketRow = {
   role: string;
 };
 
+function signatureSource(ctx: InboxListContext) {
+  return {
+    joins: sql`from field_tickets t
+      join field_ticket_signature_requests r
+        on r.org_id = t.org_id and r.field_ticket_id = t.document_id
+      join users u on u.org_id = t.org_id and u.id = ${ctx.actorId}
+        and lower(u.email) = lower(r.recipient)`,
+    where: sql`where t.org_id = ${ctx.orgId}
+      and r.sent_at is not null
+      and r.responded_at is null
+      and r.revoked_at is null
+      and r.expires_at > now()
+      and not exists (
+        select 1 from field_ticket_signatures s
+         where s.org_id = t.org_id and s.field_ticket_id = t.document_id
+           and s.role = 'customer')`,
+  };
+}
+
 export const fieldTicketSignatureAdapter: InboxAdapter = {
   kind: "field_ticket_signature",
-  async list(ctx: InboxListContext): Promise<InboxItem[]> {
+  async list(ctx: InboxListContext, page?: InboxPage): Promise<InboxItem[]> {
+    const source = signatureSource(ctx);
     const rows = (await db.execute<TicketRow>(sql`
       select distinct t.document_id::text as ticket_id,
              coalesce(p.name, 'field ticket') as project_name,
              t.period_start::text as period_start,
              'customer' as role
-        from field_tickets t
-        join field_ticket_signature_requests r
-          on r.org_id = t.org_id and r.field_ticket_id = t.document_id
-        join users u
-          on u.org_id = t.org_id and u.id = ${ctx.actorId}
-         and lower(u.email) = lower(r.recipient)
+        ${source.joins}
         left join projects p on p.org_id = t.org_id and p.id = (
           select te.project_id from time_entries te
            where te.org_id = t.org_id and te.field_ticket_id = t.document_id
            limit 1)
-       where t.org_id = ${ctx.orgId}
-         and r.sent_at is not null
-         and r.responded_at is null
-         and r.revoked_at is null
-         and r.expires_at > now()
-         and not exists (
-           select 1 from field_ticket_signatures s
-            where s.org_id = t.org_id
-              and s.field_ticket_id = t.document_id
-              and s.role = 'customer')
+       ${source.where}
        order by period_start, ticket_id
-       limit 20
+       limit ${page?.limit ?? 20} offset ${page?.offset ?? 0}
     `)).rows;
     return rows.map((row) => ({
       id: inboxItemId("field_ticket_signature", `${row.ticket_id}:${row.role}`),
@@ -71,6 +77,13 @@ export const fieldTicketSignatureAdapter: InboxAdapter = {
       actions: [],
       source: { kind: "field_ticket_signature_request", id: row.ticket_id },
     }));
+  },
+  async count(ctx: InboxListContext): Promise<number> {
+    const source = signatureSource(ctx);
+    const result = await db.execute<{ n: string }>(sql`
+      select count(distinct t.document_id) as n ${source.joins} ${source.where}
+    `);
+    return Number(result.rows[0]?.n ?? 0);
   },
   async act(): Promise<void> {
     throw new Error(
