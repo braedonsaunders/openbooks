@@ -65,6 +65,7 @@ test('vendor ledger aggregation preserves tiny-line totals, live labels and role
 })
 
 test('vendor overview bounds chart rows without changing translated portfolio totals or detail reads', { skip: !env.OPENBOOKS_DB_URL }, async () => {
+  await assertDedicatedFixtureDatabase()
   const { org } = await seedTwoCurrencySpend()
   try {
     await withBypass(async () => {
@@ -98,6 +99,23 @@ test('vendor overview bounds chart rows without changing translated portfolio to
       for (const tab of ['payment', 'scorecard', 'matrix', 'vendors', 'configuration']) {
         assert.strictEqual(withAnalyticsRead({ ...read, tab }, () => projectVendorDashboard(full)), full)
       }
+      const { registerQueryObserver } = await import('@openbooks/engine/src/platform/query-observer.ts')
+      for (const tab of ['overview', 'payment', 'scorecard', 'matrix', 'vendors']) {
+        const statements: string[] = []
+        const close = registerQueryObserver(statement => statements.push(statement))
+        let selected
+        try {
+          selected = await withAnalyticsRead({ ...read, tab, revision: randomUUID() }, () => vendorData(P, org.orgId, null))
+        } finally { close() }
+        const needsTrend = tab === 'overview'
+        assert.deepEqual(selected, { ...full, monthly: needsTrend ? full.monthly : [] },
+          `${tab} retains every live scoped vendor and portfolio figure`)
+        assert.equal(statements.filter(statement => statement.includes('as bucket,')).length, needsTrend ? 1 : 0,
+          `${tab} reads the twelve-month ledger only when its trend is displayed`)
+      }
+      const summary = await withAnalyticsRead({ ...read, projection: 'summary', revision: randomUUID() },
+        () => vendorData(P, org.orgId, null))
+      assert.deepEqual(summary.monthly, full.monthly, 'hub sparklines retain the complete translated trend')
       assert.strictEqual(withAnalyticsRead({ ...read, projection: 'summary' }, () => projectVendorDashboard(full)), full)
       assert.strictEqual(withAnalyticsRead({ ...read, slug: 'customer-intelligence' }, () => projectVendorDashboard(full)), full)
       const empty = await vendorData(P, org.orgId, new Set())
