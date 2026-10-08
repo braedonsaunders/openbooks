@@ -24,6 +24,7 @@ const rateBookBody = z.object({
   confirmEmptyReplacement: z.boolean().optional(),
   effectiveFrom: z.string().optional(),
   effectiveTo: z.string().nullable().optional(),
+  laborDerivationPolicy: z.enum(['explicit', 'time_type_multipliers']).optional(),
   lines: z.array(z.object({
     itemId: z.string().optional(), unitCode: z.string().optional(), unitName: z.string().optional(),
     baseQuantity: z.string().optional(), costRate: z.string().nullable().optional(), billRate: z.string().optional(),
@@ -55,6 +56,9 @@ export const POST = defineRoute({
   if (!name) return NextResponse.json({ error: 'Name is required.' }, { status: 422 })
 
   const replaceRates = body.replaceRates === true
+  if (body.laborDerivationPolicy !== undefined && !replaceRates) {
+    return NextResponse.json({ error: 'Changing labor pricing requires a new effective-dated rate version.' }, { status: 422 })
+  }
   const effectiveFrom = String(body.effectiveFrom ?? '')
   const effectiveTo = body.effectiveTo?.trim() || null
   const validated = replaceRates ? validateRateBookLines(body.lines) : { lines: [] as ValidRateBookLine[] }
@@ -117,6 +121,14 @@ export const POST = defineRoute({
       if (latest && effectiveFrom <= String(latest.effective_from).slice(0, 10)) {
         throw new Error(`The new rate version must start after ${String(latest.effective_from).slice(0, 10)}. Choose a later effective date.`)
       }
+      const previousLaborPolicy = latest
+        ? (await tx.execute<{ derivation_policy: 'explicit' | 'time_type_multipliers' }>(sql`
+            select derivation_policy from labor_rate_version_policies
+             where org_id = ${gate.user.orgId} and version_id = ${latest.id}`)).rows[0]
+        : undefined
+      // Replacing prices retains the book's labor registration unless the
+      // operator explicitly changes its policy on this new version.
+      const laborDerivationPolicy = body.laborDerivationPolicy ?? previousLaborPolicy?.derivation_policy
 
       const itemIds = [...new Set(validated.lines.map((line) => line.itemId))]
       const itemRows = itemIds.length
@@ -163,6 +175,16 @@ export const POST = defineRoute({
         values (${gate.user.orgId}, ${bookId}, ${effectiveFrom}, ${effectiveTo}, 'draft', ${gate.user.id}, ${gate.user.id})
         returning id`)).rows[0]
       if (!version) throw new Error('The new rate version was not created.')
+
+      let laborPolicy: Record<string, unknown> | null = null
+      if (laborDerivationPolicy !== undefined) {
+        const policies = (await tx.execute<Record<string, unknown>>(sql`
+          insert into labor_rate_version_policies (org_id, version_id, derivation_policy, created_by, updated_by)
+          values (${gate.user.orgId}, ${version.id}, ${laborDerivationPolicy}, ${gate.user.id}, ${gate.user.id})
+          returning *`)).rows
+        if (policies.length !== 1) throw new Error('The labor pricing policy was not saved. Reload the rate book and try again.')
+        laborPolicy = policies[0]!
+      }
 
       const seenProfiles = new Set<string>()
       for (const line of validated.lines) {
@@ -214,7 +236,8 @@ export const POST = defineRoute({
         insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
         values (
           ${gate.user.orgId}, 'item_rate_versions', ${version.id}, 'insert',
-          ${JSON.stringify({ rateBookId: bookId, effectiveFrom, effectiveTo, lineCount: validated.lines.length, closedVersion })}::jsonb,
+          ${JSON.stringify({ rateBookId: bookId, effectiveFrom, effectiveTo, lineCount: validated.lines.length, closedVersion,
+            ...(laborPolicy ? { laborPolicy: { before: null, after: laborPolicy } } : {}) })}::jsonb,
           ${gate.user.id}
         ) returning id`)
       if (audited.rows.length !== 1) throw new Error('The rate version audit was not saved. Reload the rate book and try again.')

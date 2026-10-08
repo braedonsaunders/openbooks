@@ -203,6 +203,9 @@
     "tierAuto": "Automático"
   },
   "rateBookDrawer": {
+    "laborPolicy": "Política de preços de mão de obra",
+    "itemPricingOnly": "Somente preços de itens",
+    "laborPolicyHelp": "Registre esta versão para os preços de mão de obra de clientes ou projetos. As substituições mantêm a política existente; alterá-la cria uma nova versão com data de vigência.",
     "newTitle": "Novo livro de tarifas",
     "editTitle": "Editar {name}",
     "description": "Mantenha juntos o cabeçalho e a tabela completa de tarifas de itens com vigência.",

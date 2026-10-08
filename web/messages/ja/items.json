@@ -203,6 +203,9 @@
     "tierAuto": "自動"
   },
   "rateBookDrawer": {
+    "laborPolicy": "作業料金ポリシー",
+    "itemPricingOnly": "品目価格のみ",
+    "laborPolicyHelp": "このバージョンを顧客またはプロジェクトの作業料金に登録します。更新時は既存のポリシーを引き継ぎます。変更すると、新しい有効日付きバージョンが作成されます。",
     "newTitle": "新しいレートブック",
     "editTitle": "{name}を編集",
     "description": "レートブックの基本情報と発効日付きの完全な品目レート表を一緒に管理します。",
