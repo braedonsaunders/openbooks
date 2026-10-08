@@ -125,6 +125,18 @@ function setNativeSelect(select: HTMLSelectElement, value: string) {
   select.dispatchEvent(new window.Event("change", { bubbles: true }));
 }
 
+async function setSelectChoice(id: string, value: string) {
+  const trigger = document.getElementById(id);
+  assert.ok(trigger, `the wage form must offer ${id}`);
+  const select = trigger.closest("span")?.querySelector("select");
+  assert.ok(select instanceof window.HTMLSelectElement, "the shared Select must retain its native change proxy");
+  await act(async () => {
+    setNativeSelect(select, value);
+    await tick();
+  });
+  await tick();
+}
+
 async function setRate(value: string) {
   const input = document.querySelector("#employee-wage-rate") as HTMLInputElement | null;
   assert.ok(input, "the form must offer a rate input");
@@ -170,10 +182,8 @@ test("adding a rate posts canonical decimal strings and clears the form", async 
   t.after(done);
   await setRate("0012.3456");
   await setYearlyBasis("02080.1250");
-  await act(async () => {
-    setNativeSelect(document.querySelector("#employee-wage-precision") as HTMLSelectElement, "2");
-    setNativeSelect(document.querySelector("#employee-wage-rounding") as HTMLSelectElement, "time_entry");
-  });
+  await setSelectChoice("employee-wage-precision", "2");
+  await setSelectChoice("employee-wage-rounding", "time_entry");
   await clickAdd();
 
   assert.equal(posted.length, 1, "one submit must post one payload");

@@ -44,7 +44,7 @@ test("dated wage rounding reaches native stubs, audits, replay and stale-calcula
       const initial = await lines();
       assert.equal(initial.length, 1);
       assert.equal(initial[0]!.amount, end === "2026-07-11" ? "264.3800" : "264.4000");
-      assert.equal(initial[0]!.hours, "5.0000");
+      assert.equal(initial[0]!.hours, "5.00");
       assert.equal(initial[0]!.earned_from, start);
       assert.equal(initial[0]!.expense_account_id, fx.accounts.wageExpense);
       assert.deepEqual((await calculate()).errors, []);
