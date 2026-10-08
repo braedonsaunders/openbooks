@@ -172,6 +172,8 @@ export async function vendorData(
   const [spendRows, billRows, monthRows, payRows] = await Promise.all([
     // Entry window first: joined inline the planner drives from accounts and
     // probes the entry primary key once per journal line in the tenant.
+    // Resolve live vendor membership and labels after the scoped ledger
+    // aggregation, so those lookups run per vendor/functional instead of line.
     // The vendor universe is parties holding a vendor role — expense lines
     // posted against employees or customers are not vendor spend.
     analyticsQuery<VendorSpendRow>(sql`
@@ -179,23 +181,26 @@ export async function vendorData(
         select id, org_id, posting_date from journal_entries
          where org_id = ${orgId} and posting_date >= ${pFrom} and posting_date <= ${to}
            and status in ('posted', 'reversed') and book_id = ${statementBookExpr(orgId)}
+      ), spend as materialized (
+        select l.party_id as id, sub.base_currency as func,
+          sum(case when e.posting_date >= ${from} and e.posting_date <= ${to} then l.amount else 0 end) as spend,
+          sum(case when e.posting_date >= ${pFrom} and e.posting_date <= ${pTo} then l.amount else 0 end) as prior_spend,
+          max(e.posting_date) filter (where e.posting_date >= ${from} and e.posting_date <= ${to})::text as late,
+          max(e.posting_date) filter (where e.posting_date >= ${pFrom} and e.posting_date <= ${pTo})::text as late_prior
+        from ew e
+        join journal_lines l on l.entry_id = e.id and l.org_id = e.org_id
+        join accounts a on a.id = l.account_id and a.org_id = l.org_id
+        left join subsidiaries sub on sub.id = l.subsidiary_id and sub.org_id = l.org_id
+        where l.org_id = ${orgId} and a.org_id = ${orgId}
+          ${subsidiaryVisibleFilter(sql`l.subsidiary_id`, allowed)}
+          and a.type in ('cogs','expense','expense_deferred') and l.party_id is not null
+        group by l.party_id, sub.base_currency
       )
       select p.id, coalesce(p.display_name, 'Unknown') as name,
-        sub.base_currency as func,
-        sum(case when e.posting_date >= ${from} and e.posting_date <= ${to} then l.amount else 0 end) as spend,
-        sum(case when e.posting_date >= ${pFrom} and e.posting_date <= ${pTo} then l.amount else 0 end) as prior_spend,
-        max(e.posting_date) filter (where e.posting_date >= ${from} and e.posting_date <= ${to})::text as late,
-        max(e.posting_date) filter (where e.posting_date >= ${pFrom} and e.posting_date <= ${pTo})::text as late_prior
-      from ew e
-      join journal_lines l on l.entry_id = e.id and l.org_id = e.org_id
-      join accounts a on a.id = l.account_id and a.org_id = l.org_id
-      join parties p on p.id = l.party_id and p.org_id = l.org_id
+        spend.func, spend.spend, spend.prior_spend, spend.late, spend.late_prior
+      from spend
+      join parties p on p.id = spend.id and p.org_id = ${orgId}
       join vendor_roles vr on vr.party_id = p.id and vr.org_id = p.org_id
-      left join subsidiaries sub on sub.id = l.subsidiary_id and sub.org_id = l.org_id
-      where l.org_id = ${orgId} and a.org_id = ${orgId} and p.org_id = ${orgId}
-        ${subsidiaryVisibleFilter(sql`l.subsidiary_id`, allowed)}
-        and a.type in ('cogs','expense','expense_deferred') and l.party_id is not null
-      group by p.id, p.display_name, sub.base_currency
     `),
     (analyticsSection('vendor-performance', ["overview","payment","scorecard","matrix","vendors"]) ? analyticsQuery<VendorBillRow>(sql`
       with bill_movements as (

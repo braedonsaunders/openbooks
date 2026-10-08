@@ -12,7 +12,7 @@ registerHooks({
 const { sql } = await import('drizzle-orm')
 const { db, env, withBypass, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
 const { withSimClock: pinClock } = await import('@openbooks/engine/src/platform/clock.ts')
-const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
+const { assertDedicatedFixtureDatabase, createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
 const { voidReportDocument } = await import('../../testing/document-void.ts')
 const { vendorData } = await import('./vendor-data')
 const { projectVendorDashboard } = await import('./overview-projection')
@@ -21,6 +21,48 @@ import type { Authz } from '../authz'
 
 const D = '2026-07-14'
 const P = { from: '2026-07-01', to: '2026-07-31', label: 'July 2026' }
+
+test('vendor ledger aggregation preserves tiny-line totals, live labels and role/subsidiary boundaries', { skip: !env.OPENBOOKS_DB_URL }, async () => {
+  await assertDedicatedFixtureDatabase()
+  const { org } = await seedTwoCurrencySpend()
+  try {
+    await withBypass(async () => {
+      for (const [party, amount] of [[org.vendorId, '0.0001'], [org.customerId, '50']] as const) {
+        const entry = randomUUID()
+        await db.execute(sql`insert into journal_entries
+          (id, org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, status, origin)
+          values (${entry}, ${org.orgId}, ${org.bookId}, ${org.subsidiaryId}, ${entry}, ${D}, ${org.periodId}, 'draft', 'manual')`)
+        await db.execute(sql`insert into journal_lines
+          (id, org_id, entry_id, line_number, account_id, subsidiary_id, party_id, amount, currency, txn_amount, fx_rate)
+          select gen_random_uuid(), ${org.orgId}, ${entry}, n * 2 + leg.line_offset,
+            leg.account_id, ${org.subsidiaryId}, ${party}, leg.amount, 'CAD', leg.amount, 1
+          from generate_series(1, 20) n
+          cross join lateral (values
+            (-1, ${org.accounts.cogs}::uuid, ${amount}::numeric),
+            (0, ${org.accounts.bank}::uuid, -${amount}::numeric)
+          ) leg(line_offset, account_id, amount)`)
+        await db.execute(sql`update journal_entries set status='posted', posted_at=now() where id=${entry}`)
+      }
+    })
+    await pinClock('2026-07-15', () => withOrgContext(org.orgId, async () => {
+      const full = await vendorData(P, org.orgId, null)
+      assert.equal(full.totals.spend, '235.0020')
+      assert.equal(full.rows.find(row => row.id === org.vendorId)?.spend, '100.0020')
+      assert.equal(full.rows.some(row => row.id === org.customerId), false)
+      const scoped = await vendorData(P, org.orgId, new Set([org.subsidiaryId]))
+      assert.equal(scoped.totals.spend, '100.0020')
+      assert.equal(scoped.monthly.find(row => row.month === '2026-07')?.spend, '100.0020')
+      const renamed = await withBypass(() => db.execute(sql`update parties set display_name='Renamed supplier'
+        where id=${org.vendorId} and org_id=${org.orgId} returning id`))
+      assert.equal(renamed.rows.length, 1)
+      const fresh = await vendorData(P, org.orgId, new Set([org.subsidiaryId]))
+      assert.equal(fresh.rows.find(row => row.id === org.vendorId)?.name, 'Renamed supplier')
+      assert.equal(fresh.totals.spend, scoped.totals.spend)
+    }))
+  } finally {
+    await withBypass(() => dropScratchOrg(org.orgId))
+  }
+})
 
 test('vendor overview bounds chart rows without changing translated portfolio totals or detail reads', { skip: !env.OPENBOOKS_DB_URL }, async () => {
   const { org } = await seedTwoCurrencySpend()
