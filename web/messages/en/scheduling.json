@@ -1,9 +1,9 @@
 {
   "title": "Scheduling",
-  "description": "Plan who goes where and when — crews by the day, shifts by the hour, and project schedules — on boards shaped to how your company works.",
+  "description": "Plan people and resources by day or hour on configurable boards. Project schedules live on project records.",
   "views": {
     "grid": "Grid",
-    "targets": "By job",
+    "targets": "By target",
     "timeline": "Timeline",
     "calendar": "Month",
     "gantt": "Gantt",
@@ -43,7 +43,13 @@
     "details": "Details",
     "date": "Go to date",
     "resourceBoards": "Resources",
-    "manageBoards": "Manage boards"
+    "manageBoards": "Manage boards",
+    "display": "Display options",
+    "showHoursColumn": "Show booked hour column",
+    "email": "Email schedule",
+    "openBoard": "Open board",
+    "returnProject": "Return to project",
+    "retry": "Retry schedule load"
   },
   "empty": {
     "title": "Set up your first board",
@@ -154,9 +160,9 @@
     "notesPlaceholder": "What the crew needs to know"
   },
   "targets": {
-    "where": "Job",
+    "where": "Target",
     "count": "{count} booked rows",
-    "add": "Add a job",
+    "add": "Add a target",
     "empty": "Nothing is booked in these dates yet.",
     "available": "Free to book",
     "allBooked": "Every row is booked or unavailable this day."
@@ -166,8 +172,8 @@
     "zoomOut": "Zoom out"
   },
   "calendar": {
-    "person": "Show",
-    "everyone": "All rows",
+    "person": "Person or resource",
+    "everyone": "Everyone",
     "onLeave": "{count} on leave",
     "more": "{count} more"
   },
@@ -266,7 +272,8 @@
     "removed": "{date}: removed from {target}",
     "link": "See your schedule",
     "footer": "You receive this because {board} notifies people when their schedule changes.",
-    "noTransport": "Email is not set up, so people were notified in OpenBooks only. Set up email in Admin → Email."
+    "noTransport": "Email is not set up, so people were notified in OpenBooks only. Set up email in Admin → Email.",
+    "nativeDistribution": "Email schedules through a reviewed Schedule distribution Flow."
   },
   "mine": {
     "tab": "Schedule",
@@ -289,5 +296,28 @@
   "boards": {
     "description": "List, configure and archive scheduling boards.",
     "return": "Back to schedule"
+  },
+  "distribution": {
+    "title": "Email schedule",
+    "close": "Close",
+    "preview": "Preview report",
+    "send": "Send reviewed schedule",
+    "working": "Preparing…",
+    "refused": "Schedule distribution could not be completed.",
+    "explanation": "Choose personal reports or a whole-board report for every selected recipient. Published bookings and literal source-date observations are shown separately. Sending uses your enabled Schedule distribution Flow and configured email provider.",
+    "everyone": "Everyone with a visible schedule in these dates",
+    "reason": "Reason for sending",
+    "queued": "The reviewed schedule is queued for email delivery.",
+    "deliveryStatus": "Queued is not delivered. Follow the native Flow run, Email log and delivery audit for actual provider results.",
+    "version": "Reviewed version",
+    "recipients": "Exact recipients and associated schedules",
+    "missingEmail": "Email missing",
+    "report": "Recipient schedule report preview",
+    "flows": "Configure native Flows",
+    "contacts": "Board resource recipients",
+    "sharing": "Report sharing",
+    "personal": "Each recipient’s own schedule/resources",
+    "wholeBoard": "The whole visible board schedule for each recipient",
+    "wholeBoardReview": "Every selected recipient will receive the whole reviewed board report, including other people/resources. Board Settings must explicitly allow this sharing within the board’s legal entity."
   }
 }

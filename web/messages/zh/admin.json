@@ -3495,6 +3495,10 @@
         "singularTitle": "排程代码",
         "description": "用于安排不属于客户或项目的工作（如培训日或车间日），以及标记人员不工作的日期。"
       },
+      "schedule-resource-recipients": {
+        "title": "Board resource recipients",
+        "singularTitle": "Resource recipient"
+      },
       "ai-capabilities": {
         "title": "助手操作审核",
         "singularTitle": "助手操作审核",
@@ -4062,13 +4066,15 @@
       "prefillTimesheets": "预填工时表",
       "prefillCrewTime": "预填班组工时",
       "prefillFieldTickets": "预填现场工单",
-      "notifyAssignees": "通过邮件通知人员其变更",
+      "notifyAssignees": "Notify people in the app",
       "resourceKind": "资源类型",
       "showTotals": "显示底部合计",
       "cellColorRules": "颜色规则",
       "field": "字段",
       "match": "匹配",
-      "dayPolicyKnown": "已配置工作日时间"
+      "dayPolicyKnown": "已配置工作日时间",
+      "showHoursColumn": "Show booked hour column",
+      "distributionVisibility": "Schedule report sharing"
     },
     "fieldHelp": {
       "fxRateMaxAgeDays": "最新可用汇率距期末的天数超过此值时，重估和合并将拒绝该汇率。期末汇率从期末即期汇率的日期起算；平均汇率从计入平均的最新报价日期起算。未设置政策时的默认值：31 天。",
@@ -4227,14 +4233,16 @@
       "scheduleBoardPrefillTimesheets": "此排程板上已发布的安排会作为计划时间显示在每个人的周工时表上，可一键添加，然后确认或更正。",
       "scheduleBoardPrefillCrewTime": "此排程板上已发布的项目安排会在工头该项目当天的班组工时表中提供已安排的班组和工时，可一键添加。",
       "scheduleBoardPrefillFieldTickets": "此排程板上已发布的项目安排会在该项目的现场工单中提供工单期间已安排的班组和工时，可一键添加。",
-      "scheduleBoardNotifyAssignees": "当某人在此排程板上已发布的安排发生变化时，通过邮件向其发送摘要。",
+      "scheduleBoardNotifyAssignees": "Send in-app notices for published changes. Configure schedule email separately using the native Schedule distribution Flow and its publish/update triggers.",
       "scheduleCode": "最多 16 个大写字母、数字或 / & + . _ -，如 TRAIN、SHOP 或 FORCED。",
       "scheduleCodeCategory": "工作代码计入计划时间。不可用代码标记人员不工作的日期，无需登记休假。",
       "scheduleCodeColor": "使用此代码的安排所显示的颜色，以十六进制值表示，如 #38bdf8。",
       "scheduleWeekendDays": "没有适用营业日历时将这些星期着色。营业日历优先。",
       "scheduleShowTotals": "显示预订行数和扣除配置休息后的实际预订小时。",
       "scheduleCellColorRules": "按顺序使用首个不区分大小写的匹配规则。请使用六位十六进制颜色，如 #38bdf8。",
-      "scheduleBoardDayPolicyKnown": "仅知道原始日期时关闭。历史记录仍显示但没有工时；整日预约需要配置开始、结束和休息时间。"
+      "scheduleBoardDayPolicyKnown": "仅知道原始日期时关闭。历史记录仍显示但没有工时；整日预约需要配置开始、结束和休息时间。",
+      "scheduleShowHoursColumn": "Show the right-side sum of booked hours. Source dates without hours remain unknown. Daily footer totals are configured separately.",
+      "scheduleDistributionVisibility": "Personal reports contain only the recipient’s own schedule or associated resources. Whole-board reports require an explicit sharing policy and a legal-entity-scoped board. Every send still requires a reviewed audience/version or an authored, enabled native Flow."
     },
     "options": {
       "storedValueKind": {
@@ -4949,7 +4957,7 @@
       },
       "scheduleView": {
         "grid": "网格",
-        "targets": "按作业",
+        "targets": "按目标",
         "timeline": "时间轴",
         "calendar": "月",
         "gantt": "甘特图",
@@ -6793,7 +6801,8 @@
         "change_status": "更改状态",
         "post_document": "过账文档",
         "lock_record": "锁定记录",
-        "unlock_record": "解锁记录"
+        "unlock_record": "解锁记录",
+        "distribute_schedule": "Email reviewed schedule"
       },
       "recipients": "收件人",
       "subject": "主题",
@@ -6822,7 +6831,8 @@
       "lockReasonPlaceholder": "例如 已批准——付款最终确定",
       "lockExemptRoles": "豁免角色",
       "lockExemptHint": "管理员始终豁免；所选角色仍可编辑。",
-      "unlockHint": "移除流程锁定，使记录可再次编辑。"
+      "unlockHint": "移除流程锁定，使记录可再次编辑。",
+      "scheduleReportHelp": "Email the immutable reviewed schedule report to its exact recipient audience. It may be a personal report or an explicitly permitted whole-board report. Contact, legal entity, schedule version and provider changes refuse delivery."
     },
     "gate": {
       "title": "标题",

@@ -6,10 +6,11 @@ import { useRouter } from 'next/navigation'
 import { useLocale, useTranslations } from 'next-intl'
 import {
   CalendarRange, ChevronLeft, ChevronRight, Plus, Redo2, Rows3, Rows4,
-  Send, Settings2, MoreHorizontal, Undo2, X,
+  Send, Settings2, MoreHorizontal, Undo2, X, ZoomIn, ZoomOut, Columns3, Mail,
 } from 'lucide-react'
 import { Button, Input, Select, Popover, cn } from '@openbooks/ui'
 import { SchedulingAlert } from './SchedulingAlert'
+import { EmailScheduleDrawer } from './EmailScheduleDrawer'
 import { BookingDrawer } from './BookingDrawer'
 import { SourceRecordDrawer } from './SourceRecord'
 import type { BoardSourceRecord } from '@openbooks/engine/src/schedule-boards/source-history.ts'
@@ -18,11 +19,11 @@ import { NewBoardDrawer, type ScopeOptions } from './NewBoardDrawer'
 import { PeopleGrid } from './PeopleGrid'
 import { TargetsView } from './TargetsView'
 import { TaskBoard, type TaskBoardProject } from './TaskBoard'
-import { TimelineView } from './TimelineView'
+import { TimelineView, TIMELINE_ZOOMS } from './TimelineView'
 import { CHIP_COLORS, chipStyle } from './BookingChip'
 import { boardLegend } from './legend'
 import { publish, SchedulingRequestError } from './api'
-import { addDays, viewRange, type BoardEntry, type BoardWindow, type GroupBy } from './model'
+import { addDays, viewRange, type BoardEntry, type BoardWindow, type GroupBy, targetHue } from './model'
 import { useBoard } from './use-board'
 import type { ScheduleBoard } from '@openbooks/engine/src/schedule-boards/boards.ts'
 
@@ -34,6 +35,8 @@ export interface BoardSummary {
 }
 
 export interface SchedulingWorkspaceProps {
+  readonly hostPath?: string
+  readonly contextProjectId?: string
   readonly boards: readonly BoardSummary[]
   readonly board: ScheduleBoard | null
   readonly view: string
@@ -72,7 +75,7 @@ export function SchedulingWorkspace(props: SchedulingWorkspaceProps) {
         {props.refusal?.remedy ? <p className="mt-1 max-w-md text-xs text-slate-400">{props.refusal.remedy}</p> : null}
         {props.refusal ? null : props.canConfigure ? <Button className="mt-5" onClick={() => setNewBoard(true)}><Plus className="mr-1.5 h-4 w-4" />{t('empty.create')}</Button> : <p className="mt-4 text-xs text-slate-400">{t('empty.askAdmin')}</p>}
         {props.canConfigure ? <Button asChild variant="ghost" className="mt-2"><Link href="/scheduling/boards">{t('toolbar.manageBoards')}</Link></Button> : null}
-        <NewBoardDrawer open={newBoard} onClose={() => setNewBoard(false)} timeZone={props.timeZone} scope={props.scope} peopleEnabled={props.peopleEnabled} tasksEnabled={props.tasksEnabled} resourcesEnabled={props.resourcesEnabled} equipmentEnabled={props.equipmentEnabled} />
+        <NewBoardDrawer open={newBoard} onClose={() => setNewBoard(false)} timeZone={props.timeZone} scope={props.scope} peopleEnabled={props.peopleEnabled} tasksEnabled={props.tasksEnabled} resourcesEnabled={props.resourcesEnabled} equipmentEnabled={props.equipmentEnabled} contextProjectId={props.contextProjectId} returnBasePath={props.hostPath} />
       </div>
     )
   }
@@ -82,9 +85,9 @@ export function SchedulingWorkspace(props: SchedulingWorkspaceProps) {
       key={props.board.id}
       {...props}
       board={props.board}
-      onSwitchBoard={(code) => router.push(`/scheduling?board=${encodeURIComponent(code)}`)}
+      onSwitchBoard={(code) => router.push(`${props.hostPath??'/scheduling'}?board=${encodeURIComponent(code)}`)}
       onNewBoard={() => setNewBoard(true)}
-      newBoard={<NewBoardDrawer open={newBoard} onClose={() => setNewBoard(false)} timeZone={props.timeZone} scope={props.scope} peopleEnabled={props.peopleEnabled} tasksEnabled={props.tasksEnabled} resourcesEnabled={props.resourcesEnabled} equipmentEnabled={props.equipmentEnabled} />}
+      newBoard={<NewBoardDrawer open={newBoard} onClose={() => setNewBoard(false)} timeZone={props.timeZone} scope={props.scope} peopleEnabled={props.peopleEnabled} tasksEnabled={props.tasksEnabled} resourcesEnabled={props.resourcesEnabled} equipmentEnabled={props.equipmentEnabled} contextProjectId={props.contextProjectId} returnBasePath={props.hostPath} />}
     />
   )
 }
@@ -100,11 +103,17 @@ function BoardShell(props: SchedulingWorkspaceProps & { board: ScheduleBoard; on
   const [groupBy, setGroupBy] = useState<GroupBy>('none')
   const [search, setSearch] = useState('')
   const [compact, setCompact] = useState(false)
+  const [personId, setPersonId] = useState('')
+  const [zoom, setZoom] = useState(props.rangeDays <= 3 ? 3 : props.rangeDays <= 7 ? 2 : 1)
+  const [showHoursColumn, setShowHoursColumn] = useState(board.showHoursColumn!==false)
+  const [savingDisplay, setSavingDisplay] = useState(false)
   const [spotlight, setSpotlight] = useState<string | null>(null)
   const [openEntry, setOpenEntry] = useState<BoardEntry | null>(null)
   const [openSourceRecord, setOpenSourceRecord] = useState<BoardSourceRecord | null>(null)
+  const [emailOpen,setEmailOpen] = useState(false)
   const [publishing, setPublishing] = useState(false)
   const [moreOpen, setMoreOpen] = useState(false)
+  const [displayOpen,setDisplayOpen]=useState(false)
   const range = useMemo(() => viewRange(view, anchor, rangeDays, board.weekStartsOn), [anchor, board.weekStartsOn, rangeDays, view])
   const people = board.rowKind !== 'tasks'
   const controller = useBoard(board.id, people ? props.initialWindow : null, range, people)
@@ -118,8 +127,8 @@ function BoardShell(props: SchedulingWorkspaceProps & { board: ScheduleBoard; on
     if (people && rangeDays !== board.rangeDays) params.set('days', String(rangeDays))
     else params.delete('days')
     if (!people && projectId) params.set('project', projectId)
-    globalThis.history.replaceState(null, '', `/scheduling?${params.toString()}`)
-  }, [anchor, board.code, board.rangeDays, people, projectId, rangeDays, view])
+    globalThis.history.replaceState(null, '', `${props.hostPath??'/scheduling'}?${params.toString()}`)
+  }, [anchor, board.code, board.rangeDays, people, projectId, rangeDays, view, props.hostPath])
 
   const step = view === 'calendar' ? 'month' : rangeDays
   const move = useCallback((direction: -1 | 1) => {
@@ -145,7 +154,7 @@ function BoardShell(props: SchedulingWorkspaceProps & { board: ScheduleBoard; on
   const settingsParams = new URLSearchParams({ board: board.code, view, boardRow: board.id })
   if (people) { settingsParams.set('from', anchor); settingsParams.set('days', String(rangeDays)) }
   else if (projectId) settingsParams.set('project', projectId)
-  const settingsHref = props.canConfigure ? `/scheduling?${settingsParams.toString()}` : null
+  const settingsHref = props.canConfigure ? `${props.hostPath??'/scheduling'}?${settingsParams.toString()}` : null
   useEffect(() => { if (!board.views.includes(view)) setView(board.defaultView) }, [board.defaultView, board.views, view])
 
   // Undo and redo answer anywhere on the page, not only inside the grid.
@@ -167,12 +176,24 @@ function BoardShell(props: SchedulingWorkspaceProps & { board: ScheduleBoard; on
     try {
       const result = await publish(board.id, range.from, range.through, t('errors.publish'))
       controller.notify('success', t('notices.published', { count: result.published }))
+      for(const refusal of result.distributionRefusals??[])controller.notify('error',`Bookings published; schedule email not queued: ${refusal.message}`,refusal.remedy)
       await controller.reload()
     } catch (error) {
       controller.notify('error', error instanceof Error ? error.message : t('errors.publish'), error instanceof SchedulingRequestError ? error.remedy : null)
     } finally {
       setPublishing(false)
     }
+  }
+
+  useEffect(()=>setShowHoursColumn(board.showHoursColumn!==false),[board.showHoursColumn])
+  async function saveHoursColumn(value:boolean) {
+    setSavingDisplay(true)
+    try {
+      const response=await fetch(`/api/scheduling/boards/${board.id}/display`,{method:'PATCH',headers:{'content-type':'application/json'},body:JSON.stringify({showHoursColumn:value})})
+      if(!response.ok) {const refusal=await response.json().catch(()=>({})); throw new SchedulingRequestError(refusal.error ?? t('errors.save'),refusal.remedy ?? null,refusal.code ?? null)}
+      setShowHoursColumn(value); await controller.reload()
+    } catch(error) {controller.notify('error',error instanceof Error?error.message:t('errors.save'),error instanceof SchedulingRequestError?error.remedy:null)}
+    finally {setSavingDisplay(false)}
   }
 
   async function discardDrafts() {
@@ -183,8 +204,9 @@ function BoardShell(props: SchedulingWorkspaceProps & { board: ScheduleBoard; on
 
   return (
     <div className="flex h-full min-h-0 min-w-0 flex-col gap-2">
-      <div className="flex min-w-0 shrink-0 flex-nowrap items-center gap-1.5" role="toolbar" aria-label={t('toolbar.board')}>
-        <Select value={board.code} onChange={(event) => props.onSwitchBoard(event.target.value)} className="h-8 min-w-0 flex-1 basis-24 text-xs font-medium sm:max-w-52" aria-label={t('toolbar.board')}>
+      <div className="flex min-w-0 shrink-0 flex-nowrap items-center gap-1.5 overflow-x-auto pb-2" role="toolbar" aria-label={t('toolbar.board')}>
+        {props.contextProjectId?<Button asChild variant="ghost" size="sm" className="h-8 shrink-0 px-2"><Link href={`/projects?row=${props.contextProjectId}&tab=schedule`} aria-label={t('toolbar.returnProject')}><ChevronLeft className="h-4 w-4" /></Link></Button>:null}
+        <Select value={board.code} onChange={(event) => props.onSwitchBoard(event.target.value)} className="h-8 w-36 shrink-0 text-xs font-medium sm:w-48" aria-label={t('toolbar.board')}>
           {props.boards.map((candidate) => <option key={candidate.id} value={candidate.code}>{candidate.name}</option>)}
         </Select>
         <Select value={view} onChange={(event) => setView(event.target.value)} className="h-8 w-24 shrink-0 text-xs" aria-label={t('toolbar.views')}>
@@ -197,23 +219,35 @@ function BoardShell(props: SchedulingWorkspaceProps & { board: ScheduleBoard; on
           <span className="hidden max-w-52 truncate px-1 text-xs font-semibold text-slate-700 dark:text-slate-200 lg:block" title={label}>{label}</span>
         </div> : null}
         {!people && props.projects.length > 1 ? <Select value={projectId ?? ''} onChange={(event) => setProjectId(event.target.value)} className="h-8 min-w-0 flex-1 basis-28 text-xs" aria-label={t('tasks.pickProject')}>{props.projects.map((project) => <option key={project.id} value={project.id}>{project.code ? `${project.code} · ` : ''}{project.name}</option>)}</Select> : null}
-        <div className="ml-auto flex shrink-0 items-center gap-1">
+        {people && view === 'timeline' ? <>
+          <Button variant="ghost" size="sm" className="h-8 shrink-0 px-2" disabled={zoom===0} onClick={()=>setZoom(z=>Math.max(0,z-1))} aria-label={t('timeline.zoomOut')}><ZoomOut className="h-4 w-4" /></Button>
+          <Button variant="ghost" size="sm" className="h-8 shrink-0 px-2" disabled={zoom===TIMELINE_ZOOMS.length-1} onClick={()=>setZoom(z=>Math.min(TIMELINE_ZOOMS.length-1,z+1))} aria-label={t('timeline.zoomIn')}><ZoomIn className="h-4 w-4" /></Button>
+        </> : null}
+        {people && view === 'calendar' ? <Select value={personId} onChange={event=>setPersonId(event.target.value)} className="h-8 w-36 shrink-0 text-xs" aria-label={t('calendar.person')}>
+          <option value="">{t('calendar.everyone')}</option>{window?.rows.map(row=><option key={row.subjectId} value={row.subjectId}>{row.name}</option>)}
+        </Select> : null}
+        <div className="ml-auto flex shrink-0 flex-nowrap items-center gap-1">
+          {people ? <Input value={search} onChange={event=>setSearch(event.target.value)} placeholder={t('toolbar.search')} className="h-8 w-32 shrink-0 text-xs sm:w-44" aria-label={t('toolbar.search')} /> : null}
           {settingsHref ? <Button variant="ghost" size="sm" className="h-8 px-2" asChild title={t('toolbar.settings')}>
             <Link href={settingsHref} aria-label={t('toolbar.settings')}><Settings2 className="h-4 w-4" /></Link>
           </Button> : null}
-          {props.canConfigure ? <Button asChild variant="ghost" size="sm" className="h-8 px-2" title={t('toolbar.manageBoards')}><Link href="/scheduling/boards" aria-label={t('toolbar.manageBoards')}><Rows3 className="h-4 w-4" /></Link></Button> : null}
+          {!props.contextProjectId && props.canConfigure ? <Button asChild variant="ghost" size="sm" className="h-8 px-2" title={t('toolbar.manageBoards')}><Link href="/scheduling/boards" aria-label={t('toolbar.manageBoards')}><Rows3 className="h-4 w-4" /></Link></Button> : null}
           {props.canConfigure ? <Button variant="outline" size="sm" className="h-8 gap-1 px-2 text-xs" onClick={props.onNewBoard} aria-label={t('toolbar.newBoard')} title={t('toolbar.newBoard')}><Plus className="h-4 w-4" /><span className="hidden xl:inline">{t('toolbar.newBoard')}</span></Button> : null}
+          {window?.canManage ? <Button variant="ghost" size="sm" className="h-8 px-2" onClick={()=>setEmailOpen(true)} aria-label={t('toolbar.email')}><Mail className="h-4 w-4" /></Button> : null}
+          {people && view==='grid' ? <Popover open={displayOpen} onOpenChange={setDisplayOpen} align="end" className="w-64" trigger={<Button variant="ghost" size="sm" className="h-8 px-2" aria-label={t('toolbar.display')} aria-expanded={displayOpen} onClick={()=>setDisplayOpen(v=>!v)}><Columns3 className="h-4 w-4" /></Button>}>
+            <div className="space-y-3 p-3 text-xs">
+              <label className="flex items-center gap-2"><input type="checkbox" checked={showHoursColumn} disabled={!props.canConfigure || savingDisplay} onChange={event=>void saveHoursColumn(event.target.checked)} />{t('toolbar.showHoursColumn')}</label>
+              <Button variant="ghost" size="sm" onClick={()=>setCompact(v=>!v)} aria-label={t('toolbar.density')}>{compact?<Rows4 className="h-4 w-4" />:<Rows3 className="h-4 w-4" />}{t('toolbar.density')}</Button>
+            </div>
+          </Popover> : null}
+          {people ? <Button variant="ghost" size="sm" className="h-8 px-2" disabled={!controller.canUndo} onClick={()=>void controller.undo()} aria-label={t('toolbar.undo')}><Undo2 className="h-4 w-4" /></Button> : null}
+          {people ? <Button variant="ghost" size="sm" className="h-8 px-2" disabled={!controller.canRedo} onClick={()=>void controller.redo()} aria-label={t('toolbar.redo')}><Redo2 className="h-4 w-4" /></Button> : null}
           {people ? <Popover open={moreOpen} onOpenChange={setMoreOpen} align="end" className="w-72 max-w-[calc(100vw-2rem)]" trigger={<Button variant="outline" size="sm" className="h-8 px-2" onClick={() => setMoreOpen((value) => !value)} aria-label={t('toolbar.more')} aria-expanded={moreOpen}><MoreHorizontal className="h-4 w-4" /></Button>}>
-            <div className="space-y-3 p-3">
-              <div className="flex items-center justify-between gap-2 text-xs"><Button variant="ghost" size="sm" onClick={() => move(-1)} aria-label={t('toolbar.previous')}><ChevronLeft className="h-4 w-4" /></Button><span>{label}</span><Button variant="ghost" size="sm" onClick={() => move(1)} aria-label={t('toolbar.next')}><ChevronRight className="h-4 w-4" /></Button></div>
-              <Input type="date" value={anchor} onChange={(event) => { if (event.target.value) setAnchor(event.target.value) }} aria-label={t('toolbar.date')} />
-              <Button variant="outline" size="sm" onClick={() => setAnchor(props.today)}>{t('toolbar.today')}</Button>
-              {view !== 'calendar' ? <><label className="block space-y-1 text-xs"><span>{t('toolbar.range')}</span><Select value={String(rangeDays)} onChange={(event) => setRangeDays(Number(event.target.value))} className="h-8 w-full text-xs">{rangeOptions.map((days) => <option key={days} value={days}>{t('toolbar.days', { count: days })}</option>)}</Select></label>
-              <Input value={search} onChange={(event) => setSearch(event.target.value)} placeholder={t('toolbar.search')} className="h-8 text-xs" aria-label={t('toolbar.search')} />
-              <label className="block space-y-1 text-xs"><span>{t('toolbar.groupBy')}</span><Select value={groupBy} onChange={(event) => setGroupBy(event.target.value as GroupBy)} className="h-8 w-full text-xs">{(['none', 'department', 'trade', 'jobTitle'] as const).map((option) => <option key={option} value={option}>{t(`groupBy.${option}`)}</option>)}</Select></label>
-              <div className="flex items-center gap-1">{view === 'grid' ? <Button variant="ghost" size="sm" onClick={() => setCompact((value) => !value)} aria-label={t('toolbar.density')} title={t('toolbar.density')}>{compact ? <Rows4 className="h-4 w-4" /> : <Rows3 className="h-4 w-4" />}</Button> : null}
-              <Button variant="ghost" size="sm" disabled={!controller.canUndo} onClick={() => void controller.undo()} aria-label={t('toolbar.undo')} title={controller.undoLabel ?? t('toolbar.undo')}><Undo2 className="h-4 w-4" /></Button>
-              <Button variant="ghost" size="sm" disabled={!controller.canRedo} onClick={() => void controller.redo()} aria-label={t('toolbar.redo')}><Redo2 className="h-4 w-4" /></Button></div></> : null}
+            <div className="grid grid-cols-2 gap-2 p-3" data-schedule-window-menu>
+              <Input type="date" value={anchor} onChange={event=>{if(event.target.value)setAnchor(event.target.value)}} className="h-8 min-w-0 w-full text-xs" aria-label={t('toolbar.date')} />
+              <Button variant="outline" size="sm" className="h-8 w-full" onClick={()=>setAnchor(props.today)}>{t('toolbar.today')}</Button>
+              <Select value={String(rangeDays)} disabled={view==='calendar'} onChange={event=>setRangeDays(Number(event.target.value))} className="h-8 min-w-0 w-full text-xs" aria-label={t('toolbar.range')}>{rangeOptions.map(days=><option key={days} value={days}>{t('toolbar.days',{count:days})}</option>)}</Select>
+              <Select value={groupBy} onChange={event=>setGroupBy(event.target.value as GroupBy)} className="h-8 min-w-0 w-full text-xs" aria-label={t('toolbar.groupBy')}>{(['none','department','trade','jobTitle'] as const).map(option=><option key={option} value={option}>{t(`groupBy.${option}`)}</option>)}</Select>
             </div>
           </Popover> : null}
         </div>
@@ -236,7 +270,7 @@ function BoardShell(props: SchedulingWorkspaceProps & { board: ScheduleBoard; on
               key={slot.key}
               type="button"
               onClick={() => setSpotlight((current) => (current === slot.key ? null : slot.key))}
-              style={chipStyle(215, slot.color)}
+              style={chipStyle(targetHue({id:slot.label,color:null}), slot.color)}
               className={cn('inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[11px] font-semibold transition', CHIP_COLORS, spotlight && spotlight !== slot.key && 'opacity-40', spotlight === slot.key && 'ring-2 ring-teal-500/50')}
               title={slot.label}
               aria-pressed={spotlight === slot.key}
@@ -261,17 +295,17 @@ function BoardShell(props: SchedulingWorkspaceProps & { board: ScheduleBoard; on
             canManage={props.canManageProjects}
           />
         ) : !window ? (
-          <div className="flex-1 animate-pulse rounded-xl border border-slate-200 bg-slate-50 dark:border-slate-800 dark:bg-slate-900" />
+          controller.loading ? <div className="flex-1 animate-pulse rounded-xl border border-slate-200 bg-slate-50 dark:border-slate-800 dark:bg-slate-900" /> : <div className="flex flex-1 items-center justify-center"><Button variant="outline" onClick={()=>void controller.reload()}>{t('toolbar.retry')}</Button></div>
         ) : (
           <div className={cn('flex min-h-0 flex-1 flex-col transition-opacity', controller.loading && 'opacity-60')}>
             {view === 'grid' ? (
-              <PeopleGrid controller={controller} window={window} groupBy={groupBy} search={search} compact={compact} spotlight={spotlight} onOpenEntry={entry => { setOpenSourceRecord(null); setOpenEntry(entry) }} onOpenSourceRecord={record => { setOpenEntry(null); setOpenSourceRecord(record) }} today={props.today} />
+              <PeopleGrid controller={controller} window={window} groupBy={groupBy} search={search} compact={compact} showHoursColumn={showHoursColumn} spotlight={spotlight} onOpenEntry={entry => { setOpenSourceRecord(null); setOpenEntry(entry) }} onOpenSourceRecord={record => { setOpenEntry(null); setOpenSourceRecord(record) }} today={props.today} />
             ) : view === 'targets' ? (
-              <TargetsView controller={controller} window={window} today={props.today} onOpenEntry={entry => { setOpenSourceRecord(null); setOpenEntry(entry) }} onOpenSourceRecord={record => { setOpenEntry(null); setOpenSourceRecord(record) }} />
+              <TargetsView controller={controller} window={window} search={search} today={props.today} onOpenEntry={entry => { setOpenSourceRecord(null); setOpenEntry(entry) }} onOpenSourceRecord={record => { setOpenEntry(null); setOpenSourceRecord(record) }} />
             ) : view === 'timeline' ? (
-              <TimelineView controller={controller} window={window} groupBy={groupBy} search={search} today={props.today} onOpenEntry={entry => { setOpenSourceRecord(null); setOpenEntry(entry) }} onOpenSourceRecord={record => { setOpenEntry(null); setOpenSourceRecord(record) }} />
+              <TimelineView controller={controller} window={window} zoom={zoom} groupBy={groupBy} search={search} today={props.today} onOpenEntry={entry => { setOpenSourceRecord(null); setOpenEntry(entry) }} onOpenSourceRecord={record => { setOpenEntry(null); setOpenSourceRecord(record) }} />
             ) : (
-              <CalendarView window={window} month={anchor.slice(0, 7)} today={props.today} onOpenEntry={entry => { setOpenSourceRecord(null); setOpenEntry(entry) }} onOpenSourceRecord={record => { setOpenEntry(null); setOpenSourceRecord(record) }} />
+              <CalendarView window={window} personId={personId} search={search} month={anchor.slice(0, 7)} today={props.today} onOpenEntry={entry => { setOpenSourceRecord(null); setOpenEntry(entry) }} onOpenSourceRecord={record => { setOpenEntry(null); setOpenSourceRecord(record) }} />
             )}
           </div>
         )}
@@ -283,6 +317,7 @@ function BoardShell(props: SchedulingWorkspaceProps & { board: ScheduleBoard; on
       {window && openEntry && !openSourceRecord ? (
         <BookingDrawer entry={window.entries.find((entry) => entry.id === openEntry.id) ?? openEntry} window={window} controller={controller} onClose={() => setOpenEntry(null)} />
       ) : null}
+      {emailOpen && window ? <EmailScheduleDrawer window={window} onClose={()=>setEmailOpen(false)} /> : null}
       {props.newBoard}
 
       {/* Notices */}

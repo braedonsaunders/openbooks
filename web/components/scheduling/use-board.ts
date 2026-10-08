@@ -26,14 +26,19 @@ const newId = () => crypto.randomUUID()
  */
 export function useBoard(boardId: string, initial: BoardWindow | null, range: { from: string; through: string }, enabled = true) {
   const t = useTranslations('scheduling')
-  const [window, setWindow] = useState<BoardWindow | null>(initial)
-  const [loading, setLoading] = useState(enabled && initial === null)
+  const compatible = (value: BoardWindow | null) => value?.board.id === boardId && value.from === range.from && value.through === range.through
+  const [window, setWindow] = useState<BoardWindow | null>(compatible(initial) ? initial : null)
+  const [loading, setLoading] = useState(enabled && !compatible(initial))
   const [saving, setSaving] = useState(0)
   const [notices, setNotices] = useState<BoardNotice[]>([])
   const [undoStack, setUndoStack] = useState<HistoryStep[]>([])
   const [redoStack, setRedoStack] = useState<HistoryStep[]>([])
   const noticeSeq = useRef(0)
   const requestSeq = useRef(0)
+  const loadedRange=useRef(compatible(initial)?`${boardId}|${range.from}|${range.through}`:'')
+  const pending = useRef<AbortController | null>(null)
+  const mounted = useRef(true)
+  useEffect(() => { mounted.current=true; return () => { mounted.current=false; ++requestSeq.current; pending.current?.abort() } }, [])
   const rangeRef = useRef(range)
   rangeRef.current = range
 
@@ -45,13 +50,18 @@ export function useBoard(boardId: string, initial: BoardWindow | null, range: { 
   const dismiss = useCallback((id: number) => setNotices((current) => current.filter((notice) => notice.id !== id)), [])
 
   const reload = useCallback(async () => {
+    pending.current?.abort()
+    const abort = new AbortController(); pending.current=abort
     const seq = ++requestSeq.current
     const { from, through } = rangeRef.current
     try {
-      const next = await fetchWindow(boardId, from, through, t('errors.load'))
-      if (seq === requestSeq.current) setWindow(next)
+      const next = await fetchWindow(boardId, from, through, t('errors.load'), abort.signal)
+      if (seq === requestSeq.current) {
+        if(next.board.id!==boardId||next.from!==from||next.through!==through)throw new SchedulingRequestError('The returned schedule does not match the requested board and dates.','Reload this board window.','schedule_window_mismatch')
+        loadedRange.current=`${boardId}|${from}|${through}`;setWindow(next)
+      }
     } catch (error) {
-      if (seq !== requestSeq.current) return
+      if (seq !== requestSeq.current || abort.signal.aborted || !mounted.current) return
       notify('error', error instanceof Error ? error.message : t('errors.load'), error instanceof SchedulingRequestError ? error.remedy : null)
     } finally {
       if (seq === requestSeq.current) setLoading(false)
@@ -60,15 +70,21 @@ export function useBoard(boardId: string, initial: BoardWindow | null, range: { 
 
   // A new board or date range loads its window; the server render already
   // supplied the first one.
-  const firstRange = useRef(initial ? `${boardId}|${range.from}|${range.through}` : '')
   useEffect(() => {
     const key = `${boardId}|${range.from}|${range.through}`
-    if (!enabled || key === firstRange.current) return
-    firstRange.current = key
+    if (!enabled || key === loadedRange.current) return
     setLoading(true)
     void reload()
   }, [boardId, enabled, range.from, range.through, reload])
 
+  // A refreshed server snapshot is authoritative only for its exact window.
+  useEffect(() => {
+    if (initial?.board.id !== boardId || initial.from !== range.from || initial.through !== range.through) return
+    pending.current?.abort(); ++requestSeq.current
+    loadedRange.current=`${boardId}|${initial.from}|${initial.through}`;setWindow(initial); setLoading(false)
+  }, [initial, boardId])
+
+  const shownWindow = compatible(window) ? window : null
   const entriesById = useMemo(() => new Map((window?.entries ?? []).map((entry) => [entry.id, entry])), [window])
 
   /** Merge accepted results into the shown window immediately. */
@@ -104,8 +120,9 @@ export function useBoard(boardId: string, initial: BoardWindow | null, range: { 
     const before = new Map(entriesById)
     setSaving((count) => count + 1)
     try {
-      const { results } = await saveChanges(boardId, changes, t('errors.save'))
+      const { results,distributionRefusals } = await saveChanges(boardId, changes, t('errors.save'))
       merge(changes, results)
+      for(const refusal of distributionRefusals??[])notify('error',`Bookings saved; schedule email not queued: ${refusal.message}`,refusal.remedy)
       const refused = results.filter((result): result is Extract<ChangeResult, { ok: false }> => !result.ok)
       if (refused.length) {
         const first = refused[0]!
@@ -146,7 +163,7 @@ export function useBoard(boardId: string, initial: BoardWindow | null, range: { 
   }, [redoStack, run])
 
   return {
-    window,
+    window: shownWindow,
     loading,
     saving: saving > 0,
     notices,

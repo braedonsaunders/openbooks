@@ -3420,6 +3420,10 @@
         "singularTitle": "Code de planification",
         "description": "Codes pour affecter un travail qui n’est ni un client ni un projet, comme des journées de formation ou d’atelier, et pour les jours où les personnes ne travaillent pas."
       },
+      "schedule-resource-recipients": {
+        "title": "Board resource recipients",
+        "singularTitle": "Resource recipient"
+      },
       "ai-capabilities": {
         "title": "Révisions des actions de l’assistant",
         "singularTitle": "Révisions des actions de l’assistant",
@@ -3987,13 +3991,15 @@
       "prefillTimesheets": "Préremplir les feuilles de temps",
       "prefillCrewTime": "Préremplir le temps d’équipe",
       "prefillFieldTickets": "Préremplir les bons de régie",
-      "notifyAssignees": "Envoyer à chacun ses modifications par e-mail",
+      "notifyAssignees": "Notify people in the app",
       "resourceKind": "Type de ressource",
       "showTotals": "Afficher les totaux en bas",
       "cellColorRules": "Règles de couleur",
       "field": "Champ",
       "match": "Correspondance",
-      "dayPolicyKnown": "Les horaires de la journée sont configurés"
+      "dayPolicyKnown": "Les horaires de la journée sont configurés",
+      "showHoursColumn": "Show booked hour column",
+      "distributionVisibility": "Schedule report sharing"
     },
     "fieldHelp": {
       "fxRateMaxAgeDays": "Nombre de jours entre le taux utilisable le plus récent et la fin de période au-delà duquel la réévaluation et la consolidation refusent le taux. Les taux de clôture se comptent depuis la date du taux comptant de fin de période ; les taux moyens depuis la cotation la plus récente incluse dans la moyenne. Valeur par défaut sans politique : 31 jours.",
@@ -4152,14 +4158,16 @@
       "scheduleBoardPrefillTimesheets": "Les affectations publiées sur ce tableau apparaissent dans la feuille de temps hebdomadaire de chaque personne comme du temps planifié qu’elle peut ajouter en un clic, puis confirmer ou corriger.",
       "scheduleBoardPrefillCrewTime": "Les affectations de projet publiées sur ce tableau proposent, sur la feuille de temps d’équipe du contremaître pour ce projet et ce jour, l’équipe et les heures affectées, ajoutées en un clic.",
       "scheduleBoardPrefillFieldTickets": "Les affectations de projet publiées sur ce tableau proposent, sur le bon de régie de ce projet, l’équipe et les heures affectées pour la période du bon, ajoutées en un clic.",
-      "scheduleBoardNotifyAssignees": "Envoie à chaque personne un récapitulatif par e-mail lorsque ses affectations publiées sur ce tableau changent.",
+      "scheduleBoardNotifyAssignees": "Send in-app notices for published changes. Configure schedule email separately using the native Schedule distribution Flow and its publish/update triggers.",
       "scheduleCode": "Jusqu’à 16 lettres majuscules, chiffres ou / & + . _ -, par exemple TRAIN, SHOP ou FORCED.",
       "scheduleCodeCategory": "Les codes de travail comptent comme du temps planifié. Les codes d’indisponibilité marquent un jour où la personne ne travaille pas, sans enregistrer d’absence.",
       "scheduleCodeColor": "La couleur d’affichage des affectations utilisant ce code, en valeur hexadécimale, par exemple #38bdf8.",
       "scheduleWeekendDays": "Jours à griser sans calendrier ouvrable applicable. Le calendrier est prioritaire.",
       "scheduleShowTotals": "Afficher les lignes et heures réservées après les pauses configurées.",
       "scheduleCellColorRules": "La première règle correspondante, sans distinction de casse, définit la couleur. Utilisez un code hexadécimal à six chiffres, comme #38bdf8.",
-      "scheduleBoardDayPolicyKnown": "Désactivez si seules les dates sont connues. L’historique reste visible sans heures ; configurez les horaires avant de réserver une journée."
+      "scheduleBoardDayPolicyKnown": "Désactivez si seules les dates sont connues. L’historique reste visible sans heures ; configurez les horaires avant de réserver une journée.",
+      "scheduleShowHoursColumn": "Show the right-side sum of booked hours. Source dates without hours remain unknown. Daily footer totals are configured separately.",
+      "scheduleDistributionVisibility": "Personal reports contain only the recipient’s own schedule or associated resources. Whole-board reports require an explicit sharing policy and a legal-entity-scoped board. Every send still requires a reviewed audience/version or an authored, enabled native Flow."
     },
     "options": {
       "storedValueKind": {
@@ -4874,7 +4882,7 @@
       },
       "scheduleView": {
         "grid": "Grille",
-        "targets": "Par chantier",
+        "targets": "Par destination",
         "timeline": "Chronologie",
         "calendar": "Mois",
         "gantt": "Diagramme de Gantt",
@@ -6793,7 +6801,8 @@
         "change_status": "Changer le statut",
         "post_document": "Comptabiliser le document",
         "lock_record": "Verrouiller l'enregistrement",
-        "unlock_record": "Déverrouiller l'enregistrement"
+        "unlock_record": "Déverrouiller l'enregistrement",
+        "distribute_schedule": "Email reviewed schedule"
       },
       "recipients": "Destinataires",
       "subject": "Objet",
@@ -6822,7 +6831,8 @@
       "lockReasonPlaceholder": "p. ex. Approuvé — le paiement est final",
       "lockExemptRoles": "Rôles exemptés",
       "lockExemptHint": "Les administrateurs sont toujours exemptés ; les rôles sélectionnés peuvent encore modifier.",
-      "unlockHint": "Supprime le verrou du flux pour permettre à nouveau la modification."
+      "unlockHint": "Supprime le verrou du flux pour permettre à nouveau la modification.",
+      "scheduleReportHelp": "Email the immutable reviewed schedule report to its exact recipient audience. It may be a personal report or an explicitly permitted whole-board report. Contact, legal entity, schedule version and provider changes refuse delivery."
     },
     "gate": {
       "title": "Titre",

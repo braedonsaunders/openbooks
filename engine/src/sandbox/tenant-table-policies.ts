@@ -1,5 +1,8 @@
 /** Explicit clone disposition and identifier-rebase rule for every tenant-owned table. Update when adding a tenant table. */
 export const TENANT_TABLE_POLICIES = {
+  "schedule_distributions": "skip:no-copy",
+  "schedule_distribution_recipients": "skip:no-copy",
+  "schedule_resource_recipients": "clone:catalog-uuid-rebase",
   "schedule_source_records": "clone:catalog-uuid-rebase",
   // Native offering inserts recreate these identities using the rebased native ids.
   "hrm_benefit_catalog": "skip:no-copy",

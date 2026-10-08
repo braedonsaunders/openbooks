@@ -1,3 +1,4 @@
+import {sendReviewedSchedule} from './schedule-distribution-hook.ts';
 import { and, eq, inArray } from "drizzle-orm";
 import {
   flowFieldValueError,
@@ -168,6 +169,11 @@ export async function executeFlowPlan(
 
   const runAction = async (nodeId: string, action: ActionData): Promise<string> => {
     switch (action.action) {
+      case 'distribute_schedule': {
+        if(flow.subjectKind!=='schedule_distribution'||!ctx.userId)throw new Error('Schedule email requires its reviewed native subject and acting user.');
+        const sent=await sendReviewedSchedule({requestId:subjectId,runId,ctx});
+        return `distribute_schedule→${sent}`;
+      }
       case "send_email": {
         const to = await resolveRecipientEmails(action.to, targetCtx);
         if (to.length === 0) throw new Error("no recipients resolved");

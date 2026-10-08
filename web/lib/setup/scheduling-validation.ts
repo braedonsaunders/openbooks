@@ -25,7 +25,7 @@ export const validateScheduleBoardWrite: SetupEntityValidationHook = async ({ bo
   if (rowId) {
     current = (await executor.execute<Record<string, unknown>>(sql`select row_kind as "rowKind", views, default_view as "defaultView",
       resource_kind as "resourceKind", department_id as "departmentId", location_id as "locationId", range_days as "rangeDays", prefill_timesheets as "prefillTimesheets", prefill_crew_time as "prefillCrewTime",
-      prefill_field_tickets as "prefillFieldTickets", notify_assignees as "notifyAssignees"
+      prefill_field_tickets as "prefillFieldTickets", notify_assignees as "notifyAssignees", subsidiary_id as "subsidiaryId", distribution_visibility as "distributionVisibility"
       from schedule_boards where org_id = ${orgId} and id = ${rowId}`)).rows[0] ?? {}
   }
   const merged = { ...current, ...body }
@@ -35,6 +35,7 @@ export const validateScheduleBoardWrite: SetupEntityValidationHook = async ({ bo
     : await lockAndCheckOrgFeature(executor, orgId, 'projects') && await lockAndCheckOrgFeature(executor, orgId, 'projectScheduling')
   if (!enabled) return `Enable ${rowKind === 'people' ? 'Human Resources and Scheduling' : 'Projects and Project Scheduling'} in Company Settings → Features before configuring this board.`
   if (rowKind === 'resources' && merged.resourceKind === 'equipment' && !await lockAndCheckOrgFeature(executor, orgId, 'equipment')) return 'Enable Equipment in Company Settings → Features before configuring an equipment board.'
+  if (merged.distributionVisibility === 'board' && !merged.subsidiaryId) return 'Choose a legal entity before allowing whole-board schedule reports.'
   const views = list(merged.views) ?? []
   const allowedViews = rowKind === 'tasks' ? TASK_VIEWS : PEOPLE_VIEWS
   const foreign = views.filter((view) => !allowedViews.has(view))

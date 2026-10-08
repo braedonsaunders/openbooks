@@ -115,6 +115,8 @@ export const EXCLUDE = new Set([
   // scheduler rows, OM-13b) — and a sample or sandbox must never replay the
   // source's side effects. The terminal audit hangs off the outbox rows and
   // goes with them.
+  "schedule_distributions",
+  "schedule_distribution_recipients",
   "scheduler_outbox",
   "scheduler_outbox_terminal_audit",
   // Time-bound controller replay grants are evidence of the source org, not

@@ -23,6 +23,6 @@ export const POST = defineRoute({
       reason: body.reason ?? null,
     })
     const delivery = await deliverScheduleNotices({ orgId: authz.user.orgId, actorId: authz.user.id, boardName: result.boardName, notices: result.notices })
-    return NextResponse.json({ published: result.published, delivery })
+    return NextResponse.json({ published: result.published, delivery, distributionRefusals: result.distributionRefusals })
   },
 })

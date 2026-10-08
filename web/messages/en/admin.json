@@ -3495,6 +3495,10 @@
         "singularTitle": "Schedule code",
         "description": "Codes for booking work that is not a customer or project, such as training or shop days, and for days people are not working."
       },
+      "schedule-resource-recipients": {
+        "title": "Board resource recipients",
+        "singularTitle": "Resource recipient"
+      },
       "ai-capabilities": {
         "title": "Assistant action reviews",
         "singularTitle": "Assistant action reviews",
@@ -4062,13 +4066,15 @@
       "prefillTimesheets": "Pre-fill timesheets",
       "prefillCrewTime": "Pre-fill crew time",
       "prefillFieldTickets": "Pre-fill field tickets",
-      "notifyAssignees": "Email people their changes",
+      "notifyAssignees": "Notify people in the app",
       "resourceKind": "Resource kind",
       "showTotals": "Show bottom totals",
       "cellColorRules": "Cell color rules",
       "field": "Field",
       "match": "Match",
-      "dayPolicyKnown": "Working-day hours are configured"
+      "dayPolicyKnown": "Working-day hours are configured",
+      "showHoursColumn": "Show booked hour column",
+      "distributionVisibility": "Schedule report sharing"
     },
     "fieldHelp": {
       "fxRateMaxAgeDays": "Days between the newest usable rate and the period end beyond which revaluation and consolidation refuse the rate. Closing rates count from the date of the period-end spot rate; average rates from the newest quote averaged. Default when no policy is set: 31 days.",
@@ -4227,14 +4233,16 @@
       "scheduleBoardPrefillTimesheets": "Published bookings on this board appear on each person's weekly timesheet as scheduled time they can add with one click, then confirm or correct.",
       "scheduleBoardPrefillCrewTime": "Published project bookings on this board offer the foreman's crew sheet for that project and day its booked crew and hours, added with one click.",
       "scheduleBoardPrefillFieldTickets": "Published project bookings on this board offer that project's field ticket its booked crew and hours for the ticket period, added with one click.",
-      "scheduleBoardNotifyAssignees": "Email each person a summary when their published bookings on this board change.",
+      "scheduleBoardNotifyAssignees": "Send in-app notices for published changes. Configure schedule email separately using the native Schedule distribution Flow and its publish/update triggers.",
       "scheduleCode": "Up to 16 capital letters, digits or / & + . _ -, such as TRAIN, SHOP or FORCED.",
       "scheduleCodeCategory": "Work codes count as scheduled time. Unavailable codes mark a day the person is not working without filing leave.",
       "scheduleCodeColor": "The colour bookings with this code show in, as a hex value such as #38bdf8.",
       "scheduleWeekendDays": "Choose days to shade when no business calendar covers the date. A business calendar takes precedence.",
       "scheduleShowTotals": "Show booked rows and actual booked hours, after configured breaks.",
       "scheduleCellColorRules": "Rules are evaluated in order; the first case-insensitive match sets the cell color. Use six-digit hex colors such as #38bdf8.",
-      "scheduleBoardDayPolicyKnown": "Turn off when only source dates are known. Imported history remains visible without hours; normal whole-day booking refuses until actual start, end and break are configured."
+      "scheduleBoardDayPolicyKnown": "Turn off when only source dates are known. Imported history remains visible without hours; normal whole-day booking refuses until actual start, end and break are configured.",
+      "scheduleShowHoursColumn": "Show the right-side sum of booked hours. Source dates without hours remain unknown. Daily footer totals are configured separately.",
+      "scheduleDistributionVisibility": "Personal reports contain only the recipient’s own schedule or associated resources. Whole-board reports require an explicit sharing policy and a legal-entity-scoped board. Every send still requires a reviewed audience/version or an authored, enabled native Flow."
     },
     "options": {
       "storedValueKind": {
@@ -4949,7 +4957,7 @@
       },
       "scheduleView": {
         "grid": "Grid",
-        "targets": "By job",
+        "targets": "By target",
         "timeline": "Timeline",
         "calendar": "Month",
         "gantt": "Gantt",
@@ -6793,7 +6801,8 @@
         "change_status": "Change the status",
         "post_document": "Post the document",
         "lock_record": "Lock the record",
-        "unlock_record": "Unlock the record"
+        "unlock_record": "Unlock the record",
+        "distribute_schedule": "Email reviewed schedule"
       },
       "recipients": "Recipients",
       "subject": "Subject",
@@ -6822,7 +6831,8 @@
       "lockReasonPlaceholder": "e.g. Approved — payment is final",
       "lockExemptRoles": "Exempt roles",
       "lockExemptHint": "Admins are always exempt; selected roles may still edit.",
-      "unlockHint": "Removes the flow lock so the record can be edited again."
+      "unlockHint": "Removes the flow lock so the record can be edited again.",
+      "scheduleReportHelp": "Email the immutable reviewed schedule report to its exact recipient audience. It may be a personal report or an explicitly permitted whole-board report. Contact, legal entity, schedule version and provider changes refuse delivery."
     },
     "gate": {
       "title": "Title",

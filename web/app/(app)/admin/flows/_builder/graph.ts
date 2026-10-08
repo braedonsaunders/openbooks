@@ -156,6 +156,7 @@ export function buildTrigger(kind: TriggerKind, profile: FlowSubjectProfile): Tr
 /** Fresh ActionData for an action kind, again schema-valid out of the box. */
 export function buildAction(kind: ActionKind, profile: FlowSubjectProfile): ActionData {
   switch (kind) {
+    case 'distribute_schedule': return {action:'distribute_schedule'}
     case 'send_email':
       return {
         action: 'send_email',

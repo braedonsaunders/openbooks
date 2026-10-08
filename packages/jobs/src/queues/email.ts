@@ -37,6 +37,9 @@ export type EmailJobData = {
     category?: string
     reportRunId?: string
     reportDeliveryId?: string
+    /** Native reviewed schedule and its immutable audience/report version. */
+    distributionId?: string
+    version?: string
     /** Payment remittance row completed by the email worker after provider acceptance. */
     paymentRemittanceId?: string
     /** Dunning claim row settled by the email worker from the provider verdict. */

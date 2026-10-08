@@ -7,7 +7,7 @@ import { isUuid } from "../platform/uuid.ts";
 import { isIsoCalendarDate } from "../platform/civil-date.ts";
 import { subsidiaryVisibleFilter } from "../organization/subsidiary-scope.ts";
 import { getBoard, peopleBoardAuthority, type ScheduleActor } from "./boards.ts";
-import { bookingColor } from "./display.ts";
+import { sourceObservationColor } from "./display.ts";
 import { ScheduleError } from "./errors.ts";
 
 export type SourceDisposition = "recorded" | "linked" | "exception";
@@ -102,8 +102,8 @@ export async function readBoardSourceHistory(actor: ScheduleActor, boardId: stri
       ${subsidiaryVisibleFilter(sql`p.subsidiary_id`,allowed)}
       and not exists(select 1 from schedule_source_records n where n.org_id=r.org_id and n.supersedes_id=r.id)
       order by r.on_date,r.source_key,r.id`)).rows;
-    return records.map(record=>({...record,color:bookingColor(board.cellColorRules,
-      {code:record.label,label:record.result ?? record.label,detail:null})}));
+    const codes = (await db.execute<{code:string;label:string;color:string|null}>(sql`select code,label,color from schedule_codes where org_id=${actor.orgId} order by code`)).rows;
+    return records.map(record=>({...record,color:sourceObservationColor(board.cellColorRules,record.label,codes)}));
   });
 }
 

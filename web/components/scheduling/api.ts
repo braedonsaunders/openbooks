@@ -32,15 +32,15 @@ async function request<T>(url: string, init: RequestInit | undefined, fallback: 
 
 const base = (boardId: string) => `/api/scheduling/boards/${encodeURIComponent(boardId)}`
 
-export function fetchWindow(boardId: string, from: string, through: string, fallback: string): Promise<BoardWindow> {
-  return request<BoardWindow>(`${base(boardId)}/window?from=${from}&through=${through}`, undefined, fallback)
+export function fetchWindow(boardId: string, from: string, through: string, fallback: string, signal?: AbortSignal): Promise<BoardWindow> {
+  return request<BoardWindow>(`${base(boardId)}/window?from=${from}&through=${through}`, {signal}, fallback)
 }
 
-export function saveChanges(boardId: string, changes: readonly BoardChange[], fallback: string, reason?: string): Promise<{ results: ChangeResult[] }> {
+export function saveChanges(boardId: string, changes: readonly BoardChange[], fallback: string, reason?: string): Promise<{ results: ChangeResult[];distributionRefusals?:{message:string;remedy:string}[] }> {
   return request(`${base(boardId)}/changes`, { method: 'POST', body: JSON.stringify({ changes, reason: reason ?? null }) }, fallback)
 }
 
-export function publish(boardId: string, from: string, through: string, fallback: string): Promise<{ published: number }> {
+export function publish(boardId: string, from: string, through: string, fallback: string): Promise<{ published: number;distributionRefusals?:{message:string;remedy:string}[] }> {
   return request(`${base(boardId)}/publish`, { method: 'POST', body: JSON.stringify({ from, through }) }, fallback)
 }
 

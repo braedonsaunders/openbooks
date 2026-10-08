@@ -1,9 +1,9 @@
 {
   "title": "スケジュール管理",
-  "description": "誰がいつどこへ行くかを計画します。日単位のクルー、時間単位のシフト、プロジェクトのスケジュールを、自社の働き方に合わせたボードで管理できます。",
+  "description": "Plan people and resources by day or hour on configurable boards. Project schedules live on project records.",
   "views": {
     "grid": "グリッド",
-    "targets": "作業先別",
+    "targets": "割当先別",
     "timeline": "タイムライン",
     "calendar": "月",
     "gantt": "ガントチャート",
@@ -43,7 +43,13 @@
     "details": "詳細",
     "date": "日付へ移動",
     "resourceBoards": "リソース",
-    "manageBoards": "ボードを管理"
+    "manageBoards": "ボードを管理",
+    "display": "Display options",
+    "showHoursColumn": "Show booked hour column",
+    "email": "Email schedule",
+    "openBoard": "Open board",
+    "returnProject": "Return to project",
+    "retry": "Retry schedule load"
   },
   "empty": {
     "title": "最初のボードを設定しましょう",
@@ -154,9 +160,9 @@
     "notesPlaceholder": "クルーへの伝達事項"
   },
   "targets": {
-    "where": "作業先",
+    "where": "Target",
     "count": "{count} 予約済みの行",
-    "add": "作業先を追加",
+    "add": "割当先を追加",
     "empty": "この期間にはまだ何も割り当てられていません。",
     "available": "割り当て可能",
     "allBooked": "この日はすべての行が予約済みまたは利用不可です。"
@@ -166,8 +172,8 @@
     "zoomOut": "縮小"
   },
   "calendar": {
-    "person": "表示",
-    "everyone": "すべての行",
+    "person": "Person or resource",
+    "everyone": "Everyone",
     "onLeave": "休暇中 {count}人",
     "more": "他 {count}件"
   },
@@ -266,7 +272,8 @@
     "removed": "{date}: {target}から削除",
     "link": "スケジュールを確認",
     "footer": "{board}はスケジュールの変更を本人に通知する設定になっているため、このメールをお送りしています。",
-    "noTransport": "メールが設定されていないため、OpenBooks内でのみ通知しました。管理 → メールでメールを設定してください。"
+    "noTransport": "メールが設定されていないため、OpenBooks内でのみ通知しました。管理 → メールでメールを設定してください。",
+    "nativeDistribution": "Email schedules through a reviewed Schedule distribution Flow."
   },
   "mine": {
     "tab": "スケジュール",
@@ -289,5 +296,28 @@
   "boards": {
     "description": "スケジュールボードの一覧、設定、アーカイブ。",
     "return": "スケジュールに戻る"
+  },
+  "distribution": {
+    "title": "Email schedule",
+    "close": "Close",
+    "preview": "Preview report",
+    "send": "Send reviewed schedule",
+    "working": "Preparing…",
+    "refused": "Schedule distribution could not be completed.",
+    "explanation": "Choose personal reports or a whole-board report for every selected recipient. Published bookings and literal source-date observations are shown separately. Sending uses your enabled Schedule distribution Flow and configured email provider.",
+    "everyone": "Everyone with a visible schedule in these dates",
+    "reason": "Reason for sending",
+    "queued": "The reviewed schedule is queued for email delivery.",
+    "deliveryStatus": "Queued is not delivered. Follow the native Flow run, Email log and delivery audit for actual provider results.",
+    "version": "Reviewed version",
+    "recipients": "Exact recipients and associated schedules",
+    "missingEmail": "Email missing",
+    "report": "Recipient schedule report preview",
+    "flows": "Configure native Flows",
+    "contacts": "Board resource recipients",
+    "sharing": "Report sharing",
+    "personal": "Each recipient’s own schedule/resources",
+    "wholeBoard": "The whole visible board schedule for each recipient",
+    "wholeBoardReview": "Every selected recipient will receive the whole reviewed board report, including other people/resources. Board Settings must explicitly allow this sharing within the board’s legal entity."
   }
 }

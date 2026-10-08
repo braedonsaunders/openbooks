@@ -1,9 +1,9 @@
 {
   "title": "Einsatzplanung",
-  "description": "Planen Sie, wer wann wohin geht – Kolonnen tageweise, Schichten stundenweise und Projektterminpläne – auf Plantafeln, die zur Arbeitsweise Ihres Unternehmens passen.",
+  "description": "Plan people and resources by day or hour on configurable boards. Project schedules live on project records.",
   "views": {
     "grid": "Raster",
-    "targets": "Nach Auftrag",
+    "targets": "Nach Ziel",
     "timeline": "Zeitachse",
     "calendar": "Monat",
     "gantt": "Gantt-Diagramm",
@@ -43,7 +43,13 @@
     "details": "Details",
     "date": "Zum Datum",
     "resourceBoards": "Ressourcen",
-    "manageBoards": "Boards verwalten"
+    "manageBoards": "Boards verwalten",
+    "display": "Display options",
+    "showHoursColumn": "Show booked hour column",
+    "email": "Email schedule",
+    "openBoard": "Open board",
+    "returnProject": "Return to project",
+    "retry": "Retry schedule load"
   },
   "empty": {
     "title": "Richten Sie Ihre erste Plantafel ein",
@@ -154,9 +160,9 @@
     "notesPlaceholder": "Was die Kolonne wissen muss"
   },
   "targets": {
-    "where": "Auftrag",
+    "where": "Target",
     "count": "{count} gebuchte Zeilen",
-    "add": "Auftrag hinzufügen",
+    "add": "Ziel hinzufügen",
     "empty": "In diesem Zeitraum ist noch nichts eingeplant.",
     "available": "Verfügbar",
     "allBooked": "Alle Zeilen sind an diesem Tag gebucht oder nicht verfügbar."
@@ -166,8 +172,8 @@
     "zoomOut": "Verkleinern"
   },
   "calendar": {
-    "person": "Anzeigen",
-    "everyone": "Alle Zeilen",
+    "person": "Person or resource",
+    "everyone": "Everyone",
     "onLeave": "{count} abwesend",
     "more": "{count} weitere"
   },
@@ -266,7 +272,8 @@
     "removed": "{date}: entfernt von {target}",
     "link": "Ihren Plan ansehen",
     "footer": "Sie erhalten diese Nachricht, weil {board} Personen benachrichtigt, wenn sich ihr Plan ändert.",
-    "noTransport": "E-Mail ist nicht eingerichtet, daher wurden die Personen nur in OpenBooks benachrichtigt. Richten Sie E-Mail unter Administration → E-Mail ein."
+    "noTransport": "E-Mail ist nicht eingerichtet, daher wurden die Personen nur in OpenBooks benachrichtigt. Richten Sie E-Mail unter Administration → E-Mail ein.",
+    "nativeDistribution": "Email schedules through a reviewed Schedule distribution Flow."
   },
   "mine": {
     "tab": "Einsatzplan",
@@ -289,5 +296,28 @@
   "boards": {
     "description": "Planungsboards anzeigen, konfigurieren und archivieren.",
     "return": "Zurück zum Zeitplan"
+  },
+  "distribution": {
+    "title": "Email schedule",
+    "close": "Close",
+    "preview": "Preview report",
+    "send": "Send reviewed schedule",
+    "working": "Preparing…",
+    "refused": "Schedule distribution could not be completed.",
+    "explanation": "Choose personal reports or a whole-board report for every selected recipient. Published bookings and literal source-date observations are shown separately. Sending uses your enabled Schedule distribution Flow and configured email provider.",
+    "everyone": "Everyone with a visible schedule in these dates",
+    "reason": "Reason for sending",
+    "queued": "The reviewed schedule is queued for email delivery.",
+    "deliveryStatus": "Queued is not delivered. Follow the native Flow run, Email log and delivery audit for actual provider results.",
+    "version": "Reviewed version",
+    "recipients": "Exact recipients and associated schedules",
+    "missingEmail": "Email missing",
+    "report": "Recipient schedule report preview",
+    "flows": "Configure native Flows",
+    "contacts": "Board resource recipients",
+    "sharing": "Report sharing",
+    "personal": "Each recipient’s own schedule/resources",
+    "wholeBoard": "The whole visible board schedule for each recipient",
+    "wholeBoardReview": "Every selected recipient will receive the whole reviewed board report, including other people/resources. Board Settings must explicitly allow this sharing within the board’s legal entity."
   }
 }

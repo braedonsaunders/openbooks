@@ -1,3 +1,4 @@
+import {SCHEDULE_DISTRIBUTION_SUBJECT_KIND,scheduleDistributionSubjectProfile,scheduleDistributionsFlowAdapter} from './schedule-distribution-adapter.ts';
 import { CHECKLIST_STEP_SUBJECT_KIND } from "@openbooks/forms-core";
 import { checklistStepsFlowAdapter, checklistStepSubjectProfile } from "./checklist-steps-adapter.ts";
 import { BENEFIT_ENROLLMENT_SUBJECT_KIND } from "@openbooks/schema/src/hrm-benefits.ts";
@@ -113,6 +114,7 @@ import { db } from "../platform/db.ts";
 const adapterCache = new Map<string, FlowSubjectAdapter>();
 
 export function getFlowAdapter(subjectKind: string): FlowSubjectAdapter | null {
+  if(subjectKind===SCHEDULE_DISTRIBUTION_SUBJECT_KIND)return scheduleDistributionsFlowAdapter;
   if(subjectKind===CHECKLIST_STEP_SUBJECT_KIND) return checklistStepsFlowAdapter;
   if (subjectKind === BENEFIT_ENROLLMENT_SUBJECT_KIND) return benefitEnrollmentsFlowAdapter;
   if (subjectKind === BENEFIT_AWARD_SUBJECT_KIND) return benefitAwardsFlowAdapter;
@@ -168,6 +170,7 @@ export function handlerReleasedSubjectKinds(): string[] {
 /** Every subject kind flows can be authored over, with its profile (builder UI). */
 export function listFlowSubjectProfiles(): FlowSubjectProfile[] {
   return [
+    scheduleDistributionSubjectProfile,
     checklistStepSubjectProfile,
     ...DOCUMENT_FLOW_KINDS.map((kind) => documentSubjectProfile(kind)),
     benefitAwardSubjectProfile,

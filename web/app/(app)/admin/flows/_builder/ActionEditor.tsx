@@ -67,6 +67,7 @@ export function ActionEditor({
         </Select>
       </div>
 
+      {action.action === 'distribute_schedule' ? <p className="text-sm text-slate-500">{t('action.scheduleReportHelp')}</p> : null}
       {action.action === 'send_email' ? (
         <>
           <div className="space-y-1.5">
