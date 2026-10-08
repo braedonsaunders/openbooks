@@ -9,6 +9,7 @@ import { getLocale, getTranslations } from 'next-intl/server'
 import { decimalLabel } from '../../../../../lib/format'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { TAX_RETURN_PACKS } from '@openbooks/engine/src/tax/seed-tax-forms.ts'
+import { ensureAiRailsSettingsForOrg } from '@openbooks/engine/src/hrm/ai/settings.ts'
 import {
   badge,
   column,
@@ -225,6 +226,9 @@ export async function loadSetupEntity(
     : null
 
   const t = await getTranslations('admin.setup')
+  if (entityKey === 'ai-rails-settings' && authz.allowedSubsidiaryIds === null) {
+    await ensureAiRailsSettingsForOrg(orgId, authz.user.id)
+  }
   const locale = await getLocale()
   const isRegistryList = entity !== null
 

@@ -119,7 +119,7 @@ registerHooks({
           export async function getAuthz() { return authz }
           export async function requirePermission() { return authz }
           export async function guardPermission() { return authz }
-          export function can() { return false }
+          export function can() { return true }
           export { guardUnrestrictedScope } from '${root}web/lib/authz.ts'
         `,
         shortCircuit: true,
@@ -231,8 +231,10 @@ test('a provider save that sends agents persists the sent pack policies', async 
 })
 
 test('the provider loader carries provider fields only — never agent policy', async () => {
-  const { loadAdminAi } = await import('./view')
+  const { loadAdminAi, adminAiSpec } = await import('./view')
+  state.statements.length = 0
   const data = await loadAdminAi()
+  assert.equal(state.statements.some((query) => /\b(ai_rails_settings|ai_capabilities|ai_decisions)\b/.test(statementSql(query))), false, 'provider GET must not provision workforce settings or load action/activity rows')
   assert.deepEqual(Object.keys(data.initial).sort(), [
     'baseUrl',
     'documentCapture',
@@ -242,6 +244,9 @@ test('the provider loader carries provider fields only — never agent policy', 
     'modelSmart',
     'provider',
   ])
+  const specText = JSON.stringify(adminAiSpec(data))
+  assert.ok(specText.includes('ai-settings-form'))
+  assert.equal(/ai-governance-ledger|ai-rails-settings.*entityKey|setup-section/.test(specText), false)
   assert.ok(!('agents' in data.initial), 'agent policy must not cross the provider boundary')
   assert.ok(data.specs.length > 0, 'the loader must offer at least one provider spec')
   const nonJson: string[] = []

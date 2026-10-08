@@ -1713,7 +1713,9 @@
     },
     "manageAgentsDescription": "スケジュール・チェック・検出事項の振り分けは「設定 → エージェント」にあります。",
     "manageAgentsLink": "エージェント設定を開く",
-    "manageAgentsTitle": "バックグラウンドエージェント"
+    "manageAgentsTitle": "バックグラウンドエージェント",
+    "workforceSettings": "従業員レビュー設定",
+    "actionLimits": "アシスタント操作のレビュー"
   },
   "setup": {
     "builder": {
@@ -3208,9 +3210,9 @@
         "description": "パイプラインテンプレートの順序付き段階。スクリーニング、面接、評価、オファー、採用、却下のいずれかです。"
       },
       "ai-rails-settings": {
-        "title": "AIレール設定",
-        "singularTitle": "AIレール設定",
-        "description": "確定的HRレール用のスキャンしきい値、基準コホート、組織宣言のバイアス用語、台帳レビュー頻度。"
+        "title": "従業員のチェックと下書き",
+        "singularTitle": "従業員のチェックと下書き",
+        "description": "給与・勤務時間の決定論的チェック、下書きの表現確認、レビュー間隔を設定します。給与計算やAIプロバイダー接続は変更しません。"
       },
       "hrm-action-reasons": {
         "title": "アクション理由",
@@ -3545,6 +3547,11 @@
         "title": "スケジュールコード",
         "singularTitle": "スケジュールコード",
         "description": "研修日や工場作業日など、顧客やプロジェクトに該当しない作業の割り当てと、勤務しない日に使うコード。"
+      },
+      "ai-capabilities": {
+        "title": "アシスタント操作のレビュー",
+        "singularTitle": "アシスタント操作のレビュー",
+        "description": "登録された操作のレビュー宣言と担当者。コードの上限とネイティブの権限・機能・ライフサイクル検証が優先されます。"
       }
     },
     "fields": {
@@ -6626,7 +6633,15 @@
     },
     "archive": "アーカイブ",
     "confirmArchive": "この記録をアーカイブしますか？履歴は引き続き参照できます。",
-    "archived": "記録をアーカイブしました"
+    "archived": "記録をアーカイブしました",
+    "aiPolicy": {
+      "checksTitle": "チェック",
+      "checksDescription": "給与・勤務時間の決定論的チェックに使用する閾値と比較グループ。AIモデルは呼び出しません。",
+      "draftingTitle": "下書き",
+      "draftingDescription": "記録に基づく下書きで人による確認が必要な語句。下書きは自動送信されません。",
+      "reviewsTitle": "レビュー",
+      "reviewsDescription": "管理者がアシスタントの操作制限と通知を確認する間隔。"
+    }
   },
   "flows": {
     "title": "フロー",
@@ -7789,17 +7804,17 @@
     }
   },
   "aiLedger": {
-    "title": "AIガバナンス",
-    "description": "能力、その自律性の上限、AI支援の回答ごとの不変の記録。",
-    "capabilitiesTitle": "能力",
-    "decisionsTitle": "判断",
+    "title": "アシスタント操作のレビュー",
+    "description": "登録された操作のレビュー宣言と担当者。コードの上限とネイティブの権限・機能・ライフサイクル検証が優先されます。",
+    "capabilitiesTitle": "レビュー宣言",
+    "decisionsTitle": "アクティビティ",
     "overdueTitle": "期限切れのレビュー",
     "overdueDescription": "レビュー周期を過ぎた能力",
     "export": "CSV出力",
-    "sync": "台帳を同期",
+    "sync": "利用可能な操作を更新",
     "syncDone": "台帳を同期しました。",
     "review": "レビューを記録",
-    "save": "保存",
+    "save": "宣言を保存",
     "failed": "変更を保存できませんでした。",
     "enabled": "有効",
     "disabled": "無効",
@@ -7807,7 +7822,7 @@
     "noticeRequired": "通知が必要",
     "neverReviewed": "未レビュー",
     "columns": {
-      "autonomy": "自律性",
+      "autonomy": "宣言したレビューレベル",
       "capability": "能力",
       "enabled": "有効",
       "notice": "通知",
@@ -7816,7 +7831,31 @@
       "reviewer": "レビュー担当",
       "summary": "概要",
       "when": "日時"
-    }
+    },
+    "activityDescription": "操作の参照と人によるレビュー結果。記録の権限は件数とエクスポートにも適用されます。",
+    "empty": "登録された操作がありません。既存の制限を変更せずに操作を更新できます。",
+    "activityEmpty": "条件に一致するアクティビティはありません。",
+    "exportPage": "このページをエクスポート",
+    "authorityHelp": "宣言の編集でチェックが無効になったりアシスタントの権限が変わったりすることはありません。ネイティブ操作はコード上限、権限、機能、必須の人によるレビューを適用します。",
+    "featuresLink": "会社の機能",
+    "levels": {
+      "read_only": "読み取りのみ",
+      "draft": "下書きのみ",
+      "propose": "レビュー用に提案",
+      "act_with_confirmation": "確認付きで実行"
+    },
+    "outcomes": {
+      "shown": "表示済み",
+      "accepted": "承認済み",
+      "edited": "編集済み",
+      "rejected": "却下済み",
+      "expired": "期限切れ"
+    },
+    "declarationSaved": "レビュー宣言を保存しました。権限、チェック、アシスタントの権限は変更されていません。",
+    "reviewRecorded": "レビューを記録しました。",
+    "registryRefreshed": "操作カタログを更新しました。既存のレビュー宣言は保持されています。",
+    "codeMaximum": "コードの上限",
+    "notRegistered": "未登録"
   },
   "sandboxManager": {
     "newEnvironment": "新しい環境",

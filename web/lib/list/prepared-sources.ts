@@ -23,6 +23,8 @@ export interface PreparedListSource {
  * owns the collection contract and pagination mode consumed by shared tables.
  * A server window must never be filtered or paginated again in the browser. */
 const SOURCES = {
+  assistant_action_limits: { route: '/admin/setup/ai-capabilities', rowsField: 'capabilities', rowKeyField: 'key', mode: 'loaded' },
+  assistant_activity: { route: '/admin/setup/ai-capabilities?tab=activity', rowsField: 'decisions', rowKeyField: 'id', mode: 'server', clientSearch: false, paging: { totalField: 'total', pageField: 'page', perPageField: 'perPage' } },
   setup_configuration_records: {
     route: '/admin/setup', rowsField: 'rows', rowKeyField: 'id', mode: 'server',
     clientSearch: false, showPerPage: false,

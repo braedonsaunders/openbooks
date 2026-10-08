@@ -1,5 +1,5 @@
 /**
- * HRM AI rails (HR-21) errors. Every refusal names the remedy — a computed
+ * Workforce assistance errors. Every refusal names the remedy — a computed
  * refusal must reach the caller, and the operator acts on the remedy, so
  * the remedy must exist in the product.
  */
@@ -16,7 +16,7 @@ export class AiRailsError extends Error {
 export function unknownCapability(key: string): AiRailsError {
   return new AiRailsError(
     "ai_unknown_capability",
-    `unknown AI capability "${key}": it is not in the capability registry — pick a registered capability on /admin/ai`,
+    `unknown AI capability "${key}": it is not in the capability registry — pick a registered capability on /admin/setup/ai-capabilities`,
   );
 }
 
@@ -24,7 +24,7 @@ export function unknownCapability(key: string): AiRailsError {
 export function autonomyRaiseRefused(key: string, max: string): AiRailsError {
   return new AiRailsError(
     "ai_autonomy_raise_refused",
-    `AI capability "${key}" cannot be raised above "${max}": autonomy is set in code and the org may only lower it on /admin/ai`,
+    `Review declaration for AI capability "${key}" cannot exceed code maximum "${max}"; edit the declaration on /admin/setup/ai-capabilities`,
   );
 }
 

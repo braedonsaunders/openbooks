@@ -1713,7 +1713,9 @@
       "current": "{id} (current)",
       "hint": "Load the live model list with your API key, or type a model id manually.",
       "idPlaceholder": "model id"
-    }
+    },
+    "workforceSettings": "Workforce review settings",
+    "actionLimits": "Assistant action reviews"
   },
   "setup": {
     "builder": {
@@ -3155,9 +3157,9 @@
         "description": "One ordered stage of a pipeline template: screening, interview, assessment, offer, hired, or rejected."
       },
       "ai-rails-settings": {
-        "title": "AI rails settings",
-        "singularTitle": "AI rails setting",
-        "description": "Scan thresholds, baseline cohorts, org-declared bias terms, and the ledger review cadence for the deterministic HR rails."
+        "title": "Workforce checks and drafting",
+        "singularTitle": "Workforce checks and drafting",
+        "description": "Deterministic payroll and timesheet checks, drafting language flags, and review intervals. These settings do not change payroll calculations or connect an AI provider."
       },
       "hrm-action-reasons": {
         "title": "Action reasons",
@@ -3492,6 +3494,11 @@
         "title": "Schedule codes",
         "singularTitle": "Schedule code",
         "description": "Codes for booking work that is not a customer or project, such as training or shop days, and for days people are not working."
+      },
+      "ai-capabilities": {
+        "title": "Assistant action reviews",
+        "singularTitle": "Assistant action reviews",
+        "description": "Review declarations and responsibility for registered actions. Code maxima and native role, feature and lifecycle checks remain authoritative."
       }
     },
     "fields": {
@@ -4175,11 +4182,11 @@
       "hrmRetentionScope": "Choose all regions or the country codes covered by this retention rule.",
       "hrmTemplateBody": "Letter body with placeholders for the offer data.",
       "hrmTemplateClauses": "Add the named clauses available in this offer template.",
-      "aiRailsZThreshold": "Flag earnings more than this many standard deviations from the cohort mean (default 3).",
-      "aiRailsRetroThreshold": "Flag retro-pay adjustments at or above this amount (default 500).",
+      "aiRailsZThreshold": "Flag earnings that deviate from the baseline group by this many standard deviations. Used by deterministic checks; no AI model is called.",
+      "aiRailsRetroThreshold": "Flag retro-pay adjustments at or above this amount for review. This threshold does not change payroll calculations.",
       "aiRailsCohort": "Group employees for baselines by subsidiary, department, pay schedule or job level.",
       "aiRailsBiasTerms": "Org-declared words and phrases the draft check flags whole-word, one per line in the editor.",
-      "aiRailsReviewMonths": "Ledger review cadence in months (1–36); overdue capabilities nudge the setup admins' inbox.",
+      "aiRailsReviewMonths": "Review interval in months (1–36). Overdue action reviews notify setup administrators.",
       "benefitProgramFamily": "Reward, allowance, incentive, or custom. Insured health and retirement stay on benefit plans.",
       "benefitProgramDescription": "What this program pays and why, in plain language.",
       "benefitProgramEntity": "Responsible legal entity. Required before activation.",
@@ -6626,7 +6633,15 @@
     },
     "archive": "Archive",
     "confirmArchive": "Archive this record? Its history remains available.",
-    "archived": "Record archived"
+    "archived": "Record archived",
+    "aiPolicy": {
+      "checksTitle": "Checks",
+      "checksDescription": "Thresholds and baseline groups for deterministic payroll and timesheet reviews. No model is called by these checks.",
+      "draftingTitle": "Drafting",
+      "draftingDescription": "Words and phrases flagged for human review in evidence-based drafts. Drafts are never submitted automatically.",
+      "reviewsTitle": "Reviews",
+      "reviewsDescription": "How often administrators review assistant action limits and notices."
+    }
   },
   "flows": {
     "title": "Flows",
@@ -7789,17 +7804,17 @@
     }
   },
   "aiLedger": {
-    "title": "AI governance",
-    "description": "Capabilities, their autonomy ceilings, and the append-only record of every AI-assisted answer.",
-    "capabilitiesTitle": "Capabilities",
-    "decisionsTitle": "Decisions",
+    "title": "Assistant action reviews",
+    "description": "Review declarations and responsibility for registered actions. Code maxima and native role, feature and lifecycle checks remain authoritative.",
+    "capabilitiesTitle": "Review declarations",
+    "decisionsTitle": "Activity",
     "overdueTitle": "Reviews overdue",
     "overdueDescription": "These capabilities passed their review cadence",
     "export": "Export CSV",
-    "sync": "Sync registry",
+    "sync": "Refresh available actions",
     "syncDone": "Registry synced.",
     "review": "Record review",
-    "save": "Save",
+    "save": "Save declaration",
     "failed": "The change could not be saved.",
     "enabled": "Enabled",
     "disabled": "Disabled",
@@ -7807,16 +7822,40 @@
     "noticeRequired": "Notice required",
     "neverReviewed": "Never reviewed",
     "columns": {
-      "autonomy": "Autonomy",
+      "autonomy": "Declared review level",
       "capability": "Capability",
-      "enabled": "Enabled",
+      "enabled": "Module available",
       "notice": "Notice",
       "outcome": "Outcome",
       "reviewed": "Reviewed",
       "reviewer": "Reviewer",
       "summary": "Summary",
       "when": "When"
-    }
+    },
+    "activityDescription": "Recent action references and human review outcomes. Subject permissions also fence the activity count and export.",
+    "empty": "No registered actions. Refresh available actions to provision the registry without changing existing limits.",
+    "activityEmpty": "No activity matches these filters.",
+    "exportPage": "Export this page",
+    "authorityHelp": "These settings record review declarations. Editing a declaration does not disable scans or change assistant authority. Native actions enforce their code maximum, role permissions, module features and required human review.",
+    "featuresLink": "Company features",
+    "levels": {
+      "read_only": "Read only",
+      "draft": "Draft only",
+      "propose": "Propose for review",
+      "act_with_confirmation": "Act with confirmation"
+    },
+    "outcomes": {
+      "shown": "Shown",
+      "accepted": "Accepted",
+      "edited": "Edited",
+      "rejected": "Rejected",
+      "expired": "Expired"
+    },
+    "declarationSaved": "Review declaration saved. Native permissions, scans and assistant authority are unchanged.",
+    "reviewRecorded": "Review recorded.",
+    "registryRefreshed": "Action catalog refreshed. Existing review declarations were retained.",
+    "codeMaximum": "Code maximum",
+    "notRegistered": "Not registered"
   },
   "sandboxManager": {
     "newEnvironment": "New environment",

@@ -1713,7 +1713,9 @@
       "current": "{id}（当前）",
       "hint": "用你的 API 密钥加载实时模型列表，或手动键入模型 id。",
       "idPlaceholder": "模型 id"
-    }
+    },
+    "workforceSettings": "员工审核设置",
+    "actionLimits": "助手操作审核"
   },
   "setup": {
     "builder": {
@@ -3155,9 +3157,9 @@
         "description": "流程模板中的一个有序阶段：筛选、面试、测评、录用、已入职或已拒绝。"
       },
       "ai-rails-settings": {
-        "title": "AI 护栏设置",
-        "singularTitle": "AI 护栏设置",
-        "description": "确定性 HR 护栏的扫描阈值、基线队列、组织声明的偏见词和台账复核频率。"
+        "title": "员工检查与草稿",
+        "singularTitle": "员工检查与草稿",
+        "description": "确定性工资和工时检查、草稿用语提示及审核周期。这些设置不会更改工资计算或连接AI提供商。"
       },
       "hrm-action-reasons": {
         "title": "操作原因",
@@ -3492,6 +3494,11 @@
         "title": "排程代码",
         "singularTitle": "排程代码",
         "description": "用于安排不属于客户或项目的工作（如培训日或车间日），以及标记人员不工作的日期。"
+      },
+      "ai-capabilities": {
+        "title": "助手操作审核",
+        "singularTitle": "助手操作审核",
+        "description": "已注册操作的审核声明和责任人。代码上限及原生权限、功能和生命周期检查仍然有效。"
       }
     },
     "fields": {
@@ -6626,7 +6633,15 @@
     },
     "archive": "归档",
     "confirmArchive": "归档此记录？其历史记录仍可查看。",
-    "archived": "记录已归档"
+    "archived": "记录已归档",
+    "aiPolicy": {
+      "checksTitle": "检查",
+      "checksDescription": "用于确定性工资和工时检查的阈值与基准分组。这些检查不调用模型。",
+      "draftingTitle": "草稿",
+      "draftingDescription": "基于记录的草稿中需要人工审核的词语。草稿不会自动提交。",
+      "reviewsTitle": "审核",
+      "reviewsDescription": "管理员审核助手操作限制和通知的周期。"
+    }
   },
   "flows": {
     "title": "流程",
@@ -7789,17 +7804,17 @@
     }
   },
   "aiLedger": {
-    "title": "AI 治理",
-    "description": "各项能力、其自主性上限，以及每个 AI 辅助答复的不可变记录。",
-    "capabilitiesTitle": "能力",
-    "decisionsTitle": "决策",
+    "title": "助手操作审核",
+    "description": "已注册操作的审核声明和责任人。代码上限及原生权限、功能和生命周期检查仍然有效。",
+    "capabilitiesTitle": "审核声明",
+    "decisionsTitle": "活动",
     "overdueTitle": "逾期的评审",
     "overdueDescription": "这些能力已超过评审周期",
     "export": "导出 CSV",
-    "sync": "同步台账",
+    "sync": "更新可用操作",
     "syncDone": "台账已同步。",
     "review": "记录评审",
-    "save": "保存",
+    "save": "保存声明",
     "failed": "无法保存更改。",
     "enabled": "已启用",
     "disabled": "已禁用",
@@ -7807,7 +7822,7 @@
     "noticeRequired": "需要提示",
     "neverReviewed": "从未评审",
     "columns": {
-      "autonomy": "自主性",
+      "autonomy": "声明的审核级别",
       "capability": "能力",
       "enabled": "已启用",
       "notice": "提示",
@@ -7816,7 +7831,31 @@
       "reviewer": "评审人",
       "summary": "摘要",
       "when": "时间"
-    }
+    },
+    "activityDescription": "操作引用和人工审核结果。记录权限也限制总数和导出内容。",
+    "empty": "没有已注册操作。可在保留现有限制的情况下更新操作。",
+    "activityEmpty": "没有符合筛选条件的活动。",
+    "exportPage": "导出此页",
+    "authorityHelp": "编辑声明不会禁用检查或更改助手权限。原生操作执行代码上限、角色权限、模块功能及必需的人工审核。",
+    "featuresLink": "公司功能",
+    "levels": {
+      "read_only": "只读",
+      "draft": "仅草稿",
+      "propose": "提请审核",
+      "act_with_confirmation": "确认后操作"
+    },
+    "outcomes": {
+      "shown": "已显示",
+      "accepted": "已接受",
+      "edited": "已编辑",
+      "rejected": "已拒绝",
+      "expired": "已过期"
+    },
+    "declarationSaved": "审核声明已保存。权限、检查和助手权限未更改。",
+    "reviewRecorded": "审核已记录。",
+    "registryRefreshed": "操作目录已更新。现有审核声明已保留。",
+    "codeMaximum": "代码上限",
+    "notRegistered": "未注册"
   },
   "sandboxManager": {
     "newEnvironment": "新建环境",

@@ -1713,7 +1713,9 @@
       "current": "{id} (atual)",
       "hint": "Carregue a lista de modelos ao vivo com sua chave de API ou digite um id de modelo manualmente.",
       "idPlaceholder": "id do modelo"
-    }
+    },
+    "workforceSettings": "Configurações de revisão de pessoal",
+    "actionLimits": "Revisões de ações do assistente"
   },
   "setup": {
     "builder": {
@@ -3155,9 +3157,9 @@
         "description": "Uma etapa ordenada de um modelo: triagem, entrevista, avaliação, oferta, contratado ou recusado."
       },
       "ai-rails-settings": {
-        "title": "Configurações dos trilhos de IA",
-        "singularTitle": "Configuração dos trilhos de IA",
-        "description": "Limiares de varredura, coortes de referência, termos de viés declarados e a cadência de revisão do razão para os trilhos determinísticos de RH."
+        "title": "Verificações de pessoal e redação",
+        "singularTitle": "Verificações de pessoal e redação",
+        "description": "Verificações determinísticas de folha e horas, termos de rascunhos e intervalos de revisão. Não alteram cálculos da folha nem conectam um provedor de IA."
       },
       "hrm-action-reasons": {
         "title": "Motivos de ação",
@@ -3492,6 +3494,11 @@
         "title": "Códigos de programação",
         "singularTitle": "Código de programação",
         "description": "Códigos para alocar trabalhos que não são de um cliente nem de um projeto, como dias de treinamento ou de oficina, e para dias em que as pessoas não trabalham."
+      },
+      "ai-capabilities": {
+        "title": "Revisões de ações do assistente",
+        "singularTitle": "Revisões de ações do assistente",
+        "description": "Declarações e responsáveis pela revisão de ações registradas. Máximos do código e controles nativos continuam sendo a autoridade."
       }
     },
     "fields": {
@@ -6626,7 +6633,15 @@
     },
     "archive": "Arquivar",
     "confirmArchive": "Arquivar este registro? Seu histórico permanece disponível.",
-    "archived": "Registro arquivado"
+    "archived": "Registro arquivado",
+    "aiPolicy": {
+      "checksTitle": "Verificações",
+      "checksDescription": "Limites e grupos de referência para verificações determinísticas de folha e horas. Nenhum modelo é chamado.",
+      "draftingTitle": "Redação",
+      "draftingDescription": "Palavras e frases para revisão humana em rascunhos baseados em registros. Rascunhos nunca são enviados automaticamente.",
+      "reviewsTitle": "Revisões",
+      "reviewsDescription": "Frequência da revisão dos limites de ações e avisos pelos administradores."
+    }
   },
   "flows": {
     "title": "Fluxos",
@@ -7789,17 +7804,17 @@
     }
   },
   "aiLedger": {
-    "title": "Governança de IA",
-    "description": "Capacidades, seus tetos de autonomia e o registro imutável de cada resposta assistida por IA.",
-    "capabilitiesTitle": "Capacidades",
-    "decisionsTitle": "Decisões",
+    "title": "Revisões de ações do assistente",
+    "description": "Declarações e responsáveis pela revisão de ações registradas. Máximos do código e controles nativos continuam sendo a autoridade.",
+    "capabilitiesTitle": "Declarações de revisão",
+    "decisionsTitle": "Atividade",
     "overdueTitle": "Revisões vencidas",
     "overdueDescription": "Estas capacidades passaram da cadência de revisão",
     "export": "Exportar CSV",
-    "sync": "Sincronizar cadastro",
+    "sync": "Atualizar ações disponíveis",
     "syncDone": "Cadastro sincronizado.",
     "review": "Registrar revisão",
-    "save": "Salvar",
+    "save": "Salvar declaração",
     "failed": "Não foi possível salvar a alteração.",
     "enabled": "Ativada",
     "disabled": "Desativada",
@@ -7807,7 +7822,7 @@
     "noticeRequired": "Aviso exigido",
     "neverReviewed": "Nunca revisada",
     "columns": {
-      "autonomy": "Autonomia",
+      "autonomy": "Nível declarado",
       "capability": "Capacidade",
       "enabled": "Ativada",
       "notice": "Aviso",
@@ -7816,7 +7831,31 @@
       "reviewer": "Revisor",
       "summary": "Resumo",
       "when": "Quando"
-    }
+    },
+    "activityDescription": "Referências de ações e resultados de revisão humana. Permissões dos registros também limitam a contagem e a exportação.",
+    "empty": "Nenhuma ação registrada. Atualize as ações sem alterar os limites existentes.",
+    "activityEmpty": "Nenhuma atividade corresponde aos filtros.",
+    "exportPage": "Exportar esta página",
+    "authorityHelp": "Estas declarações não desativam verificações nem alteram a autoridade do assistente. Ações nativas aplicam seus máximos, permissões, recursos e revisão humana obrigatória.",
+    "featuresLink": "Recursos da empresa",
+    "levels": {
+      "read_only": "Somente leitura",
+      "draft": "Somente rascunho",
+      "propose": "Propor para revisão",
+      "act_with_confirmation": "Agir com confirmação"
+    },
+    "outcomes": {
+      "shown": "Exibido",
+      "accepted": "Aceito",
+      "edited": "Editado",
+      "rejected": "Rejeitado",
+      "expired": "Expirado"
+    },
+    "declarationSaved": "Declaração salva. Permissões, verificações e autoridade do assistente não mudaram.",
+    "reviewRecorded": "Revisão registrada.",
+    "registryRefreshed": "Catálogo atualizado. Declarações existentes foram preservadas.",
+    "codeMaximum": "Máximo do código",
+    "notRegistered": "Não registrado"
   },
   "sandboxManager": {
     "newEnvironment": "Novo ambiente",

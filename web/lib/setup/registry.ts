@@ -16,6 +16,7 @@
  */
 
 import type { SetupEntity } from './types'
+import { AI_CAPABILITIES_ENTITY } from './hrm-ai-rails'
 import { BENEFIT_TRANSACTION_POLICY_ENTITY } from './benefit-transaction-policy'
 import { SETUP_GROUPS } from './types'
 import { COMPANY_ENTITIES } from './entities/company'
@@ -51,6 +52,7 @@ export { OVERHEAD_RATE_KINDS, LIEN_WAIVER_TYPES } from './options'
 
 export const SETUP_ENTITIES: SetupEntity[] = [
   BENEFIT_TRANSACTION_POLICY_ENTITY,
+  AI_CAPABILITIES_ENTITY,
   ...COMPANY_ENTITIES,
   ...ACCOUNTING_ENTITIES,
   INTERNAL_BILLING_RULES_ENTITY,

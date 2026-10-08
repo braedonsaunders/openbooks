@@ -1,26 +1,13 @@
 import type { SetupEntity } from './types'
 
-/**
- * HR-21 AI rails settings (ai_rails_settings singleton). The scan
- * thresholds, cohort key, org-declared bias terms and the ledger review
- * cadence are org-declared here; the deterministic services read them
- * with conservative fallbacks. Rehomed onto /admin/ai beside the
- * providers card and the governance ledger (never a standalone setup
- * page). The row is a per-org singleton seeded by migration 0232 and
- * ensured on ledger view: values editable, the row itself never created
- * or deleted here.
- */
+/** The existing organization policy record for deterministic workforce checks, drafting terms and review cadence. */
 export const AI_RAILS_SETTINGS_ENTITY: SetupEntity = {
   key: 'ai-rails-settings',
   table: 'ai_rails_settings',
-  // The singleton is keyed by the org itself -- 0232 gives the table
-  // org_id as its PRIMARY KEY and no id column at all. Without this the
-  // generic setup reader selects and orders by "id" and /admin/ai throws
-  // before it renders anything.
+  // The organization ID is the existing singleton's primary key.
   idColumn: 'org_id',
   groupKey: 'workforce',
   featureKey: 'aiGovernanceLedger',
-  rehomed: true, // section on the Admin → AI page
   iconKey: 'settings',
   orgScoped: true,
   actorCols: true,
@@ -28,6 +15,11 @@ export const AI_RAILS_SETTINGS_ENTITY: SetupEntity = {
   allowCreate: false,
   allowDelete: false,
   docSlug: 'ai-governance-ledger',
+  recordSections: [
+    { key: 'checks', titleKey: 'aiPolicy.checksTitle', descriptionKey: 'aiPolicy.checksDescription', fields: ['zThreshold', 'retroThreshold', 'cohortKey'] },
+    { key: 'drafting', titleKey: 'aiPolicy.draftingTitle', descriptionKey: 'aiPolicy.draftingDescription', fields: ['biasTerms'] },
+    { key: 'reviews', titleKey: 'aiPolicy.reviewsTitle', descriptionKey: 'aiPolicy.reviewsDescription', fields: ['reviewMonths'] },
+  ],
   columns: [
     { key: 'zThreshold', kind: 'number' },
     { key: 'retroThreshold', kind: 'number' },
@@ -71,4 +63,14 @@ export const AI_RAILS_SETTINGS_ENTITY: SetupEntity = {
       helpTextKey: 'fieldHelp.aiRailsReviewMonths',
     },
   ],
+}
+
+/** Configuration writes remain owned by the native capability command, never generic CRUD. */
+export const AI_CAPABILITIES_ENTITY: SetupEntity = {
+  key: 'ai-capabilities', table: 'ai_capabilities', groupKey: 'company', iconKey: 'settings',
+  orgScoped: true, hasActive: false, featureKey: 'aiGovernanceLedger',
+  readOnly: true, allowCreate: false, allowDelete: false, importVia: 'none',
+  naturalKey: 'key', docSlug: 'ai-governance-ledger',
+  columns: [{ key: 'name', kind: 'text' }, { key: 'purpose', kind: 'text' }, { key: 'autonomy', kind: 'text' }],
+  fields: [],
 }

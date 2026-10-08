@@ -1,35 +1,14 @@
 import 'server-only'
 
 import { getTranslations } from 'next-intl/server'
-import { frame, grid, page, pageHeader, ref, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
+import { frame, grid, page, pageHeader, ref, widget, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
 import { can, requirePermission } from '../../../../lib/authz'
-import { loadAiLedger, type AiLedgerData } from '../../../../lib/hrm/ai-rails'
+import { isFeatureEnabled } from '../../../../lib/features'
 import { AI_PROVIDER_SPECS } from '../../../../lib/assistant/client'
 import { getOrgAiSettings, type OrgAiSettings } from '../../../../lib/assistant/ai-config'
 import type { ProviderSpecLite } from './AiSettingsForm'
 
-/**
- * Admin → AI providers, split into a loader and a spec.
- *
- * The whole body is one client island: AiSettingsForm owns per-field useState
- * (provider/model/base-url/key, document-capture fields), the
- * auto-load-models effect (fetch → /api/admin/ai/models on mount when a key
- * is on file), and every fetch mutation (save, test connection, clear key,
- * document-capture test). None of that decomposes into spec blocks — the
- * provider selector driving the base-URL field is client state and the
- * conditional pairs (link when published, em-dash otherwise; enabled-badge
- * variants) are component logic. So the spec places one `ai-settings-form`
- * widget and the loader binds every prop verbatim from the native page: the
- * permission gate, the provider-spec slice, and the org settings read.
- *
- * Background agent packs live under Setup → Agents (cross-linked from the
- * island); this surface keeps no agent policy, no detector specs and no
- * drawer selection. Loader work: the `admin.ai.manage` gate, the
- * `getTranslations('admin')` reads for the chrome strings, the serializable
- * slice of AI_PROVIDER_SPECS (no SDK code in the client bundle), and the
- * getOrgAiSettings call. `initial` crosses the boundary whole (it is already
- * the no-secret UI-facing shape).
- */
+/** Provider credentials and model choices remain separate from workforce policy and action limits. */
 
 export interface AdminAiData {
   title: string
@@ -38,14 +17,11 @@ export interface AdminAiData {
   backLabel: string
   specs: ProviderSpecLite[]
   initial: Omit<OrgAiSettings, 'agents'>
-  /** HR-21 governance ledger: null without the setup grant — the page is
-   *  ai.manage-gated but the ledger lives under admin.setup.manage, so a
-   *  provider admin without setup scope sees the providers card alone. */
-  ledger: AiLedgerData | null
-  currentParams: Record<string, string>
+  settingsLinks: { href: string; label: string }[]
 }
 
 export async function loadAdminAi(rawParams?: Record<string, string | string[] | undefined>): Promise<AdminAiData> {
+  void rawParams
   const authz = await requirePermission('admin.ai.manage')
   const t = await getTranslations('admin')
 
@@ -81,19 +57,16 @@ export async function loadAdminAi(rawParams?: Record<string, string | string[] |
     backLabel: t('hub.title'),
     specs,
     initial,
-    ledger: can(authz, 'admin.setup.manage') ? await loadAiLedger(authz) : null,
-    currentParams: Object.fromEntries(
-      Object.entries(rawParams ?? {}).flatMap(([key, value]) =>
-        typeof value === 'string' ? [[key, value]] as const : [],
-      ),
-    ),
+    settingsLinks: can(authz, 'admin.setup.manage') && await isFeatureEnabled(authz.user.orgId, 'aiGovernanceLedger') ? [
+      { href: '/admin/setup/ai-rails-settings', label: t('ai.workforceSettings') },
+      { href: '/admin/setup/ai-capabilities', label: t('ai.actionLimits') },
+    ] : [],
   }
 }
 
 const f = ref<AdminAiData>()
 
 export function adminAiSpec(data: AdminAiData): PageSpec {
-  void data
   return page({
     route: '/admin/ai',
     // The native page owns its own shell (PageContainer) the way the platform
@@ -110,6 +83,7 @@ export function adminAiSpec(data: AdminAiData): PageSpec {
             back: { href: f('backHref'), label: f('backLabel') },
             title: f('title'),
             description: f('description'),
+            actions: data.settingsLinks.map((item) => widget('link-button', { ...item, variant: 'outline', size: 'sm' })),
           }),
           // The card itself is spec-owned chrome (`rounded-lg border …
           // bg-white shadow-sm` + `CardContent p-6 pt-0` → merged `p-6
@@ -121,24 +95,6 @@ export function adminAiSpec(data: AdminAiData): PageSpec {
               widgetBlock('ai-settings-form', {
                 specs: f('specs'),
                 initial: f('initial'),
-              }),
-            ]),
-          ]),
-          // HR-21 governance ledger: the section null-guards without the
-          // setup grant, so no `when` gate is needed.
-          frame('card', [
-            grid('p-6 pt-6', [
-              widgetBlock('ai-governance-ledger', { ledger: data.ledger }),
-            ]),
-          ]),
-          // HR-21 settings: thresholds, cohort, bias terms and review
-          // cadence through the shared Setup section (never a second form).
-          frame('card', [
-            grid('p-6 pt-6', [
-              widgetBlock('setup-section', {
-                entityKey: 'ai-rails-settings',
-                basePath: '/admin/ai',
-                sp: data.currentParams,
               }),
             ]),
           ]),

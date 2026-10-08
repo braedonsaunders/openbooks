@@ -207,7 +207,7 @@ export async function updateCapability(
   if (!(await actorHasPermission(exec, orgId, actorId, "admin.setup.manage"))) {
     throw new AiRailsError(
       "ai_forbidden",
-      `AI capability "${input.key}" needs the setup administrator — ask an administrator to change it on /admin/ai`,
+      `AI capability "${input.key}" needs the setup administrator — ask an administrator to change it on /admin/setup/ai-capabilities`,
     );
   }
   if (input.autonomy !== undefined) assertAutonomyAtOrBelowMax(input.key, input.autonomy);
@@ -233,7 +233,7 @@ export async function updateCapability(
   if (!row) {
     throw new AiRailsError(
       "ai_capability_missing",
-      `AI capability "${input.key}" is not registered for this organization — sync it from the code registry on /admin/ai first`,
+      `AI capability "${input.key}" is not registered for this organization — sync it from the code registry on /admin/setup/ai-capabilities first`,
     );
   }
   row.enabled = capabilityFeatureOn(await orgFeatureState(exec, orgId), def);
@@ -296,29 +296,21 @@ export type DecisionRow = {
  * (scans, baselines, capabilities, drafts) carry no personal values by
  * construction and stay visible to every ledger reader.
  */
-export async function listDecisions(
-  exec: SqlExecutor,
-  input: {
-    readonly orgId: string;
-    readonly actorId: string;
-    readonly capabilityKey?: string;
-    readonly outcome?: string;
-    readonly limit?: number;
-  },
-): Promise<DecisionRow[]> {
-  const limit = Math.min(input.limit ?? 50, 200);
+export interface DecisionReadInput {
+  readonly orgId: string;
+  readonly actorId: string;
+  readonly capabilityKey?: string;
+  readonly outcome?: string;
+}
+
+/** Rows and totals share the same subject authorization predicate. */
+async function decisionReadScope(exec: SqlExecutor, input: DecisionReadInput) {
   const canPay = (await actorHasPermission(exec, input.orgId, input.actorId, "payroll.manage"))
     || (await actorHasPermission(exec, input.orgId, input.actorId, "hrm.employment.read"));
   const canFlag = canPay
     || (await actorHasPermission(exec, input.orgId, input.actorId, "time.approve"));
   const allowed = await actorAllowedSubsidiaryIds(exec, input.orgId, input.actorId);
-  const rows = (await exec.execute<DecisionRow>(sql`
-    select d.id::text as id, d.capability_key as "capabilityKey",
-           d.actor_user_id::text as "actorUserId", d.subject_kind as "subjectKind",
-           d.subject_id::text as "subjectId", d.output_summary as "outputSummary",
-           d.sources, d.outcome, d.human_reviewer::text as "humanReviewer",
-           d.reviewed_at::text as "reviewedAt", d.model,
-           d.recorded_at::text as "recordedAt"
+  return { from: sql`
       from ai_decisions d
       left join worker_employments e
         on d.subject_kind = 'employment' and e.org_id = d.org_id and e.id = d.subject_id
@@ -326,9 +318,9 @@ export async function listDecisions(
         on d.subject_kind = 'payroll_anomaly_flag' and f.org_id = d.org_id and f.id = d.subject_id
       left join worker_employments fe
         on fe.org_id = f.org_id and fe.id = f.employment_id
+`, where: sql`
      where d.org_id = ${input.orgId}::uuid
-       -- Cast: an untyped null parameter makes PostgreSQL refuse the
-       -- statement outright, so an unfiltered ledger read threw.
+       -- Optional filters bind an explicit type, including their null values.
        and (${input.capabilityKey ?? null}::text is null or d.capability_key = ${input.capabilityKey ?? null}::text)
        and (${input.outcome ?? null}::text is null or d.outcome = ${input.outcome ?? null}::text)
        and (
@@ -342,9 +334,45 @@ export async function listDecisions(
                       ${subsidiaryVisibleFilter(sql`fe.employer_subsidiary_id`, allowed)})`
            : sql``}
        )
+` };
+}
+
+function decisionWindow(input: { limit?: number; offset?: number }) {
+  const limit = input.limit ?? 50;
+  const offset = input.offset ?? 0;
+  if (!Number.isSafeInteger(limit) || limit < 1 || !Number.isSafeInteger(offset) || offset < 0) {
+    throw new AiRailsError("ai_invalid_input", "Activity pagination requires a positive page size and a nonnegative offset");
+  }
+  return { limit: Math.min(limit, 200), offset };
+}
+
+async function decisionRows(exec: SqlExecutor, scope: Awaited<ReturnType<typeof decisionReadScope>>, window: { limit: number; offset: number }): Promise<DecisionRow[]> {
+  return (await exec.execute<DecisionRow>(sql`
+    select d.id::text as id, d.capability_key as "capabilityKey",
+           d.actor_user_id::text as "actorUserId", d.subject_kind as "subjectKind",
+           d.subject_id::text as "subjectId", d.output_summary as "outputSummary",
+           d.sources, d.outcome, d.human_reviewer::text as "humanReviewer",
+           d.reviewed_at::text as "reviewedAt", d.model,
+           d.recorded_at::text as "recordedAt"
+      ${scope.from} ${scope.where}
      order by d.recorded_at desc, d.id desc
-     limit ${limit}`)).rows;
-  return rows;
+     limit ${window.limit} offset ${window.offset}`)).rows;
+}
+
+export async function listDecisions(exec: SqlExecutor, input: DecisionReadInput & { readonly limit?: number; readonly offset?: number }): Promise<DecisionRow[]> {
+  const window = decisionWindow(input);
+  return decisionRows(exec, await decisionReadScope(exec, input), window);
+}
+
+/** Native paginated activity read; neither digests nor unauthorized subjects enter rows or counts. */
+export async function listDecisionsPage(exec: SqlExecutor, input: DecisionReadInput & { readonly limit?: number; readonly offset?: number }): Promise<{ decisions: DecisionRow[]; total: number }> {
+  const window = decisionWindow(input);
+  const scope = await decisionReadScope(exec, input);
+  const [decisions, count] = await Promise.all([
+    decisionRows(exec, scope, window),
+    exec.execute<{ total: number }>(sql`select count(*)::int as total ${scope.from} ${scope.where}`),
+  ]);
+  return { decisions, total: count.rows[0]?.total ?? 0 };
 }
 
 /** Capabilities whose last review is older than the org's declared months. */
@@ -620,7 +648,7 @@ export async function syncCapabilitiesForOrg(query: {
         if (!(await actorHasPermission(tx, orgId, actorId, "admin.setup.manage"))) {
           throw new AiRailsError(
             "ai_forbidden",
-            "syncing the AI capability registry needs self-service access or the setup administrator — ask an administrator on /admin/ai",
+            "syncing the AI capability registry needs self-service access or the setup administrator — ask an administrator on /admin/setup/ai-capabilities",
           );
         }
       });

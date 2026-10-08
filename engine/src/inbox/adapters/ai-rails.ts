@@ -1,14 +1,7 @@
 /**
- * HR-21 AI rails inbox adapters: blocking payroll checks and overdue
- * capability reviews.
- *
- * Both adapters are live reads over the HR-21 ledger tables (migration
- * 0232), projected through the actor's own gates — the inbox never
- * widens visibility. Table presence is probed explicitly through the
- * catalog (never by catching errors): while 0232 has not
- * landed the adapters list nothing and the inbox stays up. Items carry
- * no actions — the work happens in the checks queue (/payroll/anomalies)
- * and the ledger (/admin/ai), which the subject hrefs open.
+ * Native inbox projections for blocking workforce checks and overdue action reviews.
+ * Actor and feature gates retain subject privacy; work stays in its own queue
+ * or Setup review surface. Missing source tables yield no items during rollout.
  */
 
 import { listFlags } from "../../hrm/ai/anomalies.ts";
@@ -84,19 +77,19 @@ export const aiCapabilityReviewAdapter: InboxAdapter = {
     return overdue.map((cap) => ({
       id: inboxItemId("ai_capability_review", cap.key),
       kind: "ai_capability_review",
-      title: `AI capability review due — ${cap.name}`,
+      title: `Assistant action review due — ${cap.name}`,
       subtitle: cap.lastReviewedAt === null
         ? `never reviewed — the declared cadence is every ${settings.reviewMonths} months`
         : `last reviewed ${cap.lastReviewedAt.slice(0, 10)} — the declared cadence is every ${settings.reviewMonths} months`,
       dueAt: null,
       createdAt: cap.lastReviewedAt ?? `${ctx.asOf}`,
       priority: "due_soon",
-      subjectHref: "/admin/ai",
+      subjectHref: "/admin/setup/ai-capabilities",
       actions: [],
       source: { kind: "ai_capability", id: cap.key },
     }));
   },
   async act(_ctx, _sourceId, actionKey): Promise<void> {
-    throw new InboxError("UNKNOWN_ACTION", `action ${JSON.stringify(actionKey)} is not available on a review nudge — record the review in the ledger`);
+    throw new InboxError("UNKNOWN_ACTION", `action ${JSON.stringify(actionKey)} is not available on a review nudge — record the review in Assistant action reviews`);
   },
 };

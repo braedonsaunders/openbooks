@@ -49,7 +49,7 @@ test("autonomy ladder orders read_only below act_with_confirmation", () => {
 
 test("unknown capability refuses with the remedy", () => {
   assert.throws(() => requireCapability("hrmTimeTravel"), (e: unknown) =>
-    e instanceof AiRailsError && e.code === "ai_unknown_capability" && /\/admin\/ai/.test(e.message));
+    e instanceof AiRailsError && e.code === "ai_unknown_capability" && /\/admin\/setup\/ai-capabilities/.test(e.message));
 });
 
 test("autonomy may move down but never above the code maximum", () => {
@@ -58,7 +58,7 @@ test("autonomy may move down but never above the code maximum", () => {
   assert.throws(() => assertAutonomyAtOrBelowMax("hrmExplainPay", "draft"), (e: unknown) =>
     e instanceof AiRailsError && /cannot be raised above "read_only"/.test(e.message));
   assert.throws(() => assertAutonomyAtOrBelowMax("hrmDrafting", "act_with_confirmation"), /cannot be raised above "draft"/);
-  assert.match(autonomyRaiseRefused("k", "draft").message, /may only lower it/);
+  assert.match(autonomyRaiseRefused("k", "draft").message, /cannot exceed code maximum/);
 });
 
 test("every anomaly kind has a severity and blockers are the finalize gate", () => {

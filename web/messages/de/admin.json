@@ -1713,7 +1713,9 @@
     },
     "manageAgentsDescription": "Pläne, Prüfungen und Weiterleitung von Feststellungen leben unter Einrichtung → Agenten.",
     "manageAgentsLink": "Agenteneinrichtung öffnen",
-    "manageAgentsTitle": "Hintergrundagenten"
+    "manageAgentsTitle": "Hintergrundagenten",
+    "workforceSettings": "Personalprüfeinstellungen",
+    "actionLimits": "Aktionsprüfungen des Assistenten"
   },
   "setup": {
     "builder": {
@@ -3208,9 +3210,9 @@
         "description": "Eine geordnete Stufe einer Pipeline-Vorlage: Sichtung, Interview, Assessment, Angebot, eingestellt oder abgelehnt."
       },
       "ai-rails-settings": {
-        "title": "KI-Leitplanken-Einstellungen",
-        "singularTitle": "KI-Leitplanken-Einstellung",
-        "description": "Scan-Schwellen, Basis-Kohorten, organisationsweite Bias-Begriffe und der Prüf-Rhythmus des Ledgers für die deterministischen HR-Leitplanken."
+        "title": "Personalprüfungen und Entwürfe",
+        "singularTitle": "Personalprüfungen und Entwürfe",
+        "description": "Deterministische Lohn- und Zeitprüfungen, Hinweise zu Entwurfstexten und Prüfintervalle. Diese Einstellungen ändern keine Lohnberechnung und verbinden keinen KI-Anbieter."
       },
       "hrm-action-reasons": {
         "title": "Vorgangsgründe",
@@ -3545,6 +3547,11 @@
         "title": "Plancodes",
         "singularTitle": "Plancode",
         "description": "Codes für Arbeit, die keinem Kunden oder Projekt zugeordnet ist, etwa Schulungs- oder Werkstatttage, sowie für Tage, an denen Personen nicht arbeiten."
+      },
+      "ai-capabilities": {
+        "title": "Aktionsprüfungen des Assistenten",
+        "singularTitle": "Aktionsprüfungen des Assistenten",
+        "description": "Prüferklärungen und Verantwortliche für registrierte Aktionen. Codegrenzen und native Prüfungen bleiben maßgeblich."
       }
     },
     "fields": {
@@ -6626,7 +6633,15 @@
     },
     "archive": "Archivieren",
     "confirmArchive": "Diesen Datensatz archivieren? Der Verlauf bleibt verfügbar.",
-    "archived": "Datensatz archiviert"
+    "archived": "Datensatz archiviert",
+    "aiPolicy": {
+      "checksTitle": "Prüfungen",
+      "checksDescription": "Schwellen und Vergleichsgruppen für deterministische Lohn- und Zeitprüfungen. Diese Prüfungen rufen kein Modell auf.",
+      "draftingTitle": "Entwürfe",
+      "draftingDescription": "Wörter und Formulierungen zur menschlichen Prüfung in datengestützten Entwürfen. Entwürfe werden nie automatisch eingereicht.",
+      "reviewsTitle": "Überprüfungen",
+      "reviewsDescription": "Intervall für die Überprüfung von Aktionsgrenzen und Hinweisen durch Administratoren."
+    }
   },
   "flows": {
     "title": "Flows",
@@ -7789,17 +7804,17 @@
     }
   },
   "aiLedger": {
-    "title": "KI-Governance",
-    "description": "Fähigkeiten, ihre Autonomiestufen und der unveränderliche Nachweis jeder KI-gestützten Antwort.",
-    "capabilitiesTitle": "Fähigkeiten",
-    "decisionsTitle": "Entscheidungen",
+    "title": "Aktionsprüfungen des Assistenten",
+    "description": "Prüferklärungen und Verantwortliche für registrierte Aktionen. Codegrenzen und native Prüfungen bleiben maßgeblich.",
+    "capabilitiesTitle": "Prüferklärungen",
+    "decisionsTitle": "Aktivität",
     "overdueTitle": "Überfällige Prüfungen",
     "overdueDescription": "Diese Fähigkeiten haben ihren Prüfturnus überschritten",
     "export": "CSV exportieren",
-    "sync": "Register abgleichen",
+    "sync": "Verfügbare Aktionen aktualisieren",
     "syncDone": "Register abgeglichen.",
     "review": "Prüfung vermerken",
-    "save": "Speichern",
+    "save": "Erklärung speichern",
     "failed": "Die Änderung konnte nicht gespeichert werden.",
     "enabled": "Aktiviert",
     "disabled": "Deaktiviert",
@@ -7807,7 +7822,7 @@
     "noticeRequired": "Hinweis erforderlich",
     "neverReviewed": "Nie geprüft",
     "columns": {
-      "autonomy": "Autonomie",
+      "autonomy": "Erklärte Prüfstufe",
       "capability": "Fähigkeit",
       "enabled": "Aktiviert",
       "notice": "Hinweis",
@@ -7816,7 +7831,31 @@
       "reviewer": "Prüfer",
       "summary": "Zusammenfassung",
       "when": "Wann"
-    }
+    },
+    "activityDescription": "Aktionsreferenzen und Ergebnisse menschlicher Prüfungen. Datensatzrechte begrenzen auch Anzahl und Export.",
+    "empty": "Keine registrierten Aktionen. Aktualisieren Sie die Aktionen, ohne bestehende Grenzen zu ändern.",
+    "activityEmpty": "Keine Aktivität für diese Filter.",
+    "exportPage": "Diese Seite exportieren",
+    "authorityHelp": "Diese Erklärungen deaktivieren keine Prüfungen und ändern keine Assistentenrechte. Native Aktionen erzwingen ihre Grenzen, Rechte, Funktionen und menschlichen Prüfungen.",
+    "featuresLink": "Unternehmensfunktionen",
+    "levels": {
+      "read_only": "Nur lesen",
+      "draft": "Nur Entwürfe",
+      "propose": "Zur Prüfung vorschlagen",
+      "act_with_confirmation": "Mit Bestätigung handeln"
+    },
+    "outcomes": {
+      "shown": "Angezeigt",
+      "accepted": "Akzeptiert",
+      "edited": "Bearbeitet",
+      "rejected": "Abgelehnt",
+      "expired": "Abgelaufen"
+    },
+    "declarationSaved": "Erklärung gespeichert. Rechte, Prüfungen und Assistentenbefugnisse sind unverändert.",
+    "reviewRecorded": "Prüfung erfasst.",
+    "registryRefreshed": "Aktionskatalog aktualisiert. Bestehende Erklärungen bleiben erhalten.",
+    "codeMaximum": "Codemaximum",
+    "notRegistered": "Nicht registriert"
   },
   "sandboxManager": {
     "newEnvironment": "Neue Umgebung",
