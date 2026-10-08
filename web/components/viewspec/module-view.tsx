@@ -44,12 +44,15 @@ export async function ModuleView({
   data,
   searchParams,
   trusted = false,
+  contained = false,
 }: {
   spec: PageSpec
   data: ViewData
   searchParams: Record<string, string | string[] | undefined>
   /** Set for compiler-checked native specs to skip runtime revalidation. */
   trusted?: boolean
+  /** Let interactive workspaces own their scrolling and use the available width. */
+  contained?: boolean
 }) {
   if (!trusted) {
     const result = validateSpec(spec)
@@ -59,13 +62,13 @@ export async function ModuleView({
   }
 
   const effective = await resolveSpec(spec, searchParams)
-  if (effective === spec) return render(spec, data, searchParams)
+  if (effective === spec) return render(spec, data, searchParams, contained)
   // A tenant layout is rendered inside a boundary whose fallback is the page
   // the app shipped. Both subtrees are built here: the fallback has to exist
   // before the boundary can use it.
   return (
-    <SpecBoundary fallback={render(spec, data, searchParams)}>
-      {render(effective, data, searchParams)}
+    <SpecBoundary fallback={render(spec, data, searchParams, contained)}>
+      {render(effective, data, searchParams, contained)}
     </SpecBoundary>
   )
 }
@@ -74,6 +77,7 @@ function render(
   spec: PageSpec,
   data: ViewData,
   searchParams: Record<string, string | string[] | undefined>,
+  contained: boolean,
 ) {
   const header = <BlockList blocks={spec.header} scope={data} searchParams={searchParams} />
   const body = <BlockList blocks={spec.body} scope={data} searchParams={searchParams} />
@@ -89,11 +93,10 @@ function render(
       </>
     )
   }
-  const Layout = spec.layout === 'detail' ? DetailPageLayout : ListPageLayout
-  return (
-    <Layout header={header} className={spec.bodyClassName}>
-      {body}
-    </Layout>
+  return spec.layout === 'detail' ? (
+    <DetailPageLayout header={header} className={spec.bodyClassName}>{body}</DetailPageLayout>
+  ) : (
+    <ListPageLayout header={header} className={spec.bodyClassName} contained={contained}>{body}</ListPageLayout>
   )
 }
 

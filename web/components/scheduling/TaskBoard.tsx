@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useLocale, useTranslations } from 'next-intl'
+import { SchedulingAlert } from './SchedulingAlert'
 import { Search } from 'lucide-react'
 import { Input, cn } from '@openbooks/ui'
 import { ScheduleTab } from '../../app/(app)/projects/tabs/ScheduleTab'
@@ -122,11 +123,11 @@ function ProgressView({ boardId, projectId, canManage }: { boardId: string; proj
       const body = (await response.json().catch(() => ({}))) as { error?: string; remedy?: string }
       setError({ message: body.error ?? t('errors.save'), remedy: body.remedy ?? null })
     }
-    await load()
+    if (response.ok) await load()
     setSaving(null)
   }
 
-  if (error && !data) return <p className="rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700 dark:bg-rose-950/40 dark:text-rose-300">{error.message}{error.remedy ? ` ${error.remedy}` : ''}</p>
+  if (error && !data) return <SchedulingAlert message={error.message} remedy={error.remedy} />
   if (!data) return <div className="h-96 animate-pulse rounded-xl border border-slate-200 bg-slate-50 dark:border-slate-800 dark:bg-slate-900" />
   const totals = data.totals
 
@@ -141,7 +142,7 @@ function ProgressView({ boardId, projectId, canManage }: { boardId: string; proj
 
   return (
     <div className="space-y-4">
-      {error ? <p className="rounded-lg bg-rose-50 px-3 py-2 text-xs text-rose-700 dark:bg-rose-950/40 dark:text-rose-300">{error.message}{error.remedy ? ` ${error.remedy}` : ''}</p> : null}
+      {error ? <SchedulingAlert message={error.message} remedy={error.remedy} /> : null}
       <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
         {tiles.map((tile) => (
           <div key={tile.label} className="rounded-xl border border-slate-200 bg-white px-4 py-3 dark:border-slate-800 dark:bg-slate-950">

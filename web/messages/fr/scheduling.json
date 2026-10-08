@@ -31,14 +31,18 @@
     "today": "Aujourd’hui",
     "range": "Jours affichés",
     "days": "{count, plural, one {# jour} other {# jours}}",
-    "search": "Rechercher des personnes ou des chantiers",
+    "search": "Rechercher personnes, ressources ou travaux",
     "groupBy": "Regrouper les lignes",
     "density": "Basculer les lignes compactes",
     "undo": "Annuler",
     "undoWhat": "Annuler {what}",
     "redo": "Rétablir",
     "settings": "Paramètres du tableau",
-    "newBoard": "Nouveau tableau"
+    "newBoard": "Nouveau tableau",
+    "more": "Plus",
+    "details": "Détails",
+    "date": "Aller à la date",
+    "resourceBoards": "Ressources"
   },
   "empty": {
     "title": "Configurez votre premier tableau",
@@ -56,13 +60,14 @@
     "borrowed": "En renfort",
     "fromElsewhere": "Affecté ici depuis {department}",
     "fillHandle": "Faites glisser pour répéter la sélection",
-    "noPeople": "Personne ne fait partie du périmètre de ce tableau.",
-    "noMatch": "Personne ne correspond à la recherche.",
+    "noPeople": "Aucune personne ni ressource dans le périmètre de ce tableau.",
+    "noMatch": "Aucune ligne ne correspond à la recherche.",
     "selected": "{count} cellules sélectionnées — saisissez pour toutes les affecter, Suppr pour les vider, Ctrl+D ou Ctrl+R pour recopier",
     "hint": "Cliquez sur une cellule et saisissez un code pour affecter. Faites glisser sur plusieurs cellules pour en affecter plusieurs à la fois ; collez directement depuis un tableur.",
     "readOnly": "Vous pouvez consulter ce tableau. L’affectation nécessite l’autorisation de gérer les plannings.",
     "saving": "Enregistrement…",
-    "clearSpotlight": "Afficher tous les chantiers"
+    "clearSpotlight": "Afficher tous les chantiers",
+    "resources": "{count, plural, one {# ressource} other {# ressources}}"
   },
   "chip": {
     "unassigned": "Aucune destination",
@@ -115,8 +120,8 @@
     "dismiss": "Fermer"
   },
   "publish": {
-    "pending": "{count, plural, one {# modification non publiée} other {# modifications non publiées}} pour {people, plural, one {# personne} other {# personnes}}",
-    "explain": "Les personnes les verront dès que vous publierez.",
+    "pending": "{count} modifications non publiées pour {people} lignes",
+    "explain": "Les réservations publiées sont visibles par l’équipe.",
     "action": "Publier",
     "discard": "Abandonner les modifications"
   },
@@ -129,7 +134,7 @@
     "readOnly": "Vous pouvez consulter cette affectation. Sa modification nécessite l’autorisation de gérer les plannings.",
     "draft": "Cette modification n’est pas encore publiée.",
     "where": "Où",
-    "pickTarget": "Choisissez où va cette personne",
+    "pickTarget": "Choisir la destination de la réservation",
     "change": "Modifier",
     "task": "Tâche",
     "noTask": "Projet entier",
@@ -149,11 +154,11 @@
   },
   "targets": {
     "where": "Chantier",
-    "count": "{count} personnes",
+    "count": "{count} lignes réservées",
     "add": "Ajouter un chantier",
     "empty": "Rien n’est encore affecté sur ces dates.",
     "available": "Disponibles",
-    "allBooked": "Tout le monde est affecté ou absent ce jour-là."
+    "allBooked": "Toutes les lignes sont réservées ou indisponibles ce jour."
   },
   "timeline": {
     "zoomIn": "Zoom avant",
@@ -161,7 +166,7 @@
   },
   "calendar": {
     "person": "Afficher",
-    "everyone": "Tout le monde",
+    "everyone": "Toutes les lignes",
     "onLeave": "{count} absents",
     "more": "{count} de plus"
   },
@@ -170,7 +175,10 @@
     "noCustomer": "Aucun client",
     "noProjects": "Aucun projet actif ne fait partie du périmètre de ce tableau.",
     "pickProject": "Choisissez un projet.",
-    "openInScheduling": "Ouvrir dans Planification"
+    "openInScheduling": "Ouvrir dans Planification",
+    "addTask": "Ajouter une tâche",
+    "taskName": "Nom de la tâche",
+    "addMilestone": "Ajouter un jalon"
   },
   "progress": {
     "task": "Tâche",
@@ -207,6 +215,10 @@
       "projects": {
         "title": "Calendrier de projet",
         "description": "Les tâches du projet dans un diagramme de Gantt avec dépendances et chemin critique, ainsi que l’avancement de la production."
+      },
+      "resources": {
+        "title": "Équipements et lieux",
+        "description": "Réservez des équipements ou des lieux partagés par jour ou par heure entre projets."
       }
     },
     "name": "Nom",
@@ -222,7 +234,10 @@
     "allProjects": "Tous les projets actifs",
     "afterwards": "Les heures d’affectation, la publication et le préremplissage des feuilles de temps peuvent être modifiés à tout moment dans les paramètres du tableau.",
     "cancel": "Annuler",
-    "create": "Créer le tableau"
+    "create": "Créer le tableau",
+    "resourceKind": "Type de ressource",
+    "equipment": "Unités d’équipement",
+    "locations": "Lieux"
   },
   "errors": {
     "load": "Le planning n’a pas pu être chargé.",

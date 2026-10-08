@@ -19,7 +19,7 @@ const affected = (result: { rowCount: number | null }, label: string) => {
 };
 
 async function grantScheduling(orgId: string, roleKey: string): Promise<void> {
-  affected(await db.execute(sql`update app_roles set permissions = '["hrm.shifts.read","hrm.shifts.manage","hrm.shifts.approve"]'::jsonb
+  affected(await db.execute(sql`update app_roles set permissions = '["hrm.shifts.read","hrm.shifts.manage","hrm.shifts.approve","projects.read","projects.manage","assets.read","assets.manage"]'::jsonb
     where org_id = ${orgId} and key = ${roleKey}`), "role permissions");
 }
 
@@ -37,7 +37,7 @@ async function fixture(run: (f: Fixture) => Promise<void>): Promise<void> {
       const actorId = await createScratchUser(org.orgId, "Dispatcher", "dispatcher");
       await grantScheduling(org.orgId, "dispatcher");
       affected(await db.execute(sql`update orgs set settings = jsonb_set(settings, '{features}', coalesce(settings->'features', '{}'::jsonb)
-        || '{"hrm":true,"hrmShiftPlanning":true,"projects":true}'::jsonb) where id = ${org.orgId}`), "feature setup");
+        || '{"hrm":true,"hrmShiftPlanning":true,"projects":true,"projectScheduling":true,"equipment":true}'::jsonb) where id = ${org.orgId}`), "feature setup");
       const person = async (name: string) => {
         const id = randomUUID();
         affected(await db.execute(sql`insert into parties (id, org_id, kind, display_name, subsidiary_id, is_active, custom) values (${id}, ${org.orgId}, 'person', ${name}, ${org.subsidiaryId}, true, '{}'::jsonb)`), "person setup");
@@ -160,7 +160,7 @@ test("the window shows other boards' bookings read-only, and pre-fill offers onl
   await applyBoardChanges({ ...actor(f), boardId: f.live, changes: [day(f, f.ana, "2026-10-20", { kind: "project", id: f.projectId })] });
   await applyBoardChanges({ ...actor(f), boardId: f.second, changes: [day(f, f.ana, "2026-10-21", { kind: "code", id: f.codeId })] });
   const window = await loadBoardWindow({ ...actor(f), boardId: f.live, from: "2026-10-18", through: "2026-10-24" });
-  assert.equal(window.people.length, 2);
+  assert.equal(window.rows.length, 2);
   assert.deepEqual(window.entries.map((entry) => entry.boardId).sort(), [f.live, f.second].sort());
   assert.equal(window.entries.find((entry) => entry.boardId === f.live)?.workedMinutes, 480);
 
@@ -185,4 +185,44 @@ test("boards and bookings stay inside their organization", enabled, async () => 
   } finally {
     await dropScratchOrgReporting(outsider.orgId);
   }
+}));
+
+async function resourceFixture(f: Fixture, kind: 'equipment' | 'location') {
+  const subjectId = randomUUID(), first = randomUUID(), second = randomUUID();
+  await withBypassContext(async () => {
+    if (kind === 'equipment') affected(await db.execute(sql`insert into equipment_units(id,org_id,subsidiary_id,unit_number,name,status)
+      values (${subjectId},${f.org.orgId},${f.org.subsidiaryId},${`UNIT-${subjectId.slice(0,8)}`},'Shared lift','active')`), 'equipment setup');
+    else affected(await db.execute(sql`insert into locations(id,org_id,subsidiary_id,code,name,is_active)
+      values (${subjectId},${f.org.orgId},${f.org.subsidiaryId},${`ROOM-${subjectId.slice(0,8)}`},'Meeting room',true)`), 'location setup');
+    for (const [id, policy] of [[first,'live'],[second,'staged']] as const) affected(await db.execute(sql`
+      insert into schedule_boards(id,org_id,code,name,row_kind,resource_kind,views,default_view,time_zone,publish_policy)
+      values (${id},${f.org.orgId},${`RESOURCE-${id.slice(0,8)}`},'Shared resources','resources',${kind},'{grid,timeline}','grid','America/Toronto',${policy})`), 'resource board setup');
+  });
+  const create = (onDate: string): Extract<BoardChange,{ op: 'create' }> => ({ op:'create',id:randomUUID(),subject:{ kind,id:subjectId },onDate,target:{ kind:'project',id:f.projectId },span:{ mode:'day' } });
+  return { subjectId, first, second, create };
+}
+
+for (const kind of ['equipment','location'] as const) test(`${kind} reservations share cross-board overlap guards and immutable replacement history`, enabled, async () => fixture(async (f) => {
+  const resources = await resourceFixture(f, kind);
+  const booked = resources.create('2026-10-23');
+  const first = await applyBoardChanges({ ...actor(f),boardId:resources.first,changes:[booked] });
+  assert.ok(first.results[0]?.ok && first.results[0].entry?.subjectId === resources.subjectId);
+  assert.equal(first.results[0].entry.workerPartyId,null);
+  const replay = await applyBoardChanges({ ...actor(f),boardId:resources.first,changes:[booked] });
+  assert.ok(replay.results[0]?.ok && replay.results[0].entry?.id === booked.id);
+  const clash = resources.create('2026-10-23');
+  const next = resources.create('2026-10-24');
+  await applyBoardChanges({ ...actor(f),boardId:resources.second,changes:[clash,next] });
+  await assert.rejects(publishBoard({ ...actor(f),boardId:resources.second,from:'2026-10-23',through:'2026-10-24' }), (error:unknown) => error instanceof ScheduleError && error.code === 'schedule_publish_blocked');
+  assert.equal(await statusOf(f.org.orgId,next.id),'draft');
+  const updated = await applyBoardChanges({ ...actor(f),boardId:resources.first,changes:[{ op:'update',id:booked.id,expectedRevision:1,fields:{ detail:'East area' } }] });
+  assert.ok(updated.results[0]?.ok && updated.results[0].entry?.supersedesId === booked.id);
+  assert.equal(await statusOf(f.org.orgId,booked.id),'cancelled');
+  const window = await loadBoardWindow({ ...actor(f),boardId:resources.second,from:'2026-10-23',through:'2026-10-24' });
+  assert.ok(window.rows.some(row => row.subjectId === resources.subjectId && row.subjectKind === kind));
+  assert.deepEqual(window.absences,[]);
+  assert.equal(window.board.showTotals,false);
+  const wrong = await applyBoardChanges({ ...actor(f),boardId:resources.first,changes:[day(f,f.ana,'2026-10-25',null)] });
+  assert.equal(wrong.results[0]?.ok,false);
+  assert.equal(wrong.results[0] && !wrong.results[0].ok ? wrong.results[0].code : null,'schedule_wrong_subject');
 }));

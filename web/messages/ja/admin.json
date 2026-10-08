@@ -4090,7 +4090,7 @@
       "scheme": "スキーム",
       "identificationState": "識別加盟国",
       "weekStartsOn": "週の開始曜日",
-      "weekendDays": "週末の曜日",
+      "weekendDays": "週末の日",
       "holidayCountry": "祝日の国",
       "boundaries": "境界値",
       "holidayRegion": "祝日の地域",
@@ -4108,7 +4108,12 @@
       "prefillTimesheets": "タイムシートを事前入力",
       "prefillCrewTime": "クルー作業時間を事前入力",
       "prefillFieldTickets": "フィールドチケットを事前入力",
-      "notifyAssignees": "変更内容を本人にメールで通知"
+      "notifyAssignees": "変更内容を本人にメールで通知",
+      "resourceKind": "リソースの種類",
+      "showTotals": "下部の合計を表示",
+      "cellColorRules": "色のルール",
+      "field": "フィールド",
+      "match": "照合"
     },
     "fieldHelp": {
       "fxRateMaxAgeDays": "使用可能な最新レートから期末までの日数がこれを超えると、再評価と連結はそのレートを拒否します。期末レートは期末スポットレートの日付から、平均レートは平均に含まれる最新の相場の日付から数えます。ポリシー未設定時の既定値: 31日。",
@@ -4270,7 +4275,10 @@
       "scheduleBoardNotifyAssignees": "このボードで公開済みの割り当てが変更されたときに、各人へ概要をメールで送信します。",
       "scheduleCode": "英大文字、数字、/ & + . _ - を最大16文字（例: TRAIN、SHOP、FORCED）。",
       "scheduleCodeCategory": "作業コードは予定時間として集計されます。勤務なしのコードは、休暇を申請せずに勤務しない日を示します。",
-      "scheduleCodeColor": "このコードの割り当てを表示する色（#38bdf8 のような16進数値）。"
+      "scheduleCodeColor": "このコードの割り当てを表示する色（#38bdf8 のような16進数値）。",
+      "scheduleWeekendDays": "営業カレンダーがない日付で網掛けする曜日です。営業カレンダーが優先されます。",
+      "scheduleShowTotals": "設定された休憩を除いた予約行と実際の予約時間を表示します。",
+      "scheduleCellColorRules": "大文字と小文字を区別せず、最初に一致したルールの色を使用します。#38bdf8 のような6桁の16進色を使用します。"
     },
     "options": {
       "storedValueKind": {
@@ -4976,7 +4984,8 @@
       },
       "scheduleRowKind": {
         "people": "人員",
-        "tasks": "プロジェクトタスク"
+        "tasks": "プロジェクトタスク",
+        "resources": "リソース"
       },
       "scheduleGrain": {
         "day": "終日",
@@ -4997,6 +5006,29 @@
       "scheduleCodeCategory": {
         "work": "作業",
         "unavailable": "勤務なし"
+      },
+      "scheduleResourceKind": {
+        "equipment": "設備",
+        "location": "場所"
+      },
+      "scheduleWeekday": {
+        "1": "月曜日",
+        "2": "火曜日",
+        "3": "水曜日",
+        "4": "木曜日",
+        "5": "金曜日",
+        "6": "土曜日",
+        "7": "日曜日"
+      },
+      "scheduleColorField": {
+        "bookingLabel": "予約ラベル",
+        "targetName": "目的地名",
+        "detail": "詳細"
+      },
+      "scheduleColorMatch": {
+        "equals": "一致",
+        "startsWith": "で始まる",
+        "contains": "を含む"
       }
     },
     "invoicing": {
@@ -6579,6 +6611,10 @@
         "title": "このルールの目的は？",
         "description": "処理方法を選択します。勘定科目と日付は自動入力され、詳細設定で変更できます。"
       }
+    },
+    "scheduleColors": {
+      "add": "色のルールを追加",
+      "rule": "色のルール"
     }
   },
   "flows": {

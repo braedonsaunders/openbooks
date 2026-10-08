@@ -31,7 +31,7 @@ export function TargetsView({ controller, window: board, today, onOpenEntry }: {
   const [railDate, setRailDate] = useState<string>(() => board.days.find((day) => day.date >= today)?.date ?? board.days[0]?.date ?? today)
   const days = useMemo(() => board.days.filter((day) => board.board.showWeekends || !day.isWeekend), [board.days, board.board.showWeekends])
   const replaced = useMemo(() => new Set(board.replaced), [board.replaced])
-  const personName = useMemo(() => new Map(board.people.map((person) => [person.partyId, person.name])), [board.people])
+  const personName = useMemo(() => new Map(board.rows.map((person) => [person.subjectId, person.name])), [board.rows])
   const absences = useMemo(() => indexAbsences(board.absences), [board.absences])
 
   const live = useMemo(() => board.entries.filter((entry) => !replaced.has(entry.id)), [board.entries, replaced])
@@ -44,7 +44,7 @@ export function TargetsView({ controller, window: board, today, onOpenEntry }: {
       const list = row.cells.get(entry.startsOn) ?? []
       list.push(entry)
       row.cells.set(entry.startsOn, list)
-      row.people.add(entry.workerPartyId)
+      row.people.add(entry.subjectId)
       byTarget.set(key, row)
     }
     for (const target of extraTargets) if (!byTarget.has(keyOf(target))) byTarget.set(keyOf(target), { target, cells: new Map(), people: new Set() })
@@ -53,10 +53,10 @@ export function TargetsView({ controller, window: board, today, onOpenEntry }: {
 
   const bookedOn = useMemo(() => {
     const set = new Set<string>()
-    for (const entry of live) set.add(cellKey(entry.workerPartyId, entry.startsOn))
+    for (const entry of live) set.add(cellKey(entry.subjectId, entry.startsOn))
     return set
   }, [live])
-  const available = useMemo(() => board.people.filter((person) => !bookedOn.has(cellKey(person.partyId, railDate)) && !(absences.get(cellKey(person.partyId, railDate)) ?? []).length), [absences, board.people, bookedOn, railDate])
+  const available = useMemo(() => board.rows.filter((person) => !bookedOn.has(cellKey(person.subjectId, railDate)) && !(absences.get(cellKey(person.subjectId, railDate)) ?? []).length), [absences, board.rows, bookedOn, railDate])
 
   const span: SpanInput = board.board.grain === 'day' ? { mode: 'day' } : { mode: 'timed', starts: board.board.dayStarts, ends: board.board.dayEnds, breakMinutes: board.board.dayBreakMinutes }
   const weekday = useMemo(() => new Intl.DateTimeFormat(locale, { weekday: 'short', day: 'numeric', timeZone: 'UTC' }), [locale])
@@ -67,12 +67,14 @@ export function TargetsView({ controller, window: board, today, onOpenEntry }: {
     const personId = event.dataTransfer.getData('application/x-openbooks-person')
     const entryId = event.dataTransfer.getData('application/x-openbooks-booking')
     if (personId) {
-      await controller.run([{ op: 'create', id: newId(), workerPartyId: personId, onDate: date, target: { kind: target.kind, id: target.id }, span }], t('history.book', { target: target.code ?? target.label }))
+      const subject = board.rows.find((row) => row.subjectId === personId)
+      if (!subject) return
+      await controller.run([{ op: 'create', id: newId(), subject: { kind: subject.subjectKind, id: personId }, onDate: date, target: { kind: target.kind, id: target.id }, span }], t('history.book', { target: target.code ?? target.label }))
     } else if (entryId) {
       const entry = controller.entriesById.get(entryId)
       if (!entry || entry.boardId !== board.board.id) return
       if (entry.startsOn === date && entry.target && keyOf(entry.target) === keyOf(target)) return
-      await controller.run([{ op: 'update', id: entry.id, expectedRevision: entry.revision, fields: { onDate: date, target: { kind: target.kind, id: target.id }, projectTaskId: null } }], t('history.move', { name: personName.get(entry.workerPartyId) ?? '' }))
+      await controller.run([{ op: 'update', id: entry.id, expectedRevision: entry.revision, fields: { onDate: date, target: { kind: target.kind, id: target.id }, projectTaskId: null } }], t('history.move', { name: personName.get(entry.subjectId) ?? '' }))
     }
   }
 
@@ -125,8 +127,8 @@ export function TargetsView({ controller, window: board, today, onOpenEntry }: {
                               className={cn('flex items-center gap-1.5 rounded-md border px-1.5 py-0.5 text-[11px] font-medium', CHIP_COLORS, entry.status === 'draft' && 'border-dashed', entry.boardId !== board.board.id && 'opacity-60')}
                               title={[entry.detail, entry.spanMode === 'timed' ? `${entry.startClock}–${entry.endClock}` : null, entry.notes].filter(Boolean).join('\n') || undefined}
                             >
-                              <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-white/70 text-[8px] font-bold dark:bg-black/20">{initials(personName.get(entry.workerPartyId) ?? '?')}</span>
-                              <span className="truncate">{personName.get(entry.workerPartyId) ?? '—'}</span>
+                              <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-white/70 text-[8px] font-bold dark:bg-black/20">{initials(personName.get(entry.subjectId) ?? '?')}</span>
+                              <span className="truncate">{personName.get(entry.subjectId) ?? '—'}</span>
                             </div>
                           ))}
                           {entries.length > 1 ? <span className="px-1 text-[10px] font-semibold text-slate-400">{t('targets.count', { count: entries.length })}</span> : null}
@@ -161,7 +163,7 @@ export function TargetsView({ controller, window: board, today, onOpenEntry }: {
       <aside className="hidden w-60 shrink-0 flex-col rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-950 lg:flex">
         <div className="border-b border-slate-100 p-3 dark:border-slate-800">
           <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">{t('targets.available')}</div>
-          <div className="mt-2 flex flex-wrap gap-1">
+          <div className="mt-2 flex min-w-0 flex-nowrap gap-1 overflow-x-auto">
             {days.map((day) => (
               <button
                 key={day.date}
@@ -177,9 +179,9 @@ export function TargetsView({ controller, window: board, today, onOpenEntry }: {
         <ul className="min-h-0 flex-1 space-y-0.5 overflow-y-auto p-2">
           {available.map((person) => (
             <li
-              key={person.partyId}
+              key={person.subjectId}
               draggable={board.canManage}
-              onDragStart={(event) => event.dataTransfer.setData('application/x-openbooks-person', person.partyId)}
+              onDragStart={(event) => event.dataTransfer.setData('application/x-openbooks-person', person.subjectId)}
               className={cn('flex items-center gap-2 rounded-lg px-2 py-1.5 text-xs text-slate-700 hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-900', board.canManage && 'cursor-grab')}
             >
               <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-slate-100 text-[9px] font-bold text-slate-600 dark:bg-slate-800 dark:text-slate-300">{initials(person.name)}</span>

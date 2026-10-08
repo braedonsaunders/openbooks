@@ -7,10 +7,11 @@ import { db } from '@openbooks/engine/src/platform/db.ts'
 import { businessTimeZone, businessToday } from '@openbooks/engine/src/platform/business-date.ts'
 import { isIsoCalendarDate } from '@openbooks/engine/src/platform/iso-date.ts'
 import { subsidiaryVisibleFilter } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
-import { enabledBoardKinds, listBoards, type ScheduleBoard } from '@openbooks/engine/src/schedule-boards/boards.ts'
+import { enabledBoardKinds, listBoards, boardAuthority, type ScheduleBoard } from '@openbooks/engine/src/schedule-boards/boards.ts'
 import { ScheduleError, scheduleDatabaseRefusal } from '@openbooks/engine/src/schedule-boards/errors.ts'
 import { loadBoardWindow, type BoardWindow } from '@openbooks/engine/src/schedule-boards/window.ts'
 import { can, getAuthz } from '../../../lib/authz'
+import { isFeatureEnabled } from '../../../lib/features'
 import { accessDeniedHref } from '../../../lib/gate-targets'
 import { pickString } from '../../../lib/list-params'
 import { viewRange } from '../../../components/scheduling/model'
@@ -52,7 +53,8 @@ export async function loadSchedulingPage(searchParams: Record<string, string | s
     if (!(refusal instanceof ScheduleError)) throw error
     upgrade = { message: refusal.message, remedy: refusal.remedy ?? null }
   }
-  const usable = boards.filter((board) => (board.rowKind === 'people' ? canPeople : canTasks))
+  const resourceVisibility = await Promise.all(boards.map(async (board) => board.rowKind !== 'resources' || await boardAuthority(actor, board, 'read').then(() => true, () => false)))
+  const usable = boards.filter((board, index) => (board.rowKind === 'people' ? canPeople : board.rowKind === 'resources' ? resourceVisibility[index] : canTasks))
   const requested = pickString(searchParams.board)
   const requestedProjectId = pickString(searchParams.project)
   // A project link opens the task board that schedules that project.
@@ -84,6 +86,8 @@ export async function loadSchedulingPage(searchParams: Record<string, string | s
     scope: { subsidiaries, departments, locations, projects: projectOptions },
     peopleEnabled: kinds.people,
     tasksEnabled: kinds.tasks,
+    resourcesEnabled: kinds.resources,
+    equipmentEnabled: kinds.resources && can(authz, 'assets.read') && await isFeatureEnabled(orgId, 'equipment'),
   }
   if (!board) {
     return { ...base, board: null, view: 'grid', anchor: today, from: today, through: today, rangeDays: 14, initialWindow: null, projects: [], selectedProjectId: null, settingsHref: null }
@@ -156,6 +160,8 @@ export function schedulingSpec(data: SchedulingPageData): PageSpec {
         scope: data.scope,
         peopleEnabled: data.peopleEnabled,
         tasksEnabled: data.tasksEnabled,
+        resourcesEnabled: data.resourcesEnabled,
+        equipmentEnabled: data.equipmentEnabled,
       }),
     ],
   })

@@ -3980,7 +3980,12 @@
       "prefillTimesheets": "Prellenar partes de horas",
       "prefillCrewTime": "Prellenar tiempo de cuadrilla",
       "prefillFieldTickets": "Prellenar partes de obra",
-      "notifyAssignees": "Enviar a cada persona sus cambios por correo"
+      "notifyAssignees": "Enviar a cada persona sus cambios por correo",
+      "resourceKind": "Tipo de recurso",
+      "showTotals": "Mostrar totales inferiores",
+      "cellColorRules": "Reglas de color",
+      "field": "Campo",
+      "match": "Coincidencia"
     },
     "fieldHelp": {
       "fxRateMaxAgeDays": "Días entre el tipo utilizable más reciente y el cierre del período a partir de los cuales la revaluación y la consolidación rechazan el tipo. Los tipos de cierre se cuentan desde la fecha del tipo al contado de cierre; los promedio, desde la cotización más reciente promediada. Valor predeterminado sin política: 31 días.",
@@ -4142,7 +4147,10 @@
       "scheduleBoardNotifyAssignees": "Envía a cada persona un resumen por correo electrónico cuando cambian sus asignaciones publicadas en este tablero.",
       "scheduleCode": "Hasta 16 letras mayúsculas, dígitos o / & + . _ -, como TRAIN, SHOP o FORCED.",
       "scheduleCodeCategory": "Los códigos de trabajo cuentan como tiempo planificado. Los códigos de no disponibilidad marcan un día en que la persona no trabaja sin registrar una ausencia.",
-      "scheduleCodeColor": "El color con el que se muestran las asignaciones con este código, como valor hexadecimal, por ejemplo #38bdf8."
+      "scheduleCodeColor": "El color con el que se muestran las asignaciones con este código, como valor hexadecimal, por ejemplo #38bdf8.",
+      "scheduleWeekendDays": "Días a sombrear si no hay calendario laboral aplicable. El calendario tiene prioridad.",
+      "scheduleShowTotals": "Mostrar filas y horas reservadas después de las pausas configuradas.",
+      "scheduleCellColorRules": "La primera coincidencia sin distinguir mayúsculas establece el color. Use colores hexadecimales de seis dígitos, como #38bdf8."
     },
     "options": {
       "storedValueKind": {
@@ -4848,7 +4856,8 @@
       },
       "scheduleRowKind": {
         "people": "Personas",
-        "tasks": "Tareas de proyecto"
+        "tasks": "Tareas de proyecto",
+        "resources": "Recursos"
       },
       "scheduleGrain": {
         "day": "Jornadas completas",
@@ -4869,6 +4878,29 @@
       "scheduleCodeCategory": {
         "work": "Trabajo",
         "unavailable": "No trabaja"
+      },
+      "scheduleResourceKind": {
+        "equipment": "Unidades de equipo",
+        "location": "Ubicaciones"
+      },
+      "scheduleWeekday": {
+        "1": "Lunes",
+        "2": "Martes",
+        "3": "Miércoles",
+        "4": "Jueves",
+        "5": "Viernes",
+        "6": "Sábado",
+        "7": "Domingo"
+      },
+      "scheduleColorField": {
+        "bookingLabel": "Etiqueta de reserva",
+        "targetName": "Nombre del destino",
+        "detail": "Detalle"
+      },
+      "scheduleColorMatch": {
+        "equals": "Es igual a",
+        "startsWith": "Empieza por",
+        "contains": "Contiene"
       }
     },
     "laborCosting": {
@@ -6579,6 +6611,10 @@
         "title": "¿Qué hace esta regla?",
         "description": "Elige el tratamiento. Las cuentas y fechas se completan por ti y puedes cambiarlas en Avanzado."
       }
+    },
+    "scheduleColors": {
+      "add": "Añadir regla de color",
+      "rule": "Regla de color"
     }
   },
   "flows": {

@@ -66,7 +66,7 @@ export function BookingDrawer({
     }
   }, [board.board.id, t, target])
 
-  const person = board.people.find((candidate) => candidate.partyId === entry?.workerPartyId)
+  const person = board.rows.find((candidate) => candidate.subjectId === entry?.subjectId)
   const dateLabel = useMemo(() => entry
     ? new Intl.DateTimeFormat(locale, { weekday: 'long', month: 'long', day: 'numeric', timeZone: 'UTC' }).format(new Date(`${entry.startsOn}T00:00:00Z`))
     : '', [entry, locale])
@@ -90,7 +90,7 @@ export function BookingDrawer({
     const changes: BoardChange[] = [{ op: 'update', id: entry.id, expectedRevision: entry.revision, fields }]
     const template = { ...entryTemplate(entry), ...fields }
     for (const date of repeatDays) {
-      changes.push({ op: 'create', id: newId(), ...template, workerPartyId: entry.workerPartyId, onDate: date, seriesId: entry.seriesId })
+      changes.push({ op: 'create', id: newId(), ...template, subject: { kind: entry.subjectKind, id: entry.subjectId }, onDate: date, seriesId: entry.seriesId })
     }
     const results = await controller.run(changes, t('history.edit'))
     setSaving(false)

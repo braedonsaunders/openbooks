@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { NextResponse } from 'next/server'
+import { schedulingBoardRouteAuthority } from '@/lib/scheduling/board-route-authority'
 import { defineRoute } from '@/lib/api/route'
 import { applyBoardChanges, type BoardChange } from '@openbooks/engine/src/schedule-boards/entries.ts'
 import { deliverScheduleNotices } from '@/lib/scheduling/notify'
@@ -12,7 +13,8 @@ const span = z.discriminatedUnion('mode', [
 ])
 const target = z.strictObject({ kind: z.enum(['customer', 'project', 'location', 'code']), id: z.string().uuid() }).nullable()
 const fields = {
-  workerPartyId: z.string().uuid(),
+  workerPartyId: z.string().uuid().optional(),
+  subject: z.strictObject({ kind: z.enum(['person', 'equipment', 'location']), id: z.string().uuid() }).optional(),
   onDate: date,
   target,
   projectTaskId: z.string().uuid().nullable().optional(),
@@ -23,13 +25,14 @@ const fields = {
   seriesId: z.string().uuid().nullable().optional(),
 }
 const change = z.discriminatedUnion('op', [
-  z.strictObject({ op: z.literal('create'), id: z.string().uuid(), ...fields }),
+  z.strictObject({ op: z.literal('create'), id: z.string().uuid(), ...fields }).refine((value) => Boolean(value.workerPartyId) !== Boolean(value.subject), 'Choose exactly one booking subject'),
   z.strictObject({
     op: z.literal('update'),
     id: z.string().uuid(),
     expectedRevision: z.number().int().positive(),
     fields: z.strictObject({
-      workerPartyId: fields.workerPartyId.optional(),
+      workerPartyId: fields.workerPartyId,
+      subject: fields.subject,
       onDate: date.optional(),
       target: target.optional(),
       projectTaskId: fields.projectTaskId,
@@ -38,7 +41,8 @@ const change = z.discriminatedUnion('op', [
       notes: fields.notes,
       span: span.optional(),
       seriesId: fields.seriesId,
-    }).refine((value) => Object.keys(value).length > 0, 'Name at least one field to change'),
+    }).refine((value) => Object.keys(value).length > 0, 'Name at least one field to change')
+      .refine((value) => !(value.workerPartyId && value.subject), 'Choose exactly one booking subject'),
   }),
   z.strictObject({ op: z.literal('cancel'), id: z.string().uuid(), expectedRevision: z.number().int().positive() }),
 ])
@@ -49,8 +53,8 @@ const body = z.strictObject({
 
 /** Book, change and remove people on a board. Each change reports its own result. */
 export const POST = defineRoute({
-  permission: 'hrm.shifts.manage',
-  feature: 'hrmShiftPlanning',
+  authorize: ({ params }) => schedulingBoardRouteAuthority(params, 'manage'),
+  feature: { none: 'The addressed board is gated and authorized by its native family.' },
   params: z.object({ boardId: z.string().uuid() }),
   body,
   handler: async ({ authz, params, body }) => {

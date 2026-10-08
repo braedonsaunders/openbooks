@@ -31,14 +31,18 @@
     "today": "Hoje",
     "range": "Dias exibidos",
     "days": "{count, plural, one {# dia} other {# dias}}",
-    "search": "Buscar pessoas ou serviços",
+    "search": "Buscar pessoas, recursos ou trabalhos",
     "groupBy": "Agrupar linhas",
     "density": "Alternar linhas compactas",
     "undo": "Desfazer",
     "undoWhat": "Desfazer {what}",
     "redo": "Refazer",
     "settings": "Configurações do quadro",
-    "newBoard": "Novo quadro"
+    "newBoard": "Novo quadro",
+    "more": "Mais",
+    "details": "Detalhes",
+    "date": "Ir para a data",
+    "resourceBoards": "Recursos"
   },
   "empty": {
     "title": "Configure seu primeiro quadro",
@@ -56,13 +60,14 @@
     "borrowed": "Em apoio",
     "fromElsewhere": "Alocado aqui a partir de {department}",
     "fillHandle": "Arraste para repetir a seleção",
-    "noPeople": "Ninguém está no escopo deste quadro.",
-    "noMatch": "Ninguém corresponde à busca.",
+    "noPeople": "Não há pessoas ou recursos no escopo deste quadro.",
+    "noMatch": "Nenhuma linha corresponde à pesquisa.",
     "selected": "{count} células selecionadas — digite para alocar todas, Delete para limpar, Ctrl+D ou Ctrl+R para preencher",
     "hint": "Clique em uma célula e digite um código para alocar. Arraste sobre várias células para alocar muitas de uma vez; cole diretamente de uma planilha.",
     "readOnly": "Você pode visualizar este quadro. Para alocar, é preciso ter permissão para gerenciar programações.",
     "saving": "Salvando…",
-    "clearSpotlight": "Mostrar todos os serviços"
+    "clearSpotlight": "Mostrar todos os serviços",
+    "resources": "{count, plural, one {# recurso} other {# recursos}}"
   },
   "chip": {
     "unassigned": "Sem destino",
@@ -115,8 +120,8 @@
     "dismiss": "Dispensar"
   },
   "publish": {
-    "pending": "{count, plural, one {# alteração não publicada} other {# alterações não publicadas}} para {people, plural, one {# pessoa} other {# pessoas}}",
-    "explain": "As pessoas verão essas alterações quando você publicar.",
+    "pending": "{count} alterações não publicadas para {people} linhas",
+    "explain": "As reservas publicadas ficam visíveis para a equipe.",
     "action": "Publicar",
     "discard": "Descartar alterações"
   },
@@ -129,7 +134,7 @@
     "readOnly": "Você pode visualizar esta alocação. Para alterá-la, é preciso ter permissão para gerenciar programações.",
     "draft": "Esta alteração ainda não foi publicada.",
     "where": "Onde",
-    "pickTarget": "Escolha para onde esta pessoa vai",
+    "pickTarget": "Escolher o destino da reserva",
     "change": "Alterar",
     "task": "Tarefa",
     "noTask": "Projeto inteiro",
@@ -149,11 +154,11 @@
   },
   "targets": {
     "where": "Serviço",
-    "count": "{count} pessoas",
+    "count": "{count} linhas reservadas",
     "add": "Adicionar um serviço",
     "empty": "Nada foi alocado nessas datas ainda.",
     "available": "Disponíveis",
-    "allBooked": "Todos estão alocados ou ausentes neste dia."
+    "allBooked": "Todas as linhas estão reservadas ou indisponíveis neste dia."
   },
   "timeline": {
     "zoomIn": "Ampliar",
@@ -161,7 +166,7 @@
   },
   "calendar": {
     "person": "Exibir",
-    "everyone": "Todos",
+    "everyone": "Todas as linhas",
     "onLeave": "{count} ausentes",
     "more": "Mais {count}"
   },
@@ -170,7 +175,10 @@
     "noCustomer": "Sem cliente",
     "noProjects": "Não há projetos ativos no escopo deste quadro.",
     "pickProject": "Escolha um projeto.",
-    "openInScheduling": "Abrir em Programação"
+    "openInScheduling": "Abrir em Programação",
+    "addTask": "Adicionar tarefa",
+    "taskName": "Nome da tarefa",
+    "addMilestone": "Adicionar marco"
   },
   "progress": {
     "task": "Tarefa",
@@ -207,6 +215,10 @@
       "projects": {
         "title": "Cronograma de projeto",
         "description": "Tarefas do projeto em um gráfico de Gantt com dependências e caminho crítico, além do andamento da produção."
+      },
+      "resources": {
+        "title": "Equipamentos e locais",
+        "description": "Reserve equipamentos ou locais compartilhados por dia ou hora entre projetos."
       }
     },
     "name": "Nome",
@@ -222,7 +234,10 @@
     "allProjects": "Todos os projetos ativos",
     "afterwards": "O horário das alocações, a publicação e o preenchimento prévio das folhas de horas podem ser alterados a qualquer momento nas configurações do quadro.",
     "cancel": "Cancelar",
-    "create": "Criar quadro"
+    "create": "Criar quadro",
+    "resourceKind": "Tipo de recurso",
+    "equipment": "Unidades de equipamento",
+    "locations": "Locais"
   },
   "errors": {
     "load": "Não foi possível carregar a programação.",

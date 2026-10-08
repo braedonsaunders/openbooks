@@ -5,6 +5,13 @@ import { datesBetween, daySpan, timedSpan, windowStart, workedMinutes } from "./
 
 const day = { timeZone: "America/Toronto", dayStarts: "07:00", dayEnds: "15:30", dayBreakMinutes: 30 };
 
+test("whole-day totals use configured eight, ten and sixteen hour days after breaks", () => {
+  for (const [dayEnds, expected] of [["15:30", 480], ["17:30", 600], ["23:30", 960]] as const) {
+    const span = daySpan({ ...day, dayEnds }, "2026-10-08");
+    assert.equal(workedMinutes(span.startsAt, span.endsAt, span.breakMinutes), expected);
+  }
+});
+
 test("a whole-day booking takes the board's working day in its time zone, across a clock change", () => {
   const summer = daySpan(day, "2026-10-30");
   assert.equal(summer.startsAt, "2026-10-30T11:00:00.000Z");

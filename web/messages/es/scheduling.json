@@ -31,14 +31,18 @@
     "today": "Hoy",
     "range": "Días mostrados",
     "days": "{count, plural, one {# día} other {# días}}",
-    "search": "Buscar personas o trabajos",
+    "search": "Buscar personas, recursos o trabajos",
     "groupBy": "Agrupar filas",
     "density": "Alternar filas compactas",
     "undo": "Deshacer",
     "undoWhat": "Deshacer {what}",
     "redo": "Rehacer",
     "settings": "Configuración del tablero",
-    "newBoard": "Nuevo tablero"
+    "newBoard": "Nuevo tablero",
+    "more": "Más",
+    "details": "Detalles",
+    "date": "Ir a la fecha",
+    "resourceBoards": "Recursos"
   },
   "empty": {
     "title": "Configure su primer tablero",
@@ -56,13 +60,14 @@
     "borrowed": "De visita",
     "fromElsewhere": "Asignado aquí desde {department}",
     "fillHandle": "Arrastre para repetir la selección",
-    "noPeople": "No hay nadie en el alcance de este tablero.",
-    "noMatch": "Nadie coincide con la búsqueda.",
+    "noPeople": "No hay personas ni recursos en el alcance de este tablero.",
+    "noMatch": "Ninguna fila coincide con la búsqueda.",
     "selected": "{count} celdas seleccionadas: escriba para asignarlas todas, Supr para vaciarlas, Ctrl+D o Ctrl+R para rellenar",
     "hint": "Haga clic en una celda y escriba un código para asignar. Arrastre sobre varias celdas para asignar muchas a la vez; pegue directamente desde una hoja de cálculo.",
     "readOnly": "Puede ver este tablero. Para asignar necesita permiso para gestionar planificaciones.",
     "saving": "Guardando…",
-    "clearSpotlight": "Mostrar todos los trabajos"
+    "clearSpotlight": "Mostrar todos los trabajos",
+    "resources": "{count, plural, one {# recurso} other {# recursos}}"
   },
   "chip": {
     "unassigned": "Sin destino",
@@ -115,8 +120,8 @@
     "dismiss": "Descartar"
   },
   "publish": {
-    "pending": "{count, plural, one {# cambio sin publicar} other {# cambios sin publicar}} para {people, plural, one {# persona} other {# personas}}",
-    "explain": "Las personas los verán cuando los publique.",
+    "pending": "{count} cambios sin publicar para {people} filas",
+    "explain": "Las reservas publicadas son visibles para el equipo.",
     "action": "Publicar",
     "discard": "Descartar cambios"
   },
@@ -129,7 +134,7 @@
     "readOnly": "Puede ver esta asignación. Para modificarla necesita permiso para gestionar planificaciones.",
     "draft": "Este cambio aún no está publicado.",
     "where": "Dónde",
-    "pickTarget": "Elija adónde va esta persona",
+    "pickTarget": "Elegir el destino de la reserva",
     "change": "Cambiar",
     "task": "Tarea",
     "noTask": "Todo el proyecto",
@@ -149,11 +154,11 @@
   },
   "targets": {
     "where": "Trabajo",
-    "count": "{count} personas",
+    "count": "{count} filas reservadas",
     "add": "Añadir un trabajo",
     "empty": "Todavía no hay nada asignado en estas fechas.",
     "available": "Disponibles",
-    "allBooked": "Todos están asignados o ausentes este día."
+    "allBooked": "Todas las filas están reservadas o no disponibles este día."
   },
   "timeline": {
     "zoomIn": "Acercar",
@@ -161,7 +166,7 @@
   },
   "calendar": {
     "person": "Mostrar",
-    "everyone": "Todos",
+    "everyone": "Todas las filas",
     "onLeave": "{count} ausentes",
     "more": "{count} más"
   },
@@ -170,7 +175,10 @@
     "noCustomer": "Sin cliente",
     "noProjects": "No hay proyectos activos en el alcance de este tablero.",
     "pickProject": "Elija un proyecto.",
-    "openInScheduling": "Abrir en Planificación"
+    "openInScheduling": "Abrir en Planificación",
+    "addTask": "Añadir tarea",
+    "taskName": "Nombre de la tarea",
+    "addMilestone": "Añadir hito"
   },
   "progress": {
     "task": "Tarea",
@@ -207,6 +215,10 @@
       "projects": {
         "title": "Cronograma de proyecto",
         "description": "Tareas del proyecto en un diagrama de Gantt con dependencias y ruta crítica, además del avance de producción."
+      },
+      "resources": {
+        "title": "Equipos y ubicaciones",
+        "description": "Reserve equipos o ubicaciones compartidos por día u hora entre proyectos."
       }
     },
     "name": "Nombre",
@@ -222,7 +234,10 @@
     "allProjects": "Todos los proyectos activos",
     "afterwards": "El horario de las asignaciones, la publicación y el prellenado de partes de horas se pueden cambiar en cualquier momento en la configuración del tablero.",
     "cancel": "Cancelar",
-    "create": "Crear tablero"
+    "create": "Crear tablero",
+    "resourceKind": "Tipo de recurso",
+    "equipment": "Unidades de equipo",
+    "locations": "Ubicaciones"
   },
   "errors": {
     "load": "No se pudo cargar la planificación.",

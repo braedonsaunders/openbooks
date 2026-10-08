@@ -1,11 +1,12 @@
-import { boolean, date, integer, pgTable, smallint, text, time, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import { boolean, date, integer, jsonb, pgTable, smallint, text, time, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { auditColumns, id, orgRef } from "./helpers";
 
-export const SCHEDULE_BOARD_ROW_KINDS = ["people", "tasks"] as const;
+export const SCHEDULE_BOARD_ROW_KINDS = ["people", "tasks", "resources"] as const;
 export const SCHEDULE_BOARD_GRAINS = ["day", "timed"] as const;
 export const SCHEDULE_BOARD_VIEWS = {
   people: ["grid", "targets", "timeline", "calendar"],
   tasks: ["gantt", "progress"],
+  resources: ["grid", "targets", "timeline", "calendar"],
 } as const;
 export const SCHEDULE_BOARD_RANGE_DAYS = [1, 3, 7, 14, 21, 28, 35, 42] as const;
 export const SCHEDULE_PUBLISH_POLICIES = ["live", "staged"] as const;
@@ -27,6 +28,10 @@ export const scheduleBoards = pgTable("schedule_boards", {
   name: text("name").notNull(),
   description: text("description"),
   rowKind: text("row_kind", { enum: SCHEDULE_BOARD_ROW_KINDS }).notNull(),
+  resourceKind: text("resource_kind", { enum: ["equipment", "location"] }),
+  cellColorRules: jsonb("cell_color_rules").notNull().default([]),
+  showTotals: boolean("show_totals").notNull().default(false),
+  weekendDays: text("weekend_days").array().notNull().default(["6", "7"]),
   subsidiaryId: uuid("subsidiary_id"),
   departmentId: uuid("department_id"),
   locationId: uuid("location_id"),
@@ -76,7 +81,9 @@ export const scheduleEntries = pgTable("schedule_entries", {
   id: id(),
   orgId: orgRef(),
   boardId: uuid("board_id").notNull(),
-  workerPartyId: uuid("worker_party_id").notNull(),
+  workerPartyId: uuid("worker_party_id"),
+  equipmentUnitId: uuid("equipment_unit_id"),
+  resourceLocationId: uuid("resource_location_id"),
   employmentId: uuid("employment_id"),
   subsidiaryId: uuid("subsidiary_id"),
   targetKind: text("target_kind", { enum: SCHEDULE_TARGET_KINDS }),

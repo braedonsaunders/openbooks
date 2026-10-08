@@ -25,7 +25,11 @@ export interface ScheduleBoard {
   readonly code: string;
   readonly name: string;
   readonly description: string | null;
-  readonly rowKind: "people" | "tasks";
+  readonly rowKind: "people" | "tasks" | "resources";
+  readonly resourceKind: "equipment" | "location" | null;
+  readonly showTotals: boolean;
+  readonly weekendDays: readonly string[];
+  readonly cellColorRules: readonly import("./display.ts").CellColorRule[];
   readonly subsidiaryId: string | null;
   readonly subsidiaryName: string | null;
   readonly departmentId: string | null;
@@ -53,7 +57,8 @@ export interface ScheduleBoard {
   readonly isActive: boolean;
 }
 
-export const BOARD_COLUMNS = sql`b.id, b.code, b.name, b.description, b.row_kind as "rowKind",
+export const BOARD_COLUMNS = sql`b.id, b.code, b.name, b.description, b.row_kind as "rowKind", b.resource_kind as "resourceKind",
+  b.show_totals as "showTotals", b.weekend_days as "weekendDays", b.cell_color_rules as "cellColorRules",
   b.subsidiary_id as "subsidiaryId", s.name as "subsidiaryName",
   b.department_id as "departmentId", d.name as "departmentName",
   b.location_id as "locationId", l.name as "locationName",
@@ -73,14 +78,14 @@ export const BOARD_JOINS = sql`from schedule_boards b
   left join projects p on p.org_id = b.org_id and p.id = b.project_id`;
 
 /** Which board families the organization has switched on. */
-export async function enabledBoardKinds(orgId: string): Promise<{ people: boolean; tasks: boolean }> {
+export async function enabledBoardKinds(orgId: string): Promise<{ people: boolean; tasks: boolean; resources: boolean }> {
   const [hrm, shifts, projects, scheduling] = await Promise.all([
     lockAndCheckOrgFeature(db, orgId, "hrm"),
     lockAndCheckOrgFeature(db, orgId, "hrmShiftPlanning"),
     lockAndCheckOrgFeature(db, orgId, "projects"),
     lockAndCheckOrgFeature(db, orgId, "projectScheduling"),
   ]);
-  return { people: hrm && shifts, tasks: projects && scheduling };
+  return { people: hrm && shifts, tasks: projects && scheduling, resources: projects && scheduling };
 }
 
 /**
@@ -99,6 +104,19 @@ export async function peopleBoardAuthority(actor: ScheduleActor, permission: Peo
   return lockActorCommandAuthority(db, actor.orgId, actor.actorId, subsidiaryId, permission);
 }
 
+/** Resource bookings share project scheduling authority and native asset visibility. */
+export async function boardAuthority(actor: ScheduleActor, board: ScheduleBoard, mode: "read" | "manage" | "publish"): Promise<ReadonlySet<string> | null> {
+  if (board.rowKind === "people") return peopleBoardAuthority(actor, mode === "read" ? "hrm.shifts.read" : mode === "publish" ? "hrm.shifts.approve" : "hrm.shifts.manage", board.subsidiaryId);
+  if (board.rowKind !== "resources") throw new ScheduleError("Open this task board in the Gantt view.", { code: "schedule_wrong_board" });
+  if (!await lockAndCheckOrgFeature(db, actor.orgId, "projects") || !await lockAndCheckOrgFeature(db, actor.orgId, "projectScheduling"))
+    throw new ScheduleError("Project Scheduling is switched off.", { status: 404, remedy: "Enable Projects and Project Scheduling in Company Settings → Features." });
+  if (board.resourceKind === "equipment") {
+    if (!await lockAndCheckOrgFeature(db, actor.orgId, "equipment")) throw new ScopeNotFoundError();
+    await lockActorCommandAuthority(db, actor.orgId, actor.actorId, board.subsidiaryId, mode === "read" ? "assets.read" : "assets.manage");
+  }
+  return lockActorCommandAuthority(db, actor.orgId, actor.actorId, board.subsidiaryId, mode === "read" ? "projects.read" : "projects.manage");
+}
+
 function visibleTo(allowed: ReadonlySet<string> | null, board: { subsidiaryId: string | null }): boolean {
   return allowed === null || board.subsidiaryId === null || allowed.has(board.subsidiaryId);
 }
@@ -115,7 +133,7 @@ async function readBoards(actor: ScheduleActor, options: { includeArchived?: boo
   const rows = (await db.execute<ScheduleBoard>(sql`select ${BOARD_COLUMNS} ${BOARD_JOINS}
     where b.org_id = ${actor.orgId} ${options.includeArchived ? sql`` : sql`and b.is_active`}
     order by b.sort_order, b.name, b.id`)).rows;
-  return rows.filter((board) => (board.rowKind === "people" ? kinds.people : kinds.tasks) && visibleTo(allowed, board));
+  return rows.filter((board) => (board.rowKind === "people" ? kinds.people : board.rowKind === "resources" ? kinds.resources : kinds.tasks) && visibleTo(allowed, board));
 }
 
 /** One board by id or code, or a not-found refusal identical for absent and out-of-scope boards. */
@@ -125,7 +143,7 @@ export async function getBoard(actor: ScheduleActor, idOrCode: string): Promise<
     where b.org_id = ${actor.orgId} and ${filter}`)).rows[0];
   if (!board) throw new ScopeNotFoundError();
   const kinds = await enabledBoardKinds(actor.orgId);
-  if (!(board.rowKind === "people" ? kinds.people : kinds.tasks)) throw new ScopeNotFoundError();
+  if (!(board.rowKind === "people" ? kinds.people : board.rowKind === "resources" ? kinds.resources : kinds.tasks)) throw new ScopeNotFoundError();
   const allowed = await actorAllowedSubsidiaryIds(db, actor.orgId, actor.actorId);
   if (!visibleTo(allowed, board)) throw new ScopeNotFoundError();
   return board;

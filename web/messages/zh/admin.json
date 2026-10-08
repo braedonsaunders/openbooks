@@ -4037,7 +4037,7 @@
       "scheme": "方案",
       "identificationState": "识别成员国",
       "weekStartsOn": "周起始日",
-      "weekendDays": "周末",
+      "weekendDays": "周末日期",
       "holidayCountry": "节假日国家",
       "boundaries": "分界天数",
       "holidayRegion": "节假日地区",
@@ -4055,7 +4055,12 @@
       "prefillTimesheets": "预填工时表",
       "prefillCrewTime": "预填班组工时",
       "prefillFieldTickets": "预填现场工单",
-      "notifyAssignees": "通过邮件通知人员其变更"
+      "notifyAssignees": "通过邮件通知人员其变更",
+      "resourceKind": "资源类型",
+      "showTotals": "显示底部合计",
+      "cellColorRules": "颜色规则",
+      "field": "字段",
+      "match": "匹配"
     },
     "fieldHelp": {
       "fxRateMaxAgeDays": "最新可用汇率距期末的天数超过此值时，重估和合并将拒绝该汇率。期末汇率从期末即期汇率的日期起算；平均汇率从计入平均的最新报价日期起算。未设置政策时的默认值：31 天。",
@@ -4217,7 +4222,10 @@
       "scheduleBoardNotifyAssignees": "当某人在此排程板上已发布的安排发生变化时，通过邮件向其发送摘要。",
       "scheduleCode": "最多 16 个大写字母、数字或 / & + . _ -，如 TRAIN、SHOP 或 FORCED。",
       "scheduleCodeCategory": "工作代码计入计划时间。不可用代码标记人员不工作的日期，无需登记休假。",
-      "scheduleCodeColor": "使用此代码的安排所显示的颜色，以十六进制值表示，如 #38bdf8。"
+      "scheduleCodeColor": "使用此代码的安排所显示的颜色，以十六进制值表示，如 #38bdf8。",
+      "scheduleWeekendDays": "没有适用营业日历时将这些星期着色。营业日历优先。",
+      "scheduleShowTotals": "显示预订行数和扣除配置休息后的实际预订小时。",
+      "scheduleCellColorRules": "按顺序使用首个不区分大小写的匹配规则。请使用六位十六进制颜色，如 #38bdf8。"
     },
     "options": {
       "storedValueKind": {
@@ -4923,7 +4931,8 @@
       },
       "scheduleRowKind": {
         "people": "人员",
-        "tasks": "项目任务"
+        "tasks": "项目任务",
+        "resources": "资源"
       },
       "scheduleGrain": {
         "day": "全天",
@@ -4944,6 +4953,29 @@
       "scheduleCodeCategory": {
         "work": "工作",
         "unavailable": "不工作"
+      },
+      "scheduleResourceKind": {
+        "equipment": "设备单元",
+        "location": "地点"
+      },
+      "scheduleWeekday": {
+        "1": "星期一",
+        "2": "星期二",
+        "3": "星期三",
+        "4": "星期四",
+        "5": "星期五",
+        "6": "星期六",
+        "7": "星期日"
+      },
+      "scheduleColorField": {
+        "bookingLabel": "预订标签",
+        "targetName": "目的地名称",
+        "detail": "详情"
+      },
+      "scheduleColorMatch": {
+        "equals": "等于",
+        "startsWith": "开头为",
+        "contains": "包含"
       }
     },
     "payroll": {
@@ -6579,6 +6611,10 @@
         "title": "这条规则的作用是什么？",
         "description": "选择处理方式。科目和日期会自动填写，可在高级中修改。"
       }
+    },
+    "scheduleColors": {
+      "add": "添加颜色规则",
+      "rule": "颜色规则"
     }
   },
   "flows": {

@@ -14,7 +14,7 @@ import { canonicalJson } from "../platform/canonical-json.ts";
 import { db, withOrgTransaction, withTransactionSavepoint } from "../platform/db.ts";
 import { isUuid } from "../platform/uuid.ts";
 import { ScopeNotFoundError, subsidiaryVisibleFilter } from "../organization/subsidiary-scope.ts";
-import { getBoard, peopleBoardAuthority, type ScheduleActor, type ScheduleBoard } from "./boards.ts";
+import { getBoard, boardAuthority, type ScheduleActor, type ScheduleBoard } from "./boards.ts";
 import { ScheduleError, scheduleDatabaseRefusal } from "./errors.ts";
 import { daySpan, localClock, requireDate, timedSpan, type BookingSpan } from "./spans.ts";
 import { resolveTarget, type TargetRef } from "./targets.ts";
@@ -25,7 +25,8 @@ export type SpanInput =
   | { readonly mode: "timed"; readonly starts: string; readonly ends: string; readonly breakMinutes: number };
 
 export interface BookingFields {
-  readonly workerPartyId: string;
+  readonly workerPartyId?: string;
+  readonly subject?: { readonly kind: "person" | "equipment" | "location"; readonly id: string };
   readonly onDate: string;
   readonly target: TargetRef | null;
   readonly projectTaskId?: string | null;
@@ -69,17 +70,19 @@ function hoursLabel(entry: BoardEntry): string {
 
 function noticeFor(entry: BoardEntry, change: ScheduleNotice["change"]): ScheduleNotice {
   const label = [entry.target?.code ?? entry.target?.label ?? "", entry.detail ? `/${entry.detail}` : ""].join("").trim() || "—";
+  if (!entry.workerPartyId) throw new ScheduleError("Only people bookings send employee notifications.");
   return { workerPartyId: entry.workerPartyId, onDate: entry.startsOn, change, label, hours: hoursLabel(entry) || null };
 }
 
 interface StoredEntry {
-  id: string; revision: number; boardId: string; workerPartyId: string; status: "draft" | "published" | "cancelled";
+  id: string; revision: number; boardId: string; workerPartyId: string | null; subjectId: string; subjectKind: "person" | "equipment" | "location"; status: "draft" | "published" | "cancelled";
   targetKind: TargetRef["kind"] | null; targetId: string | null; projectTaskId: string | null; departmentId: string | null;
   detail: string | null; notes: string | null; spanMode: "day" | "timed"; timeZone: string; startsOn: string;
   startsAt: string; endsAt: string; breakMinutes: number; seriesId: string | null; supersedesId: string | null;
 }
 
-const STORED_COLUMNS = sql`id, revision, board_id as "boardId", worker_party_id as "workerPartyId", status,
+const STORED_COLUMNS = sql`id, revision, board_id as "boardId", worker_party_id as "workerPartyId", coalesce(worker_party_id,equipment_unit_id,resource_location_id) as "subjectId",
+  case when worker_party_id is not null then 'person' when equipment_unit_id is not null then 'equipment' else 'location' end as "subjectKind", status,
   target_kind as "targetKind", coalesce(customer_party_id, project_id, location_id, schedule_code_id) as "targetId",
   project_task_id as "projectTaskId", department_id as "departmentId", detail, notes, span_mode as "spanMode",
   time_zone as "timeZone", starts_on::text as "startsOn",
@@ -123,6 +126,27 @@ async function bookablePerson(orgId: string, allowed: ReadonlySet<string> | null
   return row;
 }
 
+interface Subject { id: string; kind: "person" | "equipment" | "location"; subsidiaryId: string | null }
+async function bookableSubject(board: ScheduleBoard, orgId: string, allowed: ReadonlySet<string> | null, fields: BookingFields, onDate: string): Promise<Subject> {
+  if (fields.subject && fields.workerPartyId) throw new ScheduleError("Name one booking subject.", { code: "schedule_invalid" });
+  const subject = fields.subject ?? (fields.workerPartyId ? { kind: "person" as const, id: fields.workerPartyId } : null);
+  if (!subject || !isUuid(subject.id)) throw new ScheduleError("Choose a person or native resource from this board.", { code: "schedule_invalid" });
+  if (board.rowKind === "people") {
+    if (subject.kind !== "person") throw new ScheduleError("People boards book active employees.", { code: "schedule_wrong_subject" });
+    const person = await bookablePerson(orgId, allowed, subject.id);
+    return { id: person.partyId, kind: "person", subsidiaryId: person.subsidiaryId };
+  }
+  if (board.rowKind !== "resources" || subject.kind !== board.resourceKind) throw new ScheduleError("Choose a resource of this board's configured kind.", { code: "schedule_wrong_subject" });
+  const resource = subject.kind === "equipment"
+    ? (await db.execute<{ id: string; subsidiaryId: string | null }>(sql`select id, subsidiary_id as "subsidiaryId" from equipment_units
+        where org_id = ${orgId} and id = ${subject.id} and status = 'active' and (in_service_on is null or in_service_on <= ${onDate})
+        ${subsidiaryVisibleFilter(sql`subsidiary_id`, allowed)} for share`)).rows[0]
+    : (await db.execute<{ id: string; subsidiaryId: string | null }>(sql`select id, subsidiary_id as "subsidiaryId" from locations
+        where org_id = ${orgId} and id = ${subject.id} and is_active ${subsidiaryVisibleFilter(sql`subsidiary_id`, allowed, { orgWideNull: true })} for share`)).rows[0];
+  if (!resource) throw new ScheduleError("This resource is inactive, outside your access or not yet in service.", { code: "schedule_resource_unavailable", remedy: "Choose an active native equipment unit or location covering the booking date." });
+  return { ...resource, kind: subject.kind };
+}
+
 async function bookableDepartment(orgId: string, departmentId: string | null): Promise<string | null> {
   if (departmentId === null) return null;
   const row = (await db.execute(sql`select id from departments where org_id = ${orgId} and id = ${requireId(departmentId, "Department")} and is_active for share`)).rows[0];
@@ -137,7 +161,7 @@ function spanFor(board: ScheduleBoard, onDate: string, span: SpanInput): Booking
 }
 
 interface Normalized {
-  person: Person;
+  subject: Subject;
   target: Awaited<ReturnType<typeof resolveTarget>>;
   departmentId: string | null;
   detail: string | null;
@@ -148,10 +172,10 @@ interface Normalized {
 
 async function normalize(board: ScheduleBoard, orgId: string, allowed: ReadonlySet<string> | null, fields: BookingFields): Promise<Normalized> {
   const onDate = requireDate(fields.onDate, "Booking date");
-  const person = await bookablePerson(orgId, allowed, fields.workerPartyId);
+  const subject = await bookableSubject(board, orgId, allowed, fields, onDate);
   const target = await resolveTarget(db, orgId, allowed, fields.target, fields.projectTaskId ?? null);
   return {
-    person,
+    subject,
     target,
     departmentId: await bookableDepartment(orgId, fields.departmentId === undefined ? board.departmentId : fields.departmentId),
     detail: optionalText(fields.detail, "Detail", 120),
@@ -164,7 +188,7 @@ async function normalize(board: ScheduleBoard, orgId: string, allowed: ReadonlyS
 function definition(board: ScheduleBoard, booking: Normalized) {
   return {
     boardId: board.id,
-    workerPartyId: booking.person.partyId,
+    ...(booking.subject.kind === "person" ? { workerPartyId: booking.subject.id } : { subject: booking.subject }),
     target: booking.target ? { kind: booking.target.kind, customerPartyId: booking.target.customerPartyId, projectId: booking.target.projectId,
       projectTaskId: booking.target.projectTaskId, locationId: booking.target.locationId, scheduleCodeId: booking.target.scheduleCodeId } : null,
     departmentId: booking.departmentId,
@@ -183,10 +207,10 @@ async function insertEntry(input: {
   const target = booking.target;
   const published = input.status === "published";
   const rows = (await db.execute(sql`insert into schedule_entries
-    (id, org_id, board_id, worker_party_id, subsidiary_id, target_kind, customer_party_id, project_id, project_task_id, location_id, schedule_code_id,
+    (id, org_id, board_id, worker_party_id, equipment_unit_id, resource_location_id, subsidiary_id, target_kind, customer_party_id, project_id, project_task_id, location_id, schedule_code_id,
      department_id, detail, notes, span_mode, time_zone, starts_on, ends_on, starts_at, ends_at, break_minutes, series_id, supersedes_id,
      status, published_by, published_at, reason, request_hash, created_by, updated_by)
-    values (${input.id}, ${actor.orgId}, ${board.id}, ${booking.person.partyId}, ${booking.person.subsidiaryId},
+    values (${input.id}, ${actor.orgId}, ${board.id}, ${booking.subject.kind === "person" ? booking.subject.id : null}, ${booking.subject.kind === "equipment" ? booking.subject.id : null}, ${booking.subject.kind === "location" ? booking.subject.id : null}, ${booking.subject.subsidiaryId},
      ${target?.kind ?? null}, ${target?.customerPartyId ?? null}, ${target?.projectId ?? null}, ${target?.projectTaskId ?? null},
      ${target?.locationId ?? null}, ${target?.scheduleCodeId ?? null}, ${booking.departmentId}, ${booking.detail}, ${booking.notes},
      ${booking.span.spanMode}, ${booking.span.timeZone}, ${booking.span.startsOn}, ${booking.span.endsOn}, ${booking.span.startsAt}, ${booking.span.endsAt},
@@ -222,7 +246,7 @@ async function setStatus(actor: ScheduleActor, row: StoredEntry, status: "cancel
 
 function storedFields(row: StoredEntry): BookingFields {
   return {
-    workerPartyId: row.workerPartyId,
+    ...(row.workerPartyId ? { workerPartyId: row.workerPartyId } : { subject: { kind: row.subjectKind, id: row.subjectId } }),
     onDate: row.startsOn,
     target: row.targetKind && row.targetId ? { kind: row.targetKind, id: row.targetId } : null,
     projectTaskId: row.projectTaskId,
@@ -261,6 +285,7 @@ async function createOne(actor: ScheduleActor, board: ScheduleBoard, allowed: Re
 }
 
 async function updateOne(actor: ScheduleActor, board: ScheduleBoard, allowed: ReadonlySet<string> | null, change: Extract<BoardChange, { op: "update" }>, reason: string | null): Promise<ChangeResult> {
+  if (change.fields.subject && change.fields.workerPartyId) throw new ScheduleError("Name one booking subject.", { code: "schedule_invalid" });
   const row = await lockStored(actor.orgId, board.id, change.id);
   checkRevision(row, change.expectedRevision);
   const current = storedFields(row);
@@ -268,6 +293,7 @@ async function updateOne(actor: ScheduleActor, board: ScheduleBoard, allowed: Re
   const merged: BookingFields = {
     ...current,
     ...patch,
+    ...(patch.subject ? { workerPartyId: undefined } : patch.workerPartyId ? { subject: undefined } : {}),
     // A new date keeps a timed booking's clock times and a day booking's day.
     span: patch.span ?? current.span,
     projectTaskId: patch.target !== undefined && patch.projectTaskId === undefined ? null : (patch.projectTaskId ?? current.projectTaskId),
@@ -279,7 +305,8 @@ async function updateOne(actor: ScheduleActor, board: ScheduleBoard, allowed: Re
   if (row.status === "draft") {
     const target = booking.target;
     const updated = (await db.execute(sql`update schedule_entries set
-      worker_party_id = ${booking.person.partyId}, subsidiary_id = ${booking.person.subsidiaryId},
+      worker_party_id = ${booking.subject.kind === "person" ? booking.subject.id : null},
+      equipment_unit_id = ${booking.subject.kind === "equipment" ? booking.subject.id : null}, resource_location_id = ${booking.subject.kind === "location" ? booking.subject.id : null}, subsidiary_id = ${booking.subject.subsidiaryId},
       target_kind = ${target?.kind ?? null}, customer_party_id = ${target?.customerPartyId ?? null}, project_id = ${target?.projectId ?? null},
       project_task_id = ${target?.projectTaskId ?? null}, location_id = ${target?.locationId ?? null}, schedule_code_id = ${target?.scheduleCodeId ?? null},
       department_id = ${booking.departmentId}, detail = ${booking.detail}, notes = ${booking.notes}, span_mode = ${booking.span.spanMode},
@@ -340,8 +367,8 @@ export async function applyBoardChanges(actor: ScheduleActor & { boardId: string
   const reason = optionalText(actor.reason, "Reason", 2000);
   return withOrgTransaction(actor.orgId, async () => {
     const board = await getBoard(actor, actor.boardId);
-    if (board.rowKind !== "people") throw new ScheduleError("This board schedules project tasks.", { code: "schedule_wrong_board" });
-    const allowed = await peopleBoardAuthority(actor, "hrm.shifts.manage", board.subsidiaryId);
+    if (board.rowKind === "tasks") throw new ScheduleError("This board schedules project tasks.", { code: "schedule_wrong_board" });
+    const allowed = await boardAuthority(actor, board, "manage");
     const results: ChangeResult[] = [];
     const notices: ScheduleNotice[] = [];
     const notify = board.notifyAssignees;
@@ -397,12 +424,14 @@ export async function publishBoard(actor: ScheduleActor & { boardId: string; fro
   const reason = optionalText(actor.reason, "Reason", 2000);
   return withOrgTransaction(actor.orgId, async () => {
     const board = await getBoard(actor, actor.boardId);
-    if (board.rowKind !== "people") throw new ScheduleError("This board schedules project tasks.", { code: "schedule_wrong_board" });
+    if (board.rowKind === "tasks") throw new ScheduleError("This board schedules project tasks.", { code: "schedule_wrong_board" });
     if (board.publishPolicy !== "staged") throw new ScheduleError("This board publishes each booking as it is made.", { code: "schedule_live_board" });
-    await peopleBoardAuthority(actor, "hrm.shifts.approve", board.subsidiaryId);
+    await boardAuthority(actor, board, "publish");
     await db.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`schedule-publish:${actor.orgId}:${board.id}`}, 0))`);
     const drafts = (await db.execute<StoredEntry & { personName: string }>(sql`select ${STORED_COLUMNS},
-        (select display_name from parties p where p.org_id = schedule_entries.org_id and p.id = schedule_entries.worker_party_id) as "personName"
+        coalesce((select display_name from parties p where p.org_id = schedule_entries.org_id and p.id = schedule_entries.worker_party_id),
+        (select name from equipment_units u where u.org_id = schedule_entries.org_id and u.id = schedule_entries.equipment_unit_id),
+        (select name from locations l where l.org_id = schedule_entries.org_id and l.id = schedule_entries.resource_location_id)) as "personName"
       from schedule_entries where org_id = ${actor.orgId} and board_id = ${board.id} and status = 'draft'
         and starts_on between ${from} and ${through}
       order by starts_at, id for update`)).rows;

@@ -19,11 +19,11 @@ export function CalendarView({ window: board, month, today, onOpenEntry }: {
   const [personId, setPersonId] = useState('')
   const [open, setOpen] = useState<string | null>(null)
   const replaced = useMemo(() => new Set(board.replaced), [board.replaced])
-  const names = useMemo(() => new Map(board.people.map((person) => [person.partyId, person.name])), [board.people])
+  const names = useMemo(() => new Map(board.rows.map((person) => [person.subjectId, person.name])), [board.rows])
   const byDate = useMemo(() => {
     const map = new Map<string, BoardEntry[]>()
     for (const entry of board.entries) {
-      if (replaced.has(entry.id) || (personId && entry.workerPartyId !== personId)) continue
+      if (replaced.has(entry.id) || (personId && entry.subjectId !== personId)) continue
       const list = map.get(entry.startsOn) ?? []
       list.push(entry)
       map.set(entry.startsOn, list)
@@ -47,7 +47,7 @@ export function CalendarView({ window: board, month, today, onOpenEntry }: {
       <div className="flex items-center justify-end">
         <Select value={personId} onChange={(event) => setPersonId(event.target.value)} className="h-8 w-56 text-xs" aria-label={t('calendar.person')}>
           <option value="">{t('calendar.everyone')}</option>
-          {board.people.map((person) => <option key={person.partyId} value={person.partyId}>{person.name}</option>)}
+          {board.rows.map((person) => <option key={person.subjectId} value={person.subjectId}>{person.name}</option>)}
         </Select>
       </div>
       <div className="grid min-h-0 flex-1 grid-cols-7 overflow-auto rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-950" style={{ gridTemplateRows: `auto repeat(${weeks.length}, minmax(112px, 1fr))` }}>
@@ -69,7 +69,7 @@ export function CalendarView({ window: board, month, today, onOpenEntry }: {
           const expanded = open === day.date
           const leave = leaveByDate.get(day.date) ?? 0
           return (
-            <div key={day.date} className={cn('relative min-w-0 border-b border-l border-slate-100 p-1.5 dark:border-slate-800', !inMonth && 'bg-slate-50/70 text-slate-400 dark:bg-slate-900/50', day.isHoliday && 'bg-rose-50/60 dark:bg-rose-950/20')}>
+            <div key={day.date} className={cn('relative min-w-0 border-b border-l border-slate-100 p-1.5 dark:border-slate-800', day.isWeekend && 'bg-slate-200/50 dark:bg-slate-800/60', !inMonth && 'text-slate-400', day.isHoliday && 'bg-rose-50/60 dark:bg-rose-950/20')}>
               <button type="button" onClick={() => setOpen(expanded ? null : day.date)} className="flex w-full items-center justify-between">
                 <span className={cn('flex h-6 min-w-6 items-center justify-center rounded-full px-1 text-xs font-semibold tabular-nums', day.date === today ? 'bg-teal-600 text-white' : 'text-slate-700 dark:text-slate-200')}>
                   {Number(day.date.slice(8))}
@@ -82,7 +82,7 @@ export function CalendarView({ window: board, month, today, onOpenEntry }: {
                     <button
                       type="button"
                       onClick={() => (personId && group.entries[0] ? onOpenEntry(group.entries[0]) : setOpen(expanded ? null : day.date))}
-                      style={chipStyle(targetHue(group.target))}
+                      style={chipStyle(targetHue(group.target), group.target?.color)}
                       className={cn('flex w-full items-center justify-between rounded border px-1.5 py-0.5 text-[10px] font-semibold', CHIP_COLORS)}
                     >
                       <span className="truncate">{targetShortLabel(group.target)}</span>
@@ -93,7 +93,7 @@ export function CalendarView({ window: board, month, today, onOpenEntry }: {
                         {group.entries.map((entry) => (
                           <li key={entry.id}>
                             <button type="button" onClick={() => onOpenEntry(entry)} className="w-full truncate text-left text-[10px] text-slate-600 hover:underline dark:text-slate-300">
-                              {names.get(entry.workerPartyId) ?? '—'}
+                              {names.get(entry.subjectId) ?? '—'}
                             </button>
                           </li>
                         ))}

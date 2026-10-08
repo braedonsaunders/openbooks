@@ -10,12 +10,14 @@ import { db, withOrgTransaction } from "../platform/db.ts";
 import { addCalendarDays } from "../platform/civil-date.ts";
 import { subsidiaryVisibleFilter } from "../organization/subsidiary-scope.ts";
 import { BusinessCalendarMissingError, businessCalendarOver } from "../payroll/business-calendars.ts";
-import { getBoard, peopleBoardAuthority, type ScheduleActor, type ScheduleBoard } from "./boards.ts";
+import { getBoard, boardAuthority, type ScheduleActor, type ScheduleBoard } from "./boards.ts";
+import { bookingColor } from "./display.ts";
 import { ScheduleError, scheduleDatabaseRefusal } from "./errors.ts";
 import { datesBetween, localClock, requireDate } from "./spans.ts";
 
-export interface BoardPerson {
-  readonly partyId: string;
+export interface BoardRow {
+  readonly subjectId: string;
+  readonly subjectKind: "person" | "equipment" | "location";
   readonly name: string;
   readonly shortCode: string | null;
   readonly jobTitle: string | null;
@@ -44,7 +46,9 @@ export interface BoardEntry {
   readonly revision: number;
   readonly boardId: string;
   readonly boardName: string;
-  readonly workerPartyId: string;
+  readonly workerPartyId: string | null;
+  readonly subjectId: string;
+  readonly subjectKind: "person" | "equipment" | "location";
   readonly status: "draft" | "published";
   readonly target: BoardTarget | null;
   readonly projectTaskId: string | null;
@@ -98,7 +102,7 @@ export interface BoardWindow {
   readonly days: readonly BoardDay[];
   /** Null when the business calendar answers every date; otherwise why holidays are not shown. */
   readonly calendarNotice: string | null;
-  readonly people: readonly BoardPerson[];
+  readonly rows: readonly BoardRow[];
   readonly entries: readonly BoardEntry[];
   /** Published bookings a staged draft would replace, so the board can show what changes. */
   readonly replaced: readonly string[];
@@ -138,7 +142,8 @@ export function boardScopeFilter(board: Pick<ScheduleBoard, "subsidiaryId" | "de
   return parts.length ? sql.join(parts, sql` and `) : sql`true`;
 }
 
-export const ENTRY_COLUMNS = sql`e.id, e.revision, e.board_id as "boardId", eb.name as "boardName", e.worker_party_id as "workerPartyId", e.status,
+export const ENTRY_COLUMNS = sql`e.id, e.revision, e.board_id as "boardId", eb.name as "boardName", e.worker_party_id as "workerPartyId", coalesce(e.worker_party_id,e.equipment_unit_id,e.resource_location_id) as "subjectId",
+  case when e.worker_party_id is not null then 'person' when e.equipment_unit_id is not null then 'equipment' else 'location' end as "subjectKind", eb.cell_color_rules as "colorRules", e.status,
   e.target_kind as "targetKind", coalesce(e.customer_party_id, e.project_id, e.location_id, e.schedule_code_id) as "targetId",
   coalesce(cp.short_code, pr.code, lo.code, sc.code) as "targetCode",
   coalesce(cp.display_name, pr.name, lo.name, sc.label) as "targetLabel",
@@ -166,16 +171,16 @@ export const ENTRY_JOINS = sql`from schedule_entries e
 
 type EntryRow = Omit<BoardEntry, "target" | "startClock" | "endClock"> & {
   targetKind: BoardTarget["kind"] | null; targetId: string | null; targetCode: string | null; targetLabel: string | null;
-  targetContext: string | null; targetColor: string | null; targetCounts: boolean; timeZone: string;
+  targetContext: string | null; targetColor: string | null; targetCounts: boolean; timeZone: string; colorRules: ScheduleBoard["cellColorRules"];
 };
 
 export function shapeEntry(row: EntryRow): BoardEntry {
-  const { targetKind, targetId, targetCode, targetLabel, targetContext, targetColor, targetCounts, timeZone, ...rest } = row;
+  const { targetKind, targetId, targetCode, targetLabel, targetContext, targetColor, targetCounts, timeZone, colorRules, ...rest } = row;
   return {
     ...rest,
     target: targetKind && targetId ? {
       kind: targetKind, id: targetId, code: targetCode, label: targetLabel ?? "", context: targetContext,
-      color: targetColor, counts: targetCounts,
+      color: bookingColor(colorRules ?? [], { code: targetCode, label: targetLabel, detail: row.detail }) ?? targetColor, counts: targetCounts,
     } : null,
     startClock: localClock(row.startsAt, timeZone),
     endClock: localClock(row.endsAt, timeZone),
@@ -186,22 +191,38 @@ export function loadBoardWindow(actor: ScheduleActor & { boardId: string; from: 
   return withOrgTransaction(actor.orgId, () => readBoardWindow(actor)).catch((error: unknown) => { throw scheduleDatabaseRefusal(error); });
 }
 
+async function resourceRows(board: ScheduleBoard, orgId: string, allowed: ReadonlySet<string> | null, from: string, through: string): Promise<BoardRow[]> {
+  const table = board.resourceKind === "equipment" ? "equipment_units" : "locations";
+  const bookedColumn = board.resourceKind === "equipment" ? sql`x.equipment_unit_id` : sql`x.resource_location_id`;
+  const inScope = sql`${board.subsidiaryId ? sql`r.subsidiary_id in ${treeIds("subsidiaries", orgId, board.subsidiaryId)}` : sql`true`}
+    ${board.resourceKind === "location" && board.locationId ? sql`and r.id in ${treeIds("locations", orgId, board.locationId)}` : sql``}`;
+  return (await db.execute<BoardRow>(sql`select r.id as "subjectId", ${board.resourceKind} as "subjectKind", r.name,
+    ${board.resourceKind === "equipment" ? sql`r.unit_number` : sql`r.code`} as "shortCode", null::text as "jobTitle",
+    null::uuid as "departmentId", null::text as "departmentName", null::text as "tradeName", (${inScope}) as "inScope"
+    from ${sql.identifier(table)} r where r.org_id = ${orgId}
+      and ${board.resourceKind === "equipment" ? sql`r.status = 'active' and (r.in_service_on is null or r.in_service_on <= ${through})` : sql`r.is_active`}
+      ${subsidiaryVisibleFilter(sql`r.subsidiary_id`, allowed, { orgWideNull: true })}
+      and ((${inScope}) or exists (select 1 from schedule_entries x where x.org_id = r.org_id and x.board_id = ${board.id}
+        and ${bookedColumn} = r.id and x.status <> 'cancelled' and x.starts_on <= ${through} and x.ends_on >= ${from}))
+    order by r.name, r.id`)).rows;
+}
+
 async function readBoardWindow(actor: ScheduleActor & { boardId: string; from: string; through?: string }): Promise<BoardWindow> {
   const board = await getBoard(actor, actor.boardId);
-  if (board.rowKind !== "people") throw new ScheduleError("This board schedules project tasks.", { code: "schedule_wrong_board", remedy: "Open it in the Gantt view." });
-  const allowed = await peopleBoardAuthority(actor, "hrm.shifts.read", board.subsidiaryId);
+  if (board.rowKind === "tasks") throw new ScheduleError("This board schedules project tasks.", { code: "schedule_wrong_board", remedy: "Open it in the Gantt view." });
+  const allowed = await boardAuthority(actor, board, "read");
   const from = requireDate(actor.from, "Window start");
   const through = actor.through ? requireDate(actor.through, "Window end") : addCalendarDays(from, board.rangeDays - 1);
   const dates = datesBetween(from, through);
   const orgId = actor.orgId;
 
   const [canManage, canPublish] = await Promise.all([
-    peopleBoardAuthority(actor, "hrm.shifts.manage", board.subsidiaryId).then(() => true, () => false),
-    peopleBoardAuthority(actor, "hrm.shifts.approve", board.subsidiaryId).then(() => true, () => false),
+    boardAuthority(actor, board, "manage").then(() => true, () => false),
+    boardAuthority(actor, board, "publish").then(() => true, () => false),
   ]);
 
-  const people = (await db.execute<BoardPerson>(sql`
-    select p.id as "partyId", p.display_name as name, p.short_code as "shortCode", er.job_title as "jobTitle",
+  const rows = board.rowKind === "resources" ? await resourceRows(board, orgId, allowed, from, through) : (await db.execute<BoardRow>(sql`
+    select p.id as "subjectId", 'person' as "subjectKind", p.display_name as name, p.short_code as "shortCode", er.job_title as "jobTitle",
            er.department_id as "departmentId", d.name as "departmentName", tr.name as "tradeName",
            (${boardScopeFilter(board, orgId, from)}) as "inScope"
       from parties p
@@ -218,18 +239,18 @@ async function readBoardWindow(actor: ScheduleActor & { boardId: string; from: s
      order by p.display_name, p.id
   `)).rows;
 
-  const personIds = people.map((person) => person.partyId);
+  const personIds = rows.map((person) => person.subjectId);
   const personFilter = personIds.length ? sql`= any(${`{${personIds.join(",")}}`}::uuid[])` : sql`is null and false`;
 
   const rawEntries = (await db.execute<EntryRow>(sql`select ${ENTRY_COLUMNS} ${ENTRY_JOINS}
-    where e.org_id = ${orgId} and e.worker_party_id ${personFilter} and e.status <> 'cancelled'
+    where e.org_id = ${orgId} and coalesce(e.worker_party_id,e.equipment_unit_id,e.resource_location_id) ${personFilter} and e.status <> 'cancelled'
       and e.starts_on <= ${through} and e.ends_on >= ${from}
       and (e.status = 'published' or e.board_id = ${board.id})
     order by e.starts_at, e.id`)).rows;
   const entries = rawEntries.map(shapeEntry);
   const replaced = entries.filter((entry) => entry.status === "draft" && entry.supersedesId).map((entry) => entry.supersedesId!);
 
-  const absences = (await db.execute<BoardAbsence>(sql`
+  const absences = board.rowKind === "resources" ? [] : (await db.execute<BoardAbsence>(sql`
     select we.worker_party_id as "workerPartyId", a.on_date::text as "onDate", sum(a.hours)::text as hours,
            t.code as "leaveTypeCode", t.name as "leaveTypeName"
       from hrm_absences a
@@ -259,12 +280,11 @@ async function readBoardWindow(actor: ScheduleActor & { boardId: string; from: s
     return {
       date,
       weekday,
-      // Weekends come from the business calendar too; without one the notice
-      // above says why no day is marked.
-      isWeekend: answer ? answer.weekendDays.has(isoWeekday) : false,
+      // A configured business calendar takes precedence over board display days.
+      isWeekend: answer ? answer.weekendDays.has(isoWeekday) : board.weekendDays.includes(String(isoWeekday)),
       isHoliday: answer?.isHoliday ?? false,
     };
   });
 
-  return { board, from, through, days, calendarNotice, people, entries, replaced, absences, codes, canManage, canPublish };
+  return { board, from, through, days, calendarNotice, rows, entries, replaced, absences, codes, canManage, canPublish };
 }

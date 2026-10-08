@@ -82,7 +82,8 @@ const mockSources = new Map<string, string>([
         if (/delete from schedule_calendars[\\s\\S]*returning id/i.test(statement)) {
           return { rows: state.calendarTargetExists ? [{ id: 'calendar-target' }] : [] }
         }
-        if (/select 1 from schedule_resources/i.test(statement)) {
+        if (/update project_tasks[\\s\\S]*returning id/i.test(statement)) return { rows: [{ id: 'task-1' }] }
+        if (/select (?:1|id) from schedule_resources/i.test(statement)) {
           return { rows: state.resourceTargetExists ? [{ id: 'resource-target' }] : [] }
         }
         if (/update schedule_resources[\\s\\S]*returning id/i.test(statement)) {

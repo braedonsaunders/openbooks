@@ -5,10 +5,11 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useLocale, useTranslations } from 'next-intl'
 import {
-  CalendarDays, CalendarRange, ChevronLeft, ChevronRight, ChartGantt, LayoutGrid, ListChecks, Plus, Redo2, Rows3, Rows4, Search,
-  Send, Settings2, Undo2, Users, X,
+  CalendarRange, ChevronLeft, ChevronRight, Plus, Redo2, Rows3, Rows4,
+  Send, Settings2, MoreHorizontal, Undo2, X,
 } from 'lucide-react'
-import { Button, Input, Select, cn } from '@openbooks/ui'
+import { Button, Input, Select, Popover, cn } from '@openbooks/ui'
+import { SchedulingAlert } from './SchedulingAlert'
 import { BookingDrawer } from './BookingDrawer'
 import { CalendarView } from './CalendarView'
 import { NewBoardDrawer, type ScopeOptions } from './NewBoardDrawer'
@@ -26,7 +27,7 @@ export interface BoardSummary {
   readonly id: string
   readonly code: string
   readonly name: string
-  readonly rowKind: 'people' | 'tasks'
+  readonly rowKind: 'people' | 'tasks' | 'resources'
 }
 
 export interface SchedulingWorkspaceProps {
@@ -49,9 +50,10 @@ export interface SchedulingWorkspaceProps {
   readonly scope: ScopeOptions
   readonly peopleEnabled: boolean
   readonly tasksEnabled: boolean
+  readonly resourcesEnabled: boolean
+  readonly equipmentEnabled: boolean
 }
 
-const VIEW_ICONS = { grid: LayoutGrid, targets: Users, timeline: Rows3, calendar: CalendarDays, gantt: ChartGantt, progress: ListChecks } as const
 
 export function SchedulingWorkspace(props: SchedulingWorkspaceProps) {
   const t = useTranslations('scheduling')
@@ -66,7 +68,7 @@ export function SchedulingWorkspace(props: SchedulingWorkspaceProps) {
         <p className="mt-1 max-w-md text-sm text-slate-500">{props.refusal?.message ?? t('empty.description')}</p>
         {props.refusal?.remedy ? <p className="mt-1 max-w-md text-xs text-slate-400">{props.refusal.remedy}</p> : null}
         {props.refusal ? null : props.canConfigure ? <Button className="mt-5" onClick={() => setNewBoard(true)}><Plus className="mr-1.5 h-4 w-4" />{t('empty.create')}</Button> : <p className="mt-4 text-xs text-slate-400">{t('empty.askAdmin')}</p>}
-        <NewBoardDrawer open={newBoard} onClose={() => setNewBoard(false)} timeZone={props.timeZone} scope={props.scope} peopleEnabled={props.peopleEnabled} tasksEnabled={props.tasksEnabled} />
+        <NewBoardDrawer open={newBoard} onClose={() => setNewBoard(false)} timeZone={props.timeZone} scope={props.scope} peopleEnabled={props.peopleEnabled} tasksEnabled={props.tasksEnabled} resourcesEnabled={props.resourcesEnabled} equipmentEnabled={props.equipmentEnabled} />
       </div>
     )
   }
@@ -78,7 +80,7 @@ export function SchedulingWorkspace(props: SchedulingWorkspaceProps) {
       board={props.board}
       onSwitchBoard={(code) => router.push(`/scheduling?board=${encodeURIComponent(code)}`)}
       onNewBoard={() => setNewBoard(true)}
-      newBoard={<NewBoardDrawer open={newBoard} onClose={() => setNewBoard(false)} timeZone={props.timeZone} scope={props.scope} peopleEnabled={props.peopleEnabled} tasksEnabled={props.tasksEnabled} />}
+      newBoard={<NewBoardDrawer open={newBoard} onClose={() => setNewBoard(false)} timeZone={props.timeZone} scope={props.scope} peopleEnabled={props.peopleEnabled} tasksEnabled={props.tasksEnabled} resourcesEnabled={props.resourcesEnabled} equipmentEnabled={props.equipmentEnabled} />}
     />
   )
 }
@@ -97,8 +99,9 @@ function BoardShell(props: SchedulingWorkspaceProps & { board: ScheduleBoard; on
   const [spotlight, setSpotlight] = useState<string | null>(null)
   const [openEntry, setOpenEntry] = useState<BoardEntry | null>(null)
   const [publishing, setPublishing] = useState(false)
+  const [moreOpen, setMoreOpen] = useState(false)
   const range = useMemo(() => viewRange(view, anchor, rangeDays, board.weekStartsOn), [anchor, board.weekStartsOn, rangeDays, view])
-  const people = board.rowKind === 'people'
+  const people = board.rowKind !== 'tasks'
   const controller = useBoard(board.id, people ? props.initialWindow : null, range, people)
   const window = controller.window
 
@@ -138,7 +141,7 @@ function BoardShell(props: SchedulingWorkspaceProps & { board: ScheduleBoard; on
       if (!entry.target) continue
       const key = `${entry.target.kind}:${entry.target.id}`
       const slot = counts.get(key) ?? { key, target: entry.target, people: new Set<string>() }
-      slot.people.add(entry.workerPartyId)
+      slot.people.add(entry.subjectId)
       counts.set(key, slot)
     }
     return [...counts.values()].sort((a, b) => b.people.size - a.people.size).slice(0, 14)
@@ -178,106 +181,61 @@ function BoardShell(props: SchedulingWorkspaceProps & { board: ScheduleBoard; on
   const rangeOptions = [...new Set([1, 3, 7, 14, 28, board.rangeDays])].sort((a, b) => a - b)
 
   return (
-    <div className="flex h-full min-h-0 flex-col gap-3">
-      {/* Toolbar */}
-      <div className="flex flex-wrap items-center gap-2">
-        <Select value={board.code} onChange={(event) => props.onSwitchBoard(event.target.value)} className="h-9 w-56 font-medium" aria-label={t('toolbar.board')}>
-          {props.boards.some((candidate) => candidate.rowKind === 'people') ? (
-            <optgroup label={t('toolbar.peopleBoards')}>
-              {props.boards.filter((candidate) => candidate.rowKind === 'people').map((candidate) => <option key={candidate.id} value={candidate.code}>{candidate.name}</option>)}
-            </optgroup>
-          ) : null}
-          {props.boards.some((candidate) => candidate.rowKind === 'tasks') ? (
-            <optgroup label={t('toolbar.taskBoards')}>
-              {props.boards.filter((candidate) => candidate.rowKind === 'tasks').map((candidate) => <option key={candidate.id} value={candidate.code}>{candidate.name}</option>)}
-            </optgroup>
-          ) : null}
+    <div className="flex h-full min-h-0 min-w-0 flex-col gap-2">
+      <div className="flex min-w-0 shrink-0 flex-nowrap items-center gap-1.5" role="toolbar" aria-label={t('toolbar.board')}>
+        <Select value={board.code} onChange={(event) => props.onSwitchBoard(event.target.value)} className="h-8 min-w-0 flex-1 basis-24 text-xs font-medium sm:max-w-52" aria-label={t('toolbar.board')}>
+          {props.boards.map((candidate) => <option key={candidate.id} value={candidate.code}>{candidate.name}</option>)}
         </Select>
-        <div className="inline-flex rounded-lg border border-slate-200 bg-white p-0.5 dark:border-slate-800 dark:bg-slate-950" role="tablist" aria-label={t('toolbar.views')}>
-          {board.views.map((candidate) => {
-            const Icon = VIEW_ICONS[candidate as keyof typeof VIEW_ICONS] ?? LayoutGrid
-            return (
-              <button
-                key={candidate}
-                type="button"
-                role="tab"
-                aria-selected={view === candidate}
-                onClick={() => setView(candidate)}
-                className={cn('inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium transition', view === candidate ? 'bg-slate-900 text-white shadow-sm dark:bg-slate-100 dark:text-slate-900' : 'text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white')}
-              >
-                <Icon className="h-3.5 w-3.5" />{t(`views.${candidate}`)}
-              </button>
-            )
-          })}
-        </div>
-        {people ? (
-          <div className="flex items-center gap-1">
-            <Button variant="outline" size="sm" onClick={() => move(-1)} aria-label={t('toolbar.previous')}><ChevronLeft className="h-4 w-4" /></Button>
-            <Button variant="outline" size="sm" onClick={() => setAnchor(props.today)}>{t('toolbar.today')}</Button>
-            <Button variant="outline" size="sm" onClick={() => move(1)} aria-label={t('toolbar.next')}><ChevronRight className="h-4 w-4" /></Button>
-            <span className="ml-2 min-w-[11rem] text-sm font-semibold text-slate-800 dark:text-slate-100">{label}</span>
-            {view !== 'calendar' ? (
-              <Select value={String(rangeDays)} onChange={(event) => setRangeDays(Number(event.target.value))} className="h-8 w-28 text-xs" aria-label={t('toolbar.range')}>
-                {rangeOptions.map((days) => <option key={days} value={days}>{t('toolbar.days', { count: days })}</option>)}
-              </Select>
-            ) : null}
-          </div>
-        ) : null}
-        <div className="ml-auto flex items-center gap-1.5">
-          {people && view !== 'calendar' ? (
-            <>
-              <div className="relative">
-                <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
-                <Input value={search} onChange={(event) => setSearch(event.target.value)} placeholder={t('toolbar.search')} className="h-8 w-44 pl-7 text-xs" aria-label={t('toolbar.search')} />
-              </div>
-              <Select value={groupBy} onChange={(event) => setGroupBy(event.target.value as GroupBy)} className="h-8 w-36 text-xs" aria-label={t('toolbar.groupBy')}>
-                {(['none', 'department', 'trade', 'jobTitle'] as const).map((option) => <option key={option} value={option}>{t(`groupBy.${option}`)}</option>)}
-              </Select>
-              {view === 'grid' ? (
-                <Button variant="ghost" size="sm" onClick={() => setCompact((value) => !value)} aria-label={t('toolbar.density')} title={t('toolbar.density')}>
-                  {compact ? <Rows4 className="h-4 w-4" /> : <Rows3 className="h-4 w-4" />}
-                </Button>
-              ) : null}
-              <Button variant="ghost" size="sm" disabled={!controller.canUndo} onClick={() => void controller.undo()} title={controller.undoLabel ? t('toolbar.undoWhat', { what: controller.undoLabel }) : t('toolbar.undo')} aria-label={t('toolbar.undo')}><Undo2 className="h-4 w-4" /></Button>
-              <Button variant="ghost" size="sm" disabled={!controller.canRedo} onClick={() => void controller.redo()} aria-label={t('toolbar.redo')} title={t('toolbar.redo')}><Redo2 className="h-4 w-4" /></Button>
-            </>
-          ) : null}
-          {props.settingsHref ? (
-            <Button variant="ghost" size="sm" asChild title={t('toolbar.settings')}>
-              <Link href={props.settingsHref} aria-label={t('toolbar.settings')}><Settings2 className="h-4 w-4" /></Link>
-            </Button>
-          ) : null}
-          {props.canConfigure ? <Button variant="outline" size="sm" onClick={props.onNewBoard}><Plus className="mr-1 h-4 w-4" />{t('toolbar.newBoard')}</Button> : null}
+        <Select value={view} onChange={(event) => setView(event.target.value)} className="h-8 w-24 shrink-0 text-xs" aria-label={t('toolbar.views')}>
+          {board.views.map((candidate) => <option key={candidate} value={candidate}>{t(`views.${candidate}`)}</option>)}
+        </Select>
+        {people ? <div className="hidden shrink-0 items-center gap-1 sm:flex">
+          <Button variant="outline" size="sm" className="h-8 px-2" onClick={() => move(-1)} aria-label={t('toolbar.previous')}><ChevronLeft className="h-4 w-4" /></Button>
+          <Button variant="outline" size="sm" className="h-8 px-2 text-xs" onClick={() => setAnchor(props.today)}>{t('toolbar.today')}</Button>
+          <Button variant="outline" size="sm" className="h-8 px-2" onClick={() => move(1)} aria-label={t('toolbar.next')}><ChevronRight className="h-4 w-4" /></Button>
+          <span className="hidden max-w-52 truncate px-1 text-xs font-semibold text-slate-700 dark:text-slate-200 lg:block" title={label}>{label}</span>
+        </div> : null}
+        {!people && props.projects.length > 1 ? <Select value={projectId ?? ''} onChange={(event) => setProjectId(event.target.value)} className="h-8 min-w-0 flex-1 basis-28 text-xs" aria-label={t('tasks.pickProject')}>{props.projects.map((project) => <option key={project.id} value={project.id}>{project.code ? `${project.code} · ` : ''}{project.name}</option>)}</Select> : null}
+        <div className="ml-auto flex shrink-0 items-center gap-1">
+          {props.settingsHref ? <Button variant="ghost" size="sm" className="h-8 px-2" asChild title={t('toolbar.settings')}>
+            <Link href={props.settingsHref} aria-label={t('toolbar.settings')}><Settings2 className="h-4 w-4" /></Link>
+          </Button> : null}
+          {props.canConfigure ? <Button variant="outline" size="sm" className="h-8 gap-1 px-2 text-xs" onClick={props.onNewBoard} aria-label={t('toolbar.newBoard')} title={t('toolbar.newBoard')}><Plus className="h-4 w-4" /><span className="hidden xl:inline">{t('toolbar.newBoard')}</span></Button> : null}
+          {people ? <Popover open={moreOpen} onOpenChange={setMoreOpen} align="end" className="w-72 max-w-[calc(100vw-2rem)]" trigger={<Button variant="outline" size="sm" className="h-8 px-2" onClick={() => setMoreOpen((value) => !value)} aria-label={t('toolbar.more')} aria-expanded={moreOpen}><MoreHorizontal className="h-4 w-4" /></Button>}>
+            <div className="space-y-3 p-3">
+              <div className="flex items-center justify-between gap-2 text-xs"><Button variant="ghost" size="sm" onClick={() => move(-1)} aria-label={t('toolbar.previous')}><ChevronLeft className="h-4 w-4" /></Button><span>{label}</span><Button variant="ghost" size="sm" onClick={() => move(1)} aria-label={t('toolbar.next')}><ChevronRight className="h-4 w-4" /></Button></div>
+              <Input type="date" value={anchor} onChange={(event) => { if (event.target.value) setAnchor(event.target.value) }} aria-label={t('toolbar.date')} />
+              <Button variant="outline" size="sm" onClick={() => setAnchor(props.today)}>{t('toolbar.today')}</Button>
+              {view !== 'calendar' ? <><label className="block space-y-1 text-xs"><span>{t('toolbar.range')}</span><Select value={String(rangeDays)} onChange={(event) => setRangeDays(Number(event.target.value))} className="h-8 w-full text-xs">{rangeOptions.map((days) => <option key={days} value={days}>{t('toolbar.days', { count: days })}</option>)}</Select></label>
+              <Input value={search} onChange={(event) => setSearch(event.target.value)} placeholder={t('toolbar.search')} className="h-8 text-xs" aria-label={t('toolbar.search')} />
+              <label className="block space-y-1 text-xs"><span>{t('toolbar.groupBy')}</span><Select value={groupBy} onChange={(event) => setGroupBy(event.target.value as GroupBy)} className="h-8 w-full text-xs">{(['none', 'department', 'trade', 'jobTitle'] as const).map((option) => <option key={option} value={option}>{t(`groupBy.${option}`)}</option>)}</Select></label>
+              <div className="flex items-center gap-1">{view === 'grid' ? <Button variant="ghost" size="sm" onClick={() => setCompact((value) => !value)} aria-label={t('toolbar.density')} title={t('toolbar.density')}>{compact ? <Rows4 className="h-4 w-4" /> : <Rows3 className="h-4 w-4" />}</Button> : null}
+              <Button variant="ghost" size="sm" disabled={!controller.canUndo} onClick={() => void controller.undo()} aria-label={t('toolbar.undo')} title={controller.undoLabel ?? t('toolbar.undo')}><Undo2 className="h-4 w-4" /></Button>
+              <Button variant="ghost" size="sm" disabled={!controller.canRedo} onClick={() => void controller.redo()} aria-label={t('toolbar.redo')}><Redo2 className="h-4 w-4" /></Button></div></> : null}
+            </div>
+          </Popover> : null}
         </div>
       </div>
 
       {/* Board context: scope, refusals, staged changes, legend */}
-      {people && window?.calendarNotice ? (
-        <p className="rounded-lg bg-slate-100 px-3 py-1.5 text-xs text-slate-600 dark:bg-slate-900 dark:text-slate-300">{window.calendarNotice}</p>
-      ) : null}
       {props.refusal ? (
-        <p className="rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700 dark:bg-rose-950/40 dark:text-rose-300">{props.refusal.message}{props.refusal.remedy ? ` ${props.refusal.remedy}` : ''}</p>
+        <SchedulingAlert message={props.refusal.message} remedy={props.refusal.remedy} />
       ) : null}
       {people && board.publishPolicy === 'staged' && drafts.length ? (
-        <div className="flex flex-wrap items-center gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-2.5 dark:border-amber-900 dark:bg-amber-950/30">
-          <span className="h-2 w-2 rounded-full bg-amber-500" />
-          <span className="text-sm font-medium text-amber-900 dark:text-amber-100">{t('publish.pending', { count: drafts.length, people: new Set(drafts.map((entry) => entry.workerPartyId)).size })}</span>
-          <span className="text-xs text-amber-800/80 dark:text-amber-200/70">{t('publish.explain')}</span>
-          <div className="ml-auto flex gap-2">
-            {window?.canManage ? <Button variant="ghost" size="sm" onClick={() => void discardDrafts()}>{t('publish.discard')}</Button> : null}
-            {window?.canPublish ? <Button size="sm" onClick={() => void publishDrafts()} disabled={publishing}><Send className="mr-1.5 h-3.5 w-3.5" />{t('publish.action')}</Button> : null}
-          </div>
-        </div>
+        <SchedulingAlert tone="warning" message={t('publish.pending', { count: drafts.length, people: new Set(drafts.map((entry) => entry.subjectId)).size })} remedy={t('publish.explain')}>
+          {window?.canManage ? <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={() => void discardDrafts()}>{t('publish.discard')}</Button> : null}
+          {window?.canPublish ? <Button size="sm" className="h-7 px-2 text-xs" onClick={() => void publishDrafts()} disabled={publishing}><Send className="mr-1 h-3.5 w-3.5" />{t('publish.action')}</Button> : null}
+        </SchedulingAlert>
       ) : null}
       {people && view === 'grid' && legend.length ? (
-        <div className="flex flex-wrap items-center gap-1.5">
+        <div className="flex min-w-0 shrink-0 flex-nowrap items-center gap-1.5 overflow-x-auto">
           {legend.map((slot) => (
             <button
               key={slot.key}
               type="button"
               onClick={() => setSpotlight((current) => (current === slot.key ? null : slot.key))}
-              style={chipStyle(targetHue(slot.target))}
-              className={cn('inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[11px] font-semibold transition', CHIP_COLORS, spotlight && spotlight !== slot.key && 'opacity-40', spotlight === slot.key && 'ring-2 ring-teal-500/50')}
+              style={chipStyle(targetHue(slot.target), slot.target.color)}
+              className={cn('inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[11px] font-semibold transition', CHIP_COLORS, spotlight && spotlight !== slot.key && 'opacity-40', spotlight === slot.key && 'ring-2 ring-teal-500/50')}
               title={slot.target.label}
             >
               {slot.target.code ?? slot.target.label}
@@ -288,7 +246,7 @@ function BoardShell(props: SchedulingWorkspaceProps & { board: ScheduleBoard; on
       ) : null}
 
       {/* Body: one view at a time */}
-      <div className="flex min-h-0 flex-1 flex-col">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         {!people ? (
           <TaskBoard
             boardId={board.id}
@@ -323,16 +281,10 @@ function BoardShell(props: SchedulingWorkspaceProps & { board: ScheduleBoard; on
       {/* Notices */}
       <div className="pointer-events-none fixed bottom-5 right-5 z-[70] flex w-96 max-w-[calc(100vw-2.5rem)] flex-col gap-2">
         {controller.notices.map((notice) => (
-          <div
-            key={notice.id}
-            role={notice.tone === 'error' ? 'alert' : 'status'}
-            className={cn('pointer-events-auto flex items-start gap-3 rounded-xl border px-4 py-3 text-sm shadow-lg', notice.tone === 'error' ? 'border-rose-200 bg-white text-rose-900 dark:border-rose-900 dark:bg-slate-900 dark:text-rose-200' : 'border-emerald-200 bg-white text-emerald-900 dark:border-emerald-900 dark:bg-slate-900 dark:text-emerald-200')}
-          >
-            <div className="min-w-0 flex-1">
-              <p className="font-medium">{notice.message}</p>
-              {notice.remedy ? <p className="mt-0.5 text-xs opacity-80">{notice.remedy}</p> : null}
-            </div>
-            <button type="button" onClick={() => controller.dismiss(notice.id)} aria-label={t('notices.dismiss')} className="shrink-0 opacity-60 hover:opacity-100"><X className="h-4 w-4" /></button>
+          <div key={notice.id} className="pointer-events-auto rounded-lg shadow-lg">
+            <SchedulingAlert message={notice.message} remedy={notice.remedy} tone={notice.tone === 'error' ? 'error' : 'info'}>
+              <button type="button" onClick={() => controller.dismiss(notice.id)} aria-label={t('notices.dismiss')} className="shrink-0 p-1 opacity-60 hover:opacity-100"><X className="h-4 w-4" /></button>
+            </SchedulingAlert>
           </div>
         ))}
       </div>
