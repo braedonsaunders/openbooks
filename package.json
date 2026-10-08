@@ -48,6 +48,7 @@
     "node": "24.x"
   },
   "scripts": {
+    "icons:generate": "node scripts/generate-pwa-icons.mjs",
     "worker": "tsx --conditions=react-server --tsconfig web/tsconfig.json scripts/worker-entry.mts",
     "lint": "node scripts/lint.mjs --max-warnings=0",
     "typecheck:e2e": "tsc --project e2e/tsconfig.json",

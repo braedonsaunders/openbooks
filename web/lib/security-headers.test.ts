@@ -18,7 +18,13 @@ const proxyKey = Symbol.for("openbooks.security-headers-proxy-test");
 const proxyState: { nextCalls: Array<{ request?: { headers: Headers } }> } = { nextCalls: [] };
 (globalThis as Record<symbol, unknown>)[proxyKey] = proxyState;
 
-stubModules({ intl: true, navigation: false, authz: false, features: false });
+stubModules({
+  intl: `export async function getTranslations(){return (key)=>key}
+    export async function getMessages(){return {}}
+    export async function getLocale(){return 'en'}
+    export async function getTimeZone(){return 'UTC'}`,
+  navigation: false, authz: false, features: false,
+});
 
 const proxyHooks = registerHooks({
   resolve(specifier, context, nextResolve) {
@@ -164,7 +170,11 @@ test("Next.js applies the static security-header baseline to every route", async
   assert.equal(typeof headers, "function");
   assert.ok(headers);
   const routes = await headers();
-  assert.deepEqual(routes, [{ source: "/(.*)", headers: securityHeaders }]);
+  assert.deepEqual(routes.find((route) => route.source === "/(.*)"), { source: "/(.*)", headers: securityHeaders });
+  const workerHeaders = new Map(routes.find((route) => route.source === "/sw.js")?.headers.map(({ key, value }) => [key, value]));
+  assert.equal(workerHeaders.get("Content-Type"), "application/javascript; charset=utf-8");
+  assert.equal(workerHeaders.get("Cache-Control"), "no-cache, no-store, must-revalidate");
+  assert.equal(workerHeaders.get("Service-Worker-Allowed"), "/");
 
   const values = new Map(securityHeaders.map(({ key, value }) => [key, value]));
   assert.equal(values.get("X-Content-Type-Options"), "nosniff");
