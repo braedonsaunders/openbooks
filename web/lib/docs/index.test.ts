@@ -116,3 +116,15 @@ test('article lookup and adjacent navigation follow visible reading order', () =
   })
   assert.deepEqual(adjacentArticles('not-an-article'), {})
 })
+
+test('sidebar metadata omits article bodies while full-text search retains the complete catalog', () => {
+  const browsing = docNavIndex({ includeText: false })
+  const searching = docNavIndex()
+  assert.deepEqual(browsing.categories, searching.categories)
+  assert.deepEqual(browsing.sections, searching.sections)
+  assert.deepEqual(browsing.articles, searching.articles.map(({ text: _text, ...article }) => article))
+  assert.ok(JSON.stringify(browsing).length < JSON.stringify(searching).length / 5)
+  for (const article of searching.articles) {
+    assert.equal(article.text, getArticle(article.slug)?.body.toLowerCase())
+  }
+})

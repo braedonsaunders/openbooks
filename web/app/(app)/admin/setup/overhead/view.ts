@@ -98,12 +98,13 @@ export async function loadOverhead(
   fromDate.setUTCFullYear(fromDate.getUTCFullYear() - 1)
   const from = fromDate.toISOString().slice(0, 10);
   let refusal: string | null = null;
-  const data = await trueCostData(authz.user.orgId, { from, to: today, label: 'TTM' }, authz.allowedSubsidiaryIds).catch((error: unknown) => {
+  const [data, typesRes, cardRes] = await Promise.all([
+    trueCostData(authz.user.orgId, { from, to: today, label: 'TTM' }, authz.allowedSubsidiaryIds).catch((error: unknown) => {
     if (!(error instanceof OverheadCalculationError)) throw error;
     refusal = error.message;
     return null;
-  });
-  const typesRes = await db.execute<{ id: string; name: string; overhead: { method?: string; ratePercent?: string | number; ratePerHour?: string | number } | null }>(sql`
+  }),
+    db.execute<{ id: string; name: string; overhead: { method?: string; ratePercent?: string | number; ratePerHour?: string | number } | null }>(sql`
     select pt.id, pt.name,
            version.financial_profile->'overhead' as overhead
       from project_types pt
@@ -118,11 +119,12 @@ export async function loadOverhead(
          limit 1
       ) version on true
      where pt.org_id = ${authz.user.orgId} and pt.is_active
-     order by pt.sort_order, pt.name`);
-  const cardRes = await db.execute<{ n: number; from_date: string | null }>(sql`
+     order by pt.sort_order, pt.name`),
+    db.execute<{ n: number; from_date: string | null }>(sql`
     select count(*)::int as n, min(effective_from)::text as from_date
       from overhead_rates where org_id = ${authz.user.orgId}
-       and (effective_to is null or effective_to >= ${today})`)
+       and (effective_to is null or effective_to >= ${today})`),
+  ]);
   const card = cardRes.rows[0] ?? { n: 0, from_date: null }
 
   const methodLabel = (oh: { method?: string; ratePercent?: string | number; ratePerHour?: string | number } | null) => {

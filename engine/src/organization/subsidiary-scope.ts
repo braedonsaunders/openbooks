@@ -152,6 +152,49 @@ export interface LockedScopeRow {
   subsidiaryId: string | null;
 }
 
+export interface LockedEmploymentScope extends LockedScopeRow {
+  subsidiaryId: string;
+  orgId: string;
+  workerPartyId: string;
+  revision: number;
+}
+
+/** Lock employment subjects together in canonical id order. Scope and subject
+ * facts come from the locked row, so a concurrent employer change cannot
+ * separate admission from the identity returned to the caller. */
+export async function lockEmploymentScopeRows(
+  tx: SqlExecutor,
+  orgId: string,
+  ids: readonly string[],
+  scope: ReadonlySet<string> | null,
+  outOfScope: "refuse" | "filter" = "refuse",
+): Promise<readonly LockedEmploymentScope[]> {
+  const ordered = [...new Set(ids.map(id => id.toLowerCase()))].sort();
+  if (!ordered.length) return [];
+  const result = await tx.execute<{
+    id: string; subsidiaryId: string | null; orgId: string; workerPartyId: string; revision: number;
+  }>(sql`
+    select e.id, e.org_id as "orgId", e.worker_party_id as "workerPartyId",
+           e.employer_subsidiary_id as "subsidiaryId", e.revision
+      from worker_employments e
+     where e.org_id = ${orgId}
+       and e.id in (${sql.join(ordered.map(id => sql`${id}::uuid`), sql`, `)})
+     order by e.id
+     for update of e
+  `);
+  const byId = new Map(result.rows.map(row => [row.id, row]));
+  const visible: LockedEmploymentScope[] = [];
+  for (const id of ordered) {
+    const row = byId.get(id);
+    if (!row || !row.subsidiaryId || !subsidiaryScopeAllows(scope, row.subsidiaryId)) {
+      if (outOfScope === "filter") continue;
+      throw new ScopeNotFoundError();
+    }
+    visible.push({ ...row, subsidiaryId: row.subsidiaryId });
+  }
+  return visible;
+}
+
 /** Lock one canonical scope-bearing row and authorize against its value while
  * the same lock is held. Row kinds map to their authoritative entity table;
  * customer and employee entities are represented by party/employment rows.

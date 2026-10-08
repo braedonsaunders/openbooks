@@ -458,7 +458,7 @@ export function categoriesWithArticles(): Array<{
     .filter((group) => group.articles.length > 0)
 }
 
-/** Lightweight nav/search index (no bodies) safe to pass to client components. */
+/** Navigation metadata, with optional article contents for full-text search. */
 export interface DocNavArticle {
   slug: string
   title: string
@@ -467,10 +467,10 @@ export interface DocNavArticle {
   summary: string
   keywords: string[]
   /** Lowercased article body for full-text sidebar search. */
-  text: string
+  text?: string
 }
 
-export function docNavIndex(): {
+export function docNavIndex(options: { includeText?: boolean } = {}): {
   categories: DocCategory[]
   sections: DocSection[]
   articles: DocNavArticle[]
@@ -487,7 +487,7 @@ export function docNavIndex(): {
         ...(a.section ? { section: a.section } : {}),
         summary: a.summary,
         keywords: a.keywords ?? [],
-        text: a.body.toLowerCase(),
+        ...(options.includeText === false ? {} : { text: a.body.toLowerCase() }),
       })),
     ),
   }

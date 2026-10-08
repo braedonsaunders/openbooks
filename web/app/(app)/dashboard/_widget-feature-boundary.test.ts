@@ -15,6 +15,7 @@ Object.assign(globalThis, { __dashboardFeatureBoundary: boundary })
 registerHooks({
   resolve(s, c, next) {
     const wrap = (path: string, source: string) => ({ shortCircuit: true, url: 'data:text/javascript,' + encodeURIComponent(`export * from ${JSON.stringify(root + path)};${source}`) })
+    if (s === 'next-intl/server') return { shortCircuit: true, url: 'data:text/javascript,export async function getLocale(){return "en"}export async function getTranslations(){return key=>key}' }
     if ((s === '@/lib/authz' || s === '../../lib/authz') && c.parentURL?.includes('/web/')) {
       return wrap('web/lib/authz.ts', 'export async function getAuthz(){return globalThis.__dashboardFeatureReader}')
     }

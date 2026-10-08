@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { Dispatch, SetStateAction } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
@@ -36,6 +36,7 @@ export function DocsSidebar({
   articles: DocNavArticle[]
 }) {
   const t = useTranslations('docs')
+  const common = useTranslations('common')
   // Registry metadata resolves through the docs catalog so headings and
   // accessible names follow the viewer locale; the English literals stay on
   // the registry as the authoring fallback.
@@ -79,9 +80,25 @@ export function DocsSidebar({
   }
 
   const needle = q.trim().toLowerCase()
+  const [searchArticles, setSearchArticles] = useState<DocNavArticle[] | null>(null)
+  const [searchError, setSearchError] = useState(false)
+  const [searchAttempt, setSearchAttempt] = useState(0)
+  const needsSearchIndex = Boolean(needle) && searchArticles === null
+  useEffect(() => {
+    if (!needsSearchIndex) return
+    let current = true
+    setSearchError(false)
+    // Article contents live in a versioned lazy chunk, loaded only when the
+    // reader searches. Browsing and article navigation carry metadata alone.
+    import('../../lib/docs').then(
+      (docs) => { if (current) setSearchArticles(docs.docNavIndex().articles) },
+      () => { if (current) setSearchError(true) },
+    )
+    return () => { current = false }
+  }, [needsSearchIndex, searchAttempt])
   const filtered = useMemo(() => {
     if (!needle) return articles
-    return articles.filter((article) => {
+    return (searchArticles ?? articles).filter((article) => {
       const section = article.section ? sectionByKey.get(article.section) : undefined
       const category = categoryByKey.get(article.category)
       const haystack = [article.title, article.summary, article.keywords.join(' '), article.text, section?.title, category?.title]
@@ -90,7 +107,7 @@ export function DocsSidebar({
         .toLowerCase()
       return haystack.includes(needle)
     })
-  }, [articles, categoryByKey, needle, sectionByKey])
+  }, [articles, categoryByKey, needle, searchArticles, sectionByKey])
 
   const visibleSectionKeys = useMemo(() => {
     const keys = new Set<string>()
@@ -195,6 +212,16 @@ export function DocsSidebar({
   }
 
   function renderArticleTree() {
+    if (needsSearchIndex) {
+      return searchError ? (
+        <div role="alert" className="space-y-2 px-1 py-2 text-xs text-slate-500 dark:text-slate-400">
+          <p>{common('feedback.loadFailed')}</p>
+          <button type="button" className="text-teal-700 underline dark:text-teal-300" onClick={() => setSearchAttempt(attempt => attempt + 1)}>
+            {common('actions.retry')}
+          </button>
+        </div>
+      ) : <p role="status" className="px-1 py-2 text-xs text-slate-500 dark:text-slate-400">{common('actions.loading')}</p>
+    }
     if (groups.length === 0) {
       return <p className="px-1 py-2 text-xs text-slate-500 dark:text-slate-400">{t('noResults')}</p>
     }
