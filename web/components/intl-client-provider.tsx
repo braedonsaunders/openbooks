@@ -28,7 +28,7 @@ export function IntlClientProvider({
   url: string
   children: ReactNode
 }) {
-  const messages = typeof window === 'undefined' ? publishedCatalog(version) : use(browserCatalog(url))
+  const messages = typeof window === 'undefined' ? publishedCatalog(locale, version) : use(browserCatalog(url))
   return (
     <NextIntlClientProvider locale={locale} timeZone={timeZone} messages={messages}>
       {children}
@@ -38,11 +38,13 @@ export function IntlClientProvider({
 
 const PUBLISHED_CATALOGS = Symbol.for('openbooks.i18n.client-catalogs')
 
-function publishedCatalog(version: string): Messages {
-  const catalogs = (globalThis as { [PUBLISHED_CATALOGS]?: Map<string, Messages> })[PUBLISHED_CATALOGS]
-  const messages = catalogs?.get(version)
-  if (!messages) throw new Error(`Message catalog ${version} was not published for server rendering`)
-  return messages
+function publishedCatalog(locale: string, version: string): Messages {
+  const catalogs = (globalThis as { [PUBLISHED_CATALOGS]?: Map<string, { version: string; messages: Messages }> })[PUBLISHED_CATALOGS]
+  const published = catalogs?.get(locale)
+  if (!published) throw new Error(`Message catalog ${locale}@${version} was not published for server rendering`)
+  // A catalog edited between the layout and this render publishes a newer
+  // version; the newest is the one the browser will load.
+  return published.messages
 }
 
 const browserCatalogs = new Map<string, Promise<Messages>>()
