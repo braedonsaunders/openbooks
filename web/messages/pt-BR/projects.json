@@ -393,9 +393,7 @@
       "configureProjectTypes": "Configurar tipos de projeto"
     },
     "board": {
-      "aria": "Etapas do pré-faturamento",
-      "showAll": "Mostrar todas as {count}",
-      "closedSummary": "Mostrando os últimos {shown} de {count}. A tabela inclui todos os resultados."
+      "aria": "Etapas do pré-faturamento"
     },
     "stages": {
       "unbilled": "A pré-faturar",
@@ -436,8 +434,7 @@
       "open": "{amount} em aberto"
     },
     "table": {
-      "stageFilter": "Filtrar por etapa",
-      "allOpen": "Todas em aberto",
+      "stageFilter": "Etapa do fluxo de trabalho",
       "emptyTitle": "Nada nesta etapa",
       "emptyDescription": "Escolha outra etapa ou limpe a pesquisa.",
       "worksheet": "Planilha",
@@ -446,7 +443,7 @@
       "stage": "Etapa",
       "amount": "Valor",
       "openBalance": "Saldo em aberto",
-      "scope": "As linhas a pré-faturar são projetos; as demais são planilhas. As contagens e os totais seguem a busca. Todos os abertos exclui Pago e Anulado.",
+      "scope": "A pré-faturar lista projetos; as outras etapas listam planilhas. As contagens e os totais seguem a busca e a etapa selecionada.",
       "total": "Total do trabalho correspondente"
     },
     "billRun": {

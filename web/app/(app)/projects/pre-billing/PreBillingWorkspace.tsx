@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
@@ -45,7 +45,7 @@ import type {
 import { PrebillDrawer } from "./PrebillDrawer";
 import { RecordTabs } from "../../../../components/module-home/record-tabs";
 import {
-  CLOSED_CARD_LIMIT, isClosedStage, parseWorkspaceStage, prebillDisplayAmount, projectWorkspace,
+  prebillDisplayAmount, projectWorkspace,
   type WorkspaceEntry,
 } from "./workspace-model";
 
@@ -109,7 +109,7 @@ export function PreBillingWorkspace({
   const { money } = useMoney();
   const switchView = useSwitchView();
   const view = searchParams.get("view") === "table" ? "table" : "board";
-  const stageFilter = parseWorkspaceStage(searchParams.get("stage"));
+  const requestedStage = searchParams.get("stage");
   const [query, setQuery] = useState("");
   const [billRunOpen, setBillRunOpen] = useState(false);
   const [billRunProject, setBillRunProject] = useState<string | null>(null);
@@ -137,13 +137,34 @@ export function PreBillingWorkspace({
   }
 
   const projection = useMemo(() => projectWorkspace({
-    prebills, unbilled, query, stage: stageFilter, approvalFlowsConfigured, customerPortalEnabled,
-  }), [prebills, unbilled, query, stageFilter, approvalFlowsConfigured, customerPortalEnabled]);
+    prebills, unbilled, query, stage: requestedStage, approvalFlowsConfigured, customerPortalEnabled,
+  }), [prebills, unbilled, query, requestedStage, approvalFlowsConfigured, customerPortalEnabled]);
+
+  useEffect(() => {
+    if (requestedStage === null || requestedStage === projection.activeStage) return;
+    const next = new URL(window.location.href);
+    if (next.searchParams.get("stage") !== requestedStage) return;
+    next.searchParams.set("stage", projection.activeStage);
+    window.history.replaceState(null, "", `${next.pathname}${next.search}${next.hash}`);
+  }, [requestedStage, projection.activeStage]);
 
   function openBillRun(projectId: string | null) {
     setBillRunProject(projectId);
     setBillRunOpen(true);
   }
+
+  const emptyWorkspace = projection.nothingYet ? (
+    <EmptyState
+      icon={<FileText />}
+      title={projects.length === 0 ? t("empty.noProjectsTitle") : t("empty.nothingToBillTitle")}
+      description={projects.length === 0 ? t("empty.noProjectsDescription") : t("empty.nothingToBillDescription")}
+      action={projects.length === 0 && canManage ? (
+        <Button asChild variant="outline">
+          <Link href="/admin/setup/project-types">{t("empty.configureProjectTypes")}</Link>
+        </Button>
+      ) : undefined}
+    />
+  ) : null;
 
   return (
     <div className="min-w-0 max-w-full space-y-4">
@@ -189,45 +210,34 @@ export function PreBillingWorkspace({
 
       <RecordTabs
         label={t("table.stageFilter")}
-        active={stageFilter ?? "all"}
-        onChange={(stage) => navigatePresentation({ stage: stage === "all" ? null : stage })}
-        tabs={[
-          { key: "all", label: t("table.allOpen"), count: projection.openCount },
-          ...projection.stages.map(({ key, count }) => ({ key, label: t(`stages.${key}`), count })),
-        ]}
+        active={projection.activeStage}
+        onChange={(stage) => navigatePresentation({ stage })}
+        tabs={projection.stages.map(({ key, count }) => ({ key, label: t(`stages.${key}`), count }))}
         className="min-w-0 max-w-full border-b border-slate-200 dark:border-slate-800"
       >
         <div className="min-w-0 pt-4">
-          {projection.nothingYet ? (
-            <EmptyState
-              icon={<FileText />}
-              title={projects.length === 0 ? t("empty.noProjectsTitle") : t("empty.nothingToBillTitle")}
-              description={projects.length === 0 ? t("empty.noProjectsDescription") : t("empty.nothingToBillDescription")}
-              action={projects.length === 0 && canManage ? (
-                <Button asChild variant="outline">
-                  <Link href="/admin/setup/project-types">{t("empty.configureProjectTypes")}</Link>
-                </Button>
-              ) : undefined}
-            />
-          ) : view === "board" ? (
-            <div className="grid min-w-0 grid-cols-[repeat(auto-fit,minmax(min(100%,16rem),1fr))] items-start gap-3 pb-2" role="list" aria-label={t("board.aria")}>
-              {projection.lanes.map((lane) => (
-                <BoardLane
-                  key={lane.key}
-                  lane={lane}
-                  money={money}
-                  canManage={canManage}
-                  onOpen={(id) => navigate({ prebill: id })}
-                  onPrebill={(projectId) => openBillRun(projectId)}
-                  onShowAll={() => switchView(() => navigatePresentation({ view: "table", stage: lane.key }))}
-                />
-              ))}
-            </div>
-          ) : (
+          {view === "board" ? (
+            <>
+              {emptyWorkspace}
+              <div className="grid min-w-0 grid-cols-[repeat(auto-fit,minmax(min(100%,16rem),1fr))] items-start gap-3 pb-2" role="list" aria-label={t("board.aria")}>
+                {projection.lanes.map((lane) => (
+                  <BoardLane
+                    key={lane.key}
+                    lane={lane}
+                    money={money}
+                    canManage={canManage}
+                    onOpen={(id) => navigate({ prebill: id })}
+                    onPrebill={(projectId) => openBillRun(projectId)}
+                    active={lane.key === projection.activeStage}
+                  />
+                ))}
+              </div>
+            </>
+          ) : projection.nothingYet ? emptyWorkspace : (
             <PrebillTable
               rows={projection.rows}
               total={projection.total}
-              resetPageKey={`${stageFilter ?? "all"}:${query}`}
+              resetPageKey={`${projection.activeStage}:${query}`}
               onOpen={(id) => navigate({ prebill: id })}
               onPrebill={openBillRun}
               canManage={canManage}
@@ -271,24 +281,26 @@ function BoardLane({
   canManage,
   onOpen,
   onPrebill,
-  onShowAll,
+  active,
 }: {
   lane: ReturnType<typeof projectWorkspace>["lanes"][number];
   money: (value: string) => string;
   canManage: boolean;
   onOpen: (id: string) => void;
   onPrebill: (projectId: string) => void;
-  onShowAll: () => void;
+  active: boolean;
 }) {
   const t = useTranslations("projects.preBilling");
   const { key: column, count, total, rows } = lane;
-  const closed = isClosedStage(column);
-  const shown = closed ? rows.slice(0, CLOSED_CARD_LIMIT) : rows;
   return (
     <section
       role="listitem"
       aria-label={t(`stages.${column}`)}
-      className="flex min-w-0 flex-col rounded-xl border border-slate-200 bg-slate-50/70 dark:border-slate-800 dark:bg-slate-900/40"
+      aria-current={active ? "step" : undefined}
+      className={cn(
+        "flex min-w-0 flex-col rounded-xl border border-slate-200 bg-slate-50/70 dark:border-slate-800 dark:bg-slate-900/40",
+        active && "border-teal-500 ring-1 ring-teal-500 dark:border-teal-400 dark:ring-teal-400",
+      )}
     >
       <header className="flex flex-wrap items-baseline justify-between gap-2 border-b border-slate-200 px-3 py-2.5 dark:border-slate-800">
         <h3 className="flex min-w-0 flex-wrap items-center gap-2 break-words text-sm font-semibold text-slate-900 dark:text-slate-100">
@@ -303,22 +315,10 @@ function BoardLane({
         {count === 0 ? (
           <p className="px-1 py-3 text-xs text-slate-500 dark:text-slate-400">{t(`stageEmpty.${column}`)}</p>
         ) : (
-          shown.map((entry) => entry.kind === "unbilled"
+          rows.map((entry) => entry.kind === "unbilled"
             ? <UnbilledCard key={entry.key} row={entry.source} money={money} canManage={canManage} onPrebill={onPrebill} />
             : <PackageCard key={entry.key} row={entry.source} money={money} onOpen={onOpen} />)
         )}
-        {closed && rows.length > shown.length ? (
-          <>
-            <p className="px-2 text-xs text-slate-500 dark:text-slate-400">{t("board.closedSummary", { shown: shown.length, count })}</p>
-            <button
-              type="button"
-              onClick={onShowAll}
-              className="rounded-lg px-2 py-1.5 text-xs font-medium text-teal-700 hover:bg-white dark:text-teal-300 dark:hover:bg-slate-800"
-            >
-              {t("board.showAll", { count: rows.length })}
-            </button>
-          </>
-        ) : null}
       </div>
     </section>
   );

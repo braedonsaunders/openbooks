@@ -393,9 +393,7 @@
       "configureProjectTypes": "Projekttypen konfigurieren"
     },
     "board": {
-      "aria": "Phasen der Vorabrechnung",
-      "showAll": "Alle {count} anzeigen",
-      "closedSummary": "Die neuesten {shown} von {count} werden angezeigt. Die Tabelle enthält alle Treffer."
+      "aria": "Phasen der Vorabrechnung"
     },
     "stages": {
       "unbilled": "Vorabzurechnen",
@@ -436,8 +434,7 @@
       "open": "{amount} offen"
     },
     "table": {
-      "stageFilter": "Nach Phase filtern",
-      "allOpen": "Alle offenen",
+      "stageFilter": "Workflow-Phase",
       "emptyTitle": "Nichts in dieser Phase",
       "emptyDescription": "Wählen Sie eine andere Phase oder leeren Sie die Suche.",
       "worksheet": "Arbeitsblatt",
@@ -446,7 +443,7 @@
       "stage": "Phase",
       "amount": "Betrag",
       "openBalance": "Offener Betrag",
-      "scope": "Zu fakturierende Zeilen sind Projekte; andere Zeilen sind Arbeitsblätter. Anzahlen und Summen folgen der Suche. Alle offenen schließt Bezahlt und Storniert aus.",
+      "scope": "Zur Vorabrechnung werden Projekte angezeigt, in den anderen Phasen Arbeitsblätter. Anzahlen und Summen folgen der Suche und der ausgewählten Phase.",
       "total": "Summe der passenden Arbeit"
     },
     "billRun": {
