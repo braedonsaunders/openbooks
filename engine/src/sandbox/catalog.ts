@@ -22,9 +22,9 @@ export const SANDBOX_CYCLE_BREAKERS: Record<string, readonly string[]> = {
 };
 
 /**
- * Trigger-enforced ownership references, including deferred foreign keys.
- * They still constrain bulk INSERT order because the
- * BEFORE trigger resolves the referenced row immediately. Keep this map small
+ * Trigger-enforced ownership and generated-child dependencies, including
+ * deferred foreign keys. They still constrain bulk INSERT order because
+ * triggers resolve parents or create child rows immediately. Keep this map small
  * and explicit: inferred references without an enforcing trigger must not
  * reintroduce the deferrable documents↔journal_entries cycle.
  */
@@ -35,6 +35,8 @@ const TRIGGER_INSERT_TABLE_PARENTS: Readonly<Record<string, readonly string[]>> 
   // Assignment ownership is checked before the deferred tenant FKs resolve.
   employment_assignment_versions: ["employment_assignments"],
   employment_changes: ["employment_assignments"],
+  // The component INSERT creates the empty classification that copy replaces.
+  pay_component_earning_classifications: ["pay_components"],
   // Field Ticket ownership and provenance guards read these rows immediately.
   // Deferred FKs cannot admit child-first writes inside the cyclic tail.
   field_tickets: ["documents", "parties", "users"],
