@@ -3231,17 +3231,17 @@
       "hrm-job-families": {
         "title": "岗位族",
         "singularTitle": "岗位族",
-        "description": "组织的工种 — 将级别分组的稳定编码。"
+        "description": "将相关岗位归入职系。"
       },
       "hrm-job-levels": {
         "title": "级别",
         "singularTitle": "级别",
-        "description": "每条阶梯的一级，含排序与等值标准声明。"
+        "description": "定义岗位级别及用于比较的标准。"
       },
       "hrm-pay-bands": {
         "title": "薪酬带宽",
         "singularTitle": "薪酬带宽",
-        "description": "按范围版本化的应付标准：变更一律新增行。"
+        "description": "设置薪酬范围及生效日期。此前的薪酬范围仍可在历史记录中查看。"
       },
       "hrm-competency-frameworks": {
         "title": "能力框架",

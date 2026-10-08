@@ -3231,17 +3231,17 @@
       "hrm-job-families": {
         "title": "Job families",
         "singularTitle": "Job family",
-        "description": "The org's crafts — stable per-org codes grouping job levels into ladders."
+        "description": "Group related job roles into families."
       },
       "hrm-job-levels": {
         "title": "Job levels",
         "singularTitle": "Job level",
-        "description": "One rung per ladder with rank and the declared equal-value criteria."
+        "description": "Define job levels and the criteria used to compare them."
       },
       "hrm-pay-bands": {
         "title": "Pay bands",
         "singularTitle": "Pay band",
-        "description": "Versioned SHOULD-pay rows per scope: a band change is a new row, never an overwrite."
+        "description": "Set pay ranges with effective dates. Previous ranges remain available in history."
       },
       "hrm-competency-frameworks": {
         "title": "Competency frameworks",

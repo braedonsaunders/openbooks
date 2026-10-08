@@ -826,7 +826,7 @@
       },
       "hrm_pay_bands": {
         "label": "Pay bands",
-        "description": "One row per live pay band version: level, scope, currency, basis, and the min/target/max SHOULD-pay figures. Requires the HRM compensation permission."
+        "description": "Review minimum, target and maximum pay by job level, legal entity, currency and effective date."
       },
       "hrm_comp_cycle_lines": {
         "label": "Merit cycle lines",

@@ -3156,17 +3156,17 @@
       "hrm-job-families": {
         "title": "Familias laborales",
         "singularTitle": "Familia laboral",
-        "description": "Los oficios de la organización — códigos estables que agrupan niveles."
+        "description": "Agrupe puestos relacionados en familias profesionales."
       },
       "hrm-job-levels": {
         "title": "Niveles",
         "singularTitle": "Nivel",
-        "description": "Un peldaño por escala con rango y criterios de igual valor declarados."
+        "description": "Defina los niveles de puesto y los criterios para compararlos."
       },
       "hrm-pay-bands": {
         "title": "Bandas",
         "singularTitle": "Banda",
-        "description": "Filas versionadas de salario DEBE por ámbito: los cambios son filas nuevas."
+        "description": "Establezca rangos salariales con fechas de vigencia. Los rangos anteriores permanecen disponibles en el historial."
       },
       "hrm-competency-frameworks": {
         "title": "Marcos de competencias",

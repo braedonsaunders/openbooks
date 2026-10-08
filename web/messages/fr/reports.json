@@ -826,7 +826,7 @@
       },
       "hrm_pay_bands": {
         "label": "Fourchettes",
-        "description": "Une ligne par fourchette active : niveau, périmètre, devise, base et min/cible/max."
+        "description": "Consultez les rémunérations minimale, cible et maximale par niveau de poste, entité juridique, devise et date de prise d’effet."
       },
       "hrm_comp_cycle_lines": {
         "label": "Lignes de mérite",

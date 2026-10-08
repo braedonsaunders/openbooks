@@ -3231,17 +3231,17 @@
       "hrm-job-families": {
         "title": "Famílias de cargos",
         "singularTitle": "Família de cargos",
-        "description": "Os ofícios da organização — códigos estáveis que agrupam níveis."
+        "description": "Agrupe cargos relacionados em famílias de cargos."
       },
       "hrm-job-levels": {
         "title": "Níveis",
         "singularTitle": "Nível",
-        "description": "Um degrau por escala com posto e critérios de igual valor declarados."
+        "description": "Defina os níveis de cargo e os critérios usados para compará-los."
       },
       "hrm-pay-bands": {
         "title": "Faixas",
         "singularTitle": "Faixa",
-        "description": "Linhas versionadas de salário DEVE por escopo: mudanças são linhas novas."
+        "description": "Defina faixas salariais com datas de vigência. As faixas anteriores continuam disponíveis no histórico."
       },
       "hrm-competency-frameworks": {
         "title": "Matrizes de competências",

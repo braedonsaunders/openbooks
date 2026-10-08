@@ -826,7 +826,7 @@
       },
       "hrm_pay_bands": {
         "label": "Faixas",
-        "description": "Uma linha por faixa vigente: nível, escopo, moeda, base e mínimo/meta/máximo."
+        "description": "Consulte a remuneração mínima, alvo e máxima por nível de cargo, entidade legal, moeda e data de vigência."
       },
       "hrm_comp_cycle_lines": {
         "label": "Linhas de mérito",

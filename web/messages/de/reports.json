@@ -826,7 +826,7 @@
       },
       "hrm_pay_bands": {
         "label": "Bänder",
-        "description": "Je eine Zeile pro aktivem Band: Ebene, Geltung, Währung, Basis und Minimum/Ziel/Maximum."
+        "description": "Prüfen Sie Mindest-, Ziel- und Höchstvergütung nach Stellenstufe, Rechtseinheit, Währung und Gültigkeitsdatum."
       },
       "hrm_comp_cycle_lines": {
         "label": "Meritzeilen",
