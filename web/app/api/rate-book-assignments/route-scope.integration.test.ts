@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { registerHooks } from "node:module";
-import { pathToFileURL } from "node:url";
 import test from "node:test";
 
 /**
@@ -12,19 +11,16 @@ import test from "node:test";
  * shared-party policy. Every denial answers the uniform not-found, so
  * probing ids never oracles what another entity holds.
  *
- * The gate's identity half is stubbed (controllable permissions/scope);
- * every scope predicate below it — guardSubsidiaryScope, the project
- * lock, the snapshot — is the real production code.
+ * A fixture principal enters the native request authorization context.
+ * Permission, feature and scope gates, project locks and snapshots use
+ * production code.
  */
-const root = pathToFileURL(process.cwd() + "/").href;
-const fileRoot = root;
 const state = {
   orgId: "",
   actorId: "",
   permissions: new Set<string>(["projects.read", "projects.manage"]),
   allowedSubsidiaryIds: null as ReadonlySet<string> | null,
 };
-Object.assign(globalThis, { __rateBookScopeState: state });
 const virtual = (source: string) => ({
   shortCircuit: true as const,
   url: "data:text/javascript," + encodeURIComponent(source),
@@ -35,18 +31,6 @@ registerHooks({
       return virtual("export function redirect() {}; export function notFound() {}");
     if (specifier === "next/headers")
       return virtual("export function cookies() { throw new Error('no cookies in route test') }");
-    if (specifier.endsWith("/lib/authz"))
-      return virtual(`
-        export async function guardPermission() {
-          const s = globalThis.__rateBookScopeState;
-          return {
-            user: { orgId: s.orgId, id: s.actorId },
-            permissions: new Set(s.permissions),
-            allowedSubsidiaryIds: s.allowedSubsidiaryIds,
-          };
-        }
-        export { can, guardSubsidiaryScope } from '${fileRoot}web/lib/authz.ts';
-      `);
     return next(specifier, context);
   },
 });
@@ -58,6 +42,17 @@ const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(
   "@openbooks/engine/src/testing/fixtures.ts"
 );
 const { GET, POST, PATCH, DELETE } = await import("./route.ts");
+const { withAuthzContext } = await import('../../../lib/authz-context.ts');
+
+function asPrincipal<T>(work: () => T): T {
+  return withAuthzContext({
+    user: { id: state.actorId, orgId: state.orgId, email: 'pricing@example.test', name: 'Pricing administrator',
+      roles: [], envKind: 'production', productionOrgId: state.orgId,
+      homeUserId: state.actorId, homeOrgId: state.orgId, isSuperAdmin: false },
+    permissions: new Set(state.permissions),
+    allowedSubsidiaryIds: state.allowedSubsidiaryIds === null ? null : new Set(state.allowedSubsidiaryIds),
+  }, work);
+}
 
 
 async function fixture() {
@@ -112,21 +107,21 @@ async function fixture() {
 }
 
 const get = (params: string) =>
-  withOrgContext(state.orgId, () => GET(new Request(`http://rates.test/api/rate-book-assignments?${params}`)));
+  withOrgContext(state.orgId, () => asPrincipal(() => GET(new Request(`http://rates.test/api/rate-book-assignments?${params}`))));
 
 const send = (method: (req: Request) => Promise<Response>, body: unknown, id?: string) => {
   const url = new URL("http://rates.test/api/rate-book-assignments");
   if (id) url.searchParams.set("id", id);
   return withOrgContext(
     state.orgId,
-    () =>
+    () => asPrincipal(() =>
       method(
         new Request(url, {
           method: "POST",
           headers: { "content-type": "application/json" },
           body: body ? JSON.stringify(body) : undefined,
         }),
-      ),
+      )),
   );
 };
 
@@ -257,7 +252,7 @@ test("native pricing authors an explicit nondefault card and retains a selected 
       await db.execute(sql`insert into item_rate_lines(id,org_id,version_id,item_id,unit_code,unit_name,base_quantity,cost_rate)
         values(${lineId},${org.orgId},${version},${org.items.service},'hour','Hour','1','33.25')`);
     });
-    const activated = await withOrgContext(org.orgId, () => saveVersion(new Request(
+    const activated = await withOrgContext(org.orgId, () => asPrincipal(() => saveVersion(new Request(
       `http://rates.test/api/labor-rate-cards/${version}`, { method: 'PUT',
         headers: { 'content-type': 'application/json' }, body: JSON.stringify({
           code: 'CONTRACT', name: 'Contract rates', effective_from: '2025-01-01',
@@ -265,7 +260,7 @@ test("native pricing authors an explicit nondefault card and retains a selected 
           scopes: [], lines: [{ id: lineId, itemId: org.items.service, regular: '65', timeTypeRates: {} }],
           adjustments: [], terms: [],
         }),
-      }), { params: Promise.resolve({ id: version }) }));
+      }), { params: Promise.resolve({ id: version }) })));
     assert.equal(activated.status, 200, await activated.clone().text());
     assert.deepEqual((await withOrgContext(org.orgId, () => db.execute(sql`
       select is_default from item_rate_books where org_id=${org.orgId} and id=${card}`))).rows,
