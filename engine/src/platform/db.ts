@@ -392,6 +392,7 @@ const rawBypassConnect = async (long = false): Promise<pg.PoolClient> => {
   const fallbackPool = long ? longPool : basePool;
   const raw = await (pg.Pool.prototype.connect as (...a: unknown[]) => Promise<pg.PoolClient>).call(fallbackPool);
   const client = protectCheckedOutClient(raw, long ? "pg installer bypass long pool" : "pg installer bypass pool");
+  sessionScope.delete(client);
   try {
     await client.query("select set_config('app.bypass_rls', 'on', false), set_config('app.current_org', '', false)");
   } catch (error) {
@@ -419,6 +420,32 @@ async function applyGuc(client: pg.PoolClient, ctx: OrgCtx | undefined): Promise
   );
 }
 
+/**
+ * Session tenant scope this module last applied to each pooled connection.
+ * A pooled query skips the scope round trip when the connection already
+ * carries the scope it needs. Only this module's own pooled-query path
+ * records an entry, and any path that can leave the session in another state
+ * forgets it first: a checkout handed to a caller, the installer bypass
+ * checkout, a failed statement, and a statement that may change session
+ * settings. An absent entry always re-applies the scope, so the cache can only
+ * save a round trip, never widen what a query may see.
+ */
+const sessionScope = new WeakMap<pg.PoolClient, string>();
+const SESSION_STATE_STATEMENT = /set_config|\b(?:reset|discard)\b|(?:^|;)\s*set\s/i;
+
+function scopeKey(ctx: OrgCtx | undefined, isBypass: boolean): string {
+  return isBypass ? "bypass" : `org:${ctx?.bypass ? "" : ctx?.orgId ?? ""}`;
+}
+
+async function ensureSessionScope(client: pg.PoolClient, ctx: OrgCtx | undefined, isBypass: boolean): Promise<void> {
+  const key = scopeKey(ctx, isBypass);
+  if (sessionScope.get(client) === key) return;
+  sessionScope.delete(client);
+  if (isBypass) await client.query("select set_config('app.current_org', '', false)");
+  else await applyGuc(client, ctx);
+  sessionScope.set(client, key);
+}
+
 // Wrap the pool so drizzle's `db.execute` and `db.transaction` transparently
 // carry tenant RLS scope. Each pooled query brackets applyGuc + the query on one
 // dedicated client; each pooled connect (used by drizzle transactions) applies
@@ -432,9 +459,13 @@ const queryWithOrgContext = async (
   const isBypass = ctx?.bypass === true;
   const client = isBypass ? await rawBypassConnect() : await rawConnect();
   try {
-    if (isBypass) await client.query("select set_config('app.current_org', '', false)");
-    else await applyGuc(client, ctx);
+    await ensureSessionScope(client, ctx, isBypass);
+    const statement = typeof text === "string" ? text : text.text;
+    if (SESSION_STATE_STATEMENT.test(statement)) sessionScope.delete(client);
     return await client.query(text, params);
+  } catch (error) {
+    sessionScope.delete(client);
+    throw error;
   } finally {
     client.release();
   }
@@ -457,12 +488,13 @@ const connectWithOrgContext = async (
   // synchronously) escaped with the connection still checked out, leaking it
   // out of the pool for the life of the process.
   try {
-    if (isBypass) await client.query("select set_config('app.current_org', '', false)");
-    else await applyGuc(client, activeOrgCtx());
+    await ensureSessionScope(client, activeOrgCtx(), isBypass);
   } catch (error) {
     client.release(error as Error);
     throw error;
   }
+  // The caller owns this checkout and may change its session state.
+  sessionScope.delete(client);
   if (callback) {
     try {
       callback(undefined, client, client.release.bind(client));

@@ -18,6 +18,8 @@ const EXACT_PUBLIC_PATHS = new Set([
   "/employee-app/icon-512.png",
   "/employee-app/apple-touch-icon.png",
   "/socialmedia.png",
+  // Interface strings only; the sign-in page loads them before a session exists.
+  "/api/i18n/catalog",
 ]);
 
 const PUBLIC_SEGMENT_ROOTS = [

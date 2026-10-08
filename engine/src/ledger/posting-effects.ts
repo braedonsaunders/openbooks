@@ -17,6 +17,8 @@ import {
   recordOutboxAttempt,
   runInSpan,
 } from "../platform/telemetry.ts";
+import { PostingEffectsLeaseFencedError, PostingEffectsReplayError, PostingEffectsTerminalFailureError } from "./posting-effects-errors.ts";
+export { PostingEffectsLeaseFencedError, PostingEffectsReplayError, PostingEffectsTerminalFailureError };
 
 /**
  * Durable posting-effects outbox. The journal commits before these downstream
@@ -129,27 +131,6 @@ export type PostingEffectsRow = {
   attempt_count: number;
   lease_token: string;
 };
-
-export class PostingEffectsTerminalFailureError extends Error {
-  constructor(documentId: string) {
-    super(`posting effects for document ${documentId} require operator remediation`);
-    this.name = "PostingEffectsTerminalFailureError";
-  }
-}
-
-export class PostingEffectsReplayError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = "PostingEffectsReplayError";
-  }
-}
-
-export class PostingEffectsLeaseFencedError extends Error {
-  constructor(id: string) {
-    super(`posting-effects claim ${id} lost its lease and was fenced`);
-    this.name = "PostingEffectsLeaseFencedError";
-  }
-}
 
 type TerminalizedPostingEffectsRow = Omit<PostingEffectsRow, "lease_token"> & {
   lease_token: null;

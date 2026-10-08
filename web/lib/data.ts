@@ -1,4 +1,5 @@
 import "server-only";
+import { cache } from "react";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/platform/db.ts";
 import { PAYROLL_RESTRICTED_PARTY_LABEL, collapseRestrictedPayrollLines } from "./payroll-confidentiality";
@@ -11,7 +12,8 @@ import { subsidiaryVisibleFilter } from "./subsidiaries";
 
 export const runtime = "nodejs";
 
-export async function orgInfo(orgId?: string) {
+// The shell and most pages read the organization header in the same render.
+export const orgInfo = cache(async (orgId?: string) => {
   const activeOrgId = await resolveOrgId(orgId);
   const r = (await db.execute(sql`
     select o.name, o.base_currency,
@@ -21,7 +23,7 @@ export async function orgInfo(orgId?: string) {
      where o.id = ${activeOrgId}
   `));
   return r.rows[0] as { name: string; base_currency: string; book: string } | undefined;
-}
+});
 
 export async function dashboardData(orgId?: string) {
   const activeOrgId = await resolveOrgId(orgId);

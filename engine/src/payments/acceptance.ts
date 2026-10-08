@@ -3,6 +3,8 @@ import { sql } from "drizzle-orm";
 import { db, withBypassContext, withOrg, withOrgContext } from "../platform/db.ts";
 import { businessToday, isIsoCalendarDate } from "../platform/business-date.ts";
 import { add, cmp, fromUnits, mulPercent, roundDiv, toUnits } from "../money/money.ts";
+import { fromMinorUnits, THREE_DECIMAL_CURRENCIES, ZERO_DECIMAL_CURRENCIES } from "./minor-units.ts";
+export { fromMinorUnits, THREE_DECIMAL_CURRENCIES, ZERO_DECIMAL_CURRENCIES };
 import { sealJson, sealSecret, unsealJson, unsealSecret } from "../platform/secrets.ts";
 import { paymentLinkTokenHash } from "./payment-link-seal.ts";
 import { loadPaymentProviderConfig } from "./payment-link-session-expiry.ts";
@@ -304,34 +306,15 @@ export function resolveAdyenRecurringApiBase(configuredApiBase?: string): string
   return `${endpoint.origin}${path}`;
 }
 
-/** Currencies with no minor unit (provider amount = major units as-is). */
-const ZERO_DECIMAL = new Set(["BIF", "CLP", "DJF", "GNF", "JPY", "KMF", "KRW", "MGA", "PYG", "RWF", "UGX", "VND", "VUV", "XAF", "XOF", "XPF"]);
-
 /** Adyen's currency table differs from Stripe/ISO for CLP, CVE, IDR, and ISK. */
 const ADYEN_ZERO_DECIMAL = new Set(["CVE", "DJF", "GNF", "IDR", "JPY", "KMF", "KRW", "PYG", "RWF", "UGX", "VND", "VUV", "XAF", "XOF", "XPF"]);
 const ADYEN_THREE_DECIMAL = new Set(["BHD", "IQD", "JOD", "KWD", "OMR", "TND"]);
-
-/**
- * Authoritative Stripe-scale minor-unit table for every Stripe-money boundary
- * (checkout, webhooks, payout import). This is Stripe's contract only:
- * Chargebee names its own smaller zero-decimal set (JPY, KRW, XAF, XOF —
- * see CHARGEBEE_ZERO_DECIMAL in psp-settlement.ts) and Adyen yet another
- * (ADYEN_ZERO_DECIMAL below, plus ADYEN_THREE_DECIMAL: Adyen explicitly
- * supports three-decimal minor units through its own table), so neither may
- * reuse this list.
- */
-export const ZERO_DECIMAL_CURRENCIES: ReadonlySet<string> = ZERO_DECIMAL;
-/** ISO 4217 three-decimal set: millis scale on Stripe boundaries (Stripe
- * supports them), fail-closed rejection on Chargebee (contract unverified). */
-export const THREE_DECIMAL_CURRENCIES: ReadonlySet<string> = new Set([
-  "BHD", "IQD", "JOD", "KWD", "LYD", "OMR", "TND",
-]);
 
 /** Major-unit money string → provider minor units (exact; rejects sub-minor precision). */
 export function toMinorUnits(amount: string, currency: string): string {
   const units = toUnits(amount); // 1e4 scale
   const code = currency.toUpperCase();
-  if (ZERO_DECIMAL.has(code)) {
+  if (ZERO_DECIMAL_CURRENCIES.has(code)) {
     if (units % 10_000n !== 0n) throw new PaymentAcceptanceError(`${currency} amounts must be whole units`);
     return (units / 10_000n).toString();
   }
@@ -343,22 +326,6 @@ export function toMinorUnits(amount: string, currency: string): string {
   }
   if (units % 100n !== 0n) throw new PaymentAcceptanceError(`amount ${amount} has sub-cent precision`);
   return (units / 100n).toString();
-}
-
-/**
- * Provider minor units → major-unit money string (exact). Single authoritative
- * Stripe-scale conversion: zero-decimal currencies arrive as whole major
- * units, three-decimal currencies (e.g. BHD fils) as millis, two-decimal
- * currencies as cents; money uses 4dp of the major unit (123 cents = 1.2300
- * → 12300 units; 1000 fils = 1.0000 → 10000 units). Shared with
- * psp-settlement.ts so the checkout webhook and the payout importer cannot
- * drift apart.
- */
-export function fromMinorUnits(amount: bigint, currency: string): string {
-  const code = currency.toUpperCase();
-  if (ZERO_DECIMAL.has(code)) return fromUnits(amount * 10_000n);
-  if (THREE_DECIMAL_CURRENCIES.has(code)) return fromUnits(amount * 10n);
-  return fromUnits(amount * 100n);
 }
 
 function adyenMinorUnitDecimals(currency: string): 0 | 2 | 3 {

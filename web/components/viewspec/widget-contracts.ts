@@ -159,7 +159,7 @@ export const WIDGET_CONTRACTS: Readonly<Record<string, WidgetContract>> = {
   'empty-state': { props: ['action', 'actionProps', 'description', 'icon', 'title'] },
   'encumbrance-drawer': { props: ['drawer'] },
   'entitlement-openings-grid': { props: ['canManage', 'initial'] },
-  'entity-list-view': { props: ['drawer', 'emptyAction', 'emptyDescription', 'emptyTitle', 'recordType', 'sp'], open: true },
+  'entity-list-view': { props: ['drawer', 'emptyAction', 'emptyDescription', 'emptyTitle', 'recordType', 'sp'] },
   'entry-cell': { props: ['docId', 'docKind', 'entryId', 'entryNumber'] },
   'equipment-drawer': { props: ['drawer'] },
   'equipment-header-links': { props: ['documentationLabel', 'fixedAssetsLabel', 'showFixedAssetsLinks', 'taxDepreciationLabel'] },

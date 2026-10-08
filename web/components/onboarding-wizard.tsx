@@ -1,85 +1,32 @@
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
-import { canonicalTimeZone, listCanonicalTimeZones } from '@openbooks/engine/src/platform/time-zone.ts'
-import { installablePayrollPacks } from '@openbooks/engine/src/payroll/packs.ts'
-import { canSwitchIndustry } from '@/lib/industries'
-import { INDUSTRIES } from '@/lib/industries'
-import { SetupWizard } from '@/app/(app)/admin/setup/wizard/SetupWizard'
 import type { Authz } from '@/lib/authz'
-import { setupLaunchActions } from '@/lib/setup-launch-actions'
 import { onboardingStatus } from '@/lib/onboarding'
-import { FEATURES, featureEnabled, resolvedFeatureState } from '@/lib/features'
-import { isBookStart, isCloseCadence, isComplexityLevel, isMonthlyActivityLevel, isTaxPosition, isTeamSize } from '@/lib/workspace-profile'
 
 /**
  * First-login wizard overlay. The app layout renders this only for users with
  * setup permission; this component independently checks the durable org state
  * so completion and deferral are authoritative server-side decisions.
+ *
+ * The wizard renders on EVERY page for admins, so it establishes that it is
+ * actually needed before loading anything it would render: the wizard, its
+ * industry and payroll-pack catalogs and the feature state load only for an
+ * organization whose onboarding is still required.
  */
 export async function OnboardingWizard({ authz }: { authz: Authz }) {
-  const orgId = authz.user.orgId
-  // The wizard renders on EVERY page for admins, so establish that it is
-  // actually needed before loading anything it would need to render. Fetching
-  // the industry-switch probe and feature state up front spent that work on
-  // every request of every already-onboarded org.
-  const org = (await db.execute<{ name: string; legal_name: string | null; base_currency: string; country: string; settings: Record<string, unknown> }>(sql`
+  const org = (await db.execute<OnboardingOrg>(sql`
     select name, legal_name, base_currency, country, settings
-      from orgs where id = ${orgId}`))
+      from orgs where id = ${authz.user.orgId}`))
   const row = org.rows[0]
-  const settings = row?.settings ?? {}
-  const storedProfile = settings.workspaceProfile as Record<string, unknown> | undefined
-  if (onboardingStatus(settings) !== 'required') return null
+  if (onboardingStatus(row?.settings ?? {}) !== 'required') return null
+  const { OnboardingSetupWizard } = await import('./onboarding-setup-wizard')
+  return <OnboardingSetupWizard authz={authz} org={row} />
+}
 
-  const [switchable, features] = await Promise.all([
-    canSwitchIndustry(orgId),
-    resolvedFeatureState(orgId),
-  ])
-
-  return (
-    <SetupWizard
-      open
-      launchActions={setupLaunchActions(authz)}
-      suppressOnPaths={['/inbox']}
-      industries={INDUSTRIES}
-      initial={{
-        name: row?.name ?? '',
-        legalName: row?.legal_name ?? '',
-        country: row?.country ?? '',
-        baseCurrency: row?.base_currency ?? '',
-        fiscalYearStartMonth: typeof settings.fiscalYearStartMonth === 'number' ? settings.fiscalYearStartMonth : 1,
-        timeZone: canonicalTimeZone(settings.timeZone) ?? null,
-        industry: (settings.industry as string) ?? null,
-        workspaceProfile: {
-          teamSize: isTeamSize(storedProfile?.teamSize) ? storedProfile.teamSize : 'solo',
-          complexity: isComplexityLevel(storedProfile?.complexity) ? storedProfile.complexity : 'essentials',
-          bookStart: isBookStart(storedProfile?.bookStart) ? storedProfile.bookStart : 'fresh',
-          taxPosition: isTaxPosition(storedProfile?.taxPosition) ? storedProfile.taxPosition : 'unsure',
-          monthlyActivity: isMonthlyActivityLevel(storedProfile?.monthlyActivity) ? storedProfile.monthlyActivity : 'light',
-          closeCadence: isCloseCadence(storedProfile?.closeCadence) ? storedProfile.closeCadence : 'monthly',
-        },
-        features: {
-          inventory: featureEnabled(features, 'inventory'),
-          timeTracking: featureEnabled(features, 'timeTracking'),
-          multiSubsidiary: featureEnabled(features, 'multiSubsidiary'),
-          multiCurrency: featureEnabled(features, 'multiCurrency'),
-          projects: featureEnabled(features, 'projects'),
-          subscriptionBilling: featureEnabled(features, 'subscriptionBilling'),
-          orders: featureEnabled(features, 'orders'),
-          crm: featureEnabled(features, 'crm'),
-          bankFeeds: featureEnabled(features, 'bankFeeds'),
-          onlinePayments: featureEnabled(features, 'onlinePayments'),
-          fixedAssets: featureEnabled(features, 'fixedAssets'),
-          payroll: featureEnabled(features, 'payroll'),
-        },
-        allFeatures: Object.fromEntries(
-          FEATURES.map((feature) => [feature.key, featureEnabled(features, feature.key)]),
-        ),
-      }}
-      canSwitchIndustry={switchable}
-      isRerun={false}
-      suppressOnWizardRoute
-      payrollPacks={installablePayrollPacks()}
-      timeZones={listCanonicalTimeZones()}
-    />
-  )
+export type OnboardingOrg = {
+  name: string
+  legal_name: string | null
+  base_currency: string
+  country: string
+  settings: Record<string, unknown>
 }

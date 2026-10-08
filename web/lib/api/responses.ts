@@ -5,7 +5,7 @@ import { InventoryError } from "@openbooks/engine/src/inventory/contracts.ts";
 import { PaymentError } from "@openbooks/engine/src/payments-core/payment-errors.ts";
 import { PayrollError } from "@openbooks/engine/src/payroll/error.ts";
 import { TemporalError } from "@openbooks/engine/src/hrm/temporal.ts";
-import { PostingEffectsReplayError } from "@openbooks/engine/src/ledger/posting-effects.ts";
+import { PostingEffectsReplayError } from "@openbooks/engine/documents/posting-effects-errors";
 
 /**
  * The one response vocabulary for factory routes (`defineRoute` in
