@@ -74,8 +74,10 @@ export async function openItemSourceQuery(
   // after the date that were open on it. The applied sum reads each leg
   // through its own carrying column (shared engine helper — never a bare
   // sum for both legs, which mixes denominations on cross-currency credits).
+  // Both the result and its nonzero filter consume remaining. Materializing
+  // the scoped rows evaluates the dated application sum once per control line.
   return sql`
-    with oi as (
+    with oi as materialized (
       select jl.id, jl.party_id, jl.entry_id, je.posting_date as tran_date, jl.due_date,
              d.id as doc_id, d.kind as doc_kind, d.document_number as doc_number,
              sub.base_currency as func,
