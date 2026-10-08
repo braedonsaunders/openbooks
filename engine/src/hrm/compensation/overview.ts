@@ -4,7 +4,7 @@ import { orgFeatureEnabled } from '../../organization/org-feature-lock.ts';
 import { CompensationError } from './errors.ts';
 import { businessToday } from '../../platform/business-date.ts';
 import { requireAggregateCompensationRead } from '../authorization.ts';
-import { requireActorId, requireOrgId } from '../recruiting/input.ts';
+import { requireActorId, requireCivilDate, requireOrgId } from '../recruiting/input.ts';
 import type { PayRateBasis } from '../../projects/pay-rate-basis.ts';
 
 export interface CompensationWageSummary {
@@ -14,6 +14,42 @@ export interface CompensationWageSummary {
   missing: number;
   ambiguous: number;
   groups: { currency: string; basis: PayRateBasis; workers: number; average: string; min: string; max: string }[];
+}
+
+export interface CompensationArchitectureSummary {
+  families: number;
+  levels: number;
+  bands: number;
+  bandVersions: number;
+}
+
+/** Architecture totals share one live permission and employer-scope read. */
+export async function compensationArchitectureSummary(query: {
+  orgId: string;
+  actorId: string;
+  asOf: string;
+}): Promise<CompensationArchitectureSummary> {
+  const orgId = requireOrgId(query.orgId);
+  const actorId = requireActorId(query.actorId);
+  const asOf = requireCivilDate(query.asOf, 'asOf');
+  const allowed = await requireAggregateCompensationRead(db, orgId, actorId);
+  if (!await orgFeatureEnabled(orgId, 'hrmCompensation', db)) throw new CompensationError('REFUSED', 'Enable Compensation in Company Settings → Features to read compensation summaries');
+  const result = await db.execute<CompensationArchitectureSummary>(sql`
+    with visible_bands as materialized (
+      select effective_from, effective_to from hrm_pay_bands
+       where org_id = ${orgId}
+         and (${allowed === null} or employer_subsidiary_id is null
+           or employer_subsidiary_id = any(${`{${[...(allowed ?? [])].join(',')}}`}::uuid[]))
+    )
+    select
+      (select count(*)::int from hrm_job_families where org_id = ${orgId} and is_active) as families,
+      (select count(*)::int from hrm_job_levels where org_id = ${orgId} and is_active) as levels,
+      (select count(*)::int from visible_bands where effective_from <= ${asOf}::date
+        and (effective_to is null or effective_to >= ${asOf}::date)) as bands,
+      (select count(*)::int from visible_bands) as "bandVersions"
+  `);
+  if (!result.rows[0]) throw new Error('Compensation architecture totals could not be read');
+  return result.rows[0];
 }
 
 /**

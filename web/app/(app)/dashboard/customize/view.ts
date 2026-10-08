@@ -3,8 +3,7 @@ import 'server-only'
 import { getTranslations } from 'next-intl/server'
 import { frame, grid, page, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
 import { getAuthz } from '../../../../lib/authz'
-import { loadDashboardLayout } from '../_load-layout'
-import { ROLE_TIER_LABEL_KEYS } from '../_role-tier'
+import { getUserRoleTier, ROLE_TIER_LABEL_KEYS } from '../_role-tier'
 
 /**
  * The dashboard customise page, split into a loader and a spec.
@@ -16,10 +15,9 @@ import { ROLE_TIER_LABEL_KEYS } from '../_role-tier'
  * is a decision made somewhere a tenant-authored spec could reach. So none of
  * it travels, and the slot re-derives all of it from the session.
  *
- * The loader resolves only the heading strings. It does read the layout, but
- * for one reason: the role line names the caller's tier, and that comes from
- * the same resolution the slot performs. Reading it twice is the cost of not
- * passing a permission decision through a spec, and it is the right trade.
+ * The heading's role tier derives from the authenticated principal. Layout
+ * and widget authority stay inside the slot, which resolves them once for
+ * its canvas without passing permission decisions through the spec.
  */
 
 export interface CustomizeDashboardData {
@@ -34,7 +32,7 @@ export async function loadCustomizeDashboard(): Promise<CustomizeDashboardData |
   const authz = await getAuthz()
   if (!authz) return null
 
-  const { role } = await loadDashboardLayout(authz)
+  const role = getUserRoleTier(authz)
 
   return {
     backHref: '/dashboard',

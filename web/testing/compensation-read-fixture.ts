@@ -10,10 +10,14 @@ export function installCompensationReadFixture() {
   const fixture = {
     features: {} as Record<string, boolean>, detail: false, baseCurrency: 'USD', gapReads: 0,
     snapshot: null as { snapshot?: unknown; error?: unknown } | null,
+    plans: null as unknown[] | null,
+    planLines: [] as { planId: string; estAnnualCost: string }[],
+    planLineReads: [] as unknown[],
     overview: {
       bands: [] as unknown[], levels: [] as unknown[], families: [] as unknown[], versions: [] as unknown[],
       wages: { asOf: '2026-09-22', workers: 0, covered: 0, missing: 0, ambiguous: 0, groups: [] as unknown[] },
       wageInput: undefined as unknown, error: undefined as unknown,
+      architectureInput: undefined as unknown,
     },
     translate: (namespace: string) => createTranslator({ locale: 'en', messages, namespace }),
   }
@@ -35,12 +39,14 @@ export function installCompensationReadFixture() {
       export async function listJobLevels(){return f.overview.levels}
       export async function compensationSettings(){return {comparisonAttributeKey:'group',gapThresholdPct:'5',responseDays:null,fteRounding:'up_to_whole',burdenRate:null}}`,
     '@openbooks/engine/hrm/compensation': state + `
+      export async function compensationArchitectureSummary(input){f.overview.architectureInput=input;return {families:f.overview.families.length,levels:f.overview.levels.length,bands:f.overview.bands.length,bandVersions:f.overview.versions.length}}
       export async function listJobFamilies(){return f.overview.families}
       export async function listPayBandVersions(){return f.overview.versions}
       export async function compensationWageSummary(input){f.overview.wageInput=input;if(f.overview.error)throw f.overview.error;return f.overview.wages}`,
     '@openbooks/engine/src/hrm/compensation/headcount-plans.ts': state + `
-      export async function listPlans(){return f.detail?[{id:'plan-1',name:'FY27 growth',status:'draft',fiscalPeriodFrom:'2026-01-01',fiscalPeriodTo:'2026-12-31'}]:[]}
-      export async function listPlanLines(){return []}`,
+      export async function listPlans(){return f.plans??(f.detail?[{id:'plan-1',name:'FY27 growth',status:'draft',fiscalPeriodFrom:'2026-01-01',fiscalPeriodTo:'2026-12-31'}]:[])}
+      export async function listPlanLines(input){return f.planLines.filter(line=>line.planId===input.planId)}
+      export async function listPlanLinesForPlans(input){f.planLineReads.push(input);return f.planLines.filter(line=>input.planIds.includes(line.planId))}`,
     '@openbooks/engine/src/hrm/compensation/pay-transparency.ts': state + 'export async function latestGapSnapshot(){f.gapReads++;if(f.snapshot?.error)throw f.snapshot.error;return f.snapshot?.snapshot??null}',
     '@openbooks/engine/organization/currencies': state + 'export async function organizationCurrencyOptions(){return [{value:f.baseCurrency,label:f.baseCurrency,scopeValue:null}]}',
     '../setup/ref-options': 'export async function loadEntityOptions(){return []}',

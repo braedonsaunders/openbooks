@@ -112,13 +112,24 @@ export async function loadPayrollOpeningBalances(
       ? requested
       : currentYear
 
-  const data = await scopedOpeningBalances(authz, year)
+  const [data, saldoRows, accountDeclarations, accounts, banks, tabs, programDeclarations, levies, levyRows] = await Promise.all([
+    scopedOpeningBalances(authz, year),
+    itSurtaxSaldoCarryIns(db, orgId, year),
+    declaredAccountOpeningBaseFields(),
+    listFilingAccounts(orgId, 'US'),
+    // A bank has one lifetime carry-in; its read is independent of tax year.
+    scopedEntitlementOpenings(authz),
+    groupTabs('payroll', '/payroll/opening-balances', { orgId }),
+    declaredProgramBaseFields(),
+    declaredEmployerLevyFields(year),
+    employerLevyOpeningsForYear(orgId, year),
+  ])
   // IT assessed-saldo carry-ins (migration 0393) ride the same grid as two
   // IT-only columns backed by their own table — the generic layer never names
   // it. Rows merge here; the save splits them back out before the generic
   // save, which would refuse the unknown keys.
   const saldoByEmployee = new Map(
-    (await itSurtaxSaldoCarryIns(db, orgId, year)).map((row) => [
+    saldoRows.map((row) => [
       row.employeePartyId,
       row,
     ]),
@@ -132,19 +143,12 @@ export async function loadPayrollOpeningBalances(
       [IT_SALDO_FIELDS[1].key]: saldo.comunaleSaldo,
     }
   }
-  const accountDeclarations = await declaredAccountOpeningBaseFields()
-  const filingAccounts = (await listFilingAccounts(orgId, 'US')).filter(
+  const filingAccounts = accounts.filter(
     (account) =>
       authz.allowedSubsidiaryIds === null ||
       account.subsidiaryId === null ||
       authz.allowedSubsidiaryIds.has(account.subsidiaryId),
   )
-  // Bank carry-ins are NOT year-scoped (a bank has one lifetime balance), so
-  // this load deliberately ignores `year`. See EntitlementOpeningsView.
-  const banks = await scopedEntitlementOpenings(authz)
-  const tabs = await groupTabs('payroll', '/payroll/opening-balances', {
-    orgId,
-  })
   const text = (key: string, fallback: string) =>
     t.has(key as never) ? t(key as never) : fallback
 
@@ -173,7 +177,7 @@ export async function loadPayrollOpeningBalances(
           packs: [...field.packs],
         })),
       ],
-      programs: (await declaredProgramBaseFields()).map((program) => ({
+      programs: programDeclarations.map((program) => ({
         key: program.programKey,
         label: program.label,
         help: program.help,
@@ -222,8 +226,8 @@ export async function loadPayrollOpeningBalances(
     },
     employerLevies: {
       year,
-      levies: await declaredEmployerLevyFields(year),
-      rows: await employerLevyOpeningsForYear(orgId, year),
+      levies,
+      rows: levyRows,
       canManage: can(authz, 'payroll.manage'),
     },
   }

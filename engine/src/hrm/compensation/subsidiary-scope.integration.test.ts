@@ -5,16 +5,19 @@ import { db, withOrgTransaction } from "../../platform/db.ts";
 import { createScratchOrg, createScratchUser, dropScratchOrg } from "../../testing/fixtures.ts";
 import {
   grantPermissions, linkPerson, refusalOf, seedEmployment, seedLevel, seedPayGapWorker,
-  seedPositionedEmployment, seedWage, setCompensationSettings, type Refusal,
+  seedPositionedEmployment, seedWage, setCompensationSettings, setFeatures, type Refusal,
 } from "../../testing/hrm-harness.ts";
 import { NOT_VISIBLE, countRows, refusal, refusesLikeUnknown, scopeMatrix, scopeRow, type ScopeWorld } from "../../testing/hrm-scope-matrix.ts";
 import { HrmAuthorizationError } from "../authorization.ts";
 import {
   CompensationError, approvePlan, approvePlanLine, attachStatementPdf, cancelCycle, closeCycle, closePlan, compaRatioFor,
   computeGapSnapshot, createCycle, createPayBand, createPlan, createPlanLine, fulfilPayInformationRequest, generateStatement,
-  latestGapSnapshot, listPayBands, listPlanLines, listPlans, listStatements, proposeLine, refusePayInformationRequest,
+  latestGapSnapshot, listPayBands, listPlanLines, listPlanLinesForPlans, listPlans, listStatements, proposeLine, refusePayInformationRequest,
   renderStatementPdf, requestPayInformation, submitCycleForApproval, submitPlan,
 } from "./index.ts";
+import { compensationArchitectureSummary } from './overview.ts';
+import { listPayBandVersions } from './bands.ts';
+import { listJobFamilies, listJobLevels } from './architecture.ts';
 
 /**
  * Compensation under a legal-entity lens. Salary-bearing reads and writes
@@ -206,6 +209,7 @@ scopeMatrix([
   scopeRow({
     name: "band reads show a scoped reader its own entity's bands and the shared org-wide bands",
     permissions: RM,
+    features: ['hrmCompensation'],
     seed: async (w) => {
       const levelId = await seedLevel(w.orgId, w.admin);
       const band = async (sub: string | null, min: string) => (await payBand(w, w.admin, levelId, sub, { min })).id;
@@ -215,6 +219,26 @@ scopeMatrix([
       const ids = async (actorId: string) => (await listPayBands({ orgId: w.orgId, actorId, asOf: AS_OF })).map((band) => band.id).sort();
       assert.deepEqual(await ids(w.admin), [a, b, shared].sort(), "the unrestricted reader sees every band");
       assert.deepEqual(await ids(w.scoped), [a, shared].sort(), "B's band and its figures never reach an A-scoped reader");
+      for (const actorId of [w.admin, w.scoped]) {
+        const query = { orgId: w.orgId, actorId };
+        const [families, levels, bands, versions] = await Promise.all([
+          listJobFamilies(query), listJobLevels(query), listPayBands({ ...query, asOf: AS_OF }), listPayBandVersions(query),
+        ]);
+        assert.deepEqual(await compensationArchitectureSummary({ ...query, asOf: AS_OF }), {
+          families: families.length, levels: levels.length, bands: bands.length, bandVersions: versions.length,
+        }, 'architecture counts preserve the native active and employer-scope population');
+        assert.equal((await compensationArchitectureSummary({ ...query, asOf: '2019-12-31' })).bands, 0,
+          'future bands contribute to version history but not current totals');
+      }
+      await lens(w.orgId, w.scoped, { mode: 'list', subsidiaryIds: [] });
+      assert.equal((await compensationArchitectureSummary({ orgId: w.orgId, actorId: w.scoped, asOf: AS_OF })).bands, 1,
+        'an empty lens still sees shared architecture but no employer-anchored band');
+      await inOtherOrg([READ], async (_, outsider) => {
+        await assert.rejects(compensationArchitectureSummary({ orgId: w.orgId, actorId: outsider, asOf: AS_OF }), /hrm\.compensation\.read/);
+      });
+      await setFeatures(w.orgId, { hrmCompensation: false });
+      await assert.rejects(compensationArchitectureSummary({ orgId: w.orgId, actorId: w.admin, asOf: AS_OF }), /Enable Compensation/,
+        'a later read rechecks the organization feature instead of reusing an earlier admission');
     },
   }),
   scopeRow({
@@ -310,6 +334,23 @@ scopeMatrix([
       const B = `${lineB.id} ${w.subB} 50000.0000 band_target`;
       const cases = [["unrestricted HR", w.admin, [A, B]], ["A reader", w.readerA, [A]], ["B reader", w.readerB, [B]], ["subtree rooted at A", w.subtree, [A, B]], ["empty lens", w.none, []]] as const;
       for (const [who, actorId, expected] of cases) assert.deepEqual(await view(actorId), [...expected].sort(), `${who} sees exactly the lines inside their lens`);
+      const second = await newPlan(w, 'Second register plan');
+      const secondA = await createPlanLine({
+        orgId: w.orgId, actorId: w.admin, planId: second.id, kind: 'create', title: 'Second A',
+        employerSubsidiaryId: w.subA, jobLevelId: lineA.jobLevelId, plannedFte: '1',
+        startOn: '2026-03-01', currency: 'CAD', reason: 'growth',
+      });
+      for (const [who, actorId, expected] of cases) {
+        const batch = await listPlanLinesForPlans({ orgId: w.orgId, actorId, planIds: [plan.id, second.id, plan.id, randomUUID()] });
+        assert.deepEqual(batch.filter((row) => row.planId === plan.id).map((row) => `${row.id} ${row.employerSubsidiaryId} ${row.estAnnualCost} ${(row.costBasis as { basis?: string }).basis}`).sort(),
+          [...expected].sort(), `${who}: the batch preserves the single-plan salary population`);
+        assert.deepEqual(batch.filter((row) => row.planId === second.id).map((row) => row.id),
+          actorId === w.readerB || actorId === w.none ? [] : [secondA.id], `${who}: each plan keeps its own visible lines`);
+      }
+      await lens(w.orgId, w.readerA, { mode: 'list', subsidiaryIds: [] });
+      assert.deepEqual(await listPlanLinesForPlans({ orgId: w.orgId, actorId: w.readerA, planIds: [plan.id, second.id] }), [],
+        'a later batch resolves the changed legal-entity scope afresh');
+      await lens(w.orgId, w.readerA, { mode: 'list', subsidiaryIds: [w.subA] });
       const forged = await listPlanLines({
         orgId: w.orgId, actorId: w.readerA, planId: plan.id, ...({ allowedSubsidiaryIds: [w.subB] } as Record<string, unknown>),
       } as { orgId: string; actorId: string; planId: string });
