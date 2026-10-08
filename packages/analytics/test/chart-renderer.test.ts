@@ -31,14 +31,14 @@ test('native renderer draws every dashboard series with markers, calendar and da
   }
 })
 
-test('full renderer preserves other series and later timeline or responsive option changes on the same chart', async () => {
+test('full renderer preserves other series and timeline or responsive branches after a native chart', async () => {
   const option = { animation: false, series: [{ type: 'pie', data: [{ value: 4 }] }] }
   const renderer = await loadChartRenderer(option)
-  const chart = renderer.init(null, undefined, { renderer: 'svg', ssr: true, width: 400, height: 240 })
+  let chart = renderer.init(null, undefined, { renderer: 'svg', ssr: true, width: 400, height: 240 })
   try {
     chart.setOption(option)
-    // The full module registers against the same core as an existing canvas.
-    // A later edit must load its additional series before setting its option.
+    // Processor registration is captured at initialization. A bundle change
+    // must recreate the instance after loading the additional series.
     for (const next of [
       { animation: false, series: [{ type: 'gauge', data: [{ value: 42 }] }] },
       { baseOption: { animation: false, timeline: { data: ['First'], autoPlay: false }, series: [] },
@@ -47,6 +47,8 @@ test('full renderer preserves other series and later timeline or responsive opti
     ]) {
       const full = await loadChartRenderer(next)
       assert.ok('registerMap' in full, 'every non-native branch selects the complete renderer')
+      chart.dispose()
+      chart = full.init(null, undefined, { renderer: 'svg', ssr: true, width: 400, height: 240 })
       chart.setOption(next, { notMerge: true })
       assert.match(chart.renderToSVGString(), /<svg/)
     }
