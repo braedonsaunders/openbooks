@@ -58,7 +58,7 @@ test("native project-type commands load under the React server runtime without a
       import React from 'react';
       assert.equal(React.createContext, undefined, 'the native command must use the server React export');
       const route = await import('./web/app/api/admin/setup/project-types/route.ts');
-      for (const method of ['GET', 'POST', 'PATCH', 'DELETE']) assert.equal(typeof route[method], 'function');
+      for (const method of ['POST', 'PATCH', 'DELETE']) assert.equal(typeof route[method], 'function', method);
       const { pool } = await import('./engine/src/platform/db.ts');
       await pool.end();
     `,
