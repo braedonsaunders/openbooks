@@ -79,11 +79,11 @@ export function eligibleWipSourcesSql(
          and ${effectiveInvoicing("recognition")} = 'as_invoiced'
          and coalesce(${effectiveInvoicing("revenueAccount")}, 'item_income') <> 'unbilled_receivable'`;
   const reserved = asOf === null
-    ? sql`exists(select 1 from wip_prebill_lines reserved
-                      join wip_prebills worksheet on worksheet.org_id=reserved.org_id and worksheet.id=reserved.prebill_id
+    ? sql`exists(select 1 from prebill_lines reserved
+                      join prebills worksheet on worksheet.org_id=reserved.org_id and worksheet.id=reserved.prebill_id
                      where reserved.org_id=${orgId} and reserved.source_type=source.source_type
                        and coalesce(reserved.time_entry_id,reserved.document_line_id)=source.source_id
-                       and worksheet.status in ('draft','review','approved'))`
+                       and worksheet.status in ('draft','review','approved','customer_review'))`
     : sql`false`;
   const availableValue = asOf === null
     ? sql`case when source.held or source.reserved then 0 else source.source_value end`
@@ -98,9 +98,9 @@ export function eligibleWipSourcesSql(
     ? sql`case when source.profile#>>'{totalPrice,method}' = 'not_to_exceed' then greatest(
                coalesce(source.contract_value,0)
                - ${invoicedToDate}
-               - coalesce((select sum(worksheet.proposed_bill_amount) from wip_prebills worksheet
+               - coalesce((select sum(worksheet.proposed_bill_amount) from prebills worksheet
                             where worksheet.org_id=${orgId} and worksheet.project_id=source.project_id
-                              and worksheet.status in ('draft','review','approved')),0),
+                              and worksheet.status in ('draft','review','approved','customer_review')),0),
                0
              ) else null end`
     : sql`case when (source.profile#>>'{totalPrice,method}' = 'not_to_exceed' or source.invoicing_not_to_exceed)
@@ -173,7 +173,7 @@ export function eligibleWipSourcesSql(
              case when source.profile#>>'{billableValue,timeRate}' = 'cost_times_markup'
                   then round(source.direct_cost * (1 + coalesce(nullif(source.project_markup, 0), nullif(source.profile#>>'{totalPrice,defaultMarkupPercent}', '')::numeric, 0) / 100), 4)
                   else source.native_bill end as source_value,
-             exists(select 1 from wip_holds hold where hold.org_id=${orgId}
+             exists(select 1 from prebill_holds hold where hold.org_id=${orgId}
                       and hold.source_type=source.source_type and hold.source_id=source.source_id
                       and hold.released_at is null) as held,
              ${reserved} as reserved

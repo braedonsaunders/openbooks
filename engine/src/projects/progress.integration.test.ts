@@ -9,13 +9,16 @@ import { ProjectProgressError, listProgress, recordProgress, reverseProgress } f
 import { recordForecast } from "./forecasts.ts";
 import { projectEarnedValue } from "./earned-value.ts";
 import { syncProjectRevenueContracts } from "./revenue.ts";
+import { createInternalBillingRuleVersion } from "../internal-billing/rules.ts";
+import { postInternalBilling, saveInternalBillingDraft, voidInternalBilling } from "../internal-billing/documents.ts";
 
 const enabled = { skip: !process.env.OPENBOOKS_DB_URL };
 
 async function setup(org: ScratchOrg, features: Record<string, boolean> = { projects: true, projectProgress: true, revenueRecognition: true }) {
   await db.execute(sql`update orgs set settings = settings || ${JSON.stringify({
     features,
-    controlAccounts: { unbilledReceivable: org.accounts.ar, projectRevenue: org.accounts.revenue },
+    controlAccounts: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank,
+      unbilledReceivable: org.accounts.ar, projectRevenue: org.accounts.revenue },
   })}::jsonb where id = ${org.orgId}`);
   const actor = (await seedFlowActors(org.orgId)).adminId;
   const projectId = randomUUID(), typeId = randomUUID(), conduit = randomUUID(), cleanup = randomUUID();
@@ -167,6 +170,61 @@ test("accepted forecast suggestions are recomputed by the server and the latest 
     assert.equal(earlier!.tasks.find((row) => row.taskId === conduit)!.estimateToComplete, "50.0000");
     await assert.rejects(db.execute(sql`update project_forecasts set cost_to_complete = 0 where id = ${remaining.id}`),
       (error: unknown) => errorChainMatches(error, /./));
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("earned value refuses approved labor whose cost rate is missing", enabled, async () => {
+  const org = await createScratchOrg();
+  try {
+    const { projectId, conduit } = await setup(org);
+    const employee = randomUUID();
+    await db.execute(sql`insert into parties(id,org_id,kind,display_name,subsidiary_id,is_active)
+      values(${employee},${org.orgId},'employee','Crew Hand',${org.subsidiaryId},true)`);
+    await db.execute(sql`insert into time_entries(org_id,employee_party_id,project_id,project_task_id,worked_on,hours,cost_rate,status)
+      values(${org.orgId},${employee},${projectId},${conduit},${org.date},8,null,'approved')`);
+    await assert.rejects(projectEarnedValue(org.orgId, projectId, org.date, null), (error: unknown) =>
+      error instanceof ProjectProgressError && error.status === 422 && /cost rate/.test(error.message));
+    await db.execute(sql`update time_entries set cost_rate=0 where org_id=${org.orgId} and project_id=${projectId}`);
+    assert.equal((await projectEarnedValue(org.orgId, projectId, org.date, null))!.totals.actualCost, "0.0000",
+      "an explicitly configured zero rate is distinct from a missing rate");
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("earned value includes internal cost transfers, provider recovery and dated reversals exactly once", enabled, async () => {
+  const org = await createScratchOrg();
+  try {
+    const { actor, projectId } = await setup(org, { projects: true, projectProgress: true, internalBilling: true });
+    const provider = randomUUID(), recovery = randomUUID();
+    await db.execute(sql`insert into projects(id,org_id,subsidiary_id,name,status,is_active)
+      values(${provider},${org.orgId},${org.subsidiaryId},'Shop job','active',true)`);
+    await db.execute(sql`insert into accounts(id,org_id,number,name,type)
+      values(${recovery},${org.orgId},'7101','Shop recovery','expense')`);
+    await createInternalBillingRuleVersion({
+      orgId: org.orgId, actorId: actor, allowedSubsidiaryIds: null, reason: "Transfer shop cost",
+      rule: { code: "SHOP", name: "Shop cost", method: "cost_transfer", debitAccountId: org.accounts.cogs,
+        creditAccountId: recovery, effectiveFrom: "2026-01-01" },
+    });
+    const saved = await saveInternalBillingDraft({
+      orgId: org.orgId, actorId: actor, allowedSubsidiaryIds: null,
+      input: { ruleCode: "SHOP", documentDate: org.date, projectId: provider,
+        lines: [{ amount: "300", projectId, isBillable: false }] },
+    });
+    const read = (id: string, date = org.date) => projectEarnedValue(org.orgId, id, date, null);
+    assert.equal((await read(projectId))!.totals.actualCost, "0.0000", "drafts do not enter actuals");
+    await postInternalBilling({ orgId: org.orgId, actorId: actor, allowedSubsidiaryIds: null, id: saved.id });
+    assert.equal((await read(projectId))!.totals.actualCost, "300.0000");
+    assert.equal((await read(projectId))!.totals.unassignedActualCost, "300.0000");
+    assert.equal((await read(provider))!.totals.actualCost, "-300.0000", "the providing job retains its recovery");
+    assert.equal((await read(projectId, "2026-07-14"))!.totals.actualCost, "0.0000", "future costs are excluded");
+    await voidInternalBilling({ orgId: org.orgId, actorId: actor, allowedSubsidiaryIds: null, id: saved.id,
+      reason: "Wrong job", reversalDate: "2026-07-16" });
+    assert.equal((await read(projectId))!.totals.actualCost, "300.0000", "a later void preserves historical cost");
+    assert.equal((await read(projectId, "2026-07-16"))!.totals.actualCost, "0.0000");
+    assert.equal((await read(provider, "2026-07-16"))!.totals.actualCost, "0.0000");
   } finally {
     await dropScratchOrg(org.orgId);
   }

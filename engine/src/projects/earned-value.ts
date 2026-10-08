@@ -2,6 +2,7 @@ import { sql, type SQL } from "drizzle-orm";
 import { db, orgContext, withOrgTransaction, type SqlExecutor } from "../platform/db.ts";
 import { pgTextArrayLiteral } from "../platform/pg-array.ts";
 import { signedDocumentAmount } from "../money/money.ts";
+import { ProjectProgressError } from "./progress.ts";
 import {
   addDecimal,
   BURN_WINDOW_WEEKS,
@@ -27,6 +28,8 @@ import {
  *              expense reports, card charges, checks, project charges)
  *              through their posting date, attributed by
  *              document_lines.project_task_id, in functional currency.
+ *   internal   primary-book cost legs of internal billing, including the
+ *              provider's recovery and dated reversals, at project level.
  *
  * Cost that names no task of the project falls into the project's
  * unassigned bucket. Installed quantities are the net project_progress_entries
@@ -153,12 +156,13 @@ export async function loadEarnedValue(
 
   // Labor: approved hours at their cost rate. A task of another project
   // never attributes cost here; such time reads as unassigned.
-  const labor = (await executor.execute<ActualRow>(sql`
+  const labor = (await executor.execute<ActualRow & { missing_rates: number }>(sql`
     select te.project_id, pt.id as task_id,
            coalesce(sum(round(te.hours * coalesce(te.cost_rate, 0), 4)), 0)::text as cost,
            coalesce(sum(te.hours), 0)::text as hours,
            coalesce(sum(round(te.hours * coalesce(te.cost_rate, 0), 4)) filter (where te.worked_on >= ${windowStart}), 0)::text as trailing_cost,
-           coalesce(sum(te.hours) filter (where te.worked_on >= ${windowStart}), 0)::text as trailing_hours
+           coalesce(sum(te.hours) filter (where te.worked_on >= ${windowStart}), 0)::text as trailing_hours,
+           count(*) filter (where te.cost_rate is null and te.hours <> 0)::int as missing_rates
       from time_entries te
       left join project_tasks pt
         on pt.id = te.project_task_id and pt.org_id = te.org_id and pt.project_id = te.project_id
@@ -166,6 +170,14 @@ export async function loadEarnedValue(
        and te.status = 'approved' and te.worked_on <= ${asOf}::date
      group by te.project_id, pt.id
   `)).rows;
+  if (labor.some((row) => row.missing_rates > 0)) {
+    throw new ProjectProgressError(
+      "Earned value cannot be calculated because approved time entries have no cost rate",
+      422,
+      "invalid",
+      "Review the affected approved time entries and their cost rates",
+    );
+  }
 
   const kinds = sql.join(EARNED_VALUE_COST_DOCUMENT_KINDS.map((kind) => sql`${kind}`), sql`, `);
   const lineAmount = signedDocumentAmount(sql`d.kind`, sql`round(dl.amount * coalesce(d.fx_rate, 1), 4)`);
@@ -188,6 +200,28 @@ export async function loadEarnedValue(
      group by coalesce(dl.project_id, d.project_id), pt.id
   `)).rows;
 
+  // Internal billing has two project sides. Its posted cost legs are the
+  // authority: line/header fallback would lose the provider recovery and
+  // department revenue credits must never become job cost. Include reversal
+  // legs by posting date so historical earned value retains the original cost.
+  const internalCost = (await executor.execute<ActualRow>(sql`
+    select l.project_id, null::uuid as task_id,
+           sum(l.amount)::text as cost, '0'::text as hours,
+           coalesce(sum(l.amount) filter (where e.posting_date >= ${windowStart}), 0)::text as trailing_cost,
+           '0'::text as trailing_hours
+      from journal_lines l
+      join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
+      join documents d on d.id = e.source_document_id and d.org_id = e.org_id
+      join accounts a on a.id = l.account_id and a.org_id = l.org_id
+      join accounting_books b on b.id = e.book_id and b.org_id = e.org_id
+     where l.org_id = ${orgId} and l.project_id = any(${ids})
+       and d.kind = 'internal_billing' and e.status in ('posted', 'reversed')
+       and b.is_primary and b.is_active and b.posts_gl
+       and a.type in ('cogs', 'expense', 'expense_other')
+       and e.posting_date <= ${asOf}::date
+     group by l.project_id
+  `)).rows;
+
   const forecasts = (await executor.execute<{
     task_id: string;
     method: ForecastMethod;
@@ -207,7 +241,7 @@ export async function loadEarnedValue(
   const forecastByTask = new Map(forecasts.map((row) => [row.task_id, row]));
   const actualKey = (projectId: string, taskId: string | null) => `${projectId}:${taskId ?? ""}`;
   const actuals = new Map<string, UnassignedActuals>();
-  for (const row of [...labor, ...nonLabor]) {
+  for (const row of [...labor, ...nonLabor, ...internalCost]) {
     const key = actualKey(row.project_id, row.task_id);
     const prior = actuals.get(key);
     actuals.set(key, prior
