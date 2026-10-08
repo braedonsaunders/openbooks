@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
+import { generateCopySql } from "./clone.ts";
 import { loadCatalog } from "./catalog.ts";
 import { DEFAULT_POLICIES, maskExpr, type MaskTransform } from "./masking.ts";
 
@@ -36,6 +37,7 @@ const SENSITIVE_TYPES: ReadonlySet<string> = new Set([
  * without a named column), plus the table.column pairs below.
  */
 const CONSTRUCTION_COVERED: ReadonlySet<string> = new Set([
+  "schedule_boards.cell_color_rules", // masked copy construction clears all tenant-authored matching values
   "file_blobs.bytes", // not copied at all for masked clones
   "files.storage_kind", // tombstone carrier, never 'db'/'s3'
   "file_versions.storage_kind",
@@ -2115,6 +2117,7 @@ const ALLOW_LISTED_NON_PERSONAL: ReadonlySet<string> = new Set([
   "schedule_boards.name",
   "schedule_boards.publish_policy",
   "schedule_boards.row_kind",
+  "schedule_boards.resource_kind", // constrained native equipment/location enumeration
   "schedule_boards.time_zone",
   "schedule_boards.views",
   "schedule_codes.category",
@@ -2585,6 +2588,23 @@ test("every sensitive column of every cloned table is masked or allow-listed, an
     `${offenders.length} sensitive column(s) copy verbatim into masked sandboxes ` +
       `with neither a masking policy nor an allow-list entry (showing first 20): ${shown.join(", ")}`,
   );
+  // Derive the rule-column projection from the real clone catalog, then
+  // execute its generated masked expression against tenant-authored prose.
+  const catalog = await loadCatalog();
+  const boards = catalog.tables.find(table=>table.name==='schedule_boards');
+  assert.ok(boards);
+  const ruleColumn = boards.columns.find(column=>column.name==='cell_color_rules');
+  assert.ok(ruleColumn);
+  const projection = {...boards,columns:[ruleColumn]};
+  const options = {productionOrgId:'65fa9dc7-228f-4e19-8bf1-17d52efeb78d',sandboxOrgId:'47df30a3-4fd1-4570-bb67-09641053ee3b',
+    seed:'42b3d7dd-9674-4f3c-8d6a-8ba5d2308130',tier:'full' as const,masked:true};
+  const generated = generateCopySql(projection,options,new Set(['schedule_boards']),new Set(),new Map(),null);
+  assert.ok(generated);
+  const expression = generated.split(') select ')[1]?.split(' from "schedule_boards"')[0];
+  assert.equal(expression,"'[]'::jsonb");
+  const ruleReadback = await db.execute<{rules:unknown}>(sql`select ${sql.raw(expression!)} rules
+    from (values ('[{"field":"bookingLabel","match":"contains","value":"Production Person","color":"#123456"}]'::jsonb)) source(cell_color_rules)`);
+  assert.deepEqual(ruleReadback.rows[0]?.rules,[]);
   const stale: string[] = [];
   for (const key of ALLOW_LISTED_NON_PERSONAL) {
     const udtName = live.get(key);
