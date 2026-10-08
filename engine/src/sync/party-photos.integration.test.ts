@@ -3,7 +3,7 @@ import test from 'node:test'
 import { sql } from 'drizzle-orm'
 import { db, onTransactionRollback, withOrg, withOrgTransaction } from '../platform/db.ts'
 import { createScratchOrg, createScratchUser, dropScratchOrg } from '../testing/fixtures.ts'
-import { readPartyPhoto, removePartyPhoto, storePartyPhoto, type ConnectorPhotoSource } from '../organization/party-photos.ts'
+import { PartyPhotoRefusal, readPartyPhoto, removePartyPhoto, storePartyPhoto, type ConnectorPhotoSource } from '../organization/party-photos.ts'
 import { syncSourcePartyPhotos } from './party-photos.ts'
 import { loadEntities } from './migrate.ts'
 import type { MigrationSource } from './source.ts'
@@ -114,8 +114,13 @@ test('photo lookup never matches a display name or another provider and cannot c
     const result = await syncSourcePartyPhotos(adapter(), { ...f, runId: null, execute: true })
     assert.equal(result.unmatched, 1)
     assert.equal(result.attached, 0)
-    await assert.rejects(storePartyPhoto({ ...f, orgId: other.orgId, filename: 'source.png', bytes: PNG }), /connector account|not found/)
-    await assert.rejects(readPartyPhoto({ ...f, orgId: other.orgId }), /not found/)
+    const before = await counts(f.orgId,f.partyId)
+    const deniedAccount = (error: unknown) => error instanceof PartyPhotoRefusal && error.status===403
+      && error.message.includes('does not match this organization’s connector account')
+    await assert.rejects(storePartyPhoto({ ...f, orgId: other.orgId, filename: 'source.png', bytes: PNG }), deniedAccount)
+    await assert.rejects(readPartyPhoto({ ...f, orgId: other.orgId }), deniedAccount)
+    assert.deepEqual(await counts(f.orgId,f.partyId),before)
+    assert.deepEqual(await counts(other.orgId,f.partyId),{ files: 0,audit: 0 })
   } finally { await dropScratchOrg(other.orgId); await dropScratchOrg(f.orgId) }
 })
 
