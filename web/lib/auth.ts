@@ -1,4 +1,5 @@
 import "server-only";
+import { cache } from "react";
 import {
   createHash,
   createHmac,
@@ -1298,9 +1299,27 @@ export interface SessionUser {
   sessionId?: string;
 }
 
+/**
+ * The signed-in session for this request. Layout, page, locale and
+ * authorization resolution all ask during one render; the validation and its
+ * activity stamp run once per session token.
+ */
+export async function currentSession(): Promise<ValidatedSession | null> {
+  const jar = await cookies();
+  return renderSession(jar.get(COOKIE)?.value);
+}
+
+const renderSession = cache(validateSessionToken);
+
 export async function currentUser(): Promise<SessionUser | null> {
   const jar = await cookies();
-  const session = await validateSessionToken(jar.get(COOKIE)?.value);
+  return renderUser(jar.get(COOKIE)?.value, jar.get(ACTIVE_ENV_COOKIE)?.value);
+}
+
+// Keyed by the cookie values, so a request that changes its session or active
+// environment resolves the new identity rather than a remembered one.
+const renderUser = cache(async (sessionToken: string | undefined, envToken: string | undefined): Promise<SessionUser | null> => {
+  const session = await renderSession(sessionToken);
   if (!session) return null;
   // bypass: identity-bootstrap — the session's home identity row can live in a different organization than the active one.
   const home = await withBypassContext(async () => {
@@ -1313,7 +1332,7 @@ export async function currentUser(): Promise<SessionUser | null> {
   if (!home) return null;
 
   const homeUser = { id: home.id, orgId: home.orgId, isSuperAdmin: !!home.isSuperAdmin };
-  const activeOrgId = verifyEnvToken(jar.get(ACTIVE_ENV_COOKIE)?.value);
+  const activeOrgId = verifyEnvToken(envToken);
   const activeEnvironment = (await resolveActiveEnv(homeUser, activeOrgId))
     ?? (await resolveActiveEnv(homeUser, null))!;
   setRequestOrg(activeEnvironment.orgId);
@@ -1344,7 +1363,7 @@ export async function currentUser(): Promise<SessionUser | null> {
     homeOrgId: homeUser.orgId,
     sessionId: session.sessionId,
   };
-}
+});
 
 /** Called only after a fully verified OIDC identity has been resolved. */
 export async function finishOidcLogin(input: {

@@ -1,7 +1,7 @@
 import { Fragment } from 'react'
 import type { WidgetRef } from '@braedonsaunders/appkit-viewspec'
 import { isFieldRef, resolvePath } from '@braedonsaunders/appkit-viewspec'
-import { WIDGET_REGISTRY, UnknownWidgetError } from './widgets'
+import { renderWidget } from './widget-loader'
 
 /**
  * Resolve any field references in a widget's props against the current scope.
@@ -37,15 +37,12 @@ export function WidgetSlot({
     <>
       {widgets.map((ref, index) => {
         if (ref.when && !resolvePath(scope, ref.when.$)) return null
-        const renderer = WIDGET_REGISTRY[ref.widget]
-        if (!renderer)
-          throw new UnknownWidgetError(`unknown widget: ${ref.widget}`)
         // A Fragment, not a wrapper element: the native pages place these
         // widgets as direct children of the slot, and any real element here
         // (even display:contents) is markup the native render does not have.
         return (
           <Fragment key={`${ref.widget}-${index}`}>
-            {renderer(resolveWidgetProps(ref.props, scope), scope)}
+            {renderWidget(ref.widget, resolveWidgetProps(ref.props, scope), scope)}
           </Fragment>
         )
       })}
@@ -65,7 +62,5 @@ export function WidgetBlockView({
   scope: unknown
   searchParams?: Record<string, string | string[] | undefined>
 }) {
-  const renderer = WIDGET_REGISTRY[name]
-  if (!renderer) throw new UnknownWidgetError(`unknown widget: ${name}`)
-  return <>{renderer(resolveWidgetProps(props, scope), scope, searchParams)}</>
+  return <>{renderWidget(name, resolveWidgetProps(props, scope), scope, searchParams)}</>
 }

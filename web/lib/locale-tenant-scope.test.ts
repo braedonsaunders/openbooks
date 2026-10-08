@@ -8,7 +8,7 @@ const state = { orgReads: 0, orgScopes: [] as string[], activeUser: null as { id
 
 const mocks = new Map([
   ['mock:headers', `export async function cookies() { throw new Error('no request context') }`],
-  ['mock:auth', `export const SESSION_COOKIE='session'; export async function validateSessionToken(){return null}; export async function currentUser(){return globalThis[Symbol.for('openbooks.locale-tenant-scope-test')].activeUser}`],
+  ['mock:auth', `export async function currentSession(){return null}; export async function currentUser(){return globalThis[Symbol.for('openbooks.locale-tenant-scope-test')].activeUser}`],
   ['mock:db', `const state=globalThis[Symbol.for('openbooks.locale-tenant-scope-test')]; export async function withBypassContext(work){return work()}; export async function withOrgContext(orgId,work){state.orgScopes.push(orgId);return work()}; export const db={async execute(){state.orgReads++;return{rows:[{user_locale:state.locale,org_default:'fr',time_zone:state.timeZone}]}}}`],
 ])
 

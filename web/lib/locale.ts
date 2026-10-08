@@ -1,9 +1,8 @@
 import "server-only";
 import { cache } from "react";
-import { cookies } from "next/headers";
 import { sql } from "drizzle-orm";
 import { db, withBypassContext, withOrgContext } from "@openbooks/engine/src/platform/db.ts";
-import { currentUser, validateSessionToken, SESSION_COOKIE } from "./auth";
+import { currentSession, currentUser } from "./auth";
 import { DEFAULT_LOCALE, isLocale, type Locale } from "../i18n/config";
 import { canonicalTimeZone } from "@openbooks/engine/src/platform/time-zone.ts";
 
@@ -57,8 +56,7 @@ export const resolveLocale = cache(async (): Promise<Locale> => {
  * for preference UIs that need to distinguish "chose English" from "inherits".
  */
 export const userLocalePreference = cache(async (): Promise<Locale | null> => {
-  const jar = await cookies();
-  const uid = (await validateSessionToken(jar.get(SESSION_COOKIE)?.value))?.userId;
+  const uid = (await currentSession())?.userId;
   if (!uid) return null;
   // bypass: user-keyed-lookup — the signed-in identity's locale preference, keyed by the session's user id alone.
   const r = await withBypassContext(async () => (await db.execute(

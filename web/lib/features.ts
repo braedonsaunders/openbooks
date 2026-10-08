@@ -1,4 +1,5 @@
 import 'server-only'
+import { cache } from 'react'
 import { sql, type SQL } from 'drizzle-orm'
 import { activePostingPrimaryBookId } from '@openbooks/engine/src/platform/accounting-books.ts'
 import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
@@ -12,7 +13,35 @@ export { FEATURES, FEATURE_BY_KEY, featureEnabled, featureRequirements, type Fea
 // switchboard re-exports its key so every importer keeps working.
 export { featureGateLockKey } from '@openbooks/engine/src/organization/org-feature-lock.ts'
 
-export { orgFeatureState, isFeatureEnabled, subsidiaryFeatureEnabled, resolvedFeatureState } from '@openbooks/engine/organization/feature-state'
+import {
+  isFeatureEnabled as readFeatureEnabled,
+  orgFeatureState as readOrgFeatureState,
+  resolvedFeatureState as readResolvedFeatureState,
+} from '@openbooks/engine/organization/feature-state'
+export { subsidiaryFeatureEnabled } from '@openbooks/engine/organization/feature-state'
+
+// A page render asks the same feature questions from its layout, page, gates
+// and helpers. Within one server render each organization's switches are read
+// once; actions, route handlers and calls bound to a transaction executor read
+// live, because React's request cache applies only while rendering.
+const renderFeatureState = cache((orgId: string) => readOrgFeatureState(orgId))
+const renderResolvedFeatureState = cache((orgId: string) => readResolvedFeatureState(orgId))
+const renderFeatureEnabled = cache((orgId: string, key: string) => readFeatureEnabled(orgId, key))
+
+/** Load the org's feature state (raw overrides; combine with featureEnabled). */
+export async function orgFeatureState(orgId: string, executor?: SqlExecutor): Promise<FeatureState> {
+  return executor ? readOrgFeatureState(orgId, executor) : { ...(await renderFeatureState(orgId)) }
+}
+
+/** Feature state with the data-dependent defaults resolved to explicit booleans. */
+export async function resolvedFeatureState(orgId: string, executor?: SqlExecutor): Promise<FeatureState> {
+  return executor ? readResolvedFeatureState(orgId, executor) : { ...(await renderResolvedFeatureState(orgId)) }
+}
+
+/** Is this feature on for the org? Resolves the data-dependent defaults. */
+export async function isFeatureEnabled(orgId: string, key: string, executor?: SqlExecutor): Promise<boolean> {
+  return executor ? readFeatureEnabled(orgId, key, executor) : renderFeatureEnabled(orgId, key)
+}
 
 /** The set of nav module keys hidden by disabled features (for the resolver). */
 export function hiddenNavModules(state: FeatureState): Set<string> {

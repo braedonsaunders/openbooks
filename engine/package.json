@@ -148,6 +148,7 @@
     "./payroll/compensation-patterns": "./src/payroll/compensation-package-pattern.ts",
     "./testing/hrm": "./src/testing/public-hrm.ts",
     "./platform/time-zone": "./src/platform/time-zone.ts",
-    "./payroll/business-calendars": "./src/payroll/business-calendars.ts"
+    "./payroll/business-calendars": "./src/payroll/business-calendars.ts",
+    "./documents/posting-effects-errors": "./src/ledger/posting-effects-errors.ts"
   }
 }

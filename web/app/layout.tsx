@@ -2,13 +2,16 @@ import './globals.css'
 import type { Metadata, Viewport } from 'next'
 import Script from 'next/script'
 import { headers } from 'next/headers'
-import { NextIntlClientProvider } from 'next-intl'
-import { getLocale, getMessages, getTranslations } from 'next-intl/server'
+import { preload } from 'react-dom'
+import { getLocale, getMessages, getTimeZone, getTranslations } from 'next-intl/server'
 import { Toaster } from 'sonner'
 import { AppLinkProvider } from '../components/app-link-provider'
 import { SplashScreen } from '../components/brand-splash'
 import { ConfirmRoot } from '../lib/confirm'
 import { PromptRoot } from '../lib/prompt'
+import { IntlClientProvider } from '../components/intl-client-provider'
+import { clientCatalogUrl, publishClientCatalog } from '../i18n/catalog'
+import type { Locale } from '../i18n/config'
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations('shell')
@@ -62,8 +65,13 @@ const HEAD_INIT = `(function(){try{var t=localStorage.getItem('theme')||'system'
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   // Locale: users.locale ?? orgs.settings.defaultLocale ?? 'en' (i18n/request.ts).
-  const [locale, messages, requestHeaders] = await Promise.all([getLocale(), getMessages(), headers()])
+  const [locale, messages, timeZone, requestHeaders] = await Promise.all([getLocale(), getMessages(), getTimeZone(), headers()])
   const nonce = requestHeaders.get('x-nonce') ?? undefined
+  // The browser loads the catalog as its own cached resource rather than in
+  // this payload; start that request before the scripts that need it.
+  const { version } = publishClientCatalog(messages)
+  const catalogUrl = clientCatalogUrl(locale as Locale, version)
+  preload(catalogUrl, { as: 'fetch', crossOrigin: 'anonymous' })
   return (
     <html lang={locale} className="h-full" data-application-name="openbooks" suppressHydrationWarning>
       <head>
@@ -75,7 +83,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         />
       </head>
       <body className="h-full overflow-hidden bg-slate-50 text-slate-900 antialiased dark:bg-slate-950 dark:text-slate-100">
-        <NextIntlClientProvider locale={locale} messages={messages}>
+        <IntlClientProvider locale={locale} timeZone={timeZone} version={version} url={catalogUrl}>
           <AppLinkProvider>{children}</AppLinkProvider>
           <SplashScreen />
           <Toaster richColors position="top-right" />
@@ -83,7 +91,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           <ConfirmRoot />
           {/* promptDialog()'s host (rename, etc.). */}
           <PromptRoot />
-        </NextIntlClientProvider>
+        </IntlClientProvider>
       </body>
     </html>
   )
