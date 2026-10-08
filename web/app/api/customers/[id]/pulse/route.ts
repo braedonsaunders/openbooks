@@ -27,7 +27,7 @@ export const GET = defineRoute({
   const { id } = params
   if (!isUuid(id)) return notFound("record")
 
-  const data = await loadCustomerPulse(id, authz.user.orgId, authz.allowedSubsidiaryIds, sections)
+  const data = await loadCustomerPulse(id, authz.user.orgId, authz.allowedSubsidiaryIds, sections, {})
   if (!data) return notFound("record")
 
   return NextResponse.json(data)

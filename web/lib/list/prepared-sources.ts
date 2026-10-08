@@ -768,6 +768,15 @@ const SOURCES = {
     },
     basePathField: 'basePath',
   },
+  customer_pulse_history: {
+    route: '/parties',
+    rowsField: 'rows',
+    rowKeyField: 'id',
+    mode: 'server',
+    clientSearch: false,
+    showPerPage: false,
+    paging: { totalField: 'total', pageField: 'page', perPageField: 'perPage', pageParamKey: 'pulseHistoryPage' },
+  },
   parties: {
     clientSearch: false,
     route: '/parties',
