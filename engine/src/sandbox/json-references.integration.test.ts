@@ -2,10 +2,12 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import { db } from "../platform/db.ts";
+import { db, withOrgContext } from "../platform/db.ts";
 import { actorAllowedSubsidiaryIds } from "../organization/actor-subsidiaries.ts";
 import { createScratchOrg, createScratchUser, dropScratchOrgReporting } from "../testing/fixtures.ts";
-import { createSandbox, deleteSandbox, refreshSandbox, resetSandbox } from "./lifecycle.ts";
+import { createSandbox, deleteSandbox, rebaseSandboxControlAccounts, refreshSandbox, resetSandbox } from "./lifecycle.ts";
+import { declaredRemittanceVendorSettingsKeys } from "../payroll/packs.ts";
+import { PAYROLL_ACCOUNT_SETTING_KEYS } from "../payroll/settings-references.ts";
 import { applyChangeSet, approveChangeSet, buildChangeSet, reviewChangeSet } from "./promote.ts";
 
 const enabled = { skip: !process.env.OPENBOOKS_DB_URL };
@@ -32,11 +34,21 @@ async function fixture(run: (org: Awaited<ReturnType<typeof createScratchOrg>>, 
 }
 
 for (const tier of ["full", "masked", "as_of", "dev"] as const) {
-  test(`${tier} sandbox preserves role visibility and rebases entity control accounts through refresh/reset`, enabled, async () => fixture(async (org, _actors, child) => {
+  test(`${tier} sandbox preserves role visibility and rebases entity control accounts through refresh/reset`, enabled, async () => fixture(async (org, actors, child) => {
+    const sourcePayroll = {
+      wageExpenseAccountId: org.accounts.cogs.toUpperCase(), burdenExpenseAccountId: org.accounts.adjustment,
+      netPayAccountId: org.accounts.ap, cppPayableAccountId: org.accounts.withholding,
+      eiPayableAccountId: org.accounts.withholding, taxPayableAccountId: org.accounts.withholding,
+      vacationPayableAccountId: org.accounts.withholding,
+      ...Object.fromEntries(declaredRemittanceVendorSettingsKeys().map(key => [key, org.vendorId.toUpperCase()])),
+      wagesTo: "expense", supplementalTaxMethod: "per_run", countries: ["CA"],
+    };
+    await db.execute(sql`update orgs set settings=jsonb_set(coalesce(settings,'{}'::jsonb),'{payroll}',${JSON.stringify(sourcePayroll)}::jsonb) where id=${org.orgId}`);
     const group = randomUUID();
     await db.execute(sql`insert into account_groups(id,org_id,dimension,key,name) values(${group},${org.orgId},'reconciliation','pinned','Pinned account classification')`);
     await db.execute(sql`insert into account_group_members(org_id,group_id,account_id,dimension) values(${org.orgId},${group},${org.accounts.ar},'reconciliation')`);
-    const sandbox = await createSandbox({ productionOrgId: org.orgId, name: `JSON scope ${tier}`, tier, masked: tier === "masked", asOfPeriodId: tier === "as_of" ? org.periodId : null });
+    const sandbox = await withOrgContext(org.orgId, () => createSandbox({ productionOrgId: org.orgId, name: `JSON scope ${tier}`, tier, masked: tier === "masked", asOfPeriodId: tier === "as_of" ? org.periodId : null,
+      createdBy: actors[0]!, lifecycleAuthority: { actorId: actors[0]! } }));
     const assertReferences = async () => {
       const entities = (await db.execute<{ id: string; parent_id: string | null; control_accounts: Record<string, string> }>(sql`select id,parent_id,control_accounts from subsidiaries where org_id=${sandbox.sandboxOrgId}`)).rows;
       assert.equal(entities.length, 2);
@@ -56,15 +68,47 @@ for (const tier of ["full", "masked", "as_of", "dev"] as const) {
       if (tier === "dev") for (const table of ['journal_entries', 'pay_runs', 'pay_stubs', 'entitlement_ledger']) assert.equal((await db.execute(sql`select 1 from ${sql.identifier(table)} where org_id=${sandbox.sandboxOrgId} limit 1`)).rows.length, 0);
       const evidence = (await db.execute(sql`select id from audit_log where org_id=${sandbox.sandboxOrgId} and changes->>'mode'='sandbox_json_reference_rebase'`)).rows;
       assert.ok(evidence.length >= 3);
+      const payroll = (await db.execute<{ payroll: Record<string, unknown>; seed: string }>(sql`
+        select settings->'payroll' as payroll,sandbox_seed as seed from orgs where id=${sandbox.sandboxOrgId}`)).rows[0]!;
+      for (const key of PAYROLL_ACCOUNT_SETTING_KEYS) {
+        assert.notEqual(payroll.payroll[key], sourcePayroll[key]);
+        assert.equal((await db.execute(sql`select target.id from accounts source join accounts target
+          on target.id=ob_rebase(source.id,${payroll.seed}::uuid) and target.org_id=${sandbox.sandboxOrgId}
+         where source.org_id=${org.orgId} and source.id=${sourcePayroll[key]}::uuid and target.id=${payroll.payroll[key]}::uuid`)).rows.length, 1, key);
+      }
+      for (const key of declaredRemittanceVendorSettingsKeys()) {
+        if (tier === "dev") assert.equal(payroll.payroll[key], null, key);
+        else assert.equal((await db.execute(sql`select target.party_id from vendor_roles source join vendor_roles target
+          on target.party_id=ob_rebase(source.party_id,${payroll.seed}::uuid) and target.org_id=${sandbox.sandboxOrgId}
+         where source.org_id=${org.orgId} and source.party_id=${org.vendorId} and target.party_id=${payroll.payroll[key]}::uuid`)).rows.length, 1, key);
+      }
+      assert.equal(payroll.payroll.wagesTo, "expense");
+      assert.equal(payroll.payroll.supplementalTaxMethod, "per_run");
+      assert.deepEqual(payroll.payroll.countries, ["CA"]);
+      const payrollAudit = (await db.execute<{ after: unknown; actor_id: string }>(sql`select changes->'payrollAfter' as after,actor_id from audit_log
+        where org_id=${sandbox.sandboxOrgId} and changes->>'mode'='sandbox_control_account_rebase' order by at desc,id desc limit 1`)).rows[0];
+      assert.deepEqual(payrollAudit?.after, payroll.payroll);
+      assert.equal(payrollAudit?.actor_id, actors[0]);
+      assert.deepEqual((await db.execute<{ payroll: unknown }>(sql`select settings->'payroll' as payroll from orgs where id=${org.orgId}`)).rows[0]!.payroll, sourcePayroll);
     };
     await assertReferences();
     // Existing sandboxes can still hold the pre-fix production UUIDs. A keep
     // refresh repairs that proven mapping without overwriting the role policy.
     await db.execute(sql`update app_roles set subsidiary_restriction=jsonb_build_object('mode','list','subsidiaryIds',jsonb_build_array(${child}::text)) where org_id=${sandbox.sandboxOrgId} and key='scoped_list'`);
-    await refreshSandbox(sandbox.sandboxId, { keepCustomizations: true });
+    await withOrgContext(org.orgId, () => refreshSandbox(sandbox.sandboxId, { keepCustomizations: true, authority: { actorId: actors[0]! } }));
     await assertReferences();
-    await resetSandbox(sandbox.sandboxId);
+    await withOrgContext(org.orgId, () => resetSandbox(sandbox.sandboxId, { actorId: actors[0]! }));
     await assertReferences();
+    if (tier !== "dev") {
+      const before = (await db.execute(sql`select settings from orgs where id=${sandbox.sandboxOrgId}`)).rows;
+      const auditBefore = (await db.execute(sql`select to_jsonb(a) as row from audit_log a where org_id=${sandbox.sandboxOrgId} order by id`)).rows;
+      const seed = (await db.execute<{ seed: string }>(sql`select sandbox_seed as seed from orgs where id=${sandbox.sandboxOrgId}`)).rows[0]!.seed;
+      await assert.rejects(rebaseSandboxControlAccounts({ productionOrgId: org.orgId, sandboxOrgId: sandbox.sandboxOrgId,
+        seed, productionSettings: { payroll: { ...sourcePayroll, wageExpenseAccountId: randomUUID() } } }),
+        /payroll setting wageExpenseAccountId has no counterpart.*correct the source payroll account or remittance vendor selection, then refresh/);
+      assert.deepEqual((await db.execute(sql`select settings from orgs where id=${sandbox.sandboxOrgId}`)).rows, before);
+      assert.deepEqual((await db.execute(sql`select to_jsonb(a) as row from audit_log a where org_id=${sandbox.sandboxOrgId} order by id`)).rows, auditBefore);
+    }
   }));
 }
 

@@ -8,6 +8,7 @@ import { sql } from 'drizzle-orm'
 import { db, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
 import { lockLedgerSetupFence } from '@openbooks/engine/src/organization/ledger-setup-fence.ts'
 import { payrollSettings, seedPayrollComponents, statutoryHolidayPayEnabled } from "@openbooks/engine/src/payroll/run-setup.ts";
+import { PAYROLL_ACCOUNT_SETTING_KEYS } from "@openbooks/engine/src/payroll/settings-references.ts";
 import { type PayrollSubsidiaryScope } from "@openbooks/engine/src/payroll/scope.ts";
 import {
   declaredRemittanceFrequencySettingsKeys,
@@ -98,15 +99,7 @@ export const dynamic = 'force-dynamic'
 // here: those are pack-declared slots written onto the seeded components
 // (see engine/src/payroll/packs.ts). The old statutory settings keys are
 // still accepted in PUT bodies for back-compat but no UI sends them.
-const ACCOUNT_KEYS = [
-  'wageExpenseAccountId',
-  'burdenExpenseAccountId',
-  'netPayAccountId',
-  'cppPayableAccountId',
-  'eiPayableAccountId',
-  'taxPayableAccountId',
-  'vacationPayableAccountId',
-] as const
+const ACCOUNT_KEYS = PAYROLL_ACCOUNT_SETTING_KEYS
 
 /**
  * `cogs` is allowed for the two WAGE/BURDEN keys and for nothing else.

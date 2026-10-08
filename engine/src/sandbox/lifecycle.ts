@@ -24,6 +24,7 @@ import { enqueueStorageCleanupStandalone } from "../platform/storage-cleanup.ts"
 import { neuterSandbox } from "../organization/sandbox-guard.ts";
 import { lockLedgerSetupFence } from "../organization/ledger-setup-fence.ts";
 import { seedDefaultMaskingPolicies } from "./masking.ts";
+import { PAYROLL_ACCOUNT_SETTING_KEYS, remapPayrollSettingsReferences } from "../payroll/settings-references.ts";
 import { verifyCloneRls } from "./verify-rls.ts";
 import {
   assertProductionSandboxSource,
@@ -289,44 +290,54 @@ export async function rebaseSandboxControlAccounts(args: {
   // a source-scoped caller cannot see the clone's accounts through RLS.
   return withMaintenanceTransaction(null, async () => {
     await lockLedgerSetupFence(db, args.sandboxOrgId, "exclusive");
-    const owned = (await db.execute<{ id: string }>(sql`
-      select id from orgs where id = ${args.sandboxOrgId}
-        and env_kind = 'sandbox' and sandbox_of = ${args.productionOrgId}
-        and sandbox_seed = ${args.seed}::uuid for update`)).rows[0];
+    const owned = (await db.execute<{ id: string; tier: SandboxTier }>(sql`
+      select target.id,control.tier from orgs target
+        join sandboxes control on control.org_id=target.id
+          and control.production_org_id=target.sandbox_of
+       where target.id = ${args.sandboxOrgId}
+        and target.env_kind = 'sandbox' and target.sandbox_of = ${args.productionOrgId}
+        and target.sandbox_seed = ${args.seed}::uuid for update of target`)).rows[0];
     if (!owned) throw new Error("sandbox control-account rebase requires the owning source organization and clone seed");
     // With an in-snapshot settings capture, the production half comes from the
     // caller and only the sandbox half is read; otherwise both halves are read
     // live (the refresh path).
     let productionControls: Record<string, unknown> | null | undefined;
+    let productionPayroll: unknown;
     if (args.productionSettings != null) {
       productionControls = args.productionSettings["controlAccounts"] as
         | Record<string, unknown>
         | null
         | undefined;
+      productionPayroll = args.productionSettings["payroll"];
     } else {
       const prodRow = (
         await db.execute(sql`
-        select production.settings -> 'controlAccounts' as production_controls
+        select production.settings -> 'controlAccounts' as production_controls,
+               production.settings -> 'payroll' as production_payroll
           from orgs production
          where production.id = ${args.productionOrgId}
       `)
-      ).rows[0]?.production_controls as Record<string, unknown> | null | undefined;
+      ).rows[0] as { production_controls: Record<string, unknown> | null; production_payroll: unknown } | undefined;
       if (prodRow === undefined) throw new Error("sandbox control-account rebase target not found");
-      productionControls = prodRow;
+      productionControls = prodRow.production_controls;
+      productionPayroll = prodRow.production_payroll;
     }
     const sandboxRow = (
       await db.execute(sql`
-      select settings -> 'controlAccounts' as sandbox_controls
+      select settings -> 'controlAccounts' as sandbox_controls,
+             settings -> 'payroll' as sandbox_payroll
         from orgs
        where id = ${args.sandboxOrgId}
     `)
-    ).rows[0] as { sandbox_controls: Record<string, unknown> | null } | undefined;
+    ).rows[0] as { sandbox_controls: Record<string, unknown> | null; sandbox_payroll: unknown } | undefined;
     if (!sandboxRow) throw new Error("sandbox control-account rebase target not found");
 
     const sourceControls = productionControls ?? {};
+    const payrollReferences = productionPayroll && typeof productionPayroll === "object" && !Array.isArray(productionPayroll)
+      ? productionPayroll as Record<string, unknown> : {};
     const sourceIds = [
       ...new Set(
-        Object.values(sourceControls).filter(
+        [...Object.values(sourceControls), ...PAYROLL_ACCOUNT_SETTING_KEYS.map(key => payrollReferences[key])].filter(
           (value): value is string =>
             typeof value === "string" && UUID_VALUE.test(value),
         ),
@@ -342,25 +353,35 @@ export async function rebaseSandboxControlAccounts(args: {
             on target.id = ob_rebase(source.id, ${args.seed}::uuid)
            and target.org_id = ${args.sandboxOrgId}
          where source.org_id = ${args.productionOrgId}
-           and source.id = any(${`{${sourceIds.join(",")}}`}::uuid[])
+           and source.id in (${sql.join(sourceIds.map(id => sql`${id}::uuid`), sql`, `)})
       `);
       for (const account of result.rows as Array<{
         source_id: string;
         sandbox_id: string;
       }>) {
-        mapped.set(account.source_id, account.sandbox_id);
+        mapped.set(account.source_id.toLowerCase(), account.sandbox_id);
       }
     }
 
     const rebased = Object.fromEntries(
       Object.entries(sourceControls).flatMap(([key, value]) => {
         if (typeof value !== "string" || !UUID_VALUE.test(value)) return [];
-        const sandboxId = mapped.get(value);
+        const sandboxId = mapped.get(value.toLowerCase());
         return sandboxId ? [[key, sandboxId]] : [];
       }),
     );
     const before = sandboxRow.sandbox_controls ?? {};
-    if (JSON.stringify(before) === JSON.stringify(rebased)) return rebased;
+    const vendors = (await db.execute<{ source_id: string; sandbox_id: string }>(sql`
+      select source.party_id as source_id,target.party_id as sandbox_id
+        from vendor_roles source join vendor_roles target
+          on target.party_id=ob_rebase(source.party_id,${args.seed}::uuid)
+         and target.org_id=${args.sandboxOrgId}
+       where source.org_id=${args.productionOrgId}`)).rows;
+    const rebasedPayroll = remapPayrollSettingsReferences(productionPayroll,
+      { accounts: mapped, vendors: new Map(vendors.map(row => [row.source_id.toLowerCase(), row.sandbox_id])) },
+      owned.tier === "dev");
+    const payrollChanged = JSON.stringify(sandboxRow.sandbox_payroll ?? null) !== JSON.stringify(rebasedPayroll ?? null);
+    if (JSON.stringify(before) === JSON.stringify(rebased) && !payrollChanged) return rebased;
 
     const requestId = randomUUID();
     await db.transaction(async (tx) => {
@@ -371,7 +392,7 @@ export async function rebaseSandboxControlAccounts(args: {
                  '{controlAccounts}',
                  ${JSON.stringify(rebased)}::jsonb,
                  true
-               ),
+               ) - 'payroll' || ${JSON.stringify(rebasedPayroll === undefined ? {} : { payroll: rebasedPayroll })}::jsonb,
                updated_at = now(),
                updated_by = ${args.actorId ?? null}
          where id = ${args.sandboxOrgId}
@@ -390,6 +411,8 @@ export async function rebaseSandboxControlAccounts(args: {
             productionOrgId: args.productionOrgId,
             before,
             after: rebased,
+            payrollBefore: sandboxRow.sandbox_payroll ?? null,
+            payrollAfter: rebasedPayroll ?? null,
           })}::jsonb,
           ${args.actorId ?? null}, ${requestId}
         )
