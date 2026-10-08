@@ -1,7 +1,9 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import Link from 'next/link'
 import { useTranslations } from 'next-intl'
+import { CalendarRange } from 'lucide-react'
 import { emptySchedule, type ScheduleData } from '@braedonsaunders/appkit-scheduling'
 import { ScheduleWorkspace, SchedulingProvider, type ScheduleAdapter } from '@braedonsaunders/appkit-scheduling/react'
 
@@ -21,14 +23,18 @@ export function ScheduleTab({
   projectEnd,
   canManage,
   locale,
+  showBoardLink = true,
 }: {
   projectId: string
   projectStart: string | null
   projectEnd: string | null
   canManage: boolean
   locale?: string
+  /** The project schedule is also a task board in Scheduling; link there unless already inside it. */
+  showBoardLink?: boolean
 }) {
   const t = useTranslations('projects')
+  const tScheduling = useTranslations('scheduling')
   const tCommon = useTranslations('common')
   const [data, setData] = useState<ScheduleData | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -135,6 +141,17 @@ export function ScheduleTab({
 
   return (
     <div className="space-y-3">
+      {showBoardLink ? (
+        <div className="flex justify-end">
+          <Link
+            href={`/scheduling?view=gantt&project=${encodeURIComponent(projectId)}`}
+            className="inline-flex items-center gap-1.5 text-xs font-medium text-teal-700 hover:underline dark:text-teal-300"
+          >
+            <CalendarRange className="h-3.5 w-3.5" />
+            {tScheduling('tasks.openInScheduling')}
+          </Link>
+        </div>
+      ) : null}
       {error ? (
         <p className="rounded-md bg-red-50 px-3 py-2 text-xs text-red-700 dark:bg-red-950/40 dark:text-red-300">
           {error}

@@ -1011,6 +1011,32 @@ export async function buildExport(orgId: string, exportId: string, opts?: { owne
       }
       payload.resourcingAssignments = resourcingAssignments;
 
+      type BookingRow = { id: string; starts_at: string };
+      const scheduleBookings: Record<string, unknown>[] = [];
+      let lastBookingStart: string | null = null;
+      let lastBookingId: string | null = null;
+      for (;;) {
+        const page: (Record<string, unknown> & BookingRow)[] = (await db.execute<Record<string, unknown> & BookingRow>(sql`
+          select id, board_id, worker_party_id, target_kind, customer_party_id, project_id, project_task_id,
+                 location_id, schedule_code_id, department_id, detail, notes, span_mode, time_zone,
+                 starts_on::text as starts_on, ends_on::text as ends_on, starts_at::text as starts_at,
+                 ends_at::text as ends_at, break_minutes, series_id, supersedes_id, status,
+                 published_at::text as published_at, reason, created_at::text as created_at,
+                 updated_at::text as updated_at
+            from schedule_entries
+           where org_id = ${orgId} and worker_party_id = ${partyId}
+             and (${lastBookingStart}::timestamptz is null
+                  or (starts_at, id) > (${lastBookingStart}::timestamptz, ${lastBookingId}::uuid))
+           order by starts_at, id
+           limit 1000
+        `)).rows;
+        scheduleBookings.push(...page);
+        if (page.length < 1000) break;
+        lastBookingStart = page[page.length - 1]!.starts_at;
+        lastBookingId = page[page.length - 1]!.id;
+      }
+      payload.scheduleBookings = scheduleBookings;
+
       type RequestRow = { id: string; first_week: string };
       const resourcingRequests: Record<string, unknown>[] = [];
       let lastRequestWeek: string | null = null;

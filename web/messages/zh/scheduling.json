@@ -1,0 +1,260 @@
+{
+  "title": "排程",
+  "description": "规划谁在何时去往何处——按天安排班组、按小时安排班次，以及项目进度计划——在贴合贵公司工作方式的排程板上完成。",
+  "views": {
+    "grid": "网格",
+    "targets": "按作业",
+    "timeline": "时间轴",
+    "calendar": "月",
+    "gantt": "甘特图",
+    "progress": "进度"
+  },
+  "kinds": {
+    "customer": "客户",
+    "project": "项目",
+    "location": "地点",
+    "code": "排程代码"
+  },
+  "groupBy": {
+    "none": "不分组",
+    "department": "按部门",
+    "trade": "按工种",
+    "jobTitle": "按职位"
+  },
+  "toolbar": {
+    "board": "排程板",
+    "peopleBoards": "人员排程板",
+    "taskBoards": "任务排程板",
+    "views": "视图",
+    "previous": "上一页",
+    "next": "下一页",
+    "today": "今天",
+    "range": "显示天数",
+    "days": "{count} 天",
+    "search": "查找人员或作业",
+    "groupBy": "行分组",
+    "density": "切换紧凑行",
+    "undo": "撤销",
+    "undoWhat": "撤销{what}",
+    "redo": "重做",
+    "settings": "排程板设置",
+    "newBoard": "新建排程板"
+  },
+  "empty": {
+    "title": "设置您的第一个排程板",
+    "description": "排程板是业务中某一部分的排程：按天安排的班组、轮班的团队，或您的项目进度计划。",
+    "create": "创建排程板",
+    "askAdmin": "请管理员在设置中创建排程板。"
+  },
+  "grid": {
+    "label": "排程网格",
+    "people": "{count} 人",
+    "hours": "工时",
+    "onSite": "已安排",
+    "holiday": "节假日",
+    "ungrouped": "未分组",
+    "borrowed": "外借",
+    "fromElsewhere": "从{department}调派至此",
+    "fillHandle": "拖动以重复所选内容",
+    "noPeople": "此排程板范围内没有人员。",
+    "noMatch": "没有与搜索匹配的人员。",
+    "selected": "已选择 {count} 个单元格——输入即可全部安排，按 Delete 清除，按 Ctrl+D 或 Ctrl+R 填充",
+    "hint": "点击单元格并输入代码即可安排。拖过多个单元格可一次安排多个；也可直接从电子表格粘贴。",
+    "readOnly": "您可以查看此排程板。安排人员需要管理排程的权限。",
+    "saving": "正在保存…",
+    "clearSpotlight": "显示所有作业"
+  },
+  "chip": {
+    "unassigned": "无去向",
+    "draft": "尚未发布",
+    "elsewhere": "已在{board}中安排",
+    "leave": "{type}：休假 {hours} 小时"
+  },
+  "picker": {
+    "placeholder": "输入代码、客户、项目或地点",
+    "results": "匹配的去向",
+    "cells": "{count} 个单元格",
+    "detail": "详情：{detail}",
+    "unavailable": "不工作",
+    "searching": "正在搜索…",
+    "none": "没有匹配项。请检查代码，或先添加客户、项目或排程代码。",
+    "hint": "可添加 /detail 或 6-14:30 这样的时间段",
+    "keys": "↑↓ 选择 · Enter 安排 · Esc 取消"
+  },
+  "menu": {
+    "book": "安排…",
+    "details": "编辑详情",
+    "split": "拆分为两个半天",
+    "copy": "复制",
+    "cut": "剪切",
+    "paste": "粘贴",
+    "fillDown": "向下填充",
+    "fillRight": "向右填充",
+    "clear": "清除安排"
+  },
+  "history": {
+    "book": "安排到{target}",
+    "clear": "移除 {count} 项安排",
+    "paste": "粘贴 {count} 个单元格",
+    "fill": "填充",
+    "copy": "复制安排",
+    "move": "移至{name}",
+    "split": "拆分当天",
+    "edit": "编辑安排",
+    "reschedule": "重新排程",
+    "discard": "放弃 {count} 项更改"
+  },
+  "notices": {
+    "someRefused": "{total} 项更改中有 {count} 项未保存：{reason}",
+    "skippedLeave": "已跳过 {count} 个已登记休假的日期。",
+    "skippedLeaveRemedy": "如果该人员需要上班，请通过休假申请修改休假。",
+    "copied": "已复制 {count} 个单元格。",
+    "unknownCodes": "有 {count} 个代码无法识别：{codes}。",
+    "unknownCodesRemedy": "请先将其添加为排程代码、客户或项目，然后重新粘贴。",
+    "published": "已发布 {count} 项更改。",
+    "dismiss": "关闭"
+  },
+  "publish": {
+    "pending": "{people} 人有 {count} 项未发布的更改",
+    "explain": "发布后，相关人员即可看到这些更改。",
+    "action": "发布",
+    "discard": "放弃更改"
+  },
+  "drawer": {
+    "title": "安排",
+    "save": "保存",
+    "remove": "移除安排",
+    "updatedBy": "最后修改人：{name}",
+    "otherBoard": "此安排属于{board}。请打开该排程板进行修改。",
+    "readOnly": "您可以查看此安排。修改需要管理排程的权限。",
+    "draft": "此更改尚未发布。",
+    "where": "去向",
+    "pickTarget": "选择此人的去向",
+    "change": "更改",
+    "task": "任务",
+    "noTask": "整个项目",
+    "detail": "详情",
+    "detailPlaceholder": "区域、单元或指示",
+    "when": "时间",
+    "wholeDay": "全天（{hours}）",
+    "customHours": "设置时间",
+    "starts": "开始",
+    "ends": "结束",
+    "break": "休息（分钟）",
+    "overnight": "次日结束。",
+    "booked": "扣除休息后安排 {hours}。",
+    "repeat": "同时安排在",
+    "notes": "备注",
+    "notesPlaceholder": "班组需要了解的事项"
+  },
+  "targets": {
+    "where": "作业",
+    "count": "{count} 人",
+    "add": "添加作业",
+    "empty": "这些日期内尚无任何安排。",
+    "available": "可安排",
+    "allBooked": "当天所有人都已安排或休假。"
+  },
+  "timeline": {
+    "zoomIn": "放大",
+    "zoomOut": "缩小"
+  },
+  "calendar": {
+    "person": "显示",
+    "everyone": "所有人",
+    "onLeave": "{count} 人休假",
+    "more": "另外 {count} 项"
+  },
+  "tasks": {
+    "searchProjects": "查找项目",
+    "noCustomer": "无客户",
+    "noProjects": "此排程板范围内没有进行中的项目。",
+    "pickProject": "请选择一个项目。",
+    "openInScheduling": "在排程中打开"
+  },
+  "progress": {
+    "task": "任务",
+    "budget": "预算工时",
+    "actual": "实际工时",
+    "complete": "完成率",
+    "completeFor": "{task}的完成百分比",
+    "earned": "挣得工时",
+    "factor": "生产率",
+    "toComplete": "剩余工时",
+    "estimate": "完工时",
+    "variance": "差异",
+    "pending": "+{hours} 待处理",
+    "used": "已使用 {percent}% 的预算工时",
+    "noTasks": "此项目尚无任务。请在甘特图或项目工作分解中添加。",
+    "explain": "挣得工时 = 完成百分比 × 预算工时。生产率 = 挣得工时 ÷ 实际工时：高于 1.00 表示工作进度领先于预算。剩余工时假定保持目前的进度。实际工时统计已审批的时间。"
+  },
+  "newBoard": {
+    "title": "新建排程板",
+    "description": "选择这部分业务的排程方式。所有内容之后都可在排程板设置中调整。",
+    "presets": {
+      "dispatch": {
+        "title": "每日调度",
+        "description": "按天将人员派往客户、现场或作业。可直接输入的两周网格；更改即时生效。"
+      },
+      "shifts": {
+        "title": "班次表",
+        "description": "适用于门店、厨房和前台的按小时短班次。先排好一周，再发布。"
+      },
+      "continuous": {
+        "title": "全天候运营",
+        "description": "跨越午夜的白班和夜班，每次规划四周，适用于工厂和全天候团队。"
+      },
+      "projects": {
+        "title": "项目进度计划",
+        "description": "在甘特图上展示带依赖关系和关键路径的项目任务，以及生产进度。"
+      }
+    },
+    "name": "名称",
+    "namePlaceholder": "现场班组",
+    "code": "代码",
+    "subsidiary": "法律实体",
+    "allSubsidiaries": "所有法律实体",
+    "department": "部门",
+    "allDepartments": "所有部门",
+    "location": "地点",
+    "allLocations": "所有地点",
+    "project": "项目",
+    "allProjects": "所有进行中的项目",
+    "afterwards": "安排工时、发布方式和工时表预填可随时在排程板设置中更改。",
+    "cancel": "取消",
+    "create": "创建排程板"
+  },
+  "errors": {
+    "load": "无法加载排程。",
+    "save": "无法保存更改。",
+    "publish": "无法发布排程板。",
+    "search": "无法完成搜索。"
+  },
+  "prefill": {
+    "fill": "从排程填充",
+    "timesheetHint": "将已发布安排中的工时添加到空白日期。请检查后保存。",
+    "crewHint": "添加当天安排到此项目的人员。请检查工时，然后保存各行。",
+    "ticketHint": "添加工单期间安排到此项目的班组。请检查工时后保存。",
+    "nothing": "所有已排程的日期都已有工时。",
+    "filled": "已从排程填充{count, plural, other { # 天}}。{skipped, plural, =0 {} other {# 天已有工时。}}请检查并保存。",
+    "crewFilled": "已从排程添加{count, plural, other { # 人}}。请检查工时并保存各行。",
+    "crewNothing": "今天安排到此项目的所有人员都已在表中。"
+  },
+  "notify": {
+    "subject": "您的排程已变更——{board}",
+    "intro": "{name}，您好：{count, plural, other {您的排程中有 # 天发生了变更。}}",
+    "booked": "{date}：安排至{target} {hours}",
+    "changed": "{date}：改为{target} {hours}",
+    "removed": "{date}：已从{target}移除",
+    "link": "查看您的排程",
+    "footer": "您收到此邮件，是因为{board}会在人员排程变更时通知相关人员。",
+    "noTransport": "尚未设置邮件，因此仅在 OpenBooks 中通知了相关人员。请在“管理 → 邮件”中设置邮件。"
+  },
+  "mine": {
+    "tab": "排程",
+    "title": "我的排程",
+    "description": "排程人员发布的您的安排地点和时间。",
+    "summary": "{days, plural, other {已安排 # 天}} · {hours}",
+    "empty": "{from} 至 {through} 期间没有为您安排任何内容。"
+  }
+}

@@ -1,0 +1,260 @@
+{
+  "title": "Scheduling",
+  "description": "Plan who goes where and when — crews by the day, shifts by the hour, and project schedules — on boards shaped to how your company works.",
+  "views": {
+    "grid": "Grid",
+    "targets": "By job",
+    "timeline": "Timeline",
+    "calendar": "Month",
+    "gantt": "Gantt",
+    "progress": "Progress"
+  },
+  "kinds": {
+    "customer": "Customer",
+    "project": "Project",
+    "location": "Location",
+    "code": "Schedule code"
+  },
+  "groupBy": {
+    "none": "No grouping",
+    "department": "By department",
+    "trade": "By trade",
+    "jobTitle": "By job title"
+  },
+  "toolbar": {
+    "board": "Board",
+    "peopleBoards": "People boards",
+    "taskBoards": "Task boards",
+    "views": "Views",
+    "previous": "Previous",
+    "next": "Next",
+    "today": "Today",
+    "range": "Days shown",
+    "days": "{count, plural, one {# day} other {# days}}",
+    "search": "Find people or jobs",
+    "groupBy": "Group rows",
+    "density": "Toggle compact rows",
+    "undo": "Undo",
+    "undoWhat": "Undo {what}",
+    "redo": "Redo",
+    "settings": "Board settings",
+    "newBoard": "New board"
+  },
+  "empty": {
+    "title": "Set up your first board",
+    "description": "A board is a schedule for one part of your business: a crew booked by the day, a team on shifts, or your project schedules.",
+    "create": "Create a board",
+    "askAdmin": "Ask an administrator to create a schedule board in Setup."
+  },
+  "grid": {
+    "label": "Schedule grid",
+    "people": "{count, plural, one {# person} other {# people}}",
+    "hours": "Hours",
+    "onSite": "Booked",
+    "holiday": "Holiday",
+    "ungrouped": "Unassigned",
+    "borrowed": "Visiting",
+    "fromElsewhere": "Booked here from {department}",
+    "fillHandle": "Drag to repeat the selection",
+    "noPeople": "No one is in this board's scope.",
+    "noMatch": "No one matches the search.",
+    "selected": "{count} cells selected — type to book them all, Delete to clear, Ctrl+D or Ctrl+R to fill",
+    "hint": "Click a cell and type a code to book. Drag across cells to book many at once; paste straight from a spreadsheet.",
+    "readOnly": "You can view this board. Booking needs permission to manage schedules.",
+    "saving": "Saving…",
+    "clearSpotlight": "Show all jobs"
+  },
+  "chip": {
+    "unassigned": "No target",
+    "draft": "Not yet published",
+    "elsewhere": "Booked on {board}",
+    "leave": "{type}: {hours} hours of leave"
+  },
+  "picker": {
+    "placeholder": "Type a code, customer, project or location",
+    "results": "Matching targets",
+    "cells": "{count} cells",
+    "detail": "Detail: {detail}",
+    "unavailable": "Not working",
+    "searching": "Searching…",
+    "none": "Nothing matches. Check the code or add the customer, project or schedule code first.",
+    "hint": "Add /detail or a time range like 6-14:30",
+    "keys": "↑↓ choose · Enter book · Esc cancel"
+  },
+  "menu": {
+    "book": "Book…",
+    "details": "Edit details",
+    "split": "Split into two half days",
+    "copy": "Copy",
+    "cut": "Cut",
+    "paste": "Paste",
+    "fillDown": "Fill down",
+    "fillRight": "Fill right",
+    "clear": "Clear bookings"
+  },
+  "history": {
+    "book": "booking {target}",
+    "clear": "{count, plural, one {removing a booking} other {removing # bookings}}",
+    "paste": "{count, plural, one {pasting a cell} other {pasting # cells}}",
+    "fill": "filling",
+    "copy": "copying a booking",
+    "move": "moving to {name}",
+    "split": "splitting the day",
+    "edit": "editing a booking",
+    "reschedule": "rescheduling",
+    "discard": "{count, plural, one {discarding a change} other {discarding # changes}}"
+  },
+  "notices": {
+    "someRefused": "{count} of {total} changes were not saved: {reason}",
+    "skippedLeave": "{count, plural, one {Skipped a day with recorded leave.} other {Skipped # days with recorded leave.}}",
+    "skippedLeaveRemedy": "Change the leave through its request if the person is working.",
+    "copied": "{count, plural, one {Copied a cell.} other {Copied # cells.}}",
+    "unknownCodes": "{count, plural, one {This code was not recognized: {codes}.} other {# codes were not recognized: {codes}.}}",
+    "unknownCodesRemedy": "Add them as schedule codes, customers or projects, then paste again.",
+    "published": "{count, plural, one {Published a change.} other {Published # changes.}}",
+    "dismiss": "Dismiss"
+  },
+  "publish": {
+    "pending": "{count, plural, one {# unpublished change} other {# unpublished changes}} for {people, plural, one {# person} other {# people}}",
+    "explain": "People see these once you publish.",
+    "action": "Publish",
+    "discard": "Discard changes"
+  },
+  "drawer": {
+    "title": "Booking",
+    "save": "Save",
+    "remove": "Remove booking",
+    "updatedBy": "Last changed by {name}",
+    "otherBoard": "This booking belongs to {board}. Open that board to change it.",
+    "readOnly": "You can view this booking. Changing it needs permission to manage schedules.",
+    "draft": "This change is not published yet.",
+    "where": "Where",
+    "pickTarget": "Choose where this person goes",
+    "change": "Change",
+    "task": "Task",
+    "noTask": "Whole project",
+    "detail": "Detail",
+    "detailPlaceholder": "Area, unit or instruction",
+    "when": "When",
+    "wholeDay": "Whole day ({hours})",
+    "customHours": "Set hours",
+    "starts": "Starts",
+    "ends": "Ends",
+    "break": "Break (minutes)",
+    "overnight": "Ends the next day.",
+    "booked": "{hours} booked after the break.",
+    "repeat": "Also book on",
+    "notes": "Notes",
+    "notesPlaceholder": "What the crew needs to know"
+  },
+  "targets": {
+    "where": "Job",
+    "count": "{count} people",
+    "add": "Add a job",
+    "empty": "Nothing is booked in these dates yet.",
+    "available": "Free to book",
+    "allBooked": "Everyone is booked or on leave this day."
+  },
+  "timeline": {
+    "zoomIn": "Zoom in",
+    "zoomOut": "Zoom out"
+  },
+  "calendar": {
+    "person": "Show",
+    "everyone": "Everyone",
+    "onLeave": "{count} on leave",
+    "more": "{count} more"
+  },
+  "tasks": {
+    "searchProjects": "Find a project",
+    "noCustomer": "No customer",
+    "noProjects": "No active projects are in this board's scope.",
+    "pickProject": "Choose a project.",
+    "openInScheduling": "Open in Scheduling"
+  },
+  "progress": {
+    "task": "Task",
+    "budget": "Budget hours",
+    "actual": "Actual hours",
+    "complete": "Complete",
+    "completeFor": "Percent complete for {task}",
+    "earned": "Earned hours",
+    "factor": "Productivity",
+    "toComplete": "Hours to complete",
+    "estimate": "At completion",
+    "variance": "Variance",
+    "pending": "+{hours} pending",
+    "used": "{percent}% of budget hours used",
+    "noTasks": "This project has no tasks yet. Add them on the Gantt or the project's work breakdown.",
+    "explain": "Earned hours are percent complete × budget hours. Productivity is earned ÷ actual hours: above 1.00 the work is ahead of budget. Hours to complete assume the pace so far continues. Actual hours count approved time."
+  },
+  "newBoard": {
+    "title": "New board",
+    "description": "Pick the way this part of the business schedules. Everything stays adjustable in the board settings.",
+    "presets": {
+      "dispatch": {
+        "title": "Day dispatch",
+        "description": "Send people to a customer, site or job for the day. A two-week grid you type into; changes go out as you make them."
+      },
+      "shifts": {
+        "title": "Shift roster",
+        "description": "Part-day shifts by the hour, for stores, kitchens and front desks. Build the week, then publish it."
+      },
+      "continuous": {
+        "title": "Round-the-clock operations",
+        "description": "Day and night shifts that cross midnight, planned four weeks at a time for plants and around-the-clock teams."
+      },
+      "projects": {
+        "title": "Project schedule",
+        "description": "Project tasks on a Gantt with dependencies and the critical path, plus production progress."
+      }
+    },
+    "name": "Name",
+    "namePlaceholder": "Field crews",
+    "code": "Code",
+    "subsidiary": "Legal entity",
+    "allSubsidiaries": "All legal entities",
+    "department": "Department",
+    "allDepartments": "Every department",
+    "location": "Location",
+    "allLocations": "Every location",
+    "project": "Project",
+    "allProjects": "Every active project",
+    "afterwards": "Booking hours, publishing and timesheet pre-fill can be changed in the board settings at any time.",
+    "cancel": "Cancel",
+    "create": "Create board"
+  },
+  "errors": {
+    "load": "The schedule could not be loaded.",
+    "save": "The change could not be saved.",
+    "publish": "The board could not be published.",
+    "search": "The search could not be completed."
+  },
+  "prefill": {
+    "fill": "Fill from schedule",
+    "timesheetHint": "Add the hours from your published bookings to empty days. Review them, then save.",
+    "crewHint": "Add the people booked to this project on this day. Review the hours, then save the lines.",
+    "ticketHint": "Add the crew booked to this project in the ticket period. Review the hours, then save.",
+    "nothing": "Every scheduled day already has hours.",
+    "filled": "{count, plural, one {Filled # day from the schedule.} other {Filled # days from the schedule.}} {skipped, plural, =0 {} one {# day already had hours.} other {# days already had hours.}} Review and save.",
+    "crewFilled": "{count, plural, one {Added # person from the schedule.} other {Added # people from the schedule.}} Review the hours and save the lines.",
+    "crewNothing": "Everyone booked to this project today is already on the sheet."
+  },
+  "notify": {
+    "subject": "Your schedule changed — {board}",
+    "intro": "Hi {name}, {count, plural, one {one day on your schedule changed.} other {# days on your schedule changed.}}",
+    "booked": "{date}: booked at {target} {hours}",
+    "changed": "{date}: now {target} {hours}",
+    "removed": "{date}: removed from {target}",
+    "link": "See your schedule",
+    "footer": "You receive this because {board} notifies people when their schedule changes.",
+    "noTransport": "Email is not set up, so people were notified in OpenBooks only. Set up email in Admin → Email."
+  },
+  "mine": {
+    "tab": "Schedule",
+    "title": "My schedule",
+    "description": "Where you are booked and when, as published by your schedulers.",
+    "summary": "{days, plural, one {# day booked} other {# days booked}} · {hours}",
+    "empty": "Nothing is booked for you from {from} to {through}."
+  }
+}

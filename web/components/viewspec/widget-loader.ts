@@ -43,6 +43,7 @@ const FAMILY_LOADERS: Record<WidgetFamily, () => Promise<WidgetFamilyRegistry>> 
   'resourcing-demand': () => import('./widgets-resourcing-demand').then((m) => m.RESOURCING_DEMAND_WIDGETS),
   'resourcing-requests': () => import('./widgets-resourcing-requests').then((m) => m.RESOURCING_REQUEST_WIDGETS),
   'resourcing-retainers': () => import('./widgets-resourcing-retainers').then((m) => m.RESOURCING_RETAINER_WIDGETS),
+  scheduling: () => import('./widgets-scheduling').then((m) => m.SCHEDULING_WIDGETS),
   setup: () => import('./widgets-setup').then((m) => m.SETUP_WIDGETS),
   warehouse: () => import('./widgets-warehouse').then((m) => m.WAREHOUSE_WIDGETS),
 }

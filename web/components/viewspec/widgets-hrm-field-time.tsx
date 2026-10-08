@@ -42,6 +42,7 @@ export const HRM_FIELD_TIME_WIDGETS = {
       equipmentOn={props.equipmentOn === true}
       signatureRequired={props.signatureRequired !== false}
       signLabel={str(props, 'signLabel') ?? ''}
+      scheduledCrew={(props.scheduledCrew as ComponentProps<typeof CrewWorkspace>['scheduledCrew']) ?? []}
     />
   ),
   /** The field-time setup surface: rules, kiosks, approval routing pointer. */

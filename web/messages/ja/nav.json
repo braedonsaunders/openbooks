@@ -154,7 +154,8 @@
     "hrm-performance-templates": "評価フォーム",
     "hrm-benefits-employees": "福利厚生",
     "hrm-benefits-delivery": "給付処理",
-    "hrm-training": "研修"
+    "hrm-training": "研修",
+    "scheduling": "スケジュール管理"
   },
   "groups": {
     "workforce": "従業員体制",
@@ -208,7 +209,8 @@
     "inbox-views": "受信トレイ",
     "me-views": "自分",
     "crm-sales": "営業",
-    "hrm-compensation": "報酬"
+    "hrm-compensation": "報酬",
+    "scheduling": "スケジュール管理"
   },
   "modulesShort": {
     "hrm-performance-cycles": "評価を管理",

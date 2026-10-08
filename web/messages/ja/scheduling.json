@@ -1,0 +1,260 @@
+{
+  "title": "スケジュール管理",
+  "description": "誰がいつどこへ行くかを計画します。日単位のクルー、時間単位のシフト、プロジェクトのスケジュールを、自社の働き方に合わせたボードで管理できます。",
+  "views": {
+    "grid": "グリッド",
+    "targets": "作業先別",
+    "timeline": "タイムライン",
+    "calendar": "月",
+    "gantt": "ガントチャート",
+    "progress": "進捗"
+  },
+  "kinds": {
+    "customer": "顧客",
+    "project": "プロジェクト",
+    "location": "拠点",
+    "code": "スケジュールコード"
+  },
+  "groupBy": {
+    "none": "グループ化なし",
+    "department": "部門別",
+    "trade": "職種別",
+    "jobTitle": "役職別"
+  },
+  "toolbar": {
+    "board": "ボード",
+    "peopleBoards": "人員ボード",
+    "taskBoards": "タスクボード",
+    "views": "ビュー",
+    "previous": "前へ",
+    "next": "次へ",
+    "today": "今日",
+    "range": "表示日数",
+    "days": "{count}日",
+    "search": "人員または作業先を検索",
+    "groupBy": "行をグループ化",
+    "density": "行のコンパクト表示を切り替え",
+    "undo": "元に戻す",
+    "undoWhat": "{what}を元に戻す",
+    "redo": "やり直す",
+    "settings": "ボードの設定",
+    "newBoard": "新しいボード"
+  },
+  "empty": {
+    "title": "最初のボードを設定しましょう",
+    "description": "ボードは、事業の一部門のスケジュールです。日単位で配置するクルー、シフト制のチーム、プロジェクトのスケジュールなどに使えます。",
+    "create": "ボードを作成",
+    "askAdmin": "セットアップでスケジュールボードを作成するよう管理者に依頼してください。"
+  },
+  "grid": {
+    "label": "スケジュールグリッド",
+    "people": "{count}人",
+    "hours": "時間",
+    "onSite": "割り当て済み",
+    "holiday": "祝日",
+    "ungrouped": "未分類",
+    "borrowed": "応援",
+    "fromElsewhere": "{department}からここに割り当て",
+    "fillHandle": "ドラッグして選択範囲を繰り返す",
+    "noPeople": "このボードの対象範囲には誰もいません。",
+    "noMatch": "検索に一致する人員はいません。",
+    "selected": "{count}個のセルを選択中 — 入力するとすべてに割り当て、Delete でクリア、Ctrl+D または Ctrl+R でフィル",
+    "hint": "セルをクリックしてコードを入力すると割り当てられます。複数のセルをドラッグすると一度に割り当てられ、スプレッドシートから直接貼り付けることもできます。",
+    "readOnly": "このボードは閲覧のみ可能です。割り当てにはスケジュール管理の権限が必要です。",
+    "saving": "保存中…",
+    "clearSpotlight": "すべての作業先を表示"
+  },
+  "chip": {
+    "unassigned": "作業先なし",
+    "draft": "未公開",
+    "elsewhere": "{board}で割り当て済み",
+    "leave": "{type}: 休暇{hours}時間"
+  },
+  "picker": {
+    "placeholder": "コード、顧客、プロジェクト、拠点を入力",
+    "results": "一致する作業先",
+    "cells": "{count}個のセル",
+    "detail": "詳細: {detail}",
+    "unavailable": "勤務なし",
+    "searching": "検索中…",
+    "none": "一致するものがありません。コードを確認するか、先に顧客、プロジェクト、スケジュールコードを追加してください。",
+    "hint": "/detail や 6-14:30 のような時間帯を追加できます",
+    "keys": "↑↓ 選択 · Enter 割り当て · Esc キャンセル"
+  },
+  "menu": {
+    "book": "割り当て…",
+    "details": "詳細を編集",
+    "split": "半日2つに分割",
+    "copy": "コピー",
+    "cut": "切り取り",
+    "paste": "貼り付け",
+    "fillDown": "下方向にフィル",
+    "fillRight": "右方向にフィル",
+    "clear": "割り当てをクリア"
+  },
+  "history": {
+    "book": "{target}への割り当て",
+    "clear": "割り当て{count}件の削除",
+    "paste": "セル{count}個の貼り付け",
+    "fill": "フィル",
+    "copy": "割り当てのコピー",
+    "move": "{name}への移動",
+    "split": "日の分割",
+    "edit": "割り当ての編集",
+    "reschedule": "日程変更",
+    "discard": "変更{count}件の破棄"
+  },
+  "notices": {
+    "someRefused": "{total}件中{count}件の変更を保存できませんでした: {reason}",
+    "skippedLeave": "休暇が記録されている{count}日をスキップしました。",
+    "skippedLeaveRemedy": "その人が勤務する場合は、休暇申請から休暇を変更してください。",
+    "copied": "{count}個のセルをコピーしました。",
+    "unknownCodes": "認識できないコードが{count}件あります: {codes}。",
+    "unknownCodesRemedy": "スケジュールコード、顧客、プロジェクトとして追加してから、もう一度貼り付けてください。",
+    "published": "{count}件の変更を公開しました。",
+    "dismiss": "閉じる"
+  },
+  "publish": {
+    "pending": "{people}人分の未公開の変更が{count}件あります",
+    "explain": "公開すると、対象者に表示されます。",
+    "action": "公開",
+    "discard": "変更を破棄"
+  },
+  "drawer": {
+    "title": "割り当て",
+    "save": "保存",
+    "remove": "割り当てを削除",
+    "updatedBy": "最終更新者: {name}",
+    "otherBoard": "この割り当ては{board}に属しています。変更するにはそのボードを開いてください。",
+    "readOnly": "この割り当ては閲覧のみ可能です。変更にはスケジュール管理の権限が必要です。",
+    "draft": "この変更はまだ公開されていません。",
+    "where": "作業先",
+    "pickTarget": "この人の作業先を選択",
+    "change": "変更",
+    "task": "タスク",
+    "noTask": "プロジェクト全体",
+    "detail": "詳細",
+    "detailPlaceholder": "エリア、ユニット、指示",
+    "when": "日時",
+    "wholeDay": "終日 ({hours})",
+    "customHours": "時間を指定",
+    "starts": "開始",
+    "ends": "終了",
+    "break": "休憩 (分)",
+    "overnight": "翌日に終了します。",
+    "booked": "休憩を除いて{hours}を割り当てます。",
+    "repeat": "次の日にも割り当て",
+    "notes": "メモ",
+    "notesPlaceholder": "クルーへの伝達事項"
+  },
+  "targets": {
+    "where": "作業先",
+    "count": "{count}人",
+    "add": "作業先を追加",
+    "empty": "この期間にはまだ何も割り当てられていません。",
+    "available": "割り当て可能",
+    "allBooked": "この日は全員が割り当て済みか休暇中です。"
+  },
+  "timeline": {
+    "zoomIn": "拡大",
+    "zoomOut": "縮小"
+  },
+  "calendar": {
+    "person": "表示",
+    "everyone": "全員",
+    "onLeave": "休暇中 {count}人",
+    "more": "他 {count}件"
+  },
+  "tasks": {
+    "searchProjects": "プロジェクトを検索",
+    "noCustomer": "顧客なし",
+    "noProjects": "このボードの対象範囲に有効なプロジェクトはありません。",
+    "pickProject": "プロジェクトを選択してください。",
+    "openInScheduling": "スケジュール管理で開く"
+  },
+  "progress": {
+    "task": "タスク",
+    "budget": "予算工数",
+    "actual": "実績工数",
+    "complete": "完了率",
+    "completeFor": "{task}の完了率",
+    "earned": "出来高工数",
+    "factor": "生産性",
+    "toComplete": "残工数",
+    "estimate": "完了時見込み",
+    "variance": "差異",
+    "pending": "+{hours} 保留中",
+    "used": "予算工数の{percent}%を使用",
+    "noTasks": "このプロジェクトにはまだタスクがありません。ガントチャートまたはプロジェクトの作業分解で追加してください。",
+    "explain": "出来高工数は完了率 × 予算工数です。生産性は出来高工数 ÷ 実績工数で、1.00を上回ると予算より先行しています。残工数はこれまでのペースが続くと仮定して算出します。実績工数は承認済みの時間を集計します。"
+  },
+  "newBoard": {
+    "title": "新しいボード",
+    "description": "この部門のスケジュールの立て方を選択してください。内容はすべてボードの設定で後から調整できます。",
+    "presets": {
+      "dispatch": {
+        "title": "日次配車・配置",
+        "description": "人員を日単位で顧客、現場、作業先へ派遣します。入力して使う2週間のグリッドで、変更はすぐに反映されます。"
+      },
+      "shifts": {
+        "title": "シフト表",
+        "description": "店舗、厨房、受付向けの時間単位の短時間シフト。1週間分を作成してから公開します。"
+      },
+      "continuous": {
+        "title": "24時間稼働",
+        "description": "日をまたぐ日勤・夜勤のシフトを4週間単位で計画します。工場や24時間体制のチーム向けです。"
+      },
+      "projects": {
+        "title": "プロジェクトスケジュール",
+        "description": "依存関係とクリティカルパスを含むガントチャート上のプロジェクトタスクと、生産の進捗。"
+      }
+    },
+    "name": "名前",
+    "namePlaceholder": "現場クルー",
+    "code": "コード",
+    "subsidiary": "法人",
+    "allSubsidiaries": "すべての法人",
+    "department": "部門",
+    "allDepartments": "すべての部門",
+    "location": "拠点",
+    "allLocations": "すべての拠点",
+    "project": "プロジェクト",
+    "allProjects": "すべての有効なプロジェクト",
+    "afterwards": "割り当て時間、公開、タイムシートの事前入力は、ボードの設定でいつでも変更できます。",
+    "cancel": "キャンセル",
+    "create": "ボードを作成"
+  },
+  "errors": {
+    "load": "スケジュールを読み込めませんでした。",
+    "save": "変更を保存できませんでした。",
+    "publish": "ボードを公開できませんでした。",
+    "search": "検索を完了できませんでした。"
+  },
+  "prefill": {
+    "fill": "スケジュールから入力",
+    "timesheetHint": "公開済みの割り当ての時間を空いている日に追加します。内容を確認してから保存してください。",
+    "crewHint": "この日にこのプロジェクトに割り当てられた人員を追加します。時間を確認してから行を保存してください。",
+    "ticketHint": "チケット期間にこのプロジェクトに割り当てられたクルーを追加します。時間を確認してから保存してください。",
+    "nothing": "予定されている日にはすべて時間が入力済みです。",
+    "filled": "スケジュールから{count, plural, other {#日分}}を入力しました。{skipped, plural, =0 {} other {#日はすでに時間が入力されていました。}}確認して保存してください。",
+    "crewFilled": "スケジュールから{count, plural, other {#人}}を追加しました。時間を確認して行を保存してください。",
+    "crewNothing": "今日このプロジェクトに割り当てられた全員がすでにシートに入っています。"
+  },
+  "notify": {
+    "subject": "スケジュールが変更されました — {board}",
+    "intro": "{name}さん、{count, plural, other {スケジュールの#日分が変更されました。}}",
+    "booked": "{date}: {target}に割り当て {hours}",
+    "changed": "{date}: {target}に変更 {hours}",
+    "removed": "{date}: {target}から削除",
+    "link": "スケジュールを確認",
+    "footer": "{board}はスケジュールの変更を本人に通知する設定になっているため、このメールをお送りしています。",
+    "noTransport": "メールが設定されていないため、OpenBooks内でのみ通知しました。管理 → メールでメールを設定してください。"
+  },
+  "mine": {
+    "tab": "スケジュール",
+    "title": "マイスケジュール",
+    "description": "担当者が公開した、あなたの割り当て先と日時です。",
+    "summary": "{days, plural, other {#日割り当て}} · {hours}",
+    "empty": "{from}から{through}までの割り当てはありません。"
+  }
+}

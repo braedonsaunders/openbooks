@@ -2056,6 +2056,18 @@ export const PAGE_REGISTRY: Readonly<Record<string, PageRegistryEntry>> = {
       }
     },
   },
+  '/me/schedule': {
+    route: '/me/schedule',
+    segments: [],
+    searchParams: true,
+    module: async () => {
+      const m = await import('../app/(app)/me/schedule/view')
+      return {
+        load: (input) => m.loadMySchedulePage(input.searchParams ?? {}),
+        spec: (data) => m.myScheduleSpec(data as never),
+      }
+    },
+  },
   '/me/surveys': {
     route: '/me/surveys',
     segments: [],
@@ -2893,6 +2905,18 @@ export const PAGE_REGISTRY: Readonly<Record<string, PageRegistryEntry>> = {
       return {
         load: (input) => m.loadSalesOrders(input.searchParams ?? {}),
         spec: (data) => m.salesOrdersSpec(data as never),
+      }
+    },
+  },
+  '/scheduling': {
+    route: '/scheduling',
+    segments: [],
+    searchParams: true,
+    module: async () => {
+      const m = await import('../app/(app)/scheduling/view')
+      return {
+        load: (input) => m.loadSchedulingPage(input.searchParams ?? {}),
+        spec: (data) => m.schedulingSpec(data as never),
       }
     },
   },

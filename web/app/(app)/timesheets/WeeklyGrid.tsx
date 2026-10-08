@@ -20,7 +20,8 @@ import { toast } from 'sonner'
 import { useBusinessToday } from '../../../components/business-date-provider'
 import { confirmDialog } from '../../../lib/confirm'
 import { promptDialog } from '../../../lib/prompt'
-import { ChevronLeft, ChevronRight, FilePenLine, Lock, Plus, RotateCcw, Trash2 } from 'lucide-react'
+import { CalendarCheck, ChevronLeft, ChevronRight, FilePenLine, Lock, Plus, RotateCcw, Trash2 } from 'lucide-react'
+import { fillFromSchedule } from '../../../lib/scheduling/timesheet-fill'
 import { Badge, Button, SearchSelect, Select, UrlDrawer, cn } from '@openbooks/ui'
 import { type CustomFieldDefClient } from '../../../components/custom-field-inputs'
 import { CustomFieldInput } from '../../../components/custom-field-input'
@@ -210,6 +211,7 @@ export function WeeklyGrid({
   anomalyFlags?: { kind: string; kindLabel: string; severity: string; explanation: string }[]
 }) {
   const t = useTranslations('timesheets')
+  const tScheduling = useTranslations('scheduling')
   const locale = useLocale()
   const tCommon = useTranslations('common')
   const statusLabel = (s: string) =>
@@ -468,6 +470,20 @@ export function WeeklyGrid({
   }
 
   const canSave = canManage && !readOnly && employeeId != null
+  // Published bookings fill empty days; the person reviews and saves as usual.
+  const onFillFromSchedule = () => {
+    const result = fillFromSchedule(rows, payload.scheduled ?? [], payload.days, {
+      projectIds: new Set(pickers.projects.map((project) => project.value)),
+      blank: () => emptyRow(pickers.timeTypes),
+    })
+    if (result.filled === 0) {
+      toast.info(tScheduling('prefill.nothing'))
+      return
+    }
+    setRows(result.rows)
+    setDirty(true)
+    toast.success(tScheduling('prefill.filled', { count: result.filled, skipped: result.skipped }))
+  }
   const canSubmit = requireApproval && canManage && employeeId != null && (status === 'draft' || status === 'rejected')
   const canDoApprove = requireApproval && canApprove && employeeId != null && status === 'submitted'
   const canDoReject = requireApproval && canApprove && employeeId != null && status === 'submitted'
@@ -507,6 +523,11 @@ export function WeeklyGrid({
       }
       headerActions={
         <>
+          {canSave && (payload.scheduled?.length ?? 0) > 0 ? (
+            <Button size="sm" variant="outline" onClick={onFillFromSchedule} disabled={busy} title={tScheduling('prefill.timesheetHint')}>
+              <CalendarCheck size={14} /> {tScheduling('prefill.fill')}
+            </Button>
+          ) : null}
           {canSave ? (
             <Button size="sm" onClick={onSave} disabled={busy || !dirty}>
               {tCommon('actions.save')}

@@ -527,6 +527,8 @@ export const WIDGET_NAMES: ReadonlySet<string> = new Set([
   'saved-view-header',
   'saved-view-meta',
   'schedule-report',
+  'scheduling-my-schedule',
+  'scheduling-workspace',
   'script-drawer',
   'search-input',
   'search-select-filter',

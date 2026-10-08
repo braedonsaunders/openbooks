@@ -62,6 +62,7 @@ export const DSAR_GATHERED_TABLES: readonly DsarGatheredTable[] = [
   { table: "entitlement_plan_limits", domain: "leave", linkage: "direct" },
   { table: "time_entries", domain: "time", linkage: "direct" },
   { table: "res_assignments", domain: "time", linkage: "direct" },
+  { table: "schedule_entries", domain: "time", linkage: "direct" },
   { table: "res_requests", domain: "time", linkage: "direct" },
   { table: "crew_time_batch_lines", domain: "time", linkage: "direct" },
   { table: "timesheet_weeks", domain: "time", linkage: "direct" },

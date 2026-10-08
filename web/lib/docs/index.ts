@@ -35,6 +35,7 @@ import { certifiedPayrollPrevailingWagePerDiem } from './articles/certified-payr
 // HR-20 begin: field-time articles.
 import { fieldClockIn } from './articles/field-clock-in'
 import { crewTimeEntry } from './articles/crew-time-entry'
+import { scheduling } from './articles/scheduling'
 // HR-20 end
 import { compensationAndTransparency } from './articles/compensation-transparency'
 // HR-14 begin: certifications, licenses, and dispatch gating article.
@@ -372,6 +373,7 @@ const RAW_DOC_ARTICLES: DocArticle[] = [
   // HR-20 begin
   fieldClockIn,
   crewTimeEntry,
+  scheduling,
   // HR-20 end
   itemRates,
   financialReports,

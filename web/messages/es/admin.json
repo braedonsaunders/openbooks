@@ -3402,6 +3402,16 @@
         "title": "Antigüedad de saldos",
         "singularTitle": "Política de antigüedad",
         "description": "Límites de días que convierten los días vencidos en tramos de antigüedad, con fecha de vigencia. Sin política se aplican los tramos 30/60/90."
+      },
+      "schedule-boards": {
+        "title": "Tableros de planificación",
+        "singularTitle": "Tablero de planificación",
+        "description": "Tableros para planificar personas y tareas de proyectos: a quién cubre cada tablero, cómo se ve y cómo se publican sus asignaciones."
+      },
+      "schedule-codes": {
+        "title": "Códigos de planificación",
+        "singularTitle": "Código de planificación",
+        "description": "Códigos para asignar trabajo que no corresponde a un cliente ni a un proyecto, como días de formación o de taller, y para los días en que las personas no trabajan."
       }
     },
     "fields": {
@@ -3950,7 +3960,22 @@
       "weekendDays": "Días de fin de semana",
       "holidayCountry": "País de festivos",
       "boundaries": "Límites",
-      "holidayRegion": "Región de festivos"
+      "holidayRegion": "Región de festivos",
+      "rowKind": "Planificaciones",
+      "grain": "Tipo de asignación",
+      "views": "Vistas",
+      "defaultView": "Se abre en",
+      "rangeDays": "Días mostrados",
+      "showWeekends": "Mostrar fines de semana",
+      "timeZone": "Zona horaria",
+      "dayStarts": "Inicio de la jornada",
+      "dayEnds": "Fin de la jornada",
+      "dayBreakMinutes": "Pausa (minutos)",
+      "publishPolicy": "Publicación",
+      "prefillTimesheets": "Prellenar partes de horas",
+      "prefillCrewTime": "Prellenar tiempo de cuadrilla",
+      "prefillFieldTickets": "Prellenar partes de obra",
+      "notifyAssignees": "Enviar a cada persona sus cambios por correo"
     },
     "fieldHelp": {
       "fxRateMaxAgeDays": "Días entre el tipo utilizable más reciente y el cierre del período a partir de los cuales la revaluación y la consolidación rechazan el tipo. Los tipos de cierre se cuentan desde la fecha del tipo al contado de cierre; los promedio, desde la cotización más reciente promediada. Valor predeterminado sin política: 31 días.",
@@ -4096,7 +4121,23 @@
       "businessCalendarWeekendDays": "Días de la semana ISO como lista JSON, por ejemplo [6, 7] para sábado y domingo. Una lista vacía indica que ningún día es fin de semana.",
       "businessCalendarHolidayCountry": "Los festivos provienen de un solo calendario laboral: el del país o el de su región donde el país lleva uno por región (indique la región abajo). Un país sin paquete transcrito no puede usarse — guarde sin país de festivos para solo fines de semana.",
       "agingBucketBoundaries": "Cantidades de días ascendentes como lista JSON, por ejemplo [30, 60, 90]. El último límite abre el último tramo: 90 días vencidos ya son 90+.",
-      "businessCalendarHolidayRegion": "Calificador de región que selecciona el calendario laboral: ON para Ontario (nunca CA-ON). Donde un calendario federal convive con calendarios regionales, FEDERAL nombra el calendario federal. Déjelo vacío donde el país lleva un solo calendario; un país de calendarios regionales lo exige."
+      "businessCalendarHolidayRegion": "Calificador de región que selecciona el calendario laboral: ON para Ontario (nunca CA-ON). Donde un calendario federal convive con calendarios regionales, FEDERAL nombra el calendario federal. Déjelo vacío donde el país lleva un solo calendario; un país de calendarios regionales lo exige.",
+      "scheduleBoardCode": "Un código corto para enlaces e importaciones, como FIELD o PLANT-A.",
+      "scheduleBoardRowKind": "Los tableros de personas asignan empleados; los tableros de tareas planifican tareas de proyectos en un diagrama de Gantt. No se puede cambiar después de crear el tablero.",
+      "scheduleBoardProject": "Limite un tablero de tareas a un proyecto o déjelo vacío para listar todos los proyectos activos del alcance.",
+      "scheduleBoardViews": "Las vistas que ofrece este tablero. Tableros de personas: cuadrícula, línea de tiempo, por trabajo y mes. Tableros de tareas: diagrama de Gantt y avance.",
+      "scheduleBoardRangeDays": "Cuántos días muestra a la vez un tablero de personas: 1, 3, 7, 14, 21, 28, 35 o 42.",
+      "scheduleBoardWeekStartsOn": "El primer día de cada semana mostrada: 0 es domingo, 1 es lunes, hasta 6 para sábado.",
+      "scheduleBoardGrain": "Las jornadas completas asignan a cada persona durante la jornada laboral del tablero; los turnos por horas asignan horas de inicio y fin.",
+      "scheduleBoardDayStarts": "La jornada laboral usada para las asignaciones de jornada completa, en formato de 24 horas, como 07:00.",
+      "scheduleBoardPublishPolicy": "Los tableros de publicación inmediata publican cada asignación en cuanto se crea. Los tableros de publicación conjunta acumulan los cambios hasta que alguien con permisos de aprobación los publica.",
+      "scheduleBoardPrefillTimesheets": "Las asignaciones publicadas en este tablero aparecen en el parte de horas semanal de cada persona como tiempo planificado que puede añadir con un clic y después confirmar o corregir.",
+      "scheduleBoardPrefillCrewTime": "Las asignaciones de proyecto publicadas en este tablero ofrecen a la hoja de tiempo de cuadrilla del capataz para ese proyecto y día la cuadrilla y las horas asignadas, que se añaden con un clic.",
+      "scheduleBoardPrefillFieldTickets": "Las asignaciones de proyecto publicadas en este tablero ofrecen al parte de obra de ese proyecto la cuadrilla y las horas asignadas para el período del parte, que se añaden con un clic.",
+      "scheduleBoardNotifyAssignees": "Envía a cada persona un resumen por correo electrónico cuando cambian sus asignaciones publicadas en este tablero.",
+      "scheduleCode": "Hasta 16 letras mayúsculas, dígitos o / & + . _ -, como TRAIN, SHOP o FORCED.",
+      "scheduleCodeCategory": "Los códigos de trabajo cuentan como tiempo planificado. Los códigos de no disponibilidad marcan un día en que la persona no trabaja sin registrar una ausencia.",
+      "scheduleCodeColor": "El color con el que se muestran las asignaciones con este código, como valor hexadecimal, por ejemplo #38bdf8."
     },
     "options": {
       "storedValueKind": {
@@ -4799,6 +4840,30 @@
         "friday": "viernes",
         "saturday": "sábado",
         "sunday": "domingo"
+      },
+      "scheduleRowKind": {
+        "people": "Personas",
+        "tasks": "Tareas de proyecto"
+      },
+      "scheduleGrain": {
+        "day": "Jornadas completas",
+        "timed": "Turnos por horas"
+      },
+      "scheduleView": {
+        "grid": "Cuadrícula",
+        "targets": "Por trabajo",
+        "timeline": "Línea de tiempo",
+        "calendar": "Mes",
+        "gantt": "Diagrama de Gantt",
+        "progress": "Avance"
+      },
+      "schedulePublishPolicy": {
+        "live": "Inmediata",
+        "staged": "Publicar en conjunto"
+      },
+      "scheduleCodeCategory": {
+        "work": "Trabajo",
+        "unavailable": "No trabaja"
       }
     },
     "laborCosting": {
@@ -5831,7 +5896,15 @@
       "payComponentTaxability": "Impuestos y cotizaciones",
       "payComponentTaxabilityHelp": "Las retenciones, cotizaciones obligatorias y devengos de vacaciones a los que cuenta este concepto de nómina.",
       "payComponentAccounting": "Contabilidad",
-      "payComponentAccountingHelp": "Dónde se contabiliza el importe en el libro mayor y a quién se remite."
+      "payComponentAccountingHelp": "Dónde se contabiliza el importe en el libro mayor y a quién se remite.",
+      "scheduleBoardIdentity": "Tablero",
+      "scheduleBoardScope": "A quién cubre",
+      "scheduleBoardScopeHelp": "Los tableros de personas listan a los empleados de la entidad jurídica, el departamento y la ubicación seleccionados. Deje un campo vacío para incluir a todos.",
+      "scheduleBoardDisplay": "Visualización",
+      "scheduleBoardBooking": "Asignación",
+      "scheduleBoardBookingHelp": "Las asignaciones de jornada completa usan este horario laboral en la zona horaria del tablero.",
+      "scheduleBoardAutomation": "Automatización",
+      "scheduleBoardAutomationHelp": "Lo que ocurre después de publicar una asignación en este tablero."
     },
     "segmentValues": {
       "builtinLink": "Abrir {name}",
@@ -7038,8 +7111,8 @@
       "description": "Cursos, sesiones, invitaciones, resultados y comentarios opcionales. La emisión de cualificaciones también requiere Certificaciones y licencias."
     },
     "hrmShiftPlanning": {
-      "title": "Planificación de turnos",
-      "description": "Horarios recurrentes, asignaciones y cuadrante publicado opcionales. La nómina y el registro de horas no requieren un cuadrante."
+      "title": "Planificación",
+      "description": "Tableros de planificación para asignar personas por día o por turno, con ausencias, festivos y publicación. La nómina y el registro de horas no requieren una planificación."
     },
     "hrmAttendance": {
       "title": "Asistencia por dispositivo",

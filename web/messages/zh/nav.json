@@ -154,7 +154,8 @@
     "hrm-performance-templates": "考核表单",
     "hrm-benefits-employees": "福利",
     "hrm-benefits-delivery": "发放",
-    "hrm-training": "培训"
+    "hrm-training": "培训",
+    "scheduling": "排程"
   },
   "groups": {
     "workforce": "员工队伍",
@@ -208,7 +209,8 @@
     "inbox-views": "收件箱",
     "me-views": "我的",
     "crm-sales": "销售",
-    "hrm-compensation": "薪酬"
+    "hrm-compensation": "薪酬",
+    "scheduling": "排程"
   },
   "modulesShort": {
     "hrm-performance-cycles": "管理评估",

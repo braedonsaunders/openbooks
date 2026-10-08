@@ -71,6 +71,10 @@ const IMMUTABLE_PARTY_REFS: readonly (readonly [table: string, column: string])[
   ["hrm_shift_assignments", "author_party_id"],
   ["hrm_shifts", "author_party_id"],
   ["hrm_shift_requests", "author_party_id"],
+  // Bookings name the person sent and the customer visited; a published
+  // booking keeps both, so the history of who went where is never rewritten.
+  ["schedule_entries", "worker_party_id"],
+  ["schedule_entries", "customer_party_id"],
 ];
 
 const IMMUTABLE_PARTY_REF_LABELS: Readonly<Record<string, string>> = {
@@ -83,6 +87,7 @@ const IMMUTABLE_PARTY_REF_LABELS: Readonly<Record<string, string>> = {
   hrm_shift_assignments: "shift assignment authorship evidence",
   hrm_shifts: "shift authorship evidence",
   hrm_shift_requests: "shift request authorship evidence",
+  schedule_entries: "booking history",
 };
 
 const SIMPLE_PARTY_REFS: readonly (readonly [table: string, column: string])[] = [

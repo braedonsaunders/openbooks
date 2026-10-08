@@ -59,6 +59,7 @@ export function CrewWorkspace({
   signatureRequired,
   signLabel,
   create = null,
+  scheduledCrew = [],
 }: {
   batchId: string
   status: string
@@ -81,16 +82,35 @@ export function CrewWorkspace({
     projects: CrewOption[]
     defaultWorkedOn: string
   } | null
+  /** People booked to this project on this day on boards that pre-fill crew time. */
+  scheduledCrew?: { employeePartyId: string; employeeName: string; hours: string; projectTaskId: string }[]
 }) {
   const { dateTime } = useViewerFormat()
   const t = useTranslations('timesheets')
+  const tScheduling = useTranslations('scheduling')
   const [lines, setLines] = useState<CrewLine[]>(initialLines.length > 0 ? initialLines : [{ ...EMPTY_LINE }])
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [savedAt, setSavedAt] = useState<string | null>(null)
+  const [notice, setNotice] = useState<string | null>(null)
   const [signOpen, setSignOpen] = useState(false)
   const [signerName, setSignerName] = useState('')
   const [reason, setReason] = useState('')
+
+  // Booked people not yet on the sheet join it; the foreman reviews the hours and saves.
+  const fillFromSchedule = () => {
+    const present = new Set(lines.map((line) => line.employeePartyId).filter(Boolean))
+    const additions = scheduledCrew
+      .filter((booked, index, all) => !present.has(booked.employeePartyId) && all.findIndex((other) => other.employeePartyId === booked.employeePartyId) === index)
+      .map((booked) => ({ ...EMPTY_LINE, employeePartyId: booked.employeePartyId, employeeName: booked.employeeName, hours: booked.hours.includes('.') ? booked.hours.replace(/0+$/, '').replace(/\.$/, '') : booked.hours, projectTaskId: booked.projectTaskId }))
+    if (!additions.length) {
+      setNotice(tScheduling('prefill.crewNothing'))
+      return
+    }
+    setError(null)
+    setLines((prev) => [...prev.filter((line) => line.employeePartyId || line.hours || line.id), ...additions])
+    setNotice(tScheduling('prefill.crewFilled', { count: additions.length }))
+  }
 
   const setLine = (index: number, patch: Partial<CrewLine>) => {
     setLines((prev) => prev.map((line, i) => (i === index ? { ...line, ...patch } : line)))
@@ -267,12 +287,18 @@ export function CrewWorkspace({
           {error}
         </p>
       ) : null}
+      {notice ? <p className="text-sm text-slate-600 dark:text-slate-300" role="status">{notice}</p> : null}
 
       {!locked ? (
         <div className="flex flex-wrap gap-2">
           <Button variant="outline" disabled={busy} onClick={() => setLines((prev) => [...prev, { ...EMPTY_LINE }])}>
             {t('field.addLine')}
           </Button>
+          {scheduledCrew.length ? (
+            <Button variant="outline" disabled={busy} title={tScheduling('prefill.crewHint')} onClick={fillFromSchedule}>
+              {tScheduling('prefill.fill')}
+            </Button>
+          ) : null}
           <Button disabled={busy} onClick={save}>
             {busy ? t('field.working') : t('field.saveLines')}
           </Button>

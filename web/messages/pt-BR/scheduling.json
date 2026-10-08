@@ -1,0 +1,260 @@
+{
+  "title": "Programação",
+  "description": "Planeje quem vai aonde e quando — equipes por dia, turnos por hora e cronogramas de projetos — em quadros moldados à forma como sua empresa trabalha.",
+  "views": {
+    "grid": "Grade",
+    "targets": "Por serviço",
+    "timeline": "Linha do tempo",
+    "calendar": "Mês",
+    "gantt": "Gráfico de Gantt",
+    "progress": "Andamento"
+  },
+  "kinds": {
+    "customer": "Cliente",
+    "project": "Projeto",
+    "location": "Local",
+    "code": "Código de programação"
+  },
+  "groupBy": {
+    "none": "Sem agrupamento",
+    "department": "Por departamento",
+    "trade": "Por ofício",
+    "jobTitle": "Por cargo"
+  },
+  "toolbar": {
+    "board": "Quadro",
+    "peopleBoards": "Quadros de pessoas",
+    "taskBoards": "Quadros de tarefas",
+    "views": "Visualizações",
+    "previous": "Anterior",
+    "next": "Próximo",
+    "today": "Hoje",
+    "range": "Dias exibidos",
+    "days": "{count, plural, one {# dia} other {# dias}}",
+    "search": "Buscar pessoas ou serviços",
+    "groupBy": "Agrupar linhas",
+    "density": "Alternar linhas compactas",
+    "undo": "Desfazer",
+    "undoWhat": "Desfazer {what}",
+    "redo": "Refazer",
+    "settings": "Configurações do quadro",
+    "newBoard": "Novo quadro"
+  },
+  "empty": {
+    "title": "Configure seu primeiro quadro",
+    "description": "Um quadro é a programação de uma parte do seu negócio: uma equipe alocada por dia, um time em turnos ou seus cronogramas de projetos.",
+    "create": "Criar um quadro",
+    "askAdmin": "Peça a um administrador que crie um quadro de programação em Configuração."
+  },
+  "grid": {
+    "label": "Grade de programação",
+    "people": "{count, plural, one {# pessoa} other {# pessoas}}",
+    "hours": "Horas",
+    "onSite": "Alocado",
+    "holiday": "Feriado",
+    "ungrouped": "Sem grupo",
+    "borrowed": "Em apoio",
+    "fromElsewhere": "Alocado aqui a partir de {department}",
+    "fillHandle": "Arraste para repetir a seleção",
+    "noPeople": "Ninguém está no escopo deste quadro.",
+    "noMatch": "Ninguém corresponde à busca.",
+    "selected": "{count} células selecionadas — digite para alocar todas, Delete para limpar, Ctrl+D ou Ctrl+R para preencher",
+    "hint": "Clique em uma célula e digite um código para alocar. Arraste sobre várias células para alocar muitas de uma vez; cole diretamente de uma planilha.",
+    "readOnly": "Você pode visualizar este quadro. Para alocar, é preciso ter permissão para gerenciar programações.",
+    "saving": "Salvando…",
+    "clearSpotlight": "Mostrar todos os serviços"
+  },
+  "chip": {
+    "unassigned": "Sem destino",
+    "draft": "Ainda não publicado",
+    "elsewhere": "Alocado em {board}",
+    "leave": "{type}: {hours} horas de ausência"
+  },
+  "picker": {
+    "placeholder": "Digite um código, cliente, projeto ou local",
+    "results": "Destinos correspondentes",
+    "cells": "{count} células",
+    "detail": "Detalhe: {detail}",
+    "unavailable": "Sem expediente",
+    "searching": "Buscando…",
+    "none": "Nenhum resultado. Verifique o código ou cadastre primeiro o cliente, o projeto ou o código de programação.",
+    "hint": "Adicione /detail ou um intervalo de horário como 6-14:30",
+    "keys": "↑↓ escolher · Enter alocar · Esc cancelar"
+  },
+  "menu": {
+    "book": "Alocar…",
+    "details": "Editar detalhes",
+    "split": "Dividir em dois meios períodos",
+    "copy": "Copiar",
+    "cut": "Recortar",
+    "paste": "Colar",
+    "fillDown": "Preencher para baixo",
+    "fillRight": "Preencher para a direita",
+    "clear": "Limpar alocações"
+  },
+  "history": {
+    "book": "a alocação em {target}",
+    "clear": "{count, plural, one {a remoção de uma alocação} other {a remoção de # alocações}}",
+    "paste": "{count, plural, one {a colagem de uma célula} other {a colagem de # células}}",
+    "fill": "o preenchimento",
+    "copy": "a cópia de uma alocação",
+    "move": "a movimentação para {name}",
+    "split": "a divisão do dia",
+    "edit": "a edição de uma alocação",
+    "reschedule": "a reprogramação",
+    "discard": "{count, plural, one {o descarte de uma alteração} other {o descarte de # alterações}}"
+  },
+  "notices": {
+    "someRefused": "{count} de {total} alterações não foram salvas: {reason}",
+    "skippedLeave": "{count, plural, one {Um dia com ausência registrada foi ignorado.} other {# dias com ausência registrada foram ignorados.}}",
+    "skippedLeaveRemedy": "Altere a ausência pela respectiva solicitação se a pessoa estiver trabalhando.",
+    "copied": "{count, plural, one {Uma célula copiada.} other {# células copiadas.}}",
+    "unknownCodes": "{count, plural, one {Este código não foi reconhecido: {codes}.} other {# códigos não foram reconhecidos: {codes}.}}",
+    "unknownCodesRemedy": "Cadastre-os como códigos de programação, clientes ou projetos e cole novamente.",
+    "published": "{count, plural, one {Uma alteração publicada.} other {# alterações publicadas.}}",
+    "dismiss": "Dispensar"
+  },
+  "publish": {
+    "pending": "{count, plural, one {# alteração não publicada} other {# alterações não publicadas}} para {people, plural, one {# pessoa} other {# pessoas}}",
+    "explain": "As pessoas verão essas alterações quando você publicar.",
+    "action": "Publicar",
+    "discard": "Descartar alterações"
+  },
+  "drawer": {
+    "title": "Alocação",
+    "save": "Salvar",
+    "remove": "Remover alocação",
+    "updatedBy": "Última alteração por {name}",
+    "otherBoard": "Esta alocação pertence a {board}. Abra esse quadro para alterá-la.",
+    "readOnly": "Você pode visualizar esta alocação. Para alterá-la, é preciso ter permissão para gerenciar programações.",
+    "draft": "Esta alteração ainda não foi publicada.",
+    "where": "Onde",
+    "pickTarget": "Escolha para onde esta pessoa vai",
+    "change": "Alterar",
+    "task": "Tarefa",
+    "noTask": "Projeto inteiro",
+    "detail": "Detalhe",
+    "detailPlaceholder": "Área, unidade ou instrução",
+    "when": "Quando",
+    "wholeDay": "Dia inteiro ({hours})",
+    "customHours": "Definir horário",
+    "starts": "Início",
+    "ends": "Término",
+    "break": "Intervalo (minutos)",
+    "overnight": "Termina no dia seguinte.",
+    "booked": "{hours} alocadas após o intervalo.",
+    "repeat": "Alocar também em",
+    "notes": "Observações",
+    "notesPlaceholder": "O que a equipe precisa saber"
+  },
+  "targets": {
+    "where": "Serviço",
+    "count": "{count} pessoas",
+    "add": "Adicionar um serviço",
+    "empty": "Nada foi alocado nessas datas ainda.",
+    "available": "Disponíveis",
+    "allBooked": "Todos estão alocados ou ausentes neste dia."
+  },
+  "timeline": {
+    "zoomIn": "Ampliar",
+    "zoomOut": "Reduzir"
+  },
+  "calendar": {
+    "person": "Exibir",
+    "everyone": "Todos",
+    "onLeave": "{count} ausentes",
+    "more": "Mais {count}"
+  },
+  "tasks": {
+    "searchProjects": "Buscar um projeto",
+    "noCustomer": "Sem cliente",
+    "noProjects": "Não há projetos ativos no escopo deste quadro.",
+    "pickProject": "Escolha um projeto.",
+    "openInScheduling": "Abrir em Programação"
+  },
+  "progress": {
+    "task": "Tarefa",
+    "budget": "Horas orçadas",
+    "actual": "Horas reais",
+    "complete": "Concluído",
+    "completeFor": "Percentual concluído de {task}",
+    "earned": "Horas agregadas",
+    "factor": "Produtividade",
+    "toComplete": "Horas para concluir",
+    "estimate": "Na conclusão",
+    "variance": "Variação",
+    "pending": "+{hours} pendentes",
+    "used": "{percent}% das horas orçadas utilizadas",
+    "noTasks": "Este projeto ainda não tem tarefas. Adicione-as no gráfico de Gantt ou na estrutura analítica do projeto.",
+    "explain": "Horas agregadas são o percentual concluído × as horas orçadas. Produtividade é horas agregadas ÷ horas reais: acima de 1,00 o trabalho está adiantado em relação ao orçamento. As horas para concluir supõem que o ritmo atual se mantém. As horas reais contam o tempo aprovado."
+  },
+  "newBoard": {
+    "title": "Novo quadro",
+    "description": "Escolha como esta parte do negócio faz a programação. Tudo continua ajustável nas configurações do quadro.",
+    "presets": {
+      "dispatch": {
+        "title": "Despacho diário",
+        "description": "Envie pessoas a um cliente, obra ou serviço durante o dia. Uma grade de duas semanas para digitar diretamente; as alterações valem assim que são feitas."
+      },
+      "shifts": {
+        "title": "Escala de turnos",
+        "description": "Turnos parciais por hora para lojas, cozinhas e recepções. Monte a semana e depois publique."
+      },
+      "continuous": {
+        "title": "Operação 24 horas",
+        "description": "Turnos diurnos e noturnos que atravessam a meia-noite, planejados de quatro em quatro semanas para fábricas e equipes que operam sem parar."
+      },
+      "projects": {
+        "title": "Cronograma de projeto",
+        "description": "Tarefas do projeto em um gráfico de Gantt com dependências e caminho crítico, além do andamento da produção."
+      }
+    },
+    "name": "Nome",
+    "namePlaceholder": "Equipes de campo",
+    "code": "Código",
+    "subsidiary": "Entidade jurídica",
+    "allSubsidiaries": "Todas as entidades jurídicas",
+    "department": "Departamento",
+    "allDepartments": "Todos os departamentos",
+    "location": "Local",
+    "allLocations": "Todos os locais",
+    "project": "Projeto",
+    "allProjects": "Todos os projetos ativos",
+    "afterwards": "O horário das alocações, a publicação e o preenchimento prévio das folhas de horas podem ser alterados a qualquer momento nas configurações do quadro.",
+    "cancel": "Cancelar",
+    "create": "Criar quadro"
+  },
+  "errors": {
+    "load": "Não foi possível carregar a programação.",
+    "save": "Não foi possível salvar a alteração.",
+    "publish": "Não foi possível publicar o quadro.",
+    "search": "Não foi possível concluir a busca."
+  },
+  "prefill": {
+    "fill": "Preencher pela programação",
+    "timesheetHint": "Adiciona aos dias vazios as horas das suas alocações publicadas. Revise-as e depois salve.",
+    "crewHint": "Adiciona as pessoas alocadas a este projeto neste dia. Revise as horas e depois salve as linhas.",
+    "ticketHint": "Adiciona a equipe alocada a este projeto no período do boletim. Revise as horas e depois salve.",
+    "nothing": "Todos os dias programados já têm horas.",
+    "filled": "{count, plural, one {# dia preenchido pela programação.} other {# dias preenchidos pela programação.}} {skipped, plural, =0 {} one {# dia já tinha horas.} other {# dias já tinham horas.}} Revise e salve.",
+    "crewFilled": "{count, plural, one {# pessoa adicionada pela programação.} other {# pessoas adicionadas pela programação.}} Revise as horas e salve as linhas.",
+    "crewNothing": "Todas as pessoas alocadas hoje a este projeto já estão na folha."
+  },
+  "notify": {
+    "subject": "Sua programação mudou — {board}",
+    "intro": "Olá, {name}. {count, plural, one {Um dia da sua programação mudou.} other {# dias da sua programação mudaram.}}",
+    "booked": "{date}: alocado em {target} {hours}",
+    "changed": "{date}: agora {target} {hours}",
+    "removed": "{date}: removido de {target}",
+    "link": "Ver sua programação",
+    "footer": "Você recebe esta mensagem porque {board} avisa as pessoas quando a programação delas muda.",
+    "noTransport": "O e-mail não está configurado, então as pessoas foram avisadas somente no OpenBooks. Configure o e-mail em Administração → E-mail."
+  },
+  "mine": {
+    "tab": "Programação",
+    "title": "Minha programação",
+    "description": "Onde e quando você está alocado, conforme publicado pelos seus programadores.",
+    "summary": "{days, plural, one {# dia alocado} other {# dias alocados}} · {hours}",
+    "empty": "Não há nada alocado para você de {from} a {through}."
+  }
+}

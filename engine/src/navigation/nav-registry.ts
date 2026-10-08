@@ -1098,6 +1098,8 @@ NAV_MODULES.push(
     ...(key === 'payroll-opening-balances' || key === 'payroll-parallel-run' ? { menuParent: 'payroll' } : {}),
   })),
   { key: 'hrm-performance-settings', href: '/hrm/performance?tab=settings', label: 'Performance setup', iconKey: 'settings', group: 'hrm', subgroup: 'hrm-talent', requiredPermission: 'hrm.performance.manage', featureKey: 'hrmPerformance', menuParent: 'hrm-performance', exact: true },
+  // One workspace for every board: people boards need Scheduling, task boards Project Scheduling.
+  { key: 'scheduling', href: '/scheduling', label: 'Scheduling', iconKey: 'calendar-range', group: 'hrm', subgroup: 'scheduling', requiredPermissionsAny: ['hrm.shifts.read', 'projects.read'], featureKey: 'hrmShiftPlanning', exact: true },
   { key: 'hrm-change-requests', href: '/hrm/change-requests', label: 'Employment Changes', iconKey: 'user-cog', group: 'hrm', subgroup: 'workforce', requiredPermission: 'hrm.employment.read', featureKey: 'hrm' },
   { key: 'hrm-compliance', href: '/hrm/compliance', label: 'Workforce Compliance', iconKey: 'hard-hat', group: 'hrm', subgroup: 'workforce', requiredPermission: 'hrm.construction.read', featureKey: 'hrmConstructionCompliance' },
   { key: 'admin-navigation', href: '/admin/navigation', label: 'Navigation', iconKey: 'panel-left', group: 'settings', subgroup: 'customize', requiredPermissionsAny: ['admin.nav.manage', 'admin.customization.manage'] },
@@ -1195,7 +1197,7 @@ export const DEFAULT_NAV_ORDER: Record<NavGroupKey, readonly string[]> = {
     'hrm', 'employees', 'hrm-change-requests', 'hrm-processes', 'hrm-documents',
     'hrm-qualifications', 'hrm-training', 'hrm-compliance', 'hrm-org-chart', 'hrm-processes-templates',
     'hrm-positions', 'hrm-recruiting', 'hrm-recruiting-interviews', 'hrm-recruiting-offers',
-    'hrm-recruiting-postings', 'hrm-recruiting-pools', 'hrm-leave', 'hrm-leave-calendar',
+    'hrm-recruiting-postings', 'hrm-recruiting-pools', 'hrm-leave', 'hrm-leave-calendar', 'scheduling',
     'hrm-performance', 'hrm-performance-templates', 'hrm-performance-calibration',
     'hrm-performance-talent', 'hrm-performance-succession', 'hrm-performance-retention',
     'hrm-surveys', 'hrm-performance-settings', 'hrm-compensation', 'hrm-compensation-equity',

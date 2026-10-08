@@ -7,6 +7,7 @@ import { add } from '@openbooks/engine/src/money/money.ts'
 import { subsidiaryScopeAllows } from '../../../lib/authz'
 import { isFeatureEnabled } from '../../../lib/features'
 import { loadPlannedWeek, type PlannedRow } from '../../../lib/resourcing/timesheet-prefill'
+import { scheduledWork, type ScheduledWork } from '@openbooks/engine/src/schedule-boards/prefill.ts'
 import { subsidiaryVisibleFilter } from '../../../lib/subsidiaries'
 import {
   lockReasonsFor,
@@ -243,6 +244,8 @@ export interface WeekPayload {
   days: string[]
   rows: WeekRow[]
   planned: PlannedRow[]
+  /** Published bookings from boards that pre-fill timesheets, for one-click entry while the week is editable. */
+  scheduled: ScheduledWork[]
   status: WeekStatus
   /** True when any entry in the week is approved (those must not be overwritten). */
   hasApproved: boolean
@@ -362,15 +365,21 @@ export async function loadWeek(
   const rows = Array.from(byKey.values())
   const status: WeekStatus =
     allStatuses.length === 0 && header.status === 'draft' ? 'empty' : header.status
-  const planned = status === 'draft' || status === 'empty'
-    ? await loadPlannedWeek(orgId, ownedEmployee, week, allowedSubsidiaryIds ?? null)
-    : []
+  const editable = status === 'draft' || status === 'empty' || status === 'rejected'
+  const nothing: [PlannedRow[], ScheduledWork[]] = [[], []]
+  const [planned, scheduled]: [PlannedRow[], ScheduledWork[]] = editable && ownedEmployee
+    ? await Promise.all([
+        status === 'rejected' ? Promise.resolve<PlannedRow[]>([]) : loadPlannedWeek(orgId, ownedEmployee, week, allowedSubsidiaryIds ?? null),
+        scheduledWork({ orgId, use: 'timesheets', workerPartyId: ownedEmployee, from: days[0]!, through: days[6]! }),
+      ])
+    : nothing
   return {
     employeeId: ownedEmployee,
     week,
     days,
     rows,
     planned,
+    scheduled,
     // Status is the header's, not a fold over the entries: a week with no
     // hours yet is 'draft' (a real, submittable record), and 'empty' is
     // reserved for describing that it carries nothing.

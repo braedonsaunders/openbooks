@@ -1,0 +1,260 @@
+{
+  "title": "Planificación",
+  "description": "Planifique quién va a dónde y cuándo —cuadrillas por día, turnos por hora y cronogramas de proyectos— en tableros adaptados a la forma de trabajar de su empresa.",
+  "views": {
+    "grid": "Cuadrícula",
+    "targets": "Por trabajo",
+    "timeline": "Línea de tiempo",
+    "calendar": "Mes",
+    "gantt": "Diagrama de Gantt",
+    "progress": "Avance"
+  },
+  "kinds": {
+    "customer": "Cliente",
+    "project": "Proyecto",
+    "location": "Ubicación",
+    "code": "Código de planificación"
+  },
+  "groupBy": {
+    "none": "Sin agrupar",
+    "department": "Por departamento",
+    "trade": "Por oficio",
+    "jobTitle": "Por puesto"
+  },
+  "toolbar": {
+    "board": "Tablero",
+    "peopleBoards": "Tableros de personas",
+    "taskBoards": "Tableros de tareas",
+    "views": "Vistas",
+    "previous": "Anterior",
+    "next": "Siguiente",
+    "today": "Hoy",
+    "range": "Días mostrados",
+    "days": "{count, plural, one {# día} other {# días}}",
+    "search": "Buscar personas o trabajos",
+    "groupBy": "Agrupar filas",
+    "density": "Alternar filas compactas",
+    "undo": "Deshacer",
+    "undoWhat": "Deshacer {what}",
+    "redo": "Rehacer",
+    "settings": "Configuración del tablero",
+    "newBoard": "Nuevo tablero"
+  },
+  "empty": {
+    "title": "Configure su primer tablero",
+    "description": "Un tablero es la planificación de una parte de su negocio: una cuadrilla asignada por día, un equipo por turnos o sus cronogramas de proyectos.",
+    "create": "Crear un tablero",
+    "askAdmin": "Pida a un administrador que cree un tablero de planificación en Configuración."
+  },
+  "grid": {
+    "label": "Cuadrícula de planificación",
+    "people": "{count, plural, one {# persona} other {# personas}}",
+    "hours": "Horas",
+    "onSite": "Asignado",
+    "holiday": "Festivo",
+    "ungrouped": "Sin asignar",
+    "borrowed": "De visita",
+    "fromElsewhere": "Asignado aquí desde {department}",
+    "fillHandle": "Arrastre para repetir la selección",
+    "noPeople": "No hay nadie en el alcance de este tablero.",
+    "noMatch": "Nadie coincide con la búsqueda.",
+    "selected": "{count} celdas seleccionadas: escriba para asignarlas todas, Supr para vaciarlas, Ctrl+D o Ctrl+R para rellenar",
+    "hint": "Haga clic en una celda y escriba un código para asignar. Arrastre sobre varias celdas para asignar muchas a la vez; pegue directamente desde una hoja de cálculo.",
+    "readOnly": "Puede ver este tablero. Para asignar necesita permiso para gestionar planificaciones.",
+    "saving": "Guardando…",
+    "clearSpotlight": "Mostrar todos los trabajos"
+  },
+  "chip": {
+    "unassigned": "Sin destino",
+    "draft": "Aún no publicado",
+    "elsewhere": "Asignado en {board}",
+    "leave": "{type}: {hours} horas de ausencia"
+  },
+  "picker": {
+    "placeholder": "Escriba un código, cliente, proyecto o ubicación",
+    "results": "Destinos coincidentes",
+    "cells": "{count} celdas",
+    "detail": "Detalle: {detail}",
+    "unavailable": "No trabaja",
+    "searching": "Buscando…",
+    "none": "No hay coincidencias. Revise el código o cree primero el cliente, el proyecto o el código de planificación.",
+    "hint": "Añada /detail o un intervalo horario como 6-14:30",
+    "keys": "↑↓ elegir · Enter asignar · Esc cancelar"
+  },
+  "menu": {
+    "book": "Asignar…",
+    "details": "Editar detalles",
+    "split": "Dividir en dos medias jornadas",
+    "copy": "Copiar",
+    "cut": "Cortar",
+    "paste": "Pegar",
+    "fillDown": "Rellenar hacia abajo",
+    "fillRight": "Rellenar hacia la derecha",
+    "clear": "Borrar asignaciones"
+  },
+  "history": {
+    "book": "la asignación a {target}",
+    "clear": "{count, plural, one {la eliminación de una asignación} other {la eliminación de # asignaciones}}",
+    "paste": "{count, plural, one {el pegado de una celda} other {el pegado de # celdas}}",
+    "fill": "el relleno",
+    "copy": "la copia de una asignación",
+    "move": "el traslado a {name}",
+    "split": "la división del día",
+    "edit": "la edición de una asignación",
+    "reschedule": "la reprogramación",
+    "discard": "{count, plural, one {el descarte de un cambio} other {el descarte de # cambios}}"
+  },
+  "notices": {
+    "someRefused": "No se guardaron {count} de {total} cambios: {reason}",
+    "skippedLeave": "{count, plural, one {Se omitió un día con una ausencia registrada.} other {Se omitieron # días con ausencias registradas.}}",
+    "skippedLeaveRemedy": "Si la persona trabaja, modifique la ausencia a través de su solicitud.",
+    "copied": "{count, plural, one {Se copió una celda.} other {Se copiaron # celdas.}}",
+    "unknownCodes": "{count, plural, one {No se reconoció este código: {codes}.} other {No se reconocieron # códigos: {codes}.}}",
+    "unknownCodesRemedy": "Créelos como códigos de planificación, clientes o proyectos y vuelva a pegar.",
+    "published": "{count, plural, one {Se publicó un cambio.} other {Se publicaron # cambios.}}",
+    "dismiss": "Descartar"
+  },
+  "publish": {
+    "pending": "{count, plural, one {# cambio sin publicar} other {# cambios sin publicar}} para {people, plural, one {# persona} other {# personas}}",
+    "explain": "Las personas los verán cuando los publique.",
+    "action": "Publicar",
+    "discard": "Descartar cambios"
+  },
+  "drawer": {
+    "title": "Asignación",
+    "save": "Guardar",
+    "remove": "Eliminar asignación",
+    "updatedBy": "Último cambio por {name}",
+    "otherBoard": "Esta asignación pertenece a {board}. Abra ese tablero para modificarla.",
+    "readOnly": "Puede ver esta asignación. Para modificarla necesita permiso para gestionar planificaciones.",
+    "draft": "Este cambio aún no está publicado.",
+    "where": "Dónde",
+    "pickTarget": "Elija adónde va esta persona",
+    "change": "Cambiar",
+    "task": "Tarea",
+    "noTask": "Todo el proyecto",
+    "detail": "Detalle",
+    "detailPlaceholder": "Zona, unidad o instrucción",
+    "when": "Cuándo",
+    "wholeDay": "Jornada completa ({hours})",
+    "customHours": "Definir horario",
+    "starts": "Inicio",
+    "ends": "Fin",
+    "break": "Pausa (minutos)",
+    "overnight": "Termina al día siguiente.",
+    "booked": "{hours} asignadas tras la pausa.",
+    "repeat": "Asignar también el",
+    "notes": "Notas",
+    "notesPlaceholder": "Lo que la cuadrilla necesita saber"
+  },
+  "targets": {
+    "where": "Trabajo",
+    "count": "{count} personas",
+    "add": "Añadir un trabajo",
+    "empty": "Todavía no hay nada asignado en estas fechas.",
+    "available": "Disponibles",
+    "allBooked": "Todos están asignados o ausentes este día."
+  },
+  "timeline": {
+    "zoomIn": "Acercar",
+    "zoomOut": "Alejar"
+  },
+  "calendar": {
+    "person": "Mostrar",
+    "everyone": "Todos",
+    "onLeave": "{count} ausentes",
+    "more": "{count} más"
+  },
+  "tasks": {
+    "searchProjects": "Buscar un proyecto",
+    "noCustomer": "Sin cliente",
+    "noProjects": "No hay proyectos activos en el alcance de este tablero.",
+    "pickProject": "Elija un proyecto.",
+    "openInScheduling": "Abrir en Planificación"
+  },
+  "progress": {
+    "task": "Tarea",
+    "budget": "Horas presupuestadas",
+    "actual": "Horas reales",
+    "complete": "Completado",
+    "completeFor": "Porcentaje completado de {task}",
+    "earned": "Horas ganadas",
+    "factor": "Productividad",
+    "toComplete": "Horas para terminar",
+    "estimate": "Al finalizar",
+    "variance": "Desviación",
+    "pending": "+{hours} pendientes",
+    "used": "{percent} % de las horas presupuestadas consumidas",
+    "noTasks": "Este proyecto aún no tiene tareas. Añádalas en el diagrama de Gantt o en el desglose del trabajo del proyecto.",
+    "explain": "Las horas ganadas son el porcentaje completado × las horas presupuestadas. La productividad es horas ganadas ÷ horas reales: por encima de 1,00 el trabajo va por delante del presupuesto. Las horas para terminar suponen que se mantiene el ritmo actual. Las horas reales cuentan el tiempo aprobado."
+  },
+  "newBoard": {
+    "title": "Nuevo tablero",
+    "description": "Elija cómo planifica esta parte del negocio. Todo se puede ajustar después en la configuración del tablero.",
+    "presets": {
+      "dispatch": {
+        "title": "Despacho diario",
+        "description": "Envíe personas a un cliente, obra o trabajo durante el día. Una cuadrícula de dos semanas en la que se escribe directamente; los cambios se aplican al instante."
+      },
+      "shifts": {
+        "title": "Cuadrante de turnos",
+        "description": "Turnos parciales por horas para tiendas, cocinas y recepciones. Prepare la semana y luego publíquela."
+      },
+      "continuous": {
+        "title": "Operación continua",
+        "description": "Turnos de día y de noche que cruzan la medianoche, planificados de cuatro en cuatro semanas para plantas y equipos que trabajan sin interrupción."
+      },
+      "projects": {
+        "title": "Cronograma de proyecto",
+        "description": "Tareas del proyecto en un diagrama de Gantt con dependencias y ruta crítica, además del avance de producción."
+      }
+    },
+    "name": "Nombre",
+    "namePlaceholder": "Cuadrillas de campo",
+    "code": "Código",
+    "subsidiary": "Entidad jurídica",
+    "allSubsidiaries": "Todas las entidades jurídicas",
+    "department": "Departamento",
+    "allDepartments": "Todos los departamentos",
+    "location": "Ubicación",
+    "allLocations": "Todas las ubicaciones",
+    "project": "Proyecto",
+    "allProjects": "Todos los proyectos activos",
+    "afterwards": "El horario de las asignaciones, la publicación y el prellenado de partes de horas se pueden cambiar en cualquier momento en la configuración del tablero.",
+    "cancel": "Cancelar",
+    "create": "Crear tablero"
+  },
+  "errors": {
+    "load": "No se pudo cargar la planificación.",
+    "save": "No se pudo guardar el cambio.",
+    "publish": "No se pudo publicar el tablero.",
+    "search": "No se pudo completar la búsqueda."
+  },
+  "prefill": {
+    "fill": "Rellenar desde la planificación",
+    "timesheetHint": "Añade a los días vacíos las horas de sus asignaciones publicadas. Revíselas y guarde.",
+    "crewHint": "Añade las personas asignadas a este proyecto en este día. Revise las horas y guarde las líneas.",
+    "ticketHint": "Añade la cuadrilla asignada a este proyecto en el período del parte. Revise las horas y guarde.",
+    "nothing": "Todos los días planificados ya tienen horas.",
+    "filled": "{count, plural, one {Se rellenó # día desde la planificación.} other {Se rellenaron # días desde la planificación.}} {skipped, plural, =0 {} one {# día ya tenía horas.} other {# días ya tenían horas.}} Revise y guarde.",
+    "crewFilled": "{count, plural, one {Se añadió # persona desde la planificación.} other {Se añadieron # personas desde la planificación.}} Revise las horas y guarde las líneas.",
+    "crewNothing": "Todas las personas asignadas hoy a este proyecto ya están en la hoja."
+  },
+  "notify": {
+    "subject": "Su planificación ha cambiado: {board}",
+    "intro": "Hola, {name}: {count, plural, one {ha cambiado un día de su planificación.} other {han cambiado # días de su planificación.}}",
+    "booked": "{date}: asignado a {target} {hours}",
+    "changed": "{date}: ahora {target} {hours}",
+    "removed": "{date}: retirado de {target}",
+    "link": "Ver su planificación",
+    "footer": "Recibe este mensaje porque {board} avisa a las personas cuando cambia su planificación.",
+    "noTransport": "El correo electrónico no está configurado, así que solo se avisó a las personas en OpenBooks. Configure el correo en Administración → Correo electrónico."
+  },
+  "mine": {
+    "tab": "Planificación",
+    "title": "Mi planificación",
+    "description": "Dónde y cuándo está asignado, según lo publicado por sus planificadores.",
+    "summary": "{days, plural, one {# día asignado} other {# días asignados}} · {hours}",
+    "empty": "No tiene nada asignado del {from} al {through}."
+  }
+}

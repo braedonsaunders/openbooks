@@ -3402,6 +3402,16 @@
         "title": "Tranches d'ancienneté",
         "singularTitle": "Politique de tranches d'ancienneté",
         "description": "Seuils de jours qui convertissent les jours échus en tranches d'ancienneté, avec dates de validité. Sans politique, les tranches 30/60/90 s'appliquent."
+      },
+      "schedule-boards": {
+        "title": "Tableaux de planification",
+        "singularTitle": "Tableau de planification",
+        "description": "Tableaux pour planifier les personnes et les tâches de projet : qui chaque tableau couvre, son apparence et la façon dont ses affectations sont publiées."
+      },
+      "schedule-codes": {
+        "title": "Codes de planification",
+        "singularTitle": "Code de planification",
+        "description": "Codes pour affecter un travail qui n’est ni un client ni un projet, comme des journées de formation ou d’atelier, et pour les jours où les personnes ne travaillent pas."
       }
     },
     "fields": {
@@ -3950,7 +3960,22 @@
       "weekendDays": "Jours de fin de semaine",
       "holidayCountry": "Pays des jours fériés",
       "boundaries": "Seuils",
-      "holidayRegion": "Région des jours fériés"
+      "holidayRegion": "Région des jours fériés",
+      "rowKind": "Plannings",
+      "grain": "Mode d’affectation",
+      "views": "Vues",
+      "defaultView": "S’ouvre sur",
+      "rangeDays": "Jours affichés",
+      "showWeekends": "Afficher les week-ends",
+      "timeZone": "Fuseau horaire",
+      "dayStarts": "Début de journée",
+      "dayEnds": "Fin de journée",
+      "dayBreakMinutes": "Pause (minutes)",
+      "publishPolicy": "Publication",
+      "prefillTimesheets": "Préremplir les feuilles de temps",
+      "prefillCrewTime": "Préremplir le temps d’équipe",
+      "prefillFieldTickets": "Préremplir les bons de régie",
+      "notifyAssignees": "Envoyer à chacun ses modifications par e-mail"
     },
     "fieldHelp": {
       "fxRateMaxAgeDays": "Nombre de jours entre le taux utilisable le plus récent et la fin de période au-delà duquel la réévaluation et la consolidation refusent le taux. Les taux de clôture se comptent depuis la date du taux comptant de fin de période ; les taux moyens depuis la cotation la plus récente incluse dans la moyenne. Valeur par défaut sans politique : 31 jours.",
@@ -4096,7 +4121,23 @@
       "businessCalendarWeekendDays": "Jours de la semaine ISO sous forme de liste JSON, par exemple [6, 7] pour samedi et dimanche. Une liste vide indique qu'aucun jour n'est en fin de semaine.",
       "businessCalendarHolidayCountry": "Les jours fériés proviennent d'un seul calendrier de travail : celui du pays, ou celui de sa région lorsque le pays en tient un par région (indiquez la région ci-dessous). Un pays sans module transcrit ne peut pas être utilisé — enregistrez sans pays de jours fériés pour les seules fins de semaine.",
       "agingBucketBoundaries": "Nombres de jours croissants sous forme de liste JSON, par exemple [30, 60, 90]. Le dernier seuil ouvre la dernière tranche : 90 jours échus relèvent déjà de 90+.",
-      "businessCalendarHolidayRegion": "Qualificatif de région sélectionnant le calendrier de travail : ON pour l'Ontario (jamais CA-ON). Lorsqu'un calendrier fédéral côtoie des calendriers régionaux, FEDERAL désigne le calendrier fédéral. Laissez vide lorsque le pays tient un calendrier unique ; un pays à calendriers régionaux l'exige."
+      "businessCalendarHolidayRegion": "Qualificatif de région sélectionnant le calendrier de travail : ON pour l'Ontario (jamais CA-ON). Lorsqu'un calendrier fédéral côtoie des calendriers régionaux, FEDERAL désigne le calendrier fédéral. Laissez vide lorsque le pays tient un calendrier unique ; un pays à calendriers régionaux l'exige.",
+      "scheduleBoardCode": "Un code court pour les liens et les importations, par exemple FIELD ou PLANT-A.",
+      "scheduleBoardRowKind": "Les tableaux du personnel affectent des employés ; les tableaux de tâches planifient les tâches de projet dans un diagramme de Gantt. Ce choix ne peut plus être modifié après la création du tableau.",
+      "scheduleBoardProject": "Limitez un tableau de tâches à un projet, ou laissez vide pour lister tous les projets actifs du périmètre.",
+      "scheduleBoardViews": "Les vues proposées par ce tableau. Tableaux du personnel : grille, chronologie, par chantier et mois. Tableaux de tâches : diagramme de Gantt et avancement.",
+      "scheduleBoardRangeDays": "Nombre de jours affichés à la fois par un tableau du personnel : 1, 3, 7, 14, 21, 28, 35 ou 42.",
+      "scheduleBoardWeekStartsOn": "Le premier jour de chaque semaine affichée : 0 pour dimanche, 1 pour lundi, jusqu’à 6 pour samedi.",
+      "scheduleBoardGrain": "Les journées entières affectent chaque personne pour la journée de travail du tableau ; les quarts horaires affectent des heures de début et de fin.",
+      "scheduleBoardDayStarts": "La journée de travail utilisée pour les affectations à la journée, au format 24 heures, par exemple 07:00.",
+      "scheduleBoardPublishPolicy": "Les tableaux en direct publient chaque affectation dès sa création. Les tableaux à publication groupée regroupent les modifications jusqu’à ce qu’une personne disposant des droits d’approbation les publie.",
+      "scheduleBoardPrefillTimesheets": "Les affectations publiées sur ce tableau apparaissent dans la feuille de temps hebdomadaire de chaque personne comme du temps planifié qu’elle peut ajouter en un clic, puis confirmer ou corriger.",
+      "scheduleBoardPrefillCrewTime": "Les affectations de projet publiées sur ce tableau proposent, sur la feuille de temps d’équipe du contremaître pour ce projet et ce jour, l’équipe et les heures affectées, ajoutées en un clic.",
+      "scheduleBoardPrefillFieldTickets": "Les affectations de projet publiées sur ce tableau proposent, sur le bon de régie de ce projet, l’équipe et les heures affectées pour la période du bon, ajoutées en un clic.",
+      "scheduleBoardNotifyAssignees": "Envoie à chaque personne un récapitulatif par e-mail lorsque ses affectations publiées sur ce tableau changent.",
+      "scheduleCode": "Jusqu’à 16 lettres majuscules, chiffres ou / & + . _ -, par exemple TRAIN, SHOP ou FORCED.",
+      "scheduleCodeCategory": "Les codes de travail comptent comme du temps planifié. Les codes d’indisponibilité marquent un jour où la personne ne travaille pas, sans enregistrer d’absence.",
+      "scheduleCodeColor": "La couleur d’affichage des affectations utilisant ce code, en valeur hexadécimale, par exemple #38bdf8."
     },
     "options": {
       "storedValueKind": {
@@ -4799,6 +4840,30 @@
         "friday": "vendredi",
         "saturday": "samedi",
         "sunday": "dimanche"
+      },
+      "scheduleRowKind": {
+        "people": "Personnel",
+        "tasks": "Tâches de projet"
+      },
+      "scheduleGrain": {
+        "day": "Journées entières",
+        "timed": "Quarts horaires"
+      },
+      "scheduleView": {
+        "grid": "Grille",
+        "targets": "Par chantier",
+        "timeline": "Chronologie",
+        "calendar": "Mois",
+        "gantt": "Diagramme de Gantt",
+        "progress": "Avancement"
+      },
+      "schedulePublishPolicy": {
+        "live": "En direct",
+        "staged": "Publier ensemble"
+      },
+      "scheduleCodeCategory": {
+        "work": "Travail",
+        "unavailable": "Ne travaille pas"
       }
     },
     "laborCosting": {
@@ -5831,7 +5896,15 @@
       "payComponentTaxability": "Impôts et cotisations",
       "payComponentTaxabilityHelp": "Les retenues, cotisations obligatoires et accumulations de vacances auxquelles ce code de paie contribue.",
       "payComponentAccounting": "Comptabilité",
-      "payComponentAccountingHelp": "Le compte du grand livre où le montant est comptabilisé et le destinataire du versement."
+      "payComponentAccountingHelp": "Le compte du grand livre où le montant est comptabilisé et le destinataire du versement.",
+      "scheduleBoardIdentity": "Tableau",
+      "scheduleBoardScope": "Personnes couvertes",
+      "scheduleBoardScopeHelp": "Les tableaux du personnel listent les employés de l’entité juridique, du département et de l’emplacement sélectionnés. Laissez un champ vide pour inclure tout le monde.",
+      "scheduleBoardDisplay": "Affichage",
+      "scheduleBoardBooking": "Affectation",
+      "scheduleBoardBookingHelp": "Les affectations à la journée utilisent ces heures de travail dans le fuseau horaire du tableau.",
+      "scheduleBoardAutomation": "Automatisation",
+      "scheduleBoardAutomationHelp": "Ce qui se passe après la publication d’une affectation sur ce tableau."
     },
     "segmentValues": {
       "builtinLink": "Ouvrir {name}",
@@ -7038,8 +7111,8 @@
       "description": "Cours, sessions, invitations, résultats et commentaires facultatifs. Les qualifications délivrées nécessitent aussi Certifications et licences."
     },
     "hrmShiftPlanning": {
-      "title": "Planification des quarts",
-      "description": "Horaires récurrents, affectations et planning publié facultatifs. La paie et la saisie des temps ne nécessitent pas de planning."
+      "title": "Planification",
+      "description": "Tableaux de planification pour affecter des personnes à la journée ou par quart, avec congés, jours fériés et publication. La paie et la saisie des temps ne nécessitent pas de planning."
     },
     "hrmAttendance": {
       "title": "Présence par appareil",

@@ -93,6 +93,8 @@ export const PROJECT_REFS: readonly (readonly [table: string, column: string])[]
   ["pay_applications", "project_id"],
   ["revenue_contracts", "project_id"],
   ["res_assignments", "project_id"],
+  ["schedule_boards", "project_id"],
+  ["schedule_entries", "project_id"],
   ["res_requests", "project_id"],
   ["res_retainers", "project_id"],
   ["schedule_baselines", "project_id"],

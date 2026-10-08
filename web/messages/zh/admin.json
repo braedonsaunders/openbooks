@@ -3477,6 +3477,16 @@
         "title": "账龄分段",
         "singularTitle": "账龄分段策略",
         "description": "将逾期天数转换为账龄分段的天数分界（按生效日期）。未设置策略时采用30/60/90分段。"
+      },
+      "schedule-boards": {
+        "title": "排程板",
+        "singularTitle": "排程板",
+        "description": "用于安排人员和项目任务的排程板：每个排程板涵盖哪些人员、如何显示，以及其安排如何发布。"
+      },
+      "schedule-codes": {
+        "title": "排程代码",
+        "singularTitle": "排程代码",
+        "description": "用于安排不属于客户或项目的工作（如培训日或车间日），以及标记人员不工作的日期。"
       }
     },
     "fields": {
@@ -4025,7 +4035,22 @@
       "weekendDays": "周末",
       "holidayCountry": "节假日国家",
       "boundaries": "分界天数",
-      "holidayRegion": "节假日地区"
+      "holidayRegion": "节假日地区",
+      "rowKind": "排程对象",
+      "grain": "安排方式",
+      "views": "视图",
+      "defaultView": "默认打开",
+      "rangeDays": "显示天数",
+      "showWeekends": "显示周末",
+      "timeZone": "时区",
+      "dayStarts": "上班时间",
+      "dayEnds": "下班时间",
+      "dayBreakMinutes": "休息（分钟）",
+      "publishPolicy": "发布方式",
+      "prefillTimesheets": "预填工时表",
+      "prefillCrewTime": "预填班组工时",
+      "prefillFieldTickets": "预填现场工单",
+      "notifyAssignees": "通过邮件通知人员其变更"
     },
     "fieldHelp": {
       "fxRateMaxAgeDays": "最新可用汇率距期末的天数超过此值时，重估和合并将拒绝该汇率。期末汇率从期末即期汇率的日期起算；平均汇率从计入平均的最新报价日期起算。未设置政策时的默认值：31 天。",
@@ -4171,7 +4196,23 @@
       "businessCalendarWeekendDays": "以JSON列表表示ISO星期几，例如[6, 7]表示周六和周日。空列表表示没有周末。",
       "businessCalendarHolidayCountry": "法定节假日取自唯一的就业日历：该国的，或该国按地区设历时的该地区（在下方设置地区）。没有核算包的国家不可用——不设节假日国家保存则仅适用周末规则。",
       "agingBucketBoundaries": "以升序天数的JSON列表表示，例如[30, 60, 90]。最后一个分界开启最后一个分段，因此逾期90天即属于90+。",
-      "businessCalendarHolidayRegion": "选择就业节假日历的地区限定词：安大略用ON（不可用CA-ON）。联邦日历与地区日历并存时，FEDERAL指联邦日历。该国只有单一日历时留空；按地区设历的国家必须填写。"
+      "businessCalendarHolidayRegion": "选择就业节假日历的地区限定词：安大略用ON（不可用CA-ON）。联邦日历与地区日历并存时，FEDERAL指联邦日历。该国只有单一日历时留空；按地区设历的国家必须填写。",
+      "scheduleBoardCode": "用于链接和导入的简短代码，如 FIELD 或 PLANT-A。",
+      "scheduleBoardRowKind": "人员排程板安排员工；任务排程板在甘特图上安排项目任务。排程板创建后无法更改此项。",
+      "scheduleBoardProject": "将任务排程板限定为一个项目，或留空以列出范围内所有进行中的项目。",
+      "scheduleBoardViews": "此排程板提供的视图。人员排程板：网格、时间轴、按作业和月。任务排程板：甘特图和进度。",
+      "scheduleBoardRangeDays": "人员排程板一次显示的天数：1、3、7、14、21、28、35 或 42。",
+      "scheduleBoardWeekStartsOn": "每周显示的第一天：0 为周日，1 为周一，依此类推，6 为周六。",
+      "scheduleBoardGrain": "全天模式按排程板的工作日安排每个人；按小时班次模式安排开始和结束时间。",
+      "scheduleBoardDayStarts": "全天安排所使用的工作时间，采用 24 小时制，如 07:00。",
+      "scheduleBoardPublishPolicy": "即时发布的排程板会在每项安排创建时立即发布。集中发布的排程板会汇总更改，直到拥有审批权限的人员发布。",
+      "scheduleBoardPrefillTimesheets": "此排程板上已发布的安排会作为计划时间显示在每个人的周工时表上，可一键添加，然后确认或更正。",
+      "scheduleBoardPrefillCrewTime": "此排程板上已发布的项目安排会在工头该项目当天的班组工时表中提供已安排的班组和工时，可一键添加。",
+      "scheduleBoardPrefillFieldTickets": "此排程板上已发布的项目安排会在该项目的现场工单中提供工单期间已安排的班组和工时，可一键添加。",
+      "scheduleBoardNotifyAssignees": "当某人在此排程板上已发布的安排发生变化时，通过邮件向其发送摘要。",
+      "scheduleCode": "最多 16 个大写字母、数字或 / & + . _ -，如 TRAIN、SHOP 或 FORCED。",
+      "scheduleCodeCategory": "工作代码计入计划时间。不可用代码标记人员不工作的日期，无需登记休假。",
+      "scheduleCodeColor": "使用此代码的安排所显示的颜色，以十六进制值表示，如 #38bdf8。"
     },
     "options": {
       "storedValueKind": {
@@ -4874,6 +4915,30 @@
         "friday": "星期五",
         "saturday": "星期六",
         "sunday": "星期日"
+      },
+      "scheduleRowKind": {
+        "people": "人员",
+        "tasks": "项目任务"
+      },
+      "scheduleGrain": {
+        "day": "全天",
+        "timed": "按小时班次"
+      },
+      "scheduleView": {
+        "grid": "网格",
+        "targets": "按作业",
+        "timeline": "时间轴",
+        "calendar": "月",
+        "gantt": "甘特图",
+        "progress": "进度"
+      },
+      "schedulePublishPolicy": {
+        "live": "即时发布",
+        "staged": "集中发布"
+      },
+      "scheduleCodeCategory": {
+        "work": "工作",
+        "unavailable": "不工作"
       }
     },
     "payroll": {
@@ -5759,7 +5824,15 @@
       "payComponentTaxability": "税款和缴费",
       "payComponentTaxabilityHelp": "此工资项目计入哪些预扣、法定缴费和假期工资计提。",
       "payComponentAccounting": "会计",
-      "payComponentAccountingHelp": "金额在总账中计入的科目，以及汇缴对象。"
+      "payComponentAccountingHelp": "金额在总账中计入的科目，以及汇缴对象。",
+      "scheduleBoardIdentity": "排程板",
+      "scheduleBoardScope": "涵盖人员",
+      "scheduleBoardScopeHelp": "人员排程板列出所选法律实体、部门和地点的员工。留空某个字段即包含所有人。",
+      "scheduleBoardDisplay": "显示",
+      "scheduleBoardBooking": "安排",
+      "scheduleBoardBookingHelp": "全天安排按排程板时区使用这些工作时间。",
+      "scheduleBoardAutomation": "自动化",
+      "scheduleBoardAutomationHelp": "在此排程板上发布安排后执行的操作。"
     },
     "constructionRateEditor": {
       "tab": "适用范围和工资率"
@@ -7038,8 +7111,8 @@
       "description": "可选的课程、场次、邀请、结果和反馈。授予资格还需启用认证与执照。"
     },
     "hrmShiftPlanning": {
-      "title": "排班计划",
-      "description": "可选的循环班次、员工安排和已发布排班表。工资核算和工时录入无需排班表。"
+      "title": "排程",
+      "description": "用于按天或按班次安排人员的排程板，支持休假、节假日和发布。工资核算和工时录入无需排程。"
     },
     "hrmAttendance": {
       "title": "设备考勤",

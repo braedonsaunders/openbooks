@@ -1,0 +1,114 @@
+'use client'
+
+import { useMemo, useState } from 'react'
+import { useLocale, useTranslations } from 'next-intl'
+import { Select, cn } from '@openbooks/ui'
+import { CHIP_COLORS, chipStyle } from './BookingChip'
+import { targetHue, targetShortLabel, type BoardEntry, type BoardTarget } from './model'
+import type { BoardWindow } from '@openbooks/engine/src/schedule-boards/window.ts'
+
+/** The month at a glance: who is where each day, or one person's month. */
+export function CalendarView({ window: board, month, today, onOpenEntry }: {
+  window: BoardWindow
+  month: string
+  today: string
+  onOpenEntry: (entry: BoardEntry) => void
+}) {
+  const t = useTranslations('scheduling')
+  const locale = useLocale()
+  const [personId, setPersonId] = useState('')
+  const [open, setOpen] = useState<string | null>(null)
+  const replaced = useMemo(() => new Set(board.replaced), [board.replaced])
+  const names = useMemo(() => new Map(board.people.map((person) => [person.partyId, person.name])), [board.people])
+  const byDate = useMemo(() => {
+    const map = new Map<string, BoardEntry[]>()
+    for (const entry of board.entries) {
+      if (replaced.has(entry.id) || (personId && entry.workerPartyId !== personId)) continue
+      const list = map.get(entry.startsOn) ?? []
+      list.push(entry)
+      map.set(entry.startsOn, list)
+    }
+    return map
+  }, [board.entries, personId, replaced])
+  const leaveByDate = useMemo(() => {
+    const map = new Map<string, number>()
+    for (const absence of board.absences) if (!personId || absence.workerPartyId === personId) map.set(absence.onDate, (map.get(absence.onDate) ?? 0) + 1)
+    return map
+  }, [board.absences, personId])
+  const weekdayFormat = useMemo(() => new Intl.DateTimeFormat(locale, { weekday: 'short', timeZone: 'UTC' }), [locale])
+  const weeks = useMemo(() => {
+    const rows: (typeof board.days)[] = []
+    for (let i = 0; i < board.days.length; i += 7) rows.push(board.days.slice(i, i + 7))
+    return rows
+  }, [board.days])
+
+  return (
+    <div className="flex min-h-0 flex-1 flex-col gap-2">
+      <div className="flex items-center justify-end">
+        <Select value={personId} onChange={(event) => setPersonId(event.target.value)} className="h-8 w-56 text-xs" aria-label={t('calendar.person')}>
+          <option value="">{t('calendar.everyone')}</option>
+          {board.people.map((person) => <option key={person.partyId} value={person.partyId}>{person.name}</option>)}
+        </Select>
+      </div>
+      <div className="grid min-h-0 flex-1 grid-cols-7 overflow-auto rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-950" style={{ gridTemplateRows: `auto repeat(${weeks.length}, minmax(112px, 1fr))` }}>
+        {weeks[0]?.map((day) => (
+          <div key={`h-${day.date}`} className="sticky top-0 z-10 border-b border-slate-200 bg-white/95 px-2 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:border-slate-800 dark:bg-slate-950/95">
+            {weekdayFormat.format(new Date(`${day.date}T00:00:00Z`))}
+          </div>
+        ))}
+        {weeks.flat().map((day) => {
+          const entries = byDate.get(day.date) ?? []
+          const groups = new Map<string, { target: BoardTarget | null; entries: BoardEntry[] }>()
+          for (const entry of entries) {
+            const key = entry.target ? `${entry.target.kind}:${entry.target.id}` : 'none'
+            const group = groups.get(key) ?? { target: entry.target, entries: [] }
+            group.entries.push(entry)
+            groups.set(key, group)
+          }
+          const inMonth = day.date.slice(0, 7) === month
+          const expanded = open === day.date
+          const leave = leaveByDate.get(day.date) ?? 0
+          return (
+            <div key={day.date} className={cn('relative min-w-0 border-b border-l border-slate-100 p-1.5 dark:border-slate-800', !inMonth && 'bg-slate-50/70 text-slate-400 dark:bg-slate-900/50', day.isHoliday && 'bg-rose-50/60 dark:bg-rose-950/20')}>
+              <button type="button" onClick={() => setOpen(expanded ? null : day.date)} className="flex w-full items-center justify-between">
+                <span className={cn('flex h-6 min-w-6 items-center justify-center rounded-full px-1 text-xs font-semibold tabular-nums', day.date === today ? 'bg-teal-600 text-white' : 'text-slate-700 dark:text-slate-200')}>
+                  {Number(day.date.slice(8))}
+                </span>
+                {leave ? <span className="rounded bg-amber-100 px-1 text-[9px] font-semibold text-amber-800 dark:bg-amber-950 dark:text-amber-200">{t('calendar.onLeave', { count: leave })}</span> : null}
+              </button>
+              <div className="mt-1 space-y-0.5">
+                {[...groups.values()].slice(0, expanded ? undefined : 4).map((group) => (
+                  <div key={group.target ? group.target.id : 'none'}>
+                    <button
+                      type="button"
+                      onClick={() => (personId && group.entries[0] ? onOpenEntry(group.entries[0]) : setOpen(expanded ? null : day.date))}
+                      style={chipStyle(targetHue(group.target))}
+                      className={cn('flex w-full items-center justify-between rounded border px-1.5 py-0.5 text-[10px] font-semibold', CHIP_COLORS)}
+                    >
+                      <span className="truncate">{targetShortLabel(group.target)}</span>
+                      {!personId ? <span className="tabular-nums opacity-75">{group.entries.length}</span> : null}
+                    </button>
+                    {expanded && !personId ? (
+                      <ul className="mb-1 ml-1 mt-0.5 space-y-0.5">
+                        {group.entries.map((entry) => (
+                          <li key={entry.id}>
+                            <button type="button" onClick={() => onOpenEntry(entry)} className="w-full truncate text-left text-[10px] text-slate-600 hover:underline dark:text-slate-300">
+                              {names.get(entry.workerPartyId) ?? '—'}
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : null}
+                  </div>
+                ))}
+                {!expanded && groups.size > 4 ? (
+                  <button type="button" onClick={() => setOpen(day.date)} className="px-1 text-[10px] font-medium text-teal-700 hover:underline dark:text-teal-300">{t('calendar.more', { count: groups.size - 4 })}</button>
+                ) : null}
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}

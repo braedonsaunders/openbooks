@@ -3530,6 +3530,16 @@
         "title": "滞留期間区分",
         "singularTitle": "滞留期間区分ポリシー",
         "description": "延滞日数を滞留バケットに変換する日数境界を発効日付きで管理します。ポリシーがない場合は30/60/90のバケットを適用します。"
+      },
+      "schedule-boards": {
+        "title": "スケジュールボード",
+        "singularTitle": "スケジュールボード",
+        "description": "人員とプロジェクトタスクのスケジュールを管理するボード。各ボードの対象者、表示方法、割り当ての公開方法を設定します。"
+      },
+      "schedule-codes": {
+        "title": "スケジュールコード",
+        "singularTitle": "スケジュールコード",
+        "description": "研修日や工場作業日など、顧客やプロジェクトに該当しない作業の割り当てと、勤務しない日に使うコード。"
       }
     },
     "fields": {
@@ -4078,7 +4088,22 @@
       "weekendDays": "週末の曜日",
       "holidayCountry": "祝日の国",
       "boundaries": "境界値",
-      "holidayRegion": "祝日の地域"
+      "holidayRegion": "祝日の地域",
+      "rowKind": "スケジュール対象",
+      "grain": "割り当て方式",
+      "views": "ビュー",
+      "defaultView": "初期表示",
+      "rangeDays": "表示日数",
+      "showWeekends": "週末を表示",
+      "timeZone": "タイムゾーン",
+      "dayStarts": "始業時刻",
+      "dayEnds": "終業時刻",
+      "dayBreakMinutes": "休憩 (分)",
+      "publishPolicy": "公開方式",
+      "prefillTimesheets": "タイムシートを事前入力",
+      "prefillCrewTime": "クルー作業時間を事前入力",
+      "prefillFieldTickets": "フィールドチケットを事前入力",
+      "notifyAssignees": "変更内容を本人にメールで通知"
     },
     "fieldHelp": {
       "fxRateMaxAgeDays": "使用可能な最新レートから期末までの日数がこれを超えると、再評価と連結はそのレートを拒否します。期末レートは期末スポットレートの日付から、平均レートは平均に含まれる最新の相場の日付から数えます。ポリシー未設定時の既定値: 31日。",
@@ -4224,7 +4249,23 @@
       "businessCalendarWeekendDays": "ISO曜日をJSONリストで指定します（例：土曜と日曜なら[6, 7]）。空リストは週末の曜日がないことを表します。",
       "businessCalendarHolidayCountry": "法定休日は1つの就業カレンダー（その国のもの、または地域ごとにカレンダーがある国ではその地域のもの）から解決されます（地域は下で設定）。パック未整備の国は使用できません — 休日国なしで保存すると週末のみの扱いになります。",
       "agingBucketBoundaries": "日数を昇順のJSONリストで指定します（例：[30, 60, 90]）。最後の境界は最終バケットの開始を表すため、延滞90日はすでに90+となります。",
-      "businessCalendarHolidayRegion": "就業休日カレンダーを選択する地域修飾子：オンタリオ州ならON（CA-ON不可）。連邦カレンダーが地域カレンダーと並存する国では、FEDERALが連邦カレンダーを指します。単一カレンダーの国では空欄にします。地域別カレンダーの国では必須です。"
+      "businessCalendarHolidayRegion": "就業休日カレンダーを選択する地域修飾子：オンタリオ州ならON（CA-ON不可）。連邦カレンダーが地域カレンダーと並存する国では、FEDERALが連邦カレンダーを指します。単一カレンダーの国では空欄にします。地域別カレンダーの国では必須です。",
+      "scheduleBoardCode": "リンクやインポートに使う短いコード（例: FIELD、PLANT-A）。",
+      "scheduleBoardRowKind": "人員ボードは従業員を割り当て、タスクボードはガントチャート上でプロジェクトタスクをスケジュールします。ボードの作成後は変更できません。",
+      "scheduleBoardProject": "タスクボードを1つのプロジェクトに限定します。空欄にすると、対象範囲内のすべての有効なプロジェクトが表示されます。",
+      "scheduleBoardViews": "このボードで使えるビュー。人員ボード: グリッド、タイムライン、作業先別、月。タスクボード: ガントチャートと進捗。",
+      "scheduleBoardRangeDays": "人員ボードに一度に表示する日数: 1、3、7、14、21、28、35、42。",
+      "scheduleBoardWeekStartsOn": "表示する各週の最初の曜日: 0 は日曜日、1 は月曜日、6 は土曜日です。",
+      "scheduleBoardGrain": "終日では、各人をボードの勤務時間帯で割り当てます。時間単位のシフトでは、開始時刻と終了時刻を割り当てます。",
+      "scheduleBoardDayStarts": "終日の割り当てに使う勤務時間帯（07:00 のような24時間表記）。",
+      "scheduleBoardPublishPolicy": "即時公開のボードは、割り当てを作成するたびに公開します。一括公開のボードは、承認権限を持つユーザーが公開するまで変更をまとめて保持します。",
+      "scheduleBoardPrefillTimesheets": "このボードで公開された割り当ては、各人の週次タイムシートに予定時間として表示され、ワンクリックで追加してから確認・修正できます。",
+      "scheduleBoardPrefillCrewTime": "このボードで公開されたプロジェクトの割り当ては、そのプロジェクトと日付の職長のクルー作業時間シートに、割り当てられたクルーと時間を候補として表示し、ワンクリックで追加できます。",
+      "scheduleBoardPrefillFieldTickets": "このボードで公開されたプロジェクトの割り当ては、そのプロジェクトのフィールドチケットに、チケット期間に割り当てられたクルーと時間を候補として表示し、ワンクリックで追加できます。",
+      "scheduleBoardNotifyAssignees": "このボードで公開済みの割り当てが変更されたときに、各人へ概要をメールで送信します。",
+      "scheduleCode": "英大文字、数字、/ & + . _ - を最大16文字（例: TRAIN、SHOP、FORCED）。",
+      "scheduleCodeCategory": "作業コードは予定時間として集計されます。勤務なしのコードは、休暇を申請せずに勤務しない日を示します。",
+      "scheduleCodeColor": "このコードの割り当てを表示する色（#38bdf8 のような16進数値）。"
     },
     "options": {
       "storedValueKind": {
@@ -4927,6 +4968,30 @@
         "friday": "金曜日",
         "saturday": "土曜日",
         "sunday": "日曜日"
+      },
+      "scheduleRowKind": {
+        "people": "人員",
+        "tasks": "プロジェクトタスク"
+      },
+      "scheduleGrain": {
+        "day": "終日",
+        "timed": "時間単位のシフト"
+      },
+      "scheduleView": {
+        "grid": "グリッド",
+        "targets": "作業先別",
+        "timeline": "タイムライン",
+        "calendar": "月",
+        "gantt": "ガントチャート",
+        "progress": "進捗"
+      },
+      "schedulePublishPolicy": {
+        "live": "即時公開",
+        "staged": "一括公開"
+      },
+      "scheduleCodeCategory": {
+        "work": "作業",
+        "unavailable": "勤務なし"
       }
     },
     "invoicing": {
@@ -5831,7 +5896,15 @@
       "payComponentTaxability": "税金と保険料",
       "payComponentTaxabilityHelp": "この給与項目が対象となる源泉徴収、法定保険料、休暇手当の積立。",
       "payComponentAccounting": "会計",
-      "payComponentAccountingHelp": "総勘定元帳での計上先と、納付先。"
+      "payComponentAccountingHelp": "総勘定元帳での計上先と、納付先。",
+      "scheduleBoardIdentity": "ボード",
+      "scheduleBoardScope": "対象者",
+      "scheduleBoardScopeHelp": "人員ボードには、選択した法人、部門、拠点の従業員が表示されます。空欄にするとすべての人が対象になります。",
+      "scheduleBoardDisplay": "表示",
+      "scheduleBoardBooking": "割り当て",
+      "scheduleBoardBookingHelp": "終日の割り当てには、ボードのタイムゾーンでこの勤務時間が使われます。",
+      "scheduleBoardAutomation": "自動化",
+      "scheduleBoardAutomationHelp": "このボードで割り当てが公開された後の処理。"
     },
     "segmentValues": {
       "builtinLink": "{name}を開く",
@@ -7038,8 +7111,8 @@
       "description": "任意のコース、日程、招待、結果、フィードバック。資格の付与には認定・免許も必要です。"
     },
     "hrmShiftPlanning": {
-      "title": "シフト計画",
-      "description": "任意の繰り返し勤務予定、従業員の割り当て、公開シフト表。給与計算と時間入力にシフト表は不要です。"
+      "title": "スケジュール管理",
+      "description": "人員を日単位またはシフト単位で割り当てるスケジュールボード。休暇、祝日、公開の機能を備えています。給与計算と時間入力にスケジュールは不要です。"
     },
     "hrmAttendance": {
       "title": "端末による勤怠記録",

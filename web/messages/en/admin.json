@@ -3477,6 +3477,16 @@
         "title": "Aging bucket policies",
         "singularTitle": "Aging bucket policy",
         "description": "Day boundaries that turn days-past-due into aging buckets, effective-dated. Without a policy the 30/60/90 buckets apply."
+      },
+      "schedule-boards": {
+        "title": "Schedule boards",
+        "singularTitle": "Schedule board",
+        "description": "Boards for scheduling people and project tasks: who each board covers, how it looks, and how its bookings publish."
+      },
+      "schedule-codes": {
+        "title": "Schedule codes",
+        "singularTitle": "Schedule code",
+        "description": "Codes for booking work that is not a customer or project, such as training or shop days, and for days people are not working."
       }
     },
     "fields": {
@@ -4025,7 +4035,22 @@
       "weekendDays": "Weekend days",
       "holidayCountry": "Holiday country",
       "boundaries": "Boundaries",
-      "holidayRegion": "Holiday region"
+      "holidayRegion": "Holiday region",
+      "rowKind": "Schedules",
+      "grain": "Booking style",
+      "views": "Views",
+      "defaultView": "Opens in",
+      "rangeDays": "Days shown",
+      "showWeekends": "Show weekends",
+      "timeZone": "Time zone",
+      "dayStarts": "Day starts",
+      "dayEnds": "Day ends",
+      "dayBreakMinutes": "Break (minutes)",
+      "publishPolicy": "Publishing",
+      "prefillTimesheets": "Pre-fill timesheets",
+      "prefillCrewTime": "Pre-fill crew time",
+      "prefillFieldTickets": "Pre-fill field tickets",
+      "notifyAssignees": "Email people their changes"
     },
     "fieldHelp": {
       "fxRateMaxAgeDays": "Days between the newest usable rate and the period end beyond which revaluation and consolidation refuse the rate. Closing rates count from the date of the period-end spot rate; average rates from the newest quote averaged. Default when no policy is set: 31 days.",
@@ -4171,7 +4196,23 @@
       "businessCalendarWeekendDays": "ISO weekdays as a JSON list, for example [6, 7] for Saturday and Sunday. An empty list states that no weekday is a weekend day.",
       "businessCalendarHolidayCountry": "Statutory holidays resolve from one employment calendar: this country's, or its region's where the country keeps one per region (set the region below). A country with no transcribed pack cannot be used — save without a holiday country for weekends only.",
       "agingBucketBoundaries": "Ascending day counts as a JSON list, for example [30, 60, 90]. The final boundary opens the last bucket, so 90 days past due is already 90+.",
-      "businessCalendarHolidayRegion": "Region qualifier selecting the employment holiday calendar: ON for Ontario (never CA-ON). Where a federal calendar sits beside regional ones, FEDERAL names the federal calendar. Leave empty where the country keeps a single calendar; a country of regional calendars requires it."
+      "businessCalendarHolidayRegion": "Region qualifier selecting the employment holiday calendar: ON for Ontario (never CA-ON). Where a federal calendar sits beside regional ones, FEDERAL names the federal calendar. Leave empty where the country keeps a single calendar; a country of regional calendars requires it.",
+      "scheduleBoardCode": "A short code for links and imports, such as FIELD or PLANT-A.",
+      "scheduleBoardRowKind": "People boards book employees; task boards schedule project tasks on a Gantt. This cannot change after the board is created.",
+      "scheduleBoardProject": "Limit a task board to one project, or leave empty to list every active project in scope.",
+      "scheduleBoardViews": "The views this board offers. People boards: grid, timeline, by job and month. Task boards: Gantt and progress.",
+      "scheduleBoardRangeDays": "How many days a people board shows at once: 1, 3, 7, 14, 21, 28, 35 or 42.",
+      "scheduleBoardWeekStartsOn": "The first day of each week shown: 0 is Sunday, 1 is Monday, through 6 for Saturday.",
+      "scheduleBoardGrain": "Whole days book each person for the board's working day; hourly shifts book start and end times.",
+      "scheduleBoardDayStarts": "The working day used for whole-day bookings, as a 24-hour time such as 07:00.",
+      "scheduleBoardPublishPolicy": "Live boards publish each booking as it is made. Staged boards collect changes until someone with approval rights publishes them.",
+      "scheduleBoardPrefillTimesheets": "Published bookings on this board appear on each person's weekly timesheet as scheduled time they can add with one click, then confirm or correct.",
+      "scheduleBoardPrefillCrewTime": "Published project bookings on this board offer the foreman's crew sheet for that project and day its booked crew and hours, added with one click.",
+      "scheduleBoardPrefillFieldTickets": "Published project bookings on this board offer that project's field ticket its booked crew and hours for the ticket period, added with one click.",
+      "scheduleBoardNotifyAssignees": "Email each person a summary when their published bookings on this board change.",
+      "scheduleCode": "Up to 16 capital letters, digits or / & + . _ -, such as TRAIN, SHOP or FORCED.",
+      "scheduleCodeCategory": "Work codes count as scheduled time. Unavailable codes mark a day the person is not working without filing leave.",
+      "scheduleCodeColor": "The colour bookings with this code show in, as a hex value such as #38bdf8."
     },
     "options": {
       "storedValueKind": {
@@ -4874,6 +4915,30 @@
         "friday": "Friday",
         "saturday": "Saturday",
         "sunday": "Sunday"
+      },
+      "scheduleRowKind": {
+        "people": "People",
+        "tasks": "Project tasks"
+      },
+      "scheduleGrain": {
+        "day": "Whole days",
+        "timed": "Hourly shifts"
+      },
+      "scheduleView": {
+        "grid": "Grid",
+        "targets": "By job",
+        "timeline": "Timeline",
+        "calendar": "Month",
+        "gantt": "Gantt",
+        "progress": "Progress"
+      },
+      "schedulePublishPolicy": {
+        "live": "Live",
+        "staged": "Publish together"
+      },
+      "scheduleCodeCategory": {
+        "work": "Work",
+        "unavailable": "Not working"
       }
     },
     "payroll": {
@@ -5759,7 +5824,15 @@
       "payComponentTaxability": "Taxes and contributions",
       "payComponentTaxabilityHelp": "Which withholdings, statutory contributions and vacation accruals this pay code counts toward.",
       "payComponentAccounting": "Accounting",
-      "payComponentAccountingHelp": "Where the amount posts in the general ledger, and who it is remitted to."
+      "payComponentAccountingHelp": "Where the amount posts in the general ledger, and who it is remitted to.",
+      "scheduleBoardIdentity": "Board",
+      "scheduleBoardScope": "Who it covers",
+      "scheduleBoardScopeHelp": "People boards list employees in the selected legal entity, department and location. Leave a field empty to include everyone.",
+      "scheduleBoardDisplay": "Display",
+      "scheduleBoardBooking": "Booking",
+      "scheduleBoardBookingHelp": "Whole-day bookings use these working hours in the board's time zone.",
+      "scheduleBoardAutomation": "Automation",
+      "scheduleBoardAutomationHelp": "What happens after a booking is published on this board."
     },
     "constructionRateEditor": {
       "tab": "Scope & rates"
@@ -7038,8 +7111,8 @@
       "description": "Optional courses, sessions, invitations, results and feedback. Qualification awards also require Certifications and licenses."
     },
     "hrmShiftPlanning": {
-      "title": "Shift planning",
-      "description": "Optional recurring schedules, employee assignments and a published roster. Payroll and time entry do not require a roster."
+      "title": "Scheduling",
+      "description": "Schedule boards for booking people by the day or by the shift, with leave, holidays and publishing. Payroll and time entry do not require a schedule."
     },
     "hrmAttendance": {
       "title": "Device attendance",
