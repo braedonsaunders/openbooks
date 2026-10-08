@@ -238,7 +238,8 @@
     "nothing": "Chaque jour planifié a déjà des heures.",
     "filled": "{count, plural, one {# jour rempli depuis le planning.} other {# jours remplis depuis le planning.}} {skipped, plural, =0 {} one {# jour avait déjà des heures.} other {# jours avaient déjà des heures.}} Vérifiez et enregistrez.",
     "crewFilled": "{count, plural, one {# personne ajoutée depuis le planning.} other {# personnes ajoutées depuis le planning.}} Vérifiez les heures et enregistrez les lignes.",
-    "crewNothing": "Toutes les personnes affectées à ce projet aujourd’hui figurent déjà sur la feuille."
+    "crewNothing": "Toutes les personnes affectées à ce projet aujourd’hui figurent déjà sur la feuille.",
+    "timeType": "Choisir le type de temps normal"
   },
   "notify": {
     "subject": "Votre planning a changé — {board}",

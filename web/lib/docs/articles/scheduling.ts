@@ -97,6 +97,13 @@ sheet for a project and day offers the people booked there. Nothing is
 recorded until the person or foreman saves, so the timesheet and crew
 approval rules apply unchanged.
 
+With **Pre-fill field tickets** on, a draft ticket's Crew hours tab offers
+**Fill from schedule** for its project and period. Published bookings add
+the scheduled hours and task assignments only to empty person-days; existing
+hours and unfinished edits are preserved. When several regular time types
+are available, choose one before filling. Review the crew and labor items,
+then save through the ticket's normal approval workflow.
+
 With **Email people their changes** on, everyone whose published bookings
 change receives a notification in OpenBooks and, when the organization has
 email set up and the person has an address, an email listing the days that

@@ -238,7 +238,8 @@
     "nothing": "Todos los días planificados ya tienen horas.",
     "filled": "{count, plural, one {Se rellenó # día desde la planificación.} other {Se rellenaron # días desde la planificación.}} {skipped, plural, =0 {} one {# día ya tenía horas.} other {# días ya tenían horas.}} Revise y guarde.",
     "crewFilled": "{count, plural, one {Se añadió # persona desde la planificación.} other {Se añadieron # personas desde la planificación.}} Revise las horas y guarde las líneas.",
-    "crewNothing": "Todas las personas asignadas hoy a este proyecto ya están en la hoja."
+    "crewNothing": "Todas las personas asignadas hoy a este proyecto ya están en la hoja.",
+    "timeType": "Elegir tipo de tiempo regular"
   },
   "notify": {
     "subject": "Su planificación ha cambiado: {board}",

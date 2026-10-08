@@ -238,7 +238,8 @@
     "nothing": "Todos os dias programados já têm horas.",
     "filled": "{count, plural, one {# dia preenchido pela programação.} other {# dias preenchidos pela programação.}} {skipped, plural, =0 {} one {# dia já tinha horas.} other {# dias já tinham horas.}} Revise e salve.",
     "crewFilled": "{count, plural, one {# pessoa adicionada pela programação.} other {# pessoas adicionadas pela programação.}} Revise as horas e salve as linhas.",
-    "crewNothing": "Todas as pessoas alocadas hoje a este projeto já estão na folha."
+    "crewNothing": "Todas as pessoas alocadas hoje a este projeto já estão na folha.",
+    "timeType": "Escolher o tipo de tempo regular"
   },
   "notify": {
     "subject": "Sua programação mudou — {board}",

@@ -10,7 +10,9 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { useViewerFormat } from '@/lib/viewer-format'
 import { toast } from 'sonner'
-import { Mail, Plus, Send, Trash2 } from 'lucide-react'
+import { CalendarCheck, Mail, Plus, Send, Trash2 } from 'lucide-react'
+import type { ScheduledWork } from '@openbooks/engine/src/schedule-boards/prefill.ts'
+import { fillTicketFromSchedule } from '@/lib/field-ticket-schedule-fill'
 import { Badge, Button, Input, Label, SearchSelect, Select, Textarea, cn } from '@openbooks/ui'
 import { defaultFormLayout, type FormLayoutConfig, type HeaderFieldPlacement } from '@openbooks/customization'
 import { add } from '@openbooks/engine/src/money/money.ts'
@@ -270,6 +272,7 @@ export interface FieldTicketDrawerProps {
   equipmentEnabled: boolean
   /** Projects → Progress tracking: the ticket reports production per task. */
   progressEnabled?: boolean
+  schedulingEnabled?: boolean
   layout?: FormLayoutConfig
   availableLayouts?: { id: string; name: string; isDefault?: boolean }[]
   currentLayoutId?: string | null
@@ -321,6 +324,7 @@ export function FieldTicketDrawer(props: FieldTicketDrawerProps) {
   const t = useTranslations('fieldTickets')
   const tCommon = useTranslations('common')
   const tNav = useTranslations('nav')
+  const tScheduling = useTranslations('scheduling')
   const headerFieldId = useId()
   const router = useRouter()
   const pathname = usePathname() ?? '/field-tickets'
@@ -343,6 +347,12 @@ export function FieldTicketDrawer(props: FieldTicketDrawerProps) {
   )
   const [grid, setGrid] = useState<GridRow[]>(() => buildGrid(props.ticket.entries))
   const [gridDirty, setGridDirty] = useState(false)
+  const [schedulePreview, setSchedulePreview] = useState<{ scheduled: ScheduledWork[]; timeTypes: Opt[] } | null>(null)
+  const [scheduleTimeTypeId, setScheduleTimeTypeId] = useState('')
+  const [scheduleError, setScheduleError] = useState<string | null>(null)
+  const [scheduleLoading, setScheduleLoading] = useState(false)
+  const [scheduleRetry, setScheduleRetry] = useState(0)
+  const [filledWindow, setFilledWindow] = useState<{ start: string; end: string } | null>(null)
   const [busy, setBusy] = useState(false)
   const [sending, setSending] = useState(false)
   const [sendTo, setSendTo] = useState(props.ticket.customerEmail ?? '')
@@ -391,13 +401,56 @@ export function FieldTicketDrawer(props: FieldTicketDrawerProps) {
   const editable = mode === 'edit' && canEditStatus
   const gridHasHours = grid.some((row) => Object.values(row.cells).some((value) => Number(value) > 0))
   const visibleWindow = useMemo(
-    () => editable && !gridHasHours
-      ? ticketWindow(period, documentDate)
-      : { start: ticket.fieldTicket.periodStart, end: ticket.fieldTicket.periodEnd },
-    [documentDate, editable, gridHasHours, period, ticket.fieldTicket.periodEnd, ticket.fieldTicket.periodStart],
+    () => {
+      if (editable && filledWindow && gridDirty) return filledWindow
+      return editable && !gridHasHours
+        ? ticketWindow(period, documentDate)
+        : { start: ticket.fieldTicket.periodStart, end: ticket.fieldTicket.periodEnd }
+    },
+    [documentDate, editable, filledWindow, gridDirty, gridHasHours, period, ticket.fieldTicket.periodEnd, ticket.fieldTicket.periodStart],
   )
   const days = useMemo(() => daysInWindow(visibleWindow.start, visibleWindow.end), [visibleWindow])
   const sig = ticket.fieldTicket.signatures
+
+  useEffect(() => {
+    setSchedulePreview(null)
+    setScheduleError(null)
+    setScheduleLoading(false)
+    if (!editable || !props.schedulingEnabled || !projectId) return
+    const controller = new AbortController()
+    let active = true
+    setScheduleLoading(true)
+    const query = new URLSearchParams({ projectId, from: visibleWindow.start, through: visibleWindow.end })
+    void fetch(`/api/field-tickets/${ticket.id}/schedule-preview?${query}`, { signal: controller.signal })
+      .then(async (response) => {
+        if (!response.ok) throw new Error(await readApiErrorMessage(response, tScheduling('errors.load')))
+        const preview = await response.json() as { scheduled: ScheduledWork[]; timeTypes: Opt[] }
+        if (active) {
+          setSchedulePreview(preview)
+          setScheduleTimeTypeId((selected) => preview.timeTypes.some((type) => type.id === selected)
+            ? selected : preview.timeTypes.length === 1 ? preview.timeTypes[0]!.id : '')
+        }
+      })
+      .catch((error: unknown) => {
+        if (active && (!(error instanceof Error) || error.name !== 'AbortError')) {
+          setScheduleError(error instanceof Error ? error.message : tScheduling('errors.load'))
+        }
+      })
+      .finally(() => { if (active) setScheduleLoading(false) })
+    return () => { active = false; controller.abort() }
+  }, [editable, projectId, props.schedulingEnabled, scheduleRetry, ticket.id, visibleWindow.start, visibleWindow.end, tScheduling])
+
+  function onFillFromSchedule() {
+    if (!schedulePreview || !schedulePreview.timeTypes.some((type) => type.id === scheduleTimeTypeId) || !editable || busy) return
+    const result = fillTicketFromSchedule(grid, schedulePreview.scheduled, {
+      projectId, days, timeTypeId: scheduleTimeTypeId,
+    })
+    if (result.filled === 0) { toast.info(tScheduling('prefill.nothing')); return }
+    setGrid(result.rows)
+    setFilledWindow(visibleWindow)
+    setGridDirty(true)
+    toast.success(tScheduling('prefill.filled', { count: result.filled, skipped: result.skipped }))
+  }
 
   const selectedItem = props.catalogItems.find((item) => item.id === lineItem)
   const equipmentOptions = props.equipmentUnits.filter((unit) => unit.chargeItemId === lineItem)
@@ -525,6 +578,7 @@ export function FieldTicketDrawer(props: FieldTicketDrawerProps) {
     setCustomerName(j.customerName)
     setGrid(buildGrid(j.entries))
     setGridDirty(false)
+    setFilledWindow(null)
     setProjectId(j.projectId ?? '')
     setDocumentDate(j.documentDate)
     setReferenceNumber(j.referenceNumber ?? '')
@@ -1150,15 +1204,37 @@ export function FieldTicketDrawer(props: FieldTicketDrawerProps) {
 
         {/* ---- crew hours ---- */}
         {activeSection === 'time' ? <section>
-          <div className="mb-2 flex items-center justify-between">
+          <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
             <div>
               <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t('editor.crew.title')}</h3>
               <p className="text-xs text-slate-500 dark:text-slate-400">{t('editor.crew.hint')}</p>
             </div>
+            <div className="flex flex-wrap items-center gap-3">
+              {editable && props.schedulingEnabled && projectId && (scheduleLoading || (schedulePreview?.scheduled.length ?? 0) > 0) ? (
+                <>
+                {(schedulePreview?.timeTypes.length ?? 0) > 1 ? <Select
+                  value={scheduleTimeTypeId} onChange={(event) => setScheduleTimeTypeId(event.target.value)}
+                  aria-label={tScheduling('prefill.timeType')}
+                  options={[{ value: '', label: tScheduling('prefill.timeType') },
+                    ...(schedulePreview?.timeTypes ?? []).map((type) => ({ value: type.id, label: type.name }))]}
+                  disabled={busy || scheduleLoading} /> : null}
+                <Button size="sm" variant="outline" onClick={onFillFromSchedule}
+                  disabled={busy || scheduleLoading || !scheduleTimeTypeId}
+                  title={tScheduling('prefill.ticketHint')}>
+                  <CalendarCheck size={14} /> {tScheduling('prefill.fill')}
+                </Button>
+                </>
+              ) : null}
             <span className="text-sm font-medium tabular-nums text-slate-700 dark:text-slate-200">
               {t('editor.crew.total', { hours: formatTicketHours(totalHours) })}
             </span>
+            </div>
           </div>
+          {scheduleError ? <div role="alert" className="mb-2 flex items-center gap-2 text-sm text-red-600 dark:text-red-400">
+            <p>{scheduleError}</p>
+            <Button size="sm" variant="outline" disabled={busy || scheduleLoading}
+              onClick={() => setScheduleRetry((retry) => retry + 1)}>{tCommon('actions.retry')}</Button>
+          </div> : null}
           <div className="overflow-x-auto">
             <SharedTable className="w-full min-w-[680px] text-sm">
               <SharedTableHeader>
