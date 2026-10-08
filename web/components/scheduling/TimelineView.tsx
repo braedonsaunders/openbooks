@@ -44,10 +44,10 @@ export function TimelineView({ controller, window: board, groupBy, search, today
   const replaced = useMemo(() => new Set(board.replaced), [board.replaced])
   const people = useMemo(() => {
     const query = search.trim().toLowerCase()
-    return query ? board.people.filter((person) => person.name.toLowerCase().includes(query)) : board.people
-  }, [board.people, search])
+    return query ? board.rows.filter((person) => person.name.toLowerCase().includes(query)) : board.rows
+  }, [board.rows, search])
   const { items, persons } = useMemo(() => groupRows(people, groupBy, t('grid.ungrouped')), [groupBy, people, t])
-  const rowOf = useMemo(() => new Map(persons.map((person, i) => [person.partyId, i])), [persons])
+  const rowOf = useMemo(() => new Map(persons.map((person, i) => [person.subjectId, i])), [persons])
   const tops = useMemo(() => {
     let y = 0
     const personTop = new Map<number, number>()
@@ -135,14 +135,14 @@ export function TimelineView({ controller, window: board, groupBy, search, today
       const person = row === null ? null : persons[row]
       const start = pos.start + deltaMinutes
       const date = dates[Math.floor(start / 1440)]
-      if (!date || (deltaMinutes === 0 && (!person || person.partyId === current.entry.workerPartyId))) {
+      if (!date || (deltaMinutes === 0 && (!person || person.subjectId === current.entry.subjectId))) {
         if (Math.abs(current.dx) < 3 && Math.abs(current.dy) < 3) onOpenEntry(current.entry)
         return
       }
       await controller.run([{
         op: 'update', id: current.entry.id, expectedRevision: current.entry.revision,
         fields: {
-          ...(person && person.partyId !== current.entry.workerPartyId ? { workerPartyId: person.partyId } : {}),
+          ...(person && person.subjectId !== current.entry.subjectId ? { subject: { kind: person.subjectKind, id: person.subjectId } } : {}),
           onDate: date,
           span: { mode: 'timed', starts: clock(start), ends: clock(start + pos.duration), breakMinutes: current.entry.breakMinutes },
         },
@@ -167,7 +167,7 @@ export function TimelineView({ controller, window: board, groupBy, search, today
     setCreating(null)
     if (!person) return
     await controller.run([{
-      op: 'create', id: newId(), workerPartyId: person.partyId, onDate: creating.date,
+      op: 'create', id: newId(), subject: { kind: person.subjectKind, id: person.subjectId }, onDate: creating.date,
       target: { kind: picked.target.kind, id: picked.target.id }, detail: picked.detail,
       span: picked.span ?? { mode: 'timed', starts: creating.starts, ends: creating.ends, breakMinutes: 0 },
     }], t('history.book', { target: picked.target.code ?? picked.target.label }))
@@ -234,7 +234,7 @@ export function TimelineView({ controller, window: board, groupBy, search, today
               }
               const person = item.person!
               const row = item.personIndex!
-              const entries = board.entries.filter((entry) => entry.workerPartyId === person.partyId && !replaced.has(entry.id))
+              const entries = board.entries.filter((entry) => entry.subjectId === person.subjectId && !replaced.has(entry.id))
               return (
                 <div key={item.key} className="absolute left-0 border-b border-slate-100 dark:border-slate-800/70" style={{ top, height: ROW_H, width }}>
                   <div className="sticky left-0 z-[5] flex h-full items-center gap-2 border-r border-slate-100 bg-white px-3 dark:border-slate-800 dark:bg-slate-950" style={{ width: NAME_W }}>
@@ -251,7 +251,7 @@ export function TimelineView({ controller, window: board, groupBy, search, today
                       setDrag({ kind: 'create', row, startMinute: minute, endMinute: minute })
                     }}
                   >
-                    {board.absences.filter((absence) => absence.workerPartyId === person.partyId).map((absence) => {
+                    {board.absences.filter((absence) => absence.workerPartyId === person.subjectId).map((absence) => {
                       const day = dayIndex.get(absence.onDate)
                       if (day === undefined) return null
                       return (
@@ -281,7 +281,7 @@ export function TimelineView({ controller, window: board, groupBy, search, today
                           key={entry.id}
                           onPointerDown={(event) => onBarPointerDown(event, entry, 'move')}
                           onDoubleClick={() => onOpenEntry(entry)}
-                          style={{ ...chipStyle(targetHue(entry.target)), left, width: Math.max(barWidth, 6), transform: offsetY ? `translateY(${offsetY}px)` : undefined }}
+                          style={{ ...chipStyle(targetHue(entry.target), entry.target?.color), left, width: Math.max(barWidth, 6), transform: offsetY ? `translateY(${offsetY}px)` : undefined }}
                           className={cn(
                             'absolute inset-y-1 flex items-center overflow-hidden rounded-md border px-1.5 text-[11px] font-semibold shadow-sm',
                             CHIP_COLORS,

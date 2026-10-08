@@ -377,12 +377,14 @@ async function applyTaskPatch(
       ([key, value]) =>
         sql`${sql.raw(`"${TASK_COLUMNS[key]}"`)} = ${patchValue(key, value) as never}`,
     )
-    await exec.execute(sql`
+    const updated = await exec.execute(sql`
       update project_tasks
          set ${sql.join(assignments, sql`, `)},
              updated_at = now(),
              updated_by = ${userId}
-       where id = ${taskId} and org_id = ${orgId} and project_id = ${projectId}`)
+       where id = ${taskId} and org_id = ${orgId} and project_id = ${projectId}
+       returning id`)
+    if (updated.rows.length !== 1) throw new ScheduleError('The task is no longer available in this project; reload the schedule.', 409)
   }
 
   // Resource assignments are replaced wholesale — the editor sends the complete
@@ -395,6 +397,9 @@ async function applyTaskPatch(
       if (!isUuid(String(assignment.resourceId))) {
         throw new ScheduleError('assignment resource must be a valid resource', 422)
       }
+      const resource = (await exec.execute<{ id: string }>(sql`select id from schedule_resources
+        where org_id = ${orgId} and project_id = ${projectId} and id = ${assignment.resourceId} for share`)).rows[0]
+      if (!resource) throw new ScheduleError('Choose a resource belonging to this project in Schedule → Manage schedule.', 422)
       const units = persistScheduleAssignmentUnits(assignment.units)
       if (units === 'invalid') {
         throw new ScheduleError('assignment units must be a number with no more than four decimal places', 422)
@@ -436,14 +441,15 @@ async function applyTaskPatch(
           throw error
         }
       }
-      await exec.execute(sql`
+      const saved = await exec.execute(sql`
         insert into schedule_task_assignments (org_id, task_id, resource_id, units, role, created_by, updated_by)
         values (${orgId}, ${taskId}, ${assignment.resourceId},
                 ${units}, ${assignment.role ?? ''},
                 ${userId}, ${userId})
         on conflict (task_id, resource_id)
           do update set units = excluded.units, role = excluded.role, updated_at = now(), updated_by = ${userId}
-          where schedule_task_assignments.org_id = ${orgId}`)
+          where schedule_task_assignments.org_id = ${orgId} returning id`)
+      if (saved.rows.length !== 1) throw new ScheduleError('The task resource assignment was not saved; reload the schedule and try again.', 409)
     }
   }
 }

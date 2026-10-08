@@ -7,12 +7,14 @@ import { cn } from '@openbooks/ui'
 import { targetHue, targetShortLabel, type BoardAbsence, type BoardEntry } from './model'
 
 /** Hue-driven chip colours that hold in light and dark themes. */
-export function chipStyle(hue: number): CSSProperties {
-  return { ['--chip-h' as string]: String(hue) } as CSSProperties
+export function chipStyle(hue: number, color?: string | null): CSSProperties {
+  return { ['--chip-h' as string]: String(hue),
+    ...(color && /^#[0-9a-f]{6}$/i.test(color) ? { '--chip-bg': `color-mix(in srgb, ${color} 28%, white)`, '--chip-dark-bg': `color-mix(in srgb, ${color} 25%, #0f172a)` } : {}),
+  } as CSSProperties
 }
 export const CHIP_COLORS =
-  'bg-[hsl(var(--chip-h)_78%_93%)] text-[hsl(var(--chip-h)_55%_24%)] border-[hsl(var(--chip-h)_55%_78%)] ' +
-  'dark:bg-[hsl(var(--chip-h)_38%_20%)] dark:text-[hsl(var(--chip-h)_70%_86%)] dark:border-[hsl(var(--chip-h)_35%_34%)]'
+  'bg-[var(--chip-bg,hsl(var(--chip-h)_78%_93%))] text-[hsl(var(--chip-h)_55%_24%)] border-[hsl(var(--chip-h)_55%_78%)] ' +
+  'dark:bg-[var(--chip-dark-bg,hsl(var(--chip-h)_38%_20%))] dark:text-[hsl(var(--chip-h)_70%_86%)] dark:border-[hsl(var(--chip-h)_35%_34%)]'
 
 export function BookingChip({
   entry,
@@ -63,7 +65,7 @@ export function BookingChip({
       onDoubleClick={onDoubleClick}
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
-      style={chipStyle(hue)}
+      style={chipStyle(hue, entry.target?.color)}
       className={cn(
         'group/chip relative flex min-w-0 flex-1 items-center gap-1 overflow-hidden rounded-md border px-1.5 text-left font-medium leading-tight shadow-[0_1px_0_rgba(15,23,42,0.04)] transition-opacity',
         CHIP_COLORS,

@@ -31,14 +31,18 @@
     "today": "Today",
     "range": "Days shown",
     "days": "{count, plural, one {# day} other {# days}}",
-    "search": "Find people or jobs",
+    "search": "Find people, resources or jobs",
     "groupBy": "Group rows",
     "density": "Toggle compact rows",
     "undo": "Undo",
     "undoWhat": "Undo {what}",
     "redo": "Redo",
     "settings": "Board settings",
-    "newBoard": "New board"
+    "newBoard": "New board",
+    "more": "More",
+    "details": "Details",
+    "date": "Go to date",
+    "resourceBoards": "Resources"
   },
   "empty": {
     "title": "Set up your first board",
@@ -56,13 +60,14 @@
     "borrowed": "Visiting",
     "fromElsewhere": "Booked here from {department}",
     "fillHandle": "Drag to repeat the selection",
-    "noPeople": "No one is in this board's scope.",
-    "noMatch": "No one matches the search.",
+    "noPeople": "No people or resources are in this board’s scope.",
+    "noMatch": "No rows match the search.",
     "selected": "{count} cells selected — type to book them all, Delete to clear, Ctrl+D or Ctrl+R to fill",
     "hint": "Click a cell and type a code to book. Drag across cells to book many at once; paste straight from a spreadsheet.",
     "readOnly": "You can view this board. Booking needs permission to manage schedules.",
     "saving": "Saving…",
-    "clearSpotlight": "Show all jobs"
+    "clearSpotlight": "Show all jobs",
+    "resources": "{count, plural, one {# resource} other {# resources}}"
   },
   "chip": {
     "unassigned": "No target",
@@ -115,8 +120,8 @@
     "dismiss": "Dismiss"
   },
   "publish": {
-    "pending": "{count, plural, one {# unpublished change} other {# unpublished changes}} for {people, plural, one {# person} other {# people}}",
-    "explain": "People see these once you publish.",
+    "pending": "{count, plural, one {# unpublished change} other {# unpublished changes}} for {people, plural, one {# row} other {# rows}}",
+    "explain": "Planned bookings; published changes are visible to the team.",
     "action": "Publish",
     "discard": "Discard changes"
   },
@@ -129,7 +134,7 @@
     "readOnly": "You can view this booking. Changing it needs permission to manage schedules.",
     "draft": "This change is not published yet.",
     "where": "Where",
-    "pickTarget": "Choose where this person goes",
+    "pickTarget": "Choose the booking destination",
     "change": "Change",
     "task": "Task",
     "noTask": "Whole project",
@@ -149,11 +154,11 @@
   },
   "targets": {
     "where": "Job",
-    "count": "{count} people",
+    "count": "{count} booked rows",
     "add": "Add a job",
     "empty": "Nothing is booked in these dates yet.",
     "available": "Free to book",
-    "allBooked": "Everyone is booked or on leave this day."
+    "allBooked": "Every row is booked or unavailable this day."
   },
   "timeline": {
     "zoomIn": "Zoom in",
@@ -161,7 +166,7 @@
   },
   "calendar": {
     "person": "Show",
-    "everyone": "Everyone",
+    "everyone": "All rows",
     "onLeave": "{count} on leave",
     "more": "{count} more"
   },
@@ -170,7 +175,10 @@
     "noCustomer": "No customer",
     "noProjects": "No active projects are in this board's scope.",
     "pickProject": "Choose a project.",
-    "openInScheduling": "Open in Scheduling"
+    "openInScheduling": "Open in Scheduling",
+    "addTask": "Add task",
+    "taskName": "Task name",
+    "addMilestone": "Add milestone"
   },
   "progress": {
     "task": "Task",
@@ -207,6 +215,10 @@
       "projects": {
         "title": "Project schedule",
         "description": "Project tasks on a Gantt with dependencies and the critical path, plus production progress."
+      },
+      "resources": {
+        "title": "Equipment and locations",
+        "description": "Reserve shared equipment units or locations by day or hour across projects."
       }
     },
     "name": "Name",
@@ -222,7 +234,10 @@
     "allProjects": "Every active project",
     "afterwards": "Booking hours, publishing and timesheet pre-fill can be changed in the board settings at any time.",
     "cancel": "Cancel",
-    "create": "Create board"
+    "create": "Create board",
+    "resourceKind": "Resource kind",
+    "equipment": "Equipment units",
+    "locations": "Locations"
   },
   "errors": {
     "load": "The schedule could not be loaded.",

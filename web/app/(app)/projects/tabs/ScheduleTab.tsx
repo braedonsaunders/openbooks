@@ -3,6 +3,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useTranslations } from 'next-intl'
+import { SchedulingAlert } from '@/components/scheduling/SchedulingAlert'
+import { promptDialog } from '@/lib/prompt'
+import { readApiErrorMessage } from '@/lib/api-error'
 import { CalendarRange } from 'lucide-react'
 import { emptySchedule, type ScheduleData } from '@braedonsaunders/appkit-scheduling'
 import { ScheduleWorkspace, SchedulingProvider, type ScheduleAdapter } from '@braedonsaunders/appkit-scheduling/react'
@@ -43,9 +46,9 @@ export function ScheduleTab({
   // response), never synchronously in the effect body.
   const refresh = useCallback(() => {
     return fetch(`/api/project-schedule?projectId=${projectId}`, { cache: 'no-store' })
-      .then((res) => {
+      .then(async (res) => {
         if (!res.ok) {
-          setError(tCommon('feedback.loadFailed'))
+          setError(await readApiErrorMessage(res, tCommon('feedback.loadFailed')))
           setData(emptySchedule)
           return
         }
@@ -77,8 +80,7 @@ export function ScheduleTab({
         body: JSON.stringify({ projectId, action, ...payload }),
       })
       if (!res.ok) {
-        const body = (await res.json().catch(() => ({}))) as { error?: string }
-        setError(body.error ?? tCommon('feedback.saveFailed'))
+        setError(await readApiErrorMessage(res, tCommon('feedback.saveFailed')))
         return false
       }
       await refresh()
@@ -89,7 +91,14 @@ export function ScheduleTab({
 
   const adapter: ScheduleAdapter = useMemo(
     () => ({
-      createTask: (input) => mutate('createTask', { input }),
+      createTask: async (input) => {
+        const name = input.name.trim() || await promptDialog({
+          title: tScheduling(input.taskType === 'milestone' ? 'tasks.addMilestone' : 'tasks.addTask'), label: tScheduling('tasks.taskName'),
+          confirmLabel: tCommon('actions.save'),
+        })
+        if (!name?.trim()) return false
+        return mutate('createTask', { input: { ...input, name: name.trim() } })
+      },
       updateTask: (taskId, patch) => mutate('updateTask', { taskId, patch }),
       batchUpdateTasks: (updates) => mutate('batchUpdateTasks', { updates }),
       deleteTask: (taskId) => mutate('deleteTask', { taskId }),
@@ -104,13 +113,15 @@ export function ScheduleTab({
       createBaseline: (input) => mutate('createBaseline', { input }),
       deleteBaseline: (id) => mutate('deleteBaseline', { id }),
     }),
-    [mutate],
+    [mutate, tScheduling, tCommon],
   )
 
   // The whole surface is translatable: the package ships English defaults and
   // takes overrides, so the tenant's locale drives it like every other screen.
   const labels = useMemo(
     () => ({
+      toolbar: { addTask: tScheduling('tasks.addTask'), addMilestone: tScheduling('tasks.addMilestone') },
+      columns: { name: tScheduling('progress.task') },
       status: {
         not_started: t('schedule.status.not_started'),
         in_progress: t('schedule.status.in_progress'),
@@ -132,7 +143,7 @@ export function ScheduleTab({
         description: t('schedule.leveling.description'),
       },
     }),
-    [t],
+    [t, tScheduling],
   )
 
   if (!data) {
@@ -140,7 +151,7 @@ export function ScheduleTab({
   }
 
   return (
-    <div className="space-y-3">
+    <div className="min-w-0 space-y-2 [&_[data-testid=schedule-toolbar]>div]:flex-nowrap [&_[data-testid=schedule-toolbar]>div]:overflow-x-auto">
       {showBoardLink ? (
         <div className="flex justify-end">
           <Link
@@ -153,14 +164,10 @@ export function ScheduleTab({
         </div>
       ) : null}
       {error ? (
-        <p className="rounded-md bg-red-50 px-3 py-2 text-xs text-red-700 dark:bg-red-950/40 dark:text-red-300">
-          {error}
-        </p>
+        <SchedulingAlert message={error} />
       ) : null}
       {!canManage ? (
-        <p className="rounded-md bg-slate-100 px-3 py-2 text-xs text-slate-600 dark:bg-slate-900 dark:text-slate-400">
-          {t('schedule.readOnly')}
-        </p>
+        <SchedulingAlert message={t('schedule.readOnly')} tone="info" />
       ) : null}
       <SchedulingProvider labels={labels} locale={locale}>
         <ScheduleWorkspace

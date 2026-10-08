@@ -8,7 +8,7 @@ import { sql, type SQL } from "drizzle-orm";
 import { db, withOrgTransaction, type SqlExecutor } from "../platform/db.ts";
 import { isUuid } from "../platform/uuid.ts";
 import { subsidiaryVisibleFilter } from "../organization/subsidiary-scope.ts";
-import { getBoard, peopleBoardAuthority, type ScheduleActor } from "./boards.ts";
+import { getBoard, boardAuthority, type ScheduleActor } from "./boards.ts";
 import { ScheduleError, scheduleDatabaseRefusal } from "./errors.ts";
 import type { BoardTarget } from "./window.ts";
 
@@ -46,7 +46,7 @@ export function searchTargets(actor: ScheduleActor & { boardId: string; query: s
 
 async function findTargets(actor: ScheduleActor & { boardId: string; query: string; limit?: number }): Promise<BoardTarget[]> {
   const board = await getBoard(actor, actor.boardId);
-  const allowed = await peopleBoardAuthority(actor, "hrm.shifts.read", board.subsidiaryId);
+  const allowed = await boardAuthority(actor, board, "read");
   const query = actor.query.trim().slice(0, 80);
   const limit = Math.min(Math.max(actor.limit ?? 12, 1), 40);
   const pattern = `%${escapeLike(query.toLowerCase())}%`;
@@ -94,7 +94,7 @@ export function listProjectTaskOptions(actor: ScheduleActor & { boardId: string;
 
 async function readProjectTaskOptions(actor: ScheduleActor & { boardId: string; projectId: string }): Promise<ProjectTaskOption[]> {
   const board = await getBoard(actor, actor.boardId);
-  const allowed = await peopleBoardAuthority(actor, "hrm.shifts.read", board.subsidiaryId);
+  const allowed = await boardAuthority(actor, board, "read");
   if (!isUuid(actor.projectId)) throw new ScheduleError("Choose a project first.", { code: "schedule_invalid_target" });
   const project = (await db.execute<{ id: string }>(sql`select id from projects where org_id = ${actor.orgId} and id = ${actor.projectId}
     ${subsidiaryVisibleFilter(sql`subsidiary_id`, allowed, { orgWideNull: true })}`)).rows[0];

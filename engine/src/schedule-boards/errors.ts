@@ -20,7 +20,11 @@ const CHECK_REFUSALS: Record<string, readonly [string, string]> = {
   schedule_boards_day_span: ["The board's working day must end after it starts and leave time after the break.", "Correct the day start, day end or break in the board settings."],
   schedule_boards_views_valid: ["The selected views are not available for this kind of board.", "Choose views offered for the board's row type."],
   schedule_boards_default_view_listed: ["The default view must be one of the board's views.", "Pick a default view from the enabled views."],
-  schedule_boards_people_settings: ["Timesheet, crew and field ticket pre-fill and notifications apply to people boards only.", "Turn these settings off for a task board."],
+  schedule_boards_people_settings: ["Timesheet, crew and field ticket pre-fill and notifications apply to people boards only.", "Turn these settings off for a task or resource board."],
+  schedule_boards_resource_kind: ["The board's resource kind or scope is not valid.", "Select equipment units or locations; equipment boards cannot use department or location scope."],
+  schedule_boards_cell_color_rules: ["A cell color rule is not valid.", "Choose a field and match, enter a value, and use a six-digit hex color such as #38bdf8."],
+  schedule_boards_weekend_days: ["The weekend days are not valid.", "Select days of the week in Board settings."],
+  schedule_entries_subject: ["A booking needs exactly one person or resource.", "Reload the board and select a row belonging to its resource kind."],
 };
 
 type DatabaseCause ={ code?: string; constraint?: string; message?: string; where?: string; cause?: unknown };
@@ -37,7 +41,7 @@ export function scheduleDatabaseRefusal(error: unknown, context: { personName?: 
   while (cause && typeof cause === "object" && !seen.has(cause)) {
     seen.add(cause);
     const detail = cause as DatabaseCause;
-    if (detail.code === "42P01" && /schedule_(?:boards|codes|entries)/.test(detail.message ?? "")) {
+    if ((detail.code === "42P01" && /schedule_(?:boards|codes|entries)/.test(detail.message ?? "")) || (detail.code === "42703" && /resource_kind|cell_color_rules|show_totals|weekend_days|equipment_unit_id|resource_location_id/.test(detail.message ?? ""))) {
       return new ScheduleError("Scheduling needs its database upgrade before it can be used.", {
         status: 409,
         code: "schedule_upgrade_required",
@@ -51,10 +55,10 @@ export function scheduleDatabaseRefusal(error: unknown, context: { personName?: 
       const [message, remedy] = CHECK_REFUSALS[detail.constraint]!;
       return new ScheduleError(message, { code: "schedule_invalid", remedy });
     }
-    if (detail.code === "23P01" && detail.constraint === "schedule_entries_no_double_booking") {
-      return new ScheduleError(`${context.personName ?? "This person"} is already booked at that time.`, {
+    if (detail.code === "23P01" && ["schedule_entries_no_double_booking", "schedule_entries_equipment_no_double_booking", "schedule_entries_location_no_double_booking"].includes(detail.constraint ?? "")) {
+      return new ScheduleError(`${context.personName ?? "This person or resource"} is already booked at that time.`, {
         code: "schedule_double_booked",
-        remedy: "Remove or move the other booking first, or choose another person or time.",
+        remedy: "Remove or move the other booking first, or choose another person, resource or time.",
       });
     }
     if (detail.code === "23505" && detail.constraint === "schedule_boards_org_id_code_key") {

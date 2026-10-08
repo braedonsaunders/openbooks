@@ -31,14 +31,18 @@
     "today": "今日",
     "range": "表示日数",
     "days": "{count}日",
-    "search": "人員または作業先を検索",
+    "search": "人員、リソース、作業を検索",
     "groupBy": "行をグループ化",
     "density": "行のコンパクト表示を切り替え",
     "undo": "元に戻す",
     "undoWhat": "{what}を元に戻す",
     "redo": "やり直す",
     "settings": "ボードの設定",
-    "newBoard": "新しいボード"
+    "newBoard": "新しいボード",
+    "more": "その他",
+    "details": "詳細",
+    "date": "日付へ移動",
+    "resourceBoards": "リソース"
   },
   "empty": {
     "title": "最初のボードを設定しましょう",
@@ -56,13 +60,14 @@
     "borrowed": "応援",
     "fromElsewhere": "{department}からここに割り当て",
     "fillHandle": "ドラッグして選択範囲を繰り返す",
-    "noPeople": "このボードの対象範囲には誰もいません。",
-    "noMatch": "検索に一致する人員はいません。",
+    "noPeople": "このボードの範囲に人員やリソースがありません。",
+    "noMatch": "検索に一致する行がありません。",
     "selected": "{count}個のセルを選択中 — 入力するとすべてに割り当て、Delete でクリア、Ctrl+D または Ctrl+R でフィル",
     "hint": "セルをクリックしてコードを入力すると割り当てられます。複数のセルをドラッグすると一度に割り当てられ、スプレッドシートから直接貼り付けることもできます。",
     "readOnly": "このボードは閲覧のみ可能です。割り当てにはスケジュール管理の権限が必要です。",
     "saving": "保存中…",
-    "clearSpotlight": "すべての作業先を表示"
+    "clearSpotlight": "すべての作業先を表示",
+    "resources": "{count} リソース"
   },
   "chip": {
     "unassigned": "作業先なし",
@@ -115,8 +120,8 @@
     "dismiss": "閉じる"
   },
   "publish": {
-    "pending": "{people}人分の未公開の変更が{count}件あります",
-    "explain": "公開すると、対象者に表示されます。",
+    "pending": "{people} 行の未公開変更 {count} 件",
+    "explain": "公開された予約はチームに表示されます。",
     "action": "公開",
     "discard": "変更を破棄"
   },
@@ -129,7 +134,7 @@
     "readOnly": "この割り当ては閲覧のみ可能です。変更にはスケジュール管理の権限が必要です。",
     "draft": "この変更はまだ公開されていません。",
     "where": "作業先",
-    "pickTarget": "この人の作業先を選択",
+    "pickTarget": "予約の行き先を選択",
     "change": "変更",
     "task": "タスク",
     "noTask": "プロジェクト全体",
@@ -149,11 +154,11 @@
   },
   "targets": {
     "where": "作業先",
-    "count": "{count}人",
+    "count": "{count} 予約済みの行",
     "add": "作業先を追加",
     "empty": "この期間にはまだ何も割り当てられていません。",
     "available": "割り当て可能",
-    "allBooked": "この日は全員が割り当て済みか休暇中です。"
+    "allBooked": "この日はすべての行が予約済みまたは利用不可です。"
   },
   "timeline": {
     "zoomIn": "拡大",
@@ -161,7 +166,7 @@
   },
   "calendar": {
     "person": "表示",
-    "everyone": "全員",
+    "everyone": "すべての行",
     "onLeave": "休暇中 {count}人",
     "more": "他 {count}件"
   },
@@ -170,7 +175,10 @@
     "noCustomer": "顧客なし",
     "noProjects": "このボードの対象範囲に有効なプロジェクトはありません。",
     "pickProject": "プロジェクトを選択してください。",
-    "openInScheduling": "スケジュール管理で開く"
+    "openInScheduling": "スケジュール管理で開く",
+    "addTask": "タスクを追加",
+    "taskName": "タスク名",
+    "addMilestone": "マイルストーンを追加"
   },
   "progress": {
     "task": "タスク",
@@ -207,6 +215,10 @@
       "projects": {
         "title": "プロジェクトスケジュール",
         "description": "依存関係とクリティカルパスを含むガントチャート上のプロジェクトタスクと、生産の進捗。"
+      },
+      "resources": {
+        "title": "設備と場所",
+        "description": "共有設備や場所をプロジェクト間で日単位または時間単位で予約します。"
       }
     },
     "name": "名前",
@@ -222,7 +234,10 @@
     "allProjects": "すべての有効なプロジェクト",
     "afterwards": "割り当て時間、公開、タイムシートの事前入力は、ボードの設定でいつでも変更できます。",
     "cancel": "キャンセル",
-    "create": "ボードを作成"
+    "create": "ボードを作成",
+    "resourceKind": "リソースの種類",
+    "equipment": "設備",
+    "locations": "場所"
   },
   "errors": {
     "load": "スケジュールを読み込めませんでした。",

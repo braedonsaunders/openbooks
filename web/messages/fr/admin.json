@@ -3962,7 +3962,7 @@
       "scheme": "Régime",
       "identificationState": "État membre d’identification",
       "weekStartsOn": "Début de la semaine",
-      "weekendDays": "Jours de fin de semaine",
+      "weekendDays": "Jours de week-end",
       "holidayCountry": "Pays des jours fériés",
       "boundaries": "Seuils",
       "holidayRegion": "Région des jours fériés",
@@ -3980,7 +3980,12 @@
       "prefillTimesheets": "Préremplir les feuilles de temps",
       "prefillCrewTime": "Préremplir le temps d’équipe",
       "prefillFieldTickets": "Préremplir les bons de régie",
-      "notifyAssignees": "Envoyer à chacun ses modifications par e-mail"
+      "notifyAssignees": "Envoyer à chacun ses modifications par e-mail",
+      "resourceKind": "Type de ressource",
+      "showTotals": "Afficher les totaux en bas",
+      "cellColorRules": "Règles de couleur",
+      "field": "Champ",
+      "match": "Correspondance"
     },
     "fieldHelp": {
       "fxRateMaxAgeDays": "Nombre de jours entre le taux utilisable le plus récent et la fin de période au-delà duquel la réévaluation et la consolidation refusent le taux. Les taux de clôture se comptent depuis la date du taux comptant de fin de période ; les taux moyens depuis la cotation la plus récente incluse dans la moyenne. Valeur par défaut sans politique : 31 jours.",
@@ -4142,7 +4147,10 @@
       "scheduleBoardNotifyAssignees": "Envoie à chaque personne un récapitulatif par e-mail lorsque ses affectations publiées sur ce tableau changent.",
       "scheduleCode": "Jusqu’à 16 lettres majuscules, chiffres ou / & + . _ -, par exemple TRAIN, SHOP ou FORCED.",
       "scheduleCodeCategory": "Les codes de travail comptent comme du temps planifié. Les codes d’indisponibilité marquent un jour où la personne ne travaille pas, sans enregistrer d’absence.",
-      "scheduleCodeColor": "La couleur d’affichage des affectations utilisant ce code, en valeur hexadécimale, par exemple #38bdf8."
+      "scheduleCodeColor": "La couleur d’affichage des affectations utilisant ce code, en valeur hexadécimale, par exemple #38bdf8.",
+      "scheduleWeekendDays": "Jours à griser sans calendrier ouvrable applicable. Le calendrier est prioritaire.",
+      "scheduleShowTotals": "Afficher les lignes et heures réservées après les pauses configurées.",
+      "scheduleCellColorRules": "La première règle correspondante, sans distinction de casse, définit la couleur. Utilisez un code hexadécimal à six chiffres, comme #38bdf8."
     },
     "options": {
       "storedValueKind": {
@@ -4848,7 +4856,8 @@
       },
       "scheduleRowKind": {
         "people": "Personnel",
-        "tasks": "Tâches de projet"
+        "tasks": "Tâches de projet",
+        "resources": "Ressources"
       },
       "scheduleGrain": {
         "day": "Journées entières",
@@ -4869,6 +4878,29 @@
       "scheduleCodeCategory": {
         "work": "Travail",
         "unavailable": "Ne travaille pas"
+      },
+      "scheduleResourceKind": {
+        "equipment": "Unités d’équipement",
+        "location": "Lieux"
+      },
+      "scheduleWeekday": {
+        "1": "Lundi",
+        "2": "Mardi",
+        "3": "Mercredi",
+        "4": "Jeudi",
+        "5": "Vendredi",
+        "6": "Samedi",
+        "7": "Dimanche"
+      },
+      "scheduleColorField": {
+        "bookingLabel": "Libellé de réservation",
+        "targetName": "Nom de la destination",
+        "detail": "Détail"
+      },
+      "scheduleColorMatch": {
+        "equals": "Égal à",
+        "startsWith": "Commence par",
+        "contains": "Contient"
       }
     },
     "laborCosting": {
@@ -6579,6 +6611,10 @@
         "title": "Que fait cette règle ?",
         "description": "Choisissez le traitement. Les comptes et les dates sont préremplis et modifiables dans Avancé."
       }
+    },
+    "scheduleColors": {
+      "add": "Ajouter une règle de couleur",
+      "rule": "Règle de couleur"
     }
   },
   "flows": {

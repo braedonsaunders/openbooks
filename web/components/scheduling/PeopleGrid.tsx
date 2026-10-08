@@ -9,7 +9,7 @@ import { TargetPicker, type PickedTarget } from './TargetPicker'
 import { searchTargets } from './api'
 import {
   cellKey, clampCell, dayTotals, entryTemplate, formatMinutes, groupRows, indexAbsences, indexEntries, initials,
-  rectCells, selectionRect, targetHue, tilePattern, type BoardChange, type BoardEntry, type BoardPerson, type CellAddress,
+  rectCells, selectionRect, targetHue, tilePattern, type BoardChange, type BoardEntry, type BoardRow, type CellAddress,
   type ClipCell, type GroupBy, type Rect, type Selection, type SpanInput,
 } from './model'
 import type { BoardController } from './use-board'
@@ -44,6 +44,7 @@ export function PeopleGrid({ controller, window: board, groupBy, search, compact
   const locale = useLocale()
   const menu = useContextMenu()
   const rowH = compact ? 34 : 46
+  const footerH = board.board.showTotals ? FOOTER_H : 0
   const days = useMemo(() => board.days.filter((day) => board.board.showWeekends || !day.isWeekend), [board.days, board.board.showWeekends])
   const dates = useMemo(() => days.map((day) => day.date), [days])
   const index = useMemo(() => indexEntries(board.entries), [board.entries])
@@ -52,13 +53,13 @@ export function PeopleGrid({ controller, window: board, groupBy, search, compact
 
   const people = useMemo(() => {
     const query = search.trim().toLowerCase()
-    if (!query) return board.people
-    return board.people.filter((person) => {
+    if (!query) return board.rows
+    return board.rows.filter((person) => {
       if (person.name.toLowerCase().includes(query) || (person.jobTitle ?? '').toLowerCase().includes(query) || (person.tradeName ?? '').toLowerCase().includes(query)) return true
-      return board.entries.some((entry) => entry.workerPartyId === person.partyId && entry.target
+      return board.entries.some((entry) => entry.subjectId === person.subjectId && entry.target
         && `${entry.target.code ?? ''} ${entry.target.label}`.toLowerCase().includes(query))
     })
-  }, [board.entries, board.people, search])
+  }, [board.entries, board.rows, search])
   const { items, persons } = useMemo(() => groupRows(people, groupBy, t('grid.ungrouped')), [groupBy, people, t])
   const offsets = useMemo(() => {
     const tops: number[] = []
@@ -113,7 +114,7 @@ export function PeopleGrid({ controller, window: board, groupBy, search, compact
     const shown = new Set(dates)
     for (const entry of board.entries) {
       if (!shown.has(entry.startsOn) || replaced.has(entry.id) || entry.target?.counts === false) continue
-      out.set(entry.workerPartyId, (out.get(entry.workerPartyId) ?? 0) + entry.workedMinutes)
+      out.set(entry.subjectId, (out.get(entry.subjectId) ?? 0) + entry.workedMinutes)
     }
     return out
   }, [board.entries, dates, replaced])
@@ -122,13 +123,13 @@ export function PeopleGrid({ controller, window: board, groupBy, search, compact
     const person = persons[cell.row]
     const date = dates[cell.col]
     if (!person || !date) return []
-    return (index.get(cellKey(person.partyId, date)) ?? []).filter((entry) => entry.boardId === board.board.id && entry.startsOn === date && !replaced.has(entry.id))
+    return (index.get(cellKey(person.subjectId, date)) ?? []).filter((entry) => entry.boardId === board.board.id && entry.startsOn === date && !replaced.has(entry.id))
   }, [board.board.id, dates, index, persons, replaced])
 
   const hasLeave = useCallback((cell: CellAddress) => {
     const person = persons[cell.row]
     const date = dates[cell.col]
-    return Boolean(person && date && (absences.get(cellKey(person.partyId, date)) ?? []).length)
+    return Boolean(person && date && (absences.get(cellKey(person.subjectId, date)) ?? []).length)
   }, [absences, dates, persons])
 
   const defaultSpan = useCallback((): SpanInput => board.board.grain === 'day'
@@ -158,7 +159,7 @@ export function PeopleGrid({ controller, window: board, groupBy, search, compact
       for (const fields of content) {
         // Consecutive days booked for one person in one gesture form a run.
         const seriesId = writes.length > 1 ? (series.get(cell.row) ?? (series.set(cell.row, newId()), series.get(cell.row)!)) : null
-        changes.push({ op: 'create', id: newId(), ...fields, workerPartyId: person.partyId, onDate: date, seriesId })
+        changes.push({ op: 'create', id: newId(), ...fields, subject: { kind: person.subjectKind, id: person.subjectId }, onDate: date, seriesId })
       }
     }
     if (skipped) controller.notify('error', t('notices.skippedLeave', { count: skipped }), t('notices.skippedLeaveRemedy'))
@@ -188,7 +189,7 @@ export function PeopleGrid({ controller, window: board, groupBy, search, compact
       for (let col = area.left; col <= area.right; col++) {
         const person = persons[row]
         const date = dates[col]
-        const entries = person && date ? (index.get(cellKey(person.partyId, date)) ?? []).filter((entry) => entry.startsOn === date && !replaced.has(entry.id)) : []
+        const entries = person && date ? (index.get(cellKey(person.subjectId, date)) ?? []).filter((entry) => entry.startsOn === date && !replaced.has(entry.id)) : []
         line.push(entries.map(entryTemplate))
       }
       block.push(line)
@@ -202,7 +203,7 @@ export function PeopleGrid({ controller, window: board, groupBy, search, compact
     const text = block.map((line, r) => line.map((_, c) => {
       const person = persons[rect.top + r]
       const date = dates[rect.left + c]
-      const entries = person && date ? (index.get(cellKey(person.partyId, date)) ?? []).filter((entry) => entry.startsOn === date) : []
+      const entries = person && date ? (index.get(cellKey(person.subjectId, date)) ?? []).filter((entry) => entry.startsOn === date) : []
       return entries.map((entry) => `${entry.target?.code ?? entry.target?.label ?? ''}${entry.detail ? `/${entry.detail}` : ''}`).join(' + ')
     }).join('\t')).join('\n')
     clip.current = { block, text }
@@ -283,7 +284,7 @@ export function PeopleGrid({ controller, window: board, groupBy, search, compact
     const template = entryTemplate(entry)
     await controller.run([
       { op: 'update', id: entry.id, expectedRevision: entry.revision, fields: { span: { mode: 'timed', starts: at(start), ends: at(middle), breakMinutes: 0 } } },
-      { op: 'create', id: newId(), ...template, workerPartyId: entry.workerPartyId, onDate: entry.startsOn, span: { mode: 'timed', starts: at(middle), ends: at(end), breakMinutes: 0 } },
+      { op: 'create', id: newId(), ...template, subject: { kind: entry.subjectKind, id: entry.subjectId }, onDate: entry.startsOn, span: { mode: 'timed', starts: at(middle), ends: at(end), breakMinutes: 0 } },
     ], t('history.split'))
   }, [controller, t])
 
@@ -367,12 +368,12 @@ export function PeopleGrid({ controller, window: board, groupBy, search, compact
     if (!entry || !cell) return
     const person = persons[cell.row]!
     const date = dates[cell.col]!
-    if (person.partyId === entry.workerPartyId && date === entry.startsOn) return
+    if (person.subjectId === entry.subjectId && date === entry.startsOn) return
     setSelection({ anchor: cell, focus: cell })
     if (event.altKey || event.ctrlKey || event.metaKey) {
-      await controller.run([{ op: 'create', id: newId(), ...entryTemplate(entry), workerPartyId: person.partyId, onDate: date }], t('history.copy'))
+      await controller.run([{ op: 'create', id: newId(), ...entryTemplate(entry), subject: { kind: person.subjectKind, id: person.subjectId }, onDate: date }], t('history.copy'))
     } else {
-      await controller.run([{ op: 'update', id: entry.id, expectedRevision: entry.revision, fields: { workerPartyId: person.partyId, onDate: date } }], t('history.move', { name: person.name }))
+      await controller.run([{ op: 'update', id: entry.id, expectedRevision: entry.revision, fields: { subject: { kind: person.subjectKind, id: person.subjectId }, onDate: date } }], t('history.move', { name: person.name }))
     }
   }, [canManage, cellFromPoint, controller, dates, persons, t])
 
@@ -382,7 +383,7 @@ export function PeopleGrid({ controller, window: board, groupBy, search, compact
     const top = offsets.personTop.get(cell.row)
     if (!element || top === undefined) return
     if (top < element.scrollTop) element.scrollTop = top
-    else if (top + rowH + HEADER_H + FOOTER_H > element.scrollTop + element.clientHeight) element.scrollTop = top + rowH + HEADER_H + FOOTER_H - element.clientHeight
+    else if (top + rowH + HEADER_H + footerH > element.scrollTop + element.clientHeight) element.scrollTop = top + rowH + HEADER_H + footerH - element.clientHeight
     const left = NAME_W + cell.col * dayW
     if (left < element.scrollLeft + NAME_W) element.scrollLeft = left - NAME_W
     else if (left + dayW > element.scrollLeft + element.clientWidth - TOTAL_W) element.scrollLeft = left + dayW - element.clientWidth + TOTAL_W
@@ -560,11 +561,11 @@ export function PeopleGrid({ controller, window: board, groupBy, search, compact
         }}
         className="relative min-h-0 flex-1 select-none overflow-auto rounded-xl border border-slate-200 bg-white outline-none focus-visible:ring-2 focus-visible:ring-teal-500/40 dark:border-slate-800 dark:bg-slate-950"
       >
-        <div style={{ width: contentW, height: HEADER_H + offsets.height + FOOTER_H }} className="relative">
+        <div style={{ width: contentW, height: HEADER_H + offsets.height + footerH }} className="relative">
           {/* Header */}
           <div className="sticky top-0 z-20 flex border-b border-slate-200 bg-white/95 backdrop-blur dark:border-slate-800 dark:bg-slate-950/95" style={{ height: HEADER_H, width: contentW }}>
             <div className="sticky left-0 z-10 flex items-end bg-white/95 px-3 pb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:bg-slate-950/95" style={{ width: NAME_W }}>
-              {t('grid.people', { count: rows })}
+              {t(board.board.rowKind === 'resources' ? 'grid.resources' : 'grid.people', { count: rows })}
             </div>
             <div className="relative" style={{ width: dayW * cols }}>
               <div className="flex h-5">
@@ -584,7 +585,7 @@ export function PeopleGrid({ controller, window: board, groupBy, search, compact
                       className={cn(
                         'flex flex-col items-center justify-center border-l text-center',
                         weekStart ? 'border-slate-300 dark:border-slate-700' : 'border-slate-100 dark:border-slate-800',
-                        day.isWeekend && 'bg-slate-50/80 dark:bg-slate-900/60',
+                        day.isWeekend && 'bg-slate-200/60 dark:bg-slate-800/70',
                         day.isHoliday && 'bg-rose-50/80 dark:bg-rose-950/30',
                       )}
                       style={{ width: dayW }}
@@ -619,7 +620,7 @@ export function PeopleGrid({ controller, window: board, groupBy, search, compact
                   className={cn(
                     'h-full border-l',
                     new Date(`${day.date}T00:00:00Z`).getUTCDay() === board.board.weekStartsOn ? 'border-slate-200 dark:border-slate-700' : 'border-slate-100 dark:border-slate-800/80',
-                    day.isWeekend && 'bg-slate-50/70 dark:bg-slate-900/50',
+                    day.isWeekend && 'bg-slate-200/50 dark:bg-slate-800/60',
                     day.isHoliday && 'bg-rose-50/60 dark:bg-rose-950/20',
                     day.date === today && 'bg-teal-50/50 dark:bg-teal-950/20',
                   )}
@@ -657,7 +658,7 @@ export function PeopleGrid({ controller, window: board, groupBy, search, compact
                   compact={compact}
                   spotlight={activeSpotlight}
                   canManage={canManage}
-                  minutes={personMinutes.get(person.partyId) ?? 0}
+                  minutes={personMinutes.get(person.subjectId) ?? 0}
                   onDragStartChip={onDragStartChip}
                   onOpenEntry={onOpenEntry}
                   onHoverTarget={setHoverTarget}
@@ -677,8 +678,8 @@ export function PeopleGrid({ controller, window: board, groupBy, search, compact
             {fillOverlay ? <div className="pointer-events-none absolute z-10 rounded-[3px] border-2 border-dashed border-teal-500" style={fillOverlay} /> : null}
           </div>
 
-          {/* Footer totals */}
-          <div className="sticky bottom-0 z-20 flex border-t border-slate-200 bg-white/95 backdrop-blur dark:border-slate-800 dark:bg-slate-950/95" style={{ height: FOOTER_H, width: contentW }}>
+          {/* Totals use each booked span, never a fixed number of hours per day. */}
+          {board.board.showTotals ? <div className="sticky bottom-0 z-20 flex border-t border-slate-200 bg-white/95 backdrop-blur dark:border-slate-800 dark:bg-slate-950/95" style={{ height: FOOTER_H, width: contentW }}>
             <div className="sticky left-0 z-10 flex items-center bg-white/95 px-3 text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:bg-slate-950/95" style={{ width: NAME_W }}>
               {t('grid.onSite')}
             </div>
@@ -697,7 +698,7 @@ export function PeopleGrid({ controller, window: board, groupBy, search, compact
               )
             })}
             <div className="sticky right-0 bg-white/95 dark:bg-slate-950/95" style={{ width: TOTAL_W }} />
-          </div>
+          </div> : null}
         </div>
         {rows === 0 ? (
           <div className="pointer-events-none absolute inset-x-0 top-24 text-center text-sm text-slate-500">
@@ -742,7 +743,7 @@ function PersonRow({
   person, top, rowH, dayW, contentW, dates, boardId, index, absences, replaced, compact, spotlight, canManage, minutes,
   onDragStartChip, onOpenEntry, onHoverTarget,
 }: {
-  person: BoardPerson
+  person: BoardRow
   top: number
   rowH: number
   dayW: number
@@ -761,7 +762,7 @@ function PersonRow({
   onHoverTarget: (key: string | null) => void
 }) {
   const t = useTranslations('scheduling')
-  const hue = targetHue({ id: person.partyId, color: null })
+  const hue = targetHue({ id: person.subjectId, color: null })
   return (
     <div className="absolute left-0 flex border-b border-slate-100 hover:bg-slate-50/60 dark:border-slate-800/70 dark:hover:bg-slate-900/40" style={{ top, height: rowH, width: contentW }} role="row">
       <div className="sticky left-0 z-[5] flex items-center gap-2.5 border-r border-slate-100 bg-white px-3 dark:border-slate-800 dark:bg-slate-950" style={{ width: NAME_W }} role="rowheader">
@@ -787,11 +788,11 @@ function PersonRow({
         </span>
       </div>
       {dates.map((date) => {
-        const key = cellKey(person.partyId, date)
+        const key = cellKey(person.subjectId, date)
         const entries = index.get(key) ?? []
         const leave = absences.get(key) ?? []
         return (
-          <div key={date} role="gridcell" className="flex items-center gap-0.5 px-[3px]" style={{ width: dayW }}>
+          <div key={date} role="gridcell" className="flex items-center gap-0.5 px-[3px]" style={{ width: dayW, backgroundColor: entries.find((entry) => entry.target?.color && !replaced.has(entry.id))?.target?.color ? `color-mix(in srgb, ${entries.find((entry) => entry.target?.color && !replaced.has(entry.id))!.target!.color} 20%, transparent)` : undefined }}>
             {leave.map((absence) => <AbsenceChip key={`${absence.leaveTypeCode}`} absence={absence} compact={compact} />)}
             {entries.map((entry) => (
               <BookingChip

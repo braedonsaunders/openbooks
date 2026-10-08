@@ -214,7 +214,7 @@ export const CUSTOMIZATION_LAYER = new Set([
  * `retainedTenantTables` = tenant-owned tables the clone deliberately does not
  * copy (the catalog EXCLUDE set): a real FK into one of them can never be
  * copied verbatim — the value would be a pointer at PRODUCTION's row. */
-function generateCopySql(
+export function generateCopySql(
   t: TableInfo,
   opts: CloneOptions,
   rebaseSet: Set<string>,
@@ -240,6 +240,12 @@ function generateCopySql(
     cols.push(`"${c.name}"`);
     if (opts.masked && (t.name === "files" || t.name === "file_versions") && c.name === "storage_kind") {
       exprs.push(`'${MASKED_STORAGE_KIND}'`);
+      continue;
+    }
+    // Value rules may contain customer names or booking details; masked
+    // copies retain board behavior without carrying those match values.
+    if (opts.masked && t.name === "schedule_boards" && c.name === "cell_color_rules") {
+      exprs.push("'[]'::jsonb");
       continue;
     }
     const fkTarget = t.fks[c.name];

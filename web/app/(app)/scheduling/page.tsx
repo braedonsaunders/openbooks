@@ -19,5 +19,5 @@ export default async function SchedulingPage({
 }) {
   const sp = await searchParams
   const data = await loadSchedulingPage(sp)
-  return <ModuleView spec={schedulingSpec(data)} data={data} searchParams={sp} trusted />
+  return <ModuleView spec={schedulingSpec(data)} data={data} searchParams={sp} trusted contained />
 }

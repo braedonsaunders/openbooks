@@ -3,7 +3,7 @@
 import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
-import { CalendarDays, Clock3, Factory, ChartGantt } from 'lucide-react'
+import { CalendarDays, Clock3, Factory, ChartGantt, Boxes } from 'lucide-react'
 import { Button, Drawer, Input, Select, cn } from '@openbooks/ui'
 
 export interface ScopeOptions {
@@ -13,7 +13,7 @@ export interface ScopeOptions {
   readonly projects: readonly { id: string; name: string }[]
 }
 
-type PresetKey = 'dispatch' | 'shifts' | 'continuous' | 'projects'
+type PresetKey = 'dispatch' | 'shifts' | 'continuous' | 'projects' | 'resources'
 
 /**
  * Starting points for the common ways companies schedule. Each preset only
@@ -23,26 +23,30 @@ const PRESETS: Record<PresetKey, Record<string, unknown>> = {
   dispatch: { rowKind: 'people', grain: 'day', views: ['grid', 'targets', 'calendar', 'timeline'], defaultView: 'grid', rangeDays: 14, publishPolicy: 'live', dayStarts: '07:00', dayEnds: '15:30', dayBreakMinutes: 30 },
   shifts: { rowKind: 'people', grain: 'timed', views: ['timeline', 'grid', 'calendar'], defaultView: 'timeline', rangeDays: 7, publishPolicy: 'staged', dayStarts: '09:00', dayEnds: '17:00', dayBreakMinutes: 30 },
   continuous: { rowKind: 'people', grain: 'timed', views: ['grid', 'timeline', 'calendar'], defaultView: 'grid', rangeDays: 28, publishPolicy: 'staged', dayStarts: '07:00', dayEnds: '19:00', dayBreakMinutes: 60 },
+  resources: { rowKind: 'resources', resourceKind: 'equipment', grain: 'day', views: ['grid', 'targets', 'timeline', 'calendar'], defaultView: 'grid', rangeDays: 14, publishPolicy: 'staged', dayStarts: '07:00', dayEnds: '15:30', dayBreakMinutes: 30 },
   projects: { rowKind: 'tasks', grain: 'day', views: ['gantt', 'progress'], defaultView: 'gantt', rangeDays: 14, publishPolicy: 'live', dayStarts: '07:00', dayEnds: '15:30', dayBreakMinutes: 30 },
 }
-const ICONS = { dispatch: CalendarDays, shifts: Clock3, continuous: Factory, projects: ChartGantt } as const
+const ICONS = { dispatch: CalendarDays, shifts: Clock3, continuous: Factory, projects: ChartGantt, resources: Boxes } as const
 
 function codeFrom(name: string): string {
   return name.toUpperCase().replace(/[^A-Z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40) || 'BOARD'
 }
 
-export function NewBoardDrawer({ open, onClose, timeZone, scope, peopleEnabled, tasksEnabled }: {
+export function NewBoardDrawer({ open, onClose, timeZone, scope, peopleEnabled, tasksEnabled, resourcesEnabled, equipmentEnabled }: {
   open: boolean
   onClose: () => void
   timeZone: string
   scope: ScopeOptions
   peopleEnabled: boolean
   tasksEnabled: boolean
+  resourcesEnabled: boolean
+  equipmentEnabled: boolean
 }) {
   const t = useTranslations('scheduling')
   const router = useRouter()
-  const available = useMemo(() => (Object.keys(PRESETS) as PresetKey[]).filter((key) => (PRESETS[key].rowKind === 'tasks' ? tasksEnabled : peopleEnabled)), [peopleEnabled, tasksEnabled])
+  const available = useMemo(() => (Object.keys(PRESETS) as PresetKey[]).filter((key) => (PRESETS[key].rowKind === 'tasks' ? tasksEnabled : PRESETS[key].rowKind === 'resources' ? resourcesEnabled : peopleEnabled)), [peopleEnabled, tasksEnabled, resourcesEnabled])
   const [preset, setPreset] = useState<PresetKey>(available[0] ?? 'dispatch')
+  const [resourceKind, setResourceKind] = useState(equipmentEnabled ? 'equipment' : 'location')
   const [name, setName] = useState('')
   const [code, setCode] = useState('')
   const [subsidiaryId, setSubsidiaryId] = useState('')
@@ -52,37 +56,44 @@ export function NewBoardDrawer({ open, onClose, timeZone, scope, peopleEnabled, 
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const tasks = PRESETS[preset].rowKind === 'tasks'
+  const resources = PRESETS[preset].rowKind === 'resources'
 
   async function create() {
     setSaving(true)
     setError(null)
-    const boardCode = code.trim() || codeFrom(name)
-    const response = await fetch('/api/admin/setup/schedule-boards', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', 'idempotency-key': crypto.randomUUID() },
-      body: JSON.stringify({
-        ...PRESETS[preset],
-        code: boardCode,
-        name: name.trim(),
-        timeZone,
-        weekStartsOn: 0,
-        showWeekends: true,
-        subsidiaryId: subsidiaryId || null,
-        departmentId: tasks ? null : departmentId || null,
-        locationId: tasks ? null : locationId || null,
-        projectId: tasks ? projectId || null : null,
-        isActive: true,
-      }),
-    })
-    setSaving(false)
-    if (!response.ok) {
-      const body = (await response.json().catch(() => ({}))) as { error?: string }
-      setError(body.error ?? t('errors.save'))
-      return
+    try {
+      const boardCode = code.trim() || codeFrom(name)
+      const response = await fetch('/api/admin/setup/schedule-boards', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'idempotency-key': crypto.randomUUID() },
+        body: JSON.stringify({
+          ...PRESETS[preset],
+          resourceKind: resources ? resourceKind : null,
+          code: boardCode,
+          name: name.trim(),
+          timeZone,
+          weekStartsOn: 0,
+          showWeekends: true,
+          subsidiaryId: subsidiaryId || null,
+          departmentId: tasks || resources ? null : departmentId || null,
+          locationId: tasks || resources ? null : locationId || null,
+          projectId: tasks || resources ? projectId || null : null,
+          isActive: true,
+        }),
+      })
+      if (!response.ok) {
+        const body = (await response.json().catch(() => ({}))) as { error?: string }
+        setError(body.error ?? t('errors.save'))
+        return
+      }
+      onClose()
+      router.push(`/scheduling?board=${encodeURIComponent(boardCode)}`)
+      router.refresh()
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : t('errors.save'))
+    } finally {
+      setSaving(false)
     }
-    onClose()
-    router.push(`/scheduling?board=${encodeURIComponent(boardCode)}`)
-    router.refresh()
   }
 
   return (
@@ -142,7 +153,8 @@ export function NewBoardDrawer({ open, onClose, timeZone, scope, peopleEnabled, 
               </Select>
             </label>
           ) : null}
-          {!tasks ? (
+          {resources ? <label className="space-y-1"><span className="text-xs font-medium">{t('newBoard.resourceKind')}</span><Select value={resourceKind} onChange={(event) => setResourceKind(event.target.value)}>{equipmentEnabled ? <option value="equipment">{t('newBoard.equipment')}</option> : null}<option value="location">{t('newBoard.locations')}</option></Select></label> : null}
+          {!tasks && !resources ? (
             <>
               <label className="space-y-1">
                 <span className="text-xs font-medium text-slate-600 dark:text-slate-300">{t('newBoard.department')}</span>

@@ -31,14 +31,18 @@
     "today": "Heute",
     "range": "Angezeigte Tage",
     "days": "{count, plural, one {# Tag} other {# Tage}}",
-    "search": "Personen oder Aufträge suchen",
+    "search": "Personen, Ressourcen oder Aufträge suchen",
     "groupBy": "Zeilen gruppieren",
     "density": "Kompakte Zeilen umschalten",
     "undo": "Rückgängig",
     "undoWhat": "{what} rückgängig machen",
     "redo": "Wiederholen",
     "settings": "Einstellungen der Plantafel",
-    "newBoard": "Neue Plantafel"
+    "newBoard": "Neue Plantafel",
+    "more": "Mehr",
+    "details": "Details",
+    "date": "Zum Datum",
+    "resourceBoards": "Ressourcen"
   },
   "empty": {
     "title": "Richten Sie Ihre erste Plantafel ein",
@@ -56,13 +60,14 @@
     "borrowed": "Ausgeliehen",
     "fromElsewhere": "Hier eingeplant aus {department}",
     "fillHandle": "Ziehen, um die Auswahl zu wiederholen",
-    "noPeople": "Im Bereich dieser Plantafel befindet sich niemand.",
-    "noMatch": "Niemand entspricht der Suche.",
+    "noPeople": "Keine Personen oder Ressourcen im Bereich dieser Tafel.",
+    "noMatch": "Keine Zeilen entsprechen der Suche.",
     "selected": "{count} Zellen ausgewählt – tippen, um alle einzuplanen, Entf zum Leeren, Ctrl+D oder Ctrl+R zum Ausfüllen",
     "hint": "Klicken Sie auf eine Zelle und geben Sie einen Code ein, um einzuplanen. Ziehen Sie über mehrere Zellen, um viele auf einmal einzuplanen; fügen Sie Daten direkt aus einer Tabellenkalkulation ein.",
     "readOnly": "Sie können diese Plantafel ansehen. Zum Einplanen benötigen Sie die Berechtigung zur Verwaltung von Plänen.",
     "saving": "Wird gespeichert…",
-    "clearSpotlight": "Alle Aufträge anzeigen"
+    "clearSpotlight": "Alle Aufträge anzeigen",
+    "resources": "{count, plural, one {# Ressource} other {# Ressourcen}}"
   },
   "chip": {
     "unassigned": "Kein Ziel",
@@ -115,8 +120,8 @@
     "dismiss": "Schließen"
   },
   "publish": {
-    "pending": "{count, plural, one {# unveröffentlichte Änderung} other {# unveröffentlichte Änderungen}} für {people, plural, one {# Person} other {# Personen}}",
-    "explain": "Die Personen sehen diese Änderungen, sobald Sie veröffentlichen.",
+    "pending": "{count} unveröffentlichte Änderungen für {people} Zeilen",
+    "explain": "Veröffentlichte Buchungen sind für das Team sichtbar.",
     "action": "Veröffentlichen",
     "discard": "Änderungen verwerfen"
   },
@@ -129,7 +134,7 @@
     "readOnly": "Sie können diese Einplanung ansehen. Zum Ändern benötigen Sie die Berechtigung zur Verwaltung von Plänen.",
     "draft": "Diese Änderung ist noch nicht veröffentlicht.",
     "where": "Wo",
-    "pickTarget": "Wählen Sie, wohin diese Person geht",
+    "pickTarget": "Buchungsziel wählen",
     "change": "Ändern",
     "task": "Aufgabe",
     "noTask": "Gesamtes Projekt",
@@ -149,11 +154,11 @@
   },
   "targets": {
     "where": "Auftrag",
-    "count": "{count} Personen",
+    "count": "{count} gebuchte Zeilen",
     "add": "Auftrag hinzufügen",
     "empty": "In diesem Zeitraum ist noch nichts eingeplant.",
     "available": "Verfügbar",
-    "allBooked": "An diesem Tag sind alle eingeplant oder abwesend."
+    "allBooked": "Alle Zeilen sind an diesem Tag gebucht oder nicht verfügbar."
   },
   "timeline": {
     "zoomIn": "Vergrößern",
@@ -161,7 +166,7 @@
   },
   "calendar": {
     "person": "Anzeigen",
-    "everyone": "Alle",
+    "everyone": "Alle Zeilen",
     "onLeave": "{count} abwesend",
     "more": "{count} weitere"
   },
@@ -170,7 +175,10 @@
     "noCustomer": "Kein Kunde",
     "noProjects": "Im Bereich dieser Plantafel gibt es keine aktiven Projekte.",
     "pickProject": "Wählen Sie ein Projekt.",
-    "openInScheduling": "In der Einsatzplanung öffnen"
+    "openInScheduling": "In der Einsatzplanung öffnen",
+    "addTask": "Aufgabe hinzufügen",
+    "taskName": "Aufgabenname",
+    "addMilestone": "Meilenstein hinzufügen"
   },
   "progress": {
     "task": "Aufgabe",
@@ -207,6 +215,10 @@
       "projects": {
         "title": "Projektterminplan",
         "description": "Projektaufgaben in einem Gantt-Diagramm mit Abhängigkeiten und kritischem Pfad sowie Produktionsfortschritt."
+      },
+      "resources": {
+        "title": "Geräte und Standorte",
+        "description": "Gemeinsame Geräte oder Standorte projektübergreifend tage- oder stundenweise reservieren."
       }
     },
     "name": "Bezeichnung",
@@ -222,7 +234,10 @@
     "allProjects": "Alle aktiven Projekte",
     "afterwards": "Einplanungszeiten, Veröffentlichung und Vorbelegung der Stundenzettel lassen sich jederzeit in den Einstellungen der Plantafel ändern.",
     "cancel": "Abbrechen",
-    "create": "Plantafel erstellen"
+    "create": "Plantafel erstellen",
+    "resourceKind": "Ressourcenart",
+    "equipment": "Geräteeinheiten",
+    "locations": "Standorte"
   },
   "errors": {
     "load": "Der Plan konnte nicht geladen werden.",

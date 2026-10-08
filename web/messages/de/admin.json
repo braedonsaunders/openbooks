@@ -4108,7 +4108,12 @@
       "prefillTimesheets": "Stundenzettel vorbelegen",
       "prefillCrewTime": "Teamzeit vorbelegen",
       "prefillFieldTickets": "Regieberichte vorbelegen",
-      "notifyAssignees": "Personen per E-Mail über ihre Änderungen informieren"
+      "notifyAssignees": "Personen per E-Mail über ihre Änderungen informieren",
+      "resourceKind": "Ressourcenart",
+      "showTotals": "Summen unten anzeigen",
+      "cellColorRules": "Farbregeln",
+      "field": "Feld",
+      "match": "Vergleich"
     },
     "fieldHelp": {
       "fxRateMaxAgeDays": "Tage zwischen dem neuesten verwendbaren Kurs und dem Periodenende, ab denen Bewertung und Konsolidierung den Kurs ablehnen. Stichtagskurse zählen ab dem Datum des Kassakurses zum Periodenende, Durchschnittskurse ab der neuesten einbezogenen Notierung. Standard ohne Richtlinie: 31 Tage.",
@@ -4270,7 +4275,10 @@
       "scheduleBoardNotifyAssignees": "Senden Sie jeder Person eine Zusammenfassung per E-Mail, wenn sich ihre veröffentlichten Einplanungen auf dieser Plantafel ändern.",
       "scheduleCode": "Bis zu 16 Großbuchstaben, Ziffern oder / & + . _ -, etwa TRAIN, SHOP oder FORCED.",
       "scheduleCodeCategory": "Arbeitscodes zählen als geplante Zeit. Codes für Nichtverfügbarkeit kennzeichnen einen Tag, an dem die Person nicht arbeitet, ohne eine Abwesenheit zu erfassen.",
-      "scheduleCodeColor": "Die Farbe, in der Einplanungen mit diesem Code angezeigt werden, als Hex-Wert wie #38bdf8."
+      "scheduleCodeColor": "Die Farbe, in der Einplanungen mit diesem Code angezeigt werden, als Hex-Wert wie #38bdf8.",
+      "scheduleWeekendDays": "Tage schattieren, wenn kein Geschäftskalender gilt. Der Kalender hat Vorrang.",
+      "scheduleShowTotals": "Gebuchte Zeilen und Stunden nach den konfigurierten Pausen anzeigen.",
+      "scheduleCellColorRules": "Der erste Treffer ohne Beachtung der Großschreibung bestimmt die Farbe. Sechsstellige Hexfarben verwenden, etwa #38bdf8."
     },
     "options": {
       "storedValueKind": {
@@ -4976,7 +4984,8 @@
       },
       "scheduleRowKind": {
         "people": "Personen",
-        "tasks": "Projektaufgaben"
+        "tasks": "Projektaufgaben",
+        "resources": "Ressourcen"
       },
       "scheduleGrain": {
         "day": "Ganze Tage",
@@ -4997,6 +5006,29 @@
       "scheduleCodeCategory": {
         "work": "Arbeit",
         "unavailable": "Nicht im Dienst"
+      },
+      "scheduleResourceKind": {
+        "equipment": "Geräteeinheiten",
+        "location": "Standorte"
+      },
+      "scheduleWeekday": {
+        "1": "Montag",
+        "2": "Dienstag",
+        "3": "Mittwoch",
+        "4": "Donnerstag",
+        "5": "Freitag",
+        "6": "Samstag",
+        "7": "Sonntag"
+      },
+      "scheduleColorField": {
+        "bookingLabel": "Buchungsbezeichnung",
+        "targetName": "Zielname",
+        "detail": "Detail"
+      },
+      "scheduleColorMatch": {
+        "equals": "Gleich",
+        "startsWith": "Beginnt mit",
+        "contains": "Enthält"
       }
     },
     "bankFeeds": {
@@ -6579,6 +6611,10 @@
         "title": "Was bewirkt diese Regel?",
         "description": "Wählen Sie die Behandlung. Konten und Daten werden vorausgefüllt und können unter Erweitert geändert werden."
       }
+    },
+    "scheduleColors": {
+      "add": "Farbregel hinzufügen",
+      "rule": "Farbregel"
     }
   },
   "flows": {

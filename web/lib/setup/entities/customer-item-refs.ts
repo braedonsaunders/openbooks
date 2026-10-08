@@ -1,4 +1,5 @@
 import 'server-only'
+import { validateScheduleBoardWrite, validateScheduleCodeWrite } from './scheduling'
 import { sql } from 'drizzle-orm'
 import { validateIdentifierUnit } from '@openbooks/engine/src/inventory/item-identifiers.ts'
 import { validateCustomerItemRef } from '@openbooks/engine/src/sales/customer-item-refs.ts'
@@ -52,6 +53,8 @@ const validateMarketplaceFacilitatorWrite: SetupEntityValidationHook = async ({ 
 }
 
 const SETUP_ENTITY_VALIDATION_HOOKS: Record<string, SetupEntityValidationHook> = {
+  'schedule-boards': validateScheduleBoardWrite,
+  'schedule-codes': validateScheduleCodeWrite,
   ...Object.fromEntries(BENEFIT_CONTRIBUTION_ENTITIES.map((entity) => [entity.key, validateContributionWrite])),
   [PAYROLL_SERVICE_CREDITS_ENTITY.key]: validateServiceCredit,
   [PAYROLL_VACATION_TERMS_ENTITY.key]: validateVacationTerm,

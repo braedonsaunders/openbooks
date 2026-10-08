@@ -4,9 +4,9 @@
  * saved batch for undo, typed-input parsing and day totals. No React, no I/O.
  */
 import type { BoardChange, BookingFields, ChangeResult, SpanInput } from '@openbooks/engine/src/schedule-boards/entries.ts'
-import type { BoardAbsence, BoardEntry, BoardPerson, BoardTarget, BoardWindow } from '@openbooks/engine/src/schedule-boards/window.ts'
+import type { BoardAbsence, BoardEntry, BoardRow, BoardTarget, BoardWindow } from '@openbooks/engine/src/schedule-boards/window.ts'
 
-export type { BoardChange, BookingFields, ChangeResult, SpanInput, BoardAbsence, BoardEntry, BoardPerson, BoardTarget, BoardWindow }
+export type { BoardChange, BookingFields, ChangeResult, SpanInput, BoardAbsence, BoardEntry, BoardRow, BoardTarget, BoardWindow }
 
 export interface CellAddress {
   readonly row: number
@@ -61,7 +61,7 @@ export function indexEntries(entries: readonly BoardEntry[]): Map<string, BoardE
     const dates = [date]
     if (entry.endsOn !== entry.startsOn && entry.endClock !== '00:00') dates.push(entry.endsOn)
     for (date of dates) {
-      const key = cellKey(entry.workerPartyId, date)
+      const key = cellKey(entry.subjectId, date)
       const list = index.get(key)
       if (list) list.push(entry)
       else index.set(key, [entry])
@@ -83,7 +83,7 @@ export function indexAbsences(absences: readonly BoardAbsence[]): Map<string, Bo
 }
 
 /** The fields that recreate a booking somewhere else. */
-export function entryTemplate(entry: BoardEntry): Omit<BookingFields, 'workerPartyId' | 'onDate'> {
+export function entryTemplate(entry: BoardEntry): Omit<BookingFields, 'workerPartyId' | 'subject' | 'onDate'> {
   return {
     target: entry.target ? { kind: entry.target.kind, id: entry.target.id } : null,
     projectTaskId: entry.projectTaskId,
@@ -101,10 +101,10 @@ export function spanOf(entry: BoardEntry): SpanInput {
 }
 
 export function entryFields(entry: BoardEntry): BookingFields {
-  return { ...entryTemplate(entry), workerPartyId: entry.workerPartyId, onDate: entry.startsOn, seriesId: entry.seriesId }
+  return { ...entryTemplate(entry), subject: { kind: entry.subjectKind, id: entry.subjectId }, onDate: entry.startsOn, seriesId: entry.seriesId }
 }
 
-export type ClipCell = readonly Omit<BookingFields, 'workerPartyId' | 'onDate'>[]
+export type ClipCell = readonly Omit<BookingFields, 'workerPartyId' | 'subject' | 'onDate'>[]
 
 /**
  * Tile a copied block over a destination the way a spreadsheet pastes: a
@@ -205,14 +205,14 @@ export interface DayTotal {
 }
 
 /** Headcount and booked minutes per day over the shown people; unavailable codes do not count. */
-export function dayTotals(dates: readonly string[], people: readonly BoardPerson[], index: ReadonlyMap<string, BoardEntry[]>, hidden: ReadonlySet<string>): Map<string, DayTotal> {
+export function dayTotals(dates: readonly string[], people: readonly BoardRow[], index: ReadonlyMap<string, BoardEntry[]>, hidden: ReadonlySet<string>): Map<string, DayTotal> {
   const totals = new Map<string, DayTotal>()
   for (const date of dates) {
     let count = 0
     let minutes = 0
     const byTarget = new Map<string, { target: BoardTarget; people: Set<string> }>()
     for (const person of people) {
-      const entries = (index.get(cellKey(person.partyId, date)) ?? []).filter((entry) => entry.startsOn === date && !hidden.has(entry.id))
+      const entries = (index.get(cellKey(person.subjectId, date)) ?? []).filter((entry) => entry.startsOn === date && !hidden.has(entry.id))
       const working = entries.filter((entry) => entry.target?.counts !== false)
       if (working.length) count++
       for (const entry of working) {
@@ -220,7 +220,7 @@ export function dayTotals(dates: readonly string[], people: readonly BoardPerson
         if (entry.target) {
           const key = `${entry.target.kind}:${entry.target.id}`
           const slot = byTarget.get(key) ?? { target: entry.target, people: new Set<string>() }
-          slot.people.add(person.partyId)
+          slot.people.add(person.subjectId)
           byTarget.set(key, slot)
         }
       }
@@ -271,23 +271,23 @@ export interface RowItem {
   readonly kind: 'group' | 'person'
   readonly key: string
   readonly label: string
-  readonly person?: BoardPerson
+  readonly person?: BoardRow
   /** Index into the person rows (selection coordinates). */
   readonly personIndex?: number
   readonly count?: number
 }
 
 /** Flatten people into display rows with optional group headers. Person order is the selection order. */
-export function groupRows(people: readonly BoardPerson[], groupBy: GroupBy, ungrouped: string): { items: RowItem[]; persons: BoardPerson[] } {
+export function groupRows(people: readonly BoardRow[], groupBy: GroupBy, ungrouped: string): { items: RowItem[]; persons: BoardRow[] } {
   if (groupBy === 'none') {
     return {
-      items: people.map((person, personIndex) => ({ kind: 'person', key: person.partyId, label: person.name, person, personIndex })),
+      items: people.map((person, personIndex) => ({ kind: 'person', key: person.subjectId, label: person.name, person, personIndex })),
       persons: [...people],
     }
   }
-  const label = (person: BoardPerson) =>
+  const label = (person: BoardRow) =>
     (groupBy === 'department' ? person.departmentName : groupBy === 'trade' ? person.tradeName : person.jobTitle) ?? ungrouped
-  const groups = new Map<string, BoardPerson[]>()
+  const groups = new Map<string, BoardRow[]>()
   for (const person of people) {
     const key = label(person)
     const list = groups.get(key)
@@ -295,11 +295,11 @@ export function groupRows(people: readonly BoardPerson[], groupBy: GroupBy, ungr
     else groups.set(key, [person])
   }
   const items: RowItem[] = []
-  const persons: BoardPerson[] = []
+  const persons: BoardRow[] = []
   for (const [name, members] of [...groups.entries()].sort(([a], [b]) => (a === ungrouped ? 1 : b === ungrouped ? -1 : a.localeCompare(b)))) {
     items.push({ kind: 'group', key: `group:${name}`, label: name, count: members.length })
     for (const person of members) {
-      items.push({ kind: 'person', key: person.partyId, label: person.name, person, personIndex: persons.length })
+      items.push({ kind: 'person', key: person.subjectId, label: person.name, person, personIndex: persons.length })
       persons.push(person)
     }
   }
