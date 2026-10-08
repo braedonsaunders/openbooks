@@ -2112,6 +2112,7 @@ const ALLOW_LISTED_NON_PERSONAL: ReadonlySet<string> = new Set([
   "schedule_baselines.name",
   "schedule_boards.code",
   "schedule_boards.default_view",
+  "schedule_boards.distribution_visibility", // constrained personal/whole-board audience policy
   "schedule_boards.description",
   "schedule_boards.grain",
   "schedule_boards.name",

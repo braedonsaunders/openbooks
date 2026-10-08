@@ -1,3 +1,4 @@
+import {scheduleBoardLifecycle} from './distribution-hooks.ts';
 /**
  * Booking commands for people boards. Every command runs in one tenant
  * transaction; each change in a batch is isolated in a savepoint so a paste
@@ -62,6 +63,7 @@ export interface BoardChangeOutcome {
   /** Empty unless the board notifies people of published changes. */
   readonly notices: ScheduleNotice[];
   readonly boardName: string;
+  readonly distributionRefusals: readonly {message:string;remedy:string}[];
 }
 
 function hoursLabel(entry: BoardEntry): string {
@@ -77,7 +79,7 @@ function noticeFor(entry: BoardEntry, change: ScheduleNotice["change"]): Schedul
 interface StoredEntry {
   id: string; revision: number; boardId: string; workerPartyId: string | null; subjectId: string; subjectKind: "person" | "equipment" | "location"; status: "draft" | "published" | "cancelled";
   targetKind: TargetRef["kind"] | null; targetId: string | null; projectTaskId: string | null; departmentId: string | null;
-  detail: string | null; notes: string | null; spanMode: "day" | "timed"; timeZone: string; startsOn: string;
+  detail: string | null; notes: string | null; spanMode: "day" | "timed"; timeZone: string; startsOn: string; endsOn: string;
   startsAt: string; endsAt: string; breakMinutes: number; seriesId: string | null; supersedesId: string | null;
 }
 
@@ -85,7 +87,7 @@ const STORED_COLUMNS = sql`id, revision, board_id as "boardId", worker_party_id 
   case when worker_party_id is not null then 'person' when equipment_unit_id is not null then 'equipment' else 'location' end as "subjectKind", status,
   target_kind as "targetKind", coalesce(customer_party_id, project_id, location_id, schedule_code_id) as "targetId",
   project_task_id as "projectTaskId", department_id as "departmentId", detail, notes, span_mode as "spanMode",
-  time_zone as "timeZone", starts_on::text as "startsOn",
+  time_zone as "timeZone", starts_on::text as "startsOn", ends_on::text as "endsOn",
   to_char(starts_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') as "startsAt",
   to_char(ends_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') as "endsAt",
   break_minutes as "breakMinutes", series_id as "seriesId", supersedes_id as "supersedesId"`;
@@ -262,7 +264,7 @@ function storedFields(row: StoredEntry): BookingFields {
 
 async function createOne(actor: ScheduleActor, board: ScheduleBoard, allowed: ReadonlySet<string> | null, change: Extract<BoardChange, { op: "create" }>, reason: string | null): Promise<ChangeResult> {
   const id = requireId(change.id, "Booking key");
-  if (!board.isActive) throw new ScheduleError("This board is archived.", { code: "schedule_board_archived", remedy: "Reactivate it in Setup → Schedule boards before booking." });
+  if (!board.isActive) throw new ScheduleError("This board is archived.", { code: "schedule_board_archived", remedy: "Restore the board from Scheduling → Manage boards before booking." });
   const booking = await normalize(board, actor.orgId, allowed, change);
   const requestHash = hash(definition(board, booking));
   await db.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`schedule-entry:${actor.orgId}:${id}`}, 0))`);
@@ -372,8 +374,9 @@ export async function applyBoardChanges(actor: ScheduleActor & { boardId: string
     const results: ChangeResult[] = [];
     const notices: ScheduleNotice[] = [];
     const notify = board.notifyAssignees;
+    const changedDates=new Set<string>(),changedSubjects=new Set<string>();
     for (const change of actor.changes) {
-      const before = notify && change.op !== "create" && isUuid(change.id) ? await readEntry(actor.orgId, change.id).catch(() => null) : null;
+      const before = change.op !== "create" && isUuid(change.id) ? await readEntry(actor.orgId, change.id).catch((error: unknown) => { if (error instanceof ScopeNotFoundError) return null; throw error; }) : null;
       try {
         results.push(await withTransactionSavepoint(db, () => {
           if (change.op === "create") return createOne(actor, board, allowed, change, reason);
@@ -382,6 +385,10 @@ export async function applyBoardChanges(actor: ScheduleActor & { boardId: string
           throw new ScheduleError("The change type is not recognized.", { code: "schedule_invalid" });
         }));
         const result = results.at(-1)!;
+        if(result.ok) {
+          if(before?.status==='published') {changedDates.add(before.startsOn);changedDates.add(before.endsOn);changedSubjects.add(before.subjectId);}
+          if(result.entry?.status==='published'){changedDates.add(result.entry.startsOn);changedDates.add(result.entry.endsOn);changedSubjects.add(result.entry.subjectId);}
+        }
         if (notify && result.ok) {
           if (change.op === "cancel" && before?.status === "published") notices.push(noticeFor(before, "removed"));
           else if (result.entry?.status === "published") {
@@ -402,7 +409,14 @@ export async function applyBoardChanges(actor: ScheduleActor & { boardId: string
         throw refusal;
       }
     }
-    return { results, notices, boardName: board.name };
+    const dates=[...changedDates].sort(),distributionRefusals:{message:string;remedy:string}[]=[];
+    for(let index=0;index<dates.length;) {
+      const from=dates[index]!,through=new Date(`${from}T00:00:00Z`);through.setUTCDate(through.getUTCDate()+41);
+      const upper=through.toISOString().slice(0,10);let end=index;while(end+1<dates.length&&dates[end+1]!<=upper)end++;
+      const refusal=await scheduleBoardLifecycle({actor,boardId:board.id,from,through:dates[end]!,subjectIds:[...changedSubjects],event:'on_update',occurrence:results.filter(r=>r.ok).map(r=>`${r.id}:${r.entry?.revision??'cancel'}`).sort().join(',')+`:${from}:${dates[end]}`});
+      if(refusal)distributionRefusals.push(refusal);index=end+1;
+    }
+    return { results, notices, boardName: board.name, distributionRefusals };
   }).catch((error: unknown) => { throw scheduleDatabaseRefusal(error); });
 }
 
@@ -418,7 +432,7 @@ export interface PublishFailure {
  * nothing: if any booking cannot publish (leave, a double booking), nothing
  * is published and every blocking booking is listed with its reason.
  */
-export async function publishBoard(actor: ScheduleActor & { boardId: string; from: string; through: string; reason?: string | null }): Promise<{ published: number; notices: ScheduleNotice[]; boardName: string }> {
+export async function publishBoard(actor: ScheduleActor & { boardId: string; from: string; through: string; reason?: string | null }): Promise<{ published: number; notices: ScheduleNotice[]; boardName: string; distributionRefusals: {message:string;remedy:string}[] }> {
   const from = requireDate(actor.from, "Publish from");
   const through = requireDate(actor.through, "Publish through");
   const reason = optionalText(actor.reason, "Reason", 2000);
@@ -475,6 +489,7 @@ export async function publishBoard(actor: ScheduleActor & { boardId: string; fro
         }
       }
     }
-    return { published: drafts.length, notices, boardName: board.name };
+    const refusal=await scheduleBoardLifecycle({actor,boardId:board.id,from,through,subjectIds:drafts.map(d=>d.subjectId),event:'after_post',occurrence:drafts.map(d=>`${d.id}:${d.revision+1}`).sort().join(',')});
+    return { published: drafts.length, notices, boardName: board.name, distributionRefusals:refusal?[refusal]:[] };
   }).catch((error: unknown) => { throw scheduleDatabaseRefusal(error); });
 }

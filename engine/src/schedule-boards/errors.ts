@@ -24,6 +24,7 @@ const CHECK_REFUSALS: Record<string, readonly [string, string]> = {
   schedule_boards_resource_kind: ["The board's resource kind or scope is not valid.", "Select equipment units or locations; equipment boards cannot use department or location scope."],
   schedule_boards_cell_color_rules: ["A cell color rule is not valid.", "Choose a field and match, enter a value, and use a six-digit hex color such as #38bdf8."],
   schedule_boards_weekend_days: ["The weekend days are not valid.", "Select days of the week in Board settings."],
+  schedule_boards_distribution_entity: ["Whole-board reports need a legal entity.", "Choose a legal entity in Board Settings or use personal reports."],
   schedule_entries_subject: ["A booking needs exactly one person or resource.", "Reload the board and select a row belonging to its resource kind."],
 };
 
@@ -41,14 +42,14 @@ export function scheduleDatabaseRefusal(error: unknown, context: { personName?: 
   while (cause && typeof cause === "object" && !seen.has(cause)) {
     seen.add(cause);
     const detail = cause as DatabaseCause;
-    if ((detail.code === "42P01" && /schedule_(?:boards|codes|entries|source_records)/.test(detail.message ?? "")) || (detail.code === "42703" && /resource_kind|cell_color_rules|show_totals|weekend_days|equipment_unit_id|resource_location_id|day_policy_known/.test(detail.message ?? ""))) {
+    if ((detail.code === "42P01" && /schedule_(?:boards|codes|entries|source_records|distributions|distribution_recipients|resource_recipients)/.test(detail.message ?? "")) || (detail.code === "42703" && /show_hours_column|distribution_visibility|resource_kind|cell_color_rules|show_totals|weekend_days|equipment_unit_id|resource_location_id|day_policy_known/.test(detail.message ?? ""))) {
       return new ScheduleError("Scheduling needs its database upgrade before it can be used.", {
         status: 409,
         code: "schedule_upgrade_required",
         remedy: "Ask an administrator to apply the pending database migrations.",
       });
     }
-    if ((detail.code === "23514" || detail.code === "P0001") && /schedule_(?:entr|board|code|source_record)|schedule_entry_assert/.test(`${detail.where ?? ""} ${detail.constraint ?? ""}`) && detail.message && !detail.constraint) {
+    if ((detail.code === "23514" || detail.code === "P0001") && /schedule_(?:entr|board|code|source_record|distribution|resource_recipient)|schedule_entry_assert/.test(`${detail.where ?? ""} ${detail.constraint ?? ""}`) && detail.message && !detail.constraint) {
       return new ScheduleError(detail.message, { code: "schedule_refused" });
     }
     if (detail.code === "23514" && detail.constraint && CHECK_REFUSALS[detail.constraint]) {
@@ -60,6 +61,12 @@ export function scheduleDatabaseRefusal(error: unknown, context: { personName?: 
         code: "schedule_double_booked",
         remedy: "Remove or move the other booking first, or choose another person, resource or time.",
       });
+    }
+    if (detail.code === "23505" && /schedule_resource_recipients_(equipment|location)/.test(detail.constraint ?? "")) {
+      return new ScheduleError("This resource already has an active board contact.", {status:409,code:"schedule_stale",remedy:"Edit the existing association or retire it before choosing another contact."});
+    }
+    if (detail.code === "23505" && /schedule_distributions_/.test(detail.constraint ?? "")) {
+      return new ScheduleError("Another send already owns this reviewed schedule.", {status:409,code:"schedule_stale",remedy:"Reload its native Flow and delivery status; the same version is not sent twice."});
     }
     if (detail.code === "23505" && detail.constraint === "schedule_boards_org_id_code_key") {
       return new ScheduleError("Another board already uses this code.", { code: "schedule_board_code_taken", remedy: "Choose a different board code." });

@@ -1,14 +1,21 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import Link from 'next/link'
 import { useTranslations } from 'next-intl'
+import Link from 'next/link'
+import { Button, Select } from '@openbooks/ui'
 import { SchedulingAlert } from '@/components/scheduling/SchedulingAlert'
 import { promptDialog } from '@/lib/prompt'
 import { readApiErrorMessage } from '@/lib/api-error'
-import { CalendarRange } from 'lucide-react'
-import { emptySchedule, type ScheduleData } from '@braedonsaunders/appkit-scheduling'
-import { ScheduleWorkspace, SchedulingProvider, type ScheduleAdapter } from '@braedonsaunders/appkit-scheduling/react'
+import {
+  emptySchedule,
+  type ScheduleData,
+} from '@braedonsaunders/appkit-scheduling'
+import {
+  ScheduleWorkspace,
+  SchedulingProvider,
+  type ScheduleAdapter,
+} from '@braedonsaunders/appkit-scheduling/react'
 
 /**
  * The project Schedule tab.
@@ -26,37 +33,77 @@ export function ScheduleTab({
   projectEnd,
   canManage,
   locale,
-  showBoardLink = true,
 }: {
   projectId: string
   projectStart: string | null
   projectEnd: string | null
   canManage: boolean
   locale?: string
-  /** The project schedule is also a task board in Scheduling; link there unless already inside it. */
+  /** Retained for callers; project schedules are managed on the project record. */
   showBoardLink?: boolean
 }) {
   const t = useTranslations('projects')
   const tScheduling = useTranslations('scheduling')
   const tCommon = useTranslations('common')
   const [data, setData] = useState<ScheduleData | null>(null)
+  const [boardList, setBoardList] = useState<{
+    projectId: string
+    boards: { id: string; code: string; name: string }[]
+  } | null>(null)
+  const boards = boardList?.projectId === projectId ? boardList.boards : []
+  const [boardSelection, setBoardSelection] = useState<{
+    projectId: string
+    code: string
+  } | null>(null)
+  const boardCode =
+    boardSelection?.projectId === projectId ? boardSelection.code : ''
+  useEffect(() => {
+    const abort = new AbortController()
+    void fetch(`/api/projects/${projectId}/schedule-boards`, {
+      signal: abort.signal,
+      cache: 'no-store',
+    })
+      .then(async (response) => {
+        if (!response.ok)
+          throw new Error(
+            await readApiErrorMessage(response, tCommon('feedback.loadFailed')),
+          )
+        return response.json()
+      })
+      .then((result) => {
+        if (!abort.signal.aborted)
+          setBoardList({ projectId, boards: result.boards })
+      })
+      .catch((error) => {
+        if (!abort.signal.aborted)
+          setError(
+            error instanceof Error
+              ? error.message
+              : tCommon('feedback.loadFailed'),
+          )
+      })
+    return () => abort.abort()
+  }, [projectId, tCommon])
   const [error, setError] = useState<string | null>(null)
 
   // Fetch chain: every state update sits in a promise continuation (the fetch
   // response), never synchronously in the effect body.
   const refresh = useCallback(() => {
-    return fetch(`/api/project-schedule?projectId=${projectId}`, { cache: 'no-store' })
-      .then(async (res) => {
-        if (!res.ok) {
-          setError(await readApiErrorMessage(res, tCommon('feedback.loadFailed')))
-          setData(emptySchedule)
-          return
-        }
-        return (res.json() as Promise<{ schedule: ScheduleData }>).then((body) => {
+    return fetch(`/api/project-schedule?projectId=${projectId}`, {
+      cache: 'no-store',
+    }).then(async (res) => {
+      if (!res.ok) {
+        setError(await readApiErrorMessage(res, tCommon('feedback.loadFailed')))
+        setData(emptySchedule)
+        return
+      }
+      return (res.json() as Promise<{ schedule: ScheduleData }>).then(
+        (body) => {
           setError(null)
           setData(body.schedule)
-        })
-      })
+        },
+      )
+    })
   }, [projectId, tCommon])
 
   useEffect(() => {
@@ -92,10 +139,17 @@ export function ScheduleTab({
   const adapter: ScheduleAdapter = useMemo(
     () => ({
       createTask: async (input) => {
-        const name = input.name.trim() || await promptDialog({
-          title: tScheduling(input.taskType === 'milestone' ? 'tasks.addMilestone' : 'tasks.addTask'), label: tScheduling('tasks.taskName'),
-          confirmLabel: tCommon('actions.save'),
-        })
+        const name =
+          input.name.trim() ||
+          (await promptDialog({
+            title: tScheduling(
+              input.taskType === 'milestone'
+                ? 'tasks.addMilestone'
+                : 'tasks.addTask',
+            ),
+            label: tScheduling('tasks.taskName'),
+            confirmLabel: tCommon('actions.save'),
+          }))
         if (!name?.trim()) return false
         return mutate('createTask', { input: { ...input, name: name.trim() } })
       },
@@ -105,10 +159,12 @@ export function ScheduleTab({
       createDependency: (input) => mutate('createDependency', { input }),
       deleteDependency: (id) => mutate('deleteDependency', { id }),
       createCalendar: (input) => mutate('saveCalendar', { input }),
-      updateCalendar: (id, patch) => mutate('saveCalendar', { input: { id, ...patch } }),
+      updateCalendar: (id, patch) =>
+        mutate('saveCalendar', { input: { id, ...patch } }),
       deleteCalendar: (id) => mutate('deleteCalendar', { id }),
       createResource: (input) => mutate('saveResource', { input }),
-      updateResource: (id, patch) => mutate('saveResource', { input: { id, ...patch } }),
+      updateResource: (id, patch) =>
+        mutate('saveResource', { input: { id, ...patch } }),
       deleteResource: (id) => mutate('deleteResource', { id }),
       createBaseline: (input) => mutate('createBaseline', { input }),
       deleteBaseline: (id) => mutate('deleteBaseline', { id }),
@@ -120,7 +176,10 @@ export function ScheduleTab({
   // takes overrides, so the tenant's locale drives it like every other screen.
   const labels = useMemo(
     () => ({
-      toolbar: { addTask: tScheduling('tasks.addTask'), addMilestone: tScheduling('tasks.addMilestone') },
+      toolbar: {
+        addTask: tScheduling('tasks.addTask'),
+        addMilestone: tScheduling('tasks.addMilestone'),
+      },
       columns: { name: tScheduling('progress.task') },
       status: {
         not_started: t('schedule.status.not_started'),
@@ -147,36 +206,55 @@ export function ScheduleTab({
   )
 
   if (!data) {
-    return <div className="h-96 animate-pulse rounded-lg border border-slate-200 bg-slate-50 dark:border-slate-800 dark:bg-slate-900" />
+    return (
+      <div className="h-96 animate-pulse rounded-lg border border-slate-200 bg-slate-50 dark:border-slate-800 dark:bg-slate-900" />
+    )
   }
 
   return (
     <div className="min-w-0 space-y-2 [&_[data-testid=schedule-toolbar]>div]:flex-nowrap [&_[data-testid=schedule-toolbar]>div]:overflow-x-auto">
-      {showBoardLink ? (
-        <div className="flex justify-end">
-          <Link
-            href={`/scheduling?view=gantt&project=${encodeURIComponent(projectId)}`}
-            className="inline-flex items-center gap-1.5 text-xs font-medium text-teal-700 hover:underline dark:text-teal-300"
+      {boards.length ? (
+        <div className="flex min-w-0 flex-nowrap items-center gap-2 overflow-x-auto">
+          <Select
+            value={boardCode}
+            onChange={(event) =>
+              setBoardSelection({ projectId, code: event.target.value })
+            }
+            aria-label={tScheduling('toolbar.board')}
+            className="h-8 min-w-0 flex-1 text-xs"
           >
-            <CalendarRange className="h-3.5 w-3.5" />
-            {tScheduling('tasks.openInScheduling')}
-          </Link>
+            <option value="">{t('schedule.view.gantt')}</option>
+            {boards.map((board) => (
+              <option key={board.id} value={board.code}>
+                {board.name}
+              </option>
+            ))}
+          </Select>
+          {boardCode ? (
+            <Button asChild variant="outline" size="sm">
+              <Link
+                href={`/projects/${projectId}/schedule/board?board=${encodeURIComponent(boardCode)}`}
+              >
+                {tScheduling('toolbar.openBoard')}
+              </Link>
+            </Button>
+          ) : null}
         </div>
       ) : null}
-      {error ? (
-        <SchedulingAlert message={error} />
-      ) : null}
+      {error ? <SchedulingAlert message={error} /> : null}
       {!canManage ? (
         <SchedulingAlert message={t('schedule.readOnly')} tone="info" />
       ) : null}
-      <SchedulingProvider labels={labels} locale={locale}>
-        <ScheduleWorkspace
-          data={data}
-          adapter={adapter}
-          dateWorkStart={projectStart}
-          dateWorkEnd={projectEnd}
-        />
-      </SchedulingProvider>
+      {!boardCode ? (
+        <SchedulingProvider labels={labels} locale={locale}>
+          <ScheduleWorkspace
+            data={data}
+            adapter={adapter}
+            dateWorkStart={projectStart}
+            dateWorkEnd={projectEnd}
+          />
+        </SchedulingProvider>
+      ) : null}
     </div>
   )
 }

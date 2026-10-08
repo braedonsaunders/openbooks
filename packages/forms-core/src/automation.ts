@@ -123,6 +123,8 @@ export type TriggerKind = TriggerData['trigger']
 // --- Actions (system side-effects; sinks or chain) --------------------------
 
 export const actionDataSchema = z.discriminatedUnion('action', [
+  // The recipient audience and report are pinned by the native schedule review.
+  z.object({ action: z.literal('distribute_schedule') }),
   // `subject` and `body` support {{field}} interpolation — see
   // `interpolateTemplate`. Delivery goes through the tenant's email settings.
   // `attachPdf` renders the subject record's PDF (the org's record template)

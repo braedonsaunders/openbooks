@@ -135,7 +135,7 @@ test("a staged board publishes all changes together, or none when one is blocked
 
   await applyBoardChanges({ ...actor(f), boardId: f.staged, changes: [{ op: "cancel", id: a.id, expectedRevision: 1 }] });
   assert.deepEqual(await publishBoard({ ...actor(f), boardId: f.staged, from: "2026-10-11", through: "2026-10-17" }), {
-    published: 1, notices: [], boardName: "Board PLANT",
+    published: 1, notices: [], boardName: "Board PLANT", distributionRefusals: [],
   });
   assert.equal(await statusOf(f.org.orgId, b.id), "published");
 }));
@@ -368,4 +368,19 @@ test('linked source dates expose literal values while native booking rows and th
   assert.equal(after.sourceRecords?.[0]?.result, payload.result);
   assert.equal(after.sourceRecords?.[0]?.notes, payload.notes);
   assert.equal(after.sourceRecords?.[0]?.linkedEntryId, booked.id);
+}));
+
+test('source-date colors and native booking colors share code fallback and ordered overrides without changing evidence or hours',enabled,async()=>fixture(async f=>{
+ const original=historyBatch(f,'colors'),payload={...original.rows[0]!.payload,label:'TRAIN/ N',date:'2026-10-13'};
+ const batch={...original,rows:[{...original.rows[0]!,payload,label:'TRAIN/ N',onDate:'2026-10-13',sourceHash:sourceHistoryHash(payload)}]};
+ await importSourceHistory(actor(f),batch,(await previewSourceHistory(actor(f),batch)).approvalHash);
+ const booked={...day(f,f.ben,'2026-10-13',{kind:'code' as const,id:f.codeId}),detail:' N'};
+ assert.equal((await applyBoardChanges({...actor(f),boardId:f.live,changes:[booked]})).results[0]?.ok,true);
+ let window=await loadBoardWindow({...actor(f),boardId:f.live,from:'2026-10-13',through:'2026-10-13'});
+ assert.equal(window.sourceRecords?.[0]?.color,'#38bdf8');assert.equal(window.entries[0]?.target?.color,'#38bdf8');
+ const before=await withBypassContext(()=>db.execute(sql`select * from schedule_source_records where org_id=${f.org.orgId}`));
+ await withBypassContext(()=>db.execute(sql`update schedule_boards set cell_color_rules='[{"field":"bookingLabel","match":"startsWith","value":"TRAIN/","color":"#ff00ff"}]'::jsonb where id=${f.live}`));
+ window=await loadBoardWindow({...actor(f),boardId:f.live,from:'2026-10-13',through:'2026-10-13'});
+ assert.equal(window.sourceRecords?.[0]?.color,'#ff00ff');assert.equal(window.entries[0]?.target?.color,'#ff00ff');assert.equal(window.entries[0]?.workedMinutes,480);assert.equal(window.sourceRecords?.[0]?.label,'TRAIN/ N');
+ assert.deepEqual((await withBypassContext(()=>db.execute(sql`select * from schedule_source_records where org_id=${f.org.orgId}`))).rows,before.rows);
 }));

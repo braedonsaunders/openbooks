@@ -18,7 +18,7 @@ export default async function SchedulingBoardsPage({ searchParams }: {
   const actor = { orgId: authz.user.orgId, actorId: authz.user.id }
   const kinds = await enabledBoardKinds(actor.orgId)
   if (!kinds.people && !kinds.tasks && !kinds.resources) notFound()
-  const boards = await listBoards(actor, { includeArchived: true })
+  const boards = await listBoards(actor, { includeArchived: true, generalOnly: true })
   const readable = await Promise.all(boards.map(async board => board.rowKind === 'resources'
     ? boardAuthority(actor, board, 'read').then(() => true, () => false)
     : can(authz, board.rowKind === 'people' ? 'hrm.shifts.read' : 'projects.read')))

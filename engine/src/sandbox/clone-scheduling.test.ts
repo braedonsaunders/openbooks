@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { generateCopySql, type CloneOptions } from './clone.ts';
 import type { TableInfo } from './catalog.ts';
+import { EXCLUDE } from './catalog.ts';
+import { TENANT_TABLE_POLICIES } from './tenant-table-policies.ts';
 import { DEFAULT_POLICIES } from './masking.ts';
 
 const opts: CloneOptions = {
@@ -44,4 +46,14 @@ test('source scheduling history rebases every native reference and removes sourc
   const masked=generateCopySql(records,{...opts,masked:true},rebase,new Set(),policies,null)!;
   for(const column of ['board_id','worker_party_id','subsidiary_id','linked_entry_id','supersedes_id','created_by']) assert.ok(full.includes(`ob_rebase("${column}"`));
   assert.match(masked,/md5\("source_key"::text\)/);assert.match(masked,/'\{\}'::jsonb/);assert.match(masked,/REDACTED/);
+});
+
+
+test('reviewed issuance is never cloned while native resource contacts rebase identities and mask reasons',()=>{
+ for(const name of ['schedule_distributions','schedule_distribution_recipients']){assert.equal(EXCLUDE.has(name),true);assert.equal(TENANT_TABLE_POLICIES[name as keyof typeof TENANT_TABLE_POLICIES],'skip:no-copy');}
+ const contacts=table('schedule_resource_recipients',['id','org_id','board_id','equipment_unit_id','resource_location_id','party_id','subsidiary_id','created_by','updated_by'],{board_id:'schedule_boards',equipment_unit_id:'equipment_units',resource_location_id:'locations',party_id:'parties',subsidiary_id:'subsidiaries',created_by:'users',updated_by:'users'});
+ contacts.columns.push({name:'reason',isUuid:false,udtName:'text',isNullable:false});
+ const rebase=new Set(['schedule_resource_recipients',...Object.values(contacts.fks)]),policies=new Map([['schedule_resource_recipients',new Map(DEFAULT_POLICIES.filter(p=>p.tableName==='schedule_resource_recipients').map(p=>[p.columnName,p.transform]))]]);
+ const full=generateCopySql(contacts,opts,rebase,new Set(),policies,null)!,masked=generateCopySql(contacts,{...opts,masked:true},rebase,new Set(),policies,null)!;
+ for(const column of Object.keys(contacts.fks))assert.ok(full.includes(`ob_rebase("${column}"`));assert.match(masked,/REDACTED/);
 });

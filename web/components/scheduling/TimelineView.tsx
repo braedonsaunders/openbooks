@@ -1,12 +1,12 @@
 'use client'
 
-import { useEffect, useMemo, useRef, useState, type PointerEvent } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type PointerEvent } from 'react'
 import { useLocale, useTranslations } from 'next-intl'
-import { ZoomIn, ZoomOut } from 'lucide-react'
-import { Button, cn } from '@openbooks/ui'
+import { cn } from '@openbooks/ui'
 import { CHIP_COLORS, chipStyle } from './BookingChip'
 import { SourceRecordChip } from './SourceRecord'
 import type { BoardSourceRecord } from '@openbooks/engine/src/schedule-boards/source-history.ts'
+import { filterBoardRows } from './legend'
 import { TargetPicker, type PickedTarget } from './TargetPicker'
 import { formatMinutes, groupRows, initials, presentedBoardEntries, targetHue, targetShortLabel, type BoardEntry, type GroupBy } from './model'
 import type { BoardController } from './use-board'
@@ -16,7 +16,7 @@ const NAME_W = 200
 const ROW_H = 40
 const HEADER_H = 44
 const SNAP = 15
-const ZOOMS = [4, 8, 16, 32, 56]
+export const TIMELINE_ZOOMS = [4, 8, 16, 32, 56]
 
 const newId = () => crypto.randomUUID()
 const clockMinutes = (clock: string) => Number(clock.slice(0, 2)) * 60 + Number(clock.slice(3, 5))
@@ -28,29 +28,26 @@ type Drag =
   | { kind: 'create'; row: number; startMinute: number; endMinute: number }
 
 /** Hours across the window: shifts as bars, overnight work crossing midnight. */
-export function TimelineView({ controller, window: board, groupBy, search, today, onOpenEntry, onOpenSourceRecord }: {
+export function TimelineView({ controller, window: board, groupBy, search, zoom, today, onOpenEntry, onOpenSourceRecord }: {
   controller: BoardController
   window: BoardWindow
   groupBy: GroupBy
   search: string
+  zoom: number
   today: string
   onOpenEntry: (entry: BoardEntry) => void
   onOpenSourceRecord: (record: BoardSourceRecord) => void
 }) {
   const t = useTranslations('scheduling')
   const locale = useLocale()
-  const [zoom, setZoom] = useState(board.days.length <= 3 ? 3 : board.days.length <= 7 ? 2 : 1)
   const presented = useMemo(() => presentedBoardEntries(board), [board.entries, board.sourceRecords])
   const rowHeight = (board.sourceRecords?.length ?? 0) > 0 ? ROW_H + 26 : ROW_H
-  const hourW = ZOOMS[zoom]!
+  const hourW = TIMELINE_ZOOMS[zoom]!
   const dayW = hourW * 24
   const dates = board.days.map((day) => day.date)
   const dayIndex = useMemo(() => new Map(dates.map((date, i) => [date, i])), [dates])
   const replaced = useMemo(() => new Set(board.replaced), [board.replaced])
-  const people = useMemo(() => {
-    const query = search.trim().toLowerCase()
-    return query ? board.rows.filter((person) => person.name.toLowerCase().includes(query)) : board.rows
-  }, [board.rows, search])
+  const people = useMemo(() => filterBoardRows(board,search,null),[board,search])
   const { items, persons } = useMemo(() => groupRows(people, groupBy, t('grid.ungrouped')), [groupBy, people, t])
   const rowOf = useMemo(() => new Map(persons.map((person, i) => [person.subjectId, i])), [persons])
   const tops = useMemo(() => {
@@ -66,6 +63,15 @@ export function TimelineView({ controller, window: board, groupBy, search, today
   }, [items, rowHeight])
 
   const scrollRef = useRef<HTMLDivElement>(null)
+  const previousHourWidth=useRef(hourW)
+  useLayoutEffect(()=>{
+    const element=scrollRef.current
+    if(element && previousHourWidth.current!==hourW) {
+      const minuteAtCenter=(element.scrollLeft+element.clientWidth/2-NAME_W)/previousHourWidth.current
+      element.scrollLeft=Math.max(0,minuteAtCenter*hourW+NAME_W-element.clientWidth/2)
+    }
+    previousHourWidth.current=hourW
+  },[hourW])
   const [drag, setDrag] = useState<Drag | null>(null)
   const [creating, setCreating] = useState<{ row: number; date: string; starts: string; ends: string; anchor: { left: number; top: number; width: number } } | null>(null)
 
@@ -184,10 +190,6 @@ export function TimelineView({ controller, window: board, groupBy, search, today
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-2">
-      <div className="flex items-center justify-end gap-1">
-        <Button variant="ghost" size="sm" onClick={() => setZoom((value) => Math.max(0, value - 1))} disabled={zoom === 0} aria-label={t('timeline.zoomOut')}><ZoomOut className="h-4 w-4" /></Button>
-        <Button variant="ghost" size="sm" onClick={() => setZoom((value) => Math.min(ZOOMS.length - 1, value + 1))} disabled={zoom === ZOOMS.length - 1} aria-label={t('timeline.zoomIn')}><ZoomIn className="h-4 w-4" /></Button>
-      </div>
       <div
         ref={scrollRef}
         className="relative min-h-0 flex-1 select-none overflow-auto rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-950"

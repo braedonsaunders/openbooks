@@ -1,3 +1,4 @@
+import { sql } from 'drizzle-orm';
 import { boolean, date, integer, jsonb, pgTable, smallint, text, time, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { auditColumns, id, orgRef } from "./helpers";
 
@@ -31,6 +32,8 @@ export const scheduleBoards = pgTable("schedule_boards", {
   resourceKind: text("resource_kind", { enum: ["equipment", "location"] }),
   cellColorRules: jsonb("cell_color_rules").notNull().default([]),
   showTotals: boolean("show_totals").notNull().default(false),
+  showHoursColumn: boolean("show_hours_column").notNull().default(true),
+  distributionVisibility:text("distribution_visibility",{enum:["personal","board"]}).notNull().default("personal"),
   weekendDays: text("weekend_days").array().notNull().default(["6", "7"]),
   subsidiaryId: uuid("subsidiary_id"),
   departmentId: uuid("department_id"),
@@ -136,3 +139,14 @@ export const scheduleSourceRecords = pgTable("schedule_source_records", {
   uniqueIndex('schedule_source_records_org_id_id_key').on(t.orgId,t.id),
   uniqueIndex('schedule_source_records_org_id_supersedes_id_key').on(t.orgId,t.supersedesId),
 ]);
+
+/** Native associations resolve recipients from parties; equipment never becomes a parallel roster. */
+export const scheduleResourceRecipients=pgTable('schedule_resource_recipients',{
+ id:id(),orgId:orgRef(),boardId:uuid('board_id').notNull(),equipmentUnitId:uuid('equipment_unit_id'),resourceLocationId:uuid('resource_location_id'),partyId:uuid('party_id').notNull(),subsidiaryId:uuid('subsidiary_id'),reason:text('reason').notNull(),revision:integer('revision').notNull().default(1),isActive:boolean('is_active').notNull().default(true),...auditColumns,
+},t=>[uniqueIndex('schedule_resource_recipients_org_id_id_key').on(t.orgId,t.id)]);
+export const scheduleDistributions=pgTable('schedule_distributions',{
+ id:id(),orgId:orgRef(),boardId:uuid('board_id').notNull(),subsidiaryId:uuid('subsidiary_id'),fromDate:date('from_date').notNull(),throughDate:date('through_date').notNull(),version:text('version').notNull(),audience:jsonb('audience').notNull(),reason:text('reason').notNull(),replayKey:text('replay_key').notNull(),status:text('status',{enum:['previewed','queued']}).notNull().default('previewed'),flowRunId:uuid('flow_run_id'),queuedAt:timestamp('queued_at',{withTimezone:true}),createdAt:timestamp('created_at',{withTimezone:true}).notNull().defaultNow(),createdBy:uuid('created_by').notNull(),
+},t=>[uniqueIndex('schedule_distributions_org_id_id_key').on(t.orgId,t.id),uniqueIndex('schedule_distributions_org_id_replay_key_key').on(t.orgId,t.replayKey),uniqueIndex('schedule_distributions_version_key').on(t.orgId,t.boardId,t.version).where(sql`${t.status} = 'queued'`)]);
+export const scheduleDistributionRecipients=pgTable('schedule_distribution_recipients',{
+ id:id(),orgId:orgRef(),distributionId:uuid('distribution_id').notNull(),partyId:uuid('party_id').notNull(),workerPartyId:uuid('worker_party_id'),equipmentUnitId:uuid('equipment_unit_id'),resourceLocationId:uuid('resource_location_id'),email:text('email'),report:jsonb('report').notNull(),createdAt:timestamp('created_at',{withTimezone:true}).notNull().defaultNow(),
+},t=>[uniqueIndex('schedule_distribution_recipients_org_id_id_key').on(t.orgId,t.id)]);

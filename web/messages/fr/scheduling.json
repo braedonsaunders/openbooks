@@ -1,9 +1,9 @@
 {
   "title": "Planification",
-  "description": "Planifiez qui va où et quand — les équipes à la journée, les quarts à l’heure et les calendriers de projet — sur des tableaux adaptés au fonctionnement de votre entreprise.",
+  "description": "Plan people and resources by day or hour on configurable boards. Project schedules live on project records.",
   "views": {
     "grid": "Grille",
-    "targets": "Par chantier",
+    "targets": "Par destination",
     "timeline": "Chronologie",
     "calendar": "Mois",
     "gantt": "Diagramme de Gantt",
@@ -43,7 +43,13 @@
     "details": "Détails",
     "date": "Aller à la date",
     "resourceBoards": "Ressources",
-    "manageBoards": "Gérer les tableaux"
+    "manageBoards": "Gérer les tableaux",
+    "display": "Display options",
+    "showHoursColumn": "Show booked hour column",
+    "email": "Email schedule",
+    "openBoard": "Open board",
+    "returnProject": "Return to project",
+    "retry": "Retry schedule load"
   },
   "empty": {
     "title": "Configurez votre premier tableau",
@@ -154,9 +160,9 @@
     "notesPlaceholder": "Ce que l’équipe doit savoir"
   },
   "targets": {
-    "where": "Chantier",
+    "where": "Target",
     "count": "{count} lignes réservées",
-    "add": "Ajouter un chantier",
+    "add": "Ajouter une destination",
     "empty": "Rien n’est encore affecté sur ces dates.",
     "available": "Disponibles",
     "allBooked": "Toutes les lignes sont réservées ou indisponibles ce jour."
@@ -166,8 +172,8 @@
     "zoomOut": "Zoom arrière"
   },
   "calendar": {
-    "person": "Afficher",
-    "everyone": "Toutes les lignes",
+    "person": "Person or resource",
+    "everyone": "Everyone",
     "onLeave": "{count} absents",
     "more": "{count} de plus"
   },
@@ -266,7 +272,8 @@
     "removed": "{date} : retiré de {target}",
     "link": "Voir votre planning",
     "footer": "Vous recevez ce message parce que {board} prévient les personnes lorsque leur planning change.",
-    "noTransport": "L’e-mail n’est pas configuré : les personnes ont donc été prévenues uniquement dans OpenBooks. Configurez l’e-mail dans Administration → E-mail."
+    "noTransport": "L’e-mail n’est pas configuré : les personnes ont donc été prévenues uniquement dans OpenBooks. Configurez l’e-mail dans Administration → E-mail.",
+    "nativeDistribution": "Email schedules through a reviewed Schedule distribution Flow."
   },
   "mine": {
     "tab": "Planning",
@@ -289,5 +296,28 @@
   "boards": {
     "description": "Lister, configurer et archiver les tableaux de planification.",
     "return": "Retour au planning"
+  },
+  "distribution": {
+    "title": "Email schedule",
+    "close": "Close",
+    "preview": "Preview report",
+    "send": "Send reviewed schedule",
+    "working": "Preparing…",
+    "refused": "Schedule distribution could not be completed.",
+    "explanation": "Choose personal reports or a whole-board report for every selected recipient. Published bookings and literal source-date observations are shown separately. Sending uses your enabled Schedule distribution Flow and configured email provider.",
+    "everyone": "Everyone with a visible schedule in these dates",
+    "reason": "Reason for sending",
+    "queued": "The reviewed schedule is queued for email delivery.",
+    "deliveryStatus": "Queued is not delivered. Follow the native Flow run, Email log and delivery audit for actual provider results.",
+    "version": "Reviewed version",
+    "recipients": "Exact recipients and associated schedules",
+    "missingEmail": "Email missing",
+    "report": "Recipient schedule report preview",
+    "flows": "Configure native Flows",
+    "contacts": "Board resource recipients",
+    "sharing": "Report sharing",
+    "personal": "Each recipient’s own schedule/resources",
+    "wholeBoard": "The whole visible board schedule for each recipient",
+    "wholeBoardReview": "Every selected recipient will receive the whole reviewed board report, including other people/resources. Board Settings must explicitly allow this sharing within the board’s legal entity."
   }
 }

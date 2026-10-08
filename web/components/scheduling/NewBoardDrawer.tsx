@@ -32,7 +32,9 @@ function codeFrom(name: string): string {
   return name.toUpperCase().replace(/[^A-Z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40) || 'BOARD'
 }
 
-export function NewBoardDrawer({ open, onClose, timeZone, scope, peopleEnabled, tasksEnabled, resourcesEnabled, equipmentEnabled }: {
+export function NewBoardDrawer({ open, onClose, timeZone, scope, peopleEnabled, tasksEnabled, resourcesEnabled, equipmentEnabled, contextProjectId, returnBasePath }: {
+  contextProjectId?: string
+  returnBasePath?: string
   open: boolean
   onClose: () => void
   timeZone: string
@@ -77,7 +79,7 @@ export function NewBoardDrawer({ open, onClose, timeZone, scope, peopleEnabled, 
           subsidiaryId: subsidiaryId || null,
           departmentId: tasks || resources ? null : departmentId || null,
           locationId: tasks || resources ? null : locationId || null,
-          projectId: tasks || resources ? projectId || null : null,
+          projectId: contextProjectId ?? (tasks || resources ? projectId || null : null),
           isActive: true,
         }),
       })
@@ -87,7 +89,7 @@ export function NewBoardDrawer({ open, onClose, timeZone, scope, peopleEnabled, 
         return
       }
       onClose()
-      router.push(`/scheduling?board=${encodeURIComponent(boardCode)}`)
+      router.push(`${returnBasePath??'/scheduling'}?board=${encodeURIComponent(boardCode)}`)
       router.refresh()
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : t('errors.save'))
@@ -173,7 +175,7 @@ export function NewBoardDrawer({ open, onClose, timeZone, scope, peopleEnabled, 
                 </label>
               ) : null}
             </>
-          ) : (
+          ) : scope.projects.length ? (
             <label className="space-y-1">
               <span className="text-xs font-medium text-slate-600 dark:text-slate-300">{t('newBoard.project')}</span>
               <Select value={projectId} onChange={(event) => setProjectId(event.target.value)}>
@@ -181,7 +183,7 @@ export function NewBoardDrawer({ open, onClose, timeZone, scope, peopleEnabled, 
                 {scope.projects.map((option) => <option key={option.id} value={option.id}>{option.name}</option>)}
               </Select>
             </label>
-          )}
+          ) : null}
         </div>
         <p className="text-xs text-slate-500">{t('newBoard.afterwards')}</p>
         {error ? <p className="rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700 dark:bg-rose-950/40 dark:text-rose-300">{error}</p> : null}

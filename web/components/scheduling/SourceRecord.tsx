@@ -2,27 +2,29 @@
 
 import { useTranslations } from 'next-intl'
 import { History } from 'lucide-react'
+import { targetHue } from './model'
 import { CHIP_COLORS, chipStyle } from './BookingChip'
 import { Drawer, cn } from '@openbooks/ui'
 import type { BoardSourceRecord } from '@openbooks/engine/src/schedule-boards/source-history.ts'
 
-export function SourceRecordChip({ records, compact = false, workerName, dimmed = false, onOpen }: {
+export function SourceRecordChip({ records, compact = false, workerName, subjectOnly = false, dimmed = false, onOpen }: {
   records: readonly BoardSourceRecord[]
   compact?: boolean
   dimmed?: boolean
   workerName?: string
+  subjectOnly?: boolean
   onOpen: (record: BoardSourceRecord) => void
 }) {
   const t = useTranslations('scheduling')
   if (!records.length) return null
   const color = records[0]!.color
-  return <button style={color ? chipStyle(215,color) : undefined} type="button" onClick={(event) => { event.stopPropagation(); onOpen(records[0]!) }}
+  return <button style={chipStyle(targetHue({id:records[0]!.label ?? '',color:null}),color)} type="button" onClick={(event) => { event.stopPropagation(); onOpen(records[0]!) }}
     onMouseDown={event => event.stopPropagation()} onPointerDown={event => event.stopPropagation()}
     onDoubleClick={event => event.stopPropagation()}
     title={records.map(r => `${r.label ?? '—'}${r.result ? ` · ${r.result}` : ''}\n${t('source.unknownHours')}${!r.visibleInSource ? `\n${t('source.hidden')}` : ''}`).join('\n\n')}
-    className={cn('flex min-w-0 flex-1 items-center gap-1 overflow-hidden rounded-md border px-1.5 text-left', color ? CHIP_COLORS : 'border-slate-300 bg-slate-100 text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200',compact ? 'h-[22px] text-[11px]' : 'h-[32px] text-xs', dimmed && 'opacity-25')}>
+    className={cn('flex min-w-0 flex-1 items-center gap-1 overflow-hidden rounded-md border px-1.5 text-left', CHIP_COLORS,compact ? 'h-[22px] text-[11px]' : 'h-[32px] text-xs', dimmed && 'opacity-25')}>
     <History className="h-3 w-3 shrink-0" aria-hidden />
-    <span className="truncate font-semibold">{workerName ? `${workerName} · ` : ''}{records[0]!.label ?? '—'}</span>
+    <span className="truncate font-semibold">{subjectOnly ? workerName ?? '—' : `${workerName ? `${workerName} · ` : ''}${records[0]!.label ?? '—'}`}</span>
     {records.length > 1 ? <span className="ml-auto shrink-0 text-[10px]">+{records.length - 1}</span> : null}
   </button>
 }

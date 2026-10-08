@@ -64,6 +64,7 @@ export function manualButtonPermission(subjectKind: string, plan: AutomationPlan
       continue
     }
     if (
+      action.action === 'distribute_schedule' ||
       action.action === 'set_field' ||
       action.action === 'lock_record' ||
       action.action === 'unlock_record'

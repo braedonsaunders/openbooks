@@ -1,9 +1,9 @@
 {
   "title": "排程",
-  "description": "规划谁在何时去往何处——按天安排班组、按小时安排班次，以及项目进度计划——在贴合贵公司工作方式的排程板上完成。",
+  "description": "Plan people and resources by day or hour on configurable boards. Project schedules live on project records.",
   "views": {
     "grid": "网格",
-    "targets": "按作业",
+    "targets": "按目标",
     "timeline": "时间轴",
     "calendar": "月",
     "gantt": "甘特图",
@@ -43,7 +43,13 @@
     "details": "详情",
     "date": "跳转到日期",
     "resourceBoards": "资源",
-    "manageBoards": "管理看板"
+    "manageBoards": "管理看板",
+    "display": "Display options",
+    "showHoursColumn": "Show booked hour column",
+    "email": "Email schedule",
+    "openBoard": "Open board",
+    "returnProject": "Return to project",
+    "retry": "Retry schedule load"
   },
   "empty": {
     "title": "设置您的第一个排程板",
@@ -154,9 +160,9 @@
     "notesPlaceholder": "班组需要了解的事项"
   },
   "targets": {
-    "where": "作业",
+    "where": "Target",
     "count": "{count} 个已预订行",
-    "add": "添加作业",
+    "add": "添加目标",
     "empty": "这些日期内尚无任何安排。",
     "available": "可安排",
     "allBooked": "当天所有行均已预订或不可用。"
@@ -166,8 +172,8 @@
     "zoomOut": "缩小"
   },
   "calendar": {
-    "person": "显示",
-    "everyone": "所有行",
+    "person": "Person or resource",
+    "everyone": "Everyone",
     "onLeave": "{count} 人休假",
     "more": "另外 {count} 项"
   },
@@ -266,7 +272,8 @@
     "removed": "{date}：已从{target}移除",
     "link": "查看您的排程",
     "footer": "您收到此邮件，是因为{board}会在人员排程变更时通知相关人员。",
-    "noTransport": "尚未设置邮件，因此仅在 OpenBooks 中通知了相关人员。请在“管理 → 邮件”中设置邮件。"
+    "noTransport": "尚未设置邮件，因此仅在 OpenBooks 中通知了相关人员。请在“管理 → 邮件”中设置邮件。",
+    "nativeDistribution": "Email schedules through a reviewed Schedule distribution Flow."
   },
   "mine": {
     "tab": "排程",
@@ -289,5 +296,28 @@
   "boards": {
     "description": "列出、配置和归档排程看板。",
     "return": "返回排程"
+  },
+  "distribution": {
+    "title": "Email schedule",
+    "close": "Close",
+    "preview": "Preview report",
+    "send": "Send reviewed schedule",
+    "working": "Preparing…",
+    "refused": "Schedule distribution could not be completed.",
+    "explanation": "Choose personal reports or a whole-board report for every selected recipient. Published bookings and literal source-date observations are shown separately. Sending uses your enabled Schedule distribution Flow and configured email provider.",
+    "everyone": "Everyone with a visible schedule in these dates",
+    "reason": "Reason for sending",
+    "queued": "The reviewed schedule is queued for email delivery.",
+    "deliveryStatus": "Queued is not delivered. Follow the native Flow run, Email log and delivery audit for actual provider results.",
+    "version": "Reviewed version",
+    "recipients": "Exact recipients and associated schedules",
+    "missingEmail": "Email missing",
+    "report": "Recipient schedule report preview",
+    "flows": "Configure native Flows",
+    "contacts": "Board resource recipients",
+    "sharing": "Report sharing",
+    "personal": "Each recipient’s own schedule/resources",
+    "wholeBoard": "The whole visible board schedule for each recipient",
+    "wholeBoardReview": "Every selected recipient will receive the whole reviewed board report, including other people/resources. Board Settings must explicitly allow this sharing within the board’s legal entity."
   }
 }

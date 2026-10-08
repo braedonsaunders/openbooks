@@ -31,6 +31,7 @@ export interface GridProps {
   readonly groupBy: GroupBy
   readonly search: string
   readonly compact: boolean
+  readonly showHoursColumn: boolean
   readonly spotlight: string | null
   readonly onOpenEntry: (entry: BoardEntry) => void
   readonly onOpenSourceRecord: (record: BoardSourceRecord) => void
@@ -42,10 +43,11 @@ type Clip = { block: ClipCell[][]; text: string }
 const newId = () => crypto.randomUUID()
 const targetKey = (entry: BoardEntry) => bookingLegendKey(entry) ?? 'none'
 
-export function PeopleGrid({ controller, window: board, groupBy, search, compact, spotlight, onOpenEntry, onOpenSourceRecord, today }: GridProps) {
+export function PeopleGrid({ controller, window: board, groupBy, search, compact, showHoursColumn, spotlight, onOpenEntry, onOpenSourceRecord, today }: GridProps) {
   const t = useTranslations('scheduling')
   const locale = useLocale()
   const menu = useContextMenu()
+  const totalW = showHoursColumn ? TOTAL_W : 0
   const rowH = compact ? 34 : 46
   const footerH = board.board.showTotals ? FOOTER_H : 0
   const days = useMemo(() => board.days.filter((day) => board.board.showWeekends || !day.isWeekend), [board.days, board.board.showWeekends])
@@ -88,8 +90,8 @@ export function PeopleGrid({ controller, window: board, groupBy, search, compact
     observer.observe(element)
     return () => observer.disconnect()
   }, [])
-  const dayW = Math.max(compact ? 74 : 92, Math.floor((viewport.width - NAME_W - TOTAL_W) / Math.max(1, dates.length)))
-  const contentW = NAME_W + dayW * dates.length + TOTAL_W
+  const dayW = Math.max(compact ? 74 : 92, Math.floor((viewport.width - NAME_W - totalW) / Math.max(1, dates.length)))
+  const contentW = NAME_W + dayW * dates.length + totalW
 
   const firstVisible = Math.max(0, offsets.tops.findIndex((top, i) => top + (items[i]?.kind === 'group' ? GROUP_H : rowH) >= viewport.scrollTop - HEADER_H) - OVERSCAN)
   let lastVisible = firstVisible
@@ -390,7 +392,7 @@ export function PeopleGrid({ controller, window: board, groupBy, search, compact
     else if (top + rowH + HEADER_H + footerH > element.scrollTop + element.clientHeight) element.scrollTop = top + rowH + HEADER_H + footerH - element.clientHeight
     const left = NAME_W + cell.col * dayW
     if (left < element.scrollLeft + NAME_W) element.scrollLeft = left - NAME_W
-    else if (left + dayW > element.scrollLeft + element.clientWidth - TOTAL_W) element.scrollLeft = left + dayW - element.clientWidth + TOTAL_W
+    else if (left + dayW > element.scrollLeft + element.clientWidth - totalW) element.scrollLeft = left + dayW - element.clientWidth + totalW
   }, [dayW, offsets.personTop, rowH])
 
   const onKeyDown = useCallback((event: KeyboardEvent<HTMLDivElement>) => {
@@ -609,9 +611,9 @@ export function PeopleGrid({ controller, window: board, groupBy, search, compact
                 })}
               </div>
             </div>
-            <div className="sticky right-0 flex items-end justify-end bg-white/95 px-3 pb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:bg-slate-950/95" style={{ width: TOTAL_W }}>
+            {showHoursColumn ? <div className="sticky right-0 flex items-end justify-end bg-white/95 px-3 pb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:bg-slate-950/95" style={{ width: totalW }}>
               {t('grid.hours')}
-            </div>
+            </div> : null}
           </div>
 
           {/* Body */}
@@ -654,6 +656,7 @@ export function PeopleGrid({ controller, window: board, groupBy, search, compact
                   rowH={rowH}
                   dayW={dayW}
                   contentW={contentW}
+                  showHoursColumn={showHoursColumn}
                   dates={dates}
                   boardId={board.board.id}
                   index={index}
@@ -706,7 +709,7 @@ export function PeopleGrid({ controller, window: board, groupBy, search, compact
                 </div>
               )
             })}
-            <div className="sticky right-0 bg-white/95 dark:bg-slate-950/95" style={{ width: TOTAL_W }} />
+            <div className="sticky right-0 bg-white/95 dark:bg-slate-950/95" style={{ width: totalW }} />
           </div> : null}
         </div>
         {rows === 0 ? (
@@ -741,7 +744,7 @@ export function PeopleGrid({ controller, window: board, groupBy, search, compact
 }
 
 function PersonRow({
-  person, top, rowH, dayW, contentW, dates, boardId, index, sourceIndex, absences, replaced, compact, spotlight, canManage, minutes,
+  person, top, rowH, dayW, contentW, showHoursColumn, dates, boardId, index, sourceIndex, absences, replaced, compact, spotlight, canManage, minutes,
   onDragStartChip, onOpenEntry, onOpenSourceRecord, onHoverTarget,
 }: {
   person: BoardRow
@@ -749,6 +752,7 @@ function PersonRow({
   rowH: number
   dayW: number
   contentW: number
+  showHoursColumn: boolean
   dates: readonly string[]
   boardId: string
   index: ReadonlyMap<string, BoardEntry[]>
@@ -816,11 +820,11 @@ function PersonRow({
           </div>
         )
       })}
-      <div className="sticky right-0 flex items-center justify-end border-l border-slate-100 bg-white px-3 text-xs font-semibold tabular-nums text-slate-600 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-300" style={{ width: TOTAL_W }}>
+      {showHoursColumn ? <div className="sticky right-0 flex items-center justify-end border-l border-slate-100 bg-white px-3 text-xs font-semibold tabular-nums text-slate-600 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-300" style={{ width: TOTAL_W }}>
         {dates.some(date => sourceIndex.has(cellKey(person.subjectId,date)))
           ? <span title={t('source.unknownHours')}>—</span>
           : minutes ? formatMinutes(minutes) : <span className="text-slate-300 dark:text-slate-700">—</span>}
-      </div>
+      </div> : null}
     </div>
   )
 }

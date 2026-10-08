@@ -67,6 +67,6 @@ export const POST = defineRoute({
     })
     // Delivery follows the committed command and never changes its outcome.
     const delivery = await deliverScheduleNotices({ orgId: authz.user.orgId, actorId: authz.user.id, boardName: result.boardName, notices: result.notices })
-    return NextResponse.json({ results: result.results, delivery })
+    return NextResponse.json({ results: result.results, delivery, distributionRefusals:result.distributionRefusals })
   },
 })

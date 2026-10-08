@@ -148,6 +148,7 @@
         "platform",
         "records",
         "resourcing",
+        "schedule-boards",
         "scripting",
         "tax-returns"
       ]
@@ -632,6 +633,7 @@
     "schedule-boards": {
       "description": "Unified scheduling boards: board definitions, booking targets, the people booking ledger and task production progress.",
       "dependsOn": [
+        "delivery",
         "money",
         "organization",
         "payroll",

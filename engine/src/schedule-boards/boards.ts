@@ -9,6 +9,7 @@ import { db, withOrgTransaction } from "../platform/db.ts";
 import { isUuid } from "../platform/uuid.ts";
 import { lockActorCommandAuthority } from "../organization/actor-command-authority.ts";
 import { lockAndCheckOrgFeature } from "../organization/org-feature-lock.ts";
+import {actorHasPermission} from "../organization/actor-permissions.ts";
 import { actorAllowedSubsidiaryIds } from "../organization/actor-subsidiaries.ts";
 import { ScopeNotFoundError } from "../organization/subsidiary-scope.ts";
 import { ScheduleError } from "./errors.ts";
@@ -28,6 +29,8 @@ export interface ScheduleBoard {
   readonly rowKind: "people" | "tasks" | "resources";
   readonly resourceKind: "equipment" | "location" | null;
   readonly showTotals: boolean;
+  readonly showHoursColumn: boolean;
+  readonly distributionVisibility: "personal" | "board";
   readonly weekendDays: readonly string[];
   readonly cellColorRules: readonly import("./display.ts").CellColorRule[];
   readonly subsidiaryId: string | null;
@@ -38,6 +41,7 @@ export interface ScheduleBoard {
   readonly locationName: string | null;
   readonly projectId: string | null;
   readonly projectName: string | null;
+  readonly projectSubsidiaryId: string | null;
   readonly grain: "day" | "timed";
   readonly views: readonly string[];
   readonly defaultView: string;
@@ -59,11 +63,11 @@ export interface ScheduleBoard {
 }
 
 export const BOARD_COLUMNS = sql`b.id, b.code, b.name, b.description, b.row_kind as "rowKind", b.resource_kind as "resourceKind",
-  b.show_totals as "showTotals", b.weekend_days as "weekendDays", b.cell_color_rules as "cellColorRules",
+  b.show_totals as "showTotals", b.show_hours_column as "showHoursColumn", b.distribution_visibility as "distributionVisibility", b.weekend_days as "weekendDays", b.cell_color_rules as "cellColorRules",
   b.subsidiary_id as "subsidiaryId", s.name as "subsidiaryName",
   b.department_id as "departmentId", d.name as "departmentName",
   b.location_id as "locationId", l.name as "locationName",
-  b.project_id as "projectId", p.name as "projectName",
+  b.project_id as "projectId", p.name as "projectName", p.subsidiary_id as "projectSubsidiaryId",
   b.grain, b.views, b.default_view as "defaultView", b.range_days as "rangeDays", b.week_starts_on as "weekStartsOn",
   b.show_weekends as "showWeekends", b.time_zone as "timeZone",
   to_char(b.day_starts, 'HH24:MI') as "dayStarts", to_char(b.day_ends, 'HH24:MI') as "dayEnds",
@@ -123,18 +127,19 @@ function visibleTo(allowed: ReadonlySet<string> | null, board: { subsidiaryId: s
 }
 
 /** Every active board the caller may open, in display order. */
-export function listBoards(actor: ScheduleActor, options: { includeArchived?: boolean } = {}): Promise<ScheduleBoard[]> {
+export function listBoards(actor: ScheduleActor, options: { includeArchived?: boolean; generalOnly?: boolean; projectId?: string } = {}): Promise<ScheduleBoard[]> {
   return withOrgTransaction(actor.orgId, () => readBoards(actor, options));
 }
 
-async function readBoards(actor: ScheduleActor, options: { includeArchived?: boolean }): Promise<ScheduleBoard[]> {
+async function readBoards(actor: ScheduleActor, options: { includeArchived?: boolean; generalOnly?: boolean; projectId?: string }): Promise<ScheduleBoard[]> {
   const kinds = await enabledBoardKinds(actor.orgId);
   if (!kinds.people && !kinds.tasks) return [];
   const allowed = await actorAllowedSubsidiaryIds(db, actor.orgId, actor.actorId);
   const rows = (await db.execute<ScheduleBoard>(sql`select ${BOARD_COLUMNS} ${BOARD_JOINS}
-    where b.org_id = ${actor.orgId} ${options.includeArchived ? sql`` : sql`and b.is_active`}
+    where b.org_id = ${actor.orgId} ${options.generalOnly ? sql`and b.row_kind <> 'tasks' and b.project_id is null` : sql``} ${options.projectId ? sql`and b.project_id=${options.projectId}` : sql``} ${options.includeArchived ? sql`` : sql`and b.is_active`}
     order by b.sort_order, b.name, b.id`)).rows;
-  return rows.filter((board) => (board.rowKind === "people" ? kinds.people : board.rowKind === "resources" ? kinds.resources : kinds.tasks) && visibleTo(allowed, board));
+  const canReadProjects = rows.some(board=>board.projectId) && kinds.tasks && await actorHasPermission(db,actor.orgId,actor.actorId,"projects.read");
+  return rows.filter((board) => (board.rowKind === "people" ? kinds.people : board.rowKind === "resources" ? kinds.resources : kinds.tasks) && visibleTo(allowed, board) && (!board.projectId || canReadProjects && (allowed===null || board.projectSubsidiaryId!==null&&allowed.has(board.projectSubsidiaryId))));
 }
 
 /** One board by id or code, or a not-found refusal identical for absent and out-of-scope boards. */
@@ -146,6 +151,8 @@ export async function getBoard(actor: ScheduleActor, idOrCode: string): Promise<
   const kinds = await enabledBoardKinds(actor.orgId);
   if (!(board.rowKind === "people" ? kinds.people : board.rowKind === "resources" ? kinds.resources : kinds.tasks)) throw new ScopeNotFoundError();
   const allowed = await actorAllowedSubsidiaryIds(db, actor.orgId, actor.actorId);
+  if (board.projectId && (!kinds.tasks || allowed!==null&&(board.projectSubsidiaryId===null||!allowed.has(board.projectSubsidiaryId)))) throw new ScopeNotFoundError();
   if (!visibleTo(allowed, board)) throw new ScopeNotFoundError();
+  if(board.projectId)await lockActorCommandAuthority(db,actor.orgId,actor.actorId,board.projectSubsidiaryId,"projects.read");
   return board;
 }

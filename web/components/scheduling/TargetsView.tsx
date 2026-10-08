@@ -12,17 +12,20 @@ import { cellKey, indexAbsences, initials, presentedBoardEntries, targetHue, typ
 import type { BoardController } from './use-board'
 import type { BoardWindow } from '@openbooks/engine/src/schedule-boards/window.ts'
 
+import { filterBoardRows } from './legend'
+
 const newId = () => crypto.randomUUID()
 const keyOf = (target: Pick<BoardTarget, 'kind' | 'id'>) => `${target.kind}:${target.id}`
 
 /**
- * The dispatch view: one row per job, customer or code on the board, people
- * stacked in each day. Drag people from the rail onto a job and day to book
- * them, or between days and jobs to move them.
+ * The dispatch view: one row per target on the board, subjects
+ * stacked in each day. Drag subjects from the rail onto a target and day to book
+ * them, or between days and targets to move them.
  */
-export function TargetsView({ controller, window: board, today, onOpenEntry, onOpenSourceRecord }: {
+export function TargetsView({ controller, window: board, search, today, onOpenEntry, onOpenSourceRecord }: {
   controller: BoardController
   window: BoardWindow
+  search: string
   today: string
   onOpenEntry: (entry: BoardEntry) => void
   onOpenSourceRecord: (record: BoardSourceRecord) => void
@@ -37,7 +40,8 @@ export function TargetsView({ controller, window: board, today, onOpenEntry, onO
   const personName = useMemo(() => new Map(board.rows.map((person) => [person.subjectId, person.name])), [board.rows])
   const absences = useMemo(() => indexAbsences(board.absences), [board.absences])
 
-  const live = useMemo(() => presentedBoardEntries(board).filter((entry) => !replaced.has(entry.id)), [board.entries, board.sourceRecords, replaced])
+  const visibleSubjects = useMemo(() => new Set(filterBoardRows(board,search,null).map(r=>r.subjectId)),[board,search])
+  const live = useMemo(() => presentedBoardEntries(board).filter((entry) => !replaced.has(entry.id) && visibleSubjects.has(entry.subjectId)), [board.entries, board.sourceRecords, replaced, visibleSubjects])
   const rows = useMemo(() => {
     const byTarget = new Map<string, { target: BoardTarget; cells: Map<string, BoardEntry[]>; people: Set<string> }>()
     for (const entry of live) {
@@ -56,11 +60,12 @@ export function TargetsView({ controller, window: board, today, onOpenEntry, onO
   const sourceRows = useMemo(() => {
     const groups = new Map<string, BoardSourceRecord[]>()
     for (const record of board.sourceRecords ?? []) {
+      if (!visibleSubjects.has(record.workerPartyId)) continue
       const label = record.label ?? ''; const records = groups.get(label) ?? []
       records.push(record); groups.set(label,records)
     }
     return [...groups.entries()].sort(([a],[b])=>a.localeCompare(b))
-  }, [board.sourceRecords])
+  }, [board.sourceRecords, visibleSubjects])
 
   const bookedOn = useMemo(() => {
     const set = new Set<string>()
@@ -91,8 +96,8 @@ export function TargetsView({ controller, window: board, today, onOpenEntry, onO
   }
 
   return (
-    <div className="flex min-h-0 flex-1 gap-4">
-      <div className="min-h-0 flex-1 overflow-auto rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-950">
+    <div className="flex min-h-0 min-w-0 flex-1 gap-4">
+      <div className="min-h-0 min-w-0 flex-1 overflow-auto rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-950">
         <table className="w-full border-separate border-spacing-0 text-sm">
           <thead className="sticky top-0 z-10 bg-white/95 backdrop-blur dark:bg-slate-950/95">
             <tr>
@@ -113,8 +118,7 @@ export function TargetsView({ controller, window: board, today, onOpenEntry, onO
               {days.map(day => <td key={day.date} className="border-b border-l p-1 align-top">
                 <div className="flex flex-col gap-0.5">{records.filter(r=>r.onDate===day.date).map(record=>
                   <div key={record.id} title={personName.get(record.workerPartyId)}>
-                    <span className="block truncate text-[10px] text-slate-500">{personName.get(record.workerPartyId) ?? '—'}</span>
-                    <SourceRecordChip records={[record]} compact onOpen={onOpenSourceRecord} />
+                    <SourceRecordChip records={[record]} workerName={personName.get(record.workerPartyId)} subjectOnly compact onOpen={onOpenSourceRecord} />
                   </div>)}</div>
               </td>)}
             </tr>)}
@@ -143,18 +147,19 @@ export function TargetsView({ controller, window: board, today, onOpenEntry, onO
                       >
                         <div className="flex min-h-[36px] flex-col gap-0.5">
                           {entries.map((entry) => (
-                            <div
+                            <button
+                              type="button"
                               key={entry.id}
                               draggable={board.canManage && entry.boardId === board.board.id}
                               onDragStart={(event) => event.dataTransfer.setData('application/x-openbooks-booking', entry.id)}
-                              onDoubleClick={() => onOpenEntry(entry)}
-                              style={chipStyle(hue)}
-                              className={cn('flex items-center gap-1.5 rounded-md border px-1.5 py-0.5 text-[11px] font-medium', CHIP_COLORS, entry.status === 'draft' && 'border-dashed', entry.boardId !== board.board.id && 'opacity-60')}
+                              onClick={() => onOpenEntry(entry)}
+                              style={chipStyle(targetHue(entry.target), entry.target?.color)}
+                              className={cn('flex w-full items-center gap-1.5 text-left rounded-md border px-1.5 py-0.5 text-[11px] font-medium', CHIP_COLORS, entry.status === 'draft' && 'border-dashed', entry.boardId !== board.board.id && 'opacity-60')}
                               title={[entry.detail, entry.spanMode === 'timed' ? `${entry.startClock}–${entry.endClock}` : null, entry.notes].filter(Boolean).join('\n') || undefined}
                             >
                               <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-white/70 text-[8px] font-bold dark:bg-black/20">{initials(personName.get(entry.subjectId) ?? '?')}</span>
                               <span className="truncate">{personName.get(entry.subjectId) ?? '—'}</span>
-                            </div>
+                            </button>
                           ))}
                           {entries.length > 1 ? <span className="px-1 text-[10px] font-semibold text-slate-400">{t('targets.count', { count: entries.length })}</span> : null}
                         </div>

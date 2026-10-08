@@ -3548,6 +3548,10 @@
         "singularTitle": "Plancode",
         "description": "Codes für Arbeit, die keinem Kunden oder Projekt zugeordnet ist, etwa Schulungs- oder Werkstatttage, sowie für Tage, an denen Personen nicht arbeiten."
       },
+      "schedule-resource-recipients": {
+        "title": "Board resource recipients",
+        "singularTitle": "Resource recipient"
+      },
       "ai-capabilities": {
         "title": "Aktionsprüfungen des Assistenten",
         "singularTitle": "Aktionsprüfungen des Assistenten",
@@ -4115,13 +4119,15 @@
       "prefillTimesheets": "Stundenzettel vorbelegen",
       "prefillCrewTime": "Teamzeit vorbelegen",
       "prefillFieldTickets": "Regieberichte vorbelegen",
-      "notifyAssignees": "Personen per E-Mail über ihre Änderungen informieren",
+      "notifyAssignees": "Notify people in the app",
       "resourceKind": "Ressourcenart",
       "showTotals": "Summen unten anzeigen",
       "cellColorRules": "Farbregeln",
       "field": "Feld",
       "match": "Vergleich",
-      "dayPolicyKnown": "Arbeitstag ist konfiguriert"
+      "dayPolicyKnown": "Arbeitstag ist konfiguriert",
+      "showHoursColumn": "Show booked hour column",
+      "distributionVisibility": "Schedule report sharing"
     },
     "fieldHelp": {
       "fxRateMaxAgeDays": "Tage zwischen dem neuesten verwendbaren Kurs und dem Periodenende, ab denen Bewertung und Konsolidierung den Kurs ablehnen. Stichtagskurse zählen ab dem Datum des Kassakurses zum Periodenende, Durchschnittskurse ab der neuesten einbezogenen Notierung. Standard ohne Richtlinie: 31 Tage.",
@@ -4280,14 +4286,16 @@
       "scheduleBoardPrefillTimesheets": "Veröffentlichte Einplanungen auf dieser Plantafel erscheinen im Wochenstundenzettel jeder Person als geplante Zeit, die sie mit einem Klick übernehmen und dann bestätigen oder korrigieren kann.",
       "scheduleBoardPrefillCrewTime": "Veröffentlichte Projekteinplanungen auf dieser Plantafel schlagen im Teamzeitbogen des Vorarbeiters für dieses Projekt und diesen Tag die eingeplante Kolonne und ihre Stunden vor, die sich mit einem Klick übernehmen lassen.",
       "scheduleBoardPrefillFieldTickets": "Veröffentlichte Projekteinplanungen auf dieser Plantafel schlagen im Regiebericht dieses Projekts die eingeplante Kolonne und ihre Stunden für den Berichtszeitraum vor, die sich mit einem Klick übernehmen lassen.",
-      "scheduleBoardNotifyAssignees": "Senden Sie jeder Person eine Zusammenfassung per E-Mail, wenn sich ihre veröffentlichten Einplanungen auf dieser Plantafel ändern.",
+      "scheduleBoardNotifyAssignees": "Send in-app notices for published changes. Configure schedule email separately using the native Schedule distribution Flow and its publish/update triggers.",
       "scheduleCode": "Bis zu 16 Großbuchstaben, Ziffern oder / & + . _ -, etwa TRAIN, SHOP oder FORCED.",
       "scheduleCodeCategory": "Arbeitscodes zählen als geplante Zeit. Codes für Nichtverfügbarkeit kennzeichnen einen Tag, an dem die Person nicht arbeitet, ohne eine Abwesenheit zu erfassen.",
       "scheduleCodeColor": "Die Farbe, in der Einplanungen mit diesem Code angezeigt werden, als Hex-Wert wie #38bdf8.",
       "scheduleWeekendDays": "Tage schattieren, wenn kein Geschäftskalender gilt. Der Kalender hat Vorrang.",
       "scheduleShowTotals": "Gebuchte Zeilen und Stunden nach den konfigurierten Pausen anzeigen.",
       "scheduleCellColorRules": "Der erste Treffer ohne Beachtung der Großschreibung bestimmt die Farbe. Sechsstellige Hexfarben verwenden, etwa #38bdf8.",
-      "scheduleBoardDayPolicyKnown": "Deaktivieren, wenn nur Quelldaten bekannt sind. Historie bleibt ohne Stunden sichtbar; Tagesbuchungen benötigen konfigurierte Arbeitszeiten."
+      "scheduleBoardDayPolicyKnown": "Deaktivieren, wenn nur Quelldaten bekannt sind. Historie bleibt ohne Stunden sichtbar; Tagesbuchungen benötigen konfigurierte Arbeitszeiten.",
+      "scheduleShowHoursColumn": "Show the right-side sum of booked hours. Source dates without hours remain unknown. Daily footer totals are configured separately.",
+      "scheduleDistributionVisibility": "Personal reports contain only the recipient’s own schedule or associated resources. Whole-board reports require an explicit sharing policy and a legal-entity-scoped board. Every send still requires a reviewed audience/version or an authored, enabled native Flow."
     },
     "options": {
       "storedValueKind": {
@@ -5002,7 +5010,7 @@
       },
       "scheduleView": {
         "grid": "Raster",
-        "targets": "Nach Auftrag",
+        "targets": "Nach Ziel",
         "timeline": "Zeitachse",
         "calendar": "Monat",
         "gantt": "Gantt-Diagramm",
@@ -6793,7 +6801,8 @@
         "change_status": "Den Status ändern",
         "post_document": "Das Dokument buchen",
         "lock_record": "Den Datensatz sperren",
-        "unlock_record": "Den Datensatz entsperren"
+        "unlock_record": "Den Datensatz entsperren",
+        "distribute_schedule": "Email reviewed schedule"
       },
       "recipients": "Empfänger",
       "subject": "Betreff",
@@ -6822,7 +6831,8 @@
       "lockReasonPlaceholder": "z. B. Genehmigt – Zahlung ist endgültig",
       "lockExemptRoles": "Ausgenommene Rollen",
       "lockExemptHint": "Administratoren sind immer ausgenommen; ausgewählte Rollen dürfen weiterhin bearbeiten.",
-      "unlockHint": "Entfernt die Flow-Sperre, sodass der Datensatz wieder bearbeitet werden kann."
+      "unlockHint": "Entfernt die Flow-Sperre, sodass der Datensatz wieder bearbeitet werden kann.",
+      "scheduleReportHelp": "Email the immutable reviewed schedule report to its exact recipient audience. It may be a personal report or an explicitly permitted whole-board report. Contact, legal entity, schedule version and provider changes refuse delivery."
     },
     "gate": {
       "title": "Titel",

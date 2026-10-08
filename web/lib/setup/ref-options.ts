@@ -153,6 +153,9 @@ export async function loadEntityOptions(
        where p.org_id = ${orgId} and p.is_active order by p.display_name`))
     return customers.rows as RefOption[]
   }
+  if (source === 'schedule-contacts') {
+    return (await db.execute(sql`select id as value,display_name as label from parties where org_id=${orgId} and kind='person' and is_active ${subsidiaryVisibleFilter(sql`subsidiary_id`,allowedSubsidiaryIds)} order by display_name,id`)).rows as RefOption[]
+  }
   if (source === 'employees') {
     // Role-scoped view of the native parties model — never a parallel roster.
     const employees = (await db.execute(sql`

@@ -2,7 +2,8 @@
 
 import { useMemo, useState } from 'react'
 import { useLocale, useTranslations } from 'next-intl'
-import { Select, cn } from '@openbooks/ui'
+import { cn } from '@openbooks/ui'
+import { filterBoardRows } from './legend'
 import { CHIP_COLORS, chipStyle } from './BookingChip'
 import { SourceRecordChip } from './SourceRecord'
 import type { BoardSourceRecord } from '@openbooks/engine/src/schedule-boards/source-history.ts'
@@ -10,16 +11,18 @@ import { targetHue, targetShortLabel, presentedBoardEntries, type BoardEntry, ty
 import type { BoardWindow } from '@openbooks/engine/src/schedule-boards/window.ts'
 
 /** The month at a glance: who is where each day, or one person's month. */
-export function CalendarView({ window: board, month, today, onOpenEntry, onOpenSourceRecord }: {
+export function CalendarView({ window: board, month, personId, search, today, onOpenEntry, onOpenSourceRecord }: {
   window: BoardWindow
   month: string
+  personId: string
+  search: string
   today: string
   onOpenEntry: (entry: BoardEntry) => void
   onOpenSourceRecord: (record: BoardSourceRecord) => void
 }) {
   const t = useTranslations('scheduling')
   const locale = useLocale()
-  const [personId, setPersonId] = useState('')
+  const visibleSubjects = useMemo(() => new Set(filterBoardRows(board,search,null).map(r=>r.subjectId)),[board,search])
   const [open, setOpen] = useState<string | null>(null)
   const replaced = useMemo(() => new Set(board.replaced), [board.replaced])
   const names = useMemo(() => new Map(board.rows.map((person) => [person.subjectId, person.name])), [board.rows])
@@ -27,28 +30,28 @@ export function CalendarView({ window: board, month, today, onOpenEntry, onOpenS
   const byDate = useMemo(() => {
     const map = new Map<string, BoardEntry[]>()
     for (const entry of presented) {
-      if (replaced.has(entry.id) || (personId && entry.subjectId !== personId)) continue
+      if (!visibleSubjects.has(entry.subjectId) || replaced.has(entry.id) || (personId && entry.subjectId !== personId)) continue
       const list = map.get(entry.startsOn) ?? []
       list.push(entry)
       map.set(entry.startsOn, list)
     }
     return map
-  }, [presented, personId, replaced])
+  }, [presented, personId, replaced, visibleSubjects])
   const sourceByDate = useMemo(() => {
     const map = new Map<string, Map<string, BoardSourceRecord[]>>()
     for (const record of board.sourceRecords ?? []) {
-      if (personId && record.workerPartyId !== personId) continue
+      if (!visibleSubjects.has(record.workerPartyId) || (personId && record.workerPartyId !== personId)) continue
       const people = map.get(record.onDate) ?? new Map<string, BoardSourceRecord[]>()
       people.set(record.workerPartyId, [...(people.get(record.workerPartyId) ?? []), record])
       map.set(record.onDate, people)
     }
     return map
-  }, [board.sourceRecords, personId])
+  }, [board.sourceRecords, personId, visibleSubjects])
   const leaveByDate = useMemo(() => {
     const map = new Map<string, number>()
-    for (const absence of board.absences) if (!personId || absence.workerPartyId === personId) map.set(absence.onDate, (map.get(absence.onDate) ?? 0) + 1)
+    for (const absence of board.absences) if (visibleSubjects.has(absence.workerPartyId) && (!personId || absence.workerPartyId === personId)) map.set(absence.onDate, (map.get(absence.onDate) ?? 0) + 1)
     return map
-  }, [board.absences, personId])
+  }, [board.absences, personId, visibleSubjects])
   const weekdayFormat = useMemo(() => new Intl.DateTimeFormat(locale, { weekday: 'short', timeZone: 'UTC' }), [locale])
   const weeks = useMemo(() => {
     const rows: (typeof board.days)[] = []
@@ -58,13 +61,7 @@ export function CalendarView({ window: board, month, today, onOpenEntry, onOpenS
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-2">
-      <div className="flex items-center justify-end">
-        <Select value={personId} onChange={(event) => setPersonId(event.target.value)} className="h-8 w-56 text-xs" aria-label={t('calendar.person')}>
-          <option value="">{t('calendar.everyone')}</option>
-          {board.rows.map((person) => <option key={person.subjectId} value={person.subjectId}>{person.name}</option>)}
-        </Select>
-      </div>
-      <div className="grid min-h-0 flex-1 grid-cols-7 overflow-auto rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-950" style={{ gridTemplateRows: `auto repeat(${weeks.length}, minmax(112px, 1fr))` }}>
+      <div className="grid min-h-0 flex-1 grid-cols-[repeat(7,minmax(0,1fr))] overflow-auto rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-950" style={{ gridTemplateRows: `auto repeat(${weeks.length}, minmax(0, 1fr))` }}>
         {weeks[0]?.map((day) => (
           <div key={`h-${day.date}`} className="sticky top-0 z-10 border-b border-slate-200 bg-white/95 px-2 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:border-slate-800 dark:bg-slate-950/95">
             {weekdayFormat.format(new Date(`${day.date}T00:00:00Z`))}
@@ -87,7 +84,7 @@ export function CalendarView({ window: board, month, today, onOpenEntry, onOpenS
           const bookingLimit = expanded ? groups.size : Math.max(0, 4 - sourceLimit)
           const remaining = sourceGroups.length + groups.size - sourceLimit - bookingLimit
           return (
-            <div key={day.date} className={cn('relative min-w-0 border-b border-l border-slate-100 p-1.5 dark:border-slate-800', day.isWeekend && 'bg-slate-200/50 dark:bg-slate-800/60', !inMonth && 'text-slate-400', day.isHoliday && 'bg-rose-50/60 dark:bg-rose-950/20')}>
+            <div key={day.date} className={cn('relative min-h-0 min-w-0 overflow-auto border-b border-l border-slate-100 p-1.5 dark:border-slate-800', day.isWeekend && 'bg-slate-200/50 dark:bg-slate-800/60', !inMonth && 'text-slate-400', day.isHoliday && 'bg-rose-50/60 dark:bg-rose-950/20')}>
               <button type="button" onClick={() => setOpen(expanded ? null : day.date)} className="flex w-full items-center justify-between">
                 <span className={cn('flex h-6 min-w-6 items-center justify-center rounded-full px-1 text-xs font-semibold tabular-nums', day.date === today ? 'bg-teal-600 text-white' : 'text-slate-700 dark:text-slate-200')}>
                   {Number(day.date.slice(8))}
@@ -112,7 +109,7 @@ export function CalendarView({ window: board, month, today, onOpenEntry, onOpenS
                       <ul className="mb-1 ml-1 mt-0.5 space-y-0.5">
                         {group.entries.map((entry) => (
                           <li key={entry.id}>
-                            <button type="button" onClick={() => onOpenEntry(entry)} className="w-full truncate text-left text-[10px] text-slate-600 hover:underline dark:text-slate-300">
+                            <button type="button" onClick={() => onOpenEntry(entry)} className="w-full truncate text-left text-[10px] font-semibold text-slate-600 hover:underline dark:text-slate-300">
                               {names.get(entry.subjectId) ?? '—'}
                             </button>
                           </li>
