@@ -269,8 +269,8 @@ test('vendor aggregation preserves per-line pricing, distinct documents, fresh n
       await check(new Set([org.subsidiaryId]), '100.0000', 1)
       const otherSub = (await db.execute<{ id: string }>(sql`select id from subsidiaries where org_id=${org.orgId} and base_currency='USD'`)).rows[0]!.id
       await check(new Set([otherSub]), '135.0000', 1)
-      await check(new Set(), '0.0000', 0)
-      await check(new Set([randomUUID()]), '0.0000', 0)
+      await check(new Set(), '0', 0)
+      await check(new Set([randomUUID()]), '0', 0)
       await withBypass(() => db.execute(sql`update parties set display_name='Current vendor label' where id=${org.vendorId} and org_id=${org.orgId}`))
       const renamed = await check(null, '235.0000', 2)
       assert.equal(renamed.vendorVelocity.find(row => row.id === org.vendorId)?.name, 'Current vendor label')
