@@ -483,7 +483,7 @@ export const WIDGET_CONTRACTS: Readonly<Record<string, WidgetContract>> = {
   'replenishment-proposals': { props: ['canOrder', 'orderSubsidiaryId', 'rows'] },
   'report-builder': { props: ['company', 'createMode', 'customEntities', 'definition', 'hiddenEntityKeys', 'inventoryEnabled'] },
   'report-name-cell': { props: ['href', 'name', 'summary'] },
-  'report-period-filter': { props: ['defaultPeriod'] },
+  'report-period-filter': { props: ['defaultPeriod', 'periodPresets'] },
   'receivables-view': { props: ['canOpenCustomers', 'data'] },
   'reports-card-heading': { props: ['description', 'title'] },
   'reports-hub': { props: ['canCreate', 'description', 'groups', 'title'] },

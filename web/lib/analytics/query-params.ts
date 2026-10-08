@@ -1,10 +1,11 @@
 import { parseReportQuery } from '../report-filters'
 import { normalizeCashHorizonWeeks } from '../cash/horizon'
+import { agingPeriodPreset } from '../aging-periods'
 
 /** Cards and selected tabs share a canonical source identity. Unrelated URL
  * controls cannot fragment the aggregate cache. */
 export function analyticsSourceQuery(sp: Record<string, string | undefined>, slug?: string): Record<string, string | undefined> {
-  const query = parseReportQuery(slug === 'receivables-intelligence' ? { ...sp, period: sp.period ?? 'today' } : sp)
+  const query = parseReportQuery(slug === 'receivables-intelligence' ? { ...sp, period: agingPeriodPreset(sp.period) } : sp)
   return {
     period: query.period,
     ...(query.period === 'custom' ? { from: query.from, to: query.to } : {}),

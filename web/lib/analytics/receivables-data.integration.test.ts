@@ -42,6 +42,28 @@ async function withFixture(action: (org: Org, actor: string) => Promise<void>) {
   } finally { await dropScratchOrg(org.orgId) }
 }
 
+/** Imported historical control lines may have no customer identity. They
+ * remain real receivables but cannot be treated as one concentrated customer. */
+async function unassignedReceivable(org: Org) {
+  const document = randomUUID(), entry = randomUUID()
+  await db.execute(sql`insert into documents
+    (id, org_id, kind, document_number, subsidiary_id, party_id, document_date, currency, fx_rate, subtotal, tax_total, total)
+    values (${document}, ${org.orgId}, 'customer_invoice', ${document}, ${org.subsidiaryId}, ${org.customerId}, ${org.date}, 'CAD', 1, 1000, 0, 1000)`)
+  await db.execute(sql`insert into journal_entries
+    (id, org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, status, origin, source_document_id)
+    values (${entry}, ${org.orgId}, ${org.bookId}, ${org.subsidiaryId}, ${entry}, ${org.date}, ${org.periodId}, 'draft', 'manual', ${document})`)
+  await db.execute(sql`insert into journal_lines
+    (org_id, entry_id, line_number, account_id, subsidiary_id, is_open_item, amount, currency, txn_amount, fx_rate)
+    values (${org.orgId}, ${entry}, 1, ${org.accounts.ar}, ${org.subsidiaryId}, true, 1000, 'CAD', 1000, 1),
+           (${org.orgId}, ${entry}, 2, ${org.accounts.revenue}, ${org.subsidiaryId}, false, -1000, 'CAD', -1000, 1)`)
+  const posted = await db.execute(sql`update journal_entries set status = 'posted', posted_at = now()
+    where org_id = ${org.orgId} and id = ${entry} returning id`)
+  assert.equal(posted.rows.length, 1)
+  const linked = await db.execute(sql`update documents set status = 'posted', posted_entry_id = ${entry}, posting_period_id = ${org.periodId}
+    where org_id = ${org.orgId} and id = ${document} returning id`)
+  assert.equal(linked.rows.length, 1)
+}
+
 test('receivables totals reconcile to native open items with exact credits, aging and empty legal-entity scope', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
   await withFixture(async (org, actor) => {
     await withBypassContext(async () => {
@@ -81,6 +103,7 @@ test('summary cards omit customer details and ranked customer projections retain
           values (${id}, ${org.orgId}, 'customer', ${`Customer ${index + 1}`}, true, '{}'::jsonb)`)
         await postReceivable(org, actor, { amount: '100.0000', due: '2026-07-01', party: id })
       }
+      await unassignedReceivable(org)
     })
     const authz = { user: { orgId: org.orgId, id: actor }, permissions: new Set(['reports.read', 'ar.read']), allowedSubsidiaryIds: null } as Authz
     const context = { authz, slug: 'receivables-intelligence', locale: 'en', revision: randomUUID(), observedAt: Date.now() }
@@ -90,9 +113,11 @@ test('summary cards omit customer details and ranked customer projections retain
       const customers = await withAnalyticsRead({ ...context, projection: 'tab', tab: 'customers' }, () => receivablesData(org.orgId, AS_OF, null))
       assert.deepEqual(customers.summary, summary.summary, 'the card and selected tab must reuse the complete authoritative metric projection')
       assert.equal(customers.summary.customers, 15)
-      assert.equal(customers.summary.documents, 15)
-      assert.equal(customers.summary.outstanding, '1500.0000')
+      assert.equal(customers.summary.documents, 16)
+      assert.equal(customers.summary.outstanding, '2500.0000')
+      assert.equal(customers.summary.top5Share, '0.2000', 'five named customers owe 500 of 2500; unassigned balances must not become a fictitious large customer')
       assert.equal(customers.customers.length, 12, 'only the ranked customer evidence is bounded')
+      assert.equal(customers.customers.find((customer) => customer.id === null)?.gross, '1000.0000', 'unassigned exposure must remain visible in the evidence')
     })
   })
 })

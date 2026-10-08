@@ -22,6 +22,7 @@ import { agingByParty, agingCurrenciesInScope, agingDetail, agingSummaryAndDetai
 import { orgInfo } from '../../../../lib/data'
 import { MissingRatesError, reportSubsidiaryView, type RatesBlockedNotice } from '../../../../lib/consolidation'
 import { resolvePeriod } from '../../../../lib/periods'
+import { AGING_PERIOD_PRESETS, agingPeriodPreset } from '../../../../lib/aging-periods'
 import { parseReportQuery, resolveAgingCurrencyParams } from '../../../../lib/report-filters'
 import { reportScheduleAnchor, scheduleParamsFrom } from '../../../../lib/report-schedule-anchor'
 import { getAuthz } from '@/lib/authz'
@@ -46,7 +47,7 @@ const BUCKETS = ['current', 'b1', 'b2', 'b3', 'b4'] as const
 // date is a meaningful as-of instant (today, yesterday, end of last month)
 // plus the explicit custom date. Range presets like "this fiscal year" or
 // "next month" would file every open item as "current".
-const AS_OF_PERIOD_PRESETS = ['today', 'yesterday', 'last_month', 'custom']
+const AS_OF_PERIOD_PRESETS = [...AGING_PERIOD_PRESETS]
 
 type DimensionOptions = Awaited<ReturnType<typeof dimensionOptions>>
 type SubsidiaryPicker = Awaited<ReturnType<typeof reportSubsidiaryView>>['picker']
@@ -155,7 +156,7 @@ export async function loadAging(sp: Record<string, string | undefined>): Promise
   // The URL is untrusted: a hand-edited preset outside the as-of whitelist
   // (say ?period=this_fiscal_year) must not compute a future as-of, so coerce
   // it to today instead of resolving it.
-  const requestedPeriod = sp.period && AS_OF_PERIOD_PRESETS.includes(sp.period) ? sp.period : 'today'
+  const requestedPeriod = agingPeriodPreset(sp.period)
   const period = await resolvePeriod(requestedPeriod, { customFrom: q.from, customTo: q.to })
   const asOf = period.to
   // Legal-entity scope is enforced here, not by the picker: a restricted
