@@ -26,7 +26,7 @@ const rateBookBody = z.object({
   effectiveTo: z.string().nullable().optional(),
   lines: z.array(z.object({
     itemId: z.string().optional(), unitCode: z.string().optional(), unitName: z.string().optional(),
-    baseQuantity: z.string().optional(), costRate: z.string().optional(), billRate: z.string().optional(),
+    baseQuantity: z.string().optional(), costRate: z.string().nullable().optional(), billRate: z.string().optional(),
     baseUnit: z.string().optional(), pricingPolicy: z.string().optional(), invoicePresentation: z.string().optional(),
     timeTypeBillRates: z.record(z.string(), z.string()).optional(),
   })).optional(),

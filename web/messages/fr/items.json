@@ -188,6 +188,7 @@
       "month": "Mois"
     },
     "policies": {
+      "explicit": "Explicite",
       "capped_ladder": "Paliers plafonnés",
       "lowest_cost": "Combinaison au coût minimal"
     },
@@ -199,6 +200,7 @@
     "unitName": "Nom de l’unité",
     "baseQuantity": "Quantité de base",
     "costRate": "Tarif de coût",
+    "costRateHelp": "Laissez vide si le coût est inconnu. Saisissez 0 uniquement pour un coût nul déclaré. La facturation utilise son propre tarif ; les calculs de coût nécessitent un tarif configuré.",
     "billRate": "Tarif de facturation",
     "addUnit": "Ajouter une unité tarifaire",
     "saveFailed": "Impossible d’enregistrer les tarifs",

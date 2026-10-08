@@ -1,7 +1,7 @@
 import { cmp, fromUnits, mul, roundDiv, sum, toUnits } from "../money/money.ts";
 
 export type RateRole = "cost" | "bill";
-export type PricingPolicy = "capped_ladder" | "lowest_cost";
+export type PricingPolicy = "explicit" | "capped_ladder" | "lowest_cost";
 
 export interface RateTier {
   id?: string | null;
@@ -172,6 +172,8 @@ export function priceItemRate(
   role: RateRole,
   policy: PricingPolicy,
 ): RatePrice {
+  // Explicit profiles retain the existing ladder behavior for base quantities;
+  // a selected unit is priced separately by priceSelectedRateUnit.
   return policy === "lowest_cost"
     ? priceLowestCost(baseQuantity, tiers, role)
     : priceCappedLadder(baseQuantity, tiers, role);
