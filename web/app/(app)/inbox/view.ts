@@ -7,7 +7,6 @@ import { getTranslations } from 'next-intl/server'
 import { db, schema } from '@openbooks/engine/src/platform/db.ts'
 import { type WorklistGate } from '@openbooks/engine/src/flows/index.ts'
 import {
-  listInbox,
   type InboxItem,
   type InboxSourceNotice,
 } from '@openbooks/engine/src/inbox/index.ts'
@@ -18,8 +17,7 @@ import {
 import {
   inboxContext,
   inboxCounts,
-  INBOX_FILTER_KINDS,
-  INBOX_TASK_KINDS,
+  inboxTaskFilters,
   maySeeUnion,
 } from '../../../lib/inbox-context'
 import {
@@ -591,53 +589,25 @@ export async function loadApprovals(
   // ---- Task list (new inbox kinds + notices) ------------------------------
   // Union-owned kinds never render here (see INBOX_TASK_KINDS): decision
   // rows keep ApprovalsTable + GateActions, task rows get generic actions
-  // through /api/inbox/act. List windows share a per-request cache; totals
-  // use source counts separately so a bounded list cannot truncate a badge.
+  // through /api/inbox/act. One live population supplies the presentation
+  // filters; native counts remain separate so a list window cannot truncate a badge.
   const ctx = await inboxContext(authz)
   const counts = await inboxCounts(authz, ctx)
-  const taskCache = new Map<string, InboxItem[]>()
   // One source's refusal or failure must not blank the inbox (OM-10): the
   // engine names each failed source into this collector while the healthy
   // legs still list, and the loader renders them as small named notices
-  // beside the surviving rows. Keyed by kind so the six parallel reads
-  // below cannot double-report the same source.
+  // beside the surviving rows. Keyed by kind so count and list refusals
+  // cannot double-report the same source.
   const taskNoticeByKind = new Map<string, string>()
   for (const notice of counts.notices)
     taskNoticeByKind.set(notice.kind, notice.message)
-  const taskKindsFor = (key: InboxFilter) =>
-    key === 'all' || key === 'overdue'
-      ? INBOX_TASK_KINDS
-      : (INBOX_FILTER_KINDS[key] ?? [])
-  const taskItemsFor = async (key: InboxFilter): Promise<InboxItem[]> => {
-    const kinds = taskKindsFor(key)
-    if (kinds.length === 0) return []
-    const collected: InboxSourceNotice[] = []
-    const items = await listInbox(ctx, {
-      kinds,
-      cache: taskCache,
-      notices: collected,
-    })
-    for (const notice of collected)
-      taskNoticeByKind.set(notice.kind, notice.message)
-    return key === 'overdue'
-      ? items.filter((item) => item.priority === 'overdue')
-      : items
-  }
-  const [tasksAll, tasksMy, tasksSig, tasksNotices, tasksOverdue, tasksActive] =
-    await Promise.all([
-      taskItemsFor('all'),
-      taskItemsFor('my_tasks'),
-      taskItemsFor('signatures'),
-      taskItemsFor('notices'),
-      taskItemsFor('overdue'),
-      taskItemsFor(filter),
-    ])
+  const { filters: taskFilters, notices: listNotices } = await inboxTaskFilters(ctx)
+  for (const notice of listNotices) taskNoticeByKind.set(notice.kind, notice.message)
+  const tasksActive = taskFilters[filter]
   // Named per-source notices for the legs that refused or failed, in stable
   // kind order. The frame is translated; the reason is the designed refusal
   // intact, or a generic reason for an unexpected source failure (driver
-  // text never reaches the notice). (tasksNotices above is the
-  // notices-filter ITEMS — this is the failure copy, deliberately named
-  // apart.)
+  // text never reaches the notice).
   const failedSourceNotices = [...taskNoticeByKind.entries()]
     .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
     .map(([kind, reason]) =>
@@ -685,13 +655,7 @@ export async function loadApprovals(
   // the notice renders even when no rows survived.
   const tasksEmpty =
     showTasks && taskRows.length === 0 && failedSourceNotices.length === 0
-  const filterCount = (key: InboxFilter): number => {
-    if (key === 'all') return tasksAll.length
-    if (key === 'my_tasks') return tasksMy.length
-    if (key === 'signatures') return tasksSig.length
-    if (key === 'notices') return tasksNotices.length
-    return tasksOverdue.length
-  }
+  const filterCount = (key: InboxFilter): number => taskFilters[key].length
 
   const tabs: { key: Tab; label: string; count?: number }[] = [
     { key: 'mine', label: t('tabs.mine'), count: counts.approvals },

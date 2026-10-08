@@ -1,5 +1,5 @@
 import "server-only";
-import { countInbox, type InboxKind, type InboxListContext, type InboxSourceNotice } from "@openbooks/engine/src/inbox/index.ts";
+import { countInbox, listInbox, type InboxItem, type InboxKind, type InboxListContext, type InboxSourceNotice } from "@openbooks/engine/src/inbox/index.ts";
 import { businessToday } from "@openbooks/engine/src/platform/business-date.ts";
 import { can, type Authz } from "./authz";
 import { isFeatureEnabled } from "./features";
@@ -68,6 +68,22 @@ export const INBOX_TASK_KINDS: InboxKind[] = [
   ...INBOX_FILTER_KINDS.signatures!,
   ...INBOX_FILTER_KINDS.notices!,
 ];
+
+export type InboxTaskFilter = "all" | "my_tasks" | "signatures" | "notices" | "overdue";
+
+/** One live task population supplies every presentation filter on the page. */
+export async function inboxTaskFilters(ctx: InboxListContext) {
+  const notices: InboxSourceNotice[] = [];
+  const items = await listInbox(ctx, { kinds: INBOX_TASK_KINDS, notices });
+  const filters: Record<InboxTaskFilter, InboxItem[]> = {
+    all: items,
+    my_tasks: items.filter((item) => INBOX_FILTER_KINDS.my_tasks!.includes(item.kind)),
+    signatures: items.filter((item) => INBOX_FILTER_KINDS.signatures!.includes(item.kind)),
+    notices: items.filter((item) => INBOX_FILTER_KINDS.notices!.includes(item.kind)),
+    overdue: items.filter((item) => item.priority === "overdue"),
+  };
+  return { filters, notices };
+}
 
 /** Unfiltered personal work totals shared by navigation, Inbox and Home.
  * Count each source rather than a bounded list window. The badge totals the
