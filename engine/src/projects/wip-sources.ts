@@ -88,12 +88,30 @@ export function eligibleWipSourcesSql(
   const availableValue = asOf === null
     ? sql`case when source.held or source.reserved then 0 else source.source_value end`
     : sql`case when source.held or source.source_value <= 0 then 0 else source.source_value end`;
-  const invoicedToDate = sql`coalesce((select sum(case when invoice.kind = any(array(select jsonb_array_elements_text(coalesce(source.profile#>'{invoicedToDate,creditKinds}','["customer_credit"]'::jsonb)))) then -line.amount else line.amount end)
-                             from document_lines line join documents invoice on invoice.org_id=line.org_id and invoice.id=line.document_id
-                            where line.org_id=${orgId} and coalesce(line.project_id,invoice.project_id)=source.project_id
-                              and invoice.status<>'voided'
-                              ${asOf === null ? sql`` : sql`and invoice.document_date <= ${asOf}::date`}
-                              and invoice.kind = any(array(select jsonb_array_elements_text(coalesce(source.profile#>'{invoicedToDate,docKinds}','["customer_invoice"]'::jsonb) || coalesce(source.profile#>'{invoicedToDate,creditKinds}','["customer_credit"]'::jsonb))))),0)`;
+  const invoicePopulation = sql`line.org_id=${orgId}
+    and invoice.status<>'voided'
+    ${asOf === null ? sql`` : sql`and invoice.document_date <= ${asOf}::date`}
+    and invoice.kind = any(array(select jsonb_array_elements_text(
+      coalesce(source.profile#>'{invoicedToDate,docKinds}','["customer_invoice"]'::jsonb)
+      || coalesce(source.profile#>'{invoicedToDate,creditKinds}','["customer_credit"]'::jsonb))))`;
+  // Disjoint branches preserve line-level project precedence while allowing
+  // both project and document indexes to bound the ceiling's billed population.
+  const invoicedToDate = sql`coalesce((
+    select sum(case when billed.kind = any(array(select jsonb_array_elements_text(
+      coalesce(source.profile#>'{invoicedToDate,creditKinds}','["customer_credit"]'::jsonb))))
+      then -billed.amount else billed.amount end)
+    from (
+      select line.amount, invoice.kind
+        from document_lines line
+        join documents invoice on invoice.org_id=line.org_id and invoice.id=line.document_id
+       where ${invoicePopulation} and line.project_id=source.project_id
+      union all
+      select line.amount, invoice.kind
+        from document_lines line
+        join documents invoice on invoice.org_id=line.org_id and invoice.id=line.document_id
+       where ${invoicePopulation} and line.project_id is null and invoice.project_id=source.project_id
+    ) billed
+  ),0)`;
   const remainingCap = asOf === null
     ? sql`case when source.profile#>>'{totalPrice,method}' = 'not_to_exceed' then greatest(
                coalesce(source.contract_value,0)
