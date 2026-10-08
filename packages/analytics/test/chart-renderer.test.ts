@@ -41,7 +41,7 @@ test('full renderer preserves other series and later timeline or responsive opti
     // A later edit must load its additional series before setting its option.
     for (const next of [
       { animation: false, series: [{ type: 'gauge', data: [{ value: 42 }] }] },
-      { baseOption: { animation: false, xAxis: {}, yAxis: {}, timeline: { data: ['First'], autoPlay: false }, series: [{ type: 'line' }] },
+      { baseOption: { animation: false, timeline: { data: ['First'], autoPlay: false }, series: [] },
         options: [{ series: [{ type: 'funnel', data: [{ value: 4 }] }] }] },
       { baseOption: { animation: false }, media: [{ query: { maxWidth: 500 }, option: { series: [{ type: 'radar', data: [] }], radar: { indicator: [{ name: 'First', max: 4 }] } } }] },
     ]) {
