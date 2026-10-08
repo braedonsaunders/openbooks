@@ -216,6 +216,8 @@ test('customer revenue reconciles invoiced billings to ledger recognized revenue
     close(byName.get('Cancelled')!.invoicedRevenue, '600.0000', 'E July retains the invoice before its later void')
 
     closeNum(Number(pnl.revenue) - Number(data.kpis.totalRevenue), 0, 'July recognized total ties to the P&L resolver')
+    assert.equal(data.growth.monthly.find(row => row.month === '2026-07')?.revenue, data.kpis.totalRevenue,
+      'monthly recognition includes the same credits, deferred recognition, manual postings and voids')
     close(data.kpis.totalInvoiced, '3110.0000', 'CI invoiced movements include the void period')
 
     // E in August: the recognition mirror (attributed through the schedule
@@ -239,6 +241,8 @@ test('customer revenue reconciles invoiced billings to ledger recognized revenue
     close(ea.recon.voids, '0.0000', 'E document reversal is already included in invoiced movement')
     close(ea.recon.other, '0.0000', 'E August other')
     closeNum(Number(aug.kpis.totalRevenue) - Number(augPnl.revenue), 0, 'August CI ties to P&L')
+    assert.equal(aug.growth.monthly.find(row => row.month === '2026-08')?.revenue, aug.kpis.totalRevenue,
+      'monthly recognition preserves cancellation-mirror customer attribution')
   } finally {
     await withBypass(() => dropScratchOrg(scratch.orgId))
   }

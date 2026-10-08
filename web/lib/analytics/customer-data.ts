@@ -1,6 +1,7 @@
 import "server-only";
 import { analyticsQuery } from "./query";
 import { analyticsSection } from "./read-context";
+import { customerLedgerMonths } from "./customer-ledger-months";
 import { subsidiaryVisibleFilter } from "../subsidiaries";
 import { fiscalStartMonth } from "../fiscal";
 import { fiscalYearOf } from "@openbooks/reports";
@@ -1116,7 +1117,7 @@ async function readCustomerData(
   const cohortActiveMonths = cfg.cohortActiveMonths!;
   const overdueInsightAt = cfg.overdueInsightCount!;
 
-  const [baseRows, frictionRows, paymentRows, growthRows, growthCounts, cohortRows, ledgerRows, growthLedgerRows, cohortLedgerRows, dsoStats] = await Promise.all([
+  const [baseRows, frictionRows, paymentRows, growthRows, growthCounts, cohortRows, ledgerRows, cohortLedgerRows, dsoStats] = await Promise.all([
     // Base customer metrics — the header query over CustInvc(+CashSale):
     // per-customer invoice count / INVOICED revenue / first-last dates /
     // recency / tenure. This is the billing-activity population the ledger
@@ -1321,43 +1322,6 @@ async function readCustomerData(
         ${subsidiaryVisibleFilter(sql`l.subsidiary_id`, allowed)}
       group by 1, 2, 3
     `)),
-    // Recognized revenue per month (ledger posting month — recognition timing,
-    // not billing month; the gap between this and the invoiced series IS the
-    // timing story). Invoiced monthly stays on the document query above.
-    (analyticsQuery(sql`
-      with ew as materialized (
-        select id, posting_date, origin
-          from journal_entries
-         where org_id = ${orgId}
-           and posting_date >= ${from} and posting_date <= ${to}
-           and status in ('posted', 'reversed')
-           and book_id = ${statementBookExpr(orgId)}
-      )
-      select to_char(e.posting_date, 'YYYY-MM') as month,
-        sub.base_currency as func,
-        e.posting_date::date as day,
-        -sum(l.amount) as recognized
-      from ew e
-      join journal_lines l on l.entry_id = e.id and l.org_id = ${orgId}
-      join accounts a on a.id = l.account_id and a.org_id = ${orgId}
-      left join subsidiaries sub on sub.id = l.subsidiary_id and sub.org_id = ${orgId}
-      -- Schedules carry no party, so their legs attribute through the contract
-      -- customer — including cancellation mirrors, which link back through
-      -- reversal_journal_entry_id (the cancellation route flips the original to
-      -- reversed and posts the mirror with reverses_entry_id, so both land in
-      -- voids and net exactly like document voids).
-      left join recognition_schedule_lines rsl
-        on (rsl.journal_entry_id = e.id or rsl.reversal_journal_entry_id = e.id)
-       and rsl.org_id = ${orgId}
-       and e.origin = 'revenue_recognition'
-      left join recognition_schedules rs on rs.id = rsl.schedule_id and rs.org_id = ${orgId}
-      left join performance_obligations po on po.id = rs.obligation_id and po.org_id = ${orgId}
-      left join revenue_contracts rc on rc.id = po.contract_id and rc.org_id = ${orgId}
-      where a.type in ${REVENUE_TYPES}
-        and (l.party_id is not null or rc.customer_id is not null)
-        ${subsidiaryVisibleFilter(sql`l.subsidiary_id`, allowed)}
-      group by 1, 2, 3 order by 1
-    `)),
     // Lifetime recognized per customer, for cohorts (lifetime invoiced stays
     // on the document query above).
     (preview || !analyticsSection('customer-intelligence', ['growth']) ? Promise.resolve({ rows: [] }) : analyticsQuery(sql`
@@ -1422,7 +1386,7 @@ async function readCustomerData(
   // same per-date pattern the document measures use, so FX handling cannot
   // diverge. flowRates fails closed on a missing rate: no silent 1:1.
   const ledgerLegs = ledgerRows.rows as unknown as LedgerSqlRow[];
-  const flowLegs = [ledgerRows, baseRows, growthRows, growthLedgerRows, frictionRows, cohortRows, cohortLedgerRows]
+  const flowLegs = [ledgerRows, baseRows, growthRows, frictionRows, cohortRows, cohortLedgerRows]
     .flatMap(result => result.rows as unknown as { func: string | null; day: string }[]);
   const flowCtx = await flowRates(orgId, flowLegs.map((r) => ({
     func: r.func ?? null, date: String(r.day).slice(0, 10),
@@ -1700,11 +1664,11 @@ async function readCustomerData(
   for (const r of growthCounts.rows as unknown as GrowthCountRow[]) {
     gCounts.set(String(r.month), r);
   }
-  // Recognized monthly: same leg pattern over the ledger month query. Months
+  // Reuse the customer ledger read, regrouping functional/day amounts before
+  // conversion so monthly rounding retains its original grain. Months
   // present in only one universe still appear (the other reads zero) so the
   // timing gap between billing and recognition stays visible month by month.
-  interface GrowthLedgerRow { month: string; func: string | null; day: string; recognized: CustomerSqlNumeric }
-  const glLegs = growthLedgerRows.rows as unknown as GrowthLedgerRow[];
+  const glLegs = customerLedgerMonths(ledgerLegs, from);
   const gRecognized = new Map<string, string>();
   for (const r of glLegs) {
     const key = String(r.month);

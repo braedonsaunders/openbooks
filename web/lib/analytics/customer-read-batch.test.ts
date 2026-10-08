@@ -85,6 +85,9 @@ test('customer read batches all flow sources and preserves dated exact revenue a
   assert.equal(data.rows[0]?.recon.other, '0.0000')
   assert.equal(data.cohorts.list[0]?.totalRevenue, '220.0000')
   assert.equal(data.cohorts.list[0]?.totalInvoiced, '220.0000')
+  assert.equal(data.growth.monthly[0]?.revenue, '220.0000')
+  assert.equal(state.queries.some((query) => query.sql.includes('select to_char(e.posting_date')), false,
+    'monthly recognition reuses the scoped customer ledger read')
   const movementQueries = state.queries.filter((query) => query.sql.includes('with movement as'))
   assert.ok(movementQueries.length > 1)
   assert.ok(movementQueries.every((query) => query.params.some((value) => JSON.stringify(value).includes(subsidiary))))
