@@ -2,6 +2,7 @@ import { z } from 'zod'
 import { defineRoute } from '@/lib/api/route'
 import { apiErrorResponse } from '@/lib/api/error-response'
 import { parseJsonBody } from "@/lib/api/json"
+import { uuidId } from "@/lib/api/json-schema"
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
@@ -28,7 +29,7 @@ import { isUuid } from '../../../../lib/list-params'
 import { suppliedValue } from '../../../../lib/payroll-decimal-refusal'
 
 const remittanceVendorFields = Object.fromEntries(
-  declaredRemittanceVendorSettingsKeys().map((key) => [key, z.string().uuid().nullable().optional()]),
+  declaredRemittanceVendorSettingsKeys().map((key) => [key, uuidId.nullable().optional()]),
 )
 const remittanceFrequencyFields = Object.fromEntries(
   declaredRemittanceFrequencySettingsKeys().map((key) => [
@@ -44,13 +45,13 @@ const remittanceFrequencyFields = Object.fromEntries(
   ]),
 )
 const typedPayrollSettingsSchema = z.looseObject({
-  wageExpenseAccountId: z.string().uuid().nullable().optional(),
-  burdenExpenseAccountId: z.string().uuid().nullable().optional(),
-  netPayAccountId: z.string().uuid().nullable().optional(),
-  cppPayableAccountId: z.string().uuid().nullable().optional(),
-  eiPayableAccountId: z.string().uuid().nullable().optional(),
-  taxPayableAccountId: z.string().uuid().nullable().optional(),
-  vacationPayableAccountId: z.string().uuid().nullable().optional(),
+  wageExpenseAccountId: uuidId.nullable().optional(),
+  burdenExpenseAccountId: uuidId.nullable().optional(),
+  netPayAccountId: uuidId.nullable().optional(),
+  cppPayableAccountId: uuidId.nullable().optional(),
+  eiPayableAccountId: uuidId.nullable().optional(),
+  taxPayableAccountId: uuidId.nullable().optional(),
+  vacationPayableAccountId: uuidId.nullable().optional(),
   ...remittanceVendorFields,
   ...remittanceFrequencyFields,
   eftFallbackToCheque: z.boolean().optional(),
@@ -69,7 +70,7 @@ const typedPayrollSettingsSchema = z.looseObject({
   statutoryHolidayPay: z.boolean().optional(),
   slotAccounts: z.record(
     z.string().refine((country) => Object.hasOwn(PAYROLL_COUNTRY_PACKS, country), 'country must be a declared payroll pack'),
-    z.record(z.string(), z.string().uuid().nullable()),
+    z.record(z.string(), uuidId.nullable()),
   ).optional(),
 })
 const installableCountry = z.string().refine((country) => installableCountries().includes(country), 'country must name an installable payroll pack')
