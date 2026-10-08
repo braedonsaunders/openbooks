@@ -88,7 +88,17 @@ const config = {
   distDir: process.env.NEXT_DIST_DIR || ".next",
   outputFileTracingRoot: join(dirname(fileURLToPath(import.meta.url)), ".."),
   async headers() {
-    return [{ source: "/(.*)", headers: securityHeaders }];
+    return [
+      { source: "/(.*)", headers: securityHeaders },
+      {
+        source: "/sw.js",
+        headers: [
+          { key: "Content-Type", value: "application/javascript; charset=utf-8" },
+          { key: "Cache-Control", value: "no-cache, no-store, must-revalidate" },
+          { key: "Service-Worker-Allowed", value: "/" },
+        ],
+      },
+    ];
   },
 };
 export default withNextIntl(config);

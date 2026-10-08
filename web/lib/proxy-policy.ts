@@ -11,8 +11,15 @@ const EXACT_PUBLIC_PATHS = new Set([
   "/mcp",
   "/favicon.ico",
   "/icon.svg",
-  // Public branding and installation metadata only. Employee pages and APIs
-  // retain their session, feature and permission gates.
+  // Public branding, installation metadata and a tenant-free offline screen.
+  // Application pages and APIs retain their session and permission gates.
+  "/manifest.webmanifest",
+  "/sw.js",
+  "/offline.html",
+  "/pwa/icon-192.png",
+  "/pwa/icon-512.png",
+  "/pwa/maskable-512.png",
+  "/pwa/apple-touch-icon.png",
   "/employee-app/manifest.webmanifest",
   "/employee-app/icon-192.png",
   "/employee-app/icon-512.png",
