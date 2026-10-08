@@ -53,6 +53,15 @@ export interface BankingHome {
 
 const TREND_WEEKS = 13
 
+/** Shared accounts are visible within a nonempty entity view. An explicitly
+ * empty view has no account visibility, including accounts shared by entities. */
+function bankAccountScope(subIds: string[] | undefined) {
+  if (subIds === undefined) return sql``
+  if (subIds.length === 0) return sql` and false`
+  const ids = sql`${`{${subIds.join(',')}}`}::uuid[]`
+  return sql` and (a.subsidiary_id is null or a.subsidiary_id = any(${ids}))`
+}
+
 /**
  * The workspace roster: one row per active bank/card account with its balance
  * leg and workflow state — one
@@ -71,7 +80,7 @@ async function bankRosterRows(
   const subArr = subIds !== undefined ? sql`${`{${subIds.join(',')}}`}::uuid[]` : null
   const lineScope = subArr ? sql` and jl.subsidiary_id = any(${subArr})` : sql``
   const membership = bankAccountMembership()
-  const acctScope = subArr ? sql` and (a.subsidiary_id is null or a.subsidiary_id = any(${subArr}))` : sql``
+  const acctScope = bankAccountScope(subIds)
   const bookScope = sql` and je.book_id = ${statementBookExpr(orgId)}`
   const rows = await db.execute(sql`
       select a.id, a.number, a.name, a.type, a.currency_restriction,
@@ -122,8 +131,7 @@ export async function bankingReconCount(
   orgId: string,
   subIds?: string[],
 ): Promise<number> {
-  const subArr = subIds !== undefined ? sql`${`{${subIds.join(',')}}`}::uuid[]` : null
-  const acctScope = subArr ? sql` and (a.subsidiary_id is null or a.subsidiary_id = any(${subArr}))` : sql``
+  const acctScope = bankAccountScope(subIds)
   const result = await db.execute<{ n: string }>(sql`
     select count(*) as n
       from bank_statement_lines l
@@ -166,7 +174,7 @@ export async function bankingHome(
   // before reconciliation is configured. Match/import enforce eligibility
   // separately; subsidiary and posting-book visibility remain scoped here.
   const membership = bankAccountMembership()
-  const acctScope = subArr ? sql` and (a.subsidiary_id is null or a.subsidiary_id = any(${subArr}))` : sql``
+  const acctScope = bankAccountScope(subIds)
   // Document-side counts match root-owned rows only for unrestricted
   // root-covering views; the limb never widens an empty scope (see filters).
   const docScope =
