@@ -283,7 +283,7 @@ export function VendorComplianceDrawer({
         </p>
       ) : null}
 
-      <RecordTabs label={t('drawer.tabs.aria')} tabs={tabs} active={tab} onChange={setTab} className="mb-4 border-b border-slate-200 dark:border-slate-800" />
+      <RecordTabs label={t('drawer.tabs.aria')} tabs={tabs} active={tab} onChange={setTab} />
 
       <TabContent tabKey={tab}>
         {tab === 'certificates' ? (
