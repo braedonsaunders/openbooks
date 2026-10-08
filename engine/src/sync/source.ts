@@ -50,6 +50,17 @@ export interface EntityStream {
   records: SourceEntity[];
 }
 
+/** A party photo reference, read independently of employee update watermarks. */
+export interface SourcePartyPhoto {
+  partyRef: string
+  fileRef: string | null
+}
+
+export interface SourcePhotoFile {
+  filename: string
+  bytes: Buffer
+}
+
 // --- Native transaction stream ------------------------------------------------
 
 /**
@@ -312,6 +323,16 @@ export interface MigrationSource {
    * mirror; low-volume master data may ignore it and return everything.
    */
   entities?(since?: Date | null): Promise<EntityStream[]>;
+
+  /** Bounded employee identity/role refresh through the normal source projection. */
+  employeeEntities?(refs: readonly string[]): Promise<EntityStream[]>;
+
+  /** Full photo inventory: replacing file bytes need not update the employee. */
+  partyPhotos?(): Promise<SourcePartyPhoto[]>;
+  partyPhotoContent?(fileRef: string): Promise<SourcePhotoFile>;
+  /** Account identity verified by the adapter before photo references are read. */
+  readonly photoSourceAccount?: string;
+
 
   /**
    * Small reference-data streams required to interpret a bounded transaction

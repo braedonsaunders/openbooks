@@ -91,23 +91,7 @@ export type FolderNode = {
   fileCount: number
 };
 
-export type FileMeta = {
-  id: string
-  folderId: string
-  name: string
-  extension: string | null
-  fileType: string
-  contentType: string
-  sizeBytes: number
-  isInactive: boolean
-  currentVersionId: string | null
-  versionCount: number
-  createdAt: string
-  createdBy: string | null
-  updatedAt: string
-  updatedBy: string | null
-  folderName: string | null
-};
+export type FileMeta = import('@openbooks/engine/src/platform/file-ingestion.ts').FileMeta
 
 export interface FileDetail extends FileMeta {
   versions: FileVersion[]

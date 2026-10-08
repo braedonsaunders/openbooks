@@ -1,4 +1,5 @@
-import { NetSuiteBridgeClient, type NetSuiteBridgeConfig } from "../connectors/netsuite-bridge.ts";
+import { downloadSourceFile, safeFilename } from "./netsuite-attachments.ts";
+import { DEFAULT_NETSUITE_BRIDGE_SCRIPT_ID, DEFAULT_NETSUITE_BRIDGE_DEPLOYMENT_ID, NetSuiteBridgeClient, type NetSuiteBridgeConfig } from "../connectors/netsuite-bridge.ts";
 import type { NetSuiteCreds } from "../connectors/netsuite.ts";
 import { fromUnits, mulDecimal, normalizeMoney, toUnits } from "../money/money.ts";
 import { refusedConnectionBaseCurrency } from "./base-currency.ts";
@@ -560,12 +561,14 @@ export class NetSuiteSource implements MigrationSource {
   readonly baseCurrency: string;
   private readonly bridge: NetSuiteBridgeClient;
   private readonly expectedAccount: string;
+  readonly photoSourceAccount: string;
+  private readonly photoBridge: { script: string; deploy: string };
   private readonly mappings: NetSuiteAccountMappings;
   private readonly configuredAccountingBookId: string | null;
   private accountingBookResolution: Promise<string> | null = null;
 
   constructor(
-    creds: NetSuiteCreds,
+    private readonly creds: NetSuiteCreds,
     opts: {
       baseCurrency: string;
       bridge?: NetSuiteBridgeConfig;
@@ -575,6 +578,11 @@ export class NetSuiteSource implements MigrationSource {
   ) {
     this.bridge = new NetSuiteBridgeClient(creds, opts.bridge);
     this.expectedAccount = creds.account;
+    this.photoSourceAccount = creds.account;
+    this.photoBridge = {
+      script: String(opts.bridge?.scriptId ?? DEFAULT_NETSUITE_BRIDGE_SCRIPT_ID),
+      deploy: String(opts.bridge?.deploymentId ?? DEFAULT_NETSUITE_BRIDGE_DEPLOYMENT_ID),
+    };
     this.mappings = parseNetSuiteMappings(opts.mappings);
     const baseCurrency = refusedConnectionBaseCurrency(opts.baseCurrency);
     if (baseCurrency === "missing") {
@@ -1064,7 +1072,44 @@ export class NetSuiteSource implements MigrationSource {
     }));
   }
 
-  private async parties(since?: Date | null): Promise<SourceEntity[]> {
+  /** Photo inventory uses stable employee and file IDs, including inactive employees. */
+  async partyPhotos() {
+    const health = await this.bridge.health();
+    if (String(health.accountId).replaceAll("_", "-").toLowerCase()
+      !== this.expectedAccount.replaceAll("_", "-").toLowerCase()) {
+      throw new Error("NetSuite employee photo account does not match the configured connector");
+    }
+    const rows = await this.q<{ id: string; photofile: string | null }>(
+      "SELECT id, image AS photofile FROM employee ORDER BY id",
+    );
+    const refs = new Set<string>();
+    return rows.map(row => {
+      const partyRef = String(row.id);
+      if (!/^-?\d+$/.test(partyRef) || refs.has(partyRef) || !Object.hasOwn(row, 'photofile')) {
+        throw new Error("NetSuite employee photo inventory returned an invalid or duplicate identity");
+      }
+      refs.add(partyRef);
+      const fileRef = row.photofile == null || String(row.photofile).trim() === '' ? null : String(row.photofile);
+      if (fileRef !== null && !/^\d+$/.test(fileRef)) throw new Error(`Employee ${partyRef} has an invalid NetSuite photo file ID`);
+      return { partyRef, fileRef };
+    });
+  }
+
+  async partyPhotoContent(fileRef: string) {
+    if (!/^\d+$/.test(fileRef)) throw new Error("NetSuite photo file ID must be numeric");
+    const file = await downloadSourceFile(fileRef, this.creds, this.photoBridge);
+    return { filename: safeFilename(file.source.name, fileRef), bytes: file.bytes };
+  }
+
+  /** Exact source IDs use the same employee projection as full and incremental synchronization. */
+  async employeeEntities(refs: readonly string[]): Promise<EntityStream[]> {
+    if (!refs.length || refs.length > 100 || refs.some(ref => !/^\d+$/.test(ref))) throw new Error('A scoped employee pull requires 1–100 numeric NetSuite IDs');
+    const records = await this.parties(null, refs);
+    if (new Set(records.map(row => row.sourceRef)).size !== new Set(refs).size || refs.some(ref => !records.some(row => row.sourceRef === ref))) throw new Error('A requested NetSuite employee is absent or duplicated in the source');
+    return [{ resource: 'parties', records }];
+  }
+
+  private async parties(since?: Date | null, employeeRefs?: readonly string[]): Promise<SourceEntity[]> {
     // Merge signals: entity records expose isinactive only; merge audit lives
     // in System Notes, which this adapter does not pull. No mergedIntoRef is
     // emitted; a merged-away entity takes the mirror's held path.
@@ -1074,12 +1119,12 @@ export class NetSuiteSource implements MigrationSource {
     const benefits = this.mappings.employeeBenefitsField
       ? `${this.mappings.employeeBenefitsField} AS benefits`
       : "NULL AS benefits";
-    const customers = await this.qSince<Record<string, string>>(`
+    const customers = employeeRefs ? [] : await this.qSince<Record<string, string>>(`
       SELECT id, entityid, companyname, altname, isperson, isinactive, email, phone,
              url, terms, creditlimit, salesrep, taxitem, receivablesaccount, subsidiary,
              ${shortCode}
         FROM customer`, since);
-    const vendors = await this.qSince<Record<string, string>>(`
+    const vendors = employeeRefs ? [] : await this.qSince<Record<string, string>>(`
       SELECT id, entityid, companyname, altname, isperson, isinactive, email, phone,
              terms, legalname, taxidnum, is1099eligible, payablesaccount, expenseaccount, subsidiary
         FROM vendor`, since);
@@ -1090,7 +1135,7 @@ export class NetSuiteSource implements MigrationSource {
              TO_CHAR(hiredate, 'MM/DD/YYYY') AS hiredate,
              TO_CHAR(releasedate, 'MM/DD/YYYY') AS releasedate,
              ${benefits}, initials
-        FROM employee`, since);
+        FROM employee${employeeRefs ? ` WHERE id IN (${employeeRefs.join(',')})` : ''}`, since);
 
     const out: SourceEntity[] = [];
     for (const c of customers) {

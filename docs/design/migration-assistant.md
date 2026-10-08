@@ -57,3 +57,33 @@ migration, import or journal path.
 | Opening journal posted, clearing account zero (when configured) | spreadsheet |
 | Receivables and payables tie to open documents | spreadsheet (advisory on cutover) |
 | Pre-cutover periods locked | advisory |
+
+## NetSuite employee photos and scoped refresh
+
+NetSuite migration and mirroring read employee photo references independently
+of employee update watermarks. Files are fetched through the authenticated
+connector and attached only after the employee's stable source identity and
+organization account resolve uniquely. Missing source photos preserve the
+destination. Download failures retain their actual cause in run statistics.
+
+Connector ownership records the account connection, employee and file
+identities, content digest and destination file. Same-content replay retains
+the file URL and audit history. Manual uploads, removals and cabinet edits
+take precedence over synchronization. Each changed source photo creates a new
+retained attachment. Images above 5 MB are prepared as bounded display images;
+their originals remain private employee attachments. Source images above
+25 MB refuse explicitly; display conversion also refuses more than 40 million
+decoded pixels.
+
+The native employee-photo CLI supports read-only preparation by default and
+explicit execution with organization, connection and actor IDs. Its permission
+contract requires sync.run, parties.read, parties.manage and unrestricted
+subsidiary access. Native readback checks both display and retained source bytes.
+
+A scoped employee refresh uses the same NetSuite projection and master-data
+loader as mirroring. It requires exact source IDs and verified subsidiary,
+department and supervisor mappings. It preserves the source's active status
+and service dates, and never creates canonical employment history or infers
+an employer. Omitted employees remain unchanged; a partial inventory is never
+treated as a complete source snapshot. Preparation and execution preserve
+actor, source-run and before/after audit evidence.

@@ -1,3 +1,4 @@
+import { createCabinetFile } from '@openbooks/engine/src/platform/file-ingestion.ts'
 /** Split from web/lib/file-cabinet.ts; moved without behavior changes. */
 import 'server-only'
 import { enqueueCabinetCleanup, deriveFileType } from './shared'
@@ -232,10 +233,7 @@ export async function getFile(orgId: string, id: string, viewer: FileViewer): Pr
   } as FileDetail
 }
 
-/**
- * Create a file in the cabinet: file row + initial version + blob. All in one
- * transaction. Returns the new file metadata.
- */
+/** Create a cabinet file through the native writer after locking its viewer gate. */
 export async function createFile(input: {
   orgId: string
   folderId: string
@@ -245,93 +243,22 @@ export async function createFile(input: {
   createdBy: string | null
   audit?: FileMutationAudit
 }): Promise<FileMeta> {
-  const extension = deriveExtension(input.filename)
-  const fileType = deriveFileType(input.contentType)
-  const contentHash = createHash('sha256').update(input.bytes).digest('hex')
-  const kind = activeStorageKind()
-  // The S3 put below cannot roll back with the row transaction. Track the
-  // staged version so a later failure (or a commit failure) records a
-  // durable cleanup intent instead of stranding the object. Nested callers
-  // (executor passed) compensate at their outer boundary, where the final
-  // commit verdict is known.
   let staged: { versionId: string; fileId: string } | null = null
-  return runMutation(input.audit?.executor, async (tx) => {
-    if (!(await viewerFolderGate(tx, input.orgId, input.audit, input.folderId, 'editor'))) {
-      throw new Error('createFile refused: caller lacks editor access to the destination folder')
-    }
-    const fileIns = (await tx.execute<{ id: string }>(sql`
-      insert into files (org_id, folder_id, name, extension, file_type, content_type,
-                         size_bytes, storage_kind, content_hash, created_by, updated_by,
-                         created_at, updated_at)
-      values (${input.orgId}, ${input.folderId}, ${input.filename}, ${extension}, ${fileType},
-              ${input.contentType}, ${input.bytes.length}, ${kind}, ${contentHash}, ${input.createdBy}, ${input.createdBy},
-              now(), now())
-      returning id
-    `))
-    const fileId = fileIns.rows[0]!.id
-
-    const verIns = (await tx.execute<{ id: string }>(sql`
-      insert into file_versions (file_id, version_number, size_bytes, content_type, storage_kind,
-                                  content_hash, created_by, created_at)
-      values (${fileId}, 1, ${input.bytes.length}, ${input.contentType}, ${kind}, ${contentHash}, ${input.createdBy}, now())
-      returning id
-    `))
-    const versionId = verIns.rows[0]!.id
-
-    await tx.execute(sql`
-      update files set current_version_id = ${versionId} where id = ${fileId} and org_id = ${input.orgId}
-    `)
-    // Object-store put happens inside the transaction window: an upload
-    // failure rolls the metadata back (never metadata without bytes), while
-    // a later failure is compensated by the catch below, which records a
-    // durable cleanup intent for the staged key.
-    if (kind === 's3') await putS3Blob(versionId, input.bytes, input.contentType)
-    if (kind === 's3') staged = { versionId, fileId }
-    else
-      await tx.execute(sql`
-        insert into file_blobs (version_id, bytes) values (${versionId}, ${input.bytes})
-      `)
-
-    if (input.audit) {
-      await recordFileEvent({
-        orgId: input.orgId,
-        actorId: input.audit.actorId,
-        table: 'files',
-        rowId: fileId,
-        action: 'upload',
-        changes: {
-          before: null,
-          after: {
-            id: fileId,
-            name: input.filename,
-            folderId: input.folderId,
-            contentType: input.contentType,
-            sizeBytes: input.bytes.length,
-            currentVersionId: versionId,
-          },
-        },
-        executor: tx,
-      })
-    }
-
-    const meta = (await tx.execute<FileMeta>(sql`
-      select fi.id, fi.folder_id as "folderId", fi.name, fi.extension, fi.file_type as "fileType",
-             fi.content_type as "contentType", fi.size_bytes as "sizeBytes",
-             fi.is_inactive as "isInactive", fi.current_version_id as "currentVersionId",
-             1 as "versionCount",
-             fi.created_at as "createdAt", fi.created_by as "createdBy",
-             fi.updated_at as "updatedAt", fi.updated_by as "updatedBy",
-             fo.name as "folderName"
-        from files fi left join folders fo on fo.id = fi.folder_id and fo.org_id = fi.org_id where fi.id = ${fileId} and fi.org_id = ${input.orgId}
-    `))
-    return meta.rows[0]!
-  }, input.audit?.viewer ? input.orgId : undefined).catch(async (error) => {
+  return runMutation(input.audit?.executor, (tx) => createCabinetFile({
+    ...input,
+    executor: tx,
+    auditActorId: input.audit?.actorId,
+    authorizeFolder: async () => {
+      if (!(await viewerFolderGate(tx, input.orgId, input.audit, input.folderId, 'editor'))) {
+        throw new Error('createFile refused: caller lacks editor access to the destination folder')
+      }
+    },
+    onStagedS3: (value) => { staged = value },
+  }), input.audit?.viewer ? input.orgId : undefined).catch(async (error) => {
     if (staged && !input.audit?.executor) {
       await enqueueStorageCleanupStandalone({
-        orgId: input.orgId,
-        objectKey: fileCabinetObjectKey(staged.versionId),
-        ownerKind: 'file_version',
-        ownerId: staged.fileId,
+        orgId: input.orgId, objectKey: fileCabinetObjectKey(staged.versionId),
+        ownerKind: 'file_version', ownerId: staged.fileId,
       })
     }
     throw error

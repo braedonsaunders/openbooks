@@ -1,3 +1,4 @@
+import { syncSourcePartyPhotos, type PartyPhotoSummary } from "./party-photos.ts";
 import { sql } from "drizzle-orm";
 import { db, withOrg, type SqlExecutor } from "../platform/db.ts";
 import { CLOSE_MODULES } from "../periods/period-policy.ts";
@@ -34,6 +35,8 @@ export type { PartyMirrorOutcome };
  */
 
 export interface ResourceLoadStats {
+  /** File-level outcomes, including preserved operator photos and source refusals. */
+  photos?: PartyPhotoSummary;
   created: number;
   updated: number;
   skipped: number;
@@ -417,6 +420,7 @@ export async function loadEntities(
   audit?: Ctx["audit"],
   providedStreams?: EntityStream[],
   partyOutcome?: PartyMirrorOutcome,
+  scope?: { employeeRefs: readonly string[] },
 ): Promise<EntityLoadStats> {
   if (!source.entities && !providedStreams) return {};
   const refKey = source.refKey;
@@ -427,7 +431,7 @@ export async function loadEntities(
     throw new Error("connector name must be a stable source namespace");
   }
   const ctx: Ctx = {
-    orgId, refKey, sourceName: source.name, currency: source.baseCurrency, incremental: since != null,
+    orgId, refKey, sourceName: source.name, currency: source.baseCurrency, incremental: since != null || scope !== undefined,
     usedShortCodes: new Set(),
     audit,
     maps: {
@@ -460,6 +464,10 @@ export async function loadEntities(
       ...(await source.entities!(since)),
     ];
   const stats: EntityLoadStats = {};
+  if (scope && (streams.some(stream => stream.resource !== 'parties')
+    || streams.flatMap(stream => stream.records).some(record => !scope.employeeRefs.includes(record.sourceRef) || !record.fields.employeeRole))) {
+    throw new Error('A scoped employee refresh may contain only requested source employee records');
+  }
 
   let streamIndex = 0;
   for (const stream of streams) {
@@ -551,6 +559,20 @@ export async function loadEntities(
       await reconcileSourceParties(ctx, stream.records, s, partyOutcome);
     }
     stats[stream.resource] = s;
+  }
+  if (source.partyPhotos) {
+    if (!audit?.connectionId) throw new Error("Employee photo synchronization needs the native connector identity");
+    const photos = await syncSourcePartyPhotos(source, {
+      orgId, connectionId: audit.connectionId, actorId: audit.actorId, runId: audit.runId, execute: true,
+      employeeRefs: scope?.employeeRefs,
+      onProgress: (current, total) => onProgress?.("Synchronizing employee photos…", current, total),
+    });
+    stats.employee_photos = {
+      created: photos.attached, updated: 0, skipped: 0, failed: photos.errors + photos.unmatched,
+      errors: photos.details.filter(row => row.status === 'error' || row.status === 'unmatched')
+        .map(row => ({ sourceRef: row.sourceRef, message: row.reason ?? "Employee photo failed" })),
+      photos,
+    };
   }
   return stats;
 }
@@ -1148,11 +1170,12 @@ async function upsertRole(table: string, orgId: string, partyId: string, cols: R
   // (excluded) row, so a bare org_id is ambiguous (42702) and every role
   // write fails. Qualify to the stored row: the guard keeps 5c54bd4d1's
   // intent (never overwrite another tenant's role on a party_id hit).
-  await db.execute(sql`
+  const written = await db.execute(sql`
     insert into ${sql.raw(table)} (org_id, party_id, ${sql.join(colList, sql`, `)})
     values (${orgId}, ${partyId}, ${sql.join(valList, sql`, `)})
     on conflict (party_id) do update set ${sql.join(setList, sql`, `)}
-    where ${sql.raw(table)}.org_id = ${orgId}`);
+    where ${sql.raw(table)}.org_id = ${orgId} returning party_id`);
+  if (written.rows.length !== 1) throw new Error('The source role did not persist in this organization');
 }
 
 async function auditTimeBillingChange(

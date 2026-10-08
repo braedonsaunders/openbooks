@@ -1,7 +1,7 @@
 /** Split from web/lib/file-cabinet.ts; moved without behavior changes. */
 import 'server-only'
-import { ensureRecordFolder } from './system-folders'
-import { createFile, RETAINED_ATTACHMENT, lockRetainedAttachmentTarget } from './files'
+import { uploadCabinetAttachment } from '@openbooks/engine/src/platform/record-attachments.ts'
+import { RETAINED_ATTACHMENT, lockRetainedAttachmentTarget } from './files'
 import { type FileMutationAudit, runMutation } from './mutation'
 import { sql } from 'drizzle-orm'
 import { db, type SqlExecutor } from '@openbooks/engine/src/platform/db.ts'
@@ -56,35 +56,7 @@ export async function uploadAndAttach(input: {
   /** Recheck the caller's target scope and write permission under its row lock. */
   authorizeTarget?: (executor: SqlExecutor) => Promise<void>
 }): Promise<AttachedFile> {
-  return runMutation(input.executor, async (tx) => {
-    await input.authorizeTarget?.(tx)
-    const folderId = await ensureRecordFolder(input.orgId, input.targetTable, input.targetId, tx)
-    const file = await createFile({
-      orgId: input.orgId,
-      folderId,
-      filename: input.filename,
-      contentType: input.contentType,
-      bytes: input.bytes,
-      createdBy: input.createdBy,
-      audit: { actorId: input.createdBy, executor: tx },
-    })
-    const attIns = (await tx.execute<{ id: string }>(sql`
-      insert into file_attachments (org_id, file_id, target_table, target_id, created_by, created_at)
-      values (${input.orgId}, ${file.id}, ${input.targetTable}, ${input.targetId},
-              ${input.createdBy}, now())
-      returning id
-    `))
-    return {
-      id: file.id,
-      name: file.name,
-      fileType: file.fileType,
-      contentType: file.contentType,
-      sizeBytes: file.sizeBytes,
-      createdAt: file.createdAt,
-      createdBy: input.createdBy,
-      attachmentId: attIns.rows[0]!.id,
-    }
-  })
+  return runMutation(input.executor, (tx) => uploadCabinetAttachment({ ...input, executor: tx }))
 }
 
 /** Attach an existing file to a record (no upload). Idempotent. */

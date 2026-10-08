@@ -313,6 +313,7 @@ type OrgCtx = {
   orgId: string | null;
   bypass: boolean;
   txDb?: NodePgDatabase;
+  rollbackEffects?: (() => Promise<void>)[];
 };
 type DbRuntime = typeof globalThis & {
   __openbooksOrgContext?: AsyncLocalStorage<OrgCtx>;
@@ -326,6 +327,20 @@ const dbRuntime = globalThis as DbRuntime;
 // back to trusted bypass mode. The process-global singleton preserves the
 // request/transaction context across every import identity and hot reload.
 export const orgContext = dbRuntime.__openbooksOrgContext ??= new AsyncLocalStorage<OrgCtx>();
+
+/** External resources staged by nested commands are compensated after the owning transaction rolls back. */
+export function onTransactionRollback(effect: () => Promise<void>): void {
+  const effects = orgContext.getStore()?.rollbackEffects;
+  if (!effects) throw new Error('Rollback compensation requires an authoritative transaction boundary');
+  effects.push(effect);
+}
+
+async function compensateRollback(effects: (() => Promise<void>)[]): Promise<void> {
+  for (const effect of effects) {
+    try { await effect(); }
+    catch (error) { console.error('Transaction rollback compensation failed:', error instanceof Error ? error.message : error); }
+  }
+}
 
 // A Next.js request can't scope itself from the inside: calling
 // AsyncLocalStorage.enterWith() within an awaited helper (currentUser) does not
@@ -657,6 +672,8 @@ export async function withMaintenanceTransaction<T>(
   }
   const bypass = orgId === null;
   const client = await rawLongConnect(bypass);
+  const rollbackEffects: (() => Promise<void>)[] = [];
+  let rolledBack = false;
   try {
     // Session lock first, in autocommit: a waiter blocks here holding no
     // snapshot, so it begins (below) only after the holder commits or rolls
@@ -687,7 +704,7 @@ export async function withMaintenanceTransaction<T>(
     // runInOrgContext, not orgContext.run: the scope must outlive the
     // callback's lazy work, or it lands on a pooled connection with the
     // deny-by-default GUCs and this transaction commits having read nothing.
-    const result = await runInOrgContext({ orgId, bypass, txDb }, fn);
+    const result = await runInOrgContext({ orgId, bypass, txDb, rollbackEffects }, fn);
     await client.query("commit");
     return result;
   } catch (err) {
@@ -696,6 +713,7 @@ export async function withMaintenanceTransaction<T>(
     } catch {
       // connection already broken; release will discard it
     }
+    rolledBack = true;
     throw err;
   } finally {
     if (opts.advisoryLockKey !== undefined) {
@@ -706,6 +724,7 @@ export async function withMaintenanceTransaction<T>(
       }
     }
     client.release();
+    if (rolledBack) await compensateRollback(rollbackEffects);
   }
 }
 
@@ -780,6 +799,8 @@ export async function withOrgTransaction<T>(
   }
 
   const client = await rawConnect();
+  const rollbackEffects: (() => Promise<void>)[] = [];
+  let rolledBack = false;
   try {
     await client.query(opts.readOnly === true ? "begin read only" : "begin");
     if (opts.isolationLevel !== undefined) {
@@ -793,7 +814,7 @@ export async function withOrgTransaction<T>(
       [orgId],
     );
     const txDb = drizzle({ client });
-    const result = await runInOrgContext({ orgId, bypass: false, txDb }, fn);
+    const result = await runInOrgContext({ orgId, bypass: false, txDb, rollbackEffects }, fn);
     await client.query("commit");
     return result;
   } catch (error) {
@@ -802,9 +823,11 @@ export async function withOrgTransaction<T>(
     } catch {
       // A broken connection is discarded by pg when released.
     }
+    rolledBack = true;
     throw error;
   } finally {
     client.release();
+    if (rolledBack) await compensateRollback(rollbackEffects);
   }
 }
 
