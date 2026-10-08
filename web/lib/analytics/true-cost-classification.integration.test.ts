@@ -584,3 +584,62 @@ test('true cost splits untagged expense by the category base and sends the drawe
     },
   )
 })
+
+
+test('Setup retains current allocation and publication facts without reading the prior comparison sources', { skip: !env.OPENBOOKS_DB_URL }, async () => {
+  await withTrueCostOrg({
+    employees: [
+      { name: 'Field worker', dept: 0, hours: '8.0000', priorHours: '8.0000', rate: '25.0000' },
+      { name: 'Prior nonbillable worker', dept: 0, date: '2026-06-10', hours: '4.0000', billable: false, rate: '25.0000' },
+    ],
+    burdenAccounts: [RENT],
+    journals: [rentJournal('CURRENT-RENT', '800.0000')],
+  }, async seeded => {
+    const priorPeriod = randomUUID()
+    const priorEntry = randomUUID()
+    await withBypass(async () => {
+      const period = await db.execute(sql`insert into accounting_periods
+        (id, org_id, fiscal_year, period_number, name, starts_on, ends_on, is_adjustment, fiscal_calendar_id)
+        select ${priorPeriod}, ${seeded.org.orgId}, 2026, 6, '2026-06', '2026-06-01', '2026-06-30', false, fiscal_calendar_id
+          from accounting_periods where id = ${seeded.org.periodId} and org_id = ${seeded.org.orgId}
+        returning id`)
+      assert.equal(period.rows.length, 1)
+      await db.execute(sql`insert into journal_entries
+        (id, org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, status, origin)
+        values (${priorEntry}, ${seeded.org.orgId}, ${seeded.org.bookId}, ${seeded.org.subsidiaryId},
+          'PRIOR-RENT', '2026-06-10', ${priorPeriod}, 'draft', 'manual')`)
+      await db.execute(sql`insert into journal_lines
+        (org_id, entry_id, line_number, account_id, subsidiary_id, department_id, amount, currency, txn_amount, fx_rate)
+        values (${seeded.org.orgId}, ${priorEntry}, 1, ${seeded.accountIds[0]}, ${seeded.org.subsidiaryId},
+            ${seeded.deptIds[0]}, '400.0000', 'CAD', '400.0000', '1'),
+          (${seeded.org.orgId}, ${priorEntry}, 2, ${seeded.org.accounts.bank}, ${seeded.org.subsidiaryId},
+            ${seeded.deptIds[0]}, '-400.0000', 'CAD', '-400.0000', '1')`)
+      const posted = await db.execute(sql`update journal_entries set status = 'posted', posted_at = now()
+        where id = ${priorEntry} and org_id = ${seeded.org.orgId} returning id`)
+      assert.equal(posted.rows.length, 1)
+    })
+    const { registerQueryObserver } = await import('@openbooks/engine/src/platform/query-observer.ts')
+    const captured: string[][] = []
+    const read = async (includePriorComparison: boolean) => {
+      const statements: string[] = []
+      const close = registerQueryObserver(statement => statements.push(statement))
+      try {
+        return await trueCostData(seeded.org.orgId, JULY, null, undefined, { includePriorComparison })
+      } finally { close(); captured.push(statements) }
+    }
+    const full = await read(true)
+    const setup = await read(false)
+    assert.equal(full.kpis.compositeRateChangePct, 60)
+    assert.equal(setup.kpis.compositeRateChangePct, null)
+    assert.deepEqual(setup, { ...full, kpis: { ...full.kpis, compositeRateChangePct: null } },
+      'current categories, bases, composites, labour, absorption, publication and refusals stay identical')
+    const comparisonExpense = (statement: string) => statement.includes('(select coalesce(sum(t.hours) filter (where t.is_billable)')
+    const comparisonLabor = (statement: string) => statement.includes('as nonbill_cost') && !statement.includes('to_char(t.worked_on')
+    assert.equal(captured[0]!.filter(comparisonExpense).length, 1)
+    assert.equal(captured[0]!.filter(comparisonLabor).length, 1)
+    assert.equal(captured[1]!.filter(comparisonExpense).length, 0)
+    assert.equal(captured[1]!.filter(comparisonLabor).length, 0)
+    assert.ok(captured[1]!.some(statement => statement.includes('sum(t.hours)') && statement.includes('group by 1')),
+      'Setup still resolves department utilization and current policy drivers')
+  })
+})

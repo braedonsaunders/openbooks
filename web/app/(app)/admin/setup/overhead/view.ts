@@ -100,7 +100,7 @@ export async function loadOverhead(
   const from = fromDate.toISOString().slice(0, 10);
   let refusal: string | null = null;
   const [data, typesRes, cardRes] = await Promise.all([
-    trueCostData(authz.user.orgId, { from, to: today, label: 'TTM' }, authz.allowedSubsidiaryIds).catch((error: unknown) => {
+    trueCostData(authz.user.orgId, { from, to: today, label: 'TTM' }, authz.allowedSubsidiaryIds, undefined, { includePriorComparison: false }).catch((error: unknown) => {
     if (!(error instanceof OverheadCalculationError)) throw error;
     refusal = error.message;
     return null;
