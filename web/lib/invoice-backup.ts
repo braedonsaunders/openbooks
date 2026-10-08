@@ -296,6 +296,10 @@ export function customerLabourBackupHtml(
       th, td { border-bottom: 1px solid #ddd; padding: 4px 6px; text-align:left; }
       th { background:#f3f4f6; font-size:10px; text-transform:uppercase; letter-spacing:.03em; }
       td.n, th.n { text-align:right; font-variant-numeric: tabular-nums; }
+      th:first-child, td:first-child, th.n, td.n { white-space:nowrap; }
+      td:nth-child(2), td:nth-child(3) { overflow-wrap:anywhere; }
+      /* The invoice grand total appears once after all billed entries. */
+      tfoot { display:table-row-group; break-inside:avoid; }
       tfoot td { font-weight:700; border-top:2px solid #333; }
     </style>
     <h1>${esc(title)}</h1>
