@@ -11,7 +11,7 @@ import { isUuid } from "../platform/uuid.ts";
 import { lockActorCommandAuthority } from "../organization/actor-command-authority.ts";
 import { ScopeNotFoundError, subsidiaryVisibleFilter } from "../organization/subsidiary-scope.ts";
 import { getBoard, type ScheduleActor } from "./boards.ts";
-import { ScheduleError } from "./errors.ts";
+import { ScheduleError, scheduleDatabaseRefusal } from "./errors.ts";
 
 export interface TaskProgress {
   readonly id: string;
@@ -73,7 +73,7 @@ export function taskMeasures(budget: string | null, actual: string, percent: str
 }
 
 export function loadProjectProgress(actor: ScheduleActor & { boardId: string; projectId: string }): Promise<ProjectProgress> {
-  return withOrgTransaction(actor.orgId, () => readProjectProgress(actor));
+  return withOrgTransaction(actor.orgId, () => readProjectProgress(actor)).catch((error: unknown) => { throw scheduleDatabaseRefusal(error); });
 }
 
 async function readProjectProgress(actor: ScheduleActor & { boardId: string; projectId: string }): Promise<ProjectProgress> {

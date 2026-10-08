@@ -64,7 +64,8 @@ export function SchedulingWorkspace(props: SchedulingWorkspaceProps) {
         <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-teal-50 text-teal-700 dark:bg-teal-950 dark:text-teal-300"><CalendarRange className="h-7 w-7" /></span>
         <h2 className="mt-4 text-lg font-semibold text-slate-900 dark:text-slate-100">{t('empty.title')}</h2>
         <p className="mt-1 max-w-md text-sm text-slate-500">{props.refusal?.message ?? t('empty.description')}</p>
-        {props.canConfigure ? <Button className="mt-5" onClick={() => setNewBoard(true)}><Plus className="mr-1.5 h-4 w-4" />{t('empty.create')}</Button> : <p className="mt-4 text-xs text-slate-400">{t('empty.askAdmin')}</p>}
+        {props.refusal?.remedy ? <p className="mt-1 max-w-md text-xs text-slate-400">{props.refusal.remedy}</p> : null}
+        {props.refusal ? null : props.canConfigure ? <Button className="mt-5" onClick={() => setNewBoard(true)}><Plus className="mr-1.5 h-4 w-4" />{t('empty.create')}</Button> : <p className="mt-4 text-xs text-slate-400">{t('empty.askAdmin')}</p>}
         <NewBoardDrawer open={newBoard} onClose={() => setNewBoard(false)} timeZone={props.timeZone} scope={props.scope} peopleEnabled={props.peopleEnabled} tasksEnabled={props.tasksEnabled} />
       </div>
     )

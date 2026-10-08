@@ -7,7 +7,7 @@ import { sql } from "drizzle-orm";
 import { db, withOrgTransaction } from "../platform/db.ts";
 import { lockAndCheckOrgFeature } from "../organization/org-feature-lock.ts";
 import { ScopeNotFoundError } from "../organization/subsidiary-scope.ts";
-import { ScheduleError } from "./errors.ts";
+import { ScheduleError, scheduleDatabaseRefusal } from "./errors.ts";
 import { requireDate } from "./spans.ts";
 import { ENTRY_COLUMNS, ENTRY_JOINS, shapeEntry, type BoardEntry } from "./window.ts";
 
@@ -18,7 +18,15 @@ export interface MySchedule {
   readonly entries: readonly BoardEntry[];
 }
 
-export function loadMySchedule(input: { orgId: string; actorId: string; from: string; through: string }): Promise<MySchedule> {
+export async function loadMySchedule(input: { orgId: string; actorId: string; from: string; through: string }): Promise<MySchedule> {
+  try {
+    return await readMySchedule(input);
+  } catch (error) {
+    throw scheduleDatabaseRefusal(error);
+  }
+}
+
+function readMySchedule(input: { orgId: string; actorId: string; from: string; through: string }): Promise<MySchedule> {
   return withOrgTransaction(input.orgId, async () => {
     const from = requireDate(input.from, "From");
     const through = requireDate(input.through, "Through");

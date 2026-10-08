@@ -11,7 +11,7 @@ import { div } from "../money/money.ts";
 import { db, withOrgTransaction } from "../platform/db.ts";
 import { isUuid } from "../platform/uuid.ts";
 import { lockAndCheckOrgFeature } from "../organization/org-feature-lock.ts";
-import { ScheduleError } from "./errors.ts";
+import { ScheduleError, scheduleDatabaseRefusal } from "./errors.ts";
 import { requireDate } from "./spans.ts";
 
 export type PrefillUse = "timesheets" | "crew" | "fieldTickets";
@@ -48,8 +48,16 @@ export interface ScheduledWorkQuery {
   readonly projectId?: string;
 }
 
-export function scheduledWork(input: ScheduledWorkQuery): Promise<ScheduledWork[]> {
-  return withOrgTransaction(input.orgId, () => readScheduledWork(input));
+export async function scheduledWork(input: ScheduledWorkQuery): Promise<ScheduledWork[]> {
+  try {
+    return await withOrgTransaction(input.orgId, () => readScheduledWork(input));
+  } catch (error) {
+    // Before the scheduling upgrade there are no bookings to offer; the
+    // editor itself keeps working.
+    const refusal = scheduleDatabaseRefusal(error);
+    if (refusal instanceof ScheduleError && refusal.code === "schedule_upgrade_required") return [];
+    throw error;
+  }
 }
 
 async function readScheduledWork(input: ScheduledWorkQuery): Promise<ScheduledWork[]> {

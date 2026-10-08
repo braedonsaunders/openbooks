@@ -11,7 +11,7 @@ import { addCalendarDays } from "../platform/civil-date.ts";
 import { subsidiaryVisibleFilter } from "../organization/subsidiary-scope.ts";
 import { BusinessCalendarMissingError, businessCalendarOver } from "../payroll/business-calendars.ts";
 import { getBoard, peopleBoardAuthority, type ScheduleActor, type ScheduleBoard } from "./boards.ts";
-import { ScheduleError } from "./errors.ts";
+import { ScheduleError, scheduleDatabaseRefusal } from "./errors.ts";
 import { datesBetween, localClock, requireDate } from "./spans.ts";
 
 export interface BoardPerson {
@@ -183,7 +183,7 @@ export function shapeEntry(row: EntryRow): BoardEntry {
 }
 
 export function loadBoardWindow(actor: ScheduleActor & { boardId: string; from: string; through?: string }): Promise<BoardWindow> {
-  return withOrgTransaction(actor.orgId, () => readBoardWindow(actor));
+  return withOrgTransaction(actor.orgId, () => readBoardWindow(actor)).catch((error: unknown) => { throw scheduleDatabaseRefusal(error); });
 }
 
 async function readBoardWindow(actor: ScheduleActor & { boardId: string; from: string; through?: string }): Promise<BoardWindow> {

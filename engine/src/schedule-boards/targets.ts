@@ -9,7 +9,7 @@ import { db, withOrgTransaction, type SqlExecutor } from "../platform/db.ts";
 import { isUuid } from "../platform/uuid.ts";
 import { subsidiaryVisibleFilter } from "../organization/subsidiary-scope.ts";
 import { getBoard, peopleBoardAuthority, type ScheduleActor } from "./boards.ts";
-import { ScheduleError } from "./errors.ts";
+import { ScheduleError, scheduleDatabaseRefusal } from "./errors.ts";
 import type { BoardTarget } from "./window.ts";
 
 export interface TargetRef {
@@ -41,7 +41,7 @@ function rank(code: SQL, label: SQL, query: string): SQL {
 }
 
 export function searchTargets(actor: ScheduleActor & { boardId: string; query: string; limit?: number }): Promise<BoardTarget[]> {
-  return withOrgTransaction(actor.orgId, () => findTargets(actor));
+  return withOrgTransaction(actor.orgId, () => findTargets(actor)).catch((error: unknown) => { throw scheduleDatabaseRefusal(error); });
 }
 
 async function findTargets(actor: ScheduleActor & { boardId: string; query: string; limit?: number }): Promise<BoardTarget[]> {
@@ -89,7 +89,7 @@ export interface ProjectTaskOption {
 }
 
 export function listProjectTaskOptions(actor: ScheduleActor & { boardId: string; projectId: string }): Promise<ProjectTaskOption[]> {
-  return withOrgTransaction(actor.orgId, () => readProjectTaskOptions(actor));
+  return withOrgTransaction(actor.orgId, () => readProjectTaskOptions(actor)).catch((error: unknown) => { throw scheduleDatabaseRefusal(error); });
 }
 
 async function readProjectTaskOptions(actor: ScheduleActor & { boardId: string; projectId: string }): Promise<ProjectTaskOption[]> {

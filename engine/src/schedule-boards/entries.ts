@@ -376,7 +376,7 @@ export async function applyBoardChanges(actor: ScheduleActor & { boardId: string
       }
     }
     return { results, notices, boardName: board.name };
-  });
+  }).catch((error: unknown) => { throw scheduleDatabaseRefusal(error); });
 }
 
 export interface PublishFailure {
@@ -447,5 +447,5 @@ export async function publishBoard(actor: ScheduleActor & { boardId: string; fro
       }
     }
     return { published: drafts.length, notices, boardName: board.name };
-  });
+  }).catch((error: unknown) => { throw scheduleDatabaseRefusal(error); });
 }
