@@ -3,6 +3,8 @@ import { appendFile } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import { workAsyncStorage } from "next/dist/server/app-render/work-async-storage.external";
 import { registerQueryObserver } from "@openbooks/engine/src/platform/query-observer.ts";
+import type { SpanProcessor } from "@openbooks/engine/src/platform/telemetry.ts";
+import { createRenderProfile } from "./render-profile";
 
 /**
  * Per-route database profile for the running web server.
@@ -12,10 +14,12 @@ import { registerQueryObserver } from "@openbooks/engine/src/platform/query-obse
  * attributed to the Next request whose work issued it (through Next's
  * per-request WorkStore, the same storage request-org.ts keys tenant scope
  * on). Each minute the profiler appends one JSON line covering the requests
- * that completed in that window: per route, the request count, mean and p95
+ * whose database profiles closed in that window: per route, the request count, mean and p95
  * database round trips and summed database time per request, and the ten
  * statements most often repeated within a single request and the ten
- * statement shapes consuming the most database time.
+ * statement shapes consuming the most database time. Separately, serverRenders
+ * records completed native Next render spans in the same time window. Their
+ * completion is independent of database idle closure; counts are not paired.
  *
  * Statements are recorded only in normalized form: literals, numbers and
  * placeholders become `?`, so neither parameter values nor inline tenant data
@@ -212,9 +216,9 @@ export function createQueryProfile(options: QueryProfileOptions) {
   /**
    * Close idle requests (or every request when `all`), return the window's
    * summary and start a new window. Returns null for a window with no
-   * database activity.
+   * database activity, unless a completed render requires the window metadata.
    */
-  function summarize(all = false): QueryProfileSummary | null {
+  function summarize(all = false, includeEmpty = false): QueryProfileSummary | null {
     const at = now();
     for (const [key, profile] of open) {
       if (all || at - profile.lastAt >= requestIdleMs) {
@@ -228,7 +232,7 @@ export function createQueryProfile(options: QueryProfileOptions) {
     routes = new Map();
     unattributed = { roundTrips: 0, dbMs: 0 };
     windowStart = at;
-    if (closedRoutes.size === 0 && outside.roundTrips === 0) return null;
+    if (!includeEmpty && closedRoutes.size === 0 && outside.roundTrips === 0) return null;
 
     const routeProfiles: RouteQueryProfile[] = [...closedRoutes].map(([route, window]) => {
       const roundTrips = distribution(window.roundTrips);
@@ -266,14 +270,15 @@ export function createQueryProfile(options: QueryProfileOptions) {
   return { observe, summarize };
 }
 
-type QueryProfileRuntime = typeof globalThis & { __openbooksQueryProfileStarted?: boolean };
+type QueryProfileRuntime = typeof globalThis & { __openbooksQueryProfileProcessor?: SpanProcessor };
 
 /**
  * Start profiling this process. Refuses when the output file is not
  * configured, so an enabled profiler never runs without a destination.
- * Starting twice in one process (a module graph evaluated again) is a no-op.
+ * Starting twice returns the same processor without another observer/timer.
+ * The caller installs it with the process's native telemetry provider.
  */
-export function startQueryProfile(env: Record<string, string | undefined>): void {
+export function startQueryProfile(env: Record<string, string | undefined>): SpanProcessor {
   const file = env.OPENBOOKS_QUERY_PROFILE_FILE?.trim();
   if (!file) {
     throw new Error(
@@ -281,8 +286,7 @@ export function startQueryProfile(env: Record<string, string | undefined>): void
     );
   }
   const runtime = globalThis as QueryProfileRuntime;
-  if (runtime.__openbooksQueryProfileStarted) return;
-  runtime.__openbooksQueryProfileStarted = true;
+  if (runtime.__openbooksQueryProfileProcessor) return runtime.__openbooksQueryProfileProcessor;
 
   const profile = createQueryProfile({
     currentRequest: () => {
@@ -291,11 +295,15 @@ export function startQueryProfile(env: Record<string, string | undefined>): void
     },
   });
   registerQueryObserver(profile.observe);
+  const renders = createRenderProfile();
+  runtime.__openbooksQueryProfileProcessor = renders.processor;
 
   let writing: Promise<void> = Promise.resolve();
   const flush = () => {
-    const summary = profile.summarize();
-    if (!summary) return;
+    const serverRenders = renders.summarize();
+    const database = profile.summarize(false, serverRenders.routes.length > 0 || serverRenders.droppedRenders > 0);
+    if (!database) return;
+    const summary = { ...database, serverRenders };
     writing = writing
       .then(() => appendFile(file, `${JSON.stringify(summary)}\n`))
       .catch((error: Error) => {
@@ -303,5 +311,6 @@ export function startQueryProfile(env: Record<string, string | undefined>): void
       });
   };
   setInterval(flush, FLUSH_INTERVAL_MS).unref();
-  console.log(`[query-profile] per-route database profile enabled; appending to ${file} every ${FLUSH_INTERVAL_MS / 1000}s`);
+  console.log(`[query-profile] per-route database and completed render profile enabled; appending to ${file} every ${FLUSH_INTERVAL_MS / 1000}s`);
+  return renders.processor;
 }

@@ -7,6 +7,7 @@ import {
   startTelemetry,
   stopTelemetry,
   type TelemetryEnv,
+  type SpanProcessor,
 } from "./telemetry.ts";
 import { logTerminalFailure } from "./terminal-failure.ts";
 
@@ -53,9 +54,16 @@ test("configured telemetry exports real OTLP traces and metrics to the collector
     OTEL_RESOURCE_ATTRIBUTES: "deployment.environment=test",
     OTEL_METRIC_EXPORT_INTERVAL: "100",
   };
+  let localSpans = 0;
+  const localProcessor: SpanProcessor = {
+    onStart() {},
+    onEnd(span) { if (span.name === "boot.evidence") localSpans += 1; },
+    async forceFlush() {},
+    async shutdown() {},
+  };
 
   try {
-    assert.equal(await startTelemetry(env), true);
+    assert.equal(await startTelemetry(env, [localProcessor]), true);
     // A second enabled call is idempotent: the API globals cannot be swapped.
     assert.equal(await startTelemetry(env), true);
 
@@ -81,6 +89,7 @@ test("configured telemetry exports real OTLP traces and metrics to the collector
     }
     assert.ok(hits.traces >= 1, "no trace export reached the collector");
     assert.ok(hits.metrics >= 1, "no metric export reached the collector");
+    assert.equal(localSpans, 1, "local profiling and remote export share one provider without duplicate emissions");
   } finally {
     await stopTelemetry();
     await new Promise<void>((resolve) => server.close(() => resolve()));
