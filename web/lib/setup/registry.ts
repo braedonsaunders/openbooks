@@ -87,6 +87,7 @@ export function setupChildEntities(parentKey: string): SetupEntity[] {
 
 /** Collection links lead to the owning records, where the child tab is opened. */
 export function setupEntityHref(entity: SetupEntity): string {
+  if (entity.key === 'schedule-boards') return '/scheduling/boards'
   if (entity.key.startsWith('training-')) return '/hrm/training'
   if (entity.key.startsWith('payroll-compensation-')) return '/admin/setup/payroll?tab=compensation-packages'
   if (entity.key === 'benefit-programs') return '/hrm/benefits?view=programs'

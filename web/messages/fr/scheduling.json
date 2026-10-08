@@ -42,7 +42,8 @@
     "more": "Plus",
     "details": "Détails",
     "date": "Aller à la date",
-    "resourceBoards": "Ressources"
+    "resourceBoards": "Ressources",
+    "manageBoards": "Gérer les tableaux"
   },
   "empty": {
     "title": "Configurez votre premier tableau",
@@ -284,5 +285,9 @@
     "result": "Description source",
     "hours": "Heures",
     "origin": "Source"
+  },
+  "boards": {
+    "description": "Lister, configurer et archiver les tableaux de planification.",
+    "return": "Retour au planning"
   }
 }

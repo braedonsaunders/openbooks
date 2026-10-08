@@ -20,8 +20,9 @@ import { TargetsView } from './TargetsView'
 import { TaskBoard, type TaskBoardProject } from './TaskBoard'
 import { TimelineView } from './TimelineView'
 import { CHIP_COLORS, chipStyle } from './BookingChip'
+import { boardLegend } from './legend'
 import { publish, SchedulingRequestError } from './api'
-import { addDays, targetHue, viewRange, type BoardEntry, type BoardWindow, type GroupBy } from './model'
+import { addDays, viewRange, type BoardEntry, type BoardWindow, type GroupBy } from './model'
 import { useBoard } from './use-board'
 import type { ScheduleBoard } from '@openbooks/engine/src/schedule-boards/boards.ts'
 
@@ -70,6 +71,7 @@ export function SchedulingWorkspace(props: SchedulingWorkspaceProps) {
         <p className="mt-1 max-w-md text-sm text-slate-500">{props.refusal?.message ?? t('empty.description')}</p>
         {props.refusal?.remedy ? <p className="mt-1 max-w-md text-xs text-slate-400">{props.refusal.remedy}</p> : null}
         {props.refusal ? null : props.canConfigure ? <Button className="mt-5" onClick={() => setNewBoard(true)}><Plus className="mr-1.5 h-4 w-4" />{t('empty.create')}</Button> : <p className="mt-4 text-xs text-slate-400">{t('empty.askAdmin')}</p>}
+        {props.canConfigure ? <Button asChild variant="ghost" className="mt-2"><Link href="/scheduling/boards">{t('toolbar.manageBoards')}</Link></Button> : null}
         <NewBoardDrawer open={newBoard} onClose={() => setNewBoard(false)} timeZone={props.timeZone} scope={props.scope} peopleEnabled={props.peopleEnabled} tasksEnabled={props.tasksEnabled} resourcesEnabled={props.resourcesEnabled} equipmentEnabled={props.equipmentEnabled} />
       </div>
     )
@@ -110,9 +112,11 @@ function BoardShell(props: SchedulingWorkspaceProps & { board: ScheduleBoard; on
 
   // Keep the address shareable without a server round trip.
   useEffect(() => {
-    const params = new URLSearchParams({ board: board.code, view })
+    const params = new URLSearchParams(globalThis.location.search)
+    params.set('board', board.code); params.set('view', view)
     if (people) params.set('from', anchor)
     if (people && rangeDays !== board.rangeDays) params.set('days', String(rangeDays))
+    else params.delete('days')
     if (!people && projectId) params.set('project', projectId)
     globalThis.history.replaceState(null, '', `/scheduling?${params.toString()}`)
   }, [anchor, board.code, board.rangeDays, people, projectId, rangeDays, view])
@@ -137,18 +141,12 @@ function BoardShell(props: SchedulingWorkspaceProps & { board: ScheduleBoard; on
   }, [anchor, locale, range.from, range.through, view])
 
   const drafts = useMemo(() => window?.entries.filter((entry) => entry.status === 'draft' && entry.boardId === board.id) ?? [], [board.id, window])
-  const legend = useMemo(() => {
-    if (!window) return []
-    const counts = new Map<string, { key: string; target: NonNullable<BoardEntry['target']>; people: Set<string> }>()
-    for (const entry of window.entries) {
-      if (!entry.target) continue
-      const key = `${entry.target.kind}:${entry.target.id}`
-      const slot = counts.get(key) ?? { key, target: entry.target, people: new Set<string>() }
-      slot.people.add(entry.subjectId)
-      counts.set(key, slot)
-    }
-    return [...counts.values()].sort((a, b) => b.people.size - a.people.size).slice(0, 14)
-  }, [window])
+  const legend = useMemo(() => window ? boardLegend(window) : [], [window])
+  const settingsParams = new URLSearchParams({ board: board.code, view, boardRow: board.id })
+  if (people) { settingsParams.set('from', anchor); settingsParams.set('days', String(rangeDays)) }
+  else if (projectId) settingsParams.set('project', projectId)
+  const settingsHref = props.canConfigure ? `/scheduling?${settingsParams.toString()}` : null
+  useEffect(() => { if (!board.views.includes(view)) setView(board.defaultView) }, [board.defaultView, board.views, view])
 
   // Undo and redo answer anywhere on the page, not only inside the grid.
   useEffect(() => {
@@ -200,9 +198,10 @@ function BoardShell(props: SchedulingWorkspaceProps & { board: ScheduleBoard; on
         </div> : null}
         {!people && props.projects.length > 1 ? <Select value={projectId ?? ''} onChange={(event) => setProjectId(event.target.value)} className="h-8 min-w-0 flex-1 basis-28 text-xs" aria-label={t('tasks.pickProject')}>{props.projects.map((project) => <option key={project.id} value={project.id}>{project.code ? `${project.code} · ` : ''}{project.name}</option>)}</Select> : null}
         <div className="ml-auto flex shrink-0 items-center gap-1">
-          {props.settingsHref ? <Button variant="ghost" size="sm" className="h-8 px-2" asChild title={t('toolbar.settings')}>
-            <Link href={props.settingsHref} aria-label={t('toolbar.settings')}><Settings2 className="h-4 w-4" /></Link>
+          {settingsHref ? <Button variant="ghost" size="sm" className="h-8 px-2" asChild title={t('toolbar.settings')}>
+            <Link href={settingsHref} aria-label={t('toolbar.settings')}><Settings2 className="h-4 w-4" /></Link>
           </Button> : null}
+          {props.canConfigure ? <Button asChild variant="ghost" size="sm" className="h-8 px-2" title={t('toolbar.manageBoards')}><Link href="/scheduling/boards" aria-label={t('toolbar.manageBoards')}><Rows3 className="h-4 w-4" /></Link></Button> : null}
           {props.canConfigure ? <Button variant="outline" size="sm" className="h-8 gap-1 px-2 text-xs" onClick={props.onNewBoard} aria-label={t('toolbar.newBoard')} title={t('toolbar.newBoard')}><Plus className="h-4 w-4" /><span className="hidden xl:inline">{t('toolbar.newBoard')}</span></Button> : null}
           {people ? <Popover open={moreOpen} onOpenChange={setMoreOpen} align="end" className="w-72 max-w-[calc(100vw-2rem)]" trigger={<Button variant="outline" size="sm" className="h-8 px-2" onClick={() => setMoreOpen((value) => !value)} aria-label={t('toolbar.more')} aria-expanded={moreOpen}><MoreHorizontal className="h-4 w-4" /></Button>}>
             <div className="space-y-3 p-3">
@@ -231,20 +230,22 @@ function BoardShell(props: SchedulingWorkspaceProps & { board: ScheduleBoard; on
         </SchedulingAlert>
       ) : null}
       {people && view === 'grid' && legend.length ? (
-        <div className="flex min-w-0 shrink-0 flex-nowrap items-center gap-1.5 overflow-x-auto">
+        <div className="flex min-w-0 shrink-0 flex-nowrap items-center gap-1.5 overflow-x-auto px-1 py-1">
           {legend.map((slot) => (
             <button
               key={slot.key}
               type="button"
               onClick={() => setSpotlight((current) => (current === slot.key ? null : slot.key))}
-              style={chipStyle(targetHue(slot.target), slot.target.color)}
+              style={chipStyle(215, slot.color)}
               className={cn('inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[11px] font-semibold transition', CHIP_COLORS, spotlight && spotlight !== slot.key && 'opacity-40', spotlight === slot.key && 'ring-2 ring-teal-500/50')}
-              title={slot.target.label}
+              title={slot.label}
+              aria-pressed={spotlight === slot.key}
             >
-              {slot.target.code ?? slot.target.label}
+              {slot.label}
               <span className="rounded-full bg-white/60 px-1 text-[10px] tabular-nums dark:bg-black/20">{slot.people.size}</span>
             </button>
           ))}
+          {spotlight ? <button type="button" className="shrink-0 px-2 text-xs text-teal-700 dark:text-teal-300" onClick={() => setSpotlight(null)}>{t('grid.clearSpotlight')}</button> : null}
         </div>
       ) : null}
 
@@ -264,7 +265,7 @@ function BoardShell(props: SchedulingWorkspaceProps & { board: ScheduleBoard; on
         ) : (
           <div className={cn('flex min-h-0 flex-1 flex-col transition-opacity', controller.loading && 'opacity-60')}>
             {view === 'grid' ? (
-              <PeopleGrid controller={controller} window={window} groupBy={groupBy} search={search} compact={compact} spotlight={spotlight} onSpotlight={setSpotlight} onOpenEntry={entry => { setOpenSourceRecord(null); setOpenEntry(entry) }} onOpenSourceRecord={record => { setOpenEntry(null); setOpenSourceRecord(record) }} today={props.today} />
+              <PeopleGrid controller={controller} window={window} groupBy={groupBy} search={search} compact={compact} spotlight={spotlight} onOpenEntry={entry => { setOpenSourceRecord(null); setOpenEntry(entry) }} onOpenSourceRecord={record => { setOpenEntry(null); setOpenSourceRecord(record) }} today={props.today} />
             ) : view === 'targets' ? (
               <TargetsView controller={controller} window={window} today={props.today} onOpenEntry={entry => { setOpenSourceRecord(null); setOpenEntry(entry) }} onOpenSourceRecord={record => { setOpenEntry(null); setOpenSourceRecord(record) }} />
             ) : view === 'timeline' ? (

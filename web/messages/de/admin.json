@@ -6617,7 +6617,10 @@
     "scheduleColors": {
       "add": "Farbregel hinzufügen",
       "rule": "Farbregel"
-    }
+    },
+    "archive": "Archivieren",
+    "confirmArchive": "Diesen Datensatz archivieren? Der Verlauf bleibt verfügbar.",
+    "archived": "Datensatz archiviert"
   },
   "flows": {
     "title": "Flows",

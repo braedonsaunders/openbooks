@@ -95,7 +95,7 @@ export async function loadSchedulingPage(searchParams: Record<string, string | s
 
   const requestedView = pickString(searchParams.view)
   const view = requestedView && board.views.includes(requestedView) ? requestedView : board.defaultView
-  const settingsHref = canConfigure ? `/admin/setup/schedule-boards?row=${board.id}` : null
+  const settingsHref = canConfigure ? `/scheduling?board=${encodeURIComponent(board.code)}&boardRow=${board.id}` : null
 
   if (board.rowKind === 'tasks') {
     const projects = (await db.execute<{ id: string; code: string | null; name: string; customerName: string | null; startsOn: string | null; endsOn: string | null }>(sql`
@@ -137,7 +137,7 @@ export function schedulingSpec(data: SchedulingPageData): PageSpec {
   return page({
     route: '/scheduling',
     layout: 'list',
-    bodyClassName: 'flex h-full min-h-0 flex-col',
+    bodyClassName: 'flex h-full min-h-0 flex-col pb-2 sm:pb-2',
     header: [pageHeader({ title: f('title'), description: f('description') })],
     body: [
       widgetBlock('scheduling-workspace', {

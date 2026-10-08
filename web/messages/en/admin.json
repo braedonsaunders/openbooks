@@ -6617,7 +6617,10 @@
     "scheduleColors": {
       "add": "Add color rule",
       "rule": "Color rule"
-    }
+    },
+    "archive": "Archive",
+    "confirmArchive": "Archive this record? Its history remains available.",
+    "archived": "Record archived"
   },
   "flows": {
     "title": "Flows",

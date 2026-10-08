@@ -42,7 +42,8 @@
     "more": "その他",
     "details": "詳細",
     "date": "日付へ移動",
-    "resourceBoards": "リソース"
+    "resourceBoards": "リソース",
+    "manageBoards": "ボードを管理"
   },
   "empty": {
     "title": "最初のボードを設定しましょう",
@@ -284,5 +285,9 @@
     "result": "元の説明",
     "hours": "時間",
     "origin": "元データ"
+  },
+  "boards": {
+    "description": "スケジュールボードの一覧、設定、アーカイブ。",
+    "return": "スケジュールに戻る"
   }
 }

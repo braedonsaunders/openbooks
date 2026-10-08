@@ -33,6 +33,7 @@ export const SCHEDULING_ENTITIES: SetupEntity[] = [
     // policy and booking behavior. Bookings belong to the board they were
     // made on, so archiving a board preserves its history.
     key: 'schedule-boards',
+    rehomed: true,
     table: 'schedule_boards',
     singularTitleKey: 'entities.schedule-boards.singularTitle',
     actorCols: true,
@@ -42,7 +43,8 @@ export const SCHEDULING_ENTITIES: SetupEntity[] = [
     naturalKey: 'code',
     orderBy: 'sort_order, name',
     hasActive: true,
-    allowDelete: false,
+    allowDelete: true,
+    archiveOnDelete: true,
     featureKeysAny: ['hrmShiftPlanning', 'projectScheduling'],
     docSlug: 'scheduling',
     columns: [
@@ -70,8 +72,8 @@ export const SCHEDULING_ENTITIES: SetupEntity[] = [
       { key: 'departmentId', kind: 'ref', ref: 'departments', showWhen: { field: 'rowKind', in: ['people'] }, clearWhenHidden: true },
       { key: 'locationId', kind: 'ref', ref: 'locations' },
       { key: 'projectId', kind: 'ref', ref: 'projects', helpTextKey: 'fieldHelp.scheduleBoardProject' },
-      { key: 'views', kind: 'stringArray', arrayStorage: 'text', options: VIEWS, required: true, defaultValue: ['grid', 'targets', 'timeline', 'calendar'], helpTextKey: 'fieldHelp.scheduleBoardViews' },
-      { key: 'defaultView', kind: 'select', options: VIEWS, required: true, defaultValue: 'grid' },
+      { key: 'views', kind: 'stringArray', arrayStorage: 'text', options: VIEWS, scopedOptions: { scopeField: 'rowKind', byValue: { people: VIEWS.slice(0, 4), resources: VIEWS.slice(0, 4), tasks: VIEWS.slice(4) } }, required: true, defaultValue: ['grid', 'targets', 'timeline', 'calendar'], helpTextKey: 'fieldHelp.scheduleBoardViews' },
+      { key: 'defaultView', kind: 'select', options: VIEWS, scopedOptions: { scopeField: 'rowKind', byValue: { people: VIEWS.slice(0, 4), resources: VIEWS.slice(0, 4), tasks: VIEWS.slice(4) } }, required: true, defaultValue: 'grid' },
       { key: 'rangeDays', kind: 'integer', required: true, min: 1, max: 42, defaultValue: 14, helpTextKey: 'fieldHelp.scheduleBoardRangeDays' },
       { key: 'weekStartsOn', kind: 'integer', required: true, min: 0, max: 6, defaultValue: 0, helpTextKey: 'fieldHelp.scheduleBoardWeekStartsOn' },
       { key: 'showWeekends', kind: 'boolean', defaultValue: true },

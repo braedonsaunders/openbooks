@@ -526,3 +526,22 @@ test('a cancelled re-entry restores the precision lock for the next save', async
   assert.deepEqual(seen, [], 'the restored lock still guards the save')
   assert.match(alertText() ?? '', /500/, 'the original precision remedy returns')
 })
+
+test('option-backed board views reopen as named choices and edit through native selected options', async (t) => {
+  const board = SETUP_ENTITY_BY_KEY.get('schedule-boards')!
+  const presentation = { ...board, fields: board.fields.filter(field => ['rowKind', 'views', 'defaultView'].includes(field.key)), formSections: undefined }
+  const { seen } = await mountDrawer(t, { id: '00000000-0000-4000-8000-000000000123', row_kind: 'people', views: ['grid', 'calendar'], default_view: 'grid' },
+    () => Response.json({ id: '00000000-0000-4000-8000-000000000123' }), 'schedule-boards', undefined, undefined, presentation, false)
+  const label = [...document.querySelectorAll('label')].find(node => node.textContent?.trim() === FIELD_LABEL.views)
+  assert.ok(label)
+  assert.match(label.parentElement!.textContent ?? '', /Grid/)
+  assert.match(label.parentElement!.textContent ?? '', /Calendar/)
+  assert.doesNotMatch(label.parentElement!.textContent ?? '', /grid,|Grid,/)
+  await act(async () => { clickButton('Edit').click(); await tick() })
+  const choices = [...document.querySelectorAll('fieldset label')]
+  assert.deepEqual(choices.map(node => node.textContent?.trim()), ['Grid', 'Targets', 'Timeline', 'Calendar'])
+  const targets = choices.find(node => node.textContent?.trim() === 'Targets')!.querySelector('input')!
+  await act(async () => { targets.click(); await tick() })
+  await clickSave(false)
+  assert.deepEqual((seen[0]!.body as Record<string, unknown>).views, ['grid', 'calendar', 'targets'])
+})
