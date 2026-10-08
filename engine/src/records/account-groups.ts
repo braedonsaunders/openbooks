@@ -258,9 +258,30 @@ export interface ResolvedGroups {
   pinned: Set<string>;
 }
 
+type ClassificationAccount = { id: string; number: string | null; name: string; type: string };
+
+async function classificationAccounts(orgId?: string) {
+  const orgFilter = orgId ? sql` and org_id = ${orgId}` : sql``;
+  return db.execute<ClassificationAccount>(sql`select id, number, name, type from accounts where is_summary = false${orgFilter}`);
+}
+
+/** Resolve several classifications over one fresh account population. No facts survive this read. */
+export async function resolveAccountGroupDimensions(dimensions: readonly string[], orgId?: string): Promise<Map<string, ResolvedGroups>> {
+  const unique = [...new Set(dimensions)];
+  if (unique.length === 0) return new Map();
+  const accounts = classificationAccounts(orgId);
+  const resolved = await Promise.all(unique.map(async dimension =>
+    [dimension, await resolveGroupsWithAccounts(dimension, orgId, () => accounts)] as const));
+  return new Map(resolved);
+}
+
 export async function resolveAccountGroups(dimension: string, orgId?: string): Promise<ResolvedGroups> {
+  return resolveGroupsWithAccounts(dimension, orgId, () => classificationAccounts(orgId));
+}
+
+async function resolveGroupsWithAccounts(dimension: string, orgId: string | undefined,
+  readAccounts: () => ReturnType<typeof classificationAccounts>): Promise<ResolvedGroups> {
   const orgFilter = orgId ? sql` and g.org_id = ${orgId}` : sql``;
-  const acctOrgFilter = orgId ? sql` and org_id = ${orgId}` : sql``;
   const [groups, pinRows, acctRows] = await Promise.all([
     listAccountGroups(dimension, orgId),
     db.execute<{
@@ -276,12 +297,7 @@ export async function resolveAccountGroups(dimension: string, orgId?: string): P
       where g.dimension = ${dimension} and g.is_active = true${orgFilter}
       order by m.account_id, g.id
     `),
-    db.execute<{
-      id: string;
-      number: string | null;
-      name: string;
-      type: string;
-    }>(sql`select id, number, name, type from accounts where is_summary = false${acctOrgFilter}`),
+    readAccounts(),
   ]);
 
   const pins = new Map<string, GroupRef>();

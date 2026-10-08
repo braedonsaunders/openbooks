@@ -23,7 +23,7 @@ import {
 } from "@openbooks/engine/src/projects/overhead-rates.ts";
 import { flowRates } from "../fx-presentation";
 import { analyticsConfig } from "./config";
-import { resolveAccountGroups } from "../account-groups";
+import { resolveAccountGroupDimensions } from "../account-groups";
 import {
   overheadApplicationSettings,
   overheadRateAppliesToDriver,
@@ -422,13 +422,14 @@ export async function trueCostData(
   // Classification owners resolve before any scan: the direct-labour
   // account set (rule plus pin) and the configured overhead application
   // account feed the SQL below, so no English name pattern remains.
-  const [cfg, burdenGroups, poolGroups, appliedSettings, dashboardConfig] = await Promise.all([
+  const [cfg, classifications, appliedSettings, dashboardConfig] = await Promise.all([
     loadTrueCostConfig(orgId),
-    resolveAccountGroups("burden", orgId),
-    resolveAccountGroups("cost_pool", orgId),
+    resolveAccountGroupDimensions(["burden", "cost_pool"], orgId),
     overheadApplicationSettings(orgId),
     analyticsConfig(orgId, "trueCost"),
   ]);
+  const burdenGroups = classifications.get("burden")!;
+  const poolGroups = classifications.get("cost_pool")!;
   const directLaborIds = new Set(
     [...poolGroups.byAccount.entries()].filter(([, g]) => g.key === "direct_labor").map(([id]) => id),
   );
