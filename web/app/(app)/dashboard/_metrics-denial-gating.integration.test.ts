@@ -204,7 +204,9 @@ test("omitting the visible set preserves the pre-filter query behaviour", { skip
       }) as DashboardMoneyReaders["cashflowConfig"],
     };
     const fullId = await withBypass(() => createScratchUser(org.orgId, "Full Reader", "admin"));
-    const full = authzFor(org.orgId, fullId as unknown as string, ["dashboard.read", "gl.read", "ar.read", "ap.read"]);
+    // The default includes every registered Analytics tile as well as the
+    // original GL/AR/AP groups, so its native admin fixture needs all grants.
+    const full = authzFor(org.orgId, fullId as unknown as string, ["*"]);
     await withOrgContext(org.orgId, () => loadDashboardMetrics(full, undefined, readers));
     assert.ok(calls.includes("bankBalances"), "default still queries cash balances");
     assert.ok(calls.includes("openItems:ar"), "default still queries AR items");
