@@ -387,9 +387,9 @@ export type DashboardMetrics = {
 /**
  * Bank-reconciliation queue for the dashboard tile. Returns null for a
  * caller without `banking.read` BEFORE any query runs — denial must skip
- * the reader, not merely hide its result. Counts off the same roster rows
- * the /banking workspace sums (so the tile and the cockpit tie by
- * construction) but never translates money — a missing exchange rate
+ * the reader, not merely hide its result. Counts unmatched lines using the
+ * same account membership as the /banking workspace, without loading journal
+ * balances or translating money — a missing exchange rate
  * cannot refuse a tile that shows no currency.
  */
 export async function loadReconSummary(authz: Authz): Promise<{ unreconciledItems: number } | null> {

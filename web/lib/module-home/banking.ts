@@ -54,12 +54,12 @@ export interface BankingHome {
 const TREND_WEEKS = 13
 
 /**
- * The roster query shared by the workspace and the count-only path: one row
- * per active bank/card account with its balance leg and workflow state — one
+ * The workspace roster: one row per active bank/card account with its balance
+ * leg and workflow state — one
  * row per (account, functional currency), because the balance lateral groups
  * by functional. The unmatched-line count rides the same rows the workspace
- * sums, and both readers dedupe by account id, so the reconciliation tile
- * and the cockpit tie by construction.
+ * sums. The count-only reader uses the same account membership without
+ * loading journal balances or reconciliation history.
  */
 async function bankRosterRows(
   orgId: string,
@@ -113,29 +113,28 @@ async function bankRosterRows(
 }
 
 /**
- * Unmatched bank statement lines for the reconciliation tile. Counts off the
- * same roster rows the workspace sums — but never translates money, so a
- * missing exchange rate cannot refuse a tile that shows no currency.
+ * Unmatched bank statement lines for the reconciliation tile. Only active
+ * bank/card leaf accounts in the roster's scope contribute. Journal balances
+ * and reconciliation history are unnecessary for this count; missing exchange
+ * rates cannot refuse a tile that shows no currency.
  */
 export async function bankingReconCount(
   orgId: string,
   subIds?: string[],
 ): Promise<number> {
-  const rows = await bankRosterRows(orgId, subIds)
-  // The unmatched count is per account, not per currency leg: a
-  // multi-functional account rides several roster rows carrying the same
-  // count, so sum the first row per account — the same dedupe key the
-  // workspace folds its rows on — or the tile multiplies what the cockpit
-  // shows once.
-  const seen = new Set<string>()
-  let total = 0
-  for (const r of rows) {
-    const id = String(r.id)
-    if (seen.has(id)) continue
-    seen.add(id)
-    total += Number(r.unmatched ?? 0)
-  }
-  return total
+  const subArr = subIds !== undefined ? sql`${`{${subIds.join(',')}}`}::uuid[]` : null
+  const acctScope = subArr ? sql` and (a.subsidiary_id is null or a.subsidiary_id = any(${subArr}))` : sql``
+  const result = await db.execute<{ n: string }>(sql`
+    select count(*) as n
+      from bank_statement_lines l
+      join bank_statements s on s.id = l.statement_id and s.org_id = l.org_id
+      join accounts a on a.id = s.account_id and a.org_id = s.org_id
+     where a.org_id = ${orgId} and l.match_status = 'unmatched'
+       and ${bankAccountMembership()}${acctScope}
+  `)
+  const row = result.rows[0]
+  if (!row) throw new Error('The reconciliation count did not return its total.')
+  return Number(row.n)
 }
 
 export async function bankingHome(
