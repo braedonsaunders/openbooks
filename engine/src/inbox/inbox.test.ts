@@ -488,3 +488,43 @@ describe("inbox count (B-INB-3)", () => {
     }
   });
 });
+
+describe("inbox source reads", () => {
+  it("reads sources concurrently and records failed legs in source order", async () => {
+    // Each source waits until every source has started: a sequential read
+    // would never let the second source begin.
+    let started = 0;
+    let release!: () => void;
+    const allStarted = new Promise<void>((resolve) => { release = resolve; });
+    const source = (kind: InboxAdapter["kind"], outcome: number | Error): InboxAdapter => ({
+      kind,
+      async list() { return []; },
+      async count() {
+        if (++started === 3) release();
+        await allStarted;
+        if (outcome instanceof Error) throw outcome;
+        return outcome;
+      },
+      async act() {},
+    });
+    __testResetInboxAdapters([
+      source("flows_approval", new HrmAuthorizationError("approvals refused")),
+      source("expense_report", 2),
+      source("notification", new HrmAuthorizationError("notices refused")),
+    ]);
+    try {
+      const notices: InboxSourceNotice[] = [];
+      const counted = await Promise.race([
+        countInbox(CTX, { notices }),
+        new Promise<never>((_, reject) => setTimeout(() => reject(new Error("sources were read one at a time")), 1000)),
+      ]);
+      assert.equal(counted, 2);
+      assert.deepEqual(notices, [
+        { kind: "flows_approval", message: "approvals refused" },
+        { kind: "notification", message: "notices refused" },
+      ]);
+    } finally {
+      __testResetInboxAdapters([]);
+    }
+  });
+});
