@@ -4113,7 +4113,8 @@
       "showTotals": "Summen unten anzeigen",
       "cellColorRules": "Farbregeln",
       "field": "Feld",
-      "match": "Vergleich"
+      "match": "Vergleich",
+      "dayPolicyKnown": "Arbeitstag ist konfiguriert"
     },
     "fieldHelp": {
       "fxRateMaxAgeDays": "Tage zwischen dem neuesten verwendbaren Kurs und dem Periodenende, ab denen Bewertung und Konsolidierung den Kurs ablehnen. Stichtagskurse zählen ab dem Datum des Kassakurses zum Periodenende, Durchschnittskurse ab der neuesten einbezogenen Notierung. Standard ohne Richtlinie: 31 Tage.",
@@ -4278,7 +4279,8 @@
       "scheduleCodeColor": "Die Farbe, in der Einplanungen mit diesem Code angezeigt werden, als Hex-Wert wie #38bdf8.",
       "scheduleWeekendDays": "Tage schattieren, wenn kein Geschäftskalender gilt. Der Kalender hat Vorrang.",
       "scheduleShowTotals": "Gebuchte Zeilen und Stunden nach den konfigurierten Pausen anzeigen.",
-      "scheduleCellColorRules": "Der erste Treffer ohne Beachtung der Großschreibung bestimmt die Farbe. Sechsstellige Hexfarben verwenden, etwa #38bdf8."
+      "scheduleCellColorRules": "Der erste Treffer ohne Beachtung der Großschreibung bestimmt die Farbe. Sechsstellige Hexfarben verwenden, etwa #38bdf8.",
+      "scheduleBoardDayPolicyKnown": "Deaktivieren, wenn nur Quelldaten bekannt sind. Historie bleibt ohne Stunden sichtbar; Tagesbuchungen benötigen konfigurierte Arbeitszeiten."
     },
     "options": {
       "storedValueKind": {

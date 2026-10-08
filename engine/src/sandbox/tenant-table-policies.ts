@@ -1,5 +1,6 @@
 /** Explicit clone disposition and identifier-rebase rule for every tenant-owned table. Update when adding a tenant table. */
 export const TENANT_TABLE_POLICIES = {
+  "schedule_source_records": "clone:catalog-uuid-rebase",
   // Native offering inserts recreate these identities using the rebased native ids.
   "hrm_benefit_catalog": "skip:no-copy",
   // Production device identities, roster decisions and source evidence are

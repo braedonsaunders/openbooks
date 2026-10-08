@@ -273,5 +273,16 @@
     "description": "排程人员发布的您的安排地点和时间。",
     "summary": "{days, plural, other {已安排 # 天}} · {hours}",
     "empty": "{from} 至 {through} 期间没有为您安排任何内容。"
+  },
+  "source": {
+    "explanation": "导入的排程记录为只读。它保留原始日期和指示，不生成工时、不修改员工状态，也不占用新的可用时段。",
+    "unknownHours": "源数据未提供工时。",
+    "hidden": "此行在原始看板中隐藏；记录已保留。",
+    "multiple": "源数据保留了此人员在该日期的{count}条记录。不会推定某条记录取代另一条。",
+    "select": "选择源记录",
+    "label": "源标签",
+    "result": "源描述",
+    "hours": "工时",
+    "origin": "来源"
   }
 }

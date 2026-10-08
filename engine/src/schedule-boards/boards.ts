@@ -46,6 +46,7 @@ export interface ScheduleBoard {
   readonly showWeekends: boolean;
   readonly timeZone: string;
   readonly dayStarts: string;
+  readonly dayPolicyKnown: boolean;
   readonly dayEnds: string;
   readonly dayBreakMinutes: number;
   readonly publishPolicy: "live" | "staged";
@@ -66,7 +67,7 @@ export const BOARD_COLUMNS = sql`b.id, b.code, b.name, b.description, b.row_kind
   b.grain, b.views, b.default_view as "defaultView", b.range_days as "rangeDays", b.week_starts_on as "weekStartsOn",
   b.show_weekends as "showWeekends", b.time_zone as "timeZone",
   to_char(b.day_starts, 'HH24:MI') as "dayStarts", to_char(b.day_ends, 'HH24:MI') as "dayEnds",
-  b.day_break_minutes as "dayBreakMinutes", b.publish_policy as "publishPolicy",
+  b.day_break_minutes as "dayBreakMinutes", b.day_policy_known as "dayPolicyKnown", b.publish_policy as "publishPolicy",
   b.prefill_timesheets as "prefillTimesheets", b.prefill_crew_time as "prefillCrewTime",
   b.prefill_field_tickets as "prefillFieldTickets", b.notify_assignees as "notifyAssignees",
   b.sort_order as "sortOrder", b.is_active as "isActive"`;

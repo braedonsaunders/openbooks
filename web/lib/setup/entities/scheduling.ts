@@ -57,7 +57,7 @@ export const SCHEDULING_ENTITIES: SetupEntity[] = [
       { titleKey: 'sections.scheduleBoardIdentity', fields: ['code', 'name', 'description', 'rowKind', 'resourceKind', 'sortOrder', 'isActive'] },
       { titleKey: 'sections.scheduleBoardScope', descriptionKey: 'sections.scheduleBoardScopeHelp', fields: ['subsidiaryId', 'departmentId', 'locationId', 'projectId'] },
       { titleKey: 'sections.scheduleBoardDisplay', fields: ['views', 'defaultView', 'rangeDays', 'weekStartsOn', 'showWeekends', 'weekendDays', 'showTotals', 'cellColorRules'] },
-      { titleKey: 'sections.scheduleBoardBooking', descriptionKey: 'sections.scheduleBoardBookingHelp', fields: ['grain', 'timeZone', 'dayStarts', 'dayEnds', 'dayBreakMinutes', 'publishPolicy'] },
+      { titleKey: 'sections.scheduleBoardBooking', descriptionKey: 'sections.scheduleBoardBookingHelp', fields: ['grain', 'timeZone', 'dayPolicyKnown', 'dayStarts', 'dayEnds', 'dayBreakMinutes', 'publishPolicy'] },
       { titleKey: 'sections.scheduleBoardAutomation', descriptionKey: 'sections.scheduleBoardAutomationHelp', fields: ['prefillTimesheets', 'prefillCrewTime', 'prefillFieldTickets', 'notifyAssignees'] },
     ],
     fields: [
@@ -86,6 +86,7 @@ export const SCHEDULING_ENTITIES: SetupEntity[] = [
       { key: 'grain', kind: 'select', options: GRAINS, required: true, defaultValue: 'day', helpTextKey: 'fieldHelp.scheduleBoardGrain' },
       { key: 'timeZone', kind: 'timeZone', required: true },
       { key: 'dayStarts', kind: 'text', required: true, defaultValue: '07:00', helpTextKey: 'fieldHelp.scheduleBoardDayStarts' },
+      { key: 'dayPolicyKnown', kind: 'boolean', required: true, defaultValue: true, helpTextKey: 'fieldHelp.scheduleBoardDayPolicyKnown' },
       { key: 'dayEnds', kind: 'text', required: true, defaultValue: '15:30' },
       { key: 'dayBreakMinutes', kind: 'integer', required: true, min: 0, max: 240, defaultValue: 30 },
       { key: 'publishPolicy', kind: 'select', options: PUBLISH_POLICIES, required: true, defaultValue: 'live', helpTextKey: 'fieldHelp.scheduleBoardPublishPolicy' },
@@ -133,4 +134,3 @@ export const SCHEDULING_ENTITIES: SetupEntity[] = [
 
   },
 ]
-

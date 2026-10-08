@@ -273,5 +273,16 @@
     "description": "Where you are booked and when, as published by your schedulers.",
     "summary": "{days, plural, one {# day booked} other {# days booked}} · {hours}",
     "empty": "Nothing is booked for you from {from} to {through}."
+  },
+  "source": {
+    "explanation": "Imported scheduling evidence is read-only. It preserves the source date and instructions without creating worked time, changing employee status, or reserving new availability.",
+    "unknownHours": "Hours were not supplied by the source.",
+    "hidden": "This row was hidden in the original board; its evidence is retained.",
+    "multiple": "The source retained {count} records for this person and date. No record has been assumed to supersede another.",
+    "select": "Select source record",
+    "label": "Source label",
+    "result": "Source description",
+    "hours": "Hours",
+    "origin": "Source"
   }
 }

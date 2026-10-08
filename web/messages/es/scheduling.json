@@ -273,5 +273,16 @@
     "description": "Dónde y cuándo está asignado, según lo publicado por sus planificadores.",
     "summary": "{days, plural, one {# día asignado} other {# días asignados}} · {hours}",
     "empty": "No tiene nada asignado del {from} al {through}."
+  },
+  "source": {
+    "explanation": "Los datos importados son de solo lectura. Conservan la fecha y las instrucciones sin crear tiempo trabajado, cambiar el estado del empleado ni reservar disponibilidad.",
+    "unknownHours": "La fuente no proporcionó horas.",
+    "hidden": "Esta fila estaba oculta en el tablero original; se conserva.",
+    "multiple": "La fuente conserva {count} registros para esta persona y fecha. No se presupone que uno sustituya a otro.",
+    "select": "Seleccionar registro de origen",
+    "label": "Etiqueta de origen",
+    "result": "Descripción de origen",
+    "hours": "Horas",
+    "origin": "Origen"
   }
 }

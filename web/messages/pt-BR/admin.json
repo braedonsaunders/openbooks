@@ -4060,7 +4060,8 @@
       "showTotals": "Mostrar totais inferiores",
       "cellColorRules": "Regras de cor",
       "field": "Campo",
-      "match": "Correspondência"
+      "match": "Correspondência",
+      "dayPolicyKnown": "Horário diário configurado"
     },
     "fieldHelp": {
       "fxRateMaxAgeDays": "Dias entre a taxa utilizável mais recente e o fim do período a partir dos quais a reavaliação e a consolidação recusam a taxa. Taxas de fechamento contam a partir da data da taxa à vista de fim de período; taxas médias, a partir da cotação mais recente incluída na média. Padrão sem política: 31 dias.",
@@ -4225,7 +4226,8 @@
       "scheduleCodeColor": "A cor em que as alocações com este código são exibidas, como valor hexadecimal, por exemplo #38bdf8.",
       "scheduleWeekendDays": "Dias a sombrear sem calendário comercial aplicável. O calendário tem prioridade.",
       "scheduleShowTotals": "Mostrar linhas e horas reservadas após as pausas configuradas.",
-      "scheduleCellColorRules": "A primeira correspondência sem diferenciar maiúsculas define a cor. Use cores hexadecimais de seis dígitos, como #38bdf8."
+      "scheduleCellColorRules": "A primeira correspondência sem diferenciar maiúsculas define a cor. Use cores hexadecimais de seis dígitos, como #38bdf8.",
+      "scheduleBoardDayPolicyKnown": "Desative quando somente as datas forem conhecidas. O histórico continua visível sem horas; configure início, fim e intervalo antes de reservar um dia."
     },
     "options": {
       "storedValueKind": {

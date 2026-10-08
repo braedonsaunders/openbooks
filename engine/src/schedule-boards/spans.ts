@@ -18,6 +18,7 @@ export interface BookingSpan {
 }
 
 export interface DayDefinition {
+  readonly dayPolicyKnown?: boolean;
   readonly timeZone: string;
   readonly dayStarts: string;
   readonly dayEnds: string;
@@ -77,6 +78,8 @@ function breakMinutes(value: unknown, wallMinutes: number): number {
 
 /** A whole working day booked from the board's standard day. */
 export function daySpan(day: DayDefinition, onDate: string): BookingSpan {
+  if (day.dayPolicyKnown === false) throw new ScheduleError('This board has no authoritative working-day hours.', {
+    code:'schedule_day_policy_missing',remedy:'Configure the start, end and break in Board Settings before booking a whole day.' });
   const date = requireDate(onDate, "Booking date");
   const starts = clockMinutes(day.dayStarts.slice(0, 5), "Day start");
   const ends = clockMinutes(day.dayEnds.slice(0, 5), "Day end");

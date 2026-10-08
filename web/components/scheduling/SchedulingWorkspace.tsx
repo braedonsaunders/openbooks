@@ -11,6 +11,8 @@ import {
 import { Button, Input, Select, Popover, cn } from '@openbooks/ui'
 import { SchedulingAlert } from './SchedulingAlert'
 import { BookingDrawer } from './BookingDrawer'
+import { SourceRecordDrawer } from './SourceRecord'
+import type { BoardSourceRecord } from '@openbooks/engine/src/schedule-boards/source-history.ts'
 import { CalendarView } from './CalendarView'
 import { NewBoardDrawer, type ScopeOptions } from './NewBoardDrawer'
 import { PeopleGrid } from './PeopleGrid'
@@ -98,6 +100,7 @@ function BoardShell(props: SchedulingWorkspaceProps & { board: ScheduleBoard; on
   const [compact, setCompact] = useState(false)
   const [spotlight, setSpotlight] = useState<string | null>(null)
   const [openEntry, setOpenEntry] = useState<BoardEntry | null>(null)
+  const [openSourceRecord, setOpenSourceRecord] = useState<BoardSourceRecord | null>(null)
   const [publishing, setPublishing] = useState(false)
   const [moreOpen, setMoreOpen] = useState(false)
   const range = useMemo(() => viewRange(view, anchor, rangeDays, board.weekStartsOn), [anchor, board.weekStartsOn, rangeDays, view])
@@ -261,19 +264,22 @@ function BoardShell(props: SchedulingWorkspaceProps & { board: ScheduleBoard; on
         ) : (
           <div className={cn('flex min-h-0 flex-1 flex-col transition-opacity', controller.loading && 'opacity-60')}>
             {view === 'grid' ? (
-              <PeopleGrid controller={controller} window={window} groupBy={groupBy} search={search} compact={compact} spotlight={spotlight} onSpotlight={setSpotlight} onOpenEntry={setOpenEntry} today={props.today} />
+              <PeopleGrid controller={controller} window={window} groupBy={groupBy} search={search} compact={compact} spotlight={spotlight} onSpotlight={setSpotlight} onOpenEntry={entry => { setOpenSourceRecord(null); setOpenEntry(entry) }} onOpenSourceRecord={record => { setOpenEntry(null); setOpenSourceRecord(record) }} today={props.today} />
             ) : view === 'targets' ? (
-              <TargetsView controller={controller} window={window} today={props.today} onOpenEntry={setOpenEntry} />
+              <TargetsView controller={controller} window={window} today={props.today} onOpenEntry={entry => { setOpenSourceRecord(null); setOpenEntry(entry) }} onOpenSourceRecord={record => { setOpenEntry(null); setOpenSourceRecord(record) }} />
             ) : view === 'timeline' ? (
-              <TimelineView controller={controller} window={window} groupBy={groupBy} search={search} today={props.today} onOpenEntry={setOpenEntry} />
+              <TimelineView controller={controller} window={window} groupBy={groupBy} search={search} today={props.today} onOpenEntry={entry => { setOpenSourceRecord(null); setOpenEntry(entry) }} onOpenSourceRecord={record => { setOpenEntry(null); setOpenSourceRecord(record) }} />
             ) : (
-              <CalendarView window={window} month={anchor.slice(0, 7)} today={props.today} onOpenEntry={setOpenEntry} />
+              <CalendarView window={window} month={anchor.slice(0, 7)} today={props.today} onOpenEntry={entry => { setOpenSourceRecord(null); setOpenEntry(entry) }} onOpenSourceRecord={record => { setOpenEntry(null); setOpenSourceRecord(record) }} />
             )}
           </div>
         )}
       </div>
 
-      {window && openEntry ? (
+      {window && openSourceRecord ? <SourceRecordDrawer record={openSourceRecord} records={window.sourceRecords ?? []}
+        workerName={window.rows.find(r => r.subjectId === openSourceRecord.workerPartyId)?.name ?? t('drawer.title')}
+        onSelect={setOpenSourceRecord} onClose={() => setOpenSourceRecord(null)} /> : null}
+      {window && openEntry && !openSourceRecord ? (
         <BookingDrawer entry={window.entries.find((entry) => entry.id === openEntry.id) ?? openEntry} window={window} controller={controller} onClose={() => setOpenEntry(null)} />
       ) : null}
       {props.newBoard}

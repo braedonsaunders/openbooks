@@ -41,14 +41,14 @@ export function scheduleDatabaseRefusal(error: unknown, context: { personName?: 
   while (cause && typeof cause === "object" && !seen.has(cause)) {
     seen.add(cause);
     const detail = cause as DatabaseCause;
-    if ((detail.code === "42P01" && /schedule_(?:boards|codes|entries)/.test(detail.message ?? "")) || (detail.code === "42703" && /resource_kind|cell_color_rules|show_totals|weekend_days|equipment_unit_id|resource_location_id/.test(detail.message ?? ""))) {
+    if ((detail.code === "42P01" && /schedule_(?:boards|codes|entries|source_records)/.test(detail.message ?? "")) || (detail.code === "42703" && /resource_kind|cell_color_rules|show_totals|weekend_days|equipment_unit_id|resource_location_id|day_policy_known/.test(detail.message ?? ""))) {
       return new ScheduleError("Scheduling needs its database upgrade before it can be used.", {
         status: 409,
         code: "schedule_upgrade_required",
         remedy: "Ask an administrator to apply the pending database migrations.",
       });
     }
-    if ((detail.code === "23514" || detail.code === "P0001") && /schedule_(?:entr|board|code)|schedule_entry_assert/.test(`${detail.where ?? ""} ${detail.constraint ?? ""}`) && detail.message && !detail.constraint) {
+    if ((detail.code === "23514" || detail.code === "P0001") && /schedule_(?:entr|board|code|source_record)|schedule_entry_assert/.test(`${detail.where ?? ""} ${detail.constraint ?? ""}`) && detail.message && !detail.constraint) {
       return new ScheduleError(detail.message, { code: "schedule_refused" });
     }
     if (detail.code === "23514" && detail.constraint && CHECK_REFUSALS[detail.constraint]) {

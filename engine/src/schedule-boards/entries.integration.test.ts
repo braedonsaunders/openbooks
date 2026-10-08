@@ -2,13 +2,14 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import { db, withBypassContext } from "../platform/db.ts";
+import { db, withBypassContext, withOrgTransaction } from "../platform/db.ts";
 import { createScratchOrg, createScratchUser, dropScratchOrgReporting } from "../testing/fixtures.ts";
 import { ScopeNotFoundError } from "../organization/subsidiary-scope.ts";
 import { applyBoardChanges, publishBoard, type BoardChange } from "./entries.ts";
 import { ScheduleError } from "./errors.ts";
 import { scheduledWork } from "./prefill.ts";
 import { loadBoardWindow } from "./window.ts";
+import { importSourceHistory, previewSourceHistory, sourceHistoryHash, type SourceScheduleBatch } from './source-history.ts';
 
 const enabled = { skip: !process.env.OPENBOOKS_DB_URL };
 type Org = Awaited<ReturnType<typeof createScratchOrg>>;
@@ -170,6 +171,105 @@ test("the window shows other boards' bookings read-only, and pre-fill offers onl
   assert.deepEqual(offered.map((work) => [work.onDate, work.hours, work.projectId]), [["2026-10-20", "8.0000", f.projectId]]);
 }));
 
+test('inactive employees retain source-date history without reactivation, hours, or new operational bookings', enabled, async()=>fixture(async f=>{
+  await withBypassContext(async()=> {
+    affected(await db.execute(sql`update parties set is_active=false where org_id=${f.org.orgId} and id=${f.ana}`),'inactive person');
+    affected(await db.execute(sql`update employee_roles set is_active=false where org_id=${f.org.orgId} and party_id=${f.ana}`),'inactive role');
+  });
+  const payload={id:17,onDate:'2020-01-02',label:'Literal/N',notes:'Retained original instructions'};
+  const batch:SourceScheduleBatch={sourceSystem:'Prior scheduling',sourceDataset:'schedule',captureHash:'a'.repeat(64),rows:[{
+    sourceKey:'17',sourceHash:sourceHistoryHash(payload),payload,disposition:'recorded',boardId:f.live,workerPartyId:f.ana,
+    onDate:'2020-01-02',label:'Literal/N',result:'Exact source description',notes:'Retained original instructions',visibleInSource:false,
+    linkedEntryId:null,reason:'Preserve source-date history without altering current employment.',expectedPriorId:null}]};
+  const preview=await previewSourceHistory(actor(f),batch);const first=await importSourceHistory(actor(f),batch,preview.approvalHash);
+  assert.equal(first[0]?.state,'created');
+  const repeated=await previewSourceHistory(actor(f),batch);const replay=await importSourceHistory(actor(f),batch,repeated.approvalHash);
+  assert.equal(replay[0]?.state,'unchanged');assert.equal(replay[0]?.id,first[0]?.id);
+  const window=await loadBoardWindow({...actor(f),boardId:f.live,from:'2020-01-01',through:'2020-01-03'});
+  assert.equal(window.rows.some(r=>r.subjectId===f.ana),true);assert.equal(window.entries.length,0);
+  assert.equal(window.sourceRecords?.[0]?.label,'Literal/N');assert.equal(window.sourceRecords?.[0]?.visibleInSource,false);
+  const state=await withBypassContext(()=>db.execute<{is_active:boolean}>(sql`select is_active from parties where org_id=${f.org.orgId} and id=${f.ana}`));
+  assert.equal(state.rows[0]?.is_active,false);
+  await assert.rejects(withBypassContext(()=>db.execute(sql`update schedule_source_records set label='Changed' where org_id=${f.org.orgId} and id=${first[0]!.id}`)),/immutable/);
+  const work=await scheduledWork({orgId:f.org.orgId,use:'timesheets',workerPartyId:f.ana,from:'2020-01-01',through:'2020-01-03'});
+  assert.deepEqual(work,[]);
+  await withBypassContext(()=>db.execute(sql`update orgs set settings=jsonb_set(settings,'{features,hrmShiftPlanning}','false'::jsonb) where id=${f.org.orgId}`));
+  await assert.rejects(previewSourceHistory(actor(f),batch),(error:unknown)=>error instanceof ScheduleError && error.code==='schedule_disabled');
+  const preserved=await withBypassContext(()=>db.execute(sql`select id from schedule_source_records where org_id=${f.org.orgId}`));
+  assert.equal(preserved.rows.length,1);
+}));
+
+test('published booking history remains visible after employee deactivation and unknown day policy refuses new whole-day bookings',enabled,async()=>fixture(async f=>{
+  const booked=day(f,f.ana,'2026-10-20',{kind:'code',id:f.codeId});
+  assert.equal((await applyBoardChanges({...actor(f),boardId:f.live,changes:[booked]})).results[0]?.ok,true);
+  await withBypassContext(async()=> {
+    affected(await db.execute(sql`update parties set is_active=false where org_id=${f.org.orgId} and id=${f.ana}`),'deactivate person');
+    affected(await db.execute(sql`update employee_roles set is_active=false where org_id=${f.org.orgId} and party_id=${f.ana}`),'deactivate role');
+    affected(await db.execute(sql`update schedule_boards set day_policy_known=false where org_id=${f.org.orgId} and id=${f.live}`),'unknown day policy');
+  });
+  const window=await loadBoardWindow({...actor(f),boardId:f.live,from:'2026-10-20',through:'2026-10-20'});
+  assert.equal(window.entries[0]?.id,booked.id);assert.equal(window.entries[0]?.workedMinutes,480);
+  const refused=await applyBoardChanges({...actor(f),boardId:f.live,changes:[day(f,f.ben,'2026-10-21',null)]});
+  assert.equal(refused.results[0]?.ok,false);
+  assert.equal(refused.results[0] && !refused.results[0].ok ? refused.results[0].code:null,'schedule_day_policy_missing');
+}));
+
+const historyBatch = (f: Fixture, sourceKey: string): SourceScheduleBatch => {
+  const payload = { id: sourceKey, date: '2018-03-01', label: 'Original dispatch' };
+  return { sourceSystem: 'Previous scheduling', sourceDataset: 'manpower', captureHash: 'b'.repeat(64), rows: [{
+    sourceKey, sourceHash: sourceHistoryHash(payload), payload, disposition: 'recorded', boardId: f.live,
+    workerPartyId: f.ana, onDate: '2018-03-01', label: 'Original dispatch', result: null, notes: null,
+    visibleInSource: true, linkedEntryId: null, reason: 'Retain exact source dates without asserting working hours.', expectedPriorId: null,
+  }] };
+};
+
+test('source successors require the current assessment and preserve both original evidence and audit', enabled, async()=>fixture(async f=>{
+  await withBypassContext(()=>db.execute(sql`update schedule_boards set cell_color_rules='[{"field":"bookingLabel","match":"startsWith","value":"Original","color":"#123456"}]'::jsonb where org_id=${f.org.orgId} and id=${f.live}`));
+  const original = historyBatch(f, 'successor');
+  const first = await importSourceHistory(actor(f), original, (await previewSourceHistory(actor(f), original)).approvalHash);
+  const payload = { ...original.rows[0]!.payload, label: 'Corrected source dispatch' };
+  const changed: SourceScheduleBatch = { ...original, rows: [{ ...original.rows[0]!, payload, sourceHash: sourceHistoryHash(payload), label: 'Corrected source dispatch' }] };
+  await assert.rejects(previewSourceHistory(actor(f), changed), (error:unknown)=>error instanceof ScheduleError && error.code === 'schedule_source_stale');
+  const successor = { ...changed, rows: [{ ...changed.rows[0]!, expectedPriorId: first[0]!.id }] };
+  const before = await loadBoardWindow({...actor(f),boardId:f.live,from:'2018-03-01',through:'2018-03-01'});
+  assert.equal(before.sourceRecords?.[0]?.color,'#123456');
+  const next = await importSourceHistory(actor(f), successor, (await previewSourceHistory(actor(f), successor)).approvalHash);
+  assert.notEqual(next[0]!.id, first[0]!.id);
+  const window = await loadBoardWindow({ ...actor(f), boardId:f.live, from:'2018-03-01', through:'2018-03-01' });
+  assert.deepEqual(window.sourceRecords?.map(record=>record.label), ['Corrected source dispatch']);
+  const retained = await withBypassContext(()=>db.execute<{label:string;supersedes_id:string|null}>(sql`
+    select label,supersedes_id from schedule_source_records where org_id=${f.org.orgId} order by created_at,id`));
+  assert.equal(retained.rows.length,2);
+  assert.ok(retained.rows.some(row=>row.label==='Original dispatch' && row.supersedes_id===null));
+  assert.ok(retained.rows.some(row=>row.supersedes_id===first[0]!.id));
+  const audit = await withBypassContext(()=>db.execute(sql`select id from audit_log where org_id=${f.org.orgId}
+    and table_name='schedule_source_records' and actor_id=${f.actorId}`));
+  assert.equal(audit.rows.length,2);
+}));
+
+test('source evidence and its audit roll back together and concurrent previews cannot create duplicate heads', enabled, async()=>fixture(async f=>{
+  const first = historyBatch(f, 'atomic');
+  const second = historyBatch(f, 'atomic-second');
+  const batch = { ...first, rows:[...first.rows,...second.rows] };
+  const preview = await previewSourceHistory(actor(f), batch);
+  await assert.rejects(withOrgTransaction(f.org.orgId,async()=> {
+    await importSourceHistory(actor(f),batch,preview.approvalHash);
+    throw new Error('Reject the enclosing business operation');
+  }),/enclosing business operation/);
+  const empty = await withBypassContext(()=>db.execute<{records:string;audits:string}>(sql`select
+    (select count(*)::text from schedule_source_records where org_id=${f.org.orgId}) records,
+    (select count(*)::text from audit_log where org_id=${f.org.orgId} and table_name='schedule_source_records') audits`));
+  assert.deepEqual(empty.rows[0],{records:'0',audits:'0'});
+  const attempts = await Promise.allSettled([
+    importSourceHistory(actor(f),batch,preview.approvalHash), importSourceHistory(actor(f),batch,preview.approvalHash),
+  ]);
+  assert.equal(attempts.filter(result=>result.status==='fulfilled').length,1);
+  const refused = attempts.find(result=>result.status==='rejected');
+  assert.ok(refused?.status==='rejected' && refused.reason instanceof ScheduleError && refused.reason.code==='schedule_source_stale');
+  const repeated = await importSourceHistory(actor(f),batch,(await previewSourceHistory(actor(f),batch)).approvalHash);
+  assert.deepEqual(repeated.map(row=>row.state),['unchanged','unchanged']);
+}));
+
 test("boards and bookings stay inside their organization", enabled, async () => fixture(async (f) => {
   const outsider = await withBypassContext(() => createScratchOrg());
   try {
@@ -180,6 +280,7 @@ test("boards and bookings stay inside their organization", enabled, async () => 
     });
     await withBypassContext(() => db.execute(sql`update orgs set settings = jsonb_set(settings, '{features}', coalesce(settings->'features', '{}'::jsonb) || '{"hrm":true,"hrmShiftPlanning":true}'::jsonb) where id = ${outsider.orgId}`));
     await assert.rejects(loadBoardWindow({ orgId: outsider.orgId, actorId: outsiderActor, boardId: f.live, from: "2026-10-18" }), ScopeNotFoundError);
+    await assert.rejects(previewSourceHistory({orgId:outsider.orgId,actorId:outsiderActor},historyBatch(f,'isolated')),ScopeNotFoundError);
     await assert.rejects(
       applyBoardChanges({ orgId: outsider.orgId, actorId: outsiderActor, boardId: f.live, changes: [day(f, f.ana, "2026-10-22", null)] }),
       ScopeNotFoundError,
@@ -224,6 +325,12 @@ for (const kind of ['equipment','location'] as const) test(`${kind} reservations
   assert.ok(window.rows.some(row => row.subjectId === resources.subjectId && row.subjectKind === kind));
   assert.deepEqual(window.absences,[]);
   assert.equal(window.board.showTotals,false);
+  await withBypassContext(()=>db.execute(kind==='equipment'
+    ? sql`update equipment_units set status='inactive' where org_id=${f.org.orgId} and id=${resources.subjectId}`
+    : sql`update locations set is_active=false where org_id=${f.org.orgId} and id=${resources.subjectId}`));
+  const historical=await loadBoardWindow({...actor(f),boardId:resources.first,from:'2026-10-23',through:'2026-10-23'});
+  assert.ok(historical.rows.some(row=>row.subjectId===resources.subjectId));
+  assert.ok(historical.entries.some(entry=>entry.subjectId===resources.subjectId));
   const wrong = await applyBoardChanges({ ...actor(f),boardId:resources.first,changes:[day(f,f.ana,'2026-10-25',null)] });
   assert.equal(wrong.results[0]?.ok,false);
   assert.equal(wrong.results[0] && !wrong.results[0].ok ? wrong.results[0].code : null,'schedule_wrong_subject');

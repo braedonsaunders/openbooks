@@ -3985,7 +3985,8 @@
       "showTotals": "Afficher les totaux en bas",
       "cellColorRules": "Règles de couleur",
       "field": "Champ",
-      "match": "Correspondance"
+      "match": "Correspondance",
+      "dayPolicyKnown": "Les horaires de la journée sont configurés"
     },
     "fieldHelp": {
       "fxRateMaxAgeDays": "Nombre de jours entre le taux utilisable le plus récent et la fin de période au-delà duquel la réévaluation et la consolidation refusent le taux. Les taux de clôture se comptent depuis la date du taux comptant de fin de période ; les taux moyens depuis la cotation la plus récente incluse dans la moyenne. Valeur par défaut sans politique : 31 jours.",
@@ -4150,7 +4151,8 @@
       "scheduleCodeColor": "La couleur d’affichage des affectations utilisant ce code, en valeur hexadécimale, par exemple #38bdf8.",
       "scheduleWeekendDays": "Jours à griser sans calendrier ouvrable applicable. Le calendrier est prioritaire.",
       "scheduleShowTotals": "Afficher les lignes et heures réservées après les pauses configurées.",
-      "scheduleCellColorRules": "La première règle correspondante, sans distinction de casse, définit la couleur. Utilisez un code hexadécimal à six chiffres, comme #38bdf8."
+      "scheduleCellColorRules": "La première règle correspondante, sans distinction de casse, définit la couleur. Utilisez un code hexadécimal à six chiffres, comme #38bdf8.",
+      "scheduleBoardDayPolicyKnown": "Désactivez si seules les dates sont connues. L’historique reste visible sans heures ; configurez les horaires avant de réserver une journée."
     },
     "options": {
       "storedValueKind": {

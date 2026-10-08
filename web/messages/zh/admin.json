@@ -4060,7 +4060,8 @@
       "showTotals": "显示底部合计",
       "cellColorRules": "颜色规则",
       "field": "字段",
-      "match": "匹配"
+      "match": "匹配",
+      "dayPolicyKnown": "已配置工作日时间"
     },
     "fieldHelp": {
       "fxRateMaxAgeDays": "最新可用汇率距期末的天数超过此值时，重估和合并将拒绝该汇率。期末汇率从期末即期汇率的日期起算；平均汇率从计入平均的最新报价日期起算。未设置政策时的默认值：31 天。",
@@ -4225,7 +4226,8 @@
       "scheduleCodeColor": "使用此代码的安排所显示的颜色，以十六进制值表示，如 #38bdf8。",
       "scheduleWeekendDays": "没有适用营业日历时将这些星期着色。营业日历优先。",
       "scheduleShowTotals": "显示预订行数和扣除配置休息后的实际预订小时。",
-      "scheduleCellColorRules": "按顺序使用首个不区分大小写的匹配规则。请使用六位十六进制颜色，如 #38bdf8。"
+      "scheduleCellColorRules": "按顺序使用首个不区分大小写的匹配规则。请使用六位十六进制颜色，如 #38bdf8。",
+      "scheduleBoardDayPolicyKnown": "仅知道原始日期时关闭。历史记录仍显示但没有工时；整日预约需要配置开始、结束和休息时间。"
     },
     "options": {
       "storedValueKind": {

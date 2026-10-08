@@ -1,0 +1,1 @@
+Adds an immutable source scheduling evidence ledger and an authoritative-day-policy flag defaulting to true for all existing boards. Existing booking spans and employee lifecycle remain unchanged. Unknown-policy refusal affects new whole-day bookings only; source-date records supply no hours, payroll or financial transactions.
