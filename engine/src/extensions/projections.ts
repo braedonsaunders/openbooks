@@ -8,8 +8,8 @@ import { defaultNavConfig, type OrgNavConfig } from '../navigation/nav-registry.
 import { supplementalContributionSchema, type SupplementalContribution } from './contribution-schemas.ts';
 
 export async function listActiveExtensionContributions(orgId: string, tx: SqlExecutor = db) {
-  const rows = (await tx.execute<{ extensionKey: string; extensionId: string; versionId: string; manifest: { contributions?: unknown[] } }>(sql`
-    select m.key as "extensionKey", m.id as "extensionId", v.id as "versionId", v.manifest
+  const rows = (await tx.execute<{ extensionKey: string; extensionName: string; extensionId: string; versionId: string; manifest: { contributions?: unknown[] } }>(sql`
+    select m.key as "extensionKey", m.name as "extensionName", m.id as "extensionId", v.id as "versionId", v.manifest
     from apps m join app_versions v on v.id = m.active_version_id and v.org_id = m.org_id
     where m.org_id = ${orgId} and m.status = 'installed' and (select settings->'features'->'apps' from orgs where id=${orgId}) is distinct from 'false'::jsonb
   `)).rows;

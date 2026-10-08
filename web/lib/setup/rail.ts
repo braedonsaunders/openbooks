@@ -26,9 +26,44 @@ export type SetupRailFlags = {
   shippingEnabled?: boolean
   payrollEnabled?: boolean
   hrmEnabled?: boolean
+  /** Installed apps that declare at least one setting, in display order. */
+  appSettings?: { key: string; name: string }[]
 }
 
-export type SetupRailItem = { href: string; labelKey: string; iconKey: string }
+/** A rail entry is labelled by a message key, or by the installed app's own name. */
+export type SetupRailItem = { href: string; iconKey: string } & ({ labelKey: string; label?: never } | { label: string; labelKey?: never })
+
+export function setupRailItemLabel(item: SetupRailItem, translate: (key: string) => string): string {
+  return item.label ?? translate(item.labelKey)
+}
+
+/** The Setup page listing one installed app's declared settings. */
+export function appSettingsHref(appKey: string): string {
+  return `/admin/setup/apps/${encodeURIComponent(appKey)}`
+}
+
+/** Payment operations views, each its own Setup page. */
+export const PAYMENT_SETUP_PAGES = [
+  { view: 'profiles', iconKey: 'landmark' },
+  { view: 'formats', iconKey: 'file' },
+  { view: 'schedules', iconKey: 'timer' },
+] as const
+
+/** CRM configuration lists, each its own Setup page. */
+export const CRM_SETUP_PAGES = [
+  { tab: 'accountStatuses', iconKey: 'users' },
+  { tab: 'opportunityStatuses', iconKey: 'trending-up' },
+  { tab: 'sources', iconKey: 'tag' },
+] as const
+
+export function paymentSetupHref(view: (typeof PAYMENT_SETUP_PAGES)[number]['view']): string {
+  return `/admin/setup/payment-operations?view=${view}`
+}
+
+export function crmSetupHref(tab: (typeof CRM_SETUP_PAGES)[number]['tab']): string {
+  return `/admin/setup/crm?tab=${tab}`
+}
+
 export type SetupRailGroup = { key: string; labelKey: string; items: SetupRailItem[] }
 export type SetupRail = { groups: SetupRailGroup[]; data: { labelKey: string; items: SetupRailItem[] } }
 
@@ -51,6 +86,7 @@ export function setupRail({
   shippingEnabled = false,
   payrollEnabled = false,
   hrmEnabled = false,
+  appSettings = [],
 }: SetupRailFlags): SetupRail {
   // Drop feature-gated entities (e.g. subsidiary tabs when multi-subsidiary is off).
   const hidden = new Set(hiddenEntityKeys)
@@ -65,7 +101,7 @@ export function setupRail({
 
   const groups: SetupRailGroup[] = []
   for (const group of SETUP_GROUPS) {
-    if (!canManageSetup && group.key !== 'company' && !(group.key === 'workforce' && (canManagePerformance || canManageCompensation || canReadPayrollPackages))) continue
+    if (!canManageSetup && group.key !== 'company' && !(group.key === 'sales' && canManageCrm) && !(group.key === 'workforce' && (canManagePerformance || canManageCompensation || canReadPayrollPackages))) continue
     const items: SetupRailItem[] =
       group.key === 'accounting'
         ? [
@@ -82,17 +118,27 @@ export function setupRail({
             { href: '/admin/setup/company#sample-companies', labelKey: 'data.import.sample.industry', iconKey: 'sparkles' },
             { href: '/admin/setup/features', labelKey: 'admin.setup.features.navTitle', iconKey: 'layers' },
             ...entities(group.key),
+          ]
+        : group.key === 'banking'
+        ? [
             ...(bankFeedsEnabled
               ? [{ href: '/admin/setup/bank-feeds', labelKey: 'admin.setup.bankFeeds.navTitle', iconKey: 'landmark' }]
               : []),
             ...(onlinePaymentsEnabled
               ? [{ href: '/admin/setup/payment-providers', labelKey: 'admin.setup.paymentProviders.navTitle', iconKey: 'payments' }]
               : []),
-            { href: '/admin/setup/payment-operations', labelKey: 'admin.setup.entities.payment-operations.title', iconKey: 'payments' },
-            ...(crmEnabled
-              ? [{ href: '/admin/setup/crm', labelKey: 'crm.setup.title', iconKey: 'users' }]
-              : []),
+            ...PAYMENT_SETUP_PAGES.map(({ view, iconKey }) => ({ href: paymentSetupHref(view), labelKey: `admin.setup.paymentOperations.tabs.${view}`, iconKey })),
+            ...entities(group.key),
           ]
+        : group.key === 'sales'
+        ? [
+            ...(crmEnabled
+              ? CRM_SETUP_PAGES.map(({ tab, iconKey }) => ({ href: crmSetupHref(tab), labelKey: `crm.setup.tabs.${tab}`, iconKey }))
+              : []),
+            ...entities(group.key),
+          ]
+        : group.key === 'apps'
+        ? appSettings.map((app) => ({ href: appSettingsHref(app.key), label: app.name, iconKey: 'box' }))
         : group.key === 'currency'
         ? [
             ...(currencyEnabled
@@ -165,7 +211,7 @@ export function setupRail({
           ]
         : entities(group.key)
     const authorizedItems = group.key === 'workforce' && canReadPayrollPackages && !canManageSetup ? [...items, { href: '/admin/setup/payroll?tab=compensation-packages', labelKey: 'admin.setup.entities.payroll-compensation-packages.title', iconKey: 'coins' }] : items
-    const visibleItems = canManageSetup ? authorizedItems : authorizedItems.filter((item) => (canManageCrm && item.href === '/admin/setup/crm') || (canManagePerformance && item.href === '/admin/setup/performance') || (canManageCompensation && item.href === '/admin/setup/compensation') || (canReadPayrollPackages && item.href === '/admin/setup/payroll?tab=compensation-packages'))
+    const visibleItems = canManageSetup ? authorizedItems : authorizedItems.filter((item) => (canManageCrm && item.href.startsWith('/admin/setup/crm?')) || (canManagePerformance && item.href === '/admin/setup/performance') || (canManageCompensation && item.href === '/admin/setup/compensation') || (canReadPayrollPackages && item.href === '/admin/setup/payroll?tab=compensation-packages'))
     if (visibleItems.length === 0) continue
     groups.push({ key: group.key, labelKey: `admin.setup.groups.${group.key}`, items: visibleItems })
   }

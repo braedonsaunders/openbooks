@@ -60,7 +60,8 @@
       "relationship": "Relación",
       "paymentMethods": "Métodos de pago",
       "externalIds": "ID externos",
-      "billing": "Facturación"
+      "billing": "Facturación",
+      "debitMandates": "Mandatos de débito"
     },
     "autopay": {
       "heading": "Métodos de pago",
@@ -108,6 +109,46 @@
       "moveUp": "Mover antes en el orden de respaldo",
       "moveDown": "Mover después en el orden de respaldo",
       "reorderFailed": "No se pudo cambiar el orden de respaldo."
+    },
+    "debitMandates": {
+      "heading": "Mandatos de débito",
+      "description": "Autorizaciones firmadas para cobrar de la cuenta bancaria de este cliente mediante débito directo. Los cobros usan el mandato activo firmado más recientemente que sea válido en la fecha de cobro.",
+      "new": "Nuevo mandato",
+      "newTitle": "Nuevo mandato de débito",
+      "editTitle": "Editar mandato de débito",
+      "drawerDescription": "Registre la autorización que este cliente firmó para cobrar fondos de su cuenta bancaria.",
+      "lockedNote": "La cuenta bancaria, el esquema y la referencia quedan fijos una vez registrado el mandato.",
+      "noApprovedAccounts": "Este cliente no tiene una cuenta bancaria aprobada. Agregue una en la <link>pestaña Contabilidad</link> del tercero; podrá seleccionarse una vez aprobada.",
+      "empty": "No hay mandatos de débito registrados.",
+      "select": "Seleccionar…",
+      "saved": "Mandato de débito guardado",
+      "saveFailed": "No se pudo guardar el mandato de débito.",
+      "loadFailed": "No se pudieron cargar los mandatos de débito.",
+      "fields": {
+        "bankAccount": "Cuenta bancaria aprobada",
+        "scheme": "Esquema del mandato",
+        "reference": "Referencia del mandato",
+        "signedOn": "Firmado el",
+        "validFrom": "Válido desde",
+        "expiresOn": "Vence el"
+      },
+      "columns": {
+        "bankAccount": "Cuenta bancaria"
+      },
+      "states": {
+        "pending": "Pendiente",
+        "active": "Activo",
+        "suspended": "Suspendido",
+        "revoked": "Revocado",
+        "expired": "Vencido"
+      },
+      "schemes": {
+        "custom": "Personalizado"
+      },
+      "validation": {
+        "bankAccount": "Elija una cuenta bancaria aprobada para el mandato.",
+        "reference": "Introduzca la referencia del mandato."
+      }
     },
     "wages": {
       "title": "Tarifas salariales",

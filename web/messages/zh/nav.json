@@ -247,7 +247,6 @@
     "setup-depreciation": "账面折旧",
     "setup-tax-depreciation": "税务折旧",
     "setup-overhead": "间接费用",
-    "setup-payments": "付款与银行业务",
     "crm-sales": "销售",
     "hrm-compensation": "薪酬"
   }

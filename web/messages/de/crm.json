@@ -237,67 +237,41 @@
   },
   "setup": {
     "title": "CRM",
-    "description": "Konfigurieren Sie Lebenszyklus-Status, Verkaufschancen-Phasen, Lead-Quellen, Gebiete, Vertriebsteams und Quoten.",
     "sequence": "Reihenfolge",
-    "priority": "Priorität",
-    "defaultOwner": "Standard-Verantwortlicher",
-    "manager": "Manager",
     "empty": "Keine passenden Konfigurationsdatensätze.",
     "openRecord": "{name} öffnen",
     "percent": "{value} %",
-    "memberCount": "{count, plural, one {# Mitglied} other {# Mitglieder}}",
     "created": "CRM-Konfigurationsdatensatz erstellt",
     "updated": "CRM-Konfigurationsdatensatz aktualisiert",
     "new": {
       "accountStatuses": "Neuer Kontostatus",
       "opportunityStatuses": "Neue Verkaufschancen-Phase",
-      "sources": "Neue Lead-Quelle",
-      "territories": "Neues Gebiet",
-      "teams": "Neues Vertriebsteam",
-      "quotas": "Neue Quote"
+      "sources": "Neue Lead-Quelle"
     },
     "search": {
       "accountStatuses": "Kontostatus durchsuchen",
       "opportunityStatuses": "Verkaufschancen-Phasen durchsuchen",
-      "sources": "Lead-Quellen durchsuchen",
-      "territories": "Gebiete durchsuchen",
-      "teams": "Vertriebsteams durchsuchen",
-      "quotas": "Quoten durchsuchen"
+      "sources": "Lead-Quellen durchsuchen"
     },
     "drawer": {
       "new": {
         "accountStatuses": "Neuer Kontostatus",
         "opportunityStatuses": "Neue Verkaufschancen-Phase",
-        "sources": "Neue Lead-Quelle",
-        "territories": "Neues Gebiet",
-        "teams": "Neues Vertriebsteam",
-        "quotas": "Neue Quote"
+        "sources": "Neue Lead-Quelle"
       },
       "edit": {
         "accountStatuses": "Kontostatus bearbeiten",
         "opportunityStatuses": "Verkaufschancen-Phase bearbeiten",
-        "sources": "Lead-Quelle bearbeiten",
-        "territories": "Gebiet bearbeiten",
-        "teams": "Vertriebsteam bearbeiten",
-        "quotas": "Quote bearbeiten"
+        "sources": "Lead-Quelle bearbeiten"
       },
       "description": {
         "accountStatuses": "Steuern Sie die Klassifizierung des Beziehungslebenszyklus und das Qualifizierungsverhalten.",
         "opportunityStatuses": "Steuern Sie Pipeline-Wahrscheinlichkeit, Prognosebehandlung und Abschlussverhalten.",
-        "sources": "Pflegen Sie die normalisierten Akquisitionsquellen, die im gesamten CRM verwendet werden.",
-        "territories": "Konfigurieren Sie Zuständigkeiten und deterministische Weiterleitungsregeln.",
-        "teams": "Weisen Sie diesem Vertriebsteam einen Manager und die aktiven Mitglieder zu.",
-        "quotas": "Legen Sie ein Periodenziel für einen Vertriebsmitarbeiter oder ein Team fest."
+        "sources": "Pflegen Sie die normalisierten Akquisitionsquellen, die im gesamten CRM verwendet werden."
       }
     },
     "fields": {
       "name": "Name",
-      "matchMode": "Regelabgleich",
-      "rules": "Weiterleitungsregeln",
-      "rulesHint": "Optional. Jede Regel gleicht ein Feld mit einem Wert ab, um Leads hierher weiterzuleiten. Felder: region, country, annualRevenue. Operatoren: equals, contains, in, gte, lte.",
-      "rulesPlaceholder": "['{ \"field\": \"region\", \"operator\": \"equals\", \"value\": \"West\" }']",
-      "members": "Teammitglieder",
-      "targetType": "Zieltyp",
       "isQualified": "Qualifizierter Status",
       "isClosed": "Abgeschlossener Status",
       "isWon": "Gewonnener Status",
@@ -314,25 +288,18 @@
       "yes": "Ja",
       "no": "Nein"
     },
-    "matchModes": {
-      "all": "Alle Regeln erfüllen",
-      "any": "Beliebige Regel erfüllen"
-    },
-    "targetTypes": {
-      "user": "Vertriebsmitarbeiter",
-      "team": "Vertriebsteam"
-    },
     "validation": {
-      "nameRequired": "Geben Sie einen Namen ein.",
-      "invalidRules": "Weiterleitungsregeln müssen ein gültiges JSON-Array sein."
+      "nameRequired": "Geben Sie einen Namen ein."
     },
     "tabs": {
       "accountStatuses": "Kontostatus",
       "opportunityStatuses": "Verkaufschancen-Phasen",
-      "sources": "Lead-Quellen",
-      "territories": "Gebiete",
-      "teams": "Vertriebsteams",
-      "quotas": "Quoten"
+      "sources": "Lead-Quellen"
+    },
+    "descriptions": {
+      "accountStatuses": "Lebenszyklusstatus für Leads, Interessenten und Kunden sowie welche als qualifiziert gelten.",
+      "opportunityStatuses": "Pipeline-Phasen mit Abschlusswahrscheinlichkeit, Prognosekategorie und den Voraussetzungen für den Eintritt.",
+      "sources": "Herkunft von Leads für Zuordnung und Berichte."
     },
     "columns": {
       "name": "Name",
@@ -341,18 +308,9 @@
       "probability": "Wahrscheinlichkeit",
       "default_forecast_category": "Prognosekategorie",
       "description": "Beschreibung",
-      "priority": "Priorität",
-      "owner_name": "Verantwortlicher",
-      "manager_name": "Manager",
-      "period_start": "Periodenbeginn",
-      "period_end": "Periodenende",
-      "amount": "Betrag",
       "is_qualified": "Qualifiziert",
       "is_closed": "Abgeschlossen",
-      "is_active": "Status",
-      "member_count": "Mitglieder",
-      "target_name": "Ziel",
-      "currency": "Währung"
+      "is_active": "Status"
     }
   },
   "validation": {

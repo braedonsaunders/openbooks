@@ -1068,3 +1068,127 @@ test("the customer rail gains a billing tab only with the consolidated-billing r
   assert.ok(!vendor.includes(label), "the billing tab never rides a vendor drawer");
   if (prior) t.after(prior);
 });
+
+const MANDATE_GRANTS = { debitMandates: { partyId: PARTY_ID } };
+
+const MANDATE_ROW = {
+  id: "mandate-1",
+  mandateReference: "MND-0001",
+  scheme: "sepa_core",
+  status: "pending",
+  partyBankAccountId: "bank-1",
+  bankAccountLabel: "First Bank · ••••1234",
+  signedOn: "2026-09-01",
+  validFrom: null,
+  expiresOn: null,
+};
+
+function mandateFetch(seen: Array<{ url: string; method: string; body: Record<string, unknown> | null }>, mandates: Record<string, unknown>[]) {
+  return (url: string, init?: RequestInit) => {
+    const method = init?.method ?? "GET";
+    seen.push({ url, method, body: typeof init?.body === "string" ? JSON.parse(init.body) as Record<string, unknown> : null });
+    if (url === `/api/parties/${PARTY_ID}/debit-mandates`) {
+      return Response.json({ mandates, bankAccounts: [{ id: "bank-1", label: "First Bank · ••••1234" }] });
+    }
+    if (url.startsWith("/api/admin/payment-operations/mandates")) {
+      return Response.json(method === "POST" ? { id: "mandate-2" } : { ok: true }, { status: method === "POST" ? 201 : 200 });
+    }
+    return null;
+  };
+}
+
+/** The shared Select proxies a hidden native select beside its labelled trigger. */
+function nativeSelect(id: string): HTMLSelectElement {
+  const select = document.getElementById(id)?.closest("span")?.querySelector("select");
+  assert.ok(select, `the ${id} select must render`);
+  return select as HTMLSelectElement;
+}
+
+async function clickButton(name: string) {
+  const button = [...document.querySelectorAll("button")].find((element) => element.textContent?.trim() === name) as HTMLButtonElement | undefined;
+  assert.ok(button, `the ${name} button must render`);
+  await act(async () => {
+    button.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+    await tick();
+  });
+  await tick();
+  await tick();
+}
+
+test("the debit-mandates tab rides only a granted customer record and a stale deep link falls back to overview", async (t) => {
+  const label = en("parties.drawer.tabs.debitMandates");
+  let prior: (() => Promise<void>) | null = null;
+  const render = async (options: Parameters<typeof renderDrawer>[0]) => {
+    if (prior) {
+      const unmount = prior;
+      prior = null;
+      await unmount();
+    }
+    const { done } = await renderCustomerDrawer({ fetchHandler: mandateFetch([], []), ...options });
+    prior = done;
+    return railTabs();
+  };
+  const pressed = (tabs: HTMLButtonElement[]) => tabs.find((button) => button.getAttribute("aria-pressed") === "true")?.textContent?.trim();
+
+  const ungranted = await render({ initialTab: "debitMandates" });
+  assert.ok(!ungranted.map((button) => button.textContent?.trim()).includes(label), "the tab stays hidden without the mandate grant");
+  assert.equal(pressed(ungranted), en("parties.drawer.tabs.overview"), "a stale deep link lands on overview");
+
+  const roleless = await render({ initialTab: "debitMandates", payload: VENDOR_PAYLOAD, generic: true, grants: MANDATE_GRANTS });
+  assert.ok(!roleless.map((button) => button.textContent?.trim()).includes(label), "a party without the customer role never shows mandates");
+  assert.equal(pressed(roleless), en("parties.drawer.tabs.overview"), "the deep link falls back when the customer role is missing");
+
+  const granted = await render({ initialTab: "debitMandates", grants: MANDATE_GRANTS });
+  assert.equal(pressed(granted), label, "the granted customer deep link opens the mandates tab");
+  assert.ok(await waitForText(en("parties.drawer.debitMandates.empty")), "the tab body is the mandates panel");
+  if (prior) t.after(prior);
+});
+
+test("a new mandate is issued to the drawer's party and an edit sends only the mutable fields", async (t) => {
+  const seen: Array<{ url: string; method: string; body: Record<string, unknown> | null }> = [];
+  const { done } = await renderCustomerDrawer({
+    initialTab: "debitMandates",
+    grants: MANDATE_GRANTS,
+    fetchHandler: mandateFetch(seen, [MANDATE_ROW]),
+  });
+  t.after(done);
+  assert.ok(await waitForText("MND-0001"), "the party's mandate must list by reference");
+
+  await clickButton(en("parties.drawer.debitMandates.new"));
+  const bank = nativeSelect("debit-mandate-bank-account");
+  const reference = document.getElementById("debit-mandate-reference") as HTMLInputElement;
+  assert.ok(bank && reference, "the new-mandate drawer offers the bank account and reference");
+  await act(async () => {
+    setSelectValue(bank, "bank-1");
+    setInputValue(reference, "  MND-0002 ");
+    await tick();
+  });
+  await clickButton(en("common.actions.save"));
+  const created = seen.find((request) => request.method === "POST");
+  assert.deepEqual(created?.body, {
+    partyId: PARTY_ID,
+    partyBankAccountId: "bank-1",
+    scheme: "nacha",
+    mandateReference: "MND-0002",
+    status: "pending",
+  }, "the create carries the drawer's party and the scheme the form displays");
+
+  const row = [...document.querySelectorAll("tr")].find((element) => element.textContent?.includes("MND-0001"));
+  const edit = [...(row?.querySelectorAll("button") ?? [])].find((button) => button.textContent?.trim() === en("common.actions.edit"));
+  assert.ok(edit, "each mandate row offers an edit");
+  await act(async () => {
+    edit.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+    await tick();
+  });
+  await tick();
+  assert.ok((document.getElementById("debit-mandate-reference") as HTMLInputElement).disabled, "the reference is fixed after create");
+  await act(async () => {
+    setSelectValue(nativeSelect("debit-mandate-status"), "active");
+    await tick();
+  });
+  await clickButton(en("common.actions.save"));
+  const updated = seen.find((request) => request.method === "PATCH");
+  assert.equal(updated?.url, "/api/admin/payment-operations/mandates/mandate-1");
+  assert.deepEqual(updated?.body, { status: "active", signedOn: "2026-09-01", validFrom: "", expiresOn: "" },
+    "an edit never resends the party, bank account, scheme or reference the route refuses");
+});

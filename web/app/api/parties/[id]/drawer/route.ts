@@ -83,9 +83,15 @@ export const GET = defineRoute({
   const consolidatedBilling = role === 'customer' && await isFeatureEnabled(gate.user.orgId, 'consolidatedBilling')
     ? { canManage: can(gate, 'documents.manage') }
     : null
+  // Debit mandates ride the grant the mandate routes enforce plus the
+  // customer role row; the drawer hides the tab when this is null.
+  const debitMandates = role === 'customer' && payload.customer != null && can(gate, 'admin.setup.manage')
+    ? { partyId: id }
+    : null
   return NextResponse.json({
     payload,
     consolidatedBilling,
+    debitMandates,
     paymentTerms: paymentTerms.rows,
     departments: departments.rows,
     trades: trades.rows,

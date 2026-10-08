@@ -63,7 +63,8 @@
       "relationship": "关系",
       "paymentMethods": "付款方式",
       "externalIds": "外部 ID",
-      "billing": "开票"
+      "billing": "开票",
+      "debitMandates": "扣款授权"
     },
     "autopay": {
       "heading": "付款方式",
@@ -111,6 +112,46 @@
       "moveUp": "在备用顺序中前移",
       "moveDown": "在备用顺序中后移",
       "reorderFailed": "无法更改备用顺序。"
+    },
+    "debitMandates": {
+      "heading": "扣款授权",
+      "description": "已签署的授权，用于通过直接扣款从该客户的银行账户收款。收款时使用在收款日期有效、且最近签署的有效授权。",
+      "new": "新建授权",
+      "newTitle": "新建扣款授权",
+      "editTitle": "编辑扣款授权",
+      "drawerDescription": "记录该客户签署的、从其银行账户收取资金的授权。",
+      "lockedNote": "授权记录后，银行账户、方案和引用不可更改。",
+      "noApprovedAccounts": "该客户没有已批准的银行账户。请在往来方的<link>会计选项卡</link>中添加；批准后即可选择。",
+      "empty": "暂无扣款授权。",
+      "select": "选择……",
+      "saved": "扣款授权已保存",
+      "saveFailed": "无法保存扣款授权。",
+      "loadFailed": "无法加载扣款授权。",
+      "fields": {
+        "bankAccount": "已批准的银行账户",
+        "scheme": "授权方案",
+        "reference": "授权引用",
+        "signedOn": "签署于",
+        "validFrom": "生效自",
+        "expiresOn": "到期于"
+      },
+      "columns": {
+        "bankAccount": "银行账户"
+      },
+      "states": {
+        "pending": "待处理",
+        "active": "启用",
+        "suspended": "已暂停",
+        "revoked": "已吊销",
+        "expired": "已过期"
+      },
+      "schemes": {
+        "custom": "自定义"
+      },
+      "validation": {
+        "bankAccount": "请为该授权选择一个已批准的银行账户。",
+        "reference": "请输入授权引用。"
+      }
     },
     "wages": {
       "title": "工资费率",

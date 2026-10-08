@@ -63,7 +63,8 @@
       "relationship": "Relacionamento",
       "paymentMethods": "Métodos de pagamento",
       "externalIds": "IDs externos",
-      "billing": "Faturamento"
+      "billing": "Faturamento",
+      "debitMandates": "Mandatos de débito"
     },
     "autopay": {
       "heading": "Métodos de pagamento",
@@ -111,6 +112,46 @@
       "moveUp": "Mover para antes na ordem de reserva",
       "moveDown": "Mover para depois na ordem de reserva",
       "reorderFailed": "Não foi possível alterar a ordem de reserva."
+    },
+    "debitMandates": {
+      "heading": "Mandatos de débito",
+      "description": "Autorizações assinadas para cobrar da conta bancária deste cliente por débito direto. As cobranças usam o mandato ativo assinado mais recentemente que seja válido na data da cobrança.",
+      "new": "Novo mandato",
+      "newTitle": "Novo mandato de débito",
+      "editTitle": "Editar mandato de débito",
+      "drawerDescription": "Registre a autorização que este cliente assinou para cobrar fundos de sua conta bancária.",
+      "lockedNote": "A conta bancária, o esquema e a referência ficam fixos depois que o mandato é registrado.",
+      "noApprovedAccounts": "Este cliente não tem conta bancária aprovada. Adicione uma na <link>aba Contabilidade</link> do parceiro; ela poderá ser selecionada após a aprovação.",
+      "empty": "Nenhum mandato de débito registrado.",
+      "select": "Selecionar…",
+      "saved": "Mandato de débito salvo",
+      "saveFailed": "Não foi possível salvar o mandato de débito.",
+      "loadFailed": "Não foi possível carregar os mandatos de débito.",
+      "fields": {
+        "bankAccount": "Conta bancária aprovada",
+        "scheme": "Esquema do mandato",
+        "reference": "Referência do mandato",
+        "signedOn": "Assinado em",
+        "validFrom": "Válido a partir de",
+        "expiresOn": "Expira em"
+      },
+      "columns": {
+        "bankAccount": "Conta bancária"
+      },
+      "states": {
+        "pending": "Pendente",
+        "active": "Ativo",
+        "suspended": "Suspenso",
+        "revoked": "Revogado",
+        "expired": "Expirado"
+      },
+      "schemes": {
+        "custom": "Personalizado"
+      },
+      "validation": {
+        "bankAccount": "Escolha uma conta bancária aprovada para o mandato.",
+        "reference": "Informe a referência do mandato."
+      }
     },
     "wages": {
       "title": "Taxas salariais",

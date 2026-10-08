@@ -2108,17 +2108,19 @@
       "company": "Empresa",
       "accounting": "Contabilidad",
       "taxes": "Impuestos",
+      "banking": "Bancos y pagos",
       "dimensions": "Dimensiones",
       "billing": "Facturación y numeración",
-      "sales": "Ventas",
-      "workforce": "Personal",
+      "sales": "Ventas y CRM",
+      "workforce": "Recursos humanos",
       "assets": "Activos",
       "currency": "Moneda",
       "revenue": "Ingresos",
       "inventory": "Inventario",
       "projects": "Proyectos",
       "compliance": "Cumplimiento",
-      "agents": "Agentes"
+      "agents": "Agentes",
+      "apps": "Configuración de apps"
     },
     "agents": {
       "nav": {
@@ -2417,26 +2419,26 @@
       "commitOff": "No"
     },
     "paymentOperations": {
-      "title": "Pagos y banca",
-      "description": "Configure redes de pago, perfiles bancarios, programaciones, aprobaciones, entrega y mandatos de débito.",
       "tabs": {
         "profiles": "Perfiles bancarios",
         "formats": "Formatos de pago",
-        "schedules": "Programaciones",
-        "mandates": "Mandatos de débito"
+        "schedules": "Programaciones de pago"
+      },
+      "descriptions": {
+        "profiles": "Cuentas bancarias, formatos de pago y ajustes de entrega para generar archivos de pago.",
+        "formats": "Diseños de archivo para cada red de pago, incluidos scripts de formato personalizados.",
+        "schedules": "Ejecuciones periódicas que seleccionan facturas vencidas y crean lotes de pago como borrador o para aprobación."
       },
       "search": {
         "profiles": "Buscar perfiles…",
         "formats": "Buscar formatos…",
-        "schedules": "Buscar programaciones…",
-        "mandates": "Buscar mandatos…"
+        "schedules": "Buscar programaciones…"
       },
       "state": "Estado",
       "new": {
         "profiles": "Nuevo perfil",
         "formats": "Nuevo formato personalizado",
-        "schedules": "Nueva programación",
-        "mandates": "Nuevo mandato"
+        "schedules": "Nueva programación"
       },
       "columns": {
         "name": "Nombre",
@@ -2451,20 +2453,11 @@
         "profile": "Perfil",
         "cron": "Programación",
         "nextRun": "Próxima ejecución",
-        "action": "Acción",
-        "reference": "Referencia",
-        "party": "Contraparte",
-        "scheme": "Esquema",
-        "signedOn": "Firmado",
-        "expiresOn": "Vence"
+        "action": "Acción"
       },
       "states": {
         "active": "Activo",
-        "archived": "Archivado",
-        "pending": "Pendiente",
-        "suspended": "Suspendido",
-        "revoked": "Revocado",
-        "expired": "Vencido"
+        "archived": "Archivado"
       },
       "rails": {
         "cpa005_credit": "Crédito CPA-005",
@@ -2485,12 +2478,6 @@
       "actions": {
         "create_draft": "Crear borrador",
         "submit_for_approval": "Enviar para aprobación"
-      },
-      "schemes": {
-        "nacha": "NACHA",
-        "sepa_core": "SEPA Core",
-        "sepa_b2b": "SEPA B2B",
-        "custom": "Personalizado"
       },
       "fields": {
         "name": "Nombre",
@@ -2514,14 +2501,6 @@
         "cron": "Expresión cron",
         "timezone": "Zona horaria",
         "action": "Al vencer",
-        "party": "Contraparte",
-        "partyBankAccount": "Cuenta bancaria aprobada",
-        "scheme": "Esquema del mandato",
-        "reference": "Referencia del mandato",
-        "status": "Estado",
-        "signedOn": "Firmado el",
-        "validFrom": "Válido desde",
-        "expiresOn": "Vence el",
         "cronHint": "Elija un ajuste preestablecido o indique una programación personalizada (sintaxis cron) para un control total."
       },
       "approvalHint": "La aprobación de los lotes de pagos se configura en <flows>Flujos</flows>. Sin un flujo de lotes de pagos, los lotes enviados se aprueban de inmediato.",
@@ -2576,20 +2555,17 @@
         "new": {
           "profiles": "Nuevo perfil bancario",
           "formats": "Nuevo formato de pago personalizado",
-          "schedules": "Nueva programación de pagos",
-          "mandates": "Nuevo mandato de débito"
+          "schedules": "Nueva programación de pagos"
         },
         "edit": {
           "profiles": "Editar perfil bancario",
           "formats": "Editar formato de pago",
-          "schedules": "Editar programación de pagos",
-          "mandates": "Editar mandato de débito"
+          "schedules": "Editar programación de pagos"
         },
         "description": {
           "profiles": "Conecte una cuenta de fondos con una red de pago y una política de entrega.",
           "formats": "Defina los metadatos del archivo y el JavaScript aislado de un formato bancario personalizado.",
-          "schedules": "Seleccione operaciones elegibles según una programación recurrente.",
-          "mandates": "Registre la autorización necesaria para cobrar fondos de una contraparte."
+          "schedules": "Seleccione operaciones elegibles según una programación recurrente."
         }
       },
       "select": "Seleccionar…",
@@ -2747,10 +2723,6 @@
       },
       "sftp": {
         "title": "Servidores SFTP"
-      },
-      "payment-operations": {
-        "title": "Pagos y banca",
-        "description": "Formatos de pago, perfiles bancarios, programaciones y mandatos de débito."
       },
       "subsidiaries": {
         "title": "Subsidiarias",
@@ -3074,7 +3046,8 @@
       },
       "extension-settings": {
         "title": "Configuración de aplicaciones",
-        "description": "Configure los ajustes declarados por las aplicaciones instaladas. Los cambios conservan los valores anteriores y sus fechas de vigencia."
+        "description": "Configure los ajustes declarados por las aplicaciones instaladas. Los cambios conservan los valores anteriores y sus fechas de vigencia.",
+        "appDescription": "Ajustes que declara esta app. Los cambios conservan los valores anteriores y sus fechas de vigencia."
       },
       "leave-types": {
         "title": "Tipos de ausencia",
@@ -7115,6 +7088,18 @@
     "quoteToCash": {
       "title": "De presupuesto a suscripción",
       "description": "Presupuestos SaaS con precios escalonados, aprobación de descuentos, firma electrónica y activación en un clic."
+    },
+    "internalBilling": {
+      "title": "Facturación interna",
+      "description": "Facture trabajo entre departamentos, proyectos o filiales. Cada regla define el tratamiento: acreditar la venta al departamento que presta el servicio, transferir costes o registrar una venta intercompañía que se elimina en la consolidación."
+    },
+    "projectProgress": {
+      "title": "Avance y valor ganado",
+      "description": "Presupueste cantidades de producción, registre cantidades instaladas (también desde partes de trabajo), pronostique el costo para terminar e informe el valor ganado y la tasa de consumo."
+    },
+    "unbilledRevenueAccrual": {
+      "title": "Devengo de ingresos no facturados",
+      "description": "Al cierre del período, devengue el trabajo por administración realizado y aún no facturado, con reversión automática el primer día del período siguiente."
     }
   },
   "backupsManager": {

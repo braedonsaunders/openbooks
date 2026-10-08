@@ -1,39 +1,26 @@
 'use client'
-import { ModuleHomeTabs } from '@/components/module-home/tabs'
 
 import { useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useLocale, useTranslations } from 'next-intl'
-import { useViewerFormat } from '../../../../../lib/viewer-format'
-import { Plus } from 'lucide-react'
 import { toast } from 'sonner'
 import { fetchAction } from '@braedonsaunders/appkit-errors'
 import { ActionAlert } from '@braedonsaunders/appkit-errors/react'
 import {
-  Badge,
   Button,
   Input,
   Label,
   SearchSelect,
   Select,
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
   Textarea,
   UrlDrawer,
   cn,
 } from '@openbooks/ui'
-import { SearchInput } from '../../../../../components/search-input'
-import { FilterChips } from '../../../../../components/filter-bar'
-import { Pagination } from '../../../../../components/pagination'
 import { useAppAction } from '../../../../../lib/use-app-action'
 import { countryOptions } from '../../../../../lib/countries'
 
-export type PaymentSetupView = 'profiles' | 'formats' | 'schedules' | 'mandates'
+export type PaymentSetupView = 'profiles' | 'formats' | 'schedules'
 
 type Options = {
   formats: Array<{ id: string; name: string; rail: string; currency: string | null }>
@@ -42,18 +29,9 @@ type Options = {
   subsidiaries: Array<{ id: string; name: string }>
   sftpServers: Array<{ id: string; name: string }>
   profiles: Array<{ id: string; name: string }>
-  parties: Array<{ id: string; display_name: string; bank_accounts: Array<{ id: string; label: string }> }>
   currencies: Array<{ code: string; name: string }>
 }
 type Translator = ReturnType<typeof useTranslations>
-type SetupRow = {
-  id: string; name: string; bank_number: string | null; bank_name: string | null;
-  format_name: string | null; currency: string | null; sftp_server_name: string | null;
-  is_active: boolean; code: string; rail: string;
-  direction: string; profile_name: string | null; cron: string; next_run_at: string | null;
-  action: string; mandate_reference: string; party_name: string; scheme: string;
-  signed_on: string | null; expires_on: string | null; status: string;
-}
 type SetupForm = {
   id?: string; name?: string; code?: string; rail?: string; direction?: string;
   currency?: string; country?: string; bank_account_id?: string; bankAccountId?: string;
@@ -62,10 +40,6 @@ type SetupForm = {
   file_extension?: string; fileExtension?: string; content_type?: string; contentType?: string;
   formatter_script?: string; formatterScript?: string; payment_bank_profile_id?: string;
   paymentBankProfileId?: string; cron?: string; timezone?: string; action?: string;
-  party_id?: string; partyId?: string; party_bank_account_id?: string; partyBankAccountId?: string;
-  scheme?: string; mandate_reference?: string; mandateReference?: string; status?: string;
-  signed_on?: string; signedOn?: string; valid_from?: string; validFrom?: string;
-  expires_on?: string; expiresOn?: string;
   auto_remittance?: boolean; autoRemittance?: boolean; is_active?: boolean; isActive?: boolean;
   originatorSecrets?: Record<string, string>;
   settings?: { discountAccountId?: string | null; positivePayAccountReference?: string };
@@ -85,8 +59,6 @@ function CurrencyField({ value, onChange, label, currencies, allowInherit }: { v
     </Field>
   )
 }
-
-const VIEWS: PaymentSetupView[] = ['profiles', 'formats', 'schedules', 'mandates']
 
 const SECRET_FIELDS: Record<string, string[]> = {
   cpa005_credit: ['originatorId', 'originatorShortName', 'originatorLongName', 'dataCentre', 'originatingDataCentre', 'institution', 'transit', 'account', 'transactionCode'],
@@ -127,120 +99,7 @@ function CountryField({ value, onChange, label, placeholder }: { value: string; 
   )
 }
 
-export function PaymentOperationsSetup({
-  view,
-  rows,
-  selected,
-  creating,
-  total,
-  page,
-  perPage,
-  currentParams,
-  stateCounts,
-  options,
-  multiCurrency = false,
-}: {
-  view: PaymentSetupView
-  rows: Record<string, unknown>[]
-  selected: Record<string, unknown> | null
-  creating: boolean
-  total: number
-  page: number
-  perPage: number
-  currentParams: Record<string, string | string[] | undefined>
-  stateCounts: Array<{ value: string; count: number }>
-  options: Options
-  multiCurrency?: boolean
-}) {
-  const t = useTranslations('admin.setup.paymentOperations')
-  const basePath = '/admin/setup/payment-operations'
-  const closeHref = `${basePath}?view=${view}`
-  const stateOptions = stateCounts.map((s) => ({ value: s.value, label: t((`states.${s.value}`)), count: Number(s.count) }))
-  return (
-    <div className="space-y-4">
-      <div>
-        <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">{t('title')}</h2>
-        <p className="text-sm text-slate-500 dark:text-slate-400">{t('description')}</p>
-      </div>
-
-      <ModuleHomeTabs tabs={VIEWS.map((key) => ({ href: `${basePath}?view=${key}`, label: t(`tabs.${key}`), active: view === key }))} />
-
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex flex-wrap items-center gap-2">
-          <SearchInput placeholder={t(`search.${view}`)} />
-          <FilterChips
-            basePath={basePath}
-            currentParams={currentParams}
-            paramKey="state"
-            pageParamKey="page"
-            label={t('state')}
-            options={stateOptions}
-          />
-        </div>
-        <Button asChild>
-          <Link href={`${basePath}?view=${view}&row=new`}><Plus size={15} />{t(`new.${view}`)}</Link>
-        </Button>
-      </div>
-
-      <div className="overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
-        <SetupTable view={view} rows={rows as unknown as SetupRow[]} t={t} basePath={basePath} />
-      </div>
-      <Pagination basePath={basePath} currentParams={currentParams} total={total} page={page} perPage={perPage} />
-
-      {(creating || selected) ? (
-        <SetupEditor view={view} row={selected} creating={creating} options={options} closeHref={closeHref} multiCurrency={multiCurrency} />
-      ) : null}
-    </div>
-  )
-}
-
-function SetupTable({ view, rows, t, basePath }: { view: PaymentSetupView; rows: SetupRow[]; t: Translator; basePath: string }) {
-  const { dateTime } = useViewerFormat()
-  const cols: Record<PaymentSetupView, string[]> = {
-    profiles: ['name', 'bank', 'format', 'currency', 'delivery', 'status'],
-    formats: ['code', 'name', 'rail', 'direction', 'currency', 'status'],
-    schedules: ['name', 'profile', 'cron', 'nextRun', 'action', 'status'],
-    mandates: ['reference', 'party', 'scheme', 'signedOn', 'expiresOn', 'status'],
-  }
-  return (
-    <Table>
-      <TableHeader><TableRow>{cols[view].map((c) => <TableHead key={c}>{t(`columns.${c}`)}</TableHead>)}</TableRow></TableHeader>
-      <TableBody>
-        {rows.length === 0 ? <TableRow><TableCell colSpan={cols[view].length} className="py-10 text-center text-slate-500">{t('empty')}</TableCell></TableRow> : rows.map((row) => {
-          const href = `${basePath}?view=${view}&row=${row.id}`
-          if (view === 'profiles') return <TableRow key={row.id}>
-            <TableCell><Link href={href} className="font-medium text-teal-700 hover:underline dark:text-teal-300">{row.name}</Link></TableCell>
-            <TableCell>{[row.bank_number, row.bank_name].filter(Boolean).join(' · ')}</TableCell><TableCell>{row.format_name}</TableCell>
-            <TableCell className="font-mono text-xs">{row.currency}</TableCell><TableCell>{row.sftp_server_name ?? t('manualDelivery')}</TableCell>
-            <TableCell><Active active={row.is_active} t={t} /></TableCell>
-          </TableRow>
-          if (view === 'formats') return <TableRow key={row.id}>
-            <TableCell><Link href={href} className="font-mono text-xs font-semibold text-teal-700 hover:underline dark:text-teal-300">{row.code}</Link></TableCell>
-            <TableCell>{row.name}</TableCell><TableCell><Badge variant="outline">{t(`rails.${row.rail}`)}</Badge></TableCell>
-            <TableCell>{t(`directions.${row.direction}`)}</TableCell><TableCell className="font-mono text-xs">{row.currency ?? t('any')}</TableCell><TableCell><Active active={row.is_active} t={t} /></TableCell>
-          </TableRow>
-          if (view === 'schedules') return <TableRow key={row.id}>
-            <TableCell><Link href={href} className="font-medium text-teal-700 hover:underline dark:text-teal-300">{row.name}</Link></TableCell><TableCell>{row.profile_name}</TableCell>
-            <TableCell className="font-mono text-xs">{row.cron}</TableCell><TableCell>{row.next_run_at ? dateTime(new Date(row.next_run_at)) : '—'}</TableCell>
-            <TableCell>{t(`actions.${row.action}`)}</TableCell><TableCell><Active active={row.is_active} t={t} /></TableCell>
-          </TableRow>
-          return <TableRow key={row.id}>
-            <TableCell><Link href={href} className="font-mono text-xs font-semibold text-teal-700 hover:underline dark:text-teal-300">{row.mandate_reference}</Link></TableCell>
-            <TableCell>{row.party_name}</TableCell><TableCell>{t(`schemes.${row.scheme}`)}</TableCell><TableCell>{row.signed_on ?? '—'}</TableCell><TableCell>{row.expires_on ?? '—'}</TableCell>
-            <TableCell><Badge variant={row.status === 'active' ? 'success' : row.status === 'revoked' ? 'destructive' : 'secondary'}>{t(`states.${row.status}`)}</Badge></TableCell>
-          </TableRow>
-        })}
-      </TableBody>
-    </Table>
-  )
-}
-
-function Active({ active, t }: { active: boolean; t: Translator }) {
-  return <Badge variant={active ? 'success' : 'outline'}>{t(`states.${active ? 'active' : 'archived'}`)}</Badge>
-}
-
-// Exported so the ViewSpec widget can place the same editor the native
-// page renders — one implementation, two callers.
+// The create/edit drawer the payment setup pages place by name.
 export function SetupEditor({ view, row, creating, options, closeHref, multiCurrency = false }: { view: PaymentSetupView; row: Record<string, unknown> | null; creating: boolean; options: Options; closeHref: string; multiCurrency?: boolean }) {
   const t = useTranslations('admin.setup.paymentOperations')
   const router = useRouter()
@@ -252,7 +111,7 @@ export function SetupEditor({ view, row, creating, options, closeHref, multiCurr
 
   async function save() {
     const resource = view
-    const payload = normalizePayload(view, form, creating, multiCurrency)
+    const payload = normalizePayload(view, form, multiCurrency)
     await execute(() => fetchAction(`/api/admin/payment-operations/${resource}${creating ? '' : `/${row!.id}`}`, {
         method: creating ? 'POST' : 'PATCH',
         headers: { 'Content-Type': 'application/json' },
@@ -276,13 +135,12 @@ export function SetupEditor({ view, row, creating, options, closeHref, multiCurr
         {view === 'profiles' ? <ProfileFields form={form} set={set} options={options} t={t} creating={creating} multiCurrency={multiCurrency} /> : null}
         {view === 'formats' ? <FormatFields form={form} set={set} options={options} t={t} creating={creating} multiCurrency={multiCurrency} /> : null}
         {view === 'schedules' ? <ScheduleFields form={form} set={set} options={options} t={t} /> : null}
-        {view === 'mandates' ? <MandateFields form={form} set={set} options={options} t={t} creating={creating} /> : null}
       </div>
     </UrlDrawer>
   )
 }
 
-function normalizePayload(view: PaymentSetupView, form: SetupForm, creating: boolean, multiCurrency = false) {
+function normalizePayload(view: PaymentSetupView, form: SetupForm, multiCurrency = false) {
   if (view === 'profiles') {
     const originatorSecrets = Object.fromEntries(Object.entries(form.originatorSecrets ?? {}).filter(([, value]) => String(value ?? '').trim()))
     return {
@@ -297,8 +155,7 @@ function normalizePayload(view: PaymentSetupView, form: SetupForm, creating: boo
     }
   }
   if (view === 'formats') return { code: form.code, name: form.name, direction: form.direction, country: form.country, ...(multiCurrency ? { currency: form.currency } : {}), fileExtension: form.file_extension ?? form.fileExtension, contentType: form.content_type ?? form.contentType, formatterScript: form.formatter_script ?? form.formatterScript, isActive: form.is_active ?? form.isActive ?? true }
-  if (view === 'schedules') return { name: form.name, paymentBankProfileId: form.payment_bank_profile_id ?? form.paymentBankProfileId, cron: form.cron, timezone: form.timezone, action: form.action, selectionCriteria: form.selection_criteria ?? form.selectionCriteria ?? {}, isActive: form.is_active ?? form.isActive ?? true }
-  return { partyId: form.party_id ?? form.partyId, partyBankAccountId: form.party_bank_account_id ?? form.partyBankAccountId, scheme: form.scheme, mandateReference: form.mandate_reference ?? form.mandateReference, status: form.status, signedOn: form.signed_on ?? form.signedOn, validFrom: form.valid_from ?? form.validFrom, expiresOn: form.expires_on ?? form.expiresOn, ...(creating ? {} : { id: form.id }) }
+  return { name: form.name, paymentBankProfileId: form.payment_bank_profile_id ?? form.paymentBankProfileId, cron: form.cron, timezone: form.timezone, action: form.action, selectionCriteria: form.selection_criteria ?? form.selectionCriteria ?? {}, isActive: form.is_active ?? form.isActive ?? true }
 }
 
 function ProfileFields({ form, set, options, t, creating, multiCurrency = false }: { form: SetupForm; set: (k: string, v: unknown) => void; options: Options; t: Translator; creating: boolean; multiCurrency?: boolean }) {
@@ -352,13 +209,4 @@ function ScheduleFields({ form, set, options, t }: { form: SetupForm; set: (k: s
     </Field><Field label={t('fields.timezone')}><Input value={form.timezone ?? 'UTC'} onChange={(e) => set('timezone', e.target.value)} /></Field></div>
     <div className="rounded-lg border border-slate-200 p-4 dark:border-slate-800"><h3 className="mb-3 text-sm font-semibold">{t('criteria.title')}</h3><div className="grid gap-4 sm:grid-cols-2"><Field label={t('criteria.dueThroughDays')}><Input type="number" min={0} value={criteria.dueThroughDays ?? 0} onChange={(e) => setCriteria('dueThroughDays', Number(e.target.value))} /></Field><Field label={t('criteria.minimumAmount')}><Input type="number" min={0} step="0.01" value={criteria.minimumAmount ?? ''} onChange={(e) => setCriteria('minimumAmount', e.target.value)} /></Field><Field label={t('criteria.maximumRunAmount')}><Input type="number" min={0} step="0.01" value={criteria.maximumRunAmount ?? ''} onChange={(e) => setCriteria('maximumRunAmount', e.target.value)} /></Field></div><div className="mt-3 space-y-2"><Toggle checked={criteria.captureDiscounts !== false} onChange={(v) => setCriteria('captureDiscounts', v)} label={t('criteria.captureDiscounts')} /><Toggle checked={criteria.applyCredits !== false} onChange={(v) => setCriteria('applyCredits', v)} label={t('criteria.applyCredits')} /></div></div>
     <Field label={t('fields.action')}><Select value={form.action ?? 'create_draft'} onChange={(e) => set('action', e.target.value)}><option value="create_draft">{t('actions.create_draft')}</option><option value="submit_for_approval">{t('actions.submit_for_approval')}</option></Select></Field><Toggle checked={form.is_active ?? form.isActive ?? true} onChange={(v) => set('is_active', v)} label={t('fields.active')} /></>
-}
-
-function MandateFields({ form, set, options, t, creating }: { form: SetupForm; set: (k: string, v: unknown) => void; options: Options; t: Translator; creating: boolean }) {
-  const partyId = form.party_id ?? form.partyId ?? ''
-  const party = options.parties.find((p) => p.id === partyId)
-  return <><Field label={t('fields.party')}><Select disabled={!creating} value={partyId} onChange={(e) => { set('partyId', e.target.value); set('partyBankAccountId', '') }}><option value="">{t('select')}</option>{options.parties.map((p) => <option key={p.id} value={p.id}>{p.display_name}</option>)}</Select></Field><Field label={t('fields.partyBankAccount')}><Select disabled={!creating || !party} value={form.party_bank_account_id ?? form.partyBankAccountId ?? ''} onChange={(e) => set('partyBankAccountId', e.target.value)}><option value="">{t('select')}</option>{party?.bank_accounts?.map((b) => <option key={b.id} value={b.id}>{b.label}</option>)}</Select></Field>
-    <div className="grid gap-4 sm:grid-cols-2"><Field label={t('fields.scheme')}><Select disabled={!creating} value={form.scheme ?? 'nacha'} onChange={(e) => set('scheme', e.target.value)}><option value="nacha">{t('schemes.nacha')}</option><option value="sepa_core">{t('schemes.sepa_core')}</option><option value="sepa_b2b">{t('schemes.sepa_b2b')}</option><option value="custom">{t('schemes.custom')}</option></Select></Field><Field label={t('fields.reference')}><Input disabled={!creating} value={form.mandate_reference ?? form.mandateReference ?? ''} onChange={(e) => set('mandateReference', e.target.value)} /></Field></div>
-    <Field label={t('fields.status')}><Select value={form.status ?? 'pending'} onChange={(e) => set('status', e.target.value)}>{['pending', 'active', 'suspended', 'revoked', 'expired'].map((s) => <option key={s} value={s}>{t(`states.${s}`)}</option>)}</Select></Field>
-    <div className="grid gap-4 sm:grid-cols-3"><Field label={t('fields.signedOn')}><Input type="date" value={form.signed_on ?? form.signedOn ?? ''} onChange={(e) => set('signed_on', e.target.value)} /></Field><Field label={t('fields.validFrom')}><Input type="date" value={form.valid_from ?? form.validFrom ?? ''} onChange={(e) => set('valid_from', e.target.value)} /></Field><Field label={t('fields.expiresOn')}><Input type="date" value={form.expires_on ?? form.expiresOn ?? ''} onChange={(e) => set('expires_on', e.target.value)} /></Field></div></>
 }

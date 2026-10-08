@@ -1,9 +1,7 @@
 "use client";
-import { ModuleHomeTabs } from '@/components/module-home/tabs'
 
 import { apiJson, ApiResponseError } from "@/lib/api-error";
 
-import { useMoney } from '@/components/money-provider'
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -15,7 +13,6 @@ import {
   Button,
   Input,
   Label,
-  SearchSelect,
   Select,
   Table,
   TableBody,
@@ -33,17 +30,7 @@ import { InteractiveTableRow } from '@/components/interactive-table-row'
 export type CrmSetupTab =
   | "accountStatuses"
   | "opportunityStatuses"
-  | "sources"
-  | "territories"
-  | "teams"
-  | "quotas";
-
-const TABS: CrmSetupTab[] = [
-  "accountStatuses",
-  "opportunityStatuses",
-  "sources",
-
-];
+  | "sources";
 
 const COLUMNS: Record<CrmSetupTab, string[]> = {
   accountStatuses: [
@@ -61,24 +48,14 @@ const COLUMNS: Record<CrmSetupTab, string[]> = {
     "is_active",
   ],
   sources: ["name", "description", "is_active"],
-  territories: ["name", "owner_name", "priority", "is_active"],
-  teams: ["name", "manager_name", "member_count", "is_active"],
-  quotas: ["target_name", "period_start", "period_end", "amount", "currency"],
 };
 
-type Option = { id: string; name: string };
-type CurrencyOption = { code: string; name: string };
 type CrmTranslator = ReturnType<typeof useTranslations>;
-interface CrmTeamMember { userId: string }
 interface CrmSetupRecord extends Record<string, unknown> {
-  id?: string; name?: string; target_name?: string; description?: string;
+  id?: string; name?: string; description?: string;
   lifecycle_stage?: string; sequence?: number; is_qualified?: boolean; is_closed?: boolean;
   is_default?: boolean; is_active?: boolean; probability?: number;
-  default_forecast_category?: string; is_won?: boolean; priority?: number;
-  manager_user_id?: string; default_owner_user_id?: string; match_mode?: string;
-  rules?: unknown[]; members?: CrmTeamMember[]; sales_team_id?: string;
-  owner_user_id?: string; period_start?: string; period_end?: string;
-  currency?: string; amount?: string | number;
+  default_forecast_category?: string; is_won?: boolean;
   requires_lines?: boolean; requires_primary_contact?: boolean;
   requires_positive_amount?: boolean; requires_win_loss_reason?: boolean;
 }
@@ -86,10 +63,6 @@ interface CrmForm extends Record<string, unknown> {
   name: string; description: string; lifecycleStage: string; sequence: string | number;
   isQualified: boolean; isClosed: boolean; isDefault: boolean; isActive: boolean;
   probability: string | number; defaultForecastCategory: string; isWon: boolean;
-  priority: string | number; managerUserId: string; defaultOwnerUserId: string;
-  matchMode: string; rulesText: string; memberIds: string[]; targetType: string;
-  targetId: string; periodStart: string; periodEnd: string; currency: string;
-  amount: string | number;
   requiresLines: boolean; requiresPrimaryContact: boolean;
   requiresPositiveAmount: boolean; requiresWinLossReason: boolean;
 }
@@ -97,9 +70,6 @@ const EMPTY_CRM_FORM: CrmForm = {
   name: "", description: "", lifecycleStage: "lead", sequence: 10,
   isQualified: false, isClosed: false, isDefault: false, isActive: true,
   probability: 0, defaultForecastCategory: "upside", isWon: false,
-  priority: 100, managerUserId: "", defaultOwnerUserId: "", matchMode: "all",
-  rulesText: "[]", memberIds: [], targetType: "user", targetId: "",
-  periodStart: "", periodEnd: "", currency: "", amount: "",
   requiresLines: false, requiresPrimaryContact: false,
   requiresPositiveAmount: false, requiresWinLossReason: false,
 }
@@ -113,11 +83,6 @@ export function CrmSetupWorkspace({
   page,
   perPage,
   currentParams,
-  users,
-  teams,
-  baseCurrency,
-  currencies,
-  multiCurrency = false,
 }: {
   tab: CrmSetupTab;
   rows: CrmSetupRecord[];
@@ -127,11 +92,6 @@ export function CrmSetupWorkspace({
   page: number;
   perPage: number;
   currentParams: Record<string, string | string[] | undefined>;
-  users: Option[];
-  teams: Option[];
-  baseCurrency: string;
-  currencies: CurrencyOption[];
-  multiCurrency?: boolean;
 }) {
   const t = useTranslations("crm");
   const searchParams = useSearchParams();
@@ -147,14 +107,12 @@ export function CrmSetupWorkspace({
     <div className="space-y-5">
       <div>
         <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
-          {t("setup.title")}
+          {t(`setup.tabs.${tab}`)}
         </h2>
         <p className="max-w-3xl text-sm text-slate-500 dark:text-slate-400">
-          {t("setup.description")}
+          {t(`setup.descriptions.${tab}`)}
         </p>
       </div>
-
-      <ModuleHomeTabs tabs={TABS.map((key) => ({ href: `${basePath}?tab=${key}`, label: t(`setup.tabs.${key}`), active: tab === key }))} />
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <SearchInput placeholder={t(`setup.search.${tab}`)} />
@@ -182,11 +140,6 @@ export function CrmSetupWorkspace({
           key={`${tab}:${selected?.id ?? "new"}`}
           tab={tab}
           row={selected}
-          users={users}
-          teams={teams}
-          baseCurrency={baseCurrency}
-          currencies={currencies}
-          multiCurrency={multiCurrency}
           closeHref={closeHref}
         />
       ) : null}
@@ -203,7 +156,6 @@ function SetupRows({
   rows: CrmSetupRecord[];
   closeHref: string;
 }) {
-  const { money } = useMoney()
   const t = useTranslations("crm");
   const router = useRouter();
   const columns = COLUMNS[tab];
@@ -229,9 +181,7 @@ function SetupRows({
         ) : null}
         {rows.map((row) => {
           const href = `${closeHref}&row=${row.id}`;
-          const label = String(
-            row.name ?? row.target_name ?? t("setup.tabs.quotas"),
-          );
+          const label = String(row.name ?? "");
           return (
             <InteractiveTableRow
               key={row.id}
@@ -251,10 +201,10 @@ function SetupRows({
                       className="font-medium text-teal-700 hover:underline dark:text-teal-300"
                       onClick={(event) => event.stopPropagation()}
                     >
-                      {renderCell(column, row, t, money)}
+                      {renderCell(column, row, t)}
                     </Link>
                   ) : (
-                    renderCell(column, row, t, money)
+                    renderCell(column, row, t)
                   )}
                 </TableCell>
               ))}
@@ -266,7 +216,7 @@ function SetupRows({
   );
 }
 
-function renderCell(column: string, row: CrmSetupRecord, t: CrmTranslator, money: ReturnType<typeof useMoney>['money']) {
+function renderCell(column: string, row: CrmSetupRecord, t: CrmTranslator) {
   const value = row[column];
   if (column === "is_active")
     return (
@@ -281,29 +231,16 @@ function renderCell(column: string, row: CrmSetupRecord, t: CrmTranslator, money
     return t(`forecastCategories.${value}`);
   if (column === "probability")
     return t("setup.percent", { value: Number(value) });
-  if (column === "member_count")
-    return t("setup.memberCount", { count: Number(value) });
-  if (column === "amount") return money(typeof value === "string" || typeof value === "number" ? value : 0, { currency: row.currency });
   return value == null || value === "" ? "—" : String(value);
 }
 
 function CrmSetupDrawer({
   tab,
   row,
-  users,
-  teams,
-  baseCurrency,
-  currencies,
-  multiCurrency = false,
   closeHref,
 }: {
   tab: CrmSetupTab;
   row: CrmSetupRecord | null;
-  users: Option[];
-  teams: Option[];
-  baseCurrency: string;
-  currencies: CurrencyOption[];
-  multiCurrency?: boolean;
   closeHref: string;
 }) {
   const t = useTranslations("crm");
@@ -313,26 +250,15 @@ function CrmSetupDrawer({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [form, setForm] = useState<CrmForm>(() =>
-    initialForm(tab, row, baseCurrency),
+    initialForm(tab, row),
   );
   const set = (key: string, value: unknown) =>
     setForm((current) => ({ ...current, [key]: value }));
 
   async function save() {
-    if (tab !== "quotas" && !String(form.name ?? "").trim()) {
+    if (!String(form.name ?? "").trim()) {
       toast.error(t("setup.validation.nameRequired"));
       return;
-    }
-    let payload: Record<string, unknown>;
-    try {
-      payload = normalizePayload(tab, form);
-    } catch {
-      toast.error(t("setup.validation.invalidRules"));
-      return;
-    }
-    if (tab === "quotas") {
-      const { currency, ...fields } = payload;
-      payload = { ...fields, ...(multiCurrency ? { currency } : {}) };
     }
     setBusy(true);
     setError(null);
@@ -343,7 +269,7 @@ function CrmSetupDrawer({
         body: JSON.stringify({
           action: actionFor(tab),
           id: row?.id,
-          ...payload,
+          ...form,
         }),
       },
         tc("feedback.saveFailed"),
@@ -394,23 +320,6 @@ function CrmSetupDrawer({
         {tab === "sources" ? (
           <SourceFields form={form} set={set} t={t} />
         ) : null}
-        {tab === "territories" ? (
-          <TerritoryFields form={form} set={set} users={users} t={t} />
-        ) : null}
-        {tab === "teams" ? (
-          <TeamFields form={form} set={set} users={users} t={t} />
-        ) : null}
-        {tab === "quotas" ? (
-          <QuotaFields
-            form={form}
-            set={set}
-            users={users}
-            teams={teams}
-            currencies={currencies}
-            multiCurrency={multiCurrency}
-            t={t}
-          />
-        ) : null}
       </div>
     </UrlDrawer>
   );
@@ -419,7 +328,6 @@ function CrmSetupDrawer({
 function initialForm(
   tab: CrmSetupTab,
   row: CrmSetupRecord | null,
-  baseCurrency: string,
 ): CrmForm {
   if (tab === "accountStatuses")
     return {
@@ -450,84 +358,21 @@ function initialForm(
       requiresPositiveAmount: row?.requires_positive_amount === true,
       requiresWinLossReason: row?.requires_win_loss_reason === true,
     };
-  if (tab === "sources")
-    return {
-      ...EMPTY_CRM_FORM,
-      name: row?.name ?? "",
-      description: row?.description ?? "",
-      isActive: row?.is_active ?? true,
-    };
-  if (tab === "territories")
-    return {
-      ...EMPTY_CRM_FORM,
-      name: row?.name ?? "",
-      description: row?.description ?? "",
-      priority: row?.priority ?? 100,
-      managerUserId: row?.manager_user_id ?? "",
-      defaultOwnerUserId: row?.default_owner_user_id ?? "",
-      matchMode: row?.match_mode ?? "all",
-      rulesText: JSON.stringify(row?.rules ?? [], null, 2),
-      isActive: row?.is_active ?? true,
-    };
-  if (tab === "teams")
-    return {
-      ...EMPTY_CRM_FORM,
-      name: row?.name ?? "",
-      managerUserId: row?.manager_user_id ?? "",
-      memberIds: (row?.members ?? []).map((member) => member.userId),
-      isActive: row?.is_active ?? true,
-    };
   return {
     ...EMPTY_CRM_FORM,
-    targetType: row?.sales_team_id ? "team" : "user",
-    targetId: row?.sales_team_id ?? row?.owner_user_id ?? "",
-    periodStart: row?.period_start ?? "",
-    periodEnd: row?.period_end ?? "",
-    currency: row?.currency ?? baseCurrency,
-    amount: row?.amount ?? "",
+    name: row?.name ?? "",
+    description: row?.description ?? "",
+    isActive: row?.is_active ?? true,
   };
 }
-
 function actionFor(tab: CrmSetupTab) {
   return (
     {
       accountStatuses: "save-account-status",
       opportunityStatuses: "save-opportunity-status",
       sources: "save-lead-source",
-      territories: "save-territory",
-      teams: "save-team",
-      quotas: "save-quota",
     } as const
   )[tab];
-}
-
-function normalizePayload(tab: CrmSetupTab, form: CrmForm) {
-  if (tab === "territories") {
-    const rules = JSON.parse(String(form.rulesText || "[]"));
-    if (!Array.isArray(rules)) throw new Error("rules must be an array");
-    return {
-      ...form,
-      managerUserId: form.managerUserId || null,
-      defaultOwnerUserId: form.defaultOwnerUserId || null,
-      rules,
-    };
-  }
-  if (tab === "teams")
-    return {
-      ...form,
-      managerUserId: form.managerUserId || null,
-      members: form.memberIds.map((userId: string) => ({
-        userId,
-        role: userId === form.managerUserId ? "manager" : "member",
-      })),
-    };
-  if (tab === "quotas")
-    return {
-      ...form,
-      ownerUserId: form.targetType === "user" ? form.targetId : null,
-      salesTeamId: form.targetType === "team" ? form.targetId : null,
-    };
-  return form;
 }
 
 function AccountStatusFields({ form, set, t }: FieldProps) {
@@ -639,199 +484,6 @@ function SourceFields({ form, set, t }: FieldProps) {
         onChange={(v) => set("description", v)}
       />
       <ToggleGrid form={form} set={set} keys={["isActive"]} t={t} />
-    </>
-  );
-}
-
-function TerritoryFields({
-  form,
-  set,
-  users,
-  t,
-}: FieldProps & { users: Option[] }) {
-  const userOptions = [
-    { value: "", label: t("fields.unassigned") },
-    ...users.map((user) => ({ value: user.id, label: user.name })),
-  ];
-  return (
-    <>
-      <TextField
-        label={t("setup.fields.name")}
-        value={form.name}
-        onChange={(v) => set("name", v)}
-      />
-      <TextField
-        label={t("setup.priority")}
-        type="number"
-        value={String(form.priority)}
-        onChange={(v) => set("priority", v)}
-      />
-      <SelectField
-        label={t("setup.manager")}
-        value={form.managerUserId}
-        onChange={(v) => set("managerUserId", v)}
-        options={userOptions}
-      />
-      <SelectField
-        label={t("setup.defaultOwner")}
-        value={form.defaultOwnerUserId}
-        onChange={(v) => set("defaultOwnerUserId", v)}
-        options={userOptions}
-      />
-      <SelectField
-        label={t("setup.fields.matchMode")}
-        value={form.matchMode}
-        onChange={(v) => set("matchMode", v)}
-        options={["all", "any"].map((value) => ({
-          value,
-          label: t(`setup.matchModes.${value}`),
-        }))}
-      />
-      <TextAreaField
-        label={t("fields.description")}
-        value={form.description}
-        onChange={(v) => set("description", v)}
-      />
-      <TextAreaField
-        label={t("setup.fields.rules")}
-        value={form.rulesText}
-        onChange={(v) => set("rulesText", v)}
-        mono
-        placeholder={t("setup.fields.rulesPlaceholder")}
-        hint={t("setup.fields.rulesHint")}
-      />
-      <ToggleGrid form={form} set={set} keys={["isActive"]} t={t} />
-    </>
-  );
-}
-
-function TeamFields({ form, set, users, t }: FieldProps & { users: Option[] }) {
-  const memberIds: string[] = form.memberIds;
-  return (
-    <>
-      <TextField
-        label={t("setup.fields.name")}
-        value={form.name}
-        onChange={(v) => set("name", v)}
-      />
-      <SelectField
-        label={t("setup.manager")}
-        value={form.managerUserId}
-        onChange={(value) => {
-          set("managerUserId", value);
-          if (value && !memberIds.includes(value))
-            set("memberIds", [...memberIds, value]);
-        }}
-        options={[
-          { value: "", label: t("fields.unassigned") },
-          ...users.map((user) => ({ value: user.id, label: user.name })),
-        ]}
-      />
-      <div className="space-y-2 sm:col-span-2">
-        <Label>{t("setup.fields.members")}</Label>
-        <div className="grid gap-2 rounded-lg border border-slate-200 p-3 dark:border-slate-800 sm:grid-cols-2">
-          {users.map((user) => (
-            <label key={user.id} className="flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
-                checked={memberIds.includes(user.id)}
-                onChange={(event) =>
-                  event.target.checked
-                    ? set("memberIds", [...memberIds, user.id])
-                    : (() => {
-                        set(
-                          "memberIds",
-                          memberIds.filter((id) => id !== user.id),
-                        );
-                        if (form.managerUserId === user.id)
-                          set("managerUserId", "");
-                      })()
-                }
-                className="h-4 w-4 accent-teal-600"
-              />
-              {user.name}
-            </label>
-          ))}
-        </div>
-      </div>
-      <ToggleGrid form={form} set={set} keys={["isActive"]} t={t} />
-    </>
-  );
-}
-
-function QuotaFields({
-  form,
-  set,
-  users,
-  teams,
-  currencies,
-  multiCurrency,
-  t,
-}: FieldProps & {
-  users: Option[];
-  teams: Option[];
-  currencies: CurrencyOption[];
-  multiCurrency: boolean;
-}) {
-  const options = form.targetType === "team" ? teams : users;
-  return (
-    <>
-      <SelectField
-        label={t("setup.fields.targetType")}
-        value={form.targetType}
-        onChange={(value) => {
-          set("targetType", value);
-          set("targetId", "");
-        }}
-        options={[
-          { value: "user", label: t("setup.targetTypes.user") },
-          { value: "team", label: t("setup.targetTypes.team") },
-        ]}
-      />
-      <SelectField
-        label={t("forecasts.target")}
-        value={form.targetId}
-        onChange={(v) => set("targetId", v)}
-        options={[
-          { value: "", label: t("fields.unassigned") },
-          ...options.map((option) => ({
-            value: option.id,
-            label: option.name,
-          })),
-        ]}
-      />
-      <TextField
-        label={t("fields.periodStart")}
-        type="date"
-        value={form.periodStart}
-        onChange={(v) => set("periodStart", v)}
-      />
-      <TextField
-        label={t("fields.periodEnd")}
-        type="date"
-        value={form.periodEnd}
-        onChange={(v) => set("periodEnd", v)}
-      />
-      {multiCurrency ? (
-        <div className="space-y-1.5">
-          <Label>{t("fields.currency")}</Label>
-          <SearchSelect
-            value={form.currency}
-            onChange={(value) => set("currency", value)}
-            options={currencies.map((currency) => ({
-              value: currency.code,
-              label: `${currency.code} · ${currency.name}`,
-            }))}
-            ariaLabel={t("fields.currency")}
-          />
-        </div>
-      ) : null}
-      <TextField
-        label={t("forecasts.quota")}
-        type="number"
-        value={String(form.amount)}
-        onChange={(v) => set("amount", v)}
-      />
     </>
   );
 }

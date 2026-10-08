@@ -63,7 +63,8 @@
       "relationship": "関係",
       "paymentMethods": "お支払い方法",
       "externalIds": "外部ID",
-      "billing": "請求"
+      "billing": "請求",
+      "debitMandates": "口座振替委任状"
     },
     "autopay": {
       "heading": "お支払い方法",
@@ -111,6 +112,46 @@
       "moveUp": "バックアップ順序で前に移動",
       "moveDown": "バックアップ順序で後に移動",
       "reorderFailed": "バックアップ順序を変更できませんでした。"
+    },
+    "debitMandates": {
+      "heading": "口座振替委任状",
+      "description": "この顧客の銀行口座から口座振替で回収するための署名済みの承認です。回収には、回収日に有効な有効ステータスの委任状のうち、最も新しく署名されたものが使用されます。",
+      "new": "新規委任状",
+      "newTitle": "新規口座振替委任状",
+      "editTitle": "口座振替委任状を編集",
+      "drawerDescription": "この顧客が署名した、銀行口座から資金を回収するための承認を記録します。",
+      "lockedNote": "委任状を記録した後は、銀行口座、スキーム、参照を変更できません。",
+      "noApprovedAccounts": "この顧客には承認済みの銀行口座がありません。取引先の<link>会計タブ</link>で追加してください。承認後に選択できるようになります。",
+      "empty": "登録されている口座振替委任状はありません。",
+      "select": "選択…",
+      "saved": "口座振替委任状を保存しました",
+      "saveFailed": "口座振替委任状を保存できませんでした。",
+      "loadFailed": "口座振替委任状を読み込めませんでした。",
+      "fields": {
+        "bankAccount": "承認済み銀行口座",
+        "scheme": "委任状スキーム",
+        "reference": "委任状参照",
+        "signedOn": "署名日",
+        "validFrom": "有効開始日",
+        "expiresOn": "有効期限"
+      },
+      "columns": {
+        "bankAccount": "銀行口座"
+      },
+      "states": {
+        "pending": "保留中",
+        "active": "有効",
+        "suspended": "一時停止",
+        "revoked": "取り消し済み",
+        "expired": "期限切れ"
+      },
+      "schemes": {
+        "custom": "カスタム"
+      },
+      "validation": {
+        "bankAccount": "委任状の承認済み銀行口座を選択してください。",
+        "reference": "委任状参照を入力してください。"
+      }
     },
     "wages": {
       "title": "賃金レート",

@@ -2432,17 +2432,19 @@
       "company": "会社",
       "accounting": "会計",
       "taxes": "税",
+      "banking": "銀行と支払",
       "dimensions": "ディメンション",
       "billing": "請求と採番",
-      "sales": "販売",
-      "workforce": "労働力",
+      "sales": "販売とCRM",
+      "workforce": "人事",
       "assets": "資産",
       "currency": "通貨",
       "revenue": "収益",
       "inventory": "在庫",
       "projects": "プロジェクト",
       "compliance": "コンプライアンス",
-      "agents": "エージェント"
+      "agents": "エージェント",
+      "apps": "アプリ設定"
     },
     "fxProvider": {
       "title": "為替レートプロバイダー",
@@ -2537,26 +2539,26 @@
       "commitOff": "オフ"
     },
     "paymentOperations": {
-      "title": "支払と銀行取引",
-      "description": "支払レール、資金調達プロファイル、スケジュール、承認、送付、および口座振替委任状を設定します。",
       "tabs": {
         "profiles": "銀行プロファイル",
         "formats": "支払フォーマット",
-        "schedules": "スケジュール",
-        "mandates": "口座振替委任状"
+        "schedules": "支払スケジュール"
+      },
+      "descriptions": {
+        "profiles": "支払ファイルの作成に使用する銀行口座、支払フォーマット、送信設定。",
+        "formats": "支払レールごとのファイルレイアウト(カスタムフォーマッタースクリプトを含む)。",
+        "schedules": "期日の請求書を選択し、支払実行を下書きまたは承認待ちとして作成する定期実行。"
       },
       "search": {
         "profiles": "プロファイルを検索…",
         "formats": "フォーマットを検索…",
-        "schedules": "スケジュールを検索…",
-        "mandates": "委任状を検索…"
+        "schedules": "スケジュールを検索…"
       },
       "state": "状態",
       "new": {
         "profiles": "新規プロファイル",
         "formats": "新規カスタムフォーマット",
-        "schedules": "新規スケジュール",
-        "mandates": "新規委任状"
+        "schedules": "新規スケジュール"
       },
       "columns": {
         "name": "名称",
@@ -2571,20 +2573,11 @@
         "profile": "プロファイル",
         "cron": "スケジュール",
         "nextRun": "次回実行",
-        "action": "アクション",
-        "reference": "参照",
-        "party": "取引相手",
-        "scheme": "スキーム",
-        "signedOn": "署名日",
-        "expiresOn": "有効期限"
+        "action": "アクション"
       },
       "states": {
         "active": "有効",
-        "archived": "アーカイブ済み",
-        "pending": "保留中",
-        "suspended": "一時停止",
-        "revoked": "取り消し済み",
-        "expired": "期限切れ"
+        "archived": "アーカイブ済み"
       },
       "rails": {
         "cpa005_credit": "CPA-005クレジット",
@@ -2605,12 +2598,6 @@
       "actions": {
         "create_draft": "下書きを作成",
         "submit_for_approval": "承認のために提出"
-      },
-      "schemes": {
-        "nacha": "NACHA",
-        "sepa_core": "SEPA Core",
-        "sepa_b2b": "SEPA B2B",
-        "custom": "カスタム"
       },
       "fields": {
         "name": "名称",
@@ -2634,15 +2621,7 @@
         "cron": "スケジュール",
         "cronHint": "プリセットを選択するか、完全に制御するためにカスタムスケジュール（cron構文）を入力してください。",
         "timezone": "タイムゾーン",
-        "action": "支払期日到来時",
-        "party": "取引相手",
-        "partyBankAccount": "承認済み銀行口座",
-        "scheme": "委任状スキーム",
-        "reference": "委任状参照",
-        "status": "ステータス",
-        "signedOn": "署名日",
-        "validFrom": "有効開始日",
-        "expiresOn": "有効期限"
+        "action": "支払期日到来時"
       },
       "approvalHint": "支払処理の承認は<flows>フロー</flows>で設定します。支払処理のフローがない場合、申請された支払処理はすぐに承認されます。",
       "secretFields": {
@@ -2696,20 +2675,17 @@
         "new": {
           "profiles": "新規銀行プロファイル",
           "formats": "新規カスタム支払フォーマット",
-          "schedules": "新規支払スケジュール",
-          "mandates": "新規口座振替委任状"
+          "schedules": "新規支払スケジュール"
         },
         "edit": {
           "profiles": "銀行プロファイルを編集",
           "formats": "支払フォーマットを編集",
-          "schedules": "支払スケジュールを編集",
-          "mandates": "口座振替委任状を編集"
+          "schedules": "支払スケジュールを編集"
         },
         "description": {
           "profiles": "資金調達口座を支払レールおよび送付ポリシーに接続します。",
           "formats": "カスタム銀行フォーマット用のファイルメタデータおよびサンドボックス化されたJavaScriptを定義します。",
-          "schedules": "繰り返し可能なスケジュールで対象取引を選択します。",
-          "mandates": "取引相手から資金を回収するために必要な承認を記録します。"
+          "schedules": "繰り返し可能なスケジュールで対象取引を選択します。"
         }
       },
       "select": "選択…",
@@ -2872,10 +2848,6 @@
       },
       "sftp": {
         "title": "SFTP"
-      },
-      "payment-operations": {
-        "title": "支払と銀行取引",
-        "description": "支払フォーマット、資金調達プロファイル、スケジュール、および口座振替委任状。"
       },
       "account-groups": {
         "title": "勘定グループ",
@@ -3194,7 +3166,8 @@
       },
       "extension-settings": {
         "title": "アプリ設定",
-        "description": "インストール済みアプリが宣言した設定を構成します。変更時は以前の値と発効日を保持します。"
+        "description": "インストール済みアプリが宣言した設定を構成します。変更時は以前の値と発効日を保持します。",
+        "appDescription": "このアプリが宣言する設定。変更しても以前の値と有効日は保持されます。"
       },
       "leave-types": {
         "title": "休暇種別",
@@ -7115,6 +7088,18 @@
     "quoteToCash": {
       "title": "見積からサブスク化まで",
       "description": "ランプ価格のSaaS見積、値引き承認、電子署名、ワンクリック有効化。"
+    },
+    "internalBilling": {
+      "title": "社内請求",
+      "description": "部門・プロジェクト・子会社間で作業を請求します。各ルールで処理方法を設定します：提供部門への売上計上、原価振替、または連結で消去されるグループ内売上。"
+    },
+    "projectProgress": {
+      "title": "進捗とアーンドバリュー",
+      "description": "生産数量を予算化し、施工数量を記録（作業伝票からも）、完成までのコストを予測し、アーンドバリューと消化率を報告します。"
+    },
+    "unbilledRevenueAccrual": {
+      "title": "未請求収益の見越計上",
+      "description": "期末に、実施済みで未請求の実費精算作業を見越計上し、翌期初日に自動で振り戻します。"
     }
   },
   "extensions": {

@@ -237,67 +237,41 @@
   },
   "setup": {
     "title": "CRM",
-    "description": "Configure lifecycle statuses, opportunity stages, lead sources, territories, sales teams, and quotas.",
     "sequence": "Sequence",
-    "priority": "Priority",
-    "defaultOwner": "Default owner",
-    "manager": "Manager",
     "empty": "No matching setup records.",
     "openRecord": "Open {name}",
     "percent": "{value}%",
-    "memberCount": "{count, plural, one {# member} other {# members}}",
     "created": "CRM setup record created",
     "updated": "CRM setup record updated",
     "new": {
       "accountStatuses": "New account status",
       "opportunityStatuses": "New opportunity stage",
-      "sources": "New lead source",
-      "territories": "New territory",
-      "teams": "New sales team",
-      "quotas": "New quota"
+      "sources": "New lead source"
     },
     "search": {
       "accountStatuses": "Search account statuses",
       "opportunityStatuses": "Search opportunity stages",
-      "sources": "Search lead sources",
-      "territories": "Search territories",
-      "teams": "Search sales teams",
-      "quotas": "Search quotas"
+      "sources": "Search lead sources"
     },
     "drawer": {
       "new": {
         "accountStatuses": "New account status",
         "opportunityStatuses": "New opportunity stage",
-        "sources": "New lead source",
-        "territories": "New territory",
-        "teams": "New sales team",
-        "quotas": "New quota"
+        "sources": "New lead source"
       },
       "edit": {
         "accountStatuses": "Edit account status",
         "opportunityStatuses": "Edit opportunity stage",
-        "sources": "Edit lead source",
-        "territories": "Edit territory",
-        "teams": "Edit sales team",
-        "quotas": "Edit quota"
+        "sources": "Edit lead source"
       },
       "description": {
         "accountStatuses": "Control relationship lifecycle classification and qualification behavior.",
         "opportunityStatuses": "Control pipeline probability, forecast treatment, and close behavior.",
-        "sources": "Maintain the normalized acquisition sources used across CRM.",
-        "territories": "Configure ownership and deterministic routing rules.",
-        "teams": "Assign a manager and the active members of this sales team.",
-        "quotas": "Set a period target for one sales representative or team."
+        "sources": "Maintain the normalized acquisition sources used across CRM."
       }
     },
     "fields": {
       "name": "Name",
-      "matchMode": "Rule matching",
-      "rules": "Routing rules",
-      "rulesHint": "Optional. Each rule matches a field against a value to route leads here. Fields: region, country, annualRevenue. Operators: equals, contains, in, gte, lte.",
-      "rulesPlaceholder": "['{ \"field\": \"region\", \"operator\": \"equals\", \"value\": \"West\" }']",
-      "members": "Team members",
-      "targetType": "Target type",
       "isQualified": "Qualified status",
       "isClosed": "Closed status",
       "isWon": "Won status",
@@ -314,25 +288,18 @@
       "yes": "Yes",
       "no": "No"
     },
-    "matchModes": {
-      "all": "Match all rules",
-      "any": "Match any rule"
-    },
-    "targetTypes": {
-      "user": "Sales representative",
-      "team": "Sales team"
-    },
     "validation": {
-      "nameRequired": "Enter a name.",
-      "invalidRules": "Routing rules must be a valid JSON array."
+      "nameRequired": "Enter a name."
     },
     "tabs": {
       "accountStatuses": "Account statuses",
       "opportunityStatuses": "Opportunity stages",
-      "sources": "Lead sources",
-      "territories": "Territories",
-      "teams": "Sales teams",
-      "quotas": "Quotas"
+      "sources": "Lead sources"
+    },
+    "descriptions": {
+      "accountStatuses": "Lifecycle statuses for leads, prospects and customers, and which count as qualified.",
+      "opportunityStatuses": "Pipeline stages with win probability, forecast category and the requirements to enter them.",
+      "sources": "Where leads come from, for attribution and reporting."
     },
     "columns": {
       "name": "Name",
@@ -341,18 +308,9 @@
       "probability": "Probability",
       "default_forecast_category": "Forecast category",
       "description": "Description",
-      "priority": "Priority",
-      "owner_name": "Owner",
-      "manager_name": "Manager",
-      "period_start": "Period start",
-      "period_end": "Period end",
-      "amount": "Amount",
       "is_qualified": "Qualified",
       "is_closed": "Closed",
-      "is_active": "Status",
-      "member_count": "Members",
-      "target_name": "Target",
-      "currency": "Currency"
+      "is_active": "Status"
     }
   },
   "validation": {

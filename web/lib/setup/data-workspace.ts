@@ -6,7 +6,7 @@ export function dataWorkspaceNavigation(permissions: Set<string>) {
     return { showSetup: true, backHref: '/admin/setup/company', backLabelKey: 'admin.setup.entities.company.title' }
   }
   if (permissionSetCovers(permissions, 'crm.setup.manage')) {
-    return { showSetup: true, backHref: '/admin/setup/crm', backLabelKey: 'crm.setup.title' }
+    return { showSetup: true, backHref: '/admin/setup/crm?tab=accountStatuses', backLabelKey: 'crm.setup.title' }
   }
   return { showSetup: false, backHref: '/', backLabelKey: 'nav.modules.dashboard' }
 }

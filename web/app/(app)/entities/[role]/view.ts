@@ -146,7 +146,7 @@ export async function loadEntityRole(
     || requestedPartyTab === 'payroll' || requestedPartyTab === 'employment' || requestedPartyTab === 'compliance'
     || requestedPartyTab === 'pulse' || requestedPartyTab === 'relationship' || requestedPartyTab === 'external-ids'
     || requestedPartyTab === 'invoicing' || requestedPartyTab === 'pricing'
-    || requestedPartyTab === 'paymentMethods'
+    || requestedPartyTab === 'paymentMethods' || requestedPartyTab === 'debitMandates'
     ? requestedPartyTab
     : 'overview'
   const [openParty, pickers] = await Promise.all([
@@ -328,6 +328,11 @@ export async function loadEntityRole(
                 canManageMethods: can(authz, 'payment_methods.manage'),
                 canManageAutopay: can(authz, 'autopay.manage'),
               }
+            : null,
+          // Debit mandates ride the grant the mandate routes enforce plus
+          // the persisted customer role row; null hides the tab.
+          debitMandates: role === 'customer' && can(authz, 'admin.setup.manage') && openParty?.customer != null
+            ? { partyId: String(openParty.party.id) }
             : null,
           multiCurrency,
           role,

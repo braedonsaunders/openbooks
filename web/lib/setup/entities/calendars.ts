@@ -1,4 +1,4 @@
-/** Setup-registry business calendar and aging policy entities (Company group). */
+/** Setup-registry business calendar and aging policy entities (Accounting group). */
 import type { SetupEntity } from '../types'
 import { ISO_WEEKDAYS } from '../options'
 
@@ -12,7 +12,7 @@ export const CALENDAR_ENTITIES: SetupEntity[] = [
     table: 'org_business_calendars',
     singularTitleKey: 'entities.business-calendars.singularTitle',
     actorCols: true,
-    groupKey: 'company',
+    groupKey: 'accounting',
     iconKey: 'calendar',
     orgScoped: true,
     orderBy: 'effective_from desc',
@@ -51,7 +51,7 @@ export const CALENDAR_ENTITIES: SetupEntity[] = [
     table: 'aging_bucket_policies',
     singularTitleKey: 'entities.aging-bucket-policies.singularTitle',
     actorCols: true,
-    groupKey: 'company',
+    groupKey: 'accounting',
     iconKey: 'timer',
     orgScoped: true,
     orderBy: 'effective_from desc',

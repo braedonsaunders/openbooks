@@ -4,7 +4,7 @@ import { can, type Authz } from './authz'
 import { resolvedFeatureState } from './features'
 import { visibleNavigationHref } from './nav/access'
 import { searchPages, type PageSearchHit } from './nav/page-search'
-import { setupRail } from './setup/rail'
+import { setupRail, setupRailItemLabel } from './setup/rail'
 import { setupRailFlags } from './setup/rail-flags'
 import { searchDocArticles } from './feedback/knowledge'
 import { getArticle } from './docs'
@@ -49,15 +49,15 @@ async function catalogEntries(authz: Authz): Promise<CatalogEntry[]> {
     }
   }
 
-  const rail = setupRail(setupRailFlags(authz, features))
+  const rail = setupRail(await setupRailFlags(authz, features))
   const setupTitle = label('admin.setup.title')
   for (const group of rail.groups) {
     for (const item of group.items) {
-      entries.push({ type: 'setting', href: item.href, title: label(item.labelKey), trail: [setupTitle, label(group.labelKey)], iconKey: 'settings' })
+      entries.push({ type: 'setting', href: item.href, title: setupRailItemLabel(item, label), trail: [setupTitle, label(group.labelKey)], iconKey: 'settings' })
     }
   }
   for (const item of rail.data.items) {
-    entries.push({ type: 'setting', href: item.href, title: label(item.labelKey), trail: [label(rail.data.labelKey)], iconKey: 'settings' })
+    entries.push({ type: 'setting', href: item.href, title: setupRailItemLabel(item, label), trail: [label(rail.data.labelKey)], iconKey: 'settings' })
   }
 
   const adminTitle = tAdmin('hub.title')

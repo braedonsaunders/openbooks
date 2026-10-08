@@ -27,45 +27,20 @@ import { isFeatureEnabled, subsidiaryFeatureEnabled } from '../../../../../lib/f
 import type { PaymentSetupView } from './PaymentOperationsSetup'
 
 /**
- * Payment operations setup, split into a loader and a spec.
- *
- * Four mutually exclusive bodies — profiles, formats, schedules, mandates —
- * chosen by four presence flags the LOADER computes from `?view=`. The spec
- * never asks which view is active; it places four tables and exactly one of
- * them survives. That is the accounts-page precedent (`onList`/`onSearch`/
- * `onHierarchy`) applied to a tabbed setup page.
+ * Payment operations setup: bank profiles, payment formats and schedules.
+ * Each view is its own Setup page addressed by `?view=`; the loader computes
+ * one presence flag per view and the spec places one table per flag, so
+ * exactly one survives a render.
  *
  * The editor drawer and the per-view "New" button stay widgets: the drawer
- * owns fetch flows plus client form state a spec cannot name (the /tax and
- * payroll precedents), and both need the full options payload plus the
- * multiCurrency flag the loader already resolves. The
- * `payment-operations-editor` slot re-derives nothing — it renders the shared
- * `./sections` component over loader-resolved props — while the tab strip is
- * a shared `PaymentOperationsTabs` chrome (the payroll `PayrollSetupTabs`
- * precedent): the active-vs-plain link PAIR lives in the component, because
- * presence cannot choose between two treatments.
- *
- * Everything else here is loader work copied VERBATIM from page.tsx: the
- * `admin.setup.manage` gate, the view whitelist with its `profiles` fallback,
- * the fixed sort with only `default` allowed, the mandates-vs-rest state
- * filter split, the four per-view list/count/counts/open queries, and the
- * nine-way options fan-out with the subsidiary-UI gate. The mandate status
- * counts use `status as value` (the other views bucket `is_active`); that
- * asymmetry is the native contract and the filter chips render whatever the
- * loader hands them.
- *
- * Message keys: every `t('…')` below is used by the native page or present in
- * `web/messages/en/admin.json` (verified by survey: `states.*`, `tabs.*`,
- * `search.*`, `new.*`, `columns.*`, `rails.*`, `directions.*`,
- * `actions.create_draft/submit_for_approval`, `schemes.*`, `empty`,
- * `manualDelivery`, `any`, plus the
- * drawer/edit/new keys passed through as data to the editor slot).
+ * owns fetch flows plus client form state a spec cannot name, and both need
+ * the options payload plus the multiCurrency flag the loader resolves.
+ * Debit mandates are per-customer records and live on the customer record.
  */
 
 const BASE_PATH = '/admin/setup/payment-operations'
 const ACTIVE_STATES = new Set(['active', 'archived'])
-const MANDATE_STATES = new Set(['pending', 'active', 'suspended', 'revoked', 'expired'])
-const VIEWS = new Set<PaymentSetupView>(['profiles', 'formats', 'schedules', 'mandates'])
+const VIEWS = new Set<PaymentSetupView>(['profiles', 'formats', 'schedules'])
 
 type StateCount = { value: string; count: number }
 
@@ -91,11 +66,6 @@ export interface PaymentOperationsRow {
   // client-side. `timestamptz` arrives as a Date; serialize to ISO.
   nextRunAt: string | null
   action: string | null
-  mandateReference: string | null
-  partyName: string | null
-  scheme: string | null
-  signedOn: string | null
-  expiresOn: string | null
   statusLabel: string
   statusVariant: 'default' | 'secondary' | 'outline' | 'destructive' | 'warning' | 'success'
 }
@@ -103,11 +73,9 @@ export interface PaymentOperationsRow {
 export interface PaymentOperationsData {
   title: string
   description: string
-  tabs: { key: string; href: string; label: string; active: boolean }[]
   onProfiles: boolean
   onFormats: boolean
   onSchedules: boolean
-  onMandates: boolean
   searchPlaceholder: string
   currentParams: Record<string, string | string[] | undefined>
   stateLabel: string
@@ -131,11 +99,6 @@ export interface PaymentOperationsData {
     cron: string
     nextRun: string
     action: string
-    reference: string
-    party: string
-    scheme: string
-    signedOn: string
-    expiresOn: string
   }
   rows: PaymentOperationsRow[]
   total: number
@@ -153,7 +116,6 @@ export interface PaymentOperationsData {
       subsidiaries: { id: string; name: string }[]
       sftpServers: { id: string; name: string }[]
       profiles: { id: string; name: string }[]
-      parties: { id: string; display_name: string; bank_accounts: { id: string; label: string }[] }[]
       currencies: { code: string; name: string }[]
     }
     multiCurrency: boolean
@@ -170,21 +132,13 @@ export async function loadPaymentOperations(
   const view: PaymentSetupView = requested && VIEWS.has(requested) ? requested : 'profiles'
   const list = parseListParams(sp, { sort: 'default', allowedSorts: ['default'] as const, perPage: 25 })
   const requestedState = pickString(sp.state)
-  const state = requestedState && (view === 'mandates' ? MANDATE_STATES : ACTIVE_STATES).has(requestedState)
-    ? requestedState
-    : undefined
+  const state = requestedState && ACTIVE_STATES.has(requestedState) ? requestedState : undefined
   const selectedId = isUuid(pickString(sp.row) ?? '') ? pickString(sp.row)! : null
   const orgId = authz.user.orgId
   const q = `%${list.q ?? ''}%`
-  const stateWhere = state
-    ? view === 'mandates'
-      ? sql`and m.status = ${state}`
-      : sql`and x.is_active = ${state === 'active'}`
-    : sql``
+  const stateWhere = state ? sql`and x.is_active = ${state === 'active'}` : sql``
 
-  // Per-view list/count/counts/open fan-out, verbatim from page.tsx. The
-  // mandates branch re-derives its own state fragment; the SQL is identical
-  // to `stateWhere` above and both are kept so the copy stays line-faithful.
+  // Per-view list/count/counts/open fan-out.
   let rows: Record<string, unknown>[] = []
   let total = 0
   let selected: Record<string, unknown> | null = null
@@ -231,7 +185,7 @@ export async function loadPaymentOperations(
       selectedId ? db.execute(sql`select * from payment_formats where id = ${selectedId} and org_id = ${orgId}`) : Promise.resolve({ rows: [] }),
     ])
     rows = (data.rows); total = Number(((count.rows[0]))?.n ?? 0); stateCounts = counts.rows as unknown as StateCount[]; selected = ((open.rows[0])) ?? null
-  } else if (view === 'schedules') {
+  } else {
     const [data, count, counts, open] = await Promise.all([
       db.execute(sql`
         select x.*, p.name as profile_name
@@ -247,38 +201,16 @@ export async function loadPaymentOperations(
       selectedId ? db.execute(sql`select * from payment_schedules where id = ${selectedId} and org_id = ${orgId}`) : Promise.resolve({ rows: [] }),
     ])
     rows = (data.rows); total = Number(((count.rows[0]))?.n ?? 0); stateCounts = counts.rows as unknown as StateCount[]; selected = ((open.rows[0])) ?? null
-  } else {
-    const mandateState = state ? sql`and m.status = ${state}` : sql``
-    const [data, count, counts, open] = await Promise.all([
-      db.execute(sql`
-        select m.*, p.display_name as party_name, b.bank_name, b.account_last_four
-          from payment_mandates m join parties p on p.id = m.party_id and p.org_id = m.org_id
-          join party_bank_accounts b on b.id = m.party_bank_account_id and b.org_id = m.org_id
-         where m.org_id = ${orgId} and (m.mandate_reference ilike ${q} or p.display_name ilike ${q}) ${mandateState}
-         order by m.created_at desc limit ${list.perPage} offset ${(list.page - 1) * list.perPage}`),
-      db.execute(sql`
-        select count(*)::int as n from payment_mandates m join parties p on p.id = m.party_id and p.org_id = m.org_id
-         where m.org_id = ${orgId} and (m.mandate_reference ilike ${q} or p.display_name ilike ${q}) ${mandateState}`),
-      db.execute(sql`select status as value, count(*)::int as count from payment_mandates where org_id = ${orgId} group by status`),
-      selectedId ? db.execute(sql`select * from payment_mandates where id = ${selectedId} and org_id = ${orgId}`) : Promise.resolve({ rows: [] }),
-    ])
-    rows = (data.rows); total = Number(((count.rows[0]))?.n ?? 0); stateCounts = counts.rows as unknown as StateCount[]; selected = ((open.rows[0])) ?? null
   }
 
   const multiCurrency = await isFeatureEnabled(orgId, 'multiCurrency')
-  const [formats, bankAccounts, accountingAccounts, subsidiaries, sftpServers, profiles, parties, currencies, subsidiaryUiEnabled] = await Promise.all([
+  const [formats, bankAccounts, accountingAccounts, subsidiaries, sftpServers, profiles, currencies, subsidiaryUiEnabled] = await Promise.all([
     db.execute(sql`select id, name, rail, currency from payment_formats where org_id = ${orgId} and is_active order by name`),
     db.execute(sql`select id, number, name from accounts where org_id = ${orgId} and type = 'asset_bank' and is_active and not is_summary order by number nulls last, name`),
     db.execute(sql`select id, number, name from accounts where org_id = ${orgId} and is_active and not is_summary order by number nulls last, name`),
     db.execute(sql`select id, name from subsidiaries where org_id = ${orgId} and is_active order by name`),
     db.execute(sql`select id, name from sftp_servers where org_id = ${orgId} and is_active order by name`),
     db.execute(sql`select id, name from payment_bank_profiles where org_id = ${orgId} and is_active order by name`),
-    db.execute(sql`
-      select p.id, p.display_name, jsonb_agg(jsonb_build_object(
-        'id', b.id, 'label', concat_ws(' · ', nullif(b.bank_name, ''), case when b.account_last_four is not null then '••••' || b.account_last_four end)
-      ) order by b.created_at desc) as bank_accounts
-      from parties p join party_bank_accounts b on b.party_id = p.id and b.org_id = p.org_id and b.is_active and b.approved_at is not null
-     where p.org_id = ${orgId} and p.is_active group by p.id, p.display_name order by p.display_name`),
     db.execute(sql`select code, name from currencies order by code`),
     subsidiaryFeatureEnabled(orgId),
   ])
@@ -289,13 +221,11 @@ export async function loadPaymentOperations(
     return typeof v === 'string' ? v : null
   }
   const hrefFor = (id: string) => `${BASE_PATH}?view=${view}&row=${id}`
-  const mandateVariant = (status: string): PaymentOperationsRow['statusVariant'] =>
-    status === 'active' ? 'success' : status === 'revoked' ? 'destructive' : 'secondary'
 
   // Every cell the loaders resolve to a presentation string; the spec binds
   // `text`/`link`/`badge` directly. Conditional pairs stay loader-side: the
   // bank join (`number · name`), the delivery fallback (`manualDelivery`),
-  // the active/archived badge, the `any` currency fallback, and the mandates em-dash fallbacks.
+  // the active/archived badge and the `any` currency fallback.
   const mapped: PaymentOperationsRow[] = rows.map((r) => {
     const id = String(r.id)
     if (view === 'profiles') {
@@ -317,11 +247,6 @@ export async function loadPaymentOperations(
         cron: null,
         nextRunAt: null,
         action: null,
-        mandateReference: null,
-        partyName: null,
-        scheme: null,
-        signedOn: null,
-        expiresOn: null,
         statusLabel: t(`states.${active ? 'active' : 'archived'}`),
         statusVariant: active ? 'success' : 'outline',
       }
@@ -345,55 +270,22 @@ export async function loadPaymentOperations(
         cron: null,
         nextRunAt: null,
         action: null,
-        mandateReference: null,
-        partyName: null,
-        scheme: null,
-        signedOn: null,
-        expiresOn: null,
         statusLabel: t(`states.${active ? 'active' : 'archived'}`),
         statusVariant: active ? 'success' : 'outline',
       }
     }
-    if (view === 'schedules') {
-      const active = r.is_active === true
-      const rawNextRun = r.next_run_at
-      const nextRunAt =
-        rawNextRun instanceof Date
-          ? rawNextRun.toISOString()
-          : typeof rawNextRun === 'string'
-            ? rawNextRun
-            : null
-      return {
-        id,
-        href: hrefFor(id),
-        name: str(r, 'name'),
-        bank: null,
-        formatName: null,
-        currency: null,
-        currencyFallback: null,
-        delivery: null,
-        code: null,
-        railLabel: null,
-        railVariant: 'outline',
-        direction: null,
-        profileName: str(r, 'profile_name'),
-        cron: str(r, 'cron'),
-        nextRunAt,
-        action: t(`actions.${str(r, 'action') ?? ''}`),
-        mandateReference: null,
-        partyName: null,
-        scheme: null,
-        signedOn: null,
-        expiresOn: null,
-        statusLabel: t(`states.${active ? 'active' : 'archived'}`),
-        statusVariant: active ? 'success' : 'outline',
-      }
-    }
-    const status = str(r, 'status') ?? ''
+    const active = r.is_active === true
+    const rawNextRun = r.next_run_at
+    const nextRunAt =
+      rawNextRun instanceof Date
+        ? rawNextRun.toISOString()
+        : typeof rawNextRun === 'string'
+          ? rawNextRun
+          : null
     return {
       id,
       href: hrefFor(id),
-      name: null,
+      name: str(r, 'name'),
       bank: null,
       formatName: null,
       currency: null,
@@ -403,17 +295,12 @@ export async function loadPaymentOperations(
       railLabel: null,
       railVariant: 'outline',
       direction: null,
-      profileName: null,
-      cron: null,
-      nextRunAt: null,
-      action: null,
-      mandateReference: str(r, 'mandate_reference'),
-      partyName: str(r, 'party_name'),
-      scheme: t(`schemes.${str(r, 'scheme') ?? ''}`),
-      signedOn: str(r, 'signed_on') ?? '—',
-      expiresOn: str(r, 'expires_on') ?? '—',
-      statusLabel: t(`states.${status}`),
-      statusVariant: mandateVariant(status),
+      profileName: str(r, 'profile_name'),
+      cron: str(r, 'cron'),
+      nextRunAt,
+      action: t(`actions.${str(r, 'action') ?? ''}`),
+      statusLabel: t(`states.${active ? 'active' : 'archived'}`),
+      statusVariant: active ? 'success' : 'outline',
     }
   })
 
@@ -421,18 +308,11 @@ export async function loadPaymentOperations(
   const closeHref = `${BASE_PATH}?view=${view}`
 
   return {
-    title: t('title'),
-    description: t('description'),
-    tabs: (['profiles', 'formats', 'schedules', 'mandates'] as const).map((key) => ({
-      key,
-      href: `${BASE_PATH}?view=${key}`,
-      label: t(`tabs.${key}`),
-      active: view === key,
-    })),
+    title: t(`tabs.${view}`),
+    description: t(`descriptions.${view}`),
     onProfiles: view === 'profiles',
     onFormats: view === 'formats',
     onSchedules: view === 'schedules',
-    onMandates: view === 'mandates',
     searchPlaceholder: t(`search.${view}`),
     currentParams: sp,
     stateLabel: t('state'),
@@ -460,11 +340,6 @@ export async function loadPaymentOperations(
       cron: t('columns.cron'),
       nextRun: t('columns.nextRun'),
       action: t('columns.action'),
-      reference: t('columns.reference'),
-      party: t('columns.party'),
-      scheme: t('columns.scheme'),
-      signedOn: t('columns.signedOn'),
-      expiresOn: t('columns.expiresOn'),
     },
     rows: mapped,
     total,
@@ -484,7 +359,6 @@ export async function loadPaymentOperations(
               subsidiaries: subsidiaryUiEnabled ? subsidiaries.rows as unknown as { id: string; name: string }[] : [],
               sftpServers: sftpServers.rows as unknown as { id: string; name: string }[],
               profiles: profiles.rows as unknown as { id: string; name: string }[],
-              parties: parties.rows as unknown as { id: string; display_name: string; bank_accounts: { id: string; label: string }[] }[],
               currencies: currencies.rows as unknown as { code: string; name: string }[],
             },
             multiCurrency,
@@ -498,8 +372,8 @@ const f = ref<PaymentOperationsData>()
 const item = field
 const rootF = rootRef<PaymentOperationsData>()
 
-// The row links all share one treatment: teal, with the formats/code and
-// mandates/reference variants additionally monospaced. The loader resolves
+// The row links all share one treatment: teal, with the formats/code
+// variant additionally monospaced. The loader resolves
 // which VALUE each view links; the spec states the treatment per table.
 const NAME_LINK = 'font-medium text-teal-700 hover:underline dark:text-teal-300'
 const CODE_LINK = 'font-mono text-xs font-semibold text-teal-700 hover:underline dark:text-teal-300'
@@ -527,9 +401,6 @@ export function paymentOperationsSpec(data: PaymentOperationsData): PageSpec {
             className: 'text-slate-500 dark:text-slate-400',
           }),
         ]),
-        widgetBlock('payment-operations-tabs', {
-          tabs: data.tabs,
-        }),
         grid('flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between', [
           grid('flex flex-wrap items-center gap-2', [
             widgetBlock('search-input', { placeholder: data.searchPlaceholder }),
@@ -543,7 +414,7 @@ export function paymentOperationsSpec(data: PaymentOperationsData): PageSpec {
           ]),
           newButton,
         ]),
-        // Four mutually exclusive tables; exactly one presence flag is true
+        // Three mutually exclusive tables; exactly one presence flag is true
         // per render. Each lives in the native card wrapper
         // (`overflow-hidden rounded-xl border …`); the `app` table renders no
         // wrapper of its own.
@@ -612,25 +483,6 @@ export function paymentOperationsSpec(data: PaymentOperationsData): PageSpec {
             }),
           ]),
           when: f('onSchedules'),
-        },
-        {
-          ...grid('overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900', [
-            table({
-              variant: 'app',
-              rows: f('rows'),
-              rowKey: item('id'),
-              emptyRow: { text: rootF('emptyText'), colSpan: 6, className: 'py-10 text-center text-slate-500' },
-              columns: [
-                column(rootF('labels.reference'), link(item('mandateReference'), item('href'), CODE_LINK)),
-                column(rootF('labels.party'), text(item('partyName'))),
-                column(rootF('labels.scheme'), text(item('scheme'))),
-                column(rootF('labels.signedOn'), text(item('signedOn'))),
-                column(rootF('labels.expiresOn'), text(item('expiresOn'))),
-                column(rootF('labels.status'), badge(item('statusLabel'), { variant: item('statusVariant') })),
-              ],
-            }),
-          ]),
-          when: f('onMandates'),
         },
         pagination({
           basePath: BASE_PATH,

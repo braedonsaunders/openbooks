@@ -2108,17 +2108,19 @@
       "company": "Entreprise",
       "accounting": "Comptabilité",
       "taxes": "Taxes",
+      "banking": "Banque et paiements",
       "dimensions": "Dimensions",
       "billing": "Facturation et numérotation",
-      "sales": "Ventes",
-      "workforce": "Main-d'œuvre",
+      "sales": "Ventes et CRM",
+      "workforce": "Ressources humaines",
       "assets": "Actifs",
       "currency": "Devise",
       "revenue": "Revenus",
       "inventory": "Stocks",
       "projects": "Projets",
       "compliance": "Conformité",
-      "agents": "Agents"
+      "agents": "Agents",
+      "apps": "Paramètres des apps"
     },
     "agents": {
       "nav": {
@@ -2417,26 +2419,26 @@
       "commitOff": "Non"
     },
     "paymentOperations": {
-      "title": "Paiements et services bancaires",
-      "description": "Configurez les réseaux de paiement, les profils bancaires, les calendriers, les approbations, la livraison et les mandats de prélèvement.",
       "tabs": {
         "profiles": "Profils bancaires",
         "formats": "Formats de paiement",
-        "schedules": "Calendriers",
-        "mandates": "Mandats de prélèvement"
+        "schedules": "Planifications de paiement"
+      },
+      "descriptions": {
+        "profiles": "Comptes bancaires, formats de paiement et paramètres de transmission utilisés pour générer les fichiers de paiement.",
+        "formats": "Mises en page de fichier pour chaque réseau de paiement, y compris les scripts de formatage personnalisés.",
+        "schedules": "Exécutions récurrentes qui sélectionnent les factures échues et créent des lots de paiement en brouillon ou pour approbation."
       },
       "search": {
         "profiles": "Rechercher des profils…",
         "formats": "Rechercher des formats…",
-        "schedules": "Rechercher des calendriers…",
-        "mandates": "Rechercher des mandats…"
+        "schedules": "Rechercher des calendriers…"
       },
       "state": "État",
       "new": {
         "profiles": "Nouveau profil",
         "formats": "Nouveau format personnalisé",
-        "schedules": "Nouveau calendrier",
-        "mandates": "Nouveau mandat"
+        "schedules": "Nouveau calendrier"
       },
       "columns": {
         "name": "Nom",
@@ -2451,20 +2453,11 @@
         "profile": "Profil",
         "cron": "Calendrier",
         "nextRun": "Prochaine exécution",
-        "action": "Action",
-        "reference": "Référence",
-        "party": "Tiers",
-        "scheme": "Régime",
-        "signedOn": "Signé",
-        "expiresOn": "Expiration"
+        "action": "Action"
       },
       "states": {
         "active": "Actif",
-        "archived": "Archivé",
-        "pending": "En attente",
-        "suspended": "Suspendu",
-        "revoked": "Révoqué",
-        "expired": "Expiré"
+        "archived": "Archivé"
       },
       "rails": {
         "cpa005_credit": "Crédit CPA-005",
@@ -2485,12 +2478,6 @@
       "actions": {
         "create_draft": "Créer un brouillon",
         "submit_for_approval": "Soumettre à l’approbation"
-      },
-      "schemes": {
-        "nacha": "NACHA",
-        "sepa_core": "SEPA Core",
-        "sepa_b2b": "SEPA B2B",
-        "custom": "Personnalisé"
       },
       "fields": {
         "name": "Nom",
@@ -2514,14 +2501,6 @@
         "cron": "Expression cron",
         "timezone": "Fuseau horaire",
         "action": "À l’échéance",
-        "party": "Tiers",
-        "partyBankAccount": "Compte bancaire approuvé",
-        "scheme": "Régime du mandat",
-        "reference": "Référence du mandat",
-        "status": "Statut",
-        "signedOn": "Signé le",
-        "validFrom": "Valide à partir du",
-        "expiresOn": "Expire le",
         "cronHint": "Choisissez un préréglage ou saisissez une planification personnalisée (syntaxe cron) pour un contrôle total."
       },
       "approvalHint": "L’approbation des lots de paiements se configure dans <flows>Flux</flows>. Sans flux de lots de paiements, les lots soumis sont approuvés immédiatement.",
@@ -2576,20 +2555,17 @@
         "new": {
           "profiles": "Nouveau profil bancaire",
           "formats": "Nouveau format de paiement personnalisé",
-          "schedules": "Nouveau calendrier de paiement",
-          "mandates": "Nouveau mandat de prélèvement"
+          "schedules": "Nouveau calendrier de paiement"
         },
         "edit": {
           "profiles": "Modifier le profil bancaire",
           "formats": "Modifier le format de paiement",
-          "schedules": "Modifier le calendrier de paiement",
-          "mandates": "Modifier le mandat de prélèvement"
+          "schedules": "Modifier le calendrier de paiement"
         },
         "description": {
           "profiles": "Associez un compte de financement à un réseau de paiement et à une politique de livraison.",
           "formats": "Définissez les métadonnées du fichier et le JavaScript isolé d’un format bancaire personnalisé.",
-          "schedules": "Sélectionnez les opérations admissibles selon un calendrier récurrent.",
-          "mandates": "Consignez l’autorisation requise pour prélever des fonds auprès d’un tiers."
+          "schedules": "Sélectionnez les opérations admissibles selon un calendrier récurrent."
         }
       },
       "select": "Sélectionner…",
@@ -2747,10 +2723,6 @@
       },
       "sftp": {
         "title": "Serveurs SFTP"
-      },
-      "payment-operations": {
-        "title": "Paiements et services bancaires",
-        "description": "Formats de paiement, profils bancaires, calendriers et mandats de prélèvement."
       },
       "subsidiaries": {
         "title": "Filiales",
@@ -3074,7 +3046,8 @@
       },
       "extension-settings": {
         "title": "Paramètres des applications",
-        "description": "Configurez les paramètres déclarés par les applications installées. Les modifications conservent les valeurs antérieures et leurs dates d’effet."
+        "description": "Configurez les paramètres déclarés par les applications installées. Les modifications conservent les valeurs antérieures et leurs dates d’effet.",
+        "appDescription": "Paramètres déclarés par cette app. Les modifications conservent les valeurs précédentes et leurs dates d’effet."
       },
       "leave-types": {
         "title": "Types de congé",
@@ -7115,6 +7088,18 @@
     "quoteToCash": {
       "title": "Du devis à l’abonnement",
       "description": "Devis SaaS à paliers tarifaires avec approbation des remises, signature électronique et activation en un clic."
+    },
+    "internalBilling": {
+      "title": "Facturation interne",
+      "description": "Facturez le travail entre services, projets ou filiales. Chaque règle fixe le traitement : créditer la vente au service prestataire, transférer un coût ou enregistrer une vente intragroupe éliminée en consolidation."
+    },
+    "projectProgress": {
+      "title": "Avancement et valeur acquise",
+      "description": "Budgétez les quantités de production, saisissez les quantités posées (y compris depuis les bons de travail), prévoyez le coût restant et suivez la valeur acquise et le rythme de consommation."
+    },
+    "unbilledRevenueAccrual": {
+      "title": "Produits non facturés à recevoir",
+      "description": "En fin de période, constatez les travaux en régie réalisés mais non facturés, contrepassés automatiquement le premier jour de la période suivante."
     }
   },
   "backupsManager": {

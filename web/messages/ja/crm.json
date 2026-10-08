@@ -237,67 +237,41 @@
   },
   "setup": {
     "title": "CRM",
-    "description": "ライフサイクルステータス、商談ステージ、リードソース、テリトリー、営業チーム、ノルマを設定します。",
     "sequence": "並び順",
-    "priority": "優先度",
-    "defaultOwner": "デフォルト担当者",
-    "manager": "マネージャー",
     "empty": "一致する設定レコードはありません。",
     "openRecord": "{name}を開く",
     "percent": "{value}%",
-    "memberCount": "{count, plural, one {#名のメンバー} other {#名のメンバー}}",
     "created": "CRM設定レコードを作成しました",
     "updated": "CRM設定レコードを更新しました",
     "new": {
       "accountStatuses": "新規アカウントステータス",
       "opportunityStatuses": "新規商談ステージ",
-      "sources": "新規リードソース",
-      "territories": "新規テリトリー",
-      "teams": "新規営業チーム",
-      "quotas": "新規ノルマ"
+      "sources": "新規リードソース"
     },
     "search": {
       "accountStatuses": "アカウントステータスを検索",
       "opportunityStatuses": "商談ステージを検索",
-      "sources": "リードソースを検索",
-      "territories": "テリトリーを検索",
-      "teams": "営業チームを検索",
-      "quotas": "ノルマを検索"
+      "sources": "リードソースを検索"
     },
     "drawer": {
       "new": {
         "accountStatuses": "新規アカウントステータス",
         "opportunityStatuses": "新規商談ステージ",
-        "sources": "新規リードソース",
-        "territories": "新規テリトリー",
-        "teams": "新規営業チーム",
-        "quotas": "新規ノルマ"
+        "sources": "新規リードソース"
       },
       "edit": {
         "accountStatuses": "アカウントステータスを編集",
         "opportunityStatuses": "商談ステージを編集",
-        "sources": "リードソースを編集",
-        "territories": "テリトリーを編集",
-        "teams": "営業チームを編集",
-        "quotas": "ノルマを編集"
+        "sources": "リードソースを編集"
       },
       "description": {
         "accountStatuses": "関係のライフサイクル分類と評価の挙動を制御します。",
         "opportunityStatuses": "パイプラインの確度、予測の扱い、成約の挙動を制御します。",
-        "sources": "CRM全体で使用する正規化された獲得ソースを管理します。",
-        "territories": "所有権と確定的なルーティングルールを設定します。",
-        "teams": "この営業チームのマネージャーとアクティブなメンバーを割り当てます。",
-        "quotas": "1人の営業担当者またはチームに対して期間目標を設定します。"
+        "sources": "CRM全体で使用する正規化された獲得ソースを管理します。"
       }
     },
     "fields": {
       "name": "名前",
-      "matchMode": "ルールのマッチング",
-      "rules": "ルーティングルール",
-      "rulesHint": "任意。各ルールはフィールドを値と照合してリードをここにルーティングします。フィールド: region、country、annualRevenue。演算子: equals、contains、in、gte、lte。",
-      "rulesPlaceholder": "['{ \"field\": \"region\", \"operator\": \"equals\", \"value\": \"West\" }']",
-      "members": "チームメンバー",
-      "targetType": "対象タイプ",
       "isQualified": "評価済みステータス",
       "isClosed": "成約ステータス",
       "isWon": "受注ステータス",
@@ -314,25 +288,18 @@
       "yes": "はい",
       "no": "いいえ"
     },
-    "matchModes": {
-      "all": "すべてのルールに一致",
-      "any": "いずれかのルールに一致"
-    },
-    "targetTypes": {
-      "user": "営業担当者",
-      "team": "営業チーム"
-    },
     "validation": {
-      "nameRequired": "名前を入力してください。",
-      "invalidRules": "ルーティングルールは有効なJSON配列である必要があります。"
+      "nameRequired": "名前を入力してください。"
     },
     "tabs": {
       "accountStatuses": "アカウントステータス",
       "opportunityStatuses": "商談ステージ",
-      "sources": "リードソース",
-      "territories": "テリトリー",
-      "teams": "営業チーム",
-      "quotas": "ノルマ"
+      "sources": "リードソース"
+    },
+    "descriptions": {
+      "accountStatuses": "リード、見込み客、顧客のライフサイクルステータスと、適格とみなすステータス。",
+      "opportunityStatuses": "受注確率、予測カテゴリ、移行条件を持つパイプラインのステージ。",
+      "sources": "アトリビューションとレポートのためのリードの発生元。"
     },
     "columns": {
       "name": "名前",
@@ -341,18 +308,9 @@
       "probability": "確度",
       "default_forecast_category": "予測カテゴリー",
       "description": "説明",
-      "priority": "優先度",
-      "owner_name": "担当者",
-      "manager_name": "マネージャー",
-      "period_start": "期間開始",
-      "period_end": "期間終了",
-      "amount": "金額",
       "is_qualified": "評価済み",
       "is_closed": "成約",
-      "is_active": "ステータス",
-      "member_count": "メンバー",
-      "target_name": "対象",
-      "currency": "通貨"
+      "is_active": "ステータス"
     }
   },
   "validation": {

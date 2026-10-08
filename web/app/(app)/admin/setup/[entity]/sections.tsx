@@ -1,5 +1,6 @@
 import 'server-only'
 import { loadExtensionSettingRows, extensionSettingDrawerEntity } from '../../../../../lib/setup/extension-settings'
+import { appSettingsHref } from '../../../../../lib/setup/rail'
 import { loadHomeAnnouncementRows } from '../../../../../lib/setup/home-announcements'
 
 import Link from 'next/link'
@@ -142,7 +143,8 @@ export async function SetupDrawerSlot({
   const { orgId } = authz.user
 
   const baseEntity = SETUP_ENTITY_BY_KEY.get(entityKey)
-  if (!baseEntity || baseEntity.nestedUnder || baseEntity.parentRecords?.length || baseEntity.rehomed) return null
+  // App settings render on each app's own page rather than a standalone one.
+  if (!baseEntity || baseEntity.nestedUnder || baseEntity.parentRecords?.length || (baseEntity.rehomed && baseEntity.dataSource !== 'extension-settings')) return null
   const features = await resolvedFeatureState(orgId)
   // One authoritative gate admits the drawer — never a local OR over featureKey.
   if (!resolveSetupEntityGate(baseEntity, features).enabled) return null
@@ -156,7 +158,7 @@ export async function SetupDrawerSlot({
 
   const t = await getTranslations('admin.setup')
   const rowParam = typeof sp.row === 'string' ? sp.row : undefined
-  const closeHref = mergeHref(`/admin/setup/${entity.key}`, sp, {
+  const closeHrefFor = (basePath: string) => mergeHref(basePath, sp, {
     row: undefined,
     setupTab: undefined,
     boxRow: undefined,
@@ -173,12 +175,13 @@ export async function SetupDrawerSlot({
     childPage: undefined,
     childShowInactive: undefined,
   })
+  const closeHref = closeHrefFor(`/admin/setup/${entity.key}`)
 
   if (entity.dataSource === 'extension-settings') {
     if (!rowParam || rowParam === 'new') return null
     const row = (await loadExtensionSettingRows(orgId)).find((candidate) => candidate.id === rowParam)
     if (!row) return null
-    return <SetupDrawer entity={extensionSettingDrawerEntity(entity, row)} row={row} members={[]} refOptions={{}} closeHref={closeHref} />
+    return <SetupDrawer entity={extensionSettingDrawerEntity(entity, row)} row={row} members={[]} refOptions={{}} closeHref={closeHrefFor(appSettingsHref(row.extension_key))} />
   }
   // HR-15: announcement rows come from org settings JSON, not a table.
   if (entity.dataSource === 'home-announcements') {
