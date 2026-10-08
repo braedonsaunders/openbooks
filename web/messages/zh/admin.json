@@ -6617,7 +6617,10 @@
     "scheduleColors": {
       "add": "添加颜色规则",
       "rule": "颜色规则"
-    }
+    },
+    "archive": "归档",
+    "confirmArchive": "归档此记录？其历史记录仍可查看。",
+    "archived": "记录已归档"
   },
   "flows": {
     "title": "流程",

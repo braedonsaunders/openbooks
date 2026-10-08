@@ -6617,7 +6617,10 @@
     "scheduleColors": {
       "add": "色のルールを追加",
       "rule": "色のルール"
-    }
+    },
+    "archive": "アーカイブ",
+    "confirmArchive": "この記録をアーカイブしますか？履歴は引き続き参照できます。",
+    "archived": "記録をアーカイブしました"
   },
   "flows": {
     "title": "フロー",

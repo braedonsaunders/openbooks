@@ -42,7 +42,8 @@
     "more": "Mais",
     "details": "Detalhes",
     "date": "Ir para a data",
-    "resourceBoards": "Recursos"
+    "resourceBoards": "Recursos",
+    "manageBoards": "Gerenciar quadros"
   },
   "empty": {
     "title": "Configure seu primeiro quadro",
@@ -284,5 +285,9 @@
     "result": "Descrição de origem",
     "hours": "Horas",
     "origin": "Origem"
+  },
+  "boards": {
+    "description": "Listar, configurar e arquivar quadros de agendamento.",
+    "return": "Voltar à agenda"
   }
 }

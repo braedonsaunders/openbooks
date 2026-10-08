@@ -42,7 +42,8 @@
     "more": "更多",
     "details": "详情",
     "date": "跳转到日期",
-    "resourceBoards": "资源"
+    "resourceBoards": "资源",
+    "manageBoards": "管理看板"
   },
   "empty": {
     "title": "设置您的第一个排程板",
@@ -284,5 +285,9 @@
     "result": "源描述",
     "hours": "工时",
     "origin": "来源"
+  },
+  "boards": {
+    "description": "列出、配置和归档排程看板。",
+    "return": "返回排程"
   }
 }

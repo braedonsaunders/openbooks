@@ -6617,7 +6617,10 @@
     "scheduleColors": {
       "add": "Añadir regla de color",
       "rule": "Regla de color"
-    }
+    },
+    "archive": "Archivar",
+    "confirmArchive": "¿Archivar este registro? Su historial seguirá disponible.",
+    "archived": "Registro archivado"
   },
   "flows": {
     "title": "Flujos",

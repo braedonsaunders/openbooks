@@ -402,6 +402,8 @@ export interface SetupEntity {
   /** Effective-dated history is replaced by creating a new version. */
   allowUpdate?: boolean
   allowDelete?: boolean
+  /** DELETE retires the active configuration while retaining referenced history. */
+  archiveOnDelete?: boolean
   dataSource?: 'extension-settings' | 'home-announcements'
   /** Documentation-center article slug — renders a "Learn more" link on the tab. */
   docSlug?: string

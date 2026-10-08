@@ -18,6 +18,7 @@ import { Banknote, Building2, CircleMinus, Gift, HandCoins, PiggyBank, Plus, Rec
 import { RecordKindCards } from '@/components/record-kind-cards'
 import {
   Button,
+  Badge,
   Input,
   Label,
   SearchSelect,
@@ -482,7 +483,7 @@ export function SetupDrawer({
 
   async function remove() {
     if (!row) return
-    if (!(await confirmDialog(t('confirmDelete')))) return
+    if (!(await confirmDialog(entity.archiveOnDelete ? t('confirmArchive') : t('confirmDelete')))) return
     setBusy(true)
     try {
       const res = await fetch(entity.mutationPath
@@ -495,7 +496,7 @@ export function SetupDrawer({
         toast.error(errorMessage(data))
         return
       }
-      toast.success(t('deleted'))
+      toast.success(t(entity.archiveOnDelete ? 'archived' : 'deleted'))
       router.push(closeHref)
       router.refresh()
     } catch {
@@ -586,14 +587,14 @@ export function SetupDrawer({
         steps.length && !entity.recordSections ? <div className="flex w-full justify-between gap-2">
           <Button variant="outline" disabled={busy || stepIndex === 0} onClick={() => { setFieldError(null); setStepIndex((index) => index - 1) }}>{tCommon('actions.back')}</Button>
           {!reviewing ? <Button disabled={busy} onClick={nextStep}>{tCommon('actions.next')}</Button> : null}
-        </div> : nestedTabActive ? undefined : !entity.readOnly && !creating && !entity.hasActive && entity.allowDelete !== false ? (
+        </div> : nestedTabActive ? undefined : !entity.readOnly && !creating && (!entity.hasActive || entity.archiveOnDelete) && entity.allowDelete !== false ? (
           <button
             type="button"
             onClick={remove}
             disabled={busy}
             className="flex items-center gap-1.5 text-sm text-red-600 hover:text-red-700 disabled:opacity-50 dark:text-red-400"
           >
-            <Trash2 size={14} /> {tCommon('actions.delete')}
+            <Trash2 size={14} /> {entity.archiveOnDelete ? t('archive') : tCommon('actions.delete')}
           </button>
         ) : (
           <span />
@@ -797,6 +798,13 @@ export function FieldControl({
     <Label help={help}>{label}{requiredMark}</Label>
     <ZonedDateTimeControl value={String(value ?? '')} zone={String(formValues[field.timeZoneField] ?? '')} onChange={onChange} label={label} readOnly={locked} />
   </div>
+  if (locked && field.kind === 'stringArray' && (field.options || field.scopedOptions)) {
+    const choices = setupFieldOptions(field, formValues, recordValues)
+    return <div className={wrap}><Label help={help}>{label}</Label>
+      <div className="flex min-h-10 flex-wrap items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 dark:border-slate-800 dark:bg-slate-900">
+        {Array.isArray(value) && value.length ? value.map(item => <Badge key={String(item)} variant="outline">{choices.find(option => option.value === String(item)) ? setupOptionLabel(choices.find(option => option.value === String(item))!, t) : String(item)}</Badge>) : '—'}
+      </div></div>
+  }
   // Locked natural keys are shown read-only when editing.
   if (locked && field.kind !== 'object' && field.kind !== 'objectArray') {
     return (
@@ -911,6 +919,15 @@ export function FieldControl({
     // Chip input with type-ahead over the field's ref source — raw JSON is
     // never an acceptable UI for a list of text values.
     const selected: string[] = Array.isArray(value) ? value.map(String) : []
+    if (field.options || field.scopedOptions) return <fieldset className={wrap}>
+      <legend className="text-sm font-medium">{label}{requiredMark}</legend>
+      {help ? <p className="text-xs text-slate-500">{help}</p> : null}
+      <div className="flex flex-wrap gap-x-5 gap-y-2 rounded-lg border border-slate-200 px-3 py-2 dark:border-slate-800">
+        {setupFieldOptions(field, formValues, recordValues).map(option => <label key={option.value} className="flex items-center gap-2 text-sm">
+          <input type="checkbox" checked={selected.includes(option.value)} onChange={event => onChange(event.target.checked ? [...selected, option.value] : selected.filter(item => item !== option.value))} />
+          {setupOptionLabel(option, t)}
+        </label>)}
+      </div></fieldset>
     return (
       <div className={wrap}>
         <Label help={help}>{label}{requiredMark}</Label>

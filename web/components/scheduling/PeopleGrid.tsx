@@ -6,6 +6,7 @@ import { ClipboardPaste, Copy, Eraser, Pencil, Scissors, SquareSplitHorizontal, 
 import { ContextMenu, cn, useContextMenu, type ContextMenuEntry } from '@openbooks/ui'
 import { AbsenceChip, BookingChip } from './BookingChip'
 import { SourceRecordChip } from './SourceRecord'
+import { bookingLegendKey, filterBoardRows, sourceLegendKey } from './legend'
 import type { BoardSourceRecord } from '@openbooks/engine/src/schedule-boards/source-history.ts'
 import { TargetPicker, type PickedTarget } from './TargetPicker'
 import { searchTargets } from './api'
@@ -31,7 +32,6 @@ export interface GridProps {
   readonly search: string
   readonly compact: boolean
   readonly spotlight: string | null
-  readonly onSpotlight: (key: string | null) => void
   readonly onOpenEntry: (entry: BoardEntry) => void
   readonly onOpenSourceRecord: (record: BoardSourceRecord) => void
   readonly today: string
@@ -40,9 +40,9 @@ export interface GridProps {
 type Clip = { block: ClipCell[][]; text: string }
 
 const newId = () => crypto.randomUUID()
-const targetKey = (entry: BoardEntry) => (entry.target ? `${entry.target.kind}:${entry.target.id}` : 'none')
+const targetKey = (entry: BoardEntry) => bookingLegendKey(entry) ?? 'none'
 
-export function PeopleGrid({ controller, window: board, groupBy, search, compact, spotlight, onSpotlight, onOpenEntry, onOpenSourceRecord, today }: GridProps) {
+export function PeopleGrid({ controller, window: board, groupBy, search, compact, spotlight, onOpenEntry, onOpenSourceRecord, today }: GridProps) {
   const t = useTranslations('scheduling')
   const locale = useLocale()
   const menu = useContextMenu()
@@ -62,17 +62,7 @@ export function PeopleGrid({ controller, window: board, groupBy, search, compact
   const absences = useMemo(() => indexAbsences(board.absences), [board.absences])
   const replaced = useMemo(() => new Set(board.replaced), [board.replaced])
 
-  const people = useMemo(() => {
-    const query = search.trim().toLowerCase()
-    if (!query) return board.rows
-    return board.rows.filter((person) => {
-      if (person.name.toLowerCase().includes(query) || (person.jobTitle ?? '').toLowerCase().includes(query) || (person.tradeName ?? '').toLowerCase().includes(query)) return true
-      return board.entries.some((entry) => entry.subjectId === person.subjectId && entry.target
-        && `${entry.target.code ?? ''} ${entry.target.label}`.toLowerCase().includes(query))
-        || (board.sourceRecords ?? []).some(record => record.workerPartyId === person.subjectId
-          && `${record.label ?? ''} ${record.result ?? ''}`.toLowerCase().includes(query))
-    })
-  }, [board.entries, board.rows, board.sourceRecords, search])
+  const people = useMemo(() => filterBoardRows(board, search, spotlight), [board, search, spotlight])
   const { items, persons } = useMemo(() => groupRows(people, groupBy, t('grid.ungrouped')), [groupBy, people, t])
   const offsets = useMemo(() => {
     const tops: number[] = []
@@ -720,23 +710,15 @@ export function PeopleGrid({ controller, window: board, groupBy, search, compact
         </div>
         {rows === 0 ? (
           <div className="pointer-events-none absolute inset-x-0 top-24 text-center text-sm text-slate-500">
-            {search ? t('grid.noMatch') : t('grid.noPeople')}
+            {search || spotlight ? t('grid.noMatch') : t('grid.noPeople')}
           </div>
         ) : null}
       </div>
 
-      {/* Selection hint */}
-      <div className="flex h-8 shrink-0 items-center justify-between px-1 text-[11px] text-slate-500">
-        <span>
-          {selectionCount > 1 ? t('grid.selected', { count: selectionCount }) : canManage ? t('grid.hint') : t('grid.readOnly')}
-        </span>
-        <span className="hidden gap-3 md:flex">
-          {spotlight ? (
-            <button type="button" className="font-medium text-teal-700 hover:underline dark:text-teal-300" onClick={() => onSpotlight(null)}>{t('grid.clearSpotlight')}</button>
-          ) : null}
-          {controller.saving ? <span className="animate-pulse">{t('grid.saving')}</span> : null}
-        </span>
-      </div>
+      {selectionCount > 1 || controller.saving ? <div className="flex shrink-0 items-center justify-between px-1 py-0.5 text-[11px] text-slate-500" role="status">
+        <span>{selectionCount > 1 ? t('grid.selected', { count: selectionCount }) : null}</span>
+        {controller.saving ? <span className="animate-pulse">{t('grid.saving')}</span> : null}
+      </div> : null}
 
       {editing && pickerAnchor ? (
         <TargetPicker
@@ -814,7 +796,7 @@ function PersonRow({
         return (
           <div key={date} role="gridcell" className="flex items-center gap-0.5 px-[3px]" style={{ width: dayW, backgroundColor: entries.find((entry) => entry.target?.color && !replaced.has(entry.id))?.target?.color ? `color-mix(in srgb, ${entries.find((entry) => entry.target?.color && !replaced.has(entry.id))!.target!.color} 20%, transparent)` : undefined }}>
             {leave.map((absence) => <AbsenceChip key={`${absence.leaveTypeCode}`} absence={absence} compact={compact} />)}
-            <SourceRecordChip records={sourceIndex.get(key) ?? []} compact={compact} onOpen={onOpenSourceRecord} />
+            <SourceRecordChip records={sourceIndex.get(key) ?? []} dimmed={Boolean(spotlight && !(sourceIndex.get(key) ?? []).some(record => sourceLegendKey(record.label) === spotlight))} compact={compact} onOpen={onOpenSourceRecord} />
             {entries.map((entry) => (
               <BookingChip
                 key={entry.id}

@@ -42,7 +42,8 @@
     "more": "More",
     "details": "Details",
     "date": "Go to date",
-    "resourceBoards": "Resources"
+    "resourceBoards": "Resources",
+    "manageBoards": "Manage boards"
   },
   "empty": {
     "title": "Set up your first board",
@@ -284,5 +285,9 @@
     "result": "Source description",
     "hours": "Hours",
     "origin": "Source"
+  },
+  "boards": {
+    "description": "List, configure and archive scheduling boards.",
+    "return": "Back to schedule"
   }
 }

@@ -42,7 +42,8 @@
     "more": "Más",
     "details": "Detalles",
     "date": "Ir a la fecha",
-    "resourceBoards": "Recursos"
+    "resourceBoards": "Recursos",
+    "manageBoards": "Gestionar tableros"
   },
   "empty": {
     "title": "Configure su primer tablero",
@@ -284,5 +285,9 @@
     "result": "Descripción de origen",
     "hours": "Horas",
     "origin": "Origen"
+  },
+  "boards": {
+    "description": "Listar, configurar y archivar tableros de planificación.",
+    "return": "Volver al calendario"
   }
 }

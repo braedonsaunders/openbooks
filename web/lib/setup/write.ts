@@ -3152,6 +3152,19 @@ export async function deleteSetupRecord(
       }
       const before = await loadSetupAuditRow(entity, orgId, id, tx, true)
       if (!before) return false
+      if (entity.archiveOnDelete) {
+        if (!entity.hasActive) throw new SetupWriteRefusal('This configuration has no retirement state', 409)
+        if (before.is_active === false) return true
+        const refusal = await validateEntityIntegrity(entity, { isActive: false }, orgId, id, tx)
+        if (refusal) throw new SetupWriteRefusal(refusal, 409)
+        const retired = await tx.execute<Record<string, unknown>>(sql`update ${sql.raw(entity.table)}
+          set is_active=false ${entity.actorCols ? sql`, updated_by=${actorId}, updated_at=now()` : sql``}
+          where ${sql.raw(idColumn(entity))}=${id}${orgFilter} returning *`)
+        if (retired.rows.length !== 1) return false
+        await audit({orgId: entity.orgScoped ? orgId : null, table: entity.table, rowId: id,
+          action: 'update', changes: {before, after: retired.rows[0], reason: 'Archive configuration record'}, actorId}, tx)
+        return true
+      }
       if (entity.key === 'stock-locations') await assertStockLocationDeletionAllowed(tx, orgId, id)
       if (entity.key === 'item-rate-books' && before.is_default) throw new Error('default-required')
       if (entity.key === 'account-groups') {

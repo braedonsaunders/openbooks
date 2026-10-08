@@ -42,7 +42,8 @@
     "more": "Mehr",
     "details": "Details",
     "date": "Zum Datum",
-    "resourceBoards": "Ressourcen"
+    "resourceBoards": "Ressourcen",
+    "manageBoards": "Boards verwalten"
   },
   "empty": {
     "title": "Richten Sie Ihre erste Plantafel ein",
@@ -284,5 +285,9 @@
     "result": "Quellbeschreibung",
     "hours": "Stunden",
     "origin": "Quelle"
+  },
+  "boards": {
+    "description": "Planungsboards anzeigen, konfigurieren und archivieren.",
+    "return": "Zurück zum Zeitplan"
   }
 }

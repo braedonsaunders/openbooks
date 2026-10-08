@@ -1,3 +1,7 @@
+import { getAuthz } from '../../../lib/authz'
+import { SETUP_ENTITY_BY_KEY } from '../../../lib/setup/registry'
+import { SetupEntitySection } from '../admin/setup/[entity]/SetupEntitySection'
+import { pickString } from '../../../lib/list-params'
 import { ModuleView } from '../../../components/viewspec/module-view'
 import { loadSchedulingPage, schedulingSpec, schedulingTitle } from './view'
 
@@ -19,5 +23,12 @@ export default async function SchedulingPage({
 }) {
   const sp = await searchParams
   const data = await loadSchedulingPage(sp)
-  return <ModuleView spec={schedulingSpec(data)} data={data} searchParams={sp} trusted contained />
+  const authz = data.canConfigure && pickString(sp.boardRow) ? await getAuthz() : null
+  return <>
+    <ModuleView spec={schedulingSpec(data)} data={data} searchParams={sp} trusted contained />
+    {authz ? <SetupEntitySection entity={SETUP_ENTITY_BY_KEY.get('schedule-boards')!}
+      orgId={authz.user.orgId} actorId={authz.user.id} allowedSubsidiaryIds={authz.allowedSubsidiaryIds}
+      visibleRowIds={new Set(data.boards.map(board => board.id))} canManage={data.canConfigure}
+      basePath="/scheduling" searchParams={sp} rowParam="boardRow" drawerOnly /> : null}
+  </>
 }
