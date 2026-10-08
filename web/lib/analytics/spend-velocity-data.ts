@@ -565,11 +565,11 @@ export async function spendVelocityData(
       select amounts.*, counts.transaction_count, bucket_counts.bucket_transaction_count
       from amounts join counts using (account_id, bucket) join bucket_counts using (bucket)
     `),
-    // 2. Monthly vendor/party spend (drill-down).
+    // 2. Monthly vendor/party spend (drill-down). Names depend on the party,
+    // so resolve them after aggregation rather than once per journal line.
     analyticsQuery<VendorSpendRow>(sql`
       with spend as materialized (
         select d.party_id as vendor_id,
-          (select p.display_name from parties p where p.id = d.party_id and p.org_id = d.org_id) as vendor_name,
           ${fiscalBucketKey(sql`e.posting_date`, buckets.useFiscal)} as bucket,
           ${fiscalBucketLabel(sql`e.posting_date`, buckets.useFiscal)} as bucket_label,
           d.id as doc_id, l.amount, sub.base_currency as func, l.posting_date
@@ -578,11 +578,13 @@ export async function spendVelocityData(
         select vendor_id, bucket, count(distinct doc_id) as transaction_count
         from spend group by vendor_id, bucket
       ), amounts as (
-        select vendor_id, coalesce(vendor_name, 'Unknown') as vendor_name, bucket, bucket_label, func,
+        select vendor_id, bucket, bucket_label, func,
           sum(amount) as total_amount, max(posting_date)::text as late
-        from spend group by 1, 2, 3, 4, 5
+        from spend group by 1, 2, 3, 4
       )
-      select amounts.*, counts.transaction_count from amounts join counts using (vendor_id, bucket)
+      select amounts.*, coalesce(p.display_name, 'Unknown') as vendor_name, counts.transaction_count
+      from amounts join counts using (vendor_id, bucket)
+      left join parties p on p.id = amounts.vendor_id and p.org_id = ${orgId}
     `),
     // 3. Prior-YEAR buckets for YoY, keyed by the full bucket identity so a
     // window longer than twelve months can never collide two Januarys. The
