@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { registerHooks } from 'node:module';
 import test from 'node:test';
-import { actorHasPermission } from '../organization/actor-permissions.ts';
+import { actorHasPermission, createActorPermissionRead } from '../organization/actor-permissions.ts';
 import { sql } from 'drizzle-orm';
 import { db, env, withBypassContext } from '../platform/db.ts';
 import { createScratchOrg, createScratchUser, dropScratchOrg } from '../testing/fixtures.ts';
@@ -26,6 +26,7 @@ test('reviewed extension projects navigation, dated settings and grantable permi
       const approved = await installTestExtension({orgId:org.orgId,actorId,manifest});
       assert.equal((await listActiveExtensionContributions(org.orgId)).length, 3);
       assert.equal(await actorHasPermission(db, org.orgId, actorId, 'sample.read'), true);
+      assert.equal(await createActorPermissionRead(db, org.orgId, actorId)('sample.read'), true);
       const hooks = registerHooks({ resolve(specifier, context, next) { return specifier === 'server-only' ? { shortCircuit: true, format: 'module', url: 'data:text/javascript,export {}' } : next(specifier, context); } });
       let resolveNav: (orgId: string, can: (permission: string | undefined) => boolean, roleKeys: readonly string[], t: (key: string) => string) => Promise<{ items: { href: string }[] }[]>;
       const navModulePath = '../../../web/lib/nav/resolve.ts';
@@ -56,6 +57,7 @@ test('reviewed extension projects navigation, dated settings and grantable permi
       await disableTestExtension({ orgId: org.orgId, actorId, key: manifest.key });
       assert.equal((await listActiveExtensionContributions(org.orgId)).length, 0);
       assert.equal(await actorHasPermission(db, org.orgId, actorId, 'sample.read'), false, 'inactive declarations defeat wildcard grants without deleting stored role grants');
+      assert.equal(await createActorPermissionRead(db, org.orgId, actorId)('sample.read'), false, 'a fresh read observes native extension revocation');
       assert.equal(await hasShortcut(() => true), false, 'uninstalled shortcuts are hidden even from wildcard readers');
       assert.equal((await getExtensionSettings(org.orgId))['sample-module']!.caption, 'Custom');
       await assert.rejects(() => updateExtensionSetting({ orgId: org.orgId, actorId, extensionKey: manifest.key, key: 'caption', value: 'Dormant write', reason: 'Refused', effectivePermissions: ['*'] }), /Active extension setting/);

@@ -41,12 +41,44 @@ export async function actorHasPermission(
   actorId: string,
   permission: string,
 ): Promise<boolean> {
-  const modulePermissions = !isCataloguePermission(permission) ? await extensionPermissionAvailability(orgId, exec) : null;
+  return permissionFromAuthority(permission,
+    () => actorIdentity(exec, orgId, actorId),
+    () => actorPermissionGrants(exec, orgId, actorId),
+    () => extensionPermissionAvailability(orgId, exec));
+}
+
+/** One read's native authority facts. Never retain this reader across reads
+ * or use it for commands: actorHasPermission re-resolves command authority. */
+export function createActorPermissionRead(exec: SqlExecutor, orgId: string, actorId: string): (permission: string) => Promise<boolean> {
+  const identity = once(() => actorIdentity(exec, orgId, actorId));
+  const grants = once(() => actorPermissionGrants(exec, orgId, actorId));
+  const extensions = once(() => extensionPermissionAvailability(orgId, exec));
+  return permission => permissionFromAuthority(permission, identity, grants, extensions);
+}
+
+function once<T>(load: () => Promise<T>): () => Promise<T> {
+  let pending: Promise<T> | undefined;
+  return () => pending ??= load();
+}
+
+async function permissionFromAuthority(
+  permission: string,
+  identity: () => ReturnType<typeof actorIdentity>,
+  grants: () => ReturnType<typeof actorPermissionGrants>,
+  extensions: () => ReturnType<typeof extensionPermissionAvailability>,
+): Promise<boolean> {
+  const modulePermissions = !isCataloguePermission(permission) ? await extensions() : null;
   if (modulePermissions?.inactive.includes(permission)) return false;
-  const row = await actorIdentity(exec, orgId, actorId);
+  const row = await identity();
   if (!row?.isActive) return false;
   if (row.isSuperAdmin) return true;
 
+  return permissionSetCovers(resolveEffectivePermissions({
+    ...await grants(), additionalKnownPermissions: modulePermissions?.active,
+  }), permission);
+}
+
+async function actorPermissionGrants(exec: SqlExecutor, orgId: string, actorId: string) {
   const assignments = (await exec.execute<{ permissions: string[] | null }>(sql`
     select role.permissions
       from role_assignments assignment
@@ -62,14 +94,8 @@ export async function actorHasPermission(
       from user_permission_overrides
      where user_id = ${actorId} and org_id = ${orgId}
   `));
-  return permissionSetCovers(
-    resolveEffectivePermissions({
-      additionalKnownPermissions: modulePermissions?.active,
-      rolePermissionSets: assignments.rows.map((r) =>
-        Array.isArray(r.permissions) ? r.permissions : [],
-      ),
-      overrides: overrides.rows,
-    }),
-    permission,
-  );
+  return {
+    rolePermissionSets: assignments.rows.map(r => Array.isArray(r.permissions) ? r.permissions : []),
+    overrides: overrides.rows,
+  };
 }

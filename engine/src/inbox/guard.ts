@@ -15,7 +15,7 @@
 import { sql } from "drizzle-orm";
 import { HRM_FEATURE_KEY } from "../hrm/employment-read.ts";
 import { HrmAuthorizationError, loadApprovalPerson } from "../hrm/authorization.ts";
-import { actorHasPermission } from "../organization/actor-permissions.ts";
+import { createActorPermissionRead } from "../organization/actor-permissions.ts";
 import { lockAndCheckOrgFeature } from "../organization/org-feature-lock.ts";
 import { worklistGates, type WorklistGate } from "../flows/gates.ts";
 import { db } from "../platform/db.ts";
@@ -34,7 +34,11 @@ export function orgFeatureOn(ctx: InboxListContext, key: string): Promise<boolea
 
 /** Resolve each permission through its native authority once per read. */
 export function actorPermissionOn(ctx: InboxListContext, permission: string): Promise<boolean> {
-  return memoizeForRead(ctx, `permission:${permission}`, () => actorHasPermission(ctx.exec ?? db, ctx.orgId, ctx.actorId, permission));
+  return memoizeForRead(ctx, `permission:${permission}`, async () => {
+    const read = await memoizeForRead(ctx, "actor-permission-read", async () =>
+      createActorPermissionRead(ctx.exec ?? db, ctx.orgId, ctx.actorId));
+    return read(permission);
+  });
 }
 
 export function hrmOn(ctx: InboxListContext): Promise<boolean> {

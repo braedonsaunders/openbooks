@@ -106,7 +106,10 @@ const mockSources = new Map<string, string>([
   ["hrm/ai/governance.ts", `export async function overdueReviews() { return [] }`],
   ["hrm/ai/settings.ts", `export async function loadAiRailsSettings() { return { reviewMonths: 12 } }`],
   ["organization/actor-permissions.ts", `${STATE}
-    export async function actorHasPermission(_exec, orgId, actorId, permission) { hit('actorHasPermission'); state.facts.push(['permission',orgId,actorId,permission]); return true }`],
+    export function createActorPermissionRead(_exec, orgId, actorId) {
+      hit('createActorPermissionRead');
+      return async permission => { hit('actorHasPermission'); state.facts.push(['permission',orgId,actorId,permission]); return true };
+    }`],
   ["automations/action-reasons.ts", `export async function validateSubmitActionReason() {}`],
 ]);
 
@@ -291,9 +294,13 @@ describe("inbox read memo", () => {
     const read = beginInboxRead(CTX);
     await Promise.all([actorPermissionOn(read, "payroll.manage"), actorPermissionOn(read, "payroll.manage"), actorPermissionOn(read, "admin.setup.manage")]);
     assert.equal(state.calls.actorHasPermission, 2);
+    assert.equal(state.calls.createActorPermissionRead, 1);
     await actorPermissionOn(CTX, "payroll.manage");
     await actorPermissionOn(CTX, "payroll.manage");
     assert.equal(state.calls.actorHasPermission, 4);
+    assert.equal(state.calls.createActorPermissionRead, 3, "direct calls each derive a new live authority");
+    await actorPermissionOn(beginInboxRead(CTX), "payroll.manage");
+    assert.equal(state.calls.createActorPermissionRead, 4, "the next read derives authority again");
   });
 
   it("snapshots role and legal-entity scope before concurrent sources read", async () => {
