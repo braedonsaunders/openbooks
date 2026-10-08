@@ -17,8 +17,8 @@ import {
 function PendingLogo() {
   const t = useTranslations('common.actions')
   return (
-    <div role="status" aria-live="polite" className="grid place-items-center rounded-xl bg-white/95 p-4 shadow-sm dark:bg-slate-900/95">
-      <LogoMark animated className="h-10 w-auto" />
+    <div role="status" aria-live="polite" className="page-pending-logo grid place-items-center">
+      <LogoMark draw className="relative z-10 h-12 w-auto" />
       <span className="sr-only">{t('loading')}</span>
     </div>
   )
@@ -29,7 +29,7 @@ export function PagePending() {
   useEffect(holdPagePending, [])
   return (
     <SkeletonTransition>
-      <div data-page-pending className="grid min-h-48 flex-1 place-items-center" aria-busy="true">
+      <div data-page-pending className="page-pending-surface grid min-h-48 flex-1 place-items-center" aria-busy="true">
         <PendingLogo />
       </div>
     </SkeletonTransition>
@@ -52,7 +52,7 @@ export function NavigationPendingBoundary({ children }: { children: ReactNode })
     <div className="relative flex min-h-0 flex-1 flex-col" aria-busy={Boolean(navigation) || fallbacks > 0}>
       {children}
       {visible ? (
-        <div data-navigation-pending className="pointer-events-none absolute inset-0 z-40 grid place-items-center">
+        <div data-navigation-pending className="page-pending-surface pointer-events-none absolute inset-0 z-40 grid place-items-center">
           <PendingLogo />
         </div>
       ) : null}
