@@ -3,25 +3,32 @@ import 'server-only'
 import { page, pageHeader, ref, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
 import { can, requirePermission } from '../../../../lib/authz'
 import { requireFeatureEnabled } from '../../../../lib/feature-gates'
+import { isFeatureEnabled } from '../../../../lib/features'
 import { isUuid, pickString } from '../../../../lib/list-params'
-import { listPrebills, listWipProjects, loadPrebill, wipAnalytics } from '../../../../lib/wip-billing'
+import {
+  listPrebills,
+  listUnbilledProjects,
+  listWipProjects,
+  loadPrebill,
+  prebillApprovalFlowsConfigured,
+} from '../../../../lib/wip-billing'
 import { requireWipBillingFeature } from '../../../../lib/wip-billing-gate'
 import type { WipBillingWorkspace } from './WipBillingWorkspace'
 
 /**
- * WIP & Prebilling, split into a loader and a spec.
+ * Pre-billing, split into a loader and a spec.
  *
- * The workspace is one client component and stays whole: it owns the create
- * drawer, the detail drawer, per-line edit/hold/release forms, and every
- * transition/convert call. Decomposing it would strand that client state from
- * the actions it drives (the same reason the banking match page places
+ * The workspace is one client component and stays whole: it owns the board
+ * and table views, the bill-run drawer, the worksheet drawer and every
+ * lifecycle call. Decomposing it would strand that client state from the
+ * actions it drives (the same reason the banking match page places
  * `match-workspace` whole).
  *
- * Everything here is loader work copied verbatim from page.tsx: the
- * `projects.read` gate, the two feature gates, the ?prebill= selection (uuid
- * guard, subsidiary guard inside the lib calls), and the three permission
- * decisions, which travel as plain booleans. The header strings are the
- * native page's literals — it uses no translations for them.
+ * The loader applies the `projects.read` gate and both feature gates, scopes
+ * every read to the caller's subsidiaries, resolves the ?prebill= selection
+ * (uuid guard; a hidden or unknown id resolves to no selection), and passes
+ * the permission and configuration decisions the workspace needs as plain
+ * booleans.
  */
 
 type WipBillingWorkspaceProps = Parameters<typeof WipBillingWorkspace>[0]
@@ -30,12 +37,13 @@ export interface WipBillingData {
   title: string
   description: string
   prebills: WipBillingWorkspaceProps['prebills']
+  unbilled: WipBillingWorkspaceProps['unbilled']
   projects: WipBillingWorkspaceProps['projects']
-  analytics: WipBillingWorkspaceProps['analytics']
   selected: WipBillingWorkspaceProps['selected']
   canManage: boolean
-  canApprove: boolean
   canCreateInvoice: boolean
+  customerPortalEnabled: boolean
+  approvalFlowsConfigured: boolean
 }
 
 // node-pg returns timestamptz columns as Date objects; the spec data must be
@@ -55,20 +63,19 @@ export async function loadWipBilling(
   const authz = await requirePermission('projects.read')
   await requireFeatureEnabled(authz.user.orgId, 'wipBilling')
   await requireWipBillingFeature(authz.user.orgId)
+  const orgId = authz.user.orgId
   const selectedId = pickString(sp.prebill)
-  const [prebills, projects, analytics, rawSelected] = await Promise.all([
-    listPrebills(authz.user.orgId, undefined, authz.allowedSubsidiaryIds),
-    listWipProjects(authz.user.orgId, authz.allowedSubsidiaryIds),
-    wipAnalytics(authz.user.orgId, undefined, authz.allowedSubsidiaryIds),
-    selectedId && isUuid(selectedId) ? loadPrebill(authz.user.orgId, selectedId, authz.allowedSubsidiaryIds) : null,
+  const [prebills, unbilled, projects, rawSelected, customerPortalEnabled, approvalFlowsConfigured] = await Promise.all([
+    listPrebills(orgId, undefined, authz.allowedSubsidiaryIds),
+    listUnbilledProjects(orgId, authz.allowedSubsidiaryIds),
+    listWipProjects(orgId, authz.allowedSubsidiaryIds),
+    selectedId && isUuid(selectedId) ? loadPrebill(orgId, selectedId, authz.allowedSubsidiaryIds) : null,
+    isFeatureEnabled(orgId, 'customerPortal'),
+    prebillApprovalFlowsConfigured(orgId),
   ])
-  // Org guard, subsidiary guard and the unknown-id case all resolve inside
-  // loadPrebill (it re-lists through the same scoped query and returns null
-  // for a hidden or missing id), so a null selection is data, not a branch.
   const selected = rawSelected
     ? {
         ...rawSelected,
-        createdAt: isoInstant(rawSelected.createdAt as unknown as string | Date),
         submittedAt: isoInstantOrNull(rawSelected.submittedAt as unknown as string | Date | null),
         approvedAt: isoInstantOrNull(rawSelected.approvedAt as unknown as string | Date | null),
         convertedAt: isoInstantOrNull(rawSelected.convertedAt as unknown as string | Date | null),
@@ -80,15 +87,16 @@ export async function loadWipBilling(
       }
     : null
   return {
-    title: 'WIP & Prebilling',
-    description: 'Review unbilled project work, govern billing adjustments, and convert approved worksheets into draft invoices.',
+    title: 'Pre-billing',
+    description: 'Turn unbilled work into reviewed, approved invoice packages — and deliver them with their backup.',
     prebills,
+    unbilled,
     projects,
-    analytics,
     selected,
     canManage: can(authz, 'projects.manage'),
-    canApprove: can(authz, 'ar.approve'),
     canCreateInvoice: can(authz, 'ar.create'),
+    customerPortalEnabled,
+    approvalFlowsConfigured,
   }
 }
 
@@ -100,19 +108,18 @@ export function wipBillingSpec(data: WipBillingData): PageSpec {
     layout: 'list',
     header: [pageHeader({ title: f('title'), description: f('description') })],
     body: [
-      // The whole workspace, placed through one widget:
-      // it owns the create/detail drawers, the editable line inputs and every
-      // fetch mutation, so splitting it would strand client state from the
-      // actions it drives. The loader hands over exactly the props the native
-      // page passes; the widget spreads them onto the same component.
+      // The whole workspace, placed through one widget: it owns the board,
+      // the drawers, the editable line inputs and every fetch mutation, so
+      // splitting it would strand client state from the actions it drives.
       widgetBlock('wip-billing-workspace', {
         prebills: data.prebills,
+        unbilled: data.unbilled,
         projects: data.projects,
-        analytics: data.analytics,
         selected: data.selected,
         canManage: data.canManage,
-        canApprove: data.canApprove,
         canCreateInvoice: data.canCreateInvoice,
+        customerPortalEnabled: data.customerPortalEnabled,
+        approvalFlowsConfigured: data.approvalFlowsConfigured,
       }),
     ],
   })

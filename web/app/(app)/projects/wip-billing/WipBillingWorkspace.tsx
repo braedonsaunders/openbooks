@@ -1,60 +1,46 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   AlertTriangle,
-  ArrowDownRight,
-  ArrowUpRight,
-  Check,
-  Clock3,
+  CalendarClock,
+  CheckCircle2,
+  Eye,
   FileText,
-  Lock,
-  Plus,
-  RotateCcw,
+  LayoutGrid,
+  MessageSquareWarning,
+  Rows3,
+  Search,
   Send,
-  ShieldCheck,
-  X,
+  Sparkles,
 } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { enumLabel } from "@/lib/enum-label";
-import { useViewerFormat } from "@/lib/viewer-format";
 import { toast } from "sonner";
 import {
-  Alert,
-  AlertDescription,
   Badge,
   Button,
-  Card,
-  CardContent,
   Drawer,
   EmptyState,
   Input,
   Label,
-  Select,
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
   Textarea,
   cn,
 } from "@openbooks/ui";
 import { useBusinessToday } from "../../../../components/business-date-provider";
 import { useMoney } from "../../../../components/money-provider";
-import { HomeStatTile } from "../../../../components/module-home/client";
-import { canonicalDecimal } from "../../../../lib/exact-decimal";
-import { decimalCmp, decimalSum } from "../../../../lib/statement-format";
-import type {
-  PrebillDetail,
-  PrebillLineRow,
-  PrebillListRow,
-  WipAnalytics,
-} from "../../../../lib/wip-billing";
 import { PagedTable } from "../../../../components/paged-table";
 import { readApiErrorMessage } from "../../../../lib/api-error";
+import { decimalSum } from "../../../../lib/statement-format";
+import { PREBILL_STAGES, type PrebillStage } from "../../../../lib/pre-billing-stages";
+import type {
+  BillRunResult,
+  PrebillDetail,
+  PrebillListRow,
+  UnbilledProjectRow,
+} from "../../../../lib/wip-billing";
+import { PrebillDrawer } from "./PrebillDrawer";
 
 type ProjectOption = {
   id: string;
@@ -64,963 +50,657 @@ type ProjectOption = {
   lineBuilder: string;
 };
 
-const STATUS_VARIANT = {
+type BoardColumn = PrebillStage | "unbilled";
+
+/** Stages that stay off the board until something reaches them. */
+const ON_DEMAND: ReadonlySet<BoardColumn> = new Set(["review", "customer", "sent"]);
+/** Closed stages show their most recent cards; the table lists every one. */
+const CLOSED_CARD_LIMIT = 12;
+
+export const STAGE_TONE: Record<PrebillStage, "secondary" | "warning" | "default" | "success" | "outline" | "destructive"> = {
   draft: "secondary",
   review: "warning",
-  approved: "success",
-  converted: "success",
+  ready: "default",
+  customer: "warning",
+  invoiced: "default",
+  sent: "default",
+  paid: "success",
   void: "outline",
-} as const;
+};
 
-async function requestJson(url: string, init?: RequestInit) {
+export async function requestJson<T = Record<string, unknown>>(url: string, init?: RequestInit): Promise<T> {
   const response = await fetch(url, init);
-  if (!response.ok)
-    throw new Error(await readApiErrorMessage(response, "Request failed"));
-  return response.json();
+  if (!response.ok) throw new Error(await readApiErrorMessage(response, "Request failed"));
+  return (await response.json()) as T;
 }
 
-function DetailMetric({
-  label,
-  value,
-  note,
-  tone = "default",
-}: {
-  label: string;
-  value: string;
-  note?: string;
-  tone?: "default" | "warning" | "danger";
-}) {
-  return (
-    <Card
-      className={cn(
-        tone === "danger" && "border-red-200 dark:border-red-900",
-        tone === "warning" && "border-amber-200 dark:border-amber-900",
-      )}
-    >
-      <CardContent className="p-4">
-        <p className="text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
-          {label}
-        </p>
-        <p
-          className={cn(
-            "mt-1 text-xl font-semibold tabular-nums text-slate-950 dark:text-slate-50",
-            tone === "danger" && "text-red-700 dark:text-red-300",
-            tone === "warning" && "text-amber-700 dark:text-amber-300",
-          )}
-        >
-          {value}
-        </p>
-        {note ? (
-          <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-            {note}
-          </p>
-        ) : null}
-      </CardContent>
-    </Card>
-  );
-}
-
+/**
+ * Pre-billing: unbilled work becomes a reviewed, approved — and where the
+ * customer is asked, accepted — package before it becomes an invoice, then
+ * the invoice is delivered with its backup and tracked to payment.
+ *
+ * One concept, two views of it: a board whose columns are the stages work
+ * moves through, and a single table filtered by stage. Stages that a company
+ * does not use (approval routing, customer review) stay hidden until a
+ * worksheet reaches them, so a small business sees draft → ready → invoiced.
+ */
 export function WipBillingWorkspace({
   prebills,
+  unbilled,
   projects,
-  analytics,
   selected,
   canManage,
-  canApprove,
   canCreateInvoice,
+  customerPortalEnabled,
+  approvalFlowsConfigured,
 }: {
   prebills: PrebillListRow[];
+  unbilled: UnbilledProjectRow[];
   projects: ProjectOption[];
-  analytics: WipAnalytics;
   selected: PrebillDetail | null;
   canManage: boolean;
-  canApprove: boolean;
   canCreateInvoice: boolean;
+  customerPortalEnabled: boolean;
+  approvalFlowsConfigured: boolean;
 }) {
-  const { dateTime } = useViewerFormat();
-  const router = useRouter();
-  const { money } = useMoney();
-  const today = useBusinessToday();
   const t = useTranslations("projects.wipBilling");
-  const tCommon = useTranslations("common");
-  const prebillStatusLabels = {
-    draft: tCommon("status.draft"),
-    review: tCommon("status.pendingApproval"),
-    approved: tCommon("status.approved"),
-    converted: t("status.converted"),
-    void: tCommon("status.voided"),
-  } satisfies Record<
-    "draft" | "review" | "approved" | "converted" | "void",
-    string
-  >;
-  const [creating, setCreating] = useState(false);
-  const [projectId, setProjectId] = useState(projects[0]?.id ?? "");
-  const [periodStart, setPeriodStart] = useState("");
-  const [periodEnd, setPeriodEnd] = useState(today);
-  const [notes, setNotes] = useState("");
-  const [busy, setBusy] = useState<string | null>(null);
-  const [workflowAction, setWorkflowAction] = useState<
-    "return" | "void" | null
-  >(null);
-  const [workflowReason, setWorkflowReason] = useState("");
-  const agingTotal = decimalSum([
-    analytics.aging.current,
-    analytics.aging.days1to30,
-    analytics.aging.days31to60,
-    analytics.aging.days61to90,
-    analytics.aging.over90,
-  ]);
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const { money } = useMoney();
+  const view = searchParams.get("view") === "table" ? "table" : "board";
+  const stageParam = searchParams.get("stage");
+  const stageFilter = stageParam && (PREBILL_STAGES as readonly string[]).includes(stageParam)
+    ? (stageParam as PrebillStage)
+    : null;
+  const [query, setQuery] = useState("");
+  const [billRunOpen, setBillRunOpen] = useState(false);
+  const [billRunProject, setBillRunProject] = useState<string | null>(null);
 
-  async function createWorksheet() {
-    if (!projectId || !periodEnd) return;
-    setBusy("create");
-    try {
-      const result = await requestJson("/api/wip-billing", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          projectId,
-          periodStart: periodStart || null,
-          periodEnd,
-          notes: notes || null,
-        }),
-      });
-      toast.success(
-        t("toasts.created", {
-          worksheetNumber: result.worksheetNumber,
-          sourceCount: result.sourceCount,
-        }),
-      );
-      setCreating(false);
-      router.push(`/projects/wip-billing?prebill=${result.id}`);
-      router.refresh();
-    } catch (error) {
-      toast.error((error as Error).message);
-    } finally {
-      setBusy(null);
+  function navigate(params: Record<string, string | null>) {
+    const next = new URLSearchParams(searchParams.toString());
+    for (const [key, value] of Object.entries(params)) {
+      if (value === null) next.delete(key);
+      else next.set(key, value);
     }
+    const qs = next.toString();
+    router.push(qs ? `${pathname}?${qs}` : pathname);
   }
 
-  async function transition(
-    action: "submit" | "return" | "approve" | "void",
-    suppliedReason?: string,
-  ) {
-    if (!selected) return;
-    const reason = suppliedReason?.trim();
-    if ((action === "return" || action === "void") && !reason) return;
-    setBusy(action);
-    try {
-      await requestJson(`/api/wip-billing/${selected.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action, reason }),
-      });
-      toast.success(
-        action === "submit"
-          ? t("toasts.sentForReview")
-          : action === "approve"
-            ? t("toasts.approved")
-            : action === "return"
-              ? t("toasts.returnedToDraft")
-              : t("toasts.voided"),
-      );
-      setWorkflowAction(null);
-      setWorkflowReason("");
-      router.refresh();
-    } catch (error) {
-      toast.error((error as Error).message);
-    } finally {
-      setBusy(null);
-    }
+  const needle = query.trim().toLowerCase();
+  const matches = (text: Array<string | null | undefined>) =>
+    !needle || text.some((value) => value?.toLowerCase().includes(needle));
+  const visiblePrebills = prebills.filter((row) =>
+    matches([row.worksheetNumber, row.projectName, row.customerName, row.invoiceNumber]),
+  );
+  const visibleUnbilled = unbilled.filter((row) => matches([row.projectName, row.customerName]));
+
+  const byStage = useMemo(() => {
+    const groups = new Map<PrebillStage, PrebillListRow[]>();
+    for (const stage of PREBILL_STAGES) groups.set(stage, []);
+    for (const row of visiblePrebills) groups.get(row.stage)!.push(row);
+    return groups;
+  }, [visiblePrebills]);
+
+  const columns: BoardColumn[] = (["unbilled", ...PREBILL_STAGES.filter((stage) => stage !== "void")] as BoardColumn[])
+    .filter((column) => {
+      if (!ON_DEMAND.has(column)) return true;
+      if (column === "review") return approvalFlowsConfigured || (byStage.get("review")?.length ?? 0) > 0;
+      if (column === "customer") return customerPortalEnabled || (byStage.get("customer")?.length ?? 0) > 0;
+      return (byStage.get(column as PrebillStage)?.length ?? 0) > 0;
+    });
+
+  const nothingYet = prebills.length === 0 && unbilled.length === 0;
+
+  function openBillRun(projectId: string | null) {
+    setBillRunProject(projectId);
+    setBillRunOpen(true);
   }
 
-  async function convert() {
-    if (!selected) return;
-    setBusy("convert");
-    try {
-      const result = await requestJson(
-        `/api/wip-billing/${selected.id}/convert`,
-        { method: "POST" },
-      );
-      toast.success(
-        t("toasts.converted", { documentNumber: result.documentNumber }),
-      );
-      router.refresh();
-    } catch (error) {
-      toast.error((error as Error).message);
-    } finally {
-      setBusy(null);
-    }
-  }
-
-  function closeSelected() {
-    setWorkflowAction(null);
-    setWorkflowReason("");
-    router.push("/projects/wip-billing");
-  }
   return (
     <div className="space-y-4">
-      <section
-        aria-label={t("wipHealthAria")}
-        className="grid min-w-0 gap-3 sm:grid-cols-2 lg:grid-cols-4"
-      >
-        <HomeStatTile
-          label={t("tiles.availableWip")}
-          value={money(agingTotal)}
-          sub={t("tiles.availableWipSub")}
-          icon="wallet"
-          accent="teal"
-        />
-        <HomeStatTile
-          label={t("tiles.over90")}
-          value={money(analytics.aging.over90)}
-          sub={t("tiles.over90Sub", {
-            amount: money(analytics.aging.days61to90),
-          })}
-          icon="calendar-clock"
-          accent="red"
-          tone={
-            decimalCmp(analytics.aging.over90, "0") > 0 ? "negative" : "neutral"
-          }
-        />
-        <HomeStatTile
-          label={t("tiles.realization")}
-          value={
-            analytics.realization.percent == null
-              ? "—"
-              : `${(analytics.realization.percent * 100).toFixed(1)}%`
-          }
-          sub={t("tiles.realizationSub", {
-            amount: money(analytics.realization.billed),
-          })}
-          icon="trending-up"
-          accent="emerald"
-        />
-        <HomeStatTile
-          label={t("tiles.leakage")}
-          value={money(analytics.leakage.total)}
-          sub={t("tiles.leakageSub", {
-            amount: money(analytics.leakage.heldOver90),
-          })}
-          icon="triangle-alert"
-          accent={
-            decimalCmp(analytics.leakage.total, "0") > 0 ? "red" : "amber"
-          }
-          tone={
-            decimalCmp(analytics.leakage.total, "0") > 0
-              ? "negative"
-              : "neutral"
-          }
-        />
-      </section>
-
-      <PagedTable
-        source="projects_wip_prebills"
-        rows={prebills}
-        rowKey={(row) => row.id}
-        searchable
-        emptyAsRow
-        onRowClick={(row) =>
-          router.push(`/projects/wip-billing?prebill=${row.id}`)
-        }
-        rowSelected={(row) => selected?.id === row.id}
-        rowClassName={(row) =>
-          selected?.id === row.id
-            ? "bg-teal-50/70 dark:bg-teal-950/20"
-            : undefined
-        }
-        toolbarAfter={
-          canManage ? (
-            <Button
-              disabled={projects.length === 0}
-              onClick={() => setCreating(true)}
-            >
-              <Plus className="mr-2 size-4" />
-              {t("list.newPrebill")}
-            </Button>
-          ) : undefined
-        }
-        empty={
-          <EmptyState
-            icon={<FileText />}
-            title={
-              projects.length === 0
-                ? t("empty.noProjectsTitle")
-                : t("empty.noPrebillsTitle")
-            }
-            description={
-              projects.length === 0
-                ? t("empty.noProjectsDescription")
-                : t("empty.noPrebillsDescription")
-            }
-            action={
-              canManage && projects.length === 0 ? (
-                <Button asChild variant="outline">
-                  <Link href="/projects">{t("empty.goToProjects")}</Link>
-                </Button>
-              ) : undefined
-            }
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="relative min-w-56 flex-1 sm:max-w-sm">
+          <Search className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
+          <Input
+            aria-label={t("toolbar.search")}
+            placeholder={t("toolbar.search")}
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            className="pl-8"
           />
-        }
-        columns={[
-          {
-            key: "worksheet",
-            header: t("table.worksheet"),
-            search: (row) => row.worksheetNumber,
-            cell: (row) => (
-              <>
-                <p className="font-medium">{row.worksheetNumber}</p>
-                <p className="text-xs text-slate-500">
-                  {t("table.through", { periodEnd: row.periodEnd })}
-                </p>
-              </>
-            ),
-          },
-          {
-            key: "project",
-            header: t("table.project"),
-            search: (row) => `${row.projectName} ${row.customerName ?? ""}`,
-            cell: (row) => (
-              <>
-                <p>{row.projectName}</p>
-                <p className="text-xs text-slate-500">
-                  {row.customerName ?? t("table.noCustomer")}
-                </p>
-              </>
-            ),
-          },
-          {
-            key: "status",
-            header: t("table.status"),
-            search: (row) =>
-              enumLabel(
-                row.status,
-                prebillStatusLabels,
-                tCommon("labels.unknownValue"),
-              ),
-            cell: (row) => (
-              <Badge variant={STATUS_VARIANT[row.status]}>
-                {enumLabel(
-                  row.status,
-                  prebillStatusLabels,
-                  tCommon("labels.unknownValue"),
-                )}
-              </Badge>
-            ),
-          },
-          {
-            key: "proposed",
-            header: t("table.proposed"),
-            align: "right",
-            className: "tabular-nums",
-            cell: (row) => money(row.proposedBillAmount),
-          },
-        ]}
-      />
-
-      <Drawer
-        open={creating}
-        onClose={() => setCreating(false)}
-        size="md"
-        title={t("createDrawer.title")}
-        description={t("createDrawer.description")}
-        headerActions={
-          <>
-            <Button variant="outline" onClick={() => setCreating(false)}>
-              {t("createDrawer.cancel")}
-            </Button>
-            <Button
-              disabled={!projectId || !periodEnd || busy === "create"}
-              onClick={createWorksheet}
-            >
-              {busy === "create"
-                ? t("createDrawer.creating")
-                : t("createDrawer.submit")}
-            </Button>
-          </>
-        }
-      >
-        <div className="grid gap-4 sm:grid-cols-2">
-          <div className="space-y-1.5 sm:col-span-2">
-            <Label htmlFor="wip-project">
-              {t("createDrawer.projectLabel")}
-            </Label>
-            <Select
-              id="wip-project"
-              value={projectId}
-              onChange={(event) => setProjectId(event.target.value)}
-            >
-              {projects.map((project) => (
-                <option key={project.id} value={project.id}>
-                  {project.name}
-                  {project.customerName ? ` · ${project.customerName}` : ""}
-                  {` · ${project.projectTypeName}`}
-                </option>
-              ))}
-            </Select>
-            <p className="text-xs text-slate-500 dark:text-slate-400">
-              {t("createDrawer.projectHelp")}{" "}
-              <Link
-                href="/admin/setup/project-types"
-                className="font-medium text-teal-700 hover:underline dark:text-teal-300"
-              >
-                {t("createDrawer.configureProjectTypes")}
-              </Link>
-            </p>
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="wip-start">{t("createDrawer.startLabel")}</Label>
-            <Input
-              id="wip-start"
-              type="date"
-              value={periodStart}
-              onChange={(event) => setPeriodStart(event.target.value)}
-            />
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="wip-end">{t("createDrawer.cutoffLabel")}</Label>
-            <Input
-              id="wip-end"
-              type="date"
-              value={periodEnd}
-              onChange={(event) => setPeriodEnd(event.target.value)}
-            />
-          </div>
-          <div className="space-y-1.5 sm:col-span-2">
-            <Label htmlFor="wip-notes">{t("createDrawer.notesLabel")}</Label>
-            <Textarea
-              id="wip-notes"
-              rows={4}
-              value={notes}
-              onChange={(event) => setNotes(event.target.value)}
-              placeholder={t("createDrawer.notesPlaceholder")}
-            />
-          </div>
         </div>
-      </Drawer>
+        <div className="inline-flex items-center rounded-lg border border-slate-200 bg-slate-50 p-1 text-xs font-medium dark:border-slate-800 dark:bg-slate-900">
+          {(["board", "table"] as const).map((mode) => (
+            <button
+              key={mode}
+              type="button"
+              aria-pressed={view === mode}
+              onClick={() => navigate({ view: mode === "board" ? null : "table" })}
+              className={cn(
+                "flex items-center gap-1.5 rounded-md px-2.5 py-1 transition-colors",
+                view === mode
+                  ? "bg-white font-semibold text-slate-900 shadow-sm dark:bg-slate-800 dark:text-slate-100"
+                  : "text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200",
+              )}
+            >
+              {mode === "board" ? <LayoutGrid className="size-3.5" /> : <Rows3 className="size-3.5" />}
+              {mode === "board" ? t("toolbar.board") : t("toolbar.table")}
+            </button>
+          ))}
+        </div>
+        <div className="ml-auto">
+          {canManage ? (
+            <Button onClick={() => openBillRun(null)} disabled={unbilled.length === 0}>
+              <Sparkles className="mr-2 size-4" />
+              {t("toolbar.billRun")}
+            </Button>
+          ) : null}
+        </div>
+      </div>
+
+      {nothingYet ? (
+        <EmptyState
+          icon={<FileText />}
+          title={projects.length === 0 ? t("empty.noProjectsTitle") : t("empty.nothingToBillTitle")}
+          description={projects.length === 0 ? t("empty.noProjectsDescription") : t("empty.nothingToBillDescription")}
+          action={projects.length === 0 && canManage ? (
+            <Button asChild variant="outline">
+              <Link href="/admin/setup/project-types">{t("empty.configureProjectTypes")}</Link>
+            </Button>
+          ) : undefined}
+        />
+      ) : view === "board" ? (
+        <div className="-mx-1 flex gap-3 overflow-x-auto px-1 pb-2" role="list" aria-label={t("board.aria")}>
+          {columns.map((column) => (
+            <BoardLane
+              key={column}
+              column={column}
+              rows={column === "unbilled" ? [] : byStage.get(column)!}
+              unbilled={column === "unbilled" ? visibleUnbilled : []}
+              money={money}
+              canManage={canManage}
+              onOpen={(id) => navigate({ prebill: id })}
+              onPrebill={(projectId) => openBillRun(projectId)}
+              onShowAll={(stage) => navigate({ view: "table", stage })}
+            />
+          ))}
+        </div>
+      ) : (
+        <PrebillTable
+          rows={visiblePrebills}
+          stage={stageFilter}
+          onStage={(stage) => navigate({ stage })}
+          onOpen={(id) => navigate({ prebill: id })}
+          selectedId={selected?.id ?? null}
+          money={money}
+        />
+      )}
+
+      {billRunOpen ? (
+        <BillRunDrawer
+          unbilled={unbilled}
+          initialProjectId={billRunProject}
+          money={money}
+          onClose={() => setBillRunOpen(false)}
+          onFinished={(firstId) => {
+            setBillRunOpen(false);
+            router.refresh();
+            if (firstId) navigate({ prebill: firstId });
+          }}
+        />
+      ) : null}
 
       {selected ? (
-        <Drawer
-          open
-          onClose={closeSelected}
-          size="2xl"
-          title={
-            <span className="flex items-center gap-2.5">
-              <span>{selected.worksheetNumber}</span>
-              <Badge variant={STATUS_VARIANT[selected.status]}>
-                {enumLabel(
-                  selected.status,
-                  prebillStatusLabels,
-                  tCommon("labels.unknownValue"),
-                )}
-              </Badge>
-            </span>
-          }
-          description={t("detail.description", {
-            projectName: selected.projectName,
-            periodEnd: selected.periodEnd,
-          })}
-          headerActions={
-            <>
-              {selected.status === "draft" && canManage ? (
-                <Button
-                  onClick={() => transition("submit")}
-                  disabled={Boolean(busy)}
-                >
-                  <Send className="mr-2 size-4" />
-                  {t("detail.sendForReview")}
-                </Button>
-              ) : null}
-              {selected.status === "review" && canManage ? (
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    setWorkflowAction("return");
-                    setWorkflowReason("");
-                  }}
-                  disabled={Boolean(busy)}
-                >
-                  <RotateCcw className="mr-2 size-4" />
-                  {t("detail.return")}
-                </Button>
-              ) : null}
-              {selected.status === "review" && canApprove ? (
-                <Button
-                  onClick={() => transition("approve")}
-                  disabled={Boolean(busy)}
-                >
-                  <ShieldCheck className="mr-2 size-4" />
-                  {t("detail.approve")}
-                </Button>
-              ) : null}
-              {selected.status === "approved" && canCreateInvoice ? (
-                <Button onClick={convert} disabled={Boolean(busy)}>
-                  <FileText className="mr-2 size-4" />
-                  {busy === "convert"
-                    ? t("detail.converting")
-                    : t("detail.createInvoice")}
-                </Button>
-              ) : null}
-              {["draft", "review", "approved"].includes(selected.status) &&
-              canManage ? (
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    setWorkflowAction("void");
-                    setWorkflowReason("");
-                  }}
-                  disabled={Boolean(busy)}
-                >
-                  <X className="mr-2 size-4" />
-                  {t("detail.void")}
-                </Button>
-              ) : null}
-              {selected.invoiceDocumentId ? (
-                <Button asChild variant="outline">
-                  <Link
-                    href={`/ar/invoices?invoice=${selected.invoiceDocumentId}`}
-                  >
-                    {t("detail.openInvoice", {
-                      invoiceNumber: selected.invoiceNumber ?? "",
-                    })}
-                  </Link>
-                </Button>
-              ) : null}
-            </>
-          }
-        >
-          <div className="space-y-5">
-            {workflowAction ? (
-              <section
-                aria-labelledby="workflow-reason-title"
-                className="rounded-lg border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-950/40"
-              >
-                <h3
-                  id="workflow-reason-title"
-                  className="font-medium text-slate-900 dark:text-slate-100"
-                >
-                  {workflowAction === "return"
-                    ? t("workflow.returnTitle")
-                    : t("workflow.voidTitle")}
-                </h3>
-                <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-                  {workflowAction === "return"
-                    ? t("workflow.returnDescription")
-                    : t("workflow.voidDescription")}
-                </p>
-                <div className="mt-3 space-y-1.5">
-                  <Label htmlFor="workflow-reason">
-                    {t("workflow.reasonLabel")}
-                  </Label>
-                  <Textarea
-                    id="workflow-reason"
-                    autoFocus
-                    value={workflowReason}
-                    onChange={(event) => setWorkflowReason(event.target.value)}
-                  />
-                </div>
-                <div className="mt-3 flex gap-2">
-                  <Button
-                    variant={
-                      workflowAction === "void" ? "destructive" : "default"
-                    }
-                    disabled={!workflowReason.trim() || Boolean(busy)}
-                    onClick={() => transition(workflowAction, workflowReason)}
-                  >
-                    {busy === workflowAction
-                      ? t("workflow.saving")
-                      : workflowAction === "return"
-                        ? t("workflow.returnSubmit")
-                        : t("workflow.voidSubmit")}
-                  </Button>
-                  <Button
-                    variant="outline"
-                    onClick={() => {
-                      setWorkflowAction(null);
-                      setWorkflowReason("");
-                    }}
-                  >
-                    {t("workflow.cancel")}
-                  </Button>
-                </div>
-              </section>
-            ) : null}
-            <div className="grid gap-3 sm:grid-cols-4">
-              <DetailMetric
-                label={t("metrics.original")}
-                value={money(selected.originalBillAmount)}
-              />
-              <DetailMetric
-                label={t("metrics.proposed")}
-                value={money(selected.proposedBillAmount)}
-              />
-              <DetailMetric
-                label={t("metrics.adjustment")}
-                value={money(selected.adjustmentAmount)}
-                tone={
-                  decimalCmp(selected.adjustmentAmount, "0") < 0
-                    ? "danger"
-                    : decimalCmp(selected.adjustmentAmount, "0") > 0
-                      ? "warning"
-                      : "default"
-                }
-              />
-              <DetailMetric
-                label={t("metrics.cost")}
-                value={money(selected.costAmount)}
-              />
-            </div>
-            {selected.status === "approved" ? (
-              <Alert>
-                <Lock className="size-4" />
-                <AlertDescription>{t("lockedAlert")}</AlertDescription>
-              </Alert>
-            ) : null}
-            <div className="overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-800">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>{t("linesTable.source")}</TableHead>
-                    <TableHead>{t("linesTable.date")}</TableHead>
-                    <TableHead>{t("linesTable.description")}</TableHead>
-                    <TableHead className="text-right">
-                      {t("linesTable.cost")}
-                    </TableHead>
-                    <TableHead className="text-right">
-                      {t("linesTable.original")}
-                    </TableHead>
-                    <TableHead className="min-w-72">
-                      {t("linesTable.proposedSupport")}
-                    </TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {selected.lines.map((line) => (
-                    <PrebillLine
-                      key={line.id}
-                      line={line}
-                      prebill={selected}
-                      editable={selected.status === "draft" && canManage}
-                      onChanged={() => router.refresh()}
-                      money={money}
-                    />
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-            <div>
-              <h3 className="mb-2 text-sm font-semibold text-slate-900 dark:text-slate-100">
-                {t("trail.title")}
-              </h3>
-              <ol className="space-y-2">
-                {selected.events.map((event) => (
-                  <li key={event.id} className="flex gap-3 text-sm">
-                    <Clock3 className="mt-0.5 size-4 shrink-0 text-slate-400" />
-                    <div>
-                      <span className="font-medium capitalize">
-                        {event.eventType.replaceAll("_", " ")}
-                      </span>
-                      <span className="text-slate-500">
-                        {" "}
-                        · {event.actorName ?? t("trail.system")} ·{" "}
-                        {dateTime(new Date(event.occurredAt))}
-                      </span>
-                    </div>
-                  </li>
-                ))}
-              </ol>
-            </div>
-          </div>
-        </Drawer>
+        <PrebillDrawer
+          prebill={selected}
+          canManage={canManage}
+          canCreateInvoice={canCreateInvoice}
+          customerPortalEnabled={customerPortalEnabled}
+          onClose={() => navigate({ prebill: null })}
+        />
       ) : null}
     </div>
   );
 }
 
-function PrebillLine({
-  line,
-  prebill,
-  editable,
-  onChanged,
+function BoardLane({
+  column,
+  rows,
+  unbilled,
+  money,
+  canManage,
+  onOpen,
+  onPrebill,
+  onShowAll,
+}: {
+  column: BoardColumn;
+  rows: PrebillListRow[];
+  unbilled: UnbilledProjectRow[];
+  money: (value: string) => string;
+  canManage: boolean;
+  onOpen: (id: string) => void;
+  onPrebill: (projectId: string) => void;
+  onShowAll: (stage: PrebillStage) => void;
+}) {
+  const t = useTranslations("projects.wipBilling");
+  const closed = column === "paid";
+  const shown = closed ? rows.slice(0, CLOSED_CARD_LIMIT) : rows;
+  const count = column === "unbilled" ? unbilled.length : rows.length;
+  const total = column === "unbilled"
+    ? decimalSum(unbilled.map((row) => row.unbilledAmount))
+    : decimalSum(rows.map((row) => row.proposedBillAmount));
+  return (
+    <section
+      role="listitem"
+      aria-label={t(`stages.${column}`)}
+      className="flex w-72 shrink-0 flex-col rounded-xl border border-slate-200 bg-slate-50/70 dark:border-slate-800 dark:bg-slate-900/40"
+    >
+      <header className="flex items-baseline justify-between gap-2 border-b border-slate-200 px-3 py-2.5 dark:border-slate-800">
+        <h3 className="flex items-center gap-2 text-sm font-semibold text-slate-900 dark:text-slate-100">
+          {t(`stages.${column}`)}
+          <span className="rounded-full bg-white px-1.5 text-xs tabular-nums text-slate-500 shadow-sm dark:bg-slate-800 dark:text-slate-400">
+            {count}
+          </span>
+        </h3>
+        <span className="text-xs font-medium tabular-nums text-slate-500 dark:text-slate-400">{money(total)}</span>
+      </header>
+      <div className="flex max-h-[calc(100vh-16rem)] min-h-24 flex-col gap-2 overflow-y-auto p-2">
+        {count === 0 ? (
+          <p className="px-1 py-3 text-xs text-slate-500 dark:text-slate-400">{t(`stageEmpty.${column}`)}</p>
+        ) : column === "unbilled" ? (
+          unbilled.map((row) => (
+            <UnbilledCard key={row.projectId} row={row} money={money} canManage={canManage} onPrebill={onPrebill} />
+          ))
+        ) : (
+          shown.map((row) => <PackageCard key={row.id} row={row} money={money} onOpen={onOpen} />)
+        )}
+        {closed && rows.length > shown.length ? (
+          <button
+            type="button"
+            onClick={() => onShowAll(column as PrebillStage)}
+            className="rounded-lg px-2 py-1.5 text-xs font-medium text-teal-700 hover:bg-white dark:text-teal-300 dark:hover:bg-slate-800"
+          >
+            {t("board.showAll", { count: rows.length })}
+          </button>
+        ) : null}
+      </div>
+    </section>
+  );
+}
+
+function UnbilledCard({
+  row,
+  money,
+  canManage,
+  onPrebill,
+}: {
+  row: UnbilledProjectRow;
+  money: (value: string) => string;
+  canManage: boolean;
+  onPrebill: (projectId: string) => void;
+}) {
+  const t = useTranslations("projects.wipBilling");
+  const today = useBusinessToday();
+  const ageDays = Math.max(0, Math.round((Date.parse(today) - Date.parse(row.oldestWorkDate)) / 86_400_000));
+  return (
+    <article className="rounded-lg border border-dashed border-slate-300 bg-white p-3 dark:border-slate-700 dark:bg-slate-950">
+      <p className="truncate text-sm font-semibold text-slate-900 dark:text-slate-100">{row.customerName ?? row.projectName}</p>
+      <p className="truncate text-xs text-slate-500 dark:text-slate-400">{row.projectName}</p>
+      <p className="mt-2 text-lg font-semibold tabular-nums text-slate-950 dark:text-slate-50">{money(row.unbilledAmount)}</p>
+      <div className="mt-1 flex items-center justify-between gap-2">
+        <span className={cn(
+          "inline-flex items-center gap-1 text-xs",
+          ageDays > 60 ? "text-red-600 dark:text-red-400" : ageDays > 30 ? "text-amber-700 dark:text-amber-300" : "text-slate-500",
+        )}>
+          <CalendarClock className="size-3.5" />
+          {t("card.oldest", { days: ageDays })}
+        </span>
+        {canManage ? (
+          <Button size="sm" variant="outline" onClick={() => onPrebill(row.projectId)}>
+            {t("card.prebill")}
+          </Button>
+        ) : null}
+      </div>
+    </article>
+  );
+}
+
+function PackageCard({ row, money, onOpen }: { row: PrebillListRow; money: (value: string) => string; onOpen: (id: string) => void }) {
+  const t = useTranslations("projects.wipBilling");
+  const disputed = row.stage === "draft" && row.customerDecision === "disputed";
+  return (
+    <button
+      type="button"
+      onClick={() => onOpen(row.id)}
+      className={cn(
+        "group w-full rounded-lg border bg-white p-3 text-left shadow-sm transition hover:-translate-y-px hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 dark:bg-slate-950",
+        disputed ? "border-red-200 dark:border-red-900" : "border-slate-200 dark:border-slate-800",
+      )}
+    >
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <p className="truncate text-sm font-semibold text-slate-900 dark:text-slate-100">{row.customerName ?? row.projectName}</p>
+          <p className="truncate text-xs text-slate-500 dark:text-slate-400">{row.projectName}</p>
+        </div>
+        <span className="shrink-0 rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[11px] text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+          {row.invoiceNumber ?? row.worksheetNumber}
+        </span>
+      </div>
+      <p className="mt-2 text-lg font-semibold tabular-nums text-slate-950 dark:text-slate-50">
+        {money(row.stage === "invoiced" || row.stage === "sent" || row.stage === "paid"
+          ? row.invoiceTotal ?? row.proposedBillAmount
+          : row.proposedBillAmount)}
+      </p>
+      <p className="text-xs text-slate-500 dark:text-slate-400">
+        {row.periodStart ? t("card.period", { start: row.periodStart, end: row.periodEnd }) : t("card.through", { date: row.periodEnd })}
+      </p>
+      <div className="mt-2 flex flex-wrap gap-1">
+        <Badge variant="outline">{t("card.lines", { count: row.lineCount })}</Badge>
+        {row.heldLineCount > 0 ? <Badge variant="warning">{t("card.held", { count: row.heldLineCount })}</Badge> : null}
+        {disputed ? (
+          <Badge variant="destructive">
+            <MessageSquareWarning className="mr-1 size-3" />
+            {t("card.disputed", { count: row.disputedLineCount })}
+          </Badge>
+        ) : null}
+        {row.customerDecision === "accepted" && row.stage !== "draft" ? (
+          <Badge variant="success">
+            <CheckCircle2 className="mr-1 size-3" />
+            {row.customerPoNumber ? t("card.acceptedPo", { po: row.customerPoNumber }) : t("card.accepted")}
+          </Badge>
+        ) : null}
+        {row.customerReviewRequired && row.customerDecision !== "accepted" && (row.stage === "draft" || row.stage === "review" || row.stage === "ready") ? (
+          <Badge variant="secondary">{t("card.reviewRequired")}</Badge>
+        ) : null}
+        {row.stage === "customer" && row.customerViewedAt ? (
+          <Badge variant="secondary">
+            <Eye className="mr-1 size-3" />
+            {t("card.viewed")}
+          </Badge>
+        ) : null}
+        {row.stage === "invoiced" && row.invoiceStatus !== "posted" ? (
+          <Badge variant="secondary">{t("card.invoiceDraft")}</Badge>
+        ) : null}
+        {row.stage === "invoiced" && row.invoiceStatus === "posted" ? (
+          <Badge variant="default">
+            <Send className="mr-1 size-3" />
+            {t("card.readyToSend")}
+          </Badge>
+        ) : null}
+        {row.stage === "sent" && row.invoiceOpenBalance ? (
+          <Badge variant="outline">{t("card.open", { amount: money(row.invoiceOpenBalance) })}</Badge>
+        ) : null}
+      </div>
+    </button>
+  );
+}
+
+function PrebillTable({
+  rows,
+  stage,
+  onStage,
+  onOpen,
+  selectedId,
   money,
 }: {
-  line: PrebillLineRow;
-  prebill: PrebillDetail;
-  editable: boolean;
-  onChanged: () => void;
+  rows: PrebillListRow[];
+  stage: PrebillStage | null;
+  onStage: (stage: string | null) => void;
+  onOpen: (id: string) => void;
+  selectedId: string | null;
   money: (value: string) => string;
 }) {
-  const [amount, setAmount] = useState(line.proposedBillAmount);
-  const [reason, setReason] = useState(line.adjustmentReason ?? "");
-  const [evidence, setEvidence] = useState(line.adjustmentEvidence.join(", "));
-  const [saving, setSaving] = useState(false);
-  const [holdForm, setHoldForm] = useState<"hold" | "release" | null>(null);
-  const [holdReason, setHoldReason] = useState("");
-  const [holdEvidence, setHoldEvidence] = useState("");
-  const exactAmount = canonicalDecimal(amount, 4);
-  const amountComparison =
-    exactAmount === null
-      ? null
-      : decimalCmp(exactAmount, line.originalBillAmount);
-  const changed = amountComparison !== 0;
   const t = useTranslations("projects.wipBilling");
+  const counts = new Map<PrebillStage, number>();
+  for (const row of rows) counts.set(row.stage, (counts.get(row.stage) ?? 0) + 1);
+  // "All" is every stage still in motion; closed stages are their own filters.
+  const filtered = stage ? rows.filter((row) => row.stage === stage) : rows.filter((row) => row.stage !== "paid" && row.stage !== "void");
+  return (
+    <div className="space-y-3">
+      <div className="flex flex-wrap gap-1.5" role="group" aria-label={t("table.stageFilter")}>
+        <FilterChip active={stage === null} onClick={() => onStage(null)} label={t("table.allOpen")} />
+        {PREBILL_STAGES.filter((value) => (counts.get(value) ?? 0) > 0 || value === stage).map((value) => (
+          <FilterChip
+            key={value}
+            active={stage === value}
+            onClick={() => onStage(value)}
+            label={t(`stages.${value}`)}
+            count={counts.get(value) ?? 0}
+          />
+        ))}
+      </div>
+      <PagedTable
+        source="projects_wip_prebills"
+        rows={filtered}
+        rowKey={(row) => row.id}
+        emptyAsRow
+        onRowClick={(row) => onOpen(row.id)}
+        rowSelected={(row) => row.id === selectedId}
+        empty={<EmptyState icon={<FileText />} title={t("table.emptyTitle")} description={t("table.emptyDescription")} />}
+        columns={[
+          {
+            key: "worksheet",
+            header: t("table.worksheet"),
+            cell: (row) => (
+              <>
+                <p className="font-medium">{row.worksheetNumber}</p>
+                {row.invoiceNumber ? <p className="text-xs text-slate-500">{row.invoiceNumber}</p> : null}
+              </>
+            ),
+          },
+          {
+            key: "customer",
+            header: t("table.customer"),
+            cell: (row) => (
+              <>
+                <p>{row.customerName ?? "—"}</p>
+                <p className="text-xs text-slate-500">{row.projectName}</p>
+              </>
+            ),
+          },
+          {
+            key: "period",
+            header: t("table.period"),
+            cell: (row) => (
+              <span className="whitespace-nowrap text-sm">
+                {row.periodStart ? t("card.period", { start: row.periodStart, end: row.periodEnd }) : t("card.through", { date: row.periodEnd })}
+              </span>
+            ),
+          },
+          {
+            key: "stage",
+            header: t("table.stage"),
+            cell: (row) => (
+              <span className="flex flex-wrap items-center gap-1">
+                <Badge variant={STAGE_TONE[row.stage]}>{t(`stages.${row.stage}`)}</Badge>
+                {row.stage === "draft" && row.customerDecision === "disputed" ? (
+                  <AlertTriangle className="size-4 text-red-600" aria-label={t("card.disputed", { count: row.disputedLineCount })} />
+                ) : null}
+              </span>
+            ),
+          },
+          {
+            key: "amount",
+            header: t("table.amount"),
+            align: "right",
+            className: "tabular-nums",
+            cell: (row) => money(row.invoiceTotal ?? row.proposedBillAmount),
+          },
+          {
+            key: "balance",
+            header: t("table.openBalance"),
+            align: "right",
+            className: "tabular-nums",
+            cell: (row) => (row.invoiceStatus === "posted" && row.invoiceOpenBalance ? money(row.invoiceOpenBalance) : "—"),
+          },
+        ]}
+      />
+    </div>
+  );
+}
 
-  async function save() {
-    setSaving(true);
-    try {
-      await requestJson(`/api/wip-billing/${prebill.id}/lines/${line.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          proposedBillAmount: amount,
-          adjustmentReason: reason,
-          adjustmentEvidence: evidence
-            .split(/[,\n]/)
-            .map((value) => value.trim())
-            .filter(Boolean),
-          expectedUpdatedAt: line.updatedAt,
-        }),
-      });
-      toast.success(t("lineToasts.saved"));
-      onChanged();
-    } catch (error) {
-      toast.error((error as Error).message);
-    } finally {
-      setSaving(false);
-    }
+function FilterChip({ active, onClick, label, count }: { active: boolean; onClick: () => void; label: string; count?: number }) {
+  return (
+    <button
+      type="button"
+      aria-pressed={active}
+      onClick={onClick}
+      className={cn(
+        "flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition-colors",
+        active
+          ? "border-teal-500 bg-teal-50 text-teal-800 dark:border-teal-400 dark:bg-teal-950/40 dark:text-teal-200"
+          : "border-slate-300 text-slate-600 hover:border-slate-400 dark:border-slate-700 dark:text-slate-300",
+      )}
+    >
+      {label}
+      {typeof count === "number" ? <span className="tabular-nums text-slate-500">{count}</span> : null}
+    </button>
+  );
+}
+
+function BillRunDrawer({
+  unbilled,
+  initialProjectId,
+  money,
+  onClose,
+  onFinished,
+}: {
+  unbilled: UnbilledProjectRow[];
+  initialProjectId: string | null;
+  money: (value: string) => string;
+  onClose: () => void;
+  onFinished: (firstPrebillId: string | null) => void;
+}) {
+  const t = useTranslations("projects.wipBilling");
+  const today = useBusinessToday();
+  const [periodEnd, setPeriodEnd] = useState(today);
+  const [periodStart, setPeriodStart] = useState("");
+  const [notes, setNotes] = useState("");
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(
+    () => new Set(initialProjectId ? [initialProjectId] : unbilled.map((row) => row.projectId)),
+  );
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState<BillRunResult | null>(null);
+  const allSelected = selectedIds.size === unbilled.length;
+
+  function toggle(projectId: string) {
+    setSelectedIds((current) => {
+      const next = new Set(current);
+      if (next.has(projectId)) next.delete(projectId);
+      else next.add(projectId);
+      return next;
+    });
   }
 
-  async function hold() {
-    if (!holdReason.trim()) return;
-    setSaving(true);
+  async function run() {
+    setBusy(true);
     try {
-      await requestJson(`/api/wip-billing/${prebill.id}/lines/${line.id}`, {
-        method: "PATCH",
+      const outcome = await requestJson<BillRunResult>("/api/wip-billing/runs", {
+        method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          action: "hold",
-          reason: holdReason.trim(),
-          evidence: holdEvidence
-            .split(/[,\n]/)
-            .map((value) => value.trim())
-            .filter(Boolean),
+          periodEnd,
+          periodStart: periodStart || null,
+          projectIds: allSelected ? null : [...selectedIds],
+          notes: notes || null,
         }),
       });
-      toast.success(t("lineToasts.holdApplied"));
-      setHoldForm(null);
-      setHoldReason("");
-      setHoldEvidence("");
-      onChanged();
+      if (outcome.skipped.length === 0) {
+        toast.success(t("billRun.created", { count: outcome.created.length }));
+        onFinished(outcome.created.length === 1 ? outcome.created[0]!.id : null);
+        return;
+      }
+      setResult(outcome);
     } catch (error) {
       toast.error((error as Error).message);
     } finally {
-      setSaving(false);
-    }
-  }
-
-  async function release() {
-    if (!line.holdId) return;
-    if (!holdReason.trim()) return;
-    setSaving(true);
-    try {
-      await requestJson(`/api/wip-billing/holds/${line.holdId}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ reason: holdReason.trim() }),
-      });
-      toast.success(t("lineToasts.holdReleased"));
-      setHoldForm(null);
-      setHoldReason("");
-      onChanged();
-    } catch (error) {
-      toast.error((error as Error).message);
-    } finally {
-      setSaving(false);
+      setBusy(false);
     }
   }
 
   return (
-    <TableRow
-      className={
-        line.disposition === "hold"
-          ? "bg-amber-50/60 dark:bg-amber-950/10"
-          : undefined
-      }
+    <Drawer
+      open
+      onClose={result ? () => onFinished(null) : onClose}
+      size="lg"
+      title={t("billRun.title")}
+      description={t("billRun.description")}
+      headerActions={result ? (
+        <Button onClick={() => onFinished(null)}>{t("billRun.done")}</Button>
+      ) : (
+        <>
+          <Button variant="outline" onClick={onClose}>{t("billRun.cancel")}</Button>
+          <Button disabled={busy || !periodEnd || selectedIds.size === 0} onClick={run}>
+            {busy ? t("billRun.running") : t("billRun.submit", { count: selectedIds.size })}
+          </Button>
+        </>
+      )}
     >
-      <TableCell>
-        <Badge variant={line.disposition === "hold" ? "warning" : "outline"}>
-          {line.disposition === "hold"
-            ? t("line.held")
-            : line.sourceType === "time_entry"
-              ? t("line.time")
-              : t("line.cost")}
-        </Badge>
-      </TableCell>
-      <TableCell className="whitespace-nowrap">{line.sourceDate}</TableCell>
-      <TableCell>
-        <p className="max-w-80 truncate">{line.description ?? "—"}</p>
-        {line.holdReason ? (
-          <p className="mt-1 text-xs text-amber-700 dark:text-amber-300">
-            {line.holdReason}
+      {result ? (
+        <div className="space-y-4">
+          <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
+            {t("billRun.created", { count: result.created.length })}
           </p>
-        ) : null}
-      </TableCell>
-      <TableCell className="text-right tabular-nums">
-        {money(line.costAmount)}
-      </TableCell>
-      <TableCell className="text-right tabular-nums">
-        {money(line.originalBillAmount)}
-      </TableCell>
-      <TableCell>
-        {editable && line.disposition === "bill" ? (
-          <div className="space-y-2">
-            <div className="flex gap-2">
-              <Input
-                aria-label={t("line.amountAria")}
-                inputMode="decimal"
-                value={amount}
-                onChange={(event) => setAmount(event.target.value)}
-                className="max-w-36 text-right tabular-nums"
-              />
-              {changed ? (
-                amountComparison !== null && amountComparison > 0 ? (
-                  <ArrowUpRight className="mt-2 size-4 text-amber-600" />
-                ) : (
-                  <ArrowDownRight className="mt-2 size-4 text-red-600" />
-                )
-              ) : (
-                <Check className="mt-2 size-4 text-emerald-600" />
-              )}
+          <div>
+            <h3 className="mb-2 text-sm font-semibold text-slate-900 dark:text-slate-100">{t("billRun.skippedTitle")}</h3>
+            <ul className="space-y-2">
+              {result.skipped.map((entry) => (
+                <li key={entry.projectId} className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm dark:border-amber-900 dark:bg-amber-950/20">
+                  <p className="font-medium text-slate-900 dark:text-slate-100">{entry.projectName}</p>
+                  <p className="text-amber-800 dark:text-amber-200">{entry.reason}</p>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      ) : (
+        <div className="space-y-5">
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="bill-run-end">{t("billRun.cutoff")}</Label>
+              <Input id="bill-run-end" type="date" value={periodEnd} onChange={(event) => setPeriodEnd(event.target.value)} />
             </div>
-            {changed ? (
-              <>
-                <Input
-                  aria-label={t("line.reasonAria")}
-                  placeholder={t("line.reasonAria")}
-                  value={reason}
-                  onChange={(event) => setReason(event.target.value)}
-                />
-                <Input
-                  aria-label={t("line.evidencePlaceholder")}
-                  placeholder={t("line.evidencePlaceholder")}
-                  value={evidence}
-                  onChange={(event) => setEvidence(event.target.value)}
-                />
-              </>
-            ) : null}
-            <div className="flex gap-2">
-              <Button size="sm" onClick={save} disabled={saving}>
-                {saving ? t("line.saving") : t("line.save")}
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => {
-                  setHoldForm("hold");
-                  setHoldReason("");
-                  setHoldEvidence("");
-                }}
-                disabled={saving}
+            <div className="space-y-1.5">
+              <Label htmlFor="bill-run-start">{t("billRun.start")}</Label>
+              <Input id="bill-run-start" type="date" value={periodStart} onChange={(event) => setPeriodStart(event.target.value)} />
+            </div>
+          </div>
+          <div>
+            <div className="mb-2 flex items-center justify-between">
+              <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t("billRun.projects")}</h3>
+              <button
+                type="button"
+                className="text-xs font-medium text-teal-700 hover:underline dark:text-teal-300"
+                onClick={() => setSelectedIds(allSelected ? new Set() : new Set(unbilled.map((row) => row.projectId)))}
               >
-                <AlertTriangle className="mr-1.5 size-3.5" />
-                {t("line.hold")}
-              </Button>
+                {allSelected ? t("billRun.selectNone") : t("billRun.selectAll")}
+              </button>
             </div>
-            {holdForm === "hold" ? (
-              <div className="space-y-2 rounded-md border border-amber-200 bg-amber-50 p-3 dark:border-amber-900 dark:bg-amber-950/20">
-                <Label htmlFor={`hold-reason-${line.id}`}>
-                  {t("line.holdReason")}
-                </Label>
-                <Textarea
-                  id={`hold-reason-${line.id}`}
-                  autoFocus
-                  value={holdReason}
-                  onChange={(event) => setHoldReason(event.target.value)}
-                />
-                <Label htmlFor={`hold-evidence-${line.id}`}>
-                  {t("line.evidenceReferences")}
-                </Label>
-                <Input
-                  id={`hold-evidence-${line.id}`}
-                  value={holdEvidence}
-                  onChange={(event) => setHoldEvidence(event.target.value)}
-                  placeholder={t("line.evidencePlaceholder")}
-                />
-                <div className="flex gap-2">
-                  <Button
-                    size="sm"
-                    disabled={!holdReason.trim() || saving}
-                    onClick={hold}
-                  >
-                    {t("line.applyHold")}
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => setHoldForm(null)}
-                  >
-                    {t("workflow.cancel")}
-                  </Button>
-                </div>
-              </div>
-            ) : null}
+            <ul className="divide-y divide-slate-100 rounded-lg border border-slate-200 dark:divide-slate-800 dark:border-slate-800">
+              {unbilled.map((row) => (
+                <li key={row.projectId}>
+                  <label className="flex cursor-pointer items-center gap-3 px-3 py-2.5 hover:bg-slate-50 dark:hover:bg-slate-900">
+                    <input type="checkbox" checked={selectedIds.has(row.projectId)} onChange={() => toggle(row.projectId)} />
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-sm font-medium text-slate-900 dark:text-slate-100">{row.projectName}</span>
+                      <span className="block truncate text-xs text-slate-500">{row.customerName ?? "—"} · {row.projectTypeName}</span>
+                    </span>
+                    <span className="text-right">
+                      <span className="block text-sm font-semibold tabular-nums">{money(row.unbilledAmount)}</span>
+                      <span className="block text-xs text-slate-500">{t("billRun.oldest", { date: row.oldestWorkDate })}</span>
+                    </span>
+                  </label>
+                </li>
+              ))}
+            </ul>
           </div>
-        ) : line.disposition === "hold" && editable ? (
-          <div className="space-y-2">
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => {
-                setHoldForm("release");
-                setHoldReason("");
-              }}
-              disabled={saving}
-            >
-              {t("line.releaseHold")}
-            </Button>
-            {holdForm === "release" ? (
-              <div className="space-y-2 rounded-md border border-slate-200 bg-slate-50 p-3 dark:border-slate-800 dark:bg-slate-950/30">
-                <Label htmlFor={`release-reason-${line.id}`}>
-                  {t("line.releaseReason")}
-                </Label>
-                <Textarea
-                  id={`release-reason-${line.id}`}
-                  autoFocus
-                  value={holdReason}
-                  onChange={(event) => setHoldReason(event.target.value)}
-                />
-                <div className="flex gap-2">
-                  <Button
-                    size="sm"
-                    disabled={!holdReason.trim() || saving}
-                    onClick={release}
-                  >
-                    {t("line.release")}
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => setHoldForm(null)}
-                  >
-                    {t("workflow.cancel")}
-                  </Button>
-                </div>
-              </div>
-            ) : null}
+          <div className="space-y-1.5">
+            <Label htmlFor="bill-run-notes">{t("billRun.notes")}</Label>
+            <Textarea id="bill-run-notes" rows={3} value={notes} onChange={(event) => setNotes(event.target.value)} />
           </div>
-        ) : (
-          <div className="text-right">
-            <p className="font-medium tabular-nums">
-              {money(line.proposedBillAmount)}
-            </p>
-            {line.adjustmentReason ? (
-              <p className="mt-1 text-xs text-slate-500">
-                {line.adjustmentReason}
-              </p>
-            ) : null}
-          </div>
-        )}
-      </TableCell>
-    </TableRow>
+        </div>
+      )}
+    </Drawer>
   );
 }

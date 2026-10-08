@@ -19,7 +19,7 @@ registerHooks({
     if (specifier === "@openbooks/engine/portal") {
       return {
         shortCircuit: true,
-        url: "data:text/javascript,export async function resolvePortalSession(){return globalThis.__portalCase.session};export async function consumePortalLink(){return globalThis.__portalCase.consume()};export async function portalHome(){throw new Error('unreached')}",
+        url: "data:text/javascript,export async function resolvePortalSession(){return globalThis.__portalCase.session};export async function consumePortalLink(){return globalThis.__portalCase.consume()};export async function portalHome(){throw new Error('unreached')};export async function portalBillingReviews(){throw new Error('unreached')}",
       };
     }
     if (specifier === "@openbooks/engine/platform/database") {
@@ -42,7 +42,10 @@ function portalCase(consume: PortalCase["consume"]) {
 }
 
 const { default: PortalTokenPage } = (await import("./page")) as {
-  default: (args: { params: Promise<{ token: string }> }) => Promise<unknown>;
+  default: (args: {
+    params: Promise<{ token: string }>;
+    searchParams?: Promise<Record<string, string | string[] | undefined>>;
+  }) => Promise<unknown>;
 };
 
 /**
@@ -71,5 +74,22 @@ test("an unconsumable portal link refuses", async () => {
   await assert.rejects(
     PortalTokenPage({ params: Promise.resolve({ token: "link-bad" }) }),
     (error: unknown) => (error as { digest?: string }).digest === "NEXT_NOT_FOUND",
+  );
+});
+
+/**
+ * A review invitation lands on the package it names, and only a well-formed
+ * record id is carried through the redirect.
+ */
+test("a review invitation redirects to the named billing review", async () => {
+  portalCase(async () => ({ sessionToken: "session-3" }));
+  const reviewId = "0190a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b";
+  await assert.rejects(
+    PortalTokenPage({ params: Promise.resolve({ token: "link-2" }), searchParams: Promise.resolve({ review: reviewId }) }),
+    (error: unknown) => (error as { url?: string }).url === `/portal/session-3/reviews/${reviewId}`,
+  );
+  await assert.rejects(
+    PortalTokenPage({ params: Promise.resolve({ token: "link-3" }), searchParams: Promise.resolve({ review: "../admin" }) }),
+    (error: unknown) => (error as { url?: string }).url === "/portal/session-3",
   );
 });

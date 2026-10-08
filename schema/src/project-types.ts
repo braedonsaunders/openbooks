@@ -213,6 +213,14 @@ export interface InvoicingProfile {
    */
   rateCardLapse?: "block" | "carry_forward";
   /**
+   * Customer review before invoicing, through the customer portal. `optional`
+   * (the default) lets a biller send a pre-billing worksheet for review when
+   * useful; `required` refuses to invoice a worksheet the customer has not
+   * accepted. Captured on each worksheet when it is prepared, so a later
+   * change never reinterprets work already in flight.
+   */
+  customerReview?: "optional" | "required";
+  /**
    * On a field-ticket invoice, which cost travels with the ticket.
    * `ticket_only` (the default) bills only cost the crew attached to that
    * ticket. `ticket_or_period` also sweeps in cost carrying NO ticket whose

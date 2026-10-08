@@ -40,7 +40,8 @@
     "field_ticket": "作業票",
     "close_run": "期間決算",
     "budget_scenario": "予算",
-    "hrm_employment_change_request": "雇用変更"
+    "hrm_employment_change_request": "雇用変更",
+    "wip_prebill": "事前請求"
   },
   "decide": {
     "rejectionReason": "却下理由:",

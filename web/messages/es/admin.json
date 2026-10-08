@@ -6982,8 +6982,8 @@
       "description": "Compromisos con proveedores, cambios de subcontratos, programas de valores y solicitudes de pago de proveedores, retenciones en garantía por pagar, liberaciones, cheques conjuntos y retenciones de pago."
     },
     "wipBilling": {
-      "title": "Trabajo en curso y prefacturación",
-      "description": "Revise el trabajo facturable de proyectos, retenga o ajuste líneas con evidencia, apruebe prefacturas y supervise la antigüedad del trabajo en curso, la realización y las fugas."
+      "title": "Prefacturación",
+      "description": "Convierta el trabajo de proyecto no facturado en paquetes de factura revisados: ciclos de facturación, ajustes y retenciones con evidencia, aprobación mediante Flujos, revisión opcional del cliente en el portal y envío de facturas con soporte."
     },
     "resourcing": {
       "title": "Asignación de recursos",

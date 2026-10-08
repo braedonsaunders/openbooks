@@ -152,6 +152,12 @@ export async function sendRecordPdfEmail(args: {
    * downgraded to an unprotected attachment.
    */
   encrypt?: (pdf: Buffer) => Promise<Buffer>
+  /**
+   * Further PDFs delivered with the record — an invoice's backup packet.
+   * Refused for protected payroll records, whose every attachment must pass
+   * the protection pass.
+   */
+  extraAttachments?: Array<{ filename: string; content: Buffer }>
 }): Promise<{ to: string; subject: string }> {
   const meta = PDF_RECORD_TYPE_BY_KEY[args.recordType]
   if (!meta) throw new RecordPdfSendError('unknown record type')
@@ -162,6 +168,9 @@ export async function sendRecordPdfEmail(args: {
   const protectedPayrollRecord = isProtectedPayrollRecordType(args.recordType)
   if (protectedPayrollRecord && !args.encrypt) {
     throw new RecordPdfSendError('payroll compensation PDFs must be encrypted before email delivery')
+  }
+  if (protectedPayrollRecord && args.extraAttachments?.length) {
+    throw new RecordPdfSendError('payroll compensation PDFs are delivered alone')
   }
 
   const [tpl, record, transport, actor] = await Promise.all([
@@ -252,7 +261,14 @@ export async function sendRecordPdfEmail(args: {
       subject: body.subject,
       html: body.html,
       text: body.text,
-      attachments: [{ filename: attachmentName, content: pdf.toString('base64'), contentType: 'application/pdf' }],
+      attachments: [
+        { filename: attachmentName, content: pdf.toString('base64'), contentType: 'application/pdf' },
+        ...(args.extraAttachments ?? []).map((attachment) => ({
+          filename: attachment.filename,
+          content: attachment.content.toString('base64'),
+          contentType: 'application/pdf',
+        })),
+      ],
       // The log row scope keeps this direct send's identity durable and
       // distinct from every other send to the same mailbox.
     }, { deliveryKey: deriveEmailDeliveryKey({ orgId: args.orgId, scope: `direct:${logId}`, to }) })

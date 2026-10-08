@@ -40,7 +40,8 @@
     "field_ticket": "Leistungsnachweis",
     "close_run": "Periodenabschluss",
     "budget_scenario": "Budget",
-    "hrm_employment_change_request": "Beschäftigungsänderung"
+    "hrm_employment_change_request": "Beschäftigungsänderung",
+    "wip_prebill": "Vorabrechnung"
   },
   "decide": {
     "rejectionReason": "Ablehnungsgrund:",

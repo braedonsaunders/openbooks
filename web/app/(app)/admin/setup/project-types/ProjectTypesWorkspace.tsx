@@ -513,6 +513,9 @@ export function ProjectTypesWorkspace({
               <EnumField label={tProjectInvoicing('rateCardLapse')} value={ip.rateCardLapse ?? 'block'}
                 options={['block', 'carry_forward']}
                 onChange={(v) => setIp({ rateCardLapse: v as 'block' | 'carry_forward' })} />
+              <EnumField label={tProjectInvoicing('customerReview')} value={ip.customerReview ?? 'optional'}
+                options={['optional', 'required']}
+                onChange={(v) => setIp({ customerReview: v as 'optional' | 'required' })} />
 
             </div>
           ) : null}

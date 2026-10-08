@@ -369,107 +369,201 @@
   "invoicing": {
     "rateCardLapse": "When the rate card has lapsed",
     "block": "Block invoicing",
-    "carry_forward": "Bill at the last card"
+    "carry_forward": "Bill at the last card",
+    "customerReview": "Customer review before invoicing"
   },
   "wipBilling": {
-    "wipHealthAria": "WIP health",
-    "tiles": {
-      "availableWip": "Available WIP",
-      "availableWipSub": "Eligible and not held",
-      "over90": "Over 90 days",
-      "over90Sub": "{amount} at 61–90 days",
-      "realization": "Realization",
-      "realizationSub": "{amount} billed",
-      "leakage": "Leakage",
-      "leakageSub": "{amount} held over 90 days"
-    },
-    "list": {
-      "title": "Prebill worksheets",
-      "description": "Review eligible project work, billing adjustments, and approval status.",
-      "newPrebill": "New prebill"
+    "toolbar": {
+      "search": "Search customers, projects, worksheets",
+      "board": "Board",
+      "table": "Table",
+      "billRun": "Bill run"
     },
     "empty": {
-      "noProjectsTitle": "Create a project first",
-      "noPrebillsTitle": "No prebill worksheets yet",
-      "noProjectsDescription": "WIP review starts from an active project with billable time or cost.",
-      "noPrebillsDescription": "Create a worksheet to snapshot eligible unbilled project work through a cutoff date.",
-      "createPrebill": "Create prebill",
-      "goToProjects": "Go to projects"
+      "noProjectsTitle": "Set up a billable project type first",
+      "noProjectsDescription": "Pre-billing prepares invoices from projects whose type bills time and cost lines.",
+      "nothingToBillTitle": "Nothing to bill yet",
+      "nothingToBillDescription": "Approved billable time and cost on your projects appears here, ready to prebill.",
+      "configureProjectTypes": "Configure project types"
+    },
+    "board": {
+      "aria": "Pre-billing stages",
+      "showAll": "Show all {count}"
+    },
+    "stages": {
+      "unbilled": "To prebill",
+      "draft": "Draft",
+      "review": "In approval",
+      "ready": "Ready to invoice",
+      "customer": "With customer",
+      "invoiced": "Invoiced",
+      "sent": "Sent",
+      "paid": "Paid",
+      "void": "Void"
+    },
+    "stageEmpty": {
+      "unbilled": "No unbilled work waiting.",
+      "draft": "Prebills you are preparing appear here.",
+      "review": "Prebills awaiting approval in Inbox appear here.",
+      "ready": "Approved prebills ready to invoice appear here.",
+      "customer": "Prebills the customer is reviewing appear here.",
+      "invoiced": "Invoices waiting to be posted or sent appear here.",
+      "sent": "Delivered invoices awaiting payment appear here.",
+      "paid": "Paid invoices appear here."
+    },
+    "card": {
+      "oldest": "Oldest work {days, plural, one {# day} other {# days}} ago",
+      "prebill": "Prebill",
+      "period": "{start} – {end}",
+      "through": "Through {date}",
+      "lines": "{count, plural, one {# line} other {# lines}}",
+      "held": "{count} held",
+      "disputed": "{count, plural, =0 {Changes requested} one {# line disputed} other {# lines disputed}}",
+      "accepted": "Accepted",
+      "acceptedPo": "Accepted · PO {po}",
+      "reviewRequired": "Customer review",
+      "viewed": "Viewed",
+      "invoiceDraft": "Invoice draft",
+      "readyToSend": "Ready to send",
+      "open": "{amount} open"
     },
     "table": {
+      "stageFilter": "Filter by stage",
+      "allOpen": "All open",
+      "emptyTitle": "Nothing in this stage",
+      "emptyDescription": "Pick another stage, or clear the search.",
       "worksheet": "Worksheet",
-      "project": "Project",
-      "status": "Status",
-      "proposed": "Proposed",
-      "through": "Through {periodEnd}",
-      "noCustomer": "No customer"
+      "customer": "Customer",
+      "period": "Period",
+      "stage": "Stage",
+      "amount": "Amount",
+      "openBalance": "Open balance"
     },
-    "createDrawer": {
-      "title": "New prebill worksheet",
-      "description": "Snapshot eligible unbilled work through a cutoff date.",
+    "billRun": {
+      "title": "Bill run",
+      "description": "Prepare a draft prebill for every selected project with unbilled work through the cutoff. Each prebill is reviewed before it becomes an invoice.",
+      "cutoff": "Cutoff date",
+      "start": "Period start (optional)",
+      "projects": "Projects",
+      "selectAll": "Select all",
+      "selectNone": "Select none",
+      "oldest": "Oldest {date}",
+      "notes": "Notes",
+      "submit": "Prepare {count, plural, one {# prebill} other {# prebills}}",
+      "running": "Preparing…",
+      "created": "{count, plural, =0 {No prebills prepared} one {# prebill prepared} other {# prebills prepared}}",
+      "skippedTitle": "Skipped",
       "cancel": "Cancel",
-      "creating": "Creating…",
-      "submit": "Create prebill",
-      "projectLabel": "Project",
-      "projectHelp": "Only active project types using standard T&M or Cost-Plus source billing are listed.",
-      "configureProjectTypes": "Configure project types",
-      "startLabel": "Start (optional)",
-      "cutoffLabel": "Cutoff",
-      "notesLabel": "Review notes",
-      "notesPlaceholder": "Scope, billing instructions, or reviewer context"
-    },
-    "detail": {
-      "description": "{projectName} · through {periodEnd}",
-      "sendForReview": "Send for review",
-      "return": "Return",
-      "approve": "Approve",
-      "converting": "Converting…",
-      "createInvoice": "Create invoice",
-      "void": "Void",
-      "openInvoice": "Open {invoiceNumber}"
-    },
-    "workflow": {
-      "returnTitle": "Return worksheet to draft",
-      "voidTitle": "Void worksheet",
-      "returnDescription": "Explain what the preparer needs to correct. This becomes part of the review trail.",
-      "voidDescription": "Explain why this worksheet must not proceed. The source WIP remains available for a future worksheet.",
-      "reasonLabel": "Reason",
-      "saving": "Saving…",
-      "returnSubmit": "Return to draft",
-      "voidSubmit": "Void worksheet",
-      "cancel": "Cancel"
-    },
-    "metrics": {
-      "original": "Original",
-      "proposed": "Proposed",
-      "adjustment": "Adjustment",
-      "cost": "Cost"
-    },
-    "lockedAlert": "This approval snapshot is locked. Convert it as approved, or void it and prepare a new worksheet.",
-    "linesTable": {
-      "source": "Source",
-      "date": "Date",
-      "description": "Description",
-      "cost": "Cost",
-      "original": "Original",
-      "proposedSupport": "Proposed / support"
-    },
-    "trail": {
-      "title": "Review trail",
-      "system": "System"
+      "done": "Done"
     },
     "toasts": {
-      "created": "{worksheetNumber} created with {sourceCount} source lines",
-      "sentForReview": "Sent for review",
-      "approved": "Prebill approved",
-      "returnedToDraft": "Returned to draft",
+      "submitted": "Submitted for approval",
+      "approved": "Approved — ready to invoice",
+      "reopened": "Reopened as a draft",
       "voided": "Prebill voided",
-      "converted": "{documentNumber} created as a draft invoice"
+      "converted": "Invoice {documentNumber} created as a draft",
+      "sentToCustomer": "Sent to {to} for review",
+      "sentNoEmail": "Waiting in the customer portal. {error}",
+      "delivered": "Invoice sent to {to}",
+      "deliveredWithBackup": "Invoice and backup sent to {to}"
     },
-    "lineToasts": {
-      "saved": "Billing amount saved",
-      "holdApplied": "Billing hold applied",
-      "holdReleased": "Billing hold released"
+    "detail": {
+      "description": "{projectName} · {customerName}",
+      "submit": "Submit",
+      "submitting": "Submitting…",
+      "openInbox": "Open Inbox",
+      "sendToCustomer": "Send to customer",
+      "createInvoice": "Create invoice",
+      "converting": "Creating…",
+      "reviewRequiredHint": "This project type requires the customer to accept the prebill before it is invoiced.",
+      "sendInvoice": "Send invoice",
+      "resendInvoice": "Resend invoice",
+      "openInvoice": "Open {invoiceNumber}",
+      "reopen": "Reopen",
+      "void": "Void"
+    },
+    "notice": {
+      "disputed": "{count, plural, =0 {The customer requested changes.} one {The customer disputed # line.} other {The customer disputed # lines.}} Adjust, hold or explain them, then submit again.",
+      "inApproval": "This prebill is awaiting approval. Approvers decide it in Inbox; a rejection returns it here as a draft.",
+      "withCustomer": "Sent to the customer for review {sent}. Not opened yet.",
+      "withCustomerViewed": "Sent to the customer for review {sent}. Opened {viewed}.",
+      "postInvoice": "Invoice {invoiceNumber} is a draft. Post it, then send it from here with its backup."
+    },
+    "tabs": {
+      "aria": "Prebill sections",
+      "work": "Source work",
+      "activity": "Activity"
+    },
+    "lockedAlert": "Lines are locked once a prebill is submitted. Reopen it to make changes; it will be approved again.",
+    "preview": {
+      "title": "Invoice preview",
+      "billTo": "Bill to",
+      "project": "Project",
+      "po": "PO {po}",
+      "empty": "No lines to bill.",
+      "subtotal": "Subtotal",
+      "taxNote": "Tax is calculated when the invoice is created."
+    },
+    "metrics": {
+      "original": "Standard value",
+      "adjustment": "Adjustments",
+      "cost": "Cost",
+      "margin": "Margin"
+    },
+    "customer": {
+      "accepted": "Accepted by {name}"
+    },
+    "panels": {
+      "reopen": {
+        "title": "Reopen prebill",
+        "description": "Reopening returns the prebill to draft and discards its approval and any customer decision.",
+        "submit": "Reopen"
+      },
+      "void": {
+        "title": "Void prebill",
+        "description": "Voiding releases its work back to unbilled. The worksheet and its trail are kept.",
+        "submit": "Void prebill"
+      },
+      "send": {
+        "title": "Send to customer for review",
+        "description": "The customer reviews this billing in the customer portal, then accepts it or requests changes line by line.",
+        "submit": "Send for review"
+      },
+      "deliver": {
+        "title": "Send invoice",
+        "description": "Email the posted invoice to the customer with its backup packet attached.",
+        "submit": "Send invoice"
+      },
+      "reason": "Reason",
+      "recipient": "Email (optional)",
+      "recipientHelp": "Leave blank to use the customer's email on file.",
+      "message": "Message (optional)",
+      "working": "Working…",
+      "cancel": "Cancel"
+    },
+    "events": {
+      "created": "Prepared",
+      "line_updated": "Line adjusted",
+      "hold_created": "Line held",
+      "hold_released": "Hold released",
+      "submitted": "Submitted",
+      "submit_failed": "Approval routing failed",
+      "returned": "Returned to draft",
+      "approved": "Approved",
+      "reopened": "Reopened",
+      "customer_review_sent": "Sent to customer",
+      "customer_review_emailed": "Review email sent",
+      "customer_review_email_failed": "Review email not delivered",
+      "customer_viewed": "Opened by customer",
+      "customer_accepted": "Accepted by customer",
+      "customer_disputed": "Changes requested by customer",
+      "converted": "Invoice created",
+      "delivered": "Invoice sent",
+      "voided": "Voided"
+    },
+    "trail": {
+      "system": "System",
+      "customer": "Customer"
     },
     "line": {
       "held": "Held",
@@ -486,10 +580,21 @@
       "applyHold": "Apply hold",
       "releaseHold": "Release hold",
       "releaseReason": "Release reason",
-      "release": "Release"
+      "release": "Release",
+      "customerNote": "Customer: {note}"
     },
-    "status": {
-      "converted": "Converted"
+    "linesTable": {
+      "source": "Source",
+      "date": "Date",
+      "description": "Description",
+      "cost": "Cost",
+      "original": "Original",
+      "proposedSupport": "Proposed / support"
+    },
+    "lineToasts": {
+      "saved": "Billing amount saved",
+      "holdApplied": "Billing hold applied",
+      "holdReleased": "Billing hold released"
     }
   },
   "duplicates": {
