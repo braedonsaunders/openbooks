@@ -2,6 +2,7 @@ import { EmptyState, PageHeader } from '@openbooks/ui'
 import { Clock3, GitBranch, SlidersHorizontal, Zap } from 'lucide-react'
 import { ListPageLayout } from './page-layout'
 import styles from './route-state.module.css'
+import { NavigationRefusalSettled } from './page-pending'
 
 /** House route-boundary chrome for authenticated app error and not-found surfaces. */
 export function RouteStateView({
@@ -41,6 +42,7 @@ export function RouteStateView({
   if (presentation === 'feature') {
     return (
       <div className={styles.canvas} data-route-state={state} data-route-presentation="feature">
+        <NavigationRefusalSettled />
         <div className={styles.backdrop} aria-hidden="true" />
         <div className={styles.scroll}>
           <div className={styles.content}>
@@ -72,6 +74,7 @@ export function RouteStateView({
   // icon + recovery action so the boundary never reads twice.
   return (
     <ListPageLayout header={<PageHeader title={title} description={description} />}>
+      <NavigationRefusalSettled />
       <div data-route-state={state}>
         <EmptyState icon={icon} action={action} />
         {footer ? (
