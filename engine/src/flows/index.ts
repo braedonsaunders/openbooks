@@ -110,10 +110,10 @@ export {
   fieldTicketsFlowAdapter,
 } from "./field-tickets-adapter.ts";
 export {
-  WIP_PREBILL_SUBJECT_KIND,
-  wipPrebillSubjectProfile,
-  wipPrebillsFlowAdapter,
-} from "./wip-prebills-adapter.ts";
+  PREBILL_SUBJECT_KIND,
+  prebillSubjectProfile,
+  prebillsFlowAdapter,
+} from "./prebills-adapter.ts";
 export {
   CLOSE_RUN_SUBJECT_KIND,
   closeRunsFlowAdapter,

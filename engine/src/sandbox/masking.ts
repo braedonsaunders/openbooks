@@ -316,7 +316,7 @@ export const DEFAULT_POLICIES: MaskingPolicy[] = [
   { tableName: "signature_requests", columnName: "signer_user_agent", transform: "null_out" },
   { tableName: "signature_requests", columnName: "signature_svg", transform: "null_out" },
   // A customer accepting a pre-billing package names who accepted it.
-  { tableName: "wip_prebills", columnName: "customer_signer_name", transform: "faker_name" },
+  { tableName: "prebills", columnName: "customer_signer_name", transform: "faker_name" },
   // D2b: every other column that carries a real person's address. Faked
   // where the sandbox needs a plausible address (participant and
   // notification emails), emptied where delivery must simply not resolve.

@@ -10,7 +10,7 @@ const hooks = registerHooks({
     return nextLoad(url, context)
   },
 })
-const { createPrebill, WipBillingError } = await import('./wip-billing')
+const { createPrebill, PreBillingError } = await import('./pre-billing')
 hooks.deregister()
 
 test('prebill rejects impossible calendar dates before reaching SQL', async () => {
@@ -20,7 +20,7 @@ test('prebill rejects impossible calendar dates before reaching SQL', async () =
         projectId: '00000000-0000-0000-0000-000000000000',
         periodEnd,
       }),
-      (error: unknown) => error instanceof WipBillingError && /Period end must be a valid date/.test(error.message),
+      (error: unknown) => error instanceof PreBillingError && /Period end must be a valid date/.test(error.message),
     )
   }
 })

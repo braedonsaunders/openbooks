@@ -41,7 +41,7 @@
     "close_run": "Periodenabschluss",
     "budget_scenario": "Budget",
     "hrm_employment_change_request": "Beschäftigungsänderung",
-    "wip_prebill": "Vorabrechnung"
+    "prebill": "Vorabrechnung"
   },
   "decide": {
     "rejectionReason": "Ablehnungsgrund:",

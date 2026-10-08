@@ -233,7 +233,7 @@ export const FEATURES: FeatureDef[] = [
   { key: 'retainerBilling', defaultEnabled: false, category: 'projects', parentKey: 'resourcing', requiresAll: ['revenueRecognition'] },
   // Commercial review of billable project work before it reaches a customer
   // invoice. Time is a recommended source; project cost WIP works without it.
-  { key: 'wipBilling', defaultEnabled: false, category: 'projects', navModules: ['wip-billing'], requiresAll: ['projects'], recommends: ['timeTracking'] },
+  { key: 'preBilling', defaultEnabled: false, category: 'projects', navModules: ['pre-billing'], requiresAll: ['projects'], recommends: ['timeTracking'] },
   // Vendor-side project commitments and AP progress billing. Purchase orders
   // and compliance make the workflow richer but are not required to account
   // for a direct subcontract.

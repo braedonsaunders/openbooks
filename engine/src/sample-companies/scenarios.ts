@@ -91,7 +91,7 @@ export function demoRecords(c: DemoContext): DemoRecord[] {
     const subcontract = add("subcontracts", { project_id: project, vendor_id: c.vendorId, number: "DEMO-SC-001", title: "Specialist installation package", currency: c.currency, original_commitment: "85000.00", default_retainage_percent: "10.00", starts_on: date, ends_on: end });
     add("subcontract_sov_lines", { subcontract_id: subcontract, item_no: "01", description: "Specialist installation and commissioning", scheduled_value: "85000.00", retainage_percent: "10.00", expense_account_id: c.accounts.expense });
   }
-  if (project && features.wipBilling) add("wip_prebills", { project_id: project, worksheet_number: "DEMO-WIP-001", period_start: date, period_end: end, notes: "Draft commercial review; add eligible work before approval." });
+  if (project && features.preBilling) add("prebills", { project_id: project, worksheet_number: "DEMO-PB-001", period_start: date, period_end: end, notes: "Draft commercial review; add eligible work before approval." });
   if (project && features.resourcing) {
     add("res_demand_lines", { department_id: department, job_title: "Senior consultant", first_week: sunday(date), last_week: sunday(end), hours_per_week: "24.00", note: "Delivery capacity for the client programme" });
     if (features.resourceRequests) add("res_requests", { project_id: project, employee_party_id: c.employeeId, first_week: sunday(date), last_week: sunday(end), hours_per_week: "24.00", bill_item_id: serviceItem, reason: "Approve staffing for client delivery" });

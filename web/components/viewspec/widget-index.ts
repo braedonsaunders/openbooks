@@ -612,7 +612,7 @@ export const WIDGET_FAMILY: Readonly<Record<string, WidgetFamily>> = {
   'waivers-panel': 'operations',
   'warehouses-panel': 'warehouse',
   'webhook-endpoint-drawer': 'platform',
-  'wip-billing-workspace': 'commerce',
+  'pre-billing-workspace': 'commerce',
   'work-item-drawer': 'agents',
   'year-end-workspace': 'payroll',
 }

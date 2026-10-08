@@ -23,7 +23,7 @@ function pgMessage(error: unknown): string {
 
 const migration = readFileSync(
   new URL(
-    "../../../schema/migrations/generated/0043_sandbox_wip_prebill_wipe_guard.sql",
+    "../../../schema/migrations/generated/0043_sandbox_prebill_wipe_guard.sql",
     import.meta.url,
   ),
   "utf8",
@@ -37,7 +37,7 @@ const authorizationMigration = readFileSync(
 );
 
 const deployedWipGuard = `
-CREATE OR REPLACE FUNCTION public.wip_prebill_event_append_only_guard() RETURNS trigger
+CREATE OR REPLACE FUNCTION public.prebill_event_append_only_guard() RETURNS trigger
     LANGUAGE plpgsql
     AS $$
 BEGIN
@@ -52,14 +52,14 @@ test("0043 scopes the deployed WIP guard and replays safely", { skip: !DB }, asy
     await client.query("begin");
     await client.query(deployedWipGuard);
     const before = await client.query<{ definition: string }>(
-      "select pg_get_functiondef('public.wip_prebill_event_append_only_guard()'::regprocedure) as definition",
+      "select pg_get_functiondef('public.prebill_event_append_only_guard()'::regprocedure) as definition",
     );
     assert.match(before.rows[0]!.definition, /current_setting\('openbooks\.sandbox_wipe'/);
 
     await client.query(migration);
     await client.query(migration);
     const after = await client.query<{ definition: string }>(
-      "select pg_get_functiondef('public.wip_prebill_event_append_only_guard()'::regprocedure) as definition",
+      "select pg_get_functiondef('public.prebill_event_append_only_guard()'::regprocedure) as definition",
     );
     assert.match(after.rows[0]!.definition, /openbooks_sandbox_wipe_allowed\(old\.org_id\)/i);
     assert.doesNotMatch(after.rows[0]!.definition, /current_setting\(/);
@@ -208,12 +208,12 @@ test("a fresh-schema sandbox wipe fully clears WIP pre-bill events", { skip: !DB
         (${projectId}, ${org.orgId}, ${org.subsidiaryId}, 'WIP-WIPE',
          'WIP wipe regression', ${org.customerId}, 'active', true, '{}'::jsonb)`);
     await db.execute(sql`
-      insert into wip_prebills
+      insert into prebills
         (id, org_id, project_id, worksheet_number, period_end)
       values
         (${prebillId}, ${org.orgId}, ${projectId}, 'WIP-WIPE-1', ${org.date})`);
     await db.execute(sql`
-      insert into wip_prebill_events
+      insert into prebill_events
         (id, org_id, prebill_id, event_type, actor_id)
       values
         (${eventId}, ${org.orgId}, ${prebillId}, 'created', ${randomUUID()})`);
@@ -222,14 +222,14 @@ test("a fresh-schema sandbox wipe fully clears WIP pre-bill events", { skip: !DB
       db.transaction(async (tx) => {
         await tx.execute(sql`select set_config('app.sandbox_wipe', 'on', true)`);
         await tx.execute(sql`
-          delete from wip_prebill_events
+          delete from prebill_events
            where org_id = ${org.orgId} and id = ${eventId}`);
       }),
       (error: unknown) => pgMessage(error).includes("WIP prebill events are append-only"),
     );
     const preserved = await db.execute<{ count: number }>(sql`
       select count(*)::int as count
-        from wip_prebill_events
+        from prebill_events
        where org_id = ${org.orgId} and id = ${eventId}`);
     assert.equal(Number(preserved.rows[0]!.count), 1);
 
@@ -243,7 +243,7 @@ test("a fresh-schema sandbox wipe fully clears WIP pre-bill events", { skip: !DB
     sandboxOrgId = sandbox.sandboxOrgId;
     const planted = await db.execute<{ count: number }>(sql`
       select count(*)::int as count
-        from wip_prebill_events
+        from prebill_events
        where org_id = ${sandboxOrgId}`);
     assert.equal(Number(planted.rows[0]!.count), 1);
 

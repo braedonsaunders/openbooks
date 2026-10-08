@@ -21,7 +21,7 @@ import { createPaymentLink } from '@openbooks/engine/payments/acceptance'
 import { removeMethod, setDefaultMethod, startMethodSetup } from '@openbooks/engine/payments/autopay'
 import { lookupStoredValueByCode, storedValueAccountOwnedByCustomer } from '@openbooks/engine/stored-value'
 import { appBaseUrl } from '@openbooks/engine/flows'
-import { acceptPrebillReview, disputePrebillReview } from '@/lib/wip-billing'
+import { acceptPrebillReview, disputePrebillReview } from '@/lib/pre-billing'
 
 export const runtime = 'nodejs'
 

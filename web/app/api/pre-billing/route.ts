@@ -3,7 +3,7 @@ import { defineRoute } from '@/lib/api/route';
 import { apiErrorResponse } from '@/lib/api/error-response'
 import { NextResponse } from 'next/server'
 import { isUuid } from '../../../lib/list-params'
-import { createPrebill, listPrebills } from '../../../lib/wip-billing'
+import { createPrebill, listPrebills } from '../../../lib/pre-billing'
 const POSTBodySchema1 = z.object({
   projectId: z.string().uuid(), periodStart: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
   periodEnd: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), notes: z.string().nullable().optional(),
@@ -14,7 +14,7 @@ export const runtime = 'nodejs'
 
 export const GET = defineRoute({
   permission: 'projects.read',
-  feature: 'wipBilling',
+  feature: 'preBilling',
   handler: async ({ request: req, authz: routeAuthz }) => {
     const gate = routeAuthz;
     const projectId = new URL(req.url).searchParams.get('projectId') ?? undefined
@@ -25,7 +25,7 @@ export const GET = defineRoute({
 
 export const POST = defineRoute({
   permission: 'projects.manage',
-  feature: 'wipBilling',
+  feature: 'preBilling',
   body: POSTBodySchema1,
   handler: async ({ request: _req, authz: routeAuthz, body: routeBody }) => {
     const gate = routeAuthz;

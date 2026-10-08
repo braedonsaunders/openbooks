@@ -378,7 +378,7 @@
     "carry_forward": "直近の料金表で請求する",
     "customerReview": "請求書発行前の顧客確認"
   },
-  "wipBilling": {
+  "preBilling": {
     "toolbar": {
       "search": "顧客・プロジェクト・ワークシートを検索",
       "board": "ボード",

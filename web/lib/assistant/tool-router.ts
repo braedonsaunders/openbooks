@@ -207,7 +207,7 @@ export const MODULE_KEYWORDS: Record<string, string[]> = {
   subscriptionBilling: ["subscription", "mrr", "churn", "subscription plan"],
   fieldTickets: ["field ticket"],
   subcontracts: ["subcontract", "subcontractor", "sub contract"],
-  wipBilling: ["wip", "prebill", "pre-bill", "schedule of values"],
+  preBilling: ["wip", "prebill", "pre-bill", "schedule of values"],
   multiCurrency: ["currency", "fx", "forex", "exchange rate", "revalu", "consolidation"],
   multiSubsidiary: ["subsidiary", "subsidiaries", "consolidation", "eliminat"],
   continuousClose: ["continuous close", "close finding", "control finding"],

@@ -3,11 +3,11 @@ import { FEATURES, featureRequirements } from "../organization/feature-registry.
 /** The industry demos collectively expose the complete product switchboard. */
 export const DEMO_FEATURES_BY_INDUSTRY: Record<string, readonly string[]> = {
   general_business: ["crm", "orders", "onlinePayments", "banking", "bankFeeds", "fixedAssets", "budgets", "continuousClose", "advancedClose", "multiSubsidiary", "multiCurrency", "allocations", "allocationsAtEntry", "allocationsAtPosting", "expenses", "equipment", "flows", "automations", "automationDateTriggers", "automationFieldTriggers", "automationWebhooks", "automationSimulator", "homeAnnouncements", "apps", "scripts", "apiAccess", "mcpAccess", "queryConsole", "aiGovernanceLedger"],
-  construction_contractor: ["projects", "timeTracking", "fieldTime", "fieldTickets", "projectScheduling", "subcontracts", "wipBilling", "subcontractorCompliance", "equipment", "payroll", "hrm", "hrmConstructionCompliance", "hrmCertifications", "flows"],
-  professional_services: ["projects", "timeTracking", "resourcing", "resourceRequests", "retainerBilling", "revenueRecognition", "wipBilling", "hrm", "hrmCompensation", "hrmPerformance", "hrmDocuments", "hrmSurveys", "hrmRecruiting", "flows"],
-  engineering_architecture: ["projects", "timeTracking", "resourcing", "projectScheduling", "subcontracts", "wipBilling", "fixedAssets"],
+  construction_contractor: ["projects", "timeTracking", "fieldTime", "fieldTickets", "projectScheduling", "subcontracts", "preBilling", "subcontractorCompliance", "equipment", "payroll", "hrm", "hrmConstructionCompliance", "hrmCertifications", "flows"],
+  professional_services: ["projects", "timeTracking", "resourcing", "resourceRequests", "retainerBilling", "revenueRecognition", "preBilling", "hrm", "hrmCompensation", "hrmPerformance", "hrmDocuments", "hrmSurveys", "hrmRecruiting", "flows"],
+  engineering_architecture: ["projects", "timeTracking", "resourcing", "projectScheduling", "subcontracts", "preBilling", "fixedAssets"],
   it_software_saas: ["subscriptionBilling", "advancedSubscriptions", "usageBilling", "saasMetrics", "revenueRecognition", "crm", "onlinePayments"],
-  accounting_firm: ["projects", "timeTracking", "resourcing", "resourceRequests", "retainerBilling", "revenueRecognition", "wipBilling", "advancedClose", "flows"],
+  accounting_firm: ["projects", "timeTracking", "resourcing", "resourceRequests", "retainerBilling", "revenueRecognition", "preBilling", "advancedClose", "flows"],
   wholesale_distribution: ["inventory", "orders", "warehousing", "fulfillment", "dropShipping", "returnAuthorizations", "customerPartNumbers", "barcodeScanning", "multiCurrency"],
   property_management: ["propertyManagement", "fixedAssets", "multiSubsidiary", "revenueRecognition", "onlinePayments"],
   nonprofit: ["nonprofit", "fundAccounting", "grantManagement", "pledges", "encumbrances", "functionalExpenses", "form990", "budgets", "allocations", "allocationsAtEntry", "allocationsAtPosting"],

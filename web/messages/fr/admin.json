@@ -5236,7 +5236,7 @@
         "activeSubcontractPaymentControls": "{count, plural, one {# contrôle de paiement de sous-traitance actif} other {# contrôles de paiement de sous-traitance actifs}}",
         "activeSubcontracts": "{count, plural, one {# sous-contrat actif} other {# sous-contrats actifs}}",
         "activeSubscriptions": "{count, plural, one {# abonnement actif} other {# abonnements actifs}}",
-        "activeWipHolds": "{count, plural, one {# blocage de travaux en cours actif} other {# blocages de travaux en cours actifs}}",
+        "activePrebillHolds": "{count, plural, one {# blocage de préfacturation actif} other {# blocages de préfacturation actifs}}",
         "advancedSubscriptionContracts": "{count, plural, one {# contrat d’abonnement versionné actif} other {# contrats d’abonnement versionnés actifs}}",
         "assets": "{count, plural, one {# immobilisation} other {# immobilisations}}",
         "bankStatements": "{count, plural, one {# relevé bancaire} other {# relevés bancaires}}",
@@ -7108,7 +7108,7 @@
       "title": "Sous-traitance et facturation d’avancement",
       "description": "Engagements fournisseurs, modifications de sous-traitance, états des valeurs et demandes de paiement des fournisseurs, retenues de garantie à payer, quittances, chèques conjoints et blocages de paiement."
     },
-    "wipBilling": {
+    "preBilling": {
       "title": "Préfacturation",
       "description": "Transformez le travail de projet non facturé en dossiers de facture validés : cycles de facturation, ajustements et retenues justifiés, approbation via Flux, validation client facultative dans le portail et envoi des factures avec justificatifs."
     },

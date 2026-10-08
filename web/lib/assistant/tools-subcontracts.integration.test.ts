@@ -36,7 +36,7 @@ test('subcontract and wip reads: commitments, pay apps, prebills, isolation', { 
   const prebillId = randomUUID();
   try {
     await withOrgContext(org.orgId, async () => {
-      await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||'{"projects":true,"subcontracts":true,"wipBilling":true}'::jsonb) where id=${org.orgId}`);
+      await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||'{"projects":true,"subcontracts":true,"preBilling":true}'::jsonb) where id=${org.orgId}`);
       await db.execute(sql`
         insert into subsidiaries(id,org_id,parent_id,name,base_currency,country,is_active,is_elimination)
         values (${hidden},${org.orgId},${org.subsidiaryId},'Hidden site','CAD','CA',true,false)
@@ -64,7 +64,7 @@ test('subcontract and wip reads: commitments, pay apps, prebills, isolation', { 
         values (${randomUUID()},${org.orgId},${contractId},1,${org.date},'billed','10','2000','200','1800')
       `);
       await db.execute(sql`
-        insert into wip_prebills(id,org_id,project_id,worksheet_number,period_end,status,original_bill_amount,proposed_bill_amount,cost_amount,adjustment_amount)
+        insert into prebills(id,org_id,project_id,worksheet_number,period_end,status,original_bill_amount,proposed_bill_amount,cost_amount,adjustment_amount)
         values (${prebillId},${org.orgId},${projectId},'WS-0001',${org.date},'draft','3000','2800','1500','-200'),
                (${randomUUID()},${org.orgId},${hiddenProjectId},'WS-0002',${org.date},'draft','9000','9000','4000','0')
       `);
@@ -90,12 +90,12 @@ test('subcontract and wip reads: commitments, pay apps, prebills, isolation', { 
     assert.equal((detail.payApplications as unknown[]).length, 1);
 
     const prebills = await withOrgContext(org.orgId, () =>
-      executeAssistantTool(restricted, 'list_wip_prebills', {}));
+      executeAssistantTool(restricted, 'list_prebills', {}));
     assert.equal(prebills.ok, true, JSON.stringify(prebills));
     assert.equal((prebills as { ok: true; data: Record<string, unknown> }).data.total, 1);
 
     const prebill = await withOrgContext(org.orgId, () =>
-      executeAssistantTool(restricted, 'get_wip_prebill', { id: prebillId }));
+      executeAssistantTool(restricted, 'get_prebill', { id: prebillId }));
     assert.equal(prebill.ok, true, JSON.stringify(prebill));
     assert.equal(
       ((prebill as { ok: true; data: Record<string, unknown> }).data.proposedBillAmount as string),
@@ -103,7 +103,7 @@ test('subcontract and wip reads: commitments, pay apps, prebills, isolation', { 
     );
 
     const analytics = await withOrgContext(org.orgId, () =>
-      executeAssistantTool(restricted, 'wip_analytics', { asOf: org.date }));
+      executeAssistantTool(restricted, 'pre_billing_analytics', { asOf: org.date }));
     assert.equal(analytics.ok, true, JSON.stringify(analytics));
 
     const noperm = reader(org.orgId, null, ['assistant.use']);
@@ -119,7 +119,7 @@ test('subcontract and wip reads refuse while their features are off', { skip: !p
   const org = await withBypassContext(() => (createScratchOrg()));
   try {
     await withOrgContext(org.orgId, async () => {
-      await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||'{"projects":true,"subcontracts":false,"wipBilling":false}'::jsonb) where id=${org.orgId}`);
+      await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||'{"projects":true,"subcontracts":false,"preBilling":false}'::jsonb) where id=${org.orgId}`);
     });
     const authz = reader(org.orgId, null);
     const search = await withOrgContext(org.orgId, () =>
@@ -127,9 +127,9 @@ test('subcontract and wip reads refuse while their features are off', { skip: !p
     assert.equal(search.ok, false);
     assert.equal((search as { ok: false; error: string }).error, 'subcontracts_feature_disabled');
     const prebills = await withOrgContext(org.orgId, () =>
-      executeAssistantTool(authz, 'list_wip_prebills', {}));
+      executeAssistantTool(authz, 'list_prebills', {}));
     assert.equal(prebills.ok, false);
-    assert.equal((prebills as { ok: false; error: string }).error, 'wipBilling_feature_disabled');
+    assert.equal((prebills as { ok: false; error: string }).error, 'preBilling_feature_disabled');
   } finally {
     await dropScratchOrg(org.orgId);
   }

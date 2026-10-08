@@ -291,14 +291,14 @@ const FEATURE_DISABLE_CHECKS: Record<string, (orgId: string) => Promise<FeatureD
     if (controls) impacts.push({ labelKey: 'activeSubcontractPaymentControls', count: controls })
     return { blocked: contracts + applications + controls > 0, impacts }
   },
-  wipBilling: async (orgId) => {
+  preBilling: async (orgId) => {
     const [worksheets, holds] = await sequential([
-      () => countRows(sql`select count(*)::int as n from wip_prebills where org_id = ${orgId} and status in ('draft', 'review', 'approved')`),
-      () => countRows(sql`select count(*)::int as n from wip_holds where org_id = ${orgId} and released_at is null`),
+      () => countRows(sql`select count(*)::int as n from prebills where org_id = ${orgId} and status in ('draft', 'review', 'approved', 'customer_review')`),
+      () => countRows(sql`select count(*)::int as n from prebill_holds where org_id = ${orgId} and released_at is null`),
     ])
     const impacts: FeatureImpact[] = []
     if (worksheets) impacts.push({ labelKey: 'openPrebills', count: worksheets })
-    if (holds) impacts.push({ labelKey: 'activeWipHolds', count: holds })
+    if (holds) impacts.push({ labelKey: 'activePrebillHolds', count: holds })
     return { blocked: worksheets + holds > 0, impacts }
   },
   propertyManagement: async (orgId) => {

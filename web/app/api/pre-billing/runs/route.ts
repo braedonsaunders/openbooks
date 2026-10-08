@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { defineRoute } from '@/lib/api/route';
 import { apiErrorResponse } from '@/lib/api/error-response'
 import { NextResponse } from 'next/server'
-import { runBillRun } from '../../../../lib/wip-billing'
+import { runBillRun } from '../../../../lib/pre-billing'
 
 const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/)
 const POSTBodySchema1 = z.object({
@@ -21,7 +21,7 @@ export const runtime = 'nodejs'
  */
 export const POST = defineRoute({
   permission: 'projects.manage',
-  feature: 'wipBilling',
+  feature: 'preBilling',
   body: POSTBodySchema1,
   handler: async ({ authz: gate, body }) => {
     try {

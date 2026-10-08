@@ -809,7 +809,7 @@ const SOURCES = {
     clientSearch: false,
     paging: { totalField: 'directoryTotal', pageField: 'directoryPage', perPageField: 'directoryPageSize' },
   },
-  projects_wip_prebills: { route: '/projects/wip-billing', mode: 'loaded' },
+  projects_prebills: { route: '/projects/pre-billing', mode: 'loaded' },
   subcontracts_register: { route: '/subcontracts', mode: 'loaded' },
   subcontracts_changes: { route: '/subcontracts', mode: 'loaded' },
   subcontracts_applications: { route: '/subcontracts', mode: 'loaded' },

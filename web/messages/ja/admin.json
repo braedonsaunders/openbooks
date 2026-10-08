@@ -5374,7 +5374,7 @@
         "activeSubcontractPaymentControls": "{count, plural, one {有効な下請支払管理 # 件} other {有効な下請支払管理 # 件}}",
         "activeSubcontracts": "{count, plural, one {有効な下請契約 # 件} other {有効な下請契約 # 件}}",
         "activeSubscriptions": "{count, plural, one {有効なサブスクリプション # 件} other {有効なサブスクリプション # 件}}",
-        "activeWipHolds": "{count, plural, one {有効な仕掛品保留 # 件} other {有効な仕掛品保留 # 件}}",
+        "activePrebillHolds": "{count, plural, one {有効な事前請求保留 # 件} other {有効な事前請求保留 # 件}}",
         "advancedSubscriptionContracts": "{count, plural, one {有効な版管理サブスクリプション契約 # 件} other {有効な版管理サブスクリプション契約 # 件}}",
         "assets": "{count, plural, one {固定資産 # 件} other {固定資産 # 件}}",
         "bankStatements": "{count, plural, one {銀行明細 # 件} other {銀行明細 # 件}}",
@@ -6988,7 +6988,7 @@
       "title": "下請契約と出来高請求",
       "description": "仕入先引当・下請変更・仕入先SOVと支払申請・買掛保留金・解除・共同小切手・支払停止です。"
     },
-    "wipBilling": {
+    "preBilling": {
       "title": "事前請求",
       "description": "未請求のプロジェクト作業を確認済みの請求パッケージに変換します。一括請求準備、根拠付きの調整と保留、フローによる承認、ポータルでの任意の顧客確認、証憑付きの請求書送付。"
     },

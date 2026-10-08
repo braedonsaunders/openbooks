@@ -17,7 +17,7 @@ import { ContractCostWorkspace } from '../../app/(app)/revenue/contract-costs/Co
 import { CapitalizeButton } from '../../app/(app)/revenue/contract-costs/CapitalizeButton'
 import { ImportCommissionsButton } from '../../app/(app)/revenue/contract-costs/ImportCommissionsButton'
 import { RunAmortizationButton } from '../../app/(app)/revenue/contract-costs/RunAmortizationButton'
-import { WipBillingWorkspace } from '../../app/(app)/projects/wip-billing/WipBillingWorkspace'
+import { PreBillingWorkspace } from '../../app/(app)/projects/pre-billing/PreBillingWorkspace'
 import { PropertyManagementWorkspace } from '../../app/(app)/property-management/PropertyManagementWorkspace'
 import { CaptureList } from '../../app/(app)/ap/capture/sections'
 import { CaptureReviewDrawer } from '../../app/(app)/ap/capture/CaptureReviewDrawer'
@@ -141,12 +141,12 @@ export const COMMERCE_WIDGETS = {
     />
   ),
 
-  /* --- WIP and prebilling ----------------------------------------------------------- */
+  /* --- Pre-billing ----------------------------------------------------------- */
   /** Whole: the create drawer, the detail drawer, per-line edit/hold/release
    *  forms and every transition. Decomposing would strand that state from
    *  the actions it drives — the `match-workspace` reason. */
-  'wip-billing-workspace': (props) => (
-    <WipBillingWorkspace {...(props as unknown as ComponentProps<typeof WipBillingWorkspace>)} />
+  'pre-billing-workspace': (props) => (
+    <PreBillingWorkspace {...(props as unknown as ComponentProps<typeof PreBillingWorkspace>)} />
   ),
 
   /* --- property management ---------------------------------------------------- */

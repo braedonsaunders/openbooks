@@ -583,7 +583,7 @@ export const WIDGET_CONTRACTS: Readonly<Record<string, WidgetContract>> = {
   'waivers-panel': { props: ['actionHref', 'actionLabel', 'empty', 'hint', 'rows', 'title'] },
   'warehouses-panel': { props: ['canManage', 'controlDrill', 'controlLabel', 'currentParams', 'differenceIsZero', 'differenceLabel', 'layerTotalLabel', 'rows'] },
   'webhook-endpoint-drawer': { props: ['drawer'] },
-  'wip-billing-workspace': { props: [], open: true },
+  'pre-billing-workspace': { props: [], open: true },
   'work-item-drawer': { props: ['drawer'] },
   'year-end-workspace': { props: ['canFile', 'sections', 'year', 'years'] },
 }

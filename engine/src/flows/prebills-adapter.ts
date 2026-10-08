@@ -22,9 +22,9 @@ import { defineTableSubjectAdapter } from "./table-subject-adapter.ts";
  * not rewrite them. Neither the preparer nor the submitter may decide its gate.
  */
 
-export const WIP_PREBILL_SUBJECT_KIND = "wip_prebill";
+export const PREBILL_SUBJECT_KIND = "prebill";
 
-const WIP_PREBILL_STATUSES = [
+const PREBILL_STATUSES = [
   { value: "draft", label: "Draft" },
   { value: "review", label: "In review" },
   { value: "approved", label: "Approved" },
@@ -33,12 +33,12 @@ const WIP_PREBILL_STATUSES = [
   { value: "void", label: "Void" },
 ] as const;
 
-export const wipPrebillSubjectProfile: FlowSubjectProfile = {
-  subjectKind: WIP_PREBILL_SUBJECT_KIND,
+export const prebillSubjectProfile: FlowSubjectProfile = {
+  subjectKind: PREBILL_SUBJECT_KIND,
   label: "Pre-billing worksheet",
   triggers: ["on_submit"],
   actions: ["send_email", "notify"],
-  statuses: [...WIP_PREBILL_STATUSES],
+  statuses: [...PREBILL_STATUSES],
   fields: [
     { key: "worksheetNumber", label: "Worksheet number", type: "text" },
     { key: "status", label: "Status", type: "enum" },
@@ -63,7 +63,7 @@ export const wipPrebillSubjectProfile: FlowSubjectProfile = {
   ],
 };
 
-type WipPrebillRow = {
+type PrebillRow = {
   id: string;
   worksheet_number: string;
   status: string;
@@ -86,8 +86,8 @@ type WipPrebillRow = {
   submitted_by: string | null;
 };
 
-async function loadPrebill(subjectId: string): Promise<WipPrebillRow | null> {
-  const result = await db.execute<WipPrebillRow>(sql`
+async function loadPrebill(subjectId: string): Promise<PrebillRow | null> {
+  const result = await db.execute<PrebillRow>(sql`
     select w.id, w.worksheet_number, w.status, w.project_id,
            p.code as project_code, p.name as project_name, t.name as project_type_name,
            p.customer_id, customer.display_name as customer_name,
@@ -95,16 +95,16 @@ async function loadPrebill(subjectId: string): Promise<WipPrebillRow | null> {
            w.proposed_bill_amount::text as proposed_bill_amount,
            w.original_bill_amount::text as original_bill_amount,
            w.adjustment_amount::text as adjustment_amount,
-           coalesce((select sum(-l.adjustment_amount) from wip_prebill_lines l
+           coalesce((select sum(-l.adjustment_amount) from prebill_lines l
                       where l.org_id = w.org_id and l.prebill_id = w.id
                         and l.disposition = 'bill' and l.adjustment_amount < 0), 0)::text as write_down_amount,
            w.cost_amount::text as cost_amount,
-           (select count(*)::int from wip_prebill_lines l
+           (select count(*)::int from prebill_lines l
              where l.org_id = w.org_id and l.prebill_id = w.id and l.disposition = 'bill') as line_count,
-           (select count(*)::int from wip_prebill_lines l
+           (select count(*)::int from prebill_lines l
              where l.org_id = w.org_id and l.prebill_id = w.id and l.disposition = 'hold') as held_line_count,
            w.created_by, w.submitted_by
-      from wip_prebills w
+      from prebills w
       join projects p on p.id = w.project_id and p.org_id = w.org_id
       left join project_types t on t.id = p.project_type_id and t.org_id = p.org_id
       left join parties customer on customer.id = p.customer_id and customer.org_id = p.org_id
@@ -113,11 +113,11 @@ async function loadPrebill(subjectId: string): Promise<WipPrebillRow | null> {
   return result.rows[0] ?? null;
 }
 
-export const wipPrebillsFlowAdapter: FlowSubjectAdapter = defineTableSubjectAdapter({
-  subjectKind: WIP_PREBILL_SUBJECT_KIND,
+export const prebillsFlowAdapter: FlowSubjectAdapter = defineTableSubjectAdapter({
+  subjectKind: PREBILL_SUBJECT_KIND,
   permissions: { read: "projects.read", edit: "projects.manage", approve: "ar.approve" },
-  scope: tableScope("project", "wip_prebills", "project_id"),
-  profile: wipPrebillSubjectProfile,
+  scope: tableScope("project", "prebills", "project_id"),
+  profile: prebillSubjectProfile,
   releaseViaHandler: true,
   selfApprovalPolicy: "forbidden",
 
@@ -159,7 +159,7 @@ export const wipPrebillsFlowAdapter: FlowSubjectAdapter = defineTableSubjectAdap
   },
 
   deepLink(subjectId: string): string {
-    return `/projects/wip-billing?prebill=${subjectId}`;
+    return `/projects/pre-billing?prebill=${subjectId}`;
   },
 
   async getStatus(subjectId: string): Promise<string | null> {
@@ -177,7 +177,7 @@ export const wipPrebillsFlowAdapter: FlowSubjectAdapter = defineTableSubjectAdap
     detail?: { comment?: string | null },
   ): Promise<void> {
     await releaseFlowApproval({
-      subjectKind: WIP_PREBILL_SUBJECT_KIND,
+      subjectKind: PREBILL_SUBJECT_KIND,
       subjectId,
       outcome,
       comment: detail?.comment,
@@ -194,13 +194,13 @@ export const wipPrebillsFlowAdapter: FlowSubjectAdapter = defineTableSubjectAdap
    */
   async markAwaitingApproval(subjectId: string, ctx: FlowExecCtx): Promise<void> {
     const parked = await db.execute<{ id: string }>(sql`
-      update wip_prebills w
+      update prebills w
          set status = 'review',
              submitted_at = coalesce(w.submitted_at, now()),
              submitted_by = coalesce(w.submitted_by, ${ctx.userId ?? null}::uuid),
              updated_at = now(), updated_by = ${ctx.userId ?? null}
        where w.id = ${subjectId} and w.org_id = ${ctx.orgId} and w.status = 'draft'
-         and exists (select 1 from wip_prebill_lines l
+         and exists (select 1 from prebill_lines l
                       where l.org_id = w.org_id and l.prebill_id = w.id and l.disposition = 'bill')
       returning w.id
     `);
@@ -208,10 +208,10 @@ export const wipPrebillsFlowAdapter: FlowSubjectAdapter = defineTableSubjectAdap
       // The trail always names an actor: the retrying user, else whoever
       // submitted or prepared the worksheet.
       await db.execute(sql`
-        insert into wip_prebill_events (org_id, prebill_id, event_type, actor_id, details)
+        insert into prebill_events (org_id, prebill_id, event_type, actor_id, details)
         select w.org_id, w.id, 'submitted', coalesce(${ctx.userId ?? null}::uuid, w.submitted_by, w.created_by),
                ${JSON.stringify({ source: "flow_retry" })}::jsonb
-          from wip_prebills w
+          from prebills w
          where w.id = ${subjectId} and w.org_id = ${ctx.orgId}
       `);
       return;
@@ -230,10 +230,10 @@ export const wipPrebillsFlowAdapter: FlowSubjectAdapter = defineTableSubjectAdap
   async findCandidateIds(limit: number): Promise<string[]> {
     const orgId = ambientTenantOrgId();
     if (!orgId) {
-      throw new Error(`findCandidateIds for "${WIP_PREBILL_SUBJECT_KIND}" requires an ambient tenant context (withOrg)`);
+      throw new Error(`findCandidateIds for "${PREBILL_SUBJECT_KIND}" requires an ambient tenant context (withOrg)`);
     }
     const result = await db.execute<{ id: string }>(sql`
-      select id::text as id from wip_prebills
+      select id::text as id from prebills
        where org_id = ${orgId} and status = 'review'
        order by submitted_at desc nulls last
        limit ${limit}

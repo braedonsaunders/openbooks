@@ -78,12 +78,12 @@ export async function currentBillingReviewDigest(
 ): Promise<string | null> {
   const header = (await runner.execute<{ period_end: string; total: string }>(sql`
     select period_end::text as period_end, proposed_bill_amount::text as total
-      from wip_prebills where org_id = ${orgId} and id = ${prebillId}
+      from prebills where org_id = ${orgId} and id = ${prebillId}
   `)).rows[0];
   if (!header) return null;
   const lines = (await runner.execute<DigestLine>(sql`
     select id, proposed_bill_amount::text as amount, quantity::text as quantity, description
-      from wip_prebill_lines
+      from prebill_lines
      where org_id = ${orgId} and prebill_id = ${prebillId} and disposition = 'bill'
      order by line_number
   `)).rows;
@@ -94,7 +94,7 @@ export async function currentBillingReviewDigest(
 async function reviewsEnabled(orgId: string): Promise<boolean> {
   const [projects, prebilling] = await Promise.all([
     orgFeatureEnabled(orgId, "projects"),
-    orgFeatureEnabled(orgId, "wipBilling"),
+    orgFeatureEnabled(orgId, "preBilling"),
   ]);
   return projects && prebilling;
 }
@@ -117,7 +117,7 @@ export async function portalBillingReviews(
            w.proposed_bill_amount::text as total, w.status,
            w.customer_review_sent_at::text as "sentAt",
            w.customer_decision as decision, w.customer_decided_at::text as "decidedAt"
-      from wip_prebills w
+      from prebills w
       join projects p on p.org_id = w.org_id and p.id = w.project_id
       join orgs o on o.id = w.org_id
       left join subsidiaries s on s.org_id = p.org_id and s.id = p.subsidiary_id
@@ -149,7 +149,7 @@ export async function portalBillingReview(
            w.proposed_bill_amount::text as total, w.status,
            w.customer_review_sent_at::text as "sentAt",
            w.customer_decision as decision, w.customer_decided_at::text as "decidedAt"
-      from wip_prebills w
+      from prebills w
       join projects p on p.org_id = w.org_id and p.id = w.project_id
       join orgs o on o.id = w.org_id
       left join subsidiaries s on s.org_id = p.org_id and s.id = p.subsidiary_id
@@ -161,7 +161,7 @@ export async function portalBillingReview(
     select id, line_number as "lineNumber", source_date::text as "sourceDate", description,
            quantity::text as quantity, unit, proposed_bill_amount::text as amount,
            customer_dispute_note as "disputeNote"
-      from wip_prebill_lines
+      from prebill_lines
      where org_id = ${orgId} and prebill_id = ${prebillId} and disposition = 'bill'
      order by line_number
   `)).rows;

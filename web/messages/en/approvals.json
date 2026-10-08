@@ -41,7 +41,7 @@
     "close_run": "period close",
     "budget_scenario": "budget",
     "hrm_employment_change_request": "employment change",
-    "wip_prebill": "pre-billing worksheet"
+    "prebill": "pre-billing worksheet"
   },
   "decide": {
     "rejectionReason": "Rejection reason:",

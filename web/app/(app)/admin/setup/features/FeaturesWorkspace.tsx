@@ -140,7 +140,7 @@ const ICONS: Record<string, LucideIcon> = {
   manufacturing: Factory,
   // Projects
   projects: Briefcase,
-  wipBilling: CircleDollarSign,
+  preBilling: CircleDollarSign,
   subcontracts: Handshake,
   subcontractorCompliance: ShieldCheck,
   equipment: Wrench,

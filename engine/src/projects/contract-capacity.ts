@@ -28,7 +28,7 @@ export async function projectContractCapacityUsed(
            ), 0)
            + coalesce((
              select sum(worksheet.proposed_bill_amount)
-               from wip_prebills worksheet
+               from prebills worksheet
               where worksheet.org_id = ${orgId} and worksheet.project_id = ${projectId}
                 and worksheet.status in ('draft', 'review', 'approved')
                 and (${excludePrebillId}::uuid is null or worksheet.id <> ${excludePrebillId})

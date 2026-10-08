@@ -19,7 +19,7 @@ const APP_SEGMENT = 'app/(app)'
 // listed here; a helper that does not gate must never be added.
 // A factory route (`defineRoute`) names its feature key and the factory
 // answers 404 while that feature is off.
-const GATE = /defineRoute\(\{[\s\S]*?\bfeature:\s*(['"])[A-Za-z]+\1|requireFeatureEnabled\(|guardFeaturePermission\(|isFeatureEnabled\(|requireFlowsSession\(|requireProjectsFeature\(|guardProjectsFeature\(|requireProjectSchedulingFeature\(|guardProjectSchedulingFeature\(|guardWipBillingFeature\(|guardPropertyManagementFeature\(|guardSubcontractsFeature\(|guardComplianceFeature\(|guardLienWaiverFeature\(|gateDocuments\(|gateSurveys\(|gateExports\(|meritCycleGate\(/
+const GATE = /defineRoute\(\{[\s\S]*?\bfeature:\s*(['"])[A-Za-z]+\1|requireFeatureEnabled\(|guardFeaturePermission\(|isFeatureEnabled\(|requireFlowsSession\(|requireProjectsFeature\(|guardProjectsFeature\(|requireProjectSchedulingFeature\(|guardProjectSchedulingFeature\(|guardPreBillingFeature\(|guardPropertyManagementFeature\(|guardSubcontractsFeature\(|guardComplianceFeature\(|guardLienWaiverFeature\(|gateDocuments\(|gateSurveys\(|gateExports\(|meritCycleGate\(/
 
 const read = readingPagePairs((path: string) => readFileSync(new URL(path, WEB), 'utf8'))
 const exists = (path: string) => existsSync(new URL(path, WEB))
@@ -91,7 +91,7 @@ const FEATURE_API_DIRS: Record<string, string[]> = {
   saasMetrics: ['app/api/metrics'],
   advancedSubscriptions: ['app/api/subscriptions/advanced'],
   revenueRecognition: ['app/api/revenue', 'app/api/items/[id]/fair-values'],
-  wipBilling: ['app/api/wip-billing'],
+  preBilling: ['app/api/pre-billing'],
   unbilledRevenueAccrual: ['app/api/close/unbilled-revenue-accrual'],
   propertyManagement: ['app/api/property-management'],
   projectScheduling: ['app/api/project-schedule'],

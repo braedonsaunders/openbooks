@@ -7,7 +7,7 @@ import { decimalDisplay } from '@/lib/portal/display'
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from '@openbooks/ui'
 import { PortalShell } from '@/components/portal/portal-shell'
 import { BillingReviewDecision } from '@/components/portal/billing-review-form'
-import { markPrebillViewedByCustomer } from '@/lib/wip-billing'
+import { markPrebillViewedByCustomer } from '@/lib/pre-billing'
 
 export const runtime = 'nodejs'
 

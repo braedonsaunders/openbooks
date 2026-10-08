@@ -1,14 +1,14 @@
 import type { FinancialProfile, InvoicingProfile } from '@openbooks/schema'
 import { add, cmp, mul, mulPercent, neg, normalizeMoney } from '@openbooks/engine/src/money/money.ts'
 
-export type WipPolicyVersion = {
+export type PreBillingPolicyVersion = {
   id: string | null
   effectiveFrom: string
   effectiveTo: string | null
   financialProfile: FinancialProfile
 }
 
-export type WipPricingSource = {
+export type PreBillingPricingSource = {
   sourceType: 'time_entry' | 'document_line'
   sourceDate: string
   documentKind: string | null
@@ -20,7 +20,7 @@ export type WipPricingSource = {
   rateEngineOverhead?: string
 }
 
-export type PricedWipSource = {
+export type PricedPreBillingSource = {
   eligible: boolean
   reason: string | null
   directCostAmount: string
@@ -47,11 +47,11 @@ export function sourceLinePrebillingReason(invoicing: InvoicingProfile): string 
   return null
 }
 
-export function effectiveWipPolicy(
-  versions: WipPolicyVersion[],
+export function effectivePreBillingPolicy(
+  versions: PreBillingPolicyVersion[],
   fallback: FinancialProfile,
   sourceDate: string,
-): WipPolicyVersion {
+): PreBillingPolicyVersion {
   return versions.find((version) => (
     version.effectiveFrom <= sourceDate
       && (version.effectiveTo == null || version.effectiveTo >= sourceDate)
@@ -69,11 +69,11 @@ function effectiveMarkup(profile: FinancialProfile, projectMarkupPercent: string
     : normalizeMoney(projectMarkupPercent)
 }
 
-export function priceWipSource(
+export function pricePreBillingSource(
   profile: FinancialProfile,
-  source: WipPricingSource,
+  source: PreBillingPricingSource,
   projectMarkupPercent: string,
-): PricedWipSource {
+): PricedPreBillingSource {
   const directCostAmount = normalizeMoney(source.directCostAmount)
   const nativeBillAmount = normalizeMoney(source.nativeBillAmount)
   const markupPercent = effectiveMarkup(profile, projectMarkupPercent)
@@ -138,7 +138,7 @@ export function priceWipSource(
   }
 }
 
-export function capWipSources<T extends { billAmount: string }>(
+export function capPreBillingSources<T extends { billAmount: string }>(
   sources: T[],
   remainingCap: string | null,
 ): Array<T & { cappedBillAmount: string }> {
