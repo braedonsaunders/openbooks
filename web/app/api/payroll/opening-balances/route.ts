@@ -1,3 +1,4 @@
+import { uuidId } from "@/lib/api/json-schema"
 import { z } from 'zod'
 import { defineRoute } from '@/lib/api/route'
 import { apiErrorResponse } from '@/lib/api/error-response'
@@ -36,14 +37,14 @@ const openingAmount = z.string().superRefine((value, ctx) => {
 })
 const openingAmountMap = z.record(z.string(), openingAmount)
 const openingBalanceRowSchema = z.strictObject({
-  employeePartyId: z.string().uuid(),
+  employeePartyId: uuidId,
   amounts: openingAmountMap.optional(),
   components: z.unknown().optional(),
   programs: openingAmountMap.optional(),
   suiStates: openingAmountMap.optional(),
   accountBases: z.array(z.strictObject({
     programKey: z.string().min(1),
-    filingAccountId: z.string().uuid(),
+    filingAccountId: uuidId,
     region: z.string().nullable(),
     insurableYtd: openingAmount,
   })).optional(),

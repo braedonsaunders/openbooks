@@ -1,3 +1,4 @@
+import { uuidId } from "@/lib/api/json-schema"
 import { defineRoute } from '@/lib/api/route'
 import { z } from 'zod'
 import { apiErrorResponse } from '@/lib/api/error-response'
@@ -27,7 +28,7 @@ import { notFound } from "@/lib/api/responses";
 import { isIsoCalendarDate } from '@openbooks/engine/src/platform/business-date.ts'
 
 const assertionTarget = {
-  employeePartyId: z.string().uuid(),
+  employeePartyId: uuidId,
   holidayKey: z.string().trim().min(1).optional(),
   holidayDate: z.string().refine(isIsoCalendarDate, 'holidayDate must be a real calendar date (YYYY-MM-DD)').optional(),
 }

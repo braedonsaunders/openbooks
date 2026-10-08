@@ -1,3 +1,4 @@
+import { uuidId } from "@/lib/api/json-schema"
 import { defineRoute } from '@/lib/api/route'
 import { z } from 'zod'
 import { apiErrorResponse } from '@/lib/api/error-response'
@@ -24,7 +25,7 @@ import { isUuid } from '../../../../../../lib/list-params'
 import { notFound } from "@/lib/api/responses";
 
 const requestBodySchema = z.strictObject({
-  paymentBankProfileId: z.string().uuid(),
+  paymentBankProfileId: uuidId,
   supersedeReason: z.string().trim().max(500).nullable().optional(),
 })
 

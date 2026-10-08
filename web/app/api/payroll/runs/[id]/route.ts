@@ -32,7 +32,7 @@ import { notFound } from "@/lib/api/responses";
 
 const payrollRunUuid = (field: string, subject: string, remedy: string, malformedRemedy = remedy) => z.string({
   error: (issue) => `${field} must be ${subject} — got "${suppliedValue(issue.input)}"; ${remedy}`,
-}).uuid({
+}).refine(isUuid, {
   error: (issue) => `${field} "${suppliedValue(issue.input)}" is not ${subject} — ${malformedRemedy}`,
 })
 const payrollRunMoney = z.string().superRefine((value, context) => {

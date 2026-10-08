@@ -1,8 +1,9 @@
+import { uuidId } from "@/lib/api/json-schema"
 import { z } from 'zod'
 import { isIsoCalendarDate } from '@openbooks/engine/platform/civil-date'
 import { unprocessable } from '@/lib/api/responses'
 
-const id = z.string().uuid()
+const id = uuidId
 const date = z.string().refine(isIsoCalendarDate, 'Choose a valid calendar date.')
 const reason = z.string().trim().min(1, 'Supply the reason for this compensation change.').max(2000)
 const revision = z.number().int().min(1)

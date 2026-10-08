@@ -1,3 +1,4 @@
+import { uuidId } from "@/lib/api/json-schema"
 import { z } from "zod";
 import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from 'next/server'
@@ -52,9 +53,9 @@ const decimalText = (field: string, noun: string) => z.unknown().transform((valu
 const postBodySchema = z.discriminatedUnion("action", [
   z.object({
     action: z.literal("save-assignment"),
-    employeePartyId: z.string().uuid(),
-    employmentId: z.string().uuid().nullable().optional(),
-    componentId: z.string().uuid(),
+    employeePartyId: uuidId,
+    employmentId: uuidId.nullable().optional(),
+    componentId: uuidId,
     value: decimalText("value", "an exact decimal amount").nullable().optional(),
     effectiveFrom: z.string().regex(DATE_RE),
     effectiveTo: z.string().regex(DATE_RE).nullable().optional(),
@@ -62,13 +63,13 @@ const postBodySchema = z.discriminatedUnion("action", [
   }),
   z.object({
     action: z.literal("end-assignment"),
-    id: z.string().uuid(),
+    id: uuidId,
     effectiveTo: z.string().regex(DATE_RE).nullable().optional(),
     reason: z.string().trim().max(500).optional(),
   }),
   z.object({
     action: z.literal("delete-assignment"),
-    id: z.string().uuid(),
+    id: uuidId,
     reason: z.string().trim().max(500).optional(),
   }),
 ]);

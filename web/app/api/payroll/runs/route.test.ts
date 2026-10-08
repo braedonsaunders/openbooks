@@ -49,6 +49,9 @@ const mockSources = new Map<string, string>([
           if (text.includes('from pay_schedules')) {
             return { rows: [{ subsidiaryId: state.scheduleSubsidiaryId }] }
           }
+          if (text.includes('from parties')) {
+            return { rows: [{ subsidiaryId: 'sub-visible' }] }
+          }
           if (text.includes('from subsidiaries')) return { rows: [{ id: 'sub-root' }] }
           return { rows: [] }
         },
@@ -174,6 +177,17 @@ test('POST keeps unrestricted callers unrestricted', async () => {
   assert.deepEqual(routeState.queries, [])
 })
 
+test('POST passes native rebased schedule and employee identities into the scoped command', async () => {
+  reset(new Set(['sub-visible']))
+  const scheduleId = 'db76ccd6-d8a3-ead7-42d2-6279dd4ea029'
+  const employeeId = '17ead58a-01df-a411-0031-43714689801a'
+  const response = await post({ payScheduleId: scheduleId, employeePartyIds: [employeeId] })
+  assert.equal(response.status, 200)
+  assert.equal(routeState.createCalls.length, 1)
+  assert.equal(routeState.createCalls[0]!.payScheduleId, scheduleId)
+  assert.deepEqual(routeState.createCalls[0]!.employeePartyIds, [employeeId])
+  assert.deepEqual(routeState.createCalls[0]!.allowedSubsidiaryIds, new Set(['sub-visible']))
+})
 
 test('POST refuses malformed dates and employee selections before entering payroll', async () => {
   const malformedBody = await POST(new Request('http://openbooks.test/api/payroll/runs', { method: 'POST', body: 'null' }))
@@ -184,6 +198,8 @@ test('POST refuses malformed dates and employee selections before entering payro
     { payDate: '2026-02-30' },
     { employeePartyIds: SCHEDULE_ID },
     { employeePartyIds: {} },
+    { payScheduleId: 'not-an-id' },
+    { employeePartyIds: ['not-an-id'] },
   ]) {
     reset(null)
     const response = await post({ payScheduleId: SCHEDULE_ID, ...fields })

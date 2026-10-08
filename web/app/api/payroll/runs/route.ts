@@ -1,3 +1,4 @@
+import { uuidId } from "@/lib/api/json-schema"
 import { z } from 'zod'
 import { defineRoute } from '@/lib/api/route'
 import { apiErrorResponse } from '@/lib/api/error-response'
@@ -19,12 +20,12 @@ import { notFound } from "@/lib/api/responses";
 
 const optionalCalendarDate = z.string().refine(isIsoCalendarDate, 'must be a real calendar date (YYYY-MM-DD)').optional()
 const requestBodySchema = z.strictObject({
-  payScheduleId: z.string().uuid(),
+  payScheduleId: uuidId,
   periodStart: optionalCalendarDate,
   periodEnd: optionalCalendarDate,
   payDate: optionalCalendarDate,
   runType: z.enum(['regular', 'bonus', 'termination', 'supplemental']).default('regular'),
-  employeePartyIds: z.array(z.string().uuid()).default([]),
+  employeePartyIds: z.array(uuidId).default([]),
 }).refine((body) => body.runType !== 'termination' || body.employeePartyIds.length > 0, {
   message: 'a final pay run must name the employees it pays', path: ['employeePartyIds'],
 })
