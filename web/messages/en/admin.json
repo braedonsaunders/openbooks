@@ -6906,8 +6906,8 @@
       "description": "Vendor commitments, subcontract changes, vendor SOVs and pay applications, retainage payable, releases, joint checks, and payment holds."
     },
     "wipBilling": {
-      "title": "WIP & prebilling",
-      "description": "Review billable project work, hold or adjust lines with evidence, approve prebills, and monitor WIP aging, realization, and leakage."
+      "title": "Pre-billing",
+      "description": "Turn unbilled project work into reviewed invoice packages: bill runs, write-ups and holds with evidence, approval through Flows, optional customer review in the portal, and invoice delivery with backup."
     },
     "resourcing": {
       "title": "Resourcing",

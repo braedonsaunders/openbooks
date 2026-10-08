@@ -369,107 +369,201 @@
   "invoicing": {
     "rateCardLapse": "Lorsque la grille tarifaire a expiré",
     "block": "Bloquer la facturation",
-    "carry_forward": "Facturer selon la dernière grille"
+    "carry_forward": "Facturer selon la dernière grille",
+    "customerReview": "Validation client avant facturation"
   },
   "wipBilling": {
-    "wipHealthAria": "Santé des travaux en cours",
-    "tiles": {
-      "availableWip": "Travaux en cours disponibles",
-      "availableWipSub": "Admissibles et non bloqués",
-      "over90": "Plus de 90 jours",
-      "over90Sub": "{amount} à 61–90 jours",
-      "realization": "Réalisation",
-      "realizationSub": "{amount} facturés",
-      "leakage": "Pertes",
-      "leakageSub": "{amount} bloqués depuis plus de 90 jours"
-    },
-    "list": {
-      "title": "Feuilles de préfacture",
-      "description": "Examinez les travaux de projet admissibles, les ajustements de facturation et le statut d’approbation.",
-      "newPrebill": "Nouvelle préfacture"
+    "toolbar": {
+      "search": "Rechercher clients, projets, feuilles",
+      "board": "Tableau",
+      "table": "Liste",
+      "billRun": "Cycle de facturation"
     },
     "empty": {
-      "noProjectsTitle": "Créez d’abord un projet",
-      "noPrebillsTitle": "Aucune feuille de préfacture pour l’instant",
-      "noProjectsDescription": "L’examen des travaux en cours part d’un projet actif avec du temps ou des coûts facturables.",
-      "noPrebillsDescription": "Créez une feuille pour figer les travaux de projet non facturés admissibles à une date d’arrêté.",
-      "createPrebill": "Créer une préfacture",
-      "goToProjects": "Aller aux projets"
+      "noProjectsTitle": "Configurez d’abord un type de projet facturable",
+      "noProjectsDescription": "La préfacturation prépare des factures à partir des projets dont le type facture des lignes de temps et de coûts.",
+      "nothingToBillTitle": "Rien à facturer pour l’instant",
+      "nothingToBillDescription": "Le temps et les coûts facturables approuvés de vos projets apparaissent ici, prêts à être préfacturés.",
+      "configureProjectTypes": "Configurer les types de projet"
+    },
+    "board": {
+      "aria": "Étapes de préfacturation",
+      "showAll": "Afficher les {count}"
+    },
+    "stages": {
+      "unbilled": "À préfacturer",
+      "draft": "Brouillon",
+      "review": "En approbation",
+      "ready": "Prête à facturer",
+      "customer": "Chez le client",
+      "invoiced": "Facturée",
+      "sent": "Envoyée",
+      "paid": "Payée",
+      "void": "Annulée"
+    },
+    "stageEmpty": {
+      "unbilled": "Aucun travail non facturé en attente.",
+      "draft": "Les préfactures en préparation apparaissent ici.",
+      "review": "Les préfactures en attente d’approbation dans la Boîte de réception apparaissent ici.",
+      "ready": "Les préfactures approuvées, prêtes à facturer, apparaissent ici.",
+      "customer": "Les préfactures en cours de validation par le client apparaissent ici.",
+      "invoiced": "Les factures à comptabiliser ou à envoyer apparaissent ici.",
+      "sent": "Les factures envoyées en attente de paiement apparaissent ici.",
+      "paid": "Les factures payées apparaissent ici."
+    },
+    "card": {
+      "oldest": "Travail le plus ancien il y a {days, plural, one {# jour} other {# jours}}",
+      "prebill": "Préfacturer",
+      "period": "{start} – {end}",
+      "through": "Jusqu’au {date}",
+      "lines": "{count, plural, one {# ligne} other {# lignes}}",
+      "held": "{count} retenue(s)",
+      "disputed": "{count, plural, =0 {Modifications demandées} one {# ligne contestée} other {# lignes contestées}}",
+      "accepted": "Acceptée",
+      "acceptedPo": "Acceptée · BC {po}",
+      "reviewRequired": "Validation client",
+      "viewed": "Consultée",
+      "invoiceDraft": "Facture en brouillon",
+      "readyToSend": "Prête à envoyer",
+      "open": "{amount} restant"
     },
     "table": {
+      "stageFilter": "Filtrer par étape",
+      "allOpen": "Toutes les ouvertes",
+      "emptyTitle": "Rien à cette étape",
+      "emptyDescription": "Choisissez une autre étape ou effacez la recherche.",
       "worksheet": "Feuille",
-      "project": "Projet",
-      "status": "Statut",
-      "proposed": "Proposé",
-      "through": "Jusqu’au {periodEnd}",
-      "noCustomer": "Aucun client"
+      "customer": "Client",
+      "period": "Période",
+      "stage": "Étape",
+      "amount": "Montant",
+      "openBalance": "Solde restant"
     },
-    "createDrawer": {
-      "title": "Nouvelle feuille de préfacture",
-      "description": "Figez les travaux non facturés admissibles à une date d’arrêté.",
+    "billRun": {
+      "title": "Cycle de facturation",
+      "description": "Préparez une préfacture brouillon pour chaque projet sélectionné ayant du travail non facturé jusqu’à la date limite. Chaque préfacture est revue avant de devenir une facture.",
+      "cutoff": "Date limite",
+      "start": "Début de période (facultatif)",
+      "projects": "Projets",
+      "selectAll": "Tout sélectionner",
+      "selectNone": "Tout désélectionner",
+      "oldest": "Plus ancien {date}",
+      "notes": "Notes",
+      "submit": "{count, plural, one {Préparer # préfacture} other {Préparer # préfactures}}",
+      "running": "Préparation…",
+      "created": "{count, plural, =0 {Aucune préfacture préparée} one {# préfacture préparée} other {# préfactures préparées}}",
+      "skippedTitle": "Ignorés",
       "cancel": "Annuler",
-      "creating": "Création…",
-      "submit": "Créer la préfacture",
-      "projectLabel": "Projet",
-      "projectHelp": "Seuls les types de projet actifs en facturation source standard régie ou coût majoré sont listés.",
-      "configureProjectTypes": "Configurer les types de projet",
-      "startLabel": "Début (facultatif)",
-      "cutoffLabel": "Date d’arrêté",
-      "notesLabel": "Notes d’examen",
-      "notesPlaceholder": "Périmètre, instructions de facturation ou contexte pour le réviseur"
-    },
-    "detail": {
-      "description": "{projectName} · jusqu’au {periodEnd}",
-      "sendForReview": "Envoyer en révision",
-      "return": "Renvoyer",
-      "approve": "Approuver",
-      "converting": "Conversion…",
-      "createInvoice": "Créer une facture",
-      "void": "Annuler",
-      "openInvoice": "Ouvrir {invoiceNumber}"
-    },
-    "workflow": {
-      "returnTitle": "Renvoyer la feuille en brouillon",
-      "voidTitle": "Annuler la feuille",
-      "returnDescription": "Expliquez ce que le préparateur doit corriger. Cela fera partie de la piste de révision.",
-      "voidDescription": "Expliquez pourquoi cette feuille ne doit pas aboutir. Les travaux en cours source restent disponibles pour une feuille ultérieure.",
-      "reasonLabel": "Motif",
-      "saving": "Enregistrement…",
-      "returnSubmit": "Renvoyer en brouillon",
-      "voidSubmit": "Annuler la feuille",
-      "cancel": "Annuler"
-    },
-    "metrics": {
-      "original": "Initial",
-      "proposed": "Proposé",
-      "adjustment": "Ajustement",
-      "cost": "Coût"
-    },
-    "lockedAlert": "Cet instantané d’approbation est verrouillé. Convertissez-le tel qu’approuvé, ou annulez-le et préparez une nouvelle feuille.",
-    "linesTable": {
-      "source": "Source",
-      "date": "Date",
-      "description": "Description",
-      "cost": "Coût",
-      "original": "Initial",
-      "proposedSupport": "Proposé / justificatifs"
-    },
-    "trail": {
-      "title": "Piste de révision",
-      "system": "Système"
+      "done": "Terminé"
     },
     "toasts": {
-      "created": "{worksheetNumber} créée avec {sourceCount} lignes sources",
-      "sentForReview": "Envoyée en révision",
-      "approved": "Préfacture approuvée",
-      "returnedToDraft": "Renvoyée en brouillon",
+      "submitted": "Soumise pour approbation",
+      "approved": "Approuvée — prête à facturer",
+      "reopened": "Rouverte en brouillon",
       "voided": "Préfacture annulée",
-      "converted": "{documentNumber} créée comme facture brouillon"
+      "converted": "Facture {documentNumber} créée en brouillon",
+      "sentToCustomer": "Envoyée à {to} pour validation",
+      "sentNoEmail": "En attente dans le portail client. {error}",
+      "delivered": "Facture envoyée à {to}",
+      "deliveredWithBackup": "Facture et justificatifs envoyés à {to}"
     },
-    "lineToasts": {
-      "saved": "Montant de facturation enregistré",
-      "holdApplied": "Blocage de facturation appliqué",
-      "holdReleased": "Blocage de facturation levé"
+    "detail": {
+      "description": "{projectName} · {customerName}",
+      "submit": "Soumettre",
+      "submitting": "Soumission…",
+      "openInbox": "Ouvrir la Boîte de réception",
+      "sendToCustomer": "Envoyer au client",
+      "createInvoice": "Créer la facture",
+      "converting": "Création…",
+      "reviewRequiredHint": "Ce type de projet exige que le client accepte la préfacture avant sa facturation.",
+      "sendInvoice": "Envoyer la facture",
+      "resendInvoice": "Renvoyer la facture",
+      "openInvoice": "Ouvrir {invoiceNumber}",
+      "reopen": "Rouvrir",
+      "void": "Annuler la préfacture"
+    },
+    "notice": {
+      "disputed": "{count, plural, =0 {Le client a demandé des modifications.} one {Le client a contesté # ligne.} other {Le client a contesté # lignes.}} Ajustez-les, retenez-les ou expliquez-les, puis soumettez à nouveau.",
+      "inApproval": "Cette préfacture attend une approbation. Les approbateurs décident dans la Boîte de réception ; un refus la renvoie ici en brouillon.",
+      "withCustomer": "Envoyée au client pour validation le {sent}. Pas encore ouverte.",
+      "withCustomerViewed": "Envoyée au client pour validation le {sent}. Ouverte le {viewed}.",
+      "postInvoice": "La facture {invoiceNumber} est un brouillon. Comptabilisez-la, puis envoyez-la d’ici avec ses justificatifs."
+    },
+    "tabs": {
+      "aria": "Sections de la préfacture",
+      "work": "Travail source",
+      "activity": "Activité"
+    },
+    "lockedAlert": "Les lignes sont verrouillées une fois la préfacture soumise. Rouvrez-la pour la modifier ; elle sera approuvée de nouveau.",
+    "preview": {
+      "title": "Aperçu de la facture",
+      "billTo": "Facturer à",
+      "project": "Projet",
+      "po": "BC {po}",
+      "empty": "Aucune ligne à facturer.",
+      "subtotal": "Sous-total",
+      "taxNote": "Les taxes sont calculées à la création de la facture."
+    },
+    "metrics": {
+      "original": "Valeur standard",
+      "adjustment": "Ajustements",
+      "cost": "Coût",
+      "margin": "Marge"
+    },
+    "customer": {
+      "accepted": "Acceptée par {name}"
+    },
+    "panels": {
+      "reopen": {
+        "title": "Rouvrir la préfacture",
+        "description": "La réouverture remet la préfacture en brouillon et annule son approbation ainsi que toute décision du client.",
+        "submit": "Rouvrir"
+      },
+      "void": {
+        "title": "Annuler la préfacture",
+        "description": "L’annulation remet son travail en non facturé. La feuille et son historique sont conservés.",
+        "submit": "Annuler la préfacture"
+      },
+      "send": {
+        "title": "Envoyer au client pour validation",
+        "description": "Le client examine cette facturation dans le portail client, puis l’accepte ou demande des modifications ligne par ligne.",
+        "submit": "Envoyer pour validation"
+      },
+      "deliver": {
+        "title": "Envoyer la facture",
+        "description": "Envoyez par e-mail la facture comptabilisée au client avec ses justificatifs en pièce jointe.",
+        "submit": "Envoyer la facture"
+      },
+      "reason": "Motif",
+      "recipient": "E-mail (facultatif)",
+      "recipientHelp": "Laissez vide pour utiliser l’adresse du client enregistrée.",
+      "message": "Message (facultatif)",
+      "working": "Traitement…",
+      "cancel": "Annuler"
+    },
+    "events": {
+      "created": "Préparée",
+      "line_updated": "Ligne ajustée",
+      "hold_created": "Ligne retenue",
+      "hold_released": "Retenue levée",
+      "submitted": "Soumise",
+      "submit_failed": "Échec de l’acheminement de l’approbation",
+      "returned": "Renvoyée en brouillon",
+      "approved": "Approuvée",
+      "reopened": "Rouverte",
+      "customer_review_sent": "Envoyée au client",
+      "customer_review_emailed": "E-mail de validation envoyé",
+      "customer_review_email_failed": "E-mail de validation non remis",
+      "customer_viewed": "Ouverte par le client",
+      "customer_accepted": "Acceptée par le client",
+      "customer_disputed": "Modifications demandées par le client",
+      "converted": "Facture créée",
+      "delivered": "Facture envoyée",
+      "voided": "Annulée"
+    },
+    "trail": {
+      "system": "Système",
+      "customer": "Client"
     },
     "line": {
       "held": "Bloquée",
@@ -486,10 +580,21 @@
       "applyHold": "Appliquer le blocage",
       "releaseHold": "Lever le blocage",
       "releaseReason": "Motif de la levée",
-      "release": "Lever"
+      "release": "Lever",
+      "customerNote": "Client : {note}"
     },
-    "status": {
-      "converted": "Converti"
+    "linesTable": {
+      "source": "Source",
+      "date": "Date",
+      "description": "Description",
+      "cost": "Coût",
+      "original": "Initial",
+      "proposedSupport": "Proposé / justificatifs"
+    },
+    "lineToasts": {
+      "saved": "Montant de facturation enregistré",
+      "holdApplied": "Blocage de facturation appliqué",
+      "holdReleased": "Blocage de facturation levé"
     }
   },
   "duplicates": {

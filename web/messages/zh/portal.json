@@ -20,7 +20,9 @@
     "storeCredit": "储值信用",
     "prepaid": "预付用量",
     "orders": "最近订单",
-    "noOrders": "暂无订单。"
+    "noOrders": "暂无订单。",
+    "billingReviews": "待审核的账单",
+    "noBillingReviews": "目前没有需要您审核的内容。"
   },
   "nav": {
     "invoices": "发票",
@@ -99,5 +101,38 @@
     "noCurrency": "未记录货币，金额已隐藏，待更正后再显示。",
     "storeCredit": "储值信用",
     "prepaid": "预付用量"
+  },
+  "reviews": {
+    "title": "待审核的账单",
+    "empty": "目前没有需要您审核的内容。",
+    "awaiting": "等待您审核",
+    "accepted": "已接受",
+    "disputed": "已要求修改",
+    "period": "{start} – {end}",
+    "through": "截至 {date} 的工作",
+    "periodLabel": "期间",
+    "reference": "编号",
+    "purchaseOrder": "采购订单",
+    "date": "日期",
+    "description": "描述",
+    "quantity": "数量",
+    "amount": "金额",
+    "total": "合计",
+    "accept": "接受",
+    "requestChanges": "要求修改",
+    "signerName": "您的姓名",
+    "purchaseOrderOptional": "采购订单号（可选）",
+    "comment": "备注（可选）",
+    "confirm": "我已审核此账单并同意据此开具发票。",
+    "acceptSubmit": "接受账单",
+    "accepting": "正在接受…",
+    "disputeHint": "请为每个需要处理的明细添加备注，或留下总体意见。",
+    "lineNotePlaceholder": "此明细需要处理什么问题？",
+    "generalComment": "总体意见",
+    "disputeSubmit": "发送修改要求",
+    "sending": "正在发送…",
+    "addNote": "添加备注",
+    "acceptedBanner": "您已于 {date} 接受此账单，将按所示内容开具发票。",
+    "disputedBanner": "您已于 {date} 要求修改，供应商将发送修订后的账单。"
   }
 }

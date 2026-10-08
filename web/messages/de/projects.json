@@ -369,107 +369,201 @@
   "invoicing": {
     "rateCardLapse": "Wenn die Preisliste abgelaufen ist",
     "block": "Fakturierung sperren",
-    "carry_forward": "Mit letzter Preisliste abrechnen"
+    "carry_forward": "Mit letzter Preisliste abrechnen",
+    "customerReview": "Kundenprüfung vor der Rechnungsstellung"
   },
   "wipBilling": {
-    "wipHealthAria": "WIP-Zustand",
-    "tiles": {
-      "availableWip": "Verfügbares WIP",
-      "availableWipSub": "Abrechenbar und nicht gesperrt",
-      "over90": "Über 90 Tage",
-      "over90Sub": "{amount} bei 61–90 Tagen",
-      "realization": "Realisierung",
-      "realizationSub": "{amount} berechnet",
-      "leakage": "Schwund",
-      "leakageSub": "{amount} seit über 90 Tagen gesperrt"
-    },
-    "list": {
-      "title": "Vorabrechnungsarbeitsblätter",
-      "description": "Abrechenbare Projektarbeit, Abrechnungsanpassungen und Genehmigungsstatus prüfen.",
-      "newPrebill": "Neue Vorabrechnung"
+    "toolbar": {
+      "search": "Kunden, Projekte, Arbeitsblätter suchen",
+      "board": "Board",
+      "table": "Tabelle",
+      "billRun": "Abrechnungslauf"
     },
     "empty": {
-      "noProjectsTitle": "Legen Sie zuerst ein Projekt an",
-      "noPrebillsTitle": "Noch keine Vorabrechnungsarbeitsblätter",
-      "noProjectsDescription": "Die WIP-Prüfung beginnt mit einem aktiven Projekt mit abrechenbarer Zeit oder abrechenbaren Kosten.",
-      "noPrebillsDescription": "Legen Sie ein Arbeitsblatt an, um abrechenbare, noch nicht berechnete Projektarbeit bis zu einem Stichtag festzuschreiben.",
-      "createPrebill": "Vorabrechnung erstellen",
-      "goToProjects": "Zu den Projekten"
+      "noProjectsTitle": "Richten Sie zuerst einen abrechenbaren Projekttyp ein",
+      "noProjectsDescription": "Die Vorabrechnung erstellt Rechnungen aus Projekten, deren Typ Zeit- und Kostenpositionen abrechnet.",
+      "nothingToBillTitle": "Noch nichts abzurechnen",
+      "nothingToBillDescription": "Genehmigte abrechenbare Zeiten und Kosten Ihrer Projekte erscheinen hier, bereit zur Vorabrechnung.",
+      "configureProjectTypes": "Projekttypen konfigurieren"
+    },
+    "board": {
+      "aria": "Phasen der Vorabrechnung",
+      "showAll": "Alle {count} anzeigen"
+    },
+    "stages": {
+      "unbilled": "Vorabzurechnen",
+      "draft": "Entwurf",
+      "review": "In Genehmigung",
+      "ready": "Bereit zur Rechnung",
+      "customer": "Beim Kunden",
+      "invoiced": "Fakturiert",
+      "sent": "Versendet",
+      "paid": "Bezahlt",
+      "void": "Storniert"
+    },
+    "stageEmpty": {
+      "unbilled": "Keine unberechneten Leistungen offen.",
+      "draft": "Vorabrechnungen in Vorbereitung erscheinen hier.",
+      "review": "Vorabrechnungen, die im Posteingang auf Genehmigung warten, erscheinen hier.",
+      "ready": "Genehmigte Vorabrechnungen, bereit zur Rechnung, erscheinen hier.",
+      "customer": "Vorabrechnungen, die der Kunde prüft, erscheinen hier.",
+      "invoiced": "Rechnungen, die gebucht oder versendet werden müssen, erscheinen hier.",
+      "sent": "Versendete Rechnungen, die auf Zahlung warten, erscheinen hier.",
+      "paid": "Bezahlte Rechnungen erscheinen hier."
+    },
+    "card": {
+      "oldest": "Älteste Leistung vor {days, plural, one {# Tag} other {# Tagen}}",
+      "prebill": "Vorabrechnen",
+      "period": "{start} – {end}",
+      "through": "Bis {date}",
+      "lines": "{count, plural, one {# Position} other {# Positionen}}",
+      "held": "{count} zurückgehalten",
+      "disputed": "{count, plural, =0 {Änderungen angefordert} one {# Position beanstandet} other {# Positionen beanstandet}}",
+      "accepted": "Angenommen",
+      "acceptedPo": "Angenommen · Bestellung {po}",
+      "reviewRequired": "Kundenprüfung",
+      "viewed": "Angesehen",
+      "invoiceDraft": "Rechnungsentwurf",
+      "readyToSend": "Versandbereit",
+      "open": "{amount} offen"
     },
     "table": {
+      "stageFilter": "Nach Phase filtern",
+      "allOpen": "Alle offenen",
+      "emptyTitle": "Nichts in dieser Phase",
+      "emptyDescription": "Wählen Sie eine andere Phase oder leeren Sie die Suche.",
       "worksheet": "Arbeitsblatt",
-      "project": "Projekt",
-      "status": "Status",
-      "proposed": "Vorgeschlagen",
-      "through": "Bis {periodEnd}",
-      "noCustomer": "Kein Kunde"
+      "customer": "Kunde",
+      "period": "Zeitraum",
+      "stage": "Phase",
+      "amount": "Betrag",
+      "openBalance": "Offener Betrag"
     },
-    "createDrawer": {
-      "title": "Neues Vorabrechnungsarbeitsblatt",
-      "description": "Abrechenbare, noch nicht berechnete Arbeit bis zu einem Stichtag festschreiben.",
+    "billRun": {
+      "title": "Abrechnungslauf",
+      "description": "Erstellen Sie für jedes ausgewählte Projekt mit unberechneten Leistungen bis zum Stichtag eine Entwurfs-Vorabrechnung. Jede Vorabrechnung wird geprüft, bevor sie zur Rechnung wird.",
+      "cutoff": "Stichtag",
+      "start": "Beginn des Zeitraums (optional)",
+      "projects": "Projekte",
+      "selectAll": "Alle auswählen",
+      "selectNone": "Keine auswählen",
+      "oldest": "Älteste {date}",
+      "notes": "Notizen",
+      "submit": "{count, plural, one {# Vorabrechnung erstellen} other {# Vorabrechnungen erstellen}}",
+      "running": "Wird erstellt…",
+      "created": "{count, plural, =0 {Keine Vorabrechnung erstellt} one {# Vorabrechnung erstellt} other {# Vorabrechnungen erstellt}}",
+      "skippedTitle": "Übersprungen",
       "cancel": "Abbrechen",
-      "creating": "Wird erstellt…",
-      "submit": "Vorabrechnung erstellen",
-      "projectLabel": "Projekt",
-      "projectHelp": "Es werden nur aktive Projektarten mit Standard-Zeit-&-Material- oder Selbstkosten-Quellabrechnung gelistet.",
-      "configureProjectTypes": "Projektarten konfigurieren",
-      "startLabel": "Beginn (optional)",
-      "cutoffLabel": "Stichtag",
-      "notesLabel": "Prüfnotizen",
-      "notesPlaceholder": "Umfang, Abrechnungshinweise oder Prüferkontext"
-    },
-    "detail": {
-      "description": "{projectName} · bis {periodEnd}",
-      "sendForReview": "Zur Prüfung senden",
-      "return": "Zurückgeben",
-      "approve": "Genehmigen",
-      "converting": "Wird umgewandelt…",
-      "createInvoice": "Ausgangsrechnung erstellen",
-      "void": "Stornieren",
-      "openInvoice": "{invoiceNumber} öffnen"
-    },
-    "workflow": {
-      "returnTitle": "Arbeitsblatt in Entwurf zurückgeben",
-      "voidTitle": "Arbeitsblatt stornieren",
-      "returnDescription": "Erläutern Sie, was der Ersteller korrigieren muss. Dies wird Teil des Prüfpfads.",
-      "voidDescription": "Erläutern Sie, warum dieses Arbeitsblatt nicht weitergeführt werden darf. Das Quell-WIP bleibt für ein künftiges Arbeitsblatt verfügbar.",
-      "reasonLabel": "Grund",
-      "saving": "Wird gespeichert…",
-      "returnSubmit": "In Entwurf zurückgeben",
-      "voidSubmit": "Arbeitsblatt stornieren",
-      "cancel": "Abbrechen"
-    },
-    "metrics": {
-      "original": "Ursprünglich",
-      "proposed": "Vorgeschlagen",
-      "adjustment": "Anpassung",
-      "cost": "Kosten"
-    },
-    "lockedAlert": "Dieser Genehmigungs-Schnappschuss ist gesperrt. Wandeln Sie ihn wie genehmigt um, oder stornieren Sie ihn und legen Sie ein neues Arbeitsblatt an.",
-    "linesTable": {
-      "source": "Quelle",
-      "date": "Datum",
-      "description": "Beschreibung",
-      "cost": "Kosten",
-      "original": "Ursprünglich",
-      "proposedSupport": "Vorgeschlagen / Nachweis"
-    },
-    "trail": {
-      "title": "Prüfpfad",
-      "system": "System"
+      "done": "Fertig"
     },
     "toasts": {
-      "created": "{worksheetNumber} mit {sourceCount} Quellzeilen erstellt",
-      "sentForReview": "Zur Prüfung gesendet",
-      "approved": "Vorabrechnung genehmigt",
-      "returnedToDraft": "In Entwurf zurückgegeben",
+      "submitted": "Zur Genehmigung eingereicht",
+      "approved": "Genehmigt – bereit zur Rechnung",
+      "reopened": "Als Entwurf wieder geöffnet",
       "voided": "Vorabrechnung storniert",
-      "converted": "{documentNumber} als Rechnungsentwurf erstellt"
+      "converted": "Rechnung {documentNumber} als Entwurf erstellt",
+      "sentToCustomer": "Zur Prüfung an {to} gesendet",
+      "sentNoEmail": "Wartet im Kundenportal. {error}",
+      "delivered": "Rechnung an {to} gesendet",
+      "deliveredWithBackup": "Rechnung und Nachweise an {to} gesendet"
     },
-    "lineToasts": {
-      "saved": "Abrechnungsbetrag gespeichert",
-      "holdApplied": "Abrechnungssperre angewendet",
-      "holdReleased": "Abrechnungssperre aufgehoben"
+    "detail": {
+      "description": "{projectName} · {customerName}",
+      "submit": "Einreichen",
+      "submitting": "Wird eingereicht…",
+      "openInbox": "Posteingang öffnen",
+      "sendToCustomer": "An Kunden senden",
+      "createInvoice": "Rechnung erstellen",
+      "converting": "Wird erstellt…",
+      "reviewRequiredHint": "Bei diesem Projekttyp muss der Kunde die Vorabrechnung annehmen, bevor sie fakturiert wird.",
+      "sendInvoice": "Rechnung senden",
+      "resendInvoice": "Rechnung erneut senden",
+      "openInvoice": "{invoiceNumber} öffnen",
+      "reopen": "Wieder öffnen",
+      "void": "Stornieren"
+    },
+    "notice": {
+      "disputed": "{count, plural, =0 {Der Kunde hat Änderungen angefordert.} one {Der Kunde hat # Position beanstandet.} other {Der Kunde hat # Positionen beanstandet.}} Passen Sie sie an, halten Sie sie zurück oder erläutern Sie sie und reichen Sie erneut ein.",
+      "inApproval": "Diese Vorabrechnung wartet auf Genehmigung. Genehmigende entscheiden im Posteingang; eine Ablehnung bringt sie hier als Entwurf zurück.",
+      "withCustomer": "Am {sent} zur Prüfung an den Kunden gesendet. Noch nicht geöffnet.",
+      "withCustomerViewed": "Am {sent} zur Prüfung an den Kunden gesendet. Geöffnet am {viewed}.",
+      "postInvoice": "Rechnung {invoiceNumber} ist ein Entwurf. Buchen Sie sie und senden Sie sie dann hier mit ihren Nachweisen."
+    },
+    "tabs": {
+      "aria": "Bereiche der Vorabrechnung",
+      "work": "Erbrachte Leistungen",
+      "activity": "Aktivität"
+    },
+    "lockedAlert": "Positionen sind nach dem Einreichen gesperrt. Öffnen Sie die Vorabrechnung wieder, um Änderungen vorzunehmen; sie wird dann erneut genehmigt.",
+    "preview": {
+      "title": "Rechnungsvorschau",
+      "billTo": "Rechnung an",
+      "project": "Projekt",
+      "po": "Bestellung {po}",
+      "empty": "Keine abzurechnenden Positionen.",
+      "subtotal": "Zwischensumme",
+      "taxNote": "Steuern werden beim Erstellen der Rechnung berechnet."
+    },
+    "metrics": {
+      "original": "Standardwert",
+      "adjustment": "Anpassungen",
+      "cost": "Kosten",
+      "margin": "Marge"
+    },
+    "customer": {
+      "accepted": "Angenommen von {name}"
+    },
+    "panels": {
+      "reopen": {
+        "title": "Vorabrechnung wieder öffnen",
+        "description": "Das Wiederöffnen setzt die Vorabrechnung auf Entwurf zurück und verwirft ihre Genehmigung und jede Kundenentscheidung.",
+        "submit": "Wieder öffnen"
+      },
+      "void": {
+        "title": "Vorabrechnung stornieren",
+        "description": "Durch das Stornieren werden die Leistungen wieder unberechnet. Arbeitsblatt und Verlauf bleiben erhalten.",
+        "submit": "Vorabrechnung stornieren"
+      },
+      "send": {
+        "title": "Zur Prüfung an den Kunden senden",
+        "description": "Der Kunde prüft diese Abrechnung im Kundenportal und nimmt sie an oder fordert Änderungen pro Position an.",
+        "submit": "Zur Prüfung senden"
+      },
+      "deliver": {
+        "title": "Rechnung senden",
+        "description": "Senden Sie die gebuchte Rechnung mit angehängten Nachweisen per E-Mail an den Kunden.",
+        "submit": "Rechnung senden"
+      },
+      "reason": "Grund",
+      "recipient": "E-Mail (optional)",
+      "recipientHelp": "Leer lassen, um die hinterlegte E-Mail-Adresse des Kunden zu verwenden.",
+      "message": "Nachricht (optional)",
+      "working": "Wird ausgeführt…",
+      "cancel": "Abbrechen"
+    },
+    "events": {
+      "created": "Erstellt",
+      "line_updated": "Position angepasst",
+      "hold_created": "Position zurückgehalten",
+      "hold_released": "Zurückhaltung aufgehoben",
+      "submitted": "Eingereicht",
+      "submit_failed": "Genehmigungsweiterleitung fehlgeschlagen",
+      "returned": "Auf Entwurf zurückgesetzt",
+      "approved": "Genehmigt",
+      "reopened": "Wieder geöffnet",
+      "customer_review_sent": "An Kunden gesendet",
+      "customer_review_emailed": "Prüf-E-Mail gesendet",
+      "customer_review_email_failed": "Prüf-E-Mail nicht zugestellt",
+      "customer_viewed": "Vom Kunden geöffnet",
+      "customer_accepted": "Vom Kunden angenommen",
+      "customer_disputed": "Änderungen vom Kunden angefordert",
+      "converted": "Rechnung erstellt",
+      "delivered": "Rechnung gesendet",
+      "voided": "Storniert"
+    },
+    "trail": {
+      "system": "System",
+      "customer": "Kunde"
     },
     "line": {
       "held": "Zurückgehalten",
@@ -486,10 +580,21 @@
       "applyHold": "Sperre anwenden",
       "releaseHold": "Sperre aufheben",
       "releaseReason": "Grund der Freigabe",
-      "release": "Freigeben"
+      "release": "Freigeben",
+      "customerNote": "Kunde: {note}"
     },
-    "status": {
-      "converted": "Umgewandelt"
+    "linesTable": {
+      "source": "Quelle",
+      "date": "Datum",
+      "description": "Beschreibung",
+      "cost": "Kosten",
+      "original": "Ursprünglich",
+      "proposedSupport": "Vorgeschlagen / Nachweis"
+    },
+    "lineToasts": {
+      "saved": "Abrechnungsbetrag gespeichert",
+      "holdApplied": "Abrechnungssperre angewendet",
+      "holdReleased": "Abrechnungssperre aufgehoben"
     }
   },
   "duplicates": {

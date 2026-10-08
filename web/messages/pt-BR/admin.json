@@ -6906,8 +6906,8 @@
       "description": "Compromissos com fornecedores, alterações de subcontrato, SOVs e medições de fornecedores, retenções a pagar, liberações, cheques conjuntos e travas de pagamento."
     },
     "wipBilling": {
-      "title": "Trabalhos em curso e pré-faturamento",
-      "description": "Revise trabalho faturável de obras, trave ou ajuste linhas com evidência, aprove pré-faturas e monitore aging de WIP, realização e vazamento."
+      "title": "Pré-faturamento",
+      "description": "Transforme o trabalho de projeto não faturado em pacotes de fatura revisados: ciclos de faturamento, ajustes e retenções com evidências, aprovação por Fluxos, revisão opcional do cliente no portal e envio de faturas com comprovantes."
     },
     "resourcing": {
       "title": "Alocação de recursos",

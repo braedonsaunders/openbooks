@@ -369,107 +369,201 @@
   "invoicing": {
     "rateCardLapse": "Quando a tabela de preços expirou",
     "block": "Bloquear o faturamento",
-    "carry_forward": "Faturar pela última tabela"
+    "carry_forward": "Faturar pela última tabela",
+    "customerReview": "Revisão do cliente antes do faturamento"
   },
   "wipBilling": {
-    "wipHealthAria": "Saúde do WIP",
-    "tiles": {
-      "availableWip": "WIP disponível",
-      "availableWipSub": "Elegível e sem trava",
-      "over90": "Mais de 90 dias",
-      "over90Sub": "{amount} com 61–90 dias",
-      "realization": "Realização",
-      "realizationSub": "{amount} faturado",
-      "leakage": "Vazamento",
-      "leakageSub": "{amount} travado há mais de 90 dias"
-    },
-    "list": {
-      "title": "Planilhas de pré-fatura",
-      "description": "Revise o trabalho de projeto elegível, os ajustes de faturamento e o status de aprovação.",
-      "newPrebill": "Nova pré-fatura"
+    "toolbar": {
+      "search": "Pesquisar clientes, projetos, planilhas",
+      "board": "Quadro",
+      "table": "Tabela",
+      "billRun": "Ciclo de faturamento"
     },
     "empty": {
-      "noProjectsTitle": "Crie primeiro um projeto",
-      "noPrebillsTitle": "Nenhuma planilha de pré-fatura ainda",
-      "noProjectsDescription": "A revisão de trabalhos em curso parte de um projeto ativo com horas ou custos faturáveis.",
-      "noPrebillsDescription": "Crie uma planilha para congelar o trabalho de projeto não faturado elegível até uma data de corte.",
-      "createPrebill": "Criar pré-fatura",
-      "goToProjects": "Ir para projetos"
+      "noProjectsTitle": "Configure primeiro um tipo de projeto faturável",
+      "noProjectsDescription": "O pré-faturamento prepara faturas a partir de projetos cujo tipo fatura linhas de tempo e custo.",
+      "nothingToBillTitle": "Nada a faturar ainda",
+      "nothingToBillDescription": "O tempo e os custos faturáveis aprovados dos seus projetos aparecem aqui, prontos para pré-faturar.",
+      "configureProjectTypes": "Configurar tipos de projeto"
+    },
+    "board": {
+      "aria": "Etapas do pré-faturamento",
+      "showAll": "Mostrar todas as {count}"
+    },
+    "stages": {
+      "unbilled": "A pré-faturar",
+      "draft": "Rascunho",
+      "review": "Em aprovação",
+      "ready": "Pronta para faturar",
+      "customer": "Com o cliente",
+      "invoiced": "Faturada",
+      "sent": "Enviada",
+      "paid": "Paga",
+      "void": "Anulada"
+    },
+    "stageEmpty": {
+      "unbilled": "Nenhum trabalho não faturado pendente.",
+      "draft": "As pré-faturas em preparação aparecem aqui.",
+      "review": "As pré-faturas aguardando aprovação na Caixa de entrada aparecem aqui.",
+      "ready": "As pré-faturas aprovadas, prontas para faturar, aparecem aqui.",
+      "customer": "As pré-faturas em revisão pelo cliente aparecem aqui.",
+      "invoiced": "As faturas aguardando lançamento ou envio aparecem aqui.",
+      "sent": "As faturas enviadas aguardando pagamento aparecem aqui.",
+      "paid": "As faturas pagas aparecem aqui."
+    },
+    "card": {
+      "oldest": "Trabalho mais antigo há {days, plural, one {# dia} other {# dias}}",
+      "prebill": "Pré-faturar",
+      "period": "{start} – {end}",
+      "through": "Até {date}",
+      "lines": "{count, plural, one {# linha} other {# linhas}}",
+      "held": "{count} retidas",
+      "disputed": "{count, plural, =0 {Alterações solicitadas} one {# linha contestada} other {# linhas contestadas}}",
+      "accepted": "Aceita",
+      "acceptedPo": "Aceita · PC {po}",
+      "reviewRequired": "Revisão do cliente",
+      "viewed": "Visualizada",
+      "invoiceDraft": "Fatura em rascunho",
+      "readyToSend": "Pronta para enviar",
+      "open": "{amount} em aberto"
     },
     "table": {
+      "stageFilter": "Filtrar por etapa",
+      "allOpen": "Todas em aberto",
+      "emptyTitle": "Nada nesta etapa",
+      "emptyDescription": "Escolha outra etapa ou limpe a pesquisa.",
       "worksheet": "Planilha",
-      "project": "Projeto",
-      "status": "Status",
-      "proposed": "Proposto",
-      "through": "Até {periodEnd}",
-      "noCustomer": "Sem cliente"
+      "customer": "Cliente",
+      "period": "Período",
+      "stage": "Etapa",
+      "amount": "Valor",
+      "openBalance": "Saldo em aberto"
     },
-    "createDrawer": {
-      "title": "Nova planilha de pré-fatura",
-      "description": "Congele o trabalho não faturado elegível até uma data de corte.",
+    "billRun": {
+      "title": "Ciclo de faturamento",
+      "description": "Prepare uma pré-fatura em rascunho para cada projeto selecionado com trabalho não faturado até a data de corte. Cada pré-fatura é revisada antes de se tornar uma fatura.",
+      "cutoff": "Data de corte",
+      "start": "Início do período (opcional)",
+      "projects": "Projetos",
+      "selectAll": "Selecionar todos",
+      "selectNone": "Desmarcar todos",
+      "oldest": "Mais antigo {date}",
+      "notes": "Observações",
+      "submit": "{count, plural, one {Preparar # pré-fatura} other {Preparar # pré-faturas}}",
+      "running": "Preparando…",
+      "created": "{count, plural, =0 {Nenhuma pré-fatura preparada} one {# pré-fatura preparada} other {# pré-faturas preparadas}}",
+      "skippedTitle": "Ignorados",
       "cancel": "Cancelar",
-      "creating": "Criando…",
-      "submit": "Criar pré-fatura",
-      "projectLabel": "Projeto",
-      "projectHelp": "Somente tipos de projeto ativos com faturamento fonte padrão por tempo e materiais ou custo mais margem são listados.",
-      "configureProjectTypes": "Configurar tipos de projeto",
-      "startLabel": "Início (opcional)",
-      "cutoffLabel": "Data de corte",
-      "notesLabel": "Notas de revisão",
-      "notesPlaceholder": "Escopo, instruções de faturamento ou contexto para o revisor"
-    },
-    "detail": {
-      "description": "{projectName} · até {periodEnd}",
-      "sendForReview": "Enviar para revisão",
-      "return": "Devolver",
-      "approve": "Aprovar",
-      "converting": "Convertendo…",
-      "createInvoice": "Criar fatura",
-      "void": "Anular",
-      "openInvoice": "Abrir {invoiceNumber}"
-    },
-    "workflow": {
-      "returnTitle": "Devolver planilha a rascunho",
-      "voidTitle": "Anular planilha",
-      "returnDescription": "Explique o que o preparador precisa corrigir. Isso passa a fazer parte da trilha de revisão.",
-      "voidDescription": "Explique por que esta planilha não deve seguir. O WIP fonte continua disponível para uma planilha futura.",
-      "reasonLabel": "Motivo",
-      "saving": "Salvando…",
-      "returnSubmit": "Devolver a rascunho",
-      "voidSubmit": "Anular planilha",
-      "cancel": "Cancelar"
-    },
-    "metrics": {
-      "original": "Original",
-      "proposed": "Proposto",
-      "adjustment": "Ajuste",
-      "cost": "Custo"
-    },
-    "lockedAlert": "Este instantâneo de aprovação está bloqueado. Converta-o como aprovado, ou anule-o e prepare uma nova planilha.",
-    "linesTable": {
-      "source": "Origem",
-      "date": "Data",
-      "description": "Descrição",
-      "cost": "Custo",
-      "original": "Original",
-      "proposedSupport": "Proposto / suporte"
-    },
-    "trail": {
-      "title": "Trilha de revisão",
-      "system": "Sistema"
+      "done": "Concluído"
     },
     "toasts": {
-      "created": "{worksheetNumber} criada com {sourceCount} linhas fonte",
-      "sentForReview": "Enviada para revisão",
-      "approved": "Pré-fatura aprovada",
-      "returnedToDraft": "Devolvida a rascunho",
+      "submitted": "Enviada para aprovação",
+      "approved": "Aprovada — pronta para faturar",
+      "reopened": "Reaberta como rascunho",
       "voided": "Pré-fatura anulada",
-      "converted": "{documentNumber} criada como fatura rascunho"
+      "converted": "Fatura {documentNumber} criada como rascunho",
+      "sentToCustomer": "Enviada a {to} para revisão",
+      "sentNoEmail": "Aguardando no portal do cliente. {error}",
+      "delivered": "Fatura enviada a {to}",
+      "deliveredWithBackup": "Fatura e comprovantes enviados a {to}"
     },
-    "lineToasts": {
-      "saved": "Valor de faturamento salvo",
-      "holdApplied": "Trava de faturamento aplicada",
-      "holdReleased": "Trava de faturamento liberada"
+    "detail": {
+      "description": "{projectName} · {customerName}",
+      "submit": "Enviar",
+      "submitting": "Enviando…",
+      "openInbox": "Abrir Caixa de entrada",
+      "sendToCustomer": "Enviar ao cliente",
+      "createInvoice": "Criar fatura",
+      "converting": "Criando…",
+      "reviewRequiredHint": "Este tipo de projeto exige que o cliente aceite a pré-fatura antes do faturamento.",
+      "sendInvoice": "Enviar fatura",
+      "resendInvoice": "Reenviar fatura",
+      "openInvoice": "Abrir {invoiceNumber}",
+      "reopen": "Reabrir",
+      "void": "Anular"
+    },
+    "notice": {
+      "disputed": "{count, plural, =0 {O cliente solicitou alterações.} one {O cliente contestou # linha.} other {O cliente contestou # linhas.}} Ajuste, retenha ou explique e envie novamente.",
+      "inApproval": "Esta pré-fatura aguarda aprovação. Os aprovadores decidem na Caixa de entrada; uma rejeição a devolve aqui como rascunho.",
+      "withCustomer": "Enviada ao cliente para revisão em {sent}. Ainda não aberta.",
+      "withCustomerViewed": "Enviada ao cliente para revisão em {sent}. Aberta em {viewed}.",
+      "postInvoice": "A fatura {invoiceNumber} é um rascunho. Lance-a e depois envie-a daqui com seus comprovantes."
+    },
+    "tabs": {
+      "aria": "Seções da pré-fatura",
+      "work": "Trabalho de origem",
+      "activity": "Atividade"
+    },
+    "lockedAlert": "As linhas ficam bloqueadas depois que a pré-fatura é enviada. Reabra-a para alterar; ela será aprovada novamente.",
+    "preview": {
+      "title": "Prévia da fatura",
+      "billTo": "Faturar para",
+      "project": "Projeto",
+      "po": "PC {po}",
+      "empty": "Nenhuma linha a faturar.",
+      "subtotal": "Subtotal",
+      "taxNote": "Os impostos são calculados quando a fatura é criada."
+    },
+    "metrics": {
+      "original": "Valor padrão",
+      "adjustment": "Ajustes",
+      "cost": "Custo",
+      "margin": "Margem"
+    },
+    "customer": {
+      "accepted": "Aceita por {name}"
+    },
+    "panels": {
+      "reopen": {
+        "title": "Reabrir pré-fatura",
+        "description": "Reabrir devolve a pré-fatura ao rascunho e descarta sua aprovação e qualquer decisão do cliente.",
+        "submit": "Reabrir"
+      },
+      "void": {
+        "title": "Anular pré-fatura",
+        "description": "Anular devolve o trabalho para não faturado. A planilha e seu histórico são mantidos.",
+        "submit": "Anular pré-fatura"
+      },
+      "send": {
+        "title": "Enviar ao cliente para revisão",
+        "description": "O cliente revisa este faturamento no portal do cliente e o aceita ou solicita alterações linha a linha.",
+        "submit": "Enviar para revisão"
+      },
+      "deliver": {
+        "title": "Enviar fatura",
+        "description": "Envie por e-mail a fatura lançada ao cliente com os comprovantes anexados.",
+        "submit": "Enviar fatura"
+      },
+      "reason": "Motivo",
+      "recipient": "E-mail (opcional)",
+      "recipientHelp": "Deixe em branco para usar o e-mail do cliente cadastrado.",
+      "message": "Mensagem (opcional)",
+      "working": "Processando…",
+      "cancel": "Cancelar"
+    },
+    "events": {
+      "created": "Preparada",
+      "line_updated": "Linha ajustada",
+      "hold_created": "Linha retida",
+      "hold_released": "Retenção liberada",
+      "submitted": "Enviada",
+      "submit_failed": "Falha no roteamento da aprovação",
+      "returned": "Devolvida ao rascunho",
+      "approved": "Aprovada",
+      "reopened": "Reaberta",
+      "customer_review_sent": "Enviada ao cliente",
+      "customer_review_emailed": "E-mail de revisão enviado",
+      "customer_review_email_failed": "E-mail de revisão não entregue",
+      "customer_viewed": "Aberta pelo cliente",
+      "customer_accepted": "Aceita pelo cliente",
+      "customer_disputed": "Alterações solicitadas pelo cliente",
+      "converted": "Fatura criada",
+      "delivered": "Fatura enviada",
+      "voided": "Anulada"
+    },
+    "trail": {
+      "system": "Sistema",
+      "customer": "Cliente"
     },
     "line": {
       "held": "Travada",
@@ -486,10 +580,21 @@
       "applyHold": "Aplicar trava",
       "releaseHold": "Destravar",
       "releaseReason": "Motivo da liberação",
-      "release": "Liberar"
+      "release": "Liberar",
+      "customerNote": "Cliente: {note}"
     },
-    "status": {
-      "converted": "Convertido"
+    "linesTable": {
+      "source": "Origem",
+      "date": "Data",
+      "description": "Descrição",
+      "cost": "Custo",
+      "original": "Original",
+      "proposedSupport": "Proposto / suporte"
+    },
+    "lineToasts": {
+      "saved": "Valor de faturamento salvo",
+      "holdApplied": "Trava de faturamento aplicada",
+      "holdReleased": "Trava de faturamento liberada"
     }
   },
   "duplicates": {

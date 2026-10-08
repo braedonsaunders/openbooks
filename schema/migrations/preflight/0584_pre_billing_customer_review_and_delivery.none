@@ -1,0 +1,1 @@
+Schema-only migration: nullable columns, widened status and new checks that every existing row already satisfies. No tenant data repair is required.

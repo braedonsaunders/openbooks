@@ -40,7 +40,8 @@
     "field_ticket": "parte de trabajo",
     "close_run": "cierre de período",
     "budget_scenario": "presupuesto",
-    "hrm_employment_change_request": "cambio de empleo"
+    "hrm_employment_change_request": "cambio de empleo",
+    "wip_prebill": "prefactura"
   },
   "decide": {
     "rejectionReason": "Motivo del rechazo:",

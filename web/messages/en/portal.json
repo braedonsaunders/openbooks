@@ -20,7 +20,9 @@
     "storeCredit": "Store credit",
     "prepaid": "Prepaid usage",
     "orders": "Recent orders",
-    "noOrders": "No orders yet."
+    "noOrders": "No orders yet.",
+    "billingReviews": "Billing to review",
+    "noBillingReviews": "Nothing is waiting for your review."
   },
   "nav": {
     "invoices": "Invoices",
@@ -99,5 +101,38 @@
     "noCurrency": "Currency not recorded — amount hidden until it is corrected.",
     "storeCredit": "Store credit",
     "prepaid": "Prepaid usage"
+  },
+  "reviews": {
+    "title": "Billing to review",
+    "empty": "Nothing is waiting for your review.",
+    "awaiting": "Awaiting your review",
+    "accepted": "Accepted",
+    "disputed": "Changes requested",
+    "period": "{start} – {end}",
+    "through": "Work through {date}",
+    "periodLabel": "Period",
+    "reference": "Reference",
+    "purchaseOrder": "Purchase order",
+    "date": "Date",
+    "description": "Description",
+    "quantity": "Qty",
+    "amount": "Amount",
+    "total": "Total",
+    "accept": "Accept",
+    "requestChanges": "Request changes",
+    "signerName": "Your name",
+    "purchaseOrderOptional": "Purchase order number (optional)",
+    "comment": "Comment (optional)",
+    "confirm": "I have reviewed this billing and accept it for invoicing.",
+    "acceptSubmit": "Accept billing",
+    "accepting": "Accepting…",
+    "disputeHint": "Add a note to each line that needs attention, or leave a general comment.",
+    "lineNotePlaceholder": "What needs attention on this line?",
+    "generalComment": "General comment",
+    "disputeSubmit": "Send requested changes",
+    "sending": "Sending…",
+    "addNote": "Add note",
+    "acceptedBanner": "You accepted this billing on {date}. It will be invoiced as shown.",
+    "disputedBanner": "You requested changes on {date}. Your supplier will follow up with a revised package."
   }
 }

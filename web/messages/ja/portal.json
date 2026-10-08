@@ -20,7 +20,9 @@
     "storeCredit": "ストアクレジット",
     "prepaid": "前払い利用分",
     "orders": "最近の注文",
-    "noOrders": "まだ注文がありません。"
+    "noOrders": "まだ注文がありません。",
+    "billingReviews": "確認待ちの請求",
+    "noBillingReviews": "確認待ちのものはありません。"
   },
   "nav": {
     "invoices": "請求書",
@@ -99,5 +101,38 @@
     "noCurrency": "通貨が未登録のため金額を非表示にしています。修正されるまでお待ちください。",
     "storeCredit": "ストアクレジット",
     "prepaid": "前払い利用分"
+  },
+  "reviews": {
+    "title": "確認待ちの請求",
+    "empty": "確認待ちのものはありません。",
+    "awaiting": "確認待ち",
+    "accepted": "承認済み",
+    "disputed": "修正を依頼済み",
+    "period": "{start} – {end}",
+    "through": "{date} までの作業",
+    "periodLabel": "期間",
+    "reference": "参照番号",
+    "purchaseOrder": "注文書",
+    "date": "日付",
+    "description": "内容",
+    "quantity": "数量",
+    "amount": "金額",
+    "total": "合計",
+    "accept": "承認する",
+    "requestChanges": "修正を依頼",
+    "signerName": "お名前",
+    "purchaseOrderOptional": "注文書番号（任意）",
+    "comment": "コメント（任意）",
+    "confirm": "この請求内容を確認し、請求書の発行を承認します。",
+    "acceptSubmit": "請求を承認",
+    "accepting": "承認しています…",
+    "disputeHint": "確認が必要な各明細にメモを追加するか、全体へのコメントを残してください。",
+    "lineNotePlaceholder": "この明細で確認が必要な点は？",
+    "generalComment": "全体へのコメント",
+    "disputeSubmit": "修正依頼を送信",
+    "sending": "送信しています…",
+    "addNote": "メモを追加",
+    "acceptedBanner": "{date} にこの請求を承認しました。表示どおりに請求されます。",
+    "disputedBanner": "{date} に修正を依頼しました。取引先から修正版が届きます。"
   }
 }

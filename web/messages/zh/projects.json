@@ -369,107 +369,201 @@
   "invoicing": {
     "rateCardLapse": "费率卡已失效时",
     "block": "阻止开票",
-    "carry_forward": "按最近一版费率卡开票"
+    "carry_forward": "按最近一版费率卡开票",
+    "customerReview": "开票前的客户审核"
   },
   "wipBilling": {
-    "wipHealthAria": "在产状况",
-    "tiles": {
-      "availableWip": "可用在产",
-      "availableWipSub": "符合条件且未冻结",
-      "over90": "超90天",
-      "over90Sub": "61–90天的{amount}",
-      "realization": "实现",
-      "realizationSub": "已开票{amount}",
-      "leakage": "漏损",
-      "leakageSub": "冻结超90天的{amount}"
-    },
-    "list": {
-      "title": "预开票工作表",
-      "description": "复核符合条件的项目工作、开票调整与审批状态。",
-      "newPrebill": "新建预开票"
+    "toolbar": {
+      "search": "搜索客户、项目、工作表",
+      "board": "看板",
+      "table": "表格",
+      "billRun": "批量预开票"
     },
     "empty": {
-      "noProjectsTitle": "先创建一个项目",
-      "noPrebillsTitle": "尚无预开票工作表",
-      "noProjectsDescription": "在产复核从具有可开票工时或成本的有效项目开始。",
-      "noPrebillsDescription": "创建工作表，按截止日期快照符合条件的未开票项目工作。",
-      "createPrebill": "创建预开票",
-      "goToProjects": "前往项目"
+      "noProjectsTitle": "请先设置可开票的项目类型",
+      "noProjectsDescription": "预开票会根据按工时和成本明细开票的项目类型来准备发票。",
+      "nothingToBillTitle": "暂无可开票内容",
+      "nothingToBillDescription": "项目中已批准的可开票工时和成本会显示在这里，可直接预开票。",
+      "configureProjectTypes": "配置项目类型"
+    },
+    "board": {
+      "aria": "预开票阶段",
+      "showAll": "显示全部 {count} 项"
+    },
+    "stages": {
+      "unbilled": "待预开票",
+      "draft": "草稿",
+      "review": "审批中",
+      "ready": "可开票",
+      "customer": "客户审核中",
+      "invoiced": "已开票",
+      "sent": "已发送",
+      "paid": "已付款",
+      "void": "已作废"
+    },
+    "stageEmpty": {
+      "unbilled": "没有待处理的未开票工作。",
+      "draft": "正在准备的预开票单会显示在这里。",
+      "review": "在收件箱中等待审批的预开票单会显示在这里。",
+      "ready": "已批准、可开票的预开票单会显示在这里。",
+      "customer": "客户正在审核的预开票单会显示在这里。",
+      "invoiced": "待过账或待发送的发票会显示在这里。",
+      "sent": "已发送、等待付款的发票会显示在这里。",
+      "paid": "已付款的发票会显示在这里。"
+    },
+    "card": {
+      "oldest": "最早的工作在 {days} 天前",
+      "prebill": "预开票",
+      "period": "{start} – {end}",
+      "through": "截至 {date}",
+      "lines": "{count} 行",
+      "held": "{count} 行暂缓",
+      "disputed": "{count, plural, =0 {已要求修改} other {# 行有异议}}",
+      "accepted": "已接受",
+      "acceptedPo": "已接受 · 采购订单 {po}",
+      "reviewRequired": "客户审核",
+      "viewed": "已查看",
+      "invoiceDraft": "发票草稿",
+      "readyToSend": "可发送",
+      "open": "未收 {amount}"
     },
     "table": {
+      "stageFilter": "按阶段筛选",
+      "allOpen": "全部未完成",
+      "emptyTitle": "此阶段没有内容",
+      "emptyDescription": "请选择其他阶段或清除搜索。",
       "worksheet": "工作表",
-      "project": "项目",
-      "status": "状态",
-      "proposed": "建议值",
-      "through": "截至{periodEnd}",
-      "noCustomer": "无客户"
+      "customer": "客户",
+      "period": "期间",
+      "stage": "阶段",
+      "amount": "金额",
+      "openBalance": "未收余额"
     },
-    "createDrawer": {
-      "title": "新建预开票工作表",
-      "description": "按截止日期快照符合条件的未开票工作。",
+    "billRun": {
+      "title": "批量预开票",
+      "description": "为每个选定的、在截止日前有未开票工作的项目准备一份预开票草稿。每份预开票单都会在成为发票前经过审核。",
+      "cutoff": "截止日期",
+      "start": "期间开始（可选）",
+      "projects": "项目",
+      "selectAll": "全选",
+      "selectNone": "全不选",
+      "oldest": "最早 {date}",
+      "notes": "备注",
+      "submit": "准备 {count} 份预开票单",
+      "running": "正在准备…",
+      "created": "{count, plural, =0 {未准备任何预开票单} other {已准备 # 份预开票单}}",
+      "skippedTitle": "已跳过",
       "cancel": "取消",
-      "creating": "正在创建…",
-      "submit": "创建预开票",
-      "projectLabel": "项目",
-      "projectHelp": "仅列出采用标准工料实报或成本加成来源开票的有效项目类型。",
-      "configureProjectTypes": "配置项目类型",
-      "startLabel": "开始（可选）",
-      "cutoffLabel": "截止日期",
-      "notesLabel": "复核备注",
-      "notesPlaceholder": "范围、开票说明或复核人背景信息"
-    },
-    "detail": {
-      "description": "{projectName}·截至{periodEnd}",
-      "sendForReview": "送复核",
-      "return": "退回",
-      "approve": "批准",
-      "converting": "正在转换…",
-      "createInvoice": "创建发票",
-      "void": "作废",
-      "openInvoice": "打开{invoiceNumber}"
-    },
-    "workflow": {
-      "returnTitle": "将工作表退回草稿",
-      "voidTitle": "作废工作表",
-      "returnDescription": "说明编制人需要更正的内容，该说明将记入复核轨迹。",
-      "voidDescription": "说明该工作表不得继续的原因，来源在产仍可用于以后的工作表。",
-      "reasonLabel": "原因",
-      "saving": "正在保存…",
-      "returnSubmit": "退回草稿",
-      "voidSubmit": "作废工作表",
-      "cancel": "取消"
-    },
-    "metrics": {
-      "original": "原值",
-      "proposed": "建议值",
-      "adjustment": "调整",
-      "cost": "成本"
-    },
-    "lockedAlert": "该审批快照已锁定。请按批准内容转换，或作废后重新编制工作表。",
-    "linesTable": {
-      "source": "来源",
-      "date": "日期",
-      "description": "说明",
-      "cost": "成本",
-      "original": "原值",
-      "proposedSupport": "建议值 / 依据"
-    },
-    "trail": {
-      "title": "复核轨迹",
-      "system": "系统"
+      "done": "完成"
     },
     "toasts": {
-      "created": "{worksheetNumber}已创建，含{sourceCount}条来源明细",
-      "sentForReview": "已送复核",
-      "approved": "预开票已批准",
-      "returnedToDraft": "已退回草稿",
-      "voided": "预开票已作废",
-      "converted": "{documentNumber}已创建为发票草稿"
+      "submitted": "已提交审批",
+      "approved": "已批准 — 可开票",
+      "reopened": "已重新打开为草稿",
+      "voided": "预开票单已作废",
+      "converted": "已创建发票草稿 {documentNumber}",
+      "sentToCustomer": "已发送给 {to} 审核",
+      "sentNoEmail": "正在客户门户中等待。{error}",
+      "delivered": "发票已发送给 {to}",
+      "deliveredWithBackup": "发票及支持文件已发送给 {to}"
     },
-    "lineToasts": {
-      "saved": "开票金额已保存",
-      "holdApplied": "已应用开票冻结",
-      "holdReleased": "已解除开票冻结"
+    "detail": {
+      "description": "{projectName} · {customerName}",
+      "submit": "提交",
+      "submitting": "正在提交…",
+      "openInbox": "打开收件箱",
+      "sendToCustomer": "发送给客户",
+      "createInvoice": "创建发票",
+      "converting": "正在创建…",
+      "reviewRequiredHint": "此项目类型要求客户在开票前接受预开票单。",
+      "sendInvoice": "发送发票",
+      "resendInvoice": "重新发送发票",
+      "openInvoice": "打开 {invoiceNumber}",
+      "reopen": "重新打开",
+      "void": "作废"
+    },
+    "notice": {
+      "disputed": "{count, plural, =0 {客户已要求修改。} other {客户对 # 行提出异议。}}请调整、暂缓或说明后重新提交。",
+      "inApproval": "此预开票单正在等待审批。审批人在收件箱中处理；被拒绝后会以草稿形式退回这里。",
+      "withCustomer": "已于 {sent} 发送给客户审核，尚未打开。",
+      "withCustomerViewed": "已于 {sent} 发送给客户审核，于 {viewed} 打开。",
+      "postInvoice": "发票 {invoiceNumber} 是草稿。请先过账，然后在这里连同支持文件一起发送。"
+    },
+    "tabs": {
+      "aria": "预开票单分区",
+      "work": "来源工作",
+      "activity": "活动"
+    },
+    "lockedAlert": "预开票单提交后明细即被锁定。如需修改请重新打开，届时需要重新审批。",
+    "preview": {
+      "title": "发票预览",
+      "billTo": "开票给",
+      "project": "项目",
+      "po": "采购订单 {po}",
+      "empty": "没有需要开票的明细。",
+      "subtotal": "小计",
+      "taxNote": "税额在创建发票时计算。"
+    },
+    "metrics": {
+      "original": "标准金额",
+      "adjustment": "调整",
+      "cost": "成本",
+      "margin": "毛利"
+    },
+    "customer": {
+      "accepted": "由 {name} 接受"
+    },
+    "panels": {
+      "reopen": {
+        "title": "重新打开预开票单",
+        "description": "重新打开会将预开票单退回草稿，并撤销其审批和任何客户决定。",
+        "submit": "重新打开"
+      },
+      "void": {
+        "title": "作废预开票单",
+        "description": "作废后其工作会恢复为未开票。工作表及其记录会被保留。",
+        "submit": "作废预开票单"
+      },
+      "send": {
+        "title": "发送给客户审核",
+        "description": "客户在客户门户中审核此账单，然后接受或逐行要求修改。",
+        "submit": "发送审核"
+      },
+      "deliver": {
+        "title": "发送发票",
+        "description": "将已过账的发票连同支持文件通过电子邮件发送给客户。",
+        "submit": "发送发票"
+      },
+      "reason": "原因",
+      "recipient": "电子邮件（可选）",
+      "recipientHelp": "留空则使用客户档案中的电子邮件。",
+      "message": "消息（可选）",
+      "working": "正在处理…",
+      "cancel": "取消"
+    },
+    "events": {
+      "created": "已准备",
+      "line_updated": "已调整明细",
+      "hold_created": "已暂缓明细",
+      "hold_released": "已解除暂缓",
+      "submitted": "已提交",
+      "submit_failed": "审批路由失败",
+      "returned": "已退回草稿",
+      "approved": "已批准",
+      "reopened": "已重新打开",
+      "customer_review_sent": "已发送给客户",
+      "customer_review_emailed": "已发送审核邮件",
+      "customer_review_email_failed": "审核邮件未送达",
+      "customer_viewed": "客户已打开",
+      "customer_accepted": "客户已接受",
+      "customer_disputed": "客户要求修改",
+      "converted": "已创建发票",
+      "delivered": "已发送发票",
+      "voided": "已作废"
+    },
+    "trail": {
+      "system": "系统",
+      "customer": "客户"
     },
     "line": {
       "held": "已冻结",
@@ -486,10 +580,21 @@
       "applyHold": "应用冻结",
       "releaseHold": "解除冻结",
       "releaseReason": "释放原因",
-      "release": "释放"
+      "release": "释放",
+      "customerNote": "客户：{note}"
     },
-    "status": {
-      "converted": "已转换"
+    "linesTable": {
+      "source": "来源",
+      "date": "日期",
+      "description": "说明",
+      "cost": "成本",
+      "original": "原值",
+      "proposedSupport": "建议值 / 依据"
+    },
+    "lineToasts": {
+      "saved": "开票金额已保存",
+      "holdApplied": "已应用开票冻结",
+      "holdReleased": "已解除开票冻结"
     }
   },
   "duplicates": {

@@ -44,6 +44,7 @@ const invoicingProfileSchema = z.strictObject({
   notToExceed: z.boolean().optional(), notToExceedItemId: uuidId.nullable().optional(),
   costSourceKinds: z.array(z.string()).optional(),
   rateCardLapse: z.enum(['block', 'carry_forward']).optional(),
+  customerReview: z.enum(['optional', 'required']).optional(),
   ticketCostScope: z.enum(['ticket_only', 'ticket_or_period']).optional(),
   lineGrouping: z.enum(['per_source_line', 'per_item']).optional(),
   surchargeRounding: z.enum(['half_up', 'down']).optional(), rollup: rollupSchema.optional(),

@@ -3,7 +3,8 @@ import { projectContractCapacityUsed } from '@openbooks/engine/projects/billing-
 export { projectContractCapacityUsed } from '@openbooks/engine/projects/billing-pricing'
 
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/platform/db.ts'
+import { db, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
+import { appBaseUrl, runRecordFlows, WIP_PREBILL_SUBJECT_KIND } from '@openbooks/engine/flows'
 import { businessToday, isIsoCalendarDate } from '@openbooks/engine/src/platform/business-date.ts'
 import { add, allocateLargestRemainder, cmp, mul, mulPercent, normalizeMoney, sum } from '@openbooks/engine/src/money/money.ts'
 import { documentRevisionCounterSql, isDocumentRevisionToken } from '@openbooks/engine/src/records/revision.ts'
@@ -15,6 +16,23 @@ import {
 } from '@openbooks/engine/src/tax/persist.ts'
 import { nextDocumentNumber } from "./bills.ts";
 import { acquireFeatureGateLock, isFeatureEnabled } from './features'
+import {
+  PORTAL_ACTOR_ID,
+  PORTAL_REVIEW_INVITE_TTL_DAYS,
+  currentBillingReviewDigest,
+  issuePortalReviewInvite,
+  recordPortalEvent,
+} from '@openbooks/engine/portal'
+import { billingReviewRequestEmail, deriveEmailDeliveryKey, sendVia } from '@openbooks/emails'
+import {
+  insertEmailLog,
+  markEmailFailed,
+  markEmailSent,
+  markEmailUncertain,
+  resolveOrgEmailTransport,
+} from '@openbooks/engine/delivery/email-config'
+import { createMoneyFormatter } from './money-format'
+
 import { lockAndCheckOrgFeature } from '@openbooks/engine/src/organization/org-feature-lock.ts'
 import {
   lockProjectForScope,
@@ -30,9 +48,11 @@ import {
   sourceLinePrebillingReason,
   type WipPolicyVersion,
 } from './wip-billing-policy'
+import { prebillStage, type PrebillStage } from './pre-billing-stages'
+export { PREBILL_STAGES, prebillStage, type PrebillStage } from './pre-billing-stages'
 
 export type WipSourceType = 'time_entry' | 'document_line'
-export type PrebillStatus = 'draft' | 'review' | 'approved' | 'converted' | 'void'
+export type PrebillStatus = 'draft' | 'review' | 'approved' | 'customer_review' | 'converted' | 'void'
 
 export class WipBillingError extends Error {
   constructor(message: string, readonly status = 422) {
@@ -46,14 +66,14 @@ async function assertWipBillingEnabled(orgId: string): Promise<void> {
     isFeatureEnabled(orgId, 'projects'),
     isFeatureEnabled(orgId, 'wipBilling'),
   ])
-  if (!projects || !wipBilling) throw new WipBillingError('WIP Billing feature is disabled', 404)
+  if (!projects || !wipBilling) throw new WipBillingError('Pre-billing is turned off — enable it on Company Settings → Features', 404)
 }
 
 async function assertWipBillingEnabledTx(tx: Executor, orgId: string): Promise<void> {
   await acquireFeatureGateLock(orgId, tx)
   const projects = await lockAndCheckOrgFeature(tx, orgId, 'projects')
   const wipBilling = await lockAndCheckOrgFeature(tx, orgId, 'wipBilling')
-  if (!projects || !wipBilling) throw new WipBillingError('WIP Billing feature is disabled', 404)
+  if (!projects || !wipBilling) throw new WipBillingError('Pre-billing is turned off — enable it on Company Settings → Features', 404)
 }
 
 const INVENTORY_ITEM_KINDS = new Set(['inventory', 'assembly', 'kit'])
@@ -106,6 +126,25 @@ export type PrebillListRow = {
   invoiceDocumentId: string | null
   invoiceNumber: string | null
   createdAt: string
+  /** Where the worksheet sits on the pre-billing board; see prebillStage. */
+  stage: PrebillStage
+  projectTypeName: string | null
+  lineCount: number
+  heldLineCount: number
+  disputedLineCount: number
+  /** The project type requires customer acceptance before invoicing. */
+  customerReviewRequired: boolean
+  customerReviewSentAt: string | null
+  customerDecision: 'accepted' | 'disputed' | null
+  customerDecidedAt: string | null
+  customerSignerName: string | null
+  customerDecisionNote: string | null
+  customerPoNumber: string | null
+  customerViewedAt: string | null
+  invoiceStatus: string | null
+  invoiceTotal: string | null
+  invoiceOpenBalance: string | null
+  deliveredAt: string | null
 };
 
 export type PrebillLineRow = {
@@ -129,6 +168,7 @@ export type PrebillLineRow = {
   holdId: string | null
   holdReason: string | null
   pricingSnapshot: Record<string, unknown>
+  customerDisputeNote: string | null
   /** Opaque optimistic-concurrency token: the line's canonical revision when read. */
   updatedAt: string
 };
@@ -177,6 +217,7 @@ interface WipPrebillHeaderRow extends Record<string, unknown> {
   notes: string | null
   custom: Record<string, unknown> | null
   invoice_document_id: string | null
+  customer_decision: string | null
 }
 
 /** One convertible wip_prebill_lines row plus its hold flag. */
@@ -619,6 +660,7 @@ export async function createPrebill(orgId: string, actorId: string, input: Creat
       totalPriceMethod: cutoffPolicy.financialProfile.totalPrice.method,
       contractCap: remainingCap == null ? null : policy.contractValue,
       remainingCapAtCreation: remainingCap,
+      customerReview: policy.invoicingProfile.customerReview ?? 'optional',
     }
     const created = (await tx.execute<{ id: string; worksheetNumber: string }>(sql`
       insert into wip_prebills (
@@ -670,14 +712,17 @@ export async function createPrebill(orgId: string, actorId: string, input: Creat
   })
 }
 
+type PrebillListSqlRow = Omit<PrebillListRow, 'stage' | 'customerReviewRequired'> & { customerReview: string | null }
+
 export async function listPrebills(orgId: string, projectId?: string, scope: SubsidiaryScope = null): Promise<PrebillListRow[]> {
   await assertWipBillingEnabled(orgId)
-  const result = (await db.execute<PrebillListRow>(sql`
+  const result = (await db.execute<PrebillListSqlRow>(sql`
     select worksheet.id,
            worksheet.worksheet_number as "worksheetNumber",
            worksheet.project_id as "projectId",
            project.name as "projectName",
            customer.display_name as "customerName",
+           type.name as "projectTypeName",
            worksheet.period_start::text as "periodStart",
            worksheet.period_end::text as "periodEnd",
            worksheet.status,
@@ -688,17 +733,52 @@ export async function listPrebills(orgId: string, projectId?: string, scope: Sub
            worksheet.billing_request_id as "billingRequestId",
            worksheet.invoice_document_id as "invoiceDocumentId",
            invoice.document_number as "invoiceNumber",
-           worksheet.created_at as "createdAt"
+           invoice.status as "invoiceStatus",
+           invoice.total::text as "invoiceTotal",
+           invoice.open_balance::text as "invoiceOpenBalance",
+           worksheet.created_at as "createdAt",
+           coalesce(lines.bill_lines, 0) as "lineCount",
+           coalesce(lines.held_lines, 0) as "heldLineCount",
+           coalesce(lines.disputed_lines, 0) as "disputedLineCount",
+           worksheet.custom #>> '{policy,customerReview}' as "customerReview",
+           worksheet.customer_review_sent_at as "customerReviewSentAt",
+           worksheet.customer_decision as "customerDecision",
+           worksheet.customer_decided_at as "customerDecidedAt",
+           worksheet.customer_signer_name as "customerSignerName",
+           worksheet.customer_decision_note as "customerDecisionNote",
+           worksheet.customer_po_number as "customerPoNumber",
+           worksheet.customer_viewed_at as "customerViewedAt",
+           worksheet.delivered_at as "deliveredAt"
       from wip_prebills worksheet
       join projects project on project.org_id = worksheet.org_id and project.id = worksheet.project_id
+      left join project_types type on type.org_id = project.org_id and type.id = project.project_type_id
       left join parties customer on customer.org_id = project.org_id and customer.id = project.customer_id
       left join documents invoice on invoice.org_id = worksheet.org_id and invoice.id = worksheet.invoice_document_id
+      left join lateral (
+        select count(*) filter (where line.disposition = 'bill')::int as bill_lines,
+               count(*) filter (where line.disposition = 'hold')::int as held_lines,
+               count(*) filter (where nullif(btrim(line.customer_dispute_note), '') is not null)::int as disputed_lines
+          from wip_prebill_lines line
+         where line.org_id = worksheet.org_id and line.prebill_id = worksheet.id
+      ) lines on true
      where worksheet.org_id = ${orgId}
        and (${projectId ?? null}::uuid is null or worksheet.project_id = ${projectId ?? null})
        ${subsidiaryVisibleFilter(sql`project.subsidiary_id`, scope)}
      order by worksheet.created_at desc
   `))
-  return result.rows
+  // Instants leave as ISO strings: the board and the portal-facing notices
+  // render them client side, and node-pg hands timestamptz back as Date.
+  const iso = (value: unknown): string | null => value == null ? null : value instanceof Date ? value.toISOString() : String(value)
+  return result.rows.map(({ customerReview, ...row }) => ({
+    ...row,
+    createdAt: iso(row.createdAt)!,
+    customerReviewSentAt: iso(row.customerReviewSentAt),
+    customerDecidedAt: iso(row.customerDecidedAt),
+    customerViewedAt: iso(row.customerViewedAt),
+    deliveredAt: iso(row.deliveredAt),
+    stage: prebillStage(row),
+    customerReviewRequired: customerReview === 'required',
+  }))
 }
 
 export async function loadPrebill(orgId: string, id: string, scope: SubsidiaryScope = null): Promise<PrebillDetail | null> {
@@ -729,6 +809,7 @@ export async function loadPrebill(orgId: string, id: string, scope: SubsidiarySc
              line.adjustment_reason as "adjustmentReason",
              line.adjustment_evidence as "adjustmentEvidence",
              line.pricing_snapshot as "pricingSnapshot", line.disposition,
+             line.customer_dispute_note as "customerDisputeNote",
              ${documentRevisionCounterSql(sql`line.revision_seq`)} as "updatedAt",
              hold.id as "holdId", hold.reason as "holdReason"
         from wip_prebill_lines line
@@ -970,92 +1051,243 @@ export async function releaseWipHold(orgId: string, actorId: string, holdId: str
   })
 }
 
+type LockedPrebillHeader = {
+  status: PrebillStatus
+  submitted_by: string | null
+  created_by: string | null
+  project_id: string
+  period_end: string
+  custom: { policy?: { totalPriceMethod?: string; customerReview?: string } }
+}
+
+/**
+ * Lock a worksheet and its project for a lifecycle change, rechecking the
+ * caller's subsidiary scope under the project lock: the worksheet lock alone
+ * does not stop a concurrent A→B rehome from moving the change onto B.
+ */
+async function lockPrebillForLifecycle(tx: Tx, orgId: string, id: string, scope: SubsidiaryScope): Promise<LockedPrebillHeader> {
+  const header = (await tx.execute<LockedPrebillHeader>(sql`
+    select worksheet.status, worksheet.submitted_by, worksheet.created_by, worksheet.project_id,
+           worksheet.period_end::text as period_end, worksheet.custom
+      from wip_prebills worksheet
+      join projects project on project.org_id = worksheet.org_id and project.id = worksheet.project_id
+     where worksheet.org_id = ${orgId} and worksheet.id = ${id}
+       ${subsidiaryVisibleFilter(sql`project.subsidiary_id`, scope)}
+     for update of worksheet
+  `)).rows[0]
+  if (!header) throw new WipBillingError('Prebill not found', 404)
+  try {
+    await lockProjectForScope(tx, orgId, header.project_id, scope)
+  } catch (error) {
+    if (error instanceof ScopeNotFoundError) throw new WipBillingError('Prebill not found', 404)
+    throw error
+  }
+  return header
+}
+
+/**
+ * The commercial invariants a worksheet must hold to be submitted or
+ * approved: at least one line to bill, every write-up and write-down
+ * supported by a reason and evidence, and — under a not-to-exceed policy —
+ * a total inside the remaining contract capacity.
+ */
+async function assertPrebillApprovable(
+  tx: Tx,
+  orgId: string,
+  id: string,
+  header: LockedPrebillHeader,
+  scope: SubsidiaryScope,
+): Promise<void> {
+  const current = (await tx.execute<{ bill_lines: number; proposed_total: string; unsupported_adjustments: number }>(sql`
+    select count(*) filter (where disposition = 'bill')::int as bill_lines,
+           coalesce(sum(proposed_bill_amount) filter (where disposition = 'bill'), 0)::text as proposed_total,
+           count(*) filter (
+             where disposition = 'bill'
+               and proposed_bill_amount <> original_bill_amount
+               and (nullif(trim(adjustment_reason), '') is null
+                 or jsonb_array_length(adjustment_evidence) = 0)
+           )::int as unsupported_adjustments
+      from wip_prebill_lines
+     where org_id = ${orgId} and prebill_id = ${id}
+  `)).rows[0]!
+  if (current.bill_lines === 0) throw new WipBillingError('A prebill must contain at least one billable line')
+  if (current.unsupported_adjustments > 0) {
+    throw new WipBillingError('Every write-up and write-down requires a reason and evidence')
+  }
+  if (header.custom?.policy?.totalPriceMethod === 'not_to_exceed'
+      || (await currentPolicyIsNte(tx, orgId, header.project_id, header.period_end))) {
+    const policy = await loadProjectPolicy(tx, orgId, header.project_id, true, scope)
+    const capacity = await remainingContractCapacity(tx, orgId, policy, header.period_end, id)
+    if (capacity != null && cmp(current.proposed_total, capacity) > 0) {
+      throw new WipBillingError(`Prebill exceeds the remaining not-to-exceed capacity of ${capacity}`)
+    }
+  }
+}
+
+async function openApprovalGateCount(tx: Tx, orgId: string, id: string): Promise<number> {
+  return (await tx.execute<{ n: number }>(sql`
+    select count(*)::int as n from flow_gates
+     where org_id = ${orgId} and subject_kind = ${WIP_PREBILL_SUBJECT_KIND}
+       and subject_id = ${id} and status in ('pending', 'escalated')
+  `)).rows[0]?.n ?? 0
+}
+
+/** Clear any earlier customer decision so a new review starts clean. */
+const CLEAR_CUSTOMER_DECISION = sql`
+  customer_review_sent_at = null, customer_review_sent_by = null, customer_review_digest = null,
+  customer_decision = null, customer_decided_at = null, customer_signer_name = null,
+  customer_decision_note = null`
+
+/**
+ * Submit a draft through Flows. An enabled tenant-authored on_submit flow may
+ * raise approval gates, which park the worksheet in review until they
+ * resolve; when none does, the worksheet approves immediately. There is no
+ * default approver and no approval path outside Flows.
+ */
+async function submitPrebill(orgId: string, actorId: string, id: string, scope: SubsidiaryScope) {
+  const outcome = await withOrgTransaction(orgId, async () => db.transaction(async (tx) => {
+    await assertWipBillingEnabledTx(tx, orgId)
+    const header = await lockPrebillForLifecycle(tx, orgId, id, scope)
+    if (header.status !== 'draft') throw new WipBillingError(`Cannot submit a ${header.status} prebill`)
+    await assertPrebillApprovable(tx, orgId, id, header, scope)
+    await tx.execute(sql`
+      update wip_prebills
+         set status = 'review', submitted_at = now(), submitted_by = ${actorId},
+             updated_at = now(), updated_by = ${actorId}
+       where org_id = ${orgId} and id = ${id}
+    `)
+    await appendEvent(tx, orgId, id, actorId, 'submitted')
+    await audit(tx, orgId, 'wip_prebills', id, actorId, { before: { status: 'draft' }, after: { status: 'review' } })
+
+    const routed = await runRecordFlows(
+      { kind: 'on_submit', source: 'ui' },
+      WIP_PREBILL_SUBJECT_KIND,
+      id,
+      { orgId, userId: actorId, allowedSubsidiaryIds: scope },
+    )
+    if (routed.failed) {
+      // Keep the failed run (retryable once its flow is fixed) and the
+      // worksheet in draft: a submission whose approval routing failed must
+      // never be treated as "no approval required".
+      await tx.execute(sql`
+        update wip_prebills set status = 'draft', updated_at = now(), updated_by = ${actorId}
+         where org_id = ${orgId} and id = ${id}
+      `)
+      await appendEvent(tx, orgId, id, actorId, 'submit_failed', { reason: routed.error })
+      return { status: 'draft' as PrebillStatus, flowError: routed.error ?? 'The approval workflow could not run' }
+    }
+    if (routed.gatesCreated > 0) return { status: 'review' as PrebillStatus, flowError: null }
+    await approvePrebillInTx(tx, orgId, actorId, id, 'submit_without_approval_flow', scope)
+    return { status: 'approved' as PrebillStatus, flowError: null }
+  }))
+  if (outcome.flowError) {
+    throw new WipBillingError(`${outcome.flowError} — fix or disable the approval flow in Flows, then submit again`)
+  }
+  return { id, status: outcome.status }
+}
+
+async function approvePrebillInTx(
+  tx: Tx,
+  orgId: string,
+  actorId: string,
+  id: string,
+  source: 'flows' | 'submit_without_approval_flow',
+  scope: SubsidiaryScope,
+) {
+  const header = await lockPrebillForLifecycle(tx, orgId, id, scope)
+  if (header.status === 'approved') return
+  if (header.status !== 'review') throw new WipBillingError(`Cannot approve a ${header.status} prebill`)
+  await assertPrebillApprovable(tx, orgId, id, header, scope)
+  const updated = await tx.execute(sql`
+    update wip_prebills
+       set status = 'approved', approved_at = now(), approved_by = ${actorId},
+           updated_at = now(), updated_by = ${actorId}
+     where org_id = ${orgId} and id = ${id} and status = 'review'
+  `)
+  if ((updated.rowCount ?? 0) !== 1) throw new WipBillingError('The prebill changed while approving; reload and try again', 409)
+  await appendEvent(tx, orgId, id, actorId, 'approved', { source })
+  await audit(tx, orgId, 'wip_prebills', id, actorId, { before: { status: 'review' }, after: { status: 'approved' }, source })
+}
+
+/**
+ * Deterministic approval release, called by Flows when every gate on the
+ * worksheet has resolved. Runs inside the gate decision's transaction, so the
+ * worksheet's status and the gate decision commit or roll back together.
+ * Approval rechecks the worksheet's commercial invariants; rejection returns
+ * it to draft with the approver's reason.
+ */
+export async function releasePrebillApproval(
+  orgId: string,
+  actorId: string,
+  id: string,
+  outcome: 'approved' | 'rejected',
+  comment?: string | null,
+) {
+  return db.transaction(async (tx) => {
+    await assertWipBillingEnabledTx(tx, orgId)
+    if (outcome === 'approved') {
+      // Flows has already authorized the approver against the subject's
+      // scope; the release acts under that grant, unrestricted by sentinel.
+      await approvePrebillInTx(tx, orgId, actorId, id, 'flows', null)
+      return
+    }
+    const header = await lockPrebillForLifecycle(tx, orgId, id, null)
+    if (header.status !== 'review') throw new WipBillingError(`Cannot return a ${header.status} prebill`)
+    const reason = comment?.trim() || 'Returned in approval flow'
+    await tx.execute(sql`
+      update wip_prebills set status = 'draft', updated_at = now(), updated_by = ${actorId}
+       where org_id = ${orgId} and id = ${id}
+    `)
+    await appendEvent(tx, orgId, id, actorId, 'returned', { source: 'flows', reason })
+    await audit(tx, orgId, 'wip_prebills', id, actorId, { before: { status: 'review' }, after: { status: 'draft' }, reason })
+  })
+}
+
 export async function transitionPrebill(
   orgId: string,
   actorId: string,
   id: string,
-  action: 'submit' | 'return' | 'approve' | 'void',
+  action: 'submit' | 'reopen' | 'void',
   reason?: string,
   scope: SubsidiaryScope = null,
 ) {
-  const transitions: Record<typeof action, { from: PrebillStatus[]; to: PrebillStatus; event: string }> = {
-    submit: { from: ['draft'], to: 'review', event: 'submitted' },
-    return: { from: ['review'], to: 'draft', event: 'returned' },
-    approve: { from: ['review'], to: 'approved', event: 'approved' },
-    void: { from: ['draft', 'review', 'approved'], to: 'void', event: 'voided' },
-  }
-  const rule = transitions[action]
-  if ((action === 'return' || action === 'void') && !reason?.trim()) {
-    throw new WipBillingError('A reason is required')
-  }
+  if (action === 'submit') return submitPrebill(orgId, actorId, id, scope)
+  if (!reason?.trim()) throw new WipBillingError('A reason is required')
+  const cleanReason = reason.trim()
   return db.transaction(async (tx) => {
     await assertWipBillingEnabledTx(tx, orgId)
-    const locked = (await tx.execute<{ status: PrebillStatus; submitted_by: string | null; created_by: string | null; project_id: string; period_end: string; custom: { policy?: { totalPriceMethod?: string } } }>(sql`
-      select worksheet.status, worksheet.submitted_by, worksheet.created_by, worksheet.project_id,
-             worksheet.period_end::text as period_end, worksheet.custom
-        from wip_prebills worksheet
-        join projects project on project.org_id = worksheet.org_id and project.id = worksheet.project_id
-       where worksheet.org_id = ${orgId} and worksheet.id = ${id}
-         ${subsidiaryVisibleFilter(sql`project.subsidiary_id`, scope)}
-       for update of worksheet
-    `))
-    const header = locked.rows[0]
-    if (!header) throw new WipBillingError('Prebill not found', 404)
-    // Same rehome race as the line path: the worksheet lock above pins the
-    // worksheet, not its project — lock and recheck before transitioning.
-    try {
-      await lockProjectForScope(tx, orgId, header.project_id, scope)
-    } catch (error) {
-      if (error instanceof ScopeNotFoundError) throw new WipBillingError('Prebill not found', 404)
-      throw error
+    const header = await lockPrebillForLifecycle(tx, orgId, id, scope)
+    if (header.status === 'review' && (await openApprovalGateCount(tx, orgId, id)) > 0) {
+      throw new WipBillingError('This prebill is awaiting approval in Inbox — reject it there to return it to draft')
     }
-    const current = (await tx.execute<{ bill_lines: number; proposed_total: string; unsupported_adjustments: number }>(sql`
-      select count(*) filter (where disposition = 'bill')::int as bill_lines,
-             coalesce(sum(proposed_bill_amount) filter (where disposition = 'bill'), 0)::text as proposed_total,
-             count(*) filter (
-               where disposition = 'bill'
-                 and proposed_bill_amount <> original_bill_amount
-                 and (nullif(trim(adjustment_reason), '') is null
-                   or jsonb_array_length(adjustment_evidence) = 0)
-             )::int as unsupported_adjustments
-        from wip_prebill_lines
-       where org_id = ${orgId} and prebill_id = ${id}
-    `))
-    const worksheet = { ...header, ...current.rows[0]! }
-    if (!rule.from.includes(worksheet.status)) throw new WipBillingError(`Cannot ${action} a ${worksheet.status} prebill`)
-    if (action === 'approve' && (header.submitted_by ?? header.created_by) === actorId) {
-      throw new WipBillingError('The submitter cannot approve this prebill')
-    }
-    if (action === 'submit' && worksheet.bill_lines === 0) throw new WipBillingError('A prebill must contain at least one billable line')
-    if ((action === 'submit' || action === 'approve') && worksheet.unsupported_adjustments > 0) {
-      throw new WipBillingError('Every write-up and write-down requires a reason and evidence')
-    }
-    if ((action === 'submit' || action === 'approve')
-        && (header.custom?.policy?.totalPriceMethod === 'not_to_exceed'
-          || (await currentPolicyIsNte(tx, orgId, header.project_id, header.period_end)))) {
-      // Same rehome race as the line path: the header lock above does not
-      // pin the project, so lock and recheck it here before transitioning.
-      const policy = await loadProjectPolicy(tx, orgId, header.project_id, true, scope)
-      const capacity = await remainingContractCapacity(tx, orgId, policy, header.period_end, id)
-      if (capacity != null && cmp(worksheet.proposed_total, capacity) > 0) {
-        throw new WipBillingError(`Prebill exceeds the remaining not-to-exceed capacity of ${capacity}`)
+    if (action === 'reopen') {
+      // Reopening discards approval and any customer decision: the edited
+      // worksheet goes through approval (and review, if used) again.
+      if (!['review', 'approved', 'customer_review'].includes(header.status)) {
+        throw new WipBillingError(`Cannot reopen a ${header.status} prebill`)
       }
+      await tx.execute(sql`
+        update wip_prebills
+           set status = 'draft', approved_at = null, approved_by = null, ${CLEAR_CUSTOMER_DECISION},
+               updated_at = now(), updated_by = ${actorId}
+         where org_id = ${orgId} and id = ${id}
+      `)
+      await appendEvent(tx, orgId, id, actorId, 'reopened', { reason: cleanReason, from: header.status })
+      await audit(tx, orgId, 'wip_prebills', id, actorId, { before: { status: header.status }, after: { status: 'draft' }, reason: cleanReason })
+      return { id, status: 'draft' as PrebillStatus }
     }
-    const workflowColumns = action === 'submit'
-      ? sql`, submitted_at = now(), submitted_by = ${actorId}`
-      : action === 'approve'
-        ? sql`, approved_at = now(), approved_by = ${actorId}`
-        : action === 'void'
-          ? sql`, voided_at = now(), voided_by = ${actorId}, void_reason = ${reason!.trim()}`
-          : sql``
+    if (!['draft', 'review', 'approved', 'customer_review'].includes(header.status)) {
+      throw new WipBillingError(`Cannot void a ${header.status} prebill`)
+    }
     await tx.execute(sql`
       update wip_prebills
-         set status = ${rule.to}, updated_at = now(), updated_by = ${actorId}${workflowColumns}
+         set status = 'void', voided_at = now(), voided_by = ${actorId}, void_reason = ${cleanReason},
+             updated_at = now(), updated_by = ${actorId}
        where org_id = ${orgId} and id = ${id}
     `)
-    await appendEvent(tx, orgId, id, actorId, rule.event, reason?.trim() ? { reason: reason.trim() } : {})
-    await audit(tx, orgId, 'wip_prebills', id, actorId, { before: { status: worksheet.status }, after: { status: rule.to }, reason: reason?.trim() })
-    return { id, status: rule.to }
+    await appendEvent(tx, orgId, id, actorId, 'voided', { reason: cleanReason })
+    await audit(tx, orgId, 'wip_prebills', id, actorId, { before: { status: header.status }, after: { status: 'void' }, reason: cleanReason })
+    return { id, status: 'void' as PrebillStatus }
   })
 }
 
@@ -1081,11 +1313,16 @@ export async function convertPrebill(orgId: string, actorId: string, id: string,
   if (observed.status === 'converted' && observed.invoice_id) {
     return { id: observed.invoice_id, documentNumber: observed.invoice_number!, idempotent: true }
   }
+  if (observed.status === 'customer_review') {
+    throw new WipBillingError('This prebill is with the customer for review — wait for their decision, or reopen it')
+  }
   if (observed.status !== 'approved') throw new WipBillingError('Only an approved prebill can be converted')
   return db.transaction(async (tx) => {
     await assertWipBillingEnabledTx(tx, orgId)
     const header = (await tx.execute<WipPrebillHeaderRow>(sql`
-      select worksheet.*, project.customer_id, project.customer_po_number, project.subsidiary_id,
+      select worksheet.*, project.customer_id,
+             coalesce(nullif(btrim(worksheet.customer_po_number), ''), project.customer_po_number) as customer_po_number,
+             project.subsidiary_id,
              project.name as project_name, type.billing_method,
              coalesce(subsidiary.base_currency, org.base_currency) as currency
         from wip_prebills worksheet
@@ -1113,8 +1350,15 @@ export async function convertPrebill(orgId: string, actorId: string, id: string,
       `))
       return { id: worksheet.invoice_document_id, documentNumber: invoice.rows[0]!.document_number, idempotent: true }
     }
+    if (worksheet.status === 'customer_review') {
+      throw new WipBillingError('This prebill is with the customer for review — wait for their decision, or reopen it')
+    }
     if (worksheet.status !== 'approved') throw new WipBillingError('Only an approved prebill can be converted')
     if (!worksheet.customer_id) throw new WipBillingError('The project has no customer to invoice')
+    if ((worksheet.custom?.policy as { customerReview?: string } | undefined)?.customerReview === 'required'
+        && worksheet.customer_decision !== 'accepted') {
+      throw new WipBillingError('This project type requires customer acceptance before invoicing — send the prebill to the customer first')
+    }
     if (!worksheet.currency) throw new WipBillingError('The project subsidiary has no functional currency')
     const policySnapshot = worksheet.custom?.policy as {
       billingProcedure?: string
@@ -1511,4 +1755,534 @@ export async function listWipProjects(orgId: string, scope: SubsidiaryScope = nu
   return result.rows.flatMap((row) => sourceLinePrebillingReason(row.invoicingProfile) == null
     ? [{ id: row.id, name: row.name, customerName: row.customerName, projectTypeName: row.projectTypeName, lineBuilder: row.invoicingProfile.lineBuilder }]
     : [])
+}
+
+// ---------------------------------------------------------------------------
+// Customer review, delivery and bill runs
+// ---------------------------------------------------------------------------
+
+/** Whether an enabled flow routes pre-billing approvals for this organization. */
+export async function prebillApprovalFlowsConfigured(orgId: string): Promise<boolean> {
+  const row = (await db.execute<{ configured: boolean }>(sql`
+    select exists (
+      select 1 from flows
+       where org_id = ${orgId} and subject_kind = ${WIP_PREBILL_SUBJECT_KIND} and enabled
+    ) as configured
+  `)).rows[0]
+  return row?.configured === true
+}
+
+export interface SendPrebillToCustomerInput {
+  to?: string | null
+  message?: string | null
+}
+
+export interface SendPrebillToCustomerResult {
+  id: string
+  status: PrebillStatus
+  emailed: boolean
+  recipient: string
+  emailError: string | null
+}
+
+type CustomerReviewContext = {
+  customer_id: string | null
+  customer_name: string | null
+  customer_email: string | null
+  project_name: string
+  worksheet_number: string
+  period_start: string | null
+  period_end: string
+  proposed_bill_amount: string
+  currency: string | null
+  customer_decision: string | null
+}
+
+async function customerRecipientEmail(tx: Tx, orgId: string, customerId: string): Promise<string | null> {
+  const row = (await tx.execute<{ email: string | null }>(sql`
+    select coalesce(
+      nullif(btrim(party.email), ''),
+      (select nullif(btrim(contact.email), '') from contacts contact
+        where contact.org_id = party.org_id and contact.party_id = party.id
+          and contact.is_active and nullif(btrim(contact.email), '') is not null
+        order by contact.is_primary desc, contact.created_at
+        limit 1)
+    ) as email
+      from parties party
+     where party.org_id = ${orgId} and party.id = ${customerId}
+  `)).rows[0]
+  return row?.email ?? null
+}
+
+/**
+ * Send an approved worksheet to its customer for review in the customer
+ * portal. The worksheet freezes in `customer_review` with a fingerprint of
+ * exactly what the customer is shown; the customer then accepts it (which
+ * returns it to approved, ready to invoice) or disputes lines (which returns
+ * it to draft). The invitation email is sent after the state commits: an
+ * email failure leaves the review open in the portal and is reported, never
+ * rolled into a silent success.
+ */
+export async function sendPrebillToCustomer(
+  orgId: string,
+  actorId: string,
+  id: string,
+  input: SendPrebillToCustomerInput,
+  scope: SubsidiaryScope = null,
+): Promise<SendPrebillToCustomerResult> {
+  if (!(await isFeatureEnabled(orgId, 'customerPortal'))) {
+    throw new WipBillingError('Customer review runs in the customer portal — turn on Customer portal on Company Settings → Features first')
+  }
+  const prepared = await withOrgTransaction(orgId, async () => db.transaction(async (tx) => {
+    await assertWipBillingEnabledTx(tx, orgId)
+    const header = await lockPrebillForLifecycle(tx, orgId, id, scope)
+    if (header.status !== 'approved') {
+      throw new WipBillingError(`Only an approved prebill can be sent for customer review; this one is ${header.status}`)
+    }
+    const context = (await tx.execute<CustomerReviewContext>(sql`
+      select project.customer_id, customer.display_name as customer_name, null::text as customer_email,
+             project.name as project_name, worksheet.worksheet_number,
+             worksheet.period_start::text as period_start, worksheet.period_end::text as period_end,
+             worksheet.proposed_bill_amount::text as proposed_bill_amount,
+             coalesce(subsidiary.base_currency, org.base_currency) as currency,
+             worksheet.customer_decision
+        from wip_prebills worksheet
+        join projects project on project.org_id = worksheet.org_id and project.id = worksheet.project_id
+        join orgs org on org.id = worksheet.org_id
+        left join subsidiaries subsidiary on subsidiary.org_id = project.org_id and subsidiary.id = project.subsidiary_id
+        left join parties customer on customer.org_id = project.org_id and customer.id = project.customer_id
+       where worksheet.org_id = ${orgId} and worksheet.id = ${id}
+    `)).rows[0]!
+    if (!context.customer_id) throw new WipBillingError('The project has no customer to review this billing')
+    if (context.customer_decision === 'accepted') {
+      throw new WipBillingError('The customer has already accepted this prebill — create the invoice')
+    }
+    if (!context.currency) throw new WipBillingError('The project subsidiary has no functional currency')
+    const recipient = input.to?.trim() || (await customerRecipientEmail(tx, orgId, context.customer_id))
+    if (!recipient) {
+      throw new WipBillingError('The customer has no email address — add one to the customer or a contact, or enter one when sending')
+    }
+    const digest = await currentBillingReviewDigest(orgId, id, tx)
+    if (!digest) throw new WipBillingError('Prebill not found', 404)
+    const updated = await tx.execute(sql`
+      update wip_prebills
+         set status = 'customer_review',
+             customer_decision = null, customer_decided_at = null, customer_signer_name = null,
+             customer_decision_note = null,
+             customer_review_sent_at = now(), customer_review_sent_by = ${actorId},
+             customer_review_digest = ${digest}, customer_viewed_at = null,
+             updated_at = now(), updated_by = ${actorId}
+       where org_id = ${orgId} and id = ${id} and status = 'approved'
+    `)
+    if ((updated.rowCount ?? 0) !== 1) throw new WipBillingError('The prebill changed while sending; reload and try again', 409)
+    await tx.execute(sql`
+      update wip_prebill_lines set customer_dispute_note = null
+       where org_id = ${orgId} and prebill_id = ${id} and customer_dispute_note is not null
+    `)
+    const invite = await issuePortalReviewInvite(orgId, context.customer_id, recipient, tx)
+    await appendEvent(tx, orgId, id, actorId, 'customer_review_sent', { digest })
+    await audit(tx, orgId, 'wip_prebills', id, actorId, {
+      before: { status: 'approved' },
+      after: { status: 'customer_review', customerReviewDigest: digest },
+    })
+    return { context, recipient, token: invite.token }
+  }))
+
+  const { context, recipient, token } = prepared
+  const transport = await resolveOrgEmailTransport(orgId)
+  const orgName = (await db.execute<{ name: string; portal_name: string | null }>(sql`
+    select org.name,
+           (select settings.portal_name from customer_portal_settings settings
+             where settings.org_id = org.id and settings.effective_from <= current_date
+             order by settings.effective_from desc limit 1) as portal_name
+      from orgs org where org.id = ${orgId}
+  `)).rows[0]
+  let emailError: string | null = null
+  if (!transport) {
+    emailError = 'Email delivery is not configured — set it up in Admin → Email; the review is waiting in the customer portal'
+  } else {
+    const mail = billingReviewRequestEmail({
+      orgName: orgName?.name ?? 'OpenBooks',
+      portalName: orgName?.portal_name ?? 'Customer portal',
+      partyName: context.customer_name,
+      reference: context.worksheet_number,
+      projectName: context.project_name,
+      periodLabel: context.period_start ? `${context.period_start} – ${context.period_end}` : `work through ${context.period_end}`,
+      amount: createMoneyFormatter('en', context.currency!).money(context.proposed_bill_amount),
+      reviewUrl: `${appBaseUrl()}/portal/${token}?review=${id}`,
+      expiresDays: PORTAL_REVIEW_INVITE_TTL_DAYS,
+      message: input.message ?? undefined,
+    })
+    const logId = await insertEmailLog({
+      orgId,
+      recipients: [recipient],
+      subject: mail.subject,
+      status: 'queued',
+      categoryKey: 'portal',
+      meta: { event: 'billing_review_request', prebillId: id },
+      actor: { kind: 'user', userId: actorId },
+    })
+    try {
+      const outcome = await sendVia(transport, { to: recipient, subject: mail.subject, html: mail.html, text: mail.text }, {
+        deliveryKey: deriveEmailDeliveryKey({ orgId, scope: `direct:${logId}`, to: recipient }),
+      })
+      if (outcome.kind === 'sent') {
+        await markEmailSent(orgId, logId, outcome.providerMessageId)
+      } else {
+        await markEmailUncertain(orgId, logId, outcome.reason)
+        emailError = `The email provider did not confirm delivery (${outcome.reason}); the review is waiting in the customer portal`
+      }
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error)
+      await markEmailFailed(orgId, logId, reason)
+      emailError = `The review email could not be sent (${reason}); the review is waiting in the customer portal`
+    }
+    await withOrgTransaction(orgId, async () => db.transaction(async (tx) => {
+      await appendEvent(tx, orgId, id, actorId, emailError ? 'customer_review_email_failed' : 'customer_review_emailed', {
+        emailLogId: logId,
+        ...(emailError ? { reason: emailError } : {}),
+      })
+    }))
+  }
+  return { id, status: 'customer_review', emailed: emailError === null, recipient, emailError }
+}
+
+export interface PortalReviewDecisionBase {
+  orgId: string
+  partyId: string
+  linkId: string
+  prebillId: string
+  /** The fingerprint the customer's page was rendered from. */
+  digest: string
+}
+
+type PortalReviewTarget = {
+  status: PrebillStatus
+  worksheet_number: string
+  customer_review_digest: string | null
+  notify_user_ids: string[]
+}
+
+/** Lock a worksheet the session customer is reviewing, or refuse as not found. */
+async function lockPortalReview(tx: Tx, input: PortalReviewDecisionBase): Promise<PortalReviewTarget> {
+  await assertWipBillingEnabledTx(tx, input.orgId)
+  const target = (await tx.execute<PortalReviewTarget>(sql`
+    select worksheet.status, worksheet.worksheet_number, worksheet.customer_review_digest,
+           array_remove(array[worksheet.customer_review_sent_by, worksheet.submitted_by, worksheet.created_by], null)::text[] as notify_user_ids
+      from wip_prebills worksheet
+      join projects project on project.org_id = worksheet.org_id and project.id = worksheet.project_id
+     where worksheet.org_id = ${input.orgId} and worksheet.id = ${input.prebillId}
+       and project.customer_id = ${input.partyId}
+     for update of worksheet
+  `)).rows[0]
+  if (!target || target.status !== 'customer_review') {
+    throw new WipBillingError('This billing is no longer awaiting your review', 404)
+  }
+  const current = await currentBillingReviewDigest(input.orgId, input.prebillId, tx)
+  if (!current || current !== target.customer_review_digest || current !== input.digest) {
+    throw new WipBillingError('This billing changed after you opened it — reload the page to review the current version', 409)
+  }
+  return target
+}
+
+async function notifyPrebillTeam(tx: Tx, orgId: string, userIds: string[], prebillId: string, title: string, body: string) {
+  // Notify the people who prepared, submitted and sent the worksheet. One who
+  // has since left has no inbox; the worksheet trail still records the decision.
+  await tx.execute(sql`
+    insert into notifications (org_id, user_id, kind, title, body, href, created_by, updated_by)
+    select ${orgId}, member.id, 'pre_billing', ${title}, ${body}, ${`/projects/wip-billing?prebill=${prebillId}`},
+           ${PORTAL_ACTOR_ID}::uuid, ${PORTAL_ACTOR_ID}::uuid
+      from users member
+     where member.id in (select jsonb_array_elements_text(${JSON.stringify([...new Set(userIds)])}::jsonb)::uuid)
+  `)
+}
+
+/**
+ * The customer accepts the package as shown. Acceptance names the signer and
+ * may carry the customer's purchase order number, which the invoice then
+ * references. The worksheet returns to approved, ready to invoice.
+ */
+export async function acceptPrebillReview(input: PortalReviewDecisionBase & {
+  signerName: string
+  purchaseOrderNumber?: string | null
+  note?: string | null
+}) {
+  const signerName = input.signerName.trim()
+  if (!signerName) throw new WipBillingError('Enter your name to accept this billing')
+  if (signerName.length > 200) throw new WipBillingError('The name is too long — at most 200 characters')
+  const po = input.purchaseOrderNumber?.trim() || null
+  if (po && po.length > 100) throw new WipBillingError('The purchase order number is too long — at most 100 characters')
+  const note = input.note?.trim() || null
+  if (note && note.length > 2000) throw new WipBillingError('The comment is too long — at most 2,000 characters')
+  return withOrgTransaction(input.orgId, async () => db.transaction(async (tx) => {
+    const target = await lockPortalReview(tx, input)
+    await tx.execute(sql`
+      update wip_prebills
+         set status = 'approved', customer_decision = 'accepted', customer_decided_at = now(),
+             customer_signer_name = ${signerName}, customer_decision_note = ${note},
+             customer_po_number = coalesce(${po}, customer_po_number),
+             updated_at = now(), updated_by = ${PORTAL_ACTOR_ID}::uuid
+       where org_id = ${input.orgId} and id = ${input.prebillId} and status = 'customer_review'
+    `)
+    await appendEvent(tx, input.orgId, input.prebillId, PORTAL_ACTOR_ID, 'customer_accepted', {
+      digest: input.digest,
+      purchaseOrderProvided: po !== null,
+      commented: note !== null,
+    })
+    await audit(tx, input.orgId, 'wip_prebills', input.prebillId, PORTAL_ACTOR_ID, {
+      before: { status: 'customer_review' },
+      after: { status: 'approved', customerDecision: 'accepted' },
+      source: 'customer_portal',
+    })
+    await recordPortalEvent(tx, input.orgId, {
+      partyId: input.partyId,
+      linkId: input.linkId,
+      action: 'billing_review_accepted',
+      reasonCode: null,
+      detail: { prebillId: input.prebillId },
+    })
+    await notifyPrebillTeam(tx, input.orgId, target.notify_user_ids, input.prebillId,
+      `Customer accepted ${target.worksheet_number}`,
+      po ? `Ready to invoice. Purchase order ${po} was provided.` : 'Ready to invoice.')
+    return { id: input.prebillId, status: 'approved' as PrebillStatus }
+  }))
+}
+
+/**
+ * The customer disputes the package. Each disputed line carries the
+ * customer's note; the worksheet returns to draft so the preparer can adjust,
+ * hold or explain the lines and send it through approval again.
+ */
+export async function disputePrebillReview(input: PortalReviewDecisionBase & {
+  note?: string | null
+  lines: Array<{ lineId: string; note: string }>
+}) {
+  const note = input.note?.trim() || null
+  if (note && note.length > 2000) throw new WipBillingError('The comment is too long — at most 2,000 characters')
+  const lines = input.lines
+    .map((line) => ({ lineId: line.lineId, note: line.note.trim() }))
+    .filter((line) => line.note.length > 0)
+  if (lines.length === 0 && !note) {
+    throw new WipBillingError('Tell us what needs attention — add a note to at least one line or a general comment')
+  }
+  if (lines.some((line) => line.note.length > 1000)) {
+    throw new WipBillingError('A line note is too long — at most 1,000 characters')
+  }
+  return withOrgTransaction(input.orgId, async () => db.transaction(async (tx) => {
+    const target = await lockPortalReview(tx, input)
+    for (const line of lines) {
+      const updated = await tx.execute(sql`
+        update wip_prebill_lines set customer_dispute_note = ${line.note}
+         where org_id = ${input.orgId} and prebill_id = ${input.prebillId} and id = ${line.lineId}
+           and disposition = 'bill'
+      `)
+      if ((updated.rowCount ?? 0) !== 1) {
+        throw new WipBillingError('A disputed line is not part of this billing — reload the page and try again', 409)
+      }
+    }
+    await tx.execute(sql`
+      update wip_prebills
+         set status = 'draft', approved_at = null, approved_by = null,
+             customer_decision = 'disputed', customer_decided_at = now(),
+             customer_signer_name = null, customer_decision_note = ${note},
+             updated_at = now(), updated_by = ${PORTAL_ACTOR_ID}::uuid
+       where org_id = ${input.orgId} and id = ${input.prebillId} and status = 'customer_review'
+    `)
+    await appendEvent(tx, input.orgId, input.prebillId, PORTAL_ACTOR_ID, 'customer_disputed', {
+      digest: input.digest,
+      disputedLines: lines.length,
+      commented: note !== null,
+    })
+    await audit(tx, input.orgId, 'wip_prebills', input.prebillId, PORTAL_ACTOR_ID, {
+      before: { status: 'customer_review' },
+      after: { status: 'draft', customerDecision: 'disputed' },
+      source: 'customer_portal',
+    })
+    await recordPortalEvent(tx, input.orgId, {
+      partyId: input.partyId,
+      linkId: input.linkId,
+      action: 'billing_review_disputed',
+      reasonCode: null,
+      detail: { prebillId: input.prebillId, disputedLines: lines.length },
+    })
+    await notifyPrebillTeam(tx, input.orgId, target.notify_user_ids, input.prebillId,
+      `Customer disputed ${target.worksheet_number}`,
+      lines.length > 0
+        ? `${lines.length} line${lines.length === 1 ? '' : 's'} need attention. The prebill is back in draft.`
+        : 'The prebill is back in draft with the customer\'s comment.')
+    return { id: input.prebillId, status: 'draft' as PrebillStatus }
+  }))
+}
+
+/** Record the first time the customer opens a package sent to them. */
+export async function markPrebillViewedByCustomer(orgId: string, partyId: string, prebillId: string) {
+  await withOrgTransaction(orgId, async () => db.transaction(async (tx) => {
+    const marked = (await tx.execute<{ id: string }>(sql`
+      update wip_prebills worksheet
+         set customer_viewed_at = now()
+        from projects project
+       where worksheet.org_id = ${orgId} and worksheet.id = ${prebillId}
+         and project.org_id = worksheet.org_id and project.id = worksheet.project_id
+         and project.customer_id = ${partyId}
+         and worksheet.customer_viewed_at is null
+         and worksheet.customer_review_sent_at is not null
+      returning worksheet.id
+    `)).rows[0]
+    if (marked) await appendEvent(tx, orgId, prebillId, PORTAL_ACTOR_ID, 'customer_viewed')
+  }))
+}
+
+/**
+ * Email the invoice a worksheet produced to the customer with its backup
+ * packet attached, and record the delivery on the worksheet. Only a posted
+ * invoice is delivered. When the invoice's billing request requires backup,
+ * the stored packet must exist — the same rule that guards issuing it.
+ */
+export async function deliverPrebillInvoice(
+  orgId: string,
+  actorId: string,
+  id: string,
+  input: { to?: string | null; message?: string | null },
+  scope: SubsidiaryScope = null,
+) {
+  await assertWipBillingEnabled(orgId)
+  const row = (await db.execute<{ status: PrebillStatus; invoice_id: string | null; invoice_status: string | null; invoice_number: string | null }>(sql`
+    select worksheet.status, worksheet.invoice_document_id as invoice_id,
+           invoice.status as invoice_status, invoice.document_number as invoice_number
+      from wip_prebills worksheet
+      join projects project on project.org_id = worksheet.org_id and project.id = worksheet.project_id
+      left join documents invoice on invoice.org_id = worksheet.org_id and invoice.id = worksheet.invoice_document_id
+     where worksheet.org_id = ${orgId} and worksheet.id = ${id}
+       ${subsidiaryVisibleFilter(sql`project.subsidiary_id`, scope)}
+  `)).rows[0]
+  if (!row) throw new WipBillingError('Prebill not found', 404)
+  if (row.status !== 'converted' || !row.invoice_id) throw new WipBillingError('Create the invoice before sending it')
+  if (row.invoice_status !== 'posted') {
+    throw new WipBillingError(`Post invoice ${row.invoice_number ?? ''} before sending it to the customer`.replace('  ', ' '))
+  }
+  // Delivery pulls in the PDF and file-cabinet graph only when it runs.
+  const [{ loadInvoiceBackup, requireInvoiceBackup }, { sendRecordPdfEmail }] = await Promise.all([
+    import('./invoice-backup'),
+    import('./pdf-templates/send'),
+  ])
+  try {
+    await requireInvoiceBackup(orgId, row.invoice_id)
+  } catch (error) {
+    // The backup refusal names its remedy; surface it as this command's refusal.
+    if (error instanceof Error && 'code' in error && error.code === 'invoice_backup_required') {
+      throw new WipBillingError(error.message)
+    }
+    throw error
+  }
+  const backup = await loadInvoiceBackup(orgId, row.invoice_id, scope)
+  const sent = await sendRecordPdfEmail({
+    recordType: 'customer_invoice',
+    orgId,
+    id: row.invoice_id,
+    to: input.to ?? undefined,
+    message: input.message ?? undefined,
+    scope,
+    extraAttachments: backup ? [{ filename: backup.filename, content: backup.bytes }] : [],
+  })
+  await withOrgTransaction(orgId, async () => db.transaction(async (tx) => {
+    await tx.execute(sql`
+      update wip_prebills
+         set delivered_at = now(), delivered_by = ${actorId}, updated_at = now(), updated_by = ${actorId}
+       where org_id = ${orgId} and id = ${id} and status = 'converted'
+    `)
+    await appendEvent(tx, orgId, id, actorId, 'delivered', { backupAttached: backup !== null })
+  }))
+  return { id, to: sent.to, backupAttached: backup !== null }
+}
+
+export type UnbilledProjectRow = {
+  projectId: string
+  projectName: string
+  customerName: string | null
+  projectTypeName: string
+  unbilledAmount: string
+  sourceCount: number
+  oldestWorkDate: string
+}
+
+/**
+ * Projects with unbilled work that no open worksheet has claimed yet — the
+ * board's "to prebill" column and the population a bill run prepares.
+ */
+export async function listUnbilledProjects(orgId: string, scope: SubsidiaryScope = null): Promise<UnbilledProjectRow[]> {
+  await assertWipBillingEnabled(orgId)
+  const eligible = new Set((await listWipProjects(orgId, scope)).map((project) => project.id))
+  const rows = (await db.execute<UnbilledProjectRow>(sql`
+    ${eligibleWipSources(orgId, scope)}
+    select source.project_id as "projectId", project.name as "projectName",
+           customer.display_name as "customerName", coalesce(type.name, '') as "projectTypeName",
+           sum(source.capped_available_value)::text as "unbilledAmount",
+           count(*)::int as "sourceCount",
+           min(source.source_date)::text as "oldestWorkDate"
+      from eligible_sources source
+      join projects project on project.org_id = ${orgId} and project.id = source.project_id
+      left join project_types type on type.org_id = project.org_id and type.id = project.project_type_id
+      left join parties customer on customer.org_id = project.org_id and customer.id = project.customer_id
+     where source.capped_available_value > 0
+     group by source.project_id, project.name, customer.display_name, type.name
+     order by min(source.source_date), project.name
+  `)).rows
+  return rows.filter((row) => eligible.has(row.projectId))
+}
+
+export interface BillRunInput {
+  periodStart?: string | null
+  periodEnd: string
+  /** Limit the run to these projects; omitted means every project with unbilled work. */
+  projectIds?: string[] | null
+  notes?: string | null
+}
+
+export interface BillRunResult {
+  created: Array<{ projectId: string; projectName: string; id: string; worksheetNumber: string; sourceCount: number }>
+  skipped: Array<{ projectId: string; projectName: string; reason: string }>
+}
+
+/**
+ * Prepare a worksheet for every project with unbilled work through a cutoff.
+ * Each project is prepared in its own transaction with the same locking and
+ * reservation rules as a single worksheet, so one project's refusal (no work
+ * before the cutoff, an exhausted not-to-exceed cap, a missing policy) is
+ * reported with its reason and never blocks the others.
+ */
+export async function runBillRun(
+  orgId: string,
+  actorId: string,
+  input: BillRunInput,
+  scope: SubsidiaryScope = null,
+): Promise<BillRunResult> {
+  const periodEnd = requireDate(input.periodEnd, 'Cutoff date')
+  const periodStart = input.periodStart ? requireDate(input.periodStart, 'Period start') : null
+  if (periodStart && periodStart > periodEnd) throw new WipBillingError('Period start must be on or before the cutoff date')
+  const candidates = await listUnbilledProjects(orgId, scope)
+  const wanted = input.projectIds?.length ? new Set(input.projectIds) : null
+  const targets = wanted ? candidates.filter((row) => wanted.has(row.projectId)) : candidates
+  if (wanted) {
+    const unknown = [...wanted].filter((projectId) => !candidates.some((row) => row.projectId === projectId))
+    if (unknown.length > 0) {
+      throw new WipBillingError('A selected project has no unbilled work available to prebill — refresh and try again', 409)
+    }
+  }
+  if (targets.length === 0) throw new WipBillingError('No project has unbilled work available to prebill')
+  const result: BillRunResult = { created: [], skipped: [] }
+  for (const target of targets) {
+    try {
+      const created = await createPrebill(orgId, actorId, {
+        projectId: target.projectId,
+        periodStart,
+        periodEnd,
+        notes: input.notes ?? null,
+      }, scope)
+      result.created.push({ projectId: target.projectId, projectName: target.projectName, ...created })
+    } catch (error) {
+      if (!(error instanceof WipBillingError)) throw error
+      result.skipped.push({ projectId: target.projectId, projectName: target.projectName, reason: error.message })
+    }
+  }
+  return result
 }

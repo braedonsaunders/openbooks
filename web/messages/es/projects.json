@@ -369,107 +369,201 @@
   "invoicing": {
     "rateCardLapse": "Cuando la tarifa ha caducado",
     "block": "Bloquear la facturación",
-    "carry_forward": "Facturar con la última tarifa"
+    "carry_forward": "Facturar con la última tarifa",
+    "customerReview": "Revisión del cliente antes de facturar"
   },
   "wipBilling": {
-    "wipHealthAria": "Salud del trabajo en curso",
-    "tiles": {
-      "availableWip": "Trabajo en curso disponible",
-      "availableWipSub": "Admisible y no retenido",
-      "over90": "Más de 90 días",
-      "over90Sub": "{amount} con 61–90 días",
-      "realization": "Realización",
-      "realizationSub": "{amount} facturado",
-      "leakage": "Fugas",
-      "leakageSub": "{amount} retenido más de 90 días"
-    },
-    "list": {
-      "title": "Hojas de prefactura",
-      "description": "Revise el trabajo de proyecto admisible, los ajustes de facturación y el estado de aprobación.",
-      "newPrebill": "Nueva prefactura"
+    "toolbar": {
+      "search": "Buscar clientes, proyectos, hojas",
+      "board": "Tablero",
+      "table": "Tabla",
+      "billRun": "Ciclo de facturación"
     },
     "empty": {
-      "noProjectsTitle": "Cree primero un proyecto",
-      "noPrebillsTitle": "Aún no hay hojas de prefactura",
-      "noProjectsDescription": "La revisión del trabajo en curso parte de un proyecto activo con tiempo o costos facturables.",
-      "noPrebillsDescription": "Cree una hoja para fijar el trabajo de proyecto no facturado admisible a una fecha de corte.",
-      "createPrebill": "Crear prefactura",
-      "goToProjects": "Ir a proyectos"
+      "noProjectsTitle": "Configure primero un tipo de proyecto facturable",
+      "noProjectsDescription": "La prefacturación prepara facturas a partir de proyectos cuyo tipo factura líneas de tiempo y costo.",
+      "nothingToBillTitle": "Nada que facturar todavía",
+      "nothingToBillDescription": "El tiempo y los costos facturables aprobados de sus proyectos aparecen aquí, listos para prefacturar.",
+      "configureProjectTypes": "Configurar tipos de proyecto"
+    },
+    "board": {
+      "aria": "Etapas de prefacturación",
+      "showAll": "Ver las {count}"
+    },
+    "stages": {
+      "unbilled": "Por prefacturar",
+      "draft": "Borrador",
+      "review": "En aprobación",
+      "ready": "Lista para facturar",
+      "customer": "Con el cliente",
+      "invoiced": "Facturada",
+      "sent": "Enviada",
+      "paid": "Pagada",
+      "void": "Anulada"
+    },
+    "stageEmpty": {
+      "unbilled": "No hay trabajo sin facturar pendiente.",
+      "draft": "Las prefacturas que está preparando aparecen aquí.",
+      "review": "Las prefacturas pendientes de aprobación en la Bandeja aparecen aquí.",
+      "ready": "Las prefacturas aprobadas, listas para facturar, aparecen aquí.",
+      "customer": "Las prefacturas que el cliente está revisando aparecen aquí.",
+      "invoiced": "Las facturas pendientes de contabilizar o enviar aparecen aquí.",
+      "sent": "Las facturas enviadas pendientes de pago aparecen aquí.",
+      "paid": "Las facturas pagadas aparecen aquí."
+    },
+    "card": {
+      "oldest": "Trabajo más antiguo hace {days, plural, one {# día} other {# días}}",
+      "prebill": "Prefacturar",
+      "period": "{start} – {end}",
+      "through": "Hasta {date}",
+      "lines": "{count, plural, one {# línea} other {# líneas}}",
+      "held": "{count} retenidas",
+      "disputed": "{count, plural, =0 {Cambios solicitados} one {# línea objetada} other {# líneas objetadas}}",
+      "accepted": "Aceptada",
+      "acceptedPo": "Aceptada · OC {po}",
+      "reviewRequired": "Revisión del cliente",
+      "viewed": "Vista",
+      "invoiceDraft": "Factura en borrador",
+      "readyToSend": "Lista para enviar",
+      "open": "{amount} pendiente"
     },
     "table": {
+      "stageFilter": "Filtrar por etapa",
+      "allOpen": "Todas las abiertas",
+      "emptyTitle": "Nada en esta etapa",
+      "emptyDescription": "Elija otra etapa o borre la búsqueda.",
       "worksheet": "Hoja",
-      "project": "Proyecto",
-      "status": "Estado",
-      "proposed": "Propuesto",
-      "through": "Hasta {periodEnd}",
-      "noCustomer": "Sin cliente"
+      "customer": "Cliente",
+      "period": "Periodo",
+      "stage": "Etapa",
+      "amount": "Importe",
+      "openBalance": "Saldo pendiente"
     },
-    "createDrawer": {
-      "title": "Nueva hoja de prefactura",
-      "description": "Fije el trabajo no facturado admisible a una fecha de corte.",
+    "billRun": {
+      "title": "Ciclo de facturación",
+      "description": "Prepare una prefactura en borrador para cada proyecto seleccionado con trabajo sin facturar hasta la fecha de corte. Cada prefactura se revisa antes de convertirse en factura.",
+      "cutoff": "Fecha de corte",
+      "start": "Inicio del periodo (opcional)",
+      "projects": "Proyectos",
+      "selectAll": "Seleccionar todo",
+      "selectNone": "No seleccionar ninguno",
+      "oldest": "Más antiguo {date}",
+      "notes": "Notas",
+      "submit": "{count, plural, one {Preparar # prefactura} other {Preparar # prefacturas}}",
+      "running": "Preparando…",
+      "created": "{count, plural, =0 {No se preparó ninguna prefactura} one {# prefactura preparada} other {# prefacturas preparadas}}",
+      "skippedTitle": "Omitidos",
       "cancel": "Cancelar",
-      "creating": "Creando…",
-      "submit": "Crear prefactura",
-      "projectLabel": "Proyecto",
-      "projectHelp": "Solo se listan los tipos de proyecto activos con facturación fuente estándar por tiempo y materiales o costo más honorarios.",
-      "configureProjectTypes": "Configurar tipos de proyecto",
-      "startLabel": "Inicio (opcional)",
-      "cutoffLabel": "Fecha de corte",
-      "notesLabel": "Notas de revisión",
-      "notesPlaceholder": "Alcance, instrucciones de facturación o contexto para el revisor"
-    },
-    "detail": {
-      "description": "{projectName} · hasta {periodEnd}",
-      "sendForReview": "Enviar a revisión",
-      "return": "Devolver",
-      "approve": "Aprobar",
-      "converting": "Convirtiendo…",
-      "createInvoice": "Crear factura",
-      "void": "Anular",
-      "openInvoice": "Abrir {invoiceNumber}"
-    },
-    "workflow": {
-      "returnTitle": "Devolver la hoja a borrador",
-      "voidTitle": "Anular la hoja",
-      "returnDescription": "Explique qué debe corregir el preparador. Pasará a formar parte del historial de revisión.",
-      "voidDescription": "Explique por qué esta hoja no debe continuar. El trabajo en curso fuente sigue disponible para una hoja futura.",
-      "reasonLabel": "Motivo",
-      "saving": "Guardando…",
-      "returnSubmit": "Devolver a borrador",
-      "voidSubmit": "Anular la hoja",
-      "cancel": "Cancelar"
-    },
-    "metrics": {
-      "original": "Original",
-      "proposed": "Propuesto",
-      "adjustment": "Ajuste",
-      "cost": "Costo"
-    },
-    "lockedAlert": "Esta instantánea de aprobación está bloqueada. Conviértala tal como fue aprobada, o anúlela y prepare una hoja nueva.",
-    "linesTable": {
-      "source": "Origen",
-      "date": "Fecha",
-      "description": "Descripción",
-      "cost": "Costo",
-      "original": "Original",
-      "proposedSupport": "Propuesto / sustento"
-    },
-    "trail": {
-      "title": "Historial de revisión",
-      "system": "Sistema"
+      "done": "Listo"
     },
     "toasts": {
-      "created": "{worksheetNumber} creada con {sourceCount} líneas fuente",
-      "sentForReview": "Enviada a revisión",
-      "approved": "Prefactura aprobada",
-      "returnedToDraft": "Devuelta a borrador",
+      "submitted": "Enviada para aprobación",
+      "approved": "Aprobada: lista para facturar",
+      "reopened": "Reabierta como borrador",
       "voided": "Prefactura anulada",
-      "converted": "{documentNumber} creada como factura borrador"
+      "converted": "Factura {documentNumber} creada como borrador",
+      "sentToCustomer": "Enviada a {to} para revisión",
+      "sentNoEmail": "Esperando en el portal del cliente. {error}",
+      "delivered": "Factura enviada a {to}",
+      "deliveredWithBackup": "Factura y soporte enviados a {to}"
     },
-    "lineToasts": {
-      "saved": "Monto de facturación guardado",
-      "holdApplied": "Retención de facturación aplicada",
-      "holdReleased": "Retención de facturación liberada"
+    "detail": {
+      "description": "{projectName} · {customerName}",
+      "submit": "Enviar",
+      "submitting": "Enviando…",
+      "openInbox": "Abrir Bandeja",
+      "sendToCustomer": "Enviar al cliente",
+      "createInvoice": "Crear factura",
+      "converting": "Creando…",
+      "reviewRequiredHint": "Este tipo de proyecto requiere que el cliente acepte la prefactura antes de facturarla.",
+      "sendInvoice": "Enviar factura",
+      "resendInvoice": "Reenviar factura",
+      "openInvoice": "Abrir {invoiceNumber}",
+      "reopen": "Reabrir",
+      "void": "Anular"
+    },
+    "notice": {
+      "disputed": "{count, plural, =0 {El cliente solicitó cambios.} one {El cliente objetó # línea.} other {El cliente objetó # líneas.}} Ajústelas, reténgalas o explíquelas y vuelva a enviar.",
+      "inApproval": "Esta prefactura está pendiente de aprobación. Los aprobadores deciden en la Bandeja; un rechazo la devuelve aquí como borrador.",
+      "withCustomer": "Enviada al cliente para revisión el {sent}. Aún no abierta.",
+      "withCustomerViewed": "Enviada al cliente para revisión el {sent}. Abierta el {viewed}.",
+      "postInvoice": "La factura {invoiceNumber} es un borrador. Contabilícela y envíela desde aquí con su soporte."
+    },
+    "tabs": {
+      "aria": "Secciones de la prefactura",
+      "work": "Trabajo de origen",
+      "activity": "Actividad"
+    },
+    "lockedAlert": "Las líneas se bloquean al enviar la prefactura. Reábrala para hacer cambios; se aprobará de nuevo.",
+    "preview": {
+      "title": "Vista previa de la factura",
+      "billTo": "Facturar a",
+      "project": "Proyecto",
+      "po": "OC {po}",
+      "empty": "No hay líneas para facturar.",
+      "subtotal": "Subtotal",
+      "taxNote": "Los impuestos se calculan al crear la factura."
+    },
+    "metrics": {
+      "original": "Valor estándar",
+      "adjustment": "Ajustes",
+      "cost": "Costo",
+      "margin": "Margen"
+    },
+    "customer": {
+      "accepted": "Aceptada por {name}"
+    },
+    "panels": {
+      "reopen": {
+        "title": "Reabrir prefactura",
+        "description": "Al reabrirla, la prefactura vuelve a borrador y se descartan su aprobación y cualquier decisión del cliente.",
+        "submit": "Reabrir"
+      },
+      "void": {
+        "title": "Anular prefactura",
+        "description": "Al anularla, su trabajo vuelve a quedar sin facturar. La hoja y su historial se conservan.",
+        "submit": "Anular prefactura"
+      },
+      "send": {
+        "title": "Enviar al cliente para revisión",
+        "description": "El cliente revisa esta facturación en el portal del cliente y la acepta o solicita cambios por línea.",
+        "submit": "Enviar para revisión"
+      },
+      "deliver": {
+        "title": "Enviar factura",
+        "description": "Envíe por correo la factura contabilizada al cliente con su soporte adjunto.",
+        "submit": "Enviar factura"
+      },
+      "reason": "Motivo",
+      "recipient": "Correo electrónico (opcional)",
+      "recipientHelp": "Déjelo en blanco para usar el correo del cliente registrado.",
+      "message": "Mensaje (opcional)",
+      "working": "Procesando…",
+      "cancel": "Cancelar"
+    },
+    "events": {
+      "created": "Preparada",
+      "line_updated": "Línea ajustada",
+      "hold_created": "Línea retenida",
+      "hold_released": "Retención liberada",
+      "submitted": "Enviada",
+      "submit_failed": "Falló el enrutamiento de aprobación",
+      "returned": "Devuelta a borrador",
+      "approved": "Aprobada",
+      "reopened": "Reabierta",
+      "customer_review_sent": "Enviada al cliente",
+      "customer_review_emailed": "Correo de revisión enviado",
+      "customer_review_email_failed": "Correo de revisión no entregado",
+      "customer_viewed": "Abierta por el cliente",
+      "customer_accepted": "Aceptada por el cliente",
+      "customer_disputed": "Cambios solicitados por el cliente",
+      "converted": "Factura creada",
+      "delivered": "Factura enviada",
+      "voided": "Anulada"
+    },
+    "trail": {
+      "system": "Sistema",
+      "customer": "Cliente"
     },
     "line": {
       "held": "Retenida",
@@ -486,10 +580,21 @@
       "applyHold": "Aplicar retención",
       "releaseHold": "Liberar retención",
       "releaseReason": "Motivo de la liberación",
-      "release": "Liberar"
+      "release": "Liberar",
+      "customerNote": "Cliente: {note}"
     },
-    "status": {
-      "converted": "Convertido"
+    "linesTable": {
+      "source": "Origen",
+      "date": "Fecha",
+      "description": "Descripción",
+      "cost": "Costo",
+      "original": "Original",
+      "proposedSupport": "Propuesto / sustento"
+    },
+    "lineToasts": {
+      "saved": "Monto de facturación guardado",
+      "holdApplied": "Retención de facturación aplicada",
+      "holdReleased": "Retención de facturación liberada"
     }
   },
   "duplicates": {

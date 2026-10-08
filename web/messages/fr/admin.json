@@ -6982,8 +6982,8 @@
       "description": "Engagements fournisseurs, modifications de sous-traitance, états des valeurs et demandes de paiement des fournisseurs, retenues de garantie à payer, quittances, chèques conjoints et blocages de paiement."
     },
     "wipBilling": {
-      "title": "Travaux en cours et préfacturation",
-      "description": "Révisez les travaux de projet facturables, bloquez ou ajustez des lignes avec preuves, approuvez les préfactures et suivez l’ancienneté des travaux en cours, la réalisation et les pertes."
+      "title": "Préfacturation",
+      "description": "Transformez le travail de projet non facturé en dossiers de facture validés : cycles de facturation, ajustements et retenues justifiés, approbation via Flux, validation client facultative dans le portail et envoi des factures avec justificatifs."
     },
     "resourcing": {
       "title": "Affectation des ressources",

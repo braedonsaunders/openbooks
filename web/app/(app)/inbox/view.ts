@@ -108,6 +108,9 @@ const KIND_KEYS = [
   'hrm_employment_change_request',
 ]
 
+// Approval subjects that are not documents but still carry a catalog label.
+const SUBJECT_LABEL_KEYS = [...KIND_KEYS, 'wip_prebill']
+
 export interface SubmittedListRow {
   key: string
   documentNumber: string
@@ -256,7 +259,7 @@ export async function loadApprovals(
   }
 
   const kindLabel = (kind: string) =>
-    KIND_KEYS.includes(kind) ? t(`kinds.${kind}`) : kind.replace(/_/g, ' ')
+    SUBJECT_LABEL_KEYS.includes(kind) ? t(`kinds.${kind}`) : kind.replace(/_/g, ' ')
 
   // ---- My + All approvals: the unified worklist -----------------
   // The dashboard tile counts approvalWorklistForAuthz (Flows gates +

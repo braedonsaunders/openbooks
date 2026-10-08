@@ -20,7 +20,9 @@
     "storeCredit": "Guthaben",
     "prepaid": "Vorausbezahlte Nutzung",
     "orders": "Aktuelle Bestellungen",
-    "noOrders": "Noch keine Bestellungen."
+    "noOrders": "Noch keine Bestellungen.",
+    "billingReviews": "Abrechnungen zur Prüfung",
+    "noBillingReviews": "Derzeit wartet nichts auf Ihre Prüfung."
   },
   "nav": {
     "invoices": "Rechnungen",
@@ -99,5 +101,38 @@
     "noCurrency": "Währung nicht erfasst — Betrag ausgeblendet, bis dies korrigiert ist.",
     "storeCredit": "Guthaben",
     "prepaid": "Vorausbezahlte Nutzung"
+  },
+  "reviews": {
+    "title": "Abrechnungen zur Prüfung",
+    "empty": "Derzeit wartet nichts auf Ihre Prüfung.",
+    "awaiting": "Wartet auf Ihre Prüfung",
+    "accepted": "Angenommen",
+    "disputed": "Änderungen angefordert",
+    "period": "{start} – {end}",
+    "through": "Leistungen bis {date}",
+    "periodLabel": "Zeitraum",
+    "reference": "Referenz",
+    "purchaseOrder": "Bestellung",
+    "date": "Datum",
+    "description": "Beschreibung",
+    "quantity": "Menge",
+    "amount": "Betrag",
+    "total": "Summe",
+    "accept": "Annehmen",
+    "requestChanges": "Änderungen anfordern",
+    "signerName": "Ihr Name",
+    "purchaseOrderOptional": "Bestellnummer (optional)",
+    "comment": "Kommentar (optional)",
+    "confirm": "Ich habe diese Abrechnung geprüft und akzeptiere sie zur Rechnungsstellung.",
+    "acceptSubmit": "Abrechnung annehmen",
+    "accepting": "Wird angenommen…",
+    "disputeHint": "Fügen Sie jeder Position, die geklärt werden muss, eine Notiz hinzu oder hinterlassen Sie einen allgemeinen Kommentar.",
+    "lineNotePlaceholder": "Was ist an dieser Position zu klären?",
+    "generalComment": "Allgemeiner Kommentar",
+    "disputeSubmit": "Änderungswünsche senden",
+    "sending": "Wird gesendet…",
+    "addNote": "Notiz hinzufügen",
+    "acceptedBanner": "Sie haben diese Abrechnung am {date} angenommen. Sie wird wie dargestellt in Rechnung gestellt.",
+    "disputedBanner": "Sie haben am {date} Änderungen angefordert. Ihr Lieferant meldet sich mit einer überarbeiteten Abrechnung."
   }
 }

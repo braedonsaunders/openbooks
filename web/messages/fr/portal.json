@@ -20,7 +20,9 @@
     "storeCredit": "Avoir en magasin",
     "prepaid": "Usage prépayé",
     "orders": "Commandes récentes",
-    "noOrders": "Aucune commande."
+    "noOrders": "Aucune commande.",
+    "billingReviews": "Facturation à valider",
+    "noBillingReviews": "Rien n’attend votre validation."
   },
   "nav": {
     "invoices": "Factures",
@@ -99,5 +101,38 @@
     "noCurrency": "Devise non enregistrée — montant masqué jusqu'à correction.",
     "storeCredit": "Avoir en magasin",
     "prepaid": "Usage prépayé"
+  },
+  "reviews": {
+    "title": "Facturation à valider",
+    "empty": "Rien n’attend votre validation.",
+    "awaiting": "En attente de votre validation",
+    "accepted": "Acceptée",
+    "disputed": "Modifications demandées",
+    "period": "{start} – {end}",
+    "through": "Travaux jusqu’au {date}",
+    "periodLabel": "Période",
+    "reference": "Référence",
+    "purchaseOrder": "Bon de commande",
+    "date": "Date",
+    "description": "Description",
+    "quantity": "Qté",
+    "amount": "Montant",
+    "total": "Total",
+    "accept": "Accepter",
+    "requestChanges": "Demander des modifications",
+    "signerName": "Votre nom",
+    "purchaseOrderOptional": "Numéro de bon de commande (facultatif)",
+    "comment": "Commentaire (facultatif)",
+    "confirm": "J’ai vérifié cette facturation et je l’accepte pour facturation.",
+    "acceptSubmit": "Accepter la facturation",
+    "accepting": "Acceptation…",
+    "disputeHint": "Ajoutez une note à chaque ligne à revoir, ou laissez un commentaire général.",
+    "lineNotePlaceholder": "Que faut-il revoir sur cette ligne ?",
+    "generalComment": "Commentaire général",
+    "disputeSubmit": "Envoyer les modifications demandées",
+    "sending": "Envoi…",
+    "addNote": "Ajouter une note",
+    "acceptedBanner": "Vous avez accepté cette facturation le {date}. Elle sera facturée telle quelle.",
+    "disputedBanner": "Vous avez demandé des modifications le {date}. Votre fournisseur reviendra vers vous avec une version révisée."
   }
 }

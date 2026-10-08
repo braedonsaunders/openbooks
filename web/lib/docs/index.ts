@@ -55,6 +55,7 @@ import { structuredInterviewsOffersJobBoards } from './articles/structured-inter
 import { taxConfiguration } from './articles/tax-configuration'
 import { taxJurisdictionsAndNexus, taxReturnsAndBoxes } from './articles/taxes'
 import { fieldTickets } from './articles/field-tickets'
+import { preBilling } from './articles/pre-billing'
 import { subcontractorCompliance } from './articles/subcontractor-compliance'
 import { itemRates } from './articles/item-rates'
 import { distributionBackorders } from './articles/distribution-backorders'
@@ -340,7 +341,7 @@ const RAW_DOC_ARTICLES: DocArticle[] = [
   distributionLabels,
   bankingAndReconciliation,
   periodClose,
-  projectTypes, overheadCosting, laborCosting, laborPricing, manufacturingOverview, payroll, employmentMigration, positionsAndHeadcount, hrmProcesses, inboxAndHome, automations, webhooks, correctingAndRescinding, performanceAndRetention, continuousPerformance, selfService, leaveTimeVersusValue, recruitingFunnel, benefitsEnrollment, fieldTickets, subcontractorCompliance, compensationAndTransparency,
+  projectTypes, overheadCosting, laborCosting, laborPricing, manufacturingOverview, payroll, employmentMigration, positionsAndHeadcount, hrmProcesses, inboxAndHome, automations, webhooks, correctingAndRescinding, performanceAndRetention, continuousPerformance, selfService, leaveTimeVersusValue, recruitingFunnel, benefitsEnrollment, fieldTickets, preBilling, subcontractorCompliance, compensationAndTransparency,
   busySeasonCapacity,
   staffingBoardEvidence, softHardBookings, retainersDrawdownsRecognition,
   // HR-13 begin

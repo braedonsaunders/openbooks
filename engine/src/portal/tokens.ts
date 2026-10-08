@@ -184,6 +184,59 @@ async function issuePartyLink(
   return { token, expiresAt: new Date(inserted.expires_at) };
 }
 
+/** A review invitation stays usable this long: customers act on billing in days, not minutes. */
+export const PORTAL_REVIEW_INVITE_TTL_DAYS = 7;
+
+/**
+ * Issue a single-use sign-in link that invites a customer contact to review
+ * something in the portal. It is an ordinary magic link — consumed once into
+ * a normal session, retired by any newer link — with a longer life, because
+ * it is sent on the supplier's initiative to an address already on file.
+ * Runs inside the caller's org transaction; refuses when the portal is off.
+ */
+export async function issuePortalReviewInvite(
+  orgId: string,
+  partyId: string,
+  rawEmail: unknown,
+  runner: SqlExecutor = db,
+): Promise<{ token: string; expiresAt: Date }> {
+  if (!(await orgFeatureEnabled(orgId, PORTAL_FEATURE))) {
+    throw portalRefusal("The customer portal is turned off for this organization", "feature_disabled", 404, PORTAL_FEATURE_REMEDY);
+  }
+  const email = normalizePortalEmail(rawEmail);
+  if (!email) {
+    throw portalRefusal(
+      "A valid customer email address is required to send a review",
+      "invalid_email",
+      422,
+      "Add an email address to the customer or one of its contacts, or enter one when sending",
+    );
+  }
+  const token = mintPortalToken();
+  const inserted = (await runner.execute<{ id: string; expires_at: string }>(sql`
+    insert into customer_portal_links (org_id, party_id, contact_email, token_hash, purpose, expires_at)
+    values (${orgId}, ${partyId}, ${email}, ${portalTokenHash(token)}, 'magic_link',
+            now() + ${`${PORTAL_REVIEW_INVITE_TTL_DAYS} days`}::interval)
+    returning id, expires_at::text as expires_at
+  `)).rows[0];
+  if (!inserted) throw portalRefusal("The portal link could not be created", "invalid_link", 422, "Send the review again");
+  await recordPortalEvent(runner, orgId, {
+    partyId,
+    linkId: inserted.id,
+    action: "review_invite_issued",
+    reasonCode: null,
+    detail: {},
+  });
+  await runner.execute(sql`
+    update customer_portal_links
+       set expires_at = now(), updated_at = now()
+     where org_id = ${orgId} and party_id = ${partyId} and purpose = 'magic_link'
+       and consumed_at is null and expires_at > now()
+       and id <> ${inserted.id}
+  `);
+  return { token, expiresAt: new Date(inserted.expires_at) };
+}
+
 export type ConsumedPortalLink = {
   orgId: string;
   partyId: string;

@@ -53,6 +53,11 @@ import {
   outboundPaymentRunsFlowAdapter,
 } from "./payment-runs-adapter.ts";
 import {
+  WIP_PREBILL_SUBJECT_KIND,
+  wipPrebillSubjectProfile,
+  wipPrebillsFlowAdapter,
+} from "./wip-prebills-adapter.ts";
+import {
   TIMESHEET_WEEK_SUBJECT_KIND,
   timesheetWeekSubjectProfile,
   timesheetWeeksFlowAdapter,
@@ -118,6 +123,7 @@ export function getFlowAdapter(subjectKind: string): FlowSubjectAdapter | null {
   if (subjectKind === ALLOCATION_RUN_SUBJECT_KIND) return allocationRunsFlowAdapter;
   if (subjectKind === FUND_RELEASE_SUBJECT_KIND) return fundReleasesFlowAdapter;
   if (subjectKind === FIELD_TICKET_SUBJECT_KIND) return fieldTicketsFlowAdapter;
+  if (subjectKind === WIP_PREBILL_SUBJECT_KIND) return wipPrebillsFlowAdapter;
   if (subjectKind === OUTBOUND_PAYMENT_RUN_SUBJECT_KIND) return outboundPaymentRunsFlowAdapter;
   if (subjectKind === INBOUND_PAYMENT_RUN_SUBJECT_KIND) return inboundPaymentRunsFlowAdapter;
   if (subjectKind === TIMESHEET_WEEK_SUBJECT_KIND) return timesheetWeeksFlowAdapter;
@@ -173,6 +179,7 @@ export function listFlowSubjectProfiles(): FlowSubjectProfile[] {
     allocationRunSubjectProfile,
     fundReleaseSubjectProfile,
     fieldTicketSubjectProfile,
+    wipPrebillSubjectProfile,
     payRunSubjectProfile,
     outboundPaymentRunSubjectProfile,
     inboundPaymentRunSubjectProfile,

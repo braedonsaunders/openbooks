@@ -20,7 +20,9 @@
     "storeCredit": "Crédito en tienda",
     "prepaid": "Uso prepagado",
     "orders": "Pedidos recientes",
-    "noOrders": "Sin pedidos todavía."
+    "noOrders": "Sin pedidos todavía.",
+    "billingReviews": "Facturación por revisar",
+    "noBillingReviews": "No hay nada pendiente de su revisión."
   },
   "nav": {
     "invoices": "Facturas",
@@ -99,5 +101,38 @@
     "noCurrency": "Moneda no registrada: importe oculto hasta que se corrija.",
     "storeCredit": "Crédito en tienda",
     "prepaid": "Uso prepagado"
+  },
+  "reviews": {
+    "title": "Facturación por revisar",
+    "empty": "No hay nada pendiente de su revisión.",
+    "awaiting": "Pendiente de su revisión",
+    "accepted": "Aceptada",
+    "disputed": "Cambios solicitados",
+    "period": "{start} – {end}",
+    "through": "Trabajo hasta {date}",
+    "periodLabel": "Periodo",
+    "reference": "Referencia",
+    "purchaseOrder": "Orden de compra",
+    "date": "Fecha",
+    "description": "Descripción",
+    "quantity": "Cant.",
+    "amount": "Importe",
+    "total": "Total",
+    "accept": "Aceptar",
+    "requestChanges": "Solicitar cambios",
+    "signerName": "Su nombre",
+    "purchaseOrderOptional": "Número de orden de compra (opcional)",
+    "comment": "Comentario (opcional)",
+    "confirm": "He revisado esta facturación y la acepto para facturar.",
+    "acceptSubmit": "Aceptar facturación",
+    "accepting": "Aceptando…",
+    "disputeHint": "Añada una nota a cada línea que requiera atención o deje un comentario general.",
+    "lineNotePlaceholder": "¿Qué requiere atención en esta línea?",
+    "generalComment": "Comentario general",
+    "disputeSubmit": "Enviar cambios solicitados",
+    "sending": "Enviando…",
+    "addNote": "Añadir nota",
+    "acceptedBanner": "Aceptó esta facturación el {date}. Se facturará tal como se muestra.",
+    "disputedBanner": "Solicitó cambios el {date}. Su proveedor le enviará una versión revisada."
   }
 }

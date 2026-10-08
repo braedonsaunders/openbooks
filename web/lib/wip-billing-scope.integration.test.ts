@@ -65,9 +65,10 @@ test('WIP prebilling honours the caller subsidiary scope end to end', {skip:!pro
       await wip.releaseWipHold(org.orgId, preparer, hold.id, 'Resolved', visible)
       // Workflow
       await assert.rejects(wip.transitionPrebill(org.orgId, preparer, prebill.id, 'submit', undefined, restricted), notFound)
+      // With no approval flow configured, submitting approves the worksheet.
       await wip.transitionPrebill(org.orgId, preparer, prebill.id, 'submit', undefined, visible)
-      await assert.rejects(wip.transitionPrebill(org.orgId, approver, prebill.id, 'approve', undefined, restricted), notFound)
-      await wip.transitionPrebill(org.orgId, approver, prebill.id, 'approve', undefined, visible)
+      assert.equal((await wip.loadPrebill(org.orgId, prebill.id, visible))?.status, 'approved')
+      await assert.rejects(wip.transitionPrebill(org.orgId, approver, prebill.id, 'reopen', 'Scope check', restricted), notFound)
       // Convert
       await assert.rejects(wip.convertPrebill(org.orgId, preparer, prebill.id, restricted), notFound)
       assert.equal((await db.execute<{ n: number }>(sql`select count(*)::int as n from documents where org_id=${org.orgId} and kind='customer_invoice'`)).rows[0]!.n, 0)
@@ -222,11 +223,10 @@ test('a project rehome out of scope hides the worksheet from reads and writes', 
         wip.updatePrebillLine(org.orgId, preparer, prebill.id, lineId, { proposedBillAmount: '150.0000', adjustmentReason: 'rehome', adjustmentEvidence: ['note'] }, restricted, { expectedRevision: detail.lines[0]!.updatedAt }),
         notFound,
       )
-      await assert.rejects(wip.transitionPrebill(org.orgId, approver, prebill.id, 'approve', undefined, restricted), notFound)
+      await assert.rejects(wip.transitionPrebill(org.orgId, approver, prebill.id, 'reopen', 'Rehome check', restricted), notFound)
       await assert.rejects(wip.convertPrebill(org.orgId, preparer, prebill.id, restricted), notFound)
       assert.equal((await db.execute<{ n: number }>(sql`select count(*)::int as n from documents where org_id=${org.orgId} and kind='customer_invoice'`)).rows[0]!.n, 0)
       // The locks do not break the legitimate flow: in-scope callers proceed.
-      await wip.transitionPrebill(org.orgId, approver, prebill.id, 'approve', undefined, both)
       const converted = await wip.convertPrebill(org.orgId, preparer, prebill.id, both)
       assert.equal(converted.idempotent, false)
     } finally { await dropScratchOrg(org.orgId) }
@@ -477,7 +477,7 @@ const consolidatedRows = [
             try {
               await db.execute(sql`update orgs set settings = jsonb_set(settings, '{features,wipBilling}', 'true'::jsonb, true) where id = ${org.orgId}`)
               const actors = await seedFlowActors(org.orgId)
-              const preparer = actors.adminId, approver = actors.approver1Id
+              const preparer = actors.adminId
               const tm = BUILTIN_PROJECT_TYPES.find((t) => t.key === 'time_and_materials')!
               const typeId = randomUUID(), project = randomUUID()
               await db.execute(sql`insert into project_types(id,org_id,key,name,billing_method,invoicing_profile,backup_profile)
@@ -508,7 +508,6 @@ const consolidatedRows = [
               const approved = await wip.loadPrebill(org.orgId, prebill.id, null)
               assert.equal(approved?.proposedBillAmount, '0.0100')
               await wip.transitionPrebill(org.orgId, preparer, prebill.id, 'submit', undefined, null)
-              await wip.transitionPrebill(org.orgId, approver, prebill.id, 'approve', undefined, null)
 
               const converted = await wip.convertPrebill(org.orgId, preparer, prebill.id, null)
               assert.equal(converted.idempotent, false)
@@ -560,7 +559,6 @@ const consolidatedRows = [
               const prebill = await wip.createPrebill(org.orgId, actors.adminId, { projectId: project, periodEnd: org.date })
               assert.equal(prebill.sourceCount, 1)
               await wip.transitionPrebill(org.orgId, actors.adminId, prebill.id, 'submit')
-              await wip.transitionPrebill(org.orgId, actors.approver1Id, prebill.id, 'approve')
               await run({ org, actor: actors.adminId, approver: actors.approver1Id, project, prebill: prebill.id, entry })
             } finally { await dropScratchOrg(org.orgId) }
           })
@@ -609,7 +607,6 @@ const consolidatedRows = [
           await wip.transitionPrebill(f.org.orgId, f.actor, f.prebill, 'void', 'Correct source accounting configuration')
           const replacement = await wip.createPrebill(f.org.orgId, f.actor, { projectId: f.project, periodEnd: f.org.date })
           await wip.transitionPrebill(f.org.orgId, f.actor, replacement.id, 'submit')
-          await wip.transitionPrebill(f.org.orgId, f.approver, replacement.id, 'approve')
           await convertedWith({ ...f, prebill: replacement.id }, f.org.accounts.revenue)
         }))
 
@@ -687,7 +684,7 @@ const consolidatedRows = [
 
               await assert.rejects(
                 createPrebill(org.orgId, actor, { projectId, periodEnd: org.date }),
-                (error: unknown) => error instanceof WipBillingError && error.status === 404 && /wip billing feature is disabled/i.test(error.message),
+                (error: unknown) => error instanceof WipBillingError && error.status === 404 && /Pre-billing is turned off/i.test(error.message),
               )
               assert.equal(
                 (await db.execute<{ n: number }>(sql`select count(*)::int as n from wip_prebills where org_id=${org.orgId}`)).rows[0]!.n,
@@ -766,7 +763,6 @@ test('converting after a switch to NTE enforces the new ceiling', enabled, async
       // Priced and approved under the open policy, where no cap applies.
       const prebill = await wip.createPrebill(org.orgId, preparer, { projectId: project, periodEnd: org.date }, null)
       await wip.transitionPrebill(org.orgId, preparer, prebill.id, 'submit', undefined, null)
-      await wip.transitionPrebill(org.orgId, approver, prebill.id, 'approve', undefined, null)
 
       // The job moves under the NTE policy with zero remaining capacity.
       const switched = await withOrgContext(org.orgId, () => headerRoute.PATCH(

@@ -6862,8 +6862,8 @@
       "description": "Lieferantenverpflichtungen, Nachunternehmeränderungen, Lieferanten-SOVs und Abschlagsrechnungen, Einbehaltverbindlichkeiten, Freigaben, Gemeinschaftsschecks und Zahlungssperren."
     },
     "wipBilling": {
-      "title": "Unfertige Leistungen und Vorauszahlungen",
-      "description": "Abrechenbare Projektarbeit prüfen, Zeilen mit Nachweis zurückhalten oder anpassen, Vorabrechnungen genehmigen und WIP-Alterung, Realisierung und Schwund überwachen."
+      "title": "Vorabrechnung",
+      "description": "Machen Sie aus unberechneter Projektarbeit geprüfte Rechnungspakete: Abrechnungsläufe, belegte Anpassungen und Zurückhaltungen, Genehmigung über Flows, optionale Kundenprüfung im Portal und Rechnungsversand mit Nachweisen."
     },
     "resourcing": {
       "title": "Ressourcenplanung",

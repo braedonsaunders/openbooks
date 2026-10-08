@@ -718,7 +718,7 @@ export const NAV_MODULES: NavModule[] = [
   {
     key: 'wip-billing',
     href: '/projects/wip-billing',
-    label: 'WIP & Prebilling',
+    label: 'Pre-billing',
     iconKey: 'clipboard-check',
     group: 'operations',
     subgroup: 'delivery',

@@ -8,7 +8,7 @@ import { registerFlowApprovalReleaseHandler } from '@openbooks/engine/src/flows/
  * Most flow subjects release entirely inside the engine. A few product
  * records orchestrate services that intentionally live in the web package
  * (field-ticket rate resolution and project-charge materialization,
- * timesheet stamping, crew batch approval). The engine cannot
+ * timesheet stamping, crew batch approval, pre-billing worksheets). The engine cannot
  * import web, so the node server registers those handlers here at boot,
  * exactly like the flow PDF renderer.
  *
@@ -76,5 +76,20 @@ export async function registerFlowApprovalReleaseHandlers(): Promise<void> {
     if (!ctx.userId) throw new Error('crew batch approval needs an acting user')
     const { releaseCrewTimeBatchApproval } = await import('./crew-batch-approval-release')
     await releaseCrewTimeBatchApproval(ctx.orgId, ctx.userId, subjectId, outcome, comment)
+  })
+
+  // Pre-billing worksheet approval is tenant-authored in Flows. The engine
+  // decides who approves; this supplies what approval means for a worksheet —
+  // freezing its lines as approved, or returning it to draft with the
+  // approver's reason attached.
+  registerFlowApprovalReleaseHandler('wip_prebill', async ({
+    subjectId,
+    outcome,
+    comment,
+    ctx,
+  }) => {
+    if (!ctx.userId) throw new Error('pre-billing approval needs an acting user')
+    const { releasePrebillApproval } = await import('./wip-billing')
+    await releasePrebillApproval(ctx.orgId, ctx.userId, subjectId, outcome, comment)
   })
 }

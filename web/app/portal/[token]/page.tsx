@@ -1,13 +1,24 @@
 import { notFound, redirect } from 'next/navigation'
 import { getTranslations } from 'next-intl/server'
-import { consumePortalLink, portalHome, resolvePortalSession } from '@openbooks/engine/portal'
+import { consumePortalLink, portalBillingReviews, portalHome, resolvePortalSession } from '@openbooks/engine/portal'
 import { db, withOrgContext } from '@openbooks/engine/platform/database'
 import { PortalNav, PortalShell } from '@/components/portal/portal-shell'
 
 export const runtime = 'nodejs'
 
-export default async function PortalTokenPage({ params }: { params: Promise<{ token: string }> }) {
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+export default async function PortalTokenPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ token: string }>
+  searchParams?: Promise<Record<string, string | string[] | undefined>>
+}) {
   const { token } = await params
+  // A review invitation lands the customer on the package it names.
+  const review = (await searchParams)?.review
+  const reviewId = typeof review === 'string' && UUID_RE.test(review) ? review : null
   const t = await getTranslations('portal')
   const session = await resolvePortalSession(token)
   if (!session) {
@@ -19,10 +30,14 @@ export default async function PortalTokenPage({ params }: { params: Promise<{ to
     } catch {
       notFound()
     }
-    redirect(`/portal/${consumed.sessionToken}`)
+    redirect(`/portal/${consumed.sessionToken}${reviewId ? `/reviews/${reviewId}` : ''}`)
   }
   const active = session!
-  const home = await withOrgContext(active.orgId, () => portalHome(active.orgId, active.partyId, db))
+  const [home, reviews] = await withOrgContext(active.orgId, () => Promise.all([
+    portalHome(active.orgId, active.partyId, db),
+    portalBillingReviews(active.orgId, active.partyId, db),
+  ]))
+  const awaitingReview = reviews.filter((entry) => entry.status === 'customer_review').length
   const nav = [
     ...(home.settings.sections.invoices ? [{ href: '/invoices', label: t('nav.invoices') }] : []),
     ...(home.settings.sections.paymentMethods ? [{ href: '/methods', label: t('nav.methods') }] : []),
@@ -35,6 +50,13 @@ export default async function PortalTokenPage({ params }: { params: Promise<{ to
   // link with its count, and the full list lives on its own page. Store
   // credit and prepaid grants are separate concepts with separate links.
   const summaries: Array<{ href: string; label: string; count: number; empty: string }> = [
+    // Billing reviews appear only once the supplier has sent one.
+    ...(reviews.length > 0 ? [{
+      href: `/portal/${token}/reviews`,
+      label: t('home.billingReviews'),
+      count: awaitingReview,
+      empty: t('home.noBillingReviews'),
+    }] : []),
     ...(home.settings.sections.invoices ? [{
       href: `/portal/${token}/invoices`,
       label: t('home.openInvoices'),

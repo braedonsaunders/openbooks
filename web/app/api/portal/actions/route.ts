@@ -2,6 +2,7 @@ import { randomBytes } from 'node:crypto'
 import { z } from 'zod'
 import { NextResponse } from 'next/server'
 import { defineRoute } from '@/lib/api/route'
+import { apiErrorResponse } from '@/lib/api/error-response'
 import { db, withOrgContext } from '@openbooks/engine/platform/database'
 import {
   PORTAL_ACTOR_ID,
@@ -20,6 +21,7 @@ import { createPaymentLink } from '@openbooks/engine/payments/acceptance'
 import { removeMethod, setDefaultMethod, startMethodSetup } from '@openbooks/engine/payments/autopay'
 import { lookupStoredValueByCode, storedValueAccountOwnedByCustomer } from '@openbooks/engine/stored-value'
 import { appBaseUrl } from '@openbooks/engine/flows'
+import { acceptPrebillReview, disputePrebillReview } from '@/lib/wip-billing'
 
 export const runtime = 'nodejs'
 
@@ -37,6 +39,16 @@ const bodySchema = z.discriminatedUnion('action', [
   z.object({ action: z.literal('removeMethod'), sessionToken, methodId: z.string().uuid() }),
   z.object({ action: z.literal('startMethodSetup'), sessionToken, provider: z.enum(['stripe', 'adyen', 'gocardless']) }),
   z.object({ action: z.literal('lookupGiftCard'), sessionToken, code: z.string().min(4).max(64) }),
+  z.object({
+    action: z.literal('acceptBillingReview'), sessionToken, prebillId: z.string().uuid(),
+    digest: z.string().regex(/^[0-9a-f]{64}$/), signerName: z.string().max(200),
+    purchaseOrderNumber: z.string().max(100).nullable().optional(), note: z.string().max(2000).nullable().optional(),
+  }),
+  z.object({
+    action: z.literal('disputeBillingReview'), sessionToken, prebillId: z.string().uuid(),
+    digest: z.string().regex(/^[0-9a-f]{64}$/), note: z.string().max(2000).nullable().optional(),
+    lines: z.array(z.object({ lineId: z.string().uuid(), note: z.string().max(1000) })).max(500),
+  }),
 ])
 
 type Body = z.output<typeof bodySchema>
@@ -112,6 +124,24 @@ export const POST = defineRoute({
         }
         return NextResponse.json({ kind: balance.kind, balanceMinor: balance.balanceMinor, currency: balance.currency, status: balance.status })
       }
+      case 'acceptBillingReview':
+        try {
+          return NextResponse.json(await acceptPrebillReview({
+            orgId, partyId, linkId, prebillId: body.prebillId, digest: body.digest,
+            signerName: body.signerName, purchaseOrderNumber: body.purchaseOrderNumber, note: body.note,
+          }))
+        } catch (error) {
+          return apiErrorResponse(error)
+        }
+      case 'disputeBillingReview':
+        try {
+          return NextResponse.json(await disputePrebillReview({
+            orgId, partyId, linkId, prebillId: body.prebillId, digest: body.digest,
+            note: body.note, lines: body.lines,
+          }))
+        } catch (error) {
+          return apiErrorResponse(error)
+        }
     }
   },
 })
