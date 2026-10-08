@@ -1,4 +1,5 @@
 import * as React from 'react'
+import { DrawerViewSwitchContext } from './drawer-view-switch-context'
 
 /** A view-transition class, or a class per transition type. */
 export type ViewTransitionClass = string | Record<string, string>
@@ -45,8 +46,7 @@ export const VIEW_SWITCH_TRANSITION = 'view-switch'
  */
 export const DRAWER_VIEW_SWITCH_TRANSITION = 'drawer-view-switch'
 
-/** The transition type of the nearest enclosing drawer's own view switches. */
-export const DrawerViewSwitchContext = React.createContext<string | null>(null)
+export { DrawerViewSwitchContext }
 
 /** The type a drawer's body animates on: unique to that drawer instance. */
 export function drawerViewSwitchType(drawerId: string): string {
