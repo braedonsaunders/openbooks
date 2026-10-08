@@ -3478,6 +3478,11 @@
         "singularTitle": "账龄分段策略",
         "description": "将逾期天数转换为账龄分段的天数分界（按生效日期）。未设置策略时采用30/60/90分段。"
       },
+      "internal-billing": {
+        "title": "内部计费",
+        "description": "用于部门、项目和子公司之间计费的生效日期规则，以及每条规则如何不影响公司总额。",
+        "singularTitle": "内部计费规则"
+      },
       "schedule-boards": {
         "title": "排程板",
         "singularTitle": "排程板",
@@ -3487,11 +3492,6 @@
         "title": "排程代码",
         "singularTitle": "排程代码",
         "description": "用于安排不属于客户或项目的工作（如培训日或车间日），以及标记人员不工作的日期。"
-      },
-      "internal-billing": {
-        "title": "内部计费",
-        "description": "用于部门、项目和子公司之间计费的生效日期规则，以及每条规则如何不影响公司总额。",
-        "singularTitle": "内部计费规则"
       }
     },
     "fields": {
