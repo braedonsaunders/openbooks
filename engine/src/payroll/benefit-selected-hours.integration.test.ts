@@ -188,6 +188,12 @@ test('period-end hourly policy counts paid units once while default coverage ret
         values(${randomUUID()},${fx.orgId},${enrollmentId},${ruleId},'fixed','1.54','2026-07-18','2026-07-18')`);
       rules.push({ id: ruleId, componentId, mode });
     }
+    await assert.rejects(() => db.transaction(async tx => {
+      await tx.execute(sql`update hrm_benefit_contribution_rules set hours_coverage='unknown' where org_id=${fx.orgId} and id=${rules[0]!.id}`);
+    }), error => errorChainMatches(error, /hrm_benefit_contribution_hours_coverage/));
+    await assert.rejects(() => db.transaction(async tx => {
+      await tx.execute(sql`update hrm_benefit_contribution_rules set basis='per_period' where org_id=${fx.orgId} and id=${rules[1]!.id}`);
+    }), error => errorChainMatches(error, /hrm_benefit_contribution_hours_coverage/));
     await db.execute(sql`update hrm_benefit_enrollments set submitted_by=${fx.actorId},submitted_at=now(),
       submission_snapshot=public.benefit_enrollment_submission_source(org_id,id),updated_by=${fx.actorId},
       decision_snapshot=jsonb_build_object('outcome','approved','mode','not_required','approvalMode','none','planId',plan_id),status='active'
