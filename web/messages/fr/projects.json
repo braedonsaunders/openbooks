@@ -394,7 +394,8 @@
     },
     "board": {
       "aria": "Étapes de préfacturation",
-      "showAll": "Afficher les {count}"
+      "showAll": "Afficher les {count}",
+      "closedSummary": "Affichage des {shown} derniers sur {count}. Le tableau comprend tous les résultats."
     },
     "stages": {
       "unbilled": "À préfacturer",
@@ -415,7 +416,8 @@
       "customer": "Les préfactures en cours de validation par le client apparaissent ici.",
       "invoiced": "Les factures à comptabiliser ou à envoyer apparaissent ici.",
       "sent": "Les factures envoyées en attente de paiement apparaissent ici.",
-      "paid": "Les factures payées apparaissent ici."
+      "paid": "Les factures payées apparaissent ici.",
+      "void": "Les feuilles de travail et factures annulées apparaissent ici."
     },
     "card": {
       "oldest": "Travail le plus ancien il y a {days, plural, one {# jour} other {# jours}}",
@@ -443,7 +445,9 @@
       "period": "Période",
       "stage": "Étape",
       "amount": "Montant",
-      "openBalance": "Solde restant"
+      "openBalance": "Solde restant",
+      "scope": "Les lignes à préfacturer sont des projets ; les autres sont des feuilles de travail. Les nombres et totaux suivent la recherche. Tous les ouverts exclut Payé et Annulé.",
+      "total": "Total du travail correspondant"
     },
     "billRun": {
       "title": "Cycle de facturation",

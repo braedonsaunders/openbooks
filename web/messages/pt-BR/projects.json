@@ -394,7 +394,8 @@
     },
     "board": {
       "aria": "Etapas do pré-faturamento",
-      "showAll": "Mostrar todas as {count}"
+      "showAll": "Mostrar todas as {count}",
+      "closedSummary": "Mostrando os últimos {shown} de {count}. A tabela inclui todos os resultados."
     },
     "stages": {
       "unbilled": "A pré-faturar",
@@ -415,7 +416,8 @@
       "customer": "As pré-faturas em revisão pelo cliente aparecem aqui.",
       "invoiced": "As faturas aguardando lançamento ou envio aparecem aqui.",
       "sent": "As faturas enviadas aguardando pagamento aparecem aqui.",
-      "paid": "As faturas pagas aparecem aqui."
+      "paid": "As faturas pagas aparecem aqui.",
+      "void": "Planilhas e faturas anuladas aparecem aqui."
     },
     "card": {
       "oldest": "Trabalho mais antigo há {days, plural, one {# dia} other {# dias}}",
@@ -443,7 +445,9 @@
       "period": "Período",
       "stage": "Etapa",
       "amount": "Valor",
-      "openBalance": "Saldo em aberto"
+      "openBalance": "Saldo em aberto",
+      "scope": "As linhas a pré-faturar são projetos; as demais são planilhas. As contagens e os totais seguem a busca. Todos os abertos exclui Pago e Anulado.",
+      "total": "Total do trabalho correspondente"
     },
     "billRun": {
       "title": "Ciclo de faturamento",

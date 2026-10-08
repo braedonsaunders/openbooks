@@ -26,14 +26,16 @@ import {
   Input,
   Label,
   Textarea,
+  TableCell,
+  TableRow,
+  useSwitchView,
   cn,
 } from "@openbooks/ui";
 import { useBusinessToday } from "../../../../components/business-date-provider";
 import { useMoney } from "../../../../components/money-provider";
 import { PagedTable } from "../../../../components/paged-table";
 import { readApiErrorMessage } from "../../../../lib/api-error";
-import { decimalSum } from "../../../../lib/statement-format";
-import { PREBILL_STAGES, type PrebillStage } from "../../../../lib/pre-billing-stages";
+import type { PrebillStage } from "../../../../lib/pre-billing-stages";
 import type {
   BillRunResult,
   PrebillDetail,
@@ -41,6 +43,11 @@ import type {
   UnbilledProjectRow,
 } from "../../../../lib/pre-billing";
 import { PrebillDrawer } from "./PrebillDrawer";
+import { RecordTabs } from "../../../../components/module-home/record-tabs";
+import {
+  CLOSED_CARD_LIMIT, isClosedStage, parseWorkspaceStage, prebillDisplayAmount, projectWorkspace,
+  type WorkspaceEntry,
+} from "./workspace-model";
 
 type ProjectOption = {
   id: string;
@@ -49,13 +56,6 @@ type ProjectOption = {
   projectTypeName: string;
   lineBuilder: string;
 };
-
-type BoardColumn = PrebillStage | "unbilled";
-
-/** Stages that stay off the board until something reaches them. */
-const ON_DEMAND: ReadonlySet<BoardColumn> = new Set(["review", "customer", "sent"]);
-/** Closed stages show their most recent cards; the table lists every one. */
-const CLOSED_CARD_LIMIT = 12;
 
 export const STAGE_TONE: Record<PrebillStage, "secondary" | "warning" | "default" | "success" | "outline" | "destructive"> = {
   draft: "secondary",
@@ -79,10 +79,9 @@ export async function requestJson<T = Record<string, unknown>>(url: string, init
  * customer is asked, accepted — package before it becomes an invoice, then
  * the invoice is delivered with its backup and tracked to payment.
  *
- * One concept, two views of it: a board whose columns are the stages work
- * moves through, and a single table filtered by stage. Stages that a company
- * does not use (approval routing, customer review) stay hidden until a
- * worksheet reaches them, so a small business sees draft → ready → invoiced.
+ * Board lanes and table rows share one projection of authorized project
+ * work and worksheets. Presentation changes use native history; selecting
+ * a worksheet still resolves its detail through the server navigation.
  */
 export function PreBillingWorkspace({
   prebills,
@@ -108,11 +107,9 @@ export function PreBillingWorkspace({
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const { money } = useMoney();
+  const switchView = useSwitchView();
   const view = searchParams.get("view") === "table" ? "table" : "board";
-  const stageParam = searchParams.get("stage");
-  const stageFilter = stageParam && (PREBILL_STAGES as readonly string[]).includes(stageParam)
-    ? (stageParam as PrebillStage)
-    : null;
+  const stageFilter = parseWorkspaceStage(searchParams.get("stage"));
   const [query, setQuery] = useState("");
   const [billRunOpen, setBillRunOpen] = useState(false);
   const [billRunProject, setBillRunProject] = useState<string | null>(null);
@@ -127,30 +124,21 @@ export function PreBillingWorkspace({
     router.push(qs ? `${pathname}?${qs}` : pathname);
   }
 
-  const needle = query.trim().toLowerCase();
-  const matches = (text: Array<string | null | undefined>) =>
-    !needle || text.some((value) => value?.toLowerCase().includes(needle));
-  const visiblePrebills = prebills.filter((row) =>
-    matches([row.worksheetNumber, row.projectName, row.customerName, row.invoiceNumber]),
-  );
-  const visibleUnbilled = unbilled.filter((row) => matches([row.projectName, row.customerName]));
+  function navigatePresentation(params: { view?: string | null; stage?: string | null }) {
+    const next = new URL(window.location.href);
+    for (const [key, value] of Object.entries(params)) {
+      if (value === null) next.searchParams.delete(key);
+      else next.searchParams.set(key, value);
+    }
+    const href = `${next.pathname}${next.search}${next.hash}`;
+    if (href !== `${window.location.pathname}${window.location.search}${window.location.hash}`) {
+      window.history.pushState(null, "", href);
+    }
+  }
 
-  const byStage = useMemo(() => {
-    const groups = new Map<PrebillStage, PrebillListRow[]>();
-    for (const stage of PREBILL_STAGES) groups.set(stage, []);
-    for (const row of visiblePrebills) groups.get(row.stage)!.push(row);
-    return groups;
-  }, [visiblePrebills]);
-
-  const columns: BoardColumn[] = (["unbilled", ...PREBILL_STAGES.filter((stage) => stage !== "void")] as BoardColumn[])
-    .filter((column) => {
-      if (!ON_DEMAND.has(column)) return true;
-      if (column === "review") return approvalFlowsConfigured || (byStage.get("review")?.length ?? 0) > 0;
-      if (column === "customer") return customerPortalEnabled || (byStage.get("customer")?.length ?? 0) > 0;
-      return (byStage.get(column as PrebillStage)?.length ?? 0) > 0;
-    });
-
-  const nothingYet = prebills.length === 0 && unbilled.length === 0;
+  const projection = useMemo(() => projectWorkspace({
+    prebills, unbilled, query, stage: stageFilter, approvalFlowsConfigured, customerPortalEnabled,
+  }), [prebills, unbilled, query, stageFilter, approvalFlowsConfigured, customerPortalEnabled]);
 
   function openBillRun(projectId: string | null) {
     setBillRunProject(projectId);
@@ -176,7 +164,7 @@ export function PreBillingWorkspace({
               key={mode}
               type="button"
               aria-pressed={view === mode}
-              onClick={() => navigate({ view: mode === "board" ? null : "table" })}
+              onClick={() => switchView(() => navigatePresentation({ view: mode === "board" ? null : "table" }))}
               className={cn(
                 "flex items-center gap-1.5 rounded-md px-2.5 py-1 transition-colors",
                 view === mode
@@ -199,43 +187,56 @@ export function PreBillingWorkspace({
         </div>
       </div>
 
-      {nothingYet ? (
-        <EmptyState
-          icon={<FileText />}
-          title={projects.length === 0 ? t("empty.noProjectsTitle") : t("empty.nothingToBillTitle")}
-          description={projects.length === 0 ? t("empty.noProjectsDescription") : t("empty.nothingToBillDescription")}
-          action={projects.length === 0 && canManage ? (
-            <Button asChild variant="outline">
-              <Link href="/admin/setup/project-types">{t("empty.configureProjectTypes")}</Link>
-            </Button>
-          ) : undefined}
-        />
-      ) : view === "board" ? (
-        <div className="grid min-w-0 grid-cols-[repeat(auto-fit,minmax(min(100%,16rem),1fr))] items-start gap-3 pb-2" role="list" aria-label={t("board.aria")}>
-          {columns.map((column) => (
-            <BoardLane
-              key={column}
-              column={column}
-              rows={column === "unbilled" ? [] : byStage.get(column)!}
-              unbilled={column === "unbilled" ? visibleUnbilled : []}
-              money={money}
-              canManage={canManage}
-              onOpen={(id) => navigate({ prebill: id })}
-              onPrebill={(projectId) => openBillRun(projectId)}
-              onShowAll={(stage) => navigate({ view: "table", stage })}
+      <RecordTabs
+        label={t("table.stageFilter")}
+        active={stageFilter ?? "all"}
+        onChange={(stage) => navigatePresentation({ stage: stage === "all" ? null : stage })}
+        tabs={[
+          { key: "all", label: t("table.allOpen"), count: projection.openCount },
+          ...projection.stages.map(({ key, count }) => ({ key, label: t(`stages.${key}`), count })),
+        ]}
+        className="min-w-0 max-w-full border-b border-slate-200 dark:border-slate-800"
+      >
+        <div className="min-w-0 pt-4">
+          {projection.nothingYet ? (
+            <EmptyState
+              icon={<FileText />}
+              title={projects.length === 0 ? t("empty.noProjectsTitle") : t("empty.nothingToBillTitle")}
+              description={projects.length === 0 ? t("empty.noProjectsDescription") : t("empty.nothingToBillDescription")}
+              action={projects.length === 0 && canManage ? (
+                <Button asChild variant="outline">
+                  <Link href="/admin/setup/project-types">{t("empty.configureProjectTypes")}</Link>
+                </Button>
+              ) : undefined}
             />
-          ))}
+          ) : view === "board" ? (
+            <div className="grid min-w-0 grid-cols-[repeat(auto-fit,minmax(min(100%,16rem),1fr))] items-start gap-3 pb-2" role="list" aria-label={t("board.aria")}>
+              {projection.lanes.map((lane) => (
+                <BoardLane
+                  key={lane.key}
+                  lane={lane}
+                  money={money}
+                  canManage={canManage}
+                  onOpen={(id) => navigate({ prebill: id })}
+                  onPrebill={(projectId) => openBillRun(projectId)}
+                  onShowAll={() => switchView(() => navigatePresentation({ view: "table", stage: lane.key }))}
+                />
+              ))}
+            </div>
+          ) : (
+            <PrebillTable
+              rows={projection.rows}
+              total={projection.total}
+              resetPageKey={`${stageFilter ?? "all"}:${query}`}
+              onOpen={(id) => navigate({ prebill: id })}
+              onPrebill={openBillRun}
+              canManage={canManage}
+              selectedId={selected?.id ?? null}
+              money={money}
+            />
+          )}
         </div>
-      ) : (
-        <PrebillTable
-          rows={visiblePrebills}
-          stage={stageFilter}
-          onStage={(stage) => navigate({ stage })}
-          onOpen={(id) => navigate({ prebill: id })}
-          selectedId={selected?.id ?? null}
-          money={money}
-        />
-      )}
+      </RecordTabs>
 
       {billRunOpen ? (
         <BillRunDrawer
@@ -265,31 +266,24 @@ export function PreBillingWorkspace({
 }
 
 function BoardLane({
-  column,
-  rows,
-  unbilled,
+  lane,
   money,
   canManage,
   onOpen,
   onPrebill,
   onShowAll,
 }: {
-  column: BoardColumn;
-  rows: PrebillListRow[];
-  unbilled: UnbilledProjectRow[];
+  lane: ReturnType<typeof projectWorkspace>["lanes"][number];
   money: (value: string) => string;
   canManage: boolean;
   onOpen: (id: string) => void;
   onPrebill: (projectId: string) => void;
-  onShowAll: (stage: PrebillStage) => void;
+  onShowAll: () => void;
 }) {
   const t = useTranslations("projects.preBilling");
-  const closed = column === "paid";
+  const { key: column, count, total, rows } = lane;
+  const closed = isClosedStage(column);
   const shown = closed ? rows.slice(0, CLOSED_CARD_LIMIT) : rows;
-  const count = column === "unbilled" ? unbilled.length : rows.length;
-  const total = column === "unbilled"
-    ? decimalSum(unbilled.map((row) => row.unbilledAmount))
-    : decimalSum(rows.map((row) => row.proposedBillAmount));
   return (
     <section
       role="listitem"
@@ -308,21 +302,22 @@ function BoardLane({
       <div className="flex max-h-[calc(100vh-16rem)] min-h-24 flex-col gap-2 overflow-y-auto p-2">
         {count === 0 ? (
           <p className="px-1 py-3 text-xs text-slate-500 dark:text-slate-400">{t(`stageEmpty.${column}`)}</p>
-        ) : column === "unbilled" ? (
-          unbilled.map((row) => (
-            <UnbilledCard key={row.projectId} row={row} money={money} canManage={canManage} onPrebill={onPrebill} />
-          ))
         ) : (
-          shown.map((row) => <PackageCard key={row.id} row={row} money={money} onOpen={onOpen} />)
+          shown.map((entry) => entry.kind === "unbilled"
+            ? <UnbilledCard key={entry.key} row={entry.source} money={money} canManage={canManage} onPrebill={onPrebill} />
+            : <PackageCard key={entry.key} row={entry.source} money={money} onOpen={onOpen} />)
         )}
         {closed && rows.length > shown.length ? (
-          <button
-            type="button"
-            onClick={() => onShowAll(column as PrebillStage)}
-            className="rounded-lg px-2 py-1.5 text-xs font-medium text-teal-700 hover:bg-white dark:text-teal-300 dark:hover:bg-slate-800"
-          >
-            {t("board.showAll", { count: rows.length })}
-          </button>
+          <>
+            <p className="px-2 text-xs text-slate-500 dark:text-slate-400">{t("board.closedSummary", { shown: shown.length, count })}</p>
+            <button
+              type="button"
+              onClick={onShowAll}
+              className="rounded-lg px-2 py-1.5 text-xs font-medium text-teal-700 hover:bg-white dark:text-teal-300 dark:hover:bg-slate-800"
+            >
+              {t("board.showAll", { count: rows.length })}
+            </button>
+          </>
         ) : null}
       </div>
     </section>
@@ -388,9 +383,7 @@ function PackageCard({ row, money, onOpen }: { row: PrebillListRow; money: (valu
         </span>
       </div>
       <p className="mt-2 break-words text-lg font-semibold tabular-nums text-slate-950 dark:text-slate-50">
-        {money(row.stage === "invoiced" || row.stage === "sent" || row.stage === "paid"
-          ? row.invoiceTotal ?? row.proposedBillAmount
-          : row.proposedBillAmount)}
+        {money(prebillDisplayAmount(row))}
       </p>
       <p className="text-xs text-slate-500 dark:text-slate-400">
         {row.periodStart ? t("card.period", { start: row.periodStart, end: row.periodEnd }) : t("card.through", { date: row.periodEnd })}
@@ -437,125 +430,109 @@ function PackageCard({ row, money, onOpen }: { row: PrebillListRow; money: (valu
 }
 
 function PrebillTable({
-  rows,
-  stage,
-  onStage,
-  onOpen,
-  selectedId,
-  money,
+  rows, total, resetPageKey, onOpen, onPrebill, canManage, selectedId, money,
 }: {
-  rows: PrebillListRow[];
-  stage: PrebillStage | null;
-  onStage: (stage: string | null) => void;
+  rows: WorkspaceEntry[];
+  total: string;
+  resetPageKey: string;
   onOpen: (id: string) => void;
+  onPrebill: (projectId: string) => void;
+  canManage: boolean;
   selectedId: string | null;
   money: (value: string) => string;
 }) {
   const t = useTranslations("projects.preBilling");
-  const counts = new Map<PrebillStage, number>();
-  for (const row of rows) counts.set(row.stage, (counts.get(row.stage) ?? 0) + 1);
-  // "All" is every stage still in motion; closed stages are their own filters.
-  const filtered = stage ? rows.filter((row) => row.stage === stage) : rows.filter((row) => row.stage !== "paid" && row.stage !== "void");
+  const common = useTranslations("common");
+  function open(entry: WorkspaceEntry) {
+    if (entry.kind === "prebill") onOpen(entry.source.id);
+    else if (canManage) onPrebill(entry.source.projectId);
+  }
   return (
-    <div className="space-y-3">
-      <div className="flex flex-wrap gap-1.5" role="group" aria-label={t("table.stageFilter")}>
-        <FilterChip active={stage === null} onClick={() => onStage(null)} label={t("table.allOpen")} />
-        {PREBILL_STAGES.filter((value) => (counts.get(value) ?? 0) > 0 || value === stage).map((value) => (
-          <FilterChip
-            key={value}
-            active={stage === value}
-            onClick={() => onStage(value)}
-            label={t(`stages.${value}`)}
-            count={counts.get(value) ?? 0}
-          />
-        ))}
-      </div>
+    <div className="min-w-0 space-y-3">
+      <p className="text-xs text-slate-500 dark:text-slate-400">{t("table.scope")}</p>
       <PagedTable
         source="projects_prebills"
-        rows={filtered}
-        rowKey={(row) => row.id}
+        rows={rows}
+        rowKey={(entry) => entry.key}
+        resetPageKey={resetPageKey}
         emptyAsRow
-        onRowClick={(row) => onOpen(row.id)}
-        rowSelected={(row) => row.id === selectedId}
+        onRowClick={open}
+        rowInteractive={(entry) => entry.kind === "prebill" || canManage}
+        rowSelected={(entry) => entry.kind === "prebill" && entry.source.id === selectedId}
         empty={<EmptyState icon={<FileText />} title={t("table.emptyTitle")} description={t("table.emptyDescription")} />}
+        footer={rows.length ? (
+          <TableRow>
+            <TableCell colSpan={4} className="font-medium">{t("table.total")}</TableCell>
+            <TableCell className="text-right font-medium tabular-nums">{money(total)}</TableCell>
+            <TableCell colSpan={2} />
+          </TableRow>
+        ) : undefined}
         columns={[
           {
             key: "worksheet",
             header: t("table.worksheet"),
-            cell: (row) => (
+            cell: (entry) => entry.kind === "unbilled" ? (
+              <span className="text-slate-500">{t("stages.unbilled")}</span>
+            ) : (
               <>
-                <p className="font-medium">{row.worksheetNumber}</p>
-                {row.invoiceNumber ? <p className="text-xs text-slate-500">{row.invoiceNumber}</p> : null}
+                <p className="font-medium">{entry.source.worksheetNumber}</p>
+                {entry.source.invoiceNumber ? <p className="text-xs text-slate-500">{entry.source.invoiceNumber}</p> : null}
               </>
             ),
           },
           {
             key: "customer",
             header: t("table.customer"),
-            cell: (row) => (
+            cell: (entry) => (
               <>
-                <p>{row.customerName ?? "—"}</p>
-                <p className="text-xs text-slate-500">{row.projectName}</p>
+                <p>{entry.source.customerName ?? "—"}</p>
+                <p className="text-xs text-slate-500">{entry.source.projectName}</p>
               </>
             ),
           },
           {
             key: "period",
             header: t("table.period"),
-            cell: (row) => (
+            cell: (entry) => (
               <span className="whitespace-nowrap text-sm">
-                {row.periodStart ? t("card.period", { start: row.periodStart, end: row.periodEnd }) : t("card.through", { date: row.periodEnd })}
+                {entry.kind === "unbilled" ? t("billRun.oldest", { date: entry.source.oldestWorkDate })
+                  : entry.source.periodStart ? t("card.period", { start: entry.source.periodStart, end: entry.source.periodEnd })
+                    : t("card.through", { date: entry.source.periodEnd })}
               </span>
             ),
           },
           {
             key: "stage",
             header: t("table.stage"),
-            cell: (row) => (
+            cell: (entry) => (
               <span className="flex flex-wrap items-center gap-1">
-                <Badge variant={STAGE_TONE[row.stage]}>{t(`stages.${row.stage}`)}</Badge>
-                {row.stage === "draft" && row.customerDecision === "disputed" ? (
-                  <AlertTriangle className="size-4 text-red-600" aria-label={t("card.disputed", { count: row.disputedLineCount })} />
+                <Badge variant={entry.kind === "unbilled" ? "outline" : STAGE_TONE[entry.stage]}>{t(`stages.${entry.stage}`)}</Badge>
+                {entry.kind === "prebill" && entry.stage === "draft" && entry.source.customerDecision === "disputed" ? (
+                  <AlertTriangle className="size-4 text-red-600" aria-label={t("card.disputed", { count: entry.source.disputedLineCount })} />
                 ) : null}
               </span>
             ),
           },
           {
-            key: "amount",
-            header: t("table.amount"),
-            align: "right",
-            className: "tabular-nums",
-            cell: (row) => money(row.invoiceTotal ?? row.proposedBillAmount),
+            key: "amount", header: t("table.amount"), align: "right", className: "tabular-nums",
+            cell: (entry) => money(entry.amount),
           },
           {
-            key: "balance",
-            header: t("table.openBalance"),
-            align: "right",
-            className: "tabular-nums",
-            cell: (row) => (row.invoiceStatus === "posted" && row.invoiceOpenBalance ? money(row.invoiceOpenBalance) : "—"),
+            key: "balance", header: t("table.openBalance"), align: "right", className: "tabular-nums",
+            cell: (entry) => entry.kind === "prebill" && entry.source.invoiceStatus === "posted" && entry.source.invoiceOpenBalance != null
+              ? money(entry.source.invoiceOpenBalance) : "—",
+          },
+          {
+            key: "actions", header: common("labels.actions"),
+            cell: (entry) => entry.kind === "unbilled" && !canManage ? null : (
+              <Button size="sm" variant="outline" onClick={() => open(entry)}>
+                {entry.kind === "unbilled" ? t("toolbar.billRun") : common("actions.open")}
+              </Button>
+            ),
           },
         ]}
       />
     </div>
-  );
-}
-
-function FilterChip({ active, onClick, label, count }: { active: boolean; onClick: () => void; label: string; count?: number }) {
-  return (
-    <button
-      type="button"
-      aria-pressed={active}
-      onClick={onClick}
-      className={cn(
-        "flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition-colors",
-        active
-          ? "border-teal-500 bg-teal-50 text-teal-800 dark:border-teal-400 dark:bg-teal-950/40 dark:text-teal-200"
-          : "border-slate-300 text-slate-600 hover:border-slate-400 dark:border-slate-700 dark:text-slate-300",
-      )}
-    >
-      {label}
-      {typeof count === "number" ? <span className="tabular-nums text-slate-500">{count}</span> : null}
-    </button>
   );
 }
 

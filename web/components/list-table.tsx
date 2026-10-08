@@ -39,6 +39,7 @@ export function ListTable<T>({
   rowLabel,
   rowRole,
   rowSelected,
+  rowInteractive,
   contained = false,
 }: {
   rows: T[]
@@ -55,6 +56,7 @@ export function ListTable<T>({
   rowLabel?: (row: T) => string
   rowRole?: 'link' | 'button'
   rowSelected?: (row: T) => boolean
+  rowInteractive?: (row: T) => boolean
   /** Keep scrolling inside the table while its host toolbar stays fixed. */
   contained?: boolean
 }) {
@@ -106,12 +108,12 @@ export function ListTable<T>({
               role={rowRole}
               data-state={rowSelected?.(row) ? 'selected' : undefined}
               className={
-                onRowClick
+                onRowClick && (rowInteractive?.(row) ?? true)
                   ? `cursor-pointer ${rowClassName?.(row) ?? ''}`
                   : rowClassName?.(row)
               }
               onClick={
-                onRowClick
+                onRowClick && (rowInteractive?.(row) ?? true)
                   ? (event) => {
                       // Buttons, links and inputs retain their own action; opening a
                       // record must not cover an action's result or refusal.
