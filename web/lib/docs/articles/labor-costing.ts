@@ -50,6 +50,20 @@ opens in a drawer only when selected.
 
 ## Wage rates
 
+Each dated wage also declares **Payroll rate precision** (zero through four
+places after applying the time-type multiplier) and **Payroll amount rounding**.
+The existing defaults retain four-place rates and round the total for each
+combination of time type, project, department and service item. **Per time
+entry** instead rounds each approved entry's amount to cents before summing;
+entries on the same day remain distinct at that rounding boundary. Both modes
+retain the actual hours, worked dates and accounting dimensions.
+
+These terms govern hourly payroll using the wage selected at the pay period's
+end. They do not change salary period amounts or approved job-cost snapshots.
+Change the terms on a dated wage record; changing a governing wage after
+calculation requires recalculation before the run can be committed.
+
+
 Rates are effective-dated and resolve most-specific-wins:
 
 | Scope | Applies when |

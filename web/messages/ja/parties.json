@@ -183,7 +183,13 @@
       "endToday": "本日で終了",
       "delete": "賃金レートを削除",
       "confirmEnd": "この賃金レートを本日で終了しますか？",
-      "confirmDelete": "この賃金レートを削除しますか？すでに原価計上済みの時間には保存済みのレートが保持されます。"
+      "confirmDelete": "この賃金レートを削除しますか？すでに原価計上済みの時間には保存済みのレートが保持されます。",
+      "payrollRatePrecision": "給与単価の精度",
+      "decimalPlaces": "小数点以下{count}桁",
+      "payrollAmountRounding": "給与金額の丸め",
+      "dimensionGroupRounding": "ディメンショングループごと",
+      "timeEntryRounding": "時間記録ごと",
+      "roundingEffectiveDateHint": "この有効日付き賃金の給与時間に適用します。固定給と承認済みのプロジェクト原価は変更されません。"
     },
     "payComponents": {
       "title": "定期支給項目",

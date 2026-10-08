@@ -183,7 +183,13 @@
       "endToday": "Encerrar hoje",
       "delete": "Excluir taxa salarial",
       "confirmEnd": "Encerrar esta taxa salarial hoje?",
-      "confirmDelete": "Excluir esta taxa salarial? As horas já custeadas mantêm a taxa salva."
+      "confirmDelete": "Excluir esta taxa salarial? As horas já custeadas mantêm a taxa salva.",
+      "payrollRatePrecision": "Precisão da taxa da folha",
+      "decimalPlaces": "{count} casas decimais",
+      "payrollAmountRounding": "Arredondamento do valor da folha",
+      "dimensionGroupRounding": "Por grupo de dimensões",
+      "timeEntryRounding": "Por registro de horas",
+      "roundingEffectiveDateHint": "Aplica-se às horas da folha desta remuneração com vigência; salários e custos de projeto aprovados permanecem inalterados."
     },
     "payComponents": {
       "title": "Componentes salariais recorrentes",

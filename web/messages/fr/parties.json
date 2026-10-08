@@ -180,7 +180,13 @@
       "endToday": "Terminer aujourd’hui",
       "delete": "Supprimer le taux de rémunération",
       "confirmEnd": "Terminer ce taux de rémunération aujourd’hui?",
-      "confirmDelete": "Supprimer ce taux de rémunération? Le temps déjà valorisé conserve son taux enregistré."
+      "confirmDelete": "Supprimer ce taux de rémunération? Le temps déjà valorisé conserve son taux enregistré.",
+      "payrollRatePrecision": "Précision du taux de paie",
+      "decimalPlaces": "{count} décimales",
+      "payrollAmountRounding": "Arrondi du montant de paie",
+      "dimensionGroupRounding": "Par groupe de dimensions",
+      "timeEntryRounding": "Par saisie de temps",
+      "roundingEffectiveDateHint": "Applicable aux heures de paie de ce taux daté ; les salaires et les coûts de projet approuvés restent inchangés."
     },
     "payComponents": {
       "title": "Éléments de paie récurrents",

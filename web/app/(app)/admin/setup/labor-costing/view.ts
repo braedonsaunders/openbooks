@@ -132,7 +132,7 @@ export async function loadLaborCosting(
       ${statusFilter} ${scopeFilter} ${searchFilter}`
   const rateSelect = sql`
     select r.id, r.employee_party_id, r.job_title, r.trade_id, r.department_id, r.subsidiary_id,
-           r.currency, r.rate, r.basis, r.annual_hours,
+           r.currency, r.rate, r.basis, r.annual_hours, r.payroll_rate_scale, r.payroll_amount_rounding,
            r.effective_from::text as effective_from, r.effective_to::text as effective_to, r.notes,
            null::text as employee_name, tr.name as trade_name, dep.name as department_name, sub.name as subsidiary_name
       from labor_cost_rates r

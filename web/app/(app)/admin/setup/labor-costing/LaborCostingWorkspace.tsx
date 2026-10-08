@@ -1,5 +1,8 @@
 'use client'
 
+import { PayrollWageRoundingFields } from '../../../../../components/payroll-wage-rounding-fields'
+import { type PayrollAmountRounding } from '@openbooks/engine/src/projects/payroll-wage-rounding.ts'
+
 import Link from 'next/link'
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
@@ -38,6 +41,8 @@ export interface RateRow {
   currency: string
   rate: string
   basis: string
+  payroll_rate_scale: number
+  payroll_amount_rounding: PayrollAmountRounding
   annual_hours: string
   effective_from: string
   effective_to: string | null
@@ -920,6 +925,8 @@ function RateDrawer({
   const [rate, setRate] = useState(row?.rate ?? '')
   const [basis, setBasis] = useState<PayRateBasis>(() => (row ? basisOf(row.basis) : 'hour'))
   const [annualHours, setAnnualHours] = useState(row?.annual_hours ?? String(defaultAnnualHours))
+  const [payrollRateScale, setPayrollRateScale] = useState(row?.payroll_rate_scale ?? 4)
+  const [payrollAmountRounding, setPayrollAmountRounding] = useState<PayrollAmountRounding>(row?.payroll_amount_rounding ?? 'dimension_group')
   const [effectiveFrom, setEffectiveFrom] = useState(row?.effective_from ?? today)
   const [effectiveTo, setEffectiveTo] = useState(row?.effective_to ?? '')
   // Exact preview of the hourly cost a time-based rate converts to, through
@@ -977,6 +984,8 @@ function RateDrawer({
         rate,
         basis,
         annualHours: annualHours || String(defaultAnnualHours),
+        payrollRateScale,
+        payrollAmountRounding,
         effectiveFrom,
         notes: notes.trim() || null,
       })
@@ -1133,6 +1142,8 @@ function RateDrawer({
             ) : null}
           </div>
         ) : null}
+        <PayrollWageRoundingFields idPrefix="rate" rateScale={payrollRateScale} amountRounding={payrollAmountRounding}
+          onChange={(scale, rounding) => { setPayrollRateScale(scale); setPayrollAmountRounding(rounding) }} />
         <div>
           <Label htmlFor="rate-from">{t('rates.from')}</Label>
           <Input id="rate-from" type="date" value={effectiveFrom} disabled={!creating} onChange={(event) => setEffectiveFrom(event.target.value)} />

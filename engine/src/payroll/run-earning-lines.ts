@@ -8,7 +8,7 @@ import { type PayrollSubsidiaryScope } from "./scope.ts";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { PayrollError } from "./error.ts";
-import { add, cmp, mulDecimal, mulPercent, neg, prorateDays, roundMoney } from "../money/money.ts";
+import { add, cmp, mulDecimal, mulPercent, prorateDays, roundMoney } from "../money/money.ts";
 import { negMoney, parseMoney, type Money } from "../money/brands.ts";
 import { payrollPack } from "./packs.ts";
 import { type StatutoryHolidayEligibilityFacts } from "./holidays.ts";
@@ -17,6 +17,7 @@ import { loadActiveDerivedRules, resolveDerivedEarnings } from "./derived-earnin
 import { entitlementMoneyValue, planMovementsForStub, type EntitlementPlan, type EntitlementWarning } from "./entitlements.ts";
 import { applyBasisCaps } from "./limits.ts";
 import { allocateProportionally } from "./run-allocation.ts";
+import { priceDatedWageEntries } from "./wage-rounding.ts";
 import { type Line, programApplicabilityFromExclusions, statutoryHolidayLinesForStub, earningsBase, totalHours, earningJobBuckets, cappableHourLines, resolveEarningExpenseAccount } from "./run-stub-records.ts";
 import { resolvePayRate } from "./run-calculation-support.ts";
 import { payrollHourlyWage, salaryPeriodPay } from "./rate.ts";
@@ -82,19 +83,14 @@ export async function appendPeriodicEarnings(
     `));
     const otComponent = need("overtime", "earning");
     const groups = new Map<string, {
-      hours: string; rate: string; row: (typeof time.rows)[0]; days: Map<string, string>;
+      row: (typeof time.rows)[0]; entries: { workedOn: string; hours: string }[];
     }>();
     for (const t of time.rows) {
-      // Keep the historical dimension-level rounding, then allocate its exact
-      // cent total over dated lines so lookbacks get day evidence without
-      // changing gross pay through per-day rounding.
       const key = [t.time_type_id ?? "", t.project_id ?? "", t.department_id ?? "", t.item_id ?? ""].join("|");
-      const rate = roundMoney(mulDecimal(hourlyWage, t.multiplier), 4);
+      const entry = { workedOn: t.worked_on, hours: t.hours };
       const existing = groups.get(key);
-      if (existing) {
-        existing.hours = add(existing.hours, t.hours);
-        existing.days.set(t.worked_on, add(existing.days.get(t.worked_on) ?? "0", t.hours));
-      } else groups.set(key, { hours: t.hours, rate, row: t, days: new Map([[t.worked_on, t.hours]]) });
+      if (existing) existing.entries.push(entry);
+      else groups.set(key, { row: t, entries: [entry] });
     }
     let sequence = 10;
     for (const group of groups.values()) {
@@ -116,19 +112,14 @@ export async function appendPeriodicEarnings(
         },
         wageDefaultAccountId: wageExpenseAccountId,
       });
-      const totalAmount = roundMoney(mulDecimal(group.rate, group.hours), 2);
-      const datedAmounts = allocateProportionally(totalAmount,
-        [...group.days].map(([day, hours]) => ({
-          weight: cmp(hours, "0") < 0 ? neg(hours) : hours,
-          target: day,
-        })));
-      for (const part of datedAmounts) lines.push({
+      const priced = priceDatedWageEntries(hourlyWage, group.row.multiplier, group.entries, payRate!);
+      for (const part of priced.days) lines.push({
         componentId: String(componentRow.id),
         kind: "earning",
         description: group.row.type_name,
-        hours: group.days.get(part.target)!, rate: group.rate,
-        earnedFrom: part.target, earnedTo: part.target,
-        amount: part.amount,
+        hours: part.hours, rate: priced.rate,
+        earnedFrom: part.workedOn, earnedTo: part.workedOn,
+        amount: parseMoney(part.amount),
         projectId: group.row.project_id, departmentId: group.row.department_id,
         timeTypeId: group.row.time_type_id, itemId: group.row.item_id,
         expenseAccountId: stamp?.accountId ?? null,

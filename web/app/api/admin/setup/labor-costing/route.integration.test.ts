@@ -327,6 +327,8 @@ test("restricted end-rate and delete-rate refuse org-wide rows without rate or a
 type StoredRate = {
   id: string;
   rate: string;
+  payrollRateScale: number;
+  payrollAmountRounding: string;
   effectiveFrom: string;
   effectiveTo: string | null;
   isActive: boolean;
@@ -334,7 +336,8 @@ type StoredRate = {
 
 async function storedRates(orgId: string): Promise<StoredRate[]> {
   const rows = await db.execute<StoredRate>(sql`
-    select id, rate::text as rate, effective_from::text as "effectiveFrom",
+    select id, rate::text as rate, payroll_rate_scale as "payrollRateScale",
+           payroll_amount_rounding as "payrollAmountRounding", effective_from::text as "effectiveFrom",
            effective_to::text as "effectiveTo", is_active as "isActive"
       from labor_cost_rates
      where org_id = ${orgId}
@@ -373,7 +376,9 @@ async function seedSubsidiary(orgId: string, parentId: string, name: string): Pr
 }
 
 async function seedEmployee(orgId: string, subsidiaryId: string | null): Promise<string> {
-  const partyId = randomUUID();
+  const originalId = randomUUID();
+  // Native rebased identifiers retain PostgreSQL shape without RFC version bits.
+  const partyId = originalId.slice(0, 14) + "e" + originalId.slice(15, 19) + "4" + originalId.slice(20);
   await db.execute(sql`
     insert into parties (id, org_id, kind, display_name, is_active, custom, subsidiary_id)
     values (${partyId}, ${orgId}, 'employee', 'Waged Employee', true, '{}'::jsonb, ${subsidiaryId})`);
@@ -1178,7 +1183,7 @@ test("a same-start correction keeps the row's window instead of reopening past i
 
     assert.equal((await POST(postRequest(saveRateBody({ rate: "100", effectiveFrom: "2026-01-01" })))).status, 200);
     assert.equal((await POST(postRequest(saveRateBody({ rate: "120", effectiveFrom: "2026-03-01" })))).status, 200);
-    const backdated = await POST(postRequest(saveRateBody({ rate: "110", effectiveFrom: "2026-02-01" })));
+    const backdated = await POST(postRequest(saveRateBody({ rate: "110", effectiveFrom: "2026-02-01", payrollRateScale: 2, payrollAmountRounding: "time_entry" })));
     assert.equal(backdated.status, 200);
 
     let rates = await storedRates(f.orgId);
@@ -1190,7 +1195,24 @@ test("a same-start correction keeps the row's window instead of reopening past i
     rates = await storedRates(f.orgId);
     assert.equal(rates.length, 3);
     assert.equal(rates[1]!.rate, "115.0000");
+    assert.equal(rates[1]!.payrollRateScale, 2);
+    assert.equal(rates[1]!.payrollAmountRounding, "time_entry", "omitted correction inputs retain the dated policy");
+    const audit = (await rateAudits(f.orgId)).at(-1)!;
+    assert.equal((audit.changes.after as StoredRate).payrollRateScale, 2);
+    assert.equal((audit.changes.after as StoredRate).payrollAmountRounding, "time_entry");
+    const beforeInvalid = await storedRates(f.orgId);
+    const auditCount = (await rateAudits(f.orgId)).length;
+    for (const invalid of [{ payrollRateScale: 5 }, { payrollRateScale: 1.5 }, { payrollAmountRounding: "day" }]) {
+      const response = await POST(postRequest(saveRateBody({ ...invalid, effectiveFrom: "2026-02-10" })));
+      assert.equal(response.status, 400);
+      assert.deepEqual(await storedRates(f.orgId), beforeInvalid);
+      assert.equal((await rateAudits(f.orgId)).length, auditCount);
+    }
     assert.equal(rates[1]!.effectiveTo, "2026-02-28");
+    assert.equal((await POST(postRequest(saveRateBody({ rate: "116", effectiveFrom: "2026-02-10" })))).status, 200);
+    const inherited = (await storedRates(f.orgId)).find((row) => row.effectiveFrom === "2026-02-10")!;
+    assert.equal(inherited.payrollRateScale, 2);
+    assert.equal(inherited.payrollAmountRounding, "time_entry", "new versions inherit prior policy when native callers omit rounding inputs");
   } finally {
     routeState.authz = null;
     const { dropScratchOrgReporting } = await import("@openbooks/engine/src/testing/fixtures.ts");
@@ -1245,7 +1267,7 @@ test("save-rate names WHICH wage scope is unavailable, with the supplied id", as
       { field: "subsidiaryId", kind: "subsidiary" },
     ] as const;
     for (const { field, kind } of cases) {
-      const missing = randomUUID();
+      const missing = "01234567-89ab-edef-4123-456789abcdef";
       const refused = await POST(postRequest(saveRateBody({ [field]: missing })));
       assert.equal(refused.status, 422, field);
       const body = await refused.json() as { error: string };
