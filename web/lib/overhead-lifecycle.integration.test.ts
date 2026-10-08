@@ -4,8 +4,9 @@ import { registerHooks } from 'node:module'
 import test from 'node:test'
 import type { ReactElement } from 'react'
 import type { DriftRow } from '../app/(app)/admin/setup/overhead/OverheadLifecycle'
+import type { TrueCostData } from './analytics/true-cost-data'
 
-const state = { modelReads: 0 }
+const state = { modelReads: 0, model: null as TrueCostData | null }
 const stateKey = Symbol.for('openbooks.overhead-lifecycle-read-test')
 ;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = state
 const nativeReader = new URL('./analytics/true-cost-data.ts', import.meta.url).href
@@ -15,7 +16,9 @@ const hooks = registerHooks({ resolve(specifier, context, next) {
       import {trueCostData as read} from ${JSON.stringify(nativeReader)};
       export async function trueCostData(...args) {
         globalThis[Symbol.for('openbooks.overhead-lifecycle-read-test')].modelReads++;
-        return read(...args);
+        const model = await read(...args);
+        globalThis[Symbol.for('openbooks.overhead-lifecycle-read-test')].model = model;
+        return model;
       }
     `) }
   }
@@ -93,6 +96,17 @@ test('overhead lifecycle shares one native model read while published rates, fea
           assert.equal(data.onLifecycle, true)
           assert.equal(data.actions.departments.length, 1)
           assert.equal(data.actions.departments[0]?.composite, 25)
+          assert.ok(data.trueCost)
+          assert.ok(state.model)
+          assert.equal(state.model.labor.employees.length, 1)
+          assert.ok(state.model.monthly.length > 0)
+          assert.ok(!('employees' in data.trueCost.labor))
+          assert.ok(!('monthly' in data.trueCost))
+          assert.ok(!('forecast' in data.trueCost))
+          const { monthly: _monthly, forecast: _forecast, labor, ...model } = state.model
+          const { employees: _employees, ...laborSummary } = labor
+          assert.deepEqual(data.trueCost, { ...model, labor: laborSummary },
+            'the native loader must retain model values and refusals while bounding its client payload')
           const props = widgetProps(overheadSpec(data), 'overhead-lifecycle-tab')
           assert.ok(props)
           assert.deepEqual(props.departments, data.actions.departments)
