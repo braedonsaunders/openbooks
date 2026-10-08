@@ -383,7 +383,7 @@ test('filing for a missing employee names the employee id', async () => {
 test('retro pay refuses impossible calendar pay dates at the route boundary', async () => {
   const { org, scheduleId } = await setup()
   try {
-    const response = await withOrgContext(org.orgId, () => postRetro(new Request('http://payroll.test', { method: 'POST', body: JSON.stringify({ payScheduleId: scheduleId, payDate: '2026-02-31' }) })))
+    const response = await withOrgContext(org.orgId, () => postRetro(new Request('http://payroll.test', { method: 'POST', body: JSON.stringify({ action: 'propose', payScheduleId: scheduleId, payDate: '2026-02-31' }) })))
     assert.equal(response.status, 422, await response.clone().text())
     assert.match(((await response.json()) as { error: string }).error, /payDate.*calendar date/)
   } finally { await withBypassContext(() => dropScratchOrg(org.orgId)) }
