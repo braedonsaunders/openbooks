@@ -1,5 +1,6 @@
 /** Native dashboard sections, shared by the data boundary and tab controls. */
 export const ANALYTICS_TABS = {
+  'receivables-intelligence': ['overview', 'aging', 'customers', 'maturity'],
   'financial-health': ['overview', 'margin', 'items', 'segments', 'forecast', 'scenarios', 'budget', 'drivers', 'ratios', 'configuration'],
   cashflow: ['overview', 'category'],
   'true-cost': ['absorption', 'selling'],

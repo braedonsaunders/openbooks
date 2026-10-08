@@ -29,7 +29,9 @@
       "cashflowTitle": "Fluxo de caixa",
       "cashflowDesc": "Previsão semanal de caixa, autonomia e aging de contas a pagar/receber",
       "resourceCapacityTitle": "Capacidade de recursos",
-      "resourceCapacityDesc": "Previsão da capacidade da equipe, alocações confirmadas e demanda das oportunidades comerciais"
+      "resourceCapacityDesc": "Previsão da capacidade da equipe, alocações confirmadas e demanda das oportunidades comerciais",
+      "receivablesTitle": "Análise de contas a receber",
+      "receivablesDesc": "Inadimplência, exposição por cliente, créditos e vencimentos contratuais"
     },
     "addAnalytics": "Adicionar análises",
     "libraryTitle": "Sua biblioteca de análises",
@@ -4336,5 +4338,65 @@
     "forbidden": "Salvar exige a permissão de Configuração.",
     "saveFailed": "Falha ao salvar",
     "loadFailed": "Não foi possível carregar os limites."
+  },
+  "receivables": {
+    "title": "Análise de contas a receber",
+    "backToHub": "Voltar às análises",
+    "asOf": "Em {date}",
+    "grossBasis": "Antes da aplicação dos créditos",
+    "weightedBasis": "Dias de atraso ponderados pelo saldo",
+    "openCustomerBasis": "Clientes com saldo em aberto",
+    "documents": "Documentos em aberto: {count}",
+    "cohort": "Documentos: {count} · Dias ponderados: {days}",
+    "topCustomers": "As 12 maiores exposições vencidas",
+    "unassigned": "Cliente não atribuído",
+    "customerShare": "{share} dos recebíveis brutos · {overdue} vencido",
+    "contractualBasis": "Vencimentos contratuais, sem previsão de recebimentos",
+    "methodology": "Os saldos são reconstruídos no fim do período selecionado, em {currency} às taxas de fechamento. Os créditos são apresentados separadamente. {terms} sem vencimento é classificado a partir da data contábil. A estrutura de vencimentos é contratual, não uma previsão de recebimentos.",
+    "openReport": "Abrir relatório de vencimentos",
+    "emptyTitle": "Nenhuma conta a receber em aberto",
+    "emptyBody": "Não há recebíveis contabilizados em aberto nesta data no escopo das suas entidades jurídicas.",
+    "kpi": {
+      "outstanding": "Recebíveis líquidos",
+      "overdue": "Saldo bruto vencido",
+      "overdueShare": "Parcela vencida",
+      "averageDays": "Média de dias em atraso",
+      "gross": "Recebíveis brutos",
+      "credits": "Créditos não aplicados",
+      "customers": "Clientes com itens em aberto",
+      "severe": "Exposição de 90 dias ou mais",
+      "top5": "Concentração dos cinco maiores"
+    },
+    "panels": {
+      "aging": "Composição por vencimento",
+      "balanceBridge": "Conciliação do bruto ao líquido",
+      "agingBalances": "Saldo bruto por idade",
+      "agingCredits": "Créditos por idade",
+      "customerExposure": "Exposição de cobrança por cliente",
+      "maturity": "Estrutura contratual de vencimentos",
+      "cumulative": "Saldo bruto acumulado a vencer"
+    },
+    "tabs": {
+      "overview": "Visão geral",
+      "aging": "Inadimplência",
+      "customers": "Clientes",
+      "maturity": "Vencimentos"
+    },
+    "aging": {
+      "0": "A vencer",
+      "1": "1–30 dias",
+      "2": "31–60 dias",
+      "3": "61–89 dias",
+      "4": "90 dias ou mais"
+    },
+    "maturity": {
+      "0": "Vencido",
+      "1": "Vence em 0–7 dias",
+      "2": "Vence em 8–14 dias",
+      "3": "Vence em 15–30 dias",
+      "4": "Vence em 31–60 dias",
+      "5": "Vence em 61–90 dias",
+      "6": "Vence após 90 dias"
+    }
   }
 }

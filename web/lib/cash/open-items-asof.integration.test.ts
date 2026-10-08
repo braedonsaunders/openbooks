@@ -6,6 +6,7 @@ const { db, env, withBypass, withOrgContext } = await import('@openbooks/engine/
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
 const { postDocument } = await import("@openbooks/engine/src/ledger/posting-document.ts");
 const { openItems } = await import('./open-items')
+const { receivablesData } = await import('../analytics/receivables-data')
 
 /**
  * The forecast's "as of" must see what was collectible THEN: a September
@@ -50,8 +51,13 @@ test('open items reconstruct remaining as of the forecast date', { skip: !env.OP
     const august = await withOrgContext(scratch.orgId, () => openItems(scratch.orgId, 'ar', '2026-08-31'))
     assert.equal(august.length, 1)
     assert.equal(august[0]?.remaining, '100.0000')
+    const augustMetrics = await withOrgContext(scratch.orgId, () => receivablesData(scratch.orgId, '2026-08-31', null))
+    assert.equal(augustMetrics.summary.outstanding, '100.0000', 'a later settlement must not rewrite the historical dashboard balance')
     const september = await withOrgContext(scratch.orgId, () => openItems(scratch.orgId, 'ar', '2026-09-30'))
     assert.equal(september.length, 0)
+    const septemberMetrics = await withOrgContext(scratch.orgId, () => receivablesData(scratch.orgId, '2026-09-30', null))
+    assert.equal(septemberMetrics.summary.outstanding, '0.0000')
+    assert.equal(septemberMetrics.summary.documents, 0)
   } finally {
     await withBypass(() => dropScratchOrg(scratch.orgId))
   }

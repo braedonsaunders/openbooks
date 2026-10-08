@@ -29,7 +29,9 @@
       "cashflowTitle": "Cashflow",
       "cashflowDesc": "Wöchentliche Liquiditätsprognose, Reichweite und Fälligkeitsstruktur der Verbindlichkeiten/Forderungen",
       "resourceCapacityTitle": "Ressourcenkapazität",
-      "resourceCapacityDesc": "Prognose der Personalkapazität, verbindlichen Ressourcenzuweisungen und Nachfrage aus der Vertriebspipeline"
+      "resourceCapacityDesc": "Prognose der Personalkapazität, verbindlichen Ressourcenzuweisungen und Nachfrage aus der Vertriebspipeline",
+      "receivablesTitle": "Forderungsanalyse",
+      "receivablesDesc": "Zahlungsverzug, Kundenexposition, Gutschriften und vertragliche Fälligkeiten"
     },
     "addAnalytics": "Analysen hinzufügen",
     "libraryTitle": "Ihre Analysebibliothek",
@@ -4336,5 +4338,65 @@
     "forbidden": "Zum Speichern ist die Einrichtungsberechtigung erforderlich.",
     "saveFailed": "Speichern fehlgeschlagen",
     "loadFailed": "Die Schwellenwerte konnten nicht geladen werden."
+  },
+  "receivables": {
+    "title": "Forderungsanalyse",
+    "backToHub": "Zurück zu Analysen",
+    "asOf": "Stand {date}",
+    "grossBasis": "Vor Verrechnung offener Gutschriften",
+    "weightedBasis": "Nach Saldo gewichtete Verzugstage",
+    "openCustomerBasis": "Kunden mit offenem Saldo",
+    "documents": "Offene Belege: {count}",
+    "cohort": "Belege: {count} · Gewichtete Tage: {days}",
+    "topCustomers": "Die 12 höchsten überfälligen Kundenbestände",
+    "unassigned": "Nicht zugeordneter Kunde",
+    "customerShare": "{share} der Bruttoforderungen · {overdue} überfällig",
+    "contractualBasis": "Vertragliche Fälligkeiten, keine Zahlungsvorhersage",
+    "methodology": "Die Salden werden zum Ende des gewählten Zeitraums in {currency} zu Stichtagskursen rekonstruiert. Gutschriften werden getrennt ausgewiesen. {terms} ohne Fälligkeit wird ab Buchungsdatum gealtert. Die Fälligkeitsstruktur ist vertraglich und keine Inkassoprognose.",
+    "openReport": "Fälligkeitsbericht öffnen",
+    "emptyTitle": "Keine offenen Forderungen",
+    "emptyBody": "Zum Stichtag bestehen innerhalb Ihres Rechtsträgerumfangs keine offenen gebuchten Forderungen.",
+    "kpi": {
+      "outstanding": "Nettoforderungen",
+      "overdue": "Brutto überfällig",
+      "overdueShare": "Überfälliger Anteil",
+      "averageDays": "Mittlere Verzugstage",
+      "gross": "Bruttoforderungen",
+      "credits": "Nicht verrechnete Gutschriften",
+      "customers": "Kunden mit offenen Posten",
+      "severe": "Bestand ab 90 Verzugstagen",
+      "top5": "Konzentration der fünf größten"
+    },
+    "panels": {
+      "aging": "Altersstruktur",
+      "balanceBridge": "Brutto-Netto-Abstimmung",
+      "agingBalances": "Bruttosaldo nach Alter",
+      "agingCredits": "Gutschriften nach Alter",
+      "customerExposure": "Inkassoexposition je Kunde",
+      "maturity": "Vertragliche Fälligkeitsstruktur",
+      "cumulative": "Kumulierter fälliger Bruttosaldo"
+    },
+    "tabs": {
+      "overview": "Übersicht",
+      "aging": "Zahlungsverzug",
+      "customers": "Kunden",
+      "maturity": "Fälligkeit"
+    },
+    "aging": {
+      "0": "Nicht fällig",
+      "1": "1–30 Tage",
+      "2": "31–60 Tage",
+      "3": "61–89 Tage",
+      "4": "Ab 90 Tagen"
+    },
+    "maturity": {
+      "0": "Überfällig",
+      "1": "Fällig in 0–7 Tagen",
+      "2": "Fällig in 8–14 Tagen",
+      "3": "Fällig in 15–30 Tagen",
+      "4": "Fällig in 31–60 Tagen",
+      "5": "Fällig in 61–90 Tagen",
+      "6": "Fällig nach 90 Tagen"
+    }
   }
 }

@@ -29,7 +29,9 @@
       "cashflowTitle": "Flujo de caja",
       "cashflowDesc": "Previsión semanal de caja, autonomía y antigüedad de saldos",
       "resourceCapacityTitle": "Capacidad de recursos",
-      "resourceCapacityDesc": "Previsión de capacidad del equipo, asignaciones confirmadas y demanda de oportunidades comerciales"
+      "resourceCapacityDesc": "Previsión de capacidad del equipo, asignaciones confirmadas y demanda de oportunidades comerciales",
+      "receivablesTitle": "Análisis de cuentas por cobrar",
+      "receivablesDesc": "Morosidad, exposición por cliente, créditos y vencimientos contractuales"
     },
     "addAnalytics": "Añadir análisis",
     "libraryTitle": "Tu biblioteca de análisis",
@@ -4336,5 +4338,65 @@
     "forbidden": "Para guardar se necesita el permiso de Configuración.",
     "saveFailed": "No se pudo guardar",
     "loadFailed": "No se pudieron cargar los umbrales."
+  },
+  "receivables": {
+    "title": "Análisis de cuentas por cobrar",
+    "backToHub": "Volver a Analítica",
+    "asOf": "Al {date}",
+    "grossBasis": "Antes de aplicar notas de crédito",
+    "weightedBasis": "Días de atraso ponderados por saldo",
+    "openCustomerBasis": "Clientes con saldo pendiente",
+    "documents": "Documentos abiertos: {count}",
+    "cohort": "Documentos: {count} · Días ponderados: {days}",
+    "topCustomers": "Las 12 mayores exposiciones vencidas",
+    "unassigned": "Cliente sin asignar",
+    "customerShare": "{share} de las cuentas por cobrar brutas · {overdue} vencido",
+    "contractualBasis": "Vencimientos contractuales, sin previsión de cobros",
+    "methodology": "Los saldos se reconstruyen al cierre del período seleccionado, en {currency} a tipos de cierre. Las notas de crédito se muestran por separado. {terms} sin fecha de vencimiento se clasifica desde la fecha contable. La escala de vencimientos es contractual y no una previsión de cobros.",
+    "openReport": "Abrir informe de antigüedad",
+    "emptyTitle": "No hay cuentas por cobrar abiertas",
+    "emptyBody": "No quedan cuentas por cobrar contabilizadas abiertas en esta fecha dentro de sus entidades jurídicas autorizadas.",
+    "kpi": {
+      "outstanding": "Cuentas por cobrar netas",
+      "overdue": "Saldo bruto vencido",
+      "overdueShare": "Proporción vencida",
+      "averageDays": "Días medios de atraso",
+      "gross": "Cuentas por cobrar brutas",
+      "credits": "Créditos sin aplicar",
+      "customers": "Clientes con partidas abiertas",
+      "severe": "Exposición de más de 90 días",
+      "top5": "Concentración de los cinco mayores"
+    },
+    "panels": {
+      "aging": "Composición por antigüedad",
+      "balanceBridge": "Conciliación de bruto a neto",
+      "agingBalances": "Saldo bruto por antigüedad",
+      "agingCredits": "Créditos por antigüedad",
+      "customerExposure": "Exposición de cobro por cliente",
+      "maturity": "Escala contractual de vencimientos",
+      "cumulative": "Saldo bruto acumulado exigible"
+    },
+    "tabs": {
+      "overview": "Resumen",
+      "aging": "Morosidad",
+      "customers": "Clientes",
+      "maturity": "Vencimientos"
+    },
+    "aging": {
+      "0": "No vencido",
+      "1": "1–30 días",
+      "2": "31–60 días",
+      "3": "61–89 días",
+      "4": "90 días o más"
+    },
+    "maturity": {
+      "0": "Vencido",
+      "1": "Vence en 0–7 días",
+      "2": "Vence en 8–14 días",
+      "3": "Vence en 15–30 días",
+      "4": "Vence en 31–60 días",
+      "5": "Vence en 61–90 días",
+      "6": "Vence después de 90 días"
+    }
   }
 }

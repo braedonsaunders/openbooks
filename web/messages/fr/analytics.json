@@ -29,7 +29,9 @@
       "cashflowTitle": "Trésorerie",
       "cashflowDesc": "Prévision de trésorerie hebdomadaire, autonomie et balance âgée",
       "resourceCapacityTitle": "Capacité des ressources",
-      "resourceCapacityDesc": "Prévisions de capacité des équipes, affectations confirmées et demande issue des opportunités commerciales"
+      "resourceCapacityDesc": "Prévisions de capacité des équipes, affectations confirmées et demande issue des opportunités commerciales",
+      "receivablesTitle": "Analyse des créances clients",
+      "receivablesDesc": "Retards, exposition client, avoirs et échéances contractuelles"
     },
     "addAnalytics": "Ajouter des analyses",
     "libraryTitle": "Votre bibliothèque d’analyses",
@@ -4336,5 +4338,65 @@
     "forbidden": "L’enregistrement nécessite l’autorisation Configuration.",
     "saveFailed": "Échec de l’enregistrement",
     "loadFailed": "Les seuils n’ont pas pu être chargés."
+  },
+  "receivables": {
+    "title": "Analyse des créances clients",
+    "backToHub": "Retour aux analyses",
+    "asOf": "Au {date}",
+    "grossBasis": "Avant imputation des avoirs",
+    "weightedBasis": "Jours de retard pondérés par le solde",
+    "openCustomerBasis": "Clients ayant un solde ouvert",
+    "documents": "Documents ouverts : {count}",
+    "cohort": "Documents : {count} · Jours pondérés : {days}",
+    "topCustomers": "Les 12 plus fortes expositions en retard",
+    "unassigned": "Client non affecté",
+    "customerShare": "{share} des créances brutes · {overdue} en retard",
+    "contractualBasis": "Échéances contractuelles, sans prévision des encaissements",
+    "methodology": "Les soldes sont reconstitués à la fin de la période sélectionnée, en {currency} aux cours de clôture. Les avoirs sont présentés séparément. Le montant de {terms} sans échéance vieillit à partir de la date de comptabilisation. Cet échéancier est contractuel et ne prévoit pas les encaissements.",
+    "openReport": "Ouvrir le rapport des créances âgées",
+    "emptyTitle": "Aucune créance ouverte",
+    "emptyBody": "Aucune créance comptabilisée ne reste ouverte à cette date dans le périmètre de vos entités juridiques.",
+    "kpi": {
+      "outstanding": "Créances nettes",
+      "overdue": "Créances brutes en retard",
+      "overdueShare": "Part en retard",
+      "averageDays": "Retard moyen en jours",
+      "gross": "Créances brutes",
+      "credits": "Avoirs non imputés",
+      "customers": "Clients avec postes ouverts",
+      "severe": "Exposition à plus de 90 jours",
+      "top5": "Concentration des cinq premiers"
+    },
+    "panels": {
+      "aging": "Répartition par ancienneté",
+      "balanceBridge": "Passage du brut au net",
+      "agingBalances": "Solde brut par ancienneté",
+      "agingCredits": "Avoirs par ancienneté",
+      "customerExposure": "Exposition au recouvrement par client",
+      "maturity": "Échéancier contractuel",
+      "cumulative": "Solde brut cumulé à échéance"
+    },
+    "tabs": {
+      "overview": "Vue d’ensemble",
+      "aging": "Retards",
+      "customers": "Clients",
+      "maturity": "Échéances"
+    },
+    "aging": {
+      "0": "Non échu",
+      "1": "1–30 jours",
+      "2": "31–60 jours",
+      "3": "61–89 jours",
+      "4": "90 jours et plus"
+    },
+    "maturity": {
+      "0": "En retard",
+      "1": "Échéance sous 0–7 jours",
+      "2": "Échéance sous 8–14 jours",
+      "3": "Échéance sous 15–30 jours",
+      "4": "Échéance sous 31–60 jours",
+      "5": "Échéance sous 61–90 jours",
+      "6": "Échéance après 90 jours"
+    }
   }
 }

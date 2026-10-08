@@ -29,7 +29,9 @@
       "cashflowTitle": "キャッシュフロー",
       "cashflowDesc": "週次のキャッシュ予測、ランウェイ、AP/ARエイジング",
       "resourceCapacityTitle": "リソースキャパシティ",
-      "resourceCapacityDesc": "人員キャパシティ、確定済みの割当、商談に基づく需要を予測"
+      "resourceCapacityDesc": "人員キャパシティ、確定済みの割当、商談に基づく需要を予測",
+      "receivablesTitle": "売掛金インテリジェンス",
+      "receivablesDesc": "延滞、顧客別残高、貸方残高と契約上の支払期日を分析"
     },
     "addAnalytics": "分析を追加",
     "libraryTitle": "分析ライブラリ",
@@ -4336,5 +4338,65 @@
     "forbidden": "保存するにはセットアップ権限が必要です。",
     "saveFailed": "保存に失敗しました",
     "loadFailed": "しきい値を読み込めませんでした。"
+  },
+  "receivables": {
+    "title": "売掛金インテリジェンス",
+    "backToHub": "分析に戻る",
+    "asOf": "{date} 時点",
+    "grossBasis": "未消込の貸方残高を控除する前",
+    "weightedBasis": "残高加重の延滞日数",
+    "openCustomerBasis": "未決済残高のある顧客",
+    "documents": "未決済伝票数：{count}",
+    "cohort": "伝票数：{count} · 加重日数：{days}",
+    "topCustomers": "延滞残高上位12顧客",
+    "unassigned": "顧客未割当",
+    "customerShare": "売掛金総額の {share} · 延滞 {overdue}",
+    "contractualBasis": "契約上の期日であり、入金予測ではありません",
+    "methodology": "選択期間の終了日時点の残高を、期末スポットレートにより {currency} で再構成します。未消込の貸方残高は個別に表示します。期日未設定の {terms} は転記日から経過日数を算定します。期日分布は契約条件に基づき、入金予測ではありません。",
+    "openReport": "滞留債権レポートを開く",
+    "emptyTitle": "未決済売掛金はありません",
+    "emptyBody": "指定日時点で、参照権限のある法人に未決済の転記済売掛金はありません。",
+    "kpi": {
+      "outstanding": "売掛金純額",
+      "overdue": "延滞総額",
+      "overdueShare": "延滞比率",
+      "averageDays": "平均延滞日数",
+      "gross": "売掛金総額",
+      "credits": "未消込の貸方残高",
+      "customers": "未決済項目のある顧客",
+      "severe": "90日以上の延滞残高",
+      "top5": "上位5顧客への集中度"
+    },
+    "panels": {
+      "aging": "滞留期間別構成",
+      "balanceBridge": "総額から純額への内訳",
+      "agingBalances": "滞留期間別の総残高",
+      "agingCredits": "滞留期間別の貸方残高",
+      "customerExposure": "顧客別の回収リスク残高",
+      "maturity": "契約上の支払期日分布",
+      "cumulative": "期日別の累積総残高"
+    },
+    "tabs": {
+      "overview": "概要",
+      "aging": "延滞分析",
+      "customers": "顧客",
+      "maturity": "支払期日"
+    },
+    "aging": {
+      "0": "期日前",
+      "1": "1～30日",
+      "2": "31～60日",
+      "3": "61～89日",
+      "4": "90日以上"
+    },
+    "maturity": {
+      "0": "延滞",
+      "1": "0～7日以内の期日",
+      "2": "8～14日以内の期日",
+      "3": "15～30日以内の期日",
+      "4": "31～60日以内の期日",
+      "5": "61～90日以内の期日",
+      "6": "90日超の期日"
+    }
   }
 }

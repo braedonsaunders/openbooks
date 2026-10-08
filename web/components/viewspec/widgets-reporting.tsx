@@ -23,6 +23,7 @@ import { FinancialHealthView } from '../../app/(app)/analytics/financial-health/
 import { SentinelView } from '../../app/(app)/analytics/sentinel/SentinelView'
 import { SpendVelocityView } from '../../app/(app)/analytics/spend-velocity/SpendVelocityView'
 import { UtilizationView } from '../../app/(app)/analytics/utilization/UtilizationView'
+import { ReceivablesView } from '../../app/(app)/analytics/receivables-intelligence/ReceivablesView'
 import { VendorView } from '../../app/(app)/analytics/vendor-performance/VendorView'
 import { TrueCostView } from '../../app/(app)/analytics/true-cost/TrueCostView'
 import { ProjectProfitabilityTable } from '../../app/(app)/reports/project-profitability/ProjectProfitabilityTable'
@@ -184,10 +185,9 @@ export const REPORTING_WIDGETS = {
   // filter state; decomposing them into generic blocks would reimplement the
   // component rather than compose it — the `paper-view` precedent.
   //
-  // The period control is ONE entry shared by six of the seven, because the
-  // native pages render the byte-identical `<ReportFilterBar controls={{
-  // period: true }} />`. A second entry would be a duplicate, not coverage.
-  'report-period-filter': () => <ReportFilterBar controls={{ period: true }} />,
+  // Dashboards share one native period control; point-in-time dashboards
+  // may choose a different default without introducing another filter bar.
+  'report-period-filter': (props) => <ReportFilterBar controls={{ period: true }} defaultPeriod={str(props, 'defaultPeriod')} />,
   'cashflow-horizon-control': (props) => <HorizonControl value={num(props, 'value') ?? 4} />,
   'cashflow-view': (props) => (
     <CashflowView data={props.data as ComponentProps<typeof CashflowView>['data']} />
@@ -214,6 +214,7 @@ export const REPORTING_WIDGETS = {
       canConfigure={props.canConfigure === true}
     />
   ),
+  'receivables-view': (props) => <ReceivablesView data={props.data as ComponentProps<typeof ReceivablesView>['data']} canOpenCustomers={props.canOpenCustomers === true} />,
   'vendor-view': (props) => (
     <VendorView
       data={props.data as ComponentProps<typeof VendorView>['data']}

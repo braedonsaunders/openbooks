@@ -16,11 +16,15 @@ export function agingBasisDate<D>(item: { dueDate: D | null | undefined; posting
   return item.dueDate ?? item.postingDate ?? item.documentDate ?? null
 }
 
+/** Inclusive upper days for current, 1–30, 31–60 and 61–89; the final
+ * open-ended band starts at 90. SQL projections use the same boundaries. */
+export const AGING_BUCKET_UPPER_DAYS = [0, 30, 60, 89] as const
+
 /** Bucket index for days past the aging basis date: 0 current, 1 = 1–30, 2 = 31–60, 3 = 61–89, 4 = 90+. */
 export function agingBucketIndex(daysPastDue: number): 0 | 1 | 2 | 3 | 4 {
-  if (daysPastDue <= 0) return 0
-  if (daysPastDue <= 30) return 1
-  if (daysPastDue <= 60) return 2
-  if (daysPastDue < 90) return 3
+  if (daysPastDue <= AGING_BUCKET_UPPER_DAYS[0]) return 0
+  if (daysPastDue <= AGING_BUCKET_UPPER_DAYS[1]) return 1
+  if (daysPastDue <= AGING_BUCKET_UPPER_DAYS[2]) return 2
+  if (daysPastDue < AGING_BUCKET_UPPER_DAYS[3] + 1) return 3
   return 4
 }

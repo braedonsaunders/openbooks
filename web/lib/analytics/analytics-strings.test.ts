@@ -194,7 +194,7 @@ function inScopeFiles(): string[] {
     .map((name) => join(ANALYTICS_DIR, name))
   // Hub server loaders (explicit list — no client components).
   const loaders = [
-    'cashflow', 'customer-intelligence', 'financial-health', 'sentinel',
+    'receivables-intelligence', 'cashflow', 'customer-intelligence', 'financial-health', 'sentinel',
     'spend-velocity', 'true-cost', 'utilization', 'vendor-performance',
   ].map((hub) => join(HUB_DIR, hub, 'view.ts'))
   loaders.push(join(HUB_DIR, 'true-cost', 'planner', 'view.ts'))
