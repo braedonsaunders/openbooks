@@ -12,11 +12,9 @@
  */
 
 import { sql } from "drizzle-orm";
-import { actorPartyId } from "../guard.ts";
 import { completeProcessStep } from "../../hrm/processes.ts";
-import { businessToday } from "../../platform/business-date.ts";
 import { db } from "../../platform/db.ts";
-import { hrmOn } from "../guard.ts";
+import { actorPartyId, hrmOn } from "../guard.ts";
 import type { InboxAdapter } from "../registry.ts";
 import type { InboxItem, InboxListContext } from "../types.ts";
 import { inboxItemId, priorityForDueDate } from "../types.ts";
@@ -35,10 +33,9 @@ type StepRow = {
 export const hrmProcessStepAdapter: InboxAdapter = {
   kind: "hrm_process_step",
   async list(ctx: InboxListContext): Promise<InboxItem[]> {
-    if (!(await hrmOn(db, ctx.orgId))) return [];
-    const partyId = await actorPartyId(ctx.orgId, ctx.actorId);
+    if (!(await hrmOn(ctx))) return [];
+    const partyId = await actorPartyId(ctx);
     if (!partyId) return [];
-    const today = await businessToday(ctx.orgId);
     const rows = (await db.execute<StepRow>(sql`
       select s.id, s.process_id::text as process_id, s.title,
              s.due_on::text as due_on, s.required, s.evidence_kind,
@@ -67,7 +64,7 @@ export const hrmProcessStepAdapter: InboxAdapter = {
           : `${row.process_kind} for ${row.worker_name}${row.required ? " — required" : ""}`,
         dueAt,
         createdAt: dueAt,
-        priority: priorityForDueDate(dueAt, today),
+        priority: priorityForDueDate(dueAt, ctx.asOf),
         subjectHref: `/hrm/processes?process=${row.process_id}`,
         actions: needsFile
           ? []

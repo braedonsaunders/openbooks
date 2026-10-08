@@ -57,12 +57,7 @@ const mockSources = new Map<string, string>([
     `
       export async function decideGate() { throw new Error("not under test") }
       export async function delegateGate() { throw new Error("not under test") }
-    `,
-  ],
-  [
-    "mock:worklist",
-    `
-      export async function worklistApprovals() { return [] }
+      export async function worklistGates() { return [] }
     `,
   ],
   [
@@ -82,8 +77,7 @@ const hooks = registerHooks({
     if (typeof specifier !== "string") return nextResolve(specifier, context);
     if (specifier.endsWith("/platform/db.ts")) return { url: "mock:db", shortCircuit: true };
     if (specifier === "../../hrm/change-requests.ts") return { url: "mock:change-requests", shortCircuit: true };
-    if (specifier === "../../flows/gates.ts") return { url: "mock:gates", shortCircuit: true };
-    if (specifier === "../../flows/approval-worklist.ts") return { url: "mock:worklist", shortCircuit: true };
+    if (specifier.endsWith("/flows/gates.ts")) return { url: "mock:gates", shortCircuit: true };
     if (specifier === "../../automations/action-reasons.ts") return { url: "mock:action-reasons", shortCircuit: true };
     return nextResolve(specifier, context);
   },

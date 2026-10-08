@@ -5,9 +5,9 @@
  * joined through the actor's employments, projecting the same
  * expiring/expired derivation the qualification service uses (stored
  * valid, dated expiry within 30 days). The off state is probed
- * explicitly — an information-schema existence check for the HR-14
- * table — never by catching errors. While the table is absent the
- * adapter lists nothing and the inbox stays up.
+ * explicitly — a catalog existence check for the HR-14 table — never by
+ * catching errors. While the table is absent the adapter lists nothing
+ * and the inbox stays up.
  *
  * Delivery also flows through notifications (the alert scan writes
  * hrm_qualification_expiry notices, which the notification adapter
@@ -16,9 +16,8 @@
  */
 
 import { sql } from "drizzle-orm";
-import { actorPartyId } from "../guard.ts";
 import { db } from "../../platform/db.ts";
-import { hrmOn } from "../guard.ts";
+import { actorPartyId, hrmOn, sourceTableInstalled } from "../guard.ts";
 import type { InboxAdapter } from "../registry.ts";
 import type { InboxItem, InboxListContext } from "../types.ts";
 import { inboxItemId, priorityForDueDate } from "../types.ts";
@@ -26,15 +25,8 @@ import { inboxItemId, priorityForDueDate } from "../types.ts";
 /** HR-14 ledger table (migration 0225). */
 const HR14_TABLE = "hrm_worker_qualifications" as const;
 
-async function hr14Landed(): Promise<boolean> {
-  const found = (await db.execute<{ exists: boolean }>(sql`
-    select to_regclass(${`public.${HR14_TABLE}`}) is not null as exists
-  `)).rows[0]?.exists;
-  return found === true;
-}
-
 export async function qualificationSourceAvailable(): Promise<boolean> {
-  return hr14Landed();
+  return sourceTableInstalled(HR14_TABLE);
 }
 
 type AlertRow = {
@@ -46,9 +38,9 @@ type AlertRow = {
 export const hrmQualificationAlertAdapter: InboxAdapter = {
   kind: "hrm_qualification_alert",
   async list(ctx: InboxListContext): Promise<InboxItem[]> {
-    if (!(await hrmOn(db, ctx.orgId))) return [];
-    if (!(await hr14Landed())) return [];
-    const partyId = await actorPartyId(ctx.orgId, ctx.actorId);
+    if (!(await hrmOn(ctx))) return [];
+    if (!(await sourceTableInstalled(HR14_TABLE))) return [];
+    const partyId = await actorPartyId(ctx);
     if (!partyId) return [];
     // The HR-14 read contract: stored valid rows with a dated expiry
     // inside the alert window, through the actor's employments (never a
@@ -65,7 +57,7 @@ export const hrmQualificationAlertAdapter: InboxAdapter = {
          and e.worker_party_id = ${partyId}
          and q.status = 'valid'
          and q.expires_on is not null
-         and q.expires_on <= current_date + 30
+         and q.expires_on <= ${ctx.asOf}::date + 30
        order by q.expires_on, q.id
        limit 20
     `)).rows;

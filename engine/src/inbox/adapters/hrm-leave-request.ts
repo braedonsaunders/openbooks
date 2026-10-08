@@ -2,7 +2,7 @@
  * HR-15 hrm_leave_request adapter — leave, both sides of the desk.
  *
  * Approver leg: flow gates on hrm_leave_request subjects where the actor
- * can act (read through worklistApprovals, owned here so flows_approval
+ * can act (the worklist gate leg, owned here so flows_approval
  * excludes them — one piece of work, one inbox item). Acts through
  * decideGate / delegateGate.
  *
@@ -13,13 +13,11 @@
 
 import { HRM_LEAVE_REQUEST_SUBJECT_KIND } from "@openbooks/schema/src/hrm-leave.ts";
 import { decideGate, delegateGate } from "../../flows/gates.ts";
-import { worklistApprovals } from "../../flows/approval-worklist.ts";
-import { loadOwnEmploymentIds } from "../../hrm/authorization.ts";
 import { submitLeaveRequest } from "../../hrm/leave.ts";
 import { mayReadOwnLeaveRequests, myLeaveRequests } from "../../hrm/leave-read.ts";
 import { db } from "../../platform/db.ts";
 import { parseDelegationReason } from "../delegation.ts";
-import { hrmOn, toWorklistScope } from "../guard.ts";
+import { actorPartyId, actorPendingGates, hrmOn, toWorklistScope } from "../guard.ts";
 import type { InboxAdapter } from "../registry.ts";
 import type { InboxItem, InboxListContext } from "../types.ts";
 import { inboxItemId, priorityForDueDate } from "../types.ts";
@@ -27,13 +25,11 @@ import { inboxItemId, priorityForDueDate } from "../types.ts";
 export const hrmLeaveRequestAdapter: InboxAdapter = {
   kind: "hrm_leave_request",
   async list(ctx: InboxListContext): Promise<InboxItem[]> {
-    if (!(await hrmOn(db, ctx.orgId))) return [];
+    if (!(await hrmOn(ctx))) return [];
     const out: InboxItem[] = [];
     // Approver leg — gates on leave subjects addressed to me.
-    const approvals = await worklistApprovals(ctx.orgId, ctx.actorId, toWorklistScope(ctx));
-    for (const item of approvals) {
-      if (item.kind !== "flow_gate" || item.gate.subjectKind !== HRM_LEAVE_REQUEST_SUBJECT_KIND) continue;
-      const gate = item.gate;
+    for (const gate of await actorPendingGates(ctx)) {
+      if (gate.subjectKind !== HRM_LEAVE_REQUEST_SUBJECT_KIND) continue;
       const dueAt = gate.escalateAt ? new Date(gate.escalateAt).toISOString() : null;
       out.push({
         id: inboxItemId("hrm_leave_request", `gate:${gate.id}`),
@@ -55,14 +51,15 @@ export const hrmLeaveRequestAdapter: InboxAdapter = {
       });
     }
     // Own leg — my drafts ready to submit. Self-service only, probed BEFORE
-    // the read: the actor needs the same permission myLeaveRequests enforces
-    // (reused here, never redefined) AND a linked employment. Anyone else —
-    // approvers, accountants — contributes zero own-leg items, never the
-    // named refusal, which used to blank the whole inbox (OM-10). The
-    // approver leg above keeps its own gates, unchanged.
+    // the read: the actor needs a person identity (no party, no employment)
+    // AND the same permission myLeaveRequests enforces (reused here, never
+    // redefined); myLeaveRequests itself lists nothing for a person with no
+    // employment. Anyone else — approvers, accountants — contributes zero
+    // own-leg items, never the named refusal, which used to blank the whole
+    // inbox (OM-10). The approver leg above keeps its own gates, unchanged.
     if (
-      (await mayReadOwnLeaveRequests(db, ctx.orgId, ctx.actorId)) &&
-      (await loadOwnEmploymentIds(db, ctx.orgId, ctx.actorId)).length > 0
+      (await actorPartyId(ctx)) !== null &&
+      (await mayReadOwnLeaveRequests(db, ctx.orgId, ctx.actorId))
     ) {
       const mine = await myLeaveRequests({ orgId: ctx.orgId, actorId: ctx.actorId });
       for (const request of mine) {

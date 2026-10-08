@@ -28,7 +28,10 @@ export const dynamic = 'force-dynamic'
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const authz = await getAuthz()
   if (!authz) redirect('/login')
-  const [localePreference, navMode, navModePreference, environments, org, today, featureState, feedbackConfigured] = await Promise.all([
+  const allowed = (permission: string | undefined) => permission === undefined || can(authz, permission)
+  // The shell's sources are independent: read them together so the shell waits
+  // for the slowest one rather than their sum.
+  const [localePreference, navMode, navModePreference, environments, org, today, featureState, feedbackConfigured, jar, groups, localNavigation] = await Promise.all([
     userLocalePreference(),
     resolveNavMode(authz.user.id, authz.user.orgId),
     userNavModePreference(authz.user.id, authz.user.orgId),
@@ -41,6 +44,31 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     // Installation-level, not a tenant feature: the operator configures one
     // issue destination for the whole deployment (web/lib/feedback/config.ts).
     isFeedbackReady(),
+    cookies(),
+    getTranslations('nav').then((tNav) => resolveNav(
+      authz.user.orgId,
+      allowed,
+      authz.user.roles.map(({ key }) => key),
+      // Fall back to the registry label when a module has no translation yet, so
+      // a newly-added nav module can never crash the whole app (MISSING_MESSAGE).
+      (key) => {
+        try {
+          return tNav(key)
+        } catch {
+          return ''
+        }
+      },
+      // Existence check for optional catalog branches (nav.modulesShort):
+      // silent, so absent shorts never log a development MISSING_MESSAGE.
+      (key) => {
+        try {
+          return tNav.has(key)
+        } catch {
+          return false
+        }
+      },
+    )),
+    resolveLocalNavigation(authz),
   ])
   const crmEnabled = featureEnabled(featureState, 'crm')
   const ordersEnabled = featureEnabled(featureState, 'orders')
@@ -50,33 +78,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const cashSalesEnabled = featureEnabled(featureState, 'cashSales')
   if (!org?.base_currency) throw new Error('Organization base currency is not configured')
   const feedbackReady = feedbackConfigured && can(authz, 'feedback.use')
-  const jar = await cookies()
   const defaultCollapsed = jar.get('sidebar_collapsed')?.value === '1'
-
-  const tNav = await getTranslations('nav')
-  const [groups, localNavigation] = await Promise.all([resolveNav(
-    authz.user.orgId,
-    (permission) => permission === undefined || can(authz, permission),
-    authz.user.roles.map(({ key }) => key),
-    // Fall back to the registry label when a module has no translation yet, so
-    // a newly-added nav module can never crash the whole app (MISSING_MESSAGE).
-    (key) => {
-      try {
-        return tNav(key)
-      } catch {
-        return ''
-      }
-    },
-    // Existence check for optional catalog branches (nav.modulesShort):
-    // silent, so absent shorts never log a development MISSING_MESSAGE.
-    (key) => {
-      try {
-        return tNav.has(key)
-      } catch {
-        return false
-      }
-    },
-  ), resolveLocalNavigation(authz)])
 
   return (
     <MoneyProvider currency={org.base_currency}>

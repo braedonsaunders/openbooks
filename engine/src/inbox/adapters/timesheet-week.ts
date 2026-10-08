@@ -17,11 +17,9 @@
 import { sql } from "drizzle-orm";
 import { TIMESHEET_WEEK_SUBJECT_KIND } from "../../flows/timesheet-weeks-adapter.ts";
 import { decideGate, delegateGate } from "../../flows/gates.ts";
-import { worklistApprovals } from "../../flows/approval-worklist.ts";
-import { actorPartyId } from "../guard.ts";
 import { db } from "../../platform/db.ts";
 import { parseDelegationReason } from "../delegation.ts";
-import { toWorklistScope } from "../guard.ts";
+import { actorPartyId, actorPendingGates, toWorklistScope } from "../guard.ts";
 import type { InboxAdapter } from "../registry.ts";
 import type { InboxItem, InboxListContext } from "../types.ts";
 import { inboxItemId, priorityForDueDate } from "../types.ts";
@@ -36,10 +34,8 @@ export const timesheetWeekAdapter: InboxAdapter = {
   kind: "timesheet_week",
   async list(ctx: InboxListContext): Promise<InboxItem[]> {
     const out: InboxItem[] = [];
-    const approvals = await worklistApprovals(ctx.orgId, ctx.actorId, toWorklistScope(ctx));
-    for (const item of approvals) {
-      if (item.kind !== "flow_gate" || item.gate.subjectKind !== TIMESHEET_WEEK_SUBJECT_KIND) continue;
-      const gate = item.gate;
+    for (const gate of await actorPendingGates(ctx)) {
+      if (gate.subjectKind !== TIMESHEET_WEEK_SUBJECT_KIND) continue;
       const dueAt = gate.escalateAt ? new Date(gate.escalateAt).toISOString() : null;
       out.push({
         id: inboxItemId("timesheet_week", `gate:${gate.id}`),
@@ -58,7 +54,7 @@ export const timesheetWeekAdapter: InboxAdapter = {
         source: { kind: "timesheet_week_gate", id: gate.id },
       });
     }
-    const partyId = await actorPartyId(ctx.orgId, ctx.actorId);
+    const partyId = await actorPartyId(ctx);
     if (partyId) {
       const weeks = (await db.execute<OwnWeekRow>(sql`
         select id::text as id, week_start::text as week_start, status

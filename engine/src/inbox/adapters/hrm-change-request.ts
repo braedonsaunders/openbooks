@@ -15,12 +15,10 @@
 
 import { HRM_CHANGE_REQUEST_SUBJECT_KIND } from "@openbooks/schema/src/hrm-change-requests.ts";
 import { decideGate, delegateGate } from "../../flows/gates.ts";
-import { worklistApprovals } from "../../flows/approval-worklist.ts";
 import { validateSubmitActionReason } from "../../automations/action-reasons.ts";
 import { getChangeRequest, listChangeRequests, submitChangeRequest } from "../../hrm/change-requests.ts";
-import { db } from "../../platform/db.ts";
 import { parseDelegationReason } from "../delegation.ts";
-import { hrmOn, toWorklistScope } from "../guard.ts";
+import { actorPendingGates, hrmOn, toWorklistScope } from "../guard.ts";
 import type { InboxAdapter } from "../registry.ts";
 import type { InboxItem, InboxListContext } from "../types.ts";
 import { inboxItemId, priorityForDueDate } from "../types.ts";
@@ -28,12 +26,10 @@ import { inboxItemId, priorityForDueDate } from "../types.ts";
 export const hrmChangeRequestAdapter: InboxAdapter = {
   kind: "hrm_change_request",
   async list(ctx: InboxListContext): Promise<InboxItem[]> {
-    if (!(await hrmOn(db, ctx.orgId))) return [];
+    if (!(await hrmOn(ctx))) return [];
     const out: InboxItem[] = [];
-    const approvals = await worklistApprovals(ctx.orgId, ctx.actorId, toWorklistScope(ctx));
-    for (const item of approvals) {
-      if (item.kind !== "flow_gate" || item.gate.subjectKind !== HRM_CHANGE_REQUEST_SUBJECT_KIND) continue;
-      const gate = item.gate;
+    for (const gate of await actorPendingGates(ctx)) {
+      if (gate.subjectKind !== HRM_CHANGE_REQUEST_SUBJECT_KIND) continue;
       const dueAt = gate.escalateAt ? new Date(gate.escalateAt).toISOString() : null;
       out.push({
         id: inboxItemId("hrm_change_request", `gate:${gate.id}`),

@@ -13,7 +13,6 @@
 
 import { acknowledgeReview } from "../../hrm/performance/reviews.ts";
 import { listMyReviews } from "../../hrm/performance/performance-read.ts";
-import { db } from "../../platform/db.ts";
 import { hrmOn } from "../guard.ts";
 import type { InboxAdapter } from "../registry.ts";
 import type { InboxItem, InboxListContext } from "../types.ts";
@@ -22,7 +21,7 @@ import { inboxItemId } from "../types.ts";
 export const hrmReviewAdapter: InboxAdapter = {
   kind: "hrm_review",
   async list(ctx: InboxListContext): Promise<InboxItem[]> {
-    if (!(await hrmOn(db, ctx.orgId))) return [];
+    if (!(await hrmOn(ctx))) return [];
     const mine = await listMyReviews({ orgId: ctx.orgId, actorId: ctx.actorId });
     const out: InboxItem[] = [];
     for (const review of mine.asReviewer) {
