@@ -90,7 +90,10 @@ export async function saveSetupBook(
     const existing = (await tx.execute<{ selected: boolean }>(sql`
       select exists(select 1 from ${table} where org_id = ${orgId}
         and ${sql.identifier(flag)} ${accounting ? sql`` : sql`and is_active`}) as selected`)).rows[0]
-    selected ||= !existing?.selected
+    // Accounting requires a primary book. Pricing may deliberately have no
+    // default: an explicit assignment then supplies the applicable agreement.
+    // Preserve an explicit choice instead of installing an unrequested fallback.
+    if (accounting || body[field] === undefined) selected ||= !existing?.selected
     active = selected || body.isActive === undefined || coerceBoolean(body.isActive)
   }
 

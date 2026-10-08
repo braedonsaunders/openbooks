@@ -108,7 +108,7 @@ async function fixture() {
             '2026-01-01', '2026-06-30', 'usage_date', true, ${actorId}, ${actorId}),
            (${assignProjectB}, ${org.orgId}, ${bookId}, null, ${projB},
             '2026-01-01', '2026-06-30', 'usage_date', true, ${actorId}, ${actorId})`));
-  return { org, branchId, custA, custB, projA, projB, bookId, assignCustomerB, assignProjectB };
+  return { org, branchId, custA, custB, projA, projB, bookId, versionId, assignCustomerB, assignProjectB };
 }
 
 const get = (params: string) =>
@@ -225,6 +225,136 @@ test("an unrestricted caller keeps the full surface", async () => {
     const deleted = await send(DELETE, undefined, assignProjectB);
     assert.equal(deleted.status, 200);
   } finally {
+    await withBypassContext(() => dropScratchOrg(org.orgId));
+  }
+});
+
+test("native pricing authors an explicit nondefault card and retains a selected contract version outside its window", async () => {
+  const { org, projA, projB, bookId, versionId } = await fixture();
+  const foreign = await withBypassContext(() => createScratchOrg());
+  const { POST: saveBook } = await import('../item-rate-books/route.ts');
+  const { PUT: saveVersion } = await import('../labor-rate-cards/[id]/route.ts');
+  const { resolveItemRate } = await import('../../../lib/item-rates.ts');
+  state.permissions.add('admin.setup.manage');
+  state.allowedSubsidiaryIds = null;
+  try {
+    const created = await send(saveBook, {
+      code: 'CONTRACT', name: 'Contract rates', isDefault: false,
+    });
+    assert.equal(created.status, 200, await created.clone().text());
+    const card = (await created.json()).id as string;
+    const version = randomUUID();
+    const lineId = randomUUID();
+    // The fixture supplies a draft policy; the native editor owns its lines,
+    // effective window and activation before the assignment can select it.
+    await withOrgContext(org.orgId, async () => {
+      await db.execute(sql`insert into item_rate_versions(id,org_id,rate_book_id,effective_from,status)
+        values(${version},${org.orgId},${card},'2025-01-01','draft')`);
+      await db.execute(sql`insert into labor_rate_version_policies(org_id,version_id,derivation_policy)
+        values(${org.orgId},${version},'explicit')`);
+      await db.execute(sql`insert into item_rate_profiles(org_id,item_id,base_unit,pricing_policy,invoice_presentation)
+        values(${org.orgId},${org.items.service},'hour','capped_ladder','summary')`);
+      await db.execute(sql`insert into item_rate_lines(id,org_id,version_id,item_id,unit_code,unit_name,base_quantity,cost_rate)
+        values(${lineId},${org.orgId},${version},${org.items.service},'hour','Hour','1','33.25')`);
+    });
+    const activated = await withOrgContext(org.orgId, () => saveVersion(new Request(
+      `http://rates.test/api/labor-rate-cards/${version}`, { method: 'PUT',
+        headers: { 'content-type': 'application/json' }, body: JSON.stringify({
+          code: 'CONTRACT', name: 'Contract rates', effective_from: '2025-01-01',
+          effective_to: '2025-12-31', status: 'active', derivation_policy: 'explicit',
+          scopes: [], lines: [{ id: lineId, itemId: org.items.service, regular: '65', timeTypeRates: {} }],
+          adjustments: [], terms: [],
+        }),
+      }), { params: Promise.resolve({ id: version }) }));
+    assert.equal(activated.status, 200, await activated.clone().text());
+    assert.deepEqual((await withOrgContext(org.orgId, () => db.execute(sql`
+      select is_default from item_rate_books where org_id=${org.orgId} and id=${card}`))).rows,
+    [{ is_default: false }], 'explicit nondefault pricing never installs an organization fallback');
+    const originalVersions = (await withOrgContext(org.orgId, () => db.execute(sql`
+      select to_jsonb(v) as row from item_rate_versions v where org_id=${org.orgId} order by id`))).rows;
+    const originalLines = (await withOrgContext(org.orgId, () => db.execute(sql`
+      select to_jsonb(l) as row from item_rate_lines l where org_id=${org.orgId} order by id`))).rows;
+    const made = await send(POST, { rateBookId: card, rateVersionId: version, projectId: projA,
+      effectiveFrom: null, effectiveTo: null, dateBasis: 'usage_date', isActive: true });
+    assert.equal(made.status, 200, await made.clone().text());
+    const assignmentId = (await made.json()).id as string;
+    const read = async () => (await withOrgContext(org.orgId, () => db.execute(sql`
+      select rate_book_id,rate_version_id,effective_from,effective_to,date_basis,is_active
+      from item_rate_book_assignments where org_id=${org.orgId} and id=${assignmentId}`))).rows[0];
+    const expected = { rate_book_id: card, rate_version_id: version,
+      effective_from: null, effective_to: null, date_basis: 'usage_date', is_active: true };
+    assert.deepEqual(await read(), expected);
+    const reopened = await get(`projectId=${projA}`);
+    assert.equal(reopened.status, 200);
+    const listing = await reopened.json();
+    assert.equal(listing.assignments[0].pinned_rate_version_id, version);
+    assert.equal(listing.rateBooks.find((b: { id: string }) => b.id === card).versions[0].id, version);
+    const priced = await resolveItemRate({ orgId: org.orgId, projectId: projA,
+      itemId: org.items.service, onDate: '2026-01-08', baseQuantity: '1' });
+    assert.equal(priced?.rateVersionId, version);
+    assert.equal(priced?.bill.amount, '65.0000');
+    const ordinaryEdit = await send(PATCH, { id: assignmentId, effectiveTo: '2026-01-31' });
+    assert.equal(ordinaryEdit.status, 200, await ordinaryEdit.clone().text());
+    assert.deepEqual(await read(), { ...expected, effective_to: '2026-01-31' },
+      'an ordinary edit preserves the selected policy when the pin is omitted');
+    const audit = (await withOrgContext(org.orgId, () => db.execute<{ changes: { before: { rate_version_id: string }; after: { rate_version_id: string } }; actor_id: string }>(sql`
+      select changes,actor_id from audit_log where org_id=${org.orgId}
+        and table_name='item_rate_book_assignments' and row_id=${assignmentId}
+        and action='update' order by at desc,id desc limit 1`))).rows[0]!;
+    assert.equal(audit.actor_id, state.actorId);
+    assert.equal(audit.changes.before.rate_version_id, version);
+    assert.equal(audit.changes.after.rate_version_id, version);
+    const beforeRefusals = await read();
+    const auditCount = (await withOrgContext(org.orgId, () => db.execute(sql`
+      select id from audit_log where org_id=${org.orgId}`))).rows.length;
+    for (const body of [
+      { id: assignmentId, rateVersionId: versionId }, // Different card, draft policy.
+      { id: assignmentId, rateBookId: bookId }, // Changing the card cannot discard its pin.
+      { id: assignmentId, rateVersionId: randomUUID() },
+    ]) {
+      const refused = await send(PATCH, body);
+      assert.equal(refused.status, 400);
+      assert.deepEqual(await refused.json(), { errorCode: 'version' });
+      assert.deepEqual(await read(), beforeRefusals);
+    }
+    const foreignBook = randomUUID(), foreignVersion = randomUUID();
+    await withBypassContext(async () => {
+      await db.execute(sql`insert into item_rate_books(id,org_id,code,name,currency)
+        values(${foreignBook},${foreign.orgId},'FOREIGN','Foreign card','CAD')`);
+      await db.execute(sql`insert into item_rate_versions(id,org_id,rate_book_id,effective_from)
+        values(${foreignVersion},${foreign.orgId},${foreignBook},'2025-01-01')`);
+    });
+    const crossTenant = await send(PATCH, { id: assignmentId, rateVersionId: foreignVersion });
+    assert.equal(crossTenant.status, 400);
+    assert.deepEqual(await crossTenant.json(), { errorCode: 'version' });
+    assert.deepEqual(await read(), beforeRefusals);
+    state.allowedSubsidiaryIds = new Set([org.subsidiaryId]);
+    const hidden = await send(POST, { rateBookId: card, rateVersionId: version, projectId: projB,
+      effectiveFrom: null, effectiveTo: null, dateBasis: 'usage_date', isActive: true });
+    assert.equal(hidden.status, 404);
+    assert.equal((await withOrgContext(org.orgId, () => db.execute(sql`
+      select id from audit_log where org_id=${org.orgId}`))).rows.length, auditCount);
+    state.allowedSubsidiaryIds = null;
+    const unpin = await send(PATCH, { id: assignmentId, rateVersionId: null });
+    assert.equal(unpin.status, 200, await unpin.clone().text());
+    assert.equal((await read())!.rate_version_id, null);
+    assert.equal(await resolveItemRate({ orgId: org.orgId, projectId: projA,
+      itemId: org.items.service, onDate: '2026-01-08', baseQuantity: '1' }), null,
+    'automatic lookup retains the unpriced gap instead of extending an expired contract');
+    assert.deepEqual((await withOrgContext(org.orgId, () => db.execute(sql`
+      select to_jsonb(v) as row from item_rate_versions v where org_id=${org.orgId} order by id`))).rows, originalVersions);
+    assert.deepEqual((await withOrgContext(org.orgId, () => db.execute(sql`
+      select to_jsonb(l) as row from item_rate_lines l where org_id=${org.orgId} order by id`))).rows, originalLines);
+    const automaticDefault = await send(saveBook, { code: 'AUTO', name: 'Default rates' });
+    assert.equal(automaticDefault.status, 200, await automaticDefault.clone().text());
+    const defaultId = (await automaticDefault.json()).id as string;
+    assert.deepEqual((await withOrgContext(org.orgId, () => db.execute(sql`
+      select id,is_default from item_rate_books where org_id=${org.orgId} and is_default`))).rows,
+    [{ id: defaultId, is_default: true }], 'omitting the choice retains the first-book default behavior');
+  } finally {
+    state.allowedSubsidiaryIds = null;
+    state.permissions.delete('admin.setup.manage');
+    await withBypassContext(() => dropScratchOrg(foreign.orgId));
     await withBypassContext(() => dropScratchOrg(org.orgId));
   }
 });
