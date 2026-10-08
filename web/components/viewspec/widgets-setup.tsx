@@ -335,7 +335,7 @@ export const SETUP_WIDGETS = {
     <OverheadRatesTabSlot {...(props as ComponentProps<typeof OverheadRatesTabSlot>)} />
   ),
   'overhead-lifecycle-tab': (props) => (
-    <OverheadLifecycleTabSlot {...(props as ComponentProps<typeof OverheadLifecycleTabSlot>)} />
+    <OverheadLifecycleTabSlot departments={props.departments as ComponentProps<typeof OverheadLifecycleTabSlot>['departments']} />
   ),
   'overhead-application-tab': () => <OverheadApplicationTabSlot />,
 
