@@ -239,7 +239,8 @@
     "filled": "{count, plural, one {Filled # day from the schedule.} other {Filled # days from the schedule.}} {skipped, plural, =0 {} one {# day already had hours.} other {# days already had hours.}} Review and save.",
     "crewFilled": "{count, plural, one {Added # person from the schedule.} other {Added # people from the schedule.}} Review the hours and save the lines.",
     "crewNothing": "Everyone booked to this project today is already on the sheet.",
-    "timeType": "Choose regular time type"
+    "timeType": "Choose regular time type",
+    "reload": "Some scheduled people, tasks or time types changed. Close and reopen this ticket to load the current choices, then fill again."
   },
   "notify": {
     "subject": "Your schedule changed — {board}",

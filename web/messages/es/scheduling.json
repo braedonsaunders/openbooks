@@ -239,7 +239,8 @@
     "filled": "{count, plural, one {Se rellenó # día desde la planificación.} other {Se rellenaron # días desde la planificación.}} {skipped, plural, =0 {} one {# día ya tenía horas.} other {# días ya tenían horas.}} Revise y guarde.",
     "crewFilled": "{count, plural, one {Se añadió # persona desde la planificación.} other {Se añadieron # personas desde la planificación.}} Revise las horas y guarde las líneas.",
     "crewNothing": "Todas las personas asignadas hoy a este proyecto ya están en la hoja.",
-    "timeType": "Elegir tipo de tiempo regular"
+    "timeType": "Elegir tipo de tiempo regular",
+    "reload": "Algunas personas, tareas o tipos de tiempo programados cambiaron. Cierre y vuelva a abrir este parte para cargar las opciones actuales y vuelva a rellenarlo."
   },
   "notify": {
     "subject": "Su planificación ha cambiado: {board}",
