@@ -1984,6 +1984,10 @@
         "notes": "Notizen",
         "openRate": "Lohnsatz für {scope} öffnen",
         "perHour": "pro Stunde",
+        "perWeek": "pro Woche",
+        "perBiweekly": "alle zwei Wochen",
+        "perSemimonth": "zweimal im Monat",
+        "perMonth": "pro Monat",
         "perYear": "pro Jahr",
         "rate": "Satz",
         "rateDeleted": "Lohnsatz gelöscht",
@@ -2001,6 +2005,10 @@
         "to": "Bis",
         "who": "Wer",
         "yr": "J.",
+        "wk": "Wo.",
+        "twoWk": "2 Wo.",
+        "halfMo": "½ Mon.",
+        "mo": "Mon.",
         "title": "Lohnsätze"
       },
       "reconciliation": {

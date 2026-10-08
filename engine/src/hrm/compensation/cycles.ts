@@ -8,6 +8,7 @@ import { lockAndCheckOrgFeature } from "../../organization/org-feature-lock.ts";
 import { organizationCurrencyAvailable } from "../../organization/currency-options.ts";
 import { resolveWage, laborCostingSettings, laborFxQuote } from "../../projects/labor-costing.ts";
 import { supersedeLaborCostRate } from "../../projects/labor-cost-rates.ts";
+import { annualPayRate, requirePayRateBasis } from "../../projects/pay-rate-basis.ts";
 import { add, cmp, fromUnits, mul, mulDecimal, mulRate, normalizeDecimal, roundDiv, toUnits } from "../../money/money.ts";
 import {
   HrmAuthorizationError,
@@ -609,8 +610,11 @@ async function resolveLineGuideline(
       "a line has no current rate — every in-service employment in scope needs a payroll-side wage before the cycle can open; set the missing wages in Labor Costing first",
     );
   }
-  // Native basis when the employee-scope row carries it, otherwise
-  // annualised (resolveWage always returns hourly).
+  // An hourly employee-scope row opens an hourly line at its own rate; a
+  // time-based row (week through year) opens an annual line at its
+  // annualized amount, so a weekly or monthly figure is never read as an
+  // annual one. Without an employee-scope row the line annualises the
+  // resolved wage (resolveWage always returns hourly).
   const native = (await db.execute<{ rate: string; basis: string; currency: string; annual_hours: string }>(sql`
     select rate::text as rate, basis, currency, annual_hours::text as annual_hours
       from labor_cost_rates
@@ -619,8 +623,13 @@ async function resolveLineGuideline(
        and (effective_to is null or effective_to >= ${asOf}::date)
      order by effective_from desc
      limit 1`)).rows[0];
-  const basis: BandBasis = native ? (native.basis === "hour" ? "hourly" : "annual") : "annual";
-  const currentRate = native ? String(native.rate) : mul(wage.wage, String(settings.annualHours));
+  const nativeBasis = native ? requirePayRateBasis(native.basis) : null;
+  const basis: BandBasis = nativeBasis === "hour" ? "hourly" : "annual";
+  const currentRate = !native || nativeBasis === null
+    ? mul(wage.wage, String(settings.annualHours))
+    : nativeBasis === "hour"
+      ? String(native.rate)
+      : annualPayRate(String(native.rate), nativeBasis, String(native.annual_hours));
   const currency = native?.currency ?? wage.currency;
   // The annual-hours of the same wage row that priced the line — the
   // frozen annualization input for hourly lines (null when no native

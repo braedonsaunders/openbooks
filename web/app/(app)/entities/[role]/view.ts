@@ -142,13 +142,13 @@ export async function loadEntityRole(
   const partyTransactionKind = pickString(sp.partyTxnKind)
   const requestedPartyTab = pickString(sp.partyTab)
   const partyTab: PartyTab = requestedPartyTab === 'benefits' || requestedPartyTab === 'transactions' || requestedPartyTab === 'activities' || requestedPartyTab === 'contacts'
-    || requestedPartyTab === 'addresses' || requestedPartyTab === 'accounting' || requestedPartyTab === 'wages'
+    || requestedPartyTab === 'addresses' || requestedPartyTab === 'accounting' || requestedPartyTab === 'compensation'
     || requestedPartyTab === 'payroll' || requestedPartyTab === 'employment' || requestedPartyTab === 'compliance'
     || requestedPartyTab === 'pulse' || requestedPartyTab === 'relationship' || requestedPartyTab === 'external-ids'
     || requestedPartyTab === 'invoicing' || requestedPartyTab === 'pricing'
     || requestedPartyTab === 'paymentMethods' || requestedPartyTab === 'debitMandates'
     ? requestedPartyTab
-    : 'overview'
+    : requestedPartyTab === 'wages' ? 'compensation' : 'overview'
   const [openParty, pickers] = await Promise.all([
     partyId && partyId !== 'new' && isUuid(partyId) ? loadParty(partyId, orgId, authz.allowedSubsidiaryIds) : null,
     (partyId && partyId !== 'new') || creating
@@ -318,6 +318,7 @@ export async function loadEntityRole(
             : null,
           lifecycleStage: openLifecycleStage,
           canManageWages: can(authz, 'admin.setup.manage'),
+          canReadCompensation: hrmEnabled && can(authz, 'hrm.compensation.read'),
           canReadBenefits: hrmEnabled && can(authz, 'hrm.benefits.read'),
           canManagePayroll: payrollEnabled && can(authz, 'payroll.manage'),
           payrollEnabled,

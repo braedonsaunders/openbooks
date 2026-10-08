@@ -14,7 +14,7 @@ import { jurisdictionKey, labourJurisdictionProblem, PayrollJurisdictionError, p
 import { resolveStatutoryHolidayPay, undeclaredJurisdictionHolidayConflict, type StatutoryHolidayEligibilityFacts, type StatutoryHolidayEarningLine } from "./holidays.ts";
 import { planMovementsForStub, recordEntitlementMovements } from "./entitlements.ts";
 import { type EarningsAssessedLine } from "./limits.ts";
-import { divideMoney } from "./run-allocation.ts";
+import { payrollHourlyWage, type PayableRate } from "./rate.ts";
 import type { UsSupplementalWageCategory } from "./supplemental-wages.ts";
 import type { UsStatutoryExemptionCategory } from "./statutory-exemptions.ts";
 /**
@@ -208,7 +208,7 @@ export async function statutoryHolidayLinesForStub(
     periodStart: string;
     periodEnd: string;
     /** The resolved labor cost rate; a salaried rate is divided to hourly here. */
-    payRate: { basis: "hour" | "year"; rate: string; annualHours: string } | null;
+    payRate: PayableRate | null;
     need: (systemKey: string, kind: string) => Record<string, unknown>;
     /** Caller role scope; null/undefined is unrestricted. */
     allowedSubsidiaryIds?: PayrollSubsidiaryScope;
@@ -271,11 +271,7 @@ export async function statutoryHolidayLinesForStub(
     if (conflict) throw new PayrollError(conflict.message);
     return [];
   }
-  const holidayRate = payRate
-    ? (payRate.basis === "hour"
-        ? payRate.rate
-        : divideMoney(payRate.rate, payRate.annualHours, 4))
-    : "0";
+  const holidayRate = payRate ? payrollHourlyWage(payRate) : "0";
   return resolveStatutoryHolidayPay(tx, {
     orgId,
     country,

@@ -12,7 +12,9 @@ import { auditColumns, currencyCode, id, money, orgRef } from "./helpers";
  * nullable and resolve most-specific-wins:
  *   employee > job title > trade > department > subsidiary > org default.
  * Within a scope the latest effectiveFrom ≤ workedOn wins; effectiveTo is an
- * optional hard end. basis=year divides by annualHours (default 2080).
+ * optional hard end. The rate is stored in the cadence it is quoted in
+ * (hour, week, biweekly, semimonth, month or year); a time-based rate
+ * converts to an hourly cost through annualHours (default 2080).
  *
  * The resolved wage × time-type multiplier + configured estimate components
  * (orgs.settings.laborCosting) is snapshotted into time_entries.cost_rate at
@@ -31,8 +33,9 @@ export const laborCostRates = pgTable(
     /** Denomination of the wage; converted to subsidiary functional currency. */
     currency: currencyCode("currency").notNull(),
     rate: money("rate").notNull(),
-    basis: text("basis", { enum: ["hour", "year"] }).notNull().default("hour"),
-    /** Divisor for basis=year (2080 = 40h × 52w). */
+    /** Pay cadence; the labor_cost_rates_basis check (0585) admits exactly these. */
+    basis: text("basis", { enum: ["hour", "week", "biweekly", "semimonth", "month", "year"] }).notNull().default("hour"),
+    /** Divisor converting a time-based rate to hourly (2080 = 40h × 52w). */
     annualHours: money("annual_hours").notNull().default("2080"),
     /** Inclusive validity window. Active windows may not overlap within one
      *  labor scope (storage constraint 0051). */

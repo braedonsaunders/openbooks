@@ -39,6 +39,17 @@ import { isFeatureEnabled } from '../features'
 import { requireFeatureEnabled } from '../feature-gates'
 import { cmp } from '@openbooks/engine/src/money/money.ts'
 import { planTotalCost } from './compensation-money'
+import type { PayRateBasis } from '@openbooks/engine/projects/pay-rate-basis'
+
+/** One dashboard label per wage cadence: averages never mix cadences. */
+const AVERAGE_WAGE_LABEL_KEYS: Record<PayRateBasis, string> = {
+  hour: 'compensation.dashboard.averageHourly',
+  week: 'compensation.dashboard.averageWeekly',
+  biweekly: 'compensation.dashboard.averageBiweekly',
+  semimonth: 'compensation.dashboard.averageSemimonthly',
+  month: 'compensation.dashboard.averageMonthly',
+  year: 'compensation.dashboard.averageAnnual',
+}
 
 /**
  * Compensation workspace loaders — one read per surface behind the
@@ -350,7 +361,7 @@ export async function loadCompensationHome(
         sub: t('compensation.dashboard.bandHistoryCount', { count: versions.length }), tone: 'default' },
     ]
     for (const group of wages.groups) wageTiles.push({
-      iconKey: 'coins', accent: 'teal', label: t(group.basis === 'hour' ? 'compensation.dashboard.averageHourly' : 'compensation.dashboard.averageAnnual'),
+      iconKey: 'coins', accent: 'teal', label: t(AVERAGE_WAGE_LABEL_KEYS[group.basis]),
       value: `${formatDecimal(locale, group.average, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${group.currency}`,
       sub: t('compensation.dashboard.wageGroupCount', { count: group.workers, date: wages.asOf }), tone: 'default',
     })

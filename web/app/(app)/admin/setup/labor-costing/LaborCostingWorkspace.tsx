@@ -19,6 +19,14 @@ import { InteractiveTableRow } from '@/components/interactive-table-row'
 import { apiJson } from '@/lib/api-error'
 import { confirmDialog } from '@/lib/confirm'
 import { createMoneyFormatter } from '@/lib/money-format'
+import { canonicalDecimal } from '@/lib/exact-decimal'
+import {
+  PAY_RATE_BASES,
+  hourlyPayRate,
+  isPayRateBasis,
+  isTimePayRateBasis,
+  type PayRateBasis,
+} from '@openbooks/engine/projects/pay-rate-basis'
 
 export interface RateRow {
   id: string
@@ -54,6 +62,29 @@ function rateState(row: RateRow, today: string): 'current' | 'scheduled' | 'ende
   if (row.effective_from > today) return 'scheduled'
   if (row.effective_to && row.effective_to < today) return 'ended'
   return 'current'
+}
+
+const BASIS_LABEL_KEYS: Record<PayRateBasis, string> = {
+  hour: 'rates.perHour',
+  week: 'rates.perWeek',
+  biweekly: 'rates.perBiweekly',
+  semimonth: 'rates.perSemimonth',
+  month: 'rates.perMonth',
+  year: 'rates.perYear',
+}
+
+const BASIS_SUFFIX_KEYS: Record<PayRateBasis, string> = {
+  hour: 'rates.hr',
+  week: 'rates.wk',
+  biweekly: 'rates.twoWk',
+  semimonth: 'rates.halfMo',
+  month: 'rates.mo',
+  year: 'rates.yr',
+}
+
+/** A stored basis outside the declared cadences reads as hourly only for display. */
+function basisOf(value: string): PayRateBasis {
+  return isPayRateBasis(value) ? value : 'hour'
 }
 
 function formatRate(value: string, currency: string, locale: string): string {
@@ -477,7 +508,7 @@ export function LaborCostingWorkspace(props: {
                       </TableCell>
                       <TableCell className="text-right tabular-nums">
                         {formatRate(row.rate, row.currency, locale)}
-                        <span className="ml-1 text-xs text-slate-400">/{row.basis === 'year' ? t('rates.yr') : t('rates.hr')}</span>
+                        <span className="ml-1 text-xs text-slate-400">/{t(BASIS_SUFFIX_KEYS[basisOf(row.basis)])}</span>
                       </TableCell>
                       <TableCell className="tabular-nums">{row.effective_from}</TableCell>
                       <TableCell className="tabular-nums">{row.effective_to ?? '—'}</TableCell>
@@ -887,10 +918,23 @@ function RateDrawer({
   const [subsidiaryId, setSubsidiaryId] = useState(row?.subsidiary_id ?? '')
   const [currency, setCurrency] = useState(row?.currency ?? orgCurrency)
   const [rate, setRate] = useState(row?.rate ?? '')
-  const [basis, setBasis] = useState<'hour' | 'year'>(() => (row?.basis === 'year' ? 'year' : 'hour'))
+  const [basis, setBasis] = useState<PayRateBasis>(() => (row ? basisOf(row.basis) : 'hour'))
   const [annualHours, setAnnualHours] = useState(row?.annual_hours ?? String(defaultAnnualHours))
   const [effectiveFrom, setEffectiveFrom] = useState(row?.effective_from ?? today)
   const [effectiveTo, setEffectiveTo] = useState(row?.effective_to ?? '')
+  // Exact preview of the hourly cost a time-based rate converts to, through
+  // the same conversion costing and payroll use; none while either input is
+  // not a valid decimal.
+  const hourlyEquivalent = (() => {
+    const amount = canonicalDecimal(rate, 4)
+    const hours = canonicalDecimal(annualHours || String(defaultAnnualHours), 4)
+    if (amount === null || hours === null || !isTimePayRateBasis(basis)) return null
+    try {
+      return hourlyPayRate(amount, basis, hours)
+    } catch {
+      return null
+    }
+  })()
   const [notes, setNotes] = useState(row?.notes ?? '')
 
   async function call(body: Record<string, unknown>) {
@@ -912,7 +956,7 @@ function RateDrawer({
       toast.error(t('scopeRequired'))
       return
     }
-    if (basis === 'year' && (!Number.isFinite(Number(annualHours)) || Number(annualHours) <= 0)) {
+    if (isTimePayRateBasis(basis) && (!Number.isFinite(Number(annualHours)) || Number(annualHours) <= 0)) {
       toast.error(t('rates.annualHoursRequired'))
       return
     }
@@ -1072,20 +1116,19 @@ function RateDrawer({
         ) : null}
         <div>
           <Label htmlFor="rate-basis">{t('rates.basis')}</Label>
-          <Select id="rate-basis" value={basis} onChange={(event) => setBasis(event.target.value as 'hour' | 'year')}>
-            <option value="hour">{t('rates.perHour')}</option>
-            <option value="year">{t('rates.perYear')}</option>
+          <Select id="rate-basis" value={basis} onChange={(event) => { if (isPayRateBasis(event.target.value)) setBasis(event.target.value) }}>
+            {PAY_RATE_BASES.map((value) => (
+              <option key={value} value={value}>{t(BASIS_LABEL_KEYS[value])}</option>
+            ))}
           </Select>
         </div>
-        {basis === 'year' ? (
+        {isTimePayRateBasis(basis) ? (
           <div>
             <Label htmlFor="rate-annual-hours">{t('rates.annualHours')}</Label>
             <Input id="rate-annual-hours" type="number" min="1" step="1" value={annualHours} onChange={(event) => setAnnualHours(event.target.value)} />
-            {rate ? (
+            {hourlyEquivalent !== null ? (
               <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                {t('rates.hourlyEquivalent', {
-                  amount: formatRate(String(Number(rate) / (Number(annualHours) || defaultAnnualHours)), currency, locale),
-                })}
+                {t('rates.hourlyEquivalent', { amount: formatRate(hourlyEquivalent, currency, locale) })}
               </p>
             ) : null}
           </div>

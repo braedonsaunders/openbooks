@@ -77,6 +77,7 @@
     "./revenue": "./src/revenue/public.ts",
     "./projects/header-controls": "./src/projects/header-controls.ts",
     "./projects/labor-costing": "./src/projects/public-labor-costing.ts",
+    "./projects/pay-rate-basis": "./src/projects/pay-rate-basis.ts",
     "./allocations/overhead-application": "./src/allocations/public-overhead-application.ts",
     "./payroll/entitlements": "./src/payroll/public-entitlements.ts",
     "./payroll/withholding": "./src/payroll/public-withholding.ts",

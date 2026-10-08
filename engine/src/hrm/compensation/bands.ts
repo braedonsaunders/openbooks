@@ -14,6 +14,7 @@ import {
 import { CompensationError } from "./errors.ts";
 import { canonicalDecimal, compareDecimal, isPositiveDecimal } from "../../money/exact-decimal.ts";
 import { mul } from "../../money/money.ts";
+import { annualPayRate, requirePayRateBasis } from "../../projects/pay-rate-basis.ts";
 import { bandPlacement } from "./compensation-math.ts";
 import { requireActorId, requireId, requireOrgId, requireReason } from "../recruiting/input.ts";
 
@@ -425,9 +426,10 @@ export async function compaRatioFor(
     );
   }
   const basis: BandBasis = "annual";
-  // Annual truth without a round-trip: an annual native row prices
-  // directly (dividing by annual hours and back would shed dust);
-  // hourly natives and fallback scopes annualise through the wage.
+  // Annual truth without a round-trip: a time-based native row prices
+  // through its own cadence (dividing by annual hours and back would shed
+  // dust); hourly natives and fallback scopes annualise through the
+  // org's annual hours.
   const native = (await db.execute<{ rate: string; basis: string }>(sql`
     select rate::text as rate, basis
       from labor_cost_rates
@@ -436,12 +438,9 @@ export async function compaRatioFor(
        and (effective_to is null or effective_to >= ${asOf}::date)
      order by effective_from desc
      limit 1`)).rows[0];
-  const annualRate =
-    native && native.basis === "year"
-      ? String(native.rate)
-      : native
-        ? mul(String(native.rate), String(settings.annualHours))
-        : mul(wage.wage, String(settings.annualHours));
+  const annualRate = native
+    ? annualPayRate(String(native.rate), requirePayRateBasis(native.basis), String(settings.annualHours))
+    : mul(wage.wage, String(settings.annualHours));
   const band = await resolveBandForScope(
     orgId,
     {

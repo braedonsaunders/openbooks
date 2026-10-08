@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { addCalendarDays, endOfMonth, startOfMonth } from "../platform/business-date.ts";
+import { annualPayRateSqlText } from "../projects/pay-rate-basis.ts";
 import {
   add, apportion, cmp, formatMoney, fromUnits, mul, mulPercent, roundMoney, sum, toUnits,
 } from "../money/money.ts";
@@ -1241,7 +1242,9 @@ export async function previewDerivedRule(
 
   // Gross basis for percent_of_gross only: approved hours × the effective
   // employee wage × the time type's cost multiplier — the same inputs
-  // calculateStub prices wages from, labelled as the estimate it is.
+  // calculateStub prices wages from, labelled as the estimate it is. A
+  // time-based wage converts to hourly through its own annual hours, rounded
+  // to four places like the run's hourly wage.
   const grossByEmployee = new Map<string, string>();
   if (rule.rateMode === "percent_of_gross") {
     const grossRes = (await db.execute<{ employee_party_id: string; gross: string }>(sql`
@@ -1250,9 +1253,11 @@ export async function previewDerivedRule(
         from time_entries te
         left join time_types tt on tt.id = te.time_type_id and tt.org_id = te.org_id
         join lateral (
-          select rate from labor_cost_rates lcr
+          select case when lcr.basis = 'hour' then lcr.rate
+                      else round(${sql.raw(annualPayRateSqlText("lcr"))} / lcr.annual_hours, 4) end as rate
+            from labor_cost_rates lcr
            where lcr.org_id = te.org_id and lcr.employee_party_id = te.employee_party_id
-             and lcr.is_active and lcr.basis = 'hour' and lcr.effective_from <= te.worked_on
+             and lcr.is_active and lcr.effective_from <= te.worked_on
              and (lcr.effective_to is null or lcr.effective_to >= te.worked_on)
            order by lcr.effective_from desc limit 1
         ) lcr on true

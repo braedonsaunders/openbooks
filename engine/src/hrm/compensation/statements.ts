@@ -8,6 +8,7 @@ import { db, withOrgTransaction } from "../../platform/db.ts";
 import { businessToday } from "../../platform/business-date.ts";
 import { resolveWage, laborCostingSettings } from "../../projects/labor-costing.ts";
 import { mul } from "../../money/money.ts";
+import { annualPayRate, requirePayRateBasis } from "../../projects/pay-rate-basis.ts";
 import {
   HrmAuthorizationError,
   requireHrmCompensationManage,
@@ -164,8 +165,8 @@ async function buildPayload(
 ): Promise<Record<string, unknown>> {
   const settings = await laborCostingSettings(orgId);
   const wage = await resolveWage(orgId, workerPartyId, asOf, { annualHoursDefault: settings.annualHours });
-  // Annual truth without a round-trip (see bands.ts): an annual native
-  // row prices directly; otherwise annualise the hourly wage.
+  // Annual truth without a round-trip (see bands.ts): a native row
+  // annualizes through its own cadence; otherwise annualise the hourly wage.
   const native = wage
     ? (await db.execute<{ rate: string; basis: string; currency: string }>(sql`
       select rate::text as rate, basis, currency
@@ -179,8 +180,12 @@ async function buildPayload(
   const currentRate =
     wage === null
       ? null
-      : native && native.basis === "year"
-        ? { rate: String(native.rate), currency: native.currency, basis: "annual" }
+      : native
+        ? {
+            rate: annualPayRate(String(native.rate), requirePayRateBasis(native.basis), String(settings.annualHours)),
+            currency: native.currency,
+            basis: "annual",
+          }
         : { rate: mul(wage.wage, String(settings.annualHours)), currency: wage.currency, basis: "annual" };
   let placement: Record<string, unknown> | null = null;
   // Band placement frozen without the actor-gated read (the caller is

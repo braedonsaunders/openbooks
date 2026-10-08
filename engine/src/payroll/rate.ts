@@ -1,28 +1,28 @@
 import { sql, type SQL } from "drizzle-orm";
+import { annualPayRate, isTimePayRateBasis, type PayRateBasis } from "../projects/pay-rate-basis.ts";
+import { divideMoney } from "./run-allocation.ts";
+import type { Money } from "../money/brands.ts";
 
 /**
  * The single definition of "which labor_cost_rates row pays this employee for
- * this run, and is it usable".
+ * this run, is it usable, and what does it pay".
  *
- * Two places asked that question and answered it differently: readiness tested
- * whether any active rate row OVERLAPPED the pay period, while the run's
- * `resolvePayRate` takes the latest row that covers the period END, and
- * `calculateStub` additionally refuses a salaried employee whose effective row
- * is not `basis = 'year'`. A rate that ended mid-period, or a salaried employee
- * holding only an hourly rate, therefore passed readiness green and then threw
- * inside the run — the pre-flight validating a different rule from the thing it
- * is a pre-flight for.
+ * Readiness and the run must answer the same question the same way: the run's
+ * `resolvePayRate` takes the latest row that covers the period END, and a
+ * salaried employee can only be paid from a rate quoted per stretch of time
+ * (week, two weeks, half-month, month or year) — an hourly rate has no
+ * per-period amount. `effectivePayRateSql` is the row selection,
+ * `hasUsablePayRateSql` is the readiness predicate built from it, and
+ * `payRateIsUsable` is the same decision in TypeScript so it is testable
+ * without a database. `salaryPeriodPay` and `payrollHourlyWage` are the
+ * amounts the run pays from that row, through the shared pay-rate cadence
+ * conversion.
  *
- * Two implementations of one rule IS the defect, so the rule lives here once:
- * `effectivePayRateSql` is the row selection, `hasUsablePayRateSql` is the
- * readiness predicate built from it, and `payRateIsUsable` is the same
- * decision in TypeScript so it is testable without a database.
- *
- * This module is a leaf — it imports nothing from the engine — so both
- * `payroll-run.ts` and `payroll-readiness.ts` can depend on it without a cycle.
+ * This module depends only on leaf helpers, so both the run and readiness can
+ * depend on it without a cycle.
  */
 
-export type PayRateBasis = "hour" | "year";
+export type { PayRateBasis };
 
 /**
  * The rate row `resolvePayRate` would return: active, effective on `onDate`,
@@ -49,8 +49,9 @@ export function effectivePayRateSql(input: {
 /**
  * Boolean: the run will find a rate it can actually pay this employee on.
  * `payBasis` is the employee_payroll_profiles.pay_basis expression — a
- * salaried employee needs an ANNUAL row, because calculateStub divides the
- * annual rate by the schedule's periods per year and refuses anything else.
+ * salaried employee needs a time-based row (any basis except `hour`), because
+ * calculateStub annualizes that rate and divides it by the schedule's periods
+ * per year, and refuses an hourly rate.
  */
 export function hasUsablePayRateSql(input: {
   org: SQL;
@@ -61,7 +62,7 @@ export function hasUsablePayRateSql(input: {
   const basis = effectivePayRateSql({ ...input, selectList: sql`w.basis` });
   return sql`(
     ${basis} is not null
-    and (${input.payBasis} <> 'salary' or ${basis} = 'year')
+    and (${input.payBasis} <> 'salary' or ${basis} <> 'hour')
   )`;
 }
 
@@ -74,5 +75,37 @@ export function payRateIsUsable(
   rate: { basis: PayRateBasis } | null,
 ): boolean {
   if (!rate) return false;
-  return payBasis === "salary" ? rate.basis === "year" : true;
+  return payBasis === "salary" ? isTimePayRateBasis(rate.basis) : true;
+}
+
+/** The pay-rate fields the run pays from: the effective row, FX-converted. */
+export interface PayableRate {
+  readonly basis: PayRateBasis;
+  readonly rate: string;
+  readonly annualHours: string;
+}
+
+/**
+ * One period's salary: the rate's annual amount divided by the schedule's
+ * periods per year, rounded once to the cent. A yearly rate pays exactly
+ * rate ÷ periods; a monthly rate on a semimonthly schedule pays
+ * (rate × 12) ÷ 24. Only a time-based rate can be paid as salary.
+ */
+export function salaryPeriodPay(rate: PayableRate, periodsPerYear: number): Money {
+  if (!isTimePayRateBasis(rate.basis)) {
+    throw new Error("a salary is paid from a time-based rate; an hourly rate has no per-period amount");
+  }
+  return divideMoney(annualPayRate(rate.rate, rate.basis, rate.annualHours), String(periodsPerYear), 2);
+}
+
+/**
+ * The hourly wage the run prices time with: an hourly rate as stored, a
+ * time-based rate annualized and divided by the row's annual hours, rounded
+ * once to four decimals. That quotient IS the stored hourly wage multiplied
+ * by every hour on every stub, so it is computed exactly, never through a
+ * float reciprocal.
+ */
+export function payrollHourlyWage(rate: PayableRate): string {
+  if (rate.basis === "hour") return rate.rate;
+  return divideMoney(annualPayRate(rate.rate, rate.basis, rate.annualHours), rate.annualHours, 4);
 }

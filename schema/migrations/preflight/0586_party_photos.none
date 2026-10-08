@@ -1,0 +1,1 @@
+Adds one nullable column and its foreign key to files; every existing party starts without a photo, so no tenant data needs repair.

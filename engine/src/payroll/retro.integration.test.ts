@@ -827,7 +827,7 @@ test(
       // name attached the first same-named error to both candidates.
       assert.notEqual(hourly.blockedReason, salary.blockedReason);
       assert.match(hourly.blockedReason ?? "", /no labor cost rate covers this employee/);
-      assert.match(salary.blockedReason ?? "", /no annual labor cost rate/);
+      assert.match(salary.blockedReason ?? "", /has only an hourly labor cost rate/);
     } finally {
       await dropScratchOrgReporting(org.orgId);
     }

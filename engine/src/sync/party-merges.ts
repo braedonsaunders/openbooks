@@ -881,6 +881,10 @@ async function applyMergeTx(
     await tx.execute(sql`
       update parties
          set custom = jsonb_set(coalesce(custom, '{}'::jsonb), '{merged_from}', ${JSON.stringify(priorFrom)}::jsonb),
+             -- A survivor without a photo keeps the absorbed party's picture.
+             photo_file_id = coalesce(photo_file_id, (
+               select absorbed.photo_file_id from parties absorbed
+                where absorbed.org_id = ${orgId} and absorbed.id = ${absorbedId})),
              updated_at = now()
        where org_id = ${orgId} and id = ${survivorId}`);
 

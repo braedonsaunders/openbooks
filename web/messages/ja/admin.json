@@ -1984,6 +1984,10 @@
         "notes": "メモ",
         "openRate": "{scope}の賃金レートを開く",
         "perHour": "1時間あたり",
+        "perWeek": "1週間あたり",
+        "perBiweekly": "2週間ごと",
+        "perSemimonth": "月2回",
+        "perMonth": "1か月あたり",
         "perYear": "1年あたり",
         "rate": "レート",
         "rateDeleted": "賃金レートを削除しました",
@@ -2001,7 +2005,11 @@
         "title": "賃金レート",
         "to": "終了",
         "who": "対象",
-        "yr": "年"
+        "yr": "年",
+        "wk": "週",
+        "twoWk": "2週",
+        "halfMo": "半月",
+        "mo": "月"
       },
       "reconciliation": {
         "subsidiary": "子会社",

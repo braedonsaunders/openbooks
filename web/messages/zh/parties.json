@@ -55,7 +55,7 @@
       "addresses": "地址",
       "accounting": "会计",
       "compliance": "合规",
-      "wages": "工资费率",
+      "compensation": "薪酬",
       "invoicing": "开票",
       "pricing": "定价",
       "payroll": "工资",
@@ -161,8 +161,13 @@
       "currency": "币种",
       "basis": "计薪基准",
       "perHour": "按小时",
+      "perWeek": "每周",
+      "perBiweekly": "每两周",
+      "perSemimonth": "每月两次",
+      "perMonth": "每月",
       "perYear": "按年",
       "annualHours": "年工时",
+      "equivalents": "≈ 每小时 {hourly} · 每年 {annual}",
       "effectiveFrom": "生效日期",
       "effectiveTo": "截止日期",
       "add": "添加费率",
@@ -343,7 +348,143 @@
     "workerCompGroup": "工伤组",
     "customForm": "记录表单",
     "manageForms": "自定义记录表单",
-    "addActivity": "添加活动"
+    "addActivity": "添加活动",
+    "compensation": {
+      "tabs": {
+        "ariaLabel": "薪酬视图",
+        "total": "总薪酬",
+        "rates": "工资标准",
+        "variable": "奖金与奖励"
+      },
+      "employment": "雇佣",
+      "noRate": {
+        "title": "尚无工资标准",
+        "body": "在“工资标准”选项卡中登记工资标准即可查看总薪酬。"
+      },
+      "basis": {
+        "ariaLabel": "金额显示单位",
+        "short": {
+          "hour": "按小时",
+          "week": "按周",
+          "biweekly": "每两周",
+          "semimonth": "半月",
+          "month": "按月",
+          "year": "按年"
+        },
+        "per": {
+          "hour": "/小时",
+          "week": "/周",
+          "biweekly": "/两周",
+          "semimonth": "/半月",
+          "month": "/月",
+          "year": "/年"
+        }
+      },
+      "hero": {
+        "title": "总薪酬",
+        "perHour": "全部计入后每小时 {amount}",
+        "perYear": "全部计入后每年 {amount}"
+      },
+      "composition": {
+        "ariaLabel": "总薪酬构成"
+      },
+      "segments": {
+        "base": "基本工资",
+        "variable": "奖金",
+        "retirement": "退休",
+        "health": "健康与保险",
+        "allowance": "津贴",
+        "other": "其他福利",
+        "statutory": "雇主法定成本"
+      },
+      "stats": {
+        "base": "基本工资",
+        "benefits": "福利与津贴",
+        "projected": "根据当前选择预计",
+        "statutoryAndVariable": "法定成本与奖金",
+        "trailing": "实际，过去 12 个月",
+        "payrollOff": "需要启用薪资"
+      },
+      "base": {
+        "title": "基本工资",
+        "scope": {
+          "employee": "员工个人标准",
+          "job_title": "沿用职位标准",
+          "trade": "沿用工种标准",
+          "department": "沿用部门标准",
+          "subsidiary": "沿用子公司标准",
+          "org": "沿用公司标准"
+        },
+        "since": "自 {date} 起",
+        "hoursFromRate": "按此标准约定的每年 {hours} 小时换算",
+        "hoursFromSettings": "按公司标准每年 {hours} 小时换算",
+        "schedule": "按 {name} 发放（每年 {periods} 个发薪期）"
+      },
+      "benefits": {
+        "title": "雇主支付的福利与津贴",
+        "subtitle": "根据当前选择和固定薪资项目预计一年",
+        "empty": "当前没有雇主支付的福利或津贴。"
+      },
+      "employeePaid": {
+        "title": "员工缴款",
+        "subtitle": "由员工支付，不计入总薪酬"
+      },
+      "statutory": {
+        "title": "雇主法定成本",
+        "subtitle": "来自已提交薪资的实际金额，{from} 至 {to}",
+        "empty": "此期间未支付雇主法定成本。"
+      },
+      "otherCurrency": "部分金额使用 {currency} 以外的币种，已列出但未计入合计。",
+      "notPriced": "无法计价",
+      "progression": {
+        "title": "薪资变化",
+        "subtitle": "自 {from} 起 {count, plural, other {# 个标准}}",
+        "lastChange": "上次调整 {percent}%",
+        "ariaLabel": "年薪随时间变化"
+      },
+      "history": {
+        "empty": "尚无员工个人工资标准。",
+        "window": "{from} 至 {to}",
+        "since": "自 {from} 起",
+        "equivalent": "每小时 {hourly} · 每年 {annual}"
+      },
+      "variable": {
+        "payrollOff": "奖金来自已提交的薪资，请启用薪资以查看。",
+        "trailing": "奖金，过去 12 个月",
+        "window": "自 {from} 起",
+        "payments": "付款次数",
+        "paymentsHint": "过去 12 个月内",
+        "pending": "进行中的奖励",
+        "pendingHint": "尚未发放",
+        "historyTitle": "奖金与一次性付款",
+        "empty": "尚无奖金或一次性付款。",
+        "runTypes": {
+          "bonus": "奖金发放",
+          "supplemental": "补充发放",
+          "termination": "离职结算",
+          "retro": "追溯发放",
+          "other": "周期外发放"
+        },
+        "awardsTitle": "奖励",
+        "awardsSubtitle": "在福利中记录的奖励与激励",
+        "awardFallback": "奖励",
+        "awardStatus": {
+          "delivered": "已发放",
+          "rejected": "已拒绝",
+          "pending": "进行中"
+        }
+      }
+    },
+    "photo": {
+      "add": "添加照片",
+      "change": "更换照片",
+      "remove": "移除照片",
+      "removeConfirm": "移除此照片？它仍保留在记录的附件中。",
+      "uploadFailed": "无法上传照片",
+      "removeFailed": "无法移除照片",
+      "updated": "照片已更新",
+      "removed": "照片已移除"
+    }
   },
   "rateBookAssignments": {
     "title": "费率表分配",

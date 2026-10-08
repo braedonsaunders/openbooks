@@ -4,6 +4,7 @@ import { db, withOrgTransaction } from '../../platform/db.ts';
 import { requireAggregateCompensationRead, requireCompensationManageForEmployer } from '../authorization.ts';
 import { requireActorId, requireCivilDate, requireId, requireOrgId, requireReason } from '../recruiting/input.ts';
 import { canonicalDecimal } from '../../money/exact-decimal.ts';
+import { isPayRateBasis, type PayRateBasis } from '../../projects/pay-rate-basis.ts';
 import { CompensationError } from './errors.ts';
 import { getCycle, type CompCycleDTO } from './cycles.ts';
 import { organizationCurrencyAvailable } from '../../organization/currency-options.ts';
@@ -29,7 +30,8 @@ export interface CompensationCycleEvidence {
   recordedOn: string | null;
   effectiveDateEvidence: string | null;
   currency: string;
-  basis: 'hour' | 'year';
+  /** The cadence the source workbook quotes its wages in. */
+  basis: PayRateBasis;
   rows: SourceCompensationRow[];
   cells: { cell: string; value: unknown; cached: unknown; format: string }[];
 }
@@ -37,7 +39,7 @@ export interface CompensationCycleEvidence {
 function validateEvidence(evidence: CompensationCycleEvidence): void {
   if (!evidence || evidence.version !== 1 || !/^[a-f0-9]{64}$/.test(evidence.sha256)
     || !evidence.sourcePath?.trim() || !evidence.sheet?.trim()
-    || !/^[A-Z]{3}$/.test(evidence.currency) || !['hour', 'year'].includes(evidence.basis)
+    || !/^[A-Z]{3}$/.test(evidence.currency) || !isPayRateBasis(evidence.basis)
     || !Array.isArray(evidence.rows) || evidence.rows.length === 0 || evidence.rows.length > 1000
     || !Array.isArray(evidence.cells) || evidence.cells.length > 30000
     || Buffer.byteLength(JSON.stringify(evidence), 'utf8') > 4 * 1024 * 1024) {

@@ -398,12 +398,12 @@ function payrollPanel(): HTMLElement {
 
 test("a visited compensation tab stays mounted while another shows", async (t) => {
   const { done } = await renderEmployeeDrawer({
-    initialTab: "wages",
+    initialTab: "compensation",
     grants: { canManageWages: true, canManagePayroll: true },
   });
   t.after(done);
   const rate = document.querySelector("#employee-wage-rate") as HTMLInputElement | null;
-  assert.ok(rate, "the wages tab must offer a rate input");
+  assert.ok(rate, "the compensation tab must offer a rate input");
   await act(async () => {
     setInputValue(rate, "42.50");
     await tick();
@@ -415,7 +415,7 @@ test("a visited compensation tab stays mounted while another shows", async (t) =
   await clickTab(payroll);
   const wages = wagesSection();
   assert.ok(
-    (wages.parentElement as HTMLElement | null)?.hasAttribute("hidden"),
+    wages.closest("[hidden]") !== null,
     "the wages panel must hide instead of unmounting",
   );
   assert.equal(
@@ -424,12 +424,12 @@ test("a visited compensation tab stays mounted while another shows", async (t) =
     "the unsaved rate must survive behind the hidden panel",
   );
 
-  const wagesTab = railTabNamed(en("parties.drawer.tabs.wages"));
-  assert.ok(wagesTab, "the wages tab must still ride the rail");
-  await clickTab(wagesTab);
+  const compensationTab = railTabNamed(en("parties.drawer.tabs.compensation"));
+  assert.ok(compensationTab, "the compensation tab must still ride the rail");
+  await clickTab(compensationTab);
   assert.equal(
-    (wages.parentElement as HTMLElement | null)?.hasAttribute("hidden"),
-    false,
+    wages.closest("[hidden]"),
+    null,
     "returning must show the same mounted panel",
   );
   assert.equal(
@@ -441,7 +441,7 @@ test("a visited compensation tab stays mounted while another shows", async (t) =
 
 test("each confidential tab needs its own grant", async (t) => {
   const labels = {
-    wages: en("parties.drawer.tabs.wages"),
+    compensation: en("parties.drawer.tabs.compensation"),
     payroll: en("parties.drawer.tabs.payroll"),
     employment: en("parties.drawer.tabs.employment"),
   };
@@ -460,12 +460,12 @@ test("each confidential tab needs its own grant", async (t) => {
   };
 
   const ungranted = await names({});
-  assert.ok(!ungranted.includes(labels.wages), "wages stay hidden without the setup grant");
+  assert.ok(!ungranted.includes(labels.compensation), "compensation stays hidden without a wage or compensation grant");
   assert.ok(!ungranted.includes(labels.payroll), "payroll stays hidden without the payroll grant");
   assert.ok(!ungranted.includes(labels.employment), "employment stays hidden without the HRM read surface");
 
   const waged = await names({ canManageWages: true });
-  assert.ok(waged.includes(labels.wages), "the setup grant opens wages");
+  assert.ok(waged.includes(labels.compensation), "the setup grant opens compensation for wage rates");
   assert.ok(!waged.includes(labels.payroll), "the setup grant must not open payroll");
 
   const paid = await names({ canManageWages: true, canManagePayroll: true });
@@ -475,8 +475,73 @@ test("each confidential tab needs its own grant", async (t) => {
     hrm: { employmentIds: ["emp-1"], canManageHrm: false, canReadExits: false, canRecordExit: false },
   });
   assert.ok(employed.includes(labels.employment), "the HRM read surface opens employment");
-  assert.ok(!employed.includes(labels.wages), "the HRM read surface must not open wages");
+  assert.ok(!employed.includes(labels.compensation), "the HRM read surface must not open compensation");
+
+  const compensated = await names({ canReadCompensation: true });
+  assert.ok(compensated.includes(labels.compensation), "the compensation read grant opens compensation");
+  assert.ok(!compensated.includes(labels.payroll), "the compensation read grant must not open payroll");
   if (prior) t.after(prior);
+});
+
+function equivalents(annual: string, hourly: string): Record<string, string> {
+  return { hour: hourly, week: "0.00", biweekly: "0.00", semimonth: "0.00", month: "0.00", year: annual };
+}
+
+const TOTAL_COMPENSATION = {
+  asOf: "2026-09-17",
+  employmentId: "employment-1",
+  employments: [{ id: "employment-1", employer: "Employer", status: "active" }],
+  annualHours: "2080",
+  annualHoursSource: "rate",
+  payroll: { enabled: true, payBasis: "salary", schedule: { name: "Biweekly", frequency: "biweekly", periodsPerYear: 26 } },
+  base: { rateId: "rate-1", rate: "6500.0000", basis: "month", currency: "USD", effectiveFrom: "2026-01-01", scope: "employee", equivalents: equivalents("78000.00", "37.50") },
+  history: [],
+  recurring: [
+    { key: "benefit:1", source: "benefit", category: "retirement", name: "Pension match", program: "Group RRSP", paidBy: "employer", currency: "USD", annual: "3900.00", equivalents: equivalents("3900.00", "1.88"), refusal: null },
+    { key: "benefit:2", source: "benefit", category: "health", name: "Dental premium", program: "Dental", paidBy: "employer", currency: "USD", annual: null, equivalents: null, refusal: "This contribution is priced per pay period — assign the employee a payroll pay schedule to project it for a year." },
+    { key: "benefit:3", source: "benefit", category: "retirement", name: "Employee pension deduction", program: "Group RRSP", paidBy: "employee", currency: "USD", annual: "3900.00", equivalents: equivalents("3900.00", "1.88"), refusal: null },
+  ],
+  actualsWindow: { from: "2025-09-18", to: "2026-09-17" },
+  statutory: [{ key: "cpp", name: "Pension plan (employer)", currency: "USD", amount: "4000.00" }],
+  variable: [],
+  variableHistory: [],
+  awards: [],
+  totals: {
+    currency: "USD", base: "78000.00", variable: "0.00", benefits: "3900.00", statutory: "4000.00", total: "85900.00",
+    equivalents: equivalents("85900.00", "41.30"),
+    byCategory: [
+      { category: "base", annual: "78000.00", equivalents: equivalents("78000.00", "37.50"), share: "90.8" },
+      { category: "retirement", annual: "3900.00", equivalents: equivalents("3900.00", "1.88"), share: "4.5" },
+      { category: "statutory", annual: "4000.00", equivalents: equivalents("4000.00", "1.92"), share: "4.7" },
+    ],
+  },
+};
+
+test("total compensation restates the employer total and names what it cannot price", async (t) => {
+  const { done } = await renderEmployeeDrawer({
+    initialTab: "compensation",
+    grants: { canReadCompensation: true },
+    fetchHandler: routeFetch({ "/api/hrm/employee-compensation": () => Response.json(TOTAL_COMPENSATION) }),
+  });
+  t.after(done);
+  const text = () => document.body.textContent ?? "";
+  assert.ok(text().includes("$85,900.00"), "the annual employer total leads the view");
+  assert.ok(text().includes("Pension match"), "an employer-paid contribution is listed");
+  assert.ok(
+    text().includes("assign the employee a payroll pay schedule"),
+    "a term payroll cannot price shows its refusal and remedy instead of a zero",
+  );
+  assert.ok(text().includes(en("parties.drawer.compensation.employeePaid.title")), "employee-paid contributions sit apart from the employer total");
+
+  const hourly = [...document.querySelectorAll('button[role="radio"]')].find(
+    (button) => button.textContent?.trim() === en("parties.drawer.compensation.basis.short.hour"),
+  ) as HTMLButtonElement | undefined;
+  assert.ok(hourly, "the view offers an hourly basis");
+  await act(async () => {
+    hourly.click();
+    await tick();
+  });
+  assert.ok(text().includes("$41.30"), "switching the basis restates the total per hour");
 });
 
 const CUSTOMER_PAYLOAD = {

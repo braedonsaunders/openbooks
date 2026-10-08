@@ -17,6 +17,8 @@ export interface TransactionDrawerProps {
   recordId: string
   title: ReactNode
   description?: ReactNode
+  /** Shown before the heading — the record's photo or logo. */
+  leading?: ReactNode
   panelClassName?: string
   primaryAction?: ReactNode
   actions?: ReactNode
@@ -99,6 +101,7 @@ function TransactionDrawerFrame({
   recordId,
   title,
   description,
+  leading,
   panelClassName,
   primaryAction,
   actions,
@@ -176,6 +179,7 @@ function TransactionDrawerFrame({
       panelClassName={panelClassName}
       title={title}
       description={description}
+      leading={leading}
       subtabs={
         <DrawerTabStrip
           tabs={tabs}

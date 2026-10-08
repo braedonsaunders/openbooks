@@ -35,13 +35,21 @@ export interface RecurringBenefitSource {
   workSchedule: Awaited<ReturnType<typeof resolveWorkSchedule>> | null;
 }
 
-/** Read the same authoritative configuration for calculation and the commit fence. */
+/**
+ * Read the same authoritative configuration for calculation and the commit
+ * fence. Calculation serializes with configuration writers through the
+ * transaction locks; `lock: false` is for read-only estimates, which read
+ * one consistent snapshot and must never queue behind a running payroll.
+ */
 export async function recurringBenefitSource(tx: Executor, args: {
   orgId: string; employmentId: string; subsidiaryId: string | null; periodStart: string; periodEnd: string; payDate?: string; documentId?: string; lock?: boolean;
 }): Promise<RecurringBenefitSource> {
   const { orgId, employmentId, periodStart, periodEnd, subsidiaryId } = args;
-  await lockPayrollServiceConfiguration(tx, orgId);
-  await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`openbooks:benefit-recurring:${orgId}`},0))`);
+  const lock = args.lock !== false;
+  if (lock) {
+    await lockPayrollServiceConfiguration(tx, orgId);
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`openbooks:benefit-recurring:${orgId}`},0))`);
+  }
   const rows = (await tx.execute<{ source: EnrollmentSource }>(sql`
     select jsonb_build_object(
       'id',e.id,'planId',e.plan_id,'employerSubsidiaryId',p.employer_subsidiary_id,'currency',e.currency,'classKey',e.class_key,'matchEligible',e.match_eligible,
@@ -89,7 +97,7 @@ export async function recurringBenefitSource(tx: Executor, args: {
     order by e.id
   `)).rows.map(row => row.source);
   const needsService = rows.some(e => e.rules.some(r => r.enforcePolicyCap || r.rateFormula !== 'elected_rate'));
-  const service = needsService ? await resolveEmploymentServiceCredit(tx, { orgId, employmentId, asOf: periodEnd }) : null;
+  const service = needsService ? await resolveEmploymentServiceCredit(tx, { orgId, employmentId, asOf: periodEnd, lock }) : null;
   let workSchedule: Awaited<ReturnType<typeof resolveWorkSchedule>> | null = null;
   if (rows.some(e => e.rules.some(r => r.hoursBasis === 'scheduled_paid'))) {
     const subject = (await tx.execute<{ worker_party_id: string }>(sql`select worker_party_id from worker_employments where org_id=${orgId} and id=${employmentId}`)).rows[0];
@@ -98,7 +106,7 @@ export async function recurringBenefitSource(tx: Executor, args: {
   const currencies = [...new Set(rows.map(e => e.currency))].sort();
   const currencyCodes = sql`array[${sql.join(currencies.map(code => sql`${code}`), sql`, `)}]::text[]`;
   const currencyPrecisions = currencies.length ? (await tx.execute<{ code: string; minor_units: number }>(sql`
-    select code,minor_units from currencies where code=any(${currencyCodes}) order by code for share
+    select code,minor_units from currencies where code=any(${currencyCodes}) order by code ${lock ? sql`for share` : sql``}
   `)).rows : [];
   return { employmentId, enrollments: rows, currencyPrecisions, service, workSchedule };
 }

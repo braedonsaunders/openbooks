@@ -62,8 +62,12 @@ Rates are effective-dated and resolve most-specific-wins:
 | **Org default** | None of the above |
 
 Starting a new rate automatically closes the previous one on the preceding day,
-which prevents overlapping effective periods. Salaried staff use the *per year*
-basis; the hourly wage is salary ÷ annual hours (2080 by default, configurable).
+which prevents overlapping effective periods. A rate is entered in the cadence
+it is quoted in: *per hour*, *per week*, *every two weeks*, *twice a month*,
+*per month* or *per year*. A time-based rate is annualized (52 weeks, 26
+fortnights, 24 half-months or 12 months) and its hourly wage is that annual
+amount ÷ annual hours (2080 by default, configurable). Salaried payroll pays
+the annual amount ÷ the pay schedule's periods per year.
 
 Each rate keeps its own **Currency**. When the organization and its active
 subsidiaries use more than one configured base currency, the rate drawer and

@@ -279,7 +279,7 @@ test('a salaried employee holding only an hourly rate is refused before calculat
 const calculated = await calculatePayRun({ orgId: f.orgId, documentId: f.documentId, actorId: f.actorId })
     const refusal = calculated.errors.find((e) => e.employee === 'Salaried Sam')
     assert.ok(refusal, 'the unusable rate is a per-employee calculation error')
-    assert.match(refusal!.message, /no annual labor cost rate/)
+    assert.match(refusal!.message, /has only an hourly labor cost rate/)
   } finally {
     await dropScratchOrgReporting(f.orgId)
   }
@@ -441,7 +441,7 @@ test('a run with refused in-scope employees cannot commit silently', { skip: !DB
     assert.equal(calculated.errors.length, 2)
     const byName = new Map(calculated.errors.map((entry) => [entry.employee, entry]))
     assert.match(byName.get('Silent NoRate')!.message, /no labor cost rate covers this employee/)
-    assert.match(byName.get('Silent Salary')!.message, /no annual labor cost rate/)
+    assert.match(byName.get('Silent Salary')!.message, /has only an hourly labor cost rate/)
     assert.ok(!calculated.errors.some((entry) => entry.employee === 'Silent Excluded'),
       'a deliberately excluded employee is not a refusal')
     // The first calculate persists its exceptions wholesale: commit and the
@@ -458,7 +458,7 @@ test('a run with refused in-scope employees cannot commit silently', { skip: !DB
         assert.match(error.message, /Silent NoRate/)
         assert.match(error.message, /no labor cost rate covers this employee for the period/)
         assert.match(error.message, /Silent Salary/)
-        assert.match(error.message, /salaried employee has no annual labor cost rate/)
+        assert.match(error.message, /salaried employee has only an hourly labor cost rate/)
         assert.ok(!error.message.includes('Silent Excluded'), 'the excluded employee is not named')
         return true
       },

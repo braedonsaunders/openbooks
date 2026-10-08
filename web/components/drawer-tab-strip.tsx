@@ -1,13 +1,14 @@
 'use client'
 
 import type { ReactNode } from 'react'
-import { switchView } from '@openbooks/ui'
+import { useSwitchView } from '@openbooks/ui'
 
 /**
  * A labelled group of pressed buttons for drawer panels. These panels do not
  * implement the tablist/tabpanel and arrow-key contract, so keep native button
  * activation and expose the selected panel as pressed instead of claiming tab semantics.
- * A selection is a view switch: the drawer body animates like a page change.
+ * A selection is a view switch: the enclosing drawer's body animates like a
+ * page change while the page and any drawer beneath it stay still.
  */
 export function DrawerTabStrip<T extends string>({
   tabs,
@@ -20,6 +21,7 @@ export function DrawerTabStrip<T extends string>({
   onSelect: (key: T) => void
   ariaLabel: string
 }) {
+  const switchView = useSwitchView()
   return (
     <nav className="-mb-px flex gap-1 overflow-x-auto" aria-label={ariaLabel}>
       {tabs.map((tab) => (

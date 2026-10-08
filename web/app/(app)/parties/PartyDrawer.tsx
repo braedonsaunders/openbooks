@@ -30,7 +30,8 @@ import { HeaderFields } from '../../../components/transaction-form/header-fields
 import type { LineGridColumn } from '../../../components/line-grid'
 import { TransactionDrawer } from '../../../components/transaction-drawer'
 import { SendButton } from '../../../components/send-button'
-import { EmployeeWageRates } from './EmployeeWageRates'
+import { EmployeeCompensationPanel } from './EmployeeCompensationPanel'
+import { PartyPhoto } from './PartyPhoto'
 import { EmployeePayComponents } from './EmployeePayComponents'
 import { PayrollProfileTab, type PayrollSubTab } from '../payroll/_ui/PayrollProfileTab'
 import { DrawerTabStrip } from '../../../components/drawer-tab-strip'
@@ -66,6 +67,7 @@ export function PartyDrawer({
   canManageCrmAccounts = false,
   lifecycleStage = null,
   canManageWages = false,
+  canReadCompensation = false,
   canManagePayroll = false,
   canReadBenefits = false,
   payrollEnabled = false,
@@ -119,8 +121,10 @@ export function PartyDrawer({
    * list may force the AR customer role on — see `forcesCustomerRole`.
    */
   lifecycleStage?: 'lead' | 'prospect' | 'customer' | null
-  /** admin.setup.manage — wage data is confidential; gates the Wages tab. */
+  /** admin.setup.manage — wage data is confidential; edits wage rates on the Compensation tab. */
   canManageWages?: boolean
+  /** hrm.compensation.read + the HR feature — total compensation, history and bonuses. */
+  canReadCompensation?: boolean
   /** hrm.benefits.read + the HR feature — employee Benefits record access. */
   canReadBenefits?: boolean
   /** payroll.manage + the payroll feature enabled — shows the Payroll tab. */
@@ -214,7 +218,7 @@ export function PartyDrawer({
   // holds the read grant — the loader passes null unless both hold, so the
   // same predicate gates the tab button and the deep-link like Compliance.
   const showEmploymentTab = hrm !== null && payload.employee != null
-  const showWagesTab = role === 'employee' && canManageWages && payload.employee != null
+  const showCompensationTab = role === 'employee' && (canManageWages || canReadCompensation) && payload.employee != null
   const showBenefitsTab = role === 'employee' && canReadBenefits && payload.employee != null
   const showPayrollTab = role === 'employee' && canManagePayroll && payload.employee != null
   // The Payment methods tab needs a customer drawer whose viewer holds the
@@ -262,7 +266,7 @@ export function PartyDrawer({
   ])
   const allowedInitialTab = createMode
     ? 'overview'
-    : (initialTab === 'wages' && !showWagesTab) ||
+    : (initialTab === 'compensation' && !showCompensationTab) ||
     (initialTab === 'payroll' && !showPayrollTab) ||
     (initialTab === 'benefits' && !showBenefitsTab) ||
     (initialTab === 'activities' && !canReadActivities) ||
@@ -349,6 +353,7 @@ export function PartyDrawer({
           ? t('kindEmployee')
           : t('kindCompany')
   const [displayName, setDisplayName] = useState<string>(isPlaceholderName ? '' : (p.display_name ?? ''))
+  const [photoFileId, setPhotoFileId] = useState<string | null>(p.photo_file_id ?? null)
   const [legalName, setLegalName] = useState<string>(p.legal_name ?? '')
   const [shortCode, setShortCode] = useState<string>(p.short_code ?? '')
   const [email, setEmail] = useState<string>(p.email ?? '')
@@ -1004,6 +1009,12 @@ export function PartyDrawer({
     ...(showExternalIdsTab ? [{ key: 'external-ids' as const, label: t('tabs.externalIds') }] : []),
     // Invoicing preferences + labor pricing live on their own subtabs (customers only),
     // out of the crowded overview.
+    // An employee record reads as a person first: their employment, what
+    // they are paid, what they are covered by, and how payroll pays them.
+    ...(showEmploymentTab ? [{ key: 'employment' as const, label: t('tabs.employment') }] : []),
+    ...(showCompensationTab ? [{ key: 'compensation' as const, label: t('tabs.compensation') }] : []),
+    ...(showBenefitsTab ? [{ key: 'benefits' as const, label: th('benefits.title') }] : []),
+    ...(showPayrollTab ? [{ key: 'payroll' as const, label: t('tabs.payroll') }] : []),
     ...(role === 'customer' ? [{ key: 'invoicing' as const, label: t('tabs.invoicing') }] : []),
     ...(role === 'customer' && !isPlaceholderName ? [{ key: 'pricing' as const, label: t('tabs.pricing') }] : []),
     ...(showBillingTab && !createMode ? [{ key: 'billing' as const, label: t('tabs.billing') }] : []),
@@ -1016,10 +1027,6 @@ export function PartyDrawer({
     { key: 'addresses', label: t('tabs.addresses'), count: addresses.length },
     ...(!effectiveLayout || !role || role === 'vendor' ? [{ key: 'accounting' as const, label: role === 'vendor' && effectiveLayout ? t('bankAccountsHeading') : t('tabs.accounting') }] : []),
     ...(showComplianceTab ? [{ key: 'compliance' as const, label: t('tabs.compliance') }] : []),
-    ...(showWagesTab ? [{ key: 'wages' as const, label: t('tabs.wages') }] : []),
-    ...(showBenefitsTab ? [{ key: 'benefits' as const, label: th('benefits.title') }] : []),
-    ...(showPayrollTab ? [{ key: 'payroll' as const, label: t('tabs.payroll') }] : []),
-    ...(showEmploymentTab ? [{ key: 'employment' as const, label: t('tabs.employment') }] : []),
     // Attachments and Audit trail close the rail. They are the shared shell's
     // own panels, so the shell appends them itself — listing them here would
     // duplicate the buttons.
@@ -1059,9 +1066,19 @@ export function PartyDrawer({
       onActiveTabChange={(key) => showTab(fromShellTab(key))}
       title={
         <span className="flex items-center gap-2.5">
-          <span>{displayName.trim() || (role ? tEntities(`roles.${role}s.newLabel`) : t('newPartyFallback'))}</span>
+          <span className="truncate">{displayName.trim() || (role ? tEntities(`roles.${role}s.newLabel`) : t('newPartyFallback'))}</span>
           <Badge variant={isActive ? 'success' : 'outline'}>{isActive ? tc('status.active') : tc('status.inactive')}</Badge>
         </span>
+      }
+      leading={
+        <PartyPhoto
+          partyId={createMode ? null : String(p.id)}
+          name={displayName.trim() || String(p.display_name ?? '')}
+          kind={role === 'employee' ? 'person' : kind}
+          photoFileId={photoFileId}
+          canManage={canManage}
+          onChange={setPhotoFileId}
+        />
       }
       description={mode === 'edit' ? tc('feedback.editingHint') : undefined}
       primaryAction={canManage ? <Button variant="outline" size="sm" disabled={busy} onClick={() => mode === 'edit' ? cancelWithConfirm() : setMode('edit')}>{mode === 'edit' ? tc('actions.cancel') : tc('actions.edit')}</Button> : undefined}
@@ -1876,9 +1893,9 @@ export function PartyDrawer({
           local edits — the payroll profile editor and wage-rate form hold
           unsaved state locally. Mounting stays lazy: an unvisited
           tab issues no requests until first opened. */}
-      {role === 'employee' && canManageWages && keptTabs.has('wages') ? (
-        <div hidden={tab !== 'wages'} className="space-y-7 p-1">
-          <EmployeeWageRates partyId={String(p.id)} />
+      {showCompensationTab && keptTabs.has('compensation') ? (
+        <div hidden={tab !== 'compensation'} className="p-1">
+          <EmployeeCompensationPanel partyId={String(p.id)} canReadTotal={canReadCompensation} canManageWages={canManageWages} />
         </div>
       ) : null}
       {showBenefitsTab && keptTabs.has('benefits') ? <div hidden={tab !== 'benefits'} className="space-y-4 p-1"><EmployeeBenefitsPanel partyId={String(p.id)} /></div> : null}

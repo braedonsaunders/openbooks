@@ -623,12 +623,15 @@ test(
 
 test("the usable-pay-rate rule, without a database", () => {
   // resolvePayRate takes the latest row COVERING THE PERIOD END, and
-  // calculateStub refuses a salaried employee whose effective row is not an
-  // annual one. Readiness tested period OVERLAP and ignored the basis, so both
-  // of these passed green and then threw inside the run.
+  // calculateStub refuses a salaried employee whose effective row is hourly:
+  // a salary is paid from a rate quoted per stretch of time. Readiness must
+  // apply the same rule, or a refused employee passes the pre-flight green.
   assert.equal(payRateIsUsable("hourly", { basis: "hour" }), true);
   assert.equal(payRateIsUsable("hourly", { basis: "year" }), true);
+  assert.equal(payRateIsUsable("hourly", { basis: "week" }), true);
   assert.equal(payRateIsUsable("salary", { basis: "year" }), true);
+  assert.equal(payRateIsUsable("salary", { basis: "month" }), true);
+  assert.equal(payRateIsUsable("salary", { basis: "biweekly" }), true);
   assert.equal(payRateIsUsable("salary", { basis: "hour" }), false);
   assert.equal(payRateIsUsable("hourly", null), false);
   assert.equal(payRateIsUsable("salary", null), false);

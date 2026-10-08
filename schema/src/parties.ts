@@ -58,6 +58,12 @@ export const parties = pgTable(
     /** Invoicing rules agreed with this customer, layered over the project type. */
     invoicingProfile: jsonb("invoicing_profile"),
     custom: jsonb("custom").notNull().default({}),
+    /**
+     * Optional photo (a person) or logo (a company): a File Cabinet image in
+     * the party's own record folder, served only through the party photo
+     * route under the party read permission and subsidiary scope.
+     */
+    photoFileId: uuid("photo_file_id"),
     ...auditColumns,
   },
   (t) => [

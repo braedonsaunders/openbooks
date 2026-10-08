@@ -55,7 +55,7 @@
       "addresses": "Endereços",
       "accounting": "Contabilidade",
       "compliance": "Conformidade",
-      "wages": "Taxas salariais",
+      "compensation": "Remuneração",
       "invoicing": "Faturamento",
       "pricing": "Preços",
       "payroll": "Folha de pagamento",
@@ -161,8 +161,13 @@
       "currency": "Moeda",
       "basis": "Base",
       "perHour": "Por hora",
+      "perWeek": "Por semana",
+      "perBiweekly": "A cada duas semanas",
+      "perSemimonth": "Duas vezes por mês",
+      "perMonth": "Por mês",
       "perYear": "Por ano",
       "annualHours": "Horas anuais",
+      "equivalents": "≈ {hourly} por hora · {annual} por ano",
       "effectiveFrom": "Vigente a partir de",
       "effectiveTo": "Vigente até",
       "add": "Adicionar taxa",
@@ -343,7 +348,143 @@
     "workerCompGroup": "Grupo de acidente de trabalho",
     "customForm": "Formulário de registro",
     "manageForms": "Personalizar formulário de registro",
-    "addActivity": "Adicionar atividade"
+    "addActivity": "Adicionar atividade",
+    "compensation": {
+      "tabs": {
+        "ariaLabel": "Visões de remuneração",
+        "total": "Remuneração total",
+        "rates": "Taxas salariais",
+        "variable": "Bônus e prêmios"
+      },
+      "employment": "Vínculo",
+      "noRate": {
+        "title": "Ainda sem taxa salarial",
+        "body": "Registre uma taxa na aba Taxas salariais para ver a remuneração total."
+      },
+      "basis": {
+        "ariaLabel": "Mostrar valores por",
+        "short": {
+          "hour": "Por hora",
+          "week": "Semanal",
+          "biweekly": "Quinzenal",
+          "semimonth": "Bimensal",
+          "month": "Mensal",
+          "year": "Anual"
+        },
+        "per": {
+          "hour": "por hora",
+          "week": "por semana",
+          "biweekly": "a cada duas semanas",
+          "semimonth": "duas vezes por mês",
+          "month": "por mês",
+          "year": "por ano"
+        }
+      },
+      "hero": {
+        "title": "Remuneração total",
+        "perHour": "{amount} por hora, tudo incluído",
+        "perYear": "{amount} por ano, tudo incluído"
+      },
+      "composition": {
+        "ariaLabel": "Composição da remuneração total"
+      },
+      "segments": {
+        "base": "Salário-base",
+        "variable": "Bônus",
+        "retirement": "Aposentadoria",
+        "health": "Saúde e seguros",
+        "allowance": "Auxílios",
+        "other": "Outros benefícios",
+        "statutory": "Encargos legais do empregador"
+      },
+      "stats": {
+        "base": "Salário-base",
+        "benefits": "Benefícios e auxílios",
+        "projected": "Projetado a partir das escolhas atuais",
+        "statutoryAndVariable": "Encargos legais e bônus",
+        "trailing": "Real, últimos 12 meses",
+        "payrollOff": "Requer Folha de pagamento"
+      },
+      "base": {
+        "title": "Salário-base",
+        "scope": {
+          "employee": "Taxa do funcionário",
+          "job_title": "Pela taxa do cargo",
+          "trade": "Pela taxa do ofício",
+          "department": "Pela taxa do departamento",
+          "subsidiary": "Pela taxa da subsidiária",
+          "org": "Pela taxa da empresa"
+        },
+        "since": "Desde {date}",
+        "hoursFromRate": "Convertido em {hours} horas por ano, conforme acordado nesta taxa",
+        "hoursFromSettings": "Convertido em {hours} horas por ano, o padrão da empresa",
+        "schedule": "Pago conforme {name} ({periods} períodos de pagamento por ano)"
+      },
+      "benefits": {
+        "title": "Benefícios e auxílios pagos pelo empregador",
+        "subtitle": "Projetados para um ano a partir das escolhas atuais e dos itens recorrentes da folha",
+        "empty": "Nenhum benefício ou auxílio pago pelo empregador está em vigor."
+      },
+      "employeePaid": {
+        "title": "Contribuições do funcionário",
+        "subtitle": "Pagas pelo funcionário e não contadas na remuneração total"
+      },
+      "statutory": {
+        "title": "Encargos legais do empregador",
+        "subtitle": "Reais da folha confirmada, de {from} a {to}",
+        "empty": "Nenhum encargo legal do empregador foi pago neste período."
+      },
+      "otherCurrency": "Alguns valores estão em outra moeda que não {currency} e são listados sem entrar no total.",
+      "notPriced": "Sem valor",
+      "progression": {
+        "title": "Evolução salarial",
+        "subtitle": "{count, plural, one {# taxa} other {# taxas}} desde {from}",
+        "lastChange": "{percent}% na última alteração",
+        "ariaLabel": "Salário anual ao longo do tempo"
+      },
+      "history": {
+        "empty": "Ainda não há taxas específicas do funcionário.",
+        "window": "De {from} a {to}",
+        "since": "Desde {from}",
+        "equivalent": "{hourly} por hora · {annual} por ano"
+      },
+      "variable": {
+        "payrollOff": "Os bônus vêm da folha confirmada — ative a Folha de pagamento para vê-los.",
+        "trailing": "Bônus, últimos 12 meses",
+        "window": "Desde {from}",
+        "payments": "Pagamentos",
+        "paymentsHint": "Nos últimos 12 meses",
+        "pending": "Prêmios em andamento",
+        "pendingHint": "Ainda não pagos",
+        "historyTitle": "Bônus e pagamentos avulsos",
+        "empty": "Ainda não há bônus nem pagamentos avulsos.",
+        "runTypes": {
+          "bonus": "Folha de bônus",
+          "supplemental": "Folha complementar",
+          "termination": "Folha rescisória",
+          "retro": "Folha retroativa",
+          "other": "Folha fora do ciclo"
+        },
+        "awardsTitle": "Prêmios",
+        "awardsSubtitle": "Recompensas e incentivos registrados em Benefícios",
+        "awardFallback": "Prêmio",
+        "awardStatus": {
+          "delivered": "Pago",
+          "rejected": "Recusado",
+          "pending": "Em andamento"
+        }
+      }
+    },
+    "photo": {
+      "add": "Adicionar foto",
+      "change": "Alterar foto",
+      "remove": "Remover foto",
+      "removeConfirm": "Remover esta foto? Ela permanece nos anexos do registro.",
+      "uploadFailed": "Não foi possível enviar a foto",
+      "removeFailed": "Não foi possível remover a foto",
+      "updated": "Foto atualizada",
+      "removed": "Foto removida"
+    }
   },
   "rateBookAssignments": {
     "title": "Atribuições de tabela de tarifas",

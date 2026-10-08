@@ -8,3 +8,4 @@ export { getCycle, type CompCycleDTO } from './compensation/cycles.ts'
 export { CompensationError } from './compensation/errors.ts'
 /** Burden fraction for analytics consumers: compensation settings first, else labor-costing components. */
 export { burdenRateFor } from './compensation/headcount-plans.ts'
+export { employeeTotalCompensation, type TotalCompensation, type CompensationCategory } from './compensation/total-compensation.ts'

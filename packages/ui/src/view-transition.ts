@@ -36,13 +36,49 @@ export const ViewTransition: React.ComponentType<ViewTransitionProps> =
 export const VIEW_SWITCH_TRANSITION = 'view-switch'
 
 /**
+ * Transition type carried by every view switch made inside a drawer. A
+ * drawer is portalled above the page but sits inside the page pane's React
+ * tree, so the pane — and any drawer beneath this one — would otherwise be
+ * captured as its own layer and painted over the drawer while it animates.
+ * The pane and outer drawers resolve this type to no animation; only the
+ * drawer that owns the switch animates its body, through its own type.
+ */
+export const DRAWER_VIEW_SWITCH_TRANSITION = 'drawer-view-switch'
+
+/** The transition type of the nearest enclosing drawer's own view switches. */
+export const DrawerViewSwitchContext = React.createContext<string | null>(null)
+
+/** The type a drawer's body animates on: unique to that drawer instance. */
+export function drawerViewSwitchType(drawerId: string): string {
+  return `${DRAWER_VIEW_SWITCH_TRANSITION}:${drawerId}`
+}
+
+function startViewSwitch(types: readonly string[], update: () => void) {
+  React.startTransition(() => {
+    for (const type of types) canary.addTransitionType?.(type)
+    update()
+  })
+}
+
+/**
  * Applies a view selection (the state change or navigation a tab click
  * makes) as an animated view switch. A navigation started inside `update`
  * joins the same transition and carries the same type.
  */
 export function switchView(update: () => void) {
-  React.startTransition(() => {
-    canary.addTransitionType?.(VIEW_SWITCH_TRANSITION)
-    update()
-  })
+  startViewSwitch([VIEW_SWITCH_TRANSITION], update)
+}
+
+/**
+ * `switchView` for a component that may render inside a drawer. Inside a
+ * drawer the switch animates only that drawer's body; elsewhere it animates
+ * the page pane like `switchView`.
+ */
+export function useSwitchView(): (update: () => void) => void {
+  const drawerType = React.useContext(DrawerViewSwitchContext)
+  return React.useCallback(
+    (update: () => void) =>
+      startViewSwitch(drawerType ? [DRAWER_VIEW_SWITCH_TRANSITION, drawerType] : [VIEW_SWITCH_TRANSITION], update),
+    [drawerType],
+  )
 }

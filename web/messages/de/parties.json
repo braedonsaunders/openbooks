@@ -55,7 +55,7 @@
       "addresses": "Adressen",
       "accounting": "Buchhaltung",
       "compliance": "Compliance",
-      "wages": "Lohnsätze",
+      "compensation": "Vergütung",
       "invoicing": "Fakturierung",
       "pricing": "Preise",
       "payroll": "Lohnabrechnung",
@@ -161,8 +161,13 @@
       "currency": "Währung",
       "basis": "Basis",
       "perHour": "Pro Stunde",
+      "perWeek": "Pro Woche",
+      "perBiweekly": "Alle zwei Wochen",
+      "perSemimonth": "Zweimal im Monat",
+      "perMonth": "Pro Monat",
       "perYear": "Pro Jahr",
       "annualHours": "Jahresstunden",
+      "equivalents": "≈ {hourly} pro Stunde · {annual} pro Jahr",
       "effectiveFrom": "Gültig ab",
       "effectiveTo": "Gültig bis",
       "add": "Satz hinzufügen",
@@ -343,7 +348,143 @@
     "workerCompGroup": "BG-Gruppe",
     "customForm": "Datensatzformular",
     "manageForms": "Datensatzformular anpassen",
-    "addActivity": "Aktivität hinzufügen"
+    "addActivity": "Aktivität hinzufügen",
+    "compensation": {
+      "tabs": {
+        "ariaLabel": "Vergütungsansichten",
+        "total": "Gesamtvergütung",
+        "rates": "Lohnsätze",
+        "variable": "Boni und Prämien"
+      },
+      "employment": "Beschäftigung",
+      "noRate": {
+        "title": "Noch kein Lohnsatz",
+        "body": "Erfassen Sie auf der Registerkarte „Lohnsätze“ einen Satz, um die Gesamtvergütung zu sehen."
+      },
+      "basis": {
+        "ariaLabel": "Beträge anzeigen pro",
+        "short": {
+          "hour": "Stündlich",
+          "week": "Wöchentlich",
+          "biweekly": "Zweiwöchentlich",
+          "semimonth": "Halbmonatlich",
+          "month": "Monatlich",
+          "year": "Jährlich"
+        },
+        "per": {
+          "hour": "pro Stunde",
+          "week": "pro Woche",
+          "biweekly": "alle zwei Wochen",
+          "semimonth": "zweimal im Monat",
+          "month": "pro Monat",
+          "year": "pro Jahr"
+        }
+      },
+      "hero": {
+        "title": "Gesamtvergütung",
+        "perHour": "{amount} pro Stunde, alles inklusive",
+        "perYear": "{amount} pro Jahr, alles inklusive"
+      },
+      "composition": {
+        "ariaLabel": "Zusammensetzung der Gesamtvergütung"
+      },
+      "segments": {
+        "base": "Grundgehalt",
+        "variable": "Boni",
+        "retirement": "Altersvorsorge",
+        "health": "Gesundheit und Versicherung",
+        "allowance": "Zulagen",
+        "other": "Weitere Leistungen",
+        "statutory": "Gesetzliche Arbeitgeberkosten"
+      },
+      "stats": {
+        "base": "Grundgehalt",
+        "benefits": "Leistungen und Zulagen",
+        "projected": "Hochgerechnet aus aktuellen Wahlen",
+        "statutoryAndVariable": "Gesetzliche Kosten und Boni",
+        "trailing": "Ist, letzte 12 Monate",
+        "payrollOff": "Erfordert Lohnabrechnung"
+      },
+      "base": {
+        "title": "Grundgehalt",
+        "scope": {
+          "employee": "Mitarbeitersatz",
+          "job_title": "Aus dem Satz der Stellenbezeichnung",
+          "trade": "Aus dem Satz des Gewerks",
+          "department": "Aus dem Abteilungssatz",
+          "subsidiary": "Aus dem Satz der Tochtergesellschaft",
+          "org": "Aus dem Unternehmenssatz"
+        },
+        "since": "Seit {date}",
+        "hoursFromRate": "Umgerechnet mit {hours} Stunden pro Jahr, wie für diesen Satz vereinbart",
+        "hoursFromSettings": "Umgerechnet mit {hours} Stunden pro Jahr, dem Unternehmensstandard",
+        "schedule": "Abgerechnet nach {name} ({periods} Abrechnungszeiträume pro Jahr)"
+      },
+      "benefits": {
+        "title": "Vom Arbeitgeber bezahlte Leistungen und Zulagen",
+        "subtitle": "Für ein Jahr hochgerechnet aus aktuellen Wahlen und wiederkehrenden Lohnarten",
+        "empty": "Es gelten keine vom Arbeitgeber bezahlten Leistungen oder Zulagen."
+      },
+      "employeePaid": {
+        "title": "Beiträge des Mitarbeiters",
+        "subtitle": "Vom Mitarbeiter bezahlt und nicht in der Gesamtvergütung enthalten"
+      },
+      "statutory": {
+        "title": "Gesetzliche Arbeitgeberkosten",
+        "subtitle": "Ist-Werte aus festgeschriebenen Abrechnungen, {from} bis {to}",
+        "empty": "In diesem Zeitraum wurden keine gesetzlichen Arbeitgeberkosten gezahlt."
+      },
+      "otherCurrency": "Einige Beträge lauten auf eine andere Währung als {currency} und werden aufgeführt, ohne zur Summe addiert zu werden.",
+      "notPriced": "Nicht bewertet",
+      "progression": {
+        "title": "Gehaltsentwicklung",
+        "subtitle": "{count, plural, one {# Satz} other {# Sätze}} seit {from}",
+        "lastChange": "{percent} % bei der letzten Änderung",
+        "ariaLabel": "Jahresgehalt im Zeitverlauf"
+      },
+      "history": {
+        "empty": "Noch keine mitarbeiterspezifischen Lohnsätze.",
+        "window": "{from} bis {to}",
+        "since": "Seit {from}",
+        "equivalent": "{hourly} pro Stunde · {annual} pro Jahr"
+      },
+      "variable": {
+        "payrollOff": "Boni stammen aus festgeschriebenen Abrechnungen – aktivieren Sie die Lohnabrechnung, um sie zu sehen.",
+        "trailing": "Boni, letzte 12 Monate",
+        "window": "Seit {from}",
+        "payments": "Zahlungen",
+        "paymentsHint": "In den letzten 12 Monaten",
+        "pending": "Laufende Prämien",
+        "pendingHint": "Noch nicht ausgezahlt",
+        "historyTitle": "Boni und Einmalzahlungen",
+        "empty": "Noch keine Boni oder Einmalzahlungen.",
+        "runTypes": {
+          "bonus": "Bonuslauf",
+          "supplemental": "Nachtragslauf",
+          "termination": "Austrittslauf",
+          "retro": "Rückrechnungslauf",
+          "other": "Sonderlauf"
+        },
+        "awardsTitle": "Prämien",
+        "awardsSubtitle": "In Leistungen erfasste Prämien und Anreize",
+        "awardFallback": "Prämie",
+        "awardStatus": {
+          "delivered": "Ausgezahlt",
+          "rejected": "Abgelehnt",
+          "pending": "In Bearbeitung"
+        }
+      }
+    },
+    "photo": {
+      "add": "Foto hinzufügen",
+      "change": "Foto ändern",
+      "remove": "Foto entfernen",
+      "removeConfirm": "Dieses Foto entfernen? Es bleibt in den Anhängen des Datensatzes.",
+      "uploadFailed": "Das Foto konnte nicht hochgeladen werden",
+      "removeFailed": "Das Foto konnte nicht entfernt werden",
+      "updated": "Foto aktualisiert",
+      "removed": "Foto entfernt"
+    }
   },
   "rateBookAssignments": {
     "title": "Satzbuchzuordnungen",

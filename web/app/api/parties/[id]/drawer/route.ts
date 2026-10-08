@@ -97,6 +97,7 @@ export const GET = defineRoute({
     trades: trades.rows,
     workerCompGroups: workerCompGroups.rows,
     canReadBenefits: role === 'employee' && can(gate, 'hrm.benefits.read') && await isFeatureEnabled(gate.user.orgId, 'hrm'),
+    canReadCompensation: role === 'employee' && can(gate, 'hrm.compensation.read') && await isFeatureEnabled(gate.user.orgId, 'hrm'),
     payrollEnabled,
     multiCurrency,
     complianceEnabled,

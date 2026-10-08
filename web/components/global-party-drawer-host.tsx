@@ -35,6 +35,7 @@ interface DrawerPayload {
   recordType: 'customer' | 'vendor' | 'employee'
   canCustomize: boolean
   canReadBenefits?: boolean
+  canReadCompensation?: boolean
   payrollEnabled?: boolean
   multiCurrency?: boolean
   complianceEnabled?: boolean
@@ -50,7 +51,7 @@ function isRole(value: string | null): value is RelatedPartyRole {
 
 function isPartyTab(value: string | null): value is PartyTab {
   return value === 'benefits' || value === 'overview' || value === 'transactions' || value === 'activities' || value === 'contacts'
-    || value === 'addresses' || value === 'accounting' || value === 'wages' || value === 'compliance' || value === 'billing' || value === 'debitMandates'
+    || value === 'addresses' || value === 'accounting' || value === 'compensation' || value === 'compliance' || value === 'billing' || value === 'debitMandates'
 }
 
 /** Shell-level related-party overlay. Its close URL is the exact page beneath it. */
@@ -75,7 +76,7 @@ export function GlobalPartyDrawerHost({
   const partyForm = searchParams.get('partyForm')
   const transactionId = searchParams.get('partyTxn')
   const transactionKind = searchParams.get('partyTxnKind')
-  const initialTab = isPartyTab(requestedTab) ? requestedTab : 'overview'
+  const initialTab = isPartyTab(requestedTab) ? requestedTab : requestedTab === 'wages' ? 'compensation' : 'overview'
 
   const closeHref = useMemo(() => {
     const params = new URLSearchParams(queryString)
@@ -135,6 +136,7 @@ export function GlobalPartyDrawerHost({
         canReadActivities={canReadActivities}
         canManageWages={canManageWages}
         canReadBenefits={data.canReadBenefits === true}
+        canReadCompensation={data.canReadCompensation === true}
         payrollEnabled={data.payrollEnabled === true}
         multiCurrency={data.multiCurrency === true}
         complianceEnabled={data.complianceEnabled === true}
