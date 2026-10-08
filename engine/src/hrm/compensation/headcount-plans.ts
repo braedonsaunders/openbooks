@@ -739,14 +739,27 @@ export async function listPlanLines(query: {
   const orgId = requireOrgId(query.orgId);
   const actorId = requireActorId(query.actorId);
   const planId = requireId(query.planId, "planId");
+  return listPlanLinesForPlans({ orgId, actorId, planIds: [planId] });
+}
+
+/** Read visible lines for a register in one live, tenant-scoped service call. */
+export async function listPlanLinesForPlans(query: {
+  orgId: string;
+  actorId: string;
+  planIds: readonly string[];
+}): Promise<readonly PlanLineDTO[]> {
+  const orgId = requireOrgId(query.orgId);
+  const actorId = requireActorId(query.actorId);
+  const planIds = [...new Set(query.planIds.map((id) => requireId(id, 'planId')))];
   const allowed = await requireAggregateCompensationRead(db, orgId, actorId);
+  if (planIds.length === 0) return [];
   // The predicate reads the persisted employer_subsidiary_id, never caller
   // input. The allowlist crosses as JSON (bare JS arrays interpolate as
   // row constructors, never PostgreSQL arrays); an empty set matches
   // nothing, so a zero-scope actor receives no salary/staffing lines.
   const rows = (await db.execute<PlanLineRow>(sql`
     select ${LINE_COLUMNS} from hrm_headcount_plan_lines
-     where org_id = ${orgId} and plan_id = ${planId}
+     where org_id = ${orgId} and plan_id = any(${`{${planIds.join(',')}}`}::uuid[])
        and (${allowed === null}::boolean
             or employer_subsidiary_id in (
               select jsonb_array_elements_text(${JSON.stringify([...(allowed ?? [])])}::jsonb)::uuid

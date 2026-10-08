@@ -28,6 +28,7 @@ function overviewFixture(empty = false) {
       groups: empty ? [] : [{ basis: "hour", currency: "CAD", workers: 5, average: "34.5000", min: "34.5000", max: "34.5000" }] },
     error: null as Error | null,
     wageInput: null as unknown,
+    architectureInput: null as unknown,
   };
   fixture.overview = value;
   fixture.gapReads = 0;

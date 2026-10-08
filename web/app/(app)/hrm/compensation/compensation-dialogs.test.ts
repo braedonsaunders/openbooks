@@ -24,6 +24,30 @@ function features(flags: Record<string, boolean>) {
   fixture.features = flags;
 }
 
+test('plan register batches line reads and preserves exact per-plan costs', async () => {
+  fixture.plans = ['one', 'two', 'empty'].map((id) => ({
+    id, name: id, fiscalPeriodFrom: '2026-01-01', fiscalPeriodTo: '2026-12-31', status: 'draft',
+  }));
+  fixture.planLines = [
+    { planId: 'one', estAnnualCost: '90071992547409.01' },
+    { planId: 'one', estAnnualCost: '0.01' },
+    { planId: 'two', estAnnualCost: '-0.02' },
+    { planId: 'unlisted', estAnnualCost: '999.00' },
+  ];
+  fixture.planLineReads = [];
+  try {
+    const data = await loadCompensationHome(READER, { view: 'plans' });
+    assert.deepEqual(fixture.planLineReads, [{ orgId: 'org-comp-dlg', actorId: 'actor-comp-dlg', planIds: ['one', 'two', 'empty'] }]);
+    assert.deepEqual(data?.plans.map((row) => [row.id, row.totalCost]), [
+      ['one', '90071992547409.02'], ['two', '-0.02'], ['empty', '0.00'],
+    ]);
+  } finally {
+    fixture.plans = null;
+    fixture.planLines = [];
+    fixture.planLineReads = [];
+  }
+});
+
 test("?plan=new resolves an open plan dialog with the existing create form", async () => {
   features({ payroll: true });
   const data = await loadCompensationHome(MANAGER, { plan: "new" });

@@ -2,7 +2,7 @@ import 'server-only'
 
 import { getLocale, getTranslations } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
-import { compensationWageSummary, listJobFamilies, listPayBandVersions, type CompensationWageSummary } from '@openbooks/engine/hrm/compensation'
+import { compensationArchitectureSummary, compensationWageSummary, type CompensationWageSummary } from '@openbooks/engine/hrm/compensation'
 import { formatDecimal } from '../money-format'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
@@ -13,16 +13,16 @@ import {
   getCycle,
 } from '@openbooks/engine/src/hrm/compensation/cycles.ts'
 import {
-  listPayBands,
   compaRatioFor,
 } from '@openbooks/engine/src/hrm/compensation/bands.ts'
 import {
-  listJobLevels,
   compensationSettings,
 } from '@openbooks/engine/src/hrm/compensation/architecture.ts'
 import {
   listPlans,
   listPlanLines,
+  listPlanLinesForPlans,
+  type PlanLineDTO,
 } from '@openbooks/engine/src/hrm/compensation/headcount-plans.ts'
 import {
   latestGapSnapshot,
@@ -316,11 +316,13 @@ export async function loadCompensationHome(
     ? requestedView as CompensationView : 'overview'
   // Each work area loads only its own authorized register. Architecture
   // lists use the shared registry reader and its server pagination.
-  const cycleRecords = activeView === 'cycles' || activeView === 'overview'
-    ? await listCycles({ orgId, actorId: authz.user.id }) : []
+  const [cycleRecords, plans] = await Promise.all([
+    activeView === 'cycles' || activeView === 'overview'
+      ? listCycles({ orgId, actorId: authz.user.id }) : Promise.resolve([]),
+    activeView === 'plans' || activeView === 'overview'
+      ? listPlans({ orgId, actorId: authz.user.id }) : Promise.resolve([]),
+  ])
   const cycles = meritOn ? cycleRecords : cycleRecords.filter((cycle) => cycle.status === 'historical')
-  const plans = activeView === 'plans' || activeView === 'overview'
-    ? await listPlans({ orgId, actorId: authz.user.id }) : []
   const workspaceTabs = views.map((view) => ({
     href: view === 'overview' ? '/hrm/compensation' : `/hrm/compensation?view=${view}`,
     label: t(`compensation.workspace.${view}`),
@@ -343,22 +345,19 @@ export async function loadCompensationHome(
   const wageTiles: CompStatTile[] = []
   if (activeView === 'overview') {
     const today = await businessToday(orgId)
-    const [bands, levels, families, versions, wages, locale] = await Promise.all([
-      listPayBands({ orgId, actorId: authz.user.id, asOf: today }),
-      listJobLevels({ orgId, actorId: authz.user.id }),
-      listJobFamilies({ orgId, actorId: authz.user.id }),
-      listPayBandVersions({ orgId, actorId: authz.user.id }),
+    const [architecture, wages, locale] = await Promise.all([
+      compensationArchitectureSummary({ orgId, actorId: authz.user.id, asOf: today }),
       compensationWageSummary({ orgId, actorId: authz.user.id }),
       getLocale(),
     ])
-    overview = { wages, families: families.length, levels: levels.length, bands: bands.length, bandVersions: versions.length,
+    overview = { wages, ...architecture,
       cycles: cycles.length, historicalCycles: cycles.filter((cycle) => cycle.status === 'historical').length }
     tiles = [
       { iconKey: 'users', accent: 'violet', label: t('compensation.dashboard.activeWorkers'), value: String(wages.workers), tone: 'default' },
-      { iconKey: 'briefcase', accent: 'blue', label: t('compensation.workspace.families'), value: String(families.length), tone: 'default' },
-      { iconKey: 'trending-up', accent: 'teal', label: t('compensation.workspace.levels'), value: String(levels.length), tone: 'default' },
-      { iconKey: 'scale', accent: 'amber', label: t('compensation.dashboard.activeBands'), value: String(bands.length),
-        sub: t('compensation.dashboard.bandHistoryCount', { count: versions.length }), tone: 'default' },
+      { iconKey: 'briefcase', accent: 'blue', label: t('compensation.workspace.families'), value: String(architecture.families), tone: 'default' },
+      { iconKey: 'trending-up', accent: 'teal', label: t('compensation.workspace.levels'), value: String(architecture.levels), tone: 'default' },
+      { iconKey: 'scale', accent: 'amber', label: t('compensation.dashboard.activeBands'), value: String(architecture.bands),
+        sub: t('compensation.dashboard.bandHistoryCount', { count: architecture.bandVersions }), tone: 'default' },
     ]
     for (const group of wages.groups) wageTiles.push({
       iconKey: 'coins', accent: 'teal', label: t(AVERAGE_WAGE_LABEL_KEYS[group.basis]),
@@ -367,8 +366,17 @@ export async function loadCompensationHome(
     })
   }
   const planRows: CompPlanRow[] = []
+  const linesByPlan = new Map<string, PlanLineDTO[]>()
+  if (plans.length > 0) {
+    const lines = await listPlanLinesForPlans({ orgId, actorId: authz.user.id, planIds: plans.map((plan) => plan.id) })
+    for (const line of lines) {
+      const group = linesByPlan.get(line.planId) ?? []
+      group.push(line)
+      linesByPlan.set(line.planId, group)
+    }
+  }
   for (const plan of plans) {
-    const lines = await listPlanLines({ orgId, actorId: authz.user.id, planId: plan.id })
+    const lines = linesByPlan.get(plan.id) ?? []
     const total = planTotalCost(lines)
     planRows.push({
       id: plan.id,

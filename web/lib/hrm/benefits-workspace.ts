@@ -394,7 +394,17 @@ export async function loadBenefitsPortfolio(
   // stay deliberately empty while the Projects feature is off (no refusal:
   // there is nothing to pick, and the service refuses project scope the
   // same way on write).
-  const lookup = async <T>(work: () => Promise<T[]>): Promise<{ rows: T[]; failure: string | null }> => {
+  const selectedProgram = programs.find((program) => program.id === sp.program)
+  const newProgramForm = sp.program === 'new'
+    && ['reward', 'allowance', 'incentive', 'custom'].includes(sp.family ?? '')
+  const programForm = canManage && (newProgramForm
+    || (sp.edit === '1' && selectedProgram?.status === 'draft'))
+  const programDetail = selectedProgram !== undefined && !sp.award && sp.edit !== '1'
+  const programOptions = programForm || programDetail
+  const recipientOptions = canManage && (sp.award === 'new'
+    || (sp.view === 'employees' && sp.enrollment === 'new') || programDetail)
+  const lookup = async <T>(enabled: boolean, work: () => Promise<T[]>): Promise<{ rows: T[]; failure: string | null }> => {
+    if (!enabled) return { rows: [], failure: null }
     try {
       return { rows: await work(), failure: null }
     } catch (error) {
@@ -407,7 +417,7 @@ export async function loadBenefitsPortfolio(
   let projectsEnabled = false
   let featureRefusal: PortfolioData['optionsRefusal'] = null
   try {
-    projectsEnabled = await isFeatureEnabled(orgId, 'projects')
+    if (programOptions) projectsEnabled = await isFeatureEnabled(orgId, 'projects')
   } catch (error) {
     featureRefusal = {
       title: t('portfolio.optionsFailedTitle'),
@@ -415,12 +425,12 @@ export async function loadBenefitsPortfolio(
     }
   }
   const [accounts, departments, projects, payComponents, employments, subsidiaries, currencies] = await Promise.all([
-    lookup(() => listScopedAccountOptions(orgId, authz.allowedSubsidiaryIds, { activeOnly: true, postingOnly: true })),
-    lookup(() => listScopedDepartmentOptions(orgId, authz.allowedSubsidiaryIds)),
+    lookup(programOptions, () => listScopedAccountOptions(orgId, authz.allowedSubsidiaryIds, { activeOnly: true, postingOnly: true })),
+    lookup(programOptions, () => listScopedDepartmentOptions(orgId, authz.allowedSubsidiaryIds)),
     projectsEnabled
-      ? lookup(() => listScopedProjectOptions(orgId, authz.allowedSubsidiaryIds))
+      ? lookup(programOptions, () => listScopedProjectOptions(orgId, authz.allowedSubsidiaryIds))
       : Promise.resolve({ rows: [], failure: null }),
-    lookup(() =>
+    lookup(programOptions, () =>
       db
         .execute<{ id: string; code: string | null; name: string; paymentKind: 'cash' | 'non_cash' }>(sql`
           select id::text as id, code, name, payment_kind as "paymentKind" from pay_components
@@ -429,7 +439,7 @@ export async function loadBenefitsPortfolio(
         `)
         .then((result) => result.rows),
     ),
-    lookup(() =>
+    lookup(recipientOptions, () =>
       db
         .execute<{ id: string; name: string | null }>(sql`
           select w.id::text as id, p.display_name as name
@@ -441,7 +451,7 @@ export async function loadBenefitsPortfolio(
         `)
         .then((result) => result.rows),
     ),
-    lookup(() =>
+    lookup(programOptions, () =>
       db
         .execute<{ id: string; name: string }>(sql`
           select id::text as id, name from subsidiaries
@@ -451,7 +461,7 @@ export async function loadBenefitsPortfolio(
         `)
         .then((result) => result.rows),
     ),
-    lookup(() => benefitCurrencyOptions(db, orgId, actorId)),
+    lookup(programForm, () => benefitCurrencyOptions(db, orgId, actorId)),
   ])
   const lookupFailures = [
     accounts.failure,

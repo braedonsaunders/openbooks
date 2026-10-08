@@ -4,6 +4,7 @@ import type { PortfolioCatalog } from "../../../../lib/hrm/benefits-workspace";
 import { stubModules } from "../../../../testing/stub-modules";
 import test, { beforeEach, afterEach } from "node:test";
 import { createTranslator } from "next-intl";
+import { PgDialect } from 'drizzle-orm/pg-core';
 
 // Exercise the Benefits loader and rendered lists with service read fixtures.
 // Translations use the real catalog; authorization and database access are
@@ -21,7 +22,7 @@ const authzSource = `export const can = (authz, perm) => authz.permissions.has('
 const featuresSource = `export async function isFeatureEnabled() { return true; }
              export async function requireFeatureEnabled() {}
              export async function subsidiaryFeatureEnabled() { return false; }`
-const databaseSource = "export const db = { execute: async () => ({ rows: [] }) }; export async function withBypass(work) { return work() } export async function withBypassContext(work) { return work() } export function ambientTenantOrgId() { return null } let resolver = null; export function currentRequestOrgResolver() { return resolver } export function registerRequestOrgResolver(fn) { resolver = fn } export async function withOrgContext(_orgId, work) { return work() } export async function withOrgTransaction(_orgId, work) { return work() }"
+const databaseSource = "export const db = { execute: async (query) => ({ rows: globalThis.__benefitsExecute(query) }) }; export async function withBypass(work) { return work() } export async function withBypassContext(work) { return work() } export function ambientTenantOrgId() { return null } let resolver = null; export function currentRequestOrgResolver() { return resolver } export function registerRequestOrgResolver(fn) { resolver = fn } export async function withOrgContext(_orgId, work) { return work() } export async function withOrgTransaction(_orgId, work) { return work() }"
 stubModules({
   intl: `export async function getLocale() { return 'en'; }
         export async function getTranslations() { return globalThis.__benefitsTranslations; }`,
@@ -37,7 +38,7 @@ stubModules({
     '@openbooks/engine/hrm/benefits': `
         export async function listBenefitsProgramActivity() { return [] }
         export async function listBenefitsProgramCatalog() { const a=globalThis.__benefitsReads?.catalogPlans ?? [],b=globalThis.__portfolioReads?.programs ?? [];return [...a.map(p=>({...p,type:p.kind==='retirement'?'retirement':'health',parentProgramIds:[],status:p.isActive?'active':'inactive'})),...b.map(p=>({...p,type:p.family,parentProgramIds:[]}))].sort((a,b)=>a.name.localeCompare(b.name)); }
-        export async function benefitCurrencyOptions() { return [{value: 'USD', label: 'USD · US Dollar', scopeValue: null}] }
+        export async function benefitCurrencyOptions() { globalThis.__benefitsOptionReads.push('currencies'); if(globalThis.__benefitsOptionsError)throw new Error(globalThis.__benefitsOptionsError); return [{value: 'USD', label: 'USD · US Dollar', scopeValue: null}] }
         export async function listBenefitApprovalPolicies() { return { configured: false, href: '/admin/flows', policies: [] } }
         export async function listBenefitPrograms() { const s = globalThis.__portfolioReads; if (s?.programsError) throw new Error(s.programsError); return { programs: s?.programs ?? [] } }
         export async function listBenefitAwards() { const s = globalThis.__portfolioReads; if (s?.awardsError) throw new Error(s.awardsError); return { awards: s?.awards ?? [] } }
@@ -72,7 +73,20 @@ const { loadBenefitsPortfolio } = await import('../../../../lib/hrm/benefits-wor
 const { benefitsSpec } = await import('./view.ts')
 
 const gap = globalThis as Record<string, unknown>;
+const optionReads: string[] = [];
+gap.__benefitsOptionReads = optionReads;
+gap.__benefitsExecute = (query: Parameters<PgDialect['sqlToQuery']>[0]) => {
+  const text = new PgDialect().sqlToQuery(query).sql;
+  optionReads.push(text);
+  if (gap.__benefitsOptionsError) throw new Error(String(gap.__benefitsOptionsError));
+  if (/from subsidiaries\b/.test(text)) return [{ id: 'entity', name: 'Visible legal entity' }];
+  if (/from pay_components\b/.test(text)) return [{ id: 'earning', code: 'BONUS', name: 'Bonus', paymentKind: 'cash' }];
+  if (/from worker_employments w\b/.test(text)) return [{ id: 'worker', name: 'Visible worker' }];
+  return [];
+};
 beforeEach(() => {
+  optionReads.length = 0;
+  gap.__benefitsOptionsError = undefined;
   stubReads([], [])
   gap.__portfolioReads = undefined
 })
@@ -109,6 +123,46 @@ test("an unknown segment refuses naming the segment, never an empty table", asyn
   assert.ok(data.refusal.message.includes("enrolments"), "the refusal names the rejected value");
   assert.equal(data.hasContent, false, "no rows render beside the refusal");
   assert.equal(data.showingEnrolments, false, "a refused segment shows neither view");
+});
+
+test('closed benefits drawers do not load selector catalogs or surface their failures', async () => {
+  gap.__benefitsOptionsError = 'Catalog temporarily unavailable';
+  for (const view of ['overview', 'programs', 'delivery', 'employees']) {
+    const data = await loadBenefits(HR_BENEFITS, { view });
+    assert.equal(data.optionsRefusal, null);
+    assert.equal(data.programBuilderOpen, false);
+    assert.deepEqual(data.employmentOptions, []);
+  }
+  assert.deepEqual(optionReads, [], 'list and overview reads do not fetch closed form options');
+});
+
+test('program forms resolve their complete scoped options and refuse failed catalogs', async () => {
+  const params = { view: 'programs', program: 'new', family: 'reward' };
+  const data = await loadBenefits(HR_BENEFITS, params);
+  assert.equal(data.programBuilderOpen, true);
+  assert.deepEqual(data.subsidiaryOptions, [{ value: 'entity', label: 'Visible legal entity' }]);
+  assert.deepEqual(data.payComponentOptions, [{ value: 'earning', label: 'BONUS — Bonus', paymentKind: 'cash' }]);
+  assert.equal(data.currencyOptions[0]?.value, 'USD');
+  assert.ok(optionReads.some((text) => /from accounts\b/.test(text)));
+  assert.equal(optionReads.filter((text) => /from subsidiaries\b/.test(text)).length, 1,
+    'program forms share the portfolio legal-entity selector instead of reading it twice');
+  gap.__benefitsOptionsError = 'Catalog temporarily unavailable';
+  const refused = await loadBenefits(HR_BENEFITS, params);
+  assert.equal(refused.programBuilderOpen, false);
+  assert.equal(refused.optionsRefusal?.message, 'Catalog temporarily unavailable');
+});
+
+test('recipient and window forms load only their own option catalogs', async () => {
+  const award = await loadBenefits(HR_BENEFITS, { view: 'delivery', award: 'new' });
+  assert.equal(award.awardBuilderOpen, true);
+  assert.deepEqual(award.employmentOptions, [{ value: 'worker', label: 'Visible worker' }]);
+  assert.equal(optionReads.some((text) => /from accounts\b|from pay_components\b|from subsidiaries\b/.test(text)), false);
+  optionReads.length = 0;
+  const window = await loadBenefits(HR_BENEFITS, { view: 'employees', window: 'new' });
+  assert.equal(window.dialogOpen, true);
+  assert.deepEqual(window.subsidiaryOptions, [{ value: 'entity', label: 'Visible legal entity' }]);
+  assert.equal(optionReads.filter((text) => /from subsidiaries\b/.test(text)).length, 1);
+  assert.equal(optionReads.some((text) => /from accounts\b|from pay_components\b|from worker_employments w\b/.test(text)), false);
 });
 
 test("the enrolments view swaps the table for the other entity", async () => {

@@ -364,19 +364,16 @@ export async function loadBenefits(authz: Authz, sp: Record<string, string | und
     }
   })
 
+  const dialogOpen = sp.window === 'new' && canManage
   const [subsidiaryResult, departments] = await Promise.all([
-    db.execute<{ id: string; name: string }>(sql`
+    dialogOpen ? db.execute<{ id: string; name: string }>(sql`
       select id::text as id, name from subsidiaries
        where org_id = ${orgId}::uuid and is_active
          ${subsidiaryVisibleFilter(sql`id`, authz.allowedSubsidiaryIds)}
        order by name
-    `),
-    listScopedDepartmentOptions(orgId, authz.allowedSubsidiaryIds),
+    `) : Promise.resolve({ rows: [] }),
+    dialogOpen ? listScopedDepartmentOptions(orgId, authz.allowedSubsidiaryIds) : Promise.resolve([]),
   ])
-  const subsidiaries = subsidiaryResult.rows
-  const dialogOpen = sp.window === 'new' && canManage
-  const subsidiaryOptions = subsidiaries.map((row) => ({ value: row.id, label: row.name }))
-  const departmentOptions = departments.map((row) => ({ value: row.id, label: row.name }))
   let drawer: WindowDrawerData | null = null
   if (sp.window && sp.window !== 'new') {
     const found = windowRows.find((w) => w.id === sp.window) ?? null
@@ -400,6 +397,12 @@ export async function loadBenefits(authz: Authz, sp: Record<string, string | und
   const openCount = windows.filter((w) => w.status === 'open').length
   const pendingEnrollmentCount = enrolments.filter((e) => e.status === 'pending_approval').length
   const portfolio = await loadBenefitsPortfolio(authz, sp, { openCount, pendingEnrollments: pendingEnrollmentCount }, t)
+  const subsidiaryOptions = dialogOpen
+    ? subsidiaryResult.rows.map((row) => ({ value: row.id, label: row.name }))
+    : portfolio.subsidiaryOptions
+  const departmentOptions = dialogOpen
+    ? departments.map((row) => ({ value: row.id, label: row.name }))
+    : portfolio.departmentOptions
   const portfolioFields = toPortfolioFields(t, authz, canManage, basePath, sp, portfolio, segment === 'all' ? undefined : segment)
 
   try {
