@@ -552,6 +552,20 @@ export async function reconcileApplications(
         const key = applicationPairKey(row.payment_ref, row.applied_ref, accountScoped, row.account_ref, row.account_ref);
         totalByPair.set(key, (totalByPair.get(key) ?? 0n) + toUnits(row.amount));
       }
+      // A fully manual pair also conflicts if the source now requests less.
+      // It has no source-owned row to release, so refuse before any mutation.
+      for (const [key, total] of totalByPair) {
+        const desired = target.get(key);
+        if (!desired || ownedByPair.has(key)) continue;
+        const first = desired[0]!;
+        const paymentLine = linesByRef.get(first.paymentRef)?.find(line =>
+          !accountScoped || line.accountRef === first.paymentAccountRef);
+        if (!paymentLine) continue;
+        const wanted = desired.reduce((amount, link) => amount + resolveLinkFunctional(link, paymentLine), 0n);
+        if (total > wanted) {
+          throw new Error(`source settlement ${first.paymentRef}→${first.appliedRef} conflicts with a manual allocation; manual evidence was preserved`);
+        }
+      }
       const changedPayers = new Set<string>();
       for (const [key, owned] of ownedByPair) {
         const row = evidenceByPair.get(key)!;
