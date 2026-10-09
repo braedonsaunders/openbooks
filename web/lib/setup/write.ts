@@ -2729,13 +2729,18 @@ export async function updateSetupRecord(
           if (column === 'effective_to') return sql`${effectiveTo ?? null}`
           if (column === 'created_by' || column === 'updated_by') return sql`${actorId}`
           if (column === 'is_active') return sql`${valueFor('is_active')}`
-          return sql`${valueFor(column) ?? null}`
+          if (column === 'included_job_titles' || column === 'excluded_job_titles') {
+            const titles = valueFor(column)
+            return sql`${typeof titles === 'string' ? titles : JSON.stringify(titles)}::jsonb`
+          }
+          return sql`${bindSetupValue(valueFor(column) ?? null)}`
         })
         const inserted = ((await tx.execute(sql`
           insert into pay_derived_rules (${sql.raw(successorColumns.join(', '))})
           values (${sql.join(successorValues, sql`, `)})
           returning id`)))
-        const successorId = String(inserted.rows[0]?.id)
+        if (inserted.rows.length !== 1) throw new Error('a successor derived rule version could not be created')
+        const successorId = String(inserted.rows[0].id)
 
         // Request match image for the successor insert audit, mirroring the
         // POST path: the exact coerced columns the insert stores (actor
