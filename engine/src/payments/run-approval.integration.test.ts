@@ -11,7 +11,7 @@ import {
   OUTBOUND_PAYMENT_RUN_SUBJECT_KIND,
 } from "../flows/payment-runs-adapter.ts";
 import { PaymentError } from "../payments-core/payment-errors.ts";
-import { submitPaymentRun } from "./operations.ts";
+import { releasePaymentRunApproval, submitPaymentRun } from "./operations.ts";
 import {
   createScratchOrg,
   dropScratchOrg,
@@ -37,6 +37,8 @@ test("payment runs retain explicit solo approval after an authored policy change
       assert.equal((await submitPaymentRun(runId, org.orgId, actors.submitterId)).gated, true);
       const [gate] = await openGates(org.orgId, runId);
       assert.ok(gate);
+      await assert.rejects(releasePaymentRunApproval({ orgId: org.orgId, runId,
+        actorId: actors.submitterId, outcome: "approved", approvalRunId: gate.run_id }), /completed gate decision/);
       await db.execute(sql`update flows set graph=jsonb_set(graph,'{nodes,1,data,gate,preventSelfApproval}','true'::jsonb)
         where org_id=${org.orgId} and id=${flowId}`);
       await decideGate({ gateId: gate.id, decision: "approved", userId: actors.submitterId });
@@ -57,7 +59,7 @@ test("a legacy payment gate cannot acquire solo authority from the current flow"
     await submitPaymentRun(runId, org.orgId, actors.submitterId);
     await db.execute(sql`update flow_runs set context=context-'submissionPolicy'
       where org_id=${org.orgId} and subject_id=${runId}`);
-    const [gate] = await openGates(org.orgId, runId);
+    const gate = (await openGates(org.orgId, runId)).find(row => row.assignee_user_id === actors.submitterId);
     assert.ok(gate);
     await assert.rejects(decideGate({ gateId: gate.id, decision: "approved", userId: actors.submitterId }), /own submission/);
     assert.equal((await runState(org.orgId, runId)).status, "pending_approval");
@@ -150,8 +152,8 @@ async function runEvents(orgId: string, runId: string) {
 }
 
 async function openGates(orgId: string, runId: string) {
-  return (await db.execute<{ id: string; subject_kind: string }>(sql`
-    select id, subject_kind from flow_gates
+  return (await db.execute<{ id: string; subject_kind: string; assignee_user_id: string | null; run_id: string }>(sql`
+    select id, subject_kind, assignee_user_id, run_id from flow_gates
      where org_id = ${orgId} and subject_id = ${runId} and status in ('pending', 'escalated')`)).rows;
 }
 
@@ -187,11 +189,14 @@ test("a payment-run flow parks the run until an independent approver releases it
       status: "pending_approval",
       gated: true,
     });
-    const [gate] = await openGates(org.orgId, runId);
+    const gates = await openGates(org.orgId, runId);
+    const gate = gates.find(row => row.assignee_user_id === actors.approver2Id);
+    const makerGate = gates.find(row => row.assignee_user_id === actors.approver1Id);
+    assert.ok(makerGate);
     assert.equal(gate?.subject_kind, OUTBOUND_PAYMENT_RUN_SUBJECT_KIND);
 
     const before = await runState(org.orgId, runId);
-    await assert.rejects(decideGate({ gateId: gate!.id, decision: "approved", userId: actors.approver1Id }));
+    await assert.rejects(decideGate({ gateId: makerGate.id, decision: "approved", userId: actors.approver1Id }));
     assert.deepEqual(await runState(org.orgId, runId), before, "the maker's refused decision changes nothing");
 
     await decideGate({ gateId: gate!.id, decision: "approved", userId: actors.approver2Id });
