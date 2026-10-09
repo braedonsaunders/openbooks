@@ -870,7 +870,7 @@ export async function withdrawUnusedEnrollment(query: {
     await db.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`openbooks:benefit-recurring:${orgId}`},0))`);
     await db.execute(sql`select id from hrm_benefit_enrollments where org_id=${orgId} and id=${enrollmentId} for update`);
     const current = await loadEnrollment(db, orgId, enrollmentId);
-    if (current.status !== "active") throw new BenefitsError("BAD_STATE", "Only active unused coverage can be withdrawn — reload the enrollment and choose its current record action");
+    if (current.status !== "active" && current.status !== "ended") throw new BenefitsError("BAD_STATE", "Only active or ended unused coverage can be withdrawn — reload the enrollment and choose its current record action");
     const used = (await db.execute(sql`select id from pay_run_benefit_allocations where org_id=${orgId} and enrollment_id=${enrollmentId} limit 1`)).rows;
     if (used.length) throw new BenefitsError("REFUSED", "This coverage has payroll allocation history — preserve it and use a dated successor; discard or recalculate editable payroll before withdrawing unused coverage");
     const legacy = (await db.execute(sql`select id from hrm_benefit_payroll_inputs where org_id=${orgId} and enrollment_id=${enrollmentId} limit 1`)).rows;
@@ -880,9 +880,9 @@ export async function withdrawUnusedEnrollment(query: {
     await db.execute(sql`select set_config('openbooks.hrm_benefit_withdrawal',${`${orgId}:${enrollmentId}:${actorId}`},true)`);
     const updated = requireOneRow((await db.execute<Record<string, unknown>>(sql`update hrm_benefit_enrollments
       set status='cancelled',ended_reason=${reason},updated_by=${actorId},updated_at=now()
-      where org_id=${orgId} and id=${enrollmentId} and status='active' returning ${ENROLLMENT_COLUMNS}`)).rows, "Withdrawing unused benefit coverage");
+      where org_id=${orgId} and id=${enrollmentId} and status=${current.status} returning ${ENROLLMENT_COLUMNS}`)).rows, "Withdrawing unused benefit coverage");
     await db.execute(sql`select set_config('openbooks.hrm_benefit_withdrawal','',true)`);
-    await appendEvent(db, orgId, actorId, enrollmentId, "cancelled", `Unused coverage withdrawn: ${reason}`);
+    await appendEvent(db, orgId, actorId, enrollmentId, "cancelled", `Unused ${current.status} coverage withdrawn: ${reason}`);
     return toEnrollmentDTO(updated);
   });
 }

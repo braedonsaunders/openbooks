@@ -53,6 +53,7 @@ export function EnrollmentDrawer({ record, closeHref, canManage, canChange, stac
   const selectedRules = record.rules.filter(rule => Object.hasOwn(choices, rule.value))
   const editable = mode === 'edit'
   const canEnd = canManage && record.status === 'active'
+  const canWithdraw = canManage && ['active', 'ended'].includes(record.status)
   const canCancel = canManage && ['elected', 'pending_approval'].includes(record.status)
   async function cancelEdit() {
     if (!await guard.beforeClose()) return
@@ -106,10 +107,10 @@ export function EnrollmentDrawer({ record, closeHref, canManage, canChange, stac
       <Button size="sm" disabled={busy} onClick={save}>{busy ? common('actions.saving') : mode === 'end' ? t('end') : common('actions.save')}</Button>
       <Button variant="outline" size="sm" disabled={busy} onClick={() => void cancelEdit()}>{common('actions.cancel')}</Button>
     </>}
-    actions={mode === 'view' && (canEnd || canCancel || record.approvalHref) ? <>
+    actions={mode === 'view' && (canEnd || canWithdraw || canCancel || record.approvalHref) ? <>
       {record.approvalHref ? <Button asChild variant="ghost"><a href={record.approvalHref}>{t('approvals')}</a></Button> : null}
       {canEnd ? <Button variant="ghost" disabled={busy} onClick={() => { setMode('end'); setTab('details'); setError(null) }}>{t('end')}</Button> : null}
-      {canEnd ? <Button variant="ghost" disabled={busy} onClick={async () => { const value = await promptDialog({ title: t('withdrawUnused'), label: t('withdrawUnusedReason'), confirmLabel: t('withdrawUnused') }); if (value?.trim()) await act({ action: 'withdraw_unused', reason: value.trim() }) }}>{t('withdrawUnused')}</Button> : null}
+      {canWithdraw ? <Button variant="ghost" disabled={busy} onClick={async () => { const value = await promptDialog({ title: t('withdrawUnused'), label: t('withdrawUnusedReason'), confirmLabel: t('withdrawUnused') }); if (value?.trim()) await act({ action: 'withdraw_unused', reason: value.trim() }) }}>{t('withdrawUnused')}</Button> : null}
       {canCancel ? <Button variant="ghost" disabled={busy} onClick={async () => { const value = await promptDialog({ title: t('cancel'), label: t('reason'), confirmLabel: t('cancel') }); if (value?.trim()) await act({ action: 'cancel', reason: value.trim() }) }}>{t('cancel')}</Button> : null}
     </> : null}
     footer={mode !== 'view' || error ? <div className="w-full space-y-3">
