@@ -8,6 +8,7 @@ import { requirePayrollFeature } from "./feature-gate.ts";
 import { readAdjudicatedHolidayPayment } from "./holiday-payment-contract.ts";
 import { bindHolidayPaymentSource, readHolidayPaymentSourceReference, type RetainedHolidayPaymentSource, type SourceBoundHolidayPayment } from "./holiday-payment-source.ts";
 import { payrollSubsidiaryInScope } from "./scope.ts";
+import { takeEmployeeConfigurationFence } from "./fences.ts";
 
 /** Prepare frozen evidence inside the owning command transaction. The
  * File Cabinet grant callback must use its native ACL resolver in the same
@@ -29,6 +30,9 @@ export async function loadHolidayPaymentEvidence(
   await requirePayrollFeature(tx, input.orgId);
   const instruction = readAdjudicatedHolidayPayment(input.instruction);
   const reference = readHolidayPaymentSourceReference(input.source);
+  // The payroll configuration fence precedes subject row locks, matching
+  // calculation/commit ordering and keeping approval measurements stable.
+  await takeEmployeeConfigurationFence(tx, input.orgId, instruction.employeePartyId);
   const party = (await tx.execute<{ subsidiaryId: string | null }>(sql`
     select subsidiary_id as "subsidiaryId" from parties
      where org_id=${input.orgId} and id=${instruction.employeePartyId} for share

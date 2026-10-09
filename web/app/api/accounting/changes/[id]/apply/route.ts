@@ -15,6 +15,10 @@ import { applyAssetChange } from "@openbooks/engine/src/assets/asset-changes.ts"
 import { applyLeaseChange } from "@openbooks/engine/src/revenue/lease-changes.ts";
 import { applyRevenueModification } from "@openbooks/engine/src/revenue/contract-modifications.ts";
 import { authorizeChange } from "../../_authorization";
+import { applyHolidayObligation } from "@openbooks/engine/src/payroll/holiday-obligations.ts";
+import { db } from "@openbooks/engine/src/platform/db.ts";
+import { accessAtLeast, fileAccessLevel } from "@/lib/file-cabinet";
+import { fileViewer } from "@/app/api/file-cabinet/lib";
 export const runtime = "nodejs";
 export const POST = defineRoute({
   public: "session",
@@ -24,6 +28,10 @@ export const POST = defineRoute({
       gate = await authorizeChange(id, "apply");
     if (gate instanceof NextResponse) return gate;
     try {
+      if (gate.domain === "payroll") return NextResponse.json(await applyHolidayObligation({
+        orgId: gate.auth.user.orgId, actorId: gate.auth.user.id, changeId: id,
+        authorizeFile: async fileId => accessAtLeast(await fileAccessLevel(gate.auth.user.orgId, fileViewer(gate.auth), fileId, db), "viewer"),
+      }));
       if (gate.domain === "sales") return NextResponse.json(await applyDropShipAssessment(gate.auth.user.orgId,id,gate.auth.user.id));
       if (gate.domain === "provision")
         return NextResponse.json(await applyProvisionAssessment(gate.auth.user.orgId, id, gate.auth.user.id));
