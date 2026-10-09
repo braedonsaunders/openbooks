@@ -497,7 +497,8 @@ async function wipeSandbox(sandboxOrgId: string, tableNames: Set<string>): Promi
           // RESTRICT is checked on deletion even for a deferred foreign key.
           // Delete reversals before their sources under the same scoped wipe.
           for (;;) {
-            const removed = await db.execute(sql`
+            const removed = await db.execute<{ removed: string }>(sql`
+              with removed as (
               delete from inventory_movements movement
                where movement.org_id = ${sandboxOrgId}
                  and not exists (
@@ -505,8 +506,10 @@ async function wipeSandbox(sandboxOrgId: string, tableNames: Set<string>): Promi
                     where reversal.org_id = movement.org_id
                       and reversal.reverses_movement_id = movement.id
                  )
-              returning movement.id`);
-            if (removed.rows.length > 0) continue;
+              returning 1
+              ) select count(*)::text as removed from removed`);
+            if (!removed.rows[0]) throw new Error("Sandbox inventory deletion did not return its affected count");
+            if (removed.rows[0].removed !== "0") continue;
             const remaining = await db.execute(sql`
               select id from inventory_movements where org_id = ${sandboxOrgId} limit 1`);
             if (remaining.rows.length > 0) {
