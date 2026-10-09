@@ -27,11 +27,9 @@ import type {
  * `nexttransactionlinelink` (linktype 'Payment'); verification reads the
  * posted GL (`transactionaccountingline`) and per-transaction unpaid balances.
  *
- * AR/DELETION VISIBILITY: the integration role now has the permissions for
- * CustPymt, Deposit and deletedrecord — all three are visible to SuiteQL, so
- * customer payments and deposits import natively (TTYPE_KIND classifies them)
- * and the deleted-record feed is available. Deletions remain report-only:
- * voiding an already-posted document is a deliberate act, never automatic.
+ * The integration role requires customer-payment, deposit and deleted-record
+ * access. Source deletions follow the native audited reversal/void workflow;
+ * recorded controller dispositions and accounting-period guards remain authoritative.
  */
 
 const NS_ACCOUNT_TYPE: Record<string, string> = {
@@ -1534,6 +1532,7 @@ export class NetSuiteSource implements MigrationSource {
     // The existing synchronous SuiteQL endpoint returns every ordered page.
     // Counts on both sides refuse truncation or changing cardinality;
     // allocation reconciliation does not require an asynchronous export task.
+    const applicationBookId = await this.accountingBookId();
     const links = await this.q<NsApplicationLink>(
       `SELECT n.previousdoc, n.previousline, n.nextdoc, n.nextline, n.foreignamount,
          BUILTIN.DF(t.currency) AS paycurrency, t.exchangerate AS payexrate,
@@ -1542,10 +1541,10 @@ export class NetSuiteSource implements MigrationSource {
        JOIN transaction t ON t.id = n.nextdoc
        LEFT JOIN transactionaccountingline payline
          ON payline.transaction=n.nextdoc AND payline.transactionline=n.nextline
-        AND payline.accountingbook=${await this.accountingBookId()} AND payline.posting='T'
+        AND payline.accountingbook=${applicationBookId} AND payline.posting='T'
        LEFT JOIN transactionaccountingline appline
          ON appline.transaction=n.previousdoc AND appline.transactionline=n.previousline
-        AND appline.accountingbook=${await this.accountingBookId()} AND appline.posting='T'
+        AND appline.accountingbook=${applicationBookId} AND appline.posting='T'
        WHERE n.linktype='Payment'
        ORDER BY n.previousdoc,n.previousline,n.nextdoc,n.nextline`,
     );
