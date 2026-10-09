@@ -374,6 +374,8 @@ export async function reconcileApplications(
   // Amounts stay STATED here: each pair resolves to functional at allocation
   // time, once its payment lines (currency, booked rate, functional) are
   // hydrated. Non-positive stated amounts are still skipped silently.
+  // Source line identities keep journal settlements on their stated control
+  // account, even when either journal carries several payable/receivable accounts.
   const accountScoped = links.some(link => link.paymentAccountRef !== undefined || link.appliedAccountRef !== undefined);
   if (accountScoped && links.some(link => !link.paymentAccountRef?.trim() || !link.appliedAccountRef?.trim())) {
     throw new Error("source settlement account identities are incomplete; settlements were not reconciled");
@@ -381,7 +383,7 @@ export async function reconcileApplications(
   const target = new Map<string, SourceApplicationLink[]>();
   for (const l of links) {
     if (toUnits(l.amount) <= 0n) continue;
-    const key = applicationPairKey(l.paymentRef,l.appliedRef,accountScoped,l.paymentAccountRef,l.appliedAccountRef);
+    const key = applicationPairKey(l.paymentRef, l.appliedRef, accountScoped, l.paymentAccountRef, l.appliedAccountRef);
     const arr = target.get(key) ?? [];
     arr.push(l);
     target.set(key, arr);
@@ -527,7 +529,7 @@ export async function reconcileApplications(
       const ownedByPair = new Map<string, bigint>();
       const evidenceByPair = new Map<string, typeof evidence[number]>();
       for (const row of evidence) {
-        const key = applicationPairKey(row.payment_ref,row.applied_ref,accountScoped,row.account_ref,row.account_ref);
+        const key = applicationPairKey(row.payment_ref, row.applied_ref, accountScoped, row.account_ref, row.account_ref);
         ownedByPair.set(key, (ownedByPair.get(key) ?? 0n) + toUnits(row.source_amount));
         evidenceByPair.set(key, row);
       }
@@ -540,14 +542,15 @@ export async function reconcileApplications(
           join journal_lines lt on lt.org_id=a.org_id and lt.id=a.to_line_id
           join journal_entries et on et.org_id=a.org_id and et.id=lt.entry_id
           join documents dt on dt.org_id=a.org_id and dt.id=et.source_document_id
+          join accounts pay_account on pay_account.org_id=lf.org_id and pay_account.id=lf.account_id
          where a.org_id=$1 and a.unapplied_at is null
            and ${sourceConnectionDocumentPredicate("df", "$3", "$4")}
            and ${sourceConnectionDocumentPredicate("dt", "$3", "$4")}
          group by 1,2,3`, [orgId, refKey, snapshot.connectionId, snapshot.source]);
-      const totalByPair = new Map<string,bigint>();
+      const totalByPair = new Map<string, bigint>();
       for (const row of totals.rows) {
-        const key=applicationPairKey(row.payment_ref,row.applied_ref,accountScoped,row.account_ref,row.account_ref);
-        totalByPair.set(key,(totalByPair.get(key) ?? 0n)+toUnits(row.amount));
+        const key = applicationPairKey(row.payment_ref, row.applied_ref, accountScoped, row.account_ref, row.account_ref);
+        totalByPair.set(key, (totalByPair.get(key) ?? 0n) + toUnits(row.amount));
       }
       const changedPayers = new Set<string>();
       for (const [key, owned] of ownedByPair) {
@@ -617,8 +620,8 @@ export async function reconcileApplications(
                       and ${sourceConnectionDocumentPredicate("dt", "$3", "$4")}` : ""}
        group by 1, 2, 3`, snapshot ? [orgId, refKey, snapshot.connectionId, snapshot.source] : [orgId, refKey]);
     for (const r of pairRows.rows) {
-      const key=applicationPairKey(r.pay_ref,r.app_ref,accountScoped,r.account_ref,r.account_ref);
-      existingPair.set(key,(existingPair.get(key) ?? 0n)+toUnits(r.amt));
+      const key = applicationPairKey(r.pay_ref, r.app_ref, accountScoped, r.account_ref, r.account_ref);
+      existingPair.set(key, (existingPair.get(key) ?? 0n) + toUnits(r.amt));
     }
 
     // -- allocate the missing deltas ---------------------------------------------
@@ -633,7 +636,7 @@ export async function reconcileApplications(
         skippedNoLine++;
         continue;
       }
-      const firstLink=pairLinks[0]!;
+      const firstLink = pairLinks[0]!;
       const payLines = linesByRef.get(paymentRef)?.filter(line => !accountScoped || line.accountRef === firstLink.paymentAccountRef);
       const appLines = linesByRef.get(appliedRef)?.filter(line => !accountScoped || line.accountRef === firstLink.appliedAccountRef);
       const firstPay = payLines?.[0];
