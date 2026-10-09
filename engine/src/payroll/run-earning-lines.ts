@@ -215,10 +215,22 @@ export async function appendDerivedEarningLines(
         select te.id, te.worked_on, te.hours, te.time_type_id, te.project_id,
                te.department_id, te.is_billable, te.created_at
           from time_entries te
+          left join time_types tt on tt.id = te.time_type_id and tt.org_id = te.org_id
          where te.org_id = ${orgId} and te.employee_party_id = ${employeePartyId}
            and te.status = 'approved'
            and te.worked_on between ${run.period_start} and ${run.period_end}
            and (te.payroll_batch_ref is null or te.payroll_batch_ref = ${documentId})
+           -- Time this run does not pay stays unclaimed for the period's other
+           -- run, which derives from it there; deriving here too pays twice.
+           and not exists (
+             select 1 from pay_run_adjustments a
+               join pay_components c on c.id = a.component_id and c.org_id = a.org_id
+              where a.org_id = te.org_id and a.pay_run_document_id = ${documentId}
+                and a.employee_party_id = te.employee_party_id
+                and a.adjustment_type = 'line' and a.replace_component
+                and c.system_key = case
+                  when coalesce(tt.classification, 'regular') in ('overtime', 'double_time') then 'overtime'
+                  else 'base_pay' end)
       `));
       const derived = await resolveDerivedEarnings(tx, {
         orgId,
