@@ -78,19 +78,32 @@ test("sandbox insertion orders inferred trigger-owned parents before children", 
   assert.ok(order.indexOf("project_types") < order.indexOf("project_financial_profile_versions"));
 });
 
-test("sandbox insertion resolves inventory profiles before valued and external stock inside a deferred cycle", () => {
-  const nodes = ["inventory_movements", "consignment_stock", "item_inventory_profiles", "items"];
+test("sandbox insertion resolves inventory ownership and tracking parents inside a deferred cycle", () => {
+  const nodes = ["inventory_movements", "consignment_stock", "item_inventory_profiles", "items", "stock_locations", "serials", "lots", "cost_layers"];
   const refs: Record<string, Record<string, string>> = {
-    inventory_movements: { item_id: "items" },
+    inventory_movements: { item_id: "items", serial_id: "serials" },
     consignment_stock: { item_id: "items" },
     item_inventory_profiles: { item_id: "items" },
     items: { last_movement_id: "inventory_movements" },
+    stock_locations: {},
+    serials: { lot_id: "lots", current_missing_count_movement_id: "inventory_movements" },
+    lots: {},
+    cost_layers: { source_movement_id: "inventory_movements" },
   };
   const tables = nodes.map(name => ({ ...table("NO ACTION"), name, fks: refs[name]!, hardFks: {} }));
   const order = insertionOrder({ tables, tenantTables: tables, rebaseSet: new Set(nodes) });
   assert.ok(order.indexOf("item_inventory_profiles") < order.indexOf("inventory_movements"));
   assert.ok(order.indexOf("item_inventory_profiles") < order.indexOf("consignment_stock"));
+  for (const parent of ["stock_locations", "lots", "serials"]) {
+    assert.ok(order.indexOf(parent) < order.indexOf("inventory_movements"));
+    assert.ok(order.indexOf(parent) < order.indexOf("consignment_stock"));
+  }
+  assert.ok(order.indexOf("lots") < order.indexOf("serials"));
+  assert.ok(order.indexOf("cost_layers") < order.indexOf("consignment_stock"));
   assert.equal(new Set(order).size, nodes.length);
+  const deferred = deferredDeletionTables({ tables, tenantTables: tables, rebaseSet: new Set(nodes) });
+  assert.ok(deferred.has("serials"), "native teardown must defer the current count movement cycle");
+  assert.ok(deferred.has("inventory_movements"));
 });
 
 test("sandbox insertion opens the deferred document-ledger cycle at the declared breaker", () => {

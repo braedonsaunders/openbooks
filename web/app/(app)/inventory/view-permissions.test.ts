@@ -18,6 +18,7 @@ stubModules({
       export function can(authz, perm) { return authz.permissions.has(perm) }
     `,
     "../../../lib/feature-gates": "export async function requireFeatureEnabled() { return undefined }",
+    "../../../lib/features": "export async function isFeatureEnabled() { return false }",
     "next/link": "export default function Link(p) { return globalThis.React.createElement('a', { href: p.href }, p.children) }",
     "lucide-react": "export function Plus() { return null }",
     "@openbooks/ui": "export function Button(p) { return globalThis.React.createElement('button', null, p.children) } export function PageHeader(p) { return globalThis.React.createElement('header', null, p.actions) }",

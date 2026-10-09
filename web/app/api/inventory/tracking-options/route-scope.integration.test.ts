@@ -55,6 +55,8 @@ test("identifier selection rechecks native authority and hides movement and cust
     assert.equal(changed.rows.length, 1);
     assert.equal((await run(() => db.execute(sql`insert into subsidiaries(id,org_id,parent_id,name,base_currency,country)
       values(${hidden},${org.orgId},${org.subsidiaryId},'Hidden entity','CAD','CA') returning id`))).rows.length, 1);
+    assert.equal((await run(() => db.execute(sql`insert into party_subsidiaries(org_id,party_id,subsidiary_id)
+      values(${org.orgId},${org.vendorId},${hidden}) returning party_id`))).rows.length, 1);
     assert.equal((await run(() => db.execute(sql`insert into stock_locations
       (id,org_id,location_id,code,kind,is_active,inventory_ownership,owner_party_id)
       values(${custodyLocation},${org.orgId},${org.locationId},'VENDOR-CUSTODY','bin',true,'vendor',${org.vendorId}) returning id`))).rows.length, 1);

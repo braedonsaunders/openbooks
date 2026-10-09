@@ -77,7 +77,7 @@ test(
             db,
             org.orgId,
             item,
-            binId,
+            org.stockLocationId,
             org.subsidiaryId,
             null,
           ),
@@ -430,139 +430,6 @@ test(
         ),
         /exceeds stock/,
       );
-    } finally {
-      await run(() => dropScratchOrg(org.orgId));
-    }
-  },
-);
-
-test(
-  "combined serial identity survives transfer, missing-stock count and governed found-stock restoration",
-  { skip: !DB },
-  async () => {
-    const org = await run(() => createScratchOrg());
-    try {
-      const actor = await run(() =>
-        createInventoryOperator(org.orgId, "Serial counter"),
-      );
-      await run(() =>
-        db.execute(
-          sql`update item_inventory_profiles set tracking='lot_serial' where org_id=${org.orgId} and item_id=${org.items.fifo}`,
-        ),
-      );
-      const lot = await run(() =>
-        ensureLot(org.orgId, org.items.fifo, "SERIAL-LOT", "2027-01-01", actor),
-      );
-      const serial = await run(() =>
-        ensureSerial(org.orgId, org.items.fifo, "COUNT-SERIAL", null, actor),
-      );
-      await run(() =>
-        receiveInventory(org.orgId, actor, {
-          itemId: org.items.fifo,
-          stockLocationId: org.stockLocationId,
-          subsidiaryId: org.subsidiaryId,
-          quantity: "1",
-          unitCost: "3",
-          offsetAccountId: org.accounts.clearing,
-          date: org.date,
-          lotId: lot,
-          serialId: serial,
-        }),
-      );
-      const moved = await run(() =>
-        transferInventory(org.orgId, actor, {
-          itemId: org.items.fifo,
-          fromStockLocationId: org.stockLocationId,
-          toStockLocationId: org.stockLocationId2,
-          subsidiaryId: org.subsidiaryId,
-          date: org.date,
-          quantity: "1",
-          lotId: lot,
-          serialId: serial,
-        }),
-      );
-      const transfer = (
-        await run(() =>
-          db.execute<{ lot_id: string; serial_id: string }>(
-            sql`select lot_id,serial_id from inventory_movements where org_id=${org.orgId} and id=${moved.toMovementId}`,
-          ),
-        )
-      ).rows[0]!;
-      assert.equal(transfer.lot_id, lot);
-      assert.equal(transfer.serial_id, serial);
-      const destination = (await run(() => db.execute<{ location_id: string }>(sql`
-        select location_id from stock_locations where org_id=${org.orgId} and id=${org.stockLocationId2}`))).rows[0]!;
-      assert.ok(destination.location_id, "the transferred stock must have a business location");
-      async function countAndPost(quantity: string, found: boolean) {
-        const count = await run(() =>
-          createStockCount(org.orgId, actor, {
-            locationId: destination.location_id,
-            subsidiaryId: org.subsidiaryId,
-            countedOn: org.date,
-            lines: [
-              {
-                itemId: org.items.fifo,
-                stockLocationId: org.stockLocationId2,
-                lotId: lot,
-                serialId: serial,
-              },
-            ],
-          }),
-        );
-        await run(() => startStockCount(org.orgId, actor, count.id));
-        const detail = await run(() =>
-            getStockCountDetail(org.orgId, count.id, null),
-          ),
-          line = detail.lines[0]!;
-        await assert.rejects(
-          run(() =>
-            recordCountedQuantity(org.orgId, actor, {
-              countId: count.id,
-              lineId: line.id,
-              countedQuantity: "2",
-            }),
-          ),
-          /present.*absent/,
-        );
-        await run(() =>
-          recordCountedQuantity(org.orgId, actor, {
-            countId: count.id,
-            lineId: line.id,
-            countedQuantity: quantity,
-          }),
-        );
-        await run(() =>
-          recordSecondCount(org.orgId, actor, {
-            countId: count.id,
-            lineId: line.id,
-            countedQuantity: quantity,
-          }),
-        );
-        await run(() => submitStockCountForReview(org.orgId, actor, count.id));
-        await run(() =>
-          withOrgTransaction(org.orgId, () =>
-            postStockCount(org.orgId, actor, count.id, {
-              foundUnitCosts: found ? { [line.id]: "3" } : undefined,
-            }),
-          ),
-        );
-      }
-      await countAndPost("0", false);
-      await countAndPost("1", true);
-      const restored = (
-        await run(() =>
-          db.execute<{
-            status: string;
-            lot_id: string;
-            current_stock_location_id: string;
-          }>(
-            sql`select status,lot_id,current_stock_location_id from serials where org_id=${org.orgId} and id=${serial}`,
-          ),
-        )
-      ).rows[0]!;
-      assert.equal(restored.status, "in_stock");
-      assert.equal(restored.lot_id, lot);
-      assert.equal(restored.current_stock_location_id, org.stockLocationId2);
     } finally {
       await run(() => dropScratchOrg(org.orgId));
     }

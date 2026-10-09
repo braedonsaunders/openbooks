@@ -1,4 +1,5 @@
 import { assertCustodyReceiptEvidence } from "./custody-receipt-evidence.ts";
+import { applySerialReceipt, applySerialIssue } from "./count-movement-evidence.ts";
 import { assertSaleableStock, assertOwnedLocation } from "./stock-eligibility.ts";
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
@@ -20,6 +21,8 @@ import { consumeLayers, recordConsumptions, resolveProvisionalUnitCost, addLayer
 // Receive
 // ---------------------------------------------------------------------------
 export interface ReceiveInput {
+  /** Exact reviewed count line whose surplus this receipt recognizes. */
+  stockCountLineId?: string;
   /** Custody decrease that this atomic ownership receipt recognizes. */
   ownershipSourceStockId?: string;
   itemId: string;
@@ -424,15 +427,7 @@ export async function receiveInventory(
     }
 
     if ((profile.tracking === "serial" || profile.tracking === "lot_serial")) {
-      const serialUpdate=await tx.execute(sql`
-        update serials
-           set status = 'in_stock',
-               current_stock_location_id = ${input.stockLocationId},
-               updated_at = now(),
-               updated_by = ${actorId}
-         where id = ${input.serialId} and org_id = ${orgId} returning id
-      `);
-      if(serialUpdate.rows.length!==1)throw new InventoryError('Serial lifecycle update was not recorded');
+      await applySerialReceipt(tx, orgId, actorId, input, movementId);
     }
 
     return { movementId, entryId, value: assetDelta };
@@ -450,6 +445,8 @@ export async function receiveInventory(
 // ---------------------------------------------------------------------------
 
 export interface IssueInput {
+  /** Exact reviewed count line whose shortage this issue recognizes. */
+  stockCountLineId?: string;
   itemId: string;
   stockLocationId: string;
   /** base-unit quantity (> 0). */
@@ -676,15 +673,7 @@ export async function issueInventory(
       `);
     }
     if ((profile.tracking === "serial" || profile.tracking === "lot_serial")) {
-      const serialUpdate=await tx.execute(sql`
-        update serials
-           set status = 'shipped',
-               current_stock_location_id = null,
-               updated_at = now(),
-               updated_by = ${actorId}
-         where id = ${input.serialId} and org_id = ${orgId} returning id
-      `);
-      if(serialUpdate.rows.length!==1)throw new InventoryError('Serial lifecycle update was not recorded');
+      await applySerialIssue(tx, orgId, actorId, input, movementId);
     }
     return { movementId, entryId, value: neg(cost) };
   };
@@ -696,6 +685,7 @@ export async function issueInventory(
 }
 
 export interface AdjustInput {
+  stockCountLineId?: string;
   itemId: string;
   stockLocationId: string;
   /** signed base-unit quantity delta (+ increases stock, − decreases). */
@@ -766,6 +756,7 @@ export async function adjustInventory(
         projectId: input.projectId,
         locationId: input.locationId,
         admission: input.admission,
+        stockCountLineId: input.stockCountLineId,
         tx,
       });
     }
@@ -786,6 +777,7 @@ export async function adjustInventory(
       projectId: input.projectId,
       locationId: input.locationId,
       admission: input.admission,
+      stockCountLineId: input.stockCountLineId,
       tx,
     });
   });
