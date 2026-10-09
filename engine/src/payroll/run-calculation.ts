@@ -1,3 +1,4 @@
+import { clearCalculatedHolidayAllocations } from "./holiday-obligation-source.ts";
 import { requireCompensationPackageConfiguration, clearCompensationPackageCalculations } from './compensation-package-payroll.ts';
 import { applyEmployeeEmployerAssignmentHistory, lockEmployerAssignmentProfiles } from './employer-assignment-history.ts';
 import { recurringBenefitsRunSource } from './benefit-plan-inputs.ts';
@@ -476,6 +477,7 @@ async function calculateInTransaction(input: CalculatePayRunInput): Promise<PayR
 
     if (input.simulate) await tx.execute(sql`set constraints pay_run_benefit_allocations_line_tenant_fkey deferred`);
     if (!input.simulate) await tx.execute(sql`delete from pay_run_benefit_allocations where org_id = ${orgId} and pay_run_document_id = ${documentId}`);
+    if (!input.simulate) await clearCalculatedHolidayAllocations(tx, orgId, documentId);
     // Movements are deleted with the stubs that produced them, on the same
     // key, so an employee who has dropped OFF the run (excluded, terminated,
     // moved schedule) leaves no orphaned bank movement behind. Per-employee

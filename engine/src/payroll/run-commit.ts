@@ -503,6 +503,7 @@ export async function commitPayRun(input: {
     );
     if (!currentSource) throw new PayrollError("pay run not found");
     const changes = payRunCalculationSourceChanges(storedSource, currentSource);
+    if (changes.holidayObligations) throw new PayrollError("Approved holiday entitlements, their dated wages or payment claims changed since calculation; recalculate this editable pay run before committing.");
     if (changes.compensationPackages) throw new PayrollError('Approved compensation terms or their native component policy changed since calculation — recalculate this editable pay run before committing.');
     const sourceReasons = [
       changes.time ? "time" : null,

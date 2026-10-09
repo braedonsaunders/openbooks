@@ -16,6 +16,7 @@ test("adjudicated holiday hours retain every source date without inventing a dai
   assert.deepEqual(read.holidayDates, ["2025-12-25", "2025-12-26", "2026-01-01"]);
   assert.equal(read.hours, "24.00");
   assert.deepEqual(instruction.holidayDates, ["2026-01-01", "2025-12-26", "2025-12-25"]);
+  assert.equal(readAdjudicatedHolidayPayment({ ...instruction, employeePartyId: "ABCDEF12-0000-4000-8000-000000000001" }).employeePartyId, "abcdef12-0000-4000-8000-000000000001");
   assert.deepEqual(priceAdjudicatedHolidayPayment(read, hourly), { hours: "24.00", rate: "45.0000", amount: "1080.0000" });
 });
 

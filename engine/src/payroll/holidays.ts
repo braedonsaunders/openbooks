@@ -1,3 +1,4 @@
+import { approvedHolidayOccurrenceDates } from "./holiday-obligation-source.ts";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { resolveStoredEmployerFact } from "./employer-fact-store.ts";
@@ -1384,7 +1385,15 @@ export async function resolveStatutoryHolidayPay(
 
   const lines: StatutoryHolidayEarningLine[] = [];
   let sequence = 45;
+  const ownedEntitlementDates = await approvedHolidayOccurrenceDates(tx, {
+    orgId: input.orgId, employeePartyId: input.employeePartyId, subsidiaryId: input.subsidiaryId,
+    from: input.periodStart, to: input.periodEnd,
+  });
   for (const holiday of holidays) {
+    // An independently adjudicated unpaid entitlement owns the ordinary
+    // day's payment. Work on that date still follows the native premium
+    // calculation and its eligibility facts; zero work needs no premium.
+    if (ownedEntitlementDates.has(holiday.date) && cmp(await hoursOn(tx, input, holiday.date), "0") === 0) continue;
     // The edition of the statute IN FORCE ON THE HOLIDAY — never today's, and
     // never the current one applied backwards. Refuses by name where the
     // governing statute has not been transcribed.
@@ -1552,7 +1561,7 @@ export async function resolveStatutoryHolidayPay(
       periodEnd: input.periodEnd,
       currentLines: input.currentEarningLines,
     });
-    if (cmp(capped.pay, "0") !== 0) {
+    if (!ownedEntitlementDates.has(holiday.date) && cmp(capped.pay, "0") !== 0) {
       lines.push({
         componentId: input.holidayComponentId, kind: "earning",
         description: `${holiday.name} — statutory holiday pay`,

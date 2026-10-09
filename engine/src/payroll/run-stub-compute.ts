@@ -40,6 +40,7 @@ import { settleDeductionProtection, recordProtectionShortfalls } from "./run-pro
 import { resolveProtectionExemptFloors } from "./protection-classes.ts";
 import { applyEarningPaymentKinds, payableStubTotals } from "./non-cash-earnings.ts";
 import { appendRecurringBenefitLines } from './benefit-plan-inputs.ts';
+import { appendApprovedHolidaySettlements } from './holiday-settlements.ts';
 export async function calculateStub(
   tx: Pick<typeof db, "execute">,
   ctx: {
@@ -318,6 +319,12 @@ export async function calculateStub(
     holidayEligibility: ctx.holidayEligibility,
     occupationClass: emp.statutory_occupation_class,
     currentEarningLines: lines,
+  });
+  await appendApprovedHolidaySettlements(tx, {
+    orgId, actorId, documentId, employeePartyId, employmentId,
+    subsidiaryId: ctx.runContext.subsidiaryId, country, province,
+    payDate: run.pay_date!, runType, statHolidayPay: ctx.statHolidayPay, simulate: ctx.simulate,
+    allowedSubsidiaryIds: ctx.allowedSubsidiaryIds, need: ctx.need, lines,
   });
 
   const compensationPackages = await prepareCompensationPackages(tx, {

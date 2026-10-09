@@ -1,3 +1,4 @@
+import { clearCalculatedHolidayAllocations } from "./holiday-obligation-source.ts";
 /**
  * Pay-run period lifecycle: create, discard, and subsidiary re-scoping.
  *
@@ -497,6 +498,7 @@ export async function discardPayRun(input: {
       );
     }
     await tx.execute(sql`delete from pay_run_benefit_allocations where org_id = ${orgId} and pay_run_document_id = ${documentId}`);
+    await clearCalculatedHolidayAllocations(tx, orgId, documentId);
     // Explicit deletes first: the ledger nulls its run link when the document
     // goes (ON DELETE SET NULL) and bank files restrict it — neither may
     // survive a discarded run. Deleting the document then cascades to the run,
@@ -534,6 +536,7 @@ export async function invalidateCalculatedRun(
 ): Promise<void> {
   const { orgId, actorId, documentId } = input;
   await tx.execute(sql`delete from pay_run_benefit_allocations where org_id = ${orgId} and pay_run_document_id = ${documentId}`);
+  await clearCalculatedHolidayAllocations(tx, orgId, documentId);
   // Derived bank movements must go before their stub lines; clearing a line
   // reference would rewrite append-only entitlement evidence.
   await tx.execute(sql`delete from entitlement_ledger where org_id = ${orgId} and pay_run_document_id = ${documentId}`);
