@@ -53,7 +53,7 @@ test("targeted NetSuite pulls include payment links touching either document sid
 });
 
 function allocationGraphSource(options: { count?: number; rows?: unknown[]; changedCount?: number } = {}) {
-  const source = new NetSuiteSource(creds, { baseCurrency: "CAD" });
+  const source = new NetSuiteSource(creds, { baseCurrency: "CAD", accountingBookId: "1" });
   const queries: string[] = [];
   let reads = 0;
   Object.defineProperty(source, "q", { value: async (query: string) => {
@@ -79,13 +79,13 @@ function allocationGraphSource(options: { count?: number; rows?: unknown[]; chan
 test("incremental NetSuite mirrors fetch a complete allocation graph even without changed transactions", async () => {
   const { source, queries } = allocationGraphSource({ count: 2, rows: [
     { previousdoc: "bill", previousline: "0", nextdoc: "payment", nextline: "1", foreignamount: "0", paycurrency: "CAN", payexrate: "1" },
-    { previousdoc: "void-journal", previousline: "1", nextdoc: "payment", nextline: "1", foreignamount: "611.52", paycurrency: "CAN", payexrate: "1" },
+    { previousdoc: "void-journal", previousline: "1", nextdoc: "payment", nextline: "1", foreignamount: "611.52", paycurrency: "CAN", payexrate: "1", payaccount: "111", appaccount: "111" },
   ] });
   const result = await source.nativeChanges(new Date("2026-07-31T11:59:00Z"), {} as NativeContext);
   assert.equal(result.documents.length, 0);
   assert.equal(result.applicationSnapshot, "complete");
   assert.deepEqual(result.applications, [
-    { paymentRef: "payment", appliedRef: "void-journal", amount: "611.52", currency: "CAD", rate: "1" },
+    { paymentRef: "payment", appliedRef: "void-journal", amount: "611.52", currency: "CAD", rate: "1", paymentAccountRef: "111", appliedAccountRef: "111" },
   ]);
   const graphQueries = queries.filter(query=>/nexttransactionlinelink/i.test(query));
   assert.equal(graphQueries.length, 3);
@@ -121,4 +121,11 @@ test("duplicate page identities cannot substitute for missing source allocations
   const row = { previousdoc: "bill", previousline: "0", nextdoc: "payment", nextline: "1", foreignamount: "25", paycurrency: "CAN", payexrate: "1" };
   const { source } = allocationGraphSource({ count: 2, rows: [row, row] });
   await assert.rejects(() => source.nativeChanges(new Date(), {} as NativeContext), /graph is incomplete/);
+});
+
+test("complete NetSuite settlement graphs refuse missing control-account evidence", async () => {
+  const { source } = allocationGraphSource({ count: 1, rows: [
+    { previousdoc: "bill", previousline: "0", nextdoc: "payment", nextline: "1", foreignamount: "25", paycurrency: "CAN", payexrate: "1", payaccount: "111" },
+  ] });
+  await assert.rejects(() => source.nativeChanges(new Date(), {} as NativeContext), /control-account identity is unavailable/);
 });

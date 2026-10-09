@@ -128,6 +128,9 @@ export interface SourcePhotoFile {
 export interface SourceApplicationLink {
   paymentRef: string;
   appliedRef: string;
+  /** Exact source control-account identities when the source link is line-scoped. */
+  paymentAccountRef?: string;
+  appliedAccountRef?: string;
   /** Positive decimal string, stated in `currency`. */
   amount: string;
   /** ISO 4217 code the amount is stated in, as reported by the source. */

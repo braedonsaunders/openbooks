@@ -26,6 +26,7 @@ export interface SourceApplicationEvidence {
   book_id: string;
   subsidiary_id: string;
   account_type: string;
+  account_ref: string | null;
   fx_gain_loss_entry_id: string | null;
   evidence: Record<string, unknown>;
 }
@@ -77,7 +78,7 @@ export async function sourceApplicationEvidence(
     select a.id, df.custom->>$2 as payment_ref, dt.custom->>$2 as applied_ref,
            a.from_line_id, a.to_line_id, a.source_amount::text,
            a.applied_on::text, ef.book_id, lf.subsidiary_id,
-           account.type as account_type, a.fx_gain_loss_entry_id, row_to_json(a) as evidence
+           account.type as account_type, account.custom->>$2 as account_ref, a.fx_gain_loss_entry_id, row_to_json(a) as evidence
       from applications a
       join journal_lines lf on lf.org_id=a.org_id and lf.id=a.from_line_id
       join journal_entries ef on ef.org_id=a.org_id and ef.id=lf.entry_id
