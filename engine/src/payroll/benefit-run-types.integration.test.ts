@@ -9,11 +9,14 @@ import { createPayRun } from './run-lifecycle.ts';
 import { calculatePayRun } from './run-calculation.ts';
 import { mutatePayRunAdjustment } from './run-adjustments.ts';
 import { withdrawUnusedEnrollment } from '../hrm/benefits/enrollments.ts';
+import { enableFeatures, grantPermissions } from '../testing/hrm-harness.ts';
 
 test('regular-only benefit premiums exclude supplemental and one-off runs while all-run premiums remain',
   { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
     const fx = await seedHourlyPayrollOrg();
     try {
+      await enableFeatures(fx.orgId, ['payroll', 'hrm']);
+      await grantPermissions(fx.orgId, fx.actorId, ['hrm.benefits.manage']);
       const { partyId, employmentId } = await seedHourlyPayrollEmployee(fx, 'Benefit Premium Employee');
       const planId = randomUUID(), enrollmentId = randomUUID();
       await db.execute(sql`insert into hrm_benefit_plans(id,org_id,code,name,kind,currency,employer_subsidiary_id,effective_from)
