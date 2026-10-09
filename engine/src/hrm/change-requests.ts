@@ -1898,6 +1898,15 @@ async function applyEmploymentVersionChange(
       employmentId: request.employment_id,
       terminatedOn: parseCivilDate(payload.effectiveDate),
     });
+    // Payroll bounds its roster and historical cheques by the employee
+    // record's termination date; the approved HRM termination is its source.
+    await exec.execute(sql`
+      update employee_roles r
+         set terminated_on = ${payload.effectiveDate}::date, updated_by = ${actorId}, updated_at = now()
+        from worker_employments w
+       where w.org_id = ${orgId} and w.id = ${request.employment_id}
+         and r.org_id = w.org_id and r.party_id = w.worker_party_id
+    `);
   }
   await linkAppliedEvidence(exec, { orgId, actorId, request, newRevision, changeId });
   await bumpAggregateRevision(exec, { orgId, actorId, request, expected: newRevision - 1, next: newRevision });
