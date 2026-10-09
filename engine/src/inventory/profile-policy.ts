@@ -101,12 +101,13 @@ export async function resolveProfile(
       variance_account_id: string | null;
       standard_cost: string | null;
       base_unit: string;
+      unit_conversions: unknown;
       allow_negative_inventory: boolean;
       negative_cost_basis: InventoryProfile["negativeCostBasis"];
       provisional_unit_cost: string | null;
     }>(sql`
     select item_id, costing_method, tracking, asset_account_id, cogs_account_id, adjustment_account_id,
-           variance_account_id, standard_cost, base_unit, allow_negative_inventory,
+           variance_account_id, standard_cost, base_unit, unit_conversions, allow_negative_inventory,
            negative_cost_basis, provisional_unit_cost
       from item_inventory_profiles where org_id = ${orgId} and item_id = ${itemId}
      ${lock ? sql`for share` : sql``}`));
@@ -117,6 +118,8 @@ export async function resolveProfile(
       "lot/serial tracking is incompatible with blended moving-average layers",
     );
   }
+  const conversions = parseUnitConversions(p.unit_conversions);
+  if (conversions === "invalid") throw new InventoryError("Item unit conversions are invalid — correct the inventory profile");
   return {
     itemId: p.item_id,
     costingMethod: p.costing_method,
@@ -127,6 +130,7 @@ export async function resolveProfile(
     varianceAccountId: p.variance_account_id,
     standardCost: p.standard_cost,
     baseUnit: p.base_unit,
+    unitConversions: conversions ?? {},
     allowNegativeInventory: p.allow_negative_inventory,
     negativeCostBasis: p.negative_cost_basis,
     provisionalUnitCost: p.provisional_unit_cost,
@@ -142,6 +146,7 @@ export type TrackingMode = InventoryProfile["tracking"];
 
 export type ItemInventoryProfileRow = {
   id: string;
+  abc_class: string | null;
   item_id: string;
   costing_method: CostingMethod;
   tracking: TrackingMode;
@@ -170,7 +175,7 @@ export function parseCostingMethod(value: unknown): CostingMethod | null {
 }
 
 export function parseTrackingMode(value: unknown): TrackingMode | null {
-  return value === "none" || value === "lot" || value === "serial"
+  return value === "none" || value === "lot" || value === "serial" || value === "lot_serial"
     ? value
     : null;
 }
@@ -221,7 +226,7 @@ export async function lockItemInventoryProfile(
   itemId: string,
 ): Promise<ItemInventoryProfileRow | null> {
   const r = (await tx.execute<ItemInventoryProfileRow>(sql`
-    select id, item_id, costing_method, tracking, asset_account_id, cogs_account_id,
+    select id, abc_class, item_id, costing_method, tracking, asset_account_id, cogs_account_id,
            adjustment_account_id, variance_account_id, received_not_billed_account_id,
            standard_cost, base_unit, unit_conversions, reorder_point, preferred_stock_level,
            allow_negative_inventory, negative_cost_basis, provisional_unit_cost
@@ -261,9 +266,14 @@ export async function assertCostingPolicyChangeAllowed(
     current.costing_method !== next.costingMethod ||
     current.tracking !== next.tracking;
   if (!changed) return { changed: false, historyExisted: false };
+  if (current && current.tracking !== next.tracking) {
+    const custody = (await tx.execute(sql`select 1 from consignment_stock where org_id=${orgId} and item_id=${itemId} and remaining_quantity>0 limit 1`)).rows;
+    if (custody.length) throw new CostingPolicyChangeBlockedError('Return or take ownership of consigned stock before changing its tracking mode');
+  }
   const history = (await tx.execute<{ has_history: boolean }>(sql`
     select exists(select 1 from cost_layers where org_id = ${orgId} and item_id = ${itemId})
         or exists(select 1 from inventory_movements where org_id = ${orgId} and item_id = ${itemId})
+        or exists(select 1 from consignment_stock where org_id = ${orgId} and item_id = ${itemId})
       as has_history`));
   if (history.rows[0]?.has_history !== true) {
     return { changed: true, historyExisted: false };

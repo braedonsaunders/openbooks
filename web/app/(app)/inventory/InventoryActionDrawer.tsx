@@ -1,5 +1,6 @@
 'use client'
 
+import { InventoryTrackingFields } from '@/components/inventory-tracking-fields'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
@@ -32,6 +33,7 @@ export function InventoryActionDrawer({
   subsidiaries,
   closeHref = '/inventory',
   allowedActions = ACTIONS,
+  canManageTracking = false,
 }: {
   items: ItemOpt[]
   stockLocations: LocOpt[]
@@ -39,6 +41,7 @@ export function InventoryActionDrawer({
   subsidiaries: SubsidiaryOpt[]
   closeHref?: string
   allowedActions?: readonly Action[]
+  canManageTracking?: boolean
 }) {
   const t = useTranslations('inventory')
   const tCommon = useTranslations('common')
@@ -49,6 +52,7 @@ export function InventoryActionDrawer({
   const [stockLocationId, setStockLocationId] = useState('')
   const [subsidiaryId, setSubsidiaryId] = useState('')
   const [toStockLocationId, setToStockLocationId] = useState('')
+  const [lotId,setLotId]=useState(''),[serialId,setSerialId]=useState('')
   const [quantity, setQuantity] = useState('')
   const [unitCost, setUnitCost] = useState('')
   const [offsetAccountId, setOffsetAccountId] = useState('')
@@ -116,7 +120,7 @@ export function InventoryActionDrawer({
   const offsetLabel = action === 'landed' ? t('drawer.freightAccount') : t('drawer.offsetAccount')
   const closeGuard = useDirtyClose({
     dirty: action !== allowedActions[0] || sourceMovementId !== '' || itemId !== '' || stockLocationId !== '' || toStockLocationId !== '' ||
-      quantity !== '' || unitCost !== '' || offsetAccountId !== '' || basis !== 'value' || memo !== '',
+      quantity !== '' || lotId !== '' || serialId !== '' || unitCost !== '' || offsetAccountId !== '' || basis !== 'value' || memo !== '',
     busy, onClose: () => {},
     message: tCommon('feedback.unsavedChanges'), confirmLabel: tCommon('confirm.discardChanges'),
   })
@@ -140,7 +144,7 @@ export function InventoryActionDrawer({
         stockLocationId,
         subsidiaryId,
         toStockLocationId,
-        quantity,
+        quantity,lotId,serialId,
         unitCost,
         offsetAccountId,
         basis,
@@ -165,7 +169,7 @@ export function InventoryActionDrawer({
           stockLocationId,
           subsidiaryId,
           toStockLocationId: toStockLocationId || undefined,
-          quantity,
+          quantity,lotId:lotId||undefined,serialId:serialId||undefined,
           unitCost: unitCost || undefined,
           offsetAccountId: offsetAccountId || undefined,
           basis: action === 'landed' ? basis : undefined,
@@ -241,7 +245,7 @@ export function InventoryActionDrawer({
             <SearchSelect
               disabled={busy}
               value={itemId}
-              onChange={setItemId}
+              onChange={v=>{setItemId(v);setLotId('');setSerialId('')}}
               options={itemOptions}
               placeholder={t('drawer.selectItem')}
               sheetTitle={itemLabel}
@@ -305,6 +309,7 @@ export function InventoryActionDrawer({
               </Select>
             </div>
           ) : null}
+          {['receive','issue','adjust','transfer'].includes(action) ? <div className="sm:col-span-2"><InventoryTrackingFields key={itemId} itemId={itemId} lotId={lotId} serialId={serialId} onChange={(lot,serial)=>{setLotId(lot);setSerialId(serial)}} disabled={busy} canCreate={action==='receive'&&canManageTracking}/></div> : null}
           {needsCost || action === 'adjust' ? (
             <div className={field}>
               <Label>

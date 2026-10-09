@@ -78,6 +78,7 @@ test("offsetting variances stay visibly discrepant; no cross-item sum is shown",
       locationId: org.locationId,
       subsidiaryId: org.subsidiaryId,
       countedOn: org.date,
+      blind: false,
       lines: [
         { itemId: org.items.fifo, stockLocationId: org.stockLocationId },
         { itemId: org.items.component, stockLocationId: org.stockLocationId },

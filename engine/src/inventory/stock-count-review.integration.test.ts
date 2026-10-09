@@ -1,3 +1,4 @@
+import { confirmCountObservation } from "../testing/inventory-counts.ts";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { sql } from "drizzle-orm";
@@ -68,6 +69,7 @@ async function openReviewedCount(
   const lineId = (await db.execute<{ id: string }>(sql`
     select id from stock_count_lines where org_id = ${org.orgId} and stock_count_id = ${count.id}`)).rows[0]!.id;
   await recordCountedQuantity(org.orgId, actorId, { countId: count.id, lineId, countedQuantity: counted });
+  await confirmCountObservation(org.orgId,count.id,lineId,counted,actorId);
   await submitStockCountForReview(org.orgId, actorId, count.id);
   return { countId: count.id, lineId };
 }

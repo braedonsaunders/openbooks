@@ -1,3 +1,5 @@
+import { assertTracking } from "./tracking.ts";
+import { countTolerance, assertSecondCounts } from "./count-policy.ts";
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { db, orgContext } from "../platform/db.ts";
@@ -95,6 +97,7 @@ export interface NewCountLineInput {
   itemId: string;
   stockLocationId: string;
   lotId?: string | null;
+  serialId?: string | null;
 }
 
 export interface CreateStockCountInput {
@@ -105,6 +108,7 @@ export interface CreateStockCountInput {
   subsidiaryId: string;
   countedOn: string;
   memo?: string | null;
+  blind?: boolean;
   lines: NewCountLineInput[];
 }
 
@@ -141,8 +145,8 @@ export async function createStockCount(
     // Validate every subject against the org BEFORE snapshotting: a line
     // scoped to another org's item, or to a stock location outside the
     // count's business location, must refuse by name rather than die on a
-    // foreign key. Serial-tracked items cannot be counted by quantity at
-    // all; lot-tracked items must name their lot.
+    // foreign key. Serial-tracked subjects are counted individually; lot-tracked
+    // subjects must name their lot.
     const itemIds = [...new Set(input.lines.map((l) => l.itemId))];
     const items = (await tx.execute<{ id: string; code: string | null }>(sql`
       select it.id, it.code from items it where it.org_id = ${orgId} and it.id = any(${uuidArray(itemIds)}::uuid[])`));
@@ -158,16 +162,16 @@ export async function createStockCount(
        where org_id = ${orgId} and id = any(${uuidArray(stockLocationIds)}::uuid[])`));
     const businessByStockLocation = new Map(stockLocations.rows.map((r) => [r.id, r.location_id]));
     const stockLocationCodes = new Map(stockLocations.rows.map((r) => [r.id, r.code]));
-    // One line per (item, stock location, lot) subject: duplicate lines
+    // One line per (item, stock location, lot, serial) subject: duplicate lines
     // would each post the full variance and double-apply one observation.
     // Constraint 0293 arbitrates concurrent writers; this names the offender.
     const seenSubjects = new Set<string>();
     for (const line of input.lines) {
-      const subject = `${line.itemId}|${line.stockLocationId}|${line.lotId ?? ""}`;
+      const subject = `${line.itemId}|${line.stockLocationId}|${line.lotId ?? ""}:${line.serialId ?? ""}`;
       if (seenSubjects.has(subject)) {
         const where = `item ${itemCodes.get(line.itemId) ?? line.itemId} at ${stockLocationCodes.get(line.stockLocationId) ?? line.stockLocationId}${line.lotId ? ` lot ${line.lotId}` : ""}`;
         throw new InventoryError(
-          `duplicate count line for ${where} — count each item, stock location and lot once`,
+          `duplicate count line for ${where} — count each item, stock location, lot and serial once`,
         );
       }
       seenSubjects.add(subject);
@@ -184,10 +188,11 @@ export async function createStockCount(
       stockLocationIds,
     );
     const countId = randomUUID();
-    await tx.execute(sql`
-      insert into stock_counts (id, org_id, location_id, subsidiary_id, status, counted_on, memo, created_by, updated_by)
+    const created=await tx.execute(sql`
+      insert into stock_counts (id, org_id, location_id, subsidiary_id, status, counted_on, memo, blind, created_by, updated_by)
       values (${countId}, ${orgId}, ${input.locationId}, ${input.subsidiaryId},
-              'draft', ${input.countedOn}, ${input.memo ?? null}, ${actorId}, ${actorId})`);
+              'draft', ${input.countedOn}, ${input.memo ?? null}, ${input.blind ?? true}, ${actorId}, ${actorId}) returning id`);
+    if(created.rows.length!==1)throw new InventoryError('Stock count was not created');
     for (const line of input.lines) {
       if (!foundItems.has(line.itemId)) {
         throw new InventoryError("count line item not found in this organization — choose an active item");
@@ -198,13 +203,10 @@ export async function createStockCount(
           "count line item has no inventory profile — create its item inventory profile before counting it",
         );
       }
-      if (tracking === "serial") {
-        throw new InventoryError(
-          "serial-tracked items cannot be cycle-counted by quantity — count them by serial scan instead",
-        );
-      }
-      if (tracking === "lot" && !line.lotId) {
-        throw new InventoryError("lot-tracked items must be counted per lot — supply the lot for this line");
+      assertTracking({tracking},{quantity:"1",lotId:line.lotId,serialId:line.serialId},"count");
+      if (line.serialId) {
+        const serial=(await tx.execute<{lot_id:string|null}>(sql`select lot_id from serials where org_id=${orgId} and id=${line.serialId} and item_id=${line.itemId}`)).rows[0];
+        if (!serial || (tracking==='lot_serial' && serial.lot_id!==null && serial.lot_id!==line.lotId)) throw new InventoryError('Count serial must belong to the item and lot');
       }
       const businessLocation = businessByStockLocation.get(line.stockLocationId);
       if (!businessLocation) {
@@ -224,14 +226,17 @@ export async function createStockCount(
       }
       const basis = await getCountBasisQuantity(tx, orgId, line.itemId, line.stockLocationId, {
         lotId: line.lotId ?? null,
+        serialId: line.serialId ?? null,
         subsidiaryId: input.subsidiaryId,
       });
-      await tx.execute(sql`
+      const tolerance=await countTolerance(tx,orgId,line.itemId,input.subsidiaryId,input.countedOn);
+      const insertedLine=await tx.execute(sql`
         insert into stock_count_lines
-          (id, org_id, stock_count_id, item_id, stock_location_id, lot_id,
+          (id, org_id, stock_count_id, item_id, stock_location_id, lot_id, serial_id, variance_tolerance,
            expected_quantity, counted_quantity, created_by, updated_by)
         values (${randomUUID()}, ${orgId}, ${countId}, ${line.itemId}, ${line.stockLocationId},
-                ${line.lotId ?? null}, ${basis.quantity}, null, ${actorId}, ${actorId})`);
+                ${line.lotId ?? null}, ${line.serialId ?? null}, ${tolerance}, ${basis.quantity}, null, ${actorId}, ${actorId}) returning id`);
+      if(insertedLine.rows.length!==1)throw new InventoryError('Stock count line was not created');
     }
     return { id: countId, status: "draft" as StockCountStatus };
   });
@@ -255,7 +260,7 @@ export async function recordCountedQuantity(
   orgId: string,
   actorId: string | null,
   input: { countId: string; lineId: string; countedQuantity: string; reason?: string | null },
-): Promise<{ lineId: string; variance: string }> {
+): Promise<{ lineId: string; variance: string | null }> {
   const counted = parseCountQuantity(input.countedQuantity, "counted quantity");
   assertCountedNonNegative(counted);
   return db.transaction(async (tx) => {
@@ -272,10 +277,11 @@ export async function recordCountedQuantity(
     const line = (await tx.execute<{
       id: string;
       expected_quantity: string;
+      serial_id: string | null;
       counted_quantity: string | null;
       adjustment_movement_id: string | null;
     }>(sql`
-      select id, expected_quantity::text, counted_quantity::text, adjustment_movement_id
+      select id, serial_id, expected_quantity::text, counted_quantity::text, adjustment_movement_id
         from stock_count_lines
        where org_id = ${orgId} and id = ${input.lineId} and stock_count_id = ${count.id}
        for update`)).rows[0];
@@ -287,8 +293,10 @@ export async function recordCountedQuantity(
         "line already posted an inventory adjustment — correct it with a new count, not an edit",
       );
     }
+    if (line.serial_id && cmp(counted,"0")!==0 && cmp(counted,"1")!==0) throw new InventoryError("Count one serial as present (1) or absent (0)");
     const updated = (await tx.execute<{ id: string }>(sql`
-      update stock_count_lines set counted_quantity = ${counted}, updated_at = now(), updated_by = ${actorId}
+      update stock_count_lines set counted_quantity = ${counted}, first_counted_quantity=${counted}, first_counted_by=${actorId},
+        second_counted_quantity=null,second_counted_by=null,second_counted_at=null, updated_at = now(), updated_by = ${actorId}
        where org_id = ${orgId} and id = ${line.id}
       returning id`));
     if (updated.rows.length === 0) {
@@ -308,7 +316,7 @@ export async function recordCountedQuantity(
       before: { countedQuantity: line.counted_quantity, expectedQuantity: line.expected_quantity },
       after: { countedQuantity: counted, expectedQuantity: line.expected_quantity },
     });
-    return { lineId: line.id, variance: add(counted, neg(line.expected_quantity)) };
+    return { lineId: line.id, variance: count.blind ? null : add(counted, neg(line.expected_quantity)) };
   });
 }
 
@@ -321,7 +329,7 @@ export async function recountStockCountLine(
   orgId: string,
   actorId: string | null,
   input: { countId: string; lineId: string; reason?: string | null },
-): Promise<{ lineId: string; expectedQuantity: string }> {
+): Promise<{ lineId: string; expectedQuantity: string | null }> {
   return db.transaction(async (tx) => {
     await assertInventoryFeature(tx, orgId);
     const count = await loadCountHeader(tx, orgId, input.countId, true);
@@ -335,11 +343,12 @@ export async function recountStockCountLine(
       item_id: string;
       stock_location_id: string;
       lot_id: string | null;
+      serial_id: string | null;
       expected_quantity: string;
       counted_quantity: string | null;
       adjustment_movement_id: string | null;
     }>(sql`
-      select id, item_id, stock_location_id, lot_id, expected_quantity::text, counted_quantity::text,
+      select id, item_id, stock_location_id, lot_id, serial_id, expected_quantity::text, counted_quantity::text,
              adjustment_movement_id
         from stock_count_lines
        where org_id = ${orgId} and id = ${input.lineId} and stock_count_id = ${count.id}
@@ -354,11 +363,13 @@ export async function recountStockCountLine(
     }
     const basis = await getCountBasisQuantity(tx, orgId, line.item_id, line.stock_location_id, {
       lotId: line.lot_id,
+      serialId: line.serial_id,
       subsidiaryId: count.subsidiaryId,
     });
     const updated = (await tx.execute<{ id: string }>(sql`
       update stock_count_lines
          set expected_quantity = ${basis.quantity}, counted_quantity = null,
+             first_counted_quantity=null,first_counted_by=null,second_counted_quantity=null,second_counted_by=null,second_counted_at=null,
              updated_at = now(), updated_by = ${actorId}
        where org_id = ${orgId} and id = ${line.id}
       returning id`));
@@ -375,7 +386,7 @@ export async function recountStockCountLine(
       before: { countedQuantity: line.counted_quantity, expectedQuantity: line.expected_quantity },
       after: { countedQuantity: null, expectedQuantity: basis.quantity },
     });
-    return { lineId: line.id, expectedQuantity: basis.quantity };
+    return { lineId: line.id, expectedQuantity: count.blind ? null : basis.quantity };
   });
 }
 
@@ -391,6 +402,7 @@ export async function submitStockCountForReview(
       assertCountTransition(count.status, "review");
     }
     const submitLines = await requireAllLinesCounted(tx, orgId, count.id);
+    await assertSecondCounts(tx,orgId,count.id);
     // Re-validate: a warehouse deactivated or restricted after creation must
     // refuse here with a named remedy instead of stranding the count in
     // review (or dying later inside adjustInventory at post).
@@ -559,6 +571,13 @@ export async function postStockCount(
         select updated_by as actor from stock_counts where org_id = ${orgId} and id = ${count.id}
         union
         select updated_by as actor from stock_count_lines where org_id = ${orgId} and stock_count_id = ${count.id}
+        union
+        select first_counted_by as actor from stock_count_lines where org_id = ${orgId} and stock_count_id = ${count.id}
+        union
+        select second_counted_by as actor from stock_count_lines where org_id = ${orgId} and stock_count_id = ${count.id}
+        union
+        select actor_id as actor from audit_log where org_id = ${orgId} and table_name='stock_count_lines'
+          and changes->>'countId'=${count.id} and changes->>'operation' in ('record','recount','second_count')
       ) actors where actor is not null`)).rows.map((row) => row.actor);
     if (reviewRequired) {
       if (!actorId) {
@@ -593,6 +612,7 @@ export async function postStockCount(
       throw error;
     }
     const lines = await requireAllLinesCounted(tx, orgId, count.id);
+    await assertSecondCounts(tx,orgId,count.id);
     // Re-validate before posting too: a restriction edited after review
     // refuses here with a named remedy and no adjustment, instead of dying
     // inside adjustInventory mid-post. Warehouses first, then positions —
@@ -630,6 +650,7 @@ export async function postStockCount(
       if (line.adjustmentMovementId) continue;
       const live = await getCountBasisQuantity(tx, orgId, line.itemId, line.stockLocationId, {
         lotId: line.lotId,
+        serialId: line.serialId,
         subsidiaryId: count.subsidiaryId,
       });
       if (cmp(live.quantity, line.expectedQuantity) !== 0) {
@@ -675,6 +696,7 @@ export async function postStockCount(
         subsidiaryId: prepared.count.subsidiaryId,
         date: prepared.count.countedOn,
         lotId: line.lotId,
+        serialId: line.serialId,
         memo: `Stock count ${prepared.count.id}`,
         locationId: prepared.count.locationId,
         admission: "count",
@@ -751,4 +773,3 @@ export async function postStockCount(
   }
   return { id: prepared.count.id, status: "posted", lines: results };
 }
-

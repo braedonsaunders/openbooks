@@ -410,7 +410,7 @@ export const mfgWoMaterials = pgTable(
     issuedQty: money("issued_qty").notNull().default("0"),
     backflushQty: money("backflush_qty").notNull().default("0"),
     operationSeq: integer("operation_seq"),
-    lotSerialPolicy: text("lot_serial_policy", { enum: ["none", "lot", "serial"] }).notNull(),
+    lotSerialPolicy: text("lot_serial_policy", { enum: ["none", "lot", "serial", "lot_serial"] }).notNull(),
     shortageQty: money("shortage_qty").notNull().default("0"),
     waivedAt: timestamp("waived_at", { withTimezone: true }),
     waivedBy: uuid("waived_by"),
@@ -433,7 +433,7 @@ export const mfgWoMaterials = pgTable(
     ),
     check("mfg_wo_materials_scrap_pct_check", sql`${t.scrapPct} >= 0 and ${t.scrapPct} < 100`),
     check("mfg_wo_materials_operation_sequence", sql`${t.operationSeq} is null or ${t.operationSeq} > 0`),
-    check("mfg_wo_materials_tracking_check", sql`${t.lotSerialPolicy} in ('none', 'lot', 'serial')`),
+    check("mfg_wo_materials_tracking_check", sql`${t.lotSerialPolicy} in ('none', 'lot', 'serial', 'lot_serial')`),
     check(
       "mfg_wo_materials_waiver_evidence",
       sql`(${t.waivedAt} is null and ${t.waivedBy} is null and ${t.waiveReason} is null)

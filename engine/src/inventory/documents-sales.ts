@@ -192,7 +192,7 @@ async function explodeKitLine(
           `chosen on the shipment; pick the component explicitly instead`,
       );
     }
-    if (pick && ((profile.tracking === "lot" && !pick.lotId) || (profile.tracking === "serial" && !pick.serialId))) {
+    if (pick && (((profile.tracking === "lot" || profile.tracking === "lot_serial") && !pick.lotId) || ((profile.tracking === "serial" || profile.tracking === "lot_serial") && !pick.serialId))) {
       const componentName = await kitLabel(runner, orgId, component.componentItemId);
       throw new InventoryError(
         `${label} component ${componentName} is ${profile.tracking}-tracked but names no ${profile.tracking}; ` +

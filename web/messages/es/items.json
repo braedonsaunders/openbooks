@@ -280,6 +280,8 @@
     "noCurrentRecipe": "Ningún componente está vigente hoy — las líneas siguientes son historial."
   },
   "costing": {
+    "abcClass": "Clase ABC de conteo cíclico",
+    "layerInquiry": "Ver capas de costo del inventario",
     "title": "Costeo de inventario",
     "description": "Cómo se valúa y controla el stock de este artículo: método, cuentas y puntos de reorden.",
     "configure": "Configurar costeo",
@@ -294,7 +296,8 @@
     "trackingOptions": {
       "none": "Ninguno",
       "lot": "Lote",
-      "serial": "Serie"
+      "serial": "Serie",
+      "lot_serial": "Lote y número de serie"
     },
     "baseUnit": "Unidad base",
     "unitConversions": "Conversiones de unidades",

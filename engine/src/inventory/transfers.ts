@@ -1,3 +1,4 @@
+import { assertOwnedLocation } from "./stock-eligibility.ts";
 import { sumOriginalCosts } from "./original-cost.ts";
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
@@ -195,6 +196,7 @@ export async function transferInventoryTx(
       serialId: input.serialId,
     },
     "transfer",
+      actorId,
   );
   let onHand = await getOnHandWith(
     tx,
@@ -232,6 +234,8 @@ export async function transferInventoryTx(
     );
   }
 
+  await assertOwnedLocation(tx,orgId,input.fromStockLocationId);
+  await assertOwnedLocation(tx,orgId,input.toStockLocationId);
   const locDims = (await tx.execute<{ id: string; location_id: string }>(sql`
     select id, location_id from stock_locations where org_id = ${orgId} and id in (${input.fromStockLocationId}, ${input.toStockLocationId})`));
   if (locDims.rows.length !== 2) {
@@ -339,15 +343,16 @@ export async function transferInventoryTx(
       input.toStockLocationId, fragment.quantity, fragment.value, profile.costingMethod,
       toMovementId, input.date, actorId, fragment.unitCost, fragment.originalCost);
   }
-  if (profile.tracking === "serial") {
-    await tx.execute(sql`
+  if ((profile.tracking === "serial" || profile.tracking === "lot_serial")) {
+    const serialUpdate=await tx.execute(sql`
       update serials
          set status = 'in_stock',
              current_stock_location_id = ${input.toStockLocationId},
              updated_at = now(),
              updated_by = ${actorId}
-       where id = ${input.serialId} and org_id = ${orgId}
+       where id = ${input.serialId} and org_id = ${orgId} returning id
     `);
+    if(serialUpdate.rows.length!==1)throw new InventoryError('Serial transfer lifecycle was not recorded');
   }
 
   return { fromMovementId, toMovementId, entryId, value: cost };

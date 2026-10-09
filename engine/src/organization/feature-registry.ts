@@ -171,6 +171,7 @@ export const FEATURES: FeatureDef[] = [
   { key: 'contractCosts', defaultEnabled: false, category: 'billing', requiresAll: ['revenueRecognition'] },
 
   // Inventory — stock, warehousing, fulfillment, planning and production.
+  { key: 'consignment', defaultEnabled: false, category: 'inventory', parentKey: 'inventory' },
   { key: 'inventory', defaultEnabled: true, category: 'inventory', navModules: ['inventory'] },
   // Item variants: product families with ordered options whose combinations
   // become ordinary variant items. Needs the item catalog's stocked kinds.

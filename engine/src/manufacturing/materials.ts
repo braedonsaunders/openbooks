@@ -1,3 +1,4 @@
+import { saleableLocation,unheldTracking,assertSaleableStock } from "../inventory/stock-eligibility.ts";
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { add, cmp, fromUnits, isZero, neg, toUnits } from "../money/money.ts";
@@ -169,6 +170,7 @@ async function planIssues(
     if (profile.tracking !== issue.material.lot_serial_policy) {
       refuse(`Component ${name} tracking changed after the work-order material snapshot.`, "material_tracking_changed", "Review the component inventory profile and release a new work order.", 409);
     }
+    await assertSaleableStock(tx as Runner,orgId,order.issue_location_id,{lotId:issue.lotId,serialId:issue.serialId});
     await validateTrackingSelection(tx as Runner, orgId, issue.material.component_item_id, order.issue_location_id, profile,
       { quantity: issue.quantity, lotId: issue.lotId, serialId: issue.serialId }, "issue");
     const key = selectionKey(issue);
@@ -202,29 +204,33 @@ async function trackedAvailability(
   order: WorkOrder,
   itemId: string,
   tracking: InventoryProfile["tracking"],
-): Promise<Array<{ id: string; quantity: string }>> {
+): Promise<Array<{ id: string; quantity: string;lot_id?:string|null }>> {
   if (!order.subsidiary_id || !order.issue_location_id) return [];
   if (tracking === "lot") {
     return (await tx.execute<{ id: string; quantity: string }>(sql`
       select source.lot_id as id, sum(layer.remaining_quantity)::text as quantity
         from cost_layers layer
         join inventory_movements source on source.org_id=layer.org_id and source.id=layer.source_movement_id
+        join lots lot on lot.org_id=source.org_id and lot.id=source.lot_id
        where layer.org_id=${orgId} and layer.subsidiary_id=${order.subsidiary_id}
          and layer.item_id=${itemId} and layer.stock_location_id=${order.issue_location_id}
          and layer.remaining_quantity>0 and source.lot_id is not null
-       group by source.lot_id order by min(source.moved_at), min(source.created_at), source.lot_id`)).rows;
+       and ${saleableLocation(sql`layer.org_id`,sql`layer.stock_location_id`)} and ${unheldTracking(sql`source.org_id`,sql`source.lot_id`,sql`source.serial_id`)}
+       group by source.lot_id,lot.expires_on order by lot.expires_on nulls last,min(source.moved_at), min(source.created_at), source.lot_id`)).rows;
   }
-  if (tracking === "serial") {
-    return (await tx.execute<{ id: string; quantity: string }>(sql`
-      select source.serial_id as id, sum(layer.remaining_quantity)::text as quantity
+  if (tracking === "serial" || tracking === "lot_serial") {
+    return (await tx.execute<{ id: string; quantity: string;lot_id:string|null }>(sql`
+      select source.lot_id,source.serial_id as id, sum(layer.remaining_quantity)::text as quantity
         from cost_layers layer
         join inventory_movements source on source.org_id=layer.org_id and source.id=layer.source_movement_id
         join serials serial on serial.org_id=source.org_id and serial.id=source.serial_id
+        left join lots lot on lot.org_id=source.org_id and lot.id=source.lot_id
        where layer.org_id=${orgId} and layer.subsidiary_id=${order.subsidiary_id}
          and layer.item_id=${itemId} and layer.stock_location_id=${order.issue_location_id}
          and layer.remaining_quantity>0 and source.serial_id is not null
          and serial.status='in_stock' and serial.current_stock_location_id=${order.issue_location_id}
-       group by source.serial_id order by min(source.moved_at), min(source.created_at), source.serial_id`)).rows;
+       and ${saleableLocation(sql`layer.org_id`,sql`layer.stock_location_id`)} and ${unheldTracking(sql`source.org_id`,sql`source.lot_id`,sql`source.serial_id`)}
+       group by source.serial_id,source.lot_id,lot.expires_on order by lot.expires_on nulls last,min(source.moved_at), min(source.created_at), source.serial_id`)).rows;
   }
   return [];
 }
@@ -278,7 +284,7 @@ async function backflushIntents(
       for (const candidate of lots) {
         const key = `${material.component_item_id}:${candidate.id}`;
         if ((remaining.get(key) ?? candidate.quantity) === "0.0000" || needed <= 0n) continue;
-        intents.push({ material, quantity: "1.0000", lotId: null, serialId: candidate.id });
+        intents.push({ material, quantity: "1.0000", lotId: candidate.lot_id??null, serialId: candidate.id });
         remaining.set(key, "0.0000");
         needed -= 10_000n;
       }

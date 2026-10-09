@@ -1,3 +1,4 @@
+import { lockAndCheckOrgFeature } from '@openbooks/engine/organization/features'
 import 'server-only'
 import { setupReferenceSubsidiarySource } from './subsidiary-scope'
 import { randomUUID } from 'node:crypto'
@@ -201,6 +202,8 @@ async function setupWriteTransaction<T>(
     }
     await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${featureGateLockKey(orgId)}, 0))`)
     if (!(await setupEntityEnabled(entity, orgId, tx))) throw new SetupWriteRefusal('unknown setup entity', 404)
+    if (entity.key==='stock-locations' && body && body.inventoryOwnership!==undefined && body.inventoryOwnership!=='owned'
+      && !await lockAndCheckOrgFeature(tx,orgId,'consignment')) throw new SetupWriteRefusal('Turn on Consignment in Company Settings → Features before configuring external ownership',422)
     const allowedSubsidiaryIds = options.allowedSubsidiaryIds
     if (allowedSubsidiaryIds !== undefined && allowedSubsidiaryIds !== null) {
       const scopeField = setupEntitySubsidiaryField(entity)
@@ -497,7 +500,9 @@ export async function validateEntityIntegrity(
   executor: SqlExecutor = db,
 ): Promise<string | null> {
   for (const field of entity.fields.filter(field => field.featureKey && Object.hasOwn(body, field.key))) {
-    if (!(await isFeatureEnabled(orgId, field.featureKey!, executor))) return 'Turn on E-invoicing in Company Settings → Features before changing e-invoice VAT configuration.'
+    if (!(await isFeatureEnabled(orgId, field.featureKey!, executor))) return field.featureKey==='consignment'
+      ? 'Turn on Consignment in Company Settings → Features before changing external stock ownership.'
+      : 'Turn on E-invoicing in Company Settings → Features before changing e-invoice VAT configuration.'
   }
   // `pay-schedules` is exempt from the generic feature fence: its dedicated
   // rule below (`payScheduleSubsidiaryProblem`) is the complete subsidiary
@@ -507,7 +512,7 @@ export async function validateEntityIntegrity(
   // the org's sole subsidiary while the fence is closed.
   const submittedSubsidiaryScope = entity.key !== 'tax-registrations' && entity.key !== 'pay-schedules'
     && entity.fields
-      .filter((field) => field.ref === 'subsidiaries' && !field.legalEmployer)
+      .filter((field) => field.ref === 'subsidiaries' && !field.legalEmployer && !field.legalEntity)
       .some((field) => Boolean(body[field.key]))
   if (submittedSubsidiaryScope && !(await subsidiaryFeatureEnabled(orgId, executor))) {
     return 'Subsidiaries are not enabled for this organization'
@@ -515,13 +520,14 @@ export async function validateEntityIntegrity(
   // A legal employer identifies whose payroll obligation this is; it is
   // not an optional multi-subsidiary management capability. Keep the same
   // tenant and actor scope checks with either feature state.
-  for (const field of entity.fields.filter((field) => field.legalEmployer)) {
+  for (const field of entity.fields.filter((field) => field.legalEmployer || field.legalEntity)) {
+    const scopeLabel=field.legalEmployer?'legal employer':'legal entity'
     const employer = body[field.key]
     if (employer == null || employer === '') continue
-    if (!isUuid(employer)) return 'Choose a valid legal employer from this organization'
+    if (!isUuid(employer)) return `Choose a valid ${scopeLabel} from this organization`
     const selected = await executor.execute(sql`select id from subsidiaries
       where org_id=${orgId} and id=${String(employer)} and is_active and not is_elimination`)
-    if (selected.rows.length !== 1) return 'Choose an active legal employer from this organization'
+    if (selected.rows.length !== 1) return `Choose an active ${scopeLabel} from this organization`
   }
   if (entity.key === 'pay-derived-rules') {
     // Equipment attribution is a Features-gated write. Turning Equipment off

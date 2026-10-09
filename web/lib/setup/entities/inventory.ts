@@ -4,6 +4,14 @@ import { COSTING_METHODS, INVENTORY_TRACKING, STOCK_LOCATION_KINDS } from '../op
 
 export const INVENTORY_ENTITIES: SetupEntity[] = [
   {
+    key:'inventory-count-policies',table:'inventory_count_policies',singularTitleKey:'entities.inventory-count-policies.singular',
+    actorCols:true,groupKey:'inventory',featureKey:'inventory',writePermission:'items.manage',iconKey:'package',orgScoped:true,
+    orderBy:'subsidiary_id,abc_class,effective_from',hasActive:false,
+    columns:[{key:'subsidiaryId',kind:'ref',ref:'subsidiaries'},{key:'abcClass',kind:'text'},{key:'intervalDays',kind:'number'},{key:'varianceTolerance',kind:'number'},{key:'effectiveFrom',kind:'date'},{key:'effectiveTo',kind:'date'}],
+    fields:[{key:'subsidiaryId',kind:'ref',ref:'subsidiaries',required:true,legalEntity:true},{key:'abcClass',kind:'select',required:true,options:[{value:'A',labelKey:'options.abcClass.A'},{value:'B',labelKey:'options.abcClass.B'},{value:'C',labelKey:'options.abcClass.C'}]},
+      {key:'intervalDays',kind:'integer',required:true},{key:'varianceTolerance',kind:'decimal',required:true},{key:'effectiveFrom',kind:'date',required:true},{key:'effectiveTo',kind:'date'}],
+  },
+  {
     key: 'item-identifiers',
     parentRecords: [{ entityKey: 'items', fieldKey: 'itemId' }],
     table: 'item_identifiers',
@@ -85,6 +93,8 @@ export const INVENTORY_ENTITIES: SetupEntity[] = [
       { key: 'locationId', kind: 'ref', ref: 'locations', required: true },
       { key: 'code', kind: 'text', required: true },
       { key: 'kind', kind: 'select', options: STOCK_LOCATION_KINDS, keepDefault: true },
+      {key:'inventoryOwnership',kind:'select',featureKey:'consignment',options:[{value:'owned',labelKey:'options.inventoryOwnership.owned'},{value:'vendor',labelKey:'options.inventoryOwnership.vendor'},{value:'customer',labelKey:'options.inventoryOwnership.customer'}],keepDefault:true},
+      {key:'ownerPartyId',kind:'ref',ref:'parties',featureKey:'consignment'},
       { key: 'parentId', kind: 'ref', ref: 'stock-locations' },
       { key: 'isActive', kind: 'boolean' },
     ],
@@ -117,6 +127,7 @@ export const INVENTORY_ENTITIES: SetupEntity[] = [
       { key: 'itemId', kind: 'ref', ref: 'items', required: true, lockedOnEdit: true },
       { key: 'costingMethod', kind: 'select', options: COSTING_METHODS, keepDefault: true },
       { key: 'tracking', kind: 'select', options: INVENTORY_TRACKING, keepDefault: true },
+      { key: 'abcClass', kind: 'select', options: [{value:'A',labelKey:'options.abcClass.A'},{value:'B',labelKey:'options.abcClass.B'},{value:'C',labelKey:'options.abcClass.C'}] },
       { key: 'assetAccountId', kind: 'ref', ref: 'accounts', required: true },
       { key: 'cogsAccountId', kind: 'ref', ref: 'accounts', required: true },
       { key: 'adjustmentAccountId', kind: 'ref', ref: 'accounts' },

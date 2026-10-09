@@ -126,6 +126,7 @@ async function mountCounts(t: TestContext, props: Record<string, unknown>): Prom
       return Response.json({ ok: true, replayed: script.postBodies.length > 1, id: COUNT_ID })
     }
     if (url.includes('counts?id=')) return Response.json(detailResponse)
+    if (url.includes('/api/inventory/tracking-options')) return Response.json({ tracking: 'none', lots: [], serials: [] })
     return Response.json({ counts: [], totalCount: 0, nextCursor: null })
   }) as typeof fetch
   t.after(() => {

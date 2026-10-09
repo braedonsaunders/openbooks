@@ -342,7 +342,10 @@ async function validateCustomerReturnSource(
       `${label} source shipment belongs to a different customer`,
     );
   }
-  if (line.tracking === "lot") {
+  if (line.tracking === "lot_serial") {
+    if (!line.selection.lotId || !line.selection.serialId || source.lot_id!==line.selection.lotId || source.serial_id!==line.selection.serialId)
+      throw new InventoryError(`${label} requires both identifiers matching its source shipment`);
+  } else if (line.tracking === "lot") {
     if (!line.selection.lotId || line.selection.serialId) {
       throw new InventoryError(`${label} requires exactly one selected lot`);
     }
@@ -599,7 +602,7 @@ async function returnCustomerCreditInventoryLine(
     date,
     actorId,
   );
-  if (profile.tracking === "serial") {
+  if ((profile.tracking === "serial" || profile.tracking === "lot_serial")) {
     await runner.execute(sql`
       update serials
          set status = 'in_stock', current_stock_location_id = ${line.stockLocationId},

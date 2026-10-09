@@ -68,6 +68,8 @@ export const stockLocations = pgTable(
     kind: text("kind", { enum: ["warehouse", "zone", "bin", "staging", "transit", "quarantine"] })
       .notNull()
       .default("bin"),
+    inventoryOwnership: text("inventory_ownership",{enum:["owned","vendor","customer"]}).notNull().default("owned"),
+    ownerPartyId: uuid("owner_party_id"),
     isActive: boolean("is_active").notNull().default(true),
     ...auditColumns,
   },
@@ -88,6 +90,7 @@ export const lots = pgTable(
     itemId: uuid("item_id").notNull(),
     lotNumber: text("lot_number").notNull(),
     expiresOn: date("expires_on"),
+    holdReason: text("hold_reason"),
     ...auditColumns,
   },
   (t) => [
@@ -103,6 +106,8 @@ export const serials = pgTable(
     orgId: orgRef(),
     itemId: uuid("item_id").notNull(),
     serialNumber: text("serial_number").notNull(),
+    lotId: uuid("lot_id"),
+    holdReason: text("hold_reason"),
     status: text("status", { enum: ["registered", "in_stock", "committed", "shipped", "returned", "scrapped"] })
       .notNull()
       .default("in_stock"),
@@ -163,6 +168,7 @@ export const inventoryMovements = pgTable(
     ...auditColumns,
   },
   (t) => [
+    uniqueIndex("inventory_movements_org_id_identity").on(t.orgId,t.id),
     index("inv_moves_item_loc").on(t.itemId, t.stockLocationId),
     index("inv_moves_doc_line").on(t.documentLineId),
     uniqueIndex("inventory_movements_org_idempotency")
@@ -205,6 +211,13 @@ export const stockCountLines = pgTable(
     itemId: uuid("item_id").notNull(),
     stockLocationId: uuid("stock_location_id").notNull(),
     lotId: uuid("lot_id"),
+    serialId: uuid("serial_id"),
+    varianceTolerance: money("variance_tolerance"),
+    firstCountedQuantity: money("first_counted_quantity"),
+    secondCountedQuantity: money("second_counted_quantity"),
+    firstCountedBy: uuid("first_counted_by"),
+    secondCountedBy: uuid("second_counted_by"),
+    secondCountedAt: timestamp("second_counted_at",{withTimezone:true}),
     expectedQuantity: money("expected_quantity").notNull(),
     countedQuantity: money("counted_quantity"),
     adjustmentMovementId: uuid("adjustment_movement_id"),
@@ -215,7 +228,7 @@ export const stockCountLines = pgTable(
   },
   (t) => [
     index("count_lines_count").on(t.stockCountId),
-    // One line per (count, item, stock location, lot) for unmarked rows.
+    // One line per (count, item, stock location, lot, serial) for unmarked rows.
     // NULLS NOT DISTINCT: an untracked item's lines carry NULL lot_id, and
     // without it the most common duplicate — the same item counted twice
     // with no lot — would escape the guard (0293). The SQL migration is
@@ -224,7 +237,7 @@ export const stockCountLines = pgTable(
     // NULLS NOT DISTINCT, so the mirror states the partiality here and the
     // nulls discipline lives in 0293.
     uniqueIndex("stock_count_lines_no_duplicate_subject")
-      .on(t.orgId, t.stockCountId, t.itemId, t.stockLocationId, t.lotId)
+      .on(t.orgId, t.stockCountId, t.itemId, t.stockLocationId, t.lotId, t.serialId)
       .where(sql`NOT ${t.isPreGuardLegacy}`),
     // A physical count is never negative; NULL stays legal for uncounted
     // lines. Marked pre-guard rows are preserved as evidence (0299).

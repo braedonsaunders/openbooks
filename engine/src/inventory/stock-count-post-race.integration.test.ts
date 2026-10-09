@@ -1,3 +1,4 @@
+import { confirmCountObservation } from "../testing/inventory-counts.ts";
 import assert from "node:assert/strict";
 import test from "node:test";
 import pg from "pg";
@@ -38,6 +39,7 @@ async function openReviewedCount(org: ScratchOrg, counted: string): Promise<{ co
   const lineId = (await db.execute<{ id: string }>(sql`
     select id from stock_count_lines where org_id = ${org.orgId} and stock_count_id = ${count.id}`)).rows[0]!.id;
   await recordCountedQuantity(org.orgId, null, { countId: count.id, lineId, countedQuantity: counted });
+  await confirmCountObservation(org.orgId,count.id,lineId,counted);
   await submitStockCountForReview(org.orgId, null, count.id);
   return { countId: count.id, lineId };
 }
@@ -130,7 +132,7 @@ test("two counts racing one position serialize: exactly one posts, the other ref
   }
 });
 
-test("a lot-tracked line posts under the position locks; serial-tracked items still refuse at creation", { skip: !DB }, async () => {
+test("a lot-tracked line posts under the position locks; serial counts require the individual identifier", { skip: !DB }, async () => {
   const org = await createScratchOrg();
   try {
     await db.execute(sql`
@@ -162,6 +164,7 @@ test("a lot-tracked line posts under the position locks; serial-tracked items st
     const lineId = (await db.execute<{ id: string }>(sql`
       select id from stock_count_lines where org_id = ${org.orgId} and stock_count_id = ${count.id}`)).rows[0]!.id;
     await recordCountedQuantity(org.orgId, null, { countId: count.id, lineId, countedQuantity: "9" });
+    await confirmCountObservation(org.orgId,count.id,lineId,"9");
     await submitStockCountForReview(org.orgId, null, count.id);
     const posted = await withOrgTransaction(org.orgId, () => postStockCount(org.orgId, null, count.id));
     assert.equal(posted.status, "posted");
@@ -180,7 +183,7 @@ test("a lot-tracked line posts under the position locks; serial-tracked items st
         countedOn: org.date,
         lines: [{ itemId: org.items.component, stockLocationId: org.stockLocationId }],
       }),
-      /serial-tracked items cannot be cycle-counted/,
+      /serial-tracked item requires a serial on count/,
     );
     assert.equal(
       (await db.execute<{ n: string }>(sql`

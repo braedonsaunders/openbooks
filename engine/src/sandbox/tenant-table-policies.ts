@@ -1,5 +1,8 @@
 /** Explicit clone disposition and identifier-rebase rule for every tenant-owned table. Update when adding a tenant table. */
 export const TENANT_TABLE_POLICIES = {
+  "inventory_count_policies": "clone:catalog-uuid-rebase",
+  "consignment_stock": "clone:catalog-uuid-rebase",
+  "consignment_events": "clone:catalog-uuid-rebase",
   "einvoice_settings": "clone:catalog-uuid-rebase",
   // Issued e-invoices are the source environment's legal originals.
   "einvoice_documents": "skip:no-copy",

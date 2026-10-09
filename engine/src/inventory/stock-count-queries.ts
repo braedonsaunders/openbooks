@@ -1,3 +1,4 @@
+import { requiresSecondCount } from "./count-policy.ts";
 import { sql } from "drizzle-orm";
 import { db, withOrgTransaction } from "../platform/db.ts";
 import { add, neg } from "../money/money.ts";
@@ -122,7 +123,7 @@ export async function listStockCounts(orgId: string, query: StockCountListQuery 
            (select count(*)::text from stock_count_lines l
              where l.org_id = ${orgId} and l.stock_count_id = c.id
                and l.counted_quantity is not null
-               and l.counted_quantity <> l.expected_quantity) as discrepant_count
+               and l.counted_quantity <> l.expected_quantity and (not c.blind or c.status in ('review','posted'))) as discrepant_count
       from stock_counts c
      where c.org_id = ${orgId} ${scope} ${cursorScope}
      order by ${LIST_ORDER}
@@ -150,7 +151,11 @@ export async function listStockCounts(orgId: string, query: StockCountListQuery 
   };
 }
 
-export interface StockCountLineDetail extends CountLine {
+export interface StockCountLineDetail extends Omit<CountLine,"expectedQuantity"> {
+  expectedQuantity: string | null;
+  serialNumber: string | null;
+  secondCountRequired: boolean;
+  secondCountedQuantity: string | null;
   itemCode: string | null;
   itemName: string | null;
   stockLocationCode: string | null;
@@ -188,6 +193,11 @@ export async function getStockCountDetail(
       item_id: string;
       stock_location_id: string;
       lot_id: string | null;
+      serial_id: string | null;
+      serial_number: string | null;
+      first_counted_quantity: string | null;
+      second_counted_quantity: string | null;
+      variance_tolerance: string | null;
       expected_quantity: string;
       counted_quantity: string | null;
       adjustment_movement_id: string | null;
@@ -196,7 +206,8 @@ export async function getStockCountDetail(
       stock_location_code: string | null;
       lot_number: string | null;
     }>(sql`
-      select l.id, l.item_id, l.stock_location_id, l.lot_id,
+      select l.id, l.item_id, l.stock_location_id, l.lot_id, l.serial_id, l.first_counted_quantity::text, l.second_counted_quantity::text, l.variance_tolerance::text,
+             (select serial_number from serials where org_id=${orgId} and id=l.serial_id) as serial_number,
              l.expected_quantity::text, l.counted_quantity::text, l.adjustment_movement_id,
              (select code from items where org_id = ${orgId} and id = l.item_id) as item_code,
              (select name from items where org_id = ${orgId} and id = l.item_id) as item_name,
@@ -216,14 +227,18 @@ export async function getStockCountDetail(
         itemId: row.item_id,
         stockLocationId: row.stock_location_id,
         lotId: row.lot_id,
-        expectedQuantity: row.expected_quantity,
+        serialId: row.serial_id,
+        serialNumber: row.serial_number,
+        secondCountRequired: requiresSecondCount(row.expected_quantity,row.first_counted_quantity,row.variance_tolerance) && row.second_counted_quantity===null,
+        secondCountedQuantity: row.second_counted_quantity,
+        expectedQuantity: header.blind && !["review","posted"].includes(header.status) ? null : row.expected_quantity,
         countedQuantity: row.counted_quantity,
         adjustmentMovementId: row.adjustment_movement_id,
         itemCode: row.item_code,
         itemName: row.item_name,
         stockLocationCode: row.stock_location_code,
         lotNumber: row.lot_number,
-        variance: row.counted_quantity === null ? null : add(row.counted_quantity, neg(row.expected_quantity)),
+        variance: row.counted_quantity === null || (header.blind && !["review","posted"].includes(header.status)) ? null : add(row.counted_quantity, neg(row.expected_quantity)),
       })),
     };
   });

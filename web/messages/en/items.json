@@ -283,6 +283,8 @@
     "unchangedHelp": "The item schedule is unchanged, so saving will update only the rate-book details."
   },
   "costing": {
+    "abcClass": "ABC cycle-count class",
+    "layerInquiry": "View inventory cost layers",
     "title": "Inventory costing",
     "description": "How stock for this item is valued and tracked — method, accounts, and reorder points.",
     "configure": "Configure costing",
@@ -297,7 +299,8 @@
     "trackingOptions": {
       "none": "None",
       "lot": "Lot",
-      "serial": "Serial"
+      "serial": "Serial",
+      "lot_serial": "Lot and serial"
     },
     "baseUnit": "Base unit",
     "unitConversions": "Unit conversions",

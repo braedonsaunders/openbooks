@@ -270,6 +270,8 @@
     "noCurrentRecipe": "今日有効な構成品がありません — 下の行は履歴です。"
   },
   "costing": {
+    "abcClass": "循環棚卸ABC分類",
+    "layerInquiry": "在庫原価レイヤーを表示",
     "title": "在庫評価",
     "description": "この品目の在庫の評価・管理方法 — 評価方法、勘定科目、発注点を指定します。",
     "configure": "評価を設定する",
@@ -284,7 +286,8 @@
     "trackingOptions": {
       "none": "なし",
       "lot": "ロット",
-      "serial": "シリアル番号"
+      "serial": "シリアル番号",
+      "lot_serial": "ロットとシリアル番号"
     },
     "baseUnit": "基本単位",
     "unitConversions": "単位換算",

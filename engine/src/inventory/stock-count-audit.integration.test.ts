@@ -1,3 +1,4 @@
+import { confirmCountObservation } from "../testing/inventory-counts.ts";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { sql } from "drizzle-orm";
@@ -83,14 +84,17 @@ test("a recount keeps the cleared observation, and the whole trail survives post
 
     // The recount cleared the observation: re-record, submit, post.
     await recordCountedQuantity(org.orgId, null, { countId, lineId, countedQuantity: "9" });
+    await confirmCountObservation(org.orgId,countId,lineId,"9");
     await submitStockCountForReview(org.orgId, null, countId);
     const posted = await withOrgTransaction(org.orgId, () => postStockCount(org.orgId, null, countId));
     assert.equal(posted.status, "posted");
 
     const trail = await lineAudit(org.orgId, lineId);
-    assert.equal(trail.length, 3, "the trail survives posting: record, recount, re-record");
+    assert.equal(trail.length, 4, "the trail survives posting: record, recount, re-record and second observation");
+    assert.ok(trail[3]!.actor_id, "the second observation names its counter");
+    assert.equal(trail[3]!.changes.operation, "second_count");
     assert.deepEqual(
-      trail.map((e) => e.changes.after.countedQuantity),
+      trail.filter((e) => e.changes.operation !== "second_count").map((e) => e.changes.after.countedQuantity),
       ["7.0000", null, "9.0000"],
       "the posted -1 variance reads against the full observation history",
     );

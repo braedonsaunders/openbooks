@@ -1,3 +1,5 @@
+import { StockControls } from './StockControls'
+import { LayerInquiry } from './LayerInquiry'
 import Link from 'next/link'
 import { sql } from 'drizzle-orm'
 import { getTranslations } from 'next-intl/server'
@@ -26,11 +28,11 @@ import { subsidiaryVisibleFilter } from '../../../lib/subsidiaries'
 
 export const dynamic = 'force-dynamic'
 
-type InventoryView = 'onhand' | 'movements' | 'counts' | 'locations' | 'bom'
+type InventoryView = 'onhand' | 'movements' | 'counts' | 'locations' | 'bom' | 'holds' | 'consignment' | 'cycles'
 
 function selectedView(sp: Record<string, string | string[] | undefined>): InventoryView {
   const candidate = pickString(sp.inventoryView) ?? pickString(sp.view)
-  return candidate === 'movements' || candidate === 'counts' || candidate === 'locations' || candidate === 'bom'
+  return candidate === 'movements' || candidate === 'counts' || candidate === 'locations' || candidate === 'bom' || candidate === 'holds' || candidate === 'consignment' || candidate === 'cycles'
     ? candidate
     : 'onhand'
 }
@@ -50,6 +52,7 @@ export default async function Inventory({
   const barcodeScanningEnabled = await isFeatureEnabled(authz.user.orgId, 'barcodeScanning')
 
   const orgId = authz.user.orgId
+  const consignmentOn=await isFeatureEnabled(orgId,'consignment')
   const requestedView = selectedView(sp)
   const canManage = can(authz, 'items.manage')
   const canPostMovement = canPostInventoryMovement(authz)
@@ -59,12 +62,16 @@ export default async function Inventory({
   const view = !canSetup && (requestedView === 'locations' || requestedView === 'bom')
     ? 'onhand'
     : requestedView
+  if(view==='consignment')await requireFeatureEnabled(orgId,'consignment')
   const showMovementDrawer = pickString(sp.movement) === 'new' && canPostMovement
 
   const tabs = [
     { href: '/inventory?inventoryView=onhand', label: t('view.onhand'), active: view === 'onhand' },
     { href: '/inventory?inventoryView=movements', label: t('view.movements'), active: view === 'movements' },
     { href: '/inventory?inventoryView=counts', label: t('view.counts'), active: view === 'counts' },
+    {href:'/inventory?inventoryView=holds',label:t('controls.holds'),active:view==='holds'},
+    {href:'/inventory?inventoryView=cycles',label:t('controls.cycles'),active:view==='cycles'},
+    ...(consignmentOn?[{href:'/inventory?inventoryView=consignment',label:t('controls.consignment'),active:view==='consignment'}]:[]),
     ...(canSetup
       ? [
           { href: '/inventory?inventoryView=locations', label: t('view.locations'), active: view === 'locations' },
@@ -73,7 +80,7 @@ export default async function Inventory({
       : []),
   ]
 
-  const movementPickers = showMovementDrawer
+  const movementPickers = showMovementDrawer || (view==='consignment'&&canPost)
     ? await Promise.all([
         db.execute<{ id: string; code: string | null; name: string | null }>(sql`
           select it.id, it.code, it.name from items it
@@ -173,7 +180,7 @@ export default async function Inventory({
     canSetup ? (
       <Button asChild><Link href="/inventory?inventoryView=locations&row=new"><Plus size={15} /> {tSetup('new')}</Link></Button>
     ) : null
-  ) : canSetup ? (
+  ) : view==='bom' && canSetup ? (
     <NewBomButton label={tSetup('new')} />
   ) : null
 
@@ -194,12 +201,13 @@ export default async function Inventory({
           userId={authz.user.id}
           canManage={canManage}
           sp={sp}
-          drawer={movementPickers ? (
+          drawer={showMovementDrawer && movementPickers ? (
             <InventoryActionDrawer
               items={movementPickers[0].rows}
               stockLocations={movementPickers[1].rows}
               accounts={movementPickers[2].rows}
               subsidiaries={movementPickers[3].rows}
+              canManageTracking={canManage}
               allowedActions={(Object.keys(INVENTORY_ACTION_PERMISSIONS) as (keyof typeof INVENTORY_ACTION_PERMISSIONS)[]).filter(action => can(authz,INVENTORY_ACTION_PERMISSIONS[action]))}
               closeHref={closeMovementHref}
             />
@@ -207,6 +215,8 @@ export default async function Inventory({
         />
       ) : null}
 
+      {view==='holds'||view==='consignment'||view==='cycles'?<StockControls key={view} view={view==='cycles'?'cycle_due':view} canManage={canManage} canPost={canPost} pickers={movementPickers?{items:movementPickers[0].rows,stockLocations:movementPickers[1].rows,accounts:movementPickers[2].rows,subsidiaries:movementPickers[3].rows}:undefined}/>:null}
+      {pickString(sp.layerItem)?<LayerInquiry itemId={pickString(sp.layerItem)!} stockLocationId={pickString(sp.layerLocation)}/>:null}
       {view === 'counts' && countData ? (
         <CountsList
           key={pickString(sp.countId) ?? (pickString(sp.count) === 'new' ? 'new' : 'list')}

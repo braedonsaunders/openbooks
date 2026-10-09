@@ -9,9 +9,10 @@ export interface InventoryAccounts {
 export interface InventoryProfile extends InventoryAccounts {
   itemId: string;
   costingMethod: "fifo" | "moving_average" | "standard";
-  tracking: "none" | "lot" | "serial";
+  tracking: "none" | "lot" | "serial" | "lot_serial";
   standardCost: string | null;
   baseUnit: string;
+  unitConversions?: Record<string, number>;
   allowNegativeInventory: boolean;
   negativeCostBasis: "last_receipt" | "standard" | "configured";
   provisionalUnitCost: string | null;

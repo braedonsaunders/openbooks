@@ -474,6 +474,7 @@ const INVENTORY_TRACKING = [
   { value: 'none', labelKey: 'options.tracking.none' },
   { value: 'lot', labelKey: 'options.tracking.lot' },
   { value: 'serial', labelKey: 'options.tracking.serial' },
+  { value: 'lot_serial', labelKey: 'options.tracking.lot_serial' },
 ]
 
 const STOCK_LOCATION_KINDS = [

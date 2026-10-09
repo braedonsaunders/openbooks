@@ -3451,6 +3451,12 @@
         "title": "Situación de subcontratistas",
         "singularTitle": "Situación de subcontratistas",
         "description": "Los importes reflejan el último pago guardado. Guarde los cambios para recalcular las retenciones."
+      },
+      "inventory-count-policies": {
+        "singular": "Política de conteo cíclico",
+        "plural": "Políticas de conteo cíclico",
+        "description": "Intervalos vigentes por entidad jurídica y tolerancias en unidades base según la clase ABC.",
+        "title": "Políticas de conteo cíclico"
       }
     },
     "fields": {
@@ -4053,6 +4059,10 @@
       "schedulePdfAccent": "Color de acento",
       "schedulePdfLegend": "Mostrar leyenda de colores",
       "schedulePdfWeekends": "Sombrear los fines de semana configurados",
+      "abcClass": "Clase ABC",
+      "intervalDays": "Intervalo de conteo (días)",
+      "varianceTolerance": "Tolerancia de diferencia",
+      "inventoryOwnership": "Propiedad de las existencias",
       "schedulePdfColorTreatment": "Tratamiento del color",
       "schedulePdfColorIntensity": "Intensidad del tinte (%)"
     },
@@ -4417,7 +4427,8 @@
       "tracking": {
         "none": "Ninguno",
         "lot": "Lote",
-        "serial": "Serie"
+        "serial": "Serie",
+        "lot_serial": "Lote y número de serie"
       },
       "stockLocationKind": {
         "warehouse": "Almacén",
@@ -5017,6 +5028,16 @@
       "schedulePdfStyle": {
         "modern": "Moderno",
         "classic": "Clásico"
+      },
+      "abcClass": {
+        "A": "Clase A",
+        "B": "Clase B",
+        "C": "Clase C"
+      },
+      "inventoryOwnership": {
+        "owned": "Propiedad de la empresa",
+        "vendor": "Propiedad del proveedor",
+        "customer": "Propiedad del cliente"
       },
       "schedulePdfColorTreatment": {
         "subtle": "Acentos sutiles",
@@ -7528,6 +7549,10 @@
     "contractorWithholding": {
       "title": "Retenciones de contratistas",
       "description": "Calcule retenciones legales en pagos a proveedores y prepare documentos de trabajo, ingresos tributarios y correcciones controladas."
+    },
+    "consignment": {
+      "description": "Controle existencias de proveedores y clientes en custodia y reconozca el inventario al adquirir la propiedad.",
+      "title": "Existencias en consignación"
     }
   },
   "backupsManager": {

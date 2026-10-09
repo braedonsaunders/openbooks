@@ -90,6 +90,7 @@ async function mountCounts(
     const url = String(input)
     const method = init?.method ?? 'GET'
     script.fetchCalls.push({ url, method })
+    if (url.includes('/api/inventory/tracking-options')) return Response.json({ tracking: 'none', lots: [], serials: [] })
     if (onFetch) return Response.json(await onFetch(url, method))
     return Response.json({ counts: [], totalCount: 0, nextCursor: null })
   }) as typeof fetch
@@ -166,7 +167,7 @@ test('a line missing its stock location is refused on the row with zero requests
   await pickOption('Item', 'Widget')
   await clickButtonNamed('Open count')
   await tick()
-  assert.equal(script.fetchCalls.length, 0, 'the refusal must happen client-side: no request may fire')
+  assert.equal(script.fetchCalls.filter(call => call.method === 'POST').length, 0, 'the refusal must happen client-side: no count command may fire')
   const alerts = [...document.querySelectorAll('[role="alert"]')].map((a) => a.textContent ?? '')
   assert.ok(
     alerts.some((text) => /Line 1: choose a stock location/.test(text)),

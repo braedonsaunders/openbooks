@@ -1,3 +1,5 @@
+import { assertCustodyReceiptEvidence } from "./custody-receipt-evidence.ts";
+import { assertSaleableStock, assertOwnedLocation } from "./stock-eligibility.ts";
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { db, type SqlExecutor } from "../platform/db.ts";
@@ -14,12 +16,12 @@ import { assertNotKitItem } from "./kits.ts";
 import { stockLocationDim, postInventoryEntry, inventoryOffsetAccountProblem, type JournalLineInput } from "./journal.ts";
 import { primaryBookId, periodForDate, subsidiaryCurrency, getOnHandWith, lockInventoryPosition, persistReceiptMoney } from "./position.ts";
 import { consumeLayers, recordConsumptions, resolveProvisionalUnitCost, addLayerAtCost } from "./cost-layers.ts";
-
 // ---------------------------------------------------------------------------
 // Receive
 // ---------------------------------------------------------------------------
-
 export interface ReceiveInput {
+  /** Custody decrease that this atomic ownership receipt recognizes. */
+  ownershipSourceStockId?: string;
   itemId: string;
   stockLocationId: string;
   /** base-unit quantity (> 0). */
@@ -61,14 +63,12 @@ export interface ReceiveInput {
    *  warehouse then admits it as a count, which a suspended warehouse allows. */
   admission?: "count";
 }
-
 export interface MovementResult {
   movementId: string;
   /** null when the movement recorded a layer without its own entry (bill receipt). */
   entryId: string | null;
   value: string;
 }
-
 /**
  * Receive stock: create a cost layer (or blend the moving-average layer) and
  * post DR inventory / CR offset (+ a PPV leg under standard costing).
@@ -105,12 +105,10 @@ export async function receiveInventory(
   const currency = await subsidiaryCurrency(orgId, input.subsidiaryId);
   const ctx = await loadSubsidiaryContext(db, orgId);
   assertMovementOwner(ctx, input.subsidiaryId);
-
   const dims = {
     departmentId: input.departmentId ?? null,
     projectId: input.projectId ?? null,
   };
-
   const apply = async (tx: Runner): Promise<MovementResult> => {
     // Canonical lock order: fence the position before any row lock, or a
     // peer holding the fence deadlocks against this transaction at posting.
@@ -128,6 +126,7 @@ export async function receiveInventory(
     // costing-policy writer takes the same profile lock before revaluing
     // layers, so a receipt cannot carry a stale pre-transaction policy.
     const profile = await resolveProfile(orgId, input.itemId, tx, true);
+    await assertOwnedLocation(tx, orgId, input.stockLocationId);
     // INV-ACTIVE fence: a receipt mints stock, so an inactive item refuses
     // by name here — before any layer, settlement, movement, or journal
     // write. Shared helper holds the items row FOR SHARE through posting so
@@ -154,7 +153,6 @@ export async function receiveInventory(
       input.subsidiaryId,
       input.admission === "count" ? "count" : "inbound",
     );
-
     // Costing lives under the position lock: a receipt without an explicit
     // cost carries at the average prevailing at commit time — a pre-lock
     // snapshot would let a concurrent movement strand it on a stale value.
@@ -211,7 +209,6 @@ export async function receiveInventory(
       }
     }
     const offsetTotal = add(inventoryValue, variance); // = qty × actual
-
     // When the source document already DR'd inventory (postJournal === false),
     // we skip the entry and only record the layer. Standard costing needs its
     // own entry to book the variance, so it requires a real offset (a clearing
@@ -241,7 +238,7 @@ export async function receiveInventory(
     if (postJournal && !input.offsetAccountId) {
       throw new InventoryError("receipt requires an offset account");
     }
-
+    await assertCustodyReceiptEvidence(tx,orgId,actorId,input);
     await validateTrackingSelection(
       tx,
       orgId,
@@ -253,7 +250,8 @@ export async function receiveInventory(
         lotId: input.lotId,
         serialId: input.serialId,
       },
-      "receipt",
+      input.ownershipSourceStockId ? "ownership_receipt" : input.admission === "count" ? "count_receipt" : "receipt",
+      actorId,
     );
     // Deficits settle only within the receiving legal entity: one
     // subsidiary's receipt must never consume another's shortfall (its
@@ -425,15 +423,16 @@ export async function receiveInventory(
         profile.costingMethod, movementId, input.date, actorId, layerUnitCost);
     }
 
-    if (profile.tracking === "serial") {
-      await tx.execute(sql`
+    if ((profile.tracking === "serial" || profile.tracking === "lot_serial")) {
+      const serialUpdate=await tx.execute(sql`
         update serials
            set status = 'in_stock',
                current_stock_location_id = ${input.stockLocationId},
                updated_at = now(),
                updated_by = ${actorId}
-         where id = ${input.serialId} and org_id = ${orgId}
+         where id = ${input.serialId} and org_id = ${orgId} returning id
       `);
+      if(serialUpdate.rows.length!==1)throw new InventoryError('Serial lifecycle update was not recorded');
     }
 
     return { movementId, entryId, value: assetDelta };
@@ -521,6 +520,7 @@ export async function issueInventory(
     // concurrent costing-policy revision cannot price this issue from stale
     // standard-cost or tracking settings.
     const profile = await resolveProfile(orgId, input.itemId, tx, true);
+    await assertOwnedLocation(tx, orgId, input.stockLocationId);
     // INV-ACTIVE fence: an issue moves stock out, so an inactive item
     // refuses by name here — before any consumption, movement, or journal
     // write. Shared helper holds the items row FOR SHARE through posting so
@@ -538,6 +538,7 @@ export async function issueInventory(
       { quantity: input.quantity, lotId: input.lotId, serialId: input.serialId },
       "issue",
     );
+    if (input.admission !== "count") await assertSaleableStock(tx,orgId,input.stockLocationId,input);
     const offset = input.offsetAccountId ?? profile.cogsAccountId;
     const accountProblem = inventoryOffsetAccountProblem(profile.assetAccountId, offset, "issue offset");
     if (accountProblem) throw new InventoryError(accountProblem);
@@ -561,6 +562,7 @@ export async function issueInventory(
         serialId: input.serialId,
       },
       "issue",
+      actorId,
     );
     const onHand = await getOnHandWith(
       tx,
@@ -673,15 +675,16 @@ export async function issueInventory(
                 ${shortfallQuantity},${provisionalUnitCost},${profile.negativeCostBasis},${actorId},${actorId})
       `);
     }
-    if (profile.tracking === "serial") {
-      await tx.execute(sql`
+    if ((profile.tracking === "serial" || profile.tracking === "lot_serial")) {
+      const serialUpdate=await tx.execute(sql`
         update serials
            set status = 'shipped',
                current_stock_location_id = null,
                updated_at = now(),
                updated_by = ${actorId}
-         where id = ${input.serialId} and org_id = ${orgId}
+         where id = ${input.serialId} and org_id = ${orgId} returning id
       `);
+      if(serialUpdate.rows.length!==1)throw new InventoryError('Serial lifecycle update was not recorded');
     }
     return { movementId, entryId, value: neg(cost) };
   };
@@ -740,6 +743,7 @@ export async function adjustInventory(
     await lockInventoryPosition(tx, input.itemId, input.stockLocationId);
     await assertInventoryFeature(tx, orgId);
     const profile = await resolveProfile(orgId, input.itemId, tx, true);
+    await assertOwnedLocation(tx, orgId, input.stockLocationId);
     // Positive deltas inherit this refusal from receiveInventory; negative
     // ones would otherwise die as a confusing shortfall on stock that can
     // never exist. Refuse either sign up front, by name.

@@ -270,6 +270,8 @@
     "noCurrentRecipe": "Nenhum componente vigente hoje — as linhas abaixo são histórico."
   },
   "costing": {
+    "abcClass": "Classe ABC de contagem cíclica",
+    "layerInquiry": "Ver camadas de custo do estoque",
     "title": "Custeio de estoque",
     "description": "Como o estoque deste item é avaliado e controlado — método, contas e pontos de pedido.",
     "configure": "Configurar custeio",
@@ -284,7 +286,8 @@
     "trackingOptions": {
       "none": "Nenhum",
       "lot": "Lote",
-      "serial": "Número de série"
+      "serial": "Número de série",
+      "lot_serial": "Lote e número de série"
     },
     "baseUnit": "Unidade base",
     "unitConversions": "Conversões de unidades",

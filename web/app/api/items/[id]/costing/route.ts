@@ -22,6 +22,7 @@ const itemParams = z.object({ id: z.string() })
 const costingBody = z.object({
   costingMethod: z.string(),
   tracking: z.string(),
+  abcClass: z.enum(["A","B","C"]).nullable().optional(),
   recostingAuthorization: z.string().optional(), expectedUpdatedAt: z.union([z.string(), z.null()]).optional(),
   assetAccountId: uuidId, cogsAccountId: uuidId,
   adjustmentAccountId: nullableUuidId.optional(), varianceAccountId: nullableUuidId.optional(),
@@ -69,7 +70,7 @@ export const GET = defineRoute({ permission: 'items.read', feature: 'inventory',
   // updated_at doubles as the optimistic-concurrency revision token callers
   // echo back as expectedUpdatedAt.
   const profile = ((await db.execute(sql`
-    select costing_method, tracking, asset_account_id, cogs_account_id,
+    select costing_method, tracking, abc_class, asset_account_id, cogs_account_id,
            adjustment_account_id, variance_account_id, received_not_billed_account_id,
            standard_cost, base_unit, unit_conversions, reorder_point, preferred_stock_level,
            allow_negative_inventory, negative_cost_basis, provisional_unit_cost, ${documentRevisionSql(sql`updated_at`)} as updated_at
@@ -112,7 +113,7 @@ export const PUT = defineRoute({
   const tracking = parseTrackingMode(body.tracking)
   if (!tracking) {
     return NextResponse.json(
-      { error: 'tracking must be one of none, lot, or serial' },
+      { error: 'tracking must be one of none, lot, serial, or lot_serial' },
       { status: 422 },
     )
   }
@@ -261,18 +262,19 @@ export const PUT = defineRoute({
             : {};
       const afterRows = ((await tx.execute(sql`
         insert into item_inventory_profiles
-          (org_id, item_id, costing_method, tracking, asset_account_id, cogs_account_id,
+          (org_id, item_id, costing_method, tracking, abc_class, asset_account_id, cogs_account_id,
            adjustment_account_id, variance_account_id, received_not_billed_account_id,
            standard_cost, base_unit, unit_conversions, reorder_point, preferred_stock_level,
            allow_negative_inventory, negative_cost_basis, provisional_unit_cost, created_by, updated_by)
         values
-          (${orgId}, ${id}, ${costingMethod}, ${tracking}, ${assetAccountId}, ${cogsAccountId},
+          (${orgId}, ${id}, ${costingMethod}, ${tracking}, ${body.abcClass===undefined ? before?.abc_class ?? null : body.abcClass}, ${assetAccountId}, ${cogsAccountId},
            ${adjustmentAccountId}, ${varianceAccountId}, ${receivedNotBilledAccountId},
            ${standardCost}, ${baseUnit}, ${JSON.stringify(unitConversions)}::jsonb, ${reorderPoint}, ${preferredStockLevel},
            ${allowNegativeInventory}, ${negativeCostBasis}, ${provisionalUnitCost}, ${actorId}, ${actorId})
         on conflict (item_id) do update set
           costing_method = excluded.costing_method,
           tracking = excluded.tracking,
+          abc_class=excluded.abc_class,
           asset_account_id = excluded.asset_account_id,
           cogs_account_id = excluded.cogs_account_id,
           adjustment_account_id = excluded.adjustment_account_id,
