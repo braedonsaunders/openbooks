@@ -762,7 +762,7 @@ export function SetupDrawer({
       {entity.formSections?.map((section) => {
         const fields = displayedFields.filter((field) => section.fields.includes(field.key))
         if (!fields.length) return null
-        return <InspectorPanel key={section.titleKey} title={t(section.titleKey)} description={section.descriptionKey ? t(section.descriptionKey) : undefined}>
+        return (<InspectorPanel key={section.titleKey} title={t(section.titleKey)} description={section.descriptionKey ? t(section.descriptionKey) : undefined}>
           <div className="grid gap-5 sm:grid-cols-2">
             {fields.map((field) => <FieldControl key={field.key} field={field} value={form[field.key]} onChange={(value) => set(field.key, value)} creating={creating} forceLocked={!editing || Boolean(entity.readOnly) || Object.hasOwn(fixedValues ?? {}, field.key)} refOptions={field.ref ? (refOptions[field.ref] ?? []) : []} referenceOptions={refOptions} formValues={form} t={t} moneyLocked={moneyLocked[field.key]} />)}
           </div>
