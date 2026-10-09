@@ -289,7 +289,8 @@ async function gateNodeData(orgId: string, flowId: string, nodeId: string, runId
   const [flow] = await db.select().from(schema.flows).where(and(eq(schema.flows.id, flowId), eq(schema.flows.orgId, orgId)));
   if (!flow) return null;
   const dispatch = await loadRunDispatchValues(orgId, runId);
-  const policy = getFlowAdapter(flow.subjectKind)?.profile.supportsUngatedSubmission
+  const profile = getFlowAdapter(flow.subjectKind)?.profile;
+  const policy = (profile?.supportsUngatedSubmission || profile?.pinsSubmissionPolicy)
     ? dispatch?.submissionPolicy as { graph?: unknown } | undefined
     : undefined;
   // Older runs have no pinned policy; retain their established interpretation.
@@ -576,7 +577,7 @@ async function decideGateCore(args: Parameters<typeof decideGate>[0] & {
         });
       }
       const dispatchValues = await loadRunDispatchValues(gate.orgId, gate.runId);
-      const policy = adapter.profile.supportsUngatedSubmission
+      const policy = (adapter.profile.supportsUngatedSubmission || adapter.profile.pinsSubmissionPolicy)
         ? dispatchValues?.submissionPolicy as { graph?: unknown } | undefined
         : undefined;
       const graph = parseFlowGraph(flow.id, policy?.graph ?? flow.graph);

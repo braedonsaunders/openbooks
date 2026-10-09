@@ -47,6 +47,8 @@ export type FlowFieldOption = {
 export type FlowSubjectProfile = {
   /** The native subject can apply a successful ungated submission under an explicit flow policy. */
   supportsUngatedSubmission?: boolean
+  /** Retain the authored approval policy for the lifetime of a submission. */
+  pinsSubmissionPolicy?: boolean
   /** Subject discriminator, e.g. a document kind: 'invoice', 'bill', 'journal'. */
   subjectKind: string
   /** Human label used in lint messages + canvas chrome. */

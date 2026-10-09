@@ -16,7 +16,7 @@ import { postDocument } from "../ledger/posting-document.ts";
 import { submitForApproval } from "../flows/submit.ts";
 import { createSandbox, deleteSandbox, refreshSandbox } from "../sandbox/lifecycle.ts";
 
-test("approved unpaid holiday hours settle once through native payroll and survive recalculation", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+for (const approvalMode of ["independent", "solo"] as const) test(`${approvalMode} approval settles unpaid holiday hours once and preserves their history`, { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
   const fx = await seedAdoption();
   const sandboxIds: string[] = [];
   try {
@@ -28,7 +28,7 @@ test("approved unpaid holiday hours settle once through native payroll and survi
       await db.execute(sql`insert into user_permission_overrides(org_id,user_id,permission,effect)
         values(${fx.orgId},${actor},'payroll.run','grant') on conflict(user_id,permission) do update set effect='grant'`);
     }
-    await seedApprovalFlow(fx.orgId, { subjectKind: "financial_change", assignees: [{ type: "user", userId: actors.approver1Id }], mode: "any", preventSelfApproval: true });
+    await seedApprovalFlow(fx.orgId, { subjectKind: "financial_change", assignees: [{ type: "user", userId: approvalMode === "solo" ? fx.actorId : actors.approver1Id }], mode: "any", preventSelfApproval: approvalMode !== "solo" });
     const folderId = randomUUID();
     await db.execute(sql`insert into folders(id,org_id,name) values(${folderId},${fx.orgId},'Holiday instructions')`);
     const bytes = Buffer.from("Approve eight unpaid Canada Day hours for payment July 21, priced at the July 18 wage.");
@@ -46,8 +46,20 @@ test("approved unpaid holiday hours settle once through native payroll and survi
       await submitFinancialChange(fx.orgId, proposed.changeId, fx.actorId);
       const gate = (await db.execute<{ id: string }>(sql`select id from flow_gates where org_id=${fx.orgId} and subject_id=${proposed.changeId} and status='pending'`)).rows[0]!;
       assert.ok(gate);
-      await assert.rejects(decideGate({ gateId: gate.id, decision: "approved", userId: fx.actorId }), /self|assignee|permission|decide/i);
-      await decideGate({ gateId: gate.id, decision: "approved", userId: actors.approver1Id });
+      if (approvalMode === "solo") {
+        await assert.rejects(withOrgTransaction(fx.orgId, () => db.execute(sql`update financial_changes set status='approved',approved_by=${fx.actorId},approved_at=now() where org_id=${fx.orgId} and id=${proposed.changeId}`)),
+          (error: unknown) => {
+            const messages: string[] = [];
+            for (let cause = error as { message?: string; cause?: unknown } | undefined; cause; cause = cause.cause as typeof cause) messages.push(cause.message ?? "");
+            assert.match(messages.join("\n"), /retained.*policy/i);
+            return true;
+          });
+        // A later policy edit cannot reinterpret the already submitted gate.
+        await db.execute(sql`update flows set graph=jsonb_set(graph, '{nodes,1,data,gate,preventSelfApproval}', 'true'::jsonb) where org_id=${fx.orgId} and subject_kind='financial_change'`);
+      } else {
+        await assert.rejects(decideGate({ gateId: gate.id, decision: "approved", userId: fx.actorId }), /self|assignee|permission|decide/i);
+      }
+      await decideGate({ gateId: gate.id, decision: "approved", userId: approvalMode === "solo" ? fx.actorId : actors.approver1Id });
     });
     const applied = await applyHolidayObligation({ ...input, changeId: proposed.changeId });
     assert.deepEqual(await applyHolidayObligation({ ...input, changeId: proposed.changeId }), applied);

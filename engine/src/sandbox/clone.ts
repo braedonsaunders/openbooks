@@ -387,14 +387,12 @@ export function generateCopySql(
     } else if (t.name === "flow_runs" && c.name === "context") {
       // The copied election and its pinned workflow must name the same
       // sandbox plan, employment and contribution rules before any UPDATE.
-      const holidayContext = `("context" || jsonb_build_object(` +
-        `'id', ob_rebase(("context"->>'id')::uuid, '${seed}'::uuid)::text, ` +
-        `'subsidiaryId', ob_rebase(("context"->>'subsidiaryId')::uuid, '${seed}'::uuid)::text)` +
+      const holidayContext = `(public.financial_change_clone_context("context", '${seed}'::uuid)` +
         (opts.masked ? ` || jsonb_build_object('reason','REDACTED','subjectLabel','REDACTED')` : "") + ")";
       exprs.push(`(case when "subject_kind"='hrm_benefit_enrollment' ` +
         `then public.benefit_clone_submission_evidence("context", '${seed}'::uuid) ` +
         `when "subject_kind"='financial_change' and "context"->>'domain'='payroll' and "context"->>'operation'='adjudicated_holiday_hours' ` +
-        `then ${holidayContext} else "context" end)`);
+        `then ${holidayContext} when "subject_kind"='financial_change' then public.financial_change_clone_context("context", '${seed}'::uuid) else "context" end)`);
     } else if (opts.masked && (c.udtName === "jsonb" || c.udtName === "json") && c.name === "custom") {
       // Custom fields are arbitrary tenant-authored JSON and may contain PII
       // without a schema-level column for a masking policy to name. A masked
