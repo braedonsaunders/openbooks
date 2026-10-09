@@ -108,3 +108,17 @@ test("a confirmed empty source allocation graph remains authoritative", async ()
   assert.equal(changes.applicationSnapshot, "complete");
   assert.deepEqual(changes.applications, []);
 });
+
+
+test("unknown and invalid source graph counts never authorize an empty snapshot", async () => {
+  for (const count of [-1, 0.5, Number.NaN, Number.POSITIVE_INFINITY]) {
+    const { source } = allocationGraphSource({ count });
+    await assert.rejects(() => source.nativeChanges(new Date(), {} as NativeContext), /graph count is unavailable/);
+  }
+});
+
+test("duplicate page identities cannot substitute for missing source allocations", async () => {
+  const row = { previousdoc: "bill", previousline: "0", nextdoc: "payment", nextline: "1", foreignamount: "25", paycurrency: "CAN", payexrate: "1" };
+  const { source } = allocationGraphSource({ count: 2, rows: [row, row] });
+  await assert.rejects(() => source.nativeChanges(new Date(), {} as NativeContext), /graph is incomplete/);
+});
