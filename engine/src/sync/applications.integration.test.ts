@@ -1559,6 +1559,9 @@ test("authoritative allocation replacement reverses FX evidence once and recreat
     const old=(await settlementSnapshot(org.orgId))[0]!;
     const fxBefore=(await db.execute(sql`select id,amount::text,txn_amount::text from journal_lines
       where org_id=${org.orgId} and entry_id=${old.fx_gain_loss_entry_id} order by id`)).rows;
+    await db.execute(sql`insert into period_locks(org_id,period_id,book_id,subsidiary_id,module,state,reason)
+      values(${org.orgId},${org.periodId},${org.bookId},${org.subsidiaryId},'gl','closed','close.importedPeriodLockReason'),
+        (${org.orgId},${org.periodId},${org.bookId},${org.subsidiaryId},'ar','closed','close.importedPeriodLockReason')`);
     const current=[{...initial[0]!,amount:"50"}];
     const reduced=await reconcileApplications(org.orgId,"nsId",current,snapshot);
     assert.equal(reduced.released,1);assert.equal(reduced.insertedAmount,"55.0000");

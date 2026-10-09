@@ -712,6 +712,8 @@ export async function reconcileApplications(
         sourceDocumentId: first.sourceDocumentId,
         origin: "fx_settlement",
         actorId: null,
+        allowImportedLocks: snapshot !== undefined,
+        allowInactiveAccounts: snapshot !== undefined,
         currency: first.functionalCurrency,
         lines: [
           {
