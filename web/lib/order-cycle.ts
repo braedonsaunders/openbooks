@@ -787,13 +787,13 @@ export async function fulfillSalesOrderInTx(
           `Sales-order line ${line.line_number} needs the ${tracking} for its ${tracking}-tracked component; name it per component`,
         )
       }
-      if (pick && ((tracking === 'lot' && !pick.lotId) || (tracking === 'serial' && !pick.serialId))) {
+      if (pick && ((['lot','lot_serial'].includes(tracking) && !pick.lotId) || (['serial','lot_serial'].includes(tracking) && !pick.serialId))) {
         throw new ConversionError(
           `Sales-order line ${line.line_number} names no ${tracking} for its ${tracking}-tracked component; choose the ${tracking} per component`,
         )
       }
       const componentQuantity = quantities.find((entry) => entry.componentItemId === component.componentItemId)!.quantity
-      if (tracking === 'serial' && cmp(componentQuantity, '1') !== 0) {
+      if (['serial','lot_serial'].includes(tracking) && cmp(componentQuantity, '1') !== 0) {
         throw new ConversionError(
           `Sales-order line ${line.line_number} ships ${componentQuantity} units of a serial-tracked component, but one line names one serial; split the fulfillment so each line ships one`,
         )

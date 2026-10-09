@@ -3579,6 +3579,12 @@
         "title": "下請業者の資格",
         "singularTitle": "下請業者の資格",
         "description": "金額は最後に保存された支払いに基づきます。変更を保存して源泉徴収額を再計算してください。"
+      },
+      "inventory-count-policies": {
+        "singular": "循環棚卸方針",
+        "plural": "循環棚卸方針",
+        "description": "法人およびABC分類ごとの有効な棚卸間隔と基本単位の差異許容値。",
+        "title": "循環棚卸方針"
       }
     },
     "fields": {
@@ -4181,6 +4187,10 @@
       "schedulePdfAccent": "アクセントカラー",
       "schedulePdfLegend": "予定の色凡例を表示",
       "schedulePdfWeekends": "設定された週末に網掛けを表示",
+      "abcClass": "ABC分類",
+      "intervalDays": "棚卸間隔（日）",
+      "varianceTolerance": "差異許容値",
+      "inventoryOwnership": "在庫所有区分",
       "schedulePdfColorTreatment": "色の表示",
       "schedulePdfColorIntensity": "色の濃度 (%)"
     },
@@ -4550,7 +4560,8 @@
       "tracking": {
         "none": "なし",
         "lot": "ロット",
-        "serial": "シリアル"
+        "serial": "シリアル",
+        "lot_serial": "ロットとシリアル番号"
       },
       "stockLocationKind": {
         "warehouse": "倉庫",
@@ -5145,6 +5156,16 @@
       "schedulePdfStyle": {
         "modern": "モダン",
         "classic": "クラシック"
+      },
+      "abcClass": {
+        "A": "A分類",
+        "B": "B分類",
+        "C": "C分類"
+      },
+      "inventoryOwnership": {
+        "owned": "自社所有",
+        "vendor": "仕入先所有",
+        "customer": "顧客所有"
       },
       "schedulePdfColorTreatment": {
         "subtle": "控えめなアクセント",
@@ -7528,6 +7549,10 @@
     "contractorWithholding": {
       "title": "請負業者の源泉徴収",
       "description": "仕入先への支払の法定控除を計算し、作業資料、納付書類、管理された修正を作成します。"
+    },
+    "consignment": {
+      "description": "仕入先と顧客の受託在庫を追跡し、所有権の取得時に自社在庫を計上します。",
+      "title": "委託在庫"
     }
   },
   "extensions": {

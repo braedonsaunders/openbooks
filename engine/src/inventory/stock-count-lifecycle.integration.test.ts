@@ -1,3 +1,4 @@
+import { confirmCountObservation } from "../testing/inventory-counts.ts";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
@@ -32,6 +33,7 @@ async function openCountedReview(org: ScratchOrg, counted: string): Promise<{ co
   const lineId = (await db.execute<{ id: string }>(sql`
     select id from stock_count_lines where org_id = ${org.orgId} and stock_count_id = ${count.id}`)).rows[0]!.id;
   await recordCountedQuantity(org.orgId, null, { countId: count.id, lineId, countedQuantity: counted });
+  await confirmCountObservation(org.orgId,count.id,lineId,counted);
   await submitStockCountForReview(org.orgId, null, count.id);
   return { countId: count.id, lineId };
 }
@@ -69,7 +71,7 @@ test("duplicate count lines are refused at creation, naming the subject", async 
       (e: unknown) => {
         assert.ok(e instanceof InventoryError, "a duplicate subject must refuse as InventoryError (HTTP 422)");
         assert.match((e as Error).message, /duplicate count line/i);
-        assert.match((e as Error).message, /count each item, stock location and lot once/i);
+        assert.match((e as Error).message, /count each item, stock location, lot and serial once/i);
         return true;
       },
     );
@@ -109,7 +111,7 @@ test("the same item at two warehouses is two subjects, not a duplicate", async (
 test("distinct lots are distinct subjects: the refusal names duplicates, not lot validation", async () => {
   const org = await createScratchOrg();
   try {
-    await receiveTen(org);
+    await db.execute(sql`update item_inventory_profiles set tracking='lot' where org_id=${org.orgId} and item_id=${org.items.fifo}`);
     const lotA = randomUUID();
     const lotB = randomUUID();
     // Two different lots pass the duplicate screen and reach lot validation —
@@ -322,6 +324,7 @@ test("a failing post rolls every variance back and keeps the count in review", a
     const lineId = (await db.execute<{ id: string }>(sql`
       select id from stock_count_lines where org_id = ${org.orgId} and stock_count_id = ${count.id}`)).rows[0]!.id;
     await recordCountedQuantity(org.orgId, null, { countId: count.id, lineId, countedQuantity: "9" });
+    await confirmCountObservation(org.orgId,count.id,lineId,"9");
     await submitStockCountForReview(org.orgId, null, count.id);
     const movementsBefore = await movementCount(org.orgId);
     await setInventoryFeature(org.orgId, false);

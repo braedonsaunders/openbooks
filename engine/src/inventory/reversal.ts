@@ -434,6 +434,8 @@ export async function reverseInventoryMovement(
     `));
     const requested = sourceResult.rows[0];
     if (!requested) throw new InventoryError("inventory movement not found");
+    const custody=await tx.execute(sql`select id from consignment_events where org_id=${orgId} and receipt_movement_id=${requested.id} limit 1`);
+    if(custody.rows.length)throw new InventoryError("Ownership acquisition has custody evidence — use an adjusting inventory transaction; its external custody cannot be silently restored by reversal");
     if (requested.status !== "posted") {
       throw new InventoryError(
         "only posted inventory movements can be reversed",

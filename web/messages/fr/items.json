@@ -280,6 +280,8 @@
     "noCurrentRecipe": "Aucun composant en vigueur aujourd'hui — les lignes ci-dessous sont l'historique."
   },
   "costing": {
+    "abcClass": "Classe ABC de comptage tournant",
+    "layerInquiry": "Voir les couches de coût du stock",
     "title": "Valorisation des stocks",
     "description": "Valorisation et suivi du stock de cet article — méthode, comptes et seuils de réapprovisionnement.",
     "configure": "Configurer la valorisation",
@@ -294,7 +296,8 @@
     "trackingOptions": {
       "none": "Aucun",
       "lot": "Lot",
-      "serial": "Numéro de série"
+      "serial": "Numéro de série",
+      "lot_serial": "Lot et numéro de série"
     },
     "baseUnit": "Unité de base",
     "unitConversions": "Conversions d’unités",

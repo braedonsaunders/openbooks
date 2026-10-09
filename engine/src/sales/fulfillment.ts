@@ -1,3 +1,8 @@
+import { assertSaleableStock, saleableLocation, unheldTracking } from "../inventory/stock-eligibility.ts";
+import { toBaseQuantity } from "../inventory/costing.ts";
+import { resolveProfile } from "../inventory/profile-policy.ts";
+import { validateTrackingSelection } from "../inventory/tracking.ts";
+import { allocationCandidates, type PhysicalAllocation } from "../inventory/allocation.ts";
 import { sql } from "drizzle-orm";
 import { fulfillmentDocuments, fulfillmentLines, type ShipToAddress } from "@openbooks/schema";
 import { db, withOrgTransaction, type SqlExecutor } from "../platform/db.ts";
@@ -13,7 +18,8 @@ import { openQuantitySql } from "../records/order-line-remainders.ts";
 import { submitAndReleaseIfUngated } from "../flows/submit.ts";
 import { assertWarehouseAdmitsMovement } from "../inventory/warehouses.ts";
 import { getOnHandWith, lockInventoryPosition } from "../inventory/position.ts";
-import { pickReservationsCte } from "../inventory/pick-reservations.ts";
+import { add,cmp,neg } from "../money/money.ts";
+import { pickReservationsCte, activePickReservations } from "../inventory/pick-reservations.ts";
 
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 type Scope = ReadonlySet<string> | null;
@@ -404,6 +410,19 @@ export async function createPickList(
   actorId: string,
   input: CreatePickListInput,
 ): Promise<CreatedFulfillmentDocument> {
+  for (const line of input.lines) {
+    if (!isUuid(line.salesOrderLineId) || !isUuid(line.binId) || (line.kitComponentItemId && !isUuid(line.kitComponentItemId)))
+      throw new FulfillmentRefusal('Choose a valid order line, component and stock bin','invalid_input',422);
+  }
+  const positionSubjects=(await tx.execute<{id:string;item_id:string|null}>(sql`select id,item_id from document_lines
+    where org_id=${orgId} and document_id=${input.salesOrderId}
+      and id=any(${`{${input.lines.map(line=>line.salesOrderLineId).join(',')}}`}::uuid[])`)).rows;
+  const sourceItems=new Map(positionSubjects.map(line=>[line.id,line.item_id]));
+  const positionKeys=[...new Set(input.lines.flatMap(line=>{
+    const itemId=line.kitComponentItemId??sourceItems.get(line.salesOrderLineId);
+    return itemId?[`${itemId}:${line.binId}`]:[];
+  }))].sort();
+  for (const key of positionKeys) {const [itemId,binId]=key.split(':');await lockInventoryPosition(tx,itemId!,binId!);}
   await assertFulfillmentFeature(tx, orgId);
   if (input.lines.length === 0) {
     throw new FulfillmentRefusal("Select at least one order line to pick", "invalid_input", 422);
@@ -570,9 +589,13 @@ export async function createPickList(
   }
 
   for (const line of requested) {
-    if (!line.lotId && !line.serialId) continue;
     const source = lineById.get(line.salesOrderLineId)!;
     const itemId = line.kitComponentItemId ?? source.item_id!;
+    const profile=await resolveProfile(orgId,itemId,tx);
+    await assertSaleableStock(tx,orgId,line.binId,line);
+    const unit=line.kitComponentItemId?kitComponentUnits.get(itemId)??null:source.unit;
+    const baseQuantity=toBaseQuantity(line.quantity,unit,profile.unitConversions??{},profile.baseUnit,'Pick quantity');
+    await validateTrackingSelection(tx,orgId,itemId,line.binId,profile,{...line,quantity:baseQuantity},"issue");
     const matches = (await tx.execute<{ ok: boolean }>(sql`
       select (${line.lotId}::uuid is null or exists (
                 select 1 from lots where org_id = ${orgId} and id = ${line.lotId}::uuid and item_id = ${itemId}))
@@ -747,16 +770,6 @@ async function insertLink(
   if (linked.rows.length === 0) throw new Error("document link was not recorded");
 }
 
-interface BinDemandRow extends Record<string, unknown> {
-  item_id: string;
-  item_label: string;
-  bin_id: string;
-  bin_code: string;
-  requested: string;
-  reserved: string;
-  held_by: string | null;
-}
-
 /** Stock positions (item, bin) a document's lines draw from, sorted into the
  *  canonical fence order. Read without locks. */
 async function documentPositions(runner: SqlExecutor, orgId: string, documentId: string): Promise<[string, string][]> {
@@ -835,42 +848,40 @@ export async function releasePickList(
 }
 
 async function assertBinsCover(tx: SqlExecutor, orgId: string, pickList: FulfillmentDocRow, order: OrderRow): Promise<void> {
-  const demand = (await tx.execute<BinDemandRow>(sql`
-    with ${pickReservationsCte(orgId)},
-    wanted as (
-      select line.item_id, line.stock_location_id as bin_id, sum(line.quantity) as requested
-        from document_lines line
-       where line.org_id = ${orgId} and line.document_id = ${pickList.id}
-       group by line.item_id, line.stock_location_id
-    ),
-    held as (
-      select item_id, bin_id, sum(reserved) as reserved,
-             string_agg(distinct pick_list_number, ', ' order by pick_list_number) as held_by
-        from pick_reservations
-       where pick_list_status = 'approved' and pick_list_id <> ${pickList.id} and reserved > 0
-       group by item_id, bin_id
-    )
-    select w.item_id, coalesce(i.code, i.name) as item_label, w.bin_id, bin.code as bin_code,
-           w.requested::text as requested, coalesce(h.reserved, 0)::text as reserved, h.held_by
-      from wanted w
-      join items i on i.id = w.item_id and i.org_id = ${orgId}
-      join stock_locations bin on bin.id = w.bin_id and bin.org_id = ${orgId}
-      left join held h on h.item_id = w.item_id and h.bin_id = w.bin_id
-     order by bin.code, item_label`)).rows;
   const ownerId = order.subsidiary_id ?? (await loadSubsidiaryContext(tx, orgId)).rootId;
-  for (const row of demand) {
-    const onHand = await getOnHandWith(tx, orgId, row.item_id, row.bin_id, { subsidiaryId: ownerId });
-    const check = (await tx.execute<{ fits: boolean; pickable: string }>(sql`
-      select ${row.requested}::numeric <= ${onHand.quantity}::numeric - ${row.reserved}::numeric as fits,
-             greatest(0, ${onHand.quantity}::numeric - ${row.reserved}::numeric)::text as pickable`)).rows[0]!;
-    if (check.fits) continue;
-    const heldText = row.held_by ? `, ${shown(row.reserved)} reserved by ${row.held_by}` : "";
-    throw new FulfillmentRefusal(
-      `Bin ${row.bin_code} holds ${shown(onHand.quantity)} of ${row.item_label}${heldText}; ${pickList.document_number} requests ${shown(row.requested)}`,
-      "bin_short",
-      409,
-      "Pick from another bin, receive or transfer stock into this bin, or ship what is available and leave the rest on backorder",
-    );
+  const selections = (await tx.execute<{item_id:string;bin_id:string;lot_id:string|null;serial_id:string|null;quantity:string;unit:string|null}>(sql`
+    select dl.item_id,dl.stock_location_id as bin_id,fl.lot_id,fl.serial_id,dl.quantity::text,dl.unit
+      from document_lines dl join fulfillment_lines fl on fl.org_id=dl.org_id and fl.line_id=dl.id
+      where dl.org_id=${orgId} and dl.document_id=${pickList.id}
+      order by dl.item_id,dl.stock_location_id,dl.line_number`)).rows;
+  const wanted = new Map<string,{itemId:string;binId:string;lotId:string|null;serialId:string|null;quantity:string}>();
+  const bins = new Map<string,{itemId:string;binId:string;quantity:string}>();
+  for (const line of selections) {
+    const profile = await resolveProfile(orgId,line.item_id,tx,true);
+    const quantity = toBaseQuantity(line.quantity,line.unit,profile.unitConversions??{},profile.baseUnit,'Pick quantity');
+    await assertSaleableStock(tx,orgId,line.bin_id,{lotId:line.lot_id,serialId:line.serial_id});
+    await validateTrackingSelection(tx,orgId,line.item_id,line.bin_id,profile,{quantity,lotId:line.lot_id,serialId:line.serial_id},"issue");
+    const key = [line.item_id,line.bin_id,line.lot_id??'',line.serial_id??''].join(':');
+    wanted.set(key,{itemId:line.item_id,binId:line.bin_id,lotId:line.lot_id,serialId:line.serial_id,quantity:add(wanted.get(key)?.quantity??'0',quantity)});
+    const binKey = `${line.item_id}:${line.bin_id}`;
+    bins.set(binKey,{itemId:line.item_id,binId:line.bin_id,quantity:add(bins.get(binKey)?.quantity??'0',quantity)});
+  }
+  for (const bin of bins.values()) {
+    const profile = await resolveProfile(orgId,bin.itemId,tx,true);
+    const holds = await activePickReservations(tx,orgId,{itemId:bin.itemId,binId:bin.binId,subsidiaryId:ownerId,releasedOnly:true,excludePickListId:pickList.id});
+    const reserved = (lotId?:string|null,serialId?:string|null) => holds
+      .filter(h=>lotId===undefined || (h.lotId===lotId && h.serialId===serialId))
+      .reduce((q,h)=>add(q,toBaseQuantity(h.reserved,h.unit??null,profile.unitConversions??{},profile.baseUnit,'Reserved pick')),'0');
+    const onHand = await getOnHandWith(tx,orgId,bin.itemId,bin.binId,{subsidiaryId:ownerId,saleableOnly:true});
+    if (cmp(bin.quantity,add(onHand.quantity,neg(reserved())))>0) throw new FulfillmentRefusal(
+      `The selected bin no longer covers ${pickList.document_number}'s quantity and other released picks`,
+      'bin_short',409,'Choose available stock, receive or transfer cleared stock, or leave the balance on backorder');
+    for (const selection of wanted.values()) {
+      if (selection.itemId!==bin.itemId || selection.binId!==bin.binId) continue;
+      const stock = await getOnHandWith(tx,orgId,bin.itemId,bin.binId,{subsidiaryId:ownerId,lotId:selection.lotId,serialId:selection.serialId,saleableOnly:true});
+      if (cmp(selection.quantity,add(stock.quantity,neg(reserved(selection.lotId,selection.serialId))))>0) throw new FulfillmentRefusal(
+        'Selected lot or serial is no longer available','insufficient_bin_stock',409,'Choose available stock and release again');
+    }
   }
 }
 
@@ -1674,6 +1685,7 @@ export interface PickCandidateLine {
    *  order's legal entity, most stock first. A suggestion: release re-checks
    *  every bin under the position locks. */
   bins: { binId: string; binCode: string; onHand: string }[];
+  allocations?: PhysicalAllocation[];
   /**
    * A kit line carries no stock itself: its components, each with the open
    * requirement in component units, what pick lists already hold, and the
@@ -1686,6 +1698,7 @@ export interface PickCandidateLine {
 export interface KitComponentCandidate {
   componentItemId: string;
   componentLabel: string;
+  unit?: string | null;
   /** Base units of the component per kit. */
   quantityPer: string;
   /** The kit line's open quantity times the recipe, in component units. */
@@ -1693,6 +1706,7 @@ export interface KitComponentCandidate {
   heldByPickLists: string;
   pickable: string;
   bins: { binId: string; binCode: string; onHand: string }[];
+  allocations?: PhysicalAllocation[];
 }
 
 /**
@@ -1748,6 +1762,9 @@ export async function pickCandidates(
                       join cost_layers cl on cl.stock_location_id = sl.id and cl.org_id = sl.org_id
                                          and cl.item_id = l.item_id and cl.subsidiary_id = ${ownerId}
                      where sl.org_id = ${orgId} and sl.is_active
+                       and ${saleableLocation(sql`sl.org_id`,sql`sl.id`)}
+                       and exists(select 1 from inventory_movements source where source.org_id=cl.org_id and source.id=cl.source_movement_id
+                         and ${unheldTracking(sql`source.org_id`,sql`source.lot_id`,sql`source.serial_id`)})
                        and stock_location_warehouse(sl.org_id, sl.id) = l.warehouse_id
                      group by sl.id, sl.code
                     having sum(cl.remaining_quantity) > 0) b) as bins
@@ -1768,6 +1785,13 @@ export async function pickCandidates(
         warehouseId: row.warehouse_id,
       })),
   });
+  const allocations=new Map<string,PhysicalAllocation[]>();
+  for (const row of rows) {
+    if (row.warehouse_id && row.item_kind!=='kit') allocations.set(row.sales_order_line_id,await allocationCandidates(runner,orgId,row.item_id,row.warehouse_id,ownerId,row.unit));
+    for (const component of kitComponents.get(row.sales_order_line_id)??[]) {
+      if (row.warehouse_id) component.allocations=await allocationCandidates(runner,orgId,component.componentItemId,row.warehouse_id,ownerId,component.unit??null);
+    }
+  }
   return {
     salesOrderId: order.id,
     documentNumber: order.document_number,
@@ -1784,6 +1808,7 @@ export async function pickCandidates(
       heldByPickLists: row.held,
       pickable: row.pickable,
       bins: row.bins ?? [],
+      allocations:allocations.get(row.sales_order_line_id)??[],
       ...(row.item_kind === "kit" ? { kitComponents: kitComponents.get(row.sales_order_line_id) ?? [] } : {}),
     })),
   };
@@ -1811,6 +1836,7 @@ async function kitPickComponents(
     sales_order_line_id: string;
     component_item_id: string;
     component_label: string;
+    unit: string | null;
     quantity_per: string;
     line_open: string;
     held: string;
@@ -1833,7 +1859,7 @@ async function kitPickComponents(
        group by sales_order_line_id, item_id
     )
     select k.sales_order_line_id, b.component_item_id,
-           coalesce(component.code || ' · ' || component.name, component.name) as component_label,
+           coalesce(component.code || ' · ' || component.name, component.name) as component_label, component.unit,
            b.quantity_per::text as quantity_per,
            (k.open * b.quantity_per)::text as line_open,
            coalesce(h.reserved, 0)::text as held,
@@ -1845,6 +1871,9 @@ async function kitPickComponents(
                       join cost_layers cl on cl.stock_location_id = sl.id and cl.org_id = sl.org_id
                                          and cl.item_id = b.component_item_id and cl.subsidiary_id = ${scope.ownerId}
                      where sl.org_id = ${orgId} and sl.is_active
+                       and ${saleableLocation(sql`sl.org_id`,sql`sl.id`)}
+                       and exists(select 1 from inventory_movements source where source.org_id=cl.org_id and source.id=cl.source_movement_id
+                         and ${unheldTracking(sql`source.org_id`,sql`source.lot_id`,sql`source.serial_id`)})
                        and stock_location_warehouse(sl.org_id, sl.id) = k.warehouse_id
                      group by sl.id, sl.code
                     having sum(cl.remaining_quantity) > 0) bins) as bins
@@ -1864,6 +1893,7 @@ async function kitPickComponents(
     list.push({
       componentItemId: row.component_item_id,
       componentLabel: row.component_label,
+      unit: row.unit,
       quantityPer: row.quantity_per,
       open: row.line_open,
       heldByPickLists: row.held,

@@ -196,7 +196,10 @@ async function validateVendorReturnSource(
       `${label} source receipt belongs to a different vendor`,
     );
   }
-  if (line.tracking === "lot") {
+  if (line.tracking === "lot_serial") {
+    if (!line.selection.lotId || !line.selection.serialId || source.lot_id!==line.selection.lotId || source.serial_id!==line.selection.serialId)
+      throw new InventoryError(`${label} requires both identifiers matching its source receipt`);
+  } else if (line.tracking === "lot") {
     if (!line.selection.lotId || line.selection.serialId) {
       throw new InventoryError(`${label} requires exactly one selected lot`);
     }
@@ -339,7 +342,7 @@ async function returnVendorCreditInventoryLine(
   // deliberately keep their immutable document-line evidence without claiming
   // the source movement's one permitted reversal slot.
   const reversesMovementId =
-    profile.tracking === "serial" ? sourceReceipt.id : null;
+    (profile.tracking === "serial" || profile.tracking === "lot_serial") ? sourceReceipt.id : null;
   const reversalReason = reversesMovementId
     ? `Vendor credit return of receipt ${reversesMovementId}`
     : null;
@@ -469,7 +472,7 @@ async function returnVendorCreditInventoryLine(
     movement.id,
     actorId,
   );
-  if (profile.tracking === "serial") {
+  if ((profile.tracking === "serial" || profile.tracking === "lot_serial")) {
     await runner.execute(sql`
       update serials
          set status = 'returned', current_stock_location_id = null,

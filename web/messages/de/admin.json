@@ -3579,6 +3579,12 @@
         "title": "Status der Subunternehmer",
         "singularTitle": "Status der Subunternehmer",
         "description": "Die Beträge entsprechen der zuletzt gespeicherten Zahlung. Speichern Sie Änderungen zur Neuberechnung."
+      },
+      "inventory-count-policies": {
+        "singular": "Inventurrichtlinie",
+        "plural": "Inventurrichtlinien",
+        "description": "Gültige Zählintervalle und Abweichungstoleranzen in Basiseinheiten je Rechtseinheit und ABC-Klasse.",
+        "title": "Inventurrichtlinien"
       }
     },
     "fields": {
@@ -4181,6 +4187,10 @@
       "schedulePdfAccent": "Akzentfarbe",
       "schedulePdfLegend": "Farblegende anzeigen",
       "schedulePdfWeekends": "Konfigurierte Wochenendtage schattieren",
+      "abcClass": "ABC-Klasse",
+      "intervalDays": "Zählintervall (Tage)",
+      "varianceTolerance": "Abweichungstoleranz",
+      "inventoryOwnership": "Bestandseigentum",
       "schedulePdfColorTreatment": "Farbdarstellung",
       "schedulePdfColorIntensity": "Farbtönung (%)"
     },
@@ -4550,7 +4560,8 @@
       "tracking": {
         "none": "Keine",
         "lot": "Charge",
-        "serial": "Seriennummer"
+        "serial": "Seriennummer",
+        "lot_serial": "Charge und Seriennummer"
       },
       "stockLocationKind": {
         "warehouse": "Lager",
@@ -5145,6 +5156,16 @@
       "schedulePdfStyle": {
         "modern": "Modern",
         "classic": "Klassisch"
+      },
+      "abcClass": {
+        "A": "Klasse A",
+        "B": "Klasse B",
+        "C": "Klasse C"
+      },
+      "inventoryOwnership": {
+        "owned": "Unternehmenseigentum",
+        "vendor": "Lieferanteneigentum",
+        "customer": "Kundeneigentum"
       },
       "schedulePdfColorTreatment": {
         "subtle": "Dezente Akzente",
@@ -7528,6 +7549,10 @@
     "contractorWithholding": {
       "title": "Bau- und Auftragnehmersteuerabzug",
       "description": "Berechnen Sie gesetzliche Abzüge bei Lieferantenzahlungen und erstellen Sie Arbeitspapiere, Steuerzahlungen und kontrollierte Korrekturen."
+    },
+    "consignment": {
+      "description": "Lieferanten- und Kundenbestand in Verwahrung verfolgen und beim Eigentumserwerb als eigenen Bestand erfassen.",
+      "title": "Konsignationsbestand"
     }
   },
   "extensions": {

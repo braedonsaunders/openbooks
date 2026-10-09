@@ -3526,6 +3526,12 @@
         "title": "分包商资格",
         "singularTitle": "分包商资格",
         "description": "金额反映最后保存的付款。请保存更改以重新计算扣款。"
+      },
+      "inventory-count-policies": {
+        "singular": "循环盘点策略",
+        "plural": "循环盘点策略",
+        "description": "按法人实体和ABC分类配置有效盘点间隔及基本单位差异容差。",
+        "title": "循环盘点策略"
       }
     },
     "fields": {
@@ -4128,6 +4134,10 @@
       "schedulePdfAccent": "强调色",
       "schedulePdfLegend": "显示安排颜色图例",
       "schedulePdfWeekends": "对已配置的周末加阴影",
+      "abcClass": "ABC分类",
+      "intervalDays": "盘点间隔（天）",
+      "varianceTolerance": "差异容差",
+      "inventoryOwnership": "库存所有权",
       "schedulePdfColorTreatment": "颜色处理",
       "schedulePdfColorIntensity": "色调强度 (%)"
     },
@@ -4553,7 +4563,8 @@
       "tracking": {
         "none": "无",
         "lot": "批次",
-        "serial": "序列号"
+        "serial": "序列号",
+        "lot_serial": "批次及序列号"
       },
       "stockLocationKind": {
         "warehouse": "仓库",
@@ -5092,6 +5103,16 @@
       "schedulePdfStyle": {
         "modern": "现代",
         "classic": "经典"
+      },
+      "abcClass": {
+        "A": "A类",
+        "B": "B类",
+        "C": "C类"
+      },
+      "inventoryOwnership": {
+        "owned": "企业自有",
+        "vendor": "供应商所有",
+        "customer": "客户所有"
       },
       "schedulePdfColorTreatment": {
         "subtle": "柔和强调",
@@ -7528,6 +7549,10 @@
     "contractorWithholding": {
       "title": "承包商扣税",
       "description": "计算供应商付款的法定扣税，并编制工作底稿、缴款凭证和受控更正。"
+    },
+    "consignment": {
+      "description": "跟踪托管的供应商和客户库存，并在取得所有权时确认自有库存。",
+      "title": "寄售库存"
     }
   },
   "backupsManager": {

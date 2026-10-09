@@ -283,6 +283,8 @@
     "noCurrentRecipe": "Heute ist keine Komponente gültig — die Zeilen unten sind Verlauf."
   },
   "costing": {
+    "abcClass": "ABC-Inventurklasse",
+    "layerInquiry": "Bestandskostenschichten anzeigen",
     "title": "Bestandsbewertung",
     "description": "Wie der Bestand dieses Artikels bewertet und verfolgt wird — Methode, Konten und Meldebestände.",
     "configure": "Bewertung konfigurieren",
@@ -297,7 +299,8 @@
     "trackingOptions": {
       "none": "Keine",
       "lot": "Charge",
-      "serial": "Seriennummer"
+      "serial": "Seriennummer",
+      "lot_serial": "Charge und Seriennummer"
     },
     "baseUnit": "Basiseinheit",
     "unitConversions": "Einheitenumrechnungen",

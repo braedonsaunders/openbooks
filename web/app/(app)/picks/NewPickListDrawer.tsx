@@ -18,7 +18,7 @@ import { HeaderFields } from '../../../components/transaction-form/header-fields
 import { CustomFieldInput } from '../../../components/custom-field-input'
 import { LineGrid, type LineGridColumn } from '../../../components/line-grid'
 import { confirmDialog } from '../../../lib/confirm'
-import { optionalScanResolver } from '../../../lib/scan'
+import { resolveScanValue } from '../../../lib/scan'
 import { fulfillmentRequest } from '../_fulfillment/fulfillment-client'
 import { fulfillmentHref } from '../_fulfillment/FulfillmentSections'
 import type { NewPickListData } from '../_fulfillment/types'
@@ -37,6 +37,12 @@ interface PickRow extends Record<string, unknown> {
   bins: PickCandidateLine['bins']
   binId: string
   quantity: string
+  allocationKey: string
+  lotId: string | null
+  serialId: string | null
+  lotNumber: string | null
+  serialNumber: string | null
+  allocations: NonNullable<PickCandidateLine["allocations"]>
   /** A kit line is picked by component, never as a unit: its own row is a
    *  locked header, and each component rides an editable row naming it. */
   kitComponentItemId: string | null
@@ -61,6 +67,7 @@ function toRows(line: PickCandidateLine): PickRow[] {
     bins: [],
     binId: '',
     quantity: '',
+    allocationKey:'',lotId:null,serialId:null,lotNumber:null,serialNumber:null,allocations:line.allocations??[],
     kitComponentItemId: null,
     isKitHeader: (line.kitComponents ?? []).length > 0,
     kitLabel: null,
@@ -80,6 +87,7 @@ function toRows(line: PickCandidateLine): PickRow[] {
       bins: component.bins,
       binId: component.bins[0]?.binId ?? '',
       quantity: pickable ? shown(component.pickable) : '',
+      allocationKey:'',lotId:null,serialId:null,lotNumber:null,serialNumber:null,allocations:component.allocations??[],
       kitComponentItemId: component.componentItemId,
       isKitHeader: false,
       kitLabel: line.itemLabel,
@@ -110,6 +118,7 @@ const blankRow = (): PickRow => ({
   bins: [],
   binId: '',
   quantity: '',
+  allocationKey:'',lotId:null,serialId:null,lotNumber:null,serialNumber:null,allocations:[],
   // A blank row is never a kit line: no component, no header, no kit label.
   kitComponentItemId: null,
   isKitHeader: false,
@@ -119,7 +128,7 @@ const blankRow = (): PickRow => ({
 /**
  * Create a pick list for an issued sales order. The lines start from what
  * the order still has to pick — each open stock line's pickable quantity
- * from its best-stocked bin — and the operator adjusts quantities, chooses
+ * in expiry order, then receipt order, across available physical lots and serials — and the operator adjusts quantities, chooses
  * other bins, or duplicates a line to pick it from two bins. One pick list
  * serves one warehouse, so lines from another warehouse wait for their own
  * pick list. Lines with nothing to pick stay visible and locked. Save
@@ -148,7 +157,20 @@ export function NewPickListDrawer({ data }: { data: NewPickListData }) {
         return
       }
       const body = (await res.json()) as { lines: PickCandidateLine[] }
-      const loaded = body.lines.flatMap(toRows)
+      const loaded = body.lines.flatMap(toRows).flatMap(row=>{
+        if(row.isKitHeader)return [row];
+        if(!row.allocations.length)return [{...row,binId:'',quantity:''}];
+        let need=toQuantityUnits(row.pickable);
+        const split:PickRow[]=[];
+        row.allocations.forEach((allocation,index)=>{
+          if(need<=0n)return;
+          const available=toQuantityUnits(allocation.quantity),take=need<available?need:available;
+          split.push({...row,clientKey:crypto.randomUUID(),allocationKey:String(index),binId:allocation.binId,lotId:allocation.lotId,serialId:allocation.serialId,
+            lotNumber:allocation.lotNumber,serialNumber:allocation.serialNumber,quantity:fromQuantityUnits(take)});
+          need-=take;
+        });
+        return split.length?split:[{...row,quantity:''}];
+      })
       const first = loaded.find((row) => positive(row.pickable) && row.bins.length > 0 && row.warehouseId)
       setLoadError(null)
       setRows(loaded)
@@ -170,7 +192,7 @@ export function NewPickListDrawer({ data }: { data: NewPickListData }) {
 
   const pickable = useCallback(
     (row: PickRow) =>
-      row.salesOrderLineId !== '' && !row.isKitHeader && row.warehouseId === warehouseId && positive(row.pickable) && row.bins.length > 0,
+      row.salesOrderLineId !== '' && !row.isKitHeader && row.warehouseId === warehouseId && positive(row.pickable) && row.allocations.length > 0,
     [warehouseId],
   )
 
@@ -178,7 +200,7 @@ export function NewPickListDrawer({ data }: { data: NewPickListData }) {
     if (row.salesOrderLineId === '') return null
     if (row.isKitHeader) return t('create.pickComponentsBelow')
     if (!positive(row.pickable)) return t('create.nothingPickable')
-    if (row.bins.length === 0) return t('create.noStock')
+    if (row.allocations.length === 0) return t('create.noStock')
     if (row.warehouseId !== warehouseId) return t('create.otherWarehouse', { warehouse: row.warehouseCode ?? '—' })
     return null
   }, [t, warehouseId])
@@ -213,9 +235,16 @@ export function NewPickListDrawer({ data }: { data: NewPickListData }) {
       },
     },
     {
-      key: 'binId', label: t('fields.bin'), width: '170px', type: 'search-select',
-      optionsFor: (row) => row.bins.map((bin) => ({ value: bin.binId, label: t('create.binOption', { bin: bin.binCode, onHand: shown(bin.onHand) }) })),
-      scanResolver: optionalScanResolver(data.barcodeScanningEnabled, (value) => ({ field: 'bin', value })),
+      key: 'allocationKey', label: t('fields.bin'), width: '220px', type: 'search-select',
+      optionsFor: row=>row.allocations.map((a,i)=>({value:String(i),label:[a.binCode,a.lotNumber,a.serialNumber,a.expiresOn,shown(a.quantity)].filter(Boolean).join(' · ')})),
+      scanResolver: data.barcodeScanningEnabled ? async (value,row) => {
+        const resolved=await resolveScanValue({field:'bin',value});
+        if(!resolved.ok)return resolved;
+        const candidates=row.allocations.flatMap((allocation,index)=>allocation.binId===resolved.value?[{allocation,index}]:[]);
+        const selected=candidates.find(candidate=>String(candidate.index)===row.allocationKey)??(candidates.length===1?candidates[0]:undefined);
+        if(!selected)return {ok:false,message:candidates.length?'scan_ambiguous':'scan_not_found',candidates:candidates.map(({allocation})=>[allocation.binCode,allocation.lotNumber,allocation.serialNumber].filter(Boolean).join(' · '))};
+        return {...resolved,value:String(selected.index)};
+      } : undefined,
       isCellEditable: (row) => pickable(row),
     },
     {
@@ -271,6 +300,7 @@ export function NewPickListDrawer({ data }: { data: NewPickListData }) {
           lines: chosen.map((row) => ({
             salesOrderLineId: row.salesOrderLineId,
             binId: row.binId,
+            lotId:row.lotId,serialId:row.serialId,
             quantity: row.quantity.trim(),
             ...(row.kitComponentItemId ? { kitComponentItemId: row.kitComponentItemId } : {}),
           })),
@@ -391,7 +421,10 @@ export function NewPickListDrawer({ data }: { data: NewPickListData }) {
               <LineGrid<PickRow>
                 columns={columns}
                 rows={rows}
-                onRowsChange={(next) => { setRows(next); setDirty(true) }}
+                onRowsChange={(next) => { setRows(next.map(row=>{
+                  const allocation=row.allocationKey===''?undefined:row.allocations[Number(row.allocationKey)];
+                  return allocation?{...row,binId:allocation.binId,lotId:allocation.lotId,serialId:allocation.serialId,lotNumber:allocation.lotNumber,serialNumber:allocation.serialNumber}:{...row,binId:'',lotId:null,serialId:null,lotNumber:null,serialNumber:null};
+                })); setDirty(true) }}
                 emptyRow={blankRow}
                 getRowKey={(row) => row.clientKey}
                 cloneRow={(row) => ({ ...row, clientKey: crypto.randomUUID() })}

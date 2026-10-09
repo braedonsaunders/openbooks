@@ -191,15 +191,16 @@ async function receiptPieces(
     if (cmp(q, "0") <= 0) refuse("Receipt lot quantity must be positive.", "invalid_receipt_quantity", "Enter a positive exact quantity.");
     let lotId: string | null = null;
     let serialId: string | null = null;
-    if (profile.tracking === "lot") {
+    if (profile.tracking === "lot" || profile.tracking === "lot_serial") {
       if (!selection.lotNumber?.trim()) refuse("Lot-tracked item " + itemName + " requires a lot number.", "receipt_lot_required", "Enter a lot number for the receipt.");
       lotId = await ensureLot(orgId, itemId, selection.lotNumber, selection.expiresOn ?? null, actorId);
-    } else {
+    }
+    if (profile.tracking === "serial" || profile.tracking === "lot_serial") {
       if (cmp(q, "1") !== 0 || !selection.serialNumber?.trim()) refuse("Serial-tracked item " + itemName + " requires one serial number per unit.", "receipt_serial_required", "Enter a serial number for each finished unit.");
       serialId = await ensureSerial(orgId, itemId, selection.serialNumber, locationId, actorId);
     }
     await validateTrackingSelection(tx as Runner, orgId, itemId, locationId, profile,
-      { quantity: q, lotId, serialId }, "receipt");
+      { quantity: q, lotId, serialId }, "receipt",actorId);
     pieces.push({ quantity: q, lotId, serialId, serialNumber: serialId ? selection.serialNumber!.trim() : null });
     total = add(total, q);
   }

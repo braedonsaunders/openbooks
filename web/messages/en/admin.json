@@ -3526,6 +3526,12 @@
         "title": "Subcontractor standings",
         "singularTitle": "Subcontractor standings",
         "description": "Amounts below reflect the last saved payment. Save changes to recompute deductions."
+      },
+      "inventory-count-policies": {
+        "singular": "Cycle-count policy",
+        "plural": "Cycle-count policies",
+        "description": "Effective legal-entity intervals and base-unit variance tolerances by ABC class.",
+        "title": "Cycle-count policies"
       }
     },
     "fields": {
@@ -4128,6 +4134,10 @@
       "schedulePdfAccent": "Accent color",
       "schedulePdfLegend": "Show assignment color legend",
       "schedulePdfWeekends": "Shade configured weekends",
+      "abcClass": "ABC class",
+      "intervalDays": "Count interval (days)",
+      "varianceTolerance": "Variance tolerance",
+      "inventoryOwnership": "Stock ownership",
       "schedulePdfColorTreatment": "Color treatment",
       "schedulePdfColorIntensity": "Color tint (%)"
     },
@@ -4553,7 +4563,8 @@
       "tracking": {
         "none": "None",
         "lot": "Lot",
-        "serial": "Serial"
+        "serial": "Serial",
+        "lot_serial": "Lot and serial"
       },
       "stockLocationKind": {
         "warehouse": "Warehouse",
@@ -5092,6 +5103,16 @@
       "schedulePdfStyle": {
         "modern": "Modern",
         "classic": "Classic"
+      },
+      "abcClass": {
+        "A": "A",
+        "B": "B",
+        "C": "C"
+      },
+      "inventoryOwnership": {
+        "owned": "Company owned",
+        "vendor": "Vendor owned",
+        "customer": "Customer owned"
       },
       "schedulePdfColorTreatment": {
         "subtle": "Subtle accents",
@@ -7528,6 +7549,10 @@
     "contractorWithholding": {
       "title": "Contractor withholding",
       "description": "Compute statutory deductions on vendor payments and prepare working papers, remittances and governed corrections."
+    },
+    "consignment": {
+      "description": "Track vendor and customer stock in custody and recognize inventory when ownership is acquired.",
+      "title": "Consignment"
     }
   },
   "backupsManager": {

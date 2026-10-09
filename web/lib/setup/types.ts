@@ -118,7 +118,9 @@ export type SetupDynamicOptionsSource =
 
 export interface SetupField {
   /** Optional configuration is hidden and refused while its authoritative feature is disabled. */
-  featureKey?: 'einvoicing'
+  featureKey?: 'einvoicing' | 'consignment'
+  /** Required financial owner scope remains visible in a single-entity organization. */
+  legalEntity?: boolean
   /** A sibling IANA zone opts a zonedDateTime into the native local-time picker. */
   timeZoneField?: string
   key: string
@@ -629,7 +631,7 @@ export function setupEntityForFeatureState(
   const visible = (control: SetupField | SetupColumn) =>
     (!('featureKey' in control) || !control.featureKey || features[control.featureKey] === true)
     &&
-    (features.multiSubsidiary || entity.key === 'tax-registrations' || ('legalEmployer' in control && control.legalEmployer === true) || !isSubsidiaryControl(control))
+    (features.multiSubsidiary || entity.key === 'tax-registrations' || ('legalEmployer' in control && control.legalEmployer === true) || ('legalEntity' in control && control.legalEntity === true) || !isSubsidiaryControl(control))
     && (equipmentOn || !isEquipmentControl(control))
     && (fieldTicketsOn || !isFieldTicketControl(control))
   return {

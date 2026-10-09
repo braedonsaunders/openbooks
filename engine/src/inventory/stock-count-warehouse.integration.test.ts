@@ -1,3 +1,4 @@
+import { confirmCountObservation } from "../testing/inventory-counts.ts";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
@@ -39,6 +40,7 @@ async function openCounted(org: ScratchOrg, counted: string): Promise<{ countId:
   const lineId = (await db.execute<{ id: string }>(sql`
     select id from stock_count_lines where org_id = ${org.orgId} and stock_count_id = ${count.id}`)).rows[0]!.id;
   await recordCountedQuantity(org.orgId, null, { countId: count.id, lineId, countedQuantity: counted });
+  await confirmCountObservation(org.orgId,count.id,lineId,counted);
   return { countId: count.id, lineId };
 }
 

@@ -920,8 +920,8 @@ const SOURCES: Record<string, EntityListSource> = {
     where: inventoryOnhandScopedWhere,
     drawerParam: 'item',
     basePath: '/inventory',
-    extraSelect: sql`oh.item_id`,
-    rowHref: (row) => `/items?item=${row.item_id}`,
+    extraSelect: sql`oh.item_id,oh.stock_location_id`,
+    rowHref: (row) => `/inventory?layerItem=${row.item_id}&layerLocation=${row.stock_location_id}`,
   },
   demand_suggestion: {
     recordType: 'demand_suggestion',

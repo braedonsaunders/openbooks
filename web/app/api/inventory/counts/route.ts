@@ -1,3 +1,4 @@
+import { recordSecondCount } from '@openbooks/engine/inventory'
 import { apiErrorResponse } from '@/lib/api/error-response'
 import { exactMoney, isoDate, nullableUuidId, uuidId } from "@/lib/api/json";
 import { defineRoute } from '@/lib/api/route'
@@ -30,6 +31,7 @@ const countLineBody = z.object({
   itemId: z.string(),
   stockLocationId: z.string(),
   lotId: nullableUuidId.optional(),
+  serialId: nullableUuidId.optional(),
 })
 
 const stockCountBody = z.discriminatedUnion('action', [
@@ -40,6 +42,7 @@ const stockCountBody = z.discriminatedUnion('action', [
     subsidiaryId: uuidId.optional(),
     date: isoDate(),
     memo: z.string().nullable().optional(),
+    blind: z.boolean().optional(),
     lines: z.array(countLineBody).min(1),
   }),
   z.object({ action: z.literal('start'), idempotencyKey: z.string(), countId: uuidId }),
@@ -47,6 +50,7 @@ const stockCountBody = z.discriminatedUnion('action', [
     action: z.literal('record'), idempotencyKey: z.string(), countId: uuidId,
     lineId: uuidId, countedQuantity: exactMoney(), memo: z.string().nullable().optional(),
   }),
+  z.object({action:z.literal('second'),idempotencyKey:z.string(),countId:uuidId,lineId:uuidId,countedQuantity:exactMoney(),memo:z.string().nullable().optional()}),
   z.object({ action: z.literal('recount'), idempotencyKey: z.string(), countId: uuidId, lineId: uuidId, memo: z.string().nullable().optional() }),
   z.object({ action: z.literal('submit'), idempotencyKey: z.string(), countId: uuidId }),
   z.object({ action: z.literal('return'), idempotencyKey: z.string(), countId: uuidId }),
@@ -207,10 +211,12 @@ export const POST = defineRoute({
         subsidiaryId,
         countedOn: body.date,
         memo: body.memo ?? null,
+        blind: body.blind ?? true,
         lines: body.lines.map((l) => ({
           itemId: l.itemId!,
           stockLocationId: l.stockLocationId!,
           lotId: l.lotId ?? null,
+          serialId: l.serialId ?? null,
         })),
       }
       const { value: res, replayed } = await executeIdempotentInventoryAction(
@@ -255,6 +261,10 @@ export const POST = defineRoute({
         return NextResponse.json(
           await keyed('inventory.stock-count.start', { countId }, () => startStockCount(user.orgId, user.id, countId)),
         )
+      case 'second': {
+        const input={countId,lineId:body.lineId,countedQuantity:body.countedQuantity,reason:body.memo ?? null};
+        return NextResponse.json(await keyed('inventory.stock-count.second',input,()=>recordSecondCount(user.orgId,user.id,input)));
+      }
       case 'record': {
         if (!body.lineId || !isUuid(body.lineId)) {
           return NextResponse.json({ error: 'count line required' }, { status: 422 })

@@ -1,5 +1,7 @@
 'use client'
 
+import { InventoryTrackingFields } from '@/components/inventory-tracking-fields'
+import { promptDialog } from '@/lib/prompt'
 import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
@@ -334,11 +336,11 @@ function CreateCountDrawer({
   // The count date defaults to the org's business day from the server, never
   // the browser's UTC day (tomorrow after 5pm Pacific).
   const initialDate = useBusinessToday()
-  const initialLines = [{ itemId: '', stockLocationId: '', lotId: '' }]
+  const initialLines = [{ itemId: '', stockLocationId: '', lotId: '',serialId:'' }]
   const [date, setDate] = useState(initialDate)
   const [memo, setMemo] = useState('')
-  const [lines, setLines] = useState<{ itemId: string; stockLocationId: string; lotId: string }[]>([
-    { itemId: '', stockLocationId: '', lotId: '' },
+  const [lines, setLines] = useState<{ itemId: string; stockLocationId: string; lotId: string;serialId:string }[]>([
+    { itemId: '', stockLocationId: '', lotId: '',serialId:'' },
   ])
   const [busy, setBusy] = useState(false)
   const [postError, setPostError] = useState<string | null>(null)
@@ -389,6 +391,7 @@ function CreateCountDrawer({
           itemId: l.itemId,
           stockLocationId: l.stockLocationId,
           lotId: l.lotId || undefined,
+          serialId:l.serialId||undefined,
         })),
       }
       const fingerprint = JSON.stringify(payload)
@@ -525,7 +528,7 @@ function CreateCountDrawer({
                   value={line.itemId}
                   onChange={(v) => {
                     clearRowError()
-                    setLines((prev) => prev.map((p, j) => (j === i ? { ...p, itemId: v, lotId: '' } : p)))
+                    setLines((prev) => prev.map((p, j) => (j === i ? { ...p, itemId: v, lotId: '', serialId: '' } : p)))
                   }}
                   options={itemOptions}
                   placeholder={t('counts.create.selectItem')}
@@ -570,16 +573,8 @@ function CreateCountDrawer({
                   </p>
                 ) : null}
                 </div>
-                <SearchSelect
-                  disabled={busy}
-                  value={line.lotId}
-                  onChange={(v) => setLines((prev) => prev.map((p, j) => (j === i ? { ...p, lotId: v } : p)))}
-                  options={lotOptions}
-                  placeholder={t('counts.create.selectLot')}
-                  sheetTitle={t('counts.columns.lot')}
-                  ariaLabel={t('counts.columns.lot')}
-                  scanResolver={optionalScanResolver(barcodeScanningEnabled, (value) => ({ field: 'lot', value, itemId: line.itemId }))}
-                />
+                <InventoryTrackingFields key={line.itemId} itemId={line.itemId} lotId={line.lotId} serialId={line.serialId}
+                  onChange={(lot,serial)=>setLines(prev=>prev.map((p,j)=>j===i?{...p,lotId:lot,serialId:serial}:p))} disabled={busy} canCreate={canManageItems}/>
                 <Button
                   variant="ghost"
                   onClick={() => setLines((prev) => prev.filter((_, j) => j !== i))}
@@ -593,7 +588,7 @@ function CreateCountDrawer({
           <Button
             variant="secondary"
             disabled={busy}
-            onClick={() => setLines((prev) => [...prev, { itemId: '', stockLocationId: '', lotId: '' }])}
+            onClick={() => setLines((prev) => [...prev, { itemId: '', stockLocationId: '', lotId: '',serialId:'' }])}
           >
             {t('counts.create.addLine')}
           </Button>
@@ -675,7 +670,7 @@ function CountDetailBody({
     }
   }
 
-  const lineColumns: PagedColumn<(typeof lines)[number]>[] = [
+  const allLineColumns: PagedColumn<(typeof lines)[number]>[] = [
     {
       key: 'item',
       header: t('counts.columns.item'),
@@ -687,12 +682,12 @@ function CountDetailBody({
       header: t('counts.columns.stockLocation'),
       cell: (l) => l.stockLocationCode ?? locLabel(l.stockLocationId),
     },
-    { key: 'lot', header: t('counts.columns.lot'), cell: (l) => l.lotNumber ?? '—' },
+    { key: 'lot', header: t('counts.columns.lot'), cell: (l) => [l.lotNumber,l.serialNumber].filter(Boolean).join(' · ') || '—' },
     {
       key: 'expected',
       header: t('counts.columns.expected'),
       align: 'right',
-      cell: (l) => <span className="tabular-nums">{l.expectedQuantity}</span>,
+      cell: (l) => <span className="tabular-nums">{l.expectedQuantity??'—'}</span>,
     },
     {
       key: 'counted',
@@ -713,14 +708,14 @@ function CountDetailBody({
               size="sm"
               disabled={busy || !(counted[l.id] ?? '').trim()}
               onClick={() =>
-                void run(t('counts.actions.record'), {
-                  action: 'record',
+                void (async()=>{ const reason=l.secondCountRequired?await promptDialog({title:t('counts.secondReason'),message:t('counts.secondReasonHint')}):null; await run(t('counts.actions.record'), {
+                  action: l.secondCountRequired?'second':'record',
                   lineId: l.id,
-                  countedQuantity: (counted[l.id] ?? '').trim(),
-                })
+                  countedQuantity: (counted[l.id] ?? '').trim(),memo:reason,
+                }); })()
               }
             >
-              {t('counts.actions.save')}
+              {l.secondCountRequired?t('counts.secondCount'):t('counts.actions.save')}
             </Button>
             <Button
               size="sm"
@@ -771,6 +766,7 @@ function CountDetailBody({
         ),
     },
   ]
+  const lineColumns = allLineColumns.filter(column=>!(header.blind && !["review","posted"].includes(header.status) && ["expected","variance"].includes(column.key)))
 
   return (
     <div className="space-y-5 p-1">

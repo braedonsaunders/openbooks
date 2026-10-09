@@ -27,6 +27,8 @@ export interface PickReservation {
   lotId: string | null;
   serialId: string | null;
   /** Exact numeric(28,8) strings. */
+  unit?: string | null;
+  subsidiaryId?: string;
   quantity: string;
   reserved: string;
 }
@@ -34,6 +36,7 @@ export interface PickReservation {
 export interface PickReservationFilter {
   salesOrderLineIds?: readonly string[];
   itemId?: string;
+  subsidiaryId?: string;
   binId?: string;
   /** Only pick lists released to approved (the ones holding bin stock). */
   releasedOnly?: boolean;
@@ -47,9 +50,12 @@ interface ReservationRow extends Record<string, unknown> {
   pick_line_id: string;
   sales_order_line_id: string;
   item_id: string;
+  subsidiary_id: string;
   bin_id: string;
   lot_id: string | null;
   serial_id: string | null;
+  unit?: string | null;
+  subsidiaryId?: string;
   quantity: string;
   reserved: string;
 }
@@ -71,7 +77,7 @@ export function pickReservationsCte(orgId: string): SQL {
              pick.status as pick_list_status, pick.created_at,
              line.id as pick_line_id, line.line_number, fl.sales_order_line_id,
              line.item_id, line.stock_location_id as bin_id, fl.lot_id, fl.serial_id,
-             line.quantity
+             line.quantity, line.unit, coalesce(pick.subsidiary_id,(select id from subsidiaries where org_id=${orgId} and parent_id is null)) as subsidiary_id
         from fulfillment_lines fl
         join fulfillment_documents fd on fd.document_id = fl.document_id and fd.org_id = fl.org_id
         join documents pick on pick.id = fl.document_id and pick.org_id = fl.org_id
@@ -113,7 +119,7 @@ export function pickReservationsCte(orgId: string): SQL {
     ),
     pick_reservations as (
       select pick_list_id, pick_list_number, pick_list_status, pick_line_id, sales_order_line_id,
-             item_id, bin_id, lot_id, serial_id, quantity,
+             item_id, bin_id, lot_id, serial_id, unit, subsidiary_id, quantity,
              greatest(0, least(quantity, line_open - ahead)) as reserved
         from pick_ranked
     )`;
@@ -128,10 +134,11 @@ export async function activePickReservations(
   const rows = (await runner.execute<ReservationRow>(sql`
     with ${pickReservationsCte(orgId)}
     select pick_list_id, pick_list_number, pick_list_status, pick_line_id, sales_order_line_id,
-           item_id, bin_id, lot_id, serial_id, quantity::text as quantity, reserved::text as reserved
+           item_id, bin_id, lot_id, serial_id, unit, subsidiary_id, quantity::text as quantity, reserved::text as reserved
       from pick_reservations
      where true
        ${filter.salesOrderLineIds ? sql`and sales_order_line_id = any(${uuidArray([...filter.salesOrderLineIds])}::uuid[])` : sql``}
+       ${filter.subsidiaryId ? sql`and subsidiary_id = ${filter.subsidiaryId}` : sql``}
        ${filter.itemId ? sql`and item_id = ${filter.itemId}` : sql``}
        ${filter.binId ? sql`and bin_id = ${filter.binId}` : sql``}
        ${filter.releasedOnly ? sql`and pick_list_status = 'approved'` : sql``}
@@ -145,9 +152,11 @@ export async function activePickReservations(
     pickLineId: row.pick_line_id,
     salesOrderLineId: row.sales_order_line_id,
     itemId: row.item_id,
+    subsidiaryId: row.subsidiary_id,
     binId: row.bin_id,
     lotId: row.lot_id,
     serialId: row.serial_id,
+    unit: row.unit,
     quantity: row.quantity,
     reserved: row.reserved,
   }));

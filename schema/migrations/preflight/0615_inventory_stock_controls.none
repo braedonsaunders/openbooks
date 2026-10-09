@@ -1,0 +1,1 @@
+All stock defaults to owned; existing counts retain their visibility and tolerance exemption. New nullable tracking evidence preserves posted rows. No tenant records or balances are rewritten. New custody and count policy tables begin empty.

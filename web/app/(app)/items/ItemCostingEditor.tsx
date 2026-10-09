@@ -1,5 +1,6 @@
 'use client'
 
+import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
@@ -11,6 +12,7 @@ interface AccountOpt {
   name?: string | null
 }
 interface Profile {
+  abc_class: string | null
   updated_at: string
   costing_method: string
   tracking: string
@@ -30,7 +32,7 @@ interface Profile {
 }
 
 const METHODS = ['fifo', 'moving_average', 'standard'] as const
-const TRACKING = ['none', 'lot', 'serial'] as const
+const TRACKING = ['none', 'lot', 'serial', 'lot_serial'] as const
 const NEGATIVE_COST_BASIS = ['last_receipt', 'standard', 'configured'] as const
 const field = 'space-y-1.5'
 
@@ -152,6 +154,7 @@ export function ItemCostingEditor({
 
   const [costingMethod, setCostingMethod] = useState('moving_average')
   const [tracking, setTracking] = useState('none')
+  const [abcClass,setAbcClass]=useState('')
   const [assetAccountId, setAssetAccountId] = useState('')
   const [cogsAccountId, setCogsAccountId] = useState('')
   const [adjustmentAccountId, setAdjustmentAccountId] = useState('')
@@ -202,6 +205,7 @@ export function ItemCostingEditor({
   function hydrate(p: Profile | null) {
     setCostingMethod(p?.costing_method ?? 'moving_average')
     setTracking(p?.tracking ?? 'none')
+    setAbcClass(p?.abc_class??'')
     setAssetAccountId(p?.asset_account_id ?? '')
     setCogsAccountId(p?.cogs_account_id ?? '')
     setAdjustmentAccountId(p?.adjustment_account_id ?? '')
@@ -270,7 +274,7 @@ export function ItemCostingEditor({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           expectedUpdatedAt: profile?.updated_at ?? null,
-          costingMethod, tracking, assetAccountId, cogsAccountId,
+          costingMethod, tracking, abcClass:abcClass||null, assetAccountId, cogsAccountId,
           adjustmentAccountId, varianceAccountId, receivedNotBilledAccountId,
           standardCost, baseUnit, reorderPoint, preferredStockLevel,
           allowNegativeInventory, negativeCostBasis, provisionalUnitCost,
@@ -325,9 +329,11 @@ export function ItemCostingEditor({
         ) : null}
       </div>
 
+      <Link className="text-sm text-teal-700 hover:underline" href={`/inventory?layerItem=${encodeURIComponent(itemId)}`}>{t("layerInquiry")}</Link>
       {editing ? (
         <Card>
           <CardContent className="p-4"><fieldset disabled={busy} className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <div className={field}><Label>{t('abcClass')}</Label><Select value={abcClass} onChange={e=>setAbcClass(e.target.value)}><option value="">—</option>{['A','B','C'].map(value=><option key={value} value={value}>{value}</option>)}</Select></div>
             <div className={field}>
               <Label>{t('method')}</Label>
               <Select value={costingMethod} onChange={(e) => setCostingMethod(e.target.value)}>
@@ -509,6 +515,7 @@ export function ItemCostingEditor({
         <Card>
           <CardContent className="grid gap-x-6 gap-y-3 p-4 text-sm sm:grid-cols-2 lg:grid-cols-3">
             <Detail label={t('method')} value={t(`methods.${profile.costing_method}`)} />
+            <Detail label={t("abcClass")} value={profile.abc_class??"—"} />
             <Detail label={t('tracking')} value={t(`trackingOptions.${profile.tracking}`)} />
             <Detail label={t('baseUnit')} value={profile.base_unit} />
             <Detail

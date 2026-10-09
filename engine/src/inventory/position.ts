@@ -1,3 +1,4 @@
+import { saleableLocation, unheldTracking } from "./stock-eligibility.ts";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { fromUnits, isZero, normalizeMoney, toUnits } from "../money/money.ts";
@@ -91,6 +92,7 @@ export async function getOnHandWith(
   selection: {
     lotId?: string | null;
     serialId?: string | null;
+    saleableOnly?: boolean;
     /** Restrict availability to layers created by one originating receipt. */
     sourceReceiptMovementId?: string | null;
     /** Count only layers owned by this entity; omit to span the position. */
@@ -104,14 +106,20 @@ export async function getOnHandWith(
   // Layer sums are scoped per legal entity so one subsidiary's availability,
   // and the average cost a receipt inherits, can never be driven by another
   // entity's stock sharing the same warehouse.
-  const layerScope = subId ? sql`and cost_layers.subsidiary_id = ${subId}` : sql``;
-  const provisionalScope = subId
+  const layerScope = sql`${subId ? sql`and cost_layers.subsidiary_id = ${subId}` : sql``}
+    ${selection.saleableOnly ? sql`and ${saleableLocation(sql`cost_layers.org_id`,sql`cost_layers.stock_location_id`)}
+      and exists(select 1 from inventory_movements eligibility where eligibility.org_id=cost_layers.org_id
+        and eligibility.id=cost_layers.source_movement_id
+        and ${unheldTracking(sql`eligibility.org_id`,sql`eligibility.lot_id`,sql`eligibility.serial_id`)})` : sql``}`;
+  const provisionalOwnerScope = subId
     ? sql`and exists (
             select 1 from inventory_movements owner_mv
              where owner_mv.id = inventory_provisional_costs.issue_movement_id
                and owner_mv.org_id = ${orgId}
                and owner_mv.subsidiary_id = ${subId})`
     : sql``;
+  const provisionalScope = sql`${provisionalOwnerScope}
+    ${selection.saleableOnly ? sql`and ${saleableLocation(sql`inventory_provisional_costs.org_id`,sql`inventory_provisional_costs.stock_location_id`)}` : sql``}`;
   const r = (await runner.execute<{ quantity: string; value: string }>(sql`
     select (coalesce((select sum(remaining_quantity) from cost_layers
                        where org_id=${orgId} and item_id=${itemId} and stock_location_id=${stockLocationId}

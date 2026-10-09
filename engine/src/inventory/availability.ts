@@ -260,7 +260,7 @@ export async function onHandByItem(
   const onHand = new Map(itemIds.map((id) => [id, "0.0000"]));
   for (const position of await stockPositions(runner, orgId, subsidiaryId, itemIds)) {
     if (locations && !locations.has(position.stockLocationId)) continue;
-    const held = await getOnHandWith(runner, orgId, position.itemId, position.stockLocationId, { subsidiaryId });
+    const held = await getOnHandWith(runner, orgId, position.itemId, position.stockLocationId, { subsidiaryId, saleableOnly: true });
     onHand.set(position.itemId, add(onHand.get(position.itemId)!, held.quantity));
   }
   return onHand;

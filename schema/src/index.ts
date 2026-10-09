@@ -110,3 +110,5 @@ export * from "./webhooks";
 export * from "./shipping";
 export * from "./billing-import";
 export * from "./benefit-transaction-policies";
+
+export * from './inventory-controls';

@@ -3451,6 +3451,12 @@
         "title": "Statuts des sous-traitants",
         "singularTitle": "Statuts des sous-traitants",
         "description": "Les montants reflètent le dernier paiement enregistré. Enregistrez les modifications pour recalculer les retenues."
+      },
+      "inventory-count-policies": {
+        "singular": "Règle de comptage tournant",
+        "plural": "Règles de comptage tournant",
+        "description": "Intervalles effectifs par entité juridique et tolérances en unités de base par classe ABC.",
+        "title": "Règles de comptage tournant"
       }
     },
     "fields": {
@@ -4053,6 +4059,10 @@
       "schedulePdfAccent": "Couleur d’accent",
       "schedulePdfLegend": "Afficher la légende des couleurs",
       "schedulePdfWeekends": "Ombrer les jours de fin de semaine configurés",
+      "abcClass": "Classe ABC",
+      "intervalDays": "Intervalle de comptage (jours)",
+      "varianceTolerance": "Tolérance d'écart",
+      "inventoryOwnership": "Propriété du stock",
       "schedulePdfColorTreatment": "Traitement des couleurs",
       "schedulePdfColorIntensity": "Intensité de la teinte (%)"
     },
@@ -4417,7 +4427,8 @@
       "tracking": {
         "none": "Aucun",
         "lot": "Lot",
-        "serial": "Série"
+        "serial": "Série",
+        "lot_serial": "Lot et numéro de série"
       },
       "stockLocationKind": {
         "warehouse": "Entrepôt",
@@ -5017,6 +5028,16 @@
       "schedulePdfStyle": {
         "modern": "Moderne",
         "classic": "Classique"
+      },
+      "abcClass": {
+        "A": "Classe A",
+        "B": "Classe B",
+        "C": "Classe C"
+      },
+      "inventoryOwnership": {
+        "owned": "Propriété de l'entreprise",
+        "vendor": "Propriété du fournisseur",
+        "customer": "Propriété du client"
       },
       "schedulePdfColorTreatment": {
         "subtle": "Accents discrets",
@@ -7528,6 +7549,10 @@
     "contractorWithholding": {
       "title": "Retenues des entrepreneurs",
       "description": "Calculez les retenues légales sur les paiements fournisseurs et préparez les documents de travail, versements et corrections contrôlées."
+    },
+    "consignment": {
+      "description": "Suivez le stock de fournisseurs et de clients en garde et comptabilisez-le lors de l'acquisition de sa propriété.",
+      "title": "Stock en consignation"
     }
   },
   "backupsManager": {

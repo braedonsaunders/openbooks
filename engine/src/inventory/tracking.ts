@@ -39,7 +39,12 @@ export function assertTracking(
   input: { quantity: string; lotId?: string | null; serialId?: string | null },
   kind: string,
 ): void {
-  if (profile.tracking === "lot") {
+  if (!['none','lot','serial','lot_serial'].includes(profile.tracking)) throw new InventoryError('Unsupported inventory tracking mode');
+  if (profile.tracking === "lot_serial") {
+    if (!input.lotId || !input.serialId) throw new InventoryError(`lot and serial tracking requires both identifiers on ${kind}`);
+    if (cmp(input.quantity, "1") !== 0 && cmp(input.quantity, "-1") !== 0)
+      throw new InventoryError("lot and serial movements must be exactly one unit per serial");
+  } else if (profile.tracking === "lot") {
     if (!input.lotId) {
       throw new InventoryError(`lot-tracked item requires a lot on ${kind}`);
     }
@@ -256,10 +261,11 @@ export async function validateTrackingSelection(
   stockLocationId: string,
   profile: InventoryProfile,
   selection: { quantity: string; lotId?: string | null; serialId?: string | null },
-  operation: "receipt" | "issue" | "transfer",
+  operation: "receipt" | "count_receipt" | "custody_receipt" | "ownership_receipt" | "issue" | "transfer",
+  actorId: string | null = null,
 ): Promise<void> {
   assertTracking(profile, selection, operation);
-  if (profile.tracking === "lot") {
+  if (profile.tracking === "lot" || profile.tracking === "lot_serial") {
     const lot = (await tx.execute<{ id: string }>(sql`
       select id
         from lots
@@ -271,16 +277,17 @@ export async function validateTrackingSelection(
         "lot must belong to the item and organization",
       );
     }
-    return;
+    if (profile.tracking === "lot") return;
   }
-  if (profile.tracking !== "serial") return;
+  if (profile.tracking !== "serial" && profile.tracking !== "lot_serial") return;
 
   const serial = (await tx.execute<{
       id: string;
       status: string;
       current_stock_location_id: string | null;
+      lot_id: string | null;
     }>(sql`
-    select id, status, current_stock_location_id
+    select id, status, current_stock_location_id, lot_id
       from serials
      where id = ${selection.serialId} and org_id = ${orgId} and item_id = ${itemId}
      for update
@@ -291,7 +298,10 @@ export async function validateTrackingSelection(
       "serial must belong to the item and organization",
     );
   }
-  if (operation === "receipt") {
+  if (profile.tracking === "lot_serial" && row.lot_id && row.lot_id !== selection.lotId) {
+    throw new InventoryError("serial belongs to a different lot");
+  }
+  if (["receipt","count_receipt","custody_receipt","ownership_receipt"].includes(operation)) {
     const prior = (await tx.execute(sql`
       select 1
         from inventory_movements
@@ -299,10 +309,21 @@ export async function validateTrackingSelection(
          and status = 'posted'
        limit 1
     `));
-    if (prior.rows.length) {
+    if (prior.rows.length && operation === "receipt") {
       throw new InventoryError(
         "serial already has posted inventory movement history; use a controlled return workflow",
       );
+    }
+    if (operation === "receipt") {
+      const custody=(await tx.execute(sql`select 1 from consignment_stock where org_id=${orgId} and serial_id=${row.id} and remaining_quantity>0 limit 1`)).rows;
+      if(custody.length)throw new InventoryError('Serial is externally owned — take ownership through the Consignment command');
+    }
+    if (operation !== "receipt") {
+      const occupied = (await tx.execute(sql`select 1 from cost_layers layer
+        join inventory_movements source on source.org_id=layer.org_id and source.id=layer.source_movement_id
+        where layer.org_id=${orgId} and source.serial_id=${row.id} and layer.remaining_quantity>0
+        union all select 1 from consignment_stock where org_id=${orgId} and serial_id=${row.id} and remaining_quantity>0 limit 1`)).rows;
+      if (row.status === 'in_stock' || occupied.length) throw new InventoryError('Serial already exists in stock or custody — resolve its location before recording another receipt');
     }
     if (
       row.current_stock_location_id &&
@@ -311,6 +332,13 @@ export async function validateTrackingSelection(
       throw new InventoryError(
         "serial is registered at a different stock location",
       );
+    }
+    if (profile.tracking === "lot_serial" && !row.lot_id) {
+      const bound = await tx.execute(sql`update serials set lot_id=${selection.lotId}, updated_by=${actorId}, updated_at=now() where org_id=${orgId} and id=${row.id} and lot_id is null returning id`);
+      if (!bound.rows.length) throw new InventoryError("serial lot assignment changed — reload the receipt");
+      const audit=await tx.execute(sql`insert into audit_log(org_id,table_name,row_id,action,changes,actor_id)
+        values(${orgId},'serials',${row.id},'update',${JSON.stringify({operation:'bind_lot',before:{lotId:null},after:{lotId:selection.lotId},reason:'Receipt establishes serial lot identity'})}::jsonb,${actorId}) returning id`);
+      if (!audit.rows.length) throw new InventoryError('Serial lot assignment was not audited');
     }
     return;
   }

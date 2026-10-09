@@ -1,3 +1,4 @@
+import { assertOwnedLocation } from "./stock-eligibility.ts";
 import { sql } from "drizzle-orm";
 import { add, cmp, neg } from "../money/money.ts";
 import { isIsoCalendarDate } from "../platform/business-date.ts";
@@ -144,6 +145,7 @@ export async function assertCountWarehouses(
   stockLocationIds: string[],
 ): Promise<void> {
   for (const stockLocationId of [...new Set(stockLocationIds)].sort()) {
+    await assertOwnedLocation(tx,orgId,stockLocationId);
     const row = (await tx.execute<{ code: string | null; is_active: boolean }>(sql`
       select code, is_active
         from stock_locations
@@ -199,6 +201,7 @@ export type CountHeader = {
   subsidiaryId: string;
   countedOn: string;
   memo: string | null;
+  blind: boolean;
 };
 
 export type CountLine = {
@@ -206,6 +209,7 @@ export type CountLine = {
   itemId: string;
   stockLocationId: string;
   lotId: string | null;
+  serialId: string | null;
   expectedQuantity: string;
   countedQuantity: string | null;
   adjustmentMovementId: string | null;
@@ -225,7 +229,8 @@ export async function loadCountHeader(
     subsidiary_id: string;
     counted_on: string;
     memo: string | null;
-  }>(sql`select id, status, location_id, subsidiary_id, counted_on::text, memo
+    blind: boolean;
+  }>(sql`select id, status, location_id, subsidiary_id, counted_on::text, memo, blind
             from stock_counts where org_id = ${orgId} and id = ${countId}${lock}`));
   const row = r.rows[0];
   if (!row) {
@@ -240,6 +245,7 @@ export async function loadCountHeader(
     subsidiaryId: row.subsidiary_id,
     countedOn: row.counted_on,
     memo: row.memo,
+    blind: row.blind,
   };
 }
 
@@ -253,10 +259,11 @@ export async function loadCountLines(
     item_id: string;
     stock_location_id: string;
     lot_id: string | null;
+    serial_id: string | null;
     expected_quantity: string;
     counted_quantity: string | null;
     adjustment_movement_id: string | null;
-  }>(sql`select id, item_id, stock_location_id, lot_id,
+  }>(sql`select id, item_id, stock_location_id, lot_id, serial_id,
                 expected_quantity::text, counted_quantity::text, adjustment_movement_id
            from stock_count_lines
           where org_id = ${orgId} and stock_count_id = ${countId}
@@ -266,6 +273,7 @@ export async function loadCountLines(
     itemId: row.item_id,
     stockLocationId: row.stock_location_id,
     lotId: row.lot_id,
+    serialId: row.serial_id,
     expectedQuantity: row.expected_quantity,
     countedQuantity: row.counted_quantity,
     adjustmentMovementId: row.adjustment_movement_id,
