@@ -2,7 +2,7 @@ import { canonicalNonNegativeDecimal } from "../../money/exact-decimal.ts";
 import { isCivilDate } from "../temporal.ts";
 import { sql } from "drizzle-orm";
 import { HRM_COMP_CYCLE_SUBJECT_KIND } from "@openbooks/schema/src/hrm-compensation.ts";
-import { completedGateAllowsSelfApproval } from "../../flows/approval-decision-policy.ts";
+import { completedGateAllowsSelfApproval, completedGateDecisionPolicy } from "../../flows/approval-decision-policy.ts";
 import { db, withOrgTransaction } from "../../platform/db.ts";
 import { businessToday } from "../../platform/business-date.ts";
 import { actorHasPermission } from "../../organization/actor-permissions.ts";
@@ -1498,33 +1498,50 @@ export async function releaseCompCycleDecision(
   cycleId: string,
   decision: "approved" | "rejected",
   deciderId: string,
+  approvalRunId?: string,
 ): Promise<void> {
-  const cycle = (await db.execute<CycleRow>(sql`
-    select ${CYCLE_COLUMNS} from hrm_comp_cycles where org_id = ${orgId} and id = ${cycleId}`)).rows[0];
-  if (!cycle) throw new CompensationError("NOT_FOUND", "compensation cycle is not visible in this organization");
-  if (cycle.status !== "in_review") {
-    throw new CompensationError(
-      "BAD_STATE",
-      `a ${cycle.status} cycle cannot be released — only a cycle in review releases`,
-    );
-  }
-  if (decision === "approved") {
-    const updated = (await db.execute<CycleRow>(sql`
-      update hrm_comp_cycles
-         set status = 'approved', approved_at = now(), revision = revision + 1, updated_at = now()
-       where org_id = ${orgId} and id = ${cycleId} and status = 'in_review'
-       returning ${CYCLE_COLUMNS}`)).rows[0];
-    if (!updated) throw new CompensationError("STALE_REVISION", "the cycle moved while it was released — the gate stays pending");
-    await recordEvent(db, orgId, cycleId, null, "approved", deciderId, "flows approval released");
-  } else {
-    const updated = (await db.execute<CycleRow>(sql`
-      update hrm_comp_cycles
-         set status = 'open', revision = revision + 1, updated_at = now()
-       where org_id = ${orgId} and id = ${cycleId} and status = 'in_review'
-       returning ${CYCLE_COLUMNS}`)).rows[0];
-    if (!updated) throw new CompensationError("STALE_REVISION", "the cycle moved while it was released — the gate stays pending");
-    await recordEvent(db, orgId, cycleId, null, "rejected", deciderId, "flows approval rejected — rework and resubmit");
-  }
+  return withOrgTransaction(orgId, async () => {
+    const cycle = (await db.execute<CycleRow>(sql`
+      select ${CYCLE_COLUMNS} from hrm_comp_cycles where org_id = ${orgId} and id = ${cycleId} for update`)).rows[0];
+    if (!cycle) throw new CompensationError("NOT_FOUND", "compensation cycle is not visible in this organization");
+    if (cycle.status !== "in_review") {
+      throw new CompensationError(
+        "BAD_STATE",
+        `a ${cycle.status} cycle cannot be released — only a cycle in review releases`,
+      );
+    }
+    await requireHrmCompensationManage(db, orgId, deciderId);
+    await assertCycleWriteScope(orgId, deciderId, cycle, await lineEmploymentIds(orgId, cycleId));
+    const policy = await completedGateDecisionPolicy(db, {
+      orgId, subjectKind: HRM_COMP_CYCLE_SUBJECT_KIND, subjectId: cycleId,
+      approvalRunId, actorId: deciderId, outcome: decision, trigger: "on_submit",
+    });
+    const submittedRevision = policy?.context && typeof policy.context === "object"
+      ? (policy.context as { cycleRevision?: unknown }).cycleRevision : undefined;
+    // Several tenant Flows may gate the same submission. A different finishing
+    // run must prove the same frozen revision, rather than replace its routing.
+    if (!approvalRunId || !policy || (cycle.flow_run_id !== approvalRunId
+      && submittedRevision !== cycle.revision - 1)) {
+      throw new CompensationError("REFUSED", "Complete this compensation cycle's submitted Flow approval before releasing its decision");
+    }
+    if (decision === "approved") {
+      const updated = (await db.execute<CycleRow>(sql`
+        update hrm_comp_cycles
+           set status = 'approved', approved_at = now(), flow_run_id = ${approvalRunId}, revision = revision + 1, updated_at = now()
+         where org_id = ${orgId} and id = ${cycleId} and status = 'in_review'
+         returning ${CYCLE_COLUMNS}`)).rows[0];
+      if (!updated) throw new CompensationError("STALE_REVISION", "the cycle moved while it was released — the gate stays pending");
+      await recordEvent(db, orgId, cycleId, null, "approved", deciderId, "flows approval released");
+    } else {
+      const updated = (await db.execute<CycleRow>(sql`
+        update hrm_comp_cycles
+           set status = 'open', flow_run_id = ${approvalRunId}, revision = revision + 1, updated_at = now()
+         where org_id = ${orgId} and id = ${cycleId} and status = 'in_review'
+         returning ${CYCLE_COLUMNS}`)).rows[0];
+      if (!updated) throw new CompensationError("STALE_REVISION", "the cycle moved while it was released — the gate stays pending");
+      await recordEvent(db, orgId, cycleId, null, "rejected", deciderId, "flows approval rejected — rework and resubmit");
+    }
+  });
 }
 
 export interface PushResult {
