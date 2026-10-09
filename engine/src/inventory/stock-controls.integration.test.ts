@@ -23,6 +23,7 @@ import { getStockCountDetail } from "./stock-count-queries.ts";
 import { inventoryInquiry } from "./inquiry.ts";
 import { createInventoryOperator } from "../testing/inventory-counts.ts";
 import { cmp } from "../money/money.ts";
+import { guardRefusalMessage } from "../platform/database-refusal.ts";
 
 const DB = Boolean(process.env.OPENBOOKS_DB_URL);
 const run = <T>(work: () => Promise<T>) => withBypassContext(work);
@@ -37,6 +38,13 @@ test(
         createInventoryOperator(org.orgId, "Stock operator"),
       );
       const item = org.items.fifo;
+      const areaId = randomUUID(), binId = randomUUID();
+      const area = await run(() => db.execute(sql`insert into stock_locations(id,org_id,location_id,parent_id,code,kind,is_active)
+        values(${areaId},${org.orgId},${org.locationId},${org.stockLocationId},'INSPECTION','bin',true) returning id`));
+      assert.equal(area.rows.length, 1);
+      const bin = await run(() => db.execute(sql`insert into stock_locations(id,org_id,location_id,parent_id,code,kind,is_active)
+        values(${binId},${org.orgId},${org.locationId},${areaId},'INSPECTION-1','bin',true) returning id`));
+      assert.equal(bin.rows.length, 1);
       await run(() =>
         db.execute(
           sql`update item_inventory_profiles set tracking='lot' where org_id=${org.orgId} and item_id=${item}`,
@@ -52,7 +60,7 @@ test(
         run(() =>
           receiveInventory(org.orgId, actor, {
             itemId: item,
-            stockLocationId: org.stockLocationId,
+            stockLocationId: binId,
             subsidiaryId: org.subsidiaryId,
             quantity: "3",
             unitCost,
@@ -69,7 +77,7 @@ test(
             db,
             org.orgId,
             item,
-            org.stockLocationId,
+            binId,
             org.subsidiaryId,
             null,
           ),
@@ -94,7 +102,7 @@ test(
         run(() =>
           issueInventory(org.orgId, actor, {
             itemId: item,
-            stockLocationId: org.stockLocationId,
+            stockLocationId: binId,
             subsidiaryId: org.subsidiaryId,
             quantity: "1",
             lotId: early,
@@ -104,12 +112,12 @@ test(
         /held|quarantined/,
       );
       const physical = await run(() =>
-        getOnHandWith(db, org.orgId, item, org.stockLocationId, {
+        getOnHandWith(db, org.orgId, item, binId, {
           subsidiaryId: org.subsidiaryId,
         }),
       );
       const saleable = await run(() =>
-        getOnHandWith(db, org.orgId, item, org.stockLocationId, {
+        getOnHandWith(db, org.orgId, item, binId, {
           subsidiaryId: org.subsidiaryId,
           saleableOnly: true,
         }),
@@ -140,17 +148,19 @@ test(
         new Set(inquiry.rows.map((r) => r.source_movement_id)),
         new Set([first.movementId, second.movementId]),
       );
-      await run(() =>
+      const quarantined = await run(() =>
         db.execute(
-          sql`update stock_locations set kind='quarantine' where org_id=${org.orgId} and id=${org.stockLocationId}`,
+          sql`update stock_locations set kind='quarantine' where org_id=${org.orgId} and id=${areaId} returning id`,
         ),
       );
+      assert.equal(quarantined.rows.length, 1);
       assert.deepEqual(await choices(), []);
       assert.equal(
         cmp(
           (
             await run(() =>
-              getOnHandWith(db, org.orgId, item, org.stockLocationId, {
+              getOnHandWith(db, org.orgId, item, binId, {
+                subsidiaryId: org.subsidiaryId,
                 saleableOnly: true,
               }),
             )
@@ -159,6 +169,9 @@ test(
         ),
         0,
       );
+      assert.equal(cmp((await run(() => getOnHandWith(db, org.orgId, item, binId, {
+        subsidiaryId: org.subsidiaryId,
+      }))).quantity, "6"), 0, "quarantine preserves physical stock");
     } finally {
       await run(() => dropScratchOrg(org.orgId));
     }
@@ -477,10 +490,13 @@ test(
       ).rows[0]!;
       assert.equal(transfer.lot_id, lot);
       assert.equal(transfer.serial_id, serial);
+      const destination = (await run(() => db.execute<{ location_id: string }>(sql`
+        select location_id from stock_locations where org_id=${org.orgId} and id=${org.stockLocationId2}`))).rows[0]!;
+      assert.ok(destination.location_id, "the transferred stock must have a business location");
       async function countAndPost(quantity: string, found: boolean) {
         const count = await run(() =>
           createStockCount(org.orgId, actor, {
-            locationId: org.locationId,
+            locationId: destination.location_id,
             subsidiaryId: org.subsidiaryId,
             countedOn: org.date,
             lines: [
@@ -612,7 +628,10 @@ test(
             sql`update inventory_count_policies set variance_tolerance=5 where org_id=${org.orgId} and id=${policy.id}`,
           ),
         ),
-        /immutable/,
+        (error: unknown) => {
+          assert.match(guardRefusalMessage(error) ?? "", /immutable/);
+          return true;
+        },
       );
     } finally {
       await run(() => dropScratchOrg(org.orgId));

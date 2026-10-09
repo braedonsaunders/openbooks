@@ -115,5 +115,6 @@ export { SALES_FULFILLMENT_DOCUMENT_KIND } from './documents-customer-credits.ts
 export { setStockHold } from './stock-holds.ts'
 export { moveConsignment,type ConsignmentInput } from './consignment.ts'
 export { inventoryInquiry,type InventoryInquiry } from './inquiry.ts'
+export { inventoryTrackingOptions,type InventoryTrackingOptions } from './tracking-options.ts'
 export { recordSecondCount } from './second-count.ts'
 export { executeIdempotentInventoryAction } from './action-idempotency.ts'
