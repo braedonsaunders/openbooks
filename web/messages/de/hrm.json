@@ -3441,7 +3441,9 @@
     "plan": "Plan",
     "currency": "Währung",
     "from": "Gültig ab",
-    "to": "Gültig bis"
+    "to": "Gültig bis",
+    "withdrawUnused": "Ungenutzten Schutz zurückziehen",
+    "withdrawUnusedReason": "Grund für den Rückzug (bei Abrechnungshistorie ist ein datierter Nachfolger erforderlich)"
   },
   "benefitPolicies": {
     "title": "Richtlinien",

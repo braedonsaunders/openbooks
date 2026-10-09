@@ -8,6 +8,7 @@ import { seedHourlyPayrollOrg, seedHourlyPayrollEmployee } from '../testing/payr
 import { createPayRun } from './run-lifecycle.ts';
 import { calculatePayRun } from './run-calculation.ts';
 import { mutatePayRunAdjustment } from './run-adjustments.ts';
+import { withdrawUnusedEnrollment } from '../hrm/benefits/enrollments.ts';
 
 test('regular-only benefit premiums exclude supplemental and one-off runs while all-run premiums remain',
   { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
@@ -53,6 +54,10 @@ test('regular-only benefit premiums exclude supplemental and one-off runs while 
           order by rule_id`)).rows;
         assert.deepEqual(new Map(allocations.map(row => [row.rule_id, row.amount])),
           new Map((runType === 'regular' ? ruleIds : ruleIds.slice(1)).map(id => [id, '10.0000'])), runType);
+        await assert.rejects(withdrawUnusedEnrollment({ orgId: fx.orgId, actorId: fx.actorId,
+          enrollmentId, reason: 'Contribution basis correction' }), /payroll allocation history/);
+        assert.equal((await db.execute<{ status: string }>(sql`select status from hrm_benefit_enrollments
+          where org_id=${fx.orgId} and id=${enrollmentId}`)).rows[0]!.status, 'active');
       }
     } finally { await dropScratchOrgReporting(fx.orgId); }
   });

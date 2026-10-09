@@ -851,6 +851,40 @@ export async function cancelEnrollment(query: {
   });
 }
 
+/** Withdraw unused approved coverage without rewriting its submitted evidence. */
+export async function withdrawUnusedEnrollment(query: {
+  readonly orgId: string; readonly actorId: string; readonly enrollmentId: string; readonly reason: string;
+}): Promise<EnrollmentDTO> {
+  const orgId = requireOrgId(query.orgId), actorId = requireActorId(query.actorId);
+  const enrollmentId = requireId(query.enrollmentId, "enrollmentId");
+  const reason = typeof query.reason === "string" ? query.reason.trim() : "";
+  if (!reason) throw new BenefitsError("INVALID_INPUT", "Withdrawing unused coverage needs a reason — describe the correction before replacing the election");
+  return withOrgTransaction(orgId, async () => {
+    await requireHrmBenefitsManage(db, orgId, actorId);
+    await assertHrmEnabled(db, orgId);
+    const subject = await loadEnrollment(db, orgId, enrollmentId);
+    await requireHrmBenefitsManageOnEmployment(db, orgId, actorId, subject.employmentId);
+    await lockEnrollmentPlanAdmission(db, orgId, subject.employmentId, subject.planId);
+    // Match enrollment admission's plan-before-contribution lock ordering.
+    // Calculation cannot add an allocation between usage check and withdrawal.
+    await db.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`openbooks:benefit-recurring:${orgId}`},0))`);
+    await db.execute(sql`select id from hrm_benefit_enrollments where org_id=${orgId} and id=${enrollmentId} for update`);
+    const current = await loadEnrollment(db, orgId, enrollmentId);
+    if (current.status !== "active") throw new BenefitsError("BAD_STATE", "Only active unused coverage can be withdrawn — reload the enrollment and choose its current record action");
+    const used = (await db.execute(sql`select id from pay_run_benefit_allocations where org_id=${orgId} and enrollment_id=${enrollmentId} limit 1`)).rows;
+    if (used.length) throw new BenefitsError("REFUSED", "This coverage has payroll allocation history — preserve it and use a dated successor; discard or recalculate editable payroll before withdrawing unused coverage");
+    const proposals = (await db.execute(sql`select id from hrm_benefit_enrollments where org_id=${orgId} and replaces_enrollment_id=${enrollmentId} and status in ('elected','pending_approval') limit 1`)).rows;
+    if (proposals.length) throw new BenefitsError("REFUSED", "A successor election awaits approval — complete or cancel that proposal before withdrawing unused coverage");
+    await db.execute(sql`select set_config('openbooks.hrm_benefit_withdrawal',${`${orgId}:${enrollmentId}:${actorId}`},true)`);
+    const updated = requireOneRow((await db.execute<Record<string, unknown>>(sql`update hrm_benefit_enrollments
+      set status='cancelled',ended_reason=${reason},updated_by=${actorId},updated_at=now()
+      where org_id=${orgId} and id=${enrollmentId} and status='active' returning ${ENROLLMENT_COLUMNS}`)).rows, "Withdrawing unused benefit coverage");
+    await db.execute(sql`select set_config('openbooks.hrm_benefit_withdrawal','',true)`);
+    await appendEvent(db, orgId, actorId, enrollmentId, "cancelled", `Unused coverage withdrawn: ${reason}`);
+    return toEnrollmentDTO(updated);
+  });
+}
+
 /**
  * Termination hook: ends every live enrolment of the employment in the same
  * transaction the termination change applies in. Rows starting after the

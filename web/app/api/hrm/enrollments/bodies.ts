@@ -56,11 +56,13 @@ export const endEnrollmentBody = z.object({
 });
 
 export const cancelEnrollmentBody = z.object({ action: z.literal("cancel"), reason });
+export const withdrawEnrollmentBody = z.object({ action: z.literal("withdraw_unused"), reason });
 
 export const enrollmentPatchBody = z.discriminatedUnion("action", [
   changeEnrollmentBody,
   endEnrollmentBody,
   cancelEnrollmentBody,
+  withdrawEnrollmentBody,
 ]);
 
 export const linkDependentBody = z.object({

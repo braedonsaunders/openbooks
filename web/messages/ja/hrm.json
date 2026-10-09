@@ -3441,7 +3441,9 @@
     "plan": "プラン",
     "currency": "通貨",
     "from": "適用開始日",
-    "to": "適用終了日"
+    "to": "適用終了日",
+    "withdrawUnused": "未使用の保障を取り消す",
+    "withdrawUnusedReason": "取り消し理由（給与履歴がある保障には日付付きの後継登録が必要です）"
   },
   "benefitPolicies": {
     "title": "方針",

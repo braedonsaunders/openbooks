@@ -3441,7 +3441,9 @@
     "plan": "Régime",
     "currency": "Devise",
     "from": "En vigueur à partir du",
-    "to": "En vigueur jusqu’au"
+    "to": "En vigueur jusqu’au",
+    "withdrawUnused": "Retirer la couverture inutilisée",
+    "withdrawUnusedReason": "Motif du retrait (une couverture avec historique de paie exige une couverture suivante datée)"
   },
   "benefitPolicies": {
     "title": "Politiques",

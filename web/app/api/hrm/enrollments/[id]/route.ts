@@ -5,6 +5,7 @@ import {
   cancelEnrollment,
   changeEnrollment,
   endEnrollment,
+  withdrawUnusedEnrollment,
 } from "@openbooks/engine/src/hrm/benefits/enrollments.ts";
 
 import { isUuid } from "../../../../../lib/list-params";
@@ -42,6 +43,10 @@ export const PATCH = defineRoute({
     };
     try {
       switch (body.action) {
+        case "withdraw_unused": {
+          const enrollment = await withdrawUnusedEnrollment({ ...base, reason: body.reason });
+          return NextResponse.json({ enrollment });
+        }
         case "change": {
           const enrollment = await changeEnrollment({
             ...base,

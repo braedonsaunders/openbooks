@@ -3441,7 +3441,9 @@
     "plan": "计划",
     "currency": "货币",
     "from": "生效起始日",
-    "to": "生效截止日"
+    "to": "生效截止日",
+    "withdrawUnused": "撤销未使用的保障",
+    "withdrawUnusedReason": "撤销原因（已有工资记录的保障须使用注明日期的后续登记）"
   },
   "benefitPolicies": {
     "title": "政策",

@@ -62,6 +62,7 @@ const mockSources = new Map<string, string>([
       export async function changeEnrollment(args) { return record('changed', args) }
       export async function endEnrollment(args) { return record('ended', args) }
       export async function cancelEnrollment(args) { return record('cancelled', args) }
+      export async function withdrawUnusedEnrollment(args) { return record('withdrawn', args) }
     `,
   ],
 ]);
@@ -154,9 +155,22 @@ test("PATCH ends and cancels with reasons", async () => {
 test("PATCH refuses reason-less and dateless bodies with 400", async () => {
   reset();
   assert.equal((await idRoute!.PATCH(patchRequest({ action: "end", reason: "  " }), ctx)).status, 400);
+  assert.equal((await idRoute!.PATCH(patchRequest({ action: "withdraw_unused", reason: "  " }), ctx)).status, 400);
   assert.equal((await idRoute!.PATCH(patchRequest({ action: "change", reason: "x" }), ctx)).status, 400);
   assert.equal((await idRoute!.PATCH(patchRequest({ action: "frobnicate" }), ctx)).status, 400);
   assert.equal(routeState.calls.length, 0, "the service never runs on a rejected boundary");
+});
+
+test("PATCH withdraws unused coverage through the governed service with actor and reason", async () => {
+  reset();
+  const response = await idRoute!.PATCH(patchRequest({ action: "withdraw_unused", reason: "Incorrect contribution basis" }), ctx);
+  assert.equal(response.status, 200);
+  assert.deepEqual(routeState.calls, [{ fn: "withdrawn", args: { orgId: "org-1", actorId: "user-1", enrollmentId: ENROLLMENT_ID, reason: "Incorrect contribution basis" } }]);
+  reset();
+  routeState.serviceThrow = new BenefitsError("REFUSED", "This coverage has payroll allocation history — use a dated successor");
+  const refused = await idRoute!.PATCH(patchRequest({ action: "withdraw_unused", reason: "Incorrect contribution basis" }), ctx);
+  assert.equal(refused.status, 422);
+  assert.match((await refused.json()).error, /payroll allocation history/);
 });
 
 test("PATCH maps a bad-state cancel to 409 with message intact", async () => {
