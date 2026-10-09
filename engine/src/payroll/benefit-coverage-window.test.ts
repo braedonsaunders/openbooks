@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { benefitCoverageWindow } from './benefit-coverage-window.ts';
+import { assertFlatBenefitCoverageUnique, benefitCoverageWindow } from './benefit-coverage-window.ts';
 import { coveredPayrollLines } from './covered-payroll-lines.ts';
 import { parseMoney } from '../money/brands.ts';
 import { sum } from '../money/money.ts';
@@ -37,4 +37,19 @@ test('period-end coverage refuses unsupported bases and unknown policies', () =>
   const args = { ...period, enrollment: point, term: point, rule: { ...rule, hoursCoverage: 'pay_period_end' as const } };
   assert.throws(() => benefitCoverageWindow({ ...args, rule: { ...args.rule, basis: 'per_month' } }), /without a per-hour basis/);
   assert.throws(() => benefitCoverageWindow({ ...args, rule: { ...args.rule, hoursCoverage: 'unknown' as 'earned_dates' } }), /unsupported hours coverage policy/);
+});
+
+test('flat premiums refuse multiple dated elections instead of charging the period twice', () => {
+  const before = { effectiveFrom: '2026-01-01', effectiveTo: '2026-01-09' };
+  const after = { effectiveFrom: '2026-01-10', effectiveTo: null };
+  const contribution = { effectiveFrom: '2026-01-01', effectiveTo: null, ruleKey: 'MEDICAL', basis: 'per_period', proration: 'none', payComponentId: 'premium' };
+  const policies = [before, after].map(window => ({ planId: 'medical', rule: contribution, enrollment: window, term: window }));
+  for (const basis of ['per_period', 'per_month', 'per_year']) {
+    assert.throws(() => assertFlatBenefitCoverageUnique(policies.map(policy => ({ ...policy, rule: { ...policy.rule, basis } })), period.periodStart, period.periodEnd), /multiple covered elections.*pay-period boundary.*calendar-day proration/);
+  }
+  assert.doesNotThrow(() => assertFlatBenefitCoverageUnique(policies, '2026-01-11', '2026-01-17'));
+  assert.doesNotThrow(() => assertFlatBenefitCoverageUnique(policies.map(policy => ({ ...policy, rule: { ...policy.rule, proration: 'calendar_days' } })), period.periodStart, period.periodEnd));
+  assert.doesNotThrow(() => assertFlatBenefitCoverageUnique(policies.map(policy => ({ ...policy, rule: { ...policy.rule, basis: 'per_hour' } })), period.periodStart, period.periodEnd));
+  assert.doesNotThrow(() => assertFlatBenefitCoverageUnique(policies.map((policy, index) => ({ ...policy, planId: `plan-${index}` })), period.periodStart, period.periodEnd));
+  assert.doesNotThrow(() => assertFlatBenefitCoverageUnique(policies.map((policy, index) => ({ ...policy, rule: { ...policy.rule, payComponentId: `component-${index}` } })), period.periodStart, period.periodEnd));
 });
