@@ -43,6 +43,9 @@ export interface CapturedStubLine {
   hours: string | null;
   rate: string | null;
   amount: string;
+  /** Dated earnings provenance retained for wage and allocation review. */
+  earnedFrom: string | null;
+  earnedTo: string | null;
   paymentKind: "cash" | "non_cash";
   nonCashAccountId: string | null;
   projectId: string | null;
@@ -111,6 +114,7 @@ export async function captureCalculatedStubs(
   const rows = (await tx.execute<Record<string, string | number | null>>(sql`
     select s.employee_party_id, s.province, s.gross, s.net_pay, s.employer_cost, s.factors,
            l.component_id, c.system_key, l.kind, l.description, l.hours, l.rate, l.amount, l.payment_kind, l.non_cash_account_id,
+           l.earned_from::text as earned_from, l.earned_to::text as earned_to,
            l.project_id, l.department_id, l.time_type_id, l.item_id,
            l.expense_account_id, l.expense_account_source, l.expense_account_evidence, l.sequence
       from pay_stubs s
@@ -148,6 +152,8 @@ export async function captureCalculatedStubs(
       hours: row.hours == null ? null : String(row.hours),
       rate: row.rate == null ? null : String(row.rate),
       amount: String(row.amount ?? "0"),
+      earnedFrom: row.earned_from == null ? null : String(row.earned_from),
+      earnedTo: row.earned_to == null ? null : String(row.earned_to),
       paymentKind: row.payment_kind === "non_cash" ? "non_cash" : "cash",
       nonCashAccountId: row.non_cash_account_id == null ? null : String(row.non_cash_account_id),
       projectId: row.project_id == null ? null : String(row.project_id),

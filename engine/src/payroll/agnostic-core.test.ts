@@ -629,6 +629,7 @@ test("captured stubs aggregate every line row under one employee", async () => {
       employee_party_id: "e1", province: "ON", gross: "100.00", net_pay: "80.00",
       employer_cost: "110.00", component_id: "c1", system_key: "wages", kind: "earning",
       description: "Wages", hours: "10", rate: "10.00", amount: "100.00",
+      earned_from: "2026-01-05", earned_to: "2026-01-05",
       project_id: null, department_id: null, time_type_id: null, sequence: 1,
     },
     {
@@ -654,6 +655,7 @@ test("captured stubs aggregate every line row under one employee", async () => {
   assert.equal(first.gross, "100.00");
   assert.equal(first.lines.length, 2);
   assert.deepEqual(first.lines.map((l) => l.systemKey), ["wages", "income_tax"]);
+  assert.deepEqual(first.lines.map(l => [l.earnedFrom, l.earnedTo]), [["2026-01-05", "2026-01-05"], [null, null]]);
   const second = stubs[1]!;
   assert.equal(second.employeePartyId, "e2");
   assert.deepEqual(second.lines, [], "a lineless stub exists with no lines");
