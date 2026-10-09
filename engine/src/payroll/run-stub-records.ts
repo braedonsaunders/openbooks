@@ -67,6 +67,8 @@ export interface Line {
   sourceProratedByCoverage?: boolean;
   /** Native one-off input identity distinguishes a top-up from recurring configuration. */
   runAdjustmentId?: string;
+  /** Native claim of an independently approved unpaid holiday entitlement. */
+  holidayAllocationId?: string;
   projectId?: string | null; departmentId?: string | null; timeTypeId?: string | null;
   /** Service item the hours were worked on; only time-driven earning lines
    * carry one. Absent everywhere else — never inferred, never defaulted. */
@@ -369,6 +371,14 @@ export async function insertPayStubLineRows(
       const linked = (await tx.execute(sql`update pay_run_benefit_allocations set pay_stub_line_id=${persisted.id},amount=${line.amount},updated_by=${args.actorId},updated_at=now()
         where org_id=${args.orgId} and id=${line.benefitAllocationId} and status='calculated' returning id`)).rows;
       if (linked.length !== 1) throw new PayrollError('The recurring benefit allocation could not link to its native payroll line — retry calculation before committing');
+    }
+    if (line.holidayAllocationId) {
+      const persisted = insertedLine.rows[0];
+      if (!persisted) throw new PayrollError("The approved holiday payroll line was not stored; retry calculation.");
+      const linked = (await tx.execute(sql`update pay_run_holiday_allocations set pay_stub_line_id=${persisted.id},updated_by=${args.actorId},updated_at=now()
+        where org_id=${args.orgId} and id=${line.holidayAllocationId} and status='calculated'
+          and amount=${line.amount} and hours=${line.hours ?? null} and rate=${line.rate ?? null} returning id`)).rows;
+      if (linked.length !== 1) throw new PayrollError("The approved holiday claim no longer matches its native payroll line; review payroll earning limits and recalculate.");
     }
   }
   return entitlementLineIds;

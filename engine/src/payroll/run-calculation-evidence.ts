@@ -1,5 +1,6 @@
 import { employeeEmployerAssignmentHistory, type EmployerAssignmentSource } from './employer-assignment-history.ts';
 import { compensationPackageRunSource, type CompensationPackageAssignmentSource } from './compensation-package-source.ts';
+import { holidayObligationRunSource, type HolidayObligationSource } from './holiday-obligation-source.ts';
 import { payrollSubsidiaryScopeFilter, type PayrollSubsidiaryScope } from "./scope.ts";
 import { createHash } from "node:crypto";
 import { sql } from "drizzle-orm";
@@ -67,6 +68,7 @@ export interface PayRunCalculationSourceSnapshot {
   }[];
   compensationPackages?: CompensationPackageAssignmentSource[];
   employerAssignments?: EmployerAssignmentSource[];
+  holidayObligations?: HolidayObligationSource[];
   claimEntryIds: string[];
 }
 
@@ -107,7 +109,8 @@ export function parsePayRunCalculationSource(
       || !Array.isArray(snapshot.payRates)
       || !Array.isArray(snapshot.claimEntryIds)
       || (Object.hasOwn(snapshot, 'compensationPackages') && !Array.isArray(snapshot.compensationPackages))
-      || (Object.hasOwn(snapshot, 'employerAssignments') && !Array.isArray(snapshot.employerAssignments))) return null;
+      || (Object.hasOwn(snapshot, 'employerAssignments') && !Array.isArray(snapshot.employerAssignments))
+      || (Object.hasOwn(snapshot, 'holidayObligations') && !Array.isArray(snapshot.holidayObligations))) return null;
   // Snapshots stored before item routing existed carry no itemAccounts; they
   // read as "no mapped items", so the first post-upgrade commit compares
   // honestly and refuses with the items reason instead of a bare selection.
@@ -341,6 +344,7 @@ export async function payRunCalculationSource(
   if (!row?.run_exists) return null;
   const employerAssignments = await employeeEmployerAssignmentHistory(executor, { orgId, payDate: row.pay_date, employeePartyIds: row.employee_party_ids ?? [] });
   const compensationPackages = await compensationPackageRunSource(executor, orgId, documentId, allowedSubsidiaryIds, lockSources);
+  const holidayObligations = await holidayObligationRunSource(executor, orgId, documentId, allowedSubsidiaryIds);
   return {
     version: 1,
     timeEntries: row.time_entries ?? [],
@@ -351,6 +355,7 @@ export async function payRunCalculationSource(
     // approved package obligations; an empty new field would change history.
     ...(compensationPackages.length ? { compensationPackages } : {}),
     ...(employerAssignments.length ? { employerAssignments } : {}),
+    ...(holidayObligations.length ? { holidayObligations } : {}),
     claimEntryIds: row.claim_entry_ids ?? [],
   };
 }
@@ -358,13 +363,14 @@ export async function payRunCalculationSource(
 export function payRunCalculationSourceChanges(
   stored: PayRunCalculationSourceSnapshot,
   current: PayRunCalculationSourceSnapshot,
-): { time: boolean; timeTypes: boolean; wages: boolean; items: boolean; compensationPackages: boolean; roster: boolean } {
+): { time: boolean; timeTypes: boolean; wages: boolean; items: boolean; compensationPackages: boolean; holidayObligations: boolean; roster: boolean } {
   return {
     time: canonicalJson(stored.timeEntries) !== canonicalJson(current.timeEntries)
       || canonicalJson(stored.claimEntryIds) !== canonicalJson(current.claimEntryIds),
     timeTypes: canonicalJson(stored.timeTypes) !== canonicalJson(current.timeTypes),
     wages: canonicalJson(stored.payRates) !== canonicalJson(current.payRates),
     compensationPackages: canonicalJson(stored.compensationPackages ?? []) !== canonicalJson(current.compensationPackages ?? []),
+    holidayObligations: canonicalJson(stored.holidayObligations ?? []) !== canonicalJson(current.holidayObligations ?? []),
     roster: canonicalJson(stored.employerAssignments ?? []) !== canonicalJson(current.employerAssignments ?? []),
     items: canonicalJson(stored.itemAccounts ?? []) !== canonicalJson(current.itemAccounts ?? []),
   };

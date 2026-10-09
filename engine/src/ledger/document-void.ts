@@ -1393,7 +1393,7 @@ export async function completeRequestedDocumentVoid(
         await releaseVendorBillProvenance(tx, orgId, documentId, { actorId: String(doc.void_requested_by), reason: String(doc.void_reason) });
       }
       if (String(doc.kind) === "pay_run") {
-        await releaseVoidedPayRun(tx, orgId, documentId);
+        await releaseVoidedPayRun(tx, orgId, documentId, String(doc.void_requested_by));
       }
       // A voided child returns its conversion/capture cover to the source
       // order lines, so the remainder is convertible and billable again. A
@@ -1506,6 +1506,7 @@ async function releaseVoidedPayRun(
   tx: Pick<typeof db, "execute">,
   orgId: string,
   documentId: string,
+  actorId: string,
 ): Promise<void> {
   // A posted remittance bill is an AP payment obligation backed by this
   // run's accrued liabilities. Refuse the source void until that bill is
@@ -1559,7 +1560,7 @@ async function releaseVoidedPayRun(
 
   const run = (await tx.execute<{ document_id: string }>(sql`
     update pay_runs
-       set run_status = 'voided', updated_at = now()
+       set run_status = 'voided', updated_at = now(), updated_by = ${actorId}
      where org_id = ${orgId} and document_id = ${documentId}
        and run_status <> 'voided'
      returning document_id

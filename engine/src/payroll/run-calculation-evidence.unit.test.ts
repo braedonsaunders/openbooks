@@ -12,6 +12,36 @@ const snapshot = (): PayRunCalculationSourceSnapshot => ({
   version: 1, timeEntries: [], timeTypes: [], payRates: [], itemAccounts: [], claimEntryIds: [],
 });
 
+test("approved holiday ownership, source, wage and foreign payment claims invalidate a calculated run", () => {
+  const legacy = snapshot();
+  assert.equal(payRunCalculationSourceChanges(legacy, { ...legacy, holidayObligations: [] }).holidayObligations, false);
+  const obligation: NonNullable<PayRunCalculationSourceSnapshot["holidayObligations"]>[number] = {
+    id: "10000000-0000-4000-8000-000000000001", employeePartyId: "10000000-0000-4000-8000-000000000002",
+    employmentId: "10000000-0000-4000-8000-000000000003", subsidiaryId: "10000000-0000-4000-8000-000000000004",
+    paymentDate: "2026-01-16", foreignClaim: null, component: { id: "native-stat", taxable: true }, profile: { country: "CA", province: "ON" },
+    evidence: { instruction: {
+      employeePartyId: "10000000-0000-4000-8000-000000000002", holidayDates: ["2025-12-25", "2025-12-26", "2026-01-01"],
+      hours: "24.00", assessedOn: "2026-01-10", wageBasisDate: "2026-01-10", paymentDate: "2026-01-16",
+      instructionKey: "owed-holidays", sourceReference: "Approved payroll instruction", sourceDigest: "a".repeat(64),
+    }, source: { fileId: "10000000-0000-4000-8000-000000000005", versionId: "10000000-0000-4000-8000-000000000006", versionNumber: 1, contentHash: "a".repeat(64) } },
+    wage: { resolved: { rate: "45", annualHours: "2080", basis: "hour", currency: "CAD", payrollRateScale: 2, payrollAmountRounding: "dimension_group" }, source: { id: "dated-wage" }, fx: null },
+  };
+  const calculated = { ...snapshot(), holidayObligations: [obligation] };
+  assert.equal(payRunCalculationSourceChanges(legacy, calculated).holidayObligations, true);
+  for (const replacement of [
+    { ...obligation, foreignClaim: { id: "other-claim", documentId: "other-payroll", status: "committed" } },
+    { ...obligation, wage: { ...obligation.wage!, resolved: { ...obligation.wage!.resolved, rate: "46" } } },
+    { ...obligation, evidence: { ...obligation.evidence, source: { ...obligation.evidence.source, versionNumber: 2 } } },
+    { ...obligation, component: { ...obligation.component, taxable: false } },
+  ]) {
+    const changed = { ...snapshot(), holidayObligations: [replacement] };
+    assert.equal(payRunCalculationSourceChanges(calculated, changed).holidayObligations, true);
+    assert.notEqual(payRunCalculationSourceDigest(calculated), payRunCalculationSourceDigest(changed));
+  }
+  assert.equal(payRunCalculationSourceChanges(calculated, legacy).holidayObligations, true);
+  for (const malformed of [null, false, "[]", {}]) assert.equal(parsePayRunCalculationSource({ ...snapshot(), holidayObligations: malformed }), null);
+});
+
 test("stored calculation evidence accepts the supported version and preserves routing evidence", () => {
   const value = snapshot();
   value.itemAccounts.push({ id: "service-item", payrollExpenseAccountId: "expense-account", updatedAt: "2026-09-20" });
@@ -40,7 +70,7 @@ test("legacy evidence without item routing reads as empty and detects later rout
   assert.deepEqual(parsed.itemAccounts, []);
   const current = snapshot();
   current.itemAccounts.push({ id: "item", payrollExpenseAccountId: "expense", updatedAt: "2026-09-20" });
-  assert.deepEqual(payRunCalculationSourceChanges(parsed, current), { time: false, timeTypes: false, wages: false, items: true, compensationPackages: false, roster: false });
+  assert.deepEqual(payRunCalculationSourceChanges(parsed, current), { time: false, timeTypes: false, wages: false, items: true, compensationPackages: false, holidayObligations: false, roster: false });
 });
 
 test("canonical evidence ignores object key order but preserves array order and values", () => {
