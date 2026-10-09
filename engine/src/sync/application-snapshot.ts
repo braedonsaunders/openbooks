@@ -58,6 +58,24 @@ export function applicationTransaction(client: PoolClient): SqlExecutor {
   };
 }
 
+/** Keep replay posting flags inside the native FX posting boundary. Allocation
+ * inserts still run with the ordinary endpoint and exact settlement guards. */
+export async function postSourceSettlementEntry(
+  client: PoolClient,
+  input: Parameters<typeof postEntry>[1],
+): Promise<Awaited<ReturnType<typeof postEntry>>> {
+  const replay = (await client.query<{ allowed: boolean; migration: string | null }>(
+    "select connector_historical_replay_authorized($1) as allowed,current_setting('openbooks.migration',true) as migration",
+    [input.orgId],
+  )).rows[0];
+  if (replay?.allowed) await client.query("select set_config('openbooks.migration','on',true)");
+  // A posting refusal aborts the surrounding transaction; do not replace its
+  // original cause with an attempted command on that aborted transaction.
+  const posted = await postEntry(applicationTransaction(client), input);
+  if (replay?.allowed) await client.query("select set_config('openbooks.migration',$1,true)", [replay.migration ?? 'off']);
+  return posted;
+}
+
 /** Only connector-owned application evidence may follow an authoritative snapshot.
  * Legacy migration-labelled, actorless applications retain their imported provenance.
  * Legacy unstamped documents require one unambiguous connection, matching the
@@ -221,7 +239,7 @@ export async function releaseSourceApplications(
       `select ${columns} from journal_lines where org_id=$1 and entry_id=$2 order by line_number`, [orgId, entryId],
     )).rows;
     if (!lines.length) throw new Error("source settlement FX journal has no lines");
-    await postEntry(runner, {
+    await postSourceSettlementEntry(client, {
       orgId, bookId: entry.book_id, subsidiaryId: entry.subsidiary_id,
       entryNumber: await nextEntryNumber(`${entry.entry_number}-RELEASE`),
       postingDate: entry.posting_date, periodId: entry.period_id,

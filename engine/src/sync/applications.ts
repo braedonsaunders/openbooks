@@ -1,13 +1,12 @@
 import { sql, type SQL } from "drizzle-orm";
 import { PgDialect } from "drizzle-orm/pg-core";
 import type { PoolClient } from "pg";
-import { db, pool, type SqlExecutor } from "../platform/db.ts";
-import { postEntry } from "../journal/post-entry.ts";
+import { db, pool } from "../platform/db.ts";
 import { divRate, fromUnits, mulRate, toUnits } from "../money/money.ts";
 import { lockApplicationEvidenceWithQuery } from "../records/application-lock.ts";
 import type { SourceApplicationLink } from "./source.ts";
 import {
-  releaseSourceApplications, sourceApplicationEvidence, sourceConnectionDocumentPredicate,
+  releaseSourceApplications, sourceApplicationEvidence, postSourceSettlementEntry, sourceConnectionDocumentPredicate,
   type CompleteApplicationSnapshot,
 } from "./application-snapshot.ts";
 
@@ -732,14 +731,7 @@ export async function reconcileApplications(
       // connection and transaction: drizzle statements are rendered to
       // text/params through the file's PgDialect, so the posting lock,
       // guards, line insert, and flip all share the batch's unit.
-      const runner = {
-        execute: (async (statement: SQL) => {
-          const rendered = applicationLockDialect.sqlToQuery(statement);
-          const result = await client.query(rendered.sql, rendered.params);
-          return { rows: result.rows };
-        }) as unknown as SqlExecutor["execute"],
-      };
-      const postedFx = await postEntry(runner, {
+      const postedFx = await postSourceSettlementEntry(client, {
         orgId,
         bookId: first.bookId,
         subsidiaryId: first.subsidiaryId,

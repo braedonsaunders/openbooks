@@ -1751,3 +1751,40 @@ test("historical source settlement replay requires the active owning connection 
     assert.equal((await db.execute(sql`select id from connector_replay_authorizations where org_id=${org.orgId}`)).rows.length,1);
   } finally { await dropScratchOrg(org.orgId); }
 });
+
+
+test("authenticated source settlement replay reverses and replaces FX evidence without relaxing allocation guards", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const snapshot = await completeSnapshotFixture(org);
+    await snapshotDoc(org,"payment","120",{currency:"EUR",txnAmount:"100",fxRate:"1.2"});
+    await snapshotDoc(org,"bill","-110",{currency:"EUR",txnAmount:"-100",fxRate:"1.1"});
+    const original=[{paymentRef:"payment",appliedRef:"bill",amount:"100",currency:"EUR"}];
+    await reconcileApplications(org.orgId,"nsId",original);
+    const before=await settlementSnapshot(org.orgId);
+    const actorId=await createScratchUser(org.orgId,"FX Settlement Controller","admin");
+    const runId=randomUUID();
+    await db.execute(sql`update connections set posted_change_policy='append_only_automatic',
+      posted_change_authorized_by=${actorId},posted_change_authorized_at=now()-interval '1 minute'
+      where org_id=${org.orgId} and id=${snapshot.connectionId}`);
+    await db.execute(sql`insert into sync_runs(id,org_id,connection_id,source,kind,status,triggered_by)
+      values(${runId},${org.orgId},${snapshot.connectionId},'netsuite','incremental','running',${actorId})`);
+    await db.execute(sql`insert into period_locks(org_id,period_id,book_id,subsidiary_id,module,state,reason)
+      values(${org.orgId},${org.periodId},${org.bookId},null,'ar','closed','Controller close'),
+        (${org.orgId},${org.periodId},${org.bookId},null,'gl','closed','Controller close')`);
+    const result=await reconcileApplications(org.orgId,"nsId",[{...original[0]!,amount:"50"}],{...snapshot,syncRunId:runId});
+    assert.equal(result.released,1);
+    assert.equal(result.insertedAmount,"55.0000");
+    const after=await settlementSnapshot(org.orgId);
+    assert.ok(after.find(row=>row.id===before[0]!.id)?.unapplied_at);
+    const active=after.filter(row=>row.unapplied_at===null);
+    assert.equal(active.length,1);
+    assert.equal(active[0]!.source_amount,"60.0000");
+    assert.notEqual(active[0]!.fx_gain_loss_entry_id,before[0]!.fx_gain_loss_entry_id);
+    const reversed=(await db.execute<{status:string}>(sql`select status from journal_entries where org_id=${org.orgId} and id=${before[0]!.fx_gain_loss_entry_id}`)).rows[0]!;
+    assert.equal(reversed.status,"reversed");
+    const replay=await reconcileApplications(org.orgId,"nsId",[{...original[0]!,amount:"50"}],{...snapshot,syncRunId:runId});
+    assert.equal(replay.released,0);assert.equal(replay.inserted,0);
+    assert.deepEqual(await settlementSnapshot(org.orgId),after);
+  } finally { await dropScratchOrg(org.orgId); }
+});
