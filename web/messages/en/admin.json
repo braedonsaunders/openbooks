@@ -4074,7 +4074,12 @@
       "match": "Match",
       "dayPolicyKnown": "Working-day hours are configured",
       "showHoursColumn": "Show booked hour column",
-      "distributionVisibility": "Schedule report sharing"
+      "distributionVisibility": "Schedule report sharing",
+      "purpose": "Purpose",
+      "autonomy": "Declared review level",
+      "boardId": "Schedule board",
+      "resourceLocationId": "Resource location",
+      "partyId": "Contact"
     },
     "fieldHelp": {
       "fxRateMaxAgeDays": "Days between the newest usable rate and the period end beyond which revaluation and consolidation refuse the rate. Closing rates count from the date of the period-end spot rate; average rates from the newest quote averaged. Default when no policy is set: 31 days.",

@@ -3999,7 +3999,12 @@
       "match": "Correspondance",
       "dayPolicyKnown": "Les horaires de la journée sont configurés",
       "showHoursColumn": "Show booked hour column",
-      "distributionVisibility": "Schedule report sharing"
+      "distributionVisibility": "Schedule report sharing",
+      "purpose": "Objet",
+      "autonomy": "Niveau de révision déclaré",
+      "boardId": "Tableau de planification",
+      "resourceLocationId": "Emplacement de la ressource",
+      "partyId": "Contact"
     },
     "fieldHelp": {
       "fxRateMaxAgeDays": "Nombre de jours entre le taux utilisable le plus récent et la fin de période au-delà duquel la réévaluation et la consolidation refusent le taux. Les taux de clôture se comptent depuis la date du taux comptant de fin de période ; les taux moyens depuis la cotation la plus récente incluse dans la moyenne. Valeur par défaut sans politique : 31 jours.",

@@ -4,6 +4,7 @@ import { sql } from 'drizzle-orm';
 import {
   scheduleDistributionEmail,
   normalizeEmailDeliveryInput,
+  isValidEmailAddress,
   type ScheduleEmailLine,
 } from '@openbooks/emails';
 import { db, withOrgTransaction } from '../platform/db.ts';
@@ -194,18 +195,7 @@ async function preview(
       continue;
     }
     const email = party.email?.trim() ?? null;
-    let validEmail = Boolean(email);
-    if (email)
-      try {
-        normalizeEmailDeliveryInput({
-          to: email,
-          subject: 'Schedule',
-          html: '',
-          text: '',
-        });
-      } catch {
-        validEmail = false;
-      }
+    const validEmail = email !== null && isValidEmailAddress(email);
     if (!validEmail)
       refusals.push(
         `${party.name}: enter a valid email on the native person/contact record.`,

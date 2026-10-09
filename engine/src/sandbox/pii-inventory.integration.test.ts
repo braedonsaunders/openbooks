@@ -953,6 +953,7 @@ const ALLOW_LISTED_NON_PERSONAL: ReadonlySet<string> = new Set([
   "hrm_benefit_contribution_rules.basis",
   "hrm_benefit_contribution_rules.rate_formula",
   "hrm_benefit_contribution_rules.hours_basis",
+  "hrm_benefit_contribution_rules.hours_coverage",
   "hrm_benefit_contribution_rules.pay_basis",
   "hrm_benefit_contribution_rules.proration",
   "hrm_benefit_contribution_rules.run_applicability",

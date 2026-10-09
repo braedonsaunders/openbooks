@@ -4074,7 +4074,12 @@
       "match": "匹配",
       "dayPolicyKnown": "已配置工作日时间",
       "showHoursColumn": "Show booked hour column",
-      "distributionVisibility": "Schedule report sharing"
+      "distributionVisibility": "Schedule report sharing",
+      "purpose": "用途",
+      "autonomy": "声明的审核级别",
+      "boardId": "排程看板",
+      "resourceLocationId": "资源位置",
+      "partyId": "联系人"
     },
     "fieldHelp": {
       "fxRateMaxAgeDays": "最新可用汇率距期末的天数超过此值时，重估和合并将拒绝该汇率。期末汇率从期末即期汇率的日期起算；平均汇率从计入平均的最新报价日期起算。未设置政策时的默认值：31 天。",

@@ -4127,7 +4127,12 @@
       "match": "Vergleich",
       "dayPolicyKnown": "Arbeitstag ist konfiguriert",
       "showHoursColumn": "Show booked hour column",
-      "distributionVisibility": "Schedule report sharing"
+      "distributionVisibility": "Schedule report sharing",
+      "purpose": "Zweck",
+      "autonomy": "Deklarierte Prüfstufe",
+      "boardId": "Planungstafel",
+      "resourceLocationId": "Ressourcenstandort",
+      "partyId": "Kontakt"
     },
     "fieldHelp": {
       "fxRateMaxAgeDays": "Tage zwischen dem neuesten verwendbaren Kurs und dem Periodenende, ab denen Bewertung und Konsolidierung den Kurs ablehnen. Stichtagskurse zählen ab dem Datum des Kassakurses zum Periodenende, Durchschnittskurse ab der neuesten einbezogenen Notierung. Standard ohne Richtlinie: 31 Tage.",

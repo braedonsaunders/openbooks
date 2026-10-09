@@ -6,6 +6,12 @@ stubModules({ navigation: true })
 import { bootJsdomEnvironment } from '../../testing/jsdom-env'
 import { scheduleWindow } from '../../testing/schedule-window'
 await bootJsdomEnvironment({ event: 'jsdom' })
+Object.assign(globalThis, {
+  location: window.location,
+  history: window.history,
+  addEventListener: window.addEventListener.bind(window),
+  removeEventListener: window.removeEventListener.bind(window),
+})
 const React = await import('react')
 Object.assign(globalThis, { React })
 const { createRoot } = await import('react-dom/client'),
