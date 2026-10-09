@@ -1513,13 +1513,25 @@ export class NetSuiteSource implements MigrationSource {
     // headers are incremental; an omitted link must never be interpreted as
     // a release from a partial pull. Voiding journals remain real payment
     // links, while the original bill links may become zero or disappear.
-    const partition = {
-      id: "applications",
-      sql: "SELECT n.previousdoc, n.previousline, n.nextdoc, n.nextline, n.foreignamount, BUILTIN.DF(t.currency) AS paycurrency, t.exchangerate AS payexrate FROM nexttransactionlinelink n JOIN transaction t ON t.id = n.nextdoc WHERE n.linktype = 'Payment' ORDER BY n.previousdoc, n.previousline, n.nextdoc, n.nextline",
+    const countQuery = "SELECT COUNT(*) AS n FROM nexttransactionlinelink n JOIN transaction t ON t.id=n.nextdoc WHERE n.linktype='Payment'";
+    const readCount = async () => {
+      const rows = await this.q<{ n: string }>(countQuery);
+      const count = Number(rows[0]?.n);
+      if (rows.length !== 1 || !Number.isSafeInteger(count) || count < 0) {
+        throw new Error("NetSuite application graph count is unavailable; settlements were not reconciled");
+      }
+      return count;
     };
-    const exported = await this.bridge.bulkQuery<NsApplicationLink>([partition]);
-    const links = exported.get(partition.id);
-    if (!links) throw new Error("NetSuite application export is incomplete; settlements were not reconciled");
+    const count = await readCount();
+    // The existing synchronous SuiteQL endpoint returns every ordered page.
+    // Counts on both sides refuse truncation or a changing source graph;
+    // allocation reconciliation does not require an asynchronous export task.
+    const links = await this.q<NsApplicationLink>(
+      "SELECT n.previousdoc, n.previousline, n.nextdoc, n.nextline, n.foreignamount, BUILTIN.DF(t.currency) AS paycurrency, t.exchangerate AS payexrate FROM nexttransactionlinelink n JOIN transaction t ON t.id = n.nextdoc WHERE n.linktype = 'Payment' ORDER BY n.previousdoc, n.previousline, n.nextdoc, n.nextline",
+    );
+    if (links.length !== count || await readCount() !== count) {
+      throw new Error("NetSuite application graph is incomplete or changed during reading; settlements were not reconciled");
+    }
     const applications = toSourceApplicationLinks(links, this.baseCurrency);
 
     // Pull deletion tombstones without attaching code to transaction saves.
