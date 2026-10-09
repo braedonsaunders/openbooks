@@ -121,6 +121,12 @@ async function mountCounts(t: TestContext, props: Record<string, unknown>): Prom
       const behavior = script.postBehavior.shift() ?? 'ok'
       if (behavior === 'fail') throw new TypeError('fetch failed')
       if (behavior instanceof Response) return behavior
+      if (url === '/api/inventory/execution') {
+        const body=script.postBodies.at(-1)!
+        if (body.action==='confirm') return Response.json({status:'done',taskId:LINE_ID,result:{},replayed:true})
+        return Response.json({task:{id:LINE_ID,stage:'count',status:'open',itemLabel:'W-1',binCode:'BIN-1',
+          quantity:body.quantity,unit:null,baseQuantity:body.quantity,lotNumber:null,serialNumber:null,barcodeScanning:false}})
+      }
       // The replay returns the ORIGINAL count id — the retry must surface
       // that same id, never a second count.
       return Response.json({ ok: true, replayed: script.postBodies.length > 1, id: COUNT_ID })
@@ -258,7 +264,7 @@ test('changing the create inputs after a failure rotates the retry identity', as
   assert.notEqual(third!.idempotencyKey, first!.idempotencyKey, 'an input change must rotate the retry identity')
 })
 
-test('a lost record response retried with the same quantity reuses the step key', async (t) => {
+test('a lost count suggestion response reuses its command key and confirmation reuses its task', async (t) => {
   await mountCounts(
     t,
     baseProps({
@@ -289,17 +295,23 @@ test('a lost record response retried with the same quantity reuses the step key'
     await tick()
   })
   await tick()
-  // Record commits server-side but the response is lost in transport; the
-  // operator presses Save again with the same quantity.
+  // Preparing the observation commits server-side but the response is lost;
+  // the operator presses Save again with the same quantity.
   script.postBehavior.push('fail', 'ok')
   await clickButtonNamed('Save')
   await clickButtonNamed('Save')
   assert.equal(script.postBodies.length, 2, 'two saves must fire exactly two requests')
-  const [first, retry] = script.postBodies as Array<{ action: string; idempotencyKey: string; countedQuantity: string }>
-  assert.equal(first!.action, 'record')
-  assert.ok(first!.idempotencyKey, 'the record step must carry a retry identity')
-  assert.equal(retry!.idempotencyKey, first!.idempotencyKey, 'the retry must reuse the step key, not mint a new one')
-  assert.equal(retry!.countedQuantity, '7', 'the retry must replay the same counted quantity')
+  const [first, retry] = script.postBodies as Array<{ action: string; commandKey: string; quantity: string }>
+  assert.equal(first!.action, 'count')
+  assert.ok(first!.commandKey, 'the observation suggestion must carry a retry identity')
+  assert.equal(retry!.commandKey, first!.commandKey, 'the retry must reuse the command key, not mint a new one')
+  assert.equal(retry!.quantity, '7', 'the retry must replay the same counted quantity')
+  script.postBehavior.push('fail','ok')
+  await clickButtonNamed('Confirm')
+  await clickButtonNamed('Confirm')
+  assert.equal(script.postBodies.length,4)
+  assert.equal(script.postBodies[2]!.action,'confirm')
+  assert.equal(script.postBodies[3]!.taskId,script.postBodies[2]!.taskId,'a lost count confirmation retries the exact task')
 })
 
 test('a refused create names the server reason and a 502 names the translated fallback', async (t) => {

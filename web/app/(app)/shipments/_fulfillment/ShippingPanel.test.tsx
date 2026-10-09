@@ -21,8 +21,15 @@ async function mount(draft: boolean) {
     const url = String(input)
     if (init?.method === 'POST') {
       writes.push(url)
+      if (url === '/api/shipping/rates') {
+        const body = JSON.parse(String(init.body))
+        assert.equal(body.handlingUnitId, 'unit-A', 'the quote must identify the selected packed carton')
+      }
       return Response.json({ quote: { accountName: 'Test carrier', rates: [{ providerRateId: 'rate-a', carrier: 'Carrier', service: 'Ground', amount: '21.05', currency: 'USD', deliveryDate: null, deliveryDays: 2, badges: [] }] } })
     }
+    if (url.includes('/api/shipping/handling-units')) return Response.json({units:['A','B'].map(suffix=>({
+      id:`unit-${suffix}`,code:`BOX-${suffix}`,status:'packed',binId:'bin-a',binCode:'A1',version:'1',lines:[],
+    })),bins:[]})
     return Response.json({ labels: ['A', 'B'].map(suffix => ({ id: `label-${suffix}`, carrier: 'Carrier', service: 'Ground', trackingNumber: `TRACK-${suffix}`, trackingStatus: 'in_transit', status: 'purchased', amountMinor: '2105', currency: 'USD', hasFile: true, labelUrl: null, events: [{ id: `event-${suffix}`, status: 'in_transit', detail: `Scan ${suffix}`, occurredAt: '2026-10-05' }] })) })
   }) as typeof fetch
   const host = document.createElement('div')
