@@ -20,6 +20,7 @@ export interface FlowApprovalReleaseArgs {
   subjectId: string;
   outcome: "approved" | "rejected";
   comment?: string | null;
+  approvalRunId?: string;
   ctx: FlowExecCtx;
 }
 
