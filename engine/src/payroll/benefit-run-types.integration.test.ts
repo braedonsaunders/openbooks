@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import test from 'node:test';
 import { sql } from 'drizzle-orm';
+import { cmp } from '../money/money.ts';
 import { db } from '../platform/db.ts';
 import { dropScratchOrgReporting } from '../testing/fixtures.ts';
 import { seedHourlyPayrollOrg, seedHourlyPayrollEmployee } from '../testing/payroll-hourly-fixture.ts';
@@ -57,6 +58,31 @@ test('regular-only benefit premiums exclude supplemental and one-off runs while 
           order by rule_id`)).rows;
         assert.deepEqual(new Map(allocations.map(row => [row.rule_id, row.amount])),
           new Map((runType === 'regular' ? ruleIds : ruleIds.slice(1)).map(id => [id, '10.0000'])), runType);
+        if (runType === 'regular') {
+          const premium = (await db.execute<{ id: string }>(sql`select id from pay_components
+            where org_id=${fx.orgId} and code='REGULAR_PREMIUM'`)).rows[0]!;
+          for (const amount of ['25', '0']) {
+            const replacement = randomUUID();
+            await mutatePayRunAdjustment({ orgId: fx.orgId, actorId: fx.actorId, documentId: run.documentId,
+              reason: 'Approved one-off premium replacement',
+              mutation: { action: 'add', employeePartyId: partyId, componentId: premium.id, amount,
+                replaceComponent: true, idempotencyKey: replacement } });
+            assert.deepEqual((await calculatePayRun({ orgId: fx.orgId, actorId: fx.actorId, documentId: run.documentId })).errors, []);
+            const replacedAllocations = (await db.execute<{ rule_id: string; amount: string }>(sql`select rule_id,amount::text
+              from pay_run_benefit_allocations where org_id=${fx.orgId} and pay_run_document_id=${run.documentId}`)).rows;
+            assert.deepEqual(new Map(replacedAllocations.map(row => [row.rule_id, row.amount])), new Map([[ruleIds[1], '10.0000']]));
+            const premiumTotal = (await db.execute<{ amount: string }>(sql`select coalesce(sum(l.amount),0)::text as amount
+              from pay_stub_lines l join pay_stubs s on s.org_id=l.org_id and s.id=l.stub_id
+              where l.org_id=${fx.orgId} and s.pay_run_document_id=${run.documentId} and l.component_id=${premium.id}`)).rows[0]!;
+            assert.equal(cmp(premiumTotal.amount, amount), 0);
+            await mutatePayRunAdjustment({ orgId: fx.orgId, actorId: fx.actorId, documentId: run.documentId,
+              mutation: { action: 'delete', adjustmentId: replacement } });
+          }
+          assert.deepEqual((await calculatePayRun({ orgId: fx.orgId, actorId: fx.actorId, documentId: run.documentId })).errors, []);
+          const restoredAllocations = (await db.execute<{ rule_id: string; amount: string }>(sql`select rule_id,amount::text
+            from pay_run_benefit_allocations where org_id=${fx.orgId} and pay_run_document_id=${run.documentId}`)).rows;
+          assert.deepEqual(new Map(restoredAllocations.map(row => [row.rule_id, row.amount])), new Map(ruleIds.map(id => [id, '10.0000'])));
+        }
         await assert.rejects(withdrawUnusedEnrollment({ orgId: fx.orgId, actorId: fx.actorId,
           enrollmentId, reason: 'Contribution basis correction' }), /payroll allocation history/);
         assert.equal((await db.execute<{ status: string }>(sql`select status from hrm_benefit_enrollments

@@ -382,7 +382,7 @@ export async function calculateStub(
   });
   const regularCashLines = lines.slice();
   const recurringBenefitInput: Omit<Parameters<typeof appendRecurringBenefitLines>[1], "stage"> = {
-    orgId, actorId, documentId, employmentId, employeePartyId, regularCashLines,
+    orgId, actorId, documentId, employmentId, employeePartyId, regularCashLines, replacedComponentIds,
     subsidiaryId: ctx.runContext.subsidiaryId ?? null, currency: run.doc_currency!, country,
     periodStart: run.period_start!, periodEnd: run.period_end!, periodsPerYear: P,
     hourlyWage: payRate ? payrollHourlyWage(payRate) : null,
