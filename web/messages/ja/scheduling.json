@@ -356,7 +356,9 @@
       "style": "表示スタイル",
       "accentColor": "アクセントカラー",
       "showLegend": "予定の色凡例を表示",
-      "shadeWeekends": "設定された週末に網掛けを表示"
+      "shadeWeekends": "設定された週末に網掛けを表示",
+      "colorTreatment": "色の表示",
+      "colorIntensity": "色の濃度 (%)"
     },
     "pdfOptions": {
       "paperSize": {
@@ -381,6 +383,10 @@
       "style": {
         "modern": "モダン",
         "classic": "クラシック"
+      },
+      "colorTreatment": {
+        "subtle": "控えめなアクセント",
+        "strong": "濃い背景色"
       }
     }
   }

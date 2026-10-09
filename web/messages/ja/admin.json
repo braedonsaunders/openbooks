@@ -4180,7 +4180,9 @@
       "schedulePdfStyle": "表示スタイル",
       "schedulePdfAccent": "アクセントカラー",
       "schedulePdfLegend": "予定の色凡例を表示",
-      "schedulePdfWeekends": "設定された週末に網掛けを表示"
+      "schedulePdfWeekends": "設定された週末に網掛けを表示",
+      "schedulePdfColorTreatment": "色の表示",
+      "schedulePdfColorIntensity": "色の濃度 (%)"
     },
     "fieldHelp": {
       "fxRateMaxAgeDays": "使用可能な最新レートから期末までの日数がこれを超えると、再評価と連結はそのレートを拒否します。期末レートは期末スポットレートの日付から、平均レートは平均に含まれる最新の相場の日付から数えます。ポリシー未設定時の既定値: 31日。",
@@ -5143,6 +5145,10 @@
       "schedulePdfStyle": {
         "modern": "モダン",
         "classic": "クラシック"
+      },
+      "schedulePdfColorTreatment": {
+        "subtle": "控えめなアクセント",
+        "strong": "濃い背景色"
       }
     },
     "invoicing": {

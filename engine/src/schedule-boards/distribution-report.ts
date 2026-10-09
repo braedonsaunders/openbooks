@@ -27,6 +27,8 @@ export function schedulePdfInput(
     style: "modern",
     showLegend: true,
     shadeWeekends: true,
+    colorTreatment: "subtle",
+    colorIntensity: 8,
   };
   const days: string[] = [];
   for (
@@ -85,9 +87,9 @@ export function schedulePdfInput(
       columnWeights: [2.5, ...section.map(() => 1)],
       align: ["left", ...section.map(() => "center" as const)],
       columnStyles: [
-        { body: { bold: true, backgroundColor: "#f1f5f9", textColor: "#0f172a" } },
+        { body: { bold: (layout.style ?? 'modern') !== 'modern', backgroundColor: (layout.style ?? 'modern') === 'modern' ? '#ffffff' : "#f1f5f9", textColor: "#0f172a" } },
         ...section.map(date => (preview.weekendDays ?? [0, 6]).includes(new Date(`${date}T12:00:00Z`).getUTCDay()) && layout.shadeWeekends !== false
-          ? { header: { backgroundColor: (layout.style ?? "modern") === "modern" ? "#334155" : "#e2e8f0" }, body: { backgroundColor: "#f1f5f9" } }
+          ? { header: { backgroundColor: "#e2e8f0" }, body: { backgroundColor: "#f1f5f9" } }
           : {}),
       ],
       rows: subjects.map((subject) => [
@@ -110,6 +112,8 @@ export function schedulePdfInput(
     generatedAt: new Date(preview.generatedAt),
     branding: { orgName: preview.organizationName, ...(layout.accentColor ? { primaryColor: layout.accentColor } : {}) },
     design: layout.style ?? "modern",
+    colorTreatment: layout.colorTreatment ?? "subtle",
+    colorIntensity: layout.colorIntensity ?? 8,
     ...(layout.showLegend !== false && legend.size ? { legend: {
       title: `Assignment colors · board configuration${colorKeys.length > 12 ? ` · ${colorKeys.length - 12} additional colors shown in cells` : ''}`,
       items: legendItems,

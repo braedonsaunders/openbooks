@@ -4052,7 +4052,9 @@
       "schedulePdfStyle": "Estilo visual",
       "schedulePdfAccent": "Color de acento",
       "schedulePdfLegend": "Mostrar leyenda de colores",
-      "schedulePdfWeekends": "Sombrear los fines de semana configurados"
+      "schedulePdfWeekends": "Sombrear los fines de semana configurados",
+      "schedulePdfColorTreatment": "Tratamiento del color",
+      "schedulePdfColorIntensity": "Intensidad del tinte (%)"
     },
     "fieldHelp": {
       "fxRateMaxAgeDays": "Días entre el tipo utilizable más reciente y el cierre del período a partir de los cuales la revaluación y la consolidación rechazan el tipo. Los tipos de cierre se cuentan desde la fecha del tipo al contado de cierre; los promedio, desde la cotización más reciente promediada. Valor predeterminado sin política: 31 días.",
@@ -5015,6 +5017,10 @@
       "schedulePdfStyle": {
         "modern": "Moderno",
         "classic": "Clásico"
+      },
+      "schedulePdfColorTreatment": {
+        "subtle": "Acentos sutiles",
+        "strong": "Rellenos intensos"
       }
     },
     "laborCosting": {

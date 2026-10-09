@@ -356,7 +356,9 @@
       "style": "Estilo visual",
       "accentColor": "Cor de destaque",
       "showLegend": "Mostrar legenda de cores",
-      "shadeWeekends": "Sombrear os fins de semana configurados"
+      "shadeWeekends": "Sombrear os fins de semana configurados",
+      "colorTreatment": "Tratamento das cores",
+      "colorIntensity": "Intensidade da tonalidade (%)"
     },
     "pdfOptions": {
       "paperSize": {
@@ -381,6 +383,10 @@
       "style": {
         "modern": "Moderno",
         "classic": "Clássico"
+      },
+      "colorTreatment": {
+        "subtle": "Destaques sutis",
+        "strong": "Preenchimentos fortes"
       }
     }
   }

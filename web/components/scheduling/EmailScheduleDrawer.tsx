@@ -66,6 +66,8 @@ export function EmailScheduleDrawer({
     accentColor: "#0f766e",
     showLegend: true,
     shadeWeekends: true,
+    colorTreatment: "subtle",
+    colorIntensity: 8,
   });
   const [roleKeys, setRoleKeys] = useState<string[]>([]),
     [roles, setRoles] = useState<{ key: string; name: string }[]>([]);
@@ -310,6 +312,7 @@ export function EmailScheduleDrawer({
                 "daysPerSection",
                 "detail",
                 "style",
+                "colorTreatment",
               ] as const
             ).map((field) => {
               const choices = {
@@ -319,13 +322,14 @@ export function EmailScheduleDrawer({
                 daysPerSection: ["7", "14"],
                 detail: ["assignments", "hours", "full"],
                 style: ["modern", "classic"],
+                colorTreatment: ["subtle", "strong"],
               }[field];
               return (
                 <label key={field} className="text-sm">
                   {t(`pdfFields.${field}`)}
                   <Select
                     aria-label={t(`pdfFields.${field}`)}
-                    value={String(pdfLayout[field] ?? "modern")}
+                    value={String(pdfLayout[field] ?? (field === 'colorTreatment' ? 'subtle' : 'modern'))}
                     disabled={busy || queued !== null}
                     onChange={(event) => {
                       setPdfLayout(
@@ -364,6 +368,11 @@ export function EmailScheduleDrawer({
                 {t(`pdfFields.${field}`)}
               </label>
             ))}
+            {(pdfLayout.colorTreatment ?? 'subtle') === 'subtle' ? <label className="text-sm">
+              {t("pdfFields.colorIntensity")}
+              <Input type="number" min={0} max={30} aria-label={t("pdfFields.colorIntensity")} value={pdfLayout.colorIntensity ?? 8} disabled={busy || queued !== null}
+                onChange={event => { setPdfLayout(layout => ({ ...layout, colorIntensity: Number(event.target.value) })); reset(); }} />
+            </label> : null}
             <label className="text-sm">
               {t("pdfFields.marginMm")}
               <Input

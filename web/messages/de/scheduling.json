@@ -356,7 +356,9 @@
       "style": "Darstellung",
       "accentColor": "Akzentfarbe",
       "showLegend": "Farblegende anzeigen",
-      "shadeWeekends": "Konfigurierte Wochenendtage schattieren"
+      "shadeWeekends": "Konfigurierte Wochenendtage schattieren",
+      "colorTreatment": "Farbdarstellung",
+      "colorIntensity": "Farbtönung (%)"
     },
     "pdfOptions": {
       "paperSize": {
@@ -381,6 +383,10 @@
       "style": {
         "modern": "Modern",
         "classic": "Klassisch"
+      },
+      "colorTreatment": {
+        "subtle": "Dezente Akzente",
+        "strong": "Kräftige Flächen"
       }
     }
   }

@@ -358,6 +358,9 @@ export const SCHEDULING_ENTITIES: SetupEntity[] = [
               { key: "accentColor", kind: "text", labelKey: "fields.schedulePdfAccent", defaultValue: "#0f766e" },
               { key: "showLegend", kind: "boolean", labelKey: "fields.schedulePdfLegend", defaultValue: true },
               { key: "shadeWeekends", kind: "boolean", labelKey: "fields.schedulePdfWeekends", defaultValue: true },
+              { key: "colorTreatment", kind: "select", defaultValue: "subtle", labelKey: "fields.schedulePdfColorTreatment",
+                options: ["subtle", "strong"].map(value => ({ value, labelKey: `options.schedulePdfColorTreatment.${value}` })) },
+              { key: "colorIntensity", kind: "integer", defaultValue: 8, min: 0, max: 30, labelKey: "fields.schedulePdfColorIntensity", showWhen: { field: "colorTreatment", in: ["subtle"] } },
               {
                 key: "paperSize",
                 kind: "select",

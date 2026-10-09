@@ -30,9 +30,12 @@ test('footer stamping does not append blank pages', async () => {
 })
 
 test('shared styled cells and multi-observation segments render real readable PDFs with contrast-aware colors', async () => {
-  const { pdfContrastText } = await import('./color');
+  const { pdfContrastText, pdfColorTint } = await import('./color');
   assert.equal(pdfContrastText('#000000'), '#ffffff');
   assert.equal(pdfContrastText('#ffffff'), '#000000');
+  assert.equal(pdfColorTint('#1d4ed8', 8), '#edf1fc');
+  assert.equal(pdfColorTint('#1d4ed8', 0), '#ffffff');
+  assert.equal(pdfContrastText(pdfColorTint('#1d4ed8', 8)), '#000000');
   const pdf = await renderPdfDocument({
     title: 'Resource allocation', dateRangeLabel: 'October 2026', generatedAt: new Date('2026-10-12T10:00:00Z'),
     branding: { orgName: 'Example Company', primaryColor: '#7c3aed' }, design: 'modern',

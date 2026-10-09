@@ -356,7 +356,9 @@
       "style": "Visual style",
       "accentColor": "Accent color",
       "showLegend": "Show assignment color legend",
-      "shadeWeekends": "Shade configured weekends"
+      "shadeWeekends": "Shade configured weekends",
+      "colorTreatment": "Color treatment",
+      "colorIntensity": "Color tint (%)"
     },
     "pdfOptions": {
       "paperSize": {
@@ -381,6 +383,10 @@
       "style": {
         "modern": "Modern",
         "classic": "Classic"
+      },
+      "colorTreatment": {
+        "subtle": "Subtle accents",
+        "strong": "Strong fills"
       }
     }
   }

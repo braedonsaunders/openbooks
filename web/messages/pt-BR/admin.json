@@ -4127,7 +4127,9 @@
       "schedulePdfStyle": "Estilo visual",
       "schedulePdfAccent": "Cor de destaque",
       "schedulePdfLegend": "Mostrar legenda de cores",
-      "schedulePdfWeekends": "Sombrear os fins de semana configurados"
+      "schedulePdfWeekends": "Sombrear os fins de semana configurados",
+      "schedulePdfColorTreatment": "Tratamento das cores",
+      "schedulePdfColorIntensity": "Intensidade da tonalidade (%)"
     },
     "fieldHelp": {
       "fxRateMaxAgeDays": "Dias entre a taxa utilizável mais recente e o fim do período a partir dos quais a reavaliação e a consolidação recusam a taxa. Taxas de fechamento contam a partir da data da taxa à vista de fim de período; taxas médias, a partir da cotação mais recente incluída na média. Padrão sem política: 31 dias.",
@@ -5090,6 +5092,10 @@
       "schedulePdfStyle": {
         "modern": "Moderno",
         "classic": "Clássico"
+      },
+      "schedulePdfColorTreatment": {
+        "subtle": "Destaques sutis",
+        "strong": "Preenchimentos fortes"
       }
     },
     "payroll": {

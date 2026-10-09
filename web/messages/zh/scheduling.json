@@ -356,7 +356,9 @@
       "style": "视觉样式",
       "accentColor": "强调色",
       "showLegend": "显示安排颜色图例",
-      "shadeWeekends": "对已配置的周末加阴影"
+      "shadeWeekends": "对已配置的周末加阴影",
+      "colorTreatment": "颜色处理",
+      "colorIntensity": "色调强度 (%)"
     },
     "pdfOptions": {
       "paperSize": {
@@ -381,6 +383,10 @@
       "style": {
         "modern": "现代",
         "classic": "经典"
+      },
+      "colorTreatment": {
+        "subtle": "柔和强调",
+        "strong": "浓色填充"
       }
     }
   }
