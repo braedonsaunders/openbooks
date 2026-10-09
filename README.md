@@ -242,6 +242,11 @@ A 51-pack return-workpaper library spans 41 installable country tax packs. Tax
 packs are configurable preparation workpapers, not a promise of direct
 electronic filing, government approval or complete local coverage.
 
+Electronic invoicing provides selectable standards profiles, and contractor
+withholding uses schemes declared by the country tax packs. See the
+[activation and operating guide](docs/operations/einvoicing-and-contractor-withholding.md)
+for legal-entity configuration and native invoice, payment and correction flows.
+
 Generate the source-labelled capability inventory with:
 
 ```bash
