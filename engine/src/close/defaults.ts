@@ -340,54 +340,10 @@ export async function ensureCloseDefaults(
         insert into close_policies (org_id, code, name, description, policy_type, rules, is_active, created_by, updated_by)
         values
           (${orgId}, 'material-variance', 'close.defaultData.policies.materialVariance.name', 'close.defaultData.policies.materialVariance.description',
-           'materiality', ${JSON.stringify({ amount: "10000.0000", percent: 20 })}::jsonb, true, ${actorId ?? null}, ${actorId ?? null}),
-          (${orgId}, 'independent-approval', 'close.defaultData.policies.independentApproval.name', 'close.defaultData.policies.independentApproval.description',
-           'segregation', ${JSON.stringify({ prohibitSelfApproval: true })}::jsonb, true, ${actorId ?? null}, ${actorId ?? null})
-        -- Repeated provisioning preserves existing materiality and approval policy settings.
+           'materiality', ${JSON.stringify({ amount: "10000.0000", percent: 20 })}::jsonb, true, ${actorId ?? null}, ${actorId ?? null})
+        -- Repeated provisioning preserves existing materiality settings.
         on conflict (org_id, code) do nothing`);
 
-      const closeApprovalFlow = (await tx.execute<{ id: string }>(sql`
-        select id from flows where org_id = ${orgId} and subject_kind = 'close_run' limit 1
-      `));
-      if (!closeApprovalFlow.rows[0]) {
-      const graph = {
-        schemaVersion: 1,
-        nodes: [
-          {
-            id: "request",
-            position: { x: 60, y: 120 },
-            data: { kind: "trigger", trigger: { trigger: "on_submit" } },
-          },
-          {
-            id: "independent-approval",
-            position: { x: 320, y: 120 },
-            data: {
-              kind: "gate",
-              gate: {
-                title: "Independent close approval",
-                assignees: [{ type: "role", role: "approver" }],
-                mode: "any",
-                preventSelfApproval: true,
-              },
-            },
-          },
-        ],
-        edges: [
-          {
-            id: "request-to-approval",
-            source: "request",
-            target: "independent-approval",
-            sourceHandle: "next",
-          },
-        ],
-      };
-        await tx.execute(sql`
-          insert into flows (org_id, name, description, subject_kind, enabled, graph, created_by, updated_by)
-          values (${orgId}, 'Close approval',
-                  'Routes the final period-close review through the configurable approval worklist.',
-                  'close_run', true, ${JSON.stringify(graph)}::jsonb, ${actorId ?? null}, ${actorId ?? null})
-        `);
-      }
     }
 
     const existingPackage = (await tx.execute<{ id: string }>(sql`

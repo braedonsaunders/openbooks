@@ -42,7 +42,8 @@ async function withCloseRun(
        where id = ${fixture.orgId}
     `);
     const defaults = await ensureCloseDefaults(fixture.orgId, actors.submitterId);
-    await db.execute(sql`delete from flows where org_id = ${fixture.orgId} and subject_kind = 'close_run'`);
+    assert.equal((await db.execute(sql`select id from flows where org_id=${fixture.orgId}
+      and subject_kind='close_run'`)).rows.length, 0, "close provisioning does not author a tenant workflow");
     const inserted = (await db.execute<{ id: string }>(sql`
       insert into close_runs
         (org_id, period_id, book_id, blueprint_id, reporting_package_id, status,
@@ -146,6 +147,9 @@ test("a frozen solo close gate releases with a ledger fingerprint and signoff", 
   await withCloseRun(async (fixture, actors, runId) => {
     const { flowId } = await seedApprovalFlow(fixture.orgId, { subjectKind: "close_run",
       assignees: [{ type: "user", userId: actors.submitterId }], mode: "any", preventSelfApproval: false });
+    const before = (await db.execute(sql`select id,graph from flows where org_id=${fixture.orgId} and id=${flowId}`)).rows;
+    await ensureCloseDefaults(fixture.orgId, actors.submitterId);
+    assert.deepEqual((await db.execute(sql`select id,graph from flows where org_id=${fixture.orgId} and subject_kind='close_run'`)).rows, before);
     assert.equal((await requestCloseApproval(fixture.orgId, runId, actors.submitterId)).approvals, 1);
     const [gate] = (await db.execute<{ id: string; run_id: string }>(sql`
       select id,run_id from flow_gates where org_id=${fixture.orgId} and subject_kind='close_run'
@@ -169,6 +173,15 @@ test("a frozen solo close gate releases with a ledger fingerprint and signoff", 
     assert.equal(await completedGateAllowsSelfApproval(db, { ...proof, subjectId: fixture.periodId }), false);
     assert.equal(await completedGateAllowsSelfApproval(db, { ...proof, actorId: actors.approver1Id }), false);
     assert.equal(await completedGateAllowsSelfApproval(db, { ...proof, subjectKind: "outbound_payment_run" }), false);
+  });
+});
+
+test("an unconfigured close requires a tenant-authored flow without creating one", { skip: !DB }, async () => {
+  await withCloseRun(async (fixture, actors, runId) => {
+    await assert.rejects(requestCloseApproval(fixture.orgId, runId, actors.submitterId), /workflow in Flows/);
+    assert.equal((await closeStatus(runId)).status, "in_progress");
+    assert.equal((await db.execute(sql`select id from flows where org_id=${fixture.orgId}
+      and subject_kind='close_run'`)).rows.length, 0);
   });
 });
 
