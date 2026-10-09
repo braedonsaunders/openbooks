@@ -327,6 +327,19 @@
     },
     "downloadPdf": "PDF herunterladen",
     "waived": "Nicht geschuldeter Mehrbetrag",
-    "reportedDeduction": "Gesetzlicher Steuerabzug"
+    "reportedDeduction": "Gesetzlicher Steuerabzug",
+    "deposits": "Steuerzahlungen",
+    "emptyDeposits": "Es wurden noch keine Zahlungsbelege für die Steuerbehörde erstellt.",
+    "depositDocument": "Behördenbeleg",
+    "correctDeposit": "Steuerzahlung korrigieren",
+    "journalPreparedForReview": "Die Buchungskorrektur {number} ist vorbereitet. Ein Benutzer mit Zugriff auf das Hauptbuch kann sie prüfen und buchen.",
+    "journalReviewAccess": "Zur Prüfung dieser Buchungskorrektur ist Zugriff auf das Hauptbuch erforderlich.",
+    "reviewSourceCorrection": "Quellenkorrektur prüfen",
+    "sourceOnlyCorrectionHelp": "Die erklärten Steuerbeträge entsprechen der erfassten Meldung. Prüfen Sie die Ersatz-Zahlungsbelege und Wechselkurse; die bestehende Meldungsreferenz bleibt erhalten und die Quellenkorrektur wird dokumentiert.",
+    "payees": "Zahlungsempfänger",
+    "paymentEvidence": "Zahlungsnachweise",
+    "emptySourcePayments": "Für diese Meldung sind keine Zahlungsnachweise erfasst.",
+    "paymentDocument": "Zahlungsbeleg",
+    "reportingFxRate": "Meldewechselkurs"
   }
 }

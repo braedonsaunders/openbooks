@@ -6,6 +6,8 @@ import { lookupSpotRate } from "../fx/spot-rate.ts";
 import { absorbFxRoundingResidual, intercompanyBalancingLegs, loadSubsidiaryContext, SubsidiaryError, validateSubsidiaryRestrictions } from "../organization/subsidiaries.ts";
 import { type Doc, type KernelLine, PostingError } from "../journal/posting-contracts.ts";
 import { collectBalancingLegs } from "../journal/balancing-hooks.ts";
+import { applyWithholdingCarrying, stampPaymentWithholdingCurrency } from "../contractor-withholding/remittance-carrying.ts";
+import { ContractorWithholdingError } from "../contractor-withholding/scheme.ts";
 /**
  * Application-layer proof for the storage trigger `jl_check_account`:
  * every final line inserts in its line currency, so a target
@@ -53,7 +55,7 @@ export async function applySubsidiaries(
   runner: Pick<typeof db, "execute">,
   doc: Doc,
   kernelLines: KernelLine[],
-  options: { bookId: string | null; regeneration: boolean },
+  options: { bookId: string | null; regeneration: boolean; withholdingCarrying?: boolean },
 ): Promise<{
   lines: (KernelLine & {
     subsidiaryId: string;
@@ -93,7 +95,7 @@ export async function applySubsidiaries(
       if (
         targetCurrency === origin.baseCurrency &&
         doc.fxRate &&
-        normalizeDecimal(doc.fxRate, 10) !== "1.0000000000"
+        (normalizeDecimal(doc.fxRate, 10) !== "1.0000000000" || !!(doc.custom as {withholdingDeposit?:unknown;withholdingRemittance?:unknown} | null)?.withholdingDeposit || !!(doc.custom as {withholdingRemittance?:unknown}|null)?.withholdingRemittance)
       ) {
         return doc.fxRate;
       }
@@ -160,7 +162,7 @@ export async function applySubsidiaries(
       originFxRate,
       lines: stamped,
     });
-    const all = [
+    const nativeTranslated = [
       ...stamped,
       ...legs.map((leg) => ({
         accountId: leg.accountId,
@@ -174,6 +176,12 @@ export async function applySubsidiaries(
         memo: leg.memo,
       })),
     ];
+    let translated=stampPaymentWithholdingCurrency(doc,nativeTranslated);
+    if(options.regeneration && doc.kind==='vendor_payment' && doc.postedEntryId) {
+      const existing=(await runner.execute<{accountId:string;currency:string}>(sql`select l.account_id as "accountId",l.currency from journal_lines l join journal_entries e on e.org_id=l.org_id and e.id=l.entry_id where l.org_id=${doc.orgId} and e.source_document_id=${doc.id} and e.status='posted' and ${options.bookId ? sql`e.book_id=${options.bookId}` : sql`e.id=${doc.postedEntryId}`} and l.memo='Contractor withholding' and l.contributor_kind is null`)).rows;
+      translated=translated.map((line,index)=>existing.some(row=>row.accountId===line.accountId && row.currency===doc.currency && row.currency!==line.currency) ? nativeTranslated[index]! : line);
+    }
+    const all = options.withholdingCarrying===false ? translated : await applyWithholdingCarrying(runner,doc,translated,docSubId,origin.baseCurrency,options.bookId);
     // Balancing-segment legs (interfund due-to/due-from for a balancing fund
     // segment, for example) come from registered providers. They are
     // appended before the restriction checks below so every leg is
@@ -214,6 +222,7 @@ export async function applySubsidiaries(
     };
   } catch (err) {
     if (err instanceof SubsidiaryError) throw new PostingError(err.message);
+    if (err instanceof ContractorWithholdingError) throw new PostingError(err.remedy ? `${err.message} ${err.remedy}` : err.message);
     throw err;
   }
 }

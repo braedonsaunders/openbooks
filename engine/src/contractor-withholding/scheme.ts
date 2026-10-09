@@ -117,11 +117,13 @@ export function resolveBand(
       message: `The ${scheme.name} standing was revoked, so the ${fallback.name} band applies.`,
     });
     band = fallback;
-  } else if (requested.requiresVerification && !verificationCurrent(standing, date)) {
+  } else if (requested.requiresVerification && (!verificationCurrent(standing, date) || (requested.verificationRequiresEndDate && standing.validTo === null))) {
     const missing = !(standing.verificationReference ?? "").trim();
     reasons.push({
       code: missing ? "verification_missing" : "verification_not_current",
-      message: missing
+      message: requested.verificationRequiresEndDate && standing.validTo === null && !missing
+        ? `The ${scheme.verificationLabel.toLowerCase()} has no recorded expiry date, so the ${fallback.name} band applies.`
+        : missing
         ? `The ${requested.name} band needs a recorded ${scheme.verificationLabel.toLowerCase()}, so the ${fallback.name} band applies.`
         : `The ${scheme.verificationLabel.toLowerCase()} behind the ${requested.name} band is not valid on ${date}, so the ${fallback.name} band applies.`,
     });

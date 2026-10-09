@@ -327,6 +327,19 @@
     },
     "downloadPdf": "Baixar PDF",
     "waived": "Excedente não devido",
-    "reportedDeduction": "Retenção legal"
+    "reportedDeduction": "Retenção legal",
+    "deposits": "Recolhimentos",
+    "emptyDeposits": "Nenhum documento de recolhimento à autoridade tributária foi preparado.",
+    "depositDocument": "Documento tributário",
+    "correctDeposit": "Corrigir recolhimento",
+    "journalPreparedForReview": "O ajuste contábil {number} foi preparado. Um usuário com acesso ao razão geral pode revisá-lo e contabilizá-lo.",
+    "journalReviewAccess": "É necessário acesso ao razão geral para revisar este ajuste contábil.",
+    "reviewSourceCorrection": "Revisar correção de origem",
+    "sourceOnlyCorrectionHelp": "Os valores tributários declarados correspondem à declaração registrada. Revise os comprovantes de pagamento substitutos e as taxas de câmbio; a referência existente é mantida e a correção de origem é registrada.",
+    "payees": "Beneficiários",
+    "paymentEvidence": "Comprovantes de pagamento",
+    "emptySourcePayments": "Nenhum comprovante de pagamento foi registrado para esta declaração.",
+    "paymentDocument": "Documento de pagamento",
+    "reportingFxRate": "Taxa de câmbio da declaração"
   }
 }

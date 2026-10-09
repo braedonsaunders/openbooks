@@ -327,6 +327,19 @@
     },
     "downloadPdf": "PDFをダウンロード",
     "waived": "支払義務のない超過額",
-    "reportedDeduction": "法定控除"
+    "reportedDeduction": "法定控除",
+    "deposits": "納付",
+    "emptyDeposits": "税務当局への納付書類はまだ作成されていません。",
+    "depositDocument": "納付書類",
+    "correctDeposit": "納付を修正",
+    "journalPreparedForReview": "会計調整 {number} を作成しました。総勘定元帳へのアクセス権を持つユーザーが確認して転記できます。",
+    "journalReviewAccess": "この会計調整の確認には総勘定元帳へのアクセス権が必要です。",
+    "reviewSourceCorrection": "元データの修正を確認",
+    "sourceOnlyCorrectionHelp": "申告税額は記録済みの申告内容と一致しています。差し替えた支払証憑と為替レートを確認してください。既存の申告参照番号を維持し、元データの修正を記録します。",
+    "payees": "受取人",
+    "paymentEvidence": "支払証憑",
+    "emptySourcePayments": "この申告の支払証憑は記録されていません。",
+    "paymentDocument": "支払書類",
+    "reportingFxRate": "申告用為替レート"
   }
 }
