@@ -626,7 +626,8 @@ test('tenant PDF style and color choices save and reopen through the native boar
   const layout = { paperSize: 'a4', orientation: 'landscape', marginMm: 10, density: 'compact', daysPerSection: 7, detail: 'assignments', style: 'modern', accentColor: '#0f766e', showLegend: false, shadeWeekends: false };
   const presentation = { ...board, fields: board.fields.filter(field => ['rowKind', 'automaticDeliveryPolicy'].includes(field.key)), formSections: undefined };
   const { seen } = await mountDrawer(t, { id, row_kind: 'people', automatic_delivery_policy: { operatorId: operator, timeZone: 'America/Toronto', days: 14, anchor: 'week', weekStartsOn: 0, visibility: 'board', recipientMode: 'selected', additionalPartyIds: [operator], includePdf: true, pdfLayout: layout } }, () => Response.json({ id }), 'schedule-boards', undefined, undefined, presentation, true, { 'schedule-operators': [{ value: operator, label: 'Operator' }], 'schedule-contacts': [{ value: operator, label: 'Contact' }] });
-  const style = document.querySelector(`select[aria-label="${FIELD_LABEL.schedulePdfStyle}"]`) as HTMLSelectElement;
+  const styleTrigger = document.querySelector(`button[aria-label="${FIELD_LABEL.schedulePdfStyle}"]`);
+  const style = styleTrigger?.closest('span')?.querySelector('select') as HTMLSelectElement;
   assert.ok(style);
   await act(async () => {
     style.value = 'classic';
@@ -639,6 +640,7 @@ test('tenant PDF style and color choices save and reopen through the native boar
   const policy = (seen[0]!.body as { automaticDeliveryPolicy: { pdfLayout: unknown } }).automaticDeliveryPolicy;
   assert.deepEqual(policy.pdfLayout, { ...layout, style: 'classic', accentColor: '#7c3aed' });
   await act(async () => { clickButton('Edit').click(); await tick(); });
-  assert.equal((document.querySelector(`select[aria-label="${FIELD_LABEL.schedulePdfStyle}"]`) as HTMLSelectElement).value, 'classic');
+  const reopenedTrigger = document.querySelector(`button[aria-label="${FIELD_LABEL.schedulePdfStyle}"]`);
+  assert.equal((reopenedTrigger?.closest('span')?.querySelector('select') as HTMLSelectElement).value, 'classic');
   assert.equal((document.querySelector(`input[aria-label="${FIELD_LABEL.schedulePdfAccent}"]`) as HTMLInputElement).value, '#7c3aed');
 });

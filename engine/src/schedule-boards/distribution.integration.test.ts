@@ -1042,7 +1042,7 @@ test('native PDF evidence binds ordered board rule colors for literal source obs
   const saved = await applyBoardChanges({ ...actor, boardId: f.boardId, changes: [{ op: 'create', id: randomUUID(), workerPartyId: f.ana, onDate: '2026-10-13', target: { kind: 'code', id: codeId }, span: { mode: 'day' } }] });
   assert.equal(saved.results[0]?.ok, true);
   const before = await preview(f);
-  const evidenceBefore = (await loadBoardWindow(actor, f.boardId, dates.from, dates.through)).sourceRecords ?? [];
+  const evidenceBefore = (await loadBoardWindow({ ...actor, boardId: f.boardId, ...dates })).sourceRecords ?? [];
   const actualLines = before.recipients.flatMap(recipient => recipient.lines).filter(line => line.assignment.startsWith('SHOP'));
   assert.equal(actualLines.length, 2);
   assert.ok(actualLines.every(line => line.color === '#fde68a'));
@@ -1053,6 +1053,6 @@ test('native PDF evidence binds ordered board rule colors for literal source obs
   const fallback = await preview(f);
   assert.notEqual(fallback.version, before.version);
   assert.ok(fallback.recipients.flatMap(recipient => recipient.lines).filter(line => line.assignment.startsWith('SHOP')).every(line => line.color === '#99f6e4'));
-  const evidenceAfter = (await loadBoardWindow(actor, f.boardId, dates.from, dates.through)).sourceRecords ?? [];
+  const evidenceAfter = (await loadBoardWindow({ ...actor, boardId: f.boardId, ...dates })).sourceRecords ?? [];
   assert.deepEqual(evidenceAfter.map(({ color, ...record }) => record), evidenceBefore.map(({ color, ...record }) => record));
 }));
