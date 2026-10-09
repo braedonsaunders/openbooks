@@ -2,7 +2,9 @@ import 'server-only'
 import { AuditTrailPanel } from '@/components/audit-trail-panel'
 import { notFound } from 'next/navigation'
 import { getTranslations } from 'next-intl/server'
-import { CompensationPackageUnavailableError, getCompensationPackage, listCompensationPackages } from '@openbooks/engine/payroll/compensation-packages'
+import { CompensationPackageUnavailableError, getCompensationPackage, getCompensationPackageForSubject, listCompensationPackages } from '@openbooks/engine/payroll/compensation-packages'
+import { COMPENSATION_VERSION_SUBJECT_KIND, COMPENSATION_ASSIGNMENT_SUBJECT_KIND } from '@openbooks/schema/src/payroll-compensation'
+import { ScopeNotFoundError } from '@openbooks/engine/organization/scope'
 import { Alert } from '@openbooks/ui'
 import { requireFeatureEnabled } from '@/lib/feature-gates'
 import { can, requirePermission } from '@/lib/authz'
@@ -22,9 +24,22 @@ export async function CompensationPackagesSection({ sp }: { sp: Record<string, s
     if (error instanceof CompensationPackageUnavailableError) return <Alert>{t('compensationPackages.serverUpgrade')}</Alert>
     throw error
   }
-  const selected = pickString(sp.package)
+  let selected = pickString(sp.package)
   if (selected && selected !== 'new' && !packages.some(pack => pack.id === selected)) notFound()
-  const workspace = selected && selected !== 'new' ? await getCompensationPackage({ ...actor, packageId: selected }) : null
+  let workspace = selected && selected !== 'new' ? await getCompensationPackage({ ...actor, packageId: selected }) : null
+  const linkedVersion = pickString(sp.packageVersionsRow), linkedAssignment = pickString(sp.packageAssignmentsRow)
+  if (!selected && ((linkedVersion && linkedVersion !== 'new') || (linkedAssignment && linkedAssignment !== 'new'))) {
+    if (linkedVersion && linkedAssignment) notFound()
+    try {
+      workspace = await getCompensationPackageForSubject({ ...actor, subjectId: linkedVersion ?? linkedAssignment!,
+        subjectKind: linkedVersion ? COMPENSATION_VERSION_SUBJECT_KIND : COMPENSATION_ASSIGNMENT_SUBJECT_KIND })
+    } catch (error) {
+      if (error instanceof ScopeNotFoundError) notFound()
+      throw error
+    }
+    selected = workspace.package.id
+    sp = { ...sp, package: selected }
+  }
   const pack = workspace?.package
   const manage = can(authz, 'payroll.manage'), approve = can(authz, 'hrm.compensation.approve')
   const tabs = []

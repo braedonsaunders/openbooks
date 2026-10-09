@@ -7,6 +7,8 @@ import { BENEFIT_AWARD_SUBJECT_KIND } from "@openbooks/schema/src/benefits-progr
 import { benefitAwardsFlowAdapter, benefitAwardSubjectProfile } from "./benefit-awards-adapter.ts";
 import { FINANCIAL_CHANGE_SUBJECT_KIND, financialChangeSubjectProfile, financialChangesFlowAdapter } from "./financial-changes-adapter.ts";
 import type { FlowSubjectAdapter } from "./types.ts";
+import { COMPENSATION_VERSION_SUBJECT_KIND, COMPENSATION_ASSIGNMENT_SUBJECT_KIND } from "@openbooks/schema/src/payroll-compensation.ts";
+import { compensationVersionsFlowAdapter, compensationAssignmentsFlowAdapter, compensationVersionSubjectProfile, compensationAssignmentSubjectProfile } from "./compensation-packages-adapter.ts";
 import { createDocumentsFlowAdapter } from "./documents-adapter.ts";
 import { DOCUMENT_FLOW_KINDS, documentSubjectProfile } from "./subject-profiles.ts";
 import {
@@ -114,6 +116,8 @@ import { db } from "../platform/db.ts";
 const adapterCache = new Map<string, FlowSubjectAdapter>();
 
 export function getFlowAdapter(subjectKind: string): FlowSubjectAdapter | null {
+  if (subjectKind === COMPENSATION_VERSION_SUBJECT_KIND) return compensationVersionsFlowAdapter;
+  if (subjectKind === COMPENSATION_ASSIGNMENT_SUBJECT_KIND) return compensationAssignmentsFlowAdapter;
   if(subjectKind===SCHEDULE_DISTRIBUTION_SUBJECT_KIND)return scheduleDistributionsFlowAdapter;
   if(subjectKind===CHECKLIST_STEP_SUBJECT_KIND) return checklistStepsFlowAdapter;
   if (subjectKind === BENEFIT_ENROLLMENT_SUBJECT_KIND) return benefitEnrollmentsFlowAdapter;
@@ -173,6 +177,8 @@ export function listFlowSubjectProfiles(): FlowSubjectProfile[] {
     scheduleDistributionSubjectProfile,
     checklistStepSubjectProfile,
     ...DOCUMENT_FLOW_KINDS.map((kind) => documentSubjectProfile(kind)),
+    compensationVersionSubjectProfile,
+    compensationAssignmentSubjectProfile,
     benefitAwardSubjectProfile,
     benefitEnrollmentSubjectProfile,
     financialChangeSubjectProfile,

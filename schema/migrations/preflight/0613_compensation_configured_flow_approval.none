@@ -1,0 +1,1 @@
+This migration replaces only the compensation decision guard and adds a native Flow evidence predicate. Existing configuration and approval history remain unchanged; self decisions still refuse without exact completed submitted Flow evidence and resolved person identities.
