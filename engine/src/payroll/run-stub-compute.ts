@@ -380,7 +380,7 @@ export async function calculateStub(
     periodStart: run.period_start!, periodEnd: run.period_end!, periodsPerYear: P,
     hourlyWage: payRate ? payrollHourlyWage(payRate) : null,
     payBasis: emp.pay_basis!, payDate: run.pay_date!, taxYear,
-    oneOffRun, simulate: ctx.simulate, lines, entitlementMovements,
+    runType, oneOffRun, simulate: ctx.simulate, lines, entitlementMovements,
   };
   await appendRecurringBenefitLines(tx, { ...recurringBenefitInput, stage: "vacationable_earnings" });
 
