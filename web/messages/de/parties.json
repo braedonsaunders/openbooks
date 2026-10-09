@@ -227,7 +227,11 @@
       "endToday": "Heute beenden",
       "delete": "Lohnkomponentenzuordnung löschen",
       "confirmEnd": "Diese Lohnkomponentenzuordnung heute beenden?",
-      "confirmDelete": "Diese Lohnkomponentenzuordnung löschen? Zuordnungen, die bereits einen Lohnzettel bepreist haben, können nicht gelöscht werden."
+      "confirmDelete": "Diese Lohnkomponentenzuordnung löschen? Zuordnungen, die bereits einen Lohnzettel bepreist haben, können nicht gelöscht werden.",
+      "runApplicability": "Gehaltsläufe",
+      "standardRuns": "Regulär, zusätzlich und bei Beendigung",
+      "regularOnly": "Nur regulär",
+      "unknownApplicability": "Unbekannte Anwendbarkeit"
     },
     "summary": {
       "transactions": "Transaktionen",

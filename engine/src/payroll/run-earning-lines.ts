@@ -1,3 +1,5 @@
+import { applicableAssignedComponents } from './assignment-run-applicability.ts';
+import type { PayRunType } from './run-contracts.ts';
 /**
  * Stub earning-line phases appended per employee during calculation.
  *
@@ -386,6 +388,7 @@ export async function applyAssignedComponentLines(
     taxYear: number;
     documentId: string;
     assignedRows: Record<string, unknown>[];
+    runType: PayRunType;
     oneOffRun: boolean;
     lines: Line[];
     /** The run's period: fixed_amount rows covering only part of it prorate. */
@@ -394,16 +397,22 @@ export async function applyAssignedComponentLines(
   },
 ): Promise<void> {
   const {
-    orgId, employeePartyId, employmentId, taxYear, documentId, assignedRows, oneOffRun, lines,
+    orgId, employeePartyId, employmentId, taxYear, documentId, oneOffRun, lines,
     periodStart, periodEnd,
   } = args;
+  const assignedRows = applicableAssignedComponents(args.assignedRows, args.runType);
   // A rate-card assignment prices operational facts; its value is not also
   // a recurring payment. Resolve ownership on the same date as derived rules,
   // including periods with no qualifying facts and therefore no derived line.
-  const rateCardComponents = new Set(!oneOffRun && assignedRows.some((row) => row.kind === 'earning')
+  const rateCardComponents = new Set(!oneOffRun && args.assignedRows.some((row) => row.kind === 'earning')
     ? (await loadActiveDerivedRules(tx, orgId, periodEnd))
       .filter((rule) => rule.rateMode === 'rate_card').map((rule) => rule.componentId)
     : []);
+  for (const row of args.assignedRows) {
+    if (row.run_applicability === 'regular_only' && rateCardComponents.has(String(row.id))) {
+      throw new PayrollError(`Payroll component ${String(row.code)} prices operational facts through a rate-card rule — replace its recurring assignment with standard applicability before recalculating.`);
+    }
+  }
   await assertComponentServiceEligibility(tx, { orgId, employmentId, policyDate: periodEnd,
     componentIds: oneOffRun ? [] : assignedRows.map((row) => String(row.id)) });
 /**

@@ -477,6 +477,7 @@ export const employeePayComponents = pgTable(
     /** HRM employment link (0186): null = not yet stamped, never "no employment". */
     employmentId: uuid("employment_id"),
     componentId: uuid("component_id").notNull(),
+    runApplicability: text("run_applicability").notNull().default("standard_runs"),
     /** Overrides the component default (amount, hourly rate, or percent). */
     value: money("value"),
     effectiveFrom: date("effective_from").notNull(),
@@ -488,6 +489,8 @@ export const employeePayComponents = pgTable(
 
     index("employee_pay_components_employment").on(t.orgId, t.employmentId),
     index("employee_pay_components_employee").on(t.orgId, t.employeePartyId, t.effectiveFrom),
+    check("employee_pay_components_run_applicability",
+      sql`${t.runApplicability} in ('standard_runs', 'regular_only')`),
     check("employee_pay_components_range",
       sql`${t.effectiveTo} is null or ${t.effectiveTo} >= ${t.effectiveFrom}`),
   ],

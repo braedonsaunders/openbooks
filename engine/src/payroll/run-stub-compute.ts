@@ -1,3 +1,4 @@
+import type { PayRunType } from './run-contracts.ts';
 import { historicalWithholdingProfile } from './historical-withholding.ts';
 import { prepareCompensationPackages, appendCompensationPackageStage, persistCompensationPackageCalculations } from './compensation-package-payroll.ts';
 import { ONE_OFF_RUN_TYPES } from "./run-contracts.ts";
@@ -202,7 +203,7 @@ export async function calculateStub(
   // periods already did). A bonus run's earnings are taxed on the pack's
   // non-periodic method; a retro run's treatment is the pack's DECLARATION
   // (payroll/packs.ts `retroactivePayTreatment`), never a constant here.
-  const runType = (run.run_type as string) ?? "regular";
+  const runType = (run.run_type as PayRunType) ?? "regular";
   const bonusRun = runType === "bonus";
   const retroRun = runType === "retro";
   const oneOffRun = ONE_OFF_RUN_TYPES.has(runType);
@@ -269,7 +270,7 @@ export async function calculateStub(
   // ever attributed them.
   const rosterEmploymentId = emp.employment_id ?? null;
   const assigned = (await tx.execute<Record<string, unknown>>(sql`
-    select a.value as override, a.effective_from, a.effective_to, c.*,
+    select a.value as override, a.effective_from, a.effective_to, a.run_applicability, c.*,
            ec.supplemental_wage_category, ec.statutory_reporting_category, ec.statutory_exemption_category
       from employee_pay_components a
       join pay_components c on c.id = a.component_id and c.org_id = a.org_id
@@ -332,7 +333,7 @@ export async function calculateStub(
     subsidiaryId: ctx.runContext.subsidiaryId ?? null, country, currency: run.doc_currency!,
     periodStart: run.period_start!, periodEnd: run.period_end!, taxYear,
     hourlyWage: payRate ? payrollHourlyWage(payRate) : null,
-    payScheduleId: run.pay_schedule_id!, oneOffRun, terminationRun: runType === "termination", simulate: !!ctx.simulate,
+    payScheduleId: run.pay_schedule_id!, runType, oneOffRun, terminationRun: runType === "termination", simulate: !!ctx.simulate,
     assignedRows: assigned.rows, allowedSubsidiaryIds: ctx.allowedSubsidiaryIds,
     unionAgreementId: emp.union_agreement_id ?? null, unionClassificationId: emp.union_classification_id ?? null,
   }, lines);
@@ -340,7 +341,7 @@ export async function calculateStub(
 
   await applyAssignedComponentLines(tx, {
     orgId, employeePartyId, employmentId, taxYear, documentId,
-    assignedRows: assigned.rows, oneOffRun, lines,
+    assignedRows: assigned.rows, runType, oneOffRun, lines,
     periodStart: run.period_start!, periodEnd: run.period_end!,
   });
 

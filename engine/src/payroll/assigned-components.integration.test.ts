@@ -62,6 +62,10 @@ test('effective rate-card assignments price qualifying facts without a recurring
       quantity_mode,rate_mode,costing_mode,effective_from,effective_to,is_active)
       values(${randomUUID()},${fx.orgId},'DAY-INCENTIVE','Day incentive',${incentive},'distinct_day',
         'count','rate_card','source','2026-07-12','2026-07-25',true)`);
+    await assert.rejects(() => validateEmployeePayComponentAssignment(db, fx.orgId, {
+      employeePartyId: partyId, employmentId, componentId: incentive, value: '5',
+      effectiveFrom: '2026-07-12', effectiveTo: '2026-07-25', runApplicability: 'regular_only',
+    }), /rate-card rule.*keep standard applicability/);
     await hours(fx, partyId, ['2026-07-13', '2026-07-14']);
     // Before and after rule ownership, the ordinary fixed assignment still pays.
     // During ownership, two qualifying days pay 10; no facts pay nothing.

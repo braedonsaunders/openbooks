@@ -173,6 +173,7 @@ test("assigning posts canonical decimal strings and clears the value", async (t)
   assert.equal(body.value, "25.5");
   assert.equal(typeof body.value, "string", "the override must stay decimal text, never a float");
   assert.equal(body.employmentId, null);
+  assert.equal(body.runApplicability, "standard_runs");
   assert.equal(
     (document.querySelector("#employee-pay-value") as HTMLInputElement).value,
     "",
@@ -217,4 +218,19 @@ test("existing assignments render their component and window", async (t) => {
   await addButton();
   assert.match(document.body.textContent ?? "", /COVERALLS/);
   assert.match(document.body.textContent ?? "", new RegExp(COPY.title));
+});
+
+
+test("regular-only assignments retain the selected policy in the API and reset after saving", async (t) => {
+  const posted: PostedAssignment[] = [];
+  const { done } = await renderPanel(posted, []);
+  t.after(done);
+  await chooseComponent();
+  const select = [...document.querySelectorAll('select')].find(candidate => candidate.querySelector('option[value="regular_only"]')) as HTMLSelectElement;
+  assert.ok(select);
+  await act(async () => { setNativeSelect(select, 'regular_only'); await tick(); });
+  await clickAdd();
+  assert.equal(posted.length, 1);
+  assert.equal(posted[0]!.body.runApplicability, 'regular_only');
+  assert.equal(select.value, 'standard_runs');
 });

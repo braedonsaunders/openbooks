@@ -12,6 +12,21 @@ const snapshot = (): PayRunCalculationSourceSnapshot => ({
   version: 1, timeEntries: [], timeTypes: [], payRates: [], itemAccounts: [], claimEntryIds: [],
 });
 
+test('adding, removing or changing regular-only assignment windows invalidates calculated component evidence', () => {
+  const legacy = snapshot();
+  assert.equal(payRunCalculationSourceChanges(legacy, { ...legacy, assignmentRunPolicies: [] }).components, false);
+  const policy = { id: 'assignment', employeePartyId: 'employee', employmentId: null,
+    componentId: 'allowance', policy: 'regular_only', from: '2026-01-01', to: null };
+  const calculated = { ...snapshot(), assignmentRunPolicies: [policy] };
+  assert.equal(payRunCalculationSourceChanges(legacy, calculated).components, true);
+  assert.equal(payRunCalculationSourceChanges(calculated, legacy).components, true);
+  for (const changes of [{ from: '2026-01-02' }, { to: '2026-01-09' }, { employmentId: 'new-employment' }, { componentId: 'premium' }]) {
+    assert.equal(payRunCalculationSourceChanges(calculated,
+      { ...snapshot(), assignmentRunPolicies: [{ ...policy, ...changes }] }).components, true);
+  }
+  assert.equal(parsePayRunCalculationSource({ ...legacy, assignmentRunPolicies: null }), null);
+});
+
 test("approved holiday ownership, source, wage and foreign payment claims invalidate a calculated run", () => {
   const legacy = snapshot();
   assert.equal(payRunCalculationSourceChanges(legacy, { ...legacy, holidayObligations: [] }).holidayObligations, false);
@@ -70,7 +85,7 @@ test("legacy evidence without item routing reads as empty and detects later rout
   assert.deepEqual(parsed.itemAccounts, []);
   const current = snapshot();
   current.itemAccounts.push({ id: "item", payrollExpenseAccountId: "expense", updatedAt: "2026-09-20" });
-  assert.deepEqual(payRunCalculationSourceChanges(parsed, current), { time: false, timeTypes: false, wages: false, items: true, compensationPackages: false, holidayObligations: false, roster: false });
+  assert.deepEqual(payRunCalculationSourceChanges(parsed, current), { time: false, timeTypes: false, wages: false, items: true, components: false, compensationPackages: false, holidayObligations: false, roster: false });
 });
 
 test("canonical evidence ignores object key order but preserves array order and values", () => {

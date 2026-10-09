@@ -1681,6 +1681,7 @@ export async function payRunStaleness(
   );
   let selectionChanged = false;
   let exactCompensationPackagesChanged = false;
+  let exactComponentsChanged = false;
   let exactTimeChanged = false;
   let exactTimeTypesChanged = false;
   let exactWagesChanged = false;
@@ -1710,7 +1711,8 @@ export async function payRunStaleness(
       exactItemsChanged = changes.items;
       exactRosterChanged = changes.roster;
       exactCompensationPackagesChanged = changes.compensationPackages;
-      selectionChanged = !changes.time && !changes.timeTypes && !changes.wages && !changes.items && !changes.compensationPackages && !changes.roster;
+      exactComponentsChanged = changes.components;
+      selectionChanged = !changes.time && !changes.timeTypes && !changes.wages && !changes.items && !changes.compensationPackages && !changes.components && !changes.roster;
     }
   }
   const reasons = [
@@ -1722,7 +1724,7 @@ export async function payRunStaleness(
     row.statutory_rates_changed ? "statutoryRates" : null,
     row.union_fringes_changed ? "unionFringes" : null,
     row.roster_changed || row.employment_changed || exactRosterChanged ? "roster" : null,
-    row.components_changed ? "components" : null,
+    row.components_changed || exactComponentsChanged ? "components" : null,
     row.component_definitions_changed ? "componentDefinitions" : null,
     exactCompensationPackagesChanged ? "compensationPackages" : null,
     row.derived_rules_changed ? "derivedRules" : null,
