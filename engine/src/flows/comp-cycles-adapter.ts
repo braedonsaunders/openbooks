@@ -32,10 +32,9 @@ import { tableScope } from "./subject-scope.ts";
  * happens in releaseCompCycleDecision, inside decideGate's savepoint —
  * so a throw rolls the whole decision back and the gate stays pending.
  * An approval releases the ROUND to push; per-line approve/reject stays
- * in the compensation service under hrm.compensation.approve with the
- * decider distinct from the proposer. Self-approval is forbidden
- * outright: independence of the decider is an HRM control, not a tenant
- * preference (period-close precedent).
+ * in the compensation service under hrm.compensation.approve. The submitted
+ * tenant Flow policy governs self-approval; native completed gate evidence
+ * is required before the service permits a proposer to decide their own line.
  */
 
 const CYCLE_STATUSES = [

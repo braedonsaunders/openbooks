@@ -1,6 +1,8 @@
 import { canonicalNonNegativeDecimal } from "../../money/exact-decimal.ts";
 import { isCivilDate } from "../temporal.ts";
 import { sql } from "drizzle-orm";
+import { HRM_COMP_CYCLE_SUBJECT_KIND } from "@openbooks/schema/src/hrm-compensation.ts";
+import { completedGateAllowsSelfApproval } from "../../flows/approval-decision-policy.ts";
 import { db, withOrgTransaction } from "../../platform/db.ts";
 import { businessToday } from "../../platform/business-date.ts";
 import { actorHasPermission } from "../../organization/actor-permissions.ts";
@@ -49,7 +51,7 @@ import { requireActorId, requireId, requireOrgId, requireReason } from "../recru
  * never silently accepted; over-budget pacing WARNS and requires a
  * reason, never blocks. The cycle's approval is a Flows run (submit →
  * release stamps the cycle); per-line approve/reject additionally needs
- * hrm.compensation.approve with the decider distinct from the proposer.
+ * hrm.compensation.approve and the submitted tenant Flow's approval policy.
  * Push writes each approved line once through the canonical wage writer
  * (effective on the cycle's effective_on) with the line→rate link making
  * re-push a skip, never a double. A push whose effective_on falls in a
@@ -1303,14 +1305,13 @@ export async function reopenLine(query: {
 }
 
 // ---------------------------------------------------------------------------
-// Line decisions (approve/reject): the Flows gate key plus identity
-// separation. The decider is never the proposer.
+// Line decisions retain person identity and the cycle's submitted Flow policy.
 // ---------------------------------------------------------------------------
 
 /**
- * Pure separation-of-duties invariant for line decisions. Both identity
- * legs must hold: the decider is neither the proposing user nor a second
- * login for the proposer's person. An unresolvable proposer — a legacy
+ * Person identities remain required regardless of the tenant's policy.
+ * When independence is required, the decider must be neither the proposing
+ * user nor another login for that person. An unresolvable proposer — a legacy
  * line with no proposed_by, a deleted proposing user, or a null party on
  * either side — is a named refusal (re-propose the line), never a pass:
  * an identity that cannot be checked cannot be cleared.
@@ -1320,17 +1321,12 @@ export function assertLineDeciderSeparation(args: {
   proposerPartyId: string | null;
   deciderUserId: string;
   deciderPartyId: string | null;
+  requireIndependentActor?: boolean;
 }): void {
   if (args.proposedBy === null) {
     throw new CompensationError(
       "REFUSED",
       "this line names no proposer — separation of duties cannot be verified; re-propose the line before deciding",
-    );
-  }
-  if (args.proposedBy === args.deciderUserId) {
-    throw new CompensationError(
-      "REFUSED",
-      "the proposer cannot decide their own line — separation of duties; a second approver decides",
     );
   }
   if (args.proposerPartyId === null || args.deciderPartyId === null) {
@@ -1339,10 +1335,11 @@ export function assertLineDeciderSeparation(args: {
       "the line proposer can't be verified — re-propose the line so separation of duties can be checked",
     );
   }
-  if (args.proposerPartyId === args.deciderPartyId) {
+  if (args.requireIndependentActor === false) return;
+  if (args.proposedBy === args.deciderUserId || args.proposerPartyId === args.deciderPartyId) {
     throw new CompensationError(
       "REFUSED",
-      "the proposer cannot decide their own line — separation of duties; a second approver decides",
+      "the submitted cycle Flow has not authorized this proposer to decide their own line — submit the round and complete its configured approval, or use an authorized independent approver",
     );
   }
 }
@@ -1374,6 +1371,11 @@ async function decideLine(
         `a ${line.status} line cannot be decided — only proposed lines decide`,
       );
     }
+    const selfApprovalAuthorized = cycle.status === "approved"
+      && await completedGateAllowsSelfApproval(db, {
+        orgId, subjectKind: HRM_COMP_CYCLE_SUBJECT_KIND, subjectId: cycle.id,
+        approvalRunId: cycle.flow_run_id ?? undefined, actorId, outcome: "approved",
+      });
     assertLineDeciderSeparation({
       proposedBy: line.proposed_by,
       proposerPartyId: (await db.execute<{ party_id: string | null }>(sql`
@@ -1381,6 +1383,7 @@ async function decideLine(
       deciderUserId: actorId,
       deciderPartyId: (await db.execute<{ party_id: string | null }>(sql`
         select party_id from users where id = ${actorId}`)).rows[0]?.party_id ?? null,
+      requireIndependentActor: !selfApprovalAuthorized,
     });
     if (decision === "rejected" && (reason === null || reason.trim().length === 0)) {
       throw new CompensationError("INVALID_INPUT", "a rejection needs its reason — the manager reads it");
@@ -1457,7 +1460,6 @@ export async function submitCycleForApproval(query: {
         `${undecided.n} lines were never proposed — every line needs a proposal (or an explicit rejection of the round) before review`,
       );
     }
-    const { HRM_COMP_CYCLE_SUBJECT_KIND } = await import("@openbooks/schema/src/hrm-compensation.ts");
     const { runRecordFlows } = await import("../../flows/run.ts");
     const flowResult = await runRecordFlows(
       { kind: "on_submit", source: "api" },
