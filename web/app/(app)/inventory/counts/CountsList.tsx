@@ -1,5 +1,6 @@
 'use client'
 
+import { DirectedExecutionForm,useDirectedExecution } from '@/components/directed-execution'
 import { InventoryTrackingFields } from '@/components/inventory-tracking-fields'
 import { promptDialog } from '@/lib/prompt'
 import { useEffect, useRef, useState } from 'react'
@@ -621,6 +622,7 @@ function CountDetailBody({
   onChanged: () => void
 }) {
   const t = useTranslations('inventory')
+  const execution=useDirectedExecution('/api/inventory/execution',onChanged)
   const [busy, setBusy] = useState(false)
   const [postError, setPostError] = useState<string | null>(null)
   const [counted, setCounted] = useState<Record<string, string>>({})
@@ -706,13 +708,10 @@ function CountDetailBody({
             />
             <Button
               size="sm"
-              disabled={busy || !(counted[l.id] ?? '').trim()}
+              disabled={busy || execution.busy || !(counted[l.id] ?? '').trim()}
               onClick={() =>
-                void (async()=>{ const reason=l.secondCountRequired?await promptDialog({title:t('counts.secondReason'),message:t('counts.secondReasonHint')}):null; await run(t('counts.actions.record'), {
-                  action: l.secondCountRequired?'second':'record',
-                  lineId: l.id,
-                  countedQuantity: (counted[l.id] ?? '').trim(),memo:reason,
-                }); })()
+                void (async()=>{ const reason=l.secondCountRequired?await promptDialog({title:t('counts.secondReason'),message:t('counts.secondReasonHint')}):null; await execution.prepare({action:'count',lineId:l.id,quantity:(counted[l.id]??'').trim(),
+                  observation:l.secondCountRequired?'second':'first',...(reason?{reason}:{})}); })()
               }
             >
               {l.secondCountRequired?t('counts.secondCount'):t('counts.actions.save')}
@@ -860,14 +859,16 @@ function CountDetailBody({
           ) : null}
         </div>
       ) : null}
-      <PagedTable
+      {execution.error&&!execution.task?<p role="alert" className="text-sm text-destructive">{execution.error}</p>:null}
+      {execution.task?<DirectedExecutionForm key={execution.task.id} task={execution.task} busy={execution.busy}
+        error={execution.error} onConfirm={execution.confirm} onBack={execution.clear}/>:<PagedTable
         source="inventory_count_lines"
         rows={lines}
         columns={lineColumns}
         searchable
         empty={t('counts.detail.noLines')}
         rowKey={(l) => l.id}
-      />
+      />}
       {header.status === 'posted' || header.status === 'cancelled' ? (
         <Button size="sm" variant="secondary" onClick={onDone}>
           {t('counts.actions.close')}

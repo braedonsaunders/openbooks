@@ -870,6 +870,9 @@ const SOURCES = {
     rowKeyField: 'warehouseId',
     mode: 'loaded',
   },
+  fulfillment_pick_execution: {route:'/picks',rowsField:'document.lines',rowKeyField:'lineId',mode:'loaded'},
+  handling_unit_contents: {route:'/shipments',rowsField:'unit.lines',rowKeyField:'lineId',mode:'loaded'},
+  warehouse_receipts: {route:'/warehouse',rowsField:'receipts',rowKeyField:'lineId',mode:'loaded'},
   warehouse_putaway: {
     route: '/warehouse',
     rowsField: 'staged',

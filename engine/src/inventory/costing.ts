@@ -1,5 +1,5 @@
 import { fromUnits, roundDiv, toUnits } from "../money/money.ts";
-import { canonicalDecimal } from "../money/exact-decimal.ts";
+import { canonicalDecimal, multiplyDecimal } from "../money/exact-decimal.ts";
 import { InventoryError } from "./contracts.ts";
 
 /**
@@ -120,12 +120,35 @@ export function toBaseQuantity(
   baseUnit: string,
   lineLabel = "inventory line",
 ): string {
+  const factor = inventoryConversionFactor(unit, conversions, baseUnit, lineLabel);
+  return fromUnits(mulUnits(toUnits(quantity), toUnits(factor)));
+}
+
+/** Scan comparisons retain document precision before inventory posting rounds to its stored scale. */
+export function toExactBaseQuantity(
+  quantity: string,
+  unit: string | null | undefined,
+  conversions: Record<string, number>,
+  baseUnit: string,
+  lineLabel = "inventory line",
+): string {
+  const exact = canonicalDecimal(quantity, 8);
+  if (exact === null) throw new InventoryError(`${lineLabel} quantity must be exact decimal text with at most eight places`);
+  return multiplyDecimal(exact, inventoryConversionFactor(unit, conversions, baseUnit, lineLabel), 12);
+}
+
+function inventoryConversionFactor(
+  unit: string | null | undefined,
+  conversions: Record<string, number>,
+  baseUnit: string,
+  lineLabel: string,
+): string {
   const folded = normalizeInventoryUnit(unit);
   // No unit — or the base unit under any spelling — needs no conversion.
   // Document authors (drawer free text, connector source names) must not
   // have to match the profile's exact case to post stock.
   if (!folded || folded === normalizeInventoryUnit(baseUnit)) {
-    return fromUnits(toUnits(quantity));
+    return "1";
   }
   const trimmed = (unit ?? "").trim();
   const factor: unknown =
@@ -151,7 +174,7 @@ export function toBaseQuantity(
         `configure an exact conversion under Unit conversions on the item's Inventory costing section`,
     );
   }
-  return fromUnits(mulUnits(toUnits(quantity), toUnits(exact)));
+  return exact;
 }
 
 // ---------------------------------------------------------------------------

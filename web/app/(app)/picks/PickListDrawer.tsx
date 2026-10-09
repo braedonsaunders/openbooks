@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import { PickExecutionPanel } from './PickExecutionPanel'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
@@ -141,6 +142,7 @@ export function PickListDrawer({ data }: { data: FulfillmentDrawerData }) {
       description={pick.customer?.name ?? undefined}
       actions={actions}
       detailTabs={[
+        {key:'execution',label:'Execution',content:<PickExecutionPanel pick={pick} canManage={data.canManage}/>},
         { key: 'lines', label: tCommon('labels.lines'), content: <FulfillmentLines lines={pick.lines} layout={data.layout} barcodeScanningEnabled={data.barcodeScanningEnabled} customerId={pick.customer?.id} /> },
         { key: 'related', label: t('related.tab'), content: <FulfillmentRelated document={pick} /> },
         {

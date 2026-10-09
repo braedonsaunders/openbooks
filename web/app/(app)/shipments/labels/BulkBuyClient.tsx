@@ -27,6 +27,8 @@ import { addExact } from '../_fulfillment/shipping-display'
 
 interface CandidateView {
   shipmentId: string
+  handlingUnitId:string
+  handlingUnitCode?:string
   documentNumber: string
   customerName: string | null
   promisedDate: string | null
@@ -36,6 +38,8 @@ interface CandidateView {
 type PreviewRowView =
   | {
       shipmentId: string
+  handlingUnitId:string
+  handlingUnitCode?:string
       documentNumber: string
       ok: true
       providerRateId: string
@@ -47,6 +51,8 @@ type PreviewRowView =
     }
   | {
       shipmentId: string
+  handlingUnitId:string
+  handlingUnitCode?:string
       documentNumber: string | null
       ok: false
       code: string
@@ -55,8 +61,8 @@ type PreviewRowView =
     }
 
 type BuyRowView =
-  | { shipmentId: string; ok: true; labelId: string; trackingNumber: string | null; duplicate: boolean }
-  | { shipmentId: string; ok: false; code: string; message: string; remedy?: string }
+  | { shipmentId: string; handlingUnitId:string; ok: true; labelId: string; trackingNumber: string | null; duplicate: boolean }
+  | { shipmentId: string; handlingUnitId:string; ok: false; code: string; message: string; remedy?: string }
 
 type Rule = 'cheapest' | 'fastest' | 'cheapest_by_date'
 
@@ -98,7 +104,7 @@ export function BulkBuyClient({
     }
     setCandidatesError(null)
     setCandidates(result.data.candidates)
-    setSelected(new Set(result.data.candidates.map((candidate) => candidate.shipmentId)))
+    setSelected(new Set(result.data.candidates.map((candidate) => candidate.handlingUnitId)))
     setPreview(null)
     if (!keepPurchase) {
       setBought(null)
@@ -134,7 +140,7 @@ export function BulkBuyClient({
   function toggleAll() {
     if (!candidates) return
     setSelected((current) =>
-      current.size === candidates.length ? new Set() : new Set(candidates.map((candidate) => candidate.shipmentId)),
+      current.size === candidates.length ? new Set() : new Set(candidates.map((candidate) => candidate.handlingUnitId)),
     )
     setPreview(null)
     setBought(null)
@@ -172,7 +178,7 @@ export function BulkBuyClient({
           method: 'POST',
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({
-            shipmentIds: [...selected],
+            items:(candidates??[]).filter(candidate=>selected.has(candidate.handlingUnitId)).map(candidate=>({shipmentId:candidate.shipmentId,handlingUnitId:candidate.handlingUnitId})),
             ...(accountId ? { accountId } : {}),
             rule,
             ...(rule === 'cheapest_by_date' ? { promisedDate } : {}),
@@ -195,7 +201,7 @@ export function BulkBuyClient({
           body: JSON.stringify({
             ...(accountId ? { accountId } : {}),
             items: readyRows.filter((row) => row.ok).map((row) => ({
-              shipmentId: row.shipmentId,
+              shipmentId: row.shipmentId,handlingUnitId:row.handlingUnitId,
               providerRateId: row.providerRateId,
             })),
           }),
@@ -295,17 +301,17 @@ export function BulkBuyClient({
               </TableHeader>
               <TableBody>
                 {candidates.map((candidate) => (
-                  <TableRow key={candidate.shipmentId}>
+                  <TableRow key={candidate.handlingUnitId}>
                     <TableCell>
                       <input
                         type="checkbox"
-                        aria-label={candidate.documentNumber}
-                        checked={selected.has(candidate.shipmentId)}
-                        onChange={() => toggle(candidate.shipmentId)}
+                        aria-label={`${candidate.documentNumber} · ${candidate.handlingUnitCode ?? ''}`}
+                        checked={selected.has(candidate.handlingUnitId)}
+                        onChange={() => toggle(candidate.handlingUnitId)}
                         className="h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500"
                       />
                     </TableCell>
-                    <TableCell className="font-mono">{candidate.documentNumber}</TableCell>
+                    <TableCell className="font-mono">{candidate.documentNumber} · {candidate.handlingUnitCode}</TableCell>
                     <TableCell>{candidate.customerName ?? '—'}</TableCell>
                     <TableCell>{candidate.promisedDate ?? '—'}</TableCell>
                   </TableRow>
@@ -342,7 +348,7 @@ export function BulkBuyClient({
                     <TableBody>
                       {readyRows.map((row) =>
                         row.ok ? (
-                          <TableRow key={row.shipmentId}>
+                          <TableRow key={row.handlingUnitId}>
                             <TableCell className="font-mono">{row.documentNumber}</TableCell>
                             <TableCell>{row.carrier} · {row.service}</TableCell>
                             <TableCell>{row.deliveryDate ?? '—'}</TableCell>
@@ -360,7 +366,7 @@ export function BulkBuyClient({
                 <ul className="space-y-2">
                   {failedRows.map((row) =>
                     !row.ok ? (
-                      <li key={row.shipmentId} className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200">
+                      <li key={row.handlingUnitId} className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200">
                         <span className="font-medium">{row.documentNumber ?? row.shipmentId}</span>
                         {' — '}{row.message}
                         {row.remedy ? <> {row.remedy}</> : null}{' '}
@@ -395,13 +401,13 @@ export function BulkBuyClient({
               <ul className="space-y-2">
                 {bought.map((row) =>
                   row.ok ? (
-                    <li key={row.shipmentId} className="flex flex-wrap items-center gap-2 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950 dark:text-emerald-200">
+                    <li key={row.handlingUnitId} className="flex flex-wrap items-center gap-2 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950 dark:text-emerald-200">
                       <Badge variant="success">{t('shipping.bulk.boughtOne')}</Badge>
                       <span className="font-mono">{row.trackingNumber ?? row.labelId}</span>
                       {row.duplicate ? <span>{t('shipping.bulk.duplicate')}</span> : null}
                     </li>
                   ) : (
-                    <li key={row.shipmentId} className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800 dark:border-red-900 dark:bg-red-950 dark:text-red-200">
+                    <li key={row.handlingUnitId} className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800 dark:border-red-900 dark:bg-red-950 dark:text-red-200">
                       <span className="font-mono">{row.shipmentId}</span>{' — '}{row.message}
                       {row.remedy ? <> {row.remedy}</> : null}
                     </li>

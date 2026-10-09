@@ -12,6 +12,7 @@ import {
   receiveMovingAverage,
   receiveStandard,
   toBaseQuantity,
+  toExactBaseQuantity,
   type CostLayer,
 } from "./costing.ts";
 import {
@@ -657,4 +658,12 @@ test("landed cost for a receipt lands on that receipt's layers, and its sold sha
   } finally {
     await dropScratchOrgReporting(org.orgId);
   }
+});
+
+// A document-unit scan cannot hide a mismatch below the inventory storage scale.
+test("exact scan conversion retains eight-place quantities and the same configured unit grammar",()=>{
+  assert.equal(toExactBaseQuantity("1.00000001","ea",{},"ea"),"1.000000010000");
+  assert.equal(toExactBaseQuantity("0.00000001","BOX",{box:12},"ea"),"0.000000120000");
+  assert.notEqual(toExactBaseQuantity("1.00000001","ea",{},"ea"),toExactBaseQuantity("1.00000002","ea",{},"ea"));
+  assert.throws(()=>toExactBaseQuantity("1","crate",{},"ea"),/no conversion/);
 });

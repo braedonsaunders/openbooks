@@ -6,6 +6,7 @@ import { defineRoute } from '@/lib/api/route'
 
 const ratesBody = z.object({
   shipmentId: z.string().uuid(),
+  handlingUnitId:z.string().uuid(),
   accountId: z.string().uuid().nullable().optional(),
   presetId: z.string().uuid().nullable().optional(),
   direction: z.enum(['outbound', 'return']).optional(),
@@ -24,6 +25,7 @@ export const POST = defineRoute({
     const quote = await db.transaction((tx) =>
       getShipmentRates(tx, authz.user.orgId, authz.user.id, {
         shipmentId: body.shipmentId,
+        handlingUnitId:body.handlingUnitId,
         accountId: body.accountId,
         presetId: body.presetId,
         direction: body.direction,

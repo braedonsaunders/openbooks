@@ -1,3 +1,4 @@
+import { assertShipmentPacked } from "./handling-unit-state.ts";
 import { assertSaleableStock, saleableLocation, unheldTracking } from "../inventory/stock-eligibility.ts";
 import { toBaseQuantity } from "../inventory/costing.ts";
 import { resolveProfile } from "../inventory/profile-policy.ts";
@@ -699,6 +700,7 @@ async function insertFulfillmentDocument(
       documentId: inserted.id,
       orgId,
       warehouseId: doc.warehouseId,
+      executionRequired: true,
       shipToAddress: doc.shipToAddress,
       createdBy: actorId,
       updatedBy: actorId,
@@ -971,8 +973,8 @@ export async function createShipment(
 
   const pickLines = (await tx.execute<PickLineRow & { pick_item_id: string; pick_unit: string | null }>(sql`
     with ${pickReservationsCte(orgId)}
-    select line.id as pick_line_id, line.line_number as pick_line_number, line.stock_location_id as bin_id,
-           line.quantity::text as quantity, fl.lot_id, fl.serial_id, fl.sales_order_line_id,
+    select line.id as pick_line_id, line.line_number as pick_line_number, coalesce(r.bin_id,line.stock_location_id) as bin_id,
+           coalesce(r.quantity,line.quantity)::text as quantity, fl.lot_id, fl.serial_id, fl.sales_order_line_id,
            coalesce(r.reserved, 0)::text as reserved,
            line.item_id as pick_item_id, line.unit as pick_unit,
            so.id, so.line_number, so.item_id, so.description, so.unit, so.stock_location_id,
@@ -984,6 +986,12 @@ export async function createShipment(
       left join pick_reservations r on r.pick_line_id = line.id
      where fl.org_id = ${orgId} and fl.document_id = ${pickList.id}
      order by line.line_number`)).rows;
+  const unconfirmed=(await tx.execute(sql`select line.id from document_lines line
+    join fulfillment_documents fd on fd.org_id=line.org_id and fd.document_id=line.document_id
+    left join pick_execution_lines execution on execution.org_id=line.org_id and execution.line_id=line.id
+    where line.org_id=${orgId} and line.document_id=${pickList.id} and fd.execution_required
+      and execution.line_id is null limit 1`)).rows[0];
+  if(unconfirmed)throw new FulfillmentRefusal("Confirm every suggested pick, including short picks, before creating a shipment", "wrong_stage",409);
   const byId = new Map(pickLines.map((line) => [line.pick_line_id, line]));
   const chosen = input.lines
     ? input.lines.map((line, index) => {
@@ -1000,12 +1008,19 @@ export async function createShipment(
       `Void ${pickList.document_number}; its order lines were fulfilled or cancelled another way`,
     );
   }
+  const directed=(await tx.execute<{execution_required:boolean}>(sql`select execution_required from fulfillment_documents where org_id=${orgId} and document_id=${pickList.id}`)).rows[0]!.execution_required;
   const once = new Set<string>();
   for (const { pick, quantity } of chosen) {
     if (once.has(pick.pick_line_id)) {
       throw new FulfillmentRefusal(`Pick line ${pick.pick_line_number} is selected twice`, "invalid_input", 422, "Ship each pick line once");
     }
     once.add(pick.pick_line_id);
+    if(directed) {
+      const execution=(await tx.execute<{matches:boolean}>(sql`select picked_quantity=${quantity}::numeric as matches from pick_execution_lines
+        where org_id=${orgId} and line_id=${pick.pick_line_id}`)).rows[0];
+      if(!execution?.matches)throw new FulfillmentRefusal("Ship the full confirmed quantity from each selected pick line", "wrong_stage",409,
+        "Record the actual short pick before creating its shipment; a carton moves the selected pick position as one quantity");
+    }
     const fits = (await tx.execute<{ fits: boolean }>(sql`select ${quantity}::numeric <= ${pick.reserved}::numeric as fits`)).rows[0]!;
     if (!fits.fits) {
       throw new FulfillmentRefusal(
@@ -1066,7 +1081,7 @@ export async function createShipment(
   return { id: shipmentId, documentNumber };
 }
 
-async function lockDraftShipment(tx: SqlExecutor, orgId: string, shipmentId: string, scope: Scope): Promise<FulfillmentDocRow> {
+export async function lockDraftShipment(tx: SqlExecutor, orgId: string, shipmentId: string, scope: Scope): Promise<FulfillmentDocRow> {
   const { shipment } = await lockChain(tx, orgId, shipmentId, SHIPMENT_KIND, scope);
   if (!shipment || shipment.status !== "draft" || shipment.stage !== "open") {
     const state = shipment?.stage === "done" ? "complete" : shipment?.status;
@@ -1150,6 +1165,10 @@ export async function setShipmentCartons(
   const changes: { lineId: string; before: string | null; after: string | null }[] = [];
   for (const entry of input.cartons) {
     const carton = cleanCarton(entry.carton);
+    const unit=(await tx.execute<{code:string}>(sql`select unit.code from handling_unit_contents content
+      join handling_units unit on unit.org_id=content.org_id and unit.id=content.handling_unit_id
+      where content.org_id=${orgId} and content.shipment_line_id=${entry.lineId}`)).rows[0];
+    if(unit && unit.code!==carton)throw new FulfillmentRefusal("This line belongs to a handling unit; review its assigned carton in Packing", "wrong_stage",409);
     const updated = (await tx.execute<{ before: string | null }>(sql`
       update fulfillment_lines fl
          set carton = ${carton}, updated_at = now(), updated_by = ${actorId}
@@ -1207,7 +1226,20 @@ export async function voidShipment(
   const reason = requireReason(input.reason);
   const { shipment } = await lockChain(tx, orgId, input.shipmentId, SHIPMENT_KIND, input.allowedSubsidiaryIds);
   assertVoidable(shipment!, "Shipment");
+  const paid=(await tx.execute(sql`select id from shipment_labels where org_id=${orgId} and shipment_document_id=${shipment!.id}
+    and status='purchased' limit 1`)).rows[0];
+  if(paid)throw new FulfillmentRefusal("Void purchased labels before voiding this shipment", "wrong_stage",409);
   await markVoided(tx, orgId, actorId, shipment!, reason);
+  const units=await tx.execute<{id:string;before_status:string}>(sql`with prior as (select id,status from handling_units
+      where org_id=${orgId} and shipment_document_id=${shipment!.id} and status in('open','packed') for update)
+    update handling_units unit set status='voided',updated_at=now(),updated_by=${actorId}
+    from prior where unit.org_id=${orgId} and unit.id=prior.id returning unit.id,prior.status as before_status`);
+  for(const unit of units.rows) {
+    const audited=await tx.execute(sql`insert into audit_log(org_id,table_name,row_id,action,changes,actor_id)
+      values(${orgId},'handling_units',${unit.id},'update',${JSON.stringify({operation:"void_carton",shipmentId:shipment!.id,
+        before:{status:unit.before_status},after:{status:"voided"},reason})}::jsonb,${actorId}) returning id`);
+    if(audited.rows.length!==1)throw new FulfillmentRefusal("Handling-unit void was not audited","changed_concurrently",409);
+  }
 }
 
 function requireReason(raw: string): string {
@@ -1281,6 +1313,8 @@ export interface FulfillmentLineView {
   serialNumber: string | null;
   pickLineId: string | null;
   carton: string | null;
+  pickedQuantity?:string|null;
+  shortQuantity?:string|null;
   /**
    * Set when the row covers a kit's component rather than its order line's
    * own item: the kit it belongs to, so the form nests the row under it.
@@ -1309,6 +1343,8 @@ export interface FulfillmentDocumentView {
   shipToAddress: ShipToAddress | null;
   salesFulfillment: { id: string; number: string } | null;
   completedAt: string | null;
+  pickPriority?:number;
+  releaseCutoffAt?:string|null;
   lines: FulfillmentLineView[];
 }
 
@@ -1342,6 +1378,7 @@ interface ViewRow extends Record<string, unknown> {
   sales_fulfillment_id: string | null;
   sales_fulfillment_number: string | null;
   completed_at: string | null;
+  pick_priority:number;release_cutoff_at:string|null;
 }
 
 /**
@@ -1366,7 +1403,7 @@ export async function getFulfillmentDocument(
            c.id as carrier_id, c.code as carrier_code, c.name as carrier_name, c.tracking_url_template,
            fd.carrier_service, fd.tracking_number, fd.ship_to_address,
            sf.id as sales_fulfillment_id, sf.document_number as sales_fulfillment_number,
-           fd.completed_at::text as completed_at
+           fd.pick_priority,fd.release_cutoff_at::text,fd.completed_at::text as completed_at
       from documents d
       join fulfillment_documents fd on fd.document_id = d.id and fd.org_id = d.org_id
       join warehouses w on w.stock_location_id = fd.warehouse_id and w.org_id = fd.org_id
@@ -1398,12 +1435,13 @@ export async function getFulfillmentDocument(
     bin_id: string; bin_code: string; quantity: string; unit: string | null; sales_order_line_id: string;
     sales_order_line_number: number; lot_number: string | null; serial_number: string | null;
     pick_line_id: string | null; carton: string | null;
+    picked_quantity:string|null;short_quantity:string|null;
     kit_item_id: string | null; kit_label: string | null;
   }>(sql`
     select line.id as line_id, line.line_number, line.item_id, coalesce(i.code || ' · ' || i.name, i.name) as item_label,
            line.description, line.stock_location_id as bin_id, bin.code as bin_code, line.quantity::text as quantity,
            line.unit, fl.sales_order_line_id, so.line_number as sales_order_line_number,
-           lot.lot_number, serial.serial_number, fl.pick_line_id, fl.carton,
+           lot.lot_number, serial.serial_number, fl.pick_line_id, fl.carton,execution.picked_quantity::text,execution.short_quantity::text,
            case when line.item_id <> so.item_id then so.item_id end as kit_item_id,
            case when line.item_id <> so.item_id
              then coalesce(kit.code || ' · ' || kit.name, kit.name) end as kit_label
@@ -1412,6 +1450,7 @@ export async function getFulfillmentDocument(
       join document_lines so on so.id = fl.sales_order_line_id and so.org_id = fl.org_id
       join items i on i.id = line.item_id and i.org_id = line.org_id
       join stock_locations bin on bin.id = line.stock_location_id and bin.org_id = line.org_id
+      left join pick_execution_lines execution on execution.org_id=line.org_id and execution.line_id=line.id
       left join items kit on kit.id = so.item_id and kit.org_id = so.org_id
       left join lots lot on lot.id = fl.lot_id
       left join serials serial on serial.id = fl.serial_id
@@ -1438,7 +1477,7 @@ export async function getFulfillmentDocument(
     trackingUrl: trackingUrl(row.tracking_url_template, row.tracking_number),
     shipToAddress: row.ship_to_address,
     salesFulfillment: ref(row.sales_fulfillment_id, row.sales_fulfillment_number),
-    completedAt: row.completed_at,
+    completedAt: row.completed_at,pickPriority:row.pick_priority,releaseCutoffAt:row.release_cutoff_at,
     lines: lines.map((line) => ({
       lineId: line.line_id,
       lineNumber: Number(line.line_number),
@@ -1455,6 +1494,7 @@ export async function getFulfillmentDocument(
       serialNumber: line.serial_number,
       pickLineId: line.pick_line_id,
       carton: line.carton,
+      pickedQuantity:line.picked_quantity,shortQuantity:line.short_quantity,
       kitGroup: line.kit_item_id && line.kit_label
         ? { kitItemId: line.kit_item_id, kitLabel: line.kit_label }
         : null,
@@ -1564,6 +1604,8 @@ export async function markShipmentComplete(
       "Reload the shipment and try again",
     );
   }
+  await tx.execute(sql`update handling_units set status='shipped',updated_at=now(),updated_by=${actorId}
+    where org_id=${orgId} and shipment_document_id=${input.shipment.id} and status='packed'`);
   await writeAudit(tx, orgId, actorId, input.shipment.id, "update", {
     mode: "shipment_completed",
     salesFulfillmentId: input.salesFulfillmentId,
@@ -1634,6 +1676,7 @@ export async function lockShipmentForCompletion(
       );
     }
     assertOrderOpen(order);
+    await assertShipmentPacked(tx,orgId,locked.id);
   }
   const lines = (await tx.execute<{
     sales_order_line_id: string; order_item_id: string | null; item_id: string | null;

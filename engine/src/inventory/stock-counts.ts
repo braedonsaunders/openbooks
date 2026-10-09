@@ -1,3 +1,4 @@
+import { requireExecutionConfirmation } from "./execution-authority.ts";
 import { assertTracking } from "./tracking.ts";
 import { countTolerance, assertSecondCounts } from "./count-policy.ts";
 import { randomUUID } from "node:crypto";
@@ -259,7 +260,7 @@ export async function startStockCount(
 export async function recordCountedQuantity(
   orgId: string,
   actorId: string | null,
-  input: { countId: string; lineId: string; countedQuantity: string; reason?: string | null },
+  input: { countId: string; lineId: string; countedQuantity: string; reason?: string | null; executionTaskId?:string },
 ): Promise<{ lineId: string; variance: string | null }> {
   const counted = parseCountQuantity(input.countedQuantity, "counted quantity");
   assertCountedNonNegative(counted);
@@ -293,6 +294,7 @@ export async function recordCountedQuantity(
         "line already posted an inventory adjustment — correct it with a new count, not an edit",
       );
     }
+    await requireExecutionConfirmation(tx,orgId,{stage:"count",taskId:input.executionTaskId,lineId:line.id,quantity:counted,observation:"first"});
     if (line.serial_id && cmp(counted,"0")!==0 && cmp(counted,"1")!==0) throw new InventoryError("Count one serial as present (1) or absent (0)");
     const updated = (await tx.execute<{ id: string }>(sql`
       update stock_count_lines set counted_quantity = ${counted}, first_counted_quantity=${counted}, first_counted_by=${actorId},

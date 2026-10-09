@@ -330,6 +330,10 @@ export function generateCopySql(
       ) end)`);
       continue;
     }
+    if(t.name==="handling_unit_moves" && ["request","movements"].includes(c.name)) {
+      exprs.push(`public.warehouse_execution_clone_json("${c.name}", '${seed}'::uuid)`);
+      continue;
+    }
     const fkTarget = t.fks[c.name];
     if (c.name === "id" && t.hasId) {
       exprs.push(`ob_rebase("id", '${seed}')`);

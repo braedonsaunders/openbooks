@@ -3,6 +3,7 @@ import {
   NewWarehouseButton,
   NewWarehouseDrawer,
   PutawayQueue,
+  WarehouseExecutionQueue,
   WarehousesPanel,
   ReplenishmentProposals,
   NewPickListDrawer,
@@ -28,6 +29,8 @@ export const WAREHOUSE_WIDGETS = {
       differenceIsZero={props.differenceIsZero === true}
     />
   ),
+  'warehouse-execution-queue':props=><WarehouseExecutionQueue rows={(props.rows as ComponentProps<typeof WarehouseExecutionQueue>['rows'])??[]}
+    receipts={(props.receipts as ComponentProps<typeof WarehouseExecutionQueue>['receipts'])??[]} canPost={props.canPost===true}/>,
   'putaway-queue': (props) => (
     <PutawayQueue
       rows={(props.rows as ComponentProps<typeof PutawayQueue>['rows']) ?? []}
