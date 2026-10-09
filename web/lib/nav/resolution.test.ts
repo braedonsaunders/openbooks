@@ -82,6 +82,18 @@ test('hidden and renamed destinations share one snapshot while local order stays
   assert.equal(groups.flatMap((group) => group.items).find((item) => item.href === '/payroll/runs')!.label, 'Process wages')
 })
 
+test('Payroll shows its daily workflow in order and Year-end only in local More', async () => {
+  reset()
+  const groups = await resolveNav('company-one', () => true, [], (key) => translator(`nav.${key}` as never), (key) => translator.has(`nav.${key}` as never))
+  const payroll = groups.flatMap(group => group.items).filter(item => item.subgroup === 'payroll-work')
+  assert.deepEqual(payroll.map(item => item.href), ['/payroll', '/payroll/runs', '/payroll/anomalies', '/payroll/remittances', '/payroll/separations'])
+  assert.deepEqual(payroll.map(item => item.label), ['Overview', 'Pay runs', 'Checks', 'Remittances', 'Separations'])
+  const local = await resolveLocalNavigation({user: {orgId: 'company-one'}, permissions: new Set(['*'])} as Parameters<typeof resolveLocalNavigation>[0])
+  const tabs = local.groups.find(group => group.some(tab => tab.href === '/payroll'))!
+  assert.equal(tabs.find(tab => tab.href === '/payroll/year-end')?.secondary, true)
+  assert.equal(tabs[0]!.label, 'Overview')
+})
+
 test('custom URLs and local choices cannot grant access around permission or feature gates', async () => {
   reset()
   config.groups[0]!.items.push({ kind: 'link', href: '/payroll/runs?status=posted#history', label: 'Wages' })
