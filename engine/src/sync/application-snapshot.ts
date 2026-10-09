@@ -123,7 +123,7 @@ export async function releaseSourceApplications(
     if (!period) throw new Error(`no accounting period covers source settlement ${row.applied_on}`);
     await assertPeriodModulesOpen(runner, {
       orgId, periodId: period.id, bookId: row.book_id,
-      subsidiaryIds: [row.subsidiary_id], modules: [module], allowImportedLocks: true,
+      subsidiaryIds: [row.subsidiary_id], modules: [module],
     });
     periodsChecked.add(key);
   }
@@ -165,7 +165,7 @@ export async function releaseSourceApplications(
       postingDate: entry.posting_date, periodId: entry.period_id,
       memo: "Source settlement allocation changed", origin: "fx_settlement",
       sourceDocumentId: entry.source_document_id, reversesEntryId: entry.id,
-      actorId: null, allowImportedLocks: true, allowInactiveAccounts: true,
+      actorId: null, allowInactiveAccounts: true,
       lines: reversalJournalLines(lines, { orgId, entryId: "" }),
     });
     await markEntryReversed(runner, { orgId, entryId, actorId: null });
