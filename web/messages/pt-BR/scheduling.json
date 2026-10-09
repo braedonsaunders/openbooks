@@ -388,6 +388,17 @@
         "subtle": "Destaques sutis",
         "strong": "Preenchimentos fortes"
       }
+    },
+    "editor": {
+      "bold": "Negrito",
+      "italic": "Itálico",
+      "underline": "Sublinhado",
+      "bullets": "Marcadores",
+      "numbered": "Lista numerada",
+      "link": "Link",
+      "linkAddress": "Endereço do link",
+      "apply": "Aplicar link",
+      "invalid": "Use no máximo 4000 caracteres e links seguros."
     }
   }
 }

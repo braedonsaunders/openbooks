@@ -388,6 +388,17 @@
         "subtle": "柔和强调",
         "strong": "浓色填充"
       }
+    },
+    "editor": {
+      "bold": "粗体",
+      "italic": "斜体",
+      "underline": "下划线",
+      "bullets": "项目符号",
+      "numbered": "编号列表",
+      "link": "链接",
+      "linkAddress": "链接地址",
+      "apply": "应用链接",
+      "invalid": "请使用不超过4000个字符和安全链接。"
     }
   }
 }

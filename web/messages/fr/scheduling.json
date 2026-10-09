@@ -388,6 +388,17 @@
         "subtle": "Accents discrets",
         "strong": "Aplats soutenus"
       }
+    },
+    "editor": {
+      "bold": "Gras",
+      "italic": "Italique",
+      "underline": "Souligné",
+      "bullets": "Puces",
+      "numbered": "Liste numérotée",
+      "link": "Lien",
+      "linkAddress": "Adresse du lien",
+      "apply": "Appliquer le lien",
+      "invalid": "Utilisez au plus 4000 caractères et des liens sûrs."
     }
   }
 }

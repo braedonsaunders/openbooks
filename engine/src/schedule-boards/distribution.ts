@@ -2,6 +2,7 @@ import {
   schedulePdfLayoutSchema,
   type SchedulePdfLayout,
   automaticScheduleDeliverySchema,
+  richTextDocumentSchema, richTextPlainText, type RichTextDocument,
 } from "@openbooks/forms-core";
 import { addCalendarDays } from "../platform/civil-date.ts";
 import { roleUsers } from "../organization/role-members.ts";
@@ -47,6 +48,7 @@ export interface ScheduleAudience {
   includePdf?: boolean;
   pdfLayout?: SchedulePdfLayout | null;
   message?: string;
+  messageContent?: RichTextDocument;
 }
 export interface ScheduleRecipient {
   partyId: string;
@@ -140,6 +142,29 @@ export function scheduleRecipientLines(
   );
 }
 
+/** Missing observations remain blank evidence, never inferred zero hours. */
+export function scheduleReportLines(
+  window: BoardWindow,
+  subjectIds: ReadonlySet<string>,
+  reportRows: readonly { subjectId: string; name: string }[],
+): ScheduleEmailLine[] {
+  const lines = scheduleRecipientLines(window, subjectIds);
+  const observed = new Set(lines.map(line => `${line.subjectId}:${line.date}`));
+  for (const row of reportRows)
+    for (const day of window.days)
+      if (!observed.has(`${row.subjectId}:${day.date}`))
+        lines.push({ date: day.date, subjectId: row.subjectId, subject: row.name, assignment: "—", hours: "No booking recorded", status: "No schedule evidence" });
+  return lines.sort((a, b) => a.date.localeCompare(b.date) || a.subject.localeCompare(b.subject) || (a.subjectId ?? "").localeCompare(b.subjectId ?? ""));
+}
+
+/** Rich messages are explicit; legacy strings remain literal plain text. */
+function normalizedAudience(audience: ScheduleAudience): ScheduleAudience {
+  if (audience.messageContent === undefined) return audience
+  const parsed = richTextDocumentSchema.safeParse(audience.messageContent)
+  if (!parsed.success) throw refused('The formatted message is invalid.', 'Use the message editor with at most 4000 characters and explicit safe links.')
+  return {...audience, messageContent: parsed.data, message: richTextPlainText(parsed.data)}
+}
+
 async function preview(
   actor: ScheduleActor,
   boardId: string,
@@ -147,6 +172,7 @@ async function preview(
   through: string,
   audience: ScheduleAudience,
 ): Promise<ScheduleDistributionPreview> {
+  audience = normalizedAudience(audience);
   const board = await getBoard(actor, boardId);
   await boardAuthority(actor, board, 'read');
   // Recipient addresses and issuance belong to schedulers, never self-service readers.
@@ -424,20 +450,11 @@ async function preview(
         'Use personal reports, or a board and recipients scoped to one legal entity.',
       );
   }
-  function reportLines(subjectIds: ReadonlySet<string>, reportRows: readonly { subjectId: string; name: string }[]) {
-    const lines = scheduleRecipientLines(window, subjectIds);
-    const observed = new Set(lines.map(line => `${line.subjectId}:${line.date}`));
-    for (const row of reportRows)
-      for (const day of window.days)
-        if (!observed.has(`${row.subjectId}:${day.date}`))
-          lines.push({ date: day.date, subjectId: row.subjectId, subject: row.name, assignment: "—", hours: "No booking recorded", status: "No schedule evidence" });
-    return lines.sort((a, b) => a.date.localeCompare(b.date) || a.subject.localeCompare(b.subject) || (a.subjectId ?? "").localeCompare(b.subjectId ?? ""));
-  }
   const sharedReport = audience.visibility === "board"
-    ? reportLines(relevant, window.rows.filter(row => relevant.has(row.subjectId)))
+    ? scheduleReportLines(window, relevant, window.rows.filter(row => relevant.has(row.subjectId)))
     : null;
   for (const recipient of recipients)
-    (recipient as { lines: ScheduleEmailLine[] }).lines = sharedReport ?? reportLines(new Set(recipient.subjects.map(subject => subject.id)), recipient.subjects.map(subject => ({ subjectId: subject.id, name: subject.name })));
+    (recipient as { lines: ScheduleEmailLine[] }).lines = sharedReport ?? scheduleReportLines(window, new Set(recipient.subjects.map(subject => subject.id)), recipient.subjects.map(subject => ({ subjectId: subject.id, name: subject.name })));
   // One native mailbox owns one delivery; the preview retains all associated identities.
   for (let i = 0; i < recipients.length; i++)
     for (let j = recipients.length - 1; j > i; j--)
@@ -495,6 +512,7 @@ async function preview(
     if (recipient.email) {
       const report = scheduleDistributionEmail({
         message: audience.message,
+        messageContent: audience.messageContent,
         recipient: recipient.name,
         board: board.name,
         from,
@@ -676,6 +694,7 @@ async function persist(
     for (const [subject, contactId] of snapshots) {
       const mail = scheduleDistributionEmail({
         message: p.audience.message,
+        messageContent: p.audience.messageContent,
         recipient: recipient.name,
         board: p.boardName,
         from: p.from,
@@ -747,6 +766,7 @@ export async function sendScheduleDistribution(
     key: string;
   },
 ) {
+  input = {...input, audience: normalizedAudience(input.audience)};
   return withOrgTransaction(
     actor.orgId,
     async () => {

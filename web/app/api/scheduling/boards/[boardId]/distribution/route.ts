@@ -1,4 +1,4 @@
-import {schedulePdfLayoutSchema} from '@openbooks/forms-core'
+import {schedulePdfLayoutSchema, richTextDocumentSchema} from '@openbooks/forms-core'
 import { z } from 'zod'
 import { NextResponse } from 'next/server'
 import { defineRoute } from '@/lib/api/route'
@@ -18,7 +18,7 @@ const audience = z.strictObject({
   additionalRoleKeys:z.array(z.string().min(1).max(80)).max(20).optional(),
   additionalPartyIds:z.array(z.string().uuid()).max(500).optional(),
   pdfLayout:schedulePdfLayoutSchema.nullable().optional(),
-  includePdf:z.boolean().optional(),message:z.string().max(4000).optional(),
+  includePdf:z.boolean().optional(),message:z.string().max(4000).optional(),messageContent:richTextDocumentSchema.optional(),
 })
 const selection = { from: date, through: date, audience }
 export const POST = defineRoute({

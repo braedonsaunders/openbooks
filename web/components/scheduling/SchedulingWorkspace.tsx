@@ -11,6 +11,7 @@ import {
 import { Button, Input, Select, Popover, cn } from '@openbooks/ui'
 import { SchedulingAlert } from './SchedulingAlert'
 import { EmailScheduleDrawer } from './EmailScheduleDrawer'
+import { DownloadScheduleDrawer } from './DownloadScheduleDrawer'
 import { BookingDrawer } from './BookingDrawer'
 import { SourceRecordDrawer } from './SourceRecord'
 import type { BoardSourceRecord } from '@openbooks/engine/src/schedule-boards/source-history.ts'
@@ -112,6 +113,7 @@ function BoardShell(props: SchedulingWorkspaceProps & { board: ScheduleBoard; on
   const [openSourceRecord, setOpenSourceRecord] = useState<BoardSourceRecord | null>(null)
   const [emailOpen,setEmailOpen] = useState(false)
   const [publishing, setPublishing] = useState(false)
+  const [downloadOpen, setDownloadOpen] = useState(false)
   const [moreOpen, setMoreOpen] = useState(false)
   const [displayOpen,setDisplayOpen]=useState(false)
   const range = useMemo(() => viewRange(view, anchor, rangeDays, board.weekStartsOn), [anchor, board.weekStartsOn, rangeDays, view])
@@ -249,6 +251,7 @@ function BoardShell(props: SchedulingWorkspaceProps & { board: ScheduleBoard; on
               <Select value={String(rangeDays)} disabled={view==='calendar'} onChange={event=>setRangeDays(Number(event.target.value))} className="h-8 min-w-0 w-full text-xs" aria-label={t('toolbar.range')}>{rangeOptions.map(days=><option key={days} value={days}>{t('toolbar.days',{count:days})}</option>)}</Select>
               <Select value={groupBy} onChange={event=>setGroupBy(event.target.value as GroupBy)} className="h-8 min-w-0 w-full text-xs" aria-label={t('toolbar.groupBy')}>{(['none','department','trade','jobTitle'] as const).map(option=><option key={option} value={option}>{t(`groupBy.${option}`)}</option>)}</Select>
             </div>
+            {window?.canManage ? <div className="px-3 pb-3"><Button variant="ghost" size="sm" className="w-full justify-start" onClick={() => {setMoreOpen(false); setDownloadOpen(true)}}>{t('distribution.downloadPdf')}</Button></div> : null}
           </Popover> : null}
         </div>
       </div>
@@ -317,6 +320,7 @@ function BoardShell(props: SchedulingWorkspaceProps & { board: ScheduleBoard; on
       {window && openEntry && !openSourceRecord ? (
         <BookingDrawer entry={window.entries.find((entry) => entry.id === openEntry.id) ?? openEntry} window={window} controller={controller} onClose={() => setOpenEntry(null)} />
       ) : null}
+      {downloadOpen && window ? <DownloadScheduleDrawer window={window} onClose={()=>setDownloadOpen(false)} /> : null}
       {emailOpen && window ? <EmailScheduleDrawer window={window} onClose={()=>setEmailOpen(false)} /> : null}
       {props.newBoard}
 

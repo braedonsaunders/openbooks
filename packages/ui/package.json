@@ -18,7 +18,8 @@
     "framer-motion": "^12.42.2",
     "lucide-react": "^1.24.0",
     "next-intl": "^4.13.2",
-    "tailwind-merge": "^3.6.0"
+    "tailwind-merge": "^3.6.0",
+    "@openbooks/forms-core": "*"
   },
   "peerDependencies": {
     "react": "^19.0.0",

@@ -2,10 +2,11 @@
 import { useEffect, useState } from "react";
 import Link from 'next/link'
 import { useTranslations } from 'next-intl'
-import { Button, Drawer, Input, Select, Textarea } from "@openbooks/ui";
-import type { SchedulePdfLayout } from "@openbooks/forms-core";
+import { Button, Drawer, Input, Select, RichTextEditor } from "@openbooks/ui";
+import { configuredSchedulePdfLayout, plainTextDocument, richTextPlainText, type RichTextDocument, type SchedulePdfLayout } from "@openbooks/forms-core";
 import type { BoardWindow } from './model'
 import type { ScheduleDistributionPreview } from '@openbooks/engine/src/schedule-boards/distribution.ts'
+import { SchedulePdfFields } from './SchedulePdfFields'
 import { SchedulingAlert } from './SchedulingAlert'
 import { SchedulingRequestError } from './api'
 import { scheduleDistributionEmail } from '@openbooks/emails/schedule-distribution'
@@ -30,7 +31,7 @@ export function EmailScheduleDrawer({
     "scope" | "scheduled" | "supervisors" | "self"
   >("scope");
   const [includePdf, setIncludePdf] = useState(true),
-    [message, setMessage] = useState(""),
+    [messageContent, setMessageContent] = useState<RichTextDocument>(() => plainTextDocument("")),
     [extras, setExtras] = useState<{ id: string; name: string }[]>([]),
     [contactQuery, setContactQuery] = useState(""),
     [contacts, setContacts] = useState<
@@ -55,20 +56,8 @@ export function EmailScheduleDrawer({
     } | null>(null)
   const [key, setKey] = useState(() => crypto.randomUUID()),
     [recipientId, setRecipientId] = useState('')
-  const [pdfLayout, setPdfLayout] = useState<SchedulePdfLayout>({
-    paperSize: "tabloid",
-    orientation: "landscape",
-    marginMm: 8,
-    density: "compact",
-    daysPerSection: 14,
-    detail: "assignments",
-    style: "modern",
-    accentColor: "#0f766e",
-    showLegend: true,
-    shadeWeekends: true,
-    colorTreatment: "subtle",
-    colorIntensity: 8,
-  });
+  const [messageValid, setMessageValid] = useState(true)
+  const [pdfLayout, setPdfLayout] = useState<SchedulePdfLayout>(() => configuredSchedulePdfLayout(board.board.automaticDeliveryPolicy));
   const [roleKeys, setRoleKeys] = useState<string[]>([]),
     [roles, setRoles] = useState<{ key: string; name: string }[]>([]);
   const rows = board.rows;
@@ -123,13 +112,14 @@ export function EmailScheduleDrawer({
             audience: {
               visibility,
               recipientMode,
-              cohort,
+              ...(board.board.rowKind === "people" ? {cohort} : {}),
               additionalRoleKeys: visibility === "board" ? roleKeys : [],
               additionalPartyIds:
                 visibility === "board" ? extras.map((e) => e.id) : [],
               includePdf,
               pdfLayout: includePdf ? pdfLayout : undefined,
-              message,
+              message: richTextPlainText(messageContent),
+              messageContent,
               everyone: recipientMode === "selected" ? false : everyone,
               subjectIds: everyone ? [] : [...selected].sort(),
             },
@@ -178,6 +168,7 @@ export function EmailScheduleDrawer({
     preview && recipient
       ? scheduleDistributionEmail({
           message: preview.audience.message,
+          messageContent: preview.audience.messageContent,
           recipient: recipient.name,
           board: preview.boardName,
           from: preview.from,
@@ -204,7 +195,7 @@ export function EmailScheduleDrawer({
           </Button>
           <Button
             variant="outline"
-            disabled={busy || queued !== null}
+            disabled={busy || !messageValid || queued !== null}
             onClick={() => void submit('preview')}
           >
             {t('preview')}
@@ -212,6 +203,7 @@ export function EmailScheduleDrawer({
           <Button
             disabled={
               busy ||
+              !messageValid ||
               !preview ||
               preview.refusals.length > 0 ||
               !reason.trim() ||
@@ -226,6 +218,8 @@ export function EmailScheduleDrawer({
     >
       <div className="space-y-4">
         <p className="text-sm text-slate-500">{t('explanation')}</p>
+        <fieldset className="space-y-3 border-0 p-0" data-schedule-recipients>
+          <legend className="mb-2 text-sm font-medium">{t('recipients')}</legend>
         <label className="block text-sm">
           {t('sharing')}
           <Select
@@ -289,121 +283,45 @@ export function EmailScheduleDrawer({
             </Select>
           </label>
         ) : null}
-        <label className="flex items-center gap-2 text-sm">
+        {recipientMode !== "selected" ? (
+          <label className="flex items-center gap-2 text-sm">
           <input
             type="checkbox"
-            checked={includePdf}
+            checked={everyone}
             disabled={busy || queued !== null}
-            onChange={(e) => {
-              setIncludePdf(e.target.checked);
-              reset();
+            onChange={(event) => {
+              setEveryone(event.target.checked)
+              reset()
             }}
           />
-          {t("includePdf")}
+          {t('everyone')}
         </label>
-        {includePdf ? (
-          <fieldset className="grid grid-cols-2 gap-3 rounded border p-3">
-            <legend>{t("pdfLayout")}</legend>
-            {(
-              [
-                "paperSize",
-                "orientation",
-                "density",
-                "daysPerSection",
-                "detail",
-                "style",
-                "colorTreatment",
-              ] as const
-            ).map((field) => {
-              const choices = {
-                paperSize: ["letter", "a4", "legal", "tabloid"],
-                orientation: ["portrait", "landscape"],
-                density: ["standard", "compact"],
-                daysPerSection: ["7", "14"],
-                detail: ["assignments", "hours", "full"],
-                style: ["modern", "classic"],
-                colorTreatment: ["subtle", "strong"],
-              }[field];
-              return (
-                <label key={field} className="text-sm">
-                  {t(`pdfFields.${field}`)}
-                  <Select
-                    aria-label={t(`pdfFields.${field}`)}
-                    value={String(pdfLayout[field] ?? (field === 'colorTreatment' ? 'subtle' : 'modern'))}
-                    disabled={busy || queued !== null}
-                    onChange={(event) => {
-                      setPdfLayout(
-                        (layout) =>
-                          ({
-                            ...layout,
-                            [field]:
-                              field === "daysPerSection"
-                                ? Number(event.target.value)
-                                : event.target.value,
-                          }) as SchedulePdfLayout,
-                      );
-                      reset();
-                    }}
-                  >
-                    {choices.map((value) => (
-                      <option key={value} value={value}>
-                        {field === "daysPerSection"
-                          ? value
-                          : t(`pdfOptions.${field}.${value}`)}
-                      </option>
-                    ))}
-                  </Select>
-                </label>
-              );
-            })}
-            <label className="text-sm">
-              {t("pdfFields.accentColor")}
-              <Input type="color" aria-label={t("pdfFields.accentColor")} value={pdfLayout.accentColor ?? "#0f766e"} disabled={busy || queued !== null}
-                onChange={event => { setPdfLayout(layout => ({ ...layout, accentColor: event.target.value })); reset(); }} />
-            </label>
-            {(["showLegend", "shadeWeekends"] as const).map(field => (
-              <label key={field} className="flex items-center gap-2 text-sm">
-                <input type="checkbox" checked={pdfLayout[field] !== false} disabled={busy || queued !== null}
-                  onChange={event => { setPdfLayout(layout => ({ ...layout, [field]: event.target.checked })); reset(); }} />
-                {t(`pdfFields.${field}`)}
+        ) : null}
+        {recipientMode === "selected" || !everyone ? (
+          <div className="max-h-48 overflow-auto">
+            {rows.map((row) => (
+              <label
+                key={row.subjectId}
+                className="flex items-center gap-2 py-1 text-sm"
+              >
+                <input
+                  type="checkbox"
+                  checked={selected.includes(row.subjectId)}
+                  disabled={busy || queued !== null}
+                  onChange={(event) => {
+                    setSelected((ids) =>
+                      event.target.checked
+                        ? [...ids, row.subjectId]
+                        : ids.filter((id) => id !== row.subjectId),
+                    )
+                    reset()
+                  }}
+                />
+                {row.name}
               </label>
             ))}
-            {(pdfLayout.colorTreatment ?? 'subtle') === 'subtle' ? <label className="text-sm">
-              {t("pdfFields.colorIntensity")}
-              <Input type="number" min={0} max={30} aria-label={t("pdfFields.colorIntensity")} value={pdfLayout.colorIntensity ?? 8} disabled={busy || queued !== null}
-                onChange={event => { setPdfLayout(layout => ({ ...layout, colorIntensity: Number(event.target.value) })); reset(); }} />
-            </label> : null}
-            <label className="text-sm">
-              {t("pdfFields.marginMm")}
-              <Input
-                aria-label={t("pdfFields.marginMm")}
-                type="number"
-                min={5}
-                max={30}
-                value={pdfLayout.marginMm}
-                disabled={busy || queued !== null}
-                onChange={(event) => {
-                  setPdfLayout((layout) => ({
-                    ...layout,
-                    marginMm: Number(event.target.value),
-                  }));
-                  reset();
-                }}
-              />
-            </label>
-          </fieldset>
+          </div>
         ) : null}
-        <Textarea
-          aria-label={t("message")}
-          value={message}
-          maxLength={4000}
-          disabled={busy || queued !== null}
-          onChange={(e) => {
-            setMessage(e.target.value);
-            reset();
-          }}
-          placeholder={t("message")}
-        />
         {visibility === "board" && recipientMode !== "automatic" ? (
           <fieldset className="space-y-2">
             <legend>{t("nativeContacts")}</legend>
@@ -499,45 +417,60 @@ export function EmailScheduleDrawer({
             ))}
           </fieldset>
         ) : null}
-        {recipientMode !== "selected" ? (
-          <label className="flex items-center gap-2 text-sm">
+        {preview ? <div className="space-y-2" data-reviewed-recipients>
+            <label className="block text-sm">
+              {t('recipients')}
+              <Select
+                aria-label={t('recipients')}
+                value={recipientId}
+                disabled={busy || queued !== null}
+                onChange={(event) => setRecipientId(event.target.value)}
+                className="mt-1 w-full rounded border p-2 dark:bg-slate-950"
+              >
+                {preview.recipients.map((r) => (
+                  <option key={r.partyId} value={r.partyId}>
+                    {r.contacts?.map((contact) => contact.name).join(", ") ??
+                      r.name}{" "}
+                    · {r.email ?? t("missingEmail")} ·{" "}
+                    {r.subjects.map((s) => s.name).join(', ')}
+                  </option>
+                ))}
+              </Select>
+            </label>
+            {preview.excludedHistoricalSubjects?.length ? (
+              <SchedulingAlert
+                tone="info"
+                message={t("historicalExcluded", {
+                  count: preview.excludedHistoricalSubjects.length,
+                })}
+              />
+            ) : null}
+        </div> : null}
+        </fieldset>
+        <div className="space-y-3 border-t border-slate-200 pt-4 dark:border-slate-800" data-schedule-attachment>
+        <label className="flex items-center gap-2 text-sm">
           <input
             type="checkbox"
-            checked={everyone}
+            checked={includePdf}
             disabled={busy || queued !== null}
-            onChange={(event) => {
-              setEveryone(event.target.checked)
-              reset()
+            onChange={(e) => {
+              setIncludePdf(e.target.checked);
+              reset();
             }}
           />
-          {t('everyone')}
+          {t("includePdf")}
         </label>
+        {includePdf ? (
+          <SchedulePdfFields pdfLayout={pdfLayout} setPdfLayout={setPdfLayout} disabled={busy || queued !== null} onChange={reset} />
         ) : null}
-        {recipientMode === "selected" || !everyone ? (
-          <div className="max-h-48 overflow-auto rounded-lg border p-3">
-            {rows.map((row) => (
-              <label
-                key={row.subjectId}
-                className="flex items-center gap-2 py-1 text-sm"
-              >
-                <input
-                  type="checkbox"
-                  checked={selected.includes(row.subjectId)}
-                  disabled={busy || queued !== null}
-                  onChange={(event) => {
-                    setSelected((ids) =>
-                      event.target.checked
-                        ? [...ids, row.subjectId]
-                        : ids.filter((id) => id !== row.subjectId),
-                    )
-                    reset()
-                  }}
-                />
-                {row.name}
-              </label>
-            ))}
-          </div>
-        ) : null}
+        </div>
+        <fieldset className="space-y-2 border-0 p-0" data-schedule-message>
+          <legend className="mb-2 text-sm font-medium">{t('message')}</legend>
+          <RichTextEditor label={t('message')} value={messageContent} disabled={busy || queued !== null}
+            labels={{bold: t('editor.bold'), italic: t('editor.italic'), underline: t('editor.underline'), bullets: t('editor.bullets'), numbered: t('editor.numbered'), link: t('editor.link'), linkAddress: t('editor.linkAddress'), apply: t('editor.apply'), invalid: t('editor.invalid')}}
+            onValidityChange={valid => { setMessageValid(valid); if (!valid) reset() }}
+            onChange={value => { setMessageContent(value); reset() }} />
+        </fieldset>
         <Input
           value={reason}
           onChange={(event) => setReason(event.target.value)}
@@ -572,24 +505,6 @@ export function EmailScheduleDrawer({
             {preview.refusals.map((message) => (
               <SchedulingAlert key={message} message={message} />
             ))}
-            <label className="block text-sm">
-              {t('recipients')}
-              <Select
-                aria-label={t('recipients')}
-                value={recipientId}
-                onChange={(event) => setRecipientId(event.target.value)}
-                className="mt-1 w-full rounded border p-2 dark:bg-slate-950"
-              >
-                {preview.recipients.map((r) => (
-                  <option key={r.partyId} value={r.partyId}>
-                    {r.contacts?.map((contact) => contact.name).join(", ") ??
-                      r.name}{" "}
-                    · {r.email ?? t("missingEmail")} ·{" "}
-                    {r.subjects.map((s) => s.name).join(', ')}
-                  </option>
-                ))}
-              </Select>
-            </label>
             {includePdf && recipient ? (
               <Button
                 variant="outline"
@@ -598,14 +513,6 @@ export function EmailScheduleDrawer({
               >
                 {t("downloadPdf")}
               </Button>
-            ) : null}
-            {preview.excludedHistoricalSubjects?.length ? (
-              <SchedulingAlert
-                tone="info"
-                message={t("historicalExcluded", {
-                  count: preview.excludedHistoricalSubjects.length,
-                })}
-              />
             ) : null}
             {report ? (
               <iframe
