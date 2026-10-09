@@ -157,7 +157,12 @@
     "hrm-training": "Training",
     "internal-billing": "Internal Billing",
     "scheduling": "Scheduling",
-    "contractor-withholding": "Contractor withholding"
+    "contractor-withholding": "Contractor withholding",
+    "manufacturing": "Manufacturing",
+    "manufacturing-work-orders": "Work orders",
+    "manufacturing-work-centers": "Work centers",
+    "manufacturing-routings": "Routings & revisions",
+    "manufacturing-mrp": "MRP runs"
   },
   "modulesShort": {
     "hrm-performance-cycles": "Manage reviews",

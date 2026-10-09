@@ -56,7 +56,7 @@ const body = [
   '',
 ].join('\n')
 
-const locales = readdirSync(MESSAGES).filter((name) => statSync(join(MESSAGES, name)).isDirectory()).sort()
+const locales = readdirSync(MESSAGES).filter((name) => !name.startsWith('.') && statSync(join(MESSAGES, name)).isDirectory()).sort()
 const problems = []
 for (const locale of locales) {
   const present = catalogsOf(locale)

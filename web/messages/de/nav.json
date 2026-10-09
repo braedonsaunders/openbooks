@@ -157,7 +157,12 @@
     "hrm-training": "Schulung",
     "internal-billing": "Interne Verrechnung",
     "scheduling": "Einsatzplanung",
-    "contractor-withholding": "Bauleistungsabzug"
+    "contractor-withholding": "Bauleistungsabzug",
+    "manufacturing": "Fertigung",
+    "manufacturing-work-orders": "Fertigungsaufträge",
+    "manufacturing-work-centers": "Arbeitsplätze",
+    "manufacturing-routings": "Arbeitspläne und Revisionen",
+    "manufacturing-mrp": "MRP-Läufe"
   },
   "groups": {
     "workforce": "Belegschaft",

@@ -49,6 +49,7 @@ import journal from './journal.json'
 import knowledge from './knowledge.json'
 import laborPricing from './labor-pricing.json'
 import login from './login.json'
+import manufacturing from './manufacturing.json'
 import nav from './nav.json'
 import nonprofit from './nonprofit.json'
 import parties from './parties.json'
@@ -127,6 +128,7 @@ export default {
   knowledge,
   laborPricing,
   login,
+  manufacturing,
   nav,
   nonprofit,
   parties,

@@ -48,7 +48,7 @@ type Material = {
 
 type Operation = {
   id: string; sequence: number; status: string; quantity_planned: string;
-  quantity_done: string; measured_qty: string | null; quality_gate: string; backflush_at: string;
+  quantity_done: string; quantity_scrapped_here: string; measured_qty: string | null; quality_gate: string; backflush_at: string;
 };
 
 type IssueIntent = {
@@ -107,6 +107,7 @@ async function loadOperation(tx: SqlExecutor, orgId: string, workOrderId: string
     select operation.id, operation.sequence, operation.status,
            operation.quantity_planned::text as quantity_planned,
            operation.quantity_done::text as quantity_done,
+           operation.quantity_scrapped_here::text as quantity_scrapped_here,
            operation.measured_qty::text as measured_qty,
            operation.quality_gate,
            operation.backflush_at
@@ -515,7 +516,7 @@ export async function backflushOperation(
     for (const itemId of itemIds) await lockInventoryPosition(tx as Runner, itemId, order.issue_location_id);
   }
   const intents = await backflushIntents(tx, orgId, order, materials, operation,
-    trigger === "start" ? operation.quantity_planned : operation.quantity_done);
+    trigger === "start" ? operation.quantity_planned : add(operation.quantity_done, operation.quantity_scrapped_here));
   const deltas = new Map<string, { issued: string; backflush: string }>();
   for (const issue of intents) {
     const delta = deltas.get(issue.material.id) ?? { issued: "0", backflush: "0" };
@@ -561,7 +562,7 @@ export async function completeWorkOrderOperation(
   const policies = await getManufacturingPolicies(tx, orgId);
   const toleranceUnits = toUnits(policies.completionTolerancePct);
   const maximumUnits = toUnits(operation.quantity_planned) * (1_000_000n + toleranceUnits) / 1_000_000n;
-  if (toUnits(doneQty) > maximumUnits) {
+  if (toUnits(add(doneQty, operation.quantity_scrapped_here)) > maximumUnits) {
     refuse(`Operation ${operation.sequence} completed quantity ${doneQty} exceeds its planned quantity ${operation.quantity_planned} plus the ${policies.completionTolerancePct}% completion tolerance.`, "completion_tolerance_exceeded", "Revise the order quantity.");
   }
   // Conversion cost is absorbed in the same transaction as the transition,

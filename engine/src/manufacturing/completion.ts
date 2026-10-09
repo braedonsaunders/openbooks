@@ -23,7 +23,7 @@ import { removeInboundLayer, restoreIssueLayers, reverseInventoryJournal, type R
 
 type Order = {
   id: string; number: string; produced_item_id: string; status: string; hold_reason: string | null;
-  quantity_ordered: string; quantity_completed: string; subsidiary_id: string | null;
+  quantity_ordered: string; quantity_completed: string; quantity_scrapped: string; subsidiary_id: string | null;
   receipt_location_id: string | null; issue_location_id: string | null;
   bom_revision: string | null; routing_version: number | null; standard_cost_snapshot: string | null;
   planned_start: string | null; short_close_reason: string | null;
@@ -68,7 +68,7 @@ function evidence(order: Order) {
 }
 async function loadOrder(tx: SqlExecutor, orgId: string, id: string, lock = false): Promise<Order> {
   return rowOrNotFound((await tx.execute<Order>(sql`
-    select id, number, produced_item_id, status, hold_reason, quantity_ordered::text, quantity_completed::text,
+    select id, number, produced_item_id, status, hold_reason, quantity_ordered::text, quantity_completed::text, quantity_scrapped::text,
            subsidiary_id, receipt_location_id, issue_location_id, bom_revision, routing_version,
            standard_cost_snapshot::text, planned_start::text, short_close_reason
       from mfg_work_orders where org_id=${orgId} and id=${id} ${lock ? sql`for update` : sql``}`)).rows);
@@ -271,7 +271,7 @@ export async function completeWorkOrder(
   if (cmp(q, "0") <= 0) refuse("Completion quantity must be positive.", "invalid_completion_quantity", "Enter a positive exact quantity.");
   const completed = add(order.quantity_completed, q);
   const policies = await getManufacturingPolicies(tx, orgId);
-  if (overTolerance(completed, order.quantity_ordered, policies.completionTolerancePct)) {
+  if (overTolerance(add(completed, order.quantity_scrapped), order.quantity_ordered, policies.completionTolerancePct)) {
     refuse("Work order " + order.number + " would exceed its " + policies.completionTolerancePct + "% completion tolerance.", "completion_tolerance_exceeded", "Revise the order quantity.");
   }
   const ev = evidence(order);
@@ -297,8 +297,9 @@ export async function completeWorkOrder(
   if (cmp(balance, "0") < 0) {
     refuse("Work order " + order.number + " has a credit balance in Manufacturing WIP.", "negative_work_order_wip", "Review the work order's manufacturing journal entries before completing it.");
   }
-  const remainingQuantity = add(order.quantity_ordered, neg(order.quantity_completed));
-  const finalCompletion = cmp(completed, order.quantity_ordered) >= 0;
+  const remainingQuantity = add(add(order.quantity_ordered, neg(order.quantity_scrapped)), neg(order.quantity_completed));
+  if (cmp(remainingQuantity, "0") <= 0) refuse("No good output quantity remains on this work order.", "work_order_no_good_quantity_remaining", "Hold the order for a governed loss disposition; do not invent another finished-goods receipt.");
+  const finalCompletion = cmp(add(completed, order.quantity_scrapped), order.quantity_ordered) >= 0;
   const relievedWip = finalCompletion
     ? balance : ratioAmount(balance, toUnits(q), toUnits(remainingQuantity));
   // The labor and overhead absorbed by completed operations leave WIP with
@@ -479,9 +480,10 @@ export async function markWorkOrderDone(
     refuse("Work order " + order.number + " cannot be marked done from " + order.status + ".", "invalid_work_order_transition", "Complete the released work order before marking it done.", 409);
   }
   const policies = await getManufacturingPolicies(tx, orgId);
-  if (!withinTolerance(order.quantity_completed, order.quantity_ordered, policies.completionTolerancePct)) {
+  if (!withinTolerance(add(order.quantity_completed, order.quantity_scrapped), order.quantity_ordered, policies.completionTolerancePct)) {
     refuse("Work order " + order.number + " completed " + order.quantity_completed + " of " + order.quantity_ordered + ", outside the " + policies.completionTolerancePct + "% completion tolerance.", "completion_tolerance_not_met", "Complete the remaining quantity or revise the order quantity.");
   }
+  if (cmp(order.quantity_completed, "0") === 0 && cmp(order.quantity_scrapped, "0") > 0) refuse("An all-loss order requires a governed disposition.", "all_loss_disposition_required", "Hold the work order for inventory and costing review.");
   const shortCloseReason = input.shortCloseReason?.trim() || null;
   const short = cmp(order.quantity_completed, order.quantity_ordered) < 0;
   if (short && !shortCloseReason) {
@@ -598,7 +600,7 @@ async function reverseCompletionReceipt(
   if (!sources.length) throw new InventoryError("The work-order completion has no receipt movements.");
   await lockMovementPositions(tx, sources);
   const order = (await tx.execute<Order>(sql`
-    select id, number, produced_item_id, status, hold_reason, quantity_ordered::text, quantity_completed::text,
+    select id, number, produced_item_id, status, hold_reason, quantity_ordered::text, quantity_completed::text, quantity_scrapped::text,
            subsidiary_id, receipt_location_id, issue_location_id, bom_revision, routing_version,
            standard_cost_snapshot::text, planned_start::text, short_close_reason
       from mfg_work_orders where org_id=${orgId} and number=${peek.work_order_number} for update`)).rows[0];
@@ -723,7 +725,7 @@ export async function reverseMaterialIssue(
     if (!sourceRows.length) throw new InventoryError("The work-order issue has no consume movements.");
     await lockMovementPositions(tx, sourceRows);
     const order = (await tx.execute<Order>(sql`
-      select id, number, produced_item_id, status, hold_reason, quantity_ordered::text, quantity_completed::text,
+      select id, number, produced_item_id, status, hold_reason, quantity_ordered::text, quantity_completed::text, quantity_scrapped::text,
              subsidiary_id, receipt_location_id, issue_location_id, bom_revision, routing_version,
              standard_cost_snapshot::text, planned_start::text, short_close_reason
         from mfg_work_orders where org_id=${orgId} and number=${peek.work_order_number} for update`)).rows[0];
