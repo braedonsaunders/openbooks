@@ -18,6 +18,7 @@ const run = <T>(work: () => Promise<T>) => withBypassContext(work);
 test("full and masked clones preserve retired ownership, historical issues and the exact current missing-count link", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
   const org = await run(() => createScratchOrg());
   let actor: string | undefined;
+  let scenarioFailure:unknown;
   try {
     actor = await run(() => createInventoryOperator(org.orgId,"History operator"));
     const poster = actor;
@@ -109,6 +110,24 @@ test("full and masked clones preserve retired ownership, historical issues and t
           where serial.org_id=${clone.sandboxOrgId}`))).rows[0]!;
         assert.ok(copied);
         assert.equal(copied.pointer,copied.expected_pointer);
+        const provenance=(await run(()=>db.execute<{
+          expected_actor:string;movement_actor:string;entry_poster:string;line_poster:string;count_poster:string;
+          first_observer:string;second_observer:string;actor_org:string|null;historical_proof:boolean;
+        }>(sql`select ob_rebase(${poster}::uuid,${control.sandbox_seed}::uuid) as expected_actor,
+          movement.created_by as movement_actor,entry.posted_by as entry_poster,line.updated_by as line_poster,
+          count.updated_by as count_poster,line.first_counted_by as first_observer,line.second_counted_by as second_observer,
+          actor.org_id as actor_org,public.inventory_serial_count_line_matches(line.org_id,line.id,movement.id,true) as historical_proof
+          from stock_count_lines line join stock_counts count on count.org_id=line.org_id and count.id=line.stock_count_id
+          join inventory_movements movement on movement.org_id=line.org_id and movement.id=line.adjustment_movement_id
+          join journal_entries entry on entry.org_id=movement.org_id and entry.id=movement.journal_entry_id
+          left join users actor on actor.id=movement.created_by and actor.org_id=movement.org_id
+          where line.org_id=${clone.sandboxOrgId} and movement.id=${copied.pointer}`))).rows[0];
+        assert.ok(provenance,"copied missing-count evidence must resolve its complete posted graph");
+        assert.equal(provenance.actor_org,clone.sandboxOrgId,"historical poster must resolve in the copied tenant");
+        for(const actual of [provenance.movement_actor,provenance.entry_poster,provenance.line_poster,
+          provenance.count_poster,provenance.first_observer,provenance.second_observer])
+          assert.equal(actual,provenance.expected_actor,"copied poster and observer identities must use the same native counterpart");
+        assert.equal(provenance.historical_proof,true,"historical missing count must satisfy the unchanged posted-evidence proof before recovery");
         assert.equal((await run(() => db.execute(sql`select id from audit_log where org_id=${clone.sandboxOrgId}
           and table_name='stock_counts' and changes->>'operation'='post'`))).rows.length,0,"cloning must not invent a historical post audit");
         const clonedPoster = await run(() => createInventoryOperator(clone.sandboxOrgId,"Sandbox counter"));
@@ -129,5 +148,12 @@ test("full and masked clones preserve retired ownership, historical issues and t
         }
       }
     }
-  } finally { await run(() => dropScratchOrg(org.orgId)); }
+  } catch(error) { scenarioFailure=error;throw error; }
+  finally {
+    try { await run(() => dropScratchOrg(org.orgId)); }
+    catch(cleanupError) {
+      if(scenarioFailure)throw new AggregateError([scenarioFailure,cleanupError],"Stock history scenario and scratch cleanup failed",{cause:scenarioFailure});
+      throw cleanupError;
+    }
+  }
 });
