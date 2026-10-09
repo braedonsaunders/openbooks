@@ -3496,8 +3496,9 @@
         "description": "用于安排不属于客户或项目的工作（如培训日或车间日），以及标记人员不工作的日期。"
       },
       "schedule-resource-recipients": {
-        "title": "Board resource recipients",
-        "singularTitle": "Resource recipient"
+        "title": "资源发送联系人",
+        "singularTitle": "资源发送联系人",
+        "description": "为设备或地点关联原生联系人以发送排班邮件。员工直接使用“人员”中的联系方式，无需维护第二份名单。"
       },
       "ai-capabilities": {
         "title": "助手操作审核",
@@ -4101,7 +4102,28 @@
       "autonomy": "声明的审核级别",
       "boardId": "排程看板",
       "resourceLocationId": "资源位置",
-      "partyId": "联系人"
+      "partyId": "联系人",
+      "automaticDeliveryPolicy": "自动发送排班",
+      "scheduleDeliveryOperator": "授权操作员",
+      "scheduleDeliveryTimeZone": "报告时区",
+      "scheduleDeliveryDays": "报告天数",
+      "scheduleDeliveryAnchor": "报告开始日期",
+      "scheduleDeliveryWeekStarts": "每周首日（0＝星期日）",
+      "scheduleDeliveryVisibility": "报告共享",
+      "scheduleDeliveryCohort": "员工收件范围",
+      "scheduleDeliveryExtras": "其他原生联系人",
+      "scheduleDeliveryPdf": "附加PDF",
+      "scheduleDeliveryMessage": "邮件正文",
+      "scheduleDeliveryRoles": "原生角色收件人",
+      "scheduleDeliveryMode": "收件人选择",
+      "scheduleDeliverySubjects": "选定的排班人员或资源",
+      "schedulePdfLayout": "PDF布局",
+      "schedulePdfPaper": "纸张大小",
+      "schedulePdfOrientation": "方向",
+      "schedulePdfMargin": "页边距（毫米）",
+      "schedulePdfDensity": "间距",
+      "schedulePdfDays": "每节日期列数（7或14）",
+      "schedulePdfDetail": "单元格详情"
     },
     "fieldHelp": {
       "fxRateMaxAgeDays": "最新可用汇率距期末的天数超过此值时，重估和合并将拒绝该汇率。期末汇率从期末即期汇率的日期起算；平均汇率从计入平均的最新报价日期起算。未设置政策时的默认值：31 天。",
@@ -4269,7 +4291,8 @@
       "scheduleCellColorRules": "按顺序使用首个不区分大小写的匹配规则。请使用六位十六进制颜色，如 #38bdf8。",
       "scheduleBoardDayPolicyKnown": "仅知道原始日期时关闭。历史记录仍显示但没有工时；整日预约需要配置开始、结束和休息时间。",
       "scheduleShowHoursColumn": "Show the right-side sum of booked hours. Source dates without hours remain unknown. Daily footer totals are configured separately.",
-      "scheduleDistributionVisibility": "Personal reports contain only the recipient’s own schedule or associated resources. Whole-board reports require an explicit sharing policy and a legal-entity-scoped board. Every send still requires a reviewed audience/version or an authored, enabled native Flow."
+      "scheduleDistributionVisibility": "Personal reports contain only the recipient’s own schedule or associated resources. Whole-board reports require an explicit sharing policy and a legal-entity-scoped board. Every send still requires a reviewed audience/version or an authored, enabled native Flow.",
+      "scheduleAutomaticDelivery": "可选报告策略：设置您自己的授权身份和看板时区。另行启用排班发送流程并明确指定星期和时间。清除此策略将停止后续发送，但保留发送历史。"
     },
     "options": {
       "withholdingCondominiumPayer": "公寓业主共同体付款人",
@@ -5021,6 +5044,44 @@
         "equals": "等于",
         "startsWith": "开头为",
         "contains": "包含"
+      },
+      "scheduleReportAnchor": {
+        "today": "计划执行日期",
+        "week": "所在周的开始日期"
+      },
+      "scheduleReportSharing": {
+        "personal": "个人报告",
+        "board": "整个看板报告"
+      },
+      "scheduleReportCohort": {
+        "scope": "当前范围内及借调员工",
+        "scheduled": "报告中有排班的在职员工",
+        "supervisors": "相关员工的原生主管",
+        "self": "操作员自己的排班"
+      },
+      "scheduleRecipientMode": {
+        "selected": "仅选定的原生收件人",
+        "automatic": "仅看板自动收件范围",
+        "combined": "自动范围与选定收件人"
+      },
+      "schedulePdfPaper": {
+        "letter": "US Letter",
+        "a4": "A4",
+        "legal": "US Legal",
+        "tabloid": "Tabloid"
+      },
+      "schedulePdfOrientation": {
+        "portrait": "纵向",
+        "landscape": "横向"
+      },
+      "schedulePdfDensity": {
+        "standard": "标准",
+        "compact": "紧凑"
+      },
+      "schedulePdfDetail": {
+        "assignments": "分配内容",
+        "hours": "分配内容及小时",
+        "full": "完整记录"
       }
     },
     "payroll": {
@@ -6001,7 +6062,8 @@
     "structuredFields": {
       "row": "第 {number} 行",
       "addRow": "添加行",
-      "removeRow": "删除行"
+      "removeRow": "删除行",
+      "configure": "配置{field}"
     },
     "benefitBuilder": {
       "offer": "计划",
@@ -6772,6 +6834,9 @@
         "notes": "备注",
         "returnFrequency": "申报频率"
       }
+    },
+    "actions": {
+      "scheduleDeliveryFlows": "在Flows中配置邮件时间"
     }
   },
   "flows": {
@@ -6804,7 +6869,8 @@
       "subject": "记录类型",
       "subjectPlaceholder": "选择一种记录类型……",
       "create": "创建流程",
-      "failed": "无法创建流程"
+      "failed": "无法创建流程",
+      "scheduleWeekdayPreset": "工作日06:00和14:30（可选草稿预设，启用前请确认）"
     },
     "actions": {
       "enable": "启用",
@@ -6907,7 +6973,12 @@
       "showIfRemove": "移除可见性条件",
       "buttonPreview": "记录按钮预览",
       "buttonHint": "当流程已启用且其权限和可见性条件通过时，此按钮会出现在记录抬头中。",
-      "defaultButtonLabel": "运行流程"
+      "defaultButtonLabel": "运行流程",
+      "clockSchedule": "选择星期和时间",
+      "clockHelp": "每个时间是独立的计划执行。延迟恢复时，每个设置时间仅补发最近一次。请明确选择与看板报告策略一致的时区。",
+      "clockTime": "发送时间",
+      "removeTime": "删除时间",
+      "addTime": "添加时间"
     },
     "condition": {
       "rule": "分支条件",
@@ -6925,7 +6996,8 @@
         "post_document": "过账文档",
         "lock_record": "锁定记录",
         "unlock_record": "解锁记录",
-        "distribute_schedule": "Email reviewed schedule"
+        "distribute_schedule": "Email reviewed schedule",
+        "send_board_schedule": "发送当前看板排班"
       },
       "recipients": "收件人",
       "subject": "主题",
@@ -6955,7 +7027,8 @@
       "lockExemptRoles": "豁免角色",
       "lockExemptHint": "管理员始终豁免；所选角色仍可编辑。",
       "unlockHint": "移除流程锁定，使记录可再次编辑。",
-      "scheduleReportHelp": "Email the immutable reviewed schedule report to its exact recipient audience. It may be a personal report or an explicitly permitted whole-board report. Contact, legal entity, schedule version and provider changes refuse delivery."
+      "scheduleReportHelp": "Email the immutable reviewed schedule report to its exact recipient audience. It may be a personal report or an explicitly permitted whole-board report. Contact, legal entity, schedule version and provider changes refuse delivery.",
+      "automaticScheduleHelp": "使用看板保存的授权操作员、当前原生收件范围和报告策略。每次计划执行生成最新报告；编辑或预览流程不会发送邮件。"
     },
     "gate": {
       "title": "标题",
@@ -7040,6 +7113,9 @@
       "retrying": "重试中…",
       "retried": "运行已重新驱动",
       "retryFailed": "重试失败"
+    },
+    "subjects": {
+      "schedule_board": "排班发送"
     }
   },
   "features": {

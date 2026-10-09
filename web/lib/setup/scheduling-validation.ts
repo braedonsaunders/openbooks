@@ -1,4 +1,5 @@
-import 'server-only'
+import "server-only";
+import { automaticScheduleDeliverySchema } from "@openbooks/forms-core";
 import { sql } from 'drizzle-orm'
 import { lockAndCheckOrgFeature } from '@openbooks/engine/src/organization/org-feature-lock.ts'
 import type { SetupEntityValidationHook } from './types'
@@ -23,18 +24,77 @@ function list(value: unknown): string[] | null {
 export const validateScheduleBoardWrite: SetupEntityValidationHook = async ({ body, executor, orgId, rowId }) => {
   let current: Record<string, unknown> = {}
   if (rowId) {
-    current = (await executor.execute<Record<string, unknown>>(sql`select row_kind as "rowKind", views, default_view as "defaultView",
+    current =
+      (
+        await executor.execute<
+          Record<string, unknown>
+        >(sql`select row_kind as "rowKind", views, default_view as "defaultView",
       resource_kind as "resourceKind", department_id as "departmentId", location_id as "locationId", range_days as "rangeDays", prefill_timesheets as "prefillTimesheets", prefill_crew_time as "prefillCrewTime",
-      prefill_field_tickets as "prefillFieldTickets", notify_assignees as "notifyAssignees", subsidiary_id as "subsidiaryId", distribution_visibility as "distributionVisibility"
-      from schedule_boards where org_id = ${orgId} and id = ${rowId}`)).rows[0] ?? {}
+      prefill_field_tickets as "prefillFieldTickets", notify_assignees as "notifyAssignees", subsidiary_id as "subsidiaryId", distribution_visibility as "distributionVisibility",time_zone as "timeZone",automatic_delivery_policy as "automaticDeliveryPolicy"
+      from schedule_boards where org_id = ${orgId} and id = ${rowId}`)
+      ).rows[0] ?? {};
+  }
+  if (body.automaticDeliveryPolicy != null) {
+    const parsed = automaticScheduleDeliverySchema.safeParse(
+      body.automaticDeliveryPolicy,
+    );
+    if (!parsed.success)
+      return parsed.error.issues.map((i) => i.message).join(" ");
   }
   const merged = { ...current, ...body }
   const rowKind = String(merged.rowKind ?? 'people')
-  const enabled = rowKind === 'people'
-    ? await lockAndCheckOrgFeature(executor, orgId, 'hrm') && await lockAndCheckOrgFeature(executor, orgId, 'hrmShiftPlanning')
-    : await lockAndCheckOrgFeature(executor, orgId, 'projects') && await lockAndCheckOrgFeature(executor, orgId, 'projectScheduling')
+  if (merged.automaticDeliveryPolicy != null) {
+    const policy = automaticScheduleDeliverySchema.safeParse(
+      merged.automaticDeliveryPolicy,
+    );
+    if (!policy.success)
+      return policy.error.issues.map((issue) => issue.message).join(" ");
+    if (rowKind === "tasks")
+      return "Automatic email delivery is available on people and resource boards.";
+    if (rowKind === "resources" && policy.data.cohort)
+      return "Employee cohorts apply only to people boards; choose resource associations or explicit contacts.";
+    if (policy.data.timeZone !== merged.timeZone)
+      return "Use the board timezone for the delivery report and native Flow timer.";
+    if (
+      policy.data.visibility === "board" &&
+      (merged.distributionVisibility !== "board" || !merged.subsidiaryId)
+    )
+      return "Allow whole-board sharing within a legal entity before configuring a whole-board delivery policy.";
+    if (!(await lockAndCheckOrgFeature(executor, orgId, "flows")))
+      return "Enable Flows in Company Settings → Features before configuring automatic schedule delivery.";
+    if (policy.data.additionalRoleKeys.length) {
+      const roles = (
+        await executor.execute<{ key: string }>(
+          sql`select key from app_roles where org_id=${orgId} and key in(select jsonb_array_elements_text(${JSON.stringify(policy.data.additionalRoleKeys)}::jsonb))`,
+        )
+      ).rows;
+      if (roles.length !== policy.data.additionalRoleKeys.length)
+        return "Choose existing native application roles for recipient groups.";
+    }
+    const ids = policy.data.additionalPartyIds;
+    if (ids.length) {
+      const contacts = (
+        await executor.execute<{ id: string }>(
+          sql`select id from parties where org_id=${orgId} and kind='person' and is_active and subsidiary_id=${merged.subsidiaryId} and id in(select jsonb_array_elements_text(${JSON.stringify(ids)}::jsonb)::uuid)`,
+        )
+      ).rows;
+      if (contacts.length !== ids.length)
+        return "Choose active native contacts within the board legal entity for additional whole-board recipients.";
+    }
+  }
+  const enabled =
+    rowKind === "people"
+      ? (await lockAndCheckOrgFeature(executor, orgId, "hrm")) &&
+        (await lockAndCheckOrgFeature(executor, orgId, "hrmShiftPlanning"))
+      : (await lockAndCheckOrgFeature(executor, orgId, "projects")) &&
+        (await lockAndCheckOrgFeature(executor, orgId, "projectScheduling"));
   if (!enabled) return `Enable ${rowKind === 'people' ? 'Human Resources and Scheduling' : 'Projects and Project Scheduling'} in Company Settings → Features before configuring this board.`
-  if (rowKind === 'resources' && merged.resourceKind === 'equipment' && !await lockAndCheckOrgFeature(executor, orgId, 'equipment')) return 'Enable Equipment in Company Settings → Features before configuring an equipment board.'
+  if (
+    rowKind === "resources" &&
+    merged.resourceKind === "equipment" &&
+    !(await lockAndCheckOrgFeature(executor, orgId, "equipment"))
+  )
+    return "Enable Equipment in Company Settings → Features before configuring an equipment board.";
   if (merged.distributionVisibility === 'board' && !merged.subsidiaryId) return 'Choose a legal entity before allowing whole-board schedule reports.'
   const views = list(merged.views) ?? []
   const allowedViews = rowKind === 'tasks' ? TASK_VIEWS : PEOPLE_VIEWS
@@ -62,8 +122,12 @@ export const validateScheduleBoardWrite: SetupEntityValidationHook = async ({ bo
 }
 
 export const validateScheduleCodeWrite: SetupEntityValidationHook = async ({ body, executor, orgId }) => {
-  const people = await lockAndCheckOrgFeature(executor, orgId, 'hrm') && await lockAndCheckOrgFeature(executor, orgId, 'hrmShiftPlanning')
-  const projects = await lockAndCheckOrgFeature(executor, orgId, 'projects') && await lockAndCheckOrgFeature(executor, orgId, 'projectScheduling')
+  const people =
+    (await lockAndCheckOrgFeature(executor, orgId, "hrm")) &&
+    (await lockAndCheckOrgFeature(executor, orgId, "hrmShiftPlanning"));
+  const projects =
+    (await lockAndCheckOrgFeature(executor, orgId, "projects")) &&
+    (await lockAndCheckOrgFeature(executor, orgId, "projectScheduling"));
   if (!people && !projects) return 'Enable Scheduling or Project Scheduling in Company Settings → Features before configuring booking codes.'
   if (body.code !== undefined && !/^[A-Z0-9][A-Z0-9/&+._-]{0,15}$/.test(String(body.code))) {
     return 'Codes are up to 16 capital letters, digits or / & + . _ -, such as TRAIN or SHOP.'

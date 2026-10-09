@@ -16,7 +16,9 @@ function FieldTokensHint({ profile }: { profile: FlowSubjectProfile }) {
   const t = useTranslations('admin.flows.action')
   return (
     <details className="rounded-md border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-xs text-slate-500 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400">
-      <summary className="cursor-pointer select-none">{t('interpolationHint')}</summary>
+      <summary className="cursor-pointer select-none">
+        {t("interpolationHint")}
+      </summary>
       <div className="mt-1.5 flex flex-wrap gap-1">
         {profile.fields.map((f) => (
           <code
@@ -67,7 +69,16 @@ export function ActionEditor({
         </Select>
       </div>
 
-      {action.action === 'distribute_schedule' ? <p className="text-sm text-slate-500">{t('action.scheduleReportHelp')}</p> : null}
+      {action.action === "send_board_schedule" ? (
+        <p className="text-sm text-slate-500">
+          {t("action.automaticScheduleHelp")}
+        </p>
+      ) : null}
+      {action.action === "distribute_schedule" ? (
+        <p className="text-sm text-slate-500">
+          {t("action.scheduleReportHelp")}
+        </p>
+      ) : null}
       {action.action === 'send_email' ? (
         <>
           <div className="space-y-1.5">
@@ -197,12 +208,18 @@ export function ActionEditor({
                 })
               }}
             >
-              <option value="literal">{t('action.valueSources.literal')}</option>
+              <option value="literal">
+                {t("action.valueSources.literal")}
+              </option>
               <option value="today">{t('action.valueSources.today')}</option>
               <option value="now">{t('action.valueSources.now')}</option>
-              <option value="current_user_name">{t('action.valueSources.currentUser')}</option>
+              <option value="current_user_name">
+                {t("action.valueSources.currentUser")}
+              </option>
               {action.value.kind === 'expression' ? (
-                <option value="expression">{t('action.valueSources.expression')}</option>
+                <option value="expression">
+                  {t("action.valueSources.expression")}
+                </option>
               ) : null}
             </Select>
           </div>
@@ -318,7 +335,9 @@ export function ActionEditor({
                 )
               })}
             </div>
-            <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">{t('action.lockExemptHint')}</p>
+            <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">
+              {t("action.lockExemptHint")}
+            </p>
           </div>
         </>
       ) : null}

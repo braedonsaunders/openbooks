@@ -243,11 +243,12 @@ export function coerceField(field: SetupField, raw: unknown, fieldVisible = true
         // other domain evidence carried by the same JSON object.
         const object = entry as Record<string, unknown>
         const value = { ...object }
+        const contextValues = { ...recordValues, ...object }
         for (const child of field.fields ?? []) {
-          if (child.clearWhenHidden && !setupFieldVisible(child, object)) { value[child.key] = null; continue }
-          if (child.omitWhenHidden && !setupFieldVisible(child, object)) { delete value[child.key]; continue }
-          if (!setupFieldVisible(child, object) || object[child.key] === undefined) {
-            if (child.required && setupFieldVisible(child, object)) return { error: `${field.key}${array ? ` row ${index + 1}` : ''}.${child.key} is required` }
+          if (child.clearWhenHidden && !setupFieldVisible(child, contextValues)) { value[child.key] = null; continue }
+          if (child.omitWhenHidden && !setupFieldVisible(child, contextValues)) { delete value[child.key]; continue }
+          if (!setupFieldVisible(child, contextValues) || object[child.key] === undefined) {
+            if (child.required && setupFieldVisible(child, contextValues)) return { error: `${field.key}${array ? ` row ${index + 1}` : ''}.${child.key} is required` }
             continue
           }
           if (object[child.key] != null && ['text', 'textarea', 'zonedDateTime'].includes(child.kind) && typeof object[child.key] !== 'string') return { error: `${field.key}${array ? ` row ${index + 1}` : ''}.${child.key} must be text` }

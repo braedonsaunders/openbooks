@@ -305,7 +305,7 @@
     "working": "Preparing…",
     "refused": "Schedule distribution could not be completed.",
     "explanation": "Choose personal reports or a whole-board report for every selected recipient. Published bookings and literal source-date observations are shown separately. Sending uses your enabled Schedule distribution Flow and configured email provider.",
-    "everyone": "Everyone with a visible schedule in these dates",
+    "everyone": "Alle im ausgewählten Empfängerkreis",
     "reason": "Reason for sending",
     "queued": "The reviewed schedule is queued for email delivery.",
     "deliveryStatus": "Queued is not delivered. Follow the native Flow run, Email log and delivery audit for actual provider results.",
@@ -314,10 +314,66 @@
     "missingEmail": "Email missing",
     "report": "Recipient schedule report preview",
     "flows": "Configure native Flows",
-    "contacts": "Board resource recipients",
+    "contacts": "Versandkontakte für Ressourcen",
     "sharing": "Report sharing",
     "personal": "Each recipient’s own schedule/resources",
     "wholeBoard": "The whole visible board schedule for each recipient",
-    "wholeBoardReview": "Every selected recipient will receive the whole reviewed board report, including other people/resources. Board Settings must explicitly allow this sharing within the board’s legal entity."
+    "wholeBoardReview": "Every selected recipient will receive the whole reviewed board report, including other people/resources. Board Settings must explicitly allow this sharing within the board’s legal entity.",
+    "cohort": "Mitarbeiterkreis",
+    "cohorts": {
+      "scope": "Aktuelle Mitarbeitende im Board und ausgeliehene Mitarbeitende",
+      "scheduled": "Aktuelle Mitarbeitende mit Einträgen in diesem Zeitraum",
+      "supervisors": "Vorgesetzte relevanter Mitarbeitender",
+      "self": "Mein eigener Plan"
+    },
+    "includePdf": "PDF im Querformat anhängen",
+    "message": "E-Mail-Nachricht",
+    "additionalContacts": "Zusätzliche native Kontakte",
+    "additionalHelp": "Optionale Kontakte erhalten das gesamte geprüfte Board, auch ohne eigene Einträge. Wählen Sie sichtbare native Kontakte und prüfen Sie die Freigabe vor dem Senden.",
+    "contactSearch": "Native Kontakte suchen",
+    "chooseContact": "Zusätzlichen Kontakt wählen",
+    "refineSearch": "Weitere Kontakte passen. Grenzen Sie die Suche ein.",
+    "downloadPdf": "Geprüftes PDF herunterladen",
+    "excludedHistory": "{count} historische Personen bleiben im Bericht, gehören aber nicht zu den aktuellen Mitarbeiterempfängern.",
+    "additionalRoles": "Empfänger aus nativen Rollen/Gruppen",
+    "roleHelp": "Optionale Anwendungsrollen werden bei jeder Sendung zu aktuellen aktiven Mitgliedern mit sichtbaren Personenkontakten aufgelöst. Prüfen Sie die gesamte Board-Freigabe vor dem Hinzufügen.",
+    "chooseRole": "Native Rolle wählen",
+    "recipientMode": "Empfängerauswahl",
+    "modes": {
+      "selected": "Nur ausgewählte native Empfänger",
+      "automatic": "Nur automatischer Board-Empfängerkreis",
+      "combined": "Automatischer Kreis und ausgewählte Empfänger"
+    },
+    "nativeContacts": "Native Kontaktempfänger",
+    "pdfLayout": "PDF-Seitenlayout",
+    "pdfFields": {
+      "paperSize": "Papierformat",
+      "orientation": "Ausrichtung",
+      "marginMm": "Ränder (mm)",
+      "density": "Abstände",
+      "daysPerSection": "Datumsspalten pro Abschnitt (7 oder 14)",
+      "detail": "Zellendetails"
+    },
+    "pdfOptions": {
+      "paperSize": {
+        "letter": "US Letter",
+        "a4": "A4",
+        "legal": "US Legal",
+        "tabloid": "Tabloid"
+      },
+      "orientation": {
+        "portrait": "Hochformat",
+        "landscape": "Querformat"
+      },
+      "density": {
+        "standard": "Standard",
+        "compact": "Kompakt"
+      },
+      "detail": {
+        "assignments": "Zuordnungen",
+        "hours": "Zuordnungen und Stunden",
+        "full": "Vollständige Nachweise"
+      }
+    }
   }
 }

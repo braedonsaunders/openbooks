@@ -8,7 +8,13 @@
 // top of pdfkit (pure JS, no Chromium) instead of HTML + Puppeteer.
 
 /** Paper sizes a document can print on. */
-export const PDF_PAPER_SIZES = ['letter', 'a4', 'legal', '4x6'] as const
+export const PDF_PAPER_SIZES = [
+  "letter",
+  "a4",
+  "legal",
+  "tabloid",
+  "4x6",
+] as const;
 export type PdfPaperSize = (typeof PDF_PAPER_SIZES)[number]
 
 /** Compact shrinks type and cell padding so more rows fit per page. */
@@ -111,6 +117,10 @@ export type PdfTableGroup = {
   rows: (string | number | null | undefined)[][]
   /** Per-column alignment. Defaults to 'left'; callers set 'right' for money. */
   align?: PdfColumnAlign[]
+  /** Optional proportional widths for structured grids; all columns must remain legible. */
+  columnWeights?: number[]
+  /** Exact evidence reports refuse oversized rows rather than silently truncating cells. */
+  overflow?: "ellipsis" | "refuse";
   isEmpty?: boolean
 }
 

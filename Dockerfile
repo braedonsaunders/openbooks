@@ -43,10 +43,15 @@ RUN npx esbuild scripts/bootstrap.ts \
 # keeps its declared dependencies and the engine module graph remains acyclic.
 RUN npx esbuild scripts/worker-entry.mts \
       --bundle --platform=node --format=esm --conditions=react-server --tsconfig=web/tsconfig.json \
-      --external:pg-native --external:jsdom \
+      --external:pg-native --external:jsdom --external:pdfkit \
       --banner:js="import { createRequire as openbooksCreateRequire } from 'node:module'; const require = openbooksCreateRequire(import.meta.url);" \
       --outfile=/out/worker.mjs
 RUN node --check /out/worker.mjs
+# Deployment qualification exercises the unified schedule renderer with bundled native font assets.
+RUN npx esbuild scripts/verify-native-schedule-pdf.ts \
+      --bundle --platform=node --format=esm --external:pdfkit \
+      --banner:js="import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);" \
+      --outfile=/out/verify-native-schedule-pdf.mjs
 # Deterministic master demos are prepared explicitly by installation operators.
 # The same source is used by the setup wizard when a master is not yet present.
 RUN npx esbuild engine/src/sample-companies/cli.ts \
@@ -138,6 +143,11 @@ COPY --chown=node:node --from=build /app/web/.next/static ./web/.next/static
 COPY --chown=node:node --from=build /out/sample-companies.mjs ./scripts/sample-companies.mjs
 COPY --chown=node:node --from=build /out/bootstrap.mjs ./scripts/bootstrap.mjs
 COPY --chown=node:node --from=build /out/worker.mjs ./scripts/worker.mjs
+# Native PDFKit resolves standard font metrics relative to its package directory.
+COPY --chown=node:node --from=deps /app/node_modules/pdfkit ./node_modules/pdfkit
+COPY --chown=node:node scripts/verify-native-pdf.mjs ./scripts/verify-native-pdf.mjs
+COPY --chown=node:node --from=build /out/verify-native-schedule-pdf.mjs ./scripts/verify-native-schedule-pdf.mjs
+RUN su -s /bin/sh node -c 'node scripts/verify-native-pdf.mjs && node scripts/verify-native-schedule-pdf.mjs'
 # The bootstrap reads migration SQL relative to its own location (/app/scripts → /app).
 COPY --chown=node:node schema/migrations ./schema/migrations
 RUN set -eu; \

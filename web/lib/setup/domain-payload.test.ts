@@ -1,3 +1,4 @@
+import { SETUP_ENTITY_BY_KEY } from './registry'
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { setupAggregatePayload, setupDomainPayload } from './domain-payload'
@@ -71,4 +72,20 @@ test('transaction rules retain exact shares, use live position choices and clear
   const field=BENEFIT_TRANSACTION_POLICY_ENTITY.fields.find(field=>field.key==='responsibilities')!.fields!.find(field=>field.key==='positionKey')!;
   assert.deepEqual(setupFieldOptions(field,values.responsibilities[0]!,values),[{value:'lead',label:'Lead'}]);
   assert.equal(setupDomainPayload(BENEFIT_TRANSACTION_POLICY_ENTITY,{...values,responsibilities:[{...values.responsibilities[0],positionKey:'unknown'}]},'update').ok,false);
+});
+
+
+test('structured delivery controls retain parent board scope while coercing sibling audience conditions', () => {
+  const board = SETUP_ENTITY_BY_KEY.get('schedule-boards')!;
+  const policyField = board.fields.find(field => field.key === 'automaticDeliveryPolicy')!;
+  const entity = { ...board, fields: [policyField] };
+  const raw = { operatorId: '00000000-0000-4000-8000-000000000001', timeZone: 'America/Toronto', days: 14, anchor: 'week', weekStartsOn: 0, visibility: 'board', recipientMode: 'automatic', cohort: 'scope', subjectIds: [], additionalPartyIds: [], additionalRoleKeys: [], includePdf: true };
+  const resource = setupDomainPayload(entity, { rowKind: 'resources', automaticDeliveryPolicy: raw });
+  assert.equal(resource.ok, true);
+  if (!resource.ok) throw new Error(resource.error);
+  assert.equal((resource.body.automaticDeliveryPolicy as Record<string, unknown>).cohort, undefined);
+  const people = setupDomainPayload(entity, { rowKind: 'people', automaticDeliveryPolicy: raw });
+  assert.equal(people.ok, true);
+  if (!people.ok) throw new Error(people.error);
+  assert.equal((people.body.automaticDeliveryPolicy as Record<string, unknown>).cohort, 'scope');
 });

@@ -19,3 +19,20 @@ export async function sendReviewedSchedule(
     );
   return runtime.__scheduleEmailHandler(input);
 }
+
+type AutomaticHandler = (input: {
+  boardId: string;
+  runId: string;
+  ctx: FlowExecCtx;
+}) => Promise<number>;
+const automaticRuntime = globalThis as typeof globalThis & {
+  __automaticScheduleHandler?: AutomaticHandler;
+};
+export function registerAutomaticScheduleHandler(handler: AutomaticHandler) {
+  automaticRuntime.__automaticScheduleHandler = handler;
+}
+export function sendAutomaticSchedule(input: Parameters<AutomaticHandler>[0]) {
+  if (!automaticRuntime.__automaticScheduleHandler)
+    throw new Error("Native automatic schedule delivery is not installed.");
+  return automaticRuntime.__automaticScheduleHandler(input);
+}

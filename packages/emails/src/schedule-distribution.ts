@@ -2,12 +2,15 @@ import { esc, shell, type EmailOut } from './shell';
 export interface ScheduleEmailLine {
   date: string;
   subject: string;
+  /** Native identity distinguishes people/resources with the same display name. */
+  subjectId?: string;
   assignment: string;
   hours: string;
   status: string;
 }
 /** Reports contain the reviewed personal or explicitly shared board audience. */
 export function scheduleDistributionEmail(input: {
+  message?: string;
   recipient: string;
   board: string;
   from: string;
@@ -18,7 +21,7 @@ export function scheduleDistributionEmail(input: {
 }): EmailOut {
   const subject = `${input.board} · ${input.from} – ${input.through}`;
   const text =
-    `Hello ${input.recipient},\n\n${subject}\nTime zone: ${input.timeZone}\n\n` +
+    `Hello ${input.recipient},\n\n${subject}\nTime zone: ${input.timeZone}\n\n${input.message ?? ""}\n\n` +
     input.lines
       .map(
         (l) =>
@@ -39,7 +42,7 @@ export function scheduleDistributionEmail(input: {
     text,
     html: shell({
       heading: input.board,
-      bodyHtml: `<p>Hello ${esc(input.recipient)},</p><p>${esc(input.from)} – ${esc(input.through)} · ${esc(input.timeZone)}</p><table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;font-size:14px"><thead><tr>${['Date', 'Person or resource', 'Assignment', 'Hours', 'Status'].map((h) => `<th align="left" style="padding:10px;background:#f1f5f9">${h}</th>`).join('')}</tr></thead><tbody>${rows}</tbody></table><p style="font-size:12px;color:#64748b">Date-only source observations do not establish booked or worked hours. Draft bookings are not included.</p>`,
+      bodyHtml: `<p>Hello ${esc(input.recipient)},</p>${input.message ? `<p>${esc(input.message)}</p>` : ""}<p>${esc(input.from)} – ${esc(input.through)} · ${esc(input.timeZone)}</p><table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;font-size:14px"><thead><tr>${["Date", "Person or resource", "Assignment", "Hours", "Status"].map((h) => `<th align="left" style="padding:10px;background:#f1f5f9">${h}</th>`).join("")}</tr></thead><tbody>${rows}</tbody></table><p style="font-size:12px;color:#64748b">Date-only source observations do not establish booked or worked hours. Draft bookings are not included.</p>`,
       footer: `Schedule version ${input.version}. Contact your scheduler to request a change.`,
     }),
   };

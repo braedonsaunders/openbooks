@@ -3496,8 +3496,9 @@
         "description": "Codes for booking work that is not a customer or project, such as training or shop days, and for days people are not working."
       },
       "schedule-resource-recipients": {
-        "title": "Board resource recipients",
-        "singularTitle": "Resource recipient"
+        "title": "Resource delivery contacts",
+        "singularTitle": "Resource delivery contact",
+        "description": "Associate equipment or locations with native contacts for schedule email. Employees use their People contact directly; no employee recipient list is required."
       },
       "ai-capabilities": {
         "title": "Assistant action reviews",
@@ -4101,7 +4102,28 @@
       "autonomy": "Declared review level",
       "boardId": "Schedule board",
       "resourceLocationId": "Resource location",
-      "partyId": "Contact"
+      "partyId": "Contact",
+      "automaticDeliveryPolicy": "Automatic schedule delivery",
+      "scheduleDeliveryOperator": "Authorized operator",
+      "scheduleDeliveryTimeZone": "Report timezone",
+      "scheduleDeliveryDays": "Days in report",
+      "scheduleDeliveryAnchor": "Report starts",
+      "scheduleDeliveryWeekStarts": "First weekday (0 = Sunday)",
+      "scheduleDeliveryVisibility": "Report sharing",
+      "scheduleDeliveryCohort": "Employee audience",
+      "scheduleDeliveryExtras": "Additional native contacts",
+      "scheduleDeliveryPdf": "Attach PDF",
+      "scheduleDeliveryMessage": "Email message",
+      "scheduleDeliveryRoles": "Native role recipients",
+      "scheduleDeliveryMode": "Recipient selection",
+      "scheduleDeliverySubjects": "Selected schedule people/resources",
+      "schedulePdfLayout": "PDF layout",
+      "schedulePdfPaper": "Paper size",
+      "schedulePdfOrientation": "Orientation",
+      "schedulePdfMargin": "Margins (mm)",
+      "schedulePdfDensity": "Spacing",
+      "schedulePdfDays": "Date columns per section (7 or 14)",
+      "schedulePdfDetail": "Cell detail"
     },
     "fieldHelp": {
       "fxRateMaxAgeDays": "Days between the newest usable rate and the period end beyond which revaluation and consolidation refuse the rate. Closing rates count from the date of the period-end spot rate; average rates from the newest quote averaged. Default when no policy is set: 31 days.",
@@ -4269,7 +4291,8 @@
       "scheduleCellColorRules": "Rules are evaluated in order; the first case-insensitive match sets the cell color. Use six-digit hex colors such as #38bdf8.",
       "scheduleBoardDayPolicyKnown": "Turn off when only source dates are known. Imported history remains visible without hours; normal whole-day booking refuses until actual start, end and break are configured.",
       "scheduleShowHoursColumn": "Show the right-side sum of booked hours. Source dates without hours remain unknown. Daily footer totals are configured separately.",
-      "scheduleDistributionVisibility": "Personal reports contain only the recipient’s own schedule or associated resources. Whole-board reports require an explicit sharing policy and a legal-entity-scoped board. Every send still requires a reviewed audience/version or an authored, enabled native Flow."
+      "scheduleDistributionVisibility": "Personal reports contain only the recipient’s own schedule or associated resources. Whole-board reports require an explicit sharing policy and a legal-entity-scoped board. Every send still requires a reviewed audience/version or an authored, enabled native Flow.",
+      "scheduleAutomaticDelivery": "Optional report policy only: configure your own authorized operator and the board timezone. Enable a Schedule board delivery Flow separately, with explicit weekdays and times. Clearing this policy stops future delivery; it does not erase delivery history."
     },
     "options": {
       "withholdingCondominiumPayer": "Condominium payer",
@@ -5021,6 +5044,44 @@
         "equals": "Equals",
         "startsWith": "Starts with",
         "contains": "Contains"
+      },
+      "scheduleReportAnchor": {
+        "today": "Occurrence date",
+        "week": "Start of containing week"
+      },
+      "scheduleReportSharing": {
+        "personal": "Personal reports",
+        "board": "Whole-board report"
+      },
+      "scheduleReportCohort": {
+        "scope": "Current board-scope and borrowed employees",
+        "scheduled": "Current employees scheduled in the report",
+        "supervisors": "Native supervisors of relevant employees",
+        "self": "Current operator’s own schedule"
+      },
+      "scheduleRecipientMode": {
+        "selected": "Selected native recipients only",
+        "automatic": "Automatic board audience only",
+        "combined": "Automatic audience and selected recipients"
+      },
+      "schedulePdfPaper": {
+        "letter": "US Letter",
+        "a4": "A4",
+        "legal": "US Legal",
+        "tabloid": "Tabloid"
+      },
+      "schedulePdfOrientation": {
+        "portrait": "Portrait",
+        "landscape": "Landscape"
+      },
+      "schedulePdfDensity": {
+        "standard": "Standard",
+        "compact": "Compact"
+      },
+      "schedulePdfDetail": {
+        "assignments": "Assignments",
+        "hours": "Assignments and hours",
+        "full": "Full evidence"
       }
     },
     "payroll": {
@@ -6001,7 +6062,8 @@
     "structuredFields": {
       "row": "Row {number}",
       "addRow": "Add row",
-      "removeRow": "Remove row"
+      "removeRow": "Remove row",
+      "configure": "Configure {field}"
     },
     "benefitBuilder": {
       "offer": "Program",
@@ -6772,6 +6834,9 @@
         "notes": "Notes",
         "returnFrequency": "Return frequency"
       }
+    },
+    "actions": {
+      "scheduleDeliveryFlows": "Configure email timing in Flows"
     }
   },
   "flows": {
@@ -6804,7 +6869,8 @@
       "subject": "Record type",
       "subjectPlaceholder": "Choose a record type…",
       "create": "Create flow",
-      "failed": "Could not create the flow"
+      "failed": "Could not create the flow",
+      "scheduleWeekdayPreset": "Weekdays at 06:00 and 14:30 (optional draft preset; review before enabling)"
     },
     "actions": {
       "enable": "Enable",
@@ -6907,7 +6973,12 @@
       "showIfRemove": "Remove visibility condition",
       "buttonPreview": "Record button preview",
       "buttonHint": "This button appears in the record header when the flow is enabled and its permission and visibility conditions pass.",
-      "defaultButtonLabel": "Run flow"
+      "defaultButtonLabel": "Run flow",
+      "clockSchedule": "Choose weekdays and times",
+      "clockHelp": "Each time is a separate native occurrence. Late recovery sends only the latest missed occurrence per configured time. Choose an explicit timezone matching the board report policy.",
+      "clockTime": "Send time",
+      "removeTime": "Remove time",
+      "addTime": "Add time"
     },
     "condition": {
       "rule": "Branch when",
@@ -6925,7 +6996,8 @@
         "post_document": "Post the document",
         "lock_record": "Lock the record",
         "unlock_record": "Unlock the record",
-        "distribute_schedule": "Email reviewed schedule"
+        "distribute_schedule": "Email reviewed schedule",
+        "send_board_schedule": "Email the current board schedule"
       },
       "recipients": "Recipients",
       "subject": "Subject",
@@ -6955,7 +7027,8 @@
       "lockExemptRoles": "Exempt roles",
       "lockExemptHint": "Admins are always exempt; selected roles may still edit.",
       "unlockHint": "Removes the flow lock so the record can be edited again.",
-      "scheduleReportHelp": "Email the immutable reviewed schedule report to its exact recipient audience. It may be a personal report or an explicitly permitted whole-board report. Contact, legal entity, schedule version and provider changes refuse delivery."
+      "scheduleReportHelp": "Email the immutable reviewed schedule report to its exact recipient audience. It may be a personal report or an explicitly permitted whole-board report. Contact, legal entity, schedule version and provider changes refuse delivery.",
+      "automaticScheduleHelp": "Uses the board’s stored authorized operator, current native audience and report policy. Each configured timer occurrence prepares a fresh report; no email is sent while editing or previewing this Flow."
     },
     "gate": {
       "title": "Title",
@@ -7040,6 +7113,9 @@
       "retrying": "Retrying…",
       "retried": "Run re-driven",
       "retryFailed": "Retry failed"
+    },
+    "subjects": {
+      "schedule_board": "Schedule board delivery"
     }
   },
   "features": {

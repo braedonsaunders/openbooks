@@ -143,3 +143,36 @@ test("rejects an approval gate reachable from before_post", () => {
   assert.equal(res.ok, false);
   assert.ok(res.errors.some((error) => /before_post.*on_submit/i.test(error)));
 });
+
+
+test("board delivery drafts keep generic timing neutral; explicit multi-time clocks preserve paired times and require timezone/selection", async () => {
+  const { scheduleBoardTimerGraph } = await import('./schedule-board-adapter.ts');
+  const { scheduledTriggerCrons } = await import('./scheduled.ts');
+  const id = '00000000-0000-4000-8000-000000000001';
+  const ordinary = scheduleBoardTimerGraph(id, 'America/Toronto');
+  const trigger = ordinary.nodes[0]!.data;
+  assert.equal(trigger.kind, 'trigger');
+  if (trigger.kind !== 'trigger' || trigger.trigger.trigger !== 'scheduled') throw new Error('Native board trigger missing');
+  assert.equal(trigger.trigger.clockSchedule, undefined, 'no company sending times activate by default');
+  const selected = scheduleBoardTimerGraph(id, 'America/Toronto', true);
+  const authored = selected.nodes[0]!.data;
+  if (authored.kind !== 'trigger' || authored.trigger.trigger !== 'scheduled') throw new Error('Native board trigger missing');
+  assert.deepEqual(scheduledTriggerCrons(authored.trigger), ['0 6 * * 1,2,3,4,5', '30 14 * * 1,2,3,4,5']);
+  assert.equal(lintFlowGraphForSubject('schedule_board', selected).ok, true);
+  for (const field of ['tz', 'select'] as const) {
+    const invalid = structuredClone(selected);
+    const node = invalid.nodes[0]!.data;
+    if (node.kind !== 'trigger' || node.trigger.trigger !== 'scheduled') throw new Error('Native board trigger missing');
+    delete node.trigger[field];
+    const refused = lintFlowGraphForSubject('schedule_board', invalid);
+    assert.equal(refused.ok, false);
+    assert.ok(refused.errors.some(error => field === 'tz' ? /timezone/.test(error) : /record selection/.test(error)));
+  }
+  for (const clockSchedule of [ { days: [1], times: ['06:00', '06:00'] }, { days: [1, 1], times: ['06:00'] }, { days: [1], times: ['25:00'] }, { days: [], times: [] } ]) {
+    const invalid = structuredClone(selected);
+    const node = invalid.nodes[0]!.data;
+    if (node.kind !== 'trigger' || node.trigger.trigger !== 'scheduled') throw new Error('Native board trigger missing');
+    node.trigger.clockSchedule = clockSchedule;
+    assert.equal(lintFlowGraphForSubject('schedule_board', invalid).ok, false);
+  }
+});

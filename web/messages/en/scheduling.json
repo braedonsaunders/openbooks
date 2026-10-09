@@ -305,7 +305,7 @@
     "working": "Preparing…",
     "refused": "Schedule distribution could not be completed.",
     "explanation": "Choose personal reports or a whole-board report for every selected recipient. Published bookings and literal source-date observations are shown separately. Sending uses your enabled Schedule distribution Flow and configured email provider.",
-    "everyone": "Everyone with a visible schedule in these dates",
+    "everyone": "Everyone in the chosen audience",
     "reason": "Reason for sending",
     "queued": "The reviewed schedule is queued for email delivery.",
     "deliveryStatus": "Queued is not delivered. Follow the native Flow run, Email log and delivery audit for actual provider results.",
@@ -314,10 +314,66 @@
     "missingEmail": "Email missing",
     "report": "Recipient schedule report preview",
     "flows": "Configure native Flows",
-    "contacts": "Board resource recipients",
+    "contacts": "Resource delivery contacts",
     "sharing": "Report sharing",
     "personal": "Each recipient’s own schedule/resources",
     "wholeBoard": "The whole visible board schedule for each recipient",
-    "wholeBoardReview": "Every selected recipient will receive the whole reviewed board report, including other people/resources. Board Settings must explicitly allow this sharing within the board’s legal entity."
+    "wholeBoardReview": "Every selected recipient will receive the whole reviewed board report, including other people/resources. Board Settings must explicitly allow this sharing within the board’s legal entity.",
+    "cohort": "Employee audience",
+    "cohorts": {
+      "scope": "Current board-scope and borrowed employees",
+      "scheduled": "Current employees scheduled in these dates",
+      "supervisors": "Supervisors of relevant employees",
+      "self": "My own schedule"
+    },
+    "includePdf": "Attach landscape PDF",
+    "message": "Email message",
+    "additionalContacts": "Additional native contacts",
+    "additionalHelp": "Optional contacts receive the whole reviewed board report, even when they are not scheduled. Choose visible native contacts and review sharing before sending.",
+    "contactSearch": "Search native contacts",
+    "chooseContact": "Choose an additional contact",
+    "refineSearch": "More contacts match. Refine the search to see the intended contact.",
+    "downloadPdf": "Download reviewed PDF",
+    "excludedHistory": "{count} historical people are retained in the report but excluded from current employee delivery.",
+    "additionalRoles": "Native role/group recipients",
+    "roleHelp": "Optional native application roles resolve their currently active members to visible People contacts at each send. Review the full board sharing before including a group.",
+    "chooseRole": "Choose a native role",
+    "recipientMode": "Recipient selection",
+    "modes": {
+      "selected": "Selected native recipients only",
+      "automatic": "Automatic board audience only",
+      "combined": "Automatic audience and selected recipients"
+    },
+    "nativeContacts": "Native contact recipients",
+    "pdfLayout": "PDF layout",
+    "pdfFields": {
+      "paperSize": "Paper size",
+      "orientation": "Orientation",
+      "marginMm": "Margins (mm)",
+      "density": "Spacing",
+      "daysPerSection": "Date columns per section (7 or 14)",
+      "detail": "Cell detail"
+    },
+    "pdfOptions": {
+      "paperSize": {
+        "letter": "US Letter",
+        "a4": "A4",
+        "legal": "US Legal",
+        "tabloid": "Tabloid"
+      },
+      "orientation": {
+        "portrait": "Portrait",
+        "landscape": "Landscape"
+      },
+      "density": {
+        "standard": "Standard",
+        "compact": "Compact"
+      },
+      "detail": {
+        "assignments": "Assignments",
+        "hours": "Assignments and hours",
+        "full": "Full evidence"
+      }
+    }
   }
 }

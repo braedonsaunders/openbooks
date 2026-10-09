@@ -16,6 +16,7 @@ const PAPER_PORTRAIT_PT: Record<PdfPaperSize, { width: number; height: number }>
   letter: { width: 612, height: 792 },
   a4: { width: 595.28, height: 841.89 },
   legal: { width: 612, height: 1008 },
+  tabloid: { width: 792, height: 1224 },
   '4x6': { width: 288, height: 432 },
 }
 

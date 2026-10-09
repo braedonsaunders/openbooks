@@ -1,3 +1,7 @@
+import {
+  scheduleBoardsFlowAdapter,
+  scheduleBoardSubjectProfile,
+} from "./schedule-board-adapter.ts";
 import {SCHEDULE_DISTRIBUTION_SUBJECT_KIND,scheduleDistributionSubjectProfile,scheduleDistributionsFlowAdapter} from './schedule-distribution-adapter.ts';
 import { CHECKLIST_STEP_SUBJECT_KIND } from "@openbooks/forms-core";
 import { checklistStepsFlowAdapter, checklistStepSubjectProfile } from "./checklist-steps-adapter.ts";
@@ -116,6 +120,7 @@ import { db } from "../platform/db.ts";
 const adapterCache = new Map<string, FlowSubjectAdapter>();
 
 export function getFlowAdapter(subjectKind: string): FlowSubjectAdapter | null {
+  if (subjectKind === "schedule_board") return scheduleBoardsFlowAdapter;
   if (subjectKind === COMPENSATION_VERSION_SUBJECT_KIND) return compensationVersionsFlowAdapter;
   if (subjectKind === COMPENSATION_ASSIGNMENT_SUBJECT_KIND) return compensationAssignmentsFlowAdapter;
   if(subjectKind===SCHEDULE_DISTRIBUTION_SUBJECT_KIND)return scheduleDistributionsFlowAdapter;
@@ -175,6 +180,7 @@ export function handlerReleasedSubjectKinds(): string[] {
 export function listFlowSubjectProfiles(): FlowSubjectProfile[] {
   return [
     scheduleDistributionSubjectProfile,
+    scheduleBoardSubjectProfile,
     checklistStepSubjectProfile,
     ...DOCUMENT_FLOW_KINDS.map((kind) => documentSubjectProfile(kind)),
     compensationVersionSubjectProfile,
@@ -227,9 +233,9 @@ export async function flowSubjectProfileForOrg(
   const base = listFlowSubjectProfiles().find((profile) => profile.subjectKind === subjectKind);
   if (!base) return null;
 
-  const roleResult = (await db.execute<{ key: string }>(sql`
+  const roleResult = await db.execute<{ key: string }>(sql`
     select key from app_roles where org_id = ${orgId} order by name
-  `));
+  `);
 
   // Pay runs live in the documents table, so their custom header fields come
   // from the same catalog as every other document kind.
@@ -239,13 +245,13 @@ export async function flowSubjectProfileForOrg(
     return { ...base, roles: roleResult.rows.map((role) => role.key) };
   }
 
-  const fieldResult = (await db.execute<CustomFlowFieldRow>(sql`
+  const fieldResult = await db.execute<CustomFlowFieldRow>(sql`
     select key, label, field_type, config
       from custom_field_defs
      where org_id = ${orgId} and target_table = 'documents'
        and (target_kind is null or target_kind = ${subjectKind}) and is_active
      order by sort_order, label
-  `));
+  `);
   const existing = new Set(base.fields.map((field) => field.key));
   const customFields = fieldResult.rows
     .filter((field) => !existing.has(field.key))

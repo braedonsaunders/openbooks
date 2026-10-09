@@ -1,0 +1,1 @@
+The optional native board policy begins null and activates no Flow. Existing manual version keys and immutable snapshots are retained; automatic occurrences receive separate deterministic replay keys.

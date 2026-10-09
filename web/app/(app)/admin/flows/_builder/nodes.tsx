@@ -44,6 +44,8 @@ export function triggerSummary(t: (key: string) => string, d: TriggerData): stri
 
 export function actionSummary(t: (key: string) => string, d: ActionData): string {
   switch (d.action) {
+    case "send_board_schedule":
+      return t("action.kinds.send_board_schedule");
     case 'distribute_schedule': return t('action.kinds.distribute_schedule')
     case 'send_email':
       return d.subject || t('action.kinds.send_email')

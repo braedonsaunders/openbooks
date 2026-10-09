@@ -1,7 +1,7 @@
 'use client'
 
 import { useRef, useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from "next/navigation";
 import { useTranslations } from 'next-intl'
 import { Plus, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
@@ -22,12 +22,15 @@ export function NewFlowButton() {
   const router = useRouter()
   const [open, setOpen] = useState(false)
   const [name, setName] = useState('')
-  const [subjectKind, setSubjectKind] = useState('')
-  const [ungatedOutcome, setUngatedOutcome] = useState<'apply' | undefined>()
+  const params = useSearchParams();
+  const [subjectKind, setSubjectKind] = useState(params.get("subject") ?? "");
+  const [ungatedOutcome, setUngatedOutcome] = useState<"apply" | undefined>();
+  const [weekdayPreset, setWeekdayPreset] = useState(false);
   const [profiles, setProfiles] = useState<ProfileOption[] | null>(null)
   const [busy, setBusy] = useState(false)
-  const supportsDirect = profiles?.find(profile => profile.subjectKind === subjectKind)?.supportsUngatedSubmission === true
-
+  const supportsDirect =
+    profiles?.find((profile) => profile.subjectKind === subjectKind)
+      ?.supportsUngatedSubmission === true;
 
   function openDrawer() {
     setOpen(true)
@@ -56,7 +59,19 @@ export function NewFlowButton() {
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name: name.trim(), subjectKind, ...(supportsDirect && ungatedOutcome ? { ungatedOutcome } : {}) }),
+          body: JSON.stringify({
+            name: name.trim(),
+            subjectKind,
+            ...(subjectKind === "schedule_board" && params.get("board")
+              ? {
+                  boardId: params.get("board"),
+                  ...(weekdayPreset
+                    ? { schedulePreset: "weekday-morning-afternoon" }
+                    : {}),
+                }
+              : {}),
+            ...(supportsDirect && ungatedOutcome ? { ungatedOutcome } : {}),
+          }),
         },
         t('new.failed'),
       )
@@ -97,6 +112,16 @@ export function NewFlowButton() {
               autoFocus
             />
           </div>
+          {subjectKind === "schedule_board" && params.get("board") ? (
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={weekdayPreset}
+                onChange={(event) => setWeekdayPreset(event.target.checked)}
+              />
+              {t("new.scheduleWeekdayPreset")}
+            </label>
+          ) : null}
           <div className="space-y-1.5">
             <Label>{t('new.subject')}</Label>
             <SearchSelect
@@ -105,20 +130,24 @@ export function NewFlowButton() {
                 value: p.subjectKind,
                 label: p.labelKey && tSubjects.has(p.labelKey as never)
                   ? tSubjects(p.labelKey as never)
-                  : p.label ?? p.subjectKind,
+                    : (p.label ?? p.subjectKind),
               }))}
               placeholder={t('new.subjectPlaceholder')}
               loading={profiles === null}
               onChange={(value) => { setSubjectKind(value); setUngatedOutcome(undefined) }}
             />
           </div>
-          {supportsDirect && <div className="space-y-1.5">
-            <Label htmlFor="new-flow-ungated">{t('builder.ungatedOutcomeLabel')}</Label>
+          {supportsDirect && (
+            <div className="space-y-1.5">
+              <Label htmlFor="new-flow-ungated">
+                {t("builder.ungatedOutcomeLabel")}
+              </Label>
             <Select id="new-flow-ungated" value={ungatedOutcome ?? ''} onChange={(event) => setUngatedOutcome(event.target.value === 'apply' ? 'apply' : undefined)}>
               <option value="">{t('builder.ungatedRequireApproval')}</option>
               <option value="apply">{t('builder.ungatedApply')}</option>
             </Select>
-          </div>}
+            </div>
+          )}
         </div>
       </Drawer>
     </>

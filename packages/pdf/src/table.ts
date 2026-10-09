@@ -24,6 +24,16 @@ export function computeColumnWidths(
 ): number[] {
   const n = group.columns.length
   if (n === 0) return []
+  if (group.columnWeights) {
+    const weights = group.columnWeights;
+    if (weights.length !== n || weights.some(weight => !Number.isFinite(weight) || weight <= 0))
+      throw new RangeError('Report column weights must be positive and match the column count.');
+    const totalWeight = weights.reduce((sum, weight) => sum + weight, 0);
+    const widths = weights.map(weight => contentWidth * weight / totalWeight);
+    if (widths.some(width => width < MIN_COL_W))
+      throw new RangeError('The configured grid columns are too narrow. Choose a wider page or fewer date columns.');
+    return widths;
+  }
   const maxColW = contentWidth * MAX_COL_FRAC
   const natural: number[] = []
   doc.font(theme.fontBold).fontSize(theme.table)
@@ -131,11 +141,30 @@ export function drawTable(
   // repeated header. Anything taller (e.g. a huge JSON/memo cell) is clamped
   // and the cell text ellipsised — otherwise pdfkit would auto-paginate mid-
   // cell and every later cell of the row would land on the wrong page.
-  const maxRowHeight = page.contentBottom - page.contentTop - headerHeight
+  const sectionHeight =
+    group.kind === "section"
+      ? doc
+          .font(theme.fontBold)
+          .fontSize(theme.h2)
+          .heightOfString(group.title, { width: page.contentWidth }) + 3
+      : 0;
+  const maxRowHeight =
+    page.contentBottom - page.contentTop - headerHeight - sectionHeight;
 
   for (let r = 0; r < group.rows.length; r++) {
     const row = group.rows[r]!
-    const rowHeight = Math.min(measureRowHeight(doc, row, widths, theme, theme.font), maxRowHeight)
+    const measuredHeight = measureRowHeight(
+      doc,
+      row,
+      widths,
+      theme,
+      theme.font,
+    );
+    if (group.overflow === "refuse" && measuredHeight > maxRowHeight)
+      throw new RangeError(
+        "A report row exceeds the printable page. Choose a wider page, fewer date columns or less detail; no report evidence was truncated.",
+      );
+    const rowHeight = Math.min(measuredHeight, maxRowHeight);
     // Page break before a row that overflows.
     if (y + rowHeight > page.contentBottom) {
       doc.addPage()
@@ -175,7 +204,7 @@ export function drawTable(
           width: aw,
           align: aligns[i] ?? 'left',
           height: cellMaxH,
-          ellipsis: true,
+          ellipsis: group.overflow !== "refuse",
         })
       }
     }

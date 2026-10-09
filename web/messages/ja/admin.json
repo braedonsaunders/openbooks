@@ -3549,8 +3549,9 @@
         "description": "研修日や工場作業日など、顧客やプロジェクトに該当しない作業の割り当てと、勤務しない日に使うコード。"
       },
       "schedule-resource-recipients": {
-        "title": "Board resource recipients",
-        "singularTitle": "Resource recipient"
+        "title": "リソース配信連絡先",
+        "singularTitle": "リソース配信連絡先",
+        "description": "設備や場所に予定メールの連絡先を関連付けます。従業員には「人」の連絡先を直接使用し、別の名簿は不要です。"
       },
       "ai-capabilities": {
         "title": "アシスタント操作のレビュー",
@@ -4154,7 +4155,28 @@
       "autonomy": "宣言されたレビューレベル",
       "boardId": "スケジュールボード",
       "resourceLocationId": "リソースの場所",
-      "partyId": "連絡先"
+      "partyId": "連絡先",
+      "automaticDeliveryPolicy": "予定の自動配信",
+      "scheduleDeliveryOperator": "権限のある担当者",
+      "scheduleDeliveryTimeZone": "レポートのタイムゾーン",
+      "scheduleDeliveryDays": "レポートの日数",
+      "scheduleDeliveryAnchor": "レポート開始日",
+      "scheduleDeliveryWeekStarts": "週の最初の曜日（0＝日曜）",
+      "scheduleDeliveryVisibility": "レポート共有",
+      "scheduleDeliveryCohort": "従業員の配信対象",
+      "scheduleDeliveryExtras": "追加のネイティブ連絡先",
+      "scheduleDeliveryPdf": "PDFを添付",
+      "scheduleDeliveryMessage": "メール本文",
+      "scheduleDeliveryRoles": "登録済みロールの受信者",
+      "scheduleDeliveryMode": "受信者の選択",
+      "scheduleDeliverySubjects": "選択した予定の人・リソース",
+      "schedulePdfLayout": "PDFレイアウト",
+      "schedulePdfPaper": "用紙サイズ",
+      "schedulePdfOrientation": "向き",
+      "schedulePdfMargin": "余白（mm）",
+      "schedulePdfDensity": "間隔",
+      "schedulePdfDays": "各区分の日付列数（7または14）",
+      "schedulePdfDetail": "セルの詳細"
     },
     "fieldHelp": {
       "fxRateMaxAgeDays": "使用可能な最新レートから期末までの日数がこれを超えると、再評価と連結はそのレートを拒否します。期末レートは期末スポットレートの日付から、平均レートは平均に含まれる最新の相場の日付から数えます。ポリシー未設定時の既定値: 31日。",
@@ -4322,7 +4344,8 @@
       "scheduleCellColorRules": "大文字と小文字を区別せず、最初に一致したルールの色を使用します。#38bdf8 のような6桁の16進色を使用します。",
       "scheduleBoardDayPolicyKnown": "元の日付しか分からない場合はオフにします。履歴は時間なしで表示されます。終日予約には開始・終了・休憩の設定が必要です。",
       "scheduleShowHoursColumn": "Show the right-side sum of booked hours. Source dates without hours remain unknown. Daily footer totals are configured separately.",
-      "scheduleDistributionVisibility": "Personal reports contain only the recipient’s own schedule or associated resources. Whole-board reports require an explicit sharing policy and a legal-entity-scoped board. Every send still requires a reviewed audience/version or an authored, enabled native Flow."
+      "scheduleDistributionVisibility": "Personal reports contain only the recipient’s own schedule or associated resources. Whole-board reports require an explicit sharing policy and a legal-entity-scoped board. Every send still requires a reviewed audience/version or an authored, enabled native Flow.",
+      "scheduleAutomaticDelivery": "任意のレポート設定です。自分の権限とボードのタイムゾーンを設定し、曜日と時刻を指定した予定配信フローを別途有効にしてください。設定の解除は今後の配信を停止し、配信履歴を保持します。"
     },
     "options": {
       "withholdingCondominiumPayer": "集合住宅管理組合の支払者",
@@ -5074,6 +5097,44 @@
         "equals": "一致",
         "startsWith": "で始まる",
         "contains": "を含む"
+      },
+      "scheduleReportAnchor": {
+        "today": "実行日",
+        "week": "該当する週の開始日"
+      },
+      "scheduleReportSharing": {
+        "personal": "個人レポート",
+        "board": "ボード全体のレポート"
+      },
+      "scheduleReportCohort": {
+        "scope": "現在の対象従業員と応援従業員",
+        "scheduled": "レポートに予定がある現職従業員",
+        "supervisors": "対象従業員の登録済み上司",
+        "self": "担当者自身の予定"
+      },
+      "scheduleRecipientMode": {
+        "selected": "選択した受信者のみ",
+        "automatic": "ボードの自動配信対象のみ",
+        "combined": "自動対象と選択した受信者"
+      },
+      "schedulePdfPaper": {
+        "letter": "US Letter",
+        "a4": "A4",
+        "legal": "US Legal",
+        "tabloid": "Tabloid"
+      },
+      "schedulePdfOrientation": {
+        "portrait": "縦向き",
+        "landscape": "横向き"
+      },
+      "schedulePdfDensity": {
+        "standard": "標準",
+        "compact": "コンパクト"
+      },
+      "schedulePdfDetail": {
+        "assignments": "割り当て",
+        "hours": "割り当てと時間",
+        "full": "証拠の全詳細"
       }
     },
     "invoicing": {
@@ -6001,7 +6062,8 @@
     "structuredFields": {
       "row": "行 {number}",
       "addRow": "行を追加",
-      "removeRow": "行を削除"
+      "removeRow": "行を削除",
+      "configure": "{field}を設定"
     },
     "benefitBuilder": {
       "offer": "プログラム",
@@ -6772,6 +6834,9 @@
         "notes": "備考",
         "returnFrequency": "申告頻度"
       }
+    },
+    "actions": {
+      "scheduleDeliveryFlows": "Flowsでメールの時刻を設定"
     }
   },
   "flows": {
@@ -6804,7 +6869,8 @@
       "subject": "レコードタイプ",
       "subjectPlaceholder": "レコードタイプを選択…",
       "create": "フローを作成",
-      "failed": "フローを作成できませんでした"
+      "failed": "フローを作成できませんでした",
+      "scheduleWeekdayPreset": "平日06:00と14:30（任意の下書き設定。有効化前に確認）"
     },
     "actions": {
       "enable": "有効化",
@@ -6907,7 +6973,12 @@
       "showIfRemove": "表示条件を削除",
       "buttonPreview": "レコードボタンのプレビュー",
       "buttonHint": "このボタンは、フローが有効で、その権限および表示条件を満たす場合にレコードヘッダーに表示されます。",
-      "defaultButtonLabel": "フローを実行"
+      "defaultButtonLabel": "フローを実行",
+      "clockSchedule": "曜日と時刻を指定",
+      "clockHelp": "各時刻は別の実行として扱います。遅延復旧時は設定時刻ごとに最後の未実行分のみ送信します。ボードのレポートと同じタイムゾーンを明示してください。",
+      "clockTime": "送信時刻",
+      "removeTime": "時刻を削除",
+      "addTime": "時刻を追加"
     },
     "condition": {
       "rule": "分岐する条件",
@@ -6925,7 +6996,8 @@
         "post_document": "書類を記帳",
         "lock_record": "レコードをロック",
         "unlock_record": "レコードのロックを解除",
-        "distribute_schedule": "Email reviewed schedule"
+        "distribute_schedule": "Email reviewed schedule",
+        "send_board_schedule": "現在のボード予定をメール送信"
       },
       "recipients": "宛先",
       "subject": "件名",
@@ -6955,7 +7027,8 @@
       "lockExemptRoles": "対象外のロール",
       "lockExemptHint": "管理者は常に対象外です。選択したロールは引き続き編集できます。",
       "unlockHint": "フローのロックを解除し、レコードを再び編集できるようにします。",
-      "scheduleReportHelp": "Email the immutable reviewed schedule report to its exact recipient audience. It may be a personal report or an explicitly permitted whole-board report. Contact, legal entity, schedule version and provider changes refuse delivery."
+      "scheduleReportHelp": "Email the immutable reviewed schedule report to its exact recipient audience. It may be a personal report or an explicitly permitted whole-board report. Contact, legal entity, schedule version and provider changes refuse delivery.",
+      "automaticScheduleHelp": "保存済みの権限を持つ担当者、現在の配信対象、ボードのレポート設定を使用します。実行ごとに最新レポートを作成します。フローの編集やプレビューではメールを送信しません。"
     },
     "gate": {
       "title": "タイトル",
@@ -7040,6 +7113,9 @@
       "retryFailed": "再試行に失敗しました",
       "retried": "実行を再駆動しました",
       "retrying": "再試行中…"
+    },
+    "subjects": {
+      "schedule_board": "予定配信"
     }
   },
   "features": {

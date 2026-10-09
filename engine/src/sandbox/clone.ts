@@ -253,7 +253,7 @@ async function validateVendorRetainageSourcesForClone(opts: CloneOptions): Promi
   const releases = (await db.execute<{ id: string; subcontract_id: string; amount: string; source_bill_allocations: unknown }>(sql`
     select id, subcontract_id, amount::text as amount, source_bill_allocations
       from vendor_retainage_releases where org_id = ${opts.productionOrgId}`)).rows;
-  if (!releases.some(row => row.source_bill_allocations !== null)) return;
+  if (!releases.some((row) => row.source_bill_allocations !== null)) return;
   const bills = (await db.execute<{ subcontract_id: string; document_id: string }>(sql`
     select application.subcontract_id, original.id as document_id
       from vendor_pay_applications application
@@ -300,6 +300,15 @@ export function generateCopySql(
   const exprs: string[] = [];
   for (const c of t.columns) {
     cols.push(`"${c.name}"`);
+    // Automatic delivery never follows copied people or activates in a new environment.
+    if (
+      t.name === "schedule_boards" &&
+      c.name === "automatic_delivery_policy"
+    ) {
+      exprs.push("null::jsonb");
+      continue;
+    }
+
     if (opts.masked && (t.name === "files" || t.name === "file_versions") && c.name === "storage_kind") {
       exprs.push(`'${MASKED_STORAGE_KIND}'`);
       continue;
@@ -573,18 +582,24 @@ export async function runClone(opts: CloneOptions): Promise<CloneResult> {
     for (const t of selected) {
       const stmt = generateCopySql(t, opts, rebaseSet, retainedTenantTables, masking, cutoff);
       if (!stmt) continue;
-      if (t.name === "vendor_retainage_releases" && t.columns.some(c => c.name === "source_bill_allocations")) {
-        if (!perTable.some(row => row.table === "documents")) {
+        if (
+          t.name === "vendor_retainage_releases" &&
+          t.columns.some((c) => c.name === "source_bill_allocations")
+        ) {
+          if (!perTable.some((row) => row.table === "documents")) {
           throw new Error("sandbox clone: retainage source allocations require the documents copy to finish first; include documents before retrying");
         }
         await validateVendorRetainageSourcesForClone(opts);
       }
-      const res = (await db.execute(sql.raw(stmt)));
+        const res = await db.execute(sql.raw(stmt));
       const n = res.rowCount ?? 0;
       perTable.push({ table: t.name, rows: n });
       rowsCopied += n;
     }
-    await rebaseClonedJsonReferences({ ...opts, copiedTables: new Set(perTable.map(row => row.table)) });
+      await rebaseClonedJsonReferences({
+        ...opts,
+        copiedTables: new Set(perTable.map((row) => row.table)),
+      });
     // These rollups are intentionally excluded from the clone catalog because
     // they are maintained projections, not source evidence. Rebuild them after
     // every copy: application rows can be inserted before their journal-line

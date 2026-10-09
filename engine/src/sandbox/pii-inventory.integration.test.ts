@@ -37,6 +37,7 @@ const SENSITIVE_TYPES: ReadonlySet<string> = new Set([
  * without a named column), plus the table.column pairs below.
  */
 const CONSTRUCTION_COVERED: ReadonlySet<string> = new Set([
+  "schedule_boards.automatic_delivery_policy", // actual clone construction clears operator/contact policy in every copied environment
   "schedule_boards.cell_color_rules", // masked copy construction clears all tenant-authored matching values
   "file_blobs.bytes", // not copied at all for masked clones
   "files.storage_kind", // tombstone carrier, never 'db'/'s3'
@@ -2643,9 +2644,13 @@ test("every sensitive column of every cloned table is masked or allow-listed, an
   // Derive the rule-column projection from the real clone catalog, then
   // execute its generated masked expression against tenant-authored prose.
   const catalog = await loadCatalog();
-  const boards = catalog.tables.find(table=>table.name==='schedule_boards');
+  const boards = catalog.tables.find(
+    (table) => table.name === "schedule_boards",
+  );
   assert.ok(boards);
-  const ruleColumn = boards.columns.find(column=>column.name==='cell_color_rules');
+  const ruleColumn = boards.columns.find(
+    (column) => column.name === "cell_color_rules",
+  );
   assert.ok(ruleColumn);
   const projection = {...boards,columns:[ruleColumn]};
   const options = {productionOrgId:'65fa9dc7-228f-4e19-8bf1-17d52efeb78d',sandboxOrgId:'47df30a3-4fd1-4570-bb67-09641053ee3b',
@@ -2657,6 +2662,15 @@ test("every sensitive column of every cloned table is masked or allow-listed, an
   const ruleReadback = await db.execute<{rules:unknown}>(sql`select ${sql.raw(expression!)} rules
     from (values ('[{"field":"bookingLabel","match":"contains","value":"Production Person","color":"#123456"}]'::jsonb)) source(cell_color_rules)`);
   assert.deepEqual(ruleReadback.rows[0]?.rules,[]);
+  const policyColumn = boards.columns.find(column => column.name === "automatic_delivery_policy");
+  assert.ok(policyColumn);
+  for (const masked of [false, true]) {
+    const copied = generateCopySql({ ...boards, columns: [policyColumn] }, { ...options, masked }, new Set(['schedule_boards']), new Set(), new Map(), null)!;
+    const policyExpression = copied.split(') select ')[1]?.split(' from "schedule_boards"')[0];
+    assert.equal(policyExpression, "null::jsonb");
+    const result = await db.execute<{policy: unknown}>(sql`select ${sql.raw(policyExpression!)} policy from (values ('{"operatorId":"65fa9dc7-228f-4e19-8bf1-17d52efeb78d","additionalPartyIds":["private-contact"]}'::jsonb)) source(automatic_delivery_policy)`);
+    assert.equal(result.rows[0]?.policy, null);
+  }
   const stale: string[] = [];
   for (const key of ALLOW_LISTED_NON_PERSONAL) {
     const udtName = live.get(key);

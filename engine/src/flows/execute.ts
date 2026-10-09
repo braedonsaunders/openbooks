@@ -1,4 +1,7 @@
-import {sendReviewedSchedule} from './schedule-distribution-hook.ts';
+import {
+  sendAutomaticSchedule,
+  sendReviewedSchedule,
+} from "./schedule-distribution-hook.ts";
 import { and, eq, inArray } from "drizzle-orm";
 import {
   flowFieldValueError,
@@ -92,7 +95,9 @@ export async function executeFlowPlan(
     rows: params.evalCtx.rows ?? {},
     requestContext: {
       ...params.evalCtx.requestContext,
-      today: params.evalCtx.requestContext?.today ?? await businessToday(ctx.orgId),
+      today:
+        params.evalCtx.requestContext?.today ??
+        (await businessToday(ctx.orgId)),
     },
   };
   const targetCtx = { orgId: ctx.orgId, submitterUserId: params.submitterUserId, values };
@@ -169,6 +174,13 @@ export async function executeFlowPlan(
 
   const runAction = async (nodeId: string, action: ActionData): Promise<string> => {
     switch (action.action) {
+      case "send_board_schedule": {
+        if (flow.subjectKind !== "schedule_board" || !ctx.scheduledOccurrence)
+          throw new Error(
+            "Automatic schedule delivery needs its native board and durable timer occurrence.",
+          );
+        return `send_board_schedule→${await sendAutomaticSchedule({ boardId: subjectId, runId, ctx })}`;
+      }
       case 'distribute_schedule': {
         if(flow.subjectKind!=='schedule_distribution'||!ctx.userId)throw new Error('Schedule email requires its reviewed native subject and acting user.');
         const sent=await sendReviewedSchedule({requestId:subjectId,runId,ctx});
@@ -437,8 +449,10 @@ async function createGate(
   // supervisor instead; if THAT resolves nothing, fail the run loudly — a
   // silently self-approvable gate would be worse than a failed run.
   const preventSelfApproval =
-    gate.preventSelfApproval === true || adapter.selfApprovalPolicy === "forbidden"
-    || adapter.profile.pinsSubmissionPolicy === true && gate.preventSelfApproval !== false;
+    gate.preventSelfApproval === true ||
+    adapter.selfApprovalPolicy === "forbidden" ||
+    (adapter.profile.pinsSubmissionPolicy === true &&
+      gate.preventSelfApproval !== false);
   if (preventSelfApproval && args.submitterUserId) {
     const hadSubmitter = assignees.some((u) => u.id === args.submitterUserId);
     assignees = assignees.filter((u) => u.id !== args.submitterUserId);
