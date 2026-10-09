@@ -22,7 +22,7 @@ interface EnrollmentSource {
   effectiveFrom: string; effectiveTo: string | null; planCode: string;
   terms: (RecurringBenefitTerm & { sourceDecimal: string | null; provenance: unknown })[];
   rules: (RecurringBenefitRule & { sourceDecimal: string | null; provenance: unknown;
-    selectedComponentIds: string[]; selectedComponents: { id: string; kind: string; code: string; name: string }[] })[];
+    selectedComponentIds: string[]; selectedComponents: { id: string; kind: string; code: string; name: string; unitOfMeasure: string | null }[] })[];
   tiers: (BenefitContributionTier & { classKey: string; effectiveFrom: string; effectiveTo: string | null })[];
   components: Record<string, unknown>[];
   recoveryPlans: Record<string, unknown>[];
@@ -68,7 +68,7 @@ export async function recurringBenefitSource(tx: Executor, args: {
         'basis',r.basis,'rate',r.rate::text,'rateFormula',r.rate_formula,'hoursBasis',r.hours_basis,'hoursCoverage',r.hours_coverage,'payBasis',r.pay_basis,
         'selectedComponentIds',coalesce((select jsonb_agg(rc.pay_component_id order by rc.pay_component_id)
           from hrm_benefit_contribution_rule_components rc where rc.org_id=r.org_id and rc.rule_id=r.id),'[]'::jsonb),
-        'selectedComponents',coalesce((select jsonb_agg(jsonb_build_object('id',c.id,'kind',c.kind,'code',c.code,'name',c.name) order by c.code)
+        'selectedComponents',coalesce((select jsonb_agg(jsonb_build_object('id',c.id,'kind',c.kind,'code',c.code,'name',c.name,'unitOfMeasure',c.unit_of_measure) order by c.code)
           from hrm_benefit_contribution_rule_components rc join pay_components c on c.org_id=rc.org_id and c.id=rc.pay_component_id
           where rc.org_id=r.org_id and rc.rule_id=r.id),'[]'::jsonb),
         'runApplicability',r.run_applicability,'unpaidPeriodTreatment',r.unpaid_period_treatment,'arrearsPlanId',r.arrears_plan_id,'arrearsRecoveryPeriods',r.arrears_recovery_periods,
@@ -200,6 +200,21 @@ export async function appendRecurringBenefitLines(tx: Executor, args: {
       const selected = rule.hoursBasis === 'selected_components' ? new Set(rule.selectedComponentIds ?? []) : null;
       const hourLines = rule.hoursBasis === 'regular_paid' ? baseLines.filter(regular)
         : selected !== null ? baseLines.filter(l => l.componentId !== null && selected.has(l.componentId)) : baseLines;
+      // An operator-supplied hourly earning must declare the quantity used
+      // by a per-hour election. Its cash amount cannot establish those hours.
+      // Non-hour quantities and native salary coverage retain their own bases.
+      const fixedZero = term.electionMode === 'fixed'
+        && term.electedRate !== null && cmp(term.electedRate, '0') === 0;
+      const matchingIneligible = rule.requiresMatchEligibility && enrollment.matchEligible === false;
+      if (rule.basis === 'per_hour' && selected !== null && !fixedZero && !matchingIneligible) {
+        for (const line of hourLines) {
+          if (!line.runAdjustmentId || line.hours != null || cmp(line.amount, '0') === 0) continue;
+          const counted = rule.selectedComponents.find(component => component.id === line.componentId);
+          if (counted?.unitOfMeasure === 'hours') {
+            throw new PayrollError(`Benefit rule ${rule.ruleKey} counts ${counted.code} (${counted.name}), but its payroll earning input has no hours — provide the source-supported hours on that input before calculating the per-hour contribution`);
+          }
+        }
+      }
       const payLines = rule.payBasis === 'regular_cash_earnings'
         ? coveredBaseLines(args.regularCashLines, earningsFrom, earningsTo, args.periodStart, args.periodEnd).filter(regular) : baseLines;
       const tier = source.service ? enrollment.tiers.filter(t => meetsServiceYears(source.service!, t.minimumServiceYears)).at(-1) ?? null : null;
