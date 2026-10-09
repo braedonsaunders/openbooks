@@ -1528,7 +1528,7 @@ test("source allocation reductions preserve manual settlements and rollback unav
     await db.execute(sql`insert into applications(org_id,from_line_id,to_line_id,amount,source_amount,
       source_transaction_amount,source_transaction_currency,target_transaction_amount,target_transaction_currency,
       settlement_rate,settlement_rate_source,settlement_rate_reference,applied_on)
-      values(${org.orgId},${pay.lineIds[0]},${bill.lineIds[0]},'10','10','10','CAD','10','CAD','1','manual','Controller allocation',${org.date})`);
+      values(${org.orgId},${pay.lineIds[0]},${bill.lineIds[0]},'10','10','10','CAD','10','CAD','1','same_currency','Controller allocation',${org.date})`);
     await reconcileApplications(org.orgId,"nsId",[{paymentRef:"payment",appliedRef:"bill",amount:"100",currency:"CAD"}]);
     const before=await settlementSnapshot(org.orgId);
     await assert.rejects(()=>reconcileApplications(org.orgId,"nsId",[{paymentRef:"payment",appliedRef:"missing",amount:"100",currency:"CAD"}],snapshot),/manual allocation/);
