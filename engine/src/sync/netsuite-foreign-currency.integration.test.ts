@@ -14,17 +14,15 @@ import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { postDocument } from "../ledger/posting-document.ts";
-import { createScratchOrg, type ScratchOrg } from "../testing/fixtures.ts";
+import { createScratchOrg, dropScratchOrg, type ScratchOrg } from "../testing/fixtures.ts";
 import { reconcileApplications } from "./applications.ts";
 import { toSourceApplicationLinks } from "./netsuite-source.ts";
 
 const DB = Boolean(process.env.OPENBOOKS_DB_URL);
 
 /**
- * Lease a fresh scratch org per top-level test. The suite's fixture lifecycle
- * hook drains forgotten leases at every top-level test boundary, so an org
- * memoized across tests is reset — and re-leased to another worker process —
- * as soon as the first test ends.
+ * Each test owns its organization and registers native teardown, whether
+ * fixture pooling is enabled or the database runner requires fresh rows.
  */
 async function ctx(): Promise<ScratchOrg> {
   return createScratchOrg();
@@ -33,8 +31,9 @@ async function ctx(): Promise<ScratchOrg> {
 test(
   "a foreign-currency invoice books base-currency GL with a transaction-currency open balance",
   { skip: !DB, timeout: 120_000 },
-  async () => {
+  async (t) => {
     const o = await ctx();
+    t.after(() => dropScratchOrg(o.orgId));
     // The shape the fixed NetSuite builder now emits for a 100 USD invoice at
     // 1.20: document currency USD, explicit rate, USD line amounts.
     const id = randomUUID();
@@ -91,7 +90,7 @@ test(
 test(
   "a fully-paid foreign invoice settles to zero through converted link amounts",
   { skip: !DB, timeout: 120_000 },
-  async () => {
+  async (t) => {
     // A 100 EUR invoice paid in full from a 100 EUR payment at carrying rates
     // 1.2/1.1. The source link states 100 in transaction currency; the
     // adapter must convert it to the payer's 120.0000 functional before the
@@ -99,6 +98,7 @@ test(
     // ~83.33 and leaves a repair-proof 16.6667 open on both documents while
     // reporting unallocated zero and alreadySettled on re-run.
     const o = await ctx();
+    t.after(() => dropScratchOrg(o.orgId));
     const payDoc = randomUUID();
     const invDoc = randomUUID();
     const payEntry = randomUUID();
