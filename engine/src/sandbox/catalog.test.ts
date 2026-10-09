@@ -97,7 +97,9 @@ test("sandbox deletion preserves immediate parent order inside deferred cycles",
   const cyclic = tables.map(t => t.name === "departments"
     ? { ...t, fks: { center_id: "mfg_work_centers" }, fkDeleteRules: { center_id: "RESTRICT" } }
     : t);
-  assert.throws(() => deletionOrder({ ...cat, tables: cyclic }), /immediate foreign-key cycle/);
+  const cyclicOrder = deletionOrder({ ...cat, tables: cyclic });
+  assert.equal(new Set(cyclicOrder).size, tables.length, "structural cycles retain every table for native row validation");
+  assert.equal(Math.abs(cyclicOrder.indexOf("departments") - cyclicOrder.indexOf("mfg_work_centers")), 1);
 });
 
 test("sandbox insertion resolves inventory ownership and tracking parents inside a deferred cycle", () => {
