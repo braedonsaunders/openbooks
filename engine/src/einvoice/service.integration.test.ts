@@ -163,3 +163,18 @@ test('Singapore mapping uses GST identities and original SGD journal amounts wit
     });
   } finally { await dropScratchOrg(org.orgId); }
 });
+
+
+test('native seller instructions retain domestic payment accounts and provider identifiers', { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const actor = await sellerFixture(org);
+    const id = await postedInvoice(org);
+    await withBypassContext(() => db.execute(sql`update einvoice_settings set payment_means_code='30',payee_account_id='123-456789',payee_bic='021 000021' where org_id=${org.orgId} and subsidiary_id=${org.subsidiaryId}`));
+    const issued = await issueNativeEInvoice(actor, id, { profile: 'en16931-ubl' }, noPdf);
+    const archive = await withBypassContext(() => db.execute<{ content: Uint8Array }>(sql`select content from einvoice_documents where org_id=${org.orgId} and id=${issued.id}`));
+    const xml = new TextDecoder().decode(archive.rows[0]!.content);
+    assert.match(xml, /<cbc:ID>123456789<\/cbc:ID>/);
+    assert.match(xml, /<cbc:ID>021000021<\/cbc:ID>/);
+  } finally { await dropScratchOrg(org.orgId); }
+});
