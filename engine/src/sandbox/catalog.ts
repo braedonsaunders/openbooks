@@ -71,6 +71,8 @@ const TRIGGER_INSERT_TABLE_PARENTS: Readonly<Record<string, readonly string[]>> 
  * logs (would carry production PII/history), and the org row itself (created
  * explicitly by the clone). */
 export const EXCLUDE = new Set([
+  // Executable warehouse suggestions and wave releases belong to the source environment.
+  "warehouse_execution_tasks", "warehouse_scan_events", "pick_waves", "pick_wave_members",
   // Issued e-invoices and filed withholding returns belong to the source environment.
   "einvoice_documents",
   "withholding_returns",
@@ -438,8 +440,9 @@ export async function loadCatalog(): Promise<Catalog> {
  * deleted BEFORE the table it points at (referencers first). Required because
  * some FKs are ON DELETE RESTRICT (e.g. custom_records → custom_record_types),
  * which is non-deferrable and blocks deleting the parent while children exist.
- * Kahn's topological sort on edges "A references B"; reference cycles (all
- * NO ACTION / deferrable) are appended last and resolved by deferred checks.
+ * Kahn's topological sort on edges "A references B"; its cyclic tail retains
+ * immediate child-before-parent dependencies. Structural cycles remain grouped
+ * for native row validation; deferred NO ACTION checks resolve at commit.
  * Self-references are excluded here and handled by the scoped wipe caller.
  */
 export function deletionOrder(cat: Catalog): string[] {
@@ -568,7 +571,7 @@ export function insertionOrder(cat: Catalog): string[] {
   // order loses immediate trigger dependencies even though their parent rows
   // must already exist when each BEFORE trigger runs. Re-sort the remainder
   // using only non-deferrable FKs and declared trigger parents; the remaining
-  // cycles in this stricter graph are genuine and may safely stay at the end.
+  // cycles in this stricter graph retain their outgoing dependency order.
   const cyclicTail = names.filter((n) => !seen.has(n));
   const tailSet = new Set(cyclicTail);
   const immediateChildren = new Map(cyclicTail.map((n) => [n, new Set<string>()]));
