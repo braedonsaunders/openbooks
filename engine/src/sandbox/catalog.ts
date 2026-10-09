@@ -32,9 +32,10 @@ const TRIGGER_INSERT_COLUMN_PARENTS: Readonly<Record<string, string>> = {
   subsidiary_id: "subsidiaries",
 };
 const TRIGGER_INSERT_TABLE_PARENTS: Readonly<Record<string, readonly string[]>> = {
-  // Tracking guards resolve the profile during INSERT, before deferred FKs.
-  inventory_movements: ["item_inventory_profiles"],
-  consignment_stock: ["item_inventory_profiles"],
+  // Physical identity and ownership guards resolve parents during INSERT.
+  inventory_movements: ["item_inventory_profiles", "stock_locations", "lots", "serials"],
+  serials: ["lots"],
+  consignment_stock: ["item_inventory_profiles", "stock_locations", "lots", "serials", "cost_layers"],
   // These ownership guards resolve parents before deferred FKs are checked.
   project_financial_adjustments: ["projects"],
   project_overhead_adjustments: ["projects"],

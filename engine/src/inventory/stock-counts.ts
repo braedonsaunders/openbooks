@@ -633,8 +633,7 @@ export async function postStockCount(
     // Without these locks the re-read observed a torn area: a movement
     // committing between the check and the adjustments posted a stale
     // variance with no refusal. Lot-tracked lines share their position's
-    // key, so they are covered by the same lock (serial-tracked items
-    // cannot be counted at all, and refuse at creation).
+    // key, so lot and serial count lines share the fenced item/location.
     for (const key of [
       ...new Set(lines.map((line) => `${line.itemId}:${line.stockLocationId}`)),
     ].sort()) {
@@ -700,6 +699,7 @@ export async function postStockCount(
         memo: `Stock count ${prepared.count.id}`,
         locationId: prepared.count.locationId,
         admission: "count",
+        stockCountLineId: line.id,
       });
       movementId = posted.movementId;
       entryId = posted.entryId;
@@ -718,7 +718,8 @@ export async function postStockCount(
     }
     const stamped = (await db.execute<{ id: string }>(sql`
       update stock_count_lines set adjustment_movement_id = ${movementId}, updated_at = now(), updated_by = ${actorId}
-       where org_id = ${orgId} and id = ${line.id} and adjustment_movement_id is null
+       where org_id = ${orgId} and id = ${line.id}
+         and (adjustment_movement_id is null or adjustment_movement_id = ${movementId})
       returning id`));
     if (stamped.rows.length === 0) {
       // A rival post stamped this line first: its adjustment stands, ours

@@ -112,6 +112,7 @@ export const serials = pgTable(
       .notNull()
       .default("in_stock"),
     currentStockLocationId: uuid("current_stock_location_id"),
+    currentMissingCountMovementId: uuid("current_missing_count_movement_id"),
     ...auditColumns,
   },
   (t) => [
