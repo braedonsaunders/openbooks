@@ -27,8 +27,8 @@ import { defineTableSubjectAdapter } from "./table-subject-adapter.ts";
  * an authored `change_status` or `set_field`: a run's selection and totals are
  * the thing being approved, and a flow must not rewrite them.
  *
- * Separation of duties is not a tenant preference here: neither the run's
- * maker (who assembled the selection) nor its submitter may decide its gate.
+ * The submitted flow freezes the organization's separation-of-duties policy;
+ * self-approval requires an explicit opt-out on that frozen gate.
  */
 
 export const OUTBOUND_PAYMENT_RUN_SUBJECT_KIND = "outbound_payment_run";
@@ -72,6 +72,7 @@ function paymentRunProfile(direction: PaymentRunDirection): FlowSubjectProfile {
   const outbound = direction === "outbound";
   return {
     subjectKind: outbound ? OUTBOUND_PAYMENT_RUN_SUBJECT_KIND : INBOUND_PAYMENT_RUN_SUBJECT_KIND,
+    pinsSubmissionPolicy: true,
     label: outbound ? "Payment run" : "Collection run",
     triggers: ["on_submit"],
     actions: ["send_email", "notify"],
@@ -187,7 +188,7 @@ function createPaymentRunsFlowAdapter(direction: PaymentRunDirection): FlowSubje
     },
     profile: direction === "inbound" ? inboundPaymentRunSubjectProfile : outboundPaymentRunSubjectProfile,
     releaseViaHandler: true,
-    selfApprovalPolicy: "forbidden",
+    selfApprovalPolicy: "configurable",
 
     async loadContext(subjectId: string): Promise<FlowSubjectContext | null> {
       const run = await loadRun(subjectId, direction);

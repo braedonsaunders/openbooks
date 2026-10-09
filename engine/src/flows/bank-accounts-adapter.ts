@@ -42,6 +42,7 @@ export const BANK_ACCOUNT_ENGINE_MANAGED_RELEASE_STATUSES: ReadonlySet<string> =
 
 export const bankAccountSubjectProfile: FlowSubjectProfile = {
   subjectKind: BANK_ACCOUNT_SUBJECT_KIND,
+  pinsSubmissionPolicy: true,
   label: "Vendor bank details",
   triggers: ["on_create", "on_update", "status_change", "on_field_value", "manual"],
   actions: ["send_email", "notify", "change_status"],
@@ -100,9 +101,8 @@ export const bankAccountsFlowAdapter: FlowSubjectAdapter = defineTableSubjectAda
   profile: bankAccountSubjectProfile,
   // Flows never write bank fields directly — the material columns are exactly
   // what approval guards, so all mutation goes through the API + re-approval.
-  // Vendor bank details are fraud-sensitive: the submitter must never be able
-  // to approve their own details, even if a tenant opts out on the gate node.
-  selfApprovalPolicy: "forbidden",
+  // Self-approval requires an explicit policy frozen with the submitted details.
+  selfApprovalPolicy: "configurable",
 
   async loadContext(subjectId: string): Promise<FlowSubjectContext | null> {
     const row = await loadRow(subjectId);

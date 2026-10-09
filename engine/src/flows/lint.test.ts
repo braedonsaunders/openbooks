@@ -127,7 +127,8 @@ test("bank-detail adapter rejects authored approval at the runtime boundary", as
     }),
     /bank-detail approval release is engine-enforced.*approval gate/i,
   );
-  assert.equal(bankAccountsFlowAdapter.selfApprovalPolicy, "forbidden");
+  assert.equal(bankAccountsFlowAdapter.selfApprovalPolicy, "configurable");
+  assert.equal(bankAccountsFlowAdapter.profile.pinsSubmissionPolicy, true);
 });
 
 test("rejects an approval gate reachable from before_post", () => {

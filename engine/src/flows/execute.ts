@@ -437,7 +437,8 @@ async function createGate(
   // supervisor instead; if THAT resolves nothing, fail the run loudly — a
   // silently self-approvable gate would be worse than a failed run.
   const preventSelfApproval =
-    gate.preventSelfApproval === true || adapter.selfApprovalPolicy === "forbidden";
+    gate.preventSelfApproval === true || adapter.selfApprovalPolicy === "forbidden"
+    || adapter.profile.pinsSubmissionPolicy === true && gate.preventSelfApproval !== false;
   if (preventSelfApproval && args.submitterUserId) {
     const hadSubmitter = assignees.some((u) => u.id === args.submitterUserId);
     assignees = assignees.filter((u) => u.id !== args.submitterUserId);
