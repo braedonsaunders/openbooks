@@ -1327,6 +1327,11 @@ async function dropDisposableOrgEscaped(orgId: string, kind: DisposableOrgKind):
       await tx.execute(sql.raw(`alter table public."file_blobs" disable trigger payroll_bank_file_blob_immutable`));
       await tx.execute(sql`delete from pay_run_bank_files where org_id = ${orgId}`);
     }
+    // Unpaid holiday rights retain exact Cabinet versions. Remove their
+    // disposable-org claims before deleting the protected source versions.
+    for (const table of ["pay_run_holiday_allocations", "payroll_holiday_occurrences", "payroll_holiday_obligations"]) {
+      if (present.has(table)) await tx.execute(sql`delete from ${qualified(table)} where org_id=${orgId}`);
+    }
     await tx.execute(sql`delete from file_blobs where version_id in
       (select v.id from file_versions v join files f on f.id = v.file_id where f.org_id = ${orgId})`);
     await tx.execute(sql`delete from file_versions where file_id in (select id from files where org_id = ${orgId})`);
