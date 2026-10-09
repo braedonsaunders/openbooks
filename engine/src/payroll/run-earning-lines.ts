@@ -47,6 +47,9 @@ export async function appendPeriodicEarnings(
   if (oneOffRun) {
     // no periodic earnings — adjustments (bonus) or settled retro differences
     // (retro, immediately below) carry the whole cheque
+  } else if (emp.pay_basis === "salary" && run.run_type === "supplemental") {
+    // The period's salary is paid once, by its regular run; a supplemental run
+    // in the same period pays only its other inputs.
   } else if (emp.pay_basis === "salary") {
     // Exact annual amount ÷ periods, rounded once (see salaryPeriodPay).
     const periodSalary = salaryPeriodPay(payRate!, P);
