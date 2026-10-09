@@ -5,16 +5,15 @@
  * digest of the exact operator employer/date mapping set under review.
  * Routing and conditions see the digest and the requester, never the
  * mutable mapping file. The migration preflight and apply verify the
- * deciding gate (approved, human decider distinct from the applying actor)
+ * deciding gate (approved, authenticated decider and frozen approval policy)
  * against this row's digest before any mapped candidate is applicable —
  * free-text approvedBy/approvedAt/rationale on the mapping itself carry no
  * authority.
  *
  * Release is engine-owned: the status flip on this row happens in
  * releaseApproval, inside decideGate's savepoint — so a throw rolls the
- * whole decision back and the gate stays pending. Self-approval is
- * forbidden outright: independence of the decider is a migration control,
- * not a tenant preference (period-close and HRM change-request precedent).
+ * whole decision back and the gate stays pending. Separation of duties is
+ * controlled by the approval gate policy frozen at submission.
  * A flow must not rewrite the digest it is approving: no field is
  * flow-writable.
  */
@@ -44,6 +43,7 @@ const MAPPING_APPROVAL_STATUSES = [
 export const employmentMigrationSubjectProfile: FlowSubjectProfile = {
   subjectKind: HRM_EMPLOYMENT_MIGRATION_SUBJECT_KIND,
   label: "Employment migration mapping",
+  pinsSubmissionPolicy: true,
   triggers: ["on_submit"],
   actions: ["send_email", "notify"],
   statuses: [...MAPPING_APPROVAL_STATUSES],
@@ -91,7 +91,7 @@ export const employmentMigrationFlowAdapter: FlowSubjectAdapter = defineTableSub
   profile: employmentMigrationSubjectProfile,
   // A flow must not rewrite the digest it is approving: the mapping set
   // freezes when the approval is requested, so no field is flow-writable.
-  selfApprovalPolicy: "forbidden",
+  selfApprovalPolicy: "configurable",
 
   async loadContext(subjectId: string): Promise<FlowSubjectContext | null> {
     const approval = await loadApproval(subjectId);

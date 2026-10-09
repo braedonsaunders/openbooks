@@ -116,6 +116,27 @@ function runOne(row: SourcePersonRow): ReturnType<typeof onlyRow> {
   return onlyRow(preflightEmploymentMigration([row], { appliedBy: APPLIER }));
 }
 
+test("same operator can apply a mapping only when its verified gate permits self-approval", () => {
+  const resolution = approvedResolution({ employerSubsidiaryId: SUB_A }, APPLIER);
+  const row = baseRow({ resolution });
+  assert.ok(runOne(row).issues.some((issue) => issue.code === "self_approved_mapping"));
+  const allowed = { ...resolution, approval: { ...resolution.approval!, requireIndependentActor: false } };
+  assert.equal(runOne({ ...row, resolution: allowed }).classification, "ready");
+  const required = { ...allowed, approval: { ...allowed.approval, requireIndependentActor: true } };
+  assert.ok(runOne({ ...row, resolution: required }).issues.some((issue) => issue.code === "self_approved_mapping"));
+});
+
+test("solo mapping approval still refuses unknown actors, unauthenticated decisions and changed mappings", () => {
+  const resolution = approvedResolution({ employerSubsidiaryId: SUB_A }, APPLIER);
+  const allowed = { ...resolution, approval: { ...resolution.approval!, requireIndependentActor: false } };
+  const row = baseRow({ resolution: allowed });
+  assert.ok(onlyRow(preflightEmploymentMigration([row])).issues.some((issue) => issue.code === "unknown_mapping_applier"));
+  assert.ok(runOne({ ...row, resolution: { ...allowed, approval: { ...allowed.approval, decidedBy: null } } }).issues.some((issue) => issue.code === "anonymous_mapping_approval"));
+  const changed = runOne({ ...row, resolution: { ...allowed, hiredOn: "2022-03-14" } });
+  assert.notEqual(changed.classification, "ready");
+  assert.ok(changed.issues.some((issue) => issue.code === "approval_subject_mismatch"));
+});
+
 test("ready via role service dates with valid employer; candidate null without observation", () => {
   const row = onlyRow(preflightEmploymentMigration([baseRow()]));
   assert.equal(row.classification, "ready");
@@ -978,4 +999,3 @@ test("an unknown observation with no conflict stays silent for the executor's mi
   assert.equal(row.candidate, null);
   assert.ok(!row.issues.some((issue) => issue.code === "post_termination_activity"));
 });
-

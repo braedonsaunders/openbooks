@@ -33,6 +33,7 @@ import {
   type SourcePersonRow,
 } from "./migration-preflight.ts";
 import { isUuid } from "../platform/uuid.ts";
+import { pinnedGateAllowsSelfApproval } from "../flows/gate-policy.ts";
 
 /** A mapping-approval authority failure that must reach the operator. */
 export class MappingApprovalError extends Error {
@@ -66,6 +67,8 @@ type GateResolution = {
   decided_by: string | null;
   subject_kind: string;
   subject_digest: string | null;
+  node_id: string;
+  run_context: unknown;
 };
 
 /**
@@ -99,8 +102,11 @@ export async function resolveMappingApprovalSnapshots(
       select g.id::text as gate_id, g.status as gate_status,
              g.decided_by::text as decided_by,
              g.subject_kind as subject_kind,
-             a.mapping_digest as subject_digest
+             a.mapping_digest as subject_digest,
+             g.node_id, r.context as run_context
         from flow_gates g
+        left join flow_runs r
+          on r.org_id = g.org_id and r.id = g.run_id and r.flow_id = g.flow_id
         left join hrm_employment_migration_approvals a
           on a.org_id = g.org_id and a.id = g.subject_id
        where g.org_id = ${orgId} and g.id = ${gateId}`)) as unknown as {
@@ -150,6 +156,7 @@ export async function resolveMappingApprovalSnapshots(
           decidedBy: gate.decided_by,
           subjectKind: gate.subject_kind,
           subjectDigest: gate.subject_digest ?? "",
+          requireIndependentActor: !pinnedGateAllowsSelfApproval(gate.run_context, gate.node_id),
         },
       },
     };
