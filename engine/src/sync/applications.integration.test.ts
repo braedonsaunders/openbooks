@@ -1563,6 +1563,10 @@ test("authoritative allocation replacement reverses FX evidence once and recreat
       values(${org.orgId},${org.periodId},${org.bookId},${org.subsidiaryId},'gl','closed','close.importedPeriodLockReason'),
         (${org.orgId},${org.periodId},${org.bookId},${org.subsidiaryId},'ar','closed','close.importedPeriodLockReason')`);
     const current=[{...initial[0]!,amount:"50"}];
+    const beforeLocked=await settlementSnapshot(org.orgId);
+    await assert.rejects(()=>reconcileApplications(org.orgId,"nsId",current,snapshot),/closed/);
+    assert.deepEqual(await settlementSnapshot(org.orgId),beforeLocked);
+    await db.execute(sql`delete from period_locks where org_id=${org.orgId} and reason='close.importedPeriodLockReason'`);
     const reduced=await reconcileApplications(org.orgId,"nsId",current,snapshot);
     assert.equal(reduced.released,1);assert.equal(reduced.insertedAmount,"55.0000");
     const active=(await settlementSnapshot(org.orgId)).filter(r=>r.unapplied_at==null);
