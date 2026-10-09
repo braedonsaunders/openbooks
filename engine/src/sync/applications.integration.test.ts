@@ -1601,3 +1601,55 @@ test("source releases respect controller period locks and rollback a replacement
     assert.equal((await db.execute(sql`select id from audit_log where org_id=${org.orgId} and table_name='applications'`)).rows.length,0);
   }finally{await dropScratchOrg(org.orgId);}
 });
+
+
+test("complete snapshots repair journal allocations by their source control accounts and preserve replay and manual evidence", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const snapshot = await completeSnapshotFixture(org);
+    const secondAp = randomUUID();
+    await db.execute(sql`update accounts set custom=jsonb_build_object('nsId','AP-A') where org_id=${org.orgId} and id=${org.accounts.ap}`);
+    await db.execute(sql`insert into accounts(id,org_id,number,name,type,custom)
+      values(${secondAp},${org.orgId},'2101','Equipment payable','liability_payable',jsonb_build_object('nsId','AP-B'))`);
+    const create = async (ref: string, sign: string) => postFixtureDoc(org,ref,ref,[
+      {accountId:org.accounts.ap,amount:`${sign}50`,partyId:org.vendorId,open:true},
+      {accountId:secondAp,amount:`${sign}50`,partyId:org.vendorId,open:true},
+      {accountId:org.accounts.bank,amount:sign==='-'?'100':'-100',partyId:null,open:false},
+    ],'journal',{sourceKey:'nsId'});
+    await create('payer-a','');await create('payer-b','');
+    await create('target-a','-');await create('target-b','-');
+    const oldLinks=[['payer-a','target-a'],['payer-a','target-b'],['payer-b','target-a'],['payer-b','target-b']]
+      .map(([paymentRef,appliedRef])=>({paymentRef:paymentRef!,appliedRef:appliedRef!,amount:'50',currency:'CAD'}));
+    await reconcileApplications(org.orgId,'nsId',oldLinks);
+    const originalRows=await settlementSnapshot(org.orgId);
+    const originalGL=(await db.execute(sql`select id,amount::text,txn_amount::text from journal_lines where org_id=${org.orgId} order by id`)).rows;
+    const current=oldLinks.map((link,index)=>({...link,paymentAccountRef:index===0||index===3?'AP-B':'AP-A',appliedAccountRef:index===0||index===3?'AP-B':'AP-A'}));
+    const repaired=await reconcileApplications(org.orgId,'nsId',current,snapshot);
+    assert.equal(repaired.released,4);assert.equal(repaired.inserted,4);assert.equal(repaired.unallocated,'0.0000');
+    const active=(await db.execute<{payment:string;target:string;account:string}>(sql`
+      select df.custom->>'nsId' payment,dt.custom->>'nsId' target,acc.custom->>'nsId' account
+      from applications a join journal_lines lf on lf.id=a.from_line_id and lf.org_id=a.org_id
+      join journal_lines lt on lt.id=a.to_line_id and lt.org_id=a.org_id
+      join journal_entries ef on ef.id=lf.entry_id and ef.org_id=lf.org_id
+      join journal_entries et on et.id=lt.entry_id and et.org_id=lt.org_id
+      join documents df on df.id=ef.source_document_id and df.org_id=ef.org_id
+      join documents dt on dt.id=et.source_document_id and dt.org_id=et.org_id
+      join accounts acc on acc.id=lf.account_id and acc.org_id=lf.org_id
+      where a.org_id=${org.orgId} and a.unapplied_at is null order by payment,target`)).rows;
+    assert.deepEqual(active,current.map(link=>({payment:link.paymentRef,target:link.appliedRef,account:link.paymentAccountRef})).sort((a,b)=>a.payment.localeCompare(b.payment)||a.target.localeCompare(b.target)));
+    const correctedRows=await settlementSnapshot(org.orgId);
+    for(const row of originalRows)assert.ok(correctedRows.find(r=>r.id===row.id)?.unapplied_at);
+    assert.deepEqual((await db.execute(sql`select id,amount::text,txn_amount::text from journal_lines where org_id=${org.orgId} order by id`)).rows,originalGL);
+    const auditBefore=(await db.execute(sql`select id from audit_log where org_id=${org.orgId} and table_name='applications' order by id`)).rows;
+    const replay=await reconcileApplications(org.orgId,'nsId',current,snapshot);
+    assert.equal(replay.released,0);assert.equal(replay.inserted,0);assert.equal(replay.alreadySettled,4);
+    assert.deepEqual(await settlementSnapshot(org.orgId),correctedRows);
+    assert.deepEqual((await db.execute(sql`select id from audit_log where org_id=${org.orgId} and table_name='applications' order by id`)).rows,auditBefore);
+    await assert.rejects(()=>reconcileApplications(org.orgId,'nsId',[{...current[0]!,appliedAccountRef:'AP-A'}],snapshot),/could not be allocated/);
+    assert.deepEqual(await settlementSnapshot(org.orgId),correctedRows,'cross-control-account demand rolls back without weakening native guards');
+    await db.execute(sql`update applications set settlement_rate_reference='manual allocation' where org_id=${org.orgId} and id=${correctedRows.find(r=>r.unapplied_at===null)!.id}`);
+    const manualState=await settlementSnapshot(org.orgId);
+    await assert.rejects(()=>reconcileApplications(org.orgId,'nsId',[...current].map(link=>({...link,amount:'25'})),snapshot),/manual allocation/);
+    assert.deepEqual(await settlementSnapshot(org.orgId),manualState);
+  } finally {await dropScratchOrg(org.orgId);}
+});

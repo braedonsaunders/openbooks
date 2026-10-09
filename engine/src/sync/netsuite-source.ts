@@ -269,6 +269,8 @@ export interface NsApplicationLink {
   nextdoc: string;
   nextline: string;
   foreignamount: string;
+  payaccount?: string | null;
+  appaccount?: string | null;
   /**
    * The PAYING transaction's currency display value
    * (`BUILTIN.DF(t.currency)` — the denomination of foreignamount). Raw ids
@@ -330,6 +332,10 @@ export function toSourceApplicationLinks(rows: NsApplicationLink[], baseCurrency
         amount: String(link.foreignamount),
         currency: netSuiteCurrencyIso(link.paycurrency) ?? (stated ? "" : baseCurrency),
         rate: link.payexrate ?? null,
+        ...(link.payaccount != null || link.appaccount != null ? {
+          paymentAccountRef: String(link.payaccount ?? ""),
+          appliedAccountRef: String(link.appaccount ?? ""),
+        } : {}),
       };
     });
 }
@@ -1529,10 +1535,26 @@ export class NetSuiteSource implements MigrationSource {
     // Counts on both sides refuse truncation or changing cardinality;
     // allocation reconciliation does not require an asynchronous export task.
     const links = await this.q<NsApplicationLink>(
-      "SELECT n.previousdoc, n.previousline, n.nextdoc, n.nextline, n.foreignamount, BUILTIN.DF(t.currency) AS paycurrency, t.exchangerate AS payexrate FROM nexttransactionlinelink n JOIN transaction t ON t.id = n.nextdoc WHERE n.linktype = 'Payment' ORDER BY n.previousdoc, n.previousline, n.nextdoc, n.nextline",
+      `SELECT n.previousdoc, n.previousline, n.nextdoc, n.nextline, n.foreignamount,
+         BUILTIN.DF(t.currency) AS paycurrency, t.exchangerate AS payexrate,
+         payline.account AS payaccount, appline.account AS appaccount
+       FROM nexttransactionlinelink n
+       JOIN transaction t ON t.id = n.nextdoc
+       LEFT JOIN transactionaccountingline payline
+         ON payline.transaction=n.nextdoc AND payline.transactionline=n.nextline
+        AND payline.accountingbook=${await this.accountingBookId()} AND payline.posting='T'
+       LEFT JOIN transactionaccountingline appline
+         ON appline.transaction=n.previousdoc AND appline.transactionline=n.previousline
+        AND appline.accountingbook=${await this.accountingBookId()} AND appline.posting='T'
+       WHERE n.linktype='Payment'
+       ORDER BY n.previousdoc,n.previousline,n.nextdoc,n.nextline`,
     );
     if (links.length !== count || uniqueNetSuiteApplicationLinks(links).length !== count || await readCount() !== count) {
       throw new Error("NetSuite application graph is incomplete or changed during reading; settlements were not reconciled");
+    }
+    if (links.some(link => link.foreignamount != null && toUnits(link.foreignamount) > 0n
+        && (!String(link.payaccount ?? "").trim() || !String(link.appaccount ?? "").trim()))) {
+      throw new Error("NetSuite settlement control-account identity is unavailable; settlements were not reconciled");
     }
     const applications = toSourceApplicationLinks(links, this.baseCurrency);
 
