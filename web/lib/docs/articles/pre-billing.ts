@@ -64,7 +64,9 @@ source work behind it. On a draft you can:
 
 Approval runs through **Flows**. Author a flow on the *Pre-billing worksheet*
 subject to route prebills to approvers by amount, write-downs, project type or
-any other field; the preparer can never approve their own prebill. With no
+any other field. Each gate's self-approval setting determines whether the
+preparer or submitter may decide it; the submitted policy stays fixed for
+that approval. With no
 flow, submitting a prebill approves it immediately. A rejection returns the
 prebill to draft with the approver's reason.
 

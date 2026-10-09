@@ -30,7 +30,8 @@ import { tableScope } from "./subject-scope.ts";
  * Release is where the governed decision lands: the status flip plus the
  * decision snapshot plus the all-or-nothing canonical application happen in
  * releaseHrmChangeRequest, inside decideGate's savepoint — so a throw rolls
- * the whole decision back and the gate stays pending. Human approval requires an independent decider. Explicit automatic
+ * the whole decision back and the gate stays pending. The submitted tenant Flow
+ * policy determines whether human approval requires an independent decider. Explicit automatic
  * submission policies are applied by the native submission service without
  * inventing a human approval or routing a gate to the author.
  */
