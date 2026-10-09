@@ -534,6 +534,9 @@ export async function invalidateCalculatedRun(
 ): Promise<void> {
   const { orgId, actorId, documentId } = input;
   await tx.execute(sql`delete from pay_run_benefit_allocations where org_id = ${orgId} and pay_run_document_id = ${documentId}`);
+  // Derived bank movements must go before their stub lines; clearing a line
+  // reference would rewrite append-only entitlement evidence.
+  await tx.execute(sql`delete from entitlement_ledger where org_id = ${orgId} and pay_run_document_id = ${documentId}`);
   await tx.execute(sql`
     delete from pay_stubs where org_id = ${orgId} and pay_run_document_id = ${documentId}`);
   await tx.execute(sql`

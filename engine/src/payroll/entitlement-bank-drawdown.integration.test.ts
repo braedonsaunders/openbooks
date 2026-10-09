@@ -285,6 +285,17 @@ test('an hours bank funds from negative deposit lines and pays from positive one
     assert.equal((await db.execute<{ count: number }>(sql`select count(*)::int as count from audit_log
       where org_id=${fx.orgId} and table_name='pay_run_adjustments' and row_id=${depositInput.mutation.idempotencyKey}`)).rows[0]!.count, 1);
     assert.deepEqual((await calculatePayRun({ orgId: fx.orgId, actorId: fx.actorId, documentId: first.documentId })).errors, []);
+    // Changing the paid population invalidates derived bank movements before
+    // deleting their stub lines, then recalculation recreates each deposit once.
+    await mutatePayRunAdjustment({ ...input, mutation: { action: 'exclude', employeePartyId: partyId } });
+    assert.equal((await db.execute<{ count: number }>(sql`select count(*)::int as count from entitlement_ledger
+      where org_id=${fx.orgId} and pay_run_document_id=${first.documentId}`)).rows[0]!.count, 0);
+    assert.equal((await db.execute<{ count: number }>(sql`select count(*)::int as count from pay_stubs
+      where org_id=${fx.orgId} and pay_run_document_id=${first.documentId}`)).rows[0]!.count, 0);
+    assert.equal((await db.execute<{ run_status: string }>(sql`select run_status from pay_runs
+      where org_id=${fx.orgId} and document_id=${first.documentId}`)).rows[0]!.run_status, 'draft');
+    await mutatePayRunAdjustment({ ...input, mutation: { action: 'include', employeePartyId: partyId } });
+    assert.deepEqual((await calculatePayRun({ orgId: fx.orgId, actorId: fx.actorId, documentId: first.documentId })).errors, []);
     const deposit = (await db.execute<{ amount: string; hours: string | null }>(sql`select amount::text as amount,hours::text
       from entitlement_ledger where org_id=${fx.orgId} and plan_id=${planId} and kind='bank_in'`)).rows;
     assert.equal(deposit.length, 1);
