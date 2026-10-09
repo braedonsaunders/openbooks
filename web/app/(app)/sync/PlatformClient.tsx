@@ -665,41 +665,6 @@ export function PlatformClient() {
     }
   }
 
-  async function resolveDeletion(
-    conn: Connection,
-    sourceRef: string,
-    action: "retain" | "void",
-  ) {
-    const prompt =
-      action === "void"
-        ? t("confirmVoidSourceDeletion", { ref: sourceRef })
-        : t("confirmRetainSourceDeletion", { ref: sourceRef });
-    if (!(await confirmDialog(prompt))) return;
-    setBusy(`${conn.id}:deletion:${sourceRef}`);
-    try {
-      const res = await fetch(
-        `/api/platform/connections/${conn.id}/source-deletions/${encodeURIComponent(sourceRef)}`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ action }),
-        },
-      );
-      // The status is checked before the body is parsed (see run above).
-      if (!res.ok) throw new Error(await readApiErrorMessage(res, `HTTP ${res.status}`));
-      toast.success(
-        t(
-          action === "void" ? "toast.deletionVoided" : "toast.deletionRetained",
-        ),
-      );
-      await load();
-    } catch (error) {
-      toast.error((error as Error).message);
-    } finally {
-      setBusy(null);
-    }
-  }
-
   async function remove(conn: Connection) {
     if (!(await confirmDialog(t("confirmDelete", { name: conn.displayName })))) return;
     setBusy(`${conn.id}:del`);
@@ -993,38 +958,20 @@ export function PlatformClient() {
                   <p className="mt-1 text-amber-800 dark:text-amber-300">
                     {t("connections.sourceDeletionHint")}
                   </p>
-                  <div className="mt-2 space-y-2">
-                    {c.unresolvedSourceDeletions?.map((sourceRef) => (
-                      <div
-                        key={sourceRef}
-                        className="flex flex-wrap items-center justify-between gap-2"
-                      >
-                        <code>{sourceRef}</code>
-                        <div className="flex gap-2">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            disabled={busy === `${c.id}:deletion:${sourceRef}`}
-                            onClick={() =>
-                              void resolveDeletion(c, sourceRef, "retain")
-                            }
-                          >
-                            {t("actions.retainDeletion")}
-                          </Button>
-                          <Button
-                            variant="destructive"
-                            size="sm"
-                            disabled={busy === `${c.id}:deletion:${sourceRef}`}
-                            onClick={() =>
-                              void resolveDeletion(c, sourceRef, "void")
-                            }
-                          >
-                            {t("actions.voidDeletion")}
-                          </Button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
+                  <p className="mt-2 text-amber-800 dark:text-amber-300">
+                    {t("connections.sourceDeletionCount", {
+                      count: c.unresolvedSourceDeletions?.length ?? 0,
+                    })}
+                  </p>
+                  <Button
+                    className="mt-2"
+                    variant="outline"
+                    size="sm"
+                    disabled={busy !== null}
+                    onClick={() => void run(c, "mirror")}
+                  >
+                    {t("actions.retryMirror")}
+                  </Button>
                 </div>
               ) : null}
               {c.source === "qbd" ? (

@@ -17,7 +17,7 @@ import {
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
 test(
-  "source deletion atomically reverses posted accounting and preserves complete evidence",
+  "legacy source deletion atomically reverses posted accounting and preserves complete evidence",
   { skip: !DB },
   async () => {
     const org = await createScratchOrg();
@@ -39,7 +39,7 @@ test(
         values (
           ${documentId}, ${org.orgId}, 'customer_invoice', 'draft', 'INV-SOURCE-DELETE',
           ${org.subsidiaryId}, ${org.customerId}, ${org.date}, 'CAD', '1',
-          '100', '0', '100', ${JSON.stringify({ nsId: sourceRef, connectionId })}::jsonb
+          '100', '0', '100', ${JSON.stringify({ nsId: sourceRef })}::jsonb
         )`);
       await db.execute(sql`
         insert into document_lines

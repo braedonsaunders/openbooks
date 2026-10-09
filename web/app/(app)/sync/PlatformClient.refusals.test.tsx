@@ -177,3 +177,28 @@ for (const [name, respondTest, match, matchMessage, checkParseLeak] of [
     }
   });
 }
+
+
+test("source deletions offer one mirror retry without individual accounting decisions", async (t) => {
+  const calls: { url: string; body: unknown }[] = [];
+  const restoreFetch = scriptFetch((url, init) => {
+    if (url === "/api/platform/connections" && (!init?.method || init.method === "GET")) {
+      return Response.json({ connections: [{ ...CONNECTION, unresolvedSourceDeletions: Array.from({ length: 2000 }, (_, i) => String(i)) }], runs: [], sourceTypes: [], currencies: [], canManage: true });
+    }
+    if (init?.method === "POST") {
+      calls.push({ url, body: JSON.parse(String(init.body)) });
+      return Response.json({ queued: true });
+    }
+    return null;
+  });
+  t.after(restoreFetch);
+  const { unmount } = await renderClient();
+  t.after(unmount);
+  assert.match(document.body.textContent ?? "", /2000 transactions pending automatic reconciliation/);
+  assert.equal(buttonsNamed("Retain with evidence").length, 0);
+  assert.equal(buttonsNamed("Reverse and void").length, 0);
+  const retry = buttonsNamed("Retry mirror");
+  assert.equal(retry.length, 1);
+  await click(retry[0]!);
+  assert.deepEqual(calls, [{ url: "/api/platform/connections/c1/run", body: { mode: "mirror" } }]);
+});
