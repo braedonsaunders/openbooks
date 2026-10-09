@@ -282,7 +282,7 @@ export async function runRecordFlows(
       }
       const automaticSubmission = event.kind === 'on_submit' && plan.ungatedOutcome === 'apply' && adapter.profile.supportsUngatedSubmission === true;
       if (planIsEmpty(plan) && !automaticSubmission) continue;
-      const dispatchValues = { ...subject.values, ...(adapter.profile.supportsUngatedSubmission ? { submissionPolicy: { ungatedOutcome: graph.ungatedOutcome ?? 'require_approval', graph, flowId: flow.id } } : {}) };
+      const dispatchValues = { ...subject.values, ...((adapter.profile.supportsUngatedSubmission || adapter.profile.pinsSubmissionPolicy) ? { submissionPolicy: { ungatedOutcome: graph.ungatedOutcome ?? 'require_approval', graph, flowId: flow.id } } : {}) };
 
       // Deterministic dispatch identity: when the caller supplies an
       // occurrenceKey (close automations use their execution id), every flow

@@ -37,6 +37,7 @@ export const FINANCIAL_CHANGE_SUBJECT_KIND = "financial_change";
 export const financialChangeSubjectProfile: FlowSubjectProfile = {
   subjectKind: FINANCIAL_CHANGE_SUBJECT_KIND,
   label: "Accounting event",
+  pinsSubmissionPolicy: true,
   triggers: ["on_submit"],
   actions: ["send_email", "notify"],
   statuses: ["draft", "pending", "approved", "rejected", "applied"].map(
@@ -98,7 +99,7 @@ export const financialChangesFlowAdapter: FlowSubjectAdapter = defineTableSubjec
     },
   },
   profile: financialChangeSubjectProfile,
-  selfApprovalPolicy: "forbidden",
+  selfApprovalPolicy: "configurable",
   async loadContext(id) {
     // RLS supplies the org; this adapter never widens the active tenant scope.
     const row = (
@@ -155,13 +156,15 @@ export const financialChangesFlowAdapter: FlowSubjectAdapter = defineTableSubjec
   async releaseApproval(id, outcome, ctx) {
     const row = await loadFinancialChange(db, ctx.orgId, id);
     if (row.status !== "pending") return;
-    if (!ctx.userId || row.submitted_by === ctx.userId)
-      throw new Error("an independent signed-in approver is required");
+    if (!ctx.userId)
+      throw new Error("A signed-in decision maker is required.");
+    if (row.submitted_by === ctx.userId && !row.self_approval_authorized)
+      throw new Error("The retained approval policy does not permit deciding your own submission. Review the gate's self-approval setting in Flows.");
     if (outcome === 'approved') await assertAccountingSubjectFeatures(ctx.orgId,row.subject_id,row.domain,row.operation)
     if (row.domain === "payroll" && outcome === "approved") {
       if (row.operation !== ADJUDICATED_HOLIDAY_HOURS_OPERATION ||
           !await actorHasPermission(db, ctx.orgId, ctx.userId, "payroll.run")) {
-        throw new Error("An unpaid holiday entitlement requires an independent approver with payroll.run authority.");
+        throw new Error("An unpaid holiday entitlement requires payroll.run authority.");
       }
       const required = row.payload.requiredSubsidiaryIds;
       if (!Array.isArray(required) || required.length !== 1 || required[0] !== row.subsidiary_id) {

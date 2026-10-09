@@ -102,8 +102,8 @@ export function GateEditor({
       <label className="flex items-start gap-2 text-sm text-slate-700 dark:text-slate-300">
         <input
           type="checkbox"
-          checked={gate.preventSelfApproval ?? false}
-          onChange={(e) => onChange({ ...gate, preventSelfApproval: e.target.checked || undefined })}
+          checked={gate.preventSelfApproval ?? true}
+          onChange={(e) => onChange({ ...gate, preventSelfApproval: e.target.checked })}
           className="mt-0.5 h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500"
         />
         <span>

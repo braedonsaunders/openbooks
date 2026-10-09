@@ -72,6 +72,8 @@ export type FinancialChange = {
   status: "draft" | "pending" | "approved" | "rejected" | "applied";
   submitted_by: string;
   approved_by: string | null;
+  /** Native decided gates and their retained policy authorize a self decision. */
+  self_approval_authorized?: boolean;
   result: Record<string, unknown> | null;
 };
 export async function loadFinancialChange(
@@ -81,7 +83,9 @@ export async function loadFinancialChange(
 ): Promise<FinancialChange> {
   const row = (
     await tx.execute<FinancialChange>(sql`
-    select *, effective_on::text as effective_on from financial_changes
+    select *, effective_on::text as effective_on,
+      public.financial_change_self_decision_authorized(org_id,id,submitted_by) as self_approval_authorized
+    from financial_changes
      where id=${id} and org_id=${orgId} for update
   `)
   ).rows[0];
@@ -170,10 +174,10 @@ export function assertFinancialChangeApproved(
   if (
     change.status !== "approved" ||
     !change.approved_by ||
-    change.approved_by === change.submitted_by
+    (change.approved_by === change.submitted_by && change.self_approval_authorized !== true)
   ) {
     throw new Error(
-      "submit this change through Flows and obtain independent approval before applying it",
+      "Submit this change through Flows and obtain a decision permitted by its approval policy before applying it.",
     );
   }
   if (canonicalJson(change.before_state) !== canonicalJson(args.beforeState)) {
