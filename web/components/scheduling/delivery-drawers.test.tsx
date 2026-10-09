@@ -90,7 +90,7 @@ test('shared editor reads actual formatting without resources/executable links a
   const {host, root} = await mount(t, <RichTextEditor label="Message" value={doc} labels={labels.editor} onChange={() => {writes++}} />)
   const editable = host.querySelector('[role="textbox"]')!
   assert.equal(editable.querySelectorAll('script,img').length, 0)
-  await act(async () => root.render(<RichTextEditor label="Message" value={doc} labels={labels.editor} disabled onChange={() => {writes++}} />))
+  await act(async () => root.render(<NextIntlClientProvider locale="en" messages={messages}><RichTextEditor label="Message" value={doc} labels={labels.editor} disabled onChange={() => {writes++}} /></NextIntlClientProvider>))
   assert.equal(editable.getAttribute('contenteditable'), 'false')
   assert.ok([...host.querySelectorAll('button')].every(button => button.disabled))
   await act(async () => {editable.dispatchEvent(new window.Event('input', {bubbles: true}))})
