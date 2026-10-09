@@ -230,7 +230,7 @@ test('Timeline receives zoom from the host and contains no duplicate zoom button
 
 test('the header owns search/settings and timeline zoom while More exposes exactly two native window-control rows', async (t) => {
   const { SchedulingWorkspace } = await import('./SchedulingWorkspace')
-  const board = scheduleWindow()
+  const board = {...scheduleWindow(), canManage: true}
   const originalFetch = globalThis.fetch
   let requests = 0
   globalThis.fetch = async () => {
@@ -302,6 +302,13 @@ test('the header owns search/settings and timeline zoom while More exposes exact
   assert.equal(menu.children[1]!.tagName, 'BUTTON')
   assert.ok(menu.children[2]!.querySelector('select'))
   assert.ok(menu.children[3]!.querySelector('select'))
+  const download = [...document.querySelectorAll('button')].find(button => button.textContent === messages.scheduling.distribution.downloadPdf)!
+  assert.ok(download, 'the existing More menu exposes a report-only download action')
+  await act(async () => {download.click()})
+  assert.equal(document.querySelectorAll('[role="dialog"]').length, 1)
+  assert.equal(document.querySelector('[data-schedule-recipients]'), null)
+  assert.equal(requests, 0, 'opening PDF layout does not fetch contacts or resolve an email audience')
+
 })
 
 test('the visible hour-column preference saves through its typed native boundary and stays hidden on reopen', async (t) => {

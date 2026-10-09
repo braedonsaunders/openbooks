@@ -388,6 +388,17 @@
         "subtle": "Dezente Akzente",
         "strong": "Kräftige Flächen"
       }
+    },
+    "editor": {
+      "bold": "Fett",
+      "italic": "Kursiv",
+      "underline": "Unterstrichen",
+      "bullets": "Aufzählung",
+      "numbered": "Nummerierte Liste",
+      "link": "Link",
+      "linkAddress": "Linkadresse",
+      "apply": "Link anwenden",
+      "invalid": "Verwenden Sie höchstens 4000 Zeichen und sichere Links."
     }
   }
 }

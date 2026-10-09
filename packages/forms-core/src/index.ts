@@ -94,3 +94,5 @@ export type { ChecklistDocument, ChecklistStep, ChecklistStepDesign, ChecklistIs
 export { splitRecordData, mergeRecordData, withComputedFormulas, RECORD_FIELD_TYPES } from './record-data'
 
 export * from "./schedule-delivery";
+
+export * from './rich-text';

@@ -12,10 +12,14 @@ import type {
   ScheduleDistributionPreview,
   ScheduleRecipient,
 } from "./distribution.ts";
+export type ScheduleReportPreview = Pick<ScheduleDistributionPreview, 'boardId' | 'boardName' | 'organizationName' | 'from' | 'through' | 'timeZone' | 'generatedAt' | 'version' | 'weekendDays'> & {
+  audience: Pick<ScheduleDistributionPreview['audience'], 'pdfLayout' | 'message' | 'visibility'>
+};
+export type ScheduleReportContent = Pick<ScheduleRecipient, 'lines'>;
 /** Landscape sections preserve literal observations and independently identified people/resources. */
 export function schedulePdfInput(
-  preview: ScheduleDistributionPreview,
-  recipient: ScheduleRecipient,
+  preview: ScheduleReportPreview,
+  recipient: ScheduleReportContent,
 ): PdfDocumentInput {
   const layout: SchedulePdfLayout = preview.audience.pdfLayout ?? {
     paperSize: "tabloid",
@@ -136,8 +140,8 @@ export function schedulePdfInput(
 }
 /** Renderer failures propagate; a requested PDF is never silently dropped from delivery. */
 export async function renderSchedulePdf(
-  preview: ScheduleDistributionPreview,
-  recipient: ScheduleRecipient,
+  preview: ScheduleReportPreview,
+  recipient: ScheduleReportContent,
 ) {
   try {
     return await renderPdfDocument(schedulePdfInput(preview, recipient));

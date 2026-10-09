@@ -1,3 +1,4 @@
+import { previewScheduleBoardReport, downloadScheduleBoardReport } from './board-report.ts';
 import { ScopeNotFoundError } from '../organization/subsidiary-scope.ts';
 import { scheduleBoardTimerGraph } from "../flows/schedule-board-adapter.ts";
 import {
@@ -1055,4 +1056,70 @@ test('native PDF evidence binds ordered board rule colors for literal source obs
   assert.ok(fallback.recipients.flatMap(recipient => recipient.lines).filter(line => line.assignment.startsWith('SHOP')).every(line => line.color === '#99f6e4'));
   const evidenceAfter = (await loadBoardWindow({ ...actor, boardId: f.boardId, ...dates })).sourceRecords ?? [];
   assert.deepEqual(evidenceAfter.map(({ color, ...record }) => record), evidenceBefore.map(({ color, ...record }) => record));
+}));
+
+
+test('rich manual content is version-bound and queued exactly once with immutable safe HTML and native plain text', enabled, () => fixture(async f => {
+  await f.flow();
+  const audience = {...personal, includePdf: false, message: 'ignore this alternative', messageContent: {version: 1 as const, blocks: [{kind: 'paragraph' as const, spans: [{text: 'Bring <tools>', bold: true}]}]}};
+  const p = await previewScheduleDistribution(f, f.boardId, dates.from, dates.through, audience);
+  assert.equal(p.audience.message, 'Bring <tools>');
+  const changed = {...audience, messageContent: {version: 1 as const, blocks: [{kind: 'paragraph' as const, spans: [{text: 'Bring <tools>', italic: true}]}]}};
+  const next = await previewScheduleDistribution(f, f.boardId, dates.from, dates.through, changed);
+  assert.notEqual(next.version, p.version, 'formatting is part of reviewed content');
+  await assert.rejects(sendScheduleDistribution(f, {boardId: f.boardId, ...dates, audience: changed, version: p.version, reason: 'Reviewed rich content', key: randomUUID()}));
+  assert.deepEqual(await counts(f.orgId), {requests: 0, outbox: 0});
+  const key = randomUUID();
+  const first = await issue(f, p, key);
+  const before = await withOrgTransaction(f.orgId, async () => (await db.execute<{payload: {html: string; text: string}}>(sql`select payload from scheduler_outbox where kind='flow_email' order by id`)).rows);
+  assert.equal(before.length, 2);
+  for (const row of before) {assert.ok(row.payload.html.includes('<strong>Bring &lt;tools&gt;</strong>')); assert.ok(row.payload.text.includes('Bring <tools>')); assert.ok(!row.payload.text.includes('ignore this alternative'));}
+  assert.deepEqual(await issue(f, p, key), {...first, replayed: true});
+  const after = await withOrgTransaction(f.orgId, async () => (await db.execute(sql`select payload from scheduler_outbox where kind='flow_email' order by id`)).rows);
+  assert.deepEqual(after, before);
+  await assert.rejects(previewScheduleDistribution(f, f.boardId, dates.from, dates.through, {...personal, messageContent: {version: 1, blocks: [{kind: 'paragraph', spans: [{text: 'Unsafe', href: 'javascript:alert(1)'}]}]}}), /formatted message/);
+  assert.deepEqual(await counts(f.orgId), {requests: 1, outbox: 2});
+}));
+
+test('standalone board PDF preview is provider/recipient/Flows-independent, version-bound, operator-scoped and read-only', enabled, () => fixture(async f => {
+  await withBypassContext(async () => {
+    await db.execute(sql`update orgs set settings=jsonb_set(jsonb_set(settings,'{features,flows}','false'::jsonb),'{email,enabled}','false'::jsonb) where id=${f.orgId}`);
+    await db.execute(sql`update parties set email=null,display_name='Same name' where org_id=${f.orgId} and id in (${f.ana},${f.ben})`);
+    await db.execute(sql`update parties set is_active=false where org_id=${f.orgId} and id=${f.ben}`);
+    await db.execute(sql`update employee_roles set is_active=false,terminated_on='2026-10-11' where org_id=${f.orgId} and party_id=${f.ben}`);
+  });
+  const auditBefore = await withOrgTransaction(f.orgId, async () => (await db.execute<{n: number}>(sql`select count(*)::int n from audit_log`)).rows[0]!.n);
+  const p = await previewScheduleBoardReport(f, {boardId: f.boardId, ...dates});
+  assert.equal(p.audience.visibility, 'board');
+  assert.ok(p.lines.some(line => line.assignment === 'SHOP/ N' && line.hours === 'Hours unknown'));
+  assert.ok(p.lines.some(line => line.status === 'No schedule evidence' && line.hours === 'No booking recorded'));
+  assert.ok(!JSON.stringify(p).includes('PRIVATE'));
+  assert.ok(!('recipients' in p));
+  assert.equal(new Set(p.lines.filter(line => line.subject === 'Same name').map(line => line.subjectId)).size, 2, 'inactive history and duplicate display names keep distinct subjects');
+  const bytes = await downloadScheduleBoardReport(f, {boardId: f.boardId, ...dates, layout: p.layout, version: p.version});
+  assert.equal(bytes.subarray(0, 4).toString(), '%PDF');
+  const changed = await previewScheduleBoardReport(f, {boardId: f.boardId, ...dates, layout: {...p.layout, colorTreatment: 'strong'}});
+  assert.notEqual(changed.version, p.version);
+  const shifted = await previewScheduleBoardReport(f, {boardId: f.boardId, from: '2026-10-13', through: dates.through, layout: p.layout});
+  assert.notEqual(shifted.version, p.version);
+  await assert.rejects(downloadScheduleBoardReport(f, {boardId: f.boardId, from: shifted.from, through: shifted.through, layout: p.layout, version: p.version}), /changed after preview/);
+  await assert.rejects(downloadScheduleBoardReport(f, {boardId: f.boardId, ...dates, layout: changed.layout, version: p.version}), /changed after preview/);
+  await assert.rejects(previewScheduleBoardReport({...f, actorId: f.readerId}, {boardId: f.boardId, ...dates}));
+  await assert.rejects(previewScheduleBoardReport(f, {boardId: randomUUID(), ...dates}), ScopeNotFoundError);
+  assert.deepEqual(await counts(f.orgId), {requests: 0, outbox: 0});
+}));
+
+
+test('standalone report excludes peer-board details and refuses actual foreign-tenant subjects without writes', enabled, () => fixture(async f => {
+  const peer = randomUUID();
+  await withBypassContext(() => db.execute(sql`insert into schedule_boards(id,org_id,code,name,row_kind,views,default_view,time_zone,subsidiary_id) values(${peer},${f.orgId},'PEER','Other private board','people','{grid}','grid','America/Toronto',${f.subsidiaryId})`));
+  const result = await applyBoardChanges({...f, boardId: peer, changes: [{op: 'create', id: randomUUID(), workerPartyId: f.ana, onDate: '2026-10-13', span: {mode: 'day'}, target: null, detail: 'PEER report evidence'}]});
+  assert.equal(result.results[0]?.ok, true);
+  const before = await counts(f.orgId);
+  const p = await previewScheduleBoardReport(f, {boardId: f.boardId, ...dates});
+  assert.ok(!JSON.stringify(p.lines).includes('PEER report evidence'));
+  await fixture(async other => {
+    await assert.rejects(previewScheduleBoardReport(f, {boardId: other.boardId, ...dates}), ScopeNotFoundError);
+  });
+  assert.deepEqual(await counts(f.orgId), before);
 }));

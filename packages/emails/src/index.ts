@@ -400,3 +400,5 @@ export function quoteSignatureReminderEmail(args: {
   return { subject, html, text }
 }
 export { scheduleDistributionEmail, type ScheduleEmailLine } from './schedule-distribution';
+
+export { richMessageParts } from './rich-message';

@@ -14,6 +14,16 @@ export const schedulePdfLayoutSchema = z.strictObject({
   colorIntensity: z.number().int().min(0).max(30).optional(),
 });
 export type SchedulePdfLayout = z.infer<typeof schedulePdfLayoutSchema>;
+export const defaultSchedulePdfLayout: SchedulePdfLayout = {
+  paperSize: 'tabloid', orientation: 'landscape', marginMm: 8, density: 'compact',
+  daysPerSection: 14, detail: 'assignments', style: 'modern', accentColor: '#0f766e',
+  showLegend: true, shadeWeekends: true, colorTreatment: 'subtle', colorIntensity: 8,
+};
+/** Board policy JSON is validated before a configured layout becomes an editable or printable value. */
+export function configuredSchedulePdfLayout(policy: unknown): SchedulePdfLayout {
+  const layout = policy && typeof policy === 'object' && 'pdfLayout' in policy ? policy.pdfLayout : null;
+  return layout == null ? defaultSchedulePdfLayout : schedulePdfLayoutSchema.parse(layout);
+}
 /** Stored native board policy; enabling and timing remain owned by Flows. */
 export const automaticScheduleDeliverySchema = z
   .strictObject({

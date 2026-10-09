@@ -388,6 +388,17 @@
         "subtle": "控えめなアクセント",
         "strong": "濃い背景色"
       }
+    },
+    "editor": {
+      "bold": "太字",
+      "italic": "斜体",
+      "underline": "下線",
+      "bullets": "箇条書き",
+      "numbered": "番号付きリスト",
+      "link": "リンク",
+      "linkAddress": "リンク先",
+      "apply": "リンクを適用",
+      "invalid": "4000文字以内で安全なリンクを使用してください。"
     }
   }
 }

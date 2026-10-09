@@ -30,3 +30,5 @@ export * from './sparkline'
 export * from './tab-content'
 export * from './disclosure'
 export * from './link-context'
+
+export { RichTextEditor, readRichTextDocument } from './rich-text-editor';

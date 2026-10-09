@@ -388,6 +388,17 @@
         "subtle": "Acentos sutiles",
         "strong": "Rellenos intensos"
       }
+    },
+    "editor": {
+      "bold": "Negrita",
+      "italic": "Cursiva",
+      "underline": "Subrayado",
+      "bullets": "Viñetas",
+      "numbered": "Lista numerada",
+      "link": "Enlace",
+      "linkAddress": "Dirección del enlace",
+      "apply": "Aplicar enlace",
+      "invalid": "Use hasta 4000 caracteres y enlaces seguros."
     }
   }
 }

@@ -388,6 +388,17 @@
         "subtle": "Subtle accents",
         "strong": "Strong fills"
       }
+    },
+    "editor": {
+      "bold": "Bold",
+      "italic": "Italic",
+      "underline": "Underline",
+      "bullets": "Bullets",
+      "numbered": "Numbered list",
+      "link": "Link",
+      "linkAddress": "Link address",
+      "apply": "Apply link",
+      "invalid": "Use at most 4000 characters and safe links."
     }
   }
 }
