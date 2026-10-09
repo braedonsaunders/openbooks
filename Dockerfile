@@ -50,7 +50,7 @@ RUN node --check /out/worker.mjs
 # Deployment qualification exercises the unified schedule renderer with bundled native font assets.
 RUN npx esbuild scripts/verify-native-schedule-pdf.ts \
       --bundle --platform=node --format=esm --external:pdfkit \
-      --banner:js="import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);" \
+      --banner:js="import { createRequire as openbooksCreateRequire } from 'node:module'; const require = openbooksCreateRequire(import.meta.url);" \
       --outfile=/out/verify-native-schedule-pdf.mjs
 # Deterministic master demos are prepared explicitly by installation operators.
 # The same source is used by the setup wizard when a master is not yet present.
