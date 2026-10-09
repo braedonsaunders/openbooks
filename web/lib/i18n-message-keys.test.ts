@@ -4,6 +4,7 @@ import { readFileSync, readdirSync } from 'node:fs'
 import { join, relative } from 'node:path'
 import test from 'node:test'
 import ts from 'typescript'
+import { LOCALES } from '../i18n/config.ts'
 
 /**
  * Every message key a view asks for must exist in the English catalog.
@@ -40,6 +41,30 @@ import ts from 'typescript'
 const WEB_ROOT = join(import.meta.dirname, '..')
 const MESSAGES_EN = join(WEB_ROOT, 'messages', 'en')
 const ROOTS = ['app', 'components', 'lib'] as const
+
+test('every registered feature has switchboard and setup-wizard copy in each shipped locale', () => {
+  const source = ts.createSourceFile('feature-registry.ts', readFileSync(join(WEB_ROOT, '../engine/src/organization/feature-registry.ts'), 'utf8'), ts.ScriptTarget.Latest, true)
+  const keys: string[] = []
+  function visit(node: ts.Node) {
+    if (ts.isVariableDeclaration(node) && node.name.getText(source) === 'FEATURES' && node.initializer && ts.isArrayLiteralExpression(node.initializer)) {
+      for (const entry of node.initializer.elements) {
+        if (!ts.isObjectLiteralExpression(entry)) continue
+        for (const property of entry.properties) {
+          if (ts.isPropertyAssignment(property) && property.name.getText(source) === 'key' && ts.isStringLiteral(property.initializer)) keys.push(property.initializer.text)
+        }
+      }
+    }
+    ts.forEachChild(node, visit)
+  }
+  visit(source)
+  assert.ok(keys.length > 0, 'the native feature registry must supply the checked keys')
+  for (const { code } of LOCALES) {
+    const messages = JSON.parse(readFileSync(join(WEB_ROOT, 'messages', code, 'admin.json'), 'utf8'))
+    for (const key of keys) for (const field of ['title', 'description']) {
+      assert.ok(typeof messages.features?.[key]?.[field] === 'string' && messages.features[key][field].trim(), `${code}: admin.features.${key}.${field} must describe the registered capability`)
+    }
+  }
+})
 
 /** A key we can check: plain identifier-ish path segments only. */
 const CHECKABLE_KEY = /^[A-Za-z0-9_][A-Za-z0-9_.-]*$/

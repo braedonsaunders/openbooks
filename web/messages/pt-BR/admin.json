@@ -7430,6 +7430,14 @@
     "unbilledRevenueAccrual": {
       "title": "Provisão de receita não faturada",
       "description": "No fim do período, provisione o trabalho por administração executado e ainda não faturado, com estorno automático no primeiro dia do período seguinte."
+    },
+    "einvoicing": {
+      "title": "Faturamento eletrônico",
+      "description": "Prepare e arquive faturas eletrônicas estruturadas em XML EN 16931 e Factur-X / ZUGFeRD."
+    },
+    "contractorWithholding": {
+      "title": "Retenções de empreiteiros",
+      "description": "Calcule retenções legais em pagamentos a fornecedores e prepare documentos de trabalho, recolhimentos e correções controladas."
     }
   },
   "backupsManager": {

@@ -7430,6 +7430,14 @@
     "unbilledRevenueAccrual": {
       "title": "Devengo de ingresos no facturados",
       "description": "Al cierre del período, devengue el trabajo por administración realizado y aún no facturado, con reversión automática el primer día del período siguiente."
+    },
+    "einvoicing": {
+      "title": "Facturación electrónica",
+      "description": "Prepare y archive facturas electrónicas estructuradas en XML EN 16931 y Factur-X / ZUGFeRD."
+    },
+    "contractorWithholding": {
+      "title": "Retenciones de contratistas",
+      "description": "Calcule retenciones legales en pagos a proveedores y prepare documentos de trabajo, ingresos tributarios y correcciones controladas."
     }
   },
   "backupsManager": {
