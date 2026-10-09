@@ -1003,6 +1003,9 @@ const CORE_A = [
   "inventory_provisional_costs",
   "cost_layers",
   "inventory_movements",
+  // The current missing-count movement and serial identity share a deferred
+  // reference; remove both in this transaction before validating the cycle.
+  "serials",
   // Capitalized contract costs, children first: amortization rows reference
   // assets, periods and journal entries; assets reference revenue contracts;
   // policies reference accounts.
@@ -1021,7 +1024,6 @@ const CORE_A = [
 
 /** Tx B: the master-data parents everything above referenced, children first. */
 const CORE_B = [
-  "serials",
   "lots",
   "stock_locations",
   "locations",
