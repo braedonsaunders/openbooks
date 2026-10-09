@@ -873,6 +873,8 @@ export async function withdrawUnusedEnrollment(query: {
     if (current.status !== "active") throw new BenefitsError("BAD_STATE", "Only active unused coverage can be withdrawn — reload the enrollment and choose its current record action");
     const used = (await db.execute(sql`select id from pay_run_benefit_allocations where org_id=${orgId} and enrollment_id=${enrollmentId} limit 1`)).rows;
     if (used.length) throw new BenefitsError("REFUSED", "This coverage has payroll allocation history — preserve it and use a dated successor; discard or recalculate editable payroll before withdrawing unused coverage");
+    const legacy = (await db.execute(sql`select id from hrm_benefit_payroll_inputs where org_id=${orgId} and enrollment_id=${enrollmentId} limit 1`)).rows;
+    if (legacy.length) throw new BenefitsError("REFUSED", "This coverage has legacy payroll input history — preserve it and use a dated successor election");
     const proposals = (await db.execute(sql`select id from hrm_benefit_enrollments where org_id=${orgId} and replaces_enrollment_id=${enrollmentId} and status in ('elected','pending_approval') limit 1`)).rows;
     if (proposals.length) throw new BenefitsError("REFUSED", "A successor election awaits approval — complete or cancel that proposal before withdrawing unused coverage");
     await db.execute(sql`select set_config('openbooks.hrm_benefit_withdrawal',${`${orgId}:${enrollmentId}:${actorId}`},true)`);

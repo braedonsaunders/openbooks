@@ -236,6 +236,43 @@ test("unused coverage withdrawal preserves approved evidence and permits a newly
   });
 });
 
+test("unused coverage withdrawal preserves legacy pending and voided payroll input history", { skip: !DB }, async () => {
+  await withHarness(() => setupHarness(BENEFITS_SPEC), async h => {
+    for (const status of ["pending", "voided"] as const) {
+      const { employmentId, workerPartyId } = await seedEmployment(h.org.orgId, h.org.subsidiaryId);
+      const { planId } = await seedPlan(h.org.orgId);
+      const first = await electEnrollment({ orgId: h.org.orgId, actorId: h.adminId, employmentId, planId,
+        effectiveFrom: "2026-03-01", lifeEventReason: "Contribution election", contributionTerms: await seededContributionTerms(h.org.orgId, planId) });
+      const component = (await db.execute<{ id: string }>(sql`select pay_component_id as id from hrm_benefit_contribution_rules
+        where org_id=${h.org.orgId} and plan_id=${planId} and kind='employee_deduction' limit 1`)).rows[0]!;
+      // Reconstruct pre-retirement evidence only in the disposable fixture transaction.
+      // The exact trigger lock prevents other writers from observing its suspension.
+      await db.transaction(async tx => {
+        const scratch = (await tx.execute(sql`select id from orgs where id=${h.org.orgId} and name like 'Scratch %' for update`)).rows;
+        assert.equal(scratch.length, 1);
+        await tx.execute(sql`alter table public.hrm_benefit_payroll_inputs disable trigger benefit_monthly_queue_retired_trigger`);
+        await tx.execute(sql`insert into hrm_benefit_payroll_inputs
+          (org_id,enrollment_id,employee_party_id,employment_id,kind,pay_component_id,amount,currency,coverage_from,coverage_to,status)
+          values (${h.org.orgId},${first.id},${workerPartyId},${employmentId},'benefit_deduction',${component.id},25,'USD','2026-03-01','2026-03-31',${status})`);
+        await tx.execute(sql`set constraints all immediate`);
+        await tx.execute(sql`alter table public.hrm_benefit_payroll_inputs enable trigger benefit_monthly_queue_retired_trigger`);
+      });
+      const evidence = async () => (await db.execute(sql`select * from hrm_benefit_payroll_inputs where org_id=${h.org.orgId} and enrollment_id=${first.id}`)).rows;
+      const original = await evidence();
+      await assert.rejects(withdrawUnusedEnrollment({ orgId: h.org.orgId, actorId: h.adminId, enrollmentId: first.id,
+        reason: "Contribution correction" }), /legacy payroll input history/);
+      await assertStorageRefusal(db.transaction(async tx => {
+        await tx.execute(sql`select set_config('openbooks.hrm_benefit_withdrawal',${`${h.org.orgId}:${first.id}:${h.adminId}`},true)`);
+        await tx.execute(sql`update hrm_benefit_enrollments set status='cancelled',ended_reason='Correction',updated_by=${h.adminId}
+          where org_id=${h.org.orgId} and id=${first.id}`);
+      }), /lifecycle transition/i);
+      assert.deepEqual(await evidence(), original);
+      assert.equal((await enrollmentsOf(h.org.orgId, employmentId))[0]!.status, "active");
+      assert.deepEqual((await eventsOf(first.id)).map(e => e.kind), ["life_event", "activated"]);
+    }
+  });
+});
+
 test("unused coverage withdrawal refuses an outstanding successor proposal", { skip: !DB }, async () => {
   await withHarness(() => setupHarness(BENEFITS_SPEC), async h => {
     const { employmentId } = await seedEmployment(h.org.orgId, h.org.subsidiaryId);
