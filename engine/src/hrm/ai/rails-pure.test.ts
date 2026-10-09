@@ -56,8 +56,8 @@ test("autonomy may move down but never above the code maximum", () => {
   assertAutonomyAtOrBelowMax("hrmExplainPay", "read_only");
   assertAutonomyAtOrBelowMax("hrmPayrollAnomalies", "read_only");
   assert.throws(() => assertAutonomyAtOrBelowMax("hrmExplainPay", "draft"), (e: unknown) =>
-    e instanceof AiRailsError && /cannot be raised above "read_only"/.test(e.message));
-  assert.throws(() => assertAutonomyAtOrBelowMax("hrmDrafting", "act_with_confirmation"), /cannot be raised above "draft"/);
+    e instanceof AiRailsError && /cannot exceed code maximum "read_only"/.test(e.message));
+  assert.throws(() => assertAutonomyAtOrBelowMax("hrmDrafting", "act_with_confirmation"), /cannot exceed code maximum "draft"/);
   assert.match(autonomyRaiseRefused("k", "draft").message, /cannot exceed code maximum/);
 });
 

@@ -4074,7 +4074,12 @@
       "match": "Correspondência",
       "dayPolicyKnown": "Horário diário configurado",
       "showHoursColumn": "Show booked hour column",
-      "distributionVisibility": "Schedule report sharing"
+      "distributionVisibility": "Schedule report sharing",
+      "purpose": "Finalidade",
+      "autonomy": "Nível de revisão declarado",
+      "boardId": "Quadro de planejamento",
+      "resourceLocationId": "Local do recurso",
+      "partyId": "Contato"
     },
     "fieldHelp": {
       "fxRateMaxAgeDays": "Dias entre a taxa utilizável mais recente e o fim do período a partir dos quais a reavaliação e a consolidação recusam a taxa. Taxas de fechamento contam a partir da data da taxa à vista de fim de período; taxas médias, a partir da cotação mais recente incluída na média. Padrão sem política: 31 dias.",

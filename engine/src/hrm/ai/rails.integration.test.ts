@@ -182,7 +182,7 @@ test("capability sync seeds six rows; autonomy moves down only", { skip: !DB }, 
       updateCapability(db, {
         orgId: org.orgId, actorId: adminId, key: "hrmPayrollAnomalies", autonomy: "act_with_confirmation",
       }),
-      /cannot be raised above "propose"/,
+      /cannot exceed code maximum "propose"/,
     );
     await updateCapability(db, {
       orgId: org.orgId, actorId: adminId, key: "hrmPayrollAnomalies", autonomy: "read_only",

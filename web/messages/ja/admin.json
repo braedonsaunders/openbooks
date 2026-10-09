@@ -4127,7 +4127,12 @@
       "match": "照合",
       "dayPolicyKnown": "勤務日の時間設定済み",
       "showHoursColumn": "Show booked hour column",
-      "distributionVisibility": "Schedule report sharing"
+      "distributionVisibility": "Schedule report sharing",
+      "purpose": "目的",
+      "autonomy": "宣言されたレビューレベル",
+      "boardId": "スケジュールボード",
+      "resourceLocationId": "リソースの場所",
+      "partyId": "連絡先"
     },
     "fieldHelp": {
       "fxRateMaxAgeDays": "使用可能な最新レートから期末までの日数がこれを超えると、再評価と連結はそのレートを拒否します。期末レートは期末スポットレートの日付から、平均レートは平均に含まれる最新の相場の日付から数えます。ポリシー未設定時の既定値: 31日。",
