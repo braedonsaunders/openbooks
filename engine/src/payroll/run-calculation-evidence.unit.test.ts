@@ -125,3 +125,20 @@ test('dated employer assignment evidence detects added, removed and changed hist
     assert.equal(parsePayRunCalculationSource({ ...legacy, employerAssignments }), null);
   }
 });
+
+test("historical roster admissions and changed windows stale a calculation while legacy empty evidence stays equal", () => {
+  const legacy = snapshot();
+  assert.equal(payRunCalculationSourceChanges(legacy, { ...legacy, historicalEmploymentRoster: [] }).roster, false);
+  const admission = { employeePartyId: "employee", employmentId: "employment", versionNo: 2,
+    status: "active", effectiveFrom: "2026-01-23", effectiveTo: "2026-01-24", recordedAt: "2026-10-09T12:00:00.000000Z" };
+  const calculated = { ...snapshot(), historicalEmploymentRoster: [admission] };
+  assert.equal(payRunCalculationSourceChanges(legacy, calculated).roster, true);
+  assert.equal(payRunCalculationSourceChanges(calculated, legacy).roster, true);
+  for (const replacement of [
+    { ...admission, status: "on_leave" }, { ...admission, versionNo: 3 },
+    { ...admission, effectiveFrom: "2026-01-22" }, { ...admission, employmentId: "other-employment" },
+  ]) assert.equal(payRunCalculationSourceChanges(calculated, { ...snapshot(), historicalEmploymentRoster: [replacement] }).roster, true);
+  for (const malformed of [null, {}, false, "[]"]) {
+    assert.equal(parsePayRunCalculationSource({ ...snapshot(), historicalEmploymentRoster: malformed }), null);
+  }
+});

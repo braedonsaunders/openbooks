@@ -1,3 +1,4 @@
+import { payrollEmploymentOverlapsPeriod } from "./employment-roster.ts";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { cmp, sum } from "../money/money.ts";
@@ -186,13 +187,9 @@ export async function detectRetroCandidates(input: DetectRetroInput): Promise<Re
   // omission — nominating the whole schedule for every bonus would be noise
   // that quantifies to zero.
   //
-  // The employment window mirrors the run's own eligibility predicate
-  // (`er.terminated_on is null or er.terminated_on >= run.period_start` in
-  // calculatePayRun) and extends it with the hire date that predicate never
-  // needed: the simulation keys eligibility off the LIVE roster and knows no
-  // hire date, so without `hired_on <= period_end` an employee hired AFTER
-  // the period would quantify to a full period they never worked. A missing
-  // role row (or a null date) reads as employed, exactly as the roster does.
+  // Use the same dated employment eligibility as calculation and readiness,
+  // including recorded earlier episodes under the exact legal employer.
+  // Missing legacy role dates retain their existing population semantics.
   //
   // Cells a committed retro run already settled are deliberately NOT
   // excluded here: quantification subtracts previouslySettled, so a settled
@@ -234,8 +231,11 @@ export async function detectRetroCandidates(input: DetectRetroInput): Promise<Re
            and r.run_type = 'regular'
            and r.tax_year = ${input.taxYear}
            and (sch.subsidiary_id is null or p.subsidiary_id = sch.subsidiary_id)
-           and (er.hired_on is null or er.hired_on <= r.period_end)
-           and (er.terminated_on is null or er.terminated_on >= r.period_start)
+           and ${payrollEmploymentOverlapsPeriod({
+         org: sql`prof.org_id`, employee: sql`p.id`, employment: sql`prof.employment_id`,
+         employer: sql`p.subsidiary_id`, hiredOn: sql`er.hired_on`, terminatedOn: sql`er.terminated_on`,
+         periodStart: sql`r.period_start`, periodEnd: sql`r.period_end`,
+       })}
            and not exists (
              select 1 from pay_stubs s
               where s.org_id = r.org_id and s.pay_run_document_id = r.document_id

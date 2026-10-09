@@ -1,3 +1,4 @@
+import { payrollEmploymentOverlapsPeriod, payrollEpisodeDate } from "./employment-roster.ts";
 import { getTableColumns, sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { businessToday } from "../platform/business-date.ts";
@@ -207,13 +208,18 @@ async function scope(
   run: RunRow,
   allowedSubsidiaryIds?: PayrollSubsidiaryScope,
 ): Promise<ScopeRow[]> {
+  const rosterColumns = {
+    org: sql`prof.org_id`, employee: sql`p.id`, employment: sql`prof.employment_id`,
+    employer: sql`p.subsidiary_id`, hiredOn: sql`er.hired_on`, terminatedOn: sql`er.terminated_on`,
+    periodStart: sql`${run.period_start}`, periodEnd: sql`${run.period_end}`,
+  };
   const rows = (await db.execute<ScopeRow>(sql`
     select p.id as employee_party_id, p.display_name as name, prof.pay_basis, prof.country,
            prof.province, prof.labour_jurisdiction,
            ${effectiveFilingAccountSql("prof")} as filing_account_id,
            coalesce(te.hours, 0)::text as approved_hours,
-           er.hired_on::text as hired_on,
-           er.terminated_on::text as terminated_on,
+           (${payrollEpisodeDate(rosterColumns, sql`er.hired_on`)})::text as hired_on,
+           (${payrollEpisodeDate(rosterColumns, sql`er.terminated_on`)})::text as terminated_on,
            prof.sin_encrypted is not null as has_sin,
            prof.payment_method as profile_payment_method,
            p.payment_method as party_payment_method,
@@ -248,9 +254,8 @@ async function scope(
            and t.status = 'approved'
            and t.worked_on between ${run.period_start} and ${run.period_end}) te on true
      where prof.org_id = ${orgId} and prof.pay_schedule_id = ${run.pay_schedule_id} and prof.is_active
-       -- calculatePayRun's own population predicates, verbatim.
-       and (er.hired_on is null or er.hired_on <= ${run.period_end})
-       and (er.terminated_on is null or er.terminated_on >= ${run.period_start})
+       -- Shared eligibility also admits documented earlier employment episodes.
+       and ${payrollEmploymentOverlapsPeriod(rosterColumns)}
        and (${run.subsidiary_id}::uuid is null or p.subsidiary_id = ${run.subsidiary_id}::uuid)
        ${payrollSubsidiaryScopeFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds)}
        and not exists (
@@ -1796,8 +1801,11 @@ async function employerLevyRoomConsumed(
       left join employee_roles er on er.party_id = p.id and er.org_id = prof.org_id
      where prof.org_id = ${orgId} and prof.pay_schedule_id = ${info.pay_schedule_id}
        and prof.is_active and prof.country is not null
-       and (er.hired_on is null or er.hired_on <= ${info.period_end}::date)
-       and (er.terminated_on is null or er.terminated_on >= ${info.period_start}::date)
+       and ${payrollEmploymentOverlapsPeriod({
+         org: sql`prof.org_id`, employee: sql`p.id`, employment: sql`prof.employment_id`,
+         employer: sql`p.subsidiary_id`, hiredOn: sql`er.hired_on`, terminatedOn: sql`er.terminated_on`,
+         periodStart: sql`${info.period_start}`, periodEnd: sql`${info.period_end}`,
+       })}
        and (${info.schedule_subsidiary_id}::uuid is null
         or p.subsidiary_id = ${info.schedule_subsidiary_id}::uuid)
   `)).rows;
@@ -1882,8 +1890,11 @@ async function employerLevyRoomConsumed(
         left join employee_roles oer on oer.party_id = op.id and oer.org_id = oprof.org_id
        where oprof.org_id = ${orgId} and oprof.pay_schedule_id = other.pay_schedule_id
          and oprof.is_active and oprof.country = ${arm.country}
-         and (oer.hired_on is null or oer.hired_on <= other.period_end)
-         and (oer.terminated_on is null or oer.terminated_on >= other.period_start)
+         and ${payrollEmploymentOverlapsPeriod({
+           org: sql`oprof.org_id`, employee: sql`op.id`, employment: sql`oprof.employment_id`,
+           employer: sql`op.subsidiary_id`, hiredOn: sql`oer.hired_on`, terminatedOn: sql`oer.terminated_on`,
+           periodStart: sql`other.period_start`, periodEnd: sql`other.period_end`,
+         })}
          and (osch.subsidiary_id is null or op.subsidiary_id = osch.subsidiary_id)
          ${arm.regional || arm.phase8
            ? arm.regionless

@@ -1,3 +1,4 @@
+import { lockPayrollEmploymentRoster } from "./employment-roster.ts";
 import { requireCompensationPackageConfiguration } from './compensation-package-payroll.ts';
 import { lockEmployerAssignmentProfiles } from './employer-assignment-history.ts';
 import { lockPayrollServiceConfiguration } from './service-credit.ts';
@@ -373,6 +374,7 @@ export async function commitPayRun(input: {
     if (run.doc_status !== "draft" && run.doc_status !== "approved") {
       throw new PayrollError("pay run document is not editable");
     }
+    await lockPayrollEmploymentRoster(tx, orgId, documentId);
     await lockAndCheckPayrollRunPopulation(tx, orgId, documentId, input.allowedSubsidiaryIds);
 
     // Fence the commit on the EMPLOYEE-AND-TAX-YEAR identity every racing run

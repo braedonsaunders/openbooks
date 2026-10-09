@@ -1,3 +1,4 @@
+import { payrollEmploymentOverlapsPeriod, payrollEpisodeDate, lockPayrollEmploymentRoster } from "./employment-roster.ts";
 import { clearCalculatedHolidayAllocations } from "./holiday-obligation-source.ts";
 import { requireCompensationPackageConfiguration, clearCompensationPackageCalculations } from './compensation-package-payroll.ts';
 import { applyEmployeeEmployerAssignmentHistory, lockEmployerAssignmentProfiles } from './employer-assignment-history.ts';
@@ -361,13 +362,20 @@ async function calculateInTransaction(input: CalculatePayRunInput): Promise<PayR
     // one person — a duplicate stub, doubled pay, and (because the EHT and WCB
     // accumulators below read this run's own stubs) a doubly-consumed
     // exemption. One employee, one pass, stated in the query.
+    await lockPayrollEmploymentRoster(tx, orgId, documentId);
+    const rosterColumns = {
+      org: sql`prof.org_id`, employee: sql`p.id`, employment: sql`prof.employment_id`,
+      employer: sql`p.subsidiary_id`, hiredOn: sql`er.hired_on`, terminatedOn: sql`er.terminated_on`,
+      periodStart: sql`${run.period_start}`, periodEnd: sql`${run.period_end}`,
+    };
     const employees = (await tx.execute<Record<string, string | null>>(sql`
       select * from (
         select distinct on (p.id)
-               p.id as party_id, p.display_name, er.terminated_on,
+               p.id as party_id, p.display_name,
+               ${payrollEpisodeDate(rosterColumns, sql`er.terminated_on`)} as terminated_on,
                -- Employment start, for packs whose ceilings or year-to-date
                -- position run from the hire date rather than the year start.
-               er.hired_on,
+               ${payrollEpisodeDate(rosterColumns, sql`er.hired_on`)} as hired_on,
                -- Payment rail inputs. prof.* already carries the payroll
                -- override; these are the party preference and the bank-details
                -- fact the resolver needs (engine/src/payroll/payment-method.ts).
@@ -398,8 +406,7 @@ async function calculateInTransaction(input: CalculatePayRunInput): Promise<PayR
           left join employee_roles er on er.party_id = p.id and er.org_id = p.org_id
          where prof.org_id = ${orgId} and prof.pay_schedule_id = ${run.pay_schedule_id}
            and prof.is_active
-           and (er.hired_on is null or er.hired_on <= ${run.period_end})
-           and (er.terminated_on is null or er.terminated_on >= ${run.period_start})
+           and ${payrollEmploymentOverlapsPeriod(rosterColumns)}
            and (${scopedSubsidiaryId}::uuid is null or p.subsidiary_id = ${scopedSubsidiaryId}::uuid)
          order by p.id, er.terminated_on nulls last
       ) roster
