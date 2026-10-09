@@ -122,7 +122,7 @@ export async function appendRecurringBenefitLines(tx: Executor, args: {
   orgId: string; actorId: string; documentId: string; employmentId: string; employeePartyId: string;
   subsidiaryId: string | null; currency: string; country: string; periodStart: string; periodEnd: string;
   stage: "vacationable_earnings" | "remaining"; regularCashLines: readonly Line[];
-  periodsPerYear: number; hourlyWage: string | null; payBasis: string; payDate: string; taxYear: number; oneOffRun: boolean; simulate: boolean; lines: Line[]; entitlementMovements: EntitlementMovement[];
+  periodsPerYear: number; hourlyWage: string | null; payBasis: string; payDate: string; taxYear: number; runType: string; oneOffRun: boolean; simulate: boolean; lines: Line[]; entitlementMovements: EntitlementMovement[];
 }): Promise<void> {
   const source = await recurringBenefitSource(tx, args);
   const originalLines = args.lines.slice();
@@ -138,7 +138,7 @@ export async function appendRecurringBenefitLines(tx: Executor, args: {
     for (const term of enrollment.terms) {
       const rule = enrollment.rules.find(r => r.id === term.ruleId);
       if (!rule) throw new PayrollError(`Benefit plan ${enrollment.planCode} election names an inactive or out-of-date rule — end the election terms or provide an effective replacement rule`);
-      if (args.oneOffRun && rule.runApplicability === 'regular_only') continue;
+      if (args.runType !== 'regular' && rule.runApplicability === 'regular_only') continue;
       const coverage = benefitCoverageWindow({ rule, enrollment, term, periodStart: args.periodStart, periodEnd: args.periodEnd });
       if (coverage === null) continue;
       const { from, to, earningsFrom, earningsTo } = coverage;
