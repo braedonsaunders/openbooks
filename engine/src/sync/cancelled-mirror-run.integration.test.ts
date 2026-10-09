@@ -20,10 +20,10 @@
  */
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import test from "node:test";
+import test, { after } from "node:test";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
-import { createScratchOrg, type ScratchOrg } from "../testing/fixtures.ts";
+import { createScratchOrg, dropScratchOrg, type ScratchOrg } from "../testing/fixtures.ts";
 import { runSync } from "./sync.ts";
 import type {
   MigrationSource,
@@ -40,8 +40,15 @@ const DB = Boolean(process.env.OPENBOOKS_DB_URL);
  * memoized across tests is reset — and re-leased to another worker process —
  * as soon as the first test ends.
  */
+const fixtureOrgIds: string[] = [];
+after(async () => {
+  for (const orgId of fixtureOrgIds) await dropScratchOrg(orgId);
+});
+
 async function ctx(): Promise<ScratchOrg> {
-  return createScratchOrg();
+  const org = await createScratchOrg();
+  fixtureOrgIds.push(org.orgId);
+  return org;
 }
 
 async function newConnection(orgId: string): Promise<string> {
