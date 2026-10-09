@@ -5,7 +5,7 @@ import { sql } from 'drizzle-orm';
 import { db } from '../platform/db.ts';
 import { dropScratchOrgReporting } from '../testing/fixtures.ts';
 import { seedHourlyPayrollOrg, seedHourlyPayrollEmployee } from '../testing/payroll-hourly-fixture.ts';
-import { createPayRun } from './run-lifecycle.ts';
+import { createPayRun, discardPayRun } from './run-lifecycle.ts';
 import { calculatePayRun } from './run-calculation.ts';
 import { mutatePayRunAdjustment } from './run-adjustments.ts';
 import { withdrawUnusedEnrollment } from '../hrm/benefits/enrollments.ts';
@@ -61,6 +61,9 @@ test('regular-only benefit premiums exclude supplemental and one-off runs while 
           enrollmentId, reason: 'Contribution basis correction' }), /payroll allocation history/);
         assert.equal((await db.execute<{ status: string }>(sql`select status from hrm_benefit_enrollments
           where org_id=${fx.orgId} and id=${enrollmentId}`)).rows[0]!.status, 'active');
+        await discardPayRun({ orgId: fx.orgId, actorId: fx.actorId, documentId: run.documentId });
       }
+      assert.equal((await withdrawUnusedEnrollment({ orgId: fx.orgId, actorId: fx.actorId,
+        enrollmentId, reason: 'Unused contribution basis correction' })).status, 'cancelled');
     } finally { await dropScratchOrgReporting(fx.orgId); }
   });
