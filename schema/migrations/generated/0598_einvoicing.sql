@@ -42,7 +42,7 @@ CREATE TABLE public.einvoice_settings (
  electronic_address text CHECK(length(btrim(electronic_address)) BETWEEN 1 AND 200),electronic_address_scheme text CHECK(electronic_address_scheme ~ '^([0-9]{4}|[A-Z]{2})$'),
  payment_means_code text NOT NULL DEFAULT '30' CHECK(payment_means_code ~ '^([0-9]{1,2}|ZZZ)$'),
  payee_account_id text CHECK(length(btrim(payee_account_id)) BETWEEN 1 AND 64),payee_account_name text CHECK(length(btrim(payee_account_name)) BETWEEN 1 AND 200),
- payee_bic text CHECK(payee_bic ~ '^[A-Z0-9]{8}([A-Z0-9]{3})?$'),
+ payee_bic text CHECK(regexp_replace(payee_bic, '[[:space:]-]', '', 'g') ~ '^[A-Za-z0-9]{4,35}$'),
  untaxed_line_category text CHECK(untaxed_line_category IN('Z','E','O')),
  untaxed_exemption_reason_code text CHECK(untaxed_exemption_reason_code ~ '^VATEX-[A-Z0-9-]{1,40}$'),
  untaxed_exemption_reason text CHECK(length(btrim(untaxed_exemption_reason)) BETWEEN 1 AND 1000),

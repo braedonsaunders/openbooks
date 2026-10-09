@@ -1,3 +1,4 @@
+import { compactPaymentIdentifier } from "./bank.ts";
 // Portions derived from OpenConstructionERP (https://github.com/datadrivenconstruction/OpenConstructionERP),
 // Copyright (C) 2026 Artem Boiko / DataDrivenConstruction, licensed under AGPL-3.0-or-later.
 
@@ -193,7 +194,7 @@ export function renderUbl(inv: EInvoice, profile: EInvoiceProfile): string {
           "cac:PayeeFinancialAccount",
           leaf("cbc:ID", transfer.accountId?.replace(/[\s-]+/g, "").toUpperCase()),
           leaf("cbc:Name", transfer.accountName),
-          el("cac:FinancialInstitutionBranch", leaf("cbc:ID", transfer.providerId)),
+          el("cac:FinancialInstitutionBranch", leaf("cbc:ID", transfer.providerId ? compactPaymentIdentifier(transfer.providerId) : null)),
         )
         : null,
     ),

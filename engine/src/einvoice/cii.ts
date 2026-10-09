@@ -10,7 +10,7 @@
  * when every value is right.
  */
 
-import { validPaymentIban } from "./bank.ts";
+import { validPaymentIban, compactPaymentIdentifier } from "./bank.ts";
 import { isValidBic } from "../payments-core/rail-settings.ts";
 import { canonicalDecimal, fixed, hasAtMostDecimals, isZeroDecimal } from "./decimal.ts";
 import type { EInvoice, EInvoiceAddress, EInvoiceParty, VatCategory } from "./model.ts";
@@ -174,8 +174,8 @@ export function renderCii(inv: EInvoice, profile: EInvoiceProfile): string {
           accountIsIban ? null : leaf("ram:ProprietaryID", accountId),
         )
         : null,
-      transfer?.providerId && isValidBic(transfer.providerId)
-        ? el("ram:PayeeSpecifiedCreditorFinancialInstitution", leaf("ram:BICID", transfer.providerId.trim().toUpperCase()))
+      transfer?.providerId && isValidBic(compactPaymentIdentifier(transfer.providerId))
+        ? el("ram:PayeeSpecifiedCreditorFinancialInstitution", leaf("ram:BICID", compactPaymentIdentifier(transfer.providerId)))
         : null,
     ),
     ...inv.vatBreakdown.map((group) =>
