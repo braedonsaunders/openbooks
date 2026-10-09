@@ -11,6 +11,7 @@ import { defineRoute } from '@/lib/api/route'
 
 const buyItem = z.object({
   shipmentId: z.string().uuid(),
+  handlingUnitId:z.string().uuid(),
   providerRateId: z.string().min(1).max(200),
 })
 
@@ -20,8 +21,8 @@ const bulkBuyBody = z.object({
 })
 
 type BuyRow =
-  | { shipmentId: string; ok: true; labelId: string; trackingNumber: string | null; duplicate: boolean }
-  | { shipmentId: string; ok: false; code: string; message: string; remedy?: string }
+  | { shipmentId: string; handlingUnitId:string; ok: true; labelId: string; trackingNumber: string | null; duplicate: boolean }
+  | { shipmentId: string; handlingUnitId:string; ok: false; code: string; message: string; remedy?: string }
 
 /**
  * Buy the previewed labels, one independent transaction per shipment: a
@@ -41,7 +42,7 @@ export const POST = defineRoute({
       try {
         const bought = await db.transaction((tx) =>
           buyShipmentLabel(tx, orgId, authz.user.id, {
-            shipmentId: item.shipmentId,
+            shipmentId: item.shipmentId,handlingUnitId:item.handlingUnitId,
             providerRateId: item.providerRateId,
             accountId: body.accountId,
             allowedSubsidiaryIds: authz.allowedSubsidiaryIds,
@@ -49,7 +50,7 @@ export const POST = defineRoute({
         )
         boughtIds.push(bought.id)
         rows.push({
-          shipmentId: item.shipmentId,
+          shipmentId: item.shipmentId,handlingUnitId:item.handlingUnitId,
           ok: true,
           labelId: bought.id,
           trackingNumber: bought.trackingNumber,
@@ -57,7 +58,7 @@ export const POST = defineRoute({
         })
       } catch (error) {
         rows.push({
-          shipmentId: item.shipmentId,
+          shipmentId: item.shipmentId,handlingUnitId:item.handlingUnitId,
           ok: false,
           code: error instanceof ShippingRefusal ? error.code : 'failed',
           message: error instanceof Error ? error.message : 'Label purchase failed',

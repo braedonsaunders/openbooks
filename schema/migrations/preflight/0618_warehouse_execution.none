@@ -1,0 +1,1 @@
+New warehouse execution tables and nullable handling-unit label references preserve existing tenant stock, reservations, financial history and carrier labels without a backfill. Existing fulfillment documents retain their original execution policy; newly created documents capture directed execution explicitly.

@@ -2,6 +2,8 @@ import { createHash, randomBytes } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { fetchWithConnectorRetry } from "../connectors/http-retry.ts";
 import { db, withBypassContext, withOrgContext, type SqlExecutor } from "../platform/db.ts";
+import { assertPackedUnit } from "./handling-unit-state.ts";
+import { lockActorCommandAuthority } from "../organization/actor-command-authority.ts";
 import { businessTodayInTx } from "../platform/business-date.ts";
 import { lockAndCheckOrgFeature } from "../organization/org-feature-lock.ts";
 import { sealJson, unsealJson } from "../platform/secrets.ts";
@@ -632,6 +634,7 @@ async function buildParcels(
   orgId: string,
   shipment: { id: string; documentNumber: string },
   presetId: string | null | undefined,
+  unitId?: string,
 ): Promise<{ parcels: CarrierParcel[]; lines: ParcelLine[] }> {
   const lines = (await tx.execute<{
     item_id: string; item_code: string | null; item_name: string; quantity: string; unit_price: string;
@@ -644,6 +647,8 @@ async function buildParcels(
       from document_lines dl
       join items i on i.id = dl.item_id and i.org_id = dl.org_id
      where dl.org_id = ${orgId} and dl.document_id = ${shipment.id} and dl.item_id is not null
+       ${unitId?sql`and exists(select 1 from handling_unit_contents c where c.org_id=dl.org_id
+         and c.shipment_line_id=dl.id and c.handling_unit_id=${unitId} and c.confirmed_at is not null)`:sql``}
      order by dl.line_number`)).rows;
   if (lines.length === 0) {
     throw new ShippingRefusal(
@@ -664,7 +669,7 @@ async function buildParcels(
     if (!preset.weight || !preset.weight_unit) {
       throw new ShippingRefusal("Package preset has no weight", "invalid_input", 422, "Set a weight on the preset in Setup → Shipping");
     }
-    const parcels: CarrierParcel[] = lines.map(() => ({
+    const parcels: CarrierParcel[] = (unitId?[lines[0]!]:lines).map(() => ({
       lengthCm: preset.dim_unit === "in" && preset.length ? mulExact(preset.length, IN_TO_CM) : preset.length,
       widthCm: preset.dim_unit === "in" && preset.width ? mulExact(preset.width, IN_TO_CM) : preset.width,
       heightCm: preset.dim_unit === "in" && preset.height ? mulExact(preset.height, IN_TO_CM) : preset.height,
@@ -672,6 +677,8 @@ async function buildParcels(
     }));
     return { parcels, lines: lines.map((line) => ({ ...line, quantity: line.quantity })) };
   }
+  if(unitId && lines.length>1)throw new ShippingRefusal("Choose a package preset for a carton containing multiple items", "invalid_input",422,
+    "Set the packed carton dimensions and total shipping weight in Setup → Shipping, then select that preset");
   const parcels: CarrierParcel[] = lines.map((line) => {
     if (!line.weight || !line.weight_unit) {
       const label = line.item_code ? `${line.item_code} (${line.item_name})` : line.item_name;
@@ -938,6 +945,7 @@ function addDecimal(a: string, b: string): string {
 
 export interface GetRatesInput {
   shipmentId: string;
+  handlingUnitId?: string;
   accountId?: string | null;
   presetId?: string | null;
   direction?: "outbound" | "return";
@@ -958,6 +966,9 @@ export async function getShipmentRates(
 ): Promise<ShipmentRateQuote> {
   await assertShippingFeature(tx, orgId);
   const shipment = await lockShipmentForRating(tx, orgId, input.shipmentId, input.allowedSubsidiaryIds);
+  await lockActorCommandAuthority(tx,orgId,actorId,shipment.subsidiaryId,"orders.fulfill");
+  if(!input.handlingUnitId)throw new ShippingRefusal("Select the packed handling unit to rate", "invalid_input",422,"Confirm carton contents in Packing first");
+  const unit=await assertPackedUnit(tx,orgId,shipment.id,input.handlingUnitId);
   const account = await loadShippingAccount(tx, orgId, input.accountId);
   const adapter = adapterFor(account.provider);
   const settings = await loadSettings(tx, orgId);
@@ -968,10 +979,11 @@ export async function getShipmentRates(
     `Shipment ${shipment.documentNumber} has no ship-to address`,
     `Enter the ship-to address on ${shipment.documentNumber}`,
   );
-  const { parcels, lines } = await buildParcels(tx, orgId, shipment, input.presetId);
+  const { parcels, lines } = await buildParcels(tx, orgId, shipment, input.presetId,unit.id);
   const request = buildRateRequest(from, shipTo, parcels, lines, settings, direction, shipment.currency);
   const hash = canonicalRequestHash({
     account: account.id,
+    handlingUnitId:unit.id,handlingUnitVersion:unit.content_version,direction,
     from,
     to: direction === "return" ? from : shipTo,
     parcels,
@@ -1032,10 +1044,10 @@ export async function getShipmentRates(
   }
   const stored = await tx.execute<{ id: string }>(sql`
     insert into shipping_rate_quotes
-      (org_id, shipment_document_id, account_id, request_hash, rates, expires_at, created_by, updated_by)
+      (org_id, shipment_document_id, account_id, request_hash, rates, expires_at, created_by, updated_by,handling_unit_id,handling_unit_version,direction)
     values (${orgId}, ${shipment.id}, ${account.id}, ${hash},
             ${JSON.stringify(ranked)}::jsonb, now() + (${QUOTE_TTL_MINUTES} || ' minutes')::interval,
-            ${actorId}, ${actorId})
+            ${actorId}, ${actorId},${unit.id},${unit.content_version}::bigint,${direction})
     returning id`);
   if (stored.rows.length === 0) throw new Error("rate quote was not recorded");
   return {
@@ -1055,11 +1067,14 @@ export async function findQuotedRate(
   shipmentId: string,
   accountId: string,
   providerRateId: string,
+  unit?:{id:string;content_version:string;direction:string},
 ): Promise<RankedShippingRate> {
   const rows = (await tx.execute<{ rates: RankedShippingRate[] }>(sql`
     select rates from shipping_rate_quotes
      where org_id = ${orgId} and shipment_document_id = ${shipmentId} and account_id = ${accountId}
-       and expires_at > now() order by quoted_at desc limit 5`)).rows;
+       and expires_at > now()
+       ${unit?sql`and handling_unit_id=${unit.id} and handling_unit_version=${unit.content_version}::bigint and direction=${unit.direction}`:sql`and handling_unit_id is null`}
+       order by quoted_at desc limit 5`)).rows;
   for (const row of rows) {
     const found = (row.rates as RankedShippingRate[]).find((rate) => rate.providerRateId === providerRateId);
     if (found) return found;
@@ -1253,6 +1268,7 @@ async function storeLabelPdf(
 
 export interface BuyLabelInput {
   shipmentId: string;
+  handlingUnitId?: string;
   providerRateId: string;
   accountId?: string | null;
   direction?: "outbound" | "return";
@@ -1277,13 +1293,13 @@ export async function buyShipmentLabel(
   await assertShippingFeature(tx, orgId);
   await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${"shipping-buy:" + orgId + ":" + input.shipmentId}, 0))`);
   const shipment = await lockShipmentForRating(tx, orgId, input.shipmentId, input.allowedSubsidiaryIds);
+  await lockActorCommandAuthority(tx,orgId,actorId,shipment.subsidiaryId,"shipping.manage");
+  if(!input.handlingUnitId)throw new ShippingRefusal("Select a packed handling unit before buying its label","invalid_input",422,"Confirm carton contents in Packing first");
+  const unit=await assertPackedUnit(tx,orgId,shipment.id,input.handlingUnitId);
   const account = await loadShippingAccount(tx, orgId, input.accountId);
   const adapter = adapterFor(account.provider);
   const settings = await loadSettings(tx, orgId);
   const { expenseAccountId, payableAccountId } = await requirePostingAccounts(tx, orgId, settings);
-  const quoted = await findQuotedRate(tx, orgId, shipment.id, account.id, input.providerRateId);
-  await requireFunctionalCurrency(tx, orgId, shipment.subsidiaryId, quoted.currency);
-  const minorUnits = await minorUnitsFor(tx, quoted.currency);
 
   const existing = (await tx.execute<{
     id: string; carrier: string; service: string; tracking_number: string | null;
@@ -1292,7 +1308,7 @@ export async function buyShipmentLabel(
     select id, carrier, service, tracking_number, rate_minor::text, rate_currency, cost_entry_id
       from shipment_labels
      where org_id = ${orgId} and shipment_document_id = ${shipment.id}
-       and provider_rate_id = ${input.providerRateId} and status = 'purchased'
+       and handling_unit_id=${unit.id} and direction=${input.direction??'outbound'} and status = 'purchased'
      limit 1 for share`)).rows[0];
   if (existing?.cost_entry_id) {
     return {
@@ -1322,7 +1338,7 @@ export async function buyShipmentLabel(
       payableAccountId,
       rateMinor: BigInt(existing.rate_minor),
       currency: existing.rate_currency,
-      minorUnits,
+      minorUnits:await minorUnitsFor(tx,existing.rate_currency),
       isReturn: input.direction === "return",
     });
     await markChannelEconomicsDirty(tx, orgId, shipment.orderId, "shipping label cost posted");
@@ -1341,6 +1357,9 @@ export async function buyShipmentLabel(
     };
   }
 
+  const quoted = await findQuotedRate(tx, orgId, shipment.id, account.id, input.providerRateId,{...unit,direction:input.direction??"outbound"});
+  await requireFunctionalCurrency(tx, orgId, shipment.subsidiaryId, quoted.currency);
+  const minorUnits = await minorUnitsFor(tx, quoted.currency);
   let bought;
   try {
     bought = await adapter.buyLabel(
@@ -1360,13 +1379,13 @@ export async function buyShipmentLabel(
       (org_id, shipment_document_id, order_document_id, account_id, provider,
        provider_shipment_id, provider_rate_id, provider_label_id, carrier, service,
        rate_minor, rate_currency, label_url, tracking_number, tracking_status,
-       status, purchased_at, created_by, updated_by)
+       status, purchased_at, created_by, updated_by,handling_unit_id,handling_unit_version,direction)
     values (${orgId}, ${shipment.id}, ${shipment.orderId}, ${account.id}, ${account.provider},
             ${bought.providerShipmentId}, ${input.providerRateId}, ${bought.providerLabelId},
             ${bought.carrier}, ${bought.service}, ${rateMinor.toString()}, ${bought.currency},
             ${bought.labelUrl}, ${bought.trackingNumber},
             ${bought.trackingNumber ? "pre_transit" : "unknown"},
-            'purchased', now(), ${actorId}, ${actorId})
+            'purchased', now(), ${actorId}, ${actorId},${unit.id},${unit.content_version}::bigint,${input.direction??'outbound'})
     returning id`)).rows[0]?.id;
   if (!labelId) throw new Error("shipping label was not recorded");
 
@@ -1405,10 +1424,15 @@ export async function buyShipmentLabel(
            updated_at = now(), updated_by = ${actorId}
     returning id`)).rows[0];
   if (!carrierRow) throw new Error("carrier row was not filed for the shipping label");
+  // The first outbound unit supplies the shipment summary; every unit keeps its own label and tracking history.
+  const primaryOutbound = input.direction !== "return" && !(await tx.execute(sql`
+    select id from shipment_labels where org_id=${orgId} and shipment_document_id=${shipment.id}
+      and id<>${labelId} and status='purchased' and (direction='outbound' or direction is null) limit 1`)).rows.length;
   const stamped = await tx.execute<{ id: string }>(sql`
     update fulfillment_documents
-       set carrier_id = ${carrierRow.id}, carrier_service = ${bought.service},
-           tracking_number = ${bought.trackingNumber},
+       set carrier_id = case when ${primaryOutbound} then ${carrierRow.id}::uuid else carrier_id end,
+           carrier_service = case when ${primaryOutbound} then ${bought.service} else carrier_service end,
+           tracking_number = case when ${primaryOutbound} then ${bought.trackingNumber} else tracking_number end,
            updated_at = now(), updated_by = ${actorId}
      where org_id = ${orgId} and document_id = ${shipment.id} and stage = 'open'
     returning document_id`);
@@ -1446,6 +1470,9 @@ export async function buyShipmentLabel(
   await writeLabelAudit(tx, orgId, actorId, labelId, "insert", {
     mode: "shipping_label_buy",
     shipmentId: shipment.id,
+    handlingUnitId: unit.id,
+    handlingUnitVersion: unit.content_version,
+    direction: input.direction ?? "outbound",
     orderId: shipment.orderId,
     provider: account.provider,
     providerShipmentId: bought.providerShipmentId,
@@ -2190,56 +2217,32 @@ export async function listAdjustmentsByCarrier(
 }
 
 export interface BulkCandidate {
-  shipmentId: string;
-  documentNumber: string;
-  customerName: string | null;
-  promisedDate: string | null;
-  labelCount: number;
+  shipmentId:string;handlingUnitId:string;handlingUnitCode:string;documentNumber:string;
+  customerName:string|null;promisedDate:string|null;labelCount:number;
 }
-
-/** Draft, open shipments the bulk buyer can pick from. */
-export async function listBulkCandidates(
-  runner: SqlExecutor,
-  orgId: string,
-  scope: Scope,
-): Promise<BulkCandidate[]> {
-  await assertShippingFeature(runner, orgId);
-  type CandidateRow = {
-    shipment_id: string; document_number: string; customer_name: string | null;
-    promised_date: string | null; label_count: string;
-  };
-  // The promised date is the shipment document's due date: fulfillment
-  // documents carry stage, not dates, so there is no fd.promised_date.
-  const base = sql`
-    select d.id as shipment_id, d.document_number, p.display_name as customer_name,
-           d.due_date::text as promised_date, count(l.id)::text as label_count
-      from documents d
-      join fulfillment_documents fd on fd.document_id = d.id and fd.org_id = d.org_id
-      left join parties p on p.id = d.party_id and p.org_id = d.org_id
-      left join shipment_labels l on l.shipment_document_id = d.id and l.org_id = d.org_id
-        and l.status = 'purchased'
-     where d.org_id = ${orgId} and d.kind = 'shipment' and d.status = 'draft' and fd.stage = 'open'`;
-  const tail = sql`
-     group by d.id, d.document_number, p.display_name, d.due_date
-     order by d.document_number`;
-  const rows = scope
-    ? (await runner.execute<CandidateRow>(sql`${base} and d.subsidiary_id = any(${[...scope]}) ${tail}`)).rows
-    : (await runner.execute<CandidateRow>(sql`${base} ${tail}`)).rows;
-  return rows
-    .filter((row) => row.label_count === "0")
-    .map((row) => ({
-      shipmentId: row.shipment_id,
-      documentNumber: row.document_number,
-      customerName: row.customer_name,
-      promisedDate: row.promised_date,
-      labelCount: Number(row.label_count),
-    }));
+/** Only confirmed cartons without an outbound label enter bulk label buying. */
+export async function listBulkCandidates(runner:SqlExecutor,orgId:string,scope:Scope):Promise<BulkCandidate[]> {
+  await assertShippingFeature(runner,orgId);
+  return (await runner.execute<BulkCandidate & Record<string,unknown>>(sql`
+    select doc.id as "shipmentId",unit.id as "handlingUnitId",unit.code as "handlingUnitCode",
+      doc.document_number as "documentNumber",party.display_name as "customerName",doc.due_date::text as "promisedDate",0 as "labelCount"
+    from handling_units unit join documents doc on doc.org_id=unit.org_id and doc.id=unit.shipment_document_id
+    join fulfillment_documents fd on fd.org_id=doc.org_id and fd.document_id=doc.id
+    left join parties party on party.org_id=doc.org_id and party.id=doc.party_id
+    where unit.org_id=${orgId} and unit.status='packed' and doc.kind='shipment' and doc.status='draft' and fd.stage='open'
+      ${scope===null?sql``:sql`and doc.subsidiary_id=any(${[...scope]}::uuid[])`}
+      and not exists(select 1 from shipment_labels label where label.org_id=unit.org_id and label.handling_unit_id=unit.id
+        and label.direction='outbound' and label.status='purchased')
+    order by doc.document_number,unit.code,unit.id limit 500`)).rows;
 }
 
 // --- Drawer and download reads --------------------------------------------------
 
 export interface ShipmentLabelView {
   id: string;
+  handlingUnitId: string | null;
+  handlingUnitCode: string | null;
+  direction: "outbound" | "return" | null;
   accountName: string;
   provider: string;
   carrier: string;
@@ -2265,23 +2268,25 @@ export async function getShipmentLabels(
 ): Promise<ShipmentLabelView[]> {
   await assertShippingFeature(runner, orgId);
   const rows = (await runner.execute<{
+    handling_unit_id:string|null;handling_unit_code:string|null;direction:"outbound"|"return"|null;
     id: string; account_name: string; provider: string; carrier: string; service: string;
     tracking_number: string | null; tracking_status: string; status: string;
     rate_minor: string; rate_currency: string; label_url: string | null; label_file_id: string | null;
     cost_entry_id: string | null; purchased_at: string; voided_at: string | null;
     events: ShipmentLabelView["events"];
   }>(sql`
-    select l.id, a.name as account_name, l.provider, l.carrier, l.service,
+    select l.id,l.handling_unit_id,unit.code as handling_unit_code,l.direction, a.name as account_name, l.provider, l.carrier, l.service,
            l.tracking_number, l.tracking_status, l.status,
            l.rate_minor::text, l.rate_currency, l.label_url,
            l.label_file_id, l.cost_entry_id,
            l.purchased_at::text, l.voided_at::text, l.events
       from shipment_labels l
       join shipping_accounts a on a.id = l.account_id and a.org_id = l.org_id
+      left join handling_units unit on unit.org_id=l.org_id and unit.id=l.handling_unit_id
      where l.org_id = ${orgId} and l.shipment_document_id = ${shipmentId}
      order by l.purchased_at desc`)).rows;
   return rows.map((row) => ({
-    id: row.id,
+    id: row.id,handlingUnitId:row.handling_unit_id,handlingUnitCode:row.handling_unit_code,direction:row.direction,
     accountName: row.account_name,
     provider: row.provider,
     carrier: row.carrier,

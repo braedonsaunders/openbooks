@@ -16,6 +16,8 @@ import {
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { cmp, isZero } from '@openbooks/engine/src/money/money.ts'
 import { AvailabilityRefusal, releasableBackorders } from '@openbooks/engine/src/inventory/availability.ts'
+import { purchaseReceiptQueue } from '@openbooks/engine/src/inventory/receiving-queue.ts'
+import type { ReceiptQueueRow } from './ReceiptQueue'
 import { listStagedStock } from '@openbooks/engine/src/inventory/putaway.ts'
 import { replenishmentProposals } from '@openbooks/engine/src/inventory/replenishment.ts'
 import { warehouseStockTieOut } from '@openbooks/engine/src/inventory/warehouses.ts'
@@ -78,6 +80,7 @@ export interface WarehouseData {
   queueTitle: string
   queueHint: string
   staged: StagedStockRowView[]
+  receipts:ReceiptQueueRow[]
   supplyHint: string
   availabilityTitle: string
   availabilityPulse: SupplyPulse
@@ -123,6 +126,7 @@ export async function loadWarehouse(
 
   const tieOut = await warehouseStockTieOut(db, orgId, subsidiaryIds)
   const staged = await listStagedStock(db, orgId, subsidiaryIds)
+  const receipts=await purchaseReceiptQueue(db,orgId,authz.allowedSubsidiaryIds)
   const tabs = await warehouseGroupTabs(authz, '/warehouse')
   const fulfillmentOn = await isFeatureEnabled(orgId, 'fulfillment')
   const showFulfillment = fulfillmentOn && can(authz, 'orders.fulfill')
@@ -164,7 +168,7 @@ export async function loadWarehouse(
     title: t('home.title'),
     description: t('home.description'),
     tabs,
-    currentParams: sp,
+    currentParams: sp,receipts,
     canManage,
     canPost: can(authz, 'items.post'),
     canSetup: can(authz, 'admin.setup.manage'),
@@ -311,7 +315,7 @@ export function warehouseSpec(data: WarehouseData): PageSpec {
             iconKey: 'clipboard',
             hint: f('queueHint'),
             className: 'self-start',
-            blocks: [widgetBlock('putaway-queue', { rows: data.staged, canPost: data.canPost })],
+            blocks: [widgetBlock('warehouse-execution-queue', { rows: data.staged,receipts:data.receipts, canPost: data.canPost })],
           }),
         ]),
         grid('grid grid-cols-1 gap-5 lg:grid-cols-2', [

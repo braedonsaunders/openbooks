@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto'
 import { registerHooks } from 'node:module'
 import test from 'node:test'
 import { sql } from 'drizzle-orm'
+import { confirmFixturePick } from '@openbooks/engine/src/testing/warehouse-execution.ts'
 import { db, withBypassContext } from '@openbooks/engine/src/platform/db.ts'
 import { createScratchOrg, dropScratchOrg, seedFlowActors, type ScratchOrg } from '@openbooks/engine/src/testing/fixtures.ts'
 
@@ -333,6 +334,7 @@ test('fulfillment off hides picks, shipments and backorders at every layer and p
       salesOrderId: orderId, lines: [{ salesOrderLineId: lineId, binId: bin, quantity: '5' }], ...scope,
     })))
     await withBypassContext(() => fulfillment.releasePickList(org.orgId, actorId, { pickListId: pickList.id, ...scope }))
+    await confirmFixturePick(org.orgId,actorId,pickList.id)
     const shipment = await withBypassContext(() => db.transaction((tx) => fulfillment.createShipment(tx, org.orgId, actorId, { pickListId: pickList.id, ...scope })))
     await withBypassContext(() => db.transaction((tx) => fulfillment.setShipmentCarrier(tx, org.orgId, actorId, { shipmentId: shipment.id, carrierId, service: 'Ground', ...scope })))
     await withBypassContext(() => db.transaction((tx) => cancelOrderLineRemainder(tx, org.orgId, actorId, {

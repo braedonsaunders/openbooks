@@ -1,3 +1,4 @@
+import { requireExecutionConfirmation } from "./execution-authority.ts";
 import { sql } from "drizzle-orm";
 import type { PutawayStrategy } from "@openbooks/schema";
 import { isZero, normalizeDecimal } from "../money/money.ts";
@@ -192,6 +193,10 @@ export interface StagedStockRow {
   itemLabel: string;
   subsidiaryId: string;
   quantity: string;
+  lotId:string|null;
+  serialId:string|null;
+  lotNumber:string|null;
+  serialNumber:string|null;
 }
 
 /**
@@ -224,20 +229,23 @@ export async function listStagedStock(
     const label = (kind: "item" | "location", id: string) =>
       meta.find((row) => row.kind === kind && row.id === id)?.label ?? id;
     for (const position of positions) {
-      const onHand = await getOnHandWith(runner, orgId, position.itemId, position.stockLocationId, {
-        subsidiaryId: position.subsidiaryId,
-      });
-      if (!(scaled(onHand.quantity) > 0n)) continue;
-      rows.push({
-        warehouseId: warehouse.id,
-        warehouseCode: warehouse.code,
-        stagingLocationId: position.stockLocationId,
-        stagingCode: label("location", position.stockLocationId),
-        itemId: position.itemId,
-        itemLabel: label("item", position.itemId),
-        subsidiaryId: position.subsidiaryId,
-        quantity: onHand.quantity,
-      });
+      const identifiers=(await runner.execute<{lot_id:string|null;serial_id:string|null;lot_number:string|null;serial_number:string|null}>(sql`
+        select distinct source.lot_id,source.serial_id,lot.lot_number,serial.serial_number
+        from cost_layers layer join inventory_movements source on source.org_id=layer.org_id and source.id=layer.source_movement_id
+        left join lots lot on lot.org_id=source.org_id and lot.id=source.lot_id
+        left join serials serial on serial.org_id=source.org_id and serial.id=source.serial_id
+        where layer.org_id=${orgId} and layer.item_id=${position.itemId} and layer.stock_location_id=${position.stockLocationId}
+          and layer.subsidiary_id=${position.subsidiaryId} and layer.remaining_quantity>0
+        order by source.lot_id,source.serial_id`)).rows;
+      for(const identity of identifiers) {
+        const onHand=await getOnHandWith(runner,orgId,position.itemId,position.stockLocationId,{
+          subsidiaryId:position.subsidiaryId,lotId:identity.lot_id,serialId:identity.serial_id});
+        if(!(scaled(onHand.quantity)>0n))continue;
+        rows.push({warehouseId:warehouse.id,warehouseCode:warehouse.code,stagingLocationId:position.stockLocationId,
+          stagingCode:label("location",position.stockLocationId),itemId:position.itemId,itemLabel:label("item",position.itemId),
+          subsidiaryId:position.subsidiaryId,quantity:onHand.quantity,lotId:identity.lot_id,serialId:identity.serial_id,
+          lotNumber:identity.lot_number,serialNumber:identity.serial_number});
+      }
     }
   }
   return rows;
@@ -250,6 +258,10 @@ export interface PutAwayInput {
   subsidiaryId: string;
   quantity: string;
   date: string;
+  lotId?: string | null;
+  serialId?: string | null;
+  expectedTargetLocationId?: string;
+  executionTaskId?: string;
 }
 
 /**
@@ -308,6 +320,10 @@ export async function putAwayStagedStock(
     warehouseId: input.warehouseId,
     subsidiaryId: input.subsidiaryId,
   });
+  if(input.expectedTargetLocationId && target.stockLocationId!==input.expectedTargetLocationId)
+    throw new InventoryError("The putaway rule now suggests a different bin; refresh the suggestion and scan that bin before moving stock");
+  await requireExecutionConfirmation(tx,orgId,{stage:"putaway",taskId:input.executionTaskId,itemId:input.itemId,
+    fromBinId:input.stagingLocationId,toBinId:target.stockLocationId,quantity:input.quantity});
   const moved = await transferInventoryTx(tx, orgId, actorId, {
     itemId: input.itemId,
     fromStockLocationId: input.stagingLocationId,
@@ -315,6 +331,8 @@ export async function putAwayStagedStock(
     quantity: input.quantity,
     subsidiaryId: input.subsidiaryId,
     date: input.date,
+    lotId: input.lotId,
+    serialId: input.serialId,
     memo: `Putaway ${staging.code} → ${target.code} (rule ${target.sequence})`,
   });
   return { ...target, fromMovementId: moved.fromMovementId, toMovementId: moved.toMovementId, entryId: moved.entryId };

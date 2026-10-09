@@ -23,6 +23,7 @@ export const GET = defineRoute({
 
 const buyBody = z.object({
   shipmentId: z.string().uuid(),
+  handlingUnitId:z.string().uuid(),
   providerRateId: z.string().min(1).max(200),
   accountId: z.string().uuid().nullable().optional(),
   direction: z.enum(['outbound', 'return']).optional(),
@@ -43,6 +44,7 @@ export const POST = defineRoute({
     const bought = await db.transaction((tx) =>
       buyShipmentLabel(tx, authz.user.orgId, authz.user.id, {
         shipmentId: body.shipmentId,
+        handlingUnitId:body.handlingUnitId,
         providerRateId: body.providerRateId,
         accountId: body.accountId,
         direction: body.direction,

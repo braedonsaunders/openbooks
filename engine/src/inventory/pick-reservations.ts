@@ -76,12 +76,13 @@ export function pickReservationsCte(orgId: string): SQL {
       select pick.id as pick_list_id, pick.document_number as pick_list_number,
              pick.status as pick_list_status, pick.created_at,
              line.id as pick_line_id, line.line_number, fl.sales_order_line_id,
-             line.item_id, line.stock_location_id as bin_id, fl.lot_id, fl.serial_id,
-             line.quantity, line.unit, coalesce(pick.subsidiary_id,(select id from subsidiaries where org_id=${orgId} and parent_id is null)) as subsidiary_id
+             line.item_id, coalesce(execution.current_stock_location_id,line.stock_location_id) as bin_id, fl.lot_id, fl.serial_id,
+             greatest(0,line.quantity-coalesce(execution.short_quantity,0)) as quantity, line.unit, coalesce(pick.subsidiary_id,(select id from subsidiaries where org_id=${orgId} and parent_id is null)) as subsidiary_id
         from fulfillment_lines fl
         join fulfillment_documents fd on fd.document_id = fl.document_id and fd.org_id = fl.org_id
         join documents pick on pick.id = fl.document_id and pick.org_id = fl.org_id
         join document_lines line on line.id = fl.line_id and line.org_id = fl.org_id
+        left join pick_execution_lines execution on execution.org_id=line.org_id and execution.line_id=line.id
        where fl.org_id = ${orgId}
          and pick.kind = 'pick_list'
          and pick.status in ('draft', 'pending_approval', 'approved')

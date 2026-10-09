@@ -20,7 +20,8 @@ export const GET = defineRoute({
 })
 
 const bulkBody = z.object({
-  shipmentIds: z.array(z.string().uuid()).min(1).max(100),
+  items:z.array(z.object({shipmentId:z.string().uuid(),handlingUnitId:z.string().uuid()})).min(1).max(100),
+  presetId:z.string().uuid().nullable().optional(),
   accountId: z.string().uuid().nullable().optional(),
   rule: z.enum(['cheapest', 'fastest', 'cheapest_by_date']).default('cheapest'),
   promisedDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
@@ -29,6 +30,7 @@ const bulkBody = z.object({
 type PreviewRow =
   | {
     shipmentId: string
+    handlingUnitId:string
     documentNumber: string
     ok: true
     providerRateId: string
@@ -40,6 +42,7 @@ type PreviewRow =
   }
   | {
     shipmentId: string
+    handlingUnitId:string
     documentNumber: string | null
     ok: false
     code: string
@@ -59,11 +62,12 @@ export const POST = defineRoute({
   handler: async ({ authz, body }) => {
     const orgId = authz.user.orgId
     const rows: PreviewRow[] = []
-    for (const shipmentId of body.shipmentIds) {
+    for (const item of body.items) {
+      const {shipmentId,handlingUnitId}=item
       try {
         const quote = await db.transaction((tx) =>
           getShipmentRates(tx, orgId, authz.user.id, {
-            shipmentId,
+            shipmentId,handlingUnitId,presetId:body.presetId,
             accountId: body.accountId,
             allowedSubsidiaryIds: authz.allowedSubsidiaryIds,
           }),
@@ -71,7 +75,7 @@ export const POST = defineRoute({
         const chosen = selectRateByRule(quote.rates, body.rule, body.promisedDate)
         if (!chosen) {
           rows.push({
-            shipmentId,
+            shipmentId,handlingUnitId,
             documentNumber: quote.documentNumber,
             ok: false,
             code: 'no_rate_on_time',
@@ -81,7 +85,7 @@ export const POST = defineRoute({
           continue
         }
         rows.push({
-          shipmentId,
+          shipmentId,handlingUnitId,
           documentNumber: quote.documentNumber,
           ok: true,
           providerRateId: chosen.providerRateId,
@@ -93,7 +97,7 @@ export const POST = defineRoute({
         })
       } catch (error) {
         rows.push({
-          shipmentId,
+          shipmentId,handlingUnitId,
           documentNumber: null,
           ok: false,
           code: error instanceof ShippingRefusal ? error.code : 'failed',

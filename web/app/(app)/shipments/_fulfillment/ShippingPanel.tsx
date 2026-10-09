@@ -27,6 +27,7 @@ import { readApiErrorMessage } from '@/lib/api-error'
 import { confirmDialog } from '@/lib/confirm'
 import { promptDialog } from '@/lib/prompt'
 import { createMoneyFormatter } from '@/lib/money-format'
+import type { UnitView } from '../PackExecutionPanel'
 import type { PackagePresetOption, ShippingAccountOption } from '../../_fulfillment/types'
 import { minorToMajor } from './shipping-display'
 
@@ -66,6 +67,9 @@ interface LabelView {
   provider: string
   carrier: string
   service: string
+  handlingUnitId?:string|null
+  handlingUnitCode?:string|null
+  direction?:'outbound'|'return'|null
   trackingNumber: string | null
   trackingStatus: string
   status: string
@@ -131,6 +135,9 @@ export function ShippingPanel({
   const [accountId, setAccountId] = useState(() => accounts.find((account) => account.isDefault)?.id ?? '')
   const [presetId, setPresetId] = useState('')
   const [direction, setDirection] = useState<'outbound' | 'return'>('outbound')
+  const [units,setUnits]=useState<UnitView[]>([])
+  const [handlingUnitId,setHandlingUnitId]=useState('')
+  const [unitsError,setUnitsError]=useState<string|null>(null)
   const [quote, setQuote] = useState<QuoteView | null>(null)
   const [buyingRate, setBuyingRate] = useState<string | null>(null)
   const [voidingId, setVoidingId] = useState<string | null>(null)
@@ -162,6 +169,17 @@ export function ShippingPanel({
     return () => window.clearTimeout(timer)
   }, [loadLabels])
 
+  useEffect(()=>{
+    let active=true
+    void (async()=>{
+      const response=await fetch(`/api/shipping/handling-units?shipmentId=${shipmentId}`,{cache:'no-store'})
+      if(!response.ok)throw new Error(await readApiErrorMessage(response,'Packed cartons could not be loaded'))
+      const body=await response.json() as {units:UnitView[]}
+      if(active){const packed=body.units.filter(unit=>unit.status==='packed');setUnits(packed);setHandlingUnitId(packed[0]?.id??'')}
+    })().catch(cause=>{if(active)setUnitsError(cause.message)})
+    return()=>{active=false}
+  },[shipmentId])
+
   const defaultAccount = useMemo(
     () => accounts.find((account) => account.isDefault) ?? accounts[0] ?? null,
     [accounts],
@@ -179,7 +197,7 @@ export function ShippingPanel({
           method: 'POST',
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({
-            shipmentId,
+            shipmentId,handlingUnitId,
             ...(accountId ? { accountId } : {}),
             ...(presetId ? { presetId } : {}),
             direction,
@@ -212,7 +230,7 @@ export function ShippingPanel({
             method: 'POST',
             headers: { 'content-type': 'application/json' },
             body: JSON.stringify({
-              shipmentId,
+              shipmentId,handlingUnitId,
               providerRateId: rate.providerRateId,
               ...(accountId ? { accountId } : {}),
               direction,
@@ -336,7 +354,7 @@ export function ShippingPanel({
               ariaLabel={t('shipping.labelsTitle')}
               value={selectedLabel?.id ?? ''}
               onChange={setSelectedLabelId}
-              options={labels.map((label) => ({ value: label.id, label: `${label.carrier} · ${label.service}${label.trackingNumber ? ` · ${label.trackingNumber}` : ''}` }))}
+              options={labels.map((label) => ({ value: label.id, label: `${label.handlingUnitCode?`${label.handlingUnitCode} · `:''}${label.carrier} · ${label.service}${label.trackingNumber ? ` · ${label.trackingNumber}` : ''}` }))}
             />
           ) : null}
           {selectedLabel ? (() => {
@@ -346,7 +364,7 @@ export function ShippingPanel({
               <article key={label.id} className="space-y-2 rounded-lg border border-slate-200 p-3 dark:border-slate-800">
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="font-medium text-slate-900 dark:text-slate-100">
-                    {label.carrier} · {label.service}
+                    {label.handlingUnitCode?`${label.handlingUnitCode} · `:null}{label.carrier} · {label.service}
                   </span>
                   <Badge variant={labelStatusVariant(label.status)}>{t(`shipping.status.${label.status}`)}</Badge>
                   <Badge variant={trackingVariant(label.trackingStatus)}>{t(`shipping.tracking.${label.trackingStatus}`)}</Badge>
@@ -398,6 +416,10 @@ export function ShippingPanel({
 
       {draft && section === 'rates' ? (
         <section aria-label={t('shipping.ratesTitle')} className="space-y-3">
+          {unitsError?<p role="alert" className="text-sm text-destructive">{unitsError}</p>:null}
+          <Label>Packed handling unit<Select value={handlingUnitId} onChange={event=>{setHandlingUnitId(event.target.value);setQuote(null)}}>
+            <option value="">Confirm carton contents in Packing first</option>{units.map(unit=><option key={unit.id} value={unit.id}>{unit.code} · {unit.binCode}</option>)}
+          </Select></Label>
           <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t('shipping.ratesTitle')}</h3>
           {accounts.length === 0 ? (
             <EmptyState

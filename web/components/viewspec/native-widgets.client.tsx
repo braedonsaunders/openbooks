@@ -313,3 +313,5 @@ export const WindowsManagerDrawer = dynamic(() => import("../../app/(app)/hrm/be
 export const WorkItemDrawer = dynamic(() => import("../../app/(app)/continuous-close/WorkItemDrawer").then(module => module.WorkItemDrawer))
 export const WorkLocationsView = dynamic(() => import("../../app/(app)/payroll/work-locations/WorkLocationsView").then(module => module.WorkLocationsView))
 export const YearEndView = dynamic(() => import("../../app/(app)/payroll/year-end/YearEndView").then(module => module.YearEndView))
+
+export const WarehouseExecutionQueue = dynamic(() => import('../../app/(app)/warehouse/WarehouseExecutionQueue').then(module=>module.WarehouseExecutionQueue))

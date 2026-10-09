@@ -17,6 +17,7 @@ import { PdfButton } from '../../../components/pdf-button'
 import { promptDialog } from '../../../lib/prompt'
 import { confirmDialog } from '../../../lib/confirm'
 import { fulfillmentRequest } from '../_fulfillment/fulfillment-client'
+import { PackExecutionPanel } from './PackExecutionPanel'
 import { ShippingPanel } from './_fulfillment/ShippingPanel'
 import {
   FulfillmentHeader,
@@ -367,6 +368,7 @@ export function ShipmentDrawer({ data, initialMode = 'view' }: { data: Fulfillme
       }
       actions={actions}
       detailTabs={[
+        {key:'packing',label:'Packing',content:<PackExecutionPanel shipment={shipment} canManage={canEdit} canMove={canEdit&&data.shippingHubEnabled}/>},
         {
           key: 'lines',
           label: tCommon('labels.lines'),

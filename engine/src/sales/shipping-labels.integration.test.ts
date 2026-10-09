@@ -6,8 +6,10 @@ import { sql } from "drizzle-orm";
 import { db, withBypassContext, withOrg } from "../platform/db.ts";
 import { withSimClock } from "../platform/clock.ts";
 import { receiveInventory } from "../inventory/movements.ts";
-import { createScratchOrg, createScratchUser, dropScratchOrg, type ScratchOrg } from "../testing/fixtures.ts";
+import { createScratchOrg, dropScratchOrg, type ScratchOrg } from "../testing/fixtures.ts";
 import { createPickList, createShipment, releasePickList } from "./fulfillment.ts";
+import { createWarehouseOperator, confirmFixturePick, packFixtureShipment } from "../testing/warehouse-execution.ts";
+import { moveHandlingUnit } from "./handling-units.ts";
 import { sealJson } from "../platform/secrets.ts";
 import {
   buyShipmentLabel,
@@ -175,6 +177,7 @@ async function draftShipment(org: ScratchOrg, userId: string, number: string, it
     salesOrderId: orderId, lines: [{ salesOrderLineId: lineId, binId: bin, quantity: "2" }], allowedSubsidiaryIds: null,
   })));
   await releasePickList(org.orgId, userId, { pickListId: pick.id, allowedSubsidiaryIds: null });
+  await confirmFixturePick(org.orgId, userId, pick.id);
   const shipment = await withOrg(org.orgId, () => db.transaction((tx) => createShipment(tx, org.orgId, userId, {
     pickListId: pick.id, allowedSubsidiaryIds: null,
   })));
@@ -192,10 +195,13 @@ async function draftShipment(org: ScratchOrg, userId: string, number: string, it
     update warehouses set address_line1 = '228 Park Ave S', city = 'New York',
       region = 'NY', postal_code = '10003', country = 'US'
      where org_id = ${org.orgId}`));
+  shipmentUnits.set(shipment.id,await packFixtureShipment(org.orgId,userId,shipment.id,bin));
   return shipment.id;
 }
 
-const callOpts = (baseUrl: string) => ({ allowedSubsidiaryIds: null, transport: fetch, baseUrl });
+const shipmentUnits = new Map<string,string>();
+const callOpts = (baseUrl: string,shipmentId?:string) => ({ allowedSubsidiaryIds: null, transport: fetch, baseUrl,
+  ...(shipmentId?{handlingUnitId:shipmentUnits.get(shipmentId)!}:{}) });
 
 test("rate shopping ranks live rates and buying is idempotent with a balanced cost journal", { skip: !DB }, async () => {
   const server = fakeEasyPost(Buffer.from("%PDF-1.4 test label", "utf8"));
@@ -203,7 +209,7 @@ test("rate shopping ranks live rates and buying is idempotent with a balanced co
   const org = await withBypassContext(() => createScratchOrg());
   try {
     await enableShipping(org.orgId);
-    const userId = await withBypassContext(() => createScratchUser(org.orgId, "Shipper", "admin"));
+    const userId = await withBypassContext(() => createWarehouseOperator(org.orgId, "Shipper"));
     await withBypassContext(() => receiveInventory(org.orgId, userId, {
       itemId: org.items.fifo, stockLocationId: org.stockLocationId, quantity: "10", unitCost: "2",
       subsidiaryId: org.subsidiaryId, offsetAccountId: org.accounts.clearing, date: org.date,
@@ -214,7 +220,7 @@ test("rate shopping ranks live rates and buying is idempotent with a balanced co
     const shipmentId = await draftShipment(org, userId, "SO-SHIP-1", org.items.fifo);
 
     const quote = await withOrg(org.orgId, () => db.transaction((tx) =>
-      getShipmentRates(tx, org.orgId, userId, { shipmentId, accountId, ...callOpts(baseUrl) })));
+      getShipmentRates(tx, org.orgId, userId, { shipmentId, accountId, ...callOpts(baseUrl,shipmentId) })));
     assert.equal(quote.cached, false);
     assert.equal(quote.rates.length, 3);
     const [ground, priority, express] = quote.rates as unknown as [
@@ -230,11 +236,32 @@ test("rate shopping ranks live rates and buying is idempotent with a balanced co
     assert.deepEqual(priority!.badges, ["best_value"]);
     assert.deepEqual(express!.badges, ["fastest"]);
     const repeat = await withOrg(org.orgId, () => db.transaction((tx) =>
-      getShipmentRates(tx, org.orgId, userId, { shipmentId, accountId, ...callOpts(baseUrl) })));
+      getShipmentRates(tx, org.orgId, userId, { shipmentId, accountId, ...callOpts(baseUrl,shipmentId) })));
     assert.equal(repeat.cached, true);
 
+    const dock = randomUUID();
+    await withBypassContext(() => db.execute(sql`
+      insert into stock_locations(id,org_id,location_id,parent_id,code,kind,is_active)
+      values(${dock},${org.orgId},${org.locationId},${org.stockLocationId},'LABEL-DOCK','bin',true)`));
+    const unitId = shipmentUnits.get(shipmentId)!;
+    await moveHandlingUnit(org.orgId,userId,{unitId,toBinId:dock,date:org.date,
+      reason:'Move packed carton to dispatch dock',commandKey:randomUUID()});
+    let purchases = 0;
+    const transport:typeof fetch = async (...args) => { purchases++; return fetch(...args); };
+    await assert.rejects(withOrg(org.orgId,()=>db.transaction(tx=>buyShipmentLabel(tx,org.orgId,userId,{
+      shipmentId,providerRateId:RATE_GROUND,accountId,...callOpts(baseUrl,shipmentId),transport,
+    }))), (error:unknown) => error instanceof ShippingRefusal && error.code==='quote_expired');
+    assert.equal(purchases,0,'a changed handling-unit version cannot reach the carrier with an old quote');
+    const untouched = await withBypassContext(()=>db.execute(sql`
+      select id from shipment_labels where org_id=${org.orgId}`));
+    assert.equal(untouched.rows.length,0);
+    const refreshed = await withOrg(org.orgId,()=>db.transaction(tx=>getShipmentRates(tx,org.orgId,userId,{
+      shipmentId,accountId,...callOpts(baseUrl,shipmentId),
+    })));
+    assert.equal(refreshed.cached,false);
+
     const buy = () => withOrg(org.orgId, () => db.transaction((tx) =>
-      buyShipmentLabel(tx, org.orgId, userId, { shipmentId, providerRateId: RATE_GROUND, accountId, ...callOpts(baseUrl) })));
+      buyShipmentLabel(tx, org.orgId, userId, { shipmentId, providerRateId: RATE_GROUND, accountId, ...callOpts(baseUrl,shipmentId) })));
     const bought = await withSimClock(org.date, buy);
     assert.equal(bought.duplicate, false);
     assert.equal(bought.trackingNumber, TRACKING);
@@ -244,6 +271,12 @@ test("rate shopping ranks live rates and buying is idempotent with a balanced co
     const again = await withSimClock(org.date, buy);
     assert.equal(again.duplicate, true);
     assert.equal(again.id, bought.id);
+    await assert.rejects(moveHandlingUnit(org.orgId,userId,{
+      unitId,toBinId:org.stockLocationId,date:org.date,reason:'Return carton to packing bin',commandKey:randomUUID(),
+    }), /Void.*label/i);
+    const physical = await withBypassContext(()=>db.execute<{current_stock_location_id:string}>(sql`
+      select current_stock_location_id from handling_units where org_id=${org.orgId} and id=${unitId}`));
+    assert.equal(physical.rows[0]!.current_stock_location_id,dock);
 
     // One balanced cost journal: DR freight 9.87, CR payables 9.87.
     const entries = await withBypassContext(() => db.execute<{ id: string; status: string }>(sql`
@@ -274,7 +307,7 @@ test("voiding a label reverses its cost journal", { skip: !DB }, async () => {
   const org = await withBypassContext(() => createScratchOrg());
   try {
     await enableShipping(org.orgId);
-    const userId = await withBypassContext(() => createScratchUser(org.orgId, "Shipper", "admin"));
+    const userId = await withBypassContext(() => createWarehouseOperator(org.orgId, "Shipper"));
     await withBypassContext(() => receiveInventory(org.orgId, userId, {
       itemId: org.items.fifo, stockLocationId: org.stockLocationId, quantity: "10", unitCost: "2",
       subsidiaryId: org.subsidiaryId, offsetAccountId: org.accounts.clearing, date: org.date,
@@ -284,9 +317,9 @@ test("voiding a label reverses its cost journal", { skip: !DB }, async () => {
     const accountId = await seedAccount(org, null);
     const shipmentId = await draftShipment(org, userId, "SO-SHIP-2", org.items.fifo);
     await withOrg(org.orgId, () => db.transaction((tx) =>
-      getShipmentRates(tx, org.orgId, userId, { shipmentId, accountId, ...callOpts(baseUrl) })));
+      getShipmentRates(tx, org.orgId, userId, { shipmentId, accountId, ...callOpts(baseUrl,shipmentId) })));
     const buy = () => withOrg(org.orgId, () => db.transaction((tx) =>
-      buyShipmentLabel(tx, org.orgId, userId, { shipmentId, providerRateId: RATE_GROUND, accountId, ...callOpts(baseUrl) })));
+      buyShipmentLabel(tx, org.orgId, userId, { shipmentId, providerRateId: RATE_GROUND, accountId, ...callOpts(baseUrl,shipmentId) })));
     const bought = await withSimClock(org.date, buy);
 
     const voided = await withSimClock(org.date, () => withOrg(org.orgId, () => db.transaction((tx) =>
@@ -309,7 +342,7 @@ test("a tracker delivery with a bad signature is refused and changes nothing", {
   const org = await withBypassContext(() => createScratchOrg());
   try {
     await enableShipping(org.orgId);
-    const userId = await withBypassContext(() => createScratchUser(org.orgId, "Shipper", "admin"));
+    const userId = await withBypassContext(() => createWarehouseOperator(org.orgId, "Shipper"));
     await withBypassContext(() => receiveInventory(org.orgId, userId, {
       itemId: org.items.fifo, stockLocationId: org.stockLocationId, quantity: "10", unitCost: "2",
       subsidiaryId: org.subsidiaryId, offsetAccountId: org.accounts.clearing, date: org.date,
@@ -320,9 +353,9 @@ test("a tracker delivery with a bad signature is refused and changes nothing", {
     const accountId = await seedAccount(org, relaySecret);
     const shipmentId = await draftShipment(org, userId, "SO-SHIP-3", org.items.fifo);
     await withOrg(org.orgId, () => db.transaction((tx) =>
-      getShipmentRates(tx, org.orgId, userId, { shipmentId, accountId, ...callOpts(baseUrl) })));
+      getShipmentRates(tx, org.orgId, userId, { shipmentId, accountId, ...callOpts(baseUrl,shipmentId) })));
     const buy = () => withOrg(org.orgId, () => db.transaction((tx) =>
-      buyShipmentLabel(tx, org.orgId, userId, { shipmentId, providerRateId: RATE_GROUND, accountId, ...callOpts(baseUrl) })));
+      buyShipmentLabel(tx, org.orgId, userId, { shipmentId, providerRateId: RATE_GROUND, accountId, ...callOpts(baseUrl,shipmentId) })));
     const bought = await withSimClock(org.date, buy);
 
     const rawBody = JSON.stringify({
@@ -392,7 +425,7 @@ test("rating refuses by name when an item has no weight", { skip: !DB }, async (
   const org = await withBypassContext(() => createScratchOrg());
   try {
     await enableShipping(org.orgId);
-    const userId = await withBypassContext(() => createScratchUser(org.orgId, "Shipper", "admin"));
+    const userId = await withBypassContext(() => createWarehouseOperator(org.orgId, "Shipper"));
     const lightItem = randomUUID();
     await withBypassContext(() => db.execute(sql`
       insert into items (id, org_id, kind, code, name, income_account_id, created_by)
@@ -431,6 +464,7 @@ test("rating refuses by name when an item has no weight", { skip: !DB }, async (
       allowedSubsidiaryIds: null,
     })));
     await releasePickList(org.orgId, userId, { pickListId: pick.id, allowedSubsidiaryIds: null });
+    await confirmFixturePick(org.orgId, userId, pick.id);
     const shipment = await withOrg(org.orgId, () => db.transaction((tx) => createShipment(tx, org.orgId, userId, {
       pickListId: pick.id, allowedSubsidiaryIds: null,
     })));
@@ -443,9 +477,11 @@ test("rating refuses by name when an item has no weight", { skip: !DB }, async (
       update warehouses set address_line1 = '228 Park Ave S', city = 'New York',
         region = 'NY', postal_code = '10003', country = 'US' where org_id = ${org.orgId}`));
 
+    shipmentUnits.set(shipment.id,await packFixtureShipment(org.orgId,userId,shipment.id,org.stockLocationId));
+
     await assert.rejects(
       withOrg(org.orgId, () => db.transaction((tx) =>
-        getShipmentRates(tx, org.orgId, userId, { shipmentId: shipment.id, accountId, ...callOpts(baseUrl) }))),
+        getShipmentRates(tx, org.orgId, userId, { shipmentId: shipment.id, accountId, ...callOpts(baseUrl,shipment.id) }))),
       (error: unknown) => {
         assert.ok(error instanceof ShippingRefusal);
         assert.equal(error.code, "weight_missing");

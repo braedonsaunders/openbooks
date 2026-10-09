@@ -1,3 +1,4 @@
+import { requireExecutionConfirmation } from "./execution-authority.ts";
 import { actorHasPermission } from "../organization/actor-permissions.ts";
 import { ScopeNotFoundError } from "../organization/subsidiary-scope.ts";
 import { sql } from "drizzle-orm";
@@ -22,6 +23,7 @@ export async function recordSecondCount(
     lineId: string;
     countedQuantity: string;
     reason?: string | null;
+    executionTaskId?:string;
   },
 ) {
   const quantity = parseCountQuantity(
@@ -79,6 +81,7 @@ export async function recordSecondCount(
       cmp(quantity, "1") !== 0
     )
       throw new InventoryError("Count one serial as present (1) or absent (0)");
+    await requireExecutionConfirmation(tx,orgId,{stage:"count",taskId:input.executionTaskId,lineId:input.lineId,quantity,observation:"second"});
     const reason = input.reason?.trim() ?? "";
     if (cmp(quantity, before.first_counted_quantity) !== 0 && reason.length < 5)
       throw new InventoryError(

@@ -249,7 +249,8 @@ const inventoryMovementCases = [
         const { db, withBypassContext, withOrg } = await import('@openbooks/engine/src/platform/db.ts');
         const { receiveInventory } = await import('@openbooks/engine/src/inventory/movements.ts');
         const { activePickReservations } = await import('@openbooks/engine/src/inventory/pick-reservations.ts');
-        const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts');
+        const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts');
+        const { createWarehouseOperator,confirmFixturePick,packFixtureShipment } = await import('@openbooks/engine/src/testing/warehouse-execution.ts');
         const { FulfillmentRefusal, createPickList, createShipment, releasePickList, setShipmentCarrier } = await import('@openbooks/engine/src/sales/fulfillment.ts');
         const { completeShipment, saveFulfillmentCustom } = await import('./shipments');
         const DB = Boolean(process.env.OPENBOOKS_DB_URL)
@@ -257,7 +258,7 @@ const inventoryMovementCases = [
         test('completing a shipment issues from the picked bins through the fulfilment path, once', { skip: !DB }, async () => {
           const org = await withBypassContext(() => createScratchOrg())
           try {
-            const userId = await withBypassContext(() => createScratchUser(org.orgId, 'Shipper', 'admin'))
+            const userId = await withBypassContext(() => createWarehouseOperator(org.orgId, 'Shipper'))
             const [binA, binB, orderId, lineId, carrierId] = [randomUUID(), randomUUID(), randomUUID(), randomUUID(), randomUUID()]
             await withBypassContext(async () => {
               await db.execute(sql`
@@ -304,6 +305,7 @@ const inventoryMovementCases = [
               ...scoped,
             }))
             await releasePickList(org.orgId, userId, { pickListId: pickList.id, ...scoped })
+            await confirmFixturePick(org.orgId,userId,pickList.id)
             const shipment = await inTx((tx) => createShipment(tx, org.orgId, userId, { pickListId: pickList.id, documentDate: org.date, ...scoped }))
             // A custom field defined on shipments saves through the customization
             // validation (unknown keys dropped) and is final once the shipment is.
@@ -314,6 +316,9 @@ const inventoryMovementCases = [
               documentId: shipment.id, kind: 'shipment', custom: { dock_door: 'D-4', stray: 'dropped' },
             }))
             assert.deepEqual(await saveCustom(), { dock_door: 'D-4' })
+            const packingLines=await inTx(tx=>tx.execute<{id:string;stock_location_id:string}>(sql`select id,stock_location_id from document_lines
+              where org_id=${org.orgId} and document_id=${shipment.id} order by line_number`))
+            for(const packingLine of packingLines.rows)await packFixtureShipment(org.orgId,userId,shipment.id,packingLine.stock_location_id,[packingLine.id])
             const complete = () => withOrg(org.orgId, () => completeShipment(org.orgId, userId, { shipmentId: shipment.id, ...scoped }))
 
             await assert.rejects(complete(), (error: unknown) =>

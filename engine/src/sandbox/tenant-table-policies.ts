@@ -1,5 +1,13 @@
 /** Explicit clone disposition and identifier-rebase rule for every tenant-owned table. Update when adding a tenant table. */
 export const TENANT_TABLE_POLICIES = {
+  "warehouse_execution_tasks":"skip:no-copy",
+  "warehouse_scan_events":"skip:no-copy",
+  "pick_waves":"skip:no-copy",
+  "pick_wave_members":"skip:no-copy",
+  "pick_execution_lines":"clone:catalog-uuid-rebase",
+  "handling_units":"clone:catalog-uuid-rebase",
+  "handling_unit_contents":"clone:catalog-uuid-rebase",
+  "handling_unit_moves":"clone:catalog-uuid-rebase",
   "inventory_count_policies": "clone:catalog-uuid-rebase",
   "consignment_stock": "clone:catalog-uuid-rebase",
   "consignment_events": "clone:catalog-uuid-rebase",

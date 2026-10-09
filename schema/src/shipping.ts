@@ -163,6 +163,9 @@ export const shipmentLabels = pgTable(
     id: id(),
     orgId: orgRef(),
     shipmentDocumentId: uuid("shipment_document_id").notNull(),
+    handlingUnitId:uuid("handling_unit_id"),
+    handlingUnitVersion:bigint("handling_unit_version",{mode:"bigint"}),
+    direction:text("direction",{enum:["outbound","return"]}),
     orderDocumentId: uuid("order_document_id"),
     accountId: uuid("account_id").notNull(),
     provider: text("provider", { enum: SHIPPING_PROVIDERS }).notNull(),
@@ -190,6 +193,7 @@ export const shipmentLabels = pgTable(
     uniqueIndex("shipment_labels_live_rate_unique")
       .on(t.orgId, t.shipmentDocumentId, t.providerRateId)
       .where(sql`${t.status} = 'purchased'`),
+    uniqueIndex("shipment_labels_live_unit").on(t.orgId,t.handlingUnitId,t.direction).where(sql`${t.handlingUnitId} is not null and ${t.status}='purchased'`),
     index("shipment_labels_org_shipment").on(t.orgId, t.shipmentDocumentId),
   ],
 );
@@ -212,6 +216,9 @@ export const shippingRateQuotes = pgTable(
     id: id(),
     orgId: orgRef(),
     shipmentDocumentId: uuid("shipment_document_id").notNull(),
+    handlingUnitId:uuid("handling_unit_id"),
+    handlingUnitVersion:bigint("handling_unit_version",{mode:"bigint"}),
+    direction:text("direction",{enum:["outbound","return"]}),
     accountId: uuid("account_id").notNull(),
     requestHash: text("request_hash").notNull(),
     rates: jsonb("rates").$type<NormalizedShippingRate[]>().notNull().default([]),
