@@ -14,7 +14,7 @@ import { activateRouting, createRouting, createRoutingOperation } from "./routin
 import { addWorkCenterRate, createWorkCenter } from "./work-centers.ts";
 import { createWorkOrder, holdWorkOrder, releaseWorkOrder, startWorkOrderOperation } from "./work-orders.ts";
 import { completeWorkOrderOperation, issueMaterials } from "./materials.ts";
-import { createSandbox } from "../sandbox/lifecycle.ts";
+import { createSandbox, deleteSandbox } from "../sandbox/lifecycle.ts";
 
 const DB = Boolean(process.env.OPENBOOKS_DB_URL);
 type Fixture = { org: ScratchOrg; actorId: string; wipId: string; departmentId: string };
@@ -124,15 +124,29 @@ async function refuses(work: Promise<unknown>, code: string, text: string, remed
     && error.message.includes(text) && Boolean(error.remedy?.trim()) && (remedy === undefined || error.remedy === remedy));
 }
 
-async function withSandboxClone(f: Fixture, work: (orgId: string) => Promise<void>) {
+async function withSandboxClone(f: Fixture, masked: boolean, work: (orgId: string) => Promise<void>) {
   const name = `Manufacturing ${randomUUID()}`;
-  const clone = await withBypassContext(() => createSandbox({ productionOrgId: f.org.orgId, name, tier: "full", masked: false }));
+  let failure: unknown;
   try {
+    const clone = await withBypassContext(() => createSandbox({ productionOrgId: f.org.orgId, name, tier: masked ? "masked" : "full", masked, createdBy: f.actorId }));
+    const state = await withBypassContext(() => db.execute<{ status: string }>(sql`
+      select status from sandboxes where id=${clone.sandboxId} and org_id=${clone.sandboxOrgId}`));
+    assert.equal(state.rows[0]?.status, "ready", "only a preserved, validated clone may run the scenario");
     await work(clone.sandboxOrgId);
+  } catch (error) {
+    failure = error;
+    throw error;
   } finally {
-    const renamed = await withBypassContext(() => db.execute(sql`update orgs set name=${`Scratch ${name}`} where id=${clone.sandboxOrgId} and env_kind='sandbox' returning id`));
-    assert.equal(renamed.rows.length, 1);
-    await dropScratchOrg(clone.sandboxOrgId);
+    try {
+      await withBypassContext(async () => {
+        const shells = (await db.execute<{ id: string }>(sql`
+          select id from sandboxes where production_org_id=${f.org.orgId} and name=${name}`)).rows;
+        for (const shell of shells) await deleteSandbox(shell.id, { actorId: f.actorId });
+      });
+    } catch (cleanupError) {
+      if (failure) throw new AggregateError([failure, cleanupError], "Manufacturing clone scenario and cleanup both failed", { cause: failure });
+      throw cleanupError;
+    }
   }
 }
 
@@ -177,10 +191,17 @@ const cases: Case[] = [
     const order = await prepare(f, { tracking: "lot" }); await stock(f, "2", "3", "LOT-A");
     await assert.rejects(issue(f, order.id, order.materialId, "1"), /lot-tracked item requires a lot/);
   } },
-  { name: "released measure and scrap snapshots survive sandbox cloning without audit rows", run: async (f) => {
+  { name: "released measure and scrap snapshots survive full and masked sandbox cloning without audit rows", run: async (f) => {
     const order = await prepare(f, { backflushAt: "start", qualityGate: "measure", operationSeq: 10, quantityPer: "2", scrapPct: "10", orderQty: "2" });
     await stock(f, "5", "2");
-    await withSandboxClone(f, async (orgId) => {
+    for (const masked of [false, true]) await withSandboxClone(f, masked, async (orgId) => {
+      const copied = await withBypassContext(() => db.execute<{ tracking: string; quantity: string }>(sql`
+        select profile.tracking,movement.quantity::text as quantity from inventory_movements movement
+        join item_inventory_profiles profile on profile.org_id=movement.org_id and profile.item_id=movement.item_id
+        where movement.org_id=${orgId} and movement.kind='receipt'`));
+      assert.equal(copied.rows.length, 1, "the clone must preserve the valued receipt and its profile");
+      assert.equal(copied.rows[0]!.tracking, "none");
+      assert.equal(copied.rows[0]!.quantity, "5.0000");
       const clone = await withBypassContext(async () => (await db.execute<{ id: string; operation_id: string }>(sql`select wo.id,operation.id as operation_id from mfg_work_orders wo join mfg_wo_operations operation on operation.org_id=wo.org_id and operation.work_order_id=wo.id where wo.org_id=${orgId} and wo.number=${order.number}`)).rows[0]!);
       await run((tx) => startWorkOrderOperation(tx, orgId, f.actorId, clone.id, clone.operation_id));
       assert.equal((await withBypassContext(async () => db.execute<{ quantity: string }>(sql`select quantity::text from inventory_movements where org_id=${orgId} and kind='assembly_consume'`))).rows[0]?.quantity, "-4.4000");
@@ -251,8 +272,17 @@ const cases: Case[] = [
 test("manufacturing material execution case table", { skip: !DB }, async () => {
   for (const scenario of cases) {
     const fixture = await setup();
+    let failure: unknown;
     try { await scenario.run(fixture); }
-    catch (error) { throw new Error(`${scenario.name}: ${error instanceof Error ? error.message : String(error)}`, { cause: error }); }
-    finally { await withBypassContext(() => dropScratchOrg(fixture.org.orgId)); }
+    catch (error) {
+      failure = new Error(`${scenario.name}: ${error instanceof Error ? error.message : String(error)}`, { cause: error });
+      throw failure;
+    } finally {
+      try { await withBypassContext(() => dropScratchOrg(fixture.org.orgId)); }
+      catch (cleanupError) {
+        if (failure) throw new AggregateError([failure, cleanupError], "Manufacturing material scenario and cleanup both failed", { cause: failure });
+        throw cleanupError;
+      }
+    }
   }
 });

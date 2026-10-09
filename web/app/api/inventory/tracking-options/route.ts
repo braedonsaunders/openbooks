@@ -1,9 +1,10 @@
 import { z } from "zod";
-import { sql } from "drizzle-orm";
 import { NextResponse } from "next/server";
-import { db } from "@openbooks/engine/platform/database";
+import { inventoryTrackingOptions } from "@openbooks/engine/inventory";
 import { defineRoute } from "@/lib/api/route";
 import { uuidId } from "@/lib/api/json";
+import { apiErrorResponse } from "@/lib/api/error-response";
+import { inventoryErrorStatus } from "@/lib/api/inventory-errors";
 const query = z
   .object({
     itemId: uuidId,
@@ -23,29 +24,10 @@ export const GET = defineRoute({
         { error: "Choose a valid inventory item" },
         { status: 422 },
       );
-    const { itemId, q, lotId } = parsed.data;
-    const profile = (
-      await db.execute<{ tracking: string }>(
-        sql`select tracking from item_inventory_profiles where org_id=${authz.user.orgId} and item_id=${itemId}`,
-      )
-    ).rows[0];
-    if (!profile)
-      return NextResponse.json(
-        {
-          error:
-            "Item has no inventory profile — configure its costing and tracking before selecting identifiers",
-        },
-        { status: 422 },
-      );
-    const lots = (
-      await db.execute(sql`select id,lot_number as label,expires_on::text as expiry,hold_reason from lots
-   where org_id=${authz.user.orgId} and item_id=${itemId} and lot_number ilike ${`%${q ?? ""}%`} order by expires_on nulls last,lot_number limit 100`)
-    ).rows;
-    const serials = (
-      await db.execute(sql`select id,serial_number as label,lot_id,hold_reason from serials
-   where org_id=${authz.user.orgId} and item_id=${itemId} and serial_number ilike ${`%${q ?? ""}%`}
-     ${lotId ? sql`and (lot_id=${lotId} or lot_id is null)` : sql``} order by serial_number limit 100`)
-    ).rows;
-    return NextResponse.json({ tracking: profile.tracking, lots, serials });
+    try {
+      return NextResponse.json(await inventoryTrackingOptions(authz.user.orgId, authz.user.id, parsed.data));
+    } catch (error) {
+      return apiErrorResponse(error, { safeStatus: inventoryErrorStatus(error) });
+    }
   },
 });

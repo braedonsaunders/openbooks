@@ -78,6 +78,21 @@ test("sandbox insertion orders inferred trigger-owned parents before children", 
   assert.ok(order.indexOf("project_types") < order.indexOf("project_financial_profile_versions"));
 });
 
+test("sandbox insertion resolves inventory profiles before valued and external stock inside a deferred cycle", () => {
+  const nodes = ["inventory_movements", "consignment_stock", "item_inventory_profiles", "items"];
+  const refs: Record<string, Record<string, string>> = {
+    inventory_movements: { item_id: "items" },
+    consignment_stock: { item_id: "items" },
+    item_inventory_profiles: { item_id: "items" },
+    items: { last_movement_id: "inventory_movements" },
+  };
+  const tables = nodes.map(name => ({ ...table("NO ACTION"), name, fks: refs[name]!, hardFks: {} }));
+  const order = insertionOrder({ tables, tenantTables: tables, rebaseSet: new Set(nodes) });
+  assert.ok(order.indexOf("item_inventory_profiles") < order.indexOf("inventory_movements"));
+  assert.ok(order.indexOf("item_inventory_profiles") < order.indexOf("consignment_stock"));
+  assert.equal(new Set(order).size, nodes.length);
+});
+
 test("sandbox insertion opens the deferred document-ledger cycle at the declared breaker", () => {
   const documents = table("NO ACTION");
   documents.name = "documents";
