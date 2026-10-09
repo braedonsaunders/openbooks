@@ -8,7 +8,7 @@ export const salesWorkflow: DocArticle = {
   summary: 'A practical tour of estimates, sales orders, invoices, credits, receipts, and customer balances.',
   updated: '2026-07-20',
   keywords: ['sales', 'estimate', 'quote', 'sales order', 'invoice', 'credit memo', 'receipt', 'accounts receivable', 'collections worklist', 'dso'],
-  related: ['payments-and-applications', 'transaction-lifecycle', 'financial-reports'],
+  related: ['payments-and-applications', 'transaction-lifecycle', 'financial-reports', 'electronic-invoicing'],
   body: `# Sales: Estimate to Cash
 
 The sales workflow can begin with an estimate, a sales order, or directly with a
@@ -105,7 +105,7 @@ export const purchasingWorkflow: DocArticle = {
   summary: 'A practical tour of purchase orders, bills, credits, approvals, payments, and vendor balances.',
   updated: '2026-08-26',
   keywords: ['purchase', 'purchase order', 'vendor bill', 'vendor credit', 'accounts payable', 'payment', 'approval'],
-  related: ['payments-and-applications', 'transaction-lifecycle', 'file-cabinet'],
+  related: ['payments-and-applications', 'transaction-lifecycle', 'file-cabinet', 'electronic-invoicing', 'contractor-withholding'],
   body: `# Purchases: Order to Payment
 
 The purchase workflow can begin with a purchase order or directly with a vendor
@@ -199,7 +199,7 @@ export const paymentsAndApplications: DocArticle = {
   summary: 'Understand how cash and credits settle open receivables and payables without losing subledger detail.',
   updated: '2026-07-21',
   keywords: ['payment', 'receipt', 'application', 'credit', 'unapplied', 'open item', 'settlement'],
-  related: ['sales-workflow', 'purchasing-workflow', 'banking-and-reconciliation'],
+  related: ['sales-workflow', 'purchasing-workflow', 'banking-and-reconciliation', 'contractor-withholding'],
   body: `# Payments, Credits, and Applications
 
 Recording cash and settling an open item are related but distinct events. The

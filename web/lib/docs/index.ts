@@ -54,6 +54,8 @@ import { orgChartAndDirectory } from './articles/org-chart-and-directory'
 import { structuredInterviewsOffersJobBoards } from './articles/structured-interviews-offers-job-boards'
 // HR-18 end
 import { taxConfiguration } from './articles/tax-configuration'
+import { electronicInvoicing } from './articles/electronic-invoicing'
+import { contractorWithholding } from './articles/contractor-withholding'
 import { taxJurisdictionsAndNexus, taxReturnsAndBoxes } from './articles/taxes'
 import { fieldTickets } from './articles/field-tickets'
 import { preBilling } from './articles/pre-billing'
@@ -257,6 +259,7 @@ const ARTICLE_SECTION_BY_SLUG: Record<string, string> = {
   'fixed-assets-depreciation': 'accounting-advanced',
   'allocations': 'accounting-advanced',
   'sales-workflow': 'transactions-daily',
+  'electronic-invoicing': 'transactions-daily',
   'purchasing-workflow': 'transactions-daily',
   'distribution-backorders': 'transactions-daily',
   'payments-and-applications': 'transactions-daily',
@@ -290,6 +293,7 @@ const ARTICLE_SECTION_BY_SLUG: Record<string, string> = {
   'setup-agents-group': 'administration-company-setup',
   'tax-jurisdictions-and-nexus': 'administration-taxes',
   'tax-configuration': 'administration-taxes',
+  'contractor-withholding': 'administration-taxes',
   'tax-returns-and-boxes': 'administration-taxes',
   'roles-and-permissions': 'administration-organization',
   'data-imports': 'administration-data',
@@ -329,6 +333,7 @@ const RAW_DOC_ARTICLES: DocArticle[] = [
   fixedAssetsDepreciation,
   allocations,
   salesWorkflow,
+  electronicInvoicing,
   purchasingWorkflow,
   distributionBackorders,
   paymentsAndApplications,
@@ -397,6 +402,7 @@ const RAW_DOC_ARTICLES: DocArticle[] = [
   ...companySetupGroupArticles,
   taxJurisdictionsAndNexus,
   taxConfiguration,
+  contractorWithholding,
   taxReturnsAndBoxes,
   rolesAndPermissions,
   recordCustomization,

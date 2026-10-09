@@ -7,7 +7,7 @@ export const subcontractorCompliance: DocArticle = {
   order: 6,
   summary:
     'Track certificates of insurance, exchange lien waivers for payment, and file 1099-NEC/MISC and T4A information returns — with payment holds when a subcontractor’s coverage lapses.',
-  updated: '2026-07-25',
+  updated: '2026-10-09',
   keywords: [
     'compliance',
     'certificate of insurance',
@@ -23,7 +23,7 @@ export const subcontractorCompliance: DocArticle = {
     'additional insured',
     'backup withholding',
   ],
-  related: ['project-types', 'field-tickets', 'purchasing-workflow'],
+  related: ['project-types', 'field-tickets', 'purchasing-workflow', 'contractor-withholding'],
   body: `# Subcontractor Compliance
 
 The Subcontractor Compliance module applies insurance and lien-waiver controls
