@@ -227,7 +227,11 @@
       "endToday": "今日截止",
       "delete": "删除工资组成分配",
       "confirmEnd": "今日截止此工资组成分配吗？",
-      "confirmDelete": "删除此工资组成分配吗？已计算过工资单的分配不得删除。"
+      "confirmDelete": "删除此工资组成分配吗？已计算过工资单的分配不得删除。",
+      "runApplicability": "薪资批次",
+      "standardRuns": "常规、补充及离职",
+      "regularOnly": "仅常规",
+      "unknownApplicability": "适用范围未知"
     },
     "summary": {
       "transactions": "交易",

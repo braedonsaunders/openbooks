@@ -12,6 +12,8 @@ import { decimalNullRefusal } from '../../../../lib/payroll-decimal-refusal'
 import { normalizeMoney } from '@openbooks/engine/money'
 import {
   employeePayComponentScopeLock,
+  takeEmployeeConfigurationFence,
+  ASSIGNMENT_RUN_APPLICABILITIES,
   PayrollError,
   validateEmployeePayComponentAssignment,
 } from '@openbooks/engine/payroll/assigned-components'
@@ -56,6 +58,7 @@ const postBodySchema = z.discriminatedUnion("action", [
     employeePartyId: uuidId,
     employmentId: uuidId.nullable().optional(),
     componentId: uuidId,
+    runApplicability: z.enum(ASSIGNMENT_RUN_APPLICABILITIES).default("standard_runs"),
     value: decimalText("value", "an exact decimal amount").nullable().optional(),
     effectiveFrom: z.string().regex(DATE_RE),
     effectiveTo: z.string().regex(DATE_RE).nullable().optional(),
@@ -80,13 +83,14 @@ type AssignmentRow = {
   employmentId: string | null
   componentId: string
   value: string | null
+  runApplicability: "standard_runs" | "regular_only"
   effectiveFrom: string
   effectiveTo: string | null
   isActive: boolean
 }
 
 const ASSIGNMENT_ROW_COLUMNS = sql`id, employee_party_id as "employeePartyId", employment_id as "employmentId",
-  component_id as "componentId", value::text as value,
+  component_id as "componentId", value::text as value, run_applicability as "runApplicability",
   effective_from::text as "effectiveFrom", effective_to::text as "effectiveTo", is_active as "isActive"`
 
 function bodyReason(raw: unknown, fallback: string): string {
@@ -155,7 +159,7 @@ export const GET = defineRoute({
           select a.id, a.employee_party_id as "employeePartyId", a.employment_id as "employmentId",
                  a.component_id as "componentId", c.code as "componentCode", c.name as "componentName",
                  c.kind as "componentKind", c.basis as "componentBasis",
-                 a.value::text as value, c.value::text as "componentValue",
+                 a.value::text as value, c.value::text as "componentValue", a.run_applicability as "runApplicability",
                  a.effective_from::text as "effectiveFrom", a.effective_to::text as "effectiveTo",
                  a.effective_from <= ${today} and (a.effective_to is null or a.effective_to >= ${today}) as "isCurrent"
             from employee_pay_components a
@@ -215,15 +219,16 @@ export const POST = defineRoute({
           if (subsidiary === undefined) return notFound("record")
           const scopeDenied = guardSubsidiaryScope(gate, subsidiary)
           if (scopeDenied) return scopeDenied
+          await takeEmployeeConfigurationFence(db, orgId, employeePartyId)
           await db.execute(employeePayComponentScopeLock(orgId, employeePartyId))
           const validated = await validateEmployeePayComponentAssignment(db, orgId, {
-            employeePartyId, employmentId, componentId: body.componentId, value,
+            employeePartyId, employmentId, componentId: body.componentId, value, runApplicability: body.runApplicability,
             effectiveFrom: body.effectiveFrom, effectiveTo: body.effectiveTo ?? null,
           })
           const inserted = (await db.execute<{ id: string }>(sql`
-            insert into employee_pay_components (org_id, employee_party_id, employment_id, component_id, value,
+            insert into employee_pay_components (org_id, employee_party_id, employment_id, component_id, value, run_applicability,
               effective_from, effective_to, is_active, created_by, updated_by)
-            values (${orgId}, ${employeePartyId}, ${employmentId}, ${body.componentId}, ${value},
+            values (${orgId}, ${employeePartyId}, ${employmentId}, ${body.componentId}, ${value}, ${body.runApplicability},
               ${body.effectiveFrom}::date, ${body.effectiveTo ?? null}::date, true, ${userId}, ${userId})
             returning id`)).rows[0]
           if (!inserted) throw new Error('assignment insert returned no row')
@@ -253,12 +258,13 @@ export const POST = defineRoute({
           if (subsidiary === undefined) return notFound("record")
           const scopeDenied = guardSubsidiaryScope(gate, subsidiary)
           if (scopeDenied) return scopeDenied
+          await takeEmployeeConfigurationFence(db, orgId, row.employeePartyId)
           await db.execute(employeePayComponentScopeLock(orgId, row.employeePartyId))
           // Re-validate the surviving window: a Benefits election or a rival
           // assignment may have arrived since the row was written.
           await validateEmployeePayComponentAssignment(db, orgId, {
             employeePartyId: row.employeePartyId, employmentId: row.employmentId, componentId: row.componentId,
-            value: row.value, effectiveFrom: row.effectiveFrom, effectiveTo: body.effectiveTo ?? null,
+            value: row.value, runApplicability: row.runApplicability, effectiveFrom: row.effectiveFrom, effectiveTo: body.effectiveTo ?? null,
             excludeId: row.id,
           })
           const updated = (await db.execute<{ id: string }>(sql`
@@ -288,6 +294,7 @@ export const POST = defineRoute({
         if (subsidiary === undefined) return notFound("record")
         const scopeDenied = guardSubsidiaryScope(gate, subsidiary)
         if (scopeDenied) return scopeDenied
+        await takeEmployeeConfigurationFence(db, orgId, row.employeePartyId)
         await db.execute(employeePayComponentScopeLock(orgId, row.employeePartyId))
         // Posted history is immutable: a row that already priced a stub can
         // be ended, never deleted.

@@ -227,7 +227,11 @@
       "endToday": "Encerrar hoje",
       "delete": "Excluir atribuição de componente",
       "confirmEnd": "Encerrar hoje esta atribuição de componente?",
-      "confirmDelete": "Excluir esta atribuição de componente? Atribuições que já calcularam um holerite não podem ser excluídas."
+      "confirmDelete": "Excluir esta atribuição de componente? Atribuições que já calcularam um holerite não podem ser excluídas.",
+      "runApplicability": "Folhas de pagamento",
+      "standardRuns": "Regulares, suplementares e de rescisão",
+      "regularOnly": "Somente regulares",
+      "unknownApplicability": "Aplicabilidade desconhecida"
     },
     "summary": {
       "transactions": "Transações",

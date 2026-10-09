@@ -84,7 +84,7 @@ async function post(body: unknown) {
 async function get(employee: string) {
   const { GET } = await routeReady
   const response = await GET(request('GET', undefined, employee) as never, { params: Promise.resolve({}) } as never)
-  return { status: response.status, body: (await response.json()) as { assignments: { id: string }[]; components: unknown[]; employments: unknown[] } }
+  return { status: response.status, body: (await response.json()) as { assignments: { id: string; runApplicability: string }[]; components: unknown[]; employments: unknown[] } }
 }
 
 test('save lists, overlaps refuse, and consumed rows end but never delete', { skip: !DB }, async () => {
@@ -122,13 +122,17 @@ test('save lists, overlaps refuse, and consumed rows end but never delete', { sk
 
     const saved = await post({
       action: 'save-assignment', employeePartyId: partyId, employmentId, componentId,
-      value: '25.00', effectiveFrom: '2026-01-01', effectiveTo: null,
+      runApplicability: 'regular_only', value: '25.00', effectiveFrom: '2026-01-01', effectiveTo: null,
     })
     assert.equal(saved.status, 200)
     assert.ok(saved.body.id)
     const listed = await get(partyId)
     assert.equal(listed.status, 200)
     assert.equal(listed.body.assignments.length, 1)
+    assert.equal(listed.body.assignments[0]!.runApplicability, 'regular_only')
+    const unsupported = await post({ action: 'save-assignment', employeePartyId: partyId, employmentId, componentId,
+      runApplicability: 'all_pay_runs', value: '25', effectiveFrom: '2027-01-01' })
+    assert.equal(unsupported.status, 400)
 
     const overlap = await post({
       action: 'save-assignment', employeePartyId: partyId, employmentId, componentId,
@@ -149,14 +153,28 @@ test('save lists, overlaps refuse, and consumed rows end but never delete', { sk
     })
     const run = await withBypassContext(() => createPayRun({ orgId: org.orgId, actorId, payScheduleId: scheduleId, periodStart: '2026-07-12', periodEnd: '2026-07-18' }))
     assert.deepEqual((await withBypassContext(() => calculatePayRun({ orgId: org.orgId, actorId, documentId: run.documentId }))).errors, [])
+    const recurringLines = async (documentId: string) => withBypassContext(() => db.execute(sql`
+      select l.id from pay_stub_lines l join pay_stubs s on s.org_id=l.org_id and s.id=l.stub_id
+      where s.org_id=${org.orgId} and s.pay_run_document_id=${documentId} and l.component_id=${componentId}`));
+    assert.equal((await recurringLines(run.documentId)).rows.length, 1);
+    await withBypassContext(() => seedPayrollTime(org.orgId, partyId, actorId, {
+      workedOn: '2026-07-20', hours: '8', projectId: null, status: 'approved', isBillable: false,
+      billingStatus: 'unbilled', costingBasis: 'actual',
+    }));
+    const supplemental = await withBypassContext(() => createPayRun({ orgId: org.orgId, actorId, payScheduleId: scheduleId,
+      periodStart: '2026-07-19', periodEnd: '2026-07-25', runType: 'supplemental' }));
+    assert.deepEqual((await withBypassContext(() => calculatePayRun({ orgId: org.orgId, actorId, documentId: supplemental.documentId }))).errors, []);
+    assert.equal((await recurringLines(supplemental.documentId)).rows.length, 0);
     const consumed = await post({ action: 'delete-assignment', id: saved.body.id })
     assert.equal(consumed.status, 422)
     assert.match(consumed.body.error ?? '', /already priced a pay stub — end the assignment instead/)
     const ended = await post({ action: 'end-assignment', id: saved.body.id, effectiveTo: '2026-12-31' })
     assert.equal(ended.status, 200)
-    const audit = await withBypassContext(() => db.execute<{ action: string }>(sql`select action from audit_log
+    const audit = await withBypassContext(() => db.execute<{ action: string; changes: { after: { runApplicability: string } } }>(sql`select action, changes from audit_log
       where org_id = ${org.orgId} and table_name = 'employee_pay_components' and row_id = ${saved.body.id} order by at`))
     assert.deepEqual(audit.rows.map((row) => row.action), ['insert', 'update'])
+    assert.equal(audit.rows[0]!.changes.after.runApplicability, 'regular_only')
+    assert.equal(audit.rows[1]!.changes.after.runApplicability, 'regular_only')
   } finally {
     state.authz = null
     await withBypassContext(() => dropScratchOrg(org.orgId))

@@ -1648,6 +1648,7 @@ const ALLOW_LISTED_NON_PERSONAL: ReadonlySet<string> = new Set([
   "pay_component_earning_classifications.statutory_exemption_category",
   "pay_component_earning_classifications.statutory_reporting_category",
   "pay_component_earning_classifications.supplemental_wage_category",
+  "employee_pay_components.run_applicability",
   "pay_components.basis",
   "pay_components.code",
   "pay_components.country",

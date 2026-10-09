@@ -224,7 +224,11 @@
       "endToday": "End today",
       "delete": "Delete pay-component assignment",
       "confirmEnd": "End this pay-component assignment today?",
-      "confirmDelete": "Delete this pay-component assignment? Assignments that already priced a stub cannot be deleted."
+      "confirmDelete": "Delete this pay-component assignment? Assignments that already priced a stub cannot be deleted.",
+      "runApplicability": "Pay runs",
+      "standardRuns": "Regular, supplemental and termination",
+      "regularOnly": "Regular only",
+      "unknownApplicability": "Unknown applicability"
     },
     "summary": {
       "transactions": "Transactions",

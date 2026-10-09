@@ -224,7 +224,11 @@
       "endToday": "Terminer aujourd'hui",
       "delete": "Supprimer l'attribution",
       "confirmEnd": "Terminer cette attribution aujourd'hui ?",
-      "confirmDelete": "Supprimer cette attribution ? Les attributions ayant déjà calculé un bulletin ne peuvent pas être supprimées."
+      "confirmDelete": "Supprimer cette attribution ? Les attributions ayant déjà calculé un bulletin ne peuvent pas être supprimées.",
+      "runApplicability": "Paies",
+      "standardRuns": "Régulières, supplémentaires et de cessation",
+      "regularOnly": "Régulières uniquement",
+      "unknownApplicability": "Applicabilité inconnue"
     },
     "summary": {
       "transactions": "Transactions",

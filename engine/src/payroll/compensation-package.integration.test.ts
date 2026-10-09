@@ -363,7 +363,7 @@ async function runtimeContext(f: Fixture, effectiveFrom = "2026-01-01"): Promise
     values(${documentId},${f.org.orgId},${f.scheduleId},'2026-01-01','2026-01-31','2026-01-31',2026,${f.authorId},${f.authorId})`);
   return { orgId: f.org.orgId, actorId: f.authorId, documentId, employeePartyId: f.workerPartyId, employmentId: f.employmentId,
     subsidiaryId: f.org.subsidiaryId, country: 'CA', currency: 'CAD', periodStart: '2026-01-01', periodEnd: '2026-01-31',
-    taxYear: 2026, hourlyWage: '25', payScheduleId: f.scheduleId, oneOffRun: false, terminationRun: false, simulate: false, assignedRows: [], unionAgreementId: null, unionClassificationId: null };
+    taxYear: 2026, hourlyWage: '25', payScheduleId: f.scheduleId, runType: 'regular', oneOffRun: false, terminationRun: false, simulate: false, assignedRows: [], unionAgreementId: null, unionClassificationId: null };
 }
 function nativeWages(): Line[] {
   return [{ componentId: null, kind: 'earning', description: 'Native wages', amount: parseMoney('1000'), hours: '40', sequence: 10 }];
@@ -465,7 +465,7 @@ test('package dependencies refuse an unfinished native percent amount and consum
     const context = await runtimeContext(f);
     await db.execute(sql`insert into employee_pay_components(org_id,employee_party_id,employment_id,component_id,effective_from,is_active)
       values(${f.org.orgId},${f.workerPartyId},${f.employmentId},${f.componentId},'2026-01-01',true)`);
-    context.assignedRows = (await db.execute<Record<string, unknown>>(sql`select c.*,a.effective_from::text,a.effective_to::text,a.value as override
+    context.assignedRows = (await db.execute<Record<string, unknown>>(sql`select c.*,a.run_applicability,a.effective_from::text,a.effective_to::text,a.value as override
       from employee_pay_components a join pay_components c on c.org_id=a.org_id and c.id=a.component_id
       where a.org_id=${f.org.orgId} and a.employee_party_id=${f.workerPartyId}`)).rows;
     await assert.rejects(withOrgTransaction(f.org.orgId, async () => {

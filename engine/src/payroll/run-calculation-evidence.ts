@@ -69,6 +69,7 @@ export interface PayRunCalculationSourceSnapshot {
   }[];
   compensationPackages?: CompensationPackageAssignmentSource[];
   employerAssignments?: EmployerAssignmentSource[];
+  assignmentRunPolicies?: { id: string; employeePartyId: string; employmentId: string | null; componentId: string; policy: string; from: string; to: string | null }[];
   historicalEmploymentRoster?: HistoricalEmploymentRosterSource[];
   holidayObligations?: HolidayObligationSource[];
   claimEntryIds: string[];
@@ -111,6 +112,7 @@ export function parsePayRunCalculationSource(
       || !Array.isArray(snapshot.payRates)
       || !Array.isArray(snapshot.claimEntryIds)
       || (Object.hasOwn(snapshot, 'compensationPackages') && !Array.isArray(snapshot.compensationPackages))
+      || (Object.hasOwn(snapshot, 'assignmentRunPolicies') && !Array.isArray(snapshot.assignmentRunPolicies))
       || (Object.hasOwn(snapshot, 'historicalEmploymentRoster') && !Array.isArray(snapshot.historicalEmploymentRoster))
       || (Object.hasOwn(snapshot, 'employerAssignments') && !Array.isArray(snapshot.employerAssignments))
       || (Object.hasOwn(snapshot, 'holidayObligations') && !Array.isArray(snapshot.holidayObligations))) return null;
@@ -345,6 +347,16 @@ export async function payRunCalculationSource(
   `));
   const row = result.rows[0];
   if (!row?.run_exists) return null;
+  const assignmentRunPolicies = (await executor.execute<NonNullable<PayRunCalculationSourceSnapshot['assignmentRunPolicies']>[number]>(sql`
+    select a.id::text, a.employee_party_id::text as "employeePartyId", a.employment_id::text as "employmentId",
+      a.component_id::text as "componentId", a.run_applicability as policy,
+      a.effective_from::text as "from", a.effective_to::text as "to"
+    from employee_pay_components a join pay_runs r on r.org_id=a.org_id and r.document_id=${documentId}
+    where a.org_id=${orgId} and a.is_active and a.run_applicability <> 'standard_runs'
+      and a.employee_party_id in (select jsonb_array_elements_text(${JSON.stringify(row.employee_party_ids ?? [])}::jsonb)::uuid)
+      and a.effective_from <= r.period_end and (a.effective_to is null or a.effective_to >= r.period_start)
+    order by a.id
+  `)).rows;
   const historicalEmploymentRoster = await historicalEmploymentRosterSource(executor, orgId, documentId, allowedSubsidiaryIds);
   const employerAssignments = await employeeEmployerAssignmentHistory(executor, { orgId, payDate: row.pay_date, employeePartyIds: row.employee_party_ids ?? [] });
   const compensationPackages = await compensationPackageRunSource(executor, orgId, documentId, allowedSubsidiaryIds, lockSources);
@@ -359,6 +371,7 @@ export async function payRunCalculationSource(
     // approved package obligations; an empty new field would change history.
     ...(compensationPackages.length ? { compensationPackages } : {}),
     ...(employerAssignments.length ? { employerAssignments } : {}),
+    ...(assignmentRunPolicies.length ? { assignmentRunPolicies } : {}),
     ...(historicalEmploymentRoster.length ? { historicalEmploymentRoster } : {}),
     ...(holidayObligations.length ? { holidayObligations } : {}),
     claimEntryIds: row.claim_entry_ids ?? [],
@@ -368,13 +381,14 @@ export async function payRunCalculationSource(
 export function payRunCalculationSourceChanges(
   stored: PayRunCalculationSourceSnapshot,
   current: PayRunCalculationSourceSnapshot,
-): { time: boolean; timeTypes: boolean; wages: boolean; items: boolean; compensationPackages: boolean; holidayObligations: boolean; roster: boolean } {
+): { time: boolean; timeTypes: boolean; wages: boolean; items: boolean; components: boolean; compensationPackages: boolean; holidayObligations: boolean; roster: boolean } {
   return {
     time: canonicalJson(stored.timeEntries) !== canonicalJson(current.timeEntries)
       || canonicalJson(stored.claimEntryIds) !== canonicalJson(current.claimEntryIds),
     timeTypes: canonicalJson(stored.timeTypes) !== canonicalJson(current.timeTypes),
     wages: canonicalJson(stored.payRates) !== canonicalJson(current.payRates),
     compensationPackages: canonicalJson(stored.compensationPackages ?? []) !== canonicalJson(current.compensationPackages ?? []),
+    components: canonicalJson(stored.assignmentRunPolicies ?? []) !== canonicalJson(current.assignmentRunPolicies ?? []),
     holidayObligations: canonicalJson(stored.holidayObligations ?? []) !== canonicalJson(current.holidayObligations ?? []),
     roster: canonicalJson(stored.employerAssignments ?? []) !== canonicalJson(current.employerAssignments ?? [])
       || canonicalJson(stored.historicalEmploymentRoster ?? []) !== canonicalJson(current.historicalEmploymentRoster ?? []),

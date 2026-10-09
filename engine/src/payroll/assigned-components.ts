@@ -1,3 +1,4 @@
+import { assignmentAppliesToRun, type AssignmentRunApplicability } from './assignment-run-applicability.ts';
 import { sql, type SQL } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { PayrollError } from "./error.ts";
@@ -26,6 +27,7 @@ export interface EmployeePayComponentAssignmentInput {
   componentId: string;
   /** Canonical decimal text, or null to price the component's own value. */
   value: string | null;
+  runApplicability?: AssignmentRunApplicability;
   effectiveFrom: string;
   effectiveTo: string | null;
   /** Row being ended or deleted — excluded from the overlap read. */
@@ -52,6 +54,7 @@ export async function validateEmployeePayComponentAssignment(
   orgId: string,
   input: EmployeePayComponentAssignmentInput,
 ): Promise<ValidatedAssignment> {
+  assignmentAppliesToRun(input.runApplicability ?? 'standard_runs', 'regular');
   const { employeePartyId, employmentId, componentId, effectiveFrom, effectiveTo } = input;
   const employee = (await exec.execute<{ display_name: string | null }>(sql`
     select display_name from parties where org_id = ${orgId} and id = ${employeePartyId}`)).rows[0];
@@ -80,6 +83,13 @@ export async function validateEmployeePayComponentAssignment(
   }
   if (component.system_key !== null) {
     throw new PayrollError(`Payroll component ${component.code} is statutory (${component.system_key}) — statutory amounts are always recomputed, so assign a user-defined component instead`);
+  }
+  if (input.runApplicability === 'regular_only') {
+    const rateCard = (await exec.execute(sql`select id from pay_derived_rules
+      where org_id=${orgId} and component_id=${componentId} and is_active and rate_mode='rate_card'
+        and effective_from <= coalesce(${effectiveTo}::date, 'infinity'::date)
+        and (effective_to is null or effective_to >= ${effectiveFrom}::date) limit 1`)).rows[0];
+    if (rateCard) throw new PayrollError(`Payroll component ${component.code} prices operational facts through a rate-card rule — keep standard applicability for its rate assignment and configure operational earnings in the derived rule.`);
   }
   if (component.country !== null) {
     const profile = (await exec.execute<{ country: string | null }>(sql`

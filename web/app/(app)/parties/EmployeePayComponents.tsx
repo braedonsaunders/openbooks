@@ -20,6 +20,7 @@ interface AssignmentRow {
   componentKind: string
   componentBasis: string
   value: string | null
+  runApplicability: "standard_runs" | "regular_only"
   componentValue: string | null
   effectiveFrom: string
   effectiveTo: string | null
@@ -76,6 +77,7 @@ export function EmployeePayComponents({
   // silent no-op. The detail is the server's refusal text when present.
   const [actionError, setActionError] = useState<string | null>(null)
   const [componentId, setComponentId] = useState('')
+  const [runApplicability, setRunApplicability] = useState<'standard_runs' | 'regular_only'>('standard_runs')
   const [value, setValue] = useState('')
   const [employmentId, setEmploymentId] = useState('')
   const [effectiveFrom, setEffectiveFrom] = useState(today)
@@ -110,6 +112,7 @@ export function EmployeePayComponents({
   // extra render — and no one-commit flash of a stale error banner).
   const [prevPartyId, setPrevPartyId] = useState(partyId)
   if (prevPartyId !== partyId) {
+    setRunApplicability('standard_runs')
     setPrevPartyId(partyId)
     setData(null)
     setLoadError(false)
@@ -192,11 +195,13 @@ export function EmployeePayComponents({
       employeePartyId: partyId,
       employmentId: employmentId === '' ? null : employmentId,
       componentId,
+      runApplicability,
       value: canonical,
       effectiveFrom,
       effectiveTo: effectiveTo === '' ? null : effectiveTo,
     }, t('saved'))
     if (saved) {
+      setRunApplicability('standard_runs')
       setValue('')
       setEffectiveTo('')
     }
@@ -279,6 +284,14 @@ export function EmployeePayComponents({
             </div>
           ) : null}
           <div>
+            <Label htmlFor="employee-pay-run-applicability">{t('runApplicability')}</Label>
+            <Select id="employee-pay-run-applicability" value={runApplicability}
+              disabled={busy} onChange={(event) => { setRunApplicability(event.target.value as 'standard_runs' | 'regular_only'); markDirty() }}>
+              <option value="standard_runs">{t('standardRuns')}</option>
+              <option value="regular_only">{t('regularOnly')}</option>
+            </Select>
+          </div>
+          <div>
             <Label htmlFor="employee-pay-effective-from">{t('effectiveFrom')}</Label>
             <Input
               id="employee-pay-effective-from"
@@ -353,6 +366,12 @@ export function EmployeePayComponents({
                   {row.value == null && row.componentValue != null ? ` (${t('defaultValue')})` : null}
                 </span>
               ),
+            },
+            {
+              key: 'runApplicability',
+              header: t('runApplicability'),
+              search: (row) => row.runApplicability,
+              cell: (row) => row.runApplicability === 'regular_only' ? t('regularOnly') : row.runApplicability === 'standard_runs' ? t('standardRuns') : t('unknownApplicability'),
             },
             {
               key: 'from',

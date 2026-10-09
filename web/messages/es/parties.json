@@ -224,7 +224,11 @@
       "endToday": "Finalizar hoy",
       "delete": "Eliminar asignación de componente",
       "confirmEnd": "¿Finalizar hoy esta asignación de componente?",
-      "confirmDelete": "¿Eliminar esta asignación de componente? Las asignaciones que ya calcularon un recibo no pueden eliminarse."
+      "confirmDelete": "¿Eliminar esta asignación de componente? Las asignaciones que ya calcularon un recibo no pueden eliminarse.",
+      "runApplicability": "Nóminas",
+      "standardRuns": "Regulares, complementarias y de terminación",
+      "regularOnly": "Solo regulares",
+      "unknownApplicability": "Aplicabilidad desconocida"
     },
     "summary": {
       "transactions": "Transacciones",

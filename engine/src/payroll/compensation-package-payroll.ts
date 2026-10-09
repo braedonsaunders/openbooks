@@ -1,3 +1,5 @@
+import { applicableAssignedComponents } from './assignment-run-applicability.ts';
+import type { PayRunType } from './run-contracts.ts';
 import { sql } from 'drizzle-orm';
 import type { SqlExecutor } from '../platform/db.ts';
 import { parseMoney } from '../money/brands.ts';
@@ -23,7 +25,7 @@ type ComponentWindow = { componentId: string; from: string; to: string; basis: s
 export interface CompensationPackagePayrollContext {
   orgId: string; actorId: string; documentId: string; employeePartyId: string; employmentId: string;
   subsidiaryId: string | null; country: string; currency: string; periodStart: string; periodEnd: string;
-  taxYear: number; hourlyWage: string | null; payScheduleId: string; oneOffRun: boolean; terminationRun: boolean; simulate: boolean;
+  taxYear: number; hourlyWage: string | null; payScheduleId: string; runType: PayRunType; oneOffRun: boolean; terminationRun: boolean; simulate: boolean;
   assignedRows: Record<string, unknown>[]; unionAgreementId: string | null; unionClassificationId: string | null;
   allowedSubsidiaryIds?: PayrollSubsidiaryScope;
 }
@@ -40,6 +42,7 @@ export interface PreparedCompensationPackages {
 /** Adopted packages require complete storage; unused pre-upgrade modules preserve native payroll. */
 export async function prepareCompensationPackages(tx: SqlExecutor, context: CompensationPackagePayrollContext,
   lines: readonly Line[]): Promise<PreparedCompensationPackages> {
+  context = { ...context, assignedRows: applicableAssignedComponents(context.assignedRows, context.runType) };
   let sources: CompensationPackageAssignmentSource[] = [];
   if (!context.oneOffRun) {
     try { sources = await compensationPackageEmploymentSource(tx, { ...context, lockComponents: true }); }
