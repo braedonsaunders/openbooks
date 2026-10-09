@@ -7,7 +7,7 @@ export const taxConfiguration: DocArticle = {
   order: 2,
   summary:
     'Define how tax is selected and posted: calculation type, recoverability, inclusive pricing, effective-dated rates, and sequenced tax groups.',
-  updated: '2026-07-21',
+  updated: '2026-10-09',
   keywords: [
     'tax code',
     'tax rate',
@@ -20,7 +20,7 @@ export const taxConfiguration: DocArticle = {
     'compound',
     'effective date',
   ],
-  related: ['tax-jurisdictions-and-nexus', 'tax-returns-and-boxes', 'setup-taxes-group', 'accounting-model'],
+  related: ['tax-jurisdictions-and-nexus', 'tax-returns-and-boxes', 'setup-taxes-group', 'accounting-model', 'contractor-withholding', 'electronic-invoicing'],
   body: `# Tax Codes, Rates, and Groups
 
 A **tax code** is the unit of tax configuration: it decides how tax is selected on
@@ -76,6 +76,11 @@ rather than repurposing one already used on posted activity. Changing its meanin
 would conflict with the evidence retained for prior transactions.
 
 ## Where codes fit
+
+For statutory deductions on vendor payments, such as CIS or RCT, configure the
+effective-dated enrollment described in [Contractor Withholding](/docs/contractor-withholding).
+For structured customer invoices, set the tax code's e-invoice category and
+effective date as described in [Electronic Invoicing](/docs/electronic-invoicing).
 
 Codes attach to a structured **jurisdiction** and feed the **return boxes** that
 become a government filing. Configure those alongside your codes:
