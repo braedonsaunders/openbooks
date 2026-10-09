@@ -18,7 +18,7 @@ test('module board deletion archives the native board, retains source evidence a
       const id = (await seedFlowActors(org.orgId)).adminId
       const grants = await db.execute(sql`update app_roles set permissions='["admin.setup.manage","hrm.shifts.read","hrm.shifts.approve"]'::jsonb where org_id=${org.orgId} and key='admin' returning id`)
       assert.equal(grants.rows.length, 1, 'the native role receives the actual Setup and scheduling command grants')
-      await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||'{"hrm":true,"hrmShiftPlanning":true,"subsidiaries":true}'::jsonb) where id=${org.orgId}`)
+      await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||'{"hrm":true,"hrmShiftPlanning":true,"multiSubsidiary":true}'::jsonb) where id=${org.orgId}`)
       return id
     })
     const actor = { orgId: org.orgId, id: actorId, permissions: ['admin.setup.manage'], allowedSubsidiaryIds: null }
@@ -70,7 +70,7 @@ test('module board deletion archives the native board, retains source evidence a
 test('saved hour-column and whole-board sharing settings reopen through the native board read and refuse ownerless sharing',enabled,async()=>{
  const org=await withBypassContext(()=>createScratchOrg());
  try {
-  const actorId=await withBypassContext(async()=>{const id=(await seedFlowActors(org.orgId)).adminId;await db.execute(sql`update app_roles set permissions='["admin.setup.manage","hrm.shifts.read"]'::jsonb where org_id=${org.orgId} and key='admin'`);await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||'{"hrm":true,"hrmShiftPlanning":true,"subsidiaries":true}'::jsonb) where id=${org.orgId}`);return id});
+  const actorId=await withBypassContext(async()=>{const id=(await seedFlowActors(org.orgId)).adminId;await db.execute(sql`update app_roles set permissions='["admin.setup.manage","hrm.shifts.read"]'::jsonb where org_id=${org.orgId} and key='admin'`);await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||'{"hrm":true,"hrmShiftPlanning":true,"multiSubsidiary":true}'::jsonb) where id=${org.orgId}`);return id});
   const actor={orgId:org.orgId,id:actorId,permissions:['admin.setup.manage'],allowedSubsidiaryIds:null};
   const made=await withOrgTransaction(org.orgId,()=>createSetupRecord(actor,'schedule-boards',{code:'DISPLAY',name:'Display board',rowKind:'people',views:['grid'],defaultView:'grid',rangeDays:14,timeZone:'America/Toronto',dayPolicyKnown:false},{requestId:randomUUID()}));assert.equal(made.status,200,JSON.stringify(made.body));
   const id=String(made.body.id),{updateSetupRecord}=await import('./write');
