@@ -10,7 +10,7 @@ import { add, sum, cmp } from '../money/money.ts';
 import { canonicalJson } from './run-calculation-evidence.ts';
 import { assignmentCoveredDays } from './assignment-windows.ts';
 import { coveredPayrollLines } from './covered-payroll-lines.ts';
-import { benefitCoverageWindow } from './benefit-coverage-window.ts';
+import { assertFlatBenefitCoverageUnique, benefitCoverageWindow } from './benefit-coverage-window.ts';
 import { PayrollError } from './error.ts';
 import { cappableHourLines, programApplicabilityFromExclusions, type Line } from './run-stub-records.ts';
 import { benefitCoverageRecoveryAmount, recurringBenefitAmount, type BenefitRecoveryLedgerEntry, type RecurringBenefitRule, type RecurringBenefitTerm, type BenefitContributionTier } from './benefit-plan-math.ts';
@@ -125,6 +125,11 @@ export async function appendRecurringBenefitLines(tx: Executor, args: {
   periodsPerYear: number; hourlyWage: string | null; payBasis: string; payDate: string; taxYear: number; runType: string; oneOffRun: boolean; simulate: boolean; lines: Line[]; entitlementMovements: EntitlementMovement[];
 }): Promise<void> {
   const source = await recurringBenefitSource(tx, args);
+  assertFlatBenefitCoverageUnique(source.enrollments.flatMap(enrollment => enrollment.terms.flatMap(term => {
+    const rule = enrollment.rules.find(candidate => candidate.id === term.ruleId);
+    if (!rule || args.runType !== 'regular' && rule.runApplicability === 'regular_only') return [];
+    return [{ planId: enrollment.planId, rule, enrollment, term }];
+  })), args.periodStart, args.periodEnd);
   const originalLines = args.lines.slice();
   const nativePlans = source.enrollments.some(e => e.rules.some(r => r.arrearsPlanId !== null)) ? await entitlementPlans(args.orgId, tx) : [];
   const recoveryOwners=new Set<string>();

@@ -24,3 +24,28 @@ export function benefitCoverageWindow(args: {
   const to = [periodEnd, rule.effectiveTo, enrollment.effectiveTo, term.effectiveTo].filter((date): date is string => date !== null).sort()[0]!;
   return from > to ? null : { from, to, earningsFrom: from, earningsTo: to };
 }
+
+/** Flat premiums cannot be charged once for every dated election fragment. */
+export function assertFlatBenefitCoverageUnique(policies: readonly {
+  planId: string;
+  rule: DatedCoverage & { ruleKey: string; basis: string; proration: string; payComponentId: string; hoursCoverage?: BenefitHoursCoverage };
+  enrollment: DatedCoverage;
+  term: DatedCoverage;
+}[], periodStart: string, periodEnd: string): void {
+  const outputs = new Map<string, { count: number; flatRule: string | null }>();
+  for (const policy of policies) {
+    if (benefitCoverageWindow({ ...policy, periodStart, periodEnd }) === null) continue;
+    const key = `${policy.planId}:${policy.rule.payComponentId}`;
+    const prior = outputs.get(key) ?? { count: 0, flatRule: null };
+    prior.count += 1;
+    if (['per_period', 'per_month', 'per_year'].includes(policy.rule.basis) && policy.rule.proration === 'none') {
+      prior.flatRule = policy.rule.ruleKey;
+    }
+    outputs.set(key, prior);
+  }
+  for (const output of outputs.values()) {
+    if (output.count > 1 && output.flatRule !== null) {
+      throw new PayrollError(`Benefit rule ${output.flatRule} has multiple covered elections for one flat-period contribution — make the replacement effective at a pay-period boundary or configure calendar-day proration before calculating`);
+    }
+  }
+}
