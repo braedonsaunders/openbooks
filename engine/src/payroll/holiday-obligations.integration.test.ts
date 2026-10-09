@@ -14,7 +14,7 @@ import { commitPayRun } from "./run-commit.ts";
 import { requestDocumentVoid } from "../ledger/document-void.ts";
 import { postDocument } from "../ledger/posting-document.ts";
 import { submitForApproval } from "../flows/submit.ts";
-import { createSandbox, deleteSandbox } from "../sandbox/lifecycle.ts";
+import { createSandbox, deleteSandbox, refreshSandbox } from "../sandbox/lifecycle.ts";
 
 test("approved unpaid holiday hours settle once through native payroll and survive recalculation", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
   const fx = await seedAdoption();
@@ -87,11 +87,13 @@ test("approved unpaid holiday hours settle once through native payroll and survi
       };
       await postDocument(runInput.documentId, { control: { ar: account("asset_receivable"), ap: account("liability_payable"), bank: account("asset_bank") } }, { audit: { actorId: fx.actorId, source: "payroll" } });
     });
-    const clone = async (masked: boolean, status: string) => {
-      const result = await withOrgContext(fx.orgId, () => createSandbox({ productionOrgId: fx.orgId,
+    const clone = async (masked: boolean, status: string, existing?: { sandboxId: string; sandboxOrgId: string }) => {
+      if (existing) await withOrgContext(fx.orgId, () => refreshSandbox(existing.sandboxId, {
+        keepCustomizations: false, authority: { actorId: fx.actorId } }));
+      const result = existing ?? await withOrgContext(fx.orgId, () => createSandbox({ productionOrgId: fx.orgId,
         name: masked ? "Masked holiday settlement" : "Holiday settlement history", tier: "full", masked,
         createdBy: fx.actorId, lifecycleAuthority: { actorId: fx.actorId } }));
-      sandboxIds.push(result.sandboxId);
+      if (!existing) sandboxIds.push(result.sandboxId);
       const copied = (await db.execute<{ evidence: Record<string, unknown>; source: Record<string, unknown>; payload: Record<string, unknown>; result: Record<string, unknown>; amount: string; status: string; date: string; employee: string; file: string; version: string; obligation: string }>(sql`
         select o.evidence,a.source_snapshot as source,f.payload,f.result,a.amount::text,a.status,occ.holiday_date::text as date,
           o.employee_party_id as employee,o.source_file_id as file,o.source_version_id as version,o.id as obligation
@@ -142,15 +144,18 @@ test("approved unpaid holiday hours settle once through native payroll and survi
         assert.deepEqual(row.payload.evidence, row.evidence);
         assert.equal(row.result.obligationId, row.obligation);
       }
+      return result;
     };
-    await clone(false, "committed");
+    const fullClone = await clone(false, "committed");
     await requestDocumentVoid({ ...runInput, reason: "Reverse payroll containing the holiday settlement", reversalDate: "2026-07-21" });
     const voided = await settlement();
     assert.equal(voided.length, 1);
     assert.equal(voided[0]!.status, "voided");
     assert.equal(voided[0]!.amount, "240.0000");
     assert.equal(voided[0]!.lineId, committed[0]!.lineId);
-    await clone(true, "voided");
+    await clone(false, "voided", fullClone);
+    const maskedClone = await clone(true, "voided");
+    await clone(true, "voided", maskedClone);
   } catch (error) {
     console.error(error);
     throw error;
