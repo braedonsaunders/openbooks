@@ -1283,12 +1283,12 @@ export function FieldControl({
           </legend>
       {help ? <p className="text-xs text-slate-500">{help}</p> : null}
       <div className="flex flex-wrap gap-x-5 gap-y-2 rounded-lg border border-slate-200 px-3 py-2 dark:border-slate-800">
-        {setupFieldOptions(field, formValues, recordValues).map(option => <label key={option.value} className="flex items-center gap-2 text-sm">
+        {setupFieldOptions(field, formValues, recordValues).map(option => (
+          <label key={option.value} className="flex items-center gap-2 text-sm">
           <input type="checkbox" checked={selected.includes(option.value)} onChange={event => onChange(event.target.checked ? [...selected, option.value] : selected.filter(item => item !== option.value))} />
           {setupOptionLabel(option, t)}
-                </label>
-              ),
-            )}
+          </label>
+        ))}
           </div>
         </fieldset>
       );
