@@ -72,7 +72,8 @@
  * snapshot the collector/executor re-resolved from flow_gates inside their
  * transaction (status approved, human decider, migration-mapping subject,
  * subject digest equal to this mapping set's digest), and the applying
- * actor (preflight options.appliedBy) must differ from the decider.
+ * actor (preflight options.appliedBy) must differ from the decider unless
+ * the verified submission policy explicitly permits self-approval.
  * approvedBy/approvedAt/rationale are untrusted operator context: presence
  * and format are checked, authority is NEVER derived from them. Remedies
  * name the missing evidence precisely: request Flows approval for the
@@ -209,10 +210,12 @@ export function postTerminationConflictOf(
  * collector/executor inside their own transaction — never trusted from
  * caller input, which both re-resolve before classifying. Every field is
  * the stored truth as last read; the classifier verifies the binding
- * (approved, human decider distinct from the applier, digest match) and
+ * (approved, authenticated decider, frozen approval policy, digest match) and
  * refuses the mapping when any of it fails.
  */
 export interface MappingApprovalSnapshot {
+  /** Missing policy retains independent approval for existing gates. */
+  readonly requireIndependentActor?: boolean;
   /** The flow_gates row this mapping claims as its authority. */
   readonly gateId: string;
   /** Gate status as read (only "approved" authorizes). */
@@ -793,7 +796,7 @@ const MAPPING_APPROVAL_REMEDY =
   "Request Flows approval for the exact mapping set (subject kind " +
   `${HRM_EMPLOYMENT_MIGRATION_SUBJECT_KIND}), then re-run with the decided ` +
   "approval gate id and the applying actor (--applied-by): the gate must be " +
-  "approved by an authenticated approver distinct from the applier, and the " +
+  "approved by an authenticated approver under its frozen separation-of-duties policy, and the " +
   "approved digest must cover exactly the mappings in this run. Free-text " +
   "approver names never authorize a mapping.";
 
@@ -867,20 +870,20 @@ function checkResolutionApproval(
       code: "unknown_mapping_applier",
       level: "requires_review",
       detail:
-        "the applying actor is unknown, so independence of the approver cannot be proven: " +
-        "an approval whose decider might be the applier authorizes nothing.",
+        "the applying actor is unknown, so command authority and the approval policy cannot be " +
+        "verified: supply an authenticated applying actor.",
       remedy:
         "Re-run with the applying actor supplied (--applied-by); " + MAPPING_APPROVAL_REMEDY,
     });
     return false;
   }
-  if (snapshot.decidedBy.toLowerCase() === appliedBy.toLowerCase()) {
+  if (snapshot.requireIndependentActor !== false && snapshot.decidedBy.toLowerCase() === appliedBy.toLowerCase()) {
     ctx.issues.push({
       code: "self_approved_mapping",
       level: "requires_review",
       detail:
         `approval gate ${gateId} was decided by ${snapshot.decidedBy}, who is also applying this ` +
-        "migration: the approver must be distinct from the applying actor.",
+        "migration: this gate's policy requires a distinct applying actor.",
       remedy: MAPPING_APPROVAL_REMEDY,
     });
     return false;
@@ -1369,7 +1372,7 @@ function classifyRow(
 
 export interface PreflightEmploymentMigrationOptions {
   /**
-   * The applying actor. Required to prove approver/applier independence
+   * The applying actor. Required to verify authority and approval policy
    * for any mapped row: without it every mapping refuses as
    * unknown_mapping_applier. Rows without mappings never need it.
    */

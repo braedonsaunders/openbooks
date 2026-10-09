@@ -382,9 +382,8 @@ export interface ExecuteEmploymentMigrationOptions {
   readonly allowPartial?: boolean;
   /**
    * The applying actor (user id). Required whenever any row carries an
-   * operator mapping: the classifier must prove the Flows approver is
-   * distinct from the applier, and without the applier that proof is
-   * impossible. Rows without mappings never need it.
+   * operator mapping: authority and the frozen Flows approval policy must
+   * be verified for the applier. Rows without mappings never need it.
    */
   readonly appliedBy?: string;
 }
@@ -576,14 +575,14 @@ export async function executeEmploymentMigration(
     // stored flow_gates truth (or an explicit null), so a forged approval
     // can never reach the classifier — including on the --input path, which
     // bypasses the collector. Fail closed on a missing applier: without the
-    // applying actor no independence proof is possible.
+    // applying actor no command authority or approval-policy proof is possible.
     const needsApproval = options.rows.some((row) => row.resolution !== null);
     if (needsApproval) {
       if (appliedBy === undefined || appliedBy.length === 0) {
         throw new EmploymentMigrationError(
           "this run carries operator mappings but no applying actor; refusing to evaluate approvals " +
             "without one — pass the applying user's id (CLI: --applied-by=<uuid>) so the classifier " +
-            "can prove the Flows approver is distinct from the applier",
+            "can verify command authority and the frozen Flows approval policy",
         );
       }
       assertUuid(
