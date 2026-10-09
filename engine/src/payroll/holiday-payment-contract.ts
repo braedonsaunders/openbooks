@@ -78,7 +78,7 @@ export function readAdjudicatedHolidayPayment(value: unknown): AdjudicatedHolida
     throw new PayrollError("Provide the SHA-256 digest of the retained holiday-payment source.");
   }
   return {
-    employeePartyId: input.employeePartyId,
+    employeePartyId: input.employeePartyId.toLowerCase(),
     holidayDates: [...holidayDates].sort(),
     hours: fixedDecimal(hours, 2),
     assessedOn, wageBasisDate, paymentDate,

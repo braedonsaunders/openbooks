@@ -31,13 +31,13 @@ export default async function AccountingEvents({
   const t = await getTranslations("accounting");
   const auth = await getAuthz();
   if (!auth) redirect("/login");
-  const domains = can(auth, "gl.read")
+  const domains = [...(can(auth, "gl.read")
     ? ["lease", "asset", "revenue", "consolidation", "provision", "sales"]
     : [
         ...(can(auth, "assets.read") ? ["lease", "asset"] : []),
         ...(can(auth, "ar.read") ? ["revenue", "sales"] : []),
         ...(can(auth, "close.read") ? ["consolidation"] : []),
-      ];
+      ]), ...(can(auth, "payroll.read") ? ["payroll"] : [])];
   if (!domains.length) redirect(accessDeniedHref({ permission: "gl.read" }));
   const scopePredicate = sql`fc.domain in (${sql.join(
     domains.map((domain) => sql`${domain}`),
@@ -91,7 +91,9 @@ export default async function AccountingEvents({
     references.map((r) => [r.id, r.label]),
   );
   const permission =
-    row?.domain === "provision"
+    row?.domain === "payroll"
+      ? "payroll.run"
+      : row?.domain === "provision"
       ? "gl.post"
       : (row?.domain === "revenue" || row?.domain === "sales")
       ? "ar.post"

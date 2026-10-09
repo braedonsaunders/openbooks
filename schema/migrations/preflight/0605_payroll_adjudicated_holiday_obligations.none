@@ -1,0 +1,1 @@
+Only new entitlement tables and an additional governed financial-change domain are introduced; existing tenant rows are preserved.

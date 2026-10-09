@@ -5,6 +5,7 @@ import { sql } from "drizzle-orm";
 import type { FlowSubjectProfile } from "@openbooks/forms-core";
 import { db, withOrg, withTransactionSavepoint } from "../platform/db.ts";
 import {
+  ADJUDICATED_HOLIDAY_HOURS_OPERATION,
   MANUFACTURING_SCRAP_RESTATEMENT_OPERATION,
   FinancialChangeFeatureError,
   financialChangeInboxLabel,
@@ -19,6 +20,8 @@ import type { FlowSubjectAdapter } from "./types.ts";
 import { defineTableSubjectAdapter } from "./table-subject-adapter.ts";
 
 async function assertAccountingSubjectFeatures(orgId: string, subjectId: string, domain: string, operation: string) {
+  if (domain==='payroll' && !await lockAndCheckOrgFeature(db,orgId,'payroll'))
+    throw new FinancialChangeFeatureError('Turn on Payroll in Company Settings → Features before submitting or approving unpaid holiday pay')
   if(domain==='consolidation' && operation==='net_investment_oci' && (!await lockAndCheckOrgFeature(db,orgId,'multiSubsidiary') || !await lockAndCheckOrgFeature(db,orgId,'multiCurrency')))
     throw new FinancialChangeFeatureError('Turn on Multi-Subsidiary and Multi-Currency in Company Settings → Features before submitting or approving a net-investment FX assessment')
   if (domain==='sales' && !await lockAndCheckOrgFeature(db,orgId,'dropShipping')) throw new FinancialChangeFeatureError('Turn on Drop Shipping in Company Settings → Features before submitting or approving a control assessment')
@@ -44,7 +47,7 @@ export const financialChangeSubjectProfile: FlowSubjectProfile = {
       key: "domain",
       label: "Accounting domain",
       type: "enum",
-      options: ["lease", "revenue", "asset", "consolidation", "manufacturing", "provision", "sales"].map((value) => ({
+      options: ["lease", "revenue", "asset", "consolidation", "manufacturing", "provision", "sales", "payroll"].map((value) => ({
         value,
         label: value,
       })),
@@ -155,6 +158,16 @@ export const financialChangesFlowAdapter: FlowSubjectAdapter = defineTableSubjec
     if (!ctx.userId || row.submitted_by === ctx.userId)
       throw new Error("an independent signed-in approver is required");
     if (outcome === 'approved') await assertAccountingSubjectFeatures(ctx.orgId,row.subject_id,row.domain,row.operation)
+    if (row.domain === "payroll" && outcome === "approved") {
+      if (row.operation !== ADJUDICATED_HOLIDAY_HOURS_OPERATION ||
+          !await actorHasPermission(db, ctx.orgId, ctx.userId, "payroll.run")) {
+        throw new Error("An unpaid holiday entitlement requires an independent approver with payroll.run authority.");
+      }
+      const required = row.payload.requiredSubsidiaryIds;
+      if (!Array.isArray(required) || required.length !== 1 || required[0] !== row.subsidiary_id) {
+        throw new Error("The holiday entitlement must bind exactly its legal employer; reject the malformed proposal and submit a corrected proposal.");
+      }
+    }
     // Manufacturing authority applies only when recording an approval. A
     // rejection must stay reachable for malformed or obsolete proposals, or
     // the live-proposal guard would strand the correction it exists to allow.
@@ -228,6 +241,8 @@ export async function submitFinancialChange(
       const row = await loadFinancialChange(tx, orgId, id);
       if (row.submitted_by !== actorId)
         throw new Error("only the proposer can submit this accounting event");
+      if (row.domain === "payroll" && !await actorHasPermission(tx, orgId, actorId, "payroll.run"))
+        throw new Error("Payroll run permission is required to submit an unpaid holiday entitlement.");
       await assertAccountingSubjectFeatures(orgId,row.subject_id,row.domain,row.operation)
       if (row.status !== "draft") return; // A retry reuses its existing routing/decision.
       const result = await runRecordFlows(

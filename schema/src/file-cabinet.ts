@@ -156,6 +156,7 @@ export const fileVersions = pgTable(
   },
   (t) => [
     uniqueIndex("file_versions_file_version").on(t.fileId, t.versionNumber),
+    uniqueIndex("file_versions_file_identity").on(t.fileId, t.id),
     index("file_versions_file").on(t.fileId),
   ],
 );
