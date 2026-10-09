@@ -961,18 +961,22 @@ export async function loadActorPerson(
  * An approver whose person identity is unresolved (partyId null) is
  * refused outright: without a resolved person the subject self-approval
  * leg cannot be evaluated, and no protection may be implied. Super admins
- * are bound by every leg below — platform scope is not personhood.
+ * are bound by the tenant's frozen approval policy — platform scope is not
+ * personhood. Only service-verified native gate evidence may disable the
+ * independence requirement; resolving the approver's person remains required.
  */
 export function checkApprovalIdentitySeparation(args: {
   approver: ApprovalPerson;
   submitter: ApprovalPerson;
   subjectWorkerPartyId: string;
+  requireIndependentActor?: boolean;
 }): void {
   if (!args.approver.partyId) {
     throw new HrmAuthorizationError(
       "Employment approval refused: the approver has no resolved person identity, so independence from the affected worker cannot be established.",
     );
   }
+  if (args.requireIndependentActor === false) return;
   if (args.approver.userId === args.submitter.userId) {
     throw new HrmAuthorizationError(
       "Employment approval refused: the submitter cannot approve their own change — route it to an independent approver.",

@@ -46,6 +46,7 @@ const REQUEST_STATUSES = [
 
 export const hrmChangeRequestSubjectProfile: FlowSubjectProfile = {
   subjectKind: HRM_CHANGE_REQUEST_SUBJECT_KIND,
+  pinsSubmissionPolicy: true,
   label: "Employment change request",
   supportsUngatedSubmission: true,
   triggers: ["on_submit"],
@@ -110,7 +111,7 @@ export const hrmChangeRequestFlowAdapter: FlowSubjectAdapter = defineTableSubjec
   releaseViaHandler: true,
   // A flow must not rewrite the proposal it is approving: the payload
   // freezes on submit, so no header field is flow-writable.
-  selfApprovalPolicy: "forbidden",
+  selfApprovalPolicy: "configurable",
 
   async loadContext(subjectId: string): Promise<FlowSubjectContext | null> {
     const request = await loadRequest(subjectId);
@@ -161,6 +162,7 @@ export const hrmChangeRequestFlowAdapter: FlowSubjectAdapter = defineTableSubjec
     outcome: "approved" | "rejected",
     ctx: FlowExecCtx,
     detail?: { comment?: string | null },
+    run?: { id: string; dispatchValues: Record<string, unknown> | null },
   ): Promise<void> {
     await releaseFlowApproval({
       subjectKind: HRM_CHANGE_REQUEST_SUBJECT_KIND,
@@ -168,6 +170,7 @@ export const hrmChangeRequestFlowAdapter: FlowSubjectAdapter = defineTableSubjec
       outcome,
       comment: detail?.comment,
       ctx,
+      approvalRunId: run?.id,
     });
   },
 

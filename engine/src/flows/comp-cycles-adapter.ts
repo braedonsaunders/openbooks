@@ -50,6 +50,7 @@ const CYCLE_STATUSES = [
 
 export const hrmCompCycleSubjectProfile: FlowSubjectProfile = {
   subjectKind: HRM_COMP_CYCLE_SUBJECT_KIND,
+  pinsSubmissionPolicy: true,
   label: "Compensation cycle",
   triggers: ["on_submit"],
   actions: ["send_email", "notify"],
@@ -109,7 +110,7 @@ export const hrmCompCycleFlowAdapter: FlowSubjectAdapter = defineTableSubjectAda
   releaseViaHandler: true,
   // A flow must not rewrite the round it is approving: the cycle freezes
   // on submit, so no header field is flow-writable.
-  selfApprovalPolicy: "forbidden",
+  selfApprovalPolicy: "configurable",
 
   async loadContext(subjectId: string): Promise<FlowSubjectContext | null> {
     const cycle = await loadCycle(subjectId);
@@ -173,6 +174,7 @@ export const hrmCompCycleFlowAdapter: FlowSubjectAdapter = defineTableSubjectAda
     outcome: "approved" | "rejected",
     ctx: FlowExecCtx,
     detail?: { comment?: string | null },
+    run?: { id: string; dispatchValues: Record<string, unknown> | null },
   ): Promise<void> {
     await releaseFlowApproval({
       subjectKind: HRM_COMP_CYCLE_SUBJECT_KIND,
@@ -180,6 +182,7 @@ export const hrmCompCycleFlowAdapter: FlowSubjectAdapter = defineTableSubjectAda
       outcome,
       comment: detail?.comment,
       ctx,
+      approvalRunId: run?.id,
     });
   },
 });

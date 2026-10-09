@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import { HRM_LEAVE_REQUEST_SUBJECT_KIND } from "@openbooks/schema/src/hrm-leave.ts";
+import { completedGateAllowsSelfApproval } from "../flows/approval-decision-policy.ts";
 import { db, withOrgTransaction, type SqlExecutor } from "../platform/db.ts";
 import { lockAndCheckOrgFeature } from "../organization/org-feature-lock.ts";
 import {
@@ -862,6 +863,7 @@ export async function withdrawLeaveRequest(query: WithdrawLeaveRequestQuery): Pr
 // --- Decision (Flows release path) ------------------------------------------
 
 export interface ReleaseLeaveRequestQuery {
+  readonly approvalRunId?: string;
   readonly orgId: string;
   readonly actorId: string;
   readonly requestId: string;
@@ -948,7 +950,11 @@ export async function releaseLeaveRequest(query: ReleaseLeaveRequestQuery): Prom
       );
     }
     const submitter = await loadApprovalPerson(db, orgId, current.created_by);
-    checkApprovalIdentitySeparation({ approver, submitter, subjectWorkerPartyId: subject.workerPartyId });
+    checkApprovalIdentitySeparation({ approver, submitter, subjectWorkerPartyId: subject.workerPartyId,
+      requireIndependentActor: !await completedGateAllowsSelfApproval(db, {
+        orgId, subjectKind: HRM_LEAVE_REQUEST_SUBJECT_KIND, subjectId: requestId,
+        actorId, outcome: query.outcome, approvalRunId: query.approvalRunId,
+      }) });
     const startsOn = String(current.starts_on).slice(0, 10);
     const endsOn = String(current.ends_on).slice(0, 10);
     if (query.outcome === "approved") {
