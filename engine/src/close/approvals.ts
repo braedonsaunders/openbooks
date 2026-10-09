@@ -136,7 +136,7 @@ export async function requestCloseApproval(
         approvals: 0,
         error: result.failed
           ? "close approval routing failed"
-          : "no enabled close approval flow produced an approval gate",
+          : "Configure an enabled Period close run workflow in Flows with an approval gate, then submit again.",
       };
     }
 
