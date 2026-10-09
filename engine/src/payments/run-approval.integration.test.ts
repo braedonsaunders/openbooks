@@ -5,6 +5,7 @@ import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { installEngineSeams } from "../composition/install.ts";
 import { decideGate } from "../flows/gates.ts";
+import { runRecordFlows } from "../flows/run.ts";
 import {
   INBOUND_PAYMENT_RUN_SUBJECT_KIND,
   OUTBOUND_PAYMENT_RUN_SUBJECT_KIND,
@@ -25,6 +26,68 @@ import {
 installEngineSeams();
 
 const DB = Boolean(process.env.OPENBOOKS_DB_URL);
+
+test("payment runs retain explicit solo approval after an authored policy change", { skip: !DB }, async () => {
+  for (const direction of ["outbound", "inbound"] as const) {
+    await withOrg(async (org, actors) => {
+      const subjectKind = direction === "outbound" ? OUTBOUND_PAYMENT_RUN_SUBJECT_KIND : INBOUND_PAYMENT_RUN_SUBJECT_KIND;
+      const { flowId } = await seedApprovalFlow(org.orgId, { subjectKind,
+        assignees: [{ type: "user", userId: actors.submitterId }], mode: "any", preventSelfApproval: false });
+      const runId = await seedDraftRun(org, actors.submitterId, direction);
+      assert.equal((await submitPaymentRun(runId, org.orgId, actors.submitterId)).gated, true);
+      const [gate] = await openGates(org.orgId, runId);
+      assert.ok(gate);
+      await db.execute(sql`update flows set graph=jsonb_set(graph,'{nodes,1,data,gate,preventSelfApproval}','true'::jsonb)
+        where org_id=${org.orgId} and id=${flowId}`);
+      await decideGate({ gateId: gate.id, decision: "approved", userId: actors.submitterId });
+      const state = await runState(org.orgId, runId);
+      assert.equal(state.status, "approved");
+      assert.equal(state.approved_by, actors.submitterId);
+      assert.ok((await runEvents(org.orgId, runId)).some(event => event.actor_id === actors.submitterId));
+    });
+  }
+});
+
+test("a legacy payment gate cannot acquire solo authority from the current flow", { skip: !DB }, async () => {
+  await withOrg(async (org, actors) => {
+    await seedApprovalFlow(org.orgId, { subjectKind: OUTBOUND_PAYMENT_RUN_SUBJECT_KIND,
+      assignees: [{ type: "user", userId: actors.submitterId }, { type: "user", userId: actors.approver2Id }],
+      mode: "any", preventSelfApproval: false });
+    const runId = await seedDraftRun(org, actors.submitterId);
+    await submitPaymentRun(runId, org.orgId, actors.submitterId);
+    await db.execute(sql`update flow_runs set context=context-'submissionPolicy'
+      where org_id=${org.orgId} and subject_id=${runId}`);
+    const [gate] = await openGates(org.orgId, runId);
+    assert.ok(gate);
+    await assert.rejects(decideGate({ gateId: gate.id, decision: "approved", userId: actors.submitterId }), /own submission/);
+    assert.equal((await runState(org.orgId, runId)).status, "pending_approval");
+  });
+});
+
+test("bank details release under an explicit frozen solo policy with audit evidence", { skip: !DB }, async () => {
+  await withOrg(async (org, actors) => {
+    const { flowId } = await seedApprovalFlow(org.orgId, { subjectKind: "party_bank_account", trigger: "on_create",
+      assignees: [{ type: "user", userId: actors.submitterId }], mode: "any", preventSelfApproval: false });
+    const id = randomUUID();
+    await db.execute(sql`insert into party_bank_accounts(id,org_id,party_id,approval_status,is_active,created_by,submitted_by)
+      values(${id},${org.orgId},${org.vendorId},'pending',false,${actors.submitterId},${actors.submitterId})`);
+    await runRecordFlows({ kind: "on_create" }, "party_bank_account", id, { orgId: org.orgId, userId: actors.submitterId });
+    const [gate] = await openGates(org.orgId, id);
+    assert.ok(gate);
+    await db.execute(sql`update flows set graph=jsonb_set(graph,'{nodes,1,data,gate,preventSelfApproval}','true'::jsonb)
+      where org_id=${org.orgId} and id=${flowId}`);
+    await decideGate({ gateId: gate.id, decision: "approved", userId: actors.submitterId });
+    const row = (await db.execute<{ approval_status: string; approved_by: string; is_active: boolean }>(sql`
+      select approval_status,approved_by,is_active from party_bank_accounts where org_id=${org.orgId} and id=${id}`)).rows[0]!;
+    assert.equal(row.approval_status, "approved");
+    assert.equal(row.approved_by, actors.submitterId);
+    assert.equal(row.is_active, true);
+    const audit = (await db.execute(sql`select actor_id from audit_log where org_id=${org.orgId}
+      and table_name='party_bank_accounts' and row_id=${id} and action='approve'`)).rows;
+    assert.equal(audit.length, 1);
+    assert.equal(audit[0]!.actor_id, actors.submitterId);
+  });
+});
 
 async function withOrg(fn: (org: ScratchOrg, actors: FlowActors) => Promise<void>): Promise<void> {
   const org = await createScratchOrg();

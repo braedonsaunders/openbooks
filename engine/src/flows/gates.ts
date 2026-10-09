@@ -297,7 +297,11 @@ async function gateNodeData(orgId: string, flowId: string, nodeId: string, runId
   const graph = parseFlowGraph(flow.id, policy?.graph ?? flow.graph);
   if (!graph) return null;
   const node = graph.nodes.find((n) => n.id === nodeId);
-  return node && node.data.kind === "gate" ? node.data.gate : null;
+  if (!node || node.data.kind !== "gate") return null;
+  // A legacy run cannot gain self-approval authority from a later flow edit.
+  return profile?.pinsSubmissionPolicy && !policy?.graph
+    ? { ...node.data.gate, preventSelfApproval: true }
+    : node.data.gate;
 }
 
 /** Recompute a run's status once gates move: waiting | completed | failed. */
