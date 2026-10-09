@@ -46,15 +46,16 @@ async function assertPaymentRunComposition(
   allocations: AllocationInput[],
   creditAllocations: CreditAllocationInput[],
   discountAmount: string,
+  withholdingAmount: string,
   orgId: string,
 ): Promise<void> {
   const rows = (await db.execute<{
     source_open_line_id: string; source_document_id: string; kind: string;
-    gross_amount: string; credit_amount: string; discount_amount: string;
+    gross_amount: string; credit_amount: string; discount_amount: string; withholding_amount: string;
     credit_target_allocations: Array<{ toLineId: string; amount: string }> | null;
   }>(sql`
     select source_open_line_id, source_document_id, kind, gross_amount::text,
-           credit_amount::text, discount_amount::text, credit_target_allocations
+           credit_amount::text, discount_amount::text, withholding_amount::text, credit_target_allocations
       from payment_run_items
      where payment_run_id = ${runId} and payment_instruction_id = (
        select id from payment_instructions
@@ -71,6 +72,7 @@ async function assertPaymentRunComposition(
   const creditItems = rows.filter((row) => row.kind === "credit");
   const actualCash = new Map(allocations.map((allocation) => [allocation.openLineId, allocation]));
   const expectedDiscount = cashItems.reduce((total, row) => total + toUnits(row.discount_amount), 0n);
+  const expectedWithholding = cashItems.reduce((total, row) => total + toUnits(row.withholding_amount), 0n);
   let cashMatches = actualCash.size === cashItems.length;
   for (const item of cashItems) {
     const allocation = actualCash.get(item.source_open_line_id);
@@ -95,7 +97,8 @@ async function assertPaymentRunComposition(
   const creditMatches = creditItems.every((item) => Array.isArray(item.credit_target_allocations))
     && actualCreditKeys.length === expectedCreditKeys.length
     && actualCreditKeys.every((key, index) => key === expectedCreditKeys[index]);
-  if (!cashMatches || !creditMatches || toUnits(discountAmount) !== expectedDiscount) {
+  if (!cashMatches || !creditMatches || toUnits(discountAmount) !== expectedDiscount
+      || toUnits(withholdingAmount) !== expectedWithholding) {
     throw new PaymentError(
       "payment composition differs from the approved run items; release the run and re-plan before posting",
     );
@@ -223,7 +226,17 @@ export async function postPaymentWithApplications(
       throw new PaymentError("payment application endpoints changed while posting; retry the operation");
     }
     if (options.runClaim) {
-      await assertPaymentRunComposition(options.runClaim.runId, paymentDocId, allocs, creditAllocs, custom.discountAmount ?? "0", preflight.orgId);
+      await assertPaymentRunComposition(
+        options.runClaim.runId,
+        paymentDocId,
+        allocs,
+        creditAllocs,
+        custom.discountAmount ?? "0",
+        typeof (custom as { withholdingAmount?: unknown }).withholdingAmount === "string"
+          ? (custom as { withholdingAmount: string }).withholdingAmount
+          : "0",
+        preflight.orgId,
+      );
     }
     // An item a payment run has reserved is paid by that run — its file may
     // already be at the bank — so settling it from any other payment pays it
@@ -323,8 +336,15 @@ export async function postPaymentWithApplications(
     // (vendor side) − acceptance surcharge fee (customer side) = applications
     // + on-account remainder (a customer receipt may collect more than is
     // still open; the excess stays on the receipt as an AR credit).
-    if (cmp(add(totalAlloc, onAccountAmount), fromUnits(toUnits(doc.total) + toUnits(discountAmount) - toUnits(feeAmount))) !== 0) {
-      throw new PaymentError(`cash ${doc.total} plus discount ${discountAmount} less fee ${feeAmount} must equal applications ${totalAlloc} plus on-account ${onAccountAmount}`);
+    // Contractor withholding is the vendor side's second settlement leg:
+    // the payable is relieved by cash, discount and the tax deducted.
+    const withholdingAmount = typeof (custom as { withholdingAmount?: unknown }).withholdingAmount === "string"
+      ? (custom as { withholdingAmount: string }).withholdingAmount
+      : "0";
+    if (toUnits(withholdingAmount) < 0n) throw new PaymentError("withholding amount cannot be negative");
+    if (!isZero(withholdingAmount) && doc.kind !== "vendor_payment") throw new PaymentError("withholding only applies to vendor payments");
+    if (cmp(add(totalAlloc, onAccountAmount), fromUnits(toUnits(doc.total) + toUnits(discountAmount) + toUnits(withholdingAmount) - toUnits(feeAmount))) !== 0) {
+      throw new PaymentError(`cash ${doc.total} plus discount ${discountAmount} plus withholding ${withholdingAmount} less fee ${feeAmount} must equal applications ${totalAlloc} plus on-account ${onAccountAmount}`);
     }
 
     // Final compliance gate (mirrors the run-posting final gate): a
@@ -405,7 +425,7 @@ export async function postPaymentWithApplications(
         doc.custom = { ...(doc.custom as Record<string, unknown> ?? {}), controlAccountId: derived };
       }
     }
-    const entryId = await postDocument(doc.id, deps, { deferEffects: true });
+    const entryId = await postDocument(doc.id, deps, { deferEffects: true, audit: { actorId: userId ?? null, source: auditSource } });
     if (doc.kind === "customer_payment") {
       // Stored-value tenders: the journal already debited the liability per
       // line above. Move the subledger now that the entry exists, in this

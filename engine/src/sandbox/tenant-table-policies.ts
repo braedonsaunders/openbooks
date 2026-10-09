@@ -1,5 +1,13 @@
 /** Explicit clone disposition and identifier-rebase rule for every tenant-owned table. Update when adding a tenant table. */
 export const TENANT_TABLE_POLICIES = {
+  "einvoice_settings": "clone:catalog-uuid-rebase",
+  // Issued e-invoices are the source environment's legal originals.
+  "einvoice_documents": "skip:no-copy",
+  "withholding_enrollments": "clone:catalog-uuid-rebase",
+  "withholding_standings": "clone:catalog-uuid-rebase",
+  "withholding_deductions": "clone:catalog-uuid-rebase",
+  // Returns are filings of the source environment; a sandbox prepares its own.
+  "withholding_returns": "skip:no-copy",
   "schedule_distributions": "skip:no-copy",
   "schedule_distribution_recipients": "skip:no-copy",
   "schedule_resource_recipients": "clone:catalog-uuid-rebase",

@@ -2,7 +2,7 @@ import { eq, sql } from "drizzle-orm";
 import { db, orgContext, schema, withOrgTransaction } from "../platform/db.ts";
 import { businessToday } from "../platform/business-date.ts";
 import { roundCurrencyMoney } from "../fx/currencies.ts";
-import { cmp, divRate, fromUnits, isZero, toUnits } from "../money/money.ts";
+import { add, cmp, divRate, fromUnits, isZero, sum, toUnits } from "../money/money.ts";
 import { evaluateBillsForRelease, recordReleaseCheck, type BillReleaseDecision } from "../compliance/compliance.ts";
 import { assertSubcontractPaymentCleared } from "../projects/subcontracts.ts";
 import {
@@ -14,6 +14,7 @@ import { PaymentError } from "../payments-core/payment-errors.ts";
 import { sameCurrencyAllocation, type AllocationInput } from "./settlement-policy.ts";
 import { type CreditAllocationInput } from "./payment-contracts.ts";
 import { nextNumber, createPaymentDocument, updateDraftPayment } from "./payment-documents.ts";
+import { storedPaymentWithholdings } from "../contractor-withholding/service.ts";
 // ---------------------------------------------------------------------------
 // Payment runs
 // ---------------------------------------------------------------------------
@@ -493,7 +494,7 @@ async function createPaymentRunWithinTransaction(
     const credits = creditBase > 0n && creditBase < groupBase ? availableCredits.rows : [];
     const creditRemaining = new Map(credits.map((c) => [c.open_line_id, toUnits(c.open_base)]));
     const creditAllocations: CreditAllocationInput[] = [];
-    const billComposition: Array<{ bill: (typeof vendorBills)[number]; allocation: AllocationInput; creditAmount: string; discountAmount: string; paymentAmount: string }> = [];
+    const billComposition: Array<{ bill: (typeof vendorBills)[number]; allocation: AllocationInput; creditAmount: string; discountAmount: string; withholdingAmount: string; paymentAmount: string }> = [];
     // Bills the run settles entirely with credits move no cash but are still
     // part of the run: they are reserved like every other bill, or a second
     // run could pay them in cash while this run's credit application waits to
@@ -546,6 +547,7 @@ async function createPaymentRunWithinTransaction(
         allocation: sameCurrencyAllocation(bill.open_line_id, remainingTxn, fromUnits(remainingBase)),
         creditAmount: divRate(fromUnits(toUnits(bill.open_base) - remainingBase), bill.fx_rate),
         discountAmount: discountTxn,
+        withholdingAmount: "0",
         paymentAmount,
       });
     }
@@ -590,6 +592,25 @@ async function createPaymentRunWithinTransaction(
       // entity set — is the authority, named here as unrestricted.
       { allowedSubsidiaryIds: null },
     );
+    // Contractor withholding computed by the draft save is part of the
+    // approved plan: each item records its deduction, and the bank
+    // instruction carries only the cash that leaves after it.
+    const planned = (await db.execute<{ custom: Record<string, unknown> | null; total: string }>(sql`
+      select custom, total::text as total from documents where id = ${payment.id} and org_id = ${opts.orgId}`)).rows[0];
+    const withholdingByLine = new Map<string, string>();
+    for (const row of storedPaymentWithholdings(planned?.custom)) {
+      withholdingByLine.set(row.openLineId, add(withholdingByLine.get(row.openLineId) ?? "0", row.deducted));
+    }
+    for (const item of billComposition) {
+      const withheld = withholdingByLine.get(item.bill.open_line_id) ?? "0";
+      item.withholdingAmount = withheld;
+      item.paymentAmount = fromUnits(toUnits(item.paymentAmount) - toUnits(withheld));
+    }
+    const cashTotal = planned?.total ?? total;
+    if (isZero(cashTotal)) throw new PaymentError("This payment is fully settled by statutory deductions; post it individually as a noncash vendor settlement instead of exporting a bank transfer.");
+    if (cmp(cashTotal, fromUnits(toUnits(total) - toUnits(sum([...withholdingByLine.values()])))) !== 0) {
+      throw new PaymentError("the run payment's cash does not equal its applications less discount and withholding");
+    }
 
     // Latest approved, active bank account for the payee (may be none — the
     // file export blocks on it with a clear error, never silently).
@@ -605,7 +626,7 @@ async function createPaymentRunWithinTransaction(
       paymentRunId: run.id,
       payeePartyId: partyId,
       payeeBankAccountId: payeeBank.rows[0]?.id ?? null,
-      amount: total,
+      amount: cashTotal,
       currency: profile.currency,
       paymentDocumentId: payment.id,
       status: "pending",
@@ -614,9 +635,9 @@ async function createPaymentRunWithinTransaction(
 
     const billItems = [
       ...billComposition,
-      ...creditSettledBills.map((bill) => ({ bill, creditAmount: bill.open, discountAmount: "0", paymentAmount: "0" })),
+      ...creditSettledBills.map((bill) => ({ bill, creditAmount: bill.open, discountAmount: "0", withholdingAmount: "0", paymentAmount: "0" })),
     ];
-    await db.insert(schema.paymentRunItems).values(billItems.map(({ bill, creditAmount, discountAmount, paymentAmount }) => ({
+    await db.insert(schema.paymentRunItems).values(billItems.map(({ bill, creditAmount, discountAmount, withholdingAmount, paymentAmount }) => ({
       orgId: opts.orgId,
       paymentRunId: run.id,
       paymentInstructionId: instruction.id,
@@ -625,6 +646,7 @@ async function createPaymentRunWithinTransaction(
       kind: (bill.document_kind === "expense_report" ? "expense" : "bill") as "expense" | "bill",
       grossAmount: bill.open,
       discountAmount,
+      withholdingAmount,
       creditAmount,
       paymentAmount,
       currency: bill.currency,

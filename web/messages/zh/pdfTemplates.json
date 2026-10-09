@@ -1,7 +1,7 @@
 {
   "title": "PDF 模板",
   "description": "设计精美的可打印文档，并将其分配给发票、日记账及其他所有交易",
-  "recordTypes":   {
+  "recordTypes": {
     "customer_invoice": "客户发票",
     "customer_credit": "客户贷项",
     "quote": "报价单",
@@ -85,5 +85,22 @@
     "sent": "已发送至 {to}",
     "noRecipient": "请输入收件人邮箱地址",
     "failed": "无法发送邮件"
+  },
+  "einvoice": {
+    "label": "电子发票",
+    "help": "验证所选格式，然后签发并下载已归档的原件。",
+    "profile": "格式",
+    "chooseProfile": "选择格式…",
+    "buyerReference": "买方参考号 / Leitweg-ID",
+    "validate": "验证",
+    "working": "处理中…",
+    "valid": "已通过原生验证检查。",
+    "findings": "验证结果",
+    "issue": "签发电子发票",
+    "issueUnavailable": "签发需要已过账的发票和文档管理权限。",
+    "setup": "电子发票设置",
+    "originals": "已签发原件",
+    "archivedHelp": "此格式已签发。请在下方下载保留的原件。",
+    "failed": "无法加载或签发此电子发票。"
   }
 }

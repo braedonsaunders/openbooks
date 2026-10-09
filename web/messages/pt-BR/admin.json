@@ -3503,6 +3503,28 @@
         "title": "Revisões de ações do assistente",
         "singularTitle": "Revisões de ações do assistente",
         "description": "Declarações e responsáveis pela revisão de ações registradas. Máximos do código e controles nativos continuam sendo a autoridade."
+      },
+      "einvoice-settings": {
+        "title": "Configurações do emissor eletrônico",
+        "singular": "Emissor eletrônico",
+        "singularTitle": "Emissor eletrônico",
+        "description": "Configure a identidade fiscal e as instruções de pagamento de cada entidade emissora."
+      },
+      "einvoice-recipients": {
+        "title": "Destinatários eletrônicos",
+        "singular": "Destinatário eletrônico",
+        "singularTitle": "Destinatário eletrônico",
+        "description": "Edite os metadados de faturamento dos papéis de cliente existentes."
+      },
+      "withholding-enrollments": {
+        "title": "Inscrições",
+        "singularTitle": "Inscrição",
+        "description": "Preparar demonstrativos de retenção, registrar declarações e recolher deduções."
+      },
+      "withholding-standings": {
+        "title": "Situação dos subempreiteiros",
+        "singularTitle": "Situação dos subempreiteiros",
+        "description": "Os valores refletem o último pagamento salvo. Salve as alterações para recalcular as retenções."
       }
     },
     "fields": {
@@ -4250,6 +4272,7 @@
       "scheduleDistributionVisibility": "Personal reports contain only the recipient’s own schedule or associated resources. Whole-board reports require an explicit sharing policy and a legal-entity-scoped board. Every send still requires a reviewed audience/version or an authored, enabled native Flow."
     },
     "options": {
+      "withholdingCondominiumPayer": "Pagador: condomínio",
       "storedValueKind": {
         "giftCard": "Vale-presente",
         "storeCredit": "Crédito em loja"
@@ -6654,6 +6677,101 @@
       "draftingDescription": "Palavras e frases para revisão humana em rascunhos baseados em registros. Rascunhos nunca são enviados automaticamente.",
       "reviewsTitle": "Revisões",
       "reviewsDescription": "Frequência da revisão dos limites de ações e avisos pelos administradores."
+    },
+    "einvoice": {
+      "defaultProfile": "Perfil padrão",
+      "electronicAddress": "Endereço eletrônico",
+      "electronicAddressScheme": "Esquema do endereço eletrônico",
+      "tradingName": "Nome comercial",
+      "legalRegistrationId": "Identificador de registro legal",
+      "legalRegistrationScheme": "Esquema de registro legal (ICD)",
+      "taxNumber": "Número fiscal",
+      "addressLine1": "Endereço, linha 1",
+      "addressLine2": "Endereço, linha 2",
+      "city": "Cidade",
+      "postcode": "Código postal",
+      "subdivision": "Região",
+      "contactName": "Nome do contato",
+      "contactPhone": "Telefone do contato",
+      "contactEmail": "E-mail do contato",
+      "paymentMeansCode": "Meio de pagamento",
+      "payeeAccountId": "Identificador da conta / IBAN do beneficiário",
+      "payeeAccountName": "Nome da conta do beneficiário",
+      "payeeBic": "BIC / identificador bancário",
+      "untaxedLineCategory": "Categoria de IVA de linhas sem imposto",
+      "exemptionReasonCode": "Código de isenção VATEX",
+      "exemptionReason": "Texto legal de isenção",
+      "buyerReference": "Referência do comprador / Leitweg-ID",
+      "vatCategory": "Categoria de IVA EN 16931",
+      "identity": "Identidade fiscal",
+      "address": "Endereço postal",
+      "contact": "Endereço eletrônico e contato",
+      "payment": "Instruções de pagamento",
+      "untaxed": "Linhas sem imposto",
+      "sellerHelp": "O nome e o país do emissor vêm da entidade legal. Os identificadores de IVA vêm dos registros fiscais vigentes.",
+      "recipientHelp": "Crie clientes pelo fluxo nativo. Os endereços de faturamento e os identificadores de IVA permanecem no cadastro do cliente.",
+      "taxHelp": "Configure a categoria e o texto legal que as faturas devem declarar para cada código fiscal nativo.",
+      "untaxedHelp": "Nenhuma categoria é inferida. Faturas com linhas sem imposto recusam emissão até que o tratamento seja configurado.",
+      "vat": {
+        "S": "IVA padrão",
+        "Z": "Alíquota zero",
+        "E": "Isento",
+        "AE": "Autoliquidação",
+        "K": "Entrega intracomunitária",
+        "G": "Exportação",
+        "O": "Fora do âmbito do IVA",
+        "L": "Imposto indireto das Canárias",
+        "M": "Imposto de Ceuta e Melilla"
+      },
+      "effectiveFrom": "Tratamento de IVA eletrônico vigente desde",
+      "effectiveFromHelp": "Faturas anteriores não podem usar este tratamento. Defina as datas das alíquotas na aba nativa Alíquotas.",
+      "reverseChargePreset": "Modelo de autoliquidação na construção",
+      "reverseChargePresetHelp": "Escolha apenas uma regra aplicável à operação e ao destinatário. Revise país, data de vigência, jurisdição e contas antes de salvar. As alíquotas existentes são preservadas.",
+      "choosePreset": "Escolher modelo…"
+    },
+    "withholding": {
+      "enrollments": "Inscrições",
+      "enrollment": "Inscrição",
+      "standings": "Situação dos subempreiteiros",
+      "standing": "Situação dos subempreiteiros",
+      "fields": {
+        "payerScope": "Escopo do pagador",
+        "remittanceScheduleCode": "Calendário de recolhimento",
+        "remittancePolicy": "Política de recolhimento da autoridade",
+        "calendar": "Calendário de dias úteis da autoridade",
+        "from": "Cobertura a partir de",
+        "to": "Cobertura até",
+        "closedDates": "Datas não úteis confirmadas pela autoridade",
+        "sourceReference": "Referência da autoridade ou do comprovante fiscal",
+        "lookback": "Obrigação do período de referência do Formulário 945",
+        "finalAnnualLiability": "Obrigação anual final de todas as categorias",
+        "nextDayEventOn": "Evento anterior de recolhimento no dia seguinte por US$ 100.000",
+        "other945Liabilities": "Outras obrigações do Formulário 945 (apenas cálculo do prazo)",
+        "date": "Data da obrigação",
+        "amount": "Valor da obrigação",
+        "taxYear": "Ano fiscal",
+        "totalTax": "Imposto total do Formulário 945",
+        "subsidiaryId": "Entidade jurídica",
+        "schemeCode": "Regime",
+        "contractorReference": "Referência de registro do empreiteiro",
+        "liabilityAccountId": "Conta de passivo das retenções",
+        "authorityPartyId": "Autoridade como fornecedor",
+        "thresholdBasis": "Base do limite",
+        "effectiveFrom": "Vigente desde",
+        "effectiveTo": "Vigente até",
+        "isActive": "Ativo",
+        "partyId": "Subempreiteiro",
+        "bandCode": "Faixa da alíquota",
+        "verificationReference": "Referência de verificação",
+        "verifiedOn": "Verificado em",
+        "validFrom": "Válido desde",
+        "validTo": "Válido até",
+        "payeeReference": "Referência fiscal do subempreiteiro",
+        "payeeTaxOffice": "Repartição fiscal do subempreiteiro",
+        "applyFromFirstPayment": "Reter desde o primeiro pagamento",
+        "notes": "Notas",
+        "returnFrequency": "Frequência de declaração"
+      }
     }
   },
   "flows": {

@@ -36,6 +36,8 @@ const TRIGGER_INSERT_TABLE_PARENTS: Readonly<Record<string, readonly string[]>> 
   project_financial_adjustments: ["projects"],
   project_overhead_adjustments: ["projects"],
   project_financial_profile_versions: ["project_types"],
+  // Immutable retainage coordinates resolve copied bill identities at INSERT.
+  vendor_retainage_releases: ["documents"],
   // Assignment ownership is checked before the deferred tenant FKs resolve.
   employment_assignment_versions: ["employment_assignments"],
   employment_changes: ["employment_assignments"],
@@ -62,6 +64,9 @@ const TRIGGER_INSERT_TABLE_PARENTS: Readonly<Record<string, readonly string[]>> 
  * logs (would carry production PII/history), and the org row itself (created
  * explicitly by the clone). */
 export const EXCLUDE = new Set([
+  // Issued e-invoices and filed withholding returns belong to the source environment.
+  "einvoice_documents",
+  "withholding_returns",
   // Recreated by native offering insert triggers; copying would duplicate identities.
   "hrm_benefit_catalog",
   // Initialized with the sandbox organization; generation counters are local concurrency state.

@@ -141,6 +141,12 @@ const BEFORE_POST_PROTECTED_CUSTOM_FIELDS = new Set([
   "feeAmount",
   "feeIncomeAccountId",
   "taxProviderAddresses",
+  "withholdingRemittance",
+  "withholdingDeposit",
+  "withholdings",
+  "withholdingAmount",
+  "withholdingAuthorisation",
+  "withholdingAuthorisedAmount",
   // Cash-sale tenders used to ride custom.tenders; since 0494 they live in
   // document_tenders, which scripts cannot write at all, so no key remains
   // to protect here.

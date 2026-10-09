@@ -236,6 +236,26 @@
         "records"
       ]
     },
+    "contractor-withholding": {
+      "description": "Contractor withholding: effective enrollments and standings, payment deductions and governed returns.",
+      "dependsOn": [
+        "country-tax-packs",
+        "fx",
+        "money",
+        "organization",
+        "platform",
+        "records"
+      ]
+    },
+    "einvoice": {
+      "description": "EN 16931 e-invoicing: profiles, validation, CII/UBL rendering, hybrid PDF containers and immutable issued documents.",
+      "dependsOn": [
+        "money",
+        "organization",
+        "payments-core",
+        "platform"
+      ]
+    },
     "extensions": {
       "description": "Extension contributions: schemas, projections and navigation surfaces.",
       "dependsOn": [
@@ -349,6 +369,7 @@
       "dependsOn": [
         "allocations",
         "compliance",
+        "contractor-withholding",
         "crm",
         "flows",
         "fx",
@@ -415,6 +436,7 @@
       "description": "Vendor bill capture: the AP capture pipeline, its configuration and receipt materialization.",
       "dependsOn": [
         "connectors",
+        "einvoice",
         "flows",
         "fx",
         "inventory",
@@ -428,6 +450,8 @@
       "description": "Customer and vendor payments, payment runs and formats, payment acceptance, PSP settlement, direct debit.",
       "dependsOn": [
         "compliance",
+        "contractor-withholding",
+        "country-tax-packs",
         "delivery",
         "flows",
         "fx",
@@ -625,6 +649,7 @@
       "description": "Environments: sandbox cloning, refresh, promotion, catalog and wipe guards.",
       "dependsOn": [
         "composition",
+        "money",
         "organization",
         "payroll",
         "platform",

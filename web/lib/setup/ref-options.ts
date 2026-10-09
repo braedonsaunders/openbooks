@@ -153,6 +153,13 @@ export async function loadEntityOptions(
        where p.org_id = ${orgId} and p.is_active order by p.display_name`))
     return customers.rows as RefOption[]
   }
+  if (source === 'einvoice-customers') {
+    return (await db.execute<RefOption>(sql`
+      select p.id::text as value, p.display_name as label from parties p
+      join customer_roles c on c.org_id=p.org_id and c.party_id=p.id
+      where p.org_id=${orgId} ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })}
+      order by p.display_name,p.id`)).rows
+  }
   if (source === 'schedule-contacts') {
     return (await db.execute(sql`select id as value,display_name as label from parties where org_id=${orgId} and kind='person' and is_active ${subsidiaryVisibleFilter(sql`subsidiary_id`,allowedSubsidiaryIds)} order by display_name,id`)).rows as RefOption[]
   }

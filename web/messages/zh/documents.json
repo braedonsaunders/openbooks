@@ -1,4 +1,14 @@
 {
+  "withholdingLine": {
+    "treatment": "预扣处理",
+    "fromItem": "按品目判定",
+    "labour": "劳务",
+    "materials": "材料",
+    "excluded": "排除",
+    "directCost": "材料直接成本",
+    "directCostHelp": "对于CIS材料明细，请以账单币种输入分包商的直接成本，并以收据或估算为依据。不包含加价。若分包商未登记增值税，请包含材料不可抵扣的增值税。没有符合条件的直接成本时请输入零；品目分类不会提供该成本。",
+    "splitRefusal": "拆分或合并明细前，请修正材料直接成本。"
+  },
   "list": {
     "metaTitle": "文档",
     "title": "文件柜",

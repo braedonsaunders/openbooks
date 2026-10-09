@@ -1,3 +1,4 @@
+import { reserveVendorRetainageSources } from "./vendor-retainage-sources.ts";
 import { sql } from "drizzle-orm";
 import { acquireOrgFeatureGateLock, lockAndCheckOrgFeature } from "../organization/org-feature-lock.ts";
 import { canonicalDecimal } from "../money/exact-decimal.ts";
@@ -1170,6 +1171,16 @@ export async function releaseVendorRetainage(input: {
         `Release amount must be in whole minor units of ${row.currency} (${releaseMinorUnits} decimals)`,
       );
     }
+    const sourceBills = (await tx.execute<{ documentId: string; held: string }>(sql`
+      select d.id as "documentId", a.retainage_this_period::text as held
+        from vendor_pay_applications a join documents d on d.org_id=a.org_id and d.id=a.vendor_bill_document_id
+       where a.org_id=${input.orgId} and a.subcontract_id=${input.subcontractId} and a.status='billed'
+         and d.status='posted' and a.retainage_this_period > 0
+       order by a.application_number, a.id
+    `)).rows;
+    let sources: ReturnType<typeof reserveVendorRetainageSources>;
+    try { sources = reserveVendorRetainageSources(sourceBills, balance.rows[0]?.released ?? "0", amount); }
+    catch (error) { throw new SubcontractError(error instanceof Error ? error.message : "Retainage sources cannot be resolved"); }
     const documentNumber = await nextDocumentNumber(tx, input.orgId, "BILL-");
     const document = (await tx.execute<{ id: string }>(sql`
       insert into documents (org_id, kind, document_number, party_id, document_date, currency, status,
@@ -1186,10 +1197,10 @@ export async function releaseVendorRetainage(input: {
         ${amount}, ${row.project_id}, ${row.vendor_id}, false, ${input.userId}, ${input.userId})
     `);
     const release = (await tx.execute<{ id: string }>(sql`
-      insert into vendor_retainage_releases (org_id, subcontract_id, period_end, amount, vendor_bill_document_id, memo, created_by, updated_by)
-      values (${input.orgId}, ${input.subcontractId}, ${input.periodEnd}, ${amount}, ${vendorBillDocumentId}, ${input.memo ?? null}, ${input.userId}, ${input.userId}) returning id
+      insert into vendor_retainage_releases (org_id, subcontract_id, period_end, amount, vendor_bill_document_id, memo, source_bill_allocations, created_by, updated_by)
+      values (${input.orgId}, ${input.subcontractId}, ${input.periodEnd}, ${amount}, ${vendorBillDocumentId}, ${input.memo ?? null}, ${JSON.stringify(sources)}::jsonb, ${input.userId}, ${input.userId}) returning id
     `));
-    await audit(tx, input.orgId, "vendor_retainage_releases", release.rows[0]!.id, "insert", { after: { amount, vendorBillDocumentId, documentNumber, availableBefore: available } }, input.userId);
+    await audit(tx, input.orgId, "vendor_retainage_releases", release.rows[0]!.id, "insert", { after: { amount, vendorBillDocumentId, documentNumber, availableBefore: available, sources } }, input.userId);
     return { vendorBillDocumentId, documentNumber, amount };
   });
 }

@@ -151,6 +151,7 @@ const EXCLUDED_CATEGORIES: Category[] = [
 const EXCLUDED_TABLES: Record<string, string> = {
   number_sequences: "sequence counters for document numbering.",
   connector_replay_authorizations: "operational authorization evidence for closed-period replay; not a reporting entity.",
+  einvoice_documents: "issued e-invoice files retained as legal originals; invoice facts report through documents.",
   employee_tax_certificates: "tax certificate PII.",
   source_deletion_resolutions: "sync conflict-resolution runtime.",
   posting_effects: "posting pipeline internals.",

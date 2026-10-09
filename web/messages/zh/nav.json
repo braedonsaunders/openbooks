@@ -156,7 +156,8 @@
     "hrm-benefits-delivery": "发放",
     "hrm-training": "培训",
     "internal-billing": "内部计费",
-    "scheduling": "排程"
+    "scheduling": "排程",
+    "contractor-withholding": "承包商预扣税"
   },
   "groups": {
     "workforce": "员工队伍",

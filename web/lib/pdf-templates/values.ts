@@ -264,6 +264,8 @@ async function loadDocumentValues(
   })
 
   const values: Record<string, unknown> = {
+    ...Object.fromEntries(meta.fields.map(field => [field.key, ''])),
+    ...Object.fromEntries(meta.collections.map(collection => [collection.key, []])),
     document_number: doc.document_number ?? '',
     document_date: fmtDate(doc.document_date, locale),
     due_date: fmtDate(doc.due_date, locale),

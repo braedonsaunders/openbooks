@@ -1,0 +1,82 @@
+{
+  "source": "https://github.com/itplr-kosit/validator-configuration-xrechnung/releases/download/v2026-08-31/xrechnung-3.0.2-validator-configuration-2026-08-31.zip",
+  "bundleSha256": "2530cd107c414511c5d0462ec10f886910395abfca820db82e83d70bf01221a8",
+  "files": [
+    {
+      "path": "cii/16b/xsd/CrossIndustryInvoice_100pD16B.xsd",
+      "sha256": "3baf143b90f289d62c5dfb086aa51fa183490a2d0b38a40c6b31dcae0760f2ba"
+    },
+    {
+      "path": "cii/16b/xsd/CrossIndustryInvoice_QualifiedDataType_100pD16B.xsd",
+      "sha256": "6649215914728652e883662bec1d3eab008c215e86a59f3bb417db9723ee8c5c"
+    },
+    {
+      "path": "cii/16b/xsd/CrossIndustryInvoice_ReusableAggregateBusinessInformationEntity_100pD16B.xsd",
+      "sha256": "1c42244298a863bcc0b5196983ff0a5d084fcabe58aea77ef82b242e7cd0ddfd"
+    },
+    {
+      "path": "cii/16b/xsd/CrossIndustryInvoice_UnqualifiedDataType_100pD16B.xsd",
+      "sha256": "04fce6f6f28521886731294be18a4e6bb5cb3003456457d99ad5c4d3e652f497"
+    },
+    {
+      "path": "ubl/2.1/xsd/common/CCTS_CCT_SchemaModule-2.1.xsd",
+      "sha256": "dd546e4809df86b6445589f69f0d6c9df162840ae386574ddfc1da7638103e15"
+    },
+    {
+      "path": "ubl/2.1/xsd/common/UBL-CommonAggregateComponents-2.1.xsd",
+      "sha256": "580b5af6f68f7f556bd15945ba0e819cbf561442c81694f9b9468036ebedec4d"
+    },
+    {
+      "path": "ubl/2.1/xsd/common/UBL-CommonBasicComponents-2.1.xsd",
+      "sha256": "a3b349bf92e5cff26e303d2f05b7e00c884dcafcfd9e12755fb80289abf5e22e"
+    },
+    {
+      "path": "ubl/2.1/xsd/common/UBL-CommonExtensionComponents-2.1.xsd",
+      "sha256": "ad7a4e490978adfbcfc5ec0bb20941cf11ac960ccf0c4de8791a7c731a8dbe87"
+    },
+    {
+      "path": "ubl/2.1/xsd/common/UBL-CommonSignatureComponents-2.1.xsd",
+      "sha256": "4fa9e2370100040fe14c43e135ef77e2eb66b21cb8dbfc2ffb8d82ae991fe92e"
+    },
+    {
+      "path": "ubl/2.1/xsd/common/UBL-ExtensionContentDataType-2.1.xsd",
+      "sha256": "fcee77a11870208e6377ea6311b9f2a050bca24bdad8606ea02d71e9f9e72f8d"
+    },
+    {
+      "path": "ubl/2.1/xsd/common/UBL-QualifiedDataTypes-2.1.xsd",
+      "sha256": "7dcb156e610239c97ae70940cf4653b88e48c3595bf5f56a2204a32e2893e6cf"
+    },
+    {
+      "path": "ubl/2.1/xsd/common/UBL-SignatureAggregateComponents-2.1.xsd",
+      "sha256": "9234c2ca48dbfa9a22a786112bb075c5922a305170920eaab1e3c04fa0b7344b"
+    },
+    {
+      "path": "ubl/2.1/xsd/common/UBL-SignatureBasicComponents-2.1.xsd",
+      "sha256": "0fbe2d7afff0c1e11164b8ec83e13f18801021c3c87e390a9d76f9cf862f6a64"
+    },
+    {
+      "path": "ubl/2.1/xsd/common/UBL-UnqualifiedDataTypes-2.1.xsd",
+      "sha256": "09052d406b4293e2a5f9c2bfee6df10ad4d8d5f0b36e24a6349d7f7936d89eb6"
+    },
+    {
+      "path": "ubl/2.1/xsd/common/UBL-XAdESv132-2.1.xsd",
+      "sha256": "a4f726bcf8cc3f7d9ffa4dab99e005535a8e8b60dced1e5d94578d2e05afa96e"
+    },
+    {
+      "path": "ubl/2.1/xsd/common/UBL-XAdESv141-2.1.xsd",
+      "sha256": "1fa4625e9cefcb7a9abb5ac1b64315547450031eece8a55bd584e4ba4b79dbc1"
+    },
+    {
+      "path": "ubl/2.1/xsd/common/UBL-xmldsig-core-schema-2.1.xsd",
+      "sha256": "101909c9f06456d61ddcc4fb982f1d40dc357b439f393b1a2eb46e42acd60809"
+    },
+    {
+      "path": "ubl/2.1/xsd/maindoc/UBL-CreditNote-2.1.xsd",
+      "sha256": "1e117b6c1ab713604b29b0d685442a81a0c78a82575445ee8c43e6050cda7454"
+    },
+    {
+      "path": "ubl/2.1/xsd/maindoc/UBL-Invoice-2.1.xsd",
+      "sha256": "3a5aacd823f0e5b8f25ae7b5191c2002d5333ba351d87de9371ed62dca2b2b0c"
+    }
+  ]
+}

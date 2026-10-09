@@ -1,3 +1,5 @@
+import { assertWithholdingDepositCurrent } from "../contractor-withholding/deposits.ts";
+import { assertWithholdingRemittanceCurrent, ContractorWithholdingError } from "../contractor-withholding/service.ts";
 import { PlaceOfSupplyError } from '../tax/place-of-supply.ts';
 import { assertCanadianGoodsTaxEvidence } from '../tax/goods-selection.ts'
 import { assertCrossBorderSupplyEvidence } from '../tax/cross-border-posting.ts';
@@ -254,6 +256,8 @@ export async function prepareDocumentPosting(documentId: string, deps: PostingDe
   // from the check itself.
   try {
     await assertPayrollRemittanceBillCurrent(doc.orgId, documentId, db);
+    try { await assertWithholdingRemittanceCurrent(db, doc.orgId, documentId); await assertWithholdingDepositCurrent(db, doc.orgId, documentId); }
+    catch (error) { if (error instanceof ContractorWithholdingError) throw new PostingError(error.remedy ? `${error.message} ${error.remedy}` : error.message); throw error; }
   } catch (error) {
     if (error instanceof PayrollRemittanceError) throw new PostingError(error.message);
     throw error;

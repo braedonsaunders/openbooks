@@ -14,6 +14,9 @@ export const DEFAULT_INVOICE_MODEL = "prebuilt-invoice";
 /** Reject mislabeled uploads before they enter the evidence store or provider queue. */
 export function captureContentMatchesMime(bytes: Uint8Array, contentType: string): boolean {
   const prefix = (...values: number[]) => values.every((value, index) => bytes[index] === value);
+  if (contentType === "application/xml" || contentType === "text/xml") {
+    try { return new TextDecoder("utf-8", { fatal: true }).decode(bytes).replace(/^\uFEFF/, '').trimStart().startsWith('<'); } catch { return false; }
+  }
   if (contentType === "application/pdf") return prefix(0x25, 0x50, 0x44, 0x46);
   if (contentType === "image/jpeg") return prefix(0xff, 0xd8, 0xff);
   if (contentType === "image/png") return prefix(0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a);

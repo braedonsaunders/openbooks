@@ -694,3 +694,24 @@ test("plan ignores an unsplit request for a line carrying an explicit key", () =
   assert.deepEqual(plan.lines.map((l) => l.amount).sort(), ["15.0000", "15.0000"]);
   assert.deepEqual(plan.lines.map((l) => l.distributionGroupId), ["group-fresh", "group-fresh"]);
 });
+
+
+test("entry distributions conserve direct materials cost and treatment through explode, keep and collapse", () => {
+  const r = rule("material-cost", [target({ fixedPercent: "25" }), target({ fixedPercent: "75" })]);
+  const parent: EntryLineInput = { accountId: "expense", amount: "400", withholdingTreatment: "materials", withholdingMaterialsCost: "300.0001" };
+  const exploded = explodeDocumentLine(parent, r, { groupId: "cost-group" });
+  assert.deepEqual(exploded.children.map(line => [line.amount, line.withholdingTreatment, line.withholdingMaterialsCost]),
+    [["100.0000", "materials", "75.0000"], ["300.0000", "materials", "225.0001"]]);
+  const groups = new Map([["cost-group", { groupId: "cost-group", ruleId: r.rule.id, versionId: r.version.id,
+    locked: false, total: "400.0000", memberIds: ["one", "two"] }]]);
+  const kept = planEntryDistributions({ kind: "vendor_bill" }, exploded.children, [r], { existingGroups: groups });
+  assert.deepEqual(kept.lines.map(line => line.withholdingMaterialsCost), ["75.0000", "225.0001"]);
+  const collapsed = planEntryDistributions({ kind: "vendor_bill", unsplitDistributionGroups: ["cost-group"] },
+    exploded.children, [r], { existingGroups: groups });
+  assert.equal(collapsed.lines.length, 1);
+  assert.equal(collapsed.lines[0]!.withholdingMaterialsCost, "300.0001");
+  assert.equal(collapsed.lines[0]!.withholdingTreatment, "materials");
+  const increased = exploded.children.map(line => ({ ...line, amount: line.amount === "100.0000" ? "200" : "600" }));
+  const regenerated = planEntryDistributions({ kind: "vendor_bill" }, increased, [r], { existingGroups: groups });
+  assert.deepEqual(regenerated.lines.map(line => line.withholdingMaterialsCost), ["75.0000", "225.0001"]);
+});

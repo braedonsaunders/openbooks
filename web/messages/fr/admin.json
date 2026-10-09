@@ -3428,6 +3428,28 @@
         "title": "Révisions des actions de l’assistant",
         "singularTitle": "Révisions des actions de l’assistant",
         "description": "Déclarations et responsabilités de révision des actions enregistrées. Les limites du code et les contrôles natifs restent applicables."
+      },
+      "einvoice-settings": {
+        "title": "Paramètres du vendeur électronique",
+        "singular": "Vendeur électronique",
+        "singularTitle": "Vendeur électronique",
+        "description": "Configurez l’identité fiscale et les instructions de paiement de chaque entité facturante."
+      },
+      "einvoice-recipients": {
+        "title": "Destinataires électroniques",
+        "singular": "Destinataire électronique",
+        "singularTitle": "Destinataire électronique",
+        "description": "Modifiez les métadonnées de facturation des rôles clients existants."
+      },
+      "withholding-enrollments": {
+        "title": "Inscriptions",
+        "singularTitle": "Inscription",
+        "description": "Préparer les états de retenue, enregistrer les dépôts et payer les retenues."
+      },
+      "withholding-standings": {
+        "title": "Statuts des sous-traitants",
+        "singularTitle": "Statuts des sous-traitants",
+        "description": "Les montants reflètent le dernier paiement enregistré. Enregistrez les modifications pour recalculer les retenues."
       }
     },
     "fields": {
@@ -4175,6 +4197,7 @@
       "scheduleDistributionVisibility": "Personal reports contain only the recipient’s own schedule or associated resources. Whole-board reports require an explicit sharing policy and a legal-entity-scoped board. Every send still requires a reviewed audience/version or an authored, enabled native Flow."
     },
     "options": {
+      "withholdingCondominiumPayer": "Payeur : copropriété",
       "storedValueKind": {
         "giftCard": "Carte cadeau",
         "storeCredit": "Avoir"
@@ -6654,6 +6677,101 @@
       "draftingDescription": "Mots et expressions à vérifier dans les brouillons fondés sur les dossiers. Aucun brouillon n’est envoyé automatiquement.",
       "reviewsTitle": "Révisions",
       "reviewsDescription": "Fréquence de révision des limites des actions et des avis par les administrateurs."
+    },
+    "einvoice": {
+      "defaultProfile": "Profil par défaut",
+      "electronicAddress": "Adresse électronique",
+      "electronicAddressScheme": "Schéma de l’adresse électronique",
+      "tradingName": "Nom commercial",
+      "legalRegistrationId": "Identifiant d’immatriculation",
+      "legalRegistrationScheme": "Schéma d’immatriculation (ICD)",
+      "taxNumber": "Numéro fiscal",
+      "addressLine1": "Adresse, ligne 1",
+      "addressLine2": "Adresse, ligne 2",
+      "city": "Ville",
+      "postcode": "Code postal",
+      "subdivision": "Région",
+      "contactName": "Nom du contact",
+      "contactPhone": "Téléphone du contact",
+      "contactEmail": "Courriel du contact",
+      "paymentMeansCode": "Moyen de paiement",
+      "payeeAccountId": "Identifiant du compte bénéficiaire / IBAN",
+      "payeeAccountName": "Nom du compte bénéficiaire",
+      "payeeBic": "BIC / identifiant bancaire",
+      "untaxedLineCategory": "Catégorie TVA des lignes non taxées",
+      "exemptionReasonCode": "Code de motif d’exonération VATEX",
+      "exemptionReason": "Mention légale d’exonération",
+      "buyerReference": "Référence acheteur / Leitweg-ID",
+      "vatCategory": "Catégorie TVA EN 16931",
+      "identity": "Identité fiscale",
+      "address": "Adresse postale",
+      "contact": "Adresse électronique et contact",
+      "payment": "Instructions de paiement",
+      "untaxed": "Lignes non taxées",
+      "sellerHelp": "Le nom et le pays du vendeur proviennent de l’entité juridique. Les identifiants TVA proviennent de ses immatriculations fiscales applicables.",
+      "recipientHelp": "Créez les clients avec le parcours client natif. Les adresses de facturation et les identifiants TVA restent sur la fiche client.",
+      "taxHelp": "Configurez la catégorie et les mentions légales exigées pour chaque code fiscal natif.",
+      "untaxedHelp": "Aucune catégorie n’est déduite. L’émission des factures avec lignes non taxées est refusée tant que leur traitement n’est pas configuré.",
+      "vat": {
+        "S": "TVA normale",
+        "Z": "Taux zéro",
+        "E": "Exonéré",
+        "AE": "Autoliquidation",
+        "K": "Livraison intracommunautaire",
+        "G": "Exportation",
+        "O": "Hors champ TVA",
+        "L": "Taxe indirecte des Canaries",
+        "M": "Taxe de Ceuta et Melilla"
+      },
+      "effectiveFrom": "Traitement TVA électronique applicable à partir du",
+      "effectiveFromHelp": "Les factures antérieures ne peuvent pas utiliser ce traitement TVA. Définissez les dates des taux dans l’onglet Taux natif.",
+      "reverseChargePreset": "Modèle d’autoliquidation dans la construction",
+      "reverseChargePresetHelp": "Choisissez uniquement une règle applicable à cette opération et à son destinataire. Vérifiez le pays, la date d’effet, la juridiction et les comptes avant l’enregistrement. Les taux existants sont conservés.",
+      "choosePreset": "Choisir un modèle…"
+    },
+    "withholding": {
+      "enrollments": "Inscriptions",
+      "enrollment": "Inscription",
+      "standings": "Statuts des sous-traitants",
+      "standing": "Statuts des sous-traitants",
+      "fields": {
+        "payerScope": "Périmètre du payeur",
+        "remittanceScheduleCode": "Calendrier de versement",
+        "remittancePolicy": "Règles de versement de l’autorité",
+        "calendar": "Calendrier des jours ouvrés de l’autorité",
+        "from": "Couverture à partir du",
+        "to": "Couverture jusqu’au",
+        "closedDates": "Jours de fermeture confirmés de l’autorité",
+        "sourceReference": "Référence de l’autorité ou du justificatif fiscal",
+        "lookback": "Impôt de référence du formulaire 945",
+        "finalAnnualLiability": "Impôt annuel définitif de toutes les catégories",
+        "nextDayEventOn": "Événement antérieur de versement le lendemain à 100 000 USD",
+        "other945Liabilities": "Autres impôts du formulaire 945 (calcul des échéances uniquement)",
+        "date": "Date de l’impôt",
+        "amount": "Montant de l’impôt",
+        "taxYear": "Année fiscale",
+        "totalTax": "Impôt total du formulaire 945",
+        "subsidiaryId": "Entité juridique",
+        "schemeCode": "Régime",
+        "contractorReference": "Référence d’inscription de l’entrepreneur",
+        "liabilityAccountId": "Compte de passif des retenues",
+        "authorityPartyId": "Autorité fournisseur",
+        "thresholdBasis": "Base du seuil",
+        "effectiveFrom": "Date d’effet",
+        "effectiveTo": "Fin d’effet",
+        "isActive": "Actif",
+        "partyId": "Sous-traitant",
+        "bandCode": "Catégorie de taux",
+        "verificationReference": "Référence de vérification",
+        "verifiedOn": "Date de vérification",
+        "validFrom": "Valide du",
+        "validTo": "Valide au",
+        "payeeReference": "Référence fiscale du sous-traitant",
+        "payeeTaxOffice": "Centre fiscal du sous-traitant",
+        "applyFromFirstPayment": "Retenir dès le premier paiement",
+        "notes": "Remarques",
+        "returnFrequency": "Fréquence de déclaration"
+      }
     }
   },
   "flows": {

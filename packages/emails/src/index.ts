@@ -242,15 +242,18 @@ export function paymentRemittanceEmail(args: {
   paymentDate: string
   amount: string
   currency: string
-  documents: Array<{ number: string; amount: string; discount: string; credit: string }>
+  /** `withholding` is contractor tax deducted from the payment (CIS, § 48 EStG, RCT). */
+  documents: Array<{ number: string; amount: string; discount: string; credit: string; withholding?: string }>
 }): EmailOut {
   const subject = `Payment advice ${args.paymentReference} — ${args.orgName}`
-  const rows = args.documents.map((d) => `${d.number}: ${d.amount} ${args.currency} (discount ${d.discount}, credit ${d.credit})`)
+  const withheld = (d: { withholding?: string }) => Boolean(d.withholding && !/^0*(\.0*)?$/.test(d.withholding))
+  const anyWithheld = args.documents.some(withheld)
+  const rows = args.documents.map((d) => `${d.number}: ${d.amount} ${args.currency} (discount ${d.discount}, credit ${d.credit}${withheld(d) ? `, tax withheld ${d.withholding}` : ''})`)
   const text = `A payment of ${args.amount} ${args.currency} was issued to ${args.payeeName} on ${args.paymentDate}.\nReference: ${args.paymentReference}\n\n${rows.join('\n')}\n\n— ${args.orgName} via OpenBooks`
-  const htmlRows = args.documents.map((d) => `<tr><td style="padding:6px 12px 6px 0">${esc(d.number)}</td><td style="padding:6px 12px;text-align:right">${esc(d.amount)} ${esc(args.currency)}</td><td style="padding:6px 0;color:#666">${esc(d.discount)} / ${esc(d.credit)}</td></tr>`).join('')
+  const htmlRows = args.documents.map((d) => `<tr><td style="padding:6px 12px 6px 0">${esc(d.number)}</td><td style="padding:6px 12px;text-align:right">${esc(d.amount)} ${esc(args.currency)}</td><td style="padding:6px 0;color:#666">${esc(d.discount)} / ${esc(d.credit)}</td>${anyWithheld ? `<td style="padding:6px 0 6px 12px;text-align:right">${esc(d.withholding ?? '0')} ${esc(args.currency)}</td>` : ''}</tr>`).join('')
   const html = shell({
     heading: 'Payment advice',
-    bodyHtml: `<p>A payment of <strong>${esc(args.amount)} ${esc(args.currency)}</strong> was issued to ${esc(args.payeeName)} on ${esc(args.paymentDate)}.</p><p>Reference: <strong>${esc(args.paymentReference)}</strong></p><table cellpadding="0" cellspacing="0"><thead><tr><th align="left">Document</th><th align="right">Payment</th><th align="left">Discount / credit</th></tr></thead><tbody>${htmlRows}</tbody></table>`,
+    bodyHtml: `<p>A payment of <strong>${esc(args.amount)} ${esc(args.currency)}</strong> was issued to ${esc(args.payeeName)} on ${esc(args.paymentDate)}.</p><p>Reference: <strong>${esc(args.paymentReference)}</strong></p><table cellpadding="0" cellspacing="0"><thead><tr><th align="left">Document</th><th align="right">Payment</th><th align="left">Discount / credit</th>${anyWithheld ? '<th align="right">Tax withheld</th>' : ''}</tr></thead><tbody>${htmlRows}</tbody></table>`,
     footer: `Payment advice from ${args.orgName}.`,
   })
   return { subject, html, text }

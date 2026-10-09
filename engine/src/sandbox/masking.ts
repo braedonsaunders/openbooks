@@ -140,6 +140,24 @@ export async function loadMaskingPolicies(
  * fails unless each is masked here or explicitly allow-listed as
  * non-personal. Add a policy there before allow-listing anyone's identity. */
 export const DEFAULT_POLICIES: MaskingPolicy[] = [
+  // The seller contact and payee account printed on e-invoices.
+  { tableName: "einvoice_settings", columnName: "contact_name", transform: "faker_name" },
+  { tableName: "einvoice_settings", columnName: "contact_email", transform: "faker_email" },
+  { tableName: "einvoice_settings", columnName: "contact_phone", transform: "faker_phone" },
+  { tableName: "einvoice_settings", columnName: "payee_account_id", transform: "hash" },
+  { tableName: "einvoice_settings", columnName: "payee_account_name", transform: "redact" },
+  // A buyer electronic address may be a personal email address.
+  { tableName: "customer_roles", columnName: "einvoice_address", transform: "hash" },
+  { tableName: "withholding_enrollments", columnName: "remittance_policy", transform: "null_out" },
+  // Subcontractor tax references and verification numbers identify individual sole traders.
+  { tableName: "withholding_standings", columnName: "payee_reference", transform: "hash" },
+  { tableName: "withholding_standings", columnName: "verification_reference", transform: "hash" },
+  { tableName: "withholding_standings", columnName: "notes", transform: "redact" },
+  { tableName: "withholding_standings", columnName: "revoked_reason", transform: "redact" },
+  { tableName: "withholding_deductions", columnName: "payee_name", transform: "redact" },
+  { tableName: "withholding_deductions", columnName: "payee_reference", transform: "hash" },
+  { tableName: "withholding_deductions", columnName: "verification_reference", transform: "hash" },
+  { tableName: "withholding_deductions", columnName: "authorisation_reference", transform: "hash" },
   { tableName: "schedule_source_records", columnName: "source_system", transform: "hash" },
   { tableName: "schedule_source_records", columnName: "source_dataset", transform: "hash" },
   { tableName: "schedule_source_records", columnName: "source_key", transform: "hash" },

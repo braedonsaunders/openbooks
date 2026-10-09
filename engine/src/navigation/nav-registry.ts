@@ -435,6 +435,17 @@ export const NAV_MODULES: NavModule[] = [
     recordTarget: { kind: 'query', param: 'payment' },
   },
   {
+    key: 'contractor-withholding',
+    href: '/contractor-withholding',
+    label: 'Contractor Withholding',
+    iconKey: 'receipt',
+    group: 'purchasing',
+    subgroup: 'pay',
+    requiredPermission: 'ap.read',
+    featureKey: 'contractorWithholding',
+    recordTarget: { kind: 'query', param: 'return' },
+  },
+  {
     key: 'expenses',
     href: '/expenses/reports',
     label: 'Expenses',

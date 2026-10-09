@@ -1538,3 +1538,14 @@ test('document edit lines accept a marketplace facilitator name', async () => {
   assert.equal(documentEditBodySchema.parse({ lines: [line] }).lines?.[0]?.marketplaceFacilitator, 'Amazon');
   assert.equal(documentEditBodySchema.safeParse({ lines: [{ ...line, marketplaceFacilitator: 42 }] }).success, false);
 });
+
+
+test('native editable lines preserve exact direct costs and refuse unsupported amounts', () => {
+  const valid = { accountId: 'expense', amount: '400', withholdingTreatment: 'materials' as const, withholdingMaterialsCost: '300.0001' }
+  assert.equal(validateEditableDocumentLines([valid])[0]!.withholdingMaterialsCost, '300.0001')
+  assert.equal(validateEditableDocumentLines([{ ...valid, withholdingTreatment: 'labour' }])[0]!.withholdingMaterialsCost, '300.0001')
+  for (const value of ['', '300.00001', '3e2', '-1', '400.0001', 300 as never]) {
+    assert.throws(() => validateEditableDocumentLines([{ ...valid, withholdingMaterialsCost: value }]),
+      (error: unknown) => error instanceof DocumentEditError && error.status === 422 && /direct materials cost/.test(error.message))
+  }
+})

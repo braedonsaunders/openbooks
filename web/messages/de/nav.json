@@ -156,7 +156,8 @@
     "hrm-benefits-delivery": "Bereitstellung",
     "hrm-training": "Schulung",
     "internal-billing": "Interne Verrechnung",
-    "scheduling": "Einsatzplanung"
+    "scheduling": "Einsatzplanung",
+    "contractor-withholding": "Bauleistungsabzug"
   },
   "groups": {
     "workforce": "Belegschaft",

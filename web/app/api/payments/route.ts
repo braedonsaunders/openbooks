@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { defineRoute } from '@/lib/api/route'
 import { sql } from 'drizzle-orm'
 import { z } from 'zod'
-import { db } from '@openbooks/engine/src/platform/db.ts'
+import { db, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
 import { claimIdempotentCreate, resolveIdempotentReplay } from '../../../lib/api/idempotency'
 import { cmp, sum } from '@openbooks/engine/src/money/money.ts'
 import { allocateDocumentNumber } from '@openbooks/engine/src/records/numbering.ts'
@@ -54,6 +54,8 @@ const paymentCreateBody = z.object({
   documentDate: isoDate().optional(),
   referenceNumber: z.string().nullable().optional(),
   memo: z.string().nullable().optional(),
+  withholdingAuthorisation: z.string().trim().max(100).nullable().optional(),
+  withholdingAuthorisedAmount: exactMoney().nullable().optional(),
   allocations: z.array(allocationInput).optional(),
   // Stored-value tenders (customer receipts only): fresh gift-card codes or
   // already-resolved echoes. Resolved and re-verified after insert (never
@@ -221,6 +223,8 @@ async function createPayment(request: Request) {
     documentDate: body.documentDate ?? null,
     referenceNumber: body.referenceNumber ?? null,
     memo: body.memo ?? null,
+    ...(body.withholdingAuthorisation !== undefined ? { withholdingAuthorisation: body.withholdingAuthorisation } : {}),
+    ...(body.withholdingAuthorisedAmount !== undefined ? { withholdingAuthorisedAmount: body.withholdingAuthorisedAmount } : {}),
     allocations: body.allocations ?? [],
     storedValueTenders: body.storedValueTenders ?? [],
   }
@@ -245,7 +249,8 @@ async function createPayment(request: Request) {
 
   let created = false
   try {
-    created = await db.transaction(async (tx) => {
+    created = await withOrgTransaction(user.orgId, async () => {
+      const tx = db
       // Serialize every request carrying this key: without the lock, two
       // concurrent identical Saves could both read no row, both allocate a
       // number, and the loser would 409 on the insert conflict instead of
@@ -303,6 +308,12 @@ async function createPayment(request: Request) {
         values (${user.orgId}, 'documents', ${requestId}, 'insert',
                 ${JSON.stringify({ before: null, after: snapshot })}::jsonb,
                 ${user.id}, ${requestId})`)
+      await updateDraftPayment(
+        requestId,
+        { allocations, withholdingAuthorisation: body.withholdingAuthorisation, withholdingAuthorisedAmount: body.withholdingAuthorisedAmount, storedValueTenders: body.storedValueTenders },
+        user.id, user.orgId,
+        { allowedSubsidiaryIds: gate.allowedSubsidiaryIds },
+      )
       return true
     })
   } catch (error) {
@@ -314,29 +325,7 @@ async function createPayment(request: Request) {
     throw error
   }
 
-  // Stored-value tenders resolve after the insert, never persisted raw: the
-  // patch replaces the tender set, so replaying an identical request (or a
-  // retry after a partial failure) converges on the same snapshots instead
-  // of duplicating them. Engine refusals (unknown code, over-tender, wrong
-  // customer) surface as named 4xx here.
-  if (body.storedValueTenders && body.storedValueTenders.length > 0) {
-    try {
-      await updateDraftPayment(
-        requestId,
-        { storedValueTenders: body.storedValueTenders },
-        user.id,
-        user.orgId,
-        // Forward the authoritative scope as-is: explicit null is the
-        // unrestricted grant, and omitting it would fail closed above.
-        { allowedSubsidiaryIds: gate.allowedSubsidiaryIds },
-      )
-    } catch (error) {
-      if (error instanceof PaymentError) return paymentErrorResponse(error)
-      throw error
-    }
-  }
-
-  const payment = await loadPaymentDocument(requestId, kind, user.orgId)
+  const payment = await loadPaymentDocument(requestId, kind, user.orgId, gate.allowedSubsidiaryIds)
   if (!payment) return bad('save_failed', undefined, 500)
   return NextResponse.json(payment, { status: created ? 201 : 200 })
 }

@@ -1,7 +1,7 @@
 {
   "title": "Plantillas PDF",
   "description": "Cree documentos imprimibles y asígnelos a facturas, asientos y todas las demás transacciones",
-  "recordTypes":   {
+  "recordTypes": {
     "customer_invoice": "Factura de cliente",
     "customer_credit": "Crédito de cliente",
     "quote": "Cotización",
@@ -85,5 +85,22 @@
     "sent": "Enviado a {to}",
     "noRecipient": "Introduzca la dirección de correo del destinatario",
     "failed": "No se pudo enviar el correo"
+  },
+  "einvoice": {
+    "label": "Factura electrónica",
+    "help": "Valide el formato elegido y después emita y descargue el original archivado.",
+    "profile": "Formato",
+    "chooseProfile": "Elija un formato…",
+    "buyerReference": "Referencia del comprador / Leitweg-ID",
+    "validate": "Validar",
+    "working": "Procesando…",
+    "valid": "Se superaron las comprobaciones nativas.",
+    "findings": "Resultados de validación",
+    "issue": "Emitir factura electrónica",
+    "issueUnavailable": "La emisión exige una factura contabilizada y permiso para gestionar documentos.",
+    "setup": "Configuración de factura electrónica",
+    "originals": "Originales emitidos",
+    "archivedHelp": "Este formato ya se emitió. Descargue el original conservado a continuación.",
+    "failed": "No se pudo cargar o emitir esta factura electrónica."
   }
 }

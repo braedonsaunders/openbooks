@@ -52,6 +52,13 @@ export const taxCodes = pgTable(
     roundingScale: integer("rounding_scale").notNull().default(2),
     /** Non-recoverable portion is expensed to the line's account instead. */
     recoverablePercent: money("recoverable_percent").notNull().default("100"),
+    /** EN 16931 VAT category (UNTDID 5305) stated on e-invoices for lines with this code. */
+    einvoiceEffectiveFrom: date("einvoice_effective_from"),
+    einvoiceCategory: text("einvoice_category", { enum: ["S", "Z", "E", "AE", "K", "G", "O", "L", "M", "SR", "SRCA-S", "SRCA-C", "ZR", "ES33", "ESN33", "DS", "OS", "NA", "NG", "SRRC", "SROVR-RS", "SROVR-LVG", "SRLVG"] }),
+    /** VATEX exemption reason code (BT-121) for exempting categories. */
+    einvoiceExemptionReasonCode: text("einvoice_exemption_reason_code"),
+    /** Statutory exemption or reverse-charge wording (BT-120). */
+    einvoiceExemptionReason: text("einvoice_exemption_reason"),
     isActive: boolean("is_active").notNull().default(true),
     ...auditColumns,
   },

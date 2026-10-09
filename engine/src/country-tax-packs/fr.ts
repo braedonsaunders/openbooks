@@ -1,3 +1,4 @@
+import { constructionReverseChargeRulesForCountry } from "./contractor-reverse-charge.ts";
 import type { CountryTaxPackDefinition, TaxReturnPack } from "./types.ts";
 
 const FR_CA3_2026: TaxReturnPack = {
@@ -33,6 +34,7 @@ export const FRANCE_TAX_PACK: CountryTaxPackDefinition = {
   code: "FR_INDIRECT_TAX",
   version: "2026.08.01",
   country: "FR",
+  reverseChargeRules: constructionReverseChargeRulesForCountry("FR"),
   name: "France",
   countryTaxType: "vat",
   parentReturnPackCode: "FR_CA3",

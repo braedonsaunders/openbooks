@@ -97,6 +97,18 @@ export const customerRoles = pgTable("customer_roles", {
   holdReason: text("hold_reason"),
   heldAt: timestamp("held_at", { withTimezone: true }),
   heldBy: uuid("held_by"),
+  /** E-invoice format the customer receives; null when it receives none. */
+  einvoiceProfile: text("einvoice_profile", {
+    enum: ["en16931-cii", "en16931-ubl", "xrechnung-cii", "xrechnung-ubl", "facturx", "peppol-bis", "nlcius", "ehf", "peppol-aunz", "peppol-sg", "pint-aunz", "pint-sg"],
+  }),
+  /** Buyer electronic address (BT-49) and its EAS scheme. */
+  einvoiceAddress: text("einvoice_address"),
+  einvoiceAddressScheme: text("einvoice_address_scheme"),
+  /** Default buyer reference (BT-10), such as a Leitweg-ID. */
+  einvoiceBuyerReference: text("einvoice_buyer_reference"),
+  /** Buyer legal registration (BT-47) and its ICD scheme. */
+  einvoiceLegalRegistrationId: text("einvoice_legal_registration_id"),
+  einvoiceLegalRegistrationScheme: text("einvoice_legal_registration_scheme"),
   isActive: boolean("is_active").notNull().default(true),
   custom: jsonb("custom").notNull().default({}),
   ...auditColumns,

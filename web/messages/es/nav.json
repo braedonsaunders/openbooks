@@ -156,7 +156,8 @@
     "hrm-benefits-delivery": "Entrega",
     "hrm-training": "Capacitación",
     "internal-billing": "Facturación interna",
-    "scheduling": "Planificación"
+    "scheduling": "Planificación",
+    "contractor-withholding": "Retenciones de contratistas"
   },
   "modulesShort": {
     "hrm-performance-cycles": "Gestionar evaluaciones",

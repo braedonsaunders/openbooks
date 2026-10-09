@@ -1,4 +1,5 @@
-import type { CountryTaxPackDefinition, TaxReturnPack } from "./types.ts";
+import { constructionReverseChargeRulesForCountry } from "./contractor-reverse-charge.ts";
+import type { ContractorWithholdingSchemeDefinition, CountryTaxPackDefinition, TaxReturnPack } from "./types.ts";
 
 const GB_VAT100: TaxReturnPack = {
   code: "GB_VAT100",
@@ -23,11 +24,74 @@ const GB_VAT100: TaxReturnPack = {
   ],
 };
 
+/**
+ * Construction Industry Scheme: a contractor deducts tax from the labour part
+ * of each payment to a subcontractor, at the band HMRC returns when the
+ * subcontractor is verified, and reports monthly on the CIS300 return.
+ */
+const GB_CIS: ContractorWithholdingSchemeDefinition = {
+  code: "GB_CIS",
+  country: "GB",
+  name: "Construction Industry Scheme",
+  authority: "HM Revenue & Customs",
+  legalReference: "Finance Act 2004, Part 3, Chapter 3 (ss. 57-77)",
+  currency: "GBP",
+  // FA 2004 s.61: deduct from so much of the payment as does not represent
+  // the direct cost of materials; VAT charged by the subcontractor is outside
+  // the payment the deduction is computed on (CIS340).
+  base: { excludesMaterials: true, excludesVat: true },
+  bands: [
+    {
+      code: "GROSS",
+      name: "Gross payment status",
+      requiresVerification: true,
+      rates: [{ ratePercent: "0", effectiveFrom: "2007-04-06", sourceId: "hmrc_cis340" }],
+    },
+    {
+      code: "NET",
+      name: "Registered for payment under deduction",
+      requiresVerification: true,
+      rates: [{ ratePercent: "20", effectiveFrom: "2007-04-06", sourceId: "hmrc_cis340" }],
+    },
+    {
+      code: "HIGHER",
+      name: "Unregistered or unmatched subcontractor",
+      requiresVerification: false,
+      rates: [{ ratePercent: "30", effectiveFrom: "2007-04-06", sourceId: "hmrc_cis340" }],
+    },
+  ],
+  defaultBandCode: "HIGHER",
+  // Tax months run from the 6th to the 5th. The CIS300 return is due on the
+  // 19th and an electronic payment on the 22nd after the tax month ends.
+  periodStartDay: 6,
+  returnDue: { dayOfMonth: 19, monthsAfterPeriodEnd: 0 },
+  paymentDue: { dayOfMonth: 22, monthsAfterPeriodEnd: 0 },
+  paymentAuthorisation: "none",
+  contractorReferenceLabel: "Accounts Office reference",
+  payeeReferenceLabel: "Unique Taxpayer Reference",
+  verificationLabel: "Verification number",
+  sources: [
+    {
+      id: "hmrc_cis340",
+      title: "HMRC CIS340 — Construction Industry Scheme: a guide for contractors and subcontractors",
+      url: "https://www.gov.uk/government/publications/construction-industry-scheme-cis-340",
+      asOf: "2026-10-08",
+    },
+    {
+      id: "fa2004_s61",
+      title: "Finance Act 2004, section 61 — deductions on account of tax from contract payments",
+      url: "https://www.legislation.gov.uk/ukpga/2004/12/section/61",
+      asOf: "2026-10-08",
+    },
+  ],
+};
+
 /** United Kingdom VAT localization maintained from HMRC sources. */
 export const UNITED_KINGDOM_TAX_PACK: CountryTaxPackDefinition = {
   code: "GB_INDIRECT_TAX",
   version: "2026.08.01",
   country: "GB",
+  reverseChargeRules: constructionReverseChargeRulesForCountry("GB"),
   name: "United Kingdom",
   countryTaxType: "vat",
   parentReturnPackCode: "GB_VAT100",
@@ -94,4 +158,5 @@ export const UNITED_KINGDOM_TAX_PACK: CountryTaxPackDefinition = {
       },
     ],
   },
+  contractorWithholdingSchemes: [GB_CIS],
 };

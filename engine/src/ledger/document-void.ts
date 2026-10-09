@@ -1,3 +1,4 @@
+import { releaseWithholdingDeposit } from "../contractor-withholding/deposits.ts";
 import { and, eq, getTableColumns, sql } from "drizzle-orm";
 import type { FlowEventSource } from "@openbooks/forms-core";
 import { db, schema, withOrgTransaction, type SqlExecutor } from "../platform/db.ts";
@@ -28,6 +29,7 @@ import { lockApplicationEvidence } from "../records/application-lock.ts";
 import { reverseStoredValueForVoidedDocument } from "../stored-value/void-reversal.ts";
 import { isUuid } from "../platform/uuid.ts";
 import { PROVIDER_COMMIT_KINDS, requestProviderVoidTx } from "../tax/provider-commit.ts";
+import { voidPaymentWithholdings, releaseWithholdingRemittance } from "../contractor-withholding/service.ts";
 
 /**
  * Machine-readable void refusal reasons. The human message
@@ -1223,6 +1225,8 @@ export async function completeRequestedDocumentVoid(
                select id from journal_lines where entry_id = ${entryId} and org_id = ${orgId}
              )
         `);
+        await releaseWithholdingRemittance(tx, orgId, documentId, String(doc.void_requested_by));
+        await releaseWithholdingDeposit(tx, orgId, documentId, String(doc.void_requested_by));
         if (PAYMENT_KINDS.has(String(doc.kind))) {
           await releaseCarriedCreditAllocations(tx, {
             orgId,
@@ -1231,6 +1235,14 @@ export async function completeRequestedDocumentVoid(
             allocations: carriedCreditAllocations(doc.custom),
             actorId: String(doc.void_requested_by),
             reason: String(doc.void_reason),
+          });
+          // The reversal below unwinds the withholding liability leg; the
+          // deductions stay as evidence, voided with their payment, so the
+          // period's return and any filed revision reflect the change.
+          await voidPaymentWithholdings(tx, {
+            orgId,
+            paymentDocumentId: documentId,
+            actorId: String(doc.void_requested_by),
           });
         }
 

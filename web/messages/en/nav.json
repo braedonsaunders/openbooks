@@ -156,7 +156,8 @@
     "hrm-benefits-delivery": "Delivery",
     "hrm-training": "Training",
     "internal-billing": "Internal Billing",
-    "scheduling": "Scheduling"
+    "scheduling": "Scheduling",
+    "contractor-withholding": "Contractor withholding"
   },
   "modulesShort": {
     "hrm-performance-cycles": "Manage reviews",

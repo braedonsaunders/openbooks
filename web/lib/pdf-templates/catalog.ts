@@ -70,6 +70,34 @@ const REFERENCE_FIELD: PdfMergeField = {
   sample: 'PO-2024-88',
 }
 
+const INVOICE_FISCAL_FIELDS: PdfMergeField[] = [
+  { key: 'seller_address', label: 'Seller fiscal address', sample: 'Hauptstrasse 1, 10115 Berlin, DE' },
+  { key: 'seller_vat_id', label: 'Seller VAT identifier', sample: 'DE123456789' },
+  { key: 'seller_tax_number', label: 'Seller tax registration number', sample: '123/456/78901' },
+  { key: 'seller_legal_registration', label: 'Seller legal registration', sample: 'HRB 12345' },
+  { key: 'seller_contact', label: 'Seller contact', sample: 'Accounts · +49 30 123456 · billing@example.org' },
+  { key: 'seller_electronic_address', label: 'Seller electronic address', sample: '0088:1234567890123' },
+  { key: 'buyer_vat_id', label: 'Buyer VAT identifier', sample: 'FR12345678901' },
+  { key: 'buyer_legal_registration', label: 'Buyer legal registration', sample: '123456789' },
+  { key: 'buyer_electronic_address', label: 'Buyer electronic address', sample: '0204:991-12345-67' },
+  { key: 'payment_means', label: 'Payment means', sample: '30 · Credit transfer' },
+  { key: 'payee_account', label: 'Payee account / IBAN', sample: 'DE89370400440532013000' },
+  { key: 'payee_name', label: 'Payee account name', sample: 'Example GmbH' },
+  { key: 'payee_bic', label: 'Payee BIC / bank identifier', sample: 'COBADEFFXXX' },
+  { key: 'payment_reference', label: 'Payment reference', sample: 'INV-000123' },
+]
+
+const INVOICE_VAT_COLLECTION: PdfCollection = {
+  key: 'vat_breakdown', label: 'Invoice VAT breakdown', fields: [
+    { key: 'category', label: 'VAT category', sample: 'S' },
+    { key: 'rate', label: 'VAT rate', sample: '19%' },
+    { key: 'taxable_amount', label: 'Taxable amount', sample: 'EUR 100.00' },
+    { key: 'tax_amount', label: 'VAT amount', sample: 'EUR 19.00' },
+    { key: 'exemption_reason', label: 'Exemption reason', sample: 'Reverse charge' },
+    { key: 'exemption_reason_code', label: 'VATEX exemption reason code', sample: 'VATEX-EU-AE' },
+  ],
+}
+
 const LINE_FIELDS: PdfMergeField[] = [
   { key: 'line_number', label: 'Line #', sample: '1' },
   { key: 'item_name', label: 'Item', sample: 'Structural steel' },
@@ -128,6 +156,7 @@ function docType(meta: {
   groupedLines?: boolean
   workPeriod?: boolean
 }): PdfRecordTypeMeta {
+  const invoiceFiscal = meta.key === 'customer_invoice' || meta.key === 'customer_credit'
   return {
     key: meta.key,
     labelKey: meta.key,
@@ -140,11 +169,12 @@ function docType(meta: {
       ...(meta.hasReference ? [REFERENCE_FIELD] : []),
       ...(meta.hasParty ? PARTY_FIELDS : []),
       ...(meta.extraFields ?? []),
+      ...(invoiceFiscal ? INVOICE_FISCAL_FIELDS : []),
       ...(meta.workPeriod ? [WORK_COMPLETED_FIELD] : []),
       ...(meta.hasDue ? DUE_FIELDS : []),
       ...DOC_COMMON.slice(4),
     ],
-    collections: [meta.workPeriod ? WORK_LINES_COLLECTION : LINES_COLLECTION, ...(meta.groupedLines ? [LINE_GROUPS_COLLECTION] : [])],
+    collections: [meta.workPeriod ? WORK_LINES_COLLECTION : LINES_COLLECTION, ...(meta.groupedLines ? [LINE_GROUPS_COLLECTION] : []), ...(invoiceFiscal ? [INVOICE_VAT_COLLECTION] : [])],
   }
 }
 

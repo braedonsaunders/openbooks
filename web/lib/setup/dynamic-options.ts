@@ -3,6 +3,7 @@ import { db } from '@openbooks/engine/platform/database'
 import { declaredPayrollFilings } from '@openbooks/engine/src/payroll/filing-registry.ts'
 import { declaredJurisdictions, installablePayrollPacks, payrollPack } from '@openbooks/engine/src/payroll/packs.ts'
 import { installedPayrollCountries } from '@openbooks/engine/payroll/setup'
+import { CONTRACTOR_REVERSE_CHARGE_RULES } from '@openbooks/engine/country-tax-packs'
 import type { SetupColumn, SetupDynamicOptionsSource, SetupEntity, SetupField, SetupFilter, SetupOption } from './types'
 
 /**
@@ -233,12 +234,23 @@ export function resolveDynamicSetupOptions(entity: SetupEntity, context: SetupOp
     ...entity.fields,
     ...(entity.filters ?? []),
   ].some((item) => item.optionsSource)
-  if (!needsResolution) return entity
+  const presets = entity.presetsSource === 'contractor-reverse-charge' ? {
+    titleKey: 'einvoice.reverseChargePreset', helpTextKey: 'einvoice.reverseChargePresetHelp',
+    options: CONTRACTOR_REVERSE_CHARGE_RULES.map(rule => ({
+      key: rule.code, label: `${rule.country} · ${rule.name}`,
+      description: `${rule.legalReference} · ${rule.effectiveFrom}. ${rule.applicability}`,
+      values: { country: rule.country, calculationType: rule.calculationType,
+        einvoiceCategory: rule.einvoiceCategory, einvoiceEffectiveFrom: rule.effectiveFrom,
+        einvoiceExemptionReason: rule.invoiceWording, einvoiceExemptionReasonCode: null },
+    })),
+  } : entity.presets
+  if (!needsResolution) return presets ? { ...entity, presets } : entity
   const packs = packChoices(context)
   const resolve = <T extends SetupColumn | SetupFilter>(item: T): T =>
     item.optionsSource ? { ...item, options: dynamicOptions(item.optionsSource, packs) } : item
   return {
     ...entity,
+    presets,
     columns: entity.columns.filter((column) => !singleCountry(column, context, packs)).map(resolve),
     fields: entity.fields.map((field) => resolveField(field, packs, context)),
     filters: entity.filters?.filter((filter) => !singleCountry(filter, context, packs)).map(resolve),

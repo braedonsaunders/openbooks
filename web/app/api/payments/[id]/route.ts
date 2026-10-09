@@ -45,6 +45,8 @@ const paymentPatchBody = z.object({
   documentDate: isoDate().optional(),
   referenceNumber: z.string().nullable().optional(),
   memo: z.string().nullable().optional(),
+  withholdingAuthorisation: z.string().trim().max(100).nullable().optional(),
+  withholdingAuthorisedAmount: exactMoney().nullable().optional(),
   allocations: z.array(allocationInput).optional(),
   // Credit-memo applications (engine CreditAllocationInput). The engine
   // validates endpoints, signs, and capacity at save and at posting; the
@@ -159,6 +161,8 @@ async function patchPayment(req: Request, { params }: { params: Promise<{ id: st
         documentDate: body.documentDate,
         referenceNumber: body.referenceNumber,
         memo: body.memo,
+        withholdingAuthorisation: body.withholdingAuthorisation,
+        withholdingAuthorisedAmount: body.withholdingAuthorisedAmount,
         allocations: body.allocations,
         creditAllocations: body.creditAllocations,
         storedValueTenders: body.storedValueTenders,

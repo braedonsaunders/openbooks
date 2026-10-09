@@ -84,6 +84,43 @@ test("a payment settling one mapped bill lands wholly in that box", () => {
   assert.deepEqual(unmappedAccountIds, []);
 });
 
+test("recorded backup withholding reports gross remuneration and separate federal tax without inflating bank cash", () => {
+  for (const form of [NEC, MISC]) {
+    const result = summarizeRecipient({
+      form, defaultBox: form.defaultBox, filingThreshold: "2000", boxByAccount: new Map(),
+      payments: [payment({ cash: "760", backupWithheld: "240", withholdingDeductionIds: ["deduction-1"] })],
+    });
+    assert.equal(result.amounts.reportableTotal, "1000.0000");
+    assert.equal(result.amounts.withheld, "240.0000");
+    assert.equal(result.amounts.tracedCash, "760.0000");
+    assert.equal(result.amounts.boxAmounts[form.formType === "1099-NEC" ? "nec4" : "misc4"], "240.0000");
+    assert.equal(result.belowThreshold, false, "any backup tax triggers reporting even below remuneration threshold");
+  }
+});
+
+test("backup withholding apportions gross remuneration across expense boxes once", () => {
+  const result = summarizeRecipient({
+    form: MISC, defaultBox: "misc3", filingThreshold: "2000", boxByAccount: new Map([["rent", "misc1"], ["other", "misc3"]]),
+    payments: [payment({ cash: "760", backupWithheld: "240", bills: [
+      { documentId: "rent-bill", applied: "600", lines: [{ accountId: "rent", weight: "600" }] },
+      { documentId: "other-bill", applied: "400", lines: [{ accountId: "other", weight: "400" }] },
+    ] })],
+  });
+  assert.deepEqual(result.amounts.boxAmounts, { misc1: "600.0000", misc3: "400.0000", misc4: "240.0000" });
+});
+
+test("recorded backup evidence refuses duplicate withholding mappings and foreign return types", () => {
+  assert.throws(() => summarizeRecipient({
+    form: NEC, defaultBox: "nec1", filingThreshold: "2000", boxByAccount: new Map([["acct-sub", "nec4"]]),
+    payments: [payment({ cash: "760", backupWithheld: "240" })],
+  }), /overlap recorded backup/);
+  assert.throws(() => summarizeRecipient({
+    form: formDefinition("T4A"), defaultBox: "t4a048", filingThreshold: "500", boxByAccount: new Map(),
+    payments: [payment({ cash: "760", backupWithheld: "240" })],
+  }), /Canadian T4A/);
+  assert.throws(() => allocatePaymentToBoxes({ payment: payment({ backupWithheld: "-1" }), defaultBox: "nec1", boxByAccount: new Map() }), /cannot be negative/);
+});
+
 test("spend split across accounts splits across boxes, penny-exact", () => {
   const { boxAmounts } = allocatePaymentToBoxes({
     payment: payment({

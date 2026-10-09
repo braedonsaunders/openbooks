@@ -1,3 +1,4 @@
+import { extractNativeInvoice } from "./ap-einvoice.ts";
 import { sql } from "drizzle-orm";
 import { db, type SqlExecutor, withBypassContext, withOrgContext, withOrgTransaction } from "../platform/db.ts";
 import { allocateDocumentNumber } from "../records/numbering.ts";
@@ -549,20 +550,23 @@ export async function processCaptureItem(input: {
   try {
     // All fallible setup belongs to this attempt's failure finalizer. A
     // configuration or run-ledger insert error must not strand extracting.
-    const settings = await getDocumentCaptureRuntimeConfig(input.orgId, input.lookup);
+    const blob = await loadCaptureBlob(input.orgId, item.file_id);
+    const nativeEnabled = await orgFeatureEnabled(input.orgId, "einvoicing");
+    if (!nativeEnabled && ['application/xml','text/xml'].includes(blob.contentType)) throw new Error('Enable E-invoicing in Company Settings → Features before processing this XML invoice.');
+    const native = nativeEnabled ? await extractNativeInvoice(blob.bytes, blob.contentType) : null;
+    const settings = native ? null : await getDocumentCaptureRuntimeConfig(input.orgId, input.lookup);
     const run = await db.execute<{ id: string }>(sql`
       insert into ap_capture_runs (org_id, capture_item_id, attempt, provider, model, api_version, created_by)
-      values (${input.orgId}, ${item.id}, ${attempt}, 'azure_document_intelligence',
-              ${settings?.model ?? "prebuilt-invoice"}, '2024-11-30', ${input.actorId ?? item.created_by})
+      values (${input.orgId}, ${item.id}, ${attempt}, ${native ? 'en16931' : 'azure_document_intelligence'},
+              ${native ? 'native' : settings?.model ?? "prebuilt-invoice"}, ${native ? 'EN16931:2017' : '2024-11-30'}, ${input.actorId ?? item.created_by})
       returning id
     `);
     runId = run.rows[0]!.id;
-    if (!settings) throw new Error("Document capture is disabled or not configured under Platform → AI");
-    const blob = await loadCaptureBlob(input.orgId, item.file_id);
-    const extracted = await extractAzureInvoice({
-      endpoint: settings.endpoint,
-      apiKey: settings.apiKey,
-      model: settings.model,
+    if (!native && !settings) throw new Error("Document capture is disabled or not configured under Platform → AI");
+    const extracted = native ?? await extractAzureInvoice({
+      endpoint: settings!.endpoint,
+      apiKey: settings!.apiKey,
+      model: settings!.model,
       contentType: blob.contentType,
       bytes: blob.bytes,
       fetchImpl: input.fetchImpl,
@@ -572,10 +576,10 @@ export async function processCaptureItem(input: {
       orgId: input.orgId,
       captureItemId: item.id,
       normalized: extracted.normalized,
-      confidenceThreshold: settings.confidenceThreshold,
-      documentKind: item.document_kind,
+      confidenceThreshold: settings?.confidenceThreshold ?? "1.0000",
+      documentKind: native?.documentKind ?? item.document_kind,
     });
-    if (extracted.overallConfidence && cmp(extracted.overallConfidence, settings.confidenceThreshold) < 0) {
+    if (extracted.overallConfidence && cmp(extracted.overallConfidence, settings?.confidenceThreshold ?? "1.0000") < 0) {
       resolved.issues.push(issue("document_low_confidence", "warning", { field: "document" }));
     }
     await db.transaction(async (tx) => {
@@ -602,7 +606,7 @@ export async function processCaptureItem(input: {
       `);
       const status = resolved.duplicate ? "duplicate" : resolved.issues.length ? "needs_review" : "ready";
       const completed = await tx.execute<{ id: string }>(sql`
-        update ap_capture_items set status = ${status}, normalized = ${JSON.stringify(resolved.normalized)}::jsonb,
+        update ap_capture_items set status = ${status}, document_kind = ${native?.documentKind ?? item.document_kind}, normalized = ${JSON.stringify(resolved.normalized)}::jsonb,
                validation_issues = ${JSON.stringify(resolved.issues)}::jsonb,
                overall_confidence = ${extracted.overallConfidence}, vendor_candidate_id = ${resolved.vendorId},
                purchase_order_id = ${resolved.purchaseOrderId}, processed_at = now(), updated_at = now()
@@ -618,7 +622,7 @@ export async function processCaptureItem(input: {
                 ${input.actorId ?? item.created_by})
       `);
     });
-    if (settings.autoCreatePoMatchedDrafts && resolved.purchaseOrderId && !resolved.duplicate
+    if (settings?.autoCreatePoMatchedDrafts && resolved.purchaseOrderId && !resolved.duplicate
         && resolved.issues.length === 0) {
       try {
         await materializeCapture({
@@ -1091,6 +1095,28 @@ export async function materializeCapture(input: {
       currency = capture.currency ?? company.subsidiary_currency ?? company.org_currency;
       if (!currency) {
         throw new CaptureMaterializationError("The company has no configured base currency");
+      }
+    }
+    const nativeSource = (await tx.execute<{ raw_provider_payload: { invoice?: { buyer?: { name?: string; address?: {countryCode?: string | null} | null; vatId?: string | null; electronicAddress?: { id?: string; schemeId?: string } | null } } } }>(sql`select raw_provider_payload from ap_capture_runs where org_id = ${input.orgId} and capture_item_id = ${item.id} and status = 'succeeded' and provider = 'en16931' order by attempt desc limit 1`)).rows[0];
+    if (nativeSource) {
+      if (!(await orgFeatureEnabled(input.orgId, "einvoicing", tx))) throw new CaptureMaterializationError("Enable E-invoicing in Company Settings → Features before creating this draft.");
+      const buyer = nativeSource.raw_provider_payload.invoice?.buyer;
+      if (!buyer) throw new CaptureMaterializationError("The source e-invoice does not identify its receiving legal entity.");
+      const entity = (await tx.execute<{ name: string; legal_name: string | null; country: string }>(sql`select name, legal_name,country from subsidiaries where org_id = ${input.orgId} and id = ${subsidiaryId}`)).rows[0];
+      const namesMatch = normalizedKey(buyer.name ?? '') === normalizedKey(entity?.legal_name ?? entity?.name ?? '');
+      if (buyer.address?.countryCode && buyer.address.countryCode !== entity?.country) throw new CaptureMaterializationError("The source invoice buyer country differs from the selected receiving legal entity.");
+      if (!buyer.vatId && !buyer.electronicAddress) {
+        const named = (await tx.execute<{ name: string }>(sql`select coalesce(legal_name,name) as name from subsidiaries where org_id=${input.orgId} and is_active and country=${entity?.country ?? ''}`)).rows.filter(row => normalizedKey(row.name) === normalizedKey(buyer.name ?? ''));
+        if (named.length !== 1 || !buyer.address?.countryCode) throw new CaptureMaterializationError("The source buyer identity is ambiguous. Request the receiving entity's tax identifier or electronic address on the e-invoice.");
+      }
+      if (!namesMatch) throw new CaptureMaterializationError("The supplier e-invoice names a different receiving legal entity. Match it to that entity's purchase order or request a corrected invoice.");
+      if (buyer.vatId) {
+        const registration = (await tx.execute(sql`select 1 from tax_registrations where org_id = ${input.orgId} and subsidiary_id = ${subsidiaryId} and is_active and registration_number = ${buyer.vatId} and effective_from <= ${capture.invoiceDate}::date and (effective_to is null or effective_to >= ${capture.invoiceDate}::date)`)).rows[0];
+        if (!registration) throw new CaptureMaterializationError("The buyer VAT identifier does not belong to the receiving legal entity on the invoice date.");
+      }
+      if (buyer.electronicAddress) {
+        const address = (await tx.execute(sql`select 1 from einvoice_settings where org_id = ${input.orgId} and subsidiary_id = ${subsidiaryId} and electronic_address = ${buyer.electronicAddress.id ?? ''} and electronic_address_scheme = ${buyer.electronicAddress.schemeId ?? ''}`)).rows[0];
+        if (!address) throw new CaptureMaterializationError("The buyer electronic address does not belong to the receiving legal entity.");
       }
     }
     // Stored captures and existing bills stay. Turning Inventory off must

@@ -1,5 +1,7 @@
 'use client'
 
+import { apportionWithholdingMaterialsCost, collapseWithholdingLineMetadata } from '@openbooks/engine/allocations/withholding-cost'
+
 import { CLEAR_SEGMENT, INHERIT_SEGMENT, segmentCellValue, segmentAssignmentsFromCells } from '../lib/segment-assignments'
 
 import { quoteGoodsPlaceOfSupply } from '@openbooks/engine/tax/contracts'
@@ -42,6 +44,7 @@ import { HeaderFields } from './transaction-form/header-fields'
 import { DocTypeBadge, docTypeMeta } from './doc-type-badge'
 import { JournalEntryLink } from './journal-entry-link'
 import { PdfButton } from './pdf-button'
+import { EInvoiceButton } from './einvoice-button'
 import { SendButton } from './send-button'
 import { FlowManualButtons } from './flow-manual-buttons'
 import { ApprovalActions } from './approval-actions'
@@ -160,6 +163,8 @@ interface LineRow extends Record<string, unknown> {
   taxProfileId: string
   amount: string
   taxInputAmount: string
+  withholdingTreatment: string
+  withholdingMaterialsCost: string
   taxOverridden: boolean
   taxAmount: string
   /** Marketplace collecting this line's tax (facilitator name); blank = the
@@ -707,6 +712,8 @@ const emptyLine = (): LineRow => ({
   taxProfileId: '',
   amount: '',
   taxInputAmount: '',
+  withholdingTreatment: '',
+  withholdingMaterialsCost: '',
   taxOverridden: false,
   taxAmount: '',
   marketplaceFacilitator: '',
@@ -758,6 +765,8 @@ export function isBlankDrawerLine(row: Record<string, unknown>): boolean {
     'amount',
     'taxInputAmount',
     'taxAmount',
+    'withholdingTreatment',
+    'withholdingMaterialsCost',
     'distributionGroupId',
     'distributionRuleId',
     'distributionRuleName',
@@ -896,6 +905,8 @@ function toRow(l: Record<string, unknown>, lineDefs: CustomFieldDefClient[], seg
     taxProfileId: l.tax_group_id ? `group:${l.tax_group_id}` : l.tax_code_id ? `code:${l.tax_code_id}` : '',
     amount: l.amount != null ? String(l.amount) : '',
     taxInputAmount: l.tax_input_amount != null ? String(l.tax_input_amount) : '',
+    withholdingTreatment: lineText(l.withholding_treatment),
+    withholdingMaterialsCost: lineText(l.withholding_materials_cost),
     taxOverridden: l.tax_overridden === true,
     taxAmount: l.tax_amount != null ? String(l.tax_amount) : '',
     marketplaceFacilitator: lineText(l.marketplace_facilitator),
@@ -1140,6 +1151,7 @@ export function DocumentDrawer({
   const { money } = useMoney()
   const t = useTranslations(config.i18n)
   const tCommon = useTranslations('common')
+  const tWithholdingLine = useTranslations('documents.withholdingLine')
   const tSales = useTranslations('salesOrders')
   const tPostingEffects = useTranslations('common.postingEffects')
   const tReturns = useTranslations('returns')
@@ -1395,10 +1407,19 @@ export function DocumentDrawer({
       const members = groupMembers(prev, groupKey)
       const keep = new Set(members.map((m) => m.index))
       const first = members[0]!
+      let withholding: ReturnType<typeof collapseWithholdingLineMetadata>
+      try {
+        withholding = collapseWithholdingLineMetadata(members.map(({ row }) => ({ amount: row.amount,
+          withholdingTreatment: (row.withholdingTreatment || null) as 'labour' | 'materials' | 'excluded' | null,
+          withholdingMaterialsCost: row.withholdingMaterialsCost || null })))
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : tWithholdingLine('splitRefusal'))
+        return prev
+      }
       const next: LineRow[] = []
       prev.forEach((r, j) => {
         if (!keep.has(j)) next.push(r)
-        else if (j === first.index) next.push({ ...first.row, ...clearedDistributionFields(), amount: collapsed.total })
+        else if (j === first.index) next.push({ ...first.row, ...clearedDistributionFields(), amount: collapsed.total, withholdingTreatment: withholding.withholdingTreatment || '', withholdingMaterialsCost: withholding.withholdingMaterialsCost || '' })
       })
       return next.length > 0 ? next : [emptyLine()]
     })
@@ -1439,8 +1460,11 @@ export function DocumentDrawer({
       setSplitTarget(null)
       return
     }
+    let costs: (string | null | undefined)[]
+    try { costs = apportionWithholdingMaterialsCost(parent.withholdingMaterialsCost || null, children.map(child => child.amount)) }
+    catch (error) { toast.error(error instanceof Error ? error.message : tWithholdingLine('splitRefusal')); return }
     const groupKey = crypto.randomUUID()
-    const built: LineRow[] = children.map((child) => {
+    const built: LineRow[] = children.map((child, index) => {
       const base: LineRow = { ...emptyLine(), ...clearedDistributionFields() }
       for (const key of Object.keys(parent)) {
         if (key.startsWith('cf_') || key.startsWith('seg_')) base[key] = parent[key]
@@ -1462,6 +1486,8 @@ export function DocumentDrawer({
         locationId: child.locationId ?? parent.locationId,
         classId: child.classId ?? parent.classId,
         taxProfileId: parent.taxProfileId,
+        withholdingTreatment: parent.withholdingTreatment,
+        withholdingMaterialsCost: costs[index] || '',
         marketplaceFacilitator: parent.marketplaceFacilitator,
         amount: child.amount,
         distributionGroupId: groupKey,
@@ -1762,6 +1788,8 @@ export function DocumentDrawer({
                   : r.amount,
                 taxCodeId: config.hasTax && r.taxProfileId.startsWith('code:') ? r.taxProfileId.slice(5) : null,
                 taxGroupId: config.hasTax && r.taxProfileId.startsWith('group:') ? r.taxProfileId.slice(6) : null,
+                withholdingTreatment: config.kind === 'vendor_bill' ? (r.withholdingTreatment || null) : null,
+                withholdingMaterialsCost: config.kind === 'vendor_bill' ? (r.withholdingMaterialsCost || null) : null,
                 taxOverridden: config.hasTax ? r.taxOverridden : false,
                 taxAmount: config.hasTax && r.taxOverridden ? r.taxAmount : null,
                 // Marketplace collection rides only on sales kinds that offer
@@ -2300,6 +2328,13 @@ export function DocumentDrawer({
           ),
       })
     }
+    if (config.kind === 'vendor_bill') cols.push({ key: 'withholdingTreatment', label: tWithholdingLine('treatment'), width: '150px', type: 'select', options: [
+      { value: '', label: tWithholdingLine('fromItem') },
+      { value: 'labour', label: tWithholdingLine('labour') },
+      { value: 'materials', label: tWithholdingLine('materials') },
+      { value: 'excluded', label: tWithholdingLine('excluded') },
+    ] })
+    if (config.kind === 'vendor_bill') cols.push({ key: 'withholdingMaterialsCost', label: tWithholdingLine('directCost'), help: tWithholdingLine('directCostHelp'), width: '160px', type: 'amount', align: 'right' })
     if (marketplaceColumn) cols.push(marketplaceColumn)
     const lineVisibility = new Map(builtinSegments.map((segment) => [segment.storageColumn, segment.showOnLines]))
     const storageForRowKey: Record<string, string> = {
@@ -2310,7 +2345,7 @@ export function DocumentDrawer({
       return !storage || lineVisibility.get(storage) !== false
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [accounts, departments, projects, taxProfiles, lineDefs, segments, builtinSegments, config, t, tCommon, warehouseColumn, returnSourceColumn, promotionColumn, marketplaceColumn])
+  }, [accounts, departments, projects, taxProfiles, lineDefs, segments, builtinSegments, config, t, tCommon, tWithholdingLine, warehouseColumn, returnSourceColumn, promotionColumn, marketplaceColumn])
 
   const field = 'space-y-1.5'
   const accountName = (id: unknown): string => {
@@ -2453,6 +2488,13 @@ export function DocumentDrawer({
       },
       work_from: { key: 'workFrom', width: '130px', type: 'text', placeholder: 'YYYY-MM-DD' },
       work_to: { key: 'workTo', width: '130px', type: 'text', placeholder: 'YYYY-MM-DD' },
+      withholding_treatment: { key: 'withholdingTreatment', width: '150px', type: 'select', options: [
+        { value: '', label: tWithholdingLine('fromItem') },
+        { value: 'labour', label: tWithholdingLine('labour') },
+        { value: 'materials', label: tWithholdingLine('materials') },
+        { value: 'excluded', label: tWithholdingLine('excluded') },
+      ] },
+      withholding_materials_cost: { key: 'withholdingMaterialsCost', width: '160px', type: 'amount', align: 'right', help: tWithholdingLine('directCostHelp') },
       amount: { key: 'amount', width: '120px', type: 'amount', align: 'right', required: true },
       tax_amount: {
         key: 'taxAmount', width: '120px', type: 'tax', align: 'right', computeTax: lineTax,
@@ -2480,6 +2522,8 @@ export function DocumentDrawer({
       work_to: tCommon('labels.workTo'),
       amount: tCommon('labels.amount'),
       tax_amount: t('drawer.taxAmountColumn'),
+      withholding_treatment: tWithholdingLine('treatment'),
+      withholding_materials_cost: tWithholdingLine('directCost'),
     }
     const configured = layout.lines.columns
       .filter((p: LineColumnPlacement) => p.visible && builtinSegments.find((segment) => segment.storageColumn === p.key)?.showOnLines !== false)
@@ -2509,10 +2553,10 @@ export function DocumentDrawer({
       ...(warehouseColumn ? [warehouseColumn] : []),
       ...(returnSourceColumn ? [returnSourceColumn] : []),
       ...(promotionColumn ? [promotionColumn] : []),
-      ...columns.filter((column) => String(column.key).startsWith('seg_')),
+      ...columns.filter((column) => String(column.key).startsWith('seg_') || ((column.key === 'withholdingTreatment' || column.key === 'withholdingMaterialsCost') && !configured.some(c => c.key === column.key))),
     ]
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [layout, accounts, departments, projects, locations, classes, items, taxProfiles, lineDefs, cfColumns, columns, recordType, builtinSegments, t, tCommon, warehouseColumn, returnSourceColumn, promotionColumn])
+  }, [layout, accounts, departments, projects, locations, classes, items, taxProfiles, lineDefs, cfColumns, columns, recordType, builtinSegments, t, tCommon, tWithholdingLine, warehouseColumn, returnSourceColumn, promotionColumn])
 
   const headerDefByDefKey = useMemo(() => new Map(headerDefs.map((d) => [d.key, d])), [headerDefs])
   const defLabelForHeader = (key: string): string => {
@@ -2827,7 +2871,10 @@ export function DocumentDrawer({
         ) : null
       case 'pdf':
         return PDF_RECORD_TYPE_BY_KEY[recordType ?? String(doc.kind)] ? (
-          <PdfButton recordType={recordType ?? String(doc.kind)} recordId={String(doc.id)} />
+          <Fragment>
+            <PdfButton recordType={recordType ?? String(doc.kind)} recordId={String(doc.id)} />
+            {(doc.kind === 'customer_invoice' || doc.kind === 'customer_credit') && isPosted && <EInvoiceButton documentId={String(doc.id)} />}
+          </Fragment>
         ) : null
       case 'workflow':
         return <FlowManualButtons subjectKind={String(doc.kind)} subjectId={String(doc.id)} />
@@ -3243,6 +3290,7 @@ export function DocumentDrawer({
                 </Button>
               ) : null}
             </div>
+            {config.kind === 'vendor_bill' ? <p className="text-xs text-muted-foreground">{tWithholdingLine('directCostHelp')}</p> : null}
             <LineGrid<LineRow>
               columns={useLayout ? columnsFromLayout : columns}
               rows={rows}

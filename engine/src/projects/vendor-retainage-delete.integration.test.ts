@@ -6,6 +6,8 @@ import { BUILTIN_PROJECT_TYPES } from "@openbooks/schema";
 import { db, withOrgTransaction } from "../platform/db.ts";
 import { createScratchOrg, createScratchUser, dropScratchOrgReporting } from "../testing/fixtures.ts";
 import { releaseVendorRetainageProvenance } from "../ledger/billing-provenance.ts";
+import { applyDocumentEdit } from "../ledger/document-write.ts";
+import { loadDocument, loadDocumentEditCurrent } from "../ledger/document-service.ts";
 import { deleteDocument } from "../ledger/document-delete.ts";
 import { requestDocumentVoid } from "../ledger/document-void.ts";
 import { submitAndReleaseIfUngated } from "../flows/submit.ts";
@@ -26,7 +28,7 @@ async function fixture(run: (f: {
   actor: string;
   approver: string;
   subcontract: string;
-}) => Promise<void>) {
+}) => Promise<void>, beforePost?: (f: { org: Awaited<ReturnType<typeof createScratchOrg>>; actor: string; billId: string }) => Promise<void>) {
   const org = await createScratchOrg();
   try {
     const actor = await createScratchUser(org.orgId, "Vendor retainage controller", "admin");
@@ -51,6 +53,7 @@ async function fixture(run: (f: {
     await withOrgTransaction(org.orgId, () => submitVendorPayApplication(org.orgId, actor, app.id));
     await withOrgTransaction(org.orgId, () => approveVendorPayApplication(org.orgId, approver, app.id));
     const generated = await withOrgTransaction(org.orgId, () => generateVendorPayApplicationBill(org.orgId, actor, app.id));
+    await beforePost?.({ org, actor, billId: generated.vendorBillDocumentId });
     assert.equal((await submitAndReleaseIfUngated("vendor_bill", generated.vendorBillDocumentId, actor)).autoApproved, true);
     await postDocument(generated.vendorBillDocumentId, { control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank } }, { audit: { actorId: approver, source: "test" } });
     await run({ org, actor, approver, subcontract });
@@ -155,3 +158,77 @@ test("vendor retainage release audit rolls back with the delete transaction", en
   await withOrgTransaction(org.orgId, () => deleteDocument(first.vendorBillDocumentId, actor, org.orgId, { reason: "Correct release amount", allowedSubsidiaryIds: null }));
   assert.equal((await db.execute(sql`select id from audit_log where org_id=${org.orgId} and table_name='vendor_retainage_releases' and action='billing_released'`)).rows.length, 1);
 }));
+
+
+test("generated subcontract bills keep line identities while auditing direct-cost edits and release source reservations", enabled, async () => {
+  let sourceBill = "";
+  await fixture(async ({ org, actor, subcontract }) => {
+    const first = await withOrgTransaction(org.orgId, () => releaseVendorRetainage({ orgId: org.orgId, userId: actor,
+      subcontractId: subcontract, periodEnd: org.date, amount: "40" }));
+    const last = await withOrgTransaction(org.orgId, () => releaseVendorRetainage({ orgId: org.orgId, userId: actor,
+      subcontractId: subcontract, periodEnd: org.date, amount: "60" }));
+    const reservations = (await db.execute<{ sources: unknown }>(sql`
+      select a.changes->'after'->'sources' as sources from vendor_retainage_releases r
+        join audit_log a on a.org_id=r.org_id and a.table_name='vendor_retainage_releases' and a.row_id=r.id and a.action='insert'
+       where r.org_id=${org.orgId} and r.vendor_bill_document_id in (${first.vendorBillDocumentId},${last.vendorBillDocumentId}) order by a.at,a.id
+    `)).rows.map(row => row.sources);
+    const nativeSources = (await db.execute<{ sources: unknown }>(sql`
+      select r.source_bill_allocations as sources from vendor_retainage_releases r
+       where r.org_id=${org.orgId} and r.vendor_bill_document_id in (${first.vendorBillDocumentId},${last.vendorBillDocumentId}) order by r.created_at,r.id
+    `)).rows.map(row => row.sources);
+    assert.deepEqual(nativeSources, reservations);
+    await assert.rejects(() => db.execute(sql`update vendor_retainage_releases set source_bill_allocations='[]'::jsonb
+      where org_id=${org.orgId} and vendor_bill_document_id=${first.vendorBillDocumentId}`), (error: unknown) => String((error as { cause?: unknown }).cause ?? error).includes('Retainage source allocations are immutable'));
+    assert.deepEqual(reservations, [
+      [{ documentId: sourceBill, held: "100.0000", previousAmount: "0.0000", amount: "40.0000" }],
+      [{ documentId: sourceBill, held: "100.0000", previousAmount: "40.0000", amount: "60.0000" }],
+    ]);
+  }, async ({ org, actor, billId }) => {
+    sourceBill = billId;
+    await withOrgTransaction(org.orgId, async () => {
+      const before = (await loadDocument(billId, org.orgId))!;
+      const current = (await loadDocumentEditCurrent(billId, org.orgId))!;
+      const sourceRows = (await db.execute<{ row: Record<string, unknown> }>(sql`
+        select to_jsonb(l) as row from document_lines l where org_id=${org.orgId} and document_id=${billId} order by line_number
+      `)).rows.map(line => line.row);
+      assert.ok(before.lines.every(line => line.party_id === before.doc.party_id));
+      // Match the native drawer payload: it retains stable identity and all
+      // visible financial fields, while the line party remains source-owned.
+      const lines = before.lines.map((line, index) => ({
+        lineId: line.id as string, accountId: line.account_id as string, amount: String(line.amount), description: line.description as string,
+        quantity: String(line.quantity), unitPrice: String(line.unit_price), projectId: line.project_id as string,
+        itemId: line.item_id as string | null, unit: line.unit as string | null,
+        taxCodeId: line.tax_code_id as string | null, taxGroupId: line.tax_group_id as string | null,
+        taxOverridden: line.tax_overridden === true, departmentId: line.department_id as string | null,
+        locationId: line.location_id as string | null, classId: line.class_id as string | null,
+        stockLocationId: line.stock_location_id as string | null,
+        extraDims: line.extra_dims as Record<string, string | null>, custom: line.custom as Record<string, unknown>,
+        withholdingTreatment: index === 0 ? "materials" as const : "excluded" as const, withholdingMaterialsCost: index === 0 ? "600" : null,
+      }));
+      const edit = (submitted: typeof lines) => applyDocumentEdit(billId, current,
+        { expectedUpdatedAt: current.updatedAt, lines: submitted }, { orgId: org.orgId, userId: actor, source: "ui", runFlows: false });
+      await assert.rejects(() => edit(lines.map(line => ({ ...line, partyId: null }))), /source billing workflow/);
+      await assert.rejects(() => edit(lines.map((line, index) => index === 0 ? { ...line, amount: "1001", unitPrice: "1001" } : line)), /source billing workflow/);
+      await assert.rejects(() => edit(lines.map(line => ({ ...line, description: "Changed scope" }))), /source billing workflow/);
+      await edit(lines);
+      const after = (await loadDocument(billId, org.orgId))!;
+      assert.deepEqual(after.lines.map(line => line.id), before.lines.map(line => line.id));
+      assert.deepEqual(after.lines.map(line => line.party_id), before.lines.map(line => line.party_id));
+      assert.equal(after.lines[0]!.withholding_materials_cost, "600.0000");
+      assert.equal(after.lines[0]!.withholding_treatment, "materials");
+      const editedRows = (await db.execute<{ row: Record<string, unknown> }>(sql`
+        select to_jsonb(l) as row from document_lines l where org_id=${org.orgId} and document_id=${billId} order by line_number
+      `)).rows.map(line => line.row);
+      const immutableFields = (row: Record<string, unknown>) => {
+        const { withholding_treatment, withholding_materials_cost, updated_by, updated_at, ...immutable } = row;
+        return immutable;
+      };
+      assert.deepEqual(editedRows.map(immutableFields), sourceRows.map(immutableFields));
+      const audited = (await db.execute<{ updated: boolean }>(sql`
+        select exists(select 1 from audit_log a where a.org_id=${org.orgId} and a.table_name='documents' and a.row_id=${billId}
+          and a.action='update' and a.actor_id=${actor} and (a.changes->'after'->'lines'->0->>'withholding_materials_cost')::numeric=600) as updated
+      `)).rows[0]!;
+      assert.equal(audited.updated, true);
+    });
+  });
+});

@@ -5,6 +5,8 @@ import { loadMaskingPolicies, maskExpr, type MaskTransform } from "./masking.ts"
 import { rebaseClonedJsonReferences } from "./json-references.ts";
 import { copyS3Blob, deleteS3Blobs, fileCabinetObjectKey, MASKED_STORAGE_KIND } from "../platform/file-storage.ts";
 import { enqueueStorageCleanupStandalone } from "../platform/storage-cleanup.ts";
+import { canonicalNonNegativeDecimal } from "../money/exact-decimal.ts";
+import { toUnits } from "../money/money.ts";
 
 /**
  * The deterministic UUID-rebase clone engine. Copies one org's rows into a
@@ -210,6 +212,66 @@ export const CUSTOMIZATION_LAYER = new Set([
   "users",
 ]);
 
+/** Validate original coordinates against proven bills of the same subcontract.
+ * Legacy null evidence stays null; financial strings are never rewritten. */
+export function validateVendorRetainageSourceAllocations(
+  value: unknown, releaseAmount: string, billIds: ReadonlySet<string>, label: string,
+): void {
+  if (value === null) return;
+  function refuse(reason: string): never {
+    throw new Error(`sandbox clone: ${label}: ${reason}; correct the original retainage allocations and include their bills in the document copy before retrying`);
+  }
+  if (!Array.isArray(value) || value.length === 0) refuse("source allocations must be a nonempty array");
+  const exact = (raw: unknown): bigint => {
+    const canonical = canonicalNonNegativeDecimal(raw, 4);
+    if (canonical === null) refuse("source coordinates must be exact nonnegative decimal strings");
+    return toUnits(canonical);
+  };
+  let allocated = 0n;
+  const seen = new Set<string>();
+  for (const entry of value) {
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) refuse("source allocation must be an object");
+    const allocation = entry as Record<string, unknown>;
+    if (Object.keys(allocation).sort().join(",") !== "amount,documentId,held,previousAmount") refuse("source allocation fields are invalid");
+    if (typeof allocation.documentId !== "string") refuse("source bill identity is invalid");
+    let documentId: string;
+    try { documentId = assertUuid(allocation.documentId).toLowerCase(); }
+    catch { refuse("source bill identity is invalid"); }
+    if (!billIds.has(documentId)) refuse("source bill has no scoped counterpart in the sandbox");
+    if (seen.has(documentId)) refuse("source bill is allocated more than once");
+    seen.add(documentId);
+    const held = exact(allocation.held), previous = exact(allocation.previousAmount), amount = exact(allocation.amount);
+    if (amount <= 0n || previous + amount > held) refuse("source coordinates exceed the original retained amount");
+    allocated += amount;
+  }
+  if (allocated !== exact(releaseAmount)) refuse("source amounts do not equal the release amount");
+}
+
+/** Run after documents have been copied, inside the same clone snapshot.
+ * Original bill status may have changed since release; its ownership does not. */
+async function validateVendorRetainageSourcesForClone(opts: CloneOptions): Promise<void> {
+  const releases = (await db.execute<{ id: string; subcontract_id: string; amount: string; source_bill_allocations: unknown }>(sql`
+    select id, subcontract_id, amount::text as amount, source_bill_allocations
+      from vendor_retainage_releases where org_id = ${opts.productionOrgId}`)).rows;
+  if (!releases.some(row => row.source_bill_allocations !== null)) return;
+  const bills = (await db.execute<{ subcontract_id: string; document_id: string }>(sql`
+    select application.subcontract_id, original.id as document_id
+      from vendor_pay_applications application
+      join documents original on original.org_id = application.org_id and original.id = application.vendor_bill_document_id
+      join documents copied on copied.org_id = ${opts.sandboxOrgId}
+        and copied.id = ob_rebase(original.id, ${opts.seed}::uuid)
+     where application.org_id = ${opts.productionOrgId}`)).rows;
+  const ids = new Map<string, Set<string>>();
+  for (const bill of bills) {
+    const scoped = ids.get(bill.subcontract_id) ?? new Set<string>();
+    scoped.add(bill.document_id);
+    ids.set(bill.subcontract_id, scoped);
+  }
+  for (const release of releases) validateVendorRetainageSourceAllocations(
+    release.source_bill_allocations, release.amount, ids.get(release.subcontract_id) ?? new Set(), `retainage release ${release.id}`,
+  );
+}
+
 /** Generate the INSERT..SELECT that copies one table, or null to skip it.
  * `retainedTenantTables` = tenant-owned tables the clone deliberately does not
  * copy (the catalog EXCLUDE set): a real FK into one of them can never be
@@ -246,6 +308,17 @@ export function generateCopySql(
     // copies retain board behavior without carrying those match values.
     if (opts.masked && t.name === "schedule_boards" && c.name === "cell_color_rules") {
       exprs.push("'[]'::jsonb");
+      continue;
+    }
+    if (t.name === "vendor_retainage_releases" && c.name === "source_bill_allocations") {
+      if (!rebaseSet.has("documents") || (opts.onlyTables && !opts.onlyTables.has("documents"))) {
+        throw new Error("sandbox clone: retainage source allocations require documents in the copy plan; include documents before retrying");
+      }
+      exprs.push(`(case when "source_bill_allocations" is null then null else (
+        select jsonb_agg(jsonb_set(a.value, '{documentId}',
+          to_jsonb(ob_rebase((a.value->>'documentId')::uuid, '${seed}'::uuid)::text)) order by a.ord)
+        from jsonb_array_elements("source_bill_allocations") with ordinality as a(value, ord)
+      ) end)`);
       continue;
     }
     const fkTarget = t.fks[c.name];
@@ -482,6 +555,12 @@ export async function runClone(opts: CloneOptions): Promise<CloneResult> {
     for (const t of selected) {
       const stmt = generateCopySql(t, opts, rebaseSet, retainedTenantTables, masking, cutoff);
       if (!stmt) continue;
+      if (t.name === "vendor_retainage_releases" && t.columns.some(c => c.name === "source_bill_allocations")) {
+        if (!perTable.some(row => row.table === "documents")) {
+          throw new Error("sandbox clone: retainage source allocations require the documents copy to finish first; include documents before retrying");
+        }
+        await validateVendorRetainageSourcesForClone(opts);
+      }
       const res = (await db.execute(sql.raw(stmt)));
       const n = res.rowCount ?? 0;
       perTable.push({ table: t.name, rows: n });

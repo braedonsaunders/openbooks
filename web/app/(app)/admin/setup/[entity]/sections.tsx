@@ -152,6 +152,7 @@ export async function SetupDrawerSlot({
     multiSubsidiary: featureEnabled(features, 'multiSubsidiary'),
     equipment: featureEnabled(features, 'equipment'),
     fieldTickets: featureEnabled(features, 'fieldTickets'),
+        einvoicing: featureEnabled(features, 'einvoicing'),
   })
   const entity = resolveDynamicSetupOptions(gatedEntity, await setupOptionsContext(orgId, gatedEntity))
   if (authz.allowedSubsidiaryIds !== null && !setupEntityHasSubsidiaryAnchor(entity)) return null

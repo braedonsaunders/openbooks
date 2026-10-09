@@ -14,6 +14,7 @@ export function setupReferenceSubsidiarySource(source: string, alias: string): {
     subsidiary: sql`scoped_employment.employer_subsidiary_id`, id: sql.raw(`${alias}.id`), org: sql.raw(`${alias}.org_id`),
   }
   const declarations: Record<string, [string, string]> = {
+    'einvoice-customers': ['parties', 'subsidiary_id'],
     'equipment-units': ['equipment_units', 'subsidiary_id'],
     'worker-employments': ['worker_employments', 'employer_subsidiary_id'],
     'benefit-plans': ['hrm_benefit_plans', 'employer_subsidiary_id'],
@@ -33,6 +34,6 @@ export function setupEntitySubsidiaryFilter(entity: SetupEntity, allowedSubsidia
   return sql.join(references.map((field, index) => {
     const target = setupReferenceSubsidiarySource(field.ref!, `scoped_reference_${index}`)
     return sql`and exists (select 1 from ${target.from} where ${target.id}=${sql.raw(`${entity.table}.${toSnake(field.key)}`)}
-      and ${target.org}=${sql.raw(`${entity.table}.org_id`)} ${subsidiaryVisibleFilter(target.subsidiary, allowedSubsidiaryIds, { orgWideNull: field.ref === 'benefit-plans' })})`
+      and ${target.org}=${sql.raw(`${entity.table}.org_id`)} ${subsidiaryVisibleFilter(target.subsidiary, allowedSubsidiaryIds, { orgWideNull: field.ref === 'benefit-plans' || field.ref === 'einvoice-customers' })})`
   }), sql``)
 }

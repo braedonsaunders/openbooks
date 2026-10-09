@@ -1,7 +1,7 @@
 {
   "title": "PDF Templates",
   "description": "Author beautiful printable documents and assign them to invoices, journals, and every other transaction",
-  "recordTypes":   {
+  "recordTypes": {
     "customer_invoice": "Customer invoice",
     "customer_credit": "Customer credit",
     "quote": "Quote",
@@ -85,5 +85,22 @@
     "sent": "Sent to {to}",
     "noRecipient": "Enter a recipient email address",
     "failed": "Could not send the email"
+  },
+  "einvoice": {
+    "label": "E-invoice",
+    "help": "Validate the selected format, then issue and download the archived original.",
+    "profile": "Format",
+    "chooseProfile": "Choose a format…",
+    "buyerReference": "Buyer reference / Leitweg-ID",
+    "validate": "Validate",
+    "working": "Working…",
+    "valid": "The native validation checks passed.",
+    "findings": "Validation findings",
+    "issue": "Issue e-invoice",
+    "issueUnavailable": "Issuance requires a posted invoice and permission to manage documents.",
+    "setup": "E-invoice settings",
+    "originals": "Issued originals",
+    "archivedHelp": "This format has already been issued. Download the preserved original below.",
+    "failed": "Could not load or issue this e-invoice."
   }
 }

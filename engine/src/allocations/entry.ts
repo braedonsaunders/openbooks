@@ -1,3 +1,4 @@
+import { apportionWithholdingMaterialsCost, collapseWithholdingLineMetadata } from "./withholding-cost.ts";
 import { randomUUID } from "node:crypto";
 import { fromUnits, normalizeDecimal, roundDiv, toUnits } from "../money/money.ts";
 import { AllocationApportionError, apportionTargets, fixedPercentWeights } from "./apportion.ts";
@@ -58,6 +59,8 @@ export interface EntryLineInput {
   description?: string | null;
   taxCodeId?: string | null;
   taxGroupId?: string | null;
+  withholdingTreatment?: "labour" | "materials" | "excluded" | null;
+  withholdingMaterialsCost?: string | null;
   partyId?: string | null;
   departmentId?: string | null;
   projectId?: string | null;
@@ -107,6 +110,8 @@ export interface PlannedEntryLine {
   description: string | null;
   taxCodeId: string | null;
   taxGroupId: string | null;
+  withholdingTreatment?: "labour" | "materials" | "excluded" | null;
+  withholdingMaterialsCost?: string | null;
   /** Marketplace collecting this line's tax; inherited from the exploded parent. */
   marketplaceFacilitator: string | null;
   partyId: string | null;
@@ -150,8 +155,8 @@ export interface PlannedEntryLineage {
 /** Stored-group snapshot the caller loads for re-save matching. */
 export interface StoredEntryGroup {
   groupId: string;
-  ruleId: string;
-  versionId: string;
+  ruleId: string | null;
+  versionId: string | null;
   locked: boolean;
   /** Exact Σ of the stored members' amounts. */
   total: string;
@@ -475,6 +480,7 @@ export function explodeDocumentLine(
     quantities = apportionExactUnits(qtyUnits, weightUnits, residualIdx);
   }
 
+  const costs = apportionWithholdingMaterialsCost(line.withholdingMaterialsCost, amounts);
   const groupId = opts.groupId ?? randomUUID();
   const children: PlannedEntryLine[] = ordered.map((t, i) => ({
     accountId: t.targetAccountId ?? line.accountId,
@@ -492,6 +498,8 @@ export function explodeDocumentLine(
         : (line.description ?? null),
     taxCodeId: line.taxCodeId ?? null,
     taxGroupId: line.taxGroupId ?? null,
+    withholdingTreatment: line.withholdingTreatment,
+    withholdingMaterialsCost: costs[i],
     marketplaceFacilitator: line.marketplaceFacilitator ?? null,
     partyId: line.partyId ?? null,
     departmentId: t.departmentId ?? line.departmentId ?? null,
@@ -533,6 +541,8 @@ function plainLine(line: EntryLineInput): PlannedEntryLine {
     description: line.description ?? null,
     taxCodeId: line.taxCodeId ?? null,
     taxGroupId: line.taxGroupId ?? null,
+    withholdingTreatment: line.withholdingTreatment,
+    withholdingMaterialsCost: line.withholdingMaterialsCost,
     marketplaceFacilitator: line.marketplaceFacilitator ?? null,
     partyId: line.partyId ?? null,
     departmentId: line.departmentId ?? null,
@@ -693,7 +703,7 @@ export function planEntryDistributions(
       quantity = formatScaled(qtyTotal, 8);
     }
     const collapsed: PlannedEntryLine = {
-      ...plainLine({ ...first, amount: total, quantity }),
+      ...plainLine({ ...first, ...collapseWithholdingLineMetadata(members.map(m => m.candidate)), amount: total, quantity }),
       amount: total,
       quantity,
     };
@@ -706,6 +716,15 @@ export function planEntryDistributions(
   for (const [groupId, indices] of memberIndicesByGroup) {
     const stored = existingGroups.get(groupId);
     if (stored === undefined) {
+      const members = indices.map(i => lines[i]!);
+      if (members.every(member => member.distributionLocked === true)) {
+        // Explicit manual splits are already allocated; preserve their exact inputs.
+        members.forEach((member, k) => {
+          output.push({ ...plainLine(member), distributionGroupId: groupId, distributionLocked: true });
+          handled[indices[k]!] = true;
+        });
+        continue;
+      }
       // Unknown group: strip the stamps and match each member fresh below.
       for (const i of indices) {
         const stripped: EntryLineInput = { ...lines[i]!, distributionGroupId: null, distributionLocked: null };
@@ -744,7 +763,7 @@ export function planEntryDistributions(
       for (const m of members) qtyTotal += parseQuantity(m.quantity!);
       quantity = formatScaled(qtyTotal, 8);
     }
-    const result = explodeDocumentLine({ ...first, amount: submittedTotal, quantity }, rule, {
+    const result = explodeDocumentLine({ ...first, ...collapseWithholdingLineMetadata(members), amount: submittedTotal, quantity }, rule, {
       driverVector: opts.driverVectors?.get(rule.rule.id),
       driverDimension: opts.driverDimensions?.get(rule.rule.id),
       resolveDynamicTargets: opts.resolveDynamicTargets,

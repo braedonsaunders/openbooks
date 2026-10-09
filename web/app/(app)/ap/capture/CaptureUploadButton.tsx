@@ -55,7 +55,7 @@ export function CaptureUploadButton({ disabled = false }: { disabled?: boolean }
         ref={input}
         type="file"
         multiple
-        accept="application/pdf,image/jpeg,image/png,image/tiff"
+        accept="application/pdf,image/jpeg,image/png,image/tiff,application/xml,text/xml"
         className="sr-only"
         aria-hidden="true"
         tabIndex={-1}
