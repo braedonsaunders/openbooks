@@ -542,14 +542,19 @@ export async function applyRunLineAdjustments(
     }
     // Operator-entered adjustment, closed through roundMoney: canonical Money.
     const amount = roundMoney(String(adj.adj_amount), 2) as Money;
-    if (cmp(amount, "0") === 0) continue;
+    // Paid-hour inputs can have no cash value when the corresponding wages
+    // are supplied separately. Retain their hours for benefits and reporting;
+    // empty replacements still suppress derived pay without creating a line.
+    const quantityUnits = (adj.unit_of_measure as string | null) === "quantity";
+    const paidHours = adj.kind === "earning" && !quantityUnits
+      && adj.adj_hours != null && cmp(String(adj.adj_hours), "0") > 0;
+    if (cmp(amount, "0") === 0 && !paidHours) continue;
     // A quantity-unit component counts trips, meals, or incentive units —
     // never hours. Its units stay on the adjustment for the audit trail, but
     // no hours reach the line: every hours basis downstream (per-hour rates,
     // benefit hours bases, insurable-hours and wage-hour reports) reads
     // lines and stub hours, so a quantity line is excluded everywhere by
     // carrying none.
-    const quantityUnits = (adj.unit_of_measure as string | null) === "quantity";
     lines.push({
       componentId: adj.id as string, kind: adj.kind as Line["kind"],
       runAdjustmentId: String(adj.adjustment_id),
