@@ -1,3 +1,4 @@
+import { ScopeNotFoundError } from '../organization/subsidiary-scope.ts';
 import { scheduleBoardTimerGraph } from "../flows/schedule-board-adapter.ts";
 import {
   runDueScheduledFlows,
@@ -724,7 +725,7 @@ test(
           ...audience,
           visibility: "personal",
         }),
-        /Additional native contacts/,
+        error => error instanceof Error && /audience or additional contacts/.test(error.message) && "remedy" in error && /whole-board/.test(String(error.remedy)),
       );
     }),
 );
@@ -794,9 +795,12 @@ test(
       await f.flow();
       await issue(f, combined);
       assert.deepEqual(await counts(f.orgId), { requests: 1, outbox: 1 });
-      await withBypassContext(() =>
-        db.execute(sql`delete from role_assignments where user_id=${user}`),
-      );
+      await withBypassContext(async () => {
+        const replacementRole = randomUUID();
+        await db.execute(sql`insert into app_roles(id,org_id,key,name,permissions) values(${replacementRole},${f.orgId},'unrelated-explicit-role','Unrelated explicit role','[]'::jsonb)`);
+        await db.execute(sql`insert into role_assignments(org_id,user_id,role_id) values(${f.orgId},${user},${replacementRole})`);
+        await db.execute(sql`delete from role_assignments where org_id=${f.orgId} and user_id=${user} and role_id in(select id from app_roles where org_id=${f.orgId} and key='schedule-notices')`);
+      });
       await assert.rejects(
         previewScheduleDistribution(f, f.boardId, dates.from, dates.through, {
           ...audience,
@@ -964,11 +968,8 @@ test(
           },
         ],
       };
-      await importSourceHistory(
-        f,
-        batch,
-        (await previewSourceHistory(f, batch)).approvalHash,
-      );
+      const actor = { orgId: f.orgId, actorId: f.actorId };
+      await importSourceHistory(actor, batch, (await previewSourceHistory(actor, batch)).approvalHash);
       await f.flow();
       const p = await previewScheduleDistribution(
         f,
@@ -1016,10 +1017,11 @@ test('automatic board-scope membership includes current people with no assignmen
 test('revoking the scheduling feature after authoring leaves native failed timer runs and no partial report or email', enabled, () => fixture(async f => {
   await timer(f, false);
   await withBypassContext(() => db.execute(sql`update orgs set settings=jsonb_set(settings,'{features,hrmShiftPlanning}','false'::jsonb) where id=${f.orgId}`));
+  await assert.rejects(previewScheduleDistribution(f, f.boardId, dates.from, dates.through, personal), error => error instanceof ScopeNotFoundError && error.message === 'not found');
   const result = await runDueScheduledFlows(new Date('2026-10-12T20:00:00Z'));
   assert.equal(result.errors, 2);
   assert.deepEqual(await counts(f.orgId), { requests: 0, outbox: 0 });
   const failures = await withOrgTransaction(f.orgId, () => db.execute<{status: string; error: string}>(sql`select status,error from flow_runs where subject_kind='schedule_board' order by created_at,id`));
   assert.equal(failures.rows.length, 2);
-  assert.ok(failures.rows.every(run => run.status === 'failed' && /switched off/.test(run.error)));
+  assert.ok(failures.rows.every(run => run.status === 'failed' && run.error.includes('(not found)')), JSON.stringify(failures.rows));
 }));

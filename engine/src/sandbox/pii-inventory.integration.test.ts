@@ -2665,15 +2665,6 @@ test("every sensitive column of every cloned table is masked or allow-listed, an
   const ruleReadback = await db.execute<{rules:unknown}>(sql`select ${sql.raw(expression!)} rules
     from (values ('[{"field":"bookingLabel","match":"contains","value":"Production Person","color":"#123456"}]'::jsonb)) source(cell_color_rules)`);
   assert.deepEqual(ruleReadback.rows[0]?.rules,[]);
-  const policyColumn = boards.columns.find(column => column.name === "automatic_delivery_policy");
-  assert.ok(policyColumn);
-  for (const masked of [false, true]) {
-    const copied = generateCopySql({ ...boards, columns: [policyColumn] }, { ...options, masked }, new Set(['schedule_boards']), new Set(), new Map(), null)!;
-    const policyExpression = copied.split(') select ')[1]?.split(' from "schedule_boards"')[0];
-    assert.equal(policyExpression, "null::jsonb");
-    const result = await db.execute<{policy: unknown}>(sql`select ${sql.raw(policyExpression!)} policy from (values ('{"operatorId":"65fa9dc7-228f-4e19-8bf1-17d52efeb78d","additionalPartyIds":["private-contact"]}'::jsonb)) source(automatic_delivery_policy)`);
-    assert.equal(result.rows[0]?.policy, null);
-  }
   const stale: string[] = [];
   for (const key of ALLOW_LISTED_NON_PERSONAL) {
     const udtName = live.get(key);
@@ -2721,4 +2712,20 @@ test("every masking policy names a real schema column with a legal transform", a
   assert.notEqual(masked[0]!.source_key, sourceKey);
   assert.deepEqual(masked[0]!.source_evidence, { redacted: true });
   assert.deepEqual(masked[1], { source_key: null, source_evidence: null });
+});
+
+
+test("full and masked native clone projections clear schedule automatic policy regardless of source operator/contact evidence", async () => {
+  const boards = (await loadCatalog()).tables.find(table => table.name === "schedule_boards");
+  assert.ok(boards);
+  const options = { productionOrgId: '65fa9dc7-228f-4e19-8bf1-17d52efeb78d', sandboxOrgId: '47df30a3-4fd1-4570-bb67-09641053ee3b', seed: '42b3d7dd-9674-4f3c-8d6a-8ba5d2308130', tier: 'full' as const };
+  const policyColumn = boards.columns.find(column => column.name === "automatic_delivery_policy");
+  assert.ok(policyColumn);
+  for (const masked of [false, true]) {
+    const copied = generateCopySql({ ...boards, columns: [policyColumn] }, { ...options, masked }, new Set(['schedule_boards']), new Set(), new Map(), null)!;
+    const policyExpression = copied.split(') select ')[1]?.split(' from "schedule_boards"')[0];
+    assert.equal(policyExpression, "null::jsonb");
+    const result = await db.execute<{policy: unknown}>(sql`select ${sql.raw(policyExpression!)} policy from (values ('{"operatorId":"65fa9dc7-228f-4e19-8bf1-17d52efeb78d","additionalPartyIds":["private-contact"]}'::jsonb)) source(automatic_delivery_policy)`);
+    assert.equal(result.rows[0]?.policy, null);
+  }
 });
