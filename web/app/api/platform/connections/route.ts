@@ -122,8 +122,13 @@ async function listConnectionRoutes() {
     if (!connectionId) continue;
     const health = runHealth.get(connectionId) ?? {};
     if (run.kind === "incremental" && !health.mirror) health.mirror = run;
-    if (run.kind === "attachments" && !health.attachments)
-      health.attachments = run;
+    const stats = run.stats as { attachments?: unknown } | null;
+    const progress = run.progress as { phase?: string } | null;
+    const includesAttachments = run.kind === "attachments" || stats?.attachments != null || progress?.phase === "attachments";
+    if (includesAttachments && (!health.attachments || String(run.startedAt) > String(health.attachments.startedAt))) {
+      const summary = stats?.attachments as { failures?: number } | undefined;
+      health.attachments = { ...run, status: run.kind !== "attachments" && summary?.failures === 0 ? "ok" : run.status };
+    }
     runHealth.set(connectionId, health);
   }
   const resolvedDeletions = (await db.execute<{ connectionId: string; sourceRef: string }>(sql`

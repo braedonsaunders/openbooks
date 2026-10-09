@@ -1,4 +1,7 @@
-import { downloadSourceFile, safeFilename } from "./netsuite-attachments.ts";
+import { orgFeatureEnabled } from "../organization/org-feature-lock.ts";
+import { importNetSuiteCrm } from "./netsuite-crm.ts";
+import { syncNetSuiteFixedAssets } from "./netsuite-fixed-assets.ts";
+import { importNetSuiteAttachments, downloadSourceFile, safeFilename } from "./netsuite-attachments.ts";
 import { DEFAULT_NETSUITE_BRIDGE_SCRIPT_ID, DEFAULT_NETSUITE_BRIDGE_DEPLOYMENT_ID, NetSuiteBridgeClient, type NetSuiteBridgeConfig } from "../connectors/netsuite-bridge.ts";
 import type { NetSuiteCreds } from "../connectors/netsuite.ts";
 import { fromUnits, mulDecimal, normalizeMoney, toUnits } from "../money/money.ts";
@@ -14,6 +17,7 @@ import type {
   SourceClearedLineState,
   SourceEntity,
   SourceOpenItem,
+  SourceOperationalSyncResult,
   SourceProjectAccountMonthRow,
   SourceProjectFinancialInputs,
   SourceLedgerContext,
@@ -810,6 +814,24 @@ export class NetSuiteSource implements MigrationSource {
         FROM accountingperiod
        ORDER BY startdate, enddate, id`);
     return normalizeNetSuiteAccountingPeriods(rows);
+  }
+
+  async syncOperationalRecords(options: { orgId: string; connectionId: string; actorId: string | null }): Promise<SourceOperationalSyncResult> {
+    const result: SourceOperationalSyncResult = { disabledFeatures: [] };
+    if (await orgFeatureEnabled(options.orgId, "fixedAssets")) {
+      result.fixedAssets = await syncNetSuiteFixedAssets(this, options);
+    } else result.disabledFeatures.push("fixedAssets");
+    if (await orgFeatureEnabled(options.orgId, "crm")) {
+      result.crm = await importNetSuiteCrm(options.orgId, options.connectionId, undefined, { actorId: options.actorId });
+    } else result.disabledFeatures.push("crm");
+    return result;
+  }
+
+  async syncAttachments(options: { orgId: string; connectionId: string; actorId: string | null }) {
+    return importNetSuiteAttachments({
+      org: options.orgId, connectionId: options.connectionId, actorId: options.actorId,
+      execute: true, concurrency: 4,
+    });
   }
 
   async projectFinancialInputs(): Promise<SourceProjectFinancialInputs> {

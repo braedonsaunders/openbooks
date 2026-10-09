@@ -61,6 +61,7 @@ export async function loadFeatures(): Promise<FeaturesData> {
   const features = FEATURES.map((f) => ({
     key: f.key,
     category: f.category,
+    group: f.group,
     parentKey: f.parentKey,
     requiresAll: f.requiresAll,
     recommends: f.recommends,

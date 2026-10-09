@@ -1,3 +1,4 @@
+import { isUuid } from '../platform/uuid.ts'
 import { randomUUID } from 'node:crypto'
 import { sql } from 'drizzle-orm'
 import { db } from '../platform/db.ts'
@@ -182,7 +183,7 @@ function batches<T>(rows: T[], size = 500): T[][] {
   return result
 }
 
-async function importRecentActivityNotes(orgId: string, actorId: string, creds: NetSuiteCreds, report: CrmImportReport, transport: typeof fetch) {
+async function importRecentActivityNotes(orgId: string, actorId: string | null, creds: NetSuiteCreds, report: CrmImportReport, transport: typeof fetch) {
   const rows = await suiteql<NetSuiteRecentActivityNoteRow>(`
     select ra.id,ra.entity,ra.type,ra.typecode,ra.createddate,ra.lastmodifieddate,ra.details,ra.subdetails
       from recentactivity ra
@@ -253,7 +254,7 @@ async function importRecentActivityNotes(orgId: string, actorId: string, creds: 
   report.activities.salesVisit = salesVisits
 }
 
-async function importNativeActivities(orgId: string, actorId: string, creds: NetSuiteCreds, report: CrmImportReport, transport: typeof fetch) {
+async function importNativeActivities(orgId: string, actorId: string | null, creds: NetSuiteCreds, report: CrmImportReport, transport: typeof fetch) {
   const kinds = [{ type: 'task', kind: 'task', reportKey: 'task' }, { type: 'phoneCall', kind: 'call', reportKey: 'phoneCall' }, { type: 'calendarEvent', kind: 'event', reportKey: 'calendarEvent' }, { type: 'note', kind: 'note', reportKey: 'nativeNote' }] as const
   for (const source of kinds) {
     try {
@@ -288,22 +289,16 @@ async function importNativeActivities(orgId: string, actorId: string, creds: Net
 }
 
 /** Idempotent CRM import from the tenant's stored NetSuite connection. */
-export async function importNetSuiteCrm(orgId: string, connectionId?: string, transport: typeof fetch = guardedFetch): Promise<CrmImportReport> {
+export async function importNetSuiteCrm(orgId: string, connectionId?: string, transport: typeof fetch = guardedFetch, options: { actorId?: string | null } = {}): Promise<CrmImportReport> {
   // Canonical switchboard read (::boolean casts threw on non-boolean imports).
   if (!(await orgFeatureEnabled(orgId, 'crm'))) throw new Error('CRM feature is disabled')
   const creds = await credentials(orgId, connectionId)
-  // Roles live in app_roles/role_assignments; users has no role column, so
-  // prefer a controller through the assignment join, else the earliest user.
-  const actor = (await db.execute<{ id: string }>(sql`
-    select u.id from users u
-     where u.org_id=${orgId} and u.is_active
-     order by exists (
-       select 1 from role_assignments ra
-         join app_roles r on r.id = ra.role_id
-        where ra.org_id = u.org_id and ra.user_id = u.id and r.key = 'controller'
-     ) desc, u.created_at limit 1`))
-  const actorId = actor.rows[0]?.id
-  if (!actorId) throw new Error('The tenant needs an active user before CRM data can be imported')
+  const actorId = options.actorId ?? null
+  if (actorId !== null) {
+    if (!isUuid(actorId)) throw new Error('CRM import actor must be a valid user id')
+    const actor = await db.execute<{ id: string }>(sql`select id from users where id=${actorId} and org_id=${orgId} and is_active`)
+    if (!actor.rows[0]) throw new Error('CRM import actor must be an active user in the tenant')
+  }
   await ensureCrmDefaults(orgId, actorId)
   const report: CrmImportReport = { accountStatuses: 0, accounts: 0, missingParties: 0, opportunities: 0, opportunityLines: 0, activities: {}, sourceNoteLinks: 0, warnings: [] }
 
@@ -383,7 +378,8 @@ export async function importNetSuiteCrm(orgId: string, connectionId?: string, tr
   }
   for (const opportunity of opportunities) {
     const party = opportunity.entity ? (await db.execute<{ id: string }>(sql`select id from parties where org_id=${orgId} and custom->>'nsId'=${opportunity.entity} limit 1`)).rows[0] : null
-    if (!party || !defaultStatus) continue
+    if (!defaultStatus) throw new Error('CRM import requires a default opportunity status in Company Setup')
+    if (!party) { report.missingParties++; report.warnings.push(`Opportunity ${opportunity.tranid || opportunity.id} requires missing source party ${opportunity.entity ?? '(blank)'}`); continue }
     const currency = resolveNetSuiteCrmCurrency(opportunity.currency, baseCurrency, sourceCurrencyById, configuredCurrencies)
     if (!currency) {
       report.warnings.push(`Opportunity ${opportunity.tranid || opportunity.id} was skipped because source currency ${opportunity.currency ?? '(blank)'} does not resolve to a configured ISO currency.`)

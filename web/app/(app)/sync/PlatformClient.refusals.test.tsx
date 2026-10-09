@@ -156,6 +156,7 @@ for (const [name, respondTest, match, matchMessage, checkParseLeak] of [
     const { unmount } = await renderClient();
     t.after(unmount);
 
+    await click(document.querySelector('button[aria-label="More actions for Manual import"]')!);
     const testButton = buttonsNamed("Test")[0];
     assert.ok(testButton, "the connection Test button must render once connections load");
     await click(testButton);
@@ -172,6 +173,7 @@ for (const [name, respondTest, match, matchMessage, checkParseLeak] of [
         !/SyntaxError|Unexpected token|json/i.test(last),
         `no JSON parse error may leak into the toast, saw: ${last}`,
       );
+      await click(document.querySelector('button[aria-label="More actions for Manual import"]')!);
       const testAgain = buttonsNamed("Test")[0];
       assert.ok(testAgain && !testAgain.disabled, "the Test button must release so the operator can retry");
     }
@@ -201,4 +203,33 @@ test("source deletions offer one mirror retry without individual accounting deci
   assert.equal(retry.length, 1);
   await click(retry[0]!);
   assert.deepEqual(calls, [{ url: "/api/platform/connections/c1/run", body: { mode: "mirror" } }]);
+});
+
+
+test("Connections and History replace the active body and preserve URL navigation", async (t) => {
+  window.history.replaceState({}, "", "/sync?connect=netsuite");
+  const restoreFetch = scriptFetch((url) => url === "/api/platform/connections"
+    ? Response.json({ connections: [{ ...CONNECTION, source: "netsuite" }], runs: [], sourceTypes: [], currencies: [], canManage: false }) : null);
+  t.after(restoreFetch);
+  const { unmount } = await renderClient();
+  t.after(unmount);
+  t.after(() => window.history.replaceState({}, "", "/sync"));
+  assert.equal(buttonsNamed("Sync now").length, 1);
+  assert.equal(buttonsNamed("Sync attachments").length, 0);
+  assert.equal(buttonsNamed("Sync project financials").length, 0);
+  assert.equal(buttonsNamed("Test").length, 0, "secondary actions belong to the menu");
+  await click(buttonsNamed("History")[0]!);
+  assert.equal(buttonsNamed("Sync now").length, 0);
+  assert.match(document.body.textContent ?? "", /No runs yet/);
+  assert.equal(new URLSearchParams(window.location.search).get("tab"), "history");
+  assert.equal(new URLSearchParams(window.location.search).get("connect"), "netsuite");
+  await act(async () => {
+    window.history.replaceState({}, "", "/sync?connect=netsuite");
+    window.dispatchEvent(new window.PopStateEvent("popstate"));
+    await tick();
+  });
+  assert.equal(buttonsNamed("Sync now").length, 1);
+  await click(document.querySelector('button[aria-label="More actions for Manual import"]')!);
+  assert.equal(buttonsNamed("Test").length, 1);
+  assert.equal(buttonsNamed("Edit").length, 0, "run-only callers cannot manage connections");
 });

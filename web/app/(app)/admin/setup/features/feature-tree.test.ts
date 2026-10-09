@@ -2,6 +2,8 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import {
   buildFeatureTree,
+  groupFeatureSections,
+  groupFeatureChildren,
   featureSearchMatcher,
   filterFeatureTree,
   industryLenses,
@@ -9,7 +11,7 @@ import {
   resolveFeatureOn,
   type FeatureTreeRow,
 } from './feature-tree'
-import { FEATURE_CATEGORIES as CATEGORIES, FEATURES } from '../../../../../../engine/src/organization/feature-registry'
+import { FEATURE_CATEGORIES as CATEGORIES, FEATURE_GROUPS, FEATURES } from '../../../../../../engine/src/organization/feature-registry'
 import { INDUSTRIES } from '../../../../../lib/industries'
 
 const ROWS: FeatureTreeRow[] = [
@@ -266,3 +268,39 @@ test('the real Industries tab names only registered features and carries every i
     assert.ok(shown.has(f.key), `${f.key} is an industry module the Industries tab must show`)
   }
 })
+
+
+test('manufacturing has a discoverable home while retaining inventory authority', () => {
+  const manufacturing = FEATURES.find((row) => row.key === 'manufacturing')!;
+  const mrp = FEATURES.find((row) => row.key === 'manufacturingMrp')!;
+  assert.equal(manufacturing.category, 'manufacturing');
+  assert.equal(mrp.category, 'manufacturing');
+  assert.ok(manufacturing.requiresAll?.includes('inventory'));
+  assert.equal(mrp.parentKey, 'manufacturing');
+  const state = Object.fromEntries(FEATURES.map((row) => [row.key, true]));
+  assert.equal(resolveFeatureOn(FEATURES, { ...state, inventory: false }, 'manufacturing'), false);
+  assert.equal(resolveFeatureOn(FEATURES, { ...state, inventory: false }, 'manufacturingMrp'), false);
+});
+
+test('registry presentation groups preserve every visible feature exactly once', () => {
+  const state = Object.fromEntries(FEATURES.map((row) => [row.key, true]));
+  const sections = buildFeatureTree(FEATURES, state, CATEGORIES);
+  for (const category of CATEGORIES) {
+    const section = sections.find((row) => row.category === category)!;
+    const groups = groupFeatureSections(section, FEATURE_GROUPS[category]);
+    const original = section.groups.flatMap((group) => [group.parent.row.key, ...group.visibleChildren.map((child) => child.row.key)]).sort();
+    const rendered = groups.flatMap(({ section }) => section.groups.flatMap((group) => [group.parent.row.key, ...group.visibleChildren.map((child) => child.row.key)])).sort();
+    assert.deepEqual(rendered, original);
+    assert.equal(new Set(rendered).size, rendered.length);
+    for (const group of section.groups) {
+      const children = groupFeatureChildren(group.visibleChildren, group.parent.row.group, FEATURE_GROUPS[category]);
+      assert.deepEqual(children.flatMap((group) => group.children.map((child) => child.row.key)).sort(), group.visibleChildren.map((child) => child.row.key).sort());
+    }
+  }
+  for (const feature of FEATURES) assert.ok((FEATURE_GROUPS[feature.category] as readonly string[]).includes(feature.group!), `${feature.key} has a valid presentation group`);
+});
+
+test('uncategorized subgroups keep future features visible under Other', () => {
+  const section = buildFeatureTree([{ key: 'future', category: 'finance' }], { future: true }, CATEGORIES)[0]!;
+  assert.equal(groupFeatureSections(section, FEATURE_GROUPS.finance)[0]!.key, 'other');
+});

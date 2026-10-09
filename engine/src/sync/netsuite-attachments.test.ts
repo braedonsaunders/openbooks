@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  attachmentNeedsDownload,
   decodeBridgeAttachment,
   detectContentType,
   expenseReportFileIds,
@@ -21,9 +22,10 @@ test("detectContentType recognizes source receipt signatures", () => {
   assert.equal(detectContentType(Buffer.from("GIF89a"), "receipt"), "image/gif");
 });
 
-test("detectContentType rejects unsupported content instead of mis-serving it", () => {
-  assert.throws(() => detectContentType(Buffer.from("not an image"), "payload.exe"), /unsupported attachment/);
-  assert.throws(() => detectContentType(Buffer.from("not an image"), "spoofed.pdf"), /unsupported attachment/);
+test("unknown source files are preserved as inert downloads without trusting their extension", () => {
+  assert.equal(detectContentType(Buffer.from("not an image"), "payload.exe"), "application/octet-stream");
+  assert.equal(detectContentType(Buffer.from("not an image"), "spoofed.pdf"), "application/octet-stream");
+  assert.equal(detectContentType(Buffer.from([0x50, 0x4b, 3, 4]), "budget.xlsx"), "application/octet-stream");
 });
 
 test("normalizeAttachmentBytes removes the bounded CPOW envelope from wrapped PDFs", () => {
@@ -77,7 +79,7 @@ test("targeted attachment retries normalize ids and retain only requested links"
   );
   assert.throws(
     () => selectRequestedAttachmentFiles(inventory, ["123456"]),
-    /not attached to an imported vendor bill or expense report/,
+    /not attached to an imported transaction/,
   );
 });
 
@@ -119,4 +121,14 @@ test("decodeBridgeAttachment validates identity, encoding, and decoded size", ()
     ok: true,
     file: { id: "406564", name: "invoice.pdf", size: bytes.length + 1, encoding: "base64", contents: bytes.toString("base64") },
   }, "406564"), /size mismatch/);
+});
+
+
+test("attachment mirrors download new, changed and legacy files but skip verified unchanged versions", () => {
+  const sourceModifiedMs = Date.parse("2026-10-08T09:00:00Z");
+  assert.equal(attachmentNeedsDownload({ sourceModifiedMs, storedModifiedMs: null, currentVersionReady: false }), true);
+  assert.equal(attachmentNeedsDownload({ sourceModifiedMs, storedModifiedMs: null, currentVersionReady: true }), true);
+  assert.equal(attachmentNeedsDownload({ sourceModifiedMs, storedModifiedMs: sourceModifiedMs - 1000, currentVersionReady: true }), true);
+  assert.equal(attachmentNeedsDownload({ sourceModifiedMs, storedModifiedMs: sourceModifiedMs, currentVersionReady: true }), false);
+  assert.equal(attachmentNeedsDownload({ sourceModifiedMs, storedModifiedMs: sourceModifiedMs, currentVersionReady: false }), true);
 });

@@ -6,5 +6,5 @@
  * server code into the browser bundle. Gate enforcement that touches the
  * database lives in `./public-features.ts` instead.
  */
-export { FEATURE_CATEGORIES } from "./feature-registry.ts";
-export type { FeatureCategory } from "./feature-registry.ts";
+export { FEATURE_CATEGORIES, FEATURE_GROUPS } from "./feature-registry.ts";
+export type { FeatureCategory, FeatureGroup } from "./feature-registry.ts";

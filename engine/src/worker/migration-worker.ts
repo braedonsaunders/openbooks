@@ -24,6 +24,7 @@ import {
   importNetSuiteAttachments,
 } from "../sync/netsuite-attachments.ts";
 import { purgeExpiredQbdBridgeData } from "../qbd/bridge.ts";
+import { isUuid } from "../platform/uuid.ts";
 import { mirrorIsDue } from "../sync/mirror-schedule.ts";
 
 /**
@@ -77,6 +78,7 @@ export function createMigrationWorker(): Worker<MigrationJobData> {
           const summary = await importNetSuiteAttachments({
             org: orgId,
             connectionId,
+            actorId: triggeredBy && isUuid(triggeredBy) ? triggeredBy : null,
             execute: true,
             concurrency: 4,
             sourceFileIds,

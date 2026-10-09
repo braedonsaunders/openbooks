@@ -460,3 +460,22 @@ test("change detection ignores source cleared evidence on native lines", () => {
     }),
   );
 });
+
+
+test("exact financial balances cannot hide incomplete native CRM replication", () => {
+  assert.match(syncVerificationFailures(result({ operationalRecords: {
+    disabledFeatures: [], crm: {
+      accountStatuses: 1, accounts: 1, missingParties: 1, opportunities: 0,
+      opportunityLines: 0, activities: {}, sourceNoteLinks: 0, warnings: ["Source party is missing"],
+    },
+  } })).join("; "), /CRM replication is incomplete.*Source party is missing/);
+});
+
+
+test("project input parity refuses source deletions left only in the target", () => {
+  assert.match(syncVerificationFailures(result({ projectFinancials: {
+    sourceTimeEntries: 1, targetTimeEntries: 2, exactTimeEntries: 1, changedTimeEntries: 0,
+    missingTargetTimeEntries: 0, targetOnlyTimeEntries: 1, sourceProjects: 0, targetProjects: 0,
+    exactProjects: 0, changedProjects: 0, missingTargetProjects: 0, targetOnlyProjects: 0, applied: false,
+  } })).join("; "), /1 target-only time entries/);
+});
