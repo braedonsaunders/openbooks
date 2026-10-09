@@ -113,7 +113,7 @@ export type PdfCellStyle = {
 export type PdfCellSegment = PdfCellStyle & { text: string }
 export type PdfTableCell = string | number | null | undefined | (PdfCellStyle & {
   text: string
-  /** Independently colored observations in the same cell retain their own identity. */
+  /** Independently colored observations retain identity; oversized segments refuse instead of clipping. */
   segments?: PdfCellSegment[]
 })
 export type PdfColumnStyle = { header?: PdfCellStyle; body?: PdfCellStyle }
