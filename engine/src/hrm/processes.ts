@@ -16,6 +16,7 @@ import { cancelDispatchRuns, dispatchFailureReason } from "../flows/dispatch-res
 import { businessToday } from "../platform/business-date.ts";
 import { runRecordFlows } from "../flows/run.ts";
 import { lockFlowSubjectDecision } from "../flows/decision-lock.ts";
+import { completedGateAllowsSelfApproval } from "../flows/approval-decision-policy.ts";
 import { sql } from "drizzle-orm";
 import { db, withOrgTransaction, type SqlExecutor } from "../platform/db.ts";
 import { actorHasPermission, actorIdentity } from "../organization/actor-permissions.ts";
@@ -2886,6 +2887,7 @@ export async function submitChecklistStepApproval(query: CompleteStepQuery): Pro
 }
 
 export async function releaseChecklistStepApproval(args: {
+  approvalRunId?: string;
   subjectId: string;
   outcome: "approved" | "rejected";
   comment?: string | null;
@@ -2907,10 +2909,14 @@ export async function releaseChecklistStepApproval(args: {
       "BAD_STATE",
       "This checklist no longer accepts approval decisions — cancel the outstanding gate through its workflow controls.",
     );
-  if (row.submitted_by === actorId)
+  if (row.submitted_by === actorId && !(row.flow_run_id === args.approvalRunId &&
+    await completedGateAllowsSelfApproval(db, {
+      orgId, subjectKind: CHECKLIST_STEP_SUBJECT_KIND, subjectId: step.id,
+      approvalRunId: args.approvalRunId, actorId, outcome: args.outcome,
+    })))
     throw new HrmProcessError(
       "FORBIDDEN",
-      "The person submitting checklist evidence cannot approve it — ask another authorized approver.",
+      "The submitted Flow policy requires another authorized approver for this checklist evidence.",
     );
   const changed = (
     await db.execute(
@@ -2929,7 +2935,7 @@ export async function releaseChecklistStepApproval(args: {
     step.process_id,
     "step_" + args.outcome,
     { approvalStatus: "pending" },
-    { stepId: step.id, approvalStatus: args.outcome },
+    { stepId: step.id, approvalStatus: args.outcome, approvalRunId: args.approvalRunId ?? null },
     args.comment?.trim() || "Native checklist approval decision.",
     "hrm_processes",
   );

@@ -6,6 +6,7 @@ import { releaseFlowApproval } from "./approval-release-hook.ts";
 import type { FlowSubjectAdapter } from "./types.ts";
 export const checklistStepSubjectProfile: FlowSubjectProfile = {
   subjectKind: CHECKLIST_STEP_SUBJECT_KIND,
+  pinsSubmissionPolicy: true,
   label: "HRM checklist step",
   triggers: ["on_submit"],
   actions: ["notify", "send_email"],
@@ -76,7 +77,7 @@ export const checklistStepsFlowAdapter: FlowSubjectAdapter = defineTableSubjectA
       return sql`exists(select 1 from hrm_process_steps cs join hrm_processes cp on cp.org_id=cs.org_id and cp.id=cs.process_id join worker_employments ce on ce.org_id=cp.org_id and ce.id=cp.employment_id where cs.org_id=g.org_id and cs.id=g.subject_id and ce.employer_subsidiary_id in(select value::uuid from jsonb_array_elements_text(${allowedIdsJson}::jsonb) as ids(value)))`;
     },
   },
-  selfApprovalPolicy: "forbidden",
+  selfApprovalPolicy: "configurable",
   releaseViaHandler: true,
   async loadContext(id) {
     const s = await load(id);
@@ -113,13 +114,14 @@ export const checklistStepsFlowAdapter: FlowSubjectAdapter = defineTableSubjectA
   async setField() {
     throw new Error("Checklist execution snapshots cannot be edited through workflow actions.");
   },
-  async releaseApproval(subjectId, outcome, ctx, detail) {
+  async releaseApproval(subjectId, outcome, ctx, detail, run) {
     await releaseFlowApproval({
       subjectKind: CHECKLIST_STEP_SUBJECT_KIND,
       subjectId,
       outcome,
       ctx,
       comment: detail?.comment,
+      approvalRunId: run?.id,
     });
   },
 });
