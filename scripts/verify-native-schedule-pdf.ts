@@ -9,6 +9,7 @@ const recipient = {
   lines: Array.from({ length: 85 }, (_, person) => Array.from({ length: 14 }, (_, day) => ({
     subjectId: `example-person-${person}`, subject: `Example Person ${String(person + 1).padStart(2, '0')}`,
     date: `2026-10-${String(11 + day).padStart(2, '0')}`, assignment: day % 3 === 0 ? 'SON/ N' : 'SERVICE',
+    color: day % 3 === 0 ? '#fde68a' : '#1d4ed8',
     hours: 'Hours unknown', status: 'Source date observation',
   }))).flat(),
 };

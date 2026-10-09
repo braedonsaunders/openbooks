@@ -4176,7 +4176,11 @@
       "schedulePdfMargin": "Ränder (mm)",
       "schedulePdfDensity": "Abstände",
       "schedulePdfDays": "Datumsspalten pro Abschnitt (7 oder 14)",
-      "schedulePdfDetail": "Zellendetails"
+      "schedulePdfDetail": "Zellendetails",
+      "schedulePdfStyle": "Darstellung",
+      "schedulePdfAccent": "Akzentfarbe",
+      "schedulePdfLegend": "Farblegende anzeigen",
+      "schedulePdfWeekends": "Konfigurierte Wochenendtage schattieren"
     },
     "fieldHelp": {
       "fxRateMaxAgeDays": "Tage zwischen dem neuesten verwendbaren Kurs und dem Periodenende, ab denen Bewertung und Konsolidierung den Kurs ablehnen. Stichtagskurse zählen ab dem Datum des Kassakurses zum Periodenende, Durchschnittskurse ab der neuesten einbezogenen Notierung. Standard ohne Richtlinie: 31 Tage.",
@@ -5135,6 +5139,10 @@
         "assignments": "Zuordnungen",
         "hours": "Zuordnungen und Stunden",
         "full": "Vollständige Nachweise"
+      },
+      "schedulePdfStyle": {
+        "modern": "Modern",
+        "classic": "Klassisch"
       }
     },
     "bankFeeds": {

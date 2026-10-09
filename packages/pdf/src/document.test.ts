@@ -28,3 +28,20 @@ test('footer stamping does not append blank pages', async () => {
   const parsed = await ParsedPdf.load(pdf)
   assert.equal(parsed.getPageCount(), 1)
 })
+
+test('shared styled cells and multi-observation segments render real readable PDFs with contrast-aware colors', async () => {
+  const { pdfContrastText } = await import('./color');
+  assert.equal(pdfContrastText('#000000'), '#ffffff');
+  assert.equal(pdfContrastText('#ffffff'), '#000000');
+  const pdf = await renderPdfDocument({
+    title: 'Resource allocation', dateRangeLabel: 'October 2026', generatedAt: new Date('2026-10-12T10:00:00Z'),
+    branding: { orgName: 'Example Company', primaryColor: '#7c3aed' }, design: 'modern',
+    legend: { title: 'Configured colors', items: [{ label: 'Service', color: '#1d4ed8' }] },
+    groups: [{ kind: 'section', title: 'Resources', columns: ['Resource', 'Assignments'], columnWeights: [1, 2], overflow: 'refuse',
+      rows: [[{ text: 'Equipment A', bold: true }, { text: 'Morning\nAfternoon', segments: [
+        { text: 'Morning', backgroundColor: '#1d4ed8' }, { text: 'Afternoon', backgroundColor: '#fde68a' },
+      ] }]], columnStyles: [{ body: { backgroundColor: '#f1f5f9' } }, {}] }],
+    layout: resolvePdfPageSetup({ paperSize: 'a4', orientation: 'landscape', marginMm: 10 }),
+  });
+  assert.equal((await ParsedPdf.load(pdf)).getPageCount(), 1);
+});

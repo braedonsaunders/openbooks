@@ -7,6 +7,8 @@ export interface ScheduleEmailLine {
   assignment: string;
   hours: string;
   status: string;
+  /** Native board rule/code resolution, bound with the reviewed report evidence. */
+  color?: string | null;
 }
 /** Reports contain the reviewed personal or explicitly shared board audience. */
 export function scheduleDistributionEmail(input: {

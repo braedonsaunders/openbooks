@@ -62,6 +62,10 @@ export function EmailScheduleDrawer({
     density: "compact",
     daysPerSection: 14,
     detail: "assignments",
+    style: "modern",
+    accentColor: "#0f766e",
+    showLegend: true,
+    shadeWeekends: true,
   });
   const [roleKeys, setRoleKeys] = useState<string[]>([]),
     [roles, setRoles] = useState<{ key: string; name: string }[]>([]);
@@ -305,6 +309,7 @@ export function EmailScheduleDrawer({
                 "density",
                 "daysPerSection",
                 "detail",
+                "style",
               ] as const
             ).map((field) => {
               const choices = {
@@ -313,13 +318,14 @@ export function EmailScheduleDrawer({
                 density: ["standard", "compact"],
                 daysPerSection: ["7", "14"],
                 detail: ["assignments", "hours", "full"],
+                style: ["modern", "classic"],
               }[field];
               return (
                 <label key={field} className="text-sm">
                   {t(`pdfFields.${field}`)}
                   <Select
                     aria-label={t(`pdfFields.${field}`)}
-                    value={String(pdfLayout[field])}
+                    value={String(pdfLayout[field] ?? "modern")}
                     disabled={busy || queued !== null}
                     onChange={(event) => {
                       setPdfLayout(
@@ -346,6 +352,18 @@ export function EmailScheduleDrawer({
                 </label>
               );
             })}
+            <label className="text-sm">
+              {t("pdfFields.accentColor")}
+              <Input type="color" aria-label={t("pdfFields.accentColor")} value={pdfLayout.accentColor ?? "#0f766e"} disabled={busy || queued !== null}
+                onChange={event => { setPdfLayout(layout => ({ ...layout, accentColor: event.target.value })); reset(); }} />
+            </label>
+            {(["showLegend", "shadeWeekends"] as const).map(field => (
+              <label key={field} className="flex items-center gap-2 text-sm">
+                <input type="checkbox" checked={pdfLayout[field] !== false} disabled={busy || queued !== null}
+                  onChange={event => { setPdfLayout(layout => ({ ...layout, [field]: event.target.checked })); reset(); }} />
+                {t(`pdfFields.${field}`)}
+              </label>
+            ))}
             <label className="text-sm">
               {t("pdfFields.marginMm")}
               <Input

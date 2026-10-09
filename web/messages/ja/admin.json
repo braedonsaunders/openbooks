@@ -4176,7 +4176,11 @@
       "schedulePdfMargin": "余白（mm）",
       "schedulePdfDensity": "間隔",
       "schedulePdfDays": "各区分の日付列数（7または14）",
-      "schedulePdfDetail": "セルの詳細"
+      "schedulePdfDetail": "セルの詳細",
+      "schedulePdfStyle": "表示スタイル",
+      "schedulePdfAccent": "アクセントカラー",
+      "schedulePdfLegend": "予定の色凡例を表示",
+      "schedulePdfWeekends": "設定された週末に網掛けを表示"
     },
     "fieldHelp": {
       "fxRateMaxAgeDays": "使用可能な最新レートから期末までの日数がこれを超えると、再評価と連結はそのレートを拒否します。期末レートは期末スポットレートの日付から、平均レートは平均に含まれる最新の相場の日付から数えます。ポリシー未設定時の既定値: 31日。",
@@ -5135,6 +5139,10 @@
         "assignments": "割り当て",
         "hours": "割り当てと時間",
         "full": "証拠の全詳細"
+      },
+      "schedulePdfStyle": {
+        "modern": "モダン",
+        "classic": "クラシック"
       }
     },
     "invoicing": {

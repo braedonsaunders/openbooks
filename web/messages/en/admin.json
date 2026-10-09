@@ -4123,7 +4123,11 @@
       "schedulePdfMargin": "Margins (mm)",
       "schedulePdfDensity": "Spacing",
       "schedulePdfDays": "Date columns per section (7 or 14)",
-      "schedulePdfDetail": "Cell detail"
+      "schedulePdfDetail": "Cell detail",
+      "schedulePdfStyle": "Visual style",
+      "schedulePdfAccent": "Accent color",
+      "schedulePdfLegend": "Show assignment color legend",
+      "schedulePdfWeekends": "Shade configured weekends"
     },
     "fieldHelp": {
       "fxRateMaxAgeDays": "Days between the newest usable rate and the period end beyond which revaluation and consolidation refuse the rate. Closing rates count from the date of the period-end spot rate; average rates from the newest quote averaged. Default when no policy is set: 31 days.",
@@ -5082,6 +5086,10 @@
         "assignments": "Assignments",
         "hours": "Assignments and hours",
         "full": "Full evidence"
+      },
+      "schedulePdfStyle": {
+        "modern": "Modern",
+        "classic": "Classic"
       }
     },
     "payroll": {

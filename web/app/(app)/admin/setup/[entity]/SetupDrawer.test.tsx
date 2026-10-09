@@ -618,3 +618,27 @@ test('cleared delivery policy reopens unconfigured; deliberate configuration ret
   assert.deepEqual(seen, []);
   assert.match(alertText() ?? '', /operatorId.*required/);
 });
+
+test('tenant PDF style and color choices save and reopen through the native board policy drawer', async t => {
+  const board = SETUP_ENTITY_BY_KEY.get('schedule-boards')!;
+  const id = '00000000-0000-4000-8000-000000000125';
+  const operator = '00000000-0000-4000-8000-000000000126';
+  const layout = { paperSize: 'a4', orientation: 'landscape', marginMm: 10, density: 'compact', daysPerSection: 7, detail: 'assignments', style: 'modern', accentColor: '#0f766e', showLegend: false, shadeWeekends: false };
+  const presentation = { ...board, fields: board.fields.filter(field => ['rowKind', 'automaticDeliveryPolicy'].includes(field.key)), formSections: undefined };
+  const { seen } = await mountDrawer(t, { id, row_kind: 'people', automatic_delivery_policy: { operatorId: operator, timeZone: 'America/Toronto', days: 14, anchor: 'week', weekStartsOn: 0, visibility: 'board', recipientMode: 'selected', additionalPartyIds: [operator], includePdf: true, pdfLayout: layout } }, () => Response.json({ id }), 'schedule-boards', undefined, undefined, presentation, true, { 'schedule-operators': [{ value: operator, label: 'Operator' }], 'schedule-contacts': [{ value: operator, label: 'Contact' }] });
+  const style = document.querySelector(`select[aria-label="${FIELD_LABEL.schedulePdfStyle}"]`) as HTMLSelectElement;
+  assert.ok(style);
+  await act(async () => {
+    style.value = 'classic';
+    style.dispatchEvent(new window.Event('change', { bubbles: true }));
+    setTextInput(FIELD_LABEL.schedulePdfAccent!, '#7c3aed');
+    await tick();
+  });
+  await clickSave(false);
+  assert.equal(seen.length, 1, alertText() ?? 'expected native policy save');
+  const policy = (seen[0]!.body as { automaticDeliveryPolicy: { pdfLayout: unknown } }).automaticDeliveryPolicy;
+  assert.deepEqual(policy.pdfLayout, { ...layout, style: 'classic', accentColor: '#7c3aed' });
+  await act(async () => { clickButton('Edit').click(); await tick(); });
+  assert.equal((document.querySelector(`select[aria-label="${FIELD_LABEL.schedulePdfStyle}"]`) as HTMLSelectElement).value, 'classic');
+  assert.equal((document.querySelector(`input[aria-label="${FIELD_LABEL.schedulePdfAccent}"]`) as HTMLInputElement).value, '#7c3aed');
+});

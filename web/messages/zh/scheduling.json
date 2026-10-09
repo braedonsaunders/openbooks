@@ -352,7 +352,11 @@
       "marginMm": "页边距（毫米）",
       "density": "间距",
       "daysPerSection": "每节日期列数（7或14）",
-      "detail": "单元格详情"
+      "detail": "单元格详情",
+      "style": "视觉样式",
+      "accentColor": "强调色",
+      "showLegend": "显示安排颜色图例",
+      "shadeWeekends": "对已配置的周末加阴影"
     },
     "pdfOptions": {
       "paperSize": {
@@ -373,6 +377,10 @@
         "assignments": "分配内容",
         "hours": "分配内容及小时",
         "full": "完整记录"
+      },
+      "style": {
+        "modern": "现代",
+        "classic": "经典"
       }
     }
   }

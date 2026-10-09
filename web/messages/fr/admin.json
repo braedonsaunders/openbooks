@@ -4048,7 +4048,11 @@
       "schedulePdfMargin": "Marges (mm)",
       "schedulePdfDensity": "Espacement",
       "schedulePdfDays": "Colonnes de dates par section (7 ou 14)",
-      "schedulePdfDetail": "Détail des cellules"
+      "schedulePdfDetail": "Détail des cellules",
+      "schedulePdfStyle": "Style visuel",
+      "schedulePdfAccent": "Couleur d’accent",
+      "schedulePdfLegend": "Afficher la légende des couleurs",
+      "schedulePdfWeekends": "Ombrer les jours de fin de semaine configurés"
     },
     "fieldHelp": {
       "fxRateMaxAgeDays": "Nombre de jours entre le taux utilisable le plus récent et la fin de période au-delà duquel la réévaluation et la consolidation refusent le taux. Les taux de clôture se comptent depuis la date du taux comptant de fin de période ; les taux moyens depuis la cotation la plus récente incluse dans la moyenne. Valeur par défaut sans politique : 31 jours.",
@@ -5007,6 +5011,10 @@
         "assignments": "Affectations",
         "hours": "Affectations et heures",
         "full": "Preuves complètes"
+      },
+      "schedulePdfStyle": {
+        "modern": "Moderne",
+        "classic": "Classique"
       }
     },
     "laborCosting": {

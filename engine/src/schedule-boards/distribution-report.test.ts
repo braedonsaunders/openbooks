@@ -7,6 +7,7 @@ import {
   serializeSchedulePreview,
   type ScheduleDistributionPreview,
 } from "./distribution.ts";
+import { pdfCellText } from "@openbooks/pdf";
 import type { BoardWindow } from "./window.ts";
 const recipient = {
   partyId: "contact",
@@ -69,8 +70,8 @@ test("native PDF grid keeps same-name people separate, literal multiple assignme
   assert.equal(input.groups.length, 1);
   assert.equal(input.groups[0]!.columns.length, 15);
   assert.equal(input.groups[0]!.rows.length, 2);
-  assert.equal(input.groups[0]!.rows[0]![2], "SON/ N *\n\n0205 *");
-  assert.equal(input.groups[0]!.rows[1]![2], "SERVICE");
+  assert.equal(pdfCellText(input.groups[0]!.rows[0]![2]), "SON/ N *\n\n0205 *");
+  assert.equal(pdfCellText(input.groups[0]!.rows[1]![2]), "SERVICE");
   assert.match(input.footerLeft!, /hours unknown/);
   assert.equal(input.groups[0]!.overflow, "refuse");
   const detailed = schedulePdfInput(
@@ -92,7 +93,7 @@ test("native PDF grid keeps same-name people separate, literal multiple assignme
   );
   assert.equal(detailed.groups.length, 2);
   assert.match(
-    String(detailed.groups[0]!.rows[0]![2]),
+    pdfCellText(detailed.groups[0]!.rows[0]![2]),
     /SON\/ N\nHours unknown\nSource date observation/,
   );
 });
@@ -229,6 +230,7 @@ test("populated shared PDF layouts paginate readable people/date grids with repe
     subjectId: `native-example-${person}`,
     subject: person === 0 ? "Alexandra Example - Field Services and Equipment Coordination" : `Example Person ${String(person + 1).padStart(2, "0")}`,
     date: `2026-10-${String(11 + day).padStart(2, "0")}`,
+    color: person % 3 === 0 ? "#fde68a" : person % 3 === 1 ? "#1d4ed8" : "#99f6e4",
     assignment: day % 7 === 0 || day % 7 === 6 ? "" : person % 3 === 0 ? "SON/ N" : person % 3 === 1 ? "SERVICE / East" : "0205",
     hours: day % 7 === 0 || day % 7 === 6 ? "" : "Hours unknown",
     status: day % 7 === 0 || day % 7 === 6 ? "No schedule evidence" : "Source date observation",
@@ -255,4 +257,37 @@ test("populated shared PDF layouts paginate readable people/date grids with repe
       await writeFile(join(process.env.OPENBOOKS_PDF_REVIEW_DIR, `${variant.name}.pdf`), pdf);
     }
   }
+});
+
+test('configured colors survive weekend tint and same-day multi-assignment segments, with bounded optional keys and tenant presentation', () => {
+  const colored = { ...recipient, lines: [
+    { ...recipient.lines[0]!, date: '2026-10-11', color: '#fde68a' },
+    { ...recipient.lines[1]!, date: '2026-10-11', color: '#1d4ed8' },
+    { ...recipient.lines[2]!, date: '2026-10-11', color: '#99f6e4' },
+  ] };
+  const input = schedulePdfInput({ ...preview, weekendDays: [0] }, colored);
+  const cell = input.groups[0]!.rows[0]![1];
+  assert.ok(cell && typeof cell === 'object');
+  assert.deepEqual(cell.segments?.map(segment => segment.backgroundColor), ['#fde68a', '#1d4ed8']);
+  assert.equal(cell.text, 'SON/ N *\n\n0205 *');
+  assert.equal(input.groups[0]!.columnStyles?.[1]?.body?.backgroundColor, '#f1f5f9');
+  const single = input.groups[0]!.rows[1]![1];
+  assert.ok(single && typeof single === 'object');
+  assert.equal(single.backgroundColor, '#99f6e4');
+  assert.equal(input.legend?.items.length, 3);
+  assert.equal(input.design, 'modern');
+  const classic = schedulePdfInput({ ...preview, audience: { ...preview.audience, pdfLayout: {
+    paperSize: 'a4', orientation: 'landscape', marginMm: 10, density: 'standard', daysPerSection: 7, detail: 'assignments',
+    style: 'classic', accentColor: '#7c3aed', showLegend: false, shadeWeekends: false,
+  } } }, colored);
+  assert.equal(classic.design, 'classic');
+  assert.equal(classic.branding.primaryColor, '#7c3aed');
+  assert.equal(classic.legend, undefined);
+  assert.equal(classic.groups[0]!.columnStyles?.[1]?.body, undefined);
+  assert.equal(pdfCellText(classic.groups[0]!.rows[0]![1]), 'SON/ N *\n\n0205 *');
+  const many = { ...recipient, lines: Array.from({ length: 40 }, (_, i) => ({ ...recipient.lines[0]!, assignment: `Literal ${i}`, color: `#${(i + 1).toString(16).padStart(6, '0')}` })) };
+  const bounded = schedulePdfInput(preview, many);
+  assert.equal(bounded.legend?.items.length, 12);
+  assert.match(bounded.legend!.title, /28 additional colors shown in cells/);
+  assert.equal((bounded.groups[0]!.rows[0]![2] as { segments: unknown[] }).segments.length, 40);
 });

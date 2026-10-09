@@ -352,7 +352,11 @@
       "marginMm": "Ränder (mm)",
       "density": "Abstände",
       "daysPerSection": "Datumsspalten pro Abschnitt (7 oder 14)",
-      "detail": "Zellendetails"
+      "detail": "Zellendetails",
+      "style": "Darstellung",
+      "accentColor": "Akzentfarbe",
+      "showLegend": "Farblegende anzeigen",
+      "shadeWeekends": "Konfigurierte Wochenendtage schattieren"
     },
     "pdfOptions": {
       "paperSize": {
@@ -373,6 +377,10 @@
         "assignments": "Zuordnungen",
         "hours": "Zuordnungen und Stunden",
         "full": "Vollständige Nachweise"
+      },
+      "style": {
+        "modern": "Modern",
+        "classic": "Klassisch"
       }
     }
   }

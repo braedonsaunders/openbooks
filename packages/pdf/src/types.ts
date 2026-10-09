@@ -104,6 +104,21 @@ export type PdfSummaryItem = { label: string; value: string | number }
 
 export type PdfColumnAlign = 'left' | 'right' | 'center'
 
+/** Reusable, explicit visual styling; color never replaces the underlying text. */
+export type PdfCellStyle = {
+  backgroundColor?: string
+  textColor?: string
+  bold?: boolean
+}
+export type PdfCellSegment = PdfCellStyle & { text: string }
+export type PdfTableCell = string | number | null | undefined | (PdfCellStyle & {
+  text: string
+  /** Independently colored observations in the same cell retain their own identity. */
+  segments?: PdfCellSegment[]
+})
+export type PdfColumnStyle = { header?: PdfCellStyle; body?: PdfCellStyle }
+export type PdfLegendItem = { label: string; color: string }
+
 export type PdfTableGroup = {
   /**
    * Structural role: 'results' = the single unsectioned result table, 'section'
@@ -114,7 +129,8 @@ export type PdfTableGroup = {
   title: string
   subtitle?: string
   columns: string[]
-  rows: (string | number | null | undefined)[][]
+  rows: PdfTableCell[][]
+  columnStyles?: PdfColumnStyle[]
   /** Per-column alignment. Defaults to 'left'; callers set 'right' for money. */
   align?: PdfColumnAlign[]
   /** Optional proportional widths for structured grids; all columns must remain legible. */
@@ -133,6 +149,9 @@ export type PdfDocumentInput = {
   branding: PdfBranding
   /** Key-figures band under the header. Omit to hide. */
   summary?: PdfSummaryItem[]
+  /** Shared presentation presets keep report styling independent of domain logic. */
+  design?: 'classic' | 'modern'
+  legend?: { title: string; items: PdfLegendItem[] }
   groups: PdfTableGroup[]
   layout: PdfPageSetup
   /** Footer left text (defaults to "<orgName> · <title>"). */

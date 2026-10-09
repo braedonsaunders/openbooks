@@ -352,7 +352,11 @@
       "marginMm": "Margins (mm)",
       "density": "Spacing",
       "daysPerSection": "Date columns per section (7 or 14)",
-      "detail": "Cell detail"
+      "detail": "Cell detail",
+      "style": "Visual style",
+      "accentColor": "Accent color",
+      "showLegend": "Show assignment color legend",
+      "shadeWeekends": "Shade configured weekends"
     },
     "pdfOptions": {
       "paperSize": {
@@ -373,6 +377,10 @@
         "assignments": "Assignments",
         "hours": "Assignments and hours",
         "full": "Full evidence"
+      },
+      "style": {
+        "modern": "Modern",
+        "classic": "Classic"
       }
     }
   }

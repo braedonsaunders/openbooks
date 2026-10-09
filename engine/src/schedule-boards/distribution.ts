@@ -69,6 +69,7 @@ export interface ScheduleDistributionPreview {
   from: string;
   through: string;
   timeZone: string;
+  weekendDays?: readonly number[];
   /** Actual preview/issuance time, separate from the schedule date window. */
   generatedAt: string;
   version: string;
@@ -116,6 +117,7 @@ export function scheduleRecipientLines(
           .join(' / '),
         hours: `${Math.floor(minutes / 60)}h ${minutes % 60}m booked`,
         status: `Published booking · ${entry.startClock}–${entry.endClock}${entry.endsOn !== entry.startsOn ? ` (${entry.endsOn})` : ''}`,
+        color: entry.target?.color ?? null,
       });
     }
   for (const record of window.sourceRecords ?? [])
@@ -127,6 +129,7 @@ export function scheduleRecipientLines(
         assignment: record.label ?? '—',
         hours: 'Hours unknown',
         status: 'Source date observation',
+        color: record.color ?? null,
       });
   return lines.sort(
     (a, b) =>
@@ -529,6 +532,7 @@ async function preview(
       subsidiaryId: board.subsidiaryId,
       distributionVisibility: board.distributionVisibility,
       automaticDeliveryPolicy: board.automaticDeliveryPolicy,
+      weekendDays: board.weekendDays,
     },
     from,
     through,
@@ -560,6 +564,7 @@ async function preview(
     through,
     timeZone: board.timeZone,
     generatedAt: new Date().toISOString(),
+    weekendDays: board.weekendDays,
     version,
     audience: {
       ...audience,

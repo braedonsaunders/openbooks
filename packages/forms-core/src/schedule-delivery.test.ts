@@ -107,3 +107,11 @@ test("automatic-only and combined policies are explicit, independently validated
     false,
   );
 });
+
+test('native report presentation choices preserve tenant settings and refuse invalid color inputs', () => {
+  const layout = { paperSize: 'a4', orientation: 'landscape', marginMm: 10, density: 'compact', daysPerSection: 7, detail: 'assignments', style: 'classic', accentColor: '#7c3aed', showLegend: false, shadeWeekends: false };
+  const parsed = automaticScheduleDeliverySchema.parse({ ...policy, pdfLayout: layout });
+  assert.deepEqual(parsed.pdfLayout, layout);
+  assert.deepEqual(automaticScheduleDeliverySchema.parse(JSON.parse(JSON.stringify(parsed))).pdfLayout, layout);
+  assert.equal(schedulePdfLayoutSchema.safeParse({ ...layout, accentColor: 'url(example)' }).success, false);
+});

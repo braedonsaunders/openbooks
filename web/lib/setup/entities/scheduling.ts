@@ -351,6 +351,14 @@ export const SCHEDULING_ENTITIES: SetupEntity[] = [
             omitWhenHidden: true,
             fields: [
               {
+                key: "style", kind: "select", defaultValue: "modern",
+                labelKey: "fields.schedulePdfStyle",
+                options: ["modern", "classic"].map(value => ({ value, labelKey: `options.schedulePdfStyle.${value}` })),
+              },
+              { key: "accentColor", kind: "text", labelKey: "fields.schedulePdfAccent", defaultValue: "#0f766e" },
+              { key: "showLegend", kind: "boolean", labelKey: "fields.schedulePdfLegend", defaultValue: true },
+              { key: "shadeWeekends", kind: "boolean", labelKey: "fields.schedulePdfWeekends", defaultValue: true },
+              {
                 key: "paperSize",
                 kind: "select",
                 required: true,

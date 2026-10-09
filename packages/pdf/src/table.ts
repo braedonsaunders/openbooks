@@ -9,11 +9,20 @@
 // stamping in document.ts still covers every page this appends.)
 
 import type PDFKit from 'pdfkit'
-import type { PdfColumnAlign, PdfTableGroup, PdfTheme } from './types'
+import type { PdfCellStyle, PdfTableCell, PdfColumnAlign, PdfColumnStyle, PdfTableGroup, PdfTheme } from './types'
 import type { ResolvedPage } from './page'
+import { pdfColor, pdfContrastText } from './color'
 
 const MIN_COL_W = 36
 const MAX_COL_FRAC = 0.62
+
+export function pdfCellText(cell: PdfTableCell): string {
+  return cell == null ? '' : typeof cell === 'object' ? cell.text : String(cell)
+}
+
+function styledCell(cell: PdfTableCell): cell is Exclude<PdfTableCell, string | number | null | undefined> {
+  return cell !== null && typeof cell === 'object'
+}
 
 /** Compute column widths (pt) that fill `contentWidth`, with sensible caps. */
 export function computeColumnWidths(
@@ -43,7 +52,7 @@ export function computeColumnWidths(
     for (const row of sampleRows) {
       const cell = row[i]
       if (cell === null || cell === undefined) continue
-      w = Math.max(w, doc.widthOfString(String(cell)))
+      w = Math.max(w, doc.widthOfString(pdfCellText(cell)))
     }
     natural[i] = Math.min(Math.max(Math.ceil(w), MIN_COL_W), maxColW)
   }
@@ -108,11 +117,15 @@ export function drawTable(
     doc.rect(page.contentLeft, topY, page.contentWidth, headerHeight).fill(theme.headerFill)
     doc.font(theme.fontBold).fontSize(theme.table).fillColor(theme.headerText)
     for (let i = 0; i < group.columns.length; i++) {
+      const style = group.columnStyles?.[i]?.header
+      if (style?.backgroundColor) doc.rect(colX[i]!, topY, widths[i]!, headerHeight).fill(pdfColor(style.backgroundColor, theme.headerFill))
+      doc.font(style?.bold === false ? theme.font : theme.fontBold).fontSize(theme.table)
+        .fillColor(style?.textColor ? pdfColor(style.textColor, theme.headerText) : style?.backgroundColor ? pdfContrastText(style.backgroundColor) : theme.headerText)
       const ax = colX[i]! + theme.cellPadX
       const aw = widths[i]! - theme.cellPadX * 2
       doc.text(group.columns[i]!, ax, topY + theme.cellPadY, {
         width: aw,
-        align: 'left',
+        align: aligns[i] ?? 'left',
         lineBreak: true,
       })
     }
@@ -159,6 +172,7 @@ export function drawTable(
       widths,
       theme,
       theme.font,
+      group.columnStyles,
     );
     if (group.overflow === "refuse" && measuredHeight > maxRowHeight)
       throw new RangeError(
@@ -195,12 +209,29 @@ export function drawTable(
       const ax = colX[i]! + theme.cellPadX
       const aw = widths[i]! - theme.cellPadX * 2
       const v = row[i]
+      const base = group.columnStyles?.[i]?.body
+      const style: PdfCellStyle = { ...base, ...(styledCell(v) ? v : {}) }
+      if (style.backgroundColor) doc.rect(colX[i]!, rowTop, widths[i]!, rowHeight).fill(pdfColor(style.backgroundColor, '#ffffff'))
+      doc.font(style.bold ? theme.fontBold : theme.font).fontSize(theme.table)
+        .fillColor(style.textColor ? pdfColor(style.textColor, theme.text) : style.backgroundColor ? pdfContrastText(style.backgroundColor) : theme.text)
+      if (styledCell(v) && v.segments?.length) {
+        let segmentY = rowTop + theme.cellPadY
+        for (const segment of v.segments) {
+          doc.font(segment.bold ? theme.fontBold : theme.font).fontSize(theme.table)
+          const textHeight = doc.heightOfString(segment.text, { width: aw, align: aligns[i] ?? 'left' })
+          if (segment.backgroundColor) doc.rect(colX[i]! + 1, segmentY - 1, widths[i]! - 2, textHeight + 2).fill(pdfColor(segment.backgroundColor, '#ffffff'))
+          doc.fillColor(segment.textColor ? pdfColor(segment.textColor, theme.text) : segment.backgroundColor ? pdfContrastText(segment.backgroundColor) : style.backgroundColor ? pdfContrastText(style.backgroundColor) : theme.text)
+          doc.text(segment.text, ax, segmentY, { width: aw, align: aligns[i] ?? 'left', height: textHeight + 0.5, ellipsis: false })
+          segmentY += textHeight + theme.cellPadY
+        }
+        continue
+      }
       if (v === null || v === undefined) {
         doc.fillColor(theme.empty)
         doc.text('—', ax, rowTop + theme.cellPadY, { width: aw, align: aligns[i] ?? 'left' })
         doc.fillColor(theme.text)
       } else {
-        doc.text(String(v), ax, rowTop + theme.cellPadY, {
+        doc.text(pdfCellText(v), ax, rowTop + theme.cellPadY, {
           width: aw,
           align: aligns[i] ?? 'left',
           height: cellMaxH,
@@ -222,18 +253,25 @@ export function drawTable(
 /** Max wrapped height of any cell in a row, plus vertical padding. */
 function measureRowHeight(
   doc: InstanceType<typeof PDFKit>,
-  cells: (string | number | null | undefined)[],
+  cells: PdfTableCell[],
   widths: number[],
   theme: PdfTheme,
   font: string,
+  columnStyles?: PdfColumnStyle[],
 ): number {
   doc.font(font).fontSize(theme.table)
   let max = 0
   for (let i = 0; i < cells.length; i++) {
     const v = cells[i]
-    const text = v === null || v === undefined ? '' : String(v)
+    const text = pdfCellText(v)
     const w = Math.max(widths[i]! - theme.cellPadX * 2, 1)
-    const h = doc.heightOfString(text, { width: w, align: 'left' })
+    doc.font((styledCell(v) && v.bold) || columnStyles?.[i]?.body?.bold ? theme.fontBold : font).fontSize(theme.table)
+    const h = styledCell(v) && v.segments?.length
+      ? v.segments.reduce((sum, segment, index) => {
+          doc.font(segment.bold ? theme.fontBold : font).fontSize(theme.table)
+          return sum + doc.heightOfString(segment.text, { width: w }) + (index ? theme.cellPadY : 0)
+        }, 0)
+      : doc.heightOfString(text, { width: w, align: 'left' })
     if (h > max) max = h
   }
   return max + theme.cellPadY * 2
