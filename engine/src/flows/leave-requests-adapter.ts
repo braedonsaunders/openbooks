@@ -45,6 +45,7 @@ const REQUEST_STATUSES = [
 
 export const hrmLeaveRequestSubjectProfile: FlowSubjectProfile = {
   subjectKind: HRM_LEAVE_REQUEST_SUBJECT_KIND,
+  pinsSubmissionPolicy: true,
   label: "Leave request",
   triggers: ["on_submit"],
   actions: ["send_email", "notify"],
@@ -105,7 +106,7 @@ export const hrmLeaveRequestFlowAdapter: FlowSubjectAdapter = defineTableSubject
   releaseViaHandler: true,
   // A flow must not rewrite the range it is approving: the request freezes
   // on submit, so no header field is flow-writable.
-  selfApprovalPolicy: "forbidden",
+  selfApprovalPolicy: "configurable",
 
   async loadContext(subjectId: string): Promise<FlowSubjectContext | null> {
     const request = await loadRequest(subjectId);
@@ -150,6 +151,7 @@ export const hrmLeaveRequestFlowAdapter: FlowSubjectAdapter = defineTableSubject
     outcome: "approved" | "rejected",
     ctx: FlowExecCtx,
     detail?: { comment?: string | null },
+    run?: { id: string; dispatchValues: Record<string, unknown> | null },
   ): Promise<void> {
     await releaseFlowApproval({
       subjectKind: HRM_LEAVE_REQUEST_SUBJECT_KIND,
@@ -157,6 +159,7 @@ export const hrmLeaveRequestFlowAdapter: FlowSubjectAdapter = defineTableSubject
       outcome,
       comment: detail?.comment,
       ctx,
+      approvalRunId: run?.id,
     });
   },
 

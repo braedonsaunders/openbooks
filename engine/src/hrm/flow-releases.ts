@@ -15,14 +15,15 @@ import { releaseBenefitAwardApproval } from "./benefits/awards.ts";
 import { releaseLeaveRequest } from "./leave.ts";
 
 /** Minimal release guard: the owning org of a compensation cycle. */
-async function loadCycleOrg(subjectId: string): Promise<{ org_id: string } | null> {
+async function loadCycleOrg(subjectId: string, orgId: string): Promise<{ org_id: string } | null> {
   if (!isUuid(subjectId)) return null;
   const result = await db.execute<{ org_id: string }>(sql`
-    select org_id from hrm_comp_cycles where id = ${subjectId}`);
+    select org_id from hrm_comp_cycles where id = ${subjectId} and org_id = ${orgId}`);
   return result.rows[0] ?? null;
 }
 
 type ReleaseArgs = {
+  approvalRunId?: string;
   subjectId: string;
   outcome: "approved" | "rejected";
   comment?: string | null;
@@ -43,7 +44,7 @@ export async function releaseCompCycleApproval(args: ReleaseArgs): Promise<void>
   if (outcome !== "approved" && outcome !== "rejected") {
     throw new Error(`unknown compensation decision ${outcome}`);
   }
-  const cycle = await loadCycleOrg(subjectId);
+  const cycle = await loadCycleOrg(subjectId, ctx.orgId);
   if (!cycle) throw new Error("compensation cycle is not visible");
   // The release stamps the cycle inside decideGate's savepoint; the
   // service refuses a non-review cycle so the gate stays pending.
@@ -62,6 +63,7 @@ export async function releaseHrmChangeRequestApproval(args: ReleaseArgs): Promis
     requestId: subjectId,
     outcome,
     comment: args.comment ?? null,
+    approvalRunId: args.approvalRunId,
   });
 }
 
@@ -80,6 +82,7 @@ export async function releaseLeaveRequestApproval(args: ReleaseArgs): Promise<vo
     requestId: subjectId,
     outcome,
     comment: args.comment ?? null,
+    approvalRunId: args.approvalRunId,
   });
 }
 

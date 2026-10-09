@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { z } from "zod";
 import { HRM_CHANGE_REQUEST_SUBJECT_KIND } from "@openbooks/schema/src/hrm-change-requests.ts";
+import { completedGateAllowsSelfApproval } from "../flows/approval-decision-policy.ts";
 import { db, withOrgTransaction, type SqlExecutor } from "../platform/db.ts";
 import { actorAllowedSubsidiaryIds } from "../organization/actor-subsidiaries.ts";
 import { actorHasPermission } from "../organization/actor-permissions.ts";
@@ -1196,6 +1197,7 @@ export async function listChangeRequestsWithTotal(
 // flows/types.ts): the first resolution won and this retry changes nothing.
 
 export interface ReleaseChangeRequestQuery {
+  readonly approvalRunId?: string;
   readonly orgId: string;
   readonly actorId: string;
   readonly requestId: string;
@@ -1293,6 +1295,10 @@ export async function releaseHrmChangeRequest(
       approver,
       submitter,
       subjectWorkerPartyId: subject.workerPartyId,
+      requireIndependentActor: !await completedGateAllowsSelfApproval(db, {
+        orgId, subjectKind: HRM_CHANGE_REQUEST_SUBJECT_KIND, subjectId: requestId,
+        actorId, outcome: query.outcome, approvalRunId: query.approvalRunId,
+      }),
     });
 
     const gates = await decidedGatesOfRequest(db, orgId, requestId);
