@@ -30,7 +30,7 @@ export async function appendApprovedHolidaySettlements(tx: SqlExecutor, input: {
     if (!source.wage) throw new PayrollError("The approved holiday entitlement has no retained dated wage calculation; retry calculation.");
     const priced = priceAdjudicatedHolidayPayment(source.evidence.instruction, source.wage.resolved);
     const component = input.need("stat_holiday", "earning");
-    if (!Number.isSafeInteger(component.sequence)) throw new PayrollError("The native holiday component has no valid display sequence; review Payroll components before calculating.");
+    if (typeof component.sequence !== "number" || !Number.isSafeInteger(component.sequence)) throw new PayrollError("The native holiday component has no valid display sequence; review Payroll components before calculating.");
     let allocationId: string | undefined;
     if (!input.simulate) {
       allocationId = randomUUID();

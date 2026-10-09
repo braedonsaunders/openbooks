@@ -41,5 +41,7 @@ test("holiday pricing uses the native wage cadence and declared rate precision",
   for (const changes of [{ rate: "0" }, { rate: "1e3" }, { rate: "NaN" }, { basis: "year", annualHours: "0" }, { payrollRateScale: 5 }]) {
     assert.throws(() => priceAdjudicatedHolidayPayment(read, { ...hourly, ...changes } as typeof hourly));
   }
-  assert.throws(() => priceAdjudicatedHolidayPayment(read, { ...hourly, rate: "9999999999999999" }), /amount column/);
+  assert.throws(() => priceAdjudicatedHolidayPayment(read, { ...hourly, rate: "9999999999999999" }), /rate column|amount column/);
+  assert.throws(() => priceAdjudicatedHolidayPayment({ ...read, hours: "0.01" }, { ...hourly, rate: "1000000000000000" }), /rate column/);
+  assert.throws(() => priceAdjudicatedHolidayPayment(read, { ...hourly, rate: "0.0001" }), /positive rate/);
 });

@@ -106,6 +106,9 @@ export function priceAdjudicatedHolidayPayment(
     { workedOn: reviewed.wageBasisDate, hours: reviewed.hours },
   ], effectiveRate);
   if (priced.days.length !== 1) throw new PayrollError("The holiday payment did not resolve to one dated wage calculation.");
+  if (!isPositiveDecimal(priced.rate) || priced.rate.split(".")[0]!.length > 15) {
+    throw new PayrollError("The dated holiday wage does not resolve to a positive rate within the payroll rate column; review its wage and declared rate precision.");
+  }
   if (priced.days[0]!.amount.split(".")[0]!.length > 15) {
     throw new PayrollError("The holiday entitlement exceeds the payroll amount column; review its source hours and dated wage.");
   }
