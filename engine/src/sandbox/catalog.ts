@@ -35,6 +35,8 @@ const TRIGGER_INSERT_COLUMN_PARENTS: Readonly<Record<string, string>> = {
 const TRIGGER_INSERT_TABLE_PARENTS: Readonly<Record<string, readonly string[]>> = {
   // Physical identity and ownership guards resolve parents during INSERT.
   inventory_movements: ["item_inventory_profiles", "stock_locations", "lots", "serials"],
+  // Custody admission must observe the complete valued movement and layer history.
+  cost_layers: ["inventory_movements"],
   serials: ["lots"],
   consignment_stock: ["item_inventory_profiles", "stock_locations", "lots", "serials", "cost_layers"],
   // These ownership guards resolve parents before deferred FKs are checked.
