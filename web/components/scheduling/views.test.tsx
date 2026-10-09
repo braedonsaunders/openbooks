@@ -204,12 +204,9 @@ test('the optional hour column disappears without turning source-date unknown ho
   )
   assert.equal(host.querySelectorAll('[class*="right-0"]').length, 0)
   assert.ok(!host.textContent?.includes('0h'))
-  assert.match(
-    host.querySelector('button[title*="unknown"]')?.getAttribute('title') ??
-      host.textContent ??
-      '',
-    /unknown/i,
-  )
+  assert.ok([...host.querySelectorAll('button[title]')].some(button =>
+    button.getAttribute('title')?.includes(messages.scheduling.source.unknownHours),
+  ))
 })
 
 test('Timeline receives zoom from the host and contains no duplicate zoom buttons or toolbar', async (t) => {
