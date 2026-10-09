@@ -783,6 +783,27 @@ export const PATCH = defineRoute({
               updated_at = now(), updated_by = ${user.id}
             where employee_roles.org_id = ${user.orgId}
           `)
+          // An employment whose service start was taken from this hire date
+          // keeps following it, so HRM service credit, benefit waiting periods
+          // and payroll read one date.
+          if (hiredOn) {
+            const moved = (await tx.execute<{ id: string; before: string | null }>(sql`
+              update worker_employments w set service_start = ${hiredOn}::date, updated_by = ${user.id}, updated_at = now()
+                from (select id, service_start::text as before from worker_employments
+                       where org_id = ${user.orgId} and worker_party_id = ${id}
+                         and service_start_provenance = 'employee_roles.hired_on'
+                         and service_start is distinct from ${hiredOn}::date
+                       for update) prior
+               where w.org_id = ${user.orgId} and w.id = prior.id
+              returning w.id, prior.before`)).rows
+            for (const row of moved) {
+              await tx.execute(sql`
+                insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+                values (${user.orgId}, 'worker_employments', ${row.id}, 'update',
+                  ${JSON.stringify({ before: { serviceStart: row.before }, after: { serviceStart: hiredOn },
+                    reason: changeReason || 'Employee hire date corrected' })}::jsonb, ${user.id})`)
+            }
+          }
           if (workerCompGroupId !== undefined) {
             await assignEmployeeWorkerCompGroup({
               orgId: user.orgId, actorId: user.id, employeePartyId: id, groupId: workerCompGroupId,
