@@ -5,8 +5,9 @@ import { schema, type SqlExecutor } from "../platform/db.ts";
 import { fromUnits, toUnits } from "../money/money.ts";
 import { markEntryReversed, postEntry } from "../journal/post-entry.ts";
 import { reversalJournalLines } from "../records/reversal-journal-lines.ts";
-import { assertPeriodModulesOpen } from "../periods/period-policy.ts";
+import { assertPeriodModulesOpen, CloseError } from "../periods/period-policy.ts";
 import { resolveCoveringPeriod } from "../periods/period-resolution.ts";
+import { authorizeConnectorReplay } from "../journal/replay-authorization.ts";
 
 export interface CompleteApplicationSnapshot {
   complete: true;
@@ -121,16 +122,68 @@ export async function releaseSourceApplications(
   const runner = applicationTransaction(client);
   const ids = rows.map((row) => row.id);
   const periodsChecked = new Set<string>();
+  const replayGrants = new Map<string, { authorizationId: string; actorId: string }>();
+  let replayActor: string | null = null;
+  const admitPeriod = async (periodId: string, bookId: string, subsidiaryId: string, module: "ap" | "ar") => {
+    // Share the native close fence through commit. A simultaneous close cannot
+    // invalidate the authorization between allocation discovery and release.
+    await runner.execute(sql`select period_posting_fence(${orgId}, ${periodId}, ${bookId})`);
+    try {
+      await assertPeriodModulesOpen(runner, {
+        orgId, periodId, bookId, subsidiaryIds: [subsidiaryId], modules: [module],
+      });
+      return;
+    } catch (error) {
+      if (!(error instanceof CloseError) || !snapshot.syncRunId) throw error;
+      if (!replayActor) {
+        const policy = (await client.query<{ actor_id: string }>(`
+          select connection.posted_change_authorized_by as actor_id
+            from connections connection
+            join sync_runs run on run.connection_id=connection.id and run.org_id=connection.org_id
+            join users controller on controller.id=connection.posted_change_authorized_by
+              and controller.org_id=connection.org_id and controller.is_active
+           where connection.org_id=$1 and connection.id=$2 and connection.source=$3
+             and run.id=$4 and run.status='running' and run.source=connection.source
+             and run.kind in ('incremental','full_migration')
+             and connection.status not in ('paused','unconfigured')
+             and connection.posted_change_policy='append_only_automatic'
+             and connection.posted_change_authorized_at is not null
+             and run.started_at>=connection.posted_change_authorized_at
+           for share of connection, run, controller`,
+          [orgId, snapshot.connectionId, snapshot.source, snapshot.syncRunId],
+        )).rows[0];
+        if (!policy) throw error;
+        await client.query(`select set_config('openbooks.connector_replay','on',true),
+          set_config('openbooks.connector_replay_request',$1,true),
+          set_config('openbooks.connector_replay_actor',$2,true)`, [snapshot.syncRunId, policy.actor_id]);
+        const allowed = (await client.query<{ allowed: boolean }>(
+          'select connector_historical_replay_authorized($1) as allowed', [orgId],
+        )).rows[0]?.allowed;
+        if (allowed !== true) throw error;
+        replayActor = policy.actor_id;
+      }
+      if (!replayGrants.has(periodId)) {
+        // Use the same governed connector grant as append-only document replay.
+        // The attributable connection policy authorizes this bounded window;
+        // the period locks and every original allocation remain in place.
+        const grant = await authorizeConnectorReplay(runner, {
+          orgId, connectionId: snapshot.connectionId, authorizedBy: replayActor,
+          periodFromId: periodId, periodToId: periodId,
+          expiresAt: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
+          reason: `Controller-authorized ${snapshot.source} source settlement reconciliation for sync run ${snapshot.syncRunId}`,
+          actorId: replayActor,
+        });
+        replayGrants.set(periodId, { authorizationId: grant.id, actorId: replayActor });
+      }
+    }
+  };
   for (const row of rows) {
     const module = row.account_type === "liability_payable" ? "ap" : "ar";
     const key = `${row.applied_on}|${row.book_id}|${row.subsidiary_id}|${module}`;
     if (periodsChecked.has(key)) continue;
     const period = await resolveCoveringPeriod(runner, orgId, row.applied_on);
     if (!period) throw new Error(`no accounting period covers source settlement ${row.applied_on}`);
-    await assertPeriodModulesOpen(runner, {
-      orgId, periodId: period.id, bookId: row.book_id,
-      subsidiaryIds: [row.subsidiary_id], modules: [module],
-    });
+    await admitPeriod(period.id, row.book_id, row.subsidiary_id, module);
     periodsChecked.add(key);
   }
   const fxIds = [...new Set(rows.flatMap((row) => row.fx_gain_loss_entry_id ? [row.fx_gain_loss_entry_id] : []))];
@@ -159,6 +212,9 @@ export async function releaseSourceApplications(
     if (!entry || entry.status !== "posted" || entry.origin !== "fx_settlement") {
       throw new Error("source settlement FX journal is missing or no longer posted");
     }
+    const ownedRow = rows.find((row) => row.fx_gain_loss_entry_id === entryId)!;
+    await admitPeriod(entry.period_id, entry.book_id, entry.subsidiary_id,
+      ownedRow.account_type === "liability_payable" ? "ap" : "ar");
     const columns = Object.entries(getTableColumns(schema.journalLines))
       .map(([key, column]) => `${column.name} as "${key}"`).join(",");
     const lines = (await client.query<typeof schema.journalLines.$inferSelect>(
@@ -171,21 +227,26 @@ export async function releaseSourceApplications(
       postingDate: entry.posting_date, periodId: entry.period_id,
       memo: "Source settlement allocation changed", origin: "fx_settlement",
       sourceDocumentId: entry.source_document_id, reversesEntryId: entry.id,
-      actorId: null, allowInactiveAccounts: true,
+      actorId: replayActor, allowInactiveAccounts: true,
       lines: reversalJournalLines(lines, { orgId, entryId: "" }),
     });
-    await markEntryReversed(runner, { orgId, entryId, actorId: null });
+    await markEntryReversed(runner, { orgId, entryId, actorId: replayActor });
   }
   for (const row of rows) {
     const audited = await client.query(
       `insert into audit_log(org_id,table_name,row_id,action,changes,actor_id,request_id)
-       values($1,'applications',$2,'update',$3::jsonb,null,$4) returning id`,
+       values($1,'applications',$2,'update',$3::jsonb,$5,$4) returning id`,
       [orgId, row.id, JSON.stringify({
         source: "mirror", reason: "source_settlement_allocation_changed",
         connectionId: snapshot.connectionId, syncRunId: snapshot.syncRunId ?? null,
         paymentRef: row.payment_ref, appliedRef: row.applied_ref,
         before: row.evidence, after: { unapplied: true },
-      }), "sync.applications"],
+        ...(replayGrants.size ? { historicalReplay: {
+          mode: "authenticated_connector_historical_replay",
+          authorizations: [...replayGrants].map(([periodId, grant]) => ({ periodId, ...grant })),
+          periodLocksPreserved: true,
+        } } : {}),
+      }), "sync.applications", replayActor],
     );
     if (audited.rows.length !== 1) throw new Error("source settlement release audit was not recorded");
   }

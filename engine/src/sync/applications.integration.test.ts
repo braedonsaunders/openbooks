@@ -1698,3 +1698,56 @@ test("legacy migration-labelled allocations are source-owned only without a busi
     assert.deepEqual(await settlementSnapshot(org.orgId),after);
   }finally{await dropScratchOrg(org.orgId);}
 });
+
+test("historical source settlement replay requires the active owning connection policy and retains bounded grant evidence", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const snapshot = await completeSnapshotFixture(org);
+    await snapshotDoc(org, "payment", "100");
+    await snapshotDoc(org, "bill", "-100");
+    const links = [{ paymentRef: "payment", appliedRef: "bill", amount: "100", currency: "CAD" }];
+    await reconcileApplications(org.orgId, "nsId", links);
+    await db.execute(sql`insert into period_locks(org_id,period_id,book_id,subsidiary_id,module,state,reason)
+      values(${org.orgId},${org.periodId},${org.bookId},null,'ar','closed','Controller close'),
+        (${org.orgId},${org.periodId},${org.bookId},null,'gl','closed','Controller close')`);
+    const before = await settlementSnapshot(org.orgId);
+    const locks = (await db.execute(sql`select * from period_locks where org_id=${org.orgId} order by id`)).rows;
+    const actorId = await createScratchUser(org.orgId, "Settlement Controller", "admin");
+    const runId = randomUUID();
+    await db.execute(sql`update connections set posted_change_policy='append_only_automatic',
+      posted_change_authorized_by=${actorId},posted_change_authorized_at=now()-interval '1 minute'
+      where org_id=${org.orgId} and id=${snapshot.connectionId}`);
+    await db.execute(sql`insert into sync_runs(id,org_id,connection_id,source,kind,status,triggered_by)
+      values(${runId},${org.orgId},${snapshot.connectionId},'netsuite','incremental','running',${actorId})`);
+    const authenticated = { ...snapshot, syncRunId: runId };
+    await assert.rejects(() => reconcileApplications(org.orgId,"nsId",[],{ ...authenticated,syncRunId:randomUUID() }), /closed/);
+    await db.execute(sql`update sync_runs set status='completed' where org_id=${org.orgId} and id=${runId}`);
+    await assert.rejects(() => reconcileApplications(org.orgId,"nsId",[],authenticated), /closed/);
+    await db.execute(sql`update sync_runs set status='running' where org_id=${org.orgId} and id=${runId}`);
+    // A whole-snapshot refusal rolls the grant and release back together.
+    await assert.rejects(() => reconcileApplications(org.orgId,"nsId",[{ ...links[0]!,appliedRef:'missing' }],authenticated), /missing endpoints/);
+    assert.deepEqual(await settlementSnapshot(org.orgId), before);
+    assert.equal((await db.execute(sql`select id from connector_replay_authorizations where org_id=${org.orgId}`)).rows.length,0);
+    const result = await reconcileApplications(org.orgId,"nsId",[{ ...links[0]!,amount:'50' }],authenticated);
+    assert.equal(result.released,1);
+    assert.equal(result.insertedAmount,'50.0000');
+    const grant = (await db.execute<{id:string; authorized_by:string; connection_id:string; period_from_id:string; period_to_id:string}>(sql`
+      select * from connector_replay_authorizations where org_id=${org.orgId}`)).rows;
+    assert.equal(grant.length,1);
+    assert.equal(grant[0]!.authorized_by,actorId);
+    assert.equal(grant[0]!.connection_id,snapshot.connectionId);
+    assert.equal(grant[0]!.period_from_id,org.periodId);
+    assert.equal(grant[0]!.period_to_id,org.periodId);
+    const audit = (await db.execute<{actor_id:string; changes:Record<string,any>}>(sql`
+      select actor_id,changes from audit_log where org_id=${org.orgId} and row_id=${before[0]!.id}`)).rows[0]!;
+    assert.equal(audit.actor_id,actorId);
+    assert.equal(audit.changes.historicalReplay.authorizations[0].authorizationId,grant[0]!.id);
+    assert.deepEqual((await db.execute(sql`select * from period_locks where org_id=${org.orgId} order by id`)).rows,locks);
+    const settled = await settlementSnapshot(org.orgId);
+    const replay = await reconcileApplications(org.orgId,"nsId",[{ ...links[0]!,amount:'50' }],authenticated);
+    assert.equal(replay.inserted,0);
+    assert.equal(replay.released,0);
+    assert.deepEqual(await settlementSnapshot(org.orgId),settled);
+    assert.equal((await db.execute(sql`select id from connector_replay_authorizations where org_id=${org.orgId}`)).rows.length,1);
+  } finally { await dropScratchOrg(org.orgId); }
+});
