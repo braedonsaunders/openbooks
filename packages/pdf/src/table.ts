@@ -174,7 +174,10 @@ export function drawTable(
       theme.font,
       group.columnStyles,
     );
-    if (group.overflow === "refuse" && measuredHeight > maxRowHeight)
+    // Independently styled observations are indivisible evidence; PDFKit must
+    // never auto-paginate one segment while the rest of its row stays behind.
+    const exactSegments = row.some(cell => styledCell(cell) && Boolean(cell.segments?.length))
+    if ((group.overflow === "refuse" || exactSegments) && measuredHeight > maxRowHeight)
       throw new RangeError(
         "A report row exceeds the printable page. Choose a wider page, fewer date columns or less detail; no report evidence was truncated.",
       );

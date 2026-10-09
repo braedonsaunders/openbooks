@@ -45,3 +45,14 @@ test('shared styled cells and multi-observation segments render real readable PD
   });
   assert.equal((await ParsedPdf.load(pdf)).getPageCount(), 1);
 });
+
+test('oversized segmented cells refuse even in generic ellipsis groups instead of paginating inside a row', async () => {
+  await assert.rejects(renderPdfDocument({
+    title: 'Exact observations', dateRangeLabel: 'October 2026', generatedAt: new Date('2026-10-12T10:00:00Z'),
+    branding: { orgName: 'Example Company' },
+    groups: [{ kind: 'results', title: 'Observations', columns: ['Evidence'], overflow: 'ellipsis', rows: [[{
+      text: 'Native evidence', segments: [{ text: 'Observation\n'.repeat(500), backgroundColor: '#1d4ed8' }],
+    }]] }],
+    layout: resolvePdfPageSetup({ paperSize: 'letter', orientation: 'portrait', marginMm: 15 }),
+  }), /no report evidence was truncated/);
+});
