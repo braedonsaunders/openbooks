@@ -48,7 +48,7 @@ export async function releaseCompCycleApproval(args: ReleaseArgs): Promise<void>
   if (!cycle) throw new Error("compensation cycle is not visible");
   // The release stamps the cycle inside decideGate's savepoint; the
   // service refuses a non-review cycle so the gate stays pending.
-  await releaseCompCycleDecision(cycle.org_id, subjectId, outcome, ctx.userId ?? "");
+  await releaseCompCycleDecision(cycle.org_id, subjectId, outcome, ctx.userId ?? "", args.approvalRunId);
 }
 
 /** Release an employment change-request approval (same seam contract). */

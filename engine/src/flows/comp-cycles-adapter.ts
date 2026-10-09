@@ -56,6 +56,7 @@ export const hrmCompCycleSubjectProfile: FlowSubjectProfile = {
   statuses: [...CYCLE_STATUSES],
   fields: [
     { key: "cycleId", label: "Cycle", type: "text" },
+    { key: "cycleRevision", label: "Cycle revision", type: "number" },
     { key: "cycleKind", label: "Kind", type: "text" },
     { key: "effectiveOn", label: "Effective on", type: "text" },
     { key: "budgetTotal", label: "Budget total", type: "text" },
@@ -78,6 +79,7 @@ type CycleRow = {
   effective_on: string;
   budget_total: string | null;
   created_by: string | null;
+  revision: number;
 };
 
 async function loadCycle(subjectId: string): Promise<CycleRow | null> {
@@ -91,7 +93,7 @@ async function loadCycle(subjectId: string): Promise<CycleRow | null> {
   const result = (await db.execute<CycleRow>(sql`
     select org_id, name, kind, status,
            effective_on::text as effective_on, budget_total::text as budget_total,
-           created_by
+           created_by, revision
       from hrm_comp_cycles
      where id = ${subjectId}
   `));
@@ -118,6 +120,7 @@ export const hrmCompCycleFlowAdapter: FlowSubjectAdapter = defineTableSubjectAda
       values: {
         id: subjectId,
         cycleId: subjectId,
+        cycleRevision: cycle.revision,
         cycleKind: cycle.kind,
         effectiveOn: String(cycle.effective_on).slice(0, 10),
         budgetTotal: cycle.budget_total,
