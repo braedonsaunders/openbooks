@@ -2,7 +2,10 @@ import { sql } from "drizzle-orm";
 import { bigint, date, integer, jsonb, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { id, orgRef } from "./helpers";
 
-/** Tenant FKs, state constraints, approval separation, range exclusions and history guards are enforced by migration 0551. */
+export const COMPENSATION_VERSION_SUBJECT_KIND = "compensation_package_version";
+export const COMPENSATION_ASSIGNMENT_SUBJECT_KIND = "compensation_package_assignment";
+
+/** Tenant references, lifecycle evidence, submitted Flow policy, effective windows and immutable history are enforced in storage. */
 const configurationEvidence = () => ({
   revision: integer("revision").notNull().default(1), reason: text("reason").notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(), createdBy: uuid("created_by").notNull(),

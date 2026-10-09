@@ -9,6 +9,8 @@ import { useMoney } from '@/components/money-provider'
 import { InspectorPanel } from '@/components/builder/builder-kit'
 import { clearSetupChildren } from '@/lib/setup/navigation'
 import { readApiErrorMessage } from '@/lib/api-error'
+import { ApprovalActions } from '@/components/approval-actions'
+import { COMPENSATION_VERSION_SUBJECT_KIND, COMPENSATION_ASSIGNMENT_SUBJECT_KIND } from '@openbooks/schema/src/payroll-compensation'
 import type { CompensationPackageAssignment, CompensationPackageEvaluation, CompensationPackageVersion } from '@openbooks/engine/payroll/compensation-packages'
 
 export function PackageVersionPicker({ versions, value }: { versions: CompensationPackageVersion[]; value?: string }) {
@@ -33,7 +35,7 @@ export function CompensationPackageActions({ packageId, version, assignment, can
   const family = version ? 'versions' : 'assignments'
   const actions = [
     ...(canManage && record.status === 'draft' ? ['submit'] : []),
-    ...(canApprove && record.status === 'submitted' ? ['approve', 'reject'] : []),
+    ...(canApprove && record.status === 'submitted' && !record.flowApprovalRequired ? ['approve', 'reject'] : []),
     ...(assignment && canManage && record.status === 'draft' ? ['cancel'] : []),
     ...(assignment && canManage && record.status === 'active' ? ['end'] : []),
   ]
@@ -54,11 +56,12 @@ export function CompensationPackageActions({ packageId, version, assignment, can
   }
   return <InspectorPanel title={t('compensationPackages.review')} description={t('compensationPackages.reviewHint')}>
     <p className="mb-4 text-sm">{t('compensationPackages.status')}: {t(`compensationPackages.options.${record.status}`)}</p>
+    {record.status === 'submitted' && record.flowApprovalRequired ? <ApprovalActions subjectKind={version ? COMPENSATION_VERSION_SUBJECT_KIND : COMPENSATION_ASSIGNMENT_SUBJECT_KIND} subjectId={record.id} /> : null}
     {actions.length ? <div className="space-y-4">
       <FieldControl field={{ key: 'reason', kind: 'textarea', labelKey: 'compensationPackages.reason', required: true }} value={reason} onChange={value => { setReason(String(value)); setError(null) }} creating forceLocked={busy} refOptions={[]} formValues={{ reason }} t={t} />
       {actions.includes('end') ? <FieldControl field={{ key: 'effectiveTo', kind: 'date', required: true }} value={end} onChange={value => setEnd(String(value))} creating forceLocked={busy} refOptions={[]} formValues={{ effectiveTo: end }} t={t} /> : null}
       <div className="flex flex-wrap gap-2">{actions.map(action => <Button key={action} variant={action === 'reject' || action === 'cancel' ? 'outline' : 'default'} disabled={busy} onClick={() => void act(action)}>{t(`compensationPackages.actions.${action}`)}</Button>)}</div>
-    </div> : <p className="text-sm text-slate-500">{t('compensationPackages.noActions')}</p>}
+    </div> : !record.flowApprovalRequired ? <p className="text-sm text-slate-500">{t('compensationPackages.noActions')}</p> : null}
     {error ? <p role="alert" className="mt-3 text-sm text-red-600">{error}</p> : null}
   </InspectorPanel>
 }

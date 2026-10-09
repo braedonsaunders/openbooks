@@ -24,6 +24,8 @@ import { ALLOCATION_RUN_SUBJECT_KIND } from "../flows/allocation-runs-adapter.ts
 import { FUND_RELEASE_SUBJECT_KIND } from "../flows/fund-releases-adapter.ts";
 import { CLOSE_RUN_SUBJECT_KIND } from "../flows/close-runs-adapter.ts";
 import { HRM_COMP_CYCLE_SUBJECT_KIND } from "@openbooks/schema/src/hrm-compensation.ts";
+import { COMPENSATION_VERSION_SUBJECT_KIND, COMPENSATION_ASSIGNMENT_SUBJECT_KIND } from "@openbooks/schema/src/payroll-compensation.ts";
+import { releaseCompensationPackageFlowApproval } from "../payroll/compensation-package-flow-release.ts";
 import { BENEFIT_AWARD_SUBJECT_KIND } from "@openbooks/schema/src/benefits-programs.ts";
 import { HRM_CHANGE_REQUEST_SUBJECT_KIND } from "@openbooks/schema/src/hrm-change-requests.ts";
 import { HRM_LEAVE_REQUEST_SUBJECT_KIND } from "@openbooks/schema/src/hrm-leave.ts";
@@ -103,6 +105,8 @@ export function installEngineSeams(): void {
   registerFlowApprovalReleaseHandler(BENEFIT_AWARD_SUBJECT_KIND, releaseBenefitAwardFlowApproval);
   registerFlowApprovalReleaseHandler(BENEFIT_ENROLLMENT_SUBJECT_KIND, releaseBenefitEnrollmentFlowApproval);
   registerFlowApprovalReleaseHandler(HRM_COMP_CYCLE_SUBJECT_KIND, releaseCompCycleApproval);
+  registerFlowApprovalReleaseHandler(COMPENSATION_VERSION_SUBJECT_KIND, releaseCompensationPackageFlowApproval);
+  registerFlowApprovalReleaseHandler(COMPENSATION_ASSIGNMENT_SUBJECT_KIND, releaseCompensationPackageFlowApproval);
   registerFlowApprovalReleaseHandler(HRM_CHANGE_REQUEST_SUBJECT_KIND, releaseHrmChangeRequestApproval);
   registerFlowApprovalReleaseHandler(HRM_LEAVE_REQUEST_SUBJECT_KIND, releaseLeaveRequestApproval);
   registerFlowApprovalReleaseHandler(RESOURCING_REQUEST_SUBJECT_KIND, releaseResourcingRequestApproval);
