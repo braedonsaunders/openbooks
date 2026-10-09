@@ -437,7 +437,7 @@ export async function loadCatalog(): Promise<Catalog> {
  * which is non-deferrable and blocks deleting the parent while children exist.
  * Kahn's topological sort on edges "A references B"; reference cycles (all
  * NO ACTION / deferrable) are appended last and resolved by deferred checks.
- * Self-references are excluded here — callers pre-null those columns.
+ * Self-references are excluded here and handled by the scoped wipe caller.
  */
 export function deletionOrder(cat: Catalog): string[] {
   const names = cat.tables.map((t) => t.name);
@@ -473,7 +473,39 @@ export function deletionOrder(cat: Catalog): string[] {
       if ((indeg.get(b) ?? 0) === 0) queue.push(b);
     }
   }
-  for (const n of names) if (!seen.has(n)) order.push(n);
+  // A deferred cycle can retain its acyclic ancestors in this tail. Their
+  // RESTRICT actions and non-deferrable references still require children to
+  // be deleted first; catalog order cannot safely resolve those dependencies.
+  const tail = names.filter((name) => !seen.has(name));
+  const tailSet = new Set(tail);
+  const immediateDeps = new Map(tail.map((name) => [name, new Set<string>()]));
+  const immediateIndeg = new Map(tail.map((name) => [name, 0]));
+  for (const t of cat.tables) {
+    if (!tailSet.has(t.name)) continue;
+    for (const [column, ref] of Object.entries(t.fks)) {
+      const rule = t.fkDeleteRules[column];
+      if (ref === t.name || !tailSet.has(ref) || rule === "CASCADE" || rule === "SET NULL") continue;
+      if (SANDBOX_CYCLE_BREAKERS[t.name]?.includes(column)) continue;
+      if (rule !== "RESTRICT" && t.hardFks[column] !== ref) continue;
+      if (immediateDeps.get(t.name)!.has(ref)) continue;
+      immediateDeps.get(t.name)!.add(ref);
+      immediateIndeg.set(ref, immediateIndeg.get(ref)! + 1);
+    }
+  }
+  const immediateQueue = tail.filter((name) => immediateIndeg.get(name) === 0);
+  const orderedTail = new Set<string>();
+  while (immediateQueue.length) {
+    const name = immediateQueue.shift()!;
+    orderedTail.add(name);
+    order.push(name);
+    for (const parent of immediateDeps.get(name)!) {
+      immediateIndeg.set(parent, immediateIndeg.get(parent)! - 1);
+      if (immediateIndeg.get(parent) === 0) immediateQueue.push(parent);
+    }
+  }
+  if (orderedTail.size !== tail.length) {
+    throw new Error("Sandbox deletion has an immediate foreign-key cycle; preserve its data and resolve the reference cycle before deleting");
+  }
 
   return order;
 }
