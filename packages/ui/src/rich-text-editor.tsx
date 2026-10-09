@@ -22,18 +22,23 @@ export function readRichTextDocument(root: HTMLElement): RichTextDocument {
     }
     return [...node.childNodes].flatMap(child => spans(child, next))
   }
-  let inline: RichTextSpan[] = []
-  function flush() { if (inline.length) { blocks.push({kind: 'paragraph', spans: inline}); inline = [] } }
-  for (const node of root.childNodes) {
-    const element = node.nodeType === 1 ? node as HTMLElement : null
-    if (element && ['UL','OL'].includes(element.tagName)) {
-      flush()
-      for (const child of element.children) if (child.tagName === 'LI') blocks.push({kind: element.tagName === 'UL' ? 'bullet' : 'number', spans: spans(child)})
-    } else if (element && ['P','DIV'].includes(element.tagName)) {
-      flush(); blocks.push({kind: 'paragraph', spans: spans(element)})
-    } else inline.push(...spans(node))
+  function readBlocks(container: HTMLElement, kind: 'paragraph' | 'bullet' | 'number') {
+    let inline: RichTextSpan[] = [], sawBlock = false
+    function flush(force = false) {
+      if (inline.length || force) { blocks.push({kind, spans: inline}); inline = [] }
+    }
+    for (const node of container.childNodes) {
+      const element = node.nodeType === 1 ? node as HTMLElement : null
+      if (element && ['UL','OL'].includes(element.tagName)) {
+        flush(); sawBlock = true
+        for (const child of element.children) if (child.tagName === 'LI') readBlocks(child as HTMLElement, element.tagName === 'UL' ? 'bullet' : 'number')
+      } else if (element && ['P','DIV'].includes(element.tagName)) {
+        flush(); sawBlock = true; readBlocks(element, kind)
+      } else if (!(element?.tagName === 'BR' && container.childNodes.length === 1)) inline.push(...spans(node))
+    }
+    flush(!sawBlock && !inline.length)
   }
-  flush()
+  readBlocks(root, 'paragraph')
   return richTextDocumentSchema.parse({version: 1, blocks})
 }
 function writeDocument(root: HTMLElement, value: RichTextDocument) {

@@ -79,6 +79,13 @@ test('shared editor reads actual formatting without resources/executable links a
   assert.equal(doc.blocks[0]!.spans.find(span => span.text === 'Bad link')!.href, undefined)
   assert.equal(doc.blocks[0]!.spans.find(span => span.text === 'Safe')!.href, 'https://example.test')
   assert.equal(doc.blocks[1]!.kind, 'bullet')
+  const nested = document.createElement('div')
+  nested.innerHTML = '<div><p>Intro</p><ul><li><div><b>Tools</b></div></li><li>Safety</li></ul><ol><li>Arrival</li></ol></div><div><br></div>'
+  const nestedDocument = readRichTextDocument(nested)
+  assert.deepEqual(nestedDocument.blocks.map(block => block.kind), ['paragraph','bullet','bullet','number','paragraph'])
+  assert.deepEqual(nestedDocument.blocks.map(block => block.spans.map(span => span.text).join('')), ['Intro','Tools','Safety','Arrival',''])
+  assert.equal(nestedDocument.blocks[1]!.spans[0]!.bold, true)
+
   let writes = 0
   const {host, root} = await mount(t, <RichTextEditor label="Message" value={doc} labels={labels.editor} onChange={() => {writes++}} />)
   const editable = host.querySelector('[role="textbox"]')!
