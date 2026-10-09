@@ -633,6 +633,9 @@ export const payStubLines = pgTable(
     }).notNull(),
     description: text("description").notNull(),
     hours: numeric("hours", { precision: 12, scale: 2 }),
+    /** Operational units priced by a derived rule; excluded from worked-hour bases. */
+    derivedQuantity: numeric("derived_quantity", { precision: 24, scale: 4 }),
+    derivedRuleCode: text("derived_rule_code"),
     rate: money("rate"),
     earnedFrom: date("earned_from", { mode: "string" }),
     earnedTo: date("earned_to", { mode: "string" }),
@@ -677,6 +680,12 @@ export const payStubLines = pgTable(
   },
   (t) => [
     index("pay_stub_lines_stub").on(t.stubId, t.sequence),
+    check("pay_stub_lines_derived_quantity_evidence", sql`
+      (${t.derivedQuantity} is null and ${t.derivedRuleCode} is null) or
+      (${t.derivedQuantity} is not null and ${t.derivedQuantity} > 0 and ${t.derivedQuantity} <> 'NaN'::numeric
+        and ${t.derivedRuleCode} is not null and length(btrim(${t.derivedRuleCode})) > 0
+        and ${t.derivedRuleCode} = btrim(${t.derivedRuleCode}) and ${t.kind} = 'earning' and ${t.hours} is null)
+    `),
     check("pay_stub_lines_payment_kind", sql`${t.paymentKind} in ('cash', 'non_cash')`),
     check("pay_stub_lines_non_cash_shape", sql`
       (${t.paymentKind} = 'cash' and ${t.nonCashAccountId} is null) or

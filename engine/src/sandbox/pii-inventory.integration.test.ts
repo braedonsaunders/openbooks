@@ -1689,6 +1689,7 @@ const ALLOW_LISTED_NON_PERSONAL: ReadonlySet<string> = new Set([
   "pay_schedules.frequency",
   "pay_schedules.name",
   "pay_stub_lines.description",
+  "pay_stub_lines.derived_rule_code",
   "pay_stub_lines.expense_account_evidence",
   "pay_stub_lines.expense_account_source",
   "pay_stub_lines.kind",

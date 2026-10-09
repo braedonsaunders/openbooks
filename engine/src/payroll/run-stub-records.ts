@@ -7,6 +7,7 @@
 import { payrollSubsidiaryInScope, type PayrollSubsidiaryScope } from "./scope.ts";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
+import { requireDerivedQuantityEvidence } from "./derived-quantity.ts";
 import { PayrollError } from "./error.ts";
 import { sum } from "../money/money.ts";
 import { addMoney, sumMoney, type Money } from "../money/brands.ts";
@@ -47,6 +48,10 @@ export function programApplicabilityFromExclusions(
 }
 
 export interface Line {
+  /** Priced operational quantity, independent of insured or benefit-counted hours. */
+  derivedQuantity?: string;
+  /** Rule code frozen when its operational facts are priced. */
+  derivedRuleCode?: string;
   /** Exact recurring election allocation represented by this native line. */
   benefitAllocationId?: string;
   entitlementMovementKey?: string;
@@ -334,6 +339,7 @@ export async function insertPayStubLineRows(
 ): Promise<Map<string,string>> {
   const entitlementLineIds=new Map<string,string>();
   for (const line of lines) {
+    requireDerivedQuantityEvidence(line);
     const reporting = line.statutoryReportingCode ?? resolvePayrollStatutoryReportingCode(
       args.country, line.statutoryReportingCategory, args.payDate,
     );
@@ -344,7 +350,7 @@ export async function insertPayStubLineRows(
     // and post through the unchanged component-then-default fallback.
     const insertedLine = await tx.execute<{ id: string }>(sql`
       insert into pay_stub_lines (org_id, stub_id, component_id, kind, description, hours, rate,
-                                  earned_from, earned_to,
+                                  earned_from, earned_to, derived_quantity, derived_rule_code,
                                   amount, project_id, department_id, time_type_id, item_id, sequence,
                                   expense_account_id, expense_account_source, expense_account_evidence,
                                   statutory_reporting_code,
@@ -352,7 +358,7 @@ export async function insertPayStubLineRows(
                                   created_by, updated_by)
       values (${args.orgId}, ${args.stubId}, ${line.componentId}, ${line.kind}, ${line.description},
               ${line.hours ?? null}, ${line.rate ?? null},
-              ${line.earnedFrom ?? null}, ${line.earnedTo ?? null}, ${line.amount},
+              ${line.earnedFrom ?? null}, ${line.earnedTo ?? null}, ${line.derivedQuantity ?? null}, ${line.derivedRuleCode ?? null}, ${line.amount},
               ${line.projectId ?? null}, ${line.departmentId ?? null}, ${line.timeTypeId ?? null},
               ${line.itemId ?? null}, ${line.sequence},
               ${line.expenseAccountId ?? null}, ${line.expenseAccountSource ?? "unknown"},
@@ -364,6 +370,7 @@ export async function insertPayStubLineRows(
               ${line.paymentKind ?? "cash"}, ${line.nonCashAccountId ?? null},
               ${args.actorId}, ${args.actorId}) returning id
     `);
+    if (!insertedLine.rows[0]) throw new PayrollError("The calculated payroll line was not stored; retry calculation before committing.");
     if (line.entitlementMovementKey && insertedLine.rows[0]) entitlementLineIds.set(line.entitlementMovementKey,insertedLine.rows[0].id);
     if (line.benefitAllocationId) {
       const persisted = insertedLine.rows[0];

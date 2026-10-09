@@ -594,6 +594,8 @@ test("derived lines carry no hours, so per-hour components are not paid twice", 
   assert.equal(lines.length, 1);
   assert.equal(Object.hasOwn(lines[0]!, "hours"), false);
   assert.equal(lines[0]!.rate, "2.0000");
+  assert.equal(lines[0]!.quantity, "8.0000");
+  assert.equal(lines[0]!.ruleCode, "SITE");
 });
 
 // --- 6. Equipment incentive: the SECOND fact source (project_charge lines) ---

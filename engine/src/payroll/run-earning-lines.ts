@@ -260,6 +260,8 @@ export async function appendDerivedEarningLines(
           componentId: line.componentId,
           kind: "earning",
           description: line.description,
+          derivedQuantity: line.quantity,
+          derivedRuleCode: line.ruleCode,
           // Deliberately no `hours`: nights and on-call days are not worked
           // hours, and hour-shaped derived quantities are already on the wage
           // lines, so carrying them here would pay per-hour components twice.
