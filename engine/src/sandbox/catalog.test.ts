@@ -78,6 +78,28 @@ test("sandbox insertion orders inferred trigger-owned parents before children", 
   assert.ok(order.indexOf("project_types") < order.indexOf("project_financial_profile_versions"));
 });
 
+test("sandbox deletion preserves immediate parent order inside deferred cycles", () => {
+  const refs: Record<string, Record<string, string>> = {
+    departments: {},
+    mfg_work_centers: { department_id: "departments", movement_id: "inventory_movements" },
+    inventory_movements: { serial_id: "serials" },
+    serials: { current_missing_count_movement_id: "inventory_movements", center_id: "mfg_work_centers" },
+  };
+  const tables = Object.entries(refs).map(([name, fks]) => ({
+    ...table("NO ACTION"), name, fks, hardFks: {},
+    fkDeleteRules: Object.fromEntries(Object.keys(fks).map(key => [key, key === "department_id" ? "RESTRICT" : "NO ACTION"])),
+  }));
+  const cat = { tables, tenantTables: tables, rebaseSet: new Set(Object.keys(refs)) };
+  assert.ok(deferredDeletionTables(cat).has("departments"));
+  const order = deletionOrder(cat);
+  assert.ok(order.indexOf("mfg_work_centers") < order.indexOf("departments"));
+  assert.equal(new Set(order).size, tables.length);
+  const cyclic = tables.map(t => t.name === "departments"
+    ? { ...t, fks: { center_id: "mfg_work_centers" }, fkDeleteRules: { center_id: "RESTRICT" } }
+    : t);
+  assert.throws(() => deletionOrder({ ...cat, tables: cyclic }), /immediate foreign-key cycle/);
+});
+
 test("sandbox insertion resolves inventory ownership and tracking parents inside a deferred cycle", () => {
   const nodes = ["inventory_movements", "consignment_stock", "item_inventory_profiles", "items", "stock_locations", "serials", "lots", "cost_layers"];
   const refs: Record<string, Record<string, string>> = {
