@@ -157,7 +157,12 @@
     "hrm-training": "Capacitación",
     "internal-billing": "Facturación interna",
     "scheduling": "Planificación",
-    "contractor-withholding": "Retenciones de contratistas"
+    "contractor-withholding": "Retenciones de contratistas",
+    "manufacturing": "Fabricación",
+    "manufacturing-work-orders": "Órdenes de fabricación",
+    "manufacturing-work-centers": "Centros de trabajo",
+    "manufacturing-routings": "Rutas y revisiones",
+    "manufacturing-mrp": "Ejecuciones de MRP"
   },
   "modulesShort": {
     "hrm-performance-cycles": "Gestionar evaluaciones",

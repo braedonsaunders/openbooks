@@ -157,7 +157,12 @@
     "hrm-training": "培训",
     "internal-billing": "内部计费",
     "scheduling": "排程",
-    "contractor-withholding": "承包商预扣税"
+    "contractor-withholding": "承包商预扣税",
+    "manufacturing": "制造",
+    "manufacturing-work-orders": "生产工单",
+    "manufacturing-work-centers": "工作中心",
+    "manufacturing-routings": "工艺路线与版本",
+    "manufacturing-mrp": "MRP运行"
   },
   "groups": {
     "workforce": "员工队伍",

@@ -23,6 +23,11 @@ export interface PreparedListSource {
  * owns the collection contract and pagination mode consumed by shared tables.
  * A server window must never be filtered or paginated again in the browser. */
 const SOURCES = {
+  manufacturing_work_orders: {route:'/manufacturing/work-orders',rowsField:'rows',rowKeyField:'id',mode:'server',clientSearch:false,paging:{totalField:'total',pageField:'page',perPageField:'perPage'}},
+  manufacturing_work_centers: {route:'/manufacturing/work-centers',rowsField:'rows',rowKeyField:'id',mode:'server',clientSearch:false,paging:{totalField:'total',pageField:'page',perPageField:'perPage'}},
+  manufacturing_routings: {route:'/manufacturing/routings',rowsField:'rows',rowKeyField:'id',mode:'server',clientSearch:false,paging:{totalField:'total',pageField:'page',perPageField:'perPage'}},
+  manufacturing_mrp: {route:'/manufacturing/mrp',rowsField:'rows',rowKeyField:'id',mode:'server',clientSearch:false,paging:{totalField:'total',pageField:'page',perPageField:'perPage'}},
+  manufacturing_record_rows: {route:'/manufacturing',rowsField:'rows',rowKeyField:'id',mode:'loaded'},
   inventory_stock_controls: {route:'/inventory',rowsField:'rows',rowKeyField:'id',mode:'server',clientSearch:false,paging:{totalField:'totalCount',pageField:'currentPage',perPageField:'perPage'}},
   contractor_withholding_payment_deductions: { route: '/payments', rowsField: 'withholdings', rowKeyField: 'openLineId', mode: 'loaded' },
   contractor_withholding_deposits: { route: '/contractor-withholding?tab=deposits', rowsField: 'deposits', rowKeyField: 'documentId', mode: 'loaded' },

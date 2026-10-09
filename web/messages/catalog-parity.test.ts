@@ -239,6 +239,8 @@ function blockSignature(blocks: TypedBlock[]): string[] {
  * Everything else that ships English verbatim is an untranslated string.
  */
 const COGNATES = new Set<string>([
+  // Spanish uses the same negative response as English.
+  'es:manufacturing.no|No',
   // Per-area reviewed exemptions: country names spelled identically (Canada); genuine loanwords (Pack/Status/Manual/Scripts in de/es/pt-BR);
   // nouns spelled identically in fr/es/pt-BR/de (document, migration, classification, manual, Status, Spanish No); ICU-only templates
   // ({name}: {detail} with no translatable words); REST API and Scripts conventions.

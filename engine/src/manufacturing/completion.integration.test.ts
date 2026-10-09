@@ -9,6 +9,9 @@ import { businessToday } from "../platform/business-date.ts";
 import { createScratchOrg, createScratchUser, dropScratchOrg, type ScratchOrg } from "../testing/fixtures.ts";
 import { receiveInventory } from "../inventory/movements.ts";
 import { getOnHand } from "../inventory/position.ts";
+import { recordNormalScrap } from "./scrap.ts";
+import { executeManufacturingReceipt, executeManufacturingIssue } from "./execution.ts";
+import { readManufacturingRecord, listManufacturingRecords, searchManufacturingChoices } from "./workspace.ts";
 import { ManufacturingError } from "./errors.ts";
 import { activateRouting, createRouting, createRoutingOperation } from "./routings.ts";
 import { addWorkCenterRate, createWorkCenter } from "./work-centers.ts";
@@ -187,6 +190,19 @@ async function entryAmounts(f: Fixture, entryId: string) {
   return withBypassContext(async () => Object.fromEntries((await db.execute<{ account_id: string; amount: string }>(sql`
     select account_id, sum(amount)::text amount from journal_lines where org_id=${f.org.orgId} and entry_id=${entryId} group by account_id`)).rows
     .map((row) => [row.account_id, row.amount])));
+}
+async function normalLoss(f: Fixture, produced=f.org.items.assembly) {
+  await run(tx=>tx.execute(sql`update app_roles set permissions='["manufacturing.manage","items.post"]'::jsonb where org_id=${f.org.orgId} and id in (select role_id from role_assignments where org_id=${f.org.orgId} and user_id=${f.actorId}) returning id`));
+  const wo=await prepare(f,{produced,quantity:"10"});
+  const operation=await withBypassContext(async()=>(await db.execute<{id:string;centerId:string}>(sql`select id,work_center_id as "centerId" from mfg_wo_operations where org_id=${f.org.orgId} and work_order_id=${wo.id}`)).rows[0]!);
+  await run(tx=>addWorkCenterRate(tx,f.org.orgId,f.actorId,operation.centerId,{machineRatePerHour:"0",effectiveFrom:"2026-01-01"}));
+  const reasonId=randomUUID();
+  await run(tx=>tx.execute(sql`insert into mfg_scrap_reasons (id,org_id,code,name,classification,is_active) values (${reasonId},${f.org.orgId},${reasonId},'Normal production loss','normal',true) returning id`));
+  await run(tx=>startWorkOrderOperation(tx,f.org.orgId,f.actorId,wo.id,operation.id));
+  return {...wo,operationId:operation.id,reasonId};
+}
+async function scrapState(f:Fixture,id:string) {
+ return withBypassContext(async()=>(await db.execute<{scrap:string;completed:string;events:number;audit:number}>(sql`select quantity_scrapped::text as scrap,quantity_completed::text as completed,(select count(*)::int from mfg_scrap_events where org_id=${f.org.orgId} and work_order_id=${id}) as events,(select count(*)::int from audit_log where org_id=${f.org.orgId} and table_name='mfg_scrap_events') as audit from mfg_work_orders where org_id=${f.org.orgId} and id=${id}`)).rows[0]!);
 }
 const cases: Case[] = [
   { name: "completed operations carry labor, machine and overhead into FIFO finished goods", run: async (f) => {
@@ -416,6 +432,101 @@ const cases: Case[] = [
     await refuse(run(() => reverseMaterialIssue(f.org.orgId, f.actorId, { movementId, reversalDate: f.postingDate, reason: "Correct the issue quantity" })), "issue_reversal_after_completion", "cannot be reversed after it is done");
   } },
 ];
+cases.push(
+ {name:"normal loss is scoped, replayable, quantity bounded and atomic with audit",run:async f=>{
+  const wo=await normalLoss(f),id=randomUUID(),input={operationId:wo.operationId,quantity:"2",reasonId:wo.reasonId};
+  await assert.rejects(run(tx=>recordNormalScrap(tx,f.org.orgId,f.actorId,new Set(),wo.id,id,input)),e=>e instanceof ManufacturingError&&e.status===404);
+  const before=await counts(f);
+  await run(tx=>recordNormalScrap(tx,f.org.orgId,f.actorId,null,wo.id,id,input));
+  await run(tx=>recordNormalScrap(tx,f.org.orgId,f.actorId,null,wo.id,id,input));
+  assert.deepEqual(await scrapState(f,wo.id),{scrap:"2.0000",completed:"0.0000",events:1,audit:1});
+  assert.deepEqual(await counts(f),before,"evidence does not post an inventory or accounting loss");
+  const frozen=await withBypassContext(async()=>(await db.execute(sql`select treatment,frozen_value::text,approval_required,posted_entry_id from mfg_scrap_events where org_id=${f.org.orgId} and id=${id}`)).rows[0]);
+  assert.deepEqual(frozen,{treatment:"evidence",frozen_value:"0.0000",approval_required:false,posted_entry_id:null});
+  await assert.rejects(run(tx=>recordNormalScrap(tx,f.org.orgId,f.actorId,null,wo.id,id,{...input,quantity:"3"})),e=>e instanceof ManufacturingError&&e.code==='idempotency_key_conflict');
+  await assert.rejects(run(tx=>recordNormalScrap(tx,f.org.orgId,f.actorId,null,wo.id,randomUUID(),{...input,quantity:"8"})),e=>e instanceof ManufacturingError&&e.code==='all_loss_disposition_required');
+  await assert.rejects(run(async tx=>{await recordNormalScrap(tx,f.org.orgId,f.actorId,null,wo.id,randomUUID(),{...input,quantity:"1"});throw new Error('rollback normal loss')}),/rollback normal loss/);
+  assert.deepEqual(await scrapState(f,wo.id),{scrap:"2.0000",completed:"0.0000",events:1,audit:1});
+  await assert.rejects(run(tx=>completeWorkOrderOperation(tx,f.org.orgId,f.actorId,wo.id,wo.operationId,{doneQty:"9"})),e=>e instanceof ManufacturingError&&e.code==='completion_tolerance_exceeded');
+  assert.equal((await run(tx=>listManufacturingRecords(tx,f.org.orgId,new Set(),'work-orders'))).total,0);
+  assert.deepEqual(await run(tx=>searchManufacturingChoices(tx,f.org.orgId,new Set(),'items','',f.org.items.component)),[]);
+  const selected=await run(tx=>searchManufacturingChoices(tx,f.org.orgId,null,'items','no-matching-item-name',f.org.items.component));
+  assert.equal(selected[0]?.value,f.org.items.component,"a selected visible item remains resolvable when it is outside the search window");
+
+  await assert.rejects(run(tx=>readManufacturingRecord(tx,f.org.orgId,new Set(),'work-orders',wo.id)),e=>e instanceof ManufacturingError&&e.status===404);
+ }},
+ {name:"normal loss splits exact actual-cost receipts, replays and reverses without rewriting scrap",run:async f=>{
+  const wo=await normalLoss(f),input={operationId:wo.operationId,quantity:"2",reasonId:wo.reasonId};
+  await run(tx=>recordNormalScrap(tx,f.org.orgId,f.actorId,null,wo.id,randomUUID(),input));
+  await stock(f,f.org.items.component,"20","3");
+  const issueKey=randomUUID(),lines=[{materialId:wo.materials[0]!.id,quantity:"20"}];
+  const issueCommand=()=>withBypassContext(()=>executeManufacturingIssue(f.org.orgId,f.actorId,null,wo.id,issueKey,lines));
+  assert.equal((await issueCommand()).replayed,false);const issued=await counts(f);assert.equal((await issueCommand()).replayed,true);assert.deepEqual(await counts(f),issued);
+  await run(tx=>completeWorkOrderOperation(tx,f.org.orgId,f.actorId,wo.id,wo.operationId,{doneQty:"8"}));
+  await assert.rejects(run(tx=>completeWorkOrder(tx,f.org.orgId,f.actorId,wo.id,{quantity:"9"})),e=>e instanceof ManufacturingError&&e.code==='completion_tolerance_exceeded');
+  const key=randomUUID(),receipt=()=>withBypassContext(()=>executeManufacturingReceipt(f.org.orgId,f.actorId,null,wo.id,key,{quantity:"3"}));
+  const first=await receipt();assert.equal(first.value.relievedWip,"22.5000");const evidence=await counts(f);assert.deepEqual((await receipt()).value,first.value);assert.deepEqual(await counts(f),evidence);
+  await assert.rejects(run(tx=>recordNormalScrap(tx,f.org.orgId,f.actorId,null,wo.id,randomUUID(),{...input,quantity:"1"})),e=>e instanceof ManufacturingError&&e.code==='scrap_after_receipt_requires_review');
+  const last=await run(tx=>completeWorkOrder(tx,f.org.orgId,f.actorId,wo.id,{quantity:"5"}));assert.equal(last.relievedWip,"37.5000");assert.equal(await wip(f,wo.number),"0.0000");
+  const movement=await withBypassContext(async()=>(await db.execute<{id:string}>(sql`select id from inventory_movements where org_id=${f.org.orgId} and journal_entry_id=${last.entryId} and kind='assembly_build'`)).rows[0]!);
+  await run(()=>reverseMaterialIssue(f.org.orgId,f.actorId,{movementId:movement.id,reversalDate:f.postingDate,reason:'Correct finished receipt quantity'}));
+  assert.equal(await wip(f,wo.number),"37.5000");assert.deepEqual(await scrapState(f,wo.id),{scrap:"2.0000",completed:"3.0000",events:1,audit:1});
+  assert.equal((await run(tx=>completeWorkOrder(tx,f.org.orgId,f.actorId,wo.id,{quantity:"5"}))).relievedWip,"37.5000");
+  await assert.rejects(run(tx=>markWorkOrderDone(tx,f.org.orgId,f.actorId,wo.id)),e=>e instanceof ManufacturingError&&e.code==='short_close_reason_required');
+  await run(tx=>markWorkOrderDone(tx,f.org.orgId,f.actorId,wo.id,{shortCloseReason:'Two units of normal production loss'}));
+  assert.equal(await wip(f,wo.number),"0.0000");
+  const read=await run(tx=>readManufacturingRecord(tx,f.org.orgId,null,'work-orders',wo.id));assert.equal(read.sections.scrap!.length,1);assert.ok(read.sections.receipts!.length>=2);assert.ok(read.sections.entries!.length>=3);
+ }},
+ {name:"normal loss retains frozen standard output valuation and clears WIP through native variance",run:async f=>{
+  const wo=await normalLoss(f,f.org.items.standard);
+  await run(tx=>recordNormalScrap(tx,f.org.orgId,f.actorId,null,wo.id,randomUUID(),{operationId:wo.operationId,quantity:"2",reasonId:wo.reasonId}));
+  await stock(f,f.org.items.component,"10","3");await issue(f,wo.id,[{materialId:wo.materials[0]!.id,quantity:"10"}]);
+  await run(tx=>completeWorkOrderOperation(tx,f.org.orgId,f.actorId,wo.id,wo.operationId,{doneQty:"8"}));
+  await run(tx=>tx.execute(sql`update item_inventory_profiles set standard_cost='99' where org_id=${f.org.orgId} and item_id=${f.org.items.standard} returning item_id`));
+  const receipt=await run(tx=>completeWorkOrder(tx,f.org.orgId,f.actorId,wo.id,{quantity:"8"}));assert.equal(receipt.value,"16.0000");assert.equal(receipt.relievedWip,"30.0000");assert.equal(await wip(f,wo.number),"0.0000");
+  const balance=await withBypassContext(async()=>(await db.execute<{amount:string}>(sql`select sum(amount)::text as amount from journal_lines where org_id=${f.org.orgId} and entry_id=${receipt.entryId}`)).rows[0]!.amount);assert.equal(balance,"0.0000");
+ }},
+ {name:"live execution authority refuses revoked grants, unknown actors and derived entity narrowing before replay",run:async f=>{
+  const wo=await normalLoss(f),input={operationId:wo.operationId,quantity:"1",reasonId:wo.reasonId},scrapKey=randomUUID();
+  await run(tx=>recordNormalScrap(tx,f.org.orgId,f.actorId,null,wo.id,scrapKey,input));
+  await stock(f,f.org.items.component,"20","3");const lines=[{materialId:wo.materials[0]!.id,quantity:"20"}],issueKey=randomUUID(),receiptKey=randomUUID();
+  await withBypassContext(()=>executeManufacturingIssue(f.org.orgId,f.actorId,null,wo.id,issueKey,lines));
+  await withBypassContext(()=>executeManufacturingReceipt(f.org.orgId,f.actorId,null,wo.id,receiptKey,{quantity:"1"}));
+  const before=await counts(f),scrapBefore=await scrapState(f,wo.id);
+  const denied=(work:Promise<unknown>)=>assert.rejects(work,e=>typeof e==='object'&&e!==null&&'status' in e&&e.status===404);
+  const attempts=async()=>{
+   await denied(run(tx=>recordNormalScrap(tx,f.org.orgId,f.actorId,null,wo.id,scrapKey,input)));
+   await denied(run(tx=>recordNormalScrap(tx,f.org.orgId,f.actorId,null,wo.id,randomUUID(),input)));
+   await denied(withBypassContext(()=>executeManufacturingIssue(f.org.orgId,f.actorId,null,wo.id,issueKey,lines)));
+   await denied(withBypassContext(()=>executeManufacturingIssue(f.org.orgId,f.actorId,null,wo.id,randomUUID(),lines)));
+   await denied(withBypassContext(()=>executeManufacturingReceipt(f.org.orgId,f.actorId,null,wo.id,receiptKey,{quantity:"1"})));
+   await denied(withBypassContext(()=>executeManufacturingReceipt(f.org.orgId,f.actorId,null,wo.id,randomUUID(),{quantity:"1"})));
+   assert.deepEqual(await counts(f),before);assert.deepEqual(await scrapState(f,wo.id),scrapBefore);
+  };
+  for(const remaining of ['manufacturing.manage','items.post']){
+   await run(tx=>tx.execute(sql`update app_roles set permissions=${JSON.stringify([remaining])}::jsonb where org_id=${f.org.orgId} returning id`));await attempts();
+  }
+  await run(tx=>tx.execute(sql`update app_roles set permissions='["manufacturing.manage","items.post"]'::jsonb,subsidiary_restriction='{"mode":"list","subsidiaryIds":[]}'::jsonb where org_id=${f.org.orgId} returning id`));await attempts();
+  await run(tx=>tx.execute(sql`update app_roles set subsidiary_restriction=null where org_id=${f.org.orgId} returning id`));
+  for(const unknown of [randomUUID()]){
+   await denied(run(tx=>recordNormalScrap(tx,f.org.orgId,unknown,null,wo.id,scrapKey,input)));
+   await denied(withBypassContext(()=>executeManufacturingReceipt(f.org.orgId,unknown,null,wo.id,receiptKey,{quantity:"1"})));
+   await denied(withBypassContext(()=>executeManufacturingIssue(f.org.orgId,unknown,null,wo.id,issueKey,lines)));
+  }
+  await denied(withBypassContext(()=>executeManufacturingReceipt(f.org.orgId,f.actorId,new Set(),wo.id,receiptKey,{quantity:"1"})));
+  const foreign=await withBypassContext(()=>createScratchOrg());
+  try{const actor=await withBypassContext(()=>createScratchUser(foreign.orgId,'Foreign operator','admin'));await denied(withBypassContext(()=>executeManufacturingReceipt(f.org.orgId,actor,null,wo.id,receiptKey,{quantity:'1'})));await denied(run(tx=>recordNormalScrap(tx,f.org.orgId,actor,null,wo.id,scrapKey,input)))}finally{await withBypassContext(()=>dropScratchOrg(foreign.orgId))}
+  assert.deepEqual(await counts(f),before);assert.deepEqual(await scrapState(f,wo.id),scrapBefore);
+ }},
+ {name:"concurrent normal-loss retries count once and distinct events accumulate under the order lock",run:async f=>{
+  const wo=await normalLoss(f),id=randomUUID(),input={operationId:wo.operationId,quantity:"1",reasonId:wo.reasonId};
+  await Promise.all([run(tx=>recordNormalScrap(tx,f.org.orgId,f.actorId,null,wo.id,id,input)),run(tx=>recordNormalScrap(tx,f.org.orgId,f.actorId,null,wo.id,id,input))]);
+  assert.equal((await scrapState(f,wo.id)).scrap,"1.0000");
+  await Promise.all([run(tx=>recordNormalScrap(tx,f.org.orgId,f.actorId,null,wo.id,randomUUID(),input)),run(tx=>recordNormalScrap(tx,f.org.orgId,f.actorId,null,wo.id,randomUUID(),input))]);
+  assert.deepEqual(await scrapState(f,wo.id),{scrap:"3.0000",completed:"0.0000",events:3,audit:3});
+ }}
+);
+
 test("manufacturing completion and reversal case table", { skip: !DB }, async () => {
   for (const scenario of cases) {
     const f = await setup();

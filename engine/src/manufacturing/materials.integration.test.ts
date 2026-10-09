@@ -9,6 +9,7 @@ import { createScratchOrg, createScratchUser, dropScratchOrg, type ScratchOrg } 
 import { ensureLot } from "../inventory/tracking.ts";
 import { receiveInventory } from "../inventory/movements.ts";
 import { primaryBookId } from "../inventory/position.ts";
+import { recordNormalScrap } from "./scrap.ts";
 import { ManufacturingError } from "./errors.ts";
 import { activateRouting, createRouting, createRoutingOperation } from "./routings.ts";
 import { addWorkCenterRate, createWorkCenter } from "./work-centers.ts";
@@ -268,6 +269,20 @@ const cases: Case[] = [
     assert.equal(row.rows[0]?.wip, row.rows[0]?.layer_cost); assert.equal(row.rows[0]?.wip, "6.0000");
   } },
 ];
+
+cases.push({name:"finish backflush consumes good plus normal scrap once while start backflush remains planned",run:async f=>{
+ await run(tx=>tx.execute(sql`update app_roles set permissions='["manufacturing.manage","items.post"]'::jsonb where org_id=${f.org.orgId} returning id`));
+ for(const trigger of ['finish','start'] as const){
+  const order=await prepare(f,{backflushAt:trigger,operationSeq:10,quantityPer:'2',orderQty:'10'});await stock(f,'20','3');
+  await run(tx=>startWorkOrderOperation(tx,f.org.orgId,f.actorId,order.id,order.operationId));
+  const reasonId=randomUUID();await run(tx=>tx.execute(sql`insert into mfg_scrap_reasons (id,org_id,code,name,classification) values (${reasonId},${f.org.orgId},${reasonId},'Normal loss','normal') returning id`));
+  await run(tx=>recordNormalScrap(tx,f.org.orgId,f.actorId,null,order.id,randomUUID(),{operationId:order.operationId,quantity:'2',reasonId}));
+  await run(tx=>completeWorkOrderOperation(tx,f.org.orgId,f.actorId,order.id,order.operationId,{doneQty:'8'}));
+  await run(tx=>completeWorkOrderOperation(tx,f.org.orgId,f.actorId,order.id,order.operationId,{doneQty:'8'}));
+  const result=await withBypassContext(async()=>(await db.execute<{quantity:string;entries:number}>(sql`select m.backflush_qty::text as quantity,(select count(*)::int from journal_entries where org_id=${f.org.orgId} and custom->>'operation_id'=${order.operationId} and custom->>'backflush_trigger'=${trigger}) as entries from mfg_wo_materials m where m.org_id=${f.org.orgId} and m.work_order_id=${order.id}`)).rows[0]!);
+  assert.deepEqual(result,{quantity:'20.0000',entries:1});
+ }
+}});
 
 test("manufacturing material execution case table", { skip: !DB }, async () => {
   for (const scenario of cases) {

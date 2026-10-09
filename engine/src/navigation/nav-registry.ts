@@ -331,6 +331,18 @@ export const NAV_MODULES: NavModule[] = [
     requiredPermission: 'items.read',
   },
   {
+    key: 'manufacturing', href: '/manufacturing', label: 'Manufacturing', iconKey: 'package', group: 'operations',
+    requiredPermission: 'manufacturing.read', featureKey: 'manufacturing', exact: true,
+  },
+  ...([
+    ['work-orders','Work orders','clipboard'],['work-centers','Work centers','settings'],
+    ['routings','Routings & revisions','workflow'],['mrp','MRP runs','calendar-days'],
+  ] as const).map(([route,label,iconKey]):NavModule=>({
+    key:'manufacturing-'+route,href:'/manufacturing/'+route,label,iconKey,group:'operations',subgroup:'manufacturing',
+    requiredPermission:'manufacturing.read',featureKey:route==='mrp'?'manufacturingMrp':'manufacturing',
+    recordTarget:{kind:'query',param:'record'},menuParent:'manufacturing',exact:true,
+  })),
+  {
     key: 'warehouses',
     href: '/warehouse',
     label: 'Warehouses',
@@ -1210,6 +1222,11 @@ export const DEFAULT_NAV_ORDER: Record<NavGroupKey, readonly string[]> = {
     'inventory',
     'items',
     'warehouses',
+    'manufacturing',
+    'manufacturing-work-orders',
+    'manufacturing-work-centers',
+    'manufacturing-routings',
+    'manufacturing-mrp',
     'picks',
     'shipments',
     'returns',

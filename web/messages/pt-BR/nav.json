@@ -157,7 +157,12 @@
     "hrm-training": "Treinamento",
     "internal-billing": "Faturamento interno",
     "scheduling": "Programação",
-    "contractor-withholding": "Retenções de empreiteiros"
+    "contractor-withholding": "Retenções de empreiteiros",
+    "manufacturing": "Manufatura",
+    "manufacturing-work-orders": "Ordens de produção",
+    "manufacturing-work-centers": "Centros de trabalho",
+    "manufacturing-routings": "Roteiros e revisões",
+    "manufacturing-mrp": "Execuções de MRP"
   },
   "groups": {
     "workforce": "Força de trabalho",

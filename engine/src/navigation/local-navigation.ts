@@ -121,6 +121,14 @@ export const HRM_LOCAL_NAVIGATION: Record<'people' | 'hiring' | 'timeOff' | 'tal
 }
 
 export const LOCAL_NAVIGATION: LocalNavigationSet[] = [
+  { id:'manufacturing',label:'Manufacturing',feature:'manufacturing',tabs:[
+    {href:'/manufacturing',label:'Manufacturing',ns:'manufacturing',key:'title',permission:'manufacturing.read',iconKey:'package'},
+    {href:'/manufacturing/work-orders',label:'Work orders',ns:'manufacturing',key:'titles.work-orders',permission:'manufacturing.read',iconKey:'clipboard',menuParent:'manufacturing'},
+    {href:'/manufacturing/work-centers',label:'Work centers',ns:'manufacturing',key:'titles.work-centers',permission:'manufacturing.read',iconKey:'settings',menuParent:'manufacturing'},
+    {href:'/manufacturing/routings',label:'Routings',ns:'manufacturing',key:'titles.routings',permission:'manufacturing.read',iconKey:'workflow',menuParent:'manufacturing'},
+    {href:'/manufacturing/mrp',label:'MRP',ns:'manufacturing',key:'titles.mrp',permission:'manufacturing.read',feature:'manufacturingMrp',iconKey:'calendar-days',menuParent:'manufacturing'},
+    {href:'/admin/setup/manufacturing',label:'Manufacturing setup',ns:'manufacturing',key:'setup',permission:'admin.setup.manage',feature:'manufacturing',iconKey:'settings',secondary:true,menuParent:'manufacturing'},
+  ] },
   { id: 'collections-views', label: 'Collections', tabs: [
     { href: '/collections', ns: 'ar', key: 'collections.tabs.worklist', permission: 'documents.manage', permissionsAny: ['ar.read'] },
     { href: '/collections?view=policies', ns: 'ar', key: 'collections.tabs.policies', permission: 'documents.manage' },
