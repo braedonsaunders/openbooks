@@ -702,7 +702,7 @@ export function SetupDrawer({
           {fieldError}
         </p>
       ) : null}
-      {steps.length ? <div className="mb-5 space-y-3">
+      {steps.length ? (<div className="mb-5 space-y-3">
         {entity.recordSections ? (
           <RecordTabs label={entityTitle} tabs={steps.map(step => ({ key: step.key, label: t(step.titleKey) }))} active={currentStep?.key ?? steps[0]!.key} onChange={key => {
             const index = steps.findIndex(step => step.key === key)
