@@ -366,6 +366,20 @@ export function generateCopySql(
       exprs.push("null");
     } else if (tableMask?.has(c.name)) {
       exprs.push(`${maskExpr(c.name, tableMask.get(c.name)!, "id", { ...c, tableName: t.name })} `);
+    } else if ((t.name === "payroll_holiday_obligations" && c.name === "evidence") ||
+        (t.name === "pay_run_holiday_allocations" && c.name === "source_snapshot")) {
+      exprs.push(`public.holiday_clone_json("${c.name}", '${c.name}', '${seed}'::uuid)`);
+    } else if (t.name === "financial_changes" && ["payload", "before_state", "result"].includes(c.name)) {
+      // Only this native event has the declared holiday identity contract.
+      // Other accounting events retain their existing copy composition.
+      const holidayEvidence = opts.masked
+        ? `(case when "${c.name}" is null then null else '{}'::jsonb end)`
+        : `public.holiday_clone_json("${c.name}", '${c.name}', '${seed}'::uuid)`;
+      exprs.push(`(case when "domain"='payroll' and "operation"='adjudicated_holiday_hours' ` +
+        `then ${holidayEvidence} else "${c.name}" end)`);
+    } else if (opts.masked && t.name === "financial_changes" && ["reason", "idempotency_key"].includes(c.name)) {
+      const removed = c.name === "reason" ? "'REDACTED'" : `('holiday-' || ob_rebase("id", '${seed}'::uuid)::text)`;
+      exprs.push(`(case when "domain"='payroll' and "operation"='adjudicated_holiday_hours' then ${removed} else "${c.name}" end)`);
     } else if (t.name === "hrm_benefit_enrollments" && c.name === "submission_snapshot") {
       exprs.push(`public.benefit_clone_submission_evidence("submission_snapshot", '${seed}'::uuid)`);
     } else if (t.name === "hrm_benefit_enrollments" && c.name === "decision_snapshot") {
@@ -373,8 +387,14 @@ export function generateCopySql(
     } else if (t.name === "flow_runs" && c.name === "context") {
       // The copied election and its pinned workflow must name the same
       // sandbox plan, employment and contribution rules before any UPDATE.
+      const holidayContext = `("context" || jsonb_build_object(` +
+        `'id', ob_rebase(("context"->>'id')::uuid, '${seed}'::uuid)::text, ` +
+        `'subsidiaryId', ob_rebase(("context"->>'subsidiaryId')::uuid, '${seed}'::uuid)::text)` +
+        (opts.masked ? ` || jsonb_build_object('reason','REDACTED','subjectLabel','REDACTED')` : "") + ")";
       exprs.push(`(case when "subject_kind"='hrm_benefit_enrollment' ` +
-        `then public.benefit_clone_submission_evidence("context", '${seed}'::uuid) else "context" end)`);
+        `then public.benefit_clone_submission_evidence("context", '${seed}'::uuid) ` +
+        `when "subject_kind"='financial_change' and "context"->>'domain'='payroll' and "context"->>'operation'='adjudicated_holiday_hours' ` +
+        `then ${holidayContext} else "context" end)`);
     } else if (opts.masked && (c.udtName === "jsonb" || c.udtName === "json") && c.name === "custom") {
       // Custom fields are arbitrary tenant-authored JSON and may contain PII
       // without a schema-level column for a masking policy to name. A masked
