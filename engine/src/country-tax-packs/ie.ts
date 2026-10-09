@@ -1,4 +1,5 @@
-import type { CountryTaxPackDefinition, TaxReturnPack } from "./types.ts";
+import { constructionReverseChargeRulesForCountry } from "./contractor-reverse-charge.ts";
+import type { ContractorWithholdingSchemeDefinition, CountryTaxPackDefinition, TaxReturnPack } from "./types.ts";
 
 const IE_VAT3_2026: TaxReturnPack = {
   code: "IE_VAT3",
@@ -23,11 +24,68 @@ const IE_VAT3_2026: TaxReturnPack = {
   ],
 };
 
+/**
+ * Relevant Contracts Tax: a principal contractor notifies Revenue of each
+ * payment to a subcontractor before making it, deducts at the rate on the
+ * deduction authorisation Revenue returns, and files a monthly return.
+ */
+const IE_RCT: ContractorWithholdingSchemeDefinition = {
+  code: "IE_RCT",
+  country: "IE",
+  name: "Relevant Contracts Tax",
+  authority: "Revenue Commissioners",
+  legalReference: "Taxes Consolidation Act 1997, s. 530 and following",
+  currency: "EUR",
+  // The deduction applies to the payment under the relevant contract,
+  // materials included; VAT on construction services between principal and
+  // subcontractor is reverse charged and outside the payment.
+  base: { excludesMaterials: false, excludesVat: true },
+  bands: [
+    {
+      code: "ZERO",
+      name: "Zero rate",
+      requiresVerification: true,
+      rates: [{ ratePercent: "0", effectiveFrom: "2012-01-01", sourceId: "revenue_rct" }],
+    },
+    {
+      code: "STANDARD",
+      name: "Standard rate",
+      requiresVerification: true,
+      rates: [{ ratePercent: "20", effectiveFrom: "2012-01-01", sourceId: "revenue_rct" }],
+    },
+    {
+      code: "HIGHER",
+      name: "Higher rate (unknown or non-compliant subcontractor)",
+      requiresVerification: false,
+      rates: [{ ratePercent: "35", effectiveFrom: "2012-01-01", sourceId: "revenue_rct" }],
+    },
+  ],
+  defaultBandCode: "HIGHER",
+  periodStartDay: 1,
+  returnFrequency: "monthly",
+  returnFrequencies: ["monthly", "quarterly"],
+  returnDue: { dayOfMonth: 23, monthsAfterPeriodEnd: 1 },
+  paymentDue: { dayOfMonth: 23, monthsAfterPeriodEnd: 1 },
+  paymentAuthorisation: "required",
+  contractorReferenceLabel: "Principal contractor tax registration number",
+  payeeReferenceLabel: "Subcontractor tax reference",
+  verificationLabel: "Rate determination",
+  sources: [
+    {
+      id: "revenue_rct",
+      title: "Revenue — Relevant Contracts Tax",
+      url: "https://www.revenue.ie/en/self-assessment-and-self-employment/rct/index.aspx",
+      asOf: "2026-10-08",
+    },
+  ],
+};
+
 /** Ireland VAT localization maintained from Revenue's current return guidance and complete official standard-rate history. */
 export const IRELAND_TAX_PACK: CountryTaxPackDefinition = {
   code: "IE_INDIRECT_TAX",
   version: "2026.08.01",
   country: "IE",
+  reverseChargeRules: constructionReverseChargeRulesForCountry("IE"),
   name: "Ireland",
   countryTaxType: "vat",
   parentReturnPackCode: "IE_VAT3",
@@ -119,4 +177,5 @@ export const IRELAND_TAX_PACK: CountryTaxPackDefinition = {
       },
     ],
   },
+  contractorWithholdingSchemes: [IE_RCT],
 };

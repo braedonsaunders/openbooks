@@ -1,7 +1,7 @@
 {
   "title": "PDF テンプレート",
   "description": "美しい印刷用書類を作成し、請求書、仕訳、その他すべての取引に割り当てます",
-  "recordTypes":   {
+  "recordTypes": {
     "customer_invoice": "顧客請求書",
     "customer_credit": "顧客クレジット",
     "quote": "見積書",
@@ -85,5 +85,22 @@
     "sent": "{to} に送信しました",
     "noRecipient": "宛先のメールアドレスを入力してください",
     "failed": "メールを送信できませんでした"
+  },
+  "einvoice": {
+    "label": "電子請求書",
+    "help": "選択した形式を検証してから発行し、保存された原本をダウンロードします。",
+    "profile": "形式",
+    "chooseProfile": "形式を選択…",
+    "buyerReference": "購入者参照 / Leitweg-ID",
+    "validate": "検証",
+    "working": "処理中…",
+    "valid": "ネイティブ検証に合格しました。",
+    "findings": "検証結果",
+    "issue": "電子請求書を発行",
+    "issueUnavailable": "発行には転記済み請求書と文書管理権限が必要です。",
+    "setup": "電子請求書の設定",
+    "originals": "発行済み原本",
+    "archivedHelp": "この形式は発行済みです。下から保存された原本をダウンロードしてください。",
+    "failed": "電子請求書を読み込みまたは発行できませんでした。"
   }
 }

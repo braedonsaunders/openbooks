@@ -9,6 +9,10 @@ export const PAYMENT_SYSTEM_CUSTOM_FIELDS = [
   "feeAmount",
   "feeIncomeAccountId",
   "onAccountAmount",
+  "withholdings",
+  "withholdingAmount",
+  "withholdingAuthorisation",
+  "withholdingAuthorisedAmount",
 ] as const;
 
 export const PAYMENT_SYSTEM_CUSTOM_FIELD_SET: ReadonlySet<string> =

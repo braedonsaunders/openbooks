@@ -1,0 +1,22 @@
+OpenBooks
+Licensed under the GNU Affero General Public License, version 3 or later.
+See LICENSE for the full licence text.
+
+The native e-invoicing implementation in engine/src/einvoice contains adaptations
+of OpenConstructionERP e-invoicing code:
+  https://github.com/datadrivenconstruction/OpenConstructionERP
+  Copyright (c) 2026 Artem Boiko / DataDrivenConstruction
+  Licensed under AGPL-3.0-or-later.
+  Reviewed source revision: 3517fc53b105efea92458971d427693b880fcab8.
+
+The CII D16B and UBL 2.1 schemas retain their original UN/CEFACT, OASIS and
+signature-schema copyright and permission notices. Published EN 16931 code
+lists are derived from the EUPL-1.2 validation artefacts. The EUPL licence is
+included under engine/src/einvoice/standards/EUPL-1.2.txt.
+
+The sRGB ICC colour profile is Copyright International Color Consortium, 2015,
+and is distributed under the ICC profile-library terms. Its original copyright
+tag is retained.
+
+Sources, versions, digests and validation boundaries are documented in
+engine/src/einvoice/standards/README.md.

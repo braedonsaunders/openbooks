@@ -116,6 +116,8 @@ export type SetupDynamicOptionsSource =
   | 'payroll-statutory-reporting-categories'
 
 export interface SetupField {
+  /** Optional configuration is hidden and refused while its authoritative feature is disabled. */
+  featureKey?: 'einvoicing'
   /** A sibling IANA zone opts a zonedDateTime into the native local-time picker. */
   timeZoneField?: string
   key: string
@@ -335,6 +337,9 @@ export interface SetupCreateChoice {
 }
 
 export interface SetupEntity {
+  /** Non-persistent native field templates materialized from a domain registry. */
+  presetsSource?: 'contractor-reverse-charge'
+  presets?: { titleKey: string; helpTextKey: string; options: { key: string; label: string; description: string; values: Record<string, unknown> }[] }
   /** Rehomed forms group the same registry fields into shared inspector sections. */
   formSections?: { titleKey: string; descriptionKey?: string; fields: string[] }[]
   /**
@@ -546,7 +551,7 @@ export function setupReferenceSources(entity: SetupEntity): SetupRefSource[] {
 
 /** References whose target row carries the subsidiary ownership anchor. */
 export function setupEntitySubsidiaryReferenceFields(entity: SetupEntity): SetupField[] {
-  const references = entity.fields.filter((field) => ['equipment-units', 'worker-employments', 'benefit-plans', 'benefit-enrollment-configuration'].includes(field.ref ?? ''))
+  const references = entity.fields.filter((field) => ['equipment-units', 'worker-employments', 'benefit-plans', 'benefit-enrollment-configuration', 'einvoice-customers'].includes(field.ref ?? ''))
   return references.some((field) => field.ref === 'worker-employments') ? references.filter((field) => field.ref === 'worker-employments') : references
 }
 
@@ -559,11 +564,11 @@ export function setupEntitySubsidiaryReferenceFields(entity: SetupEntity): Setup
  */
 export function setupEntityForFeatureState(
   entity: SetupEntity,
-  features: { multiSubsidiary: boolean; equipment?: boolean; fieldTickets?: boolean },
+  features: { multiSubsidiary: boolean; equipment?: boolean; fieldTickets?: boolean; einvoicing?: boolean },
 ): SetupEntity {
   const equipmentOn = features.equipment !== false
   const fieldTicketsOn = features.fieldTickets !== false
-  if (features.multiSubsidiary && equipmentOn && fieldTicketsOn) return entity
+  if (features.multiSubsidiary && equipmentOn && fieldTicketsOn && features.einvoicing !== false && !entity.fields.some(field => field.featureKey)) return entity
   const isSubsidiaryControl = (control: SetupField | SetupColumn) =>
     control.ref === 'subsidiaries' || control.key === 'subsidiaryIncludeChildren'
   const isEquipmentControl = (control: SetupField | SetupColumn) =>
@@ -577,6 +582,8 @@ export function setupEntityForFeatureState(
     return { ...control, options: control.options.filter((option) => option.value !== 'equipment_charge') }
   }
   const visible = (control: SetupField | SetupColumn) =>
+    (!('featureKey' in control) || !control.featureKey || features[control.featureKey] === true)
+    &&
     (features.multiSubsidiary || entity.key === 'tax-registrations' || ('legalEmployer' in control && control.legalEmployer === true) || !isSubsidiaryControl(control))
     && (equipmentOn || !isEquipmentControl(control))
     && (fieldTicketsOn || !isFieldTicketControl(control))
@@ -584,6 +591,8 @@ export function setupEntityForFeatureState(
     ...entity,
     columns: entity.columns.filter(visible).map(withoutEquipmentCharge),
     fields: entity.fields.filter(visible).map(withoutEquipmentCharge),
+    presetsSource: features.einvoicing === true ? entity.presetsSource : undefined,
+    presets: features.einvoicing === true ? entity.presets : undefined,
     filters: entity.filters?.map(withoutEquipmentCharge),
   }
 }

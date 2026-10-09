@@ -39,9 +39,9 @@ import { TURKIYE_TAX_PACK } from "./tr.ts";
 import { UNITED_STATES_TAX_PACK } from "./us.ts";
 import { VIETNAM_TAX_PACK } from "./vn.ts";
 import { SOUTH_AFRICA_TAX_PACK } from "./za.ts";
-import type { CountryTaxCodeDefinition, CountryTaxJurisdictionDefinition, CountryTaxPackDefinition, TaxReturnPackBox } from "./types.ts";
+import type { ContractorWithholdingSchemeDefinition, ContractorReverseChargeRuleDefinition, CountryTaxCodeDefinition, CountryTaxJurisdictionDefinition, CountryTaxPackDefinition, TaxReturnPackBox } from "./types.ts";
 
-export type { CountryPackCoverage, CountryTaxCodeDefinition, CountryTaxCodeRole, CountryTaxJurisdictionDefinition, CountryTaxPackDefinition } from "./types.ts";
+export type { ContractorReverseChargeRuleDefinition, ContractorWithholdingRemittanceSchedule, ContractorWithholdingBand, ContractorWithholdingSchemeDefinition, CountryPackCoverage, CountryTaxCodeDefinition, CountryTaxCodeRole, CountryTaxJurisdictionDefinition, CountryTaxPackDefinition } from "./types.ts";
 export { assertPackCodeRateSchedule, packGuardToday, packRatesCoveringDate } from "./rate-schedule.ts";
 
 export const COUNTRY_TAX_PACKS: readonly CountryTaxPackDefinition[] = [
@@ -97,6 +97,23 @@ export interface ResolvedCountryTaxJurisdiction extends CountryTaxJurisdictionDe
 
 export function countryTaxPack(country: string): CountryTaxPackDefinition | undefined {
   return COUNTRY_TAX_PACKS.find((pack) => pack.country === country);
+}
+
+/** Every contractor withholding scheme the packs declare, in pack order. */
+export const CONTRACTOR_WITHHOLDING_SCHEMES: readonly ContractorWithholdingSchemeDefinition[] = COUNTRY_TAX_PACKS.flatMap(
+  (pack) => pack.contractorWithholdingSchemes ?? [],
+);
+
+export const CONTRACTOR_REVERSE_CHARGE_RULES: readonly ContractorReverseChargeRuleDefinition[] = COUNTRY_TAX_PACKS.flatMap(
+  (pack) => pack.reverseChargeRules ?? [],
+);
+
+export function contractorReverseChargeRule(code: string): ContractorReverseChargeRuleDefinition | undefined {
+  return CONTRACTOR_REVERSE_CHARGE_RULES.find((rule) => rule.code === code);
+}
+
+export function contractorWithholdingScheme(code: string): ContractorWithholdingSchemeDefinition | undefined {
+  return CONTRACTOR_WITHHOLDING_SCHEMES.find((scheme) => scheme.code === code);
 }
 
 export function countryTaxPackForReturn(returnPackCode: string): CountryTaxPackDefinition | undefined {

@@ -1,3 +1,4 @@
+import { constructionReverseChargeRulesForCountry } from "./contractor-reverse-charge.ts";
 import type { CountryTaxPackDefinition, TaxReturnPack } from "./types.ts";
 
 const HU_AFA_65_2026: TaxReturnPack = {
@@ -40,6 +41,7 @@ export const HUNGARY_TAX_PACK: CountryTaxPackDefinition = {
   code: "HU_INDIRECT_TAX",
   version: "2026.08.01",
   country: "HU",
+  reverseChargeRules: constructionReverseChargeRulesForCountry("HU"),
   name: "Hungary",
   countryTaxType: "vat",
   parentReturnPackCode: "HU_AFA_65",

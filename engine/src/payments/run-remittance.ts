@@ -153,9 +153,9 @@ export async function queueAutomaticRemittance(
       import("@openbooks/jobs"),
       import("@openbooks/emails"),
     ]);
-    const documents = (await db.execute<{ number: string; amount: string; discount: string; credit: string }>(sql`
+    const documents = (await db.execute<{ number: string; amount: string; discount: string; credit: string; withholding: string }>(sql`
       select d.document_number as number, ri.payment_amount as amount,
-             ri.discount_amount as discount, ri.credit_amount as credit
+             ri.discount_amount as discount, ri.credit_amount as credit, ri.withholding_amount as withholding
         from payment_run_items ri join documents d on d.id = ri.source_document_id and d.org_id = ri.org_id
        where ri.payment_instruction_id = ${instructionId} and ri.org_id = ${orgId} and ri.kind in ('bill', 'expense', 'refund', 'receivable')
        order by d.document_number

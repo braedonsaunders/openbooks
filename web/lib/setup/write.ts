@@ -244,7 +244,8 @@ async function setupWriteTransaction<T>(
             select ${target.subsidiary} as subsidiary_id from ${target.from}
              where ${target.id}=${String(requested)} and ${target.org}=${orgId} for share
           `)
-          if (!visible.rows[0] || !allowed.has(String(visible.rows[0].subsidiary_id ?? '').toLowerCase())) {
+          const sharedCustomer = field.ref === 'einvoice-customers' && visible.rows[0]?.subsidiary_id === null
+          if (!visible.rows[0] || (!sharedCustomer && !allowed.has(String(visible.rows[0].subsidiary_id ?? '').toLowerCase()))) {
             throw new SetupWriteRefusal('The owning record is outside your allowed employer scope', 403)
           }
         }
@@ -417,7 +418,7 @@ async function setupEntityEnabled(entity: SetupEntity, orgId: string, executor: 
  *  does not rewrite the gated value as a new persist. */
 function writableSetupEntity(
   entity: SetupEntity,
-  features: { multiSubsidiary: boolean; equipment: boolean; fieldTickets: boolean },
+  features: { multiSubsidiary: boolean; equipment: boolean; fieldTickets: boolean; einvoicing: boolean },
 ): SetupEntity {
   const next = setupEntityForFeatureState(entity, features)
   // Pay schedules keep their subsidiary control coercible even while the
@@ -495,6 +496,9 @@ export async function validateEntityIntegrity(
   rowId?: string,
   executor: SqlExecutor = db,
 ): Promise<string | null> {
+  for (const field of entity.fields.filter(field => field.featureKey && Object.hasOwn(body, field.key))) {
+    if (!(await isFeatureEnabled(orgId, field.featureKey!, executor))) return 'Turn on E-invoicing in Company Settings → Features before changing e-invoice VAT configuration.'
+  }
   // `pay-schedules` is exempt from the generic feature fence: its dedicated
   // rule below (`payScheduleSubsidiaryProblem`) is the complete subsidiary
   // check for that entity — a valid subsidiary id is always accepted, an
@@ -2071,6 +2075,7 @@ export async function createSetupRecord(
     multiSubsidiary: await subsidiaryFeatureEnabled(orgId),
     equipment: await isFeatureEnabled(orgId, 'equipment'),
     fieldTickets: await isFeatureEnabled(orgId, 'fieldTickets'),
+    einvoicing: await isFeatureEnabled(orgId, 'einvoicing'),
   })
   // Rate-book currency is Multi-currency configuration. When that switch is
   // off the create descriptor must not require the field, so omitting it
@@ -2507,6 +2512,7 @@ export async function updateSetupRecord(
     multiSubsidiary: await subsidiaryFeatureEnabled(orgId),
     equipment: await isFeatureEnabled(orgId, 'equipment'),
     fieldTickets: await isFeatureEnabled(orgId, 'fieldTickets'),
+    einvoicing: await isFeatureEnabled(orgId, 'einvoicing'),
   })
   // Rate-book currency is Multi-currency configuration. When that switch is
   // off the update descriptor must not require the field, so omitting it
@@ -2740,7 +2746,7 @@ export async function updateSetupRecord(
           values (${sql.join(successorValues, sql`, `)})
           returning id`)))
         if (inserted.rows.length !== 1) throw new Error('a successor derived rule version could not be created')
-        const successorId = String(inserted.rows[0].id)
+        const successorId = String(inserted.rows[0]!.id)
 
         // Request match image for the successor insert audit, mirroring the
         // POST path: the exact coerced columns the insert stores (actor

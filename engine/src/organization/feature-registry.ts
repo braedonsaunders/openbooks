@@ -38,6 +38,8 @@ export interface FeatureDef {
  * everything currently visible defaults ON so existing orgs see no change;
  * new optional modules (field tickets) default OFF. */
 export const FEATURES: FeatureDef[] = [
+  { key: 'einvoicing', defaultEnabled: false, category: 'sales', navModules: [] },
+  { key: 'contractorWithholding', defaultEnabled: false, category: 'finance', navModules: [] },
   // Finance — legal structure, cash, planning, allocation, tax and close.
   // Multi-subsidiary: consolidation, intercompany, and per-entity
   // currencies/books. Data-dependent default — resolved by subsidiaryFeatureEnabled,

@@ -3503,6 +3503,28 @@
         "title": "助手操作审核",
         "singularTitle": "助手操作审核",
         "description": "已注册操作的审核声明和责任人。代码上限及原生权限、功能和生命周期检查仍然有效。"
+      },
+      "einvoice-settings": {
+        "title": "电子发票卖方设置",
+        "singular": "电子发票卖方",
+        "singularTitle": "电子发票卖方",
+        "description": "配置每个开票法人的税务身份和付款指示。"
+      },
+      "einvoice-recipients": {
+        "title": "电子发票收件人",
+        "singular": "电子发票收件人",
+        "singularTitle": "电子发票收件人",
+        "description": "编辑现有客户角色的电子开票信息。"
+      },
+      "withholding-enrollments": {
+        "title": "登记",
+        "singularTitle": "登记",
+        "description": "准备预扣税工作底稿、记录向税务机关的申报并缴纳扣款。"
+      },
+      "withholding-standings": {
+        "title": "分包商资格",
+        "singularTitle": "分包商资格",
+        "description": "金额反映最后保存的付款。请保存更改以重新计算扣款。"
       }
     },
     "fields": {
@@ -4250,6 +4272,7 @@
       "scheduleDistributionVisibility": "Personal reports contain only the recipient’s own schedule or associated resources. Whole-board reports require an explicit sharing policy and a legal-entity-scoped board. Every send still requires a reviewed audience/version or an authored, enabled native Flow."
     },
     "options": {
+      "withholdingCondominiumPayer": "公寓业主共同体付款人",
       "storedValueKind": {
         "giftCard": "礼品卡",
         "storeCredit": "储值余额"
@@ -6654,6 +6677,101 @@
       "draftingDescription": "基于记录的草稿中需要人工审核的词语。草稿不会自动提交。",
       "reviewsTitle": "审核",
       "reviewsDescription": "管理员审核助手操作限制和通知的周期。"
+    },
+    "einvoice": {
+      "defaultProfile": "默认配置",
+      "electronicAddress": "电子地址",
+      "electronicAddressScheme": "电子地址标识方案",
+      "tradingName": "商号",
+      "legalRegistrationId": "法人登记标识",
+      "legalRegistrationScheme": "法人登记方案（ICD）",
+      "taxNumber": "税务登记号",
+      "addressLine1": "地址第1行",
+      "addressLine2": "地址第2行",
+      "city": "城市",
+      "postcode": "邮政编码",
+      "subdivision": "地区",
+      "contactName": "联系人姓名",
+      "contactPhone": "联系人电话",
+      "contactEmail": "联系人邮箱",
+      "paymentMeansCode": "支付方式",
+      "payeeAccountId": "收款账户标识 / IBAN",
+      "payeeAccountName": "收款账户名称",
+      "payeeBic": "BIC / 银行标识",
+      "untaxedLineCategory": "未征税明细的增值税类别",
+      "exemptionReasonCode": "VATEX免税原因代码",
+      "exemptionReason": "法定免税说明",
+      "buyerReference": "买方参考号 / Leitweg-ID",
+      "vatCategory": "EN 16931增值税类别",
+      "identity": "税务身份",
+      "address": "邮寄地址",
+      "contact": "电子地址和联系人",
+      "payment": "付款指示",
+      "untaxed": "未征税明细",
+      "sellerHelp": "卖方名称和国家来自法人。增值税标识来自适用的税务登记。",
+      "recipientHelp": "请通过原生客户流程创建客户。账单地址和增值税标识仍在客户记录中管理。",
+      "taxHelp": "配置使用各原生税码的发票必须载明的类别及法定说明。",
+      "untaxedHelp": "系统不推断类别。未配置未征税明细处理方式之前，将拒绝签发发票。",
+      "vat": {
+        "S": "标准增值税",
+        "Z": "零税率",
+        "E": "免税",
+        "AE": "反向征税",
+        "K": "共同体内供应",
+        "G": "出口",
+        "O": "增值税范围之外",
+        "L": "加那利群岛间接税",
+        "M": "休达和梅利利亚税"
+      },
+      "effectiveFrom": "电子发票增值税处理生效日期",
+      "effectiveFromHelp": "此日期之前的发票无法使用此处理方式。请在原生税率选项卡中另行设置税率生效日期。",
+      "reverseChargePreset": "建筑业反向征税模板",
+      "reverseChargePresetHelp": "仅选择适用于本次供应和收件人的规则。保存前请核对国家、生效日期、管辖区及税务科目。现有税率保持不变。",
+      "choosePreset": "选择模板…"
+    },
+    "withholding": {
+      "enrollments": "登记",
+      "enrollment": "登记",
+      "standings": "分包商资格",
+      "standing": "分包商资格",
+      "fields": {
+        "payerScope": "付款人范围",
+        "remittanceScheduleCode": "缴款计划",
+        "remittancePolicy": "主管机关缴款政策",
+        "calendar": "主管机关工作日日历",
+        "from": "覆盖起始日期",
+        "to": "覆盖截止日期",
+        "closedDates": "经确认的主管机关休息日期",
+        "sourceReference": "主管机关或税负凭据来源",
+        "lookback": "Form 945回溯年度税负",
+        "finalAnnualLiability": "全部类别的最终年度税负",
+        "nextDayEventOn": "先前达到10万美元的次日缴款事件",
+        "other945Liabilities": "其他Form 945税负（仅用于判定期限）",
+        "date": "税负日期",
+        "amount": "税负金额",
+        "taxYear": "纳税年度",
+        "totalTax": "Form 945税额总计",
+        "subsidiaryId": "法人实体",
+        "schemeCode": "制度",
+        "contractorReference": "承包商登记参考号",
+        "liabilityAccountId": "预扣税负债科目",
+        "authorityPartyId": "税务机关供应商",
+        "thresholdBasis": "阈值依据",
+        "effectiveFrom": "生效日期",
+        "effectiveTo": "失效日期",
+        "isActive": "启用",
+        "partyId": "分包商",
+        "bandCode": "税率档次",
+        "verificationReference": "核验参考号",
+        "verifiedOn": "核验日期",
+        "validFrom": "有效开始日期",
+        "validTo": "有效结束日期",
+        "payeeReference": "分包商税务参考号",
+        "payeeTaxOffice": "分包商税务局",
+        "applyFromFirstPayment": "从首次付款开始扣款",
+        "notes": "备注",
+        "returnFrequency": "申报频率"
+      }
     }
   },
   "flows": {

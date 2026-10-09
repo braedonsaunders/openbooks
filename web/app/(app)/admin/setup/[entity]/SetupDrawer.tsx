@@ -279,6 +279,7 @@ export function SetupDrawer({
   // card pre-fills the values that decide which fields apply.
   const chooser = creating ? entity.createChooser : undefined
   const [choosing, setChoosing] = useState(Boolean(chooser))
+  const [presetKey, setPresetKey] = useState('')
   function choose(key: string) {
     const choice = chooser?.options.find((option) => option.key === key)
     if (!choice) return
@@ -634,6 +635,19 @@ export function SetupDrawer({
         {currentStep ? <div><h2 className="text-base font-semibold">{t(currentStep.titleKey)}</h2><p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{t(currentStep.descriptionKey)}</p></div> : null}
       </div> : null}
       <div className={entity.formSections ? "space-y-5" : undefined}>
+      {editing && entity.presets && <div className="mb-5 space-y-1.5">
+        <Label htmlFor="setup-policy-preset">{t(entity.presets.titleKey)}</Label>
+        <Select id="setup-policy-preset" value={presetKey} disabled={busy} onChange={event => {
+          setPresetKey(event.target.value)
+          const preset = entity.presets?.options.find(option => option.key === event.target.value)
+          if (preset) { setFieldError(null); setForm(current => ({ ...current, ...preset.values })) }
+        }}>
+          <option value="">{t('einvoice.choosePreset')}</option>
+          {entity.presets.options.map(preset => <option key={preset.key} value={preset.key}>{preset.label}</option>)}
+        </Select>
+        <p className="text-xs text-muted-foreground">{t(entity.presets.helpTextKey)}</p>
+        {presetKey && <p className="text-xs text-muted-foreground">{entity.presets.options.find(preset => preset.key === presetKey)?.description}</p>}
+      </div>}
       {entity.formSections?.map((section) => {
         const fields = displayedFields.filter((field) => section.fields.includes(field.key))
         if (!fields.length) return null

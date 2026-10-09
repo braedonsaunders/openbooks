@@ -15,6 +15,12 @@ import { isPaymentKind, lockEditablePaymentDocument } from "../payments-core/pay
 import { isUuid } from "../platform/uuid.ts";
 import { lockAndCheckOrgFeature } from "../organization/org-feature-lock.ts";
 import { loadStoredValueTenderAccount, resolveStoredValueTender, storedValueLiabilityControlAccount } from "../stored-value/accounts.ts";
+import {
+  computePaymentWithholdings,
+  ContractorWithholdingError,
+  withholdingTotal,
+  type PaymentWithholding,
+} from "../contractor-withholding/service.ts";
 export { isPaymentKind, lockEditablePaymentDocument };
 const NUMBER_PREFIX: Record<PaymentKind, string> = {
   vendor_payment: "PAY-",
@@ -139,6 +145,11 @@ export async function updateDraftPayment(
      * shown once at issue and is gone by design) and re-verify the same way.
      */
     storedValueTenders?: Array<{ code: string; amount: string } | { accountId: string; amount: string }>;
+    /** Authority-issued deduction authorisation for a contractor withholding
+     *  scheme that requires one per payment (vendor payments only). */
+    withholdingAuthorisation?: string | null;
+    /** Exact deduction amount printed on the authority's authorisation, including zero. */
+    withholdingAuthorisedAmount?: string | null;
   },
   userId: string | null,
   orgId: string,
@@ -178,6 +189,8 @@ export async function updateDraftPayment(
       feeIncomeAccountId?: string;
       onAccountAmount?: string;
       storedValueTenders?: StoredValueTenderSnapshot[];
+      withholdingAuthorisation?: string | null;
+      withholdingAuthorisedAmount?: string | null;
     };
     const partyId = patch.partyId !== undefined ? patch.partyId : doc.partyId;
     const bankAccountId =
@@ -350,6 +363,50 @@ export async function updateDraftPayment(
     });
     const grossApplied = sum(allocations.map((a) => a.sourceTransactionAmount));
     if (cmp(discountAmount, grossApplied) > 0) throw new PaymentError("discount cannot exceed the payment applications");
+    const withholdingAuthorisation = patch.withholdingAuthorisation !== undefined
+      ? (patch.withholdingAuthorisation?.trim() || null)
+      : (custom.withholdingAuthorisation ?? null);
+    if (withholdingAuthorisation && withholdingAuthorisation.length > 100) {
+      throw new PaymentError("a withholding authorisation reference must be at most 100 characters");
+    }
+    const suppliedWithholdingAuthorisedAmount = patch.withholdingAuthorisedAmount !== undefined
+      ? patch.withholdingAuthorisedAmount
+      : (custom.withholdingAuthorisedAmount ?? null);
+    let withholdingAuthorisedAmount: string | null = null;
+    if (suppliedWithholdingAuthorisedAmount !== null) {
+      const authorisedUnits = persistPaymentMoney(suppliedWithholdingAuthorisedAmount, "withholding authorised amount");
+      if (authorisedUnits < 0n) throw new PaymentError("withholding authorised amount cannot be negative");
+      withholdingAuthorisedAmount = fromUnits(authorisedUnits);
+    }
+    if ((withholdingAuthorisation || withholdingAuthorisedAmount !== null) && doc.kind !== "vendor_payment") {
+      throw new PaymentError("a withholding authorisation only applies to vendor payments");
+    }
+    // Contractor withholding (CIS, § 48 EStG, RCT) is deducted when the
+    // subcontractor is paid: the deduction is computed from the bills each
+    // allocation settles and carried as its own credit leg, so cash is the
+    // applications less discount and withholding. Posting recomputes it
+    // under a lock and refuses any drift from what this save stored.
+    let withholdings: PaymentWithholding[] = [];
+    if (doc.kind === "vendor_payment") {
+      try {
+        withholdings = await computePaymentWithholdings({
+          orgId: doc.orgId,
+          subsidiaryId: doc.subsidiaryId,
+          partyId,
+          paymentDate: patch.documentDate ?? doc.documentDate,
+          currency: doc.currency,
+          allocations,
+          discountAmount,
+          paymentDocumentId: doc.id,
+        });
+      } catch (error) {
+        if (error instanceof ContractorWithholdingError) {
+          throw new PaymentError(error.remedy ? `${error.message} — ${error.remedy}` : error.message, { cause: error });
+        }
+        throw error;
+      }
+    }
+    const withholdingAmount = withholdingTotal(withholdings);
     // Collected = applications − discount + surcharge fee + on-account
     // remainder; the bank line carries the full collected amount, AR settles
     // the applications plus the on-account credit, fee income clears the
@@ -365,7 +422,7 @@ export async function updateDraftPayment(
     // matching on journal lines); every settlement reader uses open items
     // and applications. Do not "fix" total to the gross: cash forecasting
     // depends on it.
-    const total = fromUnits(toUnits(grossApplied) - discountUnits + feeUnits + onAccountUnits);
+    const total = fromUnits(toUnits(grossApplied) - discountUnits - toUnits(withholdingAmount) + feeUnits + onAccountUnits);
     // Stored-value tenders split the receipt total: the bank line carries
     // the cash remainder, one line per tender debits the liability. Tenders
     // past the total would drive the bank leg negative, so they are refused
@@ -429,7 +486,7 @@ export async function updateDraftPayment(
           document_date = coalesce(${patch.documentDate ?? null}, document_date),
           reference_number = ${patch.referenceNumber !== undefined ? patch.referenceNumber : sql`reference_number`},
           memo = ${patch.memo !== undefined ? patch.memo : sql`memo`},
-          custom = ${JSON.stringify({ ...custom, bankAccountId, allocations, creditAllocations, discountAmount, discountAccountId, controlAccountId, feeAmount, feeIncomeAccountId, onAccountAmount, storedValueTenders })}::jsonb,
+          custom = ${JSON.stringify({ ...custom, bankAccountId, allocations, creditAllocations, discountAmount, discountAccountId, controlAccountId, feeAmount, feeIncomeAccountId, onAccountAmount, storedValueTenders, withholdings, withholdingAmount, withholdingAuthorisation, withholdingAuthorisedAmount })}::jsonb,
           subtotal = ${total}, tax_total = '0', total = ${total},
           updated_at = greatest(clock_timestamp(), updated_at + interval '1 microsecond'), updated_by = ${userId}
         where id = ${id} and org_id = ${orgId}

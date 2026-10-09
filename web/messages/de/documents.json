@@ -1,4 +1,14 @@
 {
+  "withholdingLine": {
+    "treatment": "Einbehaltungskategorie",
+    "fromItem": "Aus Artikel",
+    "labour": "Arbeit",
+    "materials": "Material",
+    "excluded": "Ausgeschlossen",
+    "directCost": "Direkte Materialkosten",
+    "directCostHelp": "Für CIS-Materialpositionen die direkten Kosten des Subunternehmers in Rechnungswährung laut Belegen oder Schätzung eingeben. Aufschläge ausschließen. Nicht erstattungsfähige Material-Umsatzsteuer einbeziehen, wenn der Subunternehmer nicht umsatzsteuerlich registriert ist. Null eingeben, wenn keine direkten Kosten abzugsfähig sind; die Artikelklassifizierung liefert diese Kosten nicht.",
+    "splitRefusal": "Direkte Materialkosten vor dem Aufteilen oder Zusammenführen korrigieren."
+  },
   "list": {
     "metaTitle": "Dokumente",
     "title": "Dokumentenablage",

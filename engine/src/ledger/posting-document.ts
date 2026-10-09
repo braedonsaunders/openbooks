@@ -1,3 +1,4 @@
+import { recordPaymentWithholdings } from "../contractor-withholding/service.ts";
 import { sql } from "drizzle-orm";
 import {
   ambientBypassWithoutTransaction,
@@ -106,6 +107,10 @@ export async function postDocument(documentId: string, deps: PostingDeps, option
       await assertCustomerInvoiceCredit(db, prepared.doc);
     }
     const entryId = await commitDocumentPosting(prepared, options);
+    if (prepared.doc.kind === "vendor_payment" && !deps.migration) await recordPaymentWithholdings(db, {
+      orgId: prepared.doc.orgId, paymentDocumentId: documentId, journalEntryId: entryId,
+      actorId: options.audit?.actorId ?? null,
+    });
     return { prepared, entryId };
   };
 

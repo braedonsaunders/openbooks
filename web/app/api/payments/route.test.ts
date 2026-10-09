@@ -44,6 +44,7 @@ interface RouteState {
   sequenceAllocations: number;
   auditInserts: number;
   transactionQueries: string[];
+  savedPatch: Record<string, unknown> | null;
 }
 
 const state: RouteState = {
@@ -63,6 +64,7 @@ const state: RouteState = {
   sequenceAllocations: 0,
   auditInserts: 0,
   transactionQueries: [],
+  savedPatch: null,
 };
 (globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = state;
 
@@ -134,8 +136,12 @@ stubModules({
         if (text.includes('from orgs')) return { rows: [{ baseCurrency: 'USD' }] }
         return { rows: [] }
       }
+      let inOrgTransaction = false
       export const db = {
-        execute: async (query) => respond(query),
+        execute: async (query) => {
+          if (inOrgTransaction) state.transactionQueries.push(sqlText(query))
+          return respond(query)
+        },
         transaction: async (work) => work({
           execute: async (query) => {
             state.transactionQueries.push(sqlText(query))
@@ -149,6 +155,10 @@ stubModules({
       export function ambientTenantOrgId() { return '${ORG_ID}' }
       export function withBypassContext(fn) { return fn() }
       export function withOrgContext(_orgId, fn) { return fn() }
+      export async function withOrgTransaction(_orgId, fn) {
+        inOrgTransaction = true
+        try { return await db.transaction(fn) } finally { inOrgTransaction = false }
+      }
     `,
     "../../../lib/authz": `const state = globalThis[Symbol.for('openbooks.payments-route-test')]
      export async function getAuthz() {
@@ -178,6 +188,8 @@ stubModules({
        if (!state.inserted || id !== state.requestKey) return null
        return { doc: { id, kind, org_id: orgId, document_number: 'PAY-000003' }, bankAccountId: null, allocations: [], applied: [] }
      }`,
+    "@openbooks/engine/src/payments/payment-documents.ts": `const state = globalThis[Symbol.for('openbooks.payments-route-test')]
+     export async function updateDraftPayment(_id, patch) { state.savedPatch = patch; return null }`,
     "@openbooks/engine/src/platform/business-date.ts": `export async function businessToday() { return globalThis[Symbol.for('openbooks.payments-route-test')].clockDate }`,
   },
 });
@@ -202,6 +214,7 @@ function reset(): void {
   state.sequenceAllocations = 0;
   state.auditInserts = 0;
   state.transactionQueries.length = 0;
+  state.savedPatch = null;
 }
 
 const SIMPLE = {
@@ -427,4 +440,31 @@ test("a key minted in another org cannot claim the row", async () => {
   const claimed = await post(key, SIMPLE);
   assert.equal(claimed.status, 409);
   assert.deepEqual(await claimed.json(), { error: "invalid_idempotency_key" });
+});
+
+
+test("payment creation forwards explicit zero authority evidence and binds it to replay identity", async () => {
+  reset();
+  const key = "00000000-0000-4000-8000-00000000d040";
+  const request = { ...SIMPLE, withholdingAuthorisation: "ROS-DA-1", withholdingAuthorisedAmount: "0" };
+  assert.equal((await post(key, request)).status, 201);
+  assert.equal(state.savedPatch?.withholdingAuthorisation, "ROS-DA-1");
+  assert.equal(state.savedPatch?.withholdingAuthorisedAmount, "0.0000");
+  captureAuditAfter();
+  assert.equal((await post(key, request)).status, 200);
+  assert.equal((await post(key, { ...request, withholdingAuthorisedAmount: "1" })).status, 409);
+});
+
+test("payment creation refuses inexact authority amounts and overlong references before writing", async () => {
+  for (const evidence of [
+    { withholdingAuthorisedAmount: 1 },
+    { withholdingAuthorisedAmount: "0.00001" },
+    { withholdingAuthorisedAmount: "1,00" },
+    { withholdingAuthorisation: "R".repeat(101) },
+  ]) {
+    reset();
+    assert.equal((await post("00000000-0000-4000-8000-00000000d041", { ...SIMPLE, ...evidence })).status, 422);
+    assert.equal(state.sequenceAllocations, 0);
+    assert.equal(state.savedPatch, null);
+  }
 });

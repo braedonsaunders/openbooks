@@ -1,6 +1,6 @@
 /** Pure document-to-ledger projection rules. Posting phases are coordinated by posting-document.ts. */
 import { add, cmp, isZero, neg, toUnits } from "../money/money.ts";
-import { addMoney, negMoney, parseMoney, sumMoney, type Money } from "../money/brands.ts";
+import { addMoney, negMoney, parseMoney, sumMoney, ZERO_MONEY, type Money } from "../money/brands.ts";
 import { type Doc, type DocLine, type KernelLine, type PostingDeps, type ExpenseSettlement, PostingError } from "../journal/posting-contracts.ts";
 import { assertCashTendersPresent, assertTendersMatchTotal } from "../sales/cash-tenders.ts";
 import { componentsForLine, assertTaxControlAccount } from "./posting-tax-policy.ts";
@@ -453,7 +453,24 @@ export const RULES: Record<string, RuleFn> = {
       throw new PostingError("vendor payment discount cannot be negative");
     if (!isZero(discount) && !discountAccountId)
       throw new PostingError("vendor payment discount account is required");
-    const payable = addMoney(cash, discount);
+    // Contractor withholding (CIS, § 48 EStG, RCT) deducted at payment: each
+    // deduction credits its scheme's liability account, so the payable is
+    // relieved by cash + discount + tax withheld.
+    const withholdingLegs = new Map<string, Money>();
+    const rawWithholdings = custom.withholdings;
+    if (rawWithholdings !== undefined && rawWithholdings !== null && !Array.isArray(rawWithholdings))
+      throw new PostingError("vendor payment withholdings are malformed");
+    for (const entry of (rawWithholdings as unknown[] | undefined) ?? []) {
+      const row = entry as { liabilityAccountId?: unknown; deducted?: unknown };
+      if (typeof row.liabilityAccountId !== "string" || typeof row.deducted !== "string")
+        throw new PostingError("vendor payment withholding needs a liability account and an amount");
+      if (toUnits(row.deducted) < 0n) throw new PostingError("vendor payment withholding cannot be negative");
+      withholdingLegs.set(row.liabilityAccountId, addMoney(withholdingLegs.get(row.liabilityAccountId) ?? ZERO_MONEY, parseMoney(row.deducted)));
+    }
+    const withheld = sumMoney([...withholdingLegs.values()]);
+    if (typeof custom.withholdingAmount === "string" && toUnits(custom.withholdingAmount) !== toUnits(withheld))
+      throw new PostingError("vendor payment withholding total does not match its deductions");
+    const payable = addMoney(addMoney(cash, discount), withheld);
     return [
       // The AP leg is an OPEN ITEM: it settles against the bills it paid, so it
       // must carry is_open_item to be a valid application source (from_line).
@@ -481,6 +498,15 @@ export const RULES: Record<string, RuleFn> = {
             },
           ]
         : []),
+      ...[...withholdingLegs.entries()]
+        .filter(([, amount]) => !isZero(amount))
+        .map(([accountId, amount]): KernelLine => ({
+          accountId,
+          amount: negMoney(amount),
+          partyId: doc.partyId,
+          memo: "Contractor withholding",
+          ...dims(doc),
+        })),
     ];
   },
 

@@ -176,7 +176,11 @@ const VENDOR_BILL: RecordTypeMeta = {
     ...COMMON_HEADER_EXTRAS,
     ...PAYABLE_HEADER_EXTRAS,
   ],
-  lineFields: TRANSACTION_LINE_FIELDS,
+  lineFields: [
+    ...TRANSACTION_LINE_FIELDS,
+    { key: "withholding_treatment", labelKey: "documents.withholdingLine.treatment", level: "line", kind: "text" },
+    { key: "withholding_materials_cost", labelKey: "documents.withholdingLine.directCost", level: "line", kind: "amount" },
+  ],
   listColumns: [
     { key: "document_number", labelKey: "ap.list.columns.bill", kind: "reference", sortable: true, sortKey: "number", locked: true },
     { key: "party_name", labelKey: "common.labels.vendor", kind: "text", sortable: true, sortKey: "vendor" },

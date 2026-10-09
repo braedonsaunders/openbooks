@@ -11,6 +11,8 @@ export * from "./promotions";
 export * from "./backorders";
 export * from "./fulfillment";
 export * from "./tax";
+export * from "./einvoicing";
+export * from "./contractor-withholding";
 export * from "./depreciation-conventions";
 export * from "./extension";
 export * from "./inventory";

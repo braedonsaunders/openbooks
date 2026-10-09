@@ -7,6 +7,8 @@ const documentLineSchema = z.object({
   lineId: z.string().uuid().nullable().optional(), accountId: z.union([z.string().uuid(), z.literal('')]),
   amount: z.string(), description: z.string().nullable().optional(),
   taxCodeId: z.string().uuid().nullable().optional(), taxGroupId: z.string().uuid().nullable().optional(),
+  withholdingTreatment: z.enum(["labour", "materials", "excluded"]).nullable().optional(),
+  withholdingMaterialsCost: z.string().nullable().optional(),
   taxOverridden: z.boolean().optional(), taxAmount: z.string().nullable().optional(),
   marketplaceFacilitator: z.string().nullable().optional(),
   itemId: z.string().uuid().nullable().optional(), quantity: z.string().nullable().optional(),

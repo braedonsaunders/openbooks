@@ -3556,6 +3556,28 @@
         "title": "アシスタント操作のレビュー",
         "singularTitle": "アシスタント操作のレビュー",
         "description": "登録された操作のレビュー宣言と担当者。コードの上限とネイティブの権限・機能・ライフサイクル検証が優先されます。"
+      },
+      "einvoice-settings": {
+        "title": "電子請求書の売手設定",
+        "singular": "電子請求書の売手",
+        "singularTitle": "電子請求書の売手",
+        "description": "各請求法人の税務情報と支払指示を設定します。"
+      },
+      "einvoice-recipients": {
+        "title": "電子請求書の受取人",
+        "singular": "電子請求書の受取人",
+        "singularTitle": "電子請求書の受取人",
+        "description": "既存の顧客ロールの電子請求情報を編集します。"
+      },
+      "withholding-enrollments": {
+        "title": "登録",
+        "singularTitle": "登録",
+        "description": "源泉徴収の作業資料を作成し、当局への申告を記録して納付します。"
+      },
+      "withholding-standings": {
+        "title": "下請業者の資格",
+        "singularTitle": "下請業者の資格",
+        "description": "金額は最後に保存された支払いに基づきます。変更を保存して源泉徴収額を再計算してください。"
       }
     },
     "fields": {
@@ -4303,6 +4325,7 @@
       "scheduleDistributionVisibility": "Personal reports contain only the recipient’s own schedule or associated resources. Whole-board reports require an explicit sharing policy and a legal-entity-scoped board. Every send still requires a reviewed audience/version or an authored, enabled native Flow."
     },
     "options": {
+      "withholdingCondominiumPayer": "集合住宅管理組合の支払者",
       "storedValueKind": {
         "giftCard": "ギフトカード",
         "storeCredit": "ストアクレジット"
@@ -6654,6 +6677,101 @@
       "draftingDescription": "記録に基づく下書きで人による確認が必要な語句。下書きは自動送信されません。",
       "reviewsTitle": "レビュー",
       "reviewsDescription": "管理者がアシスタントの操作制限と通知を確認する間隔。"
+    },
+    "einvoice": {
+      "defaultProfile": "既定のプロファイル",
+      "electronicAddress": "電子アドレス",
+      "electronicAddressScheme": "電子アドレスの識別方式",
+      "tradingName": "商号",
+      "legalRegistrationId": "法人登録識別子",
+      "legalRegistrationScheme": "法人登録方式（ICD）",
+      "taxNumber": "税務登録番号",
+      "addressLine1": "住所1",
+      "addressLine2": "住所2",
+      "city": "市区町村",
+      "postcode": "郵便番号",
+      "subdivision": "都道府県・地域",
+      "contactName": "担当者名",
+      "contactPhone": "担当者の電話番号",
+      "contactEmail": "担当者のメール",
+      "paymentMeansCode": "支払手段",
+      "payeeAccountId": "受取人口座識別子 / IBAN",
+      "payeeAccountName": "受取人口座名",
+      "payeeBic": "BIC / 銀行識別番号",
+      "untaxedLineCategory": "非課税明細のVAT区分",
+      "exemptionReasonCode": "VATEX免税理由コード",
+      "exemptionReason": "法定免税文言",
+      "buyerReference": "購入者参照 / Leitweg-ID",
+      "vatCategory": "EN 16931 VAT区分",
+      "identity": "税務上の識別情報",
+      "address": "郵送先住所",
+      "contact": "電子アドレスと連絡先",
+      "payment": "支払指示",
+      "untaxed": "課税されない明細",
+      "sellerHelp": "売手の名称と国は法人から取得します。VAT識別子は適用される税務登録から取得します。",
+      "recipientHelp": "顧客は標準の顧客登録手順で作成します。請求先住所とVAT識別子は顧客レコードで管理します。",
+      "taxHelp": "各税コードを使用する請求書に必要な区分と法定文言を設定します。",
+      "untaxedHelp": "区分は推定しません。課税されない明細の処理を設定するまで請求書の発行は拒否されます。",
+      "vat": {
+        "S": "標準VAT",
+        "Z": "ゼロ税率",
+        "E": "免税",
+        "AE": "リバースチャージ",
+        "K": "域内供給",
+        "G": "輸出",
+        "O": "VAT対象外",
+        "L": "カナリア諸島間接税",
+        "M": "セウタ・メリリャ税"
+      },
+      "effectiveFrom": "電子請求書VAT処理の適用開始日",
+      "effectiveFromHelp": "この日より前の請求書には、このVAT処理を使用できません。税率の適用日は標準の税率タブで別途設定します。",
+      "reverseChargePreset": "建設業リバースチャージのテンプレート",
+      "reverseChargePresetHelp": "取引と受取人に適用される規則のみを選択してください。保存前に国、適用日、管轄、税勘定を確認してください。既存の税率は維持されます。",
+      "choosePreset": "テンプレートを選択…"
+    },
+    "withholding": {
+      "enrollments": "登録",
+      "enrollment": "登録",
+      "standings": "下請業者の資格",
+      "standing": "下請業者の資格",
+      "fields": {
+        "payerScope": "支払者区分",
+        "remittanceScheduleCode": "納付スケジュール",
+        "remittancePolicy": "当局の納付方針",
+        "calendar": "当局の営業日カレンダー",
+        "from": "適用開始日",
+        "to": "適用終了日",
+        "closedDates": "確認済みの当局休業日",
+        "sourceReference": "当局または税額証跡の参照",
+        "lookback": "Form 945の参照年度税額",
+        "finalAnnualLiability": "全区分の確定年間税額",
+        "nextDayEventOn": "以前の10万ドル翌日納付イベント",
+        "other945Liabilities": "その他のForm 945税額（期限判定のみ）",
+        "date": "税額発生日",
+        "amount": "税額",
+        "taxYear": "課税年度",
+        "totalTax": "Form 945の総税額",
+        "subsidiaryId": "法人",
+        "schemeCode": "制度",
+        "contractorReference": "請負業者登録参照番号",
+        "liabilityAccountId": "源泉徴収負債勘定",
+        "authorityPartyId": "当局の仕入先",
+        "thresholdBasis": "閾値の基準",
+        "effectiveFrom": "有効開始日",
+        "effectiveTo": "有効終了日",
+        "isActive": "有効",
+        "partyId": "下請業者",
+        "bandCode": "税率区分",
+        "verificationReference": "確認参照番号",
+        "verifiedOn": "確認日",
+        "validFrom": "有効開始日",
+        "validTo": "有効終了日",
+        "payeeReference": "下請業者の税務参照番号",
+        "payeeTaxOffice": "下請業者の税務署",
+        "applyFromFirstPayment": "最初の支払いから徴収",
+        "notes": "備考",
+        "returnFrequency": "申告頻度"
+      }
     }
   },
   "flows": {

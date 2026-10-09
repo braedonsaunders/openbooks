@@ -3503,6 +3503,28 @@
         "title": "Assistant action reviews",
         "singularTitle": "Assistant action reviews",
         "description": "Review declarations and responsibility for registered actions. Code maxima and native role, feature and lifecycle checks remain authoritative."
+      },
+      "einvoice-settings": {
+        "title": "E-invoice seller settings",
+        "singular": "E-invoice seller",
+        "singularTitle": "E-invoice seller",
+        "description": "Configure the fiscal identity and payment instructions of each invoicing legal entity."
+      },
+      "einvoice-recipients": {
+        "title": "E-invoice recipients",
+        "singular": "E-invoice recipient",
+        "singularTitle": "E-invoice recipient",
+        "description": "Edit structured invoicing metadata on existing customer roles."
+      },
+      "withholding-enrollments": {
+        "title": "Enrollments",
+        "singularTitle": "Enrollment",
+        "description": "Prepare withholding working papers, record authority filings, and remit deductions."
+      },
+      "withholding-standings": {
+        "title": "Subcontractor standings",
+        "singularTitle": "Subcontractor standings",
+        "description": "Amounts below reflect the last saved payment. Save changes to recompute deductions."
       }
     },
     "fields": {
@@ -4250,6 +4272,7 @@
       "scheduleDistributionVisibility": "Personal reports contain only the recipient’s own schedule or associated resources. Whole-board reports require an explicit sharing policy and a legal-entity-scoped board. Every send still requires a reviewed audience/version or an authored, enabled native Flow."
     },
     "options": {
+      "withholdingCondominiumPayer": "Condominium payer",
       "storedValueKind": {
         "giftCard": "Gift card",
         "storeCredit": "Store credit"
@@ -6654,6 +6677,101 @@
       "draftingDescription": "Words and phrases flagged for human review in evidence-based drafts. Drafts are never submitted automatically.",
       "reviewsTitle": "Reviews",
       "reviewsDescription": "How often administrators review assistant action limits and notices."
+    },
+    "einvoice": {
+      "defaultProfile": "Default profile",
+      "electronicAddress": "Electronic address",
+      "electronicAddressScheme": "Electronic address scheme",
+      "tradingName": "Trading name",
+      "legalRegistrationId": "Legal registration identifier",
+      "legalRegistrationScheme": "Legal registration scheme (ICD)",
+      "taxNumber": "Tax registration number",
+      "addressLine1": "Address line 1",
+      "addressLine2": "Address line 2",
+      "city": "City",
+      "postcode": "Postal code",
+      "subdivision": "Region",
+      "contactName": "Contact name",
+      "contactPhone": "Contact phone",
+      "contactEmail": "Contact email",
+      "paymentMeansCode": "Payment means",
+      "payeeAccountId": "Payee account identifier / IBAN",
+      "payeeAccountName": "Payee account name",
+      "payeeBic": "BIC / bank identifier",
+      "untaxedLineCategory": "VAT category for untaxed lines",
+      "exemptionReasonCode": "VATEX exemption reason code",
+      "exemptionReason": "Statutory exemption wording",
+      "buyerReference": "Buyer reference / Leitweg-ID",
+      "vatCategory": "EN 16931 VAT category",
+      "identity": "Fiscal identity",
+      "address": "Postal address",
+      "contact": "Electronic address and contact",
+      "payment": "Payment instructions",
+      "untaxed": "Untaxed lines",
+      "sellerHelp": "Seller name and country come from the legal entity. VAT identifiers come from its effective tax registrations.",
+      "recipientHelp": "Create customers through the native customer workflow. Billing addresses and VAT identifiers remain on the customer record.",
+      "taxHelp": "Configure the category and statutory wording that invoices using each native tax code must state.",
+      "untaxedHelp": "No category is inferred. Invoices with untaxed lines refuse issuance until their treatment is configured.",
+      "vat": {
+        "S": "Standard VAT",
+        "Z": "Zero-rated",
+        "E": "Exempt",
+        "AE": "Reverse charge",
+        "K": "Intra-community supply",
+        "G": "Export",
+        "O": "Outside VAT scope",
+        "L": "Canary Islands indirect tax",
+        "M": "Ceuta and Melilla tax"
+      },
+      "effectiveFrom": "E-invoice VAT effective from",
+      "effectiveFromHelp": "Invoices before this date cannot use this VAT treatment. Set tax rate dates separately in the native Rates tab.",
+      "reverseChargePreset": "Construction reverse-charge template",
+      "reverseChargePresetHelp": "Choose only a rule that applies to this supply and recipient. Review the country, effective date, jurisdiction and control accounts before saving. Existing tax rates are preserved.",
+      "choosePreset": "Choose a template…"
+    },
+    "withholding": {
+      "enrollments": "Enrollments",
+      "enrollment": "Enrollment",
+      "standings": "Subcontractor standings",
+      "standing": "Subcontractor standings",
+      "fields": {
+        "payerScope": "Payer scope",
+        "remittanceScheduleCode": "Remittance schedule",
+        "remittancePolicy": "Authority remittance policy",
+        "calendar": "Authority business-day calendar",
+        "from": "Coverage from",
+        "to": "Coverage through",
+        "closedDates": "Confirmed authority closed dates",
+        "sourceReference": "Authority or liability evidence reference",
+        "lookback": "Form 945 lookback liability",
+        "finalAnnualLiability": "Final all-category annual liability",
+        "nextDayEventOn": "Prior $100,000 next-day deposit event",
+        "other945Liabilities": "Other Form 945 liabilities (deadline determination only)",
+        "date": "Liability date",
+        "amount": "Liability amount",
+        "taxYear": "Tax year",
+        "totalTax": "Total Form 945 tax",
+        "subsidiaryId": "Legal entity",
+        "schemeCode": "Scheme",
+        "contractorReference": "Contractor registration reference",
+        "liabilityAccountId": "Withholding liability account",
+        "authorityPartyId": "Authority vendor",
+        "thresholdBasis": "Threshold basis",
+        "effectiveFrom": "Effective from",
+        "effectiveTo": "Effective to",
+        "isActive": "Active",
+        "partyId": "Subcontractor",
+        "bandCode": "Rate band",
+        "verificationReference": "Verification reference",
+        "verifiedOn": "Verified on",
+        "validFrom": "Valid from",
+        "validTo": "Valid to",
+        "payeeReference": "Subcontractor tax reference",
+        "payeeTaxOffice": "Subcontractor tax office",
+        "applyFromFirstPayment": "Deduct from the first payment",
+        "notes": "Notes",
+        "returnFrequency": "Return frequency"
+      }
     }
   },
   "flows": {

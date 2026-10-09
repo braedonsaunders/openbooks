@@ -84,6 +84,8 @@ test('any user-entered content makes the row non-blank — even without an accou
     { unitPrice: '100' },
     { amount: '200.0000' },
     { taxProfileId: 'code:vat' },
+    { withholdingTreatment: 'materials' },
+    { withholdingMaterialsCost: '0' },
     { departmentId: 'd1' },
     { cf_note: 'keep me' },
   ]) {

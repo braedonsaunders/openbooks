@@ -3556,6 +3556,28 @@
         "title": "Aktionsprüfungen des Assistenten",
         "singularTitle": "Aktionsprüfungen des Assistenten",
         "description": "Prüferklärungen und Verantwortliche für registrierte Aktionen. Codegrenzen und native Prüfungen bleiben maßgeblich."
+      },
+      "einvoice-settings": {
+        "title": "E-Rechnung: Verkäufer",
+        "singular": "E-Rechnungsverkäufer",
+        "singularTitle": "E-Rechnungsverkäufer",
+        "description": "Steuerliche Identität und Zahlungsanweisungen jeder fakturierenden Rechtseinheit konfigurieren."
+      },
+      "einvoice-recipients": {
+        "title": "E-Rechnung: Empfänger",
+        "singular": "E-Rechnungsempfänger",
+        "singularTitle": "E-Rechnungsempfänger",
+        "description": "Rechnungsmetadaten bestehender Kundenrollen bearbeiten."
+      },
+      "withholding-enrollments": {
+        "title": "Registrierungen",
+        "singularTitle": "Registrierung",
+        "description": "Abzugsunterlagen vorbereiten, Behördenmeldungen erfassen und Abzüge abführen."
+      },
+      "withholding-standings": {
+        "title": "Status der Subunternehmer",
+        "singularTitle": "Status der Subunternehmer",
+        "description": "Die Beträge entsprechen der zuletzt gespeicherten Zahlung. Speichern Sie Änderungen zur Neuberechnung."
       }
     },
     "fields": {
@@ -4303,6 +4325,7 @@
       "scheduleDistributionVisibility": "Personal reports contain only the recipient’s own schedule or associated resources. Whole-board reports require an explicit sharing policy and a legal-entity-scoped board. Every send still requires a reviewed audience/version or an authored, enabled native Flow."
     },
     "options": {
+      "withholdingCondominiumPayer": "Wohnungseigentümergemeinschaft als Zahler",
       "storedValueKind": {
         "giftCard": "Geschenkkarte",
         "storeCredit": "Guthaben"
@@ -6654,6 +6677,101 @@
       "draftingDescription": "Wörter und Formulierungen zur menschlichen Prüfung in datengestützten Entwürfen. Entwürfe werden nie automatisch eingereicht.",
       "reviewsTitle": "Überprüfungen",
       "reviewsDescription": "Intervall für die Überprüfung von Aktionsgrenzen und Hinweisen durch Administratoren."
+    },
+    "einvoice": {
+      "defaultProfile": "Standardprofil",
+      "electronicAddress": "Elektronische Adresse",
+      "electronicAddressScheme": "Adressschema",
+      "tradingName": "Handelsname",
+      "legalRegistrationId": "Handelsregisterkennung",
+      "legalRegistrationScheme": "Registerschema (ICD)",
+      "taxNumber": "Steuernummer",
+      "addressLine1": "Adresszeile 1",
+      "addressLine2": "Adresszeile 2",
+      "city": "Ort",
+      "postcode": "Postleitzahl",
+      "subdivision": "Bundesland / Region",
+      "contactName": "Kontaktname",
+      "contactPhone": "Kontakttelefon",
+      "contactEmail": "Kontakt-E-Mail",
+      "paymentMeansCode": "Zahlungsmittel",
+      "payeeAccountId": "Kontokennung / IBAN des Empfängers",
+      "payeeAccountName": "Kontoname des Empfängers",
+      "payeeBic": "BIC / Bankkennung",
+      "untaxedLineCategory": "Umsatzsteuerkategorie für unbesteuerte Zeilen",
+      "exemptionReasonCode": "VATEX-Befreiungsgrund",
+      "exemptionReason": "Gesetzlicher Befreiungstext",
+      "buyerReference": "Käuferreferenz / Leitweg-ID",
+      "vatCategory": "Umsatzsteuerkategorie EN 16931",
+      "identity": "Steuerliche Identität",
+      "address": "Postanschrift",
+      "contact": "Elektronische Adresse und Kontakt",
+      "payment": "Zahlungsanweisungen",
+      "untaxed": "Unbesteuerte Zeilen",
+      "sellerHelp": "Name und Land des Verkäufers stammen aus der Rechtseinheit. Umsatzsteuerkennungen stammen aus den gültigen Steuerregistrierungen.",
+      "recipientHelp": "Erstellen Sie Kunden im nativen Kundenablauf. Rechnungsadressen und Umsatzsteuerkennungen bleiben im Kundendatensatz.",
+      "taxHelp": "Legen Sie die Kategorie und gesetzliche Formulierung für Rechnungen mit dem jeweiligen nativen Steuercode fest.",
+      "untaxedHelp": "Es wird keine Kategorie abgeleitet. Rechnungen mit unbesteuerten Zeilen werden erst nach Konfiguration ausgestellt.",
+      "vat": {
+        "S": "Regelumsatzsteuer",
+        "Z": "Nullsteuersatz",
+        "E": "Steuerbefreit",
+        "AE": "Umkehrung der Steuerschuld",
+        "K": "Innergemeinschaftliche Lieferung",
+        "G": "Ausfuhr",
+        "O": "Außerhalb des Umsatzsteuerbereichs",
+        "L": "Indirekte Steuer der Kanaren",
+        "M": "Steuer von Ceuta und Melilla"
+      },
+      "effectiveFrom": "E-Rechnungs-Umsatzsteuer gültig ab",
+      "effectiveFromHelp": "Frühere Rechnungen dürfen diese Behandlung nicht verwenden. Steuersatzdaten werden separat im nativen Register Sätze festgelegt.",
+      "reverseChargePreset": "Vorlage für Umkehrung der Steuerschuld bei Bauleistungen",
+      "reverseChargePresetHelp": "Wählen Sie nur eine Regel, die auf diese Leistung und den Empfänger zutrifft. Prüfen Sie Land, Gültigkeitsdatum, Zuständigkeit und Steuerkonten vor dem Speichern. Bestehende Steuersätze bleiben erhalten.",
+      "choosePreset": "Vorlage wählen…"
+    },
+    "withholding": {
+      "enrollments": "Registrierungen",
+      "enrollment": "Registrierung",
+      "standings": "Status der Subunternehmer",
+      "standing": "Status der Subunternehmer",
+      "fields": {
+        "payerScope": "Zahlerbereich",
+        "remittanceScheduleCode": "Abführungsplan",
+        "remittancePolicy": "Abführungsvorgaben der Behörde",
+        "calendar": "Behördenkalender der Geschäftstage",
+        "from": "Gültig ab",
+        "to": "Gültig bis",
+        "closedDates": "Bestätigte Schließtage der Behörde",
+        "sourceReference": "Referenz für Behörden- oder Steuernachweis",
+        "lookback": "Form-945-Steuer im Rückblickjahr",
+        "finalAnnualLiability": "Endgültige Jahressteuer aller Kategorien",
+        "nextDayEventOn": "Früheres Ereignis für Abführung am Folgetag ab 100.000 USD",
+        "other945Liabilities": "Weitere Form-945-Steuern (nur Fristbestimmung)",
+        "date": "Steuerdatum",
+        "amount": "Steuerbetrag",
+        "taxYear": "Steuerjahr",
+        "totalTax": "Gesamte Form-945-Steuer",
+        "subsidiaryId": "Rechtseinheit",
+        "schemeCode": "Verfahren",
+        "contractorReference": "Registrierungsreferenz des Auftraggebers",
+        "liabilityAccountId": "Abzugsverbindlichkeitskonto",
+        "authorityPartyId": "Behörde als Lieferant",
+        "thresholdBasis": "Schwellenbasis",
+        "effectiveFrom": "Gültig ab",
+        "effectiveTo": "Gültig bis",
+        "isActive": "Aktiv",
+        "partyId": "Subunternehmer",
+        "bandCode": "Satzstufe",
+        "verificationReference": "Prüfreferenz",
+        "verifiedOn": "Geprüft am",
+        "validFrom": "Gültig ab",
+        "validTo": "Gültig bis",
+        "payeeReference": "Steuernummer des Subunternehmers",
+        "payeeTaxOffice": "Finanzamt des Subunternehmers",
+        "applyFromFirstPayment": "Ab erster Zahlung einbehalten",
+        "notes": "Notizen",
+        "returnFrequency": "Häufigkeit der Erklärung"
+      }
     }
   },
   "flows": {

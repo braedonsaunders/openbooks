@@ -43,6 +43,8 @@ const postWithApplicationsBody = z.object({
   /** Optimistic concurrency token from documents.revision_seq (exact form). */
   expectedUpdatedAt: z.string().optional(),
   allocations: z.array(allocationInput).optional(),
+  withholdingAuthorisation: z.string().trim().max(100).nullable().optional(),
+  withholdingAuthorisedAmount: exactMoney().nullable().optional(),
 })
 
 /**
@@ -56,7 +58,7 @@ async function postWithApplications(req: Request) {
 
   const parsed = await parseJsonBody(req, postWithApplicationsBody)
   if (!parsed.ok) return parsed.response
-  const { documentId, allocations } = parsed.data
+  const { documentId, allocations, withholdingAuthorisation, withholdingAuthorisedAmount } = parsed.data
 
   const r = (await db.execute<{ kind: PaymentKind; status: string; subsidiaryId: string | null }>(sql`
     select kind, status, subsidiary_id as "subsidiaryId" from documents
@@ -113,10 +115,10 @@ async function postWithApplications(req: Request) {
         // The posting body is a convenience for the drawer's final action,
         // not an unpersisted approval bypass. Save it while the document is
         // still draft so the exact allocation set is what approval reviews.
-        if (allocations !== undefined) {
+        if (allocations !== undefined || withholdingAuthorisation !== undefined || withholdingAuthorisedAmount !== undefined) {
           await updateDraftPayment(
             documentId,
-            { allocations },
+            { allocations, withholdingAuthorisation, withholdingAuthorisedAmount },
             authz.user.id,
             authz.user.orgId,
             // The OCC token is route-level evidence; it never enters the

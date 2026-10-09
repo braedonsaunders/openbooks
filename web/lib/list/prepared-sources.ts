@@ -23,6 +23,10 @@ export interface PreparedListSource {
  * owns the collection contract and pagination mode consumed by shared tables.
  * A server window must never be filtered or paginated again in the browser. */
 const SOURCES = {
+  contractor_withholding_payment_deductions: { route: '/payments', rowsField: 'withholdings', rowKeyField: 'openLineId', mode: 'loaded' },
+  contractor_withholding_periods: { route: '/contractor-withholding', rowsField: 'periods', rowKeyField: 'periodStart', mode: 'loaded' },
+  contractor_withholding_standings: { route: '/contractor-withholding?tab=standings', rowsField: 'standings', rowKeyField: 'id', mode: 'loaded' },
+  contractor_withholding_return_payees: { route: '/contractor-withholding', rowsField: 'lines', rowKeyField: 'partyId', mode: 'loaded' },
   assistant_action_limits: { route: '/admin/setup/ai-capabilities', rowsField: 'capabilities', rowKeyField: 'key', mode: 'loaded' },
   assistant_activity: { route: '/admin/setup/ai-capabilities?tab=activity', rowsField: 'decisions', rowKeyField: 'id', mode: 'server', clientSearch: false, paging: { totalField: 'total', pageField: 'page', perPageField: 'perPage' } },
   setup_configuration_records: {

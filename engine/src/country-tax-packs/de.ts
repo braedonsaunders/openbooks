@@ -1,4 +1,5 @@
-import type { CountryTaxPackDefinition, TaxReturnPack } from "./types.ts";
+import { constructionReverseChargeRulesForCountry } from "./contractor-reverse-charge.ts";
+import type { ContractorWithholdingSchemeDefinition, CountryTaxPackDefinition, TaxReturnPack } from "./types.ts";
 
 const DE_USTVA_2026: TaxReturnPack = {
   code: "DE_USTVA",
@@ -25,11 +26,85 @@ const DE_USTVA_2026: TaxReturnPack = {
   ],
 };
 
+/**
+ * Bauabzugsteuer: the recipient of construction services withholds 15 % of
+ * the consideration, VAT included, unless the provider presents a valid
+ * Freistellungsbescheinigung, and files a monthly Anmeldung.
+ */
+const DE_BAUABZUG: ContractorWithholdingSchemeDefinition = {
+  code: "DE_BAUABZUG",
+  country: "DE",
+  name: "Bauabzugsteuer (§ 48 EStG)",
+  authority: "Finanzamt des Leistenden",
+  legalReference: "§§ 48-48d Einkommensteuergesetz",
+  currency: "EUR",
+  // § 48 Abs. 3 EStG: the base is the Gegenleistung, the payment including
+  // VAT, with no deduction for materials.
+  base: { excludesMaterials: false, excludesVat: false },
+  bands: [
+    {
+      code: "EXEMPT",
+      name: "Freistellungsbescheinigung (§ 48b EStG) held",
+      requiresVerification: true,
+      rates: [{ ratePercent: "0", effectiveFrom: "2002-01-01", sourceId: "estg_48" }],
+    },
+    {
+      code: "STANDARD",
+      name: "No exemption certificate",
+      requiresVerification: false,
+      rates: [{ ratePercent: "15", effectiveFrom: "2002-01-01", sourceId: "estg_48" }],
+    },
+  ],
+  defaultBandCode: "STANDARD",
+  // § 48 Abs. 2 EStG: no deduction while the year's consideration to one
+  // provider stays within the limit; 15 000 EUR where the recipient makes
+  // exclusively VAT-exempt lettings under § 4 Nr. 12 UStG, else 5 000 EUR.
+  threshold: {
+    excludesVerifiedZeroRateConsideration: true,
+    excessCatchUpNotDue: true,
+    limits: [
+      { amount: "5000", effectiveFrom: "2002-01-01", sourceId: "estg_48" },
+      { amount: "15000", effectiveFrom: "2002-01-01", basis: "exempt_letting", sourceId: "estg_48" },
+    ],
+  },
+  thresholdBases: [{ code: "exempt_letting", name: "Exclusively VAT-exempt letting (§ 4 Nr. 12 UStG)" }],
+  // § 48a Abs. 1 EStG: the Anmeldung and the payment are due by the 10th of
+  // the month following the month the consideration was paid.
+  periodStartDay: 1,
+  returnDue: { dayOfMonth: 10, monthsAfterPeriodEnd: 1 },
+  paymentDue: { dayOfMonth: 10, monthsAfterPeriodEnd: 1 },
+  paymentAuthorisation: "none",
+  contractorReferenceLabel: "Steuernummer des Leistungsempfängers",
+  payeeReferenceLabel: "Steuernummer des Leistenden",
+  verificationLabel: "Freistellungsbescheinigung",
+  sources: [
+    {
+      id: "bmf_bau_2022",
+      title: "BMF 19 July 2022 — Bauabzugsteuer, paragraphs 51–52",
+      url: "https://finanzamt.bayern.de/Informationen/download.php?url=Informationen%2FFormulare%2FWeitere_Themen_A_bis_Z%2FBauleistungen%2Fbmfs%2F2022-07-19-steuerabzug-von-verguetungen-fuer-im-inland-erbrachte-bauleistungen.pdf",
+      asOf: "2026-10-08",
+    },
+    {
+      id: "estg_48",
+      title: "§ 48 EStG — Steuerabzug bei Bauleistungen",
+      url: "https://www.gesetze-im-internet.de/estg/__48.html",
+      asOf: "2026-10-08",
+    },
+    {
+      id: "estg_48a",
+      title: "§ 48a EStG — Verfahren",
+      url: "https://www.gesetze-im-internet.de/estg/__48a.html",
+      asOf: "2026-10-08",
+    },
+  ],
+};
+
 /** Germany VAT localization maintained from BMF and ELSTER primary sources. */
 export const GERMANY_TAX_PACK: CountryTaxPackDefinition = {
   code: "DE_INDIRECT_TAX",
   version: "2026.08.01",
   country: "DE",
+  reverseChargeRules: constructionReverseChargeRulesForCountry("DE"),
   name: "Germany",
   countryTaxType: "vat",
   parentReturnPackCode: "DE_USTVA",
@@ -101,4 +176,5 @@ export const GERMANY_TAX_PACK: CountryTaxPackDefinition = {
       },
     ],
   },
+  contractorWithholdingSchemes: [DE_BAUABZUG],
 };

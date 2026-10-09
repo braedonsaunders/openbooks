@@ -1,3 +1,5 @@
+import { releaseWithholdingDeposit } from "../contractor-withholding/deposits.ts";
+import { releaseWithholdingRemittance } from "../contractor-withholding/service.ts";
 import { and, eq, getTableColumns, sql } from "drizzle-orm";
 import { db, schema } from "../platform/db.ts";
 import { ScopeNotFoundError, subsidiaryScopeAllows } from "../organization/subsidiary-scope.ts";
@@ -171,6 +173,8 @@ export async function deleteDocument(
     await tx.execute(
       sql`delete from document_lines where document_id = ${documentId} and org_id = ${doc.orgId}`,
     );
+    await releaseWithholdingRemittance(tx, doc.orgId, documentId, userId ?? null);
+    await releaseWithholdingDeposit(tx, doc.orgId, documentId, userId ?? null);
     await tx.execute(sql`delete from documents where id = ${documentId} and org_id = ${doc.orgId}`);
 
     await recordTransactionAudit(tx, {

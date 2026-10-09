@@ -1,3 +1,5 @@
+import { assertWithholdingRemittanceCurrent, ContractorWithholdingError } from "../contractor-withholding/service.ts";
+import { assertWithholdingDepositCurrent } from "../contractor-withholding/deposits.ts";
 import { PlaceOfSupplyError } from '../tax/place-of-supply.ts';
 import { assertCanadianGoodsTaxEvidence } from '../tax/goods-selection.ts';
 import { assertCrossBorderSupplyEvidence } from '../tax/cross-border-posting.ts';
@@ -41,8 +43,10 @@ export async function commitDocumentPosting(prepared: Awaited<ReturnType<typeof 
     await lockLedgerSetupFence(tx, doc.orgId, "shared");
     try {await assertCanadianGoodsTaxEvidence(tx,doc.orgId,documentId)} catch(error) {if(error instanceof PlaceOfSupplyError)throw new PostingError(error.message);throw error}
     try {await assertCrossBorderSupplyEvidence(tx,doc.orgId,documentId,{persist:true})} catch(error) {if(error instanceof CrossBorderTaxError)throw new PostingError(error.message);throw error}
-    if (doc.kind === "vendor_bill") {
+    if (doc.kind === "vendor_bill" || doc.kind === "vendor_credit") {
       await assertPayrollRemittanceBillCurrent(doc.orgId, documentId, tx);
+      try { await assertWithholdingRemittanceCurrent(tx, doc.orgId, documentId); await assertWithholdingDepositCurrent(tx, doc.orgId, documentId); }
+      catch (error) { if (error instanceof ContractorWithholdingError) throw new PostingError(error.remedy ? `${error.message} ${error.remedy}` : error.message); throw error; }
     }
     // Resolve the authority only after the organization fence. Reading it
     // before the transaction can retain a demoted book while setup commits.

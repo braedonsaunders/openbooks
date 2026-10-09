@@ -1,5 +1,6 @@
 /** Setup-registry taxes entities (split from registry.ts; pure moves only). */
 import type { SetupEntity } from '../types'
+import { EINVOICE_TAX_FIELDS } from './einvoicing'
 import { APPLIES_TO, TAX_CALCULATION_TYPES, TAX_BASIS, MARKETPLACE_COLLECTION_MODES, OSS_SCHEMES, SUBMISSION_CHANNELS, GOVERNMENT_FORMATS, TAX_SIGN, JURISDICTION_LEVELS, TAX_TYPES, FILING_FREQUENCIES } from '../options'
 
 export const TAX_ENTITIES: SetupEntity[] = [
@@ -72,6 +73,7 @@ export const TAX_ENTITIES: SetupEntity[] = [
   },
   {
     key: 'tax-codes',
+    presetsSource: 'contractor-reverse-charge',
     table: 'tax_codes',
     singularTitleKey: 'entities.tax-codes.singularTitle',
     actorCols: true,
@@ -105,6 +107,7 @@ export const TAX_ENTITIES: SetupEntity[] = [
       { key: 'priceIncludesTax', kind: 'boolean' },
       { key: 'compoundOnPrevious', kind: 'boolean' },
       { key: 'roundingScale', kind: 'integer', keepDefault: true },
+      ...EINVOICE_TAX_FIELDS,
       { key: 'isActive', kind: 'boolean' },
     ],
   },

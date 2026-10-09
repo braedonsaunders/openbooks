@@ -62,7 +62,7 @@ export async function loadDocument(id: string, orgId: string) {
     select l.id, l.line_number, l.account_id, l.item_id, l.description, l.quantity, l.unit,
            l.unit_price, l.amount, l.cost_rate, l.bill_rate, l.cost_amount, l.bill_amount, l.is_billable,
            l.tax_code_id, l.tax_group_id, l.tax_input_amount, l.tax_amount,
-           l.tax_overridden, l.department_id, l.project_id, l.location_id, l.class_id,
+           l.tax_overridden, l.withholding_treatment, l.withholding_materials_cost::text, l.party_id, l.department_id, l.project_id, l.location_id, l.class_id,
            l.stock_location_id, l.extra_dims, l.custom,
            l.distribution_group_id, l.distribution_rule_id, l.distribution_version_id,
            l.distribution_locked, ar.name as distribution_rule_name,

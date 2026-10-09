@@ -1,5 +1,6 @@
 import type { CountryTaxJurisdictionDefinition, CountryTaxPackDefinition, EffectiveTaxRate } from "./types.ts";
 import { UNITED_STATES_RETURN_PACKS } from "./us-returns.ts";
+import { US_BACKUP_WITHHOLDING } from "./contractor-other-schemes.ts";
 
 const detailedReturns: Readonly<Record<string, string>> = {
   CA: "US_CA_CDTFA401",
@@ -124,6 +125,7 @@ export const UNITED_STATES_TAX_PACK: CountryTaxPackDefinition = {
   version: "2026.08.01",
   country: "US",
   name: "United States",
+  contractorWithholdingSchemes: [US_BACKUP_WITHHOLDING],
   countryTaxType: "sales_use",
   parentReturnPackCode: "US_SALES_TAX_WORKPAPER",
   completeness: {

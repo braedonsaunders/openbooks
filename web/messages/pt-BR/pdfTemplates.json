@@ -1,7 +1,7 @@
 {
   "title": "Modelos de PDF",
   "description": "Crie belos documentos imprimíveis e atribua-os a faturas, lançamentos e todas as demais transações",
-  "recordTypes":   {
+  "recordTypes": {
     "customer_invoice": "Fatura de cliente",
     "customer_credit": "Crédito de cliente",
     "quote": "Cotação",
@@ -85,5 +85,22 @@
     "sent": "Enviado para {to}",
     "noRecipient": "Informe um endereço de e-mail do destinatário",
     "failed": "Não foi possível enviar o e-mail"
+  },
+  "einvoice": {
+    "label": "Fatura eletrônica",
+    "help": "Valide o formato escolhido e depois emita e baixe o original arquivado.",
+    "profile": "Formato",
+    "chooseProfile": "Escolha um formato…",
+    "buyerReference": "Referência do comprador / Leitweg-ID",
+    "validate": "Validar",
+    "working": "Processando…",
+    "valid": "As verificações nativas foram aprovadas.",
+    "findings": "Resultados da validação",
+    "issue": "Emitir fatura eletrônica",
+    "issueUnavailable": "A emissão exige uma fatura contabilizada e permissão para gerenciar documentos.",
+    "setup": "Configurações de fatura eletrônica",
+    "originals": "Originais emitidos",
+    "archivedHelp": "Este formato já foi emitido. Baixe o original preservado abaixo.",
+    "failed": "Não foi possível carregar ou emitir esta fatura eletrônica."
   }
 }

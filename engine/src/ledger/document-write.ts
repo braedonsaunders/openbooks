@@ -1,3 +1,6 @@
+import { WithholdingMaterialsCostError } from "../allocations/withholding-cost.ts";
+import { assertWithholdingDepositEdit } from "../contractor-withholding/deposits.ts";
+import { assertWithholdingRemittanceEdit, ContractorWithholdingError } from "../contractor-withholding/service.ts";
 import { parseCanadianGoodsSelection,resolveCanadianGoodsTaxes,persistGoodsTaxSnapshot,type GoodsTaxSnapshot } from '@openbooks/engine/tax'
 import { createPostedCorrection, correctPostedDocument } from './document-correction.ts'
 import { resolveAccountGroups } from '../records/account-groups.ts'
@@ -383,6 +386,7 @@ export function validateEditableDocumentLines(lines: DocumentLineInput[]): Docum
   const amounts: string[] = []
   const out = lines.map((l, i) => {
     const n = i + 1
+    if (l.withholdingTreatment != null && !['labour','materials','excluded'].includes(l.withholdingTreatment)) throw new DocumentEditError(422, `Line ${n}: choose labour, materials or excluded for withholding`);
     if (!l.accountId) {
       throw new DocumentEditError(422, `Line ${n}: an account is required`)
     }
@@ -405,6 +409,14 @@ export function validateEditableDocumentLines(lines: DocumentLineInput[]): Docum
         422,
         `Line ${n}: amount is out of range — at most 15 whole digits fit the ledger`,
       )
+    }
+    if (l.withholdingMaterialsCost != null) {
+      const cost = exactMoney(l.withholdingMaterialsCost)
+      if (cost === null) throw new DocumentEditError(422,
+        decimalNullRefusal(`Line ${n} direct materials cost`, 'an exact decimal amount', l.withholdingMaterialsCost, 4))
+      if (!fitsLedgerRange(cost) || cmp(cost, '0') < 0 || cmp(cost, exactAmount) > 0) {
+        throw new DocumentEditError(422, `Line ${n}: direct materials cost must be nonnegative and no greater than the net line amount`)
+      }
     }
     amounts.push(exactAmount)
     // Quantity is informational beside the amount, but it persists into the
@@ -821,8 +833,8 @@ async function planDocumentEntryAllocations(args: {
 
   // Stored groups for re-save matching: group-level lock is ANY locked
   // child, and the total is normalized so the planner's exact comparison
-  // cannot trip on numeric scale. Groups without rule stamps (never written
-  // by this path) are left out — their members match fresh below.
+  // cannot trip on numeric scale. Manual groups keep their nullable rule
+  // stamps and exact operator-entered costs through subsequent saves.
   const existingGroups = new Map<string, StoredEntryGroup>()
   const stored = await db.execute<{
     groupId: string
@@ -844,7 +856,6 @@ async function planDocumentEntryAllocations(args: {
      group by distribution_group_id
   `)
   for (const row of stored.rows) {
-    if (!row.ruleId || !row.versionId) continue
     existingGroups.set(row.groupId, {
       groupId: row.groupId,
       ruleId: row.ruleId,
@@ -853,6 +864,13 @@ async function planDocumentEntryAllocations(args: {
       total: normalizeMoney(row.total),
       memberIds: row.memberIds ?? [],
     })
+  }
+
+  for (const [index, line] of args.lines.entries()) {
+    if (line.lineId && line.distributionGroupId && !existingGroups.has(line.distributionGroupId) &&
+        (line.withholdingMaterialsCost != null || line.withholdingTreatment != null)) {
+      throw new DocumentEditError(422, `Line ${index + 1}: the stored distribution cannot be resolved; reload the bill before changing withholding inputs`)
+    }
   }
 
   // Header-default dims feed the match coordinate when a line leaves them blank.
@@ -889,6 +907,8 @@ async function planDocumentEntryAllocations(args: {
     description: l.description ?? null,
     taxCodeId: l.taxCodeId ?? null,
     taxGroupId: l.taxGroupId ?? null,
+    withholdingTreatment: l.withholdingTreatment,
+    withholdingMaterialsCost: l.withholdingMaterialsCost,
     marketplaceFacilitator: l.marketplaceFacilitator ?? null,
     partyId: l.partyId ?? null,
     departmentId: l.departmentId ?? null,
@@ -913,7 +933,7 @@ async function planDocumentEntryAllocations(args: {
       resolveAccountGroup,
     })
   } catch (error) {
-    if (error instanceof EntryAllocationError) throw new DocumentEditError(422, error.message)
+    if (error instanceof EntryAllocationError || error instanceof WithholdingMaterialsCostError) throw new DocumentEditError(422, error.message)
     throw error
   }
 }
@@ -1084,6 +1104,9 @@ export async function applyDocumentEdit(
   if (body.custom !== undefined) {
     const supplied = body.custom
     const existingCustom = current.custom ?? {}
+    for (const key of ['withholdingRemittance', 'withholdingDeposit']) {
+      if (Object.hasOwn(supplied, key) && JSON.stringify(supplied[key]) !== JSON.stringify(existingCustom[key])) throw new DocumentEditError(422, 'Withholding source evidence is written by the native withholding workflow and cannot be changed as a custom field.');
+    }
     const v = validateCustomValues(headerDefs, { ...existingCustom, ...supplied })
     if (!v.ok) throw new DocumentEditError(422, Object.values(v.errors)[0]!, v.errors)
     // Reference custom values are uuid-SHAPED at this point but nothing
@@ -1101,6 +1124,10 @@ export async function applyDocumentEdit(
       throw new DocumentEditError(404, `${def.label} not found in this organization`, { [def.key]: 'not found in this organization' })
     }
     headerCustom = { ...existingCustom, ...v.cleaned }
+    for (const key of ['withholdingRemittance', 'withholdingDeposit']) {
+      if (Object.hasOwn(existingCustom, key)) headerCustom[key] = existingCustom[key];
+      else delete headerCustom[key];
+    }
     if(Object.prototype.hasOwnProperty.call(supplied,'canadianGoodsTax')) {
       const selection=parseCanadianGoodsSelection(supplied.canadianGoodsTax)
       if(selection)headerCustom.canadianGoodsTax=selection
@@ -1238,7 +1265,7 @@ export async function applyDocumentEdit(
   // distribution stamps rely on). Null = new line.
   let submittedLineKeys: (string | null)[] | null = null
   let preparedLines:
-    | { accountId: string; itemId: string | null; description: string | null; quantity: string | null; unit: string | null; unitPrice: string | null; amount: string; taxCodeId: string | null; taxGroupId: string | null; taxInputAmount: string; taxAmount: string; taxOverridden: boolean; taxComponents: ReturnType<typeof computeBillTotals>['lines'][number]['taxComponents']; nativeGoodsTax?: GoodsTaxSnapshot; providerQuote?: ReturnType<typeof computeBillTotals>['lines'][number]['providerQuote']; marketplaceFacilitator: string | null; partyId: string | null; departmentId: string | null; projectId: string | null; locationId: string | null; classId: string | null; workFrom?: string | null; workTo?: string | null; stockLocationId: string | null; extraDims: Record<string, string | null>; custom: Record<string, unknown>; distributionGroupId: string | null; distributionRuleId: string | null; distributionVersionId: string | null; distributionLocked: boolean }[]
+    | { accountId: string; itemId: string | null; description: string | null; quantity: string | null; unit: string | null; unitPrice: string | null; amount: string; taxCodeId: string | null; taxGroupId: string | null; taxInputAmount: string; taxAmount: string; taxOverridden: boolean; withholdingTreatment: "labour" | "materials" | "excluded" | null; withholdingMaterialsCost: string | null; taxComponents: ReturnType<typeof computeBillTotals>['lines'][number]['taxComponents']; nativeGoodsTax?: GoodsTaxSnapshot; providerQuote?: ReturnType<typeof computeBillTotals>['lines'][number]['providerQuote']; marketplaceFacilitator: string | null; partyId: string | null; departmentId: string | null; projectId: string | null; locationId: string | null; classId: string | null; workFrom?: string | null; workTo?: string | null; stockLocationId: string | null; extraDims: Record<string, string | null>; custom: Record<string, unknown>; distributionGroupId: string | null; distributionRuleId: string | null; distributionVersionId: string | null; distributionLocked: boolean }[]
     | null = null
   if (body.lines) {
     // Charge lines are NOT editable through the generic line editor, and this
@@ -1306,6 +1333,25 @@ export async function applyDocumentEdit(
         seen.add(key)
       }
     }
+    // Native withholding inputs survive a partial line edit by stable identity.
+    // The later document revision lock fences this snapshot against a concurrent edit.
+    const storedWithholding = (await runner.execute<{
+      id: string; withholdingTreatment: DocumentLineInput['withholdingTreatment']; withholdingMaterialsCost: string | null
+    }>(sql`select id, withholding_treatment as "withholdingTreatment", withholding_materials_cost::text as "withholdingMaterialsCost"
+      from document_lines where org_id = ${orgId} and document_id = ${id}`)).rows
+    const withholdingById = new Map(storedWithholding.map(line => [line.id, line]))
+    body.lines = body.lines.map((line, index) => {
+      const source = submittedLineKeys?.[index] ? withholdingById.get(submittedLineKeys[index]!) : undefined
+      if (source) return {
+        ...line,
+        withholdingTreatment: line.withholdingTreatment === undefined ? source.withholdingTreatment : line.withholdingTreatment,
+        withholdingMaterialsCost: line.withholdingMaterialsCost === undefined ? source.withholdingMaterialsCost : line.withholdingMaterialsCost,
+      }
+      if (storedWithholding.some(stored => stored.withholdingMaterialsCost != null) && line.withholdingMaterialsCost === undefined) {
+        throw new DocumentEditError(422, `Line ${index + 1}: reload the bill and keep its line identity, or enter its direct materials cost explicitly; the stored cost cannot be matched`)
+      }
+      return line
+    })
     // Silent single-warehouse default: a stocked line
     // with no explicit warehouse takes the org's only active location, so
     // nobody answers a question with one possible answer. Several locations
@@ -1394,7 +1440,7 @@ export async function applyDocumentEdit(
       lines: body.lines,
       unsplitDistributionGroups: body.unsplitDistributionGroups,
     })
-    const linesForTotals: DocumentLineInput[] = entryPlan ? entryPlan.lines : body.lines
+    const linesForTotals: DocumentLineInput[] = validateEditableDocumentLines(entryPlan ? entryPlan.lines : body.lines)
     // Validate, don't filter. The old `filter((l) => l.accountId && cmp(l.amount, '0') > 0)`
     // dropped negative and zero lines before the totals were computed, so any
     // edit of a document carrying one rewrote it without that line — the
@@ -1447,6 +1493,7 @@ export async function applyDocumentEdit(
     // truth for that sales set, so cash kinds join both surfaces with one entry.
     const marketplaceAdmitted = PROVIDER_COMMIT_KINDS[current.kind] !== undefined
     let activeFacilitators: Set<string> | null = null
+    validateEditableDocumentLines(computed.lines)
     for (let i = 0; i < computed.lines.length; i++) {
       const l = computed.lines[i]! as (typeof computed.lines)[number] & DocumentLineInput
       const facilitatorName = typeof l.marketplaceFacilitator === 'string' ? l.marketplaceFacilitator.trim() : ''
@@ -1508,6 +1555,8 @@ export async function applyDocumentEdit(
         taxInputAmount: l.taxInputAmount,
         taxAmount: l.taxAmount,
         taxOverridden: l.taxOverridden === true,
+        withholdingTreatment: l.withholdingTreatment ?? null,
+        withholdingMaterialsCost: l.withholdingMaterialsCost == null ? null : normalizeMoney(l.withholdingMaterialsCost),
         taxComponents: l.taxComponents,
         providerQuote: l.providerQuote,
         nativeGoodsTax: l.nativeGoodsTax,
@@ -1530,6 +1579,7 @@ export async function applyDocumentEdit(
     }
   }
 
+  let generatedWithholdingUpdates: { id: string; treatment: DocumentLineInput['withholdingTreatment']; cost: string | null }[] = []
   // Filled under the document lock for line-level flow change detection.
   let oldLines: {
     lineNumber: number
@@ -1824,12 +1874,36 @@ export async function applyDocumentEdit(
         // Equivalent editor lines permit header edits, but the source rows own
         // their IDs, billable flags, lineage, and audit metadata. Never replace
         // those rows through the generic editor's smaller column set.
-        if (generated) preparedLines = null
+        if (generated) {
+          if (preparedLines && current.kind === 'vendor_bill') {
+            const sourceLines = (await tx.execute<{ id: string; treatment: DocumentLineInput['withholdingTreatment']; cost: string | null }>(sql`
+              select id, withholding_treatment as treatment, withholding_materials_cost::text as cost
+                from document_lines where org_id=${orgId} and document_id=${id} order by line_number
+            `)).rows
+            for (let index = 0; index < preparedLines.length; index++) {
+              const line = preparedLines[index]!, sourceLine = sourceLines[index]
+              const changed = sourceLine && (sourceLine.treatment !== line.withholdingTreatment ||
+                (sourceLine.cost == null ? line.withholdingMaterialsCost != null : line.withholdingMaterialsCost == null || cmp(sourceLine.cost, line.withholdingMaterialsCost) !== 0))
+              if (!changed) continue
+              if (submittedLineKeys?.[index] !== sourceLine.id) throw new DocumentEditError(422,
+                `Line ${index + 1}: reload the generated bill and retain the line identity before changing withholding inputs`)
+              generatedWithholdingUpdates.push({ id: sourceLine.id, treatment: line.withholdingTreatment, cost: line.withholdingMaterialsCost })
+            }
+          }
+          preparedLines = null
+        }
       } catch (error) {
         if (error instanceof BillingSourceIntegrityError) throw new DocumentEditError(422, error.message)
         throw error
       }
 
+      try {
+        if (await assertWithholdingDepositEdit(tx, orgId, id, preparedLines, { currency, subsidiaryId: body.subsidiaryId, partyId: body.partyId, documentDate: body.documentDate, dueDate: body.dueDate })) preparedLines = null;
+        if (await assertWithholdingRemittanceEdit(tx, orgId, id, preparedLines, { currency, subsidiaryId: body.subsidiaryId, partyId: body.partyId, documentDate: body.documentDate })) preparedLines = null;
+      } catch (error) {
+        if (error instanceof ContractorWithholdingError) throw new DocumentEditError(422, error.remedy ? `${error.message} ${error.remedy}` : error.message);
+        throw error;
+      }
       try {
         // A remittance bill is generated from its source entity whole: its
         // lines, header currency, and subsidiary are stamped at creation.
@@ -1916,6 +1990,13 @@ export async function applyDocumentEdit(
       }
 
       const auditBefore = await captureTransactionAuditSnapshot(tx, id, ctx.orgId)
+      for (const line of generatedWithholdingUpdates) {
+        const updated = await tx.execute(sql`update document_lines
+          set withholding_treatment=${line.treatment ?? null}, withholding_materials_cost=${line.cost},
+              updated_by=${ctx.userId}, updated_at=now()
+          where org_id=${orgId} and document_id=${id} and id=${line.id}`)
+        if (updated.rowCount !== 1) throw new DocumentEditError(409, 'The generated bill line changed; reload the bill before saving')
+      }
       oldLines = ((await tx.execute<{
         lineNumber: number
         accountId: string | null
@@ -1990,7 +2071,7 @@ export async function applyDocumentEdit(
           const inserted = (await tx.execute<{ id: string }>(sql`
             insert into document_lines (org_id, document_id, line_number, account_id, item_id, description,
                                         quantity, unit, unit_price, amount, tax_code_id, tax_group_id, tax_input_amount,
-                                        tax_amount, tax_overridden, marketplace_facilitator,
+                                        tax_amount, tax_overridden, withholding_treatment, withholding_materials_cost, marketplace_facilitator,
                                         party_id, department_id, project_id, location_id, class_id,
                                         stock_location_id, extra_dims, custom,
                                         distribution_group_id, distribution_rule_id, distribution_version_id,
@@ -2000,7 +2081,7 @@ export async function applyDocumentEdit(
                                         work_from, work_to)
             values (${orgId}, ${id}, ${i + 1}, ${l.accountId}, ${l.itemId}, ${l.description},
                     ${l.quantity ?? '1'}, ${l.unit}, ${l.unitPrice ?? l.amount}, ${l.amount},
-                    ${l.taxCodeId}, ${l.taxGroupId}, ${l.taxInputAmount}, ${l.taxAmount}, ${l.taxOverridden}, ${l.marketplaceFacilitator},
+                    ${l.taxCodeId}, ${l.taxGroupId}, ${l.taxInputAmount}, ${l.taxAmount}, ${l.taxOverridden}, ${l.withholdingTreatment}, ${l.withholdingMaterialsCost}, ${l.marketplaceFacilitator},
                     ${l.partyId}, ${l.departmentId}, ${l.projectId}, ${l.locationId}, ${l.classId},
                     ${l.stockLocationId}, ${JSON.stringify(l.extraDims)}::jsonb, ${JSON.stringify(l.custom)},
                     ${l.distributionGroupId}, ${l.distributionRuleId}, ${l.distributionVersionId},
@@ -2321,6 +2402,7 @@ export interface DocumentCreateResult {
  */
 export async function createDocument(input: DocumentCreateInput): Promise<DocumentCreateResult> {
   const { orgId, userId, kind, key, body, subsidiaryId, requestBody } = input
+  if (body.custom && ['withholdingDeposit','withholdingRemittance'].some(key => Object.hasOwn(body.custom!, key))) throw new DocumentEditError(422, 'Authority remittance source evidence is created only through the native withholding workflow.');
   const cfg = docKindConfig(kind)
   if (!cfg) throw new DocumentEditError(422, `kind "${kind}" is not editable`)
   if (!isDocumentCreateKind(kind)) throw new DocumentEditError(422, `kind "${kind}" is not creatable here`)

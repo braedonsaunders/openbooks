@@ -63,6 +63,7 @@ function documentStarter(meta: PdfRecordTypeMeta, accent: string): StarterTempla
   const hasParty = meta.partyHeading !== null
   const hasDue = meta.fields.some((f) => f.key === 'due_date')
   const hasReference = meta.fields.some((f) => f.key === 'reference_number')
+  const hasFiscalIdentity = meta.fields.some((f) => f.key === 'seller_address')
 
   const metaCells = [
     metaCell('Date', 'document_date'),
@@ -77,6 +78,9 @@ function documentStarter(meta: PdfRecordTypeMeta, accent: string): StarterTempla
       `<div style="font-size:13.5px;color:${INK};font-weight:700;padding-bottom:2px;">{{party_name}}</div>` +
       `<div style="font-size:11px;color:${MUTED};line-height:1.55;">{{party_address}}</div>` +
       `<div style="font-size:11px;color:${MUTED};line-height:1.55;">{{party_email}}</div>` +
+      (hasFiscalIdentity ? `<div data-if="buyer_vat_id" style="font-size:11px;color:${MUTED};">VAT: {{buyer_vat_id}}</div>` +
+        `<div data-if="buyer_legal_registration" style="font-size:11px;color:${MUTED};">Registration: {{buyer_legal_registration}}</div>` +
+        `<div data-if="buyer_electronic_address" style="font-size:11px;color:${MUTED};">{{buyer_electronic_address}}</div>` : '') +
       `</td>`
     : `<td style="vertical-align:top;"></td>`
 
@@ -86,6 +90,12 @@ function documentStarter(meta: PdfRecordTypeMeta, accent: string): StarterTempla
     `<table style="width:100%;border-collapse:collapse;margin:0 0 6px;"><tbody><tr>` +
     `<td style="vertical-align:bottom;">` +
     `<div style="font-size:19px;font-weight:800;letter-spacing:-.01em;color:${accent};">{{org_name}}</div>` +
+    (hasFiscalIdentity ? `<div data-if="seller_address" style="font-size:10px;color:${MUTED};line-height:1.6;max-width:320px;">{{seller_address}}</div>` +
+      `<div data-if="seller_vat_id" style="font-size:10px;color:${MUTED};">VAT: {{seller_vat_id}}</div>` +
+      `<div data-if="seller_tax_number" style="font-size:10px;color:${MUTED};">Tax registration: {{seller_tax_number}}</div>` +
+      `<div data-if="seller_legal_registration" style="font-size:10px;color:${MUTED};">Registration: {{seller_legal_registration}}</div>` +
+      `<div data-if="seller_contact" style="font-size:10px;color:${MUTED};">{{seller_contact}}</div>` +
+      `<div data-if="seller_electronic_address" style="font-size:10px;color:${MUTED};">{{seller_electronic_address}}</div>` : '') +
     `</td>` +
     `<td style="vertical-align:bottom;text-align:right;">` +
     `<div style="font-size:26px;font-weight:800;letter-spacing:.02em;color:${INK};text-transform:uppercase;">${meta.docTitle}</div>` +
@@ -108,8 +118,13 @@ function documentStarter(meta: PdfRecordTypeMeta, accent: string): StarterTempla
         `</tbody></table>`
       : `<table style="width:100%;border-collapse:collapse;margin:0 0 14px;"><tbody>` +
         `<tr>${th('Item / customer part #')}${th('Description')}${th('Qty', 'right', '52px')}${th('Rate', 'right', '76px')}${th('Amount', 'right', '92px')}</tr>` +
-        `<tr data-each="lines"><td style="padding:8px 10px;font-size:11.5px;color:${INK};border-bottom:1px solid ${RULE};vertical-align:top;">{{item_name}}<div data-if="customer_sku" style="font-size:9.5px;color:${MUTED};padding-top:3px;">Customer part #: {{customer_sku}}</div></td>${td('description')}${td('quantity', 'right')}${td('unit_price', 'right')}${td('amount', 'right')}</tr>` +
+        `<tr data-each="lines"><td style="padding:8px 10px;font-size:11.5px;color:${INK};border-bottom:1px solid ${RULE};vertical-align:top;">{{item_name}}<div data-if="customer_sku" style="font-size:9.5px;color:${MUTED};padding-top:3px;">Customer part #: {{customer_sku}}</div></td>${td('description')}${hasFiscalIdentity ? td('quantity', 'right').replace('{{quantity}}', '{{quantity}} {{unit}}') : td('quantity', 'right')}${td('unit_price', 'right')}${td('amount', 'right')}</tr>` +
         `</tbody></table>`) +
+    (hasFiscalIdentity ? `<div data-if="seller_address" style="font-size:10px;color:${MUTED};margin:0 0 8px;">Currency: {{currency}}</div>` +
+      `<table data-if="vat_breakdown" style="width:100%;border-collapse:collapse;margin:0 0 14px;"><tbody>` +
+      `<tr>${th('VAT category')}${th('Rate', 'right')}${th('Taxable amount', 'right')}${th('VAT amount', 'right')}${th('Exemption')}</tr>` +
+      `<tr data-each="vat_breakdown">${td('category')}${td('rate', 'right')}${td('taxable_amount', 'right')}${td('tax_amount', 'right')}<td style="padding:8px 10px;font-size:10px;border-bottom:1px solid ${RULE};">{{exemption_reason}} {{exemption_reason_code}}</td></tr>` +
+      `</tbody></table>` : '') +
     // ---- Totals ----
     `<table style="width:100%;border-collapse:collapse;margin:0 0 26px;"><tbody><tr>` +
     `<td style="vertical-align:top;">` +
@@ -125,6 +140,10 @@ function documentStarter(meta: PdfRecordTypeMeta, accent: string): StarterTempla
     `</tbody></table>` +
     `</td>` +
     `</tr></tbody></table>` +
+    (hasFiscalIdentity ? `<div data-if="payment_means" style="font-size:10px;color:${MUTED};line-height:1.6;margin-bottom:14px;">` +
+      `<div>Payment: {{payment_means}}</div><div data-if="payee_account">Account / IBAN: {{payee_account}}</div>` +
+      `<div data-if="payee_name">{{payee_name}}</div><div data-if="payee_bic">{{payee_bic}}</div>` +
+      `<div data-if="payment_reference">Payment reference: {{payment_reference}}</div></div>` : '') +
     // ---- Footer note ----
     `<div style="border-top:1px solid ${RULE};padding-top:10px;font-size:9.5px;color:${FAINT};">` +
     `Thank you for your business. Questions about this document? Contact {{org_name}}.` +

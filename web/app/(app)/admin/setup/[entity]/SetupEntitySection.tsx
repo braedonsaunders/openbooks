@@ -232,6 +232,7 @@ export async function SetupEntitySection({
     multiSubsidiary: await subsidiaryFeatureEnabled(orgId),
     equipment: await isFeatureEnabled(orgId, 'equipment'),
     fieldTickets: await isFeatureEnabled(orgId, 'fieldTickets'),
+    einvoicing: await isFeatureEnabled(orgId, 'einvoicing'),
   })
   const scopedEntity = gated.key === 'item-rate-books' && !multiCurrency
     ? { ...gated, fields: gated.fields.filter((field) => field.key !== 'currency') }

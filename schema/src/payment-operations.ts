@@ -129,6 +129,8 @@ export const paymentRunItems = pgTable(
     kind: text("kind", { enum: ["bill", "credit", "expense", "refund", "receivable"] }).notNull(),
     grossAmount: money("gross_amount").notNull(),
     discountAmount: money("discount_amount").notNull().default("0"),
+    /** Contractor withholding deducted from this item at payment. */
+    withholdingAmount: money("withholding_amount").notNull().default("0"),
     creditAmount: money("credit_amount").notNull().default("0"),
     /** Exact target open lines and amounts for this source credit open line. */
     creditTargetAllocations: jsonb("credit_target_allocations").$type<Array<{ toLineId: string; amount: string }>>(),

@@ -1,0 +1,93 @@
+[
+  {
+    "profile": "pint-aunz",
+    "version": "1.1.3",
+    "releaseDate": "2026-05-21",
+    "source": "https://docs.peppol.eu/poac/aunz/pint-aunz/",
+    "resources": "https://docs.peppol.eu/poac/aunz/pint-aunz/resources.zip",
+    "archiveSha256": "277206b650f22689b6f71de38e7e92619de315625910efb3fd89a4d1e039ea5d",
+    "files": [
+      {
+        "path": "trn-invoice/codelist/Aligned-TaxCategoryCodes.gc",
+        "sha256": "db18c2e78447f53ed3aad61e28cdf6ba5fa8918d92e1b442fac2c1c401737754"
+      },
+      {
+        "path": "trn-invoice/codelist/UNCL1001-inv.gc",
+        "sha256": "5d4af03105a300884c8b07c6c78c8f5184d947ec47b1bfa364edf94820305bcd"
+      },
+      {
+        "path": "trn-invoice/schematron/PINT-UBL-validation-preprocessed.sch",
+        "sha256": "4e66ec0e7659e82ca98f3b57f653583fba4697c99e9b79d29ce7c46aa81ed010"
+      },
+      {
+        "path": "trn-invoice/schematron/PINT-jurisdiction-aligned-rules.sch",
+        "sha256": "5016cb5aec7945185955e0950d2825ea83caa91c328d683a5c351bbe5733cd75"
+      },
+      {
+        "path": "trn-creditnote/codelist/Aligned-TaxCategoryCodes.gc",
+        "sha256": "db18c2e78447f53ed3aad61e28cdf6ba5fa8918d92e1b442fac2c1c401737754"
+      },
+      {
+        "path": "trn-creditnote/codelist/UNCL1001-cn.gc",
+        "sha256": "3c618b030481c1006669e003989e568450cc7ba205e8c8444269948dcb3ab756"
+      },
+      {
+        "path": "trn-creditnote/schematron/PINT-UBL-validation-preprocessed.sch",
+        "sha256": "4e66ec0e7659e82ca98f3b57f653583fba4697c99e9b79d29ce7c46aa81ed010"
+      },
+      {
+        "path": "trn-creditnote/schematron/PINT-jurisdiction-aligned-rules.sch",
+        "sha256": "5016cb5aec7945185955e0950d2825ea83caa91c328d683a5c351bbe5733cd75"
+      }
+    ]
+  },
+  {
+    "profile": "pint-sg",
+    "version": "1.4.1",
+    "releaseDate": "2026-05-25",
+    "source": "https://docs.peppol.eu/poac/sg/pint-sg/",
+    "resources": "https://docs.peppol.eu/poac/sg/pint-sg/resources.zip",
+    "archiveSha256": "584353b4fed58474d3ec7e32cc99d24eb8f50c812ac7d4a4ae72e6e0566b2670",
+    "files": [
+      {
+        "path": "trn-invoice/codelist/Aligned-TaxCategoryCodes.gc",
+        "sha256": "72f5a4248156d201fcedd762874419da076c2c58585a8fb4fcdcb12e8ace12f9"
+      },
+      {
+        "path": "trn-invoice/codelist/UNCL1001-inv.gc",
+        "sha256": "5d4af03105a300884c8b07c6c78c8f5184d947ec47b1bfa364edf94820305bcd"
+      },
+      {
+        "path": "trn-invoice/schematron/PINT-UBL-validation-preprocessed.sch",
+        "sha256": "4e66ec0e7659e82ca98f3b57f653583fba4697c99e9b79d29ce7c46aa81ed010"
+      },
+      {
+        "path": "trn-invoice/schematron/PINT-jurisdiction-aligned-rules.sch",
+        "sha256": "3f93031bd2e578bd1015a7a5b4f978225dceec60118d5392b1a12dab818a8ecc"
+      },
+      {
+        "path": "trn-creditnote/codelist/Aligned-TaxCategoryCodes.gc",
+        "sha256": "72f5a4248156d201fcedd762874419da076c2c58585a8fb4fcdcb12e8ace12f9"
+      },
+      {
+        "path": "trn-creditnote/codelist/UNCL1001-cn.gc",
+        "sha256": "3c618b030481c1006669e003989e568450cc7ba205e8c8444269948dcb3ab756"
+      },
+      {
+        "path": "trn-creditnote/schematron/PINT-UBL-validation-preprocessed.sch",
+        "sha256": "4e66ec0e7659e82ca98f3b57f653583fba4697c99e9b79d29ce7c46aa81ed010"
+      },
+      {
+        "path": "trn-creditnote/schematron/PINT-jurisdiction-aligned-rules.sch",
+        "sha256": "3f93031bd2e578bd1015a7a5b4f978225dceec60118d5392b1a12dab818a8ecc"
+      }
+    ]
+  },
+  {
+    "profile": "nlcius",
+    "version": "SI-UBL 2.0.3.13",
+    "releaseDate": "2026-05-21",
+    "source": "https://raw.githubusercontent.com/peppolautoriteit-nl/validation/0561da39740b6e753ba3d3dd12b87c3df3bb562f/schematron/si-ubl-2.0/si-ubl-2.0-nlcius.sch",
+    "sha256": "218d3ddc898915506f71d44bb3fe3977acbb953ec93143b27e56fc0eae68cda5"
+  }
+]

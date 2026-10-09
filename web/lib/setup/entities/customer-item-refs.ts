@@ -1,4 +1,5 @@
 import 'server-only'
+import { validateWithholdingEnrollmentWrite } from '../contractor-withholding-validation'
 import { validateScheduleBoardWrite, validateScheduleCodeWrite } from '../scheduling-validation'
 import { sql } from 'drizzle-orm'
 import { validateIdentifierUnit } from '@openbooks/engine/src/inventory/item-identifiers.ts'
@@ -6,6 +7,7 @@ import { validateCustomerItemRef } from '@openbooks/engine/src/sales/customer-it
 import { validateMarketplaceFacilitatorWrite as validateMarketplaceFacilitator } from '@openbooks/engine/tax'
 import type { SetupEntity, SetupEntityValidationHook } from '../types'
 import { validateStoredValueProgramWrite } from '../stored-value-validation'
+import { validateEInvoiceSetupWrite } from '../einvoicing-validation'
 import { BENEFIT_CONTRIBUTION_ENTITIES } from '../hrm-benefit-contributions'
 import { PAYROLL_SERVICE_CREDITS_ENTITY } from '../payroll-service-credits'
 import { PAYROLL_VACATION_TERMS_ENTITY } from '../payroll-vacation-terms'
@@ -53,6 +55,10 @@ const validateMarketplaceFacilitatorWrite: SetupEntityValidationHook = async ({ 
 }
 
 const SETUP_ENTITY_VALIDATION_HOOKS: Record<string, SetupEntityValidationHook> = {
+  'einvoice-settings': validateEInvoiceSetupWrite,
+  'einvoice-recipients': validateEInvoiceSetupWrite,
+  'tax-codes': validateEInvoiceSetupWrite,
+  'withholding-enrollments': validateWithholdingEnrollmentWrite,
   'schedule-boards': validateScheduleBoardWrite,
   'schedule-codes': validateScheduleCodeWrite,
   ...Object.fromEntries(BENEFIT_CONTRIBUTION_ENTITIES.map((entity) => [entity.key, validateContributionWrite])),

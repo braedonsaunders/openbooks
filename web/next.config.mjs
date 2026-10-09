@@ -87,6 +87,13 @@ const config = {
   // while `next start` keeps serving the live .next, then swap. Unset = default.
   distDir: process.env.NEXT_DIST_DIR || ".next",
   outputFileTracingRoot: join(dirname(fileURLToPath(import.meta.url)), ".."),
+  outputFileTracingIncludes: {
+    "/api/documents/*/einvoice": [
+      "../engine/src/einvoice/srgb-iec61966-2-1.icc",
+      "../engine/src/einvoice/standards/**/*.xsd",
+      "../engine/src/einvoice/standards/*manifest.json",
+    ],
+  },
   async headers() {
     return [
       { source: "/(.*)", headers: securityHeaders },

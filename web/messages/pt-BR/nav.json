@@ -156,7 +156,8 @@
     "hrm-benefits-delivery": "Entrega",
     "hrm-training": "Treinamento",
     "internal-billing": "Faturamento interno",
-    "scheduling": "Programação"
+    "scheduling": "Programação",
+    "contractor-withholding": "Retenções de empreiteiros"
   },
   "groups": {
     "workforce": "Força de trabalho",

@@ -1,7 +1,9 @@
 'use client'
 
 import { Table as SharedTable, TableHeader as SharedTableHeader, TableRow as SharedTableRow, TableHead as SharedTableHead, TableBody as SharedTableBody, TableCell as SharedTableCell } from "@openbooks/ui"
+import { PagedTable } from '@/components/paged-table'
 import { useMoney } from '@/components/money-provider'
+import { MoneyInput } from '@/components/money-input'
 import { initialDrawerMode, type DrawerMode } from '@/lib/drawer-mode'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
@@ -113,6 +115,9 @@ export interface PaymentPayload {
   /** Live applications as the loader hands them; narrowed to
    *  PaymentAppliedRow for rendering below. */
   applied: Record<string, unknown>[]
+  withholdingEnabled?: boolean
+  withholdingAuthorisationRequired?: boolean
+  withholdingAuthorisationCurrency?: string | null
 }
 
 /** The payment header: `documents` plus the loader's joins. Dates, uuids
@@ -270,6 +275,7 @@ export function PaymentDrawer({
   const t = useTranslations('payments.drawer')
   const tCommon = useTranslations('common')
   const tStoredValue = useTranslations('storedValue')
+  const tWithholding = useTranslations('ap.withholding')
   const router = useRouter()
   const doc = asPaymentDoc(payment.doc)
   const applied = payment.applied.map(asPaymentAppliedRow)
@@ -303,6 +309,14 @@ export function PaymentDrawer({
   // the payment total is always the sum of what's actually applied.
   const [receivedAmount, setReceivedAmount] = useState<string>('')
   const [memo, setMemo] = useState<string>(doc.memo ?? '')
+  const custom = doc.custom && typeof doc.custom === 'object' ? doc.custom as Record<string, unknown> : {}
+  const savedWithholdings = Array.isArray(custom.withholdings) ? custom.withholdings as Array<{ openLineId: string; billDocumentNumber: string; schemeCode: string; bandCode: string; ratePercent: string; base: string; deducted: string; materials: string; vat: string; uncollected: string; reporting?: { currency: string; deducted: string; base: string } }> : []
+  const [withholdingAuthorisation, setWithholdingAuthorisation] = useState(typeof custom.withholdingAuthorisation === 'string' ? custom.withholdingAuthorisation : '')
+  const [withholdingAuthorisedAmount, setWithholdingAuthorisedAmount] = useState(typeof custom.withholdingAuthorisedAmount === 'string' ? custom.withholdingAuthorisedAmount : '')
+  const showWithholding = side === 'ap' && (payment.withholdingEnabled === true || savedWithholdings.length > 0)
+  const showAuthorisedAmount = showWithholding && (payment.withholdingAuthorisationRequired === true || typeof custom.withholdingAuthorisedAmount === 'string' || withholdingAuthorisation.trim() !== '')
+  const savedWithholdingAmount = typeof custom.withholdingAmount === 'string' ? custom.withholdingAmount : '0'
+
   const [openItems, setOpenItems] = useState<OpenItemClient[]>(initialOpenItems)
   const [loadingItems, setLoadingItems] = useState(false)
   const [allocs, setAllocs] = useState<Record<string, AllocationClient>>(() =>
@@ -463,9 +477,10 @@ export function PaymentDrawer({
       referenceNumber,
       memo,
       allocations: validAllocations,
+      ...(showWithholding ? { withholdingAuthorisation: withholdingAuthorisation || null, withholdingAuthorisedAmount: withholdingAuthorisedAmount.trim() || null } : {}),
       ...(tenderPatch !== null ? { storedValueTenders: tenderPatch } : {}),
     }),
-    [partyId, bankAccountId, documentDate, referenceNumber, memo, validAllocations, tenderPatch, doc.updated_at],
+    [partyId, bankAccountId, documentDate, referenceNumber, memo, validAllocations, tenderPatch, doc.updated_at, showWithholding, withholdingAuthorisation, withholdingAuthorisedAmount],
   )
   // Track unsaved edits (no autosave — Save is an explicit button). Adjusted
   // during render (same committed value, no extra render). `editable` is read
@@ -504,6 +519,8 @@ export function PaymentDrawer({
     setDocumentDate(doc.document_date ?? '')
     setReferenceNumber(doc.reference_number ?? '')
     setMemo(doc.memo ?? '')
+    setWithholdingAuthorisation(typeof custom.withholdingAuthorisation === 'string' ? custom.withholdingAuthorisation : '')
+    setWithholdingAuthorisedAmount(typeof custom.withholdingAuthorisedAmount === 'string' ? custom.withholdingAuthorisedAmount : '')
     setAllocs(Object.fromEntries(payment.allocations.map((a) => [a.openLineId, a])))
     setTenderDrafts(initialTenderDrafts())
     // Restoring the party must not trip the party-change reset on the next
@@ -536,6 +553,7 @@ export function PaymentDrawer({
       referenceNumber,
       memo,
       allocations: validAllocations,
+      ...(showWithholding ? { withholdingAuthorisation: withholdingAuthorisation || null, withholdingAuthorisedAmount: withholdingAuthorisedAmount.trim() || null } : {}),
       ...(tenderPatch !== null ? { storedValueTenders: tenderPatch } : {}),
     }
     const ok = await execute(
@@ -624,7 +642,7 @@ export function PaymentDrawer({
           headers: { 'Content-Type': 'application/json' },
           // Same revision evidence as the draft save: the route fences its
           // final allocation write on this token and 409s a stale drawer.
-          body: JSON.stringify({ documentId: doc.id, expectedUpdatedAt: doc.updated_at, allocations: validAllocations }),
+          body: JSON.stringify({ documentId: doc.id, expectedUpdatedAt: doc.updated_at, allocations: validAllocations, ...(showWithholding ? { withholdingAuthorisation: withholdingAuthorisation || null, withholdingAuthorisedAmount: withholdingAuthorisedAmount.trim() || null } : {}) }),
         }),
       {
         fallbackMessage: t('toasts.postFailed'),
@@ -873,6 +891,22 @@ export function PaymentDrawer({
       // persisted row the drawer has not written yet.
       keepRecordTabsMounted={showTenders ? ['tenders'] : false}
       detailTabs={[
+        ...(showWithholding ? [{
+          key: 'withholding', label: tWithholding('title'),
+          content: <div className="space-y-4">
+            <div><Label>{tWithholding('authorisation')}</Label><Input value={withholdingAuthorisation} disabled={!editable} maxLength={100} onChange={event => setWithholdingAuthorisation(event.target.value)} /><p className="mt-1 text-sm text-muted-foreground">{tWithholding('authorisationHelp')}</p></div>
+            {showAuthorisedAmount ? <div><Label htmlFor="withholding-authorised-amount">{tWithholding('authorisedAmount')} {payment.withholdingAuthorisationCurrency ? `(${payment.withholdingAuthorisationCurrency})` : ''}</Label><MoneyInput id="withholding-authorised-amount" field={tWithholding('authorisedAmount')} value={withholdingAuthorisedAmount} onChange={setWithholdingAuthorisedAmount} disabled={!editable} maxScale={4} placeholder="0.0000" /><p className="mt-1 text-sm text-muted-foreground">{tWithholding('authorisedAmountHelp')}</p></div> : null}
+            <p className="text-sm">{tWithholding('savedEvidence')}</p>
+            <dl className="grid grid-cols-2 gap-3"><div><dt>{tWithholding('deducted')}</dt><dd>{money(savedWithholdingAmount, { currency: doc.currency })}</dd></div><div><dt>{tWithholding('cash')}</dt><dd>{money(doc.total, { currency: doc.currency })}</dd></div></dl>
+            <PagedTable source="contractor_withholding_payment_deductions" rows={savedWithholdings} rowKey={row => row.openLineId} empty={tWithholding('emptyPayees')} columns={[
+              { key: 'bill', header: tWithholding('bill'), cell: row => row.billDocumentNumber },
+              { key: 'scheme', header: tWithholding('scheme'), cell: row => row.schemeCode },
+              { key: 'band', header: tWithholding('band'), cell: row => `${row.bandCode} · ${row.ratePercent}%` },
+              { key: 'base', header: tWithholding('base'), align: 'right', cell: row => money(row.base, { currency: doc.currency }) },
+              { key: 'deducted', header: tWithholding('deducted'), align: 'right', cell: row => <div>{money(row.deducted, { currency: doc.currency })}{row.reporting && row.reporting.currency !== doc.currency ? <div className="text-xs text-muted-foreground">{tWithholding('reportedDeduction')}: {money(row.reporting.deducted, { currency: row.reporting.currency })}</div> : null}</div> },
+            ]} />
+          </div>,
+        }] : []),
         ...(showTenders ? [{
           key: 'tenders',
           label: tStoredValue('payment.tenderLabel'),

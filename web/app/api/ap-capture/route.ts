@@ -6,6 +6,8 @@ import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { enqueueApCapture } from '@openbooks/jobs'
 import { db } from '@openbooks/engine/src/platform/db.ts'
+import { extractNativeInvoice } from '@openbooks/engine/payables/einvoice'
+import { orgFeatureEnabled } from '@openbooks/engine/organization/features'
 import { captureContentMatchesMime } from '@openbooks/engine/src/payables/ap-capture.ts'
 import { getDocumentCaptureRuntimeConfig, type DocumentCaptureRuntimeConfig } from '@openbooks/engine/src/payables/ap-capture-config.ts'
 import '../../../lib/authz';
@@ -31,7 +33,7 @@ class CaptureConfigRefusal extends Error {
 const MAX_FILES = 50
 const MAX_BYTES = 20 * 1024 * 1024
 const MAX_BATCH_BYTES = 100 * 1024 * 1024
-const ALLOWED = new Set(['application/pdf', 'image/jpeg', 'image/png', 'image/tiff'])
+const ALLOWED = new Set(['application/pdf', 'image/jpeg', 'image/png', 'image/tiff', 'application/xml', 'text/xml'])
 
 function safeFilename(value: string): string {
   return basename(value).replace(/[\u0000-\u001f\u007f]/g, '').slice(0, 240) || 'document'
@@ -41,23 +43,11 @@ export const POST = defineRoute({
   permission: 'ap.create',
   feature: { none: 'No optional feature applies to this permission-governed endpoint.' },
   handler: async ({ request: request, authz: gate }) => {
-    // Only "not configured" (null) maps to capture_not_configured: endpoint
-    // validation refusals and unseal failures throw, and collapsing them into
-    // the 409 sent operators to reconfigure a correctly configured endpoint.
-    let captureConfig: DocumentCaptureRuntimeConfig | null
-    try {
-      captureConfig = await getDocumentCaptureRuntimeConfig(gate.user.orgId)
-    } catch (error) {
-      return apiErrorResponse(
-        new CaptureConfigRefusal(error instanceof Error ? error.message : 'capture_config_failed'),
-      )
-    }
-    if (!captureConfig) return NextResponse.json({ error: 'capture_not_configured' }, { status: 409 })
     const form = await request.formData()
     const files = form.getAll('files').filter((value): value is File => value instanceof File)
     if (files.length === 0) return NextResponse.json({ error: 'no_files' }, { status: 400 })
     if (files.length > MAX_FILES) return NextResponse.json({ error: 'too_many_files', limit: MAX_FILES }, { status: 422 })
-    const prepared: Array<{ file: File; bytes: Buffer; filename: string; hash: string }> = []
+    const prepared: Array<{ file: File; bytes: Buffer; filename: string; hash: string; native: boolean }> = []
     let batchBytes = 0
     for (const file of files) {
       if (!ALLOWED.has(file.type)) return NextResponse.json({ error: 'unsupported_type', filename: file.name }, { status: 422 })
@@ -66,7 +56,18 @@ export const POST = defineRoute({
       if (batchBytes > MAX_BATCH_BYTES) return NextResponse.json({ error: 'batch_too_large' }, { status: 422 })
       const bytes = Buffer.from(await file.arrayBuffer())
       if (!captureContentMatchesMime(bytes, file.type)) return NextResponse.json({ error: 'content_type_mismatch', filename: file.name }, { status: 422 })
-      prepared.push({ file, bytes, filename: safeFilename(file.name), hash: createHash('sha256').update(bytes).digest('hex') })
+      const nativeEnabled = await orgFeatureEnabled(gate.user.orgId, 'einvoicing');
+      if (!nativeEnabled && (file.type === 'application/xml' || file.type === 'text/xml')) return NextResponse.json({ error: 'Enable E-invoicing in Company Settings → Features to receive XML invoices.' }, { status: 422 });
+      let native = false;
+      try { native = nativeEnabled && (await extractNativeInvoice(bytes, file.type)) !== null; }
+      catch (error) { return NextResponse.json({ error: error instanceof Error ? error.message : 'The e-invoice could not be parsed.' }, { status: 422 }); }
+      prepared.push({ file, bytes, filename: safeFilename(file.name), hash: createHash('sha256').update(bytes).digest('hex'), native })
+    }
+    if (prepared.some(upload => !upload.native)) {
+      let captureConfig: DocumentCaptureRuntimeConfig | null;
+      try { captureConfig = await getDocumentCaptureRuntimeConfig(gate.user.orgId); }
+      catch (error) { return apiErrorResponse(new CaptureConfigRefusal(error instanceof Error ? error.message : 'capture_config_failed')); }
+      if (!captureConfig) return NextResponse.json({ error: 'capture_not_configured' }, { status: 409 });
     }
     const folderId = await ensureApCaptureRoot(gate.user.orgId, gate.user.id)
     const created: string[] = []

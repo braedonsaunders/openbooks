@@ -273,6 +273,9 @@ export interface PaymentTrace {
   paymentDate: string;
   /** Cash that left the bank, base currency, positive. */
   cash: string;
+  /** Posted US backup-withholding liability in base currency, in addition to bank cash. */
+  backupWithheld?: string;
+  withholdingDeductionIds?: string[];
   bills: SettledBill[];
 }
 
@@ -394,6 +397,8 @@ export function allocatePaymentToBoxes(args: {
   boxByAccount: ReadonlyMap<string, string>;
   defaultBox: string;
 }): { boxAmounts: Record<string, string>; unmappedAccountIds: string[] } {
+  if (cmp(args.payment.backupWithheld ?? "0", "0") < 0) throw new InformationReturnError("Posted backup withholding cannot be negative.");
+  const reportablePayment = add(args.payment.cash, args.payment.backupWithheld ?? "0");
   const buckets: { box: string; weight: string; accountId: string | null }[] = [];
   let appliedTotal = 0n;
   for (const bill of args.payment.bills) {
@@ -415,16 +420,16 @@ export function allocatePaymentToBoxes(args: {
     }
   }
   // Cash beyond what it settled: prepayment, retainer, or an over-payment.
-  const unapplied = toUnits(args.payment.cash) - appliedTotal;
+  const unapplied = toUnits(reportablePayment) - appliedTotal;
   if (unapplied > 0n) {
     buckets.push({ box: args.defaultBox, weight: fromUnits(unapplied), accountId: null });
   }
   if (buckets.length === 0) {
-    buckets.push({ box: args.defaultBox, weight: args.payment.cash, accountId: null });
+    buckets.push({ box: args.defaultBox, weight: reportablePayment, accountId: null });
   }
 
   const parts = allocateProportionally(
-    args.payment.cash,
+    reportablePayment,
     buckets.map((b) => b.weight),
   );
   const boxAmounts: Record<string, string> = {};
@@ -458,6 +463,15 @@ export function summarizeRecipient(args: {
     });
     for (const [box, amount] of Object.entries(allocated.boxAmounts)) {
       boxAmounts[box] = add(boxAmounts[box] ?? "0", amount);
+    }
+    if (cmp(payment.backupWithheld ?? "0", "0") > 0) {
+      if (args.form.formType === "T4A") throw new InformationReturnError("US backup withholding cannot be reported on a Canadian T4A.");
+      const withholdingBox = args.form.boxes.find((box) => box.isWithholding)?.key;
+      if (!withholdingBox) throw new InformationReturnError("The information return defines no federal withholding box.");
+      if (cmp(allocated.boxAmounts[withholdingBox] ?? "0", "0") !== 0) {
+        throw new InformationReturnError("Bill account mappings overlap recorded backup withholding. Map bill expense accounts to remuneration boxes before computing the filing.");
+      }
+      boxAmounts[withholdingBox] = add(boxAmounts[withholdingBox] ?? "0", payment.backupWithheld!);
     }
     for (const id of allocated.unmappedAccountIds) unmapped.add(id);
     traced = add(traced, payment.cash);
@@ -614,6 +628,10 @@ export async function loadPaymentTraces(args: {
     journal_entry_id: string;
     journal_line_ids: string[];
     cash: string;
+    backup_withheld: string;
+    backup_liability_transaction: string;
+    backup_deduction_transaction: string;
+    withholding_deduction_ids: string[];
   }>(sql`
     select d.id, d.document_number, d.party_id, d.document_date,
            je.id as journal_entry_id,
@@ -623,7 +641,42 @@ export async function loadPaymentTraces(args: {
            -- not leave the bank and must never inflate reportable cash.
            coalesce(-sum(jl.amount) filter (
              where jl.amount < 0 and not jl.is_open_item and funding.type = 'asset_bank'
-           ), 0) as cash
+           ), 0) as cash,
+           -- Read the posted base-currency liability once per journal line.
+           -- Multiple bill deductions may share that line and must not multiply it.
+           (select coalesce(-sum(wl.amount), 0) from journal_lines wl
+             where wl.org_id = d.org_id and wl.entry_id = je.id and wl.amount < 0
+               and exists (
+                 select 1 from withholding_deductions wd
+                 join withholding_enrollments we on we.org_id = wd.org_id and we.id = wd.enrollment_id
+                  where wd.org_id = d.org_id and wd.payment_document_id = d.id
+                    and wd.journal_entry_id = je.id and wd.party_id = d.party_id
+                    and wd.subsidiary_id = d.subsidiary_id and wd.status = 'posted'
+                    and wd.scheme_code = 'US_BACKUP_WITHHOLDING' and wd.deducted_amount > 0
+                    and we.liability_account_id = wl.account_id
+               )) as backup_withheld,
+           (select coalesce(-sum(wl.txn_amount), 0) from journal_lines wl
+             where wl.org_id = d.org_id and wl.entry_id = je.id and wl.amount < 0
+               and wl.currency = d.currency and exists (
+                 select 1 from withholding_deductions wd
+                 join withholding_enrollments we on we.org_id = wd.org_id and we.id = wd.enrollment_id
+                  where wd.org_id = d.org_id and wd.payment_document_id = d.id
+                    and wd.journal_entry_id = je.id and wd.party_id = d.party_id
+                    and wd.subsidiary_id = d.subsidiary_id and wd.status = 'posted'
+                    and wd.scheme_code = 'US_BACKUP_WITHHOLDING' and wd.deducted_amount > 0
+                    and we.liability_account_id = wl.account_id
+               )) as backup_liability_transaction,
+           (select coalesce(sum(wd.deducted_amount), 0) from withholding_deductions wd
+                  where wd.org_id = d.org_id and wd.payment_document_id = d.id
+                    and wd.journal_entry_id = je.id and wd.party_id = d.party_id
+                    and wd.subsidiary_id = d.subsidiary_id and wd.status = 'posted'
+                    and wd.scheme_code = 'US_BACKUP_WITHHOLDING') as backup_deduction_transaction,
+           array(select wd.id::text from withholding_deductions wd
+                  where wd.org_id = d.org_id and wd.payment_document_id = d.id
+                    and wd.journal_entry_id = je.id and wd.party_id = d.party_id
+                    and wd.subsidiary_id = d.subsidiary_id and wd.status = 'posted'
+                    and wd.scheme_code = 'US_BACKUP_WITHHOLDING' and wd.deducted_amount > 0
+                  order by wd.id) as withholding_deduction_ids
       from documents d
       -- Live entries only: a voided payment never paid reportable cash.
       join journal_entries je on je.id = d.posted_entry_id and je.org_id = d.org_id and je.status = 'posted'
@@ -711,6 +764,12 @@ export async function loadPaymentTraces(args: {
 
   const byParty = new Map<string, PaymentTrace[]>();
   for (const p of payments.rows) {
+    if (cmp(p.backup_liability_transaction ?? "0", p.backup_deduction_transaction ?? "0") !== 0) {
+      throw new InformationReturnError(`Payment ${p.document_number} backup deductions do not match the posted withholding liability.`);
+    }
+    if ((p.withholding_deduction_ids?.length ?? 0) > 0 && cmp(p.backup_withheld ?? "0", "0") <= 0) {
+      throw new InformationReturnError(`Payment ${p.document_number} has posted backup deductions without their posted liability credit.`);
+    }
     const list = byParty.get(p.party_id) ?? [];
     list.push({
       paymentId: p.id,
@@ -719,6 +778,8 @@ export async function loadPaymentTraces(args: {
       documentNumber: p.document_number,
       paymentDate: p.document_date,
       cash: p.cash,
+      backupWithheld: p.backup_withheld ?? "0",
+      withholdingDeductionIds: p.withholding_deduction_ids ?? [],
       bills: billsByPayment.get(p.id) ?? [],
     });
     byParty.set(p.party_id, list);
@@ -919,6 +980,7 @@ function paymentSourceGeneration(payment: PaymentTrace): PaymentTrace {
   return {
     ...payment,
     journalLineIds: [...(payment.journalLineIds ?? [])].sort(),
+    withholdingDeductionIds: [...(payment.withholdingDeductionIds ?? [])].sort(),
     bills: [...payment.bills]
       .sort((left, right) => left.documentId.localeCompare(right.documentId))
       .map((bill) => ({

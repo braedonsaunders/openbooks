@@ -8,6 +8,9 @@ export interface BillLineInput {
   taxCodeId?: string | null
   taxGroupId?: string | null
   /** Manual tax override: when true, `taxAmount` is honored instead of computed. */
+  withholdingTreatment?: "labour" | "materials" | "excluded" | null
+  /** Direct materials cost in transaction currency; never inferred from selling price. */
+  withholdingMaterialsCost?: string | null
   taxOverridden?: boolean
   taxAmount?: string | null
   custom?: Record<string, unknown>

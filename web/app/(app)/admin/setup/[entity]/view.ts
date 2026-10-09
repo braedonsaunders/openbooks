@@ -219,6 +219,7 @@ export async function loadSetupEntity(
         multiSubsidiary: featureEnabled(features, 'multiSubsidiary'),
         equipment: featureEnabled(features, 'equipment'),
         fieldTickets: featureEnabled(features, 'fieldTickets'),
+        einvoicing: featureEnabled(features, 'einvoicing'),
       })
     : null
   const entity = gatedEntity

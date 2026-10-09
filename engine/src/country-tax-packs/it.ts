@@ -1,4 +1,5 @@
 import type { CountryTaxPackDefinition, TaxReturnPack } from "./types.ts";
+import { IT_CONDOMINIUM_WITHHOLDING } from "./contractor-other-schemes.ts";
 
 const IT_LIPE_2026: TaxReturnPack = {
   code: "IT_LIPE",
@@ -33,6 +34,7 @@ export const ITALY_TAX_PACK: CountryTaxPackDefinition = {
   version: "2026.08.01",
   country: "IT",
   name: "Italy",
+  contractorWithholdingSchemes: [IT_CONDOMINIUM_WITHHOLDING],
   countryTaxType: "vat",
   parentReturnPackCode: "IT_LIPE",
   completeness: {

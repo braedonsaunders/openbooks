@@ -346,6 +346,13 @@ export const documentLines = pgTable(
      */
     taxOverridden: boolean("tax_overridden").notNull().default(false),
     /**
+     * How a bill line counts toward contractor withholding (CIS, § 48 EStG,
+     * RCT): labour, materials the subcontractor supplied, or a supply
+     * outside the scheme. Unset lines are classified from the item.
+     */
+    withholdingTreatment: text("withholding_treatment", { enum: ["labour", "materials", "excluded"] }),
+    withholdingMaterialsCost: money("withholding_materials_cost"),
+    /**
      * Marketplace facilitator collecting this line's tax (its name in
      * marketplace_facilitators), or NULL when the merchant collects. The
      * per-line toggle writes here; recalculation rebuilds component rows

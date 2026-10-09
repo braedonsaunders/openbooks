@@ -163,6 +163,7 @@ export async function loadPaymentFlyout({
         bankAccountId: banks.rows.length === 1 ? banks.rows[0]!.id : null,
         allocations: [],
         applied: [],
+        withholdingEnabled: kind === 'vendor_payment' && await isFeatureEnabled(orgId, 'contractorWithholding'),
       } as PaymentPayload,
       initialOpenItems: [],
       parties: parties.rows,

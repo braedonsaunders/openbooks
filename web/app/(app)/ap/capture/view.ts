@@ -1,3 +1,4 @@
+import { isFeatureEnabled } from '@/lib/features'
 import 'server-only'
 
 import { getTranslations } from 'next-intl/server'
@@ -222,8 +223,9 @@ export async function loadApCapture(
       }
     }
   }
-  const captureOperational = Boolean(((globalResult) as unknown as { rows: { enabled: boolean }[] }).rows[0]?.enabled)
-    && captureSettings.enabled && captureSettings.hasKey && Boolean(captureSettings.endpoint)
+  const structuredInvoicesEnabled = await isFeatureEnabled(authz.user.orgId, 'einvoicing')
+  const captureOperational = structuredInvoicesEnabled || (Boolean(((globalResult) as unknown as { rows: { enabled: boolean }[] }).rows[0]?.enabled)
+    && captureSettings.enabled && captureSettings.hasKey && Boolean(captureSettings.endpoint))
   const drawer: ApCaptureDrawer | null = detail && options
     ? {
         remountKey: String(detail.id),

@@ -19,6 +19,7 @@ import type { SetupEntity } from './types'
 import { AI_CAPABILITIES_ENTITY } from './hrm-ai-rails'
 import { BENEFIT_TRANSACTION_POLICY_ENTITY } from './benefit-transaction-policy'
 import { SETUP_GROUPS } from './types'
+import { CONTRACTOR_WITHHOLDING_ENTITIES } from './entities/contractor-withholding'
 import { COMPANY_ENTITIES } from './entities/company'
 import { CALENDAR_ENTITIES } from './entities/calendars'
 import { ACCOUNTING_ENTITIES } from './entities/accounting'
@@ -28,6 +29,7 @@ import { DIMENSION_ENTITIES } from './entities/dimensions'
 import { BILLING_ENTITIES } from './entities/billing'
 import { SALES_SETUP_ENTITIES } from './entities/sales'
 import { STORED_VALUE_ENTITIES } from './entities/stored-value'
+import { EINVOICING_ENTITIES } from './entities/einvoicing'
 import { REVENUE_ENTITIES } from './entities/revenue'
 import { INVENTORY_ENTITIES } from './entities/inventory'
 import { WAREHOUSE_ENTITIES } from './entities/warehouses'
@@ -58,10 +60,12 @@ export const SETUP_ENTITIES: SetupEntity[] = [
   INTERNAL_BILLING_RULES_ENTITY,
   ...CALENDAR_ENTITIES,
   ...TAX_ENTITIES,
+  ...CONTRACTOR_WITHHOLDING_ENTITIES,
   ...DIMENSION_ENTITIES,
   ...BILLING_ENTITIES,
   ...SALES_SETUP_ENTITIES,
   ...STORED_VALUE_ENTITIES,
+  ...EINVOICING_ENTITIES,
   ...REVENUE_ENTITIES,
   ...INVENTORY_ENTITIES,
   ...WAREHOUSE_ENTITIES,

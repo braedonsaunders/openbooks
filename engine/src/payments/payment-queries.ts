@@ -1,3 +1,5 @@
+import { contractorWithholdingScheme } from "../country-tax-packs/index.ts";
+import { orgFeatureEnabled } from "../organization/org-feature-lock.ts";
 import { sql } from "drizzle-orm";
 import { db, orgContext } from "../platform/db.ts";
 import { cmp, fromUnits, sum, toUnits } from "../money/money.ts";
@@ -406,6 +408,12 @@ export async function loadPaymentDocument(id: string, kind: PaymentKind, orgId: 
   return {
     doc: row,
     bankAccountId: custom.bankAccountId ?? null,
+    withholdingEnabled: kind === "vendor_payment" && await orgFeatureEnabled(orgId, "contractorWithholding"),
+    withholdingAuthorisationRequired: Array.isArray((row.custom as { withholdings?: unknown } | null)?.withholdings)
+      && ((row.custom as { withholdings: Array<{ schemeCode?: string }> }).withholdings).some(deduction => contractorWithholdingScheme(deduction.schemeCode ?? '')?.paymentAuthorisation === "required"),
+    withholdingAuthorisationCurrency: Array.isArray((row.custom as { withholdings?: unknown } | null)?.withholdings)
+      ? ((row.custom as { withholdings: Array<{ schemeCode?: string }> }).withholdings).map(deduction => contractorWithholdingScheme(deduction.schemeCode ?? '')).find(scheme => scheme?.paymentAuthorisation === "required")?.currency ?? null
+      : null,
     allocations: custom.allocations ?? [],
     applied,
   };

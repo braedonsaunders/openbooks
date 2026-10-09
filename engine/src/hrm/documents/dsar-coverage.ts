@@ -161,6 +161,18 @@ export interface DsarExcludedTable {
 
 export const DSAR_EXCLUDED_TABLES: readonly DsarExcludedTable[] = [
   {
+    table: "withholding_standings",
+    reason: "a subcontractor's statutory withholding standing is a counterparty tax record; finance remit.",
+  },
+  {
+    table: "withholding_deductions",
+    reason: "statutory deductions from payments to a subcontractor are filed tax evidence; finance remit.",
+  },
+  {
+    table: "withholding_enrollments",
+    reason: "the tax authority a contractor remits to is a counterparty reference, not a personal record.",
+  },
+  {
     table: "customer_item_refs",
     reason: "customer product codes and item mappings are business reference data, not personal records.",
   },

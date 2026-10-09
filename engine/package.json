@@ -47,6 +47,8 @@
     "typecheck": "tsc --noEmit"
   },
   "exports": {
+    "./einvoice/profiles": "./src/einvoice/profiles.ts",
+    "./einvoice/codes": "./src/einvoice/codes.ts",
     "./sample-companies": "./src/sample-companies/public.ts",
     "./documents": "./src/ledger/public.ts",
     "./documents/write": "./src/ledger/document-write.ts",
@@ -155,6 +157,13 @@
     "./platform/time-zone": "./src/platform/time-zone.ts",
     "./payroll/business-calendars": "./src/payroll/business-calendars.ts",
     "./documents/posting-effects-errors": "./src/ledger/posting-effects-errors.ts",
-    "./internal-billing": "./src/internal-billing/public.ts"
+    "./internal-billing": "./src/internal-billing/public.ts",
+    "./einvoice": "./src/einvoice/public.ts",
+    "./contractor-withholding": "./src/contractor-withholding/public.ts",
+    "./country-tax-packs": "./src/country-tax-packs/index.ts",
+    "./allocations/withholding-cost": "./src/allocations/withholding-cost.ts",
+    "./payables/einvoice": "./src/payables/ap-einvoice.ts",
+    "./einvoice/dates": "./src/einvoice/xml.ts",
+    "./einvoice/bank": "./src/einvoice/bank.ts"
   }
 }

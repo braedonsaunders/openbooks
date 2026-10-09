@@ -75,6 +75,8 @@ const IMMUTABLE_PARTY_REFS: readonly (readonly [table: string, column: string])[
   // booking keeps both, so the history of who went where is never rewritten.
   ["schedule_entries", "worker_party_id"],
   ["schedule_entries", "customer_party_id"],
+  // Deductions are filed statutory evidence of payments to the named payee.
+  ["withholding_deductions", "party_id"],
 ];
 
 const IMMUTABLE_PARTY_REF_LABELS: Readonly<Record<string, string>> = {
@@ -88,6 +90,7 @@ const IMMUTABLE_PARTY_REF_LABELS: Readonly<Record<string, string>> = {
   hrm_shifts: "shift authorship evidence",
   hrm_shift_requests: "shift request authorship evidence",
   schedule_entries: "booking history",
+  withholding_deductions: "contractor withholding deductions",
 };
 
 const SIMPLE_PARTY_REFS: readonly (readonly [table: string, column: string])[] = [
@@ -97,6 +100,7 @@ const SIMPLE_PARTY_REFS: readonly (readonly [table: string, column: string])[] =
   ["compliance_records", "party_id"],
   ["compliance_release_checks", "party_id"],
   ["compliance_waivers", "party_id"],
+  ["withholding_enrollments", "authority_party_id"],
   ["consolidation_groups", "payer_party_id"],
   ["contacts", "party_id"],
   // Capitalized contract costs follow the surviving party wholesale: the
@@ -291,6 +295,15 @@ interface GuardedPartyRef {
  * rows the index actually constrains can conflict.
  */
 const GUARDED_PARTY_REFS: readonly GuardedPartyRef[] = [
+  {
+    // Active standings under one scheme never overlap for a payee. A
+    // conflicting standing stays with the absorbed party for review.
+    table: "withholding_standings",
+    column: "party_id",
+    conflict:
+      "s.org_id = d.org_id and s.scheme_code = d.scheme_code and s.status = 'active' and d.status = 'active'" +
+      " and daterange(s.valid_from, s.valid_to, '[]') && daterange(d.valid_from, d.valid_to, '[]')",
+  },
   {
     // One default method per customer backs the autopay charge target. Keep
     // the absorbed party's default with it when the survivor already has

@@ -137,6 +137,117 @@ export interface CountryTaxPackCompleteness {
 }
 
 /**
+ * One rate band of a contractor withholding scheme (for example the UK CIS
+ * "net" band). The rate schedule is effective-dated so a statutory change
+ * never reprices a payment already made.
+ */
+export interface ContractorWithholdingBand {
+  code: string;
+  name: string;
+  rates: readonly EffectiveTaxRate[];
+  /** A payee is deducted at this band only on a verification current at the payment date. */
+  requiresVerification: boolean;
+}
+
+/**
+ * Annual per-payee exemption limit. The declared amounts are thresholds of
+ * the Freigrenze kind: while a payee's consideration for the calendar year
+ * stays at or below the limit nothing is deducted, and once it is exceeded
+ * the whole year's consideration becomes subject to deduction.
+ */
+export interface ContractorWithholdingThreshold {
+  excludesVerifiedZeroRateConsideration?: boolean;
+  excessCatchUpNotDue?: boolean;
+  limits: ReadonlyArray<{
+    amount: string;
+    effectiveFrom: string;
+    effectiveTo?: string;
+    /** Enrollment basis that selects this limit; absent for the general limit. */
+    basis?: string;
+    sourceId: string;
+  }>;
+}
+
+/** Statutory due date relative to the end of a deduction period. */
+export interface ContractorWithholdingDueRule {
+  dayOfMonth: number;
+  monthsAfterPeriodEnd: number;
+}
+
+export interface ContractorWithholdingRemittanceSchedule {
+  code: string;
+  name: string;
+  kind: "monthly" | "italian_accumulated" | "us_lookback" | "us_monthly" | "us_semiweekly" | "us_annual_small_liability";
+  effectiveFrom: string;
+  effectiveTo?: string;
+  dayOfMonth?: number;
+  /** Accumulated withholding, distinct from a payee exemption threshold. */
+  accumulationThreshold?: string;
+  mandatoryCutoffs?: readonly { month: number; day: number }[];
+  sourceId: string;
+}
+
+/** An invoice policy template installed onto native tax codes, never a second tax engine. */
+export interface ContractorReverseChargeRuleDefinition {
+  code: string;
+  country: string;
+  name: string;
+  legalReference: string;
+  invoiceWording: string;
+  effectiveFrom: string;
+  applicability: string;
+  calculationType: "reverse_charge";
+  einvoiceCategory: "AE";
+  sources: readonly CountryTaxPackSource[];
+}
+
+/**
+ * A statutory scheme under which a contractor deducts tax from payments to
+ * subcontractors and pays it to the authority (UK CIS, German Bauabzugsteuer,
+ * Irish RCT). Packs declare schemes; the generic withholding engine branches
+ * only on these declarations.
+ */
+export interface ContractorWithholdingSchemeDefinition {
+  code: string;
+  country: string;
+  name: string;
+  authority: string;
+  legalReference: string;
+  /** Currency the scheme's returns and limits are denominated in. */
+  currency: string;
+  /** What the rate applies to: the payment, less what the scheme removes first. */
+  base: { excludesMaterials: boolean; excludesVat: boolean };
+  bands: readonly ContractorWithholdingBand[];
+  /** Band applied when no current verification supports a lower one; the highest rate. */
+  defaultBandCode: string;
+  /** The native vendor flag is the sole subject determination for US backup withholding. */
+  standingSource?: "recorded_standing" | "vendor_backup_withholding";
+  /** Enrollment must explicitly identify a condominium payer for Italian art. 25-ter. */
+  payerScope?: "condominium";
+  returnKind?: "statutory_periodic" | "annual_945" | "financial_workpaper";
+  returnFrequency?: "monthly" | "quarterly" | "annual";
+  returnFrequencies?: readonly ("monthly" | "quarterly" | "annual")[];
+  filingNotice?: string;
+  remittanceSchedules?: readonly ContractorWithholdingRemittanceSchedule[];
+  threshold?: ContractorWithholdingThreshold;
+  /** Monthly deduction periods starting on this day of the month. */
+  periodStartDay: number;
+  returnDue: ContractorWithholdingDueRule | null;
+  paymentDue: ContractorWithholdingDueRule | null;
+  /** Whether each payment needs an authority-issued deduction authorisation before it is made. */
+  paymentAuthorisation: "none" | "required";
+  /** Label of the contractor's scheme registration reference. */
+  contractorReferenceLabel: string;
+  /** Label of the payee's tax reference reported on returns and statements. */
+  payeeReferenceLabel: string;
+  /** Label of the verification evidence that supports a reduced band. */
+  verificationLabel: string;
+  /** Enrollment bases that select an alternative threshold limit. */
+  thresholdBases?: ReadonlyArray<{ code: string; name: string }>;
+  sources: readonly CountryTaxPackSource[];
+}
+
+/**
  * Versioned localization content. Installation copies controlled definitions
  * into tenant-owned tax tables; tenants never post against this in-memory
  * catalog directly and an upgrade never silently rewrites installed history.
@@ -164,4 +275,7 @@ export interface CountryTaxPackDefinition {
    * this union would otherwise become.
    */
   returnPackTaxCodes: Readonly<Record<string, CountryTaxCodeDefinition | readonly CountryTaxCodeDefinition[]>>;
+  /** Contractor withholding schemes this country operates. */
+  contractorWithholdingSchemes?: readonly ContractorWithholdingSchemeDefinition[];
+  reverseChargeRules?: readonly ContractorReverseChargeRuleDefinition[];
 }

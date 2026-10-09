@@ -76,11 +76,22 @@ export async function assertGeneratedBillingEdit(
   if (linked.length !== 1) refuse();
   const before = await documentSnapshot(tx, orgId, id);
   const after = { ...before.document, ...Object.fromEntries(Object.entries(patch).filter(([, v]) => v !== undefined)) };
-  if (!sameEconomics(before.document, before.lines, after, preparedLines ?? before.lines)) refuse();
+  // The native editor does not expose the line's party dimension. An omitted
+  // party may retain its source value only when stable identity proves the
+  // unchanged position; an explicit clear or replacement still refuses.
+  const submittedLines = Array.isArray(patch.lines) ? patch.lines as Row[] : null;
+  const comparedLines = preparedLines?.map((line, index) => {
+    const submitted = submittedLines?.[index], source = before.lines[index];
+    return source && line.partyId == null && submitted?.partyId === undefined && typeof submitted?.lineId === "string" &&
+      submitted.lineId.toLowerCase() === source.id
+      ? { ...line, partyId: source.partyId }
+      : line;
+  });
+  if (!sameEconomics(before.document, before.lines, after, comparedLines ?? before.lines)) refuse();
   // The editor addresses lines by their array position. Equal totals or an
   // unordered match cannot authorize changed descriptions, custom content,
   // tax override evidence, or a reordered source presentation.
-  if (preparedLines && canonical(before.lines.map(editableLineKey)) !== canonical(preparedLines.map(editableLineKey))) refuse();
+  if (comparedLines && canonical(before.lines.map(editableLineKey)) !== canonical(comparedLines.map(editableLineKey))) refuse();
   return true;
 }
 
