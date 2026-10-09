@@ -144,8 +144,10 @@ export interface SourceApplicationLink {
 export interface NativeChanges {
   /** Insert-ready native documents (headers + lines, ids resolved). */
   documents: NativeDocument[];
-  /** The FULL current application graph (the reconciler is delta-safe). */
+  /** Current application links. Partial pulls remain insert-only. */
   applications: SourceApplicationLink[];
+  /** Only an explicitly complete graph authorizes releasing source-owned settlements. */
+  applicationSnapshot?: "complete";
   /** Source refs the source system reports deleted (voided in openbooks). */
   deletedRefs: string[];
   /** Source-clock high-water mark to persist for the next incremental pull. */

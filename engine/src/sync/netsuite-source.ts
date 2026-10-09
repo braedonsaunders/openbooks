@@ -1508,34 +1508,18 @@ export class NetSuiteSource implements MigrationSource {
       documents.push(built.doc);
     }
 
-    // The application graph. A full sweep pulls the whole universe (~19 pages);
-    // an incremental mirror pulls links touched by THIS pull's changed set on
-    // EITHER side. NetSuite does not guarantee which side's lastmodifieddate a
-    // link change bumps: applying a journal to an invoice bumps the INVOICE
-    // while the paying journal keeps its old timestamp, so filtering on the
-    // paying side (nextdoc) alone silently misses settlements whose payer
-    // didn't change — the open item then stays open here while the source
-    // shows it settled, and the open-item gate fails deterministically.
-    // Duplicate rows from links whose both sides changed collapse in
-    // uniqueNetSuiteApplicationLinks, and the reconciler is delta-safe/
-    // insert-only so a wider pull never disturbs existing applications.
-    const links: NsApplicationLink[] = [];
-    if (effectiveSince) {
-      for (let i = 0; i < tids.length; i += 150) {
-        const chunk = tids.slice(i, i + 150);
-        if (chunk.length === 0) continue;
-        links.push(...(await this.q<NsApplicationLink>(
-          `SELECT previousdoc, previousline, nextdoc, nextline, foreignamount, BUILTIN.DF(t.currency) AS paycurrency, t.exchangerate AS payexrate FROM nexttransactionlinelink n JOIN transaction t ON t.id = n.nextdoc WHERE n.linktype = 'Payment' AND (n.nextdoc IN (${chunk.join(",")}) OR n.previousdoc IN (${chunk.join(",")})) ORDER BY n.previousdoc, n.previousline, n.nextdoc, n.nextline`,
-        )));
-      }
-    } else {
-      const partition = {
-        id: "applications",
-        sql: "SELECT n.previousdoc, n.previousline, n.nextdoc, n.nextline, n.foreignamount, BUILTIN.DF(t.currency) AS paycurrency, t.exchangerate AS payexrate FROM nexttransactionlinelink n JOIN transaction t ON t.id = n.nextdoc WHERE n.linktype = 'Payment' ORDER BY n.previousdoc, n.previousline, n.nextdoc, n.nextline",
-      };
-      const exported = await this.bridge.bulkQuery<NsApplicationLink>([partition]);
-      links.push(...(exported.get(partition.id) ?? []));
-    }
+    // Allocation removals do not reliably advance either transaction's
+    // modification clock. A complete graph is required even when document
+    // headers are incremental; an omitted link must never be interpreted as
+    // a release from a partial pull. Voiding journals remain real payment
+    // links, while the original bill links may become zero or disappear.
+    const partition = {
+      id: "applications",
+      sql: "SELECT n.previousdoc, n.previousline, n.nextdoc, n.nextline, n.foreignamount, BUILTIN.DF(t.currency) AS paycurrency, t.exchangerate AS payexrate FROM nexttransactionlinelink n JOIN transaction t ON t.id = n.nextdoc WHERE n.linktype = 'Payment' ORDER BY n.previousdoc, n.previousline, n.nextdoc, n.nextline",
+    };
+    const exported = await this.bridge.bulkQuery<NsApplicationLink>([partition]);
+    const links = exported.get(partition.id);
+    if (!links) throw new Error("NetSuite application export is incomplete; settlements were not reconciled");
     const applications = toSourceApplicationLinks(links, this.baseCurrency);
 
     // Pull deletion tombstones without attaching code to transaction saves.
@@ -1552,6 +1536,7 @@ export class NetSuiteSource implements MigrationSource {
     return {
       documents,
       applications,
+      applicationSnapshot: "complete",
       deletedRefs: [...new Set(deletedRefs)],
       syncedThrough,
       unbuildable,

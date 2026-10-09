@@ -2290,9 +2290,18 @@ export async function runSync(
       },
       true,
     );
+    if (changes.applicationSnapshot === "complete" && !connectionId) {
+      throw new Error("complete settlement reconciliation requires its source connection");
+    }
     const applications =
-      changes.applications.length > 0
-        ? await reconcileApplications(org.id, refKey, changes.applications)
+      changes.applications.length > 0 || changes.applicationSnapshot === "complete"
+        ? await reconcileApplications(org.id, refKey, changes.applications,
+            changes.applicationSnapshot === "complete" ? {
+              complete: true,
+              connectionId: connectionId!,
+              source: source.name,
+              syncRunId: run!.id,
+            } : undefined)
         : null;
 
     // -- 6b. GL residual trueup: bring in API-opaque sub-ledger GL (inventory

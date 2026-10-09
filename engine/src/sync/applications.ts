@@ -6,6 +6,10 @@ import { postEntry } from "../journal/post-entry.ts";
 import { divRate, fromUnits, mulRate, toUnits } from "../money/money.ts";
 import { lockApplicationEvidenceWithQuery } from "../records/application-lock.ts";
 import type { SourceApplicationLink } from "./source.ts";
+import {
+  releaseSourceApplications, sourceApplicationEvidence, sourceConnectionDocumentPredicate,
+  type CompleteApplicationSnapshot,
+} from "./application-snapshot.ts";
 
 const applicationLockDialect = new PgDialect();
 
@@ -30,9 +34,10 @@ function lockApplicationEvidenceOnClient(
  *
  * Given the SOURCE system's application links (payment/credit → the open item
  * it settled, e.g. NetSuite's nexttransactionlinelink linktype='Payment'),
- * reconcile openbooks `applications` to match. DELTA-SAFE and idempotent:
- * existing applied amounts per line AND per (payment, applied) pair are
- * hydrated first, so re-running inserts only what's missing — never duplicates.
+ * reconcile openbooks `applications` to match. Partial pulls insert only
+ * missing deltas. An explicitly complete, connection-owned graph also
+ * releases removed/reduced source allocations with retained audited evidence.
+ * Existing amounts and endpoint capacities make both paths replay-safe.
  *
  * Both sides resolve to their posted entry's OPEN AR/AP line (is_open_item),
  * which includes journal legs (openbooks applies ANY crediting document).
@@ -108,6 +113,9 @@ export interface ApplyStats {
   alreadySettled: number;
   skippedNoLine: number;
   unallocated: string;
+  /** Present only when a complete, connection-owned source graph was reconciled. */
+  released?: number;
+  releasedAmount?: string;
 }
 
 interface OpenLine {
@@ -352,6 +360,7 @@ export async function reconcileApplications(
   orgId: string,
   refKey: string,
   links: SourceApplicationLink[],
+  snapshot?: CompleteApplicationSnapshot,
 ): Promise<ApplyStats> {
   // -- target: stated links per (payment, applied) pair -----------------------
   // Amounts stay STATED here: each pair resolves to functional at allocation
@@ -380,6 +389,7 @@ export async function reconcileApplications(
   let alreadySettled = 0;
   let skippedNoLine = 0;
   let unallocated = 0n;
+  let released = { count: 0, amount: "0.0000" };
   try {
     await client.query("begin");
     await client.query(
@@ -408,7 +418,11 @@ export async function reconcileApplications(
     // the join below would acquire the same rows in join-scan order, which
     // deadlocks against those writers' order. So scope the ids through the
     // join first (no locks), then lock exactly that set.
-    const batchRefs = [...new Set(links.flatMap((l) => [l.paymentRef, l.appliedRef]))];
+    const priorEvidence = snapshot ? await sourceApplicationEvidence(client, orgId, refKey, snapshot) : [];
+    const batchRefs = [...new Set([
+      ...links.flatMap((l) => [l.paymentRef, l.appliedRef]),
+      ...priorEvidence.flatMap((row) => [row.payment_ref, row.applied_ref]),
+    ])];
     if (batchRefs.length > 0) {
       const scoped = await client.query<{ id: string }>(
         `select l.id
@@ -418,10 +432,19 @@ export async function reconcileApplications(
           where l.org_id = $1
             -- Live entries only: lock exactly the endpoint set the hydration below reads.
             and e.status = 'posted'
-            and d.custom->>$2 = any($3)`,
-        [orgId, refKey, batchRefs],
+            and d.custom->>$2 = any($3)
+            ${snapshot ? `and ${sourceConnectionDocumentPredicate("d", "$4", "$5")}` : ""}`,
+        snapshot ? [orgId, refKey, batchRefs, snapshot.connectionId, snapshot.source] : [orgId, refKey, batchRefs],
       );
-      const lockIds = [...new Set(scoped.rows.map((r) => r.id))];
+      const fxIds = [...new Set(priorEvidence.flatMap((row) => row.fx_gain_loss_entry_id ? [row.fx_gain_loss_entry_id] : []))];
+      const fxLines = fxIds.length ? (await client.query<{ id: string }>(
+        "select id from journal_lines where org_id=$1 and entry_id=any($2::uuid[])", [orgId, fxIds],
+      )).rows : [];
+      const lockIds = [...new Set([
+        ...scoped.rows.map((r) => r.id),
+        ...priorEvidence.flatMap((row) => [row.from_line_id, row.to_line_id]),
+        ...fxLines.map((row) => row.id),
+      ])];
       if (lockIds.length > 0) await lockApplicationEvidenceOnClient(client, orgId, lockIds);
     }
 
@@ -446,11 +469,16 @@ export async function reconcileApplications(
        -- Live entries only: a reversed entry no longer carries a settleable open item.
        where e.status = 'posted' and d.org_id = $1
          and a.type in ('liability_payable', 'asset_receivable')
-         and d.custom->>$2 is not null`, [orgId, refKey]);
+         and d.custom->>$2 is not null
+         ${snapshot ? `and ${sourceConnectionDocumentPredicate("d", "$3", "$4")}` : ""}`,
+      snapshot ? [orgId, refKey, snapshot.connectionId, snapshot.source] : [orgId, refKey]);
 
     const linesByRef = new Map<string, OpenLine[]>();
     for (const r of lineRows.rows) {
       const arr = linesByRef.get(r.ref) ?? [];
+      if (snapshot && arr.some((line) => line.documentId !== r.document_id)) {
+        throw new Error(`source application reference ${r.ref} names multiple connection-owned documents`);
+      }
       arr.push({
         lineId: r.line_id,
         entryId: r.entry_id,
@@ -472,6 +500,54 @@ export async function reconcileApplications(
       linesByRef.set(r.ref, arr);
     }
     for (const arr of linesByRef.values()) arr.sort((a, b) => a.lineNo - b.lineNo);
+
+    if (snapshot) {
+      const evidence = await sourceApplicationEvidence(client, orgId, refKey, snapshot);
+      const priorIds = new Set(priorEvidence.map((row) => row.id));
+      if (evidence.some((row) => !priorIds.has(row.id))) {
+        throw new Error("source settlement graph changed before its endpoints were locked; retry the mirror");
+      }
+      // A reduction/removal changes the payer's allocation graph. Release
+      // that payer's source-owned rows together so a realized-FX group is
+      // reversed once, then use the ordinary allocator for its current graph.
+      const ownedByPair = new Map<string, bigint>();
+      const evidenceByPair = new Map<string, typeof evidence[number]>();
+      for (const row of evidence) {
+        const key = `${row.payment_ref}|${row.applied_ref}`;
+        ownedByPair.set(key, (ownedByPair.get(key) ?? 0n) + toUnits(row.source_amount));
+        evidenceByPair.set(key, row);
+      }
+      const totals = await client.query<{ payment_ref: string; applied_ref: string; amount: string }>(`
+        select df.custom->>$2 as payment_ref,dt.custom->>$2 as applied_ref,sum(a.source_amount)::text as amount
+          from applications a
+          join journal_lines lf on lf.org_id=a.org_id and lf.id=a.from_line_id
+          join journal_entries ef on ef.org_id=a.org_id and ef.id=lf.entry_id
+          join documents df on df.org_id=a.org_id and df.id=ef.source_document_id
+          join journal_lines lt on lt.org_id=a.org_id and lt.id=a.to_line_id
+          join journal_entries et on et.org_id=a.org_id and et.id=lt.entry_id
+          join documents dt on dt.org_id=a.org_id and dt.id=et.source_document_id
+         where a.org_id=$1 and a.unapplied_at is null
+           and ${sourceConnectionDocumentPredicate("df", "$3", "$4")}
+           and ${sourceConnectionDocumentPredicate("dt", "$3", "$4")}
+         group by 1,2`, [orgId, refKey, snapshot.connectionId, snapshot.source]);
+      const totalByPair = new Map(totals.rows.map((row) => [`${row.payment_ref}|${row.applied_ref}`, toUnits(row.amount)]));
+      const changedPayers = new Set<string>();
+      for (const [key, owned] of ownedByPair) {
+        const row = evidenceByPair.get(key)!;
+        const payLine = linesByRef.get(row.payment_ref)?.[0];
+        if (!payLine) throw new Error(`source settlement ${row.payment_ref} no longer has a current posted endpoint`);
+        const wanted = (target.get(key) ?? []).reduce((amount, link) => amount + resolveLinkFunctional(link, payLine), 0n);
+        const total = totalByPair.get(key) ?? 0n;
+        if (total <= wanted) continue;
+        if (total - owned > wanted) {
+          throw new Error(`source settlement ${row.payment_ref}→${row.applied_ref} conflicts with a manual allocation; manual evidence was preserved`);
+        }
+        changedPayers.add(row.payment_ref);
+      }
+      released = await releaseSourceApplications(client, orgId, snapshot,
+        evidence.filter((row) => changedPayers.has(row.payment_ref)),
+        (preferred) => allocateFxEntryNumber(client, orgId, preferred));
+    }
 
     // -- hydrate what's already applied ------------------------------------------
     // per line (both roles), to reduce remaining capacity. The carrying and
@@ -518,7 +594,9 @@ export async function reconcileApplications(
         join documents dt on dt.id = et.source_document_id and dt.org_id = et.org_id
        where ap.org_id = $1 and ap.unapplied_at is null
          and df.custom->>$2 is not null and dt.custom->>$2 is not null
-       group by 1, 2`, [orgId, refKey]);
+         ${snapshot ? `and ${sourceConnectionDocumentPredicate("df", "$3", "$4")}
+                      and ${sourceConnectionDocumentPredicate("dt", "$3", "$4")}` : ""}
+       group by 1, 2`, snapshot ? [orgId, refKey, snapshot.connectionId, snapshot.source] : [orgId, refKey]);
     for (const r of pairRows.rows) {
       existingPair.set(`${r.pay_ref}|${r.app_ref}`, toUnits(r.amt));
     }
@@ -549,6 +627,12 @@ export async function reconcileApplications(
       if (allocation.alreadySettled) { alreadySettled++; continue; }
       toInsert.push(...allocation.rows);
       unallocated += allocation.unallocated;
+    }
+
+    if (snapshot && (skippedNoLine > 0 || unallocated > 0n)) {
+      throw new Error(
+        `complete source settlement graph could not be allocated: ${skippedNoLine} missing endpoints, ${fromUnits(unallocated)} unallocated; previous settlements were preserved`,
+      );
     }
 
     // A foreign-currency settlement may consume different functional carrying
@@ -672,16 +756,28 @@ export async function reconcileApplications(
         values.push(`($1, $${b + 1}, $${b + 2}, $${b + 3}, $${b + 4}, $${b + 5}, $${b + 6}, $${b + 7}, $${b + 8}, $${b + 9}, $${b + 10}, $${b + 11}, $${b + 12}, $${b + 13})`);
         insertedUnits += row.amount;
       }
-      await client.query(
+      const written = await client.query<{ id: string }>(
         `insert into applications
           (org_id, from_line_id, to_line_id, amount, source_amount,
            source_transaction_amount, source_transaction_currency,
            target_transaction_amount, target_transaction_currency,
            settlement_rate, settlement_rate_source, settlement_rate_reference,
            applied_on, fx_gain_loss_entry_id)
-         values ${values.join(",")}`,
+         values ${values.join(",")} returning id`,
         params,
       );
+      if (written.rows.length !== chunk.length) throw new Error("source settlement allocations were not fully recorded");
+      if (snapshot) {
+        const audited = await client.query(
+          `insert into audit_log(org_id,table_name,row_id,action,changes,actor_id,request_id)
+           select a.org_id,'applications',a.id,'insert',
+             jsonb_build_object('source','mirror','reason','source_settlement_allocation_current',
+               'connectionId',$3::text,'syncRunId',$4::text,'after',to_jsonb(a)),null,'sync.applications'
+           from applications a where a.org_id=$1 and a.id=any($2::uuid[]) returning id`,
+          [orgId, written.rows.map((row) => row.id), snapshot.connectionId, snapshot.syncRunId ?? null],
+        );
+        if (audited.rows.length !== chunk.length) throw new Error("source settlement allocation audit was not fully recorded");
+      }
       inserted += chunk.length;
     }
     await client.query("commit");
@@ -699,6 +795,7 @@ export async function reconcileApplications(
     alreadySettled,
     skippedNoLine,
     unallocated: fromUnits(unallocated),
+    ...(snapshot ? { released: released.count, releasedAmount: released.amount } : {}),
   };
 }
 
