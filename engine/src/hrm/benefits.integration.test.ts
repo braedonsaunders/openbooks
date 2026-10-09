@@ -37,6 +37,7 @@ import {
   endEnrollment,
   endEnrollmentsForTermination,
   waiveEnrollment,
+  withdrawUnusedEnrollment,
 } from "./benefits/enrollments.ts";
 import {
   linkDependent,
@@ -198,6 +199,49 @@ test("elect happy path stores fixed contribution terms and evidences activation"
     const terms = (await db.execute<{ rate: string; mode: string }>(sql`select elected_rate::text as rate,election_mode as mode from hrm_benefit_enrollment_terms where enrollment_id=${dto.id} order by elected_rate`)).rows;
     assert.deepEqual(terms.map(t => [t.rate,t.mode]), [['250.0000000000','fixed'],['500.0000000000','fixed']]);
     assert.deepEqual((await eventsOf(dto.id)).map((e) => e.kind), ["elected", "activated"]);
+  });
+});
+
+test("unused coverage withdrawal preserves approved evidence and permits a newly approved replacement", { skip: !DB }, async () => {
+  await withHarness(() => setupHarness(BENEFITS_SPEC), async h => {
+    const { employmentId } = await seedEmployment(h.org.orgId, h.org.subsidiaryId);
+    const { planId } = await seedPlan(h.org.orgId);
+    const terms = await seededContributionTerms(h.org.orgId, planId);
+    const first = await electEnrollment({ orgId: h.org.orgId, actorId: h.adminId, employmentId, planId,
+      effectiveFrom: "2026-03-01", lifeEventReason: "Contribution election", contributionTerms: terms });
+    const evidence = async () => (await db.execute(sql`select submission_snapshot,decision_snapshot,effective_from,effective_to
+      from hrm_benefit_enrollments where org_id=${h.org.orgId} and id=${first.id}`)).rows[0];
+    const original = await evidence();
+    await assertStorageRefusal(db.execute(sql`update hrm_benefit_enrollments set status='cancelled',ended_reason='Correction',updated_by=${h.adminId}
+      where org_id=${h.org.orgId} and id=${first.id}`), /lifecycle transition/i);
+    const result = await withdrawUnusedEnrollment({ orgId: h.org.orgId, actorId: h.adminId, enrollmentId: first.id,
+      reason: "Incorrect contribution basis" });
+    assert.equal(result.status, "cancelled");
+    assert.deepEqual(await evidence(), original);
+    assert.match((await eventsOf(first.id)).at(-1)!.reason, /Incorrect contribution basis/);
+    await assert.rejects(withdrawUnusedEnrollment({ orgId: h.org.orgId, actorId: h.adminId, enrollmentId: first.id,
+      reason: "Repeated withdrawal" }), /Only active unused coverage/);
+    await db.execute(sql`update hrm_benefit_plans set approval_mode='flows' where org_id=${h.org.orgId} and id=${planId}`);
+    await seedApprovalFlow(h.org.orgId, { subjectKind: 'hrm_benefit_enrollment', assignees: [{ type: 'user', userId: h.adminId }], mode: 'any', preventSelfApproval: false });
+    const replacement = await electEnrollment({ orgId: h.org.orgId, actorId: h.adminId, employmentId, planId,
+      effectiveFrom: "2026-03-01", lifeEventReason: "Corrected contribution basis", contributionTerms: terms });
+    assert.equal(replacement.status, "pending_approval");
+  });
+});
+
+test("unused coverage withdrawal refuses an outstanding successor proposal", { skip: !DB }, async () => {
+  await withHarness(() => setupHarness(BENEFITS_SPEC), async h => {
+    const { employmentId } = await seedEmployment(h.org.orgId, h.org.subsidiaryId);
+    const { planId } = await seedPlan(h.org.orgId);
+    const first = await electEnrollment({ orgId: h.org.orgId, actorId: h.adminId, employmentId, planId,
+      effectiveFrom: "2026-03-01", lifeEventReason: "Contribution election", contributionTerms: await seededContributionTerms(h.org.orgId, planId) });
+    await db.execute(sql`update hrm_benefit_plans set approval_mode='flows' where org_id=${h.org.orgId} and id=${planId}`);
+    await seedApprovalFlow(h.org.orgId, { subjectKind: 'hrm_benefit_enrollment', assignees: [{ type: 'user', userId: h.adminId }], mode: 'any', preventSelfApproval: false });
+    await changeEnrollment({ orgId: h.org.orgId, actorId: h.adminId, enrollmentId: first.id,
+      changeDate: "2026-04-01", reason: "Contribution change" });
+    await assert.rejects(withdrawUnusedEnrollment({ orgId: h.org.orgId, actorId: h.adminId, enrollmentId: first.id,
+      reason: "Incorrect contribution basis" }), /successor election awaits approval/);
+    assert.equal((await enrollmentsOf(h.org.orgId, employmentId)).find(e => e.id === first.id)!.status, "active");
   });
 });
 

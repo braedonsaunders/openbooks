@@ -3441,7 +3441,9 @@
     "plan": "Plan",
     "currency": "Currency",
     "from": "Effective from",
-    "to": "Effective to"
+    "to": "Effective to",
+    "withdrawUnused": "Withdraw unused coverage",
+    "withdrawUnusedReason": "Reason for withdrawal (coverage with payroll history must use a dated successor)"
   },
   "benefitPolicies": {
     "title": "Policies",

@@ -3441,7 +3441,9 @@
     "plan": "Plano",
     "currency": "Moeda",
     "from": "Vigente desde",
-    "to": "Vigente até"
+    "to": "Vigente até",
+    "withdrawUnused": "Retirar cobertura não utilizada",
+    "withdrawUnusedReason": "Motivo da retirada (cobertura com histórico de folha exige uma sucessora com data)"
   },
   "benefitPolicies": {
     "title": "Políticas",
