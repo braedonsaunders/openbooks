@@ -3,7 +3,7 @@
 
 export * from './types'
 export * from './page'
-export { pdfColor, pdfContrastText } from './color'
+export { pdfColor, pdfContrastText, pdfColorTint } from './color'
 export { drawTable, computeColumnWidths, pdfCellText } from './table'
 export { renderPdfDocument } from './document'
 export { renderStatementPdf } from './statement'

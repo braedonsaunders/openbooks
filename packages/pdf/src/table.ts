@@ -11,7 +11,7 @@
 import type PDFKit from 'pdfkit'
 import type { PdfCellStyle, PdfTableCell, PdfColumnAlign, PdfColumnStyle, PdfTableGroup, PdfTheme } from './types'
 import type { ResolvedPage } from './page'
-import { pdfColor, pdfContrastText } from './color'
+import { pdfColor, pdfContrastText, pdfColorTint } from './color'
 
 const MIN_COL_W = 36
 const MAX_COL_FRAC = 0.62
@@ -119,7 +119,7 @@ export function drawTable(
     for (let i = 0; i < group.columns.length; i++) {
       const style = group.columnStyles?.[i]?.header
       if (style?.backgroundColor) doc.rect(colX[i]!, topY, widths[i]!, headerHeight).fill(pdfColor(style.backgroundColor, theme.headerFill))
-      doc.font(style?.bold === false ? theme.font : theme.fontBold).fontSize(theme.table)
+      doc.font(style?.bold === true || (style?.bold === undefined && theme.design !== 'modern') ? theme.fontBold : theme.font).fontSize(theme.table)
         .fillColor(style?.textColor ? pdfColor(style.textColor, theme.headerText) : style?.backgroundColor ? pdfContrastText(style.backgroundColor) : theme.headerText)
       const ax = colX[i]! + theme.cellPadX
       const aw = widths[i]! - theme.cellPadX * 2
@@ -191,7 +191,7 @@ export function drawTable(
       // still self-describing (particularly important for account-grouped
       // General Ledger exports).
       if (group.kind === 'section') {
-        doc.font(theme.fontBold).fontSize(theme.h2).fillColor(theme.primary)
+        doc.font(theme.design === 'modern' ? theme.font : theme.fontBold).fontSize(theme.h2).fillColor(theme.design === 'modern' ? theme.text : theme.primary)
         doc.text(group.title, page.contentLeft, y, {
           width: page.contentWidth,
           lineBreak: true,
@@ -214,16 +214,21 @@ export function drawTable(
       const v = row[i]
       const base = group.columnStyles?.[i]?.body
       const style: PdfCellStyle = { ...base, ...(styledCell(v) ? v : {}) }
-      if (style.backgroundColor) doc.rect(colX[i]!, rowTop, widths[i]!, rowHeight).fill(pdfColor(style.backgroundColor, '#ffffff'))
+      const dataColor = styledCell(v) ? v.backgroundColor : undefined
+      const fill = style.backgroundColor ? theme.colorTreatment === 'subtle' && dataColor ? pdfColorTint(style.backgroundColor, theme.colorIntensity) : pdfColor(style.backgroundColor, '#ffffff') : undefined
+      if (fill) doc.rect(colX[i]!, rowTop, widths[i]!, rowHeight).fill(fill)
+      if (dataColor && theme.colorTreatment === 'subtle') doc.rect(colX[i]! + 1, rowTop + 2, 2, Math.max(1, rowHeight - 4)).fill(pdfColor(dataColor, '#ffffff'))
       doc.font(style.bold ? theme.fontBold : theme.font).fontSize(theme.table)
-        .fillColor(style.textColor ? pdfColor(style.textColor, theme.text) : style.backgroundColor ? pdfContrastText(style.backgroundColor) : theme.text)
+        .fillColor(style.textColor ? pdfColor(style.textColor, theme.text) : fill ? pdfContrastText(fill) : theme.text)
       if (styledCell(v) && v.segments?.length) {
         let segmentY = rowTop + theme.cellPadY
         for (const segment of v.segments) {
           doc.font(segment.bold ? theme.fontBold : theme.font).fontSize(theme.table)
           const textHeight = doc.heightOfString(segment.text, { width: aw, align: aligns[i] ?? 'left' })
-          if (segment.backgroundColor) doc.rect(colX[i]! + 1, segmentY - 1, widths[i]! - 2, textHeight + 2).fill(pdfColor(segment.backgroundColor, '#ffffff'))
-          doc.fillColor(segment.textColor ? pdfColor(segment.textColor, theme.text) : segment.backgroundColor ? pdfContrastText(segment.backgroundColor) : style.backgroundColor ? pdfContrastText(style.backgroundColor) : theme.text)
+          const segmentFill = segment.backgroundColor ? theme.colorTreatment === 'subtle' ? pdfColorTint(segment.backgroundColor, theme.colorIntensity) : pdfColor(segment.backgroundColor, '#ffffff') : fill
+          if (segmentFill) doc.rect(colX[i]! + 1, segmentY - 1, widths[i]! - 2, textHeight + 2).fill(segmentFill)
+          if (segment.backgroundColor && theme.colorTreatment === 'subtle') doc.rect(colX[i]! + 1, segmentY - 1, 2, textHeight + 2).fill(pdfColor(segment.backgroundColor, '#ffffff'))
+          doc.fillColor(segment.textColor ? pdfColor(segment.textColor, theme.text) : segmentFill ? pdfContrastText(segmentFill) : theme.text)
           doc.text(segment.text, ax, segmentY, { width: aw, align: aligns[i] ?? 'left', height: textHeight + 0.5, ellipsis: false })
           segmentY += textHeight + theme.cellPadY
         }

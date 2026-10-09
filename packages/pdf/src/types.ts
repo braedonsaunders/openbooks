@@ -76,6 +76,9 @@ export const DEFAULT_PRIMARY_COLOR = '#0f766e'
 
 /** Renderer theme — density-derived sizes + colours. Built in document.ts. */
 export type PdfTheme = {
+  design?: 'classic' | 'modern'
+  colorTreatment?: 'subtle' | 'strong'
+  colorIntensity?: number
   primary: string
   text: string
   muted: string
@@ -151,6 +154,10 @@ export type PdfDocumentInput = {
   summary?: PdfSummaryItem[]
   /** Shared presentation presets keep report styling independent of domain logic. */
   design?: 'classic' | 'modern'
+  /** Exact category colors remain as accents; subtle fills blend toward white. */
+  colorTreatment?: 'subtle' | 'strong'
+  /** Percent color in a subtle fill (0–30); the accent itself is never altered. */
+  colorIntensity?: number
   legend?: { title: string; items: PdfLegendItem[] }
   groups: PdfTableGroup[]
   layout: PdfPageSetup

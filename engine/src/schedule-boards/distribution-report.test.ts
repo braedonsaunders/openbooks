@@ -276,11 +276,14 @@ test('configured colors survive weekend tint and same-day multi-assignment segme
   assert.equal(single.backgroundColor, '#99f6e4');
   assert.equal(input.legend?.items.length, 3);
   assert.equal(input.design, 'modern');
+  assert.equal(input.colorTreatment, 'subtle');
+  assert.equal(input.colorIntensity, 8);
   const classic = schedulePdfInput({ ...preview, audience: { ...preview.audience, pdfLayout: {
     paperSize: 'a4', orientation: 'landscape', marginMm: 10, density: 'standard', daysPerSection: 7, detail: 'assignments',
-    style: 'classic', accentColor: '#7c3aed', showLegend: false, shadeWeekends: false,
+    style: 'classic', accentColor: '#7c3aed', showLegend: false, shadeWeekends: false, colorTreatment: 'strong',
   } } }, colored);
   assert.equal(classic.design, 'classic');
+  assert.equal(classic.colorTreatment, 'strong');
   assert.equal(classic.branding.primaryColor, '#7c3aed');
   assert.equal(classic.legend, undefined);
   assert.equal(classic.groups[0]!.columnStyles?.[1]?.body, undefined);

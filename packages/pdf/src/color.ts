@@ -13,3 +13,10 @@ export function pdfContrastText(background: string): string {
   const luminance = channels[0]! * 0.2126 + channels[1]! * 0.7152 + channels[2]! * 0.0722
   return (luminance + 0.05) / 0.05 >= 1.05 / (luminance + 0.05) ? '#000000' : '#ffffff'
 }
+
+/** Presentation tint only; callers retain the original configured color as evidence and accent. */
+export function pdfColorTint(color: string, intensity = 8): string {
+  const hex = pdfColor(color, '#ffffff').slice(1)
+  const ratio = Math.min(30, Math.max(0, Number.isFinite(intensity) ? intensity : 8)) / 100
+  return '#' + [0, 2, 4].map(offset => Math.round(255 + (parseInt(hex.slice(offset, offset + 2), 16) - 255) * ratio).toString(16).padStart(2, '0')).join('')
+}

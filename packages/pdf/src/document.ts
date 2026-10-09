@@ -21,7 +21,7 @@ import {
 } from './types'
 import { resolvePage } from './page'
 import { drawTable } from './table'
-import { pdfColor, pdfContrastText } from './color'
+import { pdfColor } from './color'
 
 const STANDARD = {
   body: 10,
@@ -100,9 +100,12 @@ export async function renderPdfDocument(input: PdfDocumentInput): Promise<Buffer
   const page = resolvePage(layout)
   const primary = input.branding.primaryColor || DEFAULT_PRIMARY_COLOR
   const theme = themeFor(layout.density, primary)
+  theme.design = input.design
+  theme.colorTreatment = input.colorTreatment ?? (input.design === 'modern' ? 'subtle' : 'strong')
+  theme.colorIntensity = input.colorIntensity ?? 8
   if (input.design === 'modern') Object.assign(theme, {
-    text: '#0f172a', muted: '#64748b', headerFill: '#0f172a', headerText: '#ffffff',
-    headerBorder: '#cbd5e1', rowBorder: '#e2e8f0', zebra: '#f8fafc',
+    text: '#1e293b', muted: '#64748b', headerFill: '#f8fafc', headerText: '#475569',
+    headerBorder: '#e2e8f0', rowBorder: '#eef2f6', zebra: '#fbfcfd',
   })
   const s = layout.density === 'compact' ? COMPACT : STANDARD
 
@@ -167,9 +170,10 @@ function drawCover(
   const rightX = page.contentLeft + leftW
   let leftTop = page.contentTop
   if (input.design === 'modern') {
-    doc.font(theme.fontBold).fontSize(theme.meta).fillColor(theme.primary)
-    doc.text(input.branding.orgName.toUpperCase(), leftX, leftTop, { width: leftW })
-    leftTop = doc.y + 6
+    doc.font(theme.font).fontSize(theme.meta).fillColor(theme.muted)
+    doc.rect(leftX, leftTop + 2, 3, 7).fill(theme.primary)
+    doc.fillColor(theme.muted).text(input.branding.orgName, leftX + 10, leftTop, { width: leftW - 10 })
+    leftTop = doc.y + 5
   }
 
   const logoBuf = input.branding.logoBuffer ?? (input.branding.logoUrl ? decodeDataUrl(input.branding.logoUrl) : null)
@@ -182,7 +186,7 @@ function drawCover(
     }
   }
 
-  doc.font(theme.fontBold).fontSize(input.design === 'modern' ? theme.h1 + 5 : theme.h1).fillColor(theme.text)
+  doc.font(input.design === 'modern' ? theme.font : theme.fontBold).fontSize(input.design === 'modern' ? theme.h1 + 4 : theme.h1).fillColor(theme.text)
   doc.text(input.title, leftX, leftTop, { width: leftW, lineBreak: true })
   const titleBottom = doc.y
 
@@ -202,8 +206,8 @@ function drawCover(
   doc
     .moveTo(page.contentLeft, headerBottom)
     .lineTo(page.contentLeft + page.contentWidth, headerBottom)
-    .lineWidth(3)
-    .strokeColor(theme.primary)
+    .lineWidth(input.design === 'modern' ? 0.5 : 3)
+    .strokeColor(input.design === 'modern' ? theme.rowBorder : theme.primary)
     .stroke()
   return headerBottom + s.coverRuleGap
 }
@@ -225,9 +229,9 @@ function drawLegend(doc: InstanceType<typeof PDFDocument>, page: ReturnType<type
     if (x > page.contentLeft && x + width > page.contentLeft + page.contentWidth) { y += rowHeight + 5; x = page.contentLeft; rowHeight = 0 }
     if (y + height > page.contentBottom) { doc.addPage(); y = page.contentTop; x = page.contentLeft; rowHeight = 0 }
     const color = pdfColor(item.color, '#f1f5f9')
-    doc.roundedRect(x, y, width, height, 3).fill(color)
-    doc.font(theme.font).fontSize(theme.meta).fillColor(pdfContrastText(color))
-    doc.text(item.label, x + 8, y + 5, { width: width - 16, height: height - 9, ellipsis: false })
+    doc.rect(x, y + 5, 7, 7).fill(color)
+    doc.font(theme.font).fontSize(theme.meta).fillColor(theme.muted)
+    doc.text(item.label, x + 12, y + 4, { width: width - 16, height: height - 8, ellipsis: false })
     x += width + 5
     rowHeight = Math.max(rowHeight, height)
   }
@@ -242,6 +246,14 @@ function drawSummary(
   theme: PdfTheme,
   s: typeof STANDARD,
 ): number {
+  if (theme.design === 'modern') {
+    const text = summary.map(item => `${item.label}  ${item.value}`).join('    ·    ')
+    doc.font(theme.font).fontSize(theme.meta)
+    const height = doc.heightOfString(text, { width: page.contentWidth })
+    if (startY + height > page.contentBottom) { doc.addPage(); startY = page.contentTop }
+    doc.fillColor(theme.muted).text(text, page.contentLeft, startY, { width: page.contentWidth })
+    return doc.y + theme.groupGap
+  }
   const n = summary.length
   const perRow = Math.max(1, Math.min(n, Math.floor(page.contentWidth / SUMMARY_MIN_CARD_W)))
   const cardW = (page.contentWidth - SUMMARY_GAP * (perRow - 1)) / perRow
@@ -267,9 +279,11 @@ function drawSummary(
     }
     let x = page.contentLeft
     for (const item of rowItems) {
-      doc.rect(x, y, cardW, cardH).fill('#fafafa')
-      doc.rect(x, y, accentW, cardH).fill(theme.primary)
-      doc.rect(x, y, cardW, cardH).lineWidth(0.5).strokeColor('#e5e7eb').stroke()
+      if (theme.design !== 'modern') {
+        doc.rect(x, y, cardW, cardH).fill('#fafafa')
+        doc.rect(x, y, accentW, cardH).fill(theme.primary)
+        doc.rect(x, y, cardW, cardH).lineWidth(0.5).strokeColor('#e5e7eb').stroke()
+      }
       doc.font(theme.font).fontSize(s.summaryLabel).fillColor(theme.muted)
       const labelW = cardW - padX * 2 - accentW
       // Measure the (possibly wrapped) label so the value never overlaps a
@@ -312,14 +326,14 @@ function drawGroup(
   }
 
   let y = startY
-  doc.font(theme.fontBold).fontSize(theme.h2).fillColor(theme.primary)
+  doc.font(theme.design === 'modern' ? theme.font : theme.fontBold).fontSize(theme.h2).fillColor(theme.design === 'modern' ? theme.text : theme.primary)
   doc.text(group.title, page.contentLeft, y, { width: page.contentWidth, lineBreak: true })
   y = doc.y + 2
   doc
     .moveTo(page.contentLeft, y)
     .lineTo(page.contentLeft + page.contentWidth, y)
-    .lineWidth(1)
-    .strokeColor('#d1d5db')
+    .lineWidth(theme.design === 'modern' ? 0.4 : 1)
+    .strokeColor(theme.design === 'modern' ? theme.rowBorder : '#d1d5db')
     .stroke()
   y += 3
   if (group.subtitle) {
