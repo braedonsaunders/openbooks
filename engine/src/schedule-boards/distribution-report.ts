@@ -68,7 +68,7 @@ export function schedulePdfInput(
   const colorKeys = [...legend].sort(([a], [b]) => a.localeCompare(b));
   const legendItems = colorKeys.slice(0, 12).map(([color, labels]) => ({
     color,
-    label: labels.size === 1 && [...labels][0]!.length <= 32
+    label: labels.size === 1
       ? [...labels][0]!
       : `${labels.size} assignment label${labels.size === 1 ? '' : 's'}`,
   }));
