@@ -103,7 +103,7 @@ test("sandbox deletion preserves immediate parent order inside deferred cycles",
 });
 
 test("sandbox insertion resolves inventory ownership and tracking parents inside a deferred cycle", () => {
-  const nodes = ["inventory_movements", "consignment_stock", "item_inventory_profiles", "items", "stock_locations", "serials", "lots", "cost_layers"];
+  const nodes = ["cost_layers", "consignment_stock", "inventory_movements", "item_inventory_profiles", "items", "stock_locations", "serials", "lots"];
   const refs: Record<string, Record<string, string>> = {
     inventory_movements: { item_id: "items", serial_id: "serials" },
     consignment_stock: { item_id: "items" },
@@ -123,6 +123,7 @@ test("sandbox insertion resolves inventory ownership and tracking parents inside
     assert.ok(order.indexOf(parent) < order.indexOf("consignment_stock"));
   }
   assert.ok(order.indexOf("lots") < order.indexOf("serials"));
+  assert.ok(order.indexOf("inventory_movements") < order.indexOf("cost_layers"));
   assert.ok(order.indexOf("cost_layers") < order.indexOf("consignment_stock"));
   assert.equal(new Set(order).size, nodes.length);
   const deferred = deferredDeletionTables({ tables, tenantTables: tables, rebaseSet: new Set(nodes) });
