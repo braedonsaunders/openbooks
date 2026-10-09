@@ -473,6 +473,9 @@ async function wipeSandbox(sandboxOrgId: string, tableNames: Set<string>): Promi
     // is ON DELETE RESTRICT) so a single delete-all can't trip its own hierarchy.
     for (const t of targetTables) {
       if (!t.hasOrgId) continue;
+      // Posted movements retain their reversal provenance through deletion.
+      // Their RESTRICT edge is removed leaf-first below, without rewriting it.
+      if (t.name === "inventory_movements") continue;
       for (const col of selfRefColumns(t)) {
         await db.execute(sql`
           update ${sql.identifier(t.name)}
@@ -490,6 +493,28 @@ async function wipeSandbox(sandboxOrgId: string, tableNames: Set<string>): Promi
       if (name === "hrm_benefit_catalog") return;
       const t = byName.get(name)!;
       if (t.hasOrgId) {
+        if (name === "inventory_movements") {
+          // RESTRICT is checked on deletion even for a deferred foreign key.
+          // Delete reversals before their sources under the same scoped wipe.
+          for (;;) {
+            const removed = await db.execute(sql`
+              delete from inventory_movements movement
+               where movement.org_id = ${sandboxOrgId}
+                 and not exists (
+                   select 1 from inventory_movements reversal
+                    where reversal.org_id = movement.org_id
+                      and reversal.reverses_movement_id = movement.id
+                 )
+              returning movement.id`);
+            if (removed.rows.length > 0) continue;
+            const remaining = await db.execute(sql`
+              select id from inventory_movements where org_id = ${sandboxOrgId} limit 1`);
+            if (remaining.rows.length > 0) {
+              throw new Error("Sandbox inventory reversal references contain a cycle; preserve its evidence and repair the source lineage before deleting");
+            }
+            return;
+          }
+        }
         await db.execute(sql`delete from ${sql.identifier(name)} where org_id = ${sandboxOrgId}`);
       } else if (PARENT_FILTER[name]) {
         // Shared string builder; sandboxOrgId is assertUuid-checked at the top.
