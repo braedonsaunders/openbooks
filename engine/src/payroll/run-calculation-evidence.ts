@@ -1,3 +1,4 @@
+import { historicalEmploymentRosterSource, type HistoricalEmploymentRosterSource } from "./employment-roster.ts";
 import { employeeEmployerAssignmentHistory, type EmployerAssignmentSource } from './employer-assignment-history.ts';
 import { compensationPackageRunSource, type CompensationPackageAssignmentSource } from './compensation-package-source.ts';
 import { holidayObligationRunSource, type HolidayObligationSource } from './holiday-obligation-source.ts';
@@ -68,6 +69,7 @@ export interface PayRunCalculationSourceSnapshot {
   }[];
   compensationPackages?: CompensationPackageAssignmentSource[];
   employerAssignments?: EmployerAssignmentSource[];
+  historicalEmploymentRoster?: HistoricalEmploymentRosterSource[];
   holidayObligations?: HolidayObligationSource[];
   claimEntryIds: string[];
 }
@@ -109,6 +111,7 @@ export function parsePayRunCalculationSource(
       || !Array.isArray(snapshot.payRates)
       || !Array.isArray(snapshot.claimEntryIds)
       || (Object.hasOwn(snapshot, 'compensationPackages') && !Array.isArray(snapshot.compensationPackages))
+      || (Object.hasOwn(snapshot, 'historicalEmploymentRoster') && !Array.isArray(snapshot.historicalEmploymentRoster))
       || (Object.hasOwn(snapshot, 'employerAssignments') && !Array.isArray(snapshot.employerAssignments))
       || (Object.hasOwn(snapshot, 'holidayObligations') && !Array.isArray(snapshot.holidayObligations))) return null;
   // Snapshots stored before item routing existed carry no itemAccounts; they
@@ -342,6 +345,7 @@ export async function payRunCalculationSource(
   `));
   const row = result.rows[0];
   if (!row?.run_exists) return null;
+  const historicalEmploymentRoster = await historicalEmploymentRosterSource(executor, orgId, documentId, allowedSubsidiaryIds);
   const employerAssignments = await employeeEmployerAssignmentHistory(executor, { orgId, payDate: row.pay_date, employeePartyIds: row.employee_party_ids ?? [] });
   const compensationPackages = await compensationPackageRunSource(executor, orgId, documentId, allowedSubsidiaryIds, lockSources);
   const holidayObligations = await holidayObligationRunSource(executor, orgId, documentId, allowedSubsidiaryIds);
@@ -355,6 +359,7 @@ export async function payRunCalculationSource(
     // approved package obligations; an empty new field would change history.
     ...(compensationPackages.length ? { compensationPackages } : {}),
     ...(employerAssignments.length ? { employerAssignments } : {}),
+    ...(historicalEmploymentRoster.length ? { historicalEmploymentRoster } : {}),
     ...(holidayObligations.length ? { holidayObligations } : {}),
     claimEntryIds: row.claim_entry_ids ?? [],
   };
@@ -371,7 +376,8 @@ export function payRunCalculationSourceChanges(
     wages: canonicalJson(stored.payRates) !== canonicalJson(current.payRates),
     compensationPackages: canonicalJson(stored.compensationPackages ?? []) !== canonicalJson(current.compensationPackages ?? []),
     holidayObligations: canonicalJson(stored.holidayObligations ?? []) !== canonicalJson(current.holidayObligations ?? []),
-    roster: canonicalJson(stored.employerAssignments ?? []) !== canonicalJson(current.employerAssignments ?? []),
+    roster: canonicalJson(stored.employerAssignments ?? []) !== canonicalJson(current.employerAssignments ?? [])
+      || canonicalJson(stored.historicalEmploymentRoster ?? []) !== canonicalJson(current.historicalEmploymentRoster ?? []),
     items: canonicalJson(stored.itemAccounts ?? []) !== canonicalJson(current.itemAccounts ?? []),
   };
 }

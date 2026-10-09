@@ -1,3 +1,4 @@
+import { roleEmploymentOverlapsPeriod } from "./employment-roster.ts";
 import { approvedHolidayOccurrenceDates } from "./holiday-obligation-source.ts";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
@@ -1373,9 +1374,13 @@ export async function resolveStatutoryHolidayPay(
   if (holidays.length === 0 && workTriggeredHolidays.length === 0) return [];
 
   const hire = (await tx.execute<{ hired_on: string | Date | null }>(sql`
-    select hired_on from employee_roles
-     where org_id = ${input.orgId} and party_id = ${input.employeePartyId}
-     order by hired_on nulls last limit 1
+    select er.hired_on from employee_roles er
+     where er.org_id = ${input.orgId} and er.party_id = ${input.employeePartyId}
+       and ${roleEmploymentOverlapsPeriod({
+         hiredOn: sql`er.hired_on`, terminatedOn: sql`er.terminated_on`,
+         periodStart: sql`${input.periodStart}`, periodEnd: sql`${input.periodEnd}`,
+       })}
+     order by er.hired_on nulls last limit 1
   `));
   const hiredOn = hire.rows[0]?.hired_on
     ? String(hire.rows[0].hired_on instanceof Date

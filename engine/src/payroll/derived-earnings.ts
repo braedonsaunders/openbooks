@@ -1,3 +1,4 @@
+import { payrollEmploymentOverlapsPeriod } from "./employment-roster.ts";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { addCalendarDays, endOfMonth, startOfMonth } from "../platform/business-date.ts";
@@ -1225,8 +1226,11 @@ export async function previewDerivedRule(
       join parties p on p.id = prof.employee_party_id and p.org_id = prof.org_id
       left join employee_roles er on er.party_id = p.id and er.org_id = p.org_id
      where prof.org_id = ${orgId} and prof.is_active
-       and (er.hired_on is null or er.hired_on <= ${periodEnd})
-       and (er.terminated_on is null or er.terminated_on >= ${periodStart})
+       and ${payrollEmploymentOverlapsPeriod({
+         org: sql`prof.org_id`, employee: sql`p.id`, employment: sql`prof.employment_id`,
+         employer: sql`p.subsidiary_id`, hiredOn: sql`er.hired_on`, terminatedOn: sql`er.terminated_on`,
+         periodStart: sql`${periodStart}`, periodEnd: sql`${periodEnd}`,
+       })}
      order by p.display_name
   `));
   const people = peopleRes.rows;
