@@ -19,7 +19,8 @@ import { defineTableSubjectAdapter } from "./table-subject-adapter.ts";
  * The adapter owns the approval lifecycle only. Status is released inside the
  * pre-billing service through the registered handler (releaseViaHandler): the
  * worksheet's lines and amounts are the thing being approved, and a flow must
- * not rewrite them. Neither the preparer nor the submitter may decide its gate.
+ * not rewrite them. The submitted tenant Flow policy determines whether the
+ * preparer or submitter may decide a gate.
  */
 
 export const PREBILL_SUBJECT_KIND = "prebill";
@@ -35,6 +36,7 @@ const PREBILL_STATUSES = [
 
 export const prebillSubjectProfile: FlowSubjectProfile = {
   subjectKind: PREBILL_SUBJECT_KIND,
+  pinsSubmissionPolicy: true,
   label: "Pre-billing worksheet",
   triggers: ["on_submit"],
   actions: ["send_email", "notify"],
@@ -119,7 +121,7 @@ export const prebillsFlowAdapter: FlowSubjectAdapter = defineTableSubjectAdapter
   scope: tableScope("project", "prebills", "project_id"),
   profile: prebillSubjectProfile,
   releaseViaHandler: true,
-  selfApprovalPolicy: "forbidden",
+  selfApprovalPolicy: "configurable",
 
   async loadContext(subjectId: string): Promise<FlowSubjectContext | null> {
     const row = await loadPrebill(subjectId);

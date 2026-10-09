@@ -20,6 +20,7 @@ const REQUEST_STATUSES = [
 
 export const resourcingRequestSubjectProfile: FlowSubjectProfile = {
   subjectKind: RESOURCING_REQUEST_SUBJECT_KIND,
+  pinsSubmissionPolicy: true,
   label: "Resource request",
   triggers: ["on_submit"],
   actions: ["send_email", "notify"],
@@ -74,7 +75,7 @@ export const resourcingRequestFlowAdapter: FlowSubjectAdapter = {
   profile: resourcingRequestSubjectProfile,
   releaseViaHandler: true,
   writableFields: new Set<string>(),
-  selfApprovalPolicy: "forbidden",
+  selfApprovalPolicy: "configurable",
 
   async loadContext(subjectId: string): Promise<FlowSubjectContext | null> {
     const request = await loadRequest(subjectId);

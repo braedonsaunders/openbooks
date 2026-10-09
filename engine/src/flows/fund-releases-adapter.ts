@@ -16,6 +16,7 @@ const FUND_RELEASE_STATUSES = [
 
 export const fundReleaseSubjectProfile: FlowSubjectProfile = {
   subjectKind: FUND_RELEASE_SUBJECT_KIND,
+  pinsSubmissionPolicy: true,
   label: "Fund release",
   triggers: ["on_submit"],
   actions: ["send_email", "notify"],
@@ -85,7 +86,7 @@ export const fundReleasesFlowAdapter: FlowSubjectAdapter = {
   scope: { via: "none" },
   profile: fundReleaseSubjectProfile,
   writableFields: new Set<string>(),
-  selfApprovalPolicy: "forbidden",
+  selfApprovalPolicy: "configurable",
   releaseViaHandler: true,
 
   async loadContext(subjectId: string): Promise<FlowSubjectContext | null> {
