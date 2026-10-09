@@ -236,8 +236,9 @@ function createPaymentRunsFlowAdapter(direction: PaymentRunDirection): FlowSubje
       outcome: "approved" | "rejected",
       ctx: FlowExecCtx,
       detail?: { comment?: string | null },
+      run?: { id: string; dispatchValues: Record<string, unknown> | null },
     ): Promise<void> {
-      await releaseFlowApproval({ subjectKind, subjectId, outcome, comment: detail?.comment, ctx });
+      await releaseFlowApproval({ subjectKind, subjectId, outcome, comment: detail?.comment, ctx, approvalRunId: run?.id });
     },
 
     /**

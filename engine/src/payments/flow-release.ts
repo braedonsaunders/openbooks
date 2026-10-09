@@ -13,6 +13,7 @@ export async function releasePaymentRunFlowApproval(args: {
   subjectId: string;
   outcome: "approved" | "rejected";
   comment?: string | null;
+  approvalRunId?: string;
   ctx: { orgId: string; userId?: string | null };
 }): Promise<void> {
   await releasePaymentRunApproval({
@@ -21,5 +22,6 @@ export async function releasePaymentRunFlowApproval(args: {
     actorId: args.ctx.userId ?? null,
     outcome: args.outcome,
     comment: args.comment ?? null,
+    approvalRunId: args.approvalRunId,
   });
 }

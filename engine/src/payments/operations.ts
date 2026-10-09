@@ -32,6 +32,7 @@ import { createPaymentRun } from "./run-creation.ts";
 import { runRecordFlows } from "../flows/run.ts";
 import { cancelDispatchRuns, dispatchFailureReason } from "../flows/dispatch-result.ts";
 import { paymentRunSubjectKind } from "../flows/payment-runs-adapter.ts";
+import { pinnedGateAllowsSelfApproval } from "../flows/gate-policy.ts";
 import { guardCsvCell } from "@openbooks/reports";
 export { PAYMENT_FILE_STATUSES } from "./file-statuses.ts";
 
@@ -436,10 +437,8 @@ export async function submitPaymentRun(
  *
  * Only a run still awaiting approval is released; a run that left
  * `pending_approval` some other way is refused rather than overwritten. The
- * decider must be a signed-in user who is neither the run's maker nor its
- * submitter — the flows engine already refuses them for this subject, and the
- * payments engine holds the same line so a release can never record a
- * self-approval. A rejection carries its reason onto the run.
+ * Self-approval requires a decided gate on this exact run with an explicit
+ * frozen policy permitting it. A rejection carries its reason onto the run.
  */
 export async function releasePaymentRunApproval(args: {
   orgId: string;
@@ -447,11 +446,12 @@ export async function releasePaymentRunApproval(args: {
   actorId: string | null;
   outcome: "approved" | "rejected";
   comment?: string | null;
+  approvalRunId?: string;
 }): Promise<void> {
   const { orgId, runId, actorId, outcome } = args;
   if (!actorId) throw new PaymentError("a payment run approval must be decided by a signed-in user");
-  const run = (await db.execute<{ status: string; created_by: string | null; submitted_by: string | null }>(sql`
-    select status, created_by, submitted_by from payment_runs
+  const run = (await db.execute<{ status: string; direction: string; created_by: string | null; submitted_by: string | null }>(sql`
+    select status, direction, created_by, submitted_by from payment_runs
      where id = ${runId} and org_id = ${orgId}
      for update
   `)).rows[0];
@@ -459,8 +459,22 @@ export async function releasePaymentRunApproval(args: {
   if (run.status !== "pending_approval") {
     throw new PaymentError(`the payment run is ${run.status}, not awaiting approval`);
   }
-  if (actorId === run.submitted_by) throw new PaymentError("the payment run submitter cannot decide its approval");
-  if (actorId === run.created_by) throw new PaymentError("the user who assembled the payment run cannot decide its approval");
+  if (actorId === run.submitted_by || actorId === run.created_by) {
+    const gates = args.approvalRunId ? (await db.execute<{ context: unknown; node_id: string }>(sql`
+      select r.context,g.node_id from flow_runs r join flow_gates g
+        on g.org_id=r.org_id and g.run_id=r.id and g.flow_id=r.flow_id
+        and g.subject_id=r.subject_id and g.subject_kind=r.subject_kind
+      where r.org_id=${orgId} and r.id=${args.approvalRunId} and r.subject_id=${runId}
+        and r.subject_kind=${paymentRunSubjectKind(run.direction)}
+        and g.status=${outcome} and g.decided_by=${actorId}
+        and not exists(select 1 from flow_gates pending where pending.org_id=r.org_id
+          and pending.run_id=r.id and pending.status in ('pending','escalated'))
+      for share of r,g
+    `)).rows : [];
+    if (!gates.some(gate => pinnedGateAllowsSelfApproval(gate.context, gate.node_id))) {
+      throw new PaymentError("The payment run author or submitter cannot decide its approval without an explicit frozen self-approval policy and completed gate decision — use the configured approval gate.");
+    }
+  }
   const reason = args.comment?.trim() || null;
   if (outcome === "rejected" && !reason) throw new PaymentError("a rejection reason is required");
   const next = outcome === "approved" ? "approved" : "rejected";
