@@ -1647,9 +1647,54 @@ test("complete snapshots repair journal allocations by their source control acco
     assert.deepEqual((await db.execute(sql`select id from audit_log where org_id=${org.orgId} and table_name='applications' order by id`)).rows,auditBefore);
     await assert.rejects(()=>reconcileApplications(org.orgId,'nsId',[{...current[0]!,appliedAccountRef:'AP-A'}],snapshot),/could not be allocated/);
     assert.deepEqual(await settlementSnapshot(org.orgId),correctedRows,'cross-control-account demand rolls back without weakening native guards');
-    await db.execute(sql`update applications set settlement_rate_reference='manual allocation' where org_id=${org.orgId} and id=${correctedRows.find(r=>r.unapplied_at===null)!.id}`);
+    const manualPayer = await create('manual-payer','');
+    const manualTarget = await create('manual-target','-');
+    const actorId = await createScratchUser(org.orgId,'Payment operator','admin');
+    const manualId = randomUUID();
+    await db.execute(sql`insert into applications(id,org_id,from_line_id,to_line_id,amount,source_amount,
+      source_transaction_amount,source_transaction_currency,target_transaction_amount,target_transaction_currency,
+      settlement_rate,settlement_rate_source,settlement_rate_reference,applied_on,created_by)
+      values(${manualId},${org.orgId},${manualPayer.lineIds[0]},${manualTarget.lineIds[0]},50,50,50,'CAD',50,'CAD',
+        1,'same_currency','manual payment',${org.date},${actorId})`);
     const manualState=await settlementSnapshot(org.orgId);
-    await assert.rejects(()=>reconcileApplications(org.orgId,'nsId',[...current].map(link=>({...link,amount:'25'})),snapshot),/manual allocation/);
+    const manualLink={paymentRef:'manual-payer',appliedRef:'manual-target',paymentAccountRef:'AP-A',appliedAccountRef:'AP-A',amount:'25',currency:'CAD'};
+    await assert.rejects(()=>reconcileApplications(org.orgId,'nsId',[...current,manualLink],snapshot),/manual allocation/);
+    assert.deepEqual(await settlementSnapshot(org.orgId),manualState);
+    const sameManual = await reconcileApplications(org.orgId,'nsId',[...current,{...manualLink,amount:'50'}],snapshot);
+    assert.equal(sameManual.inserted,0);assert.equal(sameManual.released,0);
     assert.deepEqual(await settlementSnapshot(org.orgId),manualState);
   } finally {await dropScratchOrg(org.orgId);}
+});
+
+
+test("legacy migration-labelled allocations are source-owned only without a business actor", {skip:!DB}, async()=>{
+  const org=await createScratchOrg();
+  try{
+    const snapshot=await completeSnapshotFixture(org);
+    const actorId=await createScratchUser(org.orgId,'Manual settlement operator','admin');
+    const pay=await snapshotDoc(org,'legacy-pay','100');
+    const old=await snapshotDoc(org,'legacy-old','-100');
+    await snapshotDoc(org,'legacy-current','-100');
+    const manualPay=await snapshotDoc(org,'manual-pay','20');
+    const manualTarget=await snapshotDoc(org,'manual-old','-20');
+    const legacyId=randomUUID(),manualId=randomUUID();
+    for(const row of [{id:legacyId,from:pay.lineIds[0],to:old.lineIds[0],amount:'100',actor:null},
+      {id:manualId,from:manualPay.lineIds[0],to:manualTarget.lineIds[0],amount:'20',actor:actorId}]){
+      await db.execute(sql`insert into applications(id,org_id,from_line_id,to_line_id,amount,source_amount,
+        source_transaction_amount,source_transaction_currency,target_transaction_amount,target_transaction_currency,
+        settlement_rate,settlement_rate_source,settlement_rate_reference,applied_on,created_by)
+        values(${row.id},${org.orgId},${row.from},${row.to},${row.amount},${row.amount},${row.amount},'CAD',${row.amount},'CAD',
+          1,'same_currency','migrated same-currency application',${org.date},${row.actor})`);
+    }
+    const before=await settlementSnapshot(org.orgId);
+    const current=[{paymentRef:'legacy-pay',appliedRef:'legacy-current',amount:'100',currency:'CAD'}];
+    const repair=await reconcileApplications(org.orgId,'nsId',current,snapshot);
+    assert.equal(repair.released,1);assert.equal(repair.inserted,1);
+    const after=await settlementSnapshot(org.orgId);
+    assert.ok(after.find(r=>r.id===legacyId)?.unapplied_at);
+    assert.deepEqual(after.find(r=>r.id===manualId),before.find(r=>r.id===manualId));
+    const repeat=await reconcileApplications(org.orgId,'nsId',current,snapshot);
+    assert.equal(repeat.inserted,0);assert.equal(repeat.released,0);
+    assert.deepEqual(await settlementSnapshot(org.orgId),after);
+  }finally{await dropScratchOrg(org.orgId);}
 });

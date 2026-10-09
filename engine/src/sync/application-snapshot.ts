@@ -58,6 +58,7 @@ export function applicationTransaction(client: PoolClient): SqlExecutor {
 }
 
 /** Only connector-owned application evidence may follow an authoritative snapshot.
+ * Legacy migration-labelled, actorless applications retain their imported provenance.
  * Legacy unstamped documents require one unambiguous connection, matching the
  * native document mirror. Controller dispositions and manual settlements remain intact. */
 export async function sourceApplicationEvidence(
@@ -88,7 +89,11 @@ export async function sourceApplicationEvidence(
       join journal_entries et on et.org_id=a.org_id and et.id=lt.entry_id
       join documents dt on dt.org_id=a.org_id and dt.id=et.source_document_id
      where a.org_id=$1 and a.unapplied_at is null
-       and a.settlement_rate_reference=$5
+       and (
+         a.settlement_rate_reference=$5
+         or (a.settlement_rate_reference='migrated same-currency application'
+             and a.settlement_rate_source='same_currency' and a.created_by is null)
+       )
        and df.custom->>$2 is not null and dt.custom->>$2 is not null
        and ${sourceConnectionDocumentPredicate("df", "$3", "$4")}
        and ${sourceConnectionDocumentPredicate("dt", "$3", "$4")}
