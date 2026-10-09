@@ -125,6 +125,9 @@ const ALLOW_LISTED_NON_PERSONAL: ReadonlySet<string> = new Set([
   "payroll_compensation_versions.definition_hash",
   "payroll_compensation_versions.status",
   "payroll_compensation_assignments.status",
+  // Settlement currency references the currency catalog; status is a constrained lifecycle code.
+  "pay_run_holiday_allocations.currency",
+  "pay_run_holiday_allocations.status",
   // Exact statutory amounts and their declared numeric bounds contain no prose or personal identifiers.
   'payroll_period_openings.amounts',
   'payroll_period_openings.annual_bounds',
