@@ -7430,6 +7430,14 @@
     "unbilledRevenueAccrual": {
       "title": "Unbilled revenue accrual",
       "description": "At period end, accrue time-and-materials work performed but not yet invoiced, reversing automatically on the first day of the next period."
+    },
+    "einvoicing": {
+      "title": "Electronic invoicing",
+      "description": "Prepare and archive structured electronic invoices in EN 16931 XML and Factur-X / ZUGFeRD formats."
+    },
+    "contractorWithholding": {
+      "title": "Contractor withholding",
+      "description": "Compute statutory deductions on vendor payments and prepare working papers, remittances and governed corrections."
     }
   },
   "backupsManager": {

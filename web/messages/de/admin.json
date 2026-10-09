@@ -7430,6 +7430,14 @@
     "unbilledRevenueAccrual": {
       "title": "Abgrenzung nicht fakturierter Umsätze",
       "description": "Zum Periodenende erbrachte, noch nicht fakturierte Leistungen nach Aufwand abgrenzen; die Abgrenzung wird am ersten Tag der Folgeperiode automatisch storniert."
+    },
+    "einvoicing": {
+      "title": "Elektronische Rechnungsstellung",
+      "description": "Erstellen und archivieren Sie strukturierte elektronische Rechnungen als EN-16931-XML und Factur-X / ZUGFeRD."
+    },
+    "contractorWithholding": {
+      "title": "Bau- und Auftragnehmersteuerabzug",
+      "description": "Berechnen Sie gesetzliche Abzüge bei Lieferantenzahlungen und erstellen Sie Arbeitspapiere, Steuerzahlungen und kontrollierte Korrekturen."
     }
   },
   "extensions": {

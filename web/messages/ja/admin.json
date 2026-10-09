@@ -7430,6 +7430,14 @@
     "unbilledRevenueAccrual": {
       "title": "未請求収益の見越計上",
       "description": "期末に、実施済みで未請求の実費精算作業を見越計上し、翌期初日に自動で振り戻します。"
+    },
+    "einvoicing": {
+      "title": "電子請求",
+      "description": "EN 16931 XML および Factur-X / ZUGFeRD 形式の構造化電子請求書を作成して保存します。"
+    },
+    "contractorWithholding": {
+      "title": "請負業者の源泉徴収",
+      "description": "仕入先への支払の法定控除を計算し、作業資料、納付書類、管理された修正を作成します。"
     }
   },
   "extensions": {

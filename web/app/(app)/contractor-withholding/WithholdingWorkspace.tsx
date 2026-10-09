@@ -118,7 +118,7 @@ export function WithholdingWorkspace({ enrollments, canManage, canReadJournal, c
       { key: 'actions', header: '', cell: row => row.status === 'active' ? <Button variant="ghost" size="sm" disabled={busy} onClick={async () => { const reason = await promptDialog({ title: t('revoke'), label: t('reason') }); if (reason) await action(`/api/contractor-withholding/standings/${row.id}`, { reason }) }}>{t('revoke')}</Button> : null },
     ]} /> : tab === 'deposits' ? !selected ? <p className="text-sm text-muted-foreground">{t('emptyEnrollments')}</p> : failures['deposits:' + selected] ? <div role="alert"><p>{failures['deposits:' + selected]}</p><Button onClick={() => setRetry(value => value + 1)}>{tc('actions.retry')}</Button></div> : depositsLoadedFor !== selected ? <p aria-busy="true">{tc('actions.loading')}</p> : <PagedTable source="contractor_withholding_deposits" rows={deposits} rowKey={row => row.documentId} empty={t('emptyDeposits')} columns={[
       { key: 'document', header: t('depositDocument'), cell: row => row.kind === 'journal' && !canReadJournal ? <span title={t('journalReviewAccess')}>{row.documentNumber}</span> : <Link href={authorityHref(row.documentId, row.kind)}>{row.documentNumber}</Link> },
-      { key: 'kind', header: tc('fields.type'), cell: row => <DocTypeBadge kind={row.kind} /> },
+      { key: 'kind', header: tc('labels.type'), cell: row => <DocTypeBadge kind={row.kind} /> },
       { key: 'through', header: t('depositThrough'), cell: row => row.throughDate },
       { key: 'due', header: t('paymentDue'), cell: row => row.dueDate ?? '—' },
       { key: 'total', header: t('deducted'), align: 'right', cell: row => money(row.total, { currency: row.currency }) },
@@ -148,7 +148,7 @@ export function WithholdingWorkspace({ enrollments, canManage, canReadJournal, c
         {!!ret.sourcePayments?.length && <div className="flex gap-2"><Button variant={returnBody === 'payees' ? 'secondary' : 'ghost'} onClick={() => setReturnBody('payees')}>{t('payees')}</Button><Button variant={returnBody === 'payments' ? 'secondary' : 'ghost'} onClick={() => setReturnBody('payments')}>{t('paymentEvidence')}</Button></div>}
         {returnBody === 'payments' ? <PagedTable source="contractor_withholding_return_payments" rows={ret.sourcePayments ?? []} rowKey={row => row.documentId} empty={t('emptySourcePayments')} columns={[
           { key: 'payment', header: t('paymentDocument'), cell: row => <Link href={`/payments?doc=${row.documentId}`}>{row.documentNumber}</Link> },
-          { key: 'date', header: tc('fields.date'), cell: row => row.paymentDate },
+          { key: 'date', header: tc('labels.date'), cell: row => row.paymentDate },
           { key: 'deducted', header: t('deducted'), align: 'right', cell: row => money(row.withholdingAmount, { currency: row.currency }) },
           { key: 'statutory', header: t('reportedDeduction'), align: 'right', cell: row => money(row.statutoryWithholdingAmount, { currency: row.statutoryCurrency }) },
           { key: 'fx', header: t('reportingFxRate'), align: 'right', cell: row => row.reportingFxRate ? `${row.currency} → ${row.statutoryCurrency} · ${row.reportingFxRate}` : '—' },

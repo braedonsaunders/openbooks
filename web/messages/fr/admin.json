@@ -7430,6 +7430,14 @@
     "unbilledRevenueAccrual": {
       "title": "Produits non facturés à recevoir",
       "description": "En fin de période, constatez les travaux en régie réalisés mais non facturés, contrepassés automatiquement le premier jour de la période suivante."
+    },
+    "einvoicing": {
+      "title": "Facturation électronique",
+      "description": "Préparez et archivez des factures électroniques structurées en XML EN 16931 et Factur-X / ZUGFeRD."
+    },
+    "contractorWithholding": {
+      "title": "Retenues des entrepreneurs",
+      "description": "Calculez les retenues légales sur les paiements fournisseurs et préparez les documents de travail, versements et corrections contrôlées."
     }
   },
   "backupsManager": {

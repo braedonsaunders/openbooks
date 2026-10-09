@@ -7430,6 +7430,14 @@
     "unbilledRevenueAccrual": {
       "title": "未开票收入预提",
       "description": "期末预提已完成但尚未开票的工时与材料工作，并于下期第一天自动冲回。"
+    },
+    "einvoicing": {
+      "title": "电子开票",
+      "description": "编制并存档 EN 16931 XML 和 Factur-X / ZUGFeRD 格式的结构化电子发票。"
+    },
+    "contractorWithholding": {
+      "title": "承包商扣税",
+      "description": "计算供应商付款的法定扣税，并编制工作底稿、缴款凭证和受控更正。"
     }
   },
   "backupsManager": {
