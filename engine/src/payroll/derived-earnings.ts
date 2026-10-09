@@ -1222,6 +1222,7 @@ export async function previewDerivedRule(
       join parties p on p.id = prof.employee_party_id and p.org_id = prof.org_id
       left join employee_roles er on er.party_id = p.id and er.org_id = p.org_id
      where prof.org_id = ${orgId} and prof.is_active
+       and (er.hired_on is null or er.hired_on <= ${periodEnd})
        and (er.terminated_on is null or er.terminated_on >= ${periodStart})
      order by p.display_name
   `));

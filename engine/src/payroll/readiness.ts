@@ -248,7 +248,8 @@ async function scope(
            and t.status = 'approved'
            and t.worked_on between ${run.period_start} and ${run.period_end}) te on true
      where prof.org_id = ${orgId} and prof.pay_schedule_id = ${run.pay_schedule_id} and prof.is_active
-       -- calculatePayRun's own two population predicates, verbatim.
+       -- calculatePayRun's own population predicates, verbatim.
+       and (er.hired_on is null or er.hired_on <= ${run.period_end})
        and (er.terminated_on is null or er.terminated_on >= ${run.period_start})
        and (${run.subsidiary_id}::uuid is null or p.subsidiary_id = ${run.subsidiary_id}::uuid)
        ${payrollSubsidiaryScopeFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds)}
@@ -1770,9 +1771,9 @@ async function employerLevyRoomConsumed(
 ): Promise<boolean> {
   const run = (await executor.execute<{
     tax_year: number; calculated_at: Date | string | null;
-    period_start: string; pay_schedule_id: string; schedule_subsidiary_id: string | null;
+    period_start: string; period_end: string; pay_schedule_id: string; schedule_subsidiary_id: string | null;
   }>(sql`
-    select r.tax_year, r.calculated_at, r.period_start::text as period_start,
+    select r.tax_year, r.calculated_at, r.period_start::text as period_start, r.period_end::text as period_end,
            r.pay_schedule_id, s.subsidiary_id as schedule_subsidiary_id
       from pay_runs r
       join documents d on d.id = r.document_id and d.org_id = r.org_id
@@ -1784,7 +1785,7 @@ async function employerLevyRoomConsumed(
   if (!info || info.calculated_at === null) return false;
   // The run's affected employees: the population whose earnings claim room —
   // active schedule profiles, in the schedule's entity, excluding profiles
-  // terminated before the period started (they are not paid, so their
+  // hired after the period or terminated before it started (they are not paid, so their
   // country arms nothing and their absence shares nothing).
   const mine = (await executor.execute<{
     employee_party_id: string; country: string; province: string | null;
@@ -1795,6 +1796,7 @@ async function employerLevyRoomConsumed(
       left join employee_roles er on er.party_id = p.id and er.org_id = prof.org_id
      where prof.org_id = ${orgId} and prof.pay_schedule_id = ${info.pay_schedule_id}
        and prof.is_active and prof.country is not null
+       and (er.hired_on is null or er.hired_on <= ${info.period_end}::date)
        and (er.terminated_on is null or er.terminated_on >= ${info.period_start}::date)
        and (${info.schedule_subsidiary_id}::uuid is null
         or p.subsidiary_id = ${info.schedule_subsidiary_id}::uuid)
@@ -1880,6 +1882,7 @@ async function employerLevyRoomConsumed(
         left join employee_roles oer on oer.party_id = op.id and oer.org_id = oprof.org_id
        where oprof.org_id = ${orgId} and oprof.pay_schedule_id = other.pay_schedule_id
          and oprof.is_active and oprof.country = ${arm.country}
+         and (oer.hired_on is null or oer.hired_on <= other.period_end)
          and (oer.terminated_on is null or oer.terminated_on >= other.period_start)
          and (osch.subsidiary_id is null or op.subsidiary_id = osch.subsidiary_id)
          ${arm.regional || arm.phase8

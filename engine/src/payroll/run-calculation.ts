@@ -387,6 +387,7 @@ async function calculateInTransaction(input: CalculatePayRunInput): Promise<PayR
           left join employee_roles er on er.party_id = p.id and er.org_id = p.org_id
          where prof.org_id = ${orgId} and prof.pay_schedule_id = ${run.pay_schedule_id}
            and prof.is_active
+           and (er.hired_on is null or er.hired_on <= ${run.period_end})
            and (er.terminated_on is null or er.terminated_on >= ${run.period_start})
            and (${scopedSubsidiaryId}::uuid is null or p.subsidiary_id = ${scopedSubsidiaryId}::uuid)
          order by p.id, er.terminated_on nulls last
