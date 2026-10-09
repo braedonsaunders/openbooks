@@ -214,6 +214,13 @@ test("unused coverage withdrawal preserves approved evidence and permits a newly
     const original = await evidence();
     await assertStorageRefusal(db.execute(sql`update hrm_benefit_enrollments set status='cancelled',ended_reason='Correction',updated_by=${h.adminId}
       where org_id=${h.org.orgId} and id=${first.id}`), /lifecycle transition/i);
+    for (const [context, actor] of [["wrong-context", h.adminId], [`${h.org.orgId}:${first.id}:${h.adminId}`, null]] as const) {
+      await assertStorageRefusal(db.transaction(async tx => {
+        await tx.execute(sql`select set_config('openbooks.hrm_benefit_withdrawal',${context},true)`);
+        await tx.execute(sql`update hrm_benefit_enrollments set status='cancelled',ended_reason='Correction',updated_by=${actor}
+          where org_id=${h.org.orgId} and id=${first.id}`);
+      }), /lifecycle transition/i);
+    }
     const result = await withdrawUnusedEnrollment({ orgId: h.org.orgId, actorId: h.adminId, enrollmentId: first.id,
       reason: "Incorrect contribution basis" });
     assert.equal(result.status, "cancelled");
