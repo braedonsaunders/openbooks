@@ -21,6 +21,7 @@ import {
 } from './types'
 import { resolvePage } from './page'
 import { drawTable } from './table'
+import { pdfColor, pdfContrastText } from './color'
 
 const STANDARD = {
   body: 10,
@@ -99,6 +100,10 @@ export async function renderPdfDocument(input: PdfDocumentInput): Promise<Buffer
   const page = resolvePage(layout)
   const primary = input.branding.primaryColor || DEFAULT_PRIMARY_COLOR
   const theme = themeFor(layout.density, primary)
+  if (input.design === 'modern') Object.assign(theme, {
+    text: '#0f172a', muted: '#64748b', headerFill: '#0f172a', headerText: '#ffffff',
+    headerBorder: '#cbd5e1', rowBorder: '#e2e8f0', zebra: '#f8fafc',
+  })
   const s = layout.density === 'compact' ? COMPACT : STANDARD
 
   const doc = new PDFDocument({
@@ -131,6 +136,7 @@ export async function renderPdfDocument(input: PdfDocumentInput): Promise<Buffer
   if (input.summary && input.summary.length > 0) {
     y = drawSummary(doc, page, input.summary, y, theme, s)
   }
+  if (input.legend?.items.length) y = drawLegend(doc, page, input.legend, y, theme)
 
   for (const group of input.groups) {
     y = drawGroup(doc, page, group, y, theme, s)
@@ -160,6 +166,11 @@ function drawCover(
   const leftX = page.contentLeft
   const rightX = page.contentLeft + leftW
   let leftTop = page.contentTop
+  if (input.design === 'modern') {
+    doc.font(theme.fontBold).fontSize(theme.meta).fillColor(theme.primary)
+    doc.text(input.branding.orgName.toUpperCase(), leftX, leftTop, { width: leftW })
+    leftTop = doc.y + 6
+  }
 
   const logoBuf = input.branding.logoBuffer ?? (input.branding.logoUrl ? decodeDataUrl(input.branding.logoUrl) : null)
   if (logoBuf) {
@@ -171,19 +182,19 @@ function drawCover(
     }
   }
 
-  doc.font(theme.fontBold).fontSize(theme.h1).fillColor(theme.text)
+  doc.font(theme.fontBold).fontSize(input.design === 'modern' ? theme.h1 + 5 : theme.h1).fillColor(theme.text)
   doc.text(input.title, leftX, leftTop, { width: leftW, lineBreak: true })
   const titleBottom = doc.y
 
   // Right column: org name (bold), date range, generated — right aligned.
   doc.font(theme.fontBold).fontSize(theme.body).fillColor(theme.text)
-  doc.text(input.branding.orgName, rightX, page.contentTop, {
+  doc.text(input.design === 'modern' ? input.dateRangeLabel : input.branding.orgName, rightX, page.contentTop, {
     width: rightW,
     align: 'right',
     lineBreak: true,
   })
   doc.font(theme.font).fontSize(theme.meta).fillColor(theme.muted)
-  doc.text(input.dateRangeLabel, rightX, doc.y + 2, { width: rightW, align: 'right' })
+  if (input.design !== 'modern') doc.text(input.dateRangeLabel, rightX, doc.y + 2, { width: rightW, align: 'right' })
   doc.text(formatStamp(input.generatedAt), rightX, doc.y + 1, { width: rightW, align: 'right' })
   const rightBottom = doc.y
 
@@ -195,6 +206,32 @@ function drawCover(
     .strokeColor(theme.primary)
     .stroke()
   return headerBottom + s.coverRuleGap
+}
+
+/** Inline color keys wrap within the printable area and retain exact labels. */
+function drawLegend(doc: InstanceType<typeof PDFDocument>, page: ReturnType<typeof resolvePage>, legend: NonNullable<PdfDocumentInput['legend']>, startY: number, theme: PdfTheme): number {
+  let y = startY
+  let x = page.contentLeft
+  let rowHeight = 0
+  if (y + theme.meta * 3 > page.contentBottom) { doc.addPage(); y = page.contentTop }
+  doc.font(theme.fontBold).fontSize(theme.meta).fillColor(theme.muted)
+  doc.text(legend.title, x, y, { width: page.contentWidth })
+  y = doc.y + 5
+  for (const item of legend.items) {
+    doc.font(theme.font).fontSize(theme.meta)
+    const width = Math.min(page.contentWidth, Math.max(56, doc.widthOfString(item.label) + 25))
+    const height = doc.heightOfString(item.label, { width: width - 23 }) + 10
+    if (height > page.contentBottom - page.contentTop) throw new RangeError('A report legend label exceeds the printable page; no label was truncated.')
+    if (x > page.contentLeft && x + width > page.contentLeft + page.contentWidth) { y += rowHeight + 5; x = page.contentLeft; rowHeight = 0 }
+    if (y + height > page.contentBottom) { doc.addPage(); y = page.contentTop; x = page.contentLeft; rowHeight = 0 }
+    const color = pdfColor(item.color, '#f1f5f9')
+    doc.roundedRect(x, y, width, height, 3).fill(color)
+    doc.font(theme.font).fontSize(theme.meta).fillColor(pdfContrastText(color))
+    doc.text(item.label, x + 8, y + 5, { width: width - 16, height: height - 9, ellipsis: false })
+    x += width + 5
+    rowHeight = Math.max(rowHeight, height)
+  }
+  return y + rowHeight + theme.groupGap
 }
 
 function drawSummary(

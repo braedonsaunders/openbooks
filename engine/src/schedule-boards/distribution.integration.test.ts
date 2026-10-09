@@ -1025,3 +1025,34 @@ test('revoking the scheduling feature after authoring leaves native failed timer
   assert.equal(failures.rows.length, 2);
   assert.ok(failures.rows.every(run => run.status === 'failed' && run.error.includes('(not found)')), JSON.stringify(failures.rows));
 }));
+
+test('native PDF evidence binds ordered board rule colors for literal source observations and bookings without changing source identity', enabled, () => fixture(async f => {
+  const actor = { orgId: f.orgId, actorId: f.actorId };
+  const codeId = randomUUID();
+  const rules = [
+    { field: 'bookingLabel', match: 'startsWith', value: 'SHOP', color: '#fde68a' },
+    { field: 'bookingLabel', match: 'contains', value: 'SHOP', color: '#1d4ed8' },
+  ];
+  await withBypassContext(async () => {
+    const code = await db.execute(sql`insert into schedule_codes(id,org_id,code,label,category,color) values(${codeId},${f.orgId},'SHOP','Shop','work','#99f6e4') returning id`);
+    assert.equal(code.rows.length, 1);
+    const board = await db.execute(sql`update schedule_boards set cell_color_rules=${JSON.stringify(rules)}::jsonb where org_id=${f.orgId} and id=${f.boardId} returning id`);
+    assert.equal(board.rows.length, 1);
+  });
+  const saved = await applyBoardChanges({ ...actor, boardId: f.boardId, changes: [{ op: 'create', id: randomUUID(), workerPartyId: f.ana, onDate: '2026-10-13', target: { kind: 'code', id: codeId }, span: { mode: 'day' } }] });
+  assert.equal(saved.results[0]?.ok, true);
+  const before = await preview(f);
+  const evidenceBefore = (await loadBoardWindow(actor, f.boardId, dates.from, dates.through)).sourceRecords ?? [];
+  const actualLines = before.recipients.flatMap(recipient => recipient.lines).filter(line => line.assignment.startsWith('SHOP'));
+  assert.equal(actualLines.length, 2);
+  assert.ok(actualLines.every(line => line.color === '#fde68a'));
+  await withBypassContext(async () => {
+    const cleared = await db.execute(sql`update schedule_boards set cell_color_rules='[]'::jsonb where org_id=${f.orgId} and id=${f.boardId} returning id`);
+    assert.equal(cleared.rows.length, 1);
+  });
+  const fallback = await preview(f);
+  assert.notEqual(fallback.version, before.version);
+  assert.ok(fallback.recipients.flatMap(recipient => recipient.lines).filter(line => line.assignment.startsWith('SHOP')).every(line => line.color === '#99f6e4'));
+  const evidenceAfter = (await loadBoardWindow(actor, f.boardId, dates.from, dates.through)).sourceRecords ?? [];
+  assert.deepEqual(evidenceAfter.map(({ color, ...record }) => record), evidenceBefore.map(({ color, ...record }) => record));
+}));

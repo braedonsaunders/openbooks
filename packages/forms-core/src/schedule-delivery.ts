@@ -6,6 +6,10 @@ export const schedulePdfLayoutSchema = z.strictObject({
   density: z.enum(["standard", "compact"]),
   daysPerSection: z.union([z.literal(7), z.literal(14)]),
   detail: z.enum(["assignments", "hours", "full"]),
+  style: z.enum(["modern", "classic"]).optional(),
+  accentColor: z.string().regex(/^#[0-9a-f]{6}$/i).optional(),
+  showLegend: z.boolean().optional(),
+  shadeWeekends: z.boolean().optional(),
 });
 export type SchedulePdfLayout = z.infer<typeof schedulePdfLayoutSchema>;
 /** Stored native board policy; enabling and timing remain owned by Flows. */

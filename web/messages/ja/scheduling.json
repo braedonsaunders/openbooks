@@ -352,7 +352,11 @@
       "marginMm": "余白（mm）",
       "density": "間隔",
       "daysPerSection": "各区分の日付列数（7または14）",
-      "detail": "セルの詳細"
+      "detail": "セルの詳細",
+      "style": "表示スタイル",
+      "accentColor": "アクセントカラー",
+      "showLegend": "予定の色凡例を表示",
+      "shadeWeekends": "設定された週末に網掛けを表示"
     },
     "pdfOptions": {
       "paperSize": {
@@ -373,6 +377,10 @@
         "assignments": "割り当て",
         "hours": "割り当てと時間",
         "full": "証拠の全詳細"
+      },
+      "style": {
+        "modern": "モダン",
+        "classic": "クラシック"
       }
     }
   }

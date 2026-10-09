@@ -4123,7 +4123,11 @@
       "schedulePdfMargin": "页边距（毫米）",
       "schedulePdfDensity": "间距",
       "schedulePdfDays": "每节日期列数（7或14）",
-      "schedulePdfDetail": "单元格详情"
+      "schedulePdfDetail": "单元格详情",
+      "schedulePdfStyle": "视觉样式",
+      "schedulePdfAccent": "强调色",
+      "schedulePdfLegend": "显示安排颜色图例",
+      "schedulePdfWeekends": "对已配置的周末加阴影"
     },
     "fieldHelp": {
       "fxRateMaxAgeDays": "最新可用汇率距期末的天数超过此值时，重估和合并将拒绝该汇率。期末汇率从期末即期汇率的日期起算；平均汇率从计入平均的最新报价日期起算。未设置政策时的默认值：31 天。",
@@ -5082,6 +5086,10 @@
         "assignments": "分配内容",
         "hours": "分配内容及小时",
         "full": "完整记录"
+      },
+      "schedulePdfStyle": {
+        "modern": "现代",
+        "classic": "经典"
       }
     },
     "payroll": {
