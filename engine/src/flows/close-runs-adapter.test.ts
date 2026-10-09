@@ -18,8 +18,9 @@ test("period close is a first-class configurable flow subject", () => {
   assert.ok(closeRunSubjectProfile.fields.some((field) => field.key === "periodType"));
 });
 
-test("period close forbids self-approval regardless of authored gate settings", () => {
-  assert.equal(closeRunsFlowAdapter.selfApprovalPolicy, "forbidden");
+test("period close freezes its configurable approval policy", () => {
+  assert.equal(closeRunsFlowAdapter.selfApprovalPolicy, "configurable");
+  assert.equal(closeRunSubjectProfile.pinsSubmissionPolicy, true);
   assert.equal(
     closeRunsFlowAdapter.deepLink("00000000-0000-0000-0000-000000000001"),
     "/close?run=00000000-0000-0000-0000-000000000001&stage=lock",

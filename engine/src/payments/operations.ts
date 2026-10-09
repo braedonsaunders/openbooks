@@ -32,7 +32,7 @@ import { createPaymentRun } from "./run-creation.ts";
 import { runRecordFlows } from "../flows/run.ts";
 import { cancelDispatchRuns, dispatchFailureReason } from "../flows/dispatch-result.ts";
 import { paymentRunSubjectKind } from "../flows/payment-runs-adapter.ts";
-import { pinnedGateAllowsSelfApproval } from "../flows/gate-policy.ts";
+import { completedGateAllowsSelfApproval } from "../flows/approval-decision-policy.ts";
 import { guardCsvCell } from "@openbooks/reports";
 export { PAYMENT_FILE_STATUSES } from "./file-statuses.ts";
 
@@ -460,18 +460,8 @@ export async function releasePaymentRunApproval(args: {
     throw new PaymentError(`the payment run is ${run.status}, not awaiting approval`);
   }
   if (actorId === run.submitted_by || actorId === run.created_by) {
-    const gates = args.approvalRunId ? (await db.execute<{ context: unknown; node_id: string }>(sql`
-      select r.context,g.node_id from flow_runs r join flow_gates g
-        on g.org_id=r.org_id and g.run_id=r.id and g.flow_id=r.flow_id
-        and g.subject_id=r.subject_id and g.subject_kind=r.subject_kind
-      where r.org_id=${orgId} and r.id=${args.approvalRunId} and r.subject_id=${runId}
-        and r.subject_kind=${paymentRunSubjectKind(run.direction)}
-        and g.status=${outcome} and g.decided_by=${actorId}
-        and not exists(select 1 from flow_gates pending where pending.org_id=r.org_id
-          and pending.run_id=r.id and pending.status in ('pending','escalated'))
-      for share of r,g
-    `)).rows : [];
-    if (!gates.some(gate => pinnedGateAllowsSelfApproval(gate.context, gate.node_id))) {
+    if (!await completedGateAllowsSelfApproval(db, { orgId, subjectKind: paymentRunSubjectKind(run.direction),
+      subjectId: runId, approvalRunId: args.approvalRunId, actorId, outcome })) {
       throw new PaymentError("The payment run author or submitter cannot decide its approval without an explicit frozen self-approval policy and completed gate decision — use the configured approval gate.");
     }
   }
