@@ -340,6 +340,11 @@ export function generateCopySql(
       // Keep the complete election graph, including its actor identities,
       // on the same deterministic sandbox mapping as the guarded source row.
       exprs.push(`(case when "${c.name}" is null then null else ob_rebase("${c.name}", '${seed}') end)`);
+    } else if (c.isUuid && ["inventory_movements", "stock_counts", "stock_count_lines", "journal_entries"].includes(t.name)
+      && ["created_by", "updated_by", "posted_by"].includes(c.name)) {
+      // Count recovery resolves historical posters against the copied tenant's users.
+      // These legacy actor columns may predate their foreign-key declarations.
+      exprs.push(`(case when "${c.name}" is null then null else ob_rebase("${c.name}", '${seed}') end)`);
     } else if (c.isUuid && ["flow_runs", "flow_gates"].includes(t.name) && ["created_by", "updated_by", "decided_by"].includes(c.name) && !fkTarget && !t.forceRebase.has(c.name)) {
       exprs.push(`(case when "subject_kind"='hrm_benefit_enrollment' and "${c.name}" is not null ` +
         `then ob_rebase("${c.name}", '${seed}') else "${c.name}" end)`);
