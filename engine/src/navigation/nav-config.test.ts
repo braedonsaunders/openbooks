@@ -81,6 +81,30 @@ test('local order, visibility and names cannot resurrect unavailable choices', (
   assert.deepEqual(applyLocalNavigationPreferences([...tabs, { href: '/new', label: 'New' }], { items: [{ href: '/payroll', hidden: true }] }), [tabs[1], { href: '/new', label: 'New' }])
 })
 
+test('inherited Payroll starts with Overview and keeps Year-end in local More', () => {
+  const saved = defaultNavConfig()
+  const people = saved.groups.find(group => group.id === 'hrm')!
+  const order = ['payroll-runs', 'payroll-anomalies', 'payroll-remittances', 'payroll', 'payroll-separations']
+  const items = people.items.filter(item => item.kind === 'module' && order.includes(item.moduleKey))
+  items.sort((a, b) => order.indexOf(a.kind === 'module' ? a.moduleKey : '') - order.indexOf(b.kind === 'module' ? b.moduleKey : ''))
+  let next = 0
+  people.items = people.items.map(item => items.includes(item) ? items[next++]! : item)
+  const overview = items.find(item => item.kind === 'module' && item.moduleKey === 'payroll')!
+  Object.assign(overview, {label: 'Payroll', mobile: true})
+  const before = structuredClone(saved)
+  const result = reconcileNavConfig(saved)
+  const corrected = result.groups.find(group => group.id === 'hrm')!
+  assert.deepEqual(corrected.items.filter(item => item.kind === 'module' && order.includes(item.moduleKey)).map(item => item.kind === 'module' ? item.moduleKey : ''),
+    ['payroll', 'payroll-runs', 'payroll-anomalies', 'payroll-remittances', 'payroll-separations'])
+  assert.deepEqual(corrected.items.filter(item => item.kind !== 'module' || !order.includes(item.moduleKey)),
+    people.items.filter(item => item.kind !== 'module' || !order.includes(item.moduleKey)))
+  assert.deepEqual(corrected.items.find(item => item.kind === 'module' && item.moduleKey === 'payroll'), {kind: 'module', moduleKey: 'payroll', mobile: true})
+  const yearEnd = corrected.items.find(item => item.kind === 'module' && item.moduleKey === 'payroll-year-end')!
+  assert.equal(isDefaultLocalNavigationItem('hrm', yearEnd), true)
+  assert.deepEqual(reconcileNavConfig(result), result)
+  assert.deepEqual(saved, before)
+})
+
 test('compact Talent defaults preserve stored navigation and deliberate placements', () => {
   const saved = defaultNavConfig()
   saved.localNavigation = { 'hrm-talent': { items: [{ href: '/hrm/performance?tab=talent', label: 'Succession planning' }] } }

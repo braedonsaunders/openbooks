@@ -34,7 +34,7 @@ export function reconcileNavConfig(saved: OrgNavConfig): OrgNavConfig {
     const operations = groups.find((group) => group.id === 'operations' && group.label === 'Operations')
     if (operations) {
       for (const key of ['employees', 'payroll', 'hrm', 'me']) {
-        const index = operations.items.findIndex((item) => item.kind === 'module' && item.moduleKey === key && item.placement !== 'custom' && (!item.label || item.label === MODULE_BY_KEY.get(key)?.label) && !item.iconKey)
+        const index = operations.items.findIndex((item) => item.kind === 'module' && item.moduleKey === key && item.placement !== 'custom' && (!item.label || item.label === MODULE_BY_KEY.get(key)?.label || (key === 'payroll' && item.label === 'Payroll')) && !item.iconKey)
         if (index < 0) continue
         const [item] = operations.items.splice(index, 1)
         ensureGroup(key === 'me' ? 'my-work' : 'hrm').items.push(item!)
@@ -71,6 +71,18 @@ export function reconcileNavConfig(saved: OrgNavConfig): OrgNavConfig {
     const order = defaults.groups.find((candidate) => candidate.id === group.id)!.items
       .flatMap((item) => item.kind === 'module' ? [item.moduleKey] : [])
     group.items.sort((a, b) => a.kind === 'module' && b.kind === 'module' ? order.indexOf(a.moduleKey) - order.indexOf(b.moduleKey) : 0)
+  }
+  // The inherited Payroll workflow starts at its overview. Only its own
+  // slots change; unrelated destinations and explicit editor placements stay put.
+  const payrollOrder = ['payroll', 'payroll-runs', 'payroll-anomalies', 'payroll-remittances', 'payroll-separations']
+  const people = groups.find((group) => group.id === 'hrm')
+  if (people) {
+    const inherited = people.items.filter((item) => item.kind === 'module' && item.placement !== 'custom' && payrollOrder.includes(item.moduleKey))
+    inherited.sort((a, b) => payrollOrder.indexOf(a.kind === 'module' ? a.moduleKey : '') - payrollOrder.indexOf(b.kind === 'module' ? b.moduleKey : ''))
+    let next = 0
+    people.items = people.items.map((item) => inherited.includes(item) ? inherited[next++]! : item)
+    const overview = people.items.find((item) => item.kind === 'module' && item.moduleKey === 'payroll')
+    if (overview?.kind === 'module' && overview.label === 'Payroll') delete overview.label
   }
   return { ...saved, architectureVersion: 1, groups }
 }
