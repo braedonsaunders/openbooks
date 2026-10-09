@@ -210,6 +210,9 @@ export async function appendRecurringBenefitLines(tx: Executor, args: {
         else if (rule.basis === 'percent_of_eligible_pay') { basis.eligiblePay = capped; result = recurringBenefitAmount(rule, term, basis); }
         else result = { ...result, amount: parseMoney(capped) };
       }
+      if (cmp(result.amount, '0') < 0) {
+        throw new PayrollError(`Benefit rule ${rule.ruleKey} produces a negative contribution — review its counted earning components and signed bank inputs before calculating; contribution allocations must be non-negative`);
+      }
       const coverageAmount = result.amount;
       const recoverySources=enrollment.recoverySources.filter(s=>s.ruleId===rule.id);
       const insuredPremiums=recoverySources.map(source=>{

@@ -116,6 +116,12 @@ test('selected-components hours count signed earning hours and ignore quantity u
     assert.equal(duplicate.errors.length, 1);
     assert.match(duplicate.errors[0]!.message, /HOURS_INCENTIVE.*sole source.*never added twice/);
     assert.equal((await db.execute(sql`select id from pay_run_benefit_allocations where org_id=${fx.orgId} and pay_run_document_id=${run.documentId} and rule_id=${cashRuleId}`)).rows.length, 0, 'Refused calculation cannot retain a partial incentive allocation');
+    await db.execute(sql`delete from pay_run_adjustments where org_id=${fx.orgId} and pay_run_document_id=${run.documentId} and component_id=${cashComponentId}`);
+    await db.execute(sql`delete from hrm_benefit_contribution_rule_components where org_id=${fx.orgId} and rule_id=${employerRuleId} and pay_component_id<>${deposit}`);
+    const negative = await calculatePayRun({ orgId: fx.orgId, actorId: fx.actorId, documentId: run.documentId });
+    assert.equal(negative.errors.length, 1);
+    assert.match(negative.errors[0]!.message, /PENSION_ER.*negative contribution.*counted earning components.*signed bank inputs/);
+    assert.equal((await db.execute(sql`select id from pay_run_benefit_allocations where org_id=${fx.orgId} and pay_run_document_id=${run.documentId}`)).rows.length, 0, 'A refused negative basis cannot retain any employee contribution allocation');
   } finally { await dropScratchOrgReporting(fx.orgId); }
 });
 
