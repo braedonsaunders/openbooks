@@ -45,6 +45,8 @@ export async function lockApplicationEvidenceWithQuery(
   options: { nowait?: boolean } = {},
 ): Promise<{ documentIds: readonly string[]; entryIds: readonly string[]; lineIds: readonly string[] }> {
   const lockClause = options.nowait ? sql`for update nowait` : sql`for update`;
+  // One typed array keeps complete mirror graphs within PostgreSQL parameter
+  // limits while retaining the same document → entry → line lock order.
   const requestedLines = [...new Set(lineIds)].sort();
   const requestedDocuments = new Set(additionalDocumentIds);
   const requestedEntries = new Set(additionalEntryIds);
@@ -54,7 +56,7 @@ export async function lockApplicationEvidenceWithQuery(
       select line.id as "lineId", line.entry_id as "entryId", entry.source_document_id as "documentId"
         from journal_lines line
         join journal_entries entry on entry.id = line.entry_id and entry.org_id = line.org_id
-       where line.org_id = ${orgId} and line.id in ${requestedLines}
+       where line.org_id = ${orgId} and line.id = any(${sql.param(requestedLines)}::uuid[])
     `)).rows as { lineId: string; entryId: string; documentId: string | null }[];
     if (owners.length !== requestedLines.length) {
       throw new Error("application endpoints changed or disappeared; retry the operation");
@@ -71,7 +73,7 @@ export async function lockApplicationEvidenceWithQuery(
     const lockedDocuments = (await execute(sql`
       select id
         from documents
-       where org_id = ${orgId} and id in ${documentIds}
+       where org_id = ${orgId} and id = any(${sql.param(documentIds)}::uuid[])
        order by id
        ${lockClause}
     `)).rows;
@@ -85,7 +87,7 @@ export async function lockApplicationEvidenceWithQuery(
     const lockedEntries = (await execute(sql`
       select id
         from journal_entries
-       where org_id = ${orgId} and id in ${entryIds}
+       where org_id = ${orgId} and id = any(${sql.param(entryIds)}::uuid[])
        order by id
        ${lockClause}
     `)).rows;
@@ -98,7 +100,7 @@ export async function lockApplicationEvidenceWithQuery(
     const lockedLines = (await execute(sql`
       select id, entry_id as "entryId"
         from journal_lines
-       where org_id = ${orgId} and id in ${requestedLines}
+       where org_id = ${orgId} and id = any(${sql.param(requestedLines)}::uuid[])
        order by id
        ${lockClause}
     `)).rows as { id: string; entryId: string }[];
