@@ -4,7 +4,8 @@ import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { ensureCloseDefaults } from "../close/defaults.ts";
 import { refreshCloseRun } from "../close/run-automation.ts";
-import { requestCloseApproval } from "../close/approvals.ts";
+import { finalizeCloseFlowApproval, requestCloseApproval } from "../close/approvals.ts";
+import { completedGateAllowsSelfApproval } from "./approval-decision-policy.ts";
 import {
   createScratchOrg,
   dropScratchOrg,
@@ -101,8 +102,7 @@ test("close approval is flow-routed, forbids the initiator, and reopens after le
         { type: "user", userId: actors.approver1Id },
       ],
       mode: "any",
-      // Close overrides this authored opt-out: independence is invariant.
-      preventSelfApproval: false,
+      preventSelfApproval: true,
       gateTitle: "Final close review",
     });
 
@@ -139,6 +139,36 @@ test("close approval is flow-routed, forbids the initiator, and reopens after le
     assert.equal(reopened.status, "in_progress");
     assert.equal(reopened.approvedBy, null);
     assert.equal(reopened.approvedAt, null);
+  });
+});
+
+test("a frozen solo close gate releases with a ledger fingerprint and signoff", { skip: !DB }, async () => {
+  await withCloseRun(async (fixture, actors, runId) => {
+    const { flowId } = await seedApprovalFlow(fixture.orgId, { subjectKind: "close_run",
+      assignees: [{ type: "user", userId: actors.submitterId }], mode: "any", preventSelfApproval: false });
+    assert.equal((await requestCloseApproval(fixture.orgId, runId, actors.submitterId)).approvals, 1);
+    const [gate] = (await db.execute<{ id: string; run_id: string }>(sql`
+      select id,run_id from flow_gates where org_id=${fixture.orgId} and subject_kind='close_run'
+        and subject_id=${runId} and status='pending'`)).rows;
+    assert.ok(gate);
+    await assert.rejects(finalizeCloseFlowApproval({ orgId: fixture.orgId, runId,
+      actorId: actors.submitterId, outcome: "approved", approvalRunId: gate.run_id }), /completed gate decision/);
+    await db.execute(sql`update flows set graph=jsonb_set(graph,'{nodes,1,data,gate,preventSelfApproval}','true'::jsonb)
+      where org_id=${fixture.orgId} and id=${flowId}`);
+    await decideGate({ gateId: gate.id, decision: "approved", userId: actors.submitterId });
+    assert.equal((await closeStatus(runId)).approvedBy, actors.submitterId);
+    const signoffs = (await db.execute<{ signed_by: string; data_fingerprint: string | null }>(sql`
+      select signed_by,data_fingerprint from close_signoffs where org_id=${fixture.orgId}
+        and run_id=${runId} and decision='approved'`)).rows;
+    assert.equal(signoffs.length, 1);
+    assert.equal(signoffs[0]!.signed_by, actors.submitterId);
+    assert.ok(signoffs[0]!.data_fingerprint);
+    const proof = { orgId: fixture.orgId, subjectKind: "close_run", subjectId: runId,
+      actorId: actors.submitterId, outcome: "approved" as const, approvalRunId: gate.run_id };
+    assert.equal(await completedGateAllowsSelfApproval(db, proof), true);
+    assert.equal(await completedGateAllowsSelfApproval(db, { ...proof, subjectId: fixture.periodId }), false);
+    assert.equal(await completedGateAllowsSelfApproval(db, { ...proof, actorId: actors.approver1Id }), false);
+    assert.equal(await completedGateAllowsSelfApproval(db, { ...proof, subjectKind: "outbound_payment_run" }), false);
   });
 });
 

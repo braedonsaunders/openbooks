@@ -4,6 +4,7 @@ import { sql } from "drizzle-orm";
 import { db, withOrg, type SqlExecutor } from "../platform/db.ts";
 import { periodFingerprint } from "./readiness.ts";
 import { refreshCloseRun } from "./run-automation.ts";
+import { completedGateAllowsSelfApproval } from "../flows/approval-decision-policy.ts";
 async function assertCloseReadyForApproval(
   executor: SqlExecutor,
   orgId: string,
@@ -39,7 +40,7 @@ export async function attestOwnerManagedClose(
   comment: string,
 ): Promise<void> {
   if (await advancedCloseEnabled(orgId)) {
-    throw new CloseError("Advanced close controls require independent approval");
+    throw new CloseError("Advanced close controls require approval through the configured workflow");
   }
   const attestation = comment.trim();
   if (attestation.length < 10 || attestation.length > 1000) {
@@ -83,7 +84,7 @@ export async function requestCloseApproval(
   actorId: string,
 ): Promise<{ approvals: number }> {
   if (!(await advancedCloseEnabled(orgId))) {
-    throw new CloseError("enable Advanced close controls to use independent approval routing");
+    throw new CloseError("enable Advanced close controls to use approval routing");
   }
   await refreshCloseRun(orgId, runId, actorId);
   const outcome = await withOrg(orgId, async () => {
@@ -167,6 +168,7 @@ export async function finalizeCloseFlowApproval(args: {
   runId: string;
   actorId: string | null;
   outcome: "approved" | "rejected";
+  approvalRunId?: string;
 }): Promise<void> {
   if (!args.actorId) throw new CloseError("a signed-in approver is required");
   // decideGate calls this inside its serialized, org-scoped transaction. Keep
@@ -189,8 +191,10 @@ export async function finalizeCloseFlowApproval(args: {
   if (!row) throw new CloseError("close run not found");
   if (row.status !== "review")
     throw new CloseError("the close review changed and must be submitted again");
-  if (row.started_by === args.actorId)
-    throw new CloseError("the run initiator cannot provide final approval");
+  if (row.started_by === args.actorId && !await completedGateAllowsSelfApproval(db, {
+    orgId: args.orgId, subjectKind: "close_run", subjectId: args.runId,
+    approvalRunId: args.approvalRunId, actorId: args.actorId, outcome: args.outcome,
+  })) throw new CloseError("The run initiator cannot provide final approval without an explicit frozen self-approval policy and completed gate decision — use the configured approval gate.");
 
   const currentFingerprint = await periodFingerprint(
     args.orgId,

@@ -19,6 +19,7 @@ const CLOSE_RUN_STATUSES = [
 
 export const closeRunSubjectProfile: FlowSubjectProfile = {
   subjectKind: CLOSE_RUN_SUBJECT_KIND,
+  pinsSubmissionPolicy: true,
   label: "Period close run",
   triggers: ["on_submit"],
   actions: ["send_email", "notify"],
@@ -93,7 +94,7 @@ export const closeRunsFlowAdapter: FlowSubjectAdapter = defineTableSubjectAdapte
   profile: closeRunSubjectProfile,
   // releaseApproval below delegates to the registered engine handler.
   releaseViaHandler: true,
-  selfApprovalPolicy: "forbidden",
+  selfApprovalPolicy: "configurable",
 
   async loadContext(subjectId: string): Promise<FlowSubjectContext | null> {
     const run = await loadCloseRun(subjectId);
@@ -137,12 +138,15 @@ export const closeRunsFlowAdapter: FlowSubjectAdapter = defineTableSubjectAdapte
     subjectId: string,
     outcome: "approved" | "rejected",
     ctx: FlowExecCtx,
+    _detail?: { comment?: string | null },
+    run?: { id: string; dispatchValues: Record<string, unknown> | null },
   ): Promise<void> {
     await releaseFlowApproval({
       subjectKind: CLOSE_RUN_SUBJECT_KIND,
       subjectId,
       outcome,
       ctx,
+      approvalRunId: run?.id,
     });
   },
 
