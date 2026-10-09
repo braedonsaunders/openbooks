@@ -34,7 +34,9 @@ import {
   applySourceReconciliationEvidence,
   type SourceEvidenceOutcome,
 } from "./source-evidence.ts";
-import type { MigrationSource, SourceOpenItem } from "./source.ts";
+import type { MigrationSource, SourceOpenItem, SourceOperationalSyncResult } from "./source.ts";
+import { syncProjectFinancialInputs, type ProjectFinancialInputSyncResult } from "./project-financial-inputs.ts";
+import { AttachmentImportError, type ImportSummary } from "./netsuite-attachments.ts";
 import {
   verifyAccountMonths,
   type AccountMonthVerification,
@@ -98,6 +100,9 @@ export interface SyncResult {
    * Null for targeted repairs, which stay side-effect-minimal.
    * Optional: runs persisted before this contract lack the key. */
   sourceEvidence?: SourceEvidenceOutcome | null;
+  attachments?: ImportSummary;
+  projectFinancials?: ProjectFinancialInputSyncResult;
+  operationalRecords?: SourceOperationalSyncResult;
   applications: ApplyStats | null;
   trueUp: TrueUpStats | null;
   tb: {
@@ -188,6 +193,17 @@ export function syncVerificationFailures(result: SyncResult): string[] {
     failures.push(
       `${result.deletedAtSource.length} source deletions need resolution`,
     );
+  if ((result.attachments?.failures ?? 0) > 0) failures.push(`${result.attachments!.failures} attachments failed to import`);
+  const projectInputs = result.projectFinancials;
+  if (projectInputs && (projectInputs.targetOnlyTimeEntries > 0 || projectInputs.targetOnlyProjects > 0)) {
+    failures.push(`project input replication differs: ${projectInputs.targetOnlyTimeEntries} target-only time entries; ${projectInputs.targetOnlyProjects} target-only projects; review source deletions without removing posted history`);
+  }
+  const orphanAssetHistory = result.operationalRecords?.fixedAssets?.orphanHistoryRows ?? 0;
+  if (orphanAssetHistory > 0) failures.push(`${orphanAssetHistory} fixed-asset history rows have no source asset`);
+  const crm = result.operationalRecords?.crm;
+  if (crm && (crm.missingParties > 0 || crm.warnings.length > 0)) {
+    failures.push(`CRM replication is incomplete: ${crm.missingParties} missing parties; ${crm.warnings.slice(0, 5).join("; ")}`);
+  }
   const tbOff = result.tb.accounts - result.tb.matches;
   if (tbOff > 0) failures.push(`${tbOff} trial-balance accounts differ`);
   const openOff = result.openItems
@@ -1427,6 +1443,8 @@ export async function runSync(
     throw new Error("posted-change authorization is invalid");
   }
 
+  const supplemental: Pick<SyncResult, "attachments" | "projectFinancials" | "operationalRecords"> = {};
+
   const [run] = await claimSyncRun({
     orgId: org.id,
     connectionId,
@@ -2375,6 +2393,43 @@ export async function runSync(
       );
     }
 
+    // Supplemental populations share the run claim and completion gate. A
+    // failed attachment or commercial-state import cannot advance the cursor.
+    if (!targetedRefs && source.syncOperationalRecords) {
+      await setProgress(org.id, run!.id, {
+        phase: "operational-records", message: "Synchronizing enabled operational registers…",
+        docsNew, docsAmended, docsUnchanged, docsFailed, ordersNew,
+      }, true);
+      supplemental.operationalRecords = await source.syncOperationalRecords({
+        orgId: org.id, connectionId, actorId: isUuid(triggeredBy) ? triggeredBy : null,
+      });
+    }
+
+    if (!targetedRefs && source.syncAttachments) {
+      await setProgress(org.id, run!.id, {
+        phase: "attachments", message: "Checking attachments and importing missing or changed files…",
+        docsNew, docsAmended, docsUnchanged, docsFailed, ordersNew,
+      }, true);
+      try {
+        supplemental.attachments = await source.syncAttachments({
+          orgId: org.id, connectionId, actorId: isUuid(triggeredBy) ? triggeredBy : null,
+        });
+      } catch (error) {
+        if (error instanceof AttachmentImportError) supplemental.attachments = error.summary;
+        throw error;
+      }
+    }
+    if (!targetedRefs && source.projectFinancialInputs) {
+      await setProgress(org.id, run!.id, {
+        phase: "project-financials", message: "Reconciling project financial inputs…",
+        docsNew, docsAmended, docsUnchanged, docsFailed, ordersNew,
+      }, true);
+      supplemental.projectFinancials = await syncProjectFinancialInputs(source, {
+        orgId: org.id, connectionId, runId: run!.id,
+        actorId: isUuid(triggeredBy) ? triggeredBy : null, apply: true,
+      });
+    }
+
     // -- 7. verify: authoritative source ledger ----------------------------------
     await setProgress(
       org.id,
@@ -2446,6 +2501,7 @@ export async function runSync(
       applications,
       trueUp,
       sourceEvidence,
+      ...supplemental,
       ...financialVerification,
       targetedDocuments,
       syncedThrough: changes.syncedThrough.toISOString(),
@@ -2523,9 +2579,7 @@ export async function runSync(
       .set({
         status: "failed",
         finishedAt: new Date(),
-        ...(verificationResult
-          ? { stats: verificationResult as unknown as Record<string, unknown> }
-          : {}),
+        stats: { ...(verificationResult ?? {}), ...supplemental } as Record<string, unknown>,
         errorMessage: (e as Error).message,
       })
       .where(sql`${schema.syncRuns.id} = ${run!.id} and ${schema.syncRuns.orgId} = ${org.id}`);

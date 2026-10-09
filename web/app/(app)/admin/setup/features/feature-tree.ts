@@ -11,6 +11,7 @@
 export interface FeatureTreeRow {
   key: string
   category: string
+  group?: string
   parentKey?: string
   requiresAll?: string[]
   recommends?: string[]
@@ -326,4 +327,47 @@ export function industryLenses(
     .filter((key) => !named.has(key))
   const other = featureLens(sections, new Set(unnamed), OTHER_INDUSTRY_MODULES)
   return other ? [...lenses, { key: OTHER_INDUSTRY_MODULES, section: other }] : lenses
+}
+
+
+/** Ordered settings sections. Every root and its hierarchy is rendered once;
+ * new capabilities without presentation metadata stay visible under Other. */
+export function groupFeatureSections(
+  section: FeatureTreeSection,
+  groupOrder: readonly string[],
+): { key: string; section: FeatureTreeSection }[] {
+  const grouped = new Map<string, FeatureTreeGroup[]>();
+  for (const group of section.groups) {
+    const key = group.parent.row.group ?? 'other';
+    const siblings = grouped.get(key) ?? [];
+    siblings.push(group);
+    grouped.set(key, siblings);
+  }
+  const order = new Map([...groupOrder, 'other'].map((key, index) => [key, index]));
+  return [...grouped.entries()]
+    .sort(([a], [b]) => (order.get(a) ?? order.size) - (order.get(b) ?? order.size))
+    .map(([key, groups]) => {
+      const visible = groups.flatMap((group) => [group.parent, ...group.visibleChildren]);
+      return { key, section: { category: section.category, groups, visibleTotal: visible.length, visibleOn: visible.filter((node) => node.on).length } };
+    });
+}
+
+
+/** Subgroups inside a parent remain visually scoped to that parent. */
+export function groupFeatureChildren(
+  children: FeatureTreeNode[],
+  fallbackGroup: string | undefined,
+  groupOrder: readonly string[],
+): { key: string; children: FeatureTreeNode[] }[] {
+  const grouped = new Map<string, FeatureTreeNode[]>();
+  for (const child of children) {
+    const key = child.row.group ?? fallbackGroup ?? 'other';
+    const siblings = grouped.get(key) ?? [];
+    siblings.push(child);
+    grouped.set(key, siblings);
+  }
+  const order = new Map([...groupOrder, 'other'].map((key, index) => [key, index]));
+  return [...grouped.entries()]
+    .sort(([a], [b]) => (order.get(a) ?? order.size) - (order.get(b) ?? order.size))
+    .map(([key, children]) => ({ key, children }));
 }

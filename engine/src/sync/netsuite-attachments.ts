@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { basename, extname } from "node:path";
 import { sql } from "drizzle-orm";
+import { deriveFileType } from "../platform/file-names.ts";
 import { db } from "../platform/db.ts";
 import { fileCabinetObjectKey, getS3Blob, putS3Blob, refuseMaskedStorageKind, s3Enabled } from "../platform/file-storage.ts";
 import { enqueueStorageCleanupStandalone } from "../platform/storage-cleanup.ts";
@@ -20,7 +21,7 @@ import { isUuid } from "../platform/uuid.ts";
 const SOURCE_SYSTEM = "netsuite";
 const RESTLET_BATCH_SIZE = 50;
 
-type SourceKind = "vendor_bill" | "expense_report";
+type SourceKind = string;
 
 interface SourceDocument {
   id: string;
@@ -76,8 +77,8 @@ export interface ImportSummary {
   createdFiles: number;
   newVersions: number;
   unchangedFiles: number;
-  /** Already-imported files skipped without download (source last-modified
-   * matches the stored marker, or marker safely backfilled — see below). */
+  /** Already-imported files skipped without download when the source marker
+   * matches a complete stored version. */
   skippedUnchanged: number;
   createdLinks: number;
   failures: number;
@@ -116,7 +117,7 @@ export function selectRequestedAttachmentFiles(
   const missing = requested.filter((fileId) => !inventory.has(fileId));
   if (missing.length > 0) {
     throw new Error(
-      `requested source files are not attached to an imported vendor bill or expense report: ${missing.join(", ")}`,
+      `requested source files are not attached to an imported transaction: ${missing.join(", ")}`,
     );
   }
   return new Map(requested.map((fileId) => [fileId, new Set(inventory.get(fileId)!)]));
@@ -151,7 +152,7 @@ export function safeFilename(input: string, sourceId: string): string {
   return cleaned || `attachment-${sourceId}`;
 }
 
-export function detectContentType(bytes: Buffer, filename: string): string {
+export function detectContentType(bytes: Buffer, _filename: string): string {
   if (bytes.subarray(0, 5).toString("ascii") === "%PDF-") return "application/pdf";
   if (bytes.length >= 8 && bytes.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) return "image/png";
   if (bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return "image/jpeg";
@@ -162,7 +163,9 @@ export function detectContentType(bytes: Buffer, filename: string): string {
   if (head.startsWith("BM")) return "image/bmp";
   if (bytes.length >= 12 && head.slice(4, 8) === "ftyp" && /hei[cf]|mif1/.test(head.slice(8, 12))) return "image/heic";
 
-  throw new Error(`unsupported attachment content for source file ${filename || "(unnamed)"}`);
+  // Preserve every source file while serving unrecognized bytes as downloads.
+  // Extension alone never grants an executable or inline content type.
+  return "application/octet-stream";
 }
 
 export function normalizeAttachmentBytes(bytes: Buffer): Buffer {
@@ -258,7 +261,7 @@ async function sourceDocuments(orgId: string, limit?: number): Promise<{
   const result = (await db.execute<{ id: string; kind: SourceKind; nsId: string | null }>(sql`
     select id, kind, custom->>'nsId' as "nsId"
       from documents
-     where org_id = ${orgId} and kind in ('vendor_bill', 'expense_report')
+     where org_id = ${orgId} and custom->>'nsId' is not null
      order by kind, id
      ${limit ? sql`limit ${limit}` : sql``}
   `));
@@ -306,7 +309,7 @@ async function targetedAttachmentInventory(
     select id, kind, custom->>'nsId' as "nsId"
       from documents
      where org_id = ${orgId}
-       and kind in ('vendor_bill', 'expense_report')
+       and custom->>'nsId' is not null
        and custom->>'nsId' in (${sourceIdsSql})
      order by kind, id
   `));
@@ -332,7 +335,7 @@ async function targetedAttachmentInventory(
     }
     if (targets.size === 0) {
       throw new Error(
-        `requested source file ${relationship.fileId} is not attached to an imported vendor bill or expense report`,
+        `requested source file ${relationship.fileId} is not attached to an imported transaction`,
       );
     }
     fileToDocuments.set(relationship.fileId, targets);
@@ -355,11 +358,16 @@ async function attachmentInventory(
     }>(bridge.script, bridge.deploy, {
       action: "attachmentInventory",
       records: batch.map((doc) => ({
-        recordType: doc.kind === "vendor_bill" ? "vendorBill" : "expenseReport",
+        recordType: doc.kind === "expense_report" ? "expenseReport" : "transaction",
         internalId: doc.nsId,
       })),
     }, creds, "POST");
     if (!response.ok || !response.records) throw new Error(response.error || "attachment inventory failed");
+    for (const document of batch) {
+      if (!Array.isArray(response.records[document.nsId])) {
+        throw new Error(`attachment inventory omitted source transaction ${document.nsId}; update the extraction bridge and retry`);
+      }
+    }
     if ((index + 1) % 20 === 0 || index + 1 === batches.length) {
       console.log(`[inventory] ${Math.min((index + 1) * RESTLET_BATCH_SIZE, documents.length)}/${documents.length} transactions`);
     }
@@ -419,13 +427,9 @@ export async function downloadSourceFile(
   const body = response as { ok?: unknown; error?: unknown; file?: Record<string, unknown> };
   const encoding = body?.file ? String(body.file.encoding ?? "") : "";
   if (encoding === "base64") return decodeBridgeAttachment(response, fileId);
-  if (body?.ok === true && (encoding === "oversized" || encoding === "base64-chunks")) {
-    // The file is too large for the RESTlet transport. Every SuiteScript
-    // read path is capped or broken (getContents 10.0MB cap, FileReader read
-    // budget, getSegments' unconsumable iterable — all verified live), so
-    // pull the whole file through SuiteTalk SOAP instead: the only NetSuite
-    // read path without a size ceiling (proven to 23MB+). The 'base64-chunks'
-    // marker from older bridges is honoured the same way.
+  if (body?.ok === true && (encoding === "oversized" || encoding === "base64-chunks" || encoding === "raw-bytes")) {
+    // SOAP preserves source bytes for text and files exceeding the RESTlet
+    // transport limit; older chunk markers use the same read path.
     const { name, bytes } = await netsuiteSoapFileGet(fileId, creds, soapEndpointVersion);
     return { source: { id: fileId, name }, bytes };
   }
@@ -493,10 +497,6 @@ async function ensureRecordFolder(
   return inserted.rows[0]!.id;
 }
 
-function derivedFileType(contentType: string): "pdf" | "image" {
-  return contentType === "application/pdf" ? "pdf" : "image";
-}
-
 async function persistFile(input: {
   orgId: string;
   actorId: string | null;
@@ -520,8 +520,13 @@ async function persistFile(input: {
       contentHash: string | null;
       sourceModifiedAt: Date | string | null;
       maxVersion: number;
+      currentVersionReady: boolean;
     }>(sql`
       select id, content_hash as "contentHash", source_modified_at as "sourceModifiedAt",
+             exists(select 1 from file_versions fv where fv.id = files.current_version_id
+                      and fv.file_id = files.id and fv.storage_kind = 's3'
+                      and files.storage_kind = 's3' and fv.content_hash = files.content_hash
+                      and fv.size_bytes = files.size_bytes) as "currentVersionReady",
              (select coalesce(max(fv.version_number), 0)
                 from file_versions fv
                 join files fi on fi.id = fv.file_id and fi.org_id = ${input.orgId}
@@ -534,7 +539,7 @@ async function persistFile(input: {
     let fileId = existing.rows[0]?.id;
     let created = false;
     let versioned = false;
-    const unchanged = existing.rows[0]?.contentHash === hash;
+    const unchanged = existing.rows[0]?.contentHash === hash && existing.rows[0]?.currentVersionReady === true;
     const storedModifiedAt = existing.rows[0]?.sourceModifiedAt == null
       ? null
       : new Date(existing.rows[0].sourceModifiedAt).getTime();
@@ -553,7 +558,7 @@ async function persistFile(input: {
                            size_bytes, storage_kind, source_system, source_id, source_modified_at, content_hash,
                            created_by, updated_by, created_at, updated_at)
         values (${fileId}, ${input.orgId}, ${folderId}, ${filename}, ${extension(filename)},
-                ${derivedFileType(input.contentType)}, ${input.contentType}, ${input.bytes.length}, 's3',
+                ${deriveFileType(input.contentType)}, ${input.contentType}, ${input.bytes.length}, 's3',
                 ${SOURCE_SYSTEM}, ${input.source.id}, ${sourceModifiedAtIso}, ${hash}, ${input.actorId}, ${input.actorId}, now(), now())
       `);
       created = true;
@@ -576,7 +581,7 @@ async function persistFile(input: {
       stagedFileId = fileId;
       await tx.execute(sql`
         update files set current_version_id = ${versionId}, name = ${filename}, extension = ${extension(filename)},
-                         file_type = ${derivedFileType(input.contentType)}, content_type = ${input.contentType},
+                         file_type = ${deriveFileType(input.contentType)}, content_type = ${input.contentType},
                          size_bytes = ${input.bytes.length}, storage_kind = 's3', content_hash = ${hash},
                          source_modified_at = coalesce(${sourceModifiedAtIso}, source_modified_at),
                          updated_by = ${input.actorId}, updated_at = now()
@@ -586,7 +591,7 @@ async function persistFile(input: {
     } else {
       await tx.execute(sql`
         update files set name = ${filename}, extension = ${extension(filename)},
-                         file_type = ${derivedFileType(input.contentType)}, content_type = ${input.contentType},
+                         file_type = ${deriveFileType(input.contentType)}, content_type = ${input.contentType},
                          size_bytes = ${input.bytes.length},
                          source_modified_at = coalesce(${sourceModifiedAtIso}, source_modified_at),
                          updated_by = ${input.actorId}, updated_at = now()
@@ -699,10 +704,8 @@ async function verifyImport(
 
 /**
  * Upstream last-modified per source file id, in epoch ms. The source's wall
- * clock is read as UTC (the codebase's watermark convention) — only equality
- * across runs matters, so the absolute frame is irrelevant. Files missing
- * from the result (deleted upstream, or metadata not exposed) simply stay
- * download-eligible, the always-safe default.
+ * clock is read as UTC; only equality across runs determines eligibility.
+ * Missing metadata must be refused by the caller before any downloads.
  */
 export async function fetchSourceFileModified(
   fileIds: string[],
@@ -728,10 +731,13 @@ export async function fetchSourceFileModified(
   return modified;
 }
 
-/** Clock-skew margin for the marker backfill: the source's wall clock and ours
- *  need not agree, so only treat a stored version as definitively newer than
- *  the source's last change when a full day separates the two instants. */
-const BACKFILL_SKEW_MS = 24 * 60 * 60_000;
+export function attachmentNeedsDownload(input: {
+  sourceModifiedMs: number;
+  storedModifiedMs: number | null;
+  currentVersionReady: boolean;
+}): boolean {
+  return !input.currentVersionReady || input.storedModifiedMs !== input.sourceModifiedMs;
+}
 
 export async function importNetSuiteAttachments(options: ImportOptions): Promise<ImportSummary> {
   const requestedSourceFileIds = normalizeSourceFileIds(options.sourceFileIds ?? []);
@@ -796,84 +802,47 @@ export async function importNetSuiteAttachments(options: ImportOptions): Promise
   );
   if (!options.execute) return summary;
 
-  // -- incremental decision: download only new or provably-changed files ------
-  // The source's own last-modified instant is the equality token. A file is
-  // skipped when its stored marker matches; a pre-marker row (imported before
-  // markers existed) is backfilled WITHOUT a download when the stored version
-  // was created long after the source's last change (skew-margined) — the
-  // bytes held are then provably current. Everything else is downloaded:
-  // unknown, marker-mismatch, or metadata missing. A metadata outage degrades
-  // to the old full re-read, which is always correct — never to silent skips.
+  // The source marker is the change token. Metadata failures refuse before
+  // downloading bytes, so a scheduled sync cannot become an archive reread.
   const sourceModified = await fetchSourceFileModified(
-    Array.from(fileToDocuments.keys()),
-    creds,
-    bridge,
-  ).catch((error: unknown) => {
-    console.error(`[import] source file metadata unavailable — falling back to a full re-read: ${(error as Error).message}`);
-    return null;
-  });
+    Array.from(fileToDocuments.keys()), creds, bridge,
+  );
+  for (const fileId of fileToDocuments.keys()) {
+    if (!sourceModified.has(fileId)) {
+      throw new Error(`source file ${fileId} has no last-modified metadata; check extraction permissions and retry`);
+    }
+  }
   const requestedIdsSql = requestedSourceFileIds.length > 0
     ? sql`and f.source_id in (${sql.join(
       requestedSourceFileIds.map((fileId) => sql`${fileId}`),
       sql`, `,
     )})`
     : sql``;
-  const imported = (await db.execute<{ sourceId: string; sourceModifiedAt: string | null; versionCreatedAt: string | null }>(sql`
-    select f.source_id as "sourceId",
-           f.source_modified_at as "sourceModifiedAt",
-           fv.created_at as "versionCreatedAt"
+  const imported = (await db.execute<{
+    sourceId: string; sourceModifiedAt: string | null; currentVersionReady: boolean;
+  }>(sql`
+    select f.source_id as "sourceId", f.source_modified_at as "sourceModifiedAt",
+           (f.storage_kind = 's3' and fv.storage_kind = 's3'
+            and f.content_hash is not null and f.content_hash = fv.content_hash
+            and f.size_bytes = fv.size_bytes) as "currentVersionReady"
       from files f
       left join file_versions fv on fv.id = f.current_version_id and fv.file_id = f.id
      where f.org_id = ${orgId} and f.source_system = ${SOURCE_SYSTEM} and f.source_id is not null
        ${requestedIdsSql}
   `));
-  const importedById = new Map(imported.rows.map((row) => [row.sourceId, {
-    modifiedMs: row.sourceModifiedAt ? Date.parse(row.sourceModifiedAt) : null,
-    versionCreatedMs: row.versionCreatedAt ? Date.parse(row.versionCreatedAt) : null,
-  }]));
-
+  const importedById = new Map(imported.rows.map((row) => [row.sourceId, row]));
   const downloadIds: string[] = [];
   const downloadSet = new Set<string>();
-  const backfill: { fileId: string; modifiedMs: number }[] = [];
   for (const fileId of fileToDocuments.keys()) {
-    const lastModifiedMs = sourceModified?.get(fileId) ?? null;
     const have = importedById.get(fileId);
-    if (!have) {
+    if (attachmentNeedsDownload({
+      sourceModifiedMs: sourceModified.get(fileId)!,
+      storedModifiedMs: have?.sourceModifiedAt ? Date.parse(have.sourceModifiedAt) : null,
+      currentVersionReady: have?.currentVersionReady === true,
+    })) {
       downloadIds.push(fileId);
       downloadSet.add(fileId);
-      continue;
-    }
-    if (lastModifiedMs != null && have.modifiedMs != null && have.modifiedMs === lastModifiedMs) {
-      summary.skippedUnchanged++;
-      continue;
-    }
-    if (lastModifiedMs != null && have.modifiedMs == null && have.versionCreatedMs != null
-        && lastModifiedMs <= have.versionCreatedMs - BACKFILL_SKEW_MS) {
-      backfill.push({ fileId, modifiedMs: lastModifiedMs });
-      summary.skippedUnchanged++;
-      continue;
-    }
-    downloadIds.push(fileId);
-    downloadSet.add(fileId);
-  }
-  for (const batch of chunks(backfill, 500)) {
-    // fileIds arrive from the source system: they travel as bound parameters,
-    // never interpolated, so a quote in an external id cannot break out.
-    const values = sql.join(
-      batch.map(
-        ({ fileId, modifiedMs }) =>
-          sql`(${fileId}, ${new Date(modifiedMs).toISOString()}::timestamptz)`,
-      ),
-      sql`, `,
-    );
-    await db.execute(sql`
-      update files f set source_modified_at = v.marker
-        from (values ${values}) as v(source_id, marker)
-       where f.org_id = ${orgId} and f.source_system = ${SOURCE_SYSTEM} and f.source_id = v.source_id
-    `);
-  }
-  if (backfill.length > 0) {
-    console.log(`[import] backfilled last-modified markers for ${backfill.length} already-current files`);
+    } else summary.skippedUnchanged++;
   }
 
   // Skipped files bypass persistFile, but the source's link graph may have
@@ -907,7 +876,7 @@ export async function importNetSuiteAttachments(options: ImportOptions): Promise
       const { source, bytes: sourceBytes } = await downloadSourceFile(fileId, creds, bridge, soapEndpointVersion);
       const bytes = normalizeAttachmentBytes(sourceBytes);
       const contentType = detectContentType(bytes, source.name);
-      const lastModifiedMs = sourceModified?.get(fileId) ?? null;
+      const lastModifiedMs = sourceModified.get(fileId) ?? null;
       const persisted = await persistFile({
         orgId,
         actorId,

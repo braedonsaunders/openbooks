@@ -404,3 +404,56 @@ test("NetSuite bulk export map/reduce only accepts the submitted job's request f
   script!.getInputData().run().each((row) => { matched.push(row.id); return true; });
   assert.deepEqual(matched, ["1"]);
 });
+
+
+test("attachment inventory includes all transaction kinds and every page of file relationships", () => {
+  type Column = { name: string; join?: string; sort?: string; summary?: string };
+  type Restlet = { post: (input: Record<string, unknown>) => unknown };
+  let restlet: Restlet | undefined;
+  const requests: { type: string; filters: unknown; columns: Column[] }[] = [];
+  const pages: number[] = [];
+  const search = {
+    Type: { TRANSACTION: "transaction", VENDOR_BILL: "vendorBill", EXPENSE_REPORT: "expenseReport" },
+    Sort: { ASC: "ASC" },
+    Summary: { GROUP: "GROUP" },
+    createColumn: (column: Column) => column,
+    create: (options: { type: string; filters: unknown; columns: Column[] }) => {
+      requests.push(options);
+      return { runPaged: () => ({
+        count: 2,
+        pageRanges: [{ index: 0 }, { index: 1 }],
+        fetch: ({ index }: { index: number }) => {
+          pages.push(index);
+          return { data: [{ id: "10", getValue: (column: Column) => column.join ? String(100 + index) : "10" }] };
+        },
+      }) };
+    },
+  };
+  runInNewContext(readSuiteScript("integrations/netsuite-bridge/src/FileCabinet/SuiteScripts/OpenBooks/openbooks_bridge_restlet.js"), {
+    define: (_dependencies: string[], factory: (...modules: unknown[]) => Restlet) => {
+      restlet = factory({}, {}, {}, {}, {}, search, {});
+    },
+  });
+  const response = restlet!.post({ action: "attachmentInventory", records: [{ recordType: "transaction", internalId: "10" }] });
+  assert.deepEqual(JSON.parse(JSON.stringify(response)), { ok: true, schemaVersion: 1, records: { "10": ["100", "101"] } });
+  assert.equal(requests[0]!.type, "transaction");
+  assert.deepEqual(pages, [0, 1]);
+  assert.ok(requests[0]!.columns.every((column) => column.sort === "ASC" && column.summary === "GROUP"));
+  assert.deepEqual(JSON.parse(JSON.stringify(requests[0]!.filters)), [["internalid", "anyof", ["10"]]]);
+});
+
+
+test("text attachments request original bytes instead of treating decoded text as base64", () => {
+  type Restlet = { post: (input: Record<string, unknown>) => unknown };
+  let restlet: Restlet | undefined;
+  let textReads = 0;
+  const file = { load: () => ({ name: "schedule.csv", fileType: "CSV", size: 3, isText: true, getContents() { textReads++; return "a,b"; } }) };
+  runInNewContext(readSuiteScript("integrations/netsuite-bridge/src/FileCabinet/SuiteScripts/OpenBooks/openbooks_bridge_restlet.js"), {
+    define: (_dependencies: string[], factory: (...modules: unknown[]) => Restlet) => {
+      restlet = factory(file, {}, {}, {}, {}, {}, {});
+    },
+  });
+  const response = restlet!.post({ action: "attachmentContent", fileId: "10" });
+  assert.deepEqual(JSON.parse(JSON.stringify(response)), { ok: true, schemaVersion: 1, file: { id: "10", name: "schedule.csv", fileType: "CSV", size: 3, encoding: "raw-bytes" } });
+  assert.equal(textReads, 0);
+});

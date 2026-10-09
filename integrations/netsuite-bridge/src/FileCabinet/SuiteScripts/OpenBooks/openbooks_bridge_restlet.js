@@ -5,7 +5,7 @@
  */
 define(['N/file', 'N/format', 'N/query', 'N/record', 'N/runtime', 'N/search', 'N/task'],
   (file, format, query, record, runtime, search, task) => {
-    const BRIDGE_VERSION = '1.3.0';
+    const BRIDGE_VERSION = '1.4.0';
     const SCHEMA_VERSION = 1;
     const MARKER_PATH = 'SuiteScripts/OpenBooks/Jobs/bridge-marker.json';
     const EXPORT_SCRIPT_ID = 'customscript_openbooks_export_mr';
@@ -175,8 +175,8 @@ define(['N/file', 'N/format', 'N/query', 'N/record', 'N/runtime', 'N/search', 'N
 
       const requested = input.records.map((item) => {
         const recordType = text(item && item.recordType);
-        assert(recordType === 'vendorBill' || recordType === 'expenseReport',
-          'attachment recordType must be vendorBill or expenseReport');
+        assert(['transaction', 'vendorBill', 'expenseReport'].includes(recordType),
+          'attachment recordType must be transaction, vendorBill or expenseReport');
         const internalId = text(item && item.internalId);
         assert(/^\d+$/.test(internalId), 'attachment internalId must be numeric');
         return { recordType, internalId };
@@ -190,18 +190,22 @@ define(['N/file', 'N/format', 'N/query', 'N/record', 'N/runtime', 'N/search', 'N
         records[txId].push(id);
       };
 
-      ['vendorBill', 'expenseReport'].forEach((recordType) => {
+      ['transaction', 'vendorBill', 'expenseReport'].forEach((recordType) => {
         const ids = requested.filter((item) => item.recordType === recordType).map((item) => item.internalId);
         if (!ids.length) return;
-        const transactionId = search.createColumn({ name: 'internalid' });
-        const fileId = search.createColumn({ name: 'internalid', join: 'file' });
-        search.create({
-          type: recordType === 'vendorBill' ? search.Type.VENDOR_BILL : search.Type.EXPENSE_REPORT,
-          filters: [['internalid', 'anyof', ids], 'AND', ['mainline', 'is', 'T']],
+        const transactionId = search.createColumn({ name: 'internalid', summary: search.Summary.GROUP, sort: search.Sort.ASC });
+        const fileId = search.createColumn({ name: 'internalid', join: 'file', summary: search.Summary.GROUP, sort: search.Sort.ASC });
+        const attachments = search.create({
+          type: recordType === 'transaction' ? search.Type.TRANSACTION
+            : recordType === 'vendorBill' ? search.Type.VENDOR_BILL : search.Type.EXPENSE_REPORT,
+          filters: [['internalid', 'anyof', ids]],
           columns: [transactionId, fileId],
-        }).run().each((result) => {
-          add(result.getValue(transactionId) || result.id, result.getValue(fileId));
-          return true;
+        }).runPaged({ pageSize: 1000 });
+        assert(attachments.count <= 1000000, 'attachment inventory exceeds the paged search limit');
+        attachments.pageRanges.forEach((page) => {
+          attachments.fetch({ index: page.index }).data.forEach((result) => {
+            add(result.getValue(transactionId) || result.id, result.getValue(fileId));
+          });
         });
       });
 
@@ -229,13 +233,9 @@ define(['N/file', 'N/format', 'N/query', 'N/record', 'N/runtime', 'N/search', 'N
       const loaded = file.load({ id: fileId });
       assert(Number(loaded.size) > 0, 'attachment is empty');
       const size = Number(loaded.size);
-      if (size > MAX_ATTACHMENT_BYTES) {
-        // Beyond the RESTlet response transport. SuiteScript offers no
-        // working read path at this size (getContents caps at 10.0MB,
-        // FileReader's read budget includes the load, getSegments' iterable
-        // is unconsumable in this runtime — all verified live), so the client
-        // must fall back to the SuiteTalk SOAP file-get, which has no
-        // ceiling (proven beyond 23MB).
+      if (size > MAX_ATTACHMENT_BYTES || loaded.isText === true) {
+        // Text reads expose decoded strings rather than the source byte stream.
+        // Text and large files use the byte-preserving SOAP transport.
         return {
           ok: true,
           schemaVersion: SCHEMA_VERSION,
@@ -244,7 +244,7 @@ define(['N/file', 'N/format', 'N/query', 'N/record', 'N/runtime', 'N/search', 'N
             name: loaded.name,
             fileType: text(loaded.fileType),
             size,
-            encoding: 'oversized',
+            encoding: loaded.isText === true ? 'raw-bytes' : 'oversized',
           },
         };
       }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useContext, useLayoutEffect, useRef, useState } from "react";
+import { useContext, useLayoutEffect, useRef, useState, type ComponentProps } from "react";
 import Link from "next/link";
 import { useLocale, useTranslations } from "next-intl";
 import { ChevronDown } from "lucide-react";
@@ -40,10 +40,29 @@ function Count({ count, active }: { count: number; active: boolean }) {
   );
 }
 
-function Pill({ tab }: { tab: ModuleHomeTab }) {
+/** Native history is opt-in for fully loaded, same-page presentation tabs.
+ * Cross-page destinations retain the router and its loading feedback. */
+function TabLink({ navigation, ...props }: ComponentProps<typeof Link> & { navigation?: 'route' | 'history' }) {
+  return <Link {...props} prefetch={navigation === 'history' ? false : props.prefetch}
+    onNavigate={(event) => {
+      if (navigation === 'history' && typeof props.href === 'string') {
+        const url = new URL(props.href, window.location.href);
+        if (url.origin === window.location.origin && url.pathname === window.location.pathname) {
+          event.preventDefault();
+          if (url.href !== window.location.href) {
+            window.history.pushState(window.history.state, '', url.pathname + url.search + url.hash);
+          }
+          return;
+        }
+      }
+      props.onNavigate?.(event);
+    }} />;
+}
+
+function Pill({ tab, navigation }: { tab: ModuleHomeTab; navigation?: 'route' | 'history' }) {
   const active = tab.active === true;
   return (
-    <Link
+    <TabLink navigation={navigation}
       href={tab.href as never}
       transitionTypes={[VIEW_SWITCH_TRANSITION]}
       aria-current={active ? "page" : undefined}
@@ -53,14 +72,15 @@ function Pill({ tab }: { tab: ModuleHomeTab }) {
       {typeof tab.count === "number" ? (
         <Count count={tab.count} active={active} />
       ) : null}
-    </Link>
+    </TabLink>
   );
 }
 
-export function ModuleHomeTabs({ tabs, placement = 'header', ariaLabel }: {
+export function ModuleHomeTabs({ tabs, placement = 'header', ariaLabel, navigation = 'route' }: {
   tabs: ModuleHomeTab[];
   placement?: 'header' | 'local';
   ariaLabel?: string;
+  navigation?: 'route' | 'history';
 }) {
   const managed = useManagedLocalNavigation();
   const context = useContext(ViewTabsContext);
@@ -162,12 +182,13 @@ export function ModuleHomeTabs({ tabs, placement = 'header', ariaLabel }: {
       data-subtabs-track
       style={tabs.length < 8 && preferredWidth ? { width: preferredWidth } : undefined}
       className={cn(
-        "relative flex min-w-0 max-w-full items-center justify-end overflow-hidden",
-        // A large route group is navigation, not the whole header. Cap it at
+        "relative flex min-w-0 max-w-full items-center overflow-hidden",
+        placement === "local" ? "w-full justify-start" : "justify-end",
+        // A large header route group shares room with actions. Cap it at
         // half the desktop viewport and let the component's existing,
         // measured More menu own the overflow. Small view switches keep
         // their natural width; narrow screens still get the full row.
-        tabs.length >= 8 ? "w-full md:w-[min(50vw,48rem)] md:flex-none" : null,
+        tabs.length >= 8 && placement === "header" ? "w-full md:w-[min(50vw,48rem)] md:flex-none" : null,
       )}
     >
       {/* Off-screen copy at full width: the only honest source for "how wide
@@ -206,7 +227,7 @@ export function ModuleHomeTabs({ tabs, placement = 'header', ariaLabel }: {
         className="flex h-[calc(var(--page-control-height)+0.25rem)] min-w-0 max-w-full flex-none items-center gap-1 overflow-hidden rounded-lg bg-slate-100 p-0.5 dark:bg-slate-800"
       >
         {visible.map((tab) => (
-          <Pill key={tab.href} tab={tab} />
+          <Pill key={tab.href} tab={tab} navigation={navigation} />
         ))}
         {overflow.length > 0 ? (
           <Popover
@@ -254,7 +275,7 @@ export function ModuleHomeTabs({ tabs, placement = 'header', ariaLabel }: {
               }}>
 
               {overflow.map((tab) => (
-                <Link
+                <TabLink navigation={navigation}
                   key={tab.href}
                   role="menuitem"
                   tabIndex={-1}
@@ -275,7 +296,7 @@ export function ModuleHomeTabs({ tabs, placement = 'header', ariaLabel }: {
                       {tab.count.toLocaleString(locale)}
                     </span>
                   ) : null}
-                </Link>
+                </TabLink>
               ))}
             </div>
           </Popover>

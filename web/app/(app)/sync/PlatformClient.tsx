@@ -16,17 +16,20 @@ import {
   ExternalLink,
   Download,
   BookOpen,
-  Paperclip,
-  Calculator,
+  MoreHorizontal,
   Sparkles,
 } from "lucide-react";
 import { MIGRATION_WORKSPACE_HREF } from "@/lib/migration/links";
 import Link from "next/link";
+import { RecordTabs } from "@/components/module-home/record-tabs";
 import { readApiErrorMessage } from "../../../lib/api-error";
 import { confirmDialog } from "@/lib/confirm";
 import { PagedTable, type PagedColumn } from "../../../components/paged-table";
 import { ListPageLayout } from "../../../components/page-layout";
 import {
+  ContextMenu,
+  useContextMenu,
+  type ContextMenuEntry,
   Badge,
   Button,
   Drawer,
@@ -154,6 +157,9 @@ interface Run {
       periods?: { checked?: number; matches?: number };
       projectPeriods?: { checked?: number; matches?: number } | null;
     };
+    attachments?: { sourceFiles: number; sourceLinks: number; createdFiles: number; newVersions: number; skippedUnchanged: number; failures: number };
+    operationalRecords?: { disabledFeatures: string[]; crm?: { accounts: number; opportunities: number }; fixedAssets?: { target: { assets: number } } };
+    projectFinancials?: { sourceProjects: number; changedProjects: number; sourceTimeEntries: number; exactTimeEntries: number; changedTimeEntries: number };
     sourceFiles?: number;
     sourceLinks?: number;
     createdFiles?: number;
@@ -207,12 +213,31 @@ const STATUS_VARIANT: Record<string, "success" | "secondary" | "destructive"> =
     unconfigured: "secondary",
   };
 
+function subscribeSyncNavigation(onChange: () => void): () => void {
+  window.addEventListener("popstate", onChange);
+  return () => window.removeEventListener("popstate", onChange);
+}
+function readSyncTab(): "connections" | "history" {
+  return new URLSearchParams(window.location.search).get("tab") === "history" ? "history" : "connections";
+}
+
 export function PlatformClient() {
   const { dateTime, number } = useViewerFormat();
   const fmt = (ts: string | null) => ts ? dateTime(new Date(ts)) : "—";
   const t = useTranslations("sync");
   const tHub = useTranslations("admin.hub");
   const tCommon = useTranslations("common");
+  const activeTab = useSyncExternalStore(subscribeSyncNavigation, readSyncTab, () => "connections" as const);
+  const actionMenu = useContextMenu();
+  const [actionConnection, setActionConnection] = useState<Connection | null>(null);
+  function selectTab(tab: "connections" | "history") {
+    actionMenu.close();
+    const url = new URL(window.location.href);
+    if (tab === "history") url.searchParams.set("tab", tab);
+    else url.searchParams.delete("tab");
+    window.history.pushState(window.history.state, "", url.pathname + url.search + url.hash);
+    window.dispatchEvent(new window.PopStateEvent("popstate", { state: window.history.state }));
+  }
   const [data, setData] = useState<Payload | null>(null);
   const [loading, setLoading] = useState(true);
   // A refused or unreachable list load renders here, never as the empty
@@ -303,7 +328,9 @@ export function PlatformClient() {
     if (status === "connected") toast.success(t("toast.authorized"));
     else if (status === "denied") toast.error(t("toast.authDenied"));
     else toast.error(t("toast.authFailed", { status }));
-    window.history.replaceState({}, "", window.location.pathname);
+    const url = new URL(window.location.href);
+    url.searchParams.delete("oauth");
+    window.history.replaceState(window.history.state, "", url.pathname + url.search + url.hash);
   }, [t]);
 
   // Enum-ish values from the API render through messages when a label exists,
@@ -376,7 +403,20 @@ export function PlatformClient() {
       if (blockers > 0) {
         parts.push(t("runs.stats.preflightBlockers", { count: blockers }));
       }
-      return parts.join(" · ");
+      if (s.attachments) parts.push(t("runs.stats.incrementalAttachments", {
+      created: s.attachments.createdFiles, changed: s.attachments.newVersions, skipped: s.attachments.skippedUnchanged,
+    }));
+    if (s.projectFinancials) parts.push(t("runs.stats.projectFinancials", {
+      projects: s.projectFinancials.sourceProjects, projectChanges: s.projectFinancials.changedProjects,
+      source: s.projectFinancials.sourceTimeEntries, exact: s.projectFinancials.exactTimeEntries,
+      changed: s.projectFinancials.changedTimeEntries,
+    }));
+    if (s.operationalRecords?.crm) parts.push(t("runs.stats.crm", { accounts: s.operationalRecords.crm.accounts, opportunities: s.operationalRecords.crm.opportunities }));
+    if (s.operationalRecords?.fixedAssets) parts.push(t("runs.stats.fixedAssets", { count: s.operationalRecords.fixedAssets.target.assets }));
+    for (const feature of s.operationalRecords?.disabledFeatures ?? []) {
+      parts.push(t("runs.stats.featureDisabled", { feature: t.has(`runs.features.${feature}`) ? t(`runs.features.${feature}`) : feature }));
+    }
+    return parts.join(" · ");
     }
     const parts = [
       t("runs.stats.docs", {
@@ -423,6 +463,14 @@ export function PlatformClient() {
           checked: s.projectPeriods.checked ?? 0,
         }),
       );
+    if (s.attachments) parts.push(t("runs.stats.incrementalAttachments", {
+      created: s.attachments.createdFiles, changed: s.attachments.newVersions, skipped: s.attachments.skippedUnchanged,
+    }));
+    if (s.projectFinancials) parts.push(t("runs.stats.projectFinancials", {
+      projects: s.projectFinancials.sourceProjects, projectChanges: s.projectFinancials.changedProjects,
+      source: s.projectFinancials.sourceTimeEntries, exact: s.projectFinancials.exactTimeEntries,
+      changed: s.projectFinancials.changedTimeEntries,
+    }));
     return parts.join(" · ");
   }
 
@@ -683,6 +731,27 @@ export function PlatformClient() {
     }
   }
 
+  const connectionActions: ContextMenuEntry[] = actionConnection ? (() => {
+    const c = data?.connections.find((connection) => connection.id === actionConnection.id);
+    if (!c) return [];
+    const blocked = busy !== null || (data?.runs ?? []).some((r) => r.connectionId === c.id && r.status === "running");
+    const items: ContextMenuEntry[] = [
+      { key: "test", label: t("actions.test"), icon: FlaskConical, disabled: busy !== null, onSelect: () => void test(c) },
+      { key: "preflight", label: t("actions.preflight"), icon: BookOpen, disabled: blocked || c.status === "unconfigured", onSelect: () => void run(c, "preflight") },
+      { key: "migration", label: t("actions.runMigration"), icon: Play, disabled: blocked || c.status === "unconfigured", onSelect: () => void run(c, "full_migration") },
+    ];
+    if (c.authKind === "oauth2") items.push({ key: "reconnect", label: t("actions.reconnect"), icon: Plug,
+      onSelect: () => { window.open(`/api/platform/connections/oauth/${c.source}/start?connectionId=${c.id}`, "_blank"); } });
+    if (c.source === "qbd") items.push({ key: "qwc", label: t("actions.downloadQwc"), icon: Download,
+      onSelect: () => { window.location.assign(`/api/platform/connections/${c.id}/qwc`); } });
+    if (canManage) items.push(
+      { key: "management", separator: true },
+      { key: "edit", label: t("actions.edit"), icon: Pencil, disabled: busy !== null, onSelect: () => setDrawer({ editing: c }) },
+      { key: "remove", label: t("actions.remove", { name: c.displayName }), icon: Trash2, danger: true, disabled: blocked, onSelect: () => void remove(c) },
+    );
+    return items;
+  })() : [];
+
   return (
     <ListPageLayout
       header={
@@ -705,12 +774,8 @@ export function PlatformClient() {
         />
       }
     >
-      <div className="flex items-center justify-between">
-        <h2 className="text-sm font-semibold text-slate-700 dark:text-slate-200">
-          {t("connections.heading")}
-        </h2>
-      </div>
-
+      <RecordTabs label={t("title")} active={activeTab} onChange={selectTab}
+        tabs={[{ key: "connections", label: t("connections.heading") }, { key: "history", label: t("runs.history") }]}>
       {loading ? (
         <p className="mt-4 text-sm text-slate-500">
           {t("connections.loading")}
@@ -730,6 +795,9 @@ export function PlatformClient() {
             {tCommon("actions.retry")}
           </Button>
         </div>
+      ) : activeTab === "history" ? (
+        <div className="mt-4"><PagedTable source="sync_runs" rows={data?.runs ?? []} columns={runColumns} pageSize={15} searchable
+          rowKey={(r) => r.id} empty={<p className="text-sm text-slate-500">{t("runs.empty")}</p>} /></div>
       ) : !data || data.connections.length === 0 ? (
         <div className="mt-4 rounded-lg border border-dashed border-slate-300 p-8 text-center dark:border-slate-700">
           <Plug className="mx-auto mb-2 text-slate-400" size={22} />
@@ -748,10 +816,11 @@ export function PlatformClient() {
               className="rounded-lg border border-slate-200 p-4 dark:border-slate-800"
             >
               <div className="flex flex-wrap items-center justify-between gap-3">
-                <div className="flex items-center gap-3">
-                  <span className="font-medium text-slate-800 dark:text-slate-100">
+                <div className="min-w-0 space-y-2">
+                  <span className="block text-base font-semibold text-slate-800 dark:text-slate-100">
                     {c.displayName}
                   </span>
+                  <div className="flex flex-wrap items-center gap-2">
                   <Badge variant="secondary">{sourceLabel(c.source)}</Badge>
                   <Badge variant={STATUS_VARIANT[c.status] ?? "secondary"}>
                     {statusLabel(c.status)}
@@ -763,160 +832,24 @@ export function PlatformClient() {
                       })}
                     </Badge>
                   ) : null}
+                  </div>
                 </div>
-                <div className="flex flex-wrap items-center gap-2">
+                <div className="flex shrink-0 items-center gap-2">
                   {c.authKind === "oauth2" && c.status !== "active" ? (
-                    <Button
-                      size="sm"
-                      onClick={() =>
-                        window.open(
-                          `/api/platform/connections/oauth/${c.source}/start?connectionId=${c.id}`,
-                          "_blank",
-                        )
-                      }
-                    >
+                    <Button size="sm" onClick={() => window.open(`/api/platform/connections/oauth/${c.source}/start?connectionId=${c.id}`, "_blank")}>
                       <Plug size={14} /> {t("actions.connect")}
                     </Button>
-                  ) : null}
-                  {c.authKind === "oauth2" && c.status === "active" ? (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() =>
-                        window.open(
-                          `/api/platform/connections/oauth/${c.source}/start?connectionId=${c.id}`,
-                          "_blank",
-                        )
-                      }
-                    >
-                      {t("actions.reconnect")}
+                  ) : (
+                    <Button size="sm" disabled={busy !== null || data.runs.some((r) => r.connectionId === c.id && r.status === "running") || c.status === "unconfigured"}
+                      onClick={() => void run(c, "mirror")}>
+                      <RefreshCw size={14} /> {t("actions.syncNow")}
                     </Button>
-                  ) : null}
-                  {c.source === "qbd" ? (
-                    <Button variant="outline" size="sm" asChild>
-                      <a
-                        href={`/api/platform/connections/${c.id}/qwc`}
-                        download
-                      >
-                        <Download size={14} /> {t("actions.downloadQwc")}
-                      </a>
-                    </Button>
-                  ) : null}
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={busy === `${c.id}:test`}
-                    onClick={() => test(c)}
-                  >
-                    <FlaskConical size={14} /> {t("actions.test")}
+                  )}
+                  <Button variant="ghost" size="sm" aria-label={t("actions.more", { name: c.displayName })} aria-haspopup="menu"
+                    aria-expanded={actionMenu.open && actionConnection?.id === c.id}
+                    onClick={(event) => { setActionConnection(c); actionMenu.openBelow(event.currentTarget); }}>
+                    <MoreHorizontal size={18} />
                   </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={busy === `${c.id}:mirror`}
-                    onClick={() => run(c, "mirror")}
-                  >
-                    <RefreshCw size={14} /> {t("actions.mirrorNow")}
-                  </Button>
-                  {c.source === "netsuite" ? (
-                    <>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        disabled={busy === `${c.id}:project_financials`}
-                        onClick={() => run(c, "project_financials")}
-                      >
-                        <Calculator size={14} />{" "}
-                        {t("actions.syncProjectFinancials")}
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        disabled={busy === `${c.id}:attachments`}
-                        onClick={() => run(c, "attachments")}
-                      >
-                        <Paperclip size={14} /> {t("actions.syncAttachments")}
-                      </Button>
-                    </>
-                  ) : null}
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={busy === `${c.id}:preflight`}
-                    onClick={() => run(c, "preflight")}
-                  >
-                    <BookOpen size={14} /> {t("actions.preflight")}
-                  </Button>
-                  <Button
-                    size="sm"
-                    disabled={busy === `${c.id}:full_migration`}
-                    onClick={() => run(c, "full_migration")}
-                  >
-                    <Play size={14} /> {t("actions.runMigration")}
-                  </Button>
-                  {canManage ? (
-                    <>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => toggleMirror(c)}
-                      >
-                        {c.mirrorEnabled
-                          ? t("actions.pauseMirror")
-                          : t("actions.enableMirror")}
-                      </Button>
-                      <Select
-                        aria-label={t("connections.schedule")}
-                        className="h-8 w-auto text-xs"
-                        value={c.mirrorSchedule}
-                        disabled={busy === `${c.id}:schedule`}
-                        onChange={(event) =>
-                          void setMirrorSchedule(c, event.target.value)
-                        }
-                      >
-                        {!["hourly", "every_6_hours", "daily", "weekly"].includes(
-                          c.mirrorSchedule,
-                        ) ? (
-                          <option value={c.mirrorSchedule}>
-                            {c.mirrorSchedule}
-                          </option>
-                        ) : null}
-                        <option value="hourly">
-                          {t("connections.schedules.hourly")}
-                        </option>
-                        <option value="every_6_hours">
-                          {t("connections.schedules.every_6_hours")}
-                        </option>
-                        <option value="daily">
-                          {t("connections.schedules.daily")}
-                        </option>
-                        <option value="weekly">
-                          {t("connections.schedules.weekly")}
-                        </option>
-                      </Select>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setDrawer({ editing: c })}
-                      >
-                        <Pencil size={14} /> {t("actions.edit")}
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        disabled={busy === `${c.id}:del`}
-                        aria-busy={busy === `${c.id}:del`}
-                        aria-label={
-                          busy === `${c.id}:del`
-                            ? t("actions.removing", { name: c.displayName })
-                            : t("actions.remove", { name: c.displayName })
-                        }
-                        onClick={() => remove(c)}
-                      >
-                        <Trash2 size={14} />
-                      </Button>
-                    </>
-                  ) : null}
                 </div>
               </div>
               <div className="mt-2 text-xs text-slate-500">
@@ -950,6 +883,20 @@ export function PlatformClient() {
                   </span>
                 ) : null}
               </div>
+              {c.source === "netsuite" ? <p className="mt-3 text-sm text-slate-600 dark:text-slate-300">{t("connections.incrementalHint")}</p> : null}
+              {canManage ? (
+                <div className="mt-4 flex flex-wrap items-center gap-3 border-t border-slate-100 pt-3 dark:border-slate-800">
+                  <Label htmlFor={`schedule-${c.id}`} className="text-xs">{t("connections.schedule")}</Label>
+                  <Select id={`schedule-${c.id}`} className="h-8 w-auto text-xs" value={c.mirrorSchedule}
+                    disabled={busy !== null} onChange={(event) => void setMirrorSchedule(c, event.target.value)}>
+                    {!["hourly", "every_6_hours", "daily", "weekly"].includes(c.mirrorSchedule) ? <option value={c.mirrorSchedule}>{c.mirrorSchedule}</option> : null}
+                    {["hourly", "every_6_hours", "daily", "weekly"].map((schedule) => <option key={schedule} value={schedule}>{t(`connections.schedules.${schedule}`)}</option>)}
+                  </Select>
+                  <Button variant="outline" size="sm" disabled={busy !== null} onClick={() => void toggleMirror(c)}>
+                    {c.mirrorEnabled ? t("actions.pauseMirror") : t("actions.enableMirror")}
+                  </Button>
+                </div>
+              ) : null}
               {(c.unresolvedSourceDeletions?.length ?? 0) > 0 ? (
                 <div className="mt-3 rounded-md border border-amber-300 bg-amber-50 p-3 text-xs dark:border-amber-800 dark:bg-amber-950/20">
                   <p className="font-medium text-amber-900 dark:text-amber-200">
@@ -1009,25 +956,8 @@ export function PlatformClient() {
         </div>
       )}
 
-      {/* Recent runs — paginated + searchable */}
-      {data && data.runs.length > 0 ? (
-        <div className="mt-8 space-y-3">
-          <h2 className="text-sm font-semibold text-slate-700 dark:text-slate-200">
-            {t("runs.heading")}
-          </h2>
-          <PagedTable
-            source="sync_runs"
-            rows={data.runs}
-            columns={runColumns}
-            pageSize={15}
-            searchable
-            rowKey={(r) => r.id}
-            empty={
-              <p className="text-sm text-slate-500">{t("runs.heading")}</p>
-            }
-          />
-        </div>
-      ) : null}
+      </RecordTabs>
+      <ContextMenu open={actionMenu.open} position={actionMenu.position} onClose={actionMenu.close} items={connectionActions} />
 
       {data ? (
         <ConnectionDrawer

@@ -8,7 +8,7 @@ import { postDocument } from "../ledger/posting-document.ts";
 import { refuseFixedAssetRehomeWithEquipment } from "../organization/subsidiary-scope.ts";
 import { lockAssetCategoryTaxLifecycle } from "../organization/asset-tax-fence.ts";
 import { buildNativeContext } from "./native.ts";
-import { NetSuiteSource, type NetSuiteFixedAssetSnapshot } from "./netsuite-source.ts";
+import type { NetSuiteSource, NetSuiteFixedAssetSnapshot } from "./netsuite-source.ts";
 import { orgFeatureEnabled } from "../organization/org-feature-lock.ts";
 
 type Row = Record<string, unknown>;

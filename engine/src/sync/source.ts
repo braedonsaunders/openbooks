@@ -1,3 +1,6 @@
+import type { CrmImportReport } from "./netsuite-crm.ts";
+import type { NetSuiteFixedAssetSyncResult } from "./netsuite-fixed-assets.ts";
+import type { ImportSummary } from "./netsuite-attachments.ts";
 import type { NativeContext, NativeDocument } from "./native.ts";
 
 /**
@@ -279,6 +282,12 @@ export interface SourceProjectFinancialInputs {
 
 // --- The adapter -----------------------------------------------------------------
 
+export interface SourceOperationalSyncResult {
+  crm?: CrmImportReport;
+  fixedAssets?: NetSuiteFixedAssetSyncResult;
+  disabledFeatures: string[];
+}
+
 export interface MigrationSource {
   /** Stable machine identifier for the source namespace. Together with a
    * record's sourceRef this establishes the canonical `custom.source` origin
@@ -328,6 +337,12 @@ export interface MigrationSource {
    * mirror; low-volume master data may ignore it and return everything.
    */
   entities?(since?: Date | null): Promise<EntityStream[]>;
+
+  /** Complete transaction-link inventory with incremental file-byte imports. */
+  syncAttachments?(options: { orgId: string; connectionId: string; actorId: string | null }): Promise<ImportSummary>;
+
+  /** Native operational registers exposed by this connector, with explicit feature exclusions. */
+  syncOperationalRecords?(options: { orgId: string; connectionId: string; actorId: string | null }): Promise<SourceOperationalSyncResult>;
 
   /** Bounded employee identity/role refresh through the normal source projection. */
   employeeEntities?(refs: readonly string[]): Promise<EntityStream[]>;

@@ -1,6 +1,6 @@
 {
   "title": "Migrations & Mirror",
-  "description": "Connect an external accounting system, migrate in one click, then mirror it daily to A/B-run both in parallel.",
+  "description": "Manage source connections and keep your books synchronized. Review progress and verification in History.",
   "connections": {
     "heading": "Connections",
     "add": "Add connection",
@@ -17,6 +17,7 @@
     },
     "mirrorBadge": "Mirror: {schedule}",
     "schedule": "Mirror schedule",
+    "incrementalHint": "Each sync includes project financials, transaction attachments and enabled operational registers. Missing or changed files are imported; unchanged files are skipped.",
     "mirrorHealth": "Mirror",
     "attachmentHealth": "Attachments",
     "sourceDeletions": "Source deletions awaiting reconciliation",
@@ -35,6 +36,8 @@
     "reconnect": "Reconnect",
     "test": "Test",
     "mirrorNow": "Mirror now",
+    "syncNow": "Sync now",
+    "more": "More actions for {name}",
     "retryMirror": "Retry mirror",
     "syncAttachments": "Sync attachments",
     "syncProjectFinancials": "Sync project financials",
@@ -51,6 +54,9 @@
   },
   "runs": {
     "heading": "Recent runs",
+    "history": "History",
+    "empty": "No runs yet. Start a sync from Connections.",
+    "features": { "crm": "CRM", "fixedAssets": "Fixed Assets" },
     "columns": {
       "started": "Started",
       "kind": "Kind",
@@ -77,6 +83,10 @@
       "attachments": "Inventorying and importing source attachments"
     },
     "stats": {
+      "crm": "CRM: {accounts} accounts · {opportunities} opportunities",
+      "fixedAssets": "{count} fixed assets",
+      "featureDisabled": "{feature}: feature disabled",
+      "incrementalAttachments": "attachments: {created} new · {changed} updated · {skipped} unchanged",
       "attachments": "{files} source files · {links} transaction links · {created} new files",
       "projectFinancials": "{projects} source projects ({projectChanges} changed) · {source} source time entries · {exact} exact · {changed} billing states reconciled",
       "docs": "+{new} docs · {amended} amended · {unchanged} unchanged",

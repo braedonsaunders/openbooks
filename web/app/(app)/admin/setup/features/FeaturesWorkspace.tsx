@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useSyncExternalStore } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { useTranslations } from 'next-intl'
@@ -66,7 +66,7 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 import { Button, PageHeader, cn } from '@openbooks/ui'
-import { FEATURE_CATEGORIES, type FeatureCategory } from '@openbooks/engine/organization/feature-catalog'
+import { FEATURE_CATEGORIES, FEATURE_GROUPS, type FeatureCategory } from '@openbooks/engine/organization/feature-catalog'
 import { ModuleHomeTabs } from '@/components/module-home/tabs'
 import { SearchInput } from '@/components/search-input'
 import { Switch } from '@/components/switch'
@@ -77,6 +77,8 @@ import {
   featureSearchMatcher,
   featureToggleRefusalMessage,
   filterFeatureTree,
+  groupFeatureSections,
+  groupFeatureChildren,
   industryLenses,
   type FeatureIndustry,
   type FeatureTreeNode,
@@ -86,6 +88,7 @@ import {
 type Feature = {
   key: string
   category: string
+  group?: string
   enabled: boolean
   parentKey?: string
   requiresAll?: string[]
@@ -137,6 +140,7 @@ const ICONS: Record<string, LucideIcon> = {
   returnAuthorizations: Undo2,
   dropShipping: Truck,
   demandPlanning: BarChart3,
+  // Manufacturing
   manufacturing: Factory,
   // Projects
   projects: Briefcase,
@@ -163,6 +167,13 @@ const ICONS: Record<string, LucideIcon> = {
   queryConsole: Database,
 }
 
+function subscribeFeatureHash(onChange: () => void) {
+  window.addEventListener('hashchange', onChange)
+  window.addEventListener('popstate', onChange)
+  return () => { window.removeEventListener('hashchange', onChange); window.removeEventListener('popstate', onChange) }
+}
+const featureHash = () => window.location.hash
+
 /** The `?tab=` value when it names a category; the first tab otherwise. */
 function activeCategory(value: string | null): FeatureCategory {
   return FEATURE_CATEGORIES.find((category) => category === value) ?? FEATURE_CATEGORIES[0]
@@ -170,7 +181,8 @@ function activeCategory(value: string | null): FeatureCategory {
 
 /**
  * The Features switchboard — one tab per registry category (`?tab=`), each a
- * settings list (icon · name · description · switch) in registry order.
+ * grouped settings list (icon · name · description · switch). Presentation
+ * groups come from the same registry and preserve every dependency and gate.
  * Saves on toggle; nav re-renders so gated modules appear/disappear. Turning
  * a feature off surfaces what it affects: integrity-critical features (e.g.
  * multi-subsidiary once posted-to) lock; the rest confirm, listing the
@@ -212,7 +224,14 @@ export function FeaturesWorkspace({
   const t = useTranslations('admin')
   const router = useRouter()
   const pathname = usePathname()
-  const tab = activeCategory(useSearchParams().get('tab'))
+  const hash = useSyncExternalStore(subscribeFeatureHash, featureHash, () => '')
+  const searchParams = useSearchParams()
+  const tab = activeCategory(searchParams.get('tab'))
+  const categoryHref = (category: string) => {
+    const params = new URLSearchParams(searchParams.toString())
+    params.set('tab', category)
+    return `${pathname}?${params}${hash}`
+  }
   const [state, setState] = useState<Record<string, boolean>>(
     () => Object.fromEntries(features.map((f) => [f.key, f.enabled])),
   )
@@ -293,6 +312,7 @@ export function FeaturesWorkspace({
   // order) and vanish — from the page AND the counts — while the parent is off.
   const sections = buildFeatureTree(features, state, FEATURE_CATEGORIES)
   const categoryLabel = (category: string) => t(`setup.features.categories.${category}`)
+  const groupLabel = (group: string) => t.has(`setup.features.groups.${group}`) ? t(`setup.features.groups.${group}`) : t('setup.features.groups.other')
   // Search reads what the operator reads: the row's title, description and
   // tab name, plus its parent's title so "projects" finds every project
   // capability.
@@ -300,6 +320,7 @@ export function FeaturesWorkspace({
     t(`features.${row.key}.title`),
     t(`features.${row.key}.description`),
     categoryLabel(row.category),
+    ...(row.group ? [groupLabel(row.group)] : []),
     ...(row.parentKey ? [t(`features.${row.parentKey}.title`)] : []),
   ])
   const results = matcher ? filterFeatureTree(sections, matcher) : null
@@ -376,14 +397,17 @@ export function FeaturesWorkspace({
           {group.visibleChildren.length > 0 && (
             <div className="border-t border-slate-100 dark:border-slate-800">
               <div className="ml-12 border-l border-slate-200 pl-1 dark:border-slate-700">
-                {group.visibleChildren.map((child, index) => (
-                  <div
-                    key={child.row.key}
-                    className={cn(index > 0 && 'border-t border-slate-100 dark:border-slate-800')}
-                  >
-                    {renderRow(child, true)}
-                  </div>
-                ))}
+                {groupFeatureChildren(group.visibleChildren, group.parent.row.group,
+                  FEATURE_GROUPS[group.parent.row.category as FeatureCategory] ?? []).map((subgroup, groupIndex, subgroups) => (
+                    <div key={subgroup.key}>
+                      {subgroups.length > 1 ? <h4 className="px-4 pb-1 pt-3 text-xs font-semibold text-slate-500 dark:text-slate-400">{groupLabel(subgroup.key)}</h4> : null}
+                      {subgroup.children.map((child, index) => (
+                        <div key={child.row.key} className={cn((index > 0 || groupIndex > 0) && 'border-t border-slate-100 dark:border-slate-800')}>
+                          {renderRow(child, true)}
+                        </div>
+                      ))}
+                    </div>
+                  ))}
               </div>
             </div>
           )}
@@ -397,26 +421,18 @@ export function FeaturesWorkspace({
       <PageHeader
         title={t('setup.features.title')}
         description={t('setup.features.description')}
-        actions={
-          // Choosing a tab ends a search even when the URL does not change
-          // (the tab already in `?tab=`), so the chosen tab always renders.
-          <div className="contents" onClickCapture={(event) => {
-            if ((event.target as Element).closest('a')) setQuery('')
-          }}>
-            <ModuleHomeTabs
-              ariaLabel={t('setup.features.tabsAria')}
-              tabs={sections.map((section) => ({
-                href: `${pathname}?tab=${section.category}`,
-                label: categoryLabel(section.category),
-                // While searching, the body spans every tab, so no tab claims
-                // it; each instead counts the matches it holds.
-                active: !results && section.category === tab,
-                count: results ? resultCount(section.category) : undefined,
-              }))}
-            />
-          </div>
-        }
       />
+      <div onClickCapture={(event) => {
+        if ((event.target as Element).closest('a')) setQuery('')
+      }}>
+        <ModuleHomeTabs navigation="history" placement="local" ariaLabel={t('setup.features.tabsAria')}
+          tabs={sections.map((section) => ({
+            href: categoryHref(section.category),
+            label: categoryLabel(section.category),
+            active: !results && section.category === tab,
+            count: results ? resultCount(section.category) : undefined,
+          }))} />
+      </div>
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <SearchInput placeholder={t('setup.features.searchPlaceholder')} value={query} onValueChange={setQuery} />
@@ -479,7 +495,12 @@ export function FeaturesWorkspace({
           </section>
         ))
       ) : home ? (
-        renderPanel(home)
+        groupFeatureSections(home, FEATURE_GROUPS[tab]).map(({ key, section }) => (
+          <section key={key} className="space-y-2.5" aria-label={groupLabel(key)}>
+            <h3 className="px-1 text-sm font-semibold text-slate-900 dark:text-slate-100">{groupLabel(key)}</h3>
+            {renderPanel(section)}
+          </section>
+        ))
       ) : null}
     </div>
   )
