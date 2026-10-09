@@ -14,12 +14,12 @@ import {
   subscribeNavigationPending,
 } from '../lib/navigation-pending'
 
-function PendingLogo() {
+function PendingLogo({ active = true }: { active?: boolean }) {
   const t = useTranslations('common.actions')
   return (
-    <div role="status" aria-live="polite" className="page-pending-logo grid place-items-center">
+    <div role={active ? 'status' : undefined} aria-live={active ? 'polite' : undefined} className="page-pending-logo grid place-items-center">
       <LogoMark draw className="relative z-10 h-12 w-auto" />
-      <span className="sr-only">{t('loading')}</span>
+      {active ? <span className="sr-only">{t('loading')}</span> : null}
     </div>
   )
 }
@@ -51,11 +51,15 @@ export function NavigationPendingBoundary({ children }: { children: ReactNode })
   return (
     <div className="relative flex min-h-0 flex-1 flex-col" aria-busy={Boolean(navigation) || fallbacks > 0}>
       {children}
-      {visible ? (
-        <div data-navigation-pending className="page-pending-surface pointer-events-none absolute inset-0 z-40 grid place-items-center">
-          <PendingLogo />
-        </div>
-      ) : null}
+      <div
+        data-navigation-pending={visible ? '' : undefined}
+        data-fallback-pending={fallbacks > 0 ? '' : undefined}
+        hidden={!visible}
+        aria-hidden={!visible}
+        className="page-pending-surface page-pending-overlay pointer-events-none absolute inset-0 z-40 grid place-items-center"
+      >
+        <PendingLogo active={visible} />
+      </div>
     </div>
   )
 }

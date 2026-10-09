@@ -35,6 +35,7 @@ test('same-route server navigation shows the native logo while preserving conten
   await act(async () => onRouterTransitionStart('/projects/pre-billing?stage=approved'))
   await waitForFeedback()
   assert.equal(content.querySelectorAll('[data-navigation-pending]').length, 1)
+  const feedback = content.querySelector<HTMLElement>('[data-navigation-pending]')!
   assert.ok(content.querySelector('[data-navigation-pending] svg .brand-stroke-draw'))
   assert.equal(content.querySelector('[role="status"]')?.textContent, 'Loading…')
   assert.equal(content.querySelector('input'), input)
@@ -44,6 +45,13 @@ test('same-route server navigation shows the native logo while preserving conten
   await act(async () => show())
   assert.equal(content.querySelector('[data-navigation-pending]'), null)
   assert.equal(navigationPendingSnapshot().navigation, null)
+  assert.equal(feedback.isConnected, true)
+  assert.equal(feedback.hidden, true)
+  assert.equal(feedback.getAttribute('aria-hidden'), 'true')
+  assert.equal(content.querySelector('[role="status"]'), null)
+  assert.equal(content.firstElementChild?.getAttribute('aria-busy'), 'false')
+  assert.equal(document.activeElement, input)
+  assert.equal(input.value, 'Unsaved worksheet')
 })
 
 test('fast commits and presentation history never hold the page; a newer navigation supersedes an earlier feedback timer', async () => {
