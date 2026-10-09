@@ -305,7 +305,7 @@
     "working": "Preparing…",
     "refused": "Schedule distribution could not be completed.",
     "explanation": "Choose personal reports or a whole-board report for every selected recipient. Published bookings and literal source-date observations are shown separately. Sending uses your enabled Schedule distribution Flow and configured email provider.",
-    "everyone": "Everyone with a visible schedule in these dates",
+    "everyone": "所选范围内的所有人",
     "reason": "Reason for sending",
     "queued": "The reviewed schedule is queued for email delivery.",
     "deliveryStatus": "Queued is not delivered. Follow the native Flow run, Email log and delivery audit for actual provider results.",
@@ -314,10 +314,66 @@
     "missingEmail": "Email missing",
     "report": "Recipient schedule report preview",
     "flows": "Configure native Flows",
-    "contacts": "Board resource recipients",
+    "contacts": "资源发送联系人",
     "sharing": "Report sharing",
     "personal": "Each recipient’s own schedule/resources",
     "wholeBoard": "The whole visible board schedule for each recipient",
-    "wholeBoardReview": "Every selected recipient will receive the whole reviewed board report, including other people/resources. Board Settings must explicitly allow this sharing within the board’s legal entity."
+    "wholeBoardReview": "Every selected recipient will receive the whole reviewed board report, including other people/resources. Board Settings must explicitly allow this sharing within the board’s legal entity.",
+    "cohort": "员工收件范围",
+    "cohorts": {
+      "scope": "当前范围内及借调员工",
+      "scheduled": "指定日期有排班的在职员工",
+      "supervisors": "相关员工的主管",
+      "self": "我自己的排班"
+    },
+    "includePdf": "附加横向PDF",
+    "message": "邮件正文",
+    "additionalContacts": "其他原生联系人",
+    "additionalHelp": "即使未安排工作，这些可选联系人也会收到已预览的整个看板报告。请选择可见的原生联系人并在发送前确认共享范围。",
+    "contactSearch": "搜索原生联系人",
+    "chooseContact": "选择其他联系人",
+    "refineSearch": "还有更多联系人匹配，请缩小搜索范围。",
+    "downloadPdf": "下载已预览PDF",
+    "excludedHistory": "报告保留{count}名历史人员，但不向其发送当前员工邮件。",
+    "additionalRoles": "原生角色或组收件人",
+    "roleHelp": "每次发送时，将可选应用角色的当前有效成员解析为可见的“人员”联系人。包括组之前，请确认整个看板的共享范围。",
+    "chooseRole": "选择原生角色",
+    "recipientMode": "收件人选择",
+    "modes": {
+      "selected": "仅选定的原生收件人",
+      "automatic": "仅看板自动收件范围",
+      "combined": "自动范围与选定收件人"
+    },
+    "nativeContacts": "原生联系人收件人",
+    "pdfLayout": "PDF布局",
+    "pdfFields": {
+      "paperSize": "纸张大小",
+      "orientation": "方向",
+      "marginMm": "页边距（毫米）",
+      "density": "间距",
+      "daysPerSection": "每节日期列数（7或14）",
+      "detail": "单元格详情"
+    },
+    "pdfOptions": {
+      "paperSize": {
+        "letter": "US Letter",
+        "a4": "A4",
+        "legal": "US Legal",
+        "tabloid": "Tabloid"
+      },
+      "orientation": {
+        "portrait": "纵向",
+        "landscape": "横向"
+      },
+      "density": {
+        "standard": "标准",
+        "compact": "紧凑"
+      },
+      "detail": {
+        "assignments": "分配内容",
+        "hours": "分配内容及小时",
+        "full": "完整记录"
+      }
+    }
   }
 }

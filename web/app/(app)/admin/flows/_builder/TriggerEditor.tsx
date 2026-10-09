@@ -1,6 +1,6 @@
-'use client'
+"use client";
 
-import { useTranslations } from 'next-intl'
+import { useLocale, useTranslations } from "next-intl";
 import { Button, Input, Label, SearchSelect, Select } from '@openbooks/ui'
 import type { FlowSubjectProfile, TriggerData, TriggerKind } from '@openbooks/forms-core'
 import { buildTrigger, type OrgUser } from './graph'
@@ -24,7 +24,8 @@ export function TriggerEditor({
   users: OrgUser[]
   permissions: string[]
 }) {
-  const t = useTranslations('admin.flows')
+  const t = useTranslations("admin.flows");
+  const locale = useLocale();
 
   const statusSelect = (
     value: string | undefined,
@@ -83,10 +84,114 @@ export function TriggerEditor({
 
       {trigger.trigger === 'scheduled' ? (
         <>
-          <div className="space-y-1.5">
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={!!trigger.clockSchedule}
+              onChange={(e) =>
+                onChange({
+                  ...trigger,
+                  clockSchedule: e.target.checked
+                    ? { days: [], times: [""] }
+                    : undefined,
+                })
+              }
+            />
+            {t("trigger.clockSchedule")}
+          </label>
+          {trigger.clockSchedule ? (
+            <div className="space-y-3 rounded border p-3">
+              <p className="text-xs text-slate-500">{t("trigger.clockHelp")}</p>
+              <div className="flex flex-nowrap gap-1 overflow-x-auto">
+                {[0, 1, 2, 3, 4, 5, 6].map((day) => (
+                  <label key={day} className="flex items-center gap-1 text-xs">
+                    <input
+                      type="checkbox"
+                      checked={trigger.clockSchedule!.days.includes(day)}
+                      onChange={(e) =>
+                        onChange({
+                          ...trigger,
+                          clockSchedule: {
+                            ...trigger.clockSchedule!,
+                            days: e.target.checked
+                              ? [...trigger.clockSchedule!.days, day].sort()
+                              : trigger.clockSchedule!.days.filter(
+                                  (d) => d !== day,
+                                ),
+                          },
+                        })
+                      }
+                    />
+                    {new Intl.DateTimeFormat(locale, {
+                      weekday: "short",
+                      timeZone: "UTC",
+                    }).format(new Date(Date.UTC(2026, 9, 4 + day)))}
+                  </label>
+                ))}
+              </div>
+              {trigger.clockSchedule.times.map((time, index) => (
+                <div key={index} className="flex items-center gap-2">
+                  <Input
+                    type="time"
+                    aria-label={t("trigger.clockTime")}
+                    value={time}
+                    onChange={(e) =>
+                      onChange({
+                        ...trigger,
+                        clockSchedule: {
+                          ...trigger.clockSchedule!,
+                          times: trigger.clockSchedule!.times.map((v, i) =>
+                            i === index ? e.target.value : v,
+                          ),
+                        },
+                      })
+                    }
+                  />
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() =>
+                      onChange({
+                        ...trigger,
+                        clockSchedule: {
+                          ...trigger.clockSchedule!,
+                          times: trigger.clockSchedule!.times.filter(
+                            (_, i) => i !== index,
+                          ),
+                        },
+                      })
+                    }
+                  >
+                    {t("trigger.removeTime")}
+                  </Button>
+                </div>
+              ))}
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={trigger.clockSchedule.times.length >= 12}
+                onClick={() =>
+                  onChange({
+                    ...trigger,
+                    clockSchedule: {
+                      ...trigger.clockSchedule!,
+                      times: [...trigger.clockSchedule!.times, ""],
+                    },
+                  })
+                }
+              >
+                {t("trigger.addTime")}
+              </Button>
+            </div>
+          ) : null}
+
+          {!trigger.clockSchedule ? (
+            <div className="space-y-1.5">
             <Label>
               {t('trigger.cron')}{' '}
-              <span className="font-normal text-slate-400">{t('trigger.cronHint')}</span>
+                <span className="font-normal text-slate-400">
+                  {t("trigger.cronHint")}
+                </span>
             </Label>
             <Input
               value={trigger.cron}
@@ -94,8 +199,11 @@ export function TriggerEditor({
               placeholder="0 8 * * 1"
               className="font-mono text-[13px]"
             />
-            <p className="text-xs text-slate-500 dark:text-slate-400">{t('trigger.cronExample')}</p>
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                {t("trigger.cronExample")}
+              </p>
           </div>
+          ) : null}
           <div className="space-y-1.5">
             <Label>{t('trigger.timezone')}</Label>
             <Input
@@ -117,7 +225,9 @@ export function TriggerEditor({
               className="mt-0.5 h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500"
             />
             <span>
-              <span className="block font-medium">{t('trigger.selectRecords')}</span>
+              <span className="block font-medium">
+                {t("trigger.selectRecords")}
+              </span>
               <span className="block text-xs text-slate-500 dark:text-slate-400">
                 {t('trigger.selectRecordsHint')}
               </span>

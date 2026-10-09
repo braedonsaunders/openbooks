@@ -145,7 +145,13 @@ export function buildTrigger(kind: TriggerKind, profile: FlowSubjectProfile): Tr
     case 'status_change':
       return { trigger: 'status_change' } // no from/to = every transition
     case 'scheduled':
-      return { trigger: 'scheduled', cron: '0 8 * * 1' }
+      return {
+        trigger: "scheduled",
+        cron: "0 8 * * 1",
+        ...(profile.subjectKind === "schedule_board"
+          ? { select: { limit: 200 } }
+          : {}),
+      };
     case 'manual':
       return { trigger: 'manual', buttonId: newId('btn'), label: 'Run flow' }
     default:
@@ -156,6 +162,8 @@ export function buildTrigger(kind: TriggerKind, profile: FlowSubjectProfile): Tr
 /** Fresh ActionData for an action kind, again schema-valid out of the box. */
 export function buildAction(kind: ActionKind, profile: FlowSubjectProfile): ActionData {
   switch (kind) {
+    case "send_board_schedule":
+      return { action: "send_board_schedule" };
     case 'distribute_schedule': return {action:'distribute_schedule'}
     case 'send_email':
       return {

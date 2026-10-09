@@ -96,6 +96,26 @@ export const triggerDataSchema = z.discriminatedUnion('trigger', [
     trigger: z.literal('scheduled'),
     cron: z.string().min(1).max(128),
     tz: z.string().max(64).optional(),
+    clockSchedule: z
+      .strictObject({
+        days: z
+          .array(z.number().int().min(0).max(6))
+          .min(1)
+          .max(7)
+          .refine(
+            (days) => new Set(days).size === days.length,
+            "Choose distinct weekdays.",
+          ),
+        times: z
+          .array(z.string().regex(/^(?:[01]\d|2[0-3]):[0-5]\d$/))
+          .min(1)
+          .max(12)
+          .refine(
+            (times) => new Set(times).size === times.length,
+            "Choose distinct send times.",
+          ),
+      })
+      .optional(),
     select: z
       .object({
         rule: logicRuleSchema.optional(),
@@ -124,7 +144,8 @@ export type TriggerKind = TriggerData['trigger']
 
 export const actionDataSchema = z.discriminatedUnion('action', [
   // The recipient audience and report are pinned by the native schedule review.
-  z.object({ action: z.literal('distribute_schedule') }),
+  z.object({ action: z.literal("distribute_schedule") }),
+  z.object({ action: z.literal("send_board_schedule") }),
   // `subject` and `body` support {{field}} interpolation — see
   // `interpolateTemplate`. Delivery goes through the tenant's email settings.
   // `attachPdf` renders the subject record's PDF (the org's record template)
@@ -579,7 +600,12 @@ const WORKER_SAFE_ACTIONS = new Set<ActionKind>(['send_email', 'notify'])
 // With a record fan-out (`select`) each scheduled run HAS a subject record, so
 // persisting into it is well-defined (the EFT "sent" latch pattern). Status
 // pipelines, gates, and posting stay excluded from the tick.
-const WORKER_SAFE_ACTIONS_WITH_RECORD = new Set<ActionKind>(['send_email', 'notify', 'set_field'])
+const WORKER_SAFE_ACTIONS_WITH_RECORD = new Set<ActionKind>([
+  "send_email",
+  "notify",
+  "set_field",
+  "send_board_schedule",
+]);
 
 /** The action vocabulary a scheduled trigger's branch may use at runtime. */
 export function scheduledSafeActions(hasRecordSelect: boolean): Set<ActionKind> {

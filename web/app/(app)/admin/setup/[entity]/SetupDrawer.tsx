@@ -111,7 +111,7 @@ function initialValue(field: SetupField, row: Record<string, unknown> | null): u
     case 'stringArray':
       return Array.isArray(raw) ? raw.map(String) : ([] as string[])
     case 'object':
-      return raw == null ? (row ? null : {}) : raw
+      return raw == null ? (row || field.nullable ? null : {}) : raw;
     case 'objectArray':
       return raw == null ? (row ? null : []) : raw
     case 'json':
@@ -581,26 +581,92 @@ export function SetupDrawer({
         </>
       ) : undefined}
       headerActions={<>
-        {!creating && entity.recordLinks?.map((action) => <Button asChild key={action.href} variant="outline"><Link href={action.href}>{action.label}</Link></Button>)}
-        {!creating && !entity.readOnly && entity.allowUpdate !== false && !editing ? <Button variant="outline" disabled={busy} onClick={beginEditing}>{tCommon('actions.edit')}</Button> : null}
-        {chooser && !choosing ? <Button variant="outline" disabled={busy} onClick={() => setChoosing(true)}>{tCommon('actions.back')}</Button> : null}
-        {!choosing && !nestedTabActive && !entity.readOnly && (creating || entity.allowUpdate !== false) && editing && (!steps.length || reviewing || Boolean(entity.recordSections)) ? <Button disabled={busy} onClick={save}>
+          {!creating &&
+            [
+              ...(entity.recordLinks ?? []),
+              ...(entity.recordLinkTemplates ?? []).map((action) => ({
+                href: action.href.replace(
+                  /\{([^}]+)\}/g,
+                  (_match, key: string) =>
+                    encodeURIComponent(
+                      String(row?.[key] ?? row?.[toSnake(key)] ?? ""),
+                    ),
+                ),
+                label: t(action.labelKey),
+              })),
+            ].map((action) => (
+              <Button asChild key={action.href} variant="outline">
+                <Link href={action.href}>{action.label}</Link>
+              </Button>
+            ))}
+          {!creating &&
+          !entity.readOnly &&
+          entity.allowUpdate !== false &&
+          !editing ? (
+            <Button variant="outline" disabled={busy} onClick={beginEditing}>
+              {tCommon("actions.edit")}
+            </Button>
+          ) : null}
+          {chooser && !choosing ? (
+            <Button
+              variant="outline"
+              disabled={busy}
+              onClick={() => setChoosing(true)}
+            >
+              {tCommon("actions.back")}
+            </Button>
+          ) : null}
+          {!choosing &&
+          !nestedTabActive &&
+          !entity.readOnly &&
+          (creating || entity.allowUpdate !== false) &&
+          editing &&
+          (!steps.length || reviewing || Boolean(entity.recordSections)) ? (
+            <Button disabled={busy} onClick={save}>
           {busy ? tCommon('actions.saving') : creating ? tCommon('actions.create') : tCommon('actions.save')}
-        </Button> : null}
-        {!creating && editing ? <Button variant="outline" disabled={busy} onClick={() => void cancelEditing()}>{tCommon('actions.cancel')}</Button> : null}
+            </Button>
+          ) : null}
+          {!creating && editing ? (
+            <Button
+              variant="outline"
+              disabled={busy}
+              onClick={() => void cancelEditing()}
+            >
+              {tCommon("actions.cancel")}
+            </Button>
+          ) : null}
       </>}
       footer={
-        steps.length && !entity.recordSections ? <div className="flex w-full justify-between gap-2">
-          <Button variant="outline" disabled={busy || stepIndex === 0} onClick={() => { setFieldError(null); setStepIndex((index) => index - 1) }}>{tCommon('actions.back')}</Button>
-          {!reviewing ? <Button disabled={busy} onClick={nextStep}>{tCommon('actions.next')}</Button> : null}
-        </div> : nestedTabActive ? undefined : !entity.readOnly && !creating && (!entity.hasActive || entity.archiveOnDelete) && entity.allowDelete !== false ? (
+        steps.length && !entity.recordSections ? (
+          <div className="flex w-full justify-between gap-2">
+            <Button
+              variant="outline"
+              disabled={busy || stepIndex === 0}
+              onClick={() => {
+                setFieldError(null);
+                setStepIndex((index) => index - 1);
+              }}
+            >
+              {tCommon("actions.back")}
+            </Button>
+            {!reviewing ? (
+              <Button disabled={busy} onClick={nextStep}>
+                {tCommon("actions.next")}
+              </Button>
+            ) : null}
+          </div>
+        ) : nestedTabActive ? undefined : !entity.readOnly &&
+          !creating &&
+          (!entity.hasActive || entity.archiveOnDelete) &&
+          entity.allowDelete !== false ? (
           <button
             type="button"
             onClick={remove}
             disabled={busy}
             className="flex items-center gap-1.5 text-sm text-red-600 hover:text-red-700 disabled:opacity-50 dark:text-red-400"
           >
-            <Trash2 size={14} /> {entity.archiveOnDelete ? t('archive') : tCommon('actions.delete')}
+            <Trash2 size={14} />{" "}
+            {entity.archiveOnDelete ? t("archive") : tCommon("actions.delete")}
           </button>
         ) : (
           <span />
@@ -615,9 +681,22 @@ export function SetupDrawer({
           })}
           onChoose={choose}
         />
-      ) : nestedTabActive ? activeNestedTab?.content : <>
-      {activeRuleTab ? activeRuleTab.content : <>
-      {entity.key === "subsidiary-ownership-interests" && row && row.method === "full" ? <div className="mb-4"><LossOfControlButton interestId={String(row.id)} /><NetInvestmentButton interestId={String(row.id)} /></div> : null}
+      ) : nestedTabActive ? (
+        activeNestedTab?.content
+      ) : (
+        <>
+          {activeRuleTab ? (
+            activeRuleTab.content
+          ) : (
+            <>
+              {entity.key === "subsidiary-ownership-interests" &&
+              row &&
+              row.method === "full" ? (
+                <div className="mb-4">
+                  <LossOfControlButton interestId={String(row.id)} />
+                  <NetInvestmentButton interestId={String(row.id)} />
+                </div>
+              ) : null}
       {fieldError ? (
         <p role="alert" className="mb-4 rounded-md border border-red-200 bg-red-50 p-2.5 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300">
           {fieldError}
@@ -632,22 +711,54 @@ export function SetupDrawer({
         ) : (
           <FormSteps steps={[...steps.map((step) => ({ key: step.key, label: t(step.titleKey) })), { key: 'review', label: t('benefitBuilder.review') }]} current={stepIndex} onChange={setStepIndex} label={entityTitle} />
         )}
-        {currentStep ? <div><h2 className="text-base font-semibold">{t(currentStep.titleKey)}</h2><p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{t(currentStep.descriptionKey)}</p></div> : null}
-      </div> : null}
+                  {currentStep ? (
+                    <div>
+                      <h2 className="text-base font-semibold">
+                        {t(currentStep.titleKey)}
+                      </h2>
+                      <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+                        {t(currentStep.descriptionKey)}
+                      </p>
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
       <div className={entity.formSections ? "space-y-5" : undefined}>
-      {editing && entity.presets && <div className="mb-5 space-y-1.5">
-        <Label htmlFor="setup-policy-preset">{t(entity.presets.titleKey)}</Label>
-        <Select id="setup-policy-preset" value={presetKey} disabled={busy} onChange={event => {
+                {editing && entity.presets && (
+                  <div className="mb-5 space-y-1.5">
+                    <Label htmlFor="setup-policy-preset">
+                      {t(entity.presets.titleKey)}
+                    </Label>
+                    <Select
+                      id="setup-policy-preset"
+                      value={presetKey}
+                      disabled={busy}
+                      onChange={(event) => {
           setPresetKey(event.target.value)
           const preset = entity.presets?.options.find(option => option.key === event.target.value)
           if (preset) { setFieldError(null); setForm(current => ({ ...current, ...preset.values })) }
         }}>
           <option value="">{t('einvoice.choosePreset')}</option>
-          {entity.presets.options.map(preset => <option key={preset.key} value={preset.key}>{preset.label}</option>)}
+                      {entity.presets.options.map((preset) => (
+                        <option key={preset.key} value={preset.key}>
+                          {preset.label}
+                        </option>
+                      ))}
         </Select>
-        <p className="text-xs text-muted-foreground">{t(entity.presets.helpTextKey)}</p>
-        {presetKey && <p className="text-xs text-muted-foreground">{entity.presets.options.find(preset => preset.key === presetKey)?.description}</p>}
-      </div>}
+                    <p className="text-xs text-muted-foreground">
+                      {t(entity.presets.helpTextKey)}
+                    </p>
+                    {presetKey && (
+                      <p className="text-xs text-muted-foreground">
+                        {
+                          entity.presets.options.find(
+                            (preset) => preset.key === presetKey,
+                          )?.description
+                        }
+                      </p>
+                    )}
+                  </div>
+                )}
       {entity.formSections?.map((section) => {
         const fields = displayedFields.filter((field) => section.fields.includes(field.key))
         if (!fields.length) return null
@@ -656,6 +767,7 @@ export function SetupDrawer({
             {fields.map((field) => <FieldControl key={field.key} field={field} value={form[field.key]} onChange={(value) => set(field.key, value)} creating={creating} forceLocked={!editing || Boolean(entity.readOnly) || Object.hasOwn(fixedValues ?? {}, field.key)} refOptions={field.ref ? (refOptions[field.ref] ?? []) : []} referenceOptions={refOptions} formValues={form} t={t} moneyLocked={moneyLocked[field.key]} />)}
           </div>
         </InspectorPanel>
+                  );
       })}
       <div className="grid gap-4 p-1 sm:grid-cols-2">
         {displayedFields.filter((field) => !entity.formSections?.some((section) => section.fields.includes(field.key))).map((field, index) => (
@@ -681,7 +793,9 @@ export function SetupDrawer({
         ))}
         {!creating && entity.key === 'tax-return-forms' ? (
           <div className="space-y-2 border-t border-slate-200 pt-4 sm:col-span-2 dark:border-slate-800">
-            <Label help={t('taxOfficial.description')}>{t('taxOfficial.title')}</Label>
+                      <Label help={t("taxOfficial.description")}>
+                        {t("taxOfficial.title")}
+                      </Label>
             <div className="flex flex-wrap items-center gap-2">
               <label className="cursor-pointer">
                 <input
@@ -736,14 +850,19 @@ export function SetupDrawer({
                   {t('taxOfficial.remove')}
                 </Button>
               ) : (
-                <span className="text-xs text-slate-500 dark:text-slate-400">{t('taxOfficial.none')}</span>
+                          <span className="text-xs text-slate-500 dark:text-slate-400">
+                            {t("taxOfficial.none")}
+                          </span>
               )}
             </div>
           </div>
         ) : null}
       </div>
-      </div></>}
-      </>}
+              </div>
+            </>
+          )}
+        </>
+      )}
     </UrlDrawer>
   )
   return (
@@ -798,9 +917,17 @@ export function FieldControl({
   // validate() enforces (checkboxes/multirefs/locked keys are never required,
   // and blank keepDefault fields are legal input), so the mark
   // cannot lie about what blocks saving.
-  const requiredMark = field.required && !locked && (field.kind !== 'boolean' || field.nullable) && field.kind !== 'multiref' && !field.keepDefault
-    ? <span className="text-red-500" aria-hidden="true"> *</span>
-    : null
+  const requiredMark =
+    field.required &&
+    !locked &&
+    (field.kind !== "boolean" || field.nullable) &&
+    field.kind !== "multiref" &&
+    !field.keepDefault ? (
+      <span className="text-red-500" aria-hidden="true">
+        {" "}
+        *
+      </span>
+    ) : null;
   const full = field.fullWidth ||
     field.kind === 'multiref' || field.kind === 'textarea' || field.kind === 'json' || field.kind === 'stringArray' || field.kind === 'object' || field.kind === 'objectArray'
   const wrap = full ? 'min-w-0 space-y-1.5 sm:col-span-2' : 'min-w-0 space-y-1.5'
@@ -813,16 +940,39 @@ export function FieldControl({
           : Array.isArray(value) ? value.map(item => field.kind === 'multiref' ? refOptions.find(option => option.value === String(item))?.label ?? item : item).join(', ') : value
 
 
-  if (field.kind === 'zonedDateTime' && field.timeZoneField) return <div className={wrap}>
-    <Label help={help}>{label}{requiredMark}</Label>
+  if (field.kind === "zonedDateTime" && field.timeZoneField)
+    return (
+      <div className={wrap}>
+        <Label help={help}>
+          {label}
+          {requiredMark}
+        </Label>
     <ZonedDateTimeControl value={String(value ?? '')} zone={String(formValues[field.timeZoneField] ?? '')} onChange={onChange} label={label} readOnly={locked} />
   </div>
+    );
   if (locked && field.kind === 'stringArray' && (field.options || field.scopedOptions)) {
     const choices = setupFieldOptions(field, formValues, recordValues)
-    return <div className={wrap}><Label help={help}>{label}</Label>
+    return (
+      <div className={wrap}>
+        <Label help={help}>{label}</Label>
       <div className="flex min-h-10 flex-wrap items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 dark:border-slate-800 dark:bg-slate-900">
-        {Array.isArray(value) && value.length ? value.map(item => <Badge key={String(item)} variant="outline">{choices.find(option => option.value === String(item)) ? setupOptionLabel(choices.find(option => option.value === String(item))!, t) : String(item)}</Badge>) : '—'}
-      </div></div>
+          {Array.isArray(value) && value.length
+            ? value.map((item) => (
+                <Badge key={String(item)} variant="outline">
+                  {choices.find((option) => option.value === String(item))
+                    ? setupOptionLabel(
+                        choices.find(
+                          (option) => option.value === String(item),
+                        )!,
+                        t,
+                      )
+                    : String(item)}
+                </Badge>
+              ))
+            : "—"}
+        </div>
+      </div>
+    );
   }
   // Locked natural keys are shown read-only when editing.
   if (locked && field.kind !== 'object' && field.kind !== 'objectArray') {
@@ -839,44 +989,217 @@ export function FieldControl({
   if (field.kind === 'object' || field.kind === 'objectArray') {
     const array = field.kind === 'objectArray'
     const validObject = (item: unknown): item is Record<string, unknown> => item !== null && typeof item === 'object' && !Array.isArray(item)
-    const entries = array ? (value == null ? [] : Array.isArray(value) ? value : null) : value == null ? [{}] : [value]
+    const entries = array
+      ? value == null
+        ? []
+        : Array.isArray(value)
+          ? value
+          : null
+      : value == null
+        ? field.nullable
+          ? []
+          : [{}]
+        : [value];
     if (entries === null || entries.some((entry) => !validObject(entry))) {
-      return <div className={wrap}><Label help={help}>{label}</Label><p role="alert" className="text-sm text-red-600">{t('validation.invalidStructuredValue', { field: label })}</p></div>
+      return (
+        <div className={wrap}>
+          <Label help={help}>{label}</Label>
+          <p role="alert" className="text-sm text-red-600">
+            {t("validation.invalidStructuredValue", { field: label })}
+          </p>
+        </div>
+      );
     }
     function changeEntry(index: number, childKey: string, childValue: unknown) {
       const next = entries!.map((entry, position) => position === index ? { ...entry as Record<string, unknown>, [childKey]: childValue } : entry)
       onChange(array ? next : next[0])
     }
-    return <div className={wrap}>
-      <Label help={help}>{label}{requiredMark}</Label>
+    return (
+      <div className={wrap}>
+        <Label help={help}>
+          {label}
+          {requiredMark}
+        </Label>
+        {!array && field.nullable ? (
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              aria-label={t("structuredFields.configure", { field: label })}
+              checked={value != null}
+              disabled={locked}
+              onChange={(event) =>
+                onChange(
+                  event.target.checked
+                    ? Object.fromEntries(
+                        (field.fields ?? [])
+                          .filter((child) => child.defaultValue !== undefined)
+                          .map((child) => [child.key, child.defaultValue]),
+                      )
+                    : null,
+                )
+              }
+            />
+            {t("structuredFields.configure", { field: label })}
+          </label>
+        ) : null}
       <div className="space-y-3">
         {entries.map((entry, index) => {
-          const controls = <div className={field.itemTitleKey ? "grid gap-5 sm:grid-cols-2" : "grid gap-4 sm:grid-cols-2"}>
-            {(field.fields ?? []).filter((child) => setupFieldVisible(child, entry as Record<string, unknown>)).map((child) => <FieldControl key={child.key} field={child} value={(entry as Record<string, unknown>)[child.key]} onChange={(next) => changeEntry(index, child.key, next)} creating={creating} forceLocked={Boolean(locked)} refOptions={child.ref === 'countries' ? countries : child.ref ? referenceOptions[child.ref] ?? [] : []} referenceOptions={referenceOptions} formValues={entry as Record<string, unknown>} recordValues={recordValues} t={t} />)}
-          </div>
-          const remove = array && !locked ? <Button type="button" variant={field.itemTitleKey ? "ghost" : "outline"} size="sm" onClick={() => onChange(entries.filter((_, position) => position !== index))}><Trash2 size={14} />{t('structuredFields.removeRow')}</Button> : null
-          if (field.itemTitleKey) return <InspectorPanel key={index} title={t(field.itemTitleKey, { number: index + 1 })} description={field.itemTitleField ? String((entry as Record<string, unknown>)[field.itemTitleField] ?? '') : undefined} actions={remove}>{controls}</InspectorPanel>
-          return <fieldset key={index} className="rounded-lg border border-slate-200 p-3 dark:border-slate-800">
-            {array ? <legend className="px-1 text-sm font-medium">{t('structuredFields.row', { number: index + 1 })}</legend> : null}
+            const controls = (
+              <div
+                className={
+                  field.itemTitleKey
+                    ? "grid gap-5 sm:grid-cols-2"
+                    : "grid gap-4 sm:grid-cols-2"
+                }
+              >
+                {(field.fields ?? [])
+                  .filter((child) =>
+                    setupFieldVisible(child, { ...recordValues, ...formValues, ...entry as Record<string, unknown> }),
+                  )
+                  .map((child) => (
+                    <FieldControl
+                      key={child.key}
+                      field={child}
+                      value={(entry as Record<string, unknown>)[child.key]}
+                      onChange={(next) => changeEntry(index, child.key, next)}
+                      creating={creating}
+                      forceLocked={Boolean(locked)}
+                      refOptions={
+                        child.ref === "countries"
+                          ? countries
+                          : child.ref
+                            ? (referenceOptions[child.ref] ?? [])
+                            : []
+                      }
+                      referenceOptions={referenceOptions}
+                      formValues={entry as Record<string, unknown>}
+                      recordValues={{ ...recordValues, ...formValues }}
+                      t={t}
+                    />
+                  ))}
+              </div>
+            );
+            const remove =
+              array && !locked ? (
+                <Button
+                  type="button"
+                  variant={field.itemTitleKey ? "ghost" : "outline"}
+                  size="sm"
+                  onClick={() =>
+                    onChange(
+                      entries.filter((_, position) => position !== index),
+                    )
+                  }
+                >
+                  <Trash2 size={14} />
+                  {t("structuredFields.removeRow")}
+                </Button>
+              ) : null;
+            if (field.itemTitleKey)
+              return (
+                <InspectorPanel
+                  key={index}
+                  title={t(field.itemTitleKey, { number: index + 1 })}
+                  description={
+                    field.itemTitleField
+                      ? String(
+                          (entry as Record<string, unknown>)[
+                            field.itemTitleField
+                          ] ?? "",
+                        )
+                      : undefined
+                  }
+                  actions={remove}
+                >
+                  {controls}
+                </InspectorPanel>
+              );
+            return (
+              <fieldset
+                key={index}
+                className="rounded-lg border border-slate-200 p-3 dark:border-slate-800"
+              >
+                {array ? (
+                  <legend className="px-1 text-sm font-medium">
+                    {t("structuredFields.row", { number: index + 1 })}
+                  </legend>
+                ) : null}
             {controls}
             {remove ? <div className="mt-3 flex justify-end">{remove}</div> : null}
           </fieldset>
+            );
         })}
-        {array && !locked ? <Button type="button" variant="outline" size="sm" onClick={() => onChange([...entries, Object.fromEntries((field.fields ?? []).map((child) => [child.key, child.key === field.itemSequenceKey ? entries.reduce((highest, entry) => { const sequence = Number((entry as Record<string, unknown>)[child.key]); return Number.isSafeInteger(sequence) && sequence > highest ? sequence : highest }, 0) + 1 : child.defaultValue ?? (child.kind === 'boolean' ? false : child.kind === 'object' ? {} : child.kind === 'objectArray' || child.kind === 'stringArray' ? [] : '')]))])}><Plus size={14} />{t(field.addLabelKey ?? 'structuredFields.addRow')}</Button> : null}
+          {array && !locked ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() =>
+                onChange([
+                  ...entries,
+                  Object.fromEntries(
+                    (field.fields ?? []).map((child) => [
+                      child.key,
+                      child.key === field.itemSequenceKey
+                        ? entries.reduce((highest, entry) => {
+                            const sequence = Number(
+                              (entry as Record<string, unknown>)[child.key],
+                            );
+                            return Number.isSafeInteger(sequence) &&
+                              sequence > highest
+                              ? sequence
+                              : highest;
+                          }, 0) + 1
+                        : (child.defaultValue ??
+                          (child.kind === "boolean"
+                            ? false
+                            : child.kind === "object"
+                              ? {}
+                              : child.kind === "objectArray" ||
+                                  child.kind === "stringArray"
+                                ? []
+                                : "")),
+                    ]),
+                  ),
+                ])
+              }
+            >
+              <Plus size={14} />
+              {t(field.addLabelKey ?? "structuredFields.addRow")}
+            </Button>
+          ) : null}
       </div>
     </div>
+    );
   }
 
   if (field.kind === 'boolean' && field.nullable) {
-    return <div className={wrap}><Label help={help}>{label}{requiredMark}</Label>
+    return (
+      <div className={wrap}>
+        <Label help={help}>
+          {label}
+          {requiredMark}
+        </Label>
       <Select disabled={Boolean(locked)} aria-label={label} value={value === true ? 'true' : value === false ? 'false' : ''} onChange={(event) => onChange(event.target.value === '' ? null : event.target.value === 'true')}>
-        <option value="">{t('selectPlaceholder')}</option><option value="true">{t('yes')}</option><option value="false">{t('no')}</option>
+          <option value="">{t("selectPlaceholder")}</option>
+          <option value="true">{t("yes")}</option>
+          <option value="false">{t("no")}</option>
       </Select>
     </div>
+    );
   }
 
   if (field.kind === 'boolean' && field.booleanStyle === 'switch') {
-    return <div className={wrap}><SwitchField label={label} on={Boolean(value)} disabled={Boolean(locked)} onToggle={() => onChange(!value)} /></div>
+    return (
+      <div className={wrap}>
+        <SwitchField
+          label={label}
+          on={Boolean(value)}
+          disabled={Boolean(locked)}
+          onToggle={() => onChange(!value)}
+        />
+      </div>
+    );
   }
 
   if (field.kind === 'boolean') {
@@ -901,7 +1224,20 @@ export function FieldControl({
 
   if (field.kind === 'multiref') {
     const selected: string[] = Array.isArray(value) ? value : []
-    if (field.searchableReferences) return <div className={wrap}><Label help={help}>{label}</Label><TagInput value={selected} onChange={onChange} options={refOptions} disabled={Boolean(locked)} allowNew={false} ariaLabel={label} /></div>
+    if (field.searchableReferences)
+      return (
+        <div className={wrap}>
+          <Label help={help}>{label}</Label>
+          <TagInput
+            value={selected}
+            onChange={onChange}
+            options={refOptions}
+            disabled={Boolean(locked)}
+            allowNew={false}
+            ariaLabel={label}
+          />
+        </div>
+      );
     return (
       <div className={wrap}>
         <Label help={help}>{label}</Label>
@@ -938,22 +1274,34 @@ export function FieldControl({
     // Chip input with type-ahead over the field's ref source — raw JSON is
     // never an acceptable UI for a list of text values.
     const selected: string[] = Array.isArray(value) ? value.map(String) : []
-    if (field.options || field.scopedOptions) return <fieldset className={wrap}>
-      <legend className="text-sm font-medium">{label}{requiredMark}</legend>
+    if (field.options || field.scopedOptions)
+      return (
+        <fieldset className={wrap}>
+          <legend className="text-sm font-medium">
+            {label}
+            {requiredMark}
+          </legend>
       {help ? <p className="text-xs text-slate-500">{help}</p> : null}
       <div className="flex flex-wrap gap-x-5 gap-y-2 rounded-lg border border-slate-200 px-3 py-2 dark:border-slate-800">
         {setupFieldOptions(field, formValues, recordValues).map(option => <label key={option.value} className="flex items-center gap-2 text-sm">
           <input type="checkbox" checked={selected.includes(option.value)} onChange={event => onChange(event.target.checked ? [...selected, option.value] : selected.filter(item => item !== option.value))} />
           {setupOptionLabel(option, t)}
-        </label>)}
-      </div></fieldset>
+                </label>
+              ),
+            )}
+          </div>
+        </fieldset>
+      );
     return (
       <div className={wrap}>
-        <Label help={help}>{label}{requiredMark}</Label>
+        <Label help={help}>
+          {label}
+          {requiredMark}
+        </Label>
         <TagInput
           value={selected}
           onChange={onChange}
-          options={refOptions.map((o) => ({ value: o.value, label: o.label }))}
+          options={refOptions.filter(option => !field.refScopeField || option.scopeValue == null || option.scopeValue === String((Object.hasOwn(formValues, field.refScopeField) ? formValues : recordValues)[field.refScopeField] ?? "")).map((o) => ({ value: o.value, label: o.label }))}
           ariaLabel={label}
         />
       </div>
@@ -964,7 +1312,10 @@ export function FieldControl({
     const options: SelectOption[] = refOptions.filter((option) => !field.refScopeField || option.scopeValue == null || option.scopeValue === String((Object.hasOwn(formValues, field.refScopeField) ? formValues : recordValues)[field.refScopeField] ?? '')).filter((option) => !field.refAccountTypes || option.value === String(value ?? '') || (option.accountType !== undefined && field.refAccountTypes.includes(option.accountType))).map((o) => ({ value: o.value, label: o.label }))
     return (
       <div className={wrap}>
-        <Label help={help}>{label}{requiredMark}</Label>
+        <Label help={help}>
+          {label}
+          {requiredMark}
+        </Label>
         <SearchSelect
           value={String(value ?? '')}
           onChange={onChange}
@@ -982,7 +1333,10 @@ export function FieldControl({
   if (field.kind === 'country') {
     return (
       <div className={wrap}>
-        <Label help={help}>{label}{requiredMark}</Label>
+        <Label help={help}>
+          {label}
+          {requiredMark}
+        </Label>
         <SearchSelect
           value={String(value ?? '')}
           onChange={onChange}
@@ -1004,9 +1358,18 @@ export function FieldControl({
     const options = setupFieldOptions(field, formValues, recordValues)
     return (
       <div className={wrap}>
-        <Label help={help}>{label}{requiredMark}</Label>
+        <Label help={help}>
+          {label}
+          {requiredMark}
+        </Label>
         <Select aria-label={label} value={String(value ?? '')} onChange={(e) => onChange(e.target.value)}>
-          {!field.required ? <option value="">—</option> : value === undefined || value === null || value === '' ? <option value="" disabled>{t('selectPlaceholder')}</option> : null}
+          {!field.required ? (
+            <option value="">—</option>
+          ) : value === undefined || value === null || value === "" ? (
+            <option value="" disabled>
+              {t("selectPlaceholder")}
+            </option>
+          ) : null}
           {options.map((o) => (
             <option key={o.value} value={o.value}>
               {setupOptionLabel(o, t)}
@@ -1020,13 +1383,31 @@ export function FieldControl({
   if (field.kind === 'textarea' || field.kind === 'json') {
     return (
       <div className={wrap}>
-        <Label help={help}>{label}{requiredMark}</Label>
+        <Label help={help}>
+          {label}
+          {requiredMark}
+        </Label>
         <Textarea aria-label={label} className={field.kind === 'json' ? 'min-h-40 font-mono text-xs' : undefined} value={String(value ?? '')} onChange={(e) => onChange(e.target.value)} />
       </div>
     )
   }
 
-  if (field.kind === 'timeZone') return <div className={wrap}><Label help={help}>{label}{requiredMark}</Label><SearchSelect ariaLabel={label} options={zones} value={String(value ?? '')} onChange={onChange} placeholder={t('selectPlaceholder')} /></div>
+  if (field.kind === "timeZone")
+    return (
+      <div className={wrap}>
+        <Label help={help}>
+          {label}
+          {requiredMark}
+        </Label>
+        <SearchSelect
+          ariaLabel={label}
+          options={zones}
+          value={String(value ?? "")}
+          onChange={onChange}
+          placeholder={t("selectPlaceholder")}
+        />
+      </div>
+    );
 
   // Money fields hold operator majors in the form state (converted at init
   // and save); the control is the shared decimal input, never a minor-units box.
@@ -1039,15 +1420,23 @@ export function FieldControl({
     // lockedOnEdit, so this branch only renders for an editable field.
     return (
       <div className={wrap}>
-        <Label help={help}>{label}{requiredMark}</Label>
+        <Label help={help}>
+          {label}
+          {requiredMark}
+        </Label>
         <Input aria-label={label} type="text" inputMode="decimal" value={String(value ?? '')} onChange={(e) => onChange(e.target.value)} />
-        <p role="alert" className="mt-1 text-sm text-red-600 dark:text-red-400">{moneyLocked}</p>
+        <p role="alert" className="mt-1 text-sm text-red-600 dark:text-red-400">
+          {moneyLocked}
+        </p>
       </div>
     )
   }
   return (
     <div className={wrap}>
-      <Label help={help}>{label}{requiredMark}</Label>
+      <Label help={help}>
+        {label}
+        {requiredMark}
+      </Label>
       <Input
         aria-label={label}
         type={field.kind === 'date' ? 'date' : 'text'}

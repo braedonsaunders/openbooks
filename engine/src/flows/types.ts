@@ -16,7 +16,14 @@ import type { FlowSubjectProfile } from "@openbooks/forms-core";
 /** Who is executing the flow (the hook site's request identity). */
 export interface FlowExecCtx {
   orgId: string;
-  /** The acting user when the event came from a request; absent for timers. */
+  /** Native timer identity, retained from the durable occurrence rather than wallclock. */
+  scheduledOccurrence?: {
+    nodeId: string;
+    occurredAt: string;
+    key: string;
+    timeZone?: string;
+  };
+  /** The acting user when the event came from a request; configured native operator for authorized timers. */
   userId?: string | null;
   /** Request scope is carried through approval release hooks to locked writers. */
   allowedSubsidiaryIds?: ReadonlySet<string> | null;
@@ -171,5 +178,6 @@ export interface FlowSubjectAdapter {
    * coarse fetch (newest-first, excluding terminal records). Optional: subjects
    * without it don't support fan-out.
    */
+  scheduledActorId?(subjectId: string): Promise<string | null>;
   findCandidateIds?(limit: number): Promise<string[]>;
 }

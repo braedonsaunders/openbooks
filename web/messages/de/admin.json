@@ -3549,8 +3549,9 @@
         "description": "Codes für Arbeit, die keinem Kunden oder Projekt zugeordnet ist, etwa Schulungs- oder Werkstatttage, sowie für Tage, an denen Personen nicht arbeiten."
       },
       "schedule-resource-recipients": {
-        "title": "Board resource recipients",
-        "singularTitle": "Resource recipient"
+        "title": "Versandkontakte für Ressourcen",
+        "singularTitle": "Versandkontakt einer Ressource",
+        "description": "Ordnen Sie Geräten oder Orten native Kontakte für Plan-E-Mails zu. Mitarbeitende verwenden direkt ihren Personenkontakt; keine zweite Empfängerliste ist nötig."
       },
       "ai-capabilities": {
         "title": "Aktionsprüfungen des Assistenten",
@@ -4154,7 +4155,28 @@
       "autonomy": "Deklarierte Prüfstufe",
       "boardId": "Planungstafel",
       "resourceLocationId": "Ressourcenstandort",
-      "partyId": "Kontakt"
+      "partyId": "Kontakt",
+      "automaticDeliveryPolicy": "Automatischer Planversand",
+      "scheduleDeliveryOperator": "Berechtigter Bediener",
+      "scheduleDeliveryTimeZone": "Zeitzone des Berichts",
+      "scheduleDeliveryDays": "Tage im Bericht",
+      "scheduleDeliveryAnchor": "Berichtsbeginn",
+      "scheduleDeliveryWeekStarts": "Erster Wochentag (0 = Sonntag)",
+      "scheduleDeliveryVisibility": "Berichtsfreigabe",
+      "scheduleDeliveryCohort": "Mitarbeiterkreis",
+      "scheduleDeliveryExtras": "Zusätzliche native Kontakte",
+      "scheduleDeliveryPdf": "PDF anhängen",
+      "scheduleDeliveryMessage": "E-Mail-Nachricht",
+      "scheduleDeliveryRoles": "Empfänger aus nativen Rollen",
+      "scheduleDeliveryMode": "Empfängerauswahl",
+      "scheduleDeliverySubjects": "Ausgewählte Personen/Ressourcen",
+      "schedulePdfLayout": "PDF-Seitenlayout",
+      "schedulePdfPaper": "Papierformat",
+      "schedulePdfOrientation": "Ausrichtung",
+      "schedulePdfMargin": "Ränder (mm)",
+      "schedulePdfDensity": "Abstände",
+      "schedulePdfDays": "Datumsspalten pro Abschnitt (7 oder 14)",
+      "schedulePdfDetail": "Zellendetails"
     },
     "fieldHelp": {
       "fxRateMaxAgeDays": "Tage zwischen dem neuesten verwendbaren Kurs und dem Periodenende, ab denen Bewertung und Konsolidierung den Kurs ablehnen. Stichtagskurse zählen ab dem Datum des Kassakurses zum Periodenende, Durchschnittskurse ab der neuesten einbezogenen Notierung. Standard ohne Richtlinie: 31 Tage.",
@@ -4322,7 +4344,8 @@
       "scheduleCellColorRules": "Der erste Treffer ohne Beachtung der Großschreibung bestimmt die Farbe. Sechsstellige Hexfarben verwenden, etwa #38bdf8.",
       "scheduleBoardDayPolicyKnown": "Deaktivieren, wenn nur Quelldaten bekannt sind. Historie bleibt ohne Stunden sichtbar; Tagesbuchungen benötigen konfigurierte Arbeitszeiten.",
       "scheduleShowHoursColumn": "Show the right-side sum of booked hours. Source dates without hours remain unknown. Daily footer totals are configured separately.",
-      "scheduleDistributionVisibility": "Personal reports contain only the recipient’s own schedule or associated resources. Whole-board reports require an explicit sharing policy and a legal-entity-scoped board. Every send still requires a reviewed audience/version or an authored, enabled native Flow."
+      "scheduleDistributionVisibility": "Personal reports contain only the recipient’s own schedule or associated resources. Whole-board reports require an explicit sharing policy and a legal-entity-scoped board. Every send still requires a reviewed audience/version or an authored, enabled native Flow.",
+      "scheduleAutomaticDelivery": "Optionale Berichtsrichtlinie: Wählen Sie sich selbst als berechtigten Bediener und die Board-Zeitzone. Aktivieren Sie einen Planversand-Flow separat mit ausdrücklichen Tagen und Uhrzeiten. Das Löschen dieser Richtlinie stoppt künftige Sendungen und erhält den Versandverlauf."
     },
     "options": {
       "withholdingCondominiumPayer": "Wohnungseigentümergemeinschaft als Zahler",
@@ -5074,6 +5097,44 @@
         "equals": "Gleich",
         "startsWith": "Beginnt mit",
         "contains": "Enthält"
+      },
+      "scheduleReportAnchor": {
+        "today": "Datum des Ereignisses",
+        "week": "Beginn der betreffenden Woche"
+      },
+      "scheduleReportSharing": {
+        "personal": "Persönliche Berichte",
+        "board": "Gesamtes Board"
+      },
+      "scheduleReportCohort": {
+        "scope": "Aktuelle Mitarbeitende im Board und ausgeliehene Mitarbeitende",
+        "scheduled": "Aktuelle Mitarbeitende mit Einträgen im Bericht",
+        "supervisors": "Native Vorgesetzte relevanter Mitarbeitender",
+        "self": "Eigener Plan des Bedieners"
+      },
+      "scheduleRecipientMode": {
+        "selected": "Nur ausgewählte native Empfänger",
+        "automatic": "Nur automatischer Board-Empfängerkreis",
+        "combined": "Automatischer Kreis und ausgewählte Empfänger"
+      },
+      "schedulePdfPaper": {
+        "letter": "US Letter",
+        "a4": "A4",
+        "legal": "US Legal",
+        "tabloid": "Tabloid"
+      },
+      "schedulePdfOrientation": {
+        "portrait": "Hochformat",
+        "landscape": "Querformat"
+      },
+      "schedulePdfDensity": {
+        "standard": "Standard",
+        "compact": "Kompakt"
+      },
+      "schedulePdfDetail": {
+        "assignments": "Zuordnungen",
+        "hours": "Zuordnungen und Stunden",
+        "full": "Vollständige Nachweise"
       }
     },
     "bankFeeds": {
@@ -6001,7 +6062,8 @@
     "structuredFields": {
       "row": "Zeile {number}",
       "addRow": "Zeile hinzufügen",
-      "removeRow": "Zeile entfernen"
+      "removeRow": "Zeile entfernen",
+      "configure": "{field} konfigurieren"
     },
     "benefitBuilder": {
       "offer": "Programm",
@@ -6772,6 +6834,9 @@
         "notes": "Notizen",
         "returnFrequency": "Häufigkeit der Erklärung"
       }
+    },
+    "actions": {
+      "scheduleDeliveryFlows": "Versandzeiten in Flows konfigurieren"
     }
   },
   "flows": {
@@ -6804,7 +6869,8 @@
       "subject": "Datensatztyp",
       "subjectPlaceholder": "Datensatztyp auswählen…",
       "create": "Flow erstellen",
-      "failed": "Der Flow konnte nicht erstellt werden"
+      "failed": "Der Flow konnte nicht erstellt werden",
+      "scheduleWeekdayPreset": "Werktags 06:00 und 14:30 (optionaler Entwurf; vor Aktivierung prüfen)"
     },
     "actions": {
       "enable": "Aktivieren",
@@ -6907,7 +6973,12 @@
       "showIfRemove": "Sichtbarkeitsbedingung entfernen",
       "buttonPreview": "Vorschau der Datensatzschaltfläche",
       "buttonHint": "Diese Schaltfläche erscheint im Datensatzkopf, wenn der Flow aktiviert ist und seine Berechtigungs- und Sichtbarkeitsbedingungen erfüllt sind.",
-      "defaultButtonLabel": "Flow ausführen"
+      "defaultButtonLabel": "Flow ausführen",
+      "clockSchedule": "Wochentage und Uhrzeiten wählen",
+      "clockHelp": "Jede Uhrzeit ist ein eigenes Ereignis. Nach Ausfall wird nur das letzte verpasste Ereignis je Uhrzeit nachgeholt. Wählen Sie ausdrücklich die Zeitzone der Board-Berichtsrichtlinie.",
+      "clockTime": "Sendezeit",
+      "removeTime": "Uhrzeit entfernen",
+      "addTime": "Uhrzeit hinzufügen"
     },
     "condition": {
       "rule": "Verzweigen, wenn",
@@ -6925,7 +6996,8 @@
         "post_document": "Das Dokument buchen",
         "lock_record": "Den Datensatz sperren",
         "unlock_record": "Den Datensatz entsperren",
-        "distribute_schedule": "Email reviewed schedule"
+        "distribute_schedule": "Email reviewed schedule",
+        "send_board_schedule": "Aktuellen Board-Plan senden"
       },
       "recipients": "Empfänger",
       "subject": "Betreff",
@@ -6955,7 +7027,8 @@
       "lockExemptRoles": "Ausgenommene Rollen",
       "lockExemptHint": "Administratoren sind immer ausgenommen; ausgewählte Rollen dürfen weiterhin bearbeiten.",
       "unlockHint": "Entfernt die Flow-Sperre, sodass der Datensatz wieder bearbeitet werden kann.",
-      "scheduleReportHelp": "Email the immutable reviewed schedule report to its exact recipient audience. It may be a personal report or an explicitly permitted whole-board report. Contact, legal entity, schedule version and provider changes refuse delivery."
+      "scheduleReportHelp": "Email the immutable reviewed schedule report to its exact recipient audience. It may be a personal report or an explicitly permitted whole-board report. Contact, legal entity, schedule version and provider changes refuse delivery.",
+      "automaticScheduleHelp": "Verwendet den gespeicherten berechtigten Bediener, aktuelle native Empfänger und die Berichtsrichtlinie. Jede Timer-Ausführung erstellt einen aktuellen Bericht. Beim Bearbeiten oder Vorschauen werden keine E-Mails gesendet."
     },
     "gate": {
       "title": "Titel",
@@ -7040,6 +7113,9 @@
       "retryFailed": "Wiederholung fehlgeschlagen",
       "retried": "Lauf erneut angestoßen",
       "retrying": "Wird wiederholt …"
+    },
+    "subjects": {
+      "schedule_board": "Planversand"
     }
   },
   "features": {

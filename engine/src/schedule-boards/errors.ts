@@ -6,8 +6,16 @@ export class ScheduleError extends Error {
   readonly status: number;
   readonly code: string;
   readonly remedy?: string;
-  constructor(message: string, options: { status?: number; code?: string; remedy?: string } = {}) {
-    super(message);
+  constructor(
+    message: string,
+    options: {
+      status?: number;
+      code?: string;
+      remedy?: string;
+      cause?: unknown;
+    } = {},
+  ) {
+    super(message, { cause: options.cause });
     this.name = "ScheduleError";
     this.status = options.status ?? 422;
     this.code = options.code ?? "schedule_refused";
@@ -42,7 +50,16 @@ export function scheduleDatabaseRefusal(error: unknown, context: { personName?: 
   while (cause && typeof cause === "object" && !seen.has(cause)) {
     seen.add(cause);
     const detail = cause as DatabaseCause;
-    if ((detail.code === "42P01" && /schedule_(?:boards|codes|entries|source_records|distributions|distribution_recipients|resource_recipients)/.test(detail.message ?? "")) || (detail.code === "42703" && /show_hours_column|distribution_visibility|resource_kind|cell_color_rules|show_totals|weekend_days|equipment_unit_id|resource_location_id|day_policy_known/.test(detail.message ?? ""))) {
+    if (
+      (detail.code === "42P01" &&
+        /schedule_(?:boards|codes|entries|source_records|distributions|distribution_recipients|resource_recipients)/.test(
+          detail.message ?? "",
+        )) ||
+      (detail.code === "42703" &&
+        /automatic_delivery_policy|show_hours_column|distribution_visibility|resource_kind|cell_color_rules|show_totals|weekend_days|equipment_unit_id|resource_location_id|day_policy_known/.test(
+          detail.message ?? "",
+        ))
+    ) {
       return new ScheduleError("Scheduling needs its database upgrade before it can be used.", {
         status: 409,
         code: "schedule_upgrade_required",

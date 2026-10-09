@@ -305,7 +305,7 @@
     "working": "Preparing…",
     "refused": "Schedule distribution could not be completed.",
     "explanation": "Choose personal reports or a whole-board report for every selected recipient. Published bookings and literal source-date observations are shown separately. Sending uses your enabled Schedule distribution Flow and configured email provider.",
-    "everyone": "Everyone with a visible schedule in these dates",
+    "everyone": "Tous les membres du public choisi",
     "reason": "Reason for sending",
     "queued": "The reviewed schedule is queued for email delivery.",
     "deliveryStatus": "Queued is not delivered. Follow the native Flow run, Email log and delivery audit for actual provider results.",
@@ -314,10 +314,66 @@
     "missingEmail": "Email missing",
     "report": "Recipient schedule report preview",
     "flows": "Configure native Flows",
-    "contacts": "Board resource recipients",
+    "contacts": "Contacts de livraison des ressources",
     "sharing": "Report sharing",
     "personal": "Each recipient’s own schedule/resources",
     "wholeBoard": "The whole visible board schedule for each recipient",
-    "wholeBoardReview": "Every selected recipient will receive the whole reviewed board report, including other people/resources. Board Settings must explicitly allow this sharing within the board’s legal entity."
+    "wholeBoardReview": "Every selected recipient will receive the whole reviewed board report, including other people/resources. Board Settings must explicitly allow this sharing within the board’s legal entity.",
+    "cohort": "Destinataires employés",
+    "cohorts": {
+      "scope": "Employés actifs du périmètre et empruntés",
+      "scheduled": "Employés actifs planifiés à ces dates",
+      "supervisors": "Superviseurs des employés concernés",
+      "self": "Mon planning"
+    },
+    "includePdf": "Joindre le PDF paysage",
+    "message": "Message du courriel",
+    "additionalContacts": "Contacts natifs supplémentaires",
+    "additionalHelp": "Ces contacts facultatifs reçoivent le rapport complet, même sans planning. Choisissez des contacts natifs visibles et vérifiez le partage avant l’envoi.",
+    "contactSearch": "Rechercher des contacts natifs",
+    "chooseContact": "Choisir un contact supplémentaire",
+    "refineSearch": "D’autres contacts correspondent. Affinez la recherche.",
+    "downloadPdf": "Télécharger le PDF vérifié",
+    "excludedHistory": "{count} personnes historiques restent dans le rapport mais sont exclues des destinataires employés actuels.",
+    "additionalRoles": "Destinataires par rôle ou groupe natif",
+    "roleHelp": "Les rôles facultatifs résolvent leurs membres actifs vers des contacts Personnes visibles à chaque envoi. Vérifiez le partage complet avant d’inclure un groupe.",
+    "chooseRole": "Choisir un rôle natif",
+    "recipientMode": "Sélection des destinataires",
+    "modes": {
+      "selected": "Destinataires natifs choisis uniquement",
+      "automatic": "Public automatique du tableau uniquement",
+      "combined": "Public automatique et destinataires choisis"
+    },
+    "nativeContacts": "Contacts natifs destinataires",
+    "pdfLayout": "Mise en page PDF",
+    "pdfFields": {
+      "paperSize": "Format du papier",
+      "orientation": "Orientation",
+      "marginMm": "Marges (mm)",
+      "density": "Espacement",
+      "daysPerSection": "Colonnes de dates par section (7 ou 14)",
+      "detail": "Détail des cellules"
+    },
+    "pdfOptions": {
+      "paperSize": {
+        "letter": "US Letter",
+        "a4": "A4",
+        "legal": "US Legal",
+        "tabloid": "Tabloid"
+      },
+      "orientation": {
+        "portrait": "Portrait",
+        "landscape": "Paysage"
+      },
+      "density": {
+        "standard": "Normal",
+        "compact": "Compact"
+      },
+      "detail": {
+        "assignments": "Affectations",
+        "hours": "Affectations et heures",
+        "full": "Preuves complètes"
+      }
+    }
   }
 }

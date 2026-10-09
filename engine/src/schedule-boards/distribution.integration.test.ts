@@ -1,3 +1,9 @@
+import { scheduleBoardTimerGraph } from "../flows/schedule-board-adapter.ts";
+import {
+  runDueScheduledFlows,
+  recoverLostScheduledFlows,
+  FLOW_OCCURRENCE_STALE_MS,
+} from "../flows/scheduled.ts";
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { randomUUID } from 'node:crypto';
@@ -224,11 +230,11 @@ test(
       const ana = p.recipients.find((r) => r.partyId === f.ana)!,
         ben = p.recipients.find((r) => r.partyId === f.ben)!;
       assert.deepEqual(
-        ana.lines.map((l) => l.subject),
-        ['Ana Field'],
+        [...new Set(ana.lines.map((l) => l.subject))],
+        ["Ana Field"],
       );
       assert.deepEqual(
-        ben.lines.map((l) => l.subject),
+        [...new Set(ben.lines.map((l) => l.subject))],
         ['Ben Shop'],
       );
       assert.equal(ben.lines[0]!.assignment, 'SHOP/ N');
@@ -619,3 +625,401 @@ test(
       );
     }),
 );
+
+async function extraContact(
+  f: { orgId: string; subsidiaryId: string },
+  name: string,
+  email: string,
+) {
+  const id = randomUUID();
+  await withBypassContext(() =>
+    db.execute(
+      sql`insert into parties(id,org_id,kind,display_name,email,subsidiary_id,is_active) values(${id},${f.orgId},'person',${name},${email},${f.subsidiaryId},true)`,
+    ),
+  );
+  return id;
+}
+
+test(
+  "contacts-only full report stores native recipients without manufacturing employee subjects or resolving an automatic roster",
+  enabled,
+  () =>
+    fixture(async (f) => {
+      const contact = await extraContact(
+        f,
+        "Additional coordinator",
+        "coordinator@example.test",
+      );
+      await withBypassContext(() =>
+        db.execute(
+          sql`update schedule_boards set distribution_visibility='board' where id=${f.boardId}`,
+        ),
+      );
+      const audience = {
+        visibility: "board" as const,
+        recipientMode: "selected" as const,
+        everyone: false,
+        subjectIds: [],
+        additionalPartyIds: [contact],
+        includePdf: true,
+      };
+      const p = await previewScheduleDistribution(
+        f,
+        f.boardId,
+        dates.from,
+        dates.through,
+        audience,
+      );
+      assert.equal(p.recipients.length, 1);
+      assert.deepEqual(p.recipients[0]!.subjects, []);
+      assert.deepEqual(
+        new Set(p.recipients[0]!.lines.map((line) => line.subject)),
+        new Set(["Ana Field", "Ben Shop"]),
+      );
+      await f.flow();
+      const key = randomUUID();
+      const sent = await issue(f, p, key);
+      const rows = await withOrgTransaction(f.orgId, () =>
+        db.execute<{
+          party_id: string;
+          worker_party_id: string | null;
+          equipment_unit_id: string | null;
+          resource_location_id: string | null;
+          report: { attachments: { content: string }[] };
+        }>(
+          sql`select party_id,worker_party_id,equipment_unit_id,resource_location_id,report from schedule_distribution_recipients where distribution_id=${sent.id}`,
+        ),
+      );
+      assert.equal(rows.rows.length, 1);
+      assert.equal(rows.rows[0]!.party_id, contact);
+      assert.equal(rows.rows[0]!.worker_party_id, null);
+      assert.equal(rows.rows[0]!.equipment_unit_id, null);
+      assert.equal(rows.rows[0]!.resource_location_id, null);
+      assert.ok(
+        Buffer.from(rows.rows[0]!.report.attachments[0]!.content, "base64")
+          .subarray(0, 5)
+          .equals(Buffer.from("%PDF-")),
+      );
+      assert.equal(
+        (
+          await withOrgTransaction(f.orgId, () =>
+            db.execute(
+              sql`select id from employee_roles where party_id=${contact}`,
+            ),
+          )
+        ).rows.length,
+        0,
+      );
+      assert.equal((await issue(f, p, key)).replayed, true);
+      assert.deepEqual(await counts(f.orgId), { requests: 1, outbox: 1 });
+      await assert.rejects(
+        previewScheduleDistribution(f, f.boardId, dates.from, dates.through, {
+          ...audience,
+          additionalPartyIds: [],
+        }),
+        /Choose between/,
+      );
+      await assert.rejects(
+        previewScheduleDistribution(f, f.boardId, dates.from, dates.through, {
+          ...audience,
+          visibility: "personal",
+        }),
+        /Additional native contacts/,
+      );
+    }),
+);
+
+test(
+  "automatic current membership excludes former employees from email but retains their historical full report; combined roles deduplicate native mailboxes",
+  enabled,
+  () =>
+    fixture(async (f) => {
+      const contact = await extraContact(
+        f,
+        "Native role contact",
+        "BEN@EXAMPLE.TEST",
+      );
+      const user = await withBypassContext(() =>
+        createScratchUser(f.orgId, "Delivery group", "schedule-notices"),
+      );
+      await withBypassContext(async () => {
+        await db.execute(
+          sql`update users set party_id=${contact} where id=${user}`,
+        );
+        await db.execute(
+          sql`update schedule_boards set distribution_visibility='board' where id=${f.boardId}`,
+        );
+        await db.execute(
+          sql`update employee_roles set is_active=false where party_id=${f.ana}`,
+        );
+      });
+      const audience = {
+        visibility: "board" as const,
+        recipientMode: "automatic" as const,
+        everyone: true,
+        subjectIds: [],
+        cohort: "scope" as const,
+      };
+      const automatic = await previewScheduleDistribution(
+        f,
+        f.boardId,
+        dates.from,
+        dates.through,
+        audience,
+      );
+      assert.deepEqual(
+        automatic.recipients.map((recipient) => recipient.partyId),
+        [f.ben],
+      );
+      assert.ok(automatic.excludedHistoricalSubjects!.includes(f.ana));
+      assert.ok(
+        automatic.recipients[0]!.lines.some((line) => line.subjectId === f.ana),
+      );
+      const combined = await previewScheduleDistribution(
+        f,
+        f.boardId,
+        dates.from,
+        dates.through,
+        {
+          ...audience,
+          recipientMode: "combined",
+          additionalRoleKeys: ["schedule-notices"],
+        },
+      );
+      assert.equal(combined.recipients.length, 1);
+      assert.deepEqual(
+        new Set(combined.recipients[0]!.contacts.map((contact) => contact.id)),
+        new Set([f.ben, contact]),
+      );
+      await f.flow();
+      await issue(f, combined);
+      assert.deepEqual(await counts(f.orgId), { requests: 1, outbox: 1 });
+      await withBypassContext(() =>
+        db.execute(sql`delete from role_assignments where user_id=${user}`),
+      );
+      await assert.rejects(
+        previewScheduleDistribution(f, f.boardId, dates.from, dates.through, {
+          ...audience,
+          recipientMode: "combined",
+          additionalRoleKeys: ["schedule-notices"],
+        }),
+        /no active recipients/,
+      );
+    }),
+);
+
+async function timer(
+  f: { orgId: string; actorId: string; boardId: string },
+  includePdf = true,
+) {
+  const policy = {
+    operatorId: f.actorId,
+    timeZone: "America/Toronto",
+    days: 14,
+    anchor: "week",
+    weekStartsOn: 0,
+    visibility: "board",
+    recipientMode: "automatic",
+    cohort: "scope",
+    additionalPartyIds: [],
+    includePdf,
+    message: "Reviewed native schedule",
+  };
+  const id = randomUUID();
+  await withBypassContext(async () => {
+    await db.execute(
+      sql`update orgs set env_kind='production' where id=${f.orgId}`,
+    );
+    await db.execute(
+      sql`update schedule_boards set distribution_visibility='board',automatic_delivery_policy=${JSON.stringify(policy)}::jsonb,updated_by=${f.actorId} where id=${f.boardId}`,
+    );
+    await db.execute(
+      sql`insert into flows(id,org_id,name,subject_kind,enabled,graph,created_at,created_by,updated_by) values(${id},${f.orgId},'Configured delivery','schedule_board',true,${JSON.stringify(scheduleBoardTimerGraph(f.boardId, "America/Toronto", true))}::jsonb,'2026-10-11T00:00:00Z',${f.actorId},${f.actorId})`,
+    );
+  });
+  return id;
+}
+
+test(
+  "two configured native clock occurrences deliver unchanged board versions twice, with actual lineage and recovery replay sending nothing twice",
+  enabled,
+  () =>
+    fixture(async (f) => {
+      const flowId = await timer(f);
+      const result = await runDueScheduledFlows(
+        new Date("2026-10-12T20:00:00Z"),
+      );
+      assert.equal(result.errors, 0);
+      assert.equal(result.fired, 2);
+      assert.deepEqual(await counts(f.orgId), { requests: 2, outbox: 4 });
+      const rows = await withOrgTransaction(f.orgId, () =>
+        db.execute<{
+          occurred_at: string;
+          status: string;
+          created_by: string;
+          trigger: string;
+          subject_kind: string;
+        }>(
+          sql`select o.occurred_at::text,o.status,r.created_by,r.trigger,r.subject_kind from flow_scheduled_occurrences o join flow_runs r on r.org_id=o.org_id and r.flow_id=o.flow_id and r.context->'scheduledOccurrence'->>'occurredAt'=to_char(o.occurred_at at time zone 'UTC','YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') where o.flow_id=${flowId} order by o.occurred_at`,
+        ),
+      );
+      assert.equal(rows.rows.length, 2);
+      for (const row of rows.rows) {
+        assert.equal(row.status, "fired");
+        assert.equal(row.created_by, f.actorId);
+        assert.equal(row.subject_kind, "schedule_board");
+        assert.equal(row.trigger, "scheduled");
+      }
+      assert.ok(rows.rows[0]!.occurred_at.startsWith("2026-10-12 10:00"));
+      assert.ok(rows.rows[1]!.occurred_at.startsWith("2026-10-12 18:30"));
+      assert.equal(
+        (await runDueScheduledFlows(new Date("2026-10-12T20:00:00Z"))).fired,
+        0,
+      );
+      await withBypassContext(() =>
+        db.execute(
+          sql`update flow_scheduled_occurrences set status='firing',updated_at=now()-interval '1 day' where flow_id=${flowId}`,
+        ),
+      );
+      await recoverLostScheduledFlows(
+        new Date(Date.now() + FLOW_OCCURRENCE_STALE_MS + 60000),
+      );
+      assert.deepEqual(await counts(f.orgId), { requests: 2, outbox: 4 });
+      const versions = await withOrgTransaction(f.orgId, () =>
+        db.execute<{ n: number }>(
+          sql`select count(distinct version)::int n from schedule_distributions`,
+        ),
+      );
+      assert.equal(
+        versions.rows[0]!.n,
+        1,
+        "deliberate occurrences may deliver the same reviewed board version",
+      );
+    }),
+);
+
+test(
+  "inactive operators and fresh permission revocation produce native failed runs with no ghost-green delivery",
+  enabled,
+  () =>
+    fixture(async (f) => {
+      const flowId = await timer(f, false);
+      await withBypassContext(() =>
+        db.execute(sql`update users set is_active=false where id=${f.actorId}`),
+      );
+      const result = await runDueScheduledFlows(
+        new Date("2026-10-12T10:01:00Z"),
+      );
+      assert.equal(result.errors, 1);
+      assert.deepEqual(await counts(f.orgId), { requests: 0, outbox: 0 });
+      const failed = await withOrgTransaction(f.orgId, () =>
+        db.execute<{ status: string; error: string }>(
+          sql`select status,error from flow_runs where flow_id=${flowId}`,
+        ),
+      );
+      assert.equal(failed.rows[0]!.status, "failed");
+      assert.match(failed.rows[0]!.error, /inactive|unavailable/);
+      await withBypassContext(async () => {
+        await db.execute(
+          sql`update users set is_active=true where id=${f.actorId}`,
+        );
+        await db.execute(
+          sql`update app_roles set permissions='["hrm.shifts.read","hrm.shifts.manage"]'::jsonb where org_id=${f.orgId} and key='scheduler'`,
+        );
+      });
+      assert.equal(
+        (await runDueScheduledFlows(new Date("2026-10-12T20:00:00Z"))).errors,
+        1,
+      );
+      assert.deepEqual(await counts(f.orgId), { requests: 0, outbox: 0 });
+    }),
+);
+
+test(
+  "requested PDF rendering failure rolls back reviewed report snapshots and never queues a partial HTML-only send",
+  enabled,
+  () =>
+    fixture(async (f) => {
+      const payload = { id: 99, label: "X\n".repeat(450) };
+      const batch = {
+        sourceSystem: "LegacyPlanning",
+        sourceDataset: "manpower",
+        captureHash: sourceHistoryHash([payload]),
+        rows: [
+          {
+            sourceKey: "99",
+            sourceHash: sourceHistoryHash(payload),
+            payload,
+            disposition: "recorded" as const,
+            boardId: f.boardId,
+            workerPartyId: f.ben,
+            onDate: dates.from,
+            label: payload.label,
+            result: null,
+            notes: null,
+            visibleInSource: true,
+            linkedEntryId: null,
+            reason: "Record literal source evidence",
+            expectedPriorId: null,
+          },
+        ],
+      };
+      await importSourceHistory(
+        f,
+        batch,
+        (await previewSourceHistory(f, batch)).approvalHash,
+      );
+      await f.flow();
+      const p = await previewScheduleDistribution(
+        f,
+        f.boardId,
+        dates.from,
+        dates.through,
+        {
+          ...personal,
+          includePdf: true,
+          pdfLayout: {
+            paperSize: "letter",
+            orientation: "portrait",
+            marginMm: 30,
+            density: "standard",
+            daysPerSection: 14,
+            detail: "full",
+          },
+        },
+      );
+      await assert.rejects(
+        issue(f, p),
+        /native PDF renderer|no report evidence was truncated/,
+      );
+      assert.deepEqual(await counts(f.orgId), { requests: 0, outbox: 0 });
+    }),
+);
+
+test('automatic board-scope membership includes current people with no assignment while the scheduled-only cohort excludes them', enabled, () => fixture(async f => {
+  const member = await extraContact(f, 'Current unassigned employee', 'unassigned@example.test');
+  await withBypassContext(async () => {
+    await db.execute(sql`insert into employee_roles(org_id,party_id,is_active,hired_on) values(${f.orgId},${member},true,'2025-01-01')`);
+    await db.execute(sql`update schedule_boards set distribution_visibility='board' where id=${f.boardId}`);
+  });
+  const audience = { visibility: 'board' as const, recipientMode: 'automatic' as const, everyone: true, subjectIds: [], cohort: 'scope' as const };
+  const current = await previewScheduleDistribution(f, f.boardId, dates.from, dates.through, audience);
+  assert.ok(current.recipients.some(recipient => recipient.partyId === member));
+  const blank = current.recipients[0]!.lines.filter(line => line.subjectId === member);
+  assert.equal(blank.length, 7);
+  assert.ok(blank.every(line => line.status === 'No schedule evidence' && line.hours !== '0'));
+  const scheduled = await previewScheduleDistribution(f, f.boardId, dates.from, dates.through, { ...audience, cohort: 'scheduled' });
+  assert.equal(scheduled.recipients.some(recipient => recipient.partyId === member), false);
+  await assert.rejects(previewScheduleDistribution(f, f.boardId, dates.from, dates.through, { ...audience, recipientMode: 'combined', additionalPartyIds: [member, member] }), /distinct native additional contacts/);
+}));
+
+test('revoking the scheduling feature after authoring leaves native failed timer runs and no partial report or email', enabled, () => fixture(async f => {
+  await timer(f, false);
+  await withBypassContext(() => db.execute(sql`update orgs set settings=jsonb_set(settings,'{features,hrmShiftPlanning}','false'::jsonb) where id=${f.orgId}`));
+  const result = await runDueScheduledFlows(new Date('2026-10-12T20:00:00Z'));
+  assert.equal(result.errors, 2);
+  assert.deepEqual(await counts(f.orgId), { requests: 0, outbox: 0 });
+  const failures = await withOrgTransaction(f.orgId, () => db.execute<{status: string; error: string}>(sql`select status,error from flow_runs where subject_kind='schedule_board' order by created_at,id`));
+  assert.equal(failures.rows.length, 2);
+  assert.ok(failures.rows.every(run => run.status === 'failed' && /switched off/.test(run.error)));
+}));

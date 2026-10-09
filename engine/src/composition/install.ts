@@ -3,9 +3,16 @@ import {automationGraphSchema} from '@openbooks/forms-core';
 import {db,withTransactionSavepoint} from '../platform/db.ts';
 import {lockAndCheckOrgFeature} from '../organization/org-feature-lock.ts';
 import {runRecordFlows} from '../flows/run.ts';
-import {registerScheduleEmailHandler} from '../flows/schedule-distribution-hook.ts';
+import {
+  registerAutomaticScheduleHandler,
+  registerScheduleEmailHandler,
+} from "../flows/schedule-distribution-hook.ts";
 import {registerScheduleDistributionHooks} from '../schedule-boards/distribution-hooks.ts';
-import {enqueueReviewedSchedule,prepareScheduleLifecycle} from '../schedule-boards/distribution.ts';
+import {
+  deliverAutomaticSchedule,
+  enqueueReviewedSchedule,
+  prepareScheduleLifecycle,
+} from "../schedule-boards/distribution.ts";
 import { CHECKLIST_STEP_SUBJECT_KIND } from "@openbooks/forms-core";
 import { releaseChecklistStepApproval } from "../hrm/processes.ts";
 import { BENEFIT_ENROLLMENT_SUBJECT_KIND } from "@openbooks/schema/src/hrm-benefits.ts";
@@ -72,17 +79,48 @@ import { releaseWorkOrderApproval } from "../manufacturing/flow-release.ts";
  * check:test-mock-surface).
  */
 export function installEngineSeams(): void {
+  registerAutomaticScheduleHandler(async ({ boardId, runId, ctx }) => {
+    if (!ctx.userId || !ctx.scheduledOccurrence)
+      throw new Error(
+        "Automatic schedule delivery needs its stored operator and durable occurrence.",
+      );
+    return deliverAutomaticSchedule({
+      orgId: ctx.orgId,
+      boardId,
+      runId,
+      operatorId: ctx.userId,
+      occurrence: ctx.scheduledOccurrence,
+    });
+  });
   registerScheduleEmailHandler(async({requestId,runId,ctx})=> {
     if(!ctx.userId)throw new Error('Schedule delivery needs its original acting user.');
     return enqueueReviewedSchedule({orgId:ctx.orgId,actorId:ctx.userId,requestId,runId});
   });
   registerScheduleDistributionHooks(async({event,requestId,actor})=> {
     const result=await runRecordFlows({kind:event,occurrenceKey:`schedule:${requestId}:${event}`},'schedule_distribution',requestId,{orgId:actor.orgId,userId:actor.actorId});
-    return {failed:result.failed,error:result.error??result.runs.find(r=>r.status==='failed')?.error??null,runs:result.runs.length};
+      return {
+        failed: result.failed,
+        error:
+          result.error ??
+          result.runs.find((r) => r.status === "failed")?.error ??
+          null,
+        runs: result.runs.length,
+      };
   },async(input)=> {
-    if(!await lockAndCheckOrgFeature(db,input.actor.orgId,'flows'))return null;
+      if (!(await lockAndCheckOrgFeature(db, input.actor.orgId, "flows")))
+        return null;
     const flows=(await db.execute<{graph:unknown}>(sql`select graph from flows where org_id=${input.actor.orgId} and subject_kind='schedule_distribution' and enabled`)).rows;
-    const observed=flows.some(flow=>{const parsed=automationGraphSchema.safeParse(flow.graph);return !parsed.success||parsed.data.nodes.some(node=>node.data.kind==='trigger'&&node.data.trigger.trigger===input.event);});
+      const observed = flows.some((flow) => {
+        const parsed = automationGraphSchema.safeParse(flow.graph);
+        return (
+          !parsed.success ||
+          parsed.data.nodes.some(
+            (node) =>
+              node.data.kind === "trigger" &&
+              node.data.trigger.trigger === input.event,
+          )
+        );
+      });
     if(!observed)return null;
     // Optional distribution never undoes a saved booking; its native Flow records issuance failures.
     try {

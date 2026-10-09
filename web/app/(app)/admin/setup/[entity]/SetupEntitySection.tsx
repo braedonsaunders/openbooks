@@ -15,7 +15,10 @@ import { mergeHref, parseListParams, parsePrefixedListParams, pickString } from 
 import { setupParentScope } from '../../../../../lib/setup/parent-scope'
 import { setupEntityForFeatureState, setupChildEntities, resolveSetupEntityGate, setupOptionLabel, toSnake, type SetupColumn, type SetupEntity } from '../../../../../lib/setup/registry'
 import { setupEntitySubsidiaryFilter } from '../../../../../lib/setup/subsidiary-scope'
-import { setupEntityClientDescriptor } from '../../../../../lib/setup/types'
+import {
+  setupParentRecordVisible,
+  setupEntityClientDescriptor,
+} from "../../../../../lib/setup/types";
 import { resolveDynamicSetupOptions, setupOptionsContext } from '../../../../../lib/setup/dynamic-options'
 import { loadRefOptions, orderExpr } from '../../../../../lib/setup/ref-options'
 import { setupReadProjection, setupReadSource } from '../../../../../lib/setup/read-shape'
@@ -119,12 +122,22 @@ export function setupRecordTabs({ entity, row, orgId, actorId, sp, basePath, can
   const navigation = setupNavigationKeys(navigationPrefix)
   return (entity.recordChildren ?? setupChildEntities(entity.key))
     .filter((child) => resolveSetupEntityGate(child, features).enabled)
+    .filter((child) =>
+      setupParentRecordVisible(
+        child.parentRecords?.find((owner) => owner.entityKey === entity.key) ??
+          {},
+        row,
+      ),
+    )
     .map((child) => {
       const binding = child.parentRecords!.find((owner) => owner.entityKey === entity.key)!
       const scopeKey = child.fields.find((field) => field.key === binding.fieldKey)?.refScopeField
       const scopeField = child.fields.find((field) => field.key === scopeKey && field.kind === 'ref')
       const ownerScopeField = entity.fields.find((field) => field.key === scopeKey && field.kind === 'ref' && field.ref === scopeField?.ref)
-      const scopeValue = scopeKey && ownerScopeField ? row[toSnake(scopeKey)] ?? row[scopeKey] : undefined
+      const scopeValue =
+        scopeKey && ownerScopeField
+          ? (row[toSnake(scopeKey)] ?? row[scopeKey])
+          : undefined;
       // A child of a scoped reference inherits that scope from its owning
       // record. Choosing it again could create a contradictory relationship.
       const inheritedFilter = scopeField && typeof scopeValue === 'string' && scopeValue
@@ -315,7 +328,9 @@ export async function SetupEntitySection({
   const refOptions = await loadRefOptions(entity, orgId, allowedSubsidiaryIds)
   const sortedColumn = entity.columns.find((column) => column.key === list.sort)
   const sortField = sortedColumn ? sql.raw(toSnake(sortedColumn.key)) : undefined
-  const sortLabels = sortedColumn?.ref ? refOptions[sortedColumn.ref] ?? [] : []
+  const sortLabels = sortedColumn?.ref
+    ? (refOptions[sortedColumn.ref] ?? [])
+    : [];
   // Reference columns sort by their authorized display labels, not opaque ids.
   const sortValue = sortField && sortLabels.length ? sql`case ${sql.join(sortLabels.map((option) =>
     sql`when cast(${sortField} as text) = ${option.value} then ${option.label}`), sql` `)}
@@ -335,7 +350,9 @@ export async function SetupEntitySection({
   const refLabels: Record<string, Map<string, string>> = {}
   for (const [source, opts] of Object.entries(refOptions)) {
     const scopeField = entity.fields.find((field) => field.ref === source && field.refScopeField)?.refScopeField
-    const boundScope = scopeField ? parentScope?.fixedValues[scopeField] ?? fixedFilter?.value : undefined
+    const boundScope = scopeField
+      ? (parentScope?.fixedValues[scopeField] ?? fixedFilter?.value)
+      : undefined;
     const scopedOptions = boundScope === undefined ? opts : opts.filter((option) => option.scopeValue == null || option.scopeValue === String(boundScope))
     refLabels[source] = new Map(scopedOptions.map((option) => [option.value, option.label]))
   }
@@ -369,9 +386,16 @@ export async function SetupEntitySection({
     navigationPrefix: paramPrefix,
     entity, row: open?.row ?? null, orgId, actorId, sp, basePath,
     canManage, allowedSubsidiaryIds, features, t, mutationBasePath,
-  }).map(tab => childTabIntroductions?.[tab.key] && tab.content ? {
+  }).map((tab) =>
+    childTabIntroductions?.[tab.key] && tab.content
+      ? {
     ...tab,
-    content: <div className="space-y-6">{childTabIntroductions[tab.key]}{tab.content}</div>,
+          content: (
+            <div className="space-y-6">
+              {childTabIntroductions[tab.key]}
+              {tab.content}
+            </div>
+          ),
   } : tab)
 
   const rateBookDrawerData = open && entity.key === 'item-rate-books'
@@ -501,7 +525,8 @@ export async function SetupEntitySection({
       </div>
       ) : null}
 
-      {!drawerOnly ? <>
+      {!drawerOnly ? (
+        <>
       <div className="flex shrink-0 flex-wrap items-center gap-2">
         <SearchInput placeholder={t('searchPlaceholder')} paramKey={qParam} pageParamKey={pageParam} />
         {(entity.filters ?? []).map((filter) => (
@@ -539,7 +564,9 @@ export async function SetupEntitySection({
           columns={entity.columns.map((column, index) => ({
             key: column.key,
             sortKey: column.key,
-            align: ['number', 'money', 'percent'].includes(column.kind) ? 'right' as const : 'left' as const,
+                align: ["number", "money", "percent"].includes(column.kind)
+                  ? ("right" as const)
+                  : ("left" as const),
             header: t(column.labelKey ?? `fields.${column.key}`),
             cell: (row) => {
               const content = renderColumn?.(column, row) ??
@@ -549,13 +576,15 @@ export async function SetupEntitySection({
                   className="font-medium text-teal-700 hover:underline dark:text-teal-300">
                   {content}
                 </Link>
-              ) : content
+                  ) : (
+                    content
+                  );
             },
           }))}
         />
       </div>
-
-      </> : null}
+        </>
+      ) : null}
 
       {open && canWriteEntity && entity.key === 'item-rate-books' && rateBookDrawerData ? (
         <RateBookDrawer

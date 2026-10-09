@@ -305,7 +305,7 @@
     "working": "Preparing…",
     "refused": "Schedule distribution could not be completed.",
     "explanation": "Choose personal reports or a whole-board report for every selected recipient. Published bookings and literal source-date observations are shown separately. Sending uses your enabled Schedule distribution Flow and configured email provider.",
-    "everyone": "Everyone with a visible schedule in these dates",
+    "everyone": "選択した対象全員",
     "reason": "Reason for sending",
     "queued": "The reviewed schedule is queued for email delivery.",
     "deliveryStatus": "Queued is not delivered. Follow the native Flow run, Email log and delivery audit for actual provider results.",
@@ -314,10 +314,66 @@
     "missingEmail": "Email missing",
     "report": "Recipient schedule report preview",
     "flows": "Configure native Flows",
-    "contacts": "Board resource recipients",
+    "contacts": "リソース配信連絡先",
     "sharing": "Report sharing",
     "personal": "Each recipient’s own schedule/resources",
     "wholeBoard": "The whole visible board schedule for each recipient",
-    "wholeBoardReview": "Every selected recipient will receive the whole reviewed board report, including other people/resources. Board Settings must explicitly allow this sharing within the board’s legal entity."
+    "wholeBoardReview": "Every selected recipient will receive the whole reviewed board report, including other people/resources. Board Settings must explicitly allow this sharing within the board’s legal entity.",
+    "cohort": "従業員の配信対象",
+    "cohorts": {
+      "scope": "現在の対象従業員と応援従業員",
+      "scheduled": "指定期間に予定がある現職従業員",
+      "supervisors": "対象従業員の上司",
+      "self": "自分の予定"
+    },
+    "includePdf": "横向きPDFを添付",
+    "message": "メール本文",
+    "additionalContacts": "追加のネイティブ連絡先",
+    "additionalHelp": "予定のない追加連絡先にも、確認済みのボード全体レポートを送信します。表示可能な連絡先を選び、共有範囲を確認してください。",
+    "contactSearch": "連絡先を検索",
+    "chooseContact": "追加連絡先を選択",
+    "refineSearch": "候補がさらにあります。検索条件を絞ってください。",
+    "downloadPdf": "確認済みPDFをダウンロード",
+    "excludedHistory": "過去の{count}名はレポートに残りますが、現職従業員への配信対象からは除外されます。",
+    "additionalRoles": "登録済みロール・グループの受信者",
+    "roleHelp": "任意のアプリケーションロールから、送信時の有効なメンバーと表示可能な「人」の連絡先を解決します。グループを含める前にボード全体の共有を確認してください。",
+    "chooseRole": "登録済みロールを選択",
+    "recipientMode": "受信者の選択",
+    "modes": {
+      "selected": "選択した受信者のみ",
+      "automatic": "ボードの自動配信対象のみ",
+      "combined": "自動対象と選択した受信者"
+    },
+    "nativeContacts": "登録済み連絡先の受信者",
+    "pdfLayout": "PDFレイアウト",
+    "pdfFields": {
+      "paperSize": "用紙サイズ",
+      "orientation": "向き",
+      "marginMm": "余白（mm）",
+      "density": "間隔",
+      "daysPerSection": "各区分の日付列数（7または14）",
+      "detail": "セルの詳細"
+    },
+    "pdfOptions": {
+      "paperSize": {
+        "letter": "US Letter",
+        "a4": "A4",
+        "legal": "US Legal",
+        "tabloid": "Tabloid"
+      },
+      "orientation": {
+        "portrait": "縦向き",
+        "landscape": "横向き"
+      },
+      "density": {
+        "standard": "標準",
+        "compact": "コンパクト"
+      },
+      "detail": {
+        "assignments": "割り当て",
+        "hours": "割り当てと時間",
+        "full": "証拠の全詳細"
+      }
+    }
   }
 }

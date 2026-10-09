@@ -77,7 +77,8 @@ export interface SetupOption {
 export const setupOptionLabel = (
   option: SetupOption,
   t: (key: string) => string,
-): string => (option.labelKey ? t(option.labelKey) : (option.label ?? option.value))
+): string =>
+  option.labelKey ? t(option.labelKey) : (option.label ?? option.value);
 
 /**
  * Options that come from a runtime registry rather than this pure module.
@@ -210,7 +211,10 @@ export interface SetupField {
 }
 
 /** Whether a conditional field applies to the values currently in the form. */
-export type SetupFieldCondition = { field: string; in: string[] } | { field: string; present: boolean } | { all: SetupFieldCondition[] }
+export type SetupFieldCondition =
+  | { field: string; in: string[] }
+  | { field: string; present: boolean }
+  | { all: SetupFieldCondition[] };
 
 function setupFieldValue(values: Record<string, unknown>, path: string): unknown {
   if (Object.hasOwn(values, path)) return values[path]
@@ -232,6 +236,28 @@ export function setupFieldVisible(field: SetupField, values: Record<string, unkn
   return !field.showWhen || matches(field.showWhen)
 }
 
+/** Record-owned child visibility uses the same declared conditions as fields. */
+export function setupParentRecordVisible(
+  binding: { showWhen?: SetupFieldCondition },
+  row: Record<string, unknown>,
+): boolean {
+  const values = {
+    ...row,
+    ...Object.fromEntries(
+      Object.entries(row).map(([key, value]) => [
+        key.replace(/_([a-z])/g, (_match, letter: string) =>
+          letter.toUpperCase(),
+        ),
+        value,
+      ]),
+    ),
+  };
+  return setupFieldVisible(
+    { key: "parent", kind: "text", showWhen: binding.showWhen },
+    values,
+  );
+}
+
 /**
  * The select options that apply to the values currently in the form. A
  * field without `scopedOptions` offers its static `options`; a scoped field
@@ -247,7 +273,8 @@ export function setupFieldOptions(field: SetupField, values: Record<string, unkn
   if (field.optionsFromField) {
     const { field: source, valueKey, labelKey } = field.optionsFromField
     const rows = setupFieldValue(recordValues, source)
-    return Array.isArray(rows) ? rows.flatMap(row => {
+    return Array.isArray(rows)
+      ? rows.flatMap((row) => {
       if (!row || typeof row !== 'object' || Array.isArray(row)) return []
       const value = row[valueKey], label = row[labelKey]
       return typeof value === 'string' && value.trim() ? [{ value, label: typeof label === 'string' && label.trim() ? label : value }] : []
@@ -318,7 +345,11 @@ export interface SetupCommandDescriptor {
   /** Mutation grant the command endpoint enforces (least privilege per domain). */
   permission: 'funds.manage' | 'channels.manage' | 'documents.manage'
   /** Authoritative Company Settings → Features key enforced server-side. */
-  feature: 'fundAccounting' | 'functionalExpenses' | 'salesChannels' | 'customerPortal'
+  feature:
+    | "fundAccounting"
+    | "functionalExpenses"
+    | "salesChannels"
+    | "customerPortal";
 }
 
 /**
@@ -372,6 +403,8 @@ export interface SetupEntity {
   recordSections?: { key: string; titleKey: string; descriptionKey: string; fields: string[] }[]
   /** Authorized operational links shown by the shared record drawer. */
   recordLinks?: { href: string; label: string }[]
+  /** Record values are encoded into module-owned contextual navigation. */
+  recordLinkTemplates?: { href: string; labelKey: string }[];
   /** Server-only presentation of native record-owned collections. */
   recordChildren?: SetupEntity[]
   /** Continue creation in the owning record when child configuration is required. */
@@ -418,7 +451,12 @@ export interface SetupEntity {
   nestedUnder?: string
   /** Record-owned collections have no independent setup page. Multiple entries
    *  describe mutually exclusive owners, such as a plan OR a pay component. */
-  parentRecords?: { entityKey: string; fieldKey: string; valueKey?: string }[]
+  parentRecords?: {
+    entityKey: string;
+    fieldKey: string;
+    valueKey?: string;
+    showWhen?: SetupFieldCondition;
+  }[];
   /** Re-homed onto an operational record/module (e.g. Inventory, Items,
    *  customer/project drawers). Still served by the shared CRUD API and
    *  embeddable via <SetupEntitySection>, but hidden from the setup rail and
@@ -568,7 +606,14 @@ export function setupEntityForFeatureState(
 ): SetupEntity {
   const equipmentOn = features.equipment !== false
   const fieldTicketsOn = features.fieldTickets !== false
-  if (features.multiSubsidiary && equipmentOn && fieldTicketsOn && features.einvoicing !== false && !entity.fields.some(field => field.featureKey)) return entity
+  if (
+    features.multiSubsidiary &&
+    equipmentOn &&
+    fieldTicketsOn &&
+    features.einvoicing !== false &&
+    !entity.fields.some((field) => field.featureKey)
+  )
+    return entity;
   const isSubsidiaryControl = (control: SetupField | SetupColumn) =>
     control.ref === 'subsidiaries' || control.key === 'subsidiaryIncludeChildren'
   const isEquipmentControl = (control: SetupField | SetupColumn) =>

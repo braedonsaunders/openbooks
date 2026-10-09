@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { assertPrintablePage, isAllowedPdfRequest, preparePdfChromeHtml } from './html'
+import { assertPrintablePage, htmlPdfPageDimensions, isAllowedPdfRequest, preparePdfChromeHtml } from './html'
 import { pdfChromeSubresourceRequests } from './template'
 
 test('an unknown paper size or out-of-range margin is refused by name', () => {
@@ -160,3 +160,11 @@ test('SVG presentation attributes in chrome HTML cannot produce a network reques
   )
   assert.doesNotMatch(escaped, /static\.example|https?:\/\//i)
 })
+
+
+test('shared Tabloid page setup retains its actual native format across report and HTML adapters', () => {
+  assert.doesNotThrow(() => assertPrintablePage('tabloid', 8));
+  assert.deepEqual(htmlPdfPageDimensions('tabloid', 'landscape'), { format: 'Tabloid' });
+  assert.deepEqual(htmlPdfPageDimensions('legal', 'landscape'), { format: 'Legal' });
+  assert.deepEqual(htmlPdfPageDimensions('4x6', 'landscape'), { width: '6in', height: '4in' });
+});

@@ -57,3 +57,16 @@ test('reviewed issuance is never cloned while native resource contacts rebase id
  const full=generateCopySql(contacts,opts,rebase,new Set(),policies,null)!,masked=generateCopySql(contacts,{...opts,masked:true},rebase,new Set(),policies,null)!;
  for(const column of Object.keys(contacts.fks))assert.ok(full.includes(`ob_rebase("${column}"`));assert.match(masked,/REDACTED/);
 });
+
+
+test('full and masked board copies clear automatic delivery operator and audience policy without copying issuance history', () => {
+  const boards = table('schedule_boards', ['id', 'org_id', 'automatic_delivery_policy']);
+  boards.columns.find(column => column.name === 'automatic_delivery_policy')!.isUuid = false;
+  boards.columns.find(column => column.name === 'automatic_delivery_policy')!.udtName = 'jsonb';
+  for (const masked of [false, true]) {
+    const copy = generateCopySql(boards, { ...opts, masked }, new Set(['schedule_boards']), new Set(), new Map(), null)!;
+    assert.match(copy, /null::jsonb/);
+    assert.equal(copy.split('"automatic_delivery_policy"').length, 2, 'policy occurs in the target list only; source operator/contact JSON is not selected');
+    for (const name of ['schedule_distributions', 'schedule_distribution_recipients']) assert.equal(EXCLUDE.has(name), true);
+  }
+});

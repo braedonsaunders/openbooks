@@ -3421,8 +3421,9 @@
         "description": "Códigos para asignar trabajo que no corresponde a un cliente ni a un proyecto, como días de formación o de taller, y para los días en que las personas no trabajan."
       },
       "schedule-resource-recipients": {
-        "title": "Board resource recipients",
-        "singularTitle": "Resource recipient"
+        "title": "Contactos de envío de recursos",
+        "singularTitle": "Contacto de envío del recurso",
+        "description": "Asocie equipos o ubicaciones con contactos nativos para enviar horarios. Los empleados usan directamente su contacto en Personas; no se requiere una segunda lista."
       },
       "ai-capabilities": {
         "title": "Revisión de acciones del asistente",
@@ -4026,7 +4027,28 @@
       "autonomy": "Nivel de revisión declarado",
       "boardId": "Tablero de planificación",
       "resourceLocationId": "Ubicación del recurso",
-      "partyId": "Contacto"
+      "partyId": "Contacto",
+      "automaticDeliveryPolicy": "Envío automático del horario",
+      "scheduleDeliveryOperator": "Operador autorizado",
+      "scheduleDeliveryTimeZone": "Zona horaria del informe",
+      "scheduleDeliveryDays": "Días del informe",
+      "scheduleDeliveryAnchor": "Inicio del informe",
+      "scheduleDeliveryWeekStarts": "Primer día (0 = domingo)",
+      "scheduleDeliveryVisibility": "Uso compartido del informe",
+      "scheduleDeliveryCohort": "Destinatarios empleados",
+      "scheduleDeliveryExtras": "Contactos nativos adicionales",
+      "scheduleDeliveryPdf": "Adjuntar PDF",
+      "scheduleDeliveryMessage": "Mensaje del correo",
+      "scheduleDeliveryRoles": "Destinatarios por rol nativo",
+      "scheduleDeliveryMode": "Selección de destinatarios",
+      "scheduleDeliverySubjects": "Personas o recursos seleccionados",
+      "schedulePdfLayout": "Diseño del PDF",
+      "schedulePdfPaper": "Tamaño de papel",
+      "schedulePdfOrientation": "Orientación",
+      "schedulePdfMargin": "Márgenes (mm)",
+      "schedulePdfDensity": "Espaciado",
+      "schedulePdfDays": "Columnas de fecha por sección (7 o 14)",
+      "schedulePdfDetail": "Detalle de celdas"
     },
     "fieldHelp": {
       "fxRateMaxAgeDays": "Días entre el tipo utilizable más reciente y el cierre del período a partir de los cuales la revaluación y la consolidación rechazan el tipo. Los tipos de cierre se cuentan desde la fecha del tipo al contado de cierre; los promedio, desde la cotización más reciente promediada. Valor predeterminado sin política: 31 días.",
@@ -4194,7 +4216,8 @@
       "scheduleCellColorRules": "La primera coincidencia sin distinguir mayúsculas establece el color. Use colores hexadecimales de seis dígitos, como #38bdf8.",
       "scheduleBoardDayPolicyKnown": "Desactive si solo se conocen las fechas. El historial sigue visible sin horas; configure el inicio, fin y descanso antes de reservar un día.",
       "scheduleShowHoursColumn": "Show the right-side sum of booked hours. Source dates without hours remain unknown. Daily footer totals are configured separately.",
-      "scheduleDistributionVisibility": "Personal reports contain only the recipient’s own schedule or associated resources. Whole-board reports require an explicit sharing policy and a legal-entity-scoped board. Every send still requires a reviewed audience/version or an authored, enabled native Flow."
+      "scheduleDistributionVisibility": "Personal reports contain only the recipient’s own schedule or associated resources. Whole-board reports require an explicit sharing policy and a legal-entity-scoped board. Every send still requires a reviewed audience/version or an authored, enabled native Flow.",
+      "scheduleAutomaticDelivery": "Política opcional: configure su propio operador autorizado y la zona horaria del tablero. Active por separado un flujo de envío con días y horas explícitos. Borrar esta política detiene futuros envíos y conserva el historial."
     },
     "options": {
       "withholdingCondominiumPayer": "Pagador: comunidad de propietarios",
@@ -4946,6 +4969,44 @@
         "equals": "Es igual a",
         "startsWith": "Empieza por",
         "contains": "Contiene"
+      },
+      "scheduleReportAnchor": {
+        "today": "Fecha de la ocurrencia",
+        "week": "Inicio de la semana correspondiente"
+      },
+      "scheduleReportSharing": {
+        "personal": "Informes personales",
+        "board": "Informe de todo el tablero"
+      },
+      "scheduleReportCohort": {
+        "scope": "Empleados actuales del ámbito y prestados",
+        "scheduled": "Empleados actuales programados en el informe",
+        "supervisors": "Supervisores nativos de empleados relevantes",
+        "self": "Horario propio del operador"
+      },
+      "scheduleRecipientMode": {
+        "selected": "Solo destinatarios nativos seleccionados",
+        "automatic": "Solo destinatarios automáticos del tablero",
+        "combined": "Destinatarios automáticos y seleccionados"
+      },
+      "schedulePdfPaper": {
+        "letter": "US Letter",
+        "a4": "A4",
+        "legal": "US Legal",
+        "tabloid": "Tabloid"
+      },
+      "schedulePdfOrientation": {
+        "portrait": "Vertical",
+        "landscape": "Horizontal"
+      },
+      "schedulePdfDensity": {
+        "standard": "Normal",
+        "compact": "Compacto"
+      },
+      "schedulePdfDetail": {
+        "assignments": "Asignaciones",
+        "hours": "Asignaciones y horas",
+        "full": "Evidencia completa"
       }
     },
     "laborCosting": {
@@ -6001,7 +6062,8 @@
     "structuredFields": {
       "row": "Fila {number}",
       "addRow": "Añadir fila",
-      "removeRow": "Eliminar fila"
+      "removeRow": "Eliminar fila",
+      "configure": "Configurar {field}"
     },
     "benefitBuilder": {
       "offer": "Programa",
@@ -6772,6 +6834,9 @@
         "notes": "Notas",
         "returnFrequency": "Frecuencia de declaración"
       }
+    },
+    "actions": {
+      "scheduleDeliveryFlows": "Configurar horas de envío en Flows"
     }
   },
   "flows": {
@@ -6804,7 +6869,8 @@
       "subject": "Tipo de registro",
       "subjectPlaceholder": "Elegir un tipo de registro…",
       "create": "Crear flujo",
-      "failed": "No se pudo crear el flujo"
+      "failed": "No se pudo crear el flujo",
+      "scheduleWeekdayPreset": "Días laborables a las 06:00 y 14:30 (opción de borrador; revisar antes de activar)"
     },
     "actions": {
       "enable": "Activar",
@@ -6907,7 +6973,12 @@
       "showIfRemove": "Quitar condición de visibilidad",
       "buttonPreview": "Vista previa del botón del registro",
       "buttonHint": "Este botón aparece en la cabecera del registro cuando el flujo está activado y se cumplen sus condiciones de permiso y visibilidad.",
-      "defaultButtonLabel": "Ejecutar flujo"
+      "defaultButtonLabel": "Ejecutar flujo",
+      "clockSchedule": "Elegir días y horas",
+      "clockHelp": "Cada hora es una ocurrencia distinta. Tras un retraso, solo se envía la última ocurrencia omitida por cada hora. Elija la zona horaria de la política del tablero.",
+      "clockTime": "Hora de envío",
+      "removeTime": "Eliminar hora",
+      "addTime": "Añadir hora"
     },
     "condition": {
       "rule": "Bifurcar cuando",
@@ -6925,7 +6996,8 @@
         "post_document": "Contabilizar el documento",
         "lock_record": "Bloquear el registro",
         "unlock_record": "Desbloquear el registro",
-        "distribute_schedule": "Email reviewed schedule"
+        "distribute_schedule": "Email reviewed schedule",
+        "send_board_schedule": "Enviar el horario actual del tablero"
       },
       "recipients": "Destinatarios",
       "subject": "Asunto",
@@ -6955,7 +7027,8 @@
       "lockExemptRoles": "Roles exentos",
       "lockExemptHint": "Los administradores siempre están exentos; los roles seleccionados aún pueden editar.",
       "unlockHint": "Elimina el bloqueo del flujo para permitir la edición de nuevo.",
-      "scheduleReportHelp": "Email the immutable reviewed schedule report to its exact recipient audience. It may be a personal report or an explicitly permitted whole-board report. Contact, legal entity, schedule version and provider changes refuse delivery."
+      "scheduleReportHelp": "Email the immutable reviewed schedule report to its exact recipient audience. It may be a personal report or an explicitly permitted whole-board report. Contact, legal entity, schedule version and provider changes refuse delivery.",
+      "automaticScheduleHelp": "Usa el operador autorizado guardado, los destinatarios nativos actuales y la política del tablero. Cada ocurrencia prepara un informe nuevo; editar o previsualizar el flujo no envía correo."
     },
     "gate": {
       "title": "Título",
@@ -7040,6 +7113,9 @@
       "retry": "Reintentar",
       "retryFailed": "Reintento fallido",
       "retrying": "Reintentando…"
+    },
+    "subjects": {
+      "schedule_board": "Envío del horario"
     }
   },
   "features": {

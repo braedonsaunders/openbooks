@@ -84,22 +84,16 @@ export function assertPrintablePage(paperSize: unknown, marginMm: unknown): asse
  * margins, with the org's own running header/footer. `{{page}}`/`{{pages}}` in
  * the header/footer become Chromium's live page counters.
  */
+export function htmlPdfPageDimensions(paperSize: PdfPaperSize, orientation: PdfOrientation) {
+  const formats: Record<Exclude<PdfPaperSize, '4x6'>, 'Letter' | 'A4' | 'Legal' | 'Tabloid'> = { letter: 'Letter', a4: 'A4', legal: 'Legal', tabloid: 'Tabloid' };
+  return paperSize === '4x6'
+    ? orientation === 'landscape' ? { width: '6in', height: '4in' } : { width: '4in', height: '6in' }
+    : { format: formats[paperSize] };
+}
+
 export async function renderHtmlDocumentPdf(input: HtmlDocumentPdfInput): Promise<Buffer> {
   assertPrintablePage(input.paperSize, input.marginMm)
-  const formatMap = { letter: 'Letter', a4: 'A4', legal: 'Legal' } as const
-  const customSize = input.paperSize === '4x6'
-  const pageDimensions = customSize
-    ? input.orientation === 'landscape'
-      ? { width: '6in', height: '4in' }
-      : { width: '4in', height: '6in' }
-    : {
-        format:
-          input.paperSize === 'letter'
-            ? formatMap.letter
-            : input.paperSize === 'a4'
-              ? formatMap.a4
-              : formatMap.legal,
-      }
+  const pageDimensions = htmlPdfPageDimensions(input.paperSize, input.orientation)
   const m = `${input.marginMm}mm`
   const html = `<!doctype html><html><head><meta charset="utf-8"><style>
     *{box-sizing:border-box;} body{margin:0;font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;color:#0f172a;}

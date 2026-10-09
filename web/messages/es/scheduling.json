@@ -305,7 +305,7 @@
     "working": "Preparing…",
     "refused": "Schedule distribution could not be completed.",
     "explanation": "Choose personal reports or a whole-board report for every selected recipient. Published bookings and literal source-date observations are shown separately. Sending uses your enabled Schedule distribution Flow and configured email provider.",
-    "everyone": "Everyone with a visible schedule in these dates",
+    "everyone": "Todos los destinatarios elegidos",
     "reason": "Reason for sending",
     "queued": "The reviewed schedule is queued for email delivery.",
     "deliveryStatus": "Queued is not delivered. Follow the native Flow run, Email log and delivery audit for actual provider results.",
@@ -314,10 +314,66 @@
     "missingEmail": "Email missing",
     "report": "Recipient schedule report preview",
     "flows": "Configure native Flows",
-    "contacts": "Board resource recipients",
+    "contacts": "Contactos de envío de recursos",
     "sharing": "Report sharing",
     "personal": "Each recipient’s own schedule/resources",
     "wholeBoard": "The whole visible board schedule for each recipient",
-    "wholeBoardReview": "Every selected recipient will receive the whole reviewed board report, including other people/resources. Board Settings must explicitly allow this sharing within the board’s legal entity."
+    "wholeBoardReview": "Every selected recipient will receive the whole reviewed board report, including other people/resources. Board Settings must explicitly allow this sharing within the board’s legal entity.",
+    "cohort": "Destinatarios empleados",
+    "cohorts": {
+      "scope": "Empleados actuales del ámbito y prestados",
+      "scheduled": "Empleados actuales programados en estas fechas",
+      "supervisors": "Supervisores de empleados relevantes",
+      "self": "Mi propio horario"
+    },
+    "includePdf": "Adjuntar PDF horizontal",
+    "message": "Mensaje del correo",
+    "additionalContacts": "Contactos nativos adicionales",
+    "additionalHelp": "Estos contactos opcionales reciben todo el informe revisado, aunque no tengan horario. Elija contactos visibles y revise el uso compartido antes del envío.",
+    "contactSearch": "Buscar contactos nativos",
+    "chooseContact": "Elegir contacto adicional",
+    "refineSearch": "Hay más contactos. Precise la búsqueda.",
+    "downloadPdf": "Descargar PDF revisado",
+    "excludedHistory": "{count} personas históricas permanecen en el informe, pero se excluyen del envío a empleados actuales.",
+    "additionalRoles": "Destinatarios por rol o grupo nativo",
+    "roleHelp": "Los roles opcionales resuelven sus miembros activos en contactos visibles de Personas en cada envío. Revise el informe completo antes de incluir un grupo.",
+    "chooseRole": "Elegir rol nativo",
+    "recipientMode": "Selección de destinatarios",
+    "modes": {
+      "selected": "Solo destinatarios nativos seleccionados",
+      "automatic": "Solo destinatarios automáticos del tablero",
+      "combined": "Destinatarios automáticos y seleccionados"
+    },
+    "nativeContacts": "Contactos nativos destinatarios",
+    "pdfLayout": "Diseño del PDF",
+    "pdfFields": {
+      "paperSize": "Tamaño de papel",
+      "orientation": "Orientación",
+      "marginMm": "Márgenes (mm)",
+      "density": "Espaciado",
+      "daysPerSection": "Columnas de fecha por sección (7 o 14)",
+      "detail": "Detalle de celdas"
+    },
+    "pdfOptions": {
+      "paperSize": {
+        "letter": "US Letter",
+        "a4": "A4",
+        "legal": "US Legal",
+        "tabloid": "Tabloid"
+      },
+      "orientation": {
+        "portrait": "Vertical",
+        "landscape": "Horizontal"
+      },
+      "density": {
+        "standard": "Normal",
+        "compact": "Compacto"
+      },
+      "detail": {
+        "assignments": "Asignaciones",
+        "hours": "Asignaciones y horas",
+        "full": "Evidencia completa"
+      }
+    }
   }
 }

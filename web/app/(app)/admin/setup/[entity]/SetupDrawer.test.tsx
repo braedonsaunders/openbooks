@@ -581,3 +581,40 @@ test('choosing a new board family removes hidden incompatible views before selec
   assert.deepEqual(body.views, ['gantt'])
   assert.equal(body.defaultView, 'gantt')
 })
+
+
+test('optional delivery policy clears through native save without required hidden children and links to the exact board Flow draft', async t => {
+  const board = SETUP_ENTITY_BY_KEY.get('schedule-boards')!;
+  const id = '00000000-0000-4000-8000-000000000125';
+  const operator = '00000000-0000-4000-8000-000000000126';
+  const presentation = { ...board, fields: board.fields.filter(field => ['rowKind', 'automaticDeliveryPolicy'].includes(field.key)), formSections: undefined };
+  const row = { id, name: 'Service & Dispatch', row_kind: 'people', automatic_delivery_policy: { operatorId: operator, timeZone: 'America/Toronto', days: 14, anchor: 'week', weekStartsOn: 0, visibility: 'board', recipientMode: 'selected', additionalPartyIds: [operator], includePdf: true } };
+  const { seen } = await mountDrawer(t, row, () => Response.json({ id }), 'schedule-boards', undefined, undefined, presentation, false, { 'schedule-operators': [{ value: operator, label: 'Authorized operator' }], 'schedule-contacts': [{ value: operator, label: 'Additional native contact' }] });
+  const flow = document.querySelector('a[href*="subject=schedule_board"]');
+  assert.ok(flow);
+  const link = new URL(flow.getAttribute('href')!, 'http://localhost');
+  assert.equal(link.searchParams.get('board'), id);
+  assert.equal(link.searchParams.get('boardName'), row.name);
+  await act(async () => { clickButton('Edit').click(); await tick() });
+  const configure = document.querySelector('input[aria-label^="Configure "]') as HTMLInputElement;
+  assert.ok(configure);
+  assert.equal(configure.checked, true);
+  await act(async () => { configure.click(); await tick() });
+  assert.equal(document.querySelector(`input[aria-label="${FIELD_LABEL.scheduleDeliveryTimeZone}"]`), null);
+  await clickSave(false);
+  assert.equal(seen.length, 1);
+  assert.equal((seen[0]!.body as Record<string, unknown>).automaticDeliveryPolicy, null);
+});
+
+test('cleared delivery policy reopens unconfigured; deliberate configuration retains real required operator refusal', async t => {
+  const board = SETUP_ENTITY_BY_KEY.get('schedule-boards')!;
+  const presentation = { ...board, fields: board.fields.filter(field => ['rowKind', 'automaticDeliveryPolicy'].includes(field.key)), formSections: undefined };
+  const { seen } = await mountDrawer(t, { id: '00000000-0000-4000-8000-000000000125', row_kind: 'people', automatic_delivery_policy: null }, () => Response.json({}), 'schedule-boards', undefined, undefined, presentation);
+  const configure = document.querySelector('input[aria-label^="Configure "]') as HTMLInputElement;
+  assert.ok(configure);
+  assert.equal(configure.checked, false);
+  await act(async () => { configure.click(); await tick() });
+  await clickSave(false);
+  assert.deepEqual(seen, []);
+  assert.match(alertText() ?? '', /operatorId.*required/);
+});

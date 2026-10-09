@@ -123,6 +123,9 @@ export async function renderPdfDocument(input: PdfDocumentInput): Promise<Buffer
   sink.on('data', (c: Buffer | Uint8Array) => chunks.push(Buffer.isBuffer(c) ? c : Buffer.from(c)))
   doc.pipe(sink)
 
+  const completion = finished(sink);
+  void completion.catch(() => {});
+  try {
   let y = page.contentTop
   y = drawCover(doc, page, input, theme, s)
   if (input.summary && input.summary.length > 0) {
@@ -135,8 +138,14 @@ export async function renderPdfDocument(input: PdfDocumentInput): Promise<Buffer
 
   stampFooters(doc, page, input)
   doc.end()
-  await finished(sink)
-  return Buffer.concat(chunks)
+    await completion;
+    return Buffer.concat(chunks);
+  } catch (cause) {
+    doc.destroy();
+    sink.destroy();
+    await completion.catch(() => {});
+    throw cause;
+  }
 }
 
 function drawCover(

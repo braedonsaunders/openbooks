@@ -5,6 +5,11 @@ import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { documentRevisionSql } from '@openbooks/engine/src/records/revision.ts'
 import { db } from '@openbooks/engine/src/platform/db.ts'
+import {
+  boardAuthority,
+  getBoard,
+} from "@openbooks/engine/src/schedule-boards/boards.ts";
+import { scheduleBoardTimerGraph } from "@openbooks/engine/src/flows/schedule-board-adapter.ts";
 import { emptyAutomationGraph } from '@openbooks/forms-core'
 import { listFlowSubjectProfiles } from '@openbooks/engine/src/flows/index.ts'
 import { guardFeaturePermission } from '../../../../lib/feature-gates'
@@ -15,9 +20,34 @@ const FLOW_SUBJECT_KINDS = listFlowSubjectProfiles().map((profile) => profile.su
 const requestBodySchema = z.object({
   name: z.string().trim().min(1).max(200),
   subjectKind: z.enum(FLOW_SUBJECT_KINDS),
+    boardId: z.string().uuid().optional(),
+    schedulePreset: z.literal("weekday-morning-afternoon").optional(),
   ungatedOutcome: z.literal('apply').optional(),
 }).superRefine((value, ctx) => {
-  if (value.ungatedOutcome && !listFlowSubjectProfiles().find(profile => profile.subjectKind === value.subjectKind)?.supportsUngatedSubmission) ctx.addIssue({ code: 'custom', message: 'This record type does not support saving without approval steps.', path: ['ungatedOutcome'] });
+    if (value.schedulePreset && !value.boardId)
+      ctx.addIssue({
+        code: "custom",
+        message: "Choose a board before selecting a delivery timing preset.",
+        path: ["schedulePreset"],
+      });
+    if (value.boardId && value.subjectKind !== "schedule_board")
+      ctx.addIssue({
+        code: "custom",
+        message: "Board context is only valid for schedule board delivery.",
+        path: ["boardId"],
+      });
+    if (
+      value.ungatedOutcome &&
+      !listFlowSubjectProfiles().find(
+        (profile) => profile.subjectKind === value.subjectKind,
+      )?.supportsUngatedSubmission
+    )
+      ctx.addIssue({
+        code: "custom",
+        message:
+          "This record type does not support saving without approval steps.",
+        path: ["ungatedOutcome"],
+      });
 });
 
 
@@ -32,7 +62,7 @@ async function legacyGET() {
   const gate = await guardFeaturePermission('flows.manage', 'flows')
   if (gate instanceof NextResponse) return gate
   if (gate.allowedSubsidiaryIds === null) {
-    const r = (await db.execute<Record<string, unknown>>(sql`
+    const r = await db.execute<Record<string, unknown>>(sql`
       select f.id, f.name, f.description, f.subject_kind, f.enabled, ${documentRevisionSql(sql`f.updated_at`)} as updated_at,
              jsonb_array_length(f.graph->'nodes') as node_count,
              (select count(*) from flow_runs r where r.flow_id = f.id and r.org_id = f.org_id) as run_count,
@@ -44,7 +74,7 @@ async function legacyGET() {
         ) lr on true
        where f.org_id = ${gate.user.orgId}
        order by f.name
-    `))
+    `);
     return NextResponse.json({ flows: r.rows })
   }
   // A subsidiary-restricted caller must not learn org-wide run counts or
@@ -126,14 +156,38 @@ export const POST = defineRoute({
       return NextResponse.json({ error: `unknown subject kind "${subjectKind}"` }, { status: 400 })
     }
 
-    const graph = body.ungatedOutcome ? { schemaVersion: 1, ungatedOutcome: body.ungatedOutcome, nodes: [{ id: 'submit', position: { x: 0, y: 0 }, data: { kind: 'trigger', trigger: { trigger: 'on_submit' } } }], edges: [] } : emptyAutomationGraph()
+    const board = body.boardId
+      ? await getBoard({ orgId: user.orgId, actorId: user.id }, body.boardId)
+      : null;
+    if (board)
+      await boardAuthority(
+        { orgId: user.orgId, actorId: user.id },
+        board,
+        "manage",
+      );
+    const graph = board
+      ? scheduleBoardTimerGraph(board.id, board.timeZone, !!body.schedulePreset)
+      : body.ungatedOutcome
+        ? {
+            schemaVersion: 1,
+            ungatedOutcome: body.ungatedOutcome,
+            nodes: [
+              {
+                id: "submit",
+                position: { x: 0, y: 0 },
+                data: { kind: "trigger", trigger: { trigger: "on_submit" } },
+              },
+            ],
+            edges: [],
+          }
+        : emptyAutomationGraph();
     const id = await db.transaction(async (tx) => {
-      const r = (await tx.execute<{ id: string }>(sql`
+      const r = await tx.execute<{ id: string }>(sql`
         insert into flows (org_id, name, subject_kind, enabled, graph, created_by, updated_by)
         values (${user.orgId}, ${name}, ${subjectKind}, false,
                 ${JSON.stringify(graph)}::jsonb, ${user.id}, ${user.id})
         returning *
-      `))
+      `);
       const created = r.rows[0]!
       await tx.execute(sql`
         insert into audit_log

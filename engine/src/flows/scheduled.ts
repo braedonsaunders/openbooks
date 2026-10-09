@@ -23,7 +23,8 @@ import { parseFlowGraph } from "./run.ts";
  *
  * Anchoring: a flow fires when any of its `scheduled` trigger nodes has a
  * cron occurrence in (lastScheduledRunAt ?? createdAt, now] — a late tick or
- * downtime fast-forwards to ONE catch-up run instead of skipping. The claim
+ * downtime fast-forwards to the latest occurrence per node/configured clock time.
+ * Separate deliberate daily times remain separate sends; missed older days coalesce. The claim
  * commits atomically with the cursor advance (CLAIM below), so concurrent
  * processes never double-fire AND a crash can never silently skip.
  *
@@ -137,6 +138,21 @@ export function invalidScheduledTriggerCronReason(cron: string, tz?: string): st
   }
 }
 
+/** Expand configured native wall-clock times without cross-pairing hours and minutes. */
+export function scheduledTriggerCrons(
+  trigger: Extract<
+    import("@openbooks/forms-core").TriggerData,
+    { trigger: "scheduled" }
+  >,
+): string[] {
+  return trigger.clockSchedule
+    ? trigger.clockSchedule.times.map((time) => {
+        const [hour, minute] = time.split(":");
+        return `${Number(minute)} ${Number(hour)} * * ${[...new Set(trigger.clockSchedule!.days)].sort().join(",")}`;
+      })
+    : [trigger.cron];
+}
+
 /**
  * Which scheduled trigger nodes of a graph are due, and the latest
  * occurrence — plus the nodes whose cron can never fire. The occurrence
@@ -149,23 +165,56 @@ function dueScheduledNodes(
   graph: AutomationGraph,
   anchor: Date,
   now: Date,
-): { nodeIds: string[]; latest: Date | null; invalid: { nodeId: string; cron: string; reason: string }[] } {
+): {
+  nodeIds: string[];
+  occurrences: { nodeId: string; occurredAt: Date }[];
+  latest: Date | null;
+  invalid: { nodeId: string; cron: string; reason: string }[];
+} {
   const nodeIds: string[] = [];
+  const occurrences: { nodeId: string; occurredAt: Date }[] = [];
   const invalid: { nodeId: string; cron: string; reason: string }[] = [];
   let latest: Date | null = null;
   for (const node of graph.nodes) {
     if (node.data.kind !== "trigger" || node.data.trigger.trigger !== "scheduled") continue;
-    const reason = invalidScheduledTriggerCronReason(node.data.trigger.cron, node.data.trigger.tz);
+    const clocks = node.data.trigger.clockSchedule;
+    const crons = scheduledTriggerCrons(node.data.trigger);
+    for (const cron of [...new Set(crons)]) {
+      if (clocks && !node.data.trigger.tz) {
+        invalid.push({
+          nodeId: node.id,
+          cron,
+          reason: "Choose an explicit timezone for configured send times.",
+        });
+        continue;
+      }
+      const reason = invalidScheduledTriggerCronReason(
+        cron,
+        node.data.trigger.tz,
+      );
     if (reason) {
-      invalid.push({ nodeId: node.id, cron: node.data.trigger.cron, reason });
+        invalid.push({ nodeId: node.id, cron, reason });
       continue;
     }
-    const occ = lastCronOccurrenceBetween(node.data.trigger.cron, anchor, now, node.data.trigger.tz);
+      const occ = lastCronOccurrenceBetween(
+        cron,
+        anchor,
+        now,
+        node.data.trigger.tz,
+      );
     if (!occ) continue;
-    nodeIds.push(node.id);
+      if (!nodeIds.includes(node.id)) nodeIds.push(node.id);
+      if (
+        !occurrences.some(
+          (o) =>
+            o.nodeId === node.id && o.occurredAt.getTime() === occ.getTime(),
+        )
+      )
+        occurrences.push({ nodeId: node.id, occurredAt: occ });
     if (!latest || occ.getTime() > latest.getTime()) latest = occ;
   }
-  return { nodeIds, latest, invalid };
+  }
+  return { nodeIds, occurrences, latest, invalid };
 }
 
 /**
@@ -178,32 +227,37 @@ function dueScheduledNodes(
  */
 async function claimDueFlowOccurrences(
   flow: Pick<FlowRow, "id" | "orgId">,
-  due: { nodeIds: string[]; latest: Date },
+  due: { occurrences: { nodeId: string; occurredAt: Date }[]; latest: Date },
 ): Promise<FlowOccurrenceClaim[]> {
   const inserted = await withOrgContext(flow.orgId, () =>
-    db.execute<{ id: string; node_id: string }>(sql`
+    db.execute<{ id: string; node_id: string; occurred_at: Date | string }>(sql`
       with advanced as (
         update flows set last_scheduled_run_at = ${due.latest}
          where id = ${flow.id} and org_id = ${flow.orgId}
            and (last_scheduled_run_at is null or last_scheduled_run_at < ${due.latest})
         returning id
       ),
-      due_nodes(node_id) as (
-        values ${sql.join(due.nodeIds.map((nodeId) => sql`(${nodeId}::text)`), sql`, `)}
+      due_nodes(node_id,occurred_at) as (
+        values ${sql.join(
+          due.occurrences.map(
+            (o) => sql`(${o.nodeId}::text,${o.occurredAt}::timestamptz)`,
+          ),
+          sql`, `,
+        )}
       )
       insert into flow_scheduled_occurrences (org_id, flow_id, node_id, occurred_at)
-      select ${flow.orgId}::uuid, ${flow.id}::uuid, n.node_id, ${due.latest}
+      select ${flow.orgId}::uuid, ${flow.id}::uuid, n.node_id, n.occurred_at
         from advanced cross join due_nodes n
        -- A repeated due-node scan retains the one occurrence already created for this timestamp.
        on conflict (flow_id, node_id, occurred_at) do nothing
-      returning id, node_id
+      returning id, node_id,occurred_at
     `));
   return inserted.rows.map((row) => ({
     id: row.id,
     orgId: flow.orgId,
     flowId: flow.id,
     nodeId: row.node_id,
-    occurredAt: due.latest,
+    occurredAt: asDbDate(row.occurred_at),
   }));
 }
 
@@ -292,7 +346,9 @@ function rootErrorMessage(e: unknown): string {
  * it behind for recovery. Every run created here carries the deterministic
  * flowRuns.occurrence_key so retried/resumed attempts adopt the same rows.
  */
-async function fireScheduledOccurrence(claim: FlowOccurrenceClaim): Promise<void> {
+async function fireScheduledOccurrence(
+  claim: FlowOccurrenceClaim,
+): Promise<number> {
   const [flow] = await withOrgContext(claim.orgId, () =>
     db.select().from(schema.flows)
       .where(and(eq(schema.flows.id, claim.flowId), eq(schema.flows.orgId, claim.orgId))));
@@ -300,16 +356,21 @@ async function fireScheduledOccurrence(claim: FlowOccurrenceClaim): Promise<void
   // switched-off automation, but do not strand the claim either.
   if (!flow || !flow.enabled) {
     await stampOccurrenceLost(claim.id, "flow disabled or deleted since claim");
-    return;
+    return 0;
   }
   const graph = parseFlowGraph(flow.id, flow.graph);
   if (!graph) {
     await stampOccurrenceLost(claim.id, "flow graph failed validation since claim");
-    return;
+    return 0;
   }
 
-  await withOrg(flow.orgId, async () => {
-    await runScheduledNode(flow, graph, claim.nodeId, claim.occurredAt);
+  return withOrg(flow.orgId, async () => {
+    const failures = await runScheduledNode(
+      flow,
+      graph,
+      claim.nodeId,
+      claim.occurredAt,
+    );
     // Completion commits WITH the runs/effects/outbox emails this firing
     // produced: a crash before here rolls those back AND leaves the claim
     // unfired; a crash after leaves them durably delivered.
@@ -318,6 +379,7 @@ async function fireScheduledOccurrence(claim: FlowOccurrenceClaim): Promise<void
          set status = 'fired', updated_at = now()
        where id = ${claim.id}
     `);
+    return failures;
   });
 }
 
@@ -383,7 +445,10 @@ export async function runDueScheduledFlows(now: Date = new Date()): Promise<{
 
     let claims: FlowOccurrenceClaim[];
     try {
-      claims = await claimDueFlowOccurrences(flow, { nodeIds: due.nodeIds, latest });
+      claims = await claimDueFlowOccurrences(flow, {
+        occurrences: due.occurrences,
+        latest,
+      });
     } catch (e) {
       console.error(`[flows] scheduled claim failed for flow ${flow.id}:`, e);
       continue;
@@ -403,8 +468,9 @@ export async function runDueScheduledFlows(now: Date = new Date()): Promise<{
       }
       if (attempt === null) continue;
       try {
-        await fireScheduledOccurrence(claim);
+        const failedRuns = await fireScheduledOccurrence(claim);
         result.fired++;
+        result.errors += failedRuns;
       } catch (e) {
         result.errors++;
         await handleFiringFailure(claim, attempt, e);
@@ -524,15 +590,52 @@ async function executeScheduledRun(
   evalCtx: EvalContext,
   warnings: string[],
   submitterUserId?: string | null,
+  timer?: {
+    nodeId: string;
+    occurredAt: string;
+    key: string;
+    timeZone?: string;
+  },
 ): Promise<string | null> {
   // Insert-or-adopt on the deterministic occurrence key: a first firing and
   // any resumed attempt share ONE run row (migration 0052's partial unique
   // index), so checkpoint keys and outbox keys below can never fork into a
   // second send.
+  const adapter = getFlowAdapter(flow.subjectKind);
+  const actorId =
+    timer && adapter?.scheduledActorId
+      ? await adapter.scheduledActorId(subjectId)
+      : null;
+  if (flow.subjectKind === "schedule_board" && !actorId)
+    throw new Error(
+      "Configure the native board delivery operator before enabling this Flow.",
+    );
   const [existing] = await db
-    .select({ id: schema.flowRuns.id })
+    .select({
+      id: schema.flowRuns.id,
+      status: schema.flowRuns.status,
+      createdBy: schema.flowRuns.createdBy,
+      context: schema.flowRuns.context,
+    })
     .from(schema.flowRuns)
     .where(eq(schema.flowRuns.occurrenceKey, occurrenceKey));
+  if (existing && flow.subjectKind === "schedule_board") {
+    if (existing.createdBy !== actorId)
+      throw new Error(
+        "The configured schedule operator changed during occurrence recovery. Review the failed native run.",
+      );
+    if (
+      existing.context.deliveryPolicyVersion !==
+      evalCtx.values.deliveryPolicyVersion
+    )
+      throw new Error(
+        "The board delivery policy changed during occurrence recovery. Review a new occurrence.",
+      );
+    if (existing.status !== "running")
+      return existing.status === "failed"
+        ? "The original scheduled run failed; start a new reviewed occurrence."
+        : null;
+  }
   let runId = existing?.id;
   if (!runId) {
     const [inserted] = await db
@@ -543,11 +646,17 @@ async function executeScheduledRun(
         subjectKind: flow.subjectKind,
         subjectId,
         trigger: "scheduled",
+        createdBy: actorId,
         status: "running",
         context:
           subjectId === flow.id
             ? {}
-            : (JSON.parse(JSON.stringify(evalCtx.values)) as Record<string, unknown>),
+            : (JSON.parse(
+                JSON.stringify({
+                  ...evalCtx.values,
+                  ...(timer ? { scheduledOccurrence: timer } : {}),
+                }),
+              ) as Record<string, unknown>),
         occurrenceKey,
       })
       // Concurrent resume reuses the occurrence run selected below instead of creating a second send.
@@ -575,13 +684,19 @@ async function executeScheduledRun(
       .where(and(eq(schema.flowRuns.id, runId), eq(schema.flowRuns.orgId, flow.orgId)));
   }
 
-  const adapter = getFlowAdapter(flow.subjectKind);
   let failedText: string | null = null;
   if (plan.actionNodes.length > 0) {
     if (!adapter) {
       failedText = `no subject adapter for "${flow.subjectKind}"`;
     } else {
-      const res = await executeFlowPlan({ orgId: flow.orgId }, adapter, {
+      const res = await executeFlowPlan(
+        {
+          orgId: flow.orgId,
+          ...(actorId ? { userId: actorId } : {}),
+          ...(timer ? { scheduledOccurrence: timer } : {}),
+        },
+        adapter,
+        {
         flow: { id: flow.id, name: flow.name, subjectKind: flow.subjectKind, graph: flow.graph },
         runId,
         subjectId,
@@ -616,23 +731,27 @@ async function runScheduledNode(
   graph: AutomationGraph,
   nodeId: string,
   occurredAt: Date,
-): Promise<void> {
+): Promise<number> {
   for (const node of graph.nodes) {
     if (node.id !== nodeId) continue;
     if (node.data.kind !== "trigger" || node.data.trigger.trigger !== "scheduled") continue;
 
     const select = node.data.trigger.select;
+    if (flow.subjectKind === "schedule_board" && !select)
+      throw new Error(
+        "Schedule board delivery requires native record selection.",
+      );
     if (!select) {
       const evalCtx: EvalContext = { values: { event_source: "schedule" }, rows: {} };
       const plan = planAutomation(graph, { kind: "scheduled" }, evalCtx, {
         triggerNodeIds: [nodeId],
       });
-      if (plan.actionNodes.length === 0 && plan.gates.length === 0) return;
+      if (plan.actionNodes.length === 0 && plan.gates.length === 0) return 0;
       const warnings: string[] = [];
       const safePlan = toSafePlan(plan, false, warnings);
       // flow_runs.subject_id is NOT NULL but a record-free firing has no
       // record — the flow's own id stands in.
-      await executeScheduledRun(
+      const failed = await executeScheduledRun(
         flow,
         flow.id,
         flowRunOccurrenceKey(flow.id, nodeId, occurredAt, flow.id),
@@ -640,7 +759,7 @@ async function runScheduledNode(
         evalCtx,
         warnings,
       );
-      return;
+      return failed ? 1 : 0;
     }
 
     const adapter = getFlowAdapter(flow.subjectKind);
@@ -648,10 +767,11 @@ async function runScheduledNode(
       console.error(
         `[flows] scheduled fan-out on "${flow.subjectKind}" needs an adapter with findCandidateIds — skipped`,
       );
-      return;
+      return 0;
     }
     const limit = Math.min(select.limit ?? DEFAULT_FANOUT_LIMIT, 1_000);
     const candidateIds = await adapter.findCandidateIds(limit);
+    let failures = 0;
     for (const subjectId of candidateIds) {
       const subject = await adapter.loadContext(subjectId);
       if (!subject) continue;
@@ -667,7 +787,7 @@ async function runScheduledNode(
       if (plan.actionNodes.length === 0 && plan.gates.length === 0) continue;
       const warnings: string[] = [];
       const safePlan = toSafePlan(plan, true, warnings);
-      await executeScheduledRun(
+      const failed = await executeScheduledRun(
         flow,
         subjectId,
         flowRunOccurrenceKey(flow.id, nodeId, occurredAt, subjectId),
@@ -675,8 +795,16 @@ async function runScheduledNode(
         evalCtx,
         warnings,
         subject.submitterUserId,
+        {
+          nodeId,
+          occurredAt: occurredAt.toISOString(),
+          key: flowRunOccurrenceKey(flow.id, nodeId, occurredAt, subjectId),
+          timeZone: node.data.trigger.tz,
+        },
       );
+      if (failed) failures++;
     }
-    return;
+    return failures;
   }
+  return 0;
 }
