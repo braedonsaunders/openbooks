@@ -58,7 +58,14 @@ const SUB = '44444444-4444-4444-8444-444444444444'
 
 async function mountDrawer(t: TestContext): Promise<void> {
   const prior = globalThis.fetch
-  globalThis.fetch = (async (_input: unknown, init?: { body?: unknown }) => {
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = new URL(input instanceof Request ? input.url : String(input), window.location.href)
+    const method = init?.method ?? (input instanceof Request ? input.method : 'GET')
+    if (url.pathname === '/api/inventory/tracking-options' && method === 'GET') {
+      assert.equal(url.searchParams.get('itemId'), ITEM)
+      return Response.json({ tracking: 'none', lots: [], serials: [] })
+    }
+    assert.equal(method, 'POST', 'only movement posts consume the response script')
     script.fetchBodies.push(JSON.parse(String(init?.body ?? '{}')) as Record<string, unknown>)
     const behavior = script.fetchBehavior.shift() ?? 'ok'
     if (behavior === 'fail') throw new TypeError('fetch failed')

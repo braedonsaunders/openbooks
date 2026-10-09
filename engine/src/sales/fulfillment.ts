@@ -849,14 +849,19 @@ export async function releasePickList(
 
 async function assertBinsCover(tx: SqlExecutor, orgId: string, pickList: FulfillmentDocRow, order: OrderRow): Promise<void> {
   const ownerId = order.subsidiary_id ?? (await loadSubsidiaryContext(tx, orgId)).rootId;
-  const selections = (await tx.execute<{item_id:string;bin_id:string;lot_id:string|null;serial_id:string|null;quantity:string;unit:string|null}>(sql`
-    select dl.item_id,dl.stock_location_id as bin_id,fl.lot_id,fl.serial_id,dl.quantity::text,dl.unit
+  const selections = (await tx.execute<{item_id:string;item_label:string|null;bin_id:string;bin_code:string|null;lot_id:string|null;serial_id:string|null;quantity:string;unit:string|null}>(sql`
+    select dl.item_id,coalesce(i.code,i.name) as item_label,dl.stock_location_id as bin_id,bin.code as bin_code,
+           fl.lot_id,fl.serial_id,dl.quantity::text,dl.unit
       from document_lines dl join fulfillment_lines fl on fl.org_id=dl.org_id and fl.line_id=dl.id
+      left join items i on i.org_id=dl.org_id and i.id=dl.item_id
+      left join stock_locations bin on bin.org_id=dl.org_id and bin.id=dl.stock_location_id
       where dl.org_id=${orgId} and dl.document_id=${pickList.id}
       order by dl.item_id,dl.stock_location_id,dl.line_number`)).rows;
   const wanted = new Map<string,{itemId:string;binId:string;lotId:string|null;serialId:string|null;quantity:string}>();
-  const bins = new Map<string,{itemId:string;binId:string;quantity:string}>();
+  const bins = new Map<string,{itemId:string;itemLabel:string;binId:string;binCode:string;quantity:string}>();
   for (const line of selections) {
+    if (line.item_label===null || line.bin_code===null) throw new FulfillmentRefusal(
+      'The pick line item or bin is unavailable','invalid_input',422,'Choose an inventory item and bin in this organization');
     const profile = await resolveProfile(orgId,line.item_id,tx,true);
     const quantity = toBaseQuantity(line.quantity,line.unit,profile.unitConversions??{},profile.baseUnit,'Pick quantity');
     await assertSaleableStock(tx,orgId,line.bin_id,{lotId:line.lot_id,serialId:line.serial_id});
@@ -864,7 +869,7 @@ async function assertBinsCover(tx: SqlExecutor, orgId: string, pickList: Fulfill
     const key = [line.item_id,line.bin_id,line.lot_id??'',line.serial_id??''].join(':');
     wanted.set(key,{itemId:line.item_id,binId:line.bin_id,lotId:line.lot_id,serialId:line.serial_id,quantity:add(wanted.get(key)?.quantity??'0',quantity)});
     const binKey = `${line.item_id}:${line.bin_id}`;
-    bins.set(binKey,{itemId:line.item_id,binId:line.bin_id,quantity:add(bins.get(binKey)?.quantity??'0',quantity)});
+    bins.set(binKey,{itemId:line.item_id,itemLabel:line.item_label,binId:line.bin_id,binCode:line.bin_code,quantity:add(bins.get(binKey)?.quantity??'0',quantity)});
   }
   for (const bin of bins.values()) {
     const profile = await resolveProfile(orgId,bin.itemId,tx,true);
@@ -873,9 +878,14 @@ async function assertBinsCover(tx: SqlExecutor, orgId: string, pickList: Fulfill
       .filter(h=>lotId===undefined || (h.lotId===lotId && h.serialId===serialId))
       .reduce((q,h)=>add(q,toBaseQuantity(h.reserved,h.unit??null,profile.unitConversions??{},profile.baseUnit,'Reserved pick')),'0');
     const onHand = await getOnHandWith(tx,orgId,bin.itemId,bin.binId,{subsidiaryId:ownerId,saleableOnly:true});
-    if (cmp(bin.quantity,add(onHand.quantity,neg(reserved())))>0) throw new FulfillmentRefusal(
-      `The selected bin no longer covers ${pickList.document_number}'s quantity and other released picks`,
-      'bin_short',409,'Choose available stock, receive or transfer cleared stock, or leave the balance on backorder');
+    const totalReserved = reserved();
+    if (cmp(bin.quantity,add(onHand.quantity,neg(totalReserved)))>0) {
+      const heldBy = [...new Set(holds.filter(h=>cmp(h.reserved,'0')>0).map(h=>h.pickListNumber))].sort().join(', ');
+      const heldText = heldBy ? `, ${shown(totalReserved)} reserved by ${heldBy}` : '';
+      throw new FulfillmentRefusal(
+        `Bin ${bin.binCode} holds ${shown(onHand.quantity)} of ${bin.itemLabel}${heldText}; ${pickList.document_number} requests ${shown(bin.quantity)}`,
+        'bin_short',409,'Pick from another bin, receive or transfer stock into this bin, or ship what is available and leave the rest on backorder');
+    }
     for (const selection of wanted.values()) {
       if (selection.itemId!==bin.itemId || selection.binId!==bin.binId) continue;
       const stock = await getOnHandWith(tx,orgId,bin.itemId,bin.binId,{subsidiaryId:ownerId,lotId:selection.lotId,serialId:selection.serialId,saleableOnly:true});

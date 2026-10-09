@@ -31,6 +31,8 @@ stubModules({
     "./BomWorkspace": "export function BomWorkspace() { return null } export function NewBomButton() { return null }",
     "./counts/CountsList": "export function CountsList(p) { globalThis.__inventoryViewPermissions.pickerSubsidiaries = p.subsidiaries; return null } export function NewCountButton() { return null }",
     "./InventoryActionDrawer": "export function InventoryActionDrawer() { return null }",
+    "./StockControls": "export function StockControls() { return null }",
+    "./LayerInquiry": "export function LayerInquiry() { return null }",
     "./NewMovementButton": "export function NewMovementButton() { return null }",
     "./ReverseLandedVoucherAction": "export function ReverseLandedVoucherAction() { return globalThis.React.createElement('span', null, 'REVERSAL_ACTION') }",
     "../../../lib/setup/registry": "export const SETUP_ENTITY_BY_KEY = new Map()",
