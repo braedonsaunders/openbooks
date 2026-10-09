@@ -46,6 +46,7 @@ const DE_BAUABZUG: ContractorWithholdingSchemeDefinition = {
       code: "EXEMPT",
       name: "Freistellungsbescheinigung (§ 48b EStG) held",
       requiresVerification: true,
+      verificationRequiresEndDate: true,
       rates: [{ ratePercent: "0", effectiveFrom: "2002-01-01", sourceId: "estg_48" }],
     },
     {

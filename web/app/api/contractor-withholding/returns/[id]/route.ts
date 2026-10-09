@@ -30,7 +30,7 @@ export const GET = defineRoute({
 })
 export const POST = defineRoute({
   permission: 'ap.pay', feature: 'contractorWithholding', params,
-  body: z.discriminatedUnion('action', [z.object({ action: z.literal('file'), filingReference: z.string().trim().min(1).max(500), confirmed: z.boolean().optional() }).strict(), z.object({ action: z.literal('remit') }).strict()]), invalidBodyStatus: 422,
+  body: z.discriminatedUnion('action', [z.object({ action: z.literal('file'), filingReference: z.string().trim().min(1).max(100), confirmed: z.boolean().optional() }).strict(), z.object({ action: z.literal('remit') }).strict()]), invalidBodyStatus: 422,
   handler: async ({ authz, params, body }) => {
     const denied = await withholdingRecordScope(authz, params.id, 'return')
     if (denied) return denied

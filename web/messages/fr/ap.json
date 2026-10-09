@@ -327,6 +327,19 @@
     },
     "downloadPdf": "Télécharger PDF",
     "waived": "Excédent non dû",
-    "reportedDeduction": "Retenue légale"
+    "reportedDeduction": "Retenue légale",
+    "deposits": "Versements fiscaux",
+    "emptyDeposits": "Aucun document de versement à l’administration fiscale n’a été préparé.",
+    "depositDocument": "Document fiscal",
+    "correctDeposit": "Corriger le versement",
+    "journalPreparedForReview": "L’ajustement comptable {number} est préparé. Un utilisateur ayant accès au grand livre peut le vérifier et le comptabiliser.",
+    "journalReviewAccess": "L’accès au grand livre est nécessaire pour vérifier cet ajustement comptable.",
+    "reviewSourceCorrection": "Vérifier la correction des sources",
+    "sourceOnlyCorrectionHelp": "Les montants fiscaux déclarés correspondent à la déclaration enregistrée. Vérifiez les justificatifs de paiement de remplacement et les taux de change ; la référence existante est conservée et la correction des sources est enregistrée.",
+    "payees": "Bénéficiaires",
+    "paymentEvidence": "Justificatifs de paiement",
+    "emptySourcePayments": "Aucun justificatif de paiement n’est enregistré pour cette déclaration.",
+    "paymentDocument": "Document de paiement",
+    "reportingFxRate": "Taux de change de déclaration"
   }
 }

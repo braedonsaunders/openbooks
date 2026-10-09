@@ -256,7 +256,7 @@ export async function prepareDocumentPosting(documentId: string, deps: PostingDe
   // from the check itself.
   try {
     await assertPayrollRemittanceBillCurrent(doc.orgId, documentId, db);
-    try { await assertWithholdingRemittanceCurrent(db, doc.orgId, documentId); await assertWithholdingDepositCurrent(db, doc.orgId, documentId); }
+    try { await assertWithholdingRemittanceCurrent(db, doc.orgId, documentId, { document: doc, lines }); await assertWithholdingDepositCurrent(db, doc.orgId, documentId, { document: doc, lines }); }
     catch (error) { if (error instanceof ContractorWithholdingError) throw new PostingError(error.remedy ? `${error.message} ${error.remedy}` : error.message); throw error; }
   } catch (error) {
     if (error instanceof PayrollRemittanceError) throw new PostingError(error.message);
@@ -597,7 +597,7 @@ export async function prepareDocumentPosting(documentId: string, deps: PostingDe
       db,
       effectiveDoc,
       customGlLines.map((l) => ({ ...l, amount: parseMoney(l.amount) })),
-      { bookId: null, regeneration: false },
+      { bookId: null, regeneration: false, withholdingCarrying: false },
     );
     if (translated.lines.length !== customGlLines.length) {
       throw new PostingError(

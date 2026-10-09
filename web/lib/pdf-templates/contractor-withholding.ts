@@ -11,7 +11,7 @@ export async function renderWithholdingPdf(ret: WithholdingReturnView, statement
   const format = (value: string) => money(value, { currency: ret.currency })
   return renderPdfDocument({
     title: statement ? `${t('statement')} · ${statement.payeeName}` : `${t('return')} · ${ret.schemeName}`,
-    dateRangeLabel: `${ret.periodStart} – ${ret.periodEnd} · ${t('revision', { revision: ret.revision })} · ${t(`statuses.${ret.status}`)}`,
+    dateRangeLabel: `${ret.periodStart} – ${ret.periodEnd} · ${t('revision', { revision: ret.revision })} · ${ret.sourceOnlyRevision && ret.status === 'filed' ? t('reviewed') : t(`statuses.${ret.status}`)}`,
     generatedAt: new Date(ret.filedAt ?? ret.preparedAt),
     branding: { orgName: ret.entityName },
     layout: { paperSize: 'a4', orientation: 'portrait', marginMm: 15, density: 'standard' },

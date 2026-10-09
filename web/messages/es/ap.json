@@ -327,6 +327,19 @@
     },
     "downloadPdf": "Descargar PDF",
     "waived": "Exceso no adeudado",
-    "reportedDeduction": "Retención legal"
+    "reportedDeduction": "Retención legal",
+    "deposits": "Ingresos tributarios",
+    "emptyDeposits": "No se han preparado documentos de ingreso a la autoridad tributaria.",
+    "depositDocument": "Documento tributario",
+    "correctDeposit": "Corregir ingreso",
+    "journalPreparedForReview": "El ajuste contable {number} está preparado. Un usuario con acceso al libro mayor puede revisarlo y contabilizarlo.",
+    "journalReviewAccess": "Se requiere acceso al libro mayor para revisar este ajuste contable.",
+    "reviewSourceCorrection": "Revisar corrección de origen",
+    "sourceOnlyCorrectionHelp": "Las cifras fiscales declaradas coinciden con la declaración registrada. Revise los justificantes de pago sustitutos y los tipos de cambio; se conserva la referencia existente y se registra la corrección de origen.",
+    "payees": "Beneficiarios",
+    "paymentEvidence": "Justificantes de pago",
+    "emptySourcePayments": "No hay justificantes de pago registrados para esta declaración.",
+    "paymentDocument": "Documento de pago",
+    "reportingFxRate": "Tipo de cambio de declaración"
   }
 }

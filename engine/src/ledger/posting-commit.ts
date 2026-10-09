@@ -45,9 +45,9 @@ export async function commitDocumentPosting(prepared: Awaited<ReturnType<typeof 
     try {await assertCrossBorderSupplyEvidence(tx,doc.orgId,documentId,{persist:true})} catch(error) {if(error instanceof CrossBorderTaxError)throw new PostingError(error.message);throw error}
     if (doc.kind === "vendor_bill" || doc.kind === "vendor_credit") {
       await assertPayrollRemittanceBillCurrent(doc.orgId, documentId, tx);
-      try { await assertWithholdingRemittanceCurrent(tx, doc.orgId, documentId); await assertWithholdingDepositCurrent(tx, doc.orgId, documentId); }
-      catch (error) { if (error instanceof ContractorWithholdingError) throw new PostingError(error.remedy ? `${error.message} ${error.remedy}` : error.message); throw error; }
     }
+      try { await assertWithholdingRemittanceCurrent(tx, doc.orgId, documentId, { document: effectiveDoc, lines: postingLines }); await assertWithholdingDepositCurrent(tx, doc.orgId, documentId, { document: effectiveDoc, lines: postingLines }); }
+      catch (error) { if (error instanceof ContractorWithholdingError) throw new PostingError(error.remedy ? `${error.message} ${error.remedy}` : error.message); throw error; }
     // Resolve the authority only after the organization fence. Reading it
     // before the transaction can retain a demoted book while setup commits.
     // Hold the book row through the first journal insert so its history guard
@@ -454,7 +454,7 @@ export async function commitDocumentPosting(prepared: Awaited<ReturnType<typeof 
           tx,
           effectiveDoc,
           bookLines.map((l) => ({ ...l, amount: parseMoney(l.amount) })),
-          { bookId, regeneration: false },
+          { bookId, regeneration: false, withholdingCarrying: false },
         );
         assertFinalKernelBalance(secApplied.lines);
         await validateRequiredDimensions(tx, doc.orgId, secApplied.lines);

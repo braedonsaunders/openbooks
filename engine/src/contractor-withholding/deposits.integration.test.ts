@@ -94,21 +94,38 @@ test("native deposit edits preserve dates, authority, currency, source lines and
     const current = (await loadDocumentEditCurrent(deposit.documentId, org.orgId))!;
     await applyDocumentEdit(deposit.documentId, current, { ...body, expectedUpdatedAt: current.updatedAt }, { orgId: org.orgId, userId: f.actor, source: "ui", runFlows: false });
   };
-  await edit({ memo: "July backup withholding deposit", custom: {} });
+  const nativeLines = before.lines.map(line => ({
+    lineId: line.id as string, accountId: line.account_id as string, itemId: null,
+    description: line.description as string, quantity: line.quantity as string,
+    unit: null, unitPrice: line.unit_price as string, amount: line.amount as string,
+    taxCodeId: null, taxGroupId: null, taxAmount: null, taxOverridden: false,
+    withholdingTreatment: "excluded" as const, withholdingMaterialsCost: null,
+    departmentId: null, projectId: null, locationId: null, classId: null,
+    stockLocationId: null, extraDims: {}, custom: {}, distributionLocked: false,
+  }));
+  await edit({ memo: "July backup withholding deposit", custom: {}, documentDate: org.date,
+    partyId: f.authority, subsidiaryId: org.subsidiaryId, dueDate: "2026-08-17", lines: nativeLines });
   assert.equal((await loadDocument(deposit.documentId, org.orgId))!.doc.memo, "July backup withholding deposit");
   for (const patch of [{ documentDate: "2026-07-16" }, { dueDate: "2026-08-18" }, { partyId: org.vendorId }, { currency: "CAD" },
     { lines: [{ accountId: org.accounts.withholding, amount: "241" }] }]) {
-    await assert.rejects(() => edit(patch), /withholding deposit retains/);
+    await assert.rejects(() => edit(patch), /authority document retains/);
   }
   await assert.rejects(() => edit({ custom: { withholdingDeposit: null } }), /source evidence/);
   // Native editors expose no FX mutation; the reusable source guard also refuses it explicitly.
   await assert.rejects(() => assertWithholdingDepositEdit(db, org.orgId, deposit.documentId, null, { fxRate: "1.1" }), /captured exchange rate/);
   assert.equal(await assertWithholdingDepositEdit(db, org.orgId, deposit.documentId, null, { fxRate: "1.0000000000" }), true);
+  for (const changed of [{ accountId: org.accounts.cogs }, { unitPrice: "241" }, { taxCodeId: randomUUID() }, { description: "Changed source line" }]) {
+    const unchanged = (await loadDocument(deposit.documentId, org.orgId))!;
+    await assert.rejects(() => edit({ memo: "Must roll back", lines: [{ ...nativeLines[0]!, ...changed }] }));
+    assert.deepEqual(await loadDocument(deposit.documentId, org.orgId), unchanged);
+  }
   const after = (await loadDocument(deposit.documentId, org.orgId))!;
   assert.deepEqual(after.doc.custom, before.doc.custom);
   assert.deepEqual(after.lines, before.lines);
   assert.equal(after.doc.total, before.doc.total);
   assert.equal(after.doc.fx_rate, before.doc.fx_rate);
+  await f.post(deposit.documentId, "vendor_bill");
+  assert.equal((await loadDocument(deposit.documentId, org.orgId))!.doc.status, "posted");
 }));
 
 test("native draft deletion releases the deposit reservation with an actor audit and allows replacement", enabled, async () => scenario(async (org, f) => {
@@ -174,5 +191,11 @@ test("deposit commands enforce live payment permission, legal-entity scope and t
   await assert.rejects(() => f.prepare(), /Enable Contractor withholding/);
   assert.equal((await db.execute(sql`select id from documents where org_id=${org.orgId} and custom ? 'withholdingDeposit'`)).rows.length, 0);
   await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features,contractorWithholding}','true'::jsonb) where id=${org.orgId}`);
-  assert.equal((await loadDocument((await f.prepare()).documentId, org.orgId))!.doc.total, "240.0000");
+  const prepared = await f.prepare();
+  assert.equal((await loadDocument(prepared.documentId, org.orgId))!.doc.total, "240.0000");
+  await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features,contractorWithholding}','false'::jsonb) where id=${org.orgId}`);
+  await assert.rejects(() => f.post(prepared.documentId, "vendor_bill"), /Enable Contractor withholding/);
+  assert.equal((await db.execute(sql`select id from journal_entries where org_id=${org.orgId} and source_document_id=${prepared.documentId}`)).rows.length, 0);
+  await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features,contractorWithholding}','true'::jsonb) where id=${org.orgId}`);
+  await postDocument(prepared.documentId, f.deps, { audit: { actorId: f.actor, source: 'ui' } });
 }));

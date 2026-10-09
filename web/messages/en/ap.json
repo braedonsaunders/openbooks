@@ -327,6 +327,19 @@
     },
     "downloadPdf": "Download PDF",
     "waived": "Excess not due",
-    "reportedDeduction": "Statutory deduction"
+    "reportedDeduction": "Statutory deduction",
+    "deposits": "Deposits",
+    "emptyDeposits": "No authority deposit documents have been prepared.",
+    "depositDocument": "Authority document",
+    "correctDeposit": "Correct deposit",
+    "journalPreparedForReview": "Accounting adjustment {number} is prepared. A user with General Ledger access can review and post it.",
+    "journalReviewAccess": "General Ledger access is required to review this accounting adjustment.",
+    "reviewSourceCorrection": "Review source correction",
+    "sourceOnlyCorrectionHelp": "The declared tax figures match the recorded filing. Review the replacement payment evidence and exchange rates; this keeps the existing filing reference and records the source correction.",
+    "payees": "Payees",
+    "paymentEvidence": "Payment evidence",
+    "emptySourcePayments": "No payment evidence is recorded for this return.",
+    "paymentDocument": "Payment document",
+    "reportingFxRate": "Reporting exchange rate"
   }
 }

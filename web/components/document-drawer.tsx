@@ -1711,6 +1711,7 @@ export function DocumentDrawer({
     }
   }, [config.kind, marketplaceFacilitators, t])
 
+  const generatedAuthority = Boolean(doc.custom?.withholdingDeposit || doc.custom?.withholdingRemittance)
   const payload_ = useMemo(() => {
     if (isTransfer) {
       return {
@@ -1740,7 +1741,7 @@ export function DocumentDrawer({
       partyId: partyId || null,
       paymentCardId: config.fundingSource === 'card' ? paymentCardId || null : null,
       documentDate: documentDate || undefined,
-      dueDate: config.hasDueDate ? dueDate || null : null,
+      dueDate: config.hasDueDate || generatedAuthority ? dueDate || null : null,
       referenceNumber: config.hasReference ? referenceNumber : null,
       memo,
       // Full-schema header built-ins (persisted only when the form exposes them,
@@ -1788,8 +1789,8 @@ export function DocumentDrawer({
                   : r.amount,
                 taxCodeId: config.hasTax && r.taxProfileId.startsWith('code:') ? r.taxProfileId.slice(5) : null,
                 taxGroupId: config.hasTax && r.taxProfileId.startsWith('group:') ? r.taxProfileId.slice(6) : null,
-                withholdingTreatment: config.kind === 'vendor_bill' ? (r.withholdingTreatment || null) : null,
-                withholdingMaterialsCost: config.kind === 'vendor_bill' ? (r.withholdingMaterialsCost || null) : null,
+                withholdingTreatment: config.kind === 'vendor_bill' || generatedAuthority ? (r.withholdingTreatment || null) : null,
+                withholdingMaterialsCost: config.kind === 'vendor_bill' || generatedAuthority ? (r.withholdingMaterialsCost || null) : null,
                 taxOverridden: config.hasTax ? r.taxOverridden : false,
                 taxAmount: config.hasTax && r.taxOverridden ? r.taxAmount : null,
                 // Marketplace collection rides only on sales kinds that offer
@@ -1836,7 +1837,7 @@ export function DocumentDrawer({
               })),
           }),
     }
-  }, [isTransfer, transfer, partyId, paymentCardId, documentDate, dueDate, referenceNumber, memo, postingDate, departmentId, projectIdHeader, locationId, classId, subsidiaryId, multiSub, expectedPayDate, carriesWorkDates, workCompletedOn, paymentHoldReason, internalNotes, billingMethod, isFinalInvoice, customValues, extraDims, rows, lineDefs, segments, config, taxByProfile, returnSourceColumn, returnSources, marketplaceColumn])
+  }, [generatedAuthority, isTransfer, transfer, partyId, paymentCardId, documentDate, dueDate, referenceNumber, memo, postingDate, departmentId, projectIdHeader, locationId, classId, subsidiaryId, multiSub, expectedPayDate, carriesWorkDates, workCompletedOn, paymentHoldReason, internalNotes, billingMethod, isFinalInvoice, customValues, extraDims, rows, lineDefs, segments, config, taxByProfile, returnSourceColumn, returnSources, marketplaceColumn])
 
   const [dirty, setDirty] = useState(false)
   useEffect(() => {

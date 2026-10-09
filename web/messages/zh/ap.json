@@ -327,6 +327,19 @@
     },
     "downloadPdf": "下载 PDF",
     "waived": "无需缴纳的超出部分",
-    "reportedDeduction": "法定扣税"
+    "reportedDeduction": "法定扣税",
+    "deposits": "税款缴纳",
+    "emptyDeposits": "尚未编制税务机关缴款凭证。",
+    "depositDocument": "税款凭证",
+    "correctDeposit": "更正缴款",
+    "journalPreparedForReview": "已编制会计调整 {number}。具有总账访问权限的用户可以审核并过账。",
+    "journalReviewAccess": "审核此会计调整需要总账访问权限。",
+    "reviewSourceCorrection": "审核来源更正",
+    "sourceOnlyCorrectionHelp": "申报税额与已记录的申报一致。请审核替换后的付款凭证和汇率；系统将保留现有申报编号并记录来源更正。",
+    "payees": "收款人",
+    "paymentEvidence": "付款凭证",
+    "emptySourcePayments": "此申报尚无已记录的付款凭证。",
+    "paymentDocument": "付款单据",
+    "reportingFxRate": "申报汇率"
   }
 }

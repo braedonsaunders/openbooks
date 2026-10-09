@@ -1898,8 +1898,8 @@ export async function applyDocumentEdit(
       }
 
       try {
-        if (await assertWithholdingDepositEdit(tx, orgId, id, preparedLines, { currency, subsidiaryId: body.subsidiaryId, partyId: body.partyId, documentDate: body.documentDate, dueDate: body.dueDate })) preparedLines = null;
-        if (await assertWithholdingRemittanceEdit(tx, orgId, id, preparedLines, { currency, subsidiaryId: body.subsidiaryId, partyId: body.partyId, documentDate: body.documentDate })) preparedLines = null;
+        if (await assertWithholdingDepositEdit(tx, orgId, id, preparedLines, { ...body, currency, ...(totals ?? {}) })) preparedLines = null;
+        if (await assertWithholdingRemittanceEdit(tx, orgId, id, preparedLines, { ...body, currency, ...(totals ?? {}) })) preparedLines = null;
       } catch (error) {
         if (error instanceof ContractorWithholdingError) throw new DocumentEditError(422, error.remedy ? `${error.message} ${error.remedy}` : error.message);
         throw error;

@@ -1,3 +1,4 @@
+import { assertWithholdingDepositEdit, assertWithholdingRemittanceEdit, ContractorWithholdingError } from "@openbooks/engine/contractor-withholding";
 import { defineRoute } from "@/lib/api/route";
 import { apiErrorResponse } from '@/lib/api/error-response'
 import { NextResponse } from 'next/server'
@@ -395,6 +396,15 @@ export const PATCH = defineRoute({
             }
           }
 
+          // Generated authority journals keep their exact source rows and zero
+          // statutory face amount. The editor's debit presentation is not a
+          // new amount or permission to replace financial source evidence.
+          if (await assertWithholdingDepositEdit(tx, user.orgId, id, preparedLines, body) ||
+              await assertWithholdingRemittanceEdit(tx, user.orgId, id, preparedLines, body)) {
+            preparedLines = null
+            totalDebits = null
+          }
+
           const auditBefore = await captureTransactionAuditSnapshot(tx, id, user.orgId)
           if (!auditBefore) throw new Error(`journal ${id} disappeared before update`)
 
@@ -449,6 +459,7 @@ export const PATCH = defineRoute({
       if (e instanceof DocumentEditError) {
         return apiErrorResponse(e, { details: e.fieldErrors ? { fieldErrors: e.fieldErrors } : undefined })
       }
+      if (e instanceof ContractorWithholdingError) return NextResponse.json({ error: e.message, remedy: e.remedy }, { status: 422 })
       if (e instanceof ScopeNotFoundError) return notFound("record")
       // Composite org-scoped storage keys make cross-tenant references
       // unrepresentable; map their FK refusal to a domain 422 instead of a

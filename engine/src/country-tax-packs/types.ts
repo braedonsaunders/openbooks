@@ -147,6 +147,8 @@ export interface ContractorWithholdingBand {
   rates: readonly EffectiveTaxRate[];
   /** A payee is deducted at this band only on a verification current at the payment date. */
   requiresVerification: boolean;
+  /** The exemption instrument has a finite validity period that must be recorded. */
+  verificationRequiresEndDate?: boolean;
 }
 
 /**

@@ -231,3 +231,12 @@ test("RCT quarterly periods and annual backup withholding preserve their declare
   const backup = contractorWithholdingScheme("US_BACKUP_WITHHOLDING")!;
   assert.deepEqual(withholdingPeriod(backup, "2026-07-05"), { start:"2026-01-01",end:"2026-12-31",returnDue:"2027-01-31",paymentDue:null });
 });
+
+
+test("an exemption certificate without its required expiry cannot silently become permanent", () => {
+  const figures = computeDeduction({ scheme: BAU, standing: standing({ bandCode: 'EXEMPT', verificationReference: 'CERT-2026', validTo: null, applyFromFirstPayment: true }),
+    paymentDate: '2026-10-01', currency: 'EUR', composition: composeBill(BAU, [line('1000', '190', 'labour')]), paid: '1190', thresholdBasis: null, history: noHistory });
+  assert.equal(figures.bandCode, 'STANDARD');
+  assert.equal(figures.deducted, '178.5000');
+  assert.match(figures.reasons[0]!.message, /expiry date/);
+});

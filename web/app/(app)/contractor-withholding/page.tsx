@@ -18,5 +18,5 @@ export default async function ContractorWithholdingPage() {
       from withholding_standings w join parties p on p.org_id=w.org_id and p.id=w.party_id
       left join subsidiaries s on s.org_id=w.org_id and s.id=w.subsidiary_id
      where w.org_id=${authz.user.orgId} order by p.display_name, w.scheme_code, w.valid_from desc`)).rows : []
-  return <WithholdingWorkspace enrollments={await withholdingEnrollments(authz)} canManage={can(authz, 'ap.pay')} canSetup={canSetup} canStandings={canStandings} standings={standings} />
+  return <WithholdingWorkspace enrollments={await withholdingEnrollments(authz)} canManage={can(authz, 'ap.pay')} canReadJournal={can(authz, 'gl.read')} canSetup={canSetup} canStandings={canStandings} standings={standings} />
 }
