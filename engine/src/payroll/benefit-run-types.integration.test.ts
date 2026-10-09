@@ -48,7 +48,7 @@ test('regular-only benefit premiums exclude supplemental and one-off runs while 
         where org_id=${fx.orgId} and system_key='base_pay' and kind='earning'`)).rows[0]!;
       for (const runType of ['regular', 'supplemental', 'bonus', 'retro'] as const) {
         const run = await createPayRun({ orgId: fx.orgId, actorId: fx.actorId, payScheduleId: fx.scheduleId,
-          periodStart: '2026-07-12', periodEnd: '2026-07-18', runType });
+          periodStart: '2026-07-12', periodEnd: '2026-07-18', runType, employeePartyIds: [partyId] });
         await mutatePayRunAdjustment({ orgId: fx.orgId, actorId: fx.actorId, documentId: run.documentId,
           mutation: { action: 'add', employeePartyId: partyId, componentId: base.id, amount: '1000', replaceComponent: true } });
         assert.deepEqual((await calculatePayRun({ orgId: fx.orgId, actorId: fx.actorId, documentId: run.documentId })).errors, []);
