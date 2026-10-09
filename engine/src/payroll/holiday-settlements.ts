@@ -13,7 +13,7 @@ import type { PayrollSubsidiaryScope } from "./scope.ts";
  * machinery. All ordinary benefit and statutory phases consume the line. */
 export async function appendApprovedHolidaySettlements(tx: SqlExecutor, input: {
   orgId: string; actorId: string; documentId: string; employeePartyId: string; employmentId: string;
-  subsidiaryId: string | null | undefined; country: string; province: string | null;
+  subsidiaryId: string | null | undefined; country: string; province: string | null; labourJurisdiction: string | null;
   payDate: string; runType: string; statHolidayPay: boolean; simulate: boolean;
   allowedSubsidiaryIds?: PayrollSubsidiaryScope;
   need: (key: string, kind: string) => Record<string, unknown>; lines: Line[];
@@ -23,13 +23,16 @@ export async function appendApprovedHolidaySettlements(tx: SqlExecutor, input: {
     { employeePartyId: input.employeePartyId, employmentId: input.employmentId });
   for (const source of sources.filter(source => source.paymentDate === input.payDate)) {
     if (!input.statHolidayPay) throw new PayrollError("Enable statutory holiday pay in Payroll settings before settling the employee's approved unpaid holiday entitlement.");
-    if (source.subsidiaryId !== input.subsidiaryId || source.profile.country !== input.country || source.profile.province !== input.province) {
+    if (!source.profile || typeof source.profile !== "object" || Array.isArray(source.profile) ||
+        source.subsidiaryId !== input.subsidiaryId || source.profile.country !== input.country || source.profile.province !== input.province ||
+        source.profile.labour_jurisdiction !== input.labourJurisdiction) {
       throw new PayrollError("The approved holiday entitlement and payroll disagree on the legal employer or jurisdiction; review the employee's historical payroll configuration before settling it.");
     }
     if (source.foreignClaim) throw new PayrollError("The approved holiday entitlement is already claimed by another pay run; discard its editable claim or void its posted payroll before paying it again.");
     if (!source.wage) throw new PayrollError("The approved holiday entitlement has no retained dated wage calculation; retry calculation.");
     const priced = priceAdjudicatedHolidayPayment(source.evidence.instruction, source.wage.resolved);
     const component = input.need("stat_holiday", "earning");
+    if (component.payment_kind !== "cash") throw new PayrollError("Approved unpaid holiday hours require a cash statutory holiday component; review Payroll components before settling the entitlement.");
     if (typeof component.sequence !== "number" || !Number.isSafeInteger(component.sequence)) throw new PayrollError("The native holiday component has no valid display sequence; review Payroll components before calculating.");
     let allocationId: string | undefined;
     if (!input.simulate) {
@@ -45,6 +48,12 @@ export async function appendApprovedHolidaySettlements(tx: SqlExecutor, input: {
       hours: priced.hours, rate: priced.rate, amount: parseMoney(priced.amount), sequence: Number(component.sequence),
       taxable: component.taxable === true, pensionable: component.pensionable === true, insurable: component.insurable === true,
       vacationable: component.vacationable === true, programApplicability: programApplicabilityFromExclusions(component.program_exclusions),
+      nonPeriodic: component.non_periodic === true, taxTreatment: component.tax_treatment as string,
+      supplementalWageCategory: component.supplemental_wage_category as Line["supplementalWageCategory"],
+      statutoryExemptionCategory: component.statutory_exemption_category as Line["statutoryExemptionCategory"],
+      statutoryReportingCategory: component.statutory_reporting_category as string | null,
+      includeInDisposableEarnings: component.include_in_disposable_earnings === true,
+      paymentKind: "cash", fundedByEntitlementBank: false,
       holidayAllocationId: allocationId,
     });
   }

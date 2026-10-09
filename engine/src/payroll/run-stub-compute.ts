@@ -322,7 +322,7 @@ export async function calculateStub(
   });
   await appendApprovedHolidaySettlements(tx, {
     orgId, actorId, documentId, employeePartyId, employmentId,
-    subsidiaryId: ctx.runContext.subsidiaryId, country, province,
+    subsidiaryId: ctx.runContext.subsidiaryId, country, province, labourJurisdiction: emp.labour_jurisdiction ?? null,
     payDate: run.pay_date!, runType, statHolidayPay: ctx.statHolidayPay, simulate: ctx.simulate,
     allowedSubsidiaryIds: ctx.allowedSubsidiaryIds, need: ctx.need, lines,
   });
