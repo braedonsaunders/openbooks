@@ -4,7 +4,7 @@ import test from "node:test";
 import { setTimeout as delay } from "node:timers/promises";
 import { sql } from "drizzle-orm";
 import { db, withOrgTransaction } from "../platform/db.ts";
-import { sum } from "../money/money.ts";
+import { sum, fromUnits, toUnits, normalizeMoney } from "../money/money.ts";
 import { recomputeOpenBalances, reconcileApplications } from "./applications.ts";
 import { DocumentVoidError, requestDocumentVoid } from "../ledger/document-void.ts";
 import { createScratchOrg, createScratchUser, dropScratchOrg } from "../testing/fixtures.ts";
@@ -758,7 +758,7 @@ async function postFixtureDoc(
   sourceId: string,
   lines: readonly FixtureLine[],
   docKind = "customer_invoice",
-  options: { partyId?: string; total?: string } = {},
+  options: { partyId?: string; total?: string; sourceKey?: string; connectionId?: string } = {},
 ): Promise<{ documentId: string; entryId: string; lineIds: string[] }> {
   const documentId = randomUUID();
   const entryId = randomUUID();
@@ -776,7 +776,7 @@ async function postFixtureDoc(
     values
       (${documentId}, ${org.orgId}, ${docKind}, ${docNumber},
        ${options.partyId ?? org.customerId}, ${org.subsidiaryId}, ${org.date}, ${org.date},
-       ${docCurrency}, 'approved', ${total}, '0', ${total}, ${JSON.stringify({ sourceId })})
+       ${docCurrency}, 'approved', ${total}, '0', ${total}, ${JSON.stringify({ [options.sourceKey ?? "sourceId"]: sourceId, ...(options.connectionId ? { connectionId: options.connectionId } : {}) })})
   `);
   await db.execute(sql`
     insert into journal_entries
@@ -1426,3 +1426,171 @@ test(
     }
   },
 );
+
+
+async function completeSnapshotFixture(org: ScratchOrg) {
+  const connectionId = randomUUID();
+  await db.execute(sql`insert into connections(id,org_id,source,display_name,status)
+    values(${connectionId},${org.orgId},'netsuite','Settlement snapshot','active')`);
+  return { complete: true as const, connectionId, source: "netsuite" };
+}
+
+async function snapshotDoc(org: ScratchOrg, ref: string, amount: string,
+  options: { currency?: string; txnAmount?: string; fxRate?: string; connectionId?: string } = {}) {
+  return postFixtureDoc(org, `SNAP-${ref}`, ref, [
+    { accountId: org.accounts.ar, amount, partyId: org.customerId, open: true,
+      currency: options.currency, txnAmount: options.txnAmount, fxRate: options.fxRate },
+    { accountId: org.accounts.bank, amount: fromUnits(-toUnits(amount)), partyId: null, open: false },
+  ], amount.startsWith("-") ? "customer_invoice" : "customer_payment", {
+    sourceKey: "nsId", connectionId: options.connectionId,
+    total: fromUnits(toUnits(options.txnAmount ?? amount) < 0n ? -toUnits(options.txnAmount ?? amount) : toUnits(options.txnAmount ?? amount)),
+  });
+}
+
+async function settlementSnapshot(orgId: string) {
+  return (await db.execute(sql`select id,from_line_id,to_line_id,amount::text,source_amount::text,
+    unapplied_at,fx_gain_loss_entry_id,settlement_rate_reference from applications
+    where org_id=${orgId} order by id`)).rows;
+}
+
+test("complete source snapshots move a voided payment from bills to its reversing journal without changing original GL", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const snapshot = await completeSnapshotFixture(org);
+    const payment = await snapshotDoc(org, "payment", "611.52");
+    const refs = ["bill-a", "bill-b", "bill-c"];
+    const amounts = ["20.65", "371.68", "219.19"];
+    const bills = [];
+    for (let i=0;i<refs.length;i++) bills.push(await snapshotDoc(org, refs[i]!, `-${amounts[i]}`));
+    const links = refs.map((appliedRef,i) => ({ paymentRef:"payment",appliedRef,amount:amounts[i]!,currency:"CAD" }));
+    await reconcileApplications(org.orgId,"nsId",links);
+    const reversing = await snapshotDoc(org,"reversing-journal","-611.52");
+    const originalGL = (await db.execute(sql`select id,entry_id,amount::text,txn_amount::text from journal_lines
+      where org_id=${org.orgId} order by id`)).rows;
+    const originalApplications = await settlementSnapshot(org.orgId);
+    const current = [{ paymentRef:"payment",appliedRef:"reversing-journal",amount:"611.52",currency:"CAD" }];
+    const repaired = await reconcileApplications(org.orgId,"nsId",current,snapshot);
+    assert.equal(repaired.released,3);assert.equal(repaired.releasedAmount,"611.5200");
+    assert.equal(repaired.inserted,1);assert.equal(repaired.unallocated,"0.0000");
+    const after = await settlementSnapshot(org.orgId);
+    for (const old of originalApplications) {
+      const retained = after.find(row=>row.id===old.id)!;
+      assert.ok(retained.unapplied_at);
+      assert.deepEqual({...retained,unapplied_at:null},old);
+    }
+    const live = after.filter(row=>row.unapplied_at==null);
+    assert.equal(live.length,1);assert.equal(live[0]!.from_line_id,payment.lineIds[0]);
+    assert.equal(live[0]!.to_line_id,reversing.lineIds[0]);
+    assert.deepEqual((await db.execute(sql`select id,entry_id,amount::text,txn_amount::text from journal_lines
+      where org_id=${org.orgId} order by id`)).rows,originalGL);
+    await recomputeOpenBalances(org.orgId);
+    const balances=(await db.execute<{id:string;balance:string}>(sql`select id,open_balance::text as balance
+      from documents where org_id=${org.orgId} and id in ${bills.map(b=>b.documentId)}`)).rows;
+    for(let i=0;i<bills.length;i++) assert.equal(balances.find(b=>b.id===bills[i]!.documentId)!.balance,normalizeMoney(amounts[i]!));
+    const audits=(await db.execute(sql`select id from audit_log where org_id=${org.orgId} and table_name='applications'`)).rows;
+    assert.equal(audits.length,4);
+    const replay=await reconcileApplications(org.orgId,"nsId",current,snapshot);
+    assert.equal(replay.inserted,0);assert.equal(replay.released,0);
+    assert.deepEqual(await settlementSnapshot(org.orgId),after);
+    assert.equal((await db.execute(sql`select id from audit_log where org_id=${org.orgId} and table_name='applications'`)).rows.length,4);
+  } finally { await dropScratchOrg(org.orgId); }
+});
+
+test("complete source removal preserves evidence while partial and ambiguous pulls never release allocations", { skip: !DB },async()=>{
+  const org=await createScratchOrg();
+  try{
+    const snapshot=await completeSnapshotFixture(org);
+    await snapshotDoc(org,"payment","100");await snapshotDoc(org,"bill","-100");
+    await reconcileApplications(org.orgId,"nsId",[{paymentRef:"payment",appliedRef:"bill",amount:"100",currency:"CAD"}]);
+    const before=await settlementSnapshot(org.orgId);
+    await reconcileApplications(org.orgId,"nsId",[]);
+    assert.deepEqual(await settlementSnapshot(org.orgId),before);
+    const sibling=randomUUID();
+    await db.execute(sql`insert into connections(id,org_id,source,display_name,status)
+      values(${sibling},${org.orgId},'netsuite','Other source account','active')`);
+    const ambiguous=await reconcileApplications(org.orgId,"nsId",[],snapshot);
+    assert.equal(ambiguous.released,0);assert.deepEqual(await settlementSnapshot(org.orgId),before);
+    await db.execute(sql`update documents set custom=custom||${JSON.stringify({connectionId:snapshot.connectionId})}::jsonb where org_id=${org.orgId}`);
+    await assert.rejects(()=>reconcileApplications(org.orgId,"nsId",[],{...snapshot,connectionId:randomUUID()}),/connection is not available/);
+    await assert.rejects(()=>reconcileApplications(org.orgId,"qboId",[],snapshot),/reference namespace/);
+    const removed=await reconcileApplications(org.orgId,"nsId",[],snapshot);
+    assert.equal(removed.released,1);assert.equal(removed.inserted,0);
+    assert.ok((await settlementSnapshot(org.orgId))[0]!.unapplied_at);
+    const replay=await reconcileApplications(org.orgId,"nsId",[],snapshot);assert.equal(replay.released,0);
+  }finally{await dropScratchOrg(org.orgId);}
+});
+
+test("source allocation reductions preserve manual settlements and rollback unavailable current targets", { skip: !DB },async()=>{
+  const org=await createScratchOrg();
+  try{
+    const snapshot=await completeSnapshotFixture(org);
+    const pay=await snapshotDoc(org,"payment","100");const bill=await snapshotDoc(org,"bill","-100");
+    await db.execute(sql`insert into applications(org_id,from_line_id,to_line_id,amount,source_amount,
+      source_transaction_amount,source_transaction_currency,target_transaction_amount,target_transaction_currency,
+      settlement_rate,settlement_rate_source,settlement_rate_reference,applied_on)
+      values(${org.orgId},${pay.lineIds[0]},${bill.lineIds[0]},'10','10','10','CAD','10','CAD','1','manual','Controller allocation',${org.date})`);
+    await reconcileApplications(org.orgId,"nsId",[{paymentRef:"payment",appliedRef:"bill",amount:"100",currency:"CAD"}]);
+    const before=await settlementSnapshot(org.orgId);
+    await assert.rejects(()=>reconcileApplications(org.orgId,"nsId",[{paymentRef:"payment",appliedRef:"missing",amount:"100",currency:"CAD"}],snapshot),/manual allocation/);
+    assert.deepEqual(await settlementSnapshot(org.orgId),before);
+    const current=[{paymentRef:"payment",appliedRef:"bill",amount:"40",currency:"CAD"}];
+    const result=await reconcileApplications(org.orgId,"nsId",current,snapshot);
+    assert.equal(result.released,1);assert.equal(result.insertedAmount,"30.0000");
+    const after=await settlementSnapshot(org.orgId);
+    const manualBefore=before.find(r=>r.settlement_rate_reference==='Controller allocation')!;
+    assert.deepEqual(after.find(r=>r.id===manualBefore.id),manualBefore);
+    const oldOwned=after.find(r=>r.id===before.find(r=>r.id!==manualBefore.id)!.id)!;
+    assert.ok(oldOwned.unapplied_at);
+    const auditBefore=(await db.execute(sql`select id from audit_log where org_id=${org.orgId} order by id`)).rows;
+    await assert.rejects(()=>reconcileApplications(org.orgId,"nsId",[{...current[0]!,amount:"5"}],snapshot),/manual allocation/);
+    assert.deepEqual(await settlementSnapshot(org.orgId),after);
+    assert.deepEqual((await db.execute(sql`select id from audit_log where org_id=${org.orgId} order by id`)).rows,auditBefore);
+  }finally{await dropScratchOrg(org.orgId);}
+});
+
+test("authoritative allocation replacement reverses FX evidence once and recreates exact current carrying amounts", { skip: !DB },async()=>{
+  const org=await createScratchOrg();
+  try{
+    const snapshot=await completeSnapshotFixture(org);
+    await snapshotDoc(org,"payment","120",{currency:"EUR",txnAmount:"100",fxRate:"1.2"});
+    await snapshotDoc(org,"bill","-110",{currency:"EUR",txnAmount:"-100",fxRate:"1.1"});
+    const initial=[{paymentRef:"payment",appliedRef:"bill",amount:"100",currency:"EUR"}];
+    await reconcileApplications(org.orgId,"nsId",initial);
+    const old=(await settlementSnapshot(org.orgId))[0]!;
+    const fxBefore=(await db.execute(sql`select id,amount::text,txn_amount::text from journal_lines
+      where org_id=${org.orgId} and entry_id=${old.fx_gain_loss_entry_id} order by id`)).rows;
+    const current=[{...initial[0]!,amount:"50"}];
+    const reduced=await reconcileApplications(org.orgId,"nsId",current,snapshot);
+    assert.equal(reduced.released,1);assert.equal(reduced.insertedAmount,"55.0000");
+    const active=(await settlementSnapshot(org.orgId)).filter(r=>r.unapplied_at==null);
+    assert.equal(active.length,1);assert.equal(active[0]!.source_amount,"60.0000");
+    assert.notEqual(active[0]!.fx_gain_loss_entry_id,old.fx_gain_loss_entry_id);
+    assert.deepEqual((await db.execute(sql`select id,amount::text,txn_amount::text from journal_lines
+      where org_id=${org.orgId} and entry_id=${old.fx_gain_loss_entry_id} order by id`)).rows,fxBefore);
+    const reversal=(await db.execute<{status:string;count:string}>(sql`select original.status,
+      (select count(*)::text from journal_entries r where r.org_id=${org.orgId} and r.reverses_entry_id=original.id) as count
+      from journal_entries original where original.org_id=${org.orgId} and original.id=${old.fx_gain_loss_entry_id}`)).rows[0]!;
+    assert.equal(reversal.status,'reversed');assert.equal(reversal.count,'1');
+    const beforeReplay=await settlementSnapshot(org.orgId);
+    const result=await reconcileApplications(org.orgId,"nsId",current,snapshot);
+    assert.equal(result.released,0);assert.equal(result.inserted,0);
+    assert.deepEqual(await settlementSnapshot(org.orgId),beforeReplay);
+  }finally{await dropScratchOrg(org.orgId);}
+});
+
+test("source releases respect controller period locks and rollback a replacement with missing endpoints", { skip: !DB },async()=>{
+  const org=await createScratchOrg();
+  try{
+    const snapshot=await completeSnapshotFixture(org);
+    await snapshotDoc(org,"payment","100");await snapshotDoc(org,"bill","-100");
+    await reconcileApplications(org.orgId,"nsId",[{paymentRef:"payment",appliedRef:"bill",amount:"100",currency:"CAD"}]);
+    const before=await settlementSnapshot(org.orgId);
+    await assert.rejects(()=>reconcileApplications(org.orgId,"nsId",[{paymentRef:"payment",appliedRef:"missing",amount:"100",currency:"CAD"}],snapshot),/missing endpoints/);
+    assert.deepEqual(await settlementSnapshot(org.orgId),before);
+    await db.execute(sql`insert into period_locks(org_id,period_id,book_id,subsidiary_id,module,state,reason)
+      values(${org.orgId},${org.periodId},${org.bookId},${org.subsidiaryId},'ar','closed','Controller close')`);
+    await assert.rejects(()=>reconcileApplications(org.orgId,"nsId",[],snapshot),/AR is closed/);
+    assert.deepEqual(await settlementSnapshot(org.orgId),before);
+    assert.equal((await db.execute(sql`select id from audit_log where org_id=${org.orgId} and table_name='applications'`)).rows.length,0);
+  }finally{await dropScratchOrg(org.orgId);}
+});
