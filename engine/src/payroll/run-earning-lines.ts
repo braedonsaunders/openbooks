@@ -322,7 +322,9 @@ export async function appendStatutoryHolidayEarningLines(
     statHolidayPay, oneOffRun, need, lines, allowedSubsidiaryIds, holidayEligibility,
     occupationClass, currentEarningLines,
   } = args;
-  if (!oneOffRun && statHolidayPay) {
+  // A period's holiday pay belongs to its regular run, like its salary; a
+  // supplemental run in the same period would pay the holiday twice.
+  if (!oneOffRun && statHolidayPay && run.run_type !== "supplemental") {
     // Class-based percent-of-pay rules (Manitoba construction s. 30) price
     // the pay's regular wages: every earning line derived so far, before the
     // holiday lines themselves land.
