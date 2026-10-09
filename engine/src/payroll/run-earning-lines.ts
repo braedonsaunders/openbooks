@@ -395,6 +395,13 @@ export async function applyAssignedComponentLines(
     orgId, employeePartyId, employmentId, taxYear, documentId, assignedRows, oneOffRun, lines,
     periodStart, periodEnd,
   } = args;
+  // A rate-card assignment prices operational facts; its value is not also
+  // a recurring payment. Resolve ownership on the same date as derived rules,
+  // including periods with no qualifying facts and therefore no derived line.
+  const rateCardComponents = new Set(!oneOffRun && assignedRows.some((row) => row.kind === 'earning')
+    ? (await loadActiveDerivedRules(tx, orgId, periodEnd))
+      .filter((rule) => rule.rateMode === 'rate_card').map((rule) => rule.componentId)
+    : []);
   await assertComponentServiceEligibility(tx, { orgId, employmentId, policyDate: periodEnd,
     componentIds: oneOffRun ? [] : assignedRows.map((row) => String(row.id)) });
 /**
@@ -417,6 +424,7 @@ export async function applyAssignedComponentLines(
     });
 
   for (const c of oneOffRun ? [] : assignedRows) {
+    if (c.kind === 'earning' && rateCardComponents.has(String(c.id))) continue;
     const value = String(c.override ?? c.value ?? "0");
     const capped = {
       basis: c.basis as "fixed_amount" | "per_hour" | "percent_of_gross",

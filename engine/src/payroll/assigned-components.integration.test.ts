@@ -52,6 +52,36 @@ test('a validated fixed deduction prices on the regular run at its override', { 
   } finally { await dropScratchOrgReporting(fx.orgId); }
 });
 
+test('effective rate-card assignments price qualifying facts without a recurring payment', { skip: !DB }, async () => {
+  const fx = await payrollOrg();
+  try {
+    const { partyId, employmentId } = await employee(fx, 'Rate Card Employee');
+    const incentive = await userComponent(fx, 'INCENTIVE', 'earning', 'fixed_amount', '1');
+    await assign(fx, partyId, employmentId, incentive, '5', '2026-01-01', null);
+    await db.execute(sql`insert into pay_derived_rules(id,org_id,code,name,component_id,trigger,
+      quantity_mode,rate_mode,costing_mode,effective_from,effective_to,is_active)
+      values(${randomUUID()},${fx.orgId},'DAY-INCENTIVE','Day incentive',${incentive},'distinct_day',
+        'count','rate_card','source','2026-07-12','2026-07-25',true)`);
+    await hours(fx, partyId, ['2026-07-13', '2026-07-14']);
+    // Before and after rule ownership, the ordinary fixed assignment still pays.
+    // During ownership, two qualifying days pay 10; no facts pay nothing.
+    for (const [periodStart, periodEnd, expected] of [
+      ['2026-07-05', '2026-07-11', '5.0000'],
+      ['2026-07-12', '2026-07-18', '10.0000'],
+      ['2026-07-19', '2026-07-25', '0.0000'],
+      ['2026-07-26', '2026-08-01', '5.0000'],
+    ]) {
+      const run = await createPayRun({ orgId: fx.orgId, actorId: fx.actorId, payScheduleId: fx.scheduleId,
+        periodStart: periodStart!, periodEnd: periodEnd! });
+      assert.deepEqual((await calculatePayRun({ orgId: fx.orgId, actorId: fx.actorId, documentId: run.documentId })).errors, []);
+      const total = (await db.execute<{ amount: string }>(sql`select coalesce(sum(l.amount),0)::numeric(19,4)::text as amount
+        from pay_stub_lines l join pay_stubs s on s.org_id=l.org_id and s.id=l.stub_id
+        where s.org_id=${fx.orgId} and s.pay_run_document_id=${run.documentId} and l.component_id=${incentive}`)).rows[0]!.amount;
+      assert.equal(total, expected);
+    }
+  } finally { await dropScratchOrgReporting(fx.orgId); }
+});
+
 test('assignment writes refuse statutory components, overlaps, and Benefits-delivered components by name', { skip: !DB }, async () => {
   const fx = await payrollOrg();
   try {
