@@ -1516,20 +1516,22 @@ export class NetSuiteSource implements MigrationSource {
     const countQuery = "SELECT COUNT(*) AS n FROM nexttransactionlinelink n JOIN transaction t ON t.id=n.nextdoc WHERE n.linktype='Payment'";
     const readCount = async () => {
       const rows = await this.q<{ n: string }>(countQuery);
-      const count = Number(rows[0]?.n);
-      if (rows.length !== 1 || !Number.isSafeInteger(count) || count < 0) {
+      const stated = rows[0]?.n;
+      const count = Number(stated);
+      if ((typeof stated !== "number" && (typeof stated !== "string" || !/^\d+$/.test(stated)))
+          || rows.length !== 1 || !Number.isSafeInteger(count) || count < 0) {
         throw new Error("NetSuite application graph count is unavailable; settlements were not reconciled");
       }
       return count;
     };
     const count = await readCount();
     // The existing synchronous SuiteQL endpoint returns every ordered page.
-    // Counts on both sides refuse truncation or a changing source graph;
+    // Counts on both sides refuse truncation or changing cardinality;
     // allocation reconciliation does not require an asynchronous export task.
     const links = await this.q<NsApplicationLink>(
       "SELECT n.previousdoc, n.previousline, n.nextdoc, n.nextline, n.foreignamount, BUILTIN.DF(t.currency) AS paycurrency, t.exchangerate AS payexrate FROM nexttransactionlinelink n JOIN transaction t ON t.id = n.nextdoc WHERE n.linktype = 'Payment' ORDER BY n.previousdoc, n.previousline, n.nextdoc, n.nextline",
     );
-    if (links.length !== count || await readCount() !== count) {
+    if (links.length !== count || uniqueNetSuiteApplicationLinks(links).length !== count || await readCount() !== count) {
       throw new Error("NetSuite application graph is incomplete or changed during reading; settlements were not reconciled");
     }
     const applications = toSourceApplicationLinks(links, this.baseCurrency);
