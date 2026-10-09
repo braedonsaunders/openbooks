@@ -248,6 +248,8 @@ export const DEFAULT_POLICIES: MaskingPolicy[] = [
   { tableName: "hrm_benefit_enrollments", columnName: "submission_snapshot", transform: "null_out" },
   { tableName: "hrm_benefit_enrollments", columnName: "decision_snapshot", transform: "null_out" },
   { tableName: "pay_run_benefit_allocations", columnName: "source_snapshot", transform: "null_out" },
+  { tableName: "payroll_holiday_obligations", columnName: "evidence", transform: "null_out" },
+  { tableName: "pay_run_holiday_allocations", columnName: "source_snapshot", transform: "null_out" },
   { tableName: "pay_runs", columnName: "benefit_source_snapshot", transform: "null_out" },
   { tableName: "payroll_service_credits", columnName: "source_snapshot", transform: "null_out" },
   { tableName: "payroll_vacation_terms", columnName: "source_snapshot", transform: "null_out" },

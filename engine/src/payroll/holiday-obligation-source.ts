@@ -60,7 +60,10 @@ export async function holidayObligationRunSource(tx: SqlExecutor, orgId: string,
   const rows = (await tx.execute<HolidayObligationSource & { currency: string }>(sql`select
     o.id, o.employee_party_id as "employeePartyId", o.employment_id as "employmentId", o.subsidiary_id as "subsidiaryId",
     o.payment_date::text as "paymentDate", o.evidence, f.before_state->'profile' as profile, d.currency,
-    (select to_jsonb(c) from pay_run_holiday_allocations own_claim join pay_components c on c.org_id=own_claim.org_id and c.id=own_claim.component_id
+    (select to_jsonb(c) || jsonb_build_object('value',c.value::text,'protection_max_percent',c.protection_max_percent::text,
+       'basis_cap_hours_per_period',c.basis_cap_hours_per_period::text,'basis_cap_amount_per_period',c.basis_cap_amount_per_period::text,
+       'basis_cap_amount_per_year',c.basis_cap_amount_per_year::text)
+      from pay_run_holiday_allocations own_claim join pay_components c on c.org_id=own_claim.org_id and c.id=own_claim.component_id
       where own_claim.org_id=o.org_id and own_claim.obligation_id=o.id and own_claim.pay_run_document_id=r.document_id) as component,
     (select jsonb_build_object('id',a.id,'documentId',a.pay_run_document_id,'status',a.status)
       from pay_run_holiday_allocations a where a.org_id=o.org_id and a.obligation_id=o.id
