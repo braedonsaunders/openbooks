@@ -41,6 +41,8 @@ export interface CapturedStubLine {
   kind: "earning" | "deduction" | "employer_contribution" | "credit";
   description: string;
   hours: string | null;
+  derivedQuantity: string | null;
+  derivedRuleCode: string | null;
   rate: string | null;
   amount: string;
   /** Dated earnings provenance retained for wage and allocation review. */
@@ -113,7 +115,7 @@ export async function captureCalculatedStubs(
 ): Promise<CapturedStub[]> {
   const rows = (await tx.execute<Record<string, string | number | null>>(sql`
     select s.employee_party_id, s.province, s.gross, s.net_pay, s.employer_cost, s.factors,
-           l.component_id, c.system_key, l.kind, l.description, l.hours, l.rate, l.amount, l.payment_kind, l.non_cash_account_id,
+           l.component_id, c.system_key, l.kind, l.description, l.hours, l.derived_quantity, l.derived_rule_code, l.rate, l.amount, l.payment_kind, l.non_cash_account_id,
            l.earned_from::text as earned_from, l.earned_to::text as earned_to,
            l.project_id, l.department_id, l.time_type_id, l.item_id,
            l.expense_account_id, l.expense_account_source, l.expense_account_evidence, l.sequence
@@ -150,6 +152,8 @@ export async function captureCalculatedStubs(
       kind: String(row.kind) as CapturedStubLine["kind"],
       description: String(row.description ?? ""),
       hours: row.hours == null ? null : String(row.hours),
+      derivedQuantity: row.derived_quantity == null ? null : String(row.derived_quantity),
+      derivedRuleCode: row.derived_rule_code == null ? null : String(row.derived_rule_code),
       rate: row.rate == null ? null : String(row.rate),
       amount: String(row.amount ?? "0"),
       earnedFrom: row.earned_from == null ? null : String(row.earned_from),

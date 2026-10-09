@@ -187,6 +187,8 @@ export interface DerivedComponent {
 
 /** An earning line shaped for calculateStub's line set. */
 export interface DerivedEarningLine {
+  /** Operational quantity priced by this rule; never additional worked hours. */
+  quantity: string;
   componentId: string;
   kind: "earning";
   description: string;
@@ -811,6 +813,7 @@ export function applyDerivedRule(
       componentId: rule.componentId,
       kind: "earning",
       description: describe(rule, value.quantity, rate),
+      quantity: value.quantity,
       // Deliberately no `hours`: nights and on-call days are not worked hours,
       // and even hour-shaped derived quantities are already on the wage lines.
       // calculateStub prices per-hour components off line hours, so carrying
