@@ -73,7 +73,7 @@ test("a negative-quantity invoice line is refused and points to the customer cre
     });
     await assert.rejects(
       postDocument(documentId, depsFor(org)),
-      /negative quantity.*not a return.*customer credit with custom\.inventoryReturn evidence/s,
+      /negative quantity.*not a return.*customer credit naming the source shipment/s,
     );
     assert.equal(await movementCount(org.orgId, lineId), 0, "no stock may move on a refused line");
   } finally {
@@ -91,7 +91,7 @@ test("a negative-quantity bill line is refused and points to the vendor credit r
     });
     await assert.rejects(
       postDocument(documentId, depsFor(org)),
-      /negative quantity.*not a return.*vendor credit with custom\.inventoryReturn evidence/s,
+      /negative quantity.*not a return.*vendor credit naming the source receipt/s,
     );
     assert.equal(await movementCount(org.orgId, lineId), 0, "no stock may move on a refused line");
   } finally {

@@ -214,21 +214,18 @@ export function negativeLineRemedy(documentKind: string): string {
   if (documentKind === "customer_invoice") {
     return (
       "a negative invoice line is not a return — record the return on a " +
-      "customer credit with custom.inventoryReturn evidence naming the " +
-      "source shipment instead"
+      "customer credit naming the source shipment instead"
     );
   }
   if (documentKind === "vendor_bill") {
     return (
       "a negative bill line is not a return — record the return on a " +
-      "vendor credit with custom.inventoryReturn evidence naming the " +
-      "source receipt instead"
+      "vendor credit naming the source receipt instead"
     );
   }
   return (
     "negative-quantity inventory lines are refused — record the return " +
-    "through the customer-credit / vendor-credit return flow with " +
-    "custom.inventoryReturn evidence instead"
+    "through the customer-credit / vendor-credit return flow instead"
   );
 }
 
@@ -249,6 +246,37 @@ function parseUnitConversions(value: unknown, lineLabel: string): Record<string,
 
 export function isJsonRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+/**
+ * Explicit no-goods-returned choice on a credit line. A damage or price
+ * allowance settles commercially without moving stock, so it is recorded as
+ * its own native flag rather than as return evidence naming a movement that
+ * never happened. The document write path is the only writer; every other
+ * caller name is stripped before persistence.
+ */
+export function isAllowanceLine(custom: unknown): boolean {
+  return isJsonRecord(custom) && custom.inventoryAllowance === true;
+}
+
+/**
+ * Operator-facing item labels (catalog code, else name) for credit-line
+ * refusals, so a missing return choice names the goods the operator can see
+ * rather than a storage id.
+ */
+export async function loadItemLabels(
+  runner: Runner,
+  orgId: string,
+  itemIds: string[],
+): Promise<Map<string, string>> {
+  const ids = [...new Set(itemIds)];
+  if (ids.length === 0) return new Map();
+  const rows = (await runner.execute<{ id: string; label: string }>(sql`
+    select item.id, coalesce(nullif(btrim(item.code), ''), item.name) as label
+      from items item
+     where item.org_id = ${orgId}
+       and item.id in (${sql.join(ids.map((id) => sql`${id}::uuid`), sql`, `)})`)).rows;
+  return new Map(rows.map((row) => [row.id, row.label]));
 }
 
 /**

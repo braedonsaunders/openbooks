@@ -497,6 +497,11 @@ const NATIVE_LINE_CUSTOM_KEYS = [
   // Listing it here keeps a caller from forging it directly, and keeps a
   // description-only save from stripping a return the credit already claims.
   'inventoryReturn',
+  // Explicit no-goods-returned choice on a credit line (a damage or price
+  // allowance). Chosen through the typed `inventoryAllowance` line field for
+  // the same reason: listed here so callers cannot forge it and
+  // description-only saves cannot drop it.
+  'inventoryAllowance',
 ] as const
 
 /** Drop caller-supplied native provenance keys; tenant values pass through. */
@@ -607,6 +612,14 @@ function nativeReservationKind(custom: unknown): 'source-bound' | 'audit-only' |
     }
     audit = true
   }
+  // Explicit no-goods-returned choice: a stored `true` only. Anything else
+  // on the row is corrupt configuration, not an empty choice — fail closed
+  // rather than letting an unreadable disposition reach posting.
+  const inventoryAllowance = evidence.inventoryAllowance
+  if (inventoryAllowance !== undefined) {
+    if (inventoryAllowance !== true) return 'malformed'
+    audit = true
+  }
   if (bound) return 'source-bound'
   return audit ? 'audit-only' : null
 }
@@ -706,13 +719,130 @@ async function applyInventoryReturnSelections(
       if (error instanceof InventoryError) throw new DocumentEditError(422, `${error.message}; nothing was changed`)
       throw error
     }
+    // A stored no-goods-returned choice is replaced, not stacked: the line
+    // returns goods again, so the allowance flag must go with the old state.
+    const { inventoryAllowance: _replaced, ...withoutAllowance } = prepared.custom
     prepared.custom = {
-      ...prepared.custom,
+      ...withoutAllowance,
       inventoryReturn: {
         [side === 'purchase' ? 'sourceReceiptMovementId' : 'sourceIssueMovementId']: selection.movementId,
         ...(selection.lotId ? { lotId: selection.lotId } : {}),
         ...(selection.serialId ? { serialId: selection.serialId } : {}),
       },
+    }
+  }
+}
+
+/**
+ * Turn the operator's explicit no-goods-returned choice into the trusted
+ * `custom.inventoryAllowance` flag, beside the return-source writer above.
+ *
+ * Tri-state per line: absent preserves what reattachment restored, null or
+ * false clears the choice, true records it. A line naming both a return
+ * source and an allowance on the same save is refused — it cannot both move
+ * stock and move nothing.
+ */
+function applyInventoryAllowanceSelections(
+  kind: string,
+  submitted: DocumentLineInput[],
+  preparedLines: { custom: Record<string, unknown> }[],
+): void {
+  if (submitted.length !== preparedLines.length) return
+  if (!submitted.some((line) => line.inventoryAllowance !== undefined)) return
+  const side = RETURN_SIDE_BY_KIND[kind]
+  if (!side) {
+    const at = submitted.findIndex((line) => line.inventoryAllowance !== undefined) + 1
+    throw new DocumentEditError(
+      422,
+      `Line ${at}: only a vendor credit or a customer credit can carry a no-goods-returned choice — ` +
+        `a ${kind} has no stock movement to decline; nothing was changed`,
+    )
+  }
+  for (let i = 0; i < submitted.length; i++) {
+    const allowance = submitted[i]!.inventoryAllowance
+    if (allowance === undefined) continue
+    const prepared = preparedLines[i]!
+    if (allowance === true) {
+      if (submitted[i]!.inventoryReturnSource !== undefined && submitted[i]!.inventoryReturnSource !== null) {
+        throw new DocumentEditError(
+          422,
+          `Line ${i + 1}: choose either the ${side === 'purchase' ? 'receipt the goods are returned from' : 'shipment the goods are returned from'} or no goods returned — a line cannot be both; nothing was changed`,
+        )
+      }
+      // A stored return cleared on an earlier line of this same save reads
+      // cleared here too: the allowance replaces it rather than stacking.
+      const { inventoryReturn: _replaced, ...rest } = prepared.custom
+      prepared.custom = { ...rest, inventoryAllowance: true }
+      continue
+    }
+    const { inventoryAllowance: _cleared, ...rest } = prepared.custom
+    prepared.custom = rest
+  }
+}
+
+/**
+ * Save-time stock disposition for vendor-credit lines. Posting requires every
+ * stocked line to either return goods or be an allowance, so the save refuses
+ * a missing choice with the operator message instead of failing late at post.
+ * Zero-quantity lines move nothing at posting and stay exempt, matching the
+ * posting loader that skips them.
+ */
+async function assertVendorCreditReturnDispositions(
+  tx: SqlExecutor,
+  orgId: string,
+  preparedLines: { itemId: string | null; quantity: string | null; custom: Record<string, unknown> }[],
+): Promise<void> {
+  const stockedIds = [
+    ...new Set(
+      preparedLines
+        .map((line) => line.itemId)
+        .filter((id): id is string => typeof id === 'string' && isUuid(id)),
+    ),
+  ]
+  if (stockedIds.length === 0) return
+  const stocked = new Set(
+    (
+      await tx.execute<{ id: string }>(sql`
+      select p.item_id as id from item_inventory_profiles p
+       where p.org_id = ${orgId} and p.item_id in (${sql.join(stockedIds.map((id) => sql`${id}::uuid`), sql`, `)})`)
+    ).rows.map((row) => row.id),
+  )
+  if (stocked.size === 0) return
+  const labels = new Map(
+    (
+      await tx.execute<{ id: string; label: string }>(sql`
+      select item.id, coalesce(nullif(btrim(item.code), ''), item.name) as label
+        from items item
+       where item.org_id = ${orgId}
+         and item.id in (${sql.join([...stocked].map((id) => sql`${id}::uuid`), sql`, `)})`)
+    ).rows.map((row) => [row.id, row.label] as const),
+  )
+  for (let i = 0; i < preparedLines.length; i++) {
+    const line = preparedLines[i]!
+    if (!line.itemId || !stocked.has(line.itemId)) continue
+    if (line.quantity === null || line.quantity === undefined || String(line.quantity).trim() === '') continue
+    try {
+      if (cmp(String(line.quantity), '0') === 0) continue
+    } catch {
+      continue
+    }
+    const custom = line.custom ?? {}
+    const hasReturn = typeof custom.inventoryReturn === 'object' && custom.inventoryReturn !== null
+    const hasAllowance = custom.inventoryAllowance === true
+    const label = `Line ${i + 1} (${labels.get(line.itemId) ?? line.itemId})`
+    if (hasReturn && hasAllowance) {
+      throw new DocumentEditError(
+        422,
+        `${label} cannot both return goods and be an allowance — ` +
+          `keep the receipt the goods are returned from, or keep the allowance (no goods returned), not both; nothing was changed`,
+      )
+    }
+    if (!hasReturn && !hasAllowance) {
+      throw new DocumentEditError(
+        422,
+        `${label} is a stocked item: choose the receipt the goods are returned from, ` +
+          `or post the credit as an allowance (no goods returned); nothing was changed`,
+      )
     }
   }
 }
@@ -1909,6 +2039,13 @@ export async function applyDocumentEdit(
           body.lines,
           preparedLines,
         )
+        applyInventoryAllowanceSelections(locked.kind, body.lines, preparedLines)
+        // A vendor credit cannot post a stocked line with no choice, so the
+        // save refuses it here — with the receipt-or-allowance message —
+        // instead of failing late at post.
+        if (locked.kind === 'vendor_credit') {
+          await assertVendorCreditReturnDispositions(tx, orgId, preparedLines)
+        }
       }
 
       try {

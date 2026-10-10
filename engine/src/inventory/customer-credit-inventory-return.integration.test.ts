@@ -164,7 +164,7 @@ test("customer-return evidence is strict about its shipment link", () => {
   );
   assert.throws(
     () => parseCustomerCreditInventoryReturnSelection({}),
-    /requires custom\.inventoryReturn evidence/,
+    /is a stocked item: choose the shipment the goods are returned from/,
   );
   assert.throws(
     () =>

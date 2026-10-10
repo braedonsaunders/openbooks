@@ -66,6 +66,18 @@ export interface DocumentLineInput extends BillLineInput {
     lotId?: string | null
     serialId?: string | null
   } | null
+  /**
+   * Operator-chosen allowance on a credit memo: a damage or price concession
+   * where nothing physically returns. The credit settles commercially (a
+   * vendor allowance posts to the item's purchase price variance account)
+   * and moves no stock.
+   *
+   * Tri-state, like `inventoryReturnSource`: absent preserves the stored
+   * choice, null or false clears it, true records it. A line naming both a
+   * return source and an allowance is refused — it cannot both move stock
+   * and move nothing.
+   */
+  inventoryAllowance?: boolean | null
   extraDims?: Record<string, string | null>
   custom?: Record<string, unknown>
   /**
