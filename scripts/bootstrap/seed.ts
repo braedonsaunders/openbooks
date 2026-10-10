@@ -1,12 +1,22 @@
-/** Organization, currency, subsidiary, role, and admin seeding. Split from scripts/bootstrap.ts (pure moves only). */
+/** Organization, currency, subsidiary, role, and admin seeding for installation bootstrap. */
 import { randomBytes, scryptSync } from "node:crypto"
 import { sql } from "drizzle-orm"
 import { db, env } from "../../engine/src/platform/db.ts"
-import { upsertBuiltInRolesForOrg } from "../../engine/src/provisioning/built-in-role-seed.ts"
-import { ensureCloseDefaults } from "../../engine/src/close/defaults.ts"
+import {
+  ensureRootSubsidiary as ensureOrganizationRootSubsidiary,
+  insertOrganizationRecord,
+  seedBuiltInRolesForNewOrganization,
+  seedOrganizationLedgerFoundation,
+  validateOrganizationIdentity,
+} from "../../engine/src/provisioning/create-organization.ts"
 import { SUPPORTED_CURRENCIES } from "../../engine/src/fx/currencies.ts"
-import { BUILT_IN_ROLES } from "../../web/lib/permissions.ts"
 
+/**
+ * The first organization of a fresh installation, from ORG_NAME,
+ * ORG_CURRENCY and ORG_COUNTRY. Later organizations are created from the
+ * platform console; both paths share the engine's organization seeding.
+ * A no-op once any organization exists.
+ */
 export async function ensureOrg(): Promise<string> {
   const existing = (await db.execute<{ id: string }>(
     sql`select id from orgs order by created_at limit 1`,
@@ -25,44 +35,14 @@ export async function ensureOrg(): Promise<string> {
       "ORG_COUNTRY is required as an ISO 3166-1 alpha-2 code when creating the first organization",
     );
   }
-  const ins = (await db.execute<{ id: string }>(sql`
-    insert into orgs (name, base_currency, country) values (${name}, ${currency}, ${country})
-    returning id
-  `));
-  const orgId = ins.rows[0]?.id;
-  if (!orgId) throw new Error("org insert returned no id");
-  console.log(`[bootstrap] created org "${name}" (${currency}/${country})`);
-
-  await db.execute(sql`
-    insert into accounting_books (org_id, code, name, is_primary)
-    values (${orgId}, 'primary', 'Primary book', true)
-    -- Fresh org id (minted two lines above) under the bootstrap-wide advisory
-    -- lock: a conflict is not reachable, and doing nothing rather than
-    -- failing keeps a re-run of this ensure idempotent.
-    on conflict do nothing
-  `);
-
-  const { calendarId } = await ensureCloseDefaults(orgId);
-
-  // Monthly periods: two fiscal years back through five ahead — plenty for a
-  // dev instance; Setup → Periods & Close manages them afterwards.
-  const thisYear = new Date().getUTCFullYear();
-  for (let y = thisYear - 2; y <= thisYear + 5; y++) {
-    for (let m = 1; m <= 12; m++) {
-      const start = `${y}-${String(m).padStart(2, "0")}-01`;
-      const endDate = new Date(Date.UTC(y, m, 0));
-      const end = endDate.toISOString().slice(0, 10);
-      await db.execute(sql`
-        insert into accounting_periods (org_id, fiscal_calendar_id, fiscal_year, period_number, name, starts_on, ends_on)
-        values (${orgId}, ${calendarId}, ${y}, ${m}, ${`${y}-${String(m).padStart(2, "0")}`}, ${start}, ${end})
-        -- Fresh org + fresh calendar under the bootstrap-wide advisory lock;
-        -- the conflict is not reachable and do-nothing keeps re-runs idempotent.
-        on conflict do nothing
-      `);
-    }
-  }
+  const identity = validateOrganizationIdentity({ name, currency, country });
+  // Runs inside bootstrap's installation-wide scope on the installer
+  // connection; there is no actor yet, so the rows carry no creator.
+  const orgId = await insertOrganizationRecord(identity, null);
+  console.log(`[bootstrap] created org "${identity.name}" (${identity.currency}/${identity.country})`);
+  const foundation = await seedOrganizationLedgerFoundation(orgId, null);
   console.log(
-    `[bootstrap] primary book + periods ${thisYear - 2}..${thisYear + 5} ensured`,
+    `[bootstrap] primary book + periods ${foundation.firstFiscalYear}..${foundation.lastFiscalYear} ensured`,
   );
   return orgId;
 }
@@ -86,46 +66,19 @@ export async function seedCurrencies(): Promise<void> {
 }
 
 export async function ensureRootSubsidiary(orgId: string): Promise<void> {
-  await db.execute(sql`
-    insert into subsidiaries
-      (org_id, name, legal_name, base_currency, country, created_at, updated_at)
-    select id, name, legal_name, base_currency, country, now(), now()
-      from orgs
-     where id = ${orgId}
-       and not exists (
-         select 1 from subsidiaries where org_id = ${orgId} and parent_id is null
-       )
-    -- The not-exists guard makes the insert conditional; the conflict arm
-    -- only covers a lost race against another ensure, which the bootstrap-
-    -- wide advisory lock already excludes. Do-nothing is the ensure's
-    -- intent, and the re-read below fails loudly if the row is absent.
-    on conflict do nothing
-  `);
-  const root = (await db.execute<{ id: string }>(sql`
-    select id from subsidiaries where org_id = ${orgId} and parent_id is null
-  `));
-  if (root.rows.length !== 1) {
-    throw new Error(`organization ${orgId} must have exactly one root subsidiary`);
-  }
+  await ensureOrganizationRootSubsidiary(orgId);
   console.log("[bootstrap] root subsidiary ensured");
 }
 
 export async function seedRoles(orgId: string): Promise<void> {
   // New-org defaults only: an org that already has roles keeps its configuration.
-  const existing = await db.execute<{ present: boolean }>(sql`
-    select exists(select 1 from app_roles where org_id = ${orgId}) as present
-  `);
-  const hasRoles = existing.rows[0]?.present;
-  if (hasRoles === undefined || hasRoles === null) {
-    throw new Error(`[bootstrap] could not determine existing roles for org ${orgId}; refusing to seed blindly`);
-  }
-  if (hasRoles) {
+  const outcome = await seedBuiltInRolesForNewOrganization(orgId);
+  if (outcome === "preserved") {
     console.log(
       `[bootstrap] org ${orgId} already has roles — existing role configuration preserved (built-in catalogue not seeded)`,
     );
     return;
   }
-  await upsertBuiltInRolesForOrg(db, orgId, BUILT_IN_ROLES);
   console.log("[bootstrap] built-in roles ensured (new-org defaults; existing grants unchanged)");
 }
 

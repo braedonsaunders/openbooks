@@ -1,0 +1,29 @@
+{
+  "organizations": {
+    "create": {
+      "newButton": "Nova organização",
+      "title": "Nova organização",
+      "description": "Cria uma organização de produção com seu livro principal, períodos contábeis, entidade legal raiz, papéis integrados e configuração padrão, e convida seu primeiro administrador.",
+      "nameLabel": "Nome da organização",
+      "namePlaceholder": "ex.: Northwind Holdings",
+      "countryLabel": "País",
+      "countryPlaceholder": "Selecione um país…",
+      "countryHint": "Onde a organização está registrada. Sua entidade legal raiz usa o mesmo país.",
+      "currencyLabel": "Moeda base",
+      "currencyPlaceholder": "Selecione uma moeda…",
+      "currencyHint": "A moeda funcional dos livros da organização e de sua entidade legal raiz.",
+      "adminNameLabel": "Nome do administrador",
+      "adminEmailLabel": "E-mail do administrador",
+      "adminEmailHint": "O primeiro administrador recebe um link de uso único para definir uma senha. O endereço não pode já acessar outra organização.",
+      "reasonLabel": "Motivo",
+      "reasonPlaceholder": "Por que esta organização está sendo criada",
+      "reasonHint": "Registrado no log de auditoria com a organização, o administrador e a atribuição de papel.",
+      "create": "Criar organização",
+      "creating": "Criando…",
+      "required": "Preencha todos os campos antes de criar a organização.",
+      "created": "{name} criada. Um link para definir a senha foi enviado para {email}.",
+      "createdLinkOnly": "{name} criada. Copie agora o link de uso único do administrador para definir a senha.",
+      "requestFailed": "Não foi possível criar a organização."
+    }
+  }
+}

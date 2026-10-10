@@ -1,0 +1,29 @@
+{
+  "organizations": {
+    "create": {
+      "newButton": "Nueva organización",
+      "title": "Nueva organización",
+      "description": "Crea una organización de producción con su libro principal, períodos contables, entidad legal raíz, roles integrados y configuración predeterminada, e invita a su primer administrador.",
+      "nameLabel": "Nombre de la organización",
+      "namePlaceholder": "p. ej., Northwind Holdings",
+      "countryLabel": "País",
+      "countryPlaceholder": "Selecciona un país…",
+      "countryHint": "Dónde está registrada la organización. Su entidad legal raíz usa el mismo país.",
+      "currencyLabel": "Moneda base",
+      "currencyPlaceholder": "Selecciona una moneda…",
+      "currencyHint": "La moneda funcional de los libros de la organización y de su entidad legal raíz.",
+      "adminNameLabel": "Nombre del administrador",
+      "adminEmailLabel": "Correo del administrador",
+      "adminEmailHint": "El primer administrador recibe un enlace de un solo uso para establecer una contraseña. La dirección no puede iniciar sesión ya en otra organización.",
+      "reasonLabel": "Motivo",
+      "reasonPlaceholder": "Por qué se crea esta organización",
+      "reasonHint": "Se registra en el registro de auditoría junto con la organización, el administrador y la asignación de rol.",
+      "create": "Crear organización",
+      "creating": "Creando…",
+      "required": "Completa todos los campos antes de crear la organización.",
+      "created": "{name} creada. Se envió un enlace para establecer la contraseña a {email}.",
+      "createdLinkOnly": "{name} creada. Copia ahora el enlace de un solo uso del administrador para establecer la contraseña.",
+      "requestFailed": "No se pudo crear la organización."
+    }
+  }
+}

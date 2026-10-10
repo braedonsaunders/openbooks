@@ -540,15 +540,17 @@
       ]
     },
     "provisioning": {
-      "description": "Organization provisioning and seeders: defaults, roles, users, dashboards, project types, the end-to-end demo.",
+      "description": "Organization creation, provisioning and seeders: defaults, roles, users, dashboards, project types, the end-to-end demo.",
       "dependsOn": [
         "close",
         "composition",
         "crm",
+        "fx",
         "journal",
         "ledger",
         "organization",
         "payments",
+        "payroll",
         "platform",
         "projects",
         "reports"

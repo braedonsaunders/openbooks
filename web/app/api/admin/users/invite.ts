@@ -1,14 +1,15 @@
 /**
  * Invite-user helpers for `POST /api/admin/users` (`action: "invite"`).
  *
- * An invited user has no password yet: the row carries an unusable
- * credential placeholder until the mailbox owner follows the set-password
- * link issued through the password-reset mail path. The placeholder is
- * deliberately NOT a parseable hash — `verifyPassword` fails closed on it
- * (no scrypt, no match), so no presented secret can ever authenticate.
- * This mirrors the `'x'` placeholder the test fixtures already use.
+ * An invited user has no password yet: the row carries the engine's
+ * unusable credential placeholder until the mailbox owner follows the
+ * set-password link issued through the password-reset mail path. The
+ * placeholder is deliberately NOT a parseable hash — `verifyPassword` fails
+ * closed on it (no scrypt, no match), so no presented secret can ever
+ * authenticate. Organization provisioning invites its first administrator
+ * with the same placeholder, so one value marks every pending invitation.
  */
-export const UNUSABLE_PASSWORD_HASH = "unusable";
+export { UNUSABLE_PASSWORD_HASH } from "@openbooks/engine/organization/pending-credential";
 
 /**
  * Display name for a freshly invited user, derived from the (already

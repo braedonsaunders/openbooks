@@ -1,0 +1,29 @@
+{
+  "organizations": {
+    "create": {
+      "newButton": "新しい組織",
+      "title": "新しい組織",
+      "description": "主要帳簿、会計期間、ルート法人、組み込みロール、既定の構成を備えた本番組織を作成し、最初の管理者を招待します。",
+      "nameLabel": "組織名",
+      "namePlaceholder": "例: Northwind Holdings",
+      "countryLabel": "国",
+      "countryPlaceholder": "国を選択…",
+      "countryHint": "組織の登記国です。ルート法人も同じ国を使用します。",
+      "currencyLabel": "基準通貨",
+      "currencyPlaceholder": "通貨を選択…",
+      "currencyHint": "組織の帳簿とルート法人の機能通貨です。",
+      "adminNameLabel": "管理者名",
+      "adminEmailLabel": "管理者のメールアドレス",
+      "adminEmailHint": "最初の管理者には、パスワードを設定するための一回限りのリンクが届きます。このアドレスで既に別の組織にサインインしていないことが必要です。",
+      "reasonLabel": "理由",
+      "reasonPlaceholder": "この組織を作成する理由",
+      "reasonHint": "組織、管理者、ロール割り当てとともに監査ログに記録されます。",
+      "create": "組織を作成",
+      "creating": "作成中…",
+      "required": "組織を作成する前に、すべての項目を入力してください。",
+      "created": "{name} を作成しました。パスワード設定用のリンクを {email} に送信しました。",
+      "createdLinkOnly": "{name} を作成しました。管理者のパスワード設定用の一回限りのリンクを今すぐコピーしてください。",
+      "requestFailed": "組織を作成できませんでした。"
+    }
+  }
+}

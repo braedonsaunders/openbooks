@@ -58,6 +58,7 @@ import payments from './payments.json'
 import payroll from './payroll.json'
 import pdfTemplates from './pdfTemplates.json'
 import planning from './planning.json'
+import platform from './platform.json'
 import portal from './portal.json'
 import projectTypes from './projectTypes.json'
 import projects from './projects.json'
@@ -138,6 +139,7 @@ export default {
   payroll,
   pdfTemplates,
   planning,
+  platform,
   portal,
   projectTypes,
   projects,

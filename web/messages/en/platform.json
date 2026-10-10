@@ -1,0 +1,29 @@
+{
+  "organizations": {
+    "create": {
+      "newButton": "New organization",
+      "title": "New organization",
+      "description": "Creates a production organization with its primary book, accounting periods, root legal entity, built-in roles and default configuration, and invites its first administrator.",
+      "nameLabel": "Organization name",
+      "namePlaceholder": "e.g. Northwind Holdings",
+      "countryLabel": "Country",
+      "countryPlaceholder": "Select a country…",
+      "countryHint": "Where the organization is registered. Its root legal entity uses the same country.",
+      "currencyLabel": "Base currency",
+      "currencyPlaceholder": "Select a currency…",
+      "currencyHint": "The functional currency of the organization's books and its root legal entity.",
+      "adminNameLabel": "Administrator name",
+      "adminEmailLabel": "Administrator email",
+      "adminEmailHint": "The first administrator receives a one-time link to set a password. The address must not already sign in to another organization.",
+      "reasonLabel": "Reason",
+      "reasonPlaceholder": "Why this organization is being created",
+      "reasonHint": "Recorded with the organization, the administrator and the role assignment in the audit log.",
+      "create": "Create organization",
+      "creating": "Creating…",
+      "required": "Complete every field before creating the organization.",
+      "created": "{name} created. A set-password link was sent to {email}.",
+      "createdLinkOnly": "{name} created. Copy the administrator's one-time set-password link now.",
+      "requestFailed": "The organization could not be created."
+    }
+  }
+}

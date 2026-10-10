@@ -19,14 +19,15 @@ export async function provisionOrganizationDefaults(
   orgId: string,
   actorId: string | null = null,
 ): Promise<void> {
+  // Sequential, never fanned out: organization creation runs this inside
+  // its own transaction, and one pinned connection cannot execute
+  // statements concurrently.
   await ensureCloseDefaults(orgId, actorId ?? undefined);
-  await Promise.all([
-    ensureAccountGroupDefaults(orgId, actorId),
-    ensureCrmDefaults(orgId, actorId),
-    ensureBuiltInPaymentFormats(orgId, actorId),
-    seedProjectTypes(orgId, actorId),
-    ensureCustomizationDefaults({ orgId, actorId }),
-  ]);
+  await ensureAccountGroupDefaults(orgId, actorId);
+  await ensureCrmDefaults(orgId, actorId);
+  await ensureBuiltInPaymentFormats(orgId, actorId);
+  await seedProjectTypes(orgId, actorId);
+  await ensureCustomizationDefaults({ orgId, actorId });
 }
 
 /** Provision only the defaults owned by an explicitly enabled feature. */

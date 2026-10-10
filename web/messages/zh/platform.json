@@ -1,0 +1,29 @@
+{
+  "organizations": {
+    "create": {
+      "newButton": "新建组织",
+      "title": "新建组织",
+      "description": "创建一个生产组织，包含主账簿、会计期间、根法律实体、内置角色和默认配置，并邀请其首位管理员。",
+      "nameLabel": "组织名称",
+      "namePlaceholder": "例如：Northwind Holdings",
+      "countryLabel": "国家/地区",
+      "countryPlaceholder": "选择国家/地区…",
+      "countryHint": "组织的注册地。其根法律实体使用相同的国家/地区。",
+      "currencyLabel": "本位币",
+      "currencyPlaceholder": "选择币种…",
+      "currencyHint": "组织账簿及其根法律实体的记账本位币。",
+      "adminNameLabel": "管理员姓名",
+      "adminEmailLabel": "管理员邮箱",
+      "adminEmailHint": "首位管理员将收到一个用于设置密码的一次性链接。该地址不能已用于登录其他组织。",
+      "reasonLabel": "原因",
+      "reasonPlaceholder": "创建此组织的原因",
+      "reasonHint": "与组织、管理员和角色分配一起记录在审计日志中。",
+      "create": "创建组织",
+      "creating": "正在创建…",
+      "required": "请先填写所有字段，再创建组织。",
+      "created": "已创建 {name}。设置密码的链接已发送至 {email}。",
+      "createdLinkOnly": "已创建 {name}。请立即复制管理员设置密码的一次性链接。",
+      "requestFailed": "无法创建组织。"
+    }
+  }
+}
