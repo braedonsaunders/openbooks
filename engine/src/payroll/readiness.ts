@@ -198,8 +198,8 @@ async function runContext(
  *
  * The population predicates are the RUN's, not readiness's own: a
  * subsidiary-scoped pay schedule pays only that entity's employees, and an
- * employee terminated before the period started is not paid at all
- * (calculatePayRun applies both). Describing a different population from the
+ * employee terminated before the period started requires inclusion in a final-pay
+ * run (calculatePayRun applies both). Describing a different population from the
  * one that will be paid makes every per-employee count on this screen wrong.
  */
 async function scope(
@@ -212,6 +212,7 @@ async function scope(
     org: sql`prof.org_id`, employee: sql`p.id`, employment: sql`prof.employment_id`,
     employer: sql`p.subsidiary_id`, hiredOn: sql`er.hired_on`, terminatedOn: sql`er.terminated_on`,
     periodStart: sql`${run.period_start}`, periodEnd: sql`${run.period_end}`,
+    runType: sql`${run.run_type}`, document: sql`${documentId}`,
   };
   const rows = (await db.execute<ScopeRow>(sql`
     select p.id as employee_party_id, p.display_name as name, prof.pay_basis, prof.country,
@@ -1778,9 +1779,9 @@ async function employerLevyRoomConsumed(
 ): Promise<boolean> {
   const run = (await executor.execute<{
     tax_year: number; calculated_at: Date | string | null;
-    period_start: string; period_end: string; pay_schedule_id: string; schedule_subsidiary_id: string | null;
+    period_start: string; period_end: string; run_type: string; pay_schedule_id: string; schedule_subsidiary_id: string | null;
   }>(sql`
-    select r.tax_year, r.calculated_at, r.period_start::text as period_start, r.period_end::text as period_end,
+    select r.tax_year, r.calculated_at, r.period_start::text as period_start, r.period_end::text as period_end, r.run_type,
            r.pay_schedule_id, s.subsidiary_id as schedule_subsidiary_id
       from pay_runs r
       join documents d on d.id = r.document_id and d.org_id = r.org_id
@@ -1792,8 +1793,8 @@ async function employerLevyRoomConsumed(
   if (!info || info.calculated_at === null) return false;
   // The run's affected employees: the population whose earnings claim room —
   // active schedule profiles, in the schedule's entity, excluding profiles
-  // hired after the period or terminated before it started (they are not paid, so their
-  // country arms nothing and their absence shares nothing).
+  // without recorded period coverage or scoped final-pay admission. Employees
+  // outside this population neither claim room nor arm a country levy.
   const mine = (await executor.execute<{
     employee_party_id: string; country: string; province: string | null;
   }>(sql`
@@ -1807,6 +1808,7 @@ async function employerLevyRoomConsumed(
          org: sql`prof.org_id`, employee: sql`p.id`, employment: sql`prof.employment_id`,
          employer: sql`p.subsidiary_id`, hiredOn: sql`er.hired_on`, terminatedOn: sql`er.terminated_on`,
          periodStart: sql`${info.period_start}`, periodEnd: sql`${info.period_end}`,
+         runType: sql`${info.run_type}`, document: sql`${documentId}`,
        })}
        and (${info.schedule_subsidiary_id}::uuid is null
         or p.subsidiary_id = ${info.schedule_subsidiary_id}::uuid)
@@ -1896,6 +1898,7 @@ async function employerLevyRoomConsumed(
            org: sql`oprof.org_id`, employee: sql`op.id`, employment: sql`oprof.employment_id`,
            employer: sql`op.subsidiary_id`, hiredOn: sql`oer.hired_on`, terminatedOn: sql`oer.terminated_on`,
            periodStart: sql`other.period_start`, periodEnd: sql`other.period_end`,
+           runType: sql`other.run_type`, document: sql`other.document_id`,
          })}
          and (osch.subsidiary_id is null or op.subsidiary_id = osch.subsidiary_id)
          ${arm.regional || arm.phase8
