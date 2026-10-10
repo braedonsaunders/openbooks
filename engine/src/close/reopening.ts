@@ -35,6 +35,29 @@ export async function requestPeriodReopen(args: {
     ...args,
     subsidiaryIds: args.subsidiaryId ? [args.subsidiaryId] : [],
   });
+  // Scope dependencies fail at request time, not at the approver's desk: a
+  // subledger-only request over a closed GL can never be approved (the
+  // approval-time check below stays as the backstop against a GL that closes
+  // between request and decision), so accepting it would strand the approver
+  // with Reject as the only path forward. The refusal names the remedy —
+  // include General ledger in the reopen scope — instead of the lock state.
+  if (args.modules.some((module) => module !== "gl") && !args.modules.includes("gl")) {
+    const gl = (await db.execute<{ state: string; reopen_expires_at: Date | null }>(sql`
+      select state, reopen_expires_at from period_locks
+       where org_id = ${args.orgId} and period_id = ${args.periodId}
+         and book_id = ${args.bookId}
+         and (subsidiary_id = ${args.subsidiaryId ?? null}::uuid or subsidiary_id is null)
+         and module = 'gl'
+       order by (subsidiary_id is not null) desc limit 1`));
+    const governing = gl.rows[0];
+    if (periodLockRequiresApprovedReopen(governing && {
+      state: governing.state, reopenExpiresAt: governing.reopen_expires_at, reason: null,
+    })) {
+      throw new CloseError(
+        `cannot reopen ${args.modules.map((module) => module.toUpperCase()).join(", ")} while General ledger is closed for this period and book; include General ledger in the reopen scope`,
+      );
+    }
+  }
   const impact = (await db.execute<Record<string, unknown>>(sql`
     select
       (select count(*) from journal_entries where org_id = ${args.orgId} and period_id = ${args.periodId} and book_id = ${args.bookId}) as entries,
@@ -54,6 +77,128 @@ export async function requestPeriodReopen(args: {
   return inserted.rows[0]!.id;
 }
 
+/** One conflict class between a reopen approver and the records the window would unlock. */
+export interface ReopenApprovalConflict {
+  kind: "authored_documents" | "manual_entries" | "party_records" | "equity_lines";
+  count: number;
+  /** Document/entry numbers or account names — operator-meaningful, never raw ids. */
+  examples: string[];
+}
+
+/**
+ * Conflict-of-interest scan for a reopen approver. A reopen exists to change
+ * the period's records, so an approver who authored, posted, or is the party
+ * on those records would approve their own change in substance — even though
+ * they did not request it. The scan names counts with examples; the approval
+ * path refuses on any hit (independent approval is unconditional for
+ * reopens) and the drawer surfaces the same scan as a notice before deciding.
+ */
+export async function reopenApprovalConflicts(
+  executor: SqlExecutor,
+  orgId: string,
+  request: { period_id: string; book_id: string; subsidiary_id: string | null },
+  actorId: string,
+): Promise<ReopenApprovalConflict[]> {
+  const party = (await executor.execute<{ party_id: string | null }>(sql`
+    select party_id from users where id = ${actorId} and org_id = ${orgId}`)).rows[0]?.party_id ?? null;
+  const subsidiaryScope = request.subsidiary_id == null
+    ? sql`true`
+    : sql`(d.subsidiary_id is null or d.subsidiary_id = ${request.subsidiary_id}::uuid)`;
+  const entryScope = request.subsidiary_id == null
+    ? sql`true`
+    : sql`e.subsidiary_id = ${request.subsidiary_id}::uuid`;
+  const conflicts: ReopenApprovalConflict[] = [];
+  const authored = (await executor.execute<{ n: string; examples: string[] }>(sql`
+    with hits as (
+      select d.document_number
+        from documents d
+       where d.org_id = ${orgId} and d.posting_period_id = ${request.period_id}
+         and d.status in ('draft', 'pending_approval', 'approved', 'posted')
+         and ${subsidiaryScope}
+         and (d.created_by = ${actorId} or d.submitted_by = ${actorId}
+           or d.void_requested_by = ${actorId} or d.voided_by = ${actorId})
+       order by d.document_number
+    )
+    select (select count(*)::text from hits) as n,
+           coalesce((select array_agg(document_number) from (select document_number from hits limit 3) s), '{}') as examples`));
+  if (Number(authored.rows[0]?.n ?? 0) > 0) {
+    conflicts.push({ kind: "authored_documents", count: Number(authored.rows[0]!.n), examples: authored.rows[0]!.examples });
+  }
+  // Manual entries the approver booked themselves. System postings (close,
+  // revaluation, allocations) carry the duty actor, not a personal stake, so
+  // origin narrows the scan to hand-booked entries — a closer approving a
+  // reopen after performing the close must not trip on their duty postings.
+  const posted = (await executor.execute<{ n: string; examples: string[] }>(sql`
+    with hits as (
+      select e.entry_number
+        from journal_entries e
+       where e.org_id = ${orgId} and e.period_id = ${request.period_id} and e.book_id = ${request.book_id}
+         and e.status in ('posted', 'reversed') and e.origin = 'manual' and ${entryScope}
+         and (e.created_by = ${actorId} or e.posted_by = ${actorId})
+       order by e.entry_number
+    )
+    select (select count(*)::text from hits) as n,
+           coalesce((select array_agg(entry_number) from (select entry_number from hits limit 3) s), '{}') as examples`));
+  if (Number(posted.rows[0]?.n ?? 0) > 0) {
+    conflicts.push({ kind: "manual_entries", count: Number(posted.rows[0]!.n), examples: posted.rows[0]!.examples });
+  }
+  if (party) {
+    const partyHits = (await executor.execute<{ n: string; examples: string[] }>(sql`
+      with hits as (
+        select d.document_number as ref from documents d
+         where d.org_id = ${orgId} and d.posting_period_id = ${request.period_id}
+           and d.status in ('draft', 'pending_approval', 'approved', 'posted')
+           and ${subsidiaryScope} and d.party_id = ${party}
+        union
+        select e.entry_number as ref from journal_lines l
+          join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
+         where l.org_id = ${orgId} and e.period_id = ${request.period_id} and e.book_id = ${request.book_id}
+           and e.status in ('posted', 'reversed') and ${entryScope} and l.party_id = ${party}
+      )
+      select (select count(*)::text from hits) as n,
+             coalesce((select array_agg(ref) from (select ref from hits order by ref limit 3) s), '{}') as examples`));
+    if (Number(partyHits.rows[0]?.n ?? 0) > 0) {
+      conflicts.push({ kind: "party_records", count: Number(partyHits.rows[0]!.n), examples: partyHits.rows[0]!.examples });
+    }
+    const equity = (await executor.execute<{ n: string; examples: string[] }>(sql`
+      with hits as (
+        select distinct a.name as ref from journal_lines l
+          join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
+          join accounts a on a.id = l.account_id and a.org_id = l.org_id
+         where l.org_id = ${orgId} and e.period_id = ${request.period_id} and e.book_id = ${request.book_id}
+           and e.status in ('posted', 'reversed') and ${entryScope}
+           and l.party_id = ${party} and a.type = 'equity'
+      )
+      select (select count(*)::text from hits) as n,
+             coalesce((select array_agg(ref) from (select ref from hits order by ref limit 3) s), '{}') as examples`));
+    if (Number(equity.rows[0]?.n ?? 0) > 0) {
+      conflicts.push({ kind: "equity_lines", count: Number(equity.rows[0]!.n), examples: equity.rows[0]!.examples });
+    }
+  }
+  return conflicts;
+}
+
+async function loadRequestedReopen(
+  executor: SqlExecutor,
+  orgId: string,
+  requestId: string,
+): Promise<{ period_id: string; book_id: string; subsidiary_id: string | null } | null> {
+  return (await executor.execute<{ period_id: string; book_id: string; subsidiary_id: string | null }>(sql`
+    select period_id, book_id, subsidiary_id from close_reopen_requests
+     where id = ${requestId} and org_id = ${orgId} and status = 'requested'`)).rows[0] ?? null;
+}
+
+/** Conflict scan for one pending request and viewer — the read path behind the approval notice. */
+export async function reopenRequestConflicts(
+  orgId: string,
+  requestId: string,
+  actorId: string,
+): Promise<ReopenApprovalConflict[]> {
+  const scoped = await loadRequestedReopen(db, orgId, requestId);
+  if (!scoped) throw new CloseError("pending reopen request not found");
+  return reopenApprovalConflicts(db, orgId, scoped, actorId);
+}
+
 export async function decidePeriodReopen(args: {
   orgId: string;
   requestId: string;
@@ -61,6 +206,26 @@ export async function decidePeriodReopen(args: {
   approve: boolean;
   hours?: number;
 }): Promise<void> {
+  // The conflict scan and its audit commit outside the decision transaction:
+  // a refused decision rolls its transaction back, which would take the
+  // audit of the refusal with it. The scan itself needs no locks — it names
+  // the approver's standing relationship to the period's records.
+  if (args.approve) {
+    const scoped = await loadRequestedReopen(db, args.orgId, args.requestId);
+    if (scoped) {
+      const conflicts = await reopenApprovalConflicts(db, args.orgId, scoped, args.actorId);
+      if (conflicts.length > 0) {
+        const summary = conflicts.map((conflict) => `${conflict.count} ${conflict.kind.replace(/_/g, " ")} (${conflict.examples.join(", ")})`).join("; ");
+        await db.execute(sql`
+          insert into close_events (org_id, event_type, actor_id, payload)
+          values (${args.orgId}, 'period.reopen_conflict', ${args.actorId},
+                  ${JSON.stringify({ requestId: args.requestId, conflicts })}::jsonb)`);
+        throw new CloseError(
+          `conflict of interest: you are recorded on the records this reopen would unlock (${summary}); route it to another approver`,
+        );
+      }
+    }
+  }
   await db.transaction(async (tx) => {
     const request = (await tx.execute<CloseReopenRequestRow>(sql`
       select * from close_reopen_requests

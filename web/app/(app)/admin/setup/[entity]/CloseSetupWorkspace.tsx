@@ -3,7 +3,7 @@ import { ModuleHomeTabs } from '@/components/module-home/tabs'
 
 import { apiJson, ApiResponseError } from "@/lib/api-error";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
@@ -1299,6 +1299,7 @@ function PeriodDrawer({ row, props }: { row?: PeriodRow; props: Props }) {
     state: string;
   } | null>(null);
   const [reason, setReason] = useState("");
+  const [includeGl, setIncludeGl] = useState(true);
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [generateError, setGenerateError] = useState<string | null>(null);
@@ -1334,6 +1335,13 @@ function PeriodDrawer({ row, props }: { row?: PeriodRow; props: Props }) {
       setBusy(false);
     }
   }
+  // A subledger reopen over a closed GL can never be approved, so the form
+  // offers to include General ledger up front; the engine still refuses a
+  // subledger-only request at creation with the same remedy.
+  const offerIncludeGl =
+    action?.state === "reopen" &&
+    action.module !== "gl" &&
+    (row?.locks?.["gl"]?.state ?? "open") === "closed";
   async function apply() {
     if (!row || !selectedBook || !action || !reason.trim()) return;
     setBusy(true);
@@ -1345,7 +1353,12 @@ function PeriodDrawer({ row, props }: { row?: PeriodRow; props: Props }) {
             action: "request-reopen",
             periodId: row.id,
             bookId: selectedBook.id,
-            modules: [action.module],
+            modules:
+              action.module === "gl" || !offerIncludeGl
+                ? [action.module]
+                : includeGl
+                  ? [action.module, "gl"]
+                  : [action.module],
             reason,
           },
           t("errors.actionFailed"),
@@ -1373,6 +1386,7 @@ function PeriodDrawer({ row, props }: { row?: PeriodRow; props: Props }) {
       );
       setAction(null);
       setReason("");
+      setIncludeGl(true);
       router.refresh();
     } catch (error) {
       const message =
@@ -1710,12 +1724,21 @@ function PeriodDrawer({ row, props }: { row?: PeriodRow; props: Props }) {
                 onChange={(e) => setReason(e.target.value)}
               />
             </Field>
+            {offerIncludeGl ? (
+              <Check
+                checked={includeGl}
+                onChange={(value) => setIncludeGl(value)}
+              >
+                {t("periods.reopenIncludeGl")}
+              </Check>
+            ) : null}
             <div className="flex justify-end gap-2">
               <Button
                 variant="outline"
                 onClick={() => {
                   setAction(null);
                   setReason("");
+                  setIncludeGl(true);
                 }}
               >
                 {t("actions.cancel")}
@@ -1804,6 +1827,33 @@ function ReopenDrawer({ row, props }: { row: ReopenRow; props: Props }) {
   const closeHref = drawerHref(props.currentParams, "periods", "reopen", null);
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [conflicts, setConflicts] = useState<
+    { kind: string; count: number; examples: string[] }[] | null
+  >(null);
+  // Conflict-of-interest notice for the viewer: the same scan the approval
+  // path enforces, read before deciding so a conflicted approver sees why
+  // Approve will refuse and can route to someone else instead.
+  useEffect(() => {
+    if (row.status !== "requested") return;
+    let live = true;
+    post({ action: "reopen-conflicts", requestId: row.id }, t("errors.actionFailed"))
+      .then((data) => {
+        if (!live) return;
+        const found = (data as { conflicts?: { kind: string; count: number; examples: string[] }[] }).conflicts;
+        setConflicts(Array.isArray(found) ? found : []);
+      })
+      .catch(() => {
+        if (live) setConflicts([]);
+      });
+    return () => {
+      live = false;
+    };
+  }, [row.id, row.status]);
+  const conflictTotal = (conflicts ?? []).reduce((sum, item) => sum + item.count, 0);
+  const conflictExamples = (conflicts ?? [])
+    .flatMap((item) => item.examples)
+    .slice(0, 3)
+    .join(", ");
   async function decide(approve: boolean) {
     setBusy(true);
     setActionError(null);
@@ -1856,6 +1906,14 @@ function ReopenDrawer({ row, props }: { row: ReopenRow; props: Props }) {
         {actionError ? (
           <p role="alert" className="text-sm text-red-600">
             {actionError}
+          </p>
+        ) : null}
+        {conflictTotal > 0 ? (
+          <p role="note" className="rounded-md border border-amber-300 bg-amber-50 p-2.5 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
+            {t("periods.reopenConflictNotice", {
+              count: conflictTotal,
+              examples: conflictExamples,
+            })}
           </p>
         ) : null}
         <div>

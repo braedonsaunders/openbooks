@@ -98,15 +98,61 @@ test('an org-wide reopen window covers subsidiary-scoped locks and re-closes the
   } finally { await dropScratchOrg(org.orgId); }
 });
 
-test('subledger reopening respects the inherited global GL close', {skip:!process.env.OPENBOOKS_DB_URL}, async () => {
+test('subledger reopening requires GL in scope at request time, with the approval check as backstop', {skip:!process.env.OPENBOOKS_DB_URL}, async () => {
+  const org=await createScratchOrg();
+  try {
+    const actors=await seedFlowActors(org.orgId);
+    const target={orgId:org.orgId,periodId:org.periodId,bookId:org.bookId};
+    await setPeriodLockState({...target,subsidiaryId:org.subsidiaryId,module:'ap',state:'closed',actorId:actors.adminId,reason:'AP closed'});
+    // GL is still open, so the AP-only request is accepted at creation.
+    const requestId=await requestPeriodReopen({...target,subsidiaryId:org.subsidiaryId,modules:['ap'],actorId:actors.adminId,reason:'AP correction without GL'});
+    // The inherited global GL close lands between request and decision: the
+    // approval-time check stays as the backstop and the request stays pending.
+    await setPeriodLockState({...target,module:'gl',state:'closed',actorId:actors.adminId,reason:'Close for review'});
+    await assert.rejects(decidePeriodReopen({orgId:org.orgId,requestId,actorId:actors.approver1Id,approve:true,hours:2}),/GL must be included/);
+    assert.equal((await db.execute<{status:string}>(sql`select status from close_reopen_requests where org_id=${org.orgId} and id=${requestId}`)).rows[0]!.status,'requested');
+    // Creation-time validation: with GL closed, an AP-only request is refused
+    // with the remedy instead of stranding the approver with Reject as the
+    // only path forward.
+    await assert.rejects(
+      requestPeriodReopen({...target,subsidiaryId:org.subsidiaryId,modules:['ap'],actorId:actors.adminId,reason:'AP correction without GL'}),
+      /include General ledger in the reopen scope/,
+    );
+    // The remedy works: the widened request is accepted and approves.
+    const widenedId=await requestPeriodReopen({...target,subsidiaryId:org.subsidiaryId,modules:['ap','gl'],actorId:actors.adminId,reason:'AP correction with GL'});
+    await decidePeriodReopen({orgId:org.orgId,requestId:widenedId,actorId:actors.approver1Id,approve:true,hours:2});
+    assert.equal((await db.execute<{status:string}>(sql`select status from close_reopen_requests where org_id=${org.orgId} and id=${widenedId}`)).rows[0]!.status,'approved');
+  } finally { await dropScratchOrg(org.orgId); }
+});
+
+test('reopen approval refuses a conflicted approver and audits the conflict', {skip:!process.env.OPENBOOKS_DB_URL}, async () => {
   const org=await createScratchOrg();
   try {
     const actors=await seedFlowActors(org.orgId);
     const target={orgId:org.orgId,periodId:org.periodId,bookId:org.bookId};
     await setPeriodLockState({...target,module:'gl',state:'closed',actorId:actors.adminId,reason:'Close for review'});
-    const requestId=await requestPeriodReopen({...target,subsidiaryId:org.subsidiaryId,modules:['ap'],actorId:actors.adminId,reason:'AP correction without GL'});
-    await assert.rejects(decidePeriodReopen({orgId:org.orgId,requestId,actorId:actors.approver1Id,approve:true,hours:2}),/GL must be included/);
-    assert.equal((await db.execute<{status:string}>(sql`select status from close_reopen_requests where org_id=${org.orgId} and id=${requestId}`)).rows[0]!.status,'requested');
+    // The approver authored a live document attributed to the closed period.
+    const docId=randomUUID();
+    await db.execute(sql`
+      insert into documents
+        (id, org_id, subsidiary_id, kind, status, document_number, document_date,
+         posting_date, posting_period_id, currency, subtotal, tax_total, total, created_by, submitted_by)
+      values (${docId}, ${org.orgId}, ${org.subsidiaryId}, 'customer_invoice', 'approved', ${docId},
+              ${org.date}, ${org.date}, ${org.periodId}, 'CAD', '10.0000', '0.0000', '10.0000',
+              ${actors.approver1Id}, ${actors.approver1Id})`);
+    const requestId=await requestPeriodReopen({...target,modules:['gl'],actorId:actors.adminId,reason:'Correction window'});
+    await assert.rejects(
+      decidePeriodReopen({orgId:org.orgId,requestId,actorId:actors.approver1Id,approve:true,hours:2}),
+      /conflict of interest.*another approver/,
+    );
+    // The refused decision changes nothing but the audit: the request stays
+    // pending and the conflict is recorded in the decision audit.
+    assert.equal((await db.execute<{status:string}>(sql`select status from close_reopen_requests where id=${requestId} and org_id=${org.orgId}`)).rows[0]!.status,'requested');
+    const events=(await db.execute<{n:string}>(sql`select count(*)::text as n from close_events where org_id=${org.orgId} and event_type='period.reopen_conflict' and payload->>'requestId'=${requestId}`));
+    assert.equal(events.rows[0]!.n,'1');
+    // An unconflicted approver decides cleanly.
+    await decidePeriodReopen({orgId:org.orgId,requestId,actorId:actors.approver2Id,approve:true,hours:2});
+    assert.equal((await db.execute<{status:string}>(sql`select status from close_reopen_requests where id=${requestId} and org_id=${org.orgId}`)).rows[0]!.status,'approved');
   } finally { await dropScratchOrg(org.orgId); }
 });
 
