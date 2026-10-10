@@ -55,6 +55,11 @@ export async function ensureRetirementAuthorityOwnership(): Promise<void> {
         and not(n.nspname='public' and p.proname='app_bypass_rls_active')`, [roleName]);
     for (const row of objects.rows) await client.query(row.statement);
     await client.query("alter schema public owner to openbooks_schema_owner");
+    // The query catalog refresh recreates its schema as the business owner,
+    // which constrained deployments permit through database ownership.
+    const grant = (await client.query<{ statement: string }>(
+      "select format('grant create on database %I to openbooks_schema_owner', current_database()) as statement")).rows[0]!.statement;
+    await client.query(grant);
     if ((await client.query<{ present: boolean }>("select to_regnamespace('openbooks_query') is not null as present")).rows[0]?.present) {
       await client.query("alter schema openbooks_query owner to openbooks_schema_owner");
     }
