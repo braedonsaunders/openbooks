@@ -168,26 +168,42 @@ async function renderDrawer(options: {
 }
 
 test("a complete draft shows an enabled primary Post action", async () => {
-  const { host, done } = await renderDrawer({
+  const { done } = await renderDrawer({
     bankAccountId: "bank-1",
     allocations: [ALLOCATION],
     openItems: [OPEN_ITEM],
   });
+  let postRequest: { url: string; init?: RequestInit } | null = null;
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    if (init?.method === "POST") postRequest = { url: String(input), init };
+    return Response.json({ rates: [] });
+  }) as typeof fetch;
   try {
     const posts = buttonsNamed("Receive & post");
     assert.equal(posts.length, 1, "a complete draft must offer exactly one primary Post");
     assert.equal(posts[0]!.disabled, false, "no blocker means the primary Post is enabled");
     assert.ok(
-      !(host.textContent ?? "").includes("Choose a deposit account"),
+      !(document.body.textContent ?? "").includes("Choose a deposit account"),
       "no blocker text may show when nothing blocks",
     );
+    await act(async () => {
+      posts[0]!.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+      await tick();
+    });
+    await tick();
+    const request = postRequest as { url: string; init?: RequestInit } | null;
+    assert.ok(request, "the primary Post must reach the post endpoint");
+    assert.equal(request.url, "/api/payments/post-with-applications");
+    assert.equal(request.init?.method, "POST");
+    const body = JSON.parse(String(request.init?.body));
+    assert.equal(body.allocations?.length, 1, "posting carries the valid allocations");
   } finally {
     await done();
   }
 });
 
 test("a draft without a deposit account names the blocker beside a disabled Post", async () => {
-  const { host, done } = await renderDrawer({
+  const { done } = await renderDrawer({
     bankAccountId: null,
     allocations: [ALLOCATION],
     openItems: [OPEN_ITEM],
@@ -197,7 +213,7 @@ test("a draft without a deposit account names the blocker beside a disabled Post
     assert.equal(posts.length, 1, "Post stays visible even while blocked");
     assert.equal(posts[0]!.disabled, true, "a missing deposit account blocks posting");
     assert.ok(
-      (host.textContent ?? "").includes("Choose a deposit account"),
+      (document.body.textContent ?? "").includes("Choose a deposit account"),
       "the drawer must say the deposit account is missing",
     );
   } finally {
@@ -206,7 +222,7 @@ test("a draft without a deposit account names the blocker beside a disabled Post
 });
 
 test("a draft with no applications names the blocker beside a disabled Post", async () => {
-  const { host, done } = await renderDrawer({
+  const { done } = await renderDrawer({
     bankAccountId: "bank-1",
     allocations: [],
     openItems: [],
@@ -216,7 +232,7 @@ test("a draft with no applications names the blocker beside a disabled Post", as
     assert.equal(posts.length, 1, "Post stays visible even while blocked");
     assert.equal(posts[0]!.disabled, true, "no application blocks posting");
     assert.ok(
-      (host.textContent ?? "").includes("Apply the receipt to at least one invoice"),
+      (document.body.textContent ?? "").includes("Apply the receipt to at least one invoice"),
       "the drawer must say an application is missing",
     );
   } finally {
