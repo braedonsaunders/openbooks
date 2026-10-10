@@ -2590,6 +2590,8 @@ const COGNATES = new Set<string>([
   'pt-BR:common.transactionTypes.returnAuthorizationShort|RMA',
   'zh:common.transactionTypes.returnAuthorizationShort|RMA',
   'ja:common.transactionTypes.returnAuthorizationShort|RMA',
+  // FY is the fiscal-year abbreviation Japanese budgets and close copy already use (FY27, FY{year}).
+  'ja:common.amendment.voidReversalFiscalYear|FY',
   // Aggregation, Maximum, Operation, Operator and Format are spelled identically in German.
   'de:admin.setup.fields.aggregation|Aggregation',
   'de:admin.setup.options.usageAggregation.max|Maximum',
