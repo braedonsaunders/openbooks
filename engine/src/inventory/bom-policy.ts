@@ -103,7 +103,7 @@ function preserveHistory(before: StoredLine[], next: BomPolicyLine[], today: str
 
 async function replace(tx: SqlExecutor, orgId: string, actorId: string, input: BomPolicyInput, before: Awaited<ReturnType<typeof snapshot>>, lines: BomPolicyLine[], approvalChangeId?: string) {
   if(approvalChangeId)await tx.execute(sql`select set_config('openbooks.production_bom_changes',
-    (coalesce(nullif(current_setting('openbooks.production_bom_changes',true),''),'{}')::jsonb||jsonb_build_object(${orgId+':'+input.assemblyItemId},${approvalChangeId}::text))::text,true)`);
+    (coalesce(nullif(current_setting('openbooks.production_bom_changes',true),''),'{}')::jsonb||jsonb_build_object(${orgId+':'+input.assemblyItemId}::text,${approvalChangeId}::text))::text,true)`);
   const deleted = await tx.execute(sql`delete from bom_components where org_id=${orgId} and assembly_item_id=${input.assemblyItemId} returning id`);
   if (deleted.rows.length !== before.lines.length) throw new BomPolicyError("The prior recipe was not fully replaced; retry the transaction.",409);
   for (const line of lines) {
