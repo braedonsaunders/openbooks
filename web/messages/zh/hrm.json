@@ -270,7 +270,12 @@
       "employerRequired": "请选择雇用法人实体 — 雇用必须指明雇主。",
       "employerHint": "雇用、人头数和薪酬都读取该实体。",
       "statusLabel": "状态",
-      "startLabel": "生效开始日期"
+      "startLabel": "生效开始日期",
+      "assignmentSection": "首个职位和岗位分配",
+      "withAssignment": "随本次聘用记录首个职位和岗位分配。",
+      "departmentEmpty": "无部门",
+      "locationEmpty": "无地点",
+      "positionEmpty": "无职位关联"
     },
     "multiple": {
       "title": "存在多条雇用记录",

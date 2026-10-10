@@ -159,12 +159,36 @@ const fteField = z
     { message: "fte must be greater than 0 and below 1000" },
   );
 
+/**
+ * The first assignment riding a hire: title, department, location, FTE and
+ * primary plus the line manager and the establishment link, all effective
+ * over the hire's own window. It is validated like an assignment change
+ * (same field contract, same reference proofs) and applied atomically
+ * with the hire in the same approval — one decision covers the whole
+ * first-employment package. The establishment link rides along; pay,
+ * tax, and roster schedules attach through their native surfaces once
+ * the employment exists.
+ */
+const initialAssignmentSchema = z
+  .object({
+    assignmentKey: z.string().trim().min(1, "assignmentKey must not be blank").max(120),
+    jobTitle: z.string().trim().min(1).max(240).nullable().optional(),
+    departmentId: uuidField("departmentId").nullable().optional(),
+    locationId: uuidField("locationId").nullable().optional(),
+    fte: fteField.optional(),
+    isPrimary: z.boolean().default(true),
+    managerEmploymentId: uuidField("managerEmploymentId").nullable().optional(),
+    positionId: uuidField("positionId").nullable().optional(),
+  })
+  .strict();
+
 const hirePayloadSchema = z
   .object({
     kind: z.literal("hire"),
     status: z.enum(EMPLOYMENT_STATUSES).default("active"),
     effectiveFrom: civilDate("effectiveFrom"),
     effectiveTo: civilDate("effectiveTo").nullable().default(null),
+    initialAssignment: initialAssignmentSchema.optional(),
   })
   .strict()
   .superRefine((payload, ctx) => {
@@ -172,6 +196,13 @@ const hirePayloadSchema = z
       ctx.addIssue({
         code: "custom",
         message: "a hire cannot carry status terminated — hire as offered or active, then file a termination",
+      });
+    }
+    if (payload.initialAssignment?.managerEmploymentId === null) {
+      ctx.addIssue({
+        code: "custom",
+        message:
+          "manager removal is not modeled — a reporting line closes only onto a successor manager; file the hire without managerEmploymentId to leave reporting untouched",
       });
     }
     try {
@@ -297,6 +328,7 @@ const CHANGE_KINDS = [
 ] as const;
 
 export type HirePayload = z.infer<typeof hirePayloadSchema>;
+export type HireInitialAssignment = NonNullable<HirePayload["initialAssignment"]>;
 export type StatusChangePayload = z.infer<typeof statusChangePayloadSchema>;
 export type AssignmentChangePayload = z.infer<typeof assignmentChangePayloadSchema>;
 export type TerminationPayload = z.infer<typeof terminationPayloadSchema>;
@@ -640,6 +672,17 @@ async function assertKindPreconditions(
         "this employment already has an effective version — file a status change, not a hire",
       );
     }
+    if (payload.initialAssignment?.positionId) {
+      const position = (await exec.execute(sql`
+        select 1 as one from positions where org_id = ${orgId} and id = ${payload.initialAssignment!.positionId}
+      `)).rows[0];
+      if (!position) {
+        throw new HrmChangeRequestError(
+          "INVALID_PAYLOAD",
+          "the position is not visible in this organization — name a position of this organization",
+        );
+      }
+    }
     return;
   }
   const live = await liveEmploymentVersions(exec, orgId, employmentId);
@@ -808,8 +851,11 @@ export interface SubmitChangeRequestQuery {
 /**
  * Submit through native Flows. Reached gates pause the change; a successful
  * flow may explicitly apply a gate-free path through the same canonical
- * writer. Missing policy and every dispatch failure refuse the whole change.
- * Each application retains the proposal, exact revision, policy graph and
+ * writer. Approval is an optional Flow: with no enabled flow for
+ * employment change requests, the submission applies directly through the
+ * governed admission (automatic snapshot, actor recorded) instead of
+ * refusing. Every dispatch failure refuses the whole change. Each
+ * application retains the proposal, exact revision, policy graph and
  * execution evidence; automatic application never invents a human approver.
  */
 export async function submitChangeRequest(query: SubmitChangeRequestQuery): Promise<ChangeRequestDTO> {
@@ -867,10 +913,31 @@ export async function submitChangeRequest(query: SubmitChangeRequestQuery): Prom
           `Employee update workflow${flowResult.runs.filter(run => run.status === 'failed').map(run => ` “${run.flowName}”`).join(',')} failed. Review its configuration in Admin → Flows, then save again.`,
         );
       }
-      throw new HrmChangeRequestError(
-        "NO_FLOW",
-        "no enabled approval flow produced an approval gate for employment change requests or explicitly permitted automatic application — configure a flow with approval steps or the apply-without-approval outcome before saving",
-      );
+      // No run claimed this submission. Approval is an optional Flow: with
+      // no enabled flow for employment change requests, the submitter's
+      // own save applies directly through the governed admission (audited,
+      // actor recorded) instead of refusing. A configured-but-silent flow
+      // still owns the submission — configure it to gate or to permit
+      // automatic application before saving.
+      const enabledFlows = (await db.execute<{ n: number }>(sql`
+        select count(*)::int as n from flows
+         where org_id = ${orgId} and subject_kind = ${HRM_CHANGE_REQUEST_SUBJECT_KIND} and enabled
+      `)).rows[0]?.n ?? 0;
+      if (enabledFlows > 0) {
+        throw new HrmChangeRequestError(
+          "NO_FLOW",
+          "no enabled approval flow produced an approval gate for employment change requests or explicitly permitted automatic application — configure a flow with approval steps or the apply-without-approval outcome before saving",
+        );
+      }
+      return applyDirectRequest({
+        orgId,
+        actorId,
+        request: current,
+        payload,
+        reason,
+        action: query.action ?? null,
+        reasonCode: query.reasonCode ?? null,
+      });
     }
 
     // Submission stamps land atomically with the run anchor; the 0185 guard
@@ -917,6 +984,61 @@ export async function submitChangeRequest(query: SubmitChangeRequestQuery): Prom
     }
     return toDTO(submitted);
   });
+}
+
+/**
+ * Governed direct application for a submission no flow claimed (zero
+ * enabled flows for employment change requests). Approval is an optional
+ * Flow: the submitter's own save flips draft → approved with an
+ * automatic decision snapshot (no gates, policy recording that no flow
+ * is configured) and runs the same canonical writer every approval uses
+ * — audited, actor recorded, all in the caller's transaction, so a throw
+ * rolls the flip and every canonical write back together. Admitted by
+ * the forward 0185 admission (no-flow direct apply); without it the
+ * guard refuses the draft → approved transition.
+ */
+async function applyDirectRequest(args: {
+  orgId: string;
+  actorId: string;
+  request: RequestRow;
+  payload: ChangeRequestPayload;
+  reason: string;
+  action: string | null;
+  reasonCode: string | null;
+}): Promise<ChangeRequestDTO> {
+  const { orgId, actorId, request, payload, reason, action, reasonCode } = args;
+  const snapshot = {
+    ...buildDecisionSnapshot({ request, outcome: "approved", gates: [] }),
+    mode: "automatic",
+    policy: { ungatedOutcome: "apply", flowConfigured: false },
+  };
+  const approved = (await db.execute<RequestRow>(sql`
+    update hrm_employment_change_requests
+       set status = 'approved',
+           reason = ${reason},
+           action = coalesce(${action}::text, action),
+           reason_code = coalesce(${reasonCode}::text, reason_code),
+           submitted_by = ${actorId}, submitted_at = now(),
+           decision_snapshot = ${JSON.stringify(snapshot)}::jsonb,
+           updated_by = ${actorId}, updated_at = now()
+     where org_id = ${orgId} and id = ${request.id} and status = 'draft'
+    returning ${REQUEST_COLUMNS}
+  `)).rows[0];
+  if (!approved) {
+    throw new HrmChangeRequestError(
+      "BAD_STATE",
+      "the request changed while direct application was being recorded — reload it and try again",
+    );
+  }
+  await applyApprovedRequest(db, { orgId, actorId, request: approved, payload });
+  const applied = await loadRequestForUpdate(db, orgId, request.id);
+  if (applied.status !== "applied") {
+    throw new HrmChangeRequestError(
+      "REFUSED",
+      "the change was not applied — reload the record and try again",
+    );
+  }
+  return toDTO(applied);
 }
 
 export interface WithdrawChangeRequestQuery {
@@ -1449,7 +1571,7 @@ async function applyApprovedRequest(
   // evidence link (single-fire: only a still-approved row moves) land inside
   // each branch below — all in this one transaction.
   if (payload.kind === "hire") {
-    await applyHire(exec, { orgId, actorId, request, payload, newRevision, recordedAt });
+    await applyHire(exec, { orgId, actorId, request, payload, newRevision, recordedAt, recordedAtIso });
   } else if (payload.kind === "status_change" && payload.historicalObservation) {
     await applyHistoricalStatusObservation(exec, { orgId, actorId, request, payload, newRevision, recordedAt });
   } else if (payload.kind === "status_change" || payload.kind === "termination") {
@@ -1638,7 +1760,11 @@ async function applyProfileChange(
 
 /**
  * (a) Hire: the first effective version on a version-less (reserved)
- * identity, evidenced as a non-closure 'created' event.
+ * identity, evidenced as a non-closure 'created' event. A carried initial
+ * assignment issues its slot in the same approval as the second aggregate
+ * revision (its own 'assignment_issued' event), so one decision covers the
+ * whole first-employment package — the request stamps the final revision
+ * once, never twice.
  */
 async function applyHire(
   exec: SqlExecutor,
@@ -1649,9 +1775,11 @@ async function applyHire(
     payload: HirePayload;
     newRevision: number;
     recordedAt: DbInstant;
+    /** The same clock as recordedAt, as a UTC ISO instant for as-of reads. */
+    recordedAtIso: string;
   },
 ): Promise<void> {
-  const { orgId, actorId, request, payload, newRevision, recordedAt } = args;
+  const { orgId, actorId, request, payload, newRevision, recordedAt, recordedAtIso } = args;
   const count = await employmentVersionCount(exec, orgId, request.employment_id);
   if (count > 0) {
     throw new HrmChangeRequestError(
@@ -1694,8 +1822,162 @@ async function applyHire(
       trigger: hireTrigger,
     });
   }
-  await linkAppliedEvidence(exec, { orgId, actorId, request, newRevision, changeId });
-  await bumpAggregateRevision(exec, { orgId, actorId, request, expected: newRevision - 1, next: newRevision });
+  if (payload.initialAssignment === undefined) {
+    await linkAppliedEvidence(exec, { orgId, actorId, request, newRevision, changeId });
+    await bumpAggregateRevision(exec, { orgId, actorId, request, expected: newRevision - 1, next: newRevision });
+    return;
+  }
+  const assignmentRevision = newRevision + 1;
+  await applyInitialAssignment(exec, {
+    orgId,
+    actorId,
+    request,
+    hire: payload,
+    assignment: payload.initialAssignment,
+    newRevision: assignmentRevision,
+    recordedAt,
+    recordedAtIso,
+  });
+  await linkAppliedEvidence(exec, { orgId, actorId, request, newRevision: assignmentRevision, changeId });
+  await bumpAggregateRevision(exec, { orgId, actorId, request, expected: newRevision - 1, next: assignmentRevision });
+}
+
+/**
+ * Issue the first assignment slot riding a hire: the slot and its first
+ * version (title, department, location, FTE, primary, the hire's window)
+ * plus the line-manager reporting and the establishment link, evidenced
+ * as 'assignment_issued'. Shares the hire's approval transaction and the
+ * hire's revision chain — it writes its event but never links the request
+ * or bumps the aggregate; applyHire stamps the final revision once.
+ */
+async function applyInitialAssignment(
+  exec: SqlExecutor,
+  args: {
+    orgId: string;
+    actorId: string;
+    request: RequestRow;
+    hire: HirePayload;
+    assignment: HireInitialAssignment;
+    newRevision: number;
+    recordedAt: DbInstant;
+    recordedAtIso: string;
+  },
+): Promise<void> {
+  const { orgId, actorId, request, hire, assignment, newRevision, recordedAt, recordedAtIso } = args;
+  const windowStart = hire.effectiveFrom;
+  const windowEnd = hire.effectiveTo;
+  makeEffectiveInterval(windowStart, windowEnd);
+  const asAssignment: AssignmentChangePayload = {
+    kind: "assignment_change",
+    assignmentKey: assignment.assignmentKey,
+    jobTitle: assignment.jobTitle ?? null,
+    departmentId: assignment.departmentId ?? null,
+    locationId: assignment.locationId ?? null,
+    fte: assignment.fte,
+    isPrimary: assignment.isPrimary,
+    effectiveFrom: windowStart,
+    ...(windowEnd === null ? {} : { effectiveTo: windowEnd }),
+    ...(assignment.managerEmploymentId === undefined ? {} : { managerEmploymentId: assignment.managerEmploymentId }),
+  };
+  await assertAssignmentRefs(exec, { orgId, employmentId: request.employment_id, payload: asAssignment });
+  const isPrimary = assignment.isPrimary;
+  await assertNoPrimaryConflict(exec, {
+    orgId,
+    employmentId: request.employment_id,
+    slotId: null,
+    isPrimary,
+    windowStart,
+    windowEnd,
+  });
+  // Lock the target establishment first (when there is one): the revision
+  // read here feeds the position-side event, and the row lock serializes
+  // against concurrent closes and assignments on the same establishment.
+  let target: { id: string; position_code: string; revision: number } | null = null;
+  if (assignment.positionId) {
+    const found = (await exec.execute<{ id: string; position_code: string; revision: number }>(sql`
+      select id, position_code, revision from positions
+       where org_id = ${orgId} and id = ${assignment.positionId} for update
+    `)).rows[0];
+    if (!found) {
+      throw new HrmChangeRequestError(
+        "REFUSED",
+        "the position is gone — withdraw this request; a proposal about a deleted establishment never applies",
+      );
+    }
+    target = found;
+  }
+  const slotId = (await exec.execute<{ id: string }>(sql`
+    insert into employment_assignments (org_id, employment_id, assignment_key, created_by, updated_by)
+    values (${orgId}, ${request.employment_id}, ${assignment.assignmentKey}, ${actorId}, ${actorId})
+    returning id
+  `)).rows[0]?.id;
+  if (!slotId) {
+    throw new HrmChangeRequestError(
+      "REFUSED",
+      "the assignment slot was not stored — nothing applied; retry the decision",
+    );
+  }
+  await exec.execute(sql`
+    insert into employment_assignment_versions
+      (org_id, assignment_id, employment_id, position_id, version_no,
+       job_title, department_id, location_id, fte, is_primary,
+       effective_from, effective_to, recorded_at, created_by, updated_by)
+    values (${orgId}, ${slotId}, ${request.employment_id}, ${assignment.positionId ?? null}, 1,
+            ${assignment.jobTitle ?? null}, ${assignment.departmentId ?? null}, ${assignment.locationId ?? null},
+            ${assignment.fte ?? "1"}, ${isPrimary},
+            ${windowStart}::date, ${windowEnd}::date,
+            ${recordedAt}, ${actorId}, ${actorId})
+  `);
+  const reporting = await planLineManagerChange(exec, {
+    orgId,
+    employmentId: request.employment_id,
+    managerId: assignment.managerEmploymentId,
+    windowStart,
+    windowEnd,
+  });
+  const warnings = await positionLinkWarnings(exec, {
+    orgId,
+    target,
+    windowStart,
+    asKnown: recordedAtIso,
+    assignment: {
+      title: assignment.jobTitle ?? null,
+      departmentId: assignment.departmentId ?? null,
+      locationId: assignment.locationId ?? null,
+    },
+  });
+  const changeId = await insertEmploymentChange(exec, {
+    orgId,
+    employmentId: request.employment_id,
+    assignmentId: slotId,
+    revision: newRevision,
+    changeKind: "assignment_issued",
+    priorSnapshot: {
+      slot: assignment.assignmentKey,
+      issued: true,
+      positionId: assignment.positionId ?? null,
+      positionWarnings: warnings,
+    },
+    closedVersions: reporting.change ? reporting.elements : [],
+    reason: request.reason ?? "",
+    action: request.action ?? null,
+    reasonCode: request.reason_code ?? null,
+    actorId,
+  });
+  await closeLineManagerChange(exec, { orgId, actorId, request, reporting, changeId, recordedAt });
+  if (assignment.positionId) {
+    await recordPositionAssignmentEvent(exec, {
+      orgId,
+      actorId,
+      positionId: assignment.positionId,
+      employmentId: request.employment_id,
+      assignmentKey: assignment.assignmentKey,
+      priorPositionId: null,
+      disagreementWarnings: warnings,
+      reason: request.reason ?? "",
+      positionRevision: target?.revision ?? 0,
+    });
+  }
 }
 
 /** Status corrections cannot reinterpret payroll already committed for their window. */

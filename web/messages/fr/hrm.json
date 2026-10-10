@@ -270,7 +270,12 @@
       "employerRequired": "Choisissez l'entité juridique employeuse — un emploi nomme toujours son employeur.",
       "employerHint": "L'emploi, les effectifs et la paie lisent tous cette entité.",
       "statusLabel": "Statut",
-      "startLabel": "Début effectif"
+      "startLabel": "Début effectif",
+      "assignmentSection": "Premier poste et affectation",
+      "withAssignment": "Enregistrer le premier poste et l'affectation avec cette embauche.",
+      "departmentEmpty": "Aucun service",
+      "locationEmpty": "Aucun site",
+      "positionEmpty": "Aucun poste lié"
     },
     "multiple": {
       "title": "Plus d'un dossier d'emploi",

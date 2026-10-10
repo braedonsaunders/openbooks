@@ -270,7 +270,12 @@
       "employerRequired": "Elija la entidad jurídica empleadora — un empleo siempre nombra a su empleador.",
       "employerHint": "El empleo, la plantilla y la nómina leen esta entidad.",
       "statusLabel": "Estado",
-      "startLabel": "Inicio efectivo"
+      "startLabel": "Inicio efectivo",
+      "assignmentSection": "Primer puesto y asignación",
+      "withAssignment": "Registrar el primer puesto y la asignación con esta contratación.",
+      "departmentEmpty": "Sin departamento",
+      "locationEmpty": "Sin ubicación",
+      "positionEmpty": "Sin puesto vinculado"
     },
     "multiple": {
       "title": "Más de un registro de empleo",

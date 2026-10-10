@@ -33,6 +33,30 @@ test("hire accepts the person, the legal entity, the start, and the reason", () 
   );
 });
 
+test("hire accepts an initial assignment riding the same approval", () => {
+  const departmentId = "33333333-3333-4333-8333-333333333333";
+  assert.deepEqual(
+    hireEmploymentBody.parse({
+      workerPartyId,
+      employerSubsidiaryId,
+      effectiveFrom: "2026-09-01",
+      initialAssignment: { assignmentKey: "primary", jobTitle: "Engineer", departmentId, isPrimary: true },
+      reason: "Hire with the first assignment",
+    }).initialAssignment,
+    { assignmentKey: "primary", jobTitle: "Engineer", departmentId, isPrimary: true },
+  );
+  assert.equal(
+    hireEmploymentBody.safeParse({
+      workerPartyId,
+      employerSubsidiaryId,
+      effectiveFrom: "2026-09-01",
+      initialAssignment: { assignmentKey: "  ", jobTitle: "Engineer" },
+      reason: "x",
+    }).success,
+    false,
+  );
+});
+
 test("hire refuses a missing person, entity, start, or reason at the boundary", () => {
   assert.equal(
     hireEmploymentBody.safeParse({ employerSubsidiaryId, effectiveFrom: "2026-09-01", reason: "x" }).success,

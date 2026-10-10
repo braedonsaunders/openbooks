@@ -9,12 +9,26 @@ import { isUuid } from "../../../../lib/list-params";
  * statuses the payload contract accepts, and a non-blank reason.
  */
 const uuid = z.string().refine(isUuid, "must be a valid id");
+export const hireAssignmentBody = z.object({
+  assignmentKey: z.string().trim().min(1).max(120),
+  jobTitle: z.string().trim().min(1).max(240).nullable().optional(),
+  departmentId: uuid.nullable().optional(),
+  locationId: uuid.nullable().optional(),
+  fte: z.string().trim().min(1).optional(),
+  isPrimary: z.boolean().optional(),
+  managerEmploymentId: uuid.nullable().optional(),
+  positionId: uuid.nullable().optional(),
+});
 export const hireEmploymentBody = z.object({
   workerPartyId: uuid,
   employerSubsidiaryId: uuid,
   status: z.enum(["offered", "active", "on_leave", "suspended"]).optional(),
   effectiveFrom: z.string().trim().min(1),
   effectiveTo: z.string().trim().min(1).nullable().optional(),
+  // The first assignment riding the hire, effective over the hire's
+  // window. The engine's hire payload contract owns the full validation;
+  // the boundary pins the shape it can pin.
+  initialAssignment: hireAssignmentBody.optional(),
   reason: z.string().trim().min(1).max(500),
   // Action/reason classification: required on authoring once the org
   // declares an active reason code; optional while none is declared.

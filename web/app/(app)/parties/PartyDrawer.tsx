@@ -62,6 +62,7 @@ export function PartyDrawer({
   fieldDefs,
   subsidiaries,
   canManage,
+  canHire = false,
   canReadActivities = false,
   canManageActivities = false,
   canReadCrmAccounts = false,
@@ -107,6 +108,13 @@ export function PartyDrawer({
   fieldDefs: CustomFieldDefClient[]
   subsidiaries: SubsidiaryOpt[]
   canManage: boolean
+  /**
+   * hrm.employment.manage — chains the unsaved-create save into the Hire
+   * step so one drawer records the person and their first employment.
+   * The hire route re-checks the grant; without it creation ends at the
+   * record with its Hire button.
+   */
+  canHire?: boolean
   canReadActivities?: boolean
   /** crm.activities.manage — enables the Activities tab's Add button. */
   canManageActivities?: boolean
@@ -428,6 +436,16 @@ export function PartyDrawer({
   // it: a freshly created employee lands here with no employment yet, and
   // the Hire button beside the notice is the creation flow's remedy.
   const [hiring, setHiring] = useState(false)
+  // Unsaved-create chaining: after the person saves, the same drawer
+  // continues into the Hire step instead of navigating away — one form
+  // records the person and their first employment. A refused hire keeps
+  // the step open with its remedy; the saved person waits underneath.
+  const [hiredAfterCreate, setHiredAfterCreate] = useState<{
+    partyId: string
+    partyName: string
+    jobTitle: string
+    departmentId: string
+  } | null>(null)
   // Address/contact rows save on their own lifecycle beside the main form —
   // one pin per surface, so a refused row save pins in its own editor.
   const relatedAction = useAppAction()
@@ -766,6 +784,20 @@ export function PartyDrawer({
           }
           setSaveState('saved')
           setDirty(false)
+          // New employees continue into Hire in the same drawer when the
+          // grant allows: the person and their first employment save as one
+          // form. Without the grant (or for other roles) creation ends at
+          // the record, whose Employment tab carries the Hire button.
+          if (typeof createdId === 'string' && createdId && canHire && recordType === 'employee' && employee.enabled) {
+            setHiredAfterCreate({
+              partyId: createdId,
+              partyName: submitted.displayName,
+              jobTitle: employee.jobTitle,
+              departmentId: employee.departmentId,
+            })
+            router.refresh()
+            return
+          }
           if (typeof createdId === 'string' && createdId) {
             const separator = returnHref.includes('?') ? '&' : '?'
             router.replace(`${returnHref}${separator}party=${createdId}` as never)
@@ -1788,6 +1820,8 @@ export function PartyDrawer({
                 <HireEmploymentDrawer
                   partyId={String(p.id)}
                   partyName={p.display_name}
+                  departmentOptions={departments.map((option) => ({ value: option.id, label: option.label ?? option.name ?? option.id }))}
+                  stacked
                   onClose={() => setHiring(false)}
                   onSaved={() => setHiring(false)}
                 />
@@ -1982,6 +2016,33 @@ export function PartyDrawer({
             />
           </div>
         </div>
+      ) : null}
+      {hiredAfterCreate ? (
+        <HireEmploymentDrawer
+          partyId={hiredAfterCreate.partyId}
+          partyName={hiredAfterCreate.partyName}
+          departmentOptions={departments.map((option) => ({ value: option.id, label: option.label ?? option.name ?? option.id }))}
+          stacked
+          initialJobTitle={hiredAfterCreate.jobTitle || undefined}
+          initialDepartmentId={hiredAfterCreate.departmentId || undefined}
+          onClose={() => {
+            // The person is saved; only the employment is still missing.
+            // Land on the record, whose Employment tab carries the Hire
+            // button for a later attempt.
+            const createdId = hiredAfterCreate.partyId
+            setHiredAfterCreate(null)
+            const separator = returnHref.includes('?') ? '&' : '?'
+            router.replace(`${returnHref}${separator}party=${createdId}` as never)
+            router.refresh()
+          }}
+          onSaved={() => {
+            const createdId = hiredAfterCreate.partyId
+            setHiredAfterCreate(null)
+            const separator = returnHref.includes('?') ? '&' : '?'
+            router.replace(`${returnHref}${separator}party=${createdId}` as never)
+            router.refresh()
+          }}
+        />
       ) : null}
     </TransactionDrawer>
   )
