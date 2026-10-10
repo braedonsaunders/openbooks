@@ -53,11 +53,11 @@ export function reconcileNavConfig(saved: OrgNavConfig): OrgNavConfig {
   }
   // Retired standalone setup destinations resolve through Company Setup.
   for (const group of groups) {
-    group.items = group.items.filter(item => !(item.kind === 'module' && item.moduleKey === 'admin-setup-manufacturing'))
+    group.items = group.items.filter(item => !(item.kind === 'module' && (item.moduleKey === 'admin-setup-manufacturing' || MODULE_BY_KEY.get(item.moduleKey)?.localOnly)))
   }
   const present = new Set(groups.flatMap((group) => group.items.flatMap((item) => item.kind === 'module' ? [item.moduleKey] : [])))
   for (const module of NAV_MODULES) {
-    if (!present.has(module.key)) ensureGroup(module.group).items.push({ kind: 'module', moduleKey: module.key })
+    if (!module.localOnly && !present.has(module.key)) ensureGroup(module.group).items.push({ kind: 'module', moduleKey: module.key })
   }
   // Inherited Pre-billing belongs at the start of the customer billing
   // workflow. Explicit editor placements and every other item's order survive.
@@ -78,13 +78,18 @@ export function reconcileNavConfig(saved: OrgNavConfig): OrgNavConfig {
   }
   // The inherited Payroll workflow starts at its overview. Only its own
   // slots change; unrelated destinations and explicit editor placements stay put.
-  const payrollOrder = ['payroll', 'payroll-runs', 'payroll-anomalies', 'payroll-remittances', 'payroll-separations']
+  const payrollOrder = ['payroll', 'payroll-runs', 'payroll-remittances']
   const people = groups.find((group) => group.id === 'hrm')
   if (people) {
     const inherited = people.items.filter((item) => item.kind === 'module' && item.placement !== 'custom' && payrollOrder.includes(item.moduleKey))
     inherited.sort((a, b) => payrollOrder.indexOf(a.kind === 'module' ? a.moduleKey : '') - payrollOrder.indexOf(b.kind === 'module' ? b.moduleKey : ''))
     let next = 0
     people.items = people.items.map((item) => inherited.includes(item) ? inherited[next++]! : item)
+    const workforceOrder = ['employees', 'hrm-org-chart', 'hrm-positions']
+    const workforce = people.items.filter(item => item.kind === 'module' && item.placement !== 'custom' && workforceOrder.includes(item.moduleKey))
+    workforce.sort((a, b) => workforceOrder.indexOf(a.kind === 'module' ? a.moduleKey : '') - workforceOrder.indexOf(b.kind === 'module' ? b.moduleKey : ''))
+    let nextWorkforce = 0
+    people.items = people.items.map(item => workforce.includes(item) ? workforce[nextWorkforce++]! : item)
     const overview = people.items.find((item) => item.kind === 'module' && item.moduleKey === 'payroll')
     if (overview?.kind === 'module' && overview.label === 'Payroll') delete overview.label
   }

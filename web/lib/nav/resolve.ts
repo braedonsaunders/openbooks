@@ -120,7 +120,7 @@ export async function resolveNav(
       if (item.hidden) continue
       if (item.kind === 'module') {
         const mod = MODULE_BY_KEY.get(item.moduleKey)
-        if (!mod) continue
+        if (!mod || mod.localOnly) continue
         const parent = mod.menuParent ? MODULE_BY_KEY.get(mod.menuParent) : undefined
         if (isDefaultLocalNavigationItem(g.id, item) && parent && visibleNavigationHref(parent.href, can, featureState)) continue
         if (mod.homeOnly && g.id === mod.group && item.placement !== 'custom') continue

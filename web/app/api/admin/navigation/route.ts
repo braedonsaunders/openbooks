@@ -58,7 +58,7 @@ function validate(config: unknown): config is OrgNavConfig {
     if (itemCount > 256) return false
     for (const i of g.items) {
       if (i.kind === 'module') {
-        if (!MODULE_BY_KEY.has(i.moduleKey) || moduleKeys.has(i.moduleKey)) return false
+        if (!MODULE_BY_KEY.has(i.moduleKey) || MODULE_BY_KEY.get(i.moduleKey)?.localOnly || moduleKeys.has(i.moduleKey)) return false
         moduleKeys.add(i.moduleKey)
       } else if (i.kind === 'app') {
         if (
