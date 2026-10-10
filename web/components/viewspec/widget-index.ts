@@ -473,6 +473,7 @@ export const WIDGET_FAMILY: Readonly<Record<string, WidgetFamily>> = {
   'payroll-setup-header': 'payroll',
   'payroll-setup-tabs': 'payroll',
   'payroll-work-locations': 'payroll',
+  'permission-hint': 'core',
   'pdf-template-editor': 'setup',
   'pdf-templates-list': 'setup',
   'pick-list-drawer': 'warehouse',

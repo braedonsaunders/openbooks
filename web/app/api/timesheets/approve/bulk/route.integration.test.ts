@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { registerHooks } from 'node:module'
 import { randomUUID } from 'node:crypto'
-import type { SessionUser } from '../../../../lib/auth'
+import type { SessionUser } from '../../../../../lib/auth'
 
 /**
  * Bulk approval decides each week in its own transaction through the
@@ -21,9 +21,9 @@ const { sql } = await import('drizzle-orm')
 const { db, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
 const { createScratchOrg, createScratchUser, dropScratchOrgReporting } = await import('@openbooks/engine/src/testing/fixtures.ts')
 const { POST } = await import('./route')
-const { POST: submitWeek } = await import('../submit/route')
-const { PUT } = await import('../route')
-const { loadWeek } = await import('../_lib')
+const { POST: submitWeek } = await import('../../submit/route')
+const { PUT } = await import('../../route')
+const { loadWeek } = await import('../../_lib')
 
 const WEEK = '2026-07-12'
 

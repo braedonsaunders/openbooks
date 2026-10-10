@@ -7,6 +7,7 @@
     "emptyTitle": "No purchase orders yet",
     "emptyDescription": "Create the first purchase order to start the procure-to-pay workflow.",
     "newButton": "New purchase order",
+    "createHintAction": "purchase orders",
     "createDraftFailed": "Could not create a draft purchase order"
   },
   "shared": {

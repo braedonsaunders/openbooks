@@ -7,6 +7,7 @@
     "emptyTitle": "Aucune soumission pour l’instant",
     "emptyDescription": "Créez la première soumission pour lancer le flux commande-encaissement.",
     "newButton": "Nouvelle soumission",
+    "createHintAction": "des devis",
     "createDraftFailed": "Impossible de créer une soumission brouillon"
   },
   "quoteCash": {
@@ -105,6 +106,7 @@
   },
   "award": {
     "action": "Attribuer",
+    "awardHintAction": "une attribution pour ce devis",
     "awardedTo": "Attribuée → {project}",
     "title": "Attribuer {number}",
     "description": "Crée le projet et son budget à partir de cette soumission : les heures, le coût et le prix soumis, une tâche par ligne.",

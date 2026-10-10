@@ -7,6 +7,7 @@
     "emptyTitle": "見積はまだありません",
     "emptyDescription": "最初の見積を作成して受注から入金までのワークフローを開始します。",
     "newButton": "新規見積",
+    "createHintAction": "見積",
     "createDraftFailed": "下書き見積を作成できませんでした"
   },
   "quoteCash": {
@@ -105,6 +106,7 @@
   },
   "award": {
     "action": "受注",
+    "awardHintAction": "この見積の案件化",
     "awardedTo": "受注済 → {project}",
     "title": "{number} を受注",
     "description": "この見積からプロジェクトと予算を作成します。見積の時間・原価・価格を、明細ごとに1タスクとして取り込みます。",

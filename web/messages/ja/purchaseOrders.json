@@ -7,6 +7,7 @@
     "emptyTitle": "発注書はまだありません",
     "emptyDescription": "最初の発注書を作成して調達から支払いまでのワークフローを開始します。",
     "newButton": "新規発注書",
+    "createHintAction": "発注書",
     "createDraftFailed": "下書き発注書を作成できませんでした"
   },
   "shared": {

@@ -7,6 +7,7 @@
     "emptyTitle": "暂无采购订单",
     "emptyDescription": "创建第一张采购订单，以启动采购到付款流程。",
     "newButton": "新建采购订单",
+    "createHintAction": "采购订单",
     "createDraftFailed": "无法创建采购订单草稿"
   },
   "shared": {

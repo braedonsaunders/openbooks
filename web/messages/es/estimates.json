@@ -7,6 +7,7 @@
     "emptyTitle": "Aún no hay cotizaciones",
     "emptyDescription": "Cree la primera cotización para iniciar el flujo de pedido a cobro.",
     "newButton": "Nueva cotización",
+    "createHintAction": "presupuestos",
     "createDraftFailed": "No se pudo crear un borrador de cotización"
   },
   "quoteCash": {
@@ -105,6 +106,7 @@
   },
   "award": {
     "action": "Adjudicar",
+    "awardHintAction": "una adjudicación para este presupuesto",
     "awardedTo": "Adjudicada → {project}",
     "title": "Adjudicar {number}",
     "description": "Crea el proyecto y su presupuesto a partir de esta cotización: las horas, el coste y el precio cotizados, una tarea por línea.",

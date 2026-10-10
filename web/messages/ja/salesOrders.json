@@ -7,6 +7,7 @@
     "emptyTitle": "受注はまだありません",
     "emptyDescription": "受注を作成するか、見積から変換します。",
     "newButton": "新規受注",
+    "createHintAction": "受注",
     "createDraftFailed": "下書き受注を作成できませんでした"
   },
   "agency": {

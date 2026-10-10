@@ -1,4 +1,5 @@
 {
+  "permissionHint": "Você precisa da permissão {permission} para criar {action}. Peça acesso a um administrador.",
   "actions": {
     "save": "Salvar",
     "saving": "Salvando…",

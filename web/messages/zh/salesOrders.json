@@ -7,6 +7,7 @@
     "emptyTitle": "暂无销售订单",
     "emptyDescription": "创建一张销售订单，或从报价单转换生成。",
     "newButton": "新建销售订单",
+    "createHintAction": "销售订单",
     "createDraftFailed": "无法创建草稿销售订单"
   },
   "agency": {

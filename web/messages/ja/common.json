@@ -1,4 +1,5 @@
 {
+  "permissionHint": "{action}を作成するには{permission}権限が必要です。管理者にアクセスを依頼してください。",
   "actions": {
     "save": "保存",
     "saving": "保存中…",

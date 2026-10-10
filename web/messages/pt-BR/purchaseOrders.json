@@ -7,6 +7,7 @@
     "emptyTitle": "Nenhum pedido de compra ainda",
     "emptyDescription": "Crie o primeiro pedido de compra para iniciar o fluxo de compra a pagamento.",
     "newButton": "Novo pedido de compra",
+    "createHintAction": "pedidos de compra",
     "createDraftFailed": "Não foi possível criar um pedido de compra rascunho"
   },
   "shared": {

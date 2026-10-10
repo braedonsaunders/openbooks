@@ -21,6 +21,7 @@ import { OpportunityKanbanBoard } from './native-widgets.client'
 import { RecordListSlot } from './record-list-slot'
 import { EntityListSlot } from './entity-list-slot'
 import { RegisteredListBlockView } from './registered-list'
+import { PermissionHint } from '../permission-hint'
 import type { PreparedListSourceKey } from '../../lib/list/prepared-sources'
 import type { TableBlock, WidgetRef } from '@braedonsaunders/appkit-viewspec'
 import { findWidget, loadWidget } from './widget-loader'
@@ -95,6 +96,15 @@ export const CORE_WIDGETS: Record<string, WidgetRenderer> = {
       toolbar={props.toolbar as WidgetRef[] | undefined}
       scope={scope}
       searchParams={searchParams ?? {}}
+    />
+  ),
+  // The shared missing-grant hint for hidden primary actions: list pages
+  // render it beside the header when the viewer reads but cannot create,
+  // naming the permission to ask for instead of hiding New silently.
+  'permission-hint': (props) => (
+    <PermissionHint
+      permission={str(props, 'permission') ?? ''}
+      action={str(props, 'action') ?? ''}
     />
   ),
   'opportunity-kanban-board': async (props) => {

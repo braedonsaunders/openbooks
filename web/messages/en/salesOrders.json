@@ -7,6 +7,7 @@
     "emptyTitle": "No sales orders yet",
     "emptyDescription": "Create a sales order, or convert one from an estimate.",
     "newButton": "New sales order",
+    "createHintAction": "sales orders",
     "createDraftFailed": "Could not create a draft sales order"
   },
   "agency": {
