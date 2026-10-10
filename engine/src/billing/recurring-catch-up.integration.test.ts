@@ -232,7 +232,7 @@ test("a rewound cursor replays the committed document instead of duplicating", {
   try {
     const actorId = await createScratchUser(org.orgId, "Catch-up controller", "admin");
     await addPeriod(org, 2026, 5);
-    const { scheduleId } = await seedSchedule(org, actorId, { nextRunOn: "2026-05-10" });
+    const { scheduleId, templateId } = await seedSchedule(org, actorId, { nextRunOn: "2026-05-10" });
     const first = await runScheduleCatchUp(org.orgId, scheduleId, {
       mode: "post_all", asOf: "2026-05-10", actorId, allowedSubsidiaryIds: null,
     });

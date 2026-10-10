@@ -45,8 +45,11 @@ async function seedSubscription(
   await db.execute(sql`insert into subscription_plans(id,org_id,name,amount,interval,interval_count,income_account_id,created_by)
     values(${planId},${org.orgId},'Catch-up plan','100.0000','monthly',1,${org.accounts.revenue},${actorId})`);
   const subscriptionId = randomUUID();
-  await db.execute(sql`insert into subscriptions(id,org_id,customer_id,plan_id,quantity,status,start_on,next_bill_on,auto_post,created_by)
-    values(${subscriptionId},${org.orgId},${org.customerId},${planId},'1','active','2025-12-01',${opts.nextBillOn ?? org.date},${opts.autoPost ?? true},${actorId})`);
+  // The stored anchor follows the native first-bill-date rule (the 10th),
+  // not the mid-month service start: without it the fallback reads the
+  // start date's day and the cycle steps on the 1st.
+  await db.execute(sql`insert into subscriptions(id,org_id,customer_id,plan_id,quantity,status,start_on,next_bill_on,auto_post,anchor_day,created_by)
+    values(${subscriptionId},${org.orgId},${org.customerId},${planId},'1','active','2025-12-01',${opts.nextBillOn ?? org.date},${opts.autoPost ?? true},10,${actorId})`);
   return subscriptionId;
 }
 

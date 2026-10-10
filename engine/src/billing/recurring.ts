@@ -772,6 +772,7 @@ export async function runScheduleCatchUp(
     ({ results, stopped, ...(error ? { error } : {}) });
   let outcome: CatchUpOutcome | null = null;
   let selectedValidated = false;
+  let firstPass = true;
   for (;;) {
     const row = await withOrgContext(orgId, async () => (await db.execute<{
       templateId: string; isActive: boolean; nextRunOn: string; endsOn: string | null;
@@ -786,11 +787,25 @@ export async function runScheduleCatchUp(
         from recurring_schedules where id = ${scheduleId} and org_id = ${orgId}
     `)).rows[0]);
     if (!row) throw new RecurringError("recurring schedule not found", 404);
-    if (!row.isActive) throw new RecurringError("recurring schedule is paused — resume it to catch up");
     const runCount = Number(row.runCount);
     const maxOccurrences = row.maxOccurrences == null ? null : Number(row.maxOccurrences);
     const standingSkips = new Set(row.skippedRunOns ?? []);
     const remaining = remainingOccurrences(maxOccurrences, runCount);
+    const upcoming = pendingOccurrences(
+      {
+        cadence: row.cadence, cron: row.cron, nextRunOn: row.nextRunOn, endsOn: row.endsOn, anchorDay: row.anchorDay,
+        skippedRunOns: [...standingSkips], remaining,
+      },
+      asOf,
+    );
+    // A run that starts on a paused schedule refuses, as does a run whose
+    // schedule is paused while work is still pending. The run's own
+    // end-date deactivation leaves nothing pending, so the pass below
+    // finishes it as reached_end instead of refusing itself.
+    if (!row.isActive && (firstPass || upcoming.occurrences.length > 0)) {
+      throw new RecurringError("recurring schedule is paused — resume it to catch up");
+    }
+    firstPass = false;
     const template = (await db.execute<{ kind: string }>(sql`
       select d.kind from documents d
        where d.id = ${row.templateId} and d.org_id = ${orgId}
@@ -815,13 +830,9 @@ export async function runScheduleCatchUp(
       `)));
       return moved.rows.length > 0;
     };
-    const pending = pendingOccurrences(
-      {
-        cadence: row.cadence, cron: row.cron, nextRunOn: row.nextRunOn, endsOn: row.endsOn, anchorDay: row.anchorDay,
-        skippedRunOns: [...standingSkips], remaining,
-      },
-      asOf,
-    );
+    // upcoming (computed above for the paused guard) is this pass's pending
+    // set: the row has not moved since this pass read it.
+    const pending = upcoming;
     // The selected dates must be pending occurrences from this run's own
     // preview: anything else refuses by name instead of billing a period
     // the operator never saw listed. Validating before any cursor write
