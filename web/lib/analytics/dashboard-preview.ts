@@ -70,7 +70,10 @@ async function buildDashboardPreview(dashboard: AnalyticsDashboardDefinition, sp
     }
     case 'utilization': {
       const { data, periodLabel } = await (await import('../../app/(app)/analytics/utilization/view')).loadUtilization(sp)
-      chart = trend(t('hub.utilizationRate'), data.history.periods.map((period) => period.companyPct), data.history.periods.map((period) => period.label))
+      // History periods arrive newest first; a trend reads oldest → newest,
+      // as the Utilization dashboard draws it.
+      const chronological = [...data.history.periods].reverse()
+      chart = trend(t('hub.utilizationRate'), chronological.map((period) => period.companyPct), chronological.map((period) => period.label))
       const range = data.company.range
       return result(periodLabel, [metric('utilization.kpi.totalHours', number(range.hours)), metric('utilization.kpi.billableHours', number(range.billableHours)), metric('hub.utilizationRate', percent(range.percentBilled)), metric('utilization.kpi.nonBillableCost', fmt.money(range.nonBillableCost))])
     }
