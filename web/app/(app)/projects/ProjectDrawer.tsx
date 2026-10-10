@@ -72,6 +72,7 @@ interface ProjectRecord {
   code: string | null
   name: string
   is_active: boolean
+  is_internal: boolean
   custom: Record<string, unknown> | null
   customer_id: string | null
   foreman_id: string | null
@@ -282,6 +283,18 @@ export function ProjectDrawer({
   const [subsidiaryIncludeChildren, setSubsidiaryIncludeChildren] = useState<boolean>(
     pr.subsidiary_include_children !== false,
   )
+  // Internal (shop/overhead) time target: no customer, non-billable, no labor
+  // cost posting. Checking it clears the customer and invoicing override (the
+  // server refuses any race the same way); unchecking a project with booked
+  // time is refused by name.
+  const [isInternal, setIsInternal] = useState<boolean>(pr.is_internal === true)
+  function setInternal(next: boolean) {
+    setIsInternal(next)
+    if (next) {
+      setCustomerId('')
+      setInvoicingPref({})
+    }
+  }
 
   const [saveState, setSaveState] = useState<'saved' | 'saving' | 'dirty' | 'error'>('saved')
   // Saves run on the shared action path: refusals pin beside the record and
@@ -332,6 +345,7 @@ export function ProjectDrawer({
     () => ({
       name: name.trim() || (isActive ? name : 'New project'),
       code,
+      isInternal,
       customerId: customerId || null,
       foremanId: foremanId || null,
       managerId: managerId || null,
@@ -349,7 +363,7 @@ export function ProjectDrawer({
       subsidiaryIncludeChildren: subsidiaries.length > 0 ? subsidiaryIncludeChildren : undefined,
       ...(createMode && operatingSelection ? { operatingProfile: operatingSelection.value, operatingDepartmentId: operatingDepartmentId || null } : {}),
     }),
-    [name, code, customerId, foremanId, managerId, status, projectTypeId, invoicingPref, customerPoNumber, startsOn, endsOn, contractValue, notes, siteJurisdiction, custom, subsidiaryId, subsidiaryIncludeChildren, subsidiaries.length, isActive, createMode, operatingSelection, operatingDepartmentId],
+    [name, code, isInternal, customerId, foremanId, managerId, status, projectTypeId, invoicingPref, customerPoNumber, startsOn, endsOn, contractValue, notes, siteJurisdiction, custom, subsidiaryId, subsidiaryIncludeChildren, subsidiaries.length, isActive, createMode, operatingSelection, operatingDepartmentId],
   )
   // Track unsaved edits (no autosave — Save is an explicit button). Adjusted
   // during render (same committed value, no extra render). `editable` is read
@@ -367,6 +381,7 @@ export function ProjectDrawer({
   function resetForm() {
     setName(isPlaceholderName ? '' : (pr.name ?? ''))
     setCode(pr.code ?? '')
+    setIsInternal(pr.is_internal === true)
     setCustomerId(pr.customer_id ?? '')
     setForemanId(pr.foreman_id ?? '')
     setManagerId(pr.manager_id ?? '')
@@ -855,7 +870,33 @@ export function ProjectDrawer({
             onBreakdown={optionalBreakdownConfigured?openWorkBreakdown:undefined}/>:null}
           <HeaderFields layout={overviewLayout} editable={editable} renderField={renderProjectField} />
 
-          {/* Project-level invoicing/backup override (cascades over type ← customer). */}
+          {/* Internal (shop/overhead) time target: non-billable, customer-less,
+              excluded from labor cost posting. Offered on create and before
+              time is booked; the flag locks once hours exist. */}
+          <section className="space-y-2">
+            <label className="flex cursor-pointer items-start gap-2.5">
+              <input
+                type="checkbox"
+                checked={isInternal}
+                disabled={!editable}
+                onChange={(e) => setInternal(e.target.checked)}
+                className="mt-0.5 h-4 w-4 shrink-0 accent-teal-600"
+              />
+              <span className="min-w-0">
+                <span className="block text-sm font-medium text-slate-900 dark:text-slate-100">
+                  {t('drawer.internalLabel')}
+                </span>
+                <span className="block text-xs text-slate-500 dark:text-slate-400">
+                  {t('drawer.internalHint')}
+                </span>
+              </span>
+            </label>
+          </section>
+
+          {/* Project-level invoicing/backup override (cascades over type ← customer).
+              Internal projects invoice no one, so the override stays hidden
+              while internal is checked. */}
+          {!isInternal ? (
           <section className="space-y-3">
             <div>
               <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t('invoicingPref.heading')}</h3>
@@ -863,6 +904,7 @@ export function ProjectDrawer({
             </div>
             <InvoicingPreferenceFields value={invoicingPref} onChange={setInvoicingPref} disabled={ro} />
           </section>
+          ) : null}
 
           {/* Unsaved-create mounts no persisted-record sections: both probe
               their APIs on mount, and there is no project id to probe with. */}

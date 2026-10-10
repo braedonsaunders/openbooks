@@ -160,6 +160,13 @@ export const projects = pgTable(
     customerPoNumber: text("customer_po_number"),
     /** Native fixed-price ceiling / transaction price used by project accounting. */
     contractValue: money("contract_value"),
+    /**
+     * Internal (shop/overhead) time target: non-billable, customer-less, and
+     * excluded from labor cost posting and billing, so shop days stop
+     * booking to customer jobs. Storage-enforced: no customer, no invoicing
+     * configuration, and immutable once time is booked (migration 0639).
+     */
+    isInternal: boolean("is_internal").notNull().default(false),
     startsOn: date("starts_on"),
     endsOn: date("ends_on"),
     notes: text("notes"),

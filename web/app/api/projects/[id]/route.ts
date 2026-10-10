@@ -41,6 +41,7 @@ const projectPatchSchema = z.object({
   siteJurisdiction: z.string().nullable().optional(), contractValue: nullableExactMoney().optional(),
   custom: z.record(z.string(), z.json()).optional(), subsidiaryId: nullableUuidId.optional(),
   subsidiaryIncludeChildren: z.boolean().optional(), isActive: z.boolean().optional(), tasks: z.never().optional(),
+  isInternal: z.boolean().optional(),
 }).strict().refine((body) => Object.keys(body).length > 0, { message: "At least one field must be provided." })
 
 function bad(error: string, fieldErrors?: Record<string, string>) {
@@ -155,6 +156,9 @@ export const PATCH = defineRoute({
   }
   if (body.subsidiaryIncludeChildren !== undefined && typeof body.subsidiaryIncludeChildren !== 'boolean') {
     return NextResponse.json({ error: 'subsidiaryIncludeChildren must be a boolean' }, { status: 400 })
+  }
+  if (body.isInternal !== undefined && typeof body.isInternal !== 'boolean') {
+    return NextResponse.json({ error: 'isInternal must be a boolean' }, { status: 400 })
   }
 
   // -- enums ---------------------------------------------------------------
@@ -300,14 +304,14 @@ export const PATCH = defineRoute({
       manager_id: string | null; subsidiary_id: string | null; subsidiary_include_children: boolean | null;
       status: string; customer_po_number: string | null; contract_value: string | null;
       starts_on: string | null; ends_on: string | null; notes: string | null; is_active: boolean;
-      site_jurisdiction: string | null;
+      site_jurisdiction: string | null; is_internal: boolean;
       project_type_id: string | null; invoicing_preference: unknown; custom: unknown;
     }>(sql`
       select name, code, customer_id, foreman_id, manager_id, subsidiary_id,
              subsidiary_include_children, status, customer_po_number,
              contract_value::text as contract_value,
              starts_on::text as starts_on, ends_on::text as ends_on,
-             notes, site_jurisdiction, is_active, project_type_id, invoicing_preference, custom
+             notes, site_jurisdiction, is_active, is_internal, project_type_id, invoicing_preference, custom
         from projects
        where id = ${id} and org_id = ${user.orgId}
        for update
@@ -329,6 +333,31 @@ export const PATCH = defineRoute({
         body.isActive === true ? 'Give the project a real name before activating it' : 'An active project needs a name',
       )
       return
+    }
+    // Internal scope is validated on the locked row: an internal project has
+    // no customer and carries no invoicing configuration (storage re-checks),
+    // and the flag locks once time is booked (storage enforces) — here with
+    // a named refusal instead of a constraint error.
+    const willBeInternal = body.isInternal ?? before.is_internal
+    const effectiveCustomer = customerId !== undefined ? customerId : before.customer_id
+    const effectiveInvoicing = invoicingPref !== undefined ? invoicingPref : before.invoicing_preference
+    if (willBeInternal && effectiveCustomer !== null) {
+      txRefused = bad('An internal project has no customer')
+      return
+    }
+    if (willBeInternal && effectiveInvoicing !== null) {
+      txRefused = bad('Internal projects carry no invoicing configuration')
+      return
+    }
+    if (body.isInternal !== undefined && body.isInternal !== before.is_internal) {
+      const booked = (await db.execute<{ n: number }>(sql`
+        select count(*)::int as n from time_entries
+         where org_id = ${user.orgId} and project_id = ${id}
+      `)).rows[0]!.n
+      if (booked > 0) {
+        txRefused = bad('This project has booked time and its internal flag is immutable')
+        return
+      }
     }
     // Contract value and subsidiary carry billed and posted history: the
     // shared engine control locks this row and refuses a contract-value
@@ -399,6 +428,7 @@ export const PATCH = defineRoute({
       notes = ${body.notes !== undefined ? strOrNull(body.notes) : sql`notes`},
       site_jurisdiction = ${siteJurisdiction !== undefined ? siteJurisdiction : sql`site_jurisdiction`},
       is_active = ${body.isActive !== undefined ? body.isActive : sql`is_active`},
+      is_internal = ${body.isInternal !== undefined ? body.isInternal : sql`is_internal`},
       custom = ${mergedCustom !== undefined ? sql`${JSON.stringify(mergedCustom)}::jsonb` : sql`custom`},
       updated_at = now(), updated_by = ${user.id}
     where id = ${id} and org_id = ${user.orgId}
@@ -415,6 +445,7 @@ export const PATCH = defineRoute({
     if (managerId !== undefined) changedFields.push(['manager_id', before.manager_id, managerId])
     if (subsidiaryId !== undefined) changedFields.push(['subsidiary_id', before.subsidiary_id, subsidiaryId])
     if (body.subsidiaryIncludeChildren !== undefined) changedFields.push(['subsidiary_include_children', before.subsidiary_include_children, body.subsidiaryIncludeChildren])
+    if (body.isInternal !== undefined) changedFields.push(['is_internal', before.is_internal, body.isInternal])
     if (body.status != null) changedFields.push(['status', before.status, body.status])
     if (body.customerPoNumber !== undefined) changedFields.push(['customer_po_number', before.customer_po_number, strOrNull(body.customerPoNumber)])
     if (contractValue !== undefined) changedFields.push(['contract_value', before.contract_value, contractValue])

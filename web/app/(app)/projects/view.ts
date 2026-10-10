@@ -178,6 +178,7 @@ export async function loadProjects(
                     code: null,
                     name: '',
                     is_active: true,
+                    is_internal: false,
                     custom: {},
                     customer_id: null,
                     foreman_id: null,

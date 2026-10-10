@@ -149,6 +149,9 @@ export async function postProjectLaborCost(orgId: string, actorId: string, timeE
        where te.org_id = ${orgId} and te.id = any(${idArr}::uuid[])
          and te.status = 'approved' and te.project_id is not null
          and te.cost_journal_entry_id is null
+         -- Internal (shop/overhead) time stays statistical: it never posts
+         -- labor cost, so internal time alone moves no company ledger.
+         and coalesce(p.is_internal, false) = false
        order by te.id
        for update of te`));
     if (rows.rows.length === 0) return [];

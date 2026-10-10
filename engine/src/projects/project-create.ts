@@ -38,6 +38,9 @@ export type ProjectStatus = (typeof PROJECT_STATUSES)[number];
 export interface ProjectCreateRequest {
   name: string;
   isActive?: boolean;
+  /** Internal (shop/overhead) time target: customer-less, non-billable, and
+   * excluded from labor cost posting. Once time is booked the flag locks. */
+  isInternal?: boolean;
   subsidiaryIncludeChildren?: boolean;
   status?: string;
   customerId?: string | null;
@@ -174,6 +177,10 @@ async function resolveProjectRow(
   if (body.subsidiaryIncludeChildren !== undefined && typeof body.subsidiaryIncludeChildren !== "boolean") {
     throw bad("subsidiaryIncludeChildren must be a boolean", "subsidiaryIncludeChildren", 400);
   }
+  if (body.isInternal !== undefined && typeof body.isInternal !== "boolean") {
+    throw bad("isInternal must be a boolean", "isInternal", 400);
+  }
+  const isInternal = body.isInternal === true;
   if (body.status !== undefined && !PROJECT_STATUSES.includes(body.status as ProjectStatus)) {
     throw bad("Invalid status", "status");
   }
@@ -250,6 +257,15 @@ async function resolveProjectRow(
     invoicingRaw == null || (typeof invoicingRaw === "object" && Object.values(invoicingRaw).every((v) => v == null))
       ? null
       : (invoicingRaw as Record<string, unknown>);
+  // Internal projects bill nothing and invoice no one: a customer or any
+  // invoicing configuration on one is refused here (storage re-checks), so a
+  // shop target can never be misconfigured into customer billing.
+  if (isInternal && customerId !== null) {
+    throw bad("An internal project has no customer", "customerId");
+  }
+  if (isInternal && invoicingPreference !== null) {
+    throw bad("Internal projects carry no invoicing configuration", "invoicingPreference");
+  }
 
   const defs = await loadFieldDefs("projects");
   const customResult = validateCustomValues(defs, asRecord(body.custom));
@@ -298,6 +314,7 @@ async function resolveProjectRow(
     name,
     code: strOrNull(body.code),
     customer_id: customerId,
+    is_internal: isInternal,
     foreman_id: foremanId,
     manager_id: managerId,
     subsidiary_id: subsidiaryId,
@@ -374,7 +391,7 @@ export async function createProjectInTransaction(
       (id, org_id, name, code, customer_id, foreman_id, manager_id,
        subsidiary_id, subsidiary_include_children, status, project_type_id,
        invoicing_preference, customer_po_number, contract_value,
-       starts_on, ends_on, notes, site_jurisdiction, is_active, custom,
+       starts_on, ends_on, notes, site_jurisdiction, is_active, is_internal, custom,
        awarded_from_document_id, awarded_at, awarded_by, operating_profile_version_id, operating_department_id, created_by, updated_by)
     values
       (${id}, ${ctx.orgId}, ${s.name as string}, ${s.code as string | null},
@@ -383,7 +400,7 @@ export async function createProjectInTransaction(
        ${invoicingPreference === null ? sql`null` : sql`${JSON.stringify(invoicingPreference)}::jsonb`},
        ${s.customer_po_number as string | null}, ${s.contract_value as string | null},
        ${s.starts_on as string | null}, ${s.ends_on as string | null}, ${s.notes as string | null},
-       ${s.site_jurisdiction as string | null}, ${s.is_active as boolean},
+       ${s.site_jurisdiction as string | null}, ${s.is_active as boolean}, ${s.is_internal as boolean},
        ${JSON.stringify(s.custom)}::jsonb,
        ${awardedFrom}, ${awardedFrom === null ? sql`null` : sql`now()`}, ${awardedFrom === null ? null : ctx.actorId},
        ${(s.operating_profile_version_id as string | null) ?? null}, ${(s.operating_department_id as string | null) ?? null},

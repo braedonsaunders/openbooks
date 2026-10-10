@@ -158,7 +158,9 @@
     "taskStatusAria": "Status de {task}",
     "removeNamedTaskAria": "Remover {task}",
     "customFields": "Campos personalizados",
-    "projectType": "Tipo de projeto"
+    "projectType": "Tipo de projeto",
+    "internalLabel": "Projeto interno (oficina/despesas gerais)",
+    "internalHint": "Apontamento de horas não faturável sem cliente. As horas de oficina aqui registradas nunca são faturadas nem geram custo de mão de obra. Não pode ser alterado após o apontamento de horas."
   },
   "cockpit": {
     "subtitle": "Painel de custeio de obras",

@@ -1,0 +1,1 @@
+Internal-project marker is a backfill-safe boolean defaulting false: every existing project is customer work, no row violates the new check, and no precondition needs probing.

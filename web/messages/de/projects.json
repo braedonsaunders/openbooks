@@ -158,7 +158,9 @@
     "taskStatusAria": "Status von {task}",
     "removeNamedTaskAria": "{task} entfernen",
     "customFields": "Benutzerdefinierte Felder",
-    "projectType": "Projekttyp"
+    "projectType": "Projekttyp",
+    "internalLabel": "Internes (Werkstatt/Gemeinkosten-)Projekt",
+    "internalHint": "Nicht abrechenbares Zeitziel ohne Kunde. Hier gebuchte Werkstattstunden werden nie abgerechnet und buchen keine Lohnkosten. Kann nach erfassten Stunden nicht mehr geändert werden."
   },
   "cockpit": {
     "subtitle": "Job-Costing-Cockpit",

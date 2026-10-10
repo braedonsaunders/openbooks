@@ -158,7 +158,9 @@
     "taskStatusAria": "Status for {task}",
     "removeNamedTaskAria": "Remove {task}",
     "customFields": "Custom fields",
-    "projectType": "Project type"
+    "projectType": "Project type",
+    "internalLabel": "Internal (shop/overhead) project",
+    "internalHint": "Non-billable time target with no customer. Shop hours booked here never bill and post no labor cost. Cannot be changed once time is booked."
   },
   "cockpit": {
     "subtitle": "Job-costing cockpit",

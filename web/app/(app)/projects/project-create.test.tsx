@@ -257,6 +257,41 @@ test("a refused create toasts and stays editable without navigating", async (t) 
   assert.deepEqual(globalThis.__projectCreateRouter!.replaces, [], "a refused create navigates nowhere");
 });
 
+test("checking Internal posts an internal project with no customer", async (t) => {
+  const restoreFetch = resetHarness();
+  t.after(restoreFetch);
+  const { unmount } = await renderDrawer();
+  t.after(unmount);
+  const internal = [...document.querySelectorAll('input[type="checkbox"]')].find((el) =>
+    (el.closest("label")?.textContent ?? "").includes("Internal (shop/overhead) project"),
+  ) as HTMLInputElement | undefined;
+  assert.ok(internal, "the create form offers the internal time target");
+  const field = nameField();
+  assert.ok(field, "the project name input must render");
+  await act(async () => {
+    setInputValue(field!, "Shop");
+    await tick();
+  });
+  await tick();
+  await act(async () => {
+    internal.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+    await tick();
+  });
+  await tick();
+  assert.equal(internal.checked, true, "the internal flag checks");
+  const save = buttonsNamed("Save")[0];
+  assert.ok(save, "Save must render");
+  await click(save);
+  await tick();
+  await tick();
+  const posts = globalThis.__projectCreateFetches!.filter((f) => f.url === "/api/projects");
+  assert.equal(posts.length, 1, "explicit Save is exactly one POST");
+  const body = JSON.parse(String(posts[0]!.init?.body)) as Record<string, unknown>;
+  assert.equal(body.name, "Shop");
+  assert.equal(body.isInternal, true, "the internal flag posts through");
+  assert.equal(body.customerId, null, "an internal project carries no customer");
+});
+
 test("the New button opens the unsaved drawer with zero writes", async (t) => {
   const restoreFetch = resetHarness();
   t.after(restoreFetch);

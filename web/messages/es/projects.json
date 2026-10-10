@@ -158,7 +158,9 @@
     "taskStatusAria": "Estado de {task}",
     "removeNamedTaskAria": "Eliminar {task}",
     "customFields": "Campos personalizados",
-    "projectType": "Tipo de proyecto"
+    "projectType": "Tipo de proyecto",
+    "internalLabel": "Proyecto interno (taller/gastos generales)",
+    "internalHint": "Objetivo de horas no facturable sin cliente. Las horas de taller aquí registradas nunca se facturan ni contabilizan costo laboral. No se puede cambiar una vez registradas las horas."
   },
   "cockpit": {
     "subtitle": "Panel de control de costos de obra",
