@@ -433,3 +433,22 @@ test('a refused correction persists the server reason inline', async (t) => {
     `the alert must carry the named remedy, got ${JSON.stringify(alert.textContent)}`,
   )
 })
+
+test('the match view links to the reconciliation workspace instead of signing off', async (t) => {
+  await mountWorkspace(t, scriptedFetch({ '/rules/preview': () => Response.json({ matches: [] }) }))
+  const link = document.querySelector('a[href="/banking/acc-1/reconcile/rec-1"]')
+  assert.ok(link, 'the toolbar must link to the session reconciliation workspace')
+  assert.ok(
+    (link.textContent ?? '').includes('Open reconciliation workspace'),
+    `the link must name the workspace, got ${JSON.stringify(link.textContent)}`,
+  )
+  assert.equal(
+    [...document.querySelectorAll('button')].some((b) => (b.textContent ?? '').includes('Sign off')),
+    false,
+    'sign-off must not render in the match view',
+  )
+  assert.ok(
+    (document.body.textContent ?? '').includes('Sign-off happens in the reconciliation workspace'),
+    'the view must name why sign-off lives elsewhere',
+  )
+})
