@@ -33,7 +33,10 @@
       "openBills": "Factures",
       "oldestDue": "Plus ancienne",
       "overdue": "En retard",
-      "billedOpen": "Facturé ouvert"
+      "billedOpen": "Facturé ouvert",
+      "hintBillsOnly": "Factures fournisseurs ouvertes, plus forte exposition d'abord",
+      "emptyBillsOnly": "Aucune dette ouverte. Comptabilisez une facture fournisseur et l’exposition apparaîtra ici.",
+      "emptyOrdersOff": "Aucune dette ouverte. Comptabilisez une facture fournisseur et l’exposition apparaîtra ici. Les bons de commande font partie de Devis et commandes, qui est désactivé : un administrateur peut l’activer dans Paramètres de l’entreprise → Fonctionnalités."
     },
     "trend": {
       "title": "Tendance des dépenses",

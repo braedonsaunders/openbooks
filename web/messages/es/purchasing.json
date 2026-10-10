@@ -33,7 +33,10 @@
       "openBills": "Facturas",
       "oldestDue": "Más antigua",
       "overdue": "Vencido",
-      "billedOpen": "Facturado abierto"
+      "billedOpen": "Facturado abierto",
+      "hintBillsOnly": "Facturas de proveedor abiertas, mayor exposición primero",
+      "emptyBillsOnly": "Sin cuentas por pagar abiertas. Registre una factura de proveedor y la exposición aparecerá aquí.",
+      "emptyOrdersOff": "Sin cuentas por pagar abiertas. Registre una factura de proveedor y la exposición aparecerá aquí. Las órdenes de compra forman parte de Cotizaciones y pedidos, que está desactivado: un administrador puede activarlo en Configuración de la empresa → Funciones."
     },
     "trend": {
       "title": "Tendencia de gasto",

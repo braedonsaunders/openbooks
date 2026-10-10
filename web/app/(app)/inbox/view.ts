@@ -225,7 +225,19 @@ export async function loadApprovals(
   // anything awaits a decision, otherwise My tasks when tasks are waiting —
   // never an "all clear" page beside a badge that counts tasks.
   const ctx = await inboxContext(authz)
-  const counts = await inboxCounts(authz, ctx)
+  const [counts, approvalFlowsConfigured] = await Promise.all([
+    inboxCounts(authz, ctx),
+    // Any enabled Flow whose graph carries an approval gate, for any record.
+    db.execute<{ configured: boolean }>(sql`
+      select exists (
+        select 1 from flows
+         where org_id = ${orgId} and enabled
+           and exists (
+             select 1 from jsonb_array_elements(coalesce(graph->'nodes', '[]'::jsonb)) as node
+              where node->'data'->>'kind' = 'gate'
+           )
+      ) as configured`).then((result) => result.rows[0]?.configured === true),
+  ])
   const rawTab = pickString(sp.tab)
   const tab: Tab =
     rawTab === 'submitted'
@@ -747,8 +759,12 @@ export async function loadApprovals(
     emptySubmittedTitle: t('emptySubmitted.title'),
     emptySubmittedDescription: t('emptySubmitted.description'),
     emptyTitle: tab === 'all' ? t('emptyAll.title') : t('empty.title'),
-    emptyDescription:
-      tab === 'all' ? t('emptyAll.description') : t('empty.description'),
+    // An empty approvals list in an organization with no approval Flow says
+    // why nothing is ever routed here and how to change it, instead of
+    // reading like an all-clear.
+    emptyDescription: !approvalFlowsConfigured
+      ? t('empty.noApprovalFlows')
+      : tab === 'all' ? t('emptyAll.description') : t('empty.description'),
     currentParams: sp,
     searchPlaceholder: tc('actions.search'),
     toolbarFilters,

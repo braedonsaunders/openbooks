@@ -8,7 +8,8 @@
   },
   "empty": {
     "title": "Nada aguardando você",
-    "description": "Aprovações atribuídas, roteadas ou delegadas a você aparecerão aqui."
+    "description": "Aprovações atribuídas, roteadas ou delegadas a você aparecerão aqui.",
+    "noApprovalFlows": "Nenhum fluxo de aprovação está configurado, então nada é encaminhado para aprovação e os documentos seguem suas etapas diretas de aprovação e contabilização. Um administrador pode adicionar um fluxo de aprovação em Configurações → Fluxos."
   },
   "emptySubmitted": {
     "title": "Nenhuma submissão pendente",

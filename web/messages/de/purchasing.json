@@ -33,7 +33,10 @@
       "openBills": "Rechnungen",
       "oldestDue": "Älteste fällig",
       "overdue": "Überfällig",
-      "billedOpen": "Offen fakturiert"
+      "billedOpen": "Offen fakturiert",
+      "hintBillsOnly": "Offene Lieferantenrechnungen, größte Exponierung zuerst",
+      "emptyBillsOnly": "Keine offenen Verbindlichkeiten. Erfassen Sie eine Lieferantenrechnung — die Position erscheint dann hier.",
+      "emptyOrdersOff": "Keine offenen Verbindlichkeiten. Erfassen Sie eine Lieferantenrechnung — die Position erscheint dann hier. Bestellungen gehören zu Angebote & Aufträge, das ausgeschaltet ist — ein Administrator kann es unter Unternehmenseinstellungen → Funktionen einschalten."
     },
     "trend": {
       "title": "Ausgabentrend",

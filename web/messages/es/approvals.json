@@ -8,7 +8,8 @@
   },
   "empty": {
     "title": "No hay nada pendiente de usted",
-    "description": "Las aprobaciones asignadas, dirigidas o delegadas a usted aparecerán aquí."
+    "description": "Las aprobaciones asignadas, dirigidas o delegadas a usted aparecerán aquí.",
+    "noApprovalFlows": "No hay ningún flujo de aprobación configurado, así que nada se envía a nadie para aprobar y los documentos siguen sus pasos directos de aprobación y contabilización. Un administrador puede añadir un flujo de aprobación en Configuración → Flujos."
   },
   "emptySubmitted": {
     "title": "No hay envíos pendientes",
