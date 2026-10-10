@@ -129,7 +129,7 @@
     "dismiss": "Fermer"
   },
   "publish": {
-    "pending": "{count} modifications non publiées pour {people} lignes",
+    "pending": "{count, plural, one {# modification non publiée} other {# modifications non publiées}} pour {people, plural, one {# ligne} other {# lignes}}",
     "explain": "Les réservations publiées sont visibles par l’équipe.",
     "action": "Publier",
     "discard": "Abandonner les modifications"
