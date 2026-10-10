@@ -577,3 +577,91 @@ test('master-data exports do not resolve account labels through an unscoped look
   assert.equal(importState.scopedAccountLabelLookups.length, 1)
   assert.match(importState.scopedAccountLabelLookups[0]!, /org_id\s*=/i)
 })
+
+// Operators write what the drawer shows ("Company", "Customer"), in any
+// capitalization — the stored value stays the canonical lowercase code.
+test('parties import accepts displayed kind labels and stores the canonical value', async () => {
+  resetImportState(false)
+
+  const outcome = await resource('parties').write([
+    { shortCode: 'COM-1', displayName: 'Acme Co', kind: 'Company' },
+    { shortCode: 'CUS-1', displayName: 'Beta LLC', kind: 'CUSTOMER' },
+  ], 'insert', writeContext)
+
+  assert.deepEqual(outcome, { created: 2, updated: 0, failed: 0, errors: [] })
+  assert.equal(importState.masterInserts.length, 2)
+  assert.match(importState.masterInserts[0]!, /,\s*company,/)
+  assert.match(importState.masterInserts[1]!, /,\s*customer,/)
+  // A role-like kind still backs its native role row, exactly as a
+  // lowercase kind does.
+  assert.deepEqual(importState.roleEnsures, ['customer_roles'])
+})
+
+// Localized kind labels alias their canonical value through the shipped
+// message catalogs, so a translated template re-imports.
+test('parties import accepts localized kind labels', async () => {
+  resetImportState(false)
+
+  const outcome = await resource('parties').write([
+    { shortCode: 'COM-1', displayName: 'Acme GmbH', kind: 'Unternehmen' },
+  ], 'insert', writeContext)
+
+  assert.deepEqual(outcome, { created: 1, updated: 0, failed: 0, errors: [] })
+  assert.match(importState.masterInserts[0]!, /,\s*company,/)
+})
+
+// A refused enum cell names the field, quotes the input, and lists the
+// accepted values — the operator fixes the file without guessing.
+test('parties import refusal lists the allowed kind values', async () => {
+  resetImportState(false)
+
+  const outcome = await resource('parties').write([
+    { shortCode: 'PAR-1', displayName: 'Partner Co', kind: 'Partner' },
+  ], 'insert', writeContext)
+
+  assert.deepEqual(outcome, {
+    created: 0,
+    updated: 0,
+    failed: 1,
+    errors: [{ row: 1, message: 'kind: invalid value "Partner" — use one of: company, person, customer, vendor, employee' }],
+  })
+  assert.deepEqual(importState.attemptedMutations, [])
+})
+
+// Enum tolerance is generic to the data-io select handling, not parties-only.
+test('master-data select columns match case-insensitively beyond parties', async () => {
+  resetImportState(false)
+
+  const outcome = await resource('items').write([
+    { code: 'SKU-CASE', name: 'Cased service', kind: 'Service' },
+  ], 'insert', writeContext)
+
+  assert.deepEqual(outcome, { created: 1, updated: 0, failed: 0, errors: [] })
+  assert.match(importState.masterInserts[0]!, /,\s*service,/)
+})
+
+// Role flags create native roles through the native role command, alongside
+// the row write — a company kind plus its roles, idempotent on re-import.
+test('parties import role flags ensure native role rows', async () => {
+  resetImportState(false)
+
+  const outcome = await resource('parties').write([
+    { shortCode: 'BOTH-1', displayName: 'Both Co', kind: 'company', isCustomer: 'yes', isVendor: true, isEmployee: '' },
+  ], 'insert', writeContext)
+
+  assert.deepEqual(outcome, { created: 1, updated: 0, failed: 0, errors: [] })
+  assert.deepEqual(importState.roleEnsures, ['customer_roles', 'vendor_roles'])
+})
+
+// A false or blank role flag never strips a role: imports add, the drawer removes.
+test('parties import role flags leave roles alone when false or blank', async () => {
+  resetImportState(false)
+  importState.readRows.parties = [{ id: 'party-9', short_code: 'KEEP-9', kind: 'company', is_active: true }]
+
+  const outcome = await resource('parties').write([
+    { shortCode: 'KEEP-9', displayName: 'Keep Co', kind: 'company', isCustomer: false, isVendor: '', isEmployee: 'no' },
+  ], 'upsert', writeContext)
+
+  assert.deepEqual(outcome, { created: 0, updated: 1, failed: 0, errors: [] })
+  assert.deepEqual(importState.roleEnsures, [])
+})
