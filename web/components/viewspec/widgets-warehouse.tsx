@@ -42,6 +42,7 @@ export const WAREHOUSE_WIDGETS = {
     <NewWarehouseDrawer
       locations={(props.locations as ComponentProps<typeof NewWarehouseDrawer>['locations']) ?? []}
       closeHref={str(props, 'closeHref') ?? '/warehouse'}
+      canManageLocations={props.canManageLocations === true}
     />
   ),
   'replenishment-proposals': (props) => (

@@ -45,6 +45,7 @@ const messages = (await import('../../../messages/en')).default
 const { BusinessDateProvider } = await import('../../../components/business-date-provider')
 const { WarehousesPanel } = await import('./WarehousesPanel')
 const { PutawayQueue } = await import('./PutawayQueue')
+const { NewWarehouseDrawer } = await import('./NewWarehouseDrawer')
 
 const tick = () => new Promise((resolve) => setTimeout(resolve, 30))
 
@@ -146,5 +147,71 @@ test('the putaway queue names its empty state and offers no action without the p
     [...document.querySelectorAll('button')].filter((b) => (b.textContent ?? '').trim().length > 0).length,
     0,
     'no put-away action is offered without the posting grant',
+  )
+})
+
+test('the empty warehouse list links the create drawer for a manager', async (t) => {
+  await mount(
+    t,
+    <WarehousesPanel
+      rows={[]}
+      canManage
+      currentParams={{}}
+      layerTotalLabel="$0.00"
+      controlLabel="$0.00"
+      controlDrill={null}
+      differenceLabel="$0.00"
+      differenceIsZero
+    />,
+  )
+  const create = document.querySelector('a[href*="warehouseNew=1"]')
+  assert.ok(create, 'the empty state must name the next step: creating the first warehouse')
+})
+
+test('the empty warehouse list offers no create link without the manage grant', async (t) => {
+  await mount(
+    t,
+    <WarehousesPanel
+      rows={[]}
+      canManage={false}
+      currentParams={{}}
+      layerTotalLabel="$0.00"
+      controlLabel="$0.00"
+      controlDrill={null}
+      differenceLabel="$0.00"
+      differenceIsZero
+    />,
+  )
+  assert.equal(
+    document.querySelector('a[href*="warehouseNew=1"]'),
+    null,
+    'a reader who cannot manage warehouses gets no dead-end create link',
+  )
+})
+
+test('the create drawer names location setup when no location exists', async (t) => {
+  await mount(t, <NewWarehouseDrawer locations={[]} closeHref="/warehouse" canManageLocations />)
+  const setup = document.querySelector('a[href="/admin/setup/locations"]')
+  assert.ok(setup, 'the empty location picker must link the next step: creating a location')
+})
+
+test('the create drawer keeps the note but no setup link without the setup grant', async (t) => {
+  await mount(t, <NewWarehouseDrawer locations={[]} closeHref="/warehouse" canManageLocations={false} />)
+  assert.equal(
+    document.querySelector('a[href="/admin/setup/locations"]'),
+    null,
+    'a reader who cannot manage locations gets no setup link',
+  )
+})
+
+test('the create drawer shows no location note once locations exist', async (t) => {
+  await mount(
+    t,
+    <NewWarehouseDrawer locations={[{ id: 'loc-1', name: 'HQ' }]} closeHref="/warehouse" canManageLocations />,
+  )
+  assert.equal(
+    document.querySelector('a[href="/admin/setup/locations"]'),
+    null,
+    'the next-step note shows only while the picker is empty',
   )
 })

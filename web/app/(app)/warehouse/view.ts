@@ -16,6 +16,7 @@ import {
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { cmp, isZero } from '@openbooks/engine/src/money/money.ts'
 import { AvailabilityRefusal, releasableBackorders } from '@openbooks/engine/src/inventory/availability.ts'
+import { InventoryError } from '@openbooks/engine/src/inventory/contracts.ts'
 import { purchaseReceiptQueue } from '@openbooks/engine/src/inventory/receiving-queue.ts'
 import type { ReceiptQueueRow } from './ReceiptQueue'
 import { listStagedStock } from '@openbooks/engine/src/inventory/putaway.ts'
@@ -99,7 +100,7 @@ export interface WarehouseData {
   fulfillmentHint: string
   fulfillmentQueue: DirectoryItem[]
   carriersTitle: string
-  newDrawer: { locations: { id: string; name: string }[]; closeHref: string } | null
+  newDrawer: { locations: { id: string; name: string }[]; closeHref: string; canManageLocations: boolean } | null
   showNewDrawer: boolean
 }
 
@@ -141,8 +142,11 @@ export async function loadWarehouse(
   const today = await businessToday(orgId)
 
   // Supply figures for the reader's default legal entity. A refusal (an order
-  // line in a unit the item cannot convert) is shown in place of the figures,
-  // naming its remedy, and links to the report that refuses the same way.
+  // line in a unit the item cannot convert, malformed conversions, a kit
+  // without a recipe) is shown in place of the figures, naming its remedy,
+  // and links to the report that refuses the same way — a loader throw here
+  // is the warehouse home's error page, so every typed inventory refusal
+  // becomes the banner instead of escaping SSR.
   const entity = await availabilityEntityScope(authz, undefined)
   let supply: { stocked: number; short: number; releasable: number | null; reorder: number; unset: number; onOrder: number } | null = null
   let supplyRefusal: string | null = null
@@ -159,8 +163,13 @@ export async function loadWarehouse(
         onOrder: lines.filter((line) => !isZero(line.onOrder)).length,
       }
     } catch (error) {
-      if (!(error instanceof AvailabilityRefusal)) throw error
-      supplyRefusal = availabilityRefusalText(error)
+      // AvailabilityRefusal formats its remedy once; any other typed
+      // inventory refusal already names its remedy in its message by house
+      // rule, so it reads verbatim. Anything untyped still throws: masking
+      // a programmer error as a data banner would hide it from the logs.
+      if (error instanceof AvailabilityRefusal) supplyRefusal = availabilityRefusalText(error)
+      else if (error instanceof InventoryError) supplyRefusal = error.message
+      else throw error
     }
   }
   const entityLabel = entity.picker.find((option) => option.id === entity.selectedId)?.label ?? ''
@@ -262,7 +271,7 @@ export async function loadWarehouse(
         ]
       : [],
     carriersTitle: t('setup.carriers'),
-    newDrawer: showNew ? { locations, closeHref: '/warehouse' } : null,
+    newDrawer: showNew ? { locations, closeHref: '/warehouse', canManageLocations: can(authz, 'admin.setup.manage') } : null,
     showNewDrawer: showNew,
   }
 }

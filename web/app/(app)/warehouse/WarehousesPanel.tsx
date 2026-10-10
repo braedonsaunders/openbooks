@@ -114,7 +114,19 @@ export function WarehousesPanel({
         pageSize={15}
         searchable
         emptyAsRow
-        empty={<p className="text-sm text-slate-500 dark:text-slate-400">{t('warehouses.empty')}</p>}
+        empty={
+          <p className="text-sm text-slate-500 dark:text-slate-400">
+            {t('warehouses.empty')}{' '}
+            {canManage ? (
+              <Link
+                href={mergeHref('/warehouse', currentParams, { warehouseNew: '1', warehouse: null, rule: null })}
+                className="text-teal-700 underline hover:no-underline dark:text-teal-300"
+              >
+                {t('create.new')}
+              </Link>
+            ) : null}
+          </p>
+        }
         onRowClick={(row) => {
           if (row.warehouseId) router.push(mergeHref('/warehouse', currentParams, { warehouse: row.warehouseId }) as never)
         }}

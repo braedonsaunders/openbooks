@@ -76,6 +76,8 @@
     "description": "仓库以草稿创建，启用前不接收库存。",
     "save": "创建仓库",
     "missing": "请输入编码和名称，并选择地点。",
+    "noLocations": "尚无业务地点。",
+    "createLocationLink": "在设置中创建地点",
     "failed": "无法创建仓库。"
   },
   "fields": {

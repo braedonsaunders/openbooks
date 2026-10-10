@@ -76,6 +76,8 @@
     "description": "O armazém começa como rascunho e não aceita estoque até ser ativado.",
     "save": "Criar armazém",
     "missing": "Informe um código e um nome e escolha um local.",
+    "noLocations": "Ainda não há locais de negócio.",
+    "createLocationLink": "Criar um local em Configuração",
     "failed": "Não foi possível criar o armazém."
   },
   "fields": {

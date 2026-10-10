@@ -76,6 +76,8 @@
     "description": "El almacén empieza en borrador y no admite existencias hasta que lo active.",
     "save": "Crear almacén",
     "missing": "Introduzca un código y un nombre, y elija una ubicación.",
+    "noLocations": "Aún no hay ubicaciones de negocio.",
+    "createLocationLink": "Crear una ubicación en Configuración",
     "failed": "No se pudo crear el almacén."
   },
   "fields": {

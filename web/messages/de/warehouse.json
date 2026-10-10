@@ -76,6 +76,8 @@
     "description": "Das Lager beginnt als Entwurf und nimmt erst nach der Aktivierung Bestand an.",
     "save": "Lager anlegen",
     "missing": "Geben Sie Kürzel und Bezeichnung ein und wählen Sie einen Standort.",
+    "noLocations": "Es gibt noch keine Geschäftsstandorte.",
+    "createLocationLink": "Standort in der Einrichtung anlegen",
     "failed": "Das Lager konnte nicht angelegt werden."
   },
   "fields": {

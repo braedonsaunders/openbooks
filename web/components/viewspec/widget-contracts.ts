@@ -380,7 +380,7 @@ export const WIDGET_CONTRACTS: Readonly<Record<string, WidgetContract>> = {
   'new-timesheet': { props: ['href', 'jumpBasePath', 'jumpEmployeeId', 'label'] },
   'new-view': { props: ['recordType'] },
   'new-warehouse-button': { props: ['label'] },
-  'new-warehouse-drawer': { props: ['closeHref', 'locations'] },
+  'new-warehouse-drawer': { props: ['canManageLocations', 'closeHref', 'locations'] },
   'new-webhook-endpoint': { props: [] },
   'no-grants-body': { props: [] },
   'notifications-inbox': { props: ['rows'] },

@@ -76,6 +76,8 @@
     "description": "The warehouse starts in draft and takes no stock until you activate it.",
     "save": "Create warehouse",
     "missing": "Enter a code and a name, and choose a location.",
+    "noLocations": "There are no business locations yet.",
+    "createLocationLink": "Create a location in Setup",
     "failed": "The warehouse could not be created."
   },
   "fields": {

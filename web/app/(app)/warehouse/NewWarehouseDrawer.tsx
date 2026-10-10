@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { Button, Input, Label, Select, UrlDrawer } from '@openbooks/ui'
@@ -23,9 +24,12 @@ export function NewWarehouseButton({ label }: { label: string }) {
 export function NewWarehouseDrawer({
   locations,
   closeHref,
+  canManageLocations = false,
 }: {
   locations: { id: string; name: string }[]
   closeHref: string
+  /** May manage business locations: gates the setup link in the empty note. */
+  canManageLocations?: boolean
 }) {
   const t = useTranslations('warehouse')
   const tCommon = useTranslations('common')
@@ -111,6 +115,16 @@ export function NewWarehouseDrawer({
               <option key={location.id} value={location.id}>{location.name}</option>
             ))}
           </Select>
+          {locations.length === 0 ? (
+            <p className="text-xs text-slate-500 dark:text-slate-400">
+              {t('create.noLocations')}{' '}
+              {canManageLocations ? (
+                <Link href="/admin/setup/locations" className="underline">
+                  {t('create.createLocationLink')}
+                </Link>
+              ) : null}
+            </p>
+          ) : null}
         </div>
         {FIELDS.map((field) => (
           <div key={field} className="space-y-1.5">

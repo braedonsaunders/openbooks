@@ -76,6 +76,8 @@
     "description": "L’entrepôt démarre en brouillon et n’accepte aucun stock avant son activation.",
     "save": "Créer l’entrepôt",
     "missing": "Saisissez un identifiant et un nom, puis choisissez un site.",
+    "noLocations": "Il n’existe encore aucun site d’activité.",
+    "createLocationLink": "Créer un site dans Configuration",
     "failed": "L’entrepôt n’a pas pu être créé."
   },
   "fields": {
