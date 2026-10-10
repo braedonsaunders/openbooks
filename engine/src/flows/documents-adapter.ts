@@ -340,8 +340,10 @@ export function createDocumentsFlowAdapter(kind: string): FlowSubjectAdapter {
     },
 
     async setField(subjectId: string, field: string, value: unknown, ctx: FlowExecCtx): Promise<void> {
-      const consolidationRefusal = await consolidationSourceRefusal(db, ctx.orgId, subjectId);
-      if (consolidationRefusal) throw new Error(consolidationRefusal);
+      // Deterministic field-level refusals run before any database policy
+      // lookup: payment posting controls are never flow-writable regardless
+      // of the record's consolidation state, and the guard must hold without
+      // depending on the subject resolving to a readable row.
       if (
         ["vendor_payment", "customer_payment"].includes(kind)
         && RESERVED_DOCUMENT_FIELD_KEYS.has(field)
@@ -349,6 +351,8 @@ export function createDocumentsFlowAdapter(kind: string): FlowSubjectAdapter {
       ) {
         throw new Error(`payment field "${field}" is not writable by flows`);
       }
+      const consolidationRefusal = await consolidationSourceRefusal(db, ctx.orgId, subjectId);
+      if (consolidationRefusal) throw new Error(consolidationRefusal);
       if (["vendor_payment", "customer_payment"].includes(kind)) {
         await lockEditablePaymentDocument(subjectId, ctx.orgId, { requireDraft: false });
       }
