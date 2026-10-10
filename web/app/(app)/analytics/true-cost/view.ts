@@ -8,6 +8,7 @@ import { requireFeatureEnabled } from '../../../../lib/feature-gates'
 import { resolvePeriod } from '../../../../lib/periods'
 import { parseReportQuery } from '../../../../lib/report-filters'
 import { trueCostData } from '../../../../lib/analytics/true-cost-data'
+import { analyticsFiscalPeriodPicker } from '../../../../lib/analytics/fiscal-period-options'
 import { trueCostStrings } from '../../../../lib/analytics/true-cost-strings'
 import { presentationCurrency } from '../../../../lib/fx-presentation'
 import type { TrueCostView } from './TrueCostView'
@@ -39,6 +40,9 @@ export interface TrueCostDashboardData {
   title: string
   backLabel: string
   periodLabel: string
+  /** Named fiscal periods for the shared period picker (URL-addressable). */
+  extraPeriods: { id: string; label: string; from: string; to: string }[]
+  extraPeriodsLabel: string
   reportHref: string
   reportLabel: string
   data: ViewProps['data'] | null;
@@ -55,7 +59,7 @@ export async function loadTrueCost(sp: Record<string, string | undefined>): Prom
 
   // Insight sentences resolve through the analytics catalog in the request
   // locale — the same locale the statements use.
-  const [tc, locale] = await Promise.all([getTranslations('analytics'), getLocale()])
+  const [tc, locale, picker] = await Promise.all([getTranslations('analytics'), getLocale(), analyticsFiscalPeriodPicker(authz.user.orgId)])
   const strings = trueCostStrings(
     (key, values) => tc(key, values),
     locale,
@@ -81,6 +85,8 @@ export async function loadTrueCost(sp: Record<string, string | undefined>): Prom
     title: t('title'),
     backLabel: t('backToHub'),
     periodLabel: period.label,
+    extraPeriods: picker.extraPeriods,
+    extraPeriodsLabel: picker.extraPeriodsLabel,
     reportHref: `/reports/true-cost${qs ? `?${qs}` : ''}`,
     reportLabel: t('openReport'),
     data,
@@ -96,7 +102,7 @@ export function trueCostSpec(data: TrueCostDashboardData): PageSpec {
       frame(
         'analytics-header',
         [
-          widgetBlock('report-period-filter'),
+          widgetBlock('report-period-filter', { extraPeriods: data.extraPeriods, extraPeriodsLabel: data.extraPeriodsLabel }),
           widgetBlock('link-button', {
             href: data.reportHref,
             label: data.reportLabel,

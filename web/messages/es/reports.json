@@ -151,6 +151,7 @@
     "expandSection": "Expandir {section}",
     "collapseSection": "Contraer {section}",
     "payPeriods": "Períodos de nómina",
+    "fiscalPeriods": "Períodos fiscales",
     "periodPresets": {
       "this_fiscal_year": "Ejercicio actual",
       "this_fiscal_year_to_date": "Ejercicio hasta hoy",

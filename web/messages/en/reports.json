@@ -151,6 +151,7 @@
     "expandSection": "Expand {section}",
     "collapseSection": "Collapse {section}",
     "payPeriods": "Pay periods",
+    "fiscalPeriods": "Fiscal periods",
     "periodPresets": {
       "this_fiscal_year": "This Fiscal Year",
       "this_fiscal_year_to_date": "Fiscal Year to Date",

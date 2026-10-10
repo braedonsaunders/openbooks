@@ -189,7 +189,7 @@ export const REPORTING_WIDGETS = {
   //
   // Dashboards share one native period control; point-in-time dashboards
   // may choose a different default without introducing another filter bar.
-  'report-period-filter': (props) => <ReportFilterBar controls={{ period: true }} defaultPeriod={str(props, 'defaultPeriod')} periodPresets={props.periodPresets as ComponentProps<typeof ReportFilterBar>['periodPresets']} />,
+  'report-period-filter': (props) => <ReportFilterBar controls={{ period: true }} defaultPeriod={str(props, 'defaultPeriod')} periodPresets={props.periodPresets as ComponentProps<typeof ReportFilterBar>['periodPresets']} extraPeriods={props.extraPeriods as ComponentProps<typeof ReportFilterBar>['extraPeriods']} extraPeriodsLabel={str(props, 'extraPeriodsLabel')} />,
   'cashflow-horizon-control': (props) => <HorizonControl value={num(props, 'value') ?? 4} />,
   'cashflow-view': (props) => (
     <CashflowView data={props.data as ComponentProps<typeof CashflowView>['data']} />

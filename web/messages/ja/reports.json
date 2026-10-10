@@ -151,6 +151,7 @@
     "expandSection": "{section}を展開",
     "collapseSection": "{section}を折りたたむ",
     "payPeriods": "給与期間",
+    "fiscalPeriods": "会計期間",
     "periodPresets": {
       "this_fiscal_year": "今会計年度",
       "this_fiscal_year_to_date": "会計年度累計",

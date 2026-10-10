@@ -6,6 +6,7 @@ import { can, requirePermission } from '../../../../lib/authz'
 import { resolvePeriod } from '../../../../lib/periods'
 import { parseReportQuery } from '../../../../lib/report-filters'
 import { vendorData } from '../../../../lib/analytics/vendor-data'
+import { analyticsFiscalPeriodPicker } from '../../../../lib/analytics/fiscal-period-options'
 import { projectVendorDashboard } from '../../../../lib/analytics/overview-projection'
 import { vendorStrings } from '../../../../lib/analytics/vendor-strings'
 import type { VendorView } from './VendorView'
@@ -34,6 +35,9 @@ export interface VendorPerformanceData {
   title: string
   backLabel: string
   periodLabel: string
+  /** Named fiscal periods for the shared period picker (URL-addressable). */
+  extraPeriods: { id: string; label: string; from: string; to: string }[]
+  extraPeriodsLabel: string
   data: ViewProps['data']
   canConfigure: boolean
 }
@@ -47,7 +51,7 @@ export async function loadVendorPerformance(sp: Record<string, string | undefine
 
   // Insight sentences resolve through the analytics catalog in the request
   // locale — the same locale the statements use.
-  const [tc, locale] = await Promise.all([getTranslations('analytics'), getLocale()])
+  const [tc, locale, picker] = await Promise.all([getTranslations('analytics'), getLocale(), analyticsFiscalPeriodPicker(authz.user.orgId)])
   const strings = vendorStrings((key, values) => tc(key, values), locale)
   const data = await vendorData({ from: period.from, to: period.to, label: period.label }, authz.user.orgId, authz.allowedSubsidiaryIds, strings)
 
@@ -55,6 +59,8 @@ export async function loadVendorPerformance(sp: Record<string, string | undefine
     title: t('title'),
     backLabel: t('backToHub'),
     periodLabel: period.label,
+    extraPeriods: picker.extraPeriods,
+    extraPeriodsLabel: picker.extraPeriodsLabel,
     data: projectVendorDashboard(data),
     canConfigure: authz.allowedSubsidiaryIds === null && can(authz, 'admin.setup.manage'),
   }
@@ -65,7 +71,7 @@ export function vendorPerformanceSpec(data: VendorPerformanceData): PageSpec {
     route: '/analytics/vendor-performance',
     layout: 'list',
     header: [
-      frame('analytics-header', [widgetBlock('report-period-filter')], {
+      frame('analytics-header', [widgetBlock('report-period-filter', { extraPeriods: data.extraPeriods, extraPeriodsLabel: data.extraPeriodsLabel })], {
         title: data.title,
         periodLabel: data.periodLabel,
         backLabel: data.backLabel,

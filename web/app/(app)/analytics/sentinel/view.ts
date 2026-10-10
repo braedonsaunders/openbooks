@@ -9,6 +9,7 @@ import { sentinelAccessDenied } from '../../../../lib/analytics/sentinel-access'
 import { resolvePeriod } from '../../../../lib/periods'
 import { parseReportQuery } from '../../../../lib/report-filters'
 import { sentinelData } from '../../../../lib/analytics/sentinel-data'
+import { analyticsFiscalPeriodPicker } from '../../../../lib/analytics/fiscal-period-options'
 import { sentinelStrings } from '../../../../lib/analytics/sentinel-strings'
 import type { SentinelView } from './SentinelView'
 
@@ -41,6 +42,9 @@ export interface SentinelData {
   title: string
   backLabel: string
   periodLabel: string
+  /** Named fiscal periods for the shared period picker (URL-addressable). */
+  extraPeriods: { id: string; label: string; from: string; to: string }[]
+  extraPeriodsLabel: string
   data: ViewProps['data']
   /** Threshold editing needs admin.setup.manage with unrestricted scope (the
    * config PUT's gate); reports.read-only and scoped callers get read-only. */
@@ -61,7 +65,7 @@ export async function loadSentinel(sp: Record<string, string | undefined>): Prom
   // Forensic sentences resolve through the analytics catalog in the request
   // locale — the same locale the statements use. Conformity travels as a
   // stable code in every language; the client maps codes to words.
-  const [tc, locale] = await Promise.all([getTranslations('analytics'), getLocale()])
+  const [tc, locale, picker] = await Promise.all([getTranslations('analytics'), getLocale(), analyticsFiscalPeriodPicker(authz.user.orgId)])
   const strings = sentinelStrings((key, values) => tc(key, values), locale)
   const data = await sentinelData(authz.user.orgId, { from: period.from, to: period.to, label: period.label }, authz, strings)
 
@@ -69,6 +73,8 @@ export async function loadSentinel(sp: Record<string, string | undefined>): Prom
     title: t('title'),
     backLabel: t('backToHub'),
     periodLabel: period.label,
+    extraPeriods: picker.extraPeriods,
+    extraPeriodsLabel: picker.extraPeriodsLabel,
     data,
     canConfigure: authz.allowedSubsidiaryIds === null && can(authz, 'admin.setup.manage'),
   }
@@ -79,7 +85,7 @@ export function sentinelSpec(data: SentinelData): PageSpec {
     route: '/analytics/sentinel',
     layout: 'list',
     header: [
-      frame('analytics-header', [widgetBlock('report-period-filter')], {
+      frame('analytics-header', [widgetBlock('report-period-filter', { extraPeriods: data.extraPeriods, extraPeriodsLabel: data.extraPeriodsLabel })], {
         title: data.title,
         periodLabel: data.periodLabel,
         backLabel: data.backLabel,

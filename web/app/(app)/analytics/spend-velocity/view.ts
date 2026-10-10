@@ -6,6 +6,7 @@ import { can, requirePermission } from '../../../../lib/authz'
 import { resolvePeriod } from '../../../../lib/periods'
 import { parseReportQuery } from '../../../../lib/report-filters'
 import { spendVelocityData } from '../../../../lib/analytics/spend-velocity-data'
+import { analyticsFiscalPeriodPicker } from '../../../../lib/analytics/fiscal-period-options'
 import { spendVelocityStrings } from '../../../../lib/analytics/spend-velocity-strings'
 import type { SpendVelocityView } from './SpendVelocityView'
 
@@ -30,6 +31,9 @@ export interface SpendVelocityData {
   title: string
   backLabel: string
   periodLabel: string
+  /** Named fiscal periods for the shared period picker (URL-addressable). */
+  extraPeriods: { id: string; label: string; from: string; to: string }[]
+  extraPeriodsLabel: string
   data: ViewProps['data']
   /** Threshold editing needs admin.setup.manage with unrestricted scope (the
    * config PUT's gate); reports.read-only and scoped callers get read-only. */
@@ -47,7 +51,7 @@ export async function loadSpendVelocity(sp: Record<string, string | undefined>):
   // Insight sentences resolve through the analytics catalog in the request
   // locale (users.locale ?? org defaultLocale ?? en) — the same locale the
   // statements use. Direct loader callers keep the English default.
-  const [tc, locale] = await Promise.all([getTranslations('analytics'), getLocale()])
+  const [tc, locale, picker] = await Promise.all([getTranslations('analytics'), getLocale(), analyticsFiscalPeriodPicker(authz.user.orgId)])
   const strings = spendVelocityStrings((key, values) => tc(key, values), locale)
   const data = await spendVelocityData(authz.user.orgId, { from: period.from, to: period.to, label: period.label }, authz.allowedSubsidiaryIds, strings)
 
@@ -55,6 +59,8 @@ export async function loadSpendVelocity(sp: Record<string, string | undefined>):
     title: t('title'),
     backLabel: t('backToHub'),
     periodLabel: period.label,
+    extraPeriods: picker.extraPeriods,
+    extraPeriodsLabel: picker.extraPeriodsLabel,
     data,
     canConfigure: authz.allowedSubsidiaryIds === null && can(authz, 'admin.setup.manage'),
   }
@@ -65,7 +71,7 @@ export function spendVelocitySpec(data: SpendVelocityData): PageSpec {
     route: '/analytics/spend-velocity',
     layout: 'list',
     header: [
-      frame('analytics-header', [widgetBlock('report-period-filter')], {
+      frame('analytics-header', [widgetBlock('report-period-filter', { extraPeriods: data.extraPeriods, extraPeriodsLabel: data.extraPeriodsLabel })], {
         title: data.title,
         periodLabel: data.periodLabel,
         backLabel: data.backLabel,

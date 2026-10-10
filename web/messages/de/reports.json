@@ -151,6 +151,7 @@
     "expandSection": "{section} erweitern",
     "collapseSection": "{section} reduzieren",
     "payPeriods": "Abrechnungszeiträume",
+    "fiscalPeriods": "Fiskalperioden",
     "periodPresets": {
       "this_fiscal_year": "Laufendes Geschäftsjahr",
       "this_fiscal_year_to_date": "Geschäftsjahr bis heute",

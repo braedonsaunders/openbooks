@@ -151,6 +151,7 @@
     "expandSection": "展开{section}",
     "collapseSection": "折叠{section}",
     "payPeriods": "发薪期",
+    "fiscalPeriods": "会计期间",
     "periodPresets": {
       "this_fiscal_year": "本会计年度",
       "this_fiscal_year_to_date": "本年累计",

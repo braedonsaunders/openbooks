@@ -151,6 +151,7 @@
     "expandSection": "Expandir {section}",
     "collapseSection": "Recolher {section}",
     "payPeriods": "Períodos de pagamento",
+    "fiscalPeriods": "Períodos fiscais",
     "periodPresets": {
       "this_fiscal_year": "Exercício atual",
       "this_fiscal_year_to_date": "Exercício até hoje",

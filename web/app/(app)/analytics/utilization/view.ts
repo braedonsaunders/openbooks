@@ -7,6 +7,7 @@ import { requireFeatureEnabled } from '../../../../lib/feature-gates'
 import { resolvePeriod } from '../../../../lib/periods'
 import { parseReportQuery } from '../../../../lib/report-filters'
 import { utilizationData } from '../../../../lib/analytics/utilization-data'
+import { analyticsFiscalPeriodPicker } from '../../../../lib/analytics/fiscal-period-options'
 import { utilizationStrings } from '../../../../lib/analytics/utilization-strings'
 import type { UtilizationView } from './UtilizationView'
 
@@ -33,6 +34,9 @@ export interface UtilizationData {
   title: string
   backLabel: string
   periodLabel: string
+  /** Named fiscal periods for the shared period picker (URL-addressable). */
+  extraPeriods: { id: string; label: string; from: string; to: string }[]
+  extraPeriodsLabel: string
   data: ViewProps['data']
   /** Threshold editing needs admin.setup.manage with unrestricted scope (the
    * config PUT's gate); reports.read-only and scoped callers get read-only. */
@@ -49,7 +53,7 @@ export async function loadUtilization(sp: Record<string, string | undefined>): P
 
   // Insight sentences resolve through the analytics catalog in the request
   // locale — the same locale the statements use.
-  const [tc, locale] = await Promise.all([getTranslations('analytics'), getLocale()])
+  const [tc, locale, picker] = await Promise.all([getTranslations('analytics'), getLocale(), analyticsFiscalPeriodPicker(authz.user.orgId)])
   const strings = utilizationStrings((key, values) => tc(key, values), locale)
   const data = await utilizationData(authz.user.orgId, { from: period.from, to: period.to, label: period.label }, authz.allowedSubsidiaryIds, strings)
 
@@ -57,6 +61,8 @@ export async function loadUtilization(sp: Record<string, string | undefined>): P
     title: t('title'),
     backLabel: t('backToHub'),
     periodLabel: period.label,
+    extraPeriods: picker.extraPeriods,
+    extraPeriodsLabel: picker.extraPeriodsLabel,
     data,
     canConfigure: authz.allowedSubsidiaryIds === null && can(authz, 'admin.setup.manage'),
   }
@@ -67,7 +73,7 @@ export function utilizationSpec(data: UtilizationData): PageSpec {
     route: '/analytics/utilization',
     layout: 'list',
     header: [
-      frame('analytics-header', [widgetBlock('report-period-filter')], {
+      frame('analytics-header', [widgetBlock('report-period-filter', { extraPeriods: data.extraPeriods, extraPeriodsLabel: data.extraPeriodsLabel })], {
         title: data.title,
         periodLabel: data.periodLabel,
         backLabel: data.backLabel,

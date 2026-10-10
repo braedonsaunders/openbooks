@@ -7,6 +7,7 @@ import { isFeatureEnabled } from '../../../../lib/features'
 import { resolvePeriod } from '../../../../lib/periods'
 import { parseReportQuery } from '../../../../lib/report-filters'
 import { customerData, customerSummaryData } from '../../../../lib/analytics/customer-data'
+import { analyticsFiscalPeriodPicker } from '../../../../lib/analytics/fiscal-period-options'
 import { customerStrings } from '../../../../lib/analytics/customer-strings'
 import { projectCustomerDashboard } from '../../../../lib/analytics/overview-projection'
 import type { CustomerView } from './CustomerView'
@@ -32,6 +33,9 @@ export interface CustomerIntelligenceData {
   title: string
   backLabel: string
   periodLabel: string
+  /** Named fiscal periods for the shared period picker (URL-addressable). */
+  extraPeriods: { id: string; label: string; from: string; to: string }[]
+  extraPeriodsLabel: string
   profitability: ViewProps['profitability']
   projectsEnabled: boolean
   data: ViewProps['data']
@@ -49,9 +53,9 @@ async function customerContext(sp: Record<string, string | undefined>) {
 
   // Insight sentences resolve through the analytics catalog in the request
   // locale — the same locale the statements use.
-  const [tc, locale] = await Promise.all([getTranslations('analytics'), getLocale()])
+  const [tc, locale, picker] = await Promise.all([getTranslations('analytics'), getLocale(), analyticsFiscalPeriodPicker(authz.user.orgId)])
   const strings = customerStrings((key, values) => tc(key, values), locale)
-  return { t, authz, period, strings }
+  return { t, authz, period, strings, picker }
 }
 
 export async function loadCustomerIntelligencePreview(sp: Record<string, string | undefined>) {
@@ -60,7 +64,7 @@ export async function loadCustomerIntelligencePreview(sp: Record<string, string 
 }
 
 export async function loadCustomerIntelligence(sp: Record<string, string | undefined>): Promise<CustomerIntelligenceData> {
-  const { t, authz, period, strings } = await customerContext(sp)
+  const { t, authz, period, strings, picker } = await customerContext(sp)
   // The profitability tab's leak share divides by the loader's scoped,
   // customer-attributed period total — passed in, never a second unscoped
   // query that could divide scoped revenue by whole-org revenue.
@@ -74,6 +78,8 @@ export async function loadCustomerIntelligence(sp: Record<string, string | undef
     title: t('title'),
     backLabel: t('backToHub'),
     periodLabel: period.label,
+    extraPeriods: picker.extraPeriods,
+    extraPeriodsLabel: picker.extraPeriodsLabel,
     profitability,
     projectsEnabled,
     data: projectCustomerDashboard(dashboardData),
@@ -86,7 +92,7 @@ export function customerIntelligenceSpec(data: CustomerIntelligenceData): PageSp
     route: '/analytics/customer-intelligence',
     layout: 'list',
     header: [
-      frame('analytics-header', [widgetBlock('report-period-filter')], {
+      frame('analytics-header', [widgetBlock('report-period-filter', { extraPeriods: data.extraPeriods, extraPeriodsLabel: data.extraPeriodsLabel })], {
         title: data.title,
         periodLabel: data.periodLabel,
         backLabel: data.backLabel,
