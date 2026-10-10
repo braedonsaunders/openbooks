@@ -441,6 +441,25 @@ async function resolveProjectFinancialsInSnapshot(
           : profile.laborCost.source === 'in_actual_cost' || profile.laborCost.source === 'none'
             ? db.execute(sql`select 0 as labor`)
             : Promise.reject(new Error(`Unknown laborCost.source '${profile.laborCost.source as string}' — refusing instead of pricing labor as zero`)))
+  // Approved-but-unposted labor: approved time entries whose standard cost
+  // never reached the GL (standard-cost posting off, or posted then
+  // reversed — reversal clears the stamp so entries can be re-posted).
+  // The stamp is the posting record itself, so stamped entries are exactly
+  // the GL-posted ones and this slice can never double-count them. It joins
+  // actual cost only when labor is assumed inside actuals ('in_actual_cost'):
+  // every other source states labor separately (or not at all, by explicit
+  // profile choice), where folding it in would double-count or override.
+  const unpostedLaborRes = await (profile.laborCost.source === 'in_actual_cost'
+    ? db.execute(sql`select coalesce(te.cost_rate_currency, crs.base_currency, o.base_currency) as func,
+           max(te.worked_on)::text as late,
+           coalesce(sum(round(te.hours * te.cost_rate, 4)) filter (where te.cost_rate is not null), 0) as unposted_labor
+         from time_entries te
+         left join subsidiaries crs on crs.id = te.cost_rate_subsidiary_id and crs.org_id = te.org_id
+         join orgs o on o.id = te.org_id
+         where te.org_id = ${orgId} and te.project_id = ${projectId}
+           and te.status = 'approved' and te.cost_journal_entry_id is null
+         group by 1`)
+    : db.execute(sql`select 0 as unposted_labor`))
   // overhead (posted_gl_account_group only) — posted GL to overhead accounts.
   const overheadRes = await (profile.overhead.method !== 'posted_gl_account_group'
       ? db.execute(sql`select 0 as overhead`)
@@ -523,6 +542,7 @@ async function resolveProjectFinancialsInSnapshot(
   const ctx = await flowTranslation(orgId, [
     ...legRows(invRes), ...legRows(costRes), ...legRows(committedRes),
     ...legRows(billableLineRes), ...legRows(laborRes),
+    ...legRows(unpostedLaborRes),
     ...legRows(overheadRes), ...legRows(byAccountRes),
   ].map((r) => ({ func: r.func ?? null, date: String(r.late).slice(0, 10) })).concat(
     billTimeLegs.flatMap((r) => {
@@ -544,8 +564,12 @@ async function resolveProjectFinancialsInSnapshot(
     )),
     adjustments.invoiced_to_date,
   )
+  const approvedUnpostedLabor = amount(mergeSum(legRows(unpostedLaborRes), (r) => (r as unknown as { unposted_labor: string }).unposted_labor))
   const actualCost = add(
-    amount(mergeSum(legRows(costRes), (r) => (r as unknown as { cost: string }).cost)),
+    add(
+      amount(mergeSum(legRows(costRes), (r) => (r as unknown as { cost: string }).cost)),
+      approvedUnpostedLabor,
+    ),
     adjustments.actual_cost,
   )
   const revenuePosted = amount(mergeSum(legRows(costRes), (r) => (r as unknown as { revenue: string }).revenue))
@@ -703,6 +727,7 @@ async function resolveProjectFinancialsInSnapshot(
     invoiced_to_date_adjustment: adjustments.invoiced_to_date,
     labor_cost: laborCost,
     labor_unrated_hours: laborUnratedHours,
+    approved_unposted_labor: approvedUnpostedLabor,
     calculated_overhead: calculatedOverhead,
     overhead_adjustment: overheadAdjustment,
     overhead,
@@ -949,7 +974,7 @@ export async function resolveProjectActualCosts(
     groupCache.set(key, ids)
     return ids
   }
-  const [legs, adjustments] = await Promise.all([
+  const [legs, adjustments, unposted] = await Promise.all([
     db.execute<{ project_id: string; account_id: string; type: string; func: string | null; late: string | null; amount: string }>(sql`
       select l.project_id, l.account_id, a.type, sub.base_currency as func,
              max(e.posting_date)::text as late, coalesce(sum(l.amount), 0) as amount
@@ -966,11 +991,25 @@ export async function resolveProjectActualCosts(
         from project_financial_adjustments
        where org_id = ${orgId} and project_id = any(${`{${ids.join(',')}}`}::uuid[]) and measure = 'actual_cost'
        group by 1`),
+    // Approved-but-unposted labor (same slice the reader folds into
+    // actual_cost): stamped entries are GL-posted by construction, so the
+    // stamp predicate can never double-count them.
+    db.execute<{ project_id: string; func: string | null; late: string | null; unposted: string }>(sql`
+      select te.project_id, coalesce(te.cost_rate_currency, crs.base_currency, o.base_currency) as func,
+             max(te.worked_on)::text as late,
+             coalesce(sum(round(te.hours * te.cost_rate, 4)) filter (where te.cost_rate is not null), 0) as unposted
+        from time_entries te
+        left join subsidiaries crs on crs.id = te.cost_rate_subsidiary_id and crs.org_id = te.org_id
+        join orgs o on o.id = te.org_id
+       where te.org_id = ${orgId} and te.project_id = any(${`{${ids.join(',')}}`}::uuid[])
+         and te.status = 'approved' and te.cost_journal_entry_id is null
+       group by 1, 2`),
   ])
   const adjustmentByProject = new Map(adjustments.rows.map((r) => [r.project_id, amount(r.amount)]))
   const ctx = await flowTranslation(
     orgId,
-    legs.rows.map((r) => ({ func: r.func ?? null, date: String(r.late).slice(0, 10) })),
+    legs.rows.map((r) => ({ func: r.func ?? null, date: String(r.late).slice(0, 10) })).concat(
+      unposted.rows.map((r) => ({ func: r.func ?? null, date: String(r.late).slice(0, 10) }))),
   )
   await Promise.all(ids.map(async (id) => {
     const profile = profiles.get(id)
@@ -1006,6 +1045,14 @@ export async function resolveProjectActualCosts(
     let total = '0'
     for (const leg of byFunc.values()) {
       total = add(total, translateFlowAmount(leg.cost, leg.func, leg.late, ctx.rateAt))
+    }
+    // Labor assumed inside actuals but never posted joins the list figure,
+    // matching the reader; separately-stated (or declined) labor does not.
+    if (profile.laborCost.source === 'in_actual_cost') {
+      for (const row of unposted.rows) {
+        if (row.project_id !== id) continue
+        total = add(total, translateFlowAmount(String(row.unposted ?? 0), row.func ?? null, String(row.late).slice(0, 10), ctx.rateAt))
+      }
     }
     out.set(id, add(amount(total), adjustmentByProject.get(id) ?? '0.0000'))
   }))

@@ -90,8 +90,12 @@ test("project financials translate every measure to presentation", { skip: !DB }
   const { org, projectId } = await seedTwoCurrencyProject();
   try {
     const report = await resolveProjectFinancials(org.orgId, projectId, tmProfile);
-    // GL cost: 100 CAD + 135 CAD.
-    assert.equal(report.measures.actual_cost, "235.0000");
+    // Actual cost is posted GL (100 CAD + 135 CAD) plus approved-but-unposted
+    // labor (500 CAD + 675 CAD): with standard-cost posting off the entries
+    // never reach the GL, and the time-and-materials profile assumes labor
+    // inside actuals rather than stating it separately.
+    assert.equal(report.measures.actual_cost, "1410.0000");
+    assert.equal(report.measures.approved_unposted_labor, "1175.0000");
     // Billable time at bill rates: 1000 CAD + 1350 CAD.
     assert.equal(report.measures.billable_time_value, "2350.0000");
     // Billable lines: the USD 150 vendor bill → 202.5 CAD.

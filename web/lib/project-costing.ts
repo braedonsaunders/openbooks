@@ -290,6 +290,8 @@ export interface ProjectTimeSummary {
   byEmployee: ProjectTimeRow[]
   byItem: ProjectTimeRow[]
   totals: { hours: number; billableHours: number; cost: string; bill: string }
+  /** An active labor rate card exists, so bill value is priced — not merely zero. */
+  laborPricingConfigured: boolean
 }
 
 /**
@@ -358,11 +360,17 @@ export async function projectTimeSummary(orgId: string, projectId: string): Prom
     bill: m(r.bill),
   })
   const tot = totalRow.rows[0] ?? {}
+  // Bill value prices hours through active labor rate cards; with none
+  // configured every bill_rate is null and the zero total means "unpriced",
+  // which the cockpit states explicitly instead of printing 0.00.
+  const pricing = await db.execute(sql`select exists(
+    select 1 from item_rate_versions where org_id = ${orgId} and status = 'active') as configured`)
   return {
     byTask: (byTaskRows.rows as unknown as ProjectTimeSqlRow[]).map(row),
     byEmployee: (byEmpRows.rows as unknown as ProjectTimeSqlRow[]).map(row),
     byItem: (byItemRows.rows as unknown as ProjectTimeSqlRow[]).map(row),
     totals: { hours: n(tot.hours), billableHours: n(tot.billable_hours), cost: m(tot.cost), bill: m(tot.bill) },
+    laborPricingConfigured: Boolean((pricing.rows[0] as { configured: boolean } | undefined)?.configured),
   }
 }
 

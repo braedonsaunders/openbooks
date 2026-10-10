@@ -1,5 +1,6 @@
 'use client'
 
+import Link from 'next/link'
 import { useMoney } from '@/components/money-provider'
 import { useEffect, useState } from 'react'
 import { useLocale, useTranslations } from 'next-intl'
@@ -33,6 +34,8 @@ interface TimeRow {
 
 export interface CostTimeData {
   totals: { hours: number; billableHours: number; cost: string; bill: string }
+  /** An active labor rate card exists, so bill value is priced — not merely zero. */
+  laborPricingConfigured: boolean
   byTask: TimeRow[]
   byEmployee: TimeRow[]
   byItem: TimeRow[]
@@ -90,11 +93,16 @@ export function CostTimeTab({
   const [inner, setInner] = useState<TimeDimension>('employee')
   const [drill, setDrill] = useState<DrillTarget | null>(null)
 
+  // Bill value prices hours through labor rate cards. With none configured
+  // every bill_rate is null and the zero total means "unpriced" — printing
+  // 0.00 would read as priced work worth nothing, so the tile states that
+  // and links to setup instead.
+  const billPriced = data.laborPricingConfigured
   const kpis: Kpi[] = [
     { label: t('cockpit.totalHours'), value: fmtHours(data.totals.hours, locale) },
     { label: t('cockpit.billableHours'), value: fmtHours(data.totals.billableHours, locale) },
     { label: t('cockpit.laborCost'), value: money(data.totals.cost) },
-    { label: t('cockpit.laborBill'), value: money(data.totals.bill), tone: 'good' },
+    { label: t('cockpit.laborBill'), value: billPriced ? money(data.totals.bill) : '—', tone: billPriced ? 'good' : undefined },
   ]
 
   const rows = inner === 'task' ? data.byTask : inner === 'item' ? data.byItem : data.byEmployee
@@ -118,6 +126,14 @@ export function CostTimeTab({
   return (
     <div className="space-y-6">
       <KpiStrip items={kpis} />
+      {!billPriced ? (
+        <p className="flex flex-wrap items-center gap-x-2 text-xs leading-relaxed text-slate-500 dark:text-slate-400">
+          <span>{t('cockpit.noLaborPricingHint')}</span>
+          <Link href="/admin/setup/labor-pricing" className="font-medium text-teal-700 underline decoration-teal-300 underline-offset-2 hover:text-teal-800 dark:text-teal-300 dark:decoration-teal-700 dark:hover:text-teal-200">
+            {t('cockpit.setUpLaborPricing')}
+          </Link>
+        </p>
+      ) : null}
       {/* HR-20: crew-today renders only when rows exist. */}
       {crewToday && crewToday.length > 0 ? <CrewTodaySection rows={crewToday} /> : null}
       <div className="space-y-3">
