@@ -117,7 +117,9 @@
     "subscriptionRequired": "Aktivieren Sie Abonnementabrechnung für wiederkehrende Preise.",
     "saveFirst": "Speichern Sie den Artikel, bevor Sie datierte Tarife konfigurieren.",
     "featureRequired": "Aktivieren Sie Projekte, um Preisbücher und bereichsbezogene Preise zu verwenden.",
-    "back": "Preismodell ändern"
+    "back": "Preismodell ändern",
+    "editToChange": "Zum Wählen eines Preismodells diesen Artikel zum Bearbeiten öffnen.",
+    "rulesRequirePromotions": "Promotions unter Unternehmenseinstellungen → Funktionen aktivieren, um Preisregeln und befristete Angebote zu nutzen."
   },
   "structure": {
     "title": "{kind}: Einzelartikel oder Familie?",
@@ -156,7 +158,7 @@
   "pricingMatrix": {
     "title": "Preismatrix", "description": "Datierte Verkaufspreise nach Währung, Preisstufe oder Kunde mit Mengenstaffeln.", "addSchedule": "Preisschema hinzufügen", "minimumQuantity": "Mindestmenge", "unitPrice": "Stückpreis", "scope": "Preisbereich",
     "scopes": { "base": "Basispreis", "level": "Preisstufe", "customer": "Bestimmter Kunde" },
-    "priceLevel": "Preisstufe", "customer": "Kunde", "selectCustomer": "Kunden auswählen…", "currency": "Währung", "quantityBasis": "Mengenbasis",
+    "priceLevel": "Preisstufe", "noLevelsHint": "Noch keine Preisstufen. Unter Setup → Preisstufen eine Wholesale-Stufe anlegen und hier mit Gültigkeitsdatum bepreisen.", "customer": "Kunde", "selectCustomer": "Kunden auswählen…", "currency": "Währung", "quantityBasis": "Mengenbasis",
     "quantityBases": { "line": "Zeilenmenge", "overallItem": "Gesamtmenge dieses Artikels" },
     "effectiveFrom": "Gültig ab", "effectiveTo": "Gültig bis", "breaksTitle": "Mengenstaffeln", "breaksDescription": "Die höchste erreichte Mindestmenge bestimmt den Preis für alle Einheiten.", "addBreak": "Mengenstaffel hinzufügen", "saveFailed": "Preisschema konnte nicht gespeichert werden.", "loadFailed": "Preisschemata konnten nicht geladen werden.", "saved": "Preisschema gespeichert", "changeReason": "Grund der Änderung", "changeReasonPlaceholder": "Warum ändert sich dieser Preis?", "changeReasonHint": "Erforderlich, wenn die neuen Preise bereits wirksame Zeiträume abdecken. Die vorherige Version bleibt erhalten und der Grund wird im Protokoll festgehalten.", "endDateTitle": "Preisschema beenden", "endDateReasonLabel": "Grund für die Beendigung", "ended": "Preisschema beendet", "confirmDelete": "Dieses Preisschema löschen?", "deleteFailed": "Preisschema konnte nicht gelöscht werden.", "deleted": "Preisschema gelöscht", "customerTarget": "Kunde · {customer}", "baseTarget": "Basispreis", "empty": "Für diesen Artikel ist keine Matrix konfiguriert.", "target": "Ziel", "effective": "Gültigkeit", "breaks": "Mengenpreise", "familyDescription": "Hier bepreiste Staffeln gelten für jede Variante ohne eigene Staffel für den Bereich.", "inheritedTitle": "Von der Familie übernommen", "inheritedDescription": "Familienstaffeln, die diese Variante bepreisen; zum abweichenden Bepreisen eine Staffel überschreiben.", "override": "Für diese Variante überschreiben", "inheritedBadge": "Übernommen von {family}", "overriddenBadge": "Überschrieben", "source": "Herkunft",
     "search": "Preisstaffeln suchen…",

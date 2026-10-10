@@ -184,6 +184,7 @@ export function ItemDrawer({
   equipmentEnabled = false,
   shippingHub = false,
   subscriptionPricing = false,
+  promotionsEnabled,
   initialPricingView = 'landing',
   configuredPricingViews = [],
   createMode = false,
@@ -215,6 +216,11 @@ export function ItemDrawer({
   equipmentEnabled?: boolean
   /** Recurring/usage pricing has its own contract lifecycle surface. */
   subscriptionPricing?: boolean
+  /** Promotions switch (Company Settings → Features). Pricing rules stay
+   *  choosable while it is on; explicitly false explains the rules card
+   *  instead of leaving it disabled without a reason. Undefined preserves
+   *  the un-gated behavior for callers that predate the switch. */
+  promotionsEnabled?: boolean
   /** Persisted items open in the editor selected by their active pricing data. */
   initialPricingView?: PricingView
   /**
@@ -316,6 +322,24 @@ export function ItemDrawer({
   // read-only — the sub-editors take `canManage={editable}` and refuse writes.
   const pricingModeUnavailable = (view: PricingView) =>
     createMode || (!editable && !configuredPricingViews.includes(view))
+  // Pricing rules additionally need the Promotions switch. A configured rules
+  // mode stays open read-only while the switch is off — disabling a feature
+  // preserves its data — but an unconfigured one is refused with its remedy,
+  // never silently disabled.
+  const pricingOptionDisabled = (view: PricingView) =>
+    pricingModeUnavailable(view) ||
+    (view === 'rules' && promotionsEnabled === false && !configuredPricingViews.includes('rules'))
+  // Every disabled style names why and how to enable it: the save prerequisite
+  // for a new item, the Promotions switch for rules, or edit mode for the
+  // rest. Enabled styles keep their descriptive detail.
+  const pricingFootnote = (view: PricingView, detail: string) => {
+    if (createMode) return 'saveFirst'
+    if (view === 'rules' && promotionsEnabled === false && !configuredPricingViews.includes('rules')) {
+      return 'rulesRequirePromotions'
+    }
+    if (!editable && !configuredPricingViews.includes(view)) return 'editToChange'
+    return detail
+  }
 
   const nameValid = name.trim().length > 0
 
@@ -808,7 +832,9 @@ export function ItemDrawer({
             </>
           ) : canManage || recordSectionEditors ? (
             <div className="flex items-center gap-1.5">
-              <Button variant="outline" onClick={() => { if (canManage) setTab('overview'); setMode('edit') }}>
+              {/* Entering edit mode keeps the operator on their tab, so the
+                  pricing chooser and other sub-editors become actionable there. */}
+              <Button variant="outline" onClick={() => setMode('edit')}>
                 {tCommon('actions.edit')}
               </Button>
               {canManage ? <Popover open={actionsOpen} onOpenChange={setActionsOpen} align="end" className="w-52 p-1.5" trigger={<Button variant="outline" onClick={() => setActionsOpen((open) => !open)}>{tCommon('labels.actions')}<ChevronDown className="ml-1 h-3.5 w-3.5" /></Button>}>
@@ -902,7 +928,7 @@ export function ItemDrawer({
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
               <button
                 type="button"
-                disabled={pricingModeUnavailable('simple')}
+                disabled={pricingOptionDisabled('simple')}
                 onClick={() => setPricingView('simple')}
                 className="group rounded-xl border border-slate-200 bg-white p-5 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:border-teal-400 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 dark:border-slate-800 dark:bg-slate-950 dark:hover:border-teal-600"
               >
@@ -914,11 +940,11 @@ export function ItemDrawer({
                   <Badge variant="secondary">{t('pricingModes.recommended')}</Badge>
                 </span>
                 <span className="mt-2 block text-sm leading-5 text-slate-500 dark:text-slate-400">{t('pricingModes.simpleDescription')}</span>
-                <span className="mt-4 block border-t border-slate-100 pt-3 text-xs leading-5 text-slate-500 dark:border-slate-800 dark:text-slate-400">{t('pricingModes.simpleDetail')}</span>
+                <span className="mt-4 block border-t border-slate-100 pt-3 text-xs leading-5 text-slate-500 dark:border-slate-800 dark:text-slate-400">{t(`pricingModes.${pricingFootnote('simple', 'simpleDetail')}`)}</span>
               </button>
               <button
                 type="button"
-                disabled={pricingModeUnavailable('matrix')}
+                disabled={pricingOptionDisabled('matrix')}
                 onClick={() => setPricingView('matrix')}
                 className="group rounded-xl border border-slate-200 bg-white p-5 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:border-teal-400 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:translate-y-0 disabled:hover:border-slate-200 disabled:hover:shadow-sm dark:border-slate-800 dark:bg-slate-950 dark:hover:border-teal-600 dark:disabled:hover:border-slate-800"
               >
@@ -928,7 +954,7 @@ export function ItemDrawer({
                 <span className="block text-sm font-semibold text-slate-900 dark:text-slate-100">{t('pricingModes.matrixTitle')}</span>
                 <span className="mt-2 block text-sm leading-5 text-slate-500 dark:text-slate-400">{t('pricingModes.matrixDescription')}</span>
                 <span className="mt-4 block border-t border-slate-100 pt-3 text-xs leading-5 text-slate-500 dark:border-slate-800 dark:text-slate-400">
-                  {createMode ? t('pricingModes.saveFirst') : t('pricingModes.matrixDetail')}
+                  {t(`pricingModes.${pricingFootnote('matrix', 'matrixDetail')}`)}
                 </span>
               </button>
               {[
@@ -937,11 +963,11 @@ export function ItemDrawer({
                 { key: 'rules' as const, icon: Tags, title: 'rulesTitle', description: 'rulesDescription', detail: 'rulesDetail' },
               ].map((option) => {
                 const Icon = option.icon
-                return <button key={option.key} type="button" disabled={pricingModeUnavailable(option.key)} onClick={() => setPricingView(option.key)} className="group rounded-xl border border-slate-200 bg-white p-5 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:border-teal-400 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-800 dark:bg-slate-950 dark:hover:border-teal-600">
+                return <button key={option.key} type="button" disabled={pricingOptionDisabled(option.key)} onClick={() => setPricingView(option.key)} className="group rounded-xl border border-slate-200 bg-white p-5 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:border-teal-400 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-800 dark:bg-slate-950 dark:hover:border-teal-600">
                   <span className="mb-4 grid h-11 w-11 place-items-center rounded-xl bg-slate-100 text-slate-700 dark:bg-slate-900 dark:text-slate-300"><Icon size={22} /></span>
                   <span className="block text-sm font-semibold text-slate-900 dark:text-slate-100">{t(`pricingModes.${option.title}`)}</span>
                   <span className="mt-2 block text-sm leading-5 text-slate-500 dark:text-slate-400">{t(`pricingModes.${option.description}`)}</span>
-                  <span className="mt-4 block border-t border-slate-100 pt-3 text-xs leading-5 text-slate-500 dark:border-slate-800 dark:text-slate-400">{createMode ? t('pricingModes.saveFirst') : t(`pricingModes.${option.detail}`)}</span>
+                  <span className="mt-4 block border-t border-slate-100 pt-3 text-xs leading-5 text-slate-500 dark:border-slate-800 dark:text-slate-400">{t(`pricingModes.${pricingFootnote(option.key, option.detail)}`)}</span>
                 </button>
               })}
               <button type="button" disabled={!laborPricing || pricingModeUnavailable('contract')} onClick={() => setPricingView('contract')} className="group rounded-xl border border-slate-200 bg-white p-5 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:border-teal-400 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-800 dark:bg-slate-950 dark:hover:border-teal-600">

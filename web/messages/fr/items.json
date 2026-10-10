@@ -104,7 +104,9 @@
     "subscriptionTitle": "Tarification abonnement et usage", "subscriptionDescription": "Configurez plans récurrents, quantités, versions et avenants.", "subscriptionDetail": "Ouvrir l’espace abonnements.", "subscriptionRequired": "Activez Facturation des abonnements pour les tarifs récurrents.",
     "saveFirst": "Enregistrez l'article avant de configurer des tarifs datés.",
     "featureRequired": "Activez Projets pour utiliser les catalogues et la tarification ciblée.",
-    "back": "Changer de modèle tarifaire"
+    "back": "Changer de modèle tarifaire",
+    "editToChange": "Ouvrez Modifier sur cet article pour choisir un mode de tarification.",
+    "rulesRequirePromotions": "Activez Promotions dans Paramètres de l’entreprise → Fonctionnalités pour utiliser les règles de prix et les offres temporaires."
   },
   "structure": {
     "title": "{kind} : article unique ou famille ?",
@@ -143,7 +145,7 @@
   "pricingMatrix": {
     "title": "Matrice tarifaire", "description": "Prix datés par devise, niveau ou client avec paliers de quantité.", "addSchedule": "Ajouter une grille", "minimumQuantity": "Quantité minimale", "unitPrice": "Prix unitaire", "scope": "Portée tarifaire",
     "scopes": { "base": "Prix de base", "level": "Niveau de prix", "customer": "Client précis" },
-    "priceLevel": "Niveau de prix", "customer": "Client", "selectCustomer": "Sélectionner un client…", "currency": "Devise", "quantityBasis": "Base de quantité",
+    "priceLevel": "Niveau de prix", "noLevelsHint": "Aucun niveau de prix pour l’instant. Créez un niveau Wholesale dans Configuration → Niveaux de prix, puis tarifez-le ici avec sa date d’effet.", "customer": "Client", "selectCustomer": "Sélectionner un client…", "currency": "Devise", "quantityBasis": "Base de quantité",
     "quantityBases": { "line": "Quantité de ligne", "overallItem": "Quantité totale de l’article" },
     "effectiveFrom": "En vigueur dès", "effectiveTo": "En vigueur jusqu’au", "breaksTitle": "Paliers de quantité", "breaksDescription": "La plus grande quantité minimale atteinte fixe le prix de toutes les unités.", "addBreak": "Ajouter un palier", "saveFailed": "Impossible d’enregistrer la grille.", "loadFailed": "Impossible de charger les grilles tarifaires.", "saved": "Grille enregistrée", "changeReason": "Motif de la modification", "changeReasonPlaceholder": "Pourquoi ce prix change-t-il ?", "changeReasonHint": "Obligatoire lorsque les nouveaux prix couvrent des dates déjà en vigueur. La version précédente est conservée et le motif est enregistré dans l’audit.", "endDateTitle": "Terminer la grille", "endDateReasonLabel": "Motif de la fin", "ended": "Grille terminée", "confirmDelete": "Supprimer cette grille ?", "deleteFailed": "Impossible de supprimer la grille.", "deleted": "Grille supprimée", "customerTarget": "Client · {customer}", "baseTarget": "Prix de base", "empty": "Aucune tarification matricielle pour cet article.", "target": "Cible", "effective": "Dates d’effet", "breaks": "Prix par quantité", "familyDescription": "Les tarifs saisis ici s'appliquent à chaque variante sans tarif propre pour le périmètre.", "inheritedTitle": "Hérité de la famille", "inheritedDescription": "Tarifs de la famille appliqués à cette variante ; remplacez-en un pour tarifer cette variante seule.", "override": "Remplacer pour cette variante", "inheritedBadge": "Hérité de {family}", "overriddenBadge": "Remplacé", "source": "Source",
     "search": "Rechercher des grilles de prix…",

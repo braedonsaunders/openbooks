@@ -152,6 +152,46 @@ test('a persisted simple-pricing mode opens its editor and returns to the choose
   await clickButton('pricingModes.back'); assert.ok(document.body.textContent?.includes('pricingModes.title'), 'the pricing mode chooser is reachable again')
 })
 
+test('a disabled pricing style names how to enable it', async (t) => {
+  await mountDrawer(t, { initialPricingView: 'landing', configuredPricingViews: [] })
+  await clickTab('pricing')
+  const buttons = [...document.querySelectorAll('button')]
+  const modeButton = (key: string) => buttons.find((button) => button.textContent?.includes(`pricingModes.${key}Title`))
+  assert.equal(modeButton('matrix')?.disabled, true, 'an unconfigured style stays inert outside edit mode')
+  assert.ok(document.body.textContent?.includes('pricingModes.editToChange'), 'the disabled style says to open Edit')
+  assert.ok(!document.body.textContent?.includes('pricingModes.rulesRequirePromotions'), 'no promotions refusal without the promotions signal')
+})
+
+test('entering edit mode keeps the pricing chooser available', async (t) => {
+  await mountDrawer(t, { initialPricingView: 'landing', configuredPricingViews: [], promotionsEnabled: true })
+  await clickTab('pricing')
+  assert.ok(document.body.textContent?.includes('pricingModes.title'), 'the chooser is showing before Edit')
+  await clickButton('actions.edit')
+  assert.ok(document.body.textContent?.includes('pricingModes.title'), 'Edit keeps the operator on the chooser instead of jumping away')
+  const buttons = [...document.querySelectorAll('button')]
+  const matrix = buttons.find((button) => button.textContent?.includes('pricingModes.matrixTitle'))
+  assert.equal(matrix?.disabled, false, 'the chooser becomes actionable in edit mode')
+})
+
+test('pricing rules stay choosable while Promotions is on', async (t) => {
+  await mountDrawer(t, { initialPricingView: 'landing', configuredPricingViews: [], promotionsEnabled: true })
+  await clickButton('actions.edit'); await clickTab('pricing')
+  const buttons = [...document.querySelectorAll('button')]
+  const rules = buttons.find((button) => button.textContent?.includes('pricingModes.rulesTitle'))
+  assert.equal(rules?.disabled, false, 'rules are no longer disabled while their feature is on')
+})
+
+test('pricing rules name the Promotions switch while it is off', async (t) => {
+  await mountDrawer(t, { initialPricingView: 'landing', configuredPricingViews: [], promotionsEnabled: false })
+  await clickButton('actions.edit'); await clickTab('pricing')
+  const buttons = [...document.querySelectorAll('button')]
+  const refused = buttons.find((button) => button.textContent?.includes('pricingModes.rulesTitle'))
+  assert.equal(refused?.disabled, true, 'rules refuse while Promotions is off')
+  assert.ok(document.body.textContent?.includes('pricingModes.rulesRequirePromotions'), 'the refusal names the Promotions switch and where to turn it on')
+  const matrix = buttons.find((button) => button.textContent?.includes('pricingModes.matrixTitle'))
+  assert.equal(matrix?.disabled, false, 'the promotions refusal touches only rules')
+})
+
 test('failed rate and fair-value reads show retry instead of an empty editable state', async (t) => {
   await mountDrawer(t, { payload: { ...payload, item: { ...item, kind: 'labor' } }, laborPricing: true, fairValuePrices: true, initialPricingView: 'contract' })
   await clickButton('actions.edit')
