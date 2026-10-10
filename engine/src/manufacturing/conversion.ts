@@ -1,3 +1,5 @@
+import { type TimeCommandPermission, lockTimeWorkOrderTarget } from '../projects/time-work-target.ts'
+import { lockActorCommandAuthority } from '../organization/actor-command-authority.ts'
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { add, cmp, fromUnits, isZero, neg, roundDiv, sum, toUnits } from "../money/money.ts";
@@ -39,7 +41,7 @@ type OperationCostRow = {
   standard_labor_final_rate: string | null;
   overhead_snapshot: { basis?: string; cards?: Array<{ id: string; rate: string; kind: string; category: string | null; effectiveFrom: string; effectiveTo: string | null }> } | null;
   center_code: string; center_kind: CenterKind; absorbs_overhead: boolean;
-  labor_minutes_per_unit: string | null;
+  labor_minutes_per_unit: string | null; labor_time_source: "operation" | "approved_time";
 };
 
 export type ConversionOrder = {
@@ -75,16 +77,34 @@ async function loadOperationCost(tx: SqlExecutor, orgId: string, workOrderId: st
            operation.overhead_snapshot,
            coalesce(nullif(btrim(center.code), ''), center.id::text) as center_code,
            center.kind as center_kind, center.absorbs_overhead,
-           routing_operation.labor_minutes_per_unit::text as labor_minutes_per_unit
+           operation.labor_minutes_per_unit::text as labor_minutes_per_unit,operation.labor_time_source
       from mfg_wo_operations operation
       join mfg_work_centers center on center.org_id=operation.org_id and center.id=operation.work_center_id
-      join mfg_work_orders work_order on work_order.org_id=operation.org_id and work_order.id=operation.work_order_id
-      left join mfg_routing_operations routing_operation
-        on routing_operation.org_id=operation.org_id and routing_operation.routing_id=work_order.routing_id
-       and routing_operation.sequence=operation.sequence
      where operation.org_id=${orgId} and operation.work_order_id=${workOrderId}
        ${operationId ? sql`and operation.id=${operationId}` : sql``}
      order by operation.sequence`)).rows;
+}
+
+/** Approved employee captures are the labor quantity; elapsed machine minutes remain independent. */
+async function approvedOperationTime(tx:SqlExecutor,orgId:string,workOrderId:string,operationId:string) {
+  const unassigned=(await tx.execute(sql`select id from time_entries where org_id=${orgId} and work_order_id=${workOrderId} and wo_operation_id is null limit 1`)).rows[0]
+  if (unassigned) refuse("This order has employee time with no operation.","production_time_unassigned","Assign the order's time lines to operations before completing an operation that consumes approved time.",409)
+  const rows=(await tx.execute<{id:string;hours:string;status:string;consumed:string|null}>(sql`
+    select id,hours::text,status,production_consumed_operation_id as consumed from time_entries
+    where org_id=${orgId} and work_order_id=${workOrderId} and wo_operation_id=${operationId} order by id for update`)).rows
+  if (!rows.length) refuse("No employee time has been recorded for this operation.","production_time_missing","Record and approve the employee hours in Production → Time before completing this operation.",409)
+  if (rows.some(row=>row.status!=='approved')) refuse("This operation still has unapproved employee time.","production_time_unapproved","Submit and approve the operation's employee hours before completing it.",409)
+  if (rows.some(row=>row.consumed)) refuse("The operation's employee time has already been consumed.","production_time_already_consumed","Reload the order; use a governed time correction for consumed hours.",409)
+  const hours=sum(rows.map(row=>row.hours))
+  if (cmp(hours,'0')<0) refuse("The operation's net employee time cannot be negative.","production_time_negative","Correct the operation's time lines before completion.")
+  return {ids:rows.map(row=>row.id),entries:rows.map(row=>({id:row.id,hours:row.hours})),laborMinutes:fromUnits(toUnits(hours)*MINUTES_PER_HOUR)}
+}
+async function claimOperationTime(tx:SqlExecutor,orgId:string,actorId:string,operationId:string,ids:string[],entryId:string|null) {
+  if (!ids.length) return
+  const claim=await tx.execute(sql`update time_entries set production_consumed_operation_id=${operationId},cost_journal_entry_id=${entryId},updated_at=now(),updated_by=${actorId}
+    where org_id=${orgId} and id=any(${`{${ids.join(',')}}`}::uuid[]) and status='approved' and production_consumed_operation_id is null and cost_journal_entry_id is null returning id`)
+  if(claim.rows.length!==ids.length) refuse("Employee time changed during operation completion.","production_time_claim_conflict","Reload the operation and its time entries; nothing was completed.",409)
+  for(const id of ids) if((await tx.execute(sql`insert into audit_log(org_id,table_name,row_id,action,changes,actor_id) values(${orgId},'time_entries',${id},'update',${JSON.stringify({event:'production_time_consumed',operationId,journalEntryId:entryId})}::jsonb,${actorId}) returning id`)).rows.length!==1) refuse('Employee time consumption was not audited.','production_time_claim_conflict','Retry operation completion; no hours or costs were consumed.',409)
 }
 
 /** Labor and machine minutes for an operation producing `quantity` units. */
@@ -103,17 +123,14 @@ function operationMinutes(
   return { laborMinutes, machineMinutes };
 }
 
-async function machineRate(tx: SqlExecutor, orgId: string, operation: OperationCostRow, onDate: string): Promise<{ id: string; rate: string }> {
-  const row = (await tx.execute<{ id: string; rate: string }>(sql`
-    select id, machine_rate_per_hour::text as rate from mfg_work_center_rates
-     where org_id=${orgId} and work_center_id=${operation.work_center_id}
-       and effective_from <= ${onDate} and (effective_to is null or effective_to > ${onDate})
-     order by effective_from desc limit 1`)).rows[0];
-  if (!row) {
-    refuse(`Work center ${operation.center_code} has no machine rate covering ${onDate}, so operation ${operation.sequence}'s machine time cannot be costed.`,
-      "machine_rate_missing", `Add a machine rate for work center ${operation.center_code} effective on or before ${onDate}, then complete the operation again.`);
-  }
-  return row;
+/** Completion, costing and setup resolve the same effective machine policy. */
+export async function resolveMachineRate(tx:SqlExecutor,orgId:string,centerId:string,onDate:string,label:string):Promise<{id:string;rate:string}> {
+  const rows=(await tx.execute<{id:string;rate:string}>(sql`select id,machine_rate_per_hour::text as rate from mfg_work_center_rates where org_id=${orgId} and work_center_id=${centerId} and effective_from<=${onDate}::date and (effective_to is null or effective_to>${onDate}::date) order by effective_from,id for share`)).rows;
+  if(rows.length!==1) refuse(`Work center ${label} requires one effective machine rate covering ${onDate}.`,"machine_rate_missing",`Review the effective machine rates on work center ${label} before recording conversion cost.`);
+  return rows[0]!;
+}
+async function machineRate(tx:SqlExecutor,orgId:string,operation:OperationCostRow,onDate:string) {
+  return resolveMachineRate(tx,orgId,operation.work_center_id,onDate,operation.center_code);
 }
 
 function overheadCards(operation: OperationCostRow, orderNumber: string): StandardOverheadCard[] {
@@ -157,10 +174,7 @@ function laborAmount(operation: OperationCostRow, orderNumber: string, laborMinu
  * minutes to persist on the operation and the posted entry (null when the
  * operation consumed nothing that carries a cost).
  */
-export async function absorbOperationConversion(
-  tx: SqlExecutor, orgId: string, actorId: string, order: ConversionOrder, operationId: string,
-  doneQty: string, input: OperationTimeInput,
-): Promise<{ entryId: string | null; setupMinutes: string; runMinutes: string; laborMinutes: string }> {
+async function resolveOperationConversion(tx:SqlExecutor,orgId:string,order:ConversionOrder,operationId:string,doneQty:string,input:OperationTimeInput,onDate?:string) {
   const operation = (await loadOperationCost(tx, orgId, order.id, operationId))[0];
   if (!operation) refuse("The work-order operation was not found.", "operation_not_found", "Reload the work order and retry.", 404);
   const reported = (value: string | null | undefined, field: string) => {
@@ -174,10 +188,12 @@ export async function absorbOperationConversion(
   const actualLabor = reported(input.actualLaborMinutes, "actualLaborMinutes");
   const setupMinutes = actualSetup ?? operation.planned_setup_minutes;
   const runMinutes = actualRun ?? scale(operation.planned_run_minutes, doneQty, operation.quantity_planned);
-  const { laborMinutes, machineMinutes } = operationMinutes(operation, doneQty, setupMinutes, runMinutes, actualLabor);
-  const timeBasis = actualSetup !== null || actualRun !== null || actualLabor !== null ? "reported" : "standard";
+  if (operation.labor_time_source==='approved_time' && actualLabor!==null) refuse("This operation takes labor from approved employee time.","production_time_override_refused","Correct the shared employee time instead of entering another labor quantity.")
+  const approvedTime=operation.labor_time_source==='approved_time' ? await approvedOperationTime(tx,orgId,order.id,operationId) : null
+  const { laborMinutes, machineMinutes } = operationMinutes(operation, doneQty, setupMinutes, runMinutes, approvedTime?.laborMinutes ?? actualLabor);
+  const timeBasis = approvedTime ? "approved_time" : actualSetup !== null || actualRun !== null || actualLabor !== null ? "reported" : "standard";
 
-  const date = await businessToday(orgId);
+  const date = onDate ?? await businessToday(orgId);
   const labor = laborAmount(operation, order.number, laborMinutes);
   const machine = usesMachine(operation.center_kind) && !isZero(machineMinutes)
     ? await machineRate(tx, orgId, operation, date) : null;
@@ -186,7 +202,25 @@ export async function absorbOperationConversion(
   const applied = add(machineCost, overhead);
   const total = add(labor, applied);
   const result = { entryId: null as string | null, setupMinutes, runMinutes, laborMinutes };
-  if (isZero(total)) return result;
+  return {operation,approvedTime,timeBasis,date,labor,machine,machineCost,overhead,applied,total,result,machineMinutes};
+}
+
+/** Governed loss previews reuse the native conversion algorithm and frozen release rates. */
+export async function previewOperationConversion(tx:SqlExecutor,orgId:string,order:ConversionOrder,operationId:string,doneQty:string,input:OperationTimeInput,onDate:string) {
+  const cost=await resolveOperationConversion(tx,orgId,order,operationId,doneQty,input,onDate);
+  return {operation:cost.operation,approvedTime:cost.approvedTime,timeBasis:cost.timeBasis,date:cost.date,labor:cost.labor,machine:cost.machine,machineCost:cost.machineCost,overhead:cost.overhead,total:cost.total,setupMinutes:cost.result.setupMinutes,runMinutes:cost.result.runMinutes,laborMinutes:cost.result.laborMinutes};
+}
+
+export async function absorbOperationConversion(
+  tx: SqlExecutor, orgId: string, actorId: string, order: ConversionOrder, operationId: string,
+  doneQty: string, input: OperationTimeInput, options?:{onDate?:string},
+): Promise<{ entryId: string | null; setupMinutes: string; runMinutes: string; laborMinutes: string }> {
+  const {operation,approvedTime,timeBasis,date,labor,machine,machineCost,overhead,applied,total,result,machineMinutes}=await resolveOperationConversion(tx,orgId,order,operationId,doneQty,input,options?.onDate);
+  const {setupMinutes,runMinutes,laborMinutes}=result;
+  if (isZero(total)) {
+    if(approvedTime) await claimOperationTime(tx,orgId,actorId,operationId,approvedTime.ids,null)
+    return result
+  }
 
   const prior = (await tx.execute<{ id: string }>(sql`
     select id from journal_entries where org_id=${orgId} and origin='manufacturing'
@@ -220,13 +254,14 @@ export async function absorbOperationConversion(
       operation_id: operationId, operation_sequence: String(operation.sequence),
       conversion_labor_amount: labor, conversion_overhead_amount: applied,
       conversion: {
-        timeBasis, quantity: doneQty, setupMinutes, runMinutes, laborMinutes, machineMinutes,
+        timeBasis, timeEntryIds: approvedTime?.ids ?? [], quantity: doneQty, setupMinutes, runMinutes, laborMinutes, machineMinutes,
         laborRate: operation.standard_labor_final_rate, laborAmount: labor,
         machineRateId: machine?.id ?? null, machineRate: machine?.rate ?? null, machineAmount: machineCost,
         overheadBasis: operation.absorbs_overhead ? operation.overhead_snapshot?.basis ?? null : null, overheadAmount: overhead,
       },
     },
   });
+  if(approvedTime) await claimOperationTime(tx,orgId,actorId,operationId,approvedTime.ids,entryId)
   return { ...result, entryId };
 }
 
@@ -242,8 +277,8 @@ export async function conversionRelief(
   withStandard: boolean,
 ): Promise<{ relievedLabor: string; relievedOverhead: string; standardLabor: string; standardOverhead: string }> {
   const totals = (await tx.execute<{ absorbed_labor: string; absorbed_overhead: string; relieved_labor: string; relieved_overhead: string }>(sql`
-    select coalesce(sum((custom->>'conversion_labor_amount')::numeric), 0)::text as absorbed_labor,
-           coalesce(sum((custom->>'conversion_overhead_amount')::numeric), 0)::text as absorbed_overhead,
+    select coalesce(sum(case when custom->>'conversion_disposition'='variance' then 0 else (custom->>'conversion_labor_amount')::numeric end), 0)::text as absorbed_labor,
+           coalesce(sum(case when custom->>'conversion_disposition'='variance' then 0 else (custom->>'conversion_overhead_amount')::numeric end), 0)::text as absorbed_overhead,
            coalesce(sum((custom->>'relieved_labor')::numeric), 0)::text as relieved_labor,
            coalesce(sum((custom->>'relieved_overhead')::numeric), 0)::text as relieved_overhead
       from journal_entries where org_id=${orgId} and origin='manufacturing'
@@ -272,4 +307,56 @@ export async function conversionRelief(
     }
   }
   return { relievedLabor, relievedOverhead, standardLabor, standardOverhead };
+}
+
+
+/** Correct consumed employee hours forward. Before the first receipt the delta changes WIP; after a receipt it is an explicit variance, never a rewrite of finished-goods history. */
+export async function applyProductionTimeCorrections(tx:SqlExecutor,orgId:string,actorId:string,timeEntryIds:string[], permission: TimeCommandPermission = 'time.approve') {
+  if(!timeEntryIds.length) return
+  const candidates=(await tx.execute<{id:string;workOrderId:string;operationId:string;amendsEntryId:string|null}>(sql`
+    select e.id,e.work_order_id as "workOrderId",e.wo_operation_id as "operationId",e.amends_entry_id as "amendsEntryId"
+    from time_entries e join mfg_wo_operations o on o.org_id=e.org_id and o.work_order_id=e.work_order_id and o.id=e.wo_operation_id
+    where e.org_id=${orgId} and e.id=any(${`{${timeEntryIds.join(',')}}`}::uuid[]) and (o.status='done' or exists(select 1 from mfg_work_orders work where work.org_id=o.org_id and work.id=o.work_order_id and work.status='cancelled' and work.loss_change_id is not null))
+    and o.labor_time_source='approved_time' order by e.work_order_id,e.wo_operation_id,e.id`)).rows
+  for(const candidate of candidates) {
+    const target=await lockTimeWorkOrderTarget(tx,orgId,actorId,{workOrderId:candidate.workOrderId,operationId:candidate.operationId,requestedScope:null,permission,requireOpen:false})
+    await lockActorCommandAuthority(tx,orgId,actorId,target.subsidiaryId,'manufacturing.manage')
+    await lockActorCommandAuthority(tx,orgId,actorId,target.subsidiaryId,'items.post')
+    const order=(await tx.execute<ConversionOrder & {quantity_completed:string;status:string}>(sql`select id,number,subsidiary_id,quantity_ordered::text,bom_revision,routing_version,quantity_completed::text,status from mfg_work_orders where org_id=${orgId} and id=${candidate.workOrderId} for update`)).rows[0]
+    if(!order) refuse('The production order is unavailable.','work_order_not_found','Reload the week and order.',404)
+    const operation=(await loadOperationCost(tx,orgId,order.id,candidate.operationId))[0]!
+    const entry=(await tx.execute<{hours:string;status:string;consumed:string|null;amends_entry_id:string|null;corrects_entry_id:string|null;employee_party_id:string;worked_on:string;time_type_id:string|null}>(sql`select hours::text,status,production_consumed_operation_id as consumed,amends_entry_id,corrects_entry_id,employee_party_id,worked_on::text,time_type_id from time_entries where org_id=${orgId} and id=${candidate.id} for update`)).rows[0]
+    if(!entry || entry.status!=='approved') refuse('Only approved time may correct production costs.','production_time_not_approved','Approve the correcting time entry first.',409)
+    if(entry.consumed) continue
+    const sourceId=entry.amends_entry_id ?? entry.corrects_entry_id
+    const original=sourceId ? (await tx.execute<{hours:string;operation_id:string|null;employee_party_id:string;worked_on:string;time_type_id:string|null}>(sql`select hours::text,production_consumed_operation_id as operation_id,employee_party_id,worked_on::text,time_type_id from time_entries where org_id=${orgId} and id=${sourceId} and work_order_id=${order.id} and wo_operation_id=${operation.id} for share`)).rows[0] : null
+    const contra=sourceId ? (await tx.execute<{id:string;hours:string;employee_party_id:string;worked_on:string;time_type_id:string|null}>(sql`select id,hours::text,employee_party_id,worked_on::text,time_type_id from time_entries where org_id=${orgId} and amends_entry_id=${sourceId} and work_order_id=${order.id} and wo_operation_id=${operation.id} and status='approved' for share`)).rows : []
+    const sameContext = original && entry.employee_party_id===original.employee_party_id && entry.worked_on===original.worked_on && entry.time_type_id===original.time_type_id
+    const validContra = original && contra.length===1 && cmp(contra[0]!.hours,neg(original.hours))===0 && contra[0]!.employee_party_id===original.employee_party_id && contra[0]!.worked_on===original.worked_on && contra[0]!.time_type_id===original.time_type_id
+    const validCorrection=entry.amends_entry_id ? validContra && contra[0]!.id===candidate.id : entry.corrects_entry_id && validContra && cmp(entry.hours,'0')>=0
+    if(!original || original.operation_id!==operation.id || !sameContext || !validCorrection) refuse('This time is not an exact correction of consumed production time.','production_time_correction_required','Use the time amendment action for the consumed entry.',409)
+    const minutes=fromUnits(toUnits(entry.hours)*MINUTES_PER_HOUR)
+    const labor=laborAmount(operation,order.number,minutes)
+    const overhead=operation.absorbs_overhead && operation.overhead_snapshot?.basis==='labor_hours' ? overheadAmount(operation,order.number,'0',minutes,'0') : '0.0000'
+    const toWip=cmp(order.quantity_completed,'0')===0 && !['done','closed','cancelled'].includes(order.status)
+    let journalId:string|null=null
+    if(!isZero(add(labor,overhead))) {
+      const date=await businessToday(orgId)
+      const periodId=await periodForDate(orgId,date,tx as Runner)
+      if(!periodId || !order.bom_revision || order.routing_version===null) refuse('Production correction lacks an open accounting period or released evidence.','production_correction_evidence_missing','Open the current accounting period and use a released production order.',409)
+      const lines:JournalLineInput[]=[]
+      if(!isZero(labor)) {
+        lines.push({accountId:await manufacturingControlAccount(tx,orgId,target.subsidiaryId,toWip?'mfgWip':'mfgLaborEfficiencyVariance'),amount:labor,memo:'Consumed production time correction'})
+        lines.push({accountId:await manufacturingControlAccount(tx,orgId,target.subsidiaryId,'laborClearing'),amount:neg(labor),memo:'Production labor clearing correction'})
+      }
+      if(!isZero(overhead)) {
+        lines.push({accountId:await manufacturingControlAccount(tx,orgId,target.subsidiaryId,toWip?'mfgWip':'mfgOverheadVariance'),amount:overhead,memo:'Production labor-based overhead correction'})
+        lines.push({accountId:await manufacturingControlAccount(tx,orgId,target.subsidiaryId,'mfgOverheadApplied'),amount:neg(overhead),memo:'Production applied overhead correction'})
+      }
+      await assertInventoryAccountsPostable(tx as Runner,orgId,lines.map(line=>line.accountId))
+      journalId=await postManufacturingEntry(tx as Runner,{orgId,actorId,subsidiaryId:target.subsidiaryId,bookId:await primaryBookId(orgId,tx as Runner),currency:await subsidiaryCurrency(orgId,target.subsidiaryId,tx as Runner),periodId,date,entryNumber:`MFG-TIME-${candidate.id}`,memo:`Time amendment for ${order.number}`,lines,
+        custom:{workOrderNumber:order.number,bomRevision:order.bom_revision,routingVersion:String(order.routing_version),operation_id:operation.id,time_entry_id:candidate.id,amends_time_entry_id:entry.amends_entry_id,corrects_time_entry_id:entry.corrects_entry_id,conversion_labor_amount:labor,conversion_overhead_amount:overhead,conversion_disposition:toWip?'wip':'variance',conversion:{timeBasis:'approved_time_correction',laborMinutes:minutes}}})
+    }
+    await claimOperationTime(tx,orgId,actorId,operation.id,[candidate.id],journalId)
+  }
 }

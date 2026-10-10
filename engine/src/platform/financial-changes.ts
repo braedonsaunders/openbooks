@@ -31,7 +31,11 @@ export class FinancialChangeConflictError extends Error {
   readonly name = "FinancialChangeConflictError";
 }
 
-/** The sole manufacturing operation admitted to the governed ledger. */
+/** Manufacturing events use the shared immutable proposal and approval ledger. */
+export const MANUFACTURING_LOSS_DISPOSITION_OPERATION = "work_order_loss_disposition";
+export const MANUFACTURING_STANDARD_ROLLUP_OPERATION = "standard_cost_rollup";
+export const MANUFACTURING_BOM_APPROVAL_OPERATION = "bom_revision_activation";
+export const MANUFACTURING_ROUTING_APPROVAL_OPERATION = "routing_revision_activation";
 export const MANUFACTURING_SCRAP_RESTATEMENT_OPERATION =
   "scrap_snapshot_restatement";
 
@@ -170,18 +174,18 @@ export function assertFinancialChangeApproved(
   },
 ): void {
   if (change.domain !== args.domain || change.subject_id !== args.subjectId)
-    throw new Error("approval belongs to another financial record");
+    throw new FinancialChangeConflictError("approval belongs to another financial record");
   if (
     change.status !== "approved" ||
     !change.approved_by ||
     (change.approved_by === change.submitted_by && change.self_approval_authorized !== true)
   ) {
-    throw new Error(
+    throw new FinancialChangeConflictError(
       "Submit this change through Flows and obtain a decision permitted by its approval policy before applying it.",
     );
   }
   if (canonicalJson(change.before_state) !== canonicalJson(args.beforeState)) {
-    throw new Error(
+    throw new FinancialChangeConflictError(
       "the financial record changed after this proposal; create and approve a new proposal against its current balances",
     );
   }
@@ -191,6 +195,7 @@ export async function loadFinancialChangeSubjectLabel(
   orgId: string,
   domain: FinancialChangeDomain,
   subjectId: string,
+  operation?:string,
 ): Promise<string | null> {
   if (domain === "payroll") {
     return (await tx.execute<{ label: string }>(sql`select display_name as label from parties where org_id=${orgId} and id=${subjectId}`)).rows[0]?.label ?? null;
@@ -234,8 +239,10 @@ export async function loadFinancialChangeSubjectLabel(
     `)).rows[0]?.label ?? null;
   }
   if (domain === "manufacturing") {
-    // Scrap subjects resolve through the manufacturing record views owned
-    // downstream; they must never match the consolidation ownership table.
+    if([MANUFACTURING_STANDARD_ROLLUP_OPERATION,MANUFACTURING_BOM_APPROVAL_OPERATION].includes(operation??''))return (await tx.execute<{label:string}>(sql`select concat_ws(' — ',code,name) as label from items where org_id=${orgId} and id=${subjectId}`)).rows[0]?.label??null;
+    if(operation===MANUFACTURING_ROUTING_APPROVAL_OPERATION)return (await tx.execute<{label:string}>(sql`select concat_ws(' — ',code,name) as label from mfg_routings where org_id=${orgId} and id=${subjectId}`)).rows[0]?.label??null;
+    if(operation===MANUFACTURING_LOSS_DISPOSITION_OPERATION)return (await tx.execute<{label:string}>(sql`select number as label from mfg_work_orders where org_id=${orgId} and id=${subjectId}`)).rows[0]?.label??null;
+    if(operation===MANUFACTURING_SCRAP_RESTATEMENT_OPERATION)return (await tx.execute<{label:string}>(sql`select work.number || ' — scrap' as label from mfg_scrap_events event join mfg_work_orders work on work.org_id=event.org_id and work.id=event.work_order_id where event.org_id=${orgId} and event.id=${subjectId}`)).rows[0]?.label??null;
     return null;
   }
   const row = (

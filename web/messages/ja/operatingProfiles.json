@@ -1,0 +1,87 @@
+{
+  "chooseTitle": "作業の進め方を選択",
+  "chooseDescription": "チームに必要な詳細から始めます。機能と権限によって利用できる項目が決まります。",
+  "change": "ワークフローを変更",
+  "loading": "ワークフローを読み込み中…",
+  "loadFailed": "ワークフローを読み込めませんでした。",
+  "retry": "再試行",
+  "noChoices": "利用できるワークフローがありません。会社の機能と設定の運用プロファイルを確認してください。",
+  "presets": {
+    "shop_jobs": {
+      "name": "工場の案件",
+      "description": "顧客案件、準備状況、工数。必要に応じて活動を追加できます。"
+    },
+    "field_work": {
+      "name": "現場作業",
+      "description": "現場作業に必要な作業票、チーム、計画を選択できます。"
+    },
+    "professional_services": {
+      "name": "専門サービス",
+      "description": "建設用の項目を使わずに案件、工数、成果物を管理します。"
+    },
+    "discrete_production": {
+      "name": "個別生産",
+      "description": "部品表と工程を使って反復生産します。"
+    },
+    "custom_production": {
+      "name": "受注生産",
+      "description": "材料と改訂を管理する受注生産です。"
+    },
+    "batch_process": {
+      "name": "バッチ・プロセス生産",
+      "description": "配合、バッチ、実測歩留まり、追跡可能な製品を管理します。"
+    }
+  },
+  "capture": {
+    "job": "案件全体",
+    "activities": "活動",
+    "tasks": "タスク",
+    "field_tickets": "現場作業票",
+    "operations": "工程",
+    "batch": "バッチ"
+  },
+  "time": {
+    "work": "作業",
+    "project": "プロジェクト / 案件",
+    "production": "生産",
+    "order": "製造オーダー",
+    "operation": "工程（任意）",
+    "search": "作業を検索",
+    "title": "製造工数",
+    "correct": "訂正",
+    "correctTitle": "生産作業時間を訂正",
+    "correctMessage": "元の記録は転記済みのまま残ります。相殺と置換で訂正を記録し、入庫済み製品の履歴原価は維持されます。",
+    "correctHours": "訂正後の時間",
+    "correctReason": "理由",
+    "record": "時間を記録"
+  },
+  "department": "部門（任意）",
+  "companyDefaults": "会社の既定値",
+  "default": "既定ワークフロー",
+  "views": {
+    "presentation": "表示",
+    "list": "一覧",
+    "board": "ボード",
+    "emptyLane": "このページに作業はありません",
+    "pageScope": "カードと列の件数は現在の絞り込みページを示します。",
+    "saveFailed": "表示設定を保存できませんでした。"
+  },
+  "filters": {
+    "workflow": "業務フロー",
+    "department": "部門",
+    "allWorkflows": "すべてのフロー",
+    "allDepartments": "すべての部門",
+    "legacy": "プロファイル未設定の既存業務",
+    "unassigned": "未割当"
+  },
+  "workJourney": {
+    "description": "この案件で作業、時間、原価を管理します。チームに役立つ場合は作業内訳を追加できます。",
+    "recordTime": "時間を記録",
+    "time": "記録した時間",
+    "hours": "記録済み {hours} 時間",
+    "costs": "原価を追加",
+    "costsNote": "既存の案件原価伝票で材料やその他の原価を記録します。",
+    "breakdown": "作業内訳",
+    "breakdownNote": "詳しい管理が役立つ場合は既存の活動やタスクを使用します。"
+  }
+}

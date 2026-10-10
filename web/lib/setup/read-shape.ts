@@ -5,6 +5,17 @@ import { toSnake } from './registry'
 
 /** Read-side projection/source for registry fields stored in a child relation. */
 export function setupReadProjection(entity: SetupEntity, columns?: readonly string[]) {
+  if (entity.key === 'work-calendars') {
+    const holidays = `coalesce((select jsonb_agg(jsonb_build_object('date', day) order by day) from jsonb_array_elements_text(schedule_calendars.holidays) closure(day)), '[]'::jsonb) as holidays`
+    return sql.raw((columns?.length ? columns.map(column => column === 'holidays' ? holidays : column) : ['*', holidays]).join(', '))
+  }
+  if (entity.key === 'operating-profiles') {
+    const derived = {
+      definition: '(select v.definition from operating_profile_versions v where v.org_id=operating_profiles.org_id and v.id=operating_profiles.current_version_id) as definition',
+      version: '(select v.version from operating_profile_versions v where v.org_id=operating_profiles.org_id and v.id=operating_profiles.current_version_id) as version',
+    }
+    return sql.raw((columns?.length ? columns.map(c => derived[c as keyof typeof derived] ?? c) : ['*', ...Object.values(derived)]).join(', '))
+  }
   if (entity.key === 'dunning-policies') {
     // Export the complete policy in the same structured shape its native
     // editor accepts, including ordered reminders and retry rows.
@@ -52,5 +63,6 @@ export function setupReadProjection(entity: SetupEntity, columns?: readonly stri
 }
 
 export function setupReadSource(entity: SetupEntity) {
+  if (entity.key === 'work-calendars') return sql.raw('(select schedule_calendars.*, xmin::text as revision from schedule_calendars where project_id is null) schedule_calendars')
   return sql.raw(entity.key === 'pay-components' ? 'pay_components c' : entity.table)
 }

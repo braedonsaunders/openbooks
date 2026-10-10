@@ -1,3 +1,5 @@
+import { withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
+import { lockSharedTimeAuthority, type TimeWorkFamily } from '@openbooks/engine/src/projects/time-work-target.ts'
 import 'server-only'
 
 import { getTranslations } from 'next-intl/server'
@@ -22,6 +24,7 @@ import {
   pinTimesheetEmployee,
   userEmployeeId,
   weekStart,
+  weekWindow,
 } from '../../api/timesheets/_lib'
 import type { WeeklyGrid } from './WeeklyGrid'
 
@@ -47,6 +50,8 @@ type WeeklyGridProps = Parameters<typeof WeeklyGrid>[0]
 
 export interface TimesheetsData {
   title: string
+  workFamily: TimeWorkFamily
+  basePath: string
   description: string
   canManage: boolean
   currentParams: Record<string, string | string[] | undefined>
@@ -61,11 +66,16 @@ export interface TimesheetsData {
 
 export async function loadTimesheets(
   sp: Record<string, string | string[] | undefined>,
+  workFamily: TimeWorkFamily = 'project',
 ): Promise<TimesheetsData> {
   const t = await getTranslations('timesheets')
 
   const authz = await requirePermission('time.read')
-  await requireFeatureEnabled(authz.user.orgId, 'timeTracking')
+  await requireFeatureEnabled(authz.user.orgId, workFamily === 'production' ? 'manufacturing' : 'timeTracking')
+  if (workFamily === 'production') await requirePermission('manufacturing.read')
+  const basePath = workFamily === 'production' ? '/manufacturing/time' : '/timesheets'
+  const productionAvailable = can(authz,'manufacturing.read') && await isFeatureEnabled(authz.user.orgId,'manufacturing')
+  const projectAvailable = can(authz,'projects.read') && await isFeatureEnabled(authz.user.orgId,'timeTracking')
   const canManage = can(authz, 'time.manage')
   const orgId = authz.user.orgId
 
@@ -86,8 +96,8 @@ export async function loadTimesheets(
     : null
   const newTarget = scopedMyEmployee ?? employees.rows[0]?.id ?? null
   const newHref = newTarget
-    ? (`/timesheets?timesheet=${newTarget}:${await currentWeekStart(orgId)}` as const)
-    : ('/timesheets' as const)
+    ? (`${basePath}?timesheet=${newTarget}:${await currentWeekStart(orgId)}` as const)
+    : basePath
 
   // Flyout: ?timesheet=<employeeId>:<weekStart>, the id the list emits.
   const openParam = pickString(sp.timesheet)
@@ -97,6 +107,10 @@ export async function loadTimesheets(
     ? await pinTimesheetEmployee(orgId, requestedEmployeeId, authz.allowedSubsidiaryIds)
     : null
   const openWeek = openWeekRaw && isIsoDate(openWeekRaw) ? weekStart(openWeekRaw) : null
+  if (openEmployeeId && openWeek) {
+    const days = weekWindow(openWeek)
+    await withOrgTransaction(orgId, () => lockSharedTimeAuthority(db,orgId,authz.user.id,{ employeeId:openEmployeeId,from:days[0]!,through:days[6]!,requestedScope:authz.allowedSubsidiaryIds,permission:'time.read',workFamily }))
+  }
   const [pickers, weekPayload, lineFieldDefs] = openEmployeeId && openWeek
     ? await Promise.all([
         loadPickers(orgId, openEmployeeId, authz.allowedSubsidiaryIds),
@@ -106,7 +120,7 @@ export async function loadTimesheets(
     : [null, null, []]
   const timePolicy = await loadTimePolicy(orgId)
   const requestedReturn = pickString(sp.drawerReturn)
-  const closeHref = requestedReturn?.startsWith('/timesheets') ? requestedReturn : '/timesheets'
+  const closeHref = requestedReturn?.startsWith(basePath + '?') || requestedReturn === basePath ? requestedReturn : basePath
 
   // The grid props are checked against the component here so a prop rename
   // fails in this file; the registry spreads the rest through untouched.
@@ -117,7 +131,7 @@ export async function loadTimesheets(
   // No .catch here: a failed flags query must fail the page, not quietly
   // render a drawer with no chips — that swallow hid a hard 42803 SQL
   // error behind "no flags" for weeks.
-  const fieldTimeOnEarly = await isFeatureEnabled(orgId, 'fieldTime')
+  const fieldTimeOnEarly = workFamily === 'project' && await isFeatureEnabled(orgId, 'fieldTime')
   const fieldFlags =
     fieldTimeOnEarly && openEmployeeId && openWeek
       ? await approvalFlags(orgId, { weekStart: openWeek, employeePartyId: openEmployeeId })
@@ -135,9 +149,13 @@ export async function loadTimesheets(
     pickers && weekPayload && openEmployeeId && openWeek
       ? {
           employeeId: openEmployeeId,
+          workFamily,
+          quickProjectId: projectAvailable && isUuid(pickString(sp.job) ?? '') && pickers.projects.some(project=>project.value===pickString(sp.job)) ? pickString(sp.job) : undefined,
+          productionAvailable,
+          projectAvailable,
           week: openWeek,
           payload: weekPayload,
-          pickers,
+          pickers: projectAvailable ? pickers : { ...pickers, projects: [] },
           canManage,
           canApprove: can(authz, 'time.approve'),
           canReopen: can(authz, 'time.reopen'),
@@ -152,6 +170,8 @@ export async function loadTimesheets(
   const fieldTimeOn = fieldTimeOnEarly
 
   return {
+    workFamily,
+    basePath,
     title: t('list.title'),
     description: t('list.description'),
     canManage,
@@ -176,7 +196,7 @@ const f = ref<TimesheetsData>()
 export function timesheetsSpec(data: TimesheetsData): PageSpec {
   const newTimesheet = { widget: 'new-timesheet', props: data.newButton }
   return page({
-    route: '/timesheets',
+    route: data.basePath,
     layout: 'list',
     header: [
       pageHeader({
@@ -193,6 +213,7 @@ export function timesheetsSpec(data: TimesheetsData): PageSpec {
     body: [
       widgetBlock('entity-list-view', {
         recordType: 'timesheet_week',
+        timeWorkFamily: data.workFamily,
         sp: data.currentParams,
         emptyAction: data.canManage ? newTimesheet : null,
         drawer: data.drawer ? [{ widget: 'timesheet-drawer', props: { drawer: data.drawer } }] : [],

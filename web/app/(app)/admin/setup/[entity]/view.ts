@@ -216,6 +216,7 @@ export async function loadSetupEntity(
   }
   const gatedEntity = baseEntity
     ? setupEntityForFeatureState(baseEntity, {
+        ...features,
         multiSubsidiary: featureEnabled(features, 'multiSubsidiary'),
         equipment: featureEnabled(features, 'equipment'),
         fieldTickets: featureEnabled(features, 'fieldTickets'),
@@ -263,7 +264,7 @@ export async function loadSetupEntity(
       select ${setupReadProjection(entity)} from ${setupReadSource(entity)} ${rowFilter}
        order by ${sql.raw(orderExpr(entity))}
        limit ${list.perPage} offset ${(list.page - 1) * list.perPage}`)),
-        (db.execute(sql`select count(*)::int as n from ${sql.raw(entity.table)} ${rowFilter}`)),
+        (db.execute(sql`select count(*)::int as n from ${setupReadSource(entity)} ${rowFilter}`)),
         loadRefOptions(entity, orgId, authz.allowedSubsidiaryIds),
         entity.key === 'tax-return-forms'
           ? db.execute<{ code: string }>(sql`select code from tax_return_forms where org_id = ${orgId}`)

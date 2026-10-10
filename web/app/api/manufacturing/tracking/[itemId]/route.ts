@@ -29,6 +29,7 @@ export const GET = defineRoute({
           authz.allowedSubsidiaryIds,
           params.itemId,
           query.data,
+          authz.user.id,
         ),
       );
     }),

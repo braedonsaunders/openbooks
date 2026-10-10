@@ -1,3 +1,4 @@
+import { authorizeTimeWorkspace } from "@/lib/time-workspace";
 import { z } from "zod";
 import { defineRoute } from "@/lib/api/route";
 import { isoDate, uuidId } from "@/lib/api/json";
@@ -18,7 +19,7 @@ import {
 } from "../_lib";
 import { notFound } from "@/lib/api/responses";
 const postBodySchema0 = z.union([
-  z.strictObject({ entryId: uuidId }),
+  z.strictObject({ entryId: uuidId, replacement: z.strictObject({ hours: z.string().regex(/^(?:0|[1-9]\d*)(?:\.\d{1,4})?$/), reason: z.string().trim().min(5).max(500) }).optional() }),
   z.strictObject({
     employee: uuidId,
     week: isoDate("week must be a valid calendar date"),
@@ -33,12 +34,13 @@ export const runtime = "nodejs";
  * hours are already invoiced, paid, costed or ticketed.
  */
 export const POST = defineRoute({
-  permission: "time.reopen",
-  feature: "timeTracking",
+  authorize: authorizeTimeWorkspace("time.reopen"),
+  feature: { none: "The explicit workspace pins Time Tracking or Manufacturing; native commands fence every actual target." },
   body: postBodySchema0,
-  handler: async ({ request: _req, authz: gate, body: routeBody }) => {
+  handler: async ({ request: workspaceRequest, authz: gate, body: routeBody }) => {
     const body = routeBody as {
       entryId?: string;
+      replacement?: {hours:string;reason:string};
       employee?: string;
       week?: string;
     };
@@ -63,8 +65,10 @@ export const POST = defineRoute({
           gate.user.id,
           body.entryId,
           gate.allowedSubsidiaryIds,
+          body.replacement,
         );
-        return NextResponse.json(result, { status: 201 });
+        const payload = await loadWeek(gate.user.orgId,sourceEmployee,result.week,gate.allowedSubsidiaryIds);
+        return NextResponse.json({...payload,...result}, { status: 201 });
       }
       if (!body.employee || !isUuid(body.employee)) {
         return NextResponse.json(

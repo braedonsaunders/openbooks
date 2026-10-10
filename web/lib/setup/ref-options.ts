@@ -1,4 +1,5 @@
 import { sql } from 'drizzle-orm'
+import { setupReadSource } from './read-shape'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { featureEnabled, resolvedFeatureState } from '../features'
 import { subsidiaryVisibleFilter } from '../subsidiaries'
@@ -52,6 +53,9 @@ export async function loadEntityOptions(
   orgId: string,
   allowedSubsidiaryIds: ReadonlySet<string> | null = null,
 ): Promise<RefOption[]> {
+  if (source === 'operating-profiles') {
+    return (await db.execute<RefOption>(sql`select id::text as value,name as label,family as "scopeValue" from operating_profiles where org_id=${orgId} and is_active and current_version_id is not null order by name,id`)).rows
+  }
   if (source === 'subsidiaries') {
     const employers = await db.execute<RefOption>(sql`select id::text as value,name as label from subsidiaries
       where org_id=${orgId} and is_active and not is_elimination
@@ -276,7 +280,7 @@ export async function loadEntityOptions(
       : sql.raw(labelCols[0]!)
   const r = await db.execute(sql`
     select ${sql.raw(valueCol)} as value, ${labelExpr} as label
-      from ${sql.raw(target.table)}${orgFilter}${customSegmentFilter}
+      from ${setupReadSource(target)}${orgFilter}${customSegmentFilter}
      order by ${sql.raw(orderCol)}`);
   return r.rows as RefOption[]
 }

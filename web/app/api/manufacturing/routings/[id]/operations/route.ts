@@ -1,3 +1,4 @@
+import { lockManufacturingRoutingAuthority } from "@openbooks/engine/src/manufacturing/authority.ts";
 import { z } from "zod";
 import { db } from "@openbooks/engine/src/platform/db.ts";
 import { createRoutingOperation, getRouting, type RoutingOperationInput } from "@openbooks/engine/src/manufacturing/routings.ts";
@@ -12,7 +13,7 @@ import { manufacturingTransaction } from "../../../_transaction";
 const Params = z.object({ id: z.string().uuid() });
 const Body = z.object({
   sequence: z.number().int().positive(), name: z.string().trim().min(1), workCenterId: z.string().uuid(),
-  setupMinutes: z.string(), runMinutesPerUnit: z.string(), laborMinutesPerUnit: z.string().nullable().optional(),
+  setupMinutes: z.string(), runMinutesPerUnit: z.string(), laborTimeSource: z.enum(["operation", "approved_time"]).optional(), laborMinutesPerUnit: z.string().nullable().optional(),
   backflushAt: z.enum(["none", "start", "finish"]).optional(), qualityGate: z.enum(["none", "measure"]).optional(),
 });
 
@@ -30,9 +31,10 @@ export const POST = defineRoute({
     if (centerDenied) return centerDenied;
     const match = { routingId: params.id, ...input };
     const row = await idempotentManufacturingCreate({
-      orgId: authz.user.orgId, request, table: "mfg_routing_operations", match,
+      orgId: authz.user.orgId, actorId: authz.user.id, request, table: "mfg_routing_operations", match,
       create: (id, requestId, savedMatch) => createRoutingOperation(db, authz.user.orgId, authz.user.id, params.id, input, { id, requestId, match: savedMatch }),
       load: async () => {
+        await lockManufacturingRoutingAuthority(db,authz.user.orgId,authz.user.id,params.id);
         const current = await getRouting(db, authz.user.orgId, params.id);
         return (current?.operations as Record<string, unknown>[] | undefined)?.find((operation) => operation.id === request.headers.get("Idempotency-Key")!.trim()) ?? null;
       },

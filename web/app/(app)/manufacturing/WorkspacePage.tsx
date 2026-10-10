@@ -1,3 +1,9 @@
+import { readWorkListFilters } from "@openbooks/engine/src/organization/work-list-filters.ts";
+import { readWorkListPresentation } from "@openbooks/engine/src/organization/list-presentation.ts";
+import { WorkListPresentation } from "@/components/work-list-presentation";
+import { manufacturingFeatureEnabled } from "@openbooks/engine/src/manufacturing/gate.ts";
+import { RecordBoard } from '@/components/record-board';
+import { listOperatingProfileChoices } from '@openbooks/engine/src/organization/operating-profiles.ts';
 import Link from "next/link";
 import { getTranslations, getLocale } from "next-intl/server";
 import { z } from "zod";
@@ -6,6 +12,7 @@ import { withScopeSnapshot } from "@openbooks/engine/src/organization/subsidiary
 import {
   listManufacturingRecords,
   manufacturingOptions,
+  searchManufacturingChoices,
   type ManufacturingRow,
   type ManufacturingView,
 } from "@openbooks/engine/src/manufacturing/workspace.ts";
@@ -102,6 +109,8 @@ export async function ManufacturingWorkspacePage({
     basePath = "/manufacturing/" + view;
   const query = {
     q: value(searchParams.q)?.slice(0, 200),
+    workflow: value(searchParams.workflowFilter),
+    department: value(searchParams.department),
     status: value(searchParams.status),
     subsidiaryId: uuid(value(searchParams.subsidiaryId)),
     page: Math.max(
@@ -116,16 +125,20 @@ export async function ManufacturingWorkspacePage({
       ),
     ),
   };
-  const { page, options } = await withScopeSnapshot(
+  const { page, options, operatingChoices, preferredPresentation, workFilters } = await withScopeSnapshot(
     authz.user.orgId,
     async () => ({
+      workFilters: view==='work-orders' ? await readWorkListFilters(db,authz.user.orgId,authz.user.id,'production') : null,
+      preferredPresentation: view==='work-orders' ? await readWorkListPresentation(db,authz.user.orgId,authz.user.id,'manufacturing_work_order') : null,
       page: await listManufacturingRecords(
         db,
         authz.user.orgId,
         authz.allowedSubsidiaryIds,
         view,
         query,
+        authz.user.id,
       ),
+      operatingChoices: view==='work-orders' ? await listOperatingProfileChoices(db,authz.user.orgId,authz.user.id,'production',uuid(value(searchParams.departmentId))??null) : [],
       options: await manufacturingOptions(
         db,
         authz.user.orgId,
@@ -134,6 +147,16 @@ export async function ManufacturingWorkspacePage({
       ),
     }),
   );
+  const selectedItemId=uuid(value(searchParams.producedItemId));
+  let initialItemId:string|undefined;
+  if(view==='work-orders'&&selectedItemId) {
+    const matches=await withScopeSnapshot(authz.user.orgId,()=>searchManufacturingChoices(db,authz.user.orgId,authz.allowedSubsidiaryIds,'items','',selectedItemId));
+    const selected=matches.find(item=>item.value===selectedItemId);
+    if(selected) {initialItemId=selectedItemId;if(!options.items.some(item=>item.value===selectedItemId))options.items.push(selected);}
+  }
+  const initialEntityId=options.subsidiaries.some(entity=>entity.value===value(searchParams.subsidiaryId))?value(searchParams.subsidiaryId):undefined;
+  const tOperating = await getTranslations('operatingProfiles');
+  const presentation = view==='work-orders' && (value(searchParams.presentation) ?? preferredPresentation ?? operatingChoices.find(choice=>choice.isDefault)?.definition.presentation.defaultView ?? 'board') === 'board' ? 'board' : 'list';
   const recordId = value(searchParams.record),
     validRecord =
       recordId === "new"
@@ -198,6 +221,9 @@ export async function ManufacturingWorkspacePage({
     >
       <ServerPagedTable
         source={manufacturingSources[view]}
+        presentationBody={presentation==='board' ? <div className="p-3"><RecordBoard lanes={statuses[view].map(status=>({value:status,label:label(status)}))}
+          cards={page.rows.map(row=>({id:row.id,lane:String(row.status),title:cell('number',row),subtitle:String(row.itemName ?? ''),detail:<div className="flex justify-between gap-3"><span>{cell('quantityCompleted',row)} / {cell('quantityOrdered',row)} {label(row.unit)}</span><span>{label(row.priority)}</span></div>}))}
+          emptyLabel={tOperating('views.emptyLane')} pageLabel={tOperating('views.pageScope')} /></div> : undefined}
         rows={page.rows}
         columns={fields[view].map((key) => ({
           key,
@@ -258,6 +284,8 @@ export async function ManufacturingWorkspacePage({
                 ))}
               </Select>
             </div>
+            {workFilters?<><div className="space-y-1"><Label htmlFor="mfg-workflow">{tOperating('filters.workflow')}</Label><Select id="mfg-workflow" name="workflowFilter" defaultValue={query.workflow??'all'}><option value="all">{tOperating('filters.allWorkflows')}</option><option value="legacy">{tOperating('filters.legacy')}</option>{workFilters.profiles.map(option=><option key={option.value} value={option.value}>{option.label}</option>)}</Select></div><div className="space-y-1"><Label htmlFor="mfg-department">{tOperating('filters.department')}</Label><Select id="mfg-department" name="department" defaultValue={query.department??'all'}><option value="all">{tOperating('filters.allDepartments')}</option><option value="unassigned">{tOperating('filters.unassigned')}</option>{workFilters.departments.map(option=><option key={option.value} value={option.value}>{option.label}</option>)}</Select></div></>:null}
+            {view==='work-orders' ? <><input type="hidden" name="presentation" value={presentation}/><WorkListPresentation context="manufacturing_work_order" value={presentation} basePath={basePath} currentParams={searchParams}/></> : null}
             <input type="hidden" name="perPage" value={page.perPage} />
             <Button type="submit" variant="outline">
               {t("filter")}
@@ -275,10 +303,16 @@ export async function ManufacturingWorkspacePage({
         recordId={validRecord}
         closeHref={closeHref}
         options={options}
+        initialWorkflow={operatingChoices.find(choice=>choice.value===value(searchParams.workflow))}
+        initialDepartmentId={uuid(value(searchParams.departmentId))}
+        initialValues={{producedItemId:initialItemId,subsidiaryId:initialEntityId,quantityOrdered:value(searchParams.quantityOrdered)}}
         canManage={can(authz, "manufacturing.manage")}
         canPost={can(authz, "items.post")}
         canBuy={authz.permissions.has("ap.create")}
+        canSubcontract={await manufacturingFeatureEnabled(authz.user.orgId,"manufacturingSubcontract")} canReadQuality={can(authz,"items.read")}
         canReadJournal={can(authz, "gl.read")}
+        canGovernRevisions={can(authz,"manufacturing.manage") && authz.allowedSubsidiaryIds===null}
+        canRollup={can(authz,"manufacturing.manage") && can(authz,"items.manage") && can(authz,"items.post") && authz.allowedSubsidiaryIds===null}
       />
     </ListPageLayout>
   );

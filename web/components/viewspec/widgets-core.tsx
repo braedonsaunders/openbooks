@@ -194,6 +194,8 @@ export const CORE_WIDGETS: Record<string, WidgetRenderer> = {
     return (
       <EntityListSlot
         recordType={str(props, 'recordType') ?? ''}
+        timeWorkFamily={str(props, 'timeWorkFamily')}
+        defaultPresentation={str(props, 'defaultPresentation')}
         sp={(props.sp as Record<string, string | string[] | undefined>) ?? {}}
         drawer={drawer}
         emptyAction={emptyAction}

@@ -353,12 +353,12 @@ export const resolveListView = cache(
     // org/system. A missing row is not a refusal — then a unique personal
     // default still applies.
     if (!chosen) {
-      const pref = (await db.execute<{ viewId: string | null }>(sql`
-        select view_id as "viewId" from user_list_preferences
+      const pref = (await db.execute<{ viewId: string | null; selectionExplicit: boolean }>(sql`
+        select view_id as "viewId", view_selection_explicit as "selectionExplicit" from user_list_preferences
          where org_id = ${orgId} and user_id = ${userId} and record_type = ${recordType}
       `));
       const prefRow = pref.rows[0];
-      if (prefRow) {
+      if (prefRow && prefRow.selectionExplicit !== false) {
         const pid = prefRow.viewId;
         if (pid && isUuid(pid)) chosen = byId(pid);
       } else {

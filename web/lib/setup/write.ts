@@ -1,5 +1,6 @@
 import { lockAndCheckOrgFeature } from '@openbooks/engine/organization/features'
 import 'server-only'
+import { validateSubcontractLocationConfiguration } from '@openbooks/engine/src/inventory/subcontract-custody.ts'
 import { setupReferenceSubsidiarySource } from './subsidiary-scope'
 import { randomUUID } from 'node:crypto'
 import { uuidId } from '../api/json-schema'
@@ -2384,6 +2385,7 @@ export async function createSetupRecord(
     })
     const claimMatch = { orgId, table: entity.table, key: requestId, match, orgScoped: entity.orgScoped }
     const newId = await setupWriteTransaction(entity, orgId, body, undefined, async (tx) => {
+      if (entity.key==='stock-locations') await validateSubcontractLocationConfiguration(tx,orgId,actorId,body)
       // The claim resolves before the insert and the member sync below, so
       // an exact retry returns having written neither.
       const claim = await claimSetupCreate(tx, claimMatch)
@@ -3017,6 +3019,7 @@ export async function updateSetupRecord(
   } | null = null
   try {
     const found = await setupWriteTransaction(entity, orgId, body, id, async (tx) => {
+      if (entity.key==='stock-locations') await validateSubcontractLocationConfiguration(tx,orgId,actorId,body,id)
       const before = await loadSetupAuditRow(entity, orgId, id, tx, true)
       if (!before) return false
       const updated = ((await tx.execute(sql`

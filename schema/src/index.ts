@@ -19,6 +19,7 @@ export * from "./inventory";
 export * from "./demand-planning";
 export * from "./item-families";
 export * from "./manufacturing";
+export * from "./operating-profiles";
 export * from "./warehouses";
 export * from "./revenue";
 export * from "./assets";
@@ -115,4 +116,8 @@ export * from "./benefit-transaction-policies";
 export * from './inventory-controls';
 
 export * from './warehouse-execution';
+
+export * from "./manufacturing-trace";
+export * from "./inspections";
+export * from "./manufacturing-subcontract";
 export * from "./tenant-retirement";

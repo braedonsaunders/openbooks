@@ -3585,6 +3585,30 @@
         "plural": "循環棚卸方針",
         "description": "法人およびABC分類ごとの有効な棚卸間隔と基本単位の差異許容値。",
         "title": "循環棚卸方針"
+      },
+      "operating-profiles": {
+        "title": "運用プロファイル",
+        "singularTitle": "運用プロファイル",
+        "description": "既存の請求・会計ルールを変えずに作業記録と表示を構成します。"
+      },
+      "operating-profile-scopes": {
+        "title": "ワークフローの選択肢",
+        "singularTitle": "ワークフローの選択肢",
+        "description": "部門または会社全体で許可するワークフローと既定値を選択します。"
+      },
+      "operating-profile-versions": {
+        "title": "ワークフローバージョン",
+        "singularTitle": "ワークフローバージョン",
+        "description": "既存の作業に保持される公開済みの構成。"
+      },
+      "inspection-plans": {
+        "title": "検査計画",
+        "description": "固定された検査計画と管理された処置で入荷と生産を検査します。"
+      },
+      "work-calendars": {
+        "title": "稼働カレンダー",
+        "singularTitle": "稼働カレンダー",
+        "description": "生産とプロジェクト日程で共用する会社の稼働日と休業日です。作業センターごとに利用可能時間を設定します。既存のMRP実行は実行時のカレンダー情報を保持します。"
       }
     },
     "fields": {
@@ -4192,7 +4216,9 @@
       "varianceTolerance": "差異許容値",
       "inventoryOwnership": "在庫所有区分",
       "schedulePdfColorTreatment": "色の表示",
-      "schedulePdfColorIntensity": "色の濃度 (%)"
+      "schedulePdfColorIntensity": "色の濃度 (%)",
+      "custodianPartyId": "預け先仕入先",
+      "showReadiness": "作業ガイド"
     },
     "fieldHelp": {
       "fxRateMaxAgeDays": "使用可能な最新レートから期末までの日数がこれを超えると、再評価と連結はそのレートを拒否します。期末レートは期末スポットレートの日付から、平均レートは平均に含まれる最新の相場の日付から数えます。ポリシー未設定時の既定値: 31日。",
@@ -4569,7 +4595,8 @@
         "bin": "ビン",
         "staging": "ステージング",
         "transit": "輸送中",
-        "quarantine": "検疫"
+        "quarantine": "検疫",
+        "subcontract": "外注先預け在庫"
       },
       "manufacturingScrap": {
         "normal": "通常スクラップ",
@@ -6918,6 +6945,127 @@
     },
     "actions": {
       "scheduleDeliveryFlows": "Flowsでメールの時刻を設定"
+    },
+    "operatingProfiles": {
+      "chooser": {
+        "title": "作業の進め方を選択",
+        "description": "チームに必要な詳細から始めます。機能と権限によって利用できる項目が決まります。"
+      },
+      "presets": {
+        "shop_jobs": {
+          "name": "工場の案件",
+          "description": "顧客案件、準備状況、工数。必要に応じて活動を追加できます。"
+        },
+        "field_work": {
+          "name": "現場作業",
+          "description": "現場作業に必要な作業票、チーム、計画を選択できます。"
+        },
+        "professional_services": {
+          "name": "専門サービス",
+          "description": "建設用の項目を使わずに案件、工数、成果物を管理します。"
+        },
+        "discrete_production": {
+          "name": "個別生産",
+          "description": "部品表と工程を使って反復生産します。"
+        },
+        "custom_production": {
+          "name": "受注生産",
+          "description": "材料と改訂を管理する受注生産です。"
+        },
+        "batch_process": {
+          "name": "バッチ・プロセス生産",
+          "description": "配合、バッチ、実測歩留まり、追跡可能な製品を管理します。"
+        }
+      },
+      "compositionHelp": "各レコードは選択したバージョンを保持します。公開は新規作業の選択肢を変更します。",
+      "sections": {
+        "basics": "基本情報",
+        "composition": "作業記録とビュー",
+        "publish": "バージョンを公開"
+      },
+      "fields": {
+        "code": "コード",
+        "name": "名前",
+        "definition": "構成",
+        "family": "作業レコード",
+        "capture": "作業記録",
+        "physicalModel": "生産モデル",
+        "demand": "需要",
+        "terminology": "作業名称",
+        "singular": "単数名称",
+        "plural": "複数名称",
+        "presentation": "表示",
+        "showSite": "現場詳細",
+        "showForeman": "職長",
+        "showCustomerPo": "顧客注文番号",
+        "showMaterials": "材料",
+        "showReadiness": "準備状況",
+        "defaultView": "既定のビュー",
+        "reason": "公開理由",
+        "departmentId": "部門",
+        "profileIds": "許可されたワークフロー",
+        "defaultProfileId": "既定のワークフロー",
+        "version": "バージョン",
+        "publishedAt": "公開日時",
+        "profileId": "プロファイル"
+      },
+      "values": {
+        "project": "プロジェクト",
+        "production": "生産オーダー",
+        "job": "案件全体",
+        "activities": "活動",
+        "tasks": "タスク",
+        "field_tickets": "現場作業票",
+        "operations": "工程",
+        "batch": "バッチ",
+        "none": "なし",
+        "discrete": "個別",
+        "process": "プロセス",
+        "make_to_order": "受注生産",
+        "make_to_stock": "見込生産",
+        "list": "リスト",
+        "board": "ボード"
+      },
+      "scopeHelp": "部門を空にすると会社の既定値になります。部門は複数のワークフローを提供できます。"
+    },
+    "inspectionPlans": {
+      "name": "計画名",
+      "itemId": "在庫品目",
+      "point": "検査時点",
+      "operationSequence": "工程序号",
+      "effectiveFrom": "適用開始日",
+      "effectiveTo": "適用終了日",
+      "basics": "計画と範囲",
+      "measurements": "測定値",
+      "help": "必要な測定項目だけを追加してください。範囲を空欄にすると数値許容差なしで記録できます。使用済み計画の適用期間を終了し、次の改訂を作成してください。",
+      "audit": "監査",
+      "key": "測定キー",
+      "label": "名称",
+      "unit": "単位",
+      "required": "必須",
+      "minimum": "最小値",
+      "maximum": "最大値",
+      "reason": "変更理由",
+      "receipt": "入荷",
+      "operation": "工程"
+    },
+    "workCalendars": {
+      "help": "生産とプロジェクト日程で共用する会社の稼働日と休業日です。作業センターごとに利用可能時間を設定します。既存のMRP実行は実行時のカレンダー情報を保持します。",
+      "name": "名前",
+      "description": "説明",
+      "isDefault": "会社の既定",
+      "workingDays": "稼働日",
+      "holidays": "休業日",
+      "date": "休業日の日付",
+      "reason": "変更理由",
+      "addClosure": "休業日を追加",
+      "0": "日曜日",
+      "1": "月曜日",
+      "2": "火曜日",
+      "3": "水曜日",
+      "4": "木曜日",
+      "5": "金曜日",
+      "6": "土曜日"
     }
   },
   "flows": {
@@ -7599,6 +7747,10 @@
     "consignment": {
       "description": "仕入先と顧客の受託在庫を追跡し、所有権の取得時に自社在庫を計上します。",
       "title": "委託在庫"
+    },
+    "manufacturingSubcontract": {
+      "title": "外注製造",
+      "description": "部品を仕入先に送り、加工サービスを記録し、生産数量を製造オーダーに戻します。"
     }
   },
   "extensions": {

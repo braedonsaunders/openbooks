@@ -3,6 +3,7 @@ import { db, withOrgTransaction } from "../platform/db.ts";
 import { lockActorCommandAuthority } from "../organization/actor-command-authority.ts";
 import { orgFeatureEnabled } from "../organization/org-feature-lock.ts";
 import { InventoryError } from "./contracts.ts";
+import { inspectionHoldReason } from "./inspection-holds.ts";
 
 export type InventoryInquiry =
   "holds" | "consignment" | "cycle_due" | "layers" | "consumptions";
@@ -46,8 +47,8 @@ export async function inventoryInquiry(
     let source: ReturnType<typeof sql>;
     if (query.view === "holds") {
       source = sql`select distinct subject.subsidiary_id,h.id as subject_id,h.kind||':'||h.id::text||':'||coalesce(subject.subsidiary_id::text,'') as id,h.kind,h.identifier,h.item_id,item.name as item,h.hold_reason as reason,h.expires_on::text as expiry
-        from (select org_id,id,item_id,'lot' as kind,lot_number as identifier,hold_reason,expires_on from lots
-          union all select org_id,id,item_id,'serial',serial_number,hold_reason,null::date from serials) h
+        from (select org_id,id,item_id,'lot' as kind,lot_number as identifier,coalesce(hold_reason,${inspectionHoldReason(sql`lots.org_id`,sql`lots.id`,sql`null::uuid`)}) as hold_reason,expires_on from lots
+          union all select org_id,id,item_id,'serial',serial_number,coalesce(hold_reason,${inspectionHoldReason(sql`serials.org_id`,sql`serials.lot_id`,sql`serials.id`)}),null::date from serials) h
         join items item on item.org_id=h.org_id and item.id=h.item_id
         left join (select org_id,item_id,lot_id,serial_id,subsidiary_id from inventory_movements
           union all select org_id,item_id,lot_id,serial_id,subsidiary_id from consignment_stock) subject on subject.org_id=h.org_id and subject.item_id=h.item_id

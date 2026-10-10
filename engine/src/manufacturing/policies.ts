@@ -1,3 +1,4 @@
+import { lockManufacturingPolicyAuthority } from "./authority.ts";
 import { sql } from "drizzle-orm";
 import { cmpMoney, parseMoney, type Money } from "../money/brands.ts";
 import type { SqlExecutor } from "../platform/db.ts";
@@ -68,6 +69,7 @@ export async function updateManufacturingPolicies(
   tx: SqlExecutor, orgId: string, actorId: string, input: ManufacturingPoliciesInput,
 ): Promise<ManufacturingPolicies> {
   await assertManufacturingFeature(tx, orgId, "manufacturing");
+  await lockManufacturingPolicyAuthority(tx,orgId,actorId);
   if (!input || (input.shortagePolicy !== "warn" && input.shortagePolicy !== "refuse")) {
     refused("Choose whether material shortages warn or refuse.", "invalid_shortage_policy", "shortagePolicy", "Choose warn or refuse.");
   }

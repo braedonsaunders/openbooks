@@ -28,6 +28,7 @@ export function ServerPagedTable<T>({
   sort,
   dir = 'asc',
   toolbar,
+  presentationBody,
   source,
   leading,
   footer,
@@ -52,6 +53,8 @@ export function ServerPagedTable<T>({
   sort?: string
   dir?: 'asc' | 'desc'
   toolbar?: ReactNode
+  /** Alternative presentation of this exact authorized page, with the same toolbar and pager. */
+  presentationBody?: ReactNode
   source?: PreparedListSourceKey
   leading?: ReactNode
   footer?: ReactNode
@@ -85,7 +88,7 @@ export function ServerPagedTable<T>({
         </div>
       ) : null}
       <div className={contained ? 'flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900' : 'overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900'}>
-        <ListTable
+        {presentationBody ?? <ListTable
           contained={contained}
           rows={rows}
           columns={columns}
@@ -132,7 +135,7 @@ export function ServerPagedTable<T>({
               </TableHead>
             )
           }}
-        />
+        />}
         {paging ? (
           <Pagination
             basePath={basePath}

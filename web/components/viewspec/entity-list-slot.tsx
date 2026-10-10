@@ -1,3 +1,6 @@
+import { isFeatureEnabled } from '../../lib/features'
+import { requireFeatureEnabled } from '../../lib/feature-gates'
+import { requirePermission } from '../../lib/authz'
 import 'server-only'
 
 import type { ReactNode } from 'react'
@@ -127,6 +130,8 @@ async function bankRuleFormatValue(orgId: string) {
  */
 export async function EntityListSlot({
   recordType,
+  timeWorkFamily,
+  defaultPresentation,
   sp,
   drawer,
   emptyAction,
@@ -134,6 +139,8 @@ export async function EntityListSlot({
   emptyDescription,
 }: {
   recordType: string
+  timeWorkFamily?: string
+  defaultPresentation?: string
   sp: Record<string, string | string[] | undefined>
   drawer?: ReactNode
   emptyAction?: ReactNode
@@ -142,6 +149,20 @@ export async function EntityListSlot({
 }) {
   const authz = await getAuthz()
   if (!authz) return null
+  let timeScope: ReturnType<typeof sql> | undefined
+  let timeBasePath: string | undefined
+  if (recordType === 'timesheet_week') {
+    const timeAuthz = await requirePermission('time.read')
+    const production = timeWorkFamily === 'production'
+    await requireFeatureEnabled(timeAuthz.user.orgId, production ? 'manufacturing' : 'timeTracking')
+    if (production) await requirePermission('manufacturing.read')
+    timeBasePath = production ? '/manufacturing/time' : '/timesheets'
+    const projectVisible = can(authz,'projects.read') && await isFeatureEnabled(authz.user.orgId,'timeTracking')
+    const productionVisible = can(authz,'manufacturing.read') && await isFeatureEnabled(authz.user.orgId,'manufacturing')
+    timeScope = sql`not exists(select 1 from time_entries entry where entry.org_id=tw.org_id and entry.employee_party_id=tw.employee_party_id
+      and entry.worked_on>=tw.week_start and entry.worked_on<tw.week_start+7
+      and ((${!projectVisible} and entry.project_id is not null) or (${!productionVisible} and entry.work_order_id is not null)))`
+  }
   const formatValue = recordType === 'bank_rule'
     ? await bankRuleFormatValue(authz.user.orgId)
     : recordType === 'demand_suggestion'
@@ -180,6 +201,9 @@ export async function EntityListSlot({
   }
   return (
     <EntityListView
+      defaultPresentation={defaultPresentation}
+      scopePredicate={timeScope}
+      basePathOverride={timeBasePath}
       formatValue={formatValue}
       rowTrailing={rowTrailing}
       recordType={recordType}

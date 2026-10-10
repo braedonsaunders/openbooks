@@ -38,6 +38,8 @@ export interface LineGridColumn<Row extends Record<string, unknown>> {
   key: string
   /** Optional empty columns may be disclosed with Details; values stay in rows. */
   secondary?: boolean
+  /** A stored default does not disclose optional detail until the operator changes it. */
+  secondaryDefaultValue?: string | number | boolean
   label: string
   /** Optional explanation shown from the column heading. */
   help?: React.ReactNode
@@ -273,7 +275,7 @@ export function LineGrid<Row extends Record<string, unknown>>({
   const tCommon = useTranslations('common')
   const [showDetails, setShowDetails] = useState(false)
   const columns = allColumns.filter((column) => !column.secondary || column.required || readOnly || showDetails
-    || rows.some((row) => row[column.key] != null && row[column.key] !== ''))
+    || rows.some((row) => row[column.key] != null && row[column.key] !== '' && row[column.key] !== column.secondaryDefaultValue))
   const headerIdPrefix = useId()
   const headerIds = columns.map((_column, index) => `${headerIdPrefix}-column-${index}`)
   const rowLabelPrefix = `${headerIdPrefix}-row`

@@ -6,6 +6,7 @@ import { lockAndCheckOrgFeature } from "../organization/org-feature-lock.ts";
 import { ScopeNotFoundError, withScopeSnapshot } from "../organization/subsidiary-scope.ts";
 import { uuidArray } from "../organization/subsidiaries.ts";
 import { InventoryError, InventoryNotFoundError, type InventoryProfile } from "./contracts.ts";
+import { inspectionHoldReason } from "./inspection-holds.ts";
 
 export interface InventoryTrackingOptions {
   tracking: InventoryProfile["tracking"];
@@ -20,13 +21,15 @@ export interface InventoryTrackingOptions {
 export async function inventoryTrackingOptions(
   orgId: string,
   actorId: string,
-  query: { itemId: string; q?: string; lotId?: string },
+  query: { itemId: string; q?: string; lotId?: string;selectedLotId?:string;selectedSerialId?:string },
 ): Promise<InventoryTrackingOptions> {
   if (!isUuid(query.itemId) || (query.lotId !== undefined && !isUuid(query.lotId)))
     throw new InventoryError("Choose valid inventory identifiers");
+  if ([query.selectedLotId,query.selectedSerialId].some(value=>value!==undefined&&!isUuid(value))) throw new InventoryError("Choose valid inventory identifiers");
   if (query.q !== undefined && (typeof query.q !== "string" || query.q.length > 200))
     throw new InventoryError("Identifier search must contain at most 200 characters");
   return withScopeSnapshot(orgId, async () => {
+    if (!(await db.execute(sql`select id from users where id=${actorId} and is_active and (org_id=${orgId} or is_super_admin) for share`)).rows.length) throw new ScopeNotFoundError();
     const allowed = await lockActorCommandAuthority(db, orgId, actorId, null, "items.read");
     if (!(await lockAndCheckOrgFeature(db, orgId, "inventory"))) throw new ScopeNotFoundError();
     const profile = (await db.execute<{ tracking: InventoryProfile["tracking"] | null }>(sql`
@@ -49,13 +52,13 @@ export async function inventoryTrackingOptions(
         union all
         select lot_id,serial_id,subsidiary_id from consignment_stock where org_id=${orgId} and item_id=${query.itemId}
       ), visible_lots as (
-        select lot.id,lot.lot_number as label,lot.expires_on::text as expiry,lot.hold_reason
+        select lot.id,lot.lot_number as label,lot.expires_on::text as expiry,coalesce(lot.hold_reason,${inspectionHoldReason(sql`lot.org_id`,sql`lot.id`,sql`null::uuid`)}) as hold_reason
         from lots lot where lot.org_id=${orgId} and lot.item_id=${query.itemId}
           and ${permitted === null ? sql`true` : sql`(
             exists(select 1 from positions p where p.lot_id=lot.id and ${entityScope})
             or (lot.created_by=${actorId} and not exists(select 1 from positions p where p.lot_id=lot.id)))`}
       ), visible_serials as (
-        select serial.id,serial.serial_number as label,serial.lot_id,serial.hold_reason
+        select serial.id,serial.serial_number as label,serial.lot_id,coalesce(serial.hold_reason,${inspectionHoldReason(sql`serial.org_id`,sql`serial.lot_id`,sql`serial.id`)}) as hold_reason
         from serials serial where serial.org_id=${orgId} and serial.item_id=${query.itemId}
           and (serial.lot_id is null or exists(select 1 from visible_lots lot where lot.id=serial.lot_id))
           and ${permitted === null ? sql`true` : sql`(
@@ -66,12 +69,12 @@ export async function inventoryTrackingOptions(
     if (query.lotId && !(await db.execute(sql`with ${visible} select id from visible_lots where id=${query.lotId}`)).rows.length)
       throw new InventoryNotFoundError("Stock identifier not found");
     result.lots = (await db.execute<InventoryTrackingOptions["lots"][number]>(sql`
-      with ${visible} select * from visible_lots where label ilike ${`%${query.q ?? ""}%`}
-      order by expiry nulls last,label,id limit 100`)).rows;
+      with ${visible} select * from visible_lots where (label ilike ${`%${query.q ?? ""}%`} ${query.selectedLotId?sql`or id=${query.selectedLotId}`:sql``})
+      order by ${query.selectedLotId?sql`(id=${query.selectedLotId}) desc,`:sql``} expiry nulls last,label,id limit 100`)).rows;
     result.serials = (await db.execute<InventoryTrackingOptions["serials"][number]>(sql`
-      with ${visible} select * from visible_serials where label ilike ${`%${query.q ?? ""}%`}
+      with ${visible} select * from visible_serials where (label ilike ${`%${query.q ?? ""}%`} ${query.selectedSerialId?sql`or id=${query.selectedSerialId}`:sql``})
         ${query.lotId ? sql`and (lot_id=${query.lotId} or lot_id is null)` : sql``}
-      order by label,id limit 100`)).rows;
+      order by ${query.selectedSerialId?sql`(id=${query.selectedSerialId}) desc,`:sql``} label,id limit 100`)).rows;
     return result;
   });
 }

@@ -110,7 +110,7 @@ const listSetupRecordsTool: AssistantToolDef = {
          order by ${sql.raw(orderBy)}
          limit ${limit}`),
       db.execute<{ n: number }>(sql`
-        select count(*)::int as n from ${sql.raw(entity.table)} ${rowFilter}`),
+        select count(*)::int as n from ${setupReadSource(entity)} ${rowFilter}`),
     ]);
     const total = Number(countRes.rows[0]?.n ?? 0);
     return {

@@ -163,7 +163,9 @@
     "manufacturing-work-orders": "Ordens de produção",
     "manufacturing-work-centers": "Centros de trabalho",
     "manufacturing-routings": "Roteiros e revisões",
-    "manufacturing-mrp": "Execuções de MRP"
+    "manufacturing-mrp": "Execuções de MRP",
+    "manufacturing-time": "Tempo de produção",
+    "manufacturing-quality": "Qualidade"
   },
   "groups": {
     "manufacturing": "Manufatura",

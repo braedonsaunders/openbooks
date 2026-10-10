@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { useDirtyClose } from '@/lib/use-dirty-close'
@@ -14,12 +14,15 @@ export interface BomComponent {
   id: string
   componentItemId: string
   quantityPer: string
+  quantityBasis: "per_unit"|"per_batch"|"per_formula"
+  formulaOutputQuantity:string
   sortOrder: number
   effectiveFrom: string | null
   effectiveTo: string | null
   operationSeq: number | null
   scrapPct: string | null
   isByproduct: boolean
+  outputCostWeight?:string|null
 }
 
 export interface BomAssembly extends Record<string, unknown> {
@@ -35,22 +38,27 @@ type ItemOption = { id: string; code: string | null; name: string | null }
 type EditableBomLine = Record<string, unknown> & {
   componentItemId: string
   quantityPer: string
+  quantityBasis: "per_unit"|"per_batch"|"per_formula"
+  formulaOutputQuantity:string
   effectiveFrom: string
   effectiveTo: string
   operationSeq: string
   scrapPct: string
   isByproduct: string
+  outputCostWeight:string
 }
 
 function editableLine(line?: Partial<BomComponent>): EditableBomLine {
   return {
     componentItemId: line?.componentItemId ?? '',
     quantityPer: line?.quantityPer ?? '',
+    quantityBasis:line?.quantityBasis??'per_unit',formulaOutputQuantity:line?.formulaOutputQuantity?.replace(/\.0+$/,'')??'1',
     effectiveFrom: line?.effectiveFrom ?? '',
     effectiveTo: line?.effectiveTo ?? '',
     operationSeq: line?.operationSeq == null ? '' : String(line.operationSeq),
     scrapPct: line?.scrapPct ?? '',
-    isByproduct: line?.isByproduct ? 'true' : 'false',
+    isByproduct: line?.isByproduct ? line.outputCostWeight!=null?'co_product':'true' : 'false',
+    outputCostWeight:line?.outputCostWeight??'',
   }
 }
 
@@ -157,12 +165,20 @@ export function BomDrawer({
   onSaved?: () => void
 }) {
   const tSetup = useTranslations('admin.setup')
+  const tManufacturing = useTranslations('manufacturing')
   const tInventory = useTranslations('inventory')
   const tCommon = useTranslations('common')
   const router = useRouter()
   const creating = assembly === null && !fixedAssemblyItemId
   const [manufacturingEnabled, setManufacturingEnabled] = useState(false)
   const [detailReady, setDetailReady] = useState(false)
+  const [canProposeRevision,setCanProposeRevision] = useState(false)
+  const [parentKind,setParentKind] = useState<string|null>(null)
+  const [subsidiaries,setSubsidiaries] = useState<Array<{id:string;name:string}>>([])
+  const [subsidiaryId,setSubsidiaryId] = useState('')
+  const [loadedVersion,setLoadedVersion] = useState<string|null>(assembly?.version ?? null)
+  const [today,setToday] = useState('')
+  const requestRef = useRef<{body:string;key:string}|null>(null)
   const [assemblyItemId, setAssemblyItemId] = useState(fixedAssemblyItemId ?? assembly?.assemblyItemId ?? '')
   const [lines, setLines] = useState<EditableBomLine[]>(() =>
     assembly?.components.map((line) => editableLine(line)) ?? [editableLine()],
@@ -177,7 +193,7 @@ export function BomDrawer({
     let current = true
     async function loadBom() {
       try {
-        const targetId = fixedAssemblyItemId ?? assembly?.assemblyItemId ?? ''
+        const targetId = assemblyItemId
         const query = targetId ? `?assemblyItemId=${encodeURIComponent(targetId)}` : ''
         const res = await fetch(`/api/inventory/bom${query}`)
         if (!res.ok) {
@@ -188,31 +204,44 @@ export function BomDrawer({
           manufacturingEnabled?: boolean
           version?: string | null
           components?: BomComponent[]
+          kind?: string
+          canProposeRevision?: boolean
+          subsidiaries?: Array<{id:string;name:string}>
+          today?: string
         }
         if (!current) return
         setManufacturingEnabled(data.manufacturingEnabled === true)
-        if (assembly) {
+        setCanProposeRevision(data.canProposeRevision === true)
+        setParentKind(data.kind ?? null)
+        setSubsidiaries(data.subsidiaries ?? [])
+        setSubsidiaryId(current => (data.subsidiaries ?? []).some(entity=>entity.id===current) ? current : data.subsidiaries?.length===1 ? data.subsidiaries[0]!.id : '')
+        setLoadedVersion(data.version ?? null)
+        setToday(data.today ?? '')
+        if (assembly || data.components?.length) {
           const loaded = data.components?.map((line) => editableLine(line)) ?? []
           const nextLines = loaded.length > 0 ? loaded : [editableLine()]
           setLines(nextLines)
           setOriginalLines(nextLines)
+        } else if (data.manufacturingEnabled && data.kind !== 'kit' && data.today) {
+          setLines(current=>current.map(line=>line.effectiveFrom ? line : {...line,effectiveFrom:data.today!}))
         }
         setDetailReady(true)
       } catch (error) {
         if (current) setSaveError(error instanceof Error ? error.message : tCommon('feedback.loadFailed'))
       }
     }
+    setDetailReady(false)
     void loadBom()
     return () => { current = false }
-  }, [assembly, fixedAssemblyItemId, tCommon])
+  }, [assembly, assemblyItemId, tCommon])
   const closeGuard = useDirtyClose({
-    dirty: assemblyItemId !== (assembly?.assemblyItemId ?? '') ||
+    dirty: assemblyItemId !== (fixedAssemblyItemId ?? assembly?.assemblyItemId ?? '') ||
       JSON.stringify(lines) !== JSON.stringify(originalLines) || reason !== '',
     busy, onClose: () => {},
     message: tCommon('feedback.unsavedChanges'), confirmLabel: tCommon('confirm.discardChanges'),
   })
 
-  const showManufacturing = manufacturingEnabled && !hideManufacturingFields
+  const showManufacturing = manufacturingEnabled && parentKind !== 'kit' && !hideManufacturingFields
   const usedAssemblies = new Set(assemblies.map((candidate) => candidate.assemblyItemId))
   const assemblyOptions = items
     .filter((item) => item.id === assemblyItemId || !usedAssemblies.has(item.id))
@@ -239,6 +268,10 @@ export function BomDrawer({
       align: 'right',
       required: true,
     },
+    ...(showManufacturing ? [
+      {key:'quantityBasis',secondary:true,secondaryDefaultValue:'per_unit',label:tManufacturing('formula.basis'),width:'180px',type:'select' as const,options:[{value:'per_unit',label:tManufacturing('formula.perUnit')},{value:'per_formula',label:tManufacturing('formula.perFormula')},{value:'per_batch',label:tManufacturing('formula.perBatch')}]},
+      {key:'formulaOutputQuantity',secondary:true,secondaryDefaultValue:'1',label:tManufacturing('formula.outputQuantity'),width:'170px',type:'decimal' as const,decimalScale:4,align:'right' as const},
+    ] : []),
     {
       key: 'effectiveFrom',
       label: tInventory('bom.columns.effectiveFrom'),
@@ -280,13 +313,19 @@ export function BomDrawer({
         options: [
           { value: 'false', label: tInventory('bom.values.component') },
           { value: 'true', label: tInventory('bom.values.byproduct') },
+          { value: 'co_product', label: tInventory('bom.values.jointOutput') },
         ],
       },
+      {key:'outputCostWeight',label:tInventory('bom.columns.outputCostWeight'),width:'150px',type:'decimal' as const,decimalScale:4,align:'right' as const},
     ] : []),
   ], [componentOptions, showManufacturing, tInventory, tSetup])
 
   async function save() {
     const clean = lines.filter((line) => line.componentItemId || line.quantityPer)
+    if(clean.some(line=>line.isByproduct==='co_product'&&!line.outputCostWeight.trim())) {
+      const message=tSetup('validation.required',{field:tInventory('bom.columns.outputCostWeight')});
+      setSaveError(message);toast.error(message);return;
+    }
     if (!assemblyItemId || clean.length === 0 || clean.some((line) => !line.componentItemId || !line.quantityPer)) {
       const message = tSetup('validation.required', { field: tSetup('fields.componentItemId') })
       setSaveError(message)
@@ -303,27 +342,26 @@ export function BomDrawer({
     setBusy(true)
     setSaveError(null)
     try {
-      const res = await fetch('/api/inventory/bom', {
-        method: 'PUT',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
+      const body = JSON.stringify({
           assemblyItemId,
-          expectedVersion: assembly?.version ?? null,
+          expectedVersion: loadedVersion,
+          ...(showManufacturing ? {subsidiaryId} : {}),
           reason: reason.trim(),
           components: clean.map((line, index) => ({
             componentItemId: String(line.componentItemId),
-            quantityPer: String(line.quantityPer),
+            quantityPer: String(line.quantityPer),quantityBasis:line.quantityBasis,formulaOutputQuantity:line.quantityBasis==='per_formula'?String(line.formulaOutputQuantity):'1',
             sortOrder: index,
             effectiveFrom: line.effectiveFrom || null,
             effectiveTo: line.effectiveTo || null,
             scrapPct: line.scrapPct || null,
             ...(showManufacturing ? {
               operationSeq: line.operationSeq ? Number(line.operationSeq) : null,
-              isByproduct: line.isByproduct === 'true',
+              isByproduct: line.isByproduct !== 'false',outputCostWeight:line.isByproduct==='co_product'?line.outputCostWeight||null:null,
             } : {}),
           })),
-        }),
-      })
+        })
+      if (requestRef.current?.body !== body) requestRef.current = {body,key:crypto.randomUUID()}
+      const res = await fetch('/api/inventory/bom', {method:'PUT',headers:{'content-type':'application/json','Idempotency-Key':requestRef.current.key},body})
       if (!res.ok) {
         const data = await res.json().catch(() => ({}))
         if (data.code === 'bom_effectivity_overlap' && typeof data.componentItemId === 'string') {
@@ -336,6 +374,16 @@ export function BomDrawer({
         }
         throw new Error(typeof data.error === 'string' && data.error.trim() ? data.error : tCommon('feedback.saveFailed'))
       }
+      const result = await res.json() as {changeId?:string;version?:string|null}
+      setOriginalLines(lines)
+      setReason('')
+      if (result.changeId) {
+        toast.success(tManufacturing('bomApproval.proposed'))
+        router.push(`/accounting/changes?change=${encodeURIComponent(result.changeId)}`)
+        router.refresh()
+        return
+      }
+      setLoadedVersion(result.version ?? null)
       toast.success(creating ? tSetup('created') : tSetup('updated'))
       if (onSaved) {
         onSaved()
@@ -362,12 +410,13 @@ export function BomDrawer({
       title={tSetup('entities.bom-components.title')}
       description={tSetup('entities.bom-components.description')}
       headerActions={
-        <Button disabled={busy || !detailReady} onClick={save}>
-          {busy ? tCommon('actions.saving') : tCommon('actions.save')}
+        <Button disabled={busy || !detailReady || showManufacturing && (!canProposeRevision || !subsidiaryId)} onClick={save}>
+          {busy ? tCommon('actions.saving') : showManufacturing ? tManufacturing('bomApproval.propose') : tCommon('actions.save')}
         </Button>
       }
     >
       <div className="space-y-5 p-1">
+        {showManufacturing?<p className="text-sm text-slate-500">{tManufacturing('formula.help')}</p>:null}
         {saveError ? (
           <p role="alert" className="rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-800 dark:border-red-800 dark:bg-red-950/40 dark:text-red-300">
             {saveError}
@@ -391,13 +440,18 @@ export function BomDrawer({
             />
           </div>
         )}
+        {showManufacturing ? <div className="space-y-3 rounded-xl border border-teal-200 bg-teal-50/50 p-4 dark:border-teal-900 dark:bg-teal-950/20">
+          <p className="text-sm">{tManufacturing('bomApproval.note')}</p>
+          {!canProposeRevision ? <p role="status" className="text-sm text-amber-700">{tManufacturing('bomApproval.authority')}</p> : <div className="space-y-1.5"><Label>{tSetup('fields.subsidiaryId')} *</Label><SearchSelect value={subsidiaryId} onChange={setSubsidiaryId} options={subsidiaries.map(entity=>({value:entity.id,label:entity.name}))} disabled={busy} placeholder={tSetup('fields.subsidiaryId')} /></div>}
+        </div> : null}
         <LineGrid
           columns={lineColumns}
           rows={lines}
           onRowsChange={setLines}
-          readOnly={busy || !detailReady}
-          emptyRow={() => editableLine()}
+          readOnly={busy || !detailReady || showManufacturing && !canProposeRevision}
+          emptyRow={() => editableLine(showManufacturing && today ? {effectiveFrom:today} : undefined)}
         />
+        {showManufacturing?<p className="text-xs text-slate-500">{tInventory('bom.jointOutputNote')}</p>:null}
         <div className="space-y-1.5">
           <Label>{tCommon('amendment.reason')} <span className="text-red-500">*</span></Label>
           <Textarea

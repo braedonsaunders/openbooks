@@ -11,6 +11,7 @@ import { resolveIdempotentReplay } from "../records/idempotent-replay.ts";
 import { acquireOrgFeatureGateLock } from "../organization/org-feature-lock.ts";
 import { isFeatureEnabled } from "../organization/feature-state.ts";
 import { subsidiaryScopeAllows, subsidiaryVisibleFilter } from "../organization/subsidiary-scope.ts";
+import { checkPinnedOperatingProfileCommand, resolveOperatingProfileForCreate } from "../organization/operating-profiles.ts";
 
 /**
  * Project creation — the one write path for new projects.
@@ -53,6 +54,8 @@ export interface ProjectCreateRequest {
   code?: string | null;
   customerPoNumber?: string | null;
   notes?: string | null;
+  operatingProfile?: string | null;
+  operatingDepartmentId?: string | null;
 }
 
 export interface ProjectCreateContext {
@@ -343,6 +346,26 @@ export async function createProjectInTransaction(
     throw new ProjectCreateError("Project not found", 404, undefined, "scope");
   }
 
+  const prior = (await runner.execute<{ versionId: string | null; after: Record<string, unknown> | null }>(sql`
+    select p.operating_profile_version_id as "versionId", a.changes->'after' as after from projects p
+    left join lateral (select changes from audit_log where org_id=p.org_id and table_name='projects' and row_id=p.id and action='insert' order by created_at limit 1) a on true
+    where p.org_id=${ctx.orgId} and p.id=${id} for share of p`)).rows[0];
+  if (prior) {
+    if (prior.versionId) await checkPinnedOperatingProfileCommand(runner, ctx.orgId, ctx.actorId, { versionId: prior.versionId, family: 'project', subsidiaryId });
+    if (prior.after && ('operating_profile_version_id' in prior.after || body.operatingProfile !== undefined || body.operatingDepartmentId !== undefined)) {
+      snapshot.operating_profile_version_id = prior.versionId;
+      snapshot.operating_department_id = body.operatingDepartmentId ?? null;
+      snapshot.operating_profile_selection = body.operatingProfile ?? null;
+    }
+  } else {
+    const profile = await resolveOperatingProfileForCreate(runner, ctx.orgId, ctx.actorId, { family: 'project', subsidiaryId, selection: body.operatingProfile, departmentId: body.operatingDepartmentId });
+    if (profile.versionId || body.operatingProfile !== undefined || body.operatingDepartmentId !== undefined) {
+      snapshot.operating_profile_version_id = profile.versionId;
+      snapshot.operating_department_id = profile.departmentId;
+      snapshot.operating_profile_selection = body.operatingProfile ?? null;
+    }
+  }
+
   const s = snapshot;
   const invoicingPreference = s.invoicing_preference as Record<string, unknown> | null;
   const awardedFrom = options.awardedFromDocumentId ?? null;
@@ -352,7 +375,7 @@ export async function createProjectInTransaction(
        subsidiary_id, subsidiary_include_children, status, project_type_id,
        invoicing_preference, customer_po_number, contract_value,
        starts_on, ends_on, notes, site_jurisdiction, is_active, custom,
-       awarded_from_document_id, awarded_at, awarded_by, created_by, updated_by)
+       awarded_from_document_id, awarded_at, awarded_by, operating_profile_version_id, operating_department_id, created_by, updated_by)
     values
       (${id}, ${ctx.orgId}, ${s.name as string}, ${s.code as string | null},
        ${s.customer_id as string | null}, ${s.foreman_id as string | null}, ${s.manager_id as string | null},
@@ -363,6 +386,7 @@ export async function createProjectInTransaction(
        ${s.site_jurisdiction as string | null}, ${s.is_active as boolean},
        ${JSON.stringify(s.custom)}::jsonb,
        ${awardedFrom}, ${awardedFrom === null ? sql`null` : sql`now()`}, ${awardedFrom === null ? null : ctx.actorId},
+       ${(s.operating_profile_version_id as string | null) ?? null}, ${(s.operating_department_id as string | null) ?? null},
        ${ctx.actorId}, ${ctx.actorId})
     -- A retry is accepted only after the existing audited create image is verified below.
     on conflict (id) do nothing

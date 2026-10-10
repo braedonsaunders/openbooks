@@ -3532,6 +3532,30 @@
         "plural": "Políticas de contagem cíclica",
         "description": "Intervalos vigentes por entidade jurídica e tolerâncias em unidades básicas por classe ABC.",
         "title": "Políticas de contagem cíclica"
+      },
+      "operating-profiles": {
+        "title": "Perfis operacionais",
+        "singularTitle": "Perfis operacionais",
+        "description": "Configure registro e apresentação sem alterar regras de faturamento ou contabilidade."
+      },
+      "operating-profile-scopes": {
+        "title": "Opções de fluxo",
+        "singularTitle": "Opções de fluxo",
+        "description": "Escolha fluxos permitidos e um padrão para um departamento ou toda a empresa."
+      },
+      "operating-profile-versions": {
+        "title": "Versões de fluxos",
+        "singularTitle": "Versão do fluxo",
+        "description": "Composições publicadas mantidas nos trabalhos existentes."
+      },
+      "inspection-plans": {
+        "title": "Planos de inspeção",
+        "description": "Inspecione recebimentos e produção com planos congelados e destinações controladas."
+      },
+      "work-calendars": {
+        "title": "Calendários de trabalho",
+        "singularTitle": "Calendário de trabalho",
+        "description": "Dias úteis e fechamentos da empresa compartilhados pela produção e pelos cronogramas de projetos. Os centros definem suas horas disponíveis. As execuções MRP existentes mantêm os dados de calendário originais."
       }
     },
     "fields": {
@@ -4139,7 +4163,9 @@
       "varianceTolerance": "Tolerância de diferença",
       "inventoryOwnership": "Propriedade do estoque",
       "schedulePdfColorTreatment": "Tratamento das cores",
-      "schedulePdfColorIntensity": "Intensidade da tonalidade (%)"
+      "schedulePdfColorIntensity": "Intensidade da tonalidade (%)",
+      "custodianPartyId": "Fornecedor custodiante",
+      "showReadiness": "Guia de trabalho"
     },
     "fieldHelp": {
       "fxRateMaxAgeDays": "Dias entre a taxa utilizável mais recente e o fim do período a partir dos quais a reavaliação e a consolidação recusam a taxa. Taxas de fechamento contam a partir da data da taxa à vista de fim de período; taxas médias, a partir da cotação mais recente incluída na média. Padrão sem política: 31 dias.",
@@ -4572,7 +4598,8 @@
         "bin": "Compartimento",
         "staging": "Preparação",
         "transit": "Trânsito",
-        "quarantine": "Quarentena"
+        "quarantine": "Quarentena",
+        "subcontract": "Custódia no fornecedor"
       },
       "manufacturingScrap": {
         "normal": "Refugo normal",
@@ -6918,6 +6945,127 @@
     },
     "actions": {
       "scheduleDeliveryFlows": "Configurar horários de envio em Flows"
+    },
+    "operatingProfiles": {
+      "chooser": {
+        "title": "Escolha como este trabalho funciona",
+        "description": "Comece com o detalhe necessário para a equipe. Recursos e permissões controlam as opções."
+      },
+      "presets": {
+        "shop_jobs": {
+          "name": "Trabalhos de oficina",
+          "description": "Trabalhos de clientes, preparação e tempo. Adicione atividades quando forem úteis."
+        },
+        "field_work": {
+          "name": "Trabalho de campo",
+          "description": "Trabalho em campo com boletins, equipes e planejamento opcionais."
+        },
+        "professional_services": {
+          "name": "Serviços profissionais",
+          "description": "Projetos, tempo e entregas sem campos de construção."
+        },
+        "discrete_production": {
+          "name": "Produção discreta",
+          "description": "Produtos repetíveis com listas de materiais e operações definidas."
+        },
+        "custom_production": {
+          "name": "Produção sob encomenda",
+          "description": "Produtos sob encomenda com materiais e revisões controlados."
+        },
+        "batch_process": {
+          "name": "Produção por lotes e processos",
+          "description": "Receitas, lotes, rendimentos medidos e produtos rastreáveis."
+        }
+      },
+      "compositionHelp": "Cada registro mantém sua versão. A publicação altera as opções para novos trabalhos.",
+      "sections": {
+        "basics": "Informações básicas",
+        "composition": "Registro e visualizações",
+        "publish": "Publicar uma versão"
+      },
+      "fields": {
+        "code": "Código",
+        "name": "Nome",
+        "definition": "Composição",
+        "family": "Registros de trabalho",
+        "capture": "Registro de trabalho",
+        "physicalModel": "Modelo de produção",
+        "demand": "Demanda",
+        "terminology": "Nomes do trabalho",
+        "singular": "Nome singular",
+        "plural": "Nome plural",
+        "presentation": "Apresentação",
+        "showSite": "Detalhes do local",
+        "showForeman": "Encarregado",
+        "showCustomerPo": "Pedido do cliente",
+        "showMaterials": "Materiais",
+        "showReadiness": "Preparação",
+        "defaultView": "Visualização padrão",
+        "reason": "Motivo da publicação",
+        "departmentId": "Departamento",
+        "profileIds": "Fluxos permitidos",
+        "defaultProfileId": "Fluxo padrão",
+        "version": "Versão",
+        "publishedAt": "Publicado em",
+        "profileId": "Perfil"
+      },
+      "values": {
+        "project": "Projetos",
+        "production": "Ordens de produção",
+        "job": "Trabalho inteiro",
+        "activities": "Atividades",
+        "tasks": "Tarefas",
+        "field_tickets": "Boletins de campo",
+        "operations": "Operações",
+        "batch": "Lote",
+        "none": "Nenhum",
+        "discrete": "Discreta",
+        "process": "Processo",
+        "make_to_order": "Sob encomenda",
+        "make_to_stock": "Para estoque",
+        "list": "Lista",
+        "board": "Quadro"
+      },
+      "scopeHelp": "Deixe o departamento vazio para padrões da empresa. Um departamento pode oferecer vários fluxos."
+    },
+    "inspectionPlans": {
+      "name": "Nome do plano",
+      "itemId": "Item de estoque",
+      "point": "Ponto de inspeção",
+      "operationSequence": "Sequência da operação",
+      "effectiveFrom": "Vigente desde",
+      "effectiveTo": "Vigente até",
+      "basics": "Plano e escopo",
+      "measurements": "Medições",
+      "help": "Adicione apenas medições úteis. Limites vazios permitem registrar sem tolerância numérica. Encerre a vigência de um plano usado e crie a próxima revisão.",
+      "audit": "Auditoria",
+      "key": "Chave da medição",
+      "label": "Rótulo",
+      "unit": "Unidade",
+      "required": "Obrigatório",
+      "minimum": "Mínimo",
+      "maximum": "Máximo",
+      "reason": "Motivo da alteração",
+      "receipt": "Recebimento",
+      "operation": "Operação"
+    },
+    "workCalendars": {
+      "help": "Dias úteis e fechamentos da empresa compartilhados pela produção e pelos cronogramas de projetos. Os centros definem suas horas disponíveis. As execuções MRP existentes mantêm os dados de calendário originais.",
+      "name": "Nome",
+      "description": "Descrição",
+      "isDefault": "Padrão da empresa",
+      "workingDays": "Dias úteis",
+      "holidays": "Fechamentos",
+      "date": "Data de fechamento",
+      "reason": "Motivo da alteração",
+      "addClosure": "Adicionar fechamento",
+      "0": "Domingo",
+      "1": "Segunda-feira",
+      "2": "Terça-feira",
+      "3": "Quarta-feira",
+      "4": "Quinta-feira",
+      "5": "Sexta-feira",
+      "6": "Sábado"
     }
   },
   "flows": {
@@ -7599,6 +7747,10 @@
     "consignment": {
       "description": "Controle estoque de fornecedores e clientes em custódia e reconheça o estoque ao adquirir sua propriedade.",
       "title": "Estoque em consignação"
+    },
+    "manufacturingSubcontract": {
+      "title": "Produção externa",
+      "description": "Envie componentes a um fornecedor, registre serviços e devolva a produção à ordem."
     }
   },
   "backupsManager": {

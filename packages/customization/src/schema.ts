@@ -140,6 +140,7 @@ const listViewConfigSchema = z.object({
   schemaVersion: z.literal(1),
   recordType: recordTypeSchema,
   columns: z.array(listColumnPlacementSchema).max(100),
+  presentation: z.enum(["list","board"]).nullable().optional(),
   filters: z.array(filterClauseSchema).max(50),
   sort: z
     .object({ column: z.string().max(60), dir: z.enum(["asc", "desc"]) })

@@ -98,6 +98,8 @@ export function customKey(custom: Record<string, unknown> | null | undefined): s
 
 export interface WeekRow {
   projectId: string | null
+  workOrderId?: string | null
+  woOperationId?: string | null
   itemId: string | null
   timeTypeId: string | null
   departmentId: string | null
@@ -105,6 +107,7 @@ export interface WeekRow {
   memo: string | null
   /** hours[0]=Sunday … hours[6]=Saturday, as decimal strings ('' = none). */
   hours: string[]
+  productionEntryIds?: string[][]
   /** The most locked status among this line's entries (blocks editing). */
   entryStatuses: string[]
   /** Org-defined line field values (time_entries.custom). Part of the row's
@@ -288,6 +291,8 @@ export async function loadWeek(
       time_type_id: string | null
       item_id: string | null
       project_id: string | null
+      work_order_id: string | null
+      wo_operation_id: string | null
       department_id: string | null
       memo: string | null
       is_billable: boolean
@@ -297,15 +302,17 @@ export async function loadWeek(
       invoiced_by_line_id: string | null
       payroll_batch_ref: string | null
       cost_journal_entry_id: string | null
+  production_consumed_operation_id: string | null
       overhead_journal_entry_id: string | null
       field_ticket_id: string | null
       billing_status: 'unbilled' | 'billed'
       amends_entry_id: string | null
+      corrects_entry_id: string | null
     }>(sql`
-    select id, worked_on, hours, time_type_id, item_id, project_id,
+    select id, worked_on, hours, time_type_id, item_id, project_id, work_order_id, wo_operation_id,
            department_id, memo, is_billable, status, custom, rejection_reason,
            invoiced_by_line_id, payroll_batch_ref, cost_journal_entry_id,
-           overhead_journal_entry_id, field_ticket_id, billing_status, amends_entry_id
+           overhead_journal_entry_id, production_consumed_operation_id, field_ticket_id, billing_status, amends_entry_id, corrects_entry_id
       from time_entries
      where org_id = ${orgId}
        and employee_party_id = ${ownedEmployee}
@@ -316,6 +323,7 @@ export async function loadWeek(
     invoicedByLineId: r.invoiced_by_line_id,
     payrollBatchRef: r.payroll_batch_ref,
     costJournalEntryId: r.cost_journal_entry_id,
+      productionConsumedOperationId: r.production_consumed_operation_id,
     overheadJournalEntryId: r.overhead_journal_entry_id,
     fieldTicketId: r.field_ticket_id,
     billingStatus: r.billing_status,
@@ -327,6 +335,8 @@ export async function loadWeek(
     allStatuses.push(r.status)
     const key = [
       r.project_id ?? '',
+      r.work_order_id ?? '',
+      r.wo_operation_id ?? '',
       r.item_id ?? '',
       r.time_type_id ?? '',
       r.department_id ?? '',
@@ -334,30 +344,35 @@ export async function loadWeek(
       r.memo ?? '',
       customKey(r.custom),
       r.amends_entry_id ?? '',
+      r.corrects_entry_id ?? '',
     ].join('|')
     let row = byKey.get(key)
     if (!row) {
       row = {
         projectId: r.project_id,
+        workOrderId: r.work_order_id,
+        woOperationId: r.wo_operation_id,
         itemId: r.item_id,
         timeTypeId: r.time_type_id,
         departmentId: r.department_id,
         isBillable: r.is_billable,
         memo: r.memo,
         hours: ['', '', '', '', '', '', ''],
+        productionEntryIds: Array.from({length:7},()=>[]),
         entryStatuses: [],
         custom: r.custom ?? {},
         amendsEntryId: r.amends_entry_id,
-        immutable: r.status === 'approved' || r.status === 'submitted' || r.amends_entry_id != null,
+        immutable: r.status === 'approved' || r.status === 'submitted' || (r.amends_entry_id != null || r.corrects_entry_id != null),
       }
       byKey.set(key, row)
     }
     const idx = dayIndex.get(r.worked_on)
     if (idx != null) {
+      if (r.production_consumed_operation_id && !r.amends_entry_id) row.productionEntryIds![idx]!.push(r.id)
       row.hours[idx] = add(row.hours[idx] === '' ? '0' : row.hours[idx]!, String(r.hours))
     }
     row.entryStatuses.push(r.status)
-    if (r.status === 'approved' || r.status === 'submitted' || r.amends_entry_id != null) {
+    if (r.status === 'approved' || r.status === 'submitted' || (r.amends_entry_id != null || r.corrects_entry_id != null)) {
       row.immutable = true
     }
   }

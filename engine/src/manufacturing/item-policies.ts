@@ -1,3 +1,4 @@
+import { lockManufacturingPolicyAuthority } from "./authority.ts";
 import { sql } from "drizzle-orm";
 import type { SqlExecutor } from "../platform/db.ts";
 import { assertManufacturingFeature } from "./gate.ts";
@@ -54,6 +55,7 @@ export async function upsertItemPolicy(
   tx: SqlExecutor, orgId: string, actorId: string, itemId: string, raw: ItemPolicyInput,
 ) {
   await assertManufacturingFeature(tx, orgId, "manufacturing");
+  await lockManufacturingPolicyAuthority(tx,orgId,actorId);
   const input = validate(raw);
   const item = await tx.execute(sql`select id from items where org_id=${orgId} and id=${itemId} for update`);
   if (!item.rows.length) throw new ManufacturingNotFoundError();

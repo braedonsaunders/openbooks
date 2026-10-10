@@ -37,6 +37,8 @@ const projectCreateBody = z.object({
   code: z.string().nullable().optional(),
   customerPoNumber: z.string().nullable().optional(),
   notes: z.string().nullable().optional(),
+  operatingProfile: z.string().nullable().optional(),
+  operatingDepartmentId: uuidId.nullable().optional(),
 }).strict()
 
 function bad(error: string, field?: string, status = 422) {

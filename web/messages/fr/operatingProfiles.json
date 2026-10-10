@@ -1,0 +1,87 @@
+{
+  "chooseTitle": "Choisissez le fonctionnement du travail",
+  "chooseDescription": "Commencez avec le détail nécessaire à votre équipe. Les fonctions et autorisations contrôlent les choix.",
+  "change": "Changer de fonctionnement",
+  "loading": "Chargement des modes…",
+  "loadFailed": "Impossible de charger les modes.",
+  "retry": "Réessayer",
+  "noChoices": "Aucun mode disponible. Vérifiez les fonctions et les profils dans la configuration.",
+  "presets": {
+    "shop_jobs": {
+      "name": "Travaux en atelier",
+      "description": "Travaux clients, préparation et temps. Ajoutez des activités au besoin."
+    },
+    "field_work": {
+      "name": "Travaux sur chantier",
+      "description": "Travaux sur site avec fiches de chantier, équipes et planification facultatives."
+    },
+    "professional_services": {
+      "name": "Services professionnels",
+      "description": "Missions, temps et livrables sans champs de construction."
+    },
+    "discrete_production": {
+      "name": "Production discrète",
+      "description": "Produits répétables avec nomenclatures et opérations définies."
+    },
+    "custom_production": {
+      "name": "Production sur mesure",
+      "description": "Produits sur commande avec matériaux et révisions contrôlés."
+    },
+    "batch_process": {
+      "name": "Production par lots et procédés",
+      "description": "Recettes, lots, rendements mesurés et produits traçables."
+    }
+  },
+  "capture": {
+    "job": "Travail entier",
+    "activities": "Activités",
+    "tasks": "Tâches",
+    "field_tickets": "Fiches de chantier",
+    "operations": "Opérations",
+    "batch": "Lot"
+  },
+  "time": {
+    "work": "Travail",
+    "project": "Projet / travail",
+    "production": "Production",
+    "order": "Ordre de production",
+    "operation": "Opération (facultative)",
+    "search": "Rechercher un travail",
+    "title": "Temps de production",
+    "correct": "Corriger",
+    "correctTitle": "Corriger les heures de production",
+    "correctMessage": "L’original reste comptabilisé. Une contrepassation et un remplacement enregistrent la correction ; les produits reçus conservent leur coût historique.",
+    "correctHours": "Heures corrigées",
+    "correctReason": "Motif",
+    "record": "Saisir le temps"
+  },
+  "department": "Service (facultatif)",
+  "companyDefaults": "Valeurs de l’entreprise",
+  "default": "Flux par défaut",
+  "views": {
+    "presentation": "Vue",
+    "list": "Liste",
+    "board": "Tableau",
+    "emptyLane": "Aucun travail sur cette page",
+    "pageScope": "Les cartes et les totaux des colonnes représentent la page filtrée actuelle.",
+    "saveFailed": "Impossible d’enregistrer votre préférence d’affichage."
+  },
+  "filters": {
+    "workflow": "Mode de travail",
+    "department": "Service",
+    "allWorkflows": "Tous les modes",
+    "allDepartments": "Tous les services",
+    "legacy": "Travail existant sans profil",
+    "unassigned": "Non affecté"
+  },
+  "workJourney": {
+    "description": "Gardez le travail, le temps et les coûts sur ce dossier. Ajoutez une décomposition lorsqu’elle aide votre équipe.",
+    "recordTime": "Saisir du temps",
+    "time": "Temps enregistré",
+    "hours": "{hours} heures enregistrées",
+    "costs": "Ajouter des coûts",
+    "costsNote": "Utilisez la charge existante du dossier pour les matières et les autres coûts.",
+    "breakdown": "Décomposition du travail",
+    "breakdownNote": "Utilisez les activités et tâches existantes lorsque le détail apporte une valeur utile."
+  }
+}

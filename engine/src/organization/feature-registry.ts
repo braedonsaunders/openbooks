@@ -212,6 +212,7 @@ export const FEATURES: FeatureDef[] = [
   // Manufacturing: building finished goods from inventory components.
   { key: 'manufacturing', defaultEnabled: false, category: 'manufacturing', group: 'production', navModules: ['manufacturing'], requiresAll: ['inventory'] },
   { key: 'manufacturingMrp', defaultEnabled: false, category: 'manufacturing', group: 'production', parentKey: 'manufacturing', recommends: ['orders'] },
+  { key: 'manufacturingSubcontract', defaultEnabled: false, category: 'manufacturing', group: 'production', parentKey: 'manufacturing', requiresAll: ['inventory'] },
 
   // Projects — project delivery, field work and the buy side of a job.
   // Projects is a parent gate on the centralized Features page.

@@ -37,6 +37,22 @@ const SENSITIVE_TYPES: ReadonlySet<string> = new Set([
  * without a named column), plus the table.column pairs below.
  */
 const CONSTRUCTION_COVERED: ReadonlySet<string> = new Set([
+  // Native production evidence retains typed quantities and rebased identity while redacting authored prose.
+  "operating_profile_scopes.profile_ids",
+  "operating_profile_versions.definition",
+  "inventory_inspection_plans.measures",
+  "inventory_inspections.plan_snapshot",
+  "inventory_inspections.disposition_result",
+  "mfg_wo_operations.inspection_plan_snapshot",
+  "mfg_wo_operations.overhead_snapshot",
+  "mfg_wo_operations.standard_labor_burden",
+  "mfg_mrp_runs.parameters",
+  "mfg_planned_orders.demand_ref",
+  "mfg_subcontracts.request_snapshot",
+  "mfg_subcontract_shipments.request_snapshot",
+  "mfg_subcontract_returns.request_snapshot",
+  "mfg_subcontract_material_returns.request_snapshot",
+  "mfg_subcontract_service_bills.expense_snapshot",
   "schedule_boards.automatic_delivery_policy", // actual clone construction clears operator/contact policy in every copied environment
   "schedule_boards.cell_color_rules", // masked copy construction clears all tenant-authored matching values
   "file_blobs.bytes", // not copied at all for masked clones
@@ -69,6 +85,22 @@ function isCoveredByConstruction(table: string, column: string, udtName: string)
  *   with faked names they identify nobody.
  */
 const ALLOW_LISTED_NON_PERSONAL: ReadonlySet<string> = new Set([
+  // Production classifications and measurement values are typed business facts.
+  "operating_profiles.code",
+  "operating_profiles.family",
+  "operating_profile_versions.family",
+  "operating_profile_scopes.family",
+  "inventory_inspection_plans.point",
+  "inventory_inspections.status",
+  "inventory_inspections.disposition",
+  "inventory_inspections.measurements",
+  "mfg_completion_batches.allocation_basis",
+  "mfg_subcontracts.status",
+  "mfg_routing_operations.labor_time_source",
+  "mfg_wo_operations.labor_time_source",
+  "bom_components.quantity_basis",
+  "mfg_wo_materials.quantity_basis",
+  "mfg_wo_byproducts.quantity_basis",
   // E-invoice configuration: the legal entity's own address and identifiers, code lists.
   "einvoice_settings.default_profile",
   "einvoice_settings.address_line1",
@@ -1557,10 +1589,8 @@ const ALLOW_LISTED_NON_PERSONAL: ReadonlySet<string> = new Set([
   "demand_forecast_overrides.reason",
   "mfg_item_policies.supply_method",
   "mfg_mrp_runs.number",
-  "mfg_mrp_runs.parameters",
   "mfg_mrp_runs.status",
   "mfg_planned_orders.action",
-  "mfg_planned_orders.demand_ref",
   "mfg_planned_orders.dismiss_reason",
   "mfg_planned_orders.status",
   "mfg_routing_operations.backflush_at",
@@ -1580,12 +1610,10 @@ const ALLOW_LISTED_NON_PERSONAL: ReadonlySet<string> = new Set([
   "mfg_wo_materials.waive_reason",
   "mfg_wo_operations.backflush_at",
   "mfg_wo_operations.name",
-  "mfg_wo_operations.overhead_snapshot",
   "mfg_wo_operations.overhead_snapshot_hash",
   "mfg_wo_operations.pause_reason",
   "mfg_wo_operations.quality_gate",
   "mfg_wo_operations.standard_labor_basis",
-  "mfg_wo_operations.standard_labor_burden",
   "mfg_wo_operations.standard_labor_burden_hash",
   "mfg_wo_operations.standard_labor_currency",
   "mfg_wo_operations.standard_labor_functional_currency",
@@ -1602,6 +1630,7 @@ const ALLOW_LISTED_NON_PERSONAL: ReadonlySet<string> = new Set([
   "mfg_work_orders.hold_reason",
   "mfg_work_orders.number",
   "mfg_work_orders.priority",
+  "mfg_work_orders.production_mode",
   "mfg_work_orders.short_close_reason",
   "mfg_work_orders.source",
   "mfg_work_orders.status",
@@ -2733,4 +2762,21 @@ test("full and masked native clone projections clear schedule automatic policy r
     const result = await db.execute<{policy: unknown}>(sql`select ${sql.raw(policyExpression!)} policy from (values ('{"operatorId":"65fa9dc7-228f-4e19-8bf1-17d52efeb78d","additionalPartyIds":["private-contact"]}'::jsonb)) source(automatic_delivery_policy)`);
     assert.equal(result.rows[0]?.policy, null);
   }
+});
+
+test('native production evidence refuses whole-column masking while embedded disposition prose and identity are safely reconstructed', async () => {
+  const catalog = await loadCatalog();
+  const options = { productionOrgId: '65fa9dc7-228f-4e19-8bf1-17d52efeb78d', sandboxOrgId: '47df30a3-4fd1-4570-bb67-09641053ee3b', seed: '42b3d7dd-9674-4f3c-8d6a-8ba5d2308130', tier: 'full' as const, masked: true };
+  for (const [tableName, columnName] of [['operating_profile_scopes','profile_ids'], ['operating_profile_versions','definition'], ['inventory_inspections','disposition_result'], ['mfg_mrp_runs','parameters'], ['mfg_subcontract_shipments','request_snapshot']] as const) {
+    const table = catalog.tables.find(table => table.name === tableName); assert.ok(table);
+    const column = table.columns.find(column => column.name === columnName); assert.ok(column);
+    const policies = new Map<string,Map<string,MaskTransform>>([[tableName,new Map([[columnName,'null_out']])]]);
+    assert.throws(() => generateCopySql({ ...table, columns: [column] }, options, new Set(['operating_profiles',tableName]), new Set(), policies, null), /cannot use a whole-column masking transform/);
+  }
+  const requestId = 'a0aac416-e9c5-425a-a029-94249704fd6b';
+  const embedded = JSON.stringify({ action: 'rework', reason: 'Private engineering discussion', reworkRoutingId: requestId });
+  const result = (await db.execute<{ evidence: { requestKey:string; intent:string } }>(sql`select production_clone_safe_evidence(${JSON.stringify({requestKey:requestId,intent:embedded})}::jsonb,${options.seed}::uuid,'',${options.sandboxOrgId}::uuid,true) as evidence`)).rows[0]!.evidence;
+  const intent = JSON.parse(result.intent) as { action:string; reason:string; reworkRoutingId:string };
+  assert.equal(intent.action,'rework'); assert.equal(intent.reason,'REDACTED'); assert.notEqual(intent.reworkRoutingId,requestId);
+  assert.equal(intent.reworkRoutingId,result.requestKey); assert(!JSON.stringify(result).includes('Private engineering discussion'));
 });

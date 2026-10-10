@@ -1,3 +1,5 @@
+import { authorizeTimeWorkspace, timeWorkFamily } from "@/lib/time-workspace";
+import { lockSharedTimeAuthority } from "@openbooks/engine/src/projects/time-work-target.ts";
 import { z } from "zod";
 import { isoDate, uuidId } from "@/lib/api/json";
 import { defineRoute } from "@/lib/api/route";
@@ -25,6 +27,7 @@ import { initialEntryStatus, loadTimePolicy } from "../../../lib/time-policy";
 import { runTimeApprovalEffects } from "../../../lib/time-approval";
 import { canonicalDecimal, compareDecimal } from "../../../lib/exact-decimal";
 import { canonicalJson } from "@openbooks/engine/src/platform/canonical-json.ts";
+import { lockTimeWorkOrderTarget } from "@openbooks/engine/src/projects/time-work-target.ts";
 import {
   isIsoDate,
   loadWeek,
@@ -38,6 +41,8 @@ const saveBodySchema = z.strictObject({
   week: isoDate("week must be a valid calendar date"),
   rows: z.array(z.strictObject({
     projectId: uuidId.nullable().optional(),
+    workOrderId: uuidId.nullable().optional(),
+    woOperationId: uuidId.nullable().optional(),
     itemId: uuidId.nullable().optional(),
     timeTypeId: uuidId.nullable().optional(),
     departmentId: uuidId.nullable().optional(),
@@ -67,6 +72,8 @@ class TimeLineEntityRefusal extends Error {}
 
 interface SaveRow {
   projectId?: string | null;
+  workOrderId?: string | null;
+  woOperationId?: string | null;
   itemId?: string | null;
   timeTypeId?: string | null;
   departmentId?: string | null;
@@ -117,8 +124,8 @@ function hoursOrNull(v: unknown): string | null | "invalid" {
 
 /** GET ?employee=&week= → the week's grid rows + status. */
 export const GET = defineRoute({
-  permission: "time.read",
-  feature: "timeTracking",
+  authorize: authorizeTimeWorkspace("time.read"),
+  feature: { none: "The explicit workspace pins Time Tracking or Manufacturing; native commands fence every actual target." },
   handler: async ({ request, authz }) => {
     const orgId = authz.user.orgId;
 
@@ -138,6 +145,8 @@ export const GET = defineRoute({
     if (!ownedEmployee) return unprocessable("Employee not found");
     try {
       return await withOrgTransaction(orgId, async () => {
+        const days = weekWindow(weekStart(weekParam));
+        await lockSharedTimeAuthority(db, orgId, authz.user.id, { employeeId: ownedEmployee, from: days[0]!, through: days[6]!, requestedScope: authz.allowedSubsidiaryIds, permission: "time.read", workFamily: timeWorkFamily(request) });
         await lockScopeRow(
           db,
           orgId,
@@ -170,11 +179,11 @@ export const GET = defineRoute({
  * a save never silently overwrites an approval (or an in-flight submission).
  */
 const save = defineRoute({
-  permission: "time.manage",
-  feature: "timeTracking",
+  authorize: authorizeTimeWorkspace("time.manage"),
+  feature: { none: "The explicit workspace pins Time Tracking or Manufacturing; native commands fence every actual target." },
   body: saveBodySchema,
   invalidBodyStatus: 422,
-  handler: async ({ authz: gate, body: requestBody }) => {
+  handler: async ({ request: workspaceRequest, authz: gate, body: requestBody }) => {
     const { user } = gate;
     const orgId = user.orgId;
 
@@ -199,6 +208,8 @@ const save = defineRoute({
       workedOn: string;
       hours: string;
       projectId: string | null;
+      workOrderId: string | null;
+      woOperationId: string | null;
       itemId: string | null;
       timeTypeId: string | null;
       departmentId: string | null;
@@ -224,6 +235,8 @@ const save = defineRoute({
         return bad("Invalid billable flag");
       const projectId = uuidOrNull(r.projectId);
       if (projectId === "invalid") return bad("Invalid project");
+      const workOrderId = uuidOrNull(r.workOrderId), woOperationId = uuidOrNull(r.woOperationId);
+      if (workOrderId === 'invalid' || woOperationId === 'invalid' || (projectId && workOrderId) || (woOperationId && !workOrderId)) return bad('Choose one project or production order; an operation must belong to that production order.');
       const itemId = uuidOrNull(r.itemId);
       if (itemId === "invalid") return bad("Invalid item");
       const timeTypeId = uuidOrNull(r.timeTypeId);
@@ -283,6 +296,8 @@ const save = defineRoute({
           workedOn: days[i]!,
           hours: h,
           projectId: ownedRefs.projectId,
+          workOrderId,
+          woOperationId,
           itemId: ownedRefs.itemId,
           timeTypeId: ownedRefs.timeTypeId,
           departmentId: ownedRefs.departmentId,
@@ -349,6 +364,7 @@ const save = defineRoute({
     try {
       projectsRefused = await withOrgTransaction(orgId, async () => {
         const tx = db;
+        await lockSharedTimeAuthority(tx, orgId, user.id, { employeeId: ownedEmployee, from: days[0]!, through: days[6]!, requestedScope: gate.allowedSubsidiaryIds, permission: "time.manage", workFamily: timeWorkFamily(workspaceRequest) });
         // Canonical lock order is department, party, project. Shared locks
         // pin legal-entity attribution through save and automatic approval.
         const departmentScopes = await lockScopeRows(
@@ -370,7 +386,8 @@ const save = defineRoute({
           gate.allowedSubsidiaryIds, "share",
         );
         for (const p of toPersist) {
-          const projectEntity = projectScopes.find((row) => row.id === p.projectId)?.subsidiaryId;
+          const production = p.workOrderId ? await lockTimeWorkOrderTarget(tx, orgId, user.id, { workOrderId: p.workOrderId, operationId: p.woOperationId, requestedScope: gate.allowedSubsidiaryIds, requireOpen: false }) : null;
+          const projectEntity = production?.subsidiaryId ?? projectScopes.find((row) => row.id === p.projectId)?.subsidiaryId;
           if (employeeScope.subsidiaryId != null && projectEntity != null && employeeScope.subsidiaryId !== projectEntity) {
             throw new TimeLineEntityRefusal("The project belongs to a different legal entity than the employee");
           }
@@ -401,6 +418,8 @@ const save = defineRoute({
             worked_on: string;
             hours: string;
             project_id: string | null;
+            work_order_id: string | null;
+            wo_operation_id: string | null;
             item_id: string | null;
             time_type_id: string | null;
             department_id: string | null;
@@ -411,17 +430,19 @@ const save = defineRoute({
             invoiced_by_line_id: string | null;
             payroll_batch_ref: string | null;
             cost_journal_entry_id: string | null;
+          production_consumed_operation_id: string | null;
             overhead_journal_entry_id: string | null;
             field_ticket_id: string | null;
             billing_status: "unbilled" | "billed";
             amends_entry_id: string | null;
+            corrects_entry_id: string | null;
             has_contra: boolean;
           }>(sql`
-      select id, worked_on, hours::text as hours, project_id, item_id,
+      select id, worked_on, hours::text as hours, project_id, work_order_id, wo_operation_id, item_id,
              time_type_id, department_id, memo, is_billable, status, custom,
              invoiced_by_line_id, payroll_batch_ref, cost_journal_entry_id,
-             overhead_journal_entry_id, field_ticket_id, billing_status,
-             amends_entry_id,
+             overhead_journal_entry_id, production_consumed_operation_id, field_ticket_id, billing_status,
+             amends_entry_id, corrects_entry_id,
              exists (
                select 1 from time_entries contra
                 where contra.org_id = time_entries.org_id
@@ -452,14 +473,14 @@ const save = defineRoute({
           return false;
         }
         const replaceable = (row: (typeof stored)[number]): boolean => {
-          if (row.amends_entry_id != null || row.has_contra) return false;
+          if (row.amends_entry_id != null || row.corrects_entry_id != null || row.has_contra) return false;
           if (row.status === "draft" || row.status === "rejected") return true;
           return (
             !policy.requireApproval &&
             row.status === "approved" &&
             row.invoiced_by_line_id == null &&
             row.payroll_batch_ref == null &&
-            row.cost_journal_entry_id == null &&
+            row.cost_journal_entry_id == null && row.production_consumed_operation_id == null &&
             row.overhead_journal_entry_id == null &&
             row.field_ticket_id == null &&
             row.billing_status === "unbilled"
@@ -469,6 +490,8 @@ const save = defineRoute({
           workedOn: string;
           hours: string;
           projectId: string | null;
+          workOrderId: string | null;
+          woOperationId: string | null;
           itemId: string | null;
           timeTypeId: string | null;
           departmentId: string | null;
@@ -480,6 +503,8 @@ const save = defineRoute({
             v.workedOn,
             normalizeMoney(v.hours),
             v.projectId ?? "",
+            v.workOrderId ?? "",
+            v.woOperationId ?? "",
             v.itemId ?? "",
             v.timeTypeId ?? "",
             v.departmentId ?? "",
@@ -496,6 +521,8 @@ const save = defineRoute({
             workedOn: row.worked_on,
             hours: row.hours,
             projectId: row.project_id,
+            workOrderId: row.work_order_id,
+            woOperationId: row.wo_operation_id,
             itemId: row.item_id,
             timeTypeId: row.time_type_id,
             departmentId: row.department_id,
@@ -542,23 +569,28 @@ const save = defineRoute({
           return true;
         }
         const deleteIds = Array.from(replaceableIds.values()).flat();
+        for (const row of stored.filter(row => deleteIds.includes(row.id) && row.work_order_id)) {
+          await lockTimeWorkOrderTarget(tx, orgId, user.id, { workOrderId: row.work_order_id!, operationId: row.wo_operation_id, requestedScope: gate.allowedSubsidiaryIds });
+        }
         if (deleteIds.length > 0) {
-          await tx.execute(sql`
+          const deleted = await tx.execute(sql`
         delete from time_entries
          where org_id = ${orgId}
-           and id = any(${`{${deleteIds.join(",")}}`}::uuid[])
+           and id = any(${`{${deleteIds.join(",")}}`}::uuid[]) returning id
       `);
+          if (deleted.rows.length !== deleteIds.length) throw new TimeLineEntityRefusal("The time lines changed while saving. Reload before trying again.");
         }
         const savedIds: string[] = [];
         for (const p of toInsert) {
+          if (p.workOrderId) await lockTimeWorkOrderTarget(tx, orgId, user.id, { workOrderId: p.workOrderId, operationId: p.woOperationId, requestedScope: gate.allowedSubsidiaryIds });
           const saved = await tx.execute<{ id: string }>(sql`
         insert into time_entries
           (org_id, employee_party_id, worked_on, hours, time_type_id, item_id,
-           project_id, department_id, memo, is_billable, status, custom,
+           project_id, work_order_id, wo_operation_id, department_id, memo, is_billable, status, custom,
            created_by, updated_by)
         values
           (${orgId}, ${ownedEmployee}, ${p.workedOn}, ${p.hours}, ${p.timeTypeId},
-           ${p.itemId}, ${p.projectId}, ${p.departmentId}, ${p.memo},
+           ${p.itemId}, ${p.projectId}, ${p.workOrderId}, ${p.woOperationId}, ${p.departmentId}, ${p.memo},
            ${p.isBillable}, ${newStatus}, ${JSON.stringify(p.custom)}::jsonb,
            ${user.id}, ${user.id})
         returning id
@@ -570,7 +602,7 @@ const save = defineRoute({
         // Effects run only for freshly inserted lines: replayed lines already
         // carry theirs.
         if (newStatus === "approved")
-          await runTimeApprovalEffects(orgId, user.id, savedIds);
+          await runTimeApprovalEffects(orgId, user.id, savedIds, 'time.manage');
         return false;
       });
     } catch (error) {

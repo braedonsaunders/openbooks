@@ -22,11 +22,13 @@
       "effectiveTo": "Vigente hasta",
       "operationSeq": "Secuencia de operación",
       "scrapPct": "% de merma",
-      "isByproduct": "Tipo de línea"
+      "isByproduct": "Tipo de línea",
+      "outputCostWeight": "Peso relativo del costo"
     },
     "values": {
       "component": "Componente",
-      "byproduct": "Subproducto"
+      "byproduct": "Subproducto",
+      "jointOutput": "Coproducto"
     },
     "refusals": {
       "effectivityOverlap": "El componente {component} tiene períodos de vigencia superpuestos {windows}. Ajusta las fechas o usa una operación o designación de subproducto distinta cuando corresponda.",
@@ -35,7 +37,8 @@
       "invalidScrap": "El porcentaje de merma debe ser un decimal exacto desde 0 y menor que 100.",
       "invalidOperation": "La secuencia de operación debe ser un número entero positivo.",
       "manufacturingDisabled": "Activa Fabricación en Configuración de la empresa → Funciones para editar operaciones y subproductos."
-    }
+    },
+    "jointOutputNote": "Los coproductos comparten el costo de producción según su cantidad y peso relativo por unidad base. El producto principal tiene peso 1. Los subproductos conservan su tratamiento separado por valor neto realizable."
   },
   "labels": {
     "item": "Artículo",

@@ -22,11 +22,13 @@
       "effectiveTo": "Gültig bis",
       "operationSeq": "Arbeitsgangfolge",
       "scrapPct": "Ausschuss %",
-      "isByproduct": "Positionstyp"
+      "isByproduct": "Positionstyp",
+      "outputCostWeight": "Relatives Kostengewicht"
     },
     "values": {
       "component": "Komponente",
-      "byproduct": "Nebenprodukt"
+      "byproduct": "Nebenprodukt",
+      "jointOutput": "Kuppelprodukt"
     },
     "refusals": {
       "effectivityOverlap": "Komponente {component} hat sich überschneidende Gültigkeitszeiträume {windows}. Passen Sie die Daten an oder verwenden Sie bei Bedarf einen anderen Arbeitsgang oder Positionstyp.",
@@ -35,7 +37,8 @@
       "invalidScrap": "Der Ausschussprozentsatz muss eine exakte Dezimalzahl von 0 bis unter 100 sein.",
       "invalidOperation": "Die Arbeitsgangfolge muss eine positive ganze Zahl sein.",
       "manufacturingDisabled": "Aktivieren Sie Fertigung unter Unternehmenseinstellungen → Funktionen, um Arbeitsgang- und Nebenprodukteinstellungen zu bearbeiten."
-    }
+    },
+    "jointOutputNote": "Kuppelprodukte teilen die Produktionskosten nach Menge und relativem Gewicht je Basiseinheit. Das Hauptprodukt hat Gewicht 1. Nebenprodukte behalten ihre gesonderte Bewertung zum Nettoveräußerungswert."
   },
   "labels": {
     "item": "Artikel",

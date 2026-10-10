@@ -3585,6 +3585,30 @@
         "plural": "Inventurrichtlinien",
         "description": "Gültige Zählintervalle und Abweichungstoleranzen in Basiseinheiten je Rechtseinheit und ABC-Klasse.",
         "title": "Inventurrichtlinien"
+      },
+      "operating-profiles": {
+        "title": "Betriebsprofile",
+        "singularTitle": "Betriebsprofile",
+        "description": "Erfassung und Darstellung konfigurieren, ohne Rechnungs- oder Buchungsregeln zu ändern."
+      },
+      "operating-profile-scopes": {
+        "title": "Arbeitsweisen",
+        "singularTitle": "Arbeitsweisen",
+        "description": "Erlaubte Arbeitsweisen und einen Standard für eine Abteilung oder das Unternehmen auswählen."
+      },
+      "operating-profile-versions": {
+        "title": "Workflow-Versionen",
+        "singularTitle": "Workflow-Version",
+        "description": "Veröffentlichte Abläufe bleiben für bestehende Arbeit erhalten."
+      },
+      "inspection-plans": {
+        "title": "Prüfpläne",
+        "description": "Prüfen Sie Wareneingänge und Produktion anhand eingefrorener Prüfpläne und kontrollierter Entscheidungen."
+      },
+      "work-calendars": {
+        "title": "Arbeitskalender",
+        "singularTitle": "Arbeitskalender",
+        "description": "Unternehmensweite Arbeitstage und Schließtage für Produktion und Projektplanung. Arbeitsplätze legen ihre verfügbaren Stunden fest. Bestehende MRP-Läufe behalten ihre ursprünglichen Kalenderdaten."
       }
     },
     "fields": {
@@ -4192,7 +4216,9 @@
       "varianceTolerance": "Abweichungstoleranz",
       "inventoryOwnership": "Bestandseigentum",
       "schedulePdfColorTreatment": "Farbdarstellung",
-      "schedulePdfColorIntensity": "Farbtönung (%)"
+      "schedulePdfColorIntensity": "Farbtönung (%)",
+      "custodianPartyId": "Verwahrender Lieferant",
+      "showReadiness": "Arbeitsleitfaden"
     },
     "fieldHelp": {
       "fxRateMaxAgeDays": "Tage zwischen dem neuesten verwendbaren Kurs und dem Periodenende, ab denen Bewertung und Konsolidierung den Kurs ablehnen. Stichtagskurse zählen ab dem Datum des Kassakurses zum Periodenende, Durchschnittskurse ab der neuesten einbezogenen Notierung. Standard ohne Richtlinie: 31 Tage.",
@@ -4569,7 +4595,8 @@
         "bin": "Behälter",
         "staging": "Bereitstellung",
         "transit": "Transit",
-        "quarantine": "Quarantäne"
+        "quarantine": "Quarantäne",
+        "subcontract": "Verwahrung beim Lieferanten"
       },
       "manufacturingScrap": {
         "normal": "Normaler Ausschuss",
@@ -6918,6 +6945,127 @@
     },
     "actions": {
       "scheduleDeliveryFlows": "Versandzeiten in Flows konfigurieren"
+    },
+    "operatingProfiles": {
+      "chooser": {
+        "title": "Arbeitsweise auswählen",
+        "description": "Beginnen Sie mit den benötigten Details. Funktionen und Berechtigungen steuern die verfügbaren Optionen."
+      },
+      "presets": {
+        "shop_jobs": {
+          "name": "Werkstattaufträge",
+          "description": "Kundenaufträge, Bereitschaft und Zeit. Aktivitäten nach Bedarf ergänzen."
+        },
+        "field_work": {
+          "name": "Außendienst",
+          "description": "Vor-Ort-Arbeit mit optionalen Einsatzberichten, Teams und Planung."
+        },
+        "professional_services": {
+          "name": "Professionelle Dienstleistungen",
+          "description": "Mandate, Zeit und Ergebnisse ohne Baufelder."
+        },
+        "discrete_production": {
+          "name": "Diskrete Fertigung",
+          "description": "Wiederholbare Produkte mit Stücklisten und Arbeitsgängen."
+        },
+        "custom_production": {
+          "name": "Auftragsfertigung",
+          "description": "Auftragsprodukte mit kontrollierten Materialien und Revisionen."
+        },
+        "batch_process": {
+          "name": "Chargen- und Prozessfertigung",
+          "description": "Rezepturen, Chargen, gemessene Ausbeute und rückverfolgbare Produkte."
+        }
+      },
+      "compositionHelp": "Jeder Datensatz behält seine Version. Die Veröffentlichung ändert die Auswahl für neue Arbeiten.",
+      "sections": {
+        "basics": "Grundlagen",
+        "composition": "Erfassung und Ansichten",
+        "publish": "Version veröffentlichen"
+      },
+      "fields": {
+        "code": "Code",
+        "name": "Name",
+        "definition": "Zusammensetzung",
+        "family": "Arbeitsdatensätze",
+        "capture": "Arbeitserfassung",
+        "physicalModel": "Produktionsmodell",
+        "demand": "Bedarf",
+        "terminology": "Arbeitsbezeichnungen",
+        "singular": "Einzahl",
+        "plural": "Mehrzahl",
+        "presentation": "Darstellung",
+        "showSite": "Standortdetails",
+        "showForeman": "Vorarbeiter",
+        "showCustomerPo": "Kundenbestellung",
+        "showMaterials": "Materialien",
+        "showReadiness": "Bereitschaft",
+        "defaultView": "Standardansicht",
+        "reason": "Veröffentlichungsgrund",
+        "departmentId": "Abteilung",
+        "profileIds": "Erlaubte Arbeitsweisen",
+        "defaultProfileId": "Standardarbeitsweise",
+        "version": "Version",
+        "publishedAt": "Veröffentlicht am",
+        "profileId": "Profil"
+      },
+      "values": {
+        "project": "Projekte",
+        "production": "Fertigungsaufträge",
+        "job": "Gesamtauftrag",
+        "activities": "Aktivitäten",
+        "tasks": "Aufgaben",
+        "field_tickets": "Einsatzberichte",
+        "operations": "Arbeitsgänge",
+        "batch": "Charge",
+        "none": "Keine",
+        "discrete": "Diskret",
+        "process": "Prozess",
+        "make_to_order": "Auftragsfertigung",
+        "make_to_stock": "Lagerfertigung",
+        "list": "Liste",
+        "board": "Tafel"
+      },
+      "scopeHelp": "Ohne Abteilung gelten Unternehmensstandards. Eine Abteilung kann mehrere Arbeitsweisen anbieten."
+    },
+    "inspectionPlans": {
+      "name": "Planname",
+      "itemId": "Bestandsartikel",
+      "point": "Prüfpunkt",
+      "operationSequence": "Arbeitsgangfolge",
+      "effectiveFrom": "Gültig ab",
+      "effectiveTo": "Gültig bis",
+      "basics": "Plan und Geltungsbereich",
+      "measurements": "Messwerte",
+      "help": "Erfassen Sie nur nützliche Messwerte. Leere Grenzen erlauben eine Erfassung ohne numerische Toleranz. Beenden Sie den Zeitraum eines verwendeten Plans und erstellen Sie die nächste Revision.",
+      "audit": "Prüfprotokoll",
+      "key": "Messwertschlüssel",
+      "label": "Bezeichnung",
+      "unit": "Einheit",
+      "required": "Erforderlich",
+      "minimum": "Minimum",
+      "maximum": "Maximum",
+      "reason": "Änderungsgrund",
+      "receipt": "Wareneingang",
+      "operation": "Arbeitsgang"
+    },
+    "workCalendars": {
+      "help": "Unternehmensweite Arbeitstage und Schließtage für Produktion und Projektplanung. Arbeitsplätze legen ihre verfügbaren Stunden fest. Bestehende MRP-Läufe behalten ihre ursprünglichen Kalenderdaten.",
+      "name": "Name",
+      "description": "Beschreibung",
+      "isDefault": "Unternehmensstandard",
+      "workingDays": "Arbeitstage",
+      "holidays": "Schließtage",
+      "date": "Schließdatum",
+      "reason": "Änderungsgrund",
+      "addClosure": "Schließtag hinzufügen",
+      "0": "Sonntag",
+      "1": "Montag",
+      "2": "Dienstag",
+      "3": "Mittwoch",
+      "4": "Donnerstag",
+      "5": "Freitag",
+      "6": "Samstag"
     }
   },
   "flows": {
@@ -7599,6 +7747,10 @@
     "consignment": {
       "description": "Lieferanten- und Kundenbestand in Verwahrung verfolgen und beim Eigentumserwerb als eigenen Bestand erfassen.",
       "title": "Konsignationsbestand"
+    },
+    "manufacturingSubcontract": {
+      "title": "Externe Fertigung",
+      "description": "Komponenten an Lieferanten senden, Bearbeitungsleistungen erfassen und Produktion auf den Fertigungsauftrag zurücknehmen."
     }
   },
   "extensions": {

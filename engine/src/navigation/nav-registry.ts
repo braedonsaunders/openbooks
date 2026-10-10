@@ -19,6 +19,8 @@ export interface NavModule {
   requiredPermission?: string
   /** Alternate grants accepted by the destination. */
   requiredPermissionsAny?: readonly string[]
+  /** Additional grants that must all be held for a cross-module workspace. */
+  requiredPermissionsAll?: readonly string[]
   /** Optional-feature gate — hidden while the org has the feature off. */
   featureKey?: string
   /** Every listed feature must also be enabled for this destination. */
@@ -335,6 +337,15 @@ export const NAV_MODULES: NavModule[] = [
   {
     key: 'manufacturing', href: '/manufacturing', label: 'Manufacturing', iconKey: 'package', group: 'operations', subgroup: 'delivery',
     requiredPermission: 'manufacturing.read', featureKey: 'manufacturing', exact: true,
+  },
+
+  {
+    key:'manufacturing-time', href:'/manufacturing/time', label:'Production time', iconKey:'clock',group:'operations',subgroup:'manufacturing',
+    requiredPermission:'time.read',requiredPermissionsAll:['manufacturing.read'],featureKey:'manufacturing',menuParent:'manufacturing',exact:true,
+  },
+  {
+    key:'manufacturing-quality',href:'/manufacturing/quality',label:'Quality',iconKey:'clipboard',group:'operations',subgroup:'manufacturing',
+    requiredPermission:'manufacturing.read',requiredPermissionsAll:['items.read'],featureKey:'manufacturing',menuParent:'manufacturing',recordTarget:{kind:'query',param:'inspection'},exact:true,
   },
   ...([
     ['work-orders','Work orders','clipboard'],['work-centers','Work centers','settings'],
@@ -1157,7 +1168,7 @@ for (const workspace of LOCAL_NAVIGATION) {
       key: moduleKey, href: tab.href, label: tab.label ?? LOCAL_DESTINATION_LABELS[tab.href]!,
       iconKey: tab.iconKey ?? 'list-checks', group,
       subgroup: workspace.id === 'hrm-people' ? 'workforce' : workspace.id === 'hrm-hiring' ? 'hrm-talent' : workspace.id.startsWith('hrm-') ? workspace.id : workspace.id === 'payroll' ? 'payroll-work' : workspace.id,
-      requiredPermission: tab.permission, requiredPermissionsAny: tab.permissionsAny, featureKey: tab.feature ?? workspace.feature, requiredFeatures: tab.requiredFeatures,
+      requiredPermission: tab.permission, requiredPermissionsAny: tab.permissionsAny, requiredPermissionsAll: tab.permissionsAll, featureKey: tab.feature ?? workspace.feature, requiredFeatures: tab.requiredFeatures,
       exact: true,
       ...(tab.menuParent ? { menuParent: tab.menuParent } : {}),
     })
@@ -1236,6 +1247,8 @@ export const DEFAULT_NAV_ORDER: Record<NavGroupKey, readonly string[]> = {
     'manufacturing-work-centers',
     'manufacturing-routings',
     'manufacturing-mrp',
+    'manufacturing-time',
+    'manufacturing-quality',
     'picks',
     'shipments',
     'returns',

@@ -1,3 +1,4 @@
+import { currentWeekStart, pinTimesheetEmployee, userEmployeeId } from '../../api/timesheets/_lib'
 import 'server-only'
 
 import { getLocale, getTranslations } from 'next-intl/server'
@@ -15,6 +16,7 @@ import { loadFieldDefs } from '../../../lib/custom-fields'
 import { loadProject } from '../../api/projects/_lib'
 import { loadProjectCockpit } from './_cockpit-data'
 import type { ProjectDrawer } from './ProjectDrawer'
+import { listOperatingProfileChoices, readPinnedOperatingProfile } from '@openbooks/engine/src/organization/operating-profiles.ts'
 
 /**
  * The project list, split into a loader and a spec.
@@ -42,6 +44,7 @@ type ProjectTypeOption = {
 
 export interface ProjectsData {
   title: string
+  defaultPresentation: string
   description: string
   canManage: boolean
   currentParams: Record<string, string | string[] | undefined>
@@ -94,6 +97,14 @@ export async function loadProjects(
       : null
   const openProject = openSnapshot?.header ?? null
   const openCockpit = openSnapshot?.cockpit ?? null
+  const requestedDepartment=pickString(sp.departmentId);
+  const operatingDepartmentId=creating&&requestedDepartment&&isUuid(requestedDepartment)?requestedDepartment:null;
+  const operatingChoices = await listOperatingProfileChoices(db, orgId, authz.user.id, 'project',operatingDepartmentId)
+  const initialOperatingChoice=creating?operatingChoices.find(choice=>choice.value===pickString(sp.workflow))??null:null
+  const timeEmployee = openProject && can(authz,'time.manage') && can(authz,'time.read') && await isFeatureEnabled(orgId,'timeTracking') ? await userEmployeeId(orgId,authz.user.id) : null
+  const ownTimeEmployee = timeEmployee ? await pinTimesheetEmployee(orgId,timeEmployee,authz.allowedSubsidiaryIds) : null
+  const quickTimeHref = openProject?.project.is_active===true && ownTimeEmployee ? `/timesheets?timesheet=${ownTimeEmployee}:${await currentWeekStart(orgId)}&job=${openProject.project.id}` : null
+  const operatingDefinition = openProject ? await readPinnedOperatingProfile(db, orgId, openProject.project.operating_profile_version_id as string | null, 'project') : null
 
   // party pickers + resolved form layout + cockpit data for the flyout
   // (only when a project is open; creation loads the form inputs but no
@@ -137,6 +148,7 @@ export async function loadProjects(
         orgId,
         userId: authz.user.id,
         recordType: 'project',
+        defaultPresentation: data.defaultPresentation,
         userRoles: authz.user.roles.map(({ key }) => key),
         headerDefs: projectFieldDefs,
         lineDefs: [],
@@ -145,6 +157,7 @@ export async function loadProjects(
     : null
 
   return {
+    defaultPresentation: operatingChoices.find(choice=>choice.isDefault)?.definition.presentation.defaultView ?? 'list',
     title: t('list.title'),
     description: t('list.description'),
     canManage,
@@ -190,9 +203,14 @@ export async function loadProjects(
             subsidiaries,
             canManage,
             canViewGl,
+            quickTimeHref,
             layout: resolvedForm?.layout,
             cockpit: openProject ? openCockpit : null,
             projectTypes,
+            operatingChoices,
+            operatingDefinition,
+            initialOperatingChoice,
+            initialOperatingDepartmentId:operatingDepartmentId??'',
             schedulingEnabled,
             resourcingEnabled,
             progressEnabled,
@@ -202,6 +220,8 @@ export async function loadProjects(
             closeHref: mergeHref('/projects', sp, {
               project: undefined,
               projectNew: undefined,
+              workflow: undefined,
+              departmentId: undefined,
               projectTab: undefined,
               form: undefined,
               projectTxn: undefined,
@@ -240,6 +260,7 @@ export function projectsSpec(data: ProjectsData): PageSpec {
     body: [
       widgetBlock('entity-list-view', {
         recordType: 'project',
+        defaultPresentation: data.defaultPresentation,
         sp: data.currentParams,
         emptyAction: data.canManage ? newProject : null,
         // Rendered in the native page's order: the create-redirect first, then

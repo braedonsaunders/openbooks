@@ -118,7 +118,11 @@
       "provision_assessment": "Avaliação de provisão",
       "drop_ship_control_assessment": "Avaliação de controle na entrega direta",
       "net_investment_oci": "Avaliação cambial do investimento líquido",
-      "net_investment_oci_reversal": "Correção cambial do investimento líquido"
+      "net_investment_oci_reversal": "Correção cambial do investimento líquido",
+      "standard_cost_rollup": "Cálculo do custo padrão",
+      "routing_revision_activation": "Aprovação de revisão do roteiro",
+      "bom_revision_activation": "Aprovação de revisão da lista de materiais",
+      "work_order_loss_disposition": "Disposição de perda de produção"
     },
     "domains": {
       "lease": "Arrendamento do arrendatário",
@@ -126,7 +130,8 @@
       "revenue": "Contrato de receita",
       "consolidation": "Consolidação",
       "provision": "Provisão e contingência",
-      "sales": "Intermediação de vendas"
+      "sales": "Intermediação de vendas",
+      "manufacturing": "Manufatura"
     },
     "evidence": {
       "assessment": "Avaliação / mensuração",

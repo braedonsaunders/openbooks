@@ -186,6 +186,7 @@ export interface ListColumnPlacement {
 export interface ListViewConfig {
   schemaVersion: 1
   recordType: RecordTypeKey
+  presentation?: 'list' | 'board' | null
   columns: ListColumnPlacement[]
   filters: FilterClause[]
   sort?: { column: string; dir: 'asc' | 'desc' } | null

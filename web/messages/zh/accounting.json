@@ -118,7 +118,11 @@
       "provision_assessment": "预计负债评估",
       "drop_ship_control_assessment": "直运控制权评估",
       "net_investment_oci": "净投资汇兑评估",
-      "net_investment_oci_reversal": "净投资汇兑更正"
+      "net_investment_oci_reversal": "净投资汇兑更正",
+      "standard_cost_rollup": "标准成本滚算",
+      "routing_revision_activation": "工艺路线修订审批",
+      "bom_revision_activation": "物料清单修订审批",
+      "work_order_loss_disposition": "生产损失处置"
     },
     "domains": {
       "lease": "承租人租赁",
@@ -126,7 +130,8 @@
       "revenue": "收入合同",
       "consolidation": "合并",
       "provision": "预计负债及或有事项",
-      "sales": "销售代理业务"
+      "sales": "销售代理业务",
+      "manufacturing": "制造"
     },
     "evidence": {
       "assessment": "评估／计量",

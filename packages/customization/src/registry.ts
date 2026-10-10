@@ -1439,7 +1439,7 @@ const LEASE_AGREEMENT: RecordTypeMeta = {
     options: ["draft","active","terminated","complete"].map(value=>({value,labelKey:`accounting.lifecycle.${value}`}))}],
 };
 
-const FINANCIAL_CHANGE_OPERATIONS = ["net_investment_oci","net_investment_oci_reversal","drop_ship_control_assessment",
+const FINANCIAL_CHANGE_OPERATIONS = ["bom_revision_activation","routing_revision_activation","standard_cost_rollup","net_investment_oci","net_investment_oci_reversal","drop_ship_control_assessment",
   "modification",
   "remeasurement",
   "termination",
@@ -1474,7 +1474,7 @@ const FINANCIAL_CHANGE: RecordTypeMeta = {
         {value:"applied",labelKey:"accounting.lifecycle.queueApplied"},
       ]},
     {key:"domain",labelKey:"accounting.lifecycle.domain",kind:"select",operators:OPERATORS_BY_KIND.select,
-      options: ["lease","asset","revenue","consolidation","provision","sales"].map(value=>({value,labelKey:`accounting.lifecycle.domains.${value}`}))},
+      options: ["lease","asset","revenue","consolidation","provision","sales","manufacturing"].map(value=>({value,labelKey:`accounting.lifecycle.domains.${value}`}))},
     {key:"operation",labelKey:"accounting.lifecycle.operation",kind:"select",operators:OPERATORS_BY_KIND.select,
       options: FINANCIAL_CHANGE_OPERATIONS.map(value=>({value,labelKey:`accounting.lifecycle.operations.${value}`}))},
     {key:"status",labelKey:"common.labels.status",kind:"select",operators:OPERATORS_BY_KIND.select,
@@ -2142,6 +2142,8 @@ const PROJECT: RecordTypeMeta = {
     { key: "_actions", labelKey: "common.labels.actions", kind: "actions", defaultWidth: 44 },
   ],
   listFilters: [
+    {key:"workflow",labelKey:"operatingProfiles.filters.workflow",kind:"select",operators:OPERATORS_BY_KIND.select},
+    {key:"operating_department",labelKey:"operatingProfiles.filters.department",kind:"select",operators:OPERATORS_BY_KIND.select},
     { key: "status", labelKey: "common.labels.status", kind: "select", operators: OPERATORS_BY_KIND.select, options: PROJECT_STATUS_OPTIONS },
     {
       key: "project_type",

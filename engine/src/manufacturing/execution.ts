@@ -3,7 +3,7 @@ import { subsidiaryScopeAllows } from "../organization/subsidiary-scope.ts";
 import { executeIdempotentInventoryAction } from "../inventory/action-idempotency.ts";
 import { ManufacturingNotFoundError } from "./errors.ts";
 import { assertManufacturingFeature } from "./gate.ts";
-import { lockManufacturingExecutionAuthority } from "./authority.ts";
+import { lockManufacturingOrderExecutionAuthority } from "./authority.ts";
 import { getWorkOrder } from "./work-orders.ts";
 import {
   completeWorkOrder,
@@ -65,13 +65,7 @@ async function execute<T>(
     const order = await getWorkOrder(db, orgId, id);
     if (!order || !subsidiaryScopeAllows(scope, order.subsidiaryId))
       throw new ManufacturingNotFoundError();
-    await lockManufacturingExecutionAuthority(
-      db,
-      orgId,
-      actorId,
-      order.subsidiaryId,
-      scope,
-    );
+    await lockManufacturingOrderExecutionAuthority(db,orgId,actorId,id,scope);
     return executeIdempotentInventoryAction(orgId, actorId, {
       operation,
       idempotencyKey: key,

@@ -219,6 +219,18 @@ test('single-task resource replacement is atomic when a later assignment is inva
   assert.ok(!state.rootExecuteCalls || state.rootExecuteCalls === 1, 'only the authorization read may use the root executor')
 })
 
+test('a project default changes only that project’s calendars and preserves company production defaults', async () => {
+  reset()
+  state.calendarTargetExists = true
+  await schedule.upsertScheduleCalendar(ORG_ID, PROJECT_A, { id: 'calendar-a', isDefault: true }, 'user-1', null)
+  const clear = state.txQueries.find(query => /update schedule_calendars set is_default = false/i.test(query.strings.join(' ')))
+  assert.ok(clear)
+  assert.match(clear.strings.join(' '), /and project_id =/)
+  assert.doesNotMatch(clear.strings.join(' '), /project_id is null/)
+  assert.equal(state.orgTransactionCalls, 1)
+  assert.equal(state.commits, 1)
+})
+
 test('calendar updates and deletes require the authorized project', async () => {
   reset()
 

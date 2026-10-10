@@ -726,7 +726,7 @@ export async function upsertScheduleCalendar(
     if (input.isDefault) {
       await tx.execute(sql`
         update schedule_calendars set is_default = false, updated_at = now(), updated_by = ${userId}
-         where org_id = ${orgId} and (project_id = ${projectId} or project_id is null) and is_default`)
+         where org_id = ${orgId} and project_id = ${projectId} and is_default`)
     }
     if (input.id) {
       const updated = await tx.execute<{ id: string }>(sql`

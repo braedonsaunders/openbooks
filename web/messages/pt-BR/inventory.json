@@ -22,11 +22,13 @@
       "effectiveTo": "Vigente até",
       "operationSeq": "Sequência da operação",
       "scrapPct": "% de refugo",
-      "isByproduct": "Tipo de linha"
+      "isByproduct": "Tipo de linha",
+      "outputCostWeight": "Peso relativo do custo"
     },
     "values": {
       "component": "Componente",
-      "byproduct": "Subproduto"
+      "byproduct": "Subproduto",
+      "jointOutput": "Coproduto"
     },
     "refusals": {
       "effectivityOverlap": "O componente {component} tem períodos de vigência sobrepostos {windows}. Ajuste as datas ou use outra operação ou classificação de subproduto quando necessário.",
@@ -35,7 +37,8 @@
       "invalidScrap": "O percentual de refugo deve ser um decimal exato entre 0 (inclusive) e 100 (exclusive).",
       "invalidOperation": "A sequência da operação deve ser um número inteiro positivo.",
       "manufacturingDisabled": "Ative Manufatura em Configurações da empresa → Recursos para editar operações e subprodutos."
-    }
+    },
+    "jointOutputNote": "Os coprodutos compartilham o custo de produção por quantidade e peso relativo por unidade base. O produto principal tem peso 1. Os subprodutos mantêm seu tratamento separado pelo valor realizável líquido."
   },
   "labels": {
     "item": "Item",

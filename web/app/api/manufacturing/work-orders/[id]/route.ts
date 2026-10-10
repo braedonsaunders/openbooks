@@ -8,6 +8,7 @@ import { loadScopedWorkOrder } from "../_scope";
 const Params = z.object({ id: z.string().uuid() });
 const Patch = z.object({
   quantityOrdered: z.string().optional(),
+  productionMode:z.enum(["order","batch","continuous"]).optional(),campaignReference:z.string().trim().max(100).nullable().optional(),
   issueLocationId: z.string().uuid().nullable().optional(), receiptLocationId: z.string().uuid().nullable().optional(),
   plannedStart: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
   plannedEnd: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),

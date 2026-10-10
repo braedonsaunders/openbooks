@@ -13,7 +13,8 @@ import {
   compareDecimal,
   storageCode,
 } from "./master-support.ts";
-import { lockManufacturingExecutionAuthority } from "./authority.ts";
+import { lockManufacturingOrderExecutionAuthority } from "./authority.ts";
+import { isUuid } from "../platform/uuid.ts";
 import { add } from "../money/money.ts";
 
 export interface NormalScrapInput {
@@ -33,6 +34,8 @@ export async function recordNormalScrap(
   input: NormalScrapInput,
 ) {
   await assertManufacturingFeature(tx, orgId, "manufacturing");
+  if (![workOrderId,eventId,input.operationId,input.reasonId].every(isUuid)) throw new ManufacturingNotFoundError();
+  const effectiveScope=await lockManufacturingOrderExecutionAuthority(tx,orgId,actorId,workOrderId,scope);
   const order = (
     await tx.execute<{
       id: string;
@@ -47,13 +50,6 @@ export async function recordNormalScrap(
   ).rows[0];
   if (!order || !subsidiaryScopeAllows(scope, order.subsidiaryId))
     throw new ManufacturingNotFoundError();
-  const effectiveScope = await lockManufacturingExecutionAuthority(
-    tx,
-    orgId,
-    actorId,
-    order.subsidiaryId,
-    scope,
-  );
   const quantity = decimalValue(
     input.quantity,
     "quantity",
@@ -155,7 +151,7 @@ export async function recordNormalScrap(
       "An all-loss order needs a governed disposition rather than a normal output receipt.",
       {
         code: "all_loss_disposition_required",
-        remedy: "Hold the work order for inventory and costing review.",
+        remedy: "Use Close as loss on the work order to review actual discarded quantity and consumed time through approval.",
       },
     );
   if (

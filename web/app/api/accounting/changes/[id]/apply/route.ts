@@ -1,3 +1,7 @@
+import {applyProductionLoss} from "@openbooks/engine/src/manufacturing/loss-disposition.ts";
+import { applyBomRevision } from "@openbooks/engine/src/inventory/bom-policy.ts";
+import { applyRoutingActivation } from "@openbooks/engine/src/manufacturing/routings.ts";
+import { applyStandardRollup } from "@openbooks/engine/src/manufacturing/standard-rollup.ts";
 import { applyNetInvestmentAssessment,applyNetInvestmentReversal } from '@openbooks/engine/consolidation'
 import { applyDropShipAssessment } from '@openbooks/engine/inventory'
 import { applyExpectedBreakage } from '@openbooks/engine/revenue'
@@ -28,6 +32,10 @@ export const POST = defineRoute({
       gate = await authorizeChange(id, "apply");
     if (gate instanceof NextResponse) return gate;
     try {
+      if(gate.domain==="manufacturing"&&gate.operation==="work_order_loss_disposition")return NextResponse.json(await applyProductionLoss(gate.auth.user.orgId,gate.auth.user.id,id));
+      if (gate.domain === "manufacturing" && gate.operation === "bom_revision_activation") return NextResponse.json(await applyBomRevision(gate.auth.user.orgId,gate.auth.user.id,id));
+      if (gate.domain === "manufacturing" && gate.operation === "routing_revision_activation") return NextResponse.json(await applyRoutingActivation(gate.auth.user.orgId,gate.auth.user.id,id));
+      if (gate.domain === "manufacturing" && gate.operation === "standard_cost_rollup") return NextResponse.json(await applyStandardRollup(gate.auth.user.orgId, gate.auth.user.id, id));
       if (gate.domain === "payroll") return NextResponse.json(await applyHolidayObligation({
         orgId: gate.auth.user.orgId, actorId: gate.auth.user.id, changeId: id,
         authorizeFile: async fileId => accessAtLeast(await fileAccessLevel(gate.auth.user.orgId, fileViewer(gate.auth), fileId, db), "viewer"),

@@ -2,6 +2,8 @@ import { sql } from "drizzle-orm";
 import {
   boolean,
   date,
+  foreignKey,
+  type PgTableExtraConfigValue,
   index,
   integer,
   jsonb,
@@ -12,6 +14,7 @@ import {
   uuid
 } from "drizzle-orm/pg-core";
 import { auditColumns, currencyCode, id, money, orgRef } from "./helpers";
+import { operatingProfileVersions } from "./operating-profiles";
 import type { InvoicingPreference } from "./project-types";
 
 /**
@@ -147,6 +150,8 @@ export const projects = pgTable(
     // coarse "billing method" is derived from the type (project_types.billing_method),
     // defaulting to time_and_materials for an unconfigured project.
     projectTypeId: uuid("project_type_id"), // → project_types
+    operatingProfileVersionId: uuid("operating_profile_version_id"),
+    operatingDepartmentId: uuid("operating_department_id"),
     /** Invoicing rules for THIS job, layered over the customer's and the type's. */
     invoicingProfile: jsonb("invoicing_profile"),
     // Native invoicing/backup override for this project (cascades over the type
@@ -163,7 +168,9 @@ export const projects = pgTable(
     awardedAt: timestamp("awarded_at", { withTimezone: true }),
     awardedBy: uuid("awarded_by"),
   },
-  (t) => [
+  (t): PgTableExtraConfigValue[] => [
+    foreignKey({name:"projects_operating_profile_version_fk",columns:[t.orgId,t.operatingProfileVersionId],foreignColumns:[operatingProfileVersions.orgId,operatingProfileVersions.id]}),
+    foreignKey({name:"projects_operating_department_fk",columns:[t.orgId,t.operatingDepartmentId],foreignColumns:[departments.orgId,departments.id]}),
     uniqueIndex("projects_org_id_id_unique").on(t.orgId, t.id),
     index("projects_customer").on(t.customerId),
     uniqueIndex("projects_org_source_identity")

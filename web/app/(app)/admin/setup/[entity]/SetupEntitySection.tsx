@@ -342,7 +342,7 @@ export async function SetupEntitySection({
       select ${setupReadProjection(entity)} from ${setupReadSource(entity)} ${rowFilter}
        order by ${order}
        limit ${list.perPage} offset ${(list.page - 1) * list.perPage}`),
-    drawerOnly ? Promise.resolve({ rows: [] }) : db.execute(sql`select count(*)::int as n from ${sql.raw(entity.table)} ${rowFilter}`),
+    drawerOnly ? Promise.resolve({ rows: [] }) : db.execute(sql`select count(*)::int as n from ${setupReadSource(entity)} ${rowFilter}`),
   ])
   const rows = rowsRes.rows;
   const total = Number(countRes.rows[0]?.n ?? 0)

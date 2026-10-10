@@ -1,0 +1,87 @@
+{
+  "chooseTitle": "Arbeitsweise auswählen",
+  "chooseDescription": "Beginnen Sie mit den benötigten Details. Funktionen und Berechtigungen steuern die verfügbaren Optionen.",
+  "change": "Arbeitsweise ändern",
+  "loading": "Arbeitsweisen werden geladen…",
+  "loadFailed": "Arbeitsweisen konnten nicht geladen werden.",
+  "retry": "Erneut versuchen",
+  "noChoices": "Keine Arbeitsweisen verfügbar. Prüfen Sie Funktionen und Betriebsprofile in der Einrichtung.",
+  "presets": {
+    "shop_jobs": {
+      "name": "Werkstattaufträge",
+      "description": "Kundenaufträge, Bereitschaft und Zeit. Aktivitäten nach Bedarf ergänzen."
+    },
+    "field_work": {
+      "name": "Außendienst",
+      "description": "Vor-Ort-Arbeit mit optionalen Einsatzberichten, Teams und Planung."
+    },
+    "professional_services": {
+      "name": "Professionelle Dienstleistungen",
+      "description": "Mandate, Zeit und Ergebnisse ohne Baufelder."
+    },
+    "discrete_production": {
+      "name": "Diskrete Fertigung",
+      "description": "Wiederholbare Produkte mit Stücklisten und Arbeitsgängen."
+    },
+    "custom_production": {
+      "name": "Auftragsfertigung",
+      "description": "Auftragsprodukte mit kontrollierten Materialien und Revisionen."
+    },
+    "batch_process": {
+      "name": "Chargen- und Prozessfertigung",
+      "description": "Rezepturen, Chargen, gemessene Ausbeute und rückverfolgbare Produkte."
+    }
+  },
+  "capture": {
+    "job": "Gesamtauftrag",
+    "activities": "Aktivitäten",
+    "tasks": "Aufgaben",
+    "field_tickets": "Einsatzberichte",
+    "operations": "Arbeitsgänge",
+    "batch": "Charge"
+  },
+  "time": {
+    "work": "Arbeit",
+    "project": "Projekt / Auftrag",
+    "production": "Produktion",
+    "order": "Produktionsauftrag",
+    "operation": "Arbeitsgang (optional)",
+    "search": "Arbeit suchen",
+    "title": "Produktionszeiten",
+    "correct": "Korrigieren",
+    "correctTitle": "Produktionsstunden korrigieren",
+    "correctMessage": "Das Original bleibt gebucht. Gegenbuchung und Ersatz erfassen die Korrektur; empfangene Erzeugnisse behalten ihre historischen Kosten.",
+    "correctHours": "Korrigierte Stunden",
+    "correctReason": "Grund",
+    "record": "Zeit erfassen"
+  },
+  "department": "Abteilung (optional)",
+  "companyDefaults": "Unternehmensvorgaben",
+  "default": "Standardablauf",
+  "views": {
+    "presentation": "Ansicht",
+    "list": "Liste",
+    "board": "Board",
+    "emptyLane": "Keine Arbeit auf dieser Seite",
+    "pageScope": "Karten und Spaltenzahlen zeigen die aktuelle gefilterte Seite.",
+    "saveFailed": "Ihre Anzeigeeinstellung konnte nicht gespeichert werden."
+  },
+  "filters": {
+    "workflow": "Arbeitsablauf",
+    "department": "Abteilung",
+    "allWorkflows": "Alle Abläufe",
+    "allDepartments": "Alle Abteilungen",
+    "legacy": "Bestehende Arbeit ohne Profil",
+    "unassigned": "Nicht zugeordnet"
+  },
+  "workJourney": {
+    "description": "Arbeit, Zeit und Kosten bleiben bei diesem Auftrag. Ergänzen Sie eine Gliederung, wenn sie Ihrem Team hilft.",
+    "recordTime": "Zeit erfassen",
+    "time": "Erfasste Zeit",
+    "hours": "{hours} Stunden erfasst",
+    "costs": "Kosten hinzufügen",
+    "costsNote": "Erfassen Sie Material und andere Kosten mit der vorhandenen Auftragsbelastung.",
+    "breakdown": "Arbeitsgliederung",
+    "breakdownNote": "Nutzen Sie vorhandene Aktivitäten und Aufgaben, wenn sich die zusätzliche Detailtiefe lohnt."
+  }
+}

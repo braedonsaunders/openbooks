@@ -118,7 +118,11 @@
       "provision_assessment": "引当金評価",
       "drop_ship_control_assessment": "直送取引の支配評価",
       "net_investment_oci": "純投資の為替評価",
-      "net_investment_oci_reversal": "純投資の為替修正"
+      "net_investment_oci_reversal": "純投資の為替修正",
+      "standard_cost_rollup": "標準原価の積上げ",
+      "routing_revision_activation": "工程表改訂の承認",
+      "bom_revision_activation": "部品表改訂の承認",
+      "work_order_loss_disposition": "製造損失処置"
     },
     "domains": {
       "lease": "借手リース",
@@ -126,7 +130,8 @@
       "revenue": "収益契約",
       "consolidation": "連結",
       "provision": "引当金と偶発事項",
-      "sales": "販売代理業務"
+      "sales": "販売代理業務",
+      "manufacturing": "製造"
     },
     "evidence": {
       "assessment": "評価／測定",

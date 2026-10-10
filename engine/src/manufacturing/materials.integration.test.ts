@@ -1,3 +1,4 @@
+import { approveFixtureRouting } from "../testing/manufacturing.ts";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
@@ -11,7 +12,7 @@ import { receiveInventory } from "../inventory/movements.ts";
 import { primaryBookId } from "../inventory/position.ts";
 import { recordNormalScrap } from "./scrap.ts";
 import { ManufacturingError } from "./errors.ts";
-import { activateRouting, createRouting, createRoutingOperation } from "./routings.ts";
+import { createRouting, createRoutingOperation } from "./routings.ts";
 import { addWorkCenterRate, createWorkCenter } from "./work-centers.ts";
 import { createWorkOrder, holdWorkOrder, releaseWorkOrder, startWorkOrderOperation } from "./work-orders.ts";
 import { completeWorkOrderOperation, issueMaterials } from "./materials.ts";
@@ -75,7 +76,7 @@ async function prepare(f: Fixture, input: {
     sequence: 10, name: "Assemble", workCenterId: String(center.id), setupMinutes: "0", runMinutesPerUnit: "1",
     backflushAt: cfg.backflushAt, qualityGate: cfg.qualityGate,
   }));
-  await run((tx) => activateRouting(tx, f.org.orgId, f.actorId, String(routing.id)));
+  await run((tx) => approveFixtureRouting(tx, f.org.orgId, f.actorId, String(routing.id)));
   const draft = await run((tx) => createWorkOrder(tx, f.org.orgId, f.actorId, {
     producedItemId: f.org.items.assembly, quantityOrdered: cfg.orderQty, subsidiaryId: f.org.subsidiaryId,
     issueLocationId: f.org.stockLocationId, receiptLocationId: f.org.stockLocationId2, plannedStart: f.org.date,

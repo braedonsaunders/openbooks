@@ -3532,6 +3532,30 @@
         "plural": "循环盘点策略",
         "description": "按法人实体和ABC分类配置有效盘点间隔及基本单位差异容差。",
         "title": "循环盘点策略"
+      },
+      "operating-profiles": {
+        "title": "运营配置",
+        "singularTitle": "运营配置",
+        "description": "组合工作记录与展示方式，不改变原有计费或会计规则。"
+      },
+      "operating-profile-scopes": {
+        "title": "工作流程选择",
+        "singularTitle": "工作流程选择",
+        "description": "为部门或整个公司选择允许的工作流程与默认流程。"
+      },
+      "operating-profile-versions": {
+        "title": "工作流版本",
+        "singularTitle": "工作流版本",
+        "description": "现有工作保留已发布的工作流配置。"
+      },
+      "inspection-plans": {
+        "title": "检验计划",
+        "description": "使用冻结的检验计划和受控处置检验收货与生产。"
+      },
+      "work-calendars": {
+        "title": "工作日历",
+        "singularTitle": "工作日历",
+        "description": "生产与项目计划共用的公司工作日和停工日期。工作中心各自设置可用工时。现有MRP运行保留运行时使用的日历信息。"
       }
     },
     "fields": {
@@ -4139,7 +4163,9 @@
       "varianceTolerance": "差异容差",
       "inventoryOwnership": "库存所有权",
       "schedulePdfColorTreatment": "颜色处理",
-      "schedulePdfColorIntensity": "色调强度 (%)"
+      "schedulePdfColorIntensity": "色调强度 (%)",
+      "custodianPartyId": "保管供应商",
+      "showReadiness": "工作指南"
     },
     "fieldHelp": {
       "fxRateMaxAgeDays": "最新可用汇率距期末的天数超过此值时，重估和合并将拒绝该汇率。期末汇率从期末即期汇率的日期起算；平均汇率从计入平均的最新报价日期起算。未设置政策时的默认值：31 天。",
@@ -4572,7 +4598,8 @@
         "bin": "货位",
         "staging": "暂存区",
         "transit": "在途",
-        "quarantine": "隔离区"
+        "quarantine": "隔离区",
+        "subcontract": "供应商保管"
       },
       "manufacturingScrap": {
         "normal": "正常报废",
@@ -6918,6 +6945,127 @@
     },
     "actions": {
       "scheduleDeliveryFlows": "在Flows中配置邮件时间"
+    },
+    "operatingProfiles": {
+      "chooser": {
+        "title": "选择此工作的运作方式",
+        "description": "从团队需要的详细程度开始。功能与权限仍决定可用选项。"
+      },
+      "presets": {
+        "shop_jobs": {
+          "name": "车间作业",
+          "description": "客户作业、准备情况与工时。需要时再添加活动。"
+        },
+        "field_work": {
+          "name": "现场工作",
+          "description": "现场工作，可选现场工单、团队与计划。"
+        },
+        "professional_services": {
+          "name": "专业服务",
+          "description": "项目、工时与交付成果，无建筑专用字段。"
+        },
+        "discrete_production": {
+          "name": "离散生产",
+          "description": "使用物料清单与工艺路线的可重复产品。"
+        },
+        "custom_production": {
+          "name": "定制生产",
+          "description": "按订单生产，管控材料与版本。"
+        },
+        "batch_process": {
+          "name": "批次与流程生产",
+          "description": "配方、批次、实测产量与可追溯产品。"
+        }
+      },
+      "compositionHelp": "每条记录保留其选定版本。发布只改变新工作的可选配置。",
+      "sections": {
+        "basics": "基本信息",
+        "composition": "工作记录与视图",
+        "publish": "发布版本"
+      },
+      "fields": {
+        "code": "代码",
+        "name": "名称",
+        "definition": "组合配置",
+        "family": "工作记录",
+        "capture": "记录方式",
+        "physicalModel": "生产模型",
+        "demand": "需求",
+        "terminology": "工作名称",
+        "singular": "单数名称",
+        "plural": "复数名称",
+        "presentation": "展示",
+        "showSite": "现场详情",
+        "showForeman": "领班",
+        "showCustomerPo": "客户采购订单",
+        "showMaterials": "材料",
+        "showReadiness": "准备情况",
+        "defaultView": "默认视图",
+        "reason": "发布原因",
+        "departmentId": "部门",
+        "profileIds": "允许的工作流程",
+        "defaultProfileId": "默认工作流程",
+        "version": "版本",
+        "publishedAt": "发布时间",
+        "profileId": "配置"
+      },
+      "values": {
+        "project": "项目",
+        "production": "生产订单",
+        "job": "整个作业",
+        "activities": "活动",
+        "tasks": "任务",
+        "field_tickets": "现场工单",
+        "operations": "工序",
+        "batch": "批次",
+        "none": "无",
+        "discrete": "离散",
+        "process": "流程",
+        "make_to_order": "按订单生产",
+        "make_to_stock": "按库存生产",
+        "list": "列表",
+        "board": "看板"
+      },
+      "scopeHelp": "部门留空时使用公司默认配置。一个部门可提供多种工作流程。"
+    },
+    "inspectionPlans": {
+      "name": "计划名称",
+      "itemId": "库存物料",
+      "point": "检验节点",
+      "operationSequence": "工序顺序",
+      "effectiveFrom": "生效日期",
+      "effectiveTo": "失效日期",
+      "basics": "计划和范围",
+      "measurements": "测量值",
+      "help": "只添加有用的测量项目。留空限值可记录而不设数值公差。已使用的计划保留其内容；结束有效期后创建下一修订。",
+      "audit": "审计",
+      "key": "测量标识",
+      "label": "名称",
+      "unit": "单位",
+      "required": "必填",
+      "minimum": "最小值",
+      "maximum": "最大值",
+      "reason": "变更原因",
+      "receipt": "收货",
+      "operation": "工序"
+    },
+    "workCalendars": {
+      "help": "生产与项目计划共用的公司工作日和停工日期。工作中心各自设置可用工时。现有MRP运行保留运行时使用的日历信息。",
+      "name": "名称",
+      "description": "说明",
+      "isDefault": "公司默认",
+      "workingDays": "工作日",
+      "holidays": "停工日期",
+      "date": "停工日期",
+      "reason": "变更原因",
+      "addClosure": "添加停工日期",
+      "0": "星期日",
+      "1": "星期一",
+      "2": "星期二",
+      "3": "星期三",
+      "4": "星期四",
+      "5": "星期五",
+      "6": "星期六"
     }
   },
   "flows": {
@@ -7599,6 +7747,10 @@
     "consignment": {
       "description": "跟踪托管的供应商和客户库存，并在取得所有权时确认自有库存。",
       "title": "寄售库存"
+    },
+    "manufacturingSubcontract": {
+      "title": "外协制造",
+      "description": "向供应商发送组件，记录加工服务，并将生产数量返回生产订单。"
     }
   },
   "backupsManager": {

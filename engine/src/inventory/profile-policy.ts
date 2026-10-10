@@ -4,6 +4,7 @@ import { lockAndCheckOrgFeature, orgFeatureEnabled } from "../organization/org-f
 import { restrictionAdmits, type SubsidiaryContext } from "../organization/subsidiaries.ts";
 import { type InventoryProfile, InventoryError, InventoryOwnershipError, CostingPolicyChangeBlockedError, type Runner } from "./contracts.ts";
 import { assertWarehouseAdmitsMovement, type StockMovementDirection } from "./warehouses.ts";
+import { assertSubcontractCustodyFeature } from "./subcontract-custody.ts";
 /**
  * A stock location sits under a `locations` dimension row that may be
  * restricted to one subsidiary's subtree. Receiving into, issuing from, or
@@ -32,8 +33,9 @@ export async function assertStockLocationAdmitsSubsidiary(
       isActive: boolean;
       subsidiary_id: string | null;
       includeChildren: boolean;
+      kind: string;
     }>(sql`
-    select sl.code, sl.is_active as "isActive", l.subsidiary_id,
+    select sl.code, sl.kind, sl.is_active as "isActive", l.subsidiary_id,
            l.subsidiary_include_children as "includeChildren"
       from stock_locations sl
       join locations l on l.id = sl.location_id and l.org_id = sl.org_id
@@ -48,6 +50,7 @@ export async function assertStockLocationAdmitsSubsidiary(
   if (!location.isActive) {
     throw new InventoryError(`stock location "${location.code}" is inactive`);
   }
+  if (location.kind==='subcontract') await assertSubcontractCustodyFeature(tx as SqlExecutor,orgId);
   if (
     !restrictionAdmits(ctx, location.subsidiary_id, location.includeChildren, subsidiaryId)
   ) {

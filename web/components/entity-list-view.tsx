@@ -1,3 +1,6 @@
+import { readWorkListPresentation } from '@openbooks/engine/src/organization/list-presentation.ts'
+import { WorkListPresentation } from './work-list-presentation'
+import { RecordBoard } from './record-board'
 import { getMoneyFormatter } from '@/lib/money-server'
 import type { ReactNode } from 'react'
 import Link from 'next/link'
@@ -82,8 +85,13 @@ export async function EntityListView({
   crmAccountsVisible = true,
   hrmEmploymentVisible = true,
   scopePredicate,
+  basePathOverride,
+  defaultPresentation,
 }: {
   recordType: string
+  defaultPresentation?: string
+  /** Trusted host route for a shared native list, never a source or permission override. */
+  basePathOverride?: string
   /** Additional trusted server-side authorization, shared by rows AND counts.
    * It only narrows the source's mandatory tenant/entity predicate. */
   scopePredicate?: SQL
@@ -147,11 +155,12 @@ export async function EntityListView({
     ? recordTypeForFeatureState(catalog, { inventory: inventoryOn, crm: crmOn, hrm: hrmOn })
     : catalog
   if (!source || !meta) throw new Error(`no entity list source registered for record type "${recordType}"`)
-  const basePath = source.basePath
+  const basePath = basePathOverride ?? source.basePath
 
   const t = await getTranslations()
   const tCommon = await getTranslations('common')
   const tCustom = await getTranslations('customization')
+  const tOperating = await getTranslations('operatingProfiles')
   const label = (key: string) => {
     try {
       return t(key as never)
@@ -189,6 +198,10 @@ export async function EntityListView({
     throw error
   }
   const view = resolvedView.view
+  const boardAvailable = recordType === 'project'
+  const preferredPresentation = boardAvailable ? await readWorkListPresentation(db,orgId,userId,'project') : null
+  const presentation = boardAvailable && (pickString(sp.presentation) ?? preferredPresentation ?? view.presentation ?? defaultPresentation) === 'board' ? 'board' : 'list'
+  const readView = presentation === 'board' ? { ...view, columns: [...view.columns.filter(column => !['code','name','status','customer'].includes(column.key)), ...['code','name','status','customer'].map(key => ({key,visible:true}))] } : view
   const viewName = displayListViewName(resolvedView.row?.name, tCustom('views.defaultName'))
 
   const allowedSorts = meta.listColumns.filter((c) => c.sortable && c.sortKey).map((c) => c.sortKey!) as string[]
@@ -271,7 +284,7 @@ export async function EntityListView({
     quickFilterDefs.map((quick, index) => {
       const statics = (meta.listFilters.find((filter) => filter.key === quick.filterKey)?.options ?? [])
         .map((option) => option.value)
-      if (statics.length > 0) return [quick.filterKey, statics] as const
+      if (statics.length > 0) return [quick.filterKey, [...new Set([...statics,...(loadedQuickOptions[index]??[]).map(option=>option.value)])]] as const
       return [quick.filterKey, (loadedQuickOptions[index] ?? []).map((option) => option.value)] as const
     }),
   )
@@ -283,7 +296,7 @@ export async function EntityListView({
       recordType,
       orgId,
       allowedSubsidiaryIds: allowedSubs,
-      view,
+      view: readView,
       adhoc: { q: params.q, filters: quickValues, showInactive },
       sort: params.sort,
       dir: params.dir,
@@ -532,6 +545,7 @@ export async function EntityListView({
           />
         ) : null)}
         {source.hasInactive ? <ShowInactivesToggle basePath={basePath} currentParams={sp} /> : null}
+        {boardAvailable ? <WorkListPresentation context="project" value={presentation} basePath={basePath} currentParams={sp}/> : null}
         <ViewsMenu
           available={resolvedView.available}
           currentId={resolvedView.row?.id ?? null}
@@ -542,7 +556,13 @@ export async function EntityListView({
           canManage={canManage}
         />
       </div>
-      {total === 0 ? (
+      {presentation === 'board' ? <div className="mt-3">
+        <RecordBoard lanes={(meta.listFilters.find(filter => filter.key === 'status')?.options ?? []).map(option=>({value:option.value,label:option.labelKey ? label(option.labelKey) : option.value}))}
+          cards={rows.map(row=>({id:String(row.id),lane:String(row.status),title:<OverlayLink href={openHref(String(row.id),row)} className="block rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-teal-600">{String(row.code ?? '')} · {String(row.name ?? '')}</OverlayLink>,subtitle:row.customer ? String(row.customer) : undefined}))}
+          emptyLabel={tOperating('views.emptyLane')} pageLabel={tOperating('views.pageScope')} />
+        <Pagination basePath={basePath} currentParams={sp} total={filteredTotal} page={params.page} perPage={params.perPage} />
+        {total === 0 && !filtersActive ? <div className="mt-3">{emptyAction}</div> : null}
+      </div> : total === 0 ? (
         <div className="mt-4">
           <EmptyState
             title={filtersActive ? tCommon('empty.title') : (emptyTitle ?? tCommon('empty.title'))}

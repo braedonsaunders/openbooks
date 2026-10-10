@@ -1,3 +1,5 @@
+import { applyProductionTimeCorrections } from '@openbooks/engine/src/manufacturing/conversion.ts'
+import { lockSharedTimeAuthority, type TimeCommandPermission, type TimeWorkFamily } from '@openbooks/engine/src/projects/time-work-target.ts'
 import 'server-only'
 import { sql } from 'drizzle-orm'
 import { db, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
@@ -28,9 +30,18 @@ import { isFeatureEnabled } from './features'
  * and these effects in one transaction and fail closed: approved time may not
  * exist without the rate/cost/GL evidence its configured policy requires.
  */
-export async function runTimeApprovalEffects(orgId: string, actorId: string, timeEntryIds: string[]): Promise<void> {
+export async function runTimeApprovalEffects(orgId: string, actorId: string, timeEntryIds: string[], permission: TimeCommandPermission = 'time.approve'): Promise<void> {
   if (timeEntryIds.length === 0) return
-  if (!(await isFeatureEnabled(orgId, 'projects'))) return
+  const targets = (await db.execute<{ id: string; project_id: string | null; work_order_id: string | null }>(sql`
+    select id,project_id,work_order_id from time_entries where org_id=${orgId} and id=any(${`{${timeEntryIds.join(',')}}`}::uuid[]) for share`)).rows
+  if (targets.length !== new Set(timeEntryIds).size) throw new Error('One or more time entries are unavailable. Reload before approving time.')
+  if (targets.some(row => row.project_id && row.work_order_id)) throw new Error('Time must name one cost object. Split project and production time before approval.')
+  const productionIds = targets.filter(row => row.work_order_id).map(row => row.id)
+  const projectsEnabled = await isFeatureEnabled(orgId, 'projects')
+  const projectIds = projectsEnabled ? targets.filter(row => !row.work_order_id).map(row => row.id) : []
+  if (productionIds.length && !(await isFeatureEnabled(orgId, 'manufacturing'))) throw new Error('Manufacturing is turned off. Enable it before approving production time.')
+  if (!projectsEnabled && targets.some(row => row.project_id)) throw new Error('Projects is turned off. Enable it before approving project time.')
+  if (!projectsEnabled && !productionIds.length) return
   const settings = await laborCostingSettings(orgId)
   await snapshotLaborCostRates(orgId, timeEntryIds, { actorId })
   // The snapshot stamps every entry a wage row covers and skips the rest —
@@ -56,9 +67,14 @@ export async function runTimeApprovalEffects(orgId: string, actorId: string, tim
       `cannot approve ${uncovered.length === 1 ? 'a time entry' : `${uncovered.length} time entries`} with no covering wage rate: ${shown.join('; ')}${more} — add a wage row covering those dates, or allow unrated time in labor costing setup`,
     )
   }
-  await snapshotTimeBillRates(orgId, timeEntryIds)
-  if (settings.mode === 'post') await postProjectLaborCost(orgId, actorId, timeEntryIds)
-  await applyOverheadForTime(orgId, actorId, timeEntryIds)
+  if (productionIds.length) await applyProductionTimeCorrections(db,orgId,actorId,productionIds,permission)
+  // Production captures payroll evidence here; its released operation owns absorption into WIP.
+  // Project posting and billing receive only project-side entries, so the same hours cannot be charged twice.
+  if (projectIds.length) {
+    await snapshotTimeBillRates(orgId, projectIds)
+    if (settings.mode === 'post') await postProjectLaborCost(orgId, actorId, projectIds)
+    await applyOverheadForTime(orgId, actorId, projectIds)
+  }
 }
 
 export interface ApproveSubmittedTimeEntriesOptions {
@@ -66,6 +82,7 @@ export interface ApproveSubmittedTimeEntriesOptions {
   actorId: string
   employeePartyId: string
   weekStart: string
+  workFamily?: TimeWorkFamily
   allowedSubsidiaryIds: ReadonlySet<string> | null
 }
 
@@ -85,6 +102,7 @@ export async function approveSubmittedTimeEntries(
   const days = weekWindow(options.weekStart)
   const week = days[0]!
   return withOrgTransaction(options.orgId, async () => {
+    await lockSharedTimeAuthority(db, options.orgId, options.actorId, { employeeId: options.employeePartyId, from: days[0]!, through: days[6]!, requestedScope: options.allowedSubsidiaryIds, permission: "time.approve", workFamily: options.workFamily })
     // Parties precede their dependent week headers in the canonical lock
     // order. The route's preliminary pin can go stale while this transaction
     // starts, so recheck the employee's current scope under a shared lock and

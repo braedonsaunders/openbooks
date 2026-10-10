@@ -1,13 +1,13 @@
 import { sql } from "drizzle-orm";
-import { toUnits } from "../money/money.ts";
-import { bomRequiredQuantity } from "../inventory/bom-scrap.ts";
+import { cmp, toUnits } from "../money/money.ts";
+import { bomRequiredQuantity, type BomQuantityPolicy } from "../inventory/bom-scrap.ts";
 import { isIsoCalendarDate } from "../platform/business-date.ts";
 import type { SqlExecutor } from "../platform/db.ts";
 import { ManufacturingError } from "./errors.ts";
 
 const MAX_DEPTH = 32;
 
-type BomRow = {
+type BomRow = BomQuantityPolicy & {
   componentItemId: string;
   componentCode: string;
   quantityPer: string;
@@ -64,7 +64,7 @@ async function effectiveBom(
            b.quantity_per::text as "quantityPer",
            b.operation_seq as "operationSeq",
            b.scrap_pct::text as "scrapPct",
-           b.is_byproduct as "isByproduct"
+           b.is_byproduct as "isByproduct",b.quantity_basis as "quantityBasis",b.formula_output_quantity::text as "formulaOutputQuantity"
       from bom_components b
       join items component on component.org_id = b.org_id and component.id = b.component_item_id
      where b.org_id = ${orgId}
@@ -138,7 +138,8 @@ export async function explodeBom(
     rows: BomRow[],
   ): Promise<void> => {
     for (const row of rows) {
-      const required = bomRequiredQuantity(parentQuantity, row.quantityPer, row.scrapPct).quantity;
+      const required = bomRequiredQuantity(parentQuantity, row.quantityPer, row.scrapPct,row).quantity;
+      if(!row.isByproduct&&cmp(required,'0')<=0) throw new ManufacturingError(`The required quantity of ${row.componentCode} is below inventory precision.`,{code:'bom_quantity_below_precision',remedy:'Increase the production quantity or revise the formula so every required input is at least 0.0001 base units.'});
       const path = [...pathCodes, row.componentCode];
       const line: BomExplosionLine = {
         parentItemId: parentId,

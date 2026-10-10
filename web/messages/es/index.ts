@@ -52,6 +52,7 @@ import login from './login.json'
 import manufacturing from './manufacturing.json'
 import nav from './nav.json'
 import nonprofit from './nonprofit.json'
+import operatingProfiles from './operatingProfiles.json'
 import parties from './parties.json'
 import payments from './payments.json'
 import payroll from './payroll.json'
@@ -131,6 +132,7 @@ export default {
   manufacturing,
   nav,
   nonprofit,
+  operatingProfiles,
   parties,
   payments,
   payroll,

@@ -149,6 +149,17 @@ export async function loadMaskingPolicies(
  * fails unless each is masked here or explicitly allow-listed as
  * non-personal. Add a policy there before allow-listing anyone's identity. */
 export const DEFAULT_POLICIES: MaskingPolicy[] = [
+  {tableName:"mfg_work_orders",columnName:"campaign_reference",transform:"hash"},
+  // Workflow and quality prose may name people; typed operational evidence is masked by clone construction.
+  { tableName: "operating_profiles", columnName: "name", transform: "redact" },
+  { tableName: "operating_profile_versions", columnName: "reason", transform: "redact" },
+  { tableName: "inventory_inspection_plans", columnName: "name", transform: "redact" },
+  { tableName: "inventory_inspection_plans", columnName: "reason", transform: "redact" },
+  { tableName: "inventory_inspections", columnName: "reason", transform: "redact" },
+  { tableName: "inventory_inspections", columnName: "disposition_reason", transform: "redact" },
+  { tableName: "mfg_subcontracts", columnName: "cancel_reason", transform: "redact" },
+  { tableName: "mfg_subcontract_service_bills", columnName: "reversal_reason", transform: "redact" },
+  { tableName: "mfg_subcontract_returns", columnName: "finish_reason", transform: "redact" },
   // The seller contact and payee account printed on e-invoices.
   { tableName: "einvoice_settings", columnName: "contact_name", transform: "faker_name" },
   { tableName: "einvoice_settings", columnName: "contact_email", transform: "faker_email" },

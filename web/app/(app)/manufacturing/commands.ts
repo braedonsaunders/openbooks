@@ -4,6 +4,7 @@ import type {
   ManufacturingRow,
   ManufacturingView,
 } from "@openbooks/engine/src/manufacturing/workspace.ts";
+import { add,neg,cmp } from "@openbooks/engine/src/money/money.ts";
 export type Choice = { value: string; label: string; parentId?: string | null };
 export interface Field {
   key: string;
@@ -14,6 +15,9 @@ export interface Field {
   initial?: unknown;
   options?: Choice[];
   minLength?: number;
+  labelKey?:string;
+  context?:string;
+  section?:"process";
 }
 export interface Command {
   key: string;
@@ -85,6 +89,8 @@ export function headerCommand(
           select("receiptLocationId", options.locations, r.receiptLocationId),
           date("plannedStart", r.plannedStart),
           date("plannedEnd", r.plannedEnd),
+          field("productionMode",r.productionMode,{type:"select",options:enums(["order","batch","continuous"]),section:"process"}),
+          field("campaignReference",r.campaignReference,{nullable:true,section:"process"}),
         ]
       : view === "work-centers"
         ? [
@@ -151,12 +157,12 @@ export function headerCommand(
     key: existing ? "save" : "create",
     path,
     method: existing ? "PATCH" : "POST",
-    fields,
+    fields: view==="work-orders" && r.receiptReworkInspectionId ? fields.filter(field=>!["quantityOrdered","issueLocationId"].includes(field.key)) : fields,
     create: !existing,
     opensRecord: !existing,
     note:
       view === "work-orders"
-        ? "draftNote"
+        ? r.receiptReworkInspectionId ? "repairDraftNote" : "draftNote"
         : view === "mrp"
           ? "mrpNote"
           : undefined,
@@ -192,21 +198,25 @@ export function recordCommands(
     }
     if (r.status === "on_hold") push("resume");
     if (canPost && (r.status === "released" || r.status === "in_progress")) {
-      push("issue", [], { repeat: "issue", create: true, note: "issueNote" });
+      const repair=data.sections.repairSource?.[0],material=data.sections.materials?.[0];
+      if(r.receiptReworkInspectionId) {
+        if(repair&&material&&cmp(String(material.issuedQty),"0")===0)
+          push("issue", [], { create:true,note:"repairIssueNote",body:{lines:[{materialId:material.id,quantity:repair.quantity,lotId:repair.lotId??null,serialId:repair.serialId??null}]}});
+      } else push("issue", [], { repeat: "issue", create: true, note: "issueNote" });
       push(
         "complete",
         [
-          decimal("quantity"),
+          decimal("quantity",r.receiptReworkInspectionId?repair?.quantity:undefined),
           select("receiptLocationId", options.locations, r.receiptLocationId),
         ],
         {
-          repeat: "tracking",
+          ...(r.receiptReworkInspectionId?{}:{repeat:"tracking" as const}),
           create: true,
-          byproducts: data.sections.byproducts,
-          note: "outputNote",
+          byproducts: data.sections.byproducts?.filter(output=>output.outputCostWeight==null),
+          note: r.receiptReworkInspectionId?"repairOutputNote":"outputNote",
         },
       );
-      push("done", [reason("shortCloseReason", false)], { note: "doneNote" });
+      push("done", [reason("shortCloseReason",cmp(String(r.quantityCompleted),String(r.quantityOrdered))<0)], { note: "doneNote" });
     }
     if (canPost && r.status === "in_progress")
       push(
@@ -233,6 +243,19 @@ export function recordCommands(
         ],
         { create: true, note: "normalScrapNote" },
       );
+    if(canPost&&['released','in_progress','on_hold'].includes(String(r.status))&&cmp(String(r.quantityCompleted),'0')===0) {
+      const unfinished=(data.sections.operations??[]).filter(operation=>['running','paused'].includes(String(operation.status)));
+      push('loss-disposition',[
+        select('operationId',(data.sections.operations??[]).map(operation=>({value:operation.id,label:String(operation.sequence)+' · '+operation.name})),undefined,true),
+        decimal('quantity'),{...select('reasonId',options.reasons.filter(reason=>reason.parentId==='abnormal'),undefined,true),labelKey:'lossReasonId'},reason('reason',true,8),
+        ...unfinished.flatMap(operation=>[
+          field('attemptedQty:'+operation.id,undefined,{type:'decimal',required:true,labelKey:'attemptedQty',context:String(operation.sequence)+' · '+operation.name}),
+          field('actualSetupMinutes:'+operation.id,undefined,{type:'decimal',required:true,labelKey:'actualSetupMinutes',context:String(operation.sequence)+' · '+operation.name}),
+          field('actualRunMinutes:'+operation.id,undefined,{type:'decimal',required:true,labelKey:'actualRunMinutes',context:String(operation.sequence)+' · '+operation.name}),
+          ...(operation.laborTimeSource==='approved_time'?[]:[field('actualLaborMinutes:'+operation.id,undefined,{type:'decimal',required:true,labelKey:'actualLaborMinutes',context:String(operation.sequence)+' · '+operation.name})]),
+        ])
+      ],{create:true,note:'lossDispositionNote'});
+    }
   } else if (view === "work-centers") {
     commands.push(headerCommand(view, options, r));
     push(r.isActive ? "deactivate" : "reactivate", [], {
@@ -253,7 +276,7 @@ export function recordCommands(
     if (r.status === "draft") {
       commands.push(headerCommand(view, options, r));
       commands.push(operationCommand(String(r.id), options));
-      push("activate", [], { note: "activateNote" });
+      push("activate", [select("subsidiaryId",options.subsidiaries,options.subsidiaries.length===1?options.subsidiaries[0]!.value:undefined,true),reason("reason",true,8)], { note: "activateNote",create:true });
     }
     if (r.status === "active") push("archive");
     push("newVersion", [], {
@@ -287,6 +310,7 @@ export function operationCommand(
       decimal("setupMinutes", r.setupMinutes ?? "0"),
       decimal("runMinutesPerUnit", r.runMinutesPerUnit ?? "0"),
       decimal("laborMinutesPerUnit", r.laborMinutesPerUnit, false),
+      select("laborTimeSource", enums(["operation", "approved_time"]), r.laborTimeSource ?? "operation", true),
       select(
         "backflushAt",
         enums(["none", "start", "finish"]),
@@ -335,7 +359,7 @@ export function childCommands(
           path: base + "/complete",
           note: "operationNote",
           fields: [
-            decimal("doneQty", row.quantityPlanned),
+            decimal("doneQty",add(String(row.quantityPlanned),neg(String(row.quantityScrappedHere??'0')))),
             decimal(
               "measuredQty",
               row.measuredQty,
@@ -343,7 +367,7 @@ export function childCommands(
             ),
             decimal("actualSetupMinutes", row.actualSetupMinutes, false),
             decimal("actualRunMinutes", row.actualRunMinutes, false),
-            decimal("actualLaborMinutes", row.actualLaborMinutes, false),
+            ...(row.laborTimeSource === "approved_time" ? [] : [decimal("actualLaborMinutes", row.actualLaborMinutes, false)]),
           ],
         },
       ];
@@ -428,6 +452,11 @@ export function commandBody(
     else if (value === undefined || value === "") {
       if (f.nullable) body[f.key] = null;
     } else body[f.key] = f.type === "integer" ? Number(value) : value;
+  }
+  if(command.key==='loss-disposition') {
+    const ids=[...new Set(command.fields.filter(field=>field.key.startsWith('attemptedQty:')).map(field=>field.key.split(':')[1]!))];
+    body.times=ids.map(operationId=>({operationId,attemptedQty:values['attemptedQty:'+operationId],actualSetupMinutes:values['actualSetupMinutes:'+operationId],actualRunMinutes:values['actualRunMinutes:'+operationId],actualLaborMinutes:values['actualLaborMinutes:'+operationId]??null}));
+    for(const key of Object.keys(body))if(key.includes(':'))delete body[key];
   }
   return body;
 }

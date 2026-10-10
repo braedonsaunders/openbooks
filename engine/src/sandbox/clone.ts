@@ -300,6 +300,25 @@ export function generateCopySql(
   const exprs: string[] = [];
   for (const c of t.columns) {
     cols.push(`"${c.name}"`);
+    const nativeProductionEvidence=(t.name==='operating_profile_scopes'&&c.name==='profile_ids')
+      || (t.name==='operating_profile_versions'&&c.name==='definition')
+      || (t.name==='inventory_inspection_plans'&&c.name==='measures')
+      || (t.name==='inventory_inspections'&&['plan_snapshot','disposition_result'].includes(c.name))
+      || (t.name==='mfg_wo_operations'&&['inspection_plan_snapshot','standard_labor_burden','overhead_snapshot'].includes(c.name))
+      || (['mfg_subcontracts','mfg_subcontract_returns','mfg_subcontract_material_returns','mfg_subcontract_shipments'].includes(t.name)&&c.name==='request_snapshot')
+      || (t.name==='mfg_subcontract_service_bills'&&c.name==='expense_snapshot')
+      || (t.name==='mfg_mrp_runs'&&c.name==='parameters') || (t.name==='mfg_planned_orders'&&c.name==='demand_ref');
+    if(nativeProductionEvidence&&tableMask?.has(c.name))throw new Error(`Native production evidence ${t.name}.${c.name} cannot use a whole-column masking transform. Remove that policy; masked copies redact its prose while retaining required quantities, criteria and rebased identity.`);
+
+    // Scope membership is canonical JSON identity data and must be rebased before its ownership trigger runs.
+    if (t.name === "operating_profile_scopes" && c.name === "profile_ids") {
+      if (!rebaseSet.has("operating_profiles") || (opts.onlyTables && !opts.onlyTables.has("operating_profiles"))) {
+        throw new Error("Workflow scopes require operating profiles in the sandbox copy plan.");
+      }
+      exprs.push(`(select jsonb_agg(to_jsonb(ob_rebase(value::uuid,'${seed}'::uuid)::text) order by ord)
+        from jsonb_array_elements_text("profile_ids") with ordinality member(value,ord))`);
+      continue;
+    }
     // Automatic delivery never follows copied people or activates in a new environment.
     if (
       t.name === "schedule_boards" &&
@@ -344,8 +363,8 @@ export function generateCopySql(
       // Keep the complete election graph, including its actor identities,
       // on the same deterministic sandbox mapping as the guarded source row.
       exprs.push(`(case when "${c.name}" is null then null else ob_rebase("${c.name}", '${seed}') end)`);
-    } else if (c.isUuid && ["inventory_movements", "stock_counts", "stock_count_lines", "journal_entries"].includes(t.name)
-      && ["created_by", "updated_by", "posted_by"].includes(c.name)) {
+    } else if (c.isUuid && ["inventory_movements", "stock_counts", "stock_count_lines", "journal_entries","mfg_work_orders","mfg_wo_operations","mfg_wo_materials","mfg_scrap_events","mfg_routings","mfg_routing_operations","mfg_work_centers","mfg_work_center_rates","mfg_mrp_runs","mfg_planned_orders","mfg_subcontracts","mfg_subcontract_returns","mfg_subcontract_material_returns","mfg_subcontract_shipments","mfg_subcontract_service_bills","inventory_inspection_plans","inventory_inspections","operating_profiles","operating_profile_versions","operating_profile_scopes"].includes(t.name)
+      && ["created_by", "updated_by", "posted_by","inspected_by","disposed_by","published_by"].includes(c.name)) {
       // Count recovery resolves historical posters against the copied tenant's users.
       // These legacy actor columns may predate their foreign-key declarations.
       exprs.push(`(case when "${c.name}" is null then null else ob_rebase("${c.name}", '${seed}') end)`);
@@ -382,8 +401,26 @@ export function generateCopySql(
       // key is cleared: a sandbox never adopts the source's dedup slot, and
       // retried attempts mint their own keys.
       exprs.push("null");
+    } else if(t.name==='journal_entries'&&c.name==='custom') {
+      const rebased=`public.production_clone_journal_evidence("custom", '${seed}'::uuid, '${sbx}'::uuid, ${opts.masked?'true':'false'})`;
+      exprs.push(`(case when "origin"='manufacturing' then ${rebased} else ${opts.masked?maskExpr(c.name,tableMask?.get(c.name)??'null_out','id',c):'"custom"'} end)`);
+    } else if(t.name==='mfg_wo_operations'&&['standard_labor_burden','overhead_snapshot'].includes(c.name)) {
+      exprs.push(`public.production_clone_safe_evidence("${c.name}",'${seed}'::uuid,'${c.name}','${sbx}'::uuid,${opts.masked?'true':'false'})`);
+    } else if(t.name==='mfg_wo_operations'&&['standard_labor_burden_hash','overhead_snapshot_hash'].includes(c.name)) {
+      const document=c.name==='standard_labor_burden_hash'?'standard_labor_burden':'overhead_snapshot';
+      exprs.push(`(case when "${document}" is null then null else 'sha256:'||encode(digest(convert_to(public.production_canonical_json(public.production_clone_safe_evidence("${document}",'${seed}'::uuid,'${document}','${sbx}'::uuid,${opts.masked?'true':'false'})),'UTF8'),'sha256'),'hex') end)`);
     } else if (tableMask?.has(c.name)) {
       exprs.push(`${maskExpr(c.name, tableMask.get(c.name)!, "id", { ...c, tableName: t.name })} `);
+    } else if ((t.name === "operating_profile_scopes" && c.name === "profile_ids")
+      || (["mfg_subcontracts","mfg_subcontract_returns","mfg_subcontract_material_returns","mfg_subcontract_shipments"].includes(t.name) && c.name === "request_snapshot")
+      || (t.name === "mfg_subcontract_service_bills" && c.name === "expense_snapshot")
+      || (t.name === "inventory_inspections" && ["plan_snapshot","disposition_result"].includes(c.name))
+      || (t.name === "mfg_wo_operations" && c.name === "inspection_plan_snapshot")
+      || (t.name === "inventory_inspection_plans" && c.name === "measures")
+      || (t.name === "operating_profile_versions" && c.name === "definition")
+      || (t.name === "mfg_mrp_runs" && c.name === "parameters")
+      || (t.name === "mfg_planned_orders" && c.name === "demand_ref")) {
+      exprs.push(`public.production_clone_safe_evidence("${c.name}", '${seed}'::uuid, '${c.name}', '${sbx}'::uuid,${opts.masked?'true':'false'})`);
     } else if ((t.name === "payroll_holiday_obligations" && c.name === "evidence") ||
         (t.name === "pay_run_holiday_allocations" && c.name === "source_snapshot")) {
       exprs.push(`public.holiday_clone_json("${c.name}", '${c.name}', '${seed}'::uuid)`);
@@ -394,10 +431,13 @@ export function generateCopySql(
         ? `(case when "${c.name}" is null then null else '{}'::jsonb end)`
         : `public.holiday_clone_json("${c.name}", '${c.name}', '${seed}'::uuid)`;
       exprs.push(`(case when "domain"='payroll' and "operation"='adjudicated_holiday_hours' ` +
-        `then ${holidayEvidence} else "${c.name}" end)`);
-    } else if (opts.masked && t.name === "financial_changes" && ["reason", "idempotency_key"].includes(c.name)) {
+        `then ${holidayEvidence} when "domain"='manufacturing' then public.production_clone_safe_evidence("${c.name}", '${seed}'::uuid, '${c.name}', '${sbx}'::uuid,${opts.masked?'true':'false'}) else "${c.name}" end)`);
+    } else if (t.name === "financial_changes" && c.name === "idempotency_key") {
+      const rebound=`(public.production_clone_safe_evidence(to_jsonb("idempotency_key"),'${seed}'::uuid,'requestKey','${sbx}'::uuid,${opts.masked?'true':'false'})#>>'{}')`;
+      exprs.push(`(case when "domain"='manufacturing' then ${rebound} ${opts.masked?`when "domain"='payroll' and "operation"='adjudicated_holiday_hours' then ('holiday-'||ob_rebase("id",'${seed}'::uuid)::text)`:''} else ${tableMask?.has(c.name)?maskExpr(c.name,tableMask.get(c.name)!,'id',c):'"idempotency_key"'} end)`);
+    } else if (opts.masked && t.name === "financial_changes" && c.name === "reason") {
       const removed = c.name === "reason" ? "'REDACTED'" : `('holiday-' || ob_rebase("id", '${seed}'::uuid)::text)`;
-      exprs.push(`(case when "domain"='payroll' and "operation"='adjudicated_holiday_hours' then ${removed} else "${c.name}" end)`);
+      exprs.push(`(case when ("domain"='payroll' and "operation"='adjudicated_holiday_hours' or "domain"='manufacturing') then ${removed} else "${c.name}" end)`);
     } else if (t.name === "hrm_benefit_enrollments" && c.name === "submission_snapshot") {
       exprs.push(`public.benefit_clone_submission_evidence("submission_snapshot", '${seed}'::uuid)`);
     } else if (t.name === "hrm_benefit_enrollments" && c.name === "decision_snapshot") {
@@ -410,7 +450,7 @@ export function generateCopySql(
       exprs.push(`(case when "subject_kind"='hrm_benefit_enrollment' ` +
         `then public.benefit_clone_submission_evidence("context", '${seed}'::uuid) ` +
         `when "subject_kind"='financial_change' and "context"->>'domain'='payroll' and "context"->>'operation'='adjudicated_holiday_hours' ` +
-        `then ${holidayContext} when "subject_kind"='financial_change' then public.financial_change_clone_context("context", '${seed}'::uuid) else "context" end)`);
+        `then ${holidayContext} when "subject_kind"='financial_change' and "context"->>'domain'='manufacturing' then public.production_clone_safe_evidence("context", '${seed}'::uuid, 'context', '${sbx}'::uuid,${opts.masked?'true':'false'}) when "subject_kind"='financial_change' then public.financial_change_clone_context("context", '${seed}'::uuid) else "context" end)`);
     } else if (opts.masked && (c.udtName === "jsonb" || c.udtName === "json") && c.name === "custom") {
       // Custom fields are arbitrary tenant-authored JSON and may contain PII
       // without a schema-level column for a masking policy to name. A masked

@@ -12,6 +12,8 @@
  * approved or the user lacks time.manage.
  */
 
+import { RemoteRecordChoice } from '@/components/remote-record-choice'
+import type { TimeWorkFamily } from '@openbooks/engine/src/projects/time-work-target.ts'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useLocale, useTranslations } from 'next-intl'
@@ -48,6 +50,9 @@ const STATUS_VARIANT: Record<string, 'default' | 'secondary' | 'success' | 'warn
 }
 
 interface GridRow {
+  costTarget: TimeWorkFamily
+  workOrderId: string
+  woOperationId: string
   projectId: string
   itemId: string
   timeTypeId: string
@@ -55,6 +60,7 @@ interface GridRow {
   isBillable: boolean
   memo: string
   hours: string[]
+  productionEntryIds: string[][]
   custom: Record<string, unknown>
   immutable: boolean
   amendsEntryId: string | null
@@ -62,16 +68,20 @@ interface GridRow {
   plannedOnly: boolean
 }
 
-function emptyRow(timeTypes: TimeTypeOption[]): GridRow {
+function emptyRow(timeTypes: TimeTypeOption[], workFamily: TimeWorkFamily = 'project'): GridRow {
   const def = timeTypes[0]
   return {
+    costTarget: workFamily,
+    workOrderId: '',
+    woOperationId: '',
     projectId: '',
     itemId: '',
     timeTypeId: def?.value ?? '',
     departmentId: '',
-    isBillable: def?.isBillableDefault ?? false,
+    isBillable: workFamily === 'production' ? false : def?.isBillableDefault ?? false,
     memo: '',
     hours: ['', '', '', '', '', '', ''],
+    productionEntryIds: Array.from({length:7},()=>[]),
     custom: {},
     immutable: false,
     amendsEntryId: null,
@@ -80,15 +90,19 @@ function emptyRow(timeTypes: TimeTypeOption[]): GridRow {
   }
 }
 
-function fromPayload(rows: WeekRow[], timeTypes: TimeTypeOption[]): GridRow[] {
-  if (rows.length === 0) return [emptyRow(timeTypes)]
+function fromPayload(rows: WeekRow[], timeTypes: TimeTypeOption[], workFamily: TimeWorkFamily): GridRow[] {
+  if (rows.length === 0) return [emptyRow(timeTypes,workFamily)]
   return rows.map((r) => ({
+    costTarget: r.workOrderId ? 'production' : r.projectId ? 'project' : workFamily,
+    workOrderId: r.workOrderId ?? '',
+    woOperationId: r.woOperationId ?? '',
     projectId: r.projectId ?? '',
     itemId: r.itemId ?? '',
     timeTypeId: r.timeTypeId ?? '',
     departmentId: r.departmentId ?? '',
     isBillable: r.isBillable,
     memo: r.memo ?? '',
+    productionEntryIds: r.productionEntryIds ?? Array.from({length:7},()=>[]),
     hours: r.hours.map((h) => (h === '' ? '' : String(Number(h)))),
     custom: r.custom ?? {},
     immutable: r.immutable,
@@ -98,8 +112,13 @@ function fromPayload(rows: WeekRow[], timeTypes: TimeTypeOption[]): GridRow[] {
   }))
 }
 
-function seedRows(payload: WeekPayload, pickers: TimesheetPickers): GridRow[] {
-  const rows = fromPayload(payload.rows, pickers.timeTypes)
+function seedRows(payload: WeekPayload, pickers: TimesheetPickers, workFamily: TimeWorkFamily = 'project', quickProjectId?: string): GridRow[] {
+  const rows = fromPayload(payload.rows, pickers.timeTypes,workFamily)
+  if (quickProjectId && ['draft','empty','rejected'].includes(payload.status) && pickers.projects.some(project=>project.value===quickProjectId) && !rows.some(row=>row.projectId===quickProjectId)) {
+    const quick = {...emptyRow(pickers.timeTypes),projectId:quickProjectId}
+    if (!payload.rows.length) rows[0]=quick
+    else rows.push(quick)
+  }
   if ((payload.status !== 'draft' && payload.status !== 'empty') || !(payload.planned?.length)) return rows
   const projectIds = new Set(pickers.projects.map((project) => project.value))
   const additions: GridRow[] = []
@@ -121,7 +140,7 @@ function seedRows(payload: WeekPayload, pickers: TimesheetPickers): GridRow[] {
       })
     }
   }
-  return payload.rows.length === 0 && additions.length > 0 ? additions : [...rows, ...additions]
+  return payload.rows.length === 0 && additions.length > 0 && !quickProjectId ? additions : [...rows, ...additions]
 }
 
 function num(v: string): number {
@@ -172,6 +191,10 @@ function sundayOf(iso: string): string {
 
 export function WeeklyGrid({
   employeeId,
+  workFamily = 'project',
+  quickProjectId,
+  productionAvailable = false,
+  projectAvailable = true,
   week,
   payload,
   pickers,
@@ -186,6 +209,10 @@ export function WeeklyGrid({
   anomalyFlags = [],
 }: {
   employeeId: string | null
+  workFamily?: TimeWorkFamily
+  quickProjectId?: string
+  productionAvailable?: boolean
+  projectAvailable?: boolean
   week: string
   payload: WeekPayload
   pickers: TimesheetPickers
@@ -211,6 +238,7 @@ export function WeeklyGrid({
   anomalyFlags?: { kind: string; kindLabel: string; severity: string; explanation: string }[]
 }) {
   const t = useTranslations('timesheets')
+  const tOperating = useTranslations('operatingProfiles')
   const tScheduling = useTranslations('scheduling')
   const locale = useLocale()
   const tCommon = useTranslations('common')
@@ -218,7 +246,7 @@ export function WeeklyGrid({
     COMMON_STATUS_KEYS.has(s) ? tCommon(`status.${s}`) : LOCAL_STATUS_KEYS.has(s) ? t(`status.${s}`) : s
   const router = useRouter()
   const today = useBusinessToday()
-  const [rows, setRows] = useState<GridRow[]>(() => seedRows(payload, pickers))
+  const [rows, setRows] = useState<GridRow[]>(() => seedRows(payload, pickers,workFamily,quickProjectId))
   const [status, setStatus] = useState(payload.status)
   const [dirty, setDirty] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -245,12 +273,12 @@ export function WeeklyGrid({
     if (seededKey.current === loadedKey && seededRevision.current === payload.revision) return
     seededKey.current = loadedKey
     seededRevision.current = payload.revision
-    setRows(seedRows(payload, pickers))
+    setRows(seedRows(payload, pickers,workFamily,quickProjectId))
     setStatus(payload.status)
     setRevision(payload.revision)
     setDirty(false)
     setStaleError(null)
-  }, [loadedKey, payload, pickers])
+  }, [loadedKey, payload, pickers, workFamily, quickProjectId])
 
   // Manual approval seals the week. Automatic availability seals each saved
   // row, while later days can still be added without reopening posted history.
@@ -275,12 +303,12 @@ export function WeeklyGrid({
     setDirty(true)
   }
   const addRow = () => {
-    setRows((rs) => [...rs, emptyRow(pickers.timeTypes)])
+    setRows((rs) => [...rs, emptyRow(pickers.timeTypes,workFamily)])
     setDirty(true)
   }
   const removeRow = (i: number) => {
     if (rows[i]?.immutable) return
-    setRows((rs) => (rs.length <= 1 ? [emptyRow(pickers.timeTypes)] : rs.filter((_, j) => j !== i)))
+    setRows((rs) => (rs.length <= 1 ? [emptyRow(pickers.timeTypes,workFamily)] : rs.filter((_, j) => j !== i)))
     setDirty(true)
   }
 
@@ -288,7 +316,7 @@ export function WeeklyGrid({
   // hasn't diverged — we keep it simple and always follow the default here).
   const onTimeType = (i: number, value: string) => {
     const tt = timeTypeById.get(value)
-    setRow(i, { timeTypeId: value, isBillable: tt?.isBillableDefault ?? rows[i]!.isBillable })
+    setRow(i, { timeTypeId: value, isBillable: rows[i]!.costTarget === 'production' ? false : tt?.isBillableDefault ?? rows[i]!.isBillable })
   }
 
   const dayTotals = useMemo(() => {
@@ -341,7 +369,8 @@ export function WeeklyGrid({
   ) {
     setBusy(true)
     try {
-      const res = await fetch(url, {
+      const target = workFamily === 'production' ? `${url}?workFamily=production` : url
+      const res = await fetch(target, {
         method,
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify(body),
@@ -370,7 +399,7 @@ export function WeeklyGrid({
   }
 
   const applyPayload = (data: WeekPayload) => {
-    setRows(seedRows(data, pickers))
+    setRows(seedRows(data, pickers,workFamily,quickProjectId))
     setStatus(data.status)
     setDirty(false)
     router.refresh()
@@ -384,6 +413,8 @@ export function WeeklyGrid({
       expectedRevision: revision,
       rows: rows.filter((r) => !r.immutable && !(r.plannedOnly && !r.hours.some((hours) => hours.trim() !== '' && Number(hours) !== 0))).map((r) => ({
         projectId: r.projectId || null,
+        workOrderId: r.workOrderId || null,
+        woOperationId: r.woOperationId || null,
         itemId: r.itemId || null,
         timeTypeId: r.timeTypeId || null,
         departmentId: r.departmentId || null,
@@ -490,6 +521,15 @@ export function WeeklyGrid({
   // Reopen is offered only when it will actually succeed: approved, held by
   // nothing downstream, and the user carries the separate reopen right.
   const weekLocked = (payload.lockReasons?.length ?? 0) > 0
+  async function correctProductionEntry(entryId: string, hours: string) {
+    const replacementHours = await promptDialog({ title: tOperating('time.correctTitle'), message: tOperating('time.correctMessage'), label: tOperating('time.correctHours'), initialValue: hours })
+    if (replacementHours === null) return
+    const reason = await promptDialog({ title: tOperating('time.correctTitle'), label: tOperating('time.correctReason'), multiline: true })
+    if (!reason) return
+    const result = await post('/api/timesheets/amend', { entryId, replacement: {hours: replacementHours, reason} })
+    if (result) { toast.success(t('grid.amendedToast')); applyPayload(result); router.refresh() }
+  }
+
   const canDoReopen = canReopen && employeeId != null && status === 'approved' && !weekLocked
   const canDoAmend = canReopen && employeeId != null && status === 'approved' && weekLocked
 
@@ -677,7 +717,7 @@ export function WeeklyGrid({
           <div className="grid min-w-fit" style={{ gridTemplateColumns: template }}>
             {/* header */}
             {[
-              { id: 'project', label: tCommon('labels.project'), required: false },
+              { id: 'project', label: productionAvailable ? tOperating('time.work') : tCommon('labels.project'), required: false },
               { id: 'item', label: t('labels.serviceItem') },
               { id: 'timeType', label: t('labels.timeType') },
               { id: 'department', label: tCommon('labels.department') },
@@ -721,7 +761,12 @@ export function WeeklyGrid({
                   readOnly={readOnly || busy || r.immutable}
                   pickers={pickers}
                   cellInput={cellInput}
-                  onProject={(v) => setRow(i, { projectId: v })}
+                  productionAvailable={productionAvailable}
+                  projectAvailable={projectAvailable}
+                  onTarget={(value) => setRow(i, { costTarget: value, projectId: '', workOrderId: '', woOperationId: '', isBillable: value === 'production' ? false : r.isBillable })}
+                  onWorkOrder={(v) => setRow(i, { projectId: '', workOrderId: v, woOperationId: '', isBillable: false })}
+                  onOperation={(v) => setRow(i, { woOperationId: v })}
+                  onProject={(v) => setRow(i, { projectId: v, workOrderId: '', woOperationId: '' })}
                   onItem={(v) => setRow(i, { itemId: v })}
                   onTimeType={(v) => onTimeType(i, v)}
                   onDept={(v) => setRow(i, { departmentId: v })}
@@ -730,6 +775,7 @@ export function WeeklyGrid({
                   customCols={customCols}
                   onCustom={(v) => setRow(i, { custom: v })}
                   onCell={(d, v) => setCell(i, d, v)}
+                  onCorrect={canReopen && !busy ? (entryId, hours) => void correctProductionEntry(entryId,hours) : undefined}
                   onRemove={() => removeRow(i)}
                 />
               )
@@ -790,6 +836,11 @@ function RowFragment({
   pickers,
   cellInput,
   onProject,
+  productionAvailable,
+  projectAvailable,
+  onTarget,
+  onWorkOrder,
+  onOperation,
   onItem,
   onTimeType,
   onDept,
@@ -799,7 +850,9 @@ function RowFragment({
   onCustom,
   onCell,
   onRemove,
+  onCorrect,
 }: {
+  onCorrect?: (entryId: string, hours: string) => void
   r: GridRow
   i: number
   total: number
@@ -807,6 +860,11 @@ function RowFragment({
   pickers: TimesheetPickers
   cellInput: string
   onProject: (v: string) => void
+  productionAvailable: boolean
+  projectAvailable: boolean
+  onTarget: (v: TimeWorkFamily) => void
+  onWorkOrder: (v: string) => void
+  onOperation: (v: string) => void
   onItem: (v: string) => void
   onTimeType: (v: string) => void
   onDept: (v: string) => void
@@ -818,6 +876,7 @@ function RowFragment({
   onRemove: () => void
 }) {
   const t = useTranslations('timesheets')
+  const tOperating = useTranslations('operatingProfiles')
   const tCommon = useTranslations('common')
   const tResourcing = useTranslations('resourcing')
   const locale = useLocale()
@@ -826,8 +885,21 @@ function RowFragment({
 
   return (
     <>
-      <div className={cell}>
-        {readOnly ? (
+      <div className={cn(cell,'flex-col items-stretch justify-center gap-1 py-1')}>
+        {productionAvailable && projectAvailable && !readOnly ? (
+          <Select value={r.costTarget} aria-label={tOperating('time.work')} onChange={e=>onTarget(e.target.value as TimeWorkFamily)} className="h-7 text-xs">
+            <option value="project">{tOperating('time.project')}</option>
+            <option value="production">{tOperating('time.production')}</option>
+          </Select>
+        ) : null}
+        {r.costTarget === 'production' ? (
+          <>
+            <RemoteRecordChoice id={`time-order-${i}`} value={r.workOrderId} options={[]} endpoint="/api/timesheets/production-choices?workFamily=production" disabled={readOnly} clearable onChange={onWorkOrder}
+              labels={{choose:tOperating('time.order'),searchPlaceholder:tOperating('time.search'),loadFailed:tOperating('loadFailed'),retry:tOperating('retry')}} />
+            {r.workOrderId ? <RemoteRecordChoice id={`time-operation-${i}`} value={r.woOperationId} options={[]} endpoint={`/api/timesheets/production-choices?workFamily=production&workOrderId=${r.workOrderId}`} disabled={readOnly} clearable onChange={onOperation}
+              labels={{choose:tOperating('time.operation'),searchPlaceholder:tOperating('time.search'),loadFailed:tOperating('loadFailed'),retry:tOperating('retry')}} /> : null}
+          </>
+        ) : readOnly ? (
           <span className="px-1.5 text-sm">{label(pickers.projects, r.projectId)}</span>
         ) : (
           <SearchSelect
@@ -896,7 +968,7 @@ function RowFragment({
         <input
           type="checkbox"
           checked={r.isBillable}
-          disabled={readOnly}
+          disabled={readOnly || r.costTarget === 'production'}
           onChange={(e) => onBillable(e.target.checked)}
           aria-label={t('grid.lineBillableAria', { line: i + 1 })}
           className="h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500"
@@ -937,9 +1009,10 @@ function RowFragment({
       {r.hours.map((h, d) => (
         <div key={d} className={cn(cell, 'px-0')}>
           {readOnly ? (
-            <span className="w-full px-1 text-center text-sm tabular-nums">
-              {h === '' || Number(h) === 0 ? '' : Number(h).toFixed(2)}
-            </span>
+            <div className="flex w-full flex-col items-center gap-1 px-1 text-center text-sm tabular-nums">
+              <span>{h === '' || Number(h) === 0 ? '' : Number(h).toFixed(2)}</span>
+              {onCorrect && r.productionEntryIds[d]?.length === 1 ? <button type="button" onClick={() => onCorrect(r.productionEntryIds[d]![0]!, h)} className="text-[10px] font-medium text-teal-700 hover:underline dark:text-teal-300">{tOperating('time.correct')}</button> : null}
+            </div>
           ) : (
             <input
               inputMode="decimal"

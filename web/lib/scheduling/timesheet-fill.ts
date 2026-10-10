@@ -7,6 +7,7 @@
  */
 export interface FillableRow {
   projectId: string
+  workOrderId?: string
   memo: string
   hours: string[]
   immutable: boolean
@@ -40,7 +41,7 @@ export function fillFromSchedule<Row extends FillableRow>(
     if (day < 0 || Number(booking.hours) <= 0) continue
     const projectId = booking.projectId && options.projectIds.has(booking.projectId) ? booking.projectId : ''
     const memo = projectId ? '' : booking.targetLabel
-    const same = (row: Row) => row.projectId === projectId && (projectId !== '' || row.memo === memo)
+    const same = (row: Row) => !row.workOrderId && row.projectId === projectId && (projectId !== '' || row.memo === memo)
     // Hours already recorded for this work on this day, locked or not, win.
     if (next.some((row) => same(row) && row.hours[day] !== '')) {
       skipped++
@@ -49,7 +50,7 @@ export function fillFromSchedule<Row extends FillableRow>(
     let index = next.findIndex((row) => !row.immutable && same(row))
     if (index < 0) {
       // An untouched blank row is reused before a new line is added.
-      index = next.findIndex((row) => !row.immutable && row.projectId === '' && row.memo === '' && row.hours.every((hours) => hours === ''))
+      index = next.findIndex((row) => !row.immutable && !row.workOrderId && row.projectId === '' && row.memo === '' && row.hours.every((hours) => hours === ''))
       if (index < 0) {
         next.push({ ...options.blank(), hours: ['', '', '', '', '', '', ''] })
         index = next.length - 1

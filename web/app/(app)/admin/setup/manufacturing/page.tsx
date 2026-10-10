@@ -1,3 +1,4 @@
+import { ManufacturingSetupJourney } from '../../../manufacturing/SetupJourney'
 import { ModuleView } from '../../../../../components/viewspec/module-view'
 import { loadManufacturingSetup, manufacturingPoliciesSpec } from './view'
 import { ManufacturingPoliciesForm, ManufacturingSetupTabs } from './sections'
@@ -22,10 +23,11 @@ export default async function ManufacturingSetup({
     <div className="space-y-4">
       <ModuleView spec={manufacturingPoliciesSpec(data)} data={data} searchParams={sp} trusted />
       <ManufacturingSetupTabs tabs={data.tabs} />
-      {data.entityKey && entity && authz ? (
+      {data.tab === 'start' ? <ManufacturingSetupJourney /> : data.entityKey && entity && authz ? (
         <SetupEntitySection
           entity={entity}
           orgId={authz.user.orgId}
+          actorId={authz.user.id}
           searchParams={data.currentParams}
           basePath="/admin/setup/manufacturing"
           canManage={can(authz, 'admin.setup.manage')}
