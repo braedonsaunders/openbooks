@@ -1,3 +1,4 @@
+import { SampleCompanyError } from "./provisioning-failures.ts";
 import { sql } from "drizzle-orm";
 import { db, withMaintenanceTransaction } from "../platform/db.ts";
 import { SAMPLE_COMPANY_PROFILES } from "./catalog.ts";
@@ -7,6 +8,14 @@ export async function sampleTenantInventory() {
   return withMaintenanceTransaction(null, async () => {
     await db.execute(sql`set transaction read only`);
     await db.execute(sql`set local statement_timeout = '45000ms'`);
+    return readSampleTenantInventory();
+  });
+}
+
+/** Shared metadata reader participates in an already pinned read-only snapshot. */
+export async function readSampleTenantInventory() {
+  const mode = (await db.execute<{ readOnly: string }>(sql`select current_setting('transaction_read_only') as "readOnly"`)).rows[0];
+  if (mode?.readOnly !== 'on') throw new SampleCompanyError('Tenant inventory requires a read-only transaction.');
     const rows = (await db.execute<{
       database: string; serverAddress: string; serverPort: number; clusterName: string; id: string; name: string; environment: string; createdAt: string; sourceOrgId: string | null;
       simHarness: boolean; simProfile: string | null; template: Record<string, unknown> | null;
@@ -37,5 +46,4 @@ export async function sampleTenantInventory() {
         documents: row.documents, postedEntries: row.postedEntries, activeUsers: row.users, childCompanies: row.childCompanies,
         disposition: classification === "ordinary-company" ? "preserve" : profile ? "review-native-refresh" : "review-provenance-before-retirement" };
     });
-  });
 }

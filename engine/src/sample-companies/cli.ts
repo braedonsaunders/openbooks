@@ -1,4 +1,8 @@
 #!/usr/bin/env node
+import { readFileSync, statSync } from "node:fs";
+import { admitSampleRetirement, executeSampleRetirement } from "./retirement.ts";
+import { tenantRetirementStatus, releaseTenantRetirement } from "../organization/tenant-retirement.ts";
+import { sampleRetirementPlan } from "./retirement-plan.ts";
 import { sampleTenantInventory } from "./tenant-inventory.ts";
 import { installDemoScenarios, verifyDemoScenarios } from "./install-scenarios.ts";
 import { sampleSourceManifest } from "./manifest.ts";
@@ -28,6 +32,14 @@ function line(value: unknown): void {
   process.stdout.write(`${JSON.stringify(value)}\n`);
 }
 
+function privateJson(flag: string, maxBytes: number): unknown {
+  const path = valueAfter(flag);
+  if (!path) throw new Error(`Missing ${flag} PATH`);
+  const file = statSync(path);
+  if (!file.isFile() || file.size > maxBytes) throw new Error(`${flag} must name a bounded regular JSON file`);
+  try { return JSON.parse(readFileSync(path, "utf8")); }
+  catch { throw new Error(`${flag} contains invalid JSON`); }
+}
 function required(flag: string): string {
   const value = valueAfter(flag);
   if (!value) throw new Error(`Missing ${flag}`);
@@ -40,6 +52,30 @@ function operatorOptions(): { actorId?: string } {
 
 async function main(): Promise<void> {
   const command = process.argv[2] ?? "inventory";
+  if (command === "retirement-admit") {
+    line(await admitSampleRetirement({ plan: privateJson("--plan-file", 16 * 1024 * 1024), recovery: privateJson("--recovery-file", 65536), runId: required("--run-id"), actorId: required("--actor") }));
+    return;
+  }
+  if (command === "retirement-execute") {
+    line(await executeSampleRetirement({ runId: required("--run-id"), orgId: required("--org"), planDigest: required("--plan-digest") }));
+    return;
+  }
+  if (command === "retirement-release") {
+    line(await releaseTenantRetirement({ runId: required("--run-id"), orgId: required("--org"), planDigest: required("--plan-digest"), actorId: required("--actor"), reason: required("--reason") }));
+    return;
+  }
+  if (command === "retirement-status") { line(await tenantRetirementStatus(required("--run-id"))); return; }
+  if (command === "retirement-plan") {
+    const path = valueAfter("--selection-file");
+    if (!path) throw new Error("retirement-plan requires --selection-file PATH containing exact database identity and retain/retire UUID lists");
+    const file = statSync(path);
+    if (!file.isFile() || file.size > 65536) throw new Error("Retirement selection must be a regular JSON file no larger than 64 KiB");
+    let selection: unknown;
+    try { selection = JSON.parse(readFileSync(path, "utf8")); }
+    catch { throw new Error("Retirement selection is not valid JSON; review its schema without placing credentials in the file"); }
+    line(await sampleRetirementPlan(selection));
+    return;
+  }
   if (command === "tenant-inventory") { for (const tenant of await sampleTenantInventory()) line(tenant); return; }
   if (command === "manifest") { line(sampleSourceManifest()); return; }
   if (command === "inventory") {
@@ -112,7 +148,7 @@ async function main(): Promise<void> {
   }
 
   if (command !== "prepare") {
-    throw new Error("usage: npm -w engine run samples -- manifest | tenant-inventory | inventory | inspect --org UUID --industry KEY | refresh-plan [--industry KEY] [--actor UUID] | refresh --plan-digest SHA256 [--industry KEY] [--actor UUID] | install-scenarios --org UUID --industry KEY [--actor UUID] | prepare [--industry KEY] | install --member-user UUID --source-org UUID --member-name NAME [--industry KEY] | resume --run-dir PATH | promote --industry KEY --source-org UUID --confirm-sample-data [--unmasked --confirm-synthetic]");
+    throw new Error("usage: npm -w engine run samples -- manifest | tenant-inventory | retirement-plan --selection-file PATH | retirement-admit --plan-file PATH --recovery-file PATH --run-id UUID --actor UUID | retirement-execute --run-id UUID --org UUID --plan-digest SHA256 | retirement-status --run-id UUID | retirement-release --run-id UUID --org UUID --plan-digest SHA256 --actor UUID --reason TEXT | inventory | inspect --org UUID --industry KEY | refresh-plan [--industry KEY] [--actor UUID] | refresh --plan-digest SHA256 [--industry KEY] [--actor UUID] | install-scenarios --org UUID --industry KEY [--actor UUID] | prepare [--industry KEY] | install --member-user UUID --source-org UUID --member-name NAME [--industry KEY] | resume --run-dir PATH | promote --industry KEY --source-org UUID --confirm-sample-data [--unmasked --confirm-synthetic]");
   }
 
   const industry = valueAfter("--industry");
