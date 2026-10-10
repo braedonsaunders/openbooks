@@ -60,7 +60,7 @@ export async function deleteRetiredTenantRows(catalog: Catalog, orgId: string) {
   const byName = new Map(targets.map(table => [table.name, table]));
   const order = deletionOrder({ ...catalog, tables: targets });
   const selfEdges = (await db.execute<{ table: string; columns: string[]; referencedColumns: string[] }>(sql`
-    select c.relname as table,array_agg(child.attname order by position) as columns,array_agg(parent.attname order by position) as "referencedColumns"
+    select c.relname as table,array_agg(child.attname::text order by position) as columns,array_agg(parent.attname::text order by position) as "referencedColumns"
     from pg_constraint fk join pg_class c on c.oid=fk.conrelid join pg_namespace n on n.oid=c.relnamespace
     cross join lateral generate_subscripts(fk.conkey,1) position
     join pg_attribute child on child.attrelid=fk.conrelid and child.attnum=fk.conkey[position]
