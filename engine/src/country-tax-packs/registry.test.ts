@@ -111,7 +111,7 @@ const PACK_FACTS: Record<string, PackFacts> = {
     },
   },
   US: {
-    taxType: "sales_use", completeness: "complete complete partial partial partial partial partial", jurisdictions: 51,
+    taxType: "sales_use", completeness: "complete partial partial partial partial partial partial", jurisdictions: 51,
     returns: {
       US_SALES_TAX_WORKPAPER: {
         filing: "monthly portal_manual portal_entry",
@@ -145,6 +145,25 @@ const PACK_FACTS: Record<string, PackFacts> = {
         filing: "monthly portal_manual portal_entry", boxes: "A1 A2 A3 -5 6 7",
         formulas: ["7 = 5 - 6"],
         codes: ["US-FL-ST -: 3% 1949-11-01, 4% 1968-04-01, 5% 1982-05-01, 6% 1988-02-01"],
+      },
+      US_WA_CET: {
+        filing: "quarterly portal_manual portal_entry",
+        boxes: "BO_RET BO_WHO BO_MFG BO_SVC BO_SVC1M BO_SVC5M ST_TAXABLE ST_TAX USE_TAX LOCAL_TAXABLE LOCAL_TAX "
+          + "SBC_CREDIT WA_GROSS -WA_TAX TOTAL_DUE",
+        formulas: [
+          "TOTAL_DUE = ST_TAX + USE_TAX + LOCAL_TAX + BO_RET + BO_WHO + BO_MFG + BO_SVC + BO_SVC1M + BO_SVC5M - SBC_CREDIT",
+        ],
+        codes: [
+          "US-WA-ST - -> ST_TAXABLE ST_TAX USE_TAX: 2% 1935-05-01, 3% 1941-05-01, 3.33% 1955-05-01, "
+            + "4% 1959-04-01, 4.2% 1965-06-01, 4.5% 1967-07-01, 4.6% 1976-06-01, 4.5% 1979-07-01, 5.5% 1981-12-04, "
+            + "5.4% 1982-05-01, 6.5% 1983-03-01",
+          "US-WA-BO-RET - -> BO_RET: 0.471% 1982-07-01, 0.5% 2027-01-01",
+          "US-WA-BO-WHO - -> BO_WHO: 0.484% 1982-07-01, 0.5% 2027-01-01",
+          "US-WA-BO-MFG - -> BO_MFG: 0.484% 1982-07-01, 0.5% 2027-01-01",
+          "US-WA-BO-SVC - -> BO_SVC: 1.5% 1982-07-01",
+          "US-WA-BO-SVC1M - -> BO_SVC1M: 1.75% 2020-04-01",
+          "US-WA-BO-SVC5M - -> BO_SVC5M: 2.1% 2025-10-01",
+        ],
       },
       US_990: {
         filing: "annual portal_manual paper",
@@ -794,7 +813,15 @@ const AUTHORITY_HOSTS: Record<string, readonly string[]> = {
   TR: ["www.resmigazete.gov.tr", "dijital.gib.gov.tr", "ebeyan.gib.gov.tr"],
   US: [
     "otr.cfo.dc.gov", "revenue.louisiana.gov", "www.tax.newmexico.gov", "dor.sd.gov", "www.cdtfa.ca.gov",
-    "comptroller.texas.gov", "www.tax.ny.gov", "floridarevenue.com",
+    "comptroller.texas.gov", "www.tax.ny.gov", "floridarevenue.com", "dor.wa.gov", "lawfilesext.leg.wa.gov",
+    "www.dfa.arkansas.gov", "azjlbc.gov", "tax.colorado.gov", "portal.ct.gov", "dor.georgia.gov",
+    "legislature.idaho.gov", "cgfa.ilga.gov", "www.in.gov", "tax.iowa.gov", "ksrevenue.gov",
+    "apps.legislature.ky.gov", "www1.maine.gov", "www.marylandcomptroller.gov", "stage.mass.gov",
+    "www.michigan.gov", "www.house.mn.gov", "nebraskalegislature.gov",
+    "www.leg.state.nv.us", "www.nj.gov", "www.ncdor.gov", "www.tax.nd.gov", "dam.assets.ohio.gov",
+    "digitalprairie.ok.gov", "www.palrb.gov", "webserver.rilegislature.gov", "www.scstatehouse.gov",
+    "www.tn.gov", "le.utah.gov", "ljfo.vermont.gov", "www.tax.virginia.gov", "www.wvlegislature.gov",
+    "www.revenue.wi.gov", "wyoleg.gov",
   ],
   VN: ["congbaocdn.chinhphu.vn", "www.vietnamtradeportal.gov.vn", "thuedientu.gdt.gov.vn"],
   ZA: ["www.sars.gov.za"],

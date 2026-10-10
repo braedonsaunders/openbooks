@@ -95,7 +95,7 @@ test(
       assert.deepEqual(installed.forms.map((row) => row.code), ["CA_GST34", "US_SALES_TAX_WORKPAPER"]);
       assert.deepEqual(installed.manifests, [
         { packCode: "CA_INDIRECT_TAX", version: "2026.07.31", status: "active" },
-        { packCode: "US_INDIRECT_TAX", version: "2026.08.01", status: "active" },
+        { packCode: "US_INDIRECT_TAX", version: "2026.10.10", status: "active" },
       ]);
       assert.deepEqual(installed.registrations, [
         { code: "CA", isActive: true, returnFormCode: "CA_GST34" },
