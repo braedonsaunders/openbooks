@@ -15,6 +15,7 @@ const state = {
   data: Object.fromEntries(ANALYTICS_DASHBOARDS.map(({ slug }) => [slug, {
     sourceSlug: slug,
     weeks: [],
+    rows: [],
     asOf: '2026-07-31',
   }])),
 }
@@ -67,6 +68,14 @@ const hooks = registerHooks({
             }
           `),
         }
+      }
+      // Organization configuration and the presentation currency are
+      // database reads; the composition under test only needs their values.
+      if (specifier.endsWith('/lib/analytics/config')) {
+        return { shortCircuit: true, url: 'data:text/javascript,export async function analyticsConfig(){return {}}' }
+      }
+      if (specifier.endsWith('/lib/fx-presentation')) {
+        return { shortCircuit: true, url: 'data:text/javascript,export async function presentationCurrency(){return "USD"}' }
       }
       if (specifier === '@openbooks/engine/platform/business-date') return { shortCircuit: true, url: 'data:text/javascript,export async function businessToday(){return "2026-07-31"}' }
       if (specifier === 'next-intl/server') {
