@@ -968,10 +968,10 @@ export const TENANT_RETIREMENT_GUARDS = [
   },
   {
     "name": "payroll_compensation_configuration_guard",
-    "source": "0613_compensation_configured_flow_approval.sql",
-    "sha256": "c6149107f87b0958e81b959e3cfc4a27df54dd89d55b5282be7f10afcdaffa02",
-    "newSha256": "879e9da92cf7a615921b03e541e68fc0a30de196628ed9c21d224c232de06d79",
-    "patch": true
+    "source": "0627_compensation_ungated_submission.sql",
+    "sha256": "1a4ea1bb3741cb16429bdbb60c94218171283e45f00ee52aaa32458d58a14f0e",
+    "newSha256": "1a4ea1bb3741cb16429bdbb60c94218171283e45f00ee52aaa32458d58a14f0e",
+    "patch": false
   },
   {
     "name": "payroll_employee_employer_assignment_guard",
@@ -1531,6 +1531,13 @@ export const TENANT_RETIREMENT_GUARDS = [
     "source": "0619_operating_profiles_production_extensions.sql",
     "sha256": "50de2b351b1ccac50df8c909b860946c2c0675700304f872adb589c1e0a046c5",
     "newSha256": "3e183f14cc7ae30730320daaaf841d8807b01a7e19bdab996139d86c03786a34",
+    "patch": true
+  },
+  {
+    "name": "payroll_prior_earnings_guard",
+    "source": "0620_payroll_prior_earnings.sql",
+    "sha256": "c552a5ad592446e94ee32005ada5b971fcd0a75ea46359b40a1ebc7b1f68e946",
+    "newSha256": "aca581caf6ef846a3319eff6c0ec99850823d8f5678fc7e1f6a25f09837d6d08",
     "patch": true
   }
 ] as const;
@@ -2544,6 +2551,12 @@ export const TENANT_RETIREMENT_GUARD_ATTRIBUTES = [
   },
   {
     "name": "production_time_history_guard",
+    "config": [
+      "search_path=public,pg_catalog"
+    ]
+  },
+  {
+    "name": "payroll_prior_earnings_guard",
     "config": [
       "search_path=public,pg_catalog"
     ]
@@ -4075,6 +4088,11 @@ export const TENANT_RETIREMENT_TRIGGER_CONTRACTS = [
     "table": "mfg_mrp_runs",
     "trigger": "production_mrp_run_evidence_guard",
     "function": "production_mrp_run_evidence_guard"
+  },
+  {
+    "table": "payroll_prior_earnings",
+    "trigger": "payroll_prior_earnings_guard",
+    "function": "payroll_prior_earnings_guard"
   }
 ] as const;
 
