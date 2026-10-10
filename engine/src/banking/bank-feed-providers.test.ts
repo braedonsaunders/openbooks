@@ -257,7 +257,7 @@ interface ScriptedResponse {
 }
 
 function plaidPage(transactions: PlaidTransaction[]): ScriptedResponse {
-  return { status: 200, body: { transactions, has_more: false } };
+  return { status: 200, body: { transactions, total_transactions: transactions.length } };
 }
 
 /**
@@ -476,7 +476,7 @@ test("every bank-feed adapter confines hostile inputs to trusted HTTPS origins",
     if (url.pathname === "/api/v2/token/new/") {
       body = { access: "access-token" };
     } else if (url.pathname === "/transactions/get") {
-      body = { transactions: [], has_more: false };
+      body = { transactions: [], total_transactions: 0 };
     } else if (url.hostname === "bankaccountdata.gocardless.com") {
       body = { transactions: { booked: [] } };
     } else if (url.hostname === "api.truelayer.com" && url.pathname.endsWith("/transactions")) {
@@ -698,8 +698,8 @@ test("Plaid scopes every transaction page to the configured account mapping", as
     const body = JSON.parse(String(init?.body)) as (typeof requestBodies)[number];
     requestBodies.push(body);
     return new Response(JSON.stringify({
-      transactions: [],
-      has_more: requestBodies.length === 1,
+      transactions: Array.from({length: requestBodies.length === 1 ? 500 : 100}, (_, index) => feedTxn(`page-${requestBodies.length}-${index}`, "2026-08-01", "1")),
+      total_transactions: 600,
     }), {
       status: 200,
       headers: { "content-type": "application/json" },
@@ -746,6 +746,36 @@ test("scheduled bank-feed syncs carry the documented system actor, never the zer
   // The zero UUID means "no actor at all"; persisting it would destroy the
   // audit trail for an engine-initiated financial import.
   assert.notEqual(systemActorId, "00000000-0000-0000-0000-000000000000");
+});
+
+test("Plaid imports the complete reported population and retains the watermark on incomplete pages", {skip: !DB}, async (t) => {
+  const f = await seedFeedFixture();
+  try {
+    const postedOn = addCalendarDays(new Date().toISOString().slice(0, 10), -1);
+    const transactions = Array.from({length: 600}, (_, index) => feedTxn(`complete-${index}`, postedOn, "1"));
+    const page = (rows: PlaidTransaction[]): ScriptedResponse => ({status: 200, body: {transactions: rows, total_transactions: 600}});
+    const script = [page(transactions.slice(0, 500)), page([])];
+    scriptProvider(t, script);
+    let outcome = myOutcome(await runDueBankFeeds(), f.connectionId);
+    assert.match(String(outcome.error), /incomplete transaction page/);
+    assert.equal((await loadConnection(f.connectionId)).last_sync_at, null);
+    assert.deepEqual(await loadStatementLines(f.orgId, f.accountId), []);
+    await makeDue(f.connectionId);
+    script.push(page(transactions.slice(0, 500)), page(transactions.slice(500)));
+    outcome = myOutcome(await runDueBankFeeds(), f.connectionId);
+    assert.equal(outcome.error, undefined);
+    assert.equal(outcome.imported, 600);
+    assert.ok(asWatermarkMs((await loadConnection(f.connectionId)).last_sync_at));
+    assert.deepEqual((await loadStatementLines(f.orgId, f.accountId)).map(row => row.bank_transaction_id).sort(), transactions.map(row => row.transaction_id!).sort());
+    await makeDue(f.connectionId);
+    script.push(page(transactions.slice(0, 500)), page(transactions.slice(500)));
+    outcome = myOutcome(await runDueBankFeeds(), f.connectionId);
+    assert.equal(outcome.error, undefined);
+    assert.equal(outcome.imported, 0);
+    assert.equal((await loadStatementLines(f.orgId, f.accountId)).length, 600);
+  } finally {
+    await dropScratchOrgReporting(f.orgId);
+  }
 });
 
 test(

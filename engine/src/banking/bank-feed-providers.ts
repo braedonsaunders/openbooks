@@ -11,6 +11,7 @@ import { addCalendarDays, businessToday } from "../platform/business-date.ts";
 import { neg, normalizeMoney } from "../money/money.ts";
 import { canonicalDecimal } from "../money/exact-decimal.ts";
 import { sealJson, unsealJson } from "../platform/secrets.ts";
+import { assertRealDate } from "./statement-parsers/shared.ts";
 
 /**
  * Live bank-feed providers — the aggregator side of Bank Feeds. Each adapter
@@ -147,7 +148,9 @@ function providerTransactionList<T>(value: unknown, provider: string): T[] {
  *  the provider omits what it does not know and the mapper falls back. */
 export interface GoCardlessTransaction {
   bookingDate?: string;
+  bookingDateTime?: string;
   valueDate?: string;
+  valueDateTime?: string;
   transactionAmount?: { amount?: unknown; currency?: string };
   remittanceInformationUnstructured?: string;
   remittanceInformationUnstructuredArray?: string[];
@@ -155,6 +158,19 @@ export interface GoCardlessTransaction {
   debtorName?: string;
   internalTransactionId?: string;
   transactionId?: string;
+}
+
+/** Keep the bank's calendar date; an import window is not booking evidence. */
+function gocardlessPostedOn(transaction: GoCardlessTransaction): string {
+  const value = transaction.bookingDate || transaction.bookingDateTime || transaction.valueDate || transaction.valueDateTime;
+  if (typeof value !== "string") {
+    throw new FeedError("GoCardless booked transaction has no booking or value date; obtain dated transaction evidence before importing");
+  }
+  const parts = /^(\d{4})-(\d{2})-(\d{2})(?:$|T)/.exec(value);
+  if (!parts || !Number.isFinite(Date.parse(value))) {
+    throw new FeedError("GoCardless booked transaction has an invalid booking or value date; obtain corrected transaction evidence before importing");
+  }
+  return assertRealDate(parts[1]!, parts[2]!, parts[3]!, "GoCardless booking date");
 }
 
 /** One Plaid transactions/get transaction object. */
@@ -255,7 +271,7 @@ const gocardless: BankFeedAdapter = {
     const lines: ParsedStatementLine[] = txns.map((t) => {
       currency ??= t?.transactionAmount?.currency ?? null;
       return {
-        postedOn: (t.bookingDate || t.valueDate || sinceIso).slice(0, 10),
+        postedOn: gocardlessPostedOn(t),
         amount: exactFeedAmount(t?.transactionAmount?.amount),
         description:
           t.remittanceInformationUnstructured ||
@@ -313,23 +329,47 @@ export function plaidApiBase(environment?: unknown): string {
 }
 
 /**
- * Accumulate every transactions/get page until Plaid reports has_more=false.
+ * Accumulate every transactions/get page against its total_transactions.
  * The page fetcher is injected so pagination is testable in isolation; the
  * hard page cap throws instead of letting history fall off the end silently.
  */
 export async function plaidFetchAllTransactions(
-  fetchPage: (offset: number) => Promise<{ transactions?: PlaidTransaction[]; has_more?: boolean }>,
+  fetchPage: (offset: number) => Promise<{ transactions: PlaidTransaction[]; total_transactions: unknown }>,
 ): Promise<PlaidTransaction[]> {
   const all: PlaidTransaction[] = [];
-  for (let offset = 0, page = 1; ; offset += PLAID_PAGE_SIZE, page += 1) {
+  let expectedTotal: number | undefined;
+  const identities = new Set<string>();
+  for (let page = 1; ; page += 1) {
     if (page > PLAID_MAX_PAGES) {
       throw new FeedError(
         `Plaid feed exceeded ${PLAID_MAX_PAGES} pages (${PLAID_MAX_PAGES * PLAID_PAGE_SIZE} transactions) — narrow the sync window instead of truncating history`,
       );
     }
-    const body = await fetchPage(offset);
-    all.push(...(body.transactions ?? []));
-    if (!body.has_more) return all;
+    const body = await fetchPage(all.length);
+    const total = body.total_transactions;
+    if (typeof total !== "number" || !Number.isSafeInteger(total) || total < 0) {
+      throw new FeedError("Plaid did not return a valid transaction total; retry the complete sync window");
+    }
+    expectedTotal ??= total;
+    if (total !== expectedTotal) {
+      throw new FeedError("Plaid transaction total changed during pagination; retry the complete sync window");
+    }
+    if (!Array.isArray(body.transactions) || body.transactions.length > PLAID_PAGE_SIZE || all.length + body.transactions.length > total) {
+      throw new FeedError("Plaid transaction page does not match its total; retry the complete sync window");
+    }
+    if (!body.transactions.length && all.length < total) {
+      throw new FeedError("Plaid returned an incomplete transaction page; retry the complete sync window");
+    }
+    for (const transaction of body.transactions) {
+      if (transaction?.transaction_id) {
+        if (identities.has(transaction.transaction_id)) {
+          throw new FeedError("Plaid repeated a transaction during pagination; retry the complete sync window");
+        }
+        identities.add(transaction.transaction_id);
+      }
+    }
+    all.push(...body.transactions);
+    if (all.length === total) return all;
   }
 }
 
@@ -375,10 +415,8 @@ const plaid: BankFeedAdapter = {
       rawResponses.push(raw);
       const payload = isJsonRecord(body) ? body : {};
       return {
-        transactions: Array.isArray(payload.transactions)
-          ? (payload.transactions as PlaidTransaction[])
-          : undefined,
-        has_more: Boolean(payload.has_more),
+        transactions: payload.transactions as PlaidTransaction[],
+        total_transactions: payload.total_transactions,
       };
     });
     let currency: string | null = null;
