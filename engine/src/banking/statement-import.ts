@@ -1,5 +1,5 @@
 /** Statement import with dedupe. Split from banking.ts (pure moves only). */
-import { BankingError, type ParsedStatementLine, type StatementSource, BANK_STATEMENT_PARSER_VERSION, type StatementSourceEvidence, type BankingContext, requireActorId, type SkippedStatementRow } from "./banking-core"
+import { BankingError, type ParsedStatementLine, type StatementSource, BANK_STATEMENT_PARSER_VERSION, type StatementSourceEvidence, type BankingContext, requireActorId, type SkippedStatementRow, type BalanceCandidateLine } from "./banking-core"
 import { canonicalCsvMapping } from "./statement-parsers/csv"
 import { loadReconcilableAccount, lockBankAccountInScope, lockReconciliationAccount } from "./reconcilable-account"
 import { assertRealDate, normalizeAmount } from "./statement-parsers/shared"
@@ -127,6 +127,12 @@ export interface ImportResult {
   /** Pointer to the append-only audit row containing the exact source bytes. */
   sourceEvidenceRef: string | null;
   imported: number;
+  /**
+   * Parsed rows set aside as likely statement balances (CSV/OFX
+   * balance-hint tags): offered as opening/closing balances in the
+   * preview, never written as statement lines, never deduped against.
+   */
+  balanceCandidates: BalanceCandidateLine[];
   duplicates: number;
   /** Source rows set aside at parse time (see SkippedStatementRow). */
   skipped: SkippedStatementRow[];
@@ -321,6 +327,26 @@ export async function importStatement(
       bankTransactionId,
     };
   });
+  // Balance-hint tags (CSV/OFX "Opening balance …" rows) split out before
+  // dedupe: a summary row has no GL counterpart, so importing it as a
+  // transaction would block sign-off forever. Candidates are offered as
+  // opening/closing balances in the preview and never written.
+  const balanceCandidates: BalanceCandidateLine[] = [];
+  const transactable: typeof validated = [];
+  for (const line of validated) {
+    if (line.balanceHint) {
+      balanceCandidates.push({
+        postedOn: line.postedOn,
+        amount: line.amount,
+        description: line.description,
+        counterpartyRef: line.counterpartyRef ?? null,
+        bankTransactionId: line.bankTransactionId ?? null,
+        role: line.balanceHint,
+      });
+    } else {
+      transactable.push(line);
+    }
+  }
   // ID-less lines keep a null bankTransactionId: their content is possible
   // overlap, never identity, so no synthetic ID may stand in for a bank
   // key. The account-scoped unique index still guards source-provided IDs.
@@ -373,7 +399,7 @@ export async function importStatement(
       ? []
       : [
           ...new Set(
-            validated.flatMap((line) =>
+            transactable.flatMap((line) =>
               line.bankTransactionId ? [line.bankTransactionId] : [],
             ),
           ),
@@ -394,7 +420,7 @@ export async function importStatement(
     // lines import, the new one flagged with the earlier line as its
     // evidence for review. Genuinely new content imports clean.
     const { lines: fresh, duplicates, possibleDuplicates } =
-      await partitionIdlessLines(tx, ctx.orgId, account.id, validated, existingIds, sourceAlreadyImported);
+      await partitionIdlessLines(tx, ctx.orgId, account.id, transactable, existingIds, sourceAlreadyImported);
     // Serialize with sign-off through the shared reconciliation lock. No
     // other path takes the import lock, so acquiring it first here cannot
     // deadlock; holding both through the insert closes the race with a
@@ -425,6 +451,7 @@ export async function importStatement(
         statementId: null,
         sourceEvidenceRef: null,
         imported: opts.dryRun ? fresh.length : 0,
+        balanceCandidates,
         duplicates,
         possibleDuplicates,
         skipped,
@@ -494,6 +521,7 @@ export async function importStatement(
       statementId,
       sourceEvidenceRef: evidence.ref,
       imported: fresh.length,
+      balanceCandidates,
       duplicates,
       possibleDuplicates,
       skipped,

@@ -1,7 +1,7 @@
 /** CSV statement parsing. Split from banking.ts (pure moves only). */
 import { BankingError, type ParsedStatementLine, type StatementSourceContent, type CsvMapping, type SkippedStatementRow } from "../banking-core"
 import { decodeStatementSourceText } from "../statement-encoding"
-import { assertRealDate, normalizeAmount } from "./shared"
+import { assertRealDate, detectStatementBalanceRole, normalizeAmount } from "./shared"
 import { fromUnits, toUnits } from "../../money/money.ts"
 
 
@@ -185,11 +185,33 @@ function csvRowLooksLikeHeader(cols: string[], mapping: CsvMapping): boolean {
   return csvCellIsLabel(cols[mapping.amount]);
 }
 
+/** Bank-perspective amount of a balance-summary row, or null when neither money cell parses. */
+function csvBalanceRowAmount(cols: string[], mapping: CsvMapping, rowNo: number): string | null {
+  try {
+    if (mapping.debitAmount !== undefined) {
+      const rawAmount = (cols[mapping.amount] ?? "").trim();
+      const rawDebit = (cols[mapping.debitAmount] ?? "").trim();
+      if (rawAmount && rawDebit) return null;
+      if (rawAmount) return normalizeAmount(rawAmount, `CSV row ${rowNo}`);
+      if (rawDebit) return fromUnits(-toUnits(normalizeAmount(rawDebit, `CSV row ${rowNo}`)));
+      return null;
+    }
+    const rawAmount = (cols[mapping.amount] ?? "").trim();
+    if (!rawAmount) return null;
+    return normalizeAmount(rawAmount, `CSV row ${rowNo}`);
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Parse CSV text into normalized statement lines using a column mapping.
  * Each leading row whose mapped date column does not parse is classified
- * from the mapping alone: a transaction-looking row (parseable amount with
- * a description) refuses the import by row number — dropping it would lose
+ * from the mapping alone: a balance-summary row ("Opening balance
+ * 3,068.57") is reported in `skipped` with a balance code and offered as
+ * an opening/closing balance in the preview, never imported as a
+ * transaction; a transaction-looking row (parseable amount with a
+ * description) refuses the import by row number — dropping it would lose
  * real money, and guessing is not an option; a column-header row (labels,
  * never numbers) is consumed silently; any other metadata/disclaimer row
  * is reported in `skipped` by code, never silently discarded. The first
@@ -208,6 +230,18 @@ export function parseCsv(
     const rowNo = start + 1;
     const rawDate = (rows[start]![mapping.date] ?? "").trim();
     if (parseCsvDate(rawDate) !== null) break;
+    // A balance-summary row ("Opening balance 3,068.57") is set aside with
+    // a balance code — offered as an opening/closing balance in the
+    // preview, never imported as a transaction — even when it carries a
+    // parseable amount that would otherwise refuse as a transaction.
+    const leadingRole = detectStatementBalanceRole(rows[start]![mapping.description]);
+    if (leadingRole) {
+      const balanceAmount = csvBalanceRowAmount(rows[start]!, mapping, rowNo);
+      if (balanceAmount !== null) {
+        skipped.push({ line: rowNo, code: "csv_balance_row", dateCell: rawDate, amount: balanceAmount, balanceRole: leadingRole });
+        continue;
+      }
+    }
     if (csvRowLooksLikeTransaction(rows[start]!, mapping, rowNo)) {
       throw new BankingError(
         `CSV row ${rowNo} looks like a transaction (a parseable amount with a description) but its date "${rawDate}" does not parse — remove the row if it is a summary or metadata row, otherwise fix the date`,
@@ -253,7 +287,10 @@ export function parseCsv(
       mapping.bankTransactionId !== undefined
         ? (cols[mapping.bankTransactionId] ?? "").trim() || null
         : null;
-    return { postedOn, amount, description, counterpartyRef, bankTransactionId };
+    // A dated balance-summary row is tagged, not dropped: the import splits
+    // hinted rows into balance candidates for the preview.
+    const balanceHint = detectStatementBalanceRole(description);
+    return { postedOn, amount, description, counterpartyRef, bankTransactionId, balanceHint };
   });
   return { lines, skipped };
 }
