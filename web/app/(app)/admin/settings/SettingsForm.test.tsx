@@ -271,9 +271,13 @@ test('legal identity offers the country\'s tax numbers, checks them before savin
     const city = document.getElementById('company-address-city') as HTMLInputElement
     await type(street, '400 King St W')
     await type(city, 'Toronto')
-    const form = document.getElementById('company-legal-form') as HTMLSelectElement
+    // The legal-form picker's id names its visible trigger; its backing native
+    // select fires the genuine change event the form handles.
+    const form = document.getElementById('company-legal-form')?.closest('span')?.querySelector('select')
+    assert.ok(form, 'the legal form picker has its backing native select')
+    const selectValue = Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype, 'value')!.set!
     await act(async () => {
-      form.value = 'sole_proprietorship'
+      selectValue.call(form, 'sole_proprietorship')
       form.dispatchEvent(new window.Event('change', { bubbles: true }))
       await tick()
     })

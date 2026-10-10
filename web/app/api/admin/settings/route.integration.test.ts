@@ -258,6 +258,10 @@ test(
           name: (await settingsState(fixture.orgId)).name,
           legalName: "",
           country: "CA",
+          address: null,
+          legalForm: null,
+          taxClassification: null,
+          taxIds: {},
           defaultLocale: "en",
           timeZone: "UTC",
           reportingFramework: "us_gaap",
@@ -548,7 +552,7 @@ test(
       for (const [label, accountId, message] of [
         ["inactive", inactive, /inactive/],
         ["summary", summary, /summary/],
-        ["wrong type", wrongType, /incompatible/],
+        ["wrong type", wrongType, /must be Accounts receivable; the selected account is Income/],
       ] as const) {
         const response = await put(fixture, {
           controlAccounts: { ar: accountId },
@@ -660,7 +664,12 @@ test(
 
       const malformed = await put(fixture, { controlAccounts: { ...formRoles, taxPaid: "not-an-account" } });
       assert.equal(malformed.status, 400);
-      assert.deepEqual(await malformed.json(), { error: "taxPaid must be an account id" });
+      assert.deepEqual(await malformed.json(), {
+        error: "Sales tax paid must be an account id",
+        code: "control-account-invalid",
+        role: "taxPaid",
+        reason: "missing",
+      });
       assert.deepEqual(await settingsState(fixture.orgId), after);
     } finally {
       routeState.authz = null;
