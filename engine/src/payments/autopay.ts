@@ -4,6 +4,8 @@ import { paymentLinkTokenHash } from "./payment-link-seal.ts";
 import { addCalendarDays, businessToday } from "../platform/business-date.ts";
 import { cmp, fromUnits, toUnits } from "../money/money.ts";
 import { lockAndCheckOrgFeature, orgFeatureEnabled } from "../organization/org-feature-lock.ts";
+import { lockActorCommandAuthority } from "../organization/actor-command-authority.ts";
+import { ScopeNotFoundError, subsidiaryScopeAllows } from "../organization/subsidiary-scope.ts";
 import {
   ACCEPTANCE_ADAPTERS,
   configSecrets,
@@ -1385,6 +1387,7 @@ async function collectCandidate(
   charge: ChargeFn,
   result: AutopayRunResult,
   actorId: string | null = null,
+  requestedScope?: ReadonlySet<string> | null,
 ): Promise<void> {
   const claimed = await withCollectionClaim(orgId, candidate.invoiceId, async () => {
     const chain = await collectionChain(orgId, candidate, result);
@@ -1401,7 +1404,7 @@ async function collectCandidate(
         });
         continue;
       }
-      const claim = await withOrg(orgId, () => claimAttempt(orgId, candidate, link, fallbackPosition, actorId));
+      const claim = await withOrg(orgId, () => claimAttempt(orgId, candidate, link, fallbackPosition, actorId, requestedScope));
       if ("skip" in claim) {
         result.skipped += 1;
         result.notices.push({ invoiceId: candidate.invoiceId, attemptId: null, status: "skipped", detail: claim.skip });
@@ -1514,6 +1517,7 @@ async function claimAttempt(
   link: ChainLink,
   position: number,
   actorId: string | null,
+  requestedScope?: ReadonlySet<string> | null,
 ): Promise<{ attempt: OpenAttempt } | { skip: string }> {
   if (!(await lockAndCheckOrgFeature(db, orgId, "autopay"))) {
     return { skip: "autopay was turned off in Company Settings → Features; nothing is charged while it is off" };
@@ -1523,12 +1527,14 @@ async function claimAttempt(
     open_balance: string;
     currency: string;
     document_number: string;
+    subsidiary_id: string | null;
   }>(sql`
-    select status, open_balance, currency, document_number
+    select status, open_balance, currency, document_number, subsidiary_id
       from documents where id = ${candidate.invoiceId} and org_id = ${orgId}
      for update
   `)).rows[0];
   if (!invoice) return { skip: "invoice is gone; nothing to collect" };
+  if (actorId !== null) await lockCollectionRetryAuthority(orgId, actorId, invoice.subsidiary_id, requestedScope);
   const skipReason = await uncollectibleReason(orgId, candidate.invoiceId, invoice.status, invoice.open_balance);
   if (skipReason) return { skip: skipReason };
   await requireCollectingProvider(orgId, link.provider);
@@ -1914,7 +1920,8 @@ async function insertCollectionAttempt(
 export async function retryAttemptNow(
   orgId: string,
   attemptId: string,
-  actorId: string | null = null,
+  actorId: string,
+  allowedSubsidiaryIds: ReadonlySet<string> | null,
   chargeFn?: ChargeFn,
 ): Promise<AutopayRunResult> {
   refuseInsideTransaction();
@@ -1928,14 +1935,19 @@ export async function retryAttemptNow(
         method_id: string;
         retry_position: number;
         decline_kind: string | null;
+        status: string;
+        subsidiary_id: string | null;
       }>(sql`
         select a.invoice_id, a.enrollment_id, a.payment_method_id as "method_id",
-               a.retry_position, a.decline_kind
+               a.retry_position, a.decline_kind, a.status, d.subsidiary_id
           from collection_attempts a
-         where a.id = ${attemptId} and a.org_id = ${orgId} and a.status = 'failed'
-         limit 1
+          join documents d on d.org_id = a.org_id and d.id = a.invoice_id
+         where a.id = ${attemptId} and a.org_id = ${orgId}
+         for update of d
       `)).rows[0];
-      if (!attempt) throw new AutopayError("only a failed attempt can be retried; this one already settled or never failed");
+      if (!attempt) throw new ScopeNotFoundError();
+      await lockCollectionRetryAuthority(orgId, actorId, attempt.subsidiary_id, allowedSubsidiaryIds);
+      if (attempt.status !== 'failed') throw new AutopayError("only a failed attempt can be retried; this one already settled or never failed");
       if (attempt.decline_kind === "hard") {
         throw new AutopayError("this decline will not clear on retry; ask the customer to update the payment method instead");
       }
@@ -1965,9 +1977,27 @@ export async function retryAttemptNow(
     });
     const charge = chargeFn ?? ((provider, req) => adapterCharge(orgId, provider, req));
     result.scanned += 1;
-    await collectCandidate(orgId, prepared.candidate, prepared.position, prepared.today, prepared.policy, charge, result, actorId);
+    await collectCandidate(orgId, prepared.candidate, prepared.position, prepared.today, prepared.policy, charge, result, actorId, allowedSubsidiaryIds);
   });
   return result;
+}
+
+/** Operator retries authorize the locked invoice, independently of shared customer visibility. */
+async function lockCollectionRetryAuthority(
+  orgId: string,
+  actorId: string,
+  subsidiaryId: string | null,
+  requestedScope: ReadonlySet<string> | null | undefined,
+): Promise<void> {
+  if (!actorId || !subsidiaryId || requestedScope === undefined || !subsidiaryScopeAllows(requestedScope, subsidiaryId)) {
+    throw new ScopeNotFoundError();
+  }
+  const actor = (await db.execute(sql`
+    select id from users where id = ${actorId} and is_active and (org_id = ${orgId} or is_super_admin) for share
+  `)).rows[0];
+  if (!actor) throw new ScopeNotFoundError();
+  const derived = await lockActorCommandAuthority(db, orgId, actorId, subsidiaryId, "autopay.manage");
+  if (!subsidiaryScopeAllows(derived, subsidiaryId)) throw new ScopeNotFoundError();
 }
 
 /** Why an invoice must not be charged right now, or null when collectible. */

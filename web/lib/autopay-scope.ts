@@ -5,7 +5,7 @@ import { notFound } from '@/lib/api/responses'
 import { subsidiaryScopeAllows, type Authz } from '@/lib/authz'
 
 /**
- * Stored payment methods, enrollments and collection attempts belong to a
+ * Stored payment methods and enrollments belong to a
  * customer, and a customer assigned to a subsidiary is visible only to callers
  * who can see that subsidiary (organization-wide customers stay shared, as on
  * every party picker). An out-of-scope customer answers exactly like a missing
@@ -39,10 +39,20 @@ export function guardEnrollmentScope(authz: Authz, enrollmentId: string): Promis
      where e.org_id = ${authz.user.orgId} and e.id = ${enrollmentId}`)
 }
 
-export function guardCollectionAttemptScope(authz: Authz, attemptId: string): Promise<NextResponse | null> {
-  return partyScopeDenied(authz, sql`
-    select p.subsidiary_id from collection_attempts a
+export async function guardCollectionAttemptScope(authz: Authz, attemptId: string): Promise<NextResponse | null> {
+  const row = (await withOrgContext(authz.user.orgId, () => db.execute<{
+    invoice_subsidiary_id: string | null; party_subsidiary_id: string | null
+  }>(sql`
+    select d.subsidiary_id as invoice_subsidiary_id, p.subsidiary_id as party_subsidiary_id
+      from collection_attempts a
       join autopay_enrollments e on e.org_id = a.org_id and e.id = a.enrollment_id
       join parties p on p.org_id = e.org_id and p.id = e.party_id
-     where a.org_id = ${authz.user.orgId} and a.id = ${attemptId}`)
+      join documents d on d.org_id = a.org_id and d.id = a.invoice_id and d.party_id = p.id
+     where a.org_id = ${authz.user.orgId} and a.id = ${attemptId}`))).rows[0]
+  if (!row?.invoice_subsidiary_id ||
+      !subsidiaryScopeAllows(authz.allowedSubsidiaryIds, row.invoice_subsidiary_id) ||
+      !subsidiaryScopeAllows(authz.allowedSubsidiaryIds, row.party_subsidiary_id, { orgWideNull: true })) {
+    return notFound('record')
+  }
+  return null
 }

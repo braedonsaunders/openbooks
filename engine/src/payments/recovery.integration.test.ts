@@ -10,10 +10,12 @@ import {
   enrollAutopay,
   getRecoveryMetrics,
   recordCardUpdaterEvent,
+  retryAttemptNow,
   runAutopayCollectionForOrg,
   type ChargeFn,
 } from "./autopay.ts";
 import { createScratchOrg, createScratchUser, dropScratchOrg } from "../testing/fixtures.ts";
+import { ScopeNotFoundError } from "../organization/subsidiary-scope.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 const priorDataKey = process.env.OPENBOOKS_DATA_KEY;
@@ -339,6 +341,69 @@ test("recovery metrics come from stored attempts", { skip: !DB }, async () => {
     assert.equal(metrics.byProvider[0]!.recoveredInvoices, 2);
     assert.equal(metrics.awaitingAuthentication, 1);
     assert.equal(metrics.churnPrevented, 0);
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+
+test("operator retries authorize the invoice entity and fresh grants before any provider charge", { skip: !DB }, async () => {
+  const fixture = await seedRecoveryOrg();
+  const { org, userId } = fixture;
+  try {
+    await seedPolicy(org.orgId, userId, [1, 3], "none");
+    await db.execute(sql`update parties set subsidiary_id = null where org_id = ${org.orgId} and id = ${org.customerId}`);
+    await seedMethod(fixture);
+    await enrollAutopay(org.orgId, { partyId: org.customerId, actorId: userId });
+    const invoiceId = await seedInvoice(fixture, "INV-RETRY-SCOPE", "80", "2026-07-15");
+    await runAutopayCollectionForOrg(org.orgId, {
+      asOf: "2026-07-15", charge: async () => ({ status: "failed", providerRef: "ch_scope_failed", declineCode: "processing_error" }),
+    });
+    const attemptId = (await db.execute<{ id: string }>(sql`
+      select id from collection_attempts where org_id = ${org.orgId} and invoice_id = ${invoiceId} and retry_position = 0
+    `)).rows[0]!.id;
+    const childId = randomUUID();
+    await db.execute(sql`
+      insert into subsidiaries (id, org_id, parent_id, name, base_currency, country)
+      select ${childId}, ${org.orgId}, ${org.subsidiaryId}, 'Retry child', base_currency, country
+        from subsidiaries where id = ${org.subsidiaryId} and org_id = ${org.orgId}`);
+    const collector = await createScratchUser(org.orgId, "Restricted retry", "retry_collector");
+    const rolePolicy = async (permissions: string[], scope: { mode: string; subsidiaryIds?: string[] }) => {
+      const changed = await db.execute(sql`
+        update app_roles set permissions = ${JSON.stringify(permissions)}::jsonb,
+          subsidiary_restriction = ${JSON.stringify(scope)}::jsonb
+         where org_id = ${org.orgId} and key = 'retry_collector' returning id`);
+      assert.equal(changed.rows.length, 1);
+    };
+    await rolePolicy(["autopay.manage"], { mode: "list", subsidiaryIds: [childId] });
+    const snapshot = async () => (await db.execute(sql`
+      select (select count(*)::text from collection_attempts where org_id = ${org.orgId}) as attempts,
+             (select count(*)::text from documents where org_id = ${org.orgId}) as documents,
+             (select count(*)::text from audit_log where org_id = ${org.orgId}) as audits
+    `)).rows[0];
+    const before = await snapshot();
+    let charges = 0;
+    const charge: ChargeFn = async () => { charges += 1; return { status: "processing", providerRef: "ch_retry_scoped" }; };
+    await assert.rejects(retryAttemptNow(org.orgId, attemptId, collector, null, charge), ScopeNotFoundError);
+    await assert.rejects(retryAttemptNow(org.orgId, attemptId, collector, new Set([org.subsidiaryId]), charge), ScopeNotFoundError);
+    await assert.rejects(retryAttemptNow(org.orgId, attemptId, userId, new Set([childId]), charge), ScopeNotFoundError);
+    await assert.rejects(retryAttemptNow(org.orgId, attemptId, randomUUID(), null, charge), ScopeNotFoundError);
+    await rolePolicy([], { mode: "all" });
+    await assert.rejects(retryAttemptNow(org.orgId, attemptId, collector, null, charge), ScopeNotFoundError);
+    await rolePolicy(["autopay.manage"], { mode: "list", subsidiaryIds: [] });
+    await assert.rejects(retryAttemptNow(org.orgId, attemptId, collector, null, charge), ScopeNotFoundError);
+    assert.equal(charges, 0);
+    assert.deepEqual(await snapshot(), before);
+    await rolePolicy(["autopay.manage"], { mode: "list", subsidiaryIds: [org.subsidiaryId] });
+    const result = await retryAttemptNow(org.orgId, attemptId, collector, new Set([org.subsidiaryId]), charge);
+    assert.equal(result.charged, 1);
+    assert.equal(charges, 1);
+    const rows = (await db.execute<{ status: string; created_by: string | null; retry_position: number }>(sql`
+      select status, created_by, retry_position from collection_attempts
+       where org_id = ${org.orgId} and invoice_id = ${invoiceId} order by retry_position
+    `)).rows;
+    assert.deepEqual(rows.map(row => row.status), ["failed", "processing"]);
+    assert.equal(rows[1]!.created_by, collector);
   } finally {
     await dropScratchOrg(org.orgId);
   }
