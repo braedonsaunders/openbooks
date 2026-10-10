@@ -178,7 +178,9 @@ export const reconciliations = pgTable(
 /**
  * Match units: one statement line ↔ N journal lines (or vice versa via
  * grouping id). Auto-matcher writes `matchedBy = 'auto'` with a confidence;
- * humans confirm or override.
+ * humans confirm or override. A null statement line marks a GL-only
+ * zero-sum clearing member: journal lines with no bank counterpart that
+ * clear against each other (same account, exact-zero sum).
  */
 export const reconciliationMatches = pgTable(
   "reconciliation_matches",
@@ -186,7 +188,7 @@ export const reconciliationMatches = pgTable(
     id: id(),
     orgId: orgRef(),
     reconciliationId: uuid("reconciliation_id").notNull(),
-    statementLineId: uuid("statement_line_id").notNull(),
+    statementLineId: uuid("statement_line_id"),
     journalLineId: uuid("journal_line_id").notNull(),
     /** One match operation writes one group: unmatch removes the whole
      * group and sign-off cross-foots group sums. A journal belongs to a
