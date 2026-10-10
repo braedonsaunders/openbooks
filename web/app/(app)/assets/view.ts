@@ -50,7 +50,6 @@ type AssetDrawerProps = Parameters<typeof AssetDrawer>[0]
 /** Picker rows for the asset drawer: books, categories, GL accounts (number
  *  is nullable), tax regimes with their pool classes, and methods. */
 type AssetBookRow = { id: string; name: string; is_primary: boolean }
-type AssetCategoryRow = { id: string; name: string }
 type AssetAccountRow = { id: string; number: string | null; name: string }
 type AssetTaxRegimeRow = {
   code: string
@@ -279,7 +278,7 @@ export async function loadAssets(
       const targetAccountScope = [String(openAsset.asset.subsidiary_id)]
       const [pickers, fieldDefs] = await Promise.all([
       Promise.all([
-        db.execute<AssetCategoryRow>(sql`select id, name from asset_categories where org_id = ${orgId} and is_active order by name`),
+        db.execute<ApiAssetCategoryRow>(sql`select id, name, asset_account_id, accumulated_depreciation_account_id, depreciation_expense_account_id, default_method, default_depreciation_method_id, default_life_months, default_convention, tax_attributes from asset_categories where org_id = ${orgId} and is_active order by name`),
         db.execute<AssetAccountRow>(sql`select a.id, a.number, a.name from accounts a where a.org_id = ${orgId} and a.is_active and not a.is_summary ${assetAccountScopeSql(orgId, targetAccountScope)} order by a.number nulls last`),
         db.execute<AssetTaxRegimeRow>(sql`
           select r.code, r.name, r.class_attribute,

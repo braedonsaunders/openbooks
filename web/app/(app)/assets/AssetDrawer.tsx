@@ -48,9 +48,12 @@ import { ReverseEventButton } from './ReverseEventButton'
 import { RunDepreciationButton } from './RunDepreciationButton'
 import { DepreciationInputButton } from './DepreciationInputButton'
 import type { AssetPayload } from '../../api/assets/_lib'
+import { applyCategoryDefaults, categoryDefaultFields, type AssetCategoryDefaultsSource } from './category-defaults'
 
 interface AccountOpt { id: string; number?: string | null; name?: string | null }
-interface CategoryOpt { id: string; name: string }
+/** Category picker rows; the default columns are present wherever the drawer
+ *  may change a category (create and draft edit). */
+interface CategoryOpt extends AssetCategoryDefaultsSource { name: string }
 interface SubsidiaryOpt { id: string; name: string; depth: number }
 interface FormOpt { id: string; name: string }
 interface DepreciationMethodOpt { id: string; code: string; name: string }
@@ -181,6 +184,10 @@ export function AssetDrawer({
   const [assetNumber, setAssetNumber] = useState(a.asset_number ?? '')
   const [description, setDescription] = useState(a.description ?? '')
   const [categoryId, setCategoryId] = useState(a.category_id ?? '')
+  // A new asset opens on its category's accounts and depreciation policy.
+  const createDefaults = createMode
+    ? categoryDefaultFields(payload.category as AssetCategoryDefaultsSource | null, new Set(accounts.map((x) => x.id)))
+    : null
   const [subsidiaryId, setSubsidiaryId] = useState(a.subsidiary_id ?? '')
   const [cost, setCost] = useState(a.acquisition_cost != null ? String(a.acquisition_cost) : '')
   const [salvage, setSalvage] = useState(a.salvage_value != null ? String(a.salvage_value) : '0.0000')
@@ -197,9 +204,9 @@ export function AssetDrawer({
   const [ratePercent, setRatePercent] = useState(a.depreciation_rate_percent != null ? String(a.depreciation_rate_percent) : '')
   const [unitsTotal, setUnitsTotal] = useState(a.depreciation_units_total != null ? String(a.depreciation_units_total) : '')
   const [convention, setConvention] = useState(a.depreciation_convention ?? payload.category?.default_convention ?? 'full_month')
-  const [assetAccountId, setAssetAccountId] = useState(payload.accounts.assetAccountId ?? '')
-  const [accumAccountId, setAccumAccountId] = useState(payload.accounts.accumulatedDepreciationAccountId ?? '')
-  const [expenseAccountId, setExpenseAccountId] = useState(payload.accounts.depreciationExpenseAccountId ?? '')
+  const [assetAccountId, setAssetAccountId] = useState(payload.accounts.assetAccountId ?? createDefaults?.assetAccountId ?? '')
+  const [accumAccountId, setAccumAccountId] = useState(payload.accounts.accumulatedDepreciationAccountId ?? createDefaults?.accumAccountId ?? '')
+  const [expenseAccountId, setExpenseAccountId] = useState(payload.accounts.depreciationExpenseAccountId ?? createDefaults?.expenseAccountId ?? '')
   const [customValues, setCustomValues] = useState<Record<string, unknown>>(() =>
     Object.fromEntries(fieldDefs.map((def) => [def.key, (a.custom ?? {})[def.key]])),
   )
@@ -311,12 +318,34 @@ export function AssetDrawer({
     setRatePercent(a.depreciation_rate_percent != null ? String(a.depreciation_rate_percent) : '')
     setUnitsTotal(a.depreciation_units_total != null ? String(a.depreciation_units_total) : '')
     setConvention(a.depreciation_convention ?? payload.category?.default_convention ?? 'full_month')
-    setAssetAccountId(payload.accounts.assetAccountId ?? '')
-    setAccumAccountId(payload.accounts.accumulatedDepreciationAccountId ?? '')
-    setExpenseAccountId(payload.accounts.depreciationExpenseAccountId ?? '')
+    setAssetAccountId(payload.accounts.assetAccountId ?? createDefaults?.assetAccountId ?? '')
+    setAccumAccountId(payload.accounts.accumulatedDepreciationAccountId ?? createDefaults?.accumAccountId ?? '')
+    setExpenseAccountId(payload.accounts.depreciationExpenseAccountId ?? createDefaults?.expenseAccountId ?? '')
     setCustomValues(Object.fromEntries(fieldDefs.map((def) => [def.key, (a.custom ?? {})[def.key]])))
     const taxRoot = a.custom?.taxDepreciation
     setTaxValues(taxRoot && typeof taxRoot === 'object' && !Array.isArray(taxRoot) ? structuredClone(taxRoot) : {})
+  }
+
+  /** Choosing a category on a new or draft asset brings its defaults into
+   *  every field the operator has not changed (see category-defaults.ts). */
+  function changeCategory(nextId: string) {
+    if ((createMode || isDraft) && nextId !== categoryId) {
+      const selectable = new Set(accounts.map((x) => x.id))
+      const defaultsOf = (id: string) => categoryDefaultFields(categories.find((category) => category.id === id) ?? null, selectable)
+      const next = applyCategoryDefaults(
+        { assetAccountId, accumAccountId, expenseAccountId, method, depreciationMethodId, lifeMonths, convention },
+        defaultsOf(categoryId),
+        defaultsOf(nextId),
+      )
+      setAssetAccountId(next.assetAccountId)
+      setAccumAccountId(next.accumAccountId)
+      setExpenseAccountId(next.expenseAccountId)
+      setMethod(next.method)
+      setDepreciationMethodId(next.depreciationMethodId)
+      setLifeMonths(next.lifeMonths)
+      setConvention(next.convention)
+    }
+    setCategoryId(nextId)
   }
 
   async function patchAsset(extra: Record<string, unknown>, includeForm = true) {
@@ -469,7 +498,7 @@ export function AssetDrawer({
       case 'asset_number': return <>{fieldLabel(placement, t('labels.number'), true)}{editable ? <Input id={fieldId(placement)} className="font-mono" value={assetNumber} placeholder={createMode ? t('create.assetNumberHint') : undefined} onChange={(e) => setAssetNumber(e.target.value)} /> : <p className="font-mono text-sm">{textValue(assetNumber)}</p>}</>
       case 'status': return <>{fieldLabel(placement, tCommon('labels.status'))}<Badge variant={STATUS_VARIANT[status] ?? 'secondary'}>{t(`status.${status}`)}</Badge></>
       case 'category_id': return <>{fieldLabel(placement, t('labels.category'), true)}{editable ? <>
-        <Select id={fieldId(placement)} value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>{categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}</Select>
+        <Select id={fieldId(placement)} value={categoryId} onChange={(e) => changeCategory(e.target.value)}>{categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}</Select>
         {categories.length === 0 ? (
           <p className="text-xs leading-relaxed text-slate-500 dark:text-slate-400">
             {t('create.noCategories')}{' '}
