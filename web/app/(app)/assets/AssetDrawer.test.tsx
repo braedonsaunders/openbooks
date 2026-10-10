@@ -178,3 +178,57 @@ test('a configured tenant sees no prerequisite', async (t) => {
     'configured tenants must see no setup link',
   )
 })
+
+const CATEGORY_ACCOUNTS = [
+  { id: 'acct-1500', number: '1500', name: 'Equipment' },
+  { id: 'acct-1510', number: '1510', name: 'Accumulated depreciation - equipment' },
+  { id: 'acct-6600', number: '6600', name: 'Depreciation expense' },
+  { id: 'acct-1520', number: '1520', name: 'Vehicles' },
+  { id: 'acct-1530', number: '1530', name: 'Accumulated depreciation - vehicles' },
+  { id: 'acct-6610', number: '6610', name: 'Vehicle depreciation' },
+]
+const EQUIPMENT = {
+  id: 'cat-equipment', name: 'Equipment', asset_account_id: 'acct-1500',
+  accumulated_depreciation_account_id: 'acct-1510', depreciation_expense_account_id: 'acct-6600',
+  default_method: 'straight_line', default_depreciation_method_id: null, default_life_months: 60,
+  default_convention: 'full_month', tax_attributes: {},
+}
+const VEHICLES = {
+  id: 'cat-vehicles', name: 'Vehicles', asset_account_id: 'acct-1520',
+  accumulated_depreciation_account_id: 'acct-1530', depreciation_expense_account_id: 'acct-6610',
+  default_method: 'straight_line', default_depreciation_method_id: null, default_life_months: 36,
+  default_convention: 'half_year', tax_attributes: {},
+}
+
+function listboxLabels(): string[] {
+  return [...document.querySelectorAll('button[aria-haspopup="listbox"]')].map((button) => (button.textContent ?? '').trim())
+}
+
+async function chooseCategory(categoryId: string): Promise<void> {
+  const select = [...document.querySelectorAll('select')].find((node) =>
+    [...node.options].some((option) => option.value === categoryId))
+  assert.ok(select, 'the category picker must render')
+  const setter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')!.set!
+  await act(async () => {
+    setter.call(select, categoryId)
+    select.dispatchEvent(new Event('change', { bubbles: true }))
+    await tick()
+  })
+}
+
+test('a new asset opens on its category accounts and follows a category change', async (t) => {
+  const createPayload = { ...payload(), category: EQUIPMENT, asset: { ...payload().asset, category_id: EQUIPMENT.id } }
+  await mountDrawer(t, baseProps({ payload: createPayload, categories: [EQUIPMENT, VEHICLES], accounts: CATEGORY_ACCOUNTS }))
+  const opened = listboxLabels()
+  for (const label of ['1500 Equipment', '1510 Accumulated depreciation - equipment', '6600 Depreciation expense']) {
+    assert.ok(opened.includes(label), `the new asset must show ${label}; saw ${opened.join(' | ')}`)
+  }
+  assert.ok([...document.querySelectorAll('input')].some((input) => input.value === '60'), 'the category life must prefill')
+
+  await chooseCategory(VEHICLES.id)
+  const switched = listboxLabels()
+  for (const label of ['1520 Vehicles', '1530 Accumulated depreciation - vehicles', '6610 Vehicle depreciation']) {
+    assert.ok(switched.includes(label), `the new category must supply ${label}; saw ${switched.join(' | ')}`)
+  }
+  assert.ok([...document.querySelectorAll('input')].some((input) => input.value === '36'), 'the new category life must replace the old default')
+})
