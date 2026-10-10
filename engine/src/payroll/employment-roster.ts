@@ -12,6 +12,8 @@ interface EmploymentRosterColumns {
   terminatedOn: SQL;
   periodStart: SQL;
   periodEnd: SQL;
+  runType?: SQL;
+  document?: SQL;
 }
 
 /** Latest role dates describe an episode, not the worker's entire history. */
@@ -37,13 +39,41 @@ export function historicalEmploymentOverlapsPeriod(c: EmploymentRosterColumns): 
       and (roster_version.effective_to is null or roster_version.effective_to > ${c.periodStart}::date))`;
 }
 
+/** Validate the exact ended employment without establishing further coverage. */
+export function finalPayEmploymentIdentity(c: EmploymentRosterColumns): SQL {
+  if (!c.runType) return sql`false`;
+  return sql`(${c.runType} = 'termination'
+    and ${c.hiredOn} is not null and ${c.terminatedOn} is not null
+    and ${c.hiredOn} <= ${c.terminatedOn}
+    and ${c.terminatedOn} <= ${c.periodEnd}::date
+    and exists (
+      select 1 from worker_employments final_employment
+      where final_employment.org_id = ${c.org}
+        and final_employment.id = ${c.employment}
+        and final_employment.worker_party_id = ${c.employee}
+        and final_employment.employer_subsidiary_id = ${c.employer}))`;
+}
+
+/** Final-pay creation persists the named roster as exclusions of everyone else.
+ * Admission to that run does not establish further employment coverage. */
+export function namedFinalPayEmployment(c: EmploymentRosterColumns): SQL {
+  if (!c.document) return sql`false`;
+  return sql`(${finalPayEmploymentIdentity(c)} and not exists (
+    select 1 from pay_run_adjustments final_exclusion
+    where final_exclusion.org_id = ${c.org}
+      and final_exclusion.pay_run_document_id = ${c.document}
+      and final_exclusion.employee_party_id = ${c.employee}
+      and final_exclusion.adjustment_type = 'exclude'))`;
+}
+
 export function payrollEmploymentOverlapsPeriod(c: EmploymentRosterColumns): SQL {
-  return sql`(${roleEmploymentOverlapsPeriod(c)} or ${historicalEmploymentOverlapsPeriod(c)})`;
+  return sql`(${roleEmploymentOverlapsPeriod(c)} or ${historicalEmploymentOverlapsPeriod(c)}
+    or ${namedFinalPayEmployment(c)})`;
 }
 
 /** A previous active window cannot establish that episode's hire or release date. */
 export function payrollEpisodeDate(c: EmploymentRosterColumns, date: SQL): SQL {
-  return sql`case when ${roleEmploymentOverlapsPeriod(c)} then ${date} else null end`;
+  return sql`case when ${roleEmploymentOverlapsPeriod(c)} or ${namedFinalPayEmployment(c)} then ${date} else null end`;
 }
 
 export interface HistoricalEmploymentRosterSource {

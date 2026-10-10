@@ -5,6 +5,7 @@ import { canonicalDecimal } from "../money/exact-decimal.ts";
 import { normalizeMoney } from "../money/money.ts";
 import { PayrollError } from "./error.ts";
 import { invalidateCalculatedRun } from "./run-lifecycle.ts";
+import { finalPayEmploymentIdentity, namedFinalPayEmployment } from "./employment-roster.ts";
 import { assertBankDepositAdjustment } from "./run-bank-input.ts";
 import { lockAndCheckPayrollRunPopulation, payrollSubsidiaryInScope, type PayrollSubsidiaryScope } from "./scope.ts";
 
@@ -131,6 +132,7 @@ type ScheduleMember = {
   party_active: boolean;
   profile_active: boolean | null;
   terminated_on: string | null;
+  final_pay_eligible: boolean;
 } | undefined;
 
 /**
@@ -145,14 +147,17 @@ function inactiveMemberRefusal(member: ScheduleMember, employeeId: string, perio
     return `employee "${employeeId}" is not an active member of this pay run's schedule — no employee with that id; check the id and try again`;
   }
   const name = member.display_name ?? employeeId;
+  if (member.profile_active === null) {
+    return `employee "${name}" has no payroll profile on this run's pay schedule; link them to the schedule before adding them`;
+  }
+  if (member.profile_active !== true) {
+    return `employee "${name}" has an inactive payroll profile on this run's pay schedule; reactivate it before adding them`;
+  }
   if (!member.party_active && !(typeof member.terminated_on === 'string' && member.terminated_on >= periodStart)) {
     if (member.terminated_on) return `employee "${name}" is not eligible for this historical period — recorded employment ended ${member.terminated_on}; review their employment dates and the pay run period before importing`;
     return `employee "${name}" is not an active member of this pay run's schedule — they are deactivated; reactivate them before adding them to a pay run`;
   }
-  if (member.profile_active === null) {
-    return `employee "${name}" is not an active member of this pay run's schedule — they have no payroll profile on this run's pay schedule; link them to the schedule before adding them`;
-  }
-  return `employee "${name}" is not an active member of this pay run's schedule — their payroll profile on this run's pay schedule is inactive; reactivate it before adding them`;
+  return `employee "${name}" is not eligible for this pay run; review their linked employment and the run's scope`;
 }
 
 /**
@@ -203,8 +208,8 @@ async function executePayRunAdjustment(input: PayRunAdjustmentInput, validateOnl
   }
   if (validateOnly && mutation.action !== "add") throw new PayrollError("adjustment preflight only supports adding a line");
   return db.transaction(async (tx) => {
-    const runRows = (await tx.execute<{ run_status: string; run_type: string; pay_schedule_id: string; period_start: string; document_status: string; subsidiary_id: string | null }>(sql`
-      select r.run_status, r.run_type, r.pay_schedule_id, r.period_start::text, d.status as document_status, d.subsidiary_id
+    const runRows = (await tx.execute<{ run_status: string; run_type: string; pay_schedule_id: string; period_start: string; period_end: string; document_status: string; subsidiary_id: string | null }>(sql`
+      select r.run_status, r.run_type, r.pay_schedule_id, r.period_start::text, r.period_end::text, d.status as document_status, d.subsidiary_id
         from pay_runs r
         join documents d on d.id = r.document_id and d.org_id = r.org_id
        where r.org_id = ${orgId} and r.document_id = ${documentId}
@@ -230,13 +235,20 @@ async function executePayRunAdjustment(input: PayRunAdjustmentInput, validateOnl
 
     const employeeId = mutation.action === "delete" ? null : mutation.employeePartyId;
     if (employeeId) {
+      const rosterColumns = {
+        org: sql`prof.org_id`, employee: sql`p.id`, employment: sql`prof.employment_id`,
+        employer: sql`p.subsidiary_id`, hiredOn: sql`er.hired_on`, terminatedOn: sql`er.terminated_on`,
+        periodStart: sql`${run.period_start}`, periodEnd: sql`${run.period_end}`,
+        runType: sql`${run.run_type}`, document: sql`${documentId}`,
+      };
       // The party row rides along so a refusal can name the employee and the
       // exact failed predicate — on a roster of up to 2000 an unnamed refusal
       // is unactionable.
       const membership = (await tx.execute<{
-        display_name: string | null; party_active: boolean; profile_active: boolean | null; terminated_on: string | null;
+        display_name: string | null; party_active: boolean; profile_active: boolean | null; terminated_on: string | null; final_pay_eligible: boolean;
       }>(sql`
-        select p.display_name, p.is_active as party_active, prof.is_active as profile_active, er.terminated_on::text
+        select p.display_name, p.is_active as party_active, prof.is_active as profile_active, er.terminated_on::text,
+               ${mutation.action === "include" ? finalPayEmploymentIdentity(rosterColumns) : namedFinalPayEmployment(rosterColumns)} as final_pay_eligible
           from parties p
           left join employee_roles er on er.org_id=p.org_id and er.party_id=p.id
           left join employee_payroll_profiles prof
@@ -251,8 +263,8 @@ async function executePayRunAdjustment(input: PayRunAdjustmentInput, validateOnl
       // the state being moved AWAY FROM. Adding someone (include, or a line
       // adjustment for them) moves toward paying them, so a configured active
       // payroll profile is required. A former employee can still receive a
-      // historical cheque for a period covered by their recorded termination;
-      // their current inactive party status must remain unchanged. Removing
+      // historical cheque for a covered period, or a scoped final settlement
+      // after termination. Their inactive party status remains unchanged. Removing
       // someone (exclude) moves away: the inactive
       // member is exactly who must stay removable — refusing to remove them
       // bars the only exit from the invalid state the check detects
@@ -266,7 +278,8 @@ async function executePayRunAdjustment(input: PayRunAdjustmentInput, validateOnl
           throw new PayrollError(excludeStrangerRefusal(member?.display_name, employeeId));
         }
       } else if (!member || member.profile_active !== true || !member.party_active
-          && !(typeof member.terminated_on === 'string' && member.terminated_on >= run.period_start)) {
+          && !(typeof member.terminated_on === 'string' && member.terminated_on >= run.period_start)
+          && !member.final_pay_eligible) {
         throw new PayrollError(inactiveMemberRefusal(member, employeeId, run.period_start));
       }
     }

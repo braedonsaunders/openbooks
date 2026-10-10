@@ -367,6 +367,7 @@ async function calculateInTransaction(input: CalculatePayRunInput): Promise<PayR
       org: sql`prof.org_id`, employee: sql`p.id`, employment: sql`prof.employment_id`,
       employer: sql`p.subsidiary_id`, hiredOn: sql`er.hired_on`, terminatedOn: sql`er.terminated_on`,
       periodStart: sql`${run.period_start}`, periodEnd: sql`${run.period_end}`,
+      runType: sql`${run.run_type}`, document: sql`${documentId}`,
     };
     const employees = (await tx.execute<Record<string, string | null>>(sql`
       select * from (
