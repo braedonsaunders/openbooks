@@ -27,7 +27,7 @@ export const OPERATING_PROFILE_ENTITIES: SetupEntity[] = [{
         field('defaultView', 'select', { required: true, options: options(['list', 'board']) }),
       ] }),
     ] }),
-    field('reason', 'textarea', { required: true, resetOnEdit: true, fullWidth: true }),
+    field('reason', 'textarea', { required: true, resetOnEdit: true, inputOnly: true, fullWidth: true }),
   ],
 }, {
   key: 'operating-profile-scopes', table: 'operating_profile_scopes', groupKey: 'projects', iconKey: 'building',
@@ -47,7 +47,7 @@ export const OPERATING_PROFILE_ENTITIES: SetupEntity[] = [{
     field('family', 'select', { required: true, lockedOnEdit: true, options: options(['project', 'production']) }),
     field('profileIds', 'multiref', { required: true, ref: 'operating-profiles', refScopeField:'family' }),
     field('defaultProfileId', 'ref', { ref: 'operating-profiles',refScopeField:'family' }),
-    field('reason', 'textarea', { required: true, resetOnEdit: true, fullWidth: true }),
+    field('reason', 'textarea', { required: true, resetOnEdit: true, inputOnly: true, fullWidth: true }),
   ],
 }]
 

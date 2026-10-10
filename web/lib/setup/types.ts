@@ -194,6 +194,8 @@ export interface SetupField {
   defaultValue?: string | number | boolean | Record<string, unknown> | unknown[]
   /** New reasons are deliberate input, rather than a replay of the stored explanation. */
   resetOnEdit?: boolean
+  /** Supplied to the entity's save command but not stored on its row; exports omit it. */
+  inputOnly?: boolean
   /** Persisted field managed by another visible control; omit it from drawers. */
   hidden?: boolean
   /** Presentation label for a rehomed, type-specific native form. */
