@@ -5,6 +5,7 @@ import {
   createChangeRequestDraft,
   HrmChangeRequestError,
   submitChangeRequest,
+  validateChangePayload,
 } from "./change-requests.ts";
 import { inputGuards } from "./input-guards.ts";
 import { isCivilDate, makeEffectiveInterval } from "./temporal.ts";
@@ -48,6 +49,24 @@ export interface ProposeFirstEmploymentQuery {
   /** First effective day, a real YYYY-MM-DD calendar date. */
   readonly effectiveFrom: string;
   readonly effectiveTo?: string | null;
+  /**
+   * The first assignment riding the hire (title, department, location,
+   * FTE, primary, manager, establishment link), effective over the hire's
+   * window — one approval covers the whole package. Omit it for a bare
+   * hire; later episodes attach through the change-request routes.
+   * Shaped like the hire payload's initialAssignment; the payload
+   * contract validates and defaults it before any write.
+   */
+  readonly assignment?: {
+    readonly assignmentKey: string;
+    readonly jobTitle?: string | null;
+    readonly departmentId?: string | null;
+    readonly locationId?: string | null;
+    readonly fte?: string;
+    readonly isPrimary?: boolean;
+    readonly managerEmploymentId?: string | null;
+    readonly positionId?: string | null;
+  };
   /** Why the person is hired — required; evidence without a reason never applies. */
   readonly reason: unknown;
   readonly action?: string | null;
@@ -120,6 +139,15 @@ export async function proposeFirstEmployment(query: ProposeFirstEmploymentQuery)
   const status = query.status === undefined ? "active" : requireHireStatus(query.status);
   const window = requireEffectiveWindow(query.effectiveFrom, query.effectiveTo);
   const reason = requireHireReason(query.reason);
+  // The full hire payload validates before any write: a malformed
+  // assignment refuses with its fields named and stores nothing.
+  const hirePayload = validateChangePayload({
+    kind: "hire",
+    status,
+    effectiveFrom: window.from,
+    effectiveTo: window.to,
+    ...(query.assignment === undefined ? {} : { initialAssignment: query.assignment }),
+  });
 
   return withOrgTransaction(orgId, async () => {
     const party = (await db.execute<{ id: string; kind: string; isActive: boolean }>(sql`
@@ -246,7 +274,7 @@ export async function proposeFirstEmployment(query: ProposeFirstEmploymentQuery)
       orgId,
       actorId,
       employmentId,
-      payload: { kind: "hire", status, effectiveFrom: window.from, effectiveTo: window.to },
+      payload: hirePayload,
       ...(query.action !== undefined ? { action: query.action } : {}),
       ...(query.reasonCode !== undefined ? { reasonCode: query.reasonCode } : {}),
     });

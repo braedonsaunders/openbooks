@@ -64,6 +64,59 @@ test("hire refuses terminated status and bad windows", () => {
   );
 });
 
+test("hire carries an optional initial assignment with primary defaulted", () => {
+  const parsed = validateChangePayload({
+    kind: "hire",
+    effectiveFrom: "2026-09-01",
+    initialAssignment: {
+      assignmentKey: "primary",
+      jobTitle: "Engineer",
+      departmentId: "11111111-1111-4111-8111-111111111111",
+      fte: "1",
+    },
+  });
+  assert.equal(parsed.kind, "hire");
+  if (parsed.kind !== "hire") throw new Error("unreachable");
+  assert.equal(parsed.initialAssignment?.assignmentKey, "primary");
+  assert.equal(parsed.initialAssignment?.jobTitle, "Engineer");
+  assert.equal(parsed.initialAssignment?.isPrimary, true);
+  assert.equal(parsed.initialAssignment?.positionId, undefined);
+});
+
+test("hire refuses a malformed initial assignment by name", () => {
+  const base = {
+    kind: "hire",
+    effectiveFrom: "2026-09-01",
+    initialAssignment: { assignmentKey: "primary", jobTitle: "Engineer" },
+  };
+  assert.equal(
+    codeOf(() =>
+      validateChangePayload({ ...base, initialAssignment: { assignmentKey: " " } }),
+    ),
+    "INVALID_PAYLOAD",
+  );
+  assert.equal(
+    codeOf(() =>
+      validateChangePayload({ ...base, initialAssignment: { assignmentKey: "primary", fte: "lots" } }),
+    ),
+    "INVALID_PAYLOAD",
+  );
+  assert.equal(
+    codeOf(() =>
+      validateChangePayload({ ...base, initialAssignment: { assignmentKey: "primary", managerEmploymentId: null } }),
+    ),
+    "INVALID_PAYLOAD",
+    "manager removal is not modeled on a hire either",
+  );
+  assert.equal(
+    codeOf(() =>
+      validateChangePayload({ ...base, initialAssignment: { assignmentKey: "primary", grade: "L4" } }),
+    ),
+    "INVALID_PAYLOAD",
+    "unknown assignment keys are refused, never silently stored",
+  );
+});
+
 test("status_change requires a governed status and a real window", () => {
   const parsed = validateChangePayload({
     kind: "status_change",

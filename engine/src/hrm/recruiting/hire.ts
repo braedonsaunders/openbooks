@@ -189,10 +189,14 @@ export async function acceptOfferAsHire(query: AcceptOfferAsHireQuery): Promise<
       requestId: draft.id,
       reason: `Hire for requisition ${requisition.requisitionNumber}: ${offer.jobTitle}`,
     });
-    if (submitted.status !== "pending_approval") {
+    // Approval is an optional Flow: a configured flow gates the hire
+    // (pending_approval), while no configured flow applies it directly
+    // through the governed admission. Anything else is refused rather
+    // than recorded without its approval path.
+    if (submitted.status !== "pending_approval" && submitted.status !== "applied") {
       throw new RecruitingError(
         "REFUSED",
-        "the hire change request did not reach approval — the hire is refused rather than recorded without its approval path",
+        "the hire change request reached an unexpected state — the hire is refused rather than recorded without its approval path",
       );
     }
 

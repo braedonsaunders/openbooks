@@ -590,10 +590,11 @@ test("a past-due sent offer reads expired and refuses its accept", { skip: !DB }
   });
 });
 
-test("hire without an approval flow rolls back whole: no party, no draft, no fill", { skip: !DB }, async () => {
+test("hire without an approval flow applies directly through the governed admission", { skip: !DB }, async () => {
   await withHarness(async (h) => {
     const orgId = h.org.orgId;
-    // Deliberately no seedFlow: submission finds no gate and refuses.
+    // Deliberately no seedFlow: approval is optional, so the submission
+    // applies directly with automatic evidence instead of refusing.
     const requisition = await createRequisition({
       orgId,
       actorId: h.recruiterId,
@@ -605,7 +606,7 @@ test("hire without an approval flow rolls back whole: no party, no draft, no fil
     const { candidate } = await createCandidate({
       orgId,
       actorId: h.recruiterId,
-      displayName: "Fay Refused",
+      displayName: "Fay Direct",
       email: "fay@example.test",
     });
     const application = await createApplication({ orgId, actorId: h.recruiterId, requisitionId: requisition.id, candidateId: candidate.id });
@@ -623,40 +624,34 @@ test("hire without an approval flow rolls back whole: no party, no draft, no fil
     await sendOffer({ orgId, actorId: h.recruiterId, offerId: offer.id });
     const partiesBefore = (await db.execute<{ n: number }>(sql`
       select count(*)::int as n from parties where org_id = ${orgId}`)).rows[0]!.n;
-    const employmentsBefore = (await db.execute<{ n: number }>(sql`
-      select count(*)::int as n from worker_employments where org_id = ${orgId}`)).rows[0]!.n;
-    await assert.rejects(
-      acceptOfferAsHire({ orgId, actorId: h.recruiterId, offerId: offer.id }),
-      /no enabled approval flow/,
-      "the change-request service refuses without a flow",
-    );
-    // The WHOLE hire rolls back: nothing partial survives.
+    const hire = await acceptOfferAsHire({ orgId, actorId: h.recruiterId, offerId: offer.id });
+    // The employee party is minted, the first version applied at once.
     assert.equal(
       (await db.execute<{ n: number }>(sql`select count(*)::int as n from parties where org_id = ${orgId}`)).rows[0]!.n,
-      partiesBefore,
-      "no employee party survives the refused hire",
+      partiesBefore + 1,
+      "the hire mints the employee party",
     );
-    assert.equal(
-      (await db.execute<{ n: number }>(sql`select count(*)::int as n from worker_employments where org_id = ${orgId}`)).rows[0]!.n,
-      employmentsBefore,
-      "no reserved employment survives the refused hire",
-    );
-    assert.equal(
-      (await db.execute<{ n: number }>(sql`select count(*)::int as n from hrm_employment_change_requests where org_id = ${orgId}`)).rows[0]!.n,
-      0,
-      "no draft survives the refused hire",
-    );
-    assert.equal((await db.execute<{ status: string }>(sql`select status from hrm_offers where id = ${offer.id}`)).rows[0]!.status, "sent");
+    const versions = (await db.execute<{ no: number; status: string }>(sql`
+      select version_no as no, status from worker_employment_versions
+       where employment_id = ${hire.employmentId} and recorded_until is null order by version_no`)).rows;
+    assert.deepEqual(versions, [{ no: 1, status: "active" }]);
+    const stored = (await db.execute<{ status: string; snapshot: { mode: string; gates: unknown[]; policy: { flowConfigured: boolean } } }>(sql`
+      select status, decision_snapshot as snapshot from hrm_employment_change_requests where id = ${hire.changeRequestId}`)).rows[0]!;
+    assert.equal(stored.status, "applied");
+    assert.equal(stored.snapshot.mode, "automatic");
+    assert.deepEqual(stored.snapshot.gates, []);
+    assert.equal(stored.snapshot.policy.flowConfigured, false);
+    assert.equal((await db.execute<{ status: string }>(sql`select status from hrm_offers where id = ${offer.id}`)).rows[0]!.status, "accepted");
     assert.equal(
       (await db.execute<{ status: string }>(sql`select status from hrm_applications where id = ${application.id}`)).rows[0]!.status,
-      "active",
+      "hired",
     );
     assert.equal(
       (await db.execute<{ filled_count: number }>(sql`select filled_count from hrm_requisitions where id = ${requisition.id}`)).rows[0]!
         .filled_count,
-      0,
+      1,
     );
-    assert.deepEqual(await eventKinds(orgId, application.id), ["applied", "offer_created", "offer_sent"]);
+    assert.deepEqual(await eventKinds(orgId, application.id), ["applied", "offer_created", "offer_sent", "offer_accepted"]);
   });
 });
 

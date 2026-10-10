@@ -11,6 +11,7 @@ import {
 import {
   DB,
   gateOf,
+  mkDepartment,
   refusalOf,
   setupHarness,
   withHarness,
@@ -19,7 +20,13 @@ import {
 } from "../testing/hrm-harness.ts";
 import { findEmploymentsByParty } from "./employment-read.ts";
 import { listOwnLeaveEmploymentOptions } from "./leave-read.ts";
-import { HrmChangeRequestError, withdrawChangeRequest } from "./change-requests.ts";
+import {
+  createChangeRequestDraft,
+  HrmChangeRequestError,
+  submitChangeRequest,
+  withdrawChangeRequest,
+} from "./change-requests.ts";
+import { createPosition } from "./positions.ts";
 import { decideGate } from "../flows/gates.ts";
 import { installEngineSeams } from "../composition/install.ts";
 import { proposeFirstEmployment } from "./first-employment.ts";
@@ -45,7 +52,7 @@ installEngineSeams();
 const FIRST_EMPLOYMENT_SPEC = {
   features: ["hrm"],
   users: [
-    { key: "hrId", name: "HR Hiring Manager", handle: "hr_hire", permissions: ["hrm.employment.read", "hrm.employment.manage"], link: true },
+    { key: "hrId", name: "HR Hiring Manager", handle: "hr_hire", permissions: ["hrm.employment.read", "hrm.employment.manage", "hrm.position.read", "hrm.position.manage"], link: true },
     { key: "approverId", name: "HR Hire Approver", handle: "hr_hire_approver", permissions: ["hrm.employment.read", "hrm.employment.approve"], link: true },
     { key: "workerId", name: "New Worker Login", handle: "new_worker", permissions: ["hrm.leave.request"] },
   ],
@@ -159,41 +166,36 @@ test("first hire under an apply-without-approval flow applies at once with an au
   });
 });
 
-test("first hire with no configured flow refuses NO_FLOW and stores nothing", { skip: !DB }, async () => {
+test("first hire with no configured flow applies directly through the governed admission", { skip: !DB }, async () => {
   await withHarness(() => setupHarness(FIRST_EMPLOYMENT_SPEC), async (h) => {
     const partyId = await seedEmployeeParty(h.org.orgId, "Flowless Hire");
+    await linkWorkerLogin(h.org.orgId, h.workerId, partyId);
 
-    // The lifecycle admits no ungated application: the refusal names the
-    // remedy (configure the flow, then hire) and the single transaction
-    // rolls the reserved identity and the draft back with it.
-    const refused = await refusalOf(
-      proposeFirstEmployment({
-        orgId: h.org.orgId,
-        actorId: h.hrId,
-        workerPartyId: partyId,
-        employerSubsidiaryId: h.org.subsidiaryId,
-        effectiveFrom: "2026-09-01",
-        reason: "hire without any flow configured",
-      }),
-      HrmChangeRequestError,
-    );
-    assert.equal(refused.code, "NO_FLOW");
-    assert.match(refused.message, /approval flow|apply-without-approval/);
-    assert.equal(await employmentCount(h.org.orgId, partyId), 0, "a refused hire stores no identity");
-    assert.equal(await hireRequestCount(h.org.orgId, partyId), 0, "a refused hire files no request");
-
-    // Once the flow exists the same hire succeeds — nothing to clean up first.
-    await seedFlow(h.org.orgId, h.approverId);
+    // Approval is an optional Flow: with zero enabled flows the hire
+    // applies at once with automatic evidence instead of refusing.
     const hire = await proposeFirstEmployment({
       orgId: h.org.orgId,
       actorId: h.hrId,
       workerPartyId: partyId,
       employerSubsidiaryId: h.org.subsidiaryId,
       effectiveFrom: "2026-09-01",
-      reason: "hire after configuring the approval flow",
+      reason: "first hire with no flow configured",
     });
-    assert.equal(hire.status, "pending_approval");
-    assert.equal(await employmentCount(h.org.orgId, partyId), 1);
+    assert.equal(hire.status, "applied");
+    assert.equal(hire.applied, true);
+    assert.deepEqual(await liveVersions(hire.employmentId), [{ no: 1, status: "active" }]);
+    const snapshot = (await db.execute<{ snapshot: { mode: string; gates: unknown[]; policy: { flowConfigured: boolean } } }>(sql`
+      select decision_snapshot as snapshot from hrm_employment_change_requests where id = ${hire.changeRequestId}
+    `)).rows[0]!.snapshot;
+    assert.equal(snapshot.mode, "automatic");
+    assert.deepEqual(snapshot.gates, []);
+    assert.equal(snapshot.policy.flowConfigured, false);
+    assert.equal(await identityAuditCount(h.org.orgId, hire.employmentId), 1);
+
+    // The Me/leave path is available without any approval ceremony.
+    assert.deepEqual(await findEmploymentsByParty({ orgId: h.org.orgId, actorId: h.hrId, workerPartyId: partyId }), [hire.employmentId]);
+    const options = await listOwnLeaveEmploymentOptions({ orgId: h.org.orgId, actorId: h.workerId });
+    assert.deepEqual(options.map((option) => option.employmentId), [hire.employmentId]);
   });
 });
 
@@ -223,6 +225,152 @@ test("first hire with a configured flow waits for approval, then applies the sam
 
     const options = await listOwnLeaveEmploymentOptions({ orgId: h.org.orgId, actorId: h.workerId });
     assert.deepEqual(options.map((option) => option.employmentId), [hire.employmentId]);
+  });
+});
+
+test("first hire carries its initial assignment and establishment link in the same approval", { skip: !DB }, async () => {
+  await withHarness(() => setupHarness(FIRST_EMPLOYMENT_SPEC), async (h) => {
+    const deptId = await mkDepartment(h.org.orgId, "Engineering");
+    const locId = (await db.execute<{ id: string }>(sql`
+      insert into locations (org_id, name, code, subsidiary_id, is_active)
+      values (${h.org.orgId}, 'Headquarters', 'HQ', ${h.org.subsidiaryId}, true) returning id
+    `)).rows[0]!.id;
+    const position = await createPosition({
+      orgId: h.org.orgId,
+      actorId: h.hrId,
+      positionCode: "ENG-1042",
+      title: "Engineer",
+      departmentId: deptId,
+      employerSubsidiaryId: h.org.subsidiaryId,
+      plannedFte: "1.0000",
+      status: "open",
+      effectiveFrom: "2026-09-01",
+      reason: "open the establishment",
+    });
+    const partyId = await seedEmployeeParty(h.org.orgId, "Placed Hire");
+
+    const hire = await proposeFirstEmployment({
+      orgId: h.org.orgId,
+      actorId: h.hrId,
+      workerPartyId: partyId,
+      employerSubsidiaryId: h.org.subsidiaryId,
+      effectiveFrom: "2026-09-01",
+      reason: "hire with the first assignment attached",
+      assignment: {
+        assignmentKey: "primary",
+        jobTitle: "Engineer",
+        departmentId: deptId,
+        locationId: locId,
+        fte: "1",
+        isPrimary: true,
+        positionId: position.id,
+      },
+    });
+    assert.equal(hire.status, "applied");
+    assert.deepEqual(await liveVersions(hire.employmentId), [{ no: 1, status: "active" }]);
+
+    // The slot and its first version carry the assignment content and the
+    // establishment link over the hire's window.
+    const slots = (await db.execute<{ key: string }>(sql`
+      select assignment_key as key from employment_assignments where employment_id = ${hire.employmentId}
+    `)).rows;
+    assert.deepEqual(slots.map((slot) => slot.key), ["primary"]);
+    const assignmentVersions = (await db.execute<{
+      title: string | null; department: string | null; location: string | null;
+      fte: string; primary: boolean; position: string | null; no: number;
+    }>(sql`
+      select job_title as title, department_id::text as department, location_id::text as location,
+             fte::text as fte, is_primary as primary, position_id::text as position, version_no as no
+        from employment_assignment_versions where employment_id = ${hire.employmentId} and recorded_until is null
+    `)).rows;
+    assert.deepEqual(assignmentVersions, [{
+      title: "Engineer", department: deptId, location: locId,
+      fte: "1.0000", primary: true, position: position.id, no: 1,
+    }]);
+
+    // Two aggregate revisions — created, then assignment_issued — and the
+    // request stamps the final one once.
+    const changes = (await db.execute<{ kind: string; revision: number }>(sql`
+      select change_kind as kind, revision from employment_changes
+       where employment_id = ${hire.employmentId} order by revision
+    `)).rows;
+    assert.deepEqual(changes, [
+      { kind: "created", revision: 2 },
+      { kind: "assignment_issued", revision: 3 },
+    ]);
+    const applied = (await db.execute<{ revision: number; change: string | null }>(sql`
+      select applied_employment_revision as revision, applied_employment_change_id as change
+        from hrm_employment_change_requests where id = ${hire.changeRequestId}
+    `)).rows[0]!;
+    assert.equal(applied.revision, 3);
+    const revision = (await db.execute<{ revision: number }>(sql`
+      select revision from worker_employments where id = ${hire.employmentId}
+    `)).rows[0]!.revision;
+    assert.equal(revision, 3);
+  });
+});
+
+test("later everyday changes apply directly with no flow: title change and termination", { skip: !DB }, async () => {
+  await withHarness(() => setupHarness(FIRST_EMPLOYMENT_SPEC), async (h) => {
+    const partyId = await seedEmployeeParty(h.org.orgId, "Career Hire");
+    const hire = await proposeFirstEmployment({
+      orgId: h.org.orgId,
+      actorId: h.hrId,
+      workerPartyId: partyId,
+      employerSubsidiaryId: h.org.subsidiaryId,
+      effectiveFrom: "2026-09-01",
+      reason: "hire before the later changes",
+      assignment: { assignmentKey: "primary", jobTitle: "Engineer" },
+    });
+    assert.equal(hire.status, "applied");
+
+    // A title change files and applies with no approval ceremony.
+    const titleDraft = await createChangeRequestDraft({
+      orgId: h.org.orgId,
+      actorId: h.hrId,
+      employmentId: hire.employmentId,
+      payload: { kind: "assignment_change", assignmentKey: "primary", jobTitle: "Senior Engineer", effectiveFrom: "2026-10-01" },
+    });
+    const titled = await submitChangeRequest({
+      orgId: h.org.orgId,
+      actorId: h.hrId,
+      requestId: titleDraft.id,
+      reason: "promotion in title",
+    });
+    assert.equal(titled.status, "applied");
+    // The successor window carries the new title; the earlier slice keeps
+    // its history beside it.
+    const titles = (await db.execute<{ title: string | null; from: string }>(sql`
+      select job_title as title, effective_from::text as from from employment_assignment_versions
+       where employment_id = ${hire.employmentId} and recorded_until is null order by effective_from
+    `)).rows;
+    assert.deepEqual(titles, [
+      { title: "Engineer", from: "2026-09-01" },
+      { title: "Senior Engineer", from: "2026-10-01" },
+    ]);
+
+    // So does a termination.
+    const termDraft = await createChangeRequestDraft({
+      orgId: h.org.orgId,
+      actorId: h.hrId,
+      employmentId: hire.employmentId,
+      payload: { kind: "termination", effectiveDate: "2026-12-01" },
+    });
+    const terminated = await submitChangeRequest({
+      orgId: h.org.orgId,
+      actorId: h.hrId,
+      requestId: termDraft.id,
+      reason: "resigned",
+    });
+    assert.equal(terminated.status, "applied");
+    const episodes = (await db.execute<{ status: string; from: string }>(sql`
+      select status, effective_from::text as from from worker_employment_versions
+       where employment_id = ${hire.employmentId} and recorded_until is null order by effective_from
+    `)).rows;
+    assert.deepEqual(episodes, [
+      { status: "active", from: "2026-09-01" },
+      { status: "terminated", from: "2026-12-01" },
+    ]);
   });
 });
 

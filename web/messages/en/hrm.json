@@ -270,7 +270,12 @@
       "employerRequired": "Choose the employing legal entity — an employment always names its employer.",
       "employerHint": "The employment, headcount, and payroll all read this entity.",
       "statusLabel": "Status",
-      "startLabel": "Effective start"
+      "startLabel": "Effective start",
+      "assignmentSection": "First position and assignment",
+      "withAssignment": "Record the first position and assignment with this hire.",
+      "departmentEmpty": "No department",
+      "locationEmpty": "No location",
+      "positionEmpty": "No position link"
     },
     "multiple": {
       "title": "More than one employment record",

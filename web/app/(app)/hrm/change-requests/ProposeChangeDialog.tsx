@@ -103,6 +103,7 @@ export function ProposeChangeDialog({
   if (hireMode) {
     return (
       <HireEmploymentDrawer
+        departmentOptions={departmentOptions}
         onClose={close}
         onSaved={() => {
           router.refresh()

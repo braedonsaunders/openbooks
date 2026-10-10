@@ -28,6 +28,7 @@ export const POST = defineRoute({
         ...(body.status === undefined ? {} : { status: body.status }),
         effectiveFrom: body.effectiveFrom,
         ...(body.effectiveTo === undefined ? {} : { effectiveTo: body.effectiveTo }),
+        ...(body.initialAssignment === undefined ? {} : { assignment: body.initialAssignment }),
         reason: body.reason,
         ...(body.action === undefined ? {} : { action: body.action }),
         ...(body.reasonCode === undefined ? {} : { reasonCode: body.reasonCode }),

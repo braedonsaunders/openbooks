@@ -270,7 +270,12 @@
       "employerRequired": "Wählen Sie die beschäftigende juristische Einheit — eine Beschäftigung nennt immer ihren Arbeitgeber.",
       "employerHint": "Beschäftigung, Kopfzahl und Lohnabrechnung lesen alle diese Einheit.",
       "statusLabel": "Status",
-      "startLabel": "Effektiver Beginn"
+      "startLabel": "Effektiver Beginn",
+      "assignmentSection": "Erste Position und Zuordnung",
+      "withAssignment": "Erste Position und Zuordnung mit dieser Einstellung erfassen.",
+      "departmentEmpty": "Keine Abteilung",
+      "locationEmpty": "Kein Standort",
+      "positionEmpty": "Keine Positionsverknüpfung"
     },
     "multiple": {
       "title": "Mehr als ein Beschäftigungsdatensatz",

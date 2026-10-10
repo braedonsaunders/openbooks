@@ -246,6 +246,10 @@ export async function loadEntityRole(
               }
             : openParty) as unknown as PartyDrawerProps['payload'],
           canManage,
+          // First-employment Hire chaining for the unsaved-create flow:
+          // employee drawers only, behind the employment manage grant (the
+          // hire route re-checks it). Readers keep the read-only record.
+          canHire: role === 'employee' && canReadHrm && can(authz, 'hrm.employment.manage'),
           complianceEnabled,
           // Customer tax IDs ride the drawer like compliance does: identity
           // and the manage grant from the loader, rows from the section's

@@ -270,7 +270,12 @@
       "employerRequired": "Escolha a entidade jurídica empregadora — um vínculo sempre nomeia seu empregador.",
       "employerHint": "O vínculo, o headcount e a folha leem esta entidade.",
       "statusLabel": "Status",
-      "startLabel": "Início efetivo"
+      "startLabel": "Início efetivo",
+      "assignmentSection": "Primeira posição e atribuição",
+      "withAssignment": "Registrar a primeira posição e atribuição nesta contratação.",
+      "departmentEmpty": "Sem departamento",
+      "locationEmpty": "Sem local",
+      "positionEmpty": "Sem posição vinculada"
     },
     "multiple": {
       "title": "Mais de um registro de emprego",

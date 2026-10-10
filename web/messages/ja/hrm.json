@@ -270,7 +270,12 @@
       "employerRequired": "雇用する法人を選択してください — 雇用には必ず雇用主を指定します。",
       "employerHint": "雇用・人員数・給与はいずれもこの法人を参照します。",
       "statusLabel": "ステータス",
-      "startLabel": "有効開始日"
+      "startLabel": "有効開始日",
+      "assignmentSection": "最初のポジションと配属",
+      "withAssignment": "この採用とあわせて最初のポジションと配属を記録する。",
+      "departmentEmpty": "部門なし",
+      "locationEmpty": "拠点なし",
+      "positionEmpty": "ポジションのリンクなし"
     },
     "multiple": {
       "title": "複数の雇用記録",
