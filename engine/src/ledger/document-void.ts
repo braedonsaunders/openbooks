@@ -5,7 +5,7 @@ import { db, schema, withOrgTransaction, type SqlExecutor } from "../platform/db
 import { documentRevisionCounterSql, isDocumentRevisionToken } from "../records/revision.ts";
 import { isIsoCalendarDate } from "../platform/business-date.ts";
 import { activePostingPrimaryBookId } from "../platform/accounting-books.ts";
-import { arePeriodModulesOpen, assertPeriodModulesOpen, CloseError, closeModuleForDocument } from "../periods/period-policy.ts";
+import { arePeriodModulesOpen, assertPeriodModulesOpen, CloseError, closeModuleForDocument, type CloseModule } from "../periods/period-policy.ts";
 import { resolveCoveringPeriod } from "../periods/period-resolution.ts";
 import { nextFreeEntryNumber } from "../records/entry-number.ts";
 import { reversalJournalLines } from "../records/reversal-journal-lines.ts";
@@ -53,6 +53,20 @@ export class DocumentVoidError extends Error {
     readonly status = 422,
     readonly code: DocumentVoidCode = "invalid",
   ) { super(message); }
+}
+
+/**
+ * Close module guarding a void's reversal postings. Registered kinds resolve
+ * through the one kind map; a goods receipt unwinds AP-side fulfillment (the
+ * purchase-order side of the sales-side shipment → "ar" precedent), so its
+ * void answers the AP lock the same way a purchase-order void does. The
+ * storage fence still judges the reversal journals GL-only for this kind —
+ * this companion only decides which module lock can push the void's date
+ * forward, never whether the journals may post.
+ */
+function voidCloseModule(kind: string): CloseModule {
+  if (kind === "purchase_receipt") return "ap";
+  return closeModuleForDocument(kind);
 }
 
 export interface DocumentVoidResult {
@@ -359,7 +373,7 @@ export async function suggestVoidReversalDate(
     suggestedOpen: false,
   };
   if (!covering) return uncovered;
-  const modules = [closeModuleForDocument(doc.kind)];
+  const modules = [voidCloseModule(doc.kind)];
   const books = (await runner.execute<{ bookId: string }>(sql`
     select distinct e.book_id as "bookId" from journal_entries e
      where e.org_id = ${orgId} and e.source_document_id = ${doc.id} and e.status = 'posted'`)).rows;
@@ -1308,7 +1322,7 @@ export async function completeRequestedDocumentVoid(
             periodId: period.id,
             bookId: String(entry.book_id),
             subsidiaryIds: subsidiaries.rows.map((row) => row.subsidiary_id),
-            modules: [closeModuleForDocument(String(doc.kind))],
+            modules: [voidCloseModule(String(doc.kind))],
           });
         } catch (error) {
           if (error instanceof CloseError) {
@@ -1396,7 +1410,7 @@ export async function completeRequestedDocumentVoid(
             origin: String(source.origin),
             reversesEntryId: sourceEntryId,
             actorId: String(doc.void_requested_by),
-            closeModules: [closeModuleForDocument(String(doc.kind))],
+            closeModules: [voidCloseModule(String(doc.kind))],
             lines: mirror.map((line) => ({
               accountId: line.accountId,
               subsidiaryId: line.subsidiaryId,
@@ -1459,7 +1473,7 @@ export async function completeRequestedDocumentVoid(
               periodId: period.id,
               bookId: linked.book_id,
               subsidiaryIds: linkedSubs.rows.map((row) => row.subsidiary_id),
-              modules: [closeModuleForDocument(String(doc.kind))],
+              modules: [voidCloseModule(String(doc.kind))],
             });
           } catch (error) {
             if (error instanceof CloseError) {

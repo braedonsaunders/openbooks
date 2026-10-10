@@ -11,6 +11,7 @@ import {
   suggestVoidReversalDate,
 } from '@openbooks/engine/src/ledger/document-void.ts'
 import { can, getAuthz, guardSubsidiaryScope } from '../../../../../lib/authz'
+import { isFeatureEnabled } from '../../../../../lib/features'
 import { createPermission, postPermission } from "../../../../../lib/document-kinds.ts";
 import { documentRouteReadPermission } from "../../../../../lib/flow-subject-authz.ts";
 import { lockedDocumentScopeDenied } from "../../../../../lib/document-scope.ts";
@@ -34,6 +35,9 @@ function voidPermission(kind: string): string | null {
   if (kind === 'expense_report') return 'ap.post'
   if (kind === 'purchase_order') return 'purchase_orders.create'
   if (kind === 'sales_order' || kind === 'quote') return 'ar.create'
+  // A goods receipt voids through its receiving grant; the reversal grant
+  // below covers the stock and GL legs when Inventory is on.
+  if (kind === 'purchase_receipt') return 'goods_receipts.create'
   try {
     return postPermission(kind)
   } catch {
@@ -85,6 +89,16 @@ async function guardVoidDocument(id: string): Promise<VoidGuard | NextResponse> 
   }
   if (!can(authz, permission)) {
     return NextResponse.json({ error: `missing permission: ${permission}` }, { status: 403 })
+  }
+  // Voiding a receipt reverses its stock movements and inventory journals,
+  // so it takes the reversal grant on top of the receiving grant — the same
+  // authority split the receive endpoint demands for posting.
+  if (
+    doc.kind === 'purchase_receipt'
+    && (await isFeatureEnabled(authz.user.orgId, 'inventory'))
+    && !can(authz, 'items.reverse')
+  ) {
+    return NextResponse.json({ error: 'missing permission: items.reverse' }, { status: 403 })
   }
   return { authz, id, doc }
 }
