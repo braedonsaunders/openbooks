@@ -309,6 +309,7 @@
     "title": "Valorisation des stocks",
     "description": "Valorisation et suivi du stock de cet article — méthode, comptes et seuils de réapprovisionnement.",
     "empty": "Aucun profil de coût pour l’instant — configurez-en un avant de réceptionner du stock.",
+    "configureAction": "Configurer le coût d’inventaire",
     "method": "Méthode de valorisation",
     "methods": {
       "fifo": "PEPS",

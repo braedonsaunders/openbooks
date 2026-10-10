@@ -312,6 +312,7 @@
     "title": "Bestandsbewertung",
     "description": "Wie der Bestand dieses Artikels bewertet und verfolgt wird — Methode, Konten und Meldebestände.",
     "empty": "Noch kein Bewertungsprofil — konfigurieren Sie eines, bevor Sie Bestand einlagern.",
+    "configureAction": "Bestandskalkulation konfigurieren",
     "method": "Bewertungsmethode",
     "methods": {
       "fifo": "FIFO",

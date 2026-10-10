@@ -132,13 +132,19 @@ test('a repeated unit under any spelling is refused', () => {
   )
 })
 
-async function mountEditor(t: TestContext, accounts: { id: string; number: string; name: string }[] = []) {
+async function mountEditor(
+  t: TestContext,
+  accounts: { id: string; number: string; name: string }[] = [],
+  options: { profile?: Record<string, unknown> | null; onRequestEdit?: () => void; canManage?: boolean } = {},
+) {
   const priorFetch = globalThis.fetch
   const requests: Array<{ method: string; body?: Record<string, unknown> }> = []
+  const stored = options.profile === undefined ? null : options.profile
   globalThis.fetch = (async (_input: unknown, init?: RequestInit) => {
     const method = init?.method ?? 'GET'
     requests.push({ method, ...(init?.body ? { body: JSON.parse(String(init.body)) as Record<string, unknown> } : {}) })
-    return Response.json(method === 'GET' ? { profile: null } : { profile: null })
+    if (method === 'GET') return Response.json({ profile: stored, companyReceivedNotBilledAccountId: null })
+    return Response.json({ ok: true, updatedAt: 'rev-2' })
   }) as typeof fetch
   t.after(() => { globalThis.fetch = priorFetch })
   const root = createRoot(document.body)
@@ -147,9 +153,18 @@ async function mountEditor(t: TestContext, accounts: { id: string; number: strin
     for (const node of [...document.body.children]) node.remove()
   })
   await act(async () => {
-    root.render(React.createElement(RecordHost, null, React.createElement(ItemCostingEditor, { itemId: 'item-1', kind: 'inventory', accounts, canManage: true })))
+    root.render(React.createElement(RecordHost, null, React.createElement(ItemCostingEditor, { itemId: 'item-1', kind: 'inventory', accounts, canManage: options.canManage ?? true, onRequestEdit: options.onRequestEdit })))
     await new Promise((resolve) => setTimeout(resolve, 20))
   })
+  return requests
+}
+
+async function mountEditingEditor(
+  t: TestContext,
+  accounts: { id: string; number: string; name: string }[] = [],
+  options: { profile?: Record<string, unknown> | null; onRequestEdit?: () => void } = {},
+) {
+  const requests = await mountEditor(t, accounts, options)
   assert.ok(document.querySelector('button[aria-haspopup="listbox"]'), 'item edit mode opens the costing fields directly')
   assert.equal(
     [...document.querySelectorAll('button')].some((button) => ['actions.save', 'actions.edit', 'configure'].includes(button.textContent?.trim() ?? '')),
@@ -169,7 +184,7 @@ async function chooseAccount(label: string) {
 }
 
 test('an offset equal to the asset account shows an inline refusal without submitting', async (t) => {
-  const requests = await mountEditor(t, [{ id: ASSET, number: '100', name: 'Stock asset' }])
+  const requests = await mountEditingEditor(t, [{ id: ASSET, number: '100', name: 'Stock asset' }])
   await chooseAccount('assetAccount')
   await chooseAccount('cogsAccount')
   assert.equal(recordSave?.dirty, true, 'the edited profile marks the item dirty')
@@ -179,7 +194,7 @@ test('an offset equal to the asset account shows an inline refusal without submi
 })
 
 test('a malformed conversion row is refused inline before the costing PUT', async (t) => {
-  const requests = await mountEditor(t)
+  const requests = await mountEditingEditor(t)
   const add = [...document.querySelectorAll('button')].find((button) => button.textContent?.trim() === 'addConversion')
   assert.ok(add, 'the conversion editor can add a row')
   await act(async () => add.click())
@@ -197,6 +212,79 @@ test('a malformed conversion row is refused inline before the costing PUT', asyn
   assert.deepEqual(await saveRecord(), { ok: false, key: 'costing' })
   assert.deepEqual(requests.map((request) => request.method), ['GET'], 'an invalid factor never reaches the PUT route')
   assert.match(document.querySelector('[role="alert"]')?.textContent ?? '', /conversionFactorInvalid|conversionsBlocked/)
+})
+
+const NEWCOGS = '66666666-6666-4666-8666-666666666666'
+
+function storedProfile() {
+  return {
+    abc_class: null,
+    updated_at: 'rev-1',
+    costing_method: 'fifo',
+    tracking: 'none',
+    asset_account_id: ASSET,
+    cogs_account_id: COGS,
+    adjustment_account_id: ADJUST,
+    variance_account_id: VARIANCE,
+    received_not_billed_account_id: GRNI,
+    standard_cost: null,
+    base_unit: 'ea',
+    unit_conversions: {},
+    reorder_point: null,
+    preferred_stock_level: null,
+    allow_negative_inventory: false,
+    negative_cost_basis: 'last_receipt',
+    provisional_unit_cost: null,
+  }
+}
+
+async function chooseAccountByLabel(label: string, match: string) {
+  const trigger = [...document.querySelectorAll('button[aria-haspopup="listbox"]')].find((button) => button.getAttribute('aria-label') === label) as HTMLButtonElement | undefined
+  assert.ok(trigger, `${label} picker renders`)
+  await act(async () => trigger.click())
+  const option = [...document.querySelectorAll('button[role="option"]')].find((button) => button.textContent?.includes(match)) as HTMLButtonElement | undefined
+  assert.ok(option, `${match} is selectable`)
+  await act(async () => option.click())
+}
+
+test('the drawer Save persists edited costing accounts through the costing PUT', async (t) => {
+  const accounts = [
+    { id: ASSET, number: '100', name: 'Stock asset' },
+    { id: COGS, number: '5000', name: 'Old COGS' },
+    { id: NEWCOGS, number: '5010', name: 'New COGS' },
+  ]
+  const requests = await mountEditingEditor(
+    t,
+    accounts.map((a) => ({ id: a.id, number: a.number, name: a.name })),
+    { profile: storedProfile() },
+  )
+  await chooseAccountByLabel('cogsAccount', 'New COGS')
+  assert.equal(recordSave?.dirty, true, 'the edited accounts mark the item dirty')
+  assert.deepEqual(await saveRecord(), { ok: true }, 'the item Save commits the costing section')
+  const puts = requests.filter((request) => request.method === 'PUT')
+  assert.equal(puts.length, 1, 'one PUT carries the whole profile')
+  assert.equal(puts[0]?.body?.assetAccountId, ASSET, 'the untouched asset account rides along')
+  assert.equal(puts[0]?.body?.cogsAccountId, NEWCOGS, 'the edited COGS account is persisted')
+  assert.equal(puts[0]?.body?.expectedUpdatedAt, 'rev-1', 'the save fences on the loaded revision')
+})
+
+test('an item without a profile offers Configure inventory costing when edit can be requested', async (t) => {
+  let requested = 0
+  await mountEditor(t, [], { canManage: false, onRequestEdit: () => { requested += 1 } })
+  const configure = [...document.querySelectorAll('button')].find((button) => button.textContent?.trim() === 'configureAction')
+  assert.ok(configure, 'the empty state names its next step: configuring inventory costing')
+  await act(async () => configure.click())
+  assert.equal(requested, 1, 'the action enters the drawer edit mode that reveals the costing form')
+})
+
+test('an item without a profile shows no Configure action when edit cannot be requested', async (t) => {
+  await mountEditor(t, [], { canManage: false })
+  assert.match(document.body.textContent ?? '', /empty/, 'the empty state still names the missing profile')
+  assert.equal(
+    [...document.querySelectorAll('button')].filter((button) => (button.textContent ?? '').trim().length > 0).length,
+    0,
+    'a viewer who cannot configure keeps the text alone',
+  )
 })
 
 test('outside item edit mode the costing profile reads as values with no controls', async (t) => {

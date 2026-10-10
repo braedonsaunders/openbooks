@@ -313,7 +313,10 @@ export function ItemDrawer({
   const isStructurableKind = (value: string) =>
     value === 'inventory' || value === 'non_inventory' || value === 'service' || value === 'kit' || value === 'assembly'
   const offersStructure = variantsEnabled && isStructurableKind(kind)
-  const [tab, setTab] = useState<string>('overview')
+  // Deep links (a receive refusal pointing at the costing profile) may name a
+  // tab; anything unknown falls back to the first available tab below, and
+  // the param is read once so later tab switches are not fought.
+  const [tab, setTab] = useState<string>(() => searchParams.get('itemTab') ?? 'overview')
   const [pricingView, setPricingView] = useState<PricingView>(initialPricingView)
   const [actionsOpen, setActionsOpen] = useState(false)
   const editable = mode === 'edit' && canManage && !busy
@@ -1010,7 +1013,14 @@ export function ItemDrawer({
         ) : null}
 
         {!choosingKind && !structuring && activeTabKey === 'costing' && inventoryCosting && !createMode ? (
-          <ItemCostingEditor key={String(it.id)} itemId={String(it.id)} kind={kind} accounts={accounts} canManage={editable} />
+          <ItemCostingEditor
+            key={String(it.id)}
+            itemId={String(it.id)}
+            kind={kind}
+            accounts={accounts}
+            canManage={editable}
+            onRequestEdit={canManage ? () => setMode('edit') : undefined}
+          />
         ) : null}
         {!choosingKind && !structuring && activeTabKey === 'costing' && inventoryCosting && createMode ? (
           <EmptyState title={t('costingPresave.title')} description={t('costingPresave.hint')} />

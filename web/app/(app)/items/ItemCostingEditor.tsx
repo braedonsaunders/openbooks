@@ -137,12 +137,17 @@ export function ItemCostingEditor({
   kind,
   accounts,
   canManage,
+  onRequestEdit,
 }: {
   itemId: string
   kind: string
   accounts: AccountOpt[]
   /** The item drawer is in edit mode and the viewer may manage the item. */
   canManage: boolean
+  /** Enter the drawer's edit mode: offered as the empty state's next step
+   *  when the viewer holds the grant but the drawer is read-only. Omitted
+   *  for viewers who cannot configure, who keep the text alone. */
+  onRequestEdit?: () => void
 }) {
   const t = useTranslations('items.costing')
   const common = useTranslations('common')
@@ -528,7 +533,14 @@ export function ItemCostingEditor({
           </CardContent>
         </Card>
       ) : loaded && !profile ? (
-        <p className="text-sm text-slate-500 dark:text-slate-400">{t('empty')}</p>
+        <div className="space-y-2">
+          <p className="text-sm text-slate-500 dark:text-slate-400">{t('empty')}</p>
+          {onRequestEdit ? (
+            <Button variant="outline" size="sm" onClick={onRequestEdit}>
+              {t('configureAction')}
+            </Button>
+          ) : null}
+        </div>
       ) : profile ? (
         <Card>
           <CardContent className="grid gap-x-6 gap-y-3 p-4 text-sm sm:grid-cols-2 lg:grid-cols-3">

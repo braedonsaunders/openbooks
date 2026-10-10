@@ -309,6 +309,7 @@
     "title": "Costeo de inventario",
     "description": "Cómo se valúa y controla el stock de este artículo: método, cuentas y puntos de reorden.",
     "empty": "Aún no hay perfil de costeo; configúralo antes de recibir stock.",
+    "configureAction": "Configurar el costeo de inventario",
     "method": "Método de costeo",
     "methods": {
       "fifo": "PEPS",

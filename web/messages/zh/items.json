@@ -299,6 +299,7 @@
     "title": "存货计价",
     "description": "该物料存货的计价与跟踪方式——方法、科目与再订货点。",
     "empty": "尚无成本档案——请在收货前先配置。",
+    "configureAction": "配置库存成本",
     "method": "计价方法",
     "methods": {
       "fifo": "先进先出法",

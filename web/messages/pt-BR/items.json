@@ -299,6 +299,7 @@
     "title": "Custeio de estoque",
     "description": "Como o estoque deste item é avaliado e controlado — método, contas e pontos de pedido.",
     "empty": "Ainda sem perfil de custo — configure um antes de receber estoque.",
+    "configureAction": "Configurar o custeio de estoque",
     "method": "Método de custeio",
     "methods": {
       "fifo": "FIFO",

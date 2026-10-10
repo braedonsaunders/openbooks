@@ -297,6 +297,7 @@
     "title": "Inventory costing",
     "description": "How stock for this item is valued and tracked — method, accounts, and reorder points.",
     "empty": "No costing profile yet — configure one before receiving stock.",
+    "configureAction": "Configure inventory costing",
     "method": "Costing method",
     "methods": {
       "fifo": "FIFO",
