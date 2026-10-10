@@ -22,7 +22,7 @@ test('legacy default people destinations move without losing settings or mutatin
   assert.deepEqual(reconcileNavConfig(result), result, 'reconciliation is idempotent')
   const keys = result.groups.flatMap((group) => group.items.flatMap((item) => item.kind === 'module' ? [item.moduleKey] : []))
   assert.equal(keys.length, new Set(keys).size)
-  assert.equal(keys.length, NAV_MODULES.length)
+  assert.equal(keys.length, NAV_MODULES.filter(module => !module.localOnly).length)
 })
 
 test('deliberate placements, labels, links, and local preferences survive new defaults', () => {
@@ -84,7 +84,7 @@ test('local order, visibility and names cannot resurrect unavailable choices', (
 test('inherited Payroll starts with Overview and keeps Year-end in local More', () => {
   const saved = defaultNavConfig()
   const people = saved.groups.find(group => group.id === 'hrm')!
-  const order = ['payroll-runs', 'payroll-anomalies', 'payroll-remittances', 'payroll', 'payroll-separations']
+  const order = ['payroll-runs', 'payroll-remittances', 'payroll']
   const items = people.items.filter(item => item.kind === 'module' && order.includes(item.moduleKey))
   items.sort((a, b) => order.indexOf(a.kind === 'module' ? a.moduleKey : '') - order.indexOf(b.kind === 'module' ? b.moduleKey : ''))
   let next = 0
@@ -95,7 +95,7 @@ test('inherited Payroll starts with Overview and keeps Year-end in local More', 
   const result = reconcileNavConfig(saved)
   const corrected = result.groups.find(group => group.id === 'hrm')!
   assert.deepEqual(corrected.items.filter(item => item.kind === 'module' && order.includes(item.moduleKey)).map(item => item.kind === 'module' ? item.moduleKey : ''),
-    ['payroll', 'payroll-runs', 'payroll-anomalies', 'payroll-remittances', 'payroll-separations'])
+    ['payroll', 'payroll-runs', 'payroll-remittances'])
   assert.deepEqual(corrected.items.filter(item => item.kind !== 'module' || !order.includes(item.moduleKey)),
     people.items.filter(item => item.kind !== 'module' || !order.includes(item.moduleKey)))
   assert.deepEqual(corrected.items.find(item => item.kind === 'module' && item.moduleKey === 'payroll'), {kind: 'module', moduleKey: 'payroll', mobile: true})
@@ -121,4 +121,20 @@ test('compact Talent defaults preserve stored navigation and deliberate placemen
   assert.equal(isDefaultLocalNavigationItem('hrm', { ...calibration, placement: 'custom' }), false)
   assert.equal(isDefaultLocalNavigationItem('custom-work', calibration), false)
   assert.equal(isDefaultLocalNavigationItem('hrm', { kind: 'link', href: '/hrm/performance?tab=calibration', label: 'Calibration shortcut' }), false)
+})
+
+
+test('supporting People destinations stay inside their modules for saved and default menus', () => {
+  const keys = ['hrm-change-requests', 'hrm-processes', 'hrm-compensation-plans', 'payroll-anomalies', 'payroll-separations']
+  const defaults = defaultNavConfig()
+  assert.ok(!defaults.groups.flatMap(group => group.items).some(item => item.kind === 'module' && keys.includes(item.moduleKey)))
+  const saved = structuredClone(defaults)
+  saved.groups.push({ id: 'team-shortcuts', label: 'Team shortcuts', items: keys.map(moduleKey => ({ kind: 'module', moduleKey, placement: 'custom', label: 'Prior shortcut' })) })
+  saved.localNavigation = { payroll: { items: [{ href: '/payroll/anomalies', label: 'Review checks' }] } }
+  const before = structuredClone(saved)
+  const result = reconcileNavConfig(saved)
+  assert.ok(!result.groups.flatMap(group => group.items).some(item => item.kind === 'module' && keys.includes(item.moduleKey)))
+  assert.deepEqual(result.localNavigation, saved.localNavigation)
+  assert.deepEqual(saved, before)
+  assert.deepEqual(reconcileNavConfig(result), result)
 })

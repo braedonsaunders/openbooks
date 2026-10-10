@@ -73,7 +73,7 @@ test('hidden and renamed destinations share one snapshot while local order stays
     if (item.kind === 'module' && item.moduleKey === 'payroll-runs') item.label = 'Process wages'
     if (item.kind === 'module' && item.moduleKey === 'payroll-anomalies') item.hidden = true
   })
-  config.localNavigation = { payroll: { items: [{ href: '/payroll/runs' }, { href: '/payroll', hidden: true }] } }
+  config.localNavigation = { payroll: { items: [{ href: '/payroll/runs' }, { href: '/payroll', hidden: true }, { href: '/payroll/anomalies', hidden: true }] } }
   const local = await resolveLocalNavigation({ user: { orgId: 'company-one' }, permissions: new Set(['*']) } as Parameters<typeof resolveLocalNavigation>[0])
   const tabs = local.groups.find((group) => group.some((tab) => tab.href === '/payroll/runs'))!
   assert.equal(tabs[0]!.label, 'Process wages')
@@ -86,8 +86,8 @@ test('Payroll shows its daily workflow in order and Year-end only in local More'
   reset()
   const groups = await resolveNav('company-one', () => true, [], (key) => translator(`nav.${key}` as never), (key) => translator.has(`nav.${key}` as never))
   const payroll = groups.flatMap(group => group.items).filter(item => item.subgroup === translator('nav.groups.payroll-work'))
-  assert.deepEqual(payroll.map(item => item.href), ['/payroll', '/payroll/runs', '/payroll/anomalies', '/payroll/remittances', '/payroll/separations'])
-  assert.deepEqual(payroll.map(item => item.label), ['Overview', 'Pay runs', 'Checks', 'Remittances', 'Separations'])
+  assert.deepEqual(payroll.map(item => item.href), ['/payroll', '/payroll/runs', '/payroll/remittances'])
+  assert.deepEqual(payroll.map(item => item.label), ['Overview', 'Pay runs', 'Remittances'])
   const local = await resolveLocalNavigation({user: {orgId: 'company-one'}, permissions: new Set(['*'])} as Parameters<typeof resolveLocalNavigation>[0])
   const tabs = local.groups.find(group => group.some(tab => tab.href === '/payroll'))!
   assert.equal(tabs.find(tab => tab.href === '/payroll/year-end')?.secondary, true)
@@ -125,7 +125,7 @@ test('checklist templates sit beside checklists only with the management grant a
   assert.equal(people.find((tab) => tab.href === '/hrm/processes/templates')!.label, 'Checklist templates')
   const groups = await resolveNav('company-one', (key) => !key || permissionSetCovers(authz.permissions, key), [], (key) => translator(`nav.${key}` as never), (key) => translator.has(`nav.${key}` as never))
   const items = groups.flatMap((group) => group.items)
-  assert.ok(items.some((item) => item.href === '/hrm/processes'), 'the Checklists parent remains in the menu')
+  assert.ok(!items.some((item) => item.href === '/hrm/processes'), 'checklists remain inside Employees rather than the main menu')
   assert.ok(!items.some((item) => item.href === '/hrm/processes/templates'), 'templates are reached from the Checklists strip, not the main menu')
 })
 
@@ -230,4 +230,23 @@ test('Work locations is discoverable from the HRM menu and payroll tabs after re
   assert.ok(local.groups.flat().some((tab) => tab.href === '/payroll/work-locations'))
   const restricted = await resolveNav('company-one', (key) => !key || key === 'payroll.read', [], translate, has)
   assert.ok(!restricted.flatMap((group) => group.items).some((item) => item.href === '/payroll/work-locations'), 'the menu cannot bypass payroll.manage')
+})
+
+
+test('saved People shortcuts disappear from the menu while native module access remains', async () => {
+  reset()
+  const destinations = [
+    ['hrm-change-requests', '/hrm/change-requests'], ['hrm-processes', '/hrm/processes'],
+    ['hrm-compensation-plans', '/hrm/compensation?view=plans'],
+    ['payroll-anomalies', '/payroll/anomalies'], ['payroll-separations', '/payroll/separations'],
+  ] as const
+  config.groups.push({ id: 'prior-shortcuts', label: 'Prior shortcuts', items: destinations.map(([moduleKey]) => ({ kind: 'module', moduleKey, placement: 'custom' })) })
+  const groups = await resolveNav('company-one', () => true, [], key => translator(`nav.${key}` as never), key => translator.has(`nav.${key}` as never))
+  const hrefs = groups.flatMap(group => group.items).map(item => item.href)
+  for (const [, href] of destinations) assert.ok(!hrefs.includes(href), href)
+  assert.ok(hrefs.includes('/payroll/remittances'))
+  const local = await resolveLocalNavigation({ user: { orgId: 'company-one' }, permissions: new Set(['*']) } as Parameters<typeof resolveLocalNavigation>[0])
+  for (const [, href] of destinations) assert.equal(local.groups.flat().find(tab => tab.href === href)?.secondary, true, href)
+  const limited = await resolveLocalNavigation({ user: { orgId: 'company-one' }, permissions: new Set(['parties.read']) } as Parameters<typeof resolveLocalNavigation>[0])
+  for (const [, href] of destinations) assert.ok(!limited.groups.flat().some(tab => tab.href === href), href)
 })

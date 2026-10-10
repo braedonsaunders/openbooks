@@ -111,3 +111,13 @@ test('a missing audit insert refuses and rolls back the configuration save', asy
   assert.deepEqual(writes, ['configuration', 'audit'])
   assert.match((await response.json()).error, /audit evidence could not be recorded/)
 })
+
+
+test('module-only work cannot be restored as a main-menu shortcut', async () => {
+  for (const moduleKey of ['hrm-change-requests', 'hrm-processes', 'hrm-compensation-plans', 'payroll-anomalies', 'payroll-separations']) {
+    reset(); const config = draft()
+    config.groups[0]!.items.push({ kind: 'module', moduleKey, placement: 'custom' })
+    assert.equal((await PUT(request(config))).status, 400, moduleKey)
+    assert.deepEqual(writes, [])
+  }
+})

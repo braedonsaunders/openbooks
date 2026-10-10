@@ -65,7 +65,8 @@ export const HRM_LOCAL_NAVIGATION: Record<'people' | 'hiring' | 'timeOff' | 'tal
     { href: '/hrm/positions', iconKey: 'briefcase-business', ns: 'hrm', key: 'home.tabs.positions', permission: 'hrm.position.read' },
     { href: '/entities/employees', ns: 'nav', key: 'modules.employees', permission: 'parties.read' },
     { href: '/hrm/org-chart', iconKey: 'network', ns: 'hrm', key: 'home.tabs.orgChart', permissionsAny: ['hrm.org_chart.read', 'hrm.employment.read', 'hrm.self.read'] },
-    { href: '/hrm/processes', iconKey: 'workflow', ns: 'hrm', key: 'processes.title', permission: 'hrm.process.read', prefix: true },
+    { href: '/hrm/change-requests', iconKey: 'user-cog', ns: 'nav', key: 'modules.hrm-change-requests', permission: 'hrm.employment.read', secondary: true },
+    { href: '/hrm/processes', secondary: true, iconKey: 'workflow', ns: 'hrm', key: 'processes.title', permission: 'hrm.process.read', prefix: true },
     { href: '/hrm/processes/templates', iconKey: 'clipboard-check', ns: 'hrm', key: 'processes.templates.title', permission: 'hrm.process.manage', menuParent: 'hrm-processes', prefix: true },
     { href: '/hrm/documents', iconKey: 'files', ns: 'hrm', key: 'home.tabs.documents', permission: 'hrm.documents.read', feature: 'hrmDocuments' },
     { href: '/hrm/qualifications', iconKey: 'badge-check', ns: 'hrm', key: 'home.tabs.qualifications', permission: 'hrm.certifications.read', feature: 'hrmCertifications' },
@@ -105,7 +106,7 @@ export const HRM_LOCAL_NAVIGATION: Record<'people' | 'hiring' | 'timeOff' | 'tal
       ['levels', 'Job levels', 'layers'],
       ['bands', 'Pay bands', 'banknote'],
     ] as const).map(([view, label, iconKey]) => ({
-      href: `/hrm/compensation?view=${view}`, label, iconKey, menuKey: `hrm-compensation-${view}`,
+      href: `/hrm/compensation?view=${view}`, label, iconKey, ...(view === 'plans' ? { secondary: true } : {}), menuKey: `hrm-compensation-${view}`,
       ns: 'hrm', key: `compensation.workspace.${view}`, permission: 'hrm.compensation.read', feature: 'hrmCompensation' as const,
       // Job architecture is setup data; it stays on the Compensation strip, not the main menu.
       ...(view === 'families' || view === 'levels' || view === 'bands' ? { menuParent: 'hrm-compensation' } : {}),
@@ -203,9 +204,9 @@ export const LOCAL_NAVIGATION: LocalNavigationSet[] = [
   { id: 'payroll', label: 'Payroll', feature: 'payroll', tabs: [
     { href: '/payroll', ns: 'payroll', key: 'home.tabs.overview', permission: 'payroll.read' },
     { href: '/payroll/runs', iconKey: 'circle-dollar-sign', ns: 'payroll', key: 'home.tabs.runs', permission: 'payroll.read', prefix: true },
-    { href: '/payroll/anomalies', iconKey: 'shield', ns: 'payroll', key: 'home.tabs.checks', permission: 'payroll.read' },
+    { href: '/payroll/anomalies', secondary: true, iconKey: 'shield', ns: 'payroll', key: 'home.tabs.checks', permission: 'payroll.read' },
     { href: '/payroll/remittances', iconKey: 'landmark', ns: 'payroll', key: 'home.tabs.remittances', permission: 'payroll.read' },
-    { href: '/payroll/separations', iconKey: 'user-minus', ns: 'payroll', key: 'home.tabs.separations', permission: 'payroll.read' },
+    { href: '/payroll/separations', secondary: true, iconKey: 'user-minus', ns: 'payroll', key: 'home.tabs.separations', permission: 'payroll.read' },
     { href: '/payroll/year-end', iconKey: 'calendar-check', ns: 'payroll', key: 'home.tabs.yearEnd', permission: 'payroll.read', secondary: true, menuParent: 'payroll' },
     ...[
       ['opening-balances', 'payroll.read'],

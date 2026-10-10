@@ -40,6 +40,8 @@ export interface NavModule {
   homeOnly?: boolean
   /** Registered entry-point key; company placements can promote this view. */
   menuParent?: string
+  /** Supporting work remains accessible inside its module, outside the main menu. */
+  localOnly?: boolean
 }
 
 export const NAV_GROUPS = [
@@ -1162,6 +1164,12 @@ for (const workspace of LOCAL_NAVIGATION) {
   }
 }
 
+for (const module of NAV_MODULES) {
+  if (['hrm-change-requests', 'hrm-processes', 'hrm-compensation-plans', 'payroll-anomalies', 'payroll-separations'].includes(module.key)) {
+    module.localOnly = true
+  }
+}
+
 export const MODULE_BY_KEY = new Map(NAV_MODULES.map((m) => [m.key, m]))
 
 /**
@@ -1234,9 +1242,9 @@ export const DEFAULT_NAV_ORDER: Record<NavGroupKey, readonly string[]> = {
     'equipment',
   ],
   hrm: [
-    'hrm', 'employees', 'hrm-change-requests', 'hrm-processes', 'hrm-documents',
-    'hrm-qualifications', 'hrm-training', 'hrm-compliance', 'hrm-org-chart', 'hrm-processes-templates',
-    'hrm-positions', 'hrm-recruiting', 'hrm-recruiting-interviews', 'hrm-recruiting-offers',
+    'hrm', 'employees', 'hrm-org-chart', 'hrm-positions', 'hrm-change-requests', 'hrm-processes', 'hrm-documents',
+    'hrm-qualifications', 'hrm-training', 'hrm-compliance', 'hrm-processes-templates',
+    'hrm-recruiting', 'hrm-recruiting-interviews', 'hrm-recruiting-offers',
     'hrm-recruiting-postings', 'hrm-recruiting-pools', 'hrm-leave', 'hrm-leave-calendar', 'scheduling',
     'hrm-performance', 'hrm-performance-templates', 'hrm-performance-calibration',
     'hrm-performance-talent', 'hrm-performance-succession', 'hrm-performance-retention',
@@ -1365,7 +1373,7 @@ export function defaultNavConfig(): OrgNavConfig {
   const groups: NavGroupConfig[] = NAV_GROUPS.map((group) => ({
     id: group.key,
     label: group.label,
-    items: DEFAULT_NAV_ORDER[group.key].map((moduleKey) => ({
+    items: DEFAULT_NAV_ORDER[group.key].filter(moduleKey => !MODULE_BY_KEY.get(moduleKey)?.localOnly).map((moduleKey) => ({
       kind: 'module' as const,
       moduleKey,
       ...(mobileModules.has(moduleKey) ? { mobile: true } : {}),
