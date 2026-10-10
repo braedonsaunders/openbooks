@@ -40,7 +40,18 @@ const hooks = registerHooks({
     if (specifier === "@/lib/api/json") {
       return nextResolve(jsonUrl, context);
     }
-    return nextResolve(specifier, context);
+    const resolved = nextResolve(specifier, context);
+    const url = typeof resolved === "string" ? resolved : resolved.url;
+    // time-workspace.ts imports its session boundary with relative
+    // specifiers, so match the resolved module: however the route spells
+    // the boundary, this test's gate answers.
+    if (url.endsWith("/web/lib/authz.ts")) {
+      return { shortCircuit: true, url: "mock:reject-authz" };
+    }
+    if (url.endsWith("/web/lib/feature-gates.ts")) {
+      return { shortCircuit: true, url: "mock:reject-features" };
+    }
+    return resolved;
   },
   load(url, context, nextLoad) {
     if (url === "mock:reject-authz") {
@@ -76,14 +87,28 @@ const routeUrl = "./route.ts?timesheets-reject";
 const { POST } = (await import(routeUrl)) as typeof import("./route.ts");
 
 const { withBypassContext, db } = await import("@openbooks/engine/src/platform/db.ts");
-const { createScratchOrg, dropScratchOrg, seedActiveEmployment } = await import(
+const { createScratchOrg, createScratchUser, dropScratchOrg, seedActiveEmployment } = await import(
   "@openbooks/engine/src/testing/fixtures.ts"
 );
 
 const WEEK = "2026-07-12";
 
-function gate(orgId: string, allowedSubsidiaryIds: Set<string> | null) {
-  state.gate = { user: { id: randomUUID(), orgId }, allowedSubsidiaryIds };
+function gate(orgId: string, actorId: string, allowedSubsidiaryIds: Set<string> | null) {
+  state.gate = { user: { id: actorId, orgId }, allowedSubsidiaryIds };
+}
+
+// The shared time authority lock runs for real (users row, time grant,
+// workspace feature), so the session carries a real approver: only the
+// feature/session boundary above is stubbed.
+async function seedApprover(orgId: string): Promise<string> {
+  const approver = await withBypassContext(() => createScratchUser(orgId, "Reject Approver", "reject_approver"));
+  await withBypassContext(() => (db.execute(sql`
+    update app_roles set permissions = '["time.read", "time.approve"]'::jsonb
+     where org_id = ${orgId} and key = 'reject_approver'`)));
+  await withBypassContext(() => (db.execute(sql`
+    update orgs set settings = settings || '{"features": {"timeTracking": true}}'::jsonb
+     where id = ${orgId}`)));
+  return approver;
 }
 
 function postRequest(body: unknown): Request {
@@ -121,6 +146,16 @@ async function seedSubmittedEntry(orgId: string, employeeId: string): Promise<vo
     values (${orgId}, ${employeeId}, '2026-07-14', 8, 'submitted')`)));
 }
 
+// Entries exist but none are submitted, so the rejection has nothing to
+// flip: the refusal rolls the header stamp back. (A week with no entries
+// at all is a declared no-hours week and follows the approval path.)
+async function seedDraftEntry(orgId: string, employeeId: string): Promise<void> {
+  await withBypassContext(() => (db.execute(sql`
+    insert into time_entries
+      (org_id, employee_party_id, worked_on, hours, status)
+    values (${orgId}, ${employeeId}, '2026-07-14', 8, 'draft')`)));
+}
+
 async function weekStatus(orgId: string, employeeId: string): Promise<string | null> {
   const rows = (
     await db.execute<{ status: string }>(
@@ -148,7 +183,7 @@ test("an employee outside the caller scope is unreachable, with nothing read or 
       values (${hiddenId}, ${org.orgId}, ${org.subsidiaryId}, 'West Co', 'CAD', 'CA', '{}'::jsonb, false, true, '{}'::jsonb)`)));
     const actorId = randomUUID();
     const hiddenEmployee = await seedEmployee(org.orgId, hiddenId, actorId);
-    gate(org.orgId, new Set([org.subsidiaryId]));
+    gate(org.orgId, await seedApprover(org.orgId), new Set([org.subsidiaryId]));
 
     const response = await POST(
       postRequest({ employee: hiddenEmployee, week: WEEK, reason: "not this week" }),
@@ -170,7 +205,7 @@ test("a rejection flips the header, its entries, and the audit together", async 
     const actorId = randomUUID();
     const employeeId = await seedEmployee(org.orgId, org.subsidiaryId, actorId);
     await seedSubmittedEntry(org.orgId, employeeId);
-    gate(org.orgId, null);
+    gate(org.orgId, await seedApprover(org.orgId), null);
 
     const response = await POST(
       postRequest({ employee: employeeId, week: WEEK, reason: "wrong project" }),
@@ -203,7 +238,8 @@ test("an empty rejection rolls the header stamp back instead of recording a reas
   try {
     const actorId = randomUUID();
     const employeeId = await seedEmployee(org.orgId, org.subsidiaryId, actorId);
-    gate(org.orgId, null);
+    await seedDraftEntry(org.orgId, employeeId);
+    gate(org.orgId, await seedApprover(org.orgId), null);
 
     // The empty rejection refuses with its remedy and rolls the header stamp
     // back (still submitted, no audit).
