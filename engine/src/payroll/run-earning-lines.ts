@@ -439,7 +439,7 @@ export async function applyAssignedComponentLines(
       .filter((rule) => rule.rateMode === 'rate_card').map((rule) => rule.componentId)
     : []);
   for (const row of args.assignedRows) {
-    if (row.run_applicability === 'regular_only' && rateCardComponents.has(String(row.id))) {
+    if (row.run_applicability !== 'standard_runs' && rateCardComponents.has(String(row.id))) {
       throw new PayrollError(`Payroll component ${String(row.code)} prices operational facts through a rate-card rule — replace its recurring assignment with standard applicability before recalculating.`);
     }
   }

@@ -10,10 +10,11 @@ import { ScopeNotFoundError, subsidiaryScopeAllows } from '../organization/subsi
 import { employeePayComponentScopeLock, validateEmployeePayComponentAssignment, type EmployeePayComponentAssignmentInput } from './assigned-components.ts';
 import { takeEmployeeConfigurationFence } from './fences.ts';
 import { PayrollError } from './error.ts';
+import type { AssignmentRunApplicability } from './assignment-run-applicability.ts';
 
 export type EmployeePayComponentAssignmentRecord = {
   id: string; employeePartyId: string; employmentId: string | null; componentId: string;
-  value: string | null; runApplicability: 'standard_runs' | 'regular_only';
+  value: string | null; runApplicability: AssignmentRunApplicability;
   effectiveFrom: string; effectiveTo: string | null; isActive: boolean;
 };
 export const EMPLOYEE_PAY_COMPONENT_COLUMNS = sql`id,employee_party_id as "employeePartyId",employment_id as "employmentId",

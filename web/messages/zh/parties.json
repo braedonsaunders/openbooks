@@ -231,6 +231,7 @@
       "runApplicability": "薪资批次",
       "standardRuns": "常规、补充及离职",
       "regularOnly": "仅常规",
+      "periodicAndFinal": "正常和最后一次工资",
       "unknownApplicability": "适用范围未知"
     },
     "summary": {

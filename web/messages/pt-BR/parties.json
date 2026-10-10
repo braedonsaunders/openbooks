@@ -231,6 +231,7 @@
       "runApplicability": "Folhas de pagamento",
       "standardRuns": "Regulares, suplementares e de rescisão",
       "regularOnly": "Somente regulares",
+      "periodicAndFinal": "Folhas regulares e finais",
       "unknownApplicability": "Aplicabilidade desconhecida"
     },
     "summary": {

@@ -228,6 +228,7 @@
       "runApplicability": "Nóminas",
       "standardRuns": "Regulares, complementarias y de terminación",
       "regularOnly": "Solo regulares",
+      "periodicAndFinal": "Nóminas regulares y finales",
       "unknownApplicability": "Aplicabilidad desconocida"
     },
     "summary": {
