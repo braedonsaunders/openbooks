@@ -179,13 +179,18 @@ test("sandbox insertion orders trigger-required parents inside a deferrable FK c
   documents.fks = { labor_snapshot_id: "field_ticket_labor_snapshots" };
   documents.hardFks = {};
 
-  const tables = [laborLines, snapshots, signatures, tickets, documents, users, files];
+  const tenders = table("NO ACTION");
+  tenders.name = "document_tenders";
+  tenders.fks = { document_id: "documents" };
+  tenders.hardFks = {};
+  const tables = [tenders, laborLines, snapshots, signatures, tickets, documents, users, files];
   const order = insertionOrder({
     tables,
     tenantTables: tables,
     rebaseSet: new Set(),
   });
   assert.ok(order.indexOf("documents") < order.indexOf("field_ticket_labor_lines"));
+  assert.ok(order.indexOf("documents") < order.indexOf("document_tenders"));
   assert.ok(order.indexOf("documents") < order.indexOf("field_tickets"));
   assert.ok(order.indexOf("users") < order.indexOf("field_tickets"));
   assert.ok(order.indexOf("field_tickets") < order.indexOf("field_ticket_labor_snapshots"));
