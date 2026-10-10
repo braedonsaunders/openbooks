@@ -180,24 +180,24 @@ test("a 422 post refusal persists as a drawer-header alert", async (t) => {
 });
 
 
-test("posted documents display downstream completion and only authorized terminal retries", async () => {
+test("posted documents offer a posting-effect retry only for authorized terminal failures", async () => {
   const restore = scriptFetch(() => null);
   try {
-    for (const [effectStatus, label, canPost, retry] of [
-      ['pending', 'Queued', true, false],
-      ['running', 'Processing', true, false],
-      ['failed', 'Automatic retry pending', true, false],
-      ['terminal_failed', 'Review and retry required', true, true],
-      ['terminal_failed', 'Review and retry required', false, false],
-      ['succeeded', 'Complete', true, false],
+    for (const [effectStatus, canPost, retry] of [
+      ['pending', true, false],
+      ['running', true, false],
+      ['failed', true, false],
+      ['terminal_failed', true, true],
+      ['terminal_failed', false, false],
+      ['succeeded', true, false],
     ] as const) {
       const { host, root } = await mountApprovedBill({ status: 'posted', effectStatus, canPost });
       try {
-        const status = [...document.querySelectorAll('[role="status"]')].find(node => node.textContent?.includes('Posting effects:'));
-        assert.ok(status, 'the record must expose its posting-effect status');
-        assert.ok(status.textContent?.includes(label), `expected a readable ${label} status`);
+        const actions = [...document.querySelectorAll('button')].find(button => button.textContent?.includes('Actions'));
+        assert.ok(actions, 'Actions menu must render');
+        await act(async () => { actions.dispatchEvent(new window.MouseEvent('click', { bubbles: true })); await tick(); });
         assert.equal([...document.querySelectorAll('button')].some(button => button.textContent?.trim() === 'Retry posting effects'), retry);
-        assert.equal(status.textContent?.includes('before closing GL'), effectStatus !== 'succeeded');
+        assert.ok(!document.body.textContent?.includes('Posting effects'), 'posting-effect status is not rendered as drawer content');
       } finally { await act(async () => root.unmount()); host.remove(); }
     }
   } finally { restore(); }

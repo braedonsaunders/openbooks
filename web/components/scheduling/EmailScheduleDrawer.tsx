@@ -440,7 +440,7 @@ export function EmailScheduleDrawer({
             {preview.excludedHistoricalSubjects?.length ? (
               <SchedulingAlert
                 tone="info"
-                message={t("historicalExcluded", {
+                message={t("excludedHistory", {
                   count: preview.excludedHistoricalSubjects.length,
                 })}
               />

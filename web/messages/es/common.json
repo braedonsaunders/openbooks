@@ -346,19 +346,9 @@
     "previewUnavailable": "Vista previa fiscal no disponible — complete la evaluación de la operación y los importes de las líneas"
   },
   "postingEffects": {
-    "title": "Procesamiento posterior a la contabilización",
-    "unknown": "Estado desconocido: requiere revisión",
-    "incomplete": "El asiento está contabilizado. Las proyecciones de inventario o ingresos siguen incompletas. Revise los errores y espere a que finalicen correctamente antes de cerrar el libro mayor.",
     "retry": "Reintentar efectos de contabilización",
     "reason": "Motivo de la revisión",
     "reasonHelp": "Explique la corrección y revisión con entre 10 y 1000 caracteres.",
-    "queued": "Reintento en cola; compruebe el estado cuando se ejecute el proceso.",
-    "status": {
-      "pending": "En cola",
-      "running": "Procesando",
-      "failed": "Reintento automático pendiente",
-      "terminal_failed": "Requiere revisión y reintento",
-      "succeeded": "Completado"
-    }
+    "queued": "Reintento en cola."
   }
 }

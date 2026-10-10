@@ -301,7 +301,7 @@ export function CommandForm({
   }
   if (workflowCreate && workflowChoosing) return <div className="space-y-4 rounded-xl border border-slate-200 p-4 dark:border-slate-800">
     <OperatingProfilePicker family="production" departmentId={workflowDepartment} value={workflowSelection?.value ?? null} onChoose={(choice,department)=>{onDirty?.();setWorkflowSelection(choice);setWorkflowDepartment(department);setWorkflowChoosing(false)}} />
-    <Button variant="ghost" onClick={onCancel}>{t('cancel')}</Button>
+    <Button variant="ghost" onClick={onCancel}>{t('cancelForm')}</Button>
   </div>;
   return (
     <form

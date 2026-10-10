@@ -3018,6 +3018,9 @@ export function DocumentDrawer({
             {doc.kind === 'cash_sale' && isPosted && refundHref && canCreate ? (
               <Button variant="outline" asChild><Link href={refundHref}>{t('tenders.refundAction')}</Link></Button>
             ) : null}
+            {isPosted && doc.posting_effect_status === 'terminal_failed' && canPost ? (
+              <Button variant="outline" disabled={busy} onClick={retryPostingEffects}>{tPostingEffects('retry')}</Button>
+            ) : null}
           </>
         )
       }
@@ -3063,21 +3066,6 @@ export function DocumentDrawer({
     >
       <div className="space-y-6 p-1">
         <ActionAlert error={refusal} fallbackMessage={t('toasts.actionFailed')} />
-        {isPosted && typeof doc.posting_effect_status === 'string' ? (
-          <section role="status" aria-live="polite" className="space-y-2 rounded border p-3 text-sm">
-            <Badge variant={doc.posting_effect_status === 'succeeded' ? 'success' : 'warning'}>
-              {tPostingEffects('title')}: {tPostingEffects.has(`status.${doc.posting_effect_status}`)
-                ? tPostingEffects(`status.${doc.posting_effect_status}`) : tPostingEffects('unknown')}
-            </Badge>
-            {doc.posting_effect_status !== 'succeeded' ? <>
-              <p>{tPostingEffects('incomplete')}</p>
-              {typeof doc.posting_effect_error === 'string' ? <p>{doc.posting_effect_error}</p> : null}
-              {doc.posting_effect_status === 'terminal_failed' && canPost ? (
-                <Button variant="outline" disabled={busy} onClick={retryPostingEffects}>{tPostingEffects('retry')}</Button>
-              ) : null}
-            </> : null}
-          </section>
-        ) : null}
           {config.kind==='customer_invoice' && (editable || nativeGoods) ? <div className="space-y-3 border-b p-4">
             <div className="space-y-1"><FieldLabel fieldName={tCommon('nativeGoodsTax.title')}>{tCommon('nativeGoodsTax.title')}</FieldLabel>
               {editable ? <Select value={nativeGoods ? 'native' : 'manual'} onChange={event=>setCustomValues(values=>({...values,canadianGoodsTax:event.target.value==='native'
