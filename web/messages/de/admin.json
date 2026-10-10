@@ -5874,7 +5874,12 @@
         "description": "Wir empfehlen einen Kontenplan und passende Funktionen für die Arbeitsweise Ihrer Branche. Sie prüfen die Empfehlung, bevor sie angewandt wird.",
         "locked": "Ihre Branche kann nach gebuchten Bewegungen nicht mehr geändert werden, aber Sie können Kontenplan und Funktionen weiterhin einzeln anpassen.",
         "search": "Branchen suchen …",
-        "title": "Was ist Ihre Branche?"
+        "title": "Was ist Ihre Branche?",
+        "custom": {
+          "title": "Nichts davon passt – eigene Funktionen wählen",
+          "description": "Mit einem neutralen Kontenplan beginnen und genau die Funktionen aktivieren, die Sie nutzen – mit denselben Abhängigkeitsregeln wie unter Unternehmenseinstellungen → Funktionen."
+        },
+        "noMatches": "Keine Branchenvorlage passt zu „{query}“. Wählen Sie die nächstliegende oder unten eigene Funktionen."
       },
       "next": "Weiter",
       "operations": {
@@ -6042,7 +6047,9 @@
         "sampleCompany": "Erkundungsarbeitsbereich",
         "sampleCompanyNo": "Nicht jetzt",
         "sampleCompanyYes": "Separates Branchen-Beispielunternehmen erstellen",
-        "taxPosition": "Steuerposition"
+        "taxPosition": "Steuerposition",
+        "industryCustom": "Keine – Funktionen einzeln gewählt",
+        "chartNeutral": "{count} Konten (neutraler Basiskontenplan)"
       },
       "rhythm": {
         "activity": {
@@ -6099,47 +6106,58 @@
       "industries": {
         "accounting_firm": {
           "description": "Buchhaltungs- und Steuerkanzleien. Multi-Mandanten, Treuhandbuchhaltung und Auftragsverfolgung.",
-          "title": "Steuer- & Buchhaltungspraxis"
+          "title": "Steuer- & Buchhaltungspraxis",
+          "keywords": "Steuerberater, Buchhalter, Buchhaltung, Wirtschaftsprüfer, Steuerkanzlei, Lohnbüro"
         },
         "construction_contractor": {
           "description": "Bauunternehmer, Handwerk und Bauträger. Auftragskalkulation, Abschlagsrechnung, Einbehalt und Regieberichte.",
-          "title": "Bau & Handwerk"
+          "title": "Bau & Handwerk",
+          "keywords": "Bauunternehmen, Bau, Handwerk, Renovierung, Sanitär, Elektro, Heizung, Dachdecker, Garten- und Landschaftsbau, Generalunternehmer, Subunternehmer"
         },
         "engineering_architecture": {
           "description": "EPC- und AEC-Büros. PSP, Phasenabrechnung, Gerätekalkulation und Abschlagsrechnung.",
-          "title": "Ingenieurwesen & Architektur"
+          "title": "Ingenieurwesen & Architektur",
+          "keywords": "Ingenieurbüro, Ingenieur, Architekt, Architektur, Vermessung, Planungsbüro"
         },
         "general_business": {
           "description": "Eine Standard­einrichtung, die für jedes Unternehmen funktioniert. Keine branchenspezifischen Annahmen.",
-          "title": "Allgemeines Unternehmen"
+          "title": "Allgemeines Unternehmen",
+          "keywords": "Einzelhandel, Laden, Geschäft, Boutique, Café, Restaurant, Bar, Bäckerei, Gastronomie, Gastgewerbe, Salon, Fitness, E-Commerce, Onlineshop, Kleinunternehmen, Einzelunternehmer, Freiberufler, Sonstiges"
         },
         "healthcare_practice": {
           "description": "Arzt- und Zahnarztpraxen. Patientenforderungen, medizinische Verbrauchsmaterialien und Geräte.",
-          "title": "Arztpraxis"
+          "title": "Arztpraxis",
+          "keywords": "Arztpraxis, Zahnarzt, Klinik, Arzt, Physiotherapie, Chiropraktik, Tierarzt, Optiker, Therapie, Gesundheit"
         },
         "it_software_saas": {
           "description": "Abonnementabrechnung, Umsatzrealisierung nach ASC 606 und Verfolgung passiver Rechnungsabgrenzung.",
-          "title": "Software & SaaS"
+          "title": "Software & SaaS",
+          "keywords": "Software, SaaS, Abonnement, App, Technologie, Startup, IT-Dienstleistungen, Managed Services, digitale Produkte, Mitgliedschaften"
         },
         "manufacturing": {
           "description": "Leichte und diskrete Fertigung. Stücklisten, Rohmaterialien, WIP, Fertigwaren und Gemeinkosten.",
-          "title": "Fertigung"
+          "title": "Fertigung",
+          "keywords": "Hersteller, Produktion, Fabrik, Fertigung, Lebensmittelherstellung, Lebensmittel, Getränke, Kaffeerösterei, Rösterei, Kaffee, Bäckerei, Brauerei, Weingut, Brennerei, Manufaktur, Montage, Verarbeitung"
         },
         "nonprofit": {
           "description": "Gemeinnützige Organisationen. Zuschussverfolgung, Fondsbuchhaltung, Spenden und zweckgebundenes Nettovermögen.",
-          "title": "Gemeinnützig"
+          "title": "Gemeinnützig",
+          "keywords": "gemeinnützig, Stiftung, NGO, Kirche, Verein, Verband, Spenden, Fördermittel"
         },
         "professional_services": {
           "description": "Berater, Agenturen und Kanzleien. Zeiterfassung, Projektrentabilität und Retainer-Abrechnung.",
-          "title": "Professionelle Dienstleistungen"
+          "title": "Professionelle Dienstleistungen",
+          "keywords": "Beratung, Berater, Agentur, Marketingagentur, Designstudio, Kanzlei, Rechtsanwalt, Coaching, Personalvermittlung, Freiberufler"
         },
         "property_management": {
           "description": "Mietportfolios und Hausverwaltungen. Wiederkehrende Mieten, CAM, Kautionen und Anlagevermögen.",
-          "title": "Hausverwaltung"
+          "title": "Hausverwaltung",
+          "keywords": "Immobilien, Vermieter, Vermietung, Hausverwaltung, Wohnungen, Gewerbeimmobilien, Leasing, Eigentümergemeinschaft"
         },
         "wholesale_distribution": {
           "description": "Händler und Großhändler. Vorräte, Anschaffungsnebenkosten, GRNI und Lagerstandorte.",
-          "title": "Großhandel & Distribution"
+          "title": "Großhandel & Distribution",
+          "keywords": "Großhandel, Vertrieb, Händler, Einzelhandel, E-Commerce, Onlineshop, Onlinehandel, Laden, Import, Export, Handel, Lebensmittel, Getränke, Kaffee, Wein, Lieferant, Lager"
         }
       },
       "payroll": {
@@ -6169,6 +6187,11 @@
           "allRegions": "{components} · Lohnsteuer in allen {known} Regionen · Steuertabellen {years}",
           "someRegions": "{components} · Lohnsteuer in {supported} von {known} Regionen · Steuertabellen {years}"
         }
+      },
+      "features": {
+        "title": "Funktionen auswählen",
+        "description": "Aktivieren Sie, was dieses Unternehmen nutzt. Eine abhängige Funktion wird freigeschaltet, sobald die übergeordnete aktiv ist – dieselben Regeln wie unter Unternehmenseinstellungen → Funktionen, wo jede Wahl änderbar bleibt.",
+        "tabsAria": "Funktionskategorien"
       }
     },
     "filterAll": "Alle",

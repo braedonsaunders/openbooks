@@ -50,6 +50,26 @@ export async function isFeatureEnabled(orgId: string, key: string, executor?: Sq
   return executor ? readFeatureEnabled(orgId, key, executor) : renderFeatureEnabled(orgId, key)
 }
 
+/** The registry as the switchboard tree reads it (category, parent,
+ *  requirements, recommendations) — for surfaces that render the tree. */
+export function featureTreeRows(): {
+  key: string
+  category: string
+  group?: string
+  parentKey?: string
+  requiresAll?: string[]
+  recommends?: string[]
+}[] {
+  return FEATURES.map((f) => ({
+    key: f.key,
+    category: f.category,
+    ...(f.group ? { group: f.group } : {}),
+    ...(f.parentKey ? { parentKey: f.parentKey } : {}),
+    ...(f.requiresAll ? { requiresAll: [...f.requiresAll] } : {}),
+    ...(f.recommends ? { recommends: [...f.recommends] } : {}),
+  }))
+}
+
 /** The set of nav module keys hidden by disabled features (for the resolver). */
 export function hiddenNavModules(state: FeatureState): Set<string> {
   const hidden = new Set<string>()

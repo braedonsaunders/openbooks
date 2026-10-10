@@ -5802,7 +5802,12 @@
         "description": "Nous recommanderons un plan comptable et des fonctionnalités adaptées à votre secteur. Vous validerez la recommandation avant son application.",
         "search": "Rechercher des secteurs…",
         "locked": "Votre secteur ne peut plus être modifié après la comptabilisation d'écritures, mais vous pouvez toujours personnaliser votre plan comptable et vos fonctionnalités.",
-        "classificationOnly": "Votre plan existant et votre historique comptabilisé seront préservés. Ce premier classement ajuste uniquement les recommandations d'espace et de fonctionnalités."
+        "classificationOnly": "Votre plan existant et votre historique comptabilisé seront préservés. Ce premier classement ajuste uniquement les recommandations d'espace et de fonctionnalités.",
+        "custom": {
+          "title": "Aucun ne correspond — choisir mes fonctionnalités",
+          "description": "Partez d'un plan comptable neutre et activez exactement les fonctionnalités que vous utilisez, avec les mêmes règles de dépendance que dans Paramètres de l'entreprise → Fonctionnalités."
+        },
+        "noMatches": "Aucun modèle de secteur ne correspond à « {query} ». Choisissez le plus proche ou vos propres fonctionnalités ci-dessous."
       },
       "profile": {
         "title": "Partez d'où en est votre entreprise",
@@ -5997,7 +6002,9 @@
         "payrollPack": "Module de paie par pays",
         "payrollPackNone": "Aucun — à installer plus tard depuis la Paie",
         "defaultBadge": "Par défaut",
-        "defaultsHint": "Les champs marqués Par défaut ont conservé leur valeur présélectionnée. Revenez en arrière pour les modifier avant d’appliquer."
+        "defaultsHint": "Les champs marqués Par défaut ont conservé leur valeur présélectionnée. Revenez en arrière pour les modifier avant d’appliquer.",
+        "industryCustom": "Aucun — fonctionnalités choisies individuellement",
+        "chartNeutral": "{count} comptes (plan comptable de base neutre)"
       },
       "applying": {
         "title": "Configuration de vos livres…",
@@ -6017,47 +6024,58 @@
       "industries": {
         "general_business": {
           "title": "Entreprise générale",
-          "description": "Une configuration standard qui convient à toute entreprise. Aucune hypothèse sectorielle."
+          "description": "Une configuration standard qui convient à toute entreprise. Aucune hypothèse sectorielle.",
+          "keywords": "commerce de détail, boutique, magasin, café, restaurant, bar, boulangerie, restauration, hôtellerie, salon, fitness, e-commerce, boutique en ligne, petite entreprise, indépendant, autre"
         },
         "construction_contractor": {
           "title": "Construction et métiers",
-          "description": "Entrepreneurs, artisans et constructeurs. Coûts de revient, facturation d'avancement, retenues de garantie et bons de chantier."
+          "description": "Entrepreneurs, artisans et constructeurs. Coûts de revient, facturation d'avancement, retenues de garantie et bons de chantier.",
+          "keywords": "entrepreneur, construction, bâtiment, rénovation, plomberie, électricité, CVC, toiture, paysagisme, artisan, sous-traitant"
         },
         "professional_services": {
           "title": "Services professionnels",
-          "description": "Consultants, agences et conseillers. Suivi du temps, rentabilité des projets et facturation au forfait et sur provision."
+          "description": "Consultants, agences et conseillers. Suivi du temps, rentabilité des projets et facturation au forfait et sur provision.",
+          "keywords": "conseil, consultant, agence, agence marketing, studio de design, cabinet d'avocats, avocat, coaching, recrutement, indépendant"
         },
         "engineering_architecture": {
           "title": "Ingénierie et architecture",
-          "description": "Bureaux d'études et firmes d'architecture. Structure de découpage (WBS), facturation par phase, coûts de matériel et facturation d'avancement."
+          "description": "Bureaux d'études et firmes d'architecture. Structure de découpage (WBS), facturation par phase, coûts de matériel et facturation d'avancement.",
+          "keywords": "ingénierie, ingénieur, architecte, architecture, géomètre, bureau d'études"
         },
         "it_software_saas": {
           "title": "Logiciels et SaaS",
-          "description": "Facturation d'abonnements, comptabilisation des revenus ASC 606 et suivi des produits différés."
+          "description": "Facturation d'abonnements, comptabilisation des revenus ASC 606 et suivi des produits différés.",
+          "keywords": "logiciel, SaaS, abonnement, application, technologie, startup, services informatiques, infogérance, produits numériques, adhésions"
         },
         "accounting_firm": {
           "title": "Cabinet comptable",
-          "description": "Cabinets d'expertise et de tenue comptable. Multiclients, comptabilité des fonds confiés et suivi des missions."
+          "description": "Cabinets d'expertise et de tenue comptable. Multiclients, comptabilité des fonds confiés et suivi des missions.",
+          "keywords": "comptable, tenue de livres, expert-comptable, cabinet comptable, préparateur fiscal, gestion de la paie"
         },
         "wholesale_distribution": {
           "title": "Commerce de gros et distribution",
-          "description": "Grossistes et distributeurs. Stocks, coûts rendus, réceptions non facturées (GRNI) et emplacements de stock."
+          "description": "Grossistes et distributeurs. Stocks, coûts rendus, réceptions non facturées (GRNI) et emplacements de stock.",
+          "keywords": "grossiste, distribution, distributeur, commerce de détail, e-commerce, boutique en ligne, vente en ligne, magasin, import, export, négoce, alimentation, boissons, café, vin, fournisseur, stock"
         },
         "property_management": {
           "title": "Gestion immobilière",
-          "description": "Portefeuilles locatifs et gestionnaires. Loyers récurrents, charges communes (CAM), dépôts de garantie et immobilisations."
+          "description": "Portefeuilles locatifs et gestionnaires. Loyers récurrents, charges communes (CAM), dépôts de garantie et immobilisations.",
+          "keywords": "immobilier, propriétaire, location, gestion locative, appartements, immobilier commercial, bail, copropriété"
         },
         "nonprofit": {
           "title": "Organisme sans but lucratif",
-          "description": "Organismes de bienfaisance et OSBL. Suivi des subventions, comptabilité par fonds, dons et actif net grevé d'affectations."
+          "description": "Organismes de bienfaisance et OSBL. Suivi des subventions, comptabilité par fonds, dons et actif net grevé d'affectations.",
+          "keywords": "association, fondation, ONG, église, club, organisme de bienfaisance, dons, subventions"
         },
         "manufacturing": {
           "title": "Fabrication",
-          "description": "Fabrication légère et discrète. Nomenclatures, matières premières, encours, produits finis et frais généraux."
+          "description": "Fabrication légère et discrète. Nomenclatures, matières premières, encours, produits finis et frais généraux.",
+          "keywords": "fabricant, production, usine, fabrication, production alimentaire, alimentation, boissons, torréfacteur, torréfaction, café, boulangerie, brasserie, domaine viticole, distillerie, artisanal, assemblage, transformation"
         },
         "healthcare_practice": {
           "title": "Cabinet de santé",
-          "description": "Cabinets médicaux et dentaires. Créances patients, fournitures médicales et équipement."
+          "description": "Cabinets médicaux et dentaires. Créances patients, fournitures médicales et équipement.",
+          "keywords": "médical, dentaire, clinique, médecin, dentiste, kinésithérapie, chiropracteur, vétérinaire, optométrie, thérapie, bien-être"
         }
       },
       "payroll": {
@@ -6087,6 +6105,11 @@
           "allRegions": "{components} · Impôt sur le revenu dans les {known} régions · Barèmes fiscaux {years}",
           "someRegions": "{components} · Impôt sur le revenu dans {supported} des {known} régions · Barèmes fiscaux {years}"
         }
+      },
+      "features": {
+        "title": "Choisissez vos fonctionnalités",
+        "description": "Activez ce que cette entreprise utilise. Une fonctionnalité dépendante se déverrouille dès que son parent est actif — les mêmes règles que dans Paramètres de l'entreprise → Fonctionnalités, où chaque choix reste modifiable.",
+        "tabsAria": "Catégories de fonctionnalités"
       }
     },
     "constructionRateEditor": {

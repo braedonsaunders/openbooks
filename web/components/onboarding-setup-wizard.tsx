@@ -6,7 +6,7 @@ import { INDUSTRIES } from '@/lib/industries'
 import { SetupWizard } from '@/app/(app)/admin/setup/wizard/SetupWizard'
 import type { Authz } from '@/lib/authz'
 import { setupLaunchActions } from '@/lib/setup-launch-actions'
-import { FEATURES, featureEnabled, resolvedFeatureState } from '@/lib/features'
+import { FEATURES, featureEnabled, featureTreeRows, resolvedFeatureState } from '@/lib/features'
 import { isBookStart, isCloseCadence, isComplexityLevel, isMonthlyActivityLevel, isTaxPosition, isTeamSize } from '@/lib/workspace-profile'
 import type { OnboardingOrg } from './onboarding-wizard'
 
@@ -35,6 +35,7 @@ export async function OnboardingSetupWizard({ authz, org: row }: { authz: Authz;
         fiscalYearStartMonth: typeof settings.fiscalYearStartMonth === 'number' ? settings.fiscalYearStartMonth : 1,
         timeZone: canonicalTimeZone(settings.timeZone) ?? null,
         industry: (settings.industry as string) ?? null,
+        featureSelection: storedProfile?.featureSelection === 'custom' ? 'custom' : 'industry',
         workspaceProfile: {
           teamSize: isTeamSize(storedProfile?.teamSize) ? storedProfile.teamSize : 'solo',
           complexity: isComplexityLevel(storedProfile?.complexity) ? storedProfile.complexity : 'essentials',
@@ -67,6 +68,7 @@ export async function OnboardingSetupWizard({ authz, org: row }: { authz: Authz;
       payrollPacks={installablePayrollPackSummaries()}
       timeZones={listCanonicalTimeZones()}
       countryTimeZones={countryTimeZoneDirectory(COUNTRY_CODES)}
+      featureRows={featureTreeRows()}
     />
   )
 }

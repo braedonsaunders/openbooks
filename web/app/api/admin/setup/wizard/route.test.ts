@@ -207,3 +207,55 @@ test('restricted actors cannot mutate setup wizard org settings', async () => {
   assert.deepEqual(await postResponse.json(), { error: 'requires unrestricted subsidiary access' })
   assert.deepEqual(routeState.queries, [], 'neither org settings write enters its transaction')
 })
+
+function storedSettings(): Record<string, unknown> {
+  const update = routeState.queries.find(({ text }) => text.includes('update orgs set'))
+  assert.ok(update, 'the org settings update should execute')
+  const json = update.values.find((value) => typeof value === 'string' && value.startsWith('{') && value.includes('"onboarding"'))
+  assert.ok(typeof json === 'string', 'the settings document is bound as JSON')
+  return JSON.parse(json) as Record<string, unknown>
+}
+
+test('choosing features individually requires the neutral chart and writes nothing otherwise', async () => {
+  reset()
+  const response = await PUT(new Request('http://openbooks.test/api/admin/setup/wizard', {
+    method: 'PUT',
+    body: JSON.stringify({ ...baseBody, name: 'Roastery', industry: 'manufacturing', featureSelection: 'custom' }),
+  }))
+  assert.equal(response.status, 422)
+  const body = await response.json() as { error: string; message: string }
+  assert.equal(body.error, 'custom-features-require-neutral-chart')
+  assert.match(body.message, /neutral General Business chart/)
+  assert.deepEqual(routeState.queries, [], 'a refused choice never opens the setup transaction')
+})
+
+test('individually chosen features are stored through the dependency rules and recorded as custom', async () => {
+  reset()
+  const response = await PUT(new Request('http://openbooks.test/api/admin/setup/wizard', {
+    method: 'PUT',
+    body: JSON.stringify({
+      ...baseBody,
+      name: 'Roastery',
+      featureSelection: 'custom',
+      // A dependent switched on without its requirement: the same refusal
+      // rules as the switchboard resolve it off.
+      features: { subscriptionBilling: false, saasMetrics: true },
+    }),
+  }))
+  assert.equal(response.status, 200)
+  const settings = storedSettings()
+  const features = settings.features as Record<string, boolean>
+  assert.equal(features.subscriptionBilling, false)
+  assert.equal(features.saasMetrics, false, 'a dependent of an off requirement is stored off')
+  assert.equal((settings.workspaceProfile as Record<string, unknown>).featureSelection, 'custom')
+})
+
+test('an industry preset run records its feature selection as industry', async () => {
+  reset()
+  const response = await PUT(new Request('http://openbooks.test/api/admin/setup/wizard', {
+    method: 'PUT',
+    body: JSON.stringify({ ...baseBody, name: 'Renamed Company' }),
+  }))
+  assert.equal(response.status, 200)
+  assert.equal((storedSettings().workspaceProfile as Record<string, unknown>).featureSelection, 'industry')
+})

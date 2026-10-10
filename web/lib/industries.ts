@@ -1,5 +1,6 @@
 import 'server-only'
 import { db, type SqlExecutor } from '@openbooks/engine/src/platform/db.ts'
+import { NEUTRAL_INDUSTRY_KEY } from './industry-keys'
 
 /**
  * Industry registry — the single source of truth for the vertical presets the
@@ -149,7 +150,7 @@ const fxAccounts = (): CoaAccount[] => [
 export const INDUSTRIES: IndustryDef[] = [
   // ── General Business ──────────────────────────────────────────────────
   {
-    key: 'general_business',
+    key: NEUTRAL_INDUSTRY_KEY,
     icon: 'Building2',
     category: 'general',
     features: {},

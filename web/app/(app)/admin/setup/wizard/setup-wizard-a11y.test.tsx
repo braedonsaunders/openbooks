@@ -96,6 +96,24 @@ const TOGGLES = {
   payroll: false,
 };
 
+// The registry tree for the toggled keys, with Field Tickets nested under
+// Projects as the real registry declares it.
+const FEATURE_ROWS = [
+  { key: "multiSubsidiary", category: "finance" },
+  { key: "multiCurrency", category: "finance" },
+  { key: "bankFeeds", category: "finance" },
+  { key: "fixedAssets", category: "finance" },
+  { key: "crm", category: "sales" },
+  { key: "orders", category: "sales" },
+  { key: "subscriptionBilling", category: "billing" },
+  { key: "onlinePayments", category: "billing" },
+  { key: "inventory", category: "inventory" },
+  { key: "projects", category: "projects" },
+  { key: "timeTracking", category: "projects", parentKey: "projects" },
+  { key: "fieldTickets", category: "projects", parentKey: "projects" },
+  { key: "payroll", category: "people", recommends: ["timeTracking"] },
+];
+
 function mount() {
   globalThis.__wizardToasts = [];
   globalThis.__wizardRouter = { push() {}, refresh() {} };
@@ -144,6 +162,7 @@ async function renderWizard(
           payrollPacks={[]}
           timeZones={["UTC", "America/Toronto"]}
           countryTimeZones={{}}
+          featureRows={FEATURE_ROWS}
           {...overrides}
         />
       </NextIntlClientProvider>,
@@ -485,4 +504,103 @@ test("optional industry data installs a separate workspace and offers direct ent
   assert.match(enter.textContent ?? '', /sample|demo|Explore/i);
   assert.equal(buttonsNamed(enter.textContent!.trim()).length, 1, 'completion offers one demo entry action');
   assert.ok(buttonsNamed('Create your first invoice')[0], 'the live-company next action remains available');
+});
+
+const switchNamed = (label: string) =>
+  document.querySelector(`button[role="switch"][aria-label="${label}"]`) as HTMLButtonElement | null;
+
+async function click(element: Element) {
+  await act(async () => {
+    element.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+  });
+  await tick();
+}
+
+/** When no industry fits, the operator picks features on the same
+ *  switchboard as Company Settings → Features: children hide and lock behind
+ *  their parent, and what is applied is the resolved state on the neutral
+ *  chart. */
+test("none-of-these-fit picks features on the switchboard with parent rules enforced", async (t) => {
+  const { host, root } = mount();
+  const seen: { url: string; method: string; body: unknown }[] = [];
+  const prior = globalThis.fetch;
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    seen.push({ url: String(input), method: (init?.method ?? "GET").toUpperCase(), body: init?.body ? JSON.parse(String(init.body)) : null });
+    return Response.json({ ok: true });
+  }) as typeof fetch;
+  t.after(async () => {
+    globalThis.fetch = prior;
+    await act(async () => {
+      root.unmount();
+    });
+    host.remove();
+  });
+  await renderWizard(host, root);
+  await cont(); // welcome → company
+  await cont(); // company → industry
+  const custom = [...document.querySelectorAll("button[aria-pressed]")].find((button) =>
+    button.textContent?.includes("None of these fit"),
+  ) as HTMLButtonElement;
+  assert.ok(custom, "the industry step offers a pick-my-own-features choice");
+  await click(custom);
+  assert.equal(custom.getAttribute("aria-pressed"), "true");
+  await cont(); // industry → profile
+  await cont(); // profile → features (the switchboard replaces Operations)
+  assert.match(document.body.textContent ?? "", /Choose your features/);
+  const projectsTab = [...document.querySelectorAll('button[role="tab"]')].find((tab) => tab.textContent?.startsWith("Projects"))!;
+  await click(projectsTab);
+  const projects = switchNamed("Projects & job costing");
+  assert.ok(projects, "the Projects row renders");
+  assert.equal(projects.getAttribute("aria-checked"), "false");
+  assert.equal(switchNamed("Field tickets"), null, "a child stays hidden while its parent is off");
+  await click(projects);
+  const fieldTickets = switchNamed("Field tickets");
+  assert.ok(fieldTickets && !fieldTickets.disabled, "turning the parent on reveals its children");
+  await click(fieldTickets);
+  assert.equal(switchNamed("Field tickets")?.getAttribute("aria-checked"), "true");
+  await click(switchNamed("Projects & job costing")!);
+  assert.equal(switchNamed("Field tickets"), null, "turning the parent off hides the child again");
+  await cont(); // features → launch
+  await cont(); // launch → review
+  assert.match(document.body.textContent ?? "", /None — features chosen individually/);
+  await click(buttonsNamed("Set up my books")[0]!);
+  await tick(STEP_WAIT);
+  await tick(STEP_WAIT);
+  const put = seen.find((request) => request.method === "PUT");
+  assert.ok(put, "applying writes the setup");
+  const body = put.body as { industry: string; featureSelection: string; features: Record<string, boolean> };
+  assert.equal(body.industry, "general_business", "the neutral base chart is installed");
+  assert.equal(body.featureSelection, "custom");
+  assert.equal(body.features.projects, false);
+  assert.equal(body.features.fieldTickets, false, "a child of an off parent is applied off");
+});
+
+test("industry search finds the nearest templates by everyday words and offers the custom path on a miss", async (t) => {
+  const { host, root } = mount();
+  t.after(async () => {
+    await act(async () => {
+      root.unmount();
+    });
+    host.remove();
+  });
+  await renderWizard(host, root);
+  await cont(); // welcome → company
+  await cont(); // company → industry
+  const search = document.querySelector('input[type="text"]') as HTMLInputElement;
+  const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")!.set!;
+  const type = async (value: string) => {
+    await act(async () => {
+      setter.call(search, value);
+      search.dispatchEvent(new window.Event("input", { bubbles: true }));
+    });
+    await tick();
+  };
+  const cards = () => [...document.querySelectorAll("button[aria-pressed]")].map((button) => button.textContent ?? "");
+  await type("beverage");
+  assert.ok(cards().some((text) => text.includes("Manufacturing")), "beverage reaches Manufacturing");
+  await type("café");
+  assert.ok(cards().some((text) => text.includes("General Business")), "café reaches General Business");
+  await type("zzzz-nothing");
+  assert.match(document.body.textContent ?? "", /No industry template matches/);
+  assert.ok(cards().some((text) => text.includes("None of these fit")), "the custom path stays available on a miss");
 });

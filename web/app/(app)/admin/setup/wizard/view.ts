@@ -5,7 +5,7 @@ import { db } from '@openbooks/engine/src/platform/db.ts'
 import { page, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
 import { requirePermission } from '../../../../../lib/authz'
 import { INDUSTRIES, canSwitchIndustry } from '../../../../../lib/industries'
-import { FEATURES, featureEnabled, resolvedFeatureState } from '../../../../../lib/features'
+import { FEATURES, featureEnabled, featureTreeRows, resolvedFeatureState } from '../../../../../lib/features'
 import {
   isBookStart,
   isCloseCadence,
@@ -64,6 +64,8 @@ export interface WizardData {
   timeZones: string[]
   /** Zones and representative zone per country. */
   countryTimeZones: SetupWizardProps['countryTimeZones']
+  /** The feature registry tree for the pick-your-own-features step. */
+  featureRows: SetupWizardProps['featureRows']
 }
 
 export async function loadWizard(): Promise<WizardData> {
@@ -90,6 +92,7 @@ export async function loadWizard(): Promise<WizardData> {
     payrollPacks: installablePayrollPackSummaries(),
     timeZones: listCanonicalTimeZones(),
     countryTimeZones: countryTimeZoneDirectory(COUNTRY_CODES),
+    featureRows: featureTreeRows(),
     initial: {
       name: row?.name ?? '',
       legalName: row?.legal_name ?? '',
@@ -98,6 +101,7 @@ export async function loadWizard(): Promise<WizardData> {
       fiscalYearStartMonth: typeof settings.fiscalYearStartMonth === 'number' ? settings.fiscalYearStartMonth : 1,
       timeZone: canonicalTimeZone(settings.timeZone) ?? null,
       industry: (settings.industry as string) ?? null,
+      featureSelection: storedProfile?.featureSelection === 'custom' ? 'custom' : 'industry',
       workspaceProfile: {
         teamSize: isTeamSize(storedProfile?.teamSize) ? storedProfile.teamSize : 'solo',
         complexity: isComplexityLevel(storedProfile?.complexity) ? storedProfile.complexity : 'essentials',
@@ -152,6 +156,7 @@ export function wizardSpec(data: WizardData): PageSpec {
         payrollPacks: data.payrollPacks,
         timeZones: data.timeZones,
         countryTimeZones: data.countryTimeZones,
+        featureRows: data.featureRows,
       }),
     ],
   })
