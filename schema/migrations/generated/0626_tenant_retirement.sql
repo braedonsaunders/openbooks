@@ -864,18 +864,18 @@ END $$;
 CREATE FUNCTION tenant_retirement.openbooks_retirement_catalog_digest() RETURNS text
 LANGUAGE sql STABLE SECURITY DEFINER SET search_path=pg_catalog,public AS $$
  SELECT encode(public.digest(coalesce(string_agg(evidence,E'\n' ORDER BY evidence),''),'sha256'),'hex') FROM (
- SELECT 'column:'||c.relname||':'||a.attnum||':'||a.attname||':'||format_type(a.atttypid,a.atttypmod)||':'||a.attnotnull||':'||a.attidentity||':'||a.attgenerated||':'||coalesce(pg_get_expr(d.adbin,d.adrelid),'') AS evidence
+ SELECT 'column:'||c.relname||':'||a.attnum||':'||a.attname||':'||format_type(a.atttypid,a.atttypmod)||':'||a.attnotnull||':'||a.attidentity::text||':'||a.attgenerated::text||':'||coalesce(pg_get_expr(d.adbin,d.adrelid),'') AS evidence
  FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace JOIN pg_attribute a ON a.attrelid=c.oid AND a.attnum>0 AND NOT a.attisdropped LEFT JOIN pg_attrdef d ON d.adrelid=c.oid AND d.adnum=a.attnum
  WHERE n.nspname IN ('public','tenant_retirement') AND c.relkind IN ('r','p')
  UNION ALL SELECT 'relation:'||n.nspname||'.'||c.relname||':'||c.relowner::regrole::text||':'||coalesce(c.relacl::text,'')||':'||c.relrowsecurity||':'||c.relforcerowsecurity
  FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname IN ('public','tenant_retirement') AND c.relkind IN ('r','p')
  UNION ALL SELECT 'index:'||n.nspname||'.'||c.relname||':'||pg_get_indexdef(i.indexrelid)
  FROM pg_index i JOIN pg_class c ON c.oid=i.indrelid JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname IN ('public','tenant_retirement')
- UNION ALL SELECT 'policy:'||c.relname||':'||p.polname||':'||p.polroles::text||':'||p.polcmd||':'||coalesce(pg_get_expr(p.polqual,p.polrelid),'')||':'||coalesce(pg_get_expr(p.polwithcheck,p.polrelid),'')
+ UNION ALL SELECT 'policy:'||c.relname||':'||p.polname||':'||p.polroles::text||':'||p.polcmd::text||':'||coalesce(pg_get_expr(p.polqual,p.polrelid),'')||':'||coalesce(pg_get_expr(p.polwithcheck,p.polrelid),'')
  FROM pg_policy p JOIN pg_class c ON c.oid=p.polrelid JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname IN ('public','tenant_retirement')
  UNION ALL SELECT 'constraint:'||c.relname||':'||k.conname||':'||pg_get_constraintdef(k.oid)
  FROM pg_constraint k JOIN pg_class c ON c.oid=k.conrelid JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname IN ('public','tenant_retirement')
- UNION ALL SELECT 'trigger:'||c.relname||':'||t.tgname||':'||t.tgenabled||':'||pg_get_triggerdef(t.oid)||':'||pg_get_functiondef(t.tgfoid)
+ UNION ALL SELECT 'trigger:'||c.relname||':'||t.tgname||':'||t.tgenabled::text||':'||pg_get_triggerdef(t.oid)||':'||pg_get_functiondef(t.tgfoid)
  FROM pg_trigger t JOIN pg_class c ON c.oid=t.tgrelid JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='public' AND NOT t.tgisinternal
  UNION ALL SELECT 'function:'||p.oid::regprocedure::text||':'||p.proowner::regrole::text||':'||coalesce(p.proacl::text,'')||':'||pg_get_functiondef(p.oid)
  FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='tenant_retirement'
