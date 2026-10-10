@@ -59,6 +59,8 @@ export const INBOX_FILTER_KINDS: Record<string, InboxKind[]> = {
     // in the checks queue and the ledger behind the subject hrefs.
     "payroll_anomaly_block",
     "ai_capability_review",
+    // Period reopen requests awaiting an independent close.reopen approver.
+    "close_reopen_request",
   ],
   signatures: ["field_ticket_signature", "document_signature"],
   notices: ["notification"],

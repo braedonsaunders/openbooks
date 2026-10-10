@@ -38,7 +38,8 @@
     "ai_capability_review": "AIレビュー",
     "notification": "通知",
     "hrm_feedback_request": "フィードバック依頼",
-    "crew_time_batch": "クルー作業時間"
+    "crew_time_batch": "クルー作業時間",
+    "close_reopen_request": "期間の再オープン"
   },
   "emptyTitle": "すべて完了",
   "emptyDescription": "今あなたを待つものはありません。",

@@ -369,5 +369,32 @@
     "terminationCost": "裏付けのある解除原価",
     "assetsReviewed": "関連資産を確認し、必要な減損を転記しましたか？",
     "impairmentEvidence": "関連資産の減損確認証拠"
+  },
+  "reopenRequests": {
+    "title": "期間再オープン申請",
+    "description": "締め済み期間の再オープン申請です。申請者以外で再オープン権限を持つ人が各申請を承認または却下します。",
+    "empty": "再オープン申請はまだありません。",
+    "ownRequest": "この申請はあなたが行いました。別の承認者が判断する必要があります。",
+    "approve": "承認",
+    "reject": "却下",
+    "approved": "再オープンを承認しました。",
+    "rejected": "再オープンを却下しました。",
+    "decideFailed": "再オープン申請を処理できませんでした。",
+    "scopedApprover": "期間の再オープンは組織全体の締めに影響するため、すべての子会社を対象とするロールを持つ承認者が判断します。ロールの子会社アクセスを広げるか、その権限を持つ承認者に申請を回すよう管理者に依頼してください。",
+    "columns": {
+      "period": "期間",
+      "scope": "帳簿と事業体",
+      "modules": "モジュール",
+      "reason": "理由",
+      "requestedBy": "申請者",
+      "status": "ステータス"
+    },
+    "status": {
+      "requested": "承認待ち",
+      "approved": "承認済み",
+      "rejected": "却下",
+      "expired": "期限切れ",
+      "reclosed": "再締め済み"
+    }
   }
 }

@@ -181,7 +181,7 @@ export async function listPeriodReopenRequests(
   if (input.periodId) where = sql`${where} and r.period_id = ${input.periodId}`;
   const [rows, count] = await Promise.all([
     db.execute<Record<string, unknown>>(sql`
-      select r.id, r.modules, r.reason, r.status, r.expires_at, r.reclosed_at, r.created_at,
+      select r.id, r.modules, r.reason, r.status, r.expires_at, r.reclosed_at, r.created_at, r.requested_by,
              p.name as period_name, b.name as book_name, b.code as book_code,
              s.name as subsidiary_name,
              req.name as requested_by_name, app.name as approved_by_name, r.approved_at
@@ -209,6 +209,7 @@ export async function listPeriodReopenRequests(
       reason: row.reason,
       status: row.status,
       requestedBy: row.requested_by_name,
+      requestedById: row.requested_by,
       approvedBy: row.approved_by_name,
       approvedAt: row.approved_at,
       expiresAt: row.expires_at,

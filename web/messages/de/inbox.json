@@ -38,7 +38,8 @@
     "ai_capability_review": "KI-Prüfung",
     "notification": "Benachrichtigung",
     "hrm_feedback_request": "Feedback-Anfrage",
-    "crew_time_batch": "Teamzeiten"
+    "crew_time_batch": "Teamzeiten",
+    "close_reopen_request": "Periodenwiedereröffnung"
   },
   "emptyTitle": "Alles erledigt",
   "emptyDescription": "Im Moment wartet nichts auf Sie.",

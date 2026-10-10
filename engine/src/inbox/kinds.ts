@@ -16,6 +16,7 @@ export const INBOX_KINDS = [
   "document_signature",
   "payroll_anomaly_block",
   "ai_capability_review",
+  "close_reopen_request",
 ] as const;
 
 export type InboxKind = (typeof INBOX_KINDS)[number];

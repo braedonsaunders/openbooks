@@ -38,7 +38,8 @@
     "ai_capability_review": "Revue IA",
     "notification": "Notification",
     "hrm_feedback_request": "Demande de rétroaction",
-    "crew_time_batch": "Temps d'équipe"
+    "crew_time_batch": "Temps d'équipe",
+    "close_reopen_request": "Réouverture de période"
   },
   "emptyTitle": "Tout est à jour",
   "emptyDescription": "Rien ne vous attend pour le moment.",

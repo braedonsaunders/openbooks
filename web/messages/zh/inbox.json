@@ -38,7 +38,8 @@
     "ai_capability_review": "AI 评审",
     "notification": "通知",
     "hrm_feedback_request": "反馈请求",
-    "crew_time_batch": "班组工时"
+    "crew_time_batch": "班组工时",
+    "close_reopen_request": "期间重新打开"
   },
   "emptyTitle": "全部完成",
   "emptyDescription": "当前没有等待您处理的事项。",

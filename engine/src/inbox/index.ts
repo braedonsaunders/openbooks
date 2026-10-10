@@ -24,6 +24,7 @@ import { timesheetWeekAdapter } from "./adapters/timesheet-week.ts";
 // HR-20 begin
 import { crewTimeBatchAdapter } from "./adapters/crew-time-batch.ts";
 // HR-20 end
+import { closeReopenRequestAdapter } from "./adapters/close-reopen-request.ts";
 import { registerInboxAdapter } from "./registry.ts";
 
 registerInboxAdapter(flowsApprovalAdapter);
@@ -47,6 +48,8 @@ registerInboxAdapter(documentSignatureAdapter);
 // HR-21: blocking payroll checks and overdue capability reviews.
 registerInboxAdapter(payrollAnomalyBlockAdapter);
 registerInboxAdapter(aiCapabilityReviewAdapter);
+// Period reopen requests reach independent approvers holding close.reopen.
+registerInboxAdapter(closeReopenRequestAdapter);
 
 export { actOnInboxItem, countInbox, InboxError, listInbox, type InboxSourceNotice } from "./registry.ts";
 export { markNotificationsRead, writeNotification, type NotificationWrite } from "./adapters/notification.ts";

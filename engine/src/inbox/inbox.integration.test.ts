@@ -521,3 +521,28 @@ test("an unsubmitted own week opens that week's timesheet, not the bare list", {
     await dropScratchOrg(org.orgId);
   }
 });
+
+test("a period reopen request reaches an independent close.reopen holder's inbox, never the requester's", { skip: !DB }, async () => {
+  const org: ScratchOrg = await createScratchOrg();
+  try {
+    const requesterId = await createScratchUser(org.orgId, "Reopen Requester", "reopen_requester");
+    const approverId = await createScratchUser(org.orgId, "Reopen Approver", "reopen_approver");
+    const bystanderId = await createScratchUser(org.orgId, "Reopen Bystander", "reopen_bystander");
+    await grant(org.orgId, requesterId, ["close.reopen"]);
+    await grant(org.orgId, approverId, ["close.reopen"]);
+    const requestId = randomUUID();
+    await db.execute(sql`
+      insert into close_reopen_requests
+        (id, org_id, period_id, book_id, modules, reason, impact_snapshot, requested_by, created_by, updated_by)
+      values (${requestId}, ${org.orgId}, ${org.periodId}, ${org.bookId}, '["gl"]'::jsonb, 'Late vendor credit',
+              '{}'::jsonb, ${requesterId}, ${requesterId}, ${requesterId})`);
+    const read = (actorId: string) => listInbox({ orgId: org.orgId, actorId, asOf: nowIso() }, { kinds: ["close_reopen_request"] });
+    const approverItems = await read(approverId);
+    assert.deepEqual(approverItems.map((item) => item.source.id), [requestId], "the independent approver is asked");
+    assert.deepEqual(await read(requesterId), [], "the requester is never asked to approve their own request");
+    assert.deepEqual(await read(bystanderId), [], "nobody without close.reopen is asked");
+    assert.ok(approverItems[0]!.actions.some((action) => action.key === "approve"));
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});

@@ -165,7 +165,8 @@
     "manufacturing-routings": "工艺路线与版本",
     "manufacturing-mrp": "MRP运行",
     "manufacturing-time": "生产工时",
-    "manufacturing-quality": "质量"
+    "manufacturing-quality": "质量",
+    "close-reopen-requests": "重新打开申请"
   },
   "groups": {
     "manufacturing": "制造",

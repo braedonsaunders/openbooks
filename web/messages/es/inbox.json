@@ -38,7 +38,8 @@
     "ai_capability_review": "Revisión de IA",
     "notification": "Notificación",
     "hrm_feedback_request": "Solicitud de comentarios",
-    "crew_time_batch": "Tiempo de cuadrilla"
+    "crew_time_batch": "Tiempo de cuadrilla",
+    "close_reopen_request": "Reapertura de período"
   },
   "emptyTitle": "Todo al día",
   "emptyDescription": "Nada le espera ahora mismo.",

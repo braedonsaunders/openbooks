@@ -369,5 +369,32 @@
     "terminationCost": "有依据的终止成本",
     "assetsReviewed": "是否已审核相关资产并过账必要减值？",
     "impairmentEvidence": "相关资产减值审核证据"
+  },
+  "reopenRequests": {
+    "title": "期间重新打开申请",
+    "description": "重新打开已结账期间的申请。由申请人以外、拥有重新打开权限的人员批准或拒绝每项申请。",
+    "empty": "尚未提交任何重新打开申请。",
+    "ownRequest": "此申请由您提交——必须由其他审批人决定。",
+    "approve": "批准",
+    "reject": "拒绝",
+    "approved": "已批准重新打开。",
+    "rejected": "已拒绝重新打开。",
+    "decideFailed": "无法处理该重新打开申请。",
+    "scopedApprover": "重新打开期间会影响整个组织的结账，因此由角色覆盖所有子公司的审批人决定。请让管理员扩大您角色的子公司访问权限，或将申请转给具备该权限的审批人。",
+    "columns": {
+      "period": "期间",
+      "scope": "账簿和实体",
+      "modules": "模块",
+      "reason": "原因",
+      "requestedBy": "申请人",
+      "status": "状态"
+    },
+    "status": {
+      "requested": "待批准",
+      "approved": "已批准",
+      "rejected": "已拒绝",
+      "expired": "已过期",
+      "reclosed": "已重新结账"
+    }
   }
 }

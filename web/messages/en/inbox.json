@@ -38,7 +38,8 @@
     "ai_capability_review": "AI review",
     "notification": "Notification",
     "hrm_feedback_request": "Feedback request",
-    "crew_time_batch": "Crew time"
+    "crew_time_batch": "Crew time",
+    "close_reopen_request": "Period reopen"
   },
   "emptyTitle": "All clear",
   "emptyDescription": "Nothing waits on you right now.",
