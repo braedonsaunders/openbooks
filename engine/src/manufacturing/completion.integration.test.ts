@@ -606,7 +606,8 @@ cases.push({ name: "native workspace uses organization item identity and current
   await run(tx => upsertItemPolicy(tx, f.org.orgId, f.actorId, f.org.items.standard, {
     supplyMethod: "buy", leadTimeDays: 1, safetyStockQty: "0", minimumQty: "0", orderMultipleQty: "0", scrapPctPlanned: "0",
   }));
-  const mrp = await run(tx => runMrp(tx, f.org.orgId, f.actorId, { subsidiaryId: f.org.subsidiaryId, horizonDays: 30, capacityCheck: true }));
+  // This caller exercises the run's legal-entity read fence; capacity calendars belong to the capacity cases.
+  const mrp = await run(tx => runMrp(tx, f.org.orgId, f.actorId, { subsidiaryId: f.org.subsidiaryId, horizonDays: 30, capacityCheck: false }));
   assert.equal((await run(tx => listManufacturingRecords(tx, f.org.orgId, allowed, "mrp"))).rows[0]?.id, mrp.id);
   assert.equal((await run(tx => readManufacturingRecord(tx, f.org.orgId, allowed, "mrp", mrp.id))).record.id, mrp.id);
   await denied(run(tx => readManufacturingRecord(tx, f.org.orgId, new Set([otherEntity]), "mrp", mrp.id)));
