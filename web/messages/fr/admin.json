@@ -457,7 +457,8 @@
       "subsidiaryRequired": "Choisissez une filiale",
       "subsidiaryListRequired": "Sélectionnez au moins une filiale",
       "inactivePermissions": "Permissions d’application inactives",
-      "permissionsLoadFailed": "Impossible de charger les permissions d’application"
+      "permissionsLoadFailed": "Impossible de charger les permissions d’application",
+      "saveNotConfirmed": "Le serveur n’a pas confirmé l’enregistrement de toutes les modifications d’autorisations. Rouvrez le rôle pour voir ses autorisations actuelles, puis appliquez de nouveau vos modifications."
     }
   },
   "scripts": {

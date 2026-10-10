@@ -27,7 +27,14 @@ const roleWriteFields = {
   subsidiaryRestriction: z.json().optional(),
 };
 const createRoleBodySchema = z.object({ ...roleWriteFields, name: z.string().trim().min(1).max(200) });
-const updateRoleBodySchema = z.object({ id: z.string().uuid(), ...roleWriteFields });
+const updateRoleBodySchema = z.object({
+  id: z.string().uuid(),
+  ...roleWriteFields,
+  // Concurrency token: the role version the editor opened. A stale editor
+  // must refuse rather than overwrite a newer permission set with its
+  // older snapshot.
+  expectedUpdatedAt: z.string().min(1).max(64).optional(),
+});
 const deleteRoleBodySchema = z.object({ id: z.string().uuid(), replacementRoleId: z.string().uuid().optional() });
 
 
@@ -321,12 +328,19 @@ export const PATCH = defineRoute({
     return withOrgTransaction(actor.orgId, () => withTransactionSavepoint(db, async () => {
       await db.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`extension-projections:${actor.orgId}`}, 0))`);
       const existing = ((await db.execute(sql`
-        select id, key, name, description, is_built_in, permissions, subsidiary_restriction
+        select id, key, name, description, is_built_in, permissions, subsidiary_restriction,
+               updated_at::text as updated_at_token
           from app_roles where id = ${id} and org_id = ${actor.orgId} for update`)));
       const role = existing.rows[0];
       if (!role) return NextResponse.json({ error: "role not found" }, { status: 404 });
       if (role.is_built_in && role.key === "admin") {
         return NextResponse.json({ error: "the Administrator role cannot be edited" }, { status: 403 });
+      }
+      if (body.expectedUpdatedAt !== undefined && body.expectedUpdatedAt !== role.updated_at_token) {
+        return NextResponse.json(
+          { error: "this role changed after you opened it — reopen it to see its current permissions, then apply your changes again" },
+          { status: 409 },
+        );
       }
 
       const changes: Record<string, unknown> = {};
@@ -438,12 +452,26 @@ export const PATCH = defineRoute({
         return NextResponse.json({ error: "nothing to update" }, { status: 400 });
       }
 
-      await db.execute(sql`
+      // The whole edit is one row write: every permission added or removed
+      // lands together or not at all. A write matching no row is a failure,
+      // and the stored set is read back so success is the persisted state,
+      // never the request.
+      const updated = await db.execute<{ permissions: unknown; updated_at_token: string }>(sql`
         update app_roles
-           set ${sql.join(sets, sql`, `)}, updated_at = now(), updated_by = ${actor.id}
-         where id = ${id} and org_id = ${actor.orgId}`);
+           set ${sql.join(sets, sql`, `)}, updated_at = clock_timestamp(), updated_by = ${actor.id}
+         where id = ${id} and org_id = ${actor.orgId}
+        returning permissions, updated_at::text as updated_at_token`);
+      const stored = updated.rows[0];
+      if (!stored) throw new Error(`role ${id} update matched no row`);
+      const persisted = rolePermissionList(stored.permissions);
+      if (Array.isArray(changes.permissions)) {
+        const intended = changes.permissions[1] as string[];
+        if (persisted.length !== intended.length || intended.some((key) => !persisted.includes(key))) {
+          throw new Error(`role ${id} permissions did not persist as written`);
+        }
+      }
       await audit({ orgId: actor.orgId, rowId: id, action: "update", changes, actorId: actor.id });
-      return NextResponse.json({ ok: true });
+      return NextResponse.json({ ok: true, role: { id, permissions: persisted, updatedAt: stored.updated_at_token } });
     }));
   },
 });

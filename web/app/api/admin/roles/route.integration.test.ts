@@ -167,6 +167,37 @@ test("ID2: a role may only be created, or grow, inside the actor's own permissio
   }
 });
 
+test("a multi-group permission edit persists every change in one audited write, and a stale editor refuses", async () => {
+  const f = await seed(["admin.roles.manage", "gl.*", "ap.*", "ar.*", "items.*", "projects.*", "time.*", "reports.*"]);
+  try {
+    const original = ["gl.read", "ap.read", "ar.read", "items.read", "projects.read"];
+    const id = await createRole(f.orgId, "field_lead", original);
+    const opened = (await db.execute<{ token: string }>(sql`select updated_at::text as token from app_roles where id = ${id}`)).rows[0]!.token;
+    const added = ["gl.post", "ap.create", "ap.approve", "ar.create", "items.manage", "projects.manage", "time.read", "time.manage", "time.approve", "reports.read"];
+    const next = [...original.filter((key) => key !== "items.read"), ...added];
+    const response = await call("PATCH", { id, permissions: next, expectedUpdatedAt: opened });
+    assert.equal(response.status, 200);
+    const body = (await response.json()) as { role: { permissions: string[]; updatedAt: string } };
+    assert.deepEqual([...body.role.permissions].sort(), [...next].sort(), "the response is the persisted set");
+    assert.deepEqual([...await rolePermissions(id)].sort(), [...next].sort(), "every added and removed key across groups is stored");
+    assert.notEqual(body.role.updatedAt, opened, "the version token advances");
+    const audit = (await db.execute<{ changes: { permissions: [string[], string[]] } }>(sql`
+      select changes from audit_log where org_id = ${f.orgId} and table_name = 'app_roles' and row_id = ${id} and action = 'update'`)).rows;
+    assert.equal(audit.length, 1, "one audit row for the one write");
+    assert.deepEqual([...audit[0]!.changes.permissions[0]].sort(), [...original].sort());
+    assert.deepEqual([...audit[0]!.changes.permissions[1]].sort(), [...next].sort());
+
+    // An editor still holding the pre-save snapshot cannot write it back.
+    const stale = await call("PATCH", { id, permissions: original, expectedUpdatedAt: opened });
+    assert.equal(stale.status, 409);
+    assert.match(((await stale.json()) as { error: string }).error, /changed after you opened it/);
+    assert.deepEqual([...await rolePermissions(id)].sort(), [...next].sort(), "the stale save changed nothing");
+  } finally {
+    routeState.authz = null;
+    await dropScratchOrg(f.orgId);
+  }
+});
+
 test("ID3: deleting a role refuses to strand an active user, reassigns on request, and audits every assignment", async () => {
   const f = await seed(["admin.roles.manage", "gl.read", "ap.read"]);
   try {

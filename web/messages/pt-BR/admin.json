@@ -457,7 +457,8 @@
       "subsidiaryRequired": "Escolha uma subsidiária",
       "subsidiaryListRequired": "Selecione ao menos uma subsidiária",
       "permissionsLoadFailed": "Não foi possível carregar as permissões do app",
-      "inactivePermissions": "Permissões inativas do app"
+      "inactivePermissions": "Permissões inativas do app",
+      "saveNotConfirmed": "O servidor não confirmou que todas as alterações de permissões foram salvas. Reabra a função para ver as permissões atuais e aplique suas alterações novamente."
     }
   },
   "scripts": {
