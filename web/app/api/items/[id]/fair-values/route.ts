@@ -1,5 +1,5 @@
 import { defineRoute } from "@/lib/api/route";
-import { exactMoney, uuidId } from "@/lib/api/json";
+import { exactMoney, uuidId, nullableExactMoney } from "@/lib/api/json";
 import { z } from 'zod'
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
@@ -16,7 +16,7 @@ import { notFound } from "@/lib/api/responses";
 const itemParams = z.object({ id: uuidId })
 const fairValueCreateBody = z.object({
   currency: z.string().trim().toUpperCase().regex(/^[A-Z]{3}$/), unitPrice: exactMoney(),
-  lowValue: z.union([exactMoney(), z.null()]).optional(), highValue: z.union([exactMoney(), z.null()]).optional(),
+  lowValue: nullableExactMoney().optional(), highValue: nullableExactMoney().optional(),
   effectiveFrom: z.string().nullable().optional(), effectiveTo: z.string().nullable().optional(), isActive: z.boolean().optional(),
 })
 const fairValueUpdateBody = fairValueCreateBody.extend({ id: uuidId })

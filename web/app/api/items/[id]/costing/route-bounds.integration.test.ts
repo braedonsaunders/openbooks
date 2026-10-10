@@ -120,3 +120,28 @@ test("costing still saves an ordinary standard cost", async () => {
     await dropScratchOrg(fx.orgId);
   }
 });
+
+test("costing saves the editor's blank optional accounts and decimals as unset", async () => {
+  const fx = await fixture();
+  try {
+    const before = await profile(fx);
+    // The costing editor posts every field; unset choices arrive as "".
+    const response = await call(PUT, fx.itemId, {
+      ...putBody(fx, before.updated_at, "118"),
+      abcClass: null,
+      adjustmentAccountId: "",
+      varianceAccountId: "",
+      receivedNotBilledAccountId: "",
+      reorderPoint: "5",
+      preferredStockLevel: "",
+      provisionalUnitCost: "",
+      allowNegativeInventory: false,
+      negativeCostBasis: "last_receipt",
+    });
+    assert.equal(response.status, 200, JSON.stringify(await response.json().catch(() => null)));
+    const after = await profile(fx);
+    assert.ok(Number(after.standard_cost) === 118, `standard cost not saved: ${after.standard_cost}`);
+  } finally {
+    await dropScratchOrg(fx.orgId);
+  }
+});

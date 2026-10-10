@@ -1,5 +1,5 @@
 import { defineRoute } from "@/lib/api/route";
-import { exactMoney, nullableUuidId } from "@/lib/api/json";
+import { nullableUuidId, nullableExactMoney } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { z } from 'zod'
@@ -38,7 +38,7 @@ const projectPatchSchema = z.object({
   }).nullable().optional(),
   customerPoNumber: z.string().nullable().optional(), startsOn: z.string().nullable().optional(),
   endsOn: z.string().nullable().optional(), notes: z.string().nullable().optional(),
-  siteJurisdiction: z.string().nullable().optional(), contractValue: z.union([exactMoney(), z.null()]).optional(),
+  siteJurisdiction: z.string().nullable().optional(), contractValue: nullableExactMoney().optional(),
   custom: z.record(z.string(), z.json()).optional(), subsidiaryId: nullableUuidId.optional(),
   subsidiaryIncludeChildren: z.boolean().optional(), isActive: z.boolean().optional(), tasks: z.never().optional(),
 }).strict().refine((body) => Object.keys(body).length > 0, { message: "At least one field must be provided." })

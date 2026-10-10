@@ -30,6 +30,15 @@ export function exactMoney(message = "must be a decimal string; JSON numbers are
     );
 }
 
+/** Optional money on setup forms: null or a blank form value clears it; any
+ *  other value must be an exact decimal string. */
+export function nullableExactMoney(message?: string) {
+  return z.preprocess(
+    (v) => (typeof v === "string" && v.trim() === "" ? null : v),
+    z.union([z.null(), exactMoney(message)]),
+  );
+}
+
 function toExactMoney(v: unknown): string | null {
   if (typeof v !== "string") return null;
   const exact = canonicalDecimal(v, 4);

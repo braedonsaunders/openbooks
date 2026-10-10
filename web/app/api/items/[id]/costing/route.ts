@@ -1,6 +1,6 @@
 import { apiErrorResponse } from '@/lib/api/error-response'
 import { defineRoute } from "@/lib/api/route";
-import { exactMoney, nullableUuidId, uuidId } from "@/lib/api/json";
+import { nullableUuidId, uuidId, nullableExactMoney } from "@/lib/api/json";
 import { z } from 'zod'
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
@@ -26,11 +26,11 @@ const costingBody = z.object({
   recostingAuthorization: z.string().optional(), expectedUpdatedAt: z.union([z.string(), z.null()]).optional(),
   assetAccountId: uuidId, cogsAccountId: uuidId,
   adjustmentAccountId: nullableUuidId.optional(), varianceAccountId: nullableUuidId.optional(),
-  receivedNotBilledAccountId: nullableUuidId.optional(), standardCost: z.union([exactMoney(), z.null()]).optional(),
+  receivedNotBilledAccountId: nullableUuidId.optional(), standardCost: nullableExactMoney().optional(),
   baseUnit: z.string().trim().min(1), unitConversions: z.record(z.string(), z.number()).nullable().optional(),
-  reorderPoint: z.union([exactMoney(), z.null()]).optional(), preferredStockLevel: z.union([exactMoney(), z.null()]).optional(),
+  reorderPoint: nullableExactMoney().optional(), preferredStockLevel: nullableExactMoney().optional(),
   allowNegativeInventory: z.boolean().optional(), negativeCostBasis: z.enum(["last_receipt", "standard", "configured"]).optional(),
-  provisionalUnitCost: z.union([exactMoney(), z.null()]).optional(),
+  provisionalUnitCost: nullableExactMoney().optional(),
 })
 
 /**

@@ -1,4 +1,4 @@
-import { exactMoney } from '@/lib/api/json'
+import { nullableExactMoney } from '@/lib/api/json'
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { z } from 'zod'
@@ -42,7 +42,7 @@ const REVENUE_ALLOCATION = ['normal', 'exclude', 'software'] as const
 const nullableText = z.string().nullable().optional()
 const nullableMoney = z.preprocess(
   (value) => typeof value === 'string' && value.trim() === '' ? null : value,
-  exactMoney().nullable(),
+  nullableExactMoney(),
 ).optional()
 
 const itemCreateSchema = z.object({
