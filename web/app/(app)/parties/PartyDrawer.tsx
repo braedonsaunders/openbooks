@@ -17,7 +17,7 @@ import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'rea
 import Link from 'next/link'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { useLocale, useTranslations } from 'next-intl'
-import { Building2, Users } from 'lucide-react'
+import { Building2, Plus, Users } from 'lucide-react'
 import { fetchAction } from '@braedonsaunders/appkit-errors'
 import { ActionAlert } from '@braedonsaunders/appkit-errors/react'
 import { useAppAction } from '@/lib/use-app-action'

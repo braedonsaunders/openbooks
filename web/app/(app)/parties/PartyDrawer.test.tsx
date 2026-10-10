@@ -429,8 +429,10 @@ test("a visited compensation tab stays mounted while another shows", async (t) =
     grants: { canManageWages: true, canManagePayroll: true },
   });
   t.after(done);
+  // The rate form lives in the Add rate drawer opened from the wages list.
+  await clickButton(en("parties.drawer.wages.add"));
   const rate = document.querySelector("#employee-wage-rate") as HTMLInputElement | null;
-  assert.ok(rate, "the compensation tab must offer a rate input");
+  assert.ok(rate, "the Add rate drawer must offer a rate input");
   await act(async () => {
     setInputValue(rate, "42.50");
     await tick();

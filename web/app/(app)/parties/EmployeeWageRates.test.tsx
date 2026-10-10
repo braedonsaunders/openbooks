@@ -115,8 +115,13 @@ async function enabledButton(label: string): Promise<HTMLButtonElement> {
 }
 
 /** The rate form lives in the Add rate drawer, opened from the list's top-right action. */
+/** A match outside any drawer still playing its exit animation. */
+function live<T extends Element>(selector: string): T | null {
+  return ([...document.querySelectorAll(selector)] as T[]).find((node) => !node.closest("[data-overlay-exiting]")) ?? null;
+}
+
 async function openRateDrawer() {
-  if (document.querySelector("#employee-wage-rate")) return;
+  if (live("#employee-wage-rate")) return;
   const add = await enabledButton(WAGES.add);
   await act(async () => {
     add.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
@@ -143,7 +148,7 @@ function setNativeSelect(select: HTMLSelectElement, value: string) {
 
 async function setRate(value: string) {
   await openRateDrawer();
-  const input = document.querySelector("#employee-wage-rate") as HTMLInputElement | null;
+  const input = live<HTMLInputElement>("#employee-wage-rate");
   assert.ok(input, "the form must offer a rate input");
   await act(async () => {
     setInputValue(input, value);
@@ -154,7 +159,7 @@ async function setRate(value: string) {
 
 async function setYearlyBasis(annualHours: string) {
   const basis = [...document.querySelectorAll("select")].find((candidate) =>
-    [...candidate.options].some((option) => option.value === "year"),
+    !candidate.closest("[data-overlay-exiting]") && [...candidate.options].some((option) => option.value === "year"),
   ) as HTMLSelectElement | undefined;
   assert.ok(basis, "the form must offer an hour/year basis");
   await act(async () => {
@@ -162,7 +167,7 @@ async function setYearlyBasis(annualHours: string) {
     await tick();
   });
   await tick();
-  const hours = document.querySelector("#employee-wage-annual-hours") as HTMLInputElement | null;
+  const hours = live<HTMLInputElement>("#employee-wage-annual-hours");
   assert.ok(hours, "a yearly basis must ask for annual hours");
   await act(async () => {
     setInputValue(hours, annualHours);
@@ -205,8 +210,8 @@ test("adding a rate preserves decimal text and leaves the dated payroll policy t
   assert.equal(typeof body.rate, "string", "the rate must stay decimal text, never a float");
   assert.equal(body.annualHours, "2080.125");
   assert.equal(typeof body.annualHours, "string");
-  const cleared = document.querySelector("#employee-wage-rate") as HTMLInputElement | null;
-  assert.ok(!cleared || cleared.value === "", "a saved rate must clear the form");
+  await openRateDrawer();
+  assert.equal(live<HTMLInputElement>("#employee-wage-rate")?.value, "", "a saved rate must clear the form");
   const toasts = globalThis.__wageToasts ?? [];
   assert.ok(
     toasts.some((toast) => toast.kind === "success" && toast.message === WAGES.saved),
