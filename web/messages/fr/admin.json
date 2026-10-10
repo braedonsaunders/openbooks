@@ -936,6 +936,10 @@
         "storedValueLiability": {
           "label": "Passif de valeur stockée",
           "hint": "Soldes de cartes-cadeaux et d’avoirs dus aux clients"
+        },
+        "receivedNotBilled": {
+          "label": "Réception non facturée",
+          "hint": "Biens reçus mais non encore facturés, quand l’article ne nomme aucun compte de compensation"
         }
       },
       "defaultsNote": "Ce sont les valeurs par défaut de toute l’entreprise. Chaque filiale peut les remplacer sur sa propre fiche ; les remplacements vides reprennent celles-ci.",

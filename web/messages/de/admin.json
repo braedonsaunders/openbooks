@@ -936,6 +936,10 @@
         "storedValueLiability": {
           "label": "Verbindlichkeit aus Guthaben",
           "hint": "Offene Geschenkkarten- und Kundenguthaben gegenüber Kunden"
+        },
+        "receivedNotBilled": {
+          "label": "Erhalten, nicht fakturiert",
+          "hint": "Erhaltene, aber noch nicht fakturierte Ware, wenn der Artikel kein Verrechnungskonto nennt"
         }
       },
       "defaultsNote": "Dies sind die unternehmensweiten Standards. Jede Tochtergesellschaft kann sie in ihrem eigenen Datensatz überschreiben; leere Überschreibungen fallen auf diese zurück.",

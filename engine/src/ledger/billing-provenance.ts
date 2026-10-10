@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { lineRequiresReceipt } from "../payables/ap-capture-service.ts";
+import { lineRequiresReceipt } from "../records/stock-receipt.ts";
 import { type SqlExecutor } from "../platform/db.ts";
 import { laterProgressApplicationNumbers, laterProgressApplicationsRefusal } from "../projects/construction-billing.ts";
 import { laterVendorApplicationNumbers, laterVendorApplicationsRefusal } from "../projects/subcontracts.ts";

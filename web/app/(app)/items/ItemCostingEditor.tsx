@@ -228,13 +228,15 @@ export function ItemCostingEditor({
 
   // Fetch chain: every state update sits in a promise continuation (the fetch
   // response), never synchronously in the effect body.
+  const [companyReceivedNotBilledAccountId, setCompanyReceivedNotBilledAccountId] = useState<string | null>(null)
   function load(signal?: AbortSignal) {
     return fetch(`/api/items/${itemId}/costing`, { signal })
       .then((res) => {
         if (!res.ok) throw new Error(common('feedback.loadFailed'))
-        return (res.json() as Promise<{ profile: Profile | null }>).then((next) => {
+        return (res.json() as Promise<{ profile: Profile | null; companyReceivedNotBilledAccountId?: string | null }>).then((next) => {
           if (signal?.aborted) return
           setProfile(next.profile)
+          setCompanyReceivedNotBilledAccountId(next.companyReceivedNotBilledAccountId ?? null)
           hydrate(next.profile)
           setLoaded(true)
         })
@@ -469,6 +471,11 @@ export function ItemCostingEditor({
                 clearable placeholder={t('selectAccount')} sheetTitle={t('receivedNotBilledAccount')} ariaLabel={t('receivedNotBilledAccount')}
                 invalid={conflicted.has('receivedNotBilledAccountId')} />
               {conflictNote('receivedNotBilledAccountId')}
+              {!receivedNotBilledAccountId && companyReceivedNotBilledAccountId ? (
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  {t('usesCompanyDefault', { account: accountLabel(companyReceivedNotBilledAccountId) })}
+                </p>
+              ) : null}
             </div>
             <div className={field}>
               <Label>{t('standardCost')}</Label>
@@ -543,7 +550,7 @@ export function ItemCostingEditor({
             <Detail label={t('assetAccount')} value={accountLabel(profile.asset_account_id)} />
             <Detail label={t('cogsAccount')} value={accountLabel(profile.cogs_account_id)} />
             <Detail label={t('adjustmentAccount')} value={accountLabel(profile.adjustment_account_id)} />
-            <Detail label={t('receivedNotBilledAccount')} value={accountLabel(profile.received_not_billed_account_id)} />
+            <Detail label={t('receivedNotBilledAccount')} value={profile.received_not_billed_account_id ? accountLabel(profile.received_not_billed_account_id) : companyReceivedNotBilledAccountId ? t('usesCompanyDefault', { account: accountLabel(companyReceivedNotBilledAccountId) }) : '—'} />
             <Detail label={t('standardCost')} value={profile.standard_cost ?? '—'} />
             <Detail label={t('reorderPoint')} value={profile.reorder_point ?? '—'} />
             <Detail label={t('preferredStockLevel')} value={profile.preferred_stock_level ?? '—'} />

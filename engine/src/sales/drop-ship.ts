@@ -6,6 +6,7 @@ import { loadSubsidiaryContext } from "../organization/subsidiaries.ts";
 import { subsidiaryScopeAllows } from "../organization/subsidiary-scope.ts";
 import { db, type SqlExecutor } from "../platform/db.ts";
 import { openQuantitySql } from "../records/order-line-remainders.ts";
+import { receivedNotBilledMissingMessage, resolveReceivedNotBilledAccount } from "../records/control-accounts.ts";
 import { assertMovementOwner } from "../inventory/profile-policy.ts";
 import { InventoryError, type Runner } from "../inventory/contracts.ts";
 import { postInventoryEntry, stockLocationDim } from "../inventory/journal.ts";
@@ -200,8 +201,14 @@ export async function applyDropShipConfirmationInventory(
     if (!line.cogs_account_id) {
       throw new DropShipRefusal(`Item ${line.item_name} is missing its COGS account`, "cogs_account_required", 422, `Open Items, select ${line.item_name}, set the COGS account in its Costing profile, and retry`);
     }
-    if (!line.clearing_account_id) {
-      throw new DropShipRefusal(`Item ${line.item_name} is missing its received-not-billed account`, "received_not_billed_account_required", 422, `Open Items, select ${line.item_name}, set the received-not-billed account in its Costing profile, and retry`);
+    // The clearing account follows the one policy — profile first, company
+    // control second — and the live/posting validation below applies to
+    // whichever source wins.
+    const clearing = line.item_id
+      ? await resolveReceivedNotBilledAccount(runner, orgId, line.item_id)
+      : null;
+    if (!clearing) {
+      throw new DropShipRefusal(receivedNotBilledMissingMessage(`Item ${line.item_name}`), "received_not_billed_account_required", 422, `Open Items, select ${line.item_name}, set the received-not-billed account in its Costing profile, or set the company Received not billed control account under Company Settings, and retry`);
     }
     const cogsAccount = (await runner.execute<{ name: string; is_active: boolean; is_summary: boolean }>(sql`
       select name, is_active, is_summary from accounts
@@ -213,11 +220,11 @@ export async function applyDropShipConfirmationInventory(
     }
     const clearingAccount = (await runner.execute<{ name: string; is_active: boolean; is_summary: boolean }>(sql`
       select name, is_active, is_summary from accounts
-       where org_id = ${orgId} and id = ${line.clearing_account_id}
+       where org_id = ${orgId} and id = ${clearing.accountId}
        for share
     `)).rows[0];
     if (!clearingAccount || !clearingAccount.is_active || clearingAccount.is_summary) {
-      throw new DropShipRefusal(`Item ${line.item_name} has no active posting received-not-billed account`, "received_not_billed_account_required", 422, `Open Items, select ${line.item_name}, and choose an active posting received-not-billed account in its Costing profile`);
+      throw new DropShipRefusal(`Item ${line.item_name} has no active posting received-not-billed account`, "received_not_billed_account_required", 422, `Open Items, select ${line.item_name}, and choose an active posting received-not-billed account in its Costing profile, or set the company control account`);
     }
     const entryNumber = `INV-DS-${line.line_id}`;
     const existing = (await runner.execute(sql`
@@ -240,7 +247,7 @@ export async function applyDropShipConfirmationInventory(
         custom: { dropShipConfirmation: { receiptId, receiptLineId: line.line_id } },
         lines: [
           { accountId: line.cogs_account_id, amount: line.amount, departmentId: line.department_id, projectId: line.project_id, locationId, memo: "Cost of goods sold" },
-          { accountId: line.clearing_account_id, amount: neg(line.amount), departmentId: line.department_id, projectId: line.project_id, locationId, memo: "Received not billed" },
+          { accountId: clearing.accountId, amount: neg(line.amount), departmentId: line.department_id, projectId: line.project_id, locationId, memo: "Received not billed" },
         ],
       });
     } catch (error) {

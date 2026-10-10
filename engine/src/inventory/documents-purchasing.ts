@@ -13,11 +13,36 @@ import { receiveInventory } from "./movements.ts";
 import { liveReceiptQuantity } from "./return-quantities.ts";
 import { loadDocumentInventoryLines, unprofiledInventoryLines, assertNoUnprofiledInventoryLines, inventoryPostingEffectKey, isJsonRecord, type DocumentInventoryLine } from "./document-lines.ts";
 import { kitLabel, kitNoStockRefusal } from "./kits.ts";
+import { receivedNotBilledMissingMessage, resolveReceivedNotBilledAccount } from "../records/control-accounts.ts";
+import { lineRequiresReceipt } from "../records/stock-receipt.ts";
 
 /**
- * lineId → the GL account a vendor bill's inventory line should DEBIT: the
- * received-not-billed clearing account when configured, else the inventory
- * asset account directly. Consumed by the posting engine (posting.ts).
+ * The received-not-billed account a line must clear, resolved through the
+ * one authoritative policy (profile first, company control second). Throws
+ * naming both configuration places when neither is set.
+ */
+async function requireLineRnbAccount(
+  runner: SqlExecutor,
+  orgId: string,
+  line: DocumentInventoryLine,
+  context: string,
+): Promise<string> {
+  const rnb = await resolveReceivedNotBilledAccount(runner, orgId, line.itemId);
+  if (!rnb) {
+    throw new InventoryError(
+      `${context}: ${receivedNotBilledMissingMessage(`item ${line.itemId}`)}`,
+    );
+  }
+  return rnb.accountId;
+}
+
+/**
+ * lineId → the GL account a vendor bill's inventory line should DEBIT.
+ * Purchase-order-matched lines clear received-not-billed (profile first,
+ * company control second); every other inventory line debits its asset
+ * account directly and brings its own stock in the drain below. A matched
+ * line with no clearing account anywhere refuses naming both places instead
+ * of debiting inventory. Consumed by the posting engine (posting.ts).
  */
 export async function resolveBillInventoryAccounts(
   runner: Runner,
@@ -27,8 +52,24 @@ export async function resolveBillInventoryAccounts(
   if (!(await inventoryFeatureEnabled(runner, orgId))) return new Map();
   const lines = await loadDocumentInventoryLines(runner, orgId, documentId);
   const map = new Map<string, string>();
-  for (const l of lines)
+  for (const l of lines) {
+    if (
+      lineRequiresReceipt(l.itemKind) &&
+      billLinePurchaseOrderLineId(l.custom) !== null
+    ) {
+      map.set(
+        l.lineId,
+        await requireLineRnbAccount(
+          runner,
+          orgId,
+          l,
+          `document line ${l.lineNumber} (item ${l.itemId}) is matched to its purchase order`,
+        ),
+      );
+      continue;
+    }
     map.set(l.lineId, l.clearingAccountId ?? l.assetAccountId);
+  }
   return map;
 }
 
@@ -94,12 +135,71 @@ export async function assertBillReceiptsPostable(
         neg(extendCost(line.quantity, standardUnitCost)),
       );
       if (!isZero(variance)) {
-        throw new InventoryError(
-          `standard-cost receipt of item ${line.itemId} books purchase price variance of ${variance} but has no received-not-billed account`,
+        await requireLineRnbAccount(
+          runner,
+          orgId,
+          line,
+          `standard-cost receipt of item ${line.itemId} books purchase price variance of ${variance}`,
         );
       }
     }
   }
+  await assertManualBillLinesMatched(runner, orgId, lines);
+}
+
+/**
+ * A vendor-bill line coded by hand for receipt-tracked stock must not bypass
+ * three-way matching: billing it straight to the inventory asset and then
+ * receiving the same stock on its purchase order counts it twice. When an
+ * approved purchase order still holds that item open, refuse naming the
+ * order — match the bill to its purchase-order line (or receive first)
+ * instead. Direct counter purchases with no open order keep the legacy
+ * bill-is-the-receipt path.
+ */
+async function assertManualBillLinesMatched(
+  runner: SqlExecutor,
+  orgId: string,
+  lines: DocumentInventoryLine[],
+): Promise<void> {
+  const manual = lines.filter(
+    (line) =>
+      lineRequiresReceipt(line.itemKind) &&
+      billLinePurchaseOrderLineId(line.custom) === null,
+  );
+  if (manual.length === 0) return;
+  const open = (await runner.execute<{
+    item_id: string;
+    document_number: string;
+    line_number: number;
+  }>(sql`
+    select dl.item_id, d.document_number, dl.line_number
+      from document_lines dl
+      join documents d on d.id = dl.document_id and d.org_id = dl.org_id
+     where dl.org_id = ${orgId}
+       and d.kind = 'purchase_order'
+       and d.status = 'approved'
+       and dl.item_id in (${sql.join(
+         [...new Set(manual.map((line) => line.itemId))].map(
+           (itemId) => sql`${itemId}`,
+         ),
+         sql`, `,
+       )})
+       and (dl.quantity - dl.quantity_billed - dl.quantity_cancelled) > 0`));
+  if (open.rows.length === 0) return;
+  const byItem = new Map<string, { document_number: string; line_number: number }[]>();
+  for (const row of open.rows) {
+    const list = byItem.get(row.item_id) ?? [];
+    list.push({ document_number: row.document_number, line_number: row.line_number });
+    byItem.set(row.item_id, list);
+  }
+  const first = manual.find((line) => byItem.has(line.itemId))!;
+  const orders = byItem.get(first.itemId)!;
+  const [primary] = orders;
+  const more =
+    orders.length > 1 ? ` (and ${orders.length - 1} more open line${orders.length > 2 ? "s" : ""})` : "";
+  throw new InventoryError(
+    `vendor-bill line ${first.lineNumber} (item ${first.itemId}) is stock still open on purchase order ${primary!.document_number} line ${primary!.line_number}${more}: match the bill to its purchase-order line instead of coding it directly to the inventory asset — billing unmatched stock now and receiving it later counts it twice`,
+  );
 }
 
 /**
@@ -257,11 +357,15 @@ async function settleReceivedBillLineVariance(
   date: string,
   subsidiaryId: string,
 ): Promise<void> {
-  if (!line.clearingAccountId) {
-    throw new InventoryError(
-      `document line ${line.lineNumber} (item ${line.itemId}) was received against its purchase order but the item has no received-not-billed account`,
-    );
-  }
+  // The clearing account follows the one policy even when the profile is
+  // blank: a company-level control still lets the bill clear what the
+  // receipt credited.
+  const clearingAccountId = await requireLineRnbAccount(
+    runner,
+    orgId,
+    line,
+    `document line ${line.lineNumber} (item ${line.itemId}) was received against its purchase order`,
+  );
   // A bill for exactly what was received clears at the received value
   // itself, never quantity × a rounded rate — otherwise received-not-billed
   // nets to a rounding penny instead of zero on non-terminating amounts.
@@ -306,7 +410,7 @@ async function settleReceivedBillLineVariance(
     memo: "Purchase price variance (bill vs goods receipt)",
     lines: [
       { accountId: line.varianceAccountId, amount: variance, ...dims, memo: "PPV" },
-      { accountId: line.clearingAccountId, amount: neg(variance), ...dims, memo: "Received not billed" },
+      { accountId: clearingAccountId, amount: neg(variance), ...dims, memo: "Received not billed" },
     ],
   });
 }
@@ -351,12 +455,20 @@ export async function applyPurchaseReceiptInventory(
   const ctx = await loadSubsidiaryContext(runner, orgId);
   const movementSubsidiaryId = subsidiaryId ?? ctx.rootId;
   assertMovementOwner(ctx, movementSubsidiaryId);
+  // Resolved once per line up front so validation and posting agree on the
+  // same account: a company-level control must reach the journal, not just
+  // the pre-check.
+  const clearingByLine = new Map<string, string>();
   for (const line of lines) {
-    if (!line.clearingAccountId) {
-      throw new InventoryError(
-        `goods-receipt line ${line.lineNumber} (item ${line.itemId}) cannot be received before its bill: the item has no received-not-billed account`,
-      );
-    }
+    clearingByLine.set(
+      line.lineId,
+      await requireLineRnbAccount(
+        runner,
+        orgId,
+        line,
+        `goods-receipt line ${line.lineNumber} (item ${line.itemId}) cannot be received before its bill`,
+      ),
+    );
   }
   for (const key of [
     ...new Set(lines.map((line) => `${line.itemId}:${line.stockLocationId}`)),
@@ -378,7 +490,7 @@ export async function applyPurchaseReceiptInventory(
       quantity: line.quantity,
       totalValue: line.amount,
       subsidiaryId: movementSubsidiaryId,
-      offsetAccountId: line.clearingAccountId!,
+      offsetAccountId: clearingByLine.get(line.lineId)!,
       postJournal: true,
       date,
       documentLineId: line.lineId,

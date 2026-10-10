@@ -9,7 +9,7 @@ import { loadOrder } from "../../app/api/_order/lib";
 import { orderedNetOfCancelledSql } from "@openbooks/engine/src/records/order-line-remainders.ts";
 import { backorderPosition } from "@openbooks/engine/src/sales/backorders.ts";
 import { dropShipOrderStatus } from "@openbooks/engine/src/sales/drop-ship.ts";
-import { lineRequiresReceipt } from "@openbooks/engine/src/payables/ap-capture-service.ts";
+import { lineRequiresReceipt } from "@openbooks/engine/src/records/stock-receipt.ts";
 import {
   billableRemainderQuantityUnits,
   fromQuantityUnits,

@@ -16,7 +16,7 @@ import {
 import { promoteCrmAccount } from '@openbooks/engine/src/crm/crm.ts'
 import { add, cmp, mulRatio, neg, sum } from '@openbooks/engine/src/money/money.ts'
 import { kitComponentQuantities, loadKitComponents } from '@openbooks/engine/inventory'
-import { lineRequiresReceipt } from '@openbooks/engine/src/payables/ap-capture-service.ts'
+import { lineRequiresReceipt } from '@openbooks/engine/src/records/stock-receipt.ts'
 import {
   billableRemainderQuantityUnits,
   fromQuantityUnits,
@@ -33,6 +33,7 @@ import { InventoryError, InventoryOwnershipError } from "@openbooks/engine/src/i
 import { loadSubsidiaryContext } from '@openbooks/engine/src/organization/subsidiaries.ts'
 import { issueSalesOrder } from '@openbooks/engine/src/sales/sales-orders.ts'
 import { openQuantitySql, orderedNetOfCancelledSql } from '@openbooks/engine/src/records/order-line-remainders.ts'
+import { receivedNotBilledMissingMessage, resolveReceivedNotBilledAccount } from '@openbooks/engine/src/records/control-accounts.ts'
 import { activeStockLocations, resolveLineStockLocation } from './stock-locations'
 import { isUuid } from './list-params'
 import { WORK_PERIOD_DOCUMENT_KINDS } from '@openbooks/engine/records/work-period'
@@ -1207,6 +1208,15 @@ export async function receivePurchaseOrderInTx(
        for update of dl
     `)).rows
     const sourceById = new Map(sourceLines.map((line) => [line.id, line]))
+    // One authoritative clearing policy for the whole receipt: the item's
+    // costing profile wins, otherwise the company control account. Resolved
+    // once per item — never a policy lookup per line below.
+    const rnbByItem = new Map<string, string>()
+    for (const line of sourceLines) {
+      if (line.item_id == null || rnbByItem.has(line.item_id)) continue
+      const resolved = await resolveReceivedNotBilledAccount(tx, orgId, line.item_id)
+      if (resolved) rnbByItem.set(line.item_id, resolved.accountId)
+    }
     const selected = requested.map((request) => {
       const line = sourceById.get(request.sourceLineId)
       if (!line) throw new ConversionError(`Purchase-order line ${request.sourceLineId} was not found`)
@@ -1224,10 +1234,10 @@ export async function receivePurchaseOrderInTx(
           `Purchase-order line ${line.line_number}${itemLabel} is a kit: kits hold no stock; receive the components — receive each component on its own purchase-order line instead`,
         )
       }
-      if (!line.received_not_billed_account_id) {
+      if (line.item_id == null || !rnbByItem.has(line.item_id)) {
         const itemLabel = line.item_name ? ` (${line.item_name})` : ''
         throw new ConversionError(
-          `Purchase-order line ${line.line_number}${itemLabel} cannot be received: the item has no received-not-billed account — set it on the item's costing profile before receiving`,
+          `Purchase-order line ${line.line_number}${itemLabel} cannot be received: ${receivedNotBilledMissingMessage(line.item_name ?? (line.item_id == null ? 'this item' : `item ${line.item_id}`))}`,
           422,
           ITEM_MISSING_RNB_ACCOUNT,
           { lineNumber: line.line_number, itemId: line.item_id, itemName: line.item_name },

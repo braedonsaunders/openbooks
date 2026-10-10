@@ -4,6 +4,7 @@ import { addCalendarDays, isIsoCalendarDate } from '../platform/civil-date.ts'
 import { isUuid } from '../platform/uuid.ts'
 import { isFeatureEnabled } from '../organization/feature-state.ts'
 import { docKindConfig, type DocKindConfig } from '../records/document-kinds.ts'
+import { loadCompanyReceivedNotBilledAccount } from '../records/control-accounts.ts'
 
 /**
  * Document header and line defaults: the one resolver behind the document
@@ -142,9 +143,16 @@ export async function resolveDocumentLineDefaults(
   const inventoryRouted = side === 'purchase' && items.some((item) => item.inventory_asset_account_id)
     ? await isFeatureEnabled(orgId, 'inventory', exec)
     : false
+  // The posting router clears profile-then-company RNB for matched stock
+  // lines, so the proposal mirrors that order — never the asset account
+  // while a clearing account stands behind the item.
+  const companyClearingAccountId = inventoryRouted
+    ? (await loadCompanyReceivedNotBilledAccount(exec, orgId))
+    : null
 
   const candidateAccounts = new Set<string>()
   const candidateTaxCodes = new Set<string>()
+  if (companyClearingAccountId) candidateAccounts.add(companyClearingAccountId)
   for (const item of items) {
     for (const id of [item.income_account_id, item.expense_account_id, item.inventory_asset_account_id, item.inventory_clearing_account_id]) {
       if (id) candidateAccounts.add(id)
@@ -185,7 +193,13 @@ export async function resolveDocumentLineDefaults(
         // whatever the line names, so propose exactly that account.
         ? pick<LineAccountSource>([
             [item.inventory_clearing_account_id, 'inventory_clearing'],
-            [item.inventory_clearing_account_id ? null : item.inventory_asset_account_id, 'inventory_asset'],
+            [item.inventory_clearing_account_id ? null : companyClearingAccountId, 'inventory_clearing'],
+            [
+              item.inventory_clearing_account_id ?? companyClearingAccountId
+                ? null
+                : item.inventory_asset_account_id,
+              'inventory_asset',
+            ],
           ], usableAccounts)
         : pick<LineAccountSource>([
             [item.expense_account_id, 'item_expense'],

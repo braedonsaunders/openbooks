@@ -937,6 +937,10 @@
         "storedValueLiability": {
           "label": "Passivo de valor armazenado",
           "hint": "Saldos de vales-presente e créditos de loja devidos aos clientes"
+        },
+        "receivedNotBilled": {
+          "label": "Recebido não faturado",
+          "hint": "Bens recebidos ainda não faturados, quando o item não nomeia conta de compensação"
         }
       },
       "partylessPolicy": {

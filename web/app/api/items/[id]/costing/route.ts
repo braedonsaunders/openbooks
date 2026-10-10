@@ -12,6 +12,8 @@ import { InventoryError, CostingPolicyChangeBlockedError } from "@openbooks/engi
 import { inventoryOffsetAccountProblem } from "@openbooks/engine/src/inventory/journal.ts";
 import { assertCostingPolicyChangeAllowed, lockItemInventoryProfile, parseCostingMethod, parseTrackingMode, parseUnitConversions } from "@openbooks/engine/src/inventory/profile-policy.ts";
 import { revalueOpenLayersToStandardCost } from "@openbooks/engine/src/inventory/revaluation.ts";
+import { loadCompanyReceivedNotBilledAccount } from "@openbooks/engine/src/records/control-accounts.ts";
+import { lineRequiresReceipt } from "@openbooks/engine/src/records/stock-receipt.ts";
 import { isUuid } from '../../../../../lib/list-params'
 import { canonicalDecimal } from '../../../../../lib/exact-decimal'
 import { moneyRefusal } from '../../../../../lib/payroll-decimal-refusal'
@@ -76,7 +78,10 @@ export const GET = defineRoute({ permission: 'items.read', feature: 'inventory',
            allow_negative_inventory, negative_cost_basis, provisional_unit_cost, ${documentRevisionSql(sql`updated_at`)} as updated_at
       from item_inventory_profiles
      where org_id = ${gate.user.orgId} and item_id = ${id}`)))
-  return NextResponse.json({ profile: profile.rows[0] ?? null })
+  // The editor names the company fallback behind a blank RNB field, so the
+  // response carries the validated company default alongside the profile.
+  const companyReceivedNotBilledAccountId = await loadCompanyReceivedNotBilledAccount(db, gate.user.orgId)
+  return NextResponse.json({ profile: profile.rows[0] ?? null, companyReceivedNotBilledAccountId })
 } })
 
 function accountRef(value: unknown): string | null {
@@ -158,6 +163,17 @@ export const PUT = defineRoute({
   const adjustmentAccountId = accountRef(body.adjustmentAccountId)
   const varianceAccountId = accountRef(body.varianceAccountId)
   const receivedNotBilledAccountId = accountRef(body.receivedNotBilledAccountId)
+  // A blank received-not-billed account is storable only when something will
+  // clear it. Receipt-tracked items with no company default would strand
+  // every future receipt at posting time, so refuse naming both places —
+  // the same explicit style as every other validation in this route.
+  if (!receivedNotBilledAccountId) {
+    const itemKind = (await db.execute<{ kind: string | null }>(sql`
+      select kind from items where id = ${id} and org_id = ${orgId}`)).rows[0]?.kind ?? null
+    if (lineRequiresReceipt(itemKind) && !(await loadCompanyReceivedNotBilledAccount(db, orgId))) {
+      return NextResponse.json({ error: 'This item is receipt-tracked and no company received-not-billed default exists: set a received-not-billed account on this costing profile, or set the company Received not billed control account under Company Settings, before saving' }, { status: 422 })
+    }
+  }
   for (const [label, accountId] of [
     ['COGS', cogsAccountId], ['adjustment', adjustmentAccountId], ['variance', varianceAccountId],
     ['received-not-billed', receivedNotBilledAccountId],
