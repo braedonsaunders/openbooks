@@ -15,6 +15,7 @@ import { reportBookSelection } from '../../../../lib/report-books'
 import { MissingRatesError, reportSubsidiaryView, type RatesBlockedNotice } from '../../../../lib/consolidation'
 import { balanceSheetView } from '../../../../lib/statement-matrix'
 import { decimalAbs, decimalAdd, decimalCmp, decimalNeg } from '../../../../lib/statement-format'
+import { AS_OF_DEFAULT_PERIOD_PRESET } from '@openbooks/reports'
 import { resolvePeriod } from '../../../../lib/periods'
 import { parseReportQuery, scaleFactor } from '../../../../lib/report-filters'
 import { reportScheduleAnchor, scheduleParamsFrom } from '../../../../lib/report-schedule-anchor'
@@ -75,7 +76,9 @@ export async function loadBalanceSheet(
   const t = await getTranslations('reports')
   const tb = await getTranslations('budgets')
   const scheduleDefId = await reportScheduleAnchor('balance-sheet')
-  const q = parseReportQuery(sp)
+  // Point-in-time: an unfiltered statement is dated today, never at a
+  // fiscal year end that has not happened yet.
+  const q = parseReportQuery(sp, { defaultPeriod: AS_OF_DEFAULT_PERIOD_PRESET })
   const period = await resolvePeriod(q.period, { customFrom: q.from, customTo: q.to })
   const { books, selectedBook } = await reportBookSelection(await resolveOrgId(), sp.book)
 
@@ -223,6 +226,7 @@ export function balanceSheetSpec(data: BalanceSheetData): PageSpec {
           dimensions: f('dimensions'),
           subsidiaries: f('subsidiaries'),
           primaryFilter: f('primaryFilter'),
+          defaultPeriod: AS_OF_DEFAULT_PERIOD_PRESET,
       },
     }],
     schedule: {

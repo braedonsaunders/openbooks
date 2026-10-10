@@ -63,3 +63,18 @@ test('the paper hides while rates are blocked', () => {
     'the paper shows only when rates are ready — no numbers beside the banner',
   )
 })
+
+// A balance sheet reads "as of" its window end. Unfiltered, the filter bar
+// must show the same fiscal-year-to-date window the loader resolves, so the
+// statement is dated today rather than at a fiscal year end still ahead.
+test('the unfiltered balance sheet defaults to an as-of of today', async () => {
+  const { AS_OF_DEFAULT_PERIOD_PRESET, AS_OF_STATEMENT_KINDS } = await import('@openbooks/reports')
+  assert.equal(AS_OF_DEFAULT_PERIOD_PRESET, 'this_fiscal_year_to_date')
+  assert.ok(AS_OF_STATEMENT_KINDS.includes('balance-sheet'))
+  assert.ok(AS_OF_STATEMENT_KINDS.includes('trial-balance'))
+  assert.ok(!AS_OF_STATEMENT_KINDS.includes('pnl'), 'a period statement keeps the full fiscal year')
+  const spec = balanceSheetSpec(blockedData()) as unknown as { header: Record<string, unknown>[] }
+  const bar = spec.header.find((block) => block.kind === 'filter-bar')
+  assert.ok(bar, 'the balance sheet renders the shared filter bar')
+  assert.equal(bar.defaultPeriod, AS_OF_DEFAULT_PERIOD_PRESET)
+})

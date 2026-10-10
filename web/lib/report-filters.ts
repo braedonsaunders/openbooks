@@ -130,10 +130,17 @@ export function resolveAgingCurrencyParams(
   }
 }
 
-export function parseReportQuery(sp: ParamSource): ReportQuery {
+export function parseReportQuery(
+  sp: ParamSource,
+  options: {
+    /** The preset an absent period resolves to; point-in-time statements
+     *  pass `AS_OF_DEFAULT_PERIOD_PRESET`. */
+    defaultPeriod?: string
+  } = {},
+): ReportQuery {
   const periodRaw = read(sp, REPORT_PARAM_KEYS.period)
   return {
-    period: isPeriodPreset(periodRaw) ? periodRaw! : DEFAULT_PERIOD_PRESET,
+    period: isPeriodPreset(periodRaw) ? periodRaw! : (options.defaultPeriod ?? DEFAULT_PERIOD_PRESET),
     from: read(sp, REPORT_PARAM_KEYS.from) || undefined,
     to: read(sp, REPORT_PARAM_KEYS.to) || undefined,
     breakout: (() => {
