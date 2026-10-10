@@ -260,6 +260,7 @@
   "no": "否",
   "search": "搜索",
   "searchPlaceholder": "编号、代码或名称",
+  "producedItemEmptyHint": "没有具有库存成本档案的物料。<action>请先配置物料的成本核算</action>。",
   "allStatuses": "所有状态",
   "allEntities": "所有可访问实体",
   "filter": "应用",

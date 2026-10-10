@@ -1,4 +1,5 @@
 "use client";
+import Link from "next/link";
 import { LineGrid } from "@/components/line-grid";
 import { cmp } from "@openbooks/engine/src/money/money.ts";
 import { useEffect, useId, useRef, useState } from "react";
@@ -91,6 +92,17 @@ export function CommandForm({
             options={f.options ?? []}
             endpoint={"/api/manufacturing/options?kind=" + remoteKind(f.key)}
             disabled={busy || uncertain}
+            emptyHint={
+              f.key === "producedItemId"
+                ? t.rich("producedItemEmptyHint", {
+                    action: (chunks) => (
+                      <Link className="text-teal-700 hover:underline dark:text-teal-300" href="/items">
+                        {chunks}
+                      </Link>
+                    ),
+                  })
+                : undefined
+            }
             clearable={!f.required}
             onChange={(choice) => {
               set(f.key, choice);

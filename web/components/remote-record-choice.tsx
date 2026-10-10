@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Button, SearchSelect } from "@openbooks/ui";
 import { readApiErrorMessage } from "@/lib/api-error";
 export type RemoteRecordOption = { value: string; label: string; parentId?: string | null };
@@ -14,6 +14,7 @@ export function RemoteRecordChoice({
   clearable=false,
   onChange,
   labels,
+  emptyHint,
 }: {
   id: string;
   value: string;
@@ -24,6 +25,13 @@ export function RemoteRecordChoice({
   clearable?: boolean;
   onChange: (value: string) => void;
   labels: { choose: string; searchPlaceholder: string; loadFailed: string; retry: string };
+  /**
+   * Why an empty collection is empty, shown only when the whole collection
+   * (no search filter) comes back with nothing to pick. A filtered search
+   * that matches nothing keeps the picker's own no-matches note, so the
+   * hint never blames the query for an empty catalog.
+   */
+  emptyHint?: ReactNode;
 }) {
   const [query, setQuery] = useState(""),
     [rows, setRows] = useState(options),
@@ -79,6 +87,12 @@ export function RemoteRecordChoice({
     selected && !rows.some((o) => o.value === value)
       ? [selected, ...rows]
       : rows;
+  const showEmptyHint =
+    emptyHint !== undefined &&
+    !loading &&
+    error === null &&
+    rows.length === 0 &&
+    query.trim() === "";
   return (
     <div className="space-y-1">
       <SearchSelect
@@ -102,6 +116,9 @@ export function RemoteRecordChoice({
         statusMessage={error ?? undefined}
         statusTone={error ? "error" : "muted"}
       />
+      {showEmptyHint ? (
+        <p className="text-xs text-slate-500 dark:text-slate-400">{emptyHint}</p>
+      ) : null}
       {error ? (
         <Button
           type="button"

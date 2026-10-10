@@ -13,6 +13,7 @@ import { partyOptions } from '../../../lib/documents'
 import { SetupEntitySection } from '../admin/setup/[entity]/SetupEntitySection'
 import { ItemDrawer } from './ItemDrawer'
 import { ItemVariantsTab } from './ItemVariantsTab'
+import { AssemblyRecipeTab } from './AssemblyRecipeTab'
 import { KitAvailabilityTab } from './KitAvailabilityTab'
 import { KitComponentsTab } from './KitComponentsTab'
 import { ChannelStockTab } from './ChannelStockTab'
@@ -84,10 +85,11 @@ export async function ItemDrawerSlot({ drawer, sp }: {
   // write.
   const kitTab = await kitComponentsTab(authz.user.orgId, can(authz, 'admin.setup.manage') && authz.allowedSubsidiaryIds === null, props, sp)
   const kitAvailabilityTab = await kitAvailabilitySection(authz.user.orgId, props, sp)
+  const assemblyRecipeTab = await assemblyRecipeSection(authz.user.orgId, can(authz, 'admin.setup.manage') && authz.allowedSubsidiaryIds === null, props, sp)
   const planningTab = await itemPlanningTab(authz, props, sp)
   const variantsTab = await itemVariantsTab(props, sp)
   const channelStockTab = await itemChannelStockTab(authz, props, sp)
-  const operationalTabs = [...(kitTab ? [kitTab] : []), ...(kitAvailabilityTab ? [kitAvailabilityTab] : []), ...(planningTab ? [planningTab] : []), ...(variantsTab ? [variantsTab] : []), ...(channelStockTab ? [channelStockTab] : [])]
+  const operationalTabs = [...(kitTab ? [kitTab] : []), ...(kitAvailabilityTab ? [kitAvailabilityTab] : []), ...(assemblyRecipeTab ? [assemblyRecipeTab] : []), ...(planningTab ? [planningTab] : []), ...(variantsTab ? [variantsTab] : []), ...(channelStockTab ? [channelStockTab] : [])]
   if (props.createMode || !can(authz, 'admin.setup.manage') || authz.allowedSubsidiaryIds !== null) {
     return <ItemDrawer key={remountKey} {...props} recordTabs={operationalTabs} />
   }
@@ -183,6 +185,47 @@ async function itemVariantsTab(
     label: tFamilies('itemTab.title'),
     content: pickString(sp.itemSetup) === 'variants' ? (
       <ItemVariantsTab familyId={props.family.id} itemId={String(props.payload.item.id)} />
+    ) : null,
+  }
+}
+
+/**
+ * An assembly's Recipe tab: what manufacturing builds the finished item
+ * from. Assemblies without an inventory costing profile cannot stage a
+ * recipe the save would keep, so the tab stays visible and names that
+ * prerequisite instead of vanishing — the same explanation the produced-item
+ * picker gives when no profiled item exists. Readers see it without the
+ * setup grant like the kit recipe; replacing the recipe stays an
+ * org-wide configuration write.
+ */
+async function assemblyRecipeSection(
+  orgId: string,
+  canManage: boolean,
+  props: ComponentProps<typeof ItemDrawer>,
+  sp: Record<string, string | string[] | undefined>,
+) {
+  if (props.createMode || String(props.payload.item.kind) !== 'assembly') return null
+  if (!(await isFeatureEnabled(orgId, 'inventory'))) return null
+  const t = await getTranslations('items')
+  const itemId = String(props.payload.item.id)
+  const code = String(props.payload.item.code ?? '').trim()
+  const name = String(props.payload.item.name ?? '').trim()
+  const profiled = (await db.execute(sql`
+    select item_id from item_inventory_profiles
+     where org_id = ${orgId} and item_id = ${itemId} limit 1`)).rows.length > 0
+  const tabHref = `/items?item=${encodeURIComponent(itemId)}&itemSetup=recipe`
+  return {
+    key: 'recipe',
+    label: t('assembly.tab'),
+    content: pickString(sp.itemSetup) === 'recipe' ? (
+      <AssemblyRecipeTab
+        itemId={itemId}
+        itemLabel={code ? `${code} · ${name}` : name || itemId}
+        canManage={canManage}
+        tabHref={tabHref}
+        editing={pickString(sp.assemblyBom) === 'edit'}
+        hasCostingProfile={profiled}
+      />
     ) : null,
   }
 }

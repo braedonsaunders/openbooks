@@ -260,6 +260,7 @@
   "no": "No",
   "search": "Search",
   "searchPlaceholder": "Number, code or name",
+  "producedItemEmptyHint": "No items with an inventory costing profile. <action>Configure costing on the item</action> first.",
   "allStatuses": "All statuses",
   "allEntities": "All accessible entities",
   "filter": "Apply",

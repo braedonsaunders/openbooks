@@ -260,6 +260,7 @@
   "no": "Não",
   "search": "Pesquisar",
   "searchPlaceholder": "Número, código ou nome",
+  "producedItemEmptyHint": "Nenhum item tem perfil de custo de estoque. <action>Configure primeiro o custo do item</action>.",
   "allStatuses": "Todas as situações",
   "allEntities": "Todas as entidades acessíveis",
   "filter": "Aplicar",
