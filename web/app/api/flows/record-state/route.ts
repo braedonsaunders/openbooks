@@ -72,6 +72,13 @@ export interface RecordApprovalState {
       gateId?: string;
       signatureRequired?: boolean;
     } | null;
+    /**
+     * A pending gate reaches this viewer but separation of duties blocks
+     * them as submitter/maker: drawers render "Awaiting another approver"
+     * instead of decision actions, resolved in advance from the native
+     * gate check — never offered then refused.
+     */
+    awaitingAnotherApprover?: boolean;
   };
   history: ApprovalHistoryEntry[];
   /**
@@ -207,6 +214,7 @@ async function legacyGET(req: Request) {
     // --- pendingWith + myActions ---------------------------------------------
     const pendingWith: PendingWithEntry[] = [];
     const myActions: RecordApprovalState["approvalState"]["myActions"] = {};
+    let awaitingAnotherApprover = false;
 
     for (const g of gates.rows) {
       if (g.status !== "pending") continue;
@@ -220,6 +228,10 @@ async function legacyGET(req: Request) {
         myActions.gateId = String(g.id);
         myActions.signatureRequired = capability.signatureRequired;
       }
+      // A gate that reaches this viewer but blocks them as submitter/maker
+      // renders "Awaiting another approver" — the SoD outcome resolved in
+      // advance, never an Approve that refuses on click.
+      if (capability.sodBlocked) awaitingAnotherApprover = true;
     }
 
     // --- history --------------------------------------------------------------
@@ -295,6 +307,7 @@ async function legacyGET(req: Request) {
         status,
         pendingWith,
         myActions: myActions.gateId ? myActions : null,
+        ...(awaitingAnotherApprover ? { awaitingAnotherApprover: true as const } : {}),
       },
       history,
       failedRun:

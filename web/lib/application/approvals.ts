@@ -5,11 +5,13 @@ import {
   worklistApprovals,
   worklistApprovalsCount,
   worklistApprovalsPage,
+  worklistGatesAwaitingAnotherApprover,
   type WorklistBudget,
   type WorklistDocument,
 } from "@openbooks/engine/src/flows/approval-worklist.ts";
 import {
   decideGate,
+  gateDecisionCapability,
   GateError,
   type WorklistGate,
 } from "@openbooks/engine/src/flows/index.ts";
@@ -22,7 +24,7 @@ import { ApplicationError, forbidden, invalidInput, notFound } from "./errors";
 import { executeIdempotent } from "./idempotency";
 
 export type ApprovalWorklistItem =
-  | ({ kind: "flow_gate" } & WorklistGate)
+  | ({ kind: "flow_gate"; awaitingAnotherApprover?: boolean } & WorklistGate)
   | ({ kind: "document" } & WorklistDocument)
   | ({ kind: "budget" } & WorklistBudget);
 
@@ -106,7 +108,13 @@ export async function approvalWorklistPageForAuthz(
   const out: ApprovalWorklistItem[] = [];
   for (const item of page.items) {
     if (item.kind === "flow_gate") {
-      if (mayFlows) out.push({ ...item.gate, kind: "flow_gate" });
+      // Resolve the SoD outcome per row through the native gate check, so
+      // the page renders "awaiting another approver" instead of offering an
+      // Approve that refuses on click. Bounded by the page window.
+      if (mayFlows) {
+        const awaitingAnotherApprover = (await gateDecisionCapability(item.gate.id, authz.user.id)).sodBlocked;
+        out.push({ ...item.gate, kind: "flow_gate", awaitingAnotherApprover });
+      }
     } else if (item.kind === "document") {
       if (mayFlows) out.push({ ...item.document, kind: "document" });
     } else if (item.kind === "budget") {
@@ -114,6 +122,23 @@ export async function approvalWorklistPageForAuthz(
     }
   }
   return { items: out, total: page.total, kindCounts: page.kindCounts };
+}
+
+/**
+ * How many of the caller's union approvals await ANOTHER approver
+ * (SoD-blocked gates). Counted separately from actionable items: the My
+ * approvals tab keeps its headline total while the awaiting rows render
+ * without decision actions under their own figure.
+ */
+export async function approvalWorklistAwaitingForAuthz(authz: Authz): Promise<number> {
+  const scope = await approvalWorklistScopeForAuthz(authz);
+  if (!scope || !scope.mayFlows) return 0;
+  return (await worklistGatesAwaitingAnotherApprover(
+    scope.orgId,
+    authz.user.id,
+    authz.user.roles.map((role) => role.key),
+    authz.allowedSubsidiaryIds,
+  )).length;
 }
 
 async function approvalWorklistScopeForAuthz(authz: Authz) {

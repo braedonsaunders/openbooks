@@ -94,5 +94,6 @@
     },
     "signTitle": "Firmar para aprobar",
     "signLabel": "Escriba su nombre completo para firmar esta aprobación"
-  }
+  },
+  "awaitingOthersSummary": "{count} en espera de otro aprobador"
 }

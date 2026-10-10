@@ -1,0 +1,1 @@
+Additive grant migration: roles, overrides and API key scopes holding ar.read/ar.create (or ar.*) also receive the matching estimates.* keys, so no access widens or is lost.

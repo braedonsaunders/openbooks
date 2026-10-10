@@ -2910,6 +2910,10 @@
         "title": "工时类型",
         "description": "工时单的成本乘数和可计费默认值。"
       },
+      "time-approval-policies": {
+        "title": "工时审批政策",
+        "description": "审批人是否可以审批自己的工时。除非政策行允许，否则默认阻止自批。"
+      },
       "pay-schedules": {
         "title": "发薪计划",
         "description": "发薪频率日历：年周期数、锚定周期截止日与发薪日偏移。"
@@ -3753,6 +3757,9 @@
       "ratePercent": "税率 %",
       "effectiveFrom": "生效自",
       "effectiveTo": "生效至",
+      "timePreventSelfApproval": "阻止自批",
+      "timeEffectiveToHelp": "留空可使该政策持续有效，直到后续政策开始。",
+      "timePreventSelfApprovalHelp": "开启：审批人不能审批自己的考勤表，也不能审批包含自己工时的现场票。仅在必须由本人审批自己工时的组织中关闭。",
       "members": "税码",
       "reportCode": "报表代码",
       "lineCode": "行代码",

@@ -1,0 +1,1 @@
+New-table migration: time_approval_policies arrives empty with no backfill, so there is nothing to probe before install.

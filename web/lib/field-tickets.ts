@@ -1307,6 +1307,27 @@ export async function releaseFieldTicketApproval(
     if (doc.status === 'approved') return
     throw new FieldTicketError('Only draft or submitted tickets can be approved')
   }
+  // Separation of duties: a ticket carrying the approver's own crew time is
+  // the approver's own time evidence. While the org's time-approval policy
+  // prevents self-approval (the default), the crew member whose person
+  // party matches the actor cannot release the ticket — route it to another
+  // approver, or opt out explicitly in Time settings.
+  {
+    const { timeSelfApprovalPrevented, actorPersonPartyId, SELF_APPROVAL_REMEDY } = await import('./time-approval')
+    if (await timeSelfApprovalPrevented(orgId, doc.fieldTicket.periodEnd)) {
+      const own = await actorPersonPartyId(orgId, userId)
+      if (own !== null) {
+        const crew = (await db.execute<{ employee: string }>(sql`
+          select distinct employee_party_id as employee from time_entries
+           where org_id = ${orgId} and field_ticket_id = ${ticketId}`)).rows
+        if (crew.some((row) => row.employee === own)) {
+          throw new FieldTicketError(
+            `You cannot approve a field ticket carrying your own crew time. ${SELF_APPROVAL_REMEDY}`,
+          )
+        }
+      }
+    }
+  }
   const previousStatus = doc.status
   const laborSnapshot = await ensureFieldTicketLaborSnapshot(orgId, userId, doc)
 

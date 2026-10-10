@@ -25,6 +25,43 @@ export type { TimeApprovalRefusalCode, UncoveredTimeEntry } from './time-approva
 /** Where the labor-costing policy lives for the wage-rate remedy. */
 export const LABOR_COSTING_SETUP_HREF = '/admin/setup/labor-costing'
 
+/** Where the time-approval policy lives for the self-approval remedy. */
+export const TIME_APPROVAL_POLICY_SETUP_HREF = '/admin/setup/time-approval-policies'
+
+/** The operator remedy for a self-approval refusal. */
+export const SELF_APPROVAL_REMEDY =
+  'Ask another approver to approve your time, or have an administrator allow self-approval in Time settings.'
+
+/**
+ * Whether the org's time-approval policy prevents self-approval as of a
+ * date. Resolution is the latest active row covering the date; an org with
+ * no row keeps the safe default — prevention ON — so a sole proprietor
+ * opts out explicitly in Time settings instead of inheriting silence.
+ */
+export async function timeSelfApprovalPrevented(orgId: string, asOf: string): Promise<boolean> {
+  const row = (await db.execute<{ prevent: boolean }>(sql`
+    select prevent_self_approval as prevent from time_approval_policies
+     where org_id = ${orgId} and is_active
+       and effective_from <= ${asOf}::date
+       and (effective_to is null or effective_to >= ${asOf}::date)
+     order by effective_from desc
+     limit 1
+  `)).rows[0]
+  return row?.prevent ?? true
+}
+
+/**
+ * The actor's own person party in this org, if their login links to one.
+ * Null for logins with no person (service and cross-org admin actors) —
+ * with no person they can never BE the week's employee, so there is no
+ * self-approval to prevent.
+ */
+export async function actorPersonPartyId(orgId: string, actorId: string): Promise<string | null> {
+  return (await db.execute<{ partyId: string | null }>(sql`
+    select party_id as "partyId" from users where id = ${actorId} and org_id = ${orgId} for share
+  `)).rows[0]?.partyId ?? null
+}
+
 /**
  * The ONE set of side-effects that fire when time becomes approved — shared by
  * the personal weekly timesheet approval and field-ticket approval so hours
@@ -188,6 +225,24 @@ export async function approveSubmittedTimeEntries(
           'this week is owned by a pending approval workflow — its gates must resolve first',
           'week_owned_by_workflow', 409,
           'Decide the week through its approval flow instead of approving it directly.',
+        )
+      }
+    }
+    // Separation of duties on the direct path: the actor whose person party
+    // owns the week cannot approve it while the org's time-approval policy
+    // prevents self-approval (the default). Flow-gated weeks never reach
+    // here — the gate excludes the submitter at creation — so this guards
+    // direct, bulk and inbox-direct approvals alike. "Entered by" is not
+    // authorship: a bookkeeper entering a coworker's sheet never matches
+    // the employee check, so assisting entry stays allowed.
+    if (await timeSelfApprovalPrevented(options.orgId, week)) {
+      const own = await actorPersonPartyId(options.orgId, options.actorId)
+      if (own !== null && own === options.employeePartyId) {
+        throw new TimeApprovalRefusal(
+          'you cannot approve your own timesheet — another approver must approve your time',
+          'self_approval_prevented', 422,
+          SELF_APPROVAL_REMEDY,
+          { setupHref: TIME_APPROVAL_POLICY_SETUP_HREF },
         )
       }
     }

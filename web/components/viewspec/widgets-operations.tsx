@@ -67,6 +67,7 @@ export const OPERATIONS_WIDGETS = {
       bulk={props.bulk === true}
       showAssignee={props.showAssignee === true}
       actionsEnabled={props.actionsEnabled === true}
+      awaitingOthers={num(props, 'awaitingOthers') ?? 0}
     />
   ),
   'approvals-pagination': (props) => (

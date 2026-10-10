@@ -94,5 +94,6 @@
     },
     "signTitle": "Zur Freigabe unterschreiben",
     "signLabel": "Geben Sie Ihren vollständigen Namen ein, um diese Freigabe zu unterschreiben"
-  }
+  },
+  "awaitingOthersSummary": "{count} wartet auf einen anderen Genehmiger"
 }

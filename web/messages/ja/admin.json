@@ -2933,6 +2933,10 @@
         "title": "工数タイプ",
         "description": "タイムシートのコスト乗数および請求可能の既定値。"
       },
+      "time-approval-policies": {
+        "title": "勤怠承認ポリシー",
+        "description": "承認者が自分の勤怠を承認できるかどうか。ポリシー行で許可しない限り、自己承認は防止されます。"
+      },
       "worker-comp-groups": {
         "title": "労災保険グループ",
         "description": "労務原価計算用の労災補償料率グループ。"
@@ -3799,6 +3803,9 @@
       "ratePercent": "税率 %",
       "effectiveFrom": "発効開始日",
       "effectiveTo": "発効終了日",
+      "timePreventSelfApproval": "自己承認を防止する",
+      "timeEffectiveToHelp": "後のポリシーが開始するまで有効にする場合は空のままにします。",
+      "timePreventSelfApprovalHelp": "オン：承認者は自分のタイムシートや自分の作業時間を含むフィールドチケットを承認できません。自分の時間を自分で承認しなければならない組織でのみオフにしてください。",
       "members": "税コード",
       "reportCode": "レポートコード",
       "lineCode": "明細コード",

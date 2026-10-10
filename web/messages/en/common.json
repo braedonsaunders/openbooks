@@ -312,6 +312,7 @@
   },
   "approvalFlow": {
     "pendingWith": "Pending with {names}",
+    "awaitingAnother": "Awaiting another approver",
     "rejectTitle": "Reject this document?",
     "rejectReasonLabel": "Rejection reason",
     "signTitle": "Sign this approval",

@@ -155,6 +155,37 @@ export const WORKFORCE_ENTITIES: SetupEntity[] = [
     ],
   },
   {
+    // Organization time-approval policy: whether an approver may approve
+    // their own timesheet (and a field ticket carrying their own crew
+    // time). Effective-dated rows — the latest active row covering the week
+    // decides, so a change never reinterprets already-approved history —
+    // and every write rides the generic CRUD audit. An org with no row
+    // prevents (default ON): a sole proprietor opts out explicitly.
+    // Writes stay behind the base admin.setup.manage gate: the approver
+    // whose self-approval is prevented cannot lift the control themselves.
+    key: 'time-approval-policies',
+    table: 'time_approval_policies',
+    groupKey: 'workforce',
+    featureKeysAny: ['timeTracking', 'manufacturing'],
+    iconKey: 'shield-check',
+    orgScoped: true,
+    actorCols: true,
+    orderBy: 'effective_from desc',
+    hasActive: true,
+    columns: [
+      { key: 'effectiveFrom', kind: 'date', labelKey: 'fields.effectiveFrom' },
+      { key: 'effectiveTo', kind: 'date', labelKey: 'fields.effectiveTo' },
+      { key: 'preventSelfApproval', kind: 'boolean', labelKey: 'fields.timePreventSelfApproval' },
+      { key: 'isActive', kind: 'badge-active' },
+    ],
+    fields: [
+      { key: 'effectiveFrom', kind: 'date', labelKey: 'fields.effectiveFrom', required: true },
+      { key: 'effectiveTo', kind: 'date', labelKey: 'fields.effectiveTo', helpTextKey: 'fields.timeEffectiveToHelp' },
+      { key: 'preventSelfApproval', kind: 'boolean', labelKey: 'fields.timePreventSelfApproval', helpTextKey: 'fields.timePreventSelfApprovalHelp', defaultValue: true, booleanStyle: 'switch', fullWidth: true },
+      { key: 'isActive', kind: 'boolean' },
+    ],
+  },
+  {
     // Payroll program / EIN / state-SUI accounts the employer files and remits
     // under. Employees are assigned one on their payroll profile; remittance
     // runs, PD7A worksheets, and the T4/W-2 returns all group by it.

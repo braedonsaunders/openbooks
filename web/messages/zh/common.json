@@ -312,6 +312,7 @@
   },
   "approvalFlow": {
     "pendingWith": "等待 {names} 处理",
+    "awaitingAnother": "等待其他审批人",
     "rejectTitle": "驳回此单据？",
     "rejectReasonLabel": "驳回原因",
     "waitingOthers": "已记录——等待其他审批人",
