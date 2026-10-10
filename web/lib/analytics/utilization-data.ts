@@ -1,11 +1,10 @@
 import "server-only";
 import { analyticsQuery } from "./query";
 import { analyticsSection } from "./read-context";
-import { timeStatsSource, fetchHistoryHours } from "./utilization-history";
+import { timeStatsSource, fetchHistoryHours, planHistoryWindows } from "./utilization-history";
 import { isFeatureEnabled } from "../features";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/platform/database";
-import { utcDateFromParts } from "@openbooks/engine/src/platform/business-date.ts";
 import { add, cmp, div, mulDecimal, neg } from "@openbooks/engine/src/money/money.ts";
 import { loadWorkSchedules, pickWorkSchedule, scheduledHoursBetween } from "@openbooks/engine/payroll/work-schedules";
 import { flowRates } from "../fx-presentation";
@@ -331,20 +330,14 @@ export async function utilizationData(
   const priorTo = ymd(priorEnd);
 
   // History period plan: same month-length, 5 prior periods, deduplicated labels.
-  const periodMonths =
-    (rangeEnd.getUTCFullYear() - rangeStart.getUTCFullYear()) * 12 + (rangeEnd.getUTCMonth() - rangeStart.getUTCMonth()) + 1;
+  const { periodMonths, windows: histWindows } = planHistoryWindows(period.from, period.to, 5);
   const histPlans: { start: string; end: string; label: string }[] = [];
   const seen = new Set<string>();
-  for (let i = 1; i <= 5; i++) {
-    // utcDateFromParts keeps literal years 0001-0099 that Date.UTC would
-    // remap onto 1900-1999.
-    const pEnd = utcDateFromParts(rangeEnd.getUTCFullYear(), rangeEnd.getUTCMonth() - i * periodMonths + 1, 0);
-    const pStart = utcDateFromParts(pEnd.getUTCFullYear(), pEnd.getUTCMonth() - periodMonths + 1, 1);
-    const ym = `${pEnd.getUTCFullYear()}-${String(pEnd.getUTCMonth() + 1).padStart(2, "0")}`;
-    const label = strings.monthLabel(ym);
+  for (const window of histWindows) {
+    const label = strings.monthLabel(window.endYm);
     if (seen.has(label)) continue;
     seen.add(label);
-    histPlans.push({ start: ymd(pStart), end: ymd(pEnd), label });
+    histPlans.push({ start: window.start, end: window.end, label });
   }
 
   const [curr, prior, histStats] = await Promise.all([

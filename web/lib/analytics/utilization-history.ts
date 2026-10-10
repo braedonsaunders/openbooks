@@ -2,6 +2,46 @@ import "server-only";
 import { analyticsQuery } from "./query";
 import { sql } from "drizzle-orm";
 import { subsidiaryVisibleFilter } from "../subsidiaries";
+import { utcDateFromParts } from "@openbooks/engine/src/platform/business-date.ts";
+
+export interface HistoryWindow {
+  /** Inclusive ISO start of one prior window. */
+  start: string;
+  /** Inclusive ISO end of one prior window. */
+  end: string;
+  /** The window's end month as `YYYY-MM`, for month labels. */
+  endYm: string;
+}
+
+/**
+ * Rolling prior windows behind a selected range, each the range's own
+ * month-length, newest first. A window always runs start ≤ end: the end is
+ * the last day of the month `periodMonths` before the range end's month,
+ * and the start is that window's first day — month underflow normalizes
+ * across year boundaries instead of producing a reversed or wrong-year
+ * window. Pure date math (no DB); the dashboard labels and deduplicates.
+ */
+export function planHistoryWindows(rangeFrom: string, rangeTo: string, count = 5): { periodMonths: number; windows: HistoryWindow[] } {
+  const rangeStart = new Date(rangeFrom + "T00:00:00Z");
+  const rangeEnd = new Date(rangeTo + "T00:00:00Z");
+  const periodMonths =
+    (rangeEnd.getUTCFullYear() - rangeStart.getUTCFullYear()) * 12 + (rangeEnd.getUTCMonth() - rangeStart.getUTCMonth()) + 1;
+  const ymd = (d: Date) =>
+    `${String(d.getUTCFullYear()).padStart(4, "0")}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}`;
+  const out: HistoryWindow[] = [];
+  for (let i = 1; i <= count; i++) {
+    // utcDateFromParts keeps literal years 0001-0099 that Date.UTC would
+    // remap onto 1900-1999.
+    const pEnd = utcDateFromParts(rangeEnd.getUTCFullYear(), rangeEnd.getUTCMonth() - i * periodMonths + 1, 0);
+    const pStart = utcDateFromParts(pEnd.getUTCFullYear(), pEnd.getUTCMonth() - periodMonths + 1, 1);
+    out.push({
+      start: ymd(pStart),
+      end: ymd(pEnd),
+      endYm: `${pEnd.getUTCFullYear()}-${String(pEnd.getUTCMonth() + 1).padStart(2, "0")}`,
+    });
+  }
+  return { periodMonths, windows: out };
+}
 
 export function timeStatsSource(orgId: string, from: string, to: string, allowed: ReadonlySet<string> | null) {
   return {
