@@ -61,7 +61,7 @@ export function normalizeExternalAccountId(raw: string | null | undefined): stri
 export type StatementSource = "ofx" | "csv" | "camt053" | "bai2" | "mt940" | "feed_api" | "manual";
 
 /** Increment whenever statement-to-line normalization semantics change. */
-export const BANK_STATEMENT_PARSER_VERSION = "2026.08.6";
+export const BANK_STATEMENT_PARSER_VERSION = "2026.10.1";
 
 export type StatementSourceContent = string | Uint8Array;
 export type StatementTextSource = Extract<StatementSource, "ofx" | "csv" | "camt053" | "bai2" | "mt940">;
