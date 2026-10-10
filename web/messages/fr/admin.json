@@ -1037,7 +1037,68 @@
     },
     "saved": "Paramètres enregistrés",
     "savedPeriodsRederived": "Paramètres enregistrés — périodes comptables ré-étiquetées selon le nouvel exercice financier",
-    "saveSettings": "Enregistrer les paramètres"
+    "saveSettings": "Enregistrer les paramètres",
+    "legalIdentity": {
+      "title": "Identité juridique",
+      "description": "Adresse du siège, structure juridique et numéros fiscaux sous lesquels vous déclarez et facturez. Les factures et autres documents imprimés les affichent dans le bloc vendeur.",
+      "address": {
+        "line1": "Adresse",
+        "line2": "Complément d'adresse",
+        "city": "Ville",
+        "region": "État / province / région",
+        "postalCode": "Code postal",
+        "country": "Pays de l'adresse",
+        "countryPlaceholder": "Sélectionnez un pays…"
+      },
+      "legalForm": "Forme juridique",
+      "legalFormHint": "La forme juridique sous laquelle l'entreprise est immatriculée. Elle détermine les régimes fiscaux disponibles.",
+      "legalForms": {
+        "sole_proprietorship": "Entreprise individuelle",
+        "general_partnership": "Société en nom collectif",
+        "limited_partnership": "Société en commandite",
+        "llp": "Société à responsabilité limitée de personnes (LLP)",
+        "llc": "Société à responsabilité limitée (LLC)",
+        "corporation": "Société par actions",
+        "cooperative": "Coopérative",
+        "nonprofit": "Organisme à but non lucratif",
+        "trust": "Fiducie",
+        "other": "Autre"
+      },
+      "taxClassification": "Régime fiscal",
+      "taxClassificationHint": "Comment l'entreprise est imposée sur ses revenus, par exemple une LLC imposée comme une société de personnes.",
+      "taxClassifications": {
+        "individual": "Imposé avec le propriétaire (entrepreneur individuel / entité transparente)",
+        "partnership": "Société de personnes",
+        "corporation": "Société (impôt sur les sociétés)",
+        "s_corporation": "Société S (S corporation)",
+        "tax_exempt": "Organisme exonéré",
+        "trust": "Fiducie ou succession",
+        "other": "Autre"
+      },
+      "taxIdsTitle": "Numéros fiscaux et d'immatriculation",
+      "taxIdsHint": "Les numéros proposés suivent le pays de l'entreprise. Leur format (et leur clé de contrôle lorsque l'administration en publie une) est vérifié à l'enregistrement.",
+      "taxIds": {
+        "us_ein": "Numéro d'identification d'employeur (EIN)",
+        "ca_bn": "Numéro d'entreprise (NE)",
+        "ca_gst_hst": "Numéro d'inscription à la TPS/TVH",
+        "ca_qst": "Numéro d'inscription à la TVQ",
+        "gb_vat": "Numéro de TVA (VAT)",
+        "gb_crn": "Numéro d'immatriculation de la société",
+        "eu_vat": "Numéro de TVA intracommunautaire",
+        "au_abn": "Numéro d'entreprise australien (ABN)",
+        "tax_id": "Numéro d'identification fiscale",
+        "registration": "Numéro d'immatriculation"
+      },
+      "taxIdInvalid": "Ce numéro n'est pas valide.",
+      "taxIdInvalidExample": "Ce numéro n'est pas valide — saisissez-le comme {example}.",
+      "taxIdInvalidToast": "Vérifiez le champ {label} avant d'enregistrer.",
+      "otherJurisdiction": "Enregistré sous un autre pays. Il est conservé jusqu'à ce que vous l'effaciez.",
+      "refusals": {
+        "taxId": "{label} n'est pas valide pour cette entreprise. Vérifiez le numéro et le pays de l'entreprise.",
+        "address": "Complétez l'adresse de l'entreprise avec la rue et la ville, ou videz tous les champs d'adresse.",
+        "classification": "Ce régime fiscal n'est pas disponible pour cette forme juridique dans ce pays. Choisissez un autre régime."
+      }
+    }
   },
   "users": {
     "unlinkedPerson": "Non liée",

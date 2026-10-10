@@ -1554,7 +1554,7 @@ export async function finalizeFiling(args: {
       included: number;
       missing_tin: number;
     }>(sql`
-      select o.name as org_name, o.settings->'taxIds' as tax_ids,
+      select o.name as org_name, o.tax_ids as tax_ids,
              s.name as subsidiary_name,
              (select count(*)::int from information_return_recipients r
                where r.filing_id = f.id and r.status = 'included') as included,

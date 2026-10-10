@@ -15,6 +15,7 @@ import { rendererUnavailableResponse } from '@/lib/api/pdf-renderer'
 import { guardSubsidiaryScope } from '@/lib/authz';
 import { guardComplianceFeature, loadInformationReturnFilingScope } from '@/lib/compliance'
 import { maskTin, type RecipientFormData } from '@/lib/information-return-form'
+import { payerTaxIdentifier } from '@openbooks/engine/src/organization/company-identity.ts'
 import { renderInformationReturnBatchPdf, renderInformationReturnPdf } from '@/lib/information-return-pdf'
 import { isUuid } from '@/lib/list-params'
 import { notFound } from "@/lib/api/responses";
@@ -122,7 +123,7 @@ export const GET = defineRoute({
     // Never put a live org tax ID on a stamped copy: changing org settings after
     // finalization must not alter the evidence furnished to the recipient.
     const taxIds = filing.payer_snapshot?.taxIds ?? {}
-    const payerTin = taxIds.ein ?? taxIds.federal ?? taxIds.bn ?? Object.values(taxIds)[0] ?? null
+    const payerTin = payerTaxIdentifier(taxIds)
 
     const forms: RecipientFormData[] = recipients.rows.map((r) => ({
       formType: filing.form_type,

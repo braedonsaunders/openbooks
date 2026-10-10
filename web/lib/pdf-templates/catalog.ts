@@ -35,8 +35,12 @@ export type PdfRecordTypeMeta = {
   collections: PdfCollection[]
 }
 
-const ORG_FIELDS: PdfMergeField[] = [
+/** The seller block, from Company & Accounting → Legal identity. */
+export const ORG_FIELDS: PdfMergeField[] = [
   { key: 'org_name', label: 'Company name', sample: 'Northwind Industrial Ltd.' },
+  { key: 'org_legal_name', label: 'Company legal name', sample: 'Northwind Industrial Ltd.' },
+  { key: 'org_address', label: 'Company address', sample: '400 King St W, Suite 300, Toronto, ON M5V 1K2, CA' },
+  { key: 'org_tax_ids', label: 'Company tax numbers', sample: 'BN 123456782 · GST/HST 123456782RT0001' },
   { key: 'printed_date', label: 'Printed date', sample: 'Jul 16, 2026' },
 ]
 

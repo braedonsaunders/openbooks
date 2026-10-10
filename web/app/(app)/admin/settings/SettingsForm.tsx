@@ -27,6 +27,12 @@ import { SaasMetricsNormalization } from './SaasMetricsNormalization'
 import type { ControlAccountRole } from '@openbooks/engine/src/records/control-accounts.ts'
 import { countryOptions } from '../../../../lib/countries'
 import { accountTypeMessageKey, controlAccountPickerOptions } from './control-account-options'
+import {
+  EMPTY_ADDRESS,
+  LegalIdentityCard,
+  legalIdentityPayload,
+  type LegalIdentityValue,
+} from './LegalIdentityCard'
 
 export type AccountOption = { id: string; label: string; type: string }
 
@@ -61,6 +67,15 @@ type Initial = {
     defaultCardAccountId: string
     defaultBankAccountId: string
   }
+  /** Registered address, legal form, tax classification and identifiers. */
+  legalIdentity?: LegalIdentityValue
+}
+
+const EMPTY_LEGAL_IDENTITY: LegalIdentityValue = {
+  address: EMPTY_ADDRESS,
+  legalForm: '',
+  taxClassification: '',
+  taxIds: {},
 }
 
 /** Blank till defaults: no walk-in customer and no account prefills. */
@@ -137,7 +152,12 @@ export function SettingsForm({
       customerCreditsReduceBillings: true,
     },
     cashSales: initial.cashSales ?? { ...EMPTY_CASH_SALES },
+    legalIdentity: initial.legalIdentity ?? EMPTY_LEGAL_IDENTITY,
   })
+  // Identifiers already on file: one recorded under another jurisdiction
+  // stays visible (and travels unchanged) until an operator clears it.
+  const storedTaxIds = initial.legalIdentity?.taxIds ?? {}
+  const [invalidTaxId, setInvalidTaxId] = useState<string | null>(null)
   // Save-attempt marker: the required error shows once a save is attempted
   // with a blank name and clears as soon as typing resumes
   // (a toast alone leaves the field looking saved-but-blank until reload).
@@ -153,6 +173,16 @@ export function SettingsForm({
   const expectedTypesLabel = (types: readonly string[]) => {
     const names = types.map((type) => tAccounts(`types.${accountTypeMessageKey(type)}`))
     return new Intl.ListFormat(locale, { type: 'disjunction' }).format(names)
+  }
+
+  /** A legal-identity refusal, restated in the operator's language. */
+  const legalIdentityRefusal = (data: Record<string, unknown>): string | null => {
+    if (data.code === 'invalid-tax-id' && typeof data.scheme === 'string') {
+      return t('legalIdentity.refusals.taxId', { label: t(`legalIdentity.taxIds.${data.scheme}`) })
+    }
+    if (data.code === 'invalid-company-address') return t('legalIdentity.refusals.address')
+    if (data.code === 'tax-classification-mismatch') return t('legalIdentity.refusals.classification')
+    return null
   }
 
   /** A save refusal that names one control-account role is restated with the
@@ -207,8 +237,15 @@ export function SettingsForm({
       toast.error(t('validation.countryRequired'))
       return
     }
+    const { fairValueRangePolicy, contractCreation, saasMetrics, cashSales, legalIdentity, ...rest } = form
+    const identity = legalIdentityPayload(legalIdentity, form.country, storedTaxIds)
+    if (!identity.ok) {
+      setInvalidTaxId(identity.invalidScheme)
+      toast.error(t('legalIdentity.taxIdInvalidToast', { label: t(`legalIdentity.taxIds.${identity.invalidScheme}`) }))
+      return
+    }
+    setInvalidTaxId(null)
     setSaving(true)
-    const { fairValueRangePolicy, contractCreation, saasMetrics, cashSales, ...rest } = form
     const res = await fetch('/api/admin/settings', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
@@ -219,6 +256,7 @@ export function SettingsForm({
       // its field so the stored choice survives.
       body: JSON.stringify({
         ...rest,
+        ...identity.payload,
         ...(revenueRecognition ? { fairValueRangePolicy } : {}),
         ...(revenueContracts ? { contractCreation } : {}),
         ...(saasMetricsEnabled ? { saasMetrics } : {}),
@@ -228,8 +266,10 @@ export function SettingsForm({
     setSaving(false)
     if (!res.ok) {
       const data = (await res.json().catch(() => ({}))) as Record<string, unknown>
+      if (data.code === 'invalid-tax-id' && typeof data.scheme === 'string') setInvalidTaxId(data.scheme)
       toast.error(
         controlAccountRefusal(data)
+          ?? legalIdentityRefusal(data)
           ?? (typeof data.error === 'string' && data.error ? data.error : tCommon('feedback.saveFailed')),
       )
       return
@@ -359,6 +399,17 @@ export function SettingsForm({
           </div>
         </CardContent>
       </Card>
+
+      <LegalIdentityCard
+        value={form.legalIdentity}
+        onChange={(legalIdentity) => {
+          setInvalidTaxId(null)
+          setForm((f) => ({ ...f, legalIdentity }))
+        }}
+        country={form.country}
+        storedTaxIds={storedTaxIds}
+        invalidScheme={invalidTaxId}
+      />
 
       {/* Fiscal year — the headline setting */}
       <Card>
@@ -695,6 +746,7 @@ export function SettingsForm({
             customerCreditsReduceBillings: true,
           },
           cashSales: initial.cashSales ?? { ...EMPTY_CASH_SALES },
+          legalIdentity: initial.legalIdentity ?? EMPTY_LEGAL_IDENTITY,
         })}>
           {tCommon('actions.reset')}
         </Button>

@@ -1037,7 +1037,68 @@
     },
     "saved": "Settings saved",
     "savedPeriodsRederived": "Settings saved — accounting periods re-labelled to the new fiscal year",
-    "saveSettings": "Save settings"
+    "saveSettings": "Save settings",
+    "legalIdentity": {
+      "title": "Legal identity",
+      "description": "Registered address, business structure and the tax numbers you file and invoice under. Invoices and other printed documents show them in the seller block.",
+      "address": {
+        "line1": "Street address",
+        "line2": "Address line 2",
+        "city": "City",
+        "region": "State / province / region",
+        "postalCode": "Postal or ZIP code",
+        "country": "Address country",
+        "countryPlaceholder": "Select a country…"
+      },
+      "legalForm": "Business structure",
+      "legalFormHint": "The legal form the company is registered as. It determines which tax classifications are available.",
+      "legalForms": {
+        "sole_proprietorship": "Sole proprietorship",
+        "general_partnership": "General partnership",
+        "limited_partnership": "Limited partnership",
+        "llp": "Limited liability partnership (LLP)",
+        "llc": "Limited liability company (LLC)",
+        "corporation": "Corporation",
+        "cooperative": "Cooperative",
+        "nonprofit": "Non-profit organization",
+        "trust": "Trust",
+        "other": "Other"
+      },
+      "taxClassification": "Tax classification",
+      "taxClassificationHint": "How the company is taxed on its income, for example an LLC taxed as a partnership.",
+      "taxClassifications": {
+        "individual": "Taxed with the owner (sole proprietor / disregarded entity)",
+        "partnership": "Partnership",
+        "corporation": "Corporation",
+        "s_corporation": "S corporation",
+        "tax_exempt": "Tax-exempt organization",
+        "trust": "Trust or estate",
+        "other": "Other"
+      },
+      "taxIdsTitle": "Tax and registration numbers",
+      "taxIdsHint": "The numbers offered follow the company's country. Each is checked for its format (and check digit where the authority publishes one) when you save.",
+      "taxIds": {
+        "us_ein": "Employer Identification Number (EIN)",
+        "ca_bn": "Business Number (BN)",
+        "ca_gst_hst": "GST/HST registration number",
+        "ca_qst": "QST registration number",
+        "gb_vat": "VAT registration number",
+        "gb_crn": "Company registration number",
+        "eu_vat": "VAT identification number",
+        "au_abn": "Australian Business Number (ABN)",
+        "tax_id": "Tax registration number",
+        "registration": "Company registration number"
+      },
+      "taxIdInvalid": "This isn't a valid number.",
+      "taxIdInvalidExample": "This isn't a valid number — enter it like {example}.",
+      "taxIdInvalidToast": "Check the {label} before saving.",
+      "otherJurisdiction": "Recorded under a different country. It stays on file until you clear it.",
+      "refusals": {
+        "taxId": "{label} isn't valid for this company. Check the number and the company's country.",
+        "address": "Complete the company address with a street address and city, or clear every address field.",
+        "classification": "That tax classification isn't available for this business structure in this country. Choose another classification."
+      }
+    }
   },
   "users": {
     "metaTitle": "Users",

@@ -90,12 +90,18 @@ function documentStarter(meta: PdfRecordTypeMeta, accent: string): StarterTempla
     `<table style="width:100%;border-collapse:collapse;margin:0 0 6px;"><tbody><tr>` +
     `<td style="vertical-align:bottom;">` +
     `<div style="font-size:19px;font-weight:800;letter-spacing:-.01em;color:${accent};">{{org_name}}</div>` +
+    // Seller identity. Fiscal invoice types print the e-invoice seller block
+    // their embedded invoice requires; every other document prints the
+    // registered address and tax numbers from Company & Accounting → Legal
+    // identity. Lines collapse when not recorded.
     (hasFiscalIdentity ? `<div data-if="seller_address" style="font-size:10px;color:${MUTED};line-height:1.6;max-width:320px;">{{seller_address}}</div>` +
       `<div data-if="seller_vat_id" style="font-size:10px;color:${MUTED};">VAT: {{seller_vat_id}}</div>` +
       `<div data-if="seller_tax_number" style="font-size:10px;color:${MUTED};">Tax registration: {{seller_tax_number}}</div>` +
       `<div data-if="seller_legal_registration" style="font-size:10px;color:${MUTED};">Registration: {{seller_legal_registration}}</div>` +
       `<div data-if="seller_contact" style="font-size:10px;color:${MUTED};">{{seller_contact}}</div>` +
-      `<div data-if="seller_electronic_address" style="font-size:10px;color:${MUTED};">{{seller_electronic_address}}</div>` : '') +
+      `<div data-if="seller_electronic_address" style="font-size:10px;color:${MUTED};">{{seller_electronic_address}}</div>`
+      : `<div data-if="org_address" style="font-size:10px;color:${MUTED};line-height:1.6;max-width:320px;">{{org_address}}</div>` +
+        `<div data-if="org_tax_ids" style="font-size:10px;color:${MUTED};">{{org_tax_ids}}</div>`) +
     `</td>` +
     `<td style="vertical-align:bottom;text-align:right;">` +
     `<div style="font-size:26px;font-weight:800;letter-spacing:.02em;color:${INK};text-transform:uppercase;">${meta.docTitle}</div>` +

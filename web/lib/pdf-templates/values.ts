@@ -12,6 +12,7 @@ import { resolveLocale } from '../locale'
 import { subsidiaryVisibleFilter } from '../subsidiaries'
 import { isFeatureEnabled } from '../features'
 import { PDF_RECORD_TYPE_BY_KEY, type PdfMergeField, type PdfRecordTypeMeta } from './catalog'
+import { orgIdentityMergeValues, type OrgIdentityRow } from './org-identity'
 import { loadFieldTicket } from '../field-tickets'
 import { buildPayStubStatement, toStatementLine, type StatementRow } from './pay-stub-statement'
 import { canonicalDecimal } from '../exact-decimal'
@@ -62,7 +63,7 @@ function fmtQty(v: unknown, locale: string): string {
   return n.toLocaleString(locale, { maximumFractionDigits: 4 })
 }
 
-type OrgRow = { name: string; base_currency: string; brand_primary: string | null }
+type OrgRow = OrgIdentityRow & { base_currency: string; brand_primary: string | null }
 
 /**
  * One documented fallback policy for the whole file: a printed amount is
@@ -96,7 +97,8 @@ export class MissingPdfOrgError extends Error {
 
 async function orgRow(orgId: string): Promise<OrgRow> {
   const r = (await db.execute<OrgRow>(sql`
-    select name, base_currency, settings ->> 'brandPrimary' as brand_primary
+    select name, base_currency, settings ->> 'brandPrimary' as brand_primary,
+           legal_name, tax_ids, settings -> 'companyAddress' as company_address
       from orgs where id = ${orgId}
   `))
   const row = r.rows[0]
@@ -286,7 +288,7 @@ async function loadDocumentValues(
     tax_total: money(taxTotal),
     total: money(total),
     balance_due: doc.balance_due === null || doc.balance_due === undefined ? '' : money(String(doc.balance_due)),
-    org_name: org.name,
+    ...orgIdentityMergeValues(org),
     printed_date: fmtDate(await businessToday(orgId), locale),
     lines: lineValues,
     line_groups: lineGroups,
@@ -344,7 +346,7 @@ async function loadJournalValues(
     memo: entry.memo ?? '',
     total_debits: money(sum(debitAmounts)),
     total_credits: money(sum(creditAmounts)),
-    org_name: org.name,
+    ...orgIdentityMergeValues(org),
     printed_date: fmtDate(await businessToday(orgId), locale),
     lines: lineRows,
   }
@@ -513,7 +515,7 @@ async function loadPayStubValues(
     ytd_gross: money(String(ytd.rows[0]?.gross ?? '0')),
     ytd_tax: money(String(ytd.rows[0]?.tax ?? '0')),
     ytd_net: money(String(ytd.rows[0]?.net ?? '0')),
-    org_name: org.name,
+    ...orgIdentityMergeValues(org),
     printed_date: fmtDate(await businessToday(orgId), locale),
     earnings: byKind('earning'),
     deductions: byKind('deduction'),
@@ -623,7 +625,7 @@ async function loadPayrollChequeValues(
     has_non_cash_earnings: !isZero(nonCash),
     total_deductions: money(deductionsTotal),
     net_pay: money(net),
-    org_name: org.name,
+    ...orgIdentityMergeValues(org),
     printed_date: fmtDate(await businessToday(orgId), locale),
     earnings: byKind('earning'),
     deductions: byKind('deduction'),
@@ -752,7 +754,7 @@ async function loadShipmentValues(
       barcode: `${shipment.documentNumber}-C${index + 1}`,
     })),
     memo: shipment.memo ?? '',
-    org_name: org.name,
+    ...orgIdentityMergeValues(org),
     printed_date: fmtDate(await businessToday(orgId), locale),
     lines: shipment.lines.map((line) => ({
       line_number: String(line.lineNumber),
@@ -933,7 +935,7 @@ async function loadFieldTicketValues(
     customer_signed_at: ft.signatures?.customer?.at ? fmtDate(ft.signatures.customer.at.slice(0, 10), locale) : '',
     customer_comment: ft.signatures?.customer?.comment ?? '',
     foreman_signature_image: ft.signatures?.foreman?.image ?? '',
-    org_name: org.name,
+    ...orgIdentityMergeValues(org),
     printed_date: fmtDate(await businessToday(orgId), locale),
     crew,
     lines: ticket.lines.map((l) => ({
