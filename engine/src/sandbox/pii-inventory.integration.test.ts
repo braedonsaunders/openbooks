@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
+import { errorChainMatches } from "../testing/error-chain.ts";
 import { generateCopySql } from "./clone.ts";
 import { loadCatalog } from "./catalog.ts";
 import { DEFAULT_POLICIES, maskExpr, type MaskTransform } from "./masking.ts";
@@ -37,6 +38,8 @@ const SENSITIVE_TYPES: ReadonlySet<string> = new Set([
  * without a named column), plus the table.column pairs below.
  */
 const CONSTRUCTION_COVERED: ReadonlySet<string> = new Set([
+  "handling_unit_moves.request", // native projection preserves dated destination identity and redacts prose
+  "handling_unit_moves.movements", // native projection preserves only rebased movement IDs and exact values
   // Native production evidence retains typed quantities and rebased identity while redacting authored prose.
   "operating_profile_scopes.profile_ids",
   "operating_profile_versions.definition",
@@ -85,6 +88,16 @@ function isCoveredByConstruction(table: string, column: string, udtName: string)
  *   with faked names they identify nobody.
  */
 const ALLOW_LISTED_NON_PERSONAL: ReadonlySet<string> = new Set([
+  // Native constrained stock, ownership and presentation classifications.
+  "consignment_events.kind",
+  "consignment_stock.owner_kind",
+  "handling_units.status",
+  "inventory_count_policies.abc_class",
+  "item_inventory_profiles.abc_class",
+  "shipment_labels.direction",
+  "shipping_rate_quotes.direction",
+  "stock_locations.inventory_ownership",
+  "user_list_preferences.presentation",
   // Production classifications and measurement values are typed business facts.
   "operating_profiles.code",
   "operating_profiles.family",
@@ -2712,6 +2725,25 @@ test("every sensitive column of every cloned table is masked or allow-listed, an
     }
   }
   assert.deepEqual(stale, [], `allow-list entries that must be removed: ${stale.join(", ")}`);
+});
+
+test("warehouse evidence masking removes arbitrary prose and preserves native dated movement values", async () => {
+  const seed = "42b3d7dd-9674-4f3c-8d6a-8ba5d2308130";
+  const id = "65fa9dc7-228f-4e19-8bf1-17d52efeb78d";
+  const result = (await db.execute<{request: Record<string, unknown>; movements: Record<string, unknown>[]; rebased: string}>(sql`
+    select public.warehouse_execution_mask_json(
+      ${JSON.stringify({toBinId:id,date:"2026-01-02",reason:"Employee Jane Smith moved this carton",recipient:"Jane Smith"})}::jsonb,
+      ${seed}::uuid,'request') as request,
+      public.warehouse_execution_mask_json(
+        ${JSON.stringify([{shipmentLineId:id,fromMovementId:id,toMovementId:id,entryId:null,value:"12.3400",recipient:"Jane Smith"}])}::jsonb,
+        ${seed}::uuid,'movements') as movements,
+      public.ob_rebase(${id}::uuid,${seed}::uuid)::text as rebased`)).rows[0]!;
+  assert.deepEqual(result.request,{toBinId:result.rebased,date:"2026-01-02",reason:"REDACTED"});
+  assert.deepEqual(result.movements,[{shipmentLineId:result.rebased,fromMovementId:result.rebased,
+    toMovementId:result.rebased,entryId:null,value:"12.3400"}]);
+  await assert.rejects(db.execute(sql`select public.warehouse_execution_mask_json(
+    '[{"value":"Employee Jane Smith"}]'::jsonb,${seed}::uuid,'movements')`),
+    (error: unknown) => errorChainMatches(error, /exact numeric evidence/));
 });
 
 test("every masking policy names a real schema column with a legal transform", async () => {

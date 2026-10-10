@@ -349,8 +349,13 @@ export function generateCopySql(
       ) end)`);
       continue;
     }
-    if(t.name==="handling_unit_moves" && ["request","movements"].includes(c.name)) {
-      exprs.push(`public.warehouse_execution_clone_json("${c.name}", '${seed}'::uuid)`);
+    if (t.name === "handling_unit_moves" && ["request", "movements"].includes(c.name)) {
+      if (tableMask?.has(c.name)) {
+        throw new Error(`Warehouse movement evidence ${c.name} requires native structured masking; remove the whole-column policy before copying.`);
+      }
+      exprs.push(opts.masked
+        ? `public.warehouse_execution_mask_json("${c.name}", '${seed}'::uuid, '${c.name}')`
+        : `public.warehouse_execution_clone_json("${c.name}", '${seed}'::uuid)`);
       continue;
     }
     const fkTarget = t.fks[c.name];

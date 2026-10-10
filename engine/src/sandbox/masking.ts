@@ -149,6 +149,15 @@ export async function loadMaskingPolicies(
  * fails unless each is masked here or explicitly allow-listed as
  * non-personal. Add a policy there before allow-listing anyone's identity. */
 export const DEFAULT_POLICIES: MaskingPolicy[] = [
+  // Warehouse reasons and external carton keys can identify workers or recipients.
+  { tableName: "consignment_events", columnName: "reason", transform: "redact" },
+  { tableName: "consignment_stock", columnName: "reason", transform: "redact" },
+  { tableName: "handling_unit_moves", columnName: "command_key", transform: "hash" },
+  { tableName: "handling_unit_moves", columnName: "reason", transform: "redact" },
+  { tableName: "handling_units", columnName: "code", transform: "hash" },
+  { tableName: "lots", columnName: "hold_reason", transform: "redact" },
+  { tableName: "serials", columnName: "hold_reason", transform: "redact" },
+  { tableName: "pick_execution_lines", columnName: "reason", transform: "redact" },
   {tableName:"mfg_work_orders",columnName:"campaign_reference",transform:"hash"},
   // Workflow and quality prose may name people; typed operational evidence is masked by clone construction.
   { tableName: "operating_profiles", columnName: "name", transform: "redact" },

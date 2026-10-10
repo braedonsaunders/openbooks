@@ -482,9 +482,20 @@ test(
                 task: string | null;
                 confirmed_by: string;
                 matches: boolean;
+                code_masked: boolean;
+                reason_masked: boolean;
+                request_masked: boolean;
+                command_masked: boolean;
+                value_matches: boolean;
               }>(sql`
           select content.confirmation_task_id as task,content.confirmed_by,
-            (move.movements->0->>'shipmentLineId')::uuid=content.shipment_line_id as matches
+            (move.movements->0->>'shipmentLineId')::uuid=content.shipment_line_id as matches,
+            (select code from handling_units where org_id=${clone.sandboxOrgId} and id=${copied.unit})=
+              (select case when ${masked} then md5(code) else code end from handling_units where org_id=${org.orgId} and id=${unit.id}) as code_masked,
+            move.reason=case when ${masked} then 'REDACTED' else ${moving.reason} end as reason_masked,
+            move.request->>'reason'=case when ${masked} then 'REDACTED' else ${moving.reason} end as request_masked,
+            move.command_key=case when ${masked} then md5(${moving.commandKey}) else ${moving.commandKey} end as command_masked,
+            move.movements->0->'value'=(select movements->0->'value' from handling_unit_moves where org_id=${org.orgId} and id=${move.id}) as value_matches
           from handling_unit_contents content join handling_unit_moves move
             on move.org_id=content.org_id and move.handling_unit_id=content.handling_unit_id
           where content.org_id=${clone.sandboxOrgId} and content.handling_unit_id=${copied.unit}`),
@@ -492,6 +503,11 @@ test(
           ).rows[0]!;
           assert.equal(evidence.task, null);
           assert.equal(evidence.confirmed_by, copied.actor);
+          assert.equal(evidence.code_masked, true, "carton identity follows the selected privacy mode");
+          assert.equal(evidence.reason_masked, true);
+          assert.equal(evidence.request_masked, true);
+          assert.equal(evidence.command_masked, true);
+          assert.equal(evidence.value_matches, true, "masking preserves exact valued-transfer evidence");
           assert.equal(
             evidence.matches,
             true,
