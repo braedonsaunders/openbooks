@@ -1302,6 +1302,12 @@ function PeriodDrawer({ row, props }: { row?: PeriodRow; props: Props }) {
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [generateError, setGenerateError] = useState<string | null>(null);
+  // One-reason close across every module. Overrides stay per module; results
+  // stay visible until the panel closes so a partial run is explicit.
+  const [closeAll, setCloseAll] = useState(false);
+  const [closeAllReason, setCloseAllReason] = useState("");
+  const [closeAllOverrides, setCloseAllOverrides] = useState<Record<string, string>>({});
+  const [closeAllResults, setCloseAllResults] = useState<{ module: string; ok: boolean; error?: string }[] | null>(null);
   async function generate() {
     setBusy(true);
     setGenerateError(null);
@@ -1311,7 +1317,11 @@ function PeriodDrawer({ row, props }: { row?: PeriodRow; props: Props }) {
         t("errors.actionFailed"),
       );
       toast.success(t("messages.periodsGenerated"));
-      router.push(mergeHref(closeHref, {}, { fy: year }));
+      // Build from the base path with the full param set: feeding the
+      // tab-bearing drawer href back into mergeHref once produced a second
+      // "?" (...?tab=periods?fy=2025). The hardened mergeHref also keeps
+      // chained builds safe everywhere else.
+      router.push(mergeHref(BASE, props.currentParams, { tab: "periods", period: null, fy: year }));
       router.refresh();
     } catch (error) {
       setGenerateError(
@@ -1363,6 +1373,50 @@ function PeriodDrawer({ row, props }: { row?: PeriodRow; props: Props }) {
       );
       setAction(null);
       setReason("");
+      router.refresh();
+    } catch (error) {
+      const message =
+        error instanceof ApiResponseError
+          ? error.message
+          : t("errors.actionFailed");
+      setActionError(message);
+      toast.error(message);
+    } finally {
+      setBusy(false);
+    }
+  }
+  // One reason closes every module through the native per-module command
+  // (GL last, each transition audited). Per-module results stay in the panel:
+  // a partial run names the failed module and skips the rest explicitly.
+  async function applyCloseAll() {
+    if (!row || !selectedBook || !closeAllReason.trim()) return;
+    setBusy(true);
+    setActionError(null);
+    try {
+      const overrides = Object.fromEntries(
+        Object.entries(closeAllOverrides).filter(([, value]) => value.trim()),
+      );
+      const data = (await post(
+        {
+          action: "close-period",
+          periodId: row.id,
+          bookId: selectedBook.id,
+          reason: closeAllReason.trim(),
+          ...(Object.keys(overrides).length > 0 ? { moduleReasons: overrides } : {}),
+        },
+        t("errors.actionFailed"),
+      )) as { ok?: unknown; results?: { module: string; ok: boolean; error?: string }[] };
+      const results = Array.isArray(data.results) ? data.results : [];
+      setCloseAllResults(results);
+      if (data.ok) {
+        toast.success(t("messages.closeAllSaved"));
+        setCloseAll(false);
+        setCloseAllReason("");
+        setCloseAllOverrides({});
+        setCloseAllResults(null);
+      } else {
+        toast.error(t("messages.closeAllPartial"));
+      }
       router.refresh();
     } catch (error) {
       const message =
@@ -1451,6 +1505,19 @@ function PeriodDrawer({ row, props }: { row?: PeriodRow; props: Props }) {
             {actionError}
           </p>
         ) : null}
+        {MODULES.some((module) => (row.locks?.[module]?.state ?? "open") !== "closed") ? (
+          <div className="flex justify-end">
+            <Button
+              size="sm"
+              onClick={() => {
+                setCloseAll(true);
+                setCloseAllResults(null);
+              }}
+            >
+              {t("actions.closeAll")}
+            </Button>
+          </div>
+        ) : null}
         <div className="grid gap-2">
           {MODULES.map((module) => {
             const lock = row.locks?.[module];
@@ -1526,6 +1593,67 @@ function PeriodDrawer({ row, props }: { row?: PeriodRow; props: Props }) {
             );
           })}
         </div>
+        {closeAll ? (
+          <div className="space-y-3 rounded-lg border border-teal-300 bg-teal-50/50 p-4 dark:border-teal-800 dark:bg-teal-950/20">
+            <div>
+              <h4 className="font-medium">{t("periods.closeAllTitle")}</h4>
+              <p className="text-sm text-slate-500">
+                {t("periods.closeAllDescription", { period: row.name })}
+              </p>
+            </div>
+            <Field label={t("fields.reason")}>
+              <Textarea
+                value={closeAllReason}
+                onChange={(e) => setCloseAllReason(e.target.value)}
+              />
+            </Field>
+            <div className="space-y-2">
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                {t("periods.closeAllOverrideHint")}
+              </p>
+              {MODULES.map((module) => (
+                <Field key={module} label={t(`modules.${module}`)}>
+                  <Input
+                    value={closeAllOverrides[module] ?? ""}
+                    onChange={(e) =>
+                      setCloseAllOverrides((prev) => ({ ...prev, [module]: e.target.value }))
+                    }
+                  />
+                </Field>
+              ))}
+            </div>
+            {closeAllResults ? (
+              <ul className="space-y-1">
+                {closeAllResults.map((result) => (
+                  <li key={result.module} className="flex flex-wrap items-center gap-2 text-sm">
+                    <Badge variant={result.ok ? "success" : "outline"}>
+                      {t(`modules.${result.module}`)}
+                    </Badge>
+                    {!result.ok && result.error ? (
+                      <span className="text-red-600 dark:text-red-400">{result.error}</span>
+                    ) : null}
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+            <div className="flex justify-end gap-2">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setCloseAll(false);
+                  setCloseAllReason("");
+                  setCloseAllOverrides({});
+                  setCloseAllResults(null);
+                }}
+              >
+                {t("actions.cancel")}
+              </Button>
+              <Button disabled={busy || !closeAllReason.trim()} onClick={applyCloseAll}>
+                {t("actions.confirmClose")}
+              </Button>
+            </div>
+          </div>
+        ) : null}
         {pendingReopen.length > 0 ? (
           <div className="space-y-2">
             <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-100">

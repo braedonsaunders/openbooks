@@ -9,7 +9,7 @@ import { db } from "@openbooks/engine/src/platform/db.ts";
 import { CLOSE_MODULES, CloseError, type CloseModule } from "@openbooks/engine/src/periods/period-policy.ts";
 import { decidePeriodReopen, recloseApprovedReopen, requestPeriodReopen } from "@openbooks/engine/src/close/reopening.ts";
 import { generateAccountingPeriods } from "@openbooks/engine/src/close/calendar.ts";
-import { setPeriodLockState } from "@openbooks/engine/src/periods/period-locks.ts";
+import { closePeriodAllModules, setPeriodLockState } from "@openbooks/engine/src/periods/period-locks.ts";
 import { can, getAuthz, guardSubsidiaryScope } from "../../../../lib/authz";
 import { isUuid } from "../../../../lib/list-params";
 import { isFeatureEnabled } from "../../../../lib/features";
@@ -56,6 +56,7 @@ const closeActionSchemas = [
   z.object({ action: z.literal("save-package"), id: z.string().uuid().optional(), name: z.string().trim().min(1), description: z.string().nullable().optional(), reports: z.array(z.record(z.string(), z.json()).refine((report) => typeof report.slug === "string" && report.slug.trim().length > 0, "report slug is required")).min(1), recipients: z.array(z.string().trim().min(1).max(320)).optional(), delivery: closeObject.optional(), isDefault: z.boolean().optional(), isActive: z.boolean().optional() }),
   z.object({ action: z.literal("send-package"), packageId: z.string().uuid(), periodId: z.string().uuid(), bookId: z.string().uuid(), idempotencyKey: z.string().uuid() }),
   z.object({ action: z.literal("set-lock"), periodId: z.string().uuid(), bookId: z.string().uuid(), subsidiaryId: z.string().uuid().nullable().optional(), module: z.enum(CLOSE_MODULES), state: z.enum(["open", "soft_closed", "closed"]), reason: z.string().trim().min(1), }),
+  z.object({ action: z.literal("close-period"), periodId: z.string().uuid(), bookId: z.string().uuid(), subsidiaryId: z.string().uuid().nullable().optional(), state: z.enum(["soft_closed", "closed"]).optional().default("closed"), modules: z.array(z.enum(CLOSE_MODULES)).min(1).optional(), moduleReasons: z.record(z.enum(CLOSE_MODULES), z.string()).optional(), reason: z.string().trim().min(1), }),
   z.object({ action: z.literal("request-reopen"), periodId: z.string().uuid(), bookId: z.string().uuid(), subsidiaryId: z.string().uuid().nullable().optional(), modules: z.array(z.enum(CLOSE_MODULES)).min(1), reason: z.string().trim().min(1) }),
   z.object({ action: z.literal("decide-reopen"), requestId: z.string().uuid(), approve: z.boolean(), hours: z.number().positive().max(168).optional() }),
   z.object({ action: z.literal("reclose-reopen"), requestId: z.string().uuid(), reason: z.string().trim().min(1) }),
@@ -723,6 +724,38 @@ export const POST = defineRoute({
           reason: text(body, "reason", true)!,
         });
         return NextResponse.json({ ok: true });
+      }
+      if (action === "close-period") {
+        const periodId = text(body, "periodId", true)!;
+        const bookId = text(body, "bookId", true)!;
+        const subsidiaryId = text(body, "subsidiaryId");
+        if (
+          !isUuid(periodId) ||
+          !isUuid(bookId) ||
+          (subsidiaryId && !isUuid(subsidiaryId))
+        )
+          throw new CloseError("invalid lock scope or state");
+        const denied = guardSubsidiaryScope(gate, subsidiaryId);
+        if (denied) return denied;
+        // Modules, reasons and state arrive schema-validated above; the
+        // engine orders modules GL-last and reports each module's outcome.
+        const scoped = body as {
+          modules?: CloseModule[];
+          moduleReasons?: Partial<Record<CloseModule, string>>;
+          state?: "soft_closed" | "closed";
+        };
+        const { results } = await closePeriodAllModules({
+          orgId,
+          periodId,
+          bookId,
+          subsidiaryId: subsidiaryId ?? undefined,
+          actorId,
+          state: scoped.state ?? "closed",
+          modules: scoped.modules,
+          moduleReasons: scoped.moduleReasons,
+          reason: text(body, "reason", true)!,
+        });
+        return NextResponse.json({ ok: results.every((result) => result.ok), results });
       }
       if (action === "request-reopen") {
         const periodId = text(body, "periodId", true)!;

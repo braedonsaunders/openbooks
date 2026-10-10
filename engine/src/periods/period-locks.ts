@@ -1,4 +1,5 @@
 import {
+  CLOSE_MODULES,
   CloseError,
   periodLockBlocksPosting,
   periodLockRequiresApprovedReopen,
@@ -353,4 +354,71 @@ export async function setPeriodLockState(args: {
       values (${args.orgId}, 'period.lock_changed', ${args.actorId},
               ${JSON.stringify({ periodId: args.periodId, bookId: args.bookId, subsidiaryId: args.subsidiaryId ?? null, module: args.module, state: args.state, reason: args.reason.trim() })}::jsonb)`);
   });
+}
+
+export interface ClosePeriodModuleResult {
+  module: CloseModule;
+  ok: boolean;
+  /** Present when the module did not close; remaining modules report skipped. */
+  error?: string;
+}
+
+/**
+ * Close one period across modules with a single reason through the native
+ * per-module command. Modules run in CLOSE_MODULES order (GL last — the
+ * kernel refuses GL ahead of an open subledger), each transition audited by
+ * upsertLock exactly as a single-module close. The first failure stops the
+ * run and every module reports its outcome, so a partial close is always
+ * explicit: closed modules stay closed, the failed module names its remedy,
+ * and the rest report skipped. Retrying with the same reason is idempotent —
+ * an already-closed module in the same state and reason writes nothing and
+ * still reports ok. A per-module reason overrides the shared one for that
+ * module only; a blank override falls back to the shared reason.
+ */
+export async function closePeriodAllModules(args: {
+  orgId: string;
+  periodId: string;
+  bookId: string;
+  subsidiaryId?: string;
+  actorId: string;
+  reason: string;
+  state?: "soft_closed" | "closed";
+  modules?: CloseModule[];
+  moduleReasons?: Partial<Record<CloseModule, string>>;
+}): Promise<{ results: ClosePeriodModuleResult[] }> {
+  const reason = args.reason.trim();
+  if (!reason) throw new CloseError("a lock-state reason is required");
+  const state = args.state ?? "closed";
+  const known = new Set<CloseModule>(CLOSE_MODULES);
+  const unknown = [...new Set(args.modules ?? [])].filter((module) => !known.has(module));
+  if (unknown.length > 0) throw new CloseError(`unknown close modules: ${unknown.join(", ")}`);
+  const order = new Map<CloseModule, number>(CLOSE_MODULES.map((module, index) => [module, index]));
+  const modules = [...new Set(args.modules ?? [...CLOSE_MODULES])].sort(
+    (a, b) => (order.get(a) ?? Number.MAX_SAFE_INTEGER) - (order.get(b) ?? Number.MAX_SAFE_INTEGER),
+  );
+  const results: ClosePeriodModuleResult[] = [];
+  for (const [index, module] of modules.entries()) {
+    const moduleReason = args.moduleReasons?.[module]?.trim() || reason;
+    try {
+      await setPeriodLockState({
+        orgId: args.orgId,
+        periodId: args.periodId,
+        bookId: args.bookId,
+        subsidiaryId: args.subsidiaryId,
+        module,
+        state,
+        actorId: args.actorId,
+        reason: moduleReason,
+      });
+      results.push({ module, ok: true });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "module close failed";
+      results.push({ module, ok: false, error: message });
+      for (const skipped of modules.slice(index + 1)) {
+        results.push({ module: skipped, ok: false, error: `skipped after ${module} failed` });
+      }
+      break;
+    }
+  }
+  return { results };
 }
