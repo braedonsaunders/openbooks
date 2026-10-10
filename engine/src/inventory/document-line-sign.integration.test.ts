@@ -3,6 +3,9 @@ import { randomUUID } from "node:crypto";
 import { test } from "node:test";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
+import { applySalesFulfillmentInventoryIssues } from "./documents-sales.ts";
+import { loadDocumentInventoryLines } from "./document-lines.ts";
+import { getOnHand } from "./position.ts";
 import { receiveInventory } from "./movements.ts";
 import { postDocument } from "../ledger/posting-document.ts";
 import { toUnits } from "../money/money.ts";
@@ -23,12 +26,12 @@ const depsFor = (org: ScratchOrg) => ({
 
 async function draftApprovedDocument(
   org: ScratchOrg,
-  kind: "customer_invoice" | "vendor_bill",
-  line: { quantity: string; unitPrice: string; amount: string },
+  kind: "customer_invoice" | "vendor_bill" | "sales_order" | "sales_fulfillment",
+  line: { quantity: string; unitPrice: string; amount: string; unit?: string; custom?: Record<string, unknown> },
 ): Promise<{ documentId: string; lineId: string }> {
   const documentId = randomUUID();
   const lineId = randomUUID();
-  const partyId = kind === "customer_invoice" ? org.customerId : org.vendorId;
+  const partyId = kind === "vendor_bill" ? org.vendorId : org.customerId;
   await db.execute(sql`
     insert into documents
       (id, org_id, kind, document_number, party_id, subsidiary_id,
@@ -41,12 +44,12 @@ async function draftApprovedDocument(
   await db.execute(sql`
     insert into document_lines
       (id, org_id, document_id, line_number, item_id, account_id,
-       quantity, unit_price, amount, tax_amount, is_billable,
+       quantity, unit, unit_price, amount, tax_amount, is_billable,
        quantity_fulfilled, quantity_billed, stock_location_id, custom, tax_overridden)
     values (${lineId}, ${org.orgId}, ${documentId}, 1, ${org.items.fifo},
             ${kind === "customer_invoice" ? org.accounts.revenue : null},
-            ${line.quantity}, ${line.unitPrice}, ${line.amount},
-            '0', false, '0', '0', ${org.stockLocationId}, '{}'::jsonb, false)`);
+            ${line.quantity}, ${line.unit ?? null}, ${line.unitPrice}, ${line.amount},
+            '0', false, '0', '0', ${org.stockLocationId}, ${JSON.stringify(line.custom ?? {})}::jsonb, false)`);
   await db.execute(sql`
     update documents set status = 'approved'
      where id = ${documentId} and org_id = ${org.orgId}`);
@@ -246,3 +249,37 @@ test("a line in an unconvertible unit is refused, never assumed 1:1", { skip: !D
   }
 });
 
+
+test("eight-place fulfillment issues exact converted base quantity once and refuses an unrepresentable conversion", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    await db.execute(sql`update item_inventory_profiles set unit_conversions='{"bulk":10000}'::jsonb
+      where org_id=${org.orgId} and item_id=${org.items.fifo}`);
+    await receiveInventory(org.orgId, null, {
+      itemId: org.items.fifo, stockLocationId: org.stockLocationId, subsidiaryId: org.subsidiaryId,
+      quantity: "20000", unitCost: "2", date: org.date, offsetAccountId: org.accounts.clearing,
+    });
+    const source = await draftApprovedDocument(org, "sales_order", { quantity: "1.00000001", unitPrice: "10", amount: "10", unit: "bulk" });
+    const shipment = await draftApprovedDocument(org, "sales_fulfillment", {
+      quantity: "1.00000001", unitPrice: "0", amount: "0", unit: "bulk", custom: { fulfillment: { sourceLineId: source.lineId } },
+    });
+    const loaded = await loadDocumentInventoryLines(db, org.orgId, shipment.documentId);
+    assert.equal(loaded[0]!.quantity, "10000.0001");
+    const issue = () => db.transaction((tx) => applySalesFulfillmentInventoryIssues(tx, org.orgId, null,
+      shipment.documentId, org.date, org.subsidiaryId));
+    assert.equal(await issue(), 1);
+    const posted = await getOnHand(org.orgId, org.items.fifo, org.stockLocationId);
+    assert.equal(posted.quantity, "9999.9999");
+    assert.equal(posted.value, "19999.9998");
+    assert.equal(await issue(), 0);
+    assert.deepEqual(await getOnHand(org.orgId, org.items.fifo, org.stockLocationId), posted);
+    assert.equal(await movementCount(org.orgId, shipment.lineId), 1);
+    const refused = await draftApprovedDocument(org, "sales_fulfillment", {
+      quantity: "1.00000001", unitPrice: "0", amount: "0", unit: "ea", custom: { fulfillment: { sourceLineId: source.lineId } },
+    });
+    await assert.rejects(db.transaction((tx) => applySalesFulfillmentInventoryIssues(tx, org.orgId, null,
+      refused.documentId, org.date, org.subsidiaryId)), /cannot be stored exactly with four decimal places/);
+    assert.equal(await movementCount(org.orgId, refused.lineId), 0);
+    assert.deepEqual(await getOnHand(org.orgId, org.items.fifo, org.stockLocationId), posted);
+  } finally { await dropScratchOrg(org.orgId); }
+});
