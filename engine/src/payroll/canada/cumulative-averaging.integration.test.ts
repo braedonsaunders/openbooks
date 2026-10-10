@@ -84,9 +84,10 @@ test('elected cumulative withholding consumes committed history and scheduled pe
       await mutatePayRunAdjustment({...command,mutation:{action:'add',employeePartyId:imported.employeeId,componentId:component.id,amount:'500'}})
       assert.deepEqual((await calculatePayRun(command)).errors,[])
       const factors=(await db.execute<{factors:Record<string,string>}>(sql`select factors from pay_stubs where org_id=${imported.orgId} and pay_run_document_id=${created.documentId}`)).rows[0]!.factors
-      // CRA's 20,000 + 500 at 26/21 gives A=25,380.95. Actual 2026
-      // Ontario tax is 1,965.71; 21/26 gives 1,587.69, less M=1,390.
-      assert.equal(factors.S1_DEN,'21.0000');assert.equal(factors.A,'25380.9500');assert.equal(factors.M,'1390.0000');assert.equal(factors.T,'197.6900')
+      // CRA's 20,000 + 500 at 26/21 gives A=25,380.95 (exactly 25,380.952381,
+      // traced at ledger precision). Actual 2026 Ontario tax is 1,965.71;
+      // 21/26 gives 1,587.69, less M=1,390.
+      assert.equal(factors.S1_DEN,'21.0000');assert.equal(factors.A,'25380.9524');assert.equal(factors.M,'1390.0000');assert.equal(factors.T,'197.6900')
       await commitPayRun(command)
     })
   }finally{await withBypassContext(()=>dropScratchOrgReporting(imported.orgId))}

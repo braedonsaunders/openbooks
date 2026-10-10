@@ -50,7 +50,7 @@ test("pay-run scope guard: native membership rules for include and exclude", { s
       scopeCase("deactivated member included (must still refuse)", f => ({ action: "include", employeePartyId: f.deactivatedId }),
         /employee "Deactivated Member" is not an active member.*deactivated/),
       scopeCase("inactive-profile member included (must still refuse)", f => ({ action: "include", employeePartyId: f.profileOffId }),
-        /employee "Profile Off Member" is not an active member.*profile.*inactive/),
+        /employee "Profile Off Member" has an inactive payroll profile.*reactivate/),
       scopeCase("other-schedule member excluded (must still refuse)", f => ({ action: "exclude", employeePartyId: f.otherEmployeeId }),
         /employee "Other Schedule Member" is not on this run's pay schedule/),
       scopeCase("other-schedule member included (must still refuse)", f => ({ action: "include", employeePartyId: f.otherEmployeeId }),
