@@ -22,7 +22,7 @@ import { toast } from 'sonner'
 import { useBusinessToday } from '../../../components/business-date-provider'
 import { confirmDialog } from '../../../lib/confirm'
 import { promptDialog } from '../../../lib/prompt'
-import { CalendarCheck, ChevronLeft, ChevronRight, FilePenLine, Lock, Plus, RotateCcw, Trash2 } from 'lucide-react'
+import { CalendarCheck, ChevronLeft, ChevronRight, FilePenLine, Lock, Plus, RotateCcw, Trash2, Undo2 } from 'lucide-react'
 import { fillFromSchedule } from '../../../lib/scheduling/timesheet-fill'
 import { Badge, Button, SearchSelect, Select, UrlDrawer, cn } from '@openbooks/ui'
 import { type CustomFieldDefClient } from '../../../components/custom-field-inputs'
@@ -68,7 +68,17 @@ interface GridRow {
   plannedOnly: boolean
 }
 
-function emptyRow(timeTypes: TimeTypeOption[], workFamily: TimeWorkFamily = 'project'): GridRow {
+/**
+ * Billable is a project expectation gated by the time type: a line bills
+ * only on a project whose time type bills by default. Production lines never
+ * bill. New lines start unchecked (no project yet), so shop time is never
+ * pre-checked — the policy, not list position, decides.
+ */
+function policyBillable(projectId: string, timeType: TimeTypeOption | undefined, costTarget: TimeWorkFamily): boolean {
+  return costTarget !== 'production' && projectId !== '' && (timeType?.isBillableDefault ?? false)
+}
+
+function emptyRow(timeTypes: TimeTypeOption[], workFamily: TimeWorkFamily = 'project', projectId = ''): GridRow {
   // New lines start on the org's standard time type. List position is never
   // the default: multiplier or alphabetical order would silently book premium
   // or travel time as the operator's first, unexamined choice.
@@ -77,11 +87,11 @@ function emptyRow(timeTypes: TimeTypeOption[], workFamily: TimeWorkFamily = 'pro
     costTarget: workFamily,
     workOrderId: '',
     woOperationId: '',
-    projectId: '',
+    projectId,
     itemId: '',
     timeTypeId: def?.value ?? '',
     departmentId: '',
-    isBillable: workFamily === 'production' ? false : def?.isBillableDefault ?? false,
+    isBillable: policyBillable(projectId, def, workFamily),
     memo: '',
     hours: ['', '', '', '', '', '', ''],
     productionEntryIds: Array.from({length:7},()=>[]),
@@ -118,7 +128,7 @@ function fromPayload(rows: WeekRow[], timeTypes: TimeTypeOption[], workFamily: T
 function seedRows(payload: WeekPayload, pickers: TimesheetPickers, workFamily: TimeWorkFamily = 'project', quickProjectId?: string): GridRow[] {
   const rows = fromPayload(payload.rows, pickers.timeTypes,workFamily)
   if (quickProjectId && ['draft','empty','rejected'].includes(payload.status) && pickers.projects.some(project=>project.value===quickProjectId) && !rows.some(row=>row.projectId===quickProjectId)) {
-    const quick = {...emptyRow(pickers.timeTypes),projectId:quickProjectId}
+    const quick = emptyRow(pickers.timeTypes, workFamily, quickProjectId)
     if (!payload.rows.length) rows[0]=quick
     else rows.push(quick)
   }
@@ -315,11 +325,11 @@ export function WeeklyGrid({
     setDirty(true)
   }
 
-  // When the time type changes, follow its billable default (only if the user
-  // hasn't diverged — we keep it simple and always follow the default here).
+  // When the time type changes, follow the billable policy (only if the user
+  // hasn't diverged — we keep it simple and always follow the policy here).
+  // The explicit checkbox wins until a policy input changes.
   const onTimeType = (i: number, value: string) => {
-    const tt = timeTypeById.get(value)
-    setRow(i, { timeTypeId: value, isBillable: rows[i]!.costTarget === 'production' ? false : tt?.isBillableDefault ?? rows[i]!.isBillable })
+    setRow(i, { timeTypeId: value, isBillable: policyBillable(rows[i]!.projectId, timeTypeById.get(value), rows[i]!.costTarget) })
   }
 
   const dayTotals = useMemo(() => {
@@ -450,11 +460,16 @@ export function WeeklyGrid({
 
   // A week with nothing recorded (leave, no work) is closed by an explicit
   // declaration with a reason, which goes through the same approval as hours.
+  // Approved leave covering the week is named in the prompt and recorded on
+  // the declaration's audit, so the absence it records is explicit.
   const onDeclareNoHours = async () => {
     if (!employeeId) return
+    const cover = payload.leaveCover ?? []
     const reason = await promptDialog({
       title: t('grid.noHoursTitle'),
-      message: t('grid.noHoursMessage'),
+      message: cover.length > 0
+        ? t('grid.noHoursLeaveMessage', { leave: cover.map((entry) => `${entry.leaveType} ${entry.from}–${entry.to}`).join('; ') })
+        : t('grid.noHoursMessage'),
       label: t('grid.noHoursReasonLabel'),
       placeholder: t('grid.noHoursPlaceholder'),
       confirmLabel: t('grid.noHoursConfirm'),
@@ -492,6 +507,21 @@ export function WeeklyGrid({
     }
   }
 
+  const onWithdraw = async () => {
+    if (!employeeId) return
+    const ok = await confirmDialog({
+      title: t('grid.withdrawTitle'),
+      message: t('grid.withdrawMessage'),
+      confirmLabel: t('grid.withdraw'),
+    })
+    if (!ok) return
+    const data = await post('/api/timesheets/withdraw', { employee: employeeId, week })
+    if (data) {
+      applyPayload(data)
+      toast.success(t('grid.withdrawnToast'))
+    }
+  }
+
   const onReopen = async () => {
     if (!employeeId) return
     const ok = await confirmDialog({
@@ -525,6 +555,7 @@ export function WeeklyGrid({
   const canSave = canManage && !readOnly && employeeId != null
   // Published bookings fill empty days; the person reviews and saves as usual.
   const onFillFromSchedule = () => {
+    const beforeProjects = rows.map((row) => row.projectId)
     const result = fillFromSchedule(rows, payload.scheduled ?? [], payload.days, {
       projectIds: new Set(pickers.projects.map((project) => project.value)),
       blank: () => emptyRow(pickers.timeTypes),
@@ -533,7 +564,14 @@ export function WeeklyGrid({
       toast.info(tScheduling('prefill.nothing'))
       return
     }
-    setRows(result.rows)
+    // Rows the fill newly assigns to a project (including appended lines,
+    // which have no before-image) follow the billable policy; untouched rows
+    // keep the operator's choice.
+    setRows(result.rows.map((row, index) =>
+      row.projectId !== '' && (beforeProjects[index] ?? '') === ''
+        ? { ...row, isBillable: policyBillable(row.projectId, timeTypeById.get(row.timeTypeId), row.costTarget) }
+        : row,
+    ))
     setDirty(true)
     toast.success(tScheduling('prefill.filled', { count: result.filled, skipped: result.skipped }))
   }
@@ -554,6 +592,9 @@ export function WeeklyGrid({
 
   const canDoReopen = canReopen && employeeId != null && status === 'approved' && !weekLocked
   const canDoAmend = canReopen && employeeId != null && status === 'approved' && weekLocked
+  // Withdraw is the submitter's own recall of a week still awaiting decision:
+  // decided weeks stay decided (approved reopens, rejected is already back).
+  const canWithdraw = requireApproval && canManage && employeeId != null && status === 'submitted'
 
   // Column widths mirror LineGrid's data-driven track model.
   // Org-defined line fields become real grid columns, between the built-in
@@ -613,6 +654,11 @@ export function WeeklyGrid({
           {canDoReject ? (
             <Button size="sm" variant="outline" onClick={onReject} disabled={busy}>
               {t('grid.reject')}
+            </Button>
+          ) : null}
+          {canWithdraw ? (
+            <Button size="sm" variant="outline" onClick={onWithdraw} disabled={busy}>
+              <Undo2 size={14} /> {t('grid.withdraw')}
             </Button>
           ) : null}
           {canDoReopen ? (
@@ -793,7 +839,7 @@ export function WeeklyGrid({
                   onTarget={(value) => setRow(i, { costTarget: value, projectId: '', workOrderId: '', woOperationId: '', isBillable: value === 'production' ? false : r.isBillable })}
                   onWorkOrder={(v) => setRow(i, { projectId: '', workOrderId: v, woOperationId: '', isBillable: false })}
                   onOperation={(v) => setRow(i, { woOperationId: v })}
-                  onProject={(v) => setRow(i, { projectId: v, workOrderId: '', woOperationId: '' })}
+                  onProject={(v) => setRow(i, { projectId: v, workOrderId: '', woOperationId: '', isBillable: policyBillable(v, timeTypeById.get(r.timeTypeId), r.costTarget) })}
                   onItem={(v) => setRow(i, { itemId: v })}
                   onTimeType={(v) => onTimeType(i, v)}
                   onDept={(v) => setRow(i, { departmentId: v })}
