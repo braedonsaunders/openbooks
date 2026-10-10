@@ -1,4 +1,6 @@
+import { canonicalConnectionMappingConfig } from '@openbooks/engine/src/sync/connection-settings.ts';
 import { parseJsonBody } from "@/lib/api/json";
+import { decodeEntityMappings } from '@openbooks/engine/src/sync/entity-mapping-contract.ts';
 import { defineRoute } from '@/lib/api/route'
 import { z } from "zod";
 import { NextResponse } from "next/server";
@@ -198,7 +200,9 @@ async function createConnectionRoute(req: Request) {
       { status: 400 },
     );
   }
-  const config = declaredSourceConfig(manifest, suppliedConfig);
+  let config = declaredSourceConfig(manifest, suppliedConfig);
+  try { config = canonicalConnectionMappingConfig(config, manifest.mappingGroups ?? []); }
+  catch (cause) { return NextResponse.json({ error: cause instanceof Error ? cause.message : 'Connection mappings are unavailable' }, { status: 400 }); }
   const urlError = await connectionConfigUrlRefusal(config);
   if (urlError) {
     return NextResponse.json(
@@ -210,6 +214,7 @@ async function createConnectionRoute(req: Request) {
   const configError = validateSourceConfig(manifest, config, { today: await businessToday(orgId) });
   if (configError)
     return NextResponse.json({ error: configError }, { status: 400 });
+  if (Object.values(decodeEntityMappings(config.entityMappings).entities).some(rows => rows.length)) return NextResponse.json({ error: 'Save the connection first, then select its source and native mapping fields' }, { status: 422 });
 
   // Seal any provided secret fields (all-or-nothing per field).
   const provided: Record<string, string> = {};

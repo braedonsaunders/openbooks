@@ -1,3 +1,4 @@
+import { netSuiteEntityMappingMetadata, type EntityMappingField } from "./entity-mapping-contract.ts";
 import { netsuiteCustomizationChoices, netsuiteCustomRecordFields, type NetSuiteCustomizationKind } from "../connectors/netsuite.ts";
 import { NETSUITE_MAPPING_GROUPS, validateConnectionMappings } from "./connection-settings.ts";
 import { orgFeatureEnabled } from "../organization/org-feature-lock.ts";
@@ -571,6 +572,7 @@ export function normalizeNetSuiteTaxCodes(
 
 export class NetSuiteSource implements MigrationSource {
   readonly name = "netsuite";
+  readonly entityMappingMetadata = netSuiteEntityMappingMetadata();
   readonly refKey = "nsId";
   readonly baseCurrency: string;
   private readonly bridge: NetSuiteBridgeClient;
@@ -619,6 +621,32 @@ export class NetSuiteSource implements MigrationSource {
 
   private q<T = Record<string, unknown>>(query: string): Promise<T[]> {
     return this.bridge.query<T>(query);
+  }
+
+  async mappingSourceFields(entity: string): Promise<EntityMappingField[]> {
+    const kinds: Record<string, NetSuiteCustomizationKind> = { items: 'itemCustomField', customers: 'entityCustomField', vendors: 'entityCustomField', employees: 'entityCustomField', projects: 'entityCustomField', transactions: 'transactionBodyCustomField', transactionLines: 'transactionColumnCustomField' };
+    const kind = kinds[entity];
+    if (!kind) return [];
+    return (await netsuiteCustomizationChoices(kind, this.creds, this.soapEndpointVersion)).map(field => ({ key: field.value, label: field.label, kind: 'text' }));
+  }
+
+  async mappingSourceValues(entity: string, fields: readonly string[], refs: readonly string[]): Promise<Map<string, Record<string, unknown>>> {
+    const tables: Record<string, string> = { items: 'item', customers: 'customer', vendors: 'vendor', employees: 'employee', projects: 'job', transactions: 'transaction', transactionLines: 'transactionline' };
+    const table = tables[entity];
+    const allowed = new Set((await this.mappingSourceFields(entity)).map(field => field.key));
+    if (!table || fields.some(field => !allowed.has(field) || !/^[a-z][a-z0-9_]{0,119}$/i.test(field))) throw new Error('Choose an accessible source field for this entity');
+    const ids = [...new Set(refs.map(ref => entity === 'transactionLines' ? ref.split(':')[0]! : ref))];
+    if (ids.some(id => !/^\d+$/.test(id))) throw new Error('Source field reads need verified NetSuite record identities');
+    const result = new Map<string, Record<string, unknown>>();
+    for (let offset = 0; offset < ids.length; offset += 500) {
+      const columns = fields.map((field, index) => `${field} AS mapping_${index}`).join(', ');
+      const rows = await this.q<Record<string, unknown>>(`SELECT id${entity === 'transactionLines' ? ', transaction AS transaction_id' : ''}, ${columns} FROM ${table} WHERE ${entity === 'transactionLines' ? 'transaction' : 'id'} IN (${ids.slice(offset, offset + 500).join(',')})`);
+      for (const row of rows) {
+        const ref = entity === 'transactionLines' ? `${row.transaction_id}:${row.id}` : String(row.id);
+        result.set(ref, Object.fromEntries(fields.map((field, index) => [field, row[`mapping_${index}`]])));
+      }
+    }
+    return result;
   }
 
   async mappingOptions(field: string, parent?: string): Promise<{ value: string; label: string }[]> {
@@ -850,11 +878,11 @@ export class NetSuiteSource implements MigrationSource {
     return normalizeNetSuiteAccountingPeriods(rows);
   }
 
-  async syncOperationalRecords(options: { orgId: string; connectionId: string; actorId: string | null; populations?: { crm: boolean; fixedAssets: boolean } }): Promise<SourceOperationalSyncResult> {
+  async syncOperationalRecords(options: { orgId: string; connectionId: string; actorId: string | null; populations?: { crm: boolean; fixedAssets: boolean }; mappingSource?: MigrationSource }): Promise<SourceOperationalSyncResult> {
     const result: SourceOperationalSyncResult = { disabledFeatures: [] };
     if (options.populations?.fixedAssets !== false) {
       if (await orgFeatureEnabled(options.orgId, "fixedAssets")) {
-        result.fixedAssets = await syncNetSuiteFixedAssets(this, options);
+        result.fixedAssets = await syncNetSuiteFixedAssets((options.mappingSource ?? this) as NetSuiteSource, options);
       } else result.disabledFeatures.push("fixedAssets");
     }
     if (options.populations?.crm !== false) {

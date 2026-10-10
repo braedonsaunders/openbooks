@@ -1,3 +1,4 @@
+import { entityMappingMetadata } from "./entity-mapping-contract.ts";
 import { sql } from "drizzle-orm";
 import { businessToday, parseIsoDate } from "../platform/business-date.ts";
 import { db } from "../platform/db.ts";
@@ -79,6 +80,7 @@ function reportAmount(into: QbdReportAmount[], value: string | undefined, scope:
 
 export class QbdSource implements MigrationSource {
   readonly name = "qbd";
+  readonly entityMappingMetadata = entityMappingMetadata(['accounting_periods', 'accounts', 'parties', 'items'], ['customers', 'vendors', 'employees'], { 'accounts': ['number', 'name', 'type', 'isActive'], 'parties': ['displayName', 'kind', 'isActive'], 'items': ['code', 'name', 'kind', 'isActive'], 'tax_codes': ['code', 'name', 'ratePercent', 'appliesTo'] });
   readonly refKey = "qbdId";
   readonly baseCurrency: string;
   private captureId: string | null = null;
@@ -169,6 +171,7 @@ export class QbdSource implements MigrationSource {
           // take the held path.
           parties.push({
             sourceRef: `${prefix}:${id}`,
+            mappingEntities: [family === "customer" ? "customers" : family === "vendor" ? "vendors" : "employees"],
             fields: { displayName: (text(p.Name) || text(p.FullName) || `${prefix} ${id}`).slice(0, 500), kind, isActive: bool(p.IsActive) },
           });
         }

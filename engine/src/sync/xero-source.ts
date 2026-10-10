@@ -1,3 +1,4 @@
+import { entityMappingMetadata } from "./entity-mapping-contract.ts";
 import { xeroAttachmentProvider } from "./attachment-providers.ts";
 import { syncTransactionAttachments, type AttachmentSyncOptions } from "./transaction-attachments.ts";
 import { businessToday, parseIsoDate, utcDateFromParts } from "../platform/business-date.ts";
@@ -59,7 +60,7 @@ interface XeroAccount {
   AccountID: string; Code?: string; Name: string; Type: string;
   Status?: string; SystemAccount?: string; CurrencyCode?: string;
 }
-interface XeroContact { ContactID: string; Name: string; EmailAddress?: string; ContactStatus?: string }
+interface XeroContact { ContactID: string; Name: string; EmailAddress?: string; ContactStatus?: string; IsCustomer?: boolean; IsSupplier?: boolean }
 interface XeroItem {
   ItemID: string; Code?: string; Name: string; IsTrackedAsInventory?: boolean;
 }
@@ -125,6 +126,7 @@ const ENTITY_NAME: Record<string, string> = {
 
 export class XeroSource implements MigrationSource {
   readonly name = "xero";
+  readonly entityMappingMetadata = entityMappingMetadata(['accounting_periods', 'accounts', 'tax_codes', 'parties', 'items', 'files'], ['customers', 'vendors'], { 'accounts': ['number', 'name', 'type', 'isActive'], 'parties': ['displayName', 'kind', 'isActive', 'email'], 'items': ['code', 'name', 'kind', 'isActive'], 'tax_codes': ['code', 'name', 'ratePercent', 'appliesTo'] });
   readonly refKey = "xeroId";
   readonly baseCurrency: string;
   private readonly orgId: string;
@@ -228,6 +230,7 @@ export class XeroSource implements MigrationSource {
     const rows = await this.client.listAll<XeroContact>("Contacts", "Contacts", { includeArchived: "true" }, since);
     return rows.map((c) => ({
       sourceRef: c.ContactID,
+      mappingEntities: [...(c.IsCustomer ? ["customers"] : []), ...(c.IsSupplier ? ["vendors"] : [])],
       fields: {
         displayName: String(c.Name).slice(0, 500),
         kind: "company",

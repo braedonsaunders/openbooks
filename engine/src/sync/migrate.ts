@@ -1,3 +1,4 @@
+import { stableMappingSnapshot } from "./operational-entity-mappings.ts";
 import { syncSourcePartyPhotos, type PartyPhotoSummary } from "./party-photos.ts";
 import { sql } from "drizzle-orm";
 import { db, withOrg, type SqlExecutor } from "../platform/db.ts";
@@ -522,7 +523,20 @@ export async function loadEntities(
     // time_entries is high-volume — bulk path (batched inserts, skip unchanged
     // on a full load, update on an incremental pull).
     if (stream.resource === "time_entries") {
-      await loadTimeEntries(stream.records, ctx, s);
+      if (stream.records.some(record => record.mappingApplied)) {
+        await withOrg(orgId, async () => {
+          if (!ctx.audit?.connectionId) throw new Error('Connection mappings require the native sync-run audit context');
+          const mapped = stream.records.filter(record => record.mappingApplied);
+          const before = new Map((await db.execute<{ ref: string; snapshot: Record<string, unknown> }>(sql`select custom->>${ctx.refKey} as ref,to_jsonb(t) as snapshot from time_entries t where org_id=${orgId} and custom->>${ctx.refKey}=any(${textArrayLiteral(mapped.map(record => record.sourceRef))}::text[]) for update`)).rows.map(row => [row.ref, row.snapshot]));
+          await loadTimeEntries(stream.records, ctx, s);
+          for (const rec of mapped) {
+            if (s.errors.some(error => error.sourceRef === rec.sourceRef)) continue;
+            const id = await findByRef('time_entries', orgId, ctx.refKey, rec.sourceRef);
+            if (!id) throw new Error('Mapped time entry was not saved');
+            await completeMappedRecord('time_entries', ctx, rec, id, before.get(rec.sourceRef) ?? null);
+          }
+        });
+      } else await loadTimeEntries(stream.records, ctx, s);
       stats[stream.resource] = s;
       continue;
     }
@@ -799,6 +813,52 @@ async function loadSubsidiaries(records: SourceEntity[], ctx: Ctx, s: ResourceLo
 }
 
 async function upsert(resource: string, ctx: Ctx, rec: SourceEntity, s: ResourceLoadStats): Promise<string | null> {
+  if (!rec.mappingApplied) return upsertBase(resource, ctx, rec, s);
+  if (!ctx.audit?.connectionId) throw new Error('Connection mappings require the native sync-run audit context');
+  const priorStats = { created: s.created, updated: s.updated, skipped: s.skipped, failed: s.failed, errors: s.errors.length };
+  return withOrg(ctx.orgId, async () => {
+    await db.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`${ctx.orgId}:${ctx.refKey}:${resource}:${rec.sourceRef}`},0))`);
+    const adoption = resource === 'payment_terms' ? sql`or name=${String(rec.fields.name ?? `Term ${rec.sourceRef}`)}`
+      : resource === 'tax_codes' ? sql`or code=${String(rec.fields.code ?? rec.sourceRef)}`
+      : resource === 'subsidiaries' && !rec.parentRef ? sql`or (parent_id is null and not exists(select 1 from subsidiaries where org_id=${ctx.orgId} and custom->>${ctx.refKey}=${rec.sourceRef}))` : sql``;
+    const before = (await db.execute<{ snapshot: Record<string, unknown> }>(sql`select to_jsonb(t) as snapshot from ${sql.identifier(resource)} t where org_id=${ctx.orgId} and (custom->>${ctx.refKey}=${rec.sourceRef} ${adoption}) for update`)).rows;
+    if (before.length > 1) throw new Error('Entity mapping identity is ambiguous');
+    const rolesBefore = resource === 'parties' && before[0]?.snapshot.id ? await mappedPartyRoles(ctx.orgId, String(before[0].snapshot.id)) : undefined;
+    const id = await upsertBase(resource, ctx, rec, s);
+    if (!id) throw new Error('Mapped entity was not saved');
+    await completeMappedRecord(resource, ctx, rec, id, before[0]?.snapshot ?? null, rolesBefore);
+    return id;
+  }).catch(cause => {
+    s.created = priorStats.created; s.updated = priorStats.updated; s.skipped = priorStats.skipped; s.failed = priorStats.failed; s.errors.length = priorStats.errors;
+    throw cause;
+  });
+}
+
+async function completeMappedRecord(table: string, ctx: Ctx, rec: SourceEntity, id: string, before: Record<string, unknown> | null, rolesBefore?: Record<string, unknown>): Promise<void> {
+  const values = rec.mappedCustom ?? {};
+  const saved = (await db.execute<{ snapshot: Record<string, unknown> }>(sql`update ${sql.identifier(table)} t
+    set custom=(custom - 'connectorMappedValues')
+      || ${JSON.stringify(Object.keys(values).length ? { ...values, connectorMappedValues: values } : {})}::jsonb
+    where id=${id} and org_id=${ctx.orgId} returning to_jsonb(t) as snapshot`)).rows[0];
+  if (!saved) throw new Error('Mapped entity disappeared before its custom values were saved');
+  const rolesAfter = table === 'parties' ? await mappedPartyRoles(ctx.orgId, id) : undefined;
+  const previous = table === 'parties' && before ? { ...before, roles: rolesBefore ?? {} } : before;
+  const next = rolesAfter ? { ...saved.snapshot, roles: rolesAfter } : saved.snapshot;
+  if (JSON.stringify(stableMappingSnapshot(previous)) === JSON.stringify(stableMappingSnapshot(next))) return;
+  const audit = (await db.execute<{ id: string }>(sql`insert into audit_log(org_id,table_name,row_id,action,changes,actor_id)
+    values(${ctx.orgId},${table},${id},${before ? 'update' : 'insert'},${JSON.stringify({ event: 'connector_entity_mapping_applied', connectionId: ctx.audit?.connectionId, sourceRef: rec.sourceRef, before: previous, after: next })}::jsonb,${ctx.audit?.actorId ?? null}) returning id`)).rows[0];
+  if (!audit) throw new Error('The native mapping audit was not saved');
+}
+
+async function mappedPartyRoles(orgId: string, partyId: string): Promise<Record<string, unknown>> {
+  const roles: Record<string, unknown> = {};
+  for (const table of ['customer_roles', 'vendor_roles', 'employee_roles']) {
+    roles[table] = (await db.execute<{ snapshot: Record<string, unknown> }>(sql`select to_jsonb(t) as snapshot from ${sql.identifier(table)} t where org_id=${orgId} and party_id=${partyId} for update`)).rows[0]?.snapshot ?? null;
+  }
+  return roles;
+}
+
+async function upsertBase(resource: string, ctx: Ctx, rec: SourceEntity, s: ResourceLoadStats): Promise<string | null> {
   const f = rec.fields;
   const { orgId, refKey } = ctx;
   const custom = JSON.stringify({
@@ -882,6 +942,7 @@ async function upsert(resource: string, ctx: Ctx, rec: SourceEntity, s: Resource
     };
     if (id) {
       const changed = await db.execute(sql`update accounts set name=${vals.name}, type=${vals.type}::text,
+        number=case when ${rec.mappedFields?.includes("number") ?? false} then ${str(f.number)} else number end,
         is_summary=${vals.isSummary}, is_active=${vals.isActive}, eliminate=${vals.eliminate}, reconcilable=${vals.reconcilable}
         where id=${id} and org_id=${orgId}
           and (${suppliedCurrency}::text is null or currency_restriction = ${suppliedCurrency}::text)
@@ -974,7 +1035,7 @@ async function upsert(resource: string, ctx: Ctx, rec: SourceEntity, s: Resource
     const collected = await acctId(f.collectedAccountRef);
     const paid = await acctId(f.paidAccountRef);
     if (id) {
-      await db.execute(sql`update tax_codes set name=${name}, applies_to=${appliesTo}::text,
+      await db.execute(sql`update tax_codes set code=case when ${rec.mappedFields?.includes("code") ?? false} then ${code} else code end, name=${name}, applies_to=${appliesTo}::text,
         collected_account_id=coalesce(${collected}, collected_account_id),
         paid_account_id=coalesce(${paid}, paid_account_id),
         custom=(${taxCustom}::jsonb || tax_codes.custom)
@@ -1006,7 +1067,7 @@ async function upsert(resource: string, ctx: Ctx, rec: SourceEntity, s: Resource
     const defaultRate = f.defaultRate == null || f.defaultRate === "" ? null : persistItemDefaultRate(f.defaultRate);
     const unit = str(f.unit);
     const id = await findByRef("items", orgId, refKey, rec.sourceRef);
-    if (id) { await db.execute(sql`update items set name=${name}, kind=${String(f.kind ?? "service")}::text, category=${str(f.category)},
+    if (id) { await db.execute(sql`update items set name=${name}, code=case when ${rec.mappedFields?.includes("code") ?? false} then ${str(f.code)} else code end, kind=${String(f.kind ?? "service")}::text, category=${str(f.category)},
       default_cost=coalesce(${defaultCost}, default_cost), default_rate=coalesce(${defaultRate}, default_rate),
       unit=coalesce(${unit}, unit), is_active=${f.isActive !== false} where id=${id} and org_id=${orgId}`); s.updated++; return id; }
     const ins = (await db.execute(sql`insert into items (org_id, kind, code, name, category, default_cost, default_rate, unit, is_active, custom)
@@ -1139,7 +1200,8 @@ async function upsert(resource: string, ctx: Ctx, rec: SourceEntity, s: Resource
       sales_rep_id: ref(ctx.maps.parties, r.salesRepRef),
       tax_code_id: ref(ctx.maps.tax_codes, r.taxCodeRef), is_active: isActive,
     });
-  } else if (f.vendorRole) {
+  }
+  if (f.vendorRole) {
     const r = f.vendorRole as Record<string, unknown>;
     await upsertRole("vendor_roles", orgId, pid, {
       ap_account_id: ref(ctx.maps.accounts, r.apAccountRef),
@@ -1147,7 +1209,8 @@ async function upsert(resource: string, ctx: Ctx, rec: SourceEntity, s: Resource
       default_expense_account_id: ref(ctx.maps.accounts, r.defaultExpenseAccountRef),
       currency: ctx.currency, is_t4a: !!r.is1099OrT4a, is_active: isActive,
     });
-  } else if (f.employeeRole) {
+  }
+  if (f.employeeRole) {
     const r = f.employeeRole as Record<string, unknown>;
     await upsertRole("employee_roles", orgId, pid, {
       employee_number: str(r.employeeNumber),

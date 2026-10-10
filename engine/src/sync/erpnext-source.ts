@@ -1,3 +1,4 @@
+import { entityMappingMetadata } from "./entity-mapping-contract.ts";
 import { erpnextAttachmentProvider } from "./attachment-providers.ts";
 import { syncTransactionAttachments, type AttachmentSyncOptions } from "./transaction-attachments.ts";
 import { ErpNextClient, type ErpNextCreds } from "../connectors/erpnext.ts";
@@ -60,6 +61,7 @@ const INVOICE_FIELDS = ["name", "modified", "docstatus"];
 
 export class ErpNextSource implements MigrationSource {
   readonly name = "erpnext";
+  readonly entityMappingMetadata = entityMappingMetadata(['accounting_periods', 'accounts', 'tax_codes', 'parties', 'items', 'files'], ['customers', 'vendors'], { 'accounts': ['number', 'name', 'type', 'isActive'], 'parties': ['displayName', 'kind', 'isActive'], 'items': ['code', 'name', 'kind', 'isActive'], 'tax_codes': ['code', 'name', 'ratePercent', 'appliesTo'] });
   readonly refKey = "erpId";
   readonly baseCurrency: string;
   private readonly client: ErpNextClient;
@@ -178,6 +180,7 @@ export class ErpNextSource implements MigrationSource {
     return [
       ...customers.map((c) => ({
         sourceRef: `C:${c.name}`,
+        mappingEntities: ["customers"],
         fields: {
           displayName: String(c.customer_name ?? c.name).slice(0, 500),
           kind: c.customer_type === "Individual" ? "person" : "company",
@@ -186,6 +189,7 @@ export class ErpNextSource implements MigrationSource {
       })),
       ...suppliers.map((s) => ({
         sourceRef: `S:${s.name}`,
+        mappingEntities: ["vendors"],
         fields: {
           displayName: String(s.supplier_name ?? s.name).slice(0, 500),
           kind: s.supplier_type === "Individual" ? "person" : "company",

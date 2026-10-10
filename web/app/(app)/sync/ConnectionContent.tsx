@@ -4,6 +4,8 @@ import { useEffect, useId, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { Badge, Button, Label, SearchSelect, Select } from '@openbooks/ui'
 import { RecordTabs } from '../../../components/module-home/record-tabs'
+import { EntityMappingEditor } from './EntityMappingEditor'
+import { decodeEntityMappings, type ConnectionEntityMappings } from '@openbooks/engine/src/sync/entity-mapping-contract.ts'
 import { readApiErrorMessage } from '../../../lib/api-error'
 import { confirmDialog } from '../../../lib/confirm'
 import {
@@ -44,6 +46,33 @@ export function ConnectionSyncContent({ capabilities, value, onChange, attachmen
 
 export type MappingDraft = { source: string; target: string; error: string }
 export type MappingDrafts = Record<string, MappingDraft>
+
+export function ConnectionMappingWorkspace({ connectionId, groups, value, entityValue, drafts, onDraftChange, onChange, onEntityChange, onPendingChange }: {
+  connectionId?: string; groups: readonly MappingGroup[]; value: unknown; entityValue: unknown; drafts: MappingDrafts;
+  onDraftChange: (key: string, draft: MappingDraft) => void; onChange: (value: Record<string, unknown>) => void;
+  onEntityChange: (value: ConnectionEntityMappings) => void; onPendingChange: (pending: boolean) => void
+}) {
+  const t = useTranslations('sync.drawer.entityMappings')
+  const [selected, setSelected] = useState('entities')
+  const model = decodeEntityMappings(entityValue)
+  return <div className="space-y-4">
+    {model.unavailableRules?.length ? <div role="alert" className="space-y-3 rounded-md border border-amber-300 p-3">
+      <p className="text-sm font-medium">{t('unavailableRules')}</p><p className="text-xs text-slate-500">{t('unavailableRulesHelp')}</p>
+      {model.unavailableRules.map((rule, index) => <div key={`${rule.key}:${index}`} className="space-y-2 rounded-md border p-3">
+        <div className="flex items-center justify-between gap-2"><Badge>{rule.key}</Badge><Button size="sm" variant="outline" onClick={() => onEntityChange({ ...model, unavailableRules: model.unavailableRules!.filter((_, position) => position !== index) })}>{t('remove')}</Button></div>
+        <SavedMappingValue value={rule.value} emptyLabel={t('emptySavedValue')} /><p className="text-xs text-amber-800 dark:text-amber-200">{rule.reason}</p>
+      </div>)}
+    </div> : null}
+    <RecordTabs label={t('workspace')} active={selected} onChange={setSelected} tabs={[{ key: 'entities', label: t('entityRules') }, { key: 'sourceOptions', label: t('sourceOptions') }]}>
+    <div className="pt-4" hidden={selected !== 'entities'}><EntityMappingEditor connectionId={connectionId} value={entityValue} onChange={onEntityChange} onPendingChange={onPendingChange} /></div>
+    <div className="pt-4" hidden={selected !== 'sourceOptions'}><ConnectionMappings connectionId={connectionId} groups={groups} value={value} drafts={drafts} onDraftChange={onDraftChange} onChange={onChange} /></div>
+  </RecordTabs></div>
+}
+
+function SavedMappingValue({ value, emptyLabel }: { value: unknown; emptyLabel: string }) {
+  if (value !== null && typeof value === 'object') return <dl className="space-y-1 pl-3 text-sm">{Object.entries(value).map(([key, child]) => <div key={key}><dt className="font-medium">{key}</dt><dd className="pl-3"><SavedMappingValue value={child} emptyLabel={emptyLabel} /></dd></div>)}</dl>
+  return <span className="break-all text-sm">{value == null || value === '' ? emptyLabel : String(value)}</span>
+}
 
 export function ConnectionMappings({ connectionId, groups, value, onChange, drafts, onDraftChange }: {
   connectionId?: string

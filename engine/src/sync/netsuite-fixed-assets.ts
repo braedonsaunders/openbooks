@@ -1,3 +1,4 @@
+import { netSuiteOperationalMappingWriter } from './operational-entity-mappings.ts';
 import { sql } from "drizzle-orm";
 import { canonicalDecimal } from "../money/exact-decimal.ts";
 import { businessToday } from "../platform/business-date.ts";
@@ -206,6 +207,7 @@ export async function syncNetSuiteFixedAssets(
   if (!(await orgFeatureEnabled(options.orgId, "fixedAssets"))) {
     throw new Error("Fixed Assets feature is disabled");
   }
+  const mappings = await netSuiteOperationalMappingWriter(options.orgId, options.connectionId, options.actorId ?? null);
   const snapshot = await source.fixedAssets();
   const asOf = await extractionDate(snapshot, options.orgId);
   const historyByAsset = new Map<string, Row[]>();
@@ -327,51 +329,55 @@ export async function syncNetSuiteFixedAssets(
       const expenseAccountId = requiredRef(accounts, assetType.custrecord_assettypedeprchargeacc, "depreciation expense account");
       const gainLossAccountId = optionalRef(accounts, assetType.custrecord_assettypedisposalacc, "gain/loss account");
       const lifeMonths = Number(text(assetType.custrecord_assettypelifetime) ?? 0) || null;
-      let categoryId: string;
-      if (existing.rows[0]) {
-        categoryId = existing.rows[0].id;
-        await db.transaction(async (tx) => {
-          // Tax-class attributes share the pool-run lifecycle fence with the
-          // admin category assignment route. Re-read and lock the category
-          // only after every affected subsidiary is fenced.
-          await lockAssetCategoryTaxLifecycle(tx, options.orgId, categoryId);
-          const locked = (await tx.execute<{ id: string; tax_attributes: Record<string, unknown> | null }>(sql`
-            select id, tax_attributes from asset_categories where id = ${categoryId} and org_id = ${options.orgId} for update
-          `)).rows[0];
-          if (!locked) throw new Error(`NetSuite FAM asset category ${categoryId} disappeared before sync`);
-          const taxAttributes = mergeNetSuiteFamTaxAttributes(locked.tax_attributes, rawMetadata);
-          const updated = (await tx.execute(sql`
-            update asset_categories
-               set name = ${text(assetType.name) ?? `NetSuite FAM type ${sourceId}`},
-                   asset_account_id = ${assetAccountId},
-                   accumulated_depreciation_account_id = ${accumulatedAccountId},
-                   depreciation_expense_account_id = ${expenseAccountId},
-                   gain_loss_account_id = ${gainLossAccountId},
-                   default_method = ${method(assetType)}, default_life_months = ${lifeMonths},
-                   default_convention = 'full_month', tax_attributes = ${json(taxAttributes)}::jsonb,
-                   is_active = ${!truthy(assetType.isinactive)}, updated_at = now(), updated_by = ${options.actorId ?? null}
-             where id = ${categoryId} and org_id = ${options.orgId}
-             returning id
-          `)).rows[0];
-          if (!updated) throw new Error(`NetSuite FAM asset category ${categoryId} was not updated`);
-        });
-        updatedCategories += 1;
-      } else {
-        const inserted = (await db.execute<{ id: string }>(sql`
-          insert into asset_categories
-            (org_id, name, asset_account_id, accumulated_depreciation_account_id,
-             depreciation_expense_account_id, gain_loss_account_id, default_method,
-             default_life_months, default_convention, tax_attributes, is_active, created_by, updated_by)
-          values
-            (${options.orgId}, ${text(assetType.name) ?? `NetSuite FAM type ${sourceId}`}, ${assetAccountId},
-             ${accumulatedAccountId}, ${expenseAccountId}, ${gainLossAccountId}, ${method(assetType)},
-             ${lifeMonths}, 'full_month', ${json(rawMetadata)}::jsonb, ${!truthy(assetType.isinactive)},
-             ${options.actorId ?? null}, ${options.actorId ?? null})
-          returning id
-        `));
-        categoryId = inserted.rows[0]!.id;
-        createdCategories += 1;
-      }
+      const categoryId = await mappings.write('assetCategories', sourceId, { name: text(assetType.name) ?? `NetSuite FAM type ${sourceId}` }, sql`tax_attributes->>'source'='netsuite_fam' and tax_attributes->>'nsId'=${sourceId} and tax_attributes->'netsuiteFam'->>'connectionId'=${options.connectionId}`, async mapped => {
+        let categoryId: string;
+        if (existing.rows[0]) {
+          categoryId = existing.rows[0].id;
+          await db.transaction(async (tx) => {
+            // Tax-class attributes share the pool-run lifecycle fence with the
+            // admin category assignment route. Re-read and lock the category
+            // only after every affected subsidiary is fenced.
+            await lockAssetCategoryTaxLifecycle(tx, options.orgId, categoryId);
+            const locked = (await tx.execute<{ id: string; tax_attributes: Record<string, unknown> | null }>(sql`
+              select id, tax_attributes from asset_categories where id = ${categoryId} and org_id = ${options.orgId} for update
+            `)).rows[0];
+            if (!locked) throw new Error(`NetSuite FAM asset category ${categoryId} disappeared before sync`);
+            const taxAttributes = mergeNetSuiteFamTaxAttributes(locked.tax_attributes, rawMetadata);
+            const updated = (await tx.execute(sql`
+              update asset_categories
+                 set name = ${String(mapped.name)},
+                     asset_account_id = ${assetAccountId},
+                     accumulated_depreciation_account_id = ${accumulatedAccountId},
+                     depreciation_expense_account_id = ${expenseAccountId},
+                     gain_loss_account_id = ${gainLossAccountId},
+                     default_method = ${method(assetType)}, default_life_months = ${lifeMonths},
+                     default_convention = 'full_month', tax_attributes = ${json(taxAttributes)}::jsonb,
+                     is_active = ${!truthy(assetType.isinactive)}, updated_at = now(), updated_by = ${options.actorId ?? null}
+               where id = ${categoryId} and org_id = ${options.orgId}
+               returning id
+            `)).rows[0];
+            if (!updated) throw new Error(`NetSuite FAM asset category ${categoryId} was not updated`);
+          });
+          updatedCategories += 1;
+        } else {
+          const inserted = (await db.execute<{ id: string }>(sql`
+            insert into asset_categories
+              (org_id, name, asset_account_id, accumulated_depreciation_account_id,
+               depreciation_expense_account_id, gain_loss_account_id, default_method,
+               default_life_months, default_convention, tax_attributes, is_active, created_by, updated_by)
+            values
+              (${options.orgId}, ${String(mapped.name)}, ${assetAccountId},
+               ${accumulatedAccountId}, ${expenseAccountId}, ${gainLossAccountId}, ${method(assetType)},
+               ${lifeMonths}, 'full_month', ${json(rawMetadata)}::jsonb, ${!truthy(assetType.isinactive)},
+               ${options.actorId ?? null}, ${options.actorId ?? null})
+            returning id
+          `));
+          if (!inserted.rows[0]) throw new Error('The imported asset category was not saved');
+          categoryId = inserted.rows[0].id;
+          createdCategories += 1;
+        }
+        return categoryId;
+      }, async () => { if (existing.rows[0]) await lockAssetCategoryTaxLifecycle(db, options.orgId, existing.rows[0].id); });
       categoryBySource.set(sourceId, categoryId);
     }
 
@@ -427,53 +433,61 @@ export async function syncNetSuiteFixedAssets(
            and custom->'netsuiteFam'->>'sourceId' = ${state.sourceId}
          limit 1 for update
       `));
-      let assetId: string;
-      if (existing.rows[0]) {
-        assetId = existing.rows[0].id;
-        await refuseFixedAssetRehomeWithEquipment(
-          db,
-          options.orgId,
-          assetId,
-          existing.rows[0].subsidiary_id,
-          subsidiaryId,
-        );
-        await db.execute(sql`
-          update fixed_assets
-             set subsidiary_id = ${subsidiaryId}, category_id = ${categoryId},
-                 asset_number = ${text(asset.name) ?? `NS-${state.sourceId}`},
-                 name = ${text(asset.altname) ?? text(asset.custrecord_assetdescr) ?? text(asset.name) ?? `Asset ${state.sourceId}`},
-                 description = ${text(asset.custrecord_assetdescr)}, status = ${sourceStatus},
-                 acquired_on = ${acquiredOn}, in_service_on = ${inServiceOn},
-                 acquisition_cost = ${state.cost}, salvage_value = ${money(asset.custrecord_assetresidualvalue)},
-                 depreciation_method = ${sourceMethod}, useful_life_months = ${lifeMonths},
-                 depreciation_convention = 'full_month',
-                 serial_number = ${text(asset.custrecord_assetserialno)}, department_id = ${departmentId},
-                 project_id = ${projectId}, location_id = ${locationId}, custodian_party_id = ${custodianPartyId},
-                 custom = coalesce(custom, '{}'::jsonb) || ${json(custom)}::jsonb,
-                 updated_at = now(), updated_by = ${options.actorId ?? null}
-           where id = ${assetId} and org_id = ${options.orgId}
-        `);
-        updatedAssets += 1;
-      } else {
-        const inserted = (await db.execute<{ id: string }>(sql`
-          insert into fixed_assets
-            (org_id, subsidiary_id, category_id, asset_number, name, description, status,
-             acquired_on, in_service_on, acquisition_cost, salvage_value, serial_number,
-             depreciation_method, useful_life_months, depreciation_convention,
-             department_id, project_id, location_id, custodian_party_id, custom, created_by, updated_by)
-          values
-            (${options.orgId}, ${subsidiaryId}, ${categoryId}, ${text(asset.name) ?? `NS-${state.sourceId}`},
-             ${text(asset.altname) ?? text(asset.custrecord_assetdescr) ?? text(asset.name) ?? `Asset ${state.sourceId}`},
-             ${text(asset.custrecord_assetdescr)}, ${sourceStatus}, ${acquiredOn}, ${inServiceOn},
-             ${state.cost}, ${money(asset.custrecord_assetresidualvalue)}, ${text(asset.custrecord_assetserialno)},
-             ${sourceMethod}, ${lifeMonths}, 'full_month',
-             ${departmentId}, ${projectId}, ${locationId}, ${custodianPartyId}, ${json(custom)}::jsonb,
-             ${options.actorId ?? null}, ${options.actorId ?? null})
-          returning id
-        `));
-        assetId = inserted.rows[0]!.id;
-        createdAssets += 1;
-      }
+      const assetId = await mappings.write('fixedAssets', state.sourceId, {
+        name: text(asset.altname) ?? text(asset.custrecord_assetdescr) ?? text(asset.name) ?? `Asset ${state.sourceId}`,
+        description: text(asset.custrecord_assetdescr), serialNumber: text(asset.custrecord_assetserialno),
+      }, sql`custom->'netsuiteFam'->>'connectionId'=${options.connectionId} and custom->'netsuiteFam'->>'sourceId'=${state.sourceId}`, async mapped => {
+        let assetId: string;
+        if (existing.rows[0]) {
+          assetId = existing.rows[0].id;
+          await refuseFixedAssetRehomeWithEquipment(
+            db,
+            options.orgId,
+            assetId,
+            existing.rows[0].subsidiary_id,
+            subsidiaryId,
+          );
+          const updated = await db.execute<{ id: string }>(sql`
+            update fixed_assets
+               set subsidiary_id = ${subsidiaryId}, category_id = ${categoryId},
+                   asset_number = ${text(asset.name) ?? `NS-${state.sourceId}`},
+                   name = ${String(mapped.name)},
+                   description = ${mapped.description ?? null}, status = ${sourceStatus},
+                   acquired_on = ${acquiredOn}, in_service_on = ${inServiceOn},
+                   acquisition_cost = ${state.cost}, salvage_value = ${money(asset.custrecord_assetresidualvalue)},
+                   depreciation_method = ${sourceMethod}, useful_life_months = ${lifeMonths},
+                   depreciation_convention = 'full_month',
+                   serial_number = ${mapped.serialNumber ?? null}, department_id = ${departmentId},
+                   project_id = ${projectId}, location_id = ${locationId}, custodian_party_id = ${custodianPartyId},
+                   custom = coalesce(custom, '{}'::jsonb) || ${json(custom)}::jsonb,
+                   updated_at = now(), updated_by = ${options.actorId ?? null}
+             where id = ${assetId} and org_id = ${options.orgId} returning id
+          `);
+          if (!updated.rows[0]) throw new Error('The imported fixed asset was not saved');
+          updatedAssets += 1;
+        } else {
+          const inserted = (await db.execute<{ id: string }>(sql`
+            insert into fixed_assets
+              (org_id, subsidiary_id, category_id, asset_number, name, description, status,
+               acquired_on, in_service_on, acquisition_cost, salvage_value, serial_number,
+               depreciation_method, useful_life_months, depreciation_convention,
+               department_id, project_id, location_id, custodian_party_id, custom, created_by, updated_by)
+            values
+              (${options.orgId}, ${subsidiaryId}, ${categoryId}, ${text(asset.name) ?? `NS-${state.sourceId}`},
+               ${String(mapped.name)},
+               ${mapped.description ?? null}, ${sourceStatus}, ${acquiredOn}, ${inServiceOn},
+               ${state.cost}, ${money(asset.custrecord_assetresidualvalue)}, ${mapped.serialNumber ?? null},
+               ${sourceMethod}, ${lifeMonths}, 'full_month',
+               ${departmentId}, ${projectId}, ${locationId}, ${custodianPartyId}, ${json(custom)}::jsonb,
+               ${options.actorId ?? null}, ${options.actorId ?? null})
+            returning id
+          `));
+          if (!inserted.rows[0]) throw new Error('The imported fixed asset was not saved');
+          assetId = inserted.rows[0].id;
+          createdAssets += 1;
+        }
+        return assetId;
+      });
 
       await db.execute(sql`
         delete from asset_events
@@ -633,13 +647,12 @@ export async function syncNetSuiteFixedAssets(
         total: persistSyncLineMoney(document.total ?? "0", "total"),
         memo: document.memo,
         referenceNumber: document.referenceNumber,
-        custom: document.controlAccountId
-          ? { [source.refKey]: document.sourceRef, controlAccountId: document.controlAccountId }
-          : { [source.refKey]: document.sourceRef },
+        custom: { [source.refKey]: document.sourceRef, ...document.mappedCustom, ...(Object.keys(document.mappedCustom ?? {}).length ? { connectorMappedValues: document.mappedCustom } : {}), ...(document.controlAccountId ? { controlAccountId: document.controlAccountId } : {}) },
         createdBy: options.actorId ?? null,
         updatedBy: options.actorId ?? null,
       }).returning({ id: schema.documents.id });
-      const documentId = inserted[0]!.id;
+      if (!inserted[0]) throw new Error('The source asset ledger document was not saved');
+      const documentId = inserted[0].id;
       await db.insert(schema.documentLines).values(document.lines.map((line) => ({
         orgId: options.orgId,
         documentId,
@@ -656,6 +669,8 @@ export async function syncNetSuiteFixedAssets(
         subsidiaryId: line.subsidiaryId,
         extraDims: line.extraDims ?? {},
         description: line.description,
+        unit: line.unit ?? null, isBillable: line.isBillable ?? false, markupPercent: line.markupPercent ?? null,
+        custom: { ...(line.sourceLineRef ? { sourceLineRef: line.sourceLineRef } : {}), ...line.mappedCustom, ...(Object.keys(line.mappedCustom ?? {}).length ? { connectorMappedValues: line.mappedCustom } : {}) },
         createdBy: options.actorId ?? null,
         updatedBy: options.actorId ?? null,
       })));

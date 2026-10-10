@@ -1,3 +1,4 @@
+import { entityMappingMetadata } from "./entity-mapping-contract.ts";
 import { dynamicsAttachmentProvider } from "./attachment-providers.ts";
 import { syncTransactionAttachments, type AttachmentSyncOptions } from "./transaction-attachments.ts";
 import { businessToday } from "../platform/business-date.ts";
@@ -132,6 +133,7 @@ const TXN_ENTITIES: { path: string; entity: string; expand: string }[] = [
 
 export class DynamicsSource implements MigrationSource {
   readonly name = "dynamics";
+  readonly entityMappingMetadata = entityMappingMetadata(['accounting_periods', 'accounts', 'tax_codes', 'parties', 'items', 'files'], ['customers', 'vendors'], { 'accounts': ['number', 'name', 'type', 'isActive'], 'parties': ['displayName', 'kind', 'isActive'], 'items': ['code', 'name', 'kind', 'isActive'], 'tax_codes': ['code', 'name', 'ratePercent', 'appliesTo'] });
   readonly refKey = "bcId";
   readonly baseCurrency: string;
   private readonly orgId: string;
@@ -207,11 +209,12 @@ export class DynamicsSource implements MigrationSource {
       this.client.list<BCParty>("customers", this.sinceParams(since)),
       this.client.list<BCParty>("vendors", this.sinceParams(since)),
     ]);
-    const mk = (p: BCParty): SourceEntity => ({
+    const mk = (entity: string) => (p: BCParty): SourceEntity => ({
+      mappingEntities: [entity],
       sourceRef: p.id,
       fields: { displayName: String(p.displayName ?? p.number ?? p.id).slice(0, 500), kind: "company", isActive: !p.blocked },
     });
-    return [...customers.map(mk), ...vendors.map(mk)];
+    return [...customers.map(mk("customers")), ...vendors.map(mk("vendors"))];
   }
 
   private async items(since?: Date | null): Promise<SourceEntity[]> {
