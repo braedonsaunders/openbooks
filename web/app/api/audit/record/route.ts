@@ -46,7 +46,7 @@ export const GET = defineRoute({
       : (table === 'hrm_benefit_enrollments' || table === 'hrm_benefit_programs' || table === 'hrm_benefit_plans' || table === 'entitlement_plans') ? ['hrm.benefits.read']
       : table === 'item_rate_versions'
         ? ['admin.setup.manage']
-        : ['ar.read', 'ap.read', 'gl.read', 'expenses.read', 'cash_sales.read']
+        : ['ar.read', 'ap.read', 'gl.read', 'expenses.read', 'cash_sales.read', 'purchase_orders.read']
     try {
       assertAnyPermission((permission) => can(authz, permission), family)
     } catch (error) {
