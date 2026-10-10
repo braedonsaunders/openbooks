@@ -7,7 +7,7 @@ import {
   gateDecisionCapability,
   getFlowAdapter,
 } from "@openbooks/engine/src/flows/index.ts";
-import { lockFlowSubjectScope, requireFlowsSession } from "../_lib";
+import { lockFlowSubjectScope, requireFlowsRecordReader } from "../_lib";
 import { can } from "../../../../lib/authz";
 import { canReadFlowSubject } from "../../../../lib/flow-subject-authz";
 import { isUuid } from "../../../../lib/list-params";
@@ -100,10 +100,21 @@ const iso = (v: unknown): string =>
       ? new Date(String(v)).toISOString()
       : "";
 
-/** `[delegated YYYY-MM-DD by <userId> → <name>]` markers written by delegateGate. */
+/** The approval state of a visible record that no flow applies to. */
+function emptyApprovalState(status: string): RecordApprovalState {
+  return {
+    approvalState: { status, pendingWith: [], myActions: null },
+    history: [],
+    failedRun: null,
+    neverSubmitted: false,
+    canRetry: false,
+  };
+}
+
 async function legacyGET(req: Request) {
-  const authz = await requireFlowsSession();
-  if (authz instanceof NextResponse) return authz;
+  const session = await requireFlowsRecordReader();
+  if (session instanceof NextResponse) return session;
+  const { authz, flowsEnabled } = session;
 
   const url = new URL(req.url);
   const subjectKind = url.searchParams.get("subjectKind") ?? "";
@@ -153,6 +164,10 @@ async function legacyGET(req: Request) {
     const status = await adapter.getStatus(subjectId);
     if (status === null)
       return NextResponse.json({ error: "record not found" }, { status: 404 });
+    // With Flows off no flow applies to any record: the visible record
+    // answers an empty approval state, never a refusal the drawer would
+    // render as an error.
+    if (!flowsEnabled) return NextResponse.json(emptyApprovalState(status));
 
     const [gates, runs, roleRows] = await Promise.all([
       db.execute<Record<string, unknown>>(sql`

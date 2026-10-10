@@ -43,6 +43,13 @@ export interface RecordApprovalLoad {
   loadError: string | null
   /** Re-run the load (the named remedy for loadError). */
   reload: () => void
+  /**
+   * The server answered that this caller has no approval state for the
+   * record (404: no read access, outside scope, or no longer exists). That is
+   * not a load failure to retry: approval surfaces render nothing, and an
+   * Approvals tab shows its empty body.
+   */
+  unavailable: boolean
 }
 
 export function useRecordApprovalState(
@@ -52,6 +59,7 @@ export function useRecordApprovalState(
   const t = useTranslations('common')
   const [state, setState] = useState<RecordApprovalState | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
+  const [unavailable, setUnavailable] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -65,6 +73,14 @@ export function useRecordApprovalState(
         // null and the approval UI vanished silently. A non-JSON error
         // body surfaces the translated fallback with its status, never a
         // SyntaxError; a JSON refusal surfaces the server's named message.
+        if (res.status === 404) {
+          if (!cancelled) {
+            setState(null)
+            setUnavailable(true)
+            setLoadError(null)
+          }
+          return
+        }
         if (!res.ok) {
           if (!cancelled) setLoadError(await readApiErrorMessage(res, t('feedback.loadFailed')))
           return
@@ -73,6 +89,7 @@ export function useRecordApprovalState(
         if (!cancelled) {
           if (data) {
             setState(data)
+            setUnavailable(false)
             setLoadError(null)
           } else {
             setLoadError(t('feedback.loadFailed'))
@@ -95,7 +112,7 @@ export function useRecordApprovalState(
     refreshApprovalState()
   }, [])
 
-  return { state, loadError, reload }
+  return { state, loadError, reload, unavailable }
 }
 
 // --- header controls ----------------------------------------------------------
@@ -116,7 +133,7 @@ export function ApprovalActions({
 }) {
   const t = useTranslations('common')
   const router = useRouter()
-  const { state, loadError, reload } = useRecordApprovalState(subjectKind, subjectId)
+  const { state, loadError, reload, unavailable } = useRecordApprovalState(subjectKind, subjectId)
   const [busy, setBusy] = useState(false)
 
   const decide = useCallback(
@@ -232,6 +249,7 @@ export function ApprovalActions({
   // A failed record-state load with nothing to show (F1-11): name the
   // failure and offer the remedy inline instead of vanishing. A refresh
   // failure over last-good state keeps the live controls above.
+  if (!state && unavailable) return null
   if (!state && loadError) {
     return (
       <span className="inline-flex max-w-72 items-center gap-1.5 rounded-full border border-red-200 bg-red-50 px-2.5 py-1 text-xs font-medium text-red-800 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-300">

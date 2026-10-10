@@ -18,6 +18,8 @@ interface RouteState {
   canRetry: boolean;
   canRead: boolean;
   readChecks: string[];
+  flowsEnabled: boolean;
+  flowQueries: number;
 }
 
 const stateKey = Symbol.for("openbooks.flow-record-state-route-test");
@@ -34,6 +36,8 @@ const routeState: RouteState = {
   canRetry: false,
   canRead: true,
   readChecks: [],
+  flowsEnabled: true,
+  flowQueries: 0,
 };
 (
   globalThis as typeof globalThis & Record<symbol, unknown>
@@ -45,6 +49,7 @@ const mockSources = new Map<string, string>([
     `
       const state = globalThis[Symbol.for('openbooks.flow-record-state-route-test')]
       export const db = { execute: async (query) => {
+        state.flowQueries += 1
         if (JSON.stringify(query).includes('flow_runs')) return { rows: state.runRows ?? [] }
         return { rows: [] }
       } }
@@ -82,7 +87,9 @@ const mockSources = new Map<string, string>([
     `
       import { ScopeNotFoundError } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
       const state = globalThis[Symbol.for('openbooks.flow-record-state-route-test')]
-      export async function requireFlowsSession() { return state.authz }
+      export async function requireFlowsRecordReader() {
+        return { authz: state.authz, flowsEnabled: state.flowsEnabled }
+      }
       export async function loadFlowSubjectSubsidiary() { return state.subjectSubsidiaryId }
       export async function lockFlowSubjectScope(_subjectKind, _subjectId, _orgId, allowedSubsidiaryIds) {
         state.lockChecks.push(state.subjectSubsidiaryId ?? null)
@@ -144,6 +151,8 @@ function reset(allowedSubsidiaryIds: Set<string> | null): void {
   routeState.canRetry = false;
   routeState.canRead = true;
   routeState.readChecks = [];
+  routeState.flowsEnabled = true;
+  routeState.flowQueries = 0;
 }
 
 const SUBJECT_ID = "11111111-1111-4111-8111-111111111111";
@@ -263,4 +272,44 @@ test("a record with any run history is not neverSubmitted", async () => {
   assert.equal(response.status, 200);
   const body = (await response.json()) as { neverSubmitted: boolean };
   assert.equal(body.neverSubmitted, false);
+});
+
+test("with Flows off a visible record answers an empty approval state", async () => {
+  reset(new Set(["sub-hidden"]));
+  routeState.flowsEnabled = false;
+  routeState.status = "pending";
+  routeState.canRetry = true;
+
+  const response = await GET(request());
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), {
+    approvalState: { status: "pending", pendingWith: [], myActions: null },
+    history: [],
+    failedRun: null,
+    neverSubmitted: false,
+    canRetry: false,
+  });
+  assert.deepEqual(routeState.statusCalls, [SUBJECT_ID]);
+  assert.equal(routeState.flowQueries, 0, "no gate, run or role read may run");
+});
+
+test("with Flows off a hidden record still meets the missing-record answer", async () => {
+  reset(new Set(["sub-visible"]));
+  routeState.flowsEnabled = false;
+  const outOfScope = await GET(request());
+  assert.equal(outOfScope.status, 404);
+
+  reset(new Set(["sub-hidden"]));
+  routeState.flowsEnabled = false;
+  routeState.canRead = false;
+  const noGrant = await GET(request());
+  assert.equal(noGrant.status, 404);
+  assert.deepEqual(await noGrant.json(), { error: "record not found" });
+
+  reset(new Set(["sub-hidden"]));
+  routeState.flowsEnabled = false;
+  routeState.status = null;
+  const missing = await GET(request());
+  assert.equal(missing.status, 404);
 });
