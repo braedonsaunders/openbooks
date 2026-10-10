@@ -636,7 +636,10 @@ test('subsidiary scope clamps workforce rows and the shared gate refuses', { ski
     // grant exactly the positions entity hides, and the employment ones stay.
     // Shared by both readers below: the declarations are the independent
     // side of every check here, so they are read once, above both.
-    const { HRM_REPORT_ENTITIES: declared } = await import('@openbooks/reports')
+    // Declared from the unified entity map — the same registry the gate
+    // reads (imported above) — so workforce entities declared beside the
+    // core HRM list (benefit awards and payroll inputs) count as declared.
+    const declared = Object.values(REPORT_ENTITY_MAP)
     const employmentOnly = fakeAuthz(scratch.orgId, ['reports.read', 'hrm.employment.read'], null)
     await withOrgContext(scratch.orgId, async () => {
       const hiddenHrm = (await hiddenReportEntityKeys(employmentOnly)).filter((key) => key.startsWith('hrm_')).sort()
