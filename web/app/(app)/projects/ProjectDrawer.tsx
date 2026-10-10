@@ -30,6 +30,7 @@ import { RateBookAssignmentSection } from '../parties/RateBookAssignmentSection'
 import { GeofenceSection } from '../../../components/field-time/GeofenceSection'
 // HR-20 end
 import { shouldAutoActivateProject } from './project-activation'
+import { profileHidesProjectHeaderField } from '../../../lib/project-header-visibility'
 import { FinancialsTab, type FinancialsData } from './tabs/FinancialsTab'
 import { RecognitionCard, type RecognitionStatus } from './tabs/RecognitionCard'
 import { CostTimeTab, type CostTimeData } from './tabs/CostTimeTab'
@@ -541,11 +542,10 @@ export function ProjectDrawer({
   )
 
   function renderProjectField(placement: HeaderFieldPlacement): React.ReactNode {
-    if (activeOperatingDefinition && (
-      (placement.key === 'foreman_id' && !activeOperatingDefinition.presentation.showForeman) ||
-      (placement.key === 'site_jurisdiction' && !activeOperatingDefinition.presentation.showSite) ||
-      (placement.key === 'customer_po_number' && !activeOperatingDefinition.presentation.showCustomerPo)
-    )) return null
+    // Foreman renders from the shared project field set on every flavour;
+    // only an explicit form-layout omission hides it. Site and customer-PO
+    // keep their operating-profile presentation switches.
+    if (profileHidesProjectHeaderField(placement.key, activeOperatingDefinition?.presentation)) return null
     const lbl = placement.labelOverride?.trim() || undefined
     switch (placement.key) {
       case 'name':
