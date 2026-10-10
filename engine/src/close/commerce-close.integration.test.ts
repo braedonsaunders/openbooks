@@ -9,6 +9,7 @@ import { registerChannelAdapter } from "../commerce/adapters.ts";
 import { createChannel, markChannelActive, retryChannel } from "../commerce/channels.ts";
 import { upsertAccountMap } from "../commerce/account-maps.ts";
 import { postEntry } from "../journal/post-entry.ts";
+import { markSettlementLineJournal } from "../payments/psp-settlement.ts";
 import { db, withBypass } from "../platform/db.ts";
 import { createProgram, issueStoredValue } from "../stored-value/accounts.ts";
 import {
@@ -506,13 +507,17 @@ test("a journal-recognised line is evidenced and an explained clearing balance p
   try {
     // A posted in-window batch with one unmatched charge line fails the gate.
     const batchId = randomUUID();
+    let lineId = "";
     await withBypass(async () => {
       await db.execute(sql`
-        insert into psp_settlement_batches (id, org_id, provider, external_ref, currency, settlement_date, status, subsidiary_id)
-        values (${batchId}, ${fx.org.orgId}, 'stripe', 'po_mark_1', 'CAD', ${DAY}::date, 'posted', ${fx.org.subsidiaryId})`);
-      await db.execute(sql`
+        insert into psp_settlement_batches
+          (id, org_id, provider, external_ref, currency, settlement_date, status, subsidiary_id, journal_entry_id, posted_at)
+        values (${batchId}, ${fx.org.orgId}, 'stripe', 'po_mark_1', 'CAD', ${DAY}::date, 'posted',
+                ${fx.org.subsidiaryId}, ${fx.sweepEntryId}, ${`${DAY}T12:00:00Z`}::timestamptz)`);
+      lineId = (await db.execute<{ id: string }>(sql`
         insert into psp_settlement_lines (org_id, batch_id, line_number, kind, amount, currency, external_ref)
-        values (${fx.org.orgId}, ${batchId}, 1, 'charge', 100, 'CAD', 'charge-1')`);
+        values (${fx.org.orgId}, ${batchId}, 1, 'charge', 100, 'CAD', 'charge-1')
+        returning id`)).rows[0]!.id;
     });
     const failing = await withBypass(() => commerceCloseChecks(fx.org.orgId, SCOPE(fx.org), { storefrontTotals: matchingProvider() }));
     const payoutsOpen = failing.find((check) => check.code === "commerce-payouts-unposted")!;
@@ -536,13 +541,7 @@ test("a journal-recognised line is evidenced and an explained clearing balance p
         ],
       }),
     );
-    await withBypass(async () => {
-      await db.execute(sql`
-        update psp_settlement_lines
-           set meta = jsonb_build_object('recognizedByJournalEntry',
-                         jsonb_build_object('id', ${sale.entryId}, 'number', ${`JE-MARK-${fx.org.orgId.slice(0, 8)}`}))
-         where batch_id = ${batchId} and org_id = ${fx.org.orgId}`);
-    });
+    await withBypass(() => markSettlementLineJournal(fx.org.orgId, batchId, lineId, sale.entryId, fx.actor, null));
     const marked = await withBypass(() => commerceCloseChecks(fx.org.orgId, SCOPE(fx.org), { storefrontTotals: matchingProvider() }));
     assert.equal(marked.find((check) => check.code === "commerce-payouts-unposted")!.count, 0);
     // An open batch settling after period end explains its clearing legs:
@@ -570,8 +569,10 @@ test("a journal-recognised line is evidenced and an explained clearing balance p
     await withBypass(async () => {
       await db.execute(sql`
         insert into psp_settlement_batches
-          (id, org_id, provider, external_ref, currency, settlement_date, status, subsidiary_id, journal_entry_id, clearing_account_id)
-        values (${openBatchId}, ${fx.org.orgId}, 'stripe', 'po_open_1', 'CAD', '2026-08-04', 'posted', ${fx.org.subsidiaryId}, ${openEntry.entryId}, ${fx.clearing})`);
+          (id, org_id, provider, external_ref, currency, settlement_date, status, subsidiary_id,
+           journal_entry_id, posted_at, clearing_account_id)
+        values (${openBatchId}, ${fx.org.orgId}, 'stripe', 'po_open_1', 'CAD', '2026-08-04', 'posted',
+                ${fx.org.subsidiaryId}, ${openEntry.entryId}, ${`${DAY}T12:00:00Z`}::timestamptz, ${fx.clearing})`);
     });
     const explained = await withBypass(() => commerceCloseChecks(fx.org.orgId, SCOPE(fx.org), { storefrontTotals: matchingProvider() }));
     const clearing = explained.find((check) => check.code === "commerce-clearing-residual")!;
