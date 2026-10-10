@@ -4,7 +4,7 @@ import 'server-only'
 import { NextResponse } from 'next/server'
 import { customRecordReportCatalog } from './custom-record-report-catalog'
 import { REPORT_ENTITY_MAP } from '@openbooks/reports'
-import { can, type Authz } from './authz'
+import { can, requirePermission, type Authz } from './authz'
 import { isFeatureEnabled } from './features'
 import { requireFeatureEnabled } from './feature-gates'
 import { notFound } from "@/lib/api/responses";
@@ -30,7 +30,7 @@ import { notFound } from "@/lib/api/responses";
  * becoming a wage leak — or a leak of a module the org has switched off.
  *
  * Statement definitions carry no entity plan; they are gated by
- * `STATEMENT_KIND_FEATURE` instead of being refused here.
+ * `STATEMENT_KIND_FEATURE` and `statementKindPermission` instead.
  */
 
 export function reportEntityPermission(query: unknown): string | null {
@@ -62,12 +62,119 @@ export const STATEMENT_KIND_FEATURE: Partial<Record<string, string>> = {
   'resourcing-engagement': 'resourcing',
 }
 
+/**
+ * The domain grant every seeded statement reads, beyond `reports.read`.
+ *
+ * `reports.read` opens the reporting tools; it never stands in for the
+ * ledger, the subledgers or another module. Financial statements and ledger
+ * detail read the general ledger and need `gl.read`; receivable and payable
+ * reports need the side's own read grant; operational statements need their
+ * module's read grant. One table, consulted by the hub, the statement pages,
+ * exports, scheduled runs and drills, so a role without the ledger grant
+ * cannot reach the balance sheet through any of them.
+ */
 const STATEMENT_KIND_PERMISSION: Partial<Record<string, string>> = {
+  pnl: 'gl.read',
+  'balance-sheet': 'gl.read',
+  'cash-flow': 'gl.read',
+  'cash-flow-indirect': 'gl.read',
+  'trial-balance': 'gl.read',
+  'general-ledger': 'gl.read',
+  journal: 'gl.read',
+  budget: 'budgets.read',
   'payroll-support': 'payroll.read',
+  'project-profitability': 'projects.read',
+  'project-budget-vs-actual': 'projects.read',
+  'earned-value': 'projects.read',
+  'true-cost': 'projects.read',
+  availability: 'items.read',
+  replenishment: 'items.read',
   'resourcing-utilization': 'resourcing.read',
   'resourcing-bench': 'resourcing.read',
   'resourcing-capacity-demand': 'resourcing.read',
   'resourcing-engagement': 'resourcing.read',
+}
+
+/** Statement kinds whose grant depends on the receivable/payable side they show. */
+const SIDED_STATEMENT_KINDS = new Set(['aging', 'registers', 'partner-statement', 'partners'])
+
+type StatementParams = Record<string, string | string[] | null | undefined> | URLSearchParams | null | undefined
+
+function statementParam(params: StatementParams, key: string): string | null {
+  if (!params) return null
+  if (params instanceof URLSearchParams) return params.get(key)
+  const value = params[key]
+  return (Array.isArray(value) ? value[0] : value) ?? null
+}
+
+/**
+ * The grant a statement kind needs for the given parameters, or null when it
+ * needs nothing beyond reports.read. Sided reports follow the same parameter
+ * rules as their resolvers: `side=ap` (or partners `kind` other than
+ * receivable) reads payables; anything else reads receivables. An unknown
+ * kind fails closed with the ledger grant.
+ */
+export function statementKindPermission(kind: string, params?: StatementParams): string | null {
+  if (SIDED_STATEMENT_KINDS.has(kind)) {
+    if (kind === 'partners') {
+      const raw = statementParam(params, 'kind') ?? statementParam(params, 'side')
+      return raw === 'receivable' ? 'ar.read' : 'ap.read'
+    }
+    return statementParam(params, 'side') === 'ap' ? 'ap.read' : 'ar.read'
+  }
+  return STATEMENT_KIND_PERMISSION[kind] ?? 'gl.read'
+}
+
+/** True for a seeded statement kind this module grants (every statement page). */
+export function isStatementKind(kind: string): boolean {
+  return Object.hasOwn(STATEMENT_KIND_PERMISSION, kind) || SIDED_STATEMENT_KINDS.has(kind)
+}
+
+/** True when `authz` holds the domain grant this statement needs. */
+export function canAccessStatement(authz: Authz, kind: string, params?: StatementParams): boolean {
+  const permission = statementKindPermission(kind, params)
+  return !permission || can(authz, permission)
+}
+
+/**
+ * Page boundary for a statement page: the same refusal page every other
+ * missing grant renders, naming the grant the statement needs.
+ */
+export async function requireStatementAccess(kind: string, params?: StatementParams): Promise<Authz> {
+  const authz = await requirePermission('reports.read')
+  const permission = statementKindPermission(kind, params)
+  return permission ? requirePermission(permission) : authz
+}
+
+/**
+ * The domain grant a report drill target reads, or null when the target's
+ * own loader decides (custom definitions and views run through the entity
+ * gate). Mirrors the statements the drills come from.
+ */
+export function reportDrillPermission(target: { kind: string; side?: string; orderKind?: string }): string | null {
+  switch (target.kind) {
+    case 'ledger':
+      return 'gl.read'
+    case 'aging':
+      return target.side === 'ap' ? 'ap.read' : 'ar.read'
+    case 'budget':
+      return 'budgets.read'
+    case 'orders':
+      return target.orderKind === 'purchase_order' ? 'ap.read' : 'ar.read'
+    case 'time':
+      return 'time.read'
+    case 'custom':
+      return null
+    default:
+      return 'gl.read'
+  }
+}
+
+/** 403 for an API path whose statement grant is missing, or null when allowed. */
+export function guardStatementAccess(authz: Authz, kind: string, params?: StatementParams): NextResponse | null {
+  return canAccessStatement(authz, kind, params)
+    ? null
+    : NextResponse.json({ error: 'you do not have access to this data' }, { status: 403 })
 }
 
 export function reportStatementFeatureKey(kind: string | null | undefined): string | null {
@@ -103,10 +210,13 @@ export async function canRunReportEntity(authz: Authz, query: unknown): Promise<
   return true
 }
 
-/** True when `authz` may list or run a seeded statement kind. */
-export async function canRunReportStatement(authz: Authz, kind: string | null | undefined): Promise<boolean> {
-  const permission = kind ? STATEMENT_KIND_PERMISSION[kind] : undefined
-  if (permission && !can(authz, permission)) return false
+/** True when `authz` may list or run a seeded statement kind with these parameters. */
+export async function canRunReportStatement(
+  authz: Authz,
+  kind: string | null | undefined,
+  params?: StatementParams,
+): Promise<boolean> {
+  if (!kind || !canAccessStatement(authz, kind, params)) return false
   const featureKey = reportStatementFeatureKey(kind)
   if (!featureKey) return true
   return isFeatureEnabled(authz.user.orgId, featureKey)
@@ -115,7 +225,7 @@ export async function canRunReportStatement(authz: Authz, kind: string | null | 
 export type ReportDefinitionGateRow = {
   report_type: string | null
   query: unknown
-  statement: { kind?: string } | null
+  statement: { kind?: string; params?: Record<string, string> } | null
 }
 
 /**
@@ -127,7 +237,7 @@ export type ReportDefinitionGateRow = {
  * granted a type the catalog does not name.
  */
 export async function canSeeReportDefinition(authz: Authz, def: ReportDefinitionGateRow): Promise<boolean> {
-  if (def.report_type === 'statement') return canRunReportStatement(authz, def.statement?.kind)
+  if (def.report_type === 'statement') return canRunReportStatement(authz, def.statement?.kind, def.statement?.params)
   if (def.report_type === 'query') return canRunReportEntity(authz, def.query)
   return false
 }
@@ -185,11 +295,21 @@ export async function hiddenReportEntityKeys(authz: Authz): Promise<string[]> {
   return out
 }
 
-/** Statement kinds this reader must not see because the feature is off. */
+/**
+ * Statement kinds this reader must not see: the feature is off, or the
+ * reader lacks the kind's grant. Sided kinds hide only when neither side is
+ * readable; their per-definition visibility is decided with their parameters.
+ */
 export async function hiddenReportStatementKinds(authz: Authz): Promise<string[]> {
-  const out: string[] = []
+  const out = new Set<string>()
   for (const [kind, featureKey] of Object.entries(STATEMENT_KIND_FEATURE)) {
-    if (featureKey && !(await isFeatureEnabled(authz.user.orgId, featureKey))) out.push(kind)
+    if (featureKey && !(await isFeatureEnabled(authz.user.orgId, featureKey))) out.add(kind)
   }
-  return out
+  for (const kind of Object.keys(STATEMENT_KIND_PERMISSION)) {
+    if (!canAccessStatement(authz, kind)) out.add(kind)
+  }
+  for (const kind of SIDED_STATEMENT_KINDS) {
+    if (!can(authz, 'ar.read') && !can(authz, 'ap.read')) out.add(kind)
+  }
+  return [...out]
 }

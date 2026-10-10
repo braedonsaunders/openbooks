@@ -14,15 +14,18 @@ export interface AnalyticsDashboardDefinition {
   unrestricted?: boolean
 }
 const services = ['professional_services', 'engineering_architecture', 'accounting_firm', 'construction_contractor']
+// Every dashboard names the domain grant its data comes from, beyond
+// reports.read: the ledger for financial health, banking for cash flow, the
+// subledger or module for the rest — the same scoping the report statements use.
 export const ANALYTICS_DASHBOARDS: readonly AnalyticsDashboardDefinition[] = [
   { slug: 'receivables-intelligence', group: 'cash', icon: 'Banknote', titleKey: 'receivables', permission: 'ar.read', industries: [] },
-  { slug: 'financial-health', group: 'finance', icon: 'Activity', titleKey: 'financialHealth', industries: [] },
-  { slug: 'cashflow', group: 'cash', icon: 'Wallet', titleKey: 'cashflow', industries: [] },
-  { slug: 'true-cost', group: 'projects', icon: 'Coins', titleKey: 'trueCost', feature: 'projects', industries: services },
-  { slug: 'utilization', group: 'projects', icon: 'Clock', titleKey: 'utilization', feature: 'timeTracking', industries: services },
-  { slug: 'customer-intelligence', group: 'customers', icon: 'Users', titleKey: 'customer', industries: [] },
-  { slug: 'vendor-performance', group: 'supply', icon: 'Truck', titleKey: 'vendor', industries: [] },
-  { slug: 'spend-velocity', group: 'risk', icon: 'Zap', titleKey: 'spendVelocity', industries: [] },
+  { slug: 'financial-health', group: 'finance', icon: 'Activity', titleKey: 'financialHealth', permission: 'gl.read', industries: [] },
+  { slug: 'cashflow', group: 'cash', icon: 'Wallet', titleKey: 'cashflow', permission: 'banking.read', industries: [] },
+  { slug: 'true-cost', group: 'projects', icon: 'Coins', titleKey: 'trueCost', feature: 'projects', permission: 'projects.read', industries: services },
+  { slug: 'utilization', group: 'projects', icon: 'Clock', titleKey: 'utilization', feature: 'timeTracking', permission: 'time.read', industries: services },
+  { slug: 'customer-intelligence', group: 'customers', icon: 'Users', titleKey: 'customer', permission: 'ar.read', industries: [] },
+  { slug: 'vendor-performance', group: 'supply', icon: 'Truck', titleKey: 'vendor', permission: 'ap.read', industries: [] },
+  { slug: 'spend-velocity', group: 'risk', icon: 'Zap', titleKey: 'spendVelocity', permission: 'ap.read', industries: [] },
   // Whole-company forensics: cross-entity baselines, identity matches and
   // retained audit snapshots cannot be partially shown, so the dashboard needs
   // the audit grant AND unrestricted subsidiary scope.

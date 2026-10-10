@@ -52,7 +52,7 @@ export function snapshotReportAuthorization(authz: Authz, definition: ReportAuth
 
 export async function canAccessReportDefinition(authz: Authz, def: ReportAuthorization['definition']): Promise<boolean> {
   return can(authz, 'reports.read') && (def.report_type === 'statement'
-    ? Boolean(def.statement?.kind) && await canRunReportStatement(authz, def.statement?.kind)
+    ? Boolean(def.statement?.kind) && await canRunReportStatement(authz, def.statement?.kind, def.statement?.params)
     : Boolean(def.query) && await canRunReportEntity(authz, def.query))
 }
 

@@ -8,7 +8,7 @@ import { frame, page, ref, widgetBlock, type PageSpec } from '@braedonsaunders/a
 import { ensureReportDefinitions } from '@openbooks/engine/src/reports/ensure-report-definitions.ts'
 import { getAuthz, can, type Authz } from '../../../lib/authz'
 import { isFeatureEnabled } from '../../../lib/features'
-import { hiddenReportEntityKeys } from '../../../lib/report-authz'
+import { canAccessStatement, hiddenReportEntityKeys, isStatementKind } from '../../../lib/report-authz'
 import { savedReportPathVisible } from '../../../lib/report-feature-gates'
 import '../../../lib/resourcing/report-facts'
 import type { HubCard, HubGroup, PaperForm } from './ReportsHub'
@@ -370,12 +370,21 @@ export async function reportsHubFor(
     const path = hubCard.href.split('?')[0]!
     if (!hubCard.saved && !formByPath.has(path)) formByPath.set(path, hubCard.form)
   }
+  // A statement card (or a saved view of one) lists only when the reader
+  // holds the statement's own grant — the ledger for financial statements,
+  // the side's grant for receivables and payables — the same rule its page
+  // and exports enforce. A group left with no card disappears.
+  const statementAllowed = (href: string): boolean => {
+    const url = new URL(href, 'https://reports.invalid')
+    const kind = url.pathname.startsWith('/reports/') ? url.pathname.slice('/reports/'.length) : ''
+    return !isStatementKind(kind) || (!!authz && canAccessStatement(authz, kind, url.searchParams))
+  }
   const sheetGroups = groups.map((group) => ({
     ...group,
-    cards: group.cards.map((hubCard) => hubCard.saved
+    cards: group.cards.filter((hubCard) => statementAllowed(hubCard.href)).map((hubCard) => hubCard.saved
       ? { ...hubCard, form: formByPath.get(hubCard.href.split('?')[0]!) ?? hubCard.form }
       : hubCard),
-  }))
+  })).filter((group) => group.cards.length > 0 || group.key === 'custom')
 
   return {
     title: t('hub.title'),

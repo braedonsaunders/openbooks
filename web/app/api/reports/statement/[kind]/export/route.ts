@@ -29,6 +29,7 @@ import { guardProjectsFeature } from '../../../../../../lib/projects-gate'
 import { renderGeneralLedgerPaperPdf } from '../../../../../../lib/general-ledger-pdf'
 import { notFound } from "@/lib/api/responses";
 import { can } from '../../../../../../lib/authz'
+import { guardStatementAccess } from '../../../../../../lib/report-authz'
 
 
 export const runtime = 'nodejs'
@@ -43,6 +44,8 @@ export const GET = defineRoute({
     if (!isReportKind(kind)) {
         return NextResponse.json({ error: 'unknown statement' }, { status: 422 })
       }
+    const statementDenied = guardStatementAccess(gate, kind, new URL(req.url).searchParams)
+    if (statementDenied) return statementDenied
     if (kind === 'project-profitability') {
         const feature = await guardProjectsFeature(gate.user.orgId)
         if (feature) return feature

@@ -63,7 +63,7 @@ test('optional-module report entities declare the Features switch they follow', 
   }
 })
 
-function reportReader(): Authz {
+function reportReader(extra: string[] = []): Authz {
   return {
     user: {
       id: 'user-1',
@@ -77,7 +77,7 @@ function reportReader(): Authz {
       homeUserId: 'user-1',
       homeOrgId: 'org-1',
     },
-    permissions: new Set(['reports.read']),
+    permissions: new Set(['reports.read', ...extra]),
     allowedSubsidiaryIds: null,
   }
 }
@@ -105,13 +105,13 @@ test('guardReportEntity refuses an unknown entity the same way canRunReportEntit
 })
 
 test('canSeeReportDefinition branches on report_type for the read surfaces', async () => {
-  // Statements seed query=null by design: the statement feature gate
-  // decides visibility, never the entity gate that hides them all.
+  // Statements seed query=null by design: the statement's own grant and
+  // feature gate decide visibility, never the entity gate that hides them all.
   const authz = reportReader()
   assert.equal(
-    await canSeeReportDefinition(authz, { report_type: 'statement', query: null, statement: { kind: 'pnl' } }),
+    await canSeeReportDefinition(reportReader(['gl.read']), { report_type: 'statement', query: null, statement: { kind: 'pnl' } }),
     true,
-    'an ungated statement is visible to a reports reader',
+    'a financial statement is visible to a reports reader holding the ledger grant',
   )
   // Query plans answer the entity gate.
   const open = Object.values(REPORT_ENTITY_MAP).find(
@@ -153,4 +153,35 @@ test('payroll capability definitions do not become visible with reports.read alo
   assert.equal(await canSeeReportDefinition(reportReader(), {
     report_type: 'statement', query: null, statement: { kind: 'payroll-support' },
   }), false)
+})
+
+test('reports.read alone reaches no financial statement: each statement needs its own domain grant', async () => {
+  const { canAccessStatement, statementKindPermission } = await import('./report-authz.ts')
+  const reader = reportReader()
+  for (const kind of ['pnl', 'balance-sheet', 'cash-flow', 'cash-flow-indirect', 'trial-balance', 'general-ledger', 'journal']) {
+    assert.equal(statementKindPermission(kind), 'gl.read', `${kind} reads the general ledger`)
+    assert.equal(canAccessStatement(reader, kind), false, `${kind} is refused without gl.read`)
+    assert.equal(
+      await canSeeReportDefinition(reader, { report_type: 'statement', query: null, statement: { kind } }),
+      false,
+      `${kind} does not list in the hub without gl.read`,
+    )
+  }
+  assert.equal(canAccessStatement(reportReader(['gl.read']), 'balance-sheet'), true)
+  assert.equal(statementKindPermission('not-a-statement'), 'gl.read', 'an unknown kind fails closed on the ledger grant')
+})
+
+test('receivable and payable reports follow the side they show', async () => {
+  const { canAccessStatement } = await import('./report-authz.ts')
+  const receivables = reportReader(['ar.read'])
+  assert.equal(canAccessStatement(receivables, 'aging', { side: 'ar' }), true)
+  assert.equal(canAccessStatement(receivables, 'aging', { side: 'ap' }), false, 'payables aging needs ap.read')
+  assert.equal(canAccessStatement(receivables, 'registers', new URLSearchParams('side=ap')), false)
+  assert.equal(canAccessStatement(receivables, 'partners', { kind: 'receivable' }), true)
+  assert.equal(canAccessStatement(receivables, 'partners', { kind: 'payable' }), false)
+  assert.equal(
+    await canSeeReportDefinition(receivables, { report_type: 'statement', query: null, statement: { kind: 'aging', params: { side: 'ap' } } }),
+    false,
+    'the seeded payables aging definition stays hidden from a receivables-only reader',
+  )
 })
