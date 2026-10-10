@@ -12,6 +12,7 @@ import { postManufacturingEntry } from "@openbooks/engine/src/manufacturing/jour
 import { runMrp } from "@openbooks/engine/src/manufacturing/mrp.ts";
 import { featureGateLockKey } from "@openbooks/engine/src/organization/org-feature-lock.ts";
 import { createScratchOrg, createScratchUser, dropScratchOrg, seedApprovalFlow, type ScratchOrg } from "@openbooks/engine/src/testing/fixtures.ts";
+import { createWorkOperator } from "@openbooks/engine/src/testing/manufacturing.ts";
 import { runRecordFlows } from "@openbooks/engine/src/flows/index.ts";
 import { waitForLockWaiter } from "@openbooks/engine/src/testing/lock-wait.ts";
 import { JOURNAL_ENTRY_TABLE } from "@/lib/customization/entity-list-query/journal-entries";
@@ -82,7 +83,10 @@ function completeWorkOrderWrite(id: string) {
 test("manufacturing is off by default, parent-fenced, and preserves posted history", { skip: !DB }, async () => {
   const org = await withBypassContext(() => createScratchOrg());
   try {
-    const actorId = await withBypassContext(() => createScratchUser(org.orgId, "Shop lead", "admin")); assert.equal(await withBypassContext(() => manufacturingFeatureEnabled(org.orgId, "manufacturing")), false); await refuses(post(org, actorId));
+    // The direct MRP run below locks native command authority, so the shop
+    // lead carries the planning grants; every refusal below stays
+    // feature-based (the feature is off), never authority-based.
+    const actorId = await withBypassContext(() => createWorkOperator(org.orgId, "Shop lead", ["manufacturing.manage", "items.read"])); assert.equal(await withBypassContext(() => manufacturingFeatureEnabled(org.orgId, "manufacturing")), false); await refuses(post(org, actorId));
     await features(org.orgId, { manufacturing: true, inventory: false, manufacturingMrp: true });
     assert.equal(await withBypassContext(() => manufacturingFeatureEnabled(org.orgId, "manufacturing")), false);
     assert.equal(await withBypassContext(() => manufacturingFeatureEnabled(org.orgId, "manufacturingMrp")), false);
