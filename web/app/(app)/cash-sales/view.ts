@@ -77,7 +77,7 @@ export interface CashSalesData {
   canCreate: boolean
   canPost: boolean
   currentParams: Record<string, string | string[] | undefined>
-  newButton: { basePath: string; triggerLabel: string }
+  newButton: { items: Array<{ kind: string; label: string }>; basePath: string; triggerLabel: string }
   drawerOpen: boolean
   drawer: CashSalesDrawer | null
 }
@@ -153,6 +153,10 @@ export async function loadCashSales(
   const newDocument = {
     widget: 'new-document',
     props: {
+      items: [
+        { kind: 'cash_sale', label: tAr('actions.newCashSale') },
+        { kind: 'cash_refund', label: tAr('actions.newCashRefund') },
+      ],
       basePath: BASE_PATH,
       triggerLabel: tAr('actions.new'),
     },
@@ -423,6 +427,7 @@ export function cashSalesSpec(data: CashSalesData): PageSpec {
   const newDocument = {
     widget: 'new-document',
     props: {
+      items: data.newButton.items,
       basePath: BASE_PATH,
       triggerLabel: data.newButton.triggerLabel,
     },

@@ -26,6 +26,8 @@
     "new": "Nuevo",
     "newInvoice": "Nueva factura",
     "newCredit": "Nueva nota de crédito",
+    "newCashSale": "Nueva venta al contado",
+    "newCashRefund": "Nuevo reembolso al contado",
     "submitForApproval": "Enviar para aprobación"
   },
   "tenders": {

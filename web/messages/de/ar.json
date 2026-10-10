@@ -26,6 +26,8 @@
     "new": "Neu",
     "newInvoice": "Neue Ausgangsrechnung",
     "newCredit": "Neue Kundengutschrift",
+    "newCashSale": "Neuer Barverkauf",
+    "newCashRefund": "Neue Barerstattung",
     "submitForApproval": "Zur Genehmigung einreichen"
   },
   "tenders": {
