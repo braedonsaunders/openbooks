@@ -227,7 +227,7 @@ test("unused coverage withdrawal preserves approved evidence and permits a newly
     assert.deepEqual(await evidence(), original);
     assert.match((await eventsOf(first.id)).at(-1)!.reason, /Incorrect contribution basis/);
     await assert.rejects(withdrawUnusedEnrollment({ orgId: h.org.orgId, actorId: h.adminId, enrollmentId: first.id,
-      reason: "Repeated withdrawal" }), /Only active unused coverage/);
+      reason: "Repeated withdrawal" }), /Only active or ended unused coverage/);
     await db.execute(sql`update hrm_benefit_plans set approval_mode='flows' where org_id=${h.org.orgId} and id=${planId}`);
     await seedApprovalFlow(h.org.orgId, { subjectKind: 'hrm_benefit_enrollment', assignees: [{ type: 'user', userId: h.adminId }], mode: 'any', preventSelfApproval: false });
     const replacement = await electEnrollment({ orgId: h.org.orgId, actorId: h.adminId, employmentId, planId,
