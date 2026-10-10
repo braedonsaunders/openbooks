@@ -6091,7 +6091,12 @@
           "schedule": "在以下位置创建首个发薪日历",
           "scheduleLink": "工资设置 → 发薪日历"
         },
-        "installError": "工资已启用，但国家包未能安装。可从“工资设置 → 国家包”安装。"
+        "installError": "工资已启用，但国家包未能安装。可从“工资设置 → 国家包”安装。",
+        "packSummary": {
+          "national": "{components} · 税率表 {years}",
+          "allRegions": "{components} · 覆盖全部 {known} 个地区的所得税 · 税率表 {years}",
+          "someRegions": "{components} · 覆盖 {known} 个地区中 {supported} 个的所得税 · 税率表 {years}"
+        }
       }
     },
     "filterAll": "全部",

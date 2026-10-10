@@ -6081,7 +6081,12 @@
           "schedule": "Créez votre premier calendrier de paie dans",
           "scheduleLink": "Paie → Calendriers de paie"
         },
-        "installError": "La paie a été activée, mais le module pays n'a pas pu être installé. Vous pouvez l'installer depuis Paie → Modules pays."
+        "installError": "La paie a été activée, mais le module pays n'a pas pu être installé. Vous pouvez l'installer depuis Paie → Modules pays.",
+        "packSummary": {
+          "national": "{components} · Barèmes fiscaux {years}",
+          "allRegions": "{components} · Impôt sur le revenu dans les {known} régions · Barèmes fiscaux {years}",
+          "someRegions": "{components} · Impôt sur le revenu dans {supported} des {known} régions · Barèmes fiscaux {years}"
+        }
       }
     },
     "constructionRateEditor": {

@@ -295,6 +295,45 @@ export function installablePayrollPacks(): { country: string; name: string }[] {
     .map((pack) => ({ country: pack.country, name: pack.name }));
 }
 
+/** What a pack chooser can say about a pack, read off its own declarations. */
+export interface PayrollPackSummary {
+  country: string;
+  name: string;
+  /** Statutory components the pack calculates, in slot order, as the pack names them. */
+  statutoryComponents: string[];
+  /** Regions the pack knows, and those whose income tax it computes end to end. */
+  regions: { known: number; supported: number };
+  /** Country-wide tax years with published tables, ascending. */
+  publishedTaxYears: number[];
+  statutoryCurrency: string;
+}
+
+/**
+ * Installable packs with a description derived from their declarations, so
+ * every pack in a chooser reads with the same depth — never only the ones
+ * somebody wrote marketing copy for.
+ */
+export function installablePayrollPackSummaries(): PayrollPackSummary[] {
+  return Object.values(PAYROLL_COUNTRY_PACKS)
+    .filter((pack) => pack.installable)
+    .map((pack) => ({
+      country: pack.country,
+      name: pack.name,
+      statutoryComponents: [
+        ...new Set(pack.statutorySlots.flatMap((slot) => slot.components).map((component) => component.name)),
+      ],
+      regions: { known: pack.regions.known.length, supported: pack.regions.supported.length },
+      publishedTaxYears: [
+        ...new Set(
+          pack.taxYears.editions
+            .filter((edition) => edition.status === "published" && edition.region === undefined)
+            .map((edition) => edition.year),
+        ),
+      ].sort((a, b) => a - b),
+      statutoryCurrency: pack.statutoryCurrency,
+    }));
+}
+
 /**
  * Display name for one region code under one pack — what pickers and labels
  * show a person. Reads the pack's own `regions.regionNames` declaration and

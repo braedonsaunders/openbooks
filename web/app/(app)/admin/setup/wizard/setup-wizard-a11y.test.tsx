@@ -106,7 +106,13 @@ function mount() {
   return { host, root };
 }
 
-async function renderWizard(host: HTMLElement, root: ReturnType<typeof createRoot>) {
+type WizardProps = Parameters<typeof SetupWizard>[0];
+
+async function renderWizard(
+  host: HTMLElement,
+  root: ReturnType<typeof createRoot>,
+  overrides: Partial<WizardProps> = {},
+) {
   await act(async () => {
     root.render(
       <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
@@ -137,6 +143,8 @@ async function renderWizard(host: HTMLElement, root: ReturnType<typeof createRoo
           isRerun={false}
           payrollPacks={[]}
           timeZones={["UTC", "America/Toronto"]}
+          countryTimeZones={{}}
+          {...overrides}
         />
       </NextIntlClientProvider>,
     );
@@ -268,6 +276,46 @@ test("the company step offers exactly the server-declared time zones", async (t)
     /America\/Toronto/,
     "the restated summary follows the new time-zone selection",
   );
+});
+
+/** The zone follows the chosen country until the operator picks one: a US
+ *  company never starts on a foreign browser zone such as Toronto. */
+test("the business time zone defaults from the chosen country", async (t) => {
+  const { host, root } = mount();
+  t.after(async () => {
+    await act(async () => {
+      root.unmount();
+    });
+    host.remove();
+  });
+  await renderWizard(host, root, {
+    timeZones: ["UTC", "America/New_York", "America/Toronto"],
+    countryTimeZones: {
+      US: { zones: ["America/New_York"], primary: "America/New_York" },
+      CA: { zones: ["America/Toronto"], primary: "America/Toronto" },
+    },
+  });
+  await cont(); // welcome → company
+  const zone = () => document.getElementById("setup-time-zone") as HTMLSelectElement;
+  const country = document.getElementById("setup-country") as HTMLSelectElement;
+  assert.equal(zone().value, "America/New_York", "a US company starts on a US zone");
+  await act(async () => {
+    country.value = "CA";
+    country.dispatchEvent(new window.Event("change", { bubbles: true }));
+  });
+  await tick();
+  assert.equal(zone().value, "America/Toronto", "changing the country moves an unchosen zone with it");
+  await act(async () => {
+    zone().value = "UTC";
+    zone().dispatchEvent(new window.Event("change", { bubbles: true }));
+  });
+  await tick();
+  await act(async () => {
+    country.value = "US";
+    country.dispatchEvent(new window.Event("change", { bubbles: true }));
+  });
+  await tick();
+  assert.equal(zone().value, "UTC", "a zone the operator chose is never overwritten by a country change");
 });
 
 /** TZ1: apply sends the chosen business time zone to the wizard route. */

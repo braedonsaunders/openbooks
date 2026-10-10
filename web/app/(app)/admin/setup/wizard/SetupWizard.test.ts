@@ -46,3 +46,52 @@ test('wizard preselects no pack unless exactly one is installable', () => {
   assert.equal(initialPayrollPack([pack('CA')]), 'CA')
   assert.equal(initialPayrollPack([pack('XX')]), 'XX')
 })
+
+// Every pack in the chooser reads with a subtitle derived from its own
+// declarations — not only the packs with hand-written locale copy.
+const wizardCopy = (await import('../../../../../messages/en/admin.json', { with: { type: 'json' } }))
+  .default.setup.wizard as { payroll: { packSummary: Record<string, string> } }
+const summaryT = (() => {
+  const templates = wizardCopy.payroll.packSummary
+  const t = ((key: string, params: Record<string, unknown> = {}) => {
+    const template = templates[key.replace('payroll.packSummary.', '')] ?? key
+    return template.replace(/\{(\w+)\}/g, (_, name: string) => String(params[name]))
+  }) as unknown as Parameters<typeof packDescription>[0]
+  t.has = (() => false) as Parameters<typeof packDescription>[0]['has']
+  return t
+})()
+
+test('an undescribed pack reads with a subtitle derived from its declarations', () => {
+  const regional = packDescription(summaryT, 'GB', {
+    country: 'GB',
+    name: 'United Kingdom',
+    statutoryComponents: ['PAYE income tax', 'National Insurance (employee)', 'National Insurance (employer)', 'Student loan repayment'],
+    regions: { known: 4, supported: 4 },
+    publishedTaxYears: [2026, 2024, 2025],
+  })
+  assert.equal(
+    regional,
+    'PAYE income tax, National Insurance (employee), National Insurance (employer)… · Income tax in all 4 regions · Tax tables 2024–2026',
+  )
+  const partial = packDescription(summaryT, 'ES', {
+    country: 'ES',
+    name: 'Spain',
+    statutoryComponents: ['IRPF withholding'],
+    regions: { known: 19, supported: 17 },
+    publishedTaxYears: [2026],
+  })
+  assert.equal(partial, 'IRPF withholding · Income tax in 17 of 19 regions · Tax tables 2026')
+  const national = packDescription(summaryT, 'SG', {
+    country: 'SG',
+    name: 'Singapore',
+    statutoryComponents: ['CPF — employee share', 'CPF — employer share'],
+    regions: { known: 1, supported: 1 },
+    publishedTaxYears: [2024, 2026],
+  })
+  assert.equal(national, 'CPF — employee share, CPF — employer share · Tax tables 2024, 2026')
+})
+
+test('a pack with no published tables or components gets no invented subtitle', () => {
+  assert.equal(packDescription(summaryT, 'XX', { country: 'XX', name: 'X', statutoryComponents: [], publishedTaxYears: [2026] }), '')
+  assert.equal(packDescription(summaryT, 'XX', { country: 'XX', name: 'X', statutoryComponents: ['Tax'], publishedTaxYears: [] }), '')
+})

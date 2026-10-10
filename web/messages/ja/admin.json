@@ -6163,7 +6163,12 @@
             "title": "米国"
           }
         },
-        "title": "給与を設定"
+        "title": "給与を設定",
+        "packSummary": {
+          "national": "{components} · 税額表 {years}",
+          "allRegions": "{components} · 全{known}地域の所得税に対応 · 税額表 {years}",
+          "someRegions": "{components} · {known}地域中{supported}地域の所得税に対応 · 税額表 {years}"
+        }
       }
     },
     "filterAll": "すべて",

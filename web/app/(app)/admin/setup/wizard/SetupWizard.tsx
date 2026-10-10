@@ -57,6 +57,7 @@ import {
 import { initialPayrollPack, packDescription, packTitle, type WizardPayrollPack, type WizardT } from './payroll-pack-display'
 import type { SetupLaunchAction } from '@/lib/setup-launch-actions'
 import { MIGRATION_WORKSPACE_HREF } from '@/lib/migration/links'
+import { defaultBusinessTimeZone, type CountryTimeZoneDirectory } from './time-zone-default'
 import { documentCreateHref } from '@/lib/document-kinds'
 
 // ─── Types ────────────────────────────────────────────────────────────────
@@ -133,6 +134,9 @@ export function SetupWizard(props: {
   /** Canonical IANA zone names for the business-time-zone picker — declared
    *  by the server from the shared platform validator, never a list here. */
   timeZones: string[]
+  /** Zones and representative zone per country, from the engine's runtime
+   *  directory — the company step defaults the zone from the country. */
+  countryTimeZones: CountryTimeZoneDirectory
   onClose?: () => void
 }) {
   const locale = useLocale()
@@ -152,14 +156,26 @@ export function SetupWizard(props: {
   const [country, setCountry] = useState(props.initial.country)
   const [currency, setCurrency] = useState(props.initial.baseCurrency)
   const [fiscalMonth, setFiscalMonth] = useState(props.initial.fiscalYearStartMonth)
+  const offeredTimeZones = useMemo(() => new Set(props.timeZones), [props.timeZones])
+  // The zone a company in `forCountry` starts on: the operator's browser zone
+  // when it belongs to that country, else the country's representative zone.
+  const countryDefaultTimeZone = (forCountry: string) => defaultBusinessTimeZone({
+    country: forCountry,
+    browserZone: browserTimeZone(locale),
+    directory: props.countryTimeZones,
+    offered: offeredTimeZones,
+  })
+  // A stored zone, or one the operator picked here, is a decision; until
+  // then the zone follows the chosen country.
+  const [timeZoneChosen, setTimeZoneChosen] = useState(
+    () => Boolean(props.initial.timeZone && offeredTimeZones.has(props.initial.timeZone)),
+  )
   const [timeZone, setTimeZone] = useState(() => {
     // The select can only offer the server's canonical list: a stored zone
-    // from a richer ICU (or a browser zone the server does not enumerate)
-    // falls back to UTC rather than rendering a blank selection.
-    const offered = new Set(props.timeZones)
-    if (props.initial.timeZone && offered.has(props.initial.timeZone)) return props.initial.timeZone
-    const browser = browserTimeZone(locale)
-    return offered.has(browser) ? browser : 'UTC'
+    // from a richer ICU falls back to the country default rather than
+    // rendering a blank selection.
+    if (props.initial.timeZone && offeredTimeZones.has(props.initial.timeZone)) return props.initial.timeZone
+    return countryDefaultTimeZone(props.initial.country)
   })
   const [industryKey, setIndustryKey] = useState<string | null>(props.initial.industry)
   const [teamSize, setTeamSize] = useState<TeamSize>(props.initial.workspaceProfile.teamSize)
@@ -482,10 +498,16 @@ export function SetupWizard(props: {
           timeZones={props.timeZones}
           setName={setName}
           setLegalName={setLegalName}
-          setCountry={setCountry}
+          setCountry={(value) => {
+            setCountry(value)
+            if (!timeZoneChosen) setTimeZone(countryDefaultTimeZone(value))
+          }}
           setCurrency={setCurrency}
           setFiscalMonth={setFiscalMonth}
-          setTimeZone={setTimeZone}
+          setTimeZone={(value) => {
+            setTimeZone(value)
+            setTimeZoneChosen(true)
+          }}
         />
       )}
       {step === 'industry' && (
@@ -563,9 +585,11 @@ export function SetupWizard(props: {
             country: props.initial.country,
             currency: props.initial.baseCurrency,
             fiscalMonth: props.initial.fiscalYearStartMonth,
-            // The company step opened with the stored zone, or the browser
-            // zone when none was stored — the same default the state holds.
-            timeZone: props.initial.timeZone ?? browserTimeZone(locale),
+            // The stored zone, or the zone derived from the chosen country
+            // when none was stored — the same default the state holds.
+            timeZone: props.initial.timeZone && offeredTimeZones.has(props.initial.timeZone)
+              ? props.initial.timeZone
+              : countryDefaultTimeZone(country),
             teamSize: props.initial.workspaceProfile.teamSize,
             complexity: props.initial.workspaceProfile.complexity,
             bookStart: props.initial.workspaceProfile.bookStart,
@@ -1139,7 +1163,8 @@ function PayrollStep(props: {
       <fieldset className="space-y-3">
         <legend className="text-sm font-semibold text-slate-800 dark:text-slate-100">{t('payroll.packQuestion')}</legend>
         <div className="grid gap-3 sm:grid-cols-2">
-          {packs.map(({ country: code, name }) => {
+          {packs.map((packEntry) => {
+            const { country: code, name } = packEntry
             const selected = pack === code
             return (
               <button
@@ -1159,7 +1184,7 @@ function PayrollStep(props: {
                 </span>
                 <span className="min-w-0">
                   <span className="block text-sm font-semibold text-slate-900 dark:text-slate-100">{packTitle(t, code, name)}</span>
-                  <span className="mt-0.5 block text-xs leading-relaxed text-slate-500 dark:text-slate-400">{packDescription(t, code)}</span>
+                  <span className="mt-0.5 block text-xs leading-relaxed text-slate-500 dark:text-slate-400">{packDescription(t, code, packEntry)}</span>
                 </span>
                 {selected && (
                   <span className="absolute right-3 top-3 flex h-5 w-5 items-center justify-center rounded-full bg-teal-500">

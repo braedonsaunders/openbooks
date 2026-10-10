@@ -6081,7 +6081,12 @@
           "schedule": "Cree su primer calendario de nómina en",
           "scheduleLink": "Nómina → Calendarios de nómina"
         },
-        "installError": "La nómina quedó activada, pero el paquete de país no pudo instalarse. Puede instalarlo desde Nómina → Módulos de país."
+        "installError": "La nómina quedó activada, pero el paquete de país no pudo instalarse. Puede instalarlo desde Nómina → Módulos de país.",
+        "packSummary": {
+          "national": "{components} · Tablas fiscales {years}",
+          "allRegions": "{components} · Impuesto sobre la renta en las {known} regiones · Tablas fiscales {years}",
+          "someRegions": "{components} · Impuesto sobre la renta en {supported} de {known} regiones · Tablas fiscales {years}"
+        }
       }
     },
     "constructionRateEditor": {

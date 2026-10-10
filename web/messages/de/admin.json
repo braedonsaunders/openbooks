@@ -6163,7 +6163,12 @@
             "title": "Vereinigte Staaten"
           }
         },
-        "title": "Lohnabrechnung einrichten"
+        "title": "Lohnabrechnung einrichten",
+        "packSummary": {
+          "national": "{components} · Steuertabellen {years}",
+          "allRegions": "{components} · Lohnsteuer in allen {known} Regionen · Steuertabellen {years}",
+          "someRegions": "{components} · Lohnsteuer in {supported} von {known} Regionen · Steuertabellen {years}"
+        }
       }
     },
     "filterAll": "Alle",

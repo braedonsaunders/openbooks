@@ -6091,7 +6091,12 @@
           "schedule": "Create your first pay schedule in",
           "scheduleLink": "Payroll setup → Pay schedules"
         },
-        "installError": "Payroll was enabled, but the country pack could not be installed. You can install it from Payroll setup → Country packs."
+        "installError": "Payroll was enabled, but the country pack could not be installed. You can install it from Payroll setup → Country packs.",
+        "packSummary": {
+          "national": "{components} · Tax tables {years}",
+          "allRegions": "{components} · Income tax in all {known} regions · Tax tables {years}",
+          "someRegions": "{components} · Income tax in {supported} of {known} regions · Tax tables {years}"
+        }
       }
     },
     "filterAll": "All",

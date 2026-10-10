@@ -1,5 +1,6 @@
-import { canonicalTimeZone, listCanonicalTimeZones } from '@openbooks/engine/platform/time-zone'
-import { installablePayrollPacks } from '@openbooks/engine/src/payroll/packs.ts'
+import { canonicalTimeZone, countryTimeZoneDirectory, listCanonicalTimeZones } from '@openbooks/engine/platform/time-zone'
+import { installablePayrollPackSummaries } from '@openbooks/engine/src/payroll/packs.ts'
+import { COUNTRY_CODES } from '@/lib/countries'
 import { canSwitchIndustry } from '@/lib/industries'
 import { INDUSTRIES } from '@/lib/industries'
 import { SetupWizard } from '@/app/(app)/admin/setup/wizard/SetupWizard'
@@ -63,8 +64,9 @@ export async function OnboardingSetupWizard({ authz, org: row }: { authz: Authz;
       canSwitchIndustry={switchable}
       isRerun={false}
       suppressOnWizardRoute
-      payrollPacks={installablePayrollPacks()}
+      payrollPacks={installablePayrollPackSummaries()}
       timeZones={listCanonicalTimeZones()}
+      countryTimeZones={countryTimeZoneDirectory(COUNTRY_CODES)}
     />
   )
 }
