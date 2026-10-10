@@ -1,3 +1,5 @@
+import { qboAttachmentProvider } from "./attachment-providers.ts";
+import { syncTransactionAttachments, type AttachmentSyncOptions } from "./transaction-attachments.ts";
 import { addCalendarDays, businessToday, parseIsoDate } from "../platform/business-date.ts";
 import { QboClient } from "../connectors/qbo.ts";
 import { formatMoney, fromUnits, toUnits } from "../money/money.ts";
@@ -73,6 +75,10 @@ export class QboSource implements MigrationSource {
   constructor(private client: QboClient, opts: { orgId: string; baseCurrency?: string }) {
     this.orgId = opts.orgId;
     this.baseCurrency = opts.baseCurrency ?? "USD";
+  }
+
+  syncAttachments(options: AttachmentSyncOptions) {
+    return syncTransactionAttachments(qboAttachmentProvider(this.client), options);
   }
 
   async ping(): Promise<{ ok: boolean; detail?: string }> {

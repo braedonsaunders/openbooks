@@ -54,6 +54,7 @@ export interface SourceTypeManifest {
   configFields: SourceFieldSpec[];
   /** Secret credentials sealed into `connections.secrets` (never returned). */
   secretFields: SourceFieldSpec[];
+  attachmentUnavailableReason?: "desktopProtocol" | "notImplemented";
   mappingGroups?: readonly MappingGroup[];
   syncCapabilities?: SyncCapabilities;
   /**
@@ -498,6 +499,7 @@ export function buildSource(conn: ConnectionRow): MigrationSource {
       bridgeDeploymentId?: string;
       mappingJson?: string;
       accountingBookId?: string;
+      soapEndpoint?: string;
     };
     // Every OAuth1 field is load-bearing: the old gate checked only the
     // consumer key and coerced the rest via ?? '', so a blank tokenSecret
@@ -551,6 +553,7 @@ export function buildSource(conn: ConnectionRow): MigrationSource {
         deploymentId: cfg.bridgeDeploymentId || undefined,
       },
       mappings: cfg.mappingJson,
+      soapEndpointVersion: cfg.soapEndpoint,
       accountingBookId: cfg.accountingBookId,
     });
   }

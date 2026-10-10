@@ -39,7 +39,6 @@ import {
   Label,
   PageHeader,
   Select,
-  Textarea,
 } from "@openbooks/ui";
 
 // --- shapes (mirror the API responses) ---------------------------------------
@@ -80,6 +79,7 @@ interface SourceTypeDef {
   blurb: string;
   configFields: FieldSpec[];
   secretFields: FieldSpec[];
+  attachmentUnavailableReason?: "desktopProtocol" | "notImplemented";
   mappingGroups?: readonly MappingGroup[];
   syncCapabilities?: SyncCapabilities;
   oauthSetup?: {
@@ -1364,15 +1364,7 @@ export function ConnectionDrawer({
                     ))}
                   </Select>
                 ) : f.kind === "textarea" ? (
-                  <Textarea
-                    value={String(config[f.key] ?? "")}
-                    placeholder={f.placeholder}
-                    rows={10}
-                    className="font-mono text-xs"
-                    onChange={(e) =>
-                      setConfig((c) => ({ ...c, [f.key]: e.target.value }))
-                    }
-                  />
+                  <p role="alert" className="text-sm text-amber-700">{t("drawer.structuredRequired")}</p>
                 ) : (
                   <Input
                     value={String(config[f.key] ?? "")}
@@ -1421,9 +1413,9 @@ export function ConnectionDrawer({
                 </div>
               </div>
             ) : null}
-            </div> : drawerTab === "content" ? <ConnectionSyncContent capabilities={syncCapabilities} value={config.syncOptions}
+            </div> : drawerTab === "content" ? <ConnectionSyncContent capabilities={syncCapabilities} value={config.syncOptions} attachmentUnavailableReason={def.attachmentUnavailableReason ?? settings.attachmentUnavailableReason}
               onChange={(value) => setConfig((config) => ({ ...config, syncOptions: value }))} />
-              : <ConnectionMappings key={source} groups={mappingGroups} value={config.mappingJson} drafts={mappingDrafts}
+              : <ConnectionMappings key={source} connectionId={editing?.id} groups={mappingGroups} value={config.mappingJson} drafts={mappingDrafts}
                 onDraftChange={(key, draft) => setMappingDrafts((drafts) => ({ ...drafts, [key]: draft }))}
                 onChange={(value) => setConfig((config) => ({ ...config, mappingJson: value }))} />}
             </div>

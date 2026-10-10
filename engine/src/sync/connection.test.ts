@@ -151,7 +151,8 @@ test("connection commands validate supported content and nested mappings through
     const manifest = sourceType(name)!;
     assert.equal(manifest.configFields.filter((field) => field.key === "syncOptions").length, 1);
     assert.match(validateSourceConfig(manifest, { syncOptions: { attachments: "false" } }) ?? "", /enabled or disabled/);
-    if (name !== "netsuite") assert.match(validateSourceConfig(manifest, { syncOptions: { attachments: true } }) ?? "", /does not support attachments/);
+    if (name === "qbd") assert.match(validateSourceConfig(manifest, { syncOptions: { attachments: true } }) ?? "", /does not support attachments/);
+    if (name !== "netsuite") assert.match(validateSourceConfig(manifest, { syncOptions: { crm: true } }) ?? "", /does not support crm/);
   }
   assert.equal(validateSourceConfig(netsuite, { ...NETSUITE_CONFIG, syncOptions: { attachments: false }, mappingJson: {
     timeTypeRecord: "customrecord_time", timeTypeMultiplierField: "custrecord_multiplier", projectStatuses: { Complete: "closed" },

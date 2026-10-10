@@ -56,7 +56,10 @@
     "heading": "Recent runs",
     "history": "History",
     "empty": "No runs yet. Start a sync from Connections.",
-    "features": { "crm": "CRM", "fixedAssets": "Fixed Assets" },
+    "features": {
+      "crm": "CRM",
+      "fixedAssets": "Fixed Assets"
+    },
     "columns": {
       "started": "Started",
       "kind": "Kind",
@@ -176,16 +179,20 @@
       "restoreSupported": "Restore supported defaults",
       "help": "Choose the additional content included in manual and scheduled syncs.",
       "labels": {
-        "attachments": "Transaction attachments",
+        "attachments": "Sync transaction documents and files",
         "projectFinancials": "Project financial inputs",
         "crm": "Customer relationships",
         "fixedAssets": "Fixed assets"
       },
       "hints": {
-        "attachments": "Import missing or changed transaction files and skip unchanged file bytes.",
+        "attachments": "Imports files attached to transactions, including vendor bill PDFs and expense receipts. Enabling this catches up previously synced transactions; later runs add new files and versions without duplicate files.",
         "projectFinancials": "Reconcile project commercial data and time-entry billing states.",
         "crm": "Import supported opportunities, activities and customer relationship records when CRM is enabled.",
         "fixedAssets": "Import the supported asset register and source history when Fixed Assets is enabled."
+      },
+      "unavailableReasons": {
+        "desktopProtocol": "QuickBooks Desktop does not expose transaction file content through its connector protocol.",
+        "notImplemented": "This connector does not provide a transaction-file reader."
       }
     },
     "mappings": {
@@ -197,10 +204,10 @@
       "sourceIdentifier": "Source field or record ID",
       "childHelp": "Field on the source record configured in {parent}.",
       "useDefault": "Use default",
-      "valueRequired": "Enter a unique source value and choose its target before adding.",
+      "valueRequired": "Choose a unique source value and its target before adding.",
       "taxUse": "Tax use",
       "sourceValue": "Source value",
-      "sourceTaxCode": "Source tax-code ID or rate",
+      "sourceTaxCode": "Source tax code",
       "targetValue": "Native value",
       "select": "Select…",
       "noOverrides": "Using standard source values.",
@@ -251,14 +258,22 @@
         "not_to_exceed": "Not to exceed",
         "sales": "Sales",
         "purchase": "Purchases"
-      }
+      },
+      "nativeRecords": "Accounts, items, entities and their references are matched automatically by source identity. These optional mappings select custom source fields and translate source values.",
+      "saveFirst": "Save the connection first, then reopen Mappings to choose fields from the source.",
+      "choicesFailed": "Could not load source choices. Check the connection and its read permissions, then retry.",
+      "savedChoice": "Saved choice: {value}",
+      "searchChoices": "Search source choices…",
+      "retryChoices": "Retry choices",
+      "parentChangeConfirm": "Changing the source record clears its child-field override. Continue?"
     },
     "postedChanges": {
       "label": "Changes to posted source transactions",
       "review": "Stop and require review",
       "automatic": "Append reversal and replacement automatically",
       "help": "Automatic corrections never rewrite posted history. OpenBooks retains the original, posts a linked reversal and replacement, transfers eligible applications, and still stops for reconciliations, closed periods, inventory, revenue recognition, or downstream documents."
-    }
+    },
+    "structuredRequired": "This setting needs a structured editor. Update the connector configuration before editing it."
   },
   "oauth": {
     "title": "One-time app setup in the <link>{portal}</link>",
@@ -294,8 +309,12 @@
           "label": "Account ID",
           "help": "The NetSuite account realm."
         },
-        "host": { "label": "SuiteTalk host" },
-        "baseCurrency": { "label": "Base currency" },
+        "host": {
+          "label": "SuiteTalk host"
+        },
+        "baseCurrency": {
+          "label": "Base currency"
+        },
         "bridgeScriptId": {
           "label": "Bridge script ID",
           "help": "Leave blank to use customscript_openbooks_bridge_rl."
@@ -305,13 +324,21 @@
           "help": "Leave blank to use customdeploy_openbooks_bridge_rl."
         },
         "mappingJson": {
-          "label": "Account field mappings",
-          "help": "Optional JSON that maps account-specific custom fields and records to OpenBooks concepts."
+          "label": "Custom field and value mappings",
+          "help": "Choose custom fields and value mappings in the Mappings tab."
         },
-        "consumerKey": { "label": "Consumer key" },
-        "consumerSecret": { "label": "Consumer secret" },
-        "tokenKey": { "label": "Token ID" },
-        "tokenSecret": { "label": "Token secret" }
+        "consumerKey": {
+          "label": "Consumer key"
+        },
+        "consumerSecret": {
+          "label": "Consumer secret"
+        },
+        "tokenKey": {
+          "label": "Token ID"
+        },
+        "tokenSecret": {
+          "label": "Token secret"
+        }
       }
     },
     "odoo": {
@@ -334,8 +361,12 @@
           "label": "History start date",
           "help": "The earliest posting date to migrate. Each mirror rechecks this complete range so historical edits and deletions are detected."
         },
-        "region": { "label": "QuickBooks region" },
-        "baseCurrency": { "label": "Base currency" },
+        "region": {
+          "label": "QuickBooks region"
+        },
+        "baseCurrency": {
+          "label": "Base currency"
+        },
         "companyFile": {
           "label": "Company file path (optional)",
           "help": "Leave blank to use whichever company is open when Web Connector runs."

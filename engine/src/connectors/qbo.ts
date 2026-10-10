@@ -163,6 +163,15 @@ export class QboClient {
     }
   }
 
+  /** Signed attachment URLs carry their own authority; never forward company bearer tokens. */
+  async downloadAttachment(url: string): Promise<Buffer> {
+    const target = new URL(url);
+    if (target.protocol !== "https:" || target.username || target.password) throw new Error("QuickBooks attachment download URL is invalid");
+    const response = await qboFetch(target, {}, this.transport);
+    if (!response.ok) throw new Error(`QuickBooks attachment download HTTP ${response.status}; check file access and retry`);
+    return Buffer.from(await response.arrayBuffer());
+  }
+
   /** Fetch a report (TrialBalance, …) as its raw JSON. */
   async report<T = Record<string, unknown>>(name: string, params: Record<string, string> = {}): Promise<T> {
     return this.get<T>(`reports/${name}`, params);

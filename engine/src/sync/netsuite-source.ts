@@ -1,3 +1,4 @@
+import { netsuiteCustomizationChoices, netsuiteCustomRecordFields, type NetSuiteCustomizationKind } from "../connectors/netsuite.ts";
 import { NETSUITE_MAPPING_GROUPS, validateConnectionMappings } from "./connection-settings.ts";
 import { orgFeatureEnabled } from "../organization/org-feature-lock.ts";
 import { importNetSuiteCrm } from "./netsuite-crm.ts";
@@ -574,6 +575,7 @@ export class NetSuiteSource implements MigrationSource {
   readonly baseCurrency: string;
   private readonly bridge: NetSuiteBridgeClient;
   private readonly expectedAccount: string;
+  private readonly soapEndpointVersion: string;
   readonly photoSourceAccount: string;
   private readonly photoBridge: { script: string; deploy: string };
   private readonly mappings: NetSuiteAccountMappings;
@@ -586,11 +588,14 @@ export class NetSuiteSource implements MigrationSource {
       baseCurrency: string;
       bridge?: NetSuiteBridgeConfig;
       mappings?: unknown;
+      soapEndpointVersion?: string;
       accountingBookId?: string;
     },
   ) {
     this.bridge = new NetSuiteBridgeClient(creds, opts.bridge);
     this.expectedAccount = creds.account;
+    this.soapEndpointVersion = opts.soapEndpointVersion ?? "2022_1";
+    if (!/^20\d{2}_\d+$/.test(this.soapEndpointVersion)) throw new Error("NetSuite SOAP endpoint version is invalid");
     this.photoSourceAccount = creds.account;
     this.photoBridge = {
       script: String(opts.bridge?.scriptId ?? DEFAULT_NETSUITE_BRIDGE_SCRIPT_ID),
@@ -614,6 +619,30 @@ export class NetSuiteSource implements MigrationSource {
 
   private q<T = Record<string, unknown>>(query: string): Promise<T[]> {
     return this.bridge.query<T>(query);
+  }
+
+  async mappingOptions(field: string, parent?: string): Promise<{ value: string; label: string }[]> {
+    if (field === 'taxCodeFallbacks') return (await this.taxCodes()).filter((row) => row.fields.isActive).map((row) => ({ value: row.sourceRef, label: String(row.fields.code) + ' — ' + String(row.fields.name) }));
+    const types: Record<string, NetSuiteCustomizationKind> = {
+      projectForemanField: 'entityCustomField', projectPurchaseOrderField: 'entityCustomField', customerShortCodeField: 'entityCustomField', employeeBenefitsField: 'entityCustomField',
+      lineMarkupField: 'transactionColumnCustomField', lineBillableField: 'transactionColumnCustomField', timeEntryTypeField: 'transactionColumnCustomField', timeEntryFieldTicketNumberField: 'transactionColumnCustomField',
+      itemCategoryField: 'itemCustomField', timeTypeRecord: 'customRecordType', crmProbabilityField: 'transactionBodyCustomField',
+    };
+    if (field === 'timeTypeMultiplierField') {
+      if (!parent) throw new Error('Select the time-type source record before choosing its multiplier field');
+      return netsuiteCustomRecordFields(parent, this.creds, this.soapEndpointVersion);
+    }
+    if (field === 'projectStatuses') {
+      const rows = await this.q<{ value: string }>("SELECT DISTINCT BUILTIN.DF(entitystatus) AS value FROM job WHERE entitystatus IS NOT NULL ORDER BY value");
+      return rows.map((row) => ({ value: row.value, label: row.value }));
+    }
+    if (field === 'projectBillingTypes') {
+      const rows = await this.q<{ value: string; label: string }>("SELECT DISTINCT jobbillingtype AS value, BUILTIN.DF(jobbillingtype) AS label FROM job WHERE jobbillingtype IS NOT NULL ORDER BY value");
+      return rows.map((row) => ({ value: row.value, label: row.label || row.value }));
+    }
+    const kind = types[field];
+    if (!kind) throw new Error('This source does not expose choices for the selected mapping');
+    return netsuiteCustomizationChoices(kind, this.creds, this.soapEndpointVersion);
   }
 
   async ping(): Promise<{ ok: boolean; detail?: string }> {

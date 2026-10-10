@@ -177,16 +177,20 @@
       "restoreSupported": "対応する既定値に戻す",
       "help": "手動同期と定期同期に含める追加データを選択します。",
       "labels": {
-        "attachments": "取引の添付ファイル",
+        "attachments": "取引の文書とファイルを同期",
         "projectFinancials": "プロジェクト財務データ",
         "crm": "顧客関係",
         "fixedAssets": "固定資産"
       },
       "hints": {
-        "attachments": "未取得または変更されたファイルをインポートし、変更のないファイルをスキップします。",
+        "attachments": "仕入先請求書の PDF や経費の領収書を含む取引添付ファイルを取り込みます。有効にすると同期済み取引のファイルも取得し、その後は重複を作らず新しいファイルとバージョンを追加します。",
         "projectFinancials": "プロジェクトの商取引データと工数の請求状態を照合します。",
         "crm": "CRMが有効な場合、対応する商談、活動、顧客関係をインポートします。",
         "fixedAssets": "固定資産が有効な場合、対応する資産台帳と履歴をインポートします。"
+      },
+      "unavailableReasons": {
+        "desktopProtocol": "QuickBooks Desktop の接続プロトコルでは取引ファイルを読み取れません。",
+        "notImplemented": "このコネクターは取引ファイルの読み取りに対応していません。"
       }
     },
     "mappings": {
@@ -198,10 +202,10 @@
       "sourceIdentifier": "ソースのフィールドまたはレコードID",
       "childHelp": "{parent}で設定したソースレコードのフィールドです。",
       "useDefault": "既定値を使用",
-      "valueRequired": "一意のソース値と変換先を指定してから追加してください。",
+      "valueRequired": "追加する前に一意のソース値と対応先を選択してください。",
       "taxUse": "税の用途",
       "sourceValue": "ソース値",
-      "sourceTaxCode": "ソース税コードIDまたは税率",
+      "sourceTaxCode": "ソース税コード",
       "targetValue": "ネイティブ値",
       "select": "選択…",
       "noOverrides": "標準のソース値を使用しています。",
@@ -252,14 +256,22 @@
         "not_to_exceed": "上限額",
         "sales": "売上",
         "purchase": "仕入"
-      }
+      },
+      "nativeRecords": "勘定科目、品目、組織および参照はソースの識別子で自動的に対応付けられます。これらの任意のマッピングでカスタム項目を選択し、ソース値を変換できます。",
+      "saveFirst": "接続を先に保存し、マッピングを再度開いてソース項目を選択してください。",
+      "choicesFailed": "ソースの選択肢を読み込めませんでした。接続と読み取り権限を確認して再試行してください。",
+      "savedChoice": "保存済みの選択：{value}",
+      "searchChoices": "ソースの選択肢を検索…",
+      "retryChoices": "選択肢を再読み込み",
+      "parentChangeConfirm": "ソースレコードを変更すると、その子項目のマッピングが解除されます。続行しますか？"
     },
     "postedChanges": {
       "label": "記帳済みソース取引の変更",
       "review": "停止してレビューを求める",
       "automatic": "振戻しと差替えを自動追加する",
       "help": "自動修正で記帳済み履歴を書き換えることはありません。OpenBooksは原本を保持し、紐付きの振戻しと差替えを記帳し、対象の消込を引き継ぎますが、照合・締済期間・在庫・収益認識・後続証憑では停止します。"
-    }
+    },
+    "structuredRequired": "この設定には構造化されたエディターが必要です。編集する前にコネクター設定を更新してください。"
   },
   "oauth": {
     "title": "<link>{portal}</link> での一度きりのアプリ設定",
@@ -277,7 +289,13 @@
     "lastContact": "Web Connector の最終接続: {time}",
     "notConnected": "Web Connector はまだ接続していません",
     "capture": "キャプチャ {status}: {completed}/{total} リクエスト",
-    "captureStatus": { "queued": "待機中", "running": "実行中", "complete": "完了", "failed": "失敗", "cancelled": "キャンセル" },
+    "captureStatus": {
+      "queued": "待機中",
+      "running": "実行中",
+      "complete": "完了",
+      "failed": "失敗",
+      "cancelled": "キャンセル"
+    },
     "documentation": "ドキュメント",
     "qwcDescription": "会計移行と照合のための読み取り専用コネクター"
   },
@@ -285,13 +303,40 @@
     "netsuite": {
       "blurb": "読み取り専用の抽出ブリッジをインストールし、専用のトークンロールで接続します。取引、適用、会計統制、削除は検証を通過した場合のみ取り込まれます。",
       "fields": {
-        "account": { "label": "アカウント ID", "help": "NetSuite アカウントのレルムです。" },
-        "host": { "label": "SuiteTalk ホスト" }, "baseCurrency": { "label": "基準通貨" },
-        "bridgeScriptId": { "label": "ブリッジスクリプト ID", "help": "空欄の場合は customscript_openbooks_bridge_rl を使用します。" },
-        "bridgeDeploymentId": { "label": "デプロイメント ID", "help": "空欄の場合は customdeploy_openbooks_bridge_rl を使用します。" },
-        "mappingJson": { "label": "アカウントフィールドのマッピング", "help": "カスタムフィールドとレコードを OpenBooks の概念に対応付ける任意の JSON です。" },
-        "consumerKey": { "label": "コンシューマーキー" }, "consumerSecret": { "label": "コンシューマーシークレット" },
-        "tokenKey": { "label": "トークン ID" }, "tokenSecret": { "label": "トークンシークレット" }
+        "account": {
+          "label": "アカウント ID",
+          "help": "NetSuite アカウントのレルムです。"
+        },
+        "host": {
+          "label": "SuiteTalk ホスト"
+        },
+        "baseCurrency": {
+          "label": "基準通貨"
+        },
+        "bridgeScriptId": {
+          "label": "ブリッジスクリプト ID",
+          "help": "空欄の場合は customscript_openbooks_bridge_rl を使用します。"
+        },
+        "bridgeDeploymentId": {
+          "label": "デプロイメント ID",
+          "help": "空欄の場合は customdeploy_openbooks_bridge_rl を使用します。"
+        },
+        "mappingJson": {
+          "label": "カスタム項目と値のマッピング",
+          "help": "マッピングタブでカスタム項目と値の対応付けを選択してください。"
+        },
+        "consumerKey": {
+          "label": "コンシューマーキー"
+        },
+        "consumerSecret": {
+          "label": "コンシューマーシークレット"
+        },
+        "tokenKey": {
+          "label": "トークン ID"
+        },
+        "tokenSecret": {
+          "label": "トークンシークレット"
+        }
       }
     },
     "odoo": {
@@ -302,13 +347,32 @@
     },
     "qbd": {
       "blurb": "Intuit Web Connector を介して QuickBooks Desktop に接続します。初回承認時とキャプチャ実行中は QuickBooks を開いておく必要があります。Windows ファイアウォールの受信規則は不要です。",
-      "options": { "US": "米国", "CA": "カナダ", "UK": "英国", "AU": "オーストラリア", "NZ": "ニュージーランド" },
+      "options": {
+        "US": "米国",
+        "CA": "カナダ",
+        "UK": "英国",
+        "AU": "オーストラリア",
+        "NZ": "ニュージーランド"
+      },
       "fields": {
-        "historyStartDate": { "label": "履歴の開始日", "help": "移行する最初の転記日です。ミラーのたびに全期間を再確認し、過去の変更や削除を検出します。" },
-        "region": { "label": "QuickBooks の地域" },
-        "baseCurrency": { "label": "基準通貨" },
-        "companyFile": { "label": "会社ファイルのパス（任意）", "help": "空欄の場合、Web Connector 実行時に開いている会社を使用します。" },
-        "webConnectorPassword": { "label": "Web Connector パスワード", "help": ".QWC ファイルを取り込んだ後、QuickBooks Web Connector に一度入力してください。" }
+        "historyStartDate": {
+          "label": "履歴の開始日",
+          "help": "移行する最初の転記日です。ミラーのたびに全期間を再確認し、過去の変更や削除を検出します。"
+        },
+        "region": {
+          "label": "QuickBooks の地域"
+        },
+        "baseCurrency": {
+          "label": "基準通貨"
+        },
+        "companyFile": {
+          "label": "会社ファイルのパス（任意）",
+          "help": "空欄の場合、Web Connector 実行時に開いている会社を使用します。"
+        },
+        "webConnectorPassword": {
+          "label": "Web Connector パスワード",
+          "help": ".QWC ファイルを取り込んだ後、QuickBooks Web Connector に一度入力してください。"
+        }
       }
     },
     "qbo": {

@@ -1,3 +1,5 @@
+import { xeroAttachmentProvider } from "./attachment-providers.ts";
+import { syncTransactionAttachments, type AttachmentSyncOptions } from "./transaction-attachments.ts";
 import { businessToday, parseIsoDate, utcDateFromParts } from "../platform/business-date.ts";
 import { XeroClient, xeroDate } from "../connectors/xero.ts";
 import { formatMoney, fromUnits, mulDecimal, toUnits } from "../money/money.ts";
@@ -130,6 +132,10 @@ export class XeroSource implements MigrationSource {
   constructor(private client: XeroClient, opts: { orgId: string; baseCurrency?: string }) {
     this.orgId = opts.orgId;
     this.baseCurrency = opts.baseCurrency ?? "USD";
+  }
+
+  syncAttachments(options: AttachmentSyncOptions) {
+    return syncTransactionAttachments(xeroAttachmentProvider(this.client), options);
   }
 
   async ping(): Promise<{ ok: boolean; detail?: string }> {

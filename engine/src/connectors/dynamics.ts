@@ -1,3 +1,4 @@
+import { decodeAttachmentBase64 } from './attachment-content.ts';
 /**
  * Microsoft Dynamics 365 Business Central client — OAuth2 (Entra ID / Azure AD,
  * authorization-code) + the Business Central REST API v2.0. Per-tenant like
@@ -276,6 +277,15 @@ export class DynamicsClient {
       page = { value: [], nextLink: body["@odata.nextLink"] };
     }
     return out;
+  }
+
+  async attachmentContent(id: string): Promise<{ id: string; fileName: string; parentId: string; parentType: string; bytes: Buffer }> {
+    if (!/^[a-z0-9-]+$/i.test(id)) throw new Error("Business Central attachment identity is invalid");
+    const response = await this.send(`${this.base}/companies(${this.companyId})/documentAttachments(${id})`);
+    if (!response.ok) throw new Error(`Business Central attachment HTTP ${response.status}; grant document attachment read access and retry`);
+    const row = await response.json() as { id?: string; fileName?: string; attachmentContent?: string; parentId?: string; parentType?: string };
+    if (row.id !== id || typeof row.attachmentContent !== "string" || typeof row.fileName !== "string" || typeof row.parentId !== "string" || typeof row.parentType !== "string") throw new Error("Business Central attachment returned incomplete content or a different identity");
+    return { id: row.id, fileName: row.fileName, parentId: row.parentId, parentType: row.parentType, bytes: decodeAttachmentBase64(row.attachmentContent) };
   }
 
   /** ISO instant → OData $filter clause on lastModifiedDateTime (incremental). */

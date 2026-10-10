@@ -79,6 +79,17 @@ export class ErpNextClient {
     return data.data;
   }
 
+  async attachmentContent(fileUrl: string): Promise<Buffer> {
+    const origin = new URL(this.creds.url);
+    const target = new URL(fileUrl, origin);
+    if (target.origin !== origin.origin || target.username || target.password || !/^\/(private\/)?files\//.test(target.pathname)) throw new Error("ERPNext attachment must remain in this connection's file storage");
+    const response = await this.transport(target, {
+      headers: { Authorization: `token ${this.creds.apiKey}:${this.creds.apiSecret}` }, redirect: "error",
+    });
+    if (!response.ok) throw new Error(`ERPNext attachment HTTP ${response.status}; grant read access to the file and its transaction, then retry`);
+    return Buffer.from(await response.arrayBuffer());
+  }
+
   /** Cheap probe: whoami. */
   async ping(): Promise<string> {
     const data = await this.req<{ message: string }>("/api/method/frappe.auth.get_logged_user");

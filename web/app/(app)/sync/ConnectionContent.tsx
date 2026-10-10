@@ -1,17 +1,19 @@
 'use client'
 
-import { useId, useState } from 'react'
+import { useEffect, useId, useState } from 'react'
 import { useTranslations } from 'next-intl'
-import { Badge, Button, Input, Label, Select } from '@openbooks/ui'
+import { Badge, Button, Label, SearchSelect, Select } from '@openbooks/ui'
 import { RecordTabs } from '../../../components/module-home/record-tabs'
+import { readApiErrorMessage } from '../../../lib/api-error'
 import { confirmDialog } from '../../../lib/confirm'
 import {
   decodeConnectionMappings, resolveSyncSelection, SYNC_CONTENT_KEYS,
   type MappingGroup, type SyncCapabilities,
 } from '@openbooks/engine/src/sync/connection-settings.ts'
 
-export function ConnectionSyncContent({ capabilities, value, onChange }: {
+export function ConnectionSyncContent({ capabilities, value, onChange, attachmentUnavailableReason }: {
   capabilities: SyncCapabilities
+  attachmentUnavailableReason?: 'desktopProtocol' | 'notImplemented'
   value: unknown
   onChange: (value: Record<string, boolean>) => void
 }) {
@@ -34,7 +36,7 @@ export function ConnectionSyncContent({ capabilities, value, onChange }: {
         <Label htmlFor={`${id}-${key}`} className="flex-1">{t(`labels.${key}`)}</Label>
         {!capabilities[key] ? <Badge>{t('unavailable')}</Badge> : null}
       </div>
-      <p id={`${id}-${key}-help`} className="mt-2 text-xs text-slate-500">{t(capabilities[key] ? `hints.${key}` : 'unavailableHelp')}</p>
+      <p id={`${id}-${key}-help`} className="mt-2 text-xs text-slate-500">{t(capabilities[key] ? `hints.${key}` : key === 'attachments' && attachmentUnavailableReason ? `unavailableReasons.${attachmentUnavailableReason}` : 'unavailableHelp')}</p>
     </div>)}
     <p className="text-xs text-slate-500">{t('preservesData')}</p>
   </div>
@@ -43,7 +45,8 @@ export function ConnectionSyncContent({ capabilities, value, onChange }: {
 export type MappingDraft = { source: string; target: string; error: string }
 export type MappingDrafts = Record<string, MappingDraft>
 
-export function ConnectionMappings({ groups, value, onChange, drafts, onDraftChange }: {
+export function ConnectionMappings({ connectionId, groups, value, onChange, drafts, onDraftChange }: {
+  connectionId?: string
   groups: readonly MappingGroup[]
   drafts: MappingDrafts
   onDraftChange: (key: string, draft: MappingDraft) => void
@@ -58,11 +61,18 @@ export function ConnectionMappings({ groups, value, onChange, drafts, onDraftCha
   try { mappings = decodeConnectionMappings(value) }
   catch { return <div className="space-y-2"><p role="alert" className="text-sm text-red-600">{t('unreadable')}</p>
     <Button variant="outline" onClick={async () => { if (await confirmDialog(t('resetConfirm'))) onChange({}) }}>{t('reset')}</Button></div> }
-  const update = (key: string, value: unknown) => {
+  const update = (key: string, value: unknown, clearChildren = false) => {
     const next = { ...mappings }
     if (value === '' || value == null || (typeof value === 'object' && !Object.keys(value).length)) delete next[key]
     else next[key] = value
+    if (clearChildren) for (const field of groups.flatMap((group) => group.fields)) if (field.requires === key) delete next[field.key]
     onChange(next)
+  }
+  const chooseIdentifier = async (key: string, value: string | null) => {
+    if (value === mappings[key]) return
+    const children = groups.flatMap((group) => group.fields).filter((field) => field.requires === key && mappings[field.key] != null)
+    if (children.length && !await confirmDialog(t('parentChangeConfirm'))) return
+    update(key, value, true)
   }
   const known = new Set(groups.flatMap((group) => group.fields.map((field) => field.key)))
   const unknown = Object.keys(mappings).filter((key) => !known.has(key))
@@ -73,6 +83,8 @@ export function ConnectionMappings({ groups, value, onChange, drafts, onDraftCha
   if (!group) return <div className="space-y-4"><p className="text-sm text-slate-500">{t('automatic')}</p>{unsupported}</div>
   return <div className="space-y-4">
     <p className="text-sm text-slate-500">{t('help')}</p>
+    <p className="text-xs text-slate-500">{t('nativeRecords')}</p>
+    {!connectionId ? <p role="status" className="text-sm text-slate-500">{t('saveFirst')}</p> : null}
     {unsupported}
     <RecordTabs label={t('areas')} active={group.key} onChange={setSelected}
       tabs={groups.map((group) => ({ key: group.key, label: t(`groups.${group.key}`), count: group.fields.filter((field) => mappings[field.key] != null).length }))}>
@@ -81,16 +93,18 @@ export function ConnectionMappings({ groups, value, onChange, drafts, onDraftCha
         {group.fields.map((field) => {
           const label = t(`fields.${field.key}`)
           if (field.kind !== 'identifier') return <ValueMappings key={field.key} label={label}
-            targets={field.targets ?? []} kind={field.kind} value={mappings[field.key]} onChange={(value) => update(field.key, value)}
+            connectionId={connectionId} field={field.key} targets={field.targets ?? []} kind={field.kind} value={mappings[field.key]} onChange={(value) => update(field.key, value)}
             draft={drafts[field.key] ?? { source: '', target: '', error: '' }} onDraftChange={(draft) => onDraftChange(field.key, draft)} />
           const disabled = Boolean(field.requires && !mappings[field.requires])
           return <div key={field.key} className={field.requires ? 'ml-4 border-l border-slate-200 pl-4 dark:border-slate-700' : ''}>
             <Label htmlFor={`${id}-${field.key}`}>{label}</Label>
-            <Input id={`${id}-${field.key}`} value={typeof mappings[field.key] === 'string' ? mappings[field.key] as string : ''}
-              disabled={disabled} placeholder={t('sourceIdentifier')} onChange={(event) => update(field.key, event.target.value)} />
+            <MappingChoice id={`${id}-${field.key}`} label={label} connectionId={connectionId} field={field.key}
+              parent={field.requires ? String(mappings[field.requires] ?? '') : undefined}
+              disabled={disabled} value={typeof mappings[field.key] === 'string' ? mappings[field.key] as string : ''}
+              onChange={(value) => { void chooseIdentifier(field.key, value) }} />
             {mappings[field.key] != null && typeof mappings[field.key] !== 'string' ? <p role="alert" className="mt-1 text-xs text-red-600">{t('invalidValue')}</p> : null}
             {field.requires ? <p className="mt-1 text-xs text-slate-500">{t('childHelp', { parent: t(`fields.${field.requires}`) })}</p> : null}
-            {mappings[field.key] != null ? <Button size="sm" variant="ghost" onClick={() => update(field.key, null)}>{t('useDefault')}</Button> : null}
+            {mappings[field.key] != null ? <Button size="sm" variant="ghost" onClick={() => { void chooseIdentifier(field.key, null) }}>{t('useDefault')}</Button> : null}
           </div>
         })}
       </div>
@@ -98,7 +112,8 @@ export function ConnectionMappings({ groups, value, onChange, drafts, onDraftCha
   </div>
 }
 
-function ValueMappings({ label, targets, kind, value, onChange, draft, onDraftChange }: {
+function ValueMappings({ connectionId, field, label, targets, kind, value, onChange, draft, onDraftChange }: {
+  connectionId?: string; field: string;
   label: string; targets: readonly string[]; kind: 'values' | 'tax'; value: unknown
   onChange: (value: Record<string, unknown> | null) => void
   draft: MappingDraft
@@ -128,13 +143,51 @@ function ValueMappings({ label, targets, kind, value, onChange, draft, onDraftCh
     <div className="grid gap-2 sm:grid-cols-2">
       <div><Label htmlFor={`${id}-source`}>{t(kind === 'tax' ? 'taxUse' : 'sourceValue')}</Label>
         {kind === 'tax' ? <Select id={`${id}-source`} value={source} onChange={(event) => setSource(event.target.value)}><option value="">{t('select')}</option>{targets.map((target) => <option key={target} value={target}>{t(`targets.${target}`)}</option>)}</Select>
-          : <Input id={`${id}-source`} value={source} onChange={(event) => setSource(event.target.value)} />}</div>
+          : <MappingChoice id={`${id}-source`} label={t('sourceValue')} connectionId={connectionId} field={field} value={source} onChange={setSource} />}</div>
       <div><Label htmlFor={`${id}-target`}>{t(kind === 'tax' ? 'sourceTaxCode' : 'targetValue')}</Label>
-        {kind === 'tax' ? <Input id={`${id}-target`} value={target} onChange={(event) => setTarget(event.target.value)} />
+        {kind === 'tax' ? <MappingChoice id={`${id}-target`} label={t('sourceTaxCode')} connectionId={connectionId} field={field} value={target} onChange={setTarget} />
           : <Select id={`${id}-target`} value={target} onChange={(event) => setTarget(event.target.value)}><option value="">{t('select')}</option>{targets.map((target) => <option key={target} value={target}>{t(`targets.${target}`)}</option>)}</Select>}</div>
     </div>
     {error ? <p role="alert" className="text-xs text-red-600">{error}</p> : null}
     <div className="flex gap-2"><Button size="sm" variant="outline" onClick={add}>{t('addValue')}</Button>
       {source || target ? <Button size="sm" variant="ghost" onClick={() => onDraftChange({ source: '', target: '', error: '' })}>{t('discardDraft')}</Button> : null}</div>
+  </div>
+}
+
+/** Use the same searchable reference control as Setup, without discarding saved choices. */
+function MappingChoice({ id, label, connectionId, field, parent, disabled, value, onChange }: {
+  id: string; label: string; connectionId?: string; field: string; parent?: string; disabled?: boolean;
+  value: string; onChange: (value: string) => void;
+}) {
+  const t = useTranslations('sync.drawer.mappings')
+  const [rows, setRows] = useState<{ value: string; label: string }[]>([])
+  const [error, setError] = useState<string>()
+  const [loading, setLoading] = useState(false)
+  const [attempt, setAttempt] = useState(0)
+  const canLoad = Boolean(connectionId && !disabled)
+  useEffect(() => {
+    setRows([]); setError(undefined)
+    if (!canLoad) { setLoading(false); return }
+    const controller = new AbortController()
+    const query = new URLSearchParams({ field })
+    if (parent) query.set('parent', parent)
+    setLoading(true)
+    fetch(`/api/platform/connections/${encodeURIComponent(connectionId!)}/mapping-options?${query}`, { signal: controller.signal })
+      .then(async (response) => {
+        if (!response.ok) throw new Error(await readApiErrorMessage(response, t('choicesFailed')))
+        const rows: unknown = await response.json()
+        if (!Array.isArray(rows) || rows.some((row) => !row || typeof row.value !== 'string' || typeof row.label !== 'string')) throw new Error(t('choicesFailed'))
+        if (!controller.signal.aborted) setRows(rows)
+      })
+      .catch((cause) => { if (!controller.signal.aborted) setError(cause instanceof Error ? cause.message : t('choicesFailed')) })
+      .finally(() => { if (!controller.signal.aborted) setLoading(false) })
+    return () => controller.abort()
+  }, [connectionId, field, parent, canLoad, attempt, t])
+  const options = value && !rows.some((row) => row.value === value) ? [{ value, label: t('savedChoice', { value }) }, ...rows] : rows
+  return <div className="space-y-1">
+    <SearchSelect id={id} ariaLabel={label} value={value} options={options} onChange={onChange}
+      disabled={!canLoad} searchable loading={loading} clearable placeholder={t('select')} searchPlaceholder={t('searchChoices')}
+      statusMessage={error} statusTone={error ? 'error' : 'muted'} />
+    {error ? <Button variant="outline" size="sm" onClick={() => setAttempt((value) => value + 1)}>{t('retryChoices')}</Button> : null}
   </div>
 }

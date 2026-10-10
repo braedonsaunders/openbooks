@@ -27,7 +27,7 @@ const API = "https://api.xero.com/api.xro/2.0";
 //  - reports.trialbalance.read → the TB report (the Journals endpoint is now
 //    Advanced-tier-gated, so verification reads the report instead)
 const SCOPE =
-  "offline_access accounting.settings.read accounting.contacts.read accounting.invoices.read accounting.payments.read accounting.banktransactions.read accounting.manualjournals.read accounting.reports.trialbalance.read";
+  "offline_access accounting.attachments.read accounting.settings.read accounting.contacts.read accounting.invoices.read accounting.payments.read accounting.banktransactions.read accounting.manualjournals.read accounting.reports.trialbalance.read";
 
 export interface XeroApp {
   clientId: string;
@@ -208,6 +208,17 @@ export class XeroClient {
     const res = await this.send("GET", url, headers);
     if (!res.ok) throw new Error(`Xero ${path} HTTP ${res.status}: ${(await res.text()).slice(0, 300)}`);
     return (await res.json()) as T;
+  }
+
+  async attachmentContent(path: string, contentType: string): Promise<Buffer> {
+    if (!/^(Invoices|CreditNotes|BankTransactions|BankTransfers|ManualJournals|PurchaseOrders)\/[a-z0-9-]+\/Attachments\//i.test(path)) throw new Error("Xero attachment must belong to a supported transaction");
+    if (!/^[a-z0-9!#$&^_.+-]+\/[a-z0-9!#$&^_.+-]+$/i.test(contentType)) throw new Error("Xero attachment content type is invalid");
+    const token = await this.accessToken();
+    const response = await this.send("GET", new URL(`${API}/${path}`), {
+      Authorization: `Bearer ${token}`, "xero-tenant-id": this.tenantId, Accept: contentType,
+    });
+    if (!response.ok) throw new Error(`Xero attachment HTTP ${response.status}; reconnect with attachment read access and retry`);
+    return Buffer.from(await response.arrayBuffer());
   }
 
   /** Page through a list endpoint (?page=N, 100/page). `key` = response array. */

@@ -46,59 +46,40 @@ bridge. Large PDFs and images are transferred in bounded chunks, allowing the
 connector to preserve source files that exceed NetSuite's single-response
 limit without making them public or adding account-specific scripts.
 
-## Account field mappings
+## Connection mappings
 
-Standard records and fields are discovered without account-specific source
-code. Enter optional **Account field mappings** JSON for custom concepts. The
-supported keys are:
+Open **Sync → Connections**, edit the connection, and choose **Mappings**.
+Standard accounts, items, entities and their references are matched by source
+identity automatically. Optional mappings are grouped by concept: Projects,
+Transaction lines, Items, People, Time types, Time entries, CRM and Taxes.
 
-~~~json
-{
-  "projectForemanField": "custentity_example_foreman",
-  "projectPurchaseOrderField": "custentity_example_po",
-  "itemCategoryField": "custitem_example_category",
-  "customerShortCodeField": "custentity_example_shortcode",
-  "employeeBenefitsField": "custentity_example_benefits",
-  "timeTypeRecord": "customrecord_example_time_type",
-  "timeTypeMultiplierField": "custrecord_example_multiplier",
-  "timeEntryTypeField": "custcol_example_time_type",
-  "timeEntryFieldTicketNumberField": "custcol_example_field_ticket",
-  "projectStatuses": {
-    "Awarded": "awarded",
-    "Substantially Complete": "substantially_complete"
-  },
-  "projectBillingTypes": {
-    "FBM": "not_to_exceed"
-  },
-  "taxCodeFallbacks": {
-    "sales": "4123",
-    "purchase": "4124"
-  }
-}
-~~~
+Choose custom fields by their source names using the searchable pickers.
+For time types, select the source record first, then choose its multiplier
+field from that record's children. Existing saved choices remain visible even
+when source access is temporarily unavailable. Save a new connection before
+opening its source-field choices. The integration role needs read access to
+customization metadata.
 
-Mappings belong to the tenant connection. Never add an account's custom field
-IDs to the shared connector.
+For project statuses and billing types, choose the source value and its native
+meaning, then select **Add value mapping**. Each saved mapping appears as a
+pair of pills with a remove action. Unfinished rows must be added or discarded
+before saving. In Taxes, choose the sales or purchase use and an accessible
+source tax code. Missing required tax configuration refuses the transaction
+with a diagnostic so the mapping can be corrected and the sync replayed.
 
-**projectBillingTypes** overrides how a NetSuite **jobbillingtype** resolves to
-a project type. By default **TM** imports as Time & Materials, and both
-fixed-bid members, **FBI** and **FBM**, import as Fixed Price. NetSuite's stock
-enum has no not-to-exceed member, so accounts that run budget or do-not-exceed
-work often overload one of the fixed-bid members for it and carry the ceiling
-in the job price. Map that member here so those jobs import as Not-to-Exceed
-and bill time and materials up to the ceiling, instead of reporting the ceiling
-as earned contract revenue. Valid targets are **time_and_materials**,
-**fixed_price**, **cost_plus** and **not_to_exceed**.
+## Transaction documents and files
 
-**taxCodeFallbacks** names the tax code to carry when a source line posts tax
-money but resolves to no mirrored tax code (for example a hand-adjusted total
-whose code was never mapped). Configure the source tax-code internal id per
-transaction side — **sales** for customer invoices, credits and sales orders,
-**purchase** for everything else. A rate string is also accepted. With no
-usable value for the transaction's side the import fails closed: the
-transaction is reported unbuildable, naming the source transaction and line,
-so the mapping can be corrected and the pull replayed. The shared connector
-ships no default; every account's tax identities are its own configuration.
+In **Sync content**, enable **Sync transaction documents and files** to import
+transaction attachments, including vendor bill PDFs and expense-report
+receipts. The first enabled run inspects previously synced transactions as
+well as new ones. Later runs download new or changed files when reliable
+source modification markers are available. File Cabinet preserves versions
+and links evidence to its matching native transaction without duplicate files.
+
+The integration role needs access to the relevant transactions and File
+Cabinet files. A denied or incomplete read is reported as a failed sync;
+the connector does not advance a successful cursor past that refusal.
+Disabling file sync preserves imported files and transaction links.
 
 ## Daily mirror guarantees
 

@@ -177,16 +177,20 @@
       "restoreSupported": "恢复受支持的默认值",
       "help": "选择手动同步和定时同步中包含的附加数据。",
       "labels": {
-        "attachments": "交易附件",
+        "attachments": "同步交易文档和文件",
         "projectFinancials": "项目财务数据",
         "crm": "客户关系",
         "fixedAssets": "固定资产"
       },
       "hints": {
-        "attachments": "导入缺失或已更改的文件，跳过未更改的文件。",
+        "attachments": "导入交易附件，包括供应商账单 PDF 和费用收据。启用后会补齐已同步交易的文件；之后的同步添加新文件和版本，不生成重复文件。",
         "projectFinancials": "核对项目商业数据与工时记录的计费状态。",
         "crm": "启用CRM时，导入受支持的商机、活动和客户关系记录。",
         "fixedAssets": "启用固定资产时，导入受支持的资产台账和历史记录。"
+      },
+      "unavailableReasons": {
+        "desktopProtocol": "QuickBooks Desktop 连接器协议不支持读取交易文件。",
+        "notImplemented": "此连接器不支持读取交易文件。"
       }
     },
     "mappings": {
@@ -198,10 +202,10 @@
       "sourceIdentifier": "源字段或记录ID",
       "childHelp": "在{parent}中配置的源记录字段。",
       "useDefault": "使用默认值",
-      "valueRequired": "请填写唯一的源值并选择目标值后再添加。",
+      "valueRequired": "添加前请选择唯一的来源值及其目标。",
       "taxUse": "税务用途",
       "sourceValue": "源值",
-      "sourceTaxCode": "源税码ID或税率",
+      "sourceTaxCode": "来源税码",
       "targetValue": "原生值",
       "select": "选择…",
       "noOverrides": "使用标准源值。",
@@ -252,14 +256,22 @@
         "not_to_exceed": "最高限额",
         "sales": "销售",
         "purchase": "采购"
-      }
+      },
+      "nativeRecords": "账户、商品、实体及引用会按来源标识自动匹配。这些可选映射用于选择自定义来源字段并转换来源值。",
+      "saveFirst": "请先保存连接，然后重新打开“映射”以选择来源字段。",
+      "choicesFailed": "无法加载来源选项。请检查连接和读取权限，然后重试。",
+      "savedChoice": "已保存的选项：{value}",
+      "searchChoices": "搜索来源选项…",
+      "retryChoices": "重试选项",
+      "parentChangeConfirm": "更改来源记录会清除其子字段映射。是否继续？"
     },
     "postedChanges": {
       "label": "已记账源端交易变更",
       "review": "停止并要求复核",
       "automatic": "自动追加冲销与替代",
       "help": "自动更正从不改写已记账历史。OpenBooks 保留原文，记账关联的冲销与替代，结转符合条件的核销，但在对账、已结期间、库存、收入确认或下游单据处仍会停止。"
-    }
+    },
+    "structuredRequired": "此设置需要结构化编辑器。请先更新连接器配置再进行编辑。"
   },
   "oauth": {
     "title": "在 <link>{portal}</link> 中进行一次性应用设置",
@@ -277,7 +289,13 @@
     "lastContact": "Web Connector 上次连接：{time}",
     "notConnected": "Web Connector 尚未连接",
     "capture": "采集 {status}：{completed}/{total} 个请求",
-    "captureStatus": { "queued": "排队中", "running": "运行中", "complete": "已完成", "failed": "失败", "cancelled": "已取消" },
+    "captureStatus": {
+      "queued": "排队中",
+      "running": "运行中",
+      "complete": "已完成",
+      "failed": "失败",
+      "cancelled": "已取消"
+    },
     "documentation": "文档",
     "qwcDescription": "用于会计迁移和核对的只读连接器"
   },
@@ -285,13 +303,40 @@
     "netsuite": {
       "blurb": "安装只读提取桥接器，并使用专用令牌角色连接。交易、核销、会计控制和删除仅在验证通过后导入。",
       "fields": {
-        "account": { "label": "账户 ID", "help": "NetSuite 账户领域。" },
-        "host": { "label": "SuiteTalk 主机" }, "baseCurrency": { "label": "本位币" },
-        "bridgeScriptId": { "label": "桥接脚本 ID", "help": "留空以使用 customscript_openbooks_bridge_rl。" },
-        "bridgeDeploymentId": { "label": "部署 ID", "help": "留空以使用 customdeploy_openbooks_bridge_rl。" },
-        "mappingJson": { "label": "账户字段映射", "help": "可选 JSON，用于将自定义字段和记录映射到 OpenBooks 概念。" },
-        "consumerKey": { "label": "使用者密钥" }, "consumerSecret": { "label": "使用者机密" },
-        "tokenKey": { "label": "令牌 ID" }, "tokenSecret": { "label": "令牌机密" }
+        "account": {
+          "label": "账户 ID",
+          "help": "NetSuite 账户领域。"
+        },
+        "host": {
+          "label": "SuiteTalk 主机"
+        },
+        "baseCurrency": {
+          "label": "本位币"
+        },
+        "bridgeScriptId": {
+          "label": "桥接脚本 ID",
+          "help": "留空以使用 customscript_openbooks_bridge_rl。"
+        },
+        "bridgeDeploymentId": {
+          "label": "部署 ID",
+          "help": "留空以使用 customdeploy_openbooks_bridge_rl。"
+        },
+        "mappingJson": {
+          "label": "自定义字段和值映射",
+          "help": "在“映射”选项卡中选择自定义字段和值映射。"
+        },
+        "consumerKey": {
+          "label": "使用者密钥"
+        },
+        "consumerSecret": {
+          "label": "使用者机密"
+        },
+        "tokenKey": {
+          "label": "令牌 ID"
+        },
+        "tokenSecret": {
+          "label": "令牌机密"
+        }
       }
     },
     "odoo": {
@@ -302,13 +347,32 @@
     },
     "qbd": {
       "blurb": "通过 Intuit Web Connector 连接 QuickBooks Desktop。首次授权和采集期间必须保持 QuickBooks 打开；无需配置 Windows 入站防火墙规则。",
-      "options": { "US": "美国", "CA": "加拿大", "UK": "英国", "AU": "澳大利亚", "NZ": "新西兰" },
+      "options": {
+        "US": "美国",
+        "CA": "加拿大",
+        "UK": "英国",
+        "AU": "澳大利亚",
+        "NZ": "新西兰"
+      },
       "fields": {
-        "historyStartDate": { "label": "历史开始日期", "help": "要迁移的最早记账日期。每次镜像都会重新检查完整范围，以检测历史修改和删除。" },
-        "region": { "label": "QuickBooks 地区" },
-        "baseCurrency": { "label": "本位币" },
-        "companyFile": { "label": "公司文件路径（可选）", "help": "留空则使用 Web Connector 运行时已打开的公司。" },
-        "webConnectorPassword": { "label": "Web Connector 密码", "help": "导入 .QWC 文件后，在 QuickBooks Web Connector 中输入一次此密码。" }
+        "historyStartDate": {
+          "label": "历史开始日期",
+          "help": "要迁移的最早记账日期。每次镜像都会重新检查完整范围，以检测历史修改和删除。"
+        },
+        "region": {
+          "label": "QuickBooks 地区"
+        },
+        "baseCurrency": {
+          "label": "本位币"
+        },
+        "companyFile": {
+          "label": "公司文件路径（可选）",
+          "help": "留空则使用 Web Connector 运行时已打开的公司。"
+        },
+        "webConnectorPassword": {
+          "label": "Web Connector 密码",
+          "help": "导入 .QWC 文件后，在 QuickBooks Web Connector 中输入一次此密码。"
+        }
       }
     },
     "qbo": {

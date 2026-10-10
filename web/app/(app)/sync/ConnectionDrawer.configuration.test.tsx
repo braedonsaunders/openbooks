@@ -34,8 +34,15 @@ async function click(text: string) {
 async function fill(label: string, value: string) {
   const element = [...document.querySelectorAll('label')].find((element) => element.textContent === label)
   assert.ok(element, `missing ${label}`)
-  const input = document.getElementById(element.htmlFor) as HTMLInputElement | HTMLSelectElement
+  const input = document.getElementById(element.htmlFor) as HTMLInputElement | HTMLSelectElement | HTMLButtonElement
   assert.ok(input, `${label} is associated with its control`)
+  if (input.tagName === 'BUTTON') {
+    await act(async () => { input.click(); await tick() })
+    const option = [...document.querySelectorAll<HTMLElement>('[role="option"]')].find((option) => option.textContent?.trim() === value)
+    assert.ok(option, `missing source choice ${value}`)
+    await act(async () => { option.click(); await tick() })
+    return
+  }
   await act(async () => {
     Object.getOwnPropertyDescriptor(Object.getPrototypeOf(input), 'value')!.set!.call(input, value)
     input.dispatchEvent(new window.Event(input.tagName === 'SELECT' ? 'change' : 'input', { bubbles: true }))
@@ -57,7 +64,24 @@ test('structured connection mappings and content save and reopen without losing 
     postedChangeAuthorizedAt: null, cursor: null, lastRunAt: null, lastError: null, hasSecrets: true }
   let saved: { config: Record<string, unknown> } | undefined
   const previousFetch = globalThis.fetch
-  globalThis.fetch = (async (input, init) => { assert.equal(String(input), '/api/platform/connections/connection-1'); assert.equal(init?.method, 'PATCH'); saved = JSON.parse(String(init?.body)); return Response.json({ ok: true }) }) as typeof fetch
+  const reads: string[] = []
+  globalThis.fetch = (async (input, init) => {
+    if (String(input).includes('/mapping-options?')) {
+      reads.push(String(input))
+      const query = new URL(String(input), 'http://localhost').searchParams
+      const field = query.get('field')
+      if (field === 'timeTypeMultiplierField') assert.equal(query.get('parent'), 'customrecord_time')
+      const choices: Record<string, { value: string; label: string }[]> = {
+        projectForemanField: [{ value: 'custentity_foreman', label: 'Foreman contact' }],
+        timeTypeRecord: [{ value: 'customrecord_time', label: 'Time categories' }],
+        timeTypeMultiplierField: [{ value: 'custrecord_multiplier', label: 'Multiplier' }],
+        projectStatuses: [{ value: 'Completed', label: 'Completed' }],
+      }
+      return Response.json(choices[field ?? ''] ?? [])
+    }
+    assert.equal(String(input), '/api/platform/connections/connection-1'); assert.equal(init?.method, 'PATCH')
+    saved = JSON.parse(String(init?.body)); return Response.json({ ok: true })
+  }) as typeof fetch
   t.after(async () => { await act(async () => root.unmount()); host.remove(); globalThis.fetch = previousFetch })
   const show = (open: boolean) => root.render(<NextIntlClientProvider locale="en" messages={messages} timeZone="UTC" onError={(error) => { throw error }}>
     <ConfirmRoot /><ConnectionDrawer open={open} onClose={() => {}} sourceTypes={[manifest('netsuite')]} currencies={[]} editing={editing} onSaved={() => {}} />
@@ -66,12 +90,13 @@ test('structured connection mappings and content save and reopen without losing 
   await act(async () => { show(true); await tick() })
   assert.equal(document.querySelector('textarea'), null, 'legacy mapping manifest never exposes raw JSON')
   await click('Mappings')
-  assert.equal((document.querySelector('input[placeholder="Source field or record ID"]') as HTMLInputElement).value, 'custentity_foreman')
+  assert.match(document.body.textContent ?? '', /Foreman contact/)
+  assert.equal(document.querySelector('input[placeholder="Source field or record ID"]'), null, 'source fields use labeled choices rather than identifiers to type')
   await click('Time types')
   const child = [...document.querySelectorAll('label')].find((label) => label.textContent === 'Time-type multiplier')!
   assert.equal((document.getElementById(child.htmlFor) as HTMLInputElement).disabled, true)
-  await fill('Time-type source record', 'customrecord_time')
-  await fill('Time-type multiplier', 'custrecord_multiplier')
+  await fill('Time-type source record', 'Time categories')
+  await fill('Time-type multiplier', 'Multiplier')
   await click('Projects')
   assert.match(document.body.textContent ?? '', /In Progress/)
   await fill('Source value', 'Completed')
@@ -81,10 +106,10 @@ test('structured connection mappings and content save and reopen without losing 
   assert.equal(saved, undefined, 'unfinished mapping is never silently discarded or saved')
   assert.match(errorMessages().at(-1) ?? '', /Finish or discard/)
   await click('Time types'); await click('Projects')
-  assert.equal((document.getElementById([...document.querySelectorAll('label')].find((label) => label.textContent === 'Source value')!.htmlFor) as HTMLInputElement).value, 'Completed', 'mapping draft survives both resource and drawer switches')
+  assert.equal((document.getElementById([...document.querySelectorAll('label')].find((label) => label.textContent === 'Source value')!.htmlFor) as HTMLButtonElement).textContent?.trim(), 'Completed', 'mapping draft survives both resource and drawer switches')
   await click('Add value mapping')
   await click('Sync content')
-  const filesLabel = [...document.querySelectorAll('label')].find((label) => label.textContent === 'Transaction attachments')!
+  const filesLabel = [...document.querySelectorAll('label')].find((label) => label.textContent === 'Sync transaction documents and files')!
   await act(async () => { (document.getElementById(filesLabel.htmlFor) as HTMLInputElement).click(); await tick() })
   await click('Save changes')
   assert.ok(saved)
@@ -98,9 +123,10 @@ test('structured connection mappings and content save and reopen without losing 
   await act(async () => { show(false); await tick() })
   await act(async () => { show(true); await tick() })
   await click('Mappings'); await click('Time types')
-  assert.equal((document.getElementById([...document.querySelectorAll('label')].find((label) => label.textContent === 'Time-type multiplier')!.htmlFor) as HTMLInputElement).value, 'custrecord_multiplier')
+  assert.equal((document.getElementById([...document.querySelectorAll('label')].find((label) => label.textContent === 'Time-type multiplier')!.htmlFor) as HTMLButtonElement).textContent?.trim(), 'Multiplier')
+  assert.ok(reads.some((url) => url.includes('field=timeTypeMultiplierField&parent=customrecord_time')))
   await click('Sync content')
-  assert.equal((document.getElementById([...document.querySelectorAll('label')].find((label) => label.textContent === 'Transaction attachments')!.htmlFor) as HTMLInputElement).checked, false)
+  assert.equal((document.getElementById([...document.querySelectorAll('label')].find((label) => label.textContent === 'Sync transaction documents and files')!.htmlFor) as HTMLInputElement).checked, false)
 });
 
 test('every connector uses the same content and mapping panels with truthful availability', async (t) => {
@@ -116,7 +142,9 @@ test('every connector uses the same content and mapping panels with truthful ava
     await click('Sync content')
     const choices = [...document.querySelectorAll('input[type="checkbox"]')] as HTMLInputElement[]
     assert.equal(choices.length, 4)
-    assert.ok(choices.every((choice) => choice.disabled === (source !== 'netsuite')))
+    assert.equal(choices[0]!.disabled, source === 'qbd')
+    assert.ok(choices.slice(1).every((choice) => choice.disabled === (source !== 'netsuite')))
+    if (source === 'qbd') assert.match(document.body.textContent ?? '', /does not expose transaction file content/)
     assert.match(document.body.textContent ?? '', /Always included/)
     await click('Mappings')
     assert.equal(document.querySelector('textarea'), null)
@@ -129,12 +157,12 @@ test('every new drawer message resolves with real native translation and interpo
     if (typeof value === 'string') return [prefix]
     return Object.entries(value as Record<string, unknown>).flatMap(([key, value]) => paths(value, `${prefix}.${key}`))
   }
-  const keys = ['drawer.tabsLabel', ...paths(messages.sync.drawer.tabs, 'drawer.tabs'), ...paths(messages.sync.drawer.syncContent, 'drawer.syncContent'), ...paths(messages.sync.drawer.mappings, 'drawer.mappings'), 'runs.stats.contentExcluded']
+  const keys = ['drawer.tabsLabel', ...paths(messages.sync.drawer.tabs, 'drawer.tabs'), ...paths(messages.sync.drawer.syncContent, 'drawer.syncContent'), ...paths(messages.sync.drawer.mappings, 'drawer.mappings'), 'runs.stats.contentExcluded', 'drawer.structuredRequired']
   for (const locale of LOCALE_CODES) {
     const catalog = (await import(`../../../messages/${locale}/index.ts`)).default
     const t = createTranslator({ locale, messages: catalog, namespace: 'sync', onError: (error) => { throw error } })
     for (const key of keys) {
-      const value = t(key, { parent: 'Source record', source: 'Completed', content: 'Files' })
+      const value = t(key, { parent: 'Source record', source: 'Completed', content: 'Files', value: 'Saved field' })
       assert.ok(value.trim(), `${locale}: ${key}`)
       assert.ok(!/[{}]/.test(value), `${locale}: ${key} must interpolate`)
     }
