@@ -76,7 +76,7 @@ export const HRM_LOCAL_NAVIGATION: Record<'people' | 'hiring' | 'timeOff' | 'tal
   hiring: [
     { href: '/hrm/recruiting', iconKey: 'user-search', ns: 'hrm', key: 'talentWorkspace.applications', permission: 'hrm.recruiting.read', feature: 'hrmRecruiting', carry: ['applicationStatus','opening','stage'] },
     {href:'/hrm/recruiting?tab=openings',label:'Openings',iconKey:'briefcase-business',menuKey:'hrm-recruiting-openings',ns:'hrm',key:'recruiting.tabs.openings',permission:'hrm.recruiting.read',feature:'hrmRecruiting',menuParent:'hrm-recruiting',carry:['status']},
-    ...([['interviews', 'messages-square'], ['offers', 'handshake'], ['postings', 'megaphone'], ['pools', 'users']] as const).map(([tab, iconKey]) => ({
+    ...([['interviews', 'calendar-check'], ['offers', 'handshake'], ['postings', 'megaphone'], ['pools', 'users']] as const).map(([tab, iconKey]) => ({
       href: `/hrm/recruiting?tab=${tab}`, iconKey, menuKey: `hrm-recruiting-${tab}`, ns: 'hrm', key: `recruiting.tabs.${tab}`,
       menuParent: 'hrm-recruiting',
       permission: 'hrm.recruiting.read', feature: 'hrmRecruiting', carry: ['status'], secondary: tab !== 'pools',
@@ -116,7 +116,7 @@ export const HRM_LOCAL_NAVIGATION: Record<'people' | 'hiring' | 'timeOff' | 'tal
   ],
   benefits: [
     { href: '/hrm/benefits', iconKey: 'heart-handshake', ns: 'hrm', key: 'benefits.workspace.tabs.overview', permission: 'hrm.benefits.read' },
-    { href: '/hrm/benefits?view=programs', iconKey: 'heart-handshake', menuKey: 'hrm-benefits-programs', ns: 'hrm', key: 'benefits.workspace.tabs.programs', permission: 'hrm.benefits.read' },
+    { href: '/hrm/benefits?view=programs', iconKey: 'gift', menuKey: 'hrm-benefits-programs', ns: 'hrm', key: 'benefits.workspace.tabs.programs', permission: 'hrm.benefits.read' },
     { href: '/hrm/benefits?view=employees', iconKey: 'user-check', menuKey: 'hrm-benefits-employees', ns: 'hrm', key: 'benefits.workspace.tabs.employees', permission: 'hrm.benefits.read' },
     { href: '/hrm/benefits?view=delivery', iconKey: 'banknote-arrow-up', menuKey: 'hrm-benefits-delivery', ns: 'hrm', key: 'benefits.workspace.tabs.delivery', permission: 'hrm.benefits.read' },
   ],
@@ -129,7 +129,7 @@ export const LOCAL_NAVIGATION: LocalNavigationSet[] = [
     {href:'/manufacturing/work-centers',label:'Work centers',ns:'manufacturing',key:'titles.work-centers',permission:'manufacturing.read',iconKey:'settings',menuParent:'manufacturing'},
     {href:'/manufacturing/routings',label:'Routings',ns:'manufacturing',key:'titles.routings',permission:'manufacturing.read',iconKey:'workflow',menuParent:'manufacturing'},
     {href:'/manufacturing/time',label:'Production time',ns:'operatingProfiles',key:'time.title',permission:'time.read',permissionsAll:['manufacturing.read'],iconKey:'clock',menuParent:'manufacturing'},
-    {href:'/manufacturing/quality',label:'Quality',ns:'manufacturing',key:'quality.title',permission:'manufacturing.read',permissionsAll:['items.read'],iconKey:'clipboard',menuParent:'manufacturing'},
+    {href:'/manufacturing/quality',label:'Quality',ns:'manufacturing',key:'quality.title',permission:'manufacturing.read',permissionsAll:['items.read'],iconKey:'badge-check',menuParent:'manufacturing'},
     {href:'/manufacturing/mrp',label:'MRP',ns:'manufacturing',key:'titles.mrp',permission:'manufacturing.read',feature:'manufacturingMrp',iconKey:'calendar-days',menuParent:'manufacturing'},
   ] },
   { id: 'collections-views', label: 'Collections', tabs: [
@@ -140,13 +140,13 @@ export const LOCAL_NAVIGATION: LocalNavigationSet[] = [
     ...['versions', 'contracts', 'amendments'].map((view) => ({ href: `/collections?view=${view}`, ns: 'ar', key: `collections.tabs.${view}`, permission: 'documents.manage', permissionsAny: ['ar.read'], feature: 'advancedSubscriptions' })),
   ] },
   { id: 'crm-sales', label: 'Sales', feature: 'salesManagement', tabs: [
-    ...['overview', 'representatives', 'teams', 'quotas', 'territories'].map((tab) => ({ href: tab==='overview'?'/crm/sales':`/crm/sales/${tab}`, ns: 'crm', key: `sales.tabs.${tab}`, permissionsAny: ['crm.setup.manage', 'crm.forecasts.read'], carry: ['periodStart', 'periodEnd'] })),
+    ...([['overview', 'chart-no-axes-combined'], ['representatives', 'user-check'], ['teams', 'users'], ['quotas', 'target'], ['territories', 'map']] as const).map(([tab, iconKey]) => ({ href: tab==='overview'?'/crm/sales':`/crm/sales/${tab}`, iconKey, ns: 'crm', key: `sales.tabs.${tab}`, permissionsAny: ['crm.setup.manage', 'crm.forecasts.read'], carry: ['periodStart', 'periodEnd'] })),
   ] },
   ...Object.entries(HRM_LOCAL_NAVIGATION).map(([id, tabs]) => ({ id: `hrm-${id}`, label: ({ people: 'Employees', hiring: 'Hiring', timeOff: 'Time Off', talent: 'Talent', compensation: 'Compensation', benefits: 'Benefits' } as Record<string, string>)[id]!, feature: 'hrm', tabs })),
   { id: 'time', label: 'Time', feature: 'timeTracking', tabs: [
     { href: '/timesheets', ns: 'timesheets', key: 'field.timesheetsTab', label: 'Timesheets', permissionsAny: ['time.read', 'time.manage', 'time.self', 'time.clock'] },
     { href: '/time/clock', ns: 'timesheets', key: 'field.clockTab', label: 'Time Clock', permission: 'time.clock', feature: 'fieldTime' },
-    { href: '/time/crew', ns: 'timesheets', key: 'field.crewTab', label: 'Crew Time', permissionsAny: ['time.read', 'time.crew.enter'], feature: 'fieldTime' },
+    { href: '/time/crew', iconKey: 'users', ns: 'timesheets', key: 'field.crewTab', label: 'Crew Time', permissionsAny: ['time.read', 'time.crew.enter'], feature: 'fieldTime' },
   ] },
   { id: 'tax-views', label: 'Tax', inline: true, tabs: [
     { href: '/tax', ns: 'tax', key: 'tabs.prepare' },
@@ -221,25 +221,25 @@ export const LOCAL_NAVIGATION: LocalNavigationSet[] = [
     })),
   ] },
   { id: 'resourcing', label: 'Resourcing', feature: 'resourcing', tabs: [
-    ...[['', 'overview'], ['/board', 'board'], ['/assignments', 'assignments'], ['/requests', 'requests'], ['/demand', 'demand'], ['/retainers', 'retainers']].map(([suffix, key]) => ({
-      href: `/resourcing${suffix}`, ns: 'resourcing', key: `cockpit.tabs.${key}`, permission: 'resourcing.read',
+    ...[['', 'overview', 'gauge'], ['/board', 'board', 'calendar-range'], ['/assignments', 'assignments', 'user-check'], ['/requests', 'requests', 'inbox'], ['/demand', 'demand', 'chart-scatter'], ['/retainers', 'retainers', 'handshake']].map(([suffix, key, iconKey]) => ({
+      href: `/resourcing${suffix}`, iconKey, ns: 'resourcing', key: `cockpit.tabs.${key}`, permission: 'resourcing.read',
       ...(key === 'requests' ? { feature: 'resourceRequests' } : {}),
       ...(key === 'retainers' ? { feature: 'retainerBilling', permission: 'retainers.read' } : {}),
     })),
   ] },
   { id: 'warehouse', label: 'Warehouse', feature: 'warehousing', tabs: [
     { href: '/warehouse', ns: 'warehouse', key: 'home.title', permission: 'items.read' },
-    { href: '/picks', ns: 'nav', key: 'modules.picks', permission: 'orders.fulfill', feature: 'fulfillment' },
+    { href: '/picks', iconKey: 'list-checks', ns: 'nav', key: 'modules.picks', permission: 'orders.fulfill', feature: 'fulfillment' },
     { href: '/shipments', ns: 'nav', key: 'modules.shipments', permission: 'orders.fulfill', feature: 'fulfillment' },
     { href: '/returns', ns: 'nav', key: 'modules.returns', permission: 'orders.fulfill', feature: 'returnAuthorizations' },
   ] },
   { id: 'nonprofit', label: 'Nonprofit', feature: 'nonprofit', tabs: [
     { href: '/nonprofit', ns: 'nonprofit', key: 'home.title', permission: 'funds.read' },
-    { href: '/nonprofit/funds', ns: 'nonprofit', key: 'funds.title', permission: 'funds.read', feature: 'fundAccounting' },
-    { href: '/nonprofit/releases', ns: 'nonprofit', key: 'releases.title', permission: 'funds.read', feature: 'fundAccounting' },
-    { href: '/nonprofit/grants', ns: 'nonprofit', key: 'grants.title', permission: 'grants.read', feature: 'grantManagement' },
-    { href: '/nonprofit/encumbrances', ns: 'nonprofit', key: 'encumbrances.title', permission: 'encumbrances.read', feature: 'encumbrances' },
-    { href: '/nonprofit/setup', ns: 'nonprofit', key: 'setup.title', permission: 'funds.read' },
+    { href: '/nonprofit/funds', iconKey: 'wallet', ns: 'nonprofit', key: 'funds.title', permission: 'funds.read', feature: 'fundAccounting' },
+    { href: '/nonprofit/releases', iconKey: 'banknote-arrow-up', ns: 'nonprofit', key: 'releases.title', permission: 'funds.read', feature: 'fundAccounting' },
+    { href: '/nonprofit/grants', iconKey: 'award', ns: 'nonprofit', key: 'grants.title', permission: 'grants.read', feature: 'grantManagement' },
+    { href: '/nonprofit/encumbrances', iconKey: 'scale', ns: 'nonprofit', key: 'encumbrances.title', permission: 'encumbrances.read', feature: 'encumbrances' },
+    { href: '/nonprofit/setup', iconKey: 'settings', ns: 'nonprofit', key: 'setup.title', permission: 'funds.read' },
   ] },
   { id: 'assets', label: 'Fixed Assets', tabs: [
     { href: '/assets', ns: 'nav', key: 'modules.assets', permission: 'assets.read', feature: 'fixedAssets' },
