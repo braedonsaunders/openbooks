@@ -667,6 +667,10 @@ const SOURCES: Record<string, EntityListSource> = {
     ],
     drawerParam: 'project',
     basePath: '/projects',
+    // The unsaved-create flag is exclusive with an open record: row links
+    // must drop it, or ?projectNew=1 sticks in the URL and every later
+    // drawer open renders the create form instead of the record.
+    exclusiveDrawerParams: ['projectNew'],
     readPermission: 'projects.read',
     hasInactive: true,
     extraSelect: sql`p.is_active`,

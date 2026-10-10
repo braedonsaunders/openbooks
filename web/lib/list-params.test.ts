@@ -59,6 +59,21 @@ test('list drawer href preserves all query-backed list state for close', () => {
   )
 })
 
+test('project row links drop the unsaved-create flag instead of reopening the create form', () => {
+  const href = buildListDrawerHref(
+    '/projects',
+    { q: 'gyp', projectNew: '1', project: 'old-record' },
+    'project',
+    '019f68a5-6a24-78ec-bed6-cc04e06f2078',
+    ['projectNew'],
+  )
+  const url = new URL(href, 'https://openbooks.example')
+  assert.equal(url.searchParams.get('project'), '019f68a5-6a24-78ec-bed6-cc04e06f2078')
+  assert.equal(url.searchParams.has('projectNew'), false)
+  assert.equal(url.searchParams.get('q'), 'gyp')
+  assert.equal(url.searchParams.get('drawerReturn'), '/projects?q=gyp')
+})
+
 test('list drawer href replaces stale drawer context instead of nesting it', () => {
   const href = buildListDrawerHref(
     '/bills',
