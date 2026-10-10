@@ -129,7 +129,7 @@
     "dismiss": "Dispensar"
   },
   "publish": {
-    "pending": "{count} alterações não publicadas para {people} linhas",
+    "pending": "{count, plural, one {# alteração não publicada} other {# alterações não publicadas}} para {people, plural, one {# linha} other {# linhas}}",
     "explain": "As reservas publicadas ficam visíveis para a equipe.",
     "action": "Publicar",
     "discard": "Descartar alterações"

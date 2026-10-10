@@ -129,7 +129,7 @@
     "dismiss": "Descartar"
   },
   "publish": {
-    "pending": "{count} cambios sin publicar para {people} filas",
+    "pending": "{count, plural, one {# cambio sin publicar} other {# cambios sin publicar}} para {people, plural, one {# fila} other {# filas}}",
     "explain": "Las reservas publicadas son visibles para el equipo.",
     "action": "Publicar",
     "discard": "Descartar cambios"

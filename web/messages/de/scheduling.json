@@ -129,7 +129,7 @@
     "dismiss": "Schließen"
   },
   "publish": {
-    "pending": "{count} unveröffentlichte Änderungen für {people} Zeilen",
+    "pending": "{count, plural, one {# unveröffentlichte Änderung} other {# unveröffentlichte Änderungen}} für {people, plural, one {# Zeile} other {# Zeilen}}",
     "explain": "Veröffentlichte Buchungen sind für das Team sichtbar.",
     "action": "Veröffentlichen",
     "discard": "Änderungen verwerfen"
