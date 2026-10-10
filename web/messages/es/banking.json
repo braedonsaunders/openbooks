@@ -460,7 +460,23 @@
     "skippedRow": "Fila {line} («{dateCell}») apartada como fila de metadatos — no importada",
     "moreLines": "…y {count, plural, one {# línea más} other {# líneas más}}",
     "totalBadge": "{count, number} en total",
-    "possibleDuplicateBadge": "Posible duplicado"
+    "possibleDuplicateBadge": "Posible duplicado",
+    "importAccount": "Cuenta",
+    "unknownCurrency": "moneda desconocida",
+    "singleAccountFallback": "Importando a la cuenta de esta página.",
+    "currencyMismatchWarning": "La moneda del extracto ({statement}) no coincide con la moneda de la cuenta ({account}): la importación se rechazará hasta que coincidan.",
+    "nextStepSource": "Siguiente: pegue el texto del extracto o elija un archivo.",
+    "nextStepDetect": "Siguiente: ejecute Detectar columnas para asignar Fecha, Importe y Descripción.",
+    "nextStepPreview": "Siguiente: ejecute Vista previa para revisar las líneas interpretadas.",
+    "nextStepImport": "Siguiente: revise las líneas y elija Importar.",
+    "repreviewNotice": "Los datos cambiaron después de la vista previa: ejecútela de nuevo para activar Importar.",
+    "detectColumnsHint": "El CSV pegado necesita Detectar columnas antes de que Vista previa pueda asignar Fecha, Importe y Descripción.",
+    "balanceCandidatesTitle": "Estas filas parecen saldos del extracto, no movimientos: úselas como saldo en lugar de importarlas.",
+    "balanceRoleOpening": "saldo inicial",
+    "balanceRoleClosing": "saldo final",
+    "useAsOpening": "Usar como inicial",
+    "useAsClosing": "Usar como final",
+    "skippedBalanceRow": "Fila {line}: «{dateCell}» parece un {role} de {amount}: úsela como saldo en lugar de importarla."
   },
   "start": {
     "resume": "Reanudar conciliación",
@@ -581,7 +597,16 @@
     "unmatch": "Deshacer conciliación",
     "adjustTitle": "Ajustar conciliación",
     "adjustDescription": "Cambie la fecha de corte o el saldo del extracto bancario para esta sesión.",
-    "outstandingTotal": "{total} pendiente"
+    "outstandingTotal": "{total} pendiente",
+    "blockingLines": "Líneas que bloquean",
+    "moreBlockingLines": "Mostrando {shown} de {total} líneas que bloquean — concilie o excluya líneas para reducir la lista.",
+    "clearSelected": "Compensar selección",
+    "clearSelectedTitle": "Compensar las líneas de mayor sin contrapartida bancaria como grupo de suma cero",
+    "clearedToast": "Compensado como grupo de suma cero",
+    "clearingsTitle": "Grupos de compensación de mayor",
+    "clearingsCount": "{count, plural, one {# grupo} other {# grupos}}",
+    "openWorkspace": "Abrir el espacio de conciliación",
+    "signOffWorkspaceNote": "La aprobación se realiza en el espacio de conciliación, donde se cuadra la diferencia y se listan las líneas que bloquean."
   },
   "sftp": {
     "title": "Servidores SFTP",

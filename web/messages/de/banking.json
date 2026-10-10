@@ -460,7 +460,23 @@
     "skippedRow": "Zeile {line} („{dateCell}“) wurde als Metadatenzeile zurückgestellt — nicht importiert",
     "moreLines": "…und {count, plural, one {# weitere Zeile} other {# weitere Zeilen}}",
     "totalBadge": "{count, number} insgesamt",
-    "possibleDuplicateBadge": "Mögliches Duplikat"
+    "possibleDuplicateBadge": "Mögliches Duplikat",
+    "importAccount": "Konto",
+    "unknownCurrency": "Währung unbekannt",
+    "singleAccountFallback": "Es wird in das Konto dieser Seite importiert.",
+    "currencyMismatchWarning": "Die Auszugswährung {statement} stimmt nicht mit der Kontowährung {account} überein — der Import wird abgewiesen, bis beide übereinstimmen.",
+    "nextStepSource": "Weiter: Auszugstext einfügen oder Datei wählen.",
+    "nextStepDetect": "Weiter: „Spalten erkennen“ ausführen, um Datum, Betrag und Beschreibung zuzuordnen.",
+    "nextStepPreview": "Weiter: „Vorschau“ ausführen, um die eingelesenen Zeilen zu prüfen.",
+    "nextStepImport": "Weiter: Zeilen prüfen, dann „Importieren“ wählen.",
+    "repreviewNotice": "Die Angaben wurden nach der Vorschau geändert — führen Sie die Vorschau erneut aus, um den Import zu aktivieren.",
+    "detectColumnsHint": "Eingefügtes CSV benötigt „Spalten erkennen“, bevor die Vorschau Datum, Betrag und Beschreibung zuordnen kann.",
+    "balanceCandidatesTitle": "Diese Zeilen sehen wie Auszugssalden aus, nicht wie Buchungen — übernehmen Sie sie als Saldo, statt sie zu importieren.",
+    "balanceRoleOpening": "Anfangssaldo",
+    "balanceRoleClosing": "Schlusssaldo",
+    "useAsOpening": "Als Anfangssaldo übernehmen",
+    "useAsClosing": "Als Schlusssaldo übernehmen",
+    "skippedBalanceRow": "Zeile {line}: „{dateCell}“ sieht wie ein {role} von {amount} aus — übernehmen Sie sie als Saldo, statt sie zu importieren."
   },
   "start": {
     "resume": "Abstimmung fortsetzen",
@@ -581,7 +597,16 @@
     "unmatch": "Zuordnung aufheben",
     "adjustTitle": "Abstimmung anpassen",
     "adjustDescription": "Ändern Sie den Stichtag oder den Kontoauszugssaldo für diese Sitzung.",
-    "outstandingTotal": "{total} offen"
+    "outstandingTotal": "{total} offen",
+    "blockingLines": "Blockierende Zeilen",
+    "moreBlockingLines": "{shown} von {total} blockierenden Zeilen werden angezeigt — ordnen Sie Zeilen zu oder schließen Sie sie aus, um die Liste einzugrenzen.",
+    "clearSelected": "Auswahl ausgleichen",
+    "clearSelectedTitle": "GL-seitige Ausgleichsposten ohne Bankgegenseite als Nullsummengruppe ausgleichen",
+    "clearedToast": "Als Nullsummengruppe ausgeglichen",
+    "clearingsTitle": "GL-Ausgleichsgruppen",
+    "clearingsCount": "{count, plural, one {# Gruppe} other {# Gruppen}}",
+    "openWorkspace": "Abstimmungsarbeitsbereich öffnen",
+    "signOffWorkspaceNote": "Das Abzeichnen erfolgt im Abstimmungsarbeitsbereich — dort wird die Differenz aufgerechnet und blockierende Zeilen werden aufgelistet."
   },
   "sftp": {
     "title": "SFTP",

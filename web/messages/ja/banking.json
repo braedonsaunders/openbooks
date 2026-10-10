@@ -460,7 +460,23 @@
     "skippedRow": "行 {line}（{dateCell}）をメタデータ行として扱い、インポートしませんでした",
     "moreLines": "…他 {count, plural, one {# 件の明細} other {# 件の明細}}",
     "totalBadge": "合計 {count, number} 件",
-    "possibleDuplicateBadge": "重複の可能性あり"
+    "possibleDuplicateBadge": "重複の可能性あり",
+    "importAccount": "口座",
+    "unknownCurrency": "通貨不明",
+    "singleAccountFallback": "このページの口座にインポートします。",
+    "currencyMismatchWarning": "明細の通貨（{statement}）が口座の通貨（{account}）と一致しません。一致するまでインポートは拒否されます。",
+    "nextStepSource": "次へ：明細テキストを貼り付けるか、ファイルを選択します。",
+    "nextStepDetect": "次へ：「列を検出」を実行して日付・金額・摘要を割り当てます。",
+    "nextStepPreview": "次へ：「プレビュー」を実行して読み取った明細を確認します。",
+    "nextStepImport": "次へ：明細を確認してからインポートします。",
+    "repreviewNotice": "プレビュー後に内容が変更されました。インポートを有効にするにはプレビューを再実行してください。",
+    "detectColumnsHint": "貼り付けたCSVはプレビューで日付・金額・摘要を割り当てる前に「列を検出」が必要です。",
+    "balanceCandidatesTitle": "これらの行は取引ではなく残高のようです。インポートせず残高として使ってください。",
+    "balanceRoleOpening": "期首残高",
+    "balanceRoleClosing": "期末残高",
+    "useAsOpening": "期首残高として使う",
+    "useAsClosing": "期末残高として使う",
+    "skippedBalanceRow": "行 {line}（{dateCell}）は{amount}の{role}のようです。インポートせず残高として使ってください。"
   },
   "start": {
     "resume": "消込を再開",
@@ -581,7 +597,16 @@
     "unmatch": "照合を解除",
     "adjustTitle": "消込を調整",
     "adjustDescription": "このセッションの締め日または銀行明細残高を変更します。",
-    "outstandingTotal": "未消込 {total}"
+    "outstandingTotal": "未消込 {total}",
+    "blockingLines": "ブロック中の明細",
+    "moreBlockingLines": "ブロック中の明細を{total}件中{shown}件表示しています。明細を照合または除外して絞り込んでください。",
+    "clearSelected": "選択を相殺",
+    "clearSelectedTitle": "銀行明細のない総勘定のみの相殺明細を合計ゼロのグループとしてクリア",
+    "clearedToast": "合計ゼロのグループとしてクリアしました",
+    "clearingsTitle": "総勘定クリアリンググループ",
+    "clearingsCount": "{count, plural, other {# 件のグループ}}",
+    "openWorkspace": "照合作業画面を開く",
+    "signOffWorkspaceNote": "承認は照合作業画面で行います。差額の照合とブロック中の明細一覧はそちらに表示されます。"
   },
   "sftp": {
     "title": "SFTP",

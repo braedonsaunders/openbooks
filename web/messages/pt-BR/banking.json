@@ -460,7 +460,23 @@
     "skippedRow": "Linha {line} («{dateCell}») separada como linha de metadados — não importada",
     "moreLines": "…e mais {count, plural, one {# linha} other {# linhas}}",
     "totalBadge": "{count, number} no total",
-    "possibleDuplicateBadge": "Possível duplicata"
+    "possibleDuplicateBadge": "Possível duplicata",
+    "importAccount": "Conta",
+    "unknownCurrency": "moeda desconhecida",
+    "singleAccountFallback": "Importando para a conta desta página.",
+    "currencyMismatchWarning": "A moeda do extrato ({statement}) não corresponde à moeda da conta ({account}) — a importação será recusada até coincidirem.",
+    "nextStepSource": "Próximo: cole o texto do extrato ou escolha um arquivo.",
+    "nextStepDetect": "Próximo: execute Detectar colunas para mapear Data, Valor e Descrição.",
+    "nextStepPreview": "Próximo: execute Prévia para revisar as linhas interpretadas.",
+    "nextStepImport": "Próximo: revise as linhas e escolha Importar.",
+    "repreviewNotice": "Os dados mudaram após a prévia — execute-a novamente para ativar Importar.",
+    "detectColumnsHint": "O CSV colado precisa de Detectar colunas antes que a Prévia possa mapear Data, Valor e Descrição.",
+    "balanceCandidatesTitle": "Estas linhas parecem saldos do extrato, não lançamentos — use-as como saldo em vez de importá-las.",
+    "balanceRoleOpening": "saldo inicial",
+    "balanceRoleClosing": "saldo final",
+    "useAsOpening": "Usar como inicial",
+    "useAsClosing": "Usar como final",
+    "skippedBalanceRow": "Linha {line}: «{dateCell}» parece um {role} de {amount} — use-a como saldo em vez de importá-la."
   },
   "start": {
     "resume": "Retomar conciliação",
@@ -581,7 +597,16 @@
     "unmatch": "Desfazer correspondência",
     "adjustTitle": "Ajustar conciliação",
     "adjustDescription": "Altere a data de corte ou o saldo do extrato bancário desta sessão.",
-    "outstandingTotal": "{total} pendente"
+    "outstandingTotal": "{total} pendente",
+    "blockingLines": "Linhas que bloqueiam",
+    "moreBlockingLines": "Exibindo {shown} de {total} linhas que bloqueiam — corresponda ou exclua linhas para reduzir a lista.",
+    "clearSelected": "Compensar seleção",
+    "clearSelectedTitle": "Compensar lançamentos contábeis sem contrapartida bancária como grupo de soma zero",
+    "clearedToast": "Compensado como grupo de soma zero",
+    "clearingsTitle": "Grupos de compensação contábil",
+    "clearingsCount": "{count, plural, one {# grupo} other {# grupos}}",
+    "openWorkspace": "Abrir o espaço de conciliação",
+    "signOffWorkspaceNote": "A finalização acontece no espaço de conciliação, onde a diferença é conferida e as linhas que bloqueiam são listadas."
   },
   "sftp": {
     "title": "SFTP",
