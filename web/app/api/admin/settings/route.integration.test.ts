@@ -68,6 +68,7 @@ registerHooks({
 
 const routeUrl = "./route.ts?accounting-policy-boundary-test";
 const { GET, PUT } = (await import(routeUrl)) as typeof import("./route.ts");
+const { CONTROL_ACCOUNT_ROLES } = await import("@openbooks/engine/src/records/control-accounts.ts");
 const { db, withBypass, withBypassContext, withOrgContext } =
   await import("@openbooks/engine/src/platform/db.ts");
 const { createScratchOrg, createScratchUser, dropScratchOrg } =
@@ -633,6 +634,33 @@ test(
 
       const repeated = await put(fixture, { contractCreation: "booking" });
       assert.equal(repeated.status, 200);
+      assert.deepEqual(await settingsState(fixture.orgId), after);
+    } finally {
+      routeState.authz = null;
+      await dropScratchOrg(fixture.orgId);
+    }
+  },
+);
+
+test(
+  "the full settings form saves with unset control roles left blank and names a malformed role",
+  async () => {
+    const fixture = await seed();
+    try {
+      authorize(fixture);
+      const before = await settingsState(fixture.orgId);
+      const current = (before.settings.controlAccounts ?? {}) as Record<string, string>;
+      // The Company tab posts every role, with an empty string for each unset one.
+      const formRoles = Object.fromEntries(CONTROL_ACCOUNT_ROLES.map((role) => [role, current[role] ?? ""]));
+      const saved = await put(fixture, { name: "Renamed Scratch Company", controlAccounts: formRoles });
+      assert.equal(saved.status, 200, await saved.clone().text());
+      const after = await settingsState(fixture.orgId);
+      assert.equal(after.name, "Renamed Scratch Company");
+      assert.deepEqual(after.settings.controlAccounts, current, "blank roles leave existing mappings unchanged");
+
+      const malformed = await put(fixture, { controlAccounts: { ...formRoles, taxPaid: "not-an-account" } });
+      assert.equal(malformed.status, 400);
+      assert.deepEqual(await malformed.json(), { error: "taxPaid must be an account id" });
       assert.deepEqual(await settingsState(fixture.orgId), after);
     } finally {
       routeState.authz = null;

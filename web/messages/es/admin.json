@@ -915,6 +915,10 @@
         "retainagePayable": {
           "hint": "Retención en garantía de la facturación de avance de proveedores, conservada hasta una liberación aprobada",
           "label": "Retención en garantía por pagar"
+        },
+        "storedValueLiability": {
+          "label": "Pasivo por valor almacenado",
+          "hint": "Saldos de tarjetas regalo y crédito de tienda adeudados a clientes"
         }
       },
       "defaultsNote": "Estos son los valores predeterminados de toda la empresa. Cada filial puede reemplazarlos en su propia ficha; los reemplazos vacíos vuelven a estos."

@@ -916,6 +916,10 @@
         "valuationAllowance": {
           "label": "Valuation allowance",
           "hint": "Contra deferred tax asset"
+        },
+        "storedValueLiability": {
+          "label": "Stored value liability",
+          "hint": "Gift card and store credit balances owed to customers"
         }
       }
     },
