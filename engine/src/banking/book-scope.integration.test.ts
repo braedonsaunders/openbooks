@@ -135,7 +135,7 @@ test("a refused journal factory rolls back within an ambient transaction", { ski
     await withOrgTransaction(org.orgId, async () => {
       await db.execute(sql`update parties set display_name='Surviving banking caller' where org_id=${org.orgId} and id=${org.customerId}`);
       await assert.rejects(createMatchWithJournal({ reconciliationId: recon.id, statementLineIds: [statementLineId],
-        createJournal: async () => (await postBankJournal(org, actor, ["99"], "ambient-failed"))[0]! }, ctx), /Selected journal lines total/);
+        createJournal: async () => (await postBankJournal(org, actor, ["99"], "ambient-failed"))[0]! }, ctx), /selected journal lines total/);
       await createMatchWithJournal({ reconciliationId: recon.id, statementLineIds: [statementLineId],
         createJournal: async () => (await postBankJournal(org, actor, ["100"], "ambient-valid"))[0]! }, ctx);
     });
