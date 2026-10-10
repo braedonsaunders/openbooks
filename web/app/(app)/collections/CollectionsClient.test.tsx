@@ -11,6 +11,7 @@ const script = {
   loads: 0,
   recurringLoads: 0,
   recurringFailFirst: false,
+  plans: [] as Record<string, unknown>[],
 }
 Object.assign(globalThis, {
   __collectionsTestRouter: {
@@ -63,19 +64,20 @@ const POLICY = {
   ],
 }
 
-async function mount(t: TestContext, deleteResponder: () => Response, recurringFailFirst = false, view: 'policies' | 'recurring' | 'plans' = 'policies', policyParam = ''): Promise<void> {
+async function mount(t: TestContext, deleteResponder: () => Response, recurringFailFirst = false, view: 'policies' | 'recurring' | 'plans' = 'policies', policyParam = '', plans: Record<string, unknown>[] = []): Promise<void> {
   Object.assign(globalThis, { __collectionsTestQuery: policyParam ? `policy=${policyParam}` : "" })
   script.writes = []
   script.deletes = []
   script.loads = 0
   script.recurringLoads = 0
   script.recurringFailFirst = recurringFailFirst
+  script.plans = plans
   const prior = globalThis.fetch
   globalThis.fetch = (async (input: unknown, init?: RequestInit) => {
     const url = String(input)
     const method = init?.method ?? 'GET'
     if (method === 'POST' || method === 'PATCH') { script.writes.push(JSON.parse(String(init?.body))); return deleteResponder() }
-    if (url === '/api/subscriptions') return Response.json({ plans: [], subscriptions: [], mrr: '0' })
+    if (url === '/api/subscriptions') return Response.json({ plans: script.plans, subscriptions: [], mrr: '0' })
     if (url === '/api/recurring') return ++script.recurringLoads === 1 && script.recurringFailFirst ? Response.json({}, { status: 503 }) : Response.json({ schedules: [] })
     if (url === '/api/dunning' && method === 'GET') {
       script.loads += 1
@@ -231,4 +233,54 @@ for (const kind of ['plan', 'subscription'] as const) test(`${kind} entitlement 
   assert.ok(dialog.textContent?.includes(kind === 'plan' ? 'No grants yet' : 'No open overrides'), 'only the successful read can report the current grants')
   assert.ok(!dialog.textContent?.includes('ar.collections.'), 'loaded grant controls resolve their labels')
   if (kind === 'plan') assert.ok(findButton('Add feature'), 'editing becomes available after the successful read')
+})
+
+const SNOW_PLAN = {
+  id: 'plan-snow',
+  name: 'Snow season monthly 2025-26',
+  description: 'Winter upkeep',
+  amount: '130.0000',
+  currency: null,
+  interval: 'monthly',
+  intervalCount: 1,
+  incomeAccountId: null,
+  taxCodeId: 'tax-hst',
+  isActive: true,
+}
+
+test('plan rows offer Edit and save through updatePlan without wiping unexposed fields', async (t) => {
+  await mount(t, () => Response.json({ ok: true }), false, 'plans', '', [SNOW_PLAN])
+  assert.ok(document.body.textContent?.includes('Snow season monthly 2025-26'), 'the plan row must render')
+  const edit = findButton('Edit')
+  assert.ok(edit, 'the plan row must offer Edit, not only Delete')
+  await click(edit)
+  const dialog = document.querySelector('[role="dialog"]')
+  assert.ok(dialog, 'editing opens the plan drawer')
+  assert.match(dialog?.querySelector('input[aria-labelledby]')?.getAttribute('value') ?? '', /Snow season monthly/, 'the drawer prefills the row values')
+  const price = dialog?.querySelector('input[inputmode="decimal"]') as HTMLInputElement | null
+  assert.ok(price, 'the price field must render')
+  await fill(price, '140.0000')
+  await click(findButton('Save')!)
+  assert.equal(script.writes.length, 1)
+  assert.deepEqual(script.writes[0], {
+    action: 'updatePlan',
+    id: 'plan-snow',
+    name: 'Snow season monthly 2025-26',
+    description: 'Winter upkeep',
+    amount: '140.0000',
+    interval: 'monthly',
+    intervalCount: 1,
+    incomeAccountId: null,
+    taxCodeId: 'tax-hst',
+    isActive: true,
+  })
+})
+
+test('the plan interval count reads as a repeat-every period length', async (t) => {
+  await mount(t, () => Response.json({ ok: true }), false, 'plans', '', [SNOW_PLAN])
+  await click(findButton('New plan')!)
+  const dialog = document.querySelector('[role="dialog"]')
+  assert.ok(dialog, 'the plan drawer must open')
+  assert.match(dialog?.textContent ?? '', /Repeat every/, 'the count field names the period length')
+  assert.doesNotMatch(dialog?.textContent ?? '', /Number of intervals/)
 })

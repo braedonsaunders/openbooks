@@ -301,6 +301,8 @@
       "pause": "一時停止",
       "resume": "再開",
       "cancelSub": "解約",
+      "keepSubscription": "継続する",
+      "cancelSubscription": "解約する",
       "cancelConfirmTitle": "サブスクリプションを解約しますか?",
       "cancelConfirmBody": "解約すると、このサブスクリプションの定期請求が終了します。この操作は取り消せません。",
       "toasts": {
@@ -555,6 +557,7 @@
       "recurring": "新しい定期スケジュール",
       "subscriptions": "新しいサブスクリプション",
       "plans": "新しいプラン",
+      "editPlan": "プランを編集",
       "versions": "新しいプランバージョン",
       "contracts": "新しい契約",
       "amendments": "新しい契約変更"
@@ -564,7 +567,7 @@
       "billing": "請求",
       "incomeAccount": "収益勘定",
       "interval": "請求間隔",
-      "intervalCount": "間隔の数",
+      "intervalCount": "周期数",
       "subscriptionDetails": "サブスクリプションの詳細",
       "priceOverride": "価格の上書き",
       "startOn": "開始日",

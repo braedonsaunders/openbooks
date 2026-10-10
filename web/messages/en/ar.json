@@ -301,6 +301,8 @@
       "pause": "Pause",
       "resume": "Resume",
       "cancelSub": "Cancel",
+      "keepSubscription": "Keep subscription",
+      "cancelSubscription": "Cancel subscription",
       "cancelConfirmTitle": "Cancel subscription?",
       "cancelConfirmBody": "Canceling ends recurring billing for this subscription. This cannot be undone.",
       "toasts": {
@@ -555,6 +557,7 @@
       "recurring": "New recurring schedule",
       "subscriptions": "New subscription",
       "plans": "New plan",
+      "editPlan": "Edit plan",
       "versions": "New plan version",
       "contracts": "New contract",
       "amendments": "New amendment"
@@ -564,7 +567,7 @@
       "billing": "Billing",
       "incomeAccount": "Income account",
       "interval": "Billing interval",
-      "intervalCount": "Number of intervals",
+      "intervalCount": "Repeat every",
       "subscriptionDetails": "Subscription details",
       "priceOverride": "Price override",
       "startOn": "Start date",
