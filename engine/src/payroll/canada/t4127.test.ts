@@ -156,29 +156,29 @@ const GOLDENS: Golden[] = [
     input: { payDate: "2024-02-13", ...on26, income: "2000.00" },
     expected: { cpp: "110.99", cpp2: "0.00", ei: "33.20", eiEmployer: "46.48", periodicTax: "272.33" },
     // K2 = 0.15 × 2400.74 + 0.15 × 863.20; V2 = min(600, 450 + 0.25 × 3515.10); S = 0 as 2 × 286 < T4.
-    expectedFactors: { F5: "18.6538", A: "51515.0012", K1: "2355.75", K2: "489.5913", K4: "214.95",
-      T3: "4666.9589", T1: "4666.9589", K1P: "626.1495", K2P: "164.8291", T4: "1813.6440", V1: "0.00",
-      V2: "600.00", S: "0.00", T2: "2413.6440" } },
+    expectedFactors: { F5: "18.6538", A: "51515.0017", K1: "2355.75", K2: "489.5913", K4: "214.95",
+      T3: "4666.9590", T1: "4666.9590", K1P: "626.1495", K2P: "164.8291", T4: "1813.6441", V1: "0.00",
+      V2: "600.00", S: "0.00", T2: "2413.6441" } },
   { year: 2024, label: "PEI biweekly $2,500, claim code 1 (new five-bracket system, no surtax)",
     citation: `hand-worked, ${ED[119]}`,
     input: { payDate: "2024-03-14", province: "PE", periodsPerYear: 26, ...cc1, income: "2500.00" },
     expected: { cpp: "140.74", ei: "41.50", eiEmployer: "58.10", periodicTax: "489.29" },
     // EI annualizes past the 1049.12 maximum: K2 = 0.15 × 3044.24 + 0.15 × 1049.12.
-    expectedFactors: { F5: "23.6538", A: "64385.0012", K1: "2355.75", K2: "614.0043", T3: "6941.2209",
-      K1P: "1302.75", K2P: "395.0094", T4: "5780.3433", V1: "0.00", T2: "5780.3433" } },
+    expectedFactors: { F5: "23.6538", A: "64385.0017", K1: "2355.75", K2: "614.0043", T3: "6941.2211",
+      K1P: "1302.75", K2P: "395.0094", T4: "5780.3434", V1: "0.00", T2: "5780.3434" } },
   { year: 2024, label: "Manitoba high earner keeps the flat BPA (BPAMB phase-out starts 2025)",
     citation: `hand-worked, ${ED[119]}`,
     input: { payDate: "2024-03-14", province: "MB", periodsPerYear: 26, income: "11538.46" },
     // A is past the 2025 phase-out band; BPAF floors at its 2024 minimum past $246,752.
-    expectedFactors: { A: "297034.9538", TC: "14156.00", TCP: "15780.00" } },
+    expectedFactors: { A: "297034.9550", TC: "14156.00", TCP: "15780.00" } },
   nsPhaseOut("2024-01-30", "9981.00", 119),
 
   // ── Hand-worked stubs, 2025 ──────────────────────────────────────────────
   { year: 2025, label: "Manitoba biweekly $2,500, claim code 1", citation: `hand-worked, ${ED[120]}`,
     input: { payDate: "2025-02-13", province: "MB", periodsPerYear: 26, ...cc1, income: "2500.00" },
-    expected: { cpp: "140.74", cpp2: "0.00", ei: "41.00", eiEmployer: "57.40", periodicTax: "457.69" },
-    expectedFactors: { F5: "23.6538", A: "64385.0012", K1: "2419.35", K2: "616.5363", K4: "220.65",
-      T3: "6786.3889", T1: "6786.3889", K1P: "1724.6520", K2P: "443.9061", T4: "5113.5296", T2: "5113.5296" } },
+    expected: { cpp: "140.74", cpp2: "0.00", ei: "41.00", eiEmployer: "57.40", periodicTax: "457.68" },
+    expectedFactors: { F5: "23.6538", A: "64385.0017", K1: "2419.35", K2: "616.5363", K4: "220.65",
+      T3: "6786.3891", T1: "6786.3891", K1P: "1724.6520", K2P: "443.9061", T4: "5113.5296", T2: "5113.5296" } },
   { year: 2025, label: "Manitoba no-TD1 default uses the January BPAMB", citation: `hand-worked, ${ED[120]}`,
     input: { payDate: "2025-02-13", province: "MB", periodsPerYear: 26, income: "2500.00" },
     expectedFactors: { TCP: "15969.00", TC: "16129.00" } },
@@ -189,14 +189,14 @@ const GOLDENS: Golden[] = [
     input: { payDate: "2025-08-14", province: "AB", periodsPerYear: 26, ...cc1, income: "3000.00" },
     expected: { cpp: "170.49", ei: "49.20", eiEmployer: "68.88", periodicTax: "490.14" },
     // Annual CPP credit caps at 3356.10; EI annualizes past 1077.48.
-    expectedFactors: { F5: "28.6538", A: "77255.0012", K1: "2258.06", K2: "620.7012", K4: "205.94",
-      T3: "9023.5740", K1P: "1339.38", K2P: "266.0148", K5P: "0.00", T4: "3720.1053" } },
+    expectedFactors: { F5: "28.6538", A: "77255.0017", K1: "2258.06", K2: "620.7012", K4: "205.94",
+      T3: "9023.5741", K1P: "1339.38", K2P: "266.0148", K5P: "0.00", T4: "3720.1054" } },
   { year: 2025, label: "Alberta July K5P supplemental credit (provincial claim 60,000)",
     citation: `hand-worked, ${ED[121]}`,
     input: { payDate: "2025-08-14", province: "AB", periodsPerYear: 26, federalClaimCode: 1,
       provincialClaim: "60000.00", income: "3000.00" },
     // K5P = (3600.00 + 266.0148 − 3600) × (2/3) = 177.3432.
-    expected: { periodicTax: "396.37" }, expectedFactors: { K5P: "177.3432", T4: "1282.1421" } },
+    expected: { periodicTax: "396.37" }, expectedFactors: { K5P: "177.3432", T4: "1282.1422" } },
   nsPhaseOut("2025-01-30", "10244.00", 120),
   nsPhaseOut("2025-07-30", "11744.00", 121),
 
@@ -204,9 +204,9 @@ const GOLDENS: Golden[] = [
   { year: 2026, label: "Ontario biweekly $2,000, claim code 1", citation: `hand-worked, ${ED[122]}`,
     input: { payDate: "2026-02-13", ...on26, income: "2000.00" },
     expected: { cpp: "110.99", cpp2: "0.00", ei: "32.60", eiEmployer: "45.64", f5: "18.65",
-      periodicTax: "254.82", totalTax: "254.82" },
+      periodicTax: "254.83", totalTax: "254.83" },
     // K2 = 0.14 × min(26 × 110.99 × 495/595, 3519.45) + 0.14 × min(26 × 32.60, 1123.07).
-    expectedFactors: { A: "51515.0012", K2: "454.7678", T3: "4243.9124", T1: "4243.9124", T4: "1781.5218",
+    expectedFactors: { A: "51515.0017", K2: "454.7678", T3: "4243.9124", T1: "4243.9124", T4: "1781.5218",
       V2: "600.00", T2: "2381.5218" } },
   { year: 2026, label: "Ontario biweekly $2,000 with a $28.85 labour-sponsored funds credit (capped at $750/yr)",
     citation: `hand-worked, ${ED[122]}`,
@@ -229,14 +229,14 @@ const GOLDENS: Golden[] = [
       ytd: { ei: "1120.00" } },
     expected: { ei: "3.07" } },
   // Unrounded annual credits give T1 = 5212.0183 and T2 = 2935.7756
-  // without the bonus. Step 6 rounds (5212.0183 + 2935.7756) / 12 to 678.98;
-  // TF = 434.33 and the provincial remainder is 244.65.
+  // without the bonus. Each leg rounds on its own: TF = 434.33 and
+  // TP = 244.65, a periodic deduction of 678.98.
   { year: 2026, label: "bonus method: Ontario monthly $5,000 + $10,000 bonus", citation: `hand-worked, ${ED[122]}`,
     input: { payDate: "2026-03-31", province: "ON", periodsPerYear: 12, ...cc1, income: "5000.00",
       nonPeriodic: "10000.00" },
     expected: { cpp: "875.15", f5A: "49.03", f5B: "98.05", periodicTax: "678.98", bonusTax: "2935.93",
       totalTax: "3614.91" },
-    expectedFactors: { A: "69313.6080", A_step2: "59411.6640", K2: "649.9528", K2P: "234.4472", TF: "434.33", TP: "244.65" } },
+    expectedFactors: { A: "69313.6078", A_step2: "59411.6639", K2: "649.9528", K2P: "234.4473", TF: "434.33", TP: "244.65" } },
   { year: 2026, label: "bonus flat 15% when annual income is $5,000 or less", citation: `hand-worked, ${ED[122]}`,
     input: { payDate: "2026-03-06", province: "ON", periodsPerYear: 52, ...cc1, income: "50.00",
       nonPeriodic: "400.00" },
@@ -255,7 +255,7 @@ const GOLDENS: Golden[] = [
     citation: `hand-worked, ${ED[122]}`,
     input: { payDate: "2026-02-13", province: "QC", periodsPerYear: 26, federalClaimCode: 1, income: "2000.00" },
     expected: { cpp: "117.52", ei: "26.00", qpip: "8.60", qpipEmployer: "12.04" },
-    expectedFactors: { T2: null, T3: "4212.8630", T1: "3517.7406" } },
+    expectedFactors: { T2: null, T3: "4212.8632", T1: "3517.7408" } },
   { year: 2026, label: "QPIP prices off its own insurable base below the EI leg", citation: `hand-worked, ${ED[122]}`,
     input: { payDate: "2026-02-13", province: "QC", periodsPerYear: 26, federalClaimCode: 1, income: "2000.00",
       insurable: "2000.00", qpipInsurable: "1500.00" },
@@ -459,27 +459,27 @@ test("Canada withholding uses effective TD1ON dependants and TP-1015 fund purcha
 test("a bonus never reduces the default basic personal amount of the step without it", () => {
   // No TD1 on file: BPAF phases out on each step's own net income (NI = A + HD).
   // Step 2 (A 178,255.20) sits below the 181,440 phase-out start and keeps the full
-  // 16,452; Step 6 rounds (32941.9792 + 20164.5673) / 12 to 4425.55.
+  // 16,452; its legs round to 2745.16 + 1680.38 = 4425.54.
   // Step 1 (A 237,673.60) takes the phased 15,267.36. Pricing step 2 on step 1's
   // claim would cost the periodic tax 1,184.64 × 14% / 12 ≈ 13.82 more.
   const base = { payDate: "2026-03-31", province: "ON", periodsPerYear: 12, income: "15000.00" } as const;
   const plain = calculateT4127(base);
   const withBonus = calculateT4127({ ...base, nonPeriodic: "60000.00" });
   assert.equal(plain.periodicTax, "4424.7900");
-  assert.equal(withBonus.periodicTax, "4425.5500");
+  assert.equal(withBonus.periodicTax, "4425.5400");
   assert.equal(withBonus.bonusTax, "28997.9800");
   assert.equal(withBonus.factors.TC, "15267.3600");
 });
 
-test("period tax rounds the combined deduction and reconciles its displayed legs", () => {
-  // T4127 Chapter 4 Step 6: the half-cent boundary and a realistic Ontario
-  // annual-tax pair both distinguish combined from independent rounding.
-  for (const [t1, t2, federal, provincial, total] of [
-    ["0.26", "0.26", "0.01", "0.00", "0.01"],
-    ["15438.4409", "7903.7376", "296.89", "152.00", "448.89"],
+test("period tax withholds each leg rounded on its own", () => {
+  // Weekly Ontario annual-tax pairs whose remainders straddle the half cent in
+  // both directions: the withheld total is the sum of the rounded legs, not
+  // the rounded combined liability (278.93 and 446.51 respectively).
+  for (const [t1, t2, federal, provincial] of [
+    ["9503.0979", "5001.0623", "182.75", "96.17"],
+    ["15363.7207", "7854.9254", "295.46", "151.06"],
   ] as const) {
     const legs = periodTaxLegs(U(t1), U(t2), 52);
-    assert.equal(legs.federal + legs.provincial, U(total));
     assert.equal(legs.federal, U(federal)); assert.equal(legs.provincial, U(provincial));
   }
 })

@@ -617,17 +617,19 @@ export function calculateT4127(input: T4127Input): T4127Result {
 
 }
 
-/** T4127 Chapter 4, Step 6 rounds the combined (T1 + T2) / P deduction.
- * Federal and provincial trace amounts must reconcile to that deduction:
- * round the federal display amount and allocate the remainder to provincial.
- * Independently rounding both legs changes the amount actually withheld. */
+/** Federal and provincial income tax are withheld as separate per-period
+ * amounts, each rounded half-up to the cent from its exact annual liability,
+ * as CRA's Payroll Deductions Online Calculator and bureau payroll do. The
+ * period's tax is the sum of the rounded legs; rounding (T1 + T2) / P once
+ * differs by a cent whenever both remainders straddle the half cent. */
 export function periodTaxLegs(t1: bigint | Rational, t2: bigint | Rational, P: number): { federal: bigint; provincial: bigint } {
   if (!Number.isInteger(P) || P <= 0) throw new PayrollError(`not a positive integer: ${P}`);
   const annualFederal = typeof t1 === "bigint" ? Q(t1) : t1;
   const annualProvincial = typeof t2 === "bigint" ? Q(t2) : t2;
-  const federal = roundRational(qratio(annualFederal, 1n, BigInt(P)), 100n);
-  const combined = roundRational(qratio(qa(annualFederal, annualProvincial), 1n, BigInt(P)), 100n);
-  return { federal, provincial: combined - federal };
+  return {
+    federal: roundRational(qratio(annualFederal, 1n, BigInt(P)), 100n),
+    provincial: roundRational(qratio(annualProvincial, 1n, BigInt(P)), 100n),
+  };
 }
 
 export type { EditionRates };
