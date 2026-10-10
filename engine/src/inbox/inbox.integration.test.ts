@@ -148,12 +148,28 @@ test("leave approval: inbox act and native decide leave identical rows and event
       }
     }
 
+    const requestedBefore = (await db.execute<{ n: number }>(sql`
+      select count(*)::int as n from notifications
+       where org_id = ${org.orgId} and user_id = ${approverId} and kind = 'approval' and read_at is null`)).rows[0]!.n;
+    assert.ok(requestedBefore > 0, "each gate announced itself to the approver");
+
     // Inbox act on the first gate, native decideGate on the second.
     const firstGate = (await gatesForSubject(org.orgId, HRM_LEAVE_REQUEST_SUBJECT_KIND, filed[0]!.id))[0]!;
     const secondGate = (await gatesForSubject(org.orgId, HRM_LEAVE_REQUEST_SUBJECT_KIND, filed[1]!.id))[0]!;
     const firstItem = items.find((i) => i.source.id === firstGate.id)!;
     await actOnInboxItem(ctx, firstItem.id, "approve", "coverage confirmed");
     await decideGate({ gateId: secondGate.id, decision: "approved", userId: approverId, comment: "coverage confirmed" });
+
+    // Deciding resolves the approver's "Approval requested" notices on both
+    // paths: decided work never lingers in My tasks as an unread notice.
+    const openRequests = (await db.execute<{ n: number }>(sql`
+      select count(*)::int as n from notifications
+       where org_id = ${org.orgId} and user_id = ${approverId} and kind = 'approval' and read_at is null`)).rows[0]!.n;
+    assert.equal(openRequests, 0, "no approval notice stays unread after its gate is decided");
+    assert.equal(
+      (await listInbox(ctx, { kinds: ["notification"] })).filter((i) => i.title.startsWith("Approval requested")).length,
+      0,
+    );
 
     for (const request of [filed[0]!, filed[1]!] as const) {
       const after = (await gatesForSubject(org.orgId, HRM_LEAVE_REQUEST_SUBJECT_KIND, request.id))[0]!;

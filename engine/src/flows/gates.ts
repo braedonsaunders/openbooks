@@ -21,6 +21,7 @@ import {
 import { activeDelegationPrincipal, activeDelegationPrincipals } from "./delegations.ts";
 import { emailActionUrls } from "./email-tokens.ts";
 import { lockFlowSubjectDecision } from "./decision-lock.ts";
+import { resolveApprovalRequestNotices } from "./approval-notices.ts";
 
 /**
  * Gate lifecycle — decide / worklist / delegate / timers. OpenBooks resumes
@@ -564,6 +565,10 @@ async function decideGateCore(args: Parameters<typeof decideGate>[0] & {
           cancelledGateIds: outcome.cancelIds,
         })}::jsonb, ${asSystem ? null : userId})
       `)
+      // The decider's request (and any sibling a quorum just cancelled) is no
+      // longer waiting on them: their "Approval requested" notices resolve in
+      // the same unit as the decision.
+      await resolveApprovalRequestNotices(gate.orgId, gate.subjectKind, gate.subjectId)
 
       if (!outcome.resume) {
         // 'all' quorum still collecting approvals — the run keeps waiting.
@@ -812,6 +817,7 @@ async function cancelSubjectApprovals(
       .set({ status: "cancelled", finishedAt: new Date() })
       .where(and(eq(schema.flowRuns.id, runId), eq(schema.flowRuns.orgId, orgId), inArray(schema.flowRuns.status, ["running", "waiting"])));
   }
+  await resolveApprovalRequestNotices(orgId, subjectKind, subjectId);
 }
 
 /**
@@ -1619,6 +1625,8 @@ async function escalateGate(gateId: string, now: Date): Promise<boolean> {
      where id = ${gateId} and org_id = ${gate.orgId} and status = 'pending'
   `));
   if (!claimed.rowCount) return false;
+  // The original assignee is no longer asked; their request notice resolves.
+  await resolveApprovalRequestNotices(gate.orgId, gate.subjectKind, gate.subjectId);
 
   await db
     .insert(schema.flowGates)
