@@ -54,7 +54,7 @@ const hooks = registerHooks({
 const { loadTimesheets } = await import('./view.ts') as typeof import('./view.ts')
 hooks.deregister()
 const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
-const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
+const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
 
 async function addEmployee(orgId: string, name: string, subsidiaryId: string): Promise<string> {
   const id = randomUUID()
@@ -106,12 +106,20 @@ test('timesheet page and drawer stay within the caller subsidiary scope', async 
       await addDepartment(org.orgId, visibleDepartment, org.subsidiaryId)
       await addDepartment(org.orgId, hiddenDepartment, branchId)
       await addDepartment(org.orgId, orgWideDepartment, null)
-      return { visibleEmployee, hiddenEmployee }
+      // Opening a week locks it through the engine's time authority, which
+      // resolves the caller's grants from the database: the supervisor is a
+      // real active user holding the same grants as the session below.
+      const supervisor = await createScratchUser(org.orgId, 'Timesheet scope supervisor', 'timesheet_scope_supervisor')
+      await db.execute(sql`
+        update app_roles set permissions = '["time.read","time.manage","time.approve","projects.read"]'::jsonb
+         where org_id = ${org.orgId} and key = 'timesheet_scope_supervisor'
+      `)
+      return { visibleEmployee, hiddenEmployee, supervisor }
     })
-    const { visibleEmployee, hiddenEmployee } = employeeIds
+    const { visibleEmployee, hiddenEmployee, supervisor } = employeeIds
 
     state.authz = {
-      user: { id: randomUUID(), orgId: org.orgId },
+      user: { id: supervisor, orgId: org.orgId },
       permissions: new Set(['time.read', 'time.manage', 'time.approve']),
       allowedSubsidiaryIds: new Set([org.subsidiaryId]),
     }
