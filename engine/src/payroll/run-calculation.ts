@@ -32,7 +32,7 @@ import { calculateStub } from "./run-stub-compute.ts";
 import { employerEmployeeCount } from "./run-calculation-support.ts";
 import { PERIODIC_RUN_TYPES } from "./run-contracts.ts";
 import {
-  assertPeriodSequence, assertSupplementalSupported, loadPeriodPriors,
+  assertPeriodSequence, assertSupplementalSupported, listPeriodSiblings, loadPeriodPriors,
   periodRunIdentity, supplementalTaxMethodForOrg, type PayPeriodPriors,
 } from "./period-priors.ts";
 /** One line of a stub, as `captureCalculatedStubs` hands it back. */
@@ -346,9 +346,16 @@ async function calculateInTransaction(input: CalculatePayRunInput): Promise<PayR
     const periodIdentity = periodRunIdentity(run, {
       documentId, documentNumber: run.document_number, runType,
     });
+    // Final pay shares the period with the regular and supplemental cheques
+    // already committed for it: CPP and EI apply one period exemption and
+    // room across them, so those runs are its priors without sequencing it.
     const periodSiblings = PERIODIC_RUN_TYPES.has(runType)
       ? await assertPeriodSequence(tx, orgId, periodIdentity, "calculate")
-      : [];
+      : runType === "termination"
+        ? [...(await listPeriodSiblings(tx, orgId, periodIdentity))
+          .filter((sibling) => sibling.run_status === "committed" && sibling.pay_date <= periodIdentity.payDate),
+          { document_id: documentId } as Awaited<ReturnType<typeof listPeriodSiblings>>[number]]
+        : [];
     const periodPriorsByEmployee = periodSiblings.length > 0
       ? await loadPeriodPriors(tx, orgId, periodSiblings, documentId)
       : new Map<string, PayPeriodPriors>();
