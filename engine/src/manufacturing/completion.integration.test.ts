@@ -1385,7 +1385,7 @@ cases.push({name:"vendor deliveries, native bill capitalization and unused retur
   const receipt=await run(tx=>completeWorkOrder(tx,f.org.orgId,f.actorId,order.id,{quantity:'3'}));assert.equal(receipt.value,'30.0000');assert.equal(await wip(f,order.number),'0.0000');
   await refuse(run(tx=>reverseSubcontractServiceCost(tx,f.org.orgId,f.actorId,contract.id,key,f.postingDate,'Correct the vendor service invoice')),'subcontract_service_after_receipt','goods');
   const output=(await run(tx=>tx.execute<{id:string}>(sql`select id from inventory_movements where org_id=${f.org.orgId} and journal_entry_id=${receipt.entryId} and kind='assembly_build'`))).rows[0]!.id;
-  await withBypassContext(()=>reverseInventoryMovement(f.org.orgId,f.actorId,{movementId:output,reversalDate:f.postingDate,reason:'Reverse completed goods before correcting vendor cost'}));
+  await run(()=>reverseMaterialIssue(f.org.orgId,f.actorId,{movementId:output,reversalDate:f.postingDate,reason:'Reverse completed goods before correcting vendor cost'}));
   assert.equal(await wip(f,order.number),'30.0000');
   const reversed=await run(tx=>reverseSubcontractServiceCost(tx,f.org.orgId,f.actorId,contract.id,key,f.postingDate,'Correct the vendor service invoice'));assert(reversed.entryId);assert.equal(await wip(f,order.number),'18.0000');
   await refuse(run(tx=>completeWorkOrder(tx,f.org.orgId,f.actorId,order.id,{quantity:'3'})),'subcontract_service_cost_required','service');
