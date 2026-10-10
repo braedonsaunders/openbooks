@@ -9,6 +9,7 @@ import { loadOrder } from "../../app/api/_order/lib";
 import { orderedNetOfCancelledSql } from "@openbooks/engine/src/records/order-line-remainders.ts";
 import { backorderPosition } from "@openbooks/engine/src/sales/backorders.ts";
 import { dropShipOrderStatus } from "@openbooks/engine/src/sales/drop-ship.ts";
+import { lineRequiresReceipt } from "@openbooks/engine/src/payables/ap-capture-service.ts";
 import {
   billableRemainderQuantityUnits,
   fromQuantityUnits,
@@ -185,12 +186,13 @@ const getOrder: AssistantToolDef = {
     if (!can(authz, kindPerm(a.kind))) return { ok: false, error: "forbidden" };
     const payload = await loadOrder(a.id, authz.user.orgId, a.kind, authz.allowedSubsidiaryIds);
     if (!payload) return { ok: false, error: "not_found" };
-    const fulfil = (await db.execute<{ id: string; quantity: string; quantity_fulfilled: string; quantity_billed: string; quantity_cancelled: string }>(sql`
-      select l.id, l.quantity::text as quantity,
+    const fulfil = (await db.execute<{ id: string; item_id: string | null; item_kind: string | null; quantity: string; quantity_fulfilled: string; quantity_billed: string; quantity_cancelled: string }>(sql`
+      select l.id, l.item_id, i.kind as item_kind, l.quantity::text as quantity,
              coalesce(l.quantity_fulfilled, 0)::text as quantity_fulfilled,
              coalesce(l.quantity_billed, 0)::text as quantity_billed,
              l.quantity_cancelled::text as quantity_cancelled
         from document_lines l
+        left join items i on i.id = l.item_id and i.org_id = l.org_id
        where l.document_id = ${a.id} and l.org_id = ${authz.user.orgId}
     `)).rows;
     const fulfilById = new Map(fulfil.map((f) => [f.id, f]));
@@ -221,7 +223,11 @@ const getOrder: AssistantToolDef = {
         billedQuantity: billed,
         cancelledQuantity: cancelled,
         fulfilledQuantity: fulfilled,
-        requiresReceipt: a.kind === "purchase_order",
+        // The conversion's own billing rule: stock on a purchase order bills
+        // only received quantity and on a sales order only shipped quantity;
+        // service and account lines, and every estimate line, bill on the
+        // ordered remainder.
+        requiresReceipt: a.kind !== "quote" && f?.item_id != null && lineRequiresReceipt(f.item_kind),
       });
       return {
         ...l,

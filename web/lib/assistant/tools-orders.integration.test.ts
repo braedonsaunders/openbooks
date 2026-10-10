@@ -75,6 +75,11 @@ test('order reads: backlog, line remainders, and subsidiary isolation', { skip: 
     assert.equal(line.unit_price, '20');
     assert.equal(line.remainingBillable, '8.0000');
     assert.equal(line.fulfilment, 'partially_fulfilled');
+    // A stock line bills only what has shipped: 1 of 3, exactly what
+    // Convert to Invoice would carry, not the whole ordered remainder.
+    const stockLine = ((get as { ok: true; data: Record<string, unknown> }).data.lines as Record<string, unknown>[])[1];
+    assert.ok(stockLine);
+    assert.equal(stockLine.remainingBillable, '1.0000');
 
     // The backorder position lists the stock line only, with its open quantity.
     const position = await withOrgContext(org.orgId, () => executeAssistantTool(arOnly, 'get_backorder_position', { orderId: soId }));
