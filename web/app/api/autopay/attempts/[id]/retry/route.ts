@@ -24,7 +24,7 @@ export const POST = defineRoute({
     const outOfScope = await guardCollectionAttemptScope(authz, id)
     if (outOfScope) return outOfScope
     try {
-      const result = await retryAttemptNow(authz.user.orgId, id, authz.user.id)
+      const result = await retryAttemptNow(authz.user.orgId, id, authz.user.id, authz.allowedSubsidiaryIds)
       return NextResponse.json(result)
     } catch (e) {
       if (e instanceof AutopayError) return apiErrorResponse(e, { safeStatus: 422 })
