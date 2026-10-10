@@ -2422,6 +2422,17 @@ async function applyAssignmentChange(
             ${windowStart}::date, ${windowEnd}::date,
             ${recordedAt}, ${actorId}, ${actorId})
   `);
+  await insertRetainedAssignmentPortions(exec, {
+    orgId,
+    actorId,
+    slotId,
+    employmentId: request.employment_id,
+    overlapping,
+    windowStart,
+    windowEnd,
+    firstVersionNo: successorNo + 1,
+    recordedAt,
+  });
   await closeLineManagerChange(exec, { orgId, actorId, request, reporting, changeId, recordedAt });
   // A real department move owes its transfer checklist in this same
   // transaction. A new slot ('assignment_issued' below) is not a move, and
@@ -2702,6 +2713,17 @@ async function applyPositionAssignment(
             ${windowStart}::date, ${windowEnd}::date,
             ${recordedAt}, ${actorId}, ${actorId})
   `);
+  await insertRetainedAssignmentPortions(exec, {
+    orgId,
+    actorId,
+    slotId,
+    employmentId: request.employment_id,
+    overlapping,
+    windowStart,
+    windowEnd,
+    firstVersionNo: successorNo + 1,
+    recordedAt,
+  });
   await recordPositionAssignmentEvent(exec, {
     orgId,
     actorId,
@@ -2906,6 +2928,58 @@ async function liveAssignmentVersions(
      order by version_no
   `)).rows;
   return rows;
+}
+
+/**
+ * A change window supersedes only the effective dates it covers. The parts
+ * of each overlapping live slice before and after the window keep their
+ * recorded content as fresh slices (numbered after the successor), so a
+ * dated change never erases the assignment history beside it. The
+ * employment-status path retains its uncovered intervals the same way.
+ */
+async function insertRetainedAssignmentPortions(
+  exec: SqlExecutor,
+  args: {
+    orgId: string;
+    actorId: string;
+    slotId: string;
+    employmentId: string;
+    overlapping: readonly AssignmentSlotVersion[];
+    windowStart: string;
+    windowEnd: string | null;
+    firstVersionNo: number;
+    recordedAt: DbInstant;
+  },
+): Promise<void> {
+  const { orgId, actorId, slotId, employmentId, overlapping, windowStart, windowEnd, recordedAt } = args;
+  const portions = overlapping.flatMap((version) => {
+    const retained: { version: AssignmentSlotVersion; from: string; to: string | null }[] = [];
+    if (version.effective_from < windowStart) {
+      retained.push({ version, from: version.effective_from, to: windowStart });
+    }
+    if (windowEnd !== null && (version.effective_to === null || version.effective_to > windowEnd)) {
+      retained.push({ version, from: windowEnd, to: version.effective_to });
+    }
+    return retained;
+  }).sort((left, right) => left.from.localeCompare(right.from));
+  for (const [offset, portion] of portions.entries()) {
+    const { version } = portion;
+    const inserted = (await exec.execute(sql`
+      insert into employment_assignment_versions
+        (org_id, assignment_id, employment_id, position_id, version_no, job_title, department_id,
+         location_id, fte, is_primary, effective_from, effective_to,
+         recorded_at, created_by, updated_by)
+      values (${orgId}, ${slotId}, ${employmentId}, ${version.position_id}, ${args.firstVersionNo + offset},
+              ${version.job_title}, ${version.department_id}, ${version.location_id},
+              ${version.fte}, ${version.is_primary},
+              ${portion.from}::date, ${portion.to}::date,
+              ${recordedAt}, ${actorId}, ${actorId})
+      returning id
+    `)).rows;
+    if (inserted.length !== 1) {
+      throw new HrmChangeRequestError("REFUSED", "The retained assignment interval was not saved; nothing applied.");
+    }
+  }
 }
 
 /**
