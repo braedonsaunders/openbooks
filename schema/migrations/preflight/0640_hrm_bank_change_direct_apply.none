@@ -1,0 +1,1 @@
+Constraint/function-only migration: admits the bank_change kind in the no-flow direct admission and the bank_details_changed event kind. Existing rows satisfy the widened checks, so there is nothing to probe before install.
