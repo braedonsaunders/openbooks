@@ -12,7 +12,7 @@ import {
   type Cadence,
 } from "@openbooks/engine/src/billing/recurring.ts";
 import { defineRoute } from "@/lib/api/route";
-import { isDocKindEnabled } from "../../../lib/documents.ts";
+import { isDocKindEnabled } from "@/lib/documents";
 import { notFound } from "@/lib/api/responses";
 
 export const runtime = "nodejs";
