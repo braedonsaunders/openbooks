@@ -90,6 +90,29 @@ export async function loadJobDescriptionForRequisition(
 }
 
 /**
+ * Deletion refusal for a library entry, read inside the deleting
+ * transaction before the DELETE: an entry any requisition started from is
+ * history-pinned, so the refusal names it and the remedy (deactivate it).
+ * Null when the entry is unreferenced. The storage foreign key stays the
+ * backstop for a reference created concurrently.
+ */
+export async function jobDescriptionDeleteRefusal(
+  exec: SqlExecutor,
+  orgId: string,
+  jobDescriptionId: string,
+): Promise<string | null> {
+  const row = (await exec.execute<{ name: string; openings: number }>(sql`
+    select jd.name,
+           (select count(*)::int from hrm_requisitions r
+             where r.org_id = jd.org_id and r.job_description_id = jd.id) as openings
+      from hrm_job_descriptions jd
+     where jd.org_id = ${orgId} and jd.id = ${jobDescriptionId}
+  `)).rows[0];
+  if (!row || row.openings === 0) return null;
+  return `Job description ${row.name} was used by ${row.openings} requisition${row.openings === 1 ? "" : "s"} and is kept as their history — deactivate it instead of deleting it`;
+}
+
+/**
  * Active library entries, ordered by name, offered when opening a
  * requisition — gated on the same manage grant that opening requires.
  */
