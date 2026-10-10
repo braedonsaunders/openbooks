@@ -156,6 +156,36 @@ test("cash forecast aging places the 90th overdue day in 90+ and ages untermed i
   assert.equal(result.status, 0, result.stderr || result.stdout);
 });
 
+test("the overdue count covers exactly the items behind the overdue amount, untermed ones included", () => {
+  const source = `
+    import assert from "node:assert/strict";
+    import { overdueItemCount, summariseSide } from "./web/lib/cash/core.ts";
+
+    const asOf = new Date("2026-06-30T00:00:00Z");
+    const item = (id, tranDate, dueDate, remaining) => ({ id, entryId: "e-" + id, docKind: "customer_invoice", docNumber: id,
+      docId: "d-" + id, partyId: "p1", partyName: "Acme", tranDate: new Date(tranDate + "T00:00:00Z"),
+      dueDate: dueDate ? new Date(dueDate + "T00:00:00Z") : null, remaining });
+    const items = [
+      item("INV-1", "2026-05-01", "2026-05-31", "100.0000"), // termed, 30 days past due
+      item("INV-2", "2026-05-16", null, "200.0000"),         // untermed, ages from posting: 45 days
+      item("INV-3", "2026-06-20", "2026-07-20", "300.0000"), // termed, not yet due
+      item("INV-4", "2026-06-30", null, "400.0000"),         // untermed, posted today: current
+    ];
+    const side = summariseSide(items, asOf, "0", 0);
+    const current = side.buckets.find((b) => b.index === 0).amount;
+    assert.equal(current, "700.0000");
+    assert.equal(overdueItemCount(items, asOf), 2, "both past-due items count, whether or not they carry a due date");
+    assert.equal(overdueItemCount([], asOf), 0);
+    console.log("overdue count matches the overdue buckets");
+  `;
+  const result = spawnSync(
+    process.execPath,
+    ["--conditions=react-server", "--import", "tsx", "--input-type=module", "-e", source],
+    { cwd: process.cwd(), env: process.env, encoding: "utf8" },
+  );
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+});
+
 test("horizon normalizer accepts the cap range and fails closed to the fallback", () => {
   // core.ts is server-only in production, so run the behavior check under
   // React's server condition (the same pattern used by other web tests).

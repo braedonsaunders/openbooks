@@ -10,6 +10,7 @@ import {
   daysBetween,
   loadCategories,
   openItems,
+  overdueItemCount,
   sumMoney,
   paymentStats,
   resolveAsOf,
@@ -170,7 +171,7 @@ export async function arPosition(
   const summary = summariseSide(arItems, grid.asOf, ar.scheduled, arStats.globalAvg, ar.unplaced);
   const current = summary.buckets.find((b) => b.index === 0)?.amount ?? ZERO_MONEY;
   const overdue = compareMoney(summary.outstanding, current) > 0 ? subtractMoney(summary.outstanding, current) : ZERO_MONEY;
-  const overdueCount = arItems.filter((it) => it.dueDate && daysBetween(it.dueDate, grid.asOf) > 0).length;
+  const overdueCount = overdueItemCount(arItems, grid.asOf);
 
   const weeks: ArWeek[] = grid.weekStarts.map((k, i) => {
     const entries = (ar.byWeek.get(k) ?? []).slice().sort((a, b) => compareMoney(b.amount, a.amount));

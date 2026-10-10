@@ -2077,6 +2077,17 @@ export function predict(
   return { date: businessDay(date), method };
 }
 
+/**
+ * Number of open items past their aging basis — exactly the items whose
+ * balances make up the non-current aging buckets of summariseSide. Headline
+ * counts read this so "N overdue" always describes the same population as
+ * the overdue amount and the aging report, including items with no due date
+ * (which age from their posting date).
+ */
+export function overdueItemCount(items: OpenItem[], asOf: Date): number {
+  return items.filter((it) => agingBucketIndex(daysPastDue(it, asOf)) > 0).length;
+}
+
 export function summariseSide(
   items: OpenItem[],
   asOf: Date,
