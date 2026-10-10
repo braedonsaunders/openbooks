@@ -2128,6 +2128,53 @@ export function DocumentDrawer({
     setTotals({ subtotal: sourceDoc.subtotal, taxTotal: sourceDoc.tax_total, total: sourceDoc.total })
   }
 
+  // Confirm-before-save duplicate warning for new invoices and bills: a
+  // non-voided same-kind document for the same party, date and total (plus
+  // the vendor reference for bills) is usually a double entry. A warning,
+  // never a refusal — confirming saves anyway. An unreadable probe fails
+  // open: the save itself stays server-validated, so a down lookup must not
+  // block persistence.
+  async function confirmNoDuplicate(): Promise<boolean> {
+    if (!isCreate || (config.kind !== 'customer_invoice' && config.kind !== 'vendor_bill')) return true
+    if (!partyId || !documentDate || !positiveAmount(effectiveTotals.total)) return true
+    const query = new URLSearchParams({
+      kind: config.kind,
+      partyId,
+      documentDate,
+      total: effectiveTotals.total,
+    })
+    if (config.kind === 'vendor_bill' && referenceNumber.trim()) {
+      query.set('referenceNumber', referenceNumber.trim())
+    }
+    let duplicates: { id: string; documentNumber: string }[] = []
+    try {
+      const response = await fetch(`/api/documents/duplicates?${query.toString()}`)
+      if (!response.ok) return true
+      duplicates = ((await response.json()) as { duplicates?: { id: string; documentNumber: string }[] }).duplicates ?? []
+    } catch {
+      return true
+    }
+    if (duplicates.length === 0) return true
+    const [first, ...rest] = duplicates
+    return confirmDialog({
+      title: t('drawer.duplicateTitle'),
+      message: (
+        <>
+          <p>{t('drawer.duplicateBody', { numbers: duplicates.map((match) => match.documentNumber).join(', ') })}</p>
+          {first ? (
+            <p className="mt-2">
+              <Link className="text-teal-700 hover:underline dark:text-teal-300" href={hrefForDocument(first.id)}>
+                {t('drawer.duplicateOpen', { number: first.documentNumber })}
+              </Link>
+              {rest.length > 0 ? ` · +${rest.length}` : null}
+            </p>
+          ) : null}
+        </>
+      ),
+      confirmLabel: t('drawer.duplicateConfirm'),
+    })
+  }
+
   // Re-entry runs through the shared guard: save awaits the client-script
   // gate (up to 2 s) before execute sets busy, so a double-click used to
   // send two saves with the same revision — the second 409ing after the
@@ -2175,6 +2222,12 @@ export function DocumentDrawer({
     // currency gates as an edit above; the server runs the shared writer, so
     // validation, refusals, and audit match an edit exactly.
     if (isCreate) {
+      // A possible duplicate warns before the write, never instead of it:
+      // declining leaves the form exactly as typed for review.
+      if (!(await confirmNoDuplicate())) {
+        setSaveState('dirty')
+        return
+      }
       const create = config.kind === 'rma'
         ? buildReturnCreateRequest(payload_ as Record<string, unknown>, idempotencyKey)
         : buildDocumentCreateRequest(config.kind, payload_ as Record<string, unknown>, idempotencyKey)
@@ -2189,7 +2242,11 @@ export function DocumentDrawer({
           fallbackMessage: t('toasts.actionFailed'),
           onOk: (payload) => {
             const saved = (payload as DocPayload).doc
-            router.push(`${basePath}?doc=${String(saved.id)}&mode=edit`)
+            toast.success(t('toasts.saved', { documentNumber: String(saved.document_number ?? '') }))
+            // Land on the persisted record in view mode: the changed drawer
+            // id remounts clean, so Submit/Post is available at once instead
+            // of needing a second save to leave the editing caption behind.
+            router.push(`${basePath}?doc=${String(saved.id)}`)
             router.refresh()
           },
           onRefused: () => {
@@ -2244,6 +2301,7 @@ export function DocumentDrawer({
           setSaveState('saved')
           setDirty(false)
           setMode('view')
+          toast.success(t('toasts.saved', { documentNumber: String(data.doc.document_number ?? '') }))
           router.refresh()
         },
         onRefused: () => {

@@ -79,6 +79,10 @@
     "accountPlaceholder": "科目……",
     "currencyMismatch": "{account}仅接受{allowed}记账，不接受{actual}",
     "lineMissingAccount": "第 {line} 行：请选择科目。",
+    "duplicateTitle": "可能重复",
+    "duplicateBody": "已存在与该往来单位、日期和金额相同的单据：{numbers}。请在再次保存前检查，或直接保存以创建另一张。",
+    "duplicateOpen": "打开 {number}",
+    "duplicateConfirm": "仍然保存",
     "noTax": "无税",
     "taxAmountColumn": "税额",
     "selectCustomerPlaceholder": "选择客户……",
@@ -115,6 +119,7 @@
     "actionFailed": "操作失败",
     "submitted": "已提交审批",
     "posted": "已过账至总账",
+    "saved": "已保存单据 {documentNumber}",
     "createDraftFailed": "无法创建草稿",
     "deleted": "已删除单据",
     "deleteFailed": "删除失败"

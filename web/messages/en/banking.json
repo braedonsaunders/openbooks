@@ -389,6 +389,7 @@
     "actionFailed": "Action failed",
     "submitted": "Submitted for approval",
     "posted": "Posted to the ledger",
+    "saved": "Document saved: {documentNumber}",
     "createDraftFailed": "Could not create a draft",
     "deleted": "Document deleted",
     "deleteFailed": "Delete failed"

@@ -382,6 +382,7 @@
     "actionFailed": "Échec de l’action",
     "submitted": "Soumis pour approbation",
     "posted": "Comptabilisé au grand livre",
+    "saved": "Document enregistré : {documentNumber}",
     "createDraftFailed": "Impossible de créer un brouillon",
     "deleted": "Document supprimé",
     "deleteFailed": "Échec de la suppression"

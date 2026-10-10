@@ -79,6 +79,10 @@
     "accountPlaceholder": "Cuenta…",
     "currencyMismatch": "{account} solo acepta movimientos en {allowed}, no en {actual}",
     "lineMissingAccount": "Línea {line}: seleccione una cuenta.",
+    "duplicateTitle": "Posible duplicado",
+    "duplicateBody": "Ya existe un documento con este tercero, fecha y total: {numbers}. Revísalo antes de volver a guardar o guarda de todos modos para crear otro.",
+    "duplicateOpen": "Abrir {number}",
+    "duplicateConfirm": "Guardar de todos modos",
     "noTax": "Sin impuesto",
     "taxAmountColumn": "Impuesto",
     "selectCustomerPlaceholder": "Seleccionar cliente…",
@@ -115,6 +119,7 @@
     "actionFailed": "La acción falló",
     "submitted": "Enviado para aprobación",
     "posted": "Contabilizado en el libro mayor",
+    "saved": "Documento guardado: {documentNumber}",
     "createDraftFailed": "No se pudo crear un borrador",
     "deleted": "Documento eliminado",
     "deleteFailed": "Error al eliminar"

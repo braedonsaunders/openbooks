@@ -79,6 +79,10 @@
     "accountPlaceholder": "Account…",
     "currencyMismatch": "{account} only accepts {allowed} postings, not {actual}",
     "lineMissingAccount": "Line {line}: choose an account.",
+    "duplicateTitle": "Possible duplicate",
+    "duplicateBody": "An existing document matches this party, date and total: {numbers}. Review it before saving again, or save anyway to create another.",
+    "duplicateOpen": "Open {number}",
+    "duplicateConfirm": "Save anyway",
     "noTax": "No tax",
     "taxAmountColumn": "Tax amt",
     "selectCustomerPlaceholder": "Select customer…",
@@ -115,6 +119,7 @@
     "actionFailed": "Action failed",
     "submitted": "Submitted for approval",
     "posted": "Posted to the ledger",
+    "saved": "Document saved: {documentNumber}",
     "createDraftFailed": "Could not create a draft",
     "deleted": "Document deleted",
     "deleteFailed": "Delete failed"
