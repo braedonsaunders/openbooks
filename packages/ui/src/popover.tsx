@@ -8,6 +8,30 @@ import { cn } from './utils'
 import { useHydrated } from './use-hydrated'
 
 /**
+ * Lets an overlay launched from inside a popover outlive the popover's menu.
+ *
+ * A menu item may open a drawer (a quote's Award, a drop-ship assessment).
+ * That drawer belongs to the item's component, so it lives in the popover's
+ * React subtree while its DOM is portaled to the document body. Without
+ * retention the first press inside the drawer reads as an outside click, the
+ * popover closes, and its content unmounts the drawer before the press
+ * becomes a click. An open drawer instead retains the popover: the menu
+ * closes and hides, its content stays mounted, and the drawer releases it
+ * once it has finished closing.
+ */
+export interface PopoverRetention {
+  /** Close the menu but keep its content mounted. Returns the release. */
+  retain: () => () => void
+}
+
+const PopoverRetentionContext = React.createContext<PopoverRetention | null>(null)
+
+/** The nearest enclosing popover's retention, or null outside any popover. */
+export function usePopoverRetention(): PopoverRetention | null {
+  return React.useContext(PopoverRetentionContext)
+}
+
+/**
  * Portal-based popover that escapes any overflow-hidden ancestor.
  *
  * Use this for header/sidebar dropdowns (tenant switcher, notifications,
@@ -41,6 +65,26 @@ export function Popover({
     height: number
   } | null>(null)
   const mounted = useHydrated()
+  const [retainCount, setRetainCount] = React.useState(0)
+  const onOpenChangeRef = React.useRef(onOpenChange)
+  React.useEffect(() => {
+    onOpenChangeRef.current = onOpenChange
+  }, [onOpenChange])
+  const retention = React.useMemo<PopoverRetention>(() => ({
+    retain() {
+      setRetainCount((count) => count + 1)
+      onOpenChangeRef.current(false)
+      let released = false
+      return () => {
+        if (released) return
+        released = true
+        setRetainCount((count) => Math.max(0, count - 1))
+      }
+    },
+  }), [])
+  // Closed but retained: the panel stays mounted for the overlay it launched,
+  // hidden and inert, and no longer counts as an open overlay for Escape.
+  const retainedOnly = !open && retainCount > 0
 
   React.useEffect(() => {
     if (!open) return
@@ -95,13 +139,16 @@ export function Popover({
       {mounted && rect && typeof document !== 'undefined'
         ? createPortal(
             <AnimatePresence>
-              {open ? (
+              {open || retainCount > 0 ? (
                 <OverlayExit key="panel">
                 {(exiting) => (
                 <motion.div
                   ref={panelRef}
-                  data-ui-overlay
+                  data-ui-overlay={retainedOnly ? undefined : true}
                   data-overlay-exiting={exiting || undefined}
+                  data-popover-retained={retainedOnly || undefined}
+                  aria-hidden={retainedOnly || undefined}
+                  inert={retainedOnly || undefined}
                   initial={{
                     opacity: 0,
                     x: side === 'right' ? -4 : side === 'left' ? 4 : 0,
@@ -121,6 +168,7 @@ export function Popover({
                     className,
                   )}
                   style={{
+                    display: retainedOnly ? 'none' : undefined,
                     top:
                       side === 'bottom'
                         ? rect.top + rect.height + 4
@@ -148,7 +196,9 @@ export function Popover({
                   }}
                   role="dialog"
                 >
-                  {children}
+                  <PopoverRetentionContext.Provider value={retention}>
+                    {children}
+                  </PopoverRetentionContext.Provider>
                 </motion.div>
                 )}
                 </OverlayExit>
