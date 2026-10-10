@@ -106,6 +106,12 @@ import type {
   StatutoryAllocation,
 } from "../statutory-context.ts";
 
+/** Per-period employer levies are priced at ledger precision (four places)
+ *  and then rounded to the cent, as payroll bureaus hold premium amounts. */
+function ledgerPrecisionLevy(base: string, ratePercent: string): Money {
+  return roundMoney(mulPercent(base, ratePercent, 4), 2) as Money;
+}
+
 /**
  * 2026 CNT constants (Revenu Québec, Contribution Related to Labour
  * Standards; LE-39.0.2-V): 0.06% of remuneration to $103,000 per employee.
@@ -204,7 +210,7 @@ export async function applyCaEmployerLevies(
       : assessable;
     wcbAssessable = (cmp(assessable, room) <= 0 ? assessable : room) as Money;
     if (cmp(wcbAssessable, "0") > 0) {
-      wcbAmount = mulPercent(wcbAssessable, wcb.rate_percent, 2) as Money;
+      wcbAmount = ledgerPrecisionLevy(wcbAssessable, wcb.rate_percent);
       // Aggregate tagged ASSESSABLE earning lines by costing target (project +
       // department): hourly earnings post one line per DAY since dated
       // lookbacks, but WSIB assesses earnings and the stub allocates the
@@ -319,7 +325,7 @@ export async function applyCaEmployerLevies(
         ? add(ehtEarnings, neg(exemptionLeft))
         : "0";
       if (cmp(taxableRemuneration, "0") > 0) {
-        ehtAmount = mulPercent(taxableRemuneration, eht.rate, 2) as Money;
+        ehtAmount = ledgerPrecisionLevy(taxableRemuneration, eht.rate);
         pushStatutory("eht", "employer_contribution", "Employer Health Tax", ehtAmount, 270);
       }
     }
