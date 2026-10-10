@@ -152,14 +152,25 @@ export function mergeHref(
   current: Search,
   overrides: Record<string, string | number | undefined | null>,
 ): string {
+  // The base may already carry a query (a previously built href): seed the
+  // merge from it so chaining builds never emits a second "?". Without this,
+  // mergeHref("/close?tab=periods", {}, { fy: 2025 }) produced
+  // "/close?tab=periods?fy=2025" — a broken URL, not a merged one.
+  const queryIndex = base.indexOf('?')
+  const path = queryIndex === -1 ? base : base.slice(0, queryIndex)
   const merged: Record<string, string | number | undefined | null> = {}
+  if (queryIndex !== -1) {
+    for (const [k, v] of new URLSearchParams(base.slice(queryIndex + 1))) {
+      merged[k] = v
+    }
+  }
   for (const [k, v] of Object.entries(current)) {
     merged[k] = pickString(v) ?? undefined
   }
   for (const [k, v] of Object.entries(overrides)) {
     merged[k] = v
   }
-  return buildHref(base, merged)
+  return buildHref(path, merged)
 }
 
 /**
