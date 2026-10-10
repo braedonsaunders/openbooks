@@ -7252,6 +7252,7 @@
     },
     "statusEnabled": "已启用",
     "statusDisabled": "已禁用",
+    "statusIncomplete": "不完整：{reason}",
     "neverRan": "从未",
     "new": {
       "button": "新建流程",
@@ -7289,6 +7290,8 @@
       "saveFailed": "无法保存流程",
       "unsaved": "未保存的更改",
       "enabledToggle": "已启用",
+      "singleTrigger": "此流程已有触发器——一个流程只能从一个触发器开始。要添加另一个，请先删除现有触发器。",
+      "disabledNotice": "已禁用——此流程在禁用期间不会运行。",
       "namePlaceholder": "流程名称",
       "errorsTitle": "修复以下问题才能保存流程",
       "warningsTitle": "警告——流程可保存，但可能不会按预期运行",

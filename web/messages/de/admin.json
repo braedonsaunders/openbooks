@@ -7252,6 +7252,7 @@
     },
     "statusEnabled": "aktiviert",
     "statusDisabled": "deaktiviert",
+    "statusIncomplete": "Unvollständig: {reason}",
     "neverRan": "nie",
     "new": {
       "button": "Neuer Flow",
@@ -7289,6 +7290,8 @@
       "saveFailed": "Der Flow konnte nicht gespeichert werden",
       "unsaved": "Nicht gespeicherte Änderungen",
       "enabledToggle": "Aktiviert",
+      "singleTrigger": "Dieser Flow hat bereits einen Auslöser — ein Flow startet mit genau einem. Entferne den vorhandenen Auslöser, um einen anderen hinzuzufügen.",
+      "disabledNotice": "Deaktiviert — dieser Flow wird nicht ausgeführt, solange er deaktiviert ist.",
       "namePlaceholder": "Flow-Name",
       "errorsTitle": "Beheben Sie diese Punkte, um den Flow zu speichern",
       "warningsTitle": "Warnungen – der Flow wird gespeichert, läuft aber möglicherweise nicht wie erwartet",

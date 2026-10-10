@@ -187,7 +187,14 @@ export const PATCH = defineRoute({
            ${JSON.stringify({ before: flow, after: updated.rows[0] })}::jsonb,
            ${user.id}, ${request.headers.get('X-Request-Id')})
       `)
-      return NextResponse.json({ ok: true, warnings, updatedAt: updated.rows[0].updated_at })
+      // The persisted flag rides back so the designer and list switches render
+      // the stored state (the single source), never their optimistic copy.
+      return NextResponse.json({
+        ok: true,
+        warnings,
+        updatedAt: updated.rows[0].updated_at,
+        enabled: Boolean(updated.rows[0].enabled),
+      })
     })
   },
 });

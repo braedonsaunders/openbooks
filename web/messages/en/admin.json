@@ -7252,6 +7252,7 @@
     },
     "statusEnabled": "enabled",
     "statusDisabled": "disabled",
+    "statusIncomplete": "Incomplete: {reason}",
     "neverRan": "never",
     "new": {
       "button": "New flow",
@@ -7289,6 +7290,8 @@
       "saveFailed": "Could not save the flow",
       "unsaved": "Unsaved changes",
       "enabledToggle": "Enabled",
+      "singleTrigger": "This flow already has a trigger — a flow starts from exactly one. Remove the existing trigger to add another.",
+      "disabledNotice": "Disabled — this flow will not run while it is disabled.",
       "namePlaceholder": "Flow name",
       "errorsTitle": "Fix these to save the flow",
       "warningsTitle": "Warnings — the flow saves, but may not run as expected",

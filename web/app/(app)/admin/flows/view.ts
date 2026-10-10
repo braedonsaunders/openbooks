@@ -5,7 +5,13 @@ import { sql } from 'drizzle-orm'
 import { getTranslations } from 'next-intl/server'
 import { documentRevisionSql } from '@openbooks/engine/src/records/revision.ts'
 import { db } from '@openbooks/engine/src/platform/db.ts'
-import { listFlowSubjectProfiles } from '@openbooks/engine/src/flows/index.ts'
+import { lintFlowGraphForSubject, listFlowSubjectProfiles } from '@openbooks/engine/src/flows/index.ts'
+import {
+  flowReadiness,
+  nodeDisplayName,
+  type AutomationNode,
+} from '@openbooks/forms-core'
+import { nameFlowWarnings } from './_builder/warnings'
 import {
   pagination,
   badge,
@@ -51,6 +57,26 @@ const RUN_BADGE: Record<string, 'success' | 'warning' | 'destructive' | 'seconda
   cancelled: 'outline',
 }
 
+/** Display names for a stored graph's nodes, so list-side lint reasons name
+ *  canvas cards (kind + label) instead of storage ids. Nodes whose shape is
+ *  unrecognizable stay unnamed and the raw reason passes through. */
+function flowNodeNames(graph: unknown): Map<string, string> {
+  const names = new Map<string, string>()
+  const raw = (graph as { nodes?: unknown } | null)?.nodes
+  if (!Array.isArray(raw)) return names
+  for (const entry of raw) {
+    const rec = entry as { id?: unknown }
+    if (typeof rec?.id !== 'string') continue
+    try {
+      const name = nodeDisplayName(entry as AutomationNode)
+      if (typeof name === 'string' && name.length > 0) names.set(rec.id, name)
+    } catch {
+      // Unrecognizable node shape — leave it unnamed.
+    }
+  }
+  return names
+}
+
 /** A `flows` list row with its latest run: `updated_at` is the revision-token
  *  text, `node_count` an integer, the lateral-join run columns nullable. */
 type FlowDbRow = {
@@ -60,6 +86,7 @@ type FlowDbRow = {
   enabled: boolean
   updated_at: string
   node_count: number
+  graph: unknown
   last_run_status: string | null
   last_run_at: Date | string | null
 }
@@ -78,7 +105,7 @@ export interface FlowListRow {
   updatedAt: string
   enabled: boolean
   enabledLabel: string
-  enabledVariant: 'success' | 'outline'
+  enabledVariant: 'success' | 'warning' | 'outline'
   rowActions: { id: string; name: string; enabled: boolean; updatedAt: string }
 }
 
@@ -128,7 +155,7 @@ export async function loadFlows(
   const [flows, subjects, totalRow] = await Promise.all([
     db.execute<FlowDbRow>(sql`
       select f.id, f.name, f.subject_kind, f.enabled, ${documentRevisionSql(sql`f.updated_at`)} as updated_at,
-             jsonb_array_length(f.graph->'nodes') as node_count,
+             jsonb_array_length(f.graph->'nodes') as node_count, f.graph as graph,
              lr.status as last_run_status, lr.started_at as last_run_at
         from flows f
         left join lateral (
@@ -183,30 +210,51 @@ export async function loadFlows(
     columnLastRun: t('table.lastRun'),
     columnUpdated: t('table.updated'),
     columnStatus: t('table.status'),
-    rows: flows.rows.map((f) => ({
-      id: String(f.id),
-      name: String(f.name),
-      href: `/admin/flows/${f.id}`,
-      subjectKind: String(f.subject_kind),
-      subjectLabel: subjectName(String(f.subject_kind)),
-      nodeCount: String(f.node_count),
-      lastRunStatus:
-        f.last_run_status != null ? String(f.last_run_status) : null,
-      lastRunVariant: RUN_BADGE[String(f.last_run_status)] ?? 'outline',
-      lastRunAt: f.last_run_at ? dateTime(f.last_run_at) : null,
-      neverRanLabel: t('neverRan'),
-      updatedAt: dateTime(f.updated_at),
-      enabled: Boolean(f.enabled),
-      enabledLabel: f.enabled ? t('statusEnabled') : t('statusDisabled'),
-      enabledVariant: (f.enabled ? 'success' : 'outline') as
-        'success' | 'outline',
-      rowActions: {
+    rows: flows.rows.map((f) => {
+      // Fire-readiness in the list's own words: the stored enabled flag is
+      // the single source, and an enabled flow whose graph cannot fire reads
+      // "Incomplete: <reason>" instead of a clean "enabled".
+      const lint = lintFlowGraphForSubject(String(f.subject_kind), f.graph)
+      const readiness = flowReadiness(Boolean(f.enabled), lint.ok ? [] : lint.errors)
+      const named = readiness.state === 'incomplete'
+        ? nameFlowWarnings(readiness.reasons.slice(0, 1), flowNodeNames(f.graph))
+        : []
+      const enabledLabel =
+        readiness.state === 'disabled'
+          ? t('statusDisabled')
+          : readiness.state === 'incomplete'
+            ? t('statusIncomplete', { reason: named[0] ?? '' })
+            : t('statusEnabled')
+      const enabledVariant =
+        readiness.state === 'disabled'
+          ? ('outline' as const)
+          : readiness.state === 'incomplete'
+            ? ('warning' as const)
+            : ('success' as const)
+      return {
         id: String(f.id),
         name: String(f.name),
+        href: `/admin/flows/${f.id}`,
+        subjectKind: String(f.subject_kind),
+        subjectLabel: subjectName(String(f.subject_kind)),
+        nodeCount: String(f.node_count),
+        lastRunStatus:
+          f.last_run_status != null ? String(f.last_run_status) : null,
+        lastRunVariant: RUN_BADGE[String(f.last_run_status)] ?? 'outline',
+        lastRunAt: f.last_run_at ? dateTime(f.last_run_at) : null,
+        neverRanLabel: t('neverRan'),
+        updatedAt: dateTime(f.updated_at),
         enabled: Boolean(f.enabled),
-        updatedAt: String(f.updated_at),
-      },
-    })),
+        enabledLabel,
+        enabledVariant,
+        rowActions: {
+          id: String(f.id),
+          name: String(f.name),
+          enabled: Boolean(f.enabled),
+          updatedAt: String(f.updated_at),
+        },
+      }
+    }),
     total,
     currentPage: params.page,
     perPage: params.perPage,

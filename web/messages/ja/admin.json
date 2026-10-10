@@ -7252,6 +7252,7 @@
     },
     "statusEnabled": "有効",
     "statusDisabled": "無効",
+    "statusIncomplete": "未完了: {reason}",
     "neverRan": "なし",
     "new": {
       "button": "新規フロー",
@@ -7289,6 +7290,8 @@
       "saveFailed": "フローを保存できませんでした",
       "unsaved": "未保存の変更",
       "enabledToggle": "有効",
+      "singleTrigger": "このフローには既にトリガーがあります — フローは1つのトリガーから開始します。別のトリガーを追加するには、既存のトリガーを削除してください。",
+      "disabledNotice": "無効 — このフローは無効な間は実行されません。",
       "namePlaceholder": "フロー名",
       "errorsTitle": "フローを保存するには次の項目を修正してください",
       "warningsTitle": "警告 — フローは保存されますが、期待どおりに実行されない可能性があります",
