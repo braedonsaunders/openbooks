@@ -85,7 +85,7 @@ test('hidden and renamed destinations share one snapshot while local order stays
 test('Payroll shows its daily workflow in order and Year-end only in local More', async () => {
   reset()
   const groups = await resolveNav('company-one', () => true, [], (key) => translator(`nav.${key}` as never), (key) => translator.has(`nav.${key}` as never))
-  const payroll = groups.flatMap(group => group.items).filter(item => item.subgroup === 'payroll-work')
+  const payroll = groups.flatMap(group => group.items).filter(item => item.subgroup === translator('nav.groups.payroll-work'))
   assert.deepEqual(payroll.map(item => item.href), ['/payroll', '/payroll/runs', '/payroll/anomalies', '/payroll/remittances', '/payroll/separations'])
   assert.deepEqual(payroll.map(item => item.label), ['Overview', 'Pay runs', 'Checks', 'Remittances', 'Separations'])
   const local = await resolveLocalNavigation({user: {orgId: 'company-one'}, permissions: new Set(['*'])} as Parameters<typeof resolveLocalNavigation>[0])

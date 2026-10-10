@@ -24,8 +24,11 @@ async function mount(t: {after: (cb: () => Promise<void>) => void}, element: Rea
   return {host, root}
 }
 function nativeSelect(label: string): HTMLSelectElement {
-  const control = document.querySelector(`[aria-label="${label}"]`)!
-  return control.tagName === 'SELECT' ? control as HTMLSelectElement : control.parentElement!.querySelector('select')!
+  const control = document.querySelector(`[aria-label="${label}"]`)
+  assert.ok(control, `Native control ${label} must be present`)
+  const proxy = control.tagName === 'SELECT' ? control as HTMLSelectElement : control.closest('span.relative.block')?.querySelector('select')
+  assert.ok(proxy, `Native Select ${label} must retain its own form proxy`)
+  return proxy
 }
 async function select(label: string, value: string) {
   const control = nativeSelect(label)
