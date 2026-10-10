@@ -141,6 +141,9 @@ DECLARE
   scrap_posted_entry_id uuid;
   scrap_posted_journal_subsidiary_id uuid;
 BEGIN
+  IF TG_OP = 'DELETE' AND tenant_retirement.openbooks_tenant_retirement_delete_allowed(TG_TABLE_NAME, to_jsonb(OLD)) THEN
+    RETURN OLD;
+  END IF;
   IF TG_OP='DELETE' THEN
     IF coalesce(current_setting('openbooks.amend',true),'off')='on' THEN RETURN OLD; END IF;
     RAISE EXCEPTION 'financial changes are immutable evidence; propose a correcting change';
