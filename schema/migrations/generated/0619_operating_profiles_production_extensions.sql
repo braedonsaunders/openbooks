@@ -305,7 +305,7 @@ BEGIN
    WHERE change.org_id=NEW.org_id AND change.id=NEW.activation_change_id AND change.subject_id=NEW.id
     AND change.domain='manufacturing' AND change.operation='routing_revision_activation' AND change.status='approved'
     AND change.approved_by IS NOT NULL AND (change.approved_by<>change.submitted_by OR public.financial_change_self_decision_authorized(change.org_id,change.id,change.submitted_by))
-    AND ((change.before_state->'candidate')-ARRAY['operations','locations'])=jsonb_build_object(
+    AND (change.before_state->'candidate'-ARRAY['operations','locations'])=jsonb_build_object(
       'id',OLD.id,'orgId',OLD.org_id,'producedItemId',OLD.produced_item_id,'code',OLD.code,'name',OLD.name,'version',OLD.version,'status','draft',
       'effectiveFrom',OLD.effective_from::text,'effectiveTo',OLD.effective_to::text,'defaultIssueLocationId',OLD.default_issue_location_id,'defaultReceiptLocationId',OLD.default_receipt_location_id,'overheadBasis',OLD.overhead_basis)
     AND change.before_state->'candidate'->'operations'=(SELECT coalesce(jsonb_agg(jsonb_build_object('id',operation.id,'orgId',operation.org_id,'routingId',operation.routing_id,'sequence',operation.sequence,'name',operation.name,'workCenterId',operation.work_center_id,
