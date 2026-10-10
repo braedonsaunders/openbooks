@@ -13,6 +13,7 @@ export function compensationPackageSchemaRefusal(error: unknown): CompensationPa
     visited.add(detail);
     const cause = detail as { code?: string; message?: string; cause?: unknown };
     if (cause.code === '42P01' && /^relation "(?:public\.)?payroll_compensation_(?:configuration|packages|versions|assignments|calculations)" does not exist$/.test(cause.message ?? '')) return new CompensationPackageUnavailableError();
+    if (cause.code === '42703' && /^column "submission_policy" of relation "payroll_compensation_(?:versions|assignments)" does not exist$/.test(cause.message ?? '')) return new CompensationPackageUnavailableError();
     detail = cause.cause;
   }
   return null;
