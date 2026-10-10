@@ -161,8 +161,9 @@ export async function loadDocumentInventoryLines(
     // actually exists for this document kind.
     // Fulfillment can retain eight document places when conversion yields exact stored stock;
     // existing four-place postings keep their established costing arithmetic.
-    const exactFulfillment = row.document_kind === "sales_fulfillment" && canonicalDecimal(row.quantity, 4) === null;
-    const sourceQuantity = exactFulfillment ? canonicalDecimal(row.quantity, 8) : fromUnits(toUnits(row.quantity));
+    const fulfillmentQuantity = row.document_kind === "sales_fulfillment" ? canonicalDecimal(row.quantity, 8) : null;
+    const exactFulfillment = fulfillmentQuantity !== null && canonicalDecimal(fulfillmentQuantity, 4) === null;
+    const sourceQuantity = exactFulfillment ? fulfillmentQuantity : fromUnits(toUnits(row.quantity));
     if (sourceQuantity === null) throw new InventoryError(`${lineLabel} quantity must have at most eight decimal places`);
     if (compareDecimal(sourceQuantity, "0") < 0) {
       throw new InventoryError(

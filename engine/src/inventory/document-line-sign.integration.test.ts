@@ -253,7 +253,7 @@ test("a line in an unconvertible unit is refused, never assumed 1:1", { skip: !D
 test("eight-place fulfillment issues exact converted base quantity once and refuses an unrepresentable conversion", { skip: !DB }, async () => {
   const org = await createScratchOrg();
   try {
-    await db.execute(sql`update item_inventory_profiles set unit_conversions='{"bulk":10000}'::jsonb
+    await db.execute(sql`update item_inventory_profiles set unit_conversions='{"bulk":10000,"fraction":1.0001}'::jsonb
       where org_id=${org.orgId} and item_id=${org.items.fifo}`);
     await receiveInventory(org.orgId, null, {
       itemId: org.items.fifo, stockLocationId: org.stockLocationId, subsidiaryId: org.subsidiaryId,
@@ -281,5 +281,17 @@ test("eight-place fulfillment issues exact converted base quantity once and refu
       refused.documentId, org.date, org.subsidiaryId)), /cannot be stored exactly with four decimal places/);
     assert.equal(await movementCount(org.orgId, refused.lineId), 0);
     assert.deepEqual(await getOnHand(org.orgId, org.items.fifo, org.stockLocationId), posted);
+    const legacySource = await draftApprovedDocument(org, "sales_order", {
+      quantity: "1.0001", unitPrice: "10", amount: "10", unit: "fraction",
+    });
+    const legacy = await draftApprovedDocument(org, "sales_fulfillment", {
+      quantity: "1.0001", unitPrice: "0", amount: "0", unit: "fraction",
+      custom: { fulfillment: { sourceLineId: legacySource.lineId } },
+    });
+    assert.equal((await loadDocumentInventoryLines(db, org.orgId, legacy.documentId))[0]!.quantity, "1.0002",
+      "eight-place database padding must preserve four-place fulfillment costing arithmetic");
+    assert.equal(await db.transaction((tx) => applySalesFulfillmentInventoryIssues(tx, org.orgId, null,
+      legacy.documentId, org.date, org.subsidiaryId)), 1);
+    assert.equal((await getOnHand(org.orgId, org.items.fifo, org.stockLocationId)).quantity, "9998.9997");
   } finally { await dropScratchOrg(org.orgId); }
 });

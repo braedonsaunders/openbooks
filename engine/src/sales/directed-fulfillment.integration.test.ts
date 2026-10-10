@@ -269,6 +269,10 @@ test(
       assert.equal(candidates!.lines[0]!.heldByPickLists, "1.00000001");
       assert.equal(candidates!.lines[0]!.allocations[0]!.quantity, "2.99959999",
         "base stock minus exact reservations remains selectable at eight-place document precision");
+      const baseCandidates = await withOrgTransaction(org.orgId, () =>
+        pickCandidates(db, org.orgId, second.id, null));
+      assert.equal(baseCandidates!.lines[0]!.allocations[0]!.quantity, "29995.9999",
+        "a quotient exactly representable at four places retains the stock-unit presentation");
       const shipment = await withOrg(org.orgId, () =>
         db.transaction((tx) =>
           createShipment(tx, org.orgId, actor, {

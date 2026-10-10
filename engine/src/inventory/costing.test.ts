@@ -69,6 +69,9 @@ test("toBaseQuantity applies the item's unit conversion and refuses unknown unit
 test("directed stock converts eight-place documents exactly and refuses unrepresentable base units", () => {
   assert.equal(toExactStockQuantity("2.00000002", "bulk", { bulk: 10000 }, "ea"), "20000.0002");
   assert.equal(toExactStockQuantity("0.00000001", "bulk", { bulk: 10000 }, "ea"), "0.0001");
+  assert.equal(toExactStockQuantity("2.00000000", "ea", {}, "ea"), "2.0000");
+  assert.equal(toExactStockQuantity("1.25", "box", { box: 12 }, "ea"), "15.0000");
+  assert.equal(toExactStockQuantity("0", "ea", {}, "ea"), "0.0000");
   for (const [quantity, unit, conversions] of [
     ["2.00000002", "ea", {}],
     ["0.0001", "fraction", { fraction: 0.0001 }],

@@ -1,4 +1,4 @@
-import { fromUnits, roundDiv, toUnits } from "../money/money.ts";
+import { fromUnits, normalizeDecimal, roundDiv, toUnits } from "../money/money.ts";
 import { canonicalDecimal, multiplyDecimal } from "../money/exact-decimal.ts";
 import { InventoryError } from "./contracts.ts";
 
@@ -146,12 +146,15 @@ export function toExactStockQuantity(
   lineLabel = "inventory line",
 ): string {
   const exact = toExactBaseQuantity(quantity, unit, conversions, baseUnit, lineLabel);
-  const stored = canonicalDecimal(exact, 4);
-  if (stored === null) throw new InventoryError(
-    `${lineLabel} converts to ${exact} ${baseUnit}, which cannot be stored exactly with four decimal places — ` +
-      `enter a quantity whose converted base units fit four places, or correct the item's unit conversion`,
-  );
-  return fromUnits(toUnits(stored));
+  try {
+    // This normalizer rejects every nonzero digit beyond the stored scale; it never rounds.
+    return normalizeDecimal(exact, 4);
+  } catch {
+    throw new InventoryError(
+      `${lineLabel} converts to ${exact} ${baseUnit}, which cannot be stored exactly with four decimal places — ` +
+        `enter a quantity whose converted base units fit four places, or correct the item's unit conversion`,
+    );
+  }
 }
 
 function inventoryConversionFactor(
