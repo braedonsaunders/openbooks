@@ -55,8 +55,8 @@ const requestBodySchema = z.discriminatedUnion('action', [
   z.strictObject({ ...actionBody('dry-run') }),
   z.strictObject({ ...actionBody('bulk-adjustment'), componentId: payrollRunUuid('componentId', 'a pay component id', "choose one from this run's adjustableComponents"), amount: payrollRunMoney, employeePartyIds: employeeIds('pass the employees to adjust as a list'), note: z.json().optional(), replaceComponent: z.json().optional() }),
   z.strictObject({ ...actionBody('preview-gl') }),
-  z.strictObject({ ...actionBody('add-adjustment'), employeePartyId: payrollRunUuid('employeePartyId', 'an employee id', 'pass the employee as an employee id', 'fix the id and try again'), componentId: payrollRunUuid('componentId', 'a pay component id', "choose one from this run's adjustableComponents"), amount: payrollRunMoney, hours: z.string().nullable().optional(), note: z.json().optional(), replaceComponent: z.json().optional() }),
-  z.strictObject({ ...actionBody('record-holiday-hours'), employeePartyId: payrollRunUuid('employeePartyId', 'an employee id', 'select the employee whose paid holiday hours are being recorded'), hours: z.string(), reason: z.string().trim().min(1).max(500), note: z.string().max(500).optional() }),
+  z.strictObject({ ...actionBody('add-adjustment'), employeePartyId: payrollRunUuid('employeePartyId', 'an employee id', 'pass the employee as an employee id', 'fix the id and try again'), componentId: payrollRunUuid('componentId', 'a pay component id', "choose one from this run's adjustableComponents"), amount: payrollRunMoney, hours: z.string().nullable().optional(), earnedFrom: z.string().nullable().optional(), earnedTo: z.string().nullable().optional(), note: z.json().optional(), replaceComponent: z.json().optional() }),
+  z.strictObject({ ...actionBody('record-holiday-hours'), employeePartyId: payrollRunUuid('employeePartyId', 'an employee id', 'select the employee whose paid holiday hours are being recorded'), hours: z.string(), earnedOn: z.string().optional(), reason: z.string().trim().min(1).max(500), note: z.string().max(500).optional() }),
   z.strictObject({ ...actionBody('delete-adjustment'), adjustmentId: payrollRunUuid('adjustmentId', 'a pay adjustment id', 'pass the adjustment to delete as an id', 'fix the id and try again') }),
   z.strictObject({ ...actionBody('set-scope'), employeePartyIds: employeeIds('pass the employees to include as a list'), rosterPartyIds: rosterIds }),
   z.strictObject({ ...actionBody('exclude-employee'), employeePartyId: payrollRunUuid('employeePartyId', 'an employee id', 'pass the employee as an employee id', 'fix the id and try again') }),
@@ -209,7 +209,7 @@ export const GET = defineRoute({
         else linesByStub.set(stubId, [line])
       }
       const adjustments = await tx.execute<Record<string, unknown>>(sql`
-          select a.id, a.employee_party_id, a.adjustment_type, a.component_id, a.amount, a.hours,
+          select a.id, a.employee_party_id, a.adjustment_type, a.component_id, a.amount, a.hours, a.earned_from::text, a.earned_to::text,
                  a.replace_component, a.note, p.display_name as employee_name, c.name as component_name
             from pay_run_adjustments a
             join parties p on p.id = a.employee_party_id and p.org_id = a.org_id
@@ -413,7 +413,7 @@ export const POST = defineRoute({
         if (key !== '' && !isUuid(key)) return NextResponse.json({ error: 'invalid_idempotency_key' }, { status: 400 })
         try {
           const result = await recordPayRunHolidayHours({ orgId: gate.user.orgId, documentId: id,
-            actorId: gate.user.id, employeePartyId: body.employeePartyId, hours,
+            actorId: gate.user.id, employeePartyId: body.employeePartyId, hours, earnedOn: body.earnedOn,
             reason: body.reason, note: body.note, allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
             ...(key === '' ? {} : { idempotencyKey: key }) })
           return NextResponse.json({ ok: true, ...result })
@@ -485,7 +485,7 @@ export const POST = defineRoute({
             allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
             mutation: {
               action: 'add', employeePartyId, componentId, amount: normalizeMoney(amountRaw),
-              hours: hoursRaw, replaceComponent: replaceComponent ?? undefined, note,
+              hours: hoursRaw, earnedFrom: body.earnedFrom, earnedTo: body.earnedTo, replaceComponent: replaceComponent ?? undefined, note,
               ...(adjustmentKey === '' ? {} : { idempotencyKey: adjustmentKey }),
             },
           })
