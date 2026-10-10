@@ -24,7 +24,11 @@ function xmlTags(block: string, tag: string): string[] {
  */
 export function parseCamt053(source: StatementSourceContent): ParsedStatement {
   const text = decodeStatementSourceText(source, "camt053");
-  const stmt = xmlTag(text, "Stmt") ?? text;
+  const statements = xmlTags(text, "Stmt");
+  if (statements.length > 1) {
+    throw new BankingError("CAMT.053 contains multiple statements. Export and import each statement separately so every account, date window and closing balance is preserved.");
+  }
+  const stmt = statements[0] ?? text;
   const currency = xmlTag(stmt, "Ccy");
   const lines: ParsedStatementLine[] = [];
   let lineNo = 0;
@@ -51,7 +55,7 @@ export function parseCamt053(source: StatementSourceContent): ParsedStatement {
     // order or recurring collection, so keying by it silently drops every
     // execution after the first at import.
     const bankRef =
-      xmlTag(txDtls, "AcctSvcrRef") ?? xmlTag(txDtls, "TxId") ?? xmlTag(txDtls, "EndToEndId") ?? null;
+      xmlTag(ntry, "AcctSvcrRef") ?? xmlTag(txDtls, "TxId") ?? null;
     lines.push({
       postedOn: assertRealDate(iso[1]!, iso[2]!, iso[3]!, `CAMT.053 date "${dt}"`),
       amount: signed,
@@ -84,11 +88,11 @@ export function parseCamt053(source: StatementSourceContent): ParsedStatement {
   let statementDate: string | undefined;
   for (const bal of xmlTags(stmt, "Bal")) {
     const cd = xmlTag(bal, "Cd");
-    if (cd && /CLBD|CLAV/i.test(cd)) {
+    if (cd?.toUpperCase() === "CLBD") {
       const amt = xmlTag(bal, "Amt");
       const ind = (xmlTag(bal, "CdtDbtInd") ?? "CRDT").toUpperCase();
       if (amt) closingBalance = normalizeAmount((ind === "DBIT" ? "-" : "") + amt, "CAMT.053 balance");
-      const bd = xmlTag(bal, "Dt");
+      const bd = xmlTag(bal, "Dt")?.replace(/^<(?:Dt|DtTm)\b[^>]*>\s*/i, "");
       const m = bd?.match(/^(\d{4})-(\d{2})-(\d{2})/);
       if (m) statementDate = assertRealDate(m[1]!, m[2]!, m[3]!, "CAMT.053 balance date");
     }
