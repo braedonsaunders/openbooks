@@ -288,6 +288,26 @@ export async function appendDerivedEarningLines(
   }
 }
 
+/** Resolve the same classified operator inputs for derivation and settlement. */
+async function runLineAdjustmentRows(
+  tx: Pick<typeof db, "execute">,
+  orgId: string,
+  documentId: string,
+  employeePartyId: string,
+): Promise<readonly Record<string, unknown>[]> {
+  return (await tx.execute<Record<string, unknown>>(sql`
+    select a.id as adjustment_id, a.amount as adj_amount, a.hours as adj_hours, a.replace_component, a.note, c.*,
+           ec.supplemental_wage_category, ec.statutory_reporting_category, ec.statutory_exemption_category
+      from pay_run_adjustments a
+      join pay_components c on c.id = a.component_id and c.org_id = a.org_id
+      join pay_component_earning_classifications ec
+        on ec.org_id = c.org_id and ec.pay_component_id = c.id
+     where a.org_id = ${orgId} and a.pay_run_document_id = ${documentId}
+       and a.employee_party_id = ${employeePartyId} and a.adjustment_type = 'line'
+     order by c.sequence, a.created_at
+  `)).rows;
+}
+
 /**
  * Phase 2 mechanics: the jurisdiction-gated statutory holiday lines resolved
  * by `statutoryHolidayLinesForStub`, appended with deliberately no `hours`
@@ -329,6 +349,13 @@ export async function appendStatutoryHolidayEarningLines(
   // A period's holiday pay belongs to its regular run, like its salary; a
   // supplemental run in the same period would pay the holiday twice.
   if (!oneOffRun && statHolidayPay && run.run_type !== "supplemental") {
+    // An explicit component replacement supplies this run's holiday input.
+    // Resolve it before the superseded formula asks for eligibility or prior
+    // earnings. The ordinary adjustment phase still validates and applies it;
+    // approved unpaid obligations remain separate, governed settlements.
+    const adjustments = await runLineAdjustmentRows(tx, orgId, documentId, employeePartyId);
+    if (adjustments.some(adjustment => adjustment.replace_component === true
+      && adjustment.system_key === "stat_holiday" && adjustment.kind === "earning")) return;
     // Class-based percent-of-pay rules (Manitoba construction s. 30) price
     // the pay's regular wages: every earning line derived so far, before the
     // holiday lines themselves land.
@@ -524,18 +551,8 @@ export async function applyRunLineAdjustments(
 ): Promise<ReadonlySet<string>> {
   const { orgId, documentId, employeePartyId, bonusRun, retroRun, terminationRun, country, lines } = args;
   const replacedComponentIds = new Set<string>();
-  const adjustments = (await tx.execute<Record<string, unknown>>(sql`
-    select a.id as adjustment_id, a.amount as adj_amount, a.hours as adj_hours, a.replace_component, a.note, c.*,
-           ec.supplemental_wage_category, ec.statutory_reporting_category, ec.statutory_exemption_category
-      from pay_run_adjustments a
-      join pay_components c on c.id = a.component_id and c.org_id = a.org_id
-      join pay_component_earning_classifications ec
-        on ec.org_id = c.org_id and ec.pay_component_id = c.id
-     where a.org_id = ${orgId} and a.pay_run_document_id = ${documentId}
-       and a.employee_party_id = ${employeePartyId} and a.adjustment_type = 'line'
-     order by c.sequence, a.created_at
-  `));
-  for (const adj of adjustments.rows) {
+  const adjustments = await runLineAdjustmentRows(tx, orgId, documentId, employeePartyId);
+  for (const adj of adjustments) {
     // A saved deposit must still settle through the current native bank;
     // retiring or rebinding a plan cannot turn it into negative worked time.
     await assertBankDepositAdjustment(tx, { orgId, componentId: String(adj.id),
