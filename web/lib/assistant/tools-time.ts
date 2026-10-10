@@ -18,7 +18,7 @@ import {
 } from "../field-tickets";
 import {
   loadWeek,
-  pinTimesheetEmployee,
+  pinTimekeeper,
   weekStart,
 } from "../../app/api/timesheets/_lib";
 import type { AssistantToolDef, ToolResult } from "./types";
@@ -68,9 +68,9 @@ const getTimesheetWeek: AssistantToolDef = {
   execute: async (raw, authz): Promise<ToolResult> => {
     if (await timeFeatureOff(authz.user.orgId)) return { ok: false, error: TIME_FEATURE_ERROR };
     const a = raw as z.infer<typeof getTimesheetWeekSchema>;
-    // pinTimesheetEmployee is the route's boundary: an out-of-scope employee
+    // pinTimekeeper is the route's boundary: an out-of-scope employee
     // reads as missing, exactly like the route.
-    const owned = await pinTimesheetEmployee(authz.user.orgId, a.employeePartyId, authz.allowedSubsidiaryIds);
+    const owned = await pinTimekeeper(authz.user.orgId, a.employeePartyId, authz.allowedSubsidiaryIds);
     if (!owned) return { ok: false, error: "employee_not_found" };
     let payload: Awaited<ReturnType<typeof loadWeek>>;
     try {
@@ -165,7 +165,7 @@ const searchTimesheets: AssistantToolDef = {
     if (await timeFeatureOff(authz.user.orgId)) return { ok: false, error: TIME_FEATURE_ERROR };
     const a = raw as z.infer<typeof searchTimesheetsSchema>;
     const limit = Math.min(a.limit ?? 50, 200);
-    // Employee-subsidiary boundary, mirroring pinTimesheetEmployee: a null
+    // Employee-subsidiary boundary, mirroring pinTimekeeper: a null
     // employee subsidiary fails closed for restricted callers.
     const scope = authz.allowedSubsidiaryIds === null
       ? sql``

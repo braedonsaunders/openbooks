@@ -89,7 +89,7 @@ async function legacyPOST(req: Request, ctx: { params: Promise<unknown> }, injec
   if (!parsedBody.ok) return parsedBody.response;
   const body = parsedBody.data
   try {
-    // The clock is self: the employee always resolves from the login,
+    // The clock is self: the worker always resolves from the login,
     // never from client input — another worker's party id reads as
     // missing here, not as permission to clock for them.
     const employeePartyId = await resolveOwnParty(orgId, user.id);

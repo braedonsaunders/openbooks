@@ -1,4 +1,4 @@
-import { currentWeekStart, pinTimesheetEmployee, userEmployeeId } from '../../api/timesheets/_lib'
+import { currentWeekStart, pinTimekeeper, userEmployeeId } from '../../api/timesheets/_lib'
 import 'server-only'
 
 import { getLocale, getTranslations } from 'next-intl/server'
@@ -102,7 +102,7 @@ export async function loadProjects(
   const operatingChoices = await listOperatingProfileChoices(db, orgId, authz.user.id, 'project',operatingDepartmentId)
   const initialOperatingChoice=creating?operatingChoices.find(choice=>choice.value===pickString(sp.workflow))??null:null
   const timeEmployee = openProject && can(authz,'time.manage') && can(authz,'time.read') && await isFeatureEnabled(orgId,'timeTracking') ? await userEmployeeId(orgId,authz.user.id) : null
-  const ownTimeEmployee = timeEmployee ? await pinTimesheetEmployee(orgId,timeEmployee,authz.allowedSubsidiaryIds) : null
+  const ownTimeEmployee = timeEmployee ? await pinTimekeeper(orgId,timeEmployee,authz.allowedSubsidiaryIds) : null
   const quickTimeHref = openProject?.project.is_active===true && ownTimeEmployee ? `/timesheets?timesheet=${ownTimeEmployee}:${await currentWeekStart(orgId)}&job=${openProject.project.id}` : null
   const operatingDefinition = openProject ? await readPinnedOperatingProfile(db, orgId, openProject.project.operating_profile_version_id as string | null, 'project') : null
 

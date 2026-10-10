@@ -5,7 +5,7 @@ import { db, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
 import { canonicalDecimal, compareDecimal } from '@openbooks/engine/src/money/exact-decimal.ts'
 import { neg } from '@openbooks/engine/src/money/money.ts'
 import { lockScopeRow, ScopeNotFoundError } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
-import { pinTimesheetEmployee, pinTimesheetLineRefs, setTimesheetWeekStatus, weekStart, weekWindow } from '../app/api/timesheets/_lib'
+import { pinTimekeeper, pinTimesheetLineRefs, setTimesheetWeekStatus, weekStart, weekWindow } from '../app/api/timesheets/_lib'
 import { checkProjectsWriteEnabled } from './features'
 import { lockReasonsFor } from './time-lifecycle'
 import { initialEntryStatus, loadTimePolicy } from './time-policy'
@@ -77,7 +77,7 @@ export async function amendTimeEntry(
     // offset into phantom negative hours. Correct editable entries by saving,
     // and consumed ones here.
     if (row.status !== 'approved') throw new TimeAmendmentRefusal('only an approved entry can be amended — edit or submit it first')
-    const ownedEmployee = await pinTimesheetEmployee(orgId, row.employee_party_id, allowedSubsidiaryIds)
+    const ownedEmployee = await pinTimekeeper(orgId, row.employee_party_id, allowedSubsidiaryIds)
     if (!ownedEmployee) throw new TimeAmendmentRefusal('employee not found')
     row.employee_party_id = ownedEmployee
     const already = (await db.execute(sql`
@@ -174,7 +174,7 @@ async function insertAmendment(
   replacementHours?: string,
   reason?: string,
 ): Promise<string> {
-  const ownedEmployee = await pinTimesheetEmployee(orgId, row.employee_party_id)
+  const ownedEmployee = await pinTimekeeper(orgId, row.employee_party_id)
   if (!ownedEmployee) throw new TimeAmendmentRefusal('employee not found')
   // The contra inherits the original's project as a draft entry — a new
   // Projects disable-blocker — so a disable racing this insert must refuse
@@ -255,7 +255,7 @@ export async function amendLockedWeek(
 ): Promise<{ amended: number }> {
   return withOrgTransaction(orgId, async () => {
     await lockScopeRow(db, orgId, 'party', employeeId, allowedSubsidiaryIds, 'share')
-    const ownedEmployee = await pinTimesheetEmployee(orgId, employeeId, allowedSubsidiaryIds)
+    const ownedEmployee = await pinTimekeeper(orgId, employeeId, allowedSubsidiaryIds)
     if (!ownedEmployee) throw new TimeAmendmentRefusal('employee not found')
     const week = weekStart(sundayIso)
     const days = weekWindow(week)

@@ -756,11 +756,12 @@ export async function createScratchUser(
 }
 
 /**
- * Give a scratch party an active employment. pinTimesheetEmployee (and the
- * weekly save behind it) requires an active employee_roles row for an active
- * party — a parties row alone is not an employment, so time tests seed this
- * for every employee they pin past the guard. Tests proving the refusal
- * itself seed no employment and assert employee_not_found instead.
+ * Give a scratch party an active employment. pinTimekeeper (and the weekly
+ * save behind it) requires an active employee_roles row for an active
+ * employee party — a parties row alone is not an employment, so time tests
+ * seed this for every employee they pin past the guard. Person parties need
+ * no employment. Tests proving the refusal itself seed no employment and
+ * assert employee_not_found instead.
  */
 export async function seedActiveEmployment(orgId: string, partyId: string, hiredOn = "2026-01-01"): Promise<void> {
   await assertFixtureDatabase();

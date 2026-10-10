@@ -91,10 +91,11 @@ export function recommendWorkspaceFeatures(args: {
   state.multiSubsidiary = false
   state.multiCurrency = false
 
+  // Time tracking stands alone: an org without Projects keeps its recommended
+  // time tracking. The project capabilities below stay under Projects.
   if (!state.projects) {
     state.fieldTickets = false
     state.projectScheduling = false
-    state.timeTracking = false
     state.subcontracts = false
     state.preBilling = false
   }

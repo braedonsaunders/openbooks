@@ -120,15 +120,16 @@ export interface WeekRow {
 }
 
 /**
- * Pin an actively-employed party to the known tenant. Returns the owned id,
- * or null. A `parties` row alone proves nothing — vendors, customers and
- * contacts all live there — so the pin additionally requires an active
- * `employee_roles` row for an active party: time can only be recorded for
- * someone holding an active employment. Reads fail closed the same way — a
+ * Pin a timekeeper to the known tenant. Returns the owned id, or null. A
+ * `parties` row alone proves nothing — vendors, customers and contacts all
+ * live there — so the pin admits only an active person party, or an active
+ * employee party holding an active `employee_roles` row. Partners and
+ * contractors log billable time as people; payroll admits only employments,
+ * so their hours never reach a pay run. Reads fail closed the same way — a
  * former employee's stored entries remain in the ledger and reports, but no
  * week can be opened for them until the employment is restored.
  */
-export async function pinTimesheetEmployee(
+export async function pinTimekeeper(
   orgId: string,
   employeeId: string,
   allowedSubsidiaryIds?: ReadonlySet<string> | null,
@@ -137,11 +138,15 @@ export async function pinTimesheetEmployee(
     select id, subsidiary_id from parties
      where org_id = ${orgId} and id = ${employeeId}
        and is_active
-       and exists (
-         select 1 from employee_roles r
-          where r.org_id = parties.org_id
-            and r.party_id = parties.id
-            and r.is_active
+       and kind in ('person', 'employee')
+       and (
+         kind = 'person'
+         or exists (
+           select 1 from employee_roles r
+            where r.org_id = parties.org_id
+              and r.party_id = parties.id
+              and r.is_active
+         )
        )
      limit 1`))
   const row = owned.rows[0]
@@ -159,12 +164,12 @@ export async function pinTimesheetEmployee(
 }
 
 /**
- * Resolve an amendment's source employee without exposing an out-of-scope
- * entry to the mutation service. The employee party and source entry are both
- * tenant-pinned; the subsidiary decision happens before any amendment read or
- * write can proceed.
+ * Resolve an amendment's source timekeeper without exposing an out-of-scope
+ * entry to the mutation service. The timekeeper party and source entry are
+ * both tenant-pinned; the subsidiary decision happens before any amendment
+ * read or write can proceed.
  */
-export async function pinTimesheetEntryEmployee(
+export async function pinTimekeeperEntry(
   orgId: string,
   entryId: string,
   allowedSubsidiaryIds?: ReadonlySet<string> | null,
@@ -185,7 +190,7 @@ export async function pinTimesheetEntryEmployee(
   ) {
     return null
   }
-  return pinTimesheetEmployee(orgId, source.employee_party_id, allowedSubsidiaryIds)
+  return pinTimekeeper(orgId, source.employee_party_id, allowedSubsidiaryIds)
 }
 
 export interface TimesheetLineRefs {
@@ -276,7 +281,7 @@ export async function loadWeek(
   sundayIso: string,
   allowedSubsidiaryIds?: ReadonlySet<string> | null,
 ): Promise<WeekPayload> {
-  const ownedEmployee = await pinTimesheetEmployee(orgId, employeeId, allowedSubsidiaryIds)
+  const ownedEmployee = await pinTimekeeper(orgId, employeeId, allowedSubsidiaryIds)
   if (!ownedEmployee) throw new Error('employee not found')
   const days = weekWindow(sundayIso)
   const week = days[0]!
@@ -430,7 +435,7 @@ export async function ensureTimesheetWeek(
   actorId?: string | null,
   allowedSubsidiaryIds?: ReadonlySet<string> | null,
 ): Promise<{ id: string; status: WeekStatus; rejectionReason: string | null }> {
-  const ownedEmployee = await pinTimesheetEmployee(orgId, employeePartyId, allowedSubsidiaryIds)
+  const ownedEmployee = await pinTimekeeper(orgId, employeePartyId, allowedSubsidiaryIds)
   if (!ownedEmployee) throw new Error('employee not found')
   const week = weekStart(weekStartIso)
   const inserted = (await db.execute<{ id: string; status: WeekStatus; rejection_reason: string | null }>(sql`
@@ -538,7 +543,7 @@ export async function setTimesheetWeekStatus(
   rejectionReason?: string | null,
   allowedSubsidiaryIds?: ReadonlySet<string> | null,
 ): Promise<void> {
-  const ownedEmployee = await pinTimesheetEmployee(orgId, employeePartyId, allowedSubsidiaryIds)
+  const ownedEmployee = await pinTimekeeper(orgId, employeePartyId, allowedSubsidiaryIds)
   if (!ownedEmployee) throw new Error('employee not found')
   const week = weekStart(weekStartIso)
   // Explicit casts: an untyped `null` in a CASE makes postgres infer text for
@@ -600,10 +605,10 @@ export interface TimesheetPickers {
 /**
  * Load every picker the weekly editor needs, for one org.
  *
- * `includeEmployeeId` keeps a specific employee in the list even when they are
- * inactive or no longer hold an employee role, so the picker still names the
- * timesheet's own employee instead of rendering blank. Opening the week still
- * requires an active employment (see pinTimesheetEmployee): historical entries
+ * `includeEmployeeId` keeps a specific timekeeper in the list even when they
+ * are inactive or no longer hold an employee role, so the picker still names
+ * the timesheet's own timekeeper instead of rendering blank. Opening the
+ * week still requires a timekeeper (see pinTimekeeper): historical entries
  * remain in the ledger and reports, but no week loads for a former employee
  * until the employment is restored.
  */
@@ -624,17 +629,23 @@ export async function loadPickers(
   const [employees, projects, items, timeTypes, departments] = (await Promise.all([
     db.execute<Record<string, unknown>>(sql`
       select p.id, coalesce(p.display_name, '') as label,
-             (p.is_active and exists (
-               select 1 from employee_roles r
-                where r.party_id = p.id and r.org_id = p.org_id and r.is_active
+             (p.is_active and p.kind in ('person', 'employee') and (
+               p.kind = 'person'
+               or exists (
+                 select 1 from employee_roles r
+                  where r.party_id = p.id and r.org_id = p.org_id and r.is_active
+               )
              )) as currently_active
             from parties p
            where p.org_id = ${orgId}
              ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds ?? null)}
              and (
-           (p.is_active and exists (
-             select 1 from employee_roles r
-              where r.party_id = p.id and r.org_id = p.org_id and r.is_active
+           (p.is_active and p.kind in ('person', 'employee') and (
+             p.kind = 'person'
+             or exists (
+               select 1 from employee_roles r
+                where r.party_id = p.id and r.org_id = p.org_id and r.is_active
+             )
            ))
            or p.id = ${includeEmployeeId ?? null}
          )
@@ -683,7 +694,7 @@ export async function loadPickers(
   }
 }
 
-/** Resolve the employee party a user should default to, if any (users.party_id). */
+/** Resolve the person party a user should default to, if any (users.party_id). */
 export async function userEmployeeId(orgId: string, userId: string): Promise<string | null> {
   const r = (await db.execute<{ party_id: string | null }>(sql`
     select party_id from users where id = ${userId} and org_id = ${orgId}

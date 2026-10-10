@@ -141,3 +141,22 @@ test("optional HRM operations preserve independent capabilities and explicit clo
   assert.ok(singleSwitches.has("hrmPerformance") && singleSwitches.has("hrmRecruiting"));
   assert.deepEqual(FEATURES.filter(feature => feature.parentKey && singleSwitches.has(feature.parentKey)).map(feature => feature.key), ["hrmShiftClosing"]);
 });
+
+test("time tracking stands alone: hourly time needs no job costing", () => {
+  const timeTracking = FEATURE_BY_KEY.get("timeTracking");
+  assert.ok(timeTracking, "timeTracking must be registered before time routes gate on it");
+  assert.equal(timeTracking.parentKey, undefined);
+  assert.deepEqual(timeTracking.navModules, ["timesheets"]);
+  // A cafe with hourly staff runs time with Projects off.
+  assert.equal(featureEnabled({ projects: false, timeTracking: true }, "timeTracking"), true);
+  // A stale stored override can never resurrect time tracking while it is off.
+  assert.equal(featureEnabled({ projects: true, timeTracking: false }, "timeTracking"), false);
+  const fieldTime = FEATURE_BY_KEY.get("fieldTime");
+  assert.ok(fieldTime, "fieldTime must be registered before clock and crew routes gate on it");
+  assert.equal(fieldTime.parentKey, "timeTracking");
+  assert.deepEqual(fieldTime.requiresAll ?? [], []);
+  // Field capture rides time tracking, not Projects: clock and crew entry
+  // work with Projects off while the project binding stays in the data.
+  assert.equal(featureEnabled({ projects: false, timeTracking: true, fieldTime: true }, "fieldTime"), true);
+  assert.equal(featureEnabled({ projects: false, timeTracking: false, fieldTime: true }, "fieldTime"), false);
+});

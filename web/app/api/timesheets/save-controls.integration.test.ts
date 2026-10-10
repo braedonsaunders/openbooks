@@ -196,7 +196,7 @@ test('replaying a draft grid reuses the stored rows instead of churning them', a
   } finally { await f.close() }
 })
 
-test('time cannot be pinned to a party without an active employment', async () => {
+test('time cannot be pinned to a non-person party or an employment that lapsed', async () => {
   const f = await fixture(true)
   try {
     assert.equal((await f.save({})).status, 200)

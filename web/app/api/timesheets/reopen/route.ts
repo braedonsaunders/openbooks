@@ -14,7 +14,7 @@ import {
 import {
   isIsoDate,
   loadWeek,
-  pinTimesheetEmployee,
+  pinTimekeeper,
   setTimesheetWeekStatus,
   weekStart,
   weekWindow,
@@ -59,7 +59,7 @@ export const POST = defineRoute({
     if (!body.employee || !isUuid(body.employee))
       return bad("Invalid employee");
     if (!body.week || !isIsoDate(body.week)) return bad("Invalid week");
-    const employee = await pinTimesheetEmployee(
+    const employee = await pinTimekeeper(
       orgId,
       body.employee,
       gate.allowedSubsidiaryIds,
