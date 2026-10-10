@@ -717,42 +717,28 @@ test("an unmatched line offers evidence actions and a draft offers delete", asyn
   assert.ok(host.textContent?.includes("Delete draft"), "a draft batch offers audited deletion");
   const opener = [...host.querySelectorAll("button")].find((el) => el.textContent === "po_draft");
   assert.ok(opener, "the draft reference opens the detail drawer");
-  await act(async () => {
-    opener.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+  const click = async (button: HTMLButtonElement) => {
+    await act(async () => {
+      button.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+      await tick();
+    });
     await tick();
-  });
-  await tick();
-  const evidenceButtons = [...host.querySelectorAll("button")].filter((el) => el.textContent === "Evidence");
-  assert.ok(evidenceButtons.length >= 1, "an unmatched matchable line offers evidence actions");
-  await act(async () => {
-    evidenceButtons[0]!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-    await tick();
-  });
-  await tick();
+  };
+  const buttonNamed = (name: string) => {
+    const found = [...host.querySelectorAll("button")].find((el) => el.textContent === name);
+    assert.ok(found, `a ${name} button must render`);
+    return found as HTMLButtonElement;
+  };
+  await click(opener as HTMLButtonElement);
+  await click(buttonNamed("Evidence"));
   assert.ok(host.textContent?.includes("Settlement line evidence"), "the evidence panel opens for the line");
-  const searchBox = host.querySelector('input[placeholder="Search posted sales documents"]') as HTMLInputElement | null;
+  const searchBox = host.querySelector('input[placeholder="Search posted sales documents"]');
   assert.ok(searchBox, "the panel searches posted sales documents");
-  await act(async () => {
-    const native = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(searchBox), "value")?.set;
-    native?.call(searchBox, "INV");
-    searchBox.dispatchEvent(new Event("input", { bubbles: true }));
-    await tick();
-  });
+  setNativeValue(searchBox as HTMLElement, "INV");
   await tick();
-  const searchButtons = [...host.querySelectorAll("button")].filter((el) => el.textContent === "Search");
-  await act(async () => {
-    searchButtons[0]!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-    await tick();
-  });
-  await tick();
+  await click(buttonNamed("Search"));
   assert.ok(host.textContent?.includes("INV-1"), "the document search lists the posted invoice");
-  const linkButtons = [...host.querySelectorAll("button")].filter((el) => el.textContent === "Link");
-  assert.equal(linkButtons.length, 1, "the found document offers linking");
-  await act(async () => {
-    linkButtons[0]!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-    await tick();
-  });
-  await tick();
+  await click(buttonNamed("Link"));
   assert.ok(
     posts.some((body) => body.action === "link" && body.lineId === "l-0001" && body.documentId === "doc-1"),
     "linking posts the audited line link",
