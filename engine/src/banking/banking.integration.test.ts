@@ -1044,6 +1044,12 @@ test(
         { reconciliationId, statementLineIds: [lineId], journalLineIds: [bankLineId!] },
         ctx,
       );
+      // Capture before unmatching removes the group's match rows.
+      const groupId = (await db.execute<{ group_id: string }>(sql`
+        select group_id from reconciliation_matches
+         where org_id = ${org.orgId} and reconciliation_id = ${reconciliationId}
+         limit 1
+      `)).rows[0]!.group_id;
       await unmatchStatementLine({ reconciliationId, statementLineId: lineId }, ctx);
 
       const audits = (await db.execute<{ changes: Record<string, unknown>; actor_id: string }>(sql`
@@ -1054,6 +1060,8 @@ test(
            and action = 'update'
          order by id
       `));
+      // Even a single-line match clears as a one-member group, and the
+      // line's audit names the group that cleared it.
       assert.deepEqual(
         audits.rows.map((row) => row.changes),
         [
@@ -1061,6 +1069,8 @@ test(
             operation: "match",
             reconciliationId,
             matchedBy: "manual",
+            groupId,
+            statementLineIds: [lineId],
             journalLineIds: [bankLineId],
             before: { matchStatus: "unmatched" },
             after: { matchStatus: "matched" },
@@ -1068,6 +1078,7 @@ test(
           {
             operation: "unmatch",
             reconciliationId,
+            groupIds: [groupId],
             journalLineIds: [bankLineId],
             before: { matchStatus: "matched" },
             after: { matchStatus: "unmatched" },

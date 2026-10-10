@@ -85,6 +85,38 @@ async function setup() {
   return { org, actor, ctx: { orgId: org.orgId, userId: actor, allowedSubsidiaryIds: null } };
 }
 
+type CsvImportInput = Omit<Parameters<typeof importStatement>[0], "source" | "sourceEvidence"> & {
+  source: "csv";
+};
+
+/**
+ * Import fixture lines as the bank CSV file they stand for. CSV imports must
+ * retain the column mapping used to parse the file, so the fixture renders
+ * the lines into deterministic CSV bytes with that mapping: an identical
+ * input reproduces the identical file (and source hash).
+ */
+function importCsv(input: CsvImportInput, ctx: Parameters<typeof importStatement>[1]) {
+  const quote = (value: string) => `"${value.replace(/"/g, '""')}"`;
+  const content = [
+    "date,amount,description,bank_transaction_id",
+    ...input.lines.map((line) =>
+      [line.postedOn, line.amount, quote(line.description ?? ""), line.bankTransactionId ?? ""].join(","),
+    ),
+  ].join("\n") + "\n";
+  return importStatement(
+    {
+      ...input,
+      sourceEvidence: {
+        content,
+        filename: "statement.csv",
+        contentType: "text/csv",
+        csvMapping: { date: 0, amount: 1, description: 2, bankTransactionId: 3 },
+      },
+    },
+    ctx,
+  );
+}
+
 async function statementLineIds(orgId: string, statementId: string): Promise<string[]> {
   return (await db.execute<{ id: string }>(sql`
     select id from bank_statement_lines
@@ -114,7 +146,7 @@ test(
     try {
       // The QA case: one $8,000 journal paying two partners, two $4,000 wires.
       const [journal] = await postBankJournal(org, actor, ["8000.0000"], "two-partners");
-      const imported = await importStatement(
+      const imported = await importCsv(
         {
           accountId: org.accounts.bank,
           source: "csv" as const,
@@ -176,7 +208,7 @@ test(
     const { org, actor, ctx } = await setup();
     try {
       const receipts = await postBankJournal(org, actor, ["100.0000", "100.0000", "100.0000"], "three-receipts");
-      const imported = await importStatement(
+      const imported = await importCsv(
         {
           accountId: org.accounts.bank,
           source: "csv" as const,
@@ -230,7 +262,7 @@ test(
     const { org, actor, ctx } = await setup();
     try {
       const [journal] = await postBankJournal(org, actor, ["7999.9900"], "cent-short");
-      const imported = await importStatement(
+      const imported = await importCsv(
         {
           accountId: org.accounts.bank,
           source: "csv" as const,
