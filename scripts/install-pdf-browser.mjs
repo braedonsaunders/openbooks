@@ -1,8 +1,7 @@
 import { createHash } from 'node:crypto'
 import { execFileSync } from 'node:child_process'
 import { createReadStream, createWriteStream, existsSync, mkdtempSync, readFileSync, renameSync, rmSync } from 'node:fs'
-import { tmpdir } from 'node:os'
-import { join, resolve } from 'node:path'
+import { dirname, join, resolve } from 'node:path'
 import { Readable } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
 import { fileURLToPath } from 'node:url'
@@ -36,7 +35,8 @@ export async function verifyArchiveChecksum(path, expected) {
 async function install(architecture, destination) {
   const archive = rendererArchive(architecture)
   if (!destination || existsSync(destination)) throw new Error('PDF renderer destination must name a new directory.')
-  const temporary = mkdtempSync(join(tmpdir(), 'openbooks-pdf-browser-'))
+  // Unpack beside the destination so the final rename stays on one filesystem.
+  const temporary = mkdtempSync(join(dirname(resolve(destination)), '.openbooks-pdf-browser-'))
   try {
     const path = join(temporary, 'browser.zip')
     const response = await fetch(archive.url, { signal: AbortSignal.timeout(300_000) })
