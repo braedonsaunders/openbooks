@@ -159,6 +159,7 @@ type TabKey =
 export function ProjectDrawer({
   payload,
   parties,
+  managerParties,
   subsidiaries,
   canManage,
   canViewGl,
@@ -182,6 +183,8 @@ export function ProjectDrawer({
 }: {
   payload: ProjectPayload
   parties: PartyOpt[]
+  /** Manager picker: internal people only (the write path refuses anyone else). */
+  managerParties: PartyOpt[]
   subsidiaries: SubsidiaryOpt[]
   canManage: boolean
   canViewGl: boolean
@@ -339,6 +342,10 @@ export function ProjectDrawer({
   const partyOptions = useMemo(
     () => parties.map((p) => ({ value: p.id, label: p.display_name ?? '' })),
     [parties],
+  )
+  const managerOptions = useMemo(
+    () => managerParties.map((p) => ({ value: p.id, label: p.display_name ?? '' })),
+    [managerParties],
   )
 
   const savePayload = useMemo(
@@ -596,7 +603,7 @@ export function ProjectDrawer({
         return (
           <>
             <Label>{lbl || t('labels.manager')}</Label>
-            {editable ? <SearchSelect value={managerId} onChange={setManagerId} options={partyOptions} clearable emptyLabel={t('drawer.noManager')} placeholder={t('drawer.selectManager')} sheetTitle={t('labels.manager')} ariaLabel={t('labels.manager')} /> : <ReadOnlyValue value={partyOptions.find((option) => option.value === managerId)?.label ?? ''} />}
+            {editable ? <SearchSelect value={managerId} onChange={setManagerId} options={managerOptions} clearable emptyLabel={t('drawer.noManager')} placeholder={t('drawer.selectManager')} sheetTitle={t('labels.manager')} ariaLabel={t('labels.manager')} /> : <ReadOnlyValue value={managerOptions.find((option) => option.value === managerId)?.label ?? partyOptions.find((option) => option.value === managerId)?.label ?? ''} />}
           </>
         )
       case 'customer_po_number':

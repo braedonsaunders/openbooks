@@ -11,6 +11,7 @@ import { can, requirePermission } from '../../../lib/authz'
 import { isUuid, mergeHref, pickString } from '../../../lib/list-params'
 import { subsidiaryUiOptions } from '../../../lib/subsidiaries'
 import { listScopedPartyOptions } from '../../../lib/scoped-options'
+import { listInternalPersonOptions } from '@openbooks/engine/src/organization/internal-person.ts'
 import { resolveFormLayout } from '../../../lib/customization/resolve'
 import { loadFieldDefs } from '../../../lib/custom-fields'
 import { loadProject } from '../../api/projects/_lib'
@@ -109,17 +110,20 @@ export async function loadProjects(
   // party pickers + resolved form layout + cockpit data for the flyout
   // (only when a project is open; creation loads the form inputs but no
   // cockpit — those tabs need a persisted project and stay hidden).
-  const [parties, subsidiaries, projectTypesRes] = openProject || creating
+  const [parties, managerParties, subsidiaries, projectTypesRes] = openProject || creating
     ? await Promise.all([
-        // Customer/foreman/manager pickers: only parties the caller may see.
+        // Customer/foreman pickers: only parties the caller may see.
         listScopedPartyOptions(orgId, authz.allowedSubsidiaryIds, { activeOnly: true }),
+        // Manager picker: internal people only — the same predicate the
+        // write path enforces, so a choice here always saves.
+        listInternalPersonOptions(db, orgId, authz.allowedSubsidiaryIds),
         subsidiaryUiOptions(orgId),
         db.execute<ProjectTypeOption>(sql`
           select id, name, billing_method as "billingMethod",
                  invoicing_profile->>'billingProcedure' as "billingProcedure"
             from project_types where org_id = ${orgId} and is_active order by sort_order, name`),
       ])
-    : [null, [], null]
+    : [null, [], [], null]
   const projectTypes = projectTypesRes?.rows ?? []
 
   // The Schedule and Staffing tabs are Projects sub-capabilities: resolved on
@@ -202,6 +206,7 @@ export async function loadProjects(
                 }
               : openProject) as unknown as ProjectDrawerProps['payload'],
             parties,
+            managerParties,
             subsidiaries,
             canManage,
             canViewGl,

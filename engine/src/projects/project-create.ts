@@ -11,6 +11,7 @@ import { resolveIdempotentReplay } from "../records/idempotent-replay.ts";
 import { acquireOrgFeatureGateLock } from "../organization/org-feature-lock.ts";
 import { isFeatureEnabled } from "../organization/feature-state.ts";
 import { subsidiaryScopeAllows, subsidiaryVisibleFilter } from "../organization/subsidiary-scope.ts";
+import { pinInternalPerson } from "../organization/internal-person.ts";
 import { checkPinnedOperatingProfileCommand, resolveOperatingProfileForCreate } from "../organization/operating-profiles.ts";
 
 /**
@@ -204,6 +205,17 @@ async function resolveProjectRow(
   const customerId = await party(body.customerId, "customer", "customerId");
   const foremanId = await party(body.foremanId, "foreman", "foremanId");
   const managerId = await party(body.managerId, "manager", "managerId");
+  // Project roles are internal people (the timekeeper rule): an active
+  // person party, or an employee party holding an active employment. A
+  // customer, vendor, or company party cannot manage a project. Subsidiary
+  // scope is deliberately not pinned here — the visibility check below
+  // still reports an out-of-scope person by name instead.
+  if (managerId !== null && !(await pinInternalPerson(runner, orgId, managerId))) {
+    throw bad(
+      `project manager "${managerId}" must be an active employee or internal person in this organization — choose the manager from the organization's people`,
+      "managerId",
+    );
+  }
   // Pickers only offer subsidiary-visible active parties: the write agrees,
   // so an out-of-scope customer/foreman/manager is refused by name instead
   // of persisting a cross-subsidiary link the caller can never see again.
