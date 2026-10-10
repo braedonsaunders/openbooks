@@ -466,7 +466,7 @@
     "builtInDescriptions": {
       "admin": "Vollzugriff auf alles, einschließlich Benutzern, Rollen, Navigation und Unternehmenseinstellungen.",
       "controller": "Verantwortet die Bücher: Hauptbuch, Kreditoren, Debitoren, Einkauf, Genehmigungen, Periodenabschluss, Berichte und Prüfprotokoll. Kann keine Benutzer oder Rollen verwalten.",
-      "accountant": "Tägliche Buchhaltung: erfasst und bucht Journale, Eingangs- und Ausgangsrechnungen, zahlt und vereinnahmt und erstellt Berichte. Kann nicht genehmigen, Perioden abschließen, Banken abstimmen oder Benutzer verwalten.",
+      "accountant": "Tägliche Buchhaltung: erfasst und bucht Journale, Eingangs- und Ausgangsrechnungen, zahlt und vereinnahmt, erstellt Berichte und prüft Bank- und Kartenabstimmungen. Kann nicht genehmigen, Perioden abschließen, Banken abstimmen oder Benutzer verwalten.",
       "production": "Verwaltet Fertigungsstammdaten und Werkstattarbeit und bucht Lagerbewegungen. Kann keine Lagerbuchungen stornieren und das Hauptbuch nicht sehen.",
       "approver": "Prüft und entscheidet Genehmigungsanfragen, mit Lesezugriff auf Hauptbuch, Nebenbücher und Berichte. Kann keine Vorgänge erfassen, buchen oder bezahlen.",
       "viewer": "Lesezugriff auf Hauptbuch, Nebenbücher, Berichte und Insights. Kann keine Vorgänge erstellen, ändern, buchen oder bezahlen.",

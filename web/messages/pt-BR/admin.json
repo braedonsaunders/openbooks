@@ -466,7 +466,7 @@
     "builtInDescriptions": {
       "admin": "Acesso total a tudo, incluindo usuários, funções, navegação e configurações da empresa.",
       "controller": "Responsável pelos livros: razão geral, contas a pagar e a receber, compras, aprovações, fechamento de períodos, relatórios e log de auditoria. Não pode gerenciar usuários nem funções.",
-      "accountant": "Contabilidade do dia a dia: lança e contabiliza lançamentos, contas a pagar e faturas, paga e recebe, e cria relatórios. Não pode aprovar, fechar períodos, conciliar bancos nem gerenciar usuários.",
+      "accountant": "Contabilidade do dia a dia: lança e contabiliza lançamentos, contas a pagar e faturas, paga e recebe, cria relatórios e revisa as conciliações bancárias e de cartões. Não pode aprovar, fechar períodos, conciliar bancos nem gerenciar usuários.",
       "production": "Gerencia cadastros de manufatura e o trabalho de chão de fábrica, e lança movimentações de estoque. Não pode estornar lançamentos de estoque nem ver o razão geral.",
       "approver": "Analisa e decide solicitações de aprovação, com acesso de leitura ao razão geral, aos razões auxiliares e aos relatórios. Não pode lançar, contabilizar nem pagar transações.",
       "viewer": "Acesso somente leitura ao razão geral, razões auxiliares, relatórios e insights. Não pode criar, alterar, contabilizar nem pagar transações.",
