@@ -195,6 +195,26 @@ test("sandbox insertion orders trigger-required parents inside a deferrable FK c
   assert.ok(order.indexOf("field_ticket_labor_snapshots") < order.indexOf("field_ticket_labor_lines"));
 });
 
+test("sandbox insertion resolves budget ownership inside deferred source cycles", () => {
+  const refs: Record<string, Record<string, string>> = {
+    budget_lines: { scenario_id: "budget_scenarios", project_id: "projects", period_id: "accounting_periods" },
+    budget_scenarios: { book_id: "accounting_books", created_by: "users" },
+    projects: { source_document_id: "documents" },
+    documents: { project_id: "projects", created_by: "users" },
+    users: { source_document_id: "documents" },
+    accounts: {}, accounting_books: {}, accounting_periods: {}, departments: {}, locations: {}, classes: {},
+  };
+  const nodes = Object.keys(refs);
+  const tables = nodes.map(name => ({ ...table("NO ACTION"), name, fks: refs[name]!, hardFks: {} }));
+  const order = insertionOrder({ tables, tenantTables: tables, rebaseSet: new Set(nodes) });
+  assert.ok(order.indexOf("accounting_books") < order.indexOf("budget_scenarios"));
+  assert.ok(order.indexOf("users") < order.indexOf("budget_scenarios"));
+  for (const parent of ["budget_scenarios", "accounts", "accounting_periods", "departments", "projects", "locations", "classes"]) {
+    assert.ok(order.indexOf(parent) < order.indexOf("budget_lines"), `${parent} precedes its trigger-checked budget line`);
+  }
+  assert.equal(new Set(order).size, nodes.length);
+});
+
 test("sandbox insertion retains assignment ownership order through employment history cycles", () => {
   const nodes = ["employment_assignment_versions", "employment_assignments", "employment_changes", "worker_employment_versions", "worker_employments"];
   const refs: Record<string, Record<string, string>> = {

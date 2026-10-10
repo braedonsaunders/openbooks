@@ -33,6 +33,9 @@ const TRIGGER_INSERT_COLUMN_PARENTS: Readonly<Record<string, string>> = {
   subsidiary_id: "subsidiaries",
 };
 const TRIGGER_INSERT_TABLE_PARENTS: Readonly<Record<string, readonly string[]>> = {
+  // Budget guards resolve their book, scenario and accounting dimensions during INSERT.
+  budget_scenarios: ["accounting_books", "users"],
+  budget_lines: ["budget_scenarios", "accounts", "accounting_periods", "departments", "projects", "locations", "classes"],
   // Physical identity and ownership guards resolve parents during INSERT.
   inventory_movements: ["item_inventory_profiles", "stock_locations", "lots", "serials"],
   // Custody admission must observe the complete valued movement and layer history.
