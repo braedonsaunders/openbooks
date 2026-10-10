@@ -19,6 +19,15 @@ export type RoleRow = {
   isBuiltIn: boolean
   permissions: string[]
   subsidiaryRestriction: SubsidiaryRestriction | { mode: 'invalid' }
+  /** Concurrency token: the stored version this row was read at. */
+  updatedAt: string
+}
+
+/** Same members, order-insensitive. */
+function samePermissionSet(a: readonly string[], b: readonly string[]): boolean {
+  const left = new Set(a)
+  const right = new Set(b)
+  return left.size === right.size && [...left].every((key) => right.has(key))
 }
 
 /** Depth-first subsidiary tree flattened for pickers (subsidiaryOptions()). */
@@ -46,6 +55,12 @@ export function EditRoleButton({
 }) {
   const tCommon = useTranslations('common')
   const [open, setOpen] = useState(false)
+  // The version this button last saved, held until the refreshed row
+  // arrives. Reopening before the page refresh lands shows what was
+  // persisted, never the pre-save snapshot (which a second save would
+  // otherwise write back over the change).
+  const [saved, setSaved] = useState<{ from: string; row: RoleRow } | null>(null)
+  const current = saved && saved.from === role.updatedAt ? saved.row : role
   const locked = role.isBuiltIn && role.key === 'admin'
   return (
     <>
@@ -53,7 +68,13 @@ export function EditRoleButton({
         {locked ? tCommon('actions.view') : tCommon('actions.edit')}
       </Button>
       {open ? (
-        <RoleDrawer role={role} subsidiaries={subsidiaries} onClose={() => setOpen(false)} />
+        <RoleDrawer
+          key={current.updatedAt}
+          role={current}
+          subsidiaries={subsidiaries}
+          onSaved={(row) => setSaved({ from: role.updatedAt, row })}
+          onClose={() => setOpen(false)}
+        />
       ) : null}
     </>
   )
@@ -67,11 +88,14 @@ export function EditRoleButton({
 function RoleDrawer({
   role,
   subsidiaries,
+  onSaved,
   onClose,
 }: {
   role: RoleRow | null
   /** null = single-subsidiary org: the whole subsidiary-access section is hidden. */
   subsidiaries: SubsidiaryPickerOption[] | null
+  /** Receives the persisted row after a successful edit. */
+  onSaved?: (row: RoleRow) => void
   onClose: () => void
 }) {
   const t = useTranslations('admin.roles')
@@ -176,13 +200,14 @@ function RoleDrawer({
     setBusy(true)
     const payload = isEdit
       ? role.isBuiltIn
-        ? { id: role.id, permissions: [...selected], subsidiaryRestriction }
+        ? { id: role.id, permissions: [...selected], subsidiaryRestriction, expectedUpdatedAt: role.updatedAt }
         : {
             id: role.id,
             name: name.trim(),
             description: description.trim(),
             permissions: [...selected],
             subsidiaryRestriction,
+            expectedUpdatedAt: role.updatedAt,
           }
       : {
           name: name.trim(),
@@ -201,6 +226,29 @@ function RoleDrawer({
       const data = await res.json().catch(() => ({}))
       toast.error(data.error ?? t('drawer.saveFailed'))
       return
+    }
+    if (isEdit) {
+      // Success is what the server stored, not what was sent: a response
+      // that does not carry exactly the submitted permissions keeps the
+      // drawer open with the refusal instead of closing as if it saved.
+      const data = (await res.json().catch(() => null)) as { role?: { permissions?: unknown; updatedAt?: unknown } } | null
+      const storedPermissions: unknown = data?.role?.permissions
+      const storedVersion: unknown = data?.role?.updatedAt
+      const persisted = Array.isArray(storedPermissions)
+        ? storedPermissions.filter((key): key is string => typeof key === 'string')
+        : null
+      if (!persisted || typeof storedVersion !== 'string' || !samePermissionSet(persisted, [...selected])) {
+        toast.error(t('drawer.saveNotConfirmed'))
+        return
+      }
+      onSaved?.({
+        ...role,
+        name: role.isBuiltIn ? role.name : name.trim(),
+        description: role.isBuiltIn ? role.description : description.trim() || null,
+        permissions: persisted,
+        subsidiaryRestriction: subsidiaryRestriction ?? role.subsidiaryRestriction,
+        updatedAt: storedVersion,
+      })
     }
     toast.success(isEdit ? t('drawer.updated') : t('drawer.created'))
     onClose()

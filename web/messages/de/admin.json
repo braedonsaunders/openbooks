@@ -457,7 +457,8 @@
       "subsidiaryRequired": "Tochtergesellschaft auswählen",
       "subsidiaryListRequired": "Wählen Sie mindestens eine Tochtergesellschaft aus",
       "inactivePermissions": "Inaktive App-Berechtigungen",
-      "permissionsLoadFailed": "App-Berechtigungen konnten nicht geladen werden"
+      "permissionsLoadFailed": "App-Berechtigungen konnten nicht geladen werden",
+      "saveNotConfirmed": "Der Server hat nicht bestätigt, dass alle Berechtigungsänderungen gespeichert wurden. Öffnen Sie die Rolle erneut, um ihre aktuellen Berechtigungen zu sehen, und wenden Sie Ihre Änderungen dann erneut an."
     }
   },
   "scripts": {

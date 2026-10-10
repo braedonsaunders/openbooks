@@ -610,7 +610,8 @@
       "subsidiaryRequired": "Elija una subsidiaria",
       "subsidiaryListRequired": "Seleccione al menos una subsidiaria",
       "inactivePermissions": "Permisos de aplicación inactivos",
-      "permissionsLoadFailed": "No se pudieron cargar los permisos de la aplicación"
+      "permissionsLoadFailed": "No se pudieron cargar los permisos de la aplicación",
+      "saveNotConfirmed": "El servidor no confirmó que se guardaran todos los cambios de permisos. Vuelva a abrir el rol para ver sus permisos actuales y aplique de nuevo sus cambios."
     }
   },
   "scripts": {

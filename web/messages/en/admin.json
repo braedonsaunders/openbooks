@@ -457,7 +457,8 @@
       "subsidiaryRequired": "Choose a subsidiary",
       "subsidiaryListRequired": "Select at least one subsidiary",
       "permissionsLoadFailed": "Unable to load app permissions",
-      "inactivePermissions": "Inactive app permissions"
+      "inactivePermissions": "Inactive app permissions",
+      "saveNotConfirmed": "The server did not confirm that every permission change was saved. Reopen the role to see its current permissions, then apply your changes again."
     }
   },
   "scripts": {

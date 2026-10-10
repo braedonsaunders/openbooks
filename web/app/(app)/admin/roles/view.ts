@@ -20,6 +20,7 @@ type RoleDbRow = {
   is_built_in: boolean
   permissions: unknown
   subsidiary_restriction: unknown
+  updated_at: string
   permission_count: number
   member_count: number
 }
@@ -129,7 +130,7 @@ export async function loadAdminRoles(
   const [rowsR, countR, typeCountsR] = ((await Promise.all([
     db.execute<RoleDbRow>(sql`
       select r.id, r.key, r.name, r.description, r.is_built_in, r.permissions,
-             r.subsidiary_restriction,
+             r.subsidiary_restriction, r.updated_at::text as updated_at,
              coalesce(jsonb_array_length(r.permissions), 0)::int as permission_count,
              (select count(*)::int from role_assignments a
                where a.role_id = r.id and a.org_id = r.org_id) as member_count
@@ -154,6 +155,7 @@ export async function loadAdminRoles(
         ? r.permissions.filter((p): p is string => typeof p === 'string')
         : [],
       subsidiaryRestriction: asSubsidiaryRestriction(r.subsidiary_restriction),
+      updatedAt: r.updated_at,
       permissionCount: Number(r.permission_count),
       memberCount: Number(r.member_count),
     }),

@@ -457,7 +457,8 @@
       "subsidiaryRequired": "子会社を選択してください",
       "subsidiaryListRequired": "少なくとも1つの子会社を選択してください",
       "inactivePermissions": "非有効のアプリ権限",
-      "permissionsLoadFailed": "アプリ権限を読み込めませんでした"
+      "permissionsLoadFailed": "アプリ権限を読み込めませんでした",
+      "saveNotConfirmed": "すべての権限変更が保存されたことをサーバーが確認できませんでした。ロールを開き直して現在の権限を確認し、変更をもう一度適用してください。"
     }
   },
   "scripts": {
