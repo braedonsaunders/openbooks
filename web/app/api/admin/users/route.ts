@@ -23,6 +23,7 @@ import { authRequestContext, normalizeLoginEmail } from "../../../../lib/auth-po
 import { InviteIssuanceRefusedError, issueInviteSetPasswordLink, setPasswordUrl } from "../../../../lib/auth-reset";
 import { deriveInviteDisplayName, UNUSABLE_PASSWORD_HASH } from "./invite";
 import { isUuid } from "../../../../lib/list-params";
+import { countOtherActiveUserAdministrators } from "../../../../lib/sole-administrator";
 
 const requestBodySchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("assign"), userId: z.string().uuid(), roleId: z.string().uuid() }),
@@ -572,14 +573,20 @@ export const POST = defineRoute({
       }
       case "set-party": {
         // Audited native link between a login user and a person party.
-        // Separation of duties: your own link is refused even as superadmin —
-        // another authorized administrator must perform and evidence it. The
-        // same-user check applies to unlink (null party) as well.
-        if (userId === actor.id.toLowerCase()) {
-          return NextResponse.json(
-            { error: "you cannot change your own linked person — another administrator must perform it" },
-            { status: 403 },
-          );
+        // Separation of duties: your own link is performed by another
+        // administrator. The single exception is an organization whose only
+        // active user administrator is the actor: nobody else could perform
+        // it, so the actor may link themself with the same reason and
+        // attestation, recorded as a self-link in the audit log. The count
+        // is re-checked inside the write transaction; once a second active
+        // administrator exists the refusal applies again, unlink included.
+        const selfLink = userId === actor.id.toLowerCase();
+        const selfLinkRefusal = () => NextResponse.json(
+          { error: "you cannot change your own linked person while another active administrator exists — ask them to perform it" },
+          { status: 403 },
+        );
+        if (selfLink && (await countOtherActiveUserAdministrators(db, actor.orgId, actor.id)) > 0) {
+          return selfLinkRefusal();
         }
         if (!("partyId" in body)) {
           return NextResponse.json({ error: "partyId required" }, { status: 400 });
@@ -633,6 +640,9 @@ export const POST = defineRoute({
           const currentRows = await db.execute<{ id: string; party_id: string | null }>(sql`
             select id, party_id from users where id = ${userId} and org_id = ${actor.orgId} for update`);
           const currentRow = currentRows.rows[0];
+          if (selfLink && (await countOtherActiveUserAdministrators(db, actor.orgId, actor.id)) > 0) {
+            return selfLinkRefusal();
+          }
           // Wrong-org and missing users share one message so callers cannot
           // probe which orgs hold which user ids.
           if (!currentRow) return NextResponse.json({ error: "user not found" }, { status: 404 });
@@ -733,6 +743,7 @@ export const POST = defineRoute({
               reason,
               attestation: true,
               party: partySignals,
+              ...(selfLink ? { selfLink: { soleActiveAdministrator: true } } : {}),
             },
             actorId: actor.id,
           });

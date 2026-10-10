@@ -254,8 +254,10 @@ type PersonOption = {
  * inline error, router.refresh() on success.
  *
  * Separation of duties is explicit in the UI: your own row renders disabled
- * with the refusal explanation — the server refuses it even for superadmin
- * and another administrator must perform it.
+ * with the refusal explanation while another active administrator exists —
+ * the server refuses it even for superadmin. The sole active administrator
+ * may link their own login through the same attested drawer, which says the
+ * link is recorded as a self-link.
  */
 export function LinkPersonButton({
   userId,
@@ -263,17 +265,19 @@ export function LinkPersonButton({
   partyId,
   partyName,
   isSelf,
+  selfLinkAllowed = false,
 }: {
   userId: string
   userName: string
   partyId: string | null
   partyName: string | null
   isSelf: boolean
+  selfLinkAllowed?: boolean
 }) {
   const t = useTranslations('admin.users')
   const [open, setOpen] = useState(false)
   const router = useRouter()
-  if (isSelf) {
+  if (isSelf && !selfLinkAllowed) {
     return (
       <Button
         size="sm"
@@ -297,6 +301,7 @@ export function LinkPersonButton({
           userName={userName}
           expectedPartyId={partyId}
           initialOption={partyId && partyName ? { value: partyId, label: partyName } : null}
+          selfLink={isSelf}
           onClose={() => {
             setOpen(false)
             router.refresh()
@@ -312,12 +317,15 @@ function LinkPersonDrawer({
   userName,
   expectedPartyId,
   initialOption,
+  selfLink = false,
   onClose,
 }: {
   userId: string
   userName: string
   expectedPartyId: string | null
   initialOption: { value: string; label: string } | null
+  /** The sole active administrator linking their own login. */
+  selfLink?: boolean
   onClose: () => void
 }) {
   const t = useTranslations('admin.users')
@@ -486,6 +494,9 @@ function LinkPersonDrawer({
             }}
           />
           <p className="text-xs text-slate-500 dark:text-slate-400">{t('linkPersonSignalsNote')}</p>
+          {selfLink ? (
+            <p role="note" className="text-xs text-amber-800 dark:text-amber-200">{t('linkSelfSoleAdministrator')}</p>
+          ) : null}
         </div>
         <div className="space-y-1.5">
           <Label htmlFor="link-person-reason">{t('linkReasonLabel')}</Label>

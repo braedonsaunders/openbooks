@@ -1117,7 +1117,7 @@
     "linkAttestationRequired": "明示的な証明が必要です",
     "linkSave": "紐付けを保存",
     "linkSaved": "紐付けられた人物を保存しました",
-    "linkSelfRefused": "自分自身に紐付けられた人物は変更できません。別の管理者が実行する必要があります。",
+    "linkSelfRefused": "他に有効な管理者がいる間は、自分自身に紐付けられた人物を変更できません。その管理者に依頼してください。",
     "linkStale": "紐付けられた人物が変更されました。閉じて更新してから、もう一度お試しください。",
     "metaTitle": "ユーザー",
     "title": "ユーザー",
@@ -1166,7 +1166,8 @@
     "inviteTooManyAttempts": "招待が多すぎます — しばらくしてから試してください",
     "unassignedRole": "ロール未割当",
     "inviteChooseRole": "ロールを選択",
-    "inviteRoleRequired": "この人に付与するロールを選択してください。"
+    "inviteRoleRequired": "この人に付与するロールを選択してください。",
+    "linkSelfSoleAdministrator": "あなたは唯一の有効な管理者のため、自分のログインを紐付けることができます。紐付けは理由と宣誓とともに自己紐付けとして監査ログに記録されます。他の管理者が存在するようになったら、以降の変更はその管理者が行う必要があります。"
   },
   "permissions": {
     "hrm_employment_read": "雇用記録の表示",

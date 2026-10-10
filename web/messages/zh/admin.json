@@ -1117,7 +1117,7 @@
     "linkAttestationRequired": "需要明确确认",
     "linkSave": "保存关联",
     "linkSaved": "已保存关联人员",
-    "linkSelfRefused": "您不能更改自己的关联人员——必须由另一位管理员执行。",
+    "linkSelfRefused": "存在其他在职管理员时，您不能更改自己的关联人员——请让该管理员执行。",
     "linkStale": "关联人员已更改——请关闭、刷新后重试。",
     "metaTitle": "用户",
     "title": "用户",
@@ -1166,7 +1166,8 @@
     "inviteCopyFailed": "复制失败 — 请手动选择链接",
     "inviteTooManyAttempts": "邀请过于频繁 — 请稍后再试",
     "inviteChooseRole": "选择角色",
-    "inviteRoleRequired": "请选择此人将拥有的角色。"
+    "inviteRoleRequired": "请选择此人将拥有的角色。",
+    "linkSelfSoleAdministrator": "您是唯一的在职管理员，因此可以关联自己的登录账户。该关联会连同您的原因和声明作为自我关联记录在审计日志中；一旦有其他管理员，后续更改必须由其执行。"
   },
   "permissions": {
     "hrm_employment_read": "查看雇用记录",

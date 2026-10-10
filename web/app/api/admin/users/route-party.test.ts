@@ -4,7 +4,9 @@ import test from 'node:test'
 
 // Audited native Admin Users -> linked person (POST set-party + GET search).
 // Covers the audited link contract: attestation + reason required,
-// same-org active party, self-change refused even for superadmin, stale
+// same-org active party, self-change refused while another active
+// administrator exists (even for superadmin) and allowed only to the sole
+// active administrator with the same attestation and a self-link audit, stale
 // expected 409 with no mutation, exact before/after audit with kind/role
 // signals, concurrent writers only one wins, audit failure rolls back, and
 // per-query bounded search that stays selectable beyond the first page.
@@ -40,6 +42,8 @@ interface PartyState {
   transactionCalls: number
   failOnText?: string
   currentPartyId: string | null
+  /** Successive answers to the other-active-administrator count (last repeats). */
+  otherAdministrators: number[]
   authz: {
     user: { orgId: string; id: string; isSuperAdmin: boolean }
     permissions: Set<string>
@@ -67,6 +71,7 @@ const state: PartyState = {
   inTx: false,
   transactionCalls: 0,
   currentPartyId: null,
+  otherAdministrators: [1],
   authz: {
     user: { orgId: ORG_ID, id: ACTOR_ID, isSuperAdmin: false },
     permissions: new Set(['admin.users.manage']),
@@ -114,10 +119,15 @@ const mockSources = new Map<string, string>([
         text.includes('insert into audit_log')
       const rowsFor = (text) => {
         const lower = text.toLowerCase()
-        // POST: lock target user row.
+        // POST: other active user administrators (self-link exception).
+        if (text.includes('from users u') && text.includes('admin.users.manage')) {
+          const n = state.otherAdministrators.length > 1 ? state.otherAdministrators.shift() : state.otherAdministrators[0]
+          return [{ n }]
+        }
+        // POST: lock target user row (the target, or the actor's own row).
         if (text.includes('select id, party_id from users')) {
-          if (lower.includes('${TARGET_ID}'.toLowerCase())) {
-            return [{ id: '${TARGET_ID}', party_id: state.currentPartyId }]
+          for (const id of ['${TARGET_ID}', '${ACTOR_ID}']) {
+            if (lower.includes(id.toLowerCase())) return [{ id, party_id: state.currentPartyId }]
           }
           return []
         }
@@ -138,7 +148,8 @@ const mockSources = new Map<string, string>([
         }
         // POST: conditional link update with concurrency predicate.
         if (text.includes('update users set party_id')) {
-          if (!lower.includes('${TARGET_ID}'.toLowerCase())) return []
+          const subject = ['${TARGET_ID}', '${ACTOR_ID}'].find((id) => lower.includes(id.toLowerCase()))
+          if (!subject) return []
           const where = text.slice(text.toLowerCase().indexOf('where'))
           const setPart = text.slice(0, text.toLowerCase().indexOf('where'))
           let requested = null
@@ -155,7 +166,7 @@ const mockSources = new Map<string, string>([
           const current = state.currentPartyId ? state.currentPartyId.toLowerCase() : null
           if (current !== expected) return []
           state.currentPartyId = requested
-          return [{ id: '${TARGET_ID}' }]
+          return [{ id: subject }]
         }
         // GET: per-query bounded active-person page.
         if (text.includes('from parties p') && text.includes('group by p.id')) {
@@ -324,6 +335,7 @@ function reset(): void {
   state.transactionCalls = 0
   state.failOnText = undefined
   state.currentPartyId = null
+  state.otherAdministrators = [1]
   state.authz = {
     user: { orgId: ORG_ID, id: ACTOR_ID, isSuperAdmin: false },
     permissions: new Set(['admin.users.manage']),
@@ -376,7 +388,7 @@ test('unauthorized callers cannot change links', async () => {
   assert.equal(searchDenied.status, 403)
 })
 
-test('changing your own link is refused even as superadmin, including unlink', async () => {
+test('changing your own link is refused while another active administrator exists, even as superadmin, including unlink', async () => {
   for (const isSuperAdmin of [false, true]) {
     reset()
     state.authz = {
@@ -393,6 +405,35 @@ test('changing your own link is refused even as superadmin, including unlink', a
     assert.equal(state.committed.some((t) => t.includes('update users set party_id')), false)
     assert.equal(state.committed.some((t) => t.includes('insert into audit_log')), false)
   }
+})
+
+test('the sole active administrator may link their own login with reason, attestation and a self-link audit', async () => {
+  reset()
+  state.otherAdministrators = [0]
+  const link = await post(validLink({ userId: ACTOR_ID }))
+  assert.equal(link.status, 200)
+  assert.equal(state.currentPartyId, PARTY_A.toLowerCase())
+  const audit = state.committed.find((t) => t.includes('insert into audit_log'))
+  assert.ok(audit, 'the self-link is audited')
+  assert.match(audit!, /selfLink/)
+  assert.match(audit!, /soleActiveAdministrator/)
+
+  reset()
+  state.otherAdministrators = [0]
+  const unattested = await post(validLink({ userId: ACTOR_ID, attestation: false }))
+  assert.equal(unattested.status, 422, 'the self-link keeps the attestation requirement')
+  assert.equal(state.committed.some((t) => t.includes('update users set party_id')), false)
+})
+
+test('a second administrator appearing before the write re-applies the refusal with no mutation', async () => {
+  reset()
+  state.otherAdministrators = [0, 1]
+  const link = await post(validLink({ userId: ACTOR_ID }))
+  assert.equal(link.status, 403)
+  assert.match(((await link.json()) as { error: string }).error, /own linked person/i)
+  assert.equal(state.currentPartyId, null)
+  assert.equal(state.committed.some((t) => t.includes('update users set party_id')), false)
+  assert.equal(state.committed.some((t) => t.includes('insert into audit_log')), false)
 })
 
 test('attestation absent or false is refused without mutation', async () => {

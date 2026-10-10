@@ -1117,7 +1117,7 @@
     "linkAttestationRequired": "É necessária uma atestação explícita",
     "linkSave": "Salvar vínculo",
     "linkSaved": "Pessoa vinculada salva",
-    "linkSelfRefused": "Você não pode alterar sua própria pessoa vinculada: outro administrador deve fazê-lo.",
+    "linkSelfRefused": "Você não pode alterar sua própria pessoa vinculada enquanto existir outro administrador ativo: peça a ele que faça isso.",
     "linkStale": "A pessoa vinculada mudou: feche, atualize e tente novamente.",
     "metaTitle": "Usuários",
     "title": "Usuários",
@@ -1166,7 +1166,8 @@
     "inviteCopyFailed": "Não foi possível copiar o link — selecione-o manualmente",
     "inviteTooManyAttempts": "Convites demais — tente novamente mais tarde",
     "inviteChooseRole": "Escolha uma função",
-    "inviteRoleRequired": "Escolha a função que esta pessoa terá."
+    "inviteRoleRequired": "Escolha a função que esta pessoa terá.",
+    "linkSelfSoleAdministrator": "Você é o único administrador ativo, então pode vincular seu próprio login. O vínculo é registrado no log de auditoria como autovinculação, com seu motivo e sua declaração; quando houver outro administrador, ele deverá fazer qualquer alteração posterior."
   },
   "permissions": {
     "hrm_employment_read": "Ver registros de emprego",

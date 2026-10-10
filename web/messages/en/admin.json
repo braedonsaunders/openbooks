@@ -1163,10 +1163,11 @@
     "linkAttestationRequired": "Explicit attestation is required",
     "linkSave": "Save link",
     "linkSaved": "Linked person saved",
-    "linkSelfRefused": "You cannot change your own linked person — another administrator must perform it.",
+    "linkSelfRefused": "You cannot change your own linked person while another active administrator exists — ask them to perform it.",
     "linkStale": "The linked person changed — close, refresh, and try again.",
     "inviteChooseRole": "Choose a role",
-    "inviteRoleRequired": "Choose the role this person will have."
+    "inviteRoleRequired": "Choose the role this person will have.",
+    "linkSelfSoleAdministrator": "You are the only active administrator, so you may link your own login. The link is recorded in the audit log as a self-link with your reason and attestation; once another administrator exists, they must make any later change."
   },
   "permissions": {
     "groups": {
