@@ -326,7 +326,12 @@ export async function computeCaStatutory(
     authorizedAnnualDeductions: empFact("CA", emp, "authorized_annual_deductions") ?? undefined,
     authorizedFederalCredits: empFact("CA", emp, "authorized_federal_credits") ?? undefined,
     authorizedProvincialCredits: empFact("CA", emp, "authorized_provincial_credits") ?? undefined,
-    additionalTaxPerPeriod: empFact("CA", emp, "additional_tax_per_period") ?? undefined,
+    // The TD1 additional deduction is requested once per pay period and is
+    // withheld through the period's regular or final pay; a supplemental run
+    // sharing the period never withholds it a second time.
+    additionalTaxPerPeriod: runType === "supplemental"
+      ? undefined
+      : empFact("CA", emp, "additional_tax_per_period") ?? undefined,
     ...ontarioDependantInputs,
     federalClaim: empFact("CA", emp, "federal_claim_amount") ?? undefined,
     federalClaimCode: empFact("CA", emp, "federal_claim_amount") == null && empFact("CA", emp, "federal_claim_code") != null
