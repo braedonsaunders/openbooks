@@ -39,6 +39,7 @@ import { resolveCashPostingTenders, TenderRefusal } from "../sales/document-tend
 import { resolveProviderTaxPlans, resolveShipToSnapshot } from "./posting-provider-tax.ts";
 import { applySubsidiaries } from "./posting-subsidiaries.ts";
 import { resolveInternalBillingPostingContext } from "./internal-billing-posting.ts";
+import { documentControlChoice, resolveDocumentControlAccount } from "./posting-control-account.ts";
 
 import { postingEffectSubsidiaryId } from "./posting-dispatch.ts";
 import type { PostDocumentOptions } from "../journal/posting-contracts.ts";
@@ -427,6 +428,29 @@ export async function prepareDocumentPosting(documentId: string, deps: PostingDe
     );
   }
 
+  // -- receivable/payable control account ---------------------------------
+  // A party document posts its open item to the document's own choice, else
+  // the party's default, else the organization control account. The resolved
+  // account is validated here (active, posting, the side's account type, the
+  // document's legal entity) and stamped on the document by the posting flip,
+  // so every later consumer of the open item — and any regeneration — reads
+  // the account the entry actually carries. Historical replay reproduces the
+  // source's own account selection and is never re-resolved.
+  let controlAccountStamp: string | null = null;
+  const storeCreditMemo = effectiveDoc.kind === "customer_credit" && !!deps.storeCreditLiabilityAccountId;
+  if (!deps.migration && !storeCreditMemo) {
+    const resolved = await resolveDocumentControlAccount(db, effectiveDoc, deps.control);
+    if (resolved) {
+      controlAccountStamp = resolved.accountId;
+      if (documentControlChoice(effectiveDoc.custom) !== resolved.accountId) {
+        effectiveDoc = {
+          ...effectiveDoc,
+          custom: { ...((effectiveDoc.custom ?? {}) as Record<string, unknown>), controlAccountId: resolved.accountId },
+        };
+      }
+    }
+  }
+
   // -- build + validate kernel lines --------------------------------------
   const kernelLines = rule(effectiveDoc, postingLines, deps).filter(
     (l) => !isZero(l.amount),
@@ -642,5 +666,5 @@ export async function prepareDocumentPosting(documentId: string, deps: PostingDe
     : await resolveShipToSnapshot(effectiveDoc, postingLines);
 
   const postingDate = effectiveDoc.postingDate ?? effectiveDoc.documentDate;
-  return { documentId, deps, doc, postingLines, effectiveDoc, kernelLines, postContrib, primaryContrib, unionLines, subApplied, scriptLines, postingDate, shipToSnapshot };
+  return { documentId, deps, doc, postingLines, effectiveDoc, kernelLines, postContrib, primaryContrib, unionLines, subApplied, scriptLines, postingDate, shipToSnapshot, controlAccountStamp };
 }

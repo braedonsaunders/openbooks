@@ -45,6 +45,7 @@ export class DocumentDraftError extends Error {
 import { canonicalDecimal } from '../money/exact-decimal.ts'
 import { activeStockLocations, profiledItemIds } from '../inventory/stock-locations.ts'
 import { DOC_KIND_FEATURE, docKindConfig, isDocumentCreateKind } from '../records/document-kinds.ts'
+import { DOCUMENT_CONTROL_SIDE } from './posting-control-account.ts'
 import { featureEnabled } from '../organization/feature-registry.ts'
 import { isFeatureEnabled, orgFeatureState, checkProjectsWriteEnabled } from '../organization/feature-state.ts'
 import { findUnownedCustomReferences, loadFieldDefs, validateCustomValues } from '../records/custom-fields.ts'
@@ -1212,6 +1213,43 @@ export async function applyDocumentEdit(
         `))
         if (!owned.rows[0]) throw new DocumentEditError(404, `${fundingNoun} not found for this subsidiary`)
         headerCustom = { ...(headerCustom ?? current.custom ?? {}), controlAccountId: override }
+      }
+    }
+  }
+
+  // Receivable/payable account choice on a party document (invoice, credit
+  // memo, bill, vendor credit). Like the funding override it is not a
+  // registered custom field, so it is carried explicitly: uuid-shaped, an
+  // active posting account of the side's type, visible to the document's
+  // legal entity. An explicit null/'' clears the choice so posting resolves
+  // the party default, else the organization control account.
+  const controlSide = DOCUMENT_CONTROL_SIDE[current.kind]
+  if (body.custom !== undefined && controlSide) {
+    const choice = (body.custom as Record<string, unknown>).controlAccountId
+    if (choice !== undefined) {
+      const noun = controlSide === 'ar' ? 'receivable account' : 'payable account'
+      if (choice === null || choice === '') {
+        headerCustom = { ...(headerCustom ?? current.custom ?? {}) }
+        delete headerCustom.controlAccountId
+      } else {
+        if (typeof choice !== 'string' || !isUuid(choice)) {
+          throw new DocumentEditError(422, `${noun} must be a valid record reference`)
+        }
+        const accountType = controlSide === 'ar' ? 'asset_receivable' : 'liability_payable'
+        const owned = (await runner.execute<{ id: string }>(sql`
+          select a.id from accounts a
+           where a.org_id = ${orgId} and a.is_active and not a.is_summary
+             and a.type = ${accountType} and a.id = ${choice}::uuid
+             and ${referenceSubsidiaryScope}
+             ${ctx.allowedSubsidiaryIds === undefined ? sql`` : subsidiaryVisibleFilter(sql`a.subsidiary_id`, ctx.allowedSubsidiaryIds, { orgWideNull: true })}
+           for key share
+        `))
+        if (!owned.rows[0]) {
+          throw new DocumentEditError(422,
+            `choose an active ${noun} available to this document's subsidiary, or clear the choice to use the ${controlSide === 'ar' ? "customer's" : "vendor's"} default`,
+            { controlAccountId: `not an active ${noun} for this subsidiary` })
+        }
+        headerCustom = { ...(headerCustom ?? current.custom ?? {}), controlAccountId: choice }
       }
     }
   }
