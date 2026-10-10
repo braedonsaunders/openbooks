@@ -13,6 +13,7 @@ const configurationEvidence = () => ({
 });
 const approvalEvidence = () => ({
   authorship: jsonb("authorship").notNull().default([]),
+  submissionPolicy: jsonb("submission_policy"),
   submittedBy: uuid("submitted_by"), submittedAt: timestamp("submitted_at", { withTimezone: true }),
   decidedBy: uuid("decided_by"), decidedAt: timestamp("decided_at", { withTimezone: true }),
 });

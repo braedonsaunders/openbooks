@@ -19,7 +19,7 @@ type SubjectRow = {
 
 function profile(subjectKind: string, label: string, statuses: string[]): FlowSubjectProfile {
   return {
-    subjectKind, label, pinsSubmissionPolicy: true, triggers: ["on_submit"], actions: ["send_email", "notify"],
+    subjectKind, label, pinsSubmissionPolicy: true, supportsUngatedSubmission: true, triggers: ["on_submit"], actions: ["send_email", "notify"],
     statuses: statuses.map(value => ({ value, label: value })),
     fields: [
       { key: "packageId", label: "Package", type: "text" },

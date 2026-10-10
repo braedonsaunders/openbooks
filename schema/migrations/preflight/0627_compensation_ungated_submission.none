@@ -1,0 +1,1 @@
+Adds nullable submission evidence without transforming stored rows. Existing null-policy history retains its original decision controls.

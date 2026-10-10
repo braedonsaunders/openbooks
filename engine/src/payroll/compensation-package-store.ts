@@ -19,6 +19,7 @@ import { compensationPackageComponentSources, type CompensationPackageComponentS
 import { validateCompensationPackagePayrollPolicy, validateCompensationPackageCurrencyRounding } from './compensation-package-payroll-policy.ts';
 
 export interface CompensationPackageActor { readonly orgId: string; readonly actorId: string }
+export type CompensationSubmissionPolicy = Readonly<{ version: 1; kind: "flow" | "ungated"; submittedRevision: number }>;
 export type CompensationPackageAuthorship = readonly { actorId: string; partyId: string | null }[];
 export type CompensationPackageRecord = {
   readonly id: string; readonly subsidiaryId: string; readonly code: string; readonly name: string;
@@ -33,6 +34,7 @@ export type CompensationPackageVersion = {
   readonly authorship: CompensationPackageAuthorship;
   readonly submittedBy: string | null; readonly decidedBy: string | null; readonly createdBy: string; readonly revision: number;
   readonly flowApprovalRequired?: boolean;
+  readonly submissionPolicy?: CompensationSubmissionPolicy | null;
 }
 export type CompensationPackageAssignment = {
   readonly id: string; readonly packageId: string; readonly versionId: string; readonly employmentId: string;
@@ -42,22 +44,23 @@ export type CompensationPackageAssignment = {
   readonly authorship: CompensationPackageAuthorship;
   readonly submittedBy: string | null; readonly decidedBy: string | null; readonly createdBy: string; readonly revision: number;
   readonly flowApprovalRequired?: boolean;
+  readonly submissionPolicy?: CompensationSubmissionPolicy | null;
 }
 const PACKAGE_COLUMNS = sql`id,subsidiary_id as "subsidiaryId",code,name,description,country,currency,status,revision,
   (select minor_units from currencies where code=payroll_compensation_packages.currency) as "currencyMinorUnits"`;
 const VERSION_COLUMNS = sql`id,package_id as "packageId",version,effective_from::text as "effectiveFrom",effective_to::text as "effectiveTo",
- definition,definition_hash as "definitionHash",status,authorship,submitted_by as "submittedBy",decided_by as "decidedBy",created_by as "createdBy",revision,
- exists(select 1 from flow_runs approval where approval.org_id=payroll_compensation_versions.org_id
+ definition,definition_hash as "definitionHash",status,authorship,to_jsonb(payroll_compensation_versions)->'submission_policy' as "submissionPolicy",submitted_by as "submittedBy",decided_by as "decidedBy",created_by as "createdBy",revision,
+ (coalesce(to_jsonb(payroll_compensation_versions) #>> '{submission_policy,kind}'='flow',false) or exists(select 1 from flow_runs approval where approval.org_id=payroll_compensation_versions.org_id
    and approval.subject_kind=${COMPENSATION_VERSION_SUBJECT_KIND} and approval.subject_id=payroll_compensation_versions.id
    and approval.trigger='on_submit' and approval.context->>'revision'=payroll_compensation_versions.revision::text
-   and approval.context->>'status'='submitted') as "flowApprovalRequired"`;
+   and approval.context->>'status'='submitted')) as "flowApprovalRequired"`;
 const ASSIGNMENT_COLUMNS = sql`id,package_id as "packageId",version_id as "versionId",employment_id as "employmentId",
  employee_party_id as "employeePartyId",subsidiary_id as "subsidiaryId",effective_from::text as "effectiveFrom",effective_to::text as "effectiveTo",
- inputs,status,authorship,submitted_by as "submittedBy",decided_by as "decidedBy",created_by as "createdBy",revision,
- exists(select 1 from flow_runs approval where approval.org_id=payroll_compensation_assignments.org_id
+ inputs,status,authorship,to_jsonb(payroll_compensation_assignments)->'submission_policy' as "submissionPolicy",submitted_by as "submittedBy",decided_by as "decidedBy",created_by as "createdBy",revision,
+ (coalesce(to_jsonb(payroll_compensation_assignments) #>> '{submission_policy,kind}'='flow',false) or exists(select 1 from flow_runs approval where approval.org_id=payroll_compensation_assignments.org_id
    and approval.subject_kind=${COMPENSATION_ASSIGNMENT_SUBJECT_KIND} and approval.subject_id=payroll_compensation_assignments.id
    and approval.trigger='on_submit' and approval.context->>'revision'=payroll_compensation_assignments.revision::text
-   and approval.context->>'status'='submitted') as "flowApprovalRequired"`;
+   and approval.context->>'status'='submitted')) as "flowApprovalRequired"`;
 
 function identifier(value: unknown, name: string): string {
   if (!isUuid(value)) throw new PayrollError(`A valid ${name} is required — reload the record and choose its native reference.`);
@@ -276,11 +279,45 @@ async function compensationDecisionIdentity(orgId: string, actorId: string, crea
   if (requireIndependentActor && (actorId === createdBy || actorId === submittedBy || authors.some((row) => row.actorId === actorId || row.partyId === approver.partyId) || identities.some((row) => row.id !== actorId && row.partyId === approver.partyId) || employeePartyId === approver.partyId)) throw new PayrollError("The submitted compensation Flow policy requires an independent approver for this change — use an authorized approver under that policy.");
 }
 
-async function submitCompensationApproval(query: CompensationPackageActor, subjectKind: string, subjectId: string): Promise<void> {
+/** Submission evaluates the tenant Flow; absence of a gate never requires a reviewer. */
+async function submitCompensationApproval(query: CompensationPackageActor, subjectKind: string, subjectId: string): Promise<"gated" | "ungated"> {
   const { runRecordFlows } = await import("../flows/run.ts");
+  const { dispatchFailureReason } = await import("../flows/dispatch-result.ts");
   const result = await runRecordFlows({ kind: "on_submit", source: "api" }, subjectKind, subjectId,
     { orgId: query.orgId, userId: query.actorId });
-  if (result.failed || !result.runs.some(run => run.gatesCreated > 0)) throw new PayrollError("Configure an enabled tenant Flow with an approval gate for this compensation subject before submitting; enable Flows in Company Settings → Features if needed.");
+  if (result.failed) throw new PayrollError(dispatchFailureReason(result) ?? "The compensation Flow failed; correct its reported cause before resubmitting.");
+  if (result.runs.some(run => run.status === "cancelled")) throw new PayrollError("The compensation Flow was cancelled; review its recorded outcome before resubmitting.");
+  if (result.gatesCreated > 0 || result.runs.some(run => run.gatesCreated > 0)) return "gated";
+  if (result.runs.some(run => run.status !== "completed")) throw new PayrollError("The compensation Flow has not finished; resolve its pending work before releasing this proposal.");
+  if (!result.runs.some(run => run.ungatedOutcome === "apply" && run.status === "completed")) {
+    throw new PayrollError("The compensation submission needs a matched tenant Flow outcome; configure automatic release without approvers or an applicable approval gate.");
+  }
+  return "ungated";
+}
+
+async function assertCompensationAssignmentAvailable(orgId: string, row: CompensationPackageAssignment): Promise<void> {
+  const overlap = (await db.execute(sql`select id from payroll_compensation_assignments where org_id=${orgId} and employment_id=${row.employmentId} and status in ('active','ended')
+    and daterange(effective_from,effective_to,'[]') && daterange(${row.effectiveFrom}::date,${row.effectiveTo}::date,'[]') limit 1`)).rows[0];
+  if (overlap) throw new PayrollError("The employment already has approved compensation for this window — end the existing assignment and use non-overlapping successor dates.");
+}
+
+/** Only the successful native submission dispatcher can finalize an ungated proposal. */
+async function finalizeUngatedCompensationSubmission(query: CompensationPackageActor, subjectKind: string,
+  row: CompensationPackageVersion | CompensationPackageAssignment, reason: string): Promise<void> {
+  if (row.status !== "submitted" || row.submittedBy !== query.actorId || row.submissionPolicy?.kind !== "flow"
+    || row.submissionPolicy.submittedRevision !== row.revision) throw new PayrollError("The compensation submission changed during routing; reload its current state before retrying.");
+  const assignment = subjectKind === COMPENSATION_ASSIGNMENT_SUBJECT_KIND;
+  if (!assignment && subjectKind !== COMPENSATION_VERSION_SUBJECT_KIND) throw new PayrollError("Choose a native compensation submission subject.");
+  await compensationDecisionIdentity(query.orgId, query.actorId, row.createdBy, row.submittedBy, row.authorship, false,
+    assignment ? (row as CompensationPackageAssignment).employeePartyId : undefined);
+  if (assignment) await assertCompensationAssignmentAvailable(query.orgId, row as CompensationPackageAssignment);
+  const table = assignment ? "payroll_compensation_assignments" : "payroll_compensation_versions";
+  const policy: CompensationSubmissionPolicy = { ...row.submissionPolicy, kind: "ungated" };
+  const saved = (await db.execute(sql`update ${sql.identifier(table)} set status=${assignment ? "active" : "approved"},
+    submission_policy=${canonicalJson(policy)}::jsonb,decided_by=${query.actorId},decided_at=now(),revision=revision+1,
+    reason=${reason},updated_by=${query.actorId},updated_at=now()
+    where org_id=${query.orgId} and id=${row.id} and status='submitted' and revision=${row.revision} returning id`)).rows;
+  if (saved.length !== 1) throw new PayrollError("The ungated compensation submission was not saved; nothing applied.");
 }
 
 async function compensationDecisionPolicy(query: CompensationPackageActor & { approvalRunId?: string }, subjectKind: string, subjectId: string,
@@ -307,13 +344,17 @@ export async function transitionCompensationPackageVersion(query: CompensationPa
     if (query.action !== "reject" && await checkedDefinition(query.orgId, pack, version.definition) !== version.definitionHash) throw new PayrollError("The stored package definition does not match its evidence — create and verify a new draft version before approving.");
     if (query.action !== "submit") await compensationDecisionIdentity(query.orgId, query.actorId, version.createdBy, version.submittedBy, version.authorship,
       await compensationDecisionPolicy(query, COMPENSATION_VERSION_SUBJECT_KIND, version.id, version, query.action === "approve" ? "approved" : "rejected"));
+    const submissionPolicy: CompensationSubmissionPolicy | null = query.action === "submit"
+      ? { version: 1, kind: "flow", submittedRevision: version.revision + 1 } : version.submissionPolicy ?? null;
     const updated = one((await db.execute<CompensationPackageVersion>(sql`update payroll_compensation_versions set
-      status=${query.action === "submit" ? "submitted" : query.action === "approve" ? "approved" : "rejected"},
+      submission_policy=${canonicalJson(submissionPolicy)}::jsonb,status=${query.action === "submit" ? "submitted" : query.action === "approve" ? "approved" : "rejected"},
       submitted_by=${query.action === "submit" ? query.actorId : version.submittedBy},submitted_at=case when ${query.action === "submit"} then now() else submitted_at end,
       decided_by=${query.action === "submit" ? null : query.actorId},decided_at=case when ${query.action === "submit"} then null else now() end,
       revision=revision+1,reason=${reason},updated_by=${query.actorId},updated_at=now()
       where org_id=${query.orgId} and id=${version.id} and revision=${query.expectedRevision} returning ${VERSION_COLUMNS}`)).rows);
-    if (query.action === "submit") await submitCompensationApproval(query, COMPENSATION_VERSION_SUBJECT_KIND, updated.id);
+    if (query.action === "submit" && await submitCompensationApproval(query, COMPENSATION_VERSION_SUBJECT_KIND, updated.id) === "ungated") {
+      await finalizeUngatedCompensationSubmission(query, COMPENSATION_VERSION_SUBJECT_KIND, updated, reason);
+    }
     return versionRecord(query.orgId, pack.id, updated.id);
   });
 }
@@ -381,17 +422,17 @@ export async function transitionCompensationPackageAssignment(query: Compensatio
       effectiveTo = dates(row.effectiveFrom, query.effectiveTo).effectiveTo;
       if (effectiveTo === null || (row.effectiveTo !== null && effectiveTo > row.effectiveTo)) throw new PayrollError("Ending an assignment must shorten its current window — choose an end date within its approved terms.");
     }
-    if (query.action === "approve") {
-      const overlap = (await db.execute(sql`select id from payroll_compensation_assignments where org_id=${query.orgId} and employment_id=${row.employmentId} and status in ('active','ended')
-        and daterange(effective_from,effective_to,'[]') && daterange(${row.effectiveFrom}::date,${row.effectiveTo}::date,'[]') limit 1`)).rows[0];
-      if (overlap) throw new PayrollError("The employment already has approved compensation for this window — end the existing assignment and use non-overlapping successor dates.");
-    }
+    if (query.action === "approve") await assertCompensationAssignmentAvailable(query.orgId, row);
     const status = query.action === "approve" ? "active" : query.action === "reject" ? "rejected" : query.action === "submit" ? "submitted" : query.action === "cancel" ? "cancelled" : "ended";
-    const updated = one((await db.execute<CompensationPackageAssignment>(sql`update payroll_compensation_assignments set status=${status},effective_to=${effectiveTo},
+    const submissionPolicy: CompensationSubmissionPolicy | null = query.action === "submit"
+      ? { version: 1, kind: "flow", submittedRevision: row.revision + 1 } : row.submissionPolicy ?? null;
+    const updated = one((await db.execute<CompensationPackageAssignment>(sql`update payroll_compensation_assignments set submission_policy=${canonicalJson(submissionPolicy)}::jsonb,status=${status},effective_to=${effectiveTo},
       submitted_by=${query.action === "submit" ? query.actorId : row.submittedBy},submitted_at=case when ${query.action === "submit"} then now() else submitted_at end,
       decided_by=${decide ? query.actorId : row.decidedBy},decided_at=case when ${decide} then now() else decided_at end,
       revision=revision+1,reason=${reason},updated_by=${query.actorId},updated_at=now() where org_id=${query.orgId} and id=${row.id} and revision=${query.expectedRevision} returning ${ASSIGNMENT_COLUMNS}`)).rows);
-    if (query.action === "submit") await submitCompensationApproval(query, COMPENSATION_ASSIGNMENT_SUBJECT_KIND, updated.id);
+    if (query.action === "submit" && await submitCompensationApproval(query, COMPENSATION_ASSIGNMENT_SUBJECT_KIND, updated.id) === "ungated") {
+      await finalizeUngatedCompensationSubmission(query, COMPENSATION_ASSIGNMENT_SUBJECT_KIND, updated, reason);
+    }
     return one((await db.execute<CompensationPackageAssignment>(sql`select ${ASSIGNMENT_COLUMNS} from payroll_compensation_assignments
       where org_id=${query.orgId} and package_id=${pack.id} and id=${updated.id}`)).rows);
   });
