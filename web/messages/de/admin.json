@@ -7190,6 +7190,7 @@
       "effectiveTo": "Gültig bis",
       "basics": "Plan und Geltungsbereich",
       "measurements": "Messwerte",
+      "measures": "Messwerte",
       "help": "Erfassen Sie nur nützliche Messwerte. Leere Grenzen erlauben eine Erfassung ohne numerische Toleranz. Beenden Sie den Zeitraum eines verwendeten Plans und erstellen Sie die nächste Revision.",
       "audit": "Prüfprotokoll",
       "key": "Messwertschlüssel",

@@ -7190,6 +7190,7 @@
       "effectiveTo": "Applicable jusqu’au",
       "basics": "Plan et portée",
       "measurements": "Mesures",
+      "measures": "Mesures",
       "help": "Ajoutez uniquement les mesures utiles. Les limites vides permettent un relevé sans tolérance numérique. Clôturez la période d’un plan utilisé et créez la révision suivante.",
       "audit": "Audit",
       "key": "Clé de mesure",

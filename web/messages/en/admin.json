@@ -7190,6 +7190,7 @@
       "effectiveTo": "Effective until",
       "basics": "Plan and scope",
       "measurements": "Measurements",
+      "measures": "Measurements",
       "help": "Add only useful measurements. Empty limits allow recording without a numeric tolerance. Used plans retain their content; end their window and create the next revision.",
       "audit": "Audit",
       "key": "Measurement key",

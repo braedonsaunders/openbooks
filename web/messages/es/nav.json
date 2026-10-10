@@ -1,6 +1,5 @@
 {
   "modules": {
-    "admin-setup-manufacturing": "Configuración de fabricación",
     "hrm-performance-cycles": "Gestionar evaluaciones",
     "hrm-performance-goals": "Objetivos",
     "hrm-performance-conversations": "Conversaciones individuales",

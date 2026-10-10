@@ -7190,6 +7190,7 @@
       "effectiveTo": "Vigente hasta",
       "basics": "Plan y alcance",
       "measurements": "Mediciones",
+      "measures": "Mediciones",
       "help": "Añada solo mediciones útiles. Los límites vacíos permiten registrar sin tolerancia numérica. Cierre la vigencia de un plan usado y cree la siguiente revisión.",
       "audit": "Auditoría",
       "key": "Clave de medición",

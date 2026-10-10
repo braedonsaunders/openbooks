@@ -1,6 +1,5 @@
 {
   "modules": {
-    "admin-setup-manufacturing": "制造设置",
     "hrm-performance-cycles": "管理评估",
     "hrm-performance-goals": "目标",
     "hrm-performance-conversations": "一对一谈话",
