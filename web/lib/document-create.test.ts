@@ -126,3 +126,94 @@ test('a New button with no creatable kind renders no control', async (t) => {
   })
   assert.equal(host.querySelectorAll('button').length, 0)
 })
+
+test('a blank href falls back to the create href instead of reloading the list', async (t) => {
+  const navigations = (globalThis as typeof globalThis & { __documentCreateNavigations: string[] }).__documentCreateNavigations
+  navigations.length = 0
+  const host = document.createElement('div')
+  document.body.appendChild(host)
+  const root = createRoot(host)
+  t.after(async () => {
+    await act(async () => root.unmount())
+    host.remove()
+  })
+  await act(async () => {
+    root.render(React.createElement(NewDocumentButton, {
+      items: [{ kind: 'vendor_bill', label: 'New bill', href: '' }],
+      basePath: '/ap/bills',
+      triggerLabel: 'New bill',
+    }))
+  })
+  const create = [...host.querySelectorAll('button')].find((button) => button.textContent?.includes('New bill'))
+  assert.ok(create, 'the bill create action is visible')
+  await act(async () => create.click())
+  assert.deepEqual(navigations, ['/ap/bills?doc=new&kind=vendor_bill&mode=edit'])
+})
+
+test('a non-creatable kind withdraws its control instead of a button that throws', async (t) => {
+  const host = document.createElement('div')
+  document.body.appendChild(host)
+  const root = createRoot(host)
+  t.after(async () => {
+    await act(async () => root.unmount())
+    host.remove()
+  })
+  await act(async () => {
+    root.render(React.createElement(NewDocumentButton, {
+      items: [{ kind: 'journal', label: 'New journal' }],
+      basePath: '/ap/bills',
+      triggerLabel: 'New',
+    }))
+  })
+  assert.equal(host.querySelectorAll('button').length, 0, 'no dead control renders')
+})
+
+test('a mixed menu keeps only the navigable kinds', async (t) => {
+  const host = document.createElement('div')
+  document.body.appendChild(host)
+  const root = createRoot(host)
+  t.after(async () => {
+    await act(async () => root.unmount())
+    host.remove()
+  })
+  await act(async () => {
+    root.render(React.createElement(NewDocumentButton, {
+      items: [
+        { kind: 'customer_invoice', label: 'New invoice' },
+        { kind: 'customer_payment', label: 'Receive payment', href: '/receipts?paymentNew=1&mode=edit' },
+      ],
+      basePath: '/ar/invoices',
+      triggerLabel: 'New',
+    }))
+  })
+  const trigger = [...host.querySelectorAll('button')].find((button) => button.textContent?.includes('New'))
+  assert.ok(trigger, 'the split trigger renders')
+  await act(async () => {
+    trigger.click()
+    await new Promise((resolve) => setTimeout(resolve, 30))
+  })
+  const options = [...document.body.querySelectorAll('[data-ui-overlay] button')].map((button) => button.textContent)
+  assert.deepEqual(options, ['New invoice', 'Receive payment'])
+})
+
+test('New controls never submit an enclosing form', async (t) => {
+  const host = document.createElement('div')
+  document.body.appendChild(host)
+  const root = createRoot(host)
+  t.after(async () => {
+    await act(async () => root.unmount())
+    host.remove()
+  })
+  await act(async () => {
+    root.render(React.createElement(NewDocumentButton, {
+      items: [
+        { kind: 'vendor_bill', label: 'New bill' },
+        { kind: 'vendor_credit', label: 'New credit' },
+      ],
+      basePath: '/ap/bills',
+      triggerLabel: 'New bill',
+    }))
+  })
+  const trigger = [...host.querySelectorAll('button')].find((button) => button.textContent?.includes('New bill'))
+  assert.equal(trigger?.getAttribute('type'), 'button')
+})

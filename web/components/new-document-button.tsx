@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { ChevronDown, Plus } from 'lucide-react'
 import { Button, Popover } from '@openbooks/ui'
-import { documentCreateHref } from '../lib/document-kinds'
+import { documentCreateHref, isDocumentCreateKind } from '../lib/document-kinds'
 
 export interface NewDocumentItem {
   kind: string
@@ -36,17 +36,25 @@ export function NewDocumentButton({
 
   function create(item: NewDocumentItem) {
     setOpen(false)
-    router.push(item.href ?? documentCreateHref(basePath, item.kind))
+    // A blank href is absent, not a target: pushing '' would reload the list
+    // in place — a dead click with no drawer and no error.
+    router.push(item.href || documentCreateHref(basePath, item.kind))
   }
 
+  // Only navigable items survive: a misconfigured kind must withdraw its
+  // control rather than render a button that throws on click (a dead New
+  // with no drawer and no error). Href items navigate elsewhere, so they
+  // are kept regardless of kind.
+  const navigable = items.filter((item) => (item.href ?? '') !== '' || isDocumentCreateKind(item.kind))
+
   // No creatable kind → no control: never a dropdown that opens empty.
-  if (items.length === 0) return null
+  if (navigable.length === 0) return null
 
   // Single kind → plain button (no dropdown).
-  if (items.length === 1) {
-    const only = items[0]!
+  if (navigable.length === 1) {
+    const only = navigable[0]!
     return (
-      <Button onClick={() => create(only)}>
+      <Button type="button" onClick={() => create(only)}>
         <Plus size={15} /> {only.label}
       </Button>
     )
@@ -58,14 +66,14 @@ export function NewDocumentButton({
       onOpenChange={setOpen}
       align="end"
       trigger={
-        <Button onClick={() => setOpen((v) => !v)}>
+        <Button type="button" onClick={() => setOpen((v) => !v)}>
           <Plus size={15} /> {triggerLabel}
           <ChevronDown size={14} className="opacity-60" />
         </Button>
       }
     >
       <div className="p-1">
-        {items.map((item) => (
+        {navigable.map((item) => (
           <button
             key={item.kind}
             type="button"
