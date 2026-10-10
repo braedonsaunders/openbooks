@@ -253,3 +253,13 @@ test("isoDate accepts only real YYYY-MM-DD calendar dates", () => {
       e.issues[0]?.message === "A valid effective date is required",
   );
 });
+
+test("an optional reference treats a blank form value as cleared and still refuses a malformed id", async () => {
+  const { nullableUuidId } = await import("./json-schema.ts");
+  const id = "0b2a7d8e-3c4f-4a5b-9c6d-7e8f90a1b2c3";
+  assert.equal(nullableUuidId.parse(""), null);
+  assert.equal(nullableUuidId.parse("  "), null);
+  assert.equal(nullableUuidId.parse(null), null);
+  assert.equal(nullableUuidId.parse(id), id);
+  assert.throws(() => nullableUuidId.parse("not-an-id"), /must be a valid id/);
+});

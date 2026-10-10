@@ -213,3 +213,12 @@ test('reconcileBulkResults flags ids the server never answered', () => {
     { id: 'a', error: 'not processed' },
   ])
 })
+
+test("a schema refusal names the field the operator must correct", async () => {
+  const body = { error: "must be a valid id", issues: [{ path: "adjustmentAccountId", message: "must be a valid id" }] };
+  const response = new Response(JSON.stringify(body), { status: 422, headers: { "content-type": "application/json" } });
+  assert.equal(await readApiErrorMessage(response, "Save failed"), "Adjustment account id: must be a valid id");
+  const nested = { error: "Required", issues: [{ path: "lines.0.taxCodeId", message: "Required" }] };
+  const second = new Response(JSON.stringify(nested), { status: 400, headers: { "content-type": "application/json" } });
+  assert.equal(await readApiErrorMessage(second, "Save failed"), "Tax code id: Required");
+});
