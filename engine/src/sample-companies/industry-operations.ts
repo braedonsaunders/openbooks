@@ -36,7 +36,8 @@ export function industryOperatingRecords(c: DemoContext, add: AddDemoRecord): vo
   profile.services.forEach((name, index) => add("items", {
     code: `DEMO-OPS-SVC-${index + 1}`, name, kind: "service", unit: "each",
     income_account_id: c.accounts.revenue, expense_account_id: c.accounts.expense,
-    default_rate: ["450.00", "1250.00", "275.00", "850.00"][index]!, show_on_timesheet: features.timeTracking,
+    default_rate: ["450.00", "1250.00", "275.00", "850.00"][index]!,
+    ...(features.timeTracking !== undefined ? { show_on_timesheet: features.timeTracking } : {}),
   }, `operations-service-${index + 1}`));
   // Orders and expenses use the native authored-scenario draft path; their
   // application writers are web-owned. Approval and posting remain domain commands.

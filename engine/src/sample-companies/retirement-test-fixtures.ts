@@ -60,7 +60,7 @@ export async function retireSampleFixtureCompanies(homeOrgId: string, exactOrgId
   const selection = [...new Set(exactOrgIds)];
   assert.ok(!selection.includes(homeOrgId), "the recovery actor's home company must be retained");
   const state = await withMaintenanceTransaction(null, async () => ({
-    database: (await db.execute<RetirementDatabaseIdentity>(sql`select current_database() as database,inet_server_addr()::text as "serverAddress",
+    database: (await db.execute<RetirementDatabaseIdentity & Record<string, unknown>>(sql`select current_database() as database,inet_server_addr()::text as "serverAddress",
       inet_server_port() as "serverPort",current_setting('cluster_name') as "clusterName"`)).rows[0]!,
     live: (await db.execute<{ id: string }>(sql`select id from orgs order by id`)).rows.map(row => row.id),
   }));

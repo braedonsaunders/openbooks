@@ -69,7 +69,7 @@ async function createEvidence(org: ScratchOrg): Promise<Evidence> {
 }
 async function planFor(retireIds: string[]): Promise<Plan> {
   const { database, live } = await withMaintenanceTransaction(null, async () => ({
-    database: (await db.execute<RetirementDatabaseIdentity>(sql`select current_database() as database,inet_server_addr()::text as "serverAddress",
+    database: (await db.execute<RetirementDatabaseIdentity & Record<string, unknown>>(sql`select current_database() as database,inet_server_addr()::text as "serverAddress",
       inet_server_port() as "serverPort",current_setting('cluster_name') as "clusterName"`)).rows[0]!,
     live: (await db.execute<{ id: string }>(sql`select id from orgs order by id`)).rows.map(row => row.id),
   }));
