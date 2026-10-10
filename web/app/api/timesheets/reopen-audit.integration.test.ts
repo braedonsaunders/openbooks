@@ -11,29 +11,31 @@ import test from "node:test";
  */
 const state = { user: { orgId: "", id: "" } };
 Object.assign(globalThis, { __reopenRouteState: state });
-registerHooks({
-  resolve(specifier, context, next) {
-    if (
-      specifier.endsWith("/lib/feature-gates") &&
-      (context.parentURL?.includes("/api/timesheets/reopen/") ||
-        context.parentURL?.includes("/web/lib/api/route.ts"))
-    ) {
+const gateModule =
+  "data:text/javascript," +
+  encodeURIComponent(`
+    export async function guardFeaturePermission(){
       return {
-        shortCircuit: true,
-        url:
-          "data:text/javascript," +
-          encodeURIComponent(`
-            export async function guardFeaturePermission(){
-              return {
-                user: globalThis.__reopenRouteState.user,
-                permissions: new Set(['time.reopen']),
-                allowedSubsidiaryIds: null,
-              };
-            }
-          `),
+        user: globalThis.__reopenRouteState.user,
+        permissions: new Set(['time.reopen']),
+        allowedSubsidiaryIds: null,
       };
     }
-    return next(specifier, context);
+  `);
+registerHooks({
+  resolve(specifier, context, next) {
+    // Match the resolved session-boundary module, however the route spells
+    // it: the factory imports the "@/lib/feature-gates" alias lazily while
+    // time-workspace.ts imports it relatively.
+    if (specifier === "@/lib/feature-gates") {
+      return { shortCircuit: true, url: gateModule };
+    }
+    const resolved = next(specifier, context);
+    const url = typeof resolved === "string" ? resolved : resolved.url;
+    if (url.endsWith("/web/lib/feature-gates.ts")) {
+      return { shortCircuit: true, url: gateModule };
+    }
+    return resolved;
   },
 });
 const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
@@ -58,6 +60,16 @@ const post = (body: Record<string, unknown>) =>
 async function seedApprovedWeek() {
   const org = await withBypassContext(() => createScratchOrg());
   const actorId = (await withBypassContext(() => seedFlowActors(org.orgId))).adminId;
+  // The shared time authority lock runs for real (users row, time grant,
+  // workspace feature): the actor holds time.reopen and the org tracks time.
+  await withBypassContext(async () => {
+    await db.execute(sql`
+      update app_roles set permissions = '["time.read", "time.reopen"]'::jsonb
+       where org_id = ${org.orgId} and key = 'admin'`);
+    await db.execute(sql`
+      update orgs set settings = settings || '{"features": {"timeTracking": true}}'::jsonb
+       where id = ${org.orgId}`);
+  });
   const employeeId = randomUUID();
   const headerId = randomUUID();
   const timeEntryId = randomUUID();

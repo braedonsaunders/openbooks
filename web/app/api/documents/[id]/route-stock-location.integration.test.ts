@@ -12,17 +12,29 @@ const root = pathToFileURL(process.cwd() + '/').href
 const state: { orgId: string; actorId: string } = { orgId: '', actorId: '' }
 Object.assign(globalThis, { __documentStockState: state })
 const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })
+const sessionModule = `
+  export async function getAuthz() {
+    const s = globalThis.__documentStockState;
+    return { user: { orgId: s.orgId, id: s.actorId, isSuperAdmin: false }, permissions: new Set(['*']), allowedSubsidiaryIds: null };
+  }
+  export { can, guardSubsidiaryScope, subsidiariesInScope } from '${root}web/lib/authz.ts'
+`
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === '../../../../lib/authz')
-      return virtual(`
-        export async function getAuthz() {
-          const s = globalThis.__documentStockState;
-          return { user: { orgId: s.orgId, id: s.actorId, isSuperAdmin: false }, permissions: new Set(['*']), allowedSubsidiaryIds: null };
-        }
-        export { can, guardSubsidiaryScope, subsidiariesInScope } from '${root}web/lib/authz.ts'
-      `)
-    return next(specifier, context)
+    // The stub module itself re-exports helpers from the real boundary, so
+    // data: parents always resolve for real.
+    if (context.parentURL?.startsWith('data:'))
+      return next(specifier, context)
+    // The route file imports the boundary relatively while the route
+    // factory imports the "@/lib/authz" alias lazily at request time:
+    // stub both spellings so the session never reaches cookies().
+    if (specifier === '../../../../lib/authz' || specifier === '@/lib/authz')
+      return virtual(sessionModule)
+    const resolved = next(specifier, context)
+    const url = typeof resolved === 'string' ? resolved : resolved.url
+    if (url.endsWith('/web/lib/authz.ts'))
+      return virtual(sessionModule)
+    return resolved
   },
 })
 const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
