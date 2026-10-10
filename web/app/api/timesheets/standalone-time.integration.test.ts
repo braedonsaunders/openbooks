@@ -32,6 +32,9 @@ const { fieldClockOwnerKey } = await import('../../../lib/field-clock-owner')
 const { GET, PUT } = await import('./route')
 const { POST: submitWeek } = await import('./submit/route')
 const { POST: approveWeek } = await import('./approve/route')
+const { POST: rejectWeek } = await import('./reject/route')
+const { POST: reopenWeek } = await import('./reopen/route')
+const { POST: amendWeek } = await import('./amend/route')
 const { POST: clockIn } = await import('../time/clock/route')
 const { loadWeek } = await import('./_lib')
 
@@ -44,7 +47,7 @@ async function fixture() {
   const supervisor = await createScratchUser(org.orgId, 'Time supervisor', 'time_supervisor')
   await db.execute(sql`update app_roles set permissions='["time.self","time.clock"]'::jsonb where org_id=${org.orgId} and key='barista'`)
   await db.execute(sql`update app_roles set permissions='["time.self"]'::jsonb where org_id=${org.orgId} and key='partner'`)
-  await db.execute(sql`update app_roles set permissions='["time.read","time.manage","time.approve"]'::jsonb where org_id=${org.orgId} and key='time_supervisor'`)
+  await db.execute(sql`update app_roles set permissions='["time.read","time.manage","time.approve","time.reopen"]'::jsonb where org_id=${org.orgId} and key='time_supervisor'`)
   await db.execute(sql`update orgs set settings = settings || ${JSON.stringify({
     features: { projects: false, timeTracking: true, fieldTime: true },
     timesheets: { requireApproval: true },
@@ -80,6 +83,15 @@ async function fixture() {
   const approve = (employee: string) => withOrgContext(org.orgId, () => approveWeek(new Request('http://time.local/api/timesheets/approve', {
     method: 'POST', body: JSON.stringify({ employee, week: WEEK }),
   })))
+  const reject = (employee: string) => withOrgContext(org.orgId, () => rejectWeek(new Request('http://time.local/api/timesheets/reject', {
+    method: 'POST', body: JSON.stringify({ employee, week: WEEK, reason: 'Correct Tuesday hours' }),
+  })))
+  const reopen = (employee: string) => withOrgContext(org.orgId, () => reopenWeek(new Request('http://time.local/api/timesheets/reopen', {
+    method: 'POST', body: JSON.stringify({ employee, week: WEEK }),
+  })))
+  const amend = (employee: string) => withOrgContext(org.orgId, () => amendWeek(new Request('http://time.local/api/timesheets/amend', {
+    method: 'POST', body: JSON.stringify({ employee, week: WEEK }),
+  })))
   const clock = (userId: string, partyId: string) => withOrgContext(org.orgId, () => clockIn(new Request('http://time.local/api/time/clock', {
     method: 'POST',
     body: JSON.stringify({
@@ -89,12 +101,8 @@ async function fixture() {
   })))
   const entries = async (employee: string) => (await db.execute<{ status: string; is_billable: boolean }>(sql`
     select status, is_billable from time_entries where org_id=${org.orgId} and employee_party_id=${employee}`)).rows
-  const allowUnratedTime = async () => {
-    await db.execute(sql`update orgs set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{laborCosting,allowUnratedTime}', 'true'::jsonb, true)
-      where id=${org.orgId}`)
-  }
   const close = async () => { session.user = null; await dropScratchOrgReporting(org.orgId) }
-  return { org, barista, partner, supervisor, own, mate, project, as, read, save, submit, approve, clock, entries, allowUnratedTime, close }
+  return { org, barista, partner, supervisor, own, mate, project, as, read, save, submit, approve, reject, reopen, amend, clock, entries, close }
 }
 
 test('timesheets, clock and approval work with Projects off', async () => {
@@ -112,6 +120,34 @@ test('timesheets, clock and approval work with Projects off', async () => {
     const approved = await f.approve(f.own)
     assert.equal(approved.status, 200, await approved.clone().text())
     assert.deepEqual((await f.entries(f.own)).map((entry) => entry.status), ['approved'])
+  } finally { await f.close() }
+})
+
+test('reject, reopen and amend run the full lifecycle with Projects off', async () => {
+  const f = await fixture()
+  try {
+    f.as(f.barista, 'Barista')
+    assert.equal((await f.save(f.own)).status, 200)
+    assert.equal((await f.submit(f.own)).status, 200)
+    f.as(f.supervisor, 'Time supervisor')
+    const rejected = await f.reject(f.own)
+    assert.equal(rejected.status, 200, await rejected.clone().text())
+    assert.deepEqual((await f.entries(f.own)).map((entry) => entry.status), ['rejected'])
+    f.as(f.barista, 'Barista')
+    assert.equal((await f.save(f.own)).status, 200, 'rejected entries stay editable')
+    assert.equal((await f.submit(f.own)).status, 200)
+    f.as(f.supervisor, 'Time supervisor')
+    assert.equal((await f.approve(f.own)).status, 200)
+    const reopened = await f.reopen(f.own)
+    assert.equal(reopened.status, 200, await reopened.clone().text())
+    assert.deepEqual((await f.entries(f.own)).map((entry) => entry.status), ['draft'])
+    f.as(f.barista, 'Barista')
+    assert.equal((await f.submit(f.own)).status, 200)
+    f.as(f.supervisor, 'Time supervisor')
+    assert.equal((await f.approve(f.own)).status, 200)
+    const amended = await f.amend(f.own)
+    assert.equal(amended.status, 201, await amended.clone().text())
+    assert.equal((await amended.json() as { amended?: number }).amended, 0, 'nothing consumed, no offsets')
   } finally { await f.close() }
 })
 
@@ -139,13 +175,10 @@ test('a partner without employment records billable time but never a coworker we
     const submitted = await f.submit(f.mate)
     assert.equal(submitted.status, 200, await submitted.clone().text())
     f.as(f.supervisor, 'Time supervisor')
-    // Approval costs every entry: a partner has no wage row, so the default
-    // policy refuses by name instead of inventing a cost. Allowing unrated
-    // time in labor costing setup opens the billing path for partner hours.
-    const unrated = await f.approve(f.mate)
-    assert.equal(unrated.status, 409, await unrated.clone().text())
-    assert.deepEqual((await f.entries(f.mate)).map((entry) => entry.status), ['submitted'])
-    await f.allowUnratedTime()
+    // Costing is a Projects-module policy: with Projects off there is no
+    // wage evidence to require, so partner hours approve like anyone's.
+    // (With Projects on, the same approval refuses by name unless the org
+    // allows unrated time — see approval-refusal.integration.test.ts.)
     const approved = await f.approve(f.mate)
     assert.equal(approved.status, 200, await approved.clone().text())
     assert.deepEqual((await f.entries(f.mate)).map((entry) => entry.status), ['approved'])

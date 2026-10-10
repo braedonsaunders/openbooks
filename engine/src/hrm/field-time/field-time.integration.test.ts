@@ -8,6 +8,8 @@
  * - Batch post creates entries once and equipment charges once; a second
  *   post refuses; the charge posts the same balanced job-cost and
  *   recovery rows the equipment-charge path asserts.
+ * - Crew post refuses while Projects is off and writes no time; batch
+ *   scaffolding still works.
  * - A submitted batch approves once; a rejected batch never posts.
  * - Feature-off: recording refuses with the remedy, never a row.
  */
@@ -362,6 +364,40 @@ test("feature-off recording refuses with the remedy", { skip: !DB }, async () =>
         source: "mobile", clientEventId: randomUUID(),
       })));
     assert.equal(code, "field_time_off");
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("crew post refuses while Projects is off and writes no time", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    await enableFieldTime(org.orgId, { projects: false });
+    const foreman = randomUUID();
+    const worker = randomUUID();
+    const projectId = randomUUID();
+    const actor = randomUUID();
+    await withOrg(org.orgId, async () => {
+      await db.execute(sql`insert into parties (id, org_id, kind, display_name) values (${foreman}, ${org.orgId}, 'person', 'Foreman'), (${worker}, ${org.orgId}, 'person', 'Crew Hand')`);
+      await db.execute(sql`insert into projects (id, org_id, subsidiary_id, code, name, status, is_active, custom) values (${projectId}, ${org.orgId}, ${org.subsidiaryId}, 'JOB-FT', 'Field job', 'active', true, '{}'::jsonb)`);
+      await db.execute(sql`insert into schedule_resources (org_id, project_id, name, kind, party_id) values (${org.orgId}, ${projectId}, 'Foreman', 'crew', ${foreman})`);
+      // Batch scaffolding still works with Projects off; only the post that
+      // would write open project time refuses, like the timesheet save.
+      const batchId = await createBatch({
+        orgId: org.orgId, actorUserId: actor, foremanPartyId: foreman,
+        projectId, workedOn: "2026-09-14", canManageAll: true, allowedSubsidiaryIds: null,
+      });
+      await setBatchLines({
+        orgId: org.orgId, actorUserId: actor, batchId,
+        lines: [{ employeePartyId: worker, hours: "8.0000" }],
+        canManageAll: true, allowedSubsidiaryIds: null,
+      });
+      await submitBatch({ orgId: org.orgId, actorUserId: actor, batchId, canManageAll: true, allowedSubsidiaryIds: null });
+      await approveBatch({ orgId: org.orgId, actorUserId: actor, batchId, allowedSubsidiaryIds: null });
+      assert.equal(await refusesCode(() => postBatch({ orgId: org.orgId, actorUserId: actor, batchId, allowedSubsidiaryIds: null })), "projects_off");
+      const entries = (await db.execute<{ n: string }>(sql`select count(*)::text as n from time_entries where org_id = ${org.orgId}`)).rows[0]?.n;
+      assert.equal(entries, "0", "the refused post writes no time");
+    });
   } finally {
     await dropScratchOrg(org.orgId);
   }
