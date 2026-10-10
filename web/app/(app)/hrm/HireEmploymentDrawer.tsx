@@ -368,7 +368,9 @@ export function HireEmploymentDrawer({
       toast.success(
         t(data.applied === true ? 'employment.changeRequests.appliedToast' : 'employment.changeRequests.submittedToast'),
       )
-      onClose()
+      // One completion signal: onSaved owns the post-save landing (every
+      // caller closes there), so a success never also fires the abandon
+      // path's navigation a second time.
       onSaved()
       router.refresh()
     } catch {

@@ -158,9 +158,15 @@ async function click(button: HTMLButtonElement) {
   await tick();
 }
 
-function setInputValue(input: HTMLInputElement, value: string) {
-  const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")?.set as
-    | ((this: HTMLInputElement, value: string) => void)
+function setInputValue(input: HTMLInputElement | HTMLTextAreaElement, value: string) {
+  // The setter must come from the element's own prototype: the input
+  // setter throws on a textarea (and vice versa), which is exactly how the
+  // Hire reason fill broke.
+  const proto = input instanceof window.HTMLTextAreaElement
+    ? window.HTMLTextAreaElement.prototype
+    : window.HTMLInputElement.prototype;
+  const setter = Object.getOwnPropertyDescriptor(proto, "value")?.set as
+    | ((this: HTMLInputElement | HTMLTextAreaElement, value: string) => void)
     | undefined;
   setter?.call(input, value);
   input.dispatchEvent(new window.Event("input", { bubbles: true }));
@@ -386,6 +392,9 @@ test("new employee from an existing person patches the role and chains Hire on t
   });
   globalThis.__partyCreateToasts = [];
   globalThis.__partyCreateRouter = { pushes: [], replaces: [], refreshes: 0 };
+  // The fetch log is file-global: an earlier test's create POST would read
+  // here as a duplicate minted by this test.
+  globalThis.__partyCreateFetches = [];
   const { BusinessDateProvider } = await import("../../../components/business-date-provider");
   const host = document.createElement("div");
   document.body.appendChild(host);
