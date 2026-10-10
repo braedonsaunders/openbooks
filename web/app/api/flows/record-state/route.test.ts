@@ -317,6 +317,25 @@ test("with Flows off a customer payment answers an empty approval state, draft o
   }
 });
 
+test("with Flows off a vendor payment answers an empty approval state", async () => {
+  reset(new Set(["sub-hidden"]));
+  routeState.flowsEnabled = false;
+  routeState.status = "draft";
+
+  const response = await GET(request("vendor_payment"));
+
+  assert.equal(response.status, 200, "a draft payment must not meet a refusal");
+  assert.deepEqual(await response.json(), {
+    approvalState: { status: "draft", pendingWith: [], myActions: null },
+    history: [],
+    failedRun: null,
+    neverSubmitted: false,
+    canRetry: false,
+  });
+  assert.deepEqual(routeState.readChecks, ["vendor_payment"], "the payment's own read grant is enforced");
+  assert.equal(routeState.flowQueries, 0, "no gate, run or role read may run");
+});
+
 test("with Flows off a hidden record still meets the missing-record answer", async () => {
   reset(new Set(["sub-visible"]));
   routeState.flowsEnabled = false;

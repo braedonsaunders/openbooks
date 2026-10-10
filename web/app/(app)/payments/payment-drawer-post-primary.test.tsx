@@ -96,12 +96,12 @@ const ALLOCATION = {
   settlementRateReference: "same transaction currency",
 } as never;
 
-function draftDoc() {
+function draftDoc(kind: "customer_payment" | "vendor_payment" = "customer_payment") {
   return {
     id: randomUUID(),
-    kind: "customer_payment",
+    kind,
     status: "draft",
-    document_number: "RCPT-00008",
+    document_number: kind === "vendor_payment" ? "PAY-00004" : "RCPT-00008",
     currency: "USD",
     party_id: "33333333-3333-4333-8333-333333333333",
     party_name: "Meridian Dynamics",
@@ -121,7 +121,9 @@ async function renderDrawer(options: {
   allocations: never[];
   openItems: never[];
   governedByFlow?: boolean;
+  side?: "ar" | "ap";
 }) {
+  const side = options.side ?? "ar";
   const prior = globalThis.fetch;
   globalThis.fetch = (async () =>
     Response.json({ rates: [] })) as typeof fetch;
@@ -135,7 +137,7 @@ async function renderDrawer(options: {
         <MoneyProvider currency="USD">
           <PaymentDrawer
             payment={{
-              doc: draftDoc(),
+              doc: draftDoc(options.side === "ap" ? "vendor_payment" : "customer_payment"),
               bankAccountId: options.bankAccountId,
               allocations: options.allocations,
               applied: [],
@@ -144,8 +146,8 @@ async function renderDrawer(options: {
             initialOpenItems={options.openItems}
             parties={[]}
             bankAccounts={[]}
-            side="ar"
-            basePath="/receipts"
+            side={side}
+            basePath={side === "ap" ? "/payments" : "/receipts"}
             initialMode={"view" as never}
           />
         </MoneyProvider>
@@ -252,6 +254,62 @@ test("a flow-governed draft labels the primary action Submit for approval", asyn
     assert.equal(submits.length, 1, "a governed draft must offer Submit for approval");
     assert.equal(submits[0]!.disabled, false, "no blocker means the submit is enabled");
     assert.equal(buttonsNamed("Receive & post").length, 0, "the direct-post label must not show when governed");
+  } finally {
+    await done();
+  }
+});
+
+test("a complete vendor draft shows an enabled primary Post action", async () => {
+  const { done } = await renderDrawer({
+    bankAccountId: "bank-1",
+    allocations: [ALLOCATION],
+    openItems: [OPEN_ITEM],
+    side: "ap",
+  });
+  try {
+    const posts = buttonsNamed("Pay & post");
+    assert.equal(posts.length, 1, "a complete vendor draft must offer exactly one primary Post");
+    assert.equal(posts[0]!.disabled, false, "no blocker means the primary Post is enabled");
+  } finally {
+    await done();
+  }
+});
+
+test("a vendor draft without a paying account names the blocker beside a disabled Post", async () => {
+  const { done } = await renderDrawer({
+    bankAccountId: null,
+    allocations: [ALLOCATION],
+    openItems: [OPEN_ITEM],
+    side: "ap",
+  });
+  try {
+    const posts = buttonsNamed("Pay & post");
+    assert.equal(posts.length, 1, "Post stays visible even while blocked");
+    assert.equal(posts[0]!.disabled, true, "a missing paying account blocks posting");
+    assert.ok(
+      (document.body.textContent ?? "").includes("Choose a paying account"),
+      "the drawer must say the paying account is missing",
+    );
+  } finally {
+    await done();
+  }
+});
+
+test("a vendor draft with no applications names the blocker beside a disabled Post", async () => {
+  const { done } = await renderDrawer({
+    bankAccountId: "bank-1",
+    allocations: [],
+    openItems: [],
+    side: "ap",
+  });
+  try {
+    const posts = buttonsNamed("Pay & post");
+    assert.equal(posts.length, 1, "Post stays visible even while blocked");
+    assert.equal(posts[0]!.disabled, true, "no application blocks posting");
+    assert.ok(
+      (document.body.textContent ?? "").includes("Apply the payment to at least one bill"),
+      "the drawer must say a bill application is missing",
+    );
   } finally {
     await done();
   }

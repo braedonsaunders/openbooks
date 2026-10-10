@@ -963,6 +963,26 @@ test("an unrecognised SEC code falls back to CCD instead of reaching the 3-chara
   assert.equal(nachaOriginator({ ...NACHA_ORIGINATOR, entryClassCode: "PPD" }).entryClassCode, "PPD");
 });
 
+test("a well-formed routing with a bad check digit is refused, naming the field", () => {
+  // Nine digits pass the shape check but address the wrong institution —
+  // 021000029 fails the ABA mod-10 check digit while 021000021 passes it.
+  assert.throws(
+    () => nachaOriginator({ ...NACHA_ORIGINATOR, odfiRouting: "021000029" }),
+    (error: Error) => error instanceof PaymentError && error.message.includes("odfiRouting (check digit mismatch)"),
+  );
+});
+
+test("a company id the 10-position field cannot carry is refused, naming the field", () => {
+  assert.throws(
+    () => nachaOriginator({ ...NACHA_ORIGINATOR, companyId: "112345678901" }),
+    (error: Error) => error instanceof PaymentError && error.message.includes("companyId (1-10 alphanumeric characters)"),
+  );
+  assert.throws(
+    () => nachaOriginator({ ...NACHA_ORIGINATOR, companyId: "ACME-1" }),
+    (error: Error) => error instanceof PaymentError && error.message.includes("companyId (1-10 alphanumeric characters)"),
+  );
+});
+
 const SEPA_ORIGINATOR = {
   originatorName: "EXAMPLE CONSTRUCTION",
   originatorIban: "DE89370400440532013000",
