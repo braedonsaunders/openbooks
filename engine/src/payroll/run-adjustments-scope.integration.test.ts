@@ -54,7 +54,7 @@ test("pay-run scope guard: native membership rules for include and exclude", { s
       scopeCase("other-schedule member excluded (must still refuse)", f => ({ action: "exclude", employeePartyId: f.otherEmployeeId }),
         /employee "Other Schedule Member" is not on this run's pay schedule/),
       scopeCase("other-schedule member included (must still refuse)", f => ({ action: "include", employeePartyId: f.otherEmployeeId }),
-        /employee "Other Schedule Member" is not an active member.*no payroll profile/),
+        /employee "Other Schedule Member" has no payroll profile on this run's pay schedule.*link them/),
       scopeCase("non-existent id excluded (must still refuse)", () => ({ action: "exclude", employeePartyId: strangerId }),
         new RegExp(`employee "${strangerId}" is not on this run's pay schedule`)),
       scopeCase("non-existent id included (must still refuse)", () => ({ action: "include", employeePartyId: strangerId }),
