@@ -64,6 +64,204 @@ export class RecurringError extends Error {
   }
 }
 
+/**
+ * Period tokens for recurring template text. A template line description or
+ * header memo may name the run it bills: {period} (2025-12), {month} (the
+ * locale month name), {year}, {period_start} / {period_end} (locale dates),
+ * and the instalment counters {n} / {total}. Every generated run resolves
+ * them from its own service period and sequence number — a catch-up run
+ * uses its period, never the generation date. Text without tokens, and
+ * brace-words outside this set, render verbatim.
+ */
+export const KNOWN_PERIOD_TOKENS = [
+  "period",
+  "month",
+  "year",
+  "period_start",
+  "period_end",
+  "n",
+  "total",
+] as const;
+
+const PERIOD_TOKEN_PATTERN = /\{([A-Za-z_][A-Za-z0-9_]*)\}/g;
+
+export interface PeriodTokenContext {
+  periodStart: string;
+  periodEnd: string;
+  sequenceNumber: number | null;
+  totalOccurrences: number | null;
+  locale: string;
+}
+
+function formatTokenDate(isoDate: string, locale: string): string {
+  const date = parseIsoDate(isoDate);
+  return date.toLocaleDateString(locale, { year: "numeric", month: "short", day: "numeric", timeZone: "UTC" });
+}
+
+function formatTokenMonth(isoDate: string, locale: string): string {
+  const date = parseIsoDate(isoDate);
+  return date.toLocaleDateString(locale, { month: "long", timeZone: "UTC" });
+}
+
+/** Resolve the known period tokens in template text; anything else renders verbatim. Pure. */
+export function resolvePeriodTokens(text: string, ctx: PeriodTokenContext): string {
+  const year = ctx.periodStart.slice(0, 4);
+  const values: Record<string, string> = {
+    period: `${ctx.periodStart.slice(0, 7)}`,
+    month: formatTokenMonth(ctx.periodStart, ctx.locale),
+    year,
+    period_start: formatTokenDate(ctx.periodStart, ctx.locale),
+    period_end: formatTokenDate(ctx.periodEnd, ctx.locale),
+    n: ctx.sequenceNumber == null ? "" : String(ctx.sequenceNumber),
+    total: ctx.totalOccurrences == null ? "" : String(ctx.totalOccurrences),
+  };
+  return text.replace(PERIOD_TOKEN_PATTERN, (match, name: string) =>
+    Object.prototype.hasOwnProperty.call(values, name) ? values[name]! : match,
+  );
+}
+
+/** Brace-words in template text outside the known token set. Pure. */
+export function findUnknownPeriodTokens(text: string): string[] {
+  const known = new Set<string>(KNOWN_PERIOD_TOKENS);
+  const unknown = new Set<string>();
+  for (const match of text.matchAll(PERIOD_TOKEN_PATTERN)) {
+    if (!known.has(match[1]!)) unknown.add(match[0]);
+  }
+  return [...unknown];
+}
+
+/** The org's configured locale for customer-facing text, English unless set. */
+export async function orgDefaultLocale(runner: Pick<typeof db, "execute">, orgId: string): Promise<string> {
+  const row = (await runner.execute<{ locale: string | null }>(sql`
+    select settings->>'defaultLocale' as "locale" from orgs where id = ${orgId}`)).rows[0];
+  const locale = (row?.locale ?? "").trim();
+  return locale || "en";
+}
+
+/**
+ * Refuse unknown period tokens in a template's line descriptions and header
+ * memo, naming the token and the known set. Runs at schedule save so a
+ * misspelled token can never reach a customer invoice; existing text without
+ * tokens is untouched.
+ */
+export async function assertTemplateTokensKnown(
+  runner: Pick<typeof db, "execute">,
+  orgId: string,
+  templateId: string,
+): Promise<void> {
+  const lines = (await runner.execute<{ description: string | null }>(sql`
+    select description from document_lines where org_id = ${orgId} and document_id = ${templateId}`)).rows;
+  const memo = (await runner.execute<{ memo: string | null }>(sql`
+    select memo from documents where id = ${templateId} and org_id = ${orgId}`)).rows[0]?.memo ?? null;
+  const unknown = new Set<string>();
+  for (const row of lines) {
+    if (row.description) for (const token of findUnknownPeriodTokens(row.description)) unknown.add(token);
+  }
+  if (memo) for (const token of findUnknownPeriodTokens(memo)) unknown.add(token);
+  if (unknown.size > 0) {
+    throw new RecurringError(
+      `unknown period token ${[...unknown].join(", ")} in the template text — known tokens: ${KNOWN_PERIOD_TOKENS.map((token) => `{${token}}`).join(", ")}`,
+      400,
+    );
+  }
+}
+
+export interface RunTokenSample {
+  occurrenceOn: string;
+  /** First template line resolved for the next run, null when lineless. */
+  description: string | null;
+  /** Header memo resolved for the next run, null when the template has none. */
+  memo: string | null;
+}
+
+/**
+ * The next run's resolved template text for live preview: the first line
+ * description and header memo with period tokens resolved from the upcoming
+ * occurrence, its sequence number, and the schedule total. Read-only; the
+ * run itself resolves identically at generation.
+ */
+export async function previewRunTokens(
+  runner: Pick<typeof db, "execute">,
+  orgId: string,
+  input: { scheduleId: string } | {
+    templateId: string;
+    cadence: Cadence;
+    cron: string | null;
+    nextRunOn: string;
+    endsOn: string | null;
+    maxOccurrences?: number | null;
+  },
+  opts?: { locale?: string },
+): Promise<RunTokenSample | null> {
+  let templateId: string;
+  let cadence: Cadence;
+  let cron: string | null;
+  let nextRunOn: string;
+  let endsOn: string | null;
+  let runCount: number;
+  let anchorDay: number | null;
+  let maxOccurrences: number | null;
+  if ("scheduleId" in input) {
+    const row = (await runner.execute<{
+      templateId: string; cadence: string; cron: string | null; nextRunOn: string;
+      endsOn: string | null; runCount: number; anchorDay: number | null; maxOccurrences: number | null;
+    }>(sql`
+      select template_document_id as "templateId", cadence, cron,
+             next_run_on::text as "nextRunOn", ends_on::text as "endsOn",
+             run_count as "runCount", anchor_day as "anchorDay", max_occurrences as "maxOccurrences"
+        from recurring_schedules where id = ${input.scheduleId} and org_id = ${orgId}
+    `)).rows[0];
+    if (!row) return null;
+    templateId = row.templateId;
+    cadence = row.cadence as Cadence;
+    cron = row.cron;
+    nextRunOn = row.nextRunOn;
+    endsOn = row.endsOn;
+    runCount = Number(row.runCount);
+    anchorDay = row.anchorDay;
+    maxOccurrences = row.maxOccurrences == null ? null : Number(row.maxOccurrences);
+  } else {
+    ({ templateId, cadence, cron, nextRunOn, endsOn } = input);
+    runCount = 0;
+    anchorDay = null;
+    maxOccurrences = input.maxOccurrences ?? null;
+  }
+  anchorDay = anchorDay ?? Number(nextRunOn.slice(8, 10));
+  const periodEnd = advanceCadence(nextRunOn, cadence, cron, undefined, anchorDay);
+  const sequenceNumber = runCount + 1;
+  const endsTotal = endsOn
+    ? sequenceNumber + pendingOccurrences(
+        { cadence, cron, nextRunOn: periodEnd, endsOn, anchorDay },
+        endsOn,
+      ).occurrences.length
+    : null;
+  // The instalment count is whichever bound stops generation first: the
+  // occurrence limit wins over a longer-dated end date, and the end date
+  // wins over a roomier limit. Neither bound means an open-ended schedule.
+  const totalOccurrences = maxOccurrences != null
+    ? Math.min(maxOccurrences, endsTotal ?? maxOccurrences)
+    : endsTotal;
+  const locale = opts?.locale?.trim() || (await orgDefaultLocale(runner, orgId));
+  const ctx: PeriodTokenContext = {
+    periodStart: nextRunOn,
+    periodEnd,
+    sequenceNumber,
+    totalOccurrences,
+    locale,
+  };
+  const line = (await runner.execute<{ description: string | null }>(sql`
+    select description from document_lines
+     where org_id = ${orgId} and document_id = ${templateId}
+     order by line_number limit 1`)).rows[0];
+  const memo = (await runner.execute<{ memo: string | null }>(sql`
+    select memo from documents where id = ${templateId} and org_id = ${orgId}`)).rows[0]?.memo ?? null;
+  return {
+    occurrenceOn: nextRunOn,
+    description: typeof line?.description === "string" ? resolvePeriodTokens(line.description, ctx) : null,
+    memo: typeof memo === "string" ? resolvePeriodTokens(memo, ctx) : null,
+  };
+}
+
 /** Execution authority covers the header and every explicit line entity.
  * A standing intercompany journal must not act in a hidden entity merely
  * because its header is visible. Template parent locks fence line edits. */
@@ -190,7 +388,7 @@ export interface OccurrenceKey {
   occurrenceOn: string;
 }
 
-type RecurringRunSource = "scheduler" | "run_now";
+type RecurringRunSource = "scheduler" | "run_now" | "catch_up";
 
 /**
  * Generation attribution is explicit at the private write boundary. Scheduled
@@ -285,48 +483,12 @@ export async function runDueRecurringSchedules(asOf?: string): Promise<Recurring
     // re-evaluates the WHERE against the advanced value and claims zero rows.
     // Deactivating a final occurrence shares the same fate — it lands only if
     // the document did.
-    let gen: { documentId: string; documentNumber: string; posted: boolean } | null = null;
+    let gen: { documentId: string; documentNumber: string; posted: boolean; created: boolean } | null = null;
     try {
-      gen = await withOrg(s.orgId, async () => {
-        const current = (await db.execute<{
-          templateId: string; autoPost: boolean; isActive: boolean; nextRunOn: string;
-          cadence: Cadence; cron: string | null; endsOn: string | null; anchorDay: number;
-        }>(sql`
-          select template_document_id as "templateId", auto_post as "autoPost", is_active as "isActive",
-                 next_run_on::text as "nextRunOn", cadence, cron, ends_on::text as "endsOn",
-                 coalesce(anchor_day, extract(day from next_run_on)::int) as "anchorDay"
-            from recurring_schedules where id = ${s.id} and org_id = ${s.orgId} for update
-        `)).rows[0];
-        if (!current?.isActive || current.nextRunOn !== occurrenceDate) return null;
-        if (current.endsOn && occurrenceDate > current.endsOn) {
-          throw new RecurringError("recurring occurrence is after the schedule end date");
-        }
-        // Month-end starts keep their anchor day: a schedule anchored on the
-        // 31st steps Feb 28 → Mar 31, never Mar 28. Anchor-less rows fall back
-        // to the occurrence day (the historical behavior).
-        const advanced = advanceCadence(occurrenceDate, current.cadence, current.cron, undefined, current.anchorDay);
-        const stillActive = !current.endsOn || advanced <= current.endsOn;
-        const claimed = (await db.execute<{ id: string }>(sql`
-          update recurring_schedules
-             set next_run_on = ${advanced},
-                 is_active = ${stillActive},
-                 last_run_at = now()
-           where id = ${s.id} and org_id = ${s.orgId} and next_run_on = ${occurrenceDate}
-          returning id
-        `));
-        if (!claimed.rows.length) return null; // another tick won it
-        // Date the document with its OCCURRENCE date, not today: after a
-        // scheduler outage (or for a back-dated schedule) the catch-up
-        // occurrences must land in their own periods — July/August/September
-        // occurrences all dated September would book into the wrong period.
-        // A closed occurrence period refuses through postDocument exactly
-        // like a subscription billing into a closed period does.
-        return generateFromTemplate(s.orgId, current.templateId, occurrenceDate, current.autoPost, {
-          scheduleId: s.id,
-          occurrenceOn: occurrenceDate,
-          actorId: null,
-          runSource: "scheduler",
-        });
+      gen = await claimAndGenerateOccurrence(s.orgId, s.id, occurrenceDate, {
+        autoPost: null,
+        actorId: null,
+        runSource: "scheduler",
       });
     } catch (e) {
       // Generation threw — withOrg already rolled the whole unit back, claim
@@ -346,35 +508,451 @@ export async function runDueRecurringSchedules(asOf?: string): Promise<Recurring
     if (!gen) continue; // another tick won it
     result.generated += 1;
     if (gen.posted) result.posted += 1;
-    result.documents.push({ scheduleId: s.id, ...gen });
+    result.documents.push({
+      scheduleId: s.id, documentId: gen.documentId, documentNumber: gen.documentNumber, posted: gen.posted,
+    });
     // Success bookkeeping deliberately lives OUTSIDE the catch above. By this
     // point the occurrence durably produced exactly one document (the
     // generation transaction committed it together with its occurrence-guard
     // row), so a transient bookkeeping failure must NOT roll the claim back:
     // restoring next_run_on after a posted document is precisely how a tick
     // used to double-post. Surface through last_error instead; the claim stays
-    // advanced so the schedule moves on to its next occurrence.
+    // advanced so the schedule moves on to its next occurrence. A replayed
+    // occurrence (a run-now won the same date) keeps the creator's count.
+    if (gen.created) await recordOccurrenceBookkeeping(s.orgId, s.id, gen);
+  }
+  return result;
+}
+
+/**
+ * Claim one occurrence (compare-and-swap next_run_on off its current value)
+ * and generate its document, dated with the OCCURRENCE date, never today.
+ * Shared by the scheduler tick and explicit catch-up runs so both advance,
+ * date, guard, and replay identically. A standing seasonal skip advances
+ * past its date with no document, and an exhausted occurrence limit
+ * deactivates the schedule with no document — both return null exactly as
+ * a lost claim does, so the tick simply moves on. Returns null when another
+ * worker won the occurrence; throws when generation itself refuses.
+ */
+async function claimAndGenerateOccurrence(
+  orgId: string,
+  scheduleId: string,
+  occurrenceDate: string,
+  opts: { autoPost: boolean | null; actorId: string | null; runSource: RecurringRunSource },
+): Promise<{ documentId: string; documentNumber: string; posted: boolean; created: boolean } | null> {
+  return withOrg(orgId, async () => {
+    const current = (await db.execute<{
+      templateId: string; autoPost: boolean; isActive: boolean; nextRunOn: string;
+      cadence: Cadence; cron: string | null; endsOn: string | null; anchorDay: number;
+      runCount: number; maxOccurrences: number | null; skippedRunOns: string[] | null;
+    }>(sql`
+      select template_document_id as "templateId", auto_post as "autoPost", is_active as "isActive",
+             next_run_on::text as "nextRunOn", cadence, cron, ends_on::text as "endsOn",
+             coalesce(anchor_day, extract(day from next_run_on)::int) as "anchorDay",
+             run_count as "runCount", max_occurrences as "maxOccurrences",
+             skipped_run_ons::text[] as "skippedRunOns"
+        from recurring_schedules where id = ${scheduleId} and org_id = ${orgId} for update
+    `)).rows[0];
+    if (!current?.isActive || current.nextRunOn !== occurrenceDate) return null;
+    if (current.endsOn && occurrenceDate > current.endsOn) {
+      throw new RecurringError("recurring occurrence is after the schedule end date");
+    }
+    // Month-end starts keep their anchor day: a schedule anchored on the
+    // 31st steps Feb 28 → Mar 31, never Mar 28. Anchor-less rows fall back
+    // to the occurrence day (the historical behavior).
+    const advanced = advanceCadence(occurrenceDate, current.cadence, current.cron, undefined, current.anchorDay);
+    const stillActive = !current.endsOn || advanced <= current.endsOn;
+    // A season the operator switched off never generates: advance past it
+    // with no document and no counter, exactly as the catch-up run does.
+    if ((current.skippedRunOns ?? []).includes(occurrenceDate)) {
+      await db.execute(sql`
+        update recurring_schedules
+           set next_run_on = ${advanced},
+               is_active = ${stillActive},
+               last_run_at = now()
+         where id = ${scheduleId} and org_id = ${orgId} and next_run_on = ${occurrenceDate}
+      `);
+      return null;
+    }
+    // An exhausted occurrence limit ends the schedule exactly as the end
+    // date does: deactivate with no document rather than billing past it.
+    if (current.maxOccurrences != null && Number(current.runCount) >= current.maxOccurrences) {
+      await db.execute(sql`
+        update recurring_schedules
+           set is_active = false,
+               last_run_at = now()
+         where id = ${scheduleId} and org_id = ${orgId} and next_run_on = ${occurrenceDate}
+      `);
+      return null;
+    }
+    const claimed = (await db.execute<{ id: string }>(sql`
+      update recurring_schedules
+         set next_run_on = ${advanced},
+             is_active = ${stillActive},
+             last_run_at = now()
+       where id = ${scheduleId} and org_id = ${orgId} and next_run_on = ${occurrenceDate}
+      returning id
+    `));
+    if (!claimed.rows.length) return null; // another worker won it
+    // Date the document with its OCCURRENCE date, not today: after a
+    // scheduler outage (or for a back-dated schedule) the catch-up
+    // occurrences must land in their own periods — July/August/September
+    // occurrences all dated September would book into the wrong period.
+    // A closed occurrence period refuses through postDocument exactly
+    // like a subscription billing into a closed period does.
+    return generateFromTemplate(orgId, current.templateId, occurrenceDate, opts.autoPost ?? current.autoPost, {
+      scheduleId,
+      occurrenceOn: occurrenceDate,
+      actorId: opts.actorId,
+      runSource: opts.runSource,
+    });
+  });
+}
+
+/** Record a generated occurrence on its schedule without touching the claim. */
+async function recordOccurrenceBookkeeping(
+  orgId: string,
+  scheduleId: string,
+  gen: { documentId: string; documentNumber: string },
+): Promise<void> {
+  try {
+    await withOrgTransaction(orgId, async () => {
+      await db.execute(sql`
+        update recurring_schedules
+           set run_count = run_count + 1, last_document_id = ${gen.documentId}, last_error = null
+         where id = ${scheduleId} and org_id = ${orgId}
+      `);
+    });
+  } catch (e) {
+    const message = e instanceof Error ? e.message : String(e);
+    console.error(`[recurring] success bookkeeping failed for schedule ${scheduleId}:`, message);
+    await withOrgTransaction(orgId, async () => {
+      await db.execute(sql`
+        update recurring_schedules
+           set last_error = ${`generated ${gen.documentNumber} but bookkeeping failed: ${message}`}
+         where id = ${scheduleId} and org_id = ${orgId}
+      `);
+    });
+  }
+}
+
+export type CatchUpMode = "post_all" | "drafts" | "skip" | "selected";
+
+/**
+ * Past-due occurrences at or above this count are a backlog, not a due
+ * date: creating or resuming into one requires the operator's explicit
+ * catch-up choice instead of silently bulk-generating. A single missed
+ * occurrence stays ordinary — the scheduler bills it next tick exactly as
+ * before. Shared by recurring schedules and subscriptions so both follow
+ * one rule.
+ */
+export const CATCH_UP_CHOICE_THRESHOLD = 2;
+
+export interface CatchUpPreview {
+  occurrences: string[];
+  truncated: boolean;
+}
+
+const CATCH_UP_WALK_LIMIT = 1000;
+
+/**
+ * The pending occurrence dates from nextRunOn through asOf (and within
+ * endsOn), deterministic and shared by the preview and the run: what the
+ * preview lists is exactly what the run bills, skips, or refuses. Standing
+ * seasonal skips never appear — the tick and the run advance past them
+ * without generating — and remaining caps the billable count once an
+ * occurrence limit is set. Caps at a thousand walked occurrences with
+ * truncated set instead of walking forever.
+ */
+export function pendingOccurrences(
+  spec: {
+    cadence: Cadence; cron: string | null; nextRunOn: string; endsOn: string | null; anchorDay?: number | null;
+    skippedRunOns?: readonly string[] | null;
+    /** Billable occurrences still allowed (the occurrence limit minus run_count); null means unlimited. */
+    remaining?: number | null;
+  },
+  asOf: string,
+): CatchUpPreview {
+  const skipped = new Set(spec.skippedRunOns ?? []);
+  const occurrences: string[] = [];
+  let date = spec.nextRunOn;
+  for (let i = 0; i < CATCH_UP_WALK_LIMIT; i++) {
+    if (date > asOf) return { occurrences, truncated: false };
+    if (spec.endsOn && date > spec.endsOn) return { occurrences, truncated: false };
+    if (spec.remaining != null && occurrences.length >= spec.remaining) return { occurrences, truncated: false };
+    if (!skipped.has(date)) occurrences.push(date);
+    date = advanceCadence(date, spec.cadence, spec.cron, undefined, spec.anchorDay ?? null);
+  }
+  return { occurrences, truncated: true };
+}
+
+/** Billable occurrences left under an occurrence limit; null means unlimited. */
+export function remainingOccurrences(maxOccurrences: number | null, runCount: number): number | null {
+  if (maxOccurrences == null) return null;
+  return Math.max(0, maxOccurrences - runCount);
+}
+
+/**
+ * Postgres date[] literal for a validated ISO-date list, for `::date[]`
+ * casts on write. Pure; dates carry no quotes or backslashes, so the join
+ * is exact.
+ */
+export function toDateArrayLiteral(dates: readonly string[]): string {
+  return `{${dates.map((date) => `"${date}"`).join(",")}}`;
+}
+
+export interface CatchUpResultRow {
+  date: string;
+  status: "posted" | "draft" | "skipped" | "replayed";
+  documentId: string | null;
+  documentNumber: string | null;
+}
+
+export interface CatchUpOutcome {
+  results: CatchUpResultRow[];
+  stopped: "caught_up" | "reached_end" | "reached_limit" | "failed";
+  error?: string;
+}
+
+/**
+ * Run a schedule's pending catch-up with an explicit choice, one occurrence
+ * at a time through the same claim-and-generate unit the scheduler tick
+ * uses — same dates, same guards, same replay. post_all posts every missed
+ * period; drafts creates them unposted; skip advances past them without
+ * generating; selected generates exactly the listed preview dates (posted
+ * unless postSelected is false) and advances past every other pending
+ * period with an explicit skipped outcome. The first failure stops the run
+ * with every occurrence's outcome explicit, so a partial catch-up is never
+ * silent; retrying replays committed occurrences instead of duplicating
+ * them. Reaching the schedule end date deactivates the schedule exactly as
+ * a tick would.
+ */
+export async function runScheduleCatchUp(
+  orgId: string,
+  scheduleId: string,
+  input: {
+    mode: CatchUpMode;
+    /** Exact pending dates to generate; required for the selected choice. */
+    selectedDates?: string[];
+    /** Post the selected dates (default) or create them as drafts. */
+    postSelected?: boolean;
+    asOf?: string;
+    actorId: string;
+    allowedSubsidiaryIds: ReadonlySet<string> | null;
+  },
+): Promise<CatchUpOutcome> {
+  if (!(await actorHasPermission(db, orgId, input.actorId, "documents.manage"))) {
+    throw new RecurringError("missing permission: documents.manage", 403);
+  }
+  // The selected choice names its periods up front: it needs at least one
+  // calendar date, and dates outside it never reach generation — a stray
+  // list on any other choice refuses instead of being silently ignored.
+  const selectedList = [...new Set(input.selectedDates ?? [])];
+  if (input.mode === "selected") {
+    if (selectedList.length === 0) {
+      throw new RecurringError("selected catch-up needs at least one period date — choose from the preview list");
+    }
+    for (const selected of selectedList) {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(selected)) {
+        throw new RecurringError(`selected catch-up date ${selected} is not a calendar date (YYYY-MM-DD)`);
+      }
+    }
+  } else if (selectedList.length > 0) {
+    throw new RecurringError("selected dates apply only to the selected catch-up choice");
+  }
+  const selectedSet = new Set(selectedList);
+  const postSelected = input.postSelected ?? true;
+  const willPost = input.mode === "post_all" || (input.mode === "selected" && postSelected);
+  if (willPost && !(await actorHasPermission(db, orgId, input.actorId, "gl.post"))) {
+    throw new RecurringError("missing permission: gl.post", 403);
+  }
+  const asOf = input.asOf ?? (await withOrg(orgId, () => businessToday(orgId)));
+  const results: CatchUpResultRow[] = [];
+  const finish = (stopped: CatchUpOutcome["stopped"], error?: string): CatchUpOutcome =>
+    ({ results, stopped, ...(error ? { error } : {}) });
+  let outcome: CatchUpOutcome | null = null;
+  let selectedValidated = false;
+  for (;;) {
+    const row = await withOrgContext(orgId, async () => (await db.execute<{
+      templateId: string; isActive: boolean; nextRunOn: string; endsOn: string | null;
+      cadence: Cadence; cron: string | null; anchorDay: number | null;
+      runCount: number; maxOccurrences: number | null; skippedRunOns: string[] | null;
+    }>(sql`
+      select template_document_id as "templateId", is_active as "isActive",
+             next_run_on::text as "nextRunOn", ends_on::text as "endsOn",
+             cadence, cron, anchor_day as "anchorDay",
+             run_count as "runCount", max_occurrences as "maxOccurrences",
+             skipped_run_ons::text[] as "skippedRunOns"
+        from recurring_schedules where id = ${scheduleId} and org_id = ${orgId}
+    `)).rows[0]);
+    if (!row) throw new RecurringError("recurring schedule not found", 404);
+    if (!row.isActive) throw new RecurringError("recurring schedule is paused — resume it to catch up");
+    const runCount = Number(row.runCount);
+    const maxOccurrences = row.maxOccurrences == null ? null : Number(row.maxOccurrences);
+    const standingSkips = new Set(row.skippedRunOns ?? []);
+    const remaining = remainingOccurrences(maxOccurrences, runCount);
+    const template = (await db.execute<{ kind: string }>(sql`
+      select d.kind from documents d
+       where d.id = ${row.templateId} and d.org_id = ${orgId}
+         ${recurringTemplateScopeFilter(orgId, sql`d.id`, sql`d.subsidiary_id`, input.allowedSubsidiaryIds)}
+    `)).rows[0];
+    if (!template) throw new RecurringError("recurring schedule not found", 404);
+    if (!(await isRecurringKindEnabled(orgId, template.kind))) throw new RecurringError("template document kind is disabled", 404);
+    // Advancing past one occurrence without generating: the skip-all choice,
+    // every unlisted period of a selected run, and every standing seasonal
+    // skip share this unit, with the same end-date deactivation a tick
+    // applies.
+    const advancePast = async (target: string): Promise<boolean> => {
+      const advanced = advanceCadence(target, row.cadence, row.cron, undefined, row.anchorDay ?? null);
+      const stillActive = !row.endsOn || advanced <= row.endsOn;
+      const moved = await withOrg(orgId, async () => (await db.execute<{ id: string }>(sql`
+        update recurring_schedules
+           set next_run_on = ${advanced},
+               is_active = ${stillActive},
+               last_run_at = now()
+         where id = ${scheduleId} and org_id = ${orgId} and next_run_on = ${target}
+        returning id
+      `)));
+      return moved.rows.length > 0;
+    };
+    const pending = pendingOccurrences(
+      {
+        cadence: row.cadence, cron: row.cron, nextRunOn: row.nextRunOn, endsOn: row.endsOn, anchorDay: row.anchorDay,
+        skippedRunOns: [...standingSkips], remaining,
+      },
+      asOf,
+    );
+    // The selected dates must be pending occurrences from this run's own
+    // preview: anything else refuses by name instead of billing a period
+    // the operator never saw listed. Validating before any cursor write
+    // keeps a refused run side-effect free.
+    if (input.mode === "selected" && !selectedValidated) {
+      selectedValidated = true;
+      const pendingSet = new Set(pending.occurrences);
+      for (const selected of selectedList) {
+        if (!pendingSet.has(selected)) {
+          throw new RecurringError(`selected catch-up date ${selected} is not a pending occurrence — choose from the preview list`);
+        }
+      }
+    }
+    if (pending.occurrences.length === 0) {
+      const done = await withOrgContext(orgId, async () => (await db.execute<{
+        endsOn: string | null; nextRunOn: string; runCount: number; maxOccurrences: number | null;
+      }>(sql`
+        select ends_on::text as "endsOn", next_run_on::text as "nextRunOn",
+               run_count as "runCount", max_occurrences as "maxOccurrences"
+          from recurring_schedules where id = ${scheduleId} and org_id = ${orgId}
+      `)).rows[0]);
+      // An exhausted occurrence limit ends the run exactly as the end date
+      // does, deactivating the schedule so the tick stays quiet too.
+      const limitReached = done?.maxOccurrences != null && Number(done.runCount) >= done.maxOccurrences;
+      if (limitReached) {
+        await withOrg(orgId, async () => {
+          await db.execute(sql`
+            update recurring_schedules set is_active = false, last_run_at = now()
+             where id = ${scheduleId} and org_id = ${orgId}
+          `);
+        });
+        outcome = finish("reached_limit");
+        break;
+      }
+      const reachedEnd = !!done?.endsOn && (done.nextRunOn > done.endsOn || done.endsOn <= asOf);
+      outcome = finish(reachedEnd ? "reached_end" : "caught_up");
+      break;
+    }
+    // A standing seasonal skip drains before the choice run ever sees it:
+    // the cursor advances past its date with an explicit skipped outcome,
+    // never a document, so preview and run agree on the billable set.
+    // Reached only with billable periods pending, so the cursor is due —
+    // future skips wait for their own tick instead of advancing early.
+    if (standingSkips.has(row.nextRunOn)) {
+      if (!(await advancePast(row.nextRunOn))) continue; // another worker advanced it; recompute
+      results.push({ date: row.nextRunOn, status: "skipped", documentId: null, documentNumber: null });
+      continue;
+    }
+    const date = pending.occurrences[0]!;
+    const billThis =
+      input.mode === "post_all" ||
+      input.mode === "drafts" ||
+      (input.mode === "selected" && selectedSet.has(date));
+    const postThis = input.mode === "post_all" || (input.mode === "selected" && postSelected);
+    if (!billThis) {
+      if (!(await advancePast(date))) continue; // another worker advanced it; recompute
+      results.push({ date, status: "skipped", documentId: null, documentNumber: null });
+      continue;
+    }
+    // An already-billed occurrence replays instead of billing again — the
+    // retry path after a crash between billing and advancing, or a rewound
+    // cursor — and the cursor still advances past it.
+    const already = await withOrgContext(orgId, () => findOccurrenceDocument(orgId, scheduleId, date));
+    if (already) {
+      if (!(await advancePast(date))) continue; // another worker advanced it; recompute
+      results.push({
+        date,
+        status: "replayed",
+        documentId: already.documentId,
+        documentNumber: already.documentNumber,
+      });
+      continue;
+    }
     try {
-      await withOrgTransaction(s.orgId, async () => {
-        await db.execute(sql`
-          update recurring_schedules
-             set run_count = run_count + 1, last_document_id = ${gen.documentId}, last_error = null
-           where id = ${s.id} and org_id = ${s.orgId}
-        `);
+      const gen = await claimAndGenerateOccurrence(orgId, scheduleId, date, {
+        autoPost: postThis,
+        actorId: input.actorId,
+        runSource: "catch_up",
+      });
+      if (!gen) {
+        // Another worker won this occurrence: replay whatever it committed.
+        const replay = await withOrgContext(orgId, () => findOccurrenceDocument(orgId, scheduleId, date));
+        results.push({
+          date,
+          status: "replayed",
+          documentId: replay?.documentId ?? null,
+          documentNumber: replay?.documentNumber ?? null,
+        });
+        continue;
+      }
+      // A replayed race keeps the creator's count and reports itself as a
+      // replay; only a document this run created advances the counter.
+      if (!gen.created) {
+        results.push({
+          date,
+          status: "replayed",
+          documentId: gen.documentId,
+          documentNumber: gen.documentNumber,
+        });
+        continue;
+      }
+      await recordOccurrenceBookkeeping(orgId, scheduleId, gen);
+      results.push({
+        date,
+        status: gen.posted ? "posted" : "draft",
+        documentId: gen.documentId,
+        documentNumber: gen.documentNumber,
       });
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e);
-      console.error(`[recurring] success bookkeeping failed for schedule ${s.id}:`, message);
-      await withOrgTransaction(s.orgId, async () => {
+      await withOrgTransaction(orgId, async () => {
         await db.execute(sql`
-          update recurring_schedules
-             set last_error = ${`generated ${gen.documentNumber} but bookkeeping failed: ${message}`}
-           where id = ${s.id} and org_id = ${s.orgId}
+          update recurring_schedules set last_error = ${message} where id = ${scheduleId} and org_id = ${orgId}
         `);
       });
+      outcome = finish("failed", message);
+      break;
     }
   }
-  return result;
+  // The choice itself is audited on the schedule with its per-occurrence
+  // outcomes: a bulk post-all or skip-all stays attributable after the run.
+  // A no-op run (nothing pending) writes nothing.
+  if (results.length > 0) {
+    await db.execute(sql`
+      insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+      values (${orgId}, 'recurring_schedules', ${scheduleId}, 'update',
+              ${JSON.stringify({ mode: "catch_up", choice: input.mode, results, stopped: outcome!.stopped, ...(outcome!.error ? { error: outcome!.error } : {}) })}::jsonb,
+              ${input.actorId})
+    `);
+  }
+  return outcome!;
 }
 
 /**
@@ -401,13 +979,31 @@ export async function runScheduleNow(
   if (!row) throw new RecurringError("recurring schedule not found", 404);
   const today = asOf ?? (await businessToday(row.orgId));
   const gen = await withOrg(row.orgId, async () => {
-    const current = (await db.execute<{ templateId: string; autoPost: boolean }>(sql`
-      select template_document_id as "templateId", auto_post as "autoPost"
+    const current = (await db.execute<{
+      templateId: string; autoPost: boolean; isActive: boolean; name: string | null;
+      runCount: number; maxOccurrences: number | null;
+    }>(sql`
+      select template_document_id as "templateId", auto_post as "autoPost",
+             is_active as "isActive", name, run_count as "runCount", max_occurrences as "maxOccurrences"
         from recurring_schedules where id = ${scheduleId} and org_id = ${row.orgId} for update
     `)).rows[0];
     if (!current) throw new RecurringError("recurring schedule not found", 404);
     if (!(await actorHasPermission(db, row.orgId, actorId, "documents.manage"))) {
       throw new RecurringError("missing permission: documents.manage", 403);
+    }
+    // A paused schedule never runs on demand: resuming is the explicit act
+    // that restarts billing, so a manual run names the schedule and refuses
+    // instead of posting into a season the operator switched off.
+    if (!current.isActive) {
+      const named = current.name?.trim() ? ` "${current.name.trim()}"` : "";
+      throw new RecurringError(`recurring schedule${named} is paused — resume the schedule first`);
+    }
+    // An exhausted occurrence limit stops manual runs exactly as it stops
+    // the tick: the operator raises the limit to bill again.
+    if (current.maxOccurrences != null && Number(current.runCount) >= current.maxOccurrences) {
+      throw new RecurringError(
+        `recurring schedule reached its limit of ${current.maxOccurrences} runs — raise the occurrence limit to run again`,
+      );
     }
     const scope = await actorAllowedSubsidiaryIds(db, row.orgId, actorId);
     await db.execute(sql`select id from documents
@@ -427,18 +1023,23 @@ export async function runScheduleNow(
         || !(await actorHasPermission(db, row.orgId, actorId, "gl.post")))) {
       throw new RecurringError("missing permission: gl.post", 403);
     }
-    return generateFromTemplate(row.orgId, current.templateId, today, current.autoPost, {
+    // The counter advances in the SAME transaction as the document: a manual
+    // run either commits both together or rolls both back, so the count can
+    // never drift ahead of the documents the way a split commit could. A
+    // replayed double-click keeps the first run's count.
+    const created = await generateFromTemplate(row.orgId, current.templateId, today, current.autoPost, {
       scheduleId, occurrenceOn: today, actorId, runSource: "run_now",
     });
+    if (created.created) {
+      await db.execute(sql`
+        update recurring_schedules
+           set run_count = run_count + 1, last_document_id = ${created.documentId}, last_error = null
+         where id = ${scheduleId} and org_id = ${row.orgId}
+      `);
+    }
+    return created;
   });
-  await withOrgTransaction(row.orgId, async () => {
-    await db.execute(sql`
-      update recurring_schedules
-         set run_count = run_count + 1, last_document_id = ${gen.documentId}, last_error = null
-       where id = ${scheduleId} and org_id = ${row.orgId}
-    `);
-  });
-  return gen;
+  return { documentId: gen.documentId, documentNumber: gen.documentNumber, posted: gen.posted };
 }
 
 async function generateFromTemplate(
@@ -447,7 +1048,7 @@ async function generateFromTemplate(
   documentDate: string,
   autoPost: boolean,
   context: GenerationContext,
-): Promise<{ documentId: string; documentNumber: string; posted: boolean }> {
+): Promise<{ documentId: string; documentNumber: string; posted: boolean; created: boolean }> {
   // Per-occurrence dedupe (see recurring_occurrence_documents). The caller's
   // withOrg transaction pins one connection, so the lock, the replay check, the
   // clone, and the guard insert below are one atomic unit.
@@ -461,7 +1062,7 @@ async function generateFromTemplate(
      for update
   `);
   const prior = await findOccurrenceDocument(orgId, context.scheduleId, context.occurrenceOn);
-  if (prior) return prior;
+  if (prior) return { ...prior, created: false };
 
   const tplRes = (await db.execute<{
     kind: string;
@@ -524,6 +1125,42 @@ async function generateFromTemplate(
     }
   }
 
+  // Period tokens resolve from this run's own service period and sequence
+  // number — a catch-up run uses its period, never the generation date.
+  const sched = (await db.execute<{
+    runCount: number; endsOn: string | null; cadence: Cadence; cron: string | null; anchorDay: number | null;
+    maxOccurrences: number | null;
+  }>(sql`
+    select run_count as "runCount", ends_on::text as "endsOn", cadence, cron, anchor_day as "anchorDay",
+           max_occurrences as "maxOccurrences"
+      from recurring_schedules where id = ${context.scheduleId} and org_id = ${orgId}
+  `)).rows[0];
+  if (!sched) throw new RecurringError("recurring schedule not found", 404);
+  const cadence = sched.cadence as Cadence;
+  const periodEnd = advanceCadence(
+    documentDate, cadence, sched.cron, undefined, sched.anchorDay ?? Number(documentDate.slice(8, 10)),
+  );
+  const sequenceNumber = sched.runCount + 1;
+  const endsTotal = sched.endsOn
+    ? sequenceNumber + pendingOccurrences(
+        { cadence, cron: sched.cron, nextRunOn: periodEnd, endsOn: sched.endsOn, anchorDay: sched.anchorDay },
+        sched.endsOn,
+      ).occurrences.length
+    : null;
+  // Whichever bound stops generation first sets the instalment count, so
+  // {total} on the final document still matches the runs that happened.
+  const maxOccurrences = sched.maxOccurrences == null ? null : Number(sched.maxOccurrences);
+  const totalOccurrences = maxOccurrences != null
+    ? Math.min(maxOccurrences, endsTotal ?? maxOccurrences)
+    : endsTotal;
+  const tokenCtx: PeriodTokenContext = {
+    periodStart: documentDate,
+    periodEnd,
+    sequenceNumber,
+    totalOccurrences,
+    locale: await orgDefaultLocale(db, orgId),
+  };
+
   const termDays =
     tpl.document_date && tpl.due_date ? calendarDaysBetween(tpl.document_date, tpl.due_date) : null;
   const dueDate = termDays != null ? addCalendarDays(documentDate, termDays) : null;
@@ -552,7 +1189,7 @@ async function generateFromTemplate(
     values (${orgId}, ${tpl.kind}, ${documentNumber}, ${tpl.party_id}, ${tpl.subsidiary_id},
             ${documentDate}, ${dueDate}, ${tpl.currency}, 'draft', ${tpl.project_id},
             ${tpl.department_id}, ${tpl.location_id}, ${tpl.class_id}, ${tpl.billing_method},
-            ${tpl.reference_number}, ${tpl.memo}, '0', '0', '0',
+            ${tpl.reference_number}, ${typeof tpl.memo === "string" ? resolvePeriodTokens(tpl.memo, tokenCtx) : tpl.memo}, '0', '0', '0',
             ${JSON.stringify(tpl.extra_dims ?? {})}::jsonb, ${JSON.stringify(provenance)}::jsonb, ${context.actorId},
             ${tpl.payment_card_id})
     returning id
@@ -587,7 +1224,7 @@ async function generateFromTemplate(
       insert into document_lines (org_id, document_id, line_number, item_id, account_id, description,
             quantity, unit, unit_price, amount, tax_code_id, tax_group_id, tax_input_amount, tax_overridden, tax_amount, department_id, project_id,
             location_id, class_id, subsidiary_id, extra_dims, party_id, is_billable, custom, created_by, settlement_type)
-      values (${orgId}, ${newId}, ${l.line_number}, ${l.item_id}, ${l.account_id}, ${l.description},
+      values (${orgId}, ${newId}, ${l.line_number}, ${l.item_id}, ${l.account_id}, ${typeof l.description === "string" ? resolvePeriodTokens(l.description, tokenCtx) : l.description},
             ${l.quantity}, ${l.unit}, ${l.unit_price}, ${amount}, ${l.tax_code_id}, ${l.tax_group_id}, ${tax?.inputAmount ?? l.tax_input_amount}, ${tax?.overridden ?? l.tax_overridden},
             ${taxAmount}, ${l.department_id}, ${l.project_id}, ${l.location_id}, ${l.class_id},
             ${l.subsidiary_id}, ${JSON.stringify(l.extra_dims ?? {})}::jsonb, ${l.party_id}, ${l.is_billable ?? false}, ${JSON.stringify(l.custom ?? {})}::jsonb, ${context.actorId}, ${l.settlement_type})
@@ -631,7 +1268,12 @@ async function generateFromTemplate(
       await postDocument(newId, deps, {
         audit: {
           actorId: context.actorId,
-          source: context.runSource === "scheduler" ? "recurring_schedule" : "recurring_run_now",
+          source:
+            context.runSource === "scheduler"
+              ? "recurring_schedule"
+              : context.runSource === "catch_up"
+                ? "recurring_catch_up"
+                : "recurring_run_now",
         },
       });
       posted = true;
@@ -648,5 +1290,5 @@ async function generateFromTemplate(
       (org_id, schedule_id, occurrence_on, document_id, created_by)
     values (${orgId}, ${context.scheduleId}, ${context.occurrenceOn}, ${newId}, ${context.actorId})
   `);
-  return { documentId: newId, documentNumber, posted };
+  return { documentId: newId, documentNumber, posted, created: true };
 }

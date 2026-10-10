@@ -8,6 +8,7 @@ import {
   monthlyRecurringRevenue,
   normalizeSubscriptionCadence,
   normalizeSubscriptionMoney,
+  pendingSubscriptionPeriods,
   prorate,
   prorationDocument,
   remainingPeriodProration,
@@ -302,5 +303,25 @@ test("unbilled subscriptions keep the legacy period check and cannot skip forwar
   assert.throws(
     () => resolveNextBillOnUpdate({ ...base, newNextBillOn: "2026-06-01" }),
     /skips unbilled service from 2026-03-01 to 2026-06-01/,
+  );
+});
+
+test("pending subscription periods list exactly the missed starts through asOf", () => {
+  assert.deepEqual(
+    pendingSubscriptionPeriods(
+      { interval: "monthly", intervalCount: 1, anchorDay: 10, nextBillOn: "2025-12-10" },
+      "2026-05-10",
+    ),
+    {
+      periods: ["2025-12-10", "2026-01-10", "2026-02-10", "2026-03-10", "2026-04-10", "2026-05-10"],
+      truncated: false,
+    },
+  );
+  assert.deepEqual(
+    pendingSubscriptionPeriods(
+      { interval: "monthly", intervalCount: 1, anchorDay: 10, nextBillOn: "2026-05-11" },
+      "2026-05-10",
+    ),
+    { periods: [], truncated: false },
   );
 });
