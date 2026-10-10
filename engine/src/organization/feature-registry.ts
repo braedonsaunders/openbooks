@@ -226,8 +226,10 @@ export const FEATURES: FeatureDef[] = [
   // not a feature: geofences are declared per project, photo requirements
   // live in Timesheets setup and on each kiosk, equipment hours need the
   // Equipment module, and approval routing is authored in Flows. Off stops
-  // rendering and writing, never data.
-  { key: 'fieldTime', defaultEnabled: false, category: 'projects', group: 'field', navModules: ['timesheets'], parentKey: 'timeTracking', requiresAll: ['projects'] },
+  // rendering and writing, never data. It owns the clock and crew pages,
+  // never Timesheets itself: weekly timesheets belong to timeTracking, so an
+  // office org with field time off still reaches its timesheets.
+  { key: 'fieldTime', defaultEnabled: false, category: 'projects', group: 'field', navModules: ['time-clock', 'time-crew'], parentKey: 'timeTracking', requiresAll: ['projects'] },
   { key: 'fieldTickets', defaultEnabled: false, category: 'projects', group: 'field', navModules: ['field-tickets'], parentKey: 'projects' },
   // Progress and earned value: budgeted production quantities on tasks,
   // installed quantities (entered or reported on field tickets), estimates to

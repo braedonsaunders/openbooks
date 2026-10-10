@@ -201,3 +201,17 @@ test('every module and group carries a translated label', () => {
   const orphaned = Object.keys(nav.modules).filter((key) => !keys.has(key))
   assert.deepEqual(orphaned, [], 'these nav.modules labels name no module')
 })
+
+test('timesheets stay in the menu while field time is off; the clock is a My Work destination for time.clock', () => {
+  const officeOrg = {} as FeatureState
+  assert.equal(hiddenNavModules(officeOrg).has('timesheets'), false, 'weekly timesheets belong to time tracking, not field time')
+  assert.equal(hiddenNavModules(officeOrg).has('time-clock'), true, 'office orgs never see a clock')
+  assert.equal(hiddenNavModules({ fieldTime: true } as FeatureState).has('time-clock'), false)
+  const clock = NAV_MODULES.find((module) => module.key === 'time-clock')!
+  assert.equal(clock.href, '/time/clock')
+  assert.equal(clock.group, 'my-work')
+  assert.equal(clock.requiredPermission, 'time.clock', 'clocking in does not require reading other people\'s time')
+  assert.ok(DEFAULT_NAV_ORDER['my-work'].includes('time-clock'))
+  const crew = NAV_MODULES.find((module) => module.key === 'time-crew')!
+  assert.deepEqual(crew.requiredPermissionsAny, ['time.read', 'time.crew.enter'], 'crew entry is reachable with its own catalogue grant')
+})
