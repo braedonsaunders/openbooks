@@ -2910,6 +2910,10 @@
         "title": "Tipos de Tempo",
         "description": "Multiplicadores de custo e padrões de faturabilidade para folhas de horas."
       },
+      "time-approval-policies": {
+        "title": "Políticas de aprovação de horas",
+        "description": "Se um aprovador pode aprovar as próprias horas. A prevenção fica ativada, a menos que uma linha de política permita."
+      },
       "pay-schedules": {
         "title": "Cronogramas de folha",
         "description": "Calendários de periodicidade de pagamento: períodos por ano, fim do período âncora e defasagem da data de pagamento."
@@ -3753,6 +3757,9 @@
       "ratePercent": "% da alíquota",
       "effectiveFrom": "Vigente a partir de",
       "effectiveTo": "Vigente até",
+      "timePreventSelfApproval": "Impedir autoaprovação",
+      "timeEffectiveToHelp": "Deixe em branco para manter a política em vigor até o início de uma posterior.",
+      "timePreventSelfApprovalHelp": "Ativado: um aprovador não pode aprovar a própria planilha nem um boletim com suas próprias horas. Desative apenas em organizações onde a mesma pessoa precisa aprovar as próprias horas.",
       "members": "Códigos de imposto",
       "reportCode": "Código do relatório",
       "lineCode": "Código da linha",

@@ -94,5 +94,6 @@
       "reminder": "Reminder {date}",
       "escalates": "Escalates {date}"
     }
-  }
+  },
+  "awaitingOthersSummary": "{count} awaiting another approver"
 }

@@ -94,5 +94,6 @@
     },
     "signTitle": "签名以审批",
     "signLabel": "输入全名以签署该审批"
-  }
+  },
+  "awaitingOthersSummary": "{count} 项等待其他审批人"
 }

@@ -316,6 +316,25 @@ export function ApprovalActions({
     )
   }
 
+  // Separation of duties resolved in advance: a gate that reaches this
+  // viewer but blocks them as submitter/maker renders "Awaiting another
+  // approver" — never an Approve that refuses on click. The generic
+  // "Pending with" chip below stays for viewers who were never assigned.
+  if (!state.approvalState.myActions && state.approvalState.awaitingAnotherApprover) {
+    return (
+      <>
+        <span
+          className="inline-flex max-w-64 items-center gap-1.5 truncate rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-medium text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300"
+          title={t('approvalFlow.awaitingAnother')}
+        >
+          <Users className="h-3.5 w-3.5 shrink-0" aria-hidden />
+          <span className="truncate">{t('approvalFlow.awaitingAnother')}</span>
+        </span>
+        {retryButton}
+      </>
+    )
+  }
+
   if (state.approvalState.pendingWith.length > 0) {
     const names = state.approvalState.pendingWith.map((p) => p.name).join(', ')
     return (

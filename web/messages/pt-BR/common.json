@@ -312,6 +312,7 @@
   },
   "approvalFlow": {
     "pendingWith": "Pendente com {names}",
+    "awaitingAnother": "Aguardando outro aprovador",
     "rejectTitle": "Rejeitar este documento?",
     "rejectReasonLabel": "Motivo da rejeição",
     "waitingOthers": "Registrado — aguardando os demais aprovadores",

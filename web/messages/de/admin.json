@@ -2933,6 +2933,10 @@
         "title": "Zeitarten",
         "description": "Kostenmultiplikatoren und Fakturierungsvorgaben für Zeiterfassungen."
       },
+      "time-approval-policies": {
+        "title": "Richtlinien für Zeitgenehmigungen",
+        "description": "Ob Genehmigende die eigene Zeit genehmigen dürfen. Ohne anderslautende Richtlinienzeile ist die Selbstgenehmigung verhindert."
+      },
       "worker-comp-groups": {
         "title": "Unfallversicherungsgruppen",
         "description": "Beitragsgruppen der Arbeiterunfallversicherung für die Personalkostenrechnung."
@@ -3799,6 +3803,9 @@
       "ratePercent": "Satz %",
       "effectiveFrom": "Gültig ab",
       "effectiveTo": "Gültig bis",
+      "timePreventSelfApproval": "Selbstgenehmigung verhindern",
+      "timeEffectiveToHelp": "Leer lassen, damit die Richtlinie bis zum Beginn einer späteren gilt.",
+      "timePreventSelfApprovalHelp": "Ein: Genehmigende können weder den eigenen Stundenzettel noch einen Feldschein mit eigener Crewzeit genehmigen. Nur ausschalten, wenn dieselbe Person die eigene Zeit genehmigen muss.",
       "members": "Steuercodes",
       "reportCode": "Berichtscode",
       "lineCode": "Positionscode",

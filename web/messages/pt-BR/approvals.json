@@ -94,5 +94,6 @@
     },
     "signTitle": "Assinar para aprovar",
     "signLabel": "Digite seu nome completo para assinar esta aprovação"
-  }
+  },
+  "awaitingOthersSummary": "{count} aguardando outro aprovador"
 }

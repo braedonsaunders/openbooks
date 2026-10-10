@@ -94,5 +94,6 @@
     },
     "signTitle": "署名して承認する",
     "signLabel": "この承認に署名するため氏名を入力してください"
-  }
+  },
+  "awaitingOthersSummary": "他の承認待ち：{count}件"
 }

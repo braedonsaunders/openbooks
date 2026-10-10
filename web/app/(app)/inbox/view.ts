@@ -12,6 +12,7 @@ import {
   type InboxSourceNotice,
 } from '@openbooks/engine/src/inbox/index.ts'
 import {
+  approvalWorklistAwaitingForAuthz,
   approvalWorklistPageForAuthz,
   type ApprovalWorklistItem,
 } from '../../../lib/application/approvals'
@@ -176,6 +177,12 @@ export interface ApprovalsData {
   bulk: boolean
   showAssignee: boolean
   actionsEnabled: boolean
+  /**
+   * Org-wide count of union gates awaiting ANOTHER approver for this viewer
+   * (SoD-blocked) — the separate figure beside the actionable rows, never
+   * folded into the tab totals.
+   */
+  awaitingOthers: number
   tabKey: string
   /** Filtered total across all union legs (drives pagination). */
   total: number
@@ -306,6 +313,11 @@ export async function loadApprovals(
       }
   const unified: ApprovalWorklistItem[] = unionPage.items
   const unionTotal = unionPage.total
+  // Gates awaiting ANOTHER approver for this viewer (SoD-blocked): counted
+  // separately from actionable items — the tab keeps its headline total
+  // while the awaiting rows render without decision actions under their
+  // own figure in the table.
+  const awaitingOthers = mayApprove && onApprovals ? await approvalWorklistAwaitingForAuthz(authz) : 0
   // Chips ignore the kind filter, so their counts sum to the unfiltered
   // total (drives the mine bubble and the empty state).
   let unfilteredTotal = 0
@@ -344,7 +356,7 @@ export async function loadApprovals(
     for (const r of rows.rows) assigneeNames.set(String(r.id), String(r.name))
   }
 
-  const gateToRow = (g: WorklistGate, assignee: string | null): ApprovalRow => {
+  const gateToRow = (g: WorklistGate & { awaitingAnotherApprover?: boolean }, assignee: string | null): ApprovalRow => {
     const kind = g.document?.kind ?? g.subjectKind
     // Subject-kind detail (the employee and the decision summary for
     // change requests): resolved in one batch below through the
@@ -372,6 +384,10 @@ export async function loadApprovals(
       canDelegate: canManageFlows || g.assigneeUserId === user.id,
       quorumAll: g.quorum === 'all',
       signatureRequired: g.signatureRequired,
+      // Separation-of-duties blocked for this viewer: the row renders
+      // "Awaiting another approver" with no decision actions, resolved in
+      // advance from the native gate check — never offered then refused.
+      awaitingAnotherApprover: g.awaitingAnotherApprover === true,
     }
   }
 
@@ -778,6 +794,7 @@ export async function loadApprovals(
     columnStatus: tc('labels.status'),
     submittedRows: visibleSubmitted,
     approvalRows: unionVisible,
+    awaitingOthers,
     bulk: tab === 'mine',
     showAssignee: tab === 'all',
     actionsEnabled: tab === 'mine' || canManageFlows,
@@ -918,6 +935,7 @@ export function approvalsSpec(data: ApprovalsData): PageSpec {
                 bulk: data.bulk,
                 showAssignee: data.showAssignee,
                 actionsEnabled: data.actionsEnabled,
+                awaitingOthers: data.awaitingOthers,
               }),
               widgetBlock('approvals-pagination', {
                 params: data.paginationParams,

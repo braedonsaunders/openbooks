@@ -55,6 +55,12 @@ export interface ApprovalRow {
   signatureRequired?: boolean
   /** Past its escalation date (drives the overdue filter). */
   overdue?: boolean
+  /**
+   * The gate reaches this viewer but separation of duties blocks them as
+   * submitter/maker: the row renders "Awaiting another approver" with no
+   * decision actions and stays out of bulk selection.
+   */
+  awaitingAnotherApprover?: boolean
 }
 
 const DAY_MS = 86_400_000
@@ -91,6 +97,7 @@ export function ApprovalsTable({
   bulk,
   showAssignee,
   actionsEnabled,
+  awaitingOthers,
 }: {
   rows: ApprovalRow[]
   users: DelegateOption[]
@@ -100,6 +107,12 @@ export function ApprovalsTable({
   showAssignee: boolean
   /** Render per-row Approve/Reject/Delegate (off for read-only monitoring). */
   actionsEnabled: boolean
+  /**
+   * Org-wide count of worklist gates awaiting ANOTHER approver for this
+   * viewer (separation-of-duties blocked), rendered as its own summary
+   * line above the rows — never folded into the actionable figures.
+   */
+  awaitingOthers?: number
 }) {
   const t = useTranslations('approvals')
   const tc = useTranslations('common')
@@ -108,10 +121,12 @@ export function ApprovalsTable({
   const [busy, setBusy] = useState(false)
 
   // Selection survives filters upstream; drop keys for rows no longer shown.
-  // Only flow-gate rows are selectable: bulk decide/delegate post gate ids,
-  // so document/pay-run rows (gateId null) never enter the selection.
+  // Only actionable flow-gate rows are selectable: bulk decide/delegate post
+  // gate ids, so document/pay-run rows (gateId null) never enter the
+  // selection — and neither do gates awaiting another approver, whose
+  // decision would refuse per row.
   const selectableRows = useMemo(
-    () => rows.filter((r) => r.gateId != null),
+    () => rows.filter((r) => r.gateId != null && !r.awaitingAnotherApprover),
     [rows],
   )
   const visibleSelected = useMemo(
@@ -234,6 +249,11 @@ export function ApprovalsTable({
 
   return (
     <div className="space-y-3">
+      {(awaitingOthers ?? 0) > 0 ? (
+        <p className="text-xs text-slate-500 dark:text-slate-400">
+          {t('awaitingOthersSummary', { count: awaitingOthers })}
+        </p>
+      ) : null}
       {bulk && visibleSelected.size > 0 ? (
         <div className="flex flex-wrap items-center gap-2 rounded-md border border-teal-200 bg-teal-50 px-3 py-2 dark:border-teal-900/50 dark:bg-teal-950/40">
           <span className="text-sm font-medium text-teal-800 dark:text-teal-300">
@@ -294,7 +314,7 @@ export function ApprovalsTable({
                   headerClassName: 'w-10',
                   cell: (r: ApprovalRow) => (
                     <>
-                      {r.gateId != null ? (
+                      {r.gateId != null && !r.awaitingAnotherApprover ? (
                         <input
                           type="checkbox"
                           className="h-4 w-4 accent-teal-600"
@@ -467,7 +487,14 @@ export function ApprovalsTable({
                   header: <>{t('table.decision')}</>,
                   cell: (r: ApprovalRow) => (
                     <>
-                      {r.gateId != null ? (
+                      {r.awaitingAnotherApprover ? (
+                        <span
+                          className="inline-flex max-w-64 items-center gap-1.5 truncate rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-medium text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300"
+                          title={tc('approvalFlow.awaitingAnother')}
+                        >
+                          {tc('approvalFlow.awaitingAnother')}
+                        </span>
+                      ) : r.gateId != null ? (
                         <GateActions
                           gateId={r.gateId}
                           canDelegate={r.canDelegate}

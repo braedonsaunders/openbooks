@@ -312,6 +312,7 @@
   },
   "approvalFlow": {
     "pendingWith": "{names}の承認待ち",
+    "awaitingAnother": "他の承認待ち",
     "rejectTitle": "このドキュメントを却下しますか？",
     "rejectReasonLabel": "却下理由",
     "waitingOthers": "記録しました — 他の承認者を待っています",

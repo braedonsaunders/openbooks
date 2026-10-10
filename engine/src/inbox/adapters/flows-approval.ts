@@ -26,7 +26,7 @@ import {
   worklistApprovalsPage,
   type UnifiedApproval,
 } from "../../flows/approval-worklist.ts";
-import { decideGate, delegateGate } from "../../flows/gates.ts";
+import { decideGate, delegateGate, gateDecisionCapability } from "../../flows/gates.ts";
 import { toWorklistScope } from "../guard.ts";
 import { parseDelegationReason } from "../delegation.ts";
 import type { InboxAdapter, InboxPage } from "../registry.ts";
@@ -47,24 +47,34 @@ export const INBOX_OWNED_GATE_SUBJECTS: ReadonlySet<string> = new Set([
 /** Bounded head window: the inbox is a working list, not an archive scan. */
 export const INBOX_UNION_WINDOW = { offset: 0, limit: 100 } as const;
 
-function gateItem(gate: Extract<UnifiedApproval, { kind: "flow_gate" }>["gate"], ctx: InboxListContext): InboxItem | null {
+async function gateItem(gate: Extract<UnifiedApproval, { kind: "flow_gate" }>["gate"], ctx: InboxListContext): Promise<InboxItem | null> {
   if (INBOX_OWNED_GATE_SUBJECTS.has(gate.subjectKind)) return null;
   const dueAt = gate.escalateAt ? new Date(gate.escalateAt).toISOString() : null;
   const onBehalf = gate.onBehalfOf ? ` on behalf of ${gate.onBehalfOf.name}` : "";
+  const waitingSince = new Date(gate.createdAt).toISOString().slice(0, 10);
+  // Resolve the separation-of-duties outcome in advance through the same
+  // native gate check the decide path enforces: a submitter/maker the
+  // gate's prevent-self-approval excludes sees "Awaiting another approver"
+  // with NO decision actions, never an Approve that refuses on click.
+  const awaitingAnother = (await gateDecisionCapability(gate.id, ctx.actorId)).sodBlocked;
   return {
     id: inboxItemId("flows_approval", `gate:${gate.id}`),
     kind: "flows_approval",
     title: gate.title,
-    subtitle: `${gate.subjectLabel ?? gate.subjectKind}${onBehalf} — waiting since ${new Date(gate.createdAt).toISOString().slice(0, 10)}`,
+    subtitle: awaitingAnother
+      ? `Awaiting another approver — ${gate.subjectLabel ?? gate.subjectKind}${onBehalf} — waiting since ${waitingSince}`
+      : `${gate.subjectLabel ?? gate.subjectKind}${onBehalf} — waiting since ${waitingSince}`,
     dueAt,
     createdAt: new Date(gate.createdAt).toISOString(),
     priority: priorityForDueDate(dueAt, ctx.asOf, ctx.timeZone),
     subjectHref: gate.href ?? "/inbox",
-    actions: [
-      { key: "approve", label: "Approve", style: "primary", needsReason: false },
-      { key: "reject", label: "Reject", style: "danger", needsReason: true },
-      { key: "delegate", label: "Delegate", style: "secondary", needsReason: true },
-    ],
+    actions: awaitingAnother
+      ? []
+      : [
+          { key: "approve", label: "Approve", style: "primary", needsReason: false },
+          { key: "reject", label: "Reject", style: "danger", needsReason: true },
+          { key: "delegate", label: "Delegate", style: "secondary", needsReason: true },
+        ],
     source: { kind: "flow_gate", id: gate.id },
   };
 }
@@ -115,7 +125,7 @@ export const flowsApprovalAdapter: InboxAdapter = {
     const out: InboxItem[] = [];
     for (const item of approvals.items) {
       if (item.kind === "flow_gate") {
-        const mapped = gateItem(item.gate, ctx);
+        const mapped = await gateItem(item.gate, ctx);
         if (mapped) out.push(mapped);
       } else if (item.kind === "document") {
         const mapped = documentItem(item.document);

@@ -2805,6 +2805,10 @@
         "title": "Tipos de hora",
         "description": "Multiplicadores de costo y valores de facturación predeterminados para hojas de horas."
       },
+      "time-approval-policies": {
+        "title": "Políticas de aprobación de horas",
+        "description": "Si una persona aprobadora puede aprobar sus propias horas. La prevención está activada salvo que una fila de política lo permita."
+      },
       "worker-comp-groups": {
         "title": "Grupos de compensación laboral",
         "description": "Grupos de tasas de compensación laboral para el costeo de mano de obra."
@@ -3671,6 +3675,9 @@
       "ratePercent": "Tasa",
       "effectiveFrom": "Vigente desde",
       "effectiveTo": "Vigente hasta",
+      "timePreventSelfApproval": "Impedir la autoaprobación",
+      "timeEffectiveToHelp": "Déjelo vacío para mantener la política vigente hasta que comience una posterior.",
+      "timePreventSelfApprovalHelp": "Activado: una persona aprobadora no puede aprobar su propia planilla ni un parte con sus propias horas. Desactívelo solo si la misma persona debe aprobar sus propias horas.",
       "members": "Códigos de impuestos",
       "reportCode": "Código de informe",
       "lineCode": "Código de línea",

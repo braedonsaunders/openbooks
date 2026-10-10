@@ -312,6 +312,7 @@
   },
   "approvalFlow": {
     "pendingWith": "Ausstehend bei {names}",
+    "awaitingAnother": "Wartet auf einen anderen Genehmiger",
     "rejectTitle": "Dieses Dokument ablehnen?",
     "rejectReasonLabel": "Ablehnungsgrund",
     "waitingOthers": "Erfasst — Warten auf die übrigen Genehmiger",

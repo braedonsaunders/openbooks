@@ -2910,6 +2910,10 @@
         "title": "Time Types",
         "description": "Cost multipliers and billable defaults for timesheets."
       },
+      "time-approval-policies": {
+        "title": "Time Approval Policies",
+        "description": "Whether an approver may approve their own time. Prevention is on unless a policy row allows it."
+      },
       "pay-schedules": {
         "title": "Pay Schedules",
         "description": "Pay frequency calendars: periods per year, the anchor period end, and the pay-date offset."
@@ -3753,6 +3757,9 @@
       "ratePercent": "Rate",
       "effectiveFrom": "Effective from",
       "effectiveTo": "Effective to",
+      "timePreventSelfApproval": "Prevent self-approval",
+      "timeEffectiveToHelp": "Leave empty to keep the policy in effect until a later one starts.",
+      "timePreventSelfApprovalHelp": "On: an approver cannot approve their own timesheet or a field ticket carrying their own crew time. Turn off only for organizations where the same person must approve their own time.",
       "members": "Tax codes",
       "reportCode": "Report code",
       "lineCode": "Line code",

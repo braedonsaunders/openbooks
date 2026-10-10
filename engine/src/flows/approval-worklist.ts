@@ -1,6 +1,7 @@
 import { sql, type SQL } from "drizzle-orm";
 import { db, withOrgTransaction } from "../platform/db.ts";
 import {
+  gateDecisionCapability,
   gateSubsidiaryScopeAllows,
   sodBlockedIds,
   worklistGateKindCounts,
@@ -268,6 +269,30 @@ function worklistCounts(
       ? worklistBudgetCount(orgId, userId, kind, query)
       : Promise.resolve(0),
   ]);
+}
+
+/**
+ * Gate ids in the caller's worklist that await ANOTHER approver: the gate
+ * reaches this viewer (direct, role, or delegation assignment) but the
+ * native gate check blocks them as submitter/maker under prevent-self-
+ * approval. Resolved through gateDecisionCapability — the same check the
+ * decide path enforces — so the "awaiting another approver" rendering and
+ * its separate count can never disagree with the act-time verdict. Only
+ * the gate leg qualifies: gateless document and budget legs already
+ * exclude the caller's own submissions from the worklist entirely.
+ */
+export async function worklistGatesAwaitingAnotherApprover(
+  orgId: string,
+  userId: string,
+  roles?: Iterable<string>,
+  allowedSubsidiaryIds?: GateSubsidiaryScope,
+): Promise<string[]> {
+  const gates = await worklistGates(orgId, userId, roles, allowedSubsidiaryIds);
+  const out: string[] = [];
+  for (const gate of gates) {
+    if ((await gateDecisionCapability(gate.id, userId)).sodBlocked) out.push(gate.id);
+  }
+  return out;
 }
 
 /** Exact badge totals through the page's native predicates, without fetching rows. */

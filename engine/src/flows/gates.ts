@@ -260,14 +260,23 @@ export function sodBlockedIds(
   return ids;
 }
 
-/** Viewer-aware decision capability for contextual record drawers. */
+/**
+ * Viewer-aware decision capability for contextual record drawers — and for
+ * every surface that must resolve the separation-of-duties outcome BEFORE
+ * offering an Approve action. `sodBlocked` names the SoD denial
+ * specifically (the viewer is assigned but the gate's prevent-self-approval
+ * excludes them as submitter/maker): surfaces render those rows as
+ * "awaiting another approver" with no decision actions, instead of offering
+ * Approve and refusing on click. Any other denial (not assigned, not
+ * pending) leaves `sodBlocked` false.
+ */
 export async function gateDecisionCapability(
   gateId: string,
   userId: string,
-): Promise<{ canAct: boolean; signatureRequired: boolean }> {
+): Promise<{ canAct: boolean; signatureRequired: boolean; sodBlocked: boolean }> {
   const gate = await loadGate(gateId);
   if (!gate || gate.status !== "pending") {
-    return { canAct: false, signatureRequired: false };
+    return { canAct: false, signatureRequired: false, sodBlocked: false };
   }
   let authorized = await canActOnGate(gate, userId);
   if (!authorized && gate.assigneeUserId) {
@@ -275,7 +284,7 @@ export async function gateDecisionCapability(
       (await activeDelegationPrincipal(gate.orgId, gate.assigneeUserId, userId)) !== null;
   }
   if (!authorized) {
-    return { canAct: false, signatureRequired: gate.signatureRequired };
+    return { canAct: false, signatureRequired: gate.signatureRequired, sodBlocked: false };
   }
   const adapter = getFlowAdapter(gate.subjectKind);
   const subject = await adapter?.loadContext(gate.subjectId);
@@ -286,10 +295,10 @@ export async function gateDecisionCapability(
       !node ||
       node.preventSelfApproval !== false
     ) {
-      return { canAct: false, signatureRequired: gate.signatureRequired };
+      return { canAct: false, signatureRequired: gate.signatureRequired, sodBlocked: true };
     }
   }
-  return { canAct: true, signatureRequired: gate.signatureRequired };
+  return { canAct: true, signatureRequired: gate.signatureRequired, sodBlocked: false };
 }
 
 /** The gate node's authored GateData, for escalation targets. */

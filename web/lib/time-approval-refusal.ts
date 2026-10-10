@@ -19,6 +19,7 @@ export type TimeApprovalRefusalCode =
   | 'nothing_submitted'
   | 'line_approved'
   | 'line_billed'
+  | 'self_approval_prevented'
 
 export interface UncoveredTimeEntry {
   employeeName: string | null
