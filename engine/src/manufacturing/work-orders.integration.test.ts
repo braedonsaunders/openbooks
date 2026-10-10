@@ -23,10 +23,12 @@ type Case = { name: string; run: (fixture: Fixture) => Promise<void> };
 const itemPolicy = { supplyMethod: "buy" as const, leadTimeDays: null, safetyStockQty: "0", minimumQty: "0", orderMultipleQty: "0", scrapPctPlanned: "0" };
 function run<T>(work: (tx: SqlExecutor) => Promise<T>): Promise<T> { return withBypassContext(() => db.transaction(work)); }
 
-async function withSandboxClone(f: Fixture, work: (orgId: string) => Promise<void>) {
+async function withSandboxClone(f: Fixture, work: (orgId: string, actorId: string) => Promise<void>) {
   const clone = await withBypassContext(() => createSandbox({ productionOrgId: f.org.orgId, name: `Manufacturing ${randomUUID()}`, tier: "full", masked: false }));
   try {
-    await work(clone.sandboxOrgId);
+    const actor=(await withBypassContext(()=>db.execute<{id:string}>(sql`select ob_rebase(${f.actorId}::uuid,sandbox_seed) as id from orgs where id=${clone.sandboxOrgId}`))).rows;
+    assert.equal(actor.length,1);
+    await work(clone.sandboxOrgId,actor[0]!.id);
   } finally {
     assert.equal((await withBypassContext(() => db.execute(sql`update orgs set name='Scratch Manufacturing clone' where id=${clone.sandboxOrgId} and env_kind='sandbox' returning id`))).rows.length, 1);
     await dropScratchOrg(clone.sandboxOrgId);
@@ -98,8 +100,8 @@ const cases: Case[] = [
     await refuse(run((tx) => releaseWorkOrder(tx, f.org.orgId, f.actorId, draft.id)), "routing_not_effective", "Assembly");
   } },
   { name: "missing inventory profile passes through availability refusal", run: async (f) => {
-    await route(f, f.org.items.assembly);
     await withBypassContext(async () => db.execute(sql`insert into bom_components (org_id, assembly_item_id, component_item_id, quantity_per, sort_order) values (${f.org.orgId}, ${f.org.items.assembly}, ${f.org.items.service}, '1', 2) returning id`));
+    await route(f, f.org.items.assembly);
     const draft = await order(f);
     await assert.rejects(run((tx) => releaseWorkOrder(tx, f.org.orgId, f.actorId, draft.id)), (error: unknown) => error instanceof AvailabilityRefusal && error.code === "item_not_stocked" && /Inventory costing/.test(error.remedy));
   } },
@@ -146,9 +148,9 @@ const cases: Case[] = [
     await refuse(run((tx) => startWorkOrderOperation(tx, f.org.orgId, f.actorId, draft.id, operation.id)), "work_order_on_hold", "Quality review");
     await refuse(run((tx) => pauseWorkOrderOperation(tx, f.org.orgId, f.actorId, draft.id, operation.id, "Tool change")), "work_order_on_hold", "Quality review");
     await refuse(run((tx) => resumeWorkOrderOperation(tx, f.org.orgId, f.actorId, draft.id, operation.id)), "work_order_on_hold", "Quality review");
-    await withSandboxClone(f, async (orgId) => {
+    await withSandboxClone(f, async (orgId, actorId) => {
       const cloneOrder = await withBypassContext(async () => (await db.execute<{ id: string }>(sql`select id from mfg_work_orders where org_id=${orgId} and number=${draft.number}`)).rows[0]!.id);
-      assert.equal((await run((tx) => resumeWorkOrder(tx, orgId, f.actorId, cloneOrder))).status, "released");
+      assert.equal((await run((tx) => resumeWorkOrder(tx, orgId, actorId, cloneOrder))).status, "released");
     });
     assert.equal((await run((tx) => resumeWorkOrder(tx, f.org.orgId, f.actorId, draft.id))).status, "released");
     await run((tx) => holdWorkOrder(tx, f.org.orgId, f.actorId, draft.id, "End of run"));
@@ -200,7 +202,9 @@ const cases: Case[] = [
     const draft=await order(f);
     const cancelled=await order(f);await run(tx=>cancelWorkOrder(tx,f.org.orgId,f.actorId,cancelled.id));
     const active=await order(f);await run(tx=>releaseWorkOrder(tx,f.org.orgId,f.actorId,active.id));
-    const operation=(await run(tx=>getWorkOrder(tx,f.org.orgId,active.id)))!.operations[0]!;
+    const activeOperations=(await run(tx=>tx.execute<{id:string}>(sql`select id from mfg_wo_operations where org_id=${f.org.orgId} and work_order_id=${active.id}`))).rows;
+    assert.equal(activeOperations.length,1);
+    const operation=activeOperations[0]!;
     await run(tx=>startWorkOrderOperation(tx,f.org.orgId,f.actorId,active.id,operation.id));
     await run(tx=>pauseWorkOrderOperation(tx,f.org.orgId,f.actorId,active.id,operation.id,"Material staging"));
     await run(tx=>resumeWorkOrderOperation(tx,f.org.orgId,f.actorId,active.id,operation.id));

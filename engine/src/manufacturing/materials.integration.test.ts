@@ -126,7 +126,7 @@ async function refuses(work: Promise<unknown>, code: string, text: string, remed
     && error.message.includes(text) && Boolean(error.remedy?.trim()) && (remedy === undefined || error.remedy === remedy));
 }
 
-async function withSandboxClone(f: Fixture, masked: boolean, work: (orgId: string) => Promise<void>) {
+async function withSandboxClone(f: Fixture, masked: boolean, work: (orgId: string, actorId: string) => Promise<void>) {
   const name = `Manufacturing ${randomUUID()}`;
   let failure: unknown;
   try {
@@ -134,7 +134,9 @@ async function withSandboxClone(f: Fixture, masked: boolean, work: (orgId: strin
     const state = await withBypassContext(() => db.execute<{ status: string }>(sql`
       select status from sandboxes where id=${clone.sandboxId} and org_id=${clone.sandboxOrgId}`));
     assert.equal(state.rows[0]?.status, "ready", "only a preserved, validated clone may run the scenario");
-    await work(clone.sandboxOrgId);
+    const actor=(await withBypassContext(()=>db.execute<{id:string}>(sql`select ob_rebase(${f.actorId}::uuid,sandbox_seed) as id from orgs where id=${clone.sandboxOrgId}`))).rows;
+    assert.equal(actor.length,1);
+    await work(clone.sandboxOrgId,actor[0]!.id);
   } catch (error) {
     failure = error;
     throw error;
@@ -196,7 +198,7 @@ const cases: Case[] = [
   { name: "released measure and scrap snapshots survive full and masked sandbox cloning without audit rows", run: async (f) => {
     const order = await prepare(f, { backflushAt: "start", qualityGate: "measure", operationSeq: 10, quantityPer: "2", scrapPct: "10", orderQty: "2" });
     await stock(f, "5", "2");
-    for (const masked of [false, true]) await withSandboxClone(f, masked, async (orgId) => {
+    for (const masked of [false, true]) await withSandboxClone(f, masked, async (orgId, actorId) => {
       const copied = await withBypassContext(() => db.execute<{ tracking: string; quantity: string }>(sql`
         select profile.tracking,movement.quantity::text as quantity from inventory_movements movement
         join item_inventory_profiles profile on profile.org_id=movement.org_id and profile.item_id=movement.item_id
@@ -205,9 +207,9 @@ const cases: Case[] = [
       assert.equal(copied.rows[0]!.tracking, "none");
       assert.equal(copied.rows[0]!.quantity, "5.0000");
       const clone = await withBypassContext(async () => (await db.execute<{ id: string; operation_id: string }>(sql`select wo.id,operation.id as operation_id from mfg_work_orders wo join mfg_wo_operations operation on operation.org_id=wo.org_id and operation.work_order_id=wo.id where wo.org_id=${orgId} and wo.number=${order.number}`)).rows[0]!);
-      await run((tx) => startWorkOrderOperation(tx, orgId, f.actorId, clone.id, clone.operation_id));
+      await run((tx) => startWorkOrderOperation(tx, orgId, actorId, clone.id, clone.operation_id));
       assert.equal((await withBypassContext(async () => db.execute<{ quantity: string }>(sql`select quantity::text from inventory_movements where org_id=${orgId} and kind='assembly_consume'`))).rows[0]?.quantity, "-4.4000");
-      await refuses(run((tx) => completeWorkOrderOperation(tx, orgId, f.actorId, clone.id, clone.operation_id, { doneQty: "1" })), "measured_quantity_required", "measured quantity");
+      await refuses(run((tx) => completeWorkOrderOperation(tx, orgId, actorId, clone.id, clone.operation_id, { doneQty: "1" })), "measured_quantity_required", "measured quantity");
     });
   } },
   { name: "finish backflush uses reported quantity and scrap", run: async (f) => {

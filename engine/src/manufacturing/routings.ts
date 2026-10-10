@@ -350,7 +350,12 @@ async function routingActivationEvidence(tx:SqlExecutor,orgId:string,id:string) 
   if(candidate.status!=="draft") refused("Only a draft routing can be proposed for activation.","routing_not_draft","routingId","Create a new draft revision to change the current routing.");
   const active=(await tx.execute<{id:string;version:number;effectiveFrom:string;effectiveTo:string|null}>(sql`select id,version,effective_from::text as "effectiveFrom",effective_to::text as "effectiveTo" from mfg_routings where org_id=${orgId} and produced_item_id=${candidate.producedItemId} and status='active' order by version,id`)).rows;
   const supersedes=active.filter(r=>r.effectiveFrom<String(candidate.effectiveTo??"9999-12-31") && String(candidate.effectiveFrom)<(r.effectiveTo??"9999-12-31"));
-  if(supersedes.some(r=>r.effectiveFrom>=String(candidate.effectiveFrom)||r.version>=Number(candidate.version))) refused("This revision overlaps a later or same-date active routing.","routing_version_overlap","effectiveFrom","Choose an effective start after the current revision and before any later revision.");
+  const conflict=supersedes.find(r=>r.effectiveFrom>=String(candidate.effectiveFrom)||r.version>=Number(candidate.version));
+  if(conflict) {
+    const referenced=await routing(tx,orgId,conflict.id);
+    if(!referenced) throw new ManufacturingNotFoundError();
+    routingOverlapRefusal({code:String(referenced.code),version:conflict.version,effective_from:conflict.effectiveFrom,effective_to:conflict.effectiveTo});
+  }
   return {candidate,active,supersedes};
 }
 

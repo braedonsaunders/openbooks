@@ -1,3 +1,5 @@
+import { errorChainMatches } from "../testing/error-chain.ts";
+import { cmp } from "../money/money.ts";
 import { approveFixtureRouting, createManufacturingOperator } from "../testing/manufacturing.ts";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
@@ -277,7 +279,7 @@ const cases: Case[] = [
       }
     });
     await orderLine(f, "sales_order", f.org.items.assembly, "2", future(today, 20));
-    const result = await run(f, f.org.subsidiaryId, true); const load = (await getMrpRun(db, f.org.orgId, result.id)).capacity.find((week) => week.workCenterId === center && week.plannedHours !== "0.0000");
+    const result = await run(f, f.org.subsidiaryId, true); const load = (await getMrpRun(db, f.org.orgId, result.id)).capacity.find((week) => week.workCenterId === center && cmp(week.plannedHours,"0")>0);
     assert.ok(load); assert.equal(load?.availableHours, "5.0000"); assert.equal(load?.overloaded, true); assert.equal(load?.loadPercent, "400.0000");
     const frozen=await tx(runner=>getMrpRun(runner,f.org.orgId,result.id));
     assert.equal(frozen.capacityEvidence,'frozen');
@@ -285,10 +287,10 @@ const cases: Case[] = [
     await tx(runner=>updateWorkCenter(runner,f.org.orgId,f.actorId,center,{capacityHoursPerDay:'2'}));
     const successor=await run(f,f.org.subsidiaryId,true);
     const newer=await tx(runner=>getMrpRun(runner,f.org.orgId,successor.id));
-    assert.equal(newer.capacity.find(week=>week.workCenterId===center&&week.plannedHours!=='0.0000')?.availableHours,'10.0000');
+    assert.equal(newer.capacity.find(week=>week.workCenterId===center&&cmp(week.plannedHours,'0')>0)?.availableHours,'10.0000');
     assert.deepEqual(newer.suggestions.map(row=>({itemId:row.itemId,dueDate:row.dueDate,plannedStart:row.plannedStart})),originalDates,'capacity facts do not reschedule suggested work');
     assert.deepEqual((await tx(runner=>getMrpRun(runner,f.org.orgId,result.id))).capacity,frozen.capacity,'a later run never replaces the original capacity claim');
-    await assert.rejects(tx(runner=>runner.execute(sql`update mfg_mrp_runs set parameters=parameters||'{"capacitySnapshot":{}}'::jsonb where org_id=${f.org.orgId} and id=${result.id}`)),/immutable/);
+    await assert.rejects(tx(runner=>runner.execute(sql`update mfg_mrp_runs set parameters=parameters||'{"capacitySnapshot":{}}'::jsonb where org_id=${f.org.orgId} and id=${result.id}`)),error=>errorChainMatches(error,/immutable/));
     const calendar=(await tx(runner=>runner.execute<{id:string}>(sql`select id from schedule_calendars where org_id=${f.org.orgId} and is_default and project_id is null`))).rows[0]!;
     await tx(runner=>runner.execute(sql`insert into schedule_calendars(org_id,name,is_default) values(${f.org.orgId},'Second company default',true) returning id`));
     const before=(await tx(runner=>runner.execute(sql`select (select count(*) from mfg_mrp_runs where org_id=${f.org.orgId}) as runs,(select count(*) from mfg_planned_orders where org_id=${f.org.orgId}) as suggestions,(select jsonb_agg(to_jsonb(week) order by id) from mfg_capacity_weeks week where org_id=${f.org.orgId}) as capacity`))).rows;

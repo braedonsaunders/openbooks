@@ -78,9 +78,10 @@ export async function ensureLot(
   lotNumber: string,
   expiresOn: string | null,
   actorId: string | null,
+  runner?: Runner,
 ): Promise<string> {
   if (!lotNumber?.trim()) throw new InventoryError("lot number is required");
-  return db.transaction(async (tx) => {
+  const register = async (tx: Runner): Promise<string> => {
     const inserted = (await tx.execute<{ id: string }>(sql`
       insert into lots
         (org_id, item_id, lot_number, expires_on, created_by, updated_by)
@@ -130,7 +131,8 @@ export async function ensureLot(
       `);
     }
     return row.id;
-  });
+  };
+  return runner ? register(runner) : db.transaction(register);
 }
 
 /** Find-or-create a serial for an item, placing it in stock at a location. */
@@ -140,10 +142,11 @@ export async function ensureSerial(
   serialNumber: string,
   stockLocationId: string | null,
   actorId: string | null,
+  runner?: Runner,
 ): Promise<string> {
   if (!serialNumber?.trim())
     throw new InventoryError("serial number is required");
-  return db.transaction(async (tx) => {
+  const register = async (tx: Runner): Promise<string> => {
     const inserted = (await tx.execute<{ id: string }>(sql`
       insert into serials
         (org_id, item_id, serial_number, status, current_stock_location_id,
@@ -182,7 +185,8 @@ export async function ensureSerial(
       );
     }
     return row.id;
-  });
+  };
+  return runner ? register(runner) : db.transaction(register);
 }
 
 export interface LotRecallFilter {

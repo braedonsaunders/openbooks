@@ -36,11 +36,13 @@ import { assertCostingPolicyChangeAllowed, lockItemInventoryProfile } from "../i
 import { recordNormalScrap } from "./scrap.ts";
 import { executeManufacturingReceipt, executeManufacturingIssue } from "./execution.ts";
 import { readManufacturingRecord, listManufacturingRecords, searchManufacturingChoices, manufacturingOptions, manufacturingTracking } from "./workspace.ts";
+import { errorChainMatches } from "../testing/error-chain.ts";
+import { add,cmp,normalizeMoney } from "../money/money.ts";
 import { ManufacturingError } from "./errors.ts";
 import { upsertItemPolicy, assertManufacturingItemExists } from "./item-policies.ts";
 import { runMrp } from "./mrp.ts";
 import { activateRouting, proposeRoutingActivation, applyRoutingActivation, updateRouting, createRouting, createRoutingOperation, createNextRoutingVersion, updateRoutingOperation, getRouting } from "./routings.ts";
-import { addWorkCenterRate, createWorkCenter, updateWorkCenter } from "./work-centers.ts";
+import { addWorkCenterRate, endWorkCenterRate, createWorkCenter, updateWorkCenter } from "./work-centers.ts";
 import { createWorkOrder,getWorkOrder, updateDraftWorkOrder, holdWorkOrder, releaseWorkOrder, cancelWorkOrder, startWorkOrderOperation } from "./work-orders.ts";
 import { completeWorkOrderOperation, issueMaterials } from "./materials.ts";
 import { completeWorkOrder, markWorkOrderDone, reverseMaterialIssue, waiveMaterial } from "./completion.ts";
@@ -106,6 +108,7 @@ async function route(f: Fixture, itemId: string, qualityGate: "none" | "measure"
     sequence: 10, name: "Assemble", workCenterId: String(center.id), setupMinutes: "0", runMinutesPerUnit: "1", qualityGate,
   }));
   await approveFixtureRouting(f.org.orgId, f.actorId, String(routing.id));
+  return String(center.id);
 }
 async function prepare(f: Fixture, opts: { produced?: string; quantity?: string; qualityGate?: "none" | "measure"; secondComponent?: string } = {}) {
   const produced = opts.produced ?? f.org.items.assembly;
@@ -157,10 +160,10 @@ async function withVancouverDate(f: Fixture, work: () => Promise<void>) {
   await withSimClock("2026-10-31T23:30:00-07:00", work);
 }
 async function wip(f: Fixture, number: string) {
-  return withBypassContext(async () => (await db.execute<{ value: string }>(sql`select coalesce(sum(line.amount),0)::text value
+  return withBypassContext(async () => normalizeMoney((await db.execute<{ value: string }>(sql`select coalesce(sum(line.amount),0)::text value
     from journal_lines line join journal_entries entry on entry.org_id=line.org_id and entry.id=line.entry_id
     where line.org_id=${f.org.orgId} and line.account_id=${f.wipId} and entry.origin='manufacturing'
-      and entry.custom->>'work_order_number'=${number} and entry.status in ('posted','reversed')`)).rows[0]!.value);
+      and entry.custom->>'work_order_number'=${number} and entry.status in ('posted','reversed')`)).rows[0]!.value));
 }
 async function counts(f: Fixture) {
   return withBypassContext(async () => ({
@@ -258,7 +261,12 @@ const cases: Case[] = [
     await withBypassContext(()=>submitFinancialChange(f.org.orgId,proposal.changeId,f.actorId));
     const gates=(await run(tx=>tx.execute<{id:string}>(sql`select id from flow_gates where org_id=${f.org.orgId} and subject_kind='financial_change' and subject_id=${proposal.changeId} and status='pending'`))).rows;
     assert.equal(gates.length,1);await withBypassContext(()=>decideGate({gateId:gates[0]!.id,userId:approver,decision:'approved'}));
-    await run(async tx=>addWorkCenterRate(tx,f.org.orgId,f.actorId,(await tx.execute<{center:string}>(sql`select work_center_id as center from mfg_wo_operations where org_id=${f.org.orgId} and id=${order.operation}`)).rows[0]!.center,{machineRatePerHour:'13',effectiveFrom:f.postingDate}));
+    await run(async tx=>{
+      const prior=(await tx.execute<{id:string;center:string}>(sql`select rate.id,rate.work_center_id as center from mfg_work_center_rates rate join mfg_wo_operations operation on operation.org_id=rate.org_id and operation.work_center_id=rate.work_center_id where operation.org_id=${f.org.orgId} and operation.id=${order.operation} and rate.effective_to is null`)).rows;
+      assert.equal(prior.length,1);
+      await endWorkCenterRate(tx,f.org.orgId,f.actorId,prior[0]!.center,prior[0]!.id,f.postingDate);
+      await addWorkCenterRate(tx,f.org.orgId,f.actorId,prior[0]!.center,{machineRatePerHour:'13',effectiveFrom:f.postingDate});
+    });
     const stale=await counts(f);await assert.rejects(withBypassContext(()=>applyProductionLoss(f.org.orgId,f.actorId,proposal.changeId)),/changed/);assert.deepEqual(await counts(f),stale);
     // A new proposal retains the changed effective rate and obtains its own decision.
     const replacement=await run(tx=>proposeProductionLoss(tx,f.org.orgId,f.actorId,order.id,{...input,requestKey:randomUUID()}));
@@ -274,7 +282,7 @@ const cases: Case[] = [
     const inspection=(await run(tx=>tx.execute<{id:string}>(sql`select id from inventory_inspections where org_id=${f.org.orgId} and operation_id=${order.operation}`))).rows[0]!;
     assert.equal((await run(tx=>loadInspection(tx,f.org.orgId,inspection.id))).sourceActive,false);
     await assert.rejects(run(tx=>markEntryReversed(tx,{orgId:f.org.orgId,actorId:f.actorId,entryId:String(result.entryId)})),/adjusting journal/);
-    await assert.rejects(run(tx=>tx.execute(sql`update mfg_work_orders set status='released',cancel_reason=null where org_id=${f.org.orgId} and id=${order.id} returning id`)),/terminal loss/);
+    await assert.rejects(run(tx=>tx.execute(sql`update mfg_work_orders set status='released',cancel_reason=null where org_id=${f.org.orgId} and id=${order.id} returning id`)),error=>errorChainMatches(error,/terminal loss/));
     await assert.rejects(run(tx=>completeWorkOrder(tx,f.org.orgId,f.actorId,order.id,{quantity:'1'})));
     const roles=(await run(tx=>tx.execute<{id:string;permissions:unknown}>(sql`select id,permissions from app_roles where org_id=${f.org.orgId} and id in(select role_id from role_assignments where org_id=${f.org.orgId} and user_id=${f.actorId})`))).rows;
     await run(tx=>tx.execute(sql`update app_roles set permissions='["manufacturing.read"]'::jsonb where org_id=${f.org.orgId} and id in(select role_id from role_assignments where org_id=${f.org.orgId} and user_id=${f.actorId}) returning id`));
@@ -299,8 +307,8 @@ const cases: Case[] = [
   }},
   {name:"BOM approval retains historical effectivity and released material snapshots, replays once and refuses revoked authority",run:async f=>{
     const order=await prepare(f);
-    for(const mutation of [sql`update bom_components set quantity_per='99' where org_id=${f.org.orgId} and assembly_item_id=${f.org.items.assembly}`,sql`delete from bom_components where org_id=${f.org.orgId} and assembly_item_id=${f.org.items.assembly}`,sql`insert into bom_components(org_id,assembly_item_id,component_item_id,quantity_per,sort_order) values(${f.org.orgId},${f.org.items.assembly},${f.org.items.standard},'1',9)`])await assert.rejects(run(tx=>tx.execute(mutation)),/approved revision/);
-    await assert.rejects(run(async tx=>{await tx.execute(sql`select set_config('openbooks.production_bom_changes',${JSON.stringify({[f.org.orgId+':'+f.org.items.assembly]:randomUUID()})},true)`);await tx.execute(sql`delete from bom_components where org_id=${f.org.orgId} and assembly_item_id=${f.org.items.assembly}`)}),/approval decision/);
+    for(const mutation of [sql`update bom_components set quantity_per='99' where org_id=${f.org.orgId} and assembly_item_id=${f.org.items.assembly}`,sql`delete from bom_components where org_id=${f.org.orgId} and assembly_item_id=${f.org.items.assembly}`,sql`insert into bom_components(org_id,assembly_item_id,component_item_id,quantity_per,sort_order) values(${f.org.orgId},${f.org.items.assembly},${f.org.items.standard},'1',9)`])await assert.rejects(run(tx=>tx.execute(mutation)),error=>errorChainMatches(error,/approved revision/));
+    await assert.rejects(run(async tx=>{await tx.execute(sql`select set_config('openbooks.production_bom_changes',${JSON.stringify({[f.org.orgId+':'+f.org.items.assembly]:randomUUID()})},true)`);await tx.execute(sql`delete from bom_components where org_id=${f.org.orgId} and assembly_item_id=${f.org.items.assembly}`)}),error=>errorChainMatches(error,/approval decision/));
     const retained=(await run(tx=>tx.execute<{revision:string;quantity:string}>(sql`select work.bom_revision as revision,material.required_qty::text as quantity from mfg_work_orders work join mfg_wo_materials material on material.org_id=work.org_id and material.work_order_id=work.id where work.org_id=${f.org.orgId} and work.id=${order.id}`))).rows;
     const tomorrow=addCalendarDays(f.postingDate,1);
     const version=await run(tx=>readBomPolicyVersion(tx,f.org.orgId,f.org.items.assembly));
@@ -360,8 +368,8 @@ const cases: Case[] = [
     assert.deepEqual(retained,initial);
     const prior=(await run(tx=>tx.execute<{end:string}>(sql`select effective_to::text as "end" from mfg_routings where org_id=${f.org.orgId} and id=${initial.routingId}`))).rows[0]!;
     assert.equal(prior.end,f.postingDate);
-    await assert.rejects(run(tx=>tx.execute(sql`update mfg_work_orders set routing_version=2 where org_id=${f.org.orgId} and id=${order.id}`)),/Released work retains/);
-    await assert.rejects(run(tx=>tx.execute(sql`update mfg_routing_operations set name='Unapproved rewrite' where org_id=${f.org.orgId} and routing_id=${String(next.id)}`)),/immutable/);
+    await assert.rejects(run(tx=>tx.execute(sql`update mfg_work_orders set routing_version=2 where org_id=${f.org.orgId} and id=${order.id}`)),error=>errorChainMatches(error,/Released work retains/));
+    await assert.rejects(run(tx=>tx.execute(sql`update mfg_routing_operations set name='Unapproved rewrite' where org_id=${f.org.orgId} and routing_id=${String(next.id)}`)),error=>errorChainMatches(error,/immutable/));
     await run(tx=>tx.execute(sql`update app_roles set permissions='["manufacturing.read"]'::jsonb where org_id=${f.org.orgId} and id in(select role_id from role_assignments where org_id=${f.org.orgId} and user_id=${f.actorId}) returning id`));
     await assert.rejects(withBypassContext(()=>applyRoutingActivation(f.org.orgId,f.actorId,proposal.changeId)));
     assert.deepEqual(await counts(f),before);
@@ -379,7 +387,8 @@ const cases: Case[] = [
     const missing=await run(tx=>readOperatingSetupJourney(tx,f.org.orgId,f.actorId,{family:"production",selection:"discrete_production",itemId:f.org.items.assembly,subsidiaryId:f.org.subsidiaryId}));
     assert.equal(missing.findings.find(f=>f.key==="routing")?.status,"missing");assert.equal(missing.readyFor,"draft");
     assert.equal(new URL(missing.nextHref!,"http://localhost").searchParams.get("producedItemId"),f.org.items.assembly);assert.equal(new URL(missing.nextHref!,"http://localhost").searchParams.get("subsidiaryId"),f.org.subsidiaryId);
-    await route(f,f.org.items.assembly);
+    const center=await route(f,f.org.items.assembly);
+    await run(tx=>addWorkCenterRate(tx,f.org.orgId,f.actorId,center,{machineRatePerHour:"0",effectiveFrom:"2026-01-01"}));
     const configured=await run(tx=>readOperatingSetupJourney(tx,f.org.orgId,f.actorId,{family:"production",selection:"discrete_production",itemId:f.org.items.assembly,subsidiaryId:f.org.subsidiaryId,quantity:'10'}));
     assert.equal(configured.readyFor,"release");assert.ok(configured.findings.every(f=>f.status==="ready"));
     assert.equal(new URL(configured.nextHref!,"http://localhost").searchParams.get('quantityOrdered'),'10');
@@ -424,7 +433,7 @@ const cases: Case[] = [
     });
     await withBypassContext(()=>receiveInventory(f.org.orgId,f.actorId,{itemId:f.org.items.component,stockLocationId:otherStock,quantity:'1',unitCost:'3',subsidiaryId:otherEntity,offsetAccountId:f.org.accounts.clearing,date:f.org.date,lotId:raw}));
     const ownershipState=await counts(f);
-    await assert.rejects(run(tx=>traceManufacturingGenealogy(tx,f.org.orgId,f.actorId,{kind:'lot',id:raw,direction:'forward'},allowed)),/not found/i);
+    await assert.rejects(run(tx=>traceManufacturingGenealogy(tx,f.org.orgId,f.actorId,{kind:'lot',id:raw,direction:'forward'},allowed)),/not[ _]found/i);
     assert.deepEqual(await counts(f),ownershipState,'a trace seed cannot reveal a shared identifier whose current native owners are outside its authorized entities');
     assert.equal((await run(tx=>traceManufacturingGenealogy(tx,f.org.orgId,f.actorId,{kind:'lot',id:raw,direction:'forward'}))).edges.length,2,'organization-wide authority retains the trace without inventing edges for ordinary receipts');
     const before=await counts(f);
@@ -434,6 +443,8 @@ const cases: Case[] = [
     assert.deepEqual(await counts(f),before);
   }},
   { name: "standard roll-up requires live authority and unchanged approved sources, revalues stock and preserves released standards", run: async f => {
+    const initialStandard=await run(tx=>tx.execute(sql`update item_inventory_profiles set standard_cost='9.9' where org_id=${f.org.orgId} and item_id=${f.org.items.standard} returning item_id`));
+    assert.equal(initialStandard.rows.length,1);
     const order=await conversionOrder(f,f.org.items.standard);
     await run(async tx=>{
       await tx.execute(sql`update item_inventory_profiles set standard_cost='3' where org_id=${f.org.orgId} and item_id=${f.org.items.component} returning item_id`);
@@ -538,7 +549,7 @@ const cases: Case[] = [
     const wo = await conversionOrder(f, f.org.items.assembly);
     await withBypassContext(() => db.execute(sql`delete from mfg_work_center_rates where org_id=${f.org.orgId} returning id`));
     await refuse(run((tx) => completeWorkOrderOperation(tx, f.org.orgId, f.actorId, wo.id, wo.operation, { doneQty: "10" })),
-      "machine_rate_missing", "has no machine rate covering", "Add a machine rate for work center");
+      "machine_rate_missing", "requires one effective machine rate covering", "Review the effective machine rates on work center");
   } },
   { name: "completion uses the organization's business date", run: async (f) => {
     const wo = await prepare(f); await stock(f, f.org.items.component, "4", "3");
@@ -560,7 +571,7 @@ const cases: Case[] = [
       from cost_layers layer join inventory_movements movement on movement.org_id=layer.org_id and movement.id=layer.source_movement_id
       join journal_entries entry on entry.org_id=movement.org_id and entry.id=movement.journal_entry_id
       where layer.org_id=${f.org.orgId} and movement.item_id=${f.org.items.assembly} and movement.kind='assembly_build'
-        and entry.custom->>'work_order_number'=${wo.number} and entry.status in ('posted','reversed')`)).rows[0]!.value);
+        and entry.custom->>'work_order_number'=${wo.number} and entry.status in ('posted','reversed')`)).rows[0]!.value));
     const assetAccount = await withBypassContext(async () => (await db.execute<{ id: string }>(sql`select asset_account_id id from item_inventory_profiles
       where org_id=${f.org.orgId} and item_id=${f.org.items.assembly}`)).rows[0]!.id);
     const finishedGoods = await withBypassContext(async () => (await db.execute<{ value: string }>(sql`select coalesce(sum(line.amount),0)::text value
@@ -593,7 +604,7 @@ const cases: Case[] = [
     });
     const wo = await prepare(f);
     await assert.rejects(withBypassContext(() => db.execute(sql`update bom_components set quantity_per='8'
-      where org_id=${f.org.orgId} and assembly_item_id=${f.org.items.assembly} and is_byproduct returning id`)),/approved revision/);
+      where org_id=${f.org.orgId} and assembly_item_id=${f.org.items.assembly} and is_byproduct returning id`)),error=>errorChainMatches(error,/approved revision/));
     await stock(f, f.org.items.component, "4", "3"); await issue(f, wo.id, [{ materialId: wo.materials[0]!.id, quantity: "2" }]);
     const result = await run((tx) => completeWorkOrder(tx, f.org.orgId, f.actorId, wo.id, { quantity: "1",
       byproductValues: [{ itemId: f.org.items.fifo, nrvUnit: "2", reason: "Observed resale value" }] }));
@@ -650,7 +661,9 @@ const cases: Case[] = [
     const done=()=>run(tx=>markWorkOrderDone(tx,f.org.orgId,f.actorId,wo.id));const finished=await done();assert.deepEqual(await done(),finished);
     const active=await run(tx=>createWorkOrder(tx,f.org.orgId,f.actorId,{producedItemId:f.org.items.assembly,quantityOrdered:'1',subsidiaryId:f.org.subsidiaryId,issueLocationId:f.org.stockLocationId,receiptLocationId:f.org.stockLocationId2,plannedStart:f.org.date}));
     await run(tx=>releaseWorkOrder(tx,f.org.orgId,f.actorId,active.id));
-    const material=(await run(tx=>getWorkOrder(tx,f.org.orgId,active.id)))!.materials[0]!;
+    const activeMaterials=(await run(tx=>tx.execute<{id:string}>(sql`select id from mfg_wo_materials where org_id=${f.org.orgId} and work_order_id=${active.id}`))).rows;
+    assert.equal(activeMaterials.length,1);
+    const material=activeMaterials[0]!;
     const draw=async()=>{const result=await issue(f,active.id,[{materialId:material.id,quantity:'1'}]);return (await run(tx=>tx.execute<{id:string}>(sql`select id from inventory_movements where org_id=${f.org.orgId} and journal_entry_id=${result.entryId} and kind='assembly_consume'`))).rows[0]!.id;};
     const oldMovement=await draw(),reverse=(movementId:string,actorId=f.actorId)=>run(()=>reverseMaterialIssue(f.org.orgId,actorId,{movementId,reversalDate:f.postingDate,reason:'Correct the genuine component issue'}));
     const reversed=await reverse(oldMovement);assert.deepEqual(await reverse(oldMovement),{...reversed,alreadyReversed:true});
@@ -943,11 +956,14 @@ cases.push({ name: "native workspace uses organization item identity and current
   await run(tx => upsertItemPolicy(tx, f.org.orgId, f.actorId, f.org.items.standard, {
     supplyMethod: "buy", leadTimeDays: 1, safetyStockQty: "0", minimumQty: "0", orderMultipleQty: "0", scrapPctPlanned: "0",
   }));
+  assert.equal((await run(tx=>tx.execute(sql`update locations set subsidiary_id=${f.org.subsidiaryId},subsidiary_include_children=false where org_id=${f.org.orgId} and id=${f.org.locationId} returning id`))).rows.length,1);
   // This caller exercises the run's legal-entity read fence; capacity calendars belong to the capacity cases.
   const mrp = await run(tx => runMrp(tx, f.org.orgId, f.actorId, { subsidiaryId: f.org.subsidiaryId, horizonDays: 30, capacityCheck: false }));
   assert.equal((await run(tx => listManufacturingRecords(tx, f.org.orgId, allowed, "mrp"))).rows[0]?.id, mrp.id);
   assert.equal((await run(tx => readManufacturingRecord(tx, f.org.orgId, allowed, "mrp", mrp.id))).record.id, mrp.id);
   await denied(run(tx => readManufacturingRecord(tx, f.org.orgId, new Set([otherEntity]), "mrp", mrp.id)));
+  assert.equal((await run(tx=>tx.execute(sql`update locations set subsidiary_id=${otherEntity} where org_id=${f.org.orgId} and id=${f.org.locationId} returning id`))).rows.length,1);
+  await denied(run(tx=>readManufacturingRecord(tx,f.org.orgId,allowed,"mrp",mrp.id)));
 
   const foreign = await withBypassContext(() => createScratchOrg());
   try {
@@ -975,7 +991,7 @@ cases.push({name:"approved production employee hours consume once independently 
     assert.equal((await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features,projects}','false'::jsonb,true) where id=${f.org.orgId} returning id`)).rows.length,1)
   })
   await run(tx=>lockSharedTimeAuthority(tx,f.org.orgId,f.actorId,{employeeId:employee,from:f.postingDate,through:f.postingDate,requestedScope:null,permission:'time.read',workFamily:'production'}))
-  await assert.rejects(run(tx=>lockSharedTimeAuthority(tx,f.org.orgId,randomUUID(),{employeeId:employee,from:f.postingDate,through:f.postingDate,requestedScope:null,permission:'time.manage',workFamily:'production'})),/not found/i)
+  await assert.rejects(run(tx=>lockSharedTimeAuthority(tx,f.org.orgId,randomUUID(),{employeeId:employee,from:f.postingDate,through:f.postingDate,requestedScope:null,permission:'time.manage',workFamily:'production'})),/not[ _]found/i)
   const before=await counts(f)
   await refuse(run(tx=>completeWorkOrderOperation(tx,f.org.orgId,f.actorId,order.id,order.operation,{doneQty:'10'})),'production_time_unapproved','unapproved')
   assert.deepEqual(await counts(f),before)
@@ -987,9 +1003,9 @@ cases.push({name:"approved production employee hours consume once independently 
   const captured=(await run(tx=>tx.execute<{actual_labor_minutes:string;actual_run_minutes:string}>(sql`select actual_labor_minutes::text,actual_run_minutes::text from mfg_wo_operations where org_id=${f.org.orgId} and id=${order.operation}`))).rows[0]!
   assert.deepEqual(captured,{actual_labor_minutes:'150.0000',actual_run_minutes:'60.0000'})
   assert.equal((await run(tx=>tx.execute(sql`select id from time_entries where org_id=${f.org.orgId} and production_consumed_operation_id=${order.operation} and cost_journal_entry_id=${conversion.id}`))).rows.length,2)
-  await assert.rejects(run(tx=>tx.execute(sql`update time_entries set hours='9' where org_id=${f.org.orgId} and id=${first}`)),/immutable/)
-  await assert.rejects(run(tx=>tx.execute(sql`delete from time_entries where org_id=${f.org.orgId} and id=${first}`)),/immutable/)
-  await assert.rejects(run(tx=>tx.execute(sql`update mfg_wo_operations set labor_time_source='operation' where org_id=${f.org.orgId} and id=${order.operation}`)),/keep their labor/)
+  await assert.rejects(run(tx=>tx.execute(sql`update time_entries set hours='9' where org_id=${f.org.orgId} and id=${first}`)),error=>errorChainMatches(error,/immutable/))
+  await assert.rejects(run(tx=>tx.execute(sql`delete from time_entries where org_id=${f.org.orgId} and id=${first}`)),error=>errorChainMatches(error,/immutable/))
+  await assert.rejects(run(tx=>tx.execute(sql`update mfg_wo_operations set labor_time_source='operation' where org_id=${f.org.orgId} and id=${order.operation}`)),error=>errorChainMatches(error,/keep their labor/))
   const completedCounts=await counts(f)
   await run(tx=>completeWorkOrderOperation(tx,f.org.orgId,f.actorId,order.id,order.operation,{doneQty:'10'}))
   assert.deepEqual(await counts(f),completedCounts)
@@ -1014,7 +1030,7 @@ cases.push({name:"approved production employee hours consume once independently 
   assert.deepEqual(await counts(f),correctingCounts)
   const revoked=await run(tx=>tx.execute(sql`update app_roles set permissions='["time.approve","manufacturing.read"]'::jsonb where org_id=${f.org.orgId} and id in(select role_id from role_assignments where org_id=${f.org.orgId} and user_id=${f.actorId}) returning id`))
   assert(revoked.rows.length>0)
-  await assert.rejects(run(tx=>applyProductionTimeCorrections(tx,f.org.orgId,f.actorId,[contra])),/not found/i)
+  await assert.rejects(run(tx=>applyProductionTimeCorrections(tx,f.org.orgId,f.actorId,[contra])),/not[ _]found/i)
   assert.deepEqual(await counts(f),correctingCounts,'a revoked grant also refuses replay')
 }})
 
@@ -1112,11 +1128,15 @@ cases.push(
   await run(tx=>addWorkCenterRate(tx,f.org.orgId,f.actorId,routing.centerId,{machineRatePerHour:'0',effectiveFrom:'2026-01-01'}));
   const disposition=await run(tx=>disposeQualityInspection(tx,f.org.orgId,f.actorId,inspection.id,{action:'rework',reason:'Attempt repair under original dimensional criteria',requestKey:randomUUID(),reworkRoutingId:routing.id,reworkSequence:10}));
   const id=disposition.reworkWorkOrderId!;await run(tx=>releaseWorkOrder(tx,f.org.orgId,f.actorId,id));
-  const work=(await run(tx=>getWorkOrder(tx,f.org.orgId,id)))!,operation=work.operations[0]!,reasonId=randomUUID();
+  const work=(await run(tx=>getWorkOrder(tx,f.org.orgId,id)))!,reasonId=randomUUID();
+  const operationRows=(await run(tx=>tx.execute<{id:string}>(sql`select id from mfg_wo_operations where org_id=${f.org.orgId} and work_order_id=${id}`))).rows;
+  const materialRows=(await run(tx=>tx.execute<{id:string}>(sql`select id from mfg_wo_materials where org_id=${f.org.orgId} and work_order_id=${id}`))).rows;
+  assert.equal(operationRows.length,1);assert.equal(materialRows.length,1);
+  const operation=operationRows[0]!;
   await run(tx=>tx.execute(sql`insert into mfg_scrap_reasons(id,org_id,code,name,classification,is_active) values(${reasonId},${f.org.orgId},${reasonId},'Failed repair','abnormal',true) returning id`));
   const input={operationId:operation.id,reasonId,quantity:'2',reason:'The original stock cannot be repaired and must be discarded',requestKey:randomUUID(),times:[]};
   const before=await counts(f);await assert.rejects(run(tx=>proposeProductionLoss(tx,f.org.orgId,f.actorId,id,input)),/all of its original inspected stock/);assert.deepEqual(await counts(f),before);assert.equal((await run(tx=>getWorkOrder(tx,f.org.orgId,id)))!.status,'released');
-  await run(tx=>issueMaterials(tx,f.org.orgId,f.actorId,id,[{materialId:work.materials[0]!.id,quantity:'2',lotId}]));
+  await run(tx=>issueMaterials(tx,f.org.orgId,f.actorId,id,[{materialId:materialRows[0]!.id,quantity:'2',lotId}]));
   await run(tx=>startWorkOrderOperation(tx,f.org.orgId,f.actorId,id,operation.id));
   const loss={...input,times:[{operationId:operation.id,attemptedQty:'2',actualSetupMinutes:'0',actualRunMinutes:'0',actualLaborMinutes:'0'}]};
   await assert.rejects(run(tx=>proposeProductionLoss(tx,f.org.orgId,f.actorId,id,{...loss,quantity:'1',requestKey:randomUUID()})),/all of its original inspected stock/);
@@ -1170,7 +1190,7 @@ cases.push(
   const entryId=String(result.dispositionResult?.entryId),balanced=(await run(tx=>tx.execute<{amount:string}>(sql`select sum(amount)::text as amount from journal_lines where org_id=${f.org.orgId} and entry_id=${entryId}`))).rows[0]!.amount;assert.equal(balanced,'0.0000');
   const before=await counts(f);await run(tx=>disposeQualityInspection(tx,f.org.orgId,f.actorId,inspection.id,input));assert.deepEqual(await counts(f),before);
   await run(tx=>tx.execute(sql`update app_roles set permissions='["manufacturing.read","items.read"]'::jsonb where org_id=${f.org.orgId} and id in(select role_id from role_assignments where org_id=${f.org.orgId} and user_id=${f.actorId}) returning id`));
-  await assert.rejects(run(tx=>disposeQualityInspection(tx,f.org.orgId,f.actorId,inspection.id,input)),/not found/i);assert.deepEqual(await counts(f),before);
+  await assert.rejects(run(tx=>disposeQualityInspection(tx,f.org.orgId,f.actorId,inspection.id,input)),/not[ _]found/i);assert.deepEqual(await counts(f),before);
  }},
  {name:'reversed receipts retain inspection history without holding replacements or accepting new results',run:async f=>{
   const itemId=f.org.items.fifo,{lotId,receipt,inspection}=await trackedQualityReceipt(f,itemId);
@@ -1212,18 +1232,22 @@ cases.push({name:'formula and fixed batch ingredients freeze at release and spli
   await run(tx=>tx.execute(sql`update items set default_rate='0.5' where org_id=${f.org.orgId} and id=${f.org.items.movingAvg} returning id`));
   const exploded=await run(tx=>explodeBom(tx,f.org.orgId,f.org.items.assembly,'100',f.org.date));
   assert.deepEqual(Object.fromEntries(exploded.components.map(line=>[line.itemId,line.requiredQuantity])),{[f.org.items.component]:'10.0000',[f.org.items.fifo]:'2.0000'});assert.equal(exploded.byproducts[0]?.requiredQuantity,'1.0000');
-  await stock(f,f.org.items.component,'10','3');await stock(f,f.org.items.fifo,'2','5');await route(f,f.org.items.assembly);
+  await stock(f,f.org.items.component,'10','3');await stock(f,f.org.items.fifo,'2','5');
   await run(tx=>tx.execute(sql`update bom_components set quantity_per='0.0001' where org_id=${f.org.orgId} and assembly_item_id=${f.org.items.assembly} and component_item_id=${f.org.items.component} returning id`));
   const actualBatchSetup=await run(tx=>readOperatingSetupJourney(tx,f.org.orgId,f.actorId,{family:'production',selection:'batch_process',itemId:f.org.items.assembly,subsidiaryId:f.org.subsidiaryId,quantity:'100'}));
-  assert.equal(actualBatchSetup.readyFor,'release');assert.equal(new URL(actualBatchSetup.nextHref!,'http://localhost').searchParams.get('quantityOrdered'),'100');
+  assert.equal(actualBatchSetup.findings.find(finding=>finding.key==='bom')?.status,'ready');assert.equal(actualBatchSetup.readyFor,'draft');assert.equal(new URL(actualBatchSetup.nextHref!,'http://localhost').searchParams.get('quantityOrdered'),'100');
   const tooSmallSetup=await run(tx=>readOperatingSetupJourney(tx,f.org.orgId,f.actorId,{family:'production',selection:'batch_process',itemId:f.org.items.assembly,subsidiaryId:f.org.subsidiaryId,quantity:'1'}));
   assert.equal(tooSmallSetup.findings.find(finding=>finding.key==='bom')?.status,'missing');
   await run(tx=>tx.execute(sql`update bom_components set quantity_per='10' where org_id=${f.org.orgId} and assembly_item_id=${f.org.items.assembly} and component_item_id=${f.org.items.component} returning id`));
+  const center=await route(f,f.org.items.assembly);
+  await run(tx=>addWorkCenterRate(tx,f.org.orgId,f.actorId,center,{machineRatePerHour:'0',effectiveFrom:'2026-01-01'}));
+  const readyBatch=await run(tx=>readOperatingSetupJourney(tx,f.org.orgId,f.actorId,{family:'production',selection:'batch_process',itemId:f.org.items.assembly,subsidiaryId:f.org.subsidiaryId,quantity:'100'}));
+  assert.equal(readyBatch.readyFor,'release');
   const order=await run(tx=>createWorkOrder(tx,f.org.orgId,f.actorId,{producedItemId:f.org.items.assembly,quantityOrdered:'100',subsidiaryId:f.org.subsidiaryId,issueLocationId:f.org.stockLocationId,receiptLocationId:f.org.stockLocationId2,plannedStart:f.org.date}));
   await run(tx=>releaseWorkOrder(tx,f.org.orgId,f.actorId,order.id));
   const materials=(await run(tx=>tx.execute<{id:string;itemId:string;quantity:string;basis:string;output:string}>(sql`select id,component_item_id as "itemId",required_qty::text as quantity,quantity_basis as basis,formula_output_quantity::text as output from mfg_wo_materials where org_id=${f.org.orgId} and work_order_id=${order.id}`))).rows;
   assert.equal(materials.find(line=>line.itemId===f.org.items.component)?.output,'100.0000');assert.equal(materials.find(line=>line.itemId===f.org.items.fifo)?.basis,'per_batch');
-  await assert.rejects(run(tx=>tx.execute(sql`update mfg_wo_materials set formula_output_quantity='50' where org_id=${f.org.orgId} and work_order_id=${order.id} and component_item_id=${f.org.items.component} returning id`)),/retain their recipe/i);
+  await assert.rejects(run(tx=>tx.execute(sql`update mfg_wo_materials set formula_output_quantity='50' where org_id=${f.org.orgId} and work_order_id=${order.id} and component_item_id=${f.org.items.component} returning id`)),error=>errorChainMatches(error,/retain their recipe/i));
   await issue(f,order.id,materials.map(line=>({materialId:line.id,quantity:line.quantity})));assert.equal(await wip(f,order.number),'40.0000');
   const first=await run(tx=>completeWorkOrder(tx,f.org.orgId,f.actorId,order.id,{quantity:'40'}));assert.equal(first.value,'15.8000');assert.equal(await wip(f,order.number),'24.0000');
   const final=await run(tx=>completeWorkOrder(tx,f.org.orgId,f.actorId,order.id,{quantity:'60'}));assert.equal(final.value,'23.7000');assert.equal(await wip(f,order.number),'0.0000');
@@ -1257,7 +1281,7 @@ cases.push({name:"production subcontract ships valued components once with nativ
   const lineage=(await run(tx=>tx.execute<{item:string;entity:string;kind:string;paired:string;quantity:string}>(sql`select item_id as item,subsidiary_id as entity,kind,paired_movement_id as paired,quantity::text from inventory_movements where org_id=${f.org.orgId} and id=${sent.toMovementId}`))).rows[0]!;
   assert.deepEqual(lineage,{item:f.org.items.component,entity:f.org.subsidiaryId,kind:'transfer_in',paired:sent.fromMovementId,quantity:'6.0000'});
   await refuse(run(tx=>shipSubcontractMaterial(tx,f.org.orgId,f.actorId,contract.id,{...shipment,id:randomUUID(),quantity:'1'})),'subcontract_material_excess','remaining');
-  await assert.rejects(run(tx=>tx.execute(sql`update mfg_subcontract_shipments set quantity='5' where org_id=${f.org.orgId} and id=${sent.id}`)),/immutable/);
+  await assert.rejects(run(tx=>tx.execute(sql`update mfg_subcontract_shipments set quantity='5' where org_id=${f.org.orgId} and id=${sent.id}`)),error=>errorChainMatches(error,/immutable/));
   const consumptionKey=randomUUID();
   const beforeConsumption=await counts(f);
   await refuse(run(tx=>consumeSubcontractMaterials(tx,f.org.orgId,f.actorId,contract.id,consumptionKey,[{shipmentId:sent.id,quantity:'7'}])),'material_shortage','short');
@@ -1314,14 +1338,14 @@ cases.push({name:"vendor deliveries, native bill capitalization and unused retur
   await run(tx=>tx.execute(sql`update departments set subsidiary_id=${scopedEntity} where org_id=${f.org.orgId} and id=${serviceDepartment} returning id`));
   const hiddenBill=await counts(f);
   assert(!(await run(tx=>searchProductionServiceBills(tx,f.org.orgId,f.actorId,order.id,contract.id,'',bill.id))).some(row=>row.value===bill.id));
-  await assert.rejects(run(tx=>capitalizeSubcontractServiceBill(tx,f.org.orgId,f.actorId,contract.id,bill.id,randomUUID())),/not found/i);assert.deepEqual(await counts(f),hiddenBill);
+  await assert.rejects(run(tx=>capitalizeSubcontractServiceBill(tx,f.org.orgId,f.actorId,contract.id,bill.id,randomUUID())),/not[ _]found/i);assert.deepEqual(await counts(f),hiddenBill);
   await run(tx=>tx.execute(sql`update departments set subsidiary_id=${f.org.subsidiaryId} where org_id=${f.org.orgId} and id=${serviceDepartment} returning id`));
   const key=randomUUID();
   const service=await run(tx=>capitalizeSubcontractServiceBill(tx,f.org.orgId,f.actorId,contract.id,bill.id,key));
   assert.equal(service.amount,'12.0000');assert(service.entryId);assert.equal(await wip(f,order.number),'21.0000');
   const serviceCounts=await counts(f);assert.equal((await run(tx=>capitalizeSubcontractServiceBill(tx,f.org.orgId,f.actorId,contract.id,bill.id,key))).replayed,true);assert.deepEqual(await counts(f),serviceCounts);
   await run(tx=>tx.execute(sql`update departments set subsidiary_id=${scopedEntity} where org_id=${f.org.orgId} and id=${serviceDepartment} returning id`));
-  await assert.rejects(run(tx=>capitalizeSubcontractServiceBill(tx,f.org.orgId,f.actorId,contract.id,bill.id,key)),/not found/i);assert.deepEqual(await counts(f),serviceCounts);
+  await assert.rejects(run(tx=>capitalizeSubcontractServiceBill(tx,f.org.orgId,f.actorId,contract.id,bill.id,key)),/not[ _]found/i);assert.deepEqual(await counts(f),serviceCounts);
   await run(tx=>tx.execute(sql`update departments set subsidiary_id=${f.org.subsidiaryId} where org_id=${f.org.orgId} and id=${serviceDepartment} returning id`));
   const final={id:randomUUID(),quantity:'2',finish:true,consumption:[{shipmentId:sent.id,quantity:'2'}]};
   const returned=await run(tx=>recordSubcontractReturn(tx,f.org.orgId,f.actorId,contract.id,final));
@@ -1357,10 +1381,10 @@ async function jointOutputScenario(f:Fixture,standard:boolean) {
  const order=await prepare(f,{quantity:'2'});await stock(f,f.org.items.component,'4','3');await issue(f,order.id,[{materialId:order.materials[0]!.id,quantity:'4'}]);
  const frozen=(await run(tx=>tx.execute<{weight:string;standard:string|null}>(sql`select output_cost_weight::text as weight,standard_cost_snapshot::text as standard from mfg_wo_byproducts where org_id=${f.org.orgId} and work_order_id=${order.id} and item_id=${output}`))).rows[0]!;
  assert.equal(frozen.weight,'2.0000');assert.equal(frozen.standard,standard?'3.0000':null);
- await assert.rejects(run(tx=>tx.execute(sql`update mfg_wo_byproducts set output_cost_weight='8' where org_id=${f.org.orgId} and work_order_id=${order.id} and item_id=${output} returning id`)),/Released|immutable/i);
- await assert.rejects(run(tx=>tx.execute(sql`update bom_components set output_cost_weight='8' where org_id=${f.org.orgId} and assembly_item_id=${f.org.items.assembly} and component_item_id=${output} returning id`)),/approved revision/i);
+ await assert.rejects(run(tx=>tx.execute(sql`update mfg_wo_byproducts set output_cost_weight='8' where org_id=${f.org.orgId} and work_order_id=${order.id} and item_id=${output} returning id`)),error=>errorChainMatches(error,/Released|immutable/i));
+ await assert.rejects(run(tx=>tx.execute(sql`update bom_components set output_cost_weight='8' where org_id=${f.org.orgId} and assembly_item_id=${f.org.items.assembly} and component_item_id=${output} returning id`)),error=>errorChainMatches(error,/approved revision/i));
  const unchanged=await counts(f);
- await assert.rejects(run(tx=>tx.execute(sql`insert into mfg_wo_byproducts(org_id,work_order_id,item_id,quantity_per,output_cost_weight) values(${f.org.orgId},${order.id},${standard?f.org.items.movingAvg:f.org.items.standard},'1','1') returning id`)),/released production definition/i);
+ await assert.rejects(run(tx=>tx.execute(sql`insert into mfg_wo_byproducts(org_id,work_order_id,item_id,quantity_per,output_cost_weight) values(${f.org.orgId},${order.id},${standard?f.org.items.movingAvg:f.org.items.standard},'1','1') returning id`)),error=>errorChainMatches(error,/released production definition/i));
  assert.deepEqual(await counts(f),unchanged);
  if(standard)await run(tx=>tx.execute(sql`update item_inventory_profiles set standard_cost='9' where org_id=${f.org.orgId} and item_id=${output} returning id`));
  const invalidState=await counts(f);
@@ -1420,7 +1444,7 @@ cases.push({name:'same-transaction repeated inspections use native sequence rath
  const before=await counts(f);
  await assert.rejects(run(tx=>completeWorkOrderOperation(tx,f.org.orgId,f.actorId,order.id,operation.id,{doneQty:'2',actualSetupMinutes:'0',actualRunMinutes:'0',actualLaborMinutes:'0'})),/accepted inspections covering/i);
  assert.deepEqual(await counts(f),before);
- await assert.rejects(run(tx=>tx.execute(sql`update inventory_inspections set inspection_sequence=4 where org_id=${f.org.orgId} and id=${later} returning id`)),/immutable/i);
+ await assert.rejects(run(tx=>tx.execute(sql`update inventory_inspections set inspection_sequence=4 where org_id=${f.org.orgId} and id=${later} returning id`)),error=>errorChainMatches(error,/immutable/i));
  const final=await run(tx=>createOperationInspection(tx,f.org.orgId,f.actorId,order.id,operation.id,{id:randomUUID(),quantity:'2'}));assert(final);
  await run(tx=>recordQualityInspection(tx,f.org.orgId,f.actorId,final.id,{outcome:'pass',quantity:'2',measurements:{length:'10'},reason:'Final accepted quantity covers the batch'}));
  await run(tx=>completeWorkOrderOperation(tx,f.org.orgId,f.actorId,order.id,operation.id,{doneQty:'2',actualSetupMinutes:'0',actualRunMinutes:'0',actualLaborMinutes:'0'}));
@@ -1452,6 +1476,7 @@ cases.push({name:'required operation inspections cover multiple serials without 
  const ready=await counts(f);
  await assert.rejects(run(tx=>completeWorkOrder(tx,f.org.orgId,f.actorId,order.id,{quantity:'1',lots:[{quantity:'1',serialNumber:'UNINSPECTED-SERIAL'}]})),/accepted operation inspections/i);
  assert.deepEqual(await counts(f),ready);
+ assert.equal((await run(tx=>tx.execute(sql`select id from serials where org_id=${f.org.orgId} and item_id=${f.org.items.assembly} and serial_number='UNINSPECTED-SERIAL'`))).rows.length,0);
  const partial=await run(tx=>completeWorkOrder(tx,f.org.orgId,f.actorId,order.id,{quantity:'1',lots:[{quantity:'1',serialNumber:'INSPECTED-SERIAL-1'}]}));
  assert.equal(partial.quantityCompleted,'1.0000');assert.equal(await wip(f,order.number),'6.0000');
  const final=await run(tx=>completeWorkOrder(tx,f.org.orgId,f.actorId,order.id,{quantity:'1',lots:[{quantity:'1',serialNumber:'INSPECTED-SERIAL-2'}]}));
@@ -1553,8 +1578,8 @@ cases.push({name:'continuous process runs require a bounded window, retain their
   assert.equal(order.productionMode,'continuous');assert.equal(order.campaignReference,'WEEK-ONE');
   const updated=await run(tx=>updateDraftWorkOrder(tx,f.org.orgId,f.actorId,order.id,{campaignReference:'WEEK-TWO'}));assert.equal(updated.campaignReference,'WEEK-TWO');
   await run(tx=>releaseWorkOrder(tx,f.org.orgId,f.actorId,order.id));
-  await assert.rejects(run(tx=>tx.execute(sql`update mfg_work_orders set campaign_reference='REWRITE' where org_id=${f.org.orgId} and id=${order.id} returning id`)),/Released work retains/);
-  await assert.rejects(run(tx=>tx.execute(sql`update mfg_work_orders set planned_end=planned_end+1 where org_id=${f.org.orgId} and id=${order.id} returning id`)),/Released work retains/);
+  await assert.rejects(run(tx=>tx.execute(sql`update mfg_work_orders set campaign_reference='REWRITE' where org_id=${f.org.orgId} and id=${order.id} returning id`)),error=>errorChainMatches(error,/Released work retains/));
+  await assert.rejects(run(tx=>tx.execute(sql`update mfg_work_orders set planned_end=planned_end+1 where org_id=${f.org.orgId} and id=${order.id} returning id`)),error=>errorChainMatches(error,/Released work retains/));
   const projected=await run(tx=>readManufacturingRecord(tx,f.org.orgId,null,'work-orders',order.id,f.actorId));assert.equal(projected.record.productionMode,'continuous');assert.equal(projected.record.campaignReference,'WEEK-TWO');
   const matching=await run(tx=>listManufacturingRecords(tx,f.org.orgId,null,'work-orders',{q:'WEEK-TWO'},f.actorId));assert.equal(matching.rows.length,1);assert.equal(matching.rows[0]?.id,order.id);
   await assert.rejects(run(tx=>readManufacturingRecord(tx,f.org.orgId,new Set(),'work-orders',order.id,f.actorId)));assert.equal((await run(tx=>listManufacturingRecords(tx,f.org.orgId,new Set(),'work-orders',{q:'WEEK-TWO'},f.actorId))).total,0);
@@ -1577,8 +1602,17 @@ cases.push({name:'tracked low-value output apportions every ledger unit without 
 for (const scenario of cases) {
   test(`manufacturing completion and reversal: ${scenario.name}`, { skip: !DB, concurrency: false }, async () => {
     const f = await setup();
+    let failure: Error | undefined;
     try { await scenario.run(f); }
-    catch (error) { throw new Error(scenario.name + ": " + (error instanceof Error ? error.message : String(error)), { cause: error }); }
-    finally { await withBypassContext(() => dropScratchOrg(f.org.orgId)); }
+    catch (error) {
+      failure=new Error(scenario.name + ": " + (error instanceof Error ? error.message : String(error)), { cause: error });
+      throw failure;
+    } finally {
+      try { await withBypassContext(() => dropScratchOrg(f.org.orgId)); }
+      catch (cleanupError) {
+        if(failure) throw new AggregateError([failure,cleanupError],"Manufacturing scenario and cleanup both failed",{cause:failure});
+        throw cleanupError;
+      }
+    }
   });
 }
