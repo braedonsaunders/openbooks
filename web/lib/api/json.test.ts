@@ -263,3 +263,14 @@ test("an optional reference treats a blank form value as cleared and still refus
   assert.equal(nullableUuidId.parse(id), id);
   assert.throws(() => nullableUuidId.parse("not-an-id"), /must be a valid id/);
 });
+
+test("optional setup money treats a blank form value as unset and still refuses junk", async () => {
+  const { nullableExactMoney } = await import("./json-schema.ts");
+  const schema = nullableExactMoney();
+  assert.equal(schema.parse(""), null);
+  assert.equal(schema.parse(" "), null);
+  assert.equal(schema.parse(null), null);
+  assert.equal(schema.parse("118"), "118.0000");
+  assert.throws(() => schema.parse("12abc"));
+  assert.throws(() => schema.parse(12));
+});

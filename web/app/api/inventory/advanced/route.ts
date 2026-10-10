@@ -1,5 +1,5 @@
 import { apiErrorResponse } from '@/lib/api/error-response'
-import { exactMoney, isoDate, nullableUuidId, uuidId } from "@/lib/api/json";
+import { exactMoney, isoDate, nullableUuidId, uuidId, nullableExactMoney } from "@/lib/api/json";
 import { defineRoute } from "@/lib/api/route";
 import { z } from "zod";
 import { NextResponse } from "next/server";
@@ -39,7 +39,7 @@ const advancedInventoryBody = z.discriminatedUnion("action", [
     amount: exactMoney(), basis: z.enum(["value", "quantity", "weight", "manual"]).optional(),
     subsidiaryId: uuidId.optional(), voucherDate: isoDate().optional(),
     sourceDocumentLineId: nullableUuidId.optional(), memo: z.string().nullable().optional(),
-    targets: z.array(z.object({ itemId: uuidId, stockLocationId: uuidId, manualAmount: exactMoney().nullable().optional() })).min(1),
+    targets: z.array(z.object({ itemId: uuidId, stockLocationId: uuidId, manualAmount: nullableExactMoney().optional() })).min(1),
   }),
   z.object({ action: z.literal("reverseLandedVoucher"), idempotencyKey: z.string().min(1).optional(), id: z.string().optional(), date: z.string().optional(), memo: z.string().optional() }),
   z.object({ action: z.literal("ensureLot"), itemId: uuidId, lotNumber: z.string().trim().min(1), expiresOn: isoDate().nullable().optional() }),

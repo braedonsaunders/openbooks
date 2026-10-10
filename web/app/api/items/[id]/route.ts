@@ -1,4 +1,4 @@
-import { exactMoney } from "@/lib/api/json";
+import { nullableExactMoney } from "@/lib/api/json";
 import { defineRoute } from "@/lib/api/route";
 import { z } from 'zod'
 import { NextResponse } from 'next/server'
@@ -66,7 +66,7 @@ function uuidOrNull(v: unknown): string | null | 'invalid' {
 const nullableText = z.string().nullable().optional()
 const nullableMoney = z.preprocess(
   value => typeof value === 'string' && value.trim() === '' ? null : value,
-  exactMoney().nullable(),
+  nullableExactMoney(),
 ).optional()
 
 // Validate the complete patch shape before normalization. Non-text values must

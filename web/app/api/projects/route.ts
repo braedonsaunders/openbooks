@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import { NextResponse } from 'next/server'
 import { defineRoute } from '@/lib/api/route'
-import { exactMoney, uuidId } from '@/lib/api/json'
+import { uuidId, nullableExactMoney } from '@/lib/api/json'
 import { unprocessable } from '@/lib/api/responses'
 import { isUuid } from '../../../lib/list-params'
 import { loadProject } from './_lib'
@@ -31,7 +31,7 @@ const projectCreateBody = z.object({
     backupType: z.enum(["costed_timesheets", "timesheets_purchases", "purchases", "purchases_shop_time", "quote_only", "none"]).nullable().optional(),
   }).nullable().optional(),
   custom: z.record(z.string(), z.json()).optional(),
-  contractValue: z.union([exactMoney(), z.null()]).optional(),
+  contractValue: nullableExactMoney().optional(),
   siteJurisdiction: z.string().nullable().optional(),
   projectTypeId: uuidId.nullable().optional(),
   code: z.string().nullable().optional(),
