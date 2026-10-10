@@ -23,12 +23,14 @@ const runBody = z.strictObject({
 export const POST = defineRoute({
   permission: 'documents.manage',
   feature: 'consolidatedBilling',
+  scope: 'unrestricted',
   body: runBody,
   invalidBodyStatus: 400,
   handler: async ({ authz: gate, body }) => {
   try {
     const runs = await runConsolidationGroup(gate.user.orgId, body.groupId, body.periodStart, body.periodEnd, {
       actorId: gate.user.id,
+      allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
       autoPost: body.autoPost ?? false,
     })
     return NextResponse.json({ runs })
