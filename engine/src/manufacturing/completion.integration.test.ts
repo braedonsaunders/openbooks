@@ -368,7 +368,8 @@ const cases: Case[] = [
   }},
   {name:"setup is derived per work family and current product, without production prerequisites on simple projects",run:async f=>{
     await run(tx=>tx.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||'{"projects":true,"manufacturing":false}'::jsonb) where id=${f.org.orgId} returning id`));
-    const job=await run(tx=>readOperatingSetupJourney(tx,f.org.orgId,f.actorId,{family:"project",selection:"shop_jobs"}));
+    const projectReader=await withBypassContext(()=>createWorkOperator(f.org.orgId,'Project setup reader',['admin.setup.manage','projects.read']));
+    const job=await run(tx=>readOperatingSetupJourney(tx,f.org.orgId,projectReader,{family:"project",selection:"shop_jobs"}));
     assert.equal(job.readyFor,"project");assert.deepEqual(job.findings,[]);
     assert.ok(job.nextHref?.startsWith("/projects?projectNew=1"));
     await assert.rejects(run(tx=>readOperatingSetupJourney(tx,f.org.orgId,f.actorId,{family:"production",selection:"discrete_production"})));
@@ -1051,10 +1052,16 @@ for(const {tracking,quarantined} of [{tracking:'lot',quarantined:false},{trackin
   await inspectionPlan(f,item,'receipt');
   const identifier=tracking==='lot'?await withBypassContext(()=>ensureLot(f.org.orgId,item,'REPAIR-'+randomUUID(),null,f.actorId)):await withBypassContext(()=>ensureSerial(f.org.orgId,item,'REPAIR-'+randomUUID(),null,f.actorId));
   const selection={lotId:tracking==='lot'?identifier:null,serialId:tracking==='serial'?identifier:null};
-  const source=await withBypassContext(()=>receiveInventory(f.org.orgId,f.actorId,{itemId:item,stockLocationId:f.org.stockLocationId,quantity,unitCost:'3',subsidiaryId:f.org.subsidiaryId,offsetAccountId:f.org.accounts.clearing,date:f.postingDate,...selection}));
+  let sourceLocationId=f.org.stockLocationId;
+  if(quarantined) {
+    const location=await run(tx=>tx.execute<{id:string}>(sql`insert into stock_locations(org_id,location_id,parent_id,code,kind,is_active,created_by,updated_by)
+      values(${f.org.orgId},${f.org.locationId},${f.org.stockLocationId},'REPAIR-QUARANTINE','quarantine',true,${f.actorId},${f.actorId}) returning id`));
+    assert.equal(location.rows.length,1);
+    sourceLocationId=location.rows[0]!.id;
+  }
+  const source=await withBypassContext(()=>receiveInventory(f.org.orgId,f.actorId,{itemId:item,stockLocationId:sourceLocationId,quantity,unitCost:'3',subsidiaryId:f.org.subsidiaryId,offsetAccountId:f.org.accounts.clearing,date:f.postingDate,...selection}));
   const original=(await run(tx=>tx.execute<{id:string}>(sql`select id from inventory_inspections where org_id=${f.org.orgId} and receipt_movement_id=${source.movementId}`))).rows[0]!;
   await run(tx=>recordQualityInspection(tx,f.org.orgId,f.actorId,original.id,{outcome:'pass',measurements:{length:'10.1000'},reason:'Received finish outside tolerance'}));
-  if(quarantined)assert.equal((await run(tx=>tx.execute(sql`update stock_locations set kind='quarantine' where org_id=${f.org.orgId} and id=${f.org.stockLocationId} returning id`))).rows.length,1);
   await route(f,item);
   const routing=(await run(tx=>tx.execute<{id:string;centerId:string}>(sql`select route.id,operation.work_center_id as "centerId" from mfg_routings route join mfg_routing_operations operation on operation.org_id=route.org_id and operation.routing_id=route.id where route.org_id=${f.org.orgId} and route.produced_item_id=${item} and route.status='active' and operation.sequence=10`))).rows[0]!;
   await run(tx=>addWorkCenterRate(tx,f.org.orgId,f.actorId,routing.centerId,{machineRatePerHour:'12',effectiveFrom:'2026-01-01'}));
@@ -1092,7 +1099,7 @@ for(const {tracking,quarantined} of [{tracking:'lot',quarantined:false},{trackin
   const available=()=>run(tx=>getAvailableToPromise(tx,f.org.orgId,{itemId:item,subsidiaryId:f.org.subsidiaryId}));assert.equal((await available()).available,quantity+'.0000');
   await run(()=>reverseMaterialIssue(f.org.orgId,f.actorId,{movementId:repaired.id,reversalDate:f.postingDate,reason:'Correct repaired receipt without losing original hold'}));
   assert.equal((await available()).available,'0.0000');assert.equal(await wip(f,order.number),receipt.value);
-  const afterReversal=await counts(f);await assert.rejects(run(tx=>issueInventory(f.org.orgId,f.actorId,{tx,itemId:item,stockLocationId:f.org.stockLocationId,quantity,subsidiaryId:f.org.subsidiaryId,date:f.postingDate,...selection})),/held/);assert.deepEqual(await counts(f),afterReversal);
+  const afterReversal=await counts(f);await assert.rejects(run(tx=>issueInventory(f.org.orgId,f.actorId,{tx,itemId:item,stockLocationId:sourceLocationId,quantity,subsidiaryId:f.org.subsidiaryId,date:f.postingDate,...selection})),/held/);assert.deepEqual(await counts(f),afterReversal);
   await run(tx=>completeWorkOrder(tx,f.org.orgId,f.actorId,orderId,{quantity}));assert.equal(await wip(f,order.number),'0.0000');
 }});
 
