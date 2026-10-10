@@ -8,7 +8,7 @@ import {
   dropScratchOrg,
 } from "../../testing/fixtures.ts";
 import { cancelRequisition, createRequisition, openRequisition, reviseRequisition } from "./requisitions.ts";
-import { listActiveJobDescriptions } from "./job-descriptions.ts";
+import { jobDescriptionDeleteRefusal, listActiveJobDescriptions } from "./job-descriptions.ts";
 
 /**
  * Job description library: a requisition copies its content at creation
@@ -109,10 +109,14 @@ test("a requisition copies its job description and keeps the copy when the libra
       /title must be non-blank/,
     );
 
+    const refusal = await jobDescriptionDeleteRefusal(db, org.orgId, jobDescriptionId);
+    assert.match(refusal ?? "", /Job description Superintendent was used by 2 requisitions/, "a referenced entry is refused by name");
+    assert.match(refusal ?? "", /deactivate it instead/, "the refusal names the remedy");
+    assert.equal(await jobDescriptionDeleteRefusal(db, org.orgId, retiredId), null, "an unused entry may be deleted");
+    // Storage stays the backstop for a reference created between the check and the DELETE.
     await assert.rejects(
       db.execute(sql`delete from hrm_job_descriptions where org_id = ${org.orgId} and id = ${jobDescriptionId}`),
-      /hrm_requisitions_job_description_tenant_fkey/,
-      "a referenced entry is history-pinned",
+      (error: { cause?: { constraint?: string } }) => error.cause?.constraint === "hrm_requisitions_job_description_tenant_fkey",
     );
   } finally {
     await dropScratchOrg(org.orgId);

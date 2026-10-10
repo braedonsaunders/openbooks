@@ -32,6 +32,7 @@ import { RecruitingError } from '@openbooks/engine/src/hrm/recruiting/errors.ts'
 import { parseClauses } from '@openbooks/engine/src/hrm/recruiting/offers-signing.ts'
 import { validateAvailabilityWindows } from '@openbooks/engine/src/hrm/recruiting/scheduling.ts'
 import { requireCompensation } from '@openbooks/engine/src/hrm/recruiting/requisitions.ts'
+import { jobDescriptionDeleteRefusal } from '@openbooks/engine/src/hrm/recruiting/job-descriptions.ts'
 // HR-18 end
 import { SETUP_ENTITY_BY_KEY, resolveSetupEntityGate, setupEntityForFeatureState, setupEntitySubsidiaryField, setupEntitySubsidiaryReferenceFields, toSnake, type SetupEntity } from './registry'
 import { permissionSetCovers } from '../permissions'
@@ -3220,6 +3221,10 @@ export async function deleteSetupRecord(
       }
       if (entity.key === 'stock-locations') await assertStockLocationDeletionAllowed(tx, orgId, id)
       if (entity.key === 'item-rate-books' && before.is_default) throw new Error('default-required')
+      if (entity.key === 'hrm-job-descriptions') {
+        const refusal = await jobDescriptionDeleteRefusal(tx, orgId, id)
+        if (refusal) throw new SetupWriteRefusal(refusal, 409)
+      }
       if (entity.key === 'account-groups') {
         const pinned = await tx.execute(sql`select 1 from account_group_members where group_id = ${id} and org_id = ${orgId} limit 1`)
         if (pinned.rows.length > 0) throw new SetupWriteRefusal('account group still has pinned accounts — unpin or reassign them before deleting the group', 409)
