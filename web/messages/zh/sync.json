@@ -549,8 +549,145 @@
     "placeholder": "告诉我您目前的账簿在哪个系统中，或拖入导出文件…",
     "entry": {
       "plan": "规划迁移",
-      "wizard": "使用迁移助手规划迁移",
+      "cutover": "开始引导式切换",
       "sync": "咨询迁移助手"
+    },
+    "cutover": {
+      "title": "迁移账簿",
+      "description": "按任意顺序逐步结转余额、未结发票和账单、资产以及银行期初余额。此处不需要 AI 助手。",
+      "anyOrder": "按任意顺序完成各步骤，不适用的可跳过——只有上线才会检查其前提条件。",
+      "progress": "{total} 个步骤中已完成 {done} 个",
+      "save": "保存",
+      "saving": "保存中…",
+      "saved": "已保存。",
+      "requestFailed": "请求失败，请重试。",
+      "state": {
+        "complete": "已完成",
+        "current": "进行中",
+        "upcoming": "等待中"
+      },
+      "helper": {
+        "title": "需要迁移帮助吗？",
+        "description": "迁移助手会回答有关账簿的问题，并起草与本页所述相同的分录和导入。未经您批准，不会发生任何更改。",
+        "action": "打开迁移助手"
+      },
+      "setup": {
+        "title": "迁移方案",
+        "description": "账簿的迁入方式，以及区分旧账与新账的日期。",
+        "path": "账簿迁入方式",
+        "paths": {
+          "spreadsheet": "从电子表格",
+          "cutover": "从已连接系统迁入后切换",
+          "mirror": "从已连接系统同步",
+          "fresh": "全新开始，无历史数据"
+        },
+        "pathHint": "手工账适合使用电子表格。已连接系统通过“迁移与同步”进行迁移。",
+        "source": "原系统",
+        "sourcePlaceholder": "例如：电子表格、桌面账务软件",
+        "cutoverDate": "切换日期",
+        "cutoverDateHint": "在此新账簿而非原系统中记录的第一天。",
+        "clearing": "期初过渡科目",
+        "clearingHint": "未结发票和期初试算表在此过渡，直至双方核对一致。可选。",
+        "none": "无",
+        "connector": "该路径在“迁移与同步”中加载——在那里连接来源、演练并加载历史数据，然后返回此处进行最终检查。",
+        "openSync": "打开“迁移与同步”",
+        "freshNote": "没有需要迁入的历史数据：设置切换日期，然后运行下方的最终检查。"
+      },
+      "steps": {
+        "title": "切换清单",
+        "plan": {
+          "title": "选择账簿迁入方式",
+          "description": "在上方选择电子表格方式，或连接原系统。",
+          "action": "查看计划"
+        },
+        "cutoverDate": {
+          "title": "设置切换日期",
+          "description": "在新账簿中的第一天。期初余额使用前一天的日期。",
+          "action": "设置日期"
+        },
+        "opening": {
+          "title": "记入期初试算表",
+          "description": "根据下方准备的期初试算表：生成切换日前一天的平衡标准分录。不平衡的文件会被拒绝，绝不自动轧平。",
+          "action": "起草期初分录"
+        },
+        "receivables": {
+          "title": "导入未结客户发票",
+          "description": "切换时点的未付发票，保留原始日期和到期日，计入过渡科目。在“导入”中选择客户发票模板。",
+          "action": "打开导入"
+        },
+        "payables": {
+          "title": "导入未结供应商账单",
+          "description": "切换时点的未付账单，保留原始日期和到期日，计入过渡科目。在“导入”中选择供应商账单模板。",
+          "action": "打开导入"
+        },
+        "assets": {
+          "title": "导入固定资产",
+          "description": "每项资产的成本、投用日期和切换时点的累计折旧。在“导入”中选择固定资产模板。",
+          "action": "打开导入"
+        },
+        "bank": {
+          "title": "设置银行期初时点",
+          "description": "银行余额随期初试算表迁入。然后导入第一份对账单并开始首次对账，以证明期初余额。",
+          "action": "打开银行"
+        },
+        "checks": {
+          "title": "运行最终检查并上线",
+          "description": "自切换日期上线之前，每项必查检查都必须通过。",
+          "action": "查看检查"
+        }
+      },
+      "stepDetail": {
+        "journalDraft": "分录 {number}·草稿——请在日记账中复核并记账。",
+        "journalPosted": "分录 {number}·已记账。",
+        "noJournal": "尚无期初分录。",
+        "imported": "{count, plural, other {# 个列表已导入}}——请运行最终检查加以证明。",
+        "notImported": "尚未导入任何内容。",
+        "bankReady": "{count, plural, other {# 个银行账户}}已就绪。",
+        "noBank": "尚无银行账户——请在“银行”或会计科目表中添加。",
+        "blockers": "{count, plural, other {# 项必查检查未完成。}}",
+        "live": "自 {date} 起已上线。",
+        "ready": "所有必查检查均已通过——可以上线。"
+      },
+      "opening": {
+        "title": "期初试算表",
+        "description": "在“导入”中准备试算表导出文件，在此选择并映射列，准确预览将要记账的内容。起草会生成标准草稿分录，由您亲自复核并记账。",
+        "upload": "在“导入”中上传文件",
+        "staged": "{name} · {rows, plural, other {# 行}}",
+        "noFile": "请选择已准备的文件，或先在“导入”中上传。",
+        "columnAccount": "科目列",
+        "columnDebit": "借方列",
+        "columnCredit": "贷方列",
+        "columnAmount": "带符号金额列",
+        "columnAmountHint": "使用借方和贷方列，或使用带符号金额列（借方为正），不能同时使用。",
+        "columnDescription": "摘要列（可选）",
+        "documentDate": "余额基准日",
+        "documentDateHint": "切换日期的前一天。",
+        "memo": "分录摘要（可选）",
+        "receivablesLine": "应收控制行（与文件中写法一致）",
+        "payablesLine": "应付控制行（与文件中写法一致）",
+        "remapHint": "控制行将重定向到上方的过渡科目，因为导入的发票会重建这些余额。",
+        "equity": "差额权益科目",
+        "equityHint": "留空则拒绝不平衡的文件。只有在您批准将差额记入某权益科目时才指定。",
+        "preview": "预览",
+        "previewing": "预览中…",
+        "draft": "起草分录",
+        "drafting": "起草中…",
+        "needsPermission": "起草期初分录需要记账和导入权限，请管理员授予。",
+        "needsCutover": "请先在上方设置切换日期——分录使用其前一天的日期。",
+        "totals": "借方 {debits}·贷方 {credits}",
+        "lines": "{count, plural, other {# 行}}·{skipped, plural, other {# 个零行已跳过}}",
+        "drafted": "已创建草稿分录 {number}。",
+        "openDraft": "在日记账中复核并记入草稿",
+        "issues": "需要注意"
+      },
+      "goLive": {
+        "record": "记录上线",
+        "recording": "记录中…",
+        "confirm": "记录这些账簿自 {date} 起上线吗？将以实测检查作为证据记录一次。",
+        "reason": "审计记录确认语",
+        "reasonPlaceholder": "例如：余额和未结项目已与原系统核对",
+        "recorded": "这些账簿自 {date} 起已上线。后续更正通过标准日记账流程进行。"
+      }
     },
     "attach": {
       "label": "附加导出文件",

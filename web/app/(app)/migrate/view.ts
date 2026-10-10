@@ -1,7 +1,10 @@
 import 'server-only'
 
 import { redirect } from 'next/navigation'
-import { page, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
+import { sql } from 'drizzle-orm'
+import { getTranslations } from 'next-intl/server'
+import { page, pageHeader, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
+import { db } from '@openbooks/engine/platform/database'
 import { can, requirePermission } from '../../../lib/authz'
 import { accessDeniedHref } from '../../../lib/gate-targets'
 import { getOrgAiConfig } from '../../../lib/assistant/ai-config'
@@ -10,13 +13,79 @@ import { listConversations, ownsConversation, recentMessages } from '../../../li
 import { isUuid } from '../../../lib/list-params'
 import { loadMigrationJourney, type MigrationJourney } from '../../../lib/migration/journey'
 import { MIGRATION_WORKSPACE_HREF } from '../../../lib/migration/links'
+import type { CutoverAccountChoice } from '../../../components/migration/migration-cutover'
 
 /**
- * The migration workspace: a migration-scoped assistant conversation beside
- * the measured migration plan. Migration is organization-wide setup work, so
- * the page needs the setup permission with unrestricted subsidiary access;
- * the plan renders without an AI provider, and the conversation needs
- * assistant access.
+ * The guided migration cutover: the checklist every path works through,
+ * with or without the assistant. Migration is organization-wide setup
+ * work, so the page needs the setup permission with unrestricted
+ * subsidiary access. The opening-balance draft needs the import and
+ * posting permissions; its card names the missing permission with the
+ * remedy instead of hiding the work.
+ */
+
+export interface MigrationCutoverData {
+  title: string
+  description: string
+  journey: MigrationJourney
+  accounts: CutoverAccountChoice[]
+  canDraftOpening: boolean
+  canImport: boolean
+  aiEnabled: boolean
+}
+
+async function chartPostingAccounts(orgId: string): Promise<CutoverAccountChoice[]> {
+  const rows = (await db.execute<{ id: string; number: string | null; name: string }>(sql`
+    select id, number, name from accounts
+     where org_id = ${orgId} and is_active and not is_summary
+     order by number nulls last, name`)).rows
+  return rows.map((row) => ({ id: row.id, number: row.number, name: row.name }))
+}
+
+export async function loadMigrationCutover(): Promise<MigrationCutoverData> {
+  const authz = await requirePermission('admin.setup.manage')
+  if (authz.allowedSubsidiaryIds !== null) redirect(accessDeniedHref({ permission: 'admin.setup.manage' }))
+  const t = await getTranslations('sync.migrationAssistant')
+  const [journey, aiConfig, accounts] = await Promise.all([
+    loadMigrationJourney(authz.user.orgId),
+    getOrgAiConfig(authz.user.orgId),
+    chartPostingAccounts(authz.user.orgId),
+  ])
+  return {
+    title: t('cutover.title'),
+    description: t('cutover.description'),
+    journey,
+    accounts,
+    canDraftOpening: can(authz, 'gl.post') && can(authz, 'data.import'),
+    canImport: can(authz, 'data.import'),
+    aiEnabled: can(authz, 'assistant.use') && getModel(aiConfig, 'smart') !== null,
+  }
+}
+
+export function migrationCutoverSpec(data: MigrationCutoverData): PageSpec {
+  return page({
+    route: '/migrate',
+    layout: 'list',
+    header: [
+      pageHeader({
+        title: data.title,
+        description: data.description,
+      }),
+    ],
+    body: [widgetBlock('migration-cutover', {
+      journey: data.journey,
+      accounts: data.accounts,
+      canDraftOpening: data.canDraftOpening,
+      canImport: data.canImport,
+      aiEnabled: data.aiEnabled,
+    })],
+  })
+}
+
+/**
+ * The migration assistant conversation beside the measured migration plan,
+ * now an optional helper reached from the guided cutover. New conversations
+ * start at /migrate/assistant; deep-linkable threads stay at /migrate/[id].
  */
 
 export interface MigrationWorkspaceData {
@@ -29,10 +98,6 @@ export interface MigrationWorkspaceData {
   canImport: boolean
   journey: MigrationJourney
   initialPrompt?: string
-}
-
-export async function loadMigrationWorkspace(sp: Record<string, string | string[] | undefined> = {}): Promise<MigrationWorkspaceData> {
-  return migrationWorkspaceData(null, sp)
 }
 
 /** The workspace payload for a new conversation (`null`) or one owned migration conversation. */
@@ -72,9 +137,9 @@ export async function migrationWorkspaceData(
   }
 }
 
-export function migrationWorkspaceSpec(data: MigrationWorkspaceData): PageSpec {
+export function migrationWorkspaceSpec(route: string, data: MigrationWorkspaceData): PageSpec {
   return page({
-    route: '/migrate',
+    route,
     // Bare: the workspace owns its full-height flex column, like the assistant.
     layout: 'bare',
     header: [],

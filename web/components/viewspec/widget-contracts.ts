@@ -333,6 +333,7 @@ export const WIDGET_CONTRACTS: Readonly<Record<string, WidgetContract>> = {
   'matrix-filters': { props: ['classId', 'classes', 'state'] },
   'metric-tile': { props: ['label', 'locale', 'tone', 'value'] },
   'migration-workspace': { props: ['activeId', 'aiEnabled', 'canConfigureAi', 'canImport', 'canWrite', 'conversations', 'initialMessages', 'initialPrompt', 'journey'] },
+  'migration-cutover': { props: ['accounts', 'aiEnabled', 'canDraftOpening', 'canImport', 'journey'] },
   'module-home-tabs': { props: ['tabs'] },
   'narrative-drawer': { props: ['drawer'] },
   'narrative-entry': { props: ['href', 'labels', 'narrative'] },

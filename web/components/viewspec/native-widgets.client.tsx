@@ -145,6 +145,7 @@ export const MeExportDialog = dynamic(() => import("../../app/(app)/me/documents
 export const MeExportDownload = dynamic(() => import("../../app/(app)/me/documents/sections").then(module => module.MeExportDownload))
 export const MeSurveyRespond = dynamic(() => import("../../app/(app)/me/surveys/sections").then(module => module.MeSurveyRespond))
 export const MigrationWorkspace = dynamic(() => import("../migration/migration-workspace").then(module => module.MigrationWorkspace))
+export const MigrationCutover = dynamic(() => import("../migration/migration-cutover").then(module => module.MigrationCutover))
 export const MySchedule = dynamic(() => import("../scheduling/MySchedule").then(module => module.MySchedule))
 export const NarrativeDrawer = dynamic(() => import("../../app/(app)/continuous-close/NarrativeDrawer").then(module => module.NarrativeDrawer))
 export const NativeListDrawer = dynamic(() => import("../native-list-drawer").then(module => module.NativeListDrawer))

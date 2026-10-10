@@ -549,8 +549,145 @@
     "placeholder": "Indiquez-moi où se trouve votre comptabilité aujourd’hui, ou déposez un fichier d’export…",
     "entry": {
       "plan": "Planifier la migration",
-      "wizard": "Planifier ma migration avec l’assistant de migration",
+      "cutover": "Démarrer le basculement guidé",
       "sync": "Demander à l’assistant de migration"
+    },
+    "cutover": {
+      "title": "Transférer votre comptabilité",
+      "description": "Transférez vos soldes, factures en cours, immobilisations et soldes bancaires initiaux étape par étape, dans l’ordre de votre choix. L’assistant IA n’est nécessaire pour rien ici.",
+      "anyOrder": "Traitez les étapes dans n’importe quel ordre et ignorez ce qui ne s’applique pas — seule la mise en production vérifie ses exigences.",
+      "progress": "{done} étapes terminées sur {total}",
+      "save": "Enregistrer",
+      "saving": "Enregistrement…",
+      "saved": "Enregistré.",
+      "requestFailed": "La demande a échoué. Réessayez.",
+      "state": {
+        "complete": "Terminé",
+        "current": "En cours",
+        "upcoming": "En attente"
+      },
+      "helper": {
+        "title": "Besoin d’aide pour le transfert ?",
+        "description": "L’assistant de migration répond à vos questions sur votre comptabilité et prépare les mêmes écritures et imports que cette page décrit. Rien ne change sans votre approbation.",
+        "action": "Ouvrir l’assistant de migration"
+      },
+      "setup": {
+        "title": "Votre transfert",
+        "description": "Comment votre comptabilité arrive, et la date qui sépare l’ancienne comptabilité de celle-ci.",
+        "path": "Mode d’arrivée de la comptabilité",
+        "paths": {
+          "spreadsheet": "Depuis des tableurs",
+          "cutover": "Depuis un système connecté, puis basculement",
+          "mirror": "Répliqué depuis un système connecté",
+          "fresh": "Nouveau départ, sans historique"
+        },
+        "pathHint": "Les tableurs conviennent aux comptabilités manuelles. Un système connecté migre via Migration et synchronisation.",
+        "source": "Système précédent",
+        "sourcePlaceholder": "p. ex. tableurs, comptabilité locale",
+        "cutoverDate": "Date de basculement",
+        "cutoverDateHint": "Premier jour tenu dans cette comptabilité plutôt que dans le système précédent.",
+        "clearing": "Compte d’attente d’ouverture",
+        "clearingHint": "Les factures en cours et la balance d’ouverture s’y compensent jusqu’à concordance des deux côtés. Facultatif.",
+        "none": "Aucun",
+        "connector": "Ce parcours se charge dans Migration et synchronisation — connectez-y la source, répétez et chargez l’historique, puis revenez ici pour les contrôles finaux.",
+        "openSync": "Ouvrir Migration et synchronisation",
+        "freshNote": "Aucun historique à reprendre : fixez la date de basculement, puis lancez les contrôles finaux ci-dessous."
+      },
+      "steps": {
+        "title": "Liste de basculement",
+        "plan": {
+          "title": "Choisir le mode d’arrivée",
+          "description": "Choisissez ci-dessus la voie tableur, ou connectez le système précédent.",
+          "action": "Revoir le plan"
+        },
+        "cutoverDate": {
+          "title": "Fixer la date de basculement",
+          "description": "Le premier jour dans cette comptabilité. Les soldes d’ouverture sont datés de la veille.",
+          "action": "Fixer la date"
+        },
+        "opening": {
+          "title": "Comptabiliser la balance d’ouverture",
+          "description": "Depuis la balance préparée ci-dessous : une écriture native équilibrée datée de la veille du basculement. Un fichier déséquilibré est refusé, jamais ajusté.",
+          "action": "Préparer l’écriture d’ouverture"
+        },
+        "receivables": {
+          "title": "Importer les factures clients en cours",
+          "description": "Factures impayées au basculement, avec dates et échéances d’origine, imputées au compte d’attente. Choisissez le modèle de factures clients dans Import.",
+          "action": "Ouvrir Import"
+        },
+        "payables": {
+          "title": "Importer les factures fournisseurs en cours",
+          "description": "Factures impayées au basculement, avec dates et échéances d’origine, imputées au compte d’attente. Choisissez le modèle de factures fournisseurs dans Import.",
+          "action": "Ouvrir Import"
+        },
+        "assets": {
+          "title": "Importer les immobilisations",
+          "description": "Chaque bien avec son coût, sa date de mise en service et son amortissement cumulé au basculement. Choisissez le modèle d’immobilisations dans Import.",
+          "action": "Ouvrir Import"
+        },
+        "bank": {
+          "title": "Fixer les points de départ bancaires",
+          "description": "Les soldes bancaires arrivent avec la balance d’ouverture. Importez ensuite le premier relevé et démarrez le premier rapprochement, qui prouve l’ouverture.",
+          "action": "Ouvrir Banque"
+        },
+        "checks": {
+          "title": "Lancer les contrôles finaux et passer en production",
+          "description": "Chaque contrôle requis doit réussir avant le passage en production à la date de basculement.",
+          "action": "Revoir les contrôles"
+        }
+      },
+      "stepDetail": {
+        "journalDraft": "Écriture {number} · brouillon — contrôlez-la et comptabilisez-la depuis le journal.",
+        "journalPosted": "Écriture {number} · comptabilisée.",
+        "noJournal": "Pas encore d’écriture d’ouverture.",
+        "imported": "{count, plural, one {# liste importée} other {# listes importées}} — lancez les contrôles finaux pour les prouver.",
+        "notImported": "Rien importé pour l’instant.",
+        "bankReady": "{count, plural, one {# compte bancaire} other {# comptes bancaires}} prêts.",
+        "noBank": "Pas encore de comptes bancaires — créez-les dans Banque ou dans le plan comptable.",
+        "blockers": "{count, plural, one {# contrôle requis en suspens.} other {# contrôles requis en suspens.}}",
+        "live": "En production depuis le {date}.",
+        "ready": "Chaque contrôle requis réussit — prêt pour la mise en production."
+      },
+      "opening": {
+        "title": "Balance d’ouverture",
+        "description": "Préparez l’export de la balance dans Import, sélectionnez-le ici, mappez ses colonnes et prévisualisez exactement ce qui serait comptabilisé. Le brouillon crée une écriture native que vous contrôlez et comptabilisez vous-même.",
+        "upload": "Téléverser le fichier dans Import",
+        "staged": "{name} · {rows, plural, one {# ligne} other {# lignes}}",
+        "noFile": "Sélectionnez le fichier préparé, ou téléversez-le d’abord dans Import.",
+        "columnAccount": "Colonne de compte",
+        "columnDebit": "Colonne débit",
+        "columnCredit": "Colonne crédit",
+        "columnAmount": "Colonne de montant signé",
+        "columnAmountHint": "Utilisez soit les colonnes débit et crédit, soit une colonne de montant signé (débit positif) — pas les deux.",
+        "columnDescription": "Colonne de libellé (facultatif)",
+        "documentDate": "Soldes au",
+        "documentDateHint": "La veille de la date de basculement.",
+        "memo": "Libellé de l’écriture (facultatif)",
+        "receivablesLine": "Ligne de contrôle clients, telle qu’écrite dans le fichier",
+        "payablesLine": "Ligne de contrôle fournisseurs, telle qu’écrite dans le fichier",
+        "remapHint": "Les lignes de contrôle pointent vers le compte d’attente ci-dessus, car les factures importées reconstruisent ces soldes.",
+        "equity": "Compte de capitaux propres pour un écart",
+        "equityHint": "Laissez vide pour refuser un fichier déséquilibré. Nommez un compte de capitaux propres uniquement si vous approuvez d’y comptabiliser l’écart.",
+        "preview": "Aperçu",
+        "previewing": "Aperçu en cours…",
+        "draft": "Préparer l’écriture",
+        "drafting": "Préparation…",
+        "needsPermission": "La préparation de l’écriture d’ouverture exige les permissions de comptabilisation et d’import. Demandez à un admin de les accorder.",
+        "needsCutover": "Fixez d’abord la date de basculement ci-dessus — l’écriture est datée de la veille.",
+        "totals": "Débit {debits} · crédit {credits}",
+        "lines": "{count, plural, one {# ligne} other {# lignes}} · {skipped, plural, one {# ligne zéro ignorée} other {# lignes zéro ignorées}}",
+        "drafted": "Brouillon {number} créé.",
+        "openDraft": "Contrôler et comptabiliser le brouillon dans le journal",
+        "issues": "À vérifier"
+      },
+      "goLive": {
+        "record": "Enregistrer la mise en production",
+        "recording": "Enregistrement…",
+        "confirm": "Enregistrer que cette comptabilité est en production depuis le {date} ? L’enregistrement est unique, avec les contrôles mesurés comme preuve.",
+        "reason": "Confirmation pour le journal d’audit",
+        "reasonPlaceholder": "p. ex. soldes et postes ouverts vérifiés contre le système précédent",
+        "recorded": "Cette comptabilité est en production depuis le {date}. Les corrections ultérieures passent par le journal natif."
+      }
     },
     "attach": {
       "label": "Joindre un fichier d’export",

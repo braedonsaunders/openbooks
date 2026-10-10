@@ -549,8 +549,145 @@
     "placeholder": "Tell me where your books live today, or drop an export file…",
     "entry": {
       "plan": "Plan the migration",
-      "wizard": "Plan my move with the migration assistant",
+      "cutover": "Start the guided cutover",
       "sync": "Ask the migration assistant"
+    },
+    "cutover": {
+      "title": "Move your books",
+      "description": "Bring your balances, open invoices and bills, assets, and bank starting points across step by step, in any order. Nothing here needs the AI assistant.",
+      "anyOrder": "Work the steps in any order, and skip what does not apply — only go-live checks its requirements.",
+      "progress": "{done} of {total} steps complete",
+      "save": "Save",
+      "saving": "Saving…",
+      "saved": "Saved.",
+      "requestFailed": "The request failed. Try again.",
+      "state": {
+        "complete": "Done",
+        "current": "Now",
+        "upcoming": "Waiting"
+      },
+      "helper": {
+        "title": "Want help with the move?",
+        "description": "The migration assistant answers questions about your books and drafts the same entries and imports this page describes. Nothing changes until you approve it.",
+        "action": "Open the migration assistant"
+      },
+      "setup": {
+        "title": "Your move",
+        "description": "How your books arrive, and the date that separates the old books from these.",
+        "path": "How the books arrive",
+        "paths": {
+          "spreadsheet": "From spreadsheets",
+          "cutover": "From a connected system, then cut over",
+          "mirror": "Mirrored from a connected system",
+          "fresh": "Starting fresh, no history"
+        },
+        "pathHint": "Spreadsheets suit manual books. A connected system migrates through Migration & Sync.",
+        "source": "Previous system",
+        "sourcePlaceholder": "e.g. spreadsheets, desktop ledger",
+        "cutoverDate": "Cutover date",
+        "cutoverDateHint": "First day kept in these books rather than the previous system.",
+        "clearing": "Opening clearing account",
+        "clearingHint": "Open invoices, bills, and the trial balance offset here until both sides tie out. Optional.",
+        "none": "None",
+        "connector": "This path loads on Migration & Sync — connect the source, rehearse, and load history there, then return here for the final checks.",
+        "openSync": "Open Migration & Sync",
+        "freshNote": "No history to bring: set the cutover date, then run the final checks below."
+      },
+      "steps": {
+        "title": "Cutover checklist",
+        "plan": {
+          "title": "Choose how the books arrive",
+          "description": "Pick the spreadsheet path above, or connect the previous system.",
+          "action": "Review the plan"
+        },
+        "cutoverDate": {
+          "title": "Set the cutover date",
+          "description": "The first day kept in these books. Opening balances are dated the day before.",
+          "action": "Set the date"
+        },
+        "opening": {
+          "title": "Post the opening trial balance",
+          "description": "From the staged trial balance below: a balanced native journal dated the day before cutover. An unbalanced file is refused, never plugged.",
+          "action": "Draft the opening journal"
+        },
+        "receivables": {
+          "title": "Import open customer invoices",
+          "description": "Unpaid invoices as of cutover, with original dates and due dates, coded to the clearing account. Pick the customer invoices template on Import.",
+          "action": "Open Import"
+        },
+        "payables": {
+          "title": "Import open vendor bills",
+          "description": "Unpaid bills as of cutover, with original dates and due dates, coded to the clearing account. Pick the vendor bills template on Import.",
+          "action": "Open Import"
+        },
+        "assets": {
+          "title": "Import fixed assets",
+          "description": "Each asset with its cost, in-service date, and accumulated depreciation as of cutover. Pick the fixed assets template on Import.",
+          "action": "Open Import"
+        },
+        "bank": {
+          "title": "Set bank starting points",
+          "description": "Bank balances arrive with the opening trial balance. Then import the first statement and start the first reconciliation, which proves the opening.",
+          "action": "Open Banking"
+        },
+        "checks": {
+          "title": "Run the final checks and go live",
+          "description": "Every required check must pass before these books go live from the cutover date.",
+          "action": "Review the checks"
+        }
+      },
+      "stepDetail": {
+        "journalDraft": "Journal {number} · draft — review and post it from the journal.",
+        "journalPosted": "Journal {number} · posted.",
+        "noJournal": "No opening journal yet.",
+        "imported": "{count, plural, one {# list imported} other {# lists imported}} — run the final checks to prove them.",
+        "notImported": "Nothing imported yet.",
+        "bankReady": "{count, plural, one {# bank account} other {# bank accounts}} ready.",
+        "noBank": "No bank accounts yet — add them under Banking or the chart of accounts.",
+        "blockers": "{count, plural, one {# required check is open.} other {# required checks are open.}}",
+        "live": "Live since {date}.",
+        "ready": "Every required check passes — ready to go live."
+      },
+      "opening": {
+        "title": "Opening trial balance",
+        "description": "Stage the trial-balance export on Import, pick it here, map its columns, and preview exactly what would post. Drafting creates a native draft journal you review and post yourself.",
+        "upload": "Upload the file on Import",
+        "staged": "{name} · {rows, plural, one {# row} other {# rows}}",
+        "noFile": "Pick the staged file, or upload it on Import first.",
+        "columnAccount": "Account column",
+        "columnDebit": "Debit column",
+        "columnCredit": "Credit column",
+        "columnAmount": "Signed amount column",
+        "columnAmountHint": "Use either debit and credit columns or one signed, debit-positive amount column — not both.",
+        "columnDescription": "Description column (optional)",
+        "documentDate": "Balances as of",
+        "documentDateHint": "The day before the cutover date.",
+        "memo": "Journal memo (optional)",
+        "receivablesLine": "Receivables control line, as written in the file",
+        "payablesLine": "Payables control line, as written in the file",
+        "remapHint": "Control lines re-point to the clearing account above, because the imported invoices and bills rebuild those balances.",
+        "equity": "Equity account for a difference",
+        "equityHint": "Leave empty to refuse an unbalanced file. Name an equity account only when you approve booking the difference there.",
+        "preview": "Preview",
+        "previewing": "Previewing…",
+        "draft": "Draft the journal",
+        "drafting": "Drafting…",
+        "needsPermission": "Drafting the opening journal needs the posting and import permissions. Ask an admin to grant them.",
+        "needsCutover": "Set the cutover date above first — the journal is dated the day before it.",
+        "totals": "Debits {debits} · credits {credits}",
+        "lines": "{count, plural, one {# line} other {# lines}} · {skipped, plural, one {# zero row skipped} other {# zero rows skipped}}",
+        "drafted": "Draft journal {number} created.",
+        "openDraft": "Review and post the draft in the journal",
+        "issues": "Needs attention"
+      },
+      "goLive": {
+        "record": "Record go-live",
+        "recording": "Recording…",
+        "confirm": "Record that these books are live from {date}? This is recorded once, with the measured checks as evidence.",
+        "reason": "Confirmation for the audit record",
+        "reasonPlaceholder": "e.g. balances and open items verified against the previous system",
+        "recorded": "These books are live since {date}. Later corrections go through the native journal workflow."
+      }
     },
     "attach": {
       "label": "Attach an export file",

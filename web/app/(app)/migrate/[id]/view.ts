@@ -1,7 +1,7 @@
 import 'server-only'
 
-import { page, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
-import { migrationWorkspaceData, type MigrationWorkspaceData } from '../view'
+import type { PageSpec } from '@braedonsaunders/appkit-viewspec'
+import { migrationWorkspaceData, migrationWorkspaceSpec, type MigrationWorkspaceData } from '../view'
 
 /** One deep-linkable migration conversation: the workspace loader with an owned conversation. */
 export function loadMigrationConversation(id: string): Promise<MigrationWorkspaceData> {
@@ -9,10 +9,5 @@ export function loadMigrationConversation(id: string): Promise<MigrationWorkspac
 }
 
 export function migrationConversationSpec(data: MigrationWorkspaceData): PageSpec {
-  return page({
-    route: '/migrate/[id]',
-    layout: 'bare',
-    header: [],
-    body: [widgetBlock('migration-workspace', { ...data })],
-  })
+  return migrationWorkspaceSpec('/migrate/[id]', data)
 }

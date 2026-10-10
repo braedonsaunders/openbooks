@@ -362,6 +362,7 @@ export const WIDGET_FAMILY: Readonly<Record<string, WidgetFamily>> = {
   'matrix-filters': 'operations',
   'metric-tile': 'agents',
   'migration-workspace': 'agents',
+  'migration-cutover': 'agents',
   'module-home-tabs': 'home',
   'narrative-drawer': 'agents',
   'narrative-entry': 'agents',
