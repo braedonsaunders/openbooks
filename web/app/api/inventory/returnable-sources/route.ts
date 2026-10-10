@@ -28,6 +28,19 @@ const SIDE_KINDS: Record<string, { side: ReturnSide; creditKind: string }> = {
 }
 
 /**
+ * The credit kind authoring the return. The sales side serves customer
+ * credits and cash refunds; each is gated by its own edit permission and
+ * feature flag, so an AR-only reader is never offered refund evidence (and
+ * vice versa). Absent or unknown falls back to the side default.
+ */
+function creditKindFor(url: URL, rules: { side: ReturnSide; creditKind: string }): string {
+  const kind = url.searchParams.get('kind') ?? ''
+  if (rules.side === 'sales' && (kind === 'customer_credit' || kind === 'cash_refund')) return kind
+  if (rules.side === 'purchase' && kind === 'vendor_credit') return kind
+  return rules.creditKind
+}
+
+/**
  * Posted receipts (purchase) or shipments (sales) a credit memo may still
  * return for this party, with the quantity left on each.
  *
@@ -42,7 +55,8 @@ async function getReturnableSources(req: Request) {
   if (!rules) {
     return NextResponse.json({ error: 'side must be purchase or sales' }, { status: 400 })
   }
-  const gate = await guardPermission(createPermission(rules.creditKind))
+  const creditKind = creditKindFor(url, rules)
+  const gate = await guardPermission(createPermission(creditKind))
   if (gate instanceof NextResponse) return gate
 
   // Returns are an inventory capability, and the credit kind itself can be
@@ -50,7 +64,7 @@ async function getReturnableSources(req: Request) {
   // picker must not appear to offer one.
   if (
     !(await isFeatureEnabled(gate.user.orgId, 'inventory')) ||
-    !(await isDocKindEnabled(gate.user.orgId, rules.creditKind))
+    !(await isDocKindEnabled(gate.user.orgId, creditKind))
   ) {
     return notFound("record")
   }
@@ -109,10 +123,10 @@ async function getReturnableSources(req: Request) {
 
 export const GET = defineRoute({
   authorize: async ({ request }) => {
-    const side = new URL(request.url).searchParams.get('side') ?? ''
-    const rules = SIDE_KINDS[side]
+    const url = new URL(request.url)
+    const rules = SIDE_KINDS[url.searchParams.get('side') ?? '']
     if (!rules) return NextResponse.json({ error: 'side must be purchase or sales' }, { status: 400 })
-    return guardPermission(createPermission(rules.creditKind))
+    return guardPermission(createPermission(creditKindFor(url, rules)))
   },
   feature: { none: 'The handler additionally applies the inventory and credit-kind feature gates for the selected return side.' },
   handler: async ({ request }) => getReturnableSources(request),

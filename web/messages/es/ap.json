@@ -64,6 +64,8 @@
     "formPreferredFailed": "No se pudo guardar el formulario preferido",
     "returnsReceipt": "Devuelve recepción",
     "returnsNone": "Sin devolución de existencias",
+    "returnsChoose": "Elegir…",
+    "returnsNoGoods": "Bonificación — sin devolución de mercancía",
     "controlAccount": "Cuenta por pagar",
     "controlAccountHelp": "La cuenta por pagar en la que se contabiliza este documento. Los pagos y créditos de proveedor lo liquidan en la misma cuenta. Déjela vacía para usar la predeterminada.",
     "controlAccountPartyDefault": "Predeterminada del proveedor — {account}",

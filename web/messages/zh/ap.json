@@ -64,6 +64,8 @@
     "formPreferredFailed": "无法保存首选表单",
     "returnsReceipt": "退回的收货",
     "returnsNone": "不退回库存",
+    "returnsChoose": "选择…",
+    "returnsNoGoods": "折让 — 无货物退回",
     "controlAccount": "应付科目",
     "controlAccountHelp": "此单据过账的应付科目。付款和供应商贷项在同一科目上核销。留空则使用默认科目。",
     "controlAccountPartyDefault": "供应商默认 — {account}",

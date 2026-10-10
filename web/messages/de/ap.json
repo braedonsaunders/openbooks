@@ -64,6 +64,8 @@
     "formPreferredFailed": "Bevorzugtes Formular konnte nicht gespeichert werden",
     "returnsReceipt": "Retourniert Wareneingang",
     "returnsNone": "Keine Warenrückgabe",
+    "returnsChoose": "Wählen…",
+    "returnsNoGoods": "Nachlass — keine Warenrückgabe",
     "controlAccount": "Verbindlichkeitenkonto",
     "controlAccountHelp": "Das Verbindlichkeitenkonto, auf das dieser Beleg gebucht wird. Zahlungen und Lieferantengutschriften gleichen ihn auf demselben Konto aus. Leer lassen, um den Standard zu verwenden.",
     "controlAccountPartyDefault": "Lieferantenstandard — {account}",

@@ -64,6 +64,8 @@
     "formPreferredFailed": "優先フォームを保存できませんでした",
     "returnsReceipt": "返品対象の入庫",
     "returnsNone": "在庫の返品なし",
+    "returnsChoose": "選択…",
+    "returnsNoGoods": "値引き — 商品の返品なし",
     "controlAccount": "買掛金勘定",
     "controlAccountHelp": "この伝票が計上される買掛金勘定です。支払と仕入先クレジットは同じ勘定で消し込まれます。空欄の場合は既定の勘定を使用します。",
     "controlAccountPartyDefault": "仕入先の既定 — {account}",
