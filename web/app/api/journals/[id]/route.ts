@@ -495,8 +495,13 @@ export const DELETE = defineRoute({
   permission: "gl.post",
   feature: { none: "This endpoint has no single route-wide feature gate; its handler retains any action-specific feature checks." },
   params: z.object({ "id": z.string() }),
-  body: z.object({ action: z.literal('delete').default('delete'), expectedUpdatedAt: z.string().min(1).optional() })
-    .refine((body) => Object.keys(body).length > 0, 'A delete action is required.'),
+  // An empty body deletes the draft the caller already holds: the fence below
+  // (not the envelope) refuses a missing revision with its own remedy, so a
+  // draft delete never answers a raw "invalid request body".
+  body: z.object({
+    action: z.literal('delete').optional(),
+    expectedUpdatedAt: z.string().min(1).optional(),
+  }).default({}),
   handler: async ({ body, params, authz: routeAuthz }) => {
 
     const gate = routeAuthz
