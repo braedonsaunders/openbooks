@@ -462,7 +462,7 @@ test("a post warning names partyless control accounts in a persistent alert", as
   const restoreFetch = scriptFetch((url, init) => {
     if (url === `/api/journals/${doc.id}` && (!init?.method || init.method === "GET")) return Response.json(snapshotBody(String(doc.id)));
     if (url === "/api/journals/actions" && init?.method === "POST") {
-      return Response.json({ warnings: [{ code: "partyless_control_lines", accounts: [{ number: "1100", name: "Accounts receivable" }] }] });
+      return Response.json({ warnings: [{ code: "partyless_control_lines", accounts: [{ accountId: "a1", accountNumber: "1100", accountName: "Accounts receivable", amount: "100.00" }] }] });
     }
     if (url.includes("/api/flows/record-state")) {
       return Response.json({ approvalState: { status: "none", pendingWith: [], myActions: null }, history: [], failedRun: null, canRetry: false, neverSubmitted: true });
@@ -640,15 +640,20 @@ test("deleting a draft journal sends the revision fence with the delete", async 
   const doc = DRAFT_DOC();
   const seen: { body: unknown }[] = [];
   const restoreFetch = scriptFetch((url, init) => {
+    if (url === `/api/journals/${doc.id}` && (!init?.method || init.method === "GET")) return Response.json(snapshotBody(String(doc.id)));
     if (url === `/api/journals/${doc.id}` && init?.method === "DELETE") {
       seen.push({ body: init?.body ? JSON.parse(String(init.body)) : undefined });
       return Response.json({ ok: true });
     }
+    if (url.includes("/api/flows/record-state")) {
+      return Response.json({ approvalState: { status: "none", pendingWith: [], myActions: null }, history: [], failedRun: null, canRetry: false, neverSubmitted: true });
+    }
     return null;
   });
   t.after(restoreFetch);
-  const { unmount } = await mountJournal(doc, "edit");
+  const { unmount } = await mountJournal(doc);
   t.after(unmount);
+  await click(buttonsNamed("Actions")[0]!);
   const del = buttonsNamed("Delete")[0];
   assert.ok(del, "a draft journal offers Delete");
   await click(del);
@@ -660,6 +665,7 @@ test("a posted partyless journal names its control accounts, never undefined", a
   freshGlobals();
   const doc = DRAFT_DOC();
   const restoreFetch = scriptFetch((url, init) => {
+    if (url === `/api/journals/${doc.id}` && (!init?.method || init.method === "GET")) return Response.json(snapshotBody(String(doc.id)));
     if (url === "/api/journals/actions" && init?.method === "POST") {
       return Response.json({
         pendingApproval: false,
@@ -674,11 +680,15 @@ test("a posted partyless journal names its control accounts, never undefined", a
         ],
       });
     }
+    if (url.includes("/api/flows/record-state")) {
+      return Response.json({ approvalState: { status: "none", pendingWith: [], myActions: null }, history: [], failedRun: null, canRetry: false, neverSubmitted: true });
+    }
     return null;
   });
   t.after(restoreFetch);
-  const { unmount } = await mountJournal(doc, "edit");
+  const { unmount } = await mountJournal(doc);
   t.after(unmount);
+  await click(buttonsNamed("Actions")[0]!);
   const post = buttonsNamed("Post")[0];
   assert.ok(post, "a balanced draft journal offers Post");
   await click(post);
