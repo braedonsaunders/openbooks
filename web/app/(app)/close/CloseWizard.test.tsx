@@ -307,12 +307,12 @@ test("an invalidated attestation names what changed and a computed gate offers r
     key: "drafts-cleared",
     completion_mode: "computed",
     status: "ready",
-    workstream: "readiness",
+    workstream: "review",
   };
   await act(async () => {
     root.render(
       <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
-        <CloseWizard {...base} tasks={[reviewTask, computedTask]} />
+        <CloseWizard {...base} stage="review" tasks={[reviewTask, computedTask]} />
       </NextIntlClientProvider>,
     );
     await tick();
