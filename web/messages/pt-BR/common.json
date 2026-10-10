@@ -352,5 +352,8 @@
     "reason": "Motivo da revisão",
     "reasonHelp": "Explique a correção e a revisão em 10 a 1000 caracteres.",
     "queued": "Nova tentativa enfileirada."
+  },
+  "documentDefaults": {
+    "failed": "Não foi possível carregar a conta e o código de imposto do item nem a data de vencimento pelas condições de pagamento. Informe-os manualmente ou tente novamente."
   }
 }

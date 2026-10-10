@@ -66,6 +66,15 @@ export interface DocKindConfig {
   showsBalance: boolean
   /** Direct-post: draft → Post with no approval step. */
   directPost: boolean
+  /**
+   * Which item and party defaults a line takes when an item is chosen:
+   * sales lines take the item's income account, purchase lines its cost
+   * account (engine/src/ledger/document-defaults.ts). Absent = no line
+   * defaults.
+   */
+  lineDefaults?: 'sales' | 'purchase'
+  /** The due date derives from the party's payment terms when none is given. */
+  dueDateFromTerms?: boolean
 }
 
 const DOC_KIND_ENTRIES: Record<string, Omit<DocKindConfig, 'permNamespace'>> = {
@@ -73,21 +82,25 @@ const DOC_KIND_ENTRIES: Record<string, Omit<DocKindConfig, 'permNamespace'>> = {
     kind: 'vendor_bill', closeModule: 'ap', family: 'ap', numberPrefix: 'BILL-', i18n: 'ap',
     partyRole: 'vendor', accountTypes: null, hasTax: true, hasDueDate: true, hasReference: true,
     fundingSource: null, isOpenItem: true, showsBalance: false, directPost: false,
+    lineDefaults: 'purchase', dueDateFromTerms: true,
   },
   vendor_credit: {
     kind: 'vendor_credit', closeModule: 'ap', family: 'ap', numberPrefix: 'VCRED-', i18n: 'ap',
     partyRole: 'vendor', accountTypes: null, hasTax: true, hasDueDate: true, hasReference: true,
     fundingSource: null, isOpenItem: true, showsBalance: false, directPost: false,
+    lineDefaults: 'purchase',
   },
   customer_invoice: {
     kind: 'customer_invoice', closeModule: 'ar', family: 'ar', numberPrefix: 'INV-', i18n: 'ar',
     partyRole: 'customer', accountTypes: ['income', 'income_other'], hasTax: true, hasDueDate: true,
     hasReference: true, fundingSource: null, isOpenItem: true, showsBalance: true, directPost: false,
+    lineDefaults: 'sales', dueDateFromTerms: true,
   },
   customer_credit: {
     kind: 'customer_credit', closeModule: 'ar', family: 'ar', numberPrefix: 'CM-', i18n: 'ar',
     partyRole: 'customer', accountTypes: ['income', 'income_other'], hasTax: true, hasDueDate: true,
     hasReference: true, fundingSource: null, isOpenItem: true, showsBalance: false, directPost: false,
+    lineDefaults: 'sales',
   },
   // Cash sale (sales receipt): paid at the point of sale, so the party is
   // optional (walk-in) via optionalPartyRole, there is no due date, no open
@@ -98,6 +111,7 @@ const DOC_KIND_ENTRIES: Record<string, Omit<DocKindConfig, 'permNamespace'>> = {
     partyRole: null, optionalPartyRole: 'customer', accountTypes: ['income', 'income_other'], hasTax: true,
     hasDueDate: false, hasReference: true, fundingSource: null, isOpenItem: false, showsBalance: false,
     directPost: true,
+    lineDefaults: 'sales',
   },
   // Cash refund: money back out, so it keeps the credit memo's approval step.
   // Restocking lines restore stock at original cost; lines without
@@ -107,6 +121,7 @@ const DOC_KIND_ENTRIES: Record<string, Omit<DocKindConfig, 'permNamespace'>> = {
     partyRole: null, optionalPartyRole: 'customer', accountTypes: ['income', 'income_other'], hasTax: true,
     hasDueDate: false, hasReference: true, fundingSource: null, isOpenItem: false, showsBalance: false,
     directPost: false,
+    lineDefaults: 'sales',
   },
   rma: {
     kind: 'rma', closeModule: 'ar', family: 'ar', numberPrefix: 'RMA-', i18n: 'ar',
@@ -117,11 +132,13 @@ const DOC_KIND_ENTRIES: Record<string, Omit<DocKindConfig, 'permNamespace'>> = {
     kind: 'card_charge', closeModule: 'ap', family: 'bank', numberPrefix: 'CC-', i18n: 'banking',
     partyRole: null, accountTypes: null, hasTax: true, hasDueDate: false, hasReference: false,
     fundingSource: 'card', isOpenItem: false, showsBalance: false, directPost: true,
+    lineDefaults: 'purchase',
   },
   card_refund: {
     kind: 'card_refund', closeModule: 'ap', family: 'bank', numberPrefix: 'CRF-', i18n: 'banking',
     partyRole: null, accountTypes: null, hasTax: true, hasDueDate: false, hasReference: false,
     fundingSource: 'card', isOpenItem: false, showsBalance: false, directPost: true,
+    lineDefaults: 'purchase',
   },
   // Check: optional vendor payee (partyRole stays null so anonymous expense
   // checks stay valid — the engine settles AP open items via doc.partyId when
@@ -131,6 +148,7 @@ const DOC_KIND_ENTRIES: Record<string, Omit<DocKindConfig, 'permNamespace'>> = {
     kind: 'check', closeModule: 'ap', family: 'bank', numberPrefix: 'CHK-', i18n: 'banking',
     partyRole: null, optionalPartyRole: 'vendor', accountTypes: null, hasTax: true, hasDueDate: false, hasReference: true,
     fundingSource: 'bank', isOpenItem: false, showsBalance: false, directPost: true,
+    lineDefaults: 'purchase',
   },
   // Deposit (source platform "Make Deposits"): money IN to a chosen bank account,
   // crediting one or more source accounts (income, undeposited funds, clearing).
