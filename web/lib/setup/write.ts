@@ -17,7 +17,8 @@ import { toUnits } from '@openbooks/engine/src/money/money.ts'
 import { canonicalDecimal, compareDecimal } from '@openbooks/engine/money/decimal'
 import { decimalNullRefusal } from '../payroll-decimal-refusal'
 import { compileFormula } from '@openbooks/engine/src/assets/depreciation-formula.ts'
-import { filingAccountProblem } from '@openbooks/engine/src/payroll/filing-registry.ts'
+import { declaredPayrollFilings, filingAccountProblem } from '@openbooks/engine/src/payroll/filing-registry.ts'
+import { collidingSequenceKind } from '@openbooks/engine/src/records/numbering.ts'
 import { payPeriodsPerYearProblem, semiMonthlyAnchorProblem } from "@openbooks/engine/src/payroll/run-calendar.ts";
 import { payScheduleSubsidiaryProblem, rescopePayScheduleRuns } from "@openbooks/engine/src/payroll/run-lifecycle.ts";
 import { payComponentTreatmentProblem } from '@openbooks/engine/src/payroll/treatment-bases.ts'
@@ -567,8 +568,11 @@ export async function validateEntityIntegrity(
   if (entity.key === 'number-sequences') {
     const current = rowId
       ? (((await executor.execute(sql`
-          select document_kind, subsidiary_id, allocated_through from number_sequences
-           where id = ${rowId} and org_id = ${orgId}`)))).rows[0]
+          select document_kind, subsidiary_id, allocated_through, prefix, padding from number_sequences
+           where id = ${rowId} and org_id = ${orgId}`)))).rows[0] as {
+        document_kind: string; subsidiary_id: string | null; allocated_through: number;
+        prefix: string; padding: number;
+      } | undefined
       : null
     if (rowId && !current) return 'not found'
     if (body.nextNumber !== undefined) {
@@ -593,6 +597,27 @@ export async function validateEntityIntegrity(
          where id = ${String(submittedSubsidiaryId)} and org_id = ${orgId}
            and is_active and not is_elimination`)))
       if (!subsidiary.rows.length) return 'Choose an active subsidiary from this organization'
+    }
+    // Two kinds on one series issue the same strings from independent
+    // counters (PAY-00001 naming both a vendor payment and a pay run), so a
+    // series an unrelated kind already holds is refused — naming both kinds
+    // and the remedy. Checked only when the series itself is submitted (or on
+    // create): a counter-only edit to an already-colliding row stays
+    // writable, or the collision could never be edited away.
+    if (body.prefix !== undefined || body.padding !== undefined || !rowId) {
+      const seriesPrefix = body.prefix !== undefined ? String(body.prefix) : (current?.prefix ?? '')
+      const seriesPaddingRaw = body.padding !== undefined ? body.padding : (current?.padding ?? 5)
+      const seriesPadding = typeof seriesPaddingRaw === 'number' ? seriesPaddingRaw : Number(seriesPaddingRaw)
+      if (Number.isSafeInteger(seriesPadding) && seriesPadding >= 0) {
+        const clash = await collidingSequenceKind(executor, orgId, {
+          documentKind, prefix: seriesPrefix, padding: seriesPadding,
+        })
+        if (clash) {
+          return `"${documentKind}" and "${clash}" would both issue ${seriesPrefix || '(no prefix)'}${'0'.repeat(Math.min(seriesPadding, 12))}… — `
+            + `two document kinds cannot share one prefix and number width while each keeps its own counter. `
+            + `Change one kind's prefix in Setup → Number sequences so every number names its kind.`
+        }
+      }
     }
   }
   if (entity.key === 'depreciation-methods') {
@@ -2036,6 +2061,55 @@ function duplicateConflict(entityKey: string): { status: 409; body: { error: str
 }
 
 /**
+ * The filing-account duplicate names the row the server sees.
+ *
+ * Account numbers are unique across the whole organization — every filing
+ * program (a federal EIN and a state SUI account share one namespace), every
+ * legal entity, and archived rows too — enforced by the storage UNIQUE on
+ * (org_id, account_number) and mirrored by the natural-key preflight. The
+ * filing-accounts list can legitimately not show that row: it may belong to
+ * another program tab, another legal entity, or the archived set. A bare
+ * "already exists" then reads as a contradiction ("the list shows only the
+ * EIN row"), so the refusal carries the conflicting row's program, state,
+ * entity and archived state, with the edit-or-reactivate remedy. Falls back
+ * to the generic conflict when the row vanishes under the read.
+ */
+async function filingAccountDuplicateConflict(
+  orgId: string,
+  accountNumber: string,
+): Promise<{ status: 409; body: { error: string; code: 'duplicate' } }> {
+  const row = ((await db.execute(sql`
+    select fa.account_number, fa.name, fa.country, fa.program_type, fa.state_code,
+           fa.is_active, s.name as subsidiary_name
+      from payroll_filing_accounts fa
+      left join subsidiaries s on s.id = fa.subsidiary_id and s.org_id = fa.org_id
+     where fa.org_id = ${orgId} and fa.account_number = ${accountNumber}
+     order by fa.created_at limit 1`))).rows[0] as {
+    account_number: string; name: string; country: string; program_type: string;
+    state_code: string | null; is_active: boolean; subsidiary_name: string | null;
+  } | undefined
+  if (!row) return duplicateConflict('payroll-filing-accounts')
+  let program = row.program_type
+  for (const pack of declaredPayrollFilings()) {
+    const declared = pack.programTypes.find((programType) => programType.key === row.program_type)
+    if (declared) { program = declared.label; break }
+  }
+  const scope = [row.country, row.state_code, row.subsidiary_name ?? 'all legal entities'].filter(Boolean).join(', ')
+  const remedy = row.is_active
+    ? `Edit "${row.name}" in Payroll Setup → Filing accounts instead of creating a second row.`
+    : `"${row.name}" is archived: reactivate it in Payroll Setup → Filing accounts instead of creating a second row.`
+  return {
+    status: 409,
+    body: {
+      error: `A filing account with number "${row.account_number}" already exists: "${row.name}" (${program}${scope ? `, ${scope}` : ''}). `
+        + `Account numbers are unique across every filing program and legal entity in this organization, including archived accounts. `
+        + remedy,
+      code: 'duplicate',
+    },
+  }
+}
+
+/**
  * Overlap conflicts stay typed: a GiST exclusion rejection
  * (SQLSTATE 23P01) must never echo Postgres constraint text to the drawer.
  * `code` drives the drawer's localized copy while `error` reads as user
@@ -2223,6 +2297,12 @@ export async function createSetupRecord(
        where ${sql.raw(col)} = ${val}${orgFilter}${effectiveFilter} limit 1`)))
     if (dup.rows.length > 0
       && !(dup.rows as { id: unknown }[]).some((row) => String(row.id) === requestId)) {
+      // Filing accounts share one account-number namespace across programs,
+      // entities and archived rows: name the row the server sees, or the
+      // operator stares at a list that does not show it.
+      if (entity.key === 'payroll-filing-accounts') {
+        return filingAccountDuplicateConflict(orgId, val)
+      }
       return duplicateConflict(entity.key)
     }
   }
@@ -2483,6 +2563,11 @@ export async function createSetupRecord(
     // and surfaces here as a deterministic 409, with no partial row or audit
     // (the insert and its audit share one transaction).
     if (pgErrorCode(e) === '23505') {
+      // A lost storage race on filing accounts names the winning row exactly
+      // like the preflight does — the operator sees one answer either way.
+      if (entity.key === 'payroll-filing-accounts') {
+        return filingAccountDuplicateConflict(orgId, String(body[entity.naturalKey!] ?? ''))
+      }
       return duplicateConflict(entity.key)
     }
     // Effective-range exclusion constraints (SQLSTATE 23P01) arbitrate overlap
