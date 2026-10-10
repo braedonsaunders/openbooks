@@ -10,6 +10,7 @@ import { add, mul, mulDecimalFactors, mulRatio, neg, normalizeMoney, toUnits } f
 import { computeLineTaxes } from "../tax/tax.ts";
 import { loadTaxComponentConfig, persistLineTaxComponents } from "../tax/persist.ts";
 import { postDocument } from "../ledger/posting-document.ts";
+import { resolveDocumentLineDefaults } from "../ledger/document-defaults.ts";
 import { type PostingDeps } from "../journal/posting-contracts.ts";
 import { submitAndReleaseIfUngated } from "../flows/submit.ts";
 import { resolveSubscriptionBillingTarget } from "./consolidated-billing.ts";
@@ -839,6 +840,69 @@ async function createSubscriptionInvoiceInTransaction(
   return { invoiceId, documentNumber, posted, total };
 }
 
+export type SubscriptionLineTaxSource = "plan" | "party" | "item";
+
+/**
+ * The sales-tax code for a plain plan-generated subscription line. The
+ * plan's own code is the explicit subscription term and wins when usable;
+ * otherwise the native line-default resolution applies (the payer's default
+ * tax code first, then the item's), usability-checked against active codes.
+ * A named-but-unusable code anywhere in that chain refuses explicitly —
+ * tax that applies but cannot be resolved must never invoice as silent
+ * zero. No code named at any level resolves to null, which legitimately
+ * invoices untaxed. Advanced contract lines keep their own component codes
+ * and never pass through here.
+ */
+export async function resolveSubscriptionLineTax(
+  runner: SqlExecutor,
+  orgId: string,
+  input: { planTaxCodeId: string | null; customerId: string; itemId: string | null },
+): Promise<{ taxCodeId: string | null; source: SubscriptionLineTaxSource | null }> {
+  if (input.planTaxCodeId) {
+    const usable = (await runner.execute<{ id: string }>(sql`
+      select id from tax_codes where id = ${input.planTaxCodeId} and org_id = ${orgId} and is_active`)).rows[0];
+    if (!usable) {
+      throw new SubscriptionError(
+        "the billing plan names a tax code that is not active in this organization; " +
+        "reactivate it under Company Settings or clear the plan's tax code before billing",
+      );
+    }
+    return { taxCodeId: input.planTaxCodeId, source: "plan" };
+  }
+  const resolved = (await resolveDocumentLineDefaults(runner, orgId, {
+    kind: "customer_invoice",
+    partyId: input.customerId,
+    itemIds: input.itemId ? [input.itemId] : [],
+  }))[0];
+  if (resolved?.taxCodeId) return { taxCodeId: resolved.taxCodeId, source: resolved.taxSource };
+  if (!input.itemId) {
+    // The native helper resolves through named items, so an item-less line
+    // checks the payer default directly — same precedence, same usability
+    // bar. A named-but-unusable payer code falls through to the explicit
+    // refusal below, never to silent zero.
+    const partyCode = (await runner.execute<{ tax_code_id: string | null }>(sql`
+      select tax_code_id from customer_roles
+       where org_id = ${orgId} and party_id = ${input.customerId} and is_active`)).rows[0]?.tax_code_id ?? null;
+    if (partyCode) {
+      const usable = (await runner.execute<{ id: string }>(sql`
+        select id from tax_codes where id = ${partyCode} and org_id = ${orgId} and is_active`)).rows[0];
+      if (usable) return { taxCodeId: partyCode, source: "party" };
+    }
+  }
+  const named = (await runner.execute<{ named: boolean }>(sql`
+    select (exists(select 1 from customer_roles
+                    where org_id = ${orgId} and party_id = ${input.customerId} and tax_code_id is not null)
+            or exists(select 1 from items
+                       where org_id = ${orgId} and id = ${input.itemId} and tax_code_id is not null)) as named`)).rows[0]?.named === true;
+  if (named) {
+    throw new SubscriptionError(
+      "the customer or item names tax that cannot be resolved to an active tax code in this organization; " +
+      "correct the customer's default tax or the item's tax code before billing",
+    );
+  }
+  return { taxCodeId: null, source: null };
+}
+
 async function billOne(
   sub: SubRow,
   invoiceDate: string,
@@ -898,6 +962,17 @@ async function billOne(
     billToPartyId: sub.billToOverride,
     payerPartyId: sub.payerOverride,
   });
+  // The plain plan line carries no tax of its own: resolve it through the
+  // native defaults (plan, then payer, then item) so a taxable customer is
+  // never invoiced at silent zero. Advanced contract lines keep the codes
+  // their components declare.
+  const lineTax = advanced?.lines?.length
+    ? null
+    : await resolveSubscriptionLineTax(db, sub.orgId, {
+        planTaxCodeId: sub.taxCodeId,
+        customerId: target.payerPartyId,
+        itemId: sub.itemId,
+      });
   const generated = await createSubscriptionInvoice({
     orgId: sub.orgId,
     actorId: actor.actorId,
@@ -910,7 +985,7 @@ async function billOne(
     currency: sub.planCurrency ?? sub.baseCurrency,
     incomeAccountId: sub.incomeAccountId,
     itemId: sub.itemId,
-    taxCodeId: sub.taxCodeId,
+    taxCodeId: lineTax?.taxCodeId ?? null,
     description: sub.planName,
     quantity: sub.quantity,
     unitPrice: price,
@@ -1150,15 +1225,17 @@ export async function runDueSubscriptions(asOf?: string): Promise<SubscriptionRu
 }
 
 /**
- * Bill one subscription immediately (the "bill now" button), no date advance.
- * `actor.actorId` is the authenticated caller threading their identity through
- * every audit surface the invoice leaves; omitted means engine-initiated
- * (system provenance) — a subscription id is never accepted as an actor.
+ * Bill one subscription immediately (the "bill now" button) for its due
+ * period, no date advance. The invoice carries the scheduled bill date —
+ * never today — so a back-dated start bills each period on its own date and
+ * a prior-period bill lands in the right fiscal year. `actor.actorId` is the
+ * authenticated caller threading their identity through every audit surface
+ * the invoice leaves; omitted means engine-initiated (system provenance) —
+ * a subscription id is never accepted as an actor.
  */
 export async function billSubscriptionNow(
   orgId: string,
   subscriptionId: string,
-  asOf: string | undefined,
   actor: SubscriptionBillingActorOptions | undefined,
   allowedSubsidiaryIds: ReadonlySet<string> | null,
 ): Promise<{ invoiceId: string; documentNumber: string; posted: boolean }> {
@@ -1178,13 +1255,12 @@ export async function billSubscriptionNow(
   );
   if (!meta.rows[0]) throw new SubscriptionError("subscription not found");
   if (meta.rows[0].advancedLifecycle && !meta.rows[0].advancedEnabled) throw new SubscriptionError("advanced subscription lifecycle is disabled");
-  const today = asOf ?? (await businessToday(orgId));
   const gen = await withOrg(orgId, async () => {
     await lockSubscriptionCustomerForScope(db, orgId, subscriptionId, allowedSubsidiaryIds);
     const r = (await db.execute<SubRow>(sql`${SUB_SELECT} where s.id = ${subscriptionId} and s.org_id = ${orgId} limit 1`));
     const s = r.rows[0];
     if (!s) throw new SubscriptionError("subscription not found");
-    return billOne(s, today, s.nextBillOn, s.currentPeriodStart, { actorId, source: "bill_now" });
+    return billOne(s, s.nextBillOn, s.nextBillOn, s.currentPeriodStart, { actorId, source: "bill_now" });
   });
   await withOrgTransaction(orgId, async () => {
     await db.execute(sql`
