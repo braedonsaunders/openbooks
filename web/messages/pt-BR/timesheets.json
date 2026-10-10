@@ -86,7 +86,14 @@
       "costed": "lançados no razão",
       "ticketed": "em um boletim de campo"
     },
-    "checksLink": "Abrir verificações da folha"
+    "checksLink": "Abrir verificações da folha",
+    "noHoursAction": "Declarar sem horas",
+    "noHoursTitle": "Declarar uma semana sem horas",
+    "noHoursMessage": "Use quando você não trabalhou nesta semana, por exemplo de férias. A declaração segue para aprovação como qualquer quadro de horas.",
+    "noHoursReasonLabel": "Motivo",
+    "noHoursPlaceholder": "De férias a semana toda",
+    "noHoursConfirm": "Enviar declaração",
+    "noHoursToast": "Semana sem horas enviada para aprovação."
   },
   "field": {
     "title": "Ponto em campo",

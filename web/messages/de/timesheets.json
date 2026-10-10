@@ -86,7 +86,14 @@
       "costed": "im Hauptbuch gebucht",
       "ticketed": "in einem Arbeitsschein"
     },
-    "checksLink": "Lohnprüfungen öffnen"
+    "checksLink": "Lohnprüfungen öffnen",
+    "noHoursAction": "Keine Stunden melden",
+    "noHoursTitle": "Woche ohne Stunden melden",
+    "noHoursMessage": "Nutzen Sie dies, wenn Sie in dieser Woche nicht gearbeitet haben, zum Beispiel wegen Urlaub. Die Meldung wird wie jede Zeiterfassung zur Genehmigung eingereicht.",
+    "noHoursReasonLabel": "Begründung",
+    "noHoursPlaceholder": "Die ganze Woche im Urlaub",
+    "noHoursConfirm": "Meldung einreichen",
+    "noHoursToast": "Woche ohne Stunden zur Genehmigung eingereicht."
   },
   "field": {
     "title": "Zeiterfassung vor Ort",

@@ -138,7 +138,13 @@ export const POST = defineRoute({
            and employee_party_id = ${ownedEmployee}
            and worked_on >= ${days[0]} and worked_on <= ${days[6]}
            and status = 'submitted'`);
-        if ((moved.rowCount ?? 0) === 0) {
+        // A week declared as having no hours carries no entries at all;
+        // rejecting it returns the declaration to the employee.
+        const declaredNoHours = (moved.rowCount ?? 0) === 0 && ((await db.execute<{ n: number }>(sql`
+          select count(*)::int as n from time_entries
+           where org_id = ${orgId} and employee_party_id = ${ownedEmployee}
+             and worked_on >= ${days[0]} and worked_on <= ${days[6]}`)).rows[0]?.n ?? 0) === 0;
+        if ((moved.rowCount ?? 0) === 0 && !declaredNoHours) {
           throw new Error(
             "Nothing to reject — the week has no submitted entries",
           );

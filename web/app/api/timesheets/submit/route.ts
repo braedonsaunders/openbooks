@@ -22,6 +22,11 @@ import {
 const postBodySchema0 = z.strictObject({
   employee: uuidId,
   week: isoDate("week must be a valid calendar date"),
+  // An explicit declaration that the week holds no hours (leave, no work),
+  // with the reason the approver sees. Only a week with nothing recorded may
+  // be declared; it then follows the same approval path as any submission.
+  noHours: z.literal(true).optional(),
+  reason: z.string().trim().min(1).max(500).optional(),
 });
 
 export const runtime = "nodejs";
@@ -40,6 +45,8 @@ function bad(error: string) {
 interface Body {
   employee?: string;
   week?: string;
+  noHours?: true;
+  reason?: string;
 }
 
 /** POST { employee, week } → move the week's draft entries to submitted. */
@@ -64,6 +71,7 @@ export const POST = defineRoute({
     // A self-service caller submits only their own week.
     const othersRefused = await refuseOthersTime(gate, "time.manage", ownedEmployee);
     if (othersRefused) return othersRefused;
+    if (body.noHours === true && !body.reason) return bad("A reason is required to declare a week with no hours");
     const week = weekStart(body.week);
     const days = weekWindow(week);
 
@@ -107,7 +115,20 @@ export const POST = defineRoute({
         // gates beside the live ones, and a submission with no movable entries
         // would raise runs and gates for nothing. Refuse both before the
         // header stamp and the dispatch; throwing rolls the flip back.
-        await assertWeekSubmittable(orgId, header.id, moved.rowCount ?? 0);
+        await assertWeekSubmittable(orgId, header.id, moved.rowCount ?? 0, { declaredNoHours: body.noHours === true });
+        if (body.noHours === true) {
+          const audited = (await db.execute<{ id: string }>(sql`
+            insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+            values (${orgId}, 'timesheet_weeks', ${header.id}, 'update', ${JSON.stringify({
+              event: "no_hours_declared",
+              before: { status: header.status },
+              after: { status: "submitted" },
+              reason: body.reason,
+            })}::jsonb, ${user.id})
+            returning id
+          `)).rows[0];
+          if (!audited) throw new Error("the no-hours declaration was not recorded — nothing was submitted");
+        }
         await setTimesheetWeekStatus(
           orgId,
           ownedEmployee,

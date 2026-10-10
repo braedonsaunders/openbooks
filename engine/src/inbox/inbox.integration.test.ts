@@ -522,6 +522,49 @@ test("an unsubmitted own week opens that week's timesheet, not the bare list", {
   }
 });
 
+test("a week covered by approved leave owes no timesheet, but partial or pending leave still does", { skip: !DB }, async () => {
+  const org: ScratchOrg = await createScratchOrg();
+  try {
+    const userId = await createScratchUser(org.orgId, "Inbox Leave Owner", "inbox_leave_owner");
+    const partyId = await linkPerson(org.orgId, userId, "Inbox Leave Owner");
+    const approverId = await createScratchUser(org.orgId, "Inbox Leave Approver", "inbox_leave_approver");
+    const employmentId = await mkEmployment(org.orgId, partyId, org.subsidiaryId);
+    const leaveType = randomUUID();
+    await db.execute(sql`
+      insert into hrm_leave_types (id, org_id, code, name) values (${leaveType}, ${org.orgId}, 'VAC', 'Vacation')`);
+    // Three ended Sunday-start weeks with nothing recorded.
+    const covered = "2026-01-04"; // approved leave Monday through Friday
+    const partial = "2026-01-11"; // approved leave Monday through Thursday only
+    const pending = "2026-01-18"; // leave requested but not yet approved
+    for (const week of [covered, partial, pending]) {
+      await db.execute(sql`
+        insert into timesheet_weeks (org_id, employee_party_id, week_start, status)
+        values (${org.orgId}, ${partyId}, ${week}, 'draft')`);
+    }
+    const leave = async (from: string, to: string, status: "approved" | "submitted"): Promise<void> => {
+      const decided = status === "approved";
+      await db.execute(sql`
+        insert into hrm_leave_requests (org_id, employment_id, leave_type_id, starts_on, ends_on, hours, status, decided_by, decided_at, decision_reason)
+        values (${org.orgId}, ${employmentId}, ${leaveType}, ${from}::date, ${to}::date, 40.00, ${status},
+                ${decided ? approverId : null}, ${decided ? new Date().toISOString() : null}::timestamptz,
+                ${decided ? "Approved vacation" : null})`);
+    };
+    await leave("2026-01-05", "2026-01-09", "approved");
+    await leave("2026-01-12", "2026-01-15", "approved");
+    await leave("2026-01-19", "2026-01-23", "submitted");
+    const items = await listInbox(
+      { orgId: org.orgId, actorId: userId, asOf: "2026-02-01", timeZone: "America/Toronto" },
+      { kinds: ["timesheet_week"] },
+    );
+    const owed = (week: string) => items.some((item) => item.title.includes(week));
+    assert.equal(owed(covered), false, "every working day was approved leave, so no timesheet is owed");
+    assert.equal(owed(partial), true, "the Friday not covered by leave is still a working day");
+    assert.equal(owed(pending), true, "leave that is not approved does not excuse the week");
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
 test("a period reopen request reaches an independent close.reopen holder's inbox, never the requester's", { skip: !DB }, async () => {
   const org: ScratchOrg = await createScratchOrg();
   try {

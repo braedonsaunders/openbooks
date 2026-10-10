@@ -86,7 +86,14 @@
       "costed": "元帳に計上済み",
       "ticketed": "フィールドチケット内"
     },
-    "checksLink": "給与チェックを開く"
+    "checksLink": "給与チェックを開く",
+    "noHoursAction": "工数なしを申告",
+    "noHoursTitle": "工数のない週を申告",
+    "noHoursMessage": "休暇などで今週働かなかった場合に使います。申告は通常のタイムシートと同じく承認に回ります。",
+    "noHoursReasonLabel": "理由",
+    "noHoursPlaceholder": "1週間休暇",
+    "noHoursConfirm": "申告を提出",
+    "noHoursToast": "工数なしの週を承認に提出しました。"
   },
   "field": {
     "title": "現場打刻",

@@ -86,7 +86,14 @@
       "costed": "过账到总账",
       "ticketed": "包含在现场工单中"
     },
-    "checksLink": "打开薪资检查"
+    "checksLink": "打开薪资检查",
+    "noHoursAction": "申报无工时",
+    "noHoursTitle": "申报本周无工时",
+    "noHoursMessage": "如果您本周未工作（例如休假），请使用此功能。该申报与任何工时表一样需要审批。",
+    "noHoursReasonLabel": "原因",
+    "noHoursPlaceholder": "整周休假",
+    "noHoursConfirm": "提交申报",
+    "noHoursToast": "无工时周已提交审批。"
   },
   "field": {
     "title": "外勤打卡",

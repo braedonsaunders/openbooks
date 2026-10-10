@@ -448,6 +448,25 @@ export function WeeklyGrid({
     }
   }
 
+  // A week with nothing recorded (leave, no work) is closed by an explicit
+  // declaration with a reason, which goes through the same approval as hours.
+  const onDeclareNoHours = async () => {
+    if (!employeeId) return
+    const reason = await promptDialog({
+      title: t('grid.noHoursTitle'),
+      message: t('grid.noHoursMessage'),
+      label: t('grid.noHoursReasonLabel'),
+      placeholder: t('grid.noHoursPlaceholder'),
+      confirmLabel: t('grid.noHoursConfirm'),
+    })
+    if (!reason) return
+    const data = await post('/api/timesheets/submit', { employee: employeeId, week, noHours: true, reason })
+    if (data) {
+      applyPayload(data)
+      toast.success(t('grid.noHoursToast'))
+    }
+  }
+
   const onApprove = async () => {
     if (!employeeId) return
     const data = await post('/api/timesheets/approve', { employee: employeeId, week })
@@ -576,9 +595,14 @@ export function WeeklyGrid({
               {tCommon('actions.save')}
             </Button>
           ) : null}
-          {canSubmit ? (
+          {canSubmit && grandTotal > 0 ? (
             <Button size="sm" variant="outline" onClick={onSubmit} disabled={busy || dirty}>
               {t('grid.submitForApproval')}
+            </Button>
+          ) : null}
+          {canSubmit && grandTotal === 0 && !dirty ? (
+            <Button size="sm" variant="outline" onClick={onDeclareNoHours} disabled={busy}>
+              {t('grid.noHoursAction')}
             </Button>
           ) : null}
           {canDoApprove ? (
