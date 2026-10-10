@@ -17,9 +17,14 @@ const APP_SEGMENT = 'app/(app)'
 // same shape as requireFlowsSession and requireProjectsFeature above. Each
 // verified to call isFeatureEnabled for HRM AND its module before being
 // listed here; a helper that does not gate must never be added.
+// authorizeTimeWorkspace gates through guardFeaturePermission on the
+// request's work family (manufacturing for production time, timeTracking
+// otherwise); requireFlowsRecordReader reports isFeatureEnabled("flows")
+// and its callers answer an empty state while off. Both verified to gate
+// before being listed here.
 // A factory route (`defineRoute`) names its feature key and the factory
 // answers 404 while that feature is off.
-const GATE = /defineRoute\(\{[\s\S]*?\bfeature:\s*(['"])[A-Za-z]+\1|requireFeatureEnabled\(|guardFeaturePermission\(|isFeatureEnabled\(|requireFlowsSession\(|requireProjectsFeature\(|guardProjectsFeature\(|requireProjectSchedulingFeature\(|guardProjectSchedulingFeature\(|guardPreBillingFeature\(|guardPropertyManagementFeature\(|guardSubcontractsFeature\(|guardComplianceFeature\(|guardLienWaiverFeature\(|gateDocuments\(|gateSurveys\(|gateExports\(|meritCycleGate\(/
+const GATE = /defineRoute\(\{[\s\S]*?\bfeature:\s*(['"])[A-Za-z]+\1|requireFeatureEnabled\(|guardFeaturePermission\(|isFeatureEnabled\(|requireFlowsSession\(|requireFlowsRecordReader\(|authorizeTimeWorkspace\(|requireProjectsFeature\(|guardProjectsFeature\(|requireProjectSchedulingFeature\(|guardProjectSchedulingFeature\(|guardPreBillingFeature\(|guardPropertyManagementFeature\(|guardSubcontractsFeature\(|guardComplianceFeature\(|guardLienWaiverFeature\(|gateDocuments\(|gateSurveys\(|gateExports\(|meritCycleGate\(/
 
 const read = readingPagePairs((path: string) => readFileSync(new URL(path, WEB), 'utf8'))
 const exists = (path: string) => existsSync(new URL(path, WEB))
@@ -135,9 +140,7 @@ const UNGATED_BY_DESIGN: Record<string, string> = {
   banking: 'nav grouping only — capabilities gate individually (bankFeeds)',
 }
 
-const NAV_ARM_PENDING: Record<string, { pack: string; since: string }> = {
-  manufacturing: { pack: 'MF-09', since: '2026-09-27' },
-}
+const NAV_ARM_PENDING: Record<string, { pack: string; since: string }> = {}
 
 test('every route a feature links to is gated by its own page or an ancestor layout', () => {
   const hrefs = navHrefs()
