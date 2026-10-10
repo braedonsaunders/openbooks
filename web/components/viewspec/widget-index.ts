@@ -435,6 +435,7 @@ export const WIDGET_FAMILY: Readonly<Record<string, WidgetFamily>> = {
   'overhead-rates-tab': 'setup',
   'page-layout-drawer': 'setup',
   'page-layout-summary': 'setup',
+  'page-notice': 'records',
   'paper-view': 'reporting',
   'parallel-run-workspace': 'payroll',
   'party-drawer': 'records',

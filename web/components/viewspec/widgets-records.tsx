@@ -98,6 +98,12 @@ export const RECORDS_WIDGETS = {
   'documents-link-notice': (props) => (
     <DocumentsLinkNotice message={str(props, 'message') ?? ''} />
   ),
+  /** One-line page notice naming why an expected action is absent and the
+   *  remedy (for example an unlinked login). Same presentation as the
+   *  File Cabinet link notice. */
+  'page-notice': (props) => (
+    <DocumentsLinkNotice message={str(props, 'message') ?? ''} />
+  ),
   'folder-tree': (props) => (
     <FolderTree
       folders={(props.folders as ComponentProps<typeof FolderTree>['folders']) ?? []}

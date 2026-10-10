@@ -8,7 +8,12 @@
     "emptyTitle": "Aucune feuille de temps pour l’instant",
     "emptyDescription": "Les saisies de temps se regroupent ici en feuilles de temps hebdomadaires. Créez-en une pour consigner des heures sur un chantier.",
     "week": "Semaine",
-    "unnamed": "(sans nom)"
+    "unnamed": "(sans nom)",
+    "newRefusal": {
+      "unlinked": "Votre identifiant n'est lié à aucune fiche employé : il n'y a donc aucune feuille de temps à commencer. Demandez à un administrateur de lier votre identifiant à votre fiche employé dans Administration → Utilisateurs.",
+      "linkedOutOfScope": "Votre fiche employé se trouve hors des filiales couvertes par votre rôle : il n'y a donc aucune feuille de temps à commencer. Demandez à un administrateur de vérifier l'accès aux filiales de votre rôle.",
+      "noEmployees": "Aucun employé actif pour qui saisir du temps pour l'instant. Ajoutez un employé dans Personnel → Employés, puis commencez une feuille de temps."
+    }
   },
   "labels": {
     "totalHours": "Total des heures",

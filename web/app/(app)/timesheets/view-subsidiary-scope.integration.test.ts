@@ -111,13 +111,15 @@ test('timesheet page and drawer stay within the caller subsidiary scope', async 
 
     state.authz = {
       user: { id: randomUUID(), orgId: org.orgId },
-      permissions: new Set(['time.read']),
+      permissions: new Set(['time.read', 'time.manage', 'time.approve']),
       allowedSubsidiaryIds: new Set([org.subsidiaryId]),
     }
     await withOrgContext(org.orgId, async () => {
       const list = await loadTimesheets({})
       assert.ok(list.newButton.href.startsWith(`/timesheets?timesheet=${visibleEmployee}:`), 'the fallback new-week target is an in-scope employee')
       assert.ok(!list.newButton.href.includes(hiddenEmployee), 'the fallback never selects an employee in another subsidiary')
+      assert.equal(list.canStartTimesheet, true)
+      assert.equal(list.newNotice, null)
 
       const blocked = await loadTimesheets({ timesheet: `${hiddenEmployee}:2026-09-20` })
       assert.equal(blocked.drawer, null, 'a URL naming an out-of-scope employee opens no drawer')
@@ -130,6 +132,27 @@ test('timesheet page and drawer stay within the caller subsidiary scope', async 
       assert.ok(pickers.departments.some((item) => item.label.includes(visibleDepartment)))
       assert.ok(!pickers.departments.some((item) => item.label.includes(hiddenDepartment)), 'department picker excludes another subsidiary')
       assert.ok(pickers.departments.some((item) => item.label.includes(orgWideDepartment)), 'org-wide departments remain available')
+    })
+  } finally {
+    state.authz = null
+    await withBypassContext(() => dropScratchOrg(org.orgId))
+  }
+})
+
+test('a self-service time enterer without a linked employee gets the remedy, never another employee\'s week', async () => {
+  const org = await withBypassContext(() => createScratchOrg())
+  try {
+    const someoneElse = await withBypassContext(() => addEmployee(org.orgId, `Colleague ${randomUUID()}`, org.subsidiaryId))
+    state.authz = {
+      user: { id: randomUUID(), orgId: org.orgId },
+      permissions: new Set(['time.read', 'time.manage', 'time.clock']),
+      allowedSubsidiaryIds: null,
+    }
+    await withOrgContext(org.orgId, async () => {
+      const list = await loadTimesheets({})
+      assert.equal(list.canStartTimesheet, false, 'New timesheet is withdrawn rather than linking to the page itself')
+      assert.ok(!list.newButton.href.includes(someoneElse), 'a self-service login is never seeded with a colleague')
+      assert.equal(list.newNotice, 'list.newRefusal.unlinked')
     })
   } finally {
     state.authz = null

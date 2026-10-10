@@ -8,7 +8,12 @@
     "emptyTitle": "Noch keine Stundenzettel",
     "emptyDescription": "Zeiterfassungen werden hier zu wöchentlichen Stundenzetteln zusammengefasst. Erstellen Sie einen, um Stunden auf einen Auftrag zu buchen.",
     "week": "Woche",
-    "unnamed": "(unbenannt)"
+    "unnamed": "(unbenannt)",
+    "newRefusal": {
+      "unlinked": "Ihr Login ist mit keinem Mitarbeiterdatensatz verknüpft, daher kann keine Zeiterfassung begonnen werden. Bitten Sie einen Administrator, Ihr Login unter Administration → Benutzer mit Ihrem Mitarbeiterdatensatz zu verknüpfen.",
+      "linkedOutOfScope": "Ihr Mitarbeiterdatensatz liegt außerhalb der Tochtergesellschaften, die Ihre Rolle abdeckt, daher kann keine Zeiterfassung begonnen werden. Bitten Sie einen Administrator, den Tochtergesellschaftszugriff Ihrer Rolle zu prüfen.",
+      "noEmployees": "Es gibt noch keine aktiven Mitarbeiter, für die Zeit erfasst werden kann. Legen Sie unter Personal → Mitarbeiter einen Mitarbeiter an und beginnen Sie dann eine Zeiterfassung."
+    }
   },
   "labels": {
     "totalHours": "Gesamtstunden",

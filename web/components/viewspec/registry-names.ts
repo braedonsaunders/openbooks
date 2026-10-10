@@ -227,6 +227,7 @@ export const WIDGET_NAMES: ReadonlySet<string> = new Set([
   'hrm-surveys-drawer',
   'new-warehouse-button',
   'new-warehouse-drawer',
+  'page-notice',
   'pick-list-drawer',
   'new-pick-list-drawer',
   'shipment-drawer',

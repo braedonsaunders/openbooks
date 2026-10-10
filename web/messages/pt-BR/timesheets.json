@@ -8,7 +8,12 @@
     "emptyTitle": "Nenhum quadro de horas ainda",
     "emptyDescription": "Os registros de horas são consolidados em quadros semanais aqui. Crie um para registrar horas em um trabalho.",
     "week": "Semana",
-    "unnamed": "(sem nome)"
+    "unnamed": "(sem nome)",
+    "newRefusal": {
+      "unlinked": "Seu login não está vinculado a um cadastro de funcionário, então não há quadro de horas para iniciar. Peça a um administrador para vincular seu login ao seu cadastro de funcionário em Administração → Usuários.",
+      "linkedOutOfScope": "Seu cadastro de funcionário está fora das subsidiárias que sua função abrange, então não há quadro de horas para iniciar. Peça a um administrador para revisar o acesso a subsidiárias da sua função.",
+      "noEmployees": "Ainda não há funcionários ativos para registrar horas. Adicione um funcionário em Pessoas → Funcionários e depois inicie um quadro de horas."
+    }
   },
   "labels": {
     "totalHours": "Total de horas",
