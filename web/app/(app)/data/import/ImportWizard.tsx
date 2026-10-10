@@ -133,8 +133,14 @@ export function ImportWizard({ backHref = '/', backLabel }: { backHref?: string;
     } else if (job.state === 'ready') {
       setMapping(job.options.mapping ?? {}); setImportMode(job.options.importMode ?? 'upsert'); setPost(job.options.post ?? false)
       setPreview({ outcome: job.preview, revision: inputRevisionRef.current }); setStep('preview')
-    } else if (job.state === 'completed') { setResult(job.outcome); setStep('result') }
-  }, [job])
+    } else if (job.state === 'completed') {
+      setResult(job.outcome); setStep('result')
+      // Committed rows change the lists, counters and workspace badges the
+      // operator returns to: drop the router's cached views so the next
+      // visit renders the imported records instead of the pre-import state.
+      router.refresh()
+    }
+  }, [job, router])
   /* eslint-enable react-hooks/set-state-in-effect */
 
   const onFile = (file: File) => {
