@@ -39,7 +39,10 @@ const mocks = new Map<string, string>([
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
 
-    if (context.parentURL?.includes("/admin/navigation/view.ts")) {
+    // The loader resolves its catalogue through web/lib/nav/catalog.ts, which
+    // reads the same server translations — the intl double covers both so
+    // the loader graph never touches the client-component stub.
+    if (context.parentURL?.includes("/admin/navigation/view.ts") || context.parentURL?.includes("/lib/nav/catalog.ts")) {
       if (specifier === "../../../../lib/auth") return { url: "mock:nav-loader-auth", shortCircuit: true };
       if (specifier === "../../../../lib/authz") return { url: "mock:nav-loader-authz", shortCircuit: true };
       if (specifier === "next/navigation") return { url: "mock:nav-loader-navigation", shortCircuit: true };
