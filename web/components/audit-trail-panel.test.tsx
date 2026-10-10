@@ -46,8 +46,6 @@ async function mount(t: test.TestContext) {
         <AuditTrailPanel table="documents" recordId="00000000-0000-4000-8000-00000000c001" />
       </NextIntlClientProvider>,
     )
-    await tick()
-    await tick()
   })
   t.after(async () => {
     await act(async () => root.unmount())
@@ -56,30 +54,58 @@ async function mount(t: test.TestContext) {
   return host
 }
 
+/**
+ * The panel's body: everything below its search and action-filter row, so
+ * assertions read the panel's own state, never the filter controls' labels.
+ */
+function body(host: HTMLElement): HTMLElement[] {
+  const section = host.querySelector('section')
+  assert.ok(section, 'the audit panel renders')
+  return [...section.children].slice(1) as HTMLElement[]
+}
+
+const bodyText = (host: HTMLElement) => body(host).map((node) => node.textContent ?? '').join(' ')
+const bodyButton = (host: HTMLElement, label: string) =>
+  body(host).flatMap((node) => [...node.querySelectorAll('button')]).find((b) => b.textContent === label)
+
+/**
+ * The panel requests history from a deferred timer, which fires after the
+ * render's act scope closes. Wait inside act until the body names a result.
+ */
+async function settle(host: HTMLElement, expected: string) {
+  for (let attempt = 0; attempt < 40 && !bodyText(host).includes(expected); attempt++) {
+    await act(async () => {
+      await tick()
+    })
+  }
+}
+
 const en = (messages as { common: { auditTrail: Record<string, string> } }).common.auditTrail
 
 test('a no-access answer names the unavailable history without a retry', async (t) => {
   script.status = 404
   const host = await mount(t)
-  assert.ok(host.textContent?.includes(en.unavailableTitle), host.textContent ?? '')
-  assert.ok(!host.textContent?.includes(en.loadFailedDescription), 'never the try-again-shortly copy')
-  const retry = [...host.querySelectorAll('button')].find((b) => b.textContent === en.retry)
-  assert.equal(retry, undefined, 'retrying cannot grant access, so no retry is offered')
+  await settle(host, en.unavailableTitle)
+  const text = bodyText(host)
+  assert.ok(text.includes(en.unavailableTitle), text)
+  assert.ok(text.includes(en.unavailableDescription), text)
+  assert.ok(!text.includes(en.loadFailedDescription), 'never the try-again-shortly copy')
+  assert.equal(bodyButton(host, en.retry), undefined, 'retrying cannot grant access, so no retry is offered')
 })
 
 test('a server failure keeps the load-failed body and its retry', async (t) => {
   script.status = 502
   const host = await mount(t)
-  assert.ok(host.textContent?.includes(en.loadFailedDescription), host.textContent ?? '')
-  const retry = [...host.querySelectorAll('button')].find((b) => b.textContent === en.retry)
+  await settle(host, en.loadFailedDescription)
+  assert.ok(bodyText(host).includes(en.loadFailedDescription), bodyText(host))
+  const retry = bodyButton(host, en.retry)
   assert.ok(retry, 'a transient failure offers the retry')
   script.status = 200
   const before = requests.length
   await act(async () => {
-    retry!.click()
-    await tick()
-    await tick()
+    retry.click()
   })
+  await settle(host, en.emptyTitle)
   assert.ok(requests.length > before, 'retry re-requests the history')
-  assert.ok(host.textContent?.includes(en.emptyTitle), host.textContent ?? '')
+  assert.ok(bodyText(host).includes(en.emptyTitle), bodyText(host))
 })
