@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
 import { registerHooks } from 'node:module'
 import test from 'node:test'
-import { resolveEngineSpecifier } from '../../../../testing/engine-resolve-hooks'
+import { resolveEngineSpecifier } from '../../../../../testing/engine-resolve-hooks'
 import type { SessionUser } from '../../../../../lib/auth'
 
 // Bulk role assignment promotes every role-less party in the named slice
@@ -85,14 +85,16 @@ const assignRequest = (body: unknown) =>
 test('bulk assignment promotes every role-less party and audits each one', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
   const ctx = await fixture()
   try {
-    const first = await insertCompanyParty(ctx, 'First Co')
-    const second = await insertCompanyParty(ctx, 'Second Co')
-    const already = await insertCompanyParty(ctx, 'Already Vendor Co')
+    // Scratch orgs ship seeded role-less parties, so the slice is scoped by
+    // the endpoint's own search text — the same isolation the directory uses.
+    const first = await insertCompanyParty(ctx, 'Assign First Co')
+    const second = await insertCompanyParty(ctx, 'Assign Second Co')
+    const already = await insertCompanyParty(ctx, 'Assign Already Vendor Co')
     await withBypassContext(() => db.execute(sql`
       insert into vendor_roles (org_id, party_id, is_active, created_by, updated_by)
       values (${ctx.orgId}, ${already}, true, ${ctx.actor}, ${ctx.actor})`))
 
-    const res = await withOrgContext(ctx.orgId, () => POST(assignRequest({ role: 'vendor' })))
+    const res = await withOrgContext(ctx.orgId, () => POST(assignRequest({ role: 'vendor', q: 'Assign' })))
     assert.equal(res.status, 200)
     assert.deepEqual(await res.json(), { assigned: 2, total: 2 })
     assert.equal(await roleCount(ctx.orgId, 'vendor_roles', first), 1)
@@ -101,10 +103,11 @@ test('bulk assignment promotes every role-less party and audits each one', { ski
 
     const audits = (await withBypassContext(() => db.execute<{ n: string }>(sql`
       select count(*)::text as n from audit_log
-       where org_id = ${ctx.orgId} and table_name = 'parties' and changes->>'source' = 'bulk-role-assign'`))).rows[0]?.n
+       where org_id = ${ctx.orgId} and table_name = 'parties' and changes->>'source' = 'bulk-role-assign'
+         and row_id in (${first}, ${second}, ${already})`))).rows[0]?.n
     assert.equal(Number(audits), 2, 'each promotion carries its own audit evidence')
 
-    const rerun = await withOrgContext(ctx.orgId, () => POST(assignRequest({ role: 'vendor' })))
+    const rerun = await withOrgContext(ctx.orgId, () => POST(assignRequest({ role: 'vendor', q: 'Assign' })))
     assert.equal(rerun.status, 200)
     assert.deepEqual(await rerun.json(), { assigned: 0, total: 0 }, 'promoted parties left the slice')
   } finally {
@@ -119,7 +122,7 @@ test('bulk assignment refuses an invalid role and an empty slice', { skip: !proc
     const bad = await withOrgContext(ctx.orgId, () => POST(assignRequest({ role: 'partner' })))
     assert.equal(bad.status, 422)
 
-    const empty = await withOrgContext(ctx.orgId, () => POST(assignRequest({ role: 'customer' })))
+    const empty = await withOrgContext(ctx.orgId, () => POST(assignRequest({ role: 'customer', q: 'zzz-no-such-party' })))
     assert.equal(empty.status, 200)
     assert.deepEqual(await empty.json(), { assigned: 0, total: 0 })
   } finally {
