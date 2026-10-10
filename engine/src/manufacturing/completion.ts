@@ -200,11 +200,11 @@ async function receiptPieces(
     let serialId: string | null = null;
     if (profile.tracking === "lot" || profile.tracking === "lot_serial") {
       if (!selection.lotNumber?.trim()) refuse("Lot-tracked item " + itemName + " requires a lot number.", "receipt_lot_required", "Enter a lot number for the receipt.");
-      lotId = await ensureLot(orgId, itemId, selection.lotNumber, selection.expiresOn ?? null, actorId);
+      lotId = await ensureLot(orgId, itemId, selection.lotNumber, selection.expiresOn ?? null, actorId, tx as Runner);
     }
     if (profile.tracking === "serial" || profile.tracking === "lot_serial") {
       if (cmp(q, "1") !== 0 || !selection.serialNumber?.trim()) refuse("Serial-tracked item " + itemName + " requires one serial number per unit.", "receipt_serial_required", "Enter a serial number for each finished unit.");
-      serialId = await ensureSerial(orgId, itemId, selection.serialNumber, locationId, actorId);
+      serialId = await ensureSerial(orgId, itemId, selection.serialNumber, locationId, actorId, tx as Runner);
     }
     if(reworkWorkOrderId) await assertReceiptReworkOutput(tx,orgId,actorId,reworkWorkOrderId,quantity,[{lotId,serialId}],locationId);
     else await validateTrackingSelection(tx as Runner, orgId, itemId, locationId, profile,

@@ -159,8 +159,15 @@ test("API reverse of a work-order issue reverses every consume leg in the entry"
       await receiveInventory(org.orgId, actor, { itemId: org.items.fifo, stockLocationId: org.stockLocationId,
         quantity: "3", unitCost: "1", subsidiaryId: org.subsidiaryId, offsetAccountId: org.accounts.clearing, date: org.date });
     });
+    const departmentId=await run(async tx=>{
+      const department=(await tx.execute<{id:string}>(sql`insert into departments(org_id,name,subsidiary_id) values(${org.orgId},'Assembly',${org.subsidiaryId}) returning id`)).rows;
+      assert.equal(department.length,1);
+      const rate=await tx.execute(sql`insert into labor_cost_rates(org_id,department_id,currency,rate,basis,annual_hours,effective_from,is_active,created_by,updated_by) values(${org.orgId},${department[0]!.id},'CAD','0','hour','2080','2026-01-01',true,${actor},${actor}) returning id`);
+      assert.equal(rate.rows.length,1);
+      return department[0]!.id;
+    });
     const center = await run((tx) => createWorkCenter(tx, org.orgId, actor, {
-      code: `WC-${randomUUID()}`, name: "Assembly center", kind: "machine", capacityHoursPerDay: "8", efficiencyPct: "100", absorbsOverhead: false,
+      code: `WC-${randomUUID()}`, name: "Assembly center", kind: "machine", capacityHoursPerDay: "8", efficiencyPct: "100", departmentId, absorbsOverhead: false,
     }));
     const routing = await run((tx) => createRouting(tx, org.orgId, actor, {
       producedItemId: org.items.assembly, code: `RT-${randomUUID()}`, name: "Assembly route", effectiveFrom: "2026-01-01",
