@@ -108,6 +108,7 @@
     "asOf": "Au",
     "from": "Du",
     "to": "Au",
+    "apply": "Appliquer",
     "customer": "Client",
     "allCustomers": "Tous les clients",
     "breakout": "Ventilation",

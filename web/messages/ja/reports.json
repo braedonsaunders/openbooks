@@ -108,6 +108,7 @@
     "asOf": "基準日",
     "from": "開始",
     "to": "終了",
+    "apply": "適用",
     "customer": "顧客",
     "allCustomers": "すべての顧客",
     "breakout": "内訳",

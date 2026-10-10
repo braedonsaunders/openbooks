@@ -551,6 +551,22 @@ export interface PickerOption {
 export interface TimeTypeOption extends PickerOption {
   costMultiplier: string
   isBillableDefault: boolean
+  /** Semantic class (regular, overtime, …); the grid default is the standard type, never list position. */
+  classification: string
+  /** The org's standard time type. Exactly one list entry carries this. */
+  isDefault: boolean
+}
+
+/**
+ * Flag the org's standard time type: the first regular-classification entry
+ * in list order. New grid lines default to the flagged entry, never to list
+ * position. With no regular type nothing is flagged and callers fall back to
+ * the list head — an explicit absence of a standard type, not a guess.
+ */
+function flagStandardTimeType(options: TimeTypeOption[]): TimeTypeOption[] {
+  const standard = options.find((option) => option.classification === 'regular')
+  if (standard) standard.isDefault = true
+  return options
 }
 
 export interface TimesheetPickers {
@@ -614,7 +630,7 @@ export async function loadPickers(
          and kind in (${sql.join(catalogItemKinds.map((kind) => sql`${kind}`), sql`, `)})
        order by name`),
     db.execute<Record<string, unknown>>(sql`
-      select id, name, cost_multiplier, is_billable_default from time_types
+      select id, name, classification, cost_multiplier, is_billable_default from time_types
        where org_id = ${orgId} and is_active order by cost_multiplier`),
     db.execute<Record<string, unknown>>(sql`
           select d.id, d.code, d.name from departments d
@@ -635,12 +651,14 @@ export async function loadPickers(
     })),
     projects: projects.rows.map(withCode),
     items: items.rows.map(withCode),
-    timeTypes: timeTypes.rows.map((r) => ({
+    timeTypes: flagStandardTimeType(timeTypes.rows.map((r) => ({
       value: String(r.id),
       label: r.name as string,
+      classification: String(r.classification ?? 'regular'),
       costMultiplier: String(r.cost_multiplier),
       isBillableDefault: r.is_billable_default === true,
-    })),
+      isDefault: false,
+    }))),
     departments: departments.rows.map(withCode),
   }
 }
