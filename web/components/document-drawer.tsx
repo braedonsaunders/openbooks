@@ -1809,8 +1809,16 @@ export function DocumentDrawer({
       .then(async (res) => {
         if (cancelled) return
         // A reader without access simply sees no picker; posting and the
-        // edit boundary still resolve and validate the account.
-        setControlChoices(res.ok ? await res.json() : null)
+        // edit boundary still resolve and validate the account. A response
+        // without the account list is not a picker either: the drawer keeps
+        // rendering rather than failing on a malformed payload.
+        const payload: unknown = res.ok ? await res.json().catch(() => null) : null
+        if (cancelled) return
+        setControlChoices(
+          payload && typeof payload === 'object' && Array.isArray((payload as { accounts?: unknown }).accounts)
+            ? (payload as NonNullable<typeof controlChoices>)
+            : null,
+        )
       })
       .catch(() => {
         if (!cancelled) setControlChoices(null)
