@@ -11,6 +11,8 @@
  *   caller shows the named refusal with its remedy.
  */
 
+import { grantsConferring } from '../../../lib/permissions'
+
 export type NewTimesheetRefusal = 'unlinked' | 'linkedOutOfScope' | 'noEmployees'
 
 export interface NewTimesheetStart {
@@ -19,9 +21,14 @@ export interface NewTimesheetStart {
   refusal: NewTimesheetRefusal | null
 }
 
-/** time.manage is the supervisory grant over everyone's time; time.self is one's own. */
+/**
+ * Whether the caller manages other people's time. Resolved through the same
+ * supervisory grant table the list, drawer and write path share — never a
+ * second rule: a literal time.manage check would miss a future grant that
+ * implies supervision without naming it.
+ */
 export function managesOthersTime(can: (permission: string) => boolean): boolean {
-  return can('time.manage')
+  return grantsConferring('time.manage', 'all').some((grant) => can(grant))
 }
 
 export async function resolveNewTimesheetStart(input: {
