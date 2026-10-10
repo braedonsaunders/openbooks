@@ -176,7 +176,7 @@ const GOLDENS: Golden[] = [
   // ── Hand-worked stubs, 2025 ──────────────────────────────────────────────
   { year: 2025, label: "Manitoba biweekly $2,500, claim code 1", citation: `hand-worked, ${ED[120]}`,
     input: { payDate: "2025-02-13", province: "MB", periodsPerYear: 26, ...cc1, income: "2500.00" },
-    expected: { cpp: "140.74", cpp2: "0.00", ei: "41.00", eiEmployer: "57.40", periodicTax: "457.68" },
+    expected: { cpp: "140.74", cpp2: "0.00", ei: "41.00", eiEmployer: "57.40", periodicTax: "457.69" },
     expectedFactors: { F5: "23.6538", A: "64385.0017", K1: "2419.35", K2: "616.5363", K4: "220.65",
       T3: "6786.3891", T1: "6786.3891", K1P: "1724.6520", K2P: "443.9061", T4: "5113.5296", T2: "5113.5296" } },
   { year: 2025, label: "Manitoba no-TD1 default uses the January BPAMB", citation: `hand-worked, ${ED[120]}`,
@@ -471,13 +471,14 @@ test("a bonus never reduces the default basic personal amount of the step withou
   assert.equal(withBonus.factors.TC, "15267.3600");
 });
 
-test("period tax withholds each leg rounded on its own", () => {
-  // Weekly Ontario annual-tax pairs whose remainders straddle the half cent in
-  // both directions: the withheld total is the sum of the rounded legs, not
-  // the rounded combined liability (278.93 and 446.51 respectively).
+test("period tax withholds each leg at ledger precision, then to the cent", () => {
+  // Weekly Ontario pairs: the withheld total is the sum of the rounded legs,
+  // not the rounded combined liability (278.93 and 446.51 respectively), and a
+  // leg of 151.99495 holds as 151.9950 before rounding to 152.00.
   for (const [t1, t2, federal, provincial] of [
     ["9503.0979", "5001.0623", "182.75", "96.17"],
     ["15363.7207", "7854.9254", "295.46", "151.06"],
+    ["15438.4414", "7903.7374", "296.89", "152.00"],
   ] as const) {
     const legs = periodTaxLegs(U(t1), U(t2), 52);
     assert.equal(legs.federal, U(federal)); assert.equal(legs.provincial, U(provincial));
