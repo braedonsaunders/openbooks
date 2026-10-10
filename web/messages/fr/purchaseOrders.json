@@ -55,6 +55,7 @@
     "convertedProgress": "Converti {billed}/{ordered}",
     "fullyConverted": "Entièrement converti",
     "allChangesSaved": "Toutes les modifications sont enregistrées",
+    "savedToast": "{target} {number} enregistré",
     "saveFailedRetry": "Échec de l’enregistrement — corrigez et réessayez",
     "unsavedChanges": "Modifications non enregistrées…",
     "totals": {

@@ -59,6 +59,7 @@
     "convertedProgress": "変換済み {billed}/{ordered}",
     "fullyConverted": "全量変換済み",
     "allChangesSaved": "すべての変更を保存しました",
+    "savedToast": "{target} {number} を保存しました",
     "saveFailedRetry": "保存に失敗しました — 修正して再試行してください",
     "unsavedChanges": "未保存の変更…",
     "totals": {

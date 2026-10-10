@@ -55,6 +55,7 @@
     "convertedProgress": "Convertido {billed}/{ordered}",
     "fullyConverted": "Totalmente convertida",
     "allChangesSaved": "Todos los cambios guardados",
+    "savedToast": "{target} {number} guardado",
     "saveFailedRetry": "Error al guardar — corrija y reintente",
     "unsavedChanges": "Cambios sin guardar…",
     "totals": {

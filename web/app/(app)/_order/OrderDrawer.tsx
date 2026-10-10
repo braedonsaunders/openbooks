@@ -1229,7 +1229,7 @@ export function OrderDrawer({
   /** Unsaved-create Save: one idempotent collection POST (status=draft).
    *  The document number allocates inside that transaction — nothing before
    *  this call wrote a row or burned a sequence value. */
-  async function persistCreate(): Promise<string | null> {
+  async function persistCreate(): Promise<{ id: string; number: string } | null> {
     if (refuseUnresolvedPriceLookup()) return null
     const sentRows = rows
     const saved = await persistOrderDraft({
@@ -1247,14 +1247,14 @@ export function OrderDrawer({
       onError: (message) => refuse(message, t('actionFailed')),
     })
     if (!saved) return null
-    const id = (saved.doc as Record<string, unknown> | undefined)?.id
-    if (typeof id !== 'string' || id === '') {
+    const created = asOrderDoc(saved.doc)
+    if (!created.id) {
       refuse(undefined, t('actionFailed'))
       return null
     }
     // A successful save retires the retained draft.
     if (draftKey) clearOrderDraft(draftKey)
-    return id
+    return { id: created.id, number: created.document_number ?? '' }
   }
 
   async function save() {
@@ -1273,9 +1273,13 @@ export function OrderDrawer({
     }
     await execute(async () => {
       if (createMode) {
-        const id = await persistCreate()
-        if (!id) return { ok: true as const, status: 200, data: null }
-        router.push(`${meta.base}?${meta.param}=${id}&mode=edit`)
+        const created = await persistCreate()
+        if (!created) return { ok: true as const, status: 200, data: null }
+        toast.success(t('savedToast', { target: t('docKind', { kind }), number: created.number }))
+        // Land on the persisted record in view mode: the drawer remounts
+        // clean with the stored revision, so Issue/Send/PDF are available
+        // at once instead of needing a reload to leave edit mode behind.
+        router.push(`${meta.base}?${meta.param}=${created.id}`)
         router.refresh()
         return { ok: true as const, status: 200, data: null }
       }
@@ -1292,6 +1296,7 @@ export function OrderDrawer({
       // A successful save retires the retained draft.
       if (draftKey) clearOrderDraft(draftKey)
       setMode('view')
+      toast.success(t('savedToast', { target: t('docKind', { kind }), number: savedDoc.document_number ?? '' }))
       router.refresh()
       return { ok: true as const, status: 200, data: null }
     }, { fallbackMessage: t('actionFailed') })

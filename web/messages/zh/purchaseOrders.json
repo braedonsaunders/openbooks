@@ -59,6 +59,7 @@
     "convertedProgress": "已转换 {billed}/{ordered}",
     "fullyConverted": "已全部转换",
     "allChangesSaved": "所有更改已保存",
+    "savedToast": "已保存 {target} {number}",
     "saveFailedRetry": "保存失败——修正后重试",
     "unsavedChanges": "有未保存的更改……",
     "totals": {
