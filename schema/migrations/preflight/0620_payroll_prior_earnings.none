@@ -1,0 +1,1 @@
+Creates an empty, source-bound prior-earnings table for dated statutory lookbacks. Existing payroll, comparison registers, annual carry-ins and financial history are unchanged. New reference constraints and guards apply only to explicitly recorded prior earnings; no historic wages, coverage or source classification is inferred from tenant data.

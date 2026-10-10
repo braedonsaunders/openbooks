@@ -656,6 +656,12 @@ const PAYROLL_OPENING_BALANCES_DENIED_COLUMNS: ReadonlySet<string> = new Set([
   "updated_by",
 ]);
 
+const PAYROLL_PRIOR_EARNINGS_DENIED_COLUMNS: ReadonlySet<string> = new Set([
+  ...PAYROLL_OPENING_BALANCES_DENIED_COLUMNS,
+  // A retained register can contain several employees; export this subject's dated facts only.
+  'source_file_id', 'source_version_id',
+]);
+
 // Dated assignment evidence is insert-only: its schema has a creator, not an updater.
 const PAYROLL_EMPLOYER_ASSIGNMENTS_DENIED_COLUMNS: ReadonlySet<string> = new Set([
   "org_id", "employee_party_id", "created_by",
@@ -1535,6 +1541,12 @@ export async function buildExport(orgId: string, exportId: string, opts?: { owne
           from payroll_period_openings
          where org_id = ${orgId} and employee_party_id = ${partyId}
          order by tax_year, period_start, paid_through, id
+      `)).rows;
+      payload.priorEarnings = (await db.execute<Record<string, unknown>>(sql`
+        select ${await heldDataProjection('payroll_prior_earnings', PAYROLL_PRIOR_EARNINGS_DENIED_COLUMNS)}
+          from payroll_prior_earnings
+         where org_id = ${orgId} and employee_party_id = ${partyId}
+         order by history_from, id
       `)).rows;
       payload.employerAssignments = (await db.execute<Record<string, unknown>>(sql`
         select ${await heldDataProjection("payroll_employee_employer_assignments", PAYROLL_EMPLOYER_ASSIGNMENTS_DENIED_COLUMNS)}
