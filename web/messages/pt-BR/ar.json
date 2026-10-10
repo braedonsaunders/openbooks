@@ -28,7 +28,8 @@
     "newCredit": "Novo crédito de cliente",
     "newCashSale": "Nova venda à vista",
     "newCashRefund": "Novo reembolso à vista",
-    "submitForApproval": "Enviar para aprovação"
+    "submitForApproval": "Enviar para aprovação",
+    "receivePayment": "Receber pagamento"
   },
   "tenders": {
     "title": "Formas de pagamento",
@@ -103,7 +104,12 @@
     "returnsNone": "Sem devolução de estoque",
     "marketplaceCollectedBy": "Coletado por",
     "marketplaceCollectedByHelp": "A parte do marketplace é lançada na conta de compensação dele, nunca no seu passivo fiscal.",
-    "marketplaceMerchant": "Loja"
+    "marketplaceMerchant": "Loja",
+    "controlAccount": "Conta a receber",
+    "controlAccountHelp": "A conta a receber em que este documento é lançado. Pagamentos e créditos o liquidam na mesma conta. Deixe em branco para usar o padrão.",
+    "controlAccountPartyDefault": "Padrão do cliente — {account}",
+    "controlAccountOrganizationDefault": "Padrão da organização — {account}",
+    "controlAccountUnset": "Nenhuma conta a receber configurada — defina uma em Configuração → Empresa e Contabilidade → Contas de controle"
   },
   "toasts": {
     "actionFailed": "Falha na ação",

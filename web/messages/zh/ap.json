@@ -22,7 +22,9 @@
     "newBill": "新建账单",
     "newCredit": "新建供应商贷记",
     "capture": "采集账单",
-    "submitForApproval": "提交审批"
+    "submitForApproval": "提交审批",
+    "payBill": "支付此账单",
+    "payBills": "支付账单"
   },
   "drawer": {
     "editingHint": "编辑中——保存以应用更改",
@@ -57,7 +59,12 @@
     "formPreferredCleared": "已清除首选表单",
     "formPreferredFailed": "无法保存首选表单",
     "returnsReceipt": "退回的收货",
-    "returnsNone": "不退回库存"
+    "returnsNone": "不退回库存",
+    "controlAccount": "应付科目",
+    "controlAccountHelp": "此单据过账的应付科目。付款和供应商贷项在同一科目上核销。留空则使用默认科目。",
+    "controlAccountPartyDefault": "供应商默认 — {account}",
+    "controlAccountOrganizationDefault": "组织默认 — {account}",
+    "controlAccountUnset": "未配置应付科目 — 请在“设置 → 公司与会计 → 控制科目”中设置"
   },
   "capture": {
     "title": "账单采集",

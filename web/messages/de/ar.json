@@ -28,7 +28,8 @@
     "newCredit": "Neue Kundengutschrift",
     "newCashSale": "Neuer Barverkauf",
     "newCashRefund": "Neue Barerstattung",
-    "submitForApproval": "Zur Genehmigung einreichen"
+    "submitForApproval": "Zur Genehmigung einreichen",
+    "receivePayment": "Zahlung erfassen"
   },
   "tenders": {
     "title": "Zahlungsmittel",
@@ -103,7 +104,12 @@
     "returnsNone": "Keine Warenrückgabe",
     "marketplaceCollectedBy": "Steuererhebung durch",
     "marketplaceCollectedByHelp": "Der Marktplatzanteil wird auf dessen Verrechnungskonto gebucht, nie auf Ihre Steuerschuld.",
-    "marketplaceMerchant": "Händler"
+    "marketplaceMerchant": "Händler",
+    "controlAccount": "Forderungskonto",
+    "controlAccountHelp": "Das Forderungskonto, auf das dieser Beleg gebucht wird. Zahlungen und Gutschriften gleichen ihn auf demselben Konto aus. Leer lassen, um den Standard zu verwenden.",
+    "controlAccountPartyDefault": "Kundenstandard — {account}",
+    "controlAccountOrganizationDefault": "Unternehmensstandard — {account}",
+    "controlAccountUnset": "Kein Forderungskonto eingerichtet – legen Sie eines unter Einrichtung → Unternehmen & Buchhaltung → Kontrollkonten fest"
   },
   "toasts": {
     "actionFailed": "Aktion fehlgeschlagen",

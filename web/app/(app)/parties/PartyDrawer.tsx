@@ -83,6 +83,7 @@ export function PartyDrawer({
   autopay = null,
   consolidatedBilling = null,
   debitMandates = null,
+  settlementHrefs = null,
   initialTab = 'overview',
   initialMode = 'view',
   basePath = '/parties',
@@ -179,6 +180,10 @@ export function PartyDrawer({
    *  enforce, or the record has no customer role), so the tab never renders
    *  without the read surface behind it. */
   debitMandates?: { partyId: string } | null
+  /** Receive payment (customer) / Pay bills (vendor) links opening the new
+   *  payment for this party. Resolved by the loader from the party's roles
+   *  and the viewer's payment permissions; null entries hide the action. */
+  settlementHrefs?: { receivePayment: string | null; payBills: string | null } | null
   initialTab?: PartyTab
   initialMode?: DrawerMode
   basePath?: string
@@ -1104,6 +1109,16 @@ export function PartyDrawer({
           ) : null}
           {mode !== 'edit' && (payload.customer || payload.vendor) ? (
             <>
+              {settlementHrefs?.receivePayment ? (
+                <Button asChild variant="outline">
+                  <Link href={settlementHrefs.receivePayment}>{t('receivePayment')}</Link>
+                </Button>
+              ) : null}
+              {settlementHrefs?.payBills ? (
+                <Button asChild variant="outline">
+                  <Link href={settlementHrefs.payBills}>{t('payBills')}</Link>
+                </Button>
+              ) : null}
               <Button asChild variant="outline">
                 <Link href={`/reports/statements/${payload.party.id}?side=${payload.vendor && !payload.customer ? 'ap' : 'ar'}`}>{t('viewStatement')}</Link>
               </Button>

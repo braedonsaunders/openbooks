@@ -28,7 +28,8 @@
     "newCredit": "New customer credit",
     "newCashSale": "New cash sale",
     "newCashRefund": "New cash refund",
-    "submitForApproval": "Submit for approval"
+    "submitForApproval": "Submit for approval",
+    "receivePayment": "Receive payment"
   },
   "tenders": {
     "title": "Tenders",
@@ -103,7 +104,12 @@
     "returnsNone": "No stock returned",
     "marketplaceCollectedBy": "Tax collected by",
     "marketplaceCollectedByHelp": "The marketplace's share posts to its clearing account, never your tax liability.",
-    "marketplaceMerchant": "Merchant"
+    "marketplaceMerchant": "Merchant",
+    "controlAccount": "Receivable account",
+    "controlAccountHelp": "The receivable this document posts to. Payments and credits settle it on the same account. Leave empty to use the default.",
+    "controlAccountPartyDefault": "Customer default — {account}",
+    "controlAccountOrganizationDefault": "Organization default — {account}",
+    "controlAccountUnset": "No receivable account configured — set one in Setup → Company & Accounting → Control accounts"
   },
   "toasts": {
     "actionFailed": "Action failed",

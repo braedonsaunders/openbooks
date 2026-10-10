@@ -34,6 +34,8 @@
     "updateFailed": "更新失败",
     "nameRequired": "输入名称以保存该往来单位",
     "viewStatement": "查看对账单",
+    "receivePayment": "收款",
+    "payBills": "支付账单",
     "creditHold": "信用冻结",
     "paymentHold": "付款冻结",
     "holdReason": "冻结原因",

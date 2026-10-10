@@ -22,7 +22,9 @@
     "newBill": "Nova conta a pagar",
     "newCredit": "Novo crédito de fornecedor",
     "capture": "Capturar contas a pagar",
-    "submitForApproval": "Enviar para aprovação"
+    "submitForApproval": "Enviar para aprovação",
+    "payBill": "Pagar conta",
+    "payBills": "Pagar contas"
   },
   "drawer": {
     "editingHint": "Editando — Salve para aplicar as alterações",
@@ -57,7 +59,12 @@
     "formPreferredCleared": "Formulário preferido removido",
     "formPreferredFailed": "Não foi possível salvar o formulário preferido",
     "returnsReceipt": "Devolve recebimento",
-    "returnsNone": "Sem devolução de estoque"
+    "returnsNone": "Sem devolução de estoque",
+    "controlAccount": "Conta a pagar",
+    "controlAccountHelp": "A conta a pagar em que este documento é lançado. Pagamentos e créditos de fornecedor o liquidam na mesma conta. Deixe em branco para usar o padrão.",
+    "controlAccountPartyDefault": "Padrão do fornecedor — {account}",
+    "controlAccountOrganizationDefault": "Padrão da organização — {account}",
+    "controlAccountUnset": "Nenhuma conta a pagar configurada — defina uma em Configuração → Empresa e Contabilidade → Contas de controle"
   },
   "capture": {
     "title": "Captura de contas a pagar",

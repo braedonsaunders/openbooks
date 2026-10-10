@@ -34,6 +34,8 @@
     "updateFailed": "Error al actualizar",
     "nameRequired": "Introduzca un nombre para guardar este tercero",
     "viewStatement": "Ver extracto",
+    "receivePayment": "Recibir pago",
+    "payBills": "Pagar facturas",
     "activated": "Tercero activado",
     "deactivated": "Tercero desactivado",
     "payrollTabs": {

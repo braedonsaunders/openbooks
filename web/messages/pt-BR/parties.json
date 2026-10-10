@@ -34,6 +34,8 @@
     "updateFailed": "Falha ao atualizar",
     "nameRequired": "Digite um nome para salvar esta parte",
     "viewStatement": "Ver extrato",
+    "receivePayment": "Receber pagamento",
+    "payBills": "Pagar contas",
     "creditHold": "Bloqueio de crédito",
     "paymentHold": "Bloqueio de pagamento",
     "holdReason": "Motivo do bloqueio",

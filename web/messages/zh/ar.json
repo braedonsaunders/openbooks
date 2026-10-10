@@ -28,7 +28,8 @@
     "newCredit": "新建客户贷项",
     "newCashSale": "新建现金销售",
     "newCashRefund": "新建现金退款",
-    "submitForApproval": "提交审批"
+    "submitForApproval": "提交审批",
+    "receivePayment": "收款"
   },
   "tenders": {
     "title": "结算方式",
@@ -103,7 +104,12 @@
     "returnsNone": "不退回库存",
     "marketplaceCollectedBy": "税款收取方",
     "marketplaceCollectedByHelp": "市场平台部分的税款将记入其结算账户，而非您的税务负债。",
-    "marketplaceMerchant": "商家"
+    "marketplaceMerchant": "商家",
+    "controlAccount": "应收科目",
+    "controlAccountHelp": "此单据过账的应收科目。收款和贷项在同一科目上核销。留空则使用默认科目。",
+    "controlAccountPartyDefault": "客户默认 — {account}",
+    "controlAccountOrganizationDefault": "组织默认 — {account}",
+    "controlAccountUnset": "未配置应收科目 — 请在“设置 → 公司与会计 → 控制科目”中设置"
   },
   "toasts": {
     "actionFailed": "操作失败",

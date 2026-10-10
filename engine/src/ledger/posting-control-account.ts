@@ -215,3 +215,110 @@ export async function postedDocumentControlAccount(
      where d.org_id = ${orgId} and d.id = ${documentId} and d.status = 'posted'`)).rows[0];
   return row?.account_id ?? null;
 }
+
+/**
+ * Identity facts a caller needs to scope a control-account lookup: the
+ * party's subsidiary and the document's status and subsidiary, each null
+ * when the id names nothing of that kind in this organization.
+ */
+export async function controlAccountLookupScope(
+  runner: Pick<typeof db, "execute">,
+  input: { orgId: string; kind: string; partyId: string | null; documentId: string | null },
+): Promise<{
+  party: { subsidiaryId: string | null } | null;
+  document: { status: string; subsidiaryId: string | null } | null;
+}> {
+  const party = input.partyId
+    ? (await runner.execute<{ subsidiaryId: string | null }>(sql`
+        select subsidiary_id as "subsidiaryId" from parties
+         where id = ${input.partyId} and org_id = ${input.orgId}`)).rows[0] ?? null
+    : null;
+  const document = input.documentId
+    ? (await runner.execute<{ status: string; subsidiaryId: string | null }>(sql`
+        select status, subsidiary_id as "subsidiaryId" from documents
+         where id = ${input.documentId} and org_id = ${input.orgId} and kind = ${input.kind}`)).rows[0] ?? null
+    : null;
+  return { party, document };
+}
+
+export interface ControlAccountOption {
+  id: string;
+  number: string | null;
+  name: string;
+}
+
+export interface ControlAccountChoices {
+  side: ControlSide;
+  /** Active posting accounts of the side's type visible to the subsidiary. */
+  accounts: ControlAccountOption[];
+  /** The party's default, when it has one. */
+  partyDefault: ControlAccountOption | null;
+  /** The organization control account, when configured. */
+  organizationDefault: ControlAccountOption | null;
+  /** The document's current choice, labelled even if no longer offered. */
+  selected: ControlAccountOption | null;
+  /** For a posted document: the account its open item actually carries. */
+  posted: ControlAccountOption | null;
+}
+
+/**
+ * What a party document's receivable/payable picker offers and what an
+ * empty choice resolves to. Read-only; the edit boundary and the posting
+ * kernel re-validate whatever is chosen.
+ */
+export async function controlAccountChoices(
+  runner: Pick<typeof db, "execute">,
+  input: {
+    orgId: string;
+    kind: string;
+    partyId: string | null;
+    subsidiaryId: string | null;
+    allowedSubsidiaryIds: ReadonlySet<string> | null;
+    /** The form's current choice, to label. */
+    selectedAccountId?: string | null;
+    /** A posted document of this organization whose carried account to report. */
+    postedDocumentId?: string | null;
+  },
+): Promise<ControlAccountChoices | null> {
+  const side = DOCUMENT_CONTROL_SIDE[input.kind];
+  if (!side) return null;
+  const allowed = input.allowedSubsidiaryIds === null ? null : [...input.allowedSubsidiaryIds];
+  const accounts = (await runner.execute<ControlAccountOption>(sql`
+    select a.id, a.number, a.name
+      from accounts a
+     where a.org_id = ${input.orgId} and a.is_active and not a.is_summary
+       and a.type = ${EXPECTED_TYPE[side]}
+       and (a.subsidiary_id is null or a.subsidiary_id = ${input.subsidiaryId}::uuid)
+       and (${allowed === null}::boolean or a.subsidiary_id is null
+            or a.subsidiary_id = any(${`{${(allowed ?? []).join(",")}}`}::uuid[]))
+     order by a.number nulls last, a.name`)).rows;
+  const label = async (id: string | null): Promise<ControlAccountOption | null> => {
+    if (!id || !isUuid(id)) return null;
+    const row = (await runner.execute<ControlAccountOption>(sql`
+      select id, number, name from accounts where org_id = ${input.orgId} and id = ${id}::uuid`)).rows[0];
+    return row ?? null;
+  };
+  const role = input.partyId
+    ? (await runner.execute<{ account_id: string | null }>(
+        side === "ar"
+          ? sql`select ar_account_id::text as account_id from customer_roles
+                 where org_id = ${input.orgId} and party_id = ${input.partyId}`
+          : sql`select ap_account_id::text as account_id from vendor_roles
+                 where org_id = ${input.orgId} and party_id = ${input.partyId}`,
+      )).rows[0]?.account_id ?? null
+    : null;
+  const org = (await runner.execute<{ account_id: string | null }>(sql`
+    select settings->'controlAccounts'->>${side}::text as account_id
+      from orgs where id = ${input.orgId}`)).rows[0]?.account_id ?? null;
+  const postedAccount = input.postedDocumentId
+    ? await postedDocumentControlAccount(runner, input.orgId, input.postedDocumentId)
+    : null;
+  return {
+    side,
+    accounts,
+    partyDefault: await label(role),
+    organizationDefault: await label(org),
+    selected: await label(input.selectedAccountId ?? null),
+    posted: await label(postedAccount),
+  };
+}

@@ -67,6 +67,14 @@ export async function PaymentsSection({
           userRoles,
           authz,
           formId: pickString(sp.form),
+          // "Receive payment" / "Pay bill" from a customer, vendor, invoice
+          // or bill opens the new payment for that party and document.
+          prefill: creating
+            ? {
+                partyId: typeof sp.partyId === 'string' && isUuid(sp.partyId) ? sp.partyId : undefined,
+                documentId: typeof sp.applyTo === 'string' && isUuid(sp.applyTo) ? sp.applyTo : undefined,
+              }
+            : undefined,
         })
       : null
   const closeHref = mergeHref(basePath, sp, {
@@ -74,6 +82,8 @@ export async function PaymentsSection({
     paymentNew: undefined,
     mode: undefined,
     form: undefined,
+    partyId: undefined,
+    applyTo: undefined,
   })
   // Persisted receipts belong to the shared list host, including server deep
   // links. A separate server drawer would cover the host's second dialog.

@@ -9,6 +9,10 @@ import { documentCreateHref } from '../lib/document-kinds'
 export interface NewDocumentItem {
   kind: string
   label: string
+  /** A related record created on its own surface (for example Receive
+   *  payment on the receivables cockpit): the item navigates here instead
+   *  of opening the document drawer for `kind`. */
+  href?: string
 }
 
 /**
@@ -30,9 +34,9 @@ export function NewDocumentButton({
   const [open, setOpen] = useState(false)
   const router = useRouter()
 
-  function create(kind: string) {
+  function create(item: NewDocumentItem) {
     setOpen(false)
-    router.push(documentCreateHref(basePath, kind))
+    router.push(item.href ?? documentCreateHref(basePath, item.kind))
   }
 
   // No creatable kind → no control: never a dropdown that opens empty.
@@ -42,7 +46,7 @@ export function NewDocumentButton({
   if (items.length === 1) {
     const only = items[0]!
     return (
-      <Button onClick={() => create(only.kind)}>
+      <Button onClick={() => create(only)}>
         <Plus size={15} /> {only.label}
       </Button>
     )
@@ -65,7 +69,7 @@ export function NewDocumentButton({
           <button
             key={item.kind}
             type="button"
-            onClick={() => create(item.kind)}
+            onClick={() => create(item)}
             className="flex w-full items-center rounded px-2.5 py-1.5 text-left text-sm text-slate-700 hover:bg-slate-100 disabled:opacity-50 dark:text-slate-200 dark:hover:bg-slate-800"
           >
             {item.label}

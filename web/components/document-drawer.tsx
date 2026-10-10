@@ -1091,6 +1091,10 @@ export interface DocumentDrawerProps {
   allocationsEntryEnabled?: boolean
   /** RMA create link resolved by the invoice loader's permission and feature gates. */
   returnAuthorizationHref?: string | null
+  /** Receive payment (posted invoice) or Pay bill (posted bill) link, opening
+   *  the new payment with the party and this document preselected. Resolved
+   *  by the loader from the open balance and the payment permission. */
+  settlementHref?: string | null
   /** Server-known promotions gate. When explicitly false the drawer renders
    *  no promotion action or chip instead of probing an endpoint the server
    *  must refuse. Undefined preserves the hidden default. */
@@ -1149,6 +1153,7 @@ export function DocumentDrawer({
   afterContent,
   allocationsEntryEnabled,
   returnAuthorizationHref,
+  settlementHref,
   promotionsEnabled,
   tenderAccounts,
   refundHref,
@@ -1764,6 +1769,53 @@ export function DocumentDrawer({
       cancelled = true
     }
   }, [returnSide, partyId, returnRowsKey, recordType, subsidiaryId])
+
+  // -- receivable/payable account (party documents) ------------------------
+  // Invoices, credit memos, bills and vendor credits post their open item to
+  // the document's own choice, else the party default, else the organization
+  // control account. The picker lists the accounts the edit boundary accepts
+  // and names what an empty choice resolves to; a posted document shows the
+  // account its open item actually carries. The server re-validates both.
+  const controlSide: 'ar' | 'ap' | null =
+    config.isOpenItem && (config.family === 'ar' || config.family === 'ap') ? config.family : null
+  const controlChoice = typeof customValues.controlAccountId === 'string' ? customValues.controlAccountId : ''
+  type ControlOption = { id: string; number: string | null; name: string }
+  const [controlChoices, setControlChoices] = useState<{
+    accounts: ControlOption[]
+    partyDefault: ControlOption | null
+    organizationDefault: ControlOption | null
+    selected: ControlOption | null
+    posted: ControlOption | null
+  } | null>(null)
+  useEffect(() => {
+    if (!controlSide) return
+    let cancelled = false
+    const params = new URLSearchParams({ kind: String(config.kind) })
+    if (partyId) params.set('partyId', partyId)
+    if (subsidiaryId) params.set('subsidiaryId', subsidiaryId)
+    if (controlChoice) params.set('accountId', controlChoice)
+    if (typeof doc.id === 'string' && doc.id) params.set('documentId', doc.id)
+    fetch(`/api/documents/control-account?${params.toString()}`)
+      .then(async (res) => {
+        if (cancelled) return
+        // A reader without access simply sees no picker; posting and the
+        // edit boundary still resolve and validate the account.
+        setControlChoices(res.ok ? await res.json() : null)
+      })
+      .catch(() => {
+        if (!cancelled) setControlChoices(null)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [controlSide, config.kind, partyId, subsidiaryId, controlChoice, doc.id, doc.status])
+  const controlLabel = (option: ControlOption | null | undefined): string =>
+    option ? `${option.number ? `${option.number} · ` : ''}${option.name}` : ''
+  const controlDefault = controlChoices?.partyDefault
+    ? t('drawer.controlAccountPartyDefault', { account: controlLabel(controlChoices.partyDefault) })
+    : controlChoices?.organizationDefault
+      ? t('drawer.controlAccountOrganizationDefault', { account: controlLabel(controlChoices.organizationDefault) })
+      : t('drawer.controlAccountUnset')
   const showReturnPicker = returnSide !== null && returnSources.length > 0
   const returnSourceColumn = useMemo<LineGridColumn<LineRow> | null>(() => {
     if (!showReturnPicker) return null
@@ -3166,6 +3218,11 @@ export function DocumentDrawer({
             {doc.kind === 'customer_invoice' && returnAuthorizationHref ? (
               <Button variant="outline" asChild><Link href={returnAuthorizationHref}>{tReturns('actions.new')}</Link></Button>
             ) : null}
+            {settlementHref && isPosted && (doc.kind === 'customer_invoice' || doc.kind === 'vendor_bill') ? (
+              <Button variant="outline" asChild>
+                <Link href={settlementHref}>{doc.kind === 'customer_invoice' ? t('actions.receivePayment') : t('actions.payBill')}</Link>
+              </Button>
+            ) : null}
             {doc.kind === 'cash_sale' && isPosted && refundHref && canCreate ? (
               <Button variant="outline" asChild><Link href={refundHref}>{t('tenders.refundAction')}</Link></Button>
             ) : null}
@@ -3388,6 +3445,36 @@ export function DocumentDrawer({
             <CustomFieldInputs defs={headerDefs} values={customValues} onChange={setCustomValues} readOnly={!editable} />
           </>
         )}
+
+        {controlSide && controlChoices ? (
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className={field}>
+              <FieldLabel fieldName={t('drawer.controlAccount')}>{t('drawer.controlAccount')}</FieldLabel>
+              {editable ? (
+                <>
+                  <SearchSelect
+                    options={controlChoices.accounts.map((option) => ({ value: option.id, label: controlLabel(option) }))}
+                    value={controlChoice}
+                    onChange={(value) => setCustomValues((current) => ({ ...current, controlAccountId: value ?? '' }))}
+                    placeholder={controlDefault}
+                    clearable
+                    emptyLabel={controlDefault}
+                    ariaLabel={t('drawer.controlAccount')}
+                  />
+                  <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{t('drawer.controlAccountHelp')}</p>
+                </>
+              ) : (
+                <p className="text-sm">
+                  {isPosted && controlChoices.posted
+                    ? controlLabel(controlChoices.posted)
+                    : controlChoice
+                      ? controlLabel(controlChoices.selected) || controlChoice
+                      : controlDefault}
+                </p>
+              )}
+            </div>
+          </div>
+        ) : null}
 
         {segments.some((segment) => segment.showOnHeader) ? (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">

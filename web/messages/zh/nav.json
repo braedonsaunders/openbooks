@@ -263,5 +263,9 @@
     "setup-overhead": "间接费用",
     "crm-sales": "销售",
     "hrm-compensation": "薪酬"
+  },
+  "moduleKeywords": {
+    "receipts": "收据, 收款, 收到付款, 付款, 客户付款, 回款",
+    "payments": "支付账单, 付账单, 账单付款, 付款, 支票"
   }
 }

@@ -89,3 +89,23 @@ test('matching ignores case and accents', () => {
   const menu: SidebarNavGroup[] = [{ id: 'g', label: 'Comptabilité', iconKey: 'grid', items: [{ href: '/e', label: 'Écritures de journal', iconKey: 'grid' }] }]
   assert.deepEqual(searchPages(buildPageIndex(menu), 'ecritures').map((hit) => hit.href), ['/e'])
 })
+
+test('a page is also found by its localized synonyms, after pages its words name directly', () => {
+  const menu: SidebarNavGroup[] = [{
+    id: 'customers',
+    label: 'Customers',
+    iconKey: 'users',
+    items: [
+      { href: '/receipts', label: 'Customer Payments', iconKey: 'check', keywords: ['receipt', 'receive payment'] },
+      { href: '/payments', label: 'Vendor Payments', iconKey: 'check' },
+      { href: '/receivables', label: 'Receivables', iconKey: 'grid' },
+    ],
+  }]
+  const found = (query: string) => searchPages(buildPageIndex(menu), query).map((hit) => hit.href)
+  assert.deepEqual(found('receipt'), ['/receipts'])
+  assert.deepEqual(found('receive payment'), ['/receipts'])
+  assert.deepEqual(found('rece'), ['/receivables', '/receipts'], 'a page named by the query outranks a synonym hit')
+  assert.deepEqual(searchPages(buildPageIndex(menu), 'receipt')[0], {
+    href: '/receipts', title: 'Customer Payments', trail: ['Customers'], iconKey: 'check',
+  }, 'synonyms never leak into the hit')
+})

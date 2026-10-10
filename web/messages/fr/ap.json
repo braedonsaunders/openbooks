@@ -22,7 +22,9 @@
     "newBill": "Nouvelle facture",
     "newCredit": "Nouvelle note de crédit",
     "capture": "Capturer des factures",
-    "submitForApproval": "Soumettre pour approbation"
+    "submitForApproval": "Soumettre pour approbation",
+    "payBill": "Payer la facture",
+    "payBills": "Payer des factures"
   },
   "drawer": {
     "editingHint": "Modification — Enregistrer pour appliquer",
@@ -57,7 +59,12 @@
     "formPreferredCleared": "Formulaire préféré effacé",
     "formPreferredFailed": "Impossible d’enregistrer le formulaire préféré",
     "returnsReceipt": "Retourne la réception",
-    "returnsNone": "Aucun stock retourné"
+    "returnsNone": "Aucun stock retourné",
+    "controlAccount": "Compte fournisseur",
+    "controlAccountHelp": "Le compte fournisseur sur lequel ce document est comptabilisé. Les paiements et avoirs fournisseurs le soldent sur ce même compte. Laissez vide pour utiliser le compte par défaut.",
+    "controlAccountPartyDefault": "Défaut du fournisseur — {account}",
+    "controlAccountOrganizationDefault": "Défaut de l’organisation — {account}",
+    "controlAccountUnset": "Aucun compte fournisseur configuré — définissez-en un dans Configuration → Société et comptabilité → Comptes de contrôle"
   },
   "capture": {
     "title": "Capture de factures",

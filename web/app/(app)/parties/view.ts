@@ -43,6 +43,7 @@ import {
 import { listScopedAccountOptions } from '../../../lib/scoped-options'
 import { resolveFormLayout } from '../../../lib/customization/resolve'
 import type { PartyDrawer, PartyTab } from './PartyDrawer'
+import { settlementHrefFor } from '../../../lib/settlement-href'
 
 /**
  * The party list, split into a loader and a spec.
@@ -476,6 +477,21 @@ export async function loadParties(
           // the persisted customer role row; null hides the tab.
           debitMandates: can(authz, 'admin.setup.manage') && (role === 'customer' || !role) && openParty?.customer != null
             ? { partyId: String(openParty.party.id) }
+            : null,
+          // Receive payment / Pay bills open the new payment for this party,
+          // offered only for the role the drawer shows and the viewer's
+          // payment permission (the payment surfaces re-check both).
+          settlementHrefs: openParty && !creating
+            ? {
+                receivePayment:
+                  openParty.customer != null && role !== 'vendor' && role !== 'employee' && can(authz, 'ar.pay')
+                    ? settlementHrefFor('ar', String(openParty.party.id))
+                    : null,
+                payBills:
+                  openParty.vendor != null && role !== 'customer' && role !== 'employee' && can(authz, 'ap.pay')
+                    ? settlementHrefFor('ap', String(openParty.party.id))
+                    : null,
+              }
             : null,
           multiCurrency,
           complianceEnabled,
