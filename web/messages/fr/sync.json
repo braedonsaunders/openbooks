@@ -18,6 +18,7 @@
     "mirrorBadge": "miroir : {schedule}",
     "lastRun": "Dernière exécution : {lastRun} · Synchronisé jusqu’au : {cursor}",
     "schedule": "Calendrier du miroir",
+    "incrementalHint": "Chaque synchronisation comprend les données financières des projets, les pièces jointes des transactions et les registres opérationnels activés. Les fichiers manquants ou modifiés sont importés ; les fichiers inchangés sont ignorés.",
     "mirrorHealth": "Miroir",
     "attachmentHealth": "Pièces jointes",
     "sourceDeletions": "Suppressions à la source en attente de rapprochement",
@@ -35,6 +36,8 @@
     "reconnect": "Reconnecter",
     "test": "Tester",
     "mirrorNow": "Miroir maintenant",
+    "syncNow": "Synchroniser maintenant",
+    "more": "Autres actions pour {name}",
     "retryMirror": "Relancer le miroir",
     "syncAttachments": "Synchroniser les pièces jointes",
     "syncProjectFinancials": "Synchroniser les données financières des projets",
@@ -51,6 +54,12 @@
   },
   "runs": {
     "heading": "Exécutions récentes",
+    "history": "Historique",
+    "empty": "Aucune exécution pour le moment. Lancez une synchronisation depuis Connexions.",
+    "features": {
+      "crm": "CRM",
+      "fixedAssets": "Immobilisations"
+    },
     "columns": {
       "started": "Démarrée",
       "kind": "Type",
@@ -77,6 +86,10 @@
       "attachments": "Inventaire et importation des pièces jointes sources"
     },
     "stats": {
+      "crm": "CRM : {accounts} comptes · {opportunities} opportunités",
+      "fixedAssets": "{count} immobilisations",
+      "featureDisabled": "{feature} : fonctionnalité désactivée",
+      "incrementalAttachments": "pièces jointes : {created} nouvelles · {changed} mises à jour · {skipped} inchangées",
       "attachments": "{files} fichiers sources · {links} liens de transaction · {created} nouveaux fichiers",
       "projectFinancials": "{projects} projets source ({projectChanges} modifiés) · {source} écritures de temps source · {exact} exactes · {changed} états de facturation rapprochés",
       "docs": "+{new} docs · {amended} modifiés · {unchanged} inchangés",

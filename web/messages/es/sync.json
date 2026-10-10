@@ -18,6 +18,7 @@
     "mirrorBadge": "espejo: {schedule}",
     "lastRun": "Última ejecución: {lastRun} · Sincronizado hasta: {cursor}",
     "schedule": "Calendario del espejo",
+    "incrementalHint": "Cada sincronización incluye los datos financieros de los proyectos, los archivos adjuntos de las transacciones y los registros operativos habilitados. Se importan los archivos que faltan o han cambiado; se omiten los archivos sin cambios.",
     "mirrorHealth": "Espejo",
     "attachmentHealth": "Adjuntos",
     "sourceDeletions": "Eliminaciones de origen pendientes de conciliación",
@@ -35,6 +36,8 @@
     "reconnect": "Reconectar",
     "test": "Probar",
     "mirrorNow": "Reflejar ahora",
+    "syncNow": "Sincronizar ahora",
+    "more": "Más acciones para {name}",
     "retryMirror": "Reintentar réplica",
     "syncAttachments": "Sincronizar archivos adjuntos",
     "syncProjectFinancials": "Sincronizar finanzas de proyectos",
@@ -51,6 +54,12 @@
   },
   "runs": {
     "heading": "Ejecuciones recientes",
+    "history": "Historial",
+    "empty": "Todavía no hay ejecuciones. Inicie una sincronización desde Conexiones.",
+    "features": {
+      "crm": "CRM",
+      "fixedAssets": "Activos fijos"
+    },
     "columns": {
       "started": "Iniciada",
       "kind": "Tipo",
@@ -77,6 +86,10 @@
       "attachments": "Inventariando e importando archivos adjuntos de origen"
     },
     "stats": {
+      "crm": "CRM: {accounts} cuentas · {opportunities} oportunidades",
+      "fixedAssets": "{count} activos fijos",
+      "featureDisabled": "{feature}: función deshabilitada",
+      "incrementalAttachments": "adjuntos: {created} nuevos · {changed} actualizados · {skipped} sin cambios",
       "attachments": "{files} archivos de origen · {links} enlaces de transacción · {created} archivos nuevos",
       "projectFinancials": "{projects} proyectos de origen ({projectChanges} cambiados) · {source} registros de tiempo de origen · {exact} exactos · {changed} estados de facturación conciliados",
       "docs": "+{new} docs · {amended} modificados · {unchanged} sin cambios",
