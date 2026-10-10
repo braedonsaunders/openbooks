@@ -245,7 +245,7 @@ export async function createPayRun(input: {
 
     const seq = (await tx.execute<{ prefix: string; next_number: number; padding: number }>(sql`
       insert into number_sequences (org_id, document_kind, subsidiary_id, prefix)
-      values (${orgId}, 'pay_run', null, 'PAY-')
+      values (${orgId}, 'pay_run', null, 'PR-')
       on conflict on constraint sequences_org_kind_sub
       do update set next_number = number_sequences.next_number + 1
       where number_sequences.org_id = ${orgId}

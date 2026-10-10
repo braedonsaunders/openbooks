@@ -59,6 +59,10 @@ const CANONICAL_PREFIXES: Record<string, string> = {
   journal: "JE-",
   vendor_payment: "PAY-",
   customer_payment: "RCPT-",
+  // Pay runs mint PR- (a vendor payment and a pay run once shared PAY- with
+  // independent counters, so PAY-00001 named two documents). Existing rows
+  // keep their configured prefix — history is never renumbered.
+  pay_run: "PR-",
   quote: "EST-",
   sales_order: "SO-",
   purchase_order: "PO-",
@@ -171,6 +175,67 @@ export async function reconcileDocumentSequences(
     }
   }
   return reconciled;
+}
+
+/**
+ * Two document kinds configured to the same numbering series.
+ *
+ * A series is the prefix plus the number width: PAY- with width 5 issues
+ * PAY-00001, and two kinds sharing both shape the same strings from
+ * independent counters — PAY-00001 then names two documents. Storage gives
+ * every kind its own counter (one `number_sequences` row per org and kind),
+ * so no two kinds can share a counter atomically today: any same-series
+ * pair across kinds is refused at configuration time, and existing pairs
+ * surface as a setup warning (history is never renumbered).
+ */
+export interface DocumentNumberSeriesCollision {
+  kinds: [string, string];
+  prefix: string;
+  padding: number;
+}
+
+/** Every same-series pair across kinds in one organization, in kind order. */
+export async function findDocumentNumberSeriesCollisions(
+  exec: SqlExecutor,
+  orgId: string,
+): Promise<DocumentNumberSeriesCollision[]> {
+  const rows = (await exec.execute<{ document_kind: string; prefix: string; padding: number }>(sql`
+    select document_kind, prefix, padding from number_sequences
+     where org_id = ${orgId}
+     order by prefix, padding, document_kind`)).rows;
+  const collisions: DocumentNumberSeriesCollision[] = [];
+  for (let index = 1; index < rows.length; index += 1) {
+    const previous = rows[index - 1]!;
+    const current = rows[index]!;
+    if (current.document_kind !== previous.document_kind
+      && current.prefix === previous.prefix
+      && Number(current.padding) === Number(previous.padding)) {
+      collisions.push({
+        kinds: [previous.document_kind, current.document_kind],
+        prefix: current.prefix,
+        padding: Number(current.padding),
+      });
+    }
+  }
+  return collisions;
+}
+
+/**
+ * The other kind already configured to a series, if the given kind would
+ * collide with it. The kind's own row never collides with itself (its prefix
+ * is locked to its own counter); everything else in the org counts.
+ */
+export async function collidingSequenceKind(
+  exec: SqlExecutor,
+  orgId: string,
+  input: { documentKind: string; prefix: string; padding: number },
+): Promise<string | null> {
+  const rows = (await exec.execute<{ document_kind: string }>(sql`
+    select document_kind from number_sequences
+     where org_id = ${orgId} and document_kind <> ${input.documentKind}
+       and prefix = ${input.prefix} and padding = ${input.padding}
+     order by document_kind limit 1`)).rows;
+  return rows[0]?.document_kind ?? null;
 }
 
 export async function allocateDocumentNumber(

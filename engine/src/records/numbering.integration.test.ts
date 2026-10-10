@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
-import { allocateDocumentNumber } from "./numbering.ts";
+import { allocateDocumentNumber, collidingSequenceKind, findDocumentNumberSeriesCollisions } from "./numbering.ts";
 import { cmp } from "../money/money.ts";
 import { receiveInventory } from "../inventory/movements.ts";
 import { revalueOpenLayersToStandardCost } from "../inventory/revaluation.ts";
@@ -317,6 +317,38 @@ test("standard-cost revaluation refuses to self-cancel with no variance account,
     );
     assert.ok(entryIds && entryIds.length === 1);
     assert.equal(cmp(await layerValue(), await assetBalance()), 0, "GL must equal cost layers after revaluation");
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+/**
+ * Two document kinds on one numbering series (a vendor payment and a pay run
+ * both issuing PAY-00001 from independent counters) name two documents with
+ * one string. The series detectors below feed the configuration refusal and
+ * the setup warning; history itself is never renumbered.
+ */
+async function seedSequence(orgId: string, kind: string, prefix: string, padding = 5): Promise<void> {
+  await db.execute(sql`
+    insert into number_sequences (org_id, document_kind, prefix, next_number, padding, allocated_through)
+    values (${orgId}, ${kind}, ${prefix}, 1, ${padding}, 0)`);
+}
+
+test("same-series pairs across kinds are detected; different widths are not", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    await seedSequence(org.orgId, "vendor_payment", "PAY-");
+    await seedSequence(org.orgId, "pay_run", "PAY-");
+    await seedSequence(org.orgId, "journal", "JE-");
+    await seedSequence(org.orgId, "customer_payment", "PAY-", 4);
+    const collisions = await findDocumentNumberSeriesCollisions(db, org.orgId);
+    assert.deepEqual(collisions, [{ kinds: ["pay_run", "vendor_payment"], prefix: "PAY-", padding: 5 }]);
+    assert.equal(await collidingSequenceKind(db, org.orgId, { documentKind: "pay_run", prefix: "PAY-", padding: 5 }), "vendor_payment");
+    assert.equal(await collidingSequenceKind(db, org.orgId, { documentKind: "journal", prefix: "JE-", padding: 5 }), null);
+    // Same prefix but a different width issues distinct strings — no collision.
+    assert.equal(await collidingSequenceKind(db, org.orgId, { documentKind: "customer_payment", prefix: "PAY-", padding: 4 }), null);
+    // A kind never collides with itself.
+    assert.equal(await collidingSequenceKind(db, org.orgId, { documentKind: "pay_run", prefix: "PR-", padding: 5 }), null);
   } finally {
     await dropScratchOrg(org.orgId);
   }
