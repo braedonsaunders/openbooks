@@ -470,6 +470,8 @@ export type MigrationAttempt = {
   lock: MigrationLockConfig;
   digest: string;
   recordedDigest?: string;
+  /** Business schema owner to apply as when this privileged session is not it. */
+  schemaOwnerRole?: string;
   executeBody: (
     client: pg.PoolClient,
     body: string,
@@ -519,12 +521,15 @@ export async function executeMigrationAttempt(
   client: pg.PoolClient,
   attempt: MigrationAttempt,
 ): Promise<void> {
-  const { filename, body, transactional, lock, digest, recordedDigest, executeBody } = attempt;
+  const { filename, body, transactional, lock, digest, recordedDigest, schemaOwnerRole, executeBody } = attempt;
+  const ownerRole = schemaOwnerRole ? pg.escapeIdentifier(schemaOwnerRole) : null;
   if (transactional) {
     await client.query("begin");
     await client.query(`SET LOCAL lock_timeout = ${lock.lockTimeoutMs}`);
+    if (ownerRole) await client.query(`SET LOCAL ROLE ${ownerRole}`);
   } else {
     await client.query(`SET lock_timeout = ${lock.lockTimeoutMs}`);
+    if (ownerRole) await client.query(`SET ROLE ${ownerRole}`);
   }
   try {
     await executeBody(client, body, { transactional, filename });
@@ -559,6 +564,7 @@ export async function executeMigrationAttempt(
       // as every transactional migration's already do — no new hazard, and
       // the file can no longer touch lock_timeout itself.)
       await client.query("RESET lock_timeout").catch(() => {});
+      if (ownerRole) await client.query("RESET ROLE").catch(() => {});
     }
   }
 }

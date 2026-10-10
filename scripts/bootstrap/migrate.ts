@@ -4,6 +4,7 @@ import { applyRowLevelSecurity } from "./database-roles"
 import { ORDER_QUANTITY_PROGRESS_MIGRATION_FILENAME, executeOrderQuantityProgressMigration } from "./governed-views"
 import { generatedMigrationFiles, assertMigrationFilenameTransitionTargets, convergeMigrationFilenames, APPROVED_MIGRATION_TRANSITIONS } from "./migration-transitions"
 import { readFileSync, readdirSync } from "node:fs"
+import type pg from "pg"
 import { join } from "node:path"
 import { sealLegacyPaymentLinkTokens } from "../../engine/src/payments/payment-link-seal.ts"
 import { requireDataKey } from "../../engine/src/platform/secrets.ts"
@@ -14,6 +15,21 @@ import { PREFLIGHT_MIN_ORDINAL, earlierPendingCreatesObject, evaluatePreflight, 
 import { assertBaselineHistory, historicalMigrationPlan, migrationIdentityIsApplied, releaseMigrationPlan } from "../migration-baseline-plan.mjs"
 import { publishedMigrationSessionPrelude } from "../migration-session-headers.mjs"
 import { ensureRetirementAuthorityOwnership } from "./retirement-ownership.ts"
+
+/**
+ * A fresh installation hands business objects to the dedicated schema owner
+ * once private retirement authority exists. Later migrations then run as that
+ * owner, as constrained deployments do, so objects they create share its
+ * ownership and its catalog functions can manage their privileges.
+ */
+async function provisionedSchemaOwnerRole(client: pg.PoolClient): Promise<string | undefined> {
+  const row = (await client.query<{ owner: string; privileged: boolean; current: string }>(`select
+      n.nspowner::regrole::text as owner, current_user::text as current,
+      coalesce((select rolsuper from pg_roles where rolname=session_user), false) as privileged
+    from pg_namespace n where n.nspname='public'`)).rows[0];
+  if (!row || !row.privileged || row.owner !== "openbooks_schema_owner" || row.current === row.owner) return undefined;
+  return row.owner;
+}
 
 async function executeTrackedMigration(
   filename: string,
@@ -61,6 +77,7 @@ async function executeTrackedMigration(
         lock,
         digest,
         recordedDigest,
+        schemaOwnerRole: await provisionedSchemaOwnerRole(client),
         executeBody:
           filename === ORDER_QUANTITY_PROGRESS_MIGRATION_FILENAME
             ? (migrationClient, migrationBody) =>
