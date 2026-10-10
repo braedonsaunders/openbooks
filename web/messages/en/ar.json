@@ -26,6 +26,8 @@
     "new": "New",
     "newInvoice": "New invoice",
     "newCredit": "New customer credit",
+    "newCashSale": "New cash sale",
+    "newCashRefund": "New cash refund",
     "submitForApproval": "Submit for approval"
   },
   "tenders": {

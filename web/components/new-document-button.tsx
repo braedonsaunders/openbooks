@@ -35,6 +35,9 @@ export function NewDocumentButton({
     router.push(documentCreateHref(basePath, kind))
   }
 
+  // No creatable kind → no control: never a dropdown that opens empty.
+  if (items.length === 0) return null
+
   // Single kind → plain button (no dropdown).
   if (items.length === 1) {
     const only = items[0]!

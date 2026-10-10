@@ -26,6 +26,8 @@
     "new": "新建",
     "newInvoice": "新建发票",
     "newCredit": "新建客户贷项",
+    "newCashSale": "新建现金销售",
+    "newCashRefund": "新建现金退款",
     "submitForApproval": "提交审批"
   },
   "tenders": {

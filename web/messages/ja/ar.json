@@ -26,6 +26,8 @@
     "new": "新規",
     "newInvoice": "新規請求書",
     "newCredit": "新規得意先貸方票",
+    "newCashSale": "新規現金販売",
+    "newCashRefund": "新規現金返金",
     "submitForApproval": "承認のために提出"
   },
   "tenders": {
