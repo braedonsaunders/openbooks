@@ -144,6 +144,58 @@ test("rejects an approval gate reachable from before_post", () => {
   assert.ok(res.errors.some((error) => /before_post.*on_submit/i.test(error)));
 });
 
+test("refuses a graph with more than one trigger, naming every trigger by kind", () => {
+  const g = graph(
+    [
+      { id: "t1", position: { x: 0, y: 0 }, data: { kind: "trigger", trigger: { trigger: "on_submit" } } },
+      { id: "t2", position: { x: 0, y: 1 }, data: { kind: "trigger", trigger: { trigger: "manual", buttonId: "btn_1", label: "Run" } } },
+      { id: "g", position: { x: 1, y: 0 }, data: gate },
+    ],
+    [
+      { id: "e1", source: "t1", target: "g", sourceHandle: "next" },
+      { id: "e2", source: "t2", target: "g", sourceHandle: "next" },
+    ],
+  );
+  const res = lintFlowGraphForSubject("vendor_bill", g);
+  assert.equal(res.ok, false);
+  assert.ok(
+    res.errors.some((e) => /2 triggers.*"on_submit".*"manual".*exactly one trigger/i.test(e)),
+    `expected a named single-trigger refusal, got: ${res.errors.join("; ")}`,
+  );
+});
+
+test("refusal messages never name storage ids outside the submitted graph", () => {
+  // A hostile graph: two triggers, duplicated conditions, an empty rule,
+  // and edges into the void. Every id-shaped token in every message must be
+  // a node or edge the graph actually contains — never a stale deleted id.
+  const g = graph(
+    [
+      { id: "t1", position: { x: 0, y: 0 }, data: { kind: "trigger", trigger: { trigger: "on_submit" } } },
+      { id: "t2", position: { x: 0, y: 1 }, data: { kind: "trigger", trigger: { trigger: "on_submit" } } },
+      { id: "c1", position: { x: 1, y: 0 }, data: { kind: "condition", label: "Same", rule: { op: "isSet", field: "total" } } },
+      { id: "c2", position: { x: 1, y: 1 }, data: { kind: "condition", label: "Same", rule: { op: "isSet", field: "total" } } },
+    ],
+    [
+      { id: "e1", source: "t1", target: "c1", sourceHandle: "next" },
+      { id: "e2", source: "ghost", target: "c2", sourceHandle: "next" },
+    ],
+  );
+  const res = lintFlowGraphForSubject("vendor_bill", g);
+  assert.equal(res.ok, false);
+  const ids = new Set(["t1", "t2", "c1", "c2", "e1", "e2"]);
+  const vocab = new Set([
+    "on_create", "on_update", "on_submit", "before_post", "after_post", "before_void",
+    "status_change", "on_field_value", "scheduled", "manual",
+    "send_email", "notify", "set_field", "change_status", "post_document",
+    "lock_record", "unlock_record", "distribute_schedule", "send_board_schedule",
+  ]);
+  const stray = res.errors.filter((message) => {
+    const tokens = message.match(/[\w-]+_[\w-]+/g) ?? [];
+    return tokens.some((token) => !ids.has(token) && !vocab.has(token));
+  });
+  assert.deepEqual(stray, [], `messages must not name ids outside the graph, got: ${stray.join("; ")}`);
+});
+
 test("names posting and create triggers that can never fire for quotes", () => {
   // Quotes never post and live outside the document writers: both triggers
   // would save a silently dead flow, so enabling names the node and the cause.
