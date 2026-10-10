@@ -17,10 +17,15 @@ SELECT pg_catalog.set_config('search_path', 'public, pg_catalog', false);
 ALTER TABLE reconciliation_matches ADD COLUMN group_id uuid;
 -- Deterministic per (org, reconciliation, statement): legacy rows written by
 -- one match operation share their statement, so they stay grouped; the org
--- keeps match groups distinct across tenants.
+-- keeps match groups distinct across tenants. Signed-off matches are
+-- immutable evidence; assigning the new grouping column changes none of it,
+-- so the match guard is suspended for this backfill only. The migration
+-- transaction's table lock excludes concurrent writers.
+ALTER TABLE reconciliation_matches DISABLE TRIGGER reconciliation_match_guard;
 UPDATE reconciliation_matches
    SET group_id = md5(org_id::text || '|' || reconciliation_id::text || '|' || statement_line_id::text)::uuid
  WHERE group_id IS NULL;
+ALTER TABLE reconciliation_matches ENABLE TRIGGER reconciliation_match_guard;
 ALTER TABLE reconciliation_matches ALTER COLUMN group_id SET NOT NULL;
 DROP INDEX recon_matches_one_journal_claim;
 CREATE UNIQUE INDEX recon_matches_pair_claim ON reconciliation_matches (org_id, statement_line_id, journal_line_id);
