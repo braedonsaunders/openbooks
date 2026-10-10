@@ -118,6 +118,13 @@ export interface ReconcilePaneParams {
   perPage: number
 }
 
+export interface ReconcileGlClearing extends Record<string, unknown> {
+  group_id: string
+  lines: number
+  entries: string | null
+  total: string
+}
+
 export interface ReconciliationData {
   backHref: string
   backLabel: string
@@ -156,6 +163,7 @@ export interface ReconciliationData {
   matchedRows: ReconcileMatchedRow[]
   matchedTotal: number
   mParams: ReconcilePaneParams
+  glClearings: ReconcileGlClearing[]
 }
 
 export async function loadReconciliation(
@@ -275,6 +283,20 @@ export async function loadReconciliation(
   // signed-off session with a posted in-period book entry and no bank line
   // must show it, not report difference zero over an empty pane. The panes
   // stay read-only once signed; only their data flows again.
+  // -- GL-only clearing groups this session (no statement side) --------------
+  const glClearings = (await db.execute<ReconcileGlClearing>(sql`
+    select m.group_id, count(*)::int as lines,
+           string_agg(distinct je.entry_number, ', ') as entries,
+           coalesce(sum(jl.txn_amount), 0)::text as total
+      from reconciliation_matches m
+      join journal_lines jl on jl.id = m.journal_line_id and jl.org_id = m.org_id
+      join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id
+     where m.reconciliation_id = ${reconciliationId} and m.org_id = ${ctx.orgId}
+       and m.statement_line_id is null
+     group by m.group_id
+     order by min(m.created_at)
+  `)).rows
+
   const [stmtRows, stmtCount, glRows, glCount, mRows, mCount] = (await Promise.all([
     db.execute<ReconcileStmtRow>(sql`
           select l.id, l.posted_on, l.amount, l.description, l.counterparty_ref
@@ -390,6 +412,7 @@ export async function loadReconciliation(
     matchedRows: mRows.rows,
     matchedTotal: Number(mCount.rows[0]?.n ?? 0),
     mParams,
+    glClearings,
   }
 }
 
@@ -445,6 +468,7 @@ export function reconcileSpec(data: ReconciliationData): PageSpec {
         matchedRows: data.matchedRows,
         matchedTotal: data.matchedTotal,
         mParams: data.mParams,
+        glClearings: data.glClearings,
       }),
     ],
   })

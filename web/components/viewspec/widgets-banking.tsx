@@ -148,6 +148,7 @@ export const BANKING_WIDGETS = {
       matchedRows={(props.matchedRows as ComponentProps<typeof ReconcileWorkspace>['matchedRows']) ?? []}
       matchedTotal={num(props, 'matchedTotal') ?? 0}
       mParams={props.mParams as ComponentProps<typeof ReconcileWorkspace>['mParams']}
+      glClearings={(props.glClearings as ComponentProps<typeof ReconcileWorkspace>['glClearings']) ?? []}
     />
   ),
 
