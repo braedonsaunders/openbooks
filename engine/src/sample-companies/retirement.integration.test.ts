@@ -135,6 +135,7 @@ async function runtimeForgery(runtime: Client, orgId: string, runId: string, dig
     assert.deepEqual(posture, { rolsuper: false, rolbypassrls: false, allowed: false }, "actual runtime SESSION_USER cannot forge maintenance authority with GUCs");
   });
   await run(() => assert.rejects(runtime.query("select tenant_retirement.openbooks_retirement_begin($1,$2,$3)", [runId, orgId, digest]), /maintenance login/i));
+  await run(() => assert.rejects(runtime.query("select tenant_retirement.openbooks_retirement_row_org('auth_sessions',jsonb_build_object('user_id',$1::uuid))", [orgId]), /permission denied/i));
   await run(() => assert.rejects(runtime.query("insert into tenant_retirement.delete_authorities(transaction_id,backend_pid,tenant_id,run_id,login_name) values(txid_current(),pg_backend_pid(),$1,$2,session_user)", [orgId, runId]), /permission denied/i));
   await run(() => assert.rejects(runtime.query("delete from documents where org_id=$1 and id=$2", [orgId, postedId])));
 }

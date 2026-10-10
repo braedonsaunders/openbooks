@@ -1235,3 +1235,6 @@ BEGIN
 END $$;
 
 GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA tenant_retirement TO PUBLIC;
+-- Ownership resolution runs inside the fenced commands and triggers. Direct
+-- callers must not use its privileged reads to discover another company's data.
+REVOKE EXECUTE ON FUNCTION tenant_retirement.openbooks_retirement_row_org(text,jsonb) FROM PUBLIC;

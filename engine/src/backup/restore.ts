@@ -669,8 +669,8 @@ async function insertionOrder(
     nullable_columns: string[] | null;
   }>(`
     select child.relname as table_name, constraint_row.confmatchtype as match_type,
-           array_agg(column_row.attname order by key_row.ordinality) as columns,
-           array_agg(column_row.attname order by key_row.ordinality)
+           array_agg(column_row.attname::text order by key_row.ordinality) as columns,
+           array_agg(column_row.attname::text order by key_row.ordinality)
              filter (where not column_row.attnotnull) as nullable_columns
       from pg_constraint constraint_row
       join pg_class child on child.oid = constraint_row.conrelid
