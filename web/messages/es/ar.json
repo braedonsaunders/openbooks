@@ -301,6 +301,8 @@
       "pause": "Pausar",
       "resume": "Reanudar",
       "cancelSub": "Cancelar",
+      "keepSubscription": "Mantener suscripción",
+      "cancelSubscription": "Cancelar suscripción",
       "cancelConfirmTitle": "¿Cancelar la suscripción?",
       "cancelConfirmBody": "Cancelar pone fin a la facturación recurrente de esta suscripción. No se puede deshacer.",
       "toasts": {
@@ -555,6 +557,7 @@
       "recurring": "Nueva programación recurrente",
       "subscriptions": "Nueva suscripción",
       "plans": "Nuevo plan",
+      "editPlan": "Editar plan",
       "versions": "Nueva versión del plan",
       "contracts": "Nuevo contrato",
       "amendments": "Nueva modificación"
@@ -564,7 +567,7 @@
       "billing": "Facturación",
       "incomeAccount": "Cuenta de ingresos",
       "interval": "Intervalo de facturación",
-      "intervalCount": "Número de intervalos",
+      "intervalCount": "Repetir cada",
       "subscriptionDetails": "Detalles de la suscripción",
       "priceOverride": "Precio personalizado",
       "startOn": "Fecha de inicio",

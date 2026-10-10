@@ -301,6 +301,8 @@
       "pause": "暂停",
       "resume": "恢复",
       "cancelSub": "取消",
+      "keepSubscription": "保留订阅",
+      "cancelSubscription": "取消订阅",
       "cancelConfirmTitle": "取消订阅？",
       "cancelConfirmBody": "取消将终止此订阅的定期开票，此操作无法撤销。",
       "toasts": {
@@ -555,6 +557,7 @@
       "recurring": "新建定期计划",
       "subscriptions": "新建订阅",
       "plans": "新建套餐",
+      "editPlan": "编辑套餐",
       "versions": "新建套餐版本",
       "contracts": "新建合同",
       "amendments": "新建合同变更"
@@ -564,7 +567,7 @@
       "billing": "开票",
       "incomeAccount": "收入科目",
       "interval": "开票周期",
-      "intervalCount": "周期数量",
+      "intervalCount": "每隔",
       "subscriptionDetails": "订阅详情",
       "priceOverride": "自定义价格",
       "startOn": "开始日期",

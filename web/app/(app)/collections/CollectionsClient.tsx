@@ -90,6 +90,7 @@ interface Plan {
   interval: string;
   intervalCount: number;
   incomeAccountId: string | null;
+  taxCodeId: string | null;
   isActive: boolean;
 }
 interface Subscription {
@@ -276,6 +277,14 @@ function SubscriptionsPanel({
     intervalCount: "1",
     incomeAccountId: "",
   });
+  const resetPlanForm = () =>
+    setPlanForm({ name: "", amount: "", interval: "monthly", intervalCount: "1", incomeAccountId: "" });
+  // Plan editing reuses the create drawer: the row's stored values prefill
+  // the form, and save posts updatePlan with the row's unexposed fields
+  // (description, tax code, active flag) carried through, so editing never
+  // wipes what the form does not show. Currency and item stay untouched by
+  // omitting their keys, which updatePlan preserves.
+  const [editingPlan, setEditingPlan] = useState<Plan | null>(null);
   const [subForm, setSubForm] = useState({
     customerId: "",
     planId: "",
@@ -478,6 +487,23 @@ function SubscriptionsPanel({
                       size="sm"
                       variant="ghost"
                       disabled={action.busy}
+                      onClick={() => {
+                        setPlanForm({
+                          name: p.name,
+                          amount: p.amount,
+                          interval: p.interval,
+                          intervalCount: String(p.intervalCount),
+                          incomeAccountId: p.incomeAccountId ?? "",
+                        });
+                        setEditingPlan(p);
+                      }}
+                    >
+                      {tCommonActions("edit")}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      disabled={action.busy}
                       onClick={() => post({ action: "deletePlan", id: p.id })}
                     >
                       {t("delete")}
@@ -488,32 +514,45 @@ function SubscriptionsPanel({
             ]}
           />
           <Drawer
-            open={creating}
-            onClose={onClose}
-            title={newAction("plans")}
+            open={creating || editingPlan !== null}
+            onClose={() => {
+              setEditingPlan(null);
+              onClose();
+            }}
+            title={editingPlan ? newAction("editPlan") : newAction("plans")}
             size="xl"
             headerActions={
               <Button
                 disabled={action.busy || !planForm.name || !planForm.amount}
                 onClick={async () => {
-                  const r = await post({
-                    action: "addPlan",
-                    ...planForm,
-                    intervalCount: Number(planForm.intervalCount || 1),
-                    incomeAccountId: planForm.incomeAccountId || null,
-                  });
+                  const r = await post(
+                    editingPlan
+                      ? {
+                          action: "updatePlan",
+                          id: editingPlan.id,
+                          name: planForm.name,
+                          description: editingPlan.description,
+                          amount: planForm.amount,
+                          interval: planForm.interval,
+                          intervalCount: Number(planForm.intervalCount || 1),
+                          incomeAccountId: planForm.incomeAccountId || null,
+                          taxCodeId: editingPlan.taxCodeId,
+                          isActive: editingPlan.isActive,
+                        }
+                      : {
+                          action: "addPlan",
+                          ...planForm,
+                          intervalCount: Number(planForm.intervalCount || 1),
+                          incomeAccountId: planForm.incomeAccountId || null,
+                        },
+                  );
                   if (!r) return;
                   onClose();
-                  setPlanForm({
-                    name: "",
-                    amount: "",
-                    interval: "monthly",
-                    intervalCount: "1",
-                    incomeAccountId: "",
-                  });
+                  setEditingPlan(null);
+                  resetPlanForm();
                 }}
               >
-                {t("addPlan")}
+                {editingPlan ? tCommonActions("save") : t("addPlan")}
               </Button>
             }
           >
@@ -737,7 +776,8 @@ function SubscriptionsPanel({
                             const confirmed = await confirmDialog({
                               title: t("cancelConfirmTitle"),
                               message: t("cancelConfirmBody"),
-                              confirmLabel: t("cancelSub"),
+                              confirmLabel: t("cancelSubscription"),
+                              cancelLabel: t("keepSubscription"),
                               tone: "danger",
                             });
                             if (confirmed)

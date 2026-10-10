@@ -301,6 +301,8 @@
       "pause": "Pausieren",
       "resume": "Fortsetzen",
       "cancelSub": "Kündigen",
+      "keepSubscription": "Abo behalten",
+      "cancelSubscription": "Abo kündigen",
       "cancelConfirmTitle": "Abonnement kündigen?",
       "cancelConfirmBody": "Durch die Kündigung endet die wiederkehrende Abrechnung dieses Abonnements. Dies kann nicht rückgängig gemacht werden.",
       "toasts": {
@@ -555,6 +557,7 @@
       "recurring": "Neuer wiederkehrender Zeitplan",
       "subscriptions": "Neues Abonnement",
       "plans": "Neuer Tarif",
+      "editPlan": "Tarif bearbeiten",
       "versions": "Neue Tarifversion",
       "contracts": "Neuer Vertrag",
       "amendments": "Neue Vertragsänderung"
@@ -564,7 +567,7 @@
       "billing": "Abrechnung",
       "incomeAccount": "Erlöskonto",
       "interval": "Abrechnungsintervall",
-      "intervalCount": "Anzahl der Intervalle",
+      "intervalCount": "Wiederholen alle",
       "subscriptionDetails": "Abonnementdetails",
       "priceOverride": "Individueller Preis",
       "startOn": "Startdatum",

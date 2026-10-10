@@ -301,6 +301,8 @@
       "pause": "Suspendre",
       "resume": "Reprendre",
       "cancelSub": "Annuler",
+      "keepSubscription": "Conserver l’abonnement",
+      "cancelSubscription": "Résilier l’abonnement",
       "cancelConfirmTitle": "Annuler l’abonnement ?",
       "cancelConfirmBody": "L’annulation met fin à la facturation récurrente de cet abonnement. Cette action est irréversible.",
       "toasts": {
@@ -555,6 +557,7 @@
       "recurring": "Nouvel échéancier récurrent",
       "subscriptions": "Nouvel abonnement",
       "plans": "Nouveau forfait",
+      "editPlan": "Modifier le forfait",
       "versions": "Nouvelle version de forfait",
       "contracts": "Nouveau contrat",
       "amendments": "Nouvel avenant"
@@ -564,7 +567,7 @@
       "billing": "Facturation",
       "incomeAccount": "Compte de produits",
       "interval": "Périodicité de facturation",
-      "intervalCount": "Nombre de périodes",
+      "intervalCount": "Répéter tous les",
       "subscriptionDetails": "Détails de l’abonnement",
       "priceOverride": "Prix personnalisé",
       "startOn": "Date de début",
