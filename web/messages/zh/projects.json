@@ -158,7 +158,9 @@
     "taskStatusAria": "{task} 的状态",
     "removeNamedTaskAria": "移除 {task}",
     "customFields": "自定义字段",
-    "projectType": "项目类型"
+    "projectType": "项目类型",
+    "internalLabel": "内部（车间/间接费用）项目",
+    "internalHint": "无客户的非计费工时目标。在此记录的车间工时永不计费，也不会产生人工成本。一旦记录工时便不可更改。"
   },
   "cockpit": {
     "subtitle": "作业成本驾驶舱",

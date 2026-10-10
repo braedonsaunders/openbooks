@@ -158,7 +158,9 @@
     "taskStatusAria": "{task} のステータス",
     "removeNamedTaskAria": "{task} を削除",
     "customFields": "カスタムフィールド",
-    "projectType": "プロジェクトタイプ"
+    "projectType": "プロジェクトタイプ",
+    "internalLabel": "社内（作業／間接費）プロジェクト",
+    "internalHint": "顧客のない非請求対象の時間区分。ここに記録された作業時間は請求されず、労務費も計上されません。時間が記録された後は変更できません。"
   },
   "cockpit": {
     "subtitle": "原価計算コックピット",

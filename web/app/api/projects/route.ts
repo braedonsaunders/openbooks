@@ -17,6 +17,7 @@ const projectCreateBody = z.object({
   name: z.string(),
   tasks: z.array(z.object({ name: z.string(), code: z.string().nullable().optional() })).optional(),
   isActive: z.boolean().optional(),
+  isInternal: z.boolean().optional(),
   subsidiaryIncludeChildren: z.boolean().optional(),
   status: z.enum(PROJECT_STATUSES).optional(),
   customerId: uuidId.nullable().optional(),

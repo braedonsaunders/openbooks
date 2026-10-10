@@ -158,7 +158,9 @@
     "taskStatusAria": "Statut de {task}",
     "removeNamedTaskAria": "Supprimer {task}",
     "customFields": "Champs personnalisés",
-    "projectType": "Type de projet"
+    "projectType": "Type de projet",
+    "internalLabel": "Projet interne (atelier/frais généraux)",
+    "internalHint": "Cible horaire non facturable sans client. Les heures d'atelier saisies ici ne sont jamais facturées et ne comptabilisent aucun coût de main-d'œuvre. Ne peut plus être modifié une fois les heures saisies."
   },
   "cockpit": {
     "subtitle": "Poste de pilotage des coûts de chantier",
