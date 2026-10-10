@@ -56,6 +56,8 @@
     "fullyConverted": "Entièrement converti",
     "allChangesSaved": "Toutes les modifications sont enregistrées",
     "savedToast": "{target} {number} enregistré",
+    "voidReceiptFailed": "La réception de marchandises n'a pas pu être annulée.",
+    "voidReceiptDone": "Réception de marchandises {number} annulée",
     "saveFailedRetry": "Échec de l’enregistrement — corrigez et réessayez",
     "unsavedChanges": "Modifications non enregistrées…",
     "totals": {

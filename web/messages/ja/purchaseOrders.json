@@ -60,6 +60,8 @@
     "fullyConverted": "全量変換済み",
     "allChangesSaved": "すべての変更を保存しました",
     "savedToast": "{target} {number} を保存しました",
+    "voidReceiptFailed": "入庫を無効化できませんでした。",
+    "voidReceiptDone": "入庫 {number} を無効化しました",
     "saveFailedRetry": "保存に失敗しました — 修正して再試行してください",
     "unsavedChanges": "未保存の変更…",
     "totals": {

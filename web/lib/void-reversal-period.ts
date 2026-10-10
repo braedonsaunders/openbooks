@@ -26,6 +26,8 @@ export type VoidReversalPeriodChoice = {
   cancelled: boolean
   reversalDate: string | null
   reversalPeriodId: string | null
+  /** Revision token fenced on the void POST; null when the lookup failed. */
+  revision: string | null
 }
 
 type AdjustmentPeriod = {
@@ -97,12 +99,13 @@ export async function promptVoidReversalPeriod(
 ): Promise<VoidReversalPeriodChoice> {
   let periods: AdjustmentPeriod[] = []
   let suggestion: VoidReversalSuggestion | null = null
+  let revision: string | null = null
   try {
     const res = await fetch(`/api/documents/${documentId}/void`)
     if (res.ok) {
       const data = (await res.json().catch(() => null)) as {
         adjustmentPeriods?: unknown
-      } & Partial<VoidReversalSuggestion> | null
+      } & Partial<VoidReversalSuggestion> & { revision?: unknown } | null
       if (data && Array.isArray(data.adjustmentPeriods)) {
         periods = (data.adjustmentPeriods as Partial<AdjustmentPeriod>[]).filter(
           (period): period is AdjustmentPeriod =>
@@ -110,6 +113,7 @@ export async function promptVoidReversalPeriod(
         )
       }
       if (data && typeof data.originalDate === 'string' && typeof data.suggestedDate === 'string') {
+        revision = typeof data.revision === 'string' && data.revision.length > 0 ? data.revision : null
         suggestion = {
           originalDate: data.originalDate,
           suggestedDate: data.suggestedDate,
@@ -125,7 +129,7 @@ export async function promptVoidReversalPeriod(
   } catch {
     periods = []
   }
-  if (!suggestion) return { cancelled: false, reversalDate: null, reversalPeriodId: null }
+  if (!suggestion) return { cancelled: false, reversalDate: null, reversalPeriodId: null, revision }
   let reversalDate = suggestion.suggestedDate
   for (;;) {
     const chosen = await promptDialog({
@@ -136,14 +140,14 @@ export async function promptVoidReversalPeriod(
       confirmLabel: copy.confirm,
       cancelLabel: copy.cancel,
     })
-    if (chosen === null) return { cancelled: true, reversalDate: null, reversalPeriodId: null }
+    if (chosen === null) return { cancelled: true, reversalDate: null, reversalPeriodId: null, revision }
     if (ISO_DATE.test(chosen)) {
       reversalDate = chosen
       break
     }
     reversalDate = chosen
   }
-  if (periods.length === 0) return { cancelled: false, reversalDate, reversalPeriodId: null }
+  if (periods.length === 0) return { cancelled: false, reversalDate, reversalPeriodId: null, revision }
   const period = await promptDialog({
     title: copy.title,
     label: copy.label,
@@ -154,6 +158,6 @@ export async function promptVoidReversalPeriod(
       ...periods.map((entry) => ({ value: entry.id, label: entry.name })),
     ],
   })
-  if (period === null) return { cancelled: true, reversalDate: null, reversalPeriodId: null }
-  return { cancelled: false, reversalDate, reversalPeriodId: period || null }
+  if (period === null) return { cancelled: true, reversalDate: null, reversalPeriodId: null, revision }
+  return { cancelled: false, reversalDate, reversalPeriodId: period || null, revision }
 }

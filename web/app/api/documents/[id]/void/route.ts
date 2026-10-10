@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { defineRoute } from '@/lib/api/route';
+import { documentRevisionCounterSql } from '@openbooks/engine/src/records/revision.ts'
 import { apiErrorResponse } from '@/lib/api/error-response'
 import { isDocumentRevisionToken } from '@openbooks/engine/src/records/revision.ts'
 import { NextResponse } from 'next/server'
@@ -132,7 +133,14 @@ export const GET = defineRoute({
       documentDate: gate.doc.documentDate,
       subsidiaryId: gate.doc.subsidiaryId,
     })
-    return NextResponse.json({ adjustmentPeriods: periods.rows, ...suggestion })
+    // The revision token the void POST fences on: linked documents (a goods
+    // receipt from its purchase order) have no drawer holding it, so the
+    // suggestion carries it to the confirmation dialog.
+    const revision = (await db.execute<{ revision: string }>(sql`
+      select ${documentRevisionCounterSql(sql`revision_seq`)} as revision
+        from documents where id = ${id} and org_id = ${gate.authz.user.orgId}
+    `)).rows[0]?.revision ?? null
+    return NextResponse.json({ adjustmentPeriods: periods.rows, ...suggestion, revision })
   },
 });
 

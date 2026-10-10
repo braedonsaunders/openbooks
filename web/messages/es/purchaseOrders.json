@@ -56,6 +56,8 @@
     "fullyConverted": "Totalmente convertida",
     "allChangesSaved": "Todos los cambios guardados",
     "savedToast": "{target} {number} guardado",
+    "voidReceiptFailed": "El recibo de mercancías no se pudo anular.",
+    "voidReceiptDone": "Recibo de mercancías {number} anulado",
     "saveFailedRetry": "Error al guardar — corrija y reintente",
     "unsavedChanges": "Cambios sin guardar…",
     "totals": {

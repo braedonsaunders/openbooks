@@ -60,6 +60,8 @@
     "fullyConverted": "Totalmente convertido",
     "allChangesSaved": "Todas as alterações salvas",
     "savedToast": "{target} {number} salvo",
+    "voidReceiptFailed": "Não foi possível anular o recebimento de mercadorias.",
+    "voidReceiptDone": "Recebimento de mercadorias {number} anulado",
     "saveFailedRetry": "Falha ao salvar — corrija e tente novamente",
     "unsavedChanges": "Alterações não salvas…",
     "totals": {

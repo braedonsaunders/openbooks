@@ -25,6 +25,7 @@ import { SendButton } from '../../../components/send-button'
 import { confirmDialog } from '../../../lib/confirm'
 import { isDocumentRevisionToken } from '@/lib/api/registry-data'
 import { promptDialog } from '../../../lib/prompt'
+import { promptVoidReversalPeriod } from '../../../lib/void-reversal-period'
 import { FlowManualButtons } from '../../../components/flow-manual-buttons'
 import { ApprovalActions } from '../../../components/approval-actions'
 import { AssignWarehousePanel } from './AssignWarehousePanel'
@@ -1538,6 +1539,62 @@ export function OrderDrawer({
     return outcome
   }
 
+  /**
+   * Void a linked goods receipt: the phantom full-quantity receipts a blind
+   * convert posted are corrected from the order's Related tab, where the
+   * receipt link and its status show. Reason plus the reversal date the
+   * server suggests (the receipt's own date, or the first open period when
+   * that period closed) ride the governed void; the kernel reverses the
+   * receipt's movements and journals, restores the order's received
+   * quantities, and refuses by name when stock was consumed or billed.
+   */
+  async function voidReceipt(receiptId: string, receiptNumber: string) {
+    const reason = await promptDialog({
+      title: tCommon('amendment.voidTitle'),
+      label: tCommon('amendment.reason'),
+      placeholder: tCommon('amendment.voidPlaceholder'),
+      confirmLabel: tCommon('actions.void'),
+    })
+    if (!reason) return
+    const reversal = await promptVoidReversalPeriod(receiptId, {
+      title: tCommon('amendment.voidReversalPeriodTitle'),
+      dateLabel: tCommon('amendment.voidReversalDateLabel'),
+      summaryOriginal: tCommon('amendment.voidReversalSummaryOriginal'),
+      summaryReversal: tCommon('amendment.voidReversalSummaryReversal'),
+      fiscalYear: tCommon('amendment.voidReversalFiscalYear'),
+      fallbackNotice: tCommon('amendment.voidReversalFallbackNotice'),
+      closedNotice: tCommon('amendment.voidReversalClosedNotice'),
+      label: tCommon('amendment.voidReversalPeriodLabel'),
+      regularOption: tCommon('amendment.voidReversalPeriodRegular'),
+      confirm: tCommon('actions.void'),
+      cancel: tCommon('confirm.cancel'),
+    })
+    if (reversal.cancelled) return
+    if (!reversal.revision) {
+      refuse(null, t('voidReceiptFailed'))
+      return
+    }
+    await execute(
+      () => fetchAction(`/api/documents/${receiptId}/void`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          reason,
+          expectedUpdatedAt: reversal.revision,
+          ...(reversal.reversalDate ? { reversalDate: reversal.reversalDate } : {}),
+          ...(reversal.reversalPeriodId ? { reversalPeriodId: reversal.reversalPeriodId } : {}),
+        }),
+      }),
+      {
+        fallbackMessage: t('voidReceiptFailed'),
+        onOk: () => {
+          toast.success(t('voidReceiptDone', { number: receiptNumber }))
+          router.refresh()
+        },
+      },
+    )
+  }
+
   async function remove() {
     if (
       !(await confirmDialog({
@@ -2019,6 +2076,17 @@ export function OrderDrawer({
                     <Badge variant={STATUS_VARIANT[l.status] ?? 'secondary'}>
                       {statusLabel(l.status)}
                     </Badge>
+                    {canManage && l.kind === 'purchase_receipt' && l.status === 'approved' ? (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-7 px-2 text-xs"
+                        disabled={busy}
+                        onClick={() => void voidReceipt(l.id, l.document_number)}
+                      >
+                        {tCommon('actions.void')}
+                      </Button>
+                    ) : null}
                   </div>
                 ))}
               </div>

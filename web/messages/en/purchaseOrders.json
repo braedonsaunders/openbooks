@@ -60,6 +60,8 @@
     "fullyConverted": "Fully converted",
     "allChangesSaved": "All changes saved",
     "savedToast": "{target} {number} saved",
+    "voidReceiptFailed": "The goods receipt could not be voided.",
+    "voidReceiptDone": "Goods receipt {number} voided",
     "saveFailedRetry": "Save failed — fix and retry",
     "unsavedChanges": "Unsaved changes…",
     "totals": {

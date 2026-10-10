@@ -60,6 +60,8 @@
     "fullyConverted": "Vollständig umgewandelt",
     "allChangesSaved": "Alle Änderungen gespeichert",
     "savedToast": "{target} {number} gespeichert",
+    "voidReceiptFailed": "Der Wareneingang konnte nicht storniert werden.",
+    "voidReceiptDone": "Wareneingang {number} storniert",
     "saveFailedRetry": "Speichern fehlgeschlagen — korrigieren und erneut versuchen",
     "unsavedChanges": "Nicht gespeicherte Änderungen…",
     "totals": {

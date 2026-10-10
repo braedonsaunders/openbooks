@@ -60,6 +60,8 @@
     "fullyConverted": "已全部转换",
     "allChangesSaved": "所有更改已保存",
     "savedToast": "已保存 {target} {number}",
+    "voidReceiptFailed": "无法作废收货单。",
+    "voidReceiptDone": "收货单 {number} 已作废",
     "saveFailedRetry": "保存失败——修正后重试",
     "unsavedChanges": "有未保存的更改……",
     "totals": {
