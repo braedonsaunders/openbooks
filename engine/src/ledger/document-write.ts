@@ -21,6 +21,7 @@ import { documentRevisionCounterSql } from '../records/revision.ts'
 import { sql } from 'drizzle-orm'
 import { canonicalJson } from '../platform/canonical-json.ts'
 import { allocateDocumentNumber } from '../records/numbering.ts'
+import { DocumentDefaultsError, resolveTermsDueDate } from './document-defaults.ts'
 import { db, schema, type SqlExecutor } from '../platform/db.ts'
 import { assertReturnSourceSelectable, type ReturnSide } from '../inventory/returnable-sources.ts'
 import { InventoryError } from '../inventory/contracts.ts'
@@ -2436,6 +2437,23 @@ export async function createDocument(input: DocumentCreateInput): Promise<Docume
   const effectiveBody: DocumentEditInput = {
     ...body,
     documentDate: body.documentDate ?? today,
+  }
+  // A create that names no due date takes the one the party's payment terms
+  // imply — the same resolver the drawer previews before save. An explicit
+  // null still means "no due date"; malformed dates and parties are left for
+  // the writer to refuse by name.
+  if (effectiveBody.dueDate === undefined && cfg.dueDateFromTerms && isIsoCalendarDate(effectiveBody.documentDate)) {
+    try {
+      const terms = await resolveTermsDueDate(db, orgId, {
+        kind,
+        partyId: effectiveBody.partyId,
+        documentDate: effectiveBody.documentDate,
+      })
+      if (terms) effectiveBody.dueDate = terms.dueDate
+    } catch (error) {
+      if (error instanceof DocumentDefaultsError) throw new DocumentEditError(422, error.message)
+      throw error
+    }
   }
   const precomputedTotals = effectiveBody.lines
     ? await precomputeDocumentTotalsForCreate(orgId, kind, {

@@ -352,5 +352,8 @@
     "reason": "Prüfungsbegründung",
     "reasonHelp": "Korrektur und Prüfung mit 10 bis 1000 Zeichen erläutern.",
     "queued": "Wiederholung eingeplant."
+  },
+  "documentDefaults": {
+    "failed": "Konto und Steuerschlüssel des Artikels sowie das Fälligkeitsdatum aus den Zahlungsbedingungen konnten nicht geladen werden. Geben Sie sie selbst ein oder versuchen Sie es erneut."
   }
 }

@@ -352,5 +352,8 @@
     "reason": "Motivo de la revisión",
     "reasonHelp": "Explique la corrección y revisión con entre 10 y 1000 caracteres.",
     "queued": "Reintento en cola."
+  },
+  "documentDefaults": {
+    "failed": "No se pudieron cargar la cuenta y el código de impuesto del artículo ni la fecha de vencimiento según las condiciones de pago. Introdúzcalos manualmente o vuelva a intentarlo."
   }
 }

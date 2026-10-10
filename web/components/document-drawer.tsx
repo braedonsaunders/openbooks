@@ -25,6 +25,14 @@ import { TransactionDrawer } from './transaction-drawer'
 import { ExternalRefChip } from './external-ref-chip'
 import { LineGrid, type LineGridColumn, type LineGridDistribution } from './line-grid'
 import {
+  applyLineDefault,
+  followTermsDueDate,
+  itemChangeRequests,
+  type AppliedLineDefault,
+  type LineDefaultsContext,
+  type ResolvedLineDefault,
+} from './document-line-defaults'
+import {
   chipForRow,
   groupHeaderModels,
   groupIdOf,
@@ -1199,6 +1207,10 @@ export function DocumentDrawer({
   const [paymentCardId, setPaymentCardId] = useState<string>(doc.payment_card_id ?? '')
   const [documentDate, setDocumentDate] = useState<string>(doc.document_date ?? '')
   const [dueDate, setDueDate] = useState<string>(doc.due_date ?? '')
+  // A saved due date is the operator's until the terms resolve to the same
+  // date; a blank one follows the party's payment terms.
+  const [dueOverridden, setDueOverridden] = useState<boolean>(Boolean(doc.due_date))
+  const lastDerivedDue = useRef<string | null>(null)
   const [referenceNumber, setReferenceNumber] = useState<string>(doc.reference_number ?? '')
   const [memo, setMemo] = useState<string>(doc.memo ?? '')
   // Full-schema header built-ins (off by default; shown when a form enables them).
@@ -1313,6 +1325,124 @@ export function DocumentDrawer({
     } catch {
       return '0.0000'
     }
+  }
+
+  // -- pre-save defaults ---------------------------------------------------
+  // Choosing an item codes the line with the item's account and the
+  // party/item tax code; choosing a party or date derives the due date from
+  // the party's payment terms. The server resolves both through the same
+  // service the create path applies, and every defaulted field stays
+  // editable (see document-line-defaults.ts for the follow rules).
+  const fetchDocumentDefaults = useCallback(async (request: {
+    partyId: string
+    documentDate?: string
+    itemIds?: string[]
+  }): Promise<{ terms: { dueDate: string } | null; lines: ResolvedLineDefault[] } | null> => {
+    const query = new URLSearchParams({ kind: config.kind })
+    if (request.partyId) query.set('partyId', request.partyId)
+    if (request.documentDate) query.set('documentDate', request.documentDate)
+    for (const itemId of request.itemIds ?? []) query.append('itemId', itemId)
+    let response: Response
+    try {
+      response = await fetch(`/api/documents/defaults?${query.toString()}`, { headers: { accept: 'application/json' } })
+    } catch {
+      toast.error(tCommon('documentDefaults.failed'))
+      return null
+    }
+    if (!response.ok) {
+      const body = (await response.json().catch(() => null)) as { error?: unknown } | null
+      toast.error(typeof body?.error === 'string' && body.error ? body.error : tCommon('documentDefaults.failed'))
+      return null
+    }
+    const body = (await response.json().catch(() => null)) as { terms?: { dueDate?: unknown } | null; lines?: unknown } | null
+    return {
+      terms: typeof body?.terms?.dueDate === 'string' ? { dueDate: body.terms.dueDate } : null,
+      lines: Array.isArray(body?.lines) ? (body.lines as ResolvedLineDefault[]) : [],
+    }
+  }, [config.kind, tCommon])
+
+  const seenLineItems = useRef<Map<string, string>>(new Map())
+  const appliedLineDefaults = useRef<Map<string, AppliedLineDefault>>(new Map())
+  const lineDefaultsContext = useMemo<LineDefaultsContext>(() => ({
+    accountIds: new Set(accounts.map((account) => account.id)),
+    taxProfileValues: new Set(taxProfiles.map((profile) => profile.value)),
+    applyTax: config.hasTax && !nativeGoods,
+  }), [accounts, taxProfiles, config.hasTax, nativeGoods])
+  const applyResolvedLineDefaults = useCallback(async (
+    requests: { clientKey: string; itemId: string }[],
+    requestPartyId: string,
+  ) => {
+    const result = await fetchDocumentDefaults({ partyId: requestPartyId, itemIds: requests.map((request) => request.itemId) })
+    if (!result) return
+    const byItem = new Map(result.lines.map((line) => [line.itemId, line]))
+    const byKey = new Map(requests.map((request) => [request.clientKey, request.itemId]))
+    const previous = new Map(appliedLineDefaults.current)
+    setRows((current) => current.map((row) => {
+      const itemId = byKey.get(row.clientKey)
+      // The operator may have changed the item again while this resolved.
+      if (itemId === undefined || row.itemId !== itemId) return row
+      const resolved = byItem.get(itemId) ?? { itemId, accountId: null, taxCodeId: null }
+      const next = applyLineDefault(row, resolved, previous.get(row.clientKey), lineDefaultsContext)
+      appliedLineDefaults.current.set(row.clientKey, next.applied)
+      return next.row
+    }))
+  }, [fetchDocumentDefaults, lineDefaultsContext])
+
+  useEffect(() => {
+    if (!config.lineDefaults) return
+    const { requests, seen } = itemChangeRequests(seenLineItems.current, rows)
+    seenLineItems.current = seen
+    if (editable && requests.length > 0) void applyResolvedLineDefaults(requests, partyId)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rows, editable, config.lineDefaults])
+
+  // A party change re-resolves lines still carrying a default the drawer
+  // applied (the party's tax code takes precedence over the item's).
+  const lineDefaultsParty = useRef(partyId)
+  useEffect(() => {
+    if (lineDefaultsParty.current === partyId) return
+    lineDefaultsParty.current = partyId
+    if (!editable || !config.lineDefaults) return
+    const requests = rows
+      .filter((row) => row.itemId !== '' && appliedLineDefaults.current.has(row.clientKey))
+      .map((row) => ({ clientKey: row.clientKey, itemId: row.itemId }))
+    if (requests.length > 0) void applyResolvedLineDefaults(requests, partyId)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [partyId])
+
+  // A persisted draft's first resolution only calibrates: opening it never
+  // rewrites a saved due date.
+  const initialTermsKey = useRef<string | null>(isCreate ? null : `${doc.party_id ?? ''}|${doc.document_date ?? ''}`)
+  // The resolution settles against the due date as it is when the answer
+  // arrives, not as it was when the request left.
+  const dueState = useRef({ dueDate, overridden: dueOverridden })
+  useEffect(() => { dueState.current = { dueDate, overridden: dueOverridden } }, [dueDate, dueOverridden])
+  useEffect(() => {
+    if (!config.dueDateFromTerms || !editable || !/^\d{4}-\d{2}-\d{2}$/.test(documentDate)) return
+    const calibrateOnly = initialTermsKey.current === `${partyId}|${documentDate}`
+    let cancelled = false
+    const settle = (derived: string | null) => {
+      if (cancelled) return
+      const current = dueState.current
+      if (calibrateOnly) {
+        if (derived !== null && current.dueDate === derived) setDueOverridden(false)
+      } else {
+        const next = followTermsDueDate({ dueDate: current.dueDate, overridden: current.overridden, lastDerived: lastDerivedDue.current, derived })
+        if (next !== current.dueDate) setDueDate(next)
+        if (derived !== null && next === derived) setDueOverridden(false)
+      }
+      lastDerivedDue.current = derived
+    }
+    if (!partyId) settle(null)
+    else void fetchDocumentDefaults({ partyId, documentDate }).then((result) => { if (result) settle(result.terms?.dueDate ?? null) })
+    return () => { cancelled = true }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [partyId, documentDate, editable, config.dueDateFromTerms])
+
+  /** An operator-typed due date (or an explicit clear) stops following the terms. */
+  const editDueDate = (value: string) => {
+    setDueDate(value)
+    setDueOverridden(value === '' || value !== lastDerivedDue.current)
   }
 
   // -- entry-mode distributions -------------------------------------------
@@ -1741,7 +1871,9 @@ export function DocumentDrawer({
       partyId: partyId || null,
       paymentCardId: config.fundingSource === 'card' ? paymentCardId || null : null,
       documentDate: documentDate || undefined,
-      dueDate: config.hasDueDate || generatedAuthority ? dueDate || null : null,
+      // An unsaved document with no chosen due date lets the server derive
+      // it from the party's terms; an explicit clear stays null.
+      dueDate: config.hasDueDate || generatedAuthority ? dueDate || (isCreate && !dueOverridden ? undefined : null) : null,
       referenceNumber: config.hasReference ? referenceNumber : null,
       memo,
       // Full-schema header built-ins (persisted only when the form exposes them,
@@ -1837,7 +1969,7 @@ export function DocumentDrawer({
               })),
           }),
     }
-  }, [generatedAuthority, isTransfer, transfer, partyId, paymentCardId, documentDate, dueDate, referenceNumber, memo, postingDate, departmentId, projectIdHeader, locationId, classId, subsidiaryId, multiSub, expectedPayDate, carriesWorkDates, workCompletedOn, paymentHoldReason, internalNotes, billingMethod, isFinalInvoice, customValues, extraDims, rows, lineDefs, segments, config, taxByProfile, returnSourceColumn, returnSources, marketplaceColumn])
+  }, [generatedAuthority, isTransfer, transfer, partyId, paymentCardId, documentDate, dueDate, dueOverridden, isCreate, referenceNumber, memo, postingDate, departmentId, projectIdHeader, locationId, classId, subsidiaryId, multiSub, expectedPayDate, carriesWorkDates, workCompletedOn, paymentHoldReason, internalNotes, billingMethod, isFinalInvoice, customValues, extraDims, rows, lineDefs, segments, config, taxByProfile, returnSourceColumn, returnSources, marketplaceColumn])
 
   const [dirty, setDirty] = useState(false)
   useEffect(() => {
@@ -1895,6 +2027,7 @@ export function DocumentDrawer({
     setPaymentCardId(sourceDoc.payment_card_id ?? '')
     setDocumentDate(sourceDoc.document_date ?? '')
     setDueDate(sourceDoc.due_date ?? '')
+    setDueOverridden(Boolean(sourceDoc.due_date))
     setReferenceNumber(sourceDoc.reference_number ?? '')
     setMemo(sourceDoc.memo ?? '')
     setPostingDate(sourceDoc.posting_date ?? '')
@@ -2649,7 +2782,7 @@ export function DocumentDrawer({
           <>
             <FieldLabel fieldName={label}>{label}</FieldLabel>
             {isEditable ? (
-              <Input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
+              <Input type="date" value={dueDate} onChange={(e) => editDueDate(e.target.value)} />
             ) : (<p className="text-sm">{doc.due_date ?? '—'}</p>)}
           </>
         )
@@ -3203,7 +3336,7 @@ export function DocumentDrawer({
                 <div className={field}>
                   <FieldLabel fieldName={t('drawer.dueDate')}>{t('drawer.dueDate')}</FieldLabel>
                   {editable ? (
-                    <Input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
+                    <Input type="date" value={dueDate} onChange={(e) => editDueDate(e.target.value)} />
                   ) : (
                     <p className="text-sm">{doc.due_date ?? '—'}</p>
                   )}

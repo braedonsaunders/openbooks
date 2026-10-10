@@ -352,5 +352,8 @@
     "reason": "Motif de vérification",
     "reasonHelp": "Décrivez la correction et la vérification en 10 à 1000 caractères.",
     "queued": "Nouvelle tentative mise en file d’attente."
+  },
+  "documentDefaults": {
+    "failed": "Le compte et le code de taxe de l’article ainsi que la date d’échéance selon les conditions de paiement n’ont pas pu être chargés. Saisissez-les vous-même ou réessayez."
   }
 }

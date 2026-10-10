@@ -352,5 +352,8 @@
     "reason": "Review reason",
     "reasonHelp": "Explain the correction and review in 10 to 1000 characters.",
     "queued": "Retry queued."
+  },
+  "documentDefaults": {
+    "failed": "The item's account and tax code and the payment-terms due date could not be loaded. Enter them yourself or try again."
   }
 }
