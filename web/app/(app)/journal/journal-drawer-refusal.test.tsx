@@ -634,3 +634,56 @@ test(" journal: saving with a contentful account-less leg refuses by line name a
   assert.match(document.body.textContent ?? "", /200/, "the refused leg must stay in the drawer with its amount priced");
   assert.equal(save.disabled, false, "busy must release after the refusal");
 });
+
+test("deleting a draft journal sends the revision fence with the delete", async (t) => {
+  freshGlobals();
+  const doc = DRAFT_DOC();
+  const seen: { body: unknown }[] = [];
+  const restoreFetch = scriptFetch((url, init) => {
+    if (url === `/api/journals/${doc.id}` && init?.method === "DELETE") {
+      seen.push({ body: init?.body ? JSON.parse(String(init.body)) : undefined });
+      return Response.json({ ok: true });
+    }
+    return null;
+  });
+  t.after(restoreFetch);
+  const { unmount } = await mountJournal(doc, "edit");
+  t.after(unmount);
+  const del = buttonsNamed("Delete")[0];
+  assert.ok(del, "a draft journal offers Delete");
+  await click(del);
+  assert.equal(seen.length, 1, "the delete reaches the API once");
+  assert.deepEqual(seen[0]?.body, { expectedUpdatedAt: TOKEN }, "the concurrency fence rides along");
+});
+
+test("a posted partyless journal names its control accounts, never undefined", async (t) => {
+  freshGlobals();
+  const doc = DRAFT_DOC();
+  const restoreFetch = scriptFetch((url, init) => {
+    if (url === "/api/journals/actions" && init?.method === "POST") {
+      return Response.json({
+        pendingApproval: false,
+        warnings: [
+          {
+            code: "partyless_control_lines",
+            accounts: [
+              { accountId: "a1", accountNumber: "1100", accountName: "Receivables", amount: "100.00" },
+              { accountId: "a2", accountNumber: null, accountName: "Payables", amount: "-100.00" },
+            ],
+          },
+        ],
+      });
+    }
+    return null;
+  });
+  t.after(restoreFetch);
+  const { unmount } = await mountJournal(doc, "edit");
+  t.after(unmount);
+  const post = buttonsNamed("Post")[0];
+  assert.ok(post, "a balanced draft journal offers Post");
+  await click(post);
+  await tick();
+  const text = document.body.textContent ?? "";
+  assert.match(text, /Posted with no party on 1100 Receivables, Payables/);
+  assert.doesNotMatch(text, /undefined/);
+});

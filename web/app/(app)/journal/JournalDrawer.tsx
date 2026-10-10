@@ -767,7 +767,7 @@ function JournalDrawerBody({
           const posted = data as {
             pendingApproval?: boolean
             warnings?: (
-              | { code: 'partyless_control_lines'; accounts: { number: string | null; name: string }[] }
+              | { code: 'partyless_control_lines'; accounts: { accountNumber: string | null; accountName: string }[] }
               | {
                   code: 'budgetary_control_advisory'
                   overages: {
@@ -800,7 +800,7 @@ function JournalDrawerBody({
           if (partyless && 'accounts' in partyless && partyless.accounts.length > 0) {
             pinned.push(
               t('partylessControlWarning', {
-                accounts: partyless.accounts.map((a) => `${a.number ?? ''} ${a.name}`.trim()).join(', '),
+                accounts: partyless.accounts.map((a) => `${a.accountNumber ?? ''} ${a.accountName}`.trim()).join(', '),
               }),
             )
           }
