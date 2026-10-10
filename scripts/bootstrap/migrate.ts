@@ -191,7 +191,7 @@ function pendingMigrationItems(
 }
 
 /**
- * Contents of every migration without a ledger row, in ordinal order. The
+ * Contents of every migration without a ledger row, in prerequisite order. The
  * preflight floor (PREFLIGHT_MIN_ORDINAL) scopes which preflights run, but
  * a deferred preflight can only be explained by ANY earlier migration that
  * is still unapplied — including one below the floor, like the employment
@@ -220,7 +220,7 @@ function listPreflightEntries(): Set<string> {
 }
 
 /**
- * Run every pending migration's preflight in ordinal order, each in
+ * Run every pending migration's preflight in prerequisite order, each in
  * BEGIN READ ONLY with bypass RLS and a bounded statement_timeout, then
  * ROLLBACK. A preflight that needs an object an earlier PENDING migration
  * creates is deferred to apply time; anything else missing is a real error.

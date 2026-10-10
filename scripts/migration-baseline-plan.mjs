@@ -3,6 +3,51 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { baselineDigest } from "./migration-baseline-catalog.mjs";
 
+/** Explicit schema prerequisites can outlive ordinal allocation order. Keep
+ * immutable SQL identities and otherwise retain the existing release order. */
+export function orderMigrationPrerequisites(directory, filenames, covered = []) {
+  const path = join(directory, "prerequisites.json");
+  if (!existsSync(path)) return filenames;
+  const manifest = JSON.parse(readFileSync(path, "utf8"));
+  const identity = /^generated\/\d{4}_[a-z0-9_]+\.sql$/;
+  if (manifest?.format !== 1 || !Array.isArray(manifest.dependencies)
+      || Object.keys(manifest).some(key => !["format", "dependencies"].includes(key))) {
+    throw new Error("migration prerequisite manifest is malformed");
+  }
+  const included = new Set(filenames);
+  const satisfied = new Set(covered);
+  if (included.size !== filenames.length) throw new Error("duplicate migration identity in release plan");
+  const requirements = new Map(filenames.map(filename => [filename, new Set()]));
+  const declared = new Set();
+  for (const entry of manifest.dependencies) {
+    if (!identity.test(entry?.migration ?? "") || !Array.isArray(entry.requires) || !entry.requires.length
+        || Object.keys(entry).some(key => !["migration", "requires"].includes(key))
+        || declared.has(entry.migration)
+        || new Set(entry.requires).size !== entry.requires.length
+        || entry.requires.some(filename => !identity.test(filename) || filename === entry.migration)) {
+      throw new Error("migration prerequisites require unique exact migration identities");
+    }
+    declared.add(entry.migration);
+    // A selected release may intentionally exclude an unpublished migration.
+    if (!included.has(entry.migration)) continue;
+    for (const prerequisite of entry.requires) {
+      if (satisfied.has(prerequisite)) continue;
+      if (!included.has(prerequisite)) throw new Error(`${entry.migration} requires missing migration ${prerequisite}`);
+      requirements.get(entry.migration).add(prerequisite);
+    }
+  }
+  const remaining = new Set(filenames);
+  const ordered = [];
+  while (remaining.size) {
+    const next = filenames.find(filename => remaining.has(filename)
+      && [...requirements.get(filename)].every(prerequisite => !remaining.has(prerequisite)));
+    if (!next) throw new Error(`migration prerequisites contain a cycle: ${[...remaining].join(", ")}`);
+    remaining.delete(next);
+    ordered.push(next);
+  }
+  return ordered;
+}
+
 export function validateBaselineManifest(manifest, directory) {
   if (manifest?.format !== 1 || manifest.verified !== true
       || !/^baselines\/[a-z0-9_]+\.sql$/.test(manifest.filename ?? "")
@@ -25,14 +70,15 @@ export function validateBaselineManifest(manifest, directory) {
 
 export function releaseMigrationPlan(directory, generated) {
   const path = join(directory, "baseline.json");
-  if (!existsSync(path)) return { baseline: null, filenames: generated.map((name) => `generated/${name}`) };
+  if (!existsSync(path)) return { baseline: null, filenames: orderMigrationPrerequisites(directory, generated.map((name) => `generated/${name}`)) };
   const baseline = JSON.parse(readFileSync(path, "utf8"));
   const cutoff = validateBaselineManifest(baseline, directory);
   const covered = new Set(baseline.covered.map((entry) => entry.filename));
   for (const file of generated) {
     if (Number(file.slice(0, 4)) <= cutoff && !covered.has(`generated/${file}`)) throw new Error(`migration ${file} falls inside the release cut without verified coverage; regenerate the baseline`);
   }
-  return { baseline, filenames: [baseline.filename, ...generated.filter((file) => Number(file.slice(0, 4)) > cutoff).map((file) => `generated/${file}`)] };
+  return { baseline, filenames: orderMigrationPrerequisites(directory,
+    [baseline.filename, ...generated.filter((file) => Number(file.slice(0, 4)) > cutoff).map((file) => `generated/${file}`)], [...covered]) };
 }
 
 /**
@@ -53,7 +99,8 @@ export function historicalMigrationPlan(directory, generated) {
     throw new Error(`${environment} is missing or differs from the tenant-policy environment ${release.baseline.filename} was verified with; restore it from the release that prepared the baseline`);
   }
   const covered = new Set(release.baseline.covered.map((entry) => entry.filename));
-  return { baseline: null, filenames: generated.map((file) => `generated/${file}`).filter((file) => covered.has(file)), environment };
+  return { baseline: null, filenames: orderMigrationPrerequisites(directory,
+    generated.map((file) => `generated/${file}`).filter((file) => covered.has(file))), environment };
 }
 
 export function assertBaselineHistory(baseline, recorded, applicationTablesPresent) {
