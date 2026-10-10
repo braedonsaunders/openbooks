@@ -38,7 +38,8 @@ const mockAuthz = `
 
 registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === "../../../../lib/authz") {
+    // defineRoute imports the gate through the production alias.
+    if (specifier === "../../../../lib/authz" || specifier === "@/lib/authz") {
       return { url: "mock:authz", shortCircuit: true };
     }
     return nextResolve(specifier, context);

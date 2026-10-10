@@ -1143,7 +1143,9 @@ const poolMockSources = new Map<string, string>([
     sql.raw = (text) => state.rawSql(text)
     export const and = (...values) => ({ op: 'and', values })
     export const asc = (value) => ({ op: 'asc', value })
+    export const desc = (value) => ({ op: 'desc', value })
     export const eq = (left, right) => ({ op: 'eq', left, right })
+    export const inArray = (column, values) => ({ op: 'inArray', column, values })
     export const isNull = (value) => ({ op: 'isNull', value })
     export const or = (...values) => ({ op: 'or', values })
   `],

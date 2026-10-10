@@ -155,8 +155,15 @@ test('posting routes require both manage and posting rights before parsing the b
     ;(globalThis as Record<string, unknown>).__journalActionsSession = { id: userId, orgId: org.orgId, isSuperAdmin: false }
     assert.equal((await postGrantPostings(ledgerRequest({}))).status, 403)
     assert.equal((await postLiquidations(ledgerRequest({}))).status, 403)
-    assert.equal((await postGrantCommands(ledgerRequest({}))).status, 422)
-    assert.equal((await postEncumbranceCommands(ledgerRequest({}))).status, 422)
+    // The manage grant alone clears the non-posting command routes' gate, so
+    // the empty body reaches typed validation and meets the shared
+    // invalid-body refusal (400) rather than a permission refusal.
+    const grantCommand = await postGrantCommands(ledgerRequest({}))
+    assert.equal(grantCommand.status, 400)
+    assert.equal(((await grantCommand.json()) as { error?: string }).error !== undefined, true)
+    const encumbranceCommand = await postEncumbranceCommands(ledgerRequest({}))
+    assert.equal(encumbranceCommand.status, 400)
+    assert.equal(((await encumbranceCommand.json()) as { error?: string }).error !== undefined, true)
     const posterId = await withBypassContext(() => createScratchUser(org.orgId, 'Posting User', 'posting-user'))
     await grantRole(org.orgId, 'posting-user', ['gl.post'])
     routeState.authz = { user: { orgId: org.orgId, id: posterId }, permissions: new Set(['gl.post']), allowedSubsidiaryIds: null }

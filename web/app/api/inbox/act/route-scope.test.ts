@@ -77,6 +77,9 @@ const mockSources = new Map<string, string>([
       export async function countInbox() {
         throw new Error('The action route must not query inbox totals')
       }
+      export async function listInbox() {
+        throw new Error('The action route must not list inbox items')
+      }
     `,
   ],
 ]);
