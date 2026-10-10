@@ -53,9 +53,14 @@ export const GET = defineRoute({
   ])
   if (!payload) return notFound("record")
   const requestedRole = new URL(request.url).searchParams.get('role')
-  const role = requestedRole === 'customer' || requestedRole === 'vendor' || requestedRole === 'employee'
-    ? requestedRole
-    : payload.customer ? 'customer' : payload.vendor ? 'vendor' : 'employee'
+  // The record type is the role the drawer was opened for, else the role the
+  // party actually holds. A party with no customer, vendor or employee role
+  // (a company opened from a related record) has no role form: it resolves
+  // no layout and offers no form customization, exactly like /parties.
+  const role: 'customer' | 'vendor' | 'employee' | null =
+    requestedRole === 'customer' || requestedRole === 'vendor' || requestedRole === 'employee'
+      ? requestedRole
+      : payload.customer ? 'customer' : payload.vendor ? 'vendor' : payload.employee ? 'employee' : null
   // The shell overlay vendor drawer needs the same Compliance tab
   // inputs the /parties and /entities loaders supply — drawer-open vendors
   // only, so the class list never loads for customers, employees, or a
@@ -67,15 +72,17 @@ export const GET = defineRoute({
       }
     : null
   const formId = new URL(request.url).searchParams.get('form')
-  const resolvedForm = await resolveFormLayout({
-    orgId: gate.user.orgId,
-    userId: gate.user.id,
-    recordType: role,
-    userRoles: gate.user.roles.map(({ key }) => key),
-    headerDefs: (fieldDefs),
-    lineDefs: [],
-    explicitLayoutId: formId,
-  })
+  const resolvedForm = role
+    ? await resolveFormLayout({
+        orgId: gate.user.orgId,
+        userId: gate.user.id,
+        recordType: role,
+        userRoles: gate.user.roles.map(({ key }) => key),
+        headerDefs: (fieldDefs),
+        lineDefs: [],
+        explicitLayoutId: formId,
+      })
+    : null
 
   // Payer-hierarchy billing resolves in the payload like Compliance:
   // drawer-open customers only, so the tab never loads for other roles or
@@ -108,9 +115,9 @@ export const GET = defineRoute({
     accounts: accounts.rows,
     taxCodes: taxCodes.rows,
     salesReps: salesReps.rows,
-    layout: resolvedForm.layout,
-    forms: resolvedForm.available,
-    currentFormId: resolvedForm.row?.id ?? null,
+    layout: resolvedForm?.layout,
+    forms: resolvedForm?.available ?? [],
+    currentFormId: resolvedForm?.row?.id ?? null,
     recordType: role,
     canCustomize: can(gate, 'admin.customization.manage'),
   })
