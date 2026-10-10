@@ -47,6 +47,8 @@ node scripts/sample-companies.mjs install \
 
 The member must already have access to the named source organization. Add `--industry KEY` to create one sample. Existing member samples are reused. The setup wizard uses this same governed creation pipeline, including clone recovery, numbering reconciliation, and access granted only after finalization.
 
+Each new preview administrator receives a separate custom role containing the native Administrator defaults and its own local person identity. This grants usable access even when the source has a customized or empty `admin` role. Source and inherited roles, assignments, user overrides and existing identities remain unchanged. The new actor cannot sign in directly and gains no platform or home-company authority. Provisioning records the permission snapshot and requesting member in audit history; retries reuse the finalized actor instead of adding grants. Existing completed previews retain their configured access.
+
 An interrupted simulator build retains its manifest directory in the preparation error. Resume the recorded run with:
 
 ```sh
