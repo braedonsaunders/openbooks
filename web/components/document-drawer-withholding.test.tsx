@@ -121,7 +121,10 @@ async function renderBill(
             canPost={false}
             initialMode="edit"
             withholdingSchemes={schemes}
-            layout={{ header: { groups: [] }, lines: { columns: [] }, actions: [] } as never}
+            // A resolved bill form always places the line amount; withholding
+            // columns are never placed by the layout and appear only behind a
+            // registration.
+            layout={{ header: { groups: [] }, lines: { columns: [{ key: "amount", visible: true }] }, actions: [] } as never}
           />
         </MoneyProvider>
       </NextIntlClientProvider>,
