@@ -149,10 +149,16 @@ export const Select = React.forwardRef<HTMLSelectElement, SelectProps>(function 
 
   // Drive the hidden native <select> so the genuine change event fires (real
   // ChangeEvent for callers, native form value + validation stay intact).
+  // Assign through the prototype setter, never `el.value =`: React intercepts
+  // direct value sets to track controlled inputs, so a plain assignment marks
+  // the dispatched change as a no-op and the caller's onChange never fires —
+  // the selection visibly resets to the placeholder on every pick.
   function pick(v: string) {
     const el = innerRef.current
     if (!el) return
-    el.value = v
+    const setter = Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype, 'value')?.set
+    if (setter) setter.call(el, v)
+    else el.value = v
     el.dispatchEvent(new Event('change', { bubbles: true }))
   }
 
