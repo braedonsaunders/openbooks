@@ -19,6 +19,7 @@ import type { ContributedLine } from "../allocations/types.ts";
 import { assertContributorBalance, collectPostContributions, PostAllocationError, type PostContributionResult } from "../allocations/post.ts";
 import { postDriverResolver } from "../allocations/report-runner.ts";
 import { assertDocumentMutationRefsOwned } from "../records/mutation-refs.ts";
+import { consolidationSourceRefusal } from "../records/consolidation-source-policy.ts";
 import { runRecordFlows } from "../flows/run.ts";
 
 import { assertBillReceiptsPostable, resolveBillInventoryAccounts } from "../inventory/documents-purchasing.ts";
@@ -49,6 +50,8 @@ export async function prepareDocumentPosting(documentId: string, deps: PostingDe
     .from(schema.documents)
     .where(eq(schema.documents.id, documentId));
   if (!doc) throw new PostingError(`document ${documentId} not found`);
+  const consolidationRefusal = await consolidationSourceRefusal(db, doc.orgId, documentId);
+  if (consolidationRefusal) throw new PostingError(consolidationRefusal);
   if (doc.status === "posted")
     throw new PostingError(`document ${doc.documentNumber} already posted`);
   if (doc.status === "voided")

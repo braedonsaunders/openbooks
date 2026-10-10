@@ -2,6 +2,7 @@ import { and, eq, sql } from "drizzle-orm";
 import { db, schema, withOrgTransaction } from "../platform/db.ts";
 import { resolveScriptUser, runTriggerScripts, type ScriptContext } from "../scripting/scripting.ts";
 import { assertDocumentMutationRefsOwned } from "../records/mutation-refs.ts";
+import { consolidationSourceRefusal } from "../records/consolidation-source-policy.ts";
 import { assertExpenseEmployee, assertExpenseSettlement } from "../records/expense-validation.ts";
 import { cancelDispatchRuns, dispatchFailureReason, findGatingRun } from "./dispatch-result.ts";
 import { runRecordFlows } from "./run.ts";
@@ -83,6 +84,8 @@ async function submitForApprovalLocked(
     .for("update");
   if (!doc) throw new Error("target document not found");
   if (doc.status !== "draft") throw new SubmitError(`document is ${doc.status}, not draft`);
+  const consolidationRefusal = await consolidationSourceRefusal(db, orgId, targetId);
+  if (consolidationRefusal) throw new SubmitError(consolidationRefusal);
   const blockedCorrection = (await db.execute<{ document_number: string }>(sql`
     select source.document_number
       from document_links link

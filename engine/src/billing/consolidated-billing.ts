@@ -501,17 +501,22 @@ export async function runConsolidationGroup(
        order by r.currency
     `)).rows;
     const drafts = (await db.execute<PendingDraft>(sql`
+      with locked_drafts as materialized (
+        select d.* from documents d
+         where d.org_id = ${orgId} and d.kind = 'customer_invoice' and d.status = 'draft'
+           and d.custom->>'consolidationStatus' = 'pending_consolidation'
+           and d.custom->>'consolidationGroupId' = ${groupId}
+           and d.document_date >= ${periodStart}::date and d.document_date <= ${periodEnd}::date
+         order by d.id
+         for update
+      )
       select d.id, d.document_number as "documentNumber", d.document_date::text as "documentDate",
              d.currency, d.subsidiary_id as "subsidiaryId", d.party_id as "partyId",
              d.subtotal::text as subtotal, d.tax_total::text as "taxTotal", d.total::text as total,
              nullif(d.custom->>'billToPartyId', '') as "billToPartyId",
              nullif(d.custom->>'subscriptionId', '') as "subscriptionId"
-        from documents d
-       where d.org_id = ${orgId} and d.kind = 'customer_invoice' and d.status = 'draft'
-         and d.custom->>'consolidationStatus' = 'pending_consolidation'
-         and d.custom->>'consolidationGroupId' = ${groupId}
-         and d.document_date >= ${periodStart}::date and d.document_date <= ${periodEnd}::date
-       order by d.document_date, d.document_number
+        from locked_drafts d
+       order by d.document_date, d.document_number, d.id
     `)).rows;
     if (!drafts.length) {
       if (!priorRuns.length) {
@@ -528,7 +533,7 @@ export async function runConsolidationGroup(
       if (draft.partyId !== group.payerPartyId) {
         throw new ConsolidatedBillingError(
           `invoice ${draft.documentNumber} is addressed to another payer — ` +
-          "move it to this group's payer or bill it standalone before consolidating this period",
+          "review the group's payer and effective billing relationships, then align the group with its source charges before running consolidation",
         );
       }
     }
@@ -676,7 +681,7 @@ export async function runConsolidationGroup(
         `);
         if (superseded.rows.length !== 1) {
           throw new ConsolidatedBillingError(
-            `invoice ${draft.documentNumber} left draft after collection — void or post it standalone before consolidating this period`,
+            `invoice ${draft.documentNumber} changed during collection — reload the consolidation group and retry`,
           );
         }
         await db.execute(sql`
