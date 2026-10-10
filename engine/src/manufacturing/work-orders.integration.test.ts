@@ -1,11 +1,11 @@
-import { approveFixtureRouting } from "../testing/manufacturing.ts";
+import { approveFixtureRouting, createManufacturingOperator } from "../testing/manufacturing.ts";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db, withBypassContext } from "../platform/db.ts";
 import type { SqlExecutor } from "../platform/db.ts";
-import { createScratchOrg, createScratchUser, dropScratchOrg, seedApprovalFlow, type ScratchOrg } from "../testing/fixtures.ts";
+import { createScratchOrg, dropScratchOrg, seedApprovalFlow, type ScratchOrg } from "../testing/fixtures.ts";
 import { AvailabilityRefusal } from "../inventory/availability.ts";
 import { receiveInventory } from "../inventory/movements.ts";
 import { postManufacturingEntry } from "./journal.ts";
@@ -35,7 +35,7 @@ async function withSandboxClone(f: Fixture, work: (orgId: string) => Promise<voi
 
 async function setup(): Promise<Fixture> {
   const org = await withBypassContext(() => createScratchOrg());
-  const actorId = await withBypassContext(() => createScratchUser(org.orgId, "Shop lead", "admin"));
+  const actorId = await withBypassContext(() => createManufacturingOperator(org.orgId, "Shop lead"));
   const wipId = randomUUID();
   await withBypassContext(async () => {
     const account = await db.execute(sql`insert into accounts

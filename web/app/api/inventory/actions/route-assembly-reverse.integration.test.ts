@@ -1,4 +1,4 @@
-import { approveFixtureRouting } from "@openbooks/engine/src/testing/manufacturing.ts";
+import { approveFixtureRouting, createManufacturingOperator } from "@openbooks/engine/src/testing/manufacturing.ts";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { registerHooks } from "node:module";
@@ -125,7 +125,7 @@ test("API reverse of an assembly build restores stock, replays retries, and conf
 test("API reverse of a work-order issue reverses every consume leg in the entry", async () => {
   const org = await createScratchOrg();
   try {
-    const actor = (await seedFlowActors(org.orgId)).adminId;
+    const actor = await withBypassContext(() => createManufacturingOperator(org.orgId, "Production operator"));
     state.user = { orgId: org.orgId, id: actor };
     state.allowedSubsidiaryIds = null;
     const wipId = randomUUID();

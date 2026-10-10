@@ -1,4 +1,4 @@
-import { approveFixtureRouting } from "../testing/manufacturing.ts";
+import { approveFixtureRouting, createManufacturingOperator } from "../testing/manufacturing.ts";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
@@ -6,7 +6,7 @@ import { sql } from "drizzle-orm";
 import { db, withBypassContext } from "../platform/db.ts";
 import type { SqlExecutor } from "../platform/db.ts";
 import { withSimClock } from "../platform/clock.ts";
-import { createScratchOrg, createScratchUser, dropScratchOrg, type ScratchOrg } from "../testing/fixtures.ts";
+import { createScratchOrg, dropScratchOrg, type ScratchOrg } from "../testing/fixtures.ts";
 import { ensureLot } from "../inventory/tracking.ts";
 import { receiveInventory } from "../inventory/movements.ts";
 import { primaryBookId } from "../inventory/position.ts";
@@ -26,7 +26,7 @@ function run<T>(work: (tx: SqlExecutor) => Promise<T>) { return withBypassContex
 async function setup(): Promise<Fixture> {
   const org = await withBypassContext(() => createScratchOrg());
   try {
-    const actorId = await withBypassContext(() => createScratchUser(org.orgId, "Shop lead", "admin"));
+    const actorId = await withBypassContext(() => createManufacturingOperator(org.orgId, "Shop lead"));
     const wipId = randomUUID(), departmentId = randomUUID();
     await withBypassContext(async () => {
       const department = await db.execute<{ id: string }>(sql`insert into departments (id, org_id, name, subsidiary_id)

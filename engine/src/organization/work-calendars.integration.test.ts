@@ -3,7 +3,8 @@ import test from 'node:test';
 import { randomUUID } from 'node:crypto';
 import { sql } from 'drizzle-orm';
 import { db, withBypassContext, type SqlExecutor } from '../platform/db.ts';
-import { createScratchOrg, createScratchUser, dropScratchOrg } from '../testing/fixtures.ts';
+import { createScratchOrg, dropScratchOrg } from '../testing/fixtures.ts';
+import { createWorkOperator } from '../testing/manufacturing.ts';
 import { saveCompanyWorkCalendar, WorkCalendarError } from './work-calendars.ts';
 const transaction = <T>(work: (tx: SqlExecutor) => Promise<T>) => withBypassContext(() => db.transaction(work));
 const weekdays = { '0': false, '1': true, '2': true, '3': true, '4': true, '5': true, '6': false };
@@ -11,8 +12,8 @@ const weekdays = { '0': false, '1': true, '2': true, '3': true, '4': true, '5': 
 test('company calendars retain project defaults, audit replacements and refuse stale, hidden or revoked commands including replay', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
   const org = await withBypassContext(() => createScratchOrg()), foreign = await withBypassContext(() => createScratchOrg());
   try {
-    const actor = await withBypassContext(() => createScratchUser(org.orgId, 'Calendar manager', 'admin'));
-    const other = await withBypassContext(() => createScratchUser(foreign.orgId, 'Other company manager', 'admin'));
+    const actor = await withBypassContext(() => createWorkOperator(org.orgId, 'Calendar manager', ['admin.setup.manage']));
+    const other = await withBypassContext(() => createWorkOperator(foreign.orgId, 'Other company manager', ['admin.setup.manage']));
     await transaction(tx => tx.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||'{"projects":false,"projectScheduling":false,"inventory":true,"manufacturing":true}'::jsonb) where id=${org.orgId} returning id`));
     const input = { id: randomUUID(), name: 'Production week', workingDays: weekdays, holidays: ['2026-12-25', '2026-12-25'], isDefault: true, reason: 'Set the production working week.' };
     const create = () => transaction(tx => saveCompanyWorkCalendar(tx, org.orgId, actor, input));

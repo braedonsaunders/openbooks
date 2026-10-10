@@ -1,11 +1,11 @@
-import { approveFixtureRouting } from "../testing/manufacturing.ts";
+import { approveFixtureRouting, createManufacturingOperator } from "../testing/manufacturing.ts";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db, withBypassContext } from "../platform/db.ts";
 import { businessToday } from "../platform/business-date.ts";
-import { createScratchOrg, createScratchUser, dropScratchOrg, type ScratchOrg } from "../testing/fixtures.ts";
+import { createScratchOrg, dropScratchOrg, type ScratchOrg } from "../testing/fixtures.ts";
 import { receiveInventory } from "../inventory/movements.ts";
 import { ManufacturingError } from "./errors.ts";
 import { runMrp, getMrpRun, confirmPlannedOrder, dismissPlannedOrder, convertPlannedOrder } from "./mrp.ts";
@@ -21,7 +21,7 @@ const future = (day: string, offset: number) => { const d = new Date(`${day}T00:
 
 async function setup(): Promise<Fixture> {
   const org = await withBypassContext(() => createScratchOrg());
-  const actorId = await withBypassContext(() => createScratchUser(org.orgId, "MRP planner", "admin"));
+  const actorId = await withBypassContext(() => createManufacturingOperator(org.orgId, "MRP planner"));
   await withBypassContext(async () => {
     const enabled = await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||'{"manufacturing":true,"inventory":true,"warehousing":true,"manufacturingMrp":true}'::jsonb) where id=${org.orgId} returning id`);
     assert.equal(enabled.rows.length, 1);

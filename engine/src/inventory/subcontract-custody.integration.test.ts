@@ -3,7 +3,10 @@ import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db,withBypassContext } from "../platform/db.ts";
-import { createScratchOrg,createScratchUser,dropScratchOrg } from "../testing/fixtures.ts";
+import { createScratchOrg,dropScratchOrg } from "../testing/fixtures.ts";
+import { createWorkOperator } from "../testing/manufacturing.ts";
+import { assertCostingPolicyChangeAllowed, lockItemInventoryProfile } from "./profile-policy.ts";
+import { sum } from "../money/money.ts";
 import { receiveInventory,issueInventory } from "./movements.ts";
 import { transferInventory,transferInventoryTx } from "./transfers.ts";
 import { getOnHandWith } from "./position.ts";
@@ -18,7 +21,7 @@ const run=<T>(work:()=>Promise<T>)=>withBypassContext(work);
 test("vendor custody preserves valued ownership, excludes sale, and refuses dependency and revoked authority without moving stock",{skip:!DB},async()=>{
   const org=await run(()=>createScratchOrg());
   try {
-    const actor=await run(()=>createScratchUser(org.orgId,"Production custodian","admin"));
+    const actor=await run(()=>createWorkOperator(org.orgId,"Production custodian",["items.post","manufacturing.manage","admin.setup.manage"]));
     const custody=randomUUID();
     const configure=()=>run(()=>db.transaction(tx=>validateSubcontractLocationConfiguration(tx,org.orgId,actor,{kind:"subcontract",custodianPartyId:org.vendorId,inventoryOwnership:"owned"})));
     await assert.rejects(configure(),/Manufacturing Subcontracting/);
@@ -56,31 +59,62 @@ test("vendor custody preserves valued ownership, excludes sale, and refuses depe
 });
 
 
-test("moving-average tracked receipts retain quantity, original basis and sources through partial issue and reversal",{skip:!DB},async()=>{
+test("untracked moving-average receipts retain quantity, original basis and sources through partial issue and reversal",{skip:!DB},async()=>{
  const org=await run(()=>createScratchOrg());
  try {
-  const actor=await run(()=>createScratchUser(org.orgId,"Inventory operator","admin")),item=org.items.movingAvg;
-  await run(()=>db.execute(sql`update item_inventory_profiles set tracking='lot' where org_id=${org.orgId} and item_id=${item} returning id`));
-  const firstLot=await run(()=>ensureLot(org.orgId,item,'AVG-A',null,actor)),secondLot=await run(()=>ensureLot(org.orgId,item,'AVG-B',null,actor));
+  const actor=await run(()=>createWorkOperator(org.orgId,"Inventory operator",["items.post"])),item=org.items.movingAvg;
+  const policyState=()=>run(async()=>(await db.execute(sql`select to_jsonb(profile) as profile,
+    (select count(*) from inventory_movements where org_id=${org.orgId}) as movements,
+    (select count(*) from journal_entries where org_id=${org.orgId}) as entries,
+    (select count(*) from audit_log where org_id=${org.orgId}) as audits
+    from item_inventory_profiles profile where org_id=${org.orgId} and item_id=${item}`)).rows[0]);
+  const before=await policyState();
+  await assert.rejects(run(()=>db.transaction(async tx=>{
+    const current=await lockItemInventoryProfile(tx,org.orgId,item);
+    await assertCostingPolicyChangeAllowed(tx,org.orgId,item,current,{costingMethod:'moving_average',tracking:'lot'},null);
+  })),/tracking is incompatible with blended moving-average layers/);
+  await assert.rejects(run(()=>db.execute(sql`update item_inventory_profiles set tracking='lot' where org_id=${org.orgId} and item_id=${item} returning id`)),
+    (error:unknown)=>(error as {cause?:{constraint?:string}}).cause?.constraint==='item_inventory_profiles_tracking_costing');
+  assert.deepEqual(await policyState(),before,'unsupported tracked average policy changes no profile, stock, journal or audit');
+  const receipt=(quantity:string,unitCost:string)=>run(()=>receiveInventory(org.orgId,actor,{itemId:item,stockLocationId:org.stockLocationId,quantity,unitCost,subsidiaryId:org.subsidiaryId,date:org.date,offsetAccountId:org.accounts.clearing}));
+  const first=await receipt('3','1'),second=await receipt('1','7');
+  const position=(sourceReceiptMovementId:string)=>run(()=>getOnHandWith(db,org.orgId,item,org.stockLocationId,{subsidiaryId:org.subsidiaryId,sourceReceiptMovementId}));
+  assert.equal((await position(first.movementId)).quantity,'3.0000');assert.equal((await position(first.movementId)).value,'7.5000');
+  assert.equal((await position(second.movementId)).quantity,'1.0000');assert.equal((await position(second.movementId)).value,'2.5000');
+  const issued=await run(()=>issueInventory(org.orgId,actor,{itemId:item,stockLocationId:org.stockLocationId,quantity:'2.5',subsidiaryId:org.subsidiaryId,date:org.date}));
+  assert.equal((await position(first.movementId)).quantity,'0.5000');assert.equal((await position(first.movementId)).value,'1.2500');
+  const provenance=(await run(()=>db.execute<{source:string;basis:string}>(sql`select layer.source_movement_id as source,consumption.original_cost::text as basis from cost_layer_consumptions consumption join cost_layers layer on layer.org_id=consumption.org_id and layer.id=consumption.cost_layer_id where consumption.org_id=${org.orgId} and consumption.issue_movement_id=${issued.movementId}`))).rows;
+  assert(provenance.length>0);assert(provenance.every(row=>row.source===first.movementId));assert.equal(sum(provenance.map(row=>row.basis)),'2.5000');
+  await run(()=>reverseInventoryMovement(org.orgId,actor,{movementId:issued.movementId,reversalDate:org.date,reason:'Restore the original untracked withdrawal'}));
+  assert.equal((await position(first.movementId)).quantity,'3.0000');assert.equal((await position(first.movementId)).value,'7.5000');
+  assert.equal((await position(second.movementId)).value,'2.5000');
+ } finally {await run(()=>dropScratchOrg(org.orgId));}
+});
+
+test("tracked FIFO receipts retain lot quantity and original receipt basis through partial issue and reversal",{skip:!DB},async()=>{
+ const org=await run(()=>createScratchOrg());
+ try {
+  const actor=await run(()=>createWorkOperator(org.orgId,'Tracked inventory operator',['items.post'])),item=org.items.fifo;
+  const changed=await run(()=>db.execute(sql`update item_inventory_profiles set tracking='lot' where org_id=${org.orgId} and item_id=${item} returning id`));assert.equal(changed.rows.length,1);
+  const firstLot=await run(()=>ensureLot(org.orgId,item,'FIFO-A',null,actor)),secondLot=await run(()=>ensureLot(org.orgId,item,'FIFO-B',null,actor));
   const receipt=(quantity:string,unitCost:string,lotId:string)=>run(()=>receiveInventory(org.orgId,actor,{itemId:item,stockLocationId:org.stockLocationId,quantity,unitCost,lotId,subsidiaryId:org.subsidiaryId,date:org.date,offsetAccountId:org.accounts.clearing}));
   const first=await receipt('3','1',firstLot),second=await receipt('1','7',secondLot);
-  const position=(lotId:string,sourceReceiptMovementId?:string)=>run(()=>getOnHandWith(db,org.orgId,item,org.stockLocationId,{subsidiaryId:org.subsidiaryId,lotId,sourceReceiptMovementId}));
-  assert.equal((await position(firstLot,first.movementId)).quantity,'3.0000');assert.equal((await position(firstLot)).value,'7.5000');
-  assert.equal((await position(secondLot,second.movementId)).quantity,'1.0000');assert.equal((await position(secondLot)).value,'2.5000');
+  const position=(lotId:string,sourceReceiptMovementId:string)=>run(()=>getOnHandWith(db,org.orgId,item,org.stockLocationId,{subsidiaryId:org.subsidiaryId,lotId,sourceReceiptMovementId}));
+  assert.equal((await position(firstLot,first.movementId)).value,'3.0000');assert.equal((await position(secondLot,second.movementId)).value,'7.0000');
   const issued=await run(()=>issueInventory(org.orgId,actor,{itemId:item,stockLocationId:org.stockLocationId,quantity:'2.5',lotId:firstLot,subsidiaryId:org.subsidiaryId,date:org.date}));
-  assert.equal((await position(firstLot)).quantity,'0.5000');assert.equal((await position(firstLot)).value,'1.2500');
+  assert.equal((await position(firstLot,first.movementId)).quantity,'0.5000');assert.equal((await position(firstLot,first.movementId)).value,'0.5000');
   const provenance=(await run(()=>db.execute<{source:string;basis:string}>(sql`select layer.source_movement_id as source,consumption.original_cost::text as basis from cost_layer_consumptions consumption join cost_layers layer on layer.org_id=consumption.org_id and layer.id=consumption.cost_layer_id where consumption.org_id=${org.orgId} and consumption.issue_movement_id=${issued.movementId}`))).rows;
-  assert(provenance.length>0);assert(provenance.every(row=>row.source===first.movementId));
-  await run(()=>reverseInventoryMovement(org.orgId,actor,{movementId:issued.movementId,reversalDate:org.date,reason:'Restore the original tracked withdrawal'}));
-  assert.equal((await position(firstLot,first.movementId)).quantity,'3.0000');assert.equal((await position(firstLot)).value,'7.5000');
-  assert.equal((await position(secondLot,second.movementId)).value,'2.5000');
- } finally {await run(()=>dropScratchOrg(org.orgId));}
+  assert(provenance.length>0);assert(provenance.every(row=>row.source===first.movementId));assert.equal(sum(provenance.map(row=>row.basis)),'2.5000');
+  await run(()=>reverseInventoryMovement(org.orgId,actor,{movementId:issued.movementId,reversalDate:org.date,reason:'Restore the selected lot withdrawal'}));
+  assert.equal((await position(firstLot,first.movementId)).quantity,'3.0000');assert.equal((await position(firstLot,first.movementId)).value,'3.0000');
+  assert.equal((await position(secondLot,second.movementId)).quantity,'1.0000');assert.equal((await position(secondLot,second.movementId)).value,'7.0000');
+ }finally{await run(()=>dropScratchOrg(org.orgId));}
 });
 
 test("moving-average vendor custody retains distinct shipment costs and returns the selected original shipment",{skip:!DB},async()=>{
  const org=await run(()=>createScratchOrg());
  try {
-  const actor=await run(()=>createScratchUser(org.orgId,'Vendor custodian','admin')),item=org.items.movingAvg,custody=randomUUID();
+  const actor=await run(()=>createWorkOperator(org.orgId,'Vendor custodian',['items.post','manufacturing.manage'])),item=org.items.movingAvg,custody=randomUUID();
   await run(()=>db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||'{"inventory":true,"manufacturing":true,"manufacturingSubcontract":true}'::jsonb) where id=${org.orgId} returning id`));
   await run(()=>db.execute(sql`insert into stock_locations(id,org_id,location_id,code,kind,inventory_ownership,custodian_party_id) values(${custody},${org.orgId},${org.locationId},'AVG-VENDOR','subcontract','owned',${org.vendorId}) returning id`));
   const ship=async(unitCost:string)=>{

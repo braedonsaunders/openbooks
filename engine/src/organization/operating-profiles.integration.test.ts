@@ -5,7 +5,8 @@ import { randomUUID } from 'node:crypto'
 import test from 'node:test'
 import { sql } from 'drizzle-orm'
 import { db, withBypassContext, type SqlExecutor } from '../platform/db.ts'
-import { createScratchOrg, createScratchUser, dropScratchOrg } from '../testing/fixtures.ts'
+import { createScratchOrg, dropScratchOrg } from '../testing/fixtures.ts'
+import { createWorkOperator } from '../testing/manufacturing.ts'
 import { createProject } from '../projects/project-create.ts'
 import { OPERATING_PRESETS, type OperatingProfileDefinition } from './operating-profile-model.ts'
 import { listOperatingProfileChoices, publishOperatingProfile, readPinnedOperatingProfile, resolveOperatingProfileForCreate, saveOperatingProfileScope } from './operating-profiles.ts'
@@ -17,7 +18,7 @@ const services = OPERATING_PRESETS.find(p => p.key === 'professional_services')!
 test('operating compositions keep native work and historical versions while department defaults govern new work', { skip: !DB }, async () => {
   const org = await withBypassContext(() => createScratchOrg())
   try {
-    const actorId = await withBypassContext(() => createScratchUser(org.orgId, 'Operations administrator', 'admin'))
+    const actorId = await withBypassContext(() => createWorkOperator(org.orgId, 'Operations administrator', ['admin.setup.manage','projects.read','projects.manage']))
     const first = await transaction(tx => publishOperatingProfile(tx, org.orgId, actorId, { id: randomUUID(), code: 'shop', name: 'Shop jobs', definition: shop.definition, expectedVersion: 0, reason: 'Offer simple shop jobs.' }))
     const engagement = await transaction(tx => publishOperatingProfile(tx, org.orgId, actorId, { id: randomUUID(), code: 'services', name: 'Engagements', definition: services.definition, expectedVersion: 0, reason: 'Offer professional engagements.' }))
     const department = (await transaction(tx => tx.execute<{ id: string }>(sql`insert into departments(org_id,name,subsidiary_id) values(${org.orgId},'Delivery',${org.subsidiaryId}) returning id`))).rows[0]!
@@ -60,8 +61,8 @@ test('operating compositions keep native work and historical versions while depa
 test('operating profile catalogs hide disabled captures and refuse cross-tenant versions without materializing presets', { skip: !DB }, async () => {
   const org = await withBypassContext(() => createScratchOrg()), foreign = await withBypassContext(() => createScratchOrg())
   try {
-    const actorId = await withBypassContext(() => createScratchUser(org.orgId, 'Operations administrator', 'admin'))
-    const otherActor = await withBypassContext(() => createScratchUser(foreign.orgId, 'Other administrator', 'admin'))
+    const actorId = await withBypassContext(() => createWorkOperator(org.orgId, 'Operations administrator', ['admin.setup.manage','projects.read','projects.manage']))
+    const otherActor = await withBypassContext(() => createWorkOperator(foreign.orgId, 'Other administrator', ['admin.setup.manage','projects.read','projects.manage']))
     const choices = await transaction(tx => listOperatingProfileChoices(tx, org.orgId, actorId, 'project'))
     assert(choices.some(c => c.value === 'shop_jobs'))
     assert(!choices.some(c => c.value === 'field_work'))
@@ -80,8 +81,8 @@ test('operating profile catalogs hide disabled captures and refuse cross-tenant 
 test('personal work presentation preserves saved-view selection and requires fresh tenant authority', {skip:!DB},async()=>{
   const org=await withBypassContext(()=>createScratchOrg()),foreign=await withBypassContext(()=>createScratchOrg());
   try {
-    const actor=await withBypassContext(()=>createScratchUser(org.orgId,'Work operator','admin'));
-    const other=await withBypassContext(()=>createScratchUser(foreign.orgId,'Other operator','admin'));
+    const actor=await withBypassContext(()=>createWorkOperator(org.orgId,'Work operator',['admin.setup.manage','projects.read','projects.manage']));
+    const other=await withBypassContext(()=>createWorkOperator(foreign.orgId,'Other operator',['admin.setup.manage','projects.read','projects.manage']));
     assert.equal(await transaction(tx=>readWorkListPresentation(tx,org.orgId,actor,'project')),null);
     await transaction(tx=>saveWorkListPresentation(tx,org.orgId,actor,'project','board'));
     const preference=async()=> (await transaction(tx=>tx.execute<{view_id:string|null;presentation:string|null;view_selection_explicit:boolean}>(sql`select view_id,presentation,view_selection_explicit from user_list_preferences where org_id=${org.orgId} and user_id=${actor} and record_type='project'`))).rows[0];
