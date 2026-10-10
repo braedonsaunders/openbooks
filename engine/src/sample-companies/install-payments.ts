@@ -1,4 +1,4 @@
-import { mul, sub } from "../money/money.ts";
+import { add, mul, neg } from "../money/money.ts";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { createPaymentDocument, updateDraftPayment } from "../payments/payment-documents.ts";
@@ -31,7 +31,7 @@ export async function installOperatingPayments(c: DemoContext): Promise<void> {
       join journal_lines l on l.org_id=d.org_id and l.entry_id=d.posted_entry_id join accounts a on a.org_id=l.org_id and a.id=l.account_id
       where d.org_id=${c.orgId} and d.id=${creditId} and d.status='posted' and d.party_id=${row.partyId}
         and a.type=${kind === "vendor_payment" ? "liability_payable" : "asset_receivable"}`)).rows[0] : undefined;
-    const amount = n === 2 ? mul(row.amount, "0.50") : credit ? sub(row.amount, credit.amount) : row.amount;
+    const amount = n === 2 ? mul(row.amount, "0.50") : credit ? add(row.amount, neg(credit.amount)) : row.amount;
     const payment = await createPaymentDocument({ orgId: c.orgId, createdBy: c.actorId, kind, allowedSubsidiaryIds: scope,
       partyId: row.partyId, bankAccountId: scenarioRecordId(c, "accounts", "settlement-bank"), subsidiaryId: c.subsidiaryId,
       documentDate: c.operationDate ?? c.date, currency: c.currency, memo });
