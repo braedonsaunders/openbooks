@@ -165,6 +165,7 @@
     "manufacturing-mrp": "MRP-Läufe"
   },
   "groups": {
+    "manufacturing": "Fertigung",
     "workforce": "Belegschaft",
     "my-work": "Meine Arbeit",
     "customers": "Kunden",

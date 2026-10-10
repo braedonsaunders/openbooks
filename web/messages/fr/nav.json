@@ -176,6 +176,7 @@
     "hrm-training": "Formation"
   },
   "groups": {
+    "manufacturing": "Fabrication",
     "workforce": "Effectifs",
     "my-work": "Mon travail",
     "customers": "Clients",
