@@ -207,7 +207,29 @@ export async function recordHolidayAssertion(
   const { orgId, documentId, employeePartyId, holidayKey, holidayDate, absentWithoutConsent, actorId } = args;
   if (holidayKey.trim().length === 0) throw new PayrollError("holiday key is required");
   if (!/^\d{4}-\d{2}-\d{2}$/.test(holidayDate)) throw new PayrollError("holiday date must be YYYY-MM-DD");
-  await tx.execute(sql`
+  // Serialize with calculation and commitment so an answer cannot change
+  // after posted payroll, and concurrent edits retain the actual prior state.
+  const run = (await tx.execute<{ run_status: string }>(sql`
+    select run_status from pay_runs
+     where org_id = ${orgId} and document_id = ${documentId} for update
+  `)).rows[0];
+  if (!run || (run.run_status !== "draft" && run.run_status !== "calculated")) {
+    throw new PayrollError("holiday assertions can only be filed on an uncommitted pay run");
+  }
+  type AssertionState = {
+    id: string; absent_without_consent: boolean;
+    created_by: string | null; updated_by: string | null;
+    created_at: Date; updated_at: Date;
+  };
+  const before = (await tx.execute<AssertionState>(sql`
+    select id, absent_without_consent, created_by, updated_by, created_at, updated_at
+      from pay_run_holiday_assertions
+     where org_id = ${orgId} and pay_run_document_id = ${documentId}
+       and employee_party_id = ${employeePartyId}
+       and holiday_key = ${holidayKey} and holiday_date = ${holidayDate}
+     for update
+  `)).rows[0] ?? null;
+  const updated = await tx.execute<AssertionState>(sql`
     insert into pay_run_holiday_assertions
       (org_id, pay_run_document_id, employee_party_id, holiday_key, holiday_date,
        absent_without_consent, created_by, updated_by)
@@ -216,7 +238,21 @@ export async function recordHolidayAssertion(
     on conflict (org_id, pay_run_document_id, employee_party_id, holiday_key, holiday_date)
     do update set absent_without_consent = excluded.absent_without_consent,
                   updated_at = greatest(clock_timestamp(), pay_run_holiday_assertions.updated_at + interval '1 microsecond'),
-                  updated_by = excluded.updated_by`);
+                  updated_by = excluded.updated_by
+    returning id, absent_without_consent, created_by, updated_by, created_at, updated_at`);
+  if (updated.rows.length !== 1) throw new PayrollError("holiday assertion was not recorded — reload the pay run and retry");
+  const after = updated.rows[0]!;
+  const changes = {
+    event: "holiday_absence_assertion", reason: "Statutory holiday absence eligibility assessment",
+    payRunDocumentId: documentId, employeePartyId, holidayKey, holidayDate, before, after,
+  };
+  const audit = await tx.execute<{ id: string }>(sql`
+    insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+    values (${orgId}, 'pay_run_holiday_assertions', ${after.id},
+            ${before === null ? "insert" : "update"}, ${JSON.stringify(changes)}::jsonb, ${actorId})
+    returning id
+  `);
+  if (audit.rows.length !== 1) throw new PayrollError("holiday assertion audit was not recorded — reload the pay run and retry");
   return { holidayKey, holidayDate };
 }
 
