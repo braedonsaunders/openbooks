@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { db, withOrgTransaction, type SqlExecutor } from "../platform/db.ts";
+import { db, orgContext, withOrgTransaction, type SqlExecutor } from "../platform/db.ts";
 import { businessTodayInTx, isIsoCalendarDate } from "../platform/business-date.ts";
 import { isUuid } from "../platform/uuid.ts";
 import { add, cmp, neg, normalizeMoney, signedDocumentAmount, sum } from "../money/money.ts";
@@ -352,17 +352,32 @@ async function baselineSummaries(runner: SqlExecutor, orgId: string, projectId: 
   ).rows.map(summary);
 }
 
+/**
+ * Run a multi-statement project read in one consistent view. Inside a tenant
+ * transaction the read joins it, so a caller holding the project header lock
+ * (the project page) keeps that guarantee; otherwise it opens its own
+ * read-only repeatable-read snapshot.
+ */
+async function projectReadSnapshot<T>(orgId: string, fn: () => Promise<T>): Promise<T> {
+  const active = orgContext.getStore();
+  if (active?.txDb && !active.bypass) {
+    if (orgId !== active.orgId) throw new Error("cannot change organization inside an active tenant transaction");
+    return fn();
+  }
+  return withOrgTransaction(orgId, fn, { isolationLevel: "REPEATABLE READ", readOnly: true });
+}
+
 /** Every baseline of a project, oldest first. */
 export async function listBudgetBaselines(
   orgId: string,
   projectId: string,
   allowedSubsidiaryIds: ReadonlySet<string> | null,
 ): Promise<BudgetBaselineSummary[]> {
-  return withOrgTransaction(orgId, async () => {
+  return projectReadSnapshot(orgId, async () => {
     await requireProjectsOn(db, orgId, false);
     await requireProject(db, orgId, projectId, allowedSubsidiaryIds, "none");
     return baselineSummaries(db, orgId, projectId);
-  }, { isolationLevel: "REPEATABLE READ", readOnly: true });
+  });
 }
 
 /** One baseline with its components. */
@@ -373,7 +388,7 @@ export async function readBudgetBaseline(
   allowedSubsidiaryIds: ReadonlySet<string> | null,
 ): Promise<{ baseline: BudgetBaselineSummary; lines: BudgetBaselineLine[] }> {
   if (!isUuid(baselineId)) throw new BudgetBaselineError("Baseline not found", 404);
-  return withOrgTransaction(orgId, async () => {
+  return projectReadSnapshot(orgId, async () => {
     await requireProjectsOn(db, orgId, false);
     await requireProject(db, orgId, projectId, allowedSubsidiaryIds, "none");
     const header = (await baselineSummaries(db, orgId, projectId)).find((b) => b.id === baselineId);
@@ -408,7 +423,7 @@ export async function readBudgetBaseline(
         price: normalizeMoney(line.price),
       })),
     };
-  }, { isolationLevel: "REPEATABLE READ", readOnly: true });
+  });
 }
 
 /* ------------------------------------------------------------------ */
@@ -527,7 +542,7 @@ export async function projectBudgetComparison(
   if (options.asOf != null && options.asOf !== "" && !isIsoCalendarDate(options.asOf)) {
     throw new BudgetBaselineError("The as-of date must be a calendar date (YYYY-MM-DD)", 422, "asOf");
   }
-  return withOrgTransaction(orgId, async () => {
+  return projectReadSnapshot(orgId, async () => {
     await requireProjectsOn(db, orgId, false);
     const project = await requireProject(db, orgId, projectId, options.allowedSubsidiaryIds, "none");
     const asOf = options.asOf || (await businessTodayInTx(db, orgId));
@@ -661,5 +676,5 @@ export async function projectBudgetComparison(
         invoicedToDate,
       },
     };
-  }, { isolationLevel: "REPEATABLE READ", readOnly: true });
+  });
 }

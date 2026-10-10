@@ -13,7 +13,7 @@ const { loadProjectCockpit } = (await import("./_cockpit-data.ts")) as typeof im
   "./_cockpit-data.ts"
 );
 
-const { db } = await import("@openbooks/engine/src/platform/db.ts");
+const { db, withOrgTransaction } = await import("@openbooks/engine/src/platform/db.ts");
 const { createScratchOrg, dropScratchOrg } = await import(
   "@openbooks/engine/src/testing/fixtures.ts"
 );
@@ -68,6 +68,12 @@ test("the cockpit sums the live primary book, never a deactivated one", async ()
     assert.equal(live.recognition.recognized, "250.0000");
     assert.equal(live.financials.pricingMethod, fixedPrice.financialProfile.totalPrice.method);
     assert.equal(live.financials.contractValue, "1250.5000");
+
+    // The project page loads the cockpit inside the transaction that holds the
+    // project header lock; every cockpit read must join it rather than refuse.
+    const locked = (await withOrgTransaction(org.orgId, () => loadProjectCockpit(org.orgId, projectId)))!;
+    assert.equal(locked.financials.contractValue, live.financials.contractValue);
+    assert.equal(locked.recognition?.recognized, "250.0000");
 
     // A project outside the caller scope reads as absent.
     const hidden = await loadProjectCockpit(org.orgId, projectId, { allowedSubsidiaryIds: new Set([randomUUID()]) });
