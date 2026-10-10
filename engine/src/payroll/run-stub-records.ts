@@ -235,6 +235,11 @@ export async function statutoryHolidayLinesForStub(
       kind: string;
       nonPeriodic?: boolean | null;
     }[];
+    /**
+     * The calculation's once-resolved holiday-schema availability; probed
+     * when absent.
+     */
+    obligationsAvailable?: boolean | null;
   },
 ): Promise<StatutoryHolidayEarningLine[]> {
   const {
@@ -245,6 +250,7 @@ export async function statutoryHolidayLinesForStub(
     periodRegularEarnings,
     occupationClass,
     currentEarningLines,
+    obligationsAvailable,
   } = args;
   if (allowedSubsidiaryIds != null) {
     const employee = (await tx.execute<{ subsidiary_id: string | null }>(sql`
@@ -299,6 +305,7 @@ export async function statutoryHolidayLinesForStub(
     periodRegularEarnings,
     occupationClass,
     currentEarningLines,
+    obligationsAvailable,
   });
 }
 

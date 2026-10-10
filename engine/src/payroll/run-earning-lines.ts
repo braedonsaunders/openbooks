@@ -340,12 +340,17 @@ export async function appendStatutoryHolidayEarningLines(
       kind: string;
       nonPeriodic?: boolean | null;
     }[];
+    /**
+     * The calculation's once-resolved holiday-schema availability; probed
+     * when absent.
+     */
+    obligationsAvailable?: boolean | null;
   },
 ): Promise<void> {
   const {
     orgId, documentId, employeePartyId, emp, country, subsidiaryId, province, run, payRate,
     statHolidayPay, oneOffRun, need, lines, allowedSubsidiaryIds, holidayEligibility,
-    occupationClass, currentEarningLines,
+    occupationClass, currentEarningLines, obligationsAvailable,
   } = args;
   // A period's holiday pay belongs to its regular run, like its salary; a
   // supplemental run in the same period would pay the holiday twice.
@@ -381,6 +386,7 @@ export async function appendStatutoryHolidayEarningLines(
       periodRegularEarnings,
       occupationClass,
       currentEarningLines,
+      obligationsAvailable,
     });
     for (const line of holidayLines) {
       lines.push({
