@@ -636,7 +636,7 @@ export const POST = defineRoute({
             if (scopeDenied) return scopeDenied;
             // The authenticated caller authors the bill-now invoice — the
             // subscription's own id is never an actor.
-        const gen = await billSubscriptionNow(orgId, String(body.id), undefined, { actorId: userId }, authz.allowedSubsidiaryIds);
+        const gen = await billSubscriptionNow(orgId, String(body.id), { actorId: userId }, authz.allowedSubsidiaryIds);
             return NextResponse.json(gen);
           }
           default:
