@@ -52,7 +52,11 @@ export function useUnsavedNavigationGuard(dirty: boolean, message: string, confi
 
     const onBeforeUnload = (event: BeforeUnloadEvent) => {
       event.preventDefault()
-      event.returnValue = ''
+      // Name the unsaved draft: an empty returnValue leaves tab-close on a
+      // generic (or blank) browser prompt and the operator cannot tell what
+      // they are about to lose. In-app leave paths already confirm through
+      // the dialog above, which browsers do not allow here.
+      event.returnValue = message
     }
 
     // Keep the restoration point current when other same-page controls update
