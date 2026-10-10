@@ -1,0 +1,1 @@
+Constraint/function-only migration: rewrites three change-request CHECKs strictly wider and replaces the change-request guard preserving every existing refusal, adding only the no-flow direct admission. Existing rows satisfy the widened checks, so there is nothing to probe before install.

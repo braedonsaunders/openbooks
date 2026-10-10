@@ -200,6 +200,10 @@ test("first hire with no configured flow applies directly through the governed a
 });
 
 test("first hire with a configured flow waits for approval, then applies the same first version", { skip: !DB }, async () => {
+  // Regression proof for the no-flow admission: pending_approval and
+  // approved rows carrying a flow run still validate and decide exactly
+  // as before — the rewritten CHECKs only widen for automatic no-flow
+  // evidence.
   await withHarness(() => setupHarness(FIRST_EMPLOYMENT_SPEC), async (h) => {
     await seedFlow(h.org.orgId, h.approverId);
     const partyId = await seedEmployeeParty(h.org.orgId, "Gated Hire");
@@ -371,6 +375,59 @@ test("later everyday changes apply directly with no flow: title change and termi
       { status: "active", from: "2026-09-01" },
       { status: "terminated", from: "2026-12-01" },
     ]);
+  });
+});
+
+test("a hand-flipped draft to approved refuses while a flow is configured", { skip: !DB }, async () => {
+  await withHarness(() => setupHarness(FIRST_EMPLOYMENT_SPEC), async (h) => {
+    // The direct admission is gated on zero enabled flows: with a flow
+    // configured, even a perfectly evidenced hand flip still refuses and
+    // the row stays draft. The service never attempts this path — submit
+    // routes through the flow — so this probes the guard, not the service.
+    await seedFlow(h.org.orgId, h.approverId);
+    const partyId = await seedEmployeeParty(h.org.orgId, "Guarded Flip");
+    const employmentId = (await db.execute<{ id: string }>(sql`
+      insert into worker_employments (id, org_id, worker_party_id, employer_subsidiary_id, revision, created_by, updated_by)
+      values (gen_random_uuid(), ${h.org.orgId}, ${partyId}, ${h.org.subsidiaryId}, 1, ${h.hrId}, ${h.hrId})
+      returning id
+    `)).rows[0]!.id;
+    const draftId = (await db.execute<{ id: string }>(sql`
+      insert into hrm_employment_change_requests
+        (org_id, employment_id, expected_employment_revision, payload,
+         payload_digest, payload_schema_version, created_by, updated_by)
+      values (${h.org.orgId}, ${employmentId}, 1,
+              ${JSON.stringify({ kind: "hire", status: "active", effectiveFrom: "2026-09-01" })}::jsonb,
+              ${"0".repeat(64)}, '1', ${h.hrId}, ${h.hrId})
+      returning id
+    `)).rows[0]!.id;
+    const flip = await db.execute(sql`
+      update hrm_employment_change_requests
+         set status = 'approved',
+             reason = 'hand flip',
+             submitted_by = ${h.hrId}, submitted_at = now(),
+             decision_snapshot = ${JSON.stringify({
+               outcome: "approved",
+               payload_digest: "0".repeat(64),
+               payload_schema_version: "1",
+               expected_employment_revision: 1,
+               flow_run_id: null,
+               gates: [],
+               mode: "automatic",
+               policy: { ungatedOutcome: "apply", flowConfigured: false },
+             })}::jsonb,
+             updated_by = ${h.hrId}, updated_at = now()
+       where org_id = ${h.org.orgId} and id = ${draftId} and status = 'draft'
+    `).then(
+      () => null,
+      (caught: unknown) => caught,
+    );
+    assert.ok(flip, "the guard must refuse a direct flip while a flow is configured");
+    const text = String((flip as { cause?: { message?: string } }).cause?.message ?? flip);
+    assert.match(text, /draft must submit \(pending_approval\) or withdraw/);
+    const status = (await db.execute<{ status: string }>(sql`
+      select status from hrm_employment_change_requests where id = ${draftId}
+    `)).rows[0]!.status;
+    assert.equal(status, "draft", "the refused flip stores nothing");
   });
 });
 
