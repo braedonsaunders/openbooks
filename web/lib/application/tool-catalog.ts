@@ -687,7 +687,7 @@ export const APPLICATION_TOOLS: readonly ApplicationToolDefinition[] = [
   }),
   definition({
     name: "match_bank_line", title: "Match Bank Line",
-    description: "Pair one unmatched bank line with posted journal lines totalling exactly the statement line. Returns session totals (difference must reach zero).",
+    description: "Pair one unmatched bank line with posted journal lines totalling exactly the statement line, as a one-line group. Returns session totals (difference must reach zero).",
     inputSchema: z.object({
       reconciliationId: UUID, statementLineId: UUID,
       journalLineIds: z.array(UUID).min(1).max(50).describe("Posted journal lines whose total must equal the statement line exactly"),
@@ -707,7 +707,7 @@ export const APPLICATION_TOOLS: readonly ApplicationToolDefinition[] = [
   }),
   definition({
     name: "unmatch_bank_line", title: "Unmatch Bank Line",
-    description: "Remove all of a statement line's matches within a reconciliation session, returning it to the unmatched queue. Signed-off sessions refuse.",
+    description: "Remove a statement line's whole match group within a reconciliation session, returning every grouped line to the unmatched queue. Signed-off sessions refuse.",
     inputSchema: z.object({ reconciliationId: UUID, statementLineId: UUID, idempotencyKey: IDEMPOTENCY_KEY }),
     readOnly: false, destructive: false, openWorld: false, assistantConfirmation: "always",
     visibleTo: hasPermission("banking.reconcile"), featureKey: "banking",

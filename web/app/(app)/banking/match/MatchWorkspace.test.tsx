@@ -361,6 +361,52 @@ test('correcting a line sends the edited fields and toasts', async (t) => {
   )
 })
 
+test('grouped selection posts both sides as one group', async (t) => {
+  const calls: { url: string; body?: string }[] = []
+  const groupedData = {
+    ...data,
+    stmtRows: [
+      { id: 'stmt-a', posted_on: '2026-06-15', amount: '-25.00', description: 'Wire A' },
+      { id: 'stmt-b', posted_on: '2026-06-15', amount: '-25.00', description: 'Wire B' },
+    ],
+    stmtTotal: 2,
+    glRows: [{ id: 'gl-1', posting_date: '2026-06-14', entry_number: 'JE-1', amount: '-50.00', memo: null, party: null }],
+    glTotal: 1,
+  }
+  await mountWorkspace(t, scriptedFetch({
+    '/rules/preview': () => Response.json({ matches: [] }),
+    '/matches': (url, body) => {
+      calls.push({ url, body })
+      return Response.json({ ok: true, totals: { difference: '0.00' } })
+    },
+  }), groupedData)
+  const boxes = [...document.querySelectorAll('input[type="checkbox"]')] as HTMLInputElement[]
+  // Two bank lines plus one ledger line: every side of the group ticks.
+  assert.equal(boxes.length, 3, 'both bank lines and the ledger line offer checkboxes')
+  await act(async () => {
+    for (const box of boxes) box.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
+    for (let i = 0; i < 6; i++) await tick()
+  })
+  const summary = document.body.textContent ?? ''
+  assert.ok(summary.includes('vs GL'), 'the toolbar summarizes both sides of the grouped selection')
+  const match = [...document.querySelectorAll('button')].find((b) => (b.textContent ?? '').trim() === 'Match selected') as HTMLButtonElement | undefined
+  assert.ok(match, 'the toolbar offers Match selected')
+  assert.equal(match.disabled, false, 'a selected group enables Match selected')
+  await act(async () => {
+    match.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
+    for (let i = 0; i < 6; i++) await tick()
+  })
+  const posted = calls.find((c) => c.url.includes('/matches'))
+  assert.ok(posted, 'matching must POST the session matches route')
+  const body = JSON.parse(posted.body ?? '{}') as { statementLineIds?: string[]; journalLineIds?: string[] }
+  assert.deepEqual([...(body.statementLineIds ?? [])].sort(), ['stmt-a', 'stmt-b'], 'both bank lines post as the group')
+  assert.deepEqual(body.journalLineIds, ['gl-1'], 'the ledger side posts with them')
+  assert.ok(
+    script.toasts.some((toast) => toast.kind === 'success' && toast.message.includes('Matched')),
+    `the group match must toast success, got ${JSON.stringify(script.toasts)}`,
+  )
+})
+
 test('a refused correction persists the server reason inline', async (t) => {
   await mountWorkspace(t, scriptedFetch({
     '/rules/preview': () => Response.json({ matches: [] }),

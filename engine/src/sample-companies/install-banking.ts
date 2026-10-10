@@ -56,7 +56,7 @@ export async function installOperatingBanking(c: DemoContext): Promise<void> {
       const statement = (await db.execute<{ id: string }>(sql`select id from bank_statement_lines where org_id=${c.orgId} and account_id=${accountId} and bank_transaction_id=${entry.bankTransactionId}`)).rows[0];
       const journal = (await db.execute<{ id: string }>(sql`select id from journal_lines where org_id=${c.orgId} and entry_id=${entry.entryId} and account_id=${accountId}`)).rows;
       if (!statement || journal.length !== 1) throw new SampleCompanyError("Native bank statement or posted cash line could not be read back for matching.");
-      await createMatch({ reconciliationId: reconciliation.id, statementLineId: statement.id, journalLineIds: [journal[0]!.id] }, ctx);
+      await createMatch({ reconciliationId: reconciliation.id, statementLineIds: [statement.id], journalLineIds: [journal[0]!.id] }, ctx);
     }
     await markReconciled(reconciliation.id, ctx);
   }

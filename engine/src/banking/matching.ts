@@ -3,7 +3,8 @@ import { BankingError, type BankingContext, subsidiaryScopeSql } from "./banking
 import { requireSessionRowInScope, requireBankAccountInScope, lockBankAccountInScope, requireStatementLineAccountInScope, lockReconciliationAccount } from "./reconcilable-account"
 import { type ReconciliationRow, firstReconciliationCarry, type ReconciliationTotals, type BankingTransaction, reconciliationBookId, refreshStatus } from "./reconciliation"
 import { sql } from "drizzle-orm"
-import { db, inDbTransaction, schema, withOrgTransaction, withTransactionSavepoint } from "../platform/db.ts"
+import { randomUUID } from "node:crypto"
+import { db, inDbTransaction, withOrgTransaction, withTransactionSavepoint } from "../platform/db.ts"
 import { fromUnits, sum, toUnits } from "../money/money.ts"
 import { calendarDaysBetween } from "../platform/civil-date.ts"
 import { lockScopeRows, ScopeNotFoundError } from "../organization/subsidiary-scope.ts"
@@ -109,17 +110,19 @@ export async function autoMatch(reconciliationId: string, ctx: BankingContext): 
     }
 
     if (pairs.length > 0) {
-      await tx.insert(schema.reconciliationMatches).values(
-        pairs.map((p) => ({
-          orgId: ctx.orgId,
-          reconciliationId: recon.id,
-          statementLineId: p.statementLineId,
-          journalLineId: p.journalLineId,
-          matchedBy: "auto" as const,
-          confidence: p.confidence,
-          createdBy: ctx.userId,
-        })),
-      );
+      // Each automatic pair is its own group: unmatching one line removes
+      // only its pair, exactly the pre-group granularity.
+      await tx.execute(sql`
+        insert into reconciliation_matches
+          (org_id, reconciliation_id, statement_line_id, journal_line_id, group_id, matched_by, confidence, created_by)
+        values ${sql.join(
+          pairs.map(
+            (p) =>
+              sql`(${ctx.orgId}, ${recon.id}, ${p.statementLineId}, ${p.journalLineId}, ${randomUUID()}, 'auto', ${p.confidence}, ${ctx.userId})`,
+          ),
+          sql`, `,
+        )}
+      `);
       await tx.execute(sql`
         update bank_statement_lines
            set match_status = 'matched', updated_at = now(), updated_by = ${ctx.userId}
@@ -161,16 +164,21 @@ export async function autoMatch(reconciliationId: string, ctx: BankingContext): 
 
 type MatchOptions = {
   reconciliationId: string;
-  statementLineId: string;
+  statementLineIds: string[];
 };
 
 type MatchOrigin = "auto" | "manual" | "rule";
 
 /**
- * Validate and persist a match on an already-open transaction. The statement
- * line lock is deliberately acquired before the optional journal factory: a
- * concurrent rule invocation therefore waits for the winner and then fails
- * without creating/posting a second journal.
+ * Validate and persist a grouped match on an already-open transaction: any
+ * non-empty set of statement lines clears against any non-empty set of
+ * journal lines when both sides sum exactly alike. One match operation is one
+ * group (a shared group_id): unmatch removes the whole group and sign-off
+ * cross-foots group sums, so a $4k+$4k wire pair clears one $8k journal
+ * without voiding and re-posting it. The statement line locks are
+ * deliberately acquired before the optional journal factory: a concurrent
+ * rule invocation therefore waits for the winner and then fails without
+ * creating/posting a second journal.
  */
 async function createMatchInTransaction(
   tx: BankingTransaction,
@@ -179,6 +187,8 @@ async function createMatchInTransaction(
   journalLineIdsOrFactory: string[] | (() => Promise<string>),
   matchedBy: MatchOrigin,
 ): Promise<ReconciliationTotals> {
+  const statementLineIds = [...new Set(opts.statementLineIds)];
+  if (statementLineIds.length === 0) throw new BankingError("Select at least one statement line");
   const account = (await tx.execute<{ account_id: string }>(sql`
     select account_id from reconciliations
      where id = ${opts.reconciliationId} and org_id = ${ctx.orgId}
@@ -200,21 +210,22 @@ async function createMatchInTransaction(
   const stmt = (await tx.execute<{ id: string; amount: string; currency: string; possible_duplicate_of: string | null }>(sql`
     select l.id, l.amount, l.currency, l.possible_duplicate_of
       from bank_statement_lines l
-     where l.id = ${opts.statementLineId} and l.org_id = ${ctx.orgId}
+     where l.id = any(${sql.param(statementLineIds)}::uuid[]) and l.org_id = ${ctx.orgId}
        and l.account_id = ${recon.account_id}
        and l.currency = ${recon.currency}
        and l.posted_on <= ${recon.through_date}
        and l.match_status = 'unmatched'
+     order by l.id
      for update
   `));
-  if (!stmt.rows[0]) {
+  if (stmt.rows.length !== statementLineIds.length) {
     throw new BankingError(
-      "Statement line is unavailable, outside the reconciliation cutoff, or already matched",
+      "One or more statement lines are unavailable, outside the reconciliation cutoff, or already matched",
     );
   }
-  if (stmt.rows[0].possible_duplicate_of) {
+  if (stmt.rows.some((row) => row.possible_duplicate_of)) {
     throw new BankingError(
-      "Statement line is flagged as a possible duplicate of an earlier import — clear the flag or exclude the line before matching",
+      "A statement line is flagged as a possible duplicate of an earlier import — clear the flag or exclude the line before matching",
     );
   }
 
@@ -255,47 +266,62 @@ async function createMatchInTransaction(
       "One or more journal lines predate the carried statement opening balance and cannot be matched",
     );
   }
+  // Both sides foot exactly, in the account currency and in exact units —
+  // a cent apart is a refusal naming both totals, never a silent rounding.
+  const statementTotal = sum(stmt.rows.map((line) => line.amount));
   const journalTotal = sum(gl.rows.map((line) => line.amount));
-  if (toUnits(journalTotal) !== toUnits(stmt.rows[0].amount)) {
+  if (toUnits(statementTotal) !== toUnits(journalTotal)) {
     throw new BankingError(
-      `Selected journal lines total ${journalTotal}; the statement line is ${fromUnits(toUnits(stmt.rows[0].amount))}`,
+      `Selected bank lines total ${statementTotal}; selected journal lines total ${journalTotal}`,
     );
   }
 
-  await tx.insert(schema.reconciliationMatches).values(
-    journalLineIds.map((journalLineId) => ({
-      orgId: ctx.orgId,
-      reconciliationId: recon.id,
-      statementLineId: opts.statementLineId,
-      journalLineId,
-      matchedBy,
-      confidence: null,
-      createdBy: ctx.userId,
-    })),
-  );
+  // Complete bipartite: every bank line of the group clears against every
+  // journal line of the group. A journal still belongs to a single group —
+  // matched journals cannot be re-matched — so unmatching any member removes
+  // exactly this group, and sign-off foots the group as one unit.
+  const groupId = randomUUID();
+  await tx.execute(sql`
+    insert into reconciliation_matches
+      (org_id, reconciliation_id, statement_line_id, journal_line_id, group_id, matched_by, confidence, created_by)
+    values ${sql.join(
+      statementLineIds.flatMap((statementLineId) =>
+        journalLineIds.map(
+          (journalLineId) =>
+            sql`(${ctx.orgId}, ${recon.id}, ${statementLineId}, ${journalLineId}, ${groupId}, ${matchedBy}, null, ${ctx.userId})`,
+        ),
+      ),
+      sql`, `,
+    )}
+  `);
   await tx.execute(sql`
     update bank_statement_lines
        set match_status = 'matched', updated_at = now(), updated_by = ${ctx.userId}
-       where id = ${opts.statementLineId} and org_id = ${ctx.orgId}
+     where id = any(${sql.param(statementLineIds)}::uuid[]) and org_id = ${ctx.orgId}
   `);
   // Manual and rule-built matches attribute the same way the line's
   // exclude/restore writes do: actor, line, and target, beside the
-  // before/after the audit history cross-foots.
-  await tx.execute(sql`
-    insert into audit_log
-      (org_id, table_name, row_id, action, changes, actor_id)
-    values
-      (${ctx.orgId}, 'bank_statement_lines', ${opts.statementLineId}, 'update',
-       ${JSON.stringify({
-         operation: "match",
-         reconciliationId: recon.id,
-         matchedBy,
-         journalLineIds,
-         before: { matchStatus: "unmatched" },
-         after: { matchStatus: "matched" },
-       })}::jsonb,
-       ${ctx.userId})
-  `);
+  // before/after the audit history cross-foots. One row per grouped line so
+  // each line's history names the group that cleared it.
+  for (const statementLineId of statementLineIds) {
+    await tx.execute(sql`
+      insert into audit_log
+        (org_id, table_name, row_id, action, changes, actor_id)
+      values
+        (${ctx.orgId}, 'bank_statement_lines', ${statementLineId}, 'update',
+         ${JSON.stringify({
+           operation: "match",
+           reconciliationId: recon.id,
+           matchedBy,
+           groupId,
+           statementLineIds,
+           journalLineIds,
+           before: { matchStatus: "unmatched" },
+           after: { matchStatus: "matched" },
+         })}::jsonb,
+         ${ctx.userId})
+    `);
+  }
   return refreshStatus(recon, ctx, tx);
 }
 
@@ -327,7 +353,7 @@ export async function createMatchWithJournal(
   })));
 }
 
-/** Manually pair one statement line with one or more journal lines. */
+/** Manually pair statement lines with journal lines as one group: both sides sum exactly alike. */
 export async function createMatch(
   opts: MatchOptions & { journalLineIds: string[] },
   ctx: BankingContext,
@@ -340,7 +366,11 @@ export async function createMatch(
   );
 }
 
-/** Undo all of a statement line's matches within a session. */
+/** Undo a statement line's match group within a session: every row bound to
+ * the group's journals goes, and every grouped line left with no matches
+ * returns to unmatched. A journal belongs to a single group — matched
+ * journals cannot be re-matched — so the cascade removes exactly the group
+ * the line was cleared with, restoring all of it. */
 export async function unmatchStatementLine(
   opts: { reconciliationId: string; statementLineId: string },
   ctx: BankingContext,
@@ -363,38 +393,57 @@ export async function unmatchStatementLine(
     requireSessionRowInScope(recon, ctx.allowedSubsidiaryIds);
     if (recon.status === "signed_off") throw new BankingError("Reconciliation is already signed off");
 
-    const deleted = (await tx.execute<{ id: string; journal_line_id: string }>(sql`
-      delete from reconciliation_matches
-       where reconciliation_id = ${recon.id}
-         and statement_line_id = ${opts.statementLineId}
-         and org_id = ${ctx.orgId}
-      returning id, journal_line_id
+    const own = (await tx.execute<{ group_id: string; journal_line_id: string }>(sql`
+      select m.group_id, m.journal_line_id
+        from reconciliation_matches m
+       where m.reconciliation_id = ${recon.id}
+         and m.statement_line_id = ${opts.statementLineId}
+         and m.org_id = ${ctx.orgId}
     `));
-    if (deleted.rows.length === 0) {
+    if (own.rows.length === 0) {
       throw new BankingError("No matches for that statement line in this reconciliation");
     }
+    const journalLineIds = [...new Set(own.rows.map((row) => row.journal_line_id))];
+    const deleted = (await tx.execute<{ statement_line_id: string; journal_line_id: string; group_id: string }>(sql`
+      delete from reconciliation_matches m
+       where m.reconciliation_id = ${recon.id}
+         and m.org_id = ${ctx.orgId}
+         and m.journal_line_id = any(${sql.param(journalLineIds)}::uuid[])
+      returning m.statement_line_id, m.journal_line_id, m.group_id
+    `));
+    const releasedLineIds = [...new Set(deleted.rows.map((row) => row.statement_line_id))];
     await tx.execute(sql`
       update bank_statement_lines l
          set match_status = 'unmatched', updated_at = now(), updated_by = ${ctx.userId}
-       where l.id = ${opts.statementLineId} and l.org_id = ${ctx.orgId}
+       where l.id = any(${sql.param(releasedLineIds)}::uuid[]) and l.org_id = ${ctx.orgId}
          and not exists (
            select 1 from reconciliation_matches m where m.statement_line_id = l.id and m.org_id = l.org_id
          )
     `);
-    await tx.execute(sql`
-      insert into audit_log
-        (org_id, table_name, row_id, action, changes, actor_id)
-      values
-        (${ctx.orgId}, 'bank_statement_lines', ${opts.statementLineId}, 'update',
-         ${JSON.stringify({
-           operation: "unmatch",
-           reconciliationId: recon.id,
-           journalLineIds: deleted.rows.map((row) => row.journal_line_id),
-           before: { matchStatus: "matched" },
-           after: { matchStatus: "unmatched" },
-         })}::jsonb,
-         ${ctx.userId})
-    `);
+    for (const releasedLineId of releasedLineIds) {
+      const groupIds = [...new Set(
+        deleted.rows.filter((row) => row.statement_line_id === releasedLineId).map((row) => row.group_id),
+      )];
+      await tx.execute(sql`
+        insert into audit_log
+          (org_id, table_name, row_id, action, changes, actor_id)
+        values
+          (${ctx.orgId}, 'bank_statement_lines', ${releasedLineId}, 'update',
+           ${JSON.stringify({
+             operation: "unmatch",
+             reconciliationId: recon.id,
+             groupIds,
+             journalLineIds: [...new Set(
+               deleted.rows
+                 .filter((row) => row.statement_line_id === releasedLineId)
+                 .map((row) => row.journal_line_id),
+             )],
+             before: { matchStatus: "matched" },
+             after: { matchStatus: "unmatched" },
+           })}::jsonb,
+           ${ctx.userId})
+      `);
+    }
     return refreshStatus(recon, ctx, tx);
   });
 }

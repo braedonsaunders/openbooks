@@ -206,7 +206,7 @@ test('session write verbs refuse across the boundary with 404', { skip: !enabled
     const base = 'https://openbooks.test/api/banking/reconciliations'
     const line = randomUUID()
     const match = await errorOf(await reconMatches.POST(
-      postJson(`${base}/${fx.sessionB}/matches`, { statementLineId: line, journalLineIds: [randomUUID()] }),
+      postJson(`${base}/${fx.sessionB}/matches`, { statementLineIds: [line], journalLineIds: [randomUUID()] }),
       params(fx.sessionB),
     ))
     assert.equal(match.status, 404, JSON.stringify(match))

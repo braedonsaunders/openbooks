@@ -80,19 +80,19 @@ for (const scenario of ["manual parallel books", "automatic secondary book", "cl
       const statementLineId = (await db.execute<{ id: string }>(sql`select id from bank_statement_lines where org_id=${org.orgId} and bank_transaction_id='one-deposit'`)).rows[0]!.id;
       const recon = await startReconciliation({ accountId: org.accounts.bank, throughDate: org.date, statementBalance: amount }, ctx);
       if (scenario === "manual parallel books") {
-        await assert.rejects(createMatch({ reconciliationId: recon.id, statementLineId, journalLineIds: [...primaryLines, ...taxLines] }, ctx), /book|eligible|available/);
+        await assert.rejects(createMatch({ reconciliationId: recon.id, statementLineIds: [statementLineId], journalLineIds: [...primaryLines, ...taxLines] }, ctx), /book|eligible|available/);
         assert.equal((await db.execute(sql`select id from reconciliation_matches where org_id=${org.orgId}`)).rows.length, 0);
       } else if (scenario === "automatic secondary book") {
         // Claim the primary representation, then import a second physical
         // deposit. The tax representation cannot supply its missing journal.
-        await createMatch({ reconciliationId: recon.id, statementLineId, journalLineIds: primaryLines }, ctx);
+        await createMatch({ reconciliationId: recon.id, statementLineIds: [statementLineId], journalLineIds: primaryLines }, ctx);
         await importStatement({ accountId: org.accounts.bank, source: "manual", currency: "CAD", statementDate: org.date,
           lines: [{ postedOn: org.date, amount: "100", description: "Another deposit", bankTransactionId: "second-deposit" }] }, ctx);
         assert.equal((await autoMatch(recon.id, ctx)).matched, 0);
       } else if (scenario === "cleared parallel books") {
         for (const journalLineId of [...primaryLines, ...taxLines]) {
-          await db.execute(sql`insert into reconciliation_matches(org_id,reconciliation_id,statement_line_id,journal_line_id,matched_by,created_by)
-            values(${org.orgId},${recon.id},${statementLineId},${journalLineId},'manual',${actor})`);
+          await db.execute(sql`insert into reconciliation_matches(org_id,reconciliation_id,statement_line_id,journal_line_id,group_id,matched_by,created_by)
+            values(${org.orgId},${recon.id},${statementLineId},${journalLineId},${randomUUID()},'manual',${actor})`);
         }
         await db.execute(sql`update bank_statement_lines set match_status='matched' where org_id=${org.orgId} and id=${statementLineId}`);
         assert.equal((await reconciliationTotals(recon.id, ctx)).clearedBalance, "100.0000");
@@ -110,8 +110,8 @@ for (const scenario of ["manual parallel books", "automatic secondary book", "cl
         assert.equal(finding?.materiality, "100.0000");
       } else {
         // Simulate a legacy match created before book controls existed.
-        await db.execute(sql`insert into reconciliation_matches(org_id,reconciliation_id,statement_line_id,journal_line_id,matched_by,created_by)
-          values(${org.orgId},${recon.id},${statementLineId},${taxLines[0]},'manual',${actor})`);
+        await db.execute(sql`insert into reconciliation_matches(org_id,reconciliation_id,statement_line_id,journal_line_id,group_id,matched_by,created_by)
+          values(${org.orgId},${recon.id},${statementLineId},${taxLines[0]},${randomUUID()},'manual',${actor})`);
         await db.execute(sql`update bank_statement_lines set match_status='matched' where org_id=${org.orgId} and id=${statementLineId}`);
         await assert.rejects(markReconciled(recon.id, ctx), /book|matches fail/);
         assert.notEqual((await db.execute(sql`select status from reconciliations where org_id=${org.orgId} and id=${recon.id}`)).rows[0]!.status, "signed_off");
@@ -134,9 +134,9 @@ test("a refused journal factory rolls back within an ambient transaction", { ski
     const recon = await startReconciliation({ accountId: org.accounts.bank, throughDate: org.date, statementBalance: "100" }, ctx);
     await withOrgTransaction(org.orgId, async () => {
       await db.execute(sql`update parties set display_name='Surviving banking caller' where org_id=${org.orgId} and id=${org.customerId}`);
-      await assert.rejects(createMatchWithJournal({ reconciliationId: recon.id, statementLineId,
+      await assert.rejects(createMatchWithJournal({ reconciliationId: recon.id, statementLineIds: [statementLineId],
         createJournal: async () => (await postBankJournal(org, actor, ["99"], "ambient-failed"))[0]! }, ctx), /Selected journal lines total/);
-      await createMatchWithJournal({ reconciliationId: recon.id, statementLineId,
+      await createMatchWithJournal({ reconciliationId: recon.id, statementLineIds: [statementLineId],
         createJournal: async () => (await postBankJournal(org, actor, ["100"], "ambient-valid"))[0]! }, ctx);
     });
     assert.equal((await db.execute<{ n: number }>(sql`select count(*)::int as n from journal_entries where org_id=${org.orgId}`)).rows[0]!.n, 1);

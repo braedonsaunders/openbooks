@@ -234,7 +234,7 @@ test("statement-line edits and matching serialize against account rehome", { ski
   try {
     const attempts = [
       { id: lineIds[0]!, run: () => excludeStatementLine(lineIds[0]!, "reviewed duplicate", ctx) },
-      { id: lineIds[1]!, run: () => createMatch({ reconciliationId: session.id, statementLineId: lineIds[1]!, journalLineIds: [journalLineId] }, ctx) },
+      { id: lineIds[1]!, run: () => createMatch({ reconciliationId: session.id, statementLineIds: [lineIds[1]!], journalLineIds: [journalLineId] }, ctx) },
     ];
     for (const attempt of attempts) {
       await db.execute(sql`update accounts set subsidiary_id=${fx.subA} where id=${fx.bankA} and org_id=${fx.orgId}`);
@@ -284,7 +284,7 @@ test("session verbs refuse an out-of-scope session with uniform not-found", { sk
     await assertNotFound(reconciliationTotals(session.id, out));
     await assertNotFound(
       createMatch(
-        { reconciliationId: session.id, statementLineId: lineIds[0]!, journalLineIds: [journalA] },
+        { reconciliationId: session.id, statementLineIds: [lineIds[0]!], journalLineIds: [journalA] },
         out,
       )
     );
@@ -299,7 +299,7 @@ test("session verbs refuse an out-of-scope session with uniform not-found", { sk
     assert.equal(await matchStatus(fx, lineIds[0]!), "unmatched");
     // The in-scope caller still owns the session end to end.
     const totals = await createMatch(
-      { reconciliationId: session.id, statementLineId: lineIds[0]!, journalLineIds: [journalA] },
+      { reconciliationId: session.id, statementLineIds: [lineIds[0]!], journalLineIds: [journalA] },
       { orgId: fx.orgId, userId: fx.actor, allowedSubsidiaryIds: scopeOf(fx, "A") }
     );
     assert.equal(totals.difference, "0.0000");
@@ -326,7 +326,7 @@ test("unmatch and discard refuse across the boundary without touching rows", { s
     const inScope = { orgId: fx.orgId, userId: fx.actor, allowedSubsidiaryIds: scopeOf(fx, "A") };
     const out = { orgId: fx.orgId, userId: fx.actor, allowedSubsidiaryIds: scopeOf(fx, "B") };
     await createMatch(
-      { reconciliationId: session.id, statementLineId: lineIds[0]!, journalLineIds: [journalA] },
+      { reconciliationId: session.id, statementLineIds: [lineIds[0]!], journalLineIds: [journalA] },
       inScope
     );
     assert.equal(await matchStatus(fx, lineIds[0]!), "matched");
@@ -359,13 +359,13 @@ test("manual match cannot claim another entity's journal line", { skip: !DB }, a
     // The foreign line reads as unavailable — never as another entity's row.
     await assert.rejects(
       createMatch(
-        { reconciliationId: session.id, statementLineId: lineIds[0]!, journalLineIds: [journalB] },
+        { reconciliationId: session.id, statementLineIds: [lineIds[0]!], journalLineIds: [journalB] },
         inScope,
       )
     );
     assert.equal(await matchStatus(fx, lineIds[0]!), "unmatched");
     const totals = await createMatch(
-      { reconciliationId: session.id, statementLineId: lineIds[0]!, journalLineIds: [journalA] },
+      { reconciliationId: session.id, statementLineIds: [lineIds[0]!], journalLineIds: [journalA] },
       inScope
     );
     assert.equal(totals.difference, "0.0000");
@@ -407,7 +407,7 @@ test("sign-off refuses a session holding out-of-scope matches", { skip: !DB }, a
       { orgId: fx.orgId, userId: fx.actor, allowedSubsidiaryIds: OPEN }
     );
     await createMatch(
-      { reconciliationId: session.id, statementLineId: lineIds[0]!, journalLineIds: [journalB] },
+      { reconciliationId: session.id, statementLineIds: [lineIds[0]!], journalLineIds: [journalB] },
       { orgId: fx.orgId, userId: fx.actor, allowedSubsidiaryIds: OPEN }
     );
     // A restricted caller cannot attest to lines they cannot see.
@@ -491,7 +491,7 @@ test("unrestricted callers keep full access on shared accounts", { skip: !DB }, 
       ctx
     );
     const totals = await createMatch(
-      { reconciliationId: session.id, statementLineId: lineIds[0]!, journalLineIds: [journal] },
+      { reconciliationId: session.id, statementLineIds: [lineIds[0]!], journalLineIds: [journal] },
       ctx
     );
     assert.equal(totals.difference, "0.0000");

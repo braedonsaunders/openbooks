@@ -342,7 +342,7 @@ async function postCategorizeForLine(
   await createMatchWithJournal(
     {
       reconciliationId,
-      statementLineId: line.id,
+      statementLineIds: [line.id],
       matchedBy: 'rule',
       additionalAccountIds: splits.map((split) => split.accountId),
       createJournal: () => createCategorizingJournal(orgId, userId, {
@@ -651,7 +651,7 @@ export async function addJournalMatchFromLine(
   await createMatchWithJournal(
     {
       reconciliationId: opts.reconciliationId,
-      statementLineId: opts.statementLineId,
+      statementLineIds: [opts.statementLineId],
       matchedBy: 'manual',
       additionalAccountIds: [opts.offsetAccountId],
       createJournal: () => createCategorizingJournal(orgId, userId, {

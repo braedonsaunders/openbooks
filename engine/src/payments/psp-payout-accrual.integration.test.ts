@@ -124,7 +124,7 @@ test("deposit tie-out follows the bank reconciliation match, with the gap", { sk
        where jl.org_id = ${org.orgId} and b.id = ${batchId} and jl.account_id = ${org.accounts.bank}
     `)).rows.map((row) => row.id);
     assert.ok(bankLegs.length > 0, "the posted batch carries a bank leg");
-    await createMatch({ reconciliationId: recon.id, statementLineId, journalLineIds: bankLegs }, ctx);
+    await createMatch({ reconciliationId: recon.id, statementLineIds: [statementLineId], journalLineIds: bankLegs }, ctx);
 
     const tied = await batchDepositTieout(org.orgId, batchId, null);
     assert.equal(tied.status, "tied");
