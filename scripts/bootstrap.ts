@@ -1,3 +1,4 @@
+import { ensureRetirementBackupAccess } from "./bootstrap/retirement-backup-access.ts"
 import { runtimeDatabaseConfig, bypassDatabaseConfig } from "./bootstrap-paths"
 import { assertConstrainedSchemaOwnerMigrationRole, requireRuntimeLoginRole, requireBypassLoginRole, ensureRuntimeRoleExists, ensureBypassRoleExists, ensureBypassObjectGrants, ensureBypassDatabaseRole, ensureRuntimeDatabaseRole, verifyRuntimeDatabaseRole, transferTestOwnershipToRuntimeRole, ensureReadRole } from "./bootstrap/database-roles"
 import { runUpgradeCheckMain, migrate } from "./bootstrap/migrate"
@@ -9,6 +10,14 @@ import { provisionOrganizationDefaults } from "../engine/src/provisioning/organi
 import { provisionPayrollPackDefaults } from "../engine/src/payroll/run-setup.ts"
 
 async function main(): Promise<void> {
+  const verifyBackupAccess = process.argv.includes("--verify");
+  if (verifyBackupAccess && !process.argv.includes("--retirement-backup-access-only")) {
+    throw new Error("--verify requires --retirement-backup-access-only");
+  }
+  const backupAccessOnly = process.argv.includes("--retirement-backup-access-only");
+  if (backupAccessOnly && (process.argv.includes("--check") || process.argv.includes("--historical-migrations"))) {
+    throw new Error("Retirement backup access provisioning cannot be combined with migration or check options");
+  }
   const historicalMigrations = process.argv.includes("--historical-migrations");
   if (process.argv.includes("--check")) {
     // Strictly read-only: this path takes no advisory lock (it must not
@@ -65,6 +74,16 @@ async function main(): Promise<void> {
     ]);
     locked = true;
     console.log("[bootstrap] starting");
+    if (backupAccessOnly) {
+      if (!bypassConfig || bypassConfig.roleName === runtimeConfig?.roleName) {
+        throw new Error("Retirement backup access requires OPENBOOKS_BYPASS_DB_URL naming a dedicated login distinct from the runtime login");
+      }
+      const installed = await ensureRetirementBackupAccess(lockClient, bypassConfig.roleName, { verifyOnly: verifyBackupAccess });
+      if (!installed && !verifyBackupAccess) throw new Error("Retirement authority is not installed; no backup grants were changed");
+      console.log(installed ? "[bootstrap] retirement backup SELECT access verified; no migrations or seeds executed"
+        : "[bootstrap] retirement authority is not installed; no private backup grants required");
+      return;
+    }
     // Bootstrap is the one intentional installation-wide maintenance boundary.
     // Set it explicitly: an absent tenant remains fail-closed everywhere else,
     // while migration validation must see every row before it changes a global

@@ -147,6 +147,39 @@ BYPASS_ROLE=$(sudo docker exec "$PG" psql -X -q -A -t -v ON_ERROR_STOP=1 "$BYPAS
   exit 1; }
 echo "production database target and complete-snapshot role verified"
 
+# Keep credentialed URLs out of the Docker process argument list.
+MIGRATION_ENV=$(mktemp "$BK/migration.XXXXXXXX.env")
+cleanup_migration_env() {
+  local release_status=$?
+  trap - EXIT
+  trap '' INT TERM
+  if ! timeout 5 rm -f -- "$MIGRATION_ENV" || [ -e "$MIGRATION_ENV" ]; then
+    echo "migration credential file cleanup failed: $MIGRATION_ENV" >&2
+    [ "$release_status" -ne 0 ] || release_status=1
+  fi
+  exit "$release_status"
+}
+trap cleanup_migration_env EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+printf 'OPENBOOKS_DB_URL=%s\nOPENBOOKS_RUNTIME_DB_URL=%s\nOPENBOOKS_BYPASS_DB_URL=%s\n' "$MIGRATION_URL" "$RUNTIME_URL" "$BYPASS_URL" > "$MIGRATION_ENV"
+chmod 600 "$MIGRATION_ENV"
+
+# Read-only native admission precedes pg_dump: a schema-owner login cannot
+# repair private-owner ACLs, and a partial archive cannot recover receipts.
+echo "verifying private retirement backup read access ..."
+if ! sudo docker run --rm \
+  -e NODE_ENV=production \
+  -e OPENBOOKS_BOOTSTRAP=1 \
+  --env-file "$MIGRATION_ENV" \
+  "${IMAGE_REPO}@${NEW}" node scripts/bootstrap.mjs --retirement-backup-access-only --verify; then
+  echo "retirement backup access verification failed; refusing before snapshot or migrations" >&2
+  echo "One-time privileged provisioning: create /private/retirement-backup-provision.env (mode 600) with OPENBOOKS_DB_URL naming the private owner or controlled database administrator and the unchanged OPENBOOKS_RUNTIME_DB_URL and OPENBOOKS_BYPASS_DB_URL." >&2
+  echo "sudo docker run --rm -e NODE_ENV=production -e OPENBOOKS_BOOTSTRAP=1 --env-file /private/retirement-backup-provision.env ${IMAGE_REPO}@${NEW} node scripts/bootstrap.mjs --retirement-backup-access-only" >&2
+  echo "Remove that private credential file after provisioning, then retry this release. Never exclude tenant_retirement from the snapshot." >&2
+  exit 1
+fi
+
 # ---------------------------------------------------------------------------
 # 1. Snapshot the target database BEFORE anything migrates it. A mid-chain
 #    bootstrap failure leaves earlier migrations committed; without a snapshot
@@ -266,24 +299,6 @@ elif [ "$SEALED_PRESENT" != "1" ]; then
   echo "refusing release: unexpected migration 0417 ledger cardinality" >&2
   exit 1
 fi
-
-# Keep credentialed URLs out of the Docker process argument list.
-MIGRATION_ENV=$(mktemp "$BK/migration.XXXXXXXX.env")
-cleanup_migration_env() {
-  local release_status=$?
-  trap - EXIT
-  trap '' INT TERM
-  if ! timeout 5 rm -f -- "$MIGRATION_ENV" || [ -e "$MIGRATION_ENV" ]; then
-    echo "migration credential file cleanup failed: $MIGRATION_ENV" >&2
-    [ "$release_status" -ne 0 ] || release_status=1
-  fi
-  exit "$release_status"
-}
-trap cleanup_migration_env EXIT
-trap 'exit 130' INT
-trap 'exit 143' TERM
-printf 'OPENBOOKS_DB_URL=%s\nOPENBOOKS_RUNTIME_DB_URL=%s\nOPENBOOKS_BYPASS_DB_URL=%s\n' "$MIGRATION_URL" "$RUNTIME_URL" "$BYPASS_URL" > "$MIGRATION_ENV"
-chmod 600 "$MIGRATION_ENV"
 
 echo "applying migrations from ${IMAGE_REPO}@${NEW} ..."
 sudo docker run --rm \

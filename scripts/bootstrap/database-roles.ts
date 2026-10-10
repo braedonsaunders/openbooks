@@ -1,4 +1,5 @@
 /** Database roles, RLS, and test ownership. Split from scripts/bootstrap.ts (pure moves only). */
+import { ensureRetirementBackupAccess } from "./retirement-backup-access.ts"
 import { migrationsDir, quoted, sha256 } from "../bootstrap-paths"
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
@@ -422,6 +423,9 @@ export async function ensureBypassObjectGrants(
   await pool.query(
     `alter default privileges in schema public grant usage, select, update on sequences to ${role}`,
   );
+  const backupClient = await pool.connect();
+  try { await ensureRetirementBackupAccess(backupClient, config.roleName); }
+  finally { backupClient.release(); }
 }
 
 // Automatic mode: create the dedicated cross-tenant login when absent,
