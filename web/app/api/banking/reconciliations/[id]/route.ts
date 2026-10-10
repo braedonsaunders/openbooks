@@ -66,6 +66,9 @@ export const PATCH = defineRoute({
   permission: 'banking.reconcile',
   feature: 'banking',
   body: PATCHBodySchema1,
+  // Cutoff and balance refusals are 422 domain refusals by contract; malformed
+  // JSON still stays 400 in the shared parser.
+  invalidBodyStatus: 422,
   handler: async ({ request: _req, authz: routeAuthz, params: routeParams, body: routeBody }) => {
     const params = Promise.resolve(routeParams as { id: string });
     const gate = routeAuthz;
