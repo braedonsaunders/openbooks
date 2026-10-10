@@ -9,6 +9,8 @@ const React = await import("react");
 Object.assign(globalThis, { React });
 const { act } = React;
 const { createRoot } = await import("react-dom/client");
+const { NextIntlClientProvider } = await import("next-intl");
+const messages = (await import("../messages/en")).default;
 const { DirectedExecutionForm, useDirectedExecution } =
   await import("./directed-execution");
 const suggestion = {
@@ -98,11 +100,13 @@ test("a mismatch retains the original suggestion and task; lost responses retry 
   }) as typeof fetch;
   await act(async () =>
     root.render(
-      <Harness
-        done={() => {
-          completed++;
-        }}
-      />,
+      <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
+        <Harness
+          done={() => {
+            completed++;
+          }}
+        />
+      </NextIntlClientProvider>,
     ),
   );
   await click(host, "Prepare");
@@ -160,7 +164,9 @@ test("an HTTP refusal keeps the suggestion and displays an actionable error befo
         )) as typeof fetch;
   await act(async () =>
     root.render(
-      <Harness done={() => assert.fail("refusal cannot complete work")} />,
+      <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
+        <Harness done={() => assert.fail("refusal cannot complete work")} />
+      </NextIntlClientProvider>,
     ),
   );
   await click(host, "Prepare");
