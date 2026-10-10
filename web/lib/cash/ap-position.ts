@@ -11,6 +11,7 @@ import {
   loadCategories,
   normalizeMoneyValue,
   openItems,
+  overdueItemCount,
   paymentStats,
   resolveAsOf,
   scheduleForecast,
@@ -184,7 +185,7 @@ export async function apPosition(
   const summary = summariseSide(apItems, grid.asOf, ap.scheduled, apStats.globalAvg, ap.unplaced);
   const current = summary.buckets.find((b) => b.index === 0)?.amount ?? ZERO_MONEY;
   const overdue = compareMoney(summary.outstanding, current) > 0 ? subtractMoney(summary.outstanding, current) : ZERO_MONEY;
-  const overdueCount = apItems.filter((it) => it.dueDate && daysBetween(it.dueDate, grid.asOf) > 0).length;
+  const overdueCount = overdueItemCount(apItems, grid.asOf);
 
   const weeks: ApWeek[] = grid.weekStarts.map((k, i) => {
     const entries = (ap.byWeek.get(k) ?? []).slice().sort((a, b) => compareMoney(b.amount, a.amount));
