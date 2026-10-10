@@ -247,11 +247,14 @@ export function ApprovalsTable({
     }
   }
 
+  // Gates awaiting another approver for this viewer (SoD-blocked), counted
+  // separately from the actionable rows below — never folded into them.
+  const awaitingCount = awaitingOthers ?? 0
   return (
     <div className="space-y-3">
-      {(awaitingOthers ?? 0) > 0 ? (
+      {awaitingCount > 0 ? (
         <p className="text-xs text-slate-500 dark:text-slate-400">
-          {t('awaitingOthersSummary', { count: awaitingOthers })}
+          {t('awaitingOthersSummary', { count: awaitingCount })}
         </p>
       ) : null}
       {bulk && visibleSelected.size > 0 ? (

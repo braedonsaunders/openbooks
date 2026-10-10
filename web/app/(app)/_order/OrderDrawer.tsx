@@ -491,6 +491,7 @@ export function OrderDrawer({
   promotionsEnabled = false,
   quoteToCashEnabled = false,
   quoteAwardEnabled = false,
+  quoteAwardAvailable = false,
 }: {
   order: OrderPayload
   initialMode?: DrawerMode
@@ -553,10 +554,15 @@ export function OrderDrawer({
    *  The tab's routes enforce the feature again. Defaults off so a caller
    *  that never resolves the feature cannot surface a tab that only fails. */
   quoteToCashEnabled?: boolean
-  /** Offer Award on an issued quote: the page resolved Projects and Orders
-   *  on and the project-management grant. The award route enforces all
-   *  three again. */
+  /** Award an issued quote: the viewer holds the project-management grant
+   *  (the award route enforces it again). Without the grant the action
+   *  renders disabled with the shared missing-grant hint — see
+   *  quoteAwardAvailable. */
   quoteAwardEnabled?: boolean
+  /** Award surface available: the page resolved the Projects (and Orders)
+   *  features on. The action renders whenever available; quoteAwardEnabled
+   *  decides whether it is live or disabled-with-hint. */
+  quoteAwardAvailable?: boolean
 }) {
   const { money } = useMoney()
   const t = useTranslations('purchaseOrders.shared')
@@ -1649,10 +1655,12 @@ export function OrderDrawer({
               {busy ? tCommon('actions.saving') : tCommon('actions.save')}
             </Button>
           </>
-        ) : (canManage || convertTargets.length > 0 || canCreateDropShipPurchaseOrder || canConfirmDropShip || (kind === 'quote' && quoteAwardEnabled)) ? (
+        ) : (
           <>
-            {kind === 'quote' && quoteAwardEnabled && !createMode ? (
-              <QuoteAwardAction quoteId={String(doc.id)} docStatus={doc.status} />
+            {(canManage || convertTargets.length > 0 || canCreateDropShipPurchaseOrder || canConfirmDropShip || (kind === 'quote' && quoteAwardAvailable)) ? (
+          <>
+            {kind === 'quote' && quoteAwardAvailable && !createMode ? (
+              <QuoteAwardAction quoteId={String(doc.id)} docStatus={doc.status} canAward={quoteAwardEnabled} />
             ) : null}
             {isApproved
               ? convertTargets.map((target) => (
@@ -1671,7 +1679,6 @@ export function OrderDrawer({
                 <PdfButton recordType={kind} recordId={String(doc.id)} />
                 <SendButton recordType={kind} recordId={String(doc.id)} />
                 <FlowManualButtons subjectKind={kind} subjectId={String(doc.id)} />
-                <ApprovalActions subjectKind={kind} subjectId={String(doc.id)} />
                 {isDraft ? (
                   <Button disabled={busy || !canIssue} onClick={issue} title={priceLookupBlocked ? t('pricingResolving') : !canIssue ? t('issueHint') : undefined}>
                     {t('issue')}
@@ -1720,8 +1727,17 @@ export function OrderDrawer({
                 {tCommon('actions.delete')}
               </Button>
             ) : null}
+            </>
+            ) : null}
+            {/* Flow-gate Approve/Reject rides the viewer's gate capability
+                (record-state/myActions), not the edit grant: a gate assignee
+                with read-only access decides here through the same native
+                gate decision path the Inbox uses. Renders nothing when no
+                gate awaits this viewer — including "Awaiting another
+                approver" for SoD-blocked viewers. */}
+            <ApprovalActions subjectKind={kind} subjectId={String(doc.id)} />
           </>
-        ) : null
+        )
       }
       keepRecordTabsMounted={['subscription']}
       detailTabs={createMode ? [] : [
