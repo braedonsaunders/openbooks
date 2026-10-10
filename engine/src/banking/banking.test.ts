@@ -4,6 +4,33 @@ import { BankingError, parseBai2, parseCsv } from "./banking.ts";
 
 const baiHeader = "02,ORG,1,1,260821,0000,CAD,2/";
 
+test("CSV refuses incomplete quoted fields before returning any transaction rows", () => {
+  for (const newline of ["\n", "\r\n"]) {
+    for (const description of ['"First', '"First ""quoted""']) {
+      const source = [
+        "date,amount,description",
+        "2026-06-30,5,Earlier",
+        `2026-07-01,10,${description}`,
+        "2026-07-02,20,Second",
+      ].join(newline);
+      assert.throws(
+        () => parseCsv(source, {date: 0, amount: 1, description: 2}),
+        (error: unknown) => error instanceof BankingError && /unterminated quoted field/.test(error.message),
+      );
+    }
+    const parsed = parseCsv([
+      "date,amount,description",
+      '2026-07-01,10,"First ""quoted""',
+      'continued"',
+      "2026-07-02,20,Second",
+    ].join(newline), {date: 0, amount: 1, description: 2});
+    assert.deepEqual(parsed.lines.map(line => [line.postedOn, line.amount, line.description]), [
+      ["2026-07-01", "10.0000", `First "quoted"${newline}continued`],
+      ["2026-07-02", "20.0000", "Second"],
+    ]);
+  }
+});
+
 test("BAI2 rejects amount fields containing anything beyond an optional sign and digits", () => {
   for (const amount of ["12X34", "12-34", "12.34", ""]) {
     const source = [baiHeader, `16,165,${amount},S,REF,,deposit/`].join("\n");

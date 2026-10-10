@@ -46,6 +46,9 @@ export function parseCsvRows(source: StatementSourceContent): string[][] {
       sawAny = true;
     }
   }
+  if (inQuotes) {
+    throw new BankingError("CSV contains an unterminated quoted field. Export the complete statement again or correct the closing quote before importing.");
+  }
   row.push(field);
   if (row.some((f) => f.trim() !== "")) rows.push(row);
   if (!sawAny || rows.length === 0) throw new BankingError("CSV is empty");
