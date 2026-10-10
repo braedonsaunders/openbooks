@@ -36,7 +36,7 @@ export function InspectionHost({recordId,closeHref,canInspect,canPost,scrapReaso
       if(command==='followup'){const url=new URL(closeHref,window.location.origin);url.searchParams.set('inspection',value.id);router.push(url.pathname+url.search);}
       else setAttempt(value=>value+1);
       router.refresh();
-    }catch(cause){if(currentIdentity.current===identity)setError(cause instanceof Error?cause.message:t('failed'));}finally{lock.current=false;if(currentIdentity.current===identity)setBusy(false);}
+    }catch(cause){if(currentIdentity.current===identity)setError(cause instanceof Error?cause.message:t('failed'));}finally{lock.current=false;setBusy(false);}
   }
   if(!recordId)return null;
   const visible=loaded===recordId?data:null;
