@@ -2,7 +2,14 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import { db } from "../platform/db.ts";
+import { db, withOrgContext, withOrgTransaction } from "../platform/db.ts";
+import { submitAndReleaseIfUngated, SubmitError } from "../flows/submit.ts";
+import { createDocumentsFlowAdapter } from "../flows/documents-adapter.ts";
+import { postDocument } from "../ledger/posting-document.ts";
+import { applyDocumentEdit } from "../ledger/document-write.ts";
+import { loadDocumentEditCurrent } from "../ledger/document-service.ts";
+import { DocumentEditError } from "../records/document-edit-policy.ts";
+import { PostingError } from "../journal/posting-contracts.ts";
 import { billSubscriptionNow } from "./subscription-billing.ts";
 import {
   runConsolidationGroup,
@@ -82,6 +89,156 @@ async function seedRelationship(
       (org_id, child_party_id, bill_to_party_id, payer_party_id, effective_from, effective_to, consolidation_group_id)
     values (${orgId}, ${childId}, ${payerId}, ${payerId}, ${from}::date, ${to}::date, ${groupId})`);
 }
+
+test(
+  "held and consolidated source invoices refuse native edits, submissions, flow mutations and posting without changing evidence",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const actorId = await createScratchUser(org.orgId, "Consolidated billing operator", "admin");
+      await enableFeatures(org.orgId);
+      const payer = await seedCustomer(org.orgId, "Payer", org.subsidiaryId);
+      const child = await seedCustomer(org.orgId, "Service customer", org.subsidiaryId);
+      const groupId = await seedGroup(org.orgId, payer);
+      await seedRelationship(org.orgId, child, payer, groupId, "2026-01-01", null);
+      const planId = await seedPlan(org, actorId);
+      const subId = await seedSubscription(org, actorId, planId, child, org.date);
+      const { invoiceId: sourceId } = await billSubscriptionNow(org.orgId, subId, org.date, { actorId }, null);
+      const deps = { control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank } };
+      const snapshot = () => withOrgContext(org.orgId, async () => (await db.execute(sql`
+        select to_jsonb(d) as document,
+          (select jsonb_agg(to_jsonb(l) order by l.id) from document_lines l
+            where l.org_id = d.org_id and l.document_id = d.id) as lines,
+          (select count(*)::int from audit_log where org_id = d.org_id) as audits,
+          (select count(*)::int from journal_entries where org_id = d.org_id) as journals,
+          (select count(*)::int from flow_runs where org_id = d.org_id) as flows,
+          (select count(*)::int from document_links where org_id = d.org_id) as links
+        from documents d where d.org_id = ${org.orgId} and d.id = ${sourceId}
+      `)).rows[0]);
+      const refuseSourceCommands = async (message: RegExp) => {
+        const before = await snapshot();
+        await assert.rejects(withOrgTransaction(org.orgId, async () => {
+          const current = await loadDocumentEditCurrent(sourceId, org.orgId);
+          assert.ok(current);
+          await applyDocumentEdit(sourceId, current, { memo: "Changed source", expectedUpdatedAt: current.updatedAt },
+            { orgId: org.orgId, userId: actorId, source: "api" });
+        }), (error: unknown) => error instanceof DocumentEditError && error.status === 422 && message.test(error.message));
+        await assert.rejects(withOrgTransaction(org.orgId, () =>
+          submitAndReleaseIfUngated("customer_invoice", sourceId, actorId)),
+        (error: unknown) => error instanceof SubmitError && message.test(error.message));
+        await assert.rejects(withOrgTransaction(org.orgId, () =>
+          createDocumentsFlowAdapter("customer_invoice").setField(sourceId, "memo", "Flow changed source", { orgId: org.orgId, userId: actorId })), message);
+        await assert.rejects(withOrgTransaction(org.orgId, () => postDocument(sourceId, deps)),
+          (error: unknown) => error instanceof PostingError && message.test(error.message));
+        assert.deepEqual(await snapshot(), before, "refusals preserve source, lines, audits, flows, links and journals");
+      };
+      await refuseSourceCommands(/held for consolidated billing.*Run its consolidation group/);
+      const [run] = await runConsolidationGroup(org.orgId, groupId, "2026-07-01", "2026-07-31", { actorId });
+      assert.ok(run);
+      await refuseSourceCommands(/has been consolidated.*Continue with the consolidated invoice/);
+
+      // Retained lineage must still protect imported or older source metadata.
+      await withOrgTransaction(org.orgId, () => db.execute(sql`
+        update documents set custom = custom - 'consolidationStatus' - 'supersededBy'
+         where org_id = ${org.orgId} and id = ${sourceId} and status = 'draft'
+      `));
+      await refuseSourceCommands(/has been consolidated/);
+      await withOrgTransaction(org.orgId, async () => {
+        assert.equal((await submitAndReleaseIfUngated("customer_invoice", run.invoiceId, actorId)).autoApproved, true);
+        await postDocument(run.invoiceId, deps);
+      });
+      const totals = await withOrgContext(org.orgId, async () => (await db.execute<{ source_status: string; total: string; journals: number }>(sql`
+        select source.status as source_status, invoice.total::text as total,
+          (select count(*)::int from journal_entries where org_id = ${org.orgId}) as journals
+        from documents source join documents invoice on invoice.org_id = source.org_id
+         where source.org_id = ${org.orgId} and source.id = ${sourceId} and invoice.id = ${run.invoiceId}
+      `)).rows[0]!);
+      assert.equal(totals.source_status, "draft");
+      assert.equal(totals.total, "100.0000");
+      assert.equal(totals.journals, 1, "only the payer invoice books the source charge");
+    } finally {
+      await dropScratchOrgReporting(org.orgId);
+    }
+  },
+);
+
+test(
+  "consolidation locks source invoices before copying charges and a concurrent standalone submission cannot post them",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    let releaseSource!: () => void;
+    const released = new Promise<void>((resolve) => { releaseSource = resolve; });
+    const jobs: Promise<unknown>[] = [];
+    try {
+      const actorId = await createScratchUser(org.orgId, "Consolidated billing operator", "admin");
+      await enableFeatures(org.orgId);
+      const payer = await seedCustomer(org.orgId, "Concurrent payer", org.subsidiaryId);
+      const child = await seedCustomer(org.orgId, "Concurrent service customer", org.subsidiaryId);
+      const groupId = await seedGroup(org.orgId, payer);
+      await seedRelationship(org.orgId, child, payer, groupId, "2026-01-01", null);
+      const planId = await seedPlan(org, actorId);
+      const subId = await seedSubscription(org, actorId, planId, child, org.date);
+      const { invoiceId: sourceId } = await billSubscriptionNow(org.orgId, subId, org.date, { actorId }, null);
+      let reportLocked!: (pid: number) => void;
+      let reportFailure!: (error: unknown) => void;
+      const locked = new Promise<number>((resolve, reject) => { reportLocked = resolve; reportFailure = reject; });
+      const holder = withOrgTransaction(org.orgId, async () => {
+        const row = (await db.execute<{ pid: number }>(sql`
+          select pg_backend_pid() as pid from documents
+           where org_id = ${org.orgId} and id = ${sourceId} for update
+        `)).rows[0];
+        assert.ok(row);
+        reportLocked(row.pid);
+        await released;
+      });
+      jobs.push(holder);
+      void holder.catch(reportFailure);
+      const holderPid = await locked;
+      const consolidation = runConsolidationGroup(org.orgId, groupId, "2026-07-01", "2026-07-31", { actorId, autoPost: true })
+        .then((runs) => ({ runs }), (error: unknown) => ({ error }));
+      jobs.push(consolidation);
+      const deadline = Date.now() + 5_000;
+      let copyingBlocked = false;
+      do {
+        copyingBlocked = await withOrgContext(org.orgId, async () => (await db.execute<{ blocked: boolean }>(sql`
+          select exists (
+            select 1 from pg_stat_activity
+             where datname = current_database() and ${holderPid} = any(pg_blocking_pids(pid))
+               and query like '%locked_drafts%'
+          ) as blocked
+        `)).rows[0]!.blocked);
+        if (copyingBlocked) break;
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      } while (Date.now() < deadline);
+      assert.ok(copyingBlocked, "the source is locked before line copying, rather than only during final supersession");
+      const submission = withOrgTransaction(org.orgId, () => submitAndReleaseIfUngated("customer_invoice", sourceId, actorId))
+        .then((result) => ({ result }), (error: unknown) => ({ error }));
+      jobs.push(submission);
+      releaseSource();
+      const consolidated = await consolidation;
+      if ("error" in consolidated) throw consolidated.error;
+      assert.equal(consolidated.runs.length, 1);
+      assert.equal(consolidated.runs[0]!.posted, true);
+      const submitted = await submission;
+      assert.ok("error" in submitted && submitted.error instanceof SubmitError);
+      assert.match(submitted.error.message, /consolidat/);
+      const standing = await withOrgContext(org.orgId, async () => (await db.execute<{ status: string; journals: number; links: number }>(sql`
+        select d.status,
+          (select count(*)::int from journal_entries where org_id = d.org_id) as journals,
+          (select count(*)::int from document_links where org_id = d.org_id
+            and from_document_id = d.id and link_type = 'created_from') as links
+        from documents d where d.org_id = ${org.orgId} and d.id = ${sourceId}
+      `)).rows[0]!);
+      assert.deepEqual(standing, { status: "draft", journals: 1, links: 1 });
+    } finally {
+      releaseSource();
+      await Promise.allSettled(jobs);
+      await dropScratchOrgReporting(org.orgId);
+    }
+  },
+);
 
 test(
   "three child subscriptions consolidate into one payer invoice with grouped lines and exact totals",

@@ -66,6 +66,7 @@ import {
   runDocumentVersionedTransaction,
 } from '../records/document-edit-policy.ts'
 import type { DocumentLineInput, DocumentEditInput, DocumentEditCurrent } from '../ledger/document-input.ts'
+import { consolidationSourceRefusal } from '../records/consolidation-source-policy.ts'
 
 /** False when this kind belongs to a Features switch that is off. */
 export async function isDocKindEnabled(orgId: string, kind: string): Promise<boolean> {
@@ -1619,6 +1620,8 @@ export async function applyDocumentEdit(
          for update
       `)).rows[0] ?? null,
     mutate: async (tx, locked) => {
+      const consolidationRefusal = await consolidationSourceRefusal(tx, orgId, id)
+      if (consolidationRefusal) throw new DocumentEditError(422, consolidationRefusal)
       // Attaching a project makes this draft a Projects disable-blocker
       // (open project documents), so a disable racing this edit must refuse
       // one side or the other. Fenced inside the write transaction, before

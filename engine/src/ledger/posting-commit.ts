@@ -16,6 +16,7 @@ import { assertPeriodModulesOpen, closeModuleForDocument, CloseError } from "../
 import { applyBillInventoryReceipts } from "../inventory/documents-purchasing.ts";
 import { applyVendorCreditInventoryReturns } from "../inventory/documents-vendor-credits.ts";
 import { captureTransactionAuditSnapshot, recordTransactionAudit } from "../records/transaction-audit.ts";
+import { consolidationSourceRefusal } from "../records/consolidation-source-policy.ts";
 
 import { allocateEntryNumber, nextFreeEntryNumber } from "../records/entry-number.ts";
 import { assertPayrollRemittanceBillCurrent } from "../payroll/remittance.ts";
@@ -37,6 +38,8 @@ import type { prepareDocumentPosting } from "./posting-prepare.ts";
 export async function commitDocumentPosting(prepared: Awaited<ReturnType<typeof prepareDocumentPosting>>, options: PostDocumentOptions): Promise<string> {
   const { documentId, deps, doc, postingLines, effectiveDoc, kernelLines, postContrib, primaryContrib, unionLines, subApplied, scriptLines, postingDate, shipToSnapshot } = prepared;
   return await inDbTransaction(async (tx) => {
+    const consolidationRefusal = await consolidationSourceRefusal(tx, doc.orgId, documentId);
+    if (consolidationRefusal) throw new PostingError(consolidationRefusal);
     // Share the ledger-setup fence: setup writers exclude posting, while
     // independent documents can post concurrently. The primary-book and
     // period fences below remain narrower and protect their own state.

@@ -3,6 +3,7 @@ import { ambientTenantOrgId, db, schema } from "../platform/db.ts";
 import { PAYMENT_SYSTEM_CUSTOM_FIELDS } from "../platform/payment-system-fields.ts";
 import { lockEditablePaymentDocument } from "../payments-core/payment-document-lock.ts";
 import { assertDocumentMutationRefsOwned } from "../records/mutation-refs.ts";
+import { consolidationSourceRefusal } from "../records/consolidation-source-policy.ts";
 import {
   captureTransactionAuditSnapshot,
   recordTransactionAudit,
@@ -339,6 +340,8 @@ export function createDocumentsFlowAdapter(kind: string): FlowSubjectAdapter {
     },
 
     async setField(subjectId: string, field: string, value: unknown, ctx: FlowExecCtx): Promise<void> {
+      const consolidationRefusal = await consolidationSourceRefusal(db, ctx.orgId, subjectId);
+      if (consolidationRefusal) throw new Error(consolidationRefusal);
       if (
         ["vendor_payment", "customer_payment"].includes(kind)
         && RESERVED_DOCUMENT_FIELD_KEYS.has(field)

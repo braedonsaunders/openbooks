@@ -33,9 +33,8 @@ import { runPostDocumentEffects } from "./posting-dispatch.ts";
  * (QuickJS) and reads/writes through the shared handle, tenant script journal
  * writes join the ambient unit, the provider-tax step replays persisted quote
  * evidence with database reads only (no live HTTP at post time), and flows
- * participate in the ambient transaction. The only work held across the unit
- * before any row lock is taken is that evidence replay, so no lock is held
- * while it runs.
+ * participate in the ambient transaction. Invoice source locks retain the
+ * consolidation verdict throughout preparation and accounting commit.
  *
  * Durable effects still run only after the unit commits, as before: when this
  * call opened the transaction that means after commit; when the caller owned
