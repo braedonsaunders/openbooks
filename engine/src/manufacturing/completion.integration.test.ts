@@ -7,7 +7,7 @@ import { createDocument } from "../ledger/document-write.ts";
 import { postDocument } from "../ledger/posting-document.ts";
 import { submitAndReleaseIfUngated } from "../flows/submit.ts";
 import { readSubcontractWorkspace,searchProductionServiceBills } from "./subcontract-workspace.ts";
-import { saveInspectionPlan, loadInspection } from "../inventory/inspections.ts";
+import { saveInspectionPlan, loadInspection, resolveInspectionPlan } from "../inventory/inspections.ts";
 import { createProductionSubcontract,shipSubcontractMaterial,recordSubcontractReturn,capitalizeSubcontractServiceBill,reverseSubcontractServiceCost,returnSubcontractComponents } from "./subcontracts.ts";
 import { consumeSubcontractMaterials } from "./materials.ts";
 import { getAvailableToPromise } from "../inventory/availability.ts";
@@ -991,6 +991,23 @@ async function inspectionPlan(f:Fixture,itemId:string,point:'receipt'|'operation
   const input={id:randomUUID(),name:'Dimensional acceptance',itemId,point,operationSequence:point==='operation'?10:null,effectiveFrom:'2026-01-01',measures:[{key:'length',label:'Length',unit:'mm',required:true,minimum:'9.9999',maximum:'10.0001'}],reason:'Establish dimensional inspection policy'};
   await run(tx=>saveInspectionPlan(tx,f.org.orgId,f.actorId,input));return input;
 }
+cases.push({name:'untracked items allow operation inspection policy but refuse receipt policy without creating plan or audit evidence',run:async f=>{
+  const itemId=f.org.items.assembly;
+  const profile=(await run(tx=>tx.execute<{tracking:string}>(sql`select tracking from item_inventory_profiles where org_id=${f.org.orgId} and item_id=${itemId}`))).rows[0]!;
+  assert.equal(profile.tracking,'none');
+  const plan=await inspectionPlan(f,itemId,'operation');
+  const resolved=await run(tx=>resolveInspectionPlan(tx,f.org.orgId,itemId,'operation',f.postingDate,10));
+  assert.equal(resolved?.id,plan.id);assert.equal(resolved?.point,'operation');assert.equal(resolved?.operationSequence,10);
+  const evidence=()=>run(tx=>tx.execute<{plans:number;audits:number}>(sql`select
+    (select count(*)::int from inventory_inspection_plans where org_id=${f.org.orgId}) as plans,
+    (select count(*)::int from audit_log where org_id=${f.org.orgId} and table_name='inventory_inspection_plans') as audits`));
+  const before=(await evidence()).rows;
+  await assert.rejects(run(tx=>saveInspectionPlan(tx,f.org.orgId,f.actorId,{...plan,id:randomUUID(),point:'receipt',operationSequence:null})),/lot or serial tracking.*receipt inspection plan/i);
+  assert.deepEqual((await evidence()).rows,before);
+  assert.equal(await run(tx=>resolveInspectionPlan(tx,f.org.orgId,itemId,'receipt',f.postingDate)),null);
+  await run(tx=>saveInspectionPlan(tx,f.org.orgId,f.actorId,plan));
+  assert.deepEqual((await evidence()).rows,before,'replaying the accepted operation policy preserves its audit evidence');
+}});
 async function trackedQualityReceipt(f:Fixture,itemId:string,quantity='2') {
   await run(tx=>tx.execute(sql`update item_inventory_profiles set tracking='lot' where org_id=${f.org.orgId} and item_id=${itemId} returning item_id`));
   const plan=await inspectionPlan(f,itemId,'receipt'),lotId=await withBypassContext(()=>ensureLot(f.org.orgId,itemId,'INSPECT-'+randomUUID(),null,f.actorId));
