@@ -4,7 +4,8 @@
 -- granted accounts-payable reading or creating also receive the matching
 -- purchasing keys. Deny overrides are carried the same way, so no access
 -- widens. Built-in roles gain own-leave requests, and the hourly built-in
--- roles gain self-scoped time entry.
+-- roles gain self-scoped time entry. The built-in Accountant gains
+-- reconciliation read access for its monthly review.
 
 SET statement_timeout = 0;
 SET idle_in_transaction_session_timeout = 0;
@@ -52,3 +53,9 @@ UPDATE app_roles SET permissions = permissions || '["hrm.leave.request"]'::jsonb
 UPDATE app_roles SET permissions = permissions || '["time.self"]'::jsonb, updated_at = now()
  WHERE is_built_in AND key IN ('admin', 'production', 'sales_manager', 'sales_rep')
    AND NOT (permissions ? 'time.self' OR permissions ? '*');
+
+-- The built-in Accountant reviews bank and card reconciliations as part of
+-- the monthly books review; reconciling stays with the controller.
+UPDATE app_roles SET permissions = permissions || '["banking.read"]'::jsonb, updated_at = now()
+ WHERE is_built_in AND key = 'accountant'
+   AND NOT (permissions ? 'banking.read' OR permissions ? 'banking.*' OR permissions ? '*');
