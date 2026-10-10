@@ -346,19 +346,9 @@
     "previewUnavailable": "税额预览不可用 — 请完成供应评估及行金额"
   },
   "postingEffects": {
-    "title": "过账后处理",
-    "unknown": "状态未知 — 需要复核",
-    "incomplete": "日记账已过账。库存或收入的后续处理尚未完成。请复核错误，等待处理成功完成后再关闭总账期间。",
     "retry": "重试过账后处理",
     "reason": "复核理由",
     "reasonHelp": "请用10至1000个字符说明修正内容和复核情况。",
-    "queued": "重试已排队；请在工作进程执行后检查完成状态。",
-    "status": {
-      "pending": "已排队",
-      "running": "处理中",
-      "failed": "等待自动重试",
-      "terminal_failed": "需要复核并重试",
-      "succeeded": "已完成"
-    }
+    "queued": "已加入重试队列。"
   }
 }

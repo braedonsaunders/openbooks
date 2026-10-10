@@ -346,19 +346,9 @@
     "previewUnavailable": "Aperçu fiscal indisponible — complétez l’évaluation de la fourniture et les montants des lignes"
   },
   "postingEffects": {
-    "title": "Traitement après comptabilisation",
-    "unknown": "Statut inconnu — vérification requise",
-    "incomplete": "Le journal est comptabilisé. Les projections de stocks ou de revenus restent incomplètes. Vérifiez les erreurs et attendez la réussite du traitement avant de clôturer le grand livre.",
     "retry": "Relancer les effets de comptabilisation",
     "reason": "Motif de vérification",
     "reasonHelp": "Décrivez la correction et la vérification en 10 à 1000 caractères.",
-    "queued": "Relance mise en attente ; vérifiez le statut après le traitement.",
-    "status": {
-      "pending": "En attente",
-      "running": "En cours",
-      "failed": "Relance automatique en attente",
-      "terminal_failed": "Vérification et relance requises",
-      "succeeded": "Terminé"
-    }
+    "queued": "Nouvelle tentative mise en file d’attente."
   }
 }
