@@ -364,6 +364,7 @@ export const TENANT_TABLE_POLICIES = {
   "hrm_interview_slots": "clone:catalog-uuid-rebase",
   "hrm_interviewer_pools": "clone:catalog-uuid-rebase",
   "hrm_interviews": "clone:catalog-uuid-rebase",
+  "hrm_job_descriptions": "clone:catalog-uuid-rebase",
   "hrm_job_families": "clone:catalog-uuid-rebase",
   "hrm_job_levels": "clone:catalog-uuid-rebase",
   "hrm_job_postings": "clone:catalog-uuid-rebase",

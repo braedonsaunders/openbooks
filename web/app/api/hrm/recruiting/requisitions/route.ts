@@ -64,6 +64,7 @@ export const POST = defineRoute({
         compensation: body.compensation,
         pipelineTemplateId: body.pipelineTemplateId,
         description: body.description,
+        jobDescriptionId: body.jobDescriptionId,
       });
       return NextResponse.json({ requisition }, { status: 201 });
     } catch (e) {

@@ -126,6 +126,8 @@ export const requisitions = pgTable(
     closeReason: text("close_reason"),
     pipelineTemplateId: uuid("pipeline_template_id"),
     description: text("description"),
+    /** Job description library entry the opening started from (0634, SQL-declared tenant FK). */
+    jobDescriptionId: uuid("job_description_id"),
     revision: integer("revision").notNull().default(1),
     ...auditColumns,
   },

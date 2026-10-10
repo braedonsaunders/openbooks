@@ -939,7 +939,11 @@
       "targetStart": "Inicio previsto",
       "submit": "Crear requisición",
       "failed": "No se pudo crear la requisición.",
-      "noEmployer": "No hay ninguna empresa empleadora disponible: pida acceso a una empresa a un administrador antes de crear la requisición."
+      "noEmployer": "No hay ninguna empresa empleadora disponible: pida acceso a una empresa a un administrador antes de crear la requisición.",
+      "jobDescription": "Partir de una descripción de puesto",
+      "noJobDescription": "Ninguna: redactar la publicación desde cero",
+      "jobDescriptionNote": "El tipo de empleo y el rango salarial también se copian de la descripción de puesto.",
+      "description": "Texto de la publicación"
     },
     "lifecycle": {
       "title": "Ciclo de vida",
@@ -1140,7 +1144,7 @@
       "postings": "Anuncios de empleo"
     },
     "workspace": {
-      "openings": "Necesidades de contratación aprobadas: solicitudes, plantilla y candidatos.",
+      "openings": "Necesidades de contratación aprobadas: solicitudes, plantilla y candidatos. Las descripciones de puesto reutilizables están en la configuración de la empresa.",
       "interviews": "Entrevistas programadas y evaluaciones. Los kits y grupos de entrevistadores se gestionan en la configuración de la empresa.",
       "offers": "Ofertas, aprobaciones y aceptación. Las plantillas se gestionan en la configuración de la empresa.",
       "postings": "Publique vacantes aprobadas y siga las solicitudes por canal.",
@@ -1148,6 +1152,21 @@
       "configure": "Configurar contratación",
       "newPool": "Nueva bolsa de candidatos",
       "poolDescription": "Descripción"
+    },
+    "postingContent": {
+      "copyTitle": "Copiar título",
+      "copyDescription": "Copiar descripción",
+      "copied": "Copiado al portapapeles.",
+      "copyFailed": "El navegador bloqueó el portapapeles. Seleccione el texto y cópielo manualmente.",
+      "edit": "Editar publicación",
+      "save": "Guardar publicación",
+      "cancel": "Descartar cambios",
+      "title": "Título",
+      "employmentKind": "Tipo de empleo",
+      "description": "Texto de la publicación",
+      "empty": "Aún no hay texto de publicación.",
+      "source": "Creada a partir de la descripción de puesto {name}",
+      "failed": "No se pudo guardar la publicación."
     }
   },
   "performance": {

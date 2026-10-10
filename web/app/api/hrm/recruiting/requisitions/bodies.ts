@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { civilDateInput } from "@/lib/api/civil-date";
 import { isUuid } from "../../../../../lib/list-params";
+import { REQUISITION_DESCRIPTION_MAX_LENGTH } from "@openbooks/engine/src/hrm/recruiting/requisitions.ts";
 
 /**
  * Typed request bodies for /api/hrm/recruiting/requisitions/* (financial
@@ -24,8 +25,11 @@ const compensation = z
   .nullable()
   .optional();
 
+const description = z.string().max(REQUISITION_DESCRIPTION_MAX_LENGTH);
+
 export const createRequisitionBody = z.object({
-  title: z.string().trim().min(1).max(240),
+  // Optional when jobDescriptionId supplies it; the service refuses a request carrying neither.
+  title: z.string().trim().min(1).max(240).optional(),
   positionId: uuid.nullable().optional(),
   employerSubsidiaryId: uuid,
   departmentId: uuid.nullable().optional(),
@@ -37,7 +41,8 @@ export const createRequisitionBody = z.object({
   targetStartOn: civilDate.nullable().optional(),
   compensation,
   pipelineTemplateId: uuid.nullable().optional(),
-  description: z.string().max(4000).nullable().optional(),
+  description: description.nullable().optional(),
+  jobDescriptionId: uuid.nullable().optional(),
 });
 
 export const patchRequisitionBody = z.discriminatedUnion("action", [
@@ -49,4 +54,12 @@ export const patchRequisitionBody = z.discriminatedUnion("action", [
   z.object({ action: z.literal("hold"), reason }),
   z.object({ action: z.literal("resume"), reason }),
   z.object({ action: z.literal("cancel"), reason }),
+  z.object({
+    action: z.literal("revise"),
+    expectedRevision: z.number().int().min(1),
+    title: z.string().trim().min(1).max(240).optional(),
+    employmentKind: z.string().trim().min(1).max(120).nullable().optional(),
+    compensation,
+    description: description.nullable().optional(),
+  }),
 ]);

@@ -25,6 +25,7 @@ import {
   getRequisitionDetail,
   listRequisitions,
 } from '@openbooks/engine/src/hrm/recruiting/recruiting-read.ts'
+import { listActiveJobDescriptions } from '@openbooks/engine/src/hrm/recruiting/job-descriptions.ts'
 import { hrmGroupTabs } from '../../../../components/module-home/group-tabs'
 import { can, requirePermission, type Authz } from '../../../../lib/authz'
 
@@ -648,6 +649,24 @@ export async function loadRecruitingPage(
           offerActionFailed: t('recruiting.offerActions.failed'),
           description: t('recruiting.drawer.description'),
         },
+        postingLabels: {
+          heading: t('recruiting.postingContent.description'),
+          title: t('recruiting.postingContent.title'),
+          employmentKind: t('recruiting.postingContent.employmentKind'),
+          description: t('recruiting.postingContent.description'),
+          empty: t('recruiting.postingContent.empty'),
+          source: detail.jobDescriptionName
+            ? t('recruiting.postingContent.source', { name: detail.jobDescriptionName })
+            : '',
+          copyTitle: t('recruiting.postingContent.copyTitle'),
+          copyDescription: t('recruiting.postingContent.copyDescription'),
+          copied: t('recruiting.postingContent.copied'),
+          copyFailed: t('recruiting.postingContent.copyFailed'),
+          edit: t('recruiting.postingContent.edit'),
+          save: t('recruiting.postingContent.save'),
+          cancel: t('recruiting.postingContent.cancel'),
+          failed: t('recruiting.postingContent.failed'),
+        },
         lifecycle: {
           canManage,
           labels: {
@@ -924,6 +943,10 @@ export async function loadRecruitingPage(
        where org_id = ${authz.user.orgId}::uuid and is_active
        order by name`)
     ).rows
+    const jobDescriptions = await listActiveJobDescriptions({
+      orgId: authz.user.orgId,
+      actorId: authz.user.id,
+    })
     create = {
       basePath: '/hrm/recruiting',
       employers,
@@ -932,8 +955,18 @@ export async function loadRecruitingPage(
         value: row.id,
         label: row.name,
       })),
+      jobDescriptions: jobDescriptions.map((entry) => ({
+        value: entry.id,
+        label: entry.name,
+        title: entry.title,
+        description: entry.description,
+      })),
       labels: {
         title: t('recruiting.create.titleField'),
+        jobDescription: t('recruiting.create.jobDescription'),
+        noJobDescription: t('recruiting.create.noJobDescription'),
+        jobDescriptionNote: t('recruiting.create.jobDescriptionNote'),
+        description: t('recruiting.create.description'),
         employer: t('recruiting.create.employer'),
         department: t('recruiting.create.department'),
         noDepartment: t('recruiting.create.noDepartment'),
@@ -999,16 +1032,17 @@ export async function loadRecruitingPage(
   // The Setup lists rehomed under this tab. Unknown keys stay absent
   // rather than rendering a section the registry cannot serve.
   const SETUP_BY_TAB: Record<
-    Exclude<DepthTab, 'openings'|'applications'>,
+    Exclude<DepthTab, 'applications'>,
     readonly string[]
   > = {
+    openings: ['hrm-job-descriptions'],
     interviews: ['hrm-interview-kits', 'hrm-interviewer-pools'],
     offers: ['hrm-offer-templates'],
     postings: [],
     pools: ['hrm-retention-rules'],
   }
   const setupSections: string[] =
-    (tab === 'openings'||tab==='applications')
+    tab === 'applications'
       ? []
       : SETUP_BY_TAB[tab].filter((entityKey) =>
           SETUP_ENTITY_BY_KEY.has(entityKey),

@@ -7,6 +7,7 @@ import {
   holdRequisition,
   openRequisition,
   resumeRequisition,
+  reviseRequisition,
 } from "@openbooks/engine/src/hrm/recruiting/requisitions.ts";
 import { getRequisitionDetail } from "@openbooks/engine/src/hrm/recruiting/recruiting-read.ts";
 
@@ -20,8 +21,9 @@ export const runtime = "nodejs";
  * One requisition: GET resolves the drawer (pipeline chips, funnel,
  * applications) through the read service — which redacts candidate PII for
  * viewers without the read grant and admits the hiring manager on their own
- * openings; PATCH opens, holds, resumes, or cancels through an
- * action-discriminated body (the fill rides hire, never this endpoint).
+ * openings; PATCH opens, holds, resumes, cancels, or revises the posting
+ * content through an action-discriminated body (the fill rides hire, never
+ * this endpoint).
  */
 export const GET = defineRoute({
   permission: "hrm.recruiting.read",
@@ -81,6 +83,19 @@ export const PATCH = defineRoute({
           actorId: gate.user.id,
           requisitionId: id,
           reason: body.reason,
+        });
+        return NextResponse.json({ requisition });
+      }
+      if (body.action === "revise") {
+        const requisition = await reviseRequisition({
+          orgId: gate.user.orgId,
+          actorId: gate.user.id,
+          requisitionId: id,
+          expectedRevision: body.expectedRevision,
+          title: body.title,
+          employmentKind: body.employmentKind,
+          compensation: body.compensation,
+          description: body.description,
         });
         return NextResponse.json({ requisition });
       }

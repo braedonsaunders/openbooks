@@ -1,8 +1,8 @@
 import type { SetupEntity } from './types'
 
 /**
- * Recruiting-depth Setup entities, gated on the Recruiting module. All
- * four top-level lists live in Company Setup (SetupEntitySection
+ * Recruiting Setup entities, gated on the Recruiting module. All
+ * five top-level lists live in Company Setup (SetupEntitySection
  * via the shared registry list and drawer), exposed on the setup rail — one
  * configurable surface, never two. Kit attributes and questions nest under their kit in
  * the registry (served by the shared CRUD API and the kits/[id] routes);
@@ -159,6 +159,45 @@ export const RECRUITING_OFFER_TEMPLATES_ENTITY: SetupEntity = {
       { key: 'default_on', kind: 'boolean', defaultValue: false },
     ] },
     { key: 'approvalRequired', kind: 'boolean' },
+    { key: 'isActive', kind: 'boolean' },
+  ],
+}
+
+const COMPENSATION_BASES = [
+  { value: 'annual', labelKey: 'options.payBandBasis.annual' },
+  { value: 'hourly', labelKey: 'options.payBandBasis.hourly' },
+]
+
+// The reusable posting library a new requisition starts from. The
+// requisition copies the content when it is created, so editing an entry
+// here never rewrites an existing opening.
+export const RECRUITING_JOB_DESCRIPTIONS_ENTITY: SetupEntity = {
+  key: 'hrm-job-descriptions',
+  table: 'hrm_job_descriptions',
+  groupKey: 'workforce',
+  featureKey: 'hrmRecruiting',
+  iconKey: 'file-text',
+  orgScoped: true,
+  actorCols: true,
+  naturalKey: 'name',
+  hasActive: true,
+  docSlug: 'structured-interviews-offers-job-boards',
+  columns: [
+    { key: 'name', kind: 'text' },
+    { key: 'title', kind: 'text' },
+    { key: 'employmentKind', kind: 'text' },
+    { key: 'isActive', kind: 'badge-active' },
+  ],
+  fields: [
+    { key: 'name', kind: 'text', required: true, helpTextKey: 'fieldHelp.hrmJobDescriptionName' },
+    { key: 'title', kind: 'text', required: true, helpTextKey: 'fieldHelp.hrmJobDescriptionTitle' },
+    { key: 'employmentKind', kind: 'text', helpTextKey: 'fieldHelp.hrmJobDescriptionKind' },
+    // All four or none: the write path refuses a partial range by name.
+    { key: 'compensationMin', kind: 'decimal', decimalScale: 4, helpTextKey: 'fieldHelp.hrmJobDescriptionPay' },
+    { key: 'compensationMax', kind: 'decimal', decimalScale: 4 },
+    { key: 'compensationCurrency', kind: 'ref', ref: 'currencies' },
+    { key: 'compensationBasis', kind: 'select', options: COMPENSATION_BASES },
+    { key: 'description', kind: 'textarea', required: true, fullWidth: true, helpTextKey: 'fieldHelp.hrmJobDescriptionBody' },
     { key: 'isActive', kind: 'boolean' },
   ],
 }

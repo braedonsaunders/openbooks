@@ -2,12 +2,20 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Button, Input, Label, Select } from '@openbooks/ui'
+import { Button, Input, Label, Select, Textarea } from '@openbooks/ui'
 import { readApiErrorMessage } from '../../../../lib/api-error'
 
 export interface RecruitingCreateOption {
   value: string
   label: string
+}
+
+/** An active library entry the opening can start from (title + text prefill the form). */
+export interface RecruitingJobDescriptionOption {
+  value: string
+  label: string
+  title: string
+  description: string
 }
 
 export interface RecruitingCreateProps {
@@ -21,8 +29,13 @@ export interface RecruitingCreateProps {
    */
   employerRefusal: string | null
   departments: RecruitingCreateOption[]
+  jobDescriptions: RecruitingJobDescriptionOption[]
   labels: {
     title: string
+    jobDescription: string
+    noJobDescription: string
+    jobDescriptionNote: string
+    description: string
     employer: string
     department: string
     noDepartment: string
@@ -39,16 +52,29 @@ export interface RecruitingCreateProps {
  * request goes through the same POST /api/hrm/recruiting/requisitions the
  * API clients use — with its refusals rendered as the error, never
  * swallowed. On success the URL moves to the new requisition's own drawer.
+ * Choosing a job description fills the title and text for review; the
+ * server copies the entry's employment type and pay range alongside.
  */
-export function RecruitingCreateForm({ basePath, employers, employerRefusal, departments, labels }: RecruitingCreateProps) {
+export function RecruitingCreateForm({ basePath, employers, employerRefusal, departments, jobDescriptions, labels }: RecruitingCreateProps) {
   const router = useRouter()
+  const [jobDescription, setJobDescription] = useState('')
   const [title, setTitle] = useState('')
+  const [description, setDescription] = useState('')
   const [employer, setEmployer] = useState(employers[0]?.value ?? '')
   const [department, setDepartment] = useState('')
   const [headcount, setHeadcount] = useState('1')
   const [targetStart, setTargetStart] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  function chooseJobDescription(value: string) {
+    setJobDescription(value)
+    const entry = jobDescriptions.find((option) => option.value === value)
+    if (entry) {
+      setTitle(entry.title)
+      setDescription(entry.description)
+    }
+  }
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -60,6 +86,8 @@ export function RecruitingCreateForm({ basePath, employers, employerRefusal, dep
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
           title: title.trim(),
+          jobDescriptionId: jobDescription || null,
+          description: description.trim() ? description : null,
           employerSubsidiaryId: employer,
           departmentId: department || null,
           headcount: Number.parseInt(headcount, 10),
@@ -88,6 +116,26 @@ export function RecruitingCreateForm({ basePath, employers, employerRefusal, dep
 
   return (
     <form className="space-y-4" onSubmit={submit}>
+      {jobDescriptions.length > 0 ? (
+        <div>
+          <Label htmlFor="recruiting-job-description">{labels.jobDescription}</Label>
+          <Select
+            id="recruiting-job-description"
+            value={jobDescription}
+            onChange={(event) => chooseJobDescription(event.target.value)}
+          >
+            <option value="">{labels.noJobDescription}</option>
+            {jobDescriptions.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </Select>
+          {jobDescription ? (
+            <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{labels.jobDescriptionNote}</p>
+          ) : null}
+        </div>
+      ) : null}
       <div>
         <Label htmlFor="recruiting-title">{labels.title}</Label>
         <Input id="recruiting-title" value={title} onChange={(event) => setTitle(event.target.value)} required />
@@ -134,6 +182,15 @@ export function RecruitingCreateForm({ basePath, employers, employerRefusal, dep
       <div>
         <Label htmlFor="recruiting-target">{labels.targetStart}</Label>
         <Input id="recruiting-target" type="date" value={targetStart} onChange={(event) => setTargetStart(event.target.value)} />
+      </div>
+      <div>
+        <Label htmlFor="recruiting-description">{labels.description}</Label>
+        <Textarea
+          id="recruiting-description"
+          rows={10}
+          value={description}
+          onChange={(event) => setDescription(event.target.value)}
+        />
       </div>
       {error ? (
         <p role="alert" className="text-sm text-red-600 dark:text-red-400">

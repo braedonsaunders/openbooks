@@ -939,7 +939,11 @@
       "targetStart": "目标到岗",
       "submit": "创建需求",
       "failed": "无法创建需求。",
-      "noEmployer": "没有可用的雇主子公司 — 请先向管理员申请子公司访问权限，再创建需求。"
+      "noEmployer": "没有可用的雇主子公司 — 请先向管理员申请子公司访问权限，再创建需求。",
+      "jobDescription": "从职位描述开始",
+      "noJobDescription": "无——从头撰写",
+      "jobDescriptionNote": "雇用类型和薪酬范围也会从职位描述中复制。",
+      "description": "发布说明"
     },
     "lifecycle": {
       "title": "生命周期",
@@ -1140,7 +1144,7 @@
       "postings": "职位发布"
     },
     "workspace": {
-      "openings": "已批准的招聘需求：管理招聘申请、人数和候选人。",
+      "openings": "已批准的招聘需求：管理招聘申请、人数和候选人。可复用的职位描述位于公司设置中。",
       "interviews": "已安排的面试和评分。面试套件和面试官组在公司设置中管理。",
       "offers": "候选人录用通知、审批和接受情况。录用通知模板在公司设置中管理。",
       "postings": "将已批准的空缺发布到招聘平台，并按渠道跟踪申请。",
@@ -1148,6 +1152,21 @@
       "configure": "配置招聘",
       "newPool": "新建候选人才库",
       "poolDescription": "说明"
+    },
+    "postingContent": {
+      "copyTitle": "复制标题",
+      "copyDescription": "复制说明",
+      "copied": "已复制到剪贴板。",
+      "copyFailed": "浏览器阻止了剪贴板。请选中文本后手动复制。",
+      "edit": "编辑发布内容",
+      "save": "保存发布内容",
+      "cancel": "放弃更改",
+      "title": "标题",
+      "employmentKind": "雇用类型",
+      "description": "发布说明",
+      "empty": "尚无发布说明。",
+      "source": "基于职位描述“{name}”创建",
+      "failed": "无法保存发布内容。"
     }
   },
   "performance": {

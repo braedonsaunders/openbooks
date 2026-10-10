@@ -3485,6 +3485,11 @@
         "title": "Calendriers de travail",
         "singularTitle": "Calendrier de travail",
         "description": "Jours de travail et fermetures de l’entreprise partagés par la production et les plannings de projets. Les centres de travail définissent leurs heures disponibles. Les calculs MRP existants conservent leurs données de calendrier."
+      },
+      "hrm-job-descriptions": {
+        "title": "Descriptions de poste",
+        "singularTitle": "Description de poste",
+        "description": "Contenu d'annonce réutilisable pour les nouvelles demandes : intitulé, type d'emploi, fourchette de rémunération et description."
       }
     },
     "fields": {
@@ -4094,7 +4099,12 @@
       "schedulePdfColorTreatment": "Traitement des couleurs",
       "schedulePdfColorIntensity": "Intensité de la teinte (%)",
       "custodianPartyId": "Fournisseur dépositaire",
-      "showReadiness": "Guide de travail"
+      "showReadiness": "Guide de travail",
+      "employmentKind": "Type d'emploi",
+      "compensationMin": "Rémunération minimale",
+      "compensationMax": "Rémunération maximale",
+      "compensationCurrency": "Devise de rémunération",
+      "compensationBasis": "Base de rémunération"
     },
     "fieldHelp": {
       "fxRateMaxAgeDays": "Nombre de jours entre le taux utilisable le plus récent et la fin de période au-delà duquel la réévaluation et la consolidation refusent le taux. Les taux de clôture se comptent depuis la date du taux comptant de fin de période ; les taux moyens depuis la cotation la plus récente incluse dans la moyenne. Valeur par défaut sans politique : 31 jours.",
@@ -4263,7 +4273,12 @@
       "scheduleBoardDayPolicyKnown": "Désactivez si seules les dates sont connues. L’historique reste visible sans heures ; configurez les horaires avant de réserver une journée.",
       "scheduleShowHoursColumn": "Show the right-side sum of booked hours. Source dates without hours remain unknown. Daily footer totals are configured separately.",
       "scheduleDistributionVisibility": "Personal reports contain only the recipient’s own schedule or associated resources. Whole-board reports require an explicit sharing policy and a legal-entity-scoped board. Every send still requires a reviewed audience/version or an authored, enabled native Flow.",
-      "scheduleAutomaticDelivery": "Politique facultative : choisissez votre propre opérateur autorisé et le fuseau du tableau. Activez séparément un flux de livraison du planning avec jours et heures explicites. Effacer cette politique arrête les envois futurs sans effacer leur historique."
+      "scheduleAutomaticDelivery": "Politique facultative : choisissez votre propre opérateur autorisé et le fuseau du tableau. Activez séparément un flux de livraison du planning avec jours et heures explicites. Effacer cette politique arrête les envois futurs sans effacer leur historique.",
+      "hrmJobDescriptionName": "Nom affiché dans la bibliothèque, par exemple Chef de projet – Terrain.",
+      "hrmJobDescriptionTitle": "L'intitulé de poste affiché aux candidats dans l'annonce.",
+      "hrmJobDescriptionKind": "Par exemple temps plein, temps partiel, saisonnier ou contractuel.",
+      "hrmJobDescriptionPay": "Facultatif. Saisissez ensemble le minimum, le maximum, la devise et la base, ou laissez les quatre vides.",
+      "hrmJobDescriptionBody": "Le texte de l'annonce. Les nouvelles demandes le copient : le modifier ici ne change jamais un poste existant."
     },
     "options": {
       "withholdingCondominiumPayer": "Payeur : copropriété",

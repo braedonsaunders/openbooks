@@ -3560,6 +3560,11 @@
         "title": "Work calendars",
         "singularTitle": "Work calendar",
         "description": "Company working days and closures shared by production and project schedules. Work centers set their own available hours. Existing MRP runs keep the calendar facts used when they ran."
+      },
+      "hrm-job-descriptions": {
+        "title": "Job descriptions",
+        "singularTitle": "Job description",
+        "description": "Reusable posting content a new requisition starts from: title, employment type, pay range and description."
       }
     },
     "fields": {
@@ -4169,7 +4174,12 @@
       "schedulePdfColorTreatment": "Color treatment",
       "schedulePdfColorIntensity": "Color tint (%)",
       "custodianPartyId": "Custodian vendor",
-      "showReadiness": "Work guide"
+      "showReadiness": "Work guide",
+      "employmentKind": "Employment type",
+      "compensationMin": "Pay minimum",
+      "compensationMax": "Pay maximum",
+      "compensationCurrency": "Pay currency",
+      "compensationBasis": "Pay basis"
     },
     "fieldHelp": {
       "fxRateMaxAgeDays": "Days between the newest usable rate and the period end beyond which revaluation and consolidation refuse the rate. Closing rates count from the date of the period-end spot rate; average rates from the newest quote averaged. Default when no policy is set: 31 days.",
@@ -4338,7 +4348,12 @@
       "scheduleBoardDayPolicyKnown": "Turn off when only source dates are known. Imported history remains visible without hours; normal whole-day booking refuses until actual start, end and break are configured.",
       "scheduleShowHoursColumn": "Show the right-side sum of booked hours. Source dates without hours remain unknown. Daily footer totals are configured separately.",
       "scheduleDistributionVisibility": "Personal reports contain only the recipient’s own schedule or associated resources. Whole-board reports require an explicit sharing policy and a legal-entity-scoped board. Every send still requires a reviewed audience/version or an authored, enabled native Flow.",
-      "scheduleAutomaticDelivery": "Optional report policy only: configure your own authorized operator and the board timezone. Enable a Schedule board delivery Flow separately, with explicit weekdays and times. Clearing this policy stops future delivery; it does not erase delivery history."
+      "scheduleAutomaticDelivery": "Optional report policy only: configure your own authorized operator and the board timezone. Enable a Schedule board delivery Flow separately, with explicit weekdays and times. Clearing this policy stops future delivery; it does not erase delivery history.",
+      "hrmJobDescriptionName": "How the library lists this entry, for example Project Manager – Field.",
+      "hrmJobDescriptionTitle": "The job title applicants see on the posting.",
+      "hrmJobDescriptionKind": "For example full-time, part-time, seasonal or contract.",
+      "hrmJobDescriptionPay": "Optional. Enter minimum, maximum, currency and basis together, or leave all four empty.",
+      "hrmJobDescriptionBody": "The posting text. New requisitions copy it, so editing it here never changes an existing opening."
     },
     "options": {
       "withholdingCondominiumPayer": "Condominium payer",

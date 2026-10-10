@@ -13,9 +13,11 @@ import {
   PoolRediscoverIsland,
   PoolMemberRemoveIsland,
   PostingActionsIsland,
+  PostingContentIsland,
   ScorecardFormIsland,
   SlotProposeIsland,
   type Option,
+  type PostingContentLabels,
 } from './actions'
 import type { RecruitingPageData } from './view'
 import type { InterviewDrawer, OfferDrawerExtra, PostingDrawerExtra, PoolDrawer, ConsentStatus } from './depth-view'
@@ -108,6 +110,11 @@ export interface RequisitionDrawerData {
   compensation: string | null
   bandRange: string | null
   description: string | null
+  employmentKind: string | null
+  jobDescriptionName: string | null
+  revision: number
+  /** Copy and edit controls for the posting content. */
+  postingLabels: PostingContentLabels
   stages: readonly { id: string; key: string; name: string; kind: string }[]
   funnel: readonly { stageKey: string; stageName: string; count: number }[]
   applications: readonly {
@@ -248,19 +255,23 @@ export function RequisitionDrawerBody({ detail }: { detail: RequisitionDrawerDat
         canManage={detail.lifecycle.canManage}
         labels={detail.lifecycle.labels}
       />
-      {detail.description || detail.draft ? (
-        <div>
-          <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{labels.description}</h4>
-          {detail.description ? (
-            <p className="mt-1 whitespace-pre-wrap text-sm text-slate-600 dark:text-slate-300">{detail.description}</p>
-          ) : null}
-          {detail.draft ? (
-            <a href={detail.draft.href} className="mt-1 inline-block text-sm font-medium text-teal-700 dark:text-teal-300">
-              {detail.draft.label}
-            </a>
-          ) : null}
-        </div>
-      ) : null}
+      <div>
+        <PostingContentIsland
+          requisitionId={detail.id}
+          revision={detail.revision}
+          title={detail.title}
+          employmentKind={detail.employmentKind}
+          description={detail.description}
+          sourceName={detail.jobDescriptionName}
+          canEdit={detail.lifecycle.canManage && ['draft', 'open', 'on_hold'].includes(detail.status)}
+          labels={detail.postingLabels}
+        />
+        {detail.draft ? (
+          <a href={detail.draft.href} className="mt-1 inline-block text-sm font-medium text-teal-700 dark:text-teal-300">
+            {detail.draft.label}
+          </a>
+        ) : null}
+      </div>
       <div>
         <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{labels.pipeline}</h4>
         <div className="mt-2 flex flex-wrap gap-1.5">

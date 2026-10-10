@@ -396,10 +396,17 @@ export async function resolveFeedOrg(feedToken: string): Promise<string> {
   return row.orgId;
 }
 
+export interface FeedPosting {
+  readonly postingId: string;
+  readonly requisitionNumber: string;
+  readonly title: string;
+  readonly employmentKind: string | null;
+  readonly description: string | null;
+  readonly publishedAt: string | null;
+}
+
 /** Feed entries: published postings with open requisitions (public, aggregate only — no PII). */
-export async function listFeedPostings(orgId: string): Promise<
-  readonly { postingId: string; requisitionNumber: string; title: string; publishedAt: string | null }[]
-> {
+export async function listFeedPostings(orgId: string): Promise<readonly FeedPosting[]> {
   // Public routes carry no request-org RLS scope, so the explicit org
   // predicate alone is not enough under deny-by-default RLS: without this
   // boundary the listing silently returns zero postings. The token resolved
@@ -407,14 +414,10 @@ export async function listFeedPostings(orgId: string): Promise<
   return withOrgTransaction(orgId, async () => {
     // Same gate for direct service callers bypassing the token.
     await requireDepthFeature(db, orgId);
-    const rows = (await db.execute<{
-      postingId: string;
-      requisitionNumber: string;
-      title: string;
-      publishedAt: string | null;
-    }>(sql`
+    const rows = (await db.execute<FeedPosting>(sql`
       select p.id as "postingId", r.requisition_number as "requisitionNumber",
-             r.title, p.published_at as "publishedAt"
+             r.title, r.employment_kind as "employmentKind", r.description,
+             p.published_at as "publishedAt"
         from hrm_job_postings p
         join hrm_requisitions r on r.org_id = p.org_id and r.id = p.requisition_id
        where p.org_id = ${orgId} and p.status = 'published' and r.status = 'open'

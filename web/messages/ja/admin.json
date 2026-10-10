@@ -3613,6 +3613,11 @@
         "title": "稼働カレンダー",
         "singularTitle": "稼働カレンダー",
         "description": "生産とプロジェクト日程で共用する会社の稼働日と休業日です。作業センターごとに利用可能時間を設定します。既存のMRP実行は実行時のカレンダー情報を保持します。"
+      },
+      "hrm-job-descriptions": {
+        "title": "職務記述書",
+        "singularTitle": "職務記述書",
+        "description": "新しい採用申請の起点となる再利用可能な求人内容：職名、雇用形態、給与レンジ、説明。"
       }
     },
     "fields": {
@@ -4222,7 +4227,12 @@
       "schedulePdfColorTreatment": "色の表示",
       "schedulePdfColorIntensity": "色の濃度 (%)",
       "custodianPartyId": "預け先仕入先",
-      "showReadiness": "作業ガイド"
+      "showReadiness": "作業ガイド",
+      "employmentKind": "雇用形態",
+      "compensationMin": "給与下限",
+      "compensationMax": "給与上限",
+      "compensationCurrency": "給与通貨",
+      "compensationBasis": "給与基準"
     },
     "fieldHelp": {
       "fxRateMaxAgeDays": "使用可能な最新レートから期末までの日数がこれを超えると、再評価と連結はそのレートを拒否します。期末レートは期末スポットレートの日付から、平均レートは平均に含まれる最新の相場の日付から数えます。ポリシー未設定時の既定値: 31日。",
@@ -4391,7 +4401,12 @@
       "scheduleBoardDayPolicyKnown": "元の日付しか分からない場合はオフにします。履歴は時間なしで表示されます。終日予約には開始・終了・休憩の設定が必要です。",
       "scheduleShowHoursColumn": "Show the right-side sum of booked hours. Source dates without hours remain unknown. Daily footer totals are configured separately.",
       "scheduleDistributionVisibility": "Personal reports contain only the recipient’s own schedule or associated resources. Whole-board reports require an explicit sharing policy and a legal-entity-scoped board. Every send still requires a reviewed audience/version or an authored, enabled native Flow.",
-      "scheduleAutomaticDelivery": "任意のレポート設定です。自分の権限とボードのタイムゾーンを設定し、曜日と時刻を指定した予定配信フローを別途有効にしてください。設定の解除は今後の配信を停止し、配信履歴を保持します。"
+      "scheduleAutomaticDelivery": "任意のレポート設定です。自分の権限とボードのタイムゾーンを設定し、曜日と時刻を指定した予定配信フローを別途有効にしてください。設定の解除は今後の配信を停止し、配信履歴を保持します。",
+      "hrmJobDescriptionName": "ライブラリでの表示名。例：プロジェクトマネージャー（現場）。",
+      "hrmJobDescriptionTitle": "求人で応募者に表示される職名。",
+      "hrmJobDescriptionKind": "例：正社員、パートタイム、季節雇用、契約。",
+      "hrmJobDescriptionPay": "任意。下限・上限・通貨・基準をすべて入力するか、4つとも空欄にします。",
+      "hrmJobDescriptionBody": "求人本文。新しい採用申請にコピーされるため、ここでの編集は既存の求人に影響しません。"
     },
     "options": {
       "withholdingCondominiumPayer": "集合住宅管理組合の支払者",
