@@ -80,6 +80,36 @@ test('shared history component renders its empty body for a bank account subject
   assert.equal(host.textContent, 'No approvals required for this record.')
 })
 
+// A receipt with Flows off answers an empty approval state (never a
+// refusal code): the Approvals tab renders its empty body for drafts and
+// posted records alike instead of the raw "not_found" the QA build showed.
+for (const status of ['draft', 'posted']) {
+  test(`a ${status} customer payment with Flows off renders the empty approvals body`, async (t: TestContext) => {
+    const previousFetch = globalThis.fetch
+    globalThis.fetch = (async () => Response.json({
+      approvalState: { status, pendingWith: [], myActions: null },
+      history: [],
+    })) as typeof fetch
+    t.after(() => { globalThis.fetch = previousFetch })
+    const host = document.createElement('div')
+    document.body.appendChild(host)
+    const root = createRoot(host)
+    t.after(async () => {
+      await act(async () => root.unmount())
+      host.remove()
+    })
+    await act(async () => {
+      root.render(
+        <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
+          <ApprovalHistory subjectKind="customer_payment" subjectId="receipt-8" showEmptyState />
+        </NextIntlClientProvider>,
+      )
+      await new Promise((resolve) => setTimeout(resolve, 60))
+    })
+    assert.equal(host.textContent, 'No approvals required for this record.')
+  })
+}
+
 // residual: a record whose status claims it awaits approval, but
 // which no flow run ever fired for, is neither history nor genuinely empty —
 // the tab must name the stale state instead of "No approvals required".

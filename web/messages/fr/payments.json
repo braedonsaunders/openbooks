@@ -48,6 +48,13 @@
   "drawer": {
     "draftHint": "Brouillon — les modifications s’enregistrent automatiquement.",
     "viewGlImpact": "Voir l’impact au grand livre",
+    "postBlocked": {
+      "noParty": "{side, select, ap {Choisissez un fournisseur} other {Choisissez un client}}",
+      "noBankAccount": "{side, select, ap {Choisissez un compte de paiement} other {Choisissez un compte de dépôt}}",
+      "invalidRows": "Corrigez les lignes d’application avant de comptabiliser",
+      "noAllocations": "{side, select, ap {Affectez le paiement à au moins une facture fournisseur} other {Affectez l’encaissement à au moins une facture}}",
+      "generic": "Complétez les détails du paiement avant de comptabiliser"
+    },
     "postAction": "{side, select, ap {Payer et comptabiliser} other {Encaisser et comptabiliser}}",
     "bankAccount": "Compte bancaire",
     "selectPartyPlaceholder": "{side, select, ap {Sélectionner un fournisseur…} other {Sélectionner un client…}}",

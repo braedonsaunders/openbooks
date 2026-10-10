@@ -48,6 +48,13 @@
   "drawer": {
     "draftHint": "Rascunho — as alterações são salvas automaticamente.",
     "viewGlImpact": "Ver impacto no razão",
+    "postBlocked": {
+      "noParty": "{side, select, ap {Escolha um fornecedor} other {Escolha um cliente}}",
+      "noBankAccount": "{side, select, ap {Escolha uma conta pagadora} other {Escolha uma conta de depósito}}",
+      "invalidRows": "Corrija as linhas de aplicação antes de lançar",
+      "noAllocations": "{side, select, ap {Aplique o pagamento a pelo menos uma conta} other {Aplique o recebimento a pelo menos uma fatura}}",
+      "generic": "Complete os dados do pagamento antes de lançar"
+    },
     "postAction": "{side, select, ap {Pagar e lançar} other {Receber e lançar}}",
     "bankAccount": "Conta bancária",
     "selectPartyPlaceholder": "{side, select, ap {Selecionar fornecedor…} other {Selecionar cliente…}}",

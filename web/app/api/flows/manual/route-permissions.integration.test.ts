@@ -269,3 +269,33 @@ test('with Flows off a visible record lists no buttons and a hidden one stays mi
     await withBypassContext(() => dropScratchOrg(org.orgId))
   }
 })
+
+test('with Flows off a customer payment lists no buttons', async () => {
+  const org = await withBypassContext(() => createScratchOrg())
+  try {
+    await withBypassContext(() =>
+      db.execute(sql`
+        update orgs set settings = jsonb_set(
+          settings, '{features}',
+          coalesce(settings->'features', '{}'::jsonb) || '{"flows":false}'::jsonb, true)
+        where id = ${org.orgId}`),
+    )
+    const maker = await withBypassContext(() => createScratchUser(org.orgId, 'maker', 'maker'))
+    const docId = await withBypassContext(() =>
+      seedDraftDocument(org.orgId, { kind: 'customer_payment', createdBy: maker }))
+    await seedRole(org.orgId, 'receipt_reader', ['ar.read'])
+
+    const list = await withOrgContext(org.orgId, () =>
+      GET(new Request(
+        `http://manual.test/api/flows/manual?subjectKind=customer_payment&subjectId=${docId}`,
+      )))
+    assert.equal(list.status, 200, 'Flows off is an empty state, not a refusal')
+    assert.deepEqual(
+      ((await list.json()) as { buttons: unknown[] }).buttons, [],
+      'a receipt offers no manual buttons while the feature is off',
+    )
+  } finally {
+    state.user = null
+    await withBypassContext(() => dropScratchOrg(org.orgId))
+  }
+})

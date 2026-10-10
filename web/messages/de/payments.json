@@ -48,6 +48,13 @@
   "drawer": {
     "draftHint": "Entwurf — Änderungen werden automatisch gespeichert.",
     "viewGlImpact": "Hauptbuchauswirkung anzeigen",
+    "postBlocked": {
+      "noParty": "{side, select, ap {Lieferanten wählen} other {Kunden wählen}}",
+      "noBankAccount": "{side, select, ap {Zahlkonto wählen} other {Einzahlungskonto wählen}}",
+      "invalidRows": "Korrigieren Sie die Anwendungszeilen vor dem Buchen",
+      "noAllocations": "{side, select, ap {Zahlung mindestens einer Rechnung zuordnen} other {Zahlungseingang mindestens einer Rechnung zuordnen}}",
+      "generic": "Vervollständigen Sie die Zahlungsdetails vor dem Buchen"
+    },
     "postAction": "{side, select, ap {Zahlen & buchen} other {Vereinnahmen & buchen}}",
     "bankAccount": "Bankkonto",
     "selectPartyPlaceholder": "{side, select, ap {Lieferant auswählen…} other {Kunde auswählen…}}",
