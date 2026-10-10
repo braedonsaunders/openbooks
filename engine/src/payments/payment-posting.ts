@@ -499,7 +499,10 @@ export async function postPaymentWithApplications(
       const target = targetById.get(allocation.openLineId);
       if (!target) throw new PaymentError("an application target disappeared while posting");
       if (target.account_id !== source.account_id || target.party_id !== source.party_id || target.subsidiary_id !== source.subsidiary_id || target.book_id !== source.book_id) {
-        throw new PaymentError("applications must settle the same control account, party, subsidiary, and book as the payment");
+        throw new PaymentError(
+          "applications must settle the same control account, party, subsidiary, and book as the payment; " +
+            "settle open items on different receivable or payable accounts in separate payments",
+        );
       }
       const targetBase = carryingAmountForSettlement(target.open_base, target.open_transaction, allocation.targetTransactionAmount);
       if (allocation.targetBaseAmount !== undefined && cmp(allocation.targetBaseAmount, targetBase) !== 0) {
