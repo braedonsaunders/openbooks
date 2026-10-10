@@ -3838,7 +3838,7 @@ export const TENANT_RETIREMENT_AUTHORITY_FUNCTIONS = [
   },
   {
     "name": "openbooks_retirement_catalog_digest",
-    "sha256": "cb53fbef256b7472352c58692055a7cada5a83442c4b9bb7846838b0300498bb",
+    "sha256": "14448f2621c6a3a166176b73d25696f3976f4ee0a33bd81917a74af7b533da96",
     "returns": "text",
     "language": "sql",
     "volatility": "s",
