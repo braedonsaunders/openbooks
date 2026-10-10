@@ -105,7 +105,7 @@ async function route(f: Fixture, itemId: string, qualityGate: "none" | "measure"
   await run((tx) => createRoutingOperation(tx, f.org.orgId, f.actorId, String(routing.id), {
     sequence: 10, name: "Assemble", workCenterId: String(center.id), setupMinutes: "0", runMinutesPerUnit: "1", qualityGate,
   }));
-  await run((tx) => approveFixtureRouting(tx, f.org.orgId, f.actorId, String(routing.id)));
+  await approveFixtureRouting(f.org.orgId, f.actorId, String(routing.id));
 }
 async function prepare(f: Fixture, opts: { produced?: string; quantity?: string; qualityGate?: "none" | "measure"; secondComponent?: string } = {}) {
   const produced = opts.produced ?? f.org.items.assembly;
@@ -206,7 +206,7 @@ async function conversionOrder(f: Fixture, produced: string, laborTimeSource: "o
   await run((tx) => createRoutingOperation(tx, f.org.orgId, f.actorId, String(routing.id), {
     sequence: 10, name: "Assemble", workCenterId: String(center.id), setupMinutes: "0", runMinutesPerUnit: "6",laborTimeSource,
   }));
-  await run((tx) => approveFixtureRouting(tx, f.org.orgId, f.actorId, String(routing.id)));
+  await approveFixtureRouting(f.org.orgId, f.actorId, String(routing.id));
   const order = await run((tx) => createWorkOrder(tx, f.org.orgId, f.actorId, {
     producedItemId: produced, quantityOrdered: "10", subsidiaryId: f.org.subsidiaryId,
     issueLocationId: f.org.stockLocationId, receiptLocationId: f.org.stockLocationId2, plannedStart: f.org.date,
