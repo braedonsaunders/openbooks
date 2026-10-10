@@ -1399,9 +1399,17 @@ async function dropDisposableOrgEscaped(orgId: string, kind: DisposableOrgKind):
     // refuse ordinary rewrites (stored-value entries) let this tx remove the
     // doomed org's rows. Transaction-local, never visible outside teardown.
     await tx.execute(sql`select set_config('openbooks.teardown_org', ${orgId}, true)`);
+    // Consumed production time is immutable even during teardown, so its
+    // line and journal links are deferred rather than cleared; the rows leave
+    // in this transaction. Inspections leave first; a receipt-rework repair
+    // order still names its source inspection until it is removed at the end
+    // of this transaction, so that link is deferred too.
+    await tx.execute(sql`set constraints time_entries_invoiced_by_line_id_fkey, time_entries_cost_journal_entry_id_fkey,
+      mfg_receipt_rework_source_fk deferred`);
     await tx.execute(sql`update time_entries
       set invoiced_by_line_id = null, cost_journal_entry_id = null
-      where org_id = ${orgId}`);
+      where org_id = ${orgId} and production_consumed_operation_id is null`);
+    await tx.execute(sql`delete from inventory_inspections where org_id = ${orgId}`);
     for (const t of coreA) {
       if (t === "journal_entries") {
         // documents.posted_entry_id → journal_entries is the one genuine
@@ -1412,6 +1420,9 @@ async function dropDisposableOrgEscaped(orgId: string, kind: DisposableOrgKind):
       }
       await tx.execute(sql`delete from ${qualified(t)} where org_id = ${orgId}`);
     }
+    await tx.execute(sql`delete from mfg_wo_operations where org_id = ${orgId} and work_order_id in
+      (select id from mfg_work_orders where org_id = ${orgId} and receipt_rework_inspection_id is not null)`);
+    await tx.execute(sql`delete from mfg_work_orders where org_id = ${orgId} and receipt_rework_inspection_id is not null`);
   });
 
   // Anything that was still blocked (e.g. parents of inventory_movements like
