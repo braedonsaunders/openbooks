@@ -2,15 +2,14 @@ import 'server-only'
 
 import { NextResponse } from 'next/server'
 import { isFeatureEnabled } from './features'
+import { requireFeatureEnabled } from './feature-gates'
 
 /** Page-boundary enforcement for every Projects-domain surface. Navigation
- * hiding is presentation only; this guard is the authoritative control. */
+ * hiding is presentation only; this guard is the authoritative control. A
+ * disabled Projects module explains itself on the shared feature-required
+ * page, which names the switch and who can turn it on. */
 export async function requireProjectsFeature(orgId: string): Promise<void> {
-  if (!(await isFeatureEnabled(orgId, 'projects'))) {
-    // Native API commands share these guards without loading a client router.
-    const { redirect } = await import('next/navigation')
-    redirect('/admin/setup/features')
-  }
+  await requireFeatureEnabled(orgId, 'projects')
 }
 
 /** API-boundary enforcement for every Projects-domain mutation and query. A

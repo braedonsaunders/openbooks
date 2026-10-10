@@ -2,6 +2,8 @@
   "list": {
     "title": "Weekly timesheets",
     "description": "Employee time by the week — enter, submit, and approve hours across every job.",
+    "productionTitle": "Production time",
+    "productionDescription": "Employee hours by the week against production orders — enter, submit, and approve manufacturing labor.",
     "newButton": "New timesheet",
     "emptyTitle": "No timesheets yet",
     "emptyDescription": "Time entries roll up into weekly timesheets here. Create one to log hours against a job.",

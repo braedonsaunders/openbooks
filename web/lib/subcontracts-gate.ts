@@ -1,7 +1,7 @@
 import "server-only";
-import { redirect } from "next/navigation";
 import { NextResponse } from "next/server";
 import { isFeatureEnabled } from "./features";
+import { requireFeatureEnabled } from "./feature-gates";
 
 /**
  * Subcontracts route/page gate, resolved through the canonical feature
@@ -18,8 +18,9 @@ async function enabled(orgId: string): Promise<boolean> {
   return isFeatureEnabled(orgId, "subcontracts");
 }
 
+/** Page boundary: a disabled module explains itself on the feature-required page. */
 export async function requireSubcontractsFeature(orgId: string): Promise<void> {
-  if (!(await enabled(orgId))) redirect("/admin/setup/features");
+  await requireFeatureEnabled(orgId, "subcontracts");
 }
 
 export async function guardSubcontractsFeature(orgId: string): Promise<NextResponse | null> {

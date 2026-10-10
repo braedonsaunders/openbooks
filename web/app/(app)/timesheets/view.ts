@@ -172,8 +172,10 @@ export async function loadTimesheets(
   return {
     workFamily,
     basePath,
-    title: t('list.title'),
-    description: t('list.description'),
+    // Production time is Manufacturing's view of the same weekly time; it
+    // names itself as such instead of borrowing the project timesheet title.
+    title: workFamily === 'production' ? t('list.productionTitle') : t('list.title'),
+    description: workFamily === 'production' ? t('list.productionDescription') : t('list.description'),
     canManage,
     currentParams: sp,
     newButton: { href: newHref, label: t('list.newButton') },

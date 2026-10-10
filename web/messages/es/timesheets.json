@@ -2,6 +2,8 @@
   "list": {
     "title": "Hojas de horas semanales",
     "description": "Tiempo de los empleados por semana — registre, envíe y apruebe horas en todas las obras.",
+    "productionTitle": "Tiempo de producción",
+    "productionDescription": "Horas de los empleados por semana en órdenes de producción: registre, envíe y apruebe la mano de obra de fabricación.",
     "newButton": "Nueva hoja de horas",
     "emptyTitle": "Aún no hay hojas de horas",
     "emptyDescription": "Las entradas de tiempo se consolidan aquí en hojas de horas semanales. Cree una para registrar horas contra una obra.",

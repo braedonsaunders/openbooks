@@ -5,7 +5,7 @@ import { getTranslations } from 'next-intl/server'
 import { isUuid, parseListParams } from '../../../../../lib/list-params'
 import { dateTime } from '../../../../../lib/format'
 import { requirePermission } from '../../../../../lib/authz'
-import { canRunReportEntity } from '../../../../../lib/report-authz'
+import { canRunReportEntity, requireReportEntityFeature } from '../../../../../lib/report-authz'
 import { loadView, runView } from '../../../../../lib/views'
 import type { ReportRunResult } from '@openbooks/reports'
 import { orgBranding } from '../../../../../lib/report-pdf'
@@ -141,6 +141,7 @@ export async function loadSavedViewRun(
 
   // A shared view never widens what its reader may see: payroll / optional-
   // module entities keep the same gate the report surfaces enforce.
+  await requireReportEntityFeature(authz, view.query)
   if (!(await canRunReportEntity(authz, view.query))) notFound()
 
   const canEdit = authz.permissions.has('*') || view.owner_id === authz.user.id

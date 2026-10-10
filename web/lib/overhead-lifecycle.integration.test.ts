@@ -22,7 +22,7 @@ const hooks = registerHooks({ resolve(specifier, context, next) {
       }
     `) }
   }
-  if (specifier === 'next-intl/server') return { shortCircuit: true, url: 'data:text/javascript,export async function getTranslations(){return key=>key} export async function getLocale(){return "en"}' }
+  if (specifier === 'next-intl/server') return { shortCircuit: true, url: 'data:text/javascript,export async function getTranslations(){const t=key=>key;t.has=()=>false;return t} export async function getLocale(){return "en"}' }
   if (specifier === 'next/headers') return { shortCircuit: true, url: 'data:text/javascript,export async function cookies(){return {get(){return undefined}}}' }
   return next(specifier, context)
 } })
@@ -131,7 +131,9 @@ test('overhead lifecycle shares one native model read while published rates, fea
           assert.deepEqual((legacy as ReactElement<{ drift: DriftRow[] }>).props.drift, drift)
           assert.equal(state.modelReads, 2, 'a stored layout without shared rows retains the native reader')
           await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features,projects}','false'::jsonb,true) where id=${org.orgId}`)
-          await assert.rejects(OverheadLifecycleTabSlot(lifecycleProps), /projects feature is disabled/)
+          const switchedOff = await OverheadLifecycleTabSlot(lifecycleProps) as ReactElement<Record<string, unknown>>
+          assert.equal(switchedOff.props['data-feature-state'], 'disabled', 'Projects off renders the shared feature-unavailable panel')
+          assert.equal(switchedOff.props['data-feature-key'], 'projects')
           assert.equal(state.modelReads, 2)
         })
         await withAuthzContext({ ...authz, allowedSubsidiaryIds: new Set([randomUUID()]) }, async () => {

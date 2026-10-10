@@ -1,13 +1,13 @@
 import "server-only";
-import { redirect } from "next/navigation";
 import { NextResponse } from "next/server";
 import { isFeatureEnabled } from "./features";
+import { requireFeatureEnabled } from "./feature-gates";
 
+/** Page boundary: a disabled module explains itself on the feature-required page. */
 export async function requirePropertyManagementFeature(
   orgId: string,
 ): Promise<void> {
-  if (!(await isFeatureEnabled(orgId, "propertyManagement")))
-    redirect("/admin/setup/features");
+  await requireFeatureEnabled(orgId, "propertyManagement");
 }
 
 export async function guardPropertyManagementFeature(

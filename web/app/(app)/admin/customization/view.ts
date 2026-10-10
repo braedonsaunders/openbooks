@@ -32,8 +32,10 @@ import {
   RECORD_TYPE_BY_KEY,
   customFieldTargetFor,
   defaultFormLayout,
+  recordTypeFeatureKey,
   type FormLayoutConfig,
 } from '@openbooks/customization'
+import { featureRequiredHref } from '../../../../lib/gate-targets'
 import { loadFieldDefs } from '../../../../lib/custom-fields'
 import type { ComponentProps } from 'react'
 import type { FormDesigner } from './FormDesigner'
@@ -197,15 +199,21 @@ export async function loadCustomization(
   const tHub = await getTranslations('admin.hub')
   const tRoot = await getTranslations()
   // Whitelist the record type — an unknown key must not reach the designer.
-  // Optional-module kinds 404 when their Features switch is off; stored
-  // layouts stay in the database and reappear when the switch comes back.
+  // Optional-module kinds explain themselves on the shared feature-required
+  // page while their Features switch is off; stored layouts stay in the
+  // database and reappear when the switch comes back.
   const requestedType = pickString(sp.recordType)
   const catalogType =
     requestedType && Object.hasOwn(RECORD_TYPE_BY_KEY, requestedType)
       ? requestedType
       : null
   const hiddenKinds = new Set(await disabledRecordTypes(authz.user.orgId))
-  if (catalogType && hiddenKinds.has(catalogType)) notFound()
+  const refuseHiddenKind = (kind: string): never => {
+    const feature = recordTypeFeatureKey(kind)
+    if (feature) redirect(featureRequiredHref(feature))
+    notFound()
+  }
+  if (catalogType && hiddenKinds.has(catalogType)) refuseHiddenKind(catalogType)
   const recordType = catalogType
   const visibleTypes = RECORD_TYPES.filter((rt) => !hiddenKinds.has(rt.key))
   // The registry may eventually include list-only entities; every built-in
@@ -298,8 +306,8 @@ export async function loadCustomization(
       : null
   if (formId && formId !== 'new' && isUuid(formId) && !openForm) notFound()
   if (viewId && viewId !== 'new' && isUuid(viewId) && !openView) notFound()
-  if (openForm?.recordType && hiddenKinds.has(openForm.recordType)) notFound()
-  if (openView?.recordType && hiddenKinds.has(openView.recordType)) notFound()
+  if (openForm?.recordType && hiddenKinds.has(openForm.recordType)) refuseHiddenKind(openForm.recordType)
+  if (openView?.recordType && hiddenKinds.has(openView.recordType)) refuseHiddenKind(openView.recordType)
 
   // Copy source when creating a new form from an existing/standard baseline.
   const fromParam = pickString(sp.from)

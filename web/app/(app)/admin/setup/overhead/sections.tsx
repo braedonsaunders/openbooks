@@ -10,7 +10,8 @@ import { OverheadApplication, type ApplicationRow } from './OverheadApplication'
 import { OverheadLifecycle, type DriftRow } from './OverheadLifecycle'
 import { RatesTab } from './RatesTab'
 import type { TrueCostSetupData } from '../../../../../lib/analytics/true-cost-setup-data'
-import { getAuthz, guardRootSubsidiaryScope } from '../../../../../lib/authz'
+import { can, getAuthz, guardRootSubsidiaryScope } from '../../../../../lib/authz'
+import { FeatureUnavailable } from '@/components/feature-unavailable'
 import { currentPublishedRates } from '../../../../../lib/overhead-publish'
 import { businessToday, parseIsoDate } from '@openbooks/engine/src/platform/business-date.ts'
 import { trueCostData } from '../../../../../lib/analytics/true-cost-data'
@@ -186,12 +187,17 @@ export async function OverheadLifecycleTabSlot({ departments }: { departments?: 
   const authz = await getRootScopeAuthz()
   if (!authz) return null
   const orgId = authz.user.orgId
+  // Supplied presentation rows keep the slot's Projects gate: with Projects
+  // off the panel explains the switch instead of rendering stale rates.
+  if (departments && !(await isFeatureEnabled(orgId, 'projects'))) {
+    return FeatureUnavailable({
+      featureKey: 'projects',
+      placement: 'inline',
+      canManageFeatures: can(authz, 'admin.setup.manage'),
+    })
+  }
   const liveDepartments = async () => {
-    if (departments) {
-      // Retain the slot's Projects gate when presentation rows are supplied.
-      if (!(await isFeatureEnabled(orgId, 'projects'))) throw new Error('projects feature is disabled')
-      return departments
-    }
+    if (departments) return departments
     // Stored layouts may still place this widget without department props.
     // Resolve the same native calculation for that composition.
     const today = await businessToday(orgId)

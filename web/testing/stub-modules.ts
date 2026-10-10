@@ -92,7 +92,8 @@ function navigationSource(pathname: string, routerSource?: string): string {
 }
 
 const INTL_SERVER_DEFAULT =
-  `export async function getTranslations(){return (key)=>key}` +
+  // Key-echo translator with no catalog: `has` reports every key missing.
+  `export async function getTranslations(){const t=(key)=>key;t.has=()=>false;return t}` +
   `export async function getMessages(){return {}}` +
   `export async function getLocale(){return 'en'}`;
 

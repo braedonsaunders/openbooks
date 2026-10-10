@@ -41,7 +41,9 @@ const INTL_MOCK = `
     return String(template).replace(/\\{(\\w+)\\}/g, (m, k) => (params?.[k] ?? m));
   }
   export async function getTranslations(ns) {
-    return (key, params) => fmt(walk(ns, key), params);
+    const t = (key, params) => fmt(walk(ns, key), params);
+    t.has = (key) => { try { walk(ns, key); return true } catch { return false } };
+    return t;
   }
   export async function getMessages() {
     return globalThis.__i18nBundles;

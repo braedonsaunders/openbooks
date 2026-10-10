@@ -7,7 +7,7 @@ import { getTranslations } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { Badge, EmptyState, PageHeader, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@openbooks/ui'
-import { getRecordType, listColumnMeta } from '@openbooks/customization'
+import { getRecordType, listColumnMeta, recordTypeFeatureKey } from '@openbooks/customization'
 import { SearchInput } from './search-input'
 import { FilterChips, SearchSelectFilter } from './filter-bar'
 import { DateRangeFilter } from './date-range-filter'
@@ -28,6 +28,8 @@ import { ListDrawerLink } from './list-drawer-link'
 import { ListDrawerHost } from './list-drawer-host'
 import { statusLabel as sharedStatusLabel } from '../lib/status-label'
 import { listDrawerRoute, type NativeListDrawerData } from '../lib/list/drawer-routes'
+import { can, resolveAuthzByUserId } from '../lib/authz-core'
+import { FeatureUnavailable } from './feature-unavailable'
 
 /**
  * The universal record list — one component that renders EVERY documents-backed
@@ -90,10 +92,20 @@ export async function RecordListView({
   const { money } = await getMoneyFormatter()
   const meta = getRecordType(recordType)
   if (!listSource(recordType) || !meta) throw new Error(`no list source registered for record type "${recordType}"`)
-  // A record type whose Features switch is off lists nothing: the page is
-  // not found, exactly like the module's routes, and its rows are untouched.
+  // A record type whose Features switch is off lists nothing and reads no
+  // rows: the body becomes the shared feature-unavailable canvas naming the
+  // switch, and the page header's create actions are withdrawn with it.
   const source = await enabledListSource(orgId, recordType)
-  if (!source) notFound()
+  if (!source) {
+    const feature = recordTypeFeatureKey(recordType)
+    if (!feature) notFound()
+    const authz = await resolveAuthzByUserId(orgId, userId)
+    return FeatureUnavailable({
+      featureKey: feature,
+      placement: 'section',
+      canManageFeatures: !!authz && can(authz, 'admin.setup.manage'),
+    })
+  }
 
   const t = await getTranslations()
   const tCommon = await getTranslations('common')

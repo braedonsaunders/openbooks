@@ -6,7 +6,7 @@ import { getTranslations } from 'next-intl/server'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { page, pageHeader, ref, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
 import { requirePermission } from '../../../../../../../lib/authz'
-import { canRunReportEntity } from '../../../../../../../lib/report-authz'
+import { canRunReportEntity, requireReportEntityFeature } from '../../../../../../../lib/report-authz'
 import { canAccessReportArtifact } from '../../../../../../../lib/report-execution-context'
 import { isUuid } from '../../../../../../../lib/list-params'
 import { loadReportDefinition } from '../../../../../../../lib/custom-reports'
@@ -53,6 +53,7 @@ export async function loadReportDelivery(id: string): Promise<ReportDeliveryData
   const definition = await loadReportDefinition(authz.user.orgId, id)
   if (!definition) notFound()
   if (definition.report_type === 'statement' || !definition.query) redirect('/reports/custom')
+  await requireReportEntityFeature(authz, definition.query)
   if (!(await canRunReportEntity(authz, definition.query))) notFound()
 
   const t = await getTranslations('reports')

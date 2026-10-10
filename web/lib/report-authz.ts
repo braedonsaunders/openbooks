@@ -6,6 +6,7 @@ import { customRecordReportCatalog } from './custom-record-report-catalog'
 import { REPORT_ENTITY_MAP } from '@openbooks/reports'
 import { can, type Authz } from './authz'
 import { isFeatureEnabled } from './features'
+import { requireFeatureEnabled } from './feature-gates'
 import { notFound } from "@/lib/api/responses";
 
 /**
@@ -72,6 +73,21 @@ const STATEMENT_KIND_PERMISSION: Partial<Record<string, string>> = {
 export function reportStatementFeatureKey(kind: string | null | undefined): string | null {
   if (!kind) return null
   return STATEMENT_KIND_FEATURE[kind] ?? null
+}
+
+/**
+ * Page boundary for a stored plan (custom report, saved view) whose entity
+ * belongs to a switched-off feature. A reader who otherwise holds the entity's
+ * permission is sent to the shared feature-required explanation rather than a
+ * bare 404; every other refusal stays with `canRunReportEntity`, so a reader
+ * without the permission learns nothing about the entity's module.
+ */
+export async function requireReportEntityFeature(authz: Authz, query: unknown): Promise<void> {
+  const featureKey = reportEntityFeatureKey(query)
+  if (!featureKey) return
+  const required = reportEntityPermission(query)
+  if (required && !can(authz, required)) return
+  await requireFeatureEnabled(authz.user.orgId, featureKey)
 }
 
 /** True when `authz` may execute a plan against this entity. */
