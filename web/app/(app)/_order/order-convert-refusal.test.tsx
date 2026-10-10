@@ -87,13 +87,13 @@ async function mountPo() {
   )
 }
 
-test('a convert refusal pins as an alert, not only a toast', async (t) => {
+test('convert to goods receipt opens a draft instead of receiving blindly', async (t) => {
+  const posts: string[] = []
   const restoreFetch = scriptFetch((url, init) => {
-    if (url === `/api/purchase-orders/${PO_ID}/convert` && init?.method === 'POST') {
-      return Response.json(
-        { error: 'line 1 is not stock and is billed on a two-way match, not received' },
-        { status: 422 },
-      )
+    if (init?.method === 'POST') posts.push(url)
+    if (url === `/api/purchase-orders/${PO_ID}/receive` && (init?.method ?? 'GET') === 'GET') {
+      // An expense-line-only PO has no stock lines: the prefill is empty.
+      return Response.json({ receiptDate: '2026-08-01', lines: [] })
     }
     // No approval flow state for this record: the approval panels stay quiet.
     if (url.startsWith('/api/flows/')) {
@@ -111,22 +111,19 @@ test('a convert refusal pins as an alert, not only a toast', async (t) => {
   assert.ok(convert, 'an approved PO must offer its convert targets')
   await click(convert)
   await tick()
-  const alert = document.querySelector('[role="alert"]')
-  assert.ok(alert, 'the convert refusal must pin as an alert, not vanish with the toast')
+  await tick()
+  const form = document.querySelector('[aria-label="Receive goods"]')
+  assert.ok(form, 'Convert to Goods receipt opens the receipt draft')
   assert.match(
-    alert.textContent ?? '',
-    /line 1 is not stock/,
-    "the alert must carry the server's typed reason",
+    form.textContent ?? '',
+    /Nothing is left to receive/,
+    'an expense-line PO drafts nothing instead of 422ing a blind receive',
   )
-  const toasts = globalThis.__dashToasts ?? []
-  assert.ok(
-    toasts.some((toast) => toast.kind === 'error' && /line 1 is not stock/.test(toast.message)),
-    'the refusal must also toast as an error',
-  )
+  assert.deepEqual(posts, [], 'opening the draft posts nothing')
   assert.equal(
     globalThis.__dashRouter.pushes.length,
     0,
-    'a refused convert must not navigate away from the PO',
+    'opening the draft must not navigate away from the PO',
   )
 })
 
@@ -251,6 +248,7 @@ async function openConvert() {
   assert.ok(convert, 'an approved PO must offer its convert targets')
   await click(convert)
   await tick()
+  await tick()
 }
 
 async function setPickerValue(picker: HTMLSelectElement, value: string) {
@@ -263,9 +261,38 @@ async function setPickerValue(picker: HTMLSelectElement, value: string) {
   await tick()
 }
 
+function receiptPrefill() {
+  return Response.json({
+    receiptDate: '2026-08-01',
+    lines: [{
+      sourceLineId: LINE_ID,
+      lineNumber: 1,
+      description: 'Widget',
+      unit: 'ea',
+      unitPrice: '2.00',
+      remaining: '10',
+      stockLocationId: null,
+    }],
+  })
+}
+
+async function saveReceiptForm() {
+  // The drawer itself is a dialog: scope to the receipt form's labelled shell.
+  const form = document.querySelector('[aria-label="Receive goods"]')
+  assert.ok(form, 'the receipt draft must be open')
+  const save = [...form.querySelectorAll('button')].find((b) => b.textContent?.trim() === 'Save')
+  assert.ok(save, 'the draft saves explicitly')
+  await click(save as HTMLButtonElement)
+  await tick()
+  await tick()
+}
+
 test('a warehouse refusal renders the assign action and never navigates', async (t) => {
   const restoreFetch = scriptFetch((url, init) => {
-    if (url === `/api/purchase-orders/${PO_ID}/convert` && init?.method === 'POST') {
+    if (url === `/api/purchase-orders/${PO_ID}/receive` && (init?.method ?? 'GET') === 'GET') {
+      return receiptPrefill()
+    }
+    if (url === `/api/purchase-orders/${PO_ID}/receive` && init?.method === 'POST') {
       return warehouseRefusal()
     }
     if (url.startsWith('/api/flows/')) {
@@ -277,6 +304,7 @@ test('a warehouse refusal renders the assign action and never navigates', async 
   const { unmount } = await mountStockPo()
   t.after(unmount)
   await openConvert()
+  await saveReceiptForm()
   const alert = document.querySelector('[role="alert"]')
   assert.ok(alert, 'the convert refusal must pin as an alert')
   assert.match(alert.textContent ?? '', /no warehouse/, "the alert must carry the server's typed reason")
@@ -299,7 +327,10 @@ test('assigning the warehouse then converting succeeds without re-pinning', asyn
   const seen: Array<{ url: string; method: string; body: Record<string, unknown> | null }> = []
   const restoreFetch = scriptFetch((url, init) => {
     seen.push({ url, method: init?.method ?? 'GET', body: typeof init?.body === 'string' ? JSON.parse(init.body) as Record<string, unknown> : null })
-    if (url === `/api/purchase-orders/${PO_ID}/convert` && init?.method === 'POST') {
+    if (url === `/api/purchase-orders/${PO_ID}/receive` && (init?.method ?? 'GET') === 'GET') {
+      return receiptPrefill()
+    }
+    if (url === `/api/purchase-orders/${PO_ID}/receive` && init?.method === 'POST') {
       return seen.some((request) => request.url.endsWith('/assign-warehouse') && request.method === 'POST')
         ? Response.json({ kind: 'purchase_receipt', id: 'rcpt-1', documentNumber: 'RCPT-00001' })
         : warehouseRefusal()
@@ -316,6 +347,17 @@ test('assigning the warehouse then converting succeeds without re-pinning', asyn
   const { unmount } = await mountStockPo()
   t.after(unmount)
   await openConvert()
+  await saveReceiptForm()
+  const firstSave = seen.find((request) => request.url.endsWith('/receive') && request.method === 'POST')
+  assert.ok(firstSave, 'the draft saves through the receive endpoint')
+  assert.deepEqual(
+    firstSave?.body,
+    {
+      receiptDate: '2026-08-01',
+      lines: [{ sourceLineId: LINE_ID, quantity: '10' }],
+    },
+    'the draft posts the prefilled remainder explicitly',
+  )
   assert.deepEqual(globalThis.__dashRouter.pushes, [], 'the refused convert must not navigate')
   const picker = document.querySelector('[aria-label="Assign warehouses to stocked lines"] select') as HTMLSelectElement | null
   assert.ok(picker, 'the missing line offers the picker')
@@ -341,6 +383,8 @@ test('assigning the warehouse then converting succeeds without re-pinning', asyn
   assert.ok(retry, 'the operator converts again after assigning')
   await click(retry)
   await tick()
+  await tick()
+  await saveReceiptForm()
   assert.equal(
     globalThis.__dashRouter.pushes.length,
     1,

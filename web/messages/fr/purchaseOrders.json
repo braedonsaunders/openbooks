@@ -105,8 +105,19 @@
     "deleteConfirmMessage": "Cette action supprime définitivement la commande et ses lignes. Elle est irréversible.",
     "toastDeleted": "Commande supprimée",
     "issueHint": "Ajoutez un client ou un fournisseur et au moins une ligne pour émettre cette commande.",
-    "receiveAllConfirmTitle": "Recevoir tout ce qui reste ouvert ?",
-    "receiveAllConfirmMessage": "Cette action comptabilise une réception de marchandises pour toutes les quantités restantes de cette commande, datée d'aujourd'hui, dans l'entrepôt de chaque ligne. Elle ne peut pas être modifiée après comptabilisation.",
-    "receiveAllConfirmLabel": "Recevoir et comptabiliser"
+    "receive": {
+      "title": "Réceptionner la marchandise",
+      "receiptDate": "Date de réception",
+      "receiveQty": "Quantité à recevoir",
+      "remaining": "{remaining} restantes",
+      "noLines": "Il ne reste rien à recevoir sur cette commande.",
+      "prefillFailed": "Le brouillon de réception n'a pas pu être chargé.",
+      "receiptFailed": "La réception de marchandise n'a pas pu être enregistrée.",
+      "overReceive": "Ligne {line} : {qty} dépasse les {remaining} restant à recevoir.",
+      "invalidDate": "Saisissez la date de réception au format AAAA-MM-JJ."
+    },
+    "restoreDraftTitle": "Modifications non enregistrées détectées",
+    "restoreDraftPrompt": "Restaurer les modifications non enregistrées du {time} ?",
+    "restoreDraftConfirm": "Restaurer les modifications"
   }
 }
