@@ -764,6 +764,7 @@ class IssuePoolHarness {
   governedPoolCheckouts = 0
   governedPoolReleases = 0
   governedReads = 0
+  consolidationProbes = 0
   scriptRuns = 0
   governedReadOnlyTransactions = 0
   governedRollbacks = 0
@@ -798,6 +799,7 @@ class IssuePoolHarness {
     this.governedPoolCheckouts = 0
     this.governedPoolReleases = 0
     this.governedReads = 0
+    this.consolidationProbes = 0
     this.scriptRuns = 0
     this.governedReadOnlyTransactions = 0
     this.governedRollbacks = 0
@@ -888,6 +890,18 @@ class IssuePoolHarness {
       return this.result([{ isSuperAdmin: true, isActive: true }])
     }
     if (normalized.startsWith('update user_scripts set last_run_at = now()')) return this.result([])
+    // The submit-path consolidation-source probe
+    // (engine/src/records/consolidation-source-policy.ts): the inline
+    // kind = 'customer_invoice' filter excludes the quote fixtures, so an
+    // empty answer is the faithful one and the follow-up retention read never
+    // runs. No row lock is taken here: the issuance read already holds the
+    // aggregate lock in this transaction, and this harness lock has no
+    // same-transaction re-entry (the correction probe above answers the same
+    // way for the same reason).
+    if (normalized.startsWith("select custom->>'consolidationstatus' as consolidation_status from documents")) {
+      this.consolidationProbes += 1
+      return this.result([])
+    }
     throw new Error(`unexpected pool-contention query: ${normalized}`)
   }
 
@@ -1641,6 +1655,11 @@ test('before_submit uses isolated governed capacity when duplicate issuers satur
   assert.equal(poolHarness.governedPoolCheckouts, 1)
   assert.equal(poolHarness.governedPoolReleases, 1)
   assert.equal(poolHarness.governedReads, 1)
+  // Exactly the winning issuance reaches the submit-path consolidation
+  // probe; the nine serialized losers refuse on draft status first. The probe
+  // answers on the already-pinned transaction connection, never a new
+  // request-pool checkout.
+  assert.equal(poolHarness.consolidationProbes, 1)
   assert.equal(poolHarness.requestPoolSqlCheckoutAttempts, 0)
   assert.equal(poolHarness.overflowAttempts, 0)
   assert.equal(poolHarness.scriptRuns, 1)

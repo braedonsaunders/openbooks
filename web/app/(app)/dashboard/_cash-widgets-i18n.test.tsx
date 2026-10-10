@@ -40,7 +40,7 @@ function lowestData() {
     asOfDate: '2026-09-16',
     cashLowest: {
       available: true,
-      value: { amount: '1234.5600', week: '2026-09-20', status: 'caution', horizonWeeks: 13 },
+      value: { amount: '1234.5600', week: '2026-09-20', status: 'caution', horizonWeeks: 13, refused: [] },
     },
   } as unknown as DashboardMetrics
 }
@@ -69,7 +69,7 @@ function burnData() {
     asOfDate: '2026-09-16',
     cashBurn: {
       available: true,
-      value: { weeklyOutflow: '8450.2500', netChange: '-1234.5600', horizonWeeks: 13 },
+      value: { weeklyOutflow: '8450.2500', netChange: '-1234.5600', horizonWeeks: 13, refused: [] },
     },
   } as unknown as DashboardMetrics
 }
@@ -190,6 +190,7 @@ function forecastData() {
         ],
         projectedEnd: '2000.1200',
         horizonWeeks: 13,
+        refused: [],
       },
     },
   } as unknown as DashboardMetrics
@@ -244,6 +245,80 @@ test('lowest-point tile refuses by name when the rate is missing', async () => {
     const html = host.innerHTML
     assert.ok(html.includes('no spot rate'), 'the tile shows the refusal instead of failing the dashboard')
     assert.ok(!html.includes('1,234.56'), 'no figure renders beside the refusal')
+  } finally {
+    await unmount()
+  }
+})
+
+// A partial forecast understates outflows: every tile names the refused
+// categories beside its figure so it never reads as a healthy fact.
+test('lowest-point tile names refused categories beside its week', async () => {
+  const data = {
+    ...lowestData(),
+    cashLowest: {
+      available: true,
+      value: { amount: '1234.5600', week: '2026-09-20', status: 'caution', horizonWeeks: 13, refused: ['Travel'] },
+    },
+  } as unknown as DashboardMetrics
+  const { host, unmount } = await mountDashboard(
+    <WidgetCard widgetId="kpi-cash-lowest-point" data={data} />,
+    { dashboard: catalog('en') },
+  )
+  try {
+    const html = host.innerHTML
+    assert.ok(html.includes('1,234.56'), 'the figure still renders')
+    assert.ok(html.includes('excludes Travel'), 'the hint names the refused category')
+  } finally {
+    await unmount()
+  }
+})
+
+test('burn tile names refused categories beside the net change', async () => {
+  const data = {
+    ...burnData(),
+    cashBurn: {
+      available: true,
+      value: { weeklyOutflow: '8450.2500', netChange: '-1234.5600', horizonWeeks: 13, refused: ['Travel'] },
+    },
+  } as unknown as DashboardMetrics
+  const { host, unmount } = await mountDashboard(
+    <WidgetCard widgetId="kpi-cash-burn" data={data} />,
+    { dashboard: catalog('en') },
+  )
+  try {
+    const html = host.innerHTML
+    assert.ok(html.includes('8,450.25'), 'the outflow still renders')
+    assert.ok(html.includes('excludes Travel'), 'the hint names the refused category')
+  } finally {
+    await unmount()
+  }
+})
+
+test('forecast chart names refused categories beside its horizon', async () => {
+  const data = {
+    ...forecastData(),
+    cashForecast: {
+      available: true,
+      value: {
+        weeks: [
+          { label: 'Sep 14 – Sep 20', inflow: '5000.0000', outflow: '8450.2500', net: '-3450.2500', endingCash: '1234.5600' },
+          { label: 'Sep 21 – Sep 27', inflow: '6000.0000', outflow: '5234.4400', net: '765.5600', endingCash: '2000.1200' },
+        ],
+        projectedEnd: '2000.1200',
+        horizonWeeks: 13,
+        refused: ['Travel'],
+      },
+    },
+  } as unknown as DashboardMetrics
+  const { host, unmount } = await mountDashboard(
+    <WidgetCard widgetId="chart-cash-forecast" data={data} />,
+    { dashboard: catalog('en') },
+  )
+  try {
+    const html = host.innerHTML
+    assert.ok(html.includes('2,000.12'), 'the headline still renders')
+    assert.ok(html.includes('13-week forecast'), 'the context still names the horizon')
+    assert.ok(html.includes('excludes Travel'), 'the context names the refused category')
   } finally {
     await unmount()
   }
