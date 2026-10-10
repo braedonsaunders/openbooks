@@ -618,15 +618,18 @@ export function calculateT4127(input: T4127Input): T4127Result {
 }
 
 /** Federal and provincial income tax are withheld as separate per-period
- * amounts. Each leg divides its exact annual liability by the periods, holds
- * the result at ledger precision (four places), then rounds half-up to the
- * cent, as bureau payroll does; the period's tax is the sum of the legs. */
+ * amounts, each derived from its exact annual liability divided by the
+ * periods. The federal leg rounds half-up to the cent directly; the provincial
+ * leg is held at ledger precision (four places) before rounding to the cent,
+ * as bureau payroll computes it. The period's tax is the sum of the legs. */
 export function periodTaxLegs(t1: bigint | Rational, t2: bigint | Rational, P: number): { federal: bigint; provincial: bigint } {
   if (!Number.isInteger(P) || P <= 0) throw new PayrollError(`not a positive integer: ${P}`);
   const annualFederal = typeof t1 === "bigint" ? Q(t1) : t1;
   const annualProvincial = typeof t2 === "bigint" ? Q(t2) : t2;
-  const leg = (annual: Rational): bigint => roundRational(Q(roundRational(qratio(annual, 1n, BigInt(P)))), 100n);
-  return { federal: leg(annualFederal), provincial: leg(annualProvincial) };
+  return {
+    federal: roundRational(qratio(annualFederal, 1n, BigInt(P)), 100n),
+    provincial: roundRational(Q(roundRational(qratio(annualProvincial, 1n, BigInt(P)))), 100n),
+  };
 }
 
 export type { EditionRates };
