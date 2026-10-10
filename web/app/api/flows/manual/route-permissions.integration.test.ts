@@ -283,7 +283,8 @@ test('with Flows off a customer payment lists no buttons', async () => {
     const maker = await withBypassContext(() => createScratchUser(org.orgId, 'maker', 'maker'))
     const docId = await withBypassContext(() =>
       seedDraftDocument(org.orgId, { kind: 'customer_payment', createdBy: maker }))
-    await seedRole(org.orgId, 'receipt_reader', ['ar.read'])
+    // Receipts read under ar.pay, not ar.read (the payment permission catalog).
+    await seedRole(org.orgId, 'receipt_reader', ['ar.pay'])
 
     const list = await withOrgContext(org.orgId, () =>
       GET(new Request(
