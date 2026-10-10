@@ -102,6 +102,7 @@
     "shipmentShort": "Sendung",
     "fulfillment": "Auftragserfüllung",
     "fulfillmentShort": "Erfüllung",
+    "goodsReceipt": "Wareneingang",
     "returnAuthorization": "Rückgabegenehmigung",
     "returnAuthorizationShort": "RMA",
     "payRun": "Lohnlauf",

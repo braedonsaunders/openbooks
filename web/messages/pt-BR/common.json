@@ -102,6 +102,7 @@
     "shipmentShort": "Remessa",
     "fulfillment": "Atendimento",
     "fulfillmentShort": "Atend.",
+    "goodsReceipt": "Recebimento de mercadoria",
     "returnAuthorization": "Autorização de devolução",
     "returnAuthorizationShort": "RMA",
     "payRun": "Folha de pagamento",

@@ -226,6 +226,7 @@
   "workstreams": {
     "readiness": "就绪评估",
     "banking": "银行",
+    "sales": "销售",
     "ar": "应收款",
     "ap": "应付款",
     "assets": "固定资产",
@@ -464,6 +465,8 @@
       "closeAllOverrideHint": "可选的各模块理由 — 留空则使用共用理由。",
       "unlockTitle": "解除软结账",
       "reopenTitle": "申请受控重新开启",
+      "reopenIncludeGl": "同时重开总账（总账已关闭时必需）",
+      "reopenConflictNotice": "利益冲突：您与本次重开将解锁的 {count} 条记录有关（{examples}）。请其他审批人决定。",
       "lockDescription": "{module} · {period}。理由将保留在不可变的结账历史中。",
       "reopenRequests": "重新开启申请",
       "requestedBy": "申请人 {name}"
@@ -627,6 +630,7 @@
     "workstreams": {
       "readiness": "就绪评估",
       "banking": "银行",
+      "sales": "销售",
       "ar": "应收款",
       "ap": "应付款",
       "assets": "固定资产",

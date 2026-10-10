@@ -226,6 +226,7 @@
   "workstreams": {
     "readiness": "Bereitschaft",
     "banking": "Bank",
+    "sales": "Vertrieb",
     "ar": "Forderungen",
     "ap": "Verbindlichkeiten",
     "assets": "Anlagevermögen",
@@ -464,6 +465,8 @@
       "closeAllOverrideHint": "Optionale Gründe je Modul — leer übernimmt den gemeinsamen Grund.",
       "unlockTitle": "Weiche Sperre aufheben",
       "reopenTitle": "Kontrollierte Wiedereröffnung anfordern",
+      "reopenIncludeGl": "Hauptbuch ebenfalls öffnen (erforderlich, solange das Hauptbuch geschlossen ist)",
+      "reopenConflictNotice": "Interessenkonflikt: Sie sind in {count} Datensätzen erfasst, die diese Wiedereröffnung entsperren würde ({examples}). Bitten Sie eine andere Person um die Entscheidung.",
       "lockDescription": "{module} · {period}. Ein Grund wird in der unveränderlichen Abschlusshistorie aufbewahrt.",
       "reopenRequests": "Wiedereröffnungsanfragen",
       "requestedBy": "Angefordert von {name}"
@@ -627,6 +630,7 @@
     "workstreams": {
       "readiness": "Bereitschaft",
       "banking": "Bank",
+      "sales": "Vertrieb",
       "ar": "Forderungen",
       "ap": "Verbindlichkeiten",
       "assets": "Anlagevermögen",

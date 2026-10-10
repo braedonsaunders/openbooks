@@ -4020,6 +4020,40 @@ test('every English message key exists non-empty in every shipped locale', () =>
   }
 })
 
+test('every close workstream has a label in every shipped locale', () => {
+  // The workstream universe the product can render: the default blueprint
+  // steps (engine/src/close/defaults.ts DEFAULT_STEPS — readiness, banking,
+  // sales, ar, ap, assets, gl, intercompany, review, publish — plus the tax
+  // and payroll steps other blueprints schedule) and the close-setup
+  // workstream picker. A workstream without a label renders as a raw
+  // close.workstreams.<name> key on the close-task heading, so the list is
+  // pinned here: adding a workstream without locale copy fails this test in
+  // every locale rather than shipping a raw key to operators.
+  const workstreams = [
+    'readiness',
+    'banking',
+    'sales',
+    'ar',
+    'ap',
+    'assets',
+    'tax',
+    'payroll',
+    'intercompany',
+    'gl',
+    'review',
+    'publish',
+  ]
+  const missing: string[] = []
+  for (const catalog of CATALOGS) {
+    for (const workstream of workstreams) {
+      for (const key of [`close.workstreams.${workstream}`, `close.setup.workstreams.${workstream}`] as const) {
+        if (!catalog.leaves.get(key)?.trim()) missing.push(`${catalog.code}:${key}`)
+      }
+    }
+  }
+  assert.deepEqual(missing, [], `close workstream labels are missing:\n  ${sample(missing)}`)
+})
+
 test('every registered report entity and column has a message in every shipped locale', () => {
   const missing: string[] = []
   for (const catalog of CATALOGS) {

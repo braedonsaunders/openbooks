@@ -226,6 +226,7 @@
   "workstreams": {
     "readiness": "Preparación",
     "banking": "Bancos",
+    "sales": "Ventas",
     "ar": "Cuentas por cobrar",
     "ap": "Cuentas por pagar",
     "assets": "Activos fijos",
@@ -464,6 +465,8 @@
       "closeAllOverrideHint": "Motivos opcionales por módulo — en blanco usa el motivo común.",
       "unlockTitle": "Liberar cierre flexible",
       "reopenTitle": "Solicitar reapertura controlada",
+      "reopenIncludeGl": "Reabrir también el Libro mayor (obligatorio mientras esté cerrado)",
+      "reopenConflictNotice": "Conflicto de interés: usted figura en {count} registro(s) que esta reapertura desbloquearía ({examples}). Pida a otra persona que decida.",
       "lockDescription": "{module} · {period}. El motivo queda en el historial inmutable.",
       "reopenRequests": "Solicitudes de reapertura",
       "requestedBy": "Solicitada por {name}"
@@ -627,6 +630,7 @@
     "workstreams": {
       "readiness": "Preparación",
       "banking": "Bancos",
+      "sales": "Ventas",
       "ar": "Cuentas por cobrar",
       "ap": "Cuentas por pagar",
       "assets": "Activos fijos",

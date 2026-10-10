@@ -226,6 +226,7 @@
   "workstreams": {
     "readiness": "Prontidão",
     "banking": "Bancos",
+    "sales": "Vendas",
     "ar": "Contas a receber",
     "ap": "Contas a pagar",
     "assets": "Ativos imobilizados",
@@ -464,6 +465,8 @@
       "closeAllOverrideHint": "Motivos opcionais por módulo — em branco usa o motivo comum.",
       "unlockTitle": "Liberar fechamento flexível",
       "reopenTitle": "Solicitar reabertura controlada",
+      "reopenIncludeGl": "Reabrir também o Razão geral (obrigatório enquanto o razão estiver fechado)",
+      "reopenConflictNotice": "Conflito de interesse: você está registrado em {count} registro(s) que esta reabertura desbloquearia ({examples}). Peça a outro aprovador que decida.",
       "lockDescription": "{module} · {period}. Um motivo é retido no histórico imutável de fechamento.",
       "reopenRequests": "Solicitações de reabertura",
       "requestedBy": "Solicitado por {name}"
@@ -627,6 +630,7 @@
     "workstreams": {
       "readiness": "Prontidão",
       "banking": "Bancos",
+      "sales": "Vendas",
       "ar": "Contas a receber",
       "ap": "Contas a pagar",
       "assets": "Ativos imobilizados",

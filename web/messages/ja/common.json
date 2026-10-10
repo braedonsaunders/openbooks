@@ -102,6 +102,7 @@
     "shipmentShort": "出荷",
     "fulfillment": "出荷実績",
     "fulfillmentShort": "出荷実績",
+    "goodsReceipt": "入荷",
     "returnAuthorization": "返品承認",
     "returnAuthorizationShort": "RMA",
     "payRun": "給与計算",

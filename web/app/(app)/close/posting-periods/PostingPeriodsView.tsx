@@ -37,15 +37,36 @@ export function PostingPeriodsView({
 }) {
   const t = useTranslations("close");
   const tc = useTranslations("common");
+  // Every document kind the assignment preview can return (each decided
+  // kind in DOCUMENT_CLOSE_MODULES outside NON_POSTING_DOCUMENT_KINDS, plus
+  // the non-posting kinds kept for defense): an unmapped kind falls back to
+  // the shared "Unknown value" label instead of a raw kind string.
   const transactionKindLabels = {
     vendor_bill: tc("transactionTypes.vendorBill"),
+    vendor_credit: tc("transactionTypes.vendorCredit"),
     customer_invoice: tc("transactionTypes.customerInvoice"),
+    customer_credit: tc("transactionTypes.customerCredit"),
+    cash_sale: tc("transactionTypes.cashSale"),
+    cash_refund: tc("transactionTypes.cashRefund"),
+    card_charge: tc("transactionTypes.cardCharge"),
+    card_refund: tc("transactionTypes.cardRefund"),
+    check: tc("transactionTypes.check"),
+    deposit: tc("transactionTypes.deposit"),
+    transfer: tc("transactionTypes.transfer"),
+    project_charge: tc("transactionTypes.projectCharge"),
+    internal_billing: tc("transactionTypes.internalBilling"),
+    pay_run: tc("transactionTypes.payRun"),
+    customer_payment: tc("transactionTypes.customerPayment"),
+    vendor_payment: tc("transactionTypes.vendorPayment"),
+    expense_report: tc("transactionTypes.expenseReport"),
+    journal: tc("transactionTypes.journalEntry"),
+    purchase_receipt: tc("transactionTypes.goodsReceipt"),
+    sales_fulfillment: tc("transactionTypes.fulfillment"),
     sales_order: tc("transactionTypes.salesOrder"),
     purchase_order: tc("transactionTypes.purchaseOrder"),
-  } satisfies Record<
-    "vendor_bill" | "customer_invoice" | "sales_order" | "purchase_order",
-    string
-  >;
+    quote: tc("transactionTypes.estimate"),
+    rma: tc("transactionTypes.returnAuthorization"),
+  } satisfies Record<string, string>;
   const [rows, setRows] = useState<Candidate[] | null>(null);
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<CommitResult | null>(null);

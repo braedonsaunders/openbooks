@@ -102,6 +102,7 @@
     "shipmentShort": "Ship",
     "fulfillment": "Fulfillment",
     "fulfillmentShort": "Fulfill",
+    "goodsReceipt": "Goods receipt",
     "returnAuthorization": "Return authorization",
     "returnAuthorizationShort": "RMA",
     "payRun": "Pay run",

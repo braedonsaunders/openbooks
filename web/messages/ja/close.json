@@ -226,6 +226,7 @@
   "workstreams": {
     "readiness": "準備状況",
     "banking": "銀行",
+    "sales": "売上",
     "ar": "売掛金",
     "ap": "買掛金",
     "assets": "固定資産",
@@ -464,6 +465,8 @@
       "closeAllOverrideHint": "モジュール別の理由（任意）— 空白は共通の理由を使います。",
       "unlockTitle": "ソフトクローズを解除",
       "reopenTitle": "統制された再オープンを依頼",
+      "reopenIncludeGl": "総勘定元帳も再開する（終了済みの場合は必須）",
+      "reopenConflictNotice": "利益相反：この再開で変更可能になる {count} 件の記録にあなたが関与しています（{examples}）。別の承認者に決定を依頼してください。",
       "lockDescription": "{module} · {period}。理由は改ざん不可の決算履歴に保持されます。",
       "reopenRequests": "再オープン依頼",
       "requestedBy": "{name}が依頼"
@@ -627,6 +630,7 @@
     "workstreams": {
       "readiness": "準備状況",
       "banking": "銀行",
+      "sales": "売上",
       "ar": "売掛金",
       "ap": "買掛金",
       "assets": "固定資産",

@@ -226,6 +226,7 @@
   "workstreams": {
     "readiness": "Préparation",
     "banking": "Banque",
+    "sales": "Ventes",
     "ar": "Comptes clients",
     "ap": "Comptes fournisseurs",
     "assets": "Immobilisations",
@@ -464,6 +465,8 @@
       "closeAllOverrideHint": "Motifs facultatifs par module — vide reprend le motif commun.",
       "unlockTitle": "Lever la clôture souple",
       "reopenTitle": "Demander une réouverture contrôlée",
+      "reopenIncludeGl": "Rouvrir aussi le Grand livre (requis tant que le grand livre est clôturé)",
+      "reopenConflictNotice": "Conflit d’intérêts : vous êtes lié(e) à {count} enregistrement(s) que cette réouverture déverrouillerait ({examples}). Demandez à un autre approbateur de décider.",
       "lockDescription": "{module} · {period}. Le motif est conservé dans l’historique immuable.",
       "reopenRequests": "Demandes de réouverture",
       "requestedBy": "Demandée par {name}"
@@ -627,6 +630,7 @@
     "workstreams": {
       "readiness": "Préparation",
       "banking": "Banque",
+      "sales": "Ventes",
       "ar": "Comptes clients",
       "ap": "Comptes fournisseurs",
       "assets": "Immobilisations",

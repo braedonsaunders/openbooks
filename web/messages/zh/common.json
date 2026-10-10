@@ -102,6 +102,7 @@
     "shipmentShort": "发运",
     "fulfillment": "销售履约",
     "fulfillmentShort": "履约",
+    "goodsReceipt": "收货",
     "returnAuthorization": "退货授权",
     "returnAuthorizationShort": "RMA",
     "payRun": "工资核算",

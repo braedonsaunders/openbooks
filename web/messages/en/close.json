@@ -226,6 +226,7 @@
   "workstreams": {
     "readiness": "Readiness",
     "banking": "Banking",
+    "sales": "Sales",
     "ar": "Receivables",
     "ap": "Payables",
     "assets": "Fixed assets",
@@ -464,6 +465,8 @@
       "closeAllOverrideHint": "Optional per-module reasons — blank uses the shared reason.",
       "unlockTitle": "Release soft close",
       "reopenTitle": "Request controlled reopening",
+      "reopenIncludeGl": "Also reopen General ledger (required while the ledger is closed)",
+      "reopenConflictNotice": "Conflict of interest: you are recorded on {count} record(s) this reopen would unlock ({examples}). Ask another approver to decide.",
       "lockDescription": "{module} · {period}. A reason is retained in the immutable close history.",
       "reopenRequests": "Reopen requests",
       "requestedBy": "Requested by {name}"
@@ -627,6 +630,7 @@
     "workstreams": {
       "readiness": "Readiness",
       "banking": "Banking",
+      "sales": "Sales",
       "ar": "Receivables",
       "ap": "Payables",
       "assets": "Fixed assets",

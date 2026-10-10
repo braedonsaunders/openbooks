@@ -102,6 +102,7 @@
     "shipmentShort": "Expéd.",
     "fulfillment": "Exécution de commande",
     "fulfillmentShort": "Exéc.",
+    "goodsReceipt": "Réception de marchandises",
     "returnAuthorization": "Autorisation de retour",
     "returnAuthorizationShort": "RMA",
     "payRun": "Cycle de paie",

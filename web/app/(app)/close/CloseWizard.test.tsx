@@ -276,3 +276,38 @@ test("a 422 consolidation refusal persists inline on the task", async (t) => {
   const errors = (globalThis.__closeTestToasts ?? []).filter((toast) => toast.kind === "error");
   assert.equal(errors.length, 1, "the refusal must also surface exactly one error toast");
 });
+
+/** A commerce-complete task groups under the translated Sales heading — a
+ * workstream without locale copy renders as the raw close.workstreams.sales
+ * key on the heading. */
+test("a sales workstream task heading renders the translated label, not the message key", async (t) => {
+  globalThis.__closeTestRouter = { push() {}, refresh() {} };
+  globalThis.__closeTestToasts = [];
+  const host = document.createElement("div");
+  document.body.appendChild(host);
+  const root = createRoot(host);
+  t.after(async () => {
+    await act(async () => {
+      root.unmount();
+    });
+    host.remove();
+  });
+  const base = props();
+  const salesTask = {
+    ...base.tasks[0]!,
+    key: "commerce-complete",
+    completion_mode: "computed",
+    workstream: "sales",
+  };
+  await act(async () => {
+    root.render(
+      <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
+        <CloseWizard {...base} tasks={[salesTask]} />
+      </NextIntlClientProvider>,
+    );
+    await tick();
+  });
+  const headings = [...host.querySelectorAll("h3")].map((el) => el.textContent?.trim());
+  assert.ok(headings.includes("Sales"), `expected a Sales group heading, saw: ${headings.join(" | ")}`);
+  assert.ok(!host.textContent?.includes("workstreams.sales"), "the raw message key must not render");
+});

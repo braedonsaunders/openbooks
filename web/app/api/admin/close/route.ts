@@ -7,7 +7,7 @@ import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/platform/db.ts";
 import { CLOSE_MODULES, CloseError, type CloseModule } from "@openbooks/engine/src/periods/period-policy.ts";
-import { decidePeriodReopen, recloseApprovedReopen, requestPeriodReopen } from "@openbooks/engine/src/close/reopening.ts";
+import { decidePeriodReopen, recloseApprovedReopen, reopenRequestConflicts, requestPeriodReopen } from "@openbooks/engine/src/close/reopening.ts";
 import { generateAccountingPeriods } from "@openbooks/engine/src/close/calendar.ts";
 import { closePeriodAllModules, setPeriodLockState } from "@openbooks/engine/src/periods/period-locks.ts";
 import { can, getAuthz, guardSubsidiaryScope } from "../../../../lib/authz";
@@ -38,7 +38,7 @@ const closePolicySchema = z.object({
 });
 const closeStepSchema = z.object({
   key: z.string().trim().min(1), title: z.string().trim().min(1),
-  workstream: z.enum(["readiness", "banking", "ar", "ap", "assets", "tax", "payroll", "intercompany", "gl", "review", "publish"]),
+  workstream: z.enum(["readiness", "banking", "sales", "ar", "ap", "assets", "tax", "payroll", "intercompany", "gl", "review", "publish"]),
   taskType: z.enum(["check", "action", "reconciliation", "journal", "approval", "report", "publish"]).optional(),
   completionMode: z.enum(["manual", "computed", "automatic"]).optional(),
   gateType: z.enum(["none", "soft", "hard"]).optional(),
@@ -59,6 +59,7 @@ const closeActionSchemas = [
   z.object({ action: z.literal("close-period"), periodId: z.string().uuid(), bookId: z.string().uuid(), subsidiaryId: z.string().uuid().nullable().optional(), state: z.enum(["soft_closed", "closed"]).optional().default("closed"), modules: z.array(z.enum(CLOSE_MODULES)).min(1).optional(), moduleReasons: z.record(z.enum(CLOSE_MODULES), z.string()).optional(), reason: z.string().trim().min(1), }),
   z.object({ action: z.literal("request-reopen"), periodId: z.string().uuid(), bookId: z.string().uuid(), subsidiaryId: z.string().uuid().nullable().optional(), modules: z.array(z.enum(CLOSE_MODULES)).min(1), reason: z.string().trim().min(1) }),
   z.object({ action: z.literal("decide-reopen"), requestId: z.string().uuid(), approve: z.boolean(), hours: z.number().positive().max(168).optional() }),
+  z.object({ action: z.literal("reopen-conflicts"), requestId: z.string().uuid() }),
   z.object({ action: z.literal("reclose-reopen"), requestId: z.string().uuid(), reason: z.string().trim().min(1) }),
 ] as const;
 const requestBodySchema = z.discriminatedUnion("action", closeActionSchemas);
@@ -617,6 +618,7 @@ export const POST = defineRoute({
       "request-reopen",
       "decide-reopen",
       "reclose-reopen",
+      "reopen-conflicts",
     ].includes(action)
       ? "close.reopen"
       : "periods.manage";
@@ -807,6 +809,14 @@ export const POST = defineRoute({
           reason: text(body, "reason", true)!,
         });
         return NextResponse.json({ ok: true });
+      }
+      if (action === "reopen-conflicts") {
+        const requestId = text(body, "requestId", true)!;
+        if (!isUuid(requestId)) throw new CloseError("invalid reopen request");
+        return NextResponse.json({
+          ok: true,
+          conflicts: await reopenRequestConflicts(orgId, requestId, actorId),
+        });
       }
       return NextResponse.json(
         { error: "unknown close setup action" },
