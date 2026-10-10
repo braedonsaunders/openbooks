@@ -302,11 +302,11 @@ function BoardShell(props: SchedulingWorkspaceProps & { board: ScheduleBoard; on
         ) : (
           <div className={cn('flex min-h-0 flex-1 flex-col transition-opacity', controller.loading && 'opacity-60')}>
             {view === 'grid' ? (
-              <PeopleGrid controller={controller} window={window} groupBy={groupBy} search={search} compact={compact} showHoursColumn={showHoursColumn} spotlight={spotlight} onOpenEntry={entry => { setOpenSourceRecord(null); setOpenEntry(entry) }} onOpenSourceRecord={record => { setOpenEntry(null); setOpenSourceRecord(record) }} today={props.today} />
+              <PeopleGrid controller={controller} window={window} groupBy={groupBy} search={search} compact={compact} showHoursColumn={showHoursColumn} spotlight={spotlight} onOpenEntry={entry => { setOpenSourceRecord(null); setOpenEntry(entry) }} onOpenSourceRecord={record => { setOpenEntry(null); setOpenSourceRecord(record) }} today={props.today} settingsHref={settingsHref} />
             ) : view === 'targets' ? (
               <TargetsView controller={controller} window={window} search={search} today={props.today} onOpenEntry={entry => { setOpenSourceRecord(null); setOpenEntry(entry) }} onOpenSourceRecord={record => { setOpenEntry(null); setOpenSourceRecord(record) }} />
             ) : view === 'timeline' ? (
-              <TimelineView controller={controller} window={window} zoom={zoom} groupBy={groupBy} search={search} today={props.today} onOpenEntry={entry => { setOpenSourceRecord(null); setOpenEntry(entry) }} onOpenSourceRecord={record => { setOpenEntry(null); setOpenSourceRecord(record) }} />
+              <TimelineView controller={controller} window={window} zoom={zoom} groupBy={groupBy} search={search} today={props.today} onOpenEntry={entry => { setOpenSourceRecord(null); setOpenEntry(entry) }} onOpenSourceRecord={record => { setOpenEntry(null); setOpenSourceRecord(record) }} settingsHref={settingsHref} />
             ) : (
               <CalendarView window={window} personId={personId} search={search} month={anchor.slice(0, 7)} today={props.today} onOpenEntry={entry => { setOpenSourceRecord(null); setOpenEntry(entry) }} onOpenSourceRecord={record => { setOpenEntry(null); setOpenSourceRecord(record) }} />
             )}

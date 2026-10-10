@@ -2,6 +2,7 @@
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type PointerEvent } from 'react'
 import { useLocale, useTranslations } from 'next-intl'
+import { EmptyBoardScope } from './EmptyBoardScope'
 import { cn } from '@openbooks/ui'
 import { CHIP_COLORS, chipStyle } from './BookingChip'
 import { SourceRecordChip } from './SourceRecord'
@@ -28,7 +29,9 @@ type Drag =
   | { kind: 'create'; row: number; startMinute: number; endMinute: number }
 
 /** Hours across the window: shifts as bars, overnight work crossing midnight. */
-export function TimelineView({ controller, window: board, groupBy, search, zoom, today, onOpenEntry, onOpenSourceRecord }: {
+export function TimelineView({ controller, window: board, groupBy, search, zoom, today, onOpenEntry, onOpenSourceRecord, settingsHref = null }: {
+  /** This board's settings for a board administrator; null for everyone else. */
+  settingsHref?: string | null
   controller: BoardController
   window: BoardWindow
   groupBy: GroupBy
@@ -332,7 +335,7 @@ export function TimelineView({ controller, window: board, groupBy, search, zoom,
             })()}
           </div>
         </div>
-        {rowOf.size === 0 ? <div className="absolute inset-x-0 top-24 text-center text-sm text-slate-500">{t('grid.noPeople')}</div> : null}
+        {rowOf.size === 0 ? <div className="absolute inset-x-0 top-24 text-center text-sm text-slate-500"><EmptyBoardScope settingsHref={settingsHref} /></div> : null}
       </div>
       {creating ? (
         <TargetPicker

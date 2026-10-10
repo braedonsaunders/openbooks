@@ -74,7 +74,9 @@
     "readOnly": "Sie können diese Plantafel ansehen. Zum Einplanen benötigen Sie die Berechtigung zur Verwaltung von Plänen.",
     "saving": "Wird gespeichert…",
     "clearSpotlight": "Alle Aufträge anzeigen",
-    "resources": "{count, plural, one {# Ressource} other {# Ressourcen}}"
+    "resources": "{count, plural, one {# Ressource} other {# Ressourcen}}",
+    "noPeopleEditScope": "Festlegen, wen diese Tafel umfasst",
+    "noPeopleAsk": "Wer auf einer Tafel erscheint, legt die Person, die Planungstafeln verwaltet, im Bereich der Tafel fest. Bitten Sie Ihren Administrator, Sie oder Ihr Team hinzuzufügen."
   },
   "chip": {
     "unassigned": "Kein Ziel",

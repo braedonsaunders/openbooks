@@ -74,7 +74,9 @@
     "readOnly": "Puede ver este tablero. Para asignar necesita permiso para gestionar planificaciones.",
     "saving": "Guardando…",
     "clearSpotlight": "Mostrar todos los trabajos",
-    "resources": "{count, plural, one {# recurso} other {# recursos}}"
+    "resources": "{count, plural, one {# recurso} other {# recursos}}",
+    "noPeopleEditScope": "Editar a quién incluye este tablero",
+    "noPeopleAsk": "Quién aparece en un tablero lo define, en su alcance, quien gestiona los tableros de planificación. Pide a tu administrador que te añada a ti o a tu equipo."
   },
   "chip": {
     "unassigned": "Sin destino",

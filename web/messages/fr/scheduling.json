@@ -74,7 +74,9 @@
     "readOnly": "Vous pouvez consulter ce tableau. L’affectation nécessite l’autorisation de gérer les plannings.",
     "saving": "Enregistrement…",
     "clearSpotlight": "Afficher tous les chantiers",
-    "resources": "{count, plural, one {# ressource} other {# ressources}}"
+    "resources": "{count, plural, one {# ressource} other {# ressources}}",
+    "noPeopleEditScope": "Modifier qui ce tableau inclut",
+    "noPeopleAsk": "Les personnes affichées sur un tableau sont définies dans son périmètre par la personne qui gère les tableaux de planification. Demandez à votre administrateur de vous ajouter, vous ou votre équipe."
   },
   "chip": {
     "unassigned": "Aucune destination",
