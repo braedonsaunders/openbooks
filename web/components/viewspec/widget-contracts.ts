@@ -377,7 +377,7 @@ export const WIDGET_CONTRACTS: Readonly<Record<string, WidgetContract>> = {
   'new-script': { props: [] },
   'new-setup-button': { props: ['entityKey', 'label'] },
   'new-setup-record': { props: ['href', 'label'] },
-  'new-timesheet': { props: ['href', 'label'] },
+  'new-timesheet': { props: ['href', 'jumpBasePath', 'jumpEmployeeId', 'label'] },
   'new-view': { props: ['recordType'] },
   'new-warehouse-button': { props: ['label'] },
   'new-warehouse-drawer': { props: ['closeHref', 'locations'] },

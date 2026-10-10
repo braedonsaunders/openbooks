@@ -44,6 +44,7 @@
     "submitForApproval": "Enviar para aprovação",
     "prev": "Ant.",
     "thisWeek": "Esta semana",
+    "weekJump": "Ir para a semana",
     "weekOf": "Semana de {from} – {to}",
     "approvedReadOnly": "Quadros de horas aprovados são somente leitura.",
     "viewOnly": "Você tem acesso somente para visualização.",

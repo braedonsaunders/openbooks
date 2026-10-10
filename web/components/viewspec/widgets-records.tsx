@@ -13,6 +13,7 @@ import {
   FolderDrawer,
   UploadButton,
   NewFolderButton,
+  TimesheetWeekJump,
   WeeklyGrid,
   CrmNewButton,
   OpportunityDrawer,
@@ -148,12 +149,17 @@ export const RECORDS_WIDGETS = {
   ),
   /* --- timesheets ----------------------------------------------------------- */
   'new-timesheet': (props) => (
-    <Link
-      href={(str(props, 'href') ?? '/timesheets') as never}
-      className="inline-flex h-8 items-center gap-2 rounded-md bg-teal-700 px-3 text-sm font-medium text-white shadow-sm hover:bg-teal-800"
-    >
-      {str(props, 'label') ?? ''}
-    </Link>
+    <span className="inline-flex items-center gap-1.5">
+      {str(props, 'jumpEmployeeId') ? (
+        <TimesheetWeekJump basePath={str(props, 'jumpBasePath') ?? '/timesheets'} employeeId={str(props, 'jumpEmployeeId') ?? ''} />
+      ) : null}
+      <Link
+        href={(str(props, 'href') ?? '/timesheets') as never}
+        className="inline-flex h-8 items-center gap-2 rounded-md bg-teal-700 px-3 text-sm font-medium text-white shadow-sm hover:bg-teal-800"
+      >
+        {str(props, 'label') ?? ''}
+      </Link>
+    </span>
   ),
   'timesheet-drawer': (props) => {
     const drawer = props.drawer as (ComponentProps<typeof WeeklyGrid> & { remountKey: string }) | null

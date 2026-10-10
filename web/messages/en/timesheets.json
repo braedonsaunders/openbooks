@@ -44,6 +44,7 @@
     "submitForApproval": "Submit for approval",
     "prev": "Prev",
     "thisWeek": "This week",
+    "weekJump": "Go to week",
     "weekOf": "Week of {from} – {to}",
     "approvedReadOnly": "Approved timesheets are read-only.",
     "viewOnly": "You have view-only access.",

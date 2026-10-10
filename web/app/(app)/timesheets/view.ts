@@ -61,7 +61,7 @@ export interface TimesheetsData {
   /** Why New timesheet is withdrawn for a time enterer, with the remedy. */
   newNotice: string | null
   currentParams: Record<string, string | string[] | undefined>
-  newButton: { href: string; label: string }
+  newButton: { href: string; label: string; jumpEmployeeId: string | null; jumpBasePath: string }
   drawer: (Record<string, unknown> & { remountKey: string }) | null
   // HR-20: field-time nav under Timesheets — office orgs never see these.
   showClockLink: boolean
@@ -220,7 +220,14 @@ export async function loadTimesheets(
     canStartTimesheet: timesheetStart.employeeId !== null,
     newNotice: othersWeekRefused ? t('list.selfOnly') : newNotice,
     currentParams: sp,
-    newButton: { href: newHref, label: t('list.newButton') },
+    newButton: {
+      href: newHref,
+      label: t('list.newButton'),
+      // Week jump for the New-timesheet employee (own week, or the managing
+      // seed): backfilling history without Prev-clicking week by week.
+      jumpEmployeeId: timesheetStart.employeeId,
+      jumpBasePath: basePath,
+    },
     showClockLink: fieldTimeOn && can(authz, 'time.clock'),
     clockButton: { href: '/time/clock', label: t('field.clockTab') },
     showCrewLink: fieldTimeOn && (can(authz, 'time.crew.enter') || can(authz, 'time.read')),

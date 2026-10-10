@@ -44,6 +44,7 @@
     "submitForApproval": "承認のために提出",
     "prev": "前へ",
     "thisWeek": "今週",
+    "weekJump": "週へ移動",
     "weekOf": "{from} – {to} の週",
     "approvedReadOnly": "承認済みのタイムシートは読み取り専用です。",
     "viewOnly": "閲覧のみのアクセス権です。",
