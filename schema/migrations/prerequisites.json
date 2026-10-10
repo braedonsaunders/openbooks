@@ -17,7 +17,9 @@
       "migration": "generated/0628_production_retirement_contracts.sql",
       "requires": [
         "generated/0619_operating_profiles_production_extensions.sql",
-        "generated/0626_tenant_retirement.sql"
+        "generated/0620_payroll_prior_earnings.sql",
+        "generated/0626_tenant_retirement.sql",
+        "generated/0627_compensation_ungated_submission.sql"
       ]
     },
     {
