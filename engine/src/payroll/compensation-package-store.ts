@@ -287,6 +287,9 @@ async function submitCompensationApproval(query: CompensationPackageActor, subje
     { orgId: query.orgId, userId: query.actorId });
   if (result.failed) throw new PayrollError(dispatchFailureReason(result) ?? "The compensation Flow failed; correct its reported cause before resubmitting.");
   if (result.runs.some(run => run.status === "cancelled")) throw new PayrollError("The compensation Flow was cancelled; review its recorded outcome before resubmitting.");
+  // Approval is an optional tenant Flow: with none configured for the
+  // subject, the submitter's authority releases the proposal directly.
+  if (result.runs.length === 0) return "ungated";
   if (result.gatesCreated > 0 || result.runs.some(run => run.gatesCreated > 0)) return "gated";
   if (result.runs.some(run => run.status !== "completed")) throw new PayrollError("The compensation Flow has not finished; resolve its pending work before releasing this proposal.");
   if (!result.runs.some(run => run.ungatedOutcome === "apply" && run.status === "completed")) {
