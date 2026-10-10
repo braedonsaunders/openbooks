@@ -118,7 +118,7 @@ test(
       await seedRelationship(org.orgId, child, payer, groupId, "2026-01-01", null);
       const planId = await seedPlan(org, actorId);
       const subId = await seedSubscription(org, actorId, planId, child, org.date);
-      const { invoiceId: sourceId } = await billSubscriptionNow(org.orgId, subId, org.date, { actorId }, null);
+      const { invoiceId: sourceId } = await billSubscriptionNow(org.orgId, subId, { actorId }, null);
       const deps = { control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank } };
       const snapshot = () => withOrgContext(org.orgId, async () => (await db.execute(sql`
         select to_jsonb(d) as document,
@@ -195,7 +195,7 @@ test(
       await seedRelationship(org.orgId, child, payer, groupId, "2026-01-01", null);
       const planId = await seedPlan(org, actorId);
       const subId = await seedSubscription(org, actorId, planId, child, org.date);
-      const { invoiceId: sourceId } = await billSubscriptionNow(org.orgId, subId, org.date, { actorId }, null);
+      const { invoiceId: sourceId } = await billSubscriptionNow(org.orgId, subId, { actorId }, null);
       let reportLocked!: (pid: number) => void;
       let reportFailure!: (error: unknown) => void;
       const locked = new Promise<number>((resolve, reject) => { reportLocked = resolve; reportFailure = reject; });
@@ -275,7 +275,7 @@ test(
       const planId = await seedPlan(org, actorId);
       for (const child of children) {
         const sub = await seedSubscription(org, actorId, planId, child, org.date);
-        const gen = await billSubscriptionNow(org.orgId, sub, org.date, { actorId }, null);
+        const gen = await billSubscriptionNow(org.orgId, sub, { actorId }, null);
         const draft = (await db.execute<{ party: string; status: string; custom: Record<string, unknown> }>(sql`
           select party_id as party, status, custom from documents where id = ${gen.invoiceId}`)).rows[0]!;
         assert.equal(draft.party, payer, "the child charge is AR of the payer");
@@ -342,9 +342,11 @@ test(
       await seedRelationship(org.orgId, child, second, null, "2026-07-01", null);
       const planId = await seedPlan(org, actorId);
       const sub = await seedSubscription(org, actorId, planId, child, "2026-06-15");
-      const june = await billSubscriptionNow(org.orgId, sub, "2026-06-15", { actorId }, null);
+      // Bill-now invoices the due period on its scheduled date: June first,
+      // then July after the cursor advances.
+      const june = await billSubscriptionNow(org.orgId, sub, { actorId }, null);
       await db.execute(sql`update subscriptions set next_bill_on = '2026-07-20' where id = ${sub}`);
-      const july = await billSubscriptionNow(org.orgId, sub, "2026-07-20", { actorId }, null);
+      const july = await billSubscriptionNow(org.orgId, sub, { actorId }, null);
       const parties = (await db.execute<{ id: string; party: string }>(sql`
         select id, party_id as party from documents where id in (${june.invoiceId}, ${july.invoiceId})`)).rows;
       assert.equal(parties.find((p) => p.id === june.invoiceId)?.party, first, "the June charge follows the June payer");
@@ -387,7 +389,7 @@ test(
       await seedRelationship(org.orgId, child, payer, groupId, "2026-01-01", null);
       const planId = await seedPlan(org, actorId);
       const sub = await seedSubscription(org, actorId, planId, child, org.date);
-      await billSubscriptionNow(org.orgId, sub, org.date, { actorId }, null);
+      await billSubscriptionNow(org.orgId, sub, { actorId }, null);
       const [run] = await runConsolidationGroup(org.orgId, groupId, "2026-07-01", "2026-07-31", {
         actorId,
         autoPost: true,
@@ -431,9 +433,9 @@ test(
       await seedRelationship(org.orgId, child, payer, groupId, "2026-01-01", null);
       const planId = await seedPlan(org, actorId);
       const july = await seedSubscription(org, actorId, planId, child, "2026-07-15");
-      await billSubscriptionNow(org.orgId, july, "2026-07-15", { actorId }, null);
+      await billSubscriptionNow(org.orgId, july, { actorId }, null);
       const august = await seedSubscription(org, actorId, planId, child, "2026-08-03");
-      await billSubscriptionNow(org.orgId, august, "2026-08-03", { actorId }, null);
+      await billSubscriptionNow(org.orgId, august, { actorId }, null);
       const scan = await runDueConsolidations("2026-08-05");
       assert.equal(scan.failed, 0, `the scan takes no org down: ${JSON.stringify(scan.orgErrors)}`);
       assert.equal(scan.consolidated, 1, "only the closed July bucket consolidates");
@@ -476,7 +478,7 @@ test(
       await seedRelationship(org.orgId, child, payer, groupId, "2026-01-01", null);
       const planId = await seedPlan(org, actorId);
       const sub = await seedSubscription(org, actorId, planId, child, "2026-07-15");
-      await billSubscriptionNow(org.orgId, sub, "2026-07-15", { actorId }, null);
+      await billSubscriptionNow(org.orgId, sub, { actorId }, null);
       await db.execute(sql`
         update orgs set settings = settings || '{"features":{"consolidatedBilling":false}}'::jsonb
          where id = ${org.orgId}`);
@@ -508,7 +510,7 @@ test("consolidation rechecks current unrestricted operator and posting authority
     await seedRelationship(org.orgId, child, payer, groupId, "2026-01-01", null);
     const planId = await seedPlan(org, actorId);
     const subId = await seedSubscription(org, actorId, planId, child, org.date);
-    await billSubscriptionNow(org.orgId, subId, org.date, { actorId }, null);
+    await billSubscriptionNow(org.orgId, subId, { actorId }, null);
     const snapshot = () => withOrgContext(org.orgId, async () => (await db.execute(sql`
       select (select jsonb_agg(to_jsonb(d) order by d.id) from documents d where d.org_id=${org.orgId}) as documents,
         (select count(*)::int from audit_log where org_id=${org.orgId}) as audits,
