@@ -83,12 +83,25 @@ test('a pre-flow bank account submits into the current flow exactly once', async
     // The stranded precondition: pending, and the engine has never seen it.
     assert.equal(await runCount(org.orgId, accountId), 0)
 
-    // With no enabled flow, submit refuses truthfully — no phantom run.
+    // With no enabled flow, the explicit submit applies the details
+    // directly (audited) instead of refusing with nowhere to go.
     const noFlow = await withOrgContext(org.orgId, () =>
       submit(submitRequest(org.vendorId, accountId), params))
-    assert.equal(noFlow.status, 422, JSON.stringify(await noFlow.clone().json()))
-    assert.match(((await noFlow.json()) as { error: string }).error, /no enabled approval flow/)
-    assert.equal(await runCount(org.orgId, accountId), 0)
+    assert.equal(noFlow.status, 200, JSON.stringify(await noFlow.clone().json()))
+    const directBody = (await noFlow.json()) as { id: string; approvalStatus: string; directApplied?: boolean }
+    assert.equal(directBody.id, accountId)
+    assert.equal(directBody.approvalStatus, 'approved')
+    assert.equal(directBody.directApplied, true)
+    assert.equal(await runCount(org.orgId, accountId), 0, 'direct apply creates no phantom run')
+    const directAudit = await withBypassContext(async () =>
+      (await db.execute<{ action: string }>(sql`
+        select action from audit_log where org_id = ${org.orgId} and table_name = 'party_bank_accounts'
+         and row_id = ${accountId} order by id desc limit 1`)).rows[0])
+    assert.equal(directAudit?.action, 'approve')
+
+    // A second record exercises the flow-driven path below.
+    const flowAccountId = await seedPendingAccount(org.orgId, org.vendorId, manager, 'Flow Bank')
+    const flowParams = paramsFor(org.vendorId)
 
     // The tenant authors the creation-side flow; submit drives it now.
     await withBypassContext(() =>
@@ -100,17 +113,17 @@ test('a pre-flow bank account submits into the current flow exactly once', async
       }),
     )
     const submitted = await withOrgContext(org.orgId, () =>
-      submit(submitRequest(org.vendorId, accountId), params))
+      submit(submitRequest(org.vendorId, flowAccountId), flowParams))
     assert.equal(submitted.status, 200, JSON.stringify(await submitted.clone().json()))
     const submittedBody = (await submitted.json()) as { id: string; approvalStatus: string; runId: string; gatesCreated: number }
-    assert.equal(submittedBody.id, accountId)
+    assert.equal(submittedBody.id, flowAccountId)
     assert.equal(submittedBody.approvalStatus, 'pending')
     assert.equal(submittedBody.gatesCreated, 1)
 
     // The record is now genuinely in a flow: exactly one live gate.
     const gates = await withBypassContext(async () =>
       (await db.execute<{ id: string; status: string }>(
-        sql`select id, status from flow_gates where org_id = ${org.orgId} and subject_id = ${accountId} order by created_at`,
+        sql`select id, status from flow_gates where org_id = ${org.orgId} and subject_id = ${flowAccountId} order by created_at`,
       )).rows,
     )
     assert.equal(gates.length, 1)
@@ -118,13 +131,13 @@ test('a pre-flow bank account submits into the current flow exactly once', async
 
     // A second submit is a lifecycle refusal, not a second gate.
     const resubmit = await withOrgContext(org.orgId, () =>
-      submit(submitRequest(org.vendorId, accountId), params))
+      submit(submitRequest(org.vendorId, flowAccountId), flowParams))
     assert.equal(resubmit.status, 409, JSON.stringify(await resubmit.clone().json()))
     assert.match(((await resubmit.json()) as { error: string }).error, /already awaiting approval/)
     assert.equal(
       (await withBypassContext(async () =>
         (await db.execute<{ count: string }>(
-          sql`select count(*)::text as count from flow_gates where org_id = ${org.orgId} and subject_id = ${accountId} and status = 'pending'`,
+          sql`select count(*)::text as count from flow_gates where org_id = ${org.orgId} and subject_id = ${flowAccountId} and status = 'pending'`,
         )).rows[0]!.count,
       )),
       '1',
@@ -138,7 +151,7 @@ test('a pre-flow bank account submits into the current flow exactly once', async
     assert.equal(decision.runStatus, 'completed')
     const released = await withBypassContext(async () =>
       (await db.execute<{ approvalStatus: string; isActive: boolean }>(
-        sql`select approval_status as "approvalStatus", is_active as "isActive" from party_bank_accounts where id = ${accountId} and org_id = ${org.orgId}`,
+        sql`select approval_status as "approvalStatus", is_active as "isActive" from party_bank_accounts where id = ${flowAccountId} and org_id = ${org.orgId}`,
       )).rows[0]!,
     )
     assert.equal(released.approvalStatus, 'approved')
@@ -147,7 +160,7 @@ test('a pre-flow bank account submits into the current flow exactly once', async
     // An approved record is no longer submittable.
     state.user = asUser(manager, org.orgId, 'manager')
     const afterApproval = await withOrgContext(org.orgId, () =>
-      submit(submitRequest(org.vendorId, accountId), params))
+      submit(submitRequest(org.vendorId, flowAccountId), flowParams))
     assert.equal(afterApproval.status, 422, JSON.stringify(await afterApproval.clone().json()))
   } finally {
     await withBypassContext(() => dropScratchOrg(org.orgId))

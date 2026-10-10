@@ -80,6 +80,8 @@ const mockSources = new Map<string, string>([
     export function encryptAccountNumber(value) { return 'encrypted:' + value }`],
   ['mock:flows', `export async function runRecordFlows() { return { runs: [], gatesCreated: 0, failed: false, error: null } }`],
   ['mock:bank-adapter', `export const BANK_ACCOUNT_SUBJECT_KIND = 'party_bank_account'`],
+  ['mock:business-date', `export async function businessToday() { return '2026-10-09' }
+    export async function businessTodayInTx() { return '2026-10-09' }`],
 ])
 
 const mockUrls = new Map<string, string>([
@@ -104,6 +106,7 @@ const mockUrls = new Map<string, string>([
   ['@openbooks/engine/src/payments/settlement-policy.ts', 'mock:payments'],
   ['@openbooks/engine/src/flows/run.ts', 'mock:flows'],
   ['@openbooks/engine/src/flows/bank-accounts-adapter.ts', 'mock:bank-adapter'],
+  ['@openbooks/engine/src/platform/business-date.ts', 'mock:business-date'],
 ])
 
 registerHooks({

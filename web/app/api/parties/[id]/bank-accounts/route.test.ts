@@ -21,6 +21,7 @@ interface RouteState {
   auditCalls: number
   auditParams: unknown[][]
   flowCalls: number
+  gatedFlow: boolean
 }
 
 const stateKey = Symbol.for('openbooks.bank-accounts-route-test')
@@ -37,6 +38,7 @@ const state: RouteState = {
   auditCalls: 0,
   auditParams: [],
   flowCalls: 0,
+  gatedFlow: false,
 }
 ;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = state
 ;(globalThis as typeof globalThis & Record<string, unknown>).openbooksBankAccountsNextResponse = NextResponse
@@ -89,12 +91,19 @@ const mockSources = new Map<string, string>([
     'flows',
     `
       const state = globalThis[Symbol.for('openbooks.bank-accounts-route-test')]
-      export async function runRecordFlows() { state.flowCalls += 1; return { failed: false } }
+      export async function runRecordFlows() { state.flowCalls += 1; return { failed: false, runs: state.gatedFlow ? [{ runId: 'run-1', gatesCreated: 1 }] : [] } }
     `,
   ],
   [
     'bank-account-adapter',
     `export const BANK_ACCOUNT_SUBJECT_KIND = 'party_bank_account'`,
+  ],
+  [
+    'business-date',
+    `
+      export async function businessToday() { return '2026-10-09' }
+      export async function businessTodayInTx() { return '2026-10-09' }
+    `,
   ],
   [
     'db',
@@ -151,6 +160,9 @@ const mockSources = new Map<string, string>([
             return { rows: [{ in_flight_payment: state.inFlightPayment, live_mandate: state.liveMandate }] }
           }
           if (text.includes('from payment_instructions')) return { rows: [{ inFlightPayment: state.inFlightPayment }] }
+          if (text.includes('insert into party_bank_accounts')) {
+            return { rows: [{ id: 'account-new' }] }
+          }
           if (text.includes('update party_bank_accounts')) {
             state.updateParams.push(queryParams(query))
             if (state.operation === 'delete') {
@@ -203,6 +215,7 @@ const mockUrls = new Map<string, string>([
   ['@openbooks/engine/src/payments/settlement-policy.ts', mockUrl('payments')],
   ['@openbooks/engine/src/flows/run.ts', mockUrl('flows')],
   ['@openbooks/engine/src/flows/bank-accounts-adapter.ts', mockUrl('bank-account-adapter')],
+  ['@openbooks/engine/src/platform/business-date.ts', mockUrl('business-date')],
 ])
 
 const hooks = registerHooks({
@@ -222,7 +235,7 @@ const hooks = registerHooks({
 })
 
 const routeUrl = './route.ts?bank-accounts-route-test'
-const { PATCH, DELETE } = (await import(routeUrl)) as typeof import('./route.ts')
+const { POST, PATCH, DELETE } = (await import(routeUrl)) as typeof import('./route.ts')
 after(() => hooks.deregister())
 
 function reset(operation: RouteState['operation']): void {
@@ -238,6 +251,7 @@ function reset(operation: RouteState['operation']): void {
   state.auditCalls = 0
   state.auditParams = []
   state.flowCalls = 0
+  state.gatedFlow = false
 }
 
 function request(method: 'PATCH' | 'DELETE', body: Record<string, unknown>): Promise<Response> {
@@ -267,8 +281,29 @@ test('PATCH rejects account numbers shorter than four characters', async () => {
   assert.equal(state.updateParams.length, 0)
 })
 
-test('PATCH accepts a valid account update and stores its last four digits', async () => {
+test('PATCH applies an edit directly when no approval flow listens', async () => {
   reset('patch')
+  const response = await request('PATCH', {
+    accountNumber: '987654321',
+    changeReason: 'replace account',
+    expectedUpdatedAt: ACTUAL_UPDATED_AT,
+  })
+
+  assert.equal(response.status, 200)
+  assert.deepEqual(await response.json(), {
+    id: ACCOUNT_ID,
+    approvalStatus: 'approved',
+    changedFields: ['accountNumber'],
+  })
+  assert.equal(state.updateParams.length, 2)
+  assert.ok(state.updateParams[0]?.includes('4321'))
+  assert.equal(state.auditCalls, 2)
+  assert.equal(state.flowCalls, 1)
+})
+
+test('PATCH parks an edit pending when an approval flow gates it', async () => {
+  reset('patch')
+  state.gatedFlow = true
   const response = await request('PATCH', {
     accountNumber: '987654321',
     changeReason: 'replace account',
@@ -282,9 +317,25 @@ test('PATCH accepts a valid account update and stores its last four digits', asy
     changedFields: ['accountNumber'],
   })
   assert.equal(state.updateParams.length, 1)
-  assert.ok(state.updateParams[0]?.includes('4321'))
   assert.equal(state.auditCalls, 1)
   assert.equal(state.flowCalls, 1)
+})
+
+test('POST applies new bank details directly when no approval flow listens', async () => {
+  reset('patch')
+  const response = await POST(
+    new Request(`http://openbooks.test/api/parties/${PARTY_ID}/bank-accounts`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ bankName: 'Meridian Bank', accountNumber: '987654321' }),
+    }),
+    { params: Promise.resolve({ id: PARTY_ID }) },
+  )
+
+  assert.equal(response.status, 201)
+  assert.deepEqual(await response.json(), { id: 'account-new', approvalStatus: 'approved' })
+  assert.equal(state.flowCalls, 1)
+  assert.equal(state.auditCalls, 1)
 })
 
 test('DELETE accepts the exact six-digit revision and attributes the retirement', async () => {
