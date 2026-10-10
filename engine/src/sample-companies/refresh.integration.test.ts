@@ -134,10 +134,10 @@ test("native exploration refresh preserves rebased posted history, member drafts
           inet_server_port() as "serverPort",current_setting('cluster_name') as "clusterName"`)).rows[0]!,
         live: (await db.execute<{ id: string }>(sql`select id from orgs order by id`)).rows.map(row => row.id),
       }));
+      const actorId = await withBypass(() => createScratchUser(home.orgId, "Sample fixture recovery administrator", "admin"));
       const plan = await sampleRetirementPlan({ version: 1, database: state.database, retainOrgIds: state.live.filter(id => !retireOrgIds.includes(id)),
         retireOrgIds, reason: "Retire the exact rich sample fixtures after native preservation verification" });
       assert.deepEqual(plan.blockers, []);
-      const actorId = await withBypass(() => createScratchUser(home.orgId, "Sample fixture recovery administrator", "admin"));
       // Disposable-fixture attestations exercise native cleanup authority;
       // operational retirement requires independently verified recovery artifacts.
       const fixtureHash = createHash("sha256").update("Rich sample fixture recovery contract").digest("hex");
