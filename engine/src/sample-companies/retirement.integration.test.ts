@@ -74,6 +74,12 @@ async function planFor(retireIds: string[]): Promise<Plan> {
   assert.equal(plan.admissible, true);
   return plan;
 }
+async function assertInitializedFence(orgId: string) {
+  const result = await db.execute<{ state: string; initialized: number }>(sql`
+    select f.state,(select count(*)::int from payroll_compensation_configuration where org_id=${orgId}) as initialized
+    from tenant_retirement.fences f where f.tenant_id=${orgId}`);
+  assert.deepEqual(result.rows, [{ state: "active", initialized: 1 }], "the new company fence permits its native AFTER INSERT child initializer");
+}
 async function fingerprint(orgId: string) {
   return withMaintenanceTransaction(null, async () => retirementFingerprint(await loadCatalog(), orgId));
 }
@@ -116,6 +122,25 @@ test("native tenant retirement rejects forged authority and preserves posted, dr
   let active: { runId: string; plan: Plan } | undefined;
   let connected = false;
   try {
+    await withMaintenanceTransaction(null, () => assertInitializedFence(anchor.orgId));
+    const rolledBackOrgId = randomUUID();
+    await assert.rejects(withMaintenanceTransaction(null, async () => {
+      // The same minimal native organization fixture as createScratchOrg,
+      // kept inside this transaction to prove parent/child/fence rollback.
+      await db.execute(sql`insert into orgs(id,name,base_currency,country,settings,env_kind)
+        values(${rolledBackOrgId},'Rollback initialization fixture','CAD','CA','{}'::jsonb,'production')`);
+      await assertInitializedFence(rolledBackOrgId);
+      throw new Error("Roll back organization and native initializers");
+    }), /Roll back organization and native initializers/);
+    await withMaintenanceTransaction(null, async () => {
+      const remaining = await db.execute<{ orgs: number; fences: number; configuration: number }>(sql`
+        select (select count(*)::int from orgs where id=${rolledBackOrgId}) as orgs,
+          (select count(*)::int from tenant_retirement.fences where tenant_id=${rolledBackOrgId}) as fences,
+          (select count(*)::int from payroll_compensation_configuration where org_id=${rolledBackOrgId}) as configuration`);
+      assert.deepEqual(remaining.rows, [{ orgs: 0, fences: 0, configuration: 0 }], "failed organization creation leaves no parent, child or retirement fence");
+    });
+    await assert.rejects(withMaintenanceTransaction(null, () => db.execute(sql`
+      select tenant_retirement.openbooks_assert_tenant_available(${rolledBackOrgId}::uuid)`)), error => /retirement fence is missing/.test(nativeMessage(error)));
     await runtime.connect(); connected = true;
     const retained = await createEvidence(retainedOrg);
     const target = await createEvidence(targetOrg);
