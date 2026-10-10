@@ -295,7 +295,13 @@
     "voidPlaceholder": "说明该交易必须冲销的原因",
     "voidReversalPeriodTitle": "要冲销到哪个期间?",
     "voidReversalPeriodLabel": "冲销期间",
-    "voidReversalPeriodRegular": "常规期间（默认）"
+    "voidReversalPeriodRegular": "常规期间（默认）",
+    "voidReversalDateLabel": "冲销日期",
+    "voidReversalSummaryOriginal": "原始分录",
+    "voidReversalSummaryReversal": "冲销",
+    "voidReversalFiscalYear": "财年",
+    "voidReversalFallbackNotice": "原始期间已关闭，因此冲销默认记入其后的第一个开放期间。",
+    "voidReversalClosedNotice": "原始分录之后没有开放期间。请先生成后续期间或重新开放某一期间，然后再作废。"
   },
   "approvalFlow": {
     "pendingWith": "等待 {names} 处理",

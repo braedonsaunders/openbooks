@@ -2437,6 +2437,12 @@ export function DocumentDrawer({
     if (!reason) return
     const reversal = await promptVoidReversalPeriod(doc.id, {
       title: tCommon('amendment.voidReversalPeriodTitle'),
+      dateLabel: tCommon('amendment.voidReversalDateLabel'),
+      summaryOriginal: tCommon('amendment.voidReversalSummaryOriginal'),
+      summaryReversal: tCommon('amendment.voidReversalSummaryReversal'),
+      fiscalYear: tCommon('amendment.voidReversalFiscalYear'),
+      fallbackNotice: tCommon('amendment.voidReversalFallbackNotice'),
+      closedNotice: tCommon('amendment.voidReversalClosedNotice'),
       label: tCommon('amendment.voidReversalPeriodLabel'),
       regularOption: tCommon('amendment.voidReversalPeriodRegular'),
       confirm: tCommon('actions.void'),
@@ -2451,6 +2457,7 @@ export function DocumentDrawer({
           body: JSON.stringify({
             reason,
             expectedUpdatedAt: documentRevision,
+            ...(reversal.reversalDate ? { reversalDate: reversal.reversalDate } : {}),
             ...(reversal.reversalPeriodId ? { reversalPeriodId: reversal.reversalPeriodId } : {}),
           }),
         }),

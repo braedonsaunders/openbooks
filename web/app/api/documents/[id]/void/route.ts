@@ -8,6 +8,7 @@ import { db, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
 import {
   DocumentVoidError,
   requestDocumentVoid,
+  suggestVoidReversalDate,
 } from '@openbooks/engine/src/ledger/document-void.ts'
 import { can, getAuthz, guardSubsidiaryScope } from '../../../../../lib/authz'
 import { createPermission, postPermission } from "../../../../../lib/document-kinds.ts";
@@ -44,15 +45,19 @@ function voidPermission(kind: string): string | null {
   }
 }
 
-type VoidGuard = { authz: NonNullable<Awaited<ReturnType<typeof getAuthz>>>; id: string }
+type VoidGuard = {
+  authz: NonNullable<Awaited<ReturnType<typeof getAuthz>>>
+  id: string
+  doc: { kind: string; subsidiaryId: string | null; documentDate: string }
+}
 
 /** The caller may drive this document's void — shared by GET and POST. */
 async function guardVoidDocument(id: string): Promise<VoidGuard | NextResponse> {
   const authz = await getAuthz()
   if (!authz) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
   if (!isUuid(id)) return notFound("record")
-  const found = (await db.execute<{ kind: string; subsidiaryId: string | null }>(sql`
-    select kind, subsidiary_id as "subsidiaryId"
+  const found = (await db.execute<{ kind: string; subsidiaryId: string | null; documentDate: string }>(sql`
+    select kind, subsidiary_id as "subsidiaryId", document_date::text as "documentDate"
       from documents
      where id = ${id} and org_id = ${authz.user.orgId}
   `))
@@ -81,7 +86,7 @@ async function guardVoidDocument(id: string): Promise<VoidGuard | NextResponse> 
   if (!can(authz, permission)) {
     return NextResponse.json({ error: `missing permission: ${permission}` }, { status: 403 })
   }
-  return { authz, id }
+  return { authz, id, doc }
 }
 
 /**
@@ -105,7 +110,15 @@ export const GET = defineRoute({
          where p.org_id = ${gate.authz.user.orgId} and p.is_adjustment
          order by p.starts_on, p.ends_on, p.id
       `))
-    return NextResponse.json({ adjustmentPeriods: periods.rows })
+    // The reversal default the dialog confirms: the entry's own date, moved
+    // forward to the first open period only when the entry's period closed.
+    const suggestion = await suggestVoidReversalDate(db, gate.authz.user.orgId, {
+      id,
+      kind: gate.doc.kind,
+      documentDate: gate.doc.documentDate,
+      subsidiaryId: gate.doc.subsidiaryId,
+    })
+    return NextResponse.json({ adjustmentPeriods: periods.rows, ...suggestion })
   },
 });
 

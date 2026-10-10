@@ -295,7 +295,13 @@
     "voidPlaceholder": "Beschreiben Sie, warum die Buchung storniert werden muss",
     "voidReversalPeriodTitle": "In welche Periode soll storniert werden?",
     "voidReversalPeriodLabel": "Stornoperiode",
-    "voidReversalPeriodRegular": "Reguläre Periode (Standard)"
+    "voidReversalPeriodRegular": "Reguläre Periode (Standard)",
+    "voidReversalDateLabel": "Stornodatum",
+    "voidReversalSummaryOriginal": "Ursprüngliche Buchung",
+    "voidReversalSummaryReversal": "Storno",
+    "voidReversalFiscalYear": "GJ",
+    "voidReversalFallbackNotice": "Die ursprüngliche Periode ist geschlossen, daher wird das Storno standardmäßig in die erste offene Folgeperiode gebucht.",
+    "voidReversalClosedNotice": "Es folgt keine offene Periode. Legen Sie erst eine spätere Periode an oder öffnen Sie eine Periode wieder."
   },
   "approvalFlow": {
     "pendingWith": "Ausstehend bei {names}",

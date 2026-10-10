@@ -295,7 +295,13 @@
     "voidPlaceholder": "取引を振り戻す理由を記入してください",
     "voidReversalPeriodTitle": "どの期間に振り戻しますか?",
     "voidReversalPeriodLabel": "振り戻しの期間",
-    "voidReversalPeriodRegular": "通常期間（デフォルト）"
+    "voidReversalPeriodRegular": "通常期間（デフォルト）",
+    "voidReversalDateLabel": "振替日",
+    "voidReversalSummaryOriginal": "元の仕訳",
+    "voidReversalSummaryReversal": "振替",
+    "voidReversalFiscalYear": "FY",
+    "voidReversalFallbackNotice": "元の会計期間は締め済みのため、振替は次の未締め期間を既定とします。",
+    "voidReversalClosedNotice": "元仕訳の後に未締め期間がありません。取消前に後の期間を作成するか、期間を再オープンしてください。"
   },
   "approvalFlow": {
     "pendingWith": "{names}の承認待ち",
