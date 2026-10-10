@@ -57,7 +57,7 @@ RUN npx esbuild scripts/verify-native-schedule-pdf.ts \
 RUN npx esbuild engine/src/sample-companies/cli.ts \
       --bundle --platform=node --format=esm \
       --external:pg-native --external:jsdom \
-      --banner:js="import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);" \
+      --banner:js="import { createRequire as openbooksCreateRequire } from 'node:module'; const require = openbooksCreateRequire(import.meta.url);" \
       --outfile=/out/sample-companies.mjs
 RUN node --check /out/sample-companies.mjs
 
