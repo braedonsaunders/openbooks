@@ -3674,7 +3674,7 @@ export function DocumentDrawer({
                 </Button>
               ) : null}
             </div>
-            {config.kind === 'vendor_bill' ? <p className="text-xs text-muted-foreground">{tWithholdingLine('directCostHelp')}</p> : null}
+            {config.kind === 'vendor_bill' && showWithholdingLines ? <p className="text-xs text-muted-foreground">{tWithholdingLine('directCostHelp')}</p> : null}
             <LineGrid<LineRow>
               columns={useLayout ? columnsFromLayout : columns}
               rows={rows}
