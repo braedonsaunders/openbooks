@@ -10,6 +10,7 @@ import {
   authorizeReturn,
   getReturnAuthorization,
   receiveReturn,
+  rejectReturn,
   ReturnRefusal,
 } from './returns.ts'
 
@@ -112,6 +113,26 @@ test('return authorizations enforce source limits, lifecycle and organization sc
       (error: unknown) => error instanceof ReturnRefusal && error.code === 'exceeds_returnable_quantity'
         && error.status === 409 && /Reduce the authorized quantity/.test(error.remedy ?? ''),
     )
+
+    const rejected = await withOrg(org.orgId, () => draftReturn(org, actorId, sale.documentId, '1'))
+    await withOrg(org.orgId, () => db.transaction((tx) => authorizeReturn(tx, org.orgId, actorId,
+      rejected.id, [{ lineNumber: 1, sourceIssueMovementId: sale.issueId }], null)))
+    const reason = 'The return request does not meet the agreed return terms. '.repeat(12).trim()
+    await withOrg(org.orgId, () => db.transaction((tx) => rejectReturn(tx, org.orgId, actorId, rejected.id, reason, null)))
+    const rejectedRead = await withOrg(org.orgId, () => getReturnAuthorization(db, org.orgId, rejected.id, null))
+    assert.equal(rejectedRead.stage, 'rejected')
+    const rejection = (await withOrg(org.orgId, () => db.execute<{ status: string; voided_at: Date; voided_by: string; void_reason: string; rejection_reason: string }>(sql`
+      select d.status,d.voided_at,d.voided_by,d.void_reason,r.rejection_reason
+      from documents d join rma_documents r on r.org_id=d.org_id and r.document_id=d.id
+      where d.org_id=${org.orgId} and d.id=${rejected.id}
+    `))).rows[0]!
+    assert.equal(rejection.status, 'voided')
+    assert.ok(rejection.voided_at)
+    assert.equal(rejection.voided_by, actorId)
+    assert.equal(rejection.void_reason, reason.slice(0, 500))
+    assert.equal(rejection.rejection_reason, reason, 'the complete rejection remains in the return evidence')
+    await assert.rejects(withOrg(org.orgId, () => db.transaction((tx) => rejectReturn(tx, org.orgId, actorId, rejected.id, reason, null))),
+      (error: unknown) => error instanceof ReturnRefusal && error.code === 'wrong_stage')
 
     const accepted = await withOrg(org.orgId, () => draftReturn(org, actorId, sale.documentId, '4'))
     const authorization = await withOrg(org.orgId, () => db.transaction((tx) => authorizeReturn(tx, org.orgId, actorId,

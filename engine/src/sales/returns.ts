@@ -309,8 +309,10 @@ export async function rejectReturn(
   if (typeof reason !== "string" || reason.trim().length < 8 || reason.trim().length > 1000) {
     throw refusal("A rejection reason must contain 8 to 1,000 characters", "invalid_input", 422, "Enter a clear reason for rejecting the return");
   }
+  // The document carries bounded void evidence; the return retains the full rejection reason.
   const updatedDoc = await runner.execute(sql`
-    update documents set status = 'voided', updated_by = ${actorId}, updated_at = now()
+    update documents set status = 'voided', voided_at = now(), voided_by = ${actorId},
+      void_reason = ${reason.trim().slice(0, 500)}, updated_by = ${actorId}, updated_at = now()
      where id = ${documentId} and org_id = ${orgId} and kind = 'rma' and status in ('draft', 'approved')`);
   if (updatedDoc.rowCount !== 1) throw refusal(`${header.document_number} changed before it could be rejected`, "changed_concurrently", 409, RMA_REMEDY);
   const updated = await runner.execute(sql`
