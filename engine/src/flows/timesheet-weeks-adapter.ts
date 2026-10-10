@@ -173,6 +173,19 @@ export const timesheetWeeksFlowAdapter: FlowSubjectAdapter = defineTableSubjectA
     `));
 
     const total = Number(week.total_hours);
+    // The week's maker for separation of duties: the single user who wrote
+    // its hours, distinct from whoever submitted it. Mixed authorship leaves
+    // no single maker — the submitter still cannot decide, and any direct
+    // approval path re-checks its own authority.
+    const makers = (await db.execute<{ created_by: string | null }>(sql`
+      select distinct te.created_by
+        from time_entries te
+       where te.org_id = ${week.org_id}
+         and te.employee_party_id = ${week.employee_party_id}
+         and te.worked_on >= ${week.week_start}::date
+         and te.worked_on <= ${week.week_start}::date + 6
+    `)).rows.map((row) => row.created_by);
+    const makerUserId = makers.length === 1 ? (makers[0] ?? null) : null;
     return {
       values: {
         id: subjectId,
@@ -193,6 +206,7 @@ export const timesheetWeeksFlowAdapter: FlowSubjectAdapter = defineTableSubjectA
       },
       rows: { timeEntries: entries.rows },
       submitterUserId: week.submitted_by,
+      makerUserId,
     };
   },
 

@@ -32,6 +32,7 @@
     "hrm_qualification_alert": "Qualification",
     "field_ticket_signature": "Signature",
     "timesheet_week": "Feuille de temps",
+    "timesheet_approval": "Validation de feuille de temps",
     "expense_report": "Note de frais",
     "document_signature": "Signature",
     "payroll_anomaly_block": "Contrôle de paie",

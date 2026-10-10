@@ -15,6 +15,7 @@ import {
   NewFolderButton,
   TimesheetWeekJump,
   WeeklyGrid,
+  TimesheetBulkApprove,
   CrmNewButton,
   OpportunityDrawer,
   OpportunityViewSwitcher,
@@ -167,6 +168,12 @@ export const RECORDS_WIDGETS = {
     const { remountKey, ...rest } = drawer
     return <WeeklyGrid key={remountKey} {...rest} />
   },
+  /** Bulk approval for gateless submitted weeks: checkboxes plus per-week results, approvers only. */
+  'timesheet-bulk-approve': (props) => (
+    <TimesheetBulkApprove
+      weeks={(props.weeks as ComponentProps<typeof TimesheetBulkApprove>['weeks']) ?? []}
+    />
+  ),
 
   /* --- crm opportunities ---------------------------------------------------- */
   'crm-new-button': (props) => (

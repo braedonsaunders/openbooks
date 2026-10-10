@@ -7,6 +7,7 @@ import { pinInternalPerson } from '@openbooks/engine/src/organization/internal-p
 import { add } from '@openbooks/engine/src/money/money.ts'
 import { subsidiaryScopeAllows } from '../../../lib/authz'
 import { isFeatureEnabled } from '../../../lib/features'
+import { TimeApprovalRefusal } from '../../../lib/time-approval-refusal'
 import { loadPlannedWeek, type PlannedRow } from '../../../lib/resourcing/timesheet-prefill'
 import { scheduledWork, type ScheduledWork } from '@openbooks/engine/src/schedule-boards/prefill.ts'
 import { subsidiaryVisibleFilter } from '../../../lib/subsidiaries'
@@ -522,7 +523,11 @@ export async function assertWeekSubmittable(
        and status in ('pending', 'escalated')
   `)).rows[0]?.n ?? 0)
   if (openGates > 0) {
-    throw new Error('this week is owned by a pending approval workflow — its gates must resolve first')
+    throw new TimeApprovalRefusal(
+      'this week is owned by a pending approval workflow — its gates must resolve first',
+      'week_owned_by_workflow', 409,
+      'Decide the week through its approval flow instead of changing it directly.',
+    )
   }
   if (options.declaredNoHours) {
     // An explicit "no hours" week submits a week with nothing recorded in it

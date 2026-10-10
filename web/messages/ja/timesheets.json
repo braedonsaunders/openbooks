@@ -25,6 +25,16 @@
     "billable": "請求可能",
     "dailyTotals": "日次合計"
   },
+  "bulk": {
+    "title": "承認待ちの提出済み週",
+    "description": "週を選択してまとめて承認します。各週は個別のトランザクションで承認され、却下された週は理由を表示します。",
+    "approve": "選択を承認",
+    "approving": "承認中…",
+    "approved": "{count, plural, other {#週を承認しました}}",
+    "refused": "{count, plural, other {#週が要確認です}}",
+    "selectAll": "すべて選択",
+    "clear": "クリア"
+  },
   "status": {
     "submitted": "提出済み",
     "empty": "時間なし"
@@ -55,6 +65,7 @@
     "saveBeforeSubmit": "提出する前に変更を保存してください",
     "submittedToast": "承認のために提出しました",
     "approvedToast": "タイムシートを承認しました",
+    "approveBlockedByWorkflow": "この週は承認フローが処理中のため、フローで決定してください。",
     "addLine": "行を追加",
     "projectPlaceholder": "プロジェクト…",
     "lineProjectAria": "行 {line} のプロジェクト",

@@ -164,7 +164,7 @@ export async function loadPersonaMetrics(
           })
         : Promise.resolve([] as InboxItem[]),
       need('inboxApprovalsTop', 'inboxCount')
-        ? listInbox(ctx, { kinds: ['flows_approval', 'expense_report'], cache })
+        ? listInbox(ctx, { kinds: ['flows_approval', 'expense_report', 'timesheet_approval'], cache })
         : Promise.resolve([] as InboxItem[]),
     ])
     if (need('inboxTasksTop')) out.inboxTasksTop = tasks.slice(0, 5).map(toPersonaItem)

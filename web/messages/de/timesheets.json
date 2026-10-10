@@ -25,6 +25,16 @@
     "billable": "Abrechenbar",
     "dailyTotals": "Tagessummen"
   },
+  "bulk": {
+    "title": "Eingereichte Wochen warten auf Freigabe",
+    "description": "Wählen Sie Wochen und geben Sie sie gemeinsam frei. Jede Woche wird in ihrer eigenen Transaktion freigegeben; abgelehnte Wochen nennen ihren Grund.",
+    "approve": "Ausgewählte freigeben",
+    "approving": "Wird freigegeben…",
+    "approved": "{count, plural, one {# Woche freigegeben} other {# Wochen freigegeben}}",
+    "refused": "{count, plural, one {# Woche braucht Aufmerksamkeit} other {# Wochen brauchen Aufmerksamkeit}}",
+    "selectAll": "Alle wählen",
+    "clear": "Leeren"
+  },
   "status": {
     "submitted": "Eingereicht",
     "empty": "Keine Stunden"
@@ -55,6 +65,7 @@
     "saveBeforeSubmit": "Speichern Sie Ihre Änderungen vor dem Einreichen",
     "submittedToast": "Zur Genehmigung eingereicht",
     "approvedToast": "Stundenzettel genehmigt",
+    "approveBlockedByWorkflow": "Diese Woche gehört zu einem offenen Genehmigungsflow — entscheiden Sie sie dort.",
     "addLine": "Zeile hinzufügen",
     "projectPlaceholder": "Projekt…",
     "lineProjectAria": "Projekt in Zeile {line}",

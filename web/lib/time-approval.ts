@@ -17,6 +17,12 @@ import { postProjectLaborCost } from '@openbooks/engine/src/projects/recognition
 import { setTimesheetWeekStatus, weekWindow } from '../app/api/timesheets/_lib'
 import { snapshotTimeBillRates } from './item-rates'
 import { isFeatureEnabled } from './features'
+import { TimeApprovalRefusal } from './time-approval-refusal'
+
+export { TimeApprovalRefusal, type TimeApprovalRefusalCode, type UncoveredTimeEntry }
+
+/** Where the labor-costing policy lives for the wage-rate remedy. */
+export const LABOR_COSTING_SETUP_HREF = '/admin/setup/labor-costing'
 
 /**
  * The ONE set of side-effects that fire when time becomes approved — shared by
@@ -34,13 +40,37 @@ export async function runTimeApprovalEffects(orgId: string, actorId: string, tim
   if (timeEntryIds.length === 0) return
   const targets = (await db.execute<{ id: string; project_id: string | null; work_order_id: string | null }>(sql`
     select id,project_id,work_order_id from time_entries where org_id=${orgId} and id=any(${`{${timeEntryIds.join(',')}}`}::uuid[]) for share`)).rows
-  if (targets.length !== new Set(timeEntryIds).size) throw new Error('One or more time entries are unavailable. Reload before approving time.')
-  if (targets.some(row => row.project_id && row.work_order_id)) throw new Error('Time must name one cost object. Split project and production time before approval.')
+  if (targets.length !== new Set(timeEntryIds).size) {
+    throw new TimeApprovalRefusal(
+      'One or more time entries are unavailable. Reload before approving time.',
+      'entries_unavailable', 409,
+      'Reload the week and try again — an entry changed while the approval was prepared.',
+    )
+  }
+  if (targets.some(row => row.project_id && row.work_order_id)) {
+    throw new TimeApprovalRefusal(
+      'Time must name one cost object. Split project and production time before approval.',
+      'mixed_cost_objects', 422,
+      'Split the mixed lines so each names either a project or a production order, then approve again.',
+    )
+  }
   const productionIds = targets.filter(row => row.work_order_id).map(row => row.id)
   const projectsEnabled = await isFeatureEnabled(orgId, 'projects')
   const projectIds = projectsEnabled ? targets.filter(row => !row.work_order_id).map(row => row.id) : []
-  if (productionIds.length && !(await isFeatureEnabled(orgId, 'manufacturing'))) throw new Error('Manufacturing is turned off. Enable it before approving production time.')
-  if (!projectsEnabled && targets.some(row => row.project_id)) throw new Error('Projects is turned off. Enable it before approving project time.')
+  if (productionIds.length && !(await isFeatureEnabled(orgId, 'manufacturing'))) {
+    throw new TimeApprovalRefusal(
+      'Manufacturing is turned off. Enable it before approving production time.',
+      'manufacturing_off', 409,
+      'Turn Manufacturing back on in Company Settings → Features, then approve again.',
+    )
+  }
+  if (!projectsEnabled && targets.some(row => row.project_id)) {
+    throw new TimeApprovalRefusal(
+      'Projects is turned off. Enable it before approving project time.',
+      'projects_off', 409,
+      'Turn Projects back on in Company Settings → Features, then approve again.',
+    )
+  }
   if (!projectsEnabled && !productionIds.length) return
   const settings = await laborCostingSettings(orgId)
   await snapshotLaborCostRates(orgId, timeEntryIds, { actorId })
@@ -51,8 +81,8 @@ export async function runTimeApprovalEffects(orgId: string, actorId: string, tim
   // explicitly allows unrated time.
   // Every caller runs this inside the approval transaction before stamping
   // the header, so the refusal rolls the entry flips back with it.
-  const uncovered = (await db.execute<{ employee_name: string | null; worked_on: string }>(sql`
-    select p.display_name as employee_name, te.worked_on::text as worked_on
+  const uncovered = (await db.execute<{ employee_name: string | null; worked_on: string; party_kind: string | null }>(sql`
+    select p.display_name as employee_name, te.worked_on::text as worked_on, p.kind as party_kind
       from time_entries te
       left join parties p on p.id = te.employee_party_id and p.org_id = te.org_id
      where te.org_id = ${orgId}
@@ -63,8 +93,21 @@ export async function runTimeApprovalEffects(orgId: string, actorId: string, tim
   if (uncovered.length > 0 && !settings.allowUnratedTime) {
     const shown = uncovered.slice(0, 10).map((row) => `${row.employee_name ?? 'unknown employee'} on ${row.worked_on}`)
     const more = uncovered.length > shown.length ? `, and ${uncovered.length - shown.length} more` : ''
-    throw new Error(
-      `cannot approve ${uncovered.length === 1 ? 'a time entry' : `${uncovered.length} time entries`} with no covering wage rate: ${shown.join('; ')}${more} — add a wage row covering those dates, or allow unrated time in labor costing setup`,
+    // Partners and owners keep time as people, never as employments: their
+    // remedy names the cost rate, never an employment or compensation
+    // record. Employees keep the wage-row remedy.
+    const personOnly = uncovered.every((row) => row.party_kind === 'person')
+    const remedy = personOnly
+      ? 'Add a cost rate for them in Labor costing setup — they need no employment or compensation record — or allow unrated time.'
+      : 'Add a wage row covering those dates in Labor costing setup, or allow unrated time.'
+    throw new TimeApprovalRefusal(
+      `cannot approve ${uncovered.length === 1 ? 'a time entry' : `${uncovered.length} time entries`} with no covering cost rate: ${shown.join('; ')}${more} — ${remedy}`,
+      'no_covering_wage_rate', 422,
+      remedy,
+      {
+        uncovered: uncovered.map((row) => ({ employeeName: row.employee_name, workedOn: row.worked_on })),
+        setupHref: LABOR_COSTING_SETUP_HREF,
+      },
     )
   }
   if (productionIds.length) await applyProductionTimeCorrections(db,orgId,actorId,productionIds,permission)
@@ -140,7 +183,11 @@ export async function approveSubmittedTimeEntries(
            and status in ('pending', 'escalated')
       `)).rows[0]?.n ?? 0)
       if (openGates > 0) {
-        throw new Error('this week is owned by a pending approval workflow — its gates must resolve first')
+        throw new TimeApprovalRefusal(
+          'this week is owned by a pending approval workflow — its gates must resolve first',
+          'week_owned_by_workflow', 409,
+          'Decide the week through its approval flow instead of approving it directly.',
+        )
       }
     }
 
@@ -190,11 +237,18 @@ export async function approveSubmittedTimeEntries(
       `)).rows[0])
       if (prior) {
         const who = prior.by_name ?? prior.by_email ?? 'another approver'
-        throw new Error(
+        throw new TimeApprovalRefusal(
           `week already approved by ${who}${prior.on ? ` on ${prior.on}` : ''} — reopen or amend the week to change it`,
+          'already_approved', 409,
+          'Reopen or amend the week to change approved hours.',
+          { approvedBy: who, approvedOn: prior.on ?? null },
         )
       }
-      throw new Error('no submitted entries to approve — submit the week first')
+      throw new TimeApprovalRefusal(
+        'no submitted entries to approve — submit the week first',
+        'nothing_submitted', 422,
+        'Submit the week before approving it.',
+      )
     }
     const ids = approved.rows.map((row) => row.id)
     if (ids.length > 0) await runTimeApprovalEffects(options.orgId, options.actorId, ids)

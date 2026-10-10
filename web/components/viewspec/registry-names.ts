@@ -583,6 +583,7 @@ export const WIDGET_NAMES: ReadonlySet<string> = new Set([
   'tax-setup-guide',
   'tax-setup-header',
   'timesheet-drawer',
+  'timesheet-bulk-approve',
   'trash-back-link',
   'trash-list',
   'trend-chart',

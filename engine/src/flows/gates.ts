@@ -57,7 +57,14 @@ export function gateSubsidiaryScopeAllows(
     && allowedSubsidiaryIds.has(subsidiaryId);
 }
 
-export class GateError extends Error {}
+export class GateError extends Error {
+  /** Machine-readable refusal code; absent on legacy message-only throws. */
+  readonly code?: string;
+  constructor(message: string, code?: string) {
+    super(message);
+    if (code !== undefined) this.code = code;
+  }
+}
 
 /**
  * The unified atomic decision failure: ANY failure after the gate flip —
@@ -462,10 +469,13 @@ async function decideGateCore(args: Parameters<typeof decideGate>[0] & {
       !node ||
       node.preventSelfApproval !== false
     ) {
-      throw new GateError(
-        "you cannot approve your own submission — you created or submitted this record. " +
-          "Route it to another approver to decide.",
-      );
+      // A timesheet's enterer reads a timesheet-worded refusal; every other
+      // subject keeps the established generic text its tests assert.
+      const message = pre.subjectKind === "timesheet_week"
+        ? "You entered this timesheet; another approver must approve it."
+        : "you cannot approve your own submission — you created or submitted this record. " +
+          "Route it to another approver to decide.";
+      throw new GateError(message, "self_approval_forbidden");
     }
   }
 

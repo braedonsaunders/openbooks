@@ -4,6 +4,7 @@ import {
   actOnInboxItem,
   InboxError,
 } from "@openbooks/engine/src/inbox/index.ts";
+import { TimeApprovalRefusal } from "@/lib/time-approval-refusal";
 import "../../../../lib/authz";
 import { inboxContext } from "../../../../lib/inbox-context";
 import { parseJsonBody } from "@/lib/api/json";
@@ -18,14 +19,26 @@ const actBody = z.object({
   reason: z.string().max(2000).optional(),
 });
 
-function errorOf(error: unknown): { status: number; message: string } {
+function errorOf(error: unknown): { status: number; body: Record<string, unknown> } {
   if (error instanceof InboxError) {
-    if (error.code === "NOT_FOUND") return { status: 404, message: error.message };
-    return { status: 422, message: error.message };
+    if (error.code === "NOT_FOUND") return { status: 404, body: { error: error.message } };
+    return { status: 422, body: { error: error.message } };
   }
-  if (error instanceof z.ZodError) return { status: 400, message: "itemId and actionKey are required" };
+  // Designed domain refusals keep code, remedy and details beside the message.
+  if (error instanceof TimeApprovalRefusal) {
+    return {
+      status: error.status,
+      body: {
+        error: error.message,
+        code: error.code,
+        remedy: error.remedy,
+        ...(error.details ? { details: error.details } : {}),
+      },
+    };
+  }
+  if (error instanceof z.ZodError) return { status: 400, body: { error: "itemId and actionKey are required" } };
   const message = error instanceof Error ? error.message : "the action was refused";
-  return { status: 422, message };
+  return { status: 422, body: { error: message } };
 }
 
 /**
@@ -53,8 +66,8 @@ export const POST = defineRoute({
       );
       return NextResponse.json({ ok: true });
     } catch (error) {
-      const { status, message } = errorOf(error);
-      return NextResponse.json({ error: message }, { status });
+      const { status, body } = errorOf(error);
+      return NextResponse.json(body, { status });
     }
 
   },

@@ -1,5 +1,5 @@
 import { authorizeTimeWorkspace, refuseOthersTime, timeWorkFamily } from "@/lib/time-workspace";
-import { lockSharedTimeAuthority } from "@openbooks/engine/src/projects/time-work-target.ts";
+import { lockSharedTimeAuthority, TimeWorkTargetError } from "@openbooks/engine/src/projects/time-work-target.ts";
 import { z } from "zod";
 import { isoDate, uuidId } from "@/lib/api/json";
 import { defineRoute } from "@/lib/api/route";
@@ -26,6 +26,8 @@ import {
 } from "../../../lib/custom-fields";
 import { initialEntryStatus, loadTimePolicy } from "../../../lib/time-policy";
 import { runTimeApprovalEffects } from "../../../lib/time-approval";
+import { TimeApprovalRefusal } from "../../../lib/time-approval-refusal";
+import { apiErrorResponse } from "@/lib/api/error-response";
 import { canonicalDecimal, compareDecimal } from "../../../lib/exact-decimal";
 import { canonicalJson } from "@openbooks/engine/src/platform/canonical-json.ts";
 import { lockTimeWorkOrderTarget } from "@openbooks/engine/src/projects/time-work-target.ts";
@@ -620,6 +622,10 @@ const save = defineRoute({
       if (error instanceof TimeLineEntityRefusal) return bad(error.message);
       if (error instanceof ScopeNotFoundError)
         return notFound("record");
+      // A designed approval refusal inside auto-approve answers typed, not
+      // as an unexpected failure: the save wrote nothing, by transaction.
+      if (error instanceof TimeApprovalRefusal || error instanceof TimeWorkTargetError)
+        return apiErrorResponse(error);
       throw error;
     }
     if (staleRevision !== null) {

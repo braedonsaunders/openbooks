@@ -568,6 +568,7 @@ export const WIDGET_CONTRACTS: Readonly<Record<string, WidgetContract>> = {
   'tax-setup-guide': { props: ['guide'] },
   'tax-setup-header': { props: ['subtitle', 'title'] },
   'timesheet-drawer': { props: ['drawer'] },
+  'timesheet-bulk-approve': { props: ['weeks'] },
   'trash-back-link': { props: ['href', 'label'] },
   'trash-list': { props: ['rows'] },
   'trend-chart': { props: ['area', 'format', 'height', 'labels', 'maxTicks', 'series'] },

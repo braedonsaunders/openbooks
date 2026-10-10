@@ -23,10 +23,17 @@ export async function apiErrorResponse(
     const status = ('status' in error ? error.status : 'statusCode' in error ? error.statusCode : options.safeStatus) as number
     // A typed business refusal's remedy is part of its public result. Keep
     // only its named contract fields; unrelated Error internals stay private.
-    const metadata: Record<string, string> = {}
+    // `details` carries structured evidence (never internals): plain objects
+    // only, so a stray class instance or circular value cannot leak or crash
+    // the serializer.
+    const metadata: Record<string, unknown> = {}
     for (const key of ['code', 'remedy', 'field'] as const) {
       const value = (error as Error & { code?: unknown; remedy?: unknown; field?: unknown })[key]
       if (typeof value === 'string' && value.trim() !== '') metadata[key] = value
+    }
+    const details = (error as Error & { details?: unknown }).details
+    if (details !== null && typeof details === 'object' && !Array.isArray(details)) {
+      metadata.details = details
     }
     return NextResponse.json({ error: error.message, ...metadata, ...options.details }, { status })
   }
