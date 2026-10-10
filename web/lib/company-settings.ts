@@ -4,6 +4,7 @@ import { db } from "@openbooks/engine/src/platform/db.ts";
 import { lockLedgerSetupFence } from "@openbooks/engine/src/organization/ledger-setup-fence.ts";
 import {
   assertValidControlAccountMappings,
+  CONTROL_ACCOUNT_ROLE_LABELS,
   CONTROL_ACCOUNT_ROLES,
   ControlAccountsIncompleteError,
   type ControlAccountRecord,
@@ -317,7 +318,7 @@ export async function updateCompanySettings(
           continue;
         }
         if (typeof v !== "string" || !isUuid(v)) {
-          return { status: 400, body: { error: `${key} must be an account id` } };
+          return { status: 400, body: { error: `${CONTROL_ACCOUNT_ROLE_LABELS[key]} must be an account id`, code: "control-account-invalid", role: key, reason: "missing" } };
         }
         collected[key] = v;
       }
@@ -326,7 +327,7 @@ export async function updateCompanySettings(
         const accountId = collected[key];
         if (accountId === undefined) continue;
         if (typeof accountId !== "string" || !isUuid(accountId)) {
-          return { status: 400, body: { error: `${key}: stored control account id is invalid` } };
+          return { status: 400, body: { error: `${CONTROL_ACCOUNT_ROLE_LABELS[key]}: stored control account id is invalid — choose the account again`, code: "control-account-invalid", role: key, reason: "missing" } };
         }
         ids.add(accountId);
       }
@@ -346,7 +347,17 @@ export async function updateCompanySettings(
           );
         } catch (error) {
           if (error instanceof ControlAccountsIncompleteError) {
-            return { status: 400, body: { error: error.message } };
+            // The message names the role in plain words; the structured
+            // detail lets the settings screen restate it in the operator's
+            // language beside the field.
+            return { status: 400, body: {
+              error: error.message,
+              code: "control-account-invalid",
+              ...(error.role ? { role: error.role } : {}),
+              ...(error.reason ? { reason: error.reason } : {}),
+              ...(error.accountType ? { accountType: error.accountType } : {}),
+              ...(error.allowedTypes ? { allowedTypes: error.allowedTypes } : {}),
+            } };
           }
           throw error;
         }

@@ -927,6 +927,16 @@
         "hint": "Una línea así modifica el saldo del mayor sin partida abierta, de modo que la antigüedad, los estados de cuenta y los saldos abiertos dejan de cuadrar con el mayor. Advertir la contabiliza y muestra la solución; Rechazar bloquea la contabilización e indica usar Recibir pago, Pagar facturas o indicar el tercero en la línea. Se aplica solo a contabilizaciones nuevas.",
         "warn": "Advertir y contabilizar",
         "refuse": "Rechazar la contabilización"
+      },
+      "expectedTypes": "Acepta: {types}",
+      "incompatibleOption": "{account} (tipo no aceptado)",
+      "incompatibleSelected": "El tipo de la cuenta seleccionada no se acepta para {role}. Elija {types}.",
+      "noEligibleAccounts": "No hay cuentas activas del tipo {types}: agregue una en el plan de cuentas",
+      "refusals": {
+        "type": "{role} debe ser {types}; la cuenta seleccionada es {actual}.",
+        "inactive": "{role}: la cuenta seleccionada está inactiva. Elija una cuenta activa.",
+        "summary": "{role}: la cuenta seleccionada es una cuenta de resumen. Elija una cuenta que admita asientos.",
+        "missing": "{role}: la cuenta seleccionada ya no existe. Vuelva a elegir la cuenta."
       }
     },
     "revenue": {

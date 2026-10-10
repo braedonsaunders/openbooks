@@ -1,6 +1,11 @@
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { revenueRecognitionFeatureEnabled } from "../revenue/recognition.ts";
+import {
+  CONTROL_ACCOUNT_TYPE_LABELS,
+  CONTROL_ACCOUNT_TYPE_POLICY,
+  controlAccountExpectedTypes,
+} from "../records/control-accounts.ts";
 import { type Doc, type KernelLine, type PostingDeps, type TaxPostingComponent, PostingError } from "../journal/posting-contracts.ts";
 /** document_line id → deferred-revenue account for rev-rec invoice lines. */
 export async function resolveDeferralAccounts(
@@ -75,13 +80,14 @@ async function resolveEmployeeReceivable(
   const row = r.rows[0];
   if (!row?.raw) return undefined;
   if (!row.id) {
-    throw new PostingError("employee-receivable control account does not exist in this organization");
+    throw new PostingError("Employee receivable control account does not exist in this organization");
   }
-  if (row.isActive !== true) throw new PostingError("employee-receivable control account is inactive");
-  if (row.isSummary === true) throw new PostingError("employee-receivable control account is a summary account");
-  if (row.type !== "asset_receivable" && row.type !== "asset_current_other") {
+  if (row.isActive !== true) throw new PostingError("Employee receivable control account is inactive — choose an active account");
+  if (row.isSummary === true) throw new PostingError("Employee receivable control account is a summary account — choose a postable account");
+  const allowed: readonly string[] = CONTROL_ACCOUNT_TYPE_POLICY.employeeReceivable;
+  if (!allowed.includes(row.type ?? "")) {
     throw new PostingError(
-      `employee-receivable control account type ${row.type} is incompatible; expected asset_receivable, asset_current_other`,
+      `Employee receivable control account must be ${controlAccountExpectedTypes("employeeReceivable")}; the selected account is ${CONTROL_ACCOUNT_TYPE_LABELS[row.type ?? ""] ?? row.type}`,
     );
   }
   return row.id;

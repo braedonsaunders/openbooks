@@ -927,6 +927,16 @@
         "hint": "此类行会改变总账余额却不产生未清项，导致账龄、对账单和未清余额与总账不一致。“警告”会过账并显示处理方法；“拒绝”会阻止过账，并引导用户使用“收款”“支付账单”或在该行指定往来方。仅适用于新的过账。",
         "warn": "警告并过账",
         "refuse": "拒绝过账"
+      },
+      "expectedTypes": "可选类型：{types}",
+      "incompatibleOption": "{account}（类型不符）",
+      "incompatibleSelected": "所选科目的类型不适用于{role}。请选择{types}。",
+      "noEligibleAccounts": "没有{types}类型的有效科目——请在会计科目表中添加",
+      "refusals": {
+        "type": "{role}必须为{types}；所选科目为{actual}。",
+        "inactive": "{role}：所选科目已停用。请选择有效科目。",
+        "summary": "{role}：所选科目为汇总科目。请选择可记账科目。",
+        "missing": "{role}：所选科目已不存在。请重新选择科目。"
       }
     },
     "revenue": {
