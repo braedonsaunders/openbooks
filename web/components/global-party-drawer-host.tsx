@@ -32,7 +32,8 @@ interface DrawerPayload {
   layout: Parameters<typeof PartyDrawer>[0]['layout']
   forms: Parameters<typeof PartyDrawer>[0]['forms']
   currentFormId: string | null
-  recordType: 'customer' | 'vendor' | 'employee'
+  /** Null for a party holding no customer, vendor or employee role. */
+  recordType: 'customer' | 'vendor' | 'employee' | null
   canCustomize: boolean
   canReadBenefits?: boolean
   canReadCompensation?: boolean
@@ -150,7 +151,7 @@ export function GlobalPartyDrawerHost({
         layout={data.layout}
         forms={data.forms}
         currentFormId={data.currentFormId}
-        recordType={data.recordType}
+        recordType={data.recordType ?? undefined}
         canCustomize={data.canCustomize}
       />
       {transactionData ? (

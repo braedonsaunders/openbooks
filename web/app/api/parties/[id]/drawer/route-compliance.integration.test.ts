@@ -92,3 +92,23 @@ test("the overlay drawer payload omits compliance when the feature is off", asyn
     await withBypassContext(() => dropScratchOrg(orgId));
   }
 });
+
+test("the overlay drawer's record type follows the party's actual role", async () => {
+  const { orgId, partyId } = await fixture(false);
+  try {
+    const vendor = (await (await get(partyId)).json()) as { recordType: unknown };
+    assert.equal(vendor.recordType, "vendor", "a vendor company customizes the vendor form");
+
+    const bareId = randomUUID();
+    await withBypassContext(() => db.execute(sql`insert into parties(id,org_id,kind,display_name,subsidiary_id,is_active,custom)
+      values (${bareId},${orgId},'company','Roleless company',null,true,'{}'::jsonb)`));
+    const res = await get(bareId);
+    assert.equal(res.status, 200);
+    const bare = (await res.json()) as { recordType: unknown; forms: unknown; canReadBenefits: unknown };
+    assert.equal(bare.recordType, null, "a company with no role never resolves to the employee form");
+    assert.deepEqual(bare.forms, []);
+    assert.equal(bare.canReadBenefits, false);
+  } finally {
+    await withBypassContext(() => dropScratchOrg(orgId));
+  }
+});
