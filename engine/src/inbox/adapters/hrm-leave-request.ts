@@ -38,7 +38,7 @@ export const hrmLeaveRequestAdapter: InboxAdapter = {
         subtitle: `leave approval${gate.onBehalfOf ? ` on behalf of ${gate.onBehalfOf.name}` : ""} — waiting since ${new Date(gate.createdAt).toISOString().slice(0, 10)}`,
         dueAt,
         createdAt: new Date(gate.createdAt).toISOString(),
-        priority: priorityForDueDate(dueAt, ctx.asOf),
+        priority: priorityForDueDate(dueAt, ctx.asOf, ctx.timeZone),
         subjectHref: gate.href ?? "/hrm/leave",
         actions: [
           // The leave release requires a non-blank reason even to approve

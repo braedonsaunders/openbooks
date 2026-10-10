@@ -59,4 +59,4 @@ export type {
   InboxListContext,
   InboxPriority,
 } from "./types.ts";
-export { compareInboxItems, inboxItemId, parseInboxItemId, priorityForDueDate } from "./types.ts";
+export { compareInboxItems, dueBusinessDay, inboxItemId, parseInboxItemId, priorityForDueDate } from "./types.ts";

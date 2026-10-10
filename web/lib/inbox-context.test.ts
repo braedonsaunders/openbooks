@@ -77,7 +77,7 @@ test("a failed task source is named while healthy sources retain their count", a
   __testResetInboxAdapters([source("hrm_process_step", 2), broken]);
   assert.deepEqual(await inboxCounts(viewer(), ctx), {
     approvals: 0, tasks: 2, count: 2,
-    notices: [{ kind: "notification", message: "the inbox source could not be read" }],
+    notices: [{ kind: "notification", code: "failed", message: "the inbox source could not be read" }],
   });
 });
 
@@ -138,5 +138,5 @@ test("one unavailable task source names one sanitized notice without losing heal
   assert.equal(result.filters.all.length, 1);
   assert.equal(result.filters.signatures.length, 1);
   assert.deepEqual(result.filters.notices, []);
-  assert.deepEqual(result.notices, [{ kind: 'notification', message: 'the inbox source could not be read' }]);
+  assert.deepEqual(result.notices, [{ kind: 'notification', code: 'failed', message: 'the inbox source could not be read' }]);
 });

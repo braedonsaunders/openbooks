@@ -44,7 +44,7 @@ export const timesheetWeekAdapter: InboxAdapter = {
         subtitle: `timesheet approval${gate.onBehalfOf ? ` on behalf of ${gate.onBehalfOf.name}` : ""} — waiting since ${new Date(gate.createdAt).toISOString().slice(0, 10)}`,
         dueAt,
         createdAt: new Date(gate.createdAt).toISOString(),
-        priority: priorityForDueDate(dueAt, ctx.asOf),
+        priority: priorityForDueDate(dueAt, ctx.asOf, ctx.timeZone),
         subjectHref: gate.href ?? "/timesheets",
         actions: [
           { key: "approve", label: "Approve", style: "primary", needsReason: false },
@@ -56,19 +56,27 @@ export const timesheetWeekAdapter: InboxAdapter = {
     }
     const partyId = await actorPartyId(ctx);
     if (partyId) {
+      // Timesheet weeks run Sunday through Saturday. A week is owed once it
+      // has fully ended on the organization's business calendar: its
+      // following Sunday is on or before today. The submission is due that
+      // Sunday, so it reads as due on that day and overdue only after it —
+      // never on the week's own last day, and never by the database
+      // server's clock or its Monday-based week.
+      const today = ctx.asOf.slice(0, 10);
       const weeks = (await db.execute<OwnWeekRow>(sql`
         select id::text as id, week_start::text as week_start, status
           from timesheet_weeks
          where org_id = ${ctx.orgId}
            and employee_party_id = ${partyId}
            and status in ('draft', 'rejected')
-           and week_start < date_trunc('week', current_date)::date
+           and week_start + 7 <= ${today}::date
          order by week_start desc
          limit 10
       `)).rows;
       for (const week of weeks) {
         const dueAt = new Date(`${week.week_start}T00:00:00Z`);
         dueAt.setUTCDate(dueAt.getUTCDate() + 7);
+        const dueDay = dueAt.toISOString().slice(0, 10);
         out.push({
           id: inboxItemId("timesheet_week", `own:${week.id}`),
           kind: "timesheet_week",
@@ -77,10 +85,13 @@ export const timesheetWeekAdapter: InboxAdapter = {
             week.status === "rejected"
               ? "rejected — fix the flagged entries and submit the week in Timesheets"
               : "the week ended with no submission — submit it in Timesheets",
-          dueAt: dueAt.toISOString(),
+          dueAt: dueDay,
           createdAt: dueAt.toISOString(),
-          priority: "overdue",
-          subjectHref: `/timesheets?week=${week.week_start}`,
+          priority: priorityForDueDate(dueDay, ctx.asOf, ctx.timeZone),
+          // Open the week itself: the timesheets page opens a week's
+          // drawer from `timesheet=<employee>:<week start>`, the same id
+          // its list rows emit, so the link lands on this exact timesheet.
+          subjectHref: `/timesheets?timesheet=${partyId}:${week.week_start}`,
           actions: [],
           source: { kind: "timesheet_week", id: week.id },
         });

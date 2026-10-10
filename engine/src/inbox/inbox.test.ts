@@ -268,6 +268,7 @@ describe("adapter isolation (OM-10)", () => {
       );
       assert.equal(notices.length, 1);
       assert.equal(notices[0]!.kind, "notification");
+      assert.equal(notices[0]!.code, "failed");
       assert.equal(notices[0]!.message, "the inbox source could not be read");
       assert.equal(errors.length, 1, "an unexpected source failure is logged the way the house does");
       assert.match(String(errors[0]![0]), /\[inbox\] notification/);
@@ -276,10 +277,11 @@ describe("adapter isolation (OM-10)", () => {
     }
   });
 
-  it("a named authorization refusal is noticed by name, not logged", async () => {
+  it("a source the actor holds no grant for is skipped silently, not noticed or logged", async () => {
     // Gating refusals are an expected outcome of the read model, not an
-    // operational failure: the inbox names the source and keeps the other
-    // legs, without log noise on every load.
+    // operational failure: the actor has no work in that source, so the
+    // inbox keeps the other legs and names nothing — never a permission
+    // key or setup route at the person it refused.
     const healthy = [item({ id: "flows_approval:g1", actions: [] })];
     __testResetInboxAdapters([
       fakeAdapter(healthy),
@@ -297,9 +299,7 @@ describe("adapter isolation (OM-10)", () => {
         listed.map((i) => i.id),
         ["flows_approval:g1"],
       );
-      assert.equal(notices.length, 1);
-      assert.equal(notices[0]!.kind, "notification");
-      assert.match(notices[0]!.message, /hrm\.leave\.request/);
+      assert.deepEqual(notices, [], "no notice names the refused source");
       assert.deepEqual(errors, [], "an expected refusal must not log");
     } finally {
       __testResetInboxAdapters([]);
@@ -508,9 +508,9 @@ describe("inbox source reads", () => {
       async act() {},
     });
     __testResetInboxAdapters([
-      source("flows_approval", new HrmAuthorizationError("approvals refused")),
+      source("flows_approval", new InboxError("REFUSED", "approvals refused")),
       source("expense_report", 2),
-      source("notification", new HrmAuthorizationError("notices refused")),
+      source("notification", new InboxError("REFUSED", "notices refused")),
     ]);
     try {
       const notices: InboxSourceNotice[] = [];
@@ -520,8 +520,8 @@ describe("inbox source reads", () => {
       ]);
       assert.equal(counted, 2);
       assert.deepEqual(notices, [
-        { kind: "flows_approval", message: "approvals refused" },
-        { kind: "notification", message: "notices refused" },
+        { kind: "flows_approval", code: "refused", message: "approvals refused" },
+        { kind: "notification", code: "refused", message: "notices refused" },
       ]);
     } finally {
       __testResetInboxAdapters([]);

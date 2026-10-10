@@ -77,7 +77,7 @@ export const hrmQualificationAlertAdapter: InboxAdapter = {
         subtitle: `expires ${row.expiry_on} — renew it before work that needs it is refused`,
         dueAt,
         createdAt: dueAt,
-        priority: priorityForDueDate(dueAt, ctx.asOf),
+        priority: priorityForDueDate(dueAt, ctx.asOf, ctx.timeZone),
         subjectHref: "/hrm/qualifications",
         actions: [],
         source: { kind: "hrm_worker_qualification", id: row.id },

@@ -10,6 +10,7 @@
  */
 
 import type { SqlExecutor } from "../platform/db.ts";
+import { formatInZone } from "../platform/business-date.ts";
 import type { InboxKind } from "./kinds.ts";
 export type { InboxKind } from "./kinds.ts";
 
@@ -32,6 +33,11 @@ export interface InboxItem {
   readonly kind: InboxKind;
   readonly title: string;
   readonly subtitle: string | null;
+  /**
+   * When the work is due: a business day (YYYY-MM-DD) for date-only
+   * deadlines, or an ISO instant. Render and compare it through
+   * dueBusinessDay so both read as the organization's business day.
+   */
   readonly dueAt: string | null;
   readonly createdAt: string;
   readonly priority: InboxPriority;
@@ -44,6 +50,12 @@ export interface InboxListContext {
   readonly orgId: string;
   readonly actorId: string;
   readonly asOf: string;
+  /**
+   * The organization's business time zone (IANA). Due instants are compared
+   * as business days in this zone, the same zone `asOf` was taken in; absent
+   * means the instant's UTC day.
+   */
+  readonly timeZone?: string;
   /**
    * HR-20: injectable executor for the feature-off bypass proof — a test
    * double that throws when a gated table is reached. Absent means the
@@ -63,10 +75,30 @@ export interface InboxListContext {
   };
 }
 
-/** Priority from an optional due date relative to asOf (day-granular). */
-export function priorityForDueDate(dueAt: string | null, asOf: string): InboxPriority {
+/**
+ * The business day a due value falls on. A date-only value is already a
+ * business day; an instant is placed in the organization's zone, so a due
+ * time late in the local evening never reads as the next (or previous) day.
+ */
+export function dueBusinessDay(dueAt: string, timeZone?: string): string {
+  if (!dueAt.includes("T") || !timeZone) return dueAt.slice(0, 10);
+  const instant = new Date(dueAt);
+  if (Number.isNaN(instant.getTime())) return dueAt.slice(0, 10);
+  try {
+    return formatInZone(instant, timeZone);
+  } catch {
+    return dueAt.slice(0, 10);
+  }
+}
+
+/**
+ * Priority from an optional due date relative to asOf, compared as whole
+ * business days: overdue only once the due day has passed, due soon from
+ * three days before through the due day itself.
+ */
+export function priorityForDueDate(dueAt: string | null, asOf: string, timeZone?: string): InboxPriority {
   if (!dueAt) return "normal";
-  const dueDay = dueAt.slice(0, 10);
+  const dueDay = dueBusinessDay(dueAt, timeZone);
   const today = asOf.slice(0, 10);
   if (dueDay < today) return "overdue";
   const soon = new Date(`${today}T00:00:00Z`).getTime() + 3 * 24 * 3600 * 1000;

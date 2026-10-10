@@ -83,7 +83,7 @@ export const hrmBenefitEnrollmentWindowAdapter: InboxAdapter = {
         subtitle: `you have no election yet — choose plans in benefits before ${row.closes_on}`,
         dueAt,
         createdAt: dueAt,
-        priority: priorityForDueDate(dueAt, ctx.asOf),
+        priority: priorityForDueDate(dueAt, ctx.asOf, ctx.timeZone),
         subjectHref: "/hrm/benefits",
         actions: [],
         source: { kind: "hrm_enrollment_window", id: row.id },

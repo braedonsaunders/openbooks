@@ -38,7 +38,7 @@ export const hrmChangeRequestAdapter: InboxAdapter = {
         subtitle: `change request approval${gate.onBehalfOf ? ` on behalf of ${gate.onBehalfOf.name}` : ""} — waiting since ${new Date(gate.createdAt).toISOString().slice(0, 10)}`,
         dueAt,
         createdAt: new Date(gate.createdAt).toISOString(),
-        priority: priorityForDueDate(dueAt, ctx.asOf),
+        priority: priorityForDueDate(dueAt, ctx.asOf, ctx.timeZone),
         subjectHref: gate.href ?? "/hrm/change-requests",
         actions: [
           { key: "approve", label: "Approve", style: "primary", needsReason: false },

@@ -83,13 +83,14 @@ function adapterFor(kind: string): InboxAdapter | null {
 
 /**
  * One source that could not be read. The kind names the area so the surface
- * can say WHICH work is missing. The message is a designed refusal intact
- * (an authorization gate or adapter refusal, whose remedy the operator can
- * act on); an unexpected source failure carries a generic reason — driver
- * text must never reach the rendered notice.
+ * can say WHICH work is missing. `refused` carries a designed adapter
+ * refusal intact (its remedy is the message); `failed` is an unexpected
+ * source failure with a generic reason the surface replaces with plain,
+ * localized copy — driver text never reaches the rendered notice.
  */
 export interface InboxSourceNotice {
   readonly kind: InboxKind;
+  readonly code: "refused" | "failed";
   readonly message: string;
 }
 
@@ -98,21 +99,22 @@ export interface InboxSourceNotice {
  * The failure is named into the caller's notices collector (when supplied)
  * so the surface renders it beside the surviving sources; a failed leg is
  * never cached, so a retry re-reads rather than serving an empty list as
- * "no work". Expected gating refusals stay out of the logs — they are an
- * outcome of the read model, not an operational failure. Anything else
- * logs the way the house does.
+ * "no work".
+ *
+ * A source the actor holds no grant for is not a failure: the actor simply
+ * has no work there, so an authorization refusal contributes nothing and
+ * names nothing — a personal inbox never lists permission keys or setup
+ * routes at the person it refused. Anything unexpected logs the way the
+ * house does.
  */
 function recordSourceFailure(kind: InboxKind, error: unknown, notices?: InboxSourceNotice[]): void {
-  // Designed refusals name their remedy and stay intact; anything else is an
-  // unexpected source failure whose detail lives in the server log only.
-  const message =
-    error instanceof HrmAuthorizationError || error instanceof InboxError
-      ? error.message
-      : "the inbox source could not be read";
-  if (!(error instanceof HrmAuthorizationError)) {
-    console.error(`[inbox] ${kind} list failed:`, error);
+  if (error instanceof HrmAuthorizationError) return;
+  if (error instanceof InboxError) {
+    notices?.push({ kind, code: "refused", message: error.message });
+    return;
   }
-  notices?.push({ kind, message });
+  console.error(`[inbox] ${kind} list failed:`, error);
+  notices?.push({ kind, code: "failed", message: "the inbox source could not be read" });
 }
 
 /**

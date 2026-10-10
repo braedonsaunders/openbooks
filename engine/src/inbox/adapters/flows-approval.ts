@@ -58,7 +58,7 @@ function gateItem(gate: Extract<UnifiedApproval, { kind: "flow_gate" }>["gate"],
     subtitle: `${gate.subjectLabel ?? gate.subjectKind}${onBehalf} — waiting since ${new Date(gate.createdAt).toISOString().slice(0, 10)}`,
     dueAt,
     createdAt: new Date(gate.createdAt).toISOString(),
-    priority: priorityForDueDate(dueAt, ctx.asOf),
+    priority: priorityForDueDate(dueAt, ctx.asOf, ctx.timeZone),
     subjectHref: gate.href ?? "/inbox",
     actions: [
       { key: "approve", label: "Approve", style: "primary", needsReason: false },

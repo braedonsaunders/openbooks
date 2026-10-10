@@ -47,5 +47,6 @@
   "refused": "完了できませんでした: {message}",
   "sourceUnavailable": "{source}は利用できません: {reason}",
   "delegatePlaceholder": "委任先…",
-  "count": "{count}件"
+  "count": "{count}件",
+  "sourceFailed": "{source}のタスクを現在読み込めません。その他のタスクは表示されています。しばらくしてからもう一度お試しください。繰り返し発生する場合は管理者に連絡してください。"
 }

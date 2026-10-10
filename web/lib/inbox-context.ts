@@ -1,6 +1,6 @@
 import "server-only";
 import { countInbox, listInbox, type InboxItem, type InboxKind, type InboxListContext, type InboxSourceNotice } from "@openbooks/engine/src/inbox/index.ts";
-import { businessToday } from "@openbooks/engine/src/platform/business-date.ts";
+import { businessTimeZone, businessToday } from "@openbooks/engine/src/platform/business-date.ts";
 import { can, type Authz } from "./authz";
 import { isFeatureEnabled } from "./features";
 
@@ -12,14 +12,16 @@ import { isFeatureEnabled } from "./features";
  */
 export async function inboxContext(authz: Authz): Promise<InboxListContext> {
   const orgId = authz.user.orgId;
-  const [asOf, budgetsOn] = await Promise.all([
+  const [asOf, timeZone, budgetsOn] = await Promise.all([
     businessToday(orgId),
+    businessTimeZone(orgId),
     isFeatureEnabled(orgId, "budgets"),
   ]);
   return {
     orgId,
     actorId: authz.user.id,
     asOf,
+    timeZone,
     scope: {
       roles: authz.user.roles.map((role) => role.key),
       allowedSubsidiaryIds: authz.allowedSubsidiaryIds === null ? null : [...authz.allowedSubsidiaryIds],
@@ -34,8 +36,8 @@ export async function inboxContext(authz: Authz): Promise<InboxListContext> {
  * else carries a generic reason), so mapping them here keeps raw `.message`
  * text out of API route bodies entirely.
  */
-export function toInboxNoticeViews(notices: InboxSourceNotice[]): { source: InboxKind; reason: string }[] {
-  return notices.map((notice) => ({ source: notice.kind, reason: notice.message }));
+export function toInboxNoticeViews(notices: InboxSourceNotice[]): { source: InboxKind; code: InboxSourceNotice["code"]; reason: string }[] {
+  return notices.map((notice) => ({ source: notice.kind, code: notice.code, reason: notice.message }));
 }
 
 /** The doorway to decision rows lives in ./approval-doorway; re-exported for inbox callers. */
