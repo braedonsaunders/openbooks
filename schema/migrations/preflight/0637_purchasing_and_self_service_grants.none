@@ -1,0 +1,1 @@
+Data-only grant carry-over: every statement adds keys to existing roles, overrides and API key scopes and refuses nothing, so there is no precondition to probe.
