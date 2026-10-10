@@ -98,7 +98,7 @@ export async function loadPurchaseOrders(
              order by p.display_name limit 2000`),
           db.execute<ElementOf<OrderDrawerProps['accounts']>>(sql`select id, number, name from accounts where org_id = ${authz.user.orgId} and is_active and not is_summary order by number nulls last`),
           db.execute<ElementOf<OrderDrawerProps['items']>>(sql`
-            select it.id, it.code, it.name, it.default_rate, it.income_account_id, it.expense_account_id, it.tax_code_id, it.unit,
+            select it.id, it.code, it.name, it.default_rate, it.default_cost, it.income_account_id, it.expense_account_id, it.tax_code_id, it.unit,
                    exists (select 1 from item_inventory_profiles p where p.org_id = it.org_id and p.item_id = it.id) as has_inventory_profile
               from items it
              where it.org_id = ${authz.user.orgId} and it.is_active
