@@ -78,6 +78,21 @@ export function PromptRoot() {
   const [value, setValue] = React.useState('')
   const inputRef = React.useRef<HTMLInputElement | HTMLTextAreaElement>(null)
 
+  // The controlled value is the single source of truth for both the confirm
+  // button and the submitted text — but a programmatic fill (autofill, a
+  // script setting the field) can land in the element without React's
+  // onChange ever firing, leaving the button disabled under visible text.
+  // Re-reading the live element on focus and blur pulls such fills into
+  // state the moment the operator interacts with the field.
+  function readLiveValue(): string | null {
+    const el = inputRef.current
+    return el && 'value' in el ? el.value : null
+  }
+  function syncFromElement() {
+    const live = readLiveValue()
+    if (live !== null) setValue(live)
+  }
+
   // Reset the field each time a new request opens, during render (same
   // committed value, no extra render). Focus + scroll-lock stay in the effect
   // below — they synchronize external systems, not state.
@@ -108,7 +123,10 @@ export function PromptRoot() {
       settle(value)
       return
     }
-    const trimmed = value.trim()
+    // The submitted text is what is visibly in the field: the live element
+    // wins over lagging state, so a programmatic fill submitted by keyboard
+    // resolves its text instead of cancelling as empty.
+    const trimmed = (readLiveValue() ?? value).trim()
     settle(trimmed ? trimmed : null)
   }
 
@@ -171,7 +189,7 @@ export function PromptRoot() {
                     ))}
                   </select>
                 ) : req.multiline ? (
-                  <Textarea id="prompt-input" rows={8} ref={inputRef as React.Ref<HTMLTextAreaElement>} value={value} placeholder={req.placeholder} onChange={(e) => setValue(e.target.value)} onKeyDown={(e) => { if (e.key === 'Escape') settle(null) }} />
+                  <Textarea id="prompt-input" rows={8} ref={inputRef as React.Ref<HTMLTextAreaElement>} value={value} placeholder={req.placeholder} onChange={(e) => setValue(e.target.value)} onFocus={syncFromElement} onBlur={syncFromElement} onKeyDown={(e) => { if (e.key === 'Escape') settle(null) }} />
                 ) : (
                   <Input
                     id="prompt-input"
@@ -179,6 +197,8 @@ export function PromptRoot() {
                     value={value}
                     placeholder={req.placeholder}
                     onChange={(e) => setValue(e.target.value)}
+                    onFocus={syncFromElement}
+                    onBlur={syncFromElement}
                     onKeyDown={(e) => {
                       if (e.key === 'Escape') settle(null)
                     }}

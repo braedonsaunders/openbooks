@@ -4,7 +4,20 @@ import { z } from "zod";
 import { NextResponse } from "next/server";
 import { sql, type SQL } from "drizzle-orm";
 import { db, type SqlExecutor } from "@openbooks/engine/src/platform/db.ts";
-import { RecurringError, runScheduleNow, recurringTemplateScopeFilter } from "@openbooks/engine/src/billing/recurring.ts";
+import {
+  assertTemplateTokensKnown,
+  CATCH_UP_CHOICE_THRESHOLD,
+  pendingOccurrences,
+  RecurringError,
+  remainingOccurrences,
+  runScheduleCatchUp,
+  runScheduleNow,
+  recurringTemplateScopeFilter,
+  toDateArrayLiteral,
+  type Cadence,
+  type CatchUpMode,
+} from "@openbooks/engine/src/billing/recurring.ts";
+import { businessToday } from "@openbooks/engine/src/platform/business-date.ts";
 import { can, type Authz } from "../../../../lib/authz";
 import { defineRoute } from "../../../../lib/api/route";
 import { isDocKindEnabled } from "../../../../lib/documents.ts";
@@ -16,7 +29,14 @@ export const runtime = "nodejs";
 const patchSchema = z.object({
   isActive: z.boolean().optional(), autoPost: z.boolean().optional(),
   nextRunOn: isoDate().optional(), endsOn: isoDate().nullable().optional(),
+  maxOccurrences: z.number().int().min(1).nullable().optional(),
+  skippedRunOns: z.array(isoDate()).optional(),
   name: z.string().trim().max(255).nullable().optional(),
+  catchUp: z.object({
+    mode: z.enum(["post_all", "drafts", "skip", "selected"]),
+    dates: z.array(isoDate()).optional(),
+    post: z.boolean().optional(),
+  }).optional(),
 });
 
 async function ownedEnabled(exec: SqlExecutor, authz: Authz, id: string) {
@@ -52,11 +72,58 @@ export const PATCH = defineRoute({
   if (!parsedBody.ok) return parsedBody.response;
   const body = parsedBody.data;
   if (body.autoPost && !can(authz, "gl.post")) return NextResponse.json({ error: "missing permission: gl.post" }, { status: 403 });
+  const today = await businessToday(authz.user.orgId);
+  // Resuming into a backlog is a choice, never a side effect: refuse with
+  // the exact missed dates unless the resume carries its catch-up mode.
+  // Plain edits never trip this gate; the catch-up run recomputes from
+  // stored state, so a concurrent tick between this read and the run cannot
+  // bill anything the choice did not cover.
+  if (body.isActive === true && !body.catchUp) {
+    const current = (await db.execute<{
+      isActive: boolean; nextRunOn: string; endsOn: string | null;
+      cadence: string; cron: string | null; anchorDay: number | null;
+      runCount: number; maxOccurrences: number | null; skippedRunOns: string[] | null;
+    }>(sql`
+      select rs.is_active as "isActive", rs.next_run_on::text as "nextRunOn",
+             rs.ends_on::text as "endsOn", rs.cadence, rs.cron, rs.anchor_day as "anchorDay",
+             rs.run_count as "runCount", rs.max_occurrences as "maxOccurrences",
+             rs.skipped_run_ons::text[] as "skippedRunOns"
+        from recurring_schedules rs
+        join documents d on d.id = rs.template_document_id and d.org_id = rs.org_id
+       where rs.id = ${id} and rs.org_id = ${authz.user.orgId} and not rs.is_active
+         ${recurringTemplateScopeFilter(authz.user.orgId, sql`d.id`, sql`d.subsidiary_id`, authz.allowedSubsidiaryIds)}
+    `)).rows[0];
+    if (current) {
+      const pending = pendingOccurrences(
+        {
+          cadence: current.cadence as Cadence, cron: current.cron, nextRunOn: current.nextRunOn,
+          endsOn: current.endsOn, anchorDay: current.anchorDay,
+          skippedRunOns: current.skippedRunOns ?? [],
+          remaining: remainingOccurrences(
+            current.maxOccurrences == null ? null : Number(current.maxOccurrences), Number(current.runCount),
+          ),
+        },
+        today,
+      );
+      if (pending.occurrences.length >= CATCH_UP_CHOICE_THRESHOLD) {
+        return NextResponse.json({
+          error: `${pending.occurrences.length} periods are already due — choose how to catch up instead of bulk-generating them`,
+          code: "catch_up_choice_required",
+          occurrences: pending.occurrences,
+          truncated: pending.truncated,
+        }, { status: 409 });
+      }
+    }
+  }
   const sets: SQL[] = [];
   if ("isActive" in body) sets.push(sql`is_active = ${body.isActive}`);
   if ("autoPost" in body) sets.push(sql`auto_post = ${body.autoPost}`);
   if ("nextRunOn" in body) sets.push(sql`next_run_on = ${body.nextRunOn}`);
   if ("endsOn" in body) sets.push(sql`ends_on = ${body.endsOn ?? null}`);
+  if ("maxOccurrences" in body) sets.push(sql`max_occurrences = ${body.maxOccurrences ?? null}`);
+  if ("skippedRunOns" in body) {
+    sets.push(sql`skipped_run_ons = ${toDateArrayLiteral([...new Set(body.skippedRunOns ?? [])].sort())}::date[]`);
+  }
   if ("name" in body) sets.push(sql`name = ${body.name ?? null}`);
   if (!sets.length) return NextResponse.json({ error: "nothing to update" }, { status: 400 });
   const outcome = await db.transaction(async (tx) => {
@@ -70,6 +137,12 @@ export const PATCH = defineRoute({
     const endsOn = body.endsOn === undefined ? before.ends_on : body.endsOn;
     if (endsOn && endsOn < nextRunOn && (body.isActive ?? before.is_active)) {
       return NextResponse.json({ error: "endsOn must not precede nextRunOn" }, { status: 400 });
+    }
+    // A pause or resume never blocks on template text; any other save
+    // re-validates it, so a token added since creation is caught here.
+    const touchesConfig = ["autoPost", "nextRunOn", "endsOn", "maxOccurrences", "skippedRunOns", "name"].some((key) => key in body);
+    if (touchesConfig) {
+      await assertTemplateTokensKnown(tx, authz.user.orgId, String(before.template_document_id));
     }
     const updated = (await tx.execute<Record<string, unknown>>(sql`
       update recurring_schedules set ${sql.join(sets, sql`, `)}, updated_at = now(), updated_by = ${authz.user.id}
@@ -85,7 +158,23 @@ export const PATCH = defineRoute({
          ${authz.user.id})
     `);
   });
-  return outcome ?? NextResponse.json({ ok: true });
+  if (outcome) return outcome;
+  if (body.catchUp) {
+    try {
+      const catchUpOutcome = await runScheduleCatchUp(authz.user.orgId, id, {
+        mode: body.catchUp.mode as CatchUpMode,
+        selectedDates: body.catchUp.dates,
+        postSelected: body.catchUp.post,
+        asOf: today,
+        actorId: authz.user.id,
+        allowedSubsidiaryIds: authz.allowedSubsidiaryIds,
+      });
+      return NextResponse.json({ ok: true, catchUp: catchUpOutcome });
+    } catch (e) {
+      return apiErrorResponse(e);
+    }
+  }
+  return NextResponse.json({ ok: true });
   },
 });
 
@@ -135,17 +224,37 @@ export const DELETE = defineRoute({
   },
 });
 
-/** Run now — force-generate a document from the template immediately. */
+/**
+ * Run now — force-generate a document from the template immediately — or run
+ * an explicit catch-up choice ({ catchUp: { mode } }) against the pending
+ * backlog. An absent body keeps the historical run-now behavior.
+ */
 export const POST = defineRoute({
   permission: "documents.manage",
   feature: { none: "Recurring schedules are governed by document permissions and template kind availability." },
   params: z.object({ id: z.string() }),
-  handler: async ({ authz, params }) => {
+  handler: async ({ request: req, authz, params }) => {
   const { id } = params;
   if (!uuidId.safeParse(id).success) return notFound("record");
+  const parsedBody = await parseJsonBody(req, z.object({ catchUp: z.object({
+    mode: z.enum(["post_all", "drafts", "skip", "selected"]),
+    dates: z.array(isoDate()).optional(),
+    post: z.boolean().optional(),
+  }).optional() }).default({}));
+  if (!parsedBody.ok) return parsedBody.response;
   try {
     const existing = await db.transaction(tx => ownedEnabled(tx, authz, id));
     if (!existing) return notFound("record");
+    if (parsedBody.data.catchUp) {
+      const outcome = await runScheduleCatchUp(authz.user.orgId, id, {
+        mode: parsedBody.data.catchUp.mode as CatchUpMode,
+        selectedDates: parsedBody.data.catchUp.dates,
+        postSelected: parsedBody.data.catchUp.post,
+        actorId: authz.user.id,
+        allowedSubsidiaryIds: authz.allowedSubsidiaryIds,
+      });
+      return NextResponse.json({ ok: true, catchUp: outcome });
+    }
     const gen = await runScheduleNow(authz.user.orgId, id, authz.user.id, undefined, {
       allowedSubsidiaryIds: authz.allowedSubsidiaryIds, canPost: can(authz, "gl.post"),
     });

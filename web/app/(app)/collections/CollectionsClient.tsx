@@ -40,6 +40,8 @@ interface Schedule {
   cron: string | null;
   nextRunOn: string;
   endsOn: string | null;
+  maxOccurrences: number | null;
+  skippedRunOns: string[] | null;
   autoPost: boolean;
   isActive: boolean;
   runCount: number;
@@ -295,6 +297,72 @@ function SubscriptionsPanel({
     prorateFirstPeriod: false,
     autoPost: false,
   });
+  // Activation catch-up uses the same explicit choice as recurring
+  // schedules: a past first bill date previews its periods with totals,
+  // and creation carries the chosen mode instead of letting the scheduler
+  // silently bulk-generate them.
+  const [subPreview, setSubPreview] = useState<SubCatchUpPreview | null>(null);
+  const [subCatchUpMode, setSubCatchUpMode] = useState<CatchUpChoice | null>(null);
+  const [subSelectedPeriods, setSubSelectedPeriods] = useState<string[]>([]);
+  const [subPicker, setSubPicker] = useState<{ id: string; preview: SubCatchUpPreview } | null>(null);
+
+  const reportSubCatchUp = (data: unknown) => {
+    const outcome = (data as { catchUp?: { results?: { status?: string }[]; stopped?: string; error?: string } } | null)?.catchUp;
+    if (!outcome) return;
+    if (outcome.stopped === "failed") {
+      setError(outcome.error ?? tErrors("actionFailed"));
+      return;
+    }
+    const counts = { posted: 0, draft: 0, skipped: 0 };
+    for (const row of outcome.results ?? []) {
+      if (row.status === "posted") counts.posted += 1;
+      else if (row.status === "draft") counts.draft += 1;
+      else if (row.status === "skipped") counts.skipped += 1;
+    }
+    // A non-caught-up stop (canceled, paused, suspended) still reports its
+    // counts; the row's own status names where generation stopped.
+    setMsg(
+      t("catchUpDone", {
+        posted: String(counts.posted),
+        drafts: String(counts.draft),
+        skipped: String(counts.skipped),
+      }),
+    );
+  };
+
+  const resumeSubscriptionWithChoice = async (id: string) => {
+    setError(null);
+    const params = new URLSearchParams({ subscriptionId: id });
+    const res = await fetch(`/api/subscriptions/preview?${params.toString()}`);
+    if (!res.ok) {
+      setError(tErrors("actionFailed"));
+      return;
+    }
+    const previewed = (await res.json()) as SubCatchUpPreview;
+    if (previewed.periods.length < 2) {
+      await post({ action: "updateSubscription", id, status: "active" });
+      return;
+    }
+    // A backlog resumes through the picker: the exact missed periods with
+    // tick boxes, so some bill, some draft, all post, or all skip.
+    setSubPicker({ id, preview: previewed });
+  };
+
+  const pickSubCatchUp = async (pick: CatchUpPick) => {
+    if (!subPicker) return;
+    const r = await post({
+      action: "updateSubscription",
+      id: subPicker.id,
+      status: "active",
+      catchUp:
+        pick.mode === "selected"
+          ? { mode: "selected", dates: pick.dates, post: pick.post }
+          : { mode: pick.mode },
+    });
+    if (!r) return;
+    setSubPicker(null);
+    reportSubCatchUp(r);
+  };
   const [changing, setChanging] = useState<string | null>(null);
   const [changeQty, setChangeQty] = useState("");
   const action = useAppAction();
@@ -756,13 +824,7 @@ function SubscriptionsPanel({
                           size="sm"
                           variant="ghost"
                           disabled={action.busy}
-                          onClick={() =>
-                            post({
-                              action: "updateSubscription",
-                              id: s.id,
-                              status: "active",
-                            })
-                          }
+                          onClick={() => void resumeSubscriptionWithChoice(s.id)}
                         >
                           {t("resume")}
                         </Button>
@@ -804,12 +866,49 @@ function SubscriptionsPanel({
             size="xl"
             headerActions={
               <Button
-                disabled={action.busy || !subForm.customerId || !subForm.planId}
+                disabled={
+                  action.busy ||
+                  !subForm.customerId ||
+                  !subForm.planId ||
+                  (subPreview !== null &&
+                    subPreview.periods.length >= 2 &&
+                    (subCatchUpMode === null ||
+                      ((subCatchUpMode === "selected_post" ||
+                        subCatchUpMode === "selected_drafts") &&
+                        subSelectedPeriods.length === 0)))
+                }
                 onClick={async () => {
+                  // A past first bill date means backlog: preview it first so
+                  // the operator chooses with the periods and totals in front
+                  // of them, instead of the scheduler silently bulk-billing it.
+                  if (!subCatchUpMode && subForm.firstBillOn && subForm.planId) {
+                    const params = new URLSearchParams({
+                      planId: subForm.planId,
+                      nextBillOn: subForm.firstBillOn,
+                      quantity: subForm.quantity || "1",
+                      ...(subForm.priceOverride
+                        ? { priceOverride: subForm.priceOverride }
+                        : {}),
+                    });
+                    const res = await fetch(
+                      `/api/subscriptions/preview?${params.toString()}`,
+                    );
+                    if (res.ok) {
+                      const previewed = (await res.json()) as SubCatchUpPreview;
+                      if (previewed.periods.length >= 2) {
+                        setSubPreview(previewed);
+                        setSubSelectedPeriods(previewed.periods);
+                        return;
+                      }
+                    }
+                  }
                   const r = await post({
                     action: "addSubscription",
                     ...subForm,
                     priceOverride: subForm.priceOverride || null,
+                    ...(subCatchUpMode
+                      ? { catchUp: catchUpRequestBody(subCatchUpMode, subSelectedPeriods) }
+                      : {}),
                   });
                   if (!r) return;
                   onClose();
@@ -820,6 +919,7 @@ function SubscriptionsPanel({
                         amount: money(r.proration.amount),
                       }),
                     );
+                  reportSubCatchUp(r);
                   setSubForm({
                     customerId: "",
                     planId: "",
@@ -830,6 +930,9 @@ function SubscriptionsPanel({
                     prorateFirstPeriod: false,
                     autoPost: false,
                   });
+                  setSubPreview(null);
+                  setSubCatchUpMode(null);
+                  setSubSelectedPeriods([]);
                 }}
               >
                 {t("addSubscription")}
@@ -939,6 +1042,53 @@ function SubscriptionsPanel({
                   }
                 />
               </InspectorPanel>
+              {subPreview !== null && subPreview.periods.length >= 2 && (
+                <InspectorPanel title={t("catchUpTitle")}>
+                  <p className="text-sm text-muted-foreground">
+                    {t("catchUpCreateMessage", {
+                      count: String(subPreview.periods.length),
+                      total: `${subPreview.estimatedTotal} ${subPreview.currency ?? ""}`.trim(),
+                    })}
+                  </p>
+                  <p className="mb-2 text-sm text-muted-foreground">{t("catchUpSelectHint")}</p>
+                  <ul className="max-h-40 space-y-1 overflow-y-auto text-sm">
+                    {subPreview.periods.map((date) => (
+                      <li key={date}>
+                        <label className="flex cursor-pointer items-center gap-2">
+                          <input
+                            type="checkbox"
+                            checked={subSelectedPeriods.includes(date)}
+                            onChange={() =>
+                              setSubSelectedPeriods((prev) =>
+                                prev.includes(date)
+                                  ? prev.filter((d) => d !== date)
+                                  : [...prev, date],
+                              )
+                            }
+                            className="h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500"
+                          />
+                          <span className="tabular-nums">{date}</span>
+                        </label>
+                      </li>
+                    ))}
+                  </ul>
+                  <Field label={t("catchUpLabel")}>
+                    <Select
+                      value={subCatchUpMode ?? ""}
+                      onChange={(e) =>
+                        setSubCatchUpMode(e.target.value as CatchUpChoice)
+                      }
+                    >
+                      <option value="">{t("catchUpChoose")}</option>
+                      <option value="post_all">{t("catchUpPostAll")}</option>
+                      <option value="drafts">{t("catchUpDrafts")}</option>
+                      <option value="skip">{t("catchUpSkip")}</option>
+                      <option value="selected_post">{t("catchUpSelectedPost")}</option>
+                      <option value="selected_drafts">{t("catchUpSelectedDrafts")}</option>
+                    </Select>
+                  </Field>
+                </InspectorPanel>
+              )}
             </div>
           </Drawer>
         </>
@@ -992,7 +1142,159 @@ function SubscriptionsPanel({
           </Field>
         </InspectorPanel>
       </Drawer>
+      <CatchUpPickerDialog
+        open={subPicker !== null}
+        title={t("catchUpTitle")}
+        message={
+          subPicker
+            ? t("catchUpResumeMessage", {
+                count: String(subPicker.preview.periods.length),
+                total: `${subPicker.preview.estimatedTotal} ${subPicker.preview.currency ?? ""}`.trim(),
+              })
+            : ""
+        }
+        selectHint={t("catchUpSelectHint")}
+        dates={subPicker?.preview.periods ?? []}
+        postSelectedLabel={t("catchUpSelectedPost")}
+        draftSelectedLabel={t("catchUpSelectedDrafts")}
+        postAllLabel={t("catchUpPostAll")}
+        draftsLabel={t("catchUpDrafts")}
+        skipLabel={t("catchUpSkip")}
+        cancelLabel={tc("confirm.cancel")}
+        busy={action.busy}
+        onPick={(pick) => void pickSubCatchUp(pick)}
+        onClose={() => setSubPicker(null)}
+      />
     </div>
+  );
+}
+
+type CatchUpPreview = {
+  occurrences: string[];
+  truncated: boolean;
+  templateTotal: string;
+  currency: string;
+  estimatedTotal: string;
+  sample: { occurrenceOn: string; description: string | null; memo: string | null } | null;
+  maxOccurrences: number | null;
+  skippedRunOns: string[];
+};
+
+type SubCatchUpPreview = {
+  periods: string[];
+  truncated: boolean;
+  perPeriodAmount: string;
+  currency: string | null;
+  estimatedTotal: string;
+};
+
+type CatchUpChoice = "post_all" | "drafts" | "skip" | "selected_post" | "selected_drafts";
+
+type CatchUpPick =
+  | { mode: "post_all" | "drafts" | "skip" }
+  | { mode: "selected"; post: boolean; dates: string[] };
+
+/** Map a dialog choice to the catch-up request body the API routes accept. */
+function catchUpRequestBody(choice: CatchUpChoice, selectedDates: string[]): unknown {
+  if (choice === "selected_post") return { mode: "selected", dates: selectedDates, post: true };
+  if (choice === "selected_drafts") return { mode: "selected", dates: selectedDates, post: false };
+  return { mode: choice };
+}
+
+/**
+ * The resume catch-up picker: the exact missed periods with tick boxes, so
+ * the operator bills all of them, drafts them, skips them, or ticks a
+ * subset to generate. Shared by recurring schedules and subscriptions —
+ * both catch-up runs take the same choice shape.
+ */
+function CatchUpPickerDialog({
+  open,
+  title,
+  message,
+  selectHint,
+  dates,
+  postSelectedLabel,
+  draftSelectedLabel,
+  postAllLabel,
+  draftsLabel,
+  skipLabel,
+  cancelLabel,
+  busy,
+  onPick,
+  onClose,
+}: {
+  open: boolean;
+  title: string;
+  message: string;
+  selectHint: string;
+  dates: string[];
+  postSelectedLabel: string;
+  draftSelectedLabel: string;
+  postAllLabel: string;
+  draftsLabel: string;
+  skipLabel: string;
+  cancelLabel: string;
+  busy: boolean;
+  onPick: (pick: CatchUpPick) => void;
+  onClose: () => void;
+}) {
+  // Every period starts ticked: the usual resume bills all of them, and
+  // unticking the out-of-season ones is the shortcut to a partial run.
+  // Reset while rendering when a new backlog opens (same committed value,
+  // no extra render).
+  const datesKey = dates.join(",");
+  const [checked, setChecked] = useState<string[]>(dates);
+  const [seenKey, setSeenKey] = useState(datesKey);
+  if (seenKey !== datesKey) {
+    setSeenKey(datesKey);
+    setChecked(dates);
+  }
+  const toggle = (date: string) =>
+    setChecked((prev) => (prev.includes(date) ? prev.filter((d) => d !== date) : [...prev, date]));
+  return (
+    <Drawer open={open} onClose={onClose} title={title} size="lg">
+      <div className="space-y-5">
+        <p className="text-sm text-muted-foreground">{message}</p>
+        <div>
+          <p className="mb-2 text-sm text-muted-foreground">{selectHint}</p>
+          <ul className="max-h-56 space-y-1 overflow-y-auto text-sm">
+            {dates.map((date) => (
+              <li key={date}>
+                <label className="flex cursor-pointer items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={checked.includes(date)}
+                    onChange={() => toggle(date)}
+                    className="h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500"
+                  />
+                  <span className="tabular-nums">{date}</span>
+                </label>
+              </li>
+            ))}
+          </ul>
+        </div>
+        <div className="flex flex-col gap-2">
+          <Button disabled={busy || checked.length === 0} onClick={() => onPick({ mode: "selected", post: true, dates: checked })}>
+            {postSelectedLabel}
+          </Button>
+          <Button disabled={busy || checked.length === 0} variant="outline" onClick={() => onPick({ mode: "selected", post: false, dates: checked })}>
+            {draftSelectedLabel}
+          </Button>
+          <Button disabled={busy} variant="outline" onClick={() => onPick({ mode: "post_all" })}>
+            {postAllLabel}
+          </Button>
+          <Button disabled={busy} variant="outline" onClick={() => onPick({ mode: "drafts" })}>
+            {draftsLabel}
+          </Button>
+          <Button disabled={busy} variant="outline" onClick={() => onPick({ mode: "skip" })}>
+            {skipLabel}
+          </Button>
+          <Button disabled={busy} variant="ghost" onClick={onClose}>
+            {cancelLabel}
+          </Button>
+        </div>
+      </div>
+    </Drawer>
   );
 }
 
@@ -1004,14 +1306,27 @@ function RecurringPanel({ creating, onClose }: EditorProps) {
   );
   const action = useAppAction();
   const busy = action.busy;
-  const [form, setForm] = useState({
+  const blankForm = {
     templateDocumentNumber: "",
     cadence: "monthly",
     cron: "",
     nextRunOn: "",
+    endsOn: "",
+    maxOccurrences: "",
+    skippedRunOns: [] as string[],
     autoPost: false,
-  });
+  };
+  const [form, setForm] = useState(blankForm);
   const [error, setError] = useState<string | null>(null);
+  // Editing reuses the create drawer prefilled from the row; the catch-up
+  // preview below belongs to creates, where a past first run means backlog.
+  const [editingSchedule, setEditingSchedule] = useState<Schedule | null>(null);
+  const [preview, setPreview] = useState<CatchUpPreview | null>(null);
+  const [catchUpMode, setCatchUpMode] = useState<CatchUpChoice | null>(null);
+  const [selectedDates, setSelectedDates] = useState<string[]>([]);
+  const [skipDateInput, setSkipDateInput] = useState("");
+  const [schedPicker, setSchedPicker] = useState<{ id: string; preview: CatchUpPreview } | null>(null);
+  const [tokenSample, setTokenSample] = useState<CatchUpPreview["sample"]>(null);
   const t = useTranslations("ar.collections.recurring");
   const tErrors = useTranslations("ar.collections.errors");
   const common = useTranslations("common");
@@ -1043,8 +1358,73 @@ function RecurringPanel({ creating, onClose }: EditorProps) {
     void Promise.resolve().then(load);
   }, [load]);
 
+  // Live token sample for the edit drawer: the next run's resolved text for
+  // the opened schedule. Guarded so a slow response cannot paint another
+  // schedule's sample.
+  const editingScheduleId = editingSchedule?.id ?? null;
+  useEffect(() => {
+    if (!editingScheduleId) return;
+    let live = true;
+    void fetch(
+      `/api/recurring/preview?${new URLSearchParams({ scheduleId: editingScheduleId }).toString()}`,
+    )
+      .then(async (res) => {
+        if (!live || !res.ok) return;
+        const previewed = (await res.json()) as CatchUpPreview;
+        if (live) setTokenSample(previewed.sample);
+      })
+      .catch(() => {});
+    return () => {
+      live = false;
+    };
+  }, [editingScheduleId]);
+
+  const closeDrawer = () => {
+    setEditingSchedule(null);
+    setPreview(null);
+    setCatchUpMode(null);
+    setSelectedDates([]);
+    setSkipDateInput("");
+    setTokenSample(null);
+    onClose();
+  };
+
   const create = async () => {
     setError(null);
+    // A past first run means backlog: preview it first so the operator
+    // chooses post-all/drafts/skip with the list and totals in front of
+    // them, instead of the scheduler silently bulk-posting it.
+    if (!editingSchedule && !catchUpMode && form.nextRunOn) {
+      const previewed = await action.execute(
+        async () => {
+          const params = new URLSearchParams({
+            templateDocumentNumber: form.templateDocumentNumber,
+            cadence: form.cadence,
+            ...(form.cadence === "custom_cron" ? { cron: form.cron } : {}),
+            nextRunOn: form.nextRunOn,
+            ...(form.endsOn ? { endsOn: form.endsOn } : {}),
+            ...(form.maxOccurrences.trim() ? { maxOccurrences: form.maxOccurrences.trim() } : {}),
+          });
+          for (const skipped of form.skippedRunOns) params.append("skippedRunOn", skipped);
+          const res = await fetch(`/api/recurring/preview?${params.toString()}`);
+          if (!res.ok) return { ok: false as const, error: new ActionError({ kind: "unexpected" }) };
+          const data = (await res.json()) as CatchUpPreview;
+          return { ok: true as const, data };
+        },
+        {
+          fallbackMessage: tErrors("couldNotCreate"),
+          onRefused: (refusal) =>
+            setError(refusal.displayMessage(tErrors("couldNotCreate"))),
+        },
+      );
+      if (!previewed) return;
+      setTokenSample(previewed.sample);
+      if (previewed.occurrences.length >= 2) {
+        setPreview(previewed);
+        setSelectedDates(previewed.occurrences);
+        return;
+      }
+    }
     await action.execute(
       () =>
         fetchAction("/api/recurring", {
@@ -1055,6 +1435,66 @@ function RecurringPanel({ creating, onClose }: EditorProps) {
             cadence: form.cadence,
             cron: form.cadence === "custom_cron" ? form.cron : null,
             nextRunOn: form.nextRunOn || undefined,
+            endsOn: form.endsOn || null,
+            maxOccurrences: form.maxOccurrences.trim() ? Number(form.maxOccurrences.trim()) : null,
+            skippedRunOns: form.skippedRunOns,
+            autoPost: form.autoPost,
+            ...(catchUpMode ? { catchUp: catchUpRequestBody(catchUpMode, selectedDates) } : {}),
+          }),
+        }),
+      {
+        fallbackMessage: tErrors("couldNotCreate"),
+        onRefused: (refusal) => {
+          // A backlog that landed between preview and create still refuses:
+          // reload the preview so the choice surfaces instead of failing.
+          if (refusal.code === "catch_up_choice_required") {
+            void refreshPreview();
+            return;
+          }
+          setError(refusal.displayMessage(tErrors("couldNotCreate")));
+        },
+        onOk: (data) => {
+          reportCatchUp(data);
+          closeDrawer();
+          setForm(blankForm);
+          void load();
+        },
+      },
+    );
+  };
+
+  const refreshPreview = async () => {
+    if (!form.templateDocumentNumber || !form.nextRunOn) return;
+    const params = new URLSearchParams({
+      templateDocumentNumber: form.templateDocumentNumber,
+      cadence: form.cadence,
+      ...(form.cadence === "custom_cron" ? { cron: form.cron } : {}),
+      nextRunOn: form.nextRunOn,
+      ...(form.endsOn ? { endsOn: form.endsOn } : {}),
+      ...(form.maxOccurrences.trim() ? { maxOccurrences: form.maxOccurrences.trim() } : {}),
+    });
+    for (const skipped of form.skippedRunOns) params.append("skippedRunOn", skipped);
+    const res = await fetch(`/api/recurring/preview?${params.toString()}`);
+    if (!res.ok) return;
+    const previewed = (await res.json()) as CatchUpPreview;
+    setPreview(previewed);
+    setSelectedDates(previewed.occurrences);
+    setTokenSample(previewed.sample);
+  };
+
+  const saveEdit = async () => {
+    if (!editingSchedule) return;
+    setError(null);
+    await action.execute(
+      () =>
+        fetchAction(`/api/recurring/${editingSchedule.id}`, {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            nextRunOn: form.nextRunOn || undefined,
+            endsOn: form.endsOn || null,
+            maxOccurrences: form.maxOccurrences.trim() ? Number(form.maxOccurrences.trim()) : null,
+            skippedRunOns: form.skippedRunOns,
             autoPost: form.autoPost,
           }),
         }),
@@ -1063,17 +1503,90 @@ function RecurringPanel({ creating, onClose }: EditorProps) {
         onRefused: (refusal) =>
           setError(refusal.displayMessage(tErrors("couldNotCreate"))),
         onOk: () => {
-          onClose();
-          setForm({
-            templateDocumentNumber: "",
-            cadence: "monthly",
-            cron: "",
-            nextRunOn: "",
-            autoPost: false,
-          });
+          closeDrawer();
+          setForm(blankForm);
           void load();
         },
       },
+    );
+  };
+
+  const resumeWithChoice = async (id: string) => {
+    setError(null);
+    const params = new URLSearchParams({ scheduleId: id });
+    const res = await fetch(`/api/recurring/preview?${params.toString()}`);
+    if (!res.ok) {
+      setError(tErrors("couldNotCreate"));
+      return;
+    }
+    const previewed = (await res.json()) as CatchUpPreview;
+    if (previewed.occurrences.length < 2) {
+      await act(id, "PATCH", { isActive: true });
+      return;
+    }
+    // A backlog resumes through the picker: the exact missed periods with
+    // tick boxes, so some generate, some draft, all post, or all skip.
+    setSchedPicker({ id, preview: previewed });
+  };
+
+  const pickSchedCatchUp = async (pick: CatchUpPick) => {
+    if (!schedPicker) return;
+    await action.execute(
+      () =>
+        fetchAction(`/api/recurring/${schedPicker.id}`, {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            isActive: true,
+            catchUp:
+              pick.mode === "selected"
+                ? { mode: "selected", dates: pick.dates, post: pick.post }
+                : { mode: pick.mode },
+          }),
+        }),
+      {
+        fallbackMessage: tErrors("actionFailed"),
+        onRefused: (refusal) =>
+          setError(refusal.displayMessage(tErrors("actionFailed"))),
+        onOk: (data) => {
+          setSchedPicker(null);
+          reportCatchUp(data);
+          void load();
+        },
+      },
+    );
+  };
+
+  const [notice, setNotice] = useState<string | null>(null);
+
+  const reportCatchUp = (data: unknown) => {
+    const outcome = (data as { catchUp?: { results?: { status?: string }[]; stopped?: string; error?: string } } | null)?.catchUp;
+    if (!outcome) return;
+    if (outcome.stopped === "failed") {
+      setError(outcome.error ?? tErrors("actionFailed"));
+      return;
+    }
+    const counts = { posted: 0, draft: 0, skipped: 0 };
+    for (const row of outcome.results ?? []) {
+      if (row.status === "posted") counts.posted += 1;
+      else if (row.status === "draft") counts.draft += 1;
+      else if (row.status === "skipped") counts.skipped += 1;
+    }
+    setError(null);
+    // The stop names itself: an ended schedule, a limited one, or a plain
+    // catch-up — the counts ride along either way.
+    const doneKey =
+      outcome.stopped === "reached_end"
+        ? "catchUpEnded"
+        : outcome.stopped === "reached_limit"
+          ? "catchUpLimited"
+          : "catchUpDone";
+    setNotice(
+      t(doneKey, {
+        posted: String(counts.posted),
+        drafts: String(counts.draft),
+        skipped: String(counts.skipped),
+      }),
     );
   };
 
@@ -1116,16 +1629,25 @@ function RecurringPanel({ creating, onClose }: EditorProps) {
   return (
     <div className="space-y-6">
       <Drawer
-        open={creating}
-        onClose={onClose}
-        title={t("newSchedule")}
+        open={creating || editingSchedule !== null}
+        onClose={closeDrawer}
+        title={editingSchedule ? t("editSchedule") : t("newSchedule")}
         size="xl"
         headerActions={
           <Button
-            onClick={create}
-            disabled={busy || !form.templateDocumentNumber}
+            onClick={editingSchedule ? saveEdit : create}
+            disabled={
+              busy ||
+              (!editingSchedule && !form.templateDocumentNumber) ||
+              (preview !== null &&
+                preview.occurrences.length >= 2 &&
+                (catchUpMode === null ||
+                  ((catchUpMode === "selected_post" ||
+                    catchUpMode === "selected_drafts") &&
+                    selectedDates.length === 0)))
+            }
           >
-            {t("createSchedule")}
+            {editingSchedule ? common("actions.save") : t("createSchedule")}
           </Button>
         }
       >
@@ -1135,17 +1657,19 @@ function RecurringPanel({ creating, onClose }: EditorProps) {
           </p>
         )}
         <div className="space-y-5">
-          <InspectorPanel title={forms("scheduleDetails")}>
-            <Field label={t("templateDocLabel")} required>
-              <Input
-                placeholder={t("templateDocPlaceholder")}
-                value={form.templateDocumentNumber}
-                onChange={(e) =>
-                  setForm({ ...form, templateDocumentNumber: e.target.value })
-                }
-              />
-            </Field>
-          </InspectorPanel>
+          {!editingSchedule && (
+            <InspectorPanel title={forms("scheduleDetails")}>
+              <Field label={t("templateDocLabel")} required>
+                <Input
+                  placeholder={t("templateDocPlaceholder")}
+                  value={form.templateDocumentNumber}
+                  onChange={(e) =>
+                    setForm({ ...form, templateDocumentNumber: e.target.value })
+                  }
+                />
+              </Field>
+            </InspectorPanel>
+          )}
           <InspectorPanel title={forms("timing")}>
             <div className="grid gap-5 sm:grid-cols-2">
               <Field label={t("cadenceLabel")}>
@@ -1171,6 +1695,26 @@ function RecurringPanel({ creating, onClose }: EditorProps) {
                   }
                 />
               </Field>
+              <Field label={t("endsOnLabel")}>
+                <Input
+                  type="date"
+                  value={form.endsOn}
+                  onChange={(e) =>
+                    setForm({ ...form, endsOn: e.target.value })
+                  }
+                />
+              </Field>
+              <Field label={t("maxOccurrencesLabel")}>
+                <Input
+                  inputMode="numeric"
+                  min={1}
+                  placeholder={t("maxOccurrencesPlaceholder")}
+                  value={form.maxOccurrences}
+                  onChange={(e) =>
+                    setForm({ ...form, maxOccurrences: e.target.value.replace(/[^0-9]/g, "") })
+                  }
+                />
+              </Field>
               {form.cadence === "custom_cron" && (
                 <Field
                   label={t("cronLabel")}
@@ -1191,8 +1735,107 @@ function RecurringPanel({ creating, onClose }: EditorProps) {
               onToggle={() => setForm({ ...form, autoPost: !form.autoPost })}
             />
           </InspectorPanel>
+          <InspectorPanel title={t("skippedDatesTitle")}>
+            <p className="text-sm text-muted-foreground">{t("skippedDatesHint")}</p>
+            <div className="flex items-end gap-2">
+              <Field label={t("skippedDatesLabel")}>
+                <Input
+                  type="date"
+                  value={skipDateInput}
+                  onChange={(e) => setSkipDateInput(e.target.value)}
+                />
+              </Field>
+              <Button
+                variant="outline"
+                disabled={!skipDateInput || form.skippedRunOns.includes(skipDateInput)}
+                onClick={() => {
+                  setForm({ ...form, skippedRunOns: [...form.skippedRunOns, skipDateInput].sort() });
+                  setSkipDateInput("");
+                }}
+              >
+                {common("actions.add")}
+              </Button>
+            </div>
+            {form.skippedRunOns.length > 0 && (
+              <ul className="max-h-40 space-y-1 overflow-y-auto text-sm">
+                {form.skippedRunOns.map((date) => (
+                  <li key={date} className="flex items-center justify-between gap-2">
+                    <span className="tabular-nums">{date}</span>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() =>
+                        setForm({ ...form, skippedRunOns: form.skippedRunOns.filter((d) => d !== date) })
+                      }
+                    >
+                      {common("actions.remove")}
+                    </Button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </InspectorPanel>
+          <InspectorPanel title={t("tokensTitle")}>
+            <p className="whitespace-pre-line text-sm text-muted-foreground">
+              {t("tokensHelp")}
+            </p>
+            {tokenSample?.description ? (
+              <p className="text-sm">
+                {t("tokensPreview")}:{" "}
+                <span className="font-medium">{tokenSample.description}</span>
+              </p>
+            ) : null}
+          </InspectorPanel>
+          {preview !== null && preview.occurrences.length >= 2 && (
+            <InspectorPanel title={t("catchUpTitle")}>
+              <p className="text-sm text-muted-foreground">
+                {t("catchUpCreateMessage", {
+                  count: String(preview.occurrences.length),
+                  total: `${preview.estimatedTotal} ${preview.currency}`,
+                })}
+              </p>
+              <p className="mb-2 text-sm text-muted-foreground">{t("catchUpSelectHint")}</p>
+              <ul className="max-h-40 space-y-1 overflow-y-auto text-sm">
+                {preview.occurrences.map((date) => (
+                  <li key={date}>
+                    <label className="flex cursor-pointer items-center gap-2">
+                      <input
+                        type="checkbox"
+                        checked={selectedDates.includes(date)}
+                        onChange={() =>
+                          setSelectedDates((prev) =>
+                            prev.includes(date)
+                              ? prev.filter((d) => d !== date)
+                              : [...prev, date],
+                          )
+                        }
+                        className="h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500"
+                      />
+                      <span className="tabular-nums">{date}</span>
+                    </label>
+                  </li>
+                ))}
+              </ul>
+              <Field label={t("catchUpLabel")}>
+                <Select
+                  value={catchUpMode ?? ""}
+                  onChange={(e) =>
+                    setCatchUpMode(e.target.value as CatchUpChoice)
+                  }
+                >
+                  <option value="">{t("catchUpChoose")}</option>
+                  <option value="post_all">{t("catchUpPostAll")}</option>
+                  <option value="drafts">{t("catchUpDrafts")}</option>
+                  <option value="skip">{t("catchUpSkip")}</option>
+                  <option value="selected_post">{t("catchUpSelectedPost")}</option>
+                  <option value="selected_drafts">{t("catchUpSelectedDrafts")}</option>
+                </Select>
+              </Field>
+            </InspectorPanel>
+          )}
         </div>
       </Drawer>
+      {notice && <p className="text-sm text-teal-700 dark:text-teal-300">{notice}</p>}
 
       {error && !creating && (
         <p role="alert" className="text-sm text-destructive">
@@ -1297,10 +1940,46 @@ function RecurringPanel({ creating, onClose }: EditorProps) {
                   size="sm"
                   variant="ghost"
                   disabled={busy}
-                  onClick={() => act(s.id, "PATCH", { isActive: !s.isActive })}
+                  onClick={() => {
+                    setForm({
+                      templateDocumentNumber: s.templateNumber,
+                      cadence: s.cadence,
+                      cron: s.cron ?? "",
+                      nextRunOn: s.nextRunOn,
+                      endsOn: s.endsOn ?? "",
+                      maxOccurrences: s.maxOccurrences == null ? "" : String(s.maxOccurrences),
+                      skippedRunOns: [...(s.skippedRunOns ?? [])].sort(),
+                      autoPost: s.autoPost,
+                    });
+                    setPreview(null);
+                    setCatchUpMode(null);
+                    setSelectedDates([]);
+                    setSkipDateInput("");
+                    setTokenSample(null);
+                    setEditingSchedule(s);
+                  }}
                 >
-                  {s.isActive ? t("pause") : t("resume")}
+                  {t("editSchedule")}
                 </Button>
+                {s.isActive ? (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    disabled={busy}
+                    onClick={() => act(s.id, "PATCH", { isActive: false })}
+                  >
+                    {t("pause")}
+                  </Button>
+                ) : (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    disabled={busy}
+                    onClick={() => void resumeWithChoice(s.id)}
+                  >
+                    {t("resume")}
+                  </Button>
+                )}
                 <Button
                   size="sm"
                   variant="ghost"
@@ -1313,6 +1992,29 @@ function RecurringPanel({ creating, onClose }: EditorProps) {
             ),
           },
         ]}
+      />
+      <CatchUpPickerDialog
+        open={schedPicker !== null}
+        title={t("catchUpTitle")}
+        message={
+          schedPicker
+            ? t("catchUpResumeMessage", {
+                count: String(schedPicker.preview.occurrences.length),
+                total: `${schedPicker.preview.estimatedTotal} ${schedPicker.preview.currency}`,
+              })
+            : ""
+        }
+        selectHint={t("catchUpSelectHint")}
+        dates={schedPicker?.preview.occurrences ?? []}
+        postSelectedLabel={t("catchUpSelectedPost")}
+        draftSelectedLabel={t("catchUpSelectedDrafts")}
+        postAllLabel={t("catchUpPostAll")}
+        draftsLabel={t("catchUpDrafts")}
+        skipLabel={t("catchUpSkip")}
+        cancelLabel={common("actions.cancel")}
+        busy={busy}
+        onPick={(pick) => void pickSchedCatchUp(pick)}
+        onClose={() => setSchedPicker(null)}
       />
     </div>
   );

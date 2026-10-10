@@ -600,7 +600,7 @@ export interface InvoiceSpec {
  */
 export interface SubscriptionBillingActor {
   actorId: string | null;
-  source: "scheduler" | "bill_now" | "change_proration" | "first_proration";
+  source: "scheduler" | "bill_now" | "change_proration" | "first_proration" | "catch_up";
 }
 
 /** Actor options for the public entry points; omitted actor means system. */
@@ -615,6 +615,7 @@ const POSTING_AUDIT_SOURCES: Record<SubscriptionBillingActor["source"], string> 
   bill_now: "subscription_bill_now",
   change_proration: "subscription_change_proration",
   first_proration: "subscription_first_proration",
+  catch_up: "subscription_catch_up",
 };
 
 /** Why the engine itself acted, recorded next to the explicit system marker. */
@@ -623,6 +624,7 @@ const SYSTEM_ACTOR_REASONS: Record<SubscriptionBillingActor["source"], string> =
   bill_now: "subscription bill-now billing",
   change_proration: "subscription change proration",
   first_proration: "subscription first-period proration",
+  catch_up: "subscription catch-up run",
 };
 
 /** Durable invoice-header provenance: the path, the subscription, and — for an
@@ -909,7 +911,8 @@ async function billOne(
   billingDate = invoiceDate,
   periodStartOverride?: string | null,
   actor: SubscriptionBillingActor = { actorId: null, source: "scheduler" },
-): Promise<{ invoiceId: string; documentNumber: string; posted: boolean }> {
+  opts?: { autoPost?: boolean },
+): Promise<{ invoiceId: string; documentNumber: string; posted: boolean; created: boolean }> {
   // Serialize every invoice attempt for one subscription. This makes the
   // period/revision lookup + document creation + guard insert one atomic claim;
   // a concurrent caller waits, then replays the committed invoice instead of
@@ -951,7 +954,7 @@ async function billOne(
        and pi.period_ends_on = ${guard.endsOn} and pi.contract_revision = ${guard.revision}
      limit 1
   `));
-  if (prior.rows[0]) return { invoiceId: prior.rows[0].invoiceId, documentNumber: prior.rows[0].documentNumber, posted: prior.rows[0].status === "posted" };
+  if (prior.rows[0]) return { invoiceId: prior.rows[0].invoiceId, documentNumber: prior.rows[0].documentNumber, posted: prior.rows[0].status === "posted", created: false };
   // The charge bills through the payer hierarchy on the billing date: the
   // header carries the payer (AR) and the billing entity, the lines carry
   // the service party (and the service entity across legal entities), and a
@@ -991,7 +994,7 @@ async function billOne(
     unitPrice: price,
     memo: sub.planName,
     invoiceDate,
-    autoPost: sub.autoPost,
+    autoPost: opts?.autoPost ?? sub.autoPost,
     lines: advanced?.lines,
     custom: subscriptionBillingProvenance(sub.id, actor, billingDate),
     postingAuditSource: POSTING_AUDIT_SOURCES[actor.source],
@@ -1002,7 +1005,7 @@ async function billOne(
     values (${sub.orgId}, ${sub.id}, ${guard.startsOn}, ${guard.endsOn},
             ${guard.revision}, ${generated.invoiceId}, ${actor.actorId}, ${actor.actorId})
   `);
-  return generated;
+  return { ...generated, created: true };
 }
 
 const SUB_SELECT = sql`
@@ -1202,7 +1205,10 @@ export async function runDueSubscriptions(asOf?: string): Promise<SubscriptionRu
     // together with its subscription_period_invoices guard row — so a transient
     // bookkeeping failure must NOT roll the claim back: restoring next_bill_on
     // after a posted invoice is precisely how a tick used to double-bill.
-    // Surface through last_error instead; the claim stays advanced.
+    // Surface through last_error instead; the claim stays advanced. A replayed
+    // period (a rewound cursor meeting its own guard row) keeps the original
+    // run's count.
+    if (!gen.created) continue;
     try {
       await withOrgTransaction(row.orgId, async () => {
         await db.execute(sql`
@@ -1262,15 +1268,297 @@ export async function billSubscriptionNow(
     if (!s) throw new SubscriptionError("subscription not found");
     return billOne(s, s.nextBillOn, s.nextBillOn, s.currentPeriodStart, { actorId, source: "bill_now" });
   });
-  await withOrgTransaction(orgId, async () => {
-    await db.execute(sql`
-      update subscriptions set run_count = run_count + 1, last_invoice_id = ${gen.invoiceId},
-             last_billed_at = now(), last_error = null
-       where id = ${subscriptionId} and org_id = ${orgId}
-    `);
-  });
-  return gen;
+  // A double-click replays the first invoice through billOne's guard row and
+  // keeps its count; only a newly created invoice advances the counter.
+  if (gen.created) {
+    await withOrgTransaction(orgId, async () => {
+      await db.execute(sql`
+        update subscriptions set run_count = run_count + 1, last_invoice_id = ${gen.invoiceId},
+               last_billed_at = now(), last_error = null
+         where id = ${subscriptionId} and org_id = ${orgId}
+      `);
+    });
+  }
+  return { invoiceId: gen.invoiceId, documentNumber: gen.documentNumber, posted: gen.posted };
 }
+export interface SubscriptionCatchUpPreview {
+  periods: string[];
+  truncated: boolean;
+}
+
+const SUBSCRIPTION_CATCH_UP_WALK_LIMIT = 1000;
+
+/**
+ * The full billing period starts from nextBillOn through asOf, stepping the
+ * plan cadence — the one walk behind activation previews, resume gates, and
+ * catch-up runs, so all three agree exactly. Caps at a thousand pending
+ * periods with truncated set instead of walking forever.
+ */
+export function pendingSubscriptionPeriods(
+  input: { interval: Interval; intervalCount: number; anchorDay: number | null; nextBillOn: string },
+  asOf: string,
+): SubscriptionCatchUpPreview {
+  const periods: string[] = [];
+  let date = input.nextBillOn;
+  for (let i = 0; i < SUBSCRIPTION_CATCH_UP_WALK_LIMIT; i++) {
+    if (date > asOf) return { periods, truncated: false };
+    periods.push(date);
+    date = advanceSubscription(date, input.interval, input.intervalCount, input.anchorDay);
+  }
+  return { periods, truncated: true };
+}
+
+/**
+ * The full billing periods from nextBillOn through asOf, deterministic and
+ * shared by the preview and the run: what the preview lists is exactly what
+ * the run bills, drafts, or skips. Advanced lifecycles bill through contract
+ * amendments, not stepped periods, so they refuse here with their remedy.
+ */
+export async function previewSubscriptionCatchUp(
+  orgId: string,
+  subscriptionId: string,
+  asOf?: string,
+): Promise<SubscriptionCatchUpPreview> {
+  const row = await withOrg(orgId, () => loadSubRow(subscriptionId, orgId));
+  if (row.advancedLifecycle) {
+    throw new SubscriptionError("advanced lifecycles bill through contract amendments, not catch-up runs");
+  }
+  const today = asOf ?? (await businessToday(orgId));
+  return pendingSubscriptionPeriods(
+    { interval: row.interval, intervalCount: row.intervalCount, anchorDay: row.anchorDay, nextBillOn: row.nextBillOn },
+    today,
+  );
+}
+
+export type SubscriptionCatchUpMode = "post_all" | "drafts" | "skip" | "selected";
+
+export interface SubscriptionCatchUpResultRow {
+  periodStart: string;
+  status: "posted" | "draft" | "skipped" | "replayed";
+  invoiceId: string | null;
+  documentNumber: string | null;
+}
+
+export interface SubscriptionCatchUpOutcome {
+  results: SubscriptionCatchUpResultRow[];
+  stopped: "caught_up" | "canceled" | "paused" | "suspended" | "failed";
+  error?: string;
+}
+
+/**
+ * Run a subscription's pending catch-up with an explicit choice, one full
+ * period at a time through the same claim-and-bill unit the scheduler tick
+ * uses — same dates, same guards, same replay. post_all posts every missed
+ * period; drafts creates them unposted; skip advances past them without
+ * generating; selected bills exactly the listed preview periods (posted
+ * unless postSelected is false) and advances past every other pending
+ * period with an explicit skipped outcome. Each invoice carries its
+ * period's date, never today. The first failure stops the run with every
+ * period's outcome explicit; retrying replays committed periods instead of
+ * duplicating them. The outcome names where generation stopped and why —
+ * caught up, the subscription's status, or the failure — so a run that
+ * ends early is never silent.
+ */
+export async function runSubscriptionCatchUp(
+  orgId: string,
+  subscriptionId: string,
+  input: {
+    mode: SubscriptionCatchUpMode;
+    /** Exact pending period starts to bill; required for the selected choice. */
+    selectedPeriods?: string[];
+    /** Post the selected periods (default) or create them as drafts. */
+    postSelected?: boolean;
+    asOf?: string;
+    actorId: string | null;
+    allowedSubsidiaryIds: ReadonlySet<string> | null;
+  },
+): Promise<SubscriptionCatchUpOutcome> {
+  // The selected choice names its periods up front: it needs at least one
+  // calendar date, and dates outside it never reach billing — a stray list
+  // on any other choice refuses instead of being silently ignored.
+  const selectedList = [...new Set(input.selectedPeriods ?? [])];
+  if (input.mode === "selected") {
+    if (selectedList.length === 0) {
+      throw new SubscriptionError("selected catch-up needs at least one period date — choose from the preview list");
+    }
+    for (const selected of selectedList) {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(selected)) {
+        throw new SubscriptionError(`selected catch-up period ${selected} is not a calendar date (YYYY-MM-DD)`);
+      }
+    }
+  } else if (selectedList.length > 0) {
+    throw new SubscriptionError("selected periods apply only to the selected catch-up choice");
+  }
+  const selectedSet = new Set(selectedList);
+  const postSelected = input.postSelected ?? true;
+  const asOf = input.asOf ?? (await businessToday(orgId));
+  const results: SubscriptionCatchUpResultRow[] = [];
+  const finish = (
+    stopped: SubscriptionCatchUpOutcome["stopped"],
+    error?: string,
+  ): SubscriptionCatchUpOutcome => ({ results, stopped, ...(error ? { error } : {}) });
+  let outcome: SubscriptionCatchUpOutcome | null = null;
+  let selectedValidated = false;
+  for (;;) {
+    const row = await withOrg(orgId, async () => {
+      await lockSubscriptionCustomerForScope(db, orgId, subscriptionId, input.allowedSubsidiaryIds);
+      return loadSubRow(subscriptionId, orgId);
+    });
+    if (row.advancedLifecycle) {
+      throw new SubscriptionError("advanced lifecycles bill through contract amendments, not catch-up runs");
+    }
+    if (row.status !== "active") {
+      const stopped = row.status === "canceled" ? "canceled" : row.status === "suspended" ? "suspended" : "paused";
+      outcome = finish(stopped);
+      break;
+    }
+    // The selected periods must be pending billing periods from this run's
+    // own preview: anything else refuses by name instead of billing a
+    // period the operator never saw listed.
+    if (input.mode === "selected" && !selectedValidated) {
+      selectedValidated = true;
+      const pendingSet = new Set(pendingSubscriptionPeriods(
+        { interval: row.interval, intervalCount: row.intervalCount, anchorDay: row.anchorDay, nextBillOn: row.nextBillOn },
+        asOf,
+      ).periods);
+      for (const selected of selectedList) {
+        if (!pendingSet.has(selected)) {
+          throw new SubscriptionError(`selected catch-up period ${selected} is not a pending billing period — choose from the preview list`);
+        }
+      }
+    }
+    if (row.nextBillOn > asOf) {
+      outcome = finish("caught_up");
+      break;
+    }
+    const periodStart = row.nextBillOn;
+    const advanced = advanceSubscription(periodStart, row.interval, row.intervalCount, row.anchorDay);
+    // Advancing past one period without billing: the skip-all choice and
+    // every unlisted period of a selected run share this unit.
+    const advancePast = async (): Promise<boolean> => {
+      const moved = await withOrg(orgId, async () => (await db.execute<{ id: string }>(sql`
+        update subscriptions
+           set next_bill_on = ${advanced}, current_period_start = ${periodStart}, last_billed_at = now()
+         where id = ${subscriptionId} and org_id = ${orgId} and next_bill_on = ${periodStart} and status = 'active'
+        returning id
+      `)));
+      return moved.rows.length > 0;
+    };
+    const billThis =
+      input.mode === "post_all" ||
+      input.mode === "drafts" ||
+      (input.mode === "selected" && selectedSet.has(periodStart));
+    const postThis = input.mode === "post_all" || (input.mode === "selected" && postSelected);
+    if (!billThis) {
+      if (!(await advancePast())) continue; // another worker advanced it; recompute
+      results.push({ periodStart, status: "skipped", invoiceId: null, documentNumber: null });
+      continue;
+    }
+    // An already-billed period replays instead of billing again — the retry
+    // path after a crash between billing and advancing, or a rewound
+    // cursor — and the cursor still advances past it.
+    const already = await withOrgContext(orgId, async () => (await db.execute<{ invoiceId: string; documentNumber: string }>(sql`
+      select d.id as "invoiceId", d.document_number as "documentNumber"
+        from subscription_period_invoices pi
+        join documents d on d.id = pi.invoice_id and d.org_id = pi.org_id
+       where pi.org_id = ${orgId} and pi.subscription_id = ${subscriptionId}
+         and pi.period_starts_on = ${periodStart}
+       order by d.created_at desc limit 1
+    `)).rows[0]);
+    if (already) {
+      if (!(await advancePast())) continue; // another worker advanced it; recompute
+      results.push({
+        periodStart,
+        status: "replayed",
+        invoiceId: already.invoiceId,
+        documentNumber: already.documentNumber,
+      });
+      continue;
+    }
+    try {
+      const gen = await withOrg(orgId, async () => {
+        const claimed = (await db.execute<{ id: string }>(sql`
+          update subscriptions
+             set next_bill_on = ${advanced}, current_period_start = ${periodStart}, last_billed_at = now()
+           where id = ${subscriptionId} and org_id = ${orgId} and next_bill_on = ${periodStart} and status = 'active'
+          returning id
+        `));
+        if (!claimed.rows.length) return null; // another worker won it
+        const r = (await db.execute<SubRow>(sql`${SUB_SELECT} where s.id = ${subscriptionId} and s.org_id = ${orgId} limit 1`));
+        const s = r.rows[0];
+        if (!s) throw new SubscriptionError("subscription vanished");
+        return billOne(s, periodStart, periodStart, periodStart, { actorId: input.actorId, source: "catch_up" }, {
+          autoPost: postThis,
+        });
+      });
+      if (!gen) {
+        // Another worker won this period: replay whatever it committed.
+        const replay = await withOrgContext(orgId, async () => (await db.execute<{ invoiceId: string; documentNumber: string; posted: boolean }>(sql`
+          select d.id as "invoiceId", d.document_number as "documentNumber", (d.status = 'posted') as "posted"
+            from subscription_period_invoices pi
+            join documents d on d.id = pi.invoice_id and d.org_id = pi.org_id
+           where pi.org_id = ${orgId} and pi.subscription_id = ${subscriptionId}
+             and pi.period_starts_on = ${periodStart}
+           order by d.created_at desc limit 1
+        `)).rows[0]);
+        results.push({
+          periodStart,
+          status: "replayed",
+          invoiceId: replay?.invoiceId ?? null,
+          documentNumber: replay?.documentNumber ?? null,
+        });
+        continue;
+      }
+      // A replayed race keeps the creator's count; only an invoice this run
+      // created advances the counter.
+      if (!gen.created) {
+        results.push({
+          periodStart,
+          status: "replayed",
+          invoiceId: gen.invoiceId,
+          documentNumber: gen.documentNumber,
+        });
+        continue;
+      }
+      try {
+        await withOrgTransaction(orgId, async () => {
+          await db.execute(sql`
+            update subscriptions set run_count = run_count + 1, last_invoice_id = ${gen.invoiceId}, last_error = null
+             where id = ${subscriptionId} and org_id = ${orgId}
+          `);
+        });
+      } catch (e) {
+        const message = e instanceof Error ? e.message : String(e);
+        console.error(`[subscriptions] success bookkeeping failed for subscription ${subscriptionId}:`, message);
+        await recordSubscriptionTickFailure(orgId, subscriptionId, `invoiced ${gen.documentNumber} but bookkeeping failed: ${message}`);
+      }
+      results.push({
+        periodStart,
+        status: gen.posted ? "posted" : "draft",
+        invoiceId: gen.invoiceId,
+        documentNumber: gen.documentNumber,
+      });
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e);
+      await recordSubscriptionTickFailure(orgId, subscriptionId, message);
+      outcome = finish("failed", message);
+      break;
+    }
+  }
+  // The choice itself is audited on the subscription with its per-period
+  // outcomes: a bulk post-all or skip-all stays attributable after the run.
+  // A no-op run (nothing pending) writes nothing.
+  if (results.length > 0) {
+    await db.execute(sql`
+      insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+      values (${orgId}, 'subscriptions', ${subscriptionId}, 'update',
+              ${JSON.stringify({ mode: "catch_up", choice: input.mode, results, stopped: outcome!.stopped, ...(outcome!.error ? { error: outcome!.error } : {}) })}::jsonb,
+              ${input.actorId})
+    `);
+  }
+  return outcome!;
+}
+
 type SubDetail = SubRow & {
   nextBillOn: string;
   currentPeriodStart: string | null;
@@ -1294,7 +1582,7 @@ async function requireSubscriptionInOrg(orgId: string, subscriptionId: string): 
  * transaction (see withOrg) — mutation paths call this after taking the
  * subscription row lock so they price from locked, current state.
  */
-async function loadSubRow(subscriptionId: string, orgId: string): Promise<SubDetail> {
+export async function loadSubRow(subscriptionId: string, orgId: string): Promise<SubDetail> {
   const r = (await db.execute<SubDetail>(sql`
     select s.id, s.org_id as "orgId", s.customer_id as "customerId",
            s.bill_to_party_id as "billToOverride", s.payer_party_id as "payerOverride", s.quantity,
@@ -1509,7 +1797,9 @@ export async function prorateFirstInvoice(
       quantity: "1",
       unitPrice: amount,
       memo: row.planName,
-      invoiceDate: today,
+      // The stub covers [startOn, firstBillOn): date it at its period start,
+      // never today, so a back-dated activation bills its stub in-period.
+      invoiceDate: row.startOn,
       autoPost: row.autoPost,
       custom: subscriptionBillingProvenance(subscriptionId, { actorId, source: "first_proration" }),
       postingAuditSource: POSTING_AUDIT_SOURCES.first_proration,

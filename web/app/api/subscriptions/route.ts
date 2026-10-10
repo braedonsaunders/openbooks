@@ -14,10 +14,13 @@ import {
   monthlyRecurringRevenue,
   normalizeSubscriptionCadence,
   normalizeSubscriptionMoney,
+  pendingSubscriptionPeriods,
   prorateFirstInvoice,
   resolveNextBillOnUpdate,
+  runSubscriptionCatchUp,
   type Interval,
 } from "@openbooks/engine/src/billing/subscription-billing.ts";
+import { CATCH_UP_CHOICE_THRESHOLD } from "@openbooks/engine/src/billing/recurring.ts";
 import { ScopeNotFoundError } from "@openbooks/engine/src/organization/subsidiary-scope.ts";
 import { add, mulDecimal } from "@openbooks/engine/src/money/money.ts";
 import { guardSubsidiaryScope, guardUnrestrictedScope, type Authz } from "../../../lib/authz";
@@ -30,9 +33,9 @@ const POSTBodySchema1 = z.discriminatedUnion('action', [
   z.object({ action: z.literal('addPlan'), name: z.string().trim().min(1), description: z.string().nullable().optional(), amount: z.string().optional(), currency: z.string().nullable().optional(), interval: intervalSchema, intervalCount: intervalCountSchema, incomeAccountId: z.string().uuid().nullable().optional(), itemId: z.string().uuid().nullable().optional(), taxCodeId: z.string().uuid().nullable().optional() }),
   z.object({ action: z.literal('updatePlan'), id: z.string().uuid(), name: z.string().trim().min(1), description: z.string().nullable().optional(), amount: z.string().optional(), currency: z.string().nullable().optional(), interval: intervalSchema, intervalCount: intervalCountSchema, incomeAccountId: z.string().uuid().nullable().optional(), itemId: z.string().uuid().nullable().optional(), taxCodeId: z.string().uuid().nullable().optional(), isActive: z.boolean().optional() }),
   z.object({ action: z.literal('deletePlan'), id: z.string().uuid() }),
-  z.object({ action: z.literal('addSubscription'), customerId: z.string().uuid(), planId: z.string().uuid(), startOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(), firstBillOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(), prorateFirstPeriod: z.boolean().optional(), autoPost: z.boolean().optional(), quantity: z.string().optional(), priceOverride: z.string().nullable().optional(), memo: z.string().nullable().optional() }),
+  z.object({ action: z.literal('addSubscription'), customerId: z.string().uuid(), planId: z.string().uuid(), startOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(), firstBillOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(), prorateFirstPeriod: z.boolean().optional(), autoPost: z.boolean().optional(), quantity: z.string().optional(), priceOverride: z.string().nullable().optional(), memo: z.string().nullable().optional(), catchUp: z.object({ mode: z.enum(["post_all", "drafts", "skip", "selected"]), dates: z.array(z.string().regex(/^\d{4}-\d{2}-\d{2}$/)).optional(), post: z.boolean().optional() }).optional() }),
   z.object({ action: z.literal('changeSubscription'), id: z.string().uuid(), quantity: z.string().optional(), priceOverride: z.string().nullable().optional() }),
-  z.object({ action: z.literal('updateSubscription'), id: z.string().uuid(), status: z.enum(['active', 'paused', 'canceled']).optional(), quantity: z.string().optional(), priceOverride: z.string().nullable().optional(), autoPost: z.boolean().optional(), nextBillOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(), skipUnbilledService: z.boolean().optional(), skipReason: z.string().optional(), billToPartyId: z.string().uuid().nullable().optional(), payerPartyId: z.string().uuid().nullable().optional() }),
+  z.object({ action: z.literal('updateSubscription'), id: z.string().uuid(), status: z.enum(['active', 'paused', 'canceled']).optional(), quantity: z.string().optional(), priceOverride: z.string().nullable().optional(), autoPost: z.boolean().optional(), nextBillOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(), skipUnbilledService: z.boolean().optional(), skipReason: z.string().optional(), billToPartyId: z.string().uuid().nullable().optional(), payerPartyId: z.string().uuid().nullable().optional(), catchUp: z.object({ mode: z.enum(["post_all", "drafts", "skip", "selected"]), dates: z.array(z.string().regex(/^\d{4}-\d{2}-\d{2}$/)).optional(), post: z.boolean().optional() }).optional() }),
   z.object({ action: z.literal('billNow'), id: z.string().uuid() }),
 ]);
 
@@ -405,6 +408,38 @@ export const POST = defineRoute({
             if (prorateFirstPeriod && firstBillOn <= startOn) {
               throw new SubscriptionError("a prorated first period requires a later first bill date");
             }
+            // Activating into a backlog is a choice, never a side effect:
+            // two or more past-due full periods without a catch-up mode
+            // refuses with the exact period dates, so the scheduler cannot
+            // silently bulk-generate them.
+            const activationDay = await businessToday(orgId);
+            const activationPlan = firstBillOn <= activationDay
+              ? (await db.execute<{ interval: string; intervalCount: number }>(sql`
+                  select interval, interval_count as "intervalCount" from subscription_plans
+                   where id = ${body.planId} and org_id = ${orgId}`)).rows[0]
+              : undefined;
+            const activationCadence = activationPlan
+              ? normalizeSubscriptionCadence(activationPlan.interval, activationPlan.intervalCount)
+              : null;
+            const activationPending = activationCadence
+              ? pendingSubscriptionPeriods(
+                  {
+                    interval: activationCadence.interval,
+                    intervalCount: activationCadence.intervalCount,
+                    anchorDay: Number(firstBillOn.slice(8, 10)),
+                    nextBillOn: firstBillOn,
+                  },
+                  activationDay,
+                )
+              : null;
+            if (activationPending && activationPending.periods.length >= CATCH_UP_CHOICE_THRESHOLD && !body.catchUp) {
+              return NextResponse.json({
+                error: `${activationPending.periods.length} periods are already due — choose how to catch up instead of bulk-generating them`,
+                code: "catch_up_choice_required",
+                periods: activationPending.periods,
+                truncated: activationPending.truncated,
+              }, { status: 409 });
+            }
             const autoPost = optionalBoolean(body.autoPost, "auto post") ?? false;
             const quantity = normalizeSubscriptionMoney(body.quantity ?? "1", "quantity", "positive");
             const priceOverride =
@@ -460,7 +495,23 @@ export const POST = defineRoute({
                 allowedSubsidiaryIds: authz.allowedSubsidiaryIds,
               });
             }
-            return NextResponse.json({ id, proration }, { status: 201 });
+            let catchUp: unknown = null;
+            if (body.catchUp) {
+              try {
+                catchUp = await runSubscriptionCatchUp(orgId, id, {
+                  mode: body.catchUp.mode,
+                  selectedPeriods: body.catchUp.dates,
+                  postSelected: body.catchUp.post,
+                  asOf: activationDay,
+                  actorId: userId,
+                  allowedSubsidiaryIds: authz.allowedSubsidiaryIds,
+                });
+              } catch (e) {
+                if (e instanceof SubscriptionError) return apiErrorResponse(e);
+                throw e;
+              }
+            }
+            return NextResponse.json({ id, proration, ...(catchUp ? { catchUp } : {}) }, { status: 201 });
           }
           case "changeSubscription": {
             const scopeDenied = await guardSubscriptionScope(authz, body.id);
@@ -486,6 +537,42 @@ export const POST = defineRoute({
           case "updateSubscription": {
             const scopeDenied = await guardSubscriptionScope(authz, body.id);
             if (scopeDenied) return scopeDenied;
+            // Resuming into a backlog is a choice, never a side effect.
+            // Plain edits never trip this gate; the catch-up run recomputes
+            // from stored state, so a concurrent tick cannot bill anything
+            // the choice did not cover.
+            if (body.status === "active" && !body.catchUp) {
+              const current = (await db.execute<{
+                nextBillOn: string; interval: string; intervalCount: number; anchorDay: number;
+              }>(sql`
+                select s.next_bill_on::text as "nextBillOn", p.interval,
+                       p.interval_count as "intervalCount",
+                       coalesce(s.anchor_day, extract(day from s.start_on)::int) as "anchorDay"
+                  from subscriptions s
+                  join subscription_plans p on p.id = s.plan_id and p.org_id = s.org_id
+                 where s.id = ${body.id} and s.org_id = ${orgId} and s.status <> 'active'`)).rows[0];
+              if (current) {
+                const resumeDay = await businessToday(orgId);
+                const resumeCadence = normalizeSubscriptionCadence(current.interval, current.intervalCount);
+                const pending = pendingSubscriptionPeriods(
+                  {
+                    interval: resumeCadence.interval,
+                    intervalCount: resumeCadence.intervalCount,
+                    anchorDay: current.anchorDay,
+                    nextBillOn: current.nextBillOn,
+                  },
+                  resumeDay,
+                );
+                if (pending.periods.length >= CATCH_UP_CHOICE_THRESHOLD) {
+                  return NextResponse.json({
+                    error: `${pending.periods.length} periods are already due — choose how to catch up instead of bulk-generating them`,
+                    code: "catch_up_choice_required",
+                    periods: pending.periods,
+                    truncated: pending.truncated,
+                  }, { status: 409 });
+                }
+              }
+            }
             const sets: SQL[] = [];
             if ("status" in body) {
               if (typeof body.status !== "string" || !["active", "paused", "canceled"].includes(body.status)) {
@@ -622,14 +709,30 @@ export const POST = defineRoute({
               return { skippedWindow };
             });
             if (!outcome) return notFound("record");
+            let catchUp: unknown = null;
+            if (body.catchUp) {
+              try {
+                catchUp = await runSubscriptionCatchUp(orgId, String(body.id), {
+                  mode: body.catchUp.mode,
+                  selectedPeriods: body.catchUp.dates,
+                  postSelected: body.catchUp.post,
+                  actorId: userId,
+                  allowedSubsidiaryIds: authz.allowedSubsidiaryIds,
+                });
+              } catch (e) {
+                if (e instanceof SubscriptionError) return apiErrorResponse(e);
+                throw e;
+              }
+            }
             if (outcome.skippedWindow) {
               return NextResponse.json({
                 ok: true,
                 skippedWindow: outcome.skippedWindow,
                 skipReason: (skipReason ?? "").trim(),
+                ...(catchUp ? { catchUp } : {}),
               });
             }
-            return NextResponse.json({ ok: true });
+            return NextResponse.json({ ok: true, ...(catchUp ? { catchUp } : {}) });
           }
           case "billNow": {
             const scopeDenied = await guardSubscriptionScope(authz, body.id);
