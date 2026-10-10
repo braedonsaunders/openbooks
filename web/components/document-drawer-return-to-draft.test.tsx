@@ -74,7 +74,9 @@ function scriptFetch(handler: (url: string, init?: RequestInit) => Response | nu
 async function mountBill(options: { status?: string; canPost?: boolean } = {}) {
   globalThis.__drawerRouter = { push() {}, refresh() {} };
   globalThis.__drawerToasts = [];
-  globalThis.__drawerPrompt = undefined;
+  // Note: the reason prompt is NOT reset here — click tests arm
+  // globalThis.__drawerPrompt after mounting (resetting it here would
+  // disarm the dialog and the action would return before any fetch).
   const host = document.createElement("div");
   document.body.appendChild(host);
   const root = createRoot(host);
@@ -213,7 +215,6 @@ test("Return to draft posts the prompted reason with the drawer revision", async
     "the drawer revision travels for optimistic concurrency");
   assert.ok((globalThis.__drawerToasts ?? []).some((toast) => toast.kind === "success"),
     "a success toast confirms the return");
-  void doc;
 });
 
 /** A refused return pins the remedy as a drawer-header alert, not just a toast. */
