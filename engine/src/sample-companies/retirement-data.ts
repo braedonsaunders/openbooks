@@ -100,7 +100,54 @@ export function retirementDeletionOrder(names: readonly string[], foreignKeys: r
 
 /** Delete only owned rows. Constraint refusals are retried after their children;
  * cycles that cannot be removed without UPDATE roll back the entire target. */
-export async function deleteRetiredTenantRows(catalog: Catalog, orgId: string) {
+export async function deleteRetiredTenantRows(catalog: Catalog, orgId: string, options: { batchSize?: number } = {}) {
+  const batchSize = options.batchSize ?? 4096;
+  if (!Number.isSafeInteger(batchSize) || batchSize < 1 || batchSize > 4096) throw new Error("Retirement deletion batches must contain between 1 and 4096 rows or journal entries");
+  // Statement bounds do not split the target transaction. Journal statements
+  // retain complete entries so balancing and FX guards never see partial legs.
+  const deleteBatches = async (table: Pick<TableInfo, "name" | "hasOrgId">, leaves: SQL[] = []) => {
+    let removed = 0n;
+    let lastEntryId: string | null = null;
+    for (;;) {
+      const journal = table.name === "journal_lines";
+      if (journal && leaves.length) throw new Error("Journal retirement cannot split self-referencing entries");
+      const candidates = journal ? sql`
+        select distinct owned_row.entry_id from public.journal_lines owned_row
+        where ${retirementPredicate(table, orgId)}
+          ${lastEntryId ? sql`and owned_row.entry_id>${lastEntryId}::uuid` : sql``}
+        order by owned_row.entry_id limit ${batchSize}` : sql`
+        select owned_row.ctid from public.${sql.identifier(table.name)} owned_row
+        where ${retirementPredicate(table, orgId)}
+          ${leaves.length ? sql`and ${sql.join(leaves, sql` and `)}` : sql``}
+        limit ${batchSize}`;
+      const result = await db.execute<{ expected: string; removed: string; nextEntryId: string | null }>(sql`
+        with candidates as materialized (${candidates}),
+        owned_batch as materialized (
+          ${journal ? sql`select owned_row.ctid from public.journal_lines owned_row
+            join candidates on candidates.entry_id=owned_row.entry_id where ${retirementPredicate(table, orgId)}`
+          : sql`select ctid from candidates`}
+        ), deleted as (
+          delete from public.${sql.identifier(table.name)} owned_row
+          where ${retirementPredicate(table, orgId)} and owned_row.ctid in (select ctid from owned_batch)
+          returning 1
+        )
+        select (select count(*)::text from owned_batch) as expected,
+          (select count(*)::text from deleted) as removed,
+          ${journal ? sql`(select entry_id::text from candidates order by entry_id desc limit 1)` : sql`null::text`} as "nextEntryId"`);
+      const row = result.rows[0];
+      if (result.rows.length !== 1 || !row || typeof row.expected !== "string" || typeof row.removed !== "string"
+          || !/^(0|[1-9][0-9]*)$/.test(row.expected) || !/^(0|[1-9][0-9]*)$/.test(row.removed)
+          || row.expected !== row.removed) {
+        throw new Error(`Retirement did not remove exactly its claimed ${table.name} batch`);
+      }
+      if (row.removed === "0") return removed;
+      removed += BigInt(row.removed);
+      if (journal) {
+        if (!isUuid(row.nextEntryId) || (lastEntryId !== null && row.nextEntryId <= lastEntryId)) throw new Error("Retirement journal batch has no advancing exact entry cursor");
+        lastEntryId = row.nextEntryId;
+      }
+    }
+  };
   const targets = catalog.tenantTables.filter(t => t.name !== "orgs");
   const byName = new Map(targets.map(table => [table.name, table]));
   const foreignKeys = (await db.execute<RetirementForeignKey & Record<string, unknown>>(sql`
@@ -117,9 +164,7 @@ export async function deleteRetiredTenantRows(catalog: Catalog, orgId: string) {
   const selfEdges = foreignKeys.filter(edge => edge.table === edge.referencedTable && (edge.deleteAction !== "a" || !edge.deferrable));
   const removed: Record<string, string> = {};
   for (const name of RETIREMENT_AUTH_TABLES) {
-    const result = await db.execute(sql`delete from public.${sql.identifier(name)} where ${retirementPredicate({ name, hasOrgId: false }, orgId)}`);
-    if (result.rowCount == null) throw new Error(`Missing auth cleanup count for ${name}`);
-    removed[name] = String(result.rowCount);
+    removed[name] = String(await deleteBatches({ name, hasOrgId: false }));
   }
   let pending = [...order];
   while (pending.length) {
@@ -132,14 +177,12 @@ export async function deleteRetiredTenantRows(catalog: Catalog, orgId: string) {
           sql`child.${sql.identifier(column)}=owned_row.${sql.identifier(edge.referencedColumns[i]!)}`), sql` and `)})`);
       await db.execute(sql`savepoint retirement_table`);
       try {
-        const result = await db.execute(sql`delete from public.${sql.identifier(name)} owned_row where ${retirementPredicate(table, orgId)}
-          ${leaves.length ? sql`and ${sql.join(leaves, sql` and `)}` : sql``}`);
-        if (result.rowCount == null) throw new Error(`Missing retirement affected-row count for ${name}`);
+        const count = await deleteBatches(table, leaves);
         const remaining = await db.execute(sql`select 1 from public.${sql.identifier(name)} where ${retirementPredicate(table, orgId)} limit 1`);
         await db.execute(sql`release savepoint retirement_table`);
-        removed[name] = (BigInt(removed[name] ?? "0") + BigInt(result.rowCount)).toString();
+        removed[name] = (BigInt(removed[name] ?? "0") + count).toString();
         if (!remaining.rows.length) progress = true;
-        else { refused.push(name); if (result.rowCount > 0) progress = true; }
+        else { refused.push(name); if (count > 0n) progress = true; }
       } catch (error) {
         await db.execute(sql`rollback to savepoint retirement_table`);
         await db.execute(sql`release savepoint retirement_table`);
