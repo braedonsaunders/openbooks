@@ -6,7 +6,7 @@ import { NextResponse } from "next/server";
 import { TimeApprovalRefusal } from "@/lib/time-approval-refusal";
 import { TimeWorkTargetError } from "@openbooks/engine/src/projects/time-work-target.ts";
 import { ScopeNotFoundError } from "@openbooks/engine/src/organization/subsidiary-scope.ts";
-import { approveSubmittedTimeEntries } from "../../../../lib/time-approval";
+import { approveSubmittedTimeEntries } from "../../../../../lib/time-approval";
 import { APPROVALS_BULK_BATCH_MAX } from "@/lib/approvals-limits";
 
 export const runtime = "nodejs";
