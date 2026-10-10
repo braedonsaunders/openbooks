@@ -97,6 +97,8 @@ export const EXCLUDE = new Set([
   // Masked sandboxes require newly reviewed routing definitions.
   "crm_sales_territory_versions",
   "orgs",
+  // Access is granted by the destination lifecycle, never inherited from its source.
+  "user_org_access",
   "sandboxes",
   "masking_policies",
   "change_sets",

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
+import { Client } from "pg";
 import { db } from "../platform/db.ts";
 import {
   createMatch,
@@ -130,16 +131,26 @@ test(
         select status from reconciliations where org_id = ${org.orgId} and id = ${recon.id}
       `)).rows[0]!.status;
       assert.equal(status, "signed_off");
-      await assert.rejects(db.transaction(async (tx) => {
-        await tx.execute(sql`select set_config('openbooks.clone','on',true),
-          set_config('openbooks.migration','on',true),set_config('openbooks.amend','on',true)`);
-        assert.equal((await tx.execute<{ allowed: boolean }>(sql`
-          select public.openbooks_clone_authority() as allowed`)).rows[0]!.allowed, false);
-        await tx.execute(sql`insert into reconciliation_matches
+      const runtimeUrl = process.env.OPENBOOKS_RUNTIME_DB_URL ?? process.env.OPENBOOKS_DB_URL;
+      const runtime = new Client({ connectionString: runtimeUrl });
+      await runtime.connect();
+      try {
+        await runtime.query("begin");
+        await runtime.query("select set_config('app.current_org',$1,true),set_config('app.bypass_rls','off',true)", [org.orgId]);
+        await runtime.query("select set_config('openbooks.clone','on',true),set_config('openbooks.migration','on',true),set_config('openbooks.amend','on',true)");
+        const posture = (await runtime.query(`select r.rolsuper,r.rolbypassrls,
+          public.openbooks_clone_authority() as allowed from pg_roles r where r.rolname=session_user`)).rows[0];
+        assert.deepEqual(posture, { rolsuper: false, rolbypassrls: false, allowed: false },
+          "the refusal is exercised by the actual runtime login");
+        await assert.rejects(runtime.query(`insert into reconciliation_matches
           (id,org_id,reconciliation_id,statement_line_id,journal_line_id,matched_by)
-          values(${randomUUID()},${org.orgId},${recon.id},${statementLineId},${periodLines[0]},'manual')`);
-      }), /signed-off reconciliation matches are immutable/,
-      "runtime flags cannot authorize an additional match on signed-off history");
+          values($1,$2,$3,$4,$5,'manual')`, [randomUUID(),org.orgId,recon.id,statementLineId,periodLines[0]]),
+        /signed-off reconciliation matches are immutable/,
+        "runtime flags cannot authorize an additional match on signed-off history");
+      } finally {
+        await runtime.query("rollback");
+        await runtime.end();
+      }
       await assert.rejects(db.execute(sql`update reconciliation_matches set confidence='0.5000'
         where org_id=${org.orgId} and reconciliation_id=${recon.id}`),
       /signed-off reconciliation matches are immutable/);

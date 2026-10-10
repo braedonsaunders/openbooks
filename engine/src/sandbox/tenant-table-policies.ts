@@ -766,7 +766,7 @@ export const TENANT_TABLE_POLICIES = {
   "user_dashboard_layouts": "clone:catalog-uuid-rebase",
   "user_form_preferences": "clone:catalog-uuid-rebase",
   "user_list_preferences": "clone:catalog-uuid-rebase",
-  "user_org_access": "clone:catalog-uuid-rebase",
+  "user_org_access": "skip:no-copy",
   "user_page_layouts": "clone:catalog-uuid-rebase",
   "user_permission_overrides": "clone:catalog-uuid-rebase",
   "user_scripts": "clone:catalog-uuid-rebase",
