@@ -43,6 +43,10 @@ export interface CashSalesDrawer {
   createMode: boolean
   config: DocKindConfig
   initialMode: 'edit' | 'view'
+  /** cash_sales.create: edit, save and delete drafts. */
+  canCreate: DocumentDrawerProps['canCreate']
+  /** cash_sales.post: post drafts. */
+  canPost: DocumentDrawerProps['canPost']
   parties: DocumentDrawerProps['parties']
   accounts: DocumentDrawerProps['accounts']
   taxCodes: DocumentDrawerProps['taxCodes']
@@ -382,6 +386,11 @@ export async function loadCashSales(
           allocationsEntryEnabled: featureEnabled(featureState, 'allocationsAtEntry'),
           config: DOC_KINDS[drawerKind]!,
           initialMode: (isCreate || pickString(sp.mode) === 'edit' ? 'edit' : 'view') as 'edit' | 'view',
+          // The drawer's edit, save, delete and post affordances read these
+          // grants; without them every draft rendered read-only for every
+          // role. The document routes enforce the same permissions.
+          canCreate,
+          canPost,
           parties: pickers[0],
           accounts: pickers[1],
           taxCodes: pickers[2],
