@@ -12,7 +12,7 @@ import { loadSubsidiaryContext, restrictionAdmits } from "../organization/subsid
  *   1. the document's own choice (`custom.controlAccountId`),
  *   2. the party's default (customer_roles.ar_account_id /
  *      vendor_roles.ap_account_id),
- *   3. the organization control account (Setup → Company → Control accounts).
+ *   3. the organization control account (Setup → Company & Accounting → Control accounts).
  *
  * The resolved account is stamped on the document when it posts, so the
  * document carries its own control account for its whole life: payments,
@@ -55,7 +55,7 @@ function remedyFor(side: ControlSide, source: ControlAccountSource): string {
       ? "correct the customer's Receivable account on the customer record, or choose a receivable account on the document"
       : "correct the vendor's Payable account on the vendor record, or choose a payable account on the document";
   }
-  return `set an active ${NOUN[side]} control account in Setup → Company → Control accounts`;
+  return `set an active ${NOUN[side]} control account in Setup → Company & Accounting → Control accounts`;
 }
 
 function sourceLabel(side: ControlSide, source: ControlAccountSource): string {
@@ -189,4 +189,29 @@ export async function resolveDocumentControlAccount(
     candidate.source,
   );
   return { side: candidate.side, accountId: candidate.accountId, source: candidate.source, ...account };
+}
+
+/**
+ * The control account a posted party document's open item actually carries:
+ * its stamped choice when present, else the account of its posted open-item
+ * leg (documents posted before the stamp existed). Null for documents with
+ * no posted open item. A follow-on document that must settle against this
+ * one (a credit memo for an invoice) inherits this account.
+ */
+export async function postedDocumentControlAccount(
+  runner: Pick<typeof db, "execute">,
+  orgId: string,
+  documentId: string,
+): Promise<string | null> {
+  const row = (await runner.execute<{ account_id: string | null }>(sql`
+    select coalesce(
+             (select jl.account_id::text
+                from journal_lines jl
+               where jl.org_id = d.org_id and jl.entry_id = d.posted_entry_id and jl.is_open_item
+               order by jl.line_number
+               limit 1),
+             nullif(d.custom->>'controlAccountId', '')) as account_id
+      from documents d
+     where d.org_id = ${orgId} and d.id = ${documentId} and d.status = 'posted'`)).rows[0];
+  return row?.account_id ?? null;
 }

@@ -57,6 +57,8 @@
     "amountReceived": "Erhaltener Betrag",
     "autoApply": "Automatisch zuordnen",
     "reservedByRun": "Reserviert durch Zahlungslauf {runNumber}",
+    "openItemAccount": "Konto {account}",
+    "otherControlAccount": "Auf einem anderen Konto – in einer separaten Zahlung ausgleichen",
     "autoApplyFailed": "Es konnte keine Zuordnung vorgeschlagen werden",
     "autoApplyNone": "Keine offenen Posten passen zu diesem Betrag",
     "autoApplyDone": "Auf {count, plural, one {# Posten} other {# Posten}} angewendet ({strategy})",

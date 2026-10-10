@@ -371,6 +371,25 @@ async function findPostedPurposeReceipt(orgId: string, memo: string): Promise<st
   return row?.id ?? null;
 }
 
+/** The receivable account an open item sits on: by its journal line, or by
+ *  a posted document's own open-item leg. Fails closed when none exists. */
+async function openItemAccount(
+  orgId: string,
+  target: { lineId: string } | { documentId: string },
+): Promise<string> {
+  const row = (await db.execute<{ account_id: string }>("lineId" in target
+    ? sql`select account_id from journal_lines where org_id = ${orgId} and id = ${target.lineId} and is_open_item`
+    : sql`
+      select jl.account_id
+        from documents d
+        join journal_lines jl on jl.entry_id = d.posted_entry_id and jl.org_id = d.org_id and jl.is_open_item
+       where d.org_id = ${orgId} and d.id = ${target.documentId}
+       order by jl.line_number
+       limit 1`)).rows[0];
+  if (!row) throw new PspAutomationError("the settled document has no posted receivable open item");
+  return row.account_id;
+}
+
 /** Post an unapplied customer receipt (cash moves, nothing settles) — the
  *  same validated draft shape settleAttempt builds when the invoice needs no
  *  application. A gated receipt parks: the caller records pending_review and
@@ -385,6 +404,10 @@ async function postUnappliedReceipt(
     total: string;
     memo: string;
     referenceNumber: string;
+    /** The receivable account of the open item this receipt will later
+     *  settle against: applications require both endpoints on one account,
+     *  so the receipt posts to the target's own account, never a default. */
+    controlAccountId: string;
   },
 ): Promise<{ receiptId: string; gated: boolean }> {
   const actorId = PSP_AUTOMATION_SYSTEM_ACTOR_ID;
@@ -406,14 +429,16 @@ async function postUnappliedReceipt(
       (org_id, document_id, line_number, account_id, quantity, unit_price, amount, tax_amount)
     values (${orgId}, ${payment.id}, 1, ${opts.bankAccountId}, '1', ${opts.total}, ${opts.total}, '0')
   `);
-  await db.execute(sql`
+  const shaped = await db.execute<{ id: string }>(sql`
     update documents
        set reference_number = ${opts.referenceNumber},
-           custom = coalesce(custom, '{}'::jsonb) || '{"allocations": []}'::jsonb,
+           custom = coalesce(custom, '{}'::jsonb) || jsonb_build_object('allocations', '[]'::jsonb, 'controlAccountId', ${opts.controlAccountId}::text),
            subtotal = ${opts.total}, tax_total = '0', total = ${opts.total},
            updated_at = now(), updated_by = ${actorId}
      where id = ${payment.id} and org_id = ${orgId} and status = 'draft'
+     returning id
   `);
+  if (!shaped.rows[0]) throw new PspAutomationError("the unapplied receipt draft changed before it could be completed");
   const submission = await submitAndReleaseIfUngated("customer_payment", payment.id, actorId);
   if (submission.flowError) {
     throw new PspAutomationError(`receipt approval could not be routed: ${submission.flowError}`);
@@ -550,6 +575,7 @@ async function refundAgainstCredit(
     total: neg(refundedAmount),
     memo: purpose,
     referenceNumber: `psp-refund:${ctx.attempt.external_ref.slice(0, 8)}`,
+    controlAccountId: await openItemAccount(orgId, { lineId: creditLineId }),
   });
   if (issued.gated) return { refundId: issued.receiptId, gated: true };
   const refundId = issued.receiptId;
@@ -1042,6 +1068,7 @@ async function openDisputeHold(
       total: disputeAmount,
       memo: holdPurpose,
       referenceNumber: `psp-dispute:${providerRef.slice(0, 12)}`,
+      controlAccountId: await openItemAccount(orgId, { documentId: ctx.invoice.id }),
     });
   if (issuedHold.gated) return { documents, holdId: issuedHold.receiptId, gated: true };
   const holdId = issuedHold.receiptId;

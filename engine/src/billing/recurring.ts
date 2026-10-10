@@ -479,6 +479,7 @@ async function generateFromTemplate(
     memo: string | null;
     extra_dims: Record<string, unknown> | null;
     payment_card_id: string | null;
+    custom: Record<string, unknown> | null;
   }>(sql`
     select * from documents where id = ${templateId} and org_id = ${orgId} for share
   `));
@@ -534,6 +535,11 @@ async function generateFromTemplate(
     recurringRunSource: context.runSource,
     ...(context.actorId === null
       ? { actorKind: "system", actorReason: "recurring schedule" }
+      : {}),
+    // The template's receivable/payable account choice is part of what the
+    // schedule bills: each occurrence posts to the same account.
+    ...(typeof tpl.custom?.controlAccountId === "string" && tpl.custom.controlAccountId
+      ? { controlAccountId: tpl.custom.controlAccountId }
       : {}),
   };
   // 0171: an expense report's funding card lives on the header — carry it so

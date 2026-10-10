@@ -57,6 +57,8 @@
     "amountReceived": "Amount received",
     "autoApply": "Auto-apply",
     "reservedByRun": "Reserved by payment run {runNumber}",
+    "openItemAccount": "Account {account}",
+    "otherControlAccount": "On another account — settle it in a separate payment",
     "autoApplyFailed": "Could not suggest an application",
     "autoApplyNone": "No open items match this amount",
     "autoApplyDone": "Applied to {count, plural, one {# item} other {# items}} ({strategy})",

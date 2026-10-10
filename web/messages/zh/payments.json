@@ -57,6 +57,8 @@
     "amountReceived": "收款金额",
     "autoApply": "自动核销",
     "reservedByRun": "已被付款批次 {runNumber} 预留",
+    "openItemAccount": "科目 {account}",
+    "otherControlAccount": "位于其他科目 — 请通过单独的付款核销",
     "autoApplyFailed": "无法建议核销方案",
     "autoApplyNone": "没有未结项与此金额匹配",
     "autoApplyDone": "已核销至 {count, plural, one {# 项} other {# 项}}（{strategy}）",

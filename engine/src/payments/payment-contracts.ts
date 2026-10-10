@@ -47,6 +47,11 @@ export interface OpenItem {
   documentKind: string | null;
   referenceNumber: string | null;
   memo: string | null;
+  /** The receivable/payable account the open item sits on. A payment settles
+   *  one account: every application shares its source's account. */
+  accountId: string;
+  accountNumber: string | null;
+  accountName: string;
   /** Absolute original amount of the open-item line. */
   amount: string;
   /** Sum of live applications against this line. */

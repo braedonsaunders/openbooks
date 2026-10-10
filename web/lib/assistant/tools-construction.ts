@@ -61,6 +61,7 @@ const retainageBalances: AssistantToolDef = {
     const filters = sql`
      where l.org_id = ${orgId}
        and l.account_id = ${acct.id}
+       and not l.is_open_item
        and e.status in ('posted', 'reversed')
        and e.book_id = (select b.id from accounting_books b
                           where b.org_id = ${orgId} and b.is_primary and b.is_active and b.posts_gl limit 1)
