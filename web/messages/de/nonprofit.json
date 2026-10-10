@@ -186,7 +186,9 @@
     "activityEmpty": "Noch keine Aktivität erfasst.",
     "entryNumber": "Buchung",
     "changeAction": "Aktion",
-    "changeAt": "Erfasst am"
+    "changeAt": "Erfasst am",
+    "reportsTitle": "Berichtspflichten",
+    "reportsSearch": "Berichte suchen…"
   },
   "encumbrances": {
     "title": "Zweckbindungen",

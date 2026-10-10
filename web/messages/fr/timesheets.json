@@ -229,7 +229,6 @@
     "circle": "Cercle",
     "polygon": "Polygone",
     "corners": "sommets",
-    "inactive": "inactive",
     "removeGeofence": "Retirer",
     "latitude": "Latitude",
     "longitude": "Longitude",
@@ -238,6 +237,12 @@
     "cornersPlaceholder": "43.6532,-79.3832",
     "useLocation": "Utiliser ma position",
     "locationDenied": "Position indisponible — saisissez les coordonnées à la main.",
-    "saveGeofence": "Enregistrer la zone"
+    "saveGeofence": "Enregistrer la zone",
+    "addGeofence": "Ajouter une zone géographique",
+    "shape": "Forme",
+    "area": "Zone",
+    "status": "Statut",
+    "activeBadge": "Activée",
+    "inactiveBadge": "Désactivée"
   }
 }

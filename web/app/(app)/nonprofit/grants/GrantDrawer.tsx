@@ -12,6 +12,7 @@ import {
   AlertTitle,
   Badge,
   Button,
+  Drawer,
   Input,
   Label,
   Select,
@@ -25,6 +26,7 @@ import {
   UrlDrawer,
 } from '@openbooks/ui'
 import { DrawerTabStrip } from '@/components/drawer-tab-strip'
+import { DrawerSublist, SublistAddButton, SublistEmpty, SublistPager, useSublistRows } from '@/components/drawer-sublist'
 import { confirmDialog } from '@/lib/confirm'
 import { useAppAction } from '@/lib/use-app-action'
 import type { GrantDrawerData, GrantGroupOption } from './view'
@@ -739,12 +741,28 @@ function GrantReportsTab({
   canManage: boolean
 }) {
   const t = useTranslations('nonprofit')
+  const tc = useTranslations('common')
+  const [adding, setAdding] = useState(false)
   const [title, setTitle] = useState('')
   const [dueOn, setDueOn] = useState('')
+  const list = useSublistRows(drawer.reports, (item) => `${item.title} ${item.dueOn}`)
+  async function create() {
+    const created = await onCommand({ action: 'createReport', grantId: drawer.terms.id, title, dueOn }, t('grants.reportCreated'))
+    if (created) {
+      setAdding(false)
+      setTitle('')
+      setDueOn('')
+    }
+  }
   return (
-    <div className="space-y-4">
+    <DrawerSublist
+      title={t('grants.reportsTitle')}
+      action={canManage ? <SublistAddButton label={t('grants.createReportAction')} onClick={() => setAdding(true)} /> : undefined}
+      search={drawer.reports.length ? { value: list.query, onChange: list.setQuery, placeholder: t('grants.reportsSearch') } : undefined}
+      footer={drawer.reports.length ? <SublistPager page={list.page} pages={list.pages} onPage={list.setPage} /> : null}
+    >
       {drawer.reports.length === 0 ? (
-        <p className="text-sm text-slate-500">{t('grants.reportsEmpty')}</p>
+        <SublistEmpty text={t('grants.reportsEmpty')} />
       ) : (
         <Table>
           <TableHeader>
@@ -755,7 +773,7 @@ function GrantReportsTab({
             </TableRow>
           </TableHeader>
           <TableBody>
-            {drawer.reports.map((item) => (
+            {list.shown.map((item) => (
               <TableRow key={item.id}>
                 <TableCell>{item.title}</TableCell>
                 <TableCell className="font-mono text-[13px]">{item.dueOn}</TableCell>
@@ -775,19 +793,26 @@ function GrantReportsTab({
         </Table>
       )}
       {canManage ? (
-        <div className="flex flex-wrap items-end gap-2 border-t border-slate-200 pt-3 dark:border-slate-800">
-          <div className="min-w-52 flex-1">
+        <Drawer
+          open={adding}
+          onClose={() => { if (!busy) setAdding(false) }}
+          stacked
+          size="md"
+          title={t('grants.createReportAction')}
+          footer={(
+            <>
+              <Button variant="outline" disabled={busy} onClick={() => setAdding(false)}>{tc('actions.cancel')}</Button>
+              <Button disabled={busy || !title.trim() || !dueOn} onClick={() => void create()}>{t('grants.createReportAction')}</Button>
+            </>
+          )}
+        >
+          <div className="grid gap-4 sm:grid-cols-2">
             <Field label={t('grants.reportTitle')}><Input value={title} onChange={(e) => setTitle(e.target.value)} /></Field>
-          </div>
-          <div className="min-w-40">
             <Field label={t('grants.dueOn')}><Input type="date" value={dueOn} onChange={(e) => setDueOn(e.target.value)} /></Field>
           </div>
-          <Button disabled={busy} onClick={() => onCommand({ action: 'createReport', grantId: drawer.terms.id, title, dueOn }, t('grants.reportCreated'))}>
-            {t('grants.createReportAction')}
-          </Button>
-        </div>
+        </Drawer>
       ) : null}
-    </div>
+    </DrawerSublist>
   )
 }
 

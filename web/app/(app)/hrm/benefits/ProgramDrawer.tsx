@@ -6,7 +6,8 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { AlertTriangle } from 'lucide-react'
-import { Alert, Button, Input, Label, Select, Textarea } from '@openbooks/ui'
+import { Alert, Button, Drawer, Input, Label, Select, Textarea } from '@openbooks/ui'
+import { SublistAddButton, SublistHeading } from '../../../../components/drawer-sublist'
 import { readApiErrorMessage } from '../../../../lib/api-error'
 import { promptDialog } from '../../../../lib/prompt'
 import { useDirtyClose } from '../../../../lib/use-dirty-close'
@@ -214,7 +215,12 @@ export function ProgramDrawer({
       showAttachments={false} detailsLabel={t('programWorkspace.rules')} activeTab={tab} onActiveTabChange={setTab}
       detailTabs={[
         { key: 'participants', label: t('programWorkspace.participants'), content: <div className="p-4">        {!drawer.drawerRefusal ? <div>
-          <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t('portfolio.membersTitle')}</h3>
+          <div className="mb-3 flex items-start justify-between gap-3">
+            <SublistHeading title={t('portfolio.membersTitle')} />
+            {canManage && program.status !== 'closed' ? (
+              <div className="shrink-0"><SublistAddButton label={t('portfolio.addMember')} onClick={() => setAdding(true)} /></div>
+            ) : null}
+          </div>
           <PreparedPagedTable source="hrm_benefit_program_participants" rows={drawer.members.map(m => ({
             id:m.id,searchText:`${m.employeeLabel} ${m.role ?? ''}`,cells:[
               m.employeeHref ? <Link key="employee" href={m.employeeHref as never} className="font-medium text-teal-700 hover:underline">{m.employeeLabel}</Link> : m.employeeLabel,
@@ -227,15 +233,24 @@ export function ProgramDrawer({
               }}>{t('portfolio.removeMember')}</Button> : null,
             ],
           }))} columns={[{key:'employee',header:t('benefits.columns.employee')},{key:'effective',header:t('portfolio.columns.effective')},{key:'role',header:t('portfolio.members.role')},{key:'weight',header:t('portfolio.members.weight'),align:'right'},{key:'actions',header:''}]} empty={<p>{drawer.membersEmpty}</p>} />
-          {canManage && program.status !== 'closed' && !adding ? (
-            <div className="mt-2 flex justify-end">
-              <Button variant="outline" size="sm" onClick={() => setAdding(true)}>
-                {t('portfolio.addMember')}
-              </Button>
-            </div>
-          ) : null}
-          {adding ? (
-            <div className="mt-2 flex flex-col gap-3 rounded-lg border border-slate-200 p-3 dark:border-slate-700">
+          <Drawer
+            open={adding && canManage && program.status !== 'closed'}
+            onClose={() => { if (!working) setAdding(false) }}
+            stacked
+            size="md"
+            title={t('portfolio.addMember')}
+            footer={(
+              <>
+                <Button variant="outline" disabled={working} onClick={() => setAdding(false)}>
+                  {t('portfolio.builder.cancel')}
+                </Button>
+                <Button disabled={working} onClick={addMember}>
+                  {t('portfolio.addMember')}
+                </Button>
+              </>
+            )}
+          >
+            <div className="flex flex-col gap-3">
               <div>
                 <Label htmlFor="program-member-employment">{t('portfolio.awardFields.recipient')}</Label>
                 <Select
@@ -299,16 +314,8 @@ export function ProgramDrawer({
                   {memberError}
                 </p>
               ) : null}
-              <div className="flex justify-end gap-2">
-                <Button variant="outline" size="sm" onClick={() => setAdding(false)}>
-                  {t('portfolio.builder.cancel')}
-                </Button>
-                <Button size="sm" disabled={working} onClick={addMember}>
-                  {t('portfolio.addMember')}
-                </Button>
-              </div>
             </div>
-          ) : null}
+          </Drawer>
         </div> : null}
 
 </div> },

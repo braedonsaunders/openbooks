@@ -186,7 +186,9 @@
     "activityEmpty": "まだ活動はありません。",
     "entryNumber": "仕訳番号",
     "changeAction": "操作",
-    "changeAt": "記録日時"
+    "changeAt": "記録日時",
+    "reportsTitle": "報告要件",
+    "reportsSearch": "レポートを検索…"
   },
   "encumbrances": {
     "title": "支出負担行為",

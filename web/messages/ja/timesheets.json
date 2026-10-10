@@ -229,7 +229,6 @@
     "circle": "円",
     "polygon": "多角形",
     "corners": "頂点",
-    "inactive": "無効",
     "removeGeofence": "削除",
     "latitude": "緯度",
     "longitude": "経度",
@@ -238,6 +237,12 @@
     "cornersPlaceholder": "43.6532,-79.3832",
     "useLocation": "現在地を使う",
     "locationDenied": "位置を取得できません — 座標を手入力してください。",
-    "saveGeofence": "ジオフェンスを保存"
+    "saveGeofence": "ジオフェンスを保存",
+    "addGeofence": "ジオフェンスを追加",
+    "shape": "形状",
+    "area": "範囲",
+    "status": "ステータス",
+    "activeBadge": "有効",
+    "inactiveBadge": "無効"
   }
 }

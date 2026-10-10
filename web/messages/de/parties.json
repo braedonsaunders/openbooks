@@ -140,7 +140,7 @@
       "search": "Zahlungsmethoden suchen…",
       "allStatuses": "Alle Status",
       "method": "Methode",
-      "details": "Details",
+      "details": "Einzelheiten",
       "enrollmentsLoadFailed": "Die Einstellungen für automatische Zahlungen konnten nicht geladen werden.",
       "needsMethodTitle": "Fügen Sie zuerst eine Zahlungsmethode hinzu",
       "needsMethodHint": "Automatische Zahlungen belasten die Standardzahlungsmethode des Kunden. Senden Sie dem Kunden einen Einrichtungslink, um eine Karte oder ein Bankkonto zu hinterlegen, und aktivieren Sie dann die automatische Zahlung.",

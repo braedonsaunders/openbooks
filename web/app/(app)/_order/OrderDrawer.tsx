@@ -1720,7 +1720,9 @@ export function OrderDrawer({
             <QuoteCashSection
               quoteId={String(doc.id)}
               currency={doc.currency}
-              canManage={canManage}
+              // Subscription terms edit with the quote: read-only until the
+              // drawer is in edit mode.
+              canManage={canManage && mode === 'edit'}
               docStatus={doc.status}
               lines={order.lines
                 .filter((l) => typeof (l as { id?: unknown }).id === 'string')

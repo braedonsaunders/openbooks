@@ -186,7 +186,9 @@
     "activityEmpty": "暂无活动记录。",
     "entryNumber": "分录号",
     "changeAction": "操作",
-    "changeAt": "记录时间"
+    "changeAt": "记录时间",
+    "reportsTitle": "报告要求",
+    "reportsSearch": "搜索报告…"
   },
   "encumbrances": {
     "title": "预留款",

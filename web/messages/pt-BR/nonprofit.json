@@ -186,7 +186,9 @@
     "activityEmpty": "Sem atividade registrada ainda.",
     "entryNumber": "Lançamento",
     "changeAction": "Ação",
-    "changeAt": "Registrado em"
+    "changeAt": "Registrado em",
+    "reportsTitle": "Requisitos de relatórios",
+    "reportsSearch": "Pesquisar relatórios…"
   },
   "encumbrances": {
     "title": "Empenhos",
