@@ -5,9 +5,20 @@ import { stubModules } from '../../../../../testing/stub-modules'
 
 await bootJsdomEnvironment({ url: 'http://localhost/admin/setup/features?tab=finance&draft=kept#features' })
 const reactUrl = import.meta.resolve('react')
+let navigationHref = window.location.href
+const navigationListeners = new Set<() => void>()
+const navigationStore = {
+  subscribe(listener: () => void) { navigationListeners.add(listener); return () => { navigationListeners.delete(listener) } },
+  getSnapshot() { return navigationHref },
+}
+Object.assign(globalThis, { __featuresNavigationStore: navigationStore })
 stubModules({
   navigation: {
-    source: "export function usePathname(){return window.location.pathname}export function useSearchParams(){return new URLSearchParams(window.location.search)}export function useRouter(){return{push(){throw new Error('presentation must not request a server route')},replace(){},refresh(){}}}",
+    source: `import {useSyncExternalStore,useMemo} from ${JSON.stringify(reactUrl)};
+      function useUrl(){const store=globalThis.__featuresNavigationStore;const href=useSyncExternalStore(store.subscribe,store.getSnapshot,store.getSnapshot);return useMemo(()=>new URL(href),[href])}
+      export function usePathname(){return useUrl().pathname}
+      export function useSearchParams(){const search=useUrl().search;return useMemo(()=>new URLSearchParams(search),[search])}
+      export function useRouter(){return{push(){throw new Error('presentation must not request a server route')},replace(){},refresh(){}}}`,
   },
   intl: false, authz: false, features: false,
   extra: {
@@ -37,7 +48,37 @@ const features = [
   { key: 'manufacturing', category: 'manufacturing', group: 'production', enabled: false, requiresAll: ['inventory'] },
 ]
 
+/** Model the installed Next history boundary, including its internal-write bypass.
+ * URL hooks observe router restoration, not arbitrary reads of window.location. */
+function installNextHistoryBoundary() {
+  const originalPush = window.history.pushState
+  const originalReplace = window.history.replaceState
+  const tree = { segment: 'features' }
+  const writes: unknown[] = []
+  const restore = (url: string | URL) => {
+    navigationHref = new URL(url, window.location.href).href
+    navigationListeners.forEach((listener) => listener())
+  }
+  originalReplace.call(window.history, { __NA: true, __PRIVATE_NEXTJS_INTERNALS_TREE: tree }, '',
+    '/admin/setup/features?tab=finance&draft=kept#features')
+  restore(window.location.href)
+  window.history.pushState = function (data, unused, url) {
+    writes.push(data)
+    if (data?.__NA || data?._N) return originalPush.call(this, data, unused, url)
+    const state = { ...data, __NA: this.state?.__NA, __PRIVATE_NEXTJS_INTERNALS_TREE: this.state?.__PRIVATE_NEXTJS_INTERNALS_TREE }
+    if (url) restore(url)
+    return originalPush.call(this, state, unused, url)
+  }
+  const traverse = (event: PopStateEvent) => {
+    if (event.state?.__NA) restore(window.location.href)
+  }
+  window.addEventListener('popstate', traverse)
+  return { writes, tree, dispose() { window.history.pushState = originalPush; window.removeEventListener('popstate', traverse) } }
+}
+
 test('Features tabs use immediate presentation history and preserve drafts; a genuine route still shows loading feedback', async (t) => {
+  const history = installNextHistoryBoundary()
+  t.after(() => history.dispose())
   const host = document.createElement('div')
   document.body.append(host)
   const root = createRoot(host)
@@ -63,28 +104,35 @@ test('Features tabs use immediate presentation history and preserve drafts; a ge
   assert.equal(manufacturing.getAttribute('data-prefetch'), 'false')
   await act(async () => {
     manufacturing.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
-    show()
     await new Promise(resolve => setTimeout(resolve, 140))
   })
+  assert.deepEqual(history.writes, [null], 'presentation writes let Next restore its URL observers')
+  assert.equal(window.history.state.__NA, true, 'Next preserves its app-router marker')
+  assert.deepEqual(window.history.state.__PRIVATE_NEXTJS_INTERNALS_TREE, history.tree)
   assert.equal(new URLSearchParams(window.location.search).get('tab'), 'manufacturing')
   assert.equal(new URLSearchParams(window.location.search).get('draft'), 'kept')
   assert.equal(window.location.hash, '#features')
   assert.match(host.textContent ?? '', /Production and material planning/)
+  assert.equal(host.querySelector('a[href*="tab=manufacturing"]')?.getAttribute('aria-current'), 'page')
+  assert.equal(host.querySelector('a[href*="tab=finance"]')?.getAttribute('aria-current'), null)
   assert.equal(navigationPendingSnapshot().navigation, null)
   assert.equal(host.querySelector('[data-navigation-pending]'), null)
   assert.equal(host.querySelector('input[aria-label="Unsaved settings draft"]'), draft)
   assert.equal(draft.value, 'Unsaved edit')
   assert.equal(fetches, 0)
   const back = new Promise<void>(resolve => window.addEventListener('popstate', () => resolve(), { once: true }))
-  await act(async () => { window.history.back(); await back; show() })
+  await act(async () => { window.history.back(); await back })
   assert.equal(new URLSearchParams(window.location.search).get('tab'), 'finance')
   assert.match(host.textContent ?? '', /Planning/)
+  assert.equal(host.querySelector('a[href*="tab=finance"]')?.getAttribute('aria-current'), 'page')
   assert.equal(draft.value, 'Unsaved edit')
   assert.equal(navigationPendingSnapshot().navigation, null)
   const forward = new Promise<void>(resolve => window.addEventListener('popstate', () => resolve(), { once: true }))
-  await act(async () => { window.history.forward(); await forward; show() })
+  await act(async () => { window.history.forward(); await forward })
   assert.equal(new URLSearchParams(window.location.search).get('tab'), 'manufacturing')
   assert.equal(window.location.hash, '#features')
+  assert.match(host.textContent ?? '', /Production and material planning/)
+  assert.equal(host.querySelector('a[href*="tab=manufacturing"]')?.getAttribute('aria-current'), 'page')
   assert.equal(draft.value, 'Unsaved edit')
   assert.equal(navigationPendingSnapshot().navigation, null)
   await act(async () => {
@@ -98,7 +146,8 @@ test('Features tabs use immediate presentation history and preserve drafts; a ge
 
 
 test('Features overflow entries use the same presentation history without global loading', async (t) => {
-  window.history.replaceState({}, '', '/admin/setup/features?tab=finance&draft=kept#features')
+  const history = installNextHistoryBoundary()
+  t.after(() => history.dispose())
   const originalRect = window.HTMLElement.prototype.getBoundingClientRect
   window.HTMLElement.prototype.getBoundingClientRect = function () {
     const width = this.hasAttribute('data-subtabs-track') ? 210
@@ -123,11 +172,13 @@ test('Features overflow entries use the same presentation history without global
   const entry = document.querySelector('a[role="menuitem"][href*="tab=manufacturing"]')!
   assert.ok(entry, 'Manufacturing remains reachable through overflow')
   assert.equal(entry.getAttribute('data-prefetch'), 'false')
-  await act(async () => { entry.dispatchEvent(new window.MouseEvent('click', { bubbles: true })); show() })
+  await act(async () => { entry.dispatchEvent(new window.MouseEvent('click', { bubbles: true })) })
+  assert.deepEqual(history.writes, [null])
   assert.equal(new URLSearchParams(window.location.search).get('tab'), 'manufacturing')
   assert.equal(new URLSearchParams(window.location.search).get('draft'), 'kept')
   assert.equal(window.location.hash, '#features')
   assert.equal(navigationPendingSnapshot().navigation, null)
   assert.equal(host.querySelector('[data-navigation-pending]'), null)
   assert.match(host.textContent ?? '', /Production and material planning/)
+  assert.match(host.querySelector('[data-subtabs-track] button')?.textContent ?? '', /Manufacturing/)
 })
