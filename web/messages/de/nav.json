@@ -1,5 +1,6 @@
 {
   "modules": {
+    "admin-setup-manufacturing": "Fertigungseinrichtung",
     "hrm-performance-cycles": "Beurteilungen verwalten",
     "hrm-performance-goals": "Ziele",
     "hrm-performance-conversations": "Einzelgespräche",
@@ -232,6 +233,7 @@
     "hrm-training": "Schulung"
   },
   "localWorkspaces": {
+    "manufacturing": "Fertigung",
     "collections-views": "Forderungseinzug",
     "hrm-people": "Mitarbeiter",
     "hrm-hiring": "Personalgewinnung",

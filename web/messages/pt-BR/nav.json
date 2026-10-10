@@ -1,5 +1,6 @@
 {
   "modules": {
+    "admin-setup-manufacturing": "Configuração de manufatura",
     "hrm-performance-cycles": "Gerenciar avaliações",
     "hrm-performance-goals": "Metas",
     "hrm-performance-conversations": "Conversas individuais",
@@ -232,6 +233,7 @@
     "hrm-training": "Treinamento"
   },
   "localWorkspaces": {
+    "manufacturing": "Manufatura",
     "collections-views": "Cobranças",
     "hrm-people": "Funcionários",
     "hrm-hiring": "Recrutamento",
