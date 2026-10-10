@@ -985,7 +985,6 @@ const ALLOW_LISTED_NON_PERSONAL: ReadonlySet<string> = new Set([
   "form_templates.status",
   "fulfillment_documents.carrier_service",
   "fulfillment_documents.stage",
-  "fulfillment_lines.carton",
   "functional_mappings.function",
   "functional_mappings.program_key",
   "fund_releases.purpose",

@@ -155,6 +155,7 @@ export const DEFAULT_POLICIES: MaskingPolicy[] = [
   { tableName: "handling_unit_moves", columnName: "command_key", transform: "hash" },
   { tableName: "handling_unit_moves", columnName: "reason", transform: "redact" },
   { tableName: "handling_units", columnName: "code", transform: "hash" },
+  { tableName: "fulfillment_lines", columnName: "carton", transform: "hash" },
   { tableName: "lots", columnName: "hold_reason", transform: "redact" },
   { tableName: "serials", columnName: "hold_reason", transform: "redact" },
   { tableName: "pick_execution_lines", columnName: "reason", transform: "redact" },
