@@ -37,6 +37,38 @@ export interface ManufacturingRecordData {
   sections: Record<string, ManufacturingRow[]>;
 }
 
+// Item identities belong to the organization catalog. Legal-entity visibility
+// comes from the order and its current resources, not from the item master.
+function orderResourcesVisible(scope: ReadonlySet<string> | null, alias: "r" | "c"): SQL {
+  const column = (name: string) => sql.raw(`${alias}.${name}`);
+  return sql` and not exists (
+    select 1 from mfg_wo_operations operation
+    left join mfg_work_centers center on center.org_id=operation.org_id and center.id=operation.work_center_id
+    where operation.org_id=${column("org_id")} and operation.work_order_id=${column("id")}
+      and (center.id is null or not (true ${subsidiaryVisibleFilter(sql`center.subsidiary_id`, scope)}))
+  ) and not exists (
+    select 1 from unnest(array[${column("issue_location_id")},${column("receipt_location_id")}]) resource(id)
+    left join stock_locations stock on stock.org_id=${column("org_id")} and stock.id=resource.id
+    left join locations location on location.org_id=stock.org_id and location.id=stock.location_id
+    where resource.id is not null and (location.id is null or not (true ${subsidiaryVisibleFilter(sql`location.subsidiary_id`, scope, { orgWideNull: true })}))
+  )`;
+}
+
+function routingResourcesVisible(scope: ReadonlySet<string> | null, alias: "r" | "v" = "r"): SQL {
+  const column = (name: string) => sql.raw(`${alias}.${name}`);
+  return sql` and not exists (
+    select 1 from mfg_routing_operations operation
+    left join mfg_work_centers center on center.org_id=operation.org_id and center.id=operation.work_center_id
+    where operation.org_id=${column("org_id")} and operation.routing_id=${column("id")}
+      and (center.id is null or not (true ${subsidiaryVisibleFilter(sql`center.subsidiary_id`, scope)}))
+  ) and not exists (
+    select 1 from unnest(array[${column("default_issue_location_id")},${column("default_receipt_location_id")}]) resource(id)
+    left join stock_locations stock on stock.org_id=${column("org_id")} and stock.id=resource.id
+    left join locations location on location.org_id=stock.org_id and location.id=stock.location_id
+    where resource.id is not null and (location.id is null or not (true ${subsidiaryVisibleFilter(sql`location.subsidiary_id`, scope, { orgWideNull: true })}))
+  )`;
+}
+
 export function manufacturingListQuery(input: {
   page?: number;
   perPage?: number;
@@ -70,7 +102,7 @@ export async function listManufacturingRecords(
   let from: SQL, where: SQL, fields: SQL, order: SQL;
   if (view === "work-orders") {
     from = sql`mfg_work_orders r join items i on i.org_id=r.org_id and i.id=r.produced_item_id`;
-    where = sql`r.org_id=${orgId} ${subsidiaryVisibleFilter(sql`r.subsidiary_id`, scope)} ${subsidiaryVisibleFilter(sql`i.subsidiary_id`, scope)}`;
+    where = sql`r.org_id=${orgId} ${subsidiaryVisibleFilter(sql`r.subsidiary_id`, scope)} ${orderResourcesVisible(scope, "r")}`;
     if (query.subsidiaryId)
       where.append(sql` and r.subsidiary_id=${query.subsidiaryId}`);
     if (query.status) where.append(sql` and r.status=${query.status}`);
@@ -95,13 +127,10 @@ export async function listManufacturingRecords(
     order = sql`r.code,r.id`;
   } else if (view === "routings") {
     from = sql`mfg_routings r join items i on i.org_id=r.org_id and i.id=r.produced_item_id`;
-    where = sql`r.org_id=${orgId} ${subsidiaryVisibleFilter(sql`i.subsidiary_id`, scope)}`;
+    where = sql`r.org_id=${orgId} ${routingResourcesVisible(scope)}`;
     // A routing is visible only when all of its operation resources are visible.
-    where.append(
-      sql` and not exists (select 1 from mfg_routing_operations o join mfg_work_centers c on c.org_id=o.org_id and c.id=o.work_center_id where o.org_id=r.org_id and o.routing_id=r.id and not (true ${subsidiaryVisibleFilter(sql`c.subsidiary_id`, scope)}))`,
-    );
     if (query.subsidiaryId)
-      where.append(sql` and i.subsidiary_id=${query.subsidiaryId}`);
+      where.append(sql` and exists (select 1 from mfg_routing_operations operation join mfg_work_centers center on center.org_id=operation.org_id and center.id=operation.work_center_id where operation.org_id=r.org_id and operation.routing_id=r.id and center.subsidiary_id=${query.subsidiaryId})`);
     if (query.status) where.append(sql` and r.status=${query.status}`);
     if (query.q)
       where.append(
@@ -154,7 +183,7 @@ export async function manufacturingOptions(
   };
   await select(
     "items",
-    sql`select i.id as value,concat_ws(' · ',i.code,i.name) as label from items i join item_inventory_profiles p on p.org_id=i.org_id and p.item_id=i.id where i.org_id=${orgId} and i.is_active ${subsidiaryVisibleFilter(sql`i.subsidiary_id`, scope)} order by i.name,i.id limit 100`,
+    sql`select i.id as value,concat_ws(' · ',i.code,i.name) as label from items i join item_inventory_profiles p on p.org_id=i.org_id and p.item_id=i.id where i.org_id=${orgId} and i.is_active order by i.name,i.id limit 100`,
   );
   await select(
     "subsidiaries",
@@ -170,7 +199,7 @@ export async function manufacturingOptions(
   );
   await select(
     "routings",
-    sql`select r.id as value,concat_ws(' · ',r.code,'v' || r.version,r.name) as label,r.produced_item_id as "parentId" from mfg_routings r join items i on i.org_id=r.org_id and i.id=r.produced_item_id where r.org_id=${orgId} and r.status='active' ${subsidiaryVisibleFilter(sql`i.subsidiary_id`, scope)} and not exists (select 1 from mfg_routing_operations o join mfg_work_centers c on c.org_id=o.org_id and c.id=o.work_center_id where o.org_id=r.org_id and o.routing_id=r.id and not (true ${subsidiaryVisibleFilter(sql`c.subsidiary_id`, scope)})) order by r.code,r.version desc`,
+    sql`select r.id as value,concat_ws(' · ',r.code,'v' || r.version,r.name) as label,r.produced_item_id as "parentId" from mfg_routings r join items i on i.org_id=r.org_id and i.id=r.produced_item_id where r.org_id=${orgId} and r.status='active' ${routingResourcesVisible(scope)} order by r.code,r.version desc`,
   );
   await select(
     "departments",
@@ -215,18 +244,14 @@ export async function readManufacturingRecord(
       throw new ManufacturingNotFoundError();
     const item = (
       await tx.execute<ManufacturingRow>(
-        sql`select id,name,code,subsidiary_id as "subsidiaryId" from items where org_id=${orgId} and id=${record.producedItemId}`,
+        sql`select id,name,code from items where org_id=${orgId} and id=${record.producedItemId}`,
       )
     ).rows[0];
-    if (
-      !item ||
-      !subsidiaryScopeAllows(scope, item.subsidiaryId as string | null)
-    )
-      throw new ManufacturingNotFoundError();
-    // Refuse the whole projection if a child resource or component is outside scope.
+    if (!item) throw new ManufacturingNotFoundError();
+    // Refuse the whole projection if any current operation or location is outside scope.
     const hidden = (
       await tx.execute<{ id: string }>(
-        sql`select o.id from mfg_wo_operations o join mfg_work_centers c on c.org_id=o.org_id and c.id=o.work_center_id where o.org_id=${orgId} and o.work_order_id=${id} and not (true ${subsidiaryVisibleFilter(sql`c.subsidiary_id`, scope)}) union all select m.id from mfg_wo_materials m join items i on i.org_id=m.org_id and i.id=m.component_item_id where m.org_id=${orgId} and m.work_order_id=${id} and not (true ${subsidiaryVisibleFilter(sql`i.subsidiary_id`, scope)}) union all select b.id from mfg_wo_byproducts b join items i on i.org_id=b.org_id and i.id=b.item_id where b.org_id=${orgId} and b.work_order_id=${id} and not (true ${subsidiaryVisibleFilter(sql`i.subsidiary_id`, scope)}) limit 1`,
+        sql`select r.id from mfg_work_orders r where r.org_id=${orgId} and r.id=${id} and not (true ${orderResourcesVisible(scope, "r")})`,
       )
     ).rows;
     if (hidden.length) throw new ManufacturingNotFoundError();
@@ -260,7 +285,7 @@ export async function readManufacturingRecord(
     );
     await rows(
       "children",
-      sql`select c.id,c.number,c.status,c.quantity_ordered::text as quantity,c.unit from mfg_work_orders c where c.org_id=${orgId} and c.parent_wo_id=${id} ${subsidiaryVisibleFilter(sql`c.subsidiary_id`, scope)} order by c.number,c.id`,
+      sql`select c.id,c.number,c.status,c.quantity_ordered::text as quantity,c.unit from mfg_work_orders c where c.org_id=${orgId} and c.parent_wo_id=${id} ${subsidiaryVisibleFilter(sql`c.subsidiary_id`, scope)} ${orderResourcesVisible(scope, "c")} order by c.number,c.id`,
     );
     const entity = (
       await tx.execute<{ currency: string }>(
@@ -294,12 +319,13 @@ export async function readManufacturingRecord(
     const record = await getRouting(tx, orgId, id);
     if (
       !record ||
-      !subsidiaryScopeAllows(scope, record.producedItemSubsidiaryId) ||
       record.operations?.some(
         (o) => !subsidiaryScopeAllows(scope, o.workCenterSubsidiaryId),
       )
     )
       throw new ManufacturingNotFoundError();
+    const visible = (await tx.execute(sql`select r.id from mfg_routings r where r.org_id=${orgId} and r.id=${id} ${routingResourcesVisible(scope)}`)).rows;
+    if (!visible.length) throw new ManufacturingNotFoundError();
     await rows(
       "operations",
       sql`select o.id,o.sequence,o.name,o.work_center_id as "workCenterId",c.name as "centerName",
@@ -310,7 +336,7 @@ export async function readManufacturingRecord(
     );
     await rows(
       "versions",
-      sql`select id,code,name,version,status,effective_from::text as "effectiveFrom",effective_to::text as "effectiveTo" from mfg_routings where org_id=${orgId} and produced_item_id=${record.producedItemId} order by version desc,id`,
+      sql`select v.id,v.code,v.name,v.version,v.status,v.effective_from::text as "effectiveFrom",v.effective_to::text as "effectiveTo" from mfg_routings v where v.org_id=${orgId} and v.produced_item_id=${record.producedItemId} ${routingResourcesVisible(scope, "v")} order by v.version desc,v.id`,
     );
     return { record: record as ManufacturingRow, sections };
   }
@@ -328,12 +354,6 @@ export async function readManufacturingRecord(
     )
   )
     throw new ManufacturingNotFoundError();
-  const hidden = (
-    await tx.execute(
-      sql`select p.id from mfg_planned_orders p join items i on i.org_id=p.org_id and i.id=p.item_id where p.org_id=${orgId} and p.run_id=${id} and not (true ${subsidiaryVisibleFilter(sql`i.subsidiary_id`, scope)}) limit 1`,
-    )
-  ).rows;
-  if (hidden.length) throw new ManufacturingNotFoundError();
   const result = await getMrpRun(tx, orgId, id);
   sections.suggestions = result.suggestions as ManufacturingRow[];
   sections.capacity = result.capacity.map((c) => ({
@@ -354,7 +374,7 @@ export async function manufacturingTracking(
   await assertManufacturingFeature(tx, orgId, "manufacturing");
   const item = (
     await tx.execute(
-      sql`select id from items where org_id=${orgId} and id=${itemId} ${subsidiaryVisibleFilter(sql`subsidiary_id`, scope)}`,
+      sql`select id from items where org_id=${orgId} and id=${itemId}`,
     )
   ).rows[0];
   if (!item) throw new ManufacturingNotFoundError();
@@ -389,7 +409,7 @@ export async function searchManufacturingChoices(
   if (kind === "items") {
     query = sql`select i.id as value, concat_ws(' · ',i.code,i.name) as label
       from items i join item_inventory_profiles p on p.org_id=i.org_id and p.item_id=i.id
-      where i.org_id=${orgId} and i.is_active ${subsidiaryVisibleFilter(sql`i.subsidiary_id`, scope)}
+      where i.org_id=${orgId} and i.is_active
       and (i.name ilike ${pattern} or i.code ilike ${pattern} ${selected ? sql`or i.id=${selected}` : sql``})
       order by ${selected ? sql`(i.id=${selected}) desc,` : sql``} i.name,i.id limit 100`;
   } else if (kind === "locations") {

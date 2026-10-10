@@ -3,6 +3,7 @@ import type { SqlExecutor } from "../platform/db.ts";
 import { assertManufacturingFeature } from "./gate.ts";
 import { ManufacturingError, ManufacturingNotFoundError } from "./errors.ts";
 import { auditChange, compareDecimal, decimalValue, isoDate, refused, storageCode } from "./master-support.ts";
+import { assertManufacturingItemExists } from "./item-policies.ts";
 
 export interface RoutingInput {
   producedItemId: string; code: string; name: string; effectiveFrom: string; effectiveTo?: string | null;
@@ -14,8 +15,8 @@ export interface RoutingOperationInput {
   laborMinutesPerUnit?: string | null; backflushAt?: "none" | "start" | "finish"; qualityGate?: "none" | "measure";
 }
 export interface RoutingSubsidiaryScope {
-  producedItemSubsidiaryId: string | null;
   operations: Array<{ workCenterSubsidiaryId: string | null }>;
+  locations: Array<{ subsidiaryId: string | null }>;
 }
 
 const routingColumns = sql`id, org_id as "orgId", produced_item_id as "producedItemId", code, name, version, status,
@@ -139,9 +140,14 @@ export async function getRouting(tx: SqlExecutor, orgId: string, id: string): Pr
       from mfg_routing_operations operation
       join mfg_work_centers center on center.org_id=operation.org_id and center.id=operation.work_center_id
      where operation.org_id=${orgId} and operation.routing_id=${id} order by operation.sequence`);
-  const item = await tx.execute<{ subsidiary_id: string | null }>(sql`select subsidiary_id from items where org_id=${orgId} and id=${row.producedItemId}`);
-  if (!item.rows[0]) throw new ManufacturingNotFoundError();
-  return { ...row, producedItemSubsidiaryId: item.rows[0].subsidiary_id, operations: operations.rows };
+  await assertManufacturingItemExists(tx, orgId, String(row.producedItemId));
+  const locationIds = [...new Set([row.defaultIssueLocationId, row.defaultReceiptLocationId].filter((id): id is string => typeof id === "string"))];
+  const locations = locationIds.length ? (await tx.execute<{ subsidiaryId: string | null }>(sql`
+    select location.subsidiary_id as "subsidiaryId" from stock_locations stock
+    join locations location on location.org_id=stock.org_id and location.id=stock.location_id
+    where stock.org_id=${orgId} and stock.id in (${sql.join(locationIds.map(id => sql`${id}::uuid`), sql`, `)})`)).rows : [];
+  if (locations.length !== locationIds.length) throw new ManufacturingNotFoundError();
+  return { ...row, operations: operations.rows, locations };
 }
 
 export async function updateRouting(tx: SqlExecutor, orgId: string, actorId: string, id: string, patch: Partial<RoutingInput>) {

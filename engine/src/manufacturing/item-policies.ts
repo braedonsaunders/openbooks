@@ -18,11 +18,11 @@ const policyColumns = sql`id, org_id as "orgId", item_id as "itemId", supply_met
   minimum_qty::text as "minimumQty", order_multiple_qty::text as "orderMultipleQty",
   scrap_pct_planned::text as "scrapPctPlanned"`;
 
-export async function getItemSubsidiary(tx: SqlExecutor, orgId: string, itemId: string) {
+/** Item definitions are organization-owned; transactional resources carry entity scope. */
+export async function assertManufacturingItemExists(tx: SqlExecutor, orgId: string, itemId: string): Promise<void> {
   await assertManufacturingFeature(tx, orgId, "manufacturing");
-  const result = await tx.execute<{ subsidiary_id: string | null }>(sql`select subsidiary_id from items where org_id=${orgId} and id=${itemId}`);
+  const result = await tx.execute(sql`select id from items where org_id=${orgId} and id=${itemId}`);
   if (!result.rows[0]) throw new ManufacturingNotFoundError();
-  return result.rows[0].subsidiary_id;
 }
 
 function validate(input: ItemPolicyInput): ItemPolicyInput {

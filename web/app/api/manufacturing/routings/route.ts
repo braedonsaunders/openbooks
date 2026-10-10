@@ -1,8 +1,6 @@
 import { z } from "zod";
 import { db } from "@openbooks/engine/src/platform/db.ts";
 import { createRouting, getRouting, type RoutingInput } from "@openbooks/engine/src/manufacturing/routings.ts";
-import { getItemSubsidiary } from "@openbooks/engine/src/manufacturing/item-policies.ts";
-import { guardSubsidiaryScope } from "@/lib/authz";
 import { defineRoute } from "@/lib/api/route";
 import { created } from "@/lib/api/responses";
 import { idempotentManufacturingCreate } from "../_idempotent";
@@ -17,12 +15,9 @@ const Body = z.object({
 const Params = z.object({}).strict();
 
 export const POST = defineRoute({
-  permission: "manufacturing.manage", feature: "manufacturing", params: Params, body: Body,
+  permission: "manufacturing.manage", feature: "manufacturing", params: Params, body: Body, scope: "unrestricted",
   handler: async ({ request, authz, body }) => manufacturingTransaction(authz.user.orgId, async () => {
     const input = body as RoutingInput;
-    const subsidiaryId = await getItemSubsidiary(db, authz.user.orgId, input.producedItemId);
-    const denied = guardSubsidiaryScope(authz, subsidiaryId);
-    if (denied) return denied;
     const match = { ...input };
     const row = await idempotentManufacturingCreate({
       orgId: authz.user.orgId, request, table: "mfg_routings", match,
