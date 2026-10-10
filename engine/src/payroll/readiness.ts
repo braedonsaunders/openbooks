@@ -1644,6 +1644,13 @@ export async function payRunStaleness(
            -- the stub's social contributions a fiction; deletes leave no row
            -- to timestamp, so the save's audit evidence is watched as well.
            (exists (
+             select 1 from audit_log prior_evidence
+              where prior_evidence.org_id=r.org_id and prior_evidence.table_name='payroll_prior_earnings'
+                and prior_evidence.at>r.calculated_at
+                and exists(select 1 from pay_stubs mine where mine.org_id=r.org_id
+                  and mine.pay_run_document_id=r.document_id
+                  and mine.employee_party_id::text=prior_evidence.changes->>'employeePartyId'))
+            or exists (
              select 1 from payroll_opening_balances b
                join pay_stubs mine
                  on mine.employee_party_id = b.employee_party_id and mine.org_id = b.org_id

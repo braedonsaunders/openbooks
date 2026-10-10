@@ -65,6 +65,15 @@ export function maskExpr(
       // Deterministic ±50% jitter, preserves sign and numeric type.
       return `(case when ${q} is null then null else round(${q} * (0.5 + (abs(hashtext(${idExpr}::text)) % 1000) / 1000.0), 4) end)`;
     case "null_out":
+      // Preserve dated statutory amounts while removing source prose from a masked copy.
+      if (column?.tableName === 'payroll_prior_earnings' && col === 'periods' && column.udtName === 'jsonb') {
+        return `(select jsonb_agg((p.value - 'sourceReference' - 'lines') || jsonb_build_object(
+          'sourceReference','REDACTED','lines',(select coalesce(jsonb_agg(
+            (e.value - 'sourceKey' - 'sourceLabel') || jsonb_build_object(
+              'sourceKey',md5(e.value->>'sourceKey'),'sourceLabel','REDACTED') order by e.ordinality),'[]'::jsonb)
+            from jsonb_array_elements(p.value->'lines') with ordinality e(value,ordinality))) order by p.ordinality)
+          from jsonb_array_elements(${q}) with ordinality p(value,ordinality))`;
+      }
       // An approved override must retain the presence of its reason alongside
       // its approver and timestamp. Remove the prose without fabricating a
       // missing approval or breaking the existing evidence constraint.
@@ -380,6 +389,9 @@ export const DEFAULT_POLICIES: MaskingPolicy[] = [
   { tableName: "payroll_compensation_packages", columnName: "name", transform: "redact" },
   { tableName: 'payroll_period_openings', columnName: 'source_reference', transform: 'redact' },
   { tableName: 'payroll_period_openings', columnName: 'reason', transform: 'redact' },
+  { tableName: 'payroll_prior_earnings', columnName: 'source_reference', transform: 'redact' },
+  { tableName: 'payroll_prior_earnings', columnName: 'reason', transform: 'redact' },
+  { tableName: 'payroll_prior_earnings', columnName: 'periods', transform: 'null_out' },
   { tableName: 'payroll_employee_employer_assignments', columnName: 'source_reference', transform: 'redact' },
   { tableName: 'payroll_employee_employer_assignments', columnName: 'reason', transform: 'redact' },
   { tableName: "payroll_compensation_packages", columnName: "description", transform: "redact" },

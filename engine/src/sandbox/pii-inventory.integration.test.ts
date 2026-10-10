@@ -134,6 +134,11 @@ const ALLOW_LISTED_NON_PERSONAL: ReadonlySet<string> = new Set([
   'payroll_period_openings.contract_hash',
   'payroll_period_openings.country',
   'payroll_period_openings.currency',
+  // Prior-earnings jurisdiction codes and one-way source/content digests identify no person.
+  'payroll_prior_earnings.country',
+  'payroll_prior_earnings.currency',
+  'payroll_prior_earnings.source_hash',
+  'payroll_prior_earnings.content_hash',
   'payroll_employee_employer_assignments.assignment_kind',
   // Training configuration codes, lifecycle states, IANA zones and content digests identify no person.
   "hrm_training_courses.code",

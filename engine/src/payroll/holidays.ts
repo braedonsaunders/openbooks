@@ -1,4 +1,5 @@
 import { roleEmploymentOverlapsPeriod } from "./employment-roster.ts";
+import { readPayrollPriorEarnings } from './prior-earnings.ts';
 import { approvedHolidayOccurrenceDates } from "./holiday-obligation-source.ts";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
@@ -1744,6 +1745,10 @@ async function lookbackEarnings(
       from pay_stub_lines l
       join pay_stubs s on s.id = l.stub_id and s.org_id = l.org_id
       join pay_runs r on r.document_id = s.pay_run_document_id and r.org_id = s.org_id and r.run_status = 'committed'
+      join documents historical_document on historical_document.org_id=r.org_id and historical_document.id=r.document_id
+      join documents current_document on current_document.org_id=r.org_id and current_document.id=${input.excludeDocumentId}
+        and historical_document.subsidiary_id=current_document.subsidiary_id
+        and historical_document.currency=current_document.currency
       left join pay_components c on c.id = l.component_id and c.org_id = l.org_id
      where l.org_id = ${input.orgId} and s.employee_party_id = ${input.employeePartyId}
        and l.kind = 'earning'
@@ -1751,7 +1756,7 @@ async function lookbackEarnings(
        and r.period_start <= ${window.to} and r.period_end >= ${window.from}
   `));
 
-  const totals = emptyLookbackEarnings();
+  const totals = await readPayrollPriorEarnings(tx, input, window);
   for (const row of rows.rows) {
     const day = (value: string | Date) =>
       String(value instanceof Date ? value.toISOString() : value).slice(0, 10);
