@@ -180,7 +180,7 @@ async function runtimeForgery(runtime: Client, orgId: string, runId: string, dig
   await run(() => assert.rejects(runtime.query("select tenant_retirement.openbooks_retirement_row_org('auth_sessions',jsonb_build_object('user_id',$1::uuid))", [orgId]), /permission denied/i));
   await run(() => assert.rejects(runtime.query("insert into tenant_retirement.delete_authorities(transaction_id,backend_pid,tenant_id,run_id,login_name) values(txid_current(),pg_backend_pid(),$1,$2,session_user)", [orgId, runId]), /permission denied/i));
   await run(() => assert.rejects(runtime.query("delete from documents where org_id=$1 and id=$2", [orgId, postedId])));
-  await run(() => assert.rejects(runtime.query("delete from operating_profile_versions where org_id=$1 and id=$2", [orgId, profileVersionId]), /immutable|retirement fence/i)));
+  await run(() => assert.rejects(runtime.query("delete from operating_profile_versions where org_id=$1 and id=$2", [orgId, profileVersionId]), /immutable|retirement fence/i));
 }
 
 test("native tenant retirement rejects forged authority and preserves posted, draft, approval and auth evidence through quarantine, rollback and release", enabled, async () => {
