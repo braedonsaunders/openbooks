@@ -37,8 +37,15 @@ export async function holidayObligationsAvailable(tx: SqlExecutor): Promise<bool
 
 export async function approvedHolidayOccurrenceDates(tx: SqlExecutor, input: {
   orgId: string; employeePartyId: string; subsidiaryId: string | null | undefined; from: string; to: string;
+  /**
+   * The calculation's once-resolved schema availability. The catalog probe
+   * is identical for every stub, so the driver resolves it once per run and
+   * hands it down — the per-stub default keeps every other caller probing
+   * exactly once for its own transaction.
+   */
+  obligationsAvailable?: boolean | null;
 }): Promise<ReadonlySet<string>> {
-  if (!await holidayObligationsAvailable(tx)) return new Set();
+  if (!(input.obligationsAvailable ?? await holidayObligationsAvailable(tx))) return new Set();
   if (!input.subsidiaryId) throw new PayrollError("Resolve the employee's legal employer before selecting approved holiday entitlements.");
   const dates = (await tx.execute<{ date: string }>(sql`select occurrence.holiday_date::text as date
     from payroll_holiday_occurrences occurrence
@@ -55,8 +62,10 @@ export async function approvedHolidayOccurrenceDates(tx: SqlExecutor, input: {
  * recalculation and commit see the same authoritative source. */
 export async function holidayObligationRunSource(tx: SqlExecutor, orgId: string, documentId: string, allowed?: PayrollSubsidiaryScope,
   candidate?: { employeePartyId: string; employmentId: string },
+  /** The calculation's once-resolved schema availability; probed when absent. */
+  obligationsAvailable?: boolean | null,
 ): Promise<HolidayObligationSource[]> {
-  if (!await holidayObligationsAvailable(tx)) return [];
+  if (!(obligationsAvailable ?? await holidayObligationsAvailable(tx))) return [];
   const rows = (await tx.execute<HolidayObligationSource & { currency: string }>(sql`select
     o.id, o.employee_party_id as "employeePartyId", o.employment_id as "employmentId", o.subsidiary_id as "subsidiaryId",
     o.payment_date::text as "paymentDate", o.evidence, f.before_state->'profile' as profile, d.currency,
@@ -99,7 +108,10 @@ export async function holidayObligationRunSource(tx: SqlExecutor, orgId: string,
   return result;
 }
 
-export async function clearCalculatedHolidayAllocations(tx: SqlExecutor, orgId: string, documentId: string): Promise<void> {
-  if (!await holidayObligationsAvailable(tx)) return;
+export async function clearCalculatedHolidayAllocations(tx: SqlExecutor, orgId: string, documentId: string,
+  /** The calculation's once-resolved schema availability; probed when absent. */
+  obligationsAvailable?: boolean | null,
+): Promise<void> {
+  if (!(obligationsAvailable ?? await holidayObligationsAvailable(tx))) return;
   await tx.execute(sql`delete from pay_run_holiday_allocations where org_id=${orgId} and pay_run_document_id=${documentId}`);
 }

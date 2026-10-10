@@ -65,6 +65,12 @@ export async function calculateStub(
     statutoryRatesFor: (country: string, taxYear: number) => Promise<StatutoryRateResolution>;
     /** orgs.settings.payroll.eftFallbackToCheque, read once for the run. */
     eftFallbackToCheque: boolean;
+    /**
+     * Holiday-schema availability, resolved once per calculation by the
+     * driver: the to_regclass probe is identical for every stub, so it must
+     * not repeat per employee (it was observed firing per stub line).
+     */
+    holidayObligationsAvailable: boolean;
     /** orgs.settings.payroll.statutoryHolidayPay, read once for the run. */
     statHolidayPay: boolean;
     /** Authoritative statutory holiday eligibility facts by employee. */
@@ -320,12 +326,14 @@ export async function calculateStub(
     holidayEligibility: ctx.holidayEligibility,
     occupationClass: emp.statutory_occupation_class,
     currentEarningLines: lines,
+    obligationsAvailable: ctx.holidayObligationsAvailable,
   });
   await appendApprovedHolidaySettlements(tx, {
     orgId, actorId, documentId, employeePartyId, employmentId,
     subsidiaryId: ctx.runContext.subsidiaryId, country, province, labourJurisdiction: emp.labour_jurisdiction ?? null,
     payDate: run.pay_date!, runType, statHolidayPay: ctx.statHolidayPay, simulate: ctx.simulate,
     allowedSubsidiaryIds: ctx.allowedSubsidiaryIds, need: ctx.need, lines,
+    obligationsAvailable: ctx.holidayObligationsAvailable,
   });
 
   const compensationPackages = await prepareCompensationPackages(tx, {

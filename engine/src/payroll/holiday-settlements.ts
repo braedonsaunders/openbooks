@@ -17,10 +17,16 @@ export async function appendApprovedHolidaySettlements(tx: SqlExecutor, input: {
   payDate: string; runType: string; statHolidayPay: boolean; simulate: boolean;
   allowedSubsidiaryIds?: PayrollSubsidiaryScope;
   need: (key: string, kind: string) => Record<string, unknown>; lines: Line[];
+  /**
+   * The calculation's once-resolved holiday-schema availability; probed
+   * when absent.
+   */
+  obligationsAvailable?: boolean | null;
 }): Promise<void> {
   if (input.runType !== "regular") return;
   const sources = await holidayObligationRunSource(tx, input.orgId, input.documentId, input.allowedSubsidiaryIds,
-    { employeePartyId: input.employeePartyId, employmentId: input.employmentId });
+    { employeePartyId: input.employeePartyId, employmentId: input.employmentId },
+    input.obligationsAvailable);
   for (const source of sources.filter(source => source.paymentDate === input.payDate)) {
     if (!input.statHolidayPay) throw new PayrollError("Enable statutory holiday pay in Payroll settings before settling the employee's approved unpaid holiday entitlement.");
     if (!source.profile || typeof source.profile !== "object" || Array.isArray(source.profile) ||
