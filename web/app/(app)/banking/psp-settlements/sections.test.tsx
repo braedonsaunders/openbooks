@@ -720,24 +720,25 @@ test("an unmatched line offers evidence actions and a draft offers delete", asyn
   const click = async (button: HTMLButtonElement) => {
     await act(async () => {
       button.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
-      await tick();
     });
+    await tick();
     await tick();
   };
   const buttonNamed = (name: string) => {
-    const found = [...host.querySelectorAll("button")].find((el) => el.textContent === name);
+    // The detail drawer portals to the document body, outside the mount host.
+    const found = [...document.querySelectorAll("button")].find((el) => el.textContent === name);
     assert.ok(found, `a ${name} button must render`);
     return found as HTMLButtonElement;
   };
   await click(opener as HTMLButtonElement);
   await click(buttonNamed("Evidence"));
-  assert.ok(host.textContent?.includes("Settlement line evidence"), "the evidence panel opens for the line");
-  const searchBox = host.querySelector('input[placeholder="Search posted sales documents"]');
+  assert.ok(document.body.textContent?.includes("Settlement line evidence"), "the evidence panel opens for the line");
+  const searchBox = document.querySelector('input[placeholder="Search posted sales documents"]');
   assert.ok(searchBox, "the panel searches posted sales documents");
   setNativeValue(searchBox as HTMLElement, "INV");
   await tick();
   await click(buttonNamed("Search"));
-  assert.ok(host.textContent?.includes("INV-1"), "the document search lists the posted invoice");
+  assert.ok(document.body.textContent?.includes("INV-1"), "the document search lists the posted invoice");
   await click(buttonNamed("Link"));
   assert.ok(
     posts.some((body) => body.action === "link" && body.lineId === "l-0001" && body.documentId === "doc-1"),
