@@ -2,7 +2,8 @@ import { sql } from "drizzle-orm";
 import { type SqlExecutor } from "../platform/db.ts";
 import { fromUnits, toUnits } from "../money/money.ts";
 import { defaultPostingSubsidiaryId, loadSubsidiaryContext } from "../organization/subsidiaries.ts";
-import { toBaseQuantity } from "./costing.ts";
+import { canonicalDecimal, compareDecimal } from "../money/exact-decimal.ts";
+import { toBaseQuantity, toExactStockQuantity } from "./costing.ts";
 import { InventoryError, InventoryOwnershipError, type InventoryProfile, type Runner } from "./contracts.ts";
 import { assertStockLocationAdmitsSubsidiary, assertMovementOwner } from "./profile-policy.ts";
 import { WarehouseRefusal, type StockMovementDirection } from "./warehouses.ts";
@@ -158,8 +159,12 @@ export async function loadDocumentInventoryLines(
     // "return" invoice line (revenue down, inventory down too) and priced
     // bill lines at a negative unit cost, so refuse with the flow that
     // actually exists for this document kind.
-    const rawQuantity = toUnits(row.quantity);
-    if (rawQuantity < 0n) {
+    // Fulfillment can retain eight document places when conversion yields exact stored stock;
+    // existing four-place postings keep their established costing arithmetic.
+    const exactFulfillment = row.document_kind === "sales_fulfillment" && canonicalDecimal(row.quantity, 4) === null;
+    const sourceQuantity = exactFulfillment ? canonicalDecimal(row.quantity, 8) : fromUnits(toUnits(row.quantity));
+    if (sourceQuantity === null) throw new InventoryError(`${lineLabel} quantity must have at most eight decimal places`);
+    if (compareDecimal(sourceQuantity, "0") < 0) {
       throw new InventoryError(
         `${lineLabel} has a negative quantity (${row.quantity}); ${negativeLineRemedy(row.document_kind)}`,
       );
@@ -168,8 +173,8 @@ export async function loadDocumentInventoryLines(
     // item's base unit. Convert here — once — so receipts, issues, returns,
     // and fulfillment/goods-receipt legs all agree, and refuse an
     // unconvertible unit instead of silently moving 1:1.
-    const quantity = toBaseQuantity(
-      fromUnits(rawQuantity),
+    const quantity = (exactFulfillment ? toExactStockQuantity : toBaseQuantity)(
+      sourceQuantity,
       row.unit,
       parseUnitConversions(row.unit_conversions, lineLabel),
       row.base_unit,
