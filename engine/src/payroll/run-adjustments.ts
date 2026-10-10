@@ -2,8 +2,9 @@ import { createHash } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { canonicalDecimal } from "../money/exact-decimal.ts";
-import { normalizeMoney } from "../money/money.ts";
+import { cmp, normalizeMoney } from "../money/money.ts";
 import { PayrollError } from "./error.ts";
+import { priceRunHolidayHours } from "./run-holiday-input.ts";
 import { invalidateCalculatedRun } from "./run-lifecycle.ts";
 import { finalPayEmploymentIdentity, namedFinalPayEmployment, namedSupplementalEmployment, supplementalEmploymentIdentity } from "./employment-roster.ts";
 import { assertBankDepositAdjustment } from "./run-bank-input.ts";
@@ -193,6 +194,26 @@ export async function mutatePayRunAdjustment(input: PayRunAdjustmentInput): Prom
   return executePayRunAdjustment(input, false);
 }
 
+/** Record paid holiday hours through the ordinary audited payroll input lifecycle. */
+export async function recordPayRunHolidayHours(input: {
+  orgId: string; documentId: string; actorId: string; employeePartyId: string;
+  hours: string; reason: string; note?: string; idempotencyKey?: string;
+  allowedSubsidiaryIds?: PayrollSubsidiaryScope;
+}): Promise<{ changed: boolean; replayed: boolean }> {
+  return db.transaction(async tx => {
+    const components = await tx.execute<{ id: string }>(sql`
+      select id from pay_components where org_id=${input.orgId}
+        and system_key='stat_holiday' and kind='earning' and is_active
+    `);
+    if (components.rows.length !== 1) throw new PayrollError("Configure one active statutory holiday earning component before recording paid holiday hours.");
+    const amount = await priceRunHolidayHours(tx, input);
+    return mutatePayRunAdjustment({ orgId: input.orgId, documentId: input.documentId,
+      actorId: input.actorId, reason: input.reason, allowedSubsidiaryIds: input.allowedSubsidiaryIds,
+      mutation: { action: "add", employeePartyId: input.employeePartyId, componentId: components.rows[0]!.id,
+        amount, hours: input.hours, replaceComponent: true, note: input.note, idempotencyKey: input.idempotencyKey } });
+  });
+}
+
 /** Validate an imported line through the writer's guards without changing inputs or calculated stubs. */
 export async function preflightPayRunAdjustment(
   input: PayRunAdjustmentInput & { mutation: Extract<PayRunAdjustmentMutation, { action: "add" }> },
@@ -343,13 +364,22 @@ async function executePayRunAdjustment(input: PayRunAdjustmentInput, validateOnl
         }
       }
       const component = (await tx.execute(sql`
-        select 1
+        select system_key, kind, payment_kind
           from pay_components
          where org_id = ${orgId} and id = ${mutation.componentId} and is_active
-           and (system_key is null or system_key in ('base_pay','overtime','allowance','bonus','vacation_payout'))
+           and (system_key is null or system_key in ('base_pay','overtime','allowance','bonus','vacation_payout','stat_holiday'))
          limit 1
       `));
       if (component.rows.length === 0) throw new PayrollError("component cannot be adjusted");
+      if (component.rows[0]!.system_key === "stat_holiday") {
+        if (component.rows[0]!.kind !== "earning" || component.rows[0]!.payment_kind !== "cash"
+          || !replaceComponent || !hours || !(input.reason ?? note)?.trim()) {
+          throw new PayrollError("Recorded holiday pay requires a cash earning component, positive paid hours, component replacement and a supporting reason.");
+        }
+        const priced = await priceRunHolidayHours(tx, { orgId, documentId, employeePartyId: mutation.employeePartyId, hours });
+        if (cmp(amount, priced) !== 0) throw new PayrollError("Holiday pay must equal the native dated wage calculation; supply paid hours instead of a cash override.");
+      }
+
       await assertBankDepositAdjustment(tx, { orgId, componentId: mutation.componentId, amount, hours,
         terminationRun: run.run_type === "termination" });
       if (hours?.startsWith("-") && !(input.reason ?? note)?.trim()) {

@@ -26,6 +26,7 @@ import { payrollHourlyWage, salaryPeriodPay } from "./rate.ts";
 import { assignmentCoveredDays, assignmentCoversPeriod } from "./assignment-windows.ts";
 import { assertComponentServiceEligibility } from "./entitlements-component-eligibility.ts";
 import { assertBankDepositAdjustment } from "./run-bank-input.ts";
+import { priceRunHolidayHours } from "./run-holiday-input.ts";
 export async function appendPeriodicEarnings(
   tx: Pick<typeof db, "execute">,
   args: {
@@ -553,6 +554,13 @@ export async function applyRunLineAdjustments(
   const replacedComponentIds = new Set<string>();
   const adjustments = await runLineAdjustmentRows(tx, orgId, documentId, employeePartyId);
   for (const adj of adjustments) {
+    if (adj.system_key === "stat_holiday") {
+      if (adj.kind !== "earning" || adj.payment_kind !== "cash" || adj.replace_component !== true
+        || adj.adj_hours == null) throw new PayrollError("The recorded holiday input no longer identifies a cash earning replacement with paid hours; review the editable run input.");
+      const priced = await priceRunHolidayHours(tx, { orgId, documentId, employeePartyId, hours: String(adj.adj_hours) });
+      if (cmp(String(adj.adj_amount), priced) !== 0) throw new PayrollError("The dated wage for recorded holiday hours has changed; update the editable holiday input and recalculate.");
+    }
+
     // A saved deposit must still settle through the current native bank;
     // retiring or rebinding a plan cannot turn it into negative worked time.
     await assertBankDepositAdjustment(tx, { orgId, componentId: String(adj.id),
