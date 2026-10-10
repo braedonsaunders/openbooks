@@ -458,7 +458,10 @@
       "subsidiaryListRequired": "Sélectionnez au moins une filiale",
       "inactivePermissions": "Permissions d’application inactives",
       "permissionsLoadFailed": "Impossible de charger les permissions d’application",
-      "saveNotConfirmed": "Le serveur n’a pas confirmé l’enregistrement de toutes les modifications d’autorisations. Rouvrez le rôle pour voir ses autorisations actuelles, puis appliquez de nouveau vos modifications."
+      "saveNotConfirmed": "Le serveur n’a pas confirmé l’enregistrement de toutes les modifications d’autorisations. Rouvrez le rôle pour voir ses autorisations actuelles, puis appliquez de nouveau vos modifications.",
+      "includes": "Comprend aussi : {permissions}",
+      "includedBy": "Déjà inclus par : {permissions}",
+      "ownScope": "{permission} (ses propres enregistrements uniquement)"
     },
     "builtInDescriptions": {
       "admin": "Accès complet à tout, y compris les utilisateurs, les rôles, la navigation et les paramètres de l’entreprise.",

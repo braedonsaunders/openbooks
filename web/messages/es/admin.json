@@ -611,7 +611,10 @@
       "subsidiaryListRequired": "Seleccione al menos una subsidiaria",
       "inactivePermissions": "Permisos de aplicación inactivos",
       "permissionsLoadFailed": "No se pudieron cargar los permisos de la aplicación",
-      "saveNotConfirmed": "El servidor no confirmó que se guardaran todos los cambios de permisos. Vuelva a abrir el rol para ver sus permisos actuales y aplique de nuevo sus cambios."
+      "saveNotConfirmed": "El servidor no confirmó que se guardaran todos los cambios de permisos. Vuelva a abrir el rol para ver sus permisos actuales y aplique de nuevo sus cambios.",
+      "includes": "También incluye: {permissions}",
+      "includedBy": "Ya incluido por: {permissions}",
+      "ownScope": "{permission} (solo registros propios)"
     },
     "builtInDescriptions": {
       "admin": "Acceso total a todo, incluidos usuarios, roles, navegación y configuración de la empresa.",

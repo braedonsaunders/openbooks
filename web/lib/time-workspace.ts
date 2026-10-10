@@ -4,6 +4,7 @@ import { guardFeaturePermission } from './feature-gates'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/platform/database'
 import { can, guardPermission, type Authz } from './authz'
+import { grantsConferring } from './permissions'
 import { selfServiceTimeRefusal, type TimeCommandPermission, type TimeWorkFamily } from '@openbooks/engine/src/projects/time-work-target.ts'
 
 export function timeWorkFamily(request: Request): TimeWorkFamily {
@@ -17,13 +18,26 @@ class InvalidTimeWorkspaceError extends Error {
   constructor() { super('Choose the project or production time workspace.'); this.name = 'InvalidTimeWorkspaceError' }
 }
 /**
- * Reading and entering a week accept the self-service time.self grant in
- * place of the supervisory grant: the route opens, and the shared time
- * authority every command locks its week through (lockSharedTimeAuthority)
- * then confines a time.self caller to the employee linked to their own
- * login, refusing anyone else's week by name.
+ * Every grant that opens a time command, in resolution order: the
+ * supervisory grants over everyone's weeks, then the own-scope grants
+ * declared in PERMISSION_IMPLICATIONS (time.self reads and enters, time.clock
+ * reads). An own-scope caller is then confined to the employee linked to
+ * their own login by the shared time authority every command locks its week
+ * through (lockSharedTimeAuthority), which refuses anyone else's week by name.
  */
-const SELF_SERVICE_COMMANDS: ReadonlySet<TimeCommandPermission> = new Set(['time.read', 'time.manage'])
+export function timeCommandGrants(permission: TimeCommandPermission): { all: string[]; own: string[] } {
+  return { all: grantsConferring(permission, 'all'), own: grantsConferring(permission, 'own') }
+}
+
+/** True when the caller may run this time command over everyone's weeks. */
+export function supervisesTime(authz: Authz, permission: TimeCommandPermission): boolean {
+  return timeCommandGrants(permission).all.some((grant) => can(authz, grant))
+}
+
+/** True when the caller may run this time command over their own weeks only. */
+export function ownTimeOnly(authz: Authz, permission: TimeCommandPermission): boolean {
+  return !supervisesTime(authz, permission) && timeCommandGrants(permission).own.some((grant) => can(authz, grant))
+}
 
 /** Both workspaces use the same entries and lifecycle. Native commands separately fence every actual cost target. */
 export function authorizeTimeWorkspace(permission: TimeCommandPermission) {
@@ -31,9 +45,11 @@ export function authorizeTimeWorkspace(permission: TimeCommandPermission) {
     const family = timeWorkFamily(request)
     const feature = family === 'production' ? 'manufacturing' : 'timeTracking'
     let gate = await guardFeaturePermission(permission, feature)
-    if (gate instanceof NextResponse && gate.status === 403 && SELF_SERVICE_COMMANDS.has(permission)) {
-      const self = await guardFeaturePermission('time.self', feature)
-      if (!(self instanceof NextResponse)) gate = self
+    const { all, own } = timeCommandGrants(permission)
+    for (const grant of [...all, ...own]) {
+      if (!(gate instanceof NextResponse) || gate.status !== 403 || grant === permission) continue
+      const alternative = await guardFeaturePermission(grant, feature)
+      if (!(alternative instanceof NextResponse)) gate = alternative
     }
     if (gate instanceof NextResponse || family !== 'production') return gate
     const production = await guardPermission('manufacturing.read')
@@ -49,7 +65,7 @@ export function authorizeTimeWorkspace(permission: TimeCommandPermission) {
  * own linked employee.
  */
 export async function refuseOthersTime(authz: Authz, permission: TimeCommandPermission, employeeId: string): Promise<NextResponse | null> {
-  if (can(authz, permission)) return null
+  if (supervisesTime(authz, permission)) return null
   const own = (await db.execute<{ partyId: string | null }>(sql`
     select party_id as "partyId" from users where id = ${authz.user.id} and org_id = ${authz.user.orgId}`)).rows[0]?.partyId ?? null
   if (own !== null && own === employeeId) return null

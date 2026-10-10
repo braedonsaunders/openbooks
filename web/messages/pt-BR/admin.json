@@ -458,7 +458,10 @@
       "subsidiaryListRequired": "Selecione ao menos uma subsidiária",
       "permissionsLoadFailed": "Não foi possível carregar as permissões do app",
       "inactivePermissions": "Permissões inativas do app",
-      "saveNotConfirmed": "O servidor não confirmou que todas as alterações de permissões foram salvas. Reabra a função para ver as permissões atuais e aplique suas alterações novamente."
+      "saveNotConfirmed": "O servidor não confirmou que todas as alterações de permissões foram salvas. Reabra a função para ver as permissões atuais e aplique suas alterações novamente.",
+      "includes": "Também inclui: {permissions}",
+      "includedBy": "Já incluído por: {permissions}",
+      "ownScope": "{permission} (somente os próprios registros)"
     },
     "builtInDescriptions": {
       "admin": "Acesso total a tudo, incluindo usuários, funções, navegação e configurações da empresa.",

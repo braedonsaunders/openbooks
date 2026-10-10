@@ -779,8 +779,9 @@ export const NAV_MODULES: NavModule[] = [
     iconKey: 'timer',
     group: 'operations',
     subgroup: 'delivery',
-    // Supervisors see everyone's weeks; time.self holders see their own.
-    requiredPermissionsAny: ['time.read', 'time.self'],
+    // Supervisors see everyone's weeks; time.self and time.clock holders see
+    // their own (the grants that confer time.read in PERMISSION_IMPLICATIONS).
+    requiredPermissionsAny: ['time.read', 'time.manage', 'time.self', 'time.clock'],
   },
   {
     key: 'resourcing',

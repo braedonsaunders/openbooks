@@ -7,6 +7,8 @@ import {
   PERMISSION_GROUPS,
   permissionLabelKey,
   permissionSetCovers,
+  grantsConferring,
+  PERMISSION_IMPLICATIONS,
   purchaseOrderConversionPermission,
   resolveKeyScopeAuthority,
   type CataloguePermission,
@@ -392,6 +394,19 @@ test("hourly roles enter their own time through time.self, never the supervisory
   }
   for (const role of ["controller", "accountant"]) {
     assert.equal(holds(role, "time.manage"), true, `${role} keeps supervisory time entry`);
+  }
+});
+
+test("declared implications decide which grants open each time command", () => {
+  assert.deepEqual(grantsConferring("time.read", "all"), ["time.read", "time.manage"], "entering anyone's time reads it");
+  assert.deepEqual(grantsConferring("time.read", "own"), ["time.self", "time.clock"], "own-time grants read the holder's weeks");
+  assert.deepEqual(grantsConferring("time.manage", "own"), ["time.self"], "clocking in never enters a week");
+  assert.deepEqual(grantsConferring("time.approve", "own"), [], "approval has no own-scope grant");
+  for (const [key, implications] of Object.entries(PERMISSION_IMPLICATIONS)) {
+    assert.ok((PERMISSION_CATALOGUE as readonly string[]).includes(key), `${key} is a catalogue key`);
+    for (const implied of implications ?? []) {
+      assert.ok((PERMISSION_CATALOGUE as readonly string[]).includes(implied.key), `${key} implies the catalogue key ${implied.key}`);
+    }
   }
 });
 
