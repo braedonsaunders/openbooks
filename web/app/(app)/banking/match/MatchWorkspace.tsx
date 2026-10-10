@@ -7,7 +7,7 @@ import { useEffect, useId, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
-import { Ban, CheckCheck, FilePlus2, Link2, Pencil, RotateCcw, Sparkles, Wand2, Workflow } from 'lucide-react'
+import { ArrowUpRight, Ban, FilePlus2, Link2, Pencil, RotateCcw, Sparkles, Wand2, Workflow } from 'lucide-react'
 import { toast } from 'sonner'
 import {
   Badge, Button, Drawer, EmptyState, Label, SearchSelect, Table, TableBody,
@@ -15,9 +15,9 @@ import {
 } from '@openbooks/ui'
 import { SearchInput } from '../../../../components/search-input'
 import { Pagination } from '../../../../components/pagination'
-import { compareDecimal } from '../../../../lib/exact-decimal'
 import { confirmDialog } from '../../../../lib/confirm'
 import { promptDialog } from '../../../../lib/prompt'
+import { isZeroAmount } from '../[accountId]/reconcile/[reconciliationId]/DifferenceBadge'
 import { InteractiveTableRow } from '@/components/interactive-table-row'
 import { CorrectStatementLineDialog } from './CorrectStatementLineDialog'
 type Search = Record<string, string | string[] | undefined>
@@ -345,16 +345,10 @@ export function MatchWorkspace({
     toast.success(t('addedToast')); setAddLine(null); setOffsetId(''); setAddError(null); router.refresh()
   }
 
-  async function signOff() {
-    if (!session) return
-    const ok = await confirmDialog({ message: tW('signOffConfirm') })
-    if (!ok) return
-    const d = await call('POST', `/api/banking/reconciliations/${session.id}/sign-off`)
-    if (!d) return
-    toast.success(tW('signedOffToast', { count: d.journalLinesReconciled ?? 0 })); router.refresh()
-  }
-
-  const zero = totals ? compareDecimal(String(totals.difference ?? '0'), '0') === 0 : false
+  // Sign-off lives in the reconciliation workspace, not here: this view has
+  // no Adjust action, so a refusal could never be repaired in place. The
+  // workspace link below carries the session; the note names why.
+  const workspaceHref = session && account ? `/banking/${account.id}/reconcile/${session.id}` : null
 
   // ---- account picker (always shown) --------------------------------------
   const picker = (
@@ -424,7 +418,7 @@ export function MatchWorkspace({
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
         <div className={stat}><div className={statLabel}>{tBanking('labels.statementBalance')}</div><div className="text-sm font-semibold tabular-nums">{money(totals.statementBalance)}</div></div>
         <div className={stat}><div className={statLabel}>{tBanking('reconcile.stats.clearedGlBalance')}</div><div className="text-sm font-semibold tabular-nums">{money(totals.clearedBalance)}</div></div>
-        <div className={stat}><div className={statLabel}>{tBanking('reconcile.stats.difference')}</div><div className={cn('text-sm font-semibold tabular-nums', zero ? 'text-green-600 dark:text-green-400' : 'text-amber-600 dark:text-amber-400')}>{money(totals.difference)}</div></div>
+        <div className={stat}><div className={statLabel}>{tBanking('reconcile.stats.difference')}</div><div className={cn('text-sm font-semibold tabular-nums', isZeroAmount(String(totals.difference ?? '0')) ? 'text-green-600 dark:text-green-400' : 'text-amber-600 dark:text-amber-400')}>{money(totals.difference)}</div></div>
         <div className={stat}><div className={statLabel}>{t('throughDate')}</div><div className="text-sm font-semibold">{session.throughDate}</div></div>
       </div>
 
@@ -438,8 +432,13 @@ export function MatchWorkspace({
         <span className="flex-1" />
         {selectedStmts.size > 0 || selectedGl.size > 0 ? <span className="text-xs text-slate-600 tabular-nums dark:text-slate-300">{tW('selectionSummary', { bank: money(stmtSelectionSum), gl: money(glSelectionSum) })}</span> : null}
         <Button disabled={busy || selectedStmts.size === 0 || selectedGl.size === 0} onClick={matchSelected}><Link2 size={15} /> {tW('matchSelected')}</Button>
-        <Button disabled={busy || !zero} onClick={signOff} title={zero ? undefined : tW('signOffDisabledTitle')}><CheckCheck size={15} /> {tW('signOff')}</Button>
+        {workspaceHref ? (
+          <Button asChild disabled={busy}>
+            <Link href={workspaceHref}><ArrowUpRight size={15} /> {tW('openWorkspace')}</Link>
+          </Button>
+        ) : null}
       </div>
+      <p className="text-xs text-slate-500 dark:text-slate-400">{tW('signOffWorkspaceNote')}</p>
 
       {/* tabs */}
       <div className="flex items-center gap-1 border-b border-slate-200 pb-2 dark:border-slate-800">
