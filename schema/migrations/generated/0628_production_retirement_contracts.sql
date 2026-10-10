@@ -1,5 +1,6 @@
--- Extend exact native retirement DELETE authority to versioned production evidence.
--- The retirement authority prerequisite must precede the production migration.
+-- Extend exact native retirement DELETE authority to versioned production and payroll evidence.
+-- The retirement authority prerequisite precedes production and prior earnings.
+-- Compensation submission retains its published DELETE authority unchanged.
 -- Existing private authority, posted history and INSERT/UPDATE guards are unchanged.
 DO $admission$
 DECLARE refusal record;
@@ -144,7 +145,8 @@ WITH known_functions(name,old_digest,new_digest,source,patch) AS (VALUES
 ('payment_run_item_guard','8fe0c6aff0cfc9528429baa03f46780e626cafe1efd8ed134bedbef0bed43a5f','8fe0c6aff0cfc9528429baa03f46780e626cafe1efd8ed134bedbef0bed43a5f','0001_baseline.sql',false),
 ('payroll_annual_period_bounds_guard','b0934f0f9930ec7800cc8286bf0c0469528f9b5c4d400c60603688ba6e8b73fd','b0934f0f9930ec7800cc8286bf0c0469528f9b5c4d400c60603688ba6e8b73fd','0560_payroll_period_openings.sql',false),
 ('payroll_compensation_calculation_guard','9bf4bdfb630110ea8731d08aae67eb08bdc5cd5e5c302b819991d9d88478009b','9bf4bdfb630110ea8731d08aae67eb08bdc5cd5e5c302b819991d9d88478009b','0551_payroll_compensation_packages.sql',false),
-('payroll_compensation_configuration_guard','879e9da92cf7a615921b03e541e68fc0a30de196628ed9c21d224c232de06d79','879e9da92cf7a615921b03e541e68fc0a30de196628ed9c21d224c232de06d79','0613_compensation_configured_flow_approval.sql',false),
+('payroll_prior_earnings_guard','c552a5ad592446e94ee32005ada5b971fcd0a75ea46359b40a1ebc7b1f68e946','aca581caf6ef846a3319eff6c0ec99850823d8f5678fc7e1f6a25f09837d6d08','0620_payroll_prior_earnings.sql',true),
+('payroll_compensation_configuration_guard','1a4ea1bb3741cb16429bdbb60c94218171283e45f00ee52aaa32458d58a14f0e','1a4ea1bb3741cb16429bdbb60c94218171283e45f00ee52aaa32458d58a14f0e','0627_compensation_ungated_submission.sql',false),
 ('payroll_employee_employer_assignment_guard','7918f607fec3e0c80ff92d2a41e23e2775cb2de98cef017993ad2a7a5b6681ca','7918f607fec3e0c80ff92d2a41e23e2775cb2de98cef017993ad2a7a5b6681ca','0568_payroll_employee_employer_assignments.sql',false),
 ('payroll_holiday_allocation_audit','61c473adadc109c7f0d90259fa62b1258663fe3627f175681763bfe74a03a4a5','61c473adadc109c7f0d90259fa62b1258663fe3627f175681763bfe74a03a4a5','0606_payroll_holiday_settlement_allocations.sql',false),
 ('payroll_holiday_allocation_guard','1868461bf68220c4969db8657957f7eaa7d5d98464a5060afc10143a204eed9f','1868461bf68220c4969db8657957f7eaa7d5d98464a5060afc10143a204eed9f','0607_payroll_holiday_historical_clone.sql',false),
@@ -365,6 +367,7 @@ known_attributes(name,config) AS (VALUES
 ('payroll_annual_period_bounds_guard','["search_path=public,pg_catalog"]'::jsonb),
 ('payroll_compensation_calculation_guard','["search_path=public,pg_catalog"]'::jsonb),
 ('payroll_compensation_configuration_guard','["search_path=public,pg_catalog"]'::jsonb),
+('payroll_prior_earnings_guard','["search_path=public,pg_catalog"]'::jsonb),
 ('payroll_employee_employer_assignment_guard','["search_path=public,pg_catalog"]'::jsonb),
 ('payroll_holiday_allocation_audit','["search_path=pg_catalog,public"]'::jsonb),
 ('payroll_holiday_allocation_guard','["search_path=pg_catalog,public"]'::jsonb),
@@ -750,7 +753,8 @@ known_triggers(table_name,trigger_name,function_name) AS (VALUES
 ('mfg_wo_byproducts','manufacturing_snapshot_configuration_guard','manufacturing_snapshot_configuration_guard'),
 ('bom_components','production_bom_revision_guard','production_bom_revision_guard'),
 ('bom_components','production_bom_revision_complete_guard','production_bom_revision_complete_guard'),
-('mfg_mrp_runs','production_mrp_run_evidence_guard','production_mrp_run_evidence_guard')),
+('mfg_mrp_runs','production_mrp_run_evidence_guard','production_mrp_run_evidence_guard'),
+('payroll_prior_earnings','payroll_prior_earnings_guard','payroll_prior_earnings_guard')),
 production_triggers(table_name,trigger_name,function_name,trigger_type,is_deferrable,initially_deferred) AS (VALUES
 ('operating_profile_versions','operating_profile_version_immutable','operating_profile_version_immutable',27,false,false),
 ('time_entries','production_time_history_guard','production_time_history_guard',27,false,false),
@@ -770,7 +774,8 @@ production_triggers(table_name,trigger_name,function_name,trigger_type,is_deferr
 ('mfg_wo_byproducts','manufacturing_snapshot_configuration_guard','manufacturing_snapshot_configuration_guard',27,false,false),
 ('bom_components','production_bom_revision_guard','production_bom_revision_guard',31,false,false),
 ('bom_components','production_bom_revision_complete_guard','production_bom_revision_complete_guard',29,true,true),
-('mfg_mrp_runs','production_mrp_run_evidence_guard','production_mrp_run_evidence_guard',27,false,false)),
+('mfg_mrp_runs','production_mrp_run_evidence_guard','production_mrp_run_evidence_guard',27,false,false),
+('payroll_prior_earnings','payroll_prior_earnings_guard','payroll_prior_earnings_guard',31,false,false)),
 production_tables(table_name) AS (VALUES
 ('operating_profiles'),
 ('operating_profile_versions'),
@@ -783,7 +788,8 @@ production_tables(table_name) AS (VALUES
 ('mfg_subcontract_shipments'),
 ('mfg_subcontract_returns'),
 ('mfg_subcontract_service_bills'),
-('mfg_subcontract_material_returns')),
+('mfg_subcontract_material_returns'),
+('payroll_prior_earnings')),
 production_functions(name) AS (VALUES
 ('financial_change_guard'),
 ('inventory_inspection_guard'),
@@ -801,7 +807,9 @@ production_functions(name) AS (VALUES
 ('production_subcontract_return_guard'),
 ('production_subcontract_service_guard'),
 ('production_subcontract_shipment_guard'),
-('production_time_history_guard')),
+('production_time_history_guard'),
+('payroll_prior_earnings_guard'),
+('payroll_compensation_configuration_guard')),
 authority_functions(name,digest,returns,language,volatility,config) AS (VALUES
 ('openbooks_retirement_trusted_login','df5c7924dedd26409822800647c426cb205b2c271fe386e04c3ca932b0ac4332','boolean','sql','s','["search_path=pg_catalog"]'::jsonb),
 ('openbooks_retirement_row_org','0b6d0d93ea67b449e0b987f192aa09163a8c64ddf3ca5a01b611b02b21d80325','uuid','plpgsql','s','["search_path=pg_catalog,public"]'::jsonb),
@@ -828,10 +836,10 @@ problems AS (
  WHERE n.nspname='public' AND (p.prosecdef OR p.provolatile<>'v' OR p.proisstrict OR p.proleakproof OR p.proparallel<>'u' OR l.lanname<>'plpgsql'
    OR coalesce((SELECT jsonb_agg(regexp_replace(value,'\s','','g') ORDER BY value) FROM unnest(p.proconfig) value),'[]'::jsonb)<>k.config)
  UNION ALL
- SELECT 'production_function_missing',k.name,'Apply the selected production migration after the native retirement authority prerequisite'
+ SELECT 'production_function_missing',k.name,'Apply the selected production and payroll migrations after the native retirement authority prerequisite'
  FROM production_functions k WHERE (SELECT count(*) FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='public' AND p.proname=k.name)<>1
  UNION ALL
- SELECT 'production_table_changed',k.table_name,'Expected the published tenant-owned table with a required UUID org_id'
+ SELECT 'production_table_changed',k.table_name,'Expected the published tenant-owned extension table with a required UUID org_id'
  FROM production_tables k WHERE NOT EXISTS(SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
    JOIN pg_attribute a ON a.attrelid=c.oid WHERE n.nspname='public' AND c.relname=k.table_name AND c.relkind='r'
    AND a.attname='org_id' AND a.atttypid='uuid'::regtype AND a.attnotnull AND NOT a.attisdropped)
@@ -861,7 +869,7 @@ problems AS (
    OR t.tgtype::integer<>CASE WHEN t.tgname='tenant_retirement_new_org' THEN 7 WHEN c.relname='orgs' THEN 27 ELSE 31 END
    OR t.tgenabled NOT IN ('O','A') OR t.tgisinternal OR t.tgnargs<>0 OR t.tgqual IS NOT NULL OR t.tgattr::text<>'' OR t.tgdeferrable OR t.tginitdeferred)
  UNION ALL
- SELECT 'retirement_fence_missing',c.relname::text,'Only the exact new production tables may acquire fences in this migration'
+ SELECT 'retirement_fence_missing',c.relname::text,'Only the exact production and payroll extension tables may acquire fences in this migration'
  FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='public' AND c.relkind IN ('r','p')
  AND (EXISTS(SELECT 1 FROM pg_attribute a WHERE a.attrelid=c.oid AND a.attname='org_id' AND NOT a.attisdropped)
    OR c.relname IN ('orgs','app_listings','file_versions','file_blobs','tax_group_members','auth_login_challenges','auth_login_events','auth_login_state','auth_mfa_factors','auth_oidc_identities','auth_password_resets','auth_sessions'))
@@ -890,7 +898,7 @@ problems AS (
    AND NOT pg_has_role(ordinary.relowner,authority.relowner,'MEMBER'))
 )
 SELECT '0628.'||problem AS code,'refuse' AS severity,subject,detail,
- 'Preserve the schema and tenant data; apply the exact retirement prerequisite and production source through the native migration runner. Qualify any drift before proceeding.' AS remedy
+ 'Preserve the schema and tenant data; apply the exact retirement prerequisite and production/payroll source through the native migration runner. Qualify any drift before proceeding.' AS remedy
 FROM problems ORDER BY code,subject
  LOOP
   RAISE EXCEPTION 'Production retirement contract refused: % [%] %',refusal.code,refusal.subject,refusal.detail USING ERRCODE='55000';
@@ -916,7 +924,8 @@ BEGIN
 ('production_subcontract_return_guard','2d3964e196a0abc9494b9ba8e93723e7e13f11be843ef7c3313df4a447a4fa93','b7c83b0e49d2c03e3fe859e9a83cc790238d3481c2ee3f3a5ac2416a8aafd600'),
 ('production_subcontract_service_guard','48de6e18d59b2d95394b0d0858edab52b806a0b226e1e0e8ac31d5d7f41e2b6d','dfc4ac97773b7e725258727e1a43640a0899b695927f02951b7a8deb8eb00cb5'),
 ('production_subcontract_shipment_guard','05c5386f6281cf941e2d9f9c35570f4a2a980d359f38217b1ab51f2bcb17c89f','45c77b504b342953bfee5b7956bcbcab1618cbab512d1037ea28748ee537de21'),
-('production_time_history_guard','50de2b351b1ccac50df8c909b860946c2c0675700304f872adb589c1e0a046c5','3e183f14cc7ae30730320daaaf841d8807b01a7e19bdab996139d86c03786a34')
+('production_time_history_guard','50de2b351b1ccac50df8c909b860946c2c0675700304f872adb589c1e0a046c5','3e183f14cc7ae30730320daaaf841d8807b01a7e19bdab996139d86c03786a34'),
+('payroll_prior_earnings_guard','c552a5ad592446e94ee32005ada5b971fcd0a75ea46359b40a1ebc7b1f68e946','aca581caf6ef846a3319eff6c0ec99850823d8f5678fc7e1f6a25f09837d6d08')
  ) AS expected(name,old_digest,new_digest) LOOP
   SELECT p.oid,p.prosrc INTO STRICT proc FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace
     WHERE n.nspname='public' AND p.proname=contract.name AND p.pronargs=0;
@@ -945,7 +954,8 @@ BEGIN
 ('mfg_subcontract_shipments'),
 ('mfg_subcontract_returns'),
 ('mfg_subcontract_service_bills'),
-('mfg_subcontract_material_returns')
+('mfg_subcontract_material_returns'),
+('payroll_prior_earnings')
  ) AS expected(table_name) LOOP
   IF NOT EXISTS(SELECT 1 FROM pg_trigger t JOIN pg_class c ON c.oid=t.tgrelid JOIN pg_namespace n ON n.oid=c.relnamespace
     WHERE n.nspname='public' AND c.relname=target.table_name AND t.tgname='tenant_retirement_fence') THEN
