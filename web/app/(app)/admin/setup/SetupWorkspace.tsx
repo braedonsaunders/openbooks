@@ -34,7 +34,7 @@ export async function SetupWorkspace({
       {/* Body — the rail stacks above the content below sm so a 390px panel
           gets full width; sm and up keep the side-by-side rail untouched. */}
       <div className="flex min-h-0 flex-1 flex-col sm:flex-row">
-        <aside className="app-scroll w-full shrink-0 overflow-x-auto border-b border-slate-200 bg-white p-2 sm:w-52 sm:overflow-y-auto sm:border-r sm:border-b-0 sm:p-3 lg:w-60 dark:border-slate-800 dark:bg-slate-900">
+        <aside className="app-scroll min-w-0 w-full shrink-0 overflow-x-hidden border-b border-slate-200 bg-white p-2 sm:w-52 sm:overflow-y-auto sm:border-r sm:border-b-0 sm:p-3 lg:w-60 dark:border-slate-800 dark:bg-slate-900">
           <SetupNav {...railFlags} />
         </aside>
         <div className="app-scroll min-h-0 min-w-0 flex-1 overflow-y-auto bg-slate-50 dark:bg-slate-950">

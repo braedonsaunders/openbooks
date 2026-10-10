@@ -101,14 +101,14 @@ export function SetupNav(flags: SetupRailFlags) {
   const label = (key: string) => tAll(key as never)
 
   return (
-    <nav className="w-full" aria-label={t('title')}>
+    <nav className="min-w-0 w-full" aria-label={t('title')}>
       {/* Below sm the rail is a horizontal strip above the content: groups
           sit side by side and scroll sideways instead of squeezing the
           panel. sm and up restore the grouped vertical rail exactly. */}
-      <div className="flex flex-row items-start gap-6 overflow-x-auto pb-1 sm:flex-col sm:gap-0 sm:space-y-5 sm:overflow-visible sm:pb-0">
+      <div className="flex min-w-0 flex-row items-start gap-6 overflow-x-auto pb-1 sm:flex-col sm:items-stretch sm:gap-0 sm:space-y-5 sm:overflow-visible sm:pb-0">
         {rail.groups.map((group) => {
           return (
-            <div key={group.key} className="shrink-0 space-y-1">
+            <div key={group.key} className="shrink-0 space-y-1 sm:min-w-0 sm:w-full">
               <h3 className="hidden px-2 text-xs font-semibold tracking-wider text-slate-400 uppercase sm:block dark:text-slate-500">
                 {label(group.labelKey)}
               </h3>
@@ -117,12 +117,12 @@ export function SetupNav(flags: SetupRailFlags) {
                   // Builder index pages stay highlighted on their per-record pages.
                   const active = railItemActive(item.href, pathname, search)
                   return (
-                    <li key={item.href} className="shrink-0">
+                    <li key={item.href} className="shrink-0 sm:min-w-0">
                       <Link
                         href={item.href}
                         aria-current={active ? 'page' : undefined}
                         className={cn(
-                          'flex items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-sm transition-colors',
+                          'flex min-w-0 items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-sm transition-colors sm:w-full',
                           active
                             ? 'bg-teal-50 font-medium text-teal-700 dark:bg-teal-950/50 dark:text-teal-300'
                             : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800/60 dark:hover:text-slate-100',
@@ -131,7 +131,7 @@ export function SetupNav(flags: SetupRailFlags) {
                         <span className={cn('shrink-0', active ? 'text-teal-600 dark:text-teal-300' : 'text-slate-400')}>
                           {ICONS[item.iconKey] ?? <Tag size={15} />}
                         </span>
-                        <span className="truncate">{setupRailItemLabel(item, label)}</span>
+                        <span className="min-w-0 whitespace-nowrap sm:whitespace-normal sm:[overflow-wrap:anywhere]">{setupRailItemLabel(item, label)}</span>
                       </Link>
                     </li>
                   )
@@ -142,7 +142,7 @@ export function SetupNav(flags: SetupRailFlags) {
         })}
 
         {rail.data.items.length > 0 && (
-          <div className="shrink-0 space-y-1">
+          <div className="shrink-0 space-y-1 sm:min-w-0 sm:w-full">
             <h3 className="hidden px-2 text-xs font-semibold tracking-wider text-slate-400 uppercase sm:block dark:text-slate-500">
               {label(rail.data.labelKey)}
             </h3>
@@ -150,12 +150,12 @@ export function SetupNav(flags: SetupRailFlags) {
               {rail.data.items.map((item) => {
                 const active = railItemActive(item.href, pathname, search)
                 return (
-                  <li key={item.href} className="shrink-0">
+                  <li key={item.href} className="shrink-0 sm:min-w-0">
                     <Link
                       href={item.href}
                       aria-current={active ? 'page' : undefined}
                       className={cn(
-                        'flex items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-sm transition-colors',
+                        'flex min-w-0 items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-sm transition-colors sm:w-full',
                         active
                           ? 'bg-teal-50 font-medium text-teal-700 dark:bg-teal-950/50 dark:text-teal-300'
                           : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800/60 dark:hover:text-slate-100',
@@ -164,7 +164,7 @@ export function SetupNav(flags: SetupRailFlags) {
                       <span className={cn('shrink-0', active ? 'text-teal-600 dark:text-teal-300' : 'text-slate-400')}>
                         {ICONS[item.iconKey] ?? <Tag size={15} />}
                       </span>
-                      <span className="truncate">{setupRailItemLabel(item, label)}</span>
+                      <span className="min-w-0 whitespace-nowrap sm:whitespace-normal sm:[overflow-wrap:anywhere]">{setupRailItemLabel(item, label)}</span>
                     </Link>
                   </li>
                 )
