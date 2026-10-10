@@ -4,6 +4,9 @@ import { resolveScriptUser, runTriggerScripts, type ScriptContext } from "../scr
 import { assertDocumentMutationRefsOwned } from "../records/mutation-refs.ts";
 import { consolidationSourceRefusal } from "../records/consolidation-source-policy.ts";
 import { assertExpenseEmployee, assertExpenseSettlement } from "../records/expense-validation.ts";
+import { documentRevisionCounterSql, isDocumentRevisionToken } from "../records/revision.ts";
+import { captureTransactionAuditSnapshot, recordTransactionAudit } from "../records/transaction-audit.ts";
+import { ScopeNotFoundError, subsidiaryScopeAllows } from "../organization/subsidiary-scope.ts";
 import { cancelDispatchRuns, dispatchFailureReason, findGatingRun } from "./dispatch-result.ts";
 import { runRecordFlows } from "./run.ts";
 import { isVendorBillApprovalRequired, VENDOR_BILL_KIND } from "./vendor-bill-approval.ts";
@@ -258,5 +261,189 @@ export async function submitAndReleaseIfUngated(
       throw new Error("document changed while submission was being released");
     }
     return { ...result, autoApproved: true, approvalRequired: false };
+  });
+}
+
+/**
+ * A return-to-draft refusal: the target is not in a returnable state
+ * (posted, voided, already draft, still gated, or partially applied).
+ * Callers map this to a 4xx with the message intact — a mis-approved
+ * document the operator corrects is request state, not a server defect,
+ * and must never surface as a 500.
+ */
+export class ReturnToDraftError extends Error {
+  readonly name = "ReturnToDraftError";
+  constructor(
+    message: string,
+    readonly status: number = 422,
+    readonly code: "invalid_status" | "stale-revision" | "not-found" | "applied" = "invalid_status",
+  ) {
+    super(message);
+  }
+}
+
+export interface ReturnToDraftInput {
+  readonly documentId: string;
+  readonly orgId: string;
+  readonly actorId: string | null;
+  /** Why the approval is withdrawn — required; the audit trail records it. */
+  readonly reason: unknown;
+  /** Optimistic concurrency token from the opened drawer; checked under lock. */
+  readonly expectedUpdatedAt?: string | null;
+  readonly allowedSubsidiaryIds?: ReadonlySet<string> | null;
+}
+
+export interface ReturnToDraftResult {
+  readonly status: "draft";
+  /** Completed approval runs superseded by the return (kept as history). */
+  readonly supersededRunIds: string[];
+  /** In-flight runs and gates cancelled by the return. */
+  readonly cancelledRunIds: string[];
+}
+
+function requireReturnReason(reason: unknown): string {
+  const value = typeof reason === "string" ? reason.trim() : "";
+  if (value.length < 5 || value.length > 500) {
+    throw new ReturnToDraftError("a return reason between 5 and 500 characters is required");
+  }
+  return value;
+}
+
+/**
+ * Return an approved, never-posted document to draft so a mis-approval
+ * corrects through edit and re-approval instead of a void on a document
+ * that never touched the GL. Applies to every document kind sharing the
+ * approve → post lifecycle (the status gate, not a kind list, decides).
+ *
+ * The aggregate lock precedes every check and the compare-and-set flip,
+ * so a concurrent post either wins before this lock (the status gate
+ * below refuses) or waits until the draft flip commits (its own approved
+ * precondition then fails) — exactly one outcome converges. A zero-row
+ * flip is a failure, never a success.
+ *
+ * Flow evidence: in-flight runs and pending gates cancel through the
+ * native cancellation; completed approval runs are kept as history and
+ * recorded superseded in the audit entry, so a resubmission starts a
+ * new run and the returned document must be re-approved.
+ */
+export async function returnDocumentToDraft(
+  input: ReturnToDraftInput,
+): Promise<ReturnToDraftResult> {
+  const reason = requireReturnReason(input.reason);
+  return withOrgTransaction(input.orgId, async () => {
+    const locked = (await db.execute<{
+      id: string;
+      kind: string;
+      status: string;
+      number: string | null;
+      subsidiaryId: string | null;
+      revision: string;
+    }>(sql`
+      select id, kind, status,
+             document_number as number,
+             subsidiary_id as "subsidiaryId",
+             ${documentRevisionCounterSql(sql.raw("revision_seq"))} as revision
+        from documents
+       where id = ${input.documentId} and org_id = ${input.orgId}
+       for update
+    `)).rows[0];
+    if (!locked) {
+      throw new ReturnToDraftError("document not found in this organization", 404, "not-found");
+    }
+    if (
+      input.allowedSubsidiaryIds !== undefined &&
+      !subsidiaryScopeAllows(input.allowedSubsidiaryIds, locked.subsidiaryId)
+    ) {
+      throw new ScopeNotFoundError();
+    }
+    if (
+      input.expectedUpdatedAt != null &&
+      (!isDocumentRevisionToken(input.expectedUpdatedAt) || input.expectedUpdatedAt !== locked.revision)
+    ) {
+      throw new ReturnToDraftError(
+        "this document changed after you opened it; reload and review the latest revision",
+        409,
+        "stale-revision",
+      );
+    }
+    const name = locked.number ?? "this document";
+    if (locked.status === "draft") {
+      throw new ReturnToDraftError(`${name} is already a draft — nothing to return`);
+    }
+    if (locked.status === "posted") {
+      throw new ReturnToDraftError(
+        `${name} is already posted — void it or post a correction instead of returning to draft`,
+      );
+    }
+    if (locked.status === "voided") {
+      throw new ReturnToDraftError(`${name} is voided — voided documents are terminal`);
+    }
+    if (locked.status === "pending_approval") {
+      throw new ReturnToDraftError(
+        `${name} is still awaiting approval — decide or withdraw the approval request before returning to draft`,
+      );
+    }
+    if (locked.status !== "approved") {
+      throw new ReturnToDraftError(`${name} is ${locked.status} — only an approved document returns to draft`);
+    }
+    // Partial application refuses by name: money already moving against
+    // these details must settle first, or the redraft would strand it.
+    const applied = (await db.execute<{ n: number }>(sql`
+      select count(*)::int as n from payment_instructions instruction
+       where instruction.org_id = ${input.orgId}
+         and instruction.payment_document_id = ${input.documentId}
+         and instruction.status in ('pending', 'approved', 'generated', 'sent')
+    `)).rows[0]?.n ?? 0;
+    if (applied > 0) {
+      throw new ReturnToDraftError(
+        `${name} has live payment instructions against it — settle or cancel the payments before returning to draft`,
+        422,
+        "applied",
+      );
+    }
+    // In-flight runs and pending gates cancel natively; completed runs
+    // stay as history (superseded, never deleted), so a resubmission starts
+    // a new run and the returned document must be re-approved.
+    const runs = (await db.execute<{ id: string; status: string }>(sql`
+      select id::text as id, status from flow_runs
+       where org_id = ${input.orgId} and subject_id = ${input.documentId}
+    `)).rows;
+    const liveRunIds = runs.filter((run) => run.status === "running" || run.status === "waiting").map((run) => run.id);
+    await cancelDispatchRuns(input.orgId, liveRunIds, { actorId: input.actorId });
+    const supersededRunIds = runs.filter((run) => run.status === "completed").map((run) => run.id);
+    const before = await captureTransactionAuditSnapshot(db, input.documentId, input.orgId);
+    if (!before) {
+      throw new ReturnToDraftError("document not found in this organization", 404, "not-found");
+    }
+    const flipped = (await db.execute<{ id: string }>(sql`
+      update documents
+         set status = 'draft',
+             submitted_by = null, submitted_at = null,
+             updated_at = now(), updated_by = ${input.actorId}
+       where id = ${input.documentId} and org_id = ${input.orgId} and status = 'approved'
+      returning id
+    `)).rows[0];
+    if (!flipped) {
+      throw new ReturnToDraftError(
+        `${name} changed while it was being returned to draft; reload and try again`,
+      );
+    }
+    const after = await captureTransactionAuditSnapshot(db, input.documentId, input.orgId);
+    if (!after) {
+      throw new ReturnToDraftError(
+        `${name} changed while it was being returned to draft; reload and try again`,
+      );
+    }
+    await recordTransactionAudit(db, {
+      orgId: input.orgId,
+      documentId: input.documentId,
+      action: "update",
+      actorId: input.actorId,
+      source: "documents.actions.return_to_draft",
+      reason,
+      before,
+      after,
+    });
+    return { status: "draft" as const, supersededRunIds, cancelledRunIds: liveRunIds };
   });
 }

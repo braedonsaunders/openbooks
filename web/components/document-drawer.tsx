@@ -2399,6 +2399,29 @@ export function DocumentDrawer({
       successMessage: tPostingEffects('queued'), onOk: () => router.refresh() })
   }
 
+  async function returnToDraft() {
+    // A mis-approved document corrects through edit and re-approval, never
+    // through a void on a record that never touched the GL. The server owns
+    // the approved-only gate, the approve-level permission, and every refusal
+    // remedy; refusals pin beside the record through the shared handler.
+    const reason = await promptDialog({
+      title: tCommon('actions.returnToDraft'),
+      label: tCommon('amendment.reason'),
+      placeholder: tCommon('amendment.returnToDraftPlaceholder'),
+      confirmLabel: tCommon('actions.returnToDraft'),
+    })
+    if (reason === null) return
+    if (reason.trim().length < 5 || reason.trim().length > 500) {
+      refuse(tCommon('amendment.returnToDraftPlaceholder'), t('toasts.actionFailed'))
+      return
+    }
+    await execute(() => fetchAction('/api/documents/actions', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'return_to_draft', documentId: doc.id, reason, expectedUpdatedAt: documentRevision }),
+    }), { fallbackMessage: t('toasts.actionFailed'),
+      successMessage: tCommon('status.draft'), onOk: () => router.refresh() })
+  }
+
   async function remove() {
     if (
       !(await confirmDialog({
@@ -3263,6 +3286,12 @@ export function DocumentDrawer({
             ) : null}
             {isPosted && doc.posting_effect_status === 'terminal_failed' && canPost ? (
               <Button variant="outline" disabled={busy} onClick={retryPostingEffects}>{tPostingEffects('retry')}</Button>
+            ) : null}
+            {/* canPost is the approve grant for every drawer-registry kind
+                (the permission catalog derives approve from the post grant),
+                so this is approve-level authority, never just edit. */}
+            {doc.status === 'approved' && canPost ? (
+              <Button variant="outline" disabled={busy} onClick={returnToDraft}>{tCommon('actions.returnToDraft')}</Button>
             ) : null}
           </>
         )

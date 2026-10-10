@@ -23,9 +23,13 @@ export { executeFlowPlan, type ExecuteFlowPlanResult } from "./execute.ts";
 export {
   submitForApproval,
   submitAndReleaseIfUngated,
+  returnDocumentToDraft,
   SubmitError,
+  ReturnToDraftError,
   type SubmitResult,
   type SubmissionReleaseResult,
+  type ReturnToDraftInput,
+  type ReturnToDraftResult,
 } from "./submit.ts";
 export {
   hasVendorBillApprovalFlow,

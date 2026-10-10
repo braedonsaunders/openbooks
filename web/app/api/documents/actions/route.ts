@@ -4,7 +4,9 @@ import { apiErrorResponse } from '@/lib/api/error-response'
 import { NextResponse } from 'next/server'
 import { and, eq, sql } from 'drizzle-orm'
 import { db, schema, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
-import { submitAndReleaseIfUngated, VENDOR_BILL_APPROVAL_REQUIRED_MESSAGE } from '@openbooks/engine/src/flows/index.ts'
+import { returnDocumentToDraft, ReturnToDraftError, submitAndReleaseIfUngated, VENDOR_BILL_APPROVAL_REQUIRED_MESSAGE } from '@openbooks/engine/src/flows/index.ts'
+import { documentKindPermissions } from '@openbooks/engine/src/records/document-kind-permissions.ts'
+import { ScopeNotFoundError } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
 import { postDocument } from "@openbooks/engine/src/ledger/posting-document.ts";
 import { runPostDocumentEffects } from "@openbooks/engine/src/ledger/posting-dispatch.ts";
 import { getAuthz, can, guardSubsidiaryScope, type Authz } from '../../../../lib/authz'
@@ -21,6 +23,12 @@ const POSTBodySchema = z.discriminatedUnion('action', [
   z.object({ action: z.literal('submit'), documentId: z.string().uuid() }),
   z.object({ action: z.literal('post'), documentId: z.string().uuid() }),
   z.object({
+    action: z.literal('return_to_draft'),
+    documentId: z.string().uuid(),
+    reason: z.string().trim().min(5, 'a return reason between 5 and 500 characters is required').max(500),
+    expectedUpdatedAt: z.string().min(1).optional(),
+  }),
+  z.object({
     action: z.literal('retry-effects'),
     documentId: z.string().uuid(),
     reason: z.string().max(1000, 'A 10–1000 character review reason is required to retry posting effects').refine(
@@ -35,8 +43,9 @@ const POSTBodySchema = z.discriminatedUnion('action', [
 export const runtime = 'nodejs'
 
 /**
- * Submit a draft for approval, post an approved/draft document, or retry a
- * stranded posting effect on a posted document.
+ * Submit a draft for approval, post an approved/draft document, return an
+ * approved never-posted document to draft, or retry a stranded posting
+ * effect on a posted document.
  *
  * Approvals are owned by the Flows engine: submit fires the record's on_submit
  * flows. When a flow gates the document it goes pending_approval; when none
@@ -96,7 +105,13 @@ export const POST = defineRoute({
     if (!canReadDocumentKind(authz, doc.kind)) {
         return notFound("record")
       }
-    const perm = action === 'submit' ? createPermission(doc.kind) : postPermission(doc.kind)
+    // Return-to-draft undoes an approval, so it requires the same
+    // authority as approving the kind — never just the edit grant.
+    const perm = action === 'submit'
+      ? createPermission(doc.kind)
+      : action === 'return_to_draft'
+        ? (documentKindPermissions(doc.kind)?.approve ?? postPermission(doc.kind))
+        : postPermission(doc.kind)
     if (!can(authz, perm)) {
         return NextResponse.json({ error: `missing permission: ${perm}` }, { status: 403 })
       }
@@ -181,6 +196,47 @@ export const POST = defineRoute({
           // A refused routing throws inside the transaction above (fail closed,
           // never auto-approve), so reaching here means the release succeeded.
           return NextResponse.json({ ok: true, requestId: null, autoApproved: submission.autoApproved })
+        }
+        if (action === 'return_to_draft') {
+          // Return the approved, never-posted document to draft under the
+          // row lock (same shape as the submit/post branches): a rehome
+          // that landed after the precheck meets the uniform 404, and the
+          // service owns the status, scope, revision, and application
+          // preconditions with named remedies. A concurrent post either
+          // wins first (the service refuses) or loses its approved
+          // precondition against the flipped row — exactly one converges.
+          try {
+            const outcome = await withOrgTransaction(user.orgId, async () => {
+              const locked = (await db.execute<{ status: string; subsidiaryId: string | null }>(sql`
+                select status, subsidiary_id as "subsidiaryId" from documents
+                 where id = ${doc.id} and org_id = ${user.orgId}
+                 for update
+              `))
+              if (guardSubsidiaryScope(authz, locked.rows[0]?.subsidiaryId)) {
+                return { kind: 'scope_revoked' as const }
+              }
+              if (!locked.rows[0]) return { kind: 'not_found' as const }
+              const result = await returnDocumentToDraft({
+                documentId: doc.id,
+                orgId: user.orgId,
+                actorId: user.id,
+                reason: body.reason,
+                expectedUpdatedAt: body.expectedUpdatedAt,
+                allowedSubsidiaryIds: authz.allowedSubsidiaryIds,
+              })
+              return { kind: 'returned' as const, result }
+            })
+            if (outcome.kind === 'scope_revoked' || outcome.kind === 'not_found') {
+              return notFound("record")
+            }
+            return NextResponse.json({ ok: true, supersededRunIds: outcome.result.supersededRunIds })
+          } catch (e) {
+            if (e instanceof ScopeNotFoundError) return notFound("record")
+            if (e instanceof ReturnToDraftError) {
+              return NextResponse.json({ error: e.message, code: e.code }, { status: e.status })
+            }
+            throw e
+          }
         }
         if (action === 'retry-effects') {
           const reason = body.reason
