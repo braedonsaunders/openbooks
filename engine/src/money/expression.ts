@@ -1,6 +1,7 @@
 import { canonicalDecimal } from "./exact-decimal.ts";
 import { decimalNullRefusal } from "./decimal-refusal.ts";
 import { roundDiv } from "./money.ts";
+import { rational as exactRational, compareRational, RationalError, RATIONAL_DIGITS, type Rational } from "./rational.ts";
 
 /** A deliberately small expression language: no code execution, property access, clock, or I/O. */
 export type ExpressionType =
@@ -26,7 +27,7 @@ export class ExpressionError extends Error {
 }
 
 // Bound both parsing and exact intermediate arithmetic before allocating large values.
-export const EXPRESSION_LIMITS = Object.freeze({ characters: 4096, tokens: 512, depth: 32, inputs: 128, decimalCharacters: 64, rationalDigits: 256 });
+export const EXPRESSION_LIMITS = Object.freeze({ characters: 4096, tokens: 512, depth: 32, inputs: 128, decimalCharacters: 64, rationalDigits: RATIONAL_DIGITS });
 const FUNCTIONS = ["min", "max", "clamp", "if", "and", "or", "not"] as const;
 type FunctionName = (typeof FUNCTIONS)[number];
 type Operator = "+" | "-" | "*" | "/" | "<" | "<=" | ">" | ">=" | "==" | "!=";
@@ -37,7 +38,6 @@ type Node =
   | { kind: "negate"; operand: Node; type: ExpressionType }
   | { kind: "binary"; operator: Operator; left: Node; right: Node; type: ExpressionType }
   | { kind: "call"; name: FunctionName; arguments: readonly Node[]; type: ExpressionType };
-type Rational = { numerator: bigint; denominator: bigint };
 type Value = Rational | boolean;
 const SCALAR: ExpressionType = Object.freeze({ kind: "scalar" });
 const BOOLEAN: ExpressionType = Object.freeze({ kind: "boolean" });
@@ -78,21 +78,15 @@ function productType(a: ExpressionType, b: ExpressionType, divide: boolean): Exp
   return refusal("TYPE_MISMATCH", `Cannot ${divide ? "divide" : "multiply"} ${typeLabel(a)} by ${typeLabel(b)} — use an explicit scalar factor or a compatible hours and hourly-rate pair.`);
 }
 
-function gcd(a: bigint, b: bigint): bigint {
-  let left = a < 0n ? -a : a;
-  let right = b;
-  while (right !== 0n) [left, right] = [right, left % right];
-  return left;
-}
-
 function rational(numerator: bigint, denominator: bigint): Rational {
-  if (denominator === 0n) return refusal("DIVISION_BY_ZERO", "The formula divides by zero — correct the divisor or use if(condition, yes, no) to handle a zero input.");
-  if (denominator < 0n) { numerator = -numerator; denominator = -denominator; }
-  if (numerator.toString().length > EXPRESSION_LIMITS.rationalDigits || denominator.toString().length > EXPRESSION_LIMITS.rationalDigits) {
-    refusal("LIMIT", "The formula exceeds the exact-arithmetic limit — simplify repeated multiplication or division before trying again.");
+  try {
+    return exactRational(numerator, denominator);
+  } catch (error) {
+    if (!(error instanceof RationalError)) throw error;
+    return refusal(error.code, error.code === "DIVISION_BY_ZERO"
+      ? "The formula divides by zero — correct the divisor or use if(condition, yes, no) to handle a zero input."
+      : "The formula exceeds the exact-arithmetic limit — simplify repeated multiplication or division before trying again.");
   }
-  const divisor = gcd(numerator, denominator);
-  return { numerator: numerator / divisor, denominator: denominator / divisor };
 }
 
 function decimal(raw: unknown, label: string): Rational {
@@ -241,8 +235,7 @@ function asRational(value: Value): Rational {
 }
 
 function compare(a: Rational, b: Rational): -1 | 0 | 1 {
-  const difference = a.numerator * b.denominator - b.numerator * a.denominator;
-  return difference < 0n ? -1 : difference > 0n ? 1 : 0;
+  return compareRational(a, b);
 }
 
 function evaluate(node: Node, inputs: ReadonlyMap<string, Value>): Value {

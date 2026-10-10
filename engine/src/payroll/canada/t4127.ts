@@ -7,13 +7,11 @@ import { canonicalNonNegativeDecimal } from "../../money/exact-decimal.ts";
  * Faithful to the guide's factor notation (A, C, C2, EI, F5, K1..K4, T1..T4,
  * V1, V2, S, TB…) and its rounding rule: the guide rounds the deductions
  * themselves (CPP, EI, the per-period tax) half-up to the cent and nothing
- * in between, so F5, A and the annual tax keep full precision while the
- * annual credits retain unit precision; the printed credit tables are display
- * amounts, not intermediate rounding instructions. Rate ratios are
- * never rounded; the CPP per-period exemption truncates. Rounding F5 per
- * period and annualizing it moved withholding by a cent on about one
- * paycard in twenty against bureau payroll. All arithmetic is exact bigint via
- * money.ts primitives — no floats anywhere.
+ * in between, except personal amounts that the guide explicitly rounds.
+ * Income and annual credits retain exact rational precision; printed factors
+ * are display amounts, never inputs to later formula steps. Rate ratios are
+ * never rounded; the CPP per-period exemption truncates. Arithmetic uses
+ * bounded bigint ratios and rounds only at declared statutory boundaries.
  *
  * Methods outside this calculator: TD1X commission employees, mid-year province-transfer credit
  * variants (K2R/K2RQ), and Quebec *provincial* income tax (TP-1015, which
@@ -23,8 +21,9 @@ import { canonicalNonNegativeDecimal } from "../../money/exact-decimal.ts";
 import { PayrollError } from "../error.ts";
 import type { Money } from "../../money/brands.ts";
 import {
-  bmax, bmin, D, divIntCents, max0, mulInt, mulRatioCents, mulRatioUnits, mulRateCents, mulRateUnits, r2, rate6, truncCents, U,
+  bmax, bmin, D, max0, mulInt, mulRatioCents, mulRateCents, rate6, truncCents, U,
 } from "../../money/payroll-decimal.ts";
+import { rational as Q, addRational as qa, subtractRational as qs, multiplyRational, compareRational as qc, roundRational, type Rational } from "../../money/rational.ts";
 import {
   claimCodeAmount, CPP_EXEMPTION_BY_P, EditionRates, PensionPlanRates, Province, ratesForPayDate,
 } from "./rates";
@@ -249,32 +248,41 @@ function opt(value: string | undefined): bigint {
   return value === undefined || value === "" ? ZERO : U(value);
 }
 
-function bracketFor(brackets: { upTo: string | null; rate: string; k: string }[], annual: bigint) {
+const QZERO = Q(0n);
+const qmin = (a: Rational, b: Rational): Rational => qc(a, b) < 0 ? a : b;
+const qmax = (a: Rational, b: Rational): Rational => qc(a, b) > 0 ? a : b;
+const qmax0 = (value: Rational): Rational => qmax(value, QZERO);
+const qsum = (...values: Rational[]): Rational => values.reduce(qa, QZERO);
+const qratio = (value: Rational, numerator: bigint, denominator: bigint): Rational => {
+  if (denominator <= 0n) throw new PayrollError("ratio denominator must be greater than zero");
+  return multiplyRational(value, Q(numerator, denominator));
+};
+const qrate = (value: Rational, rate: string): Rational => qratio(value, rate6(rate), 1_000_000n);
+const qint = (value: Rational, count: number): Rational => Q(mulInt(value.numerator, count), value.denominator);
+
+function bracketFor(brackets: { upTo: string | null; rate: string; k: string }[], annual: Rational) {
   for (const bracket of brackets) {
-    if (bracket.upTo === null || annual <= U(bracket.upTo)) return bracket;
+    if (bracket.upTo === null || qc(annual, Q(U(bracket.upTo))) <= 0) return bracket;
   }
   return brackets[brackets.length - 1]!;
 }
 
 function bpaPhaseOut(
-  netIncome: bigint,
+  netIncome: Rational,
   phase: { max: string; min: string; phaseStart: string; phaseEnd: string; slopeNum: string; slopeDen: string },
-): bigint {
-  if (netIncome <= U(phase.phaseStart)) return U(phase.max);
-  if (netIncome >= U(phase.phaseEnd)) return U(phase.min);
-  const reduction = mulRatioCents(
-    netIncome - U(phase.phaseStart),
-    BigInt(phase.slopeNum),
-    BigInt(phase.slopeDen),
-  );
-  return U(phase.max) - reduction;
+): Rational {
+  if (qc(netIncome, Q(U(phase.phaseStart))) <= 0) return Q(U(phase.max));
+  if (qc(netIncome, Q(U(phase.phaseEnd))) >= 0) return Q(U(phase.min));
+  const reduction = qratio(qs(netIncome, Q(U(phase.phaseStart))), BigInt(phase.slopeNum), BigInt(phase.slopeDen));
+  // T4127 explicitly rounds the resulting personal amount to the cent.
+  return Q(roundRational(qs(Q(U(phase.max)), reduction), 100n));
 }
 
-function bpamb(netIncome: bigint): bigint {
-  const cap = U("15780");
-  if (netIncome <= U("200000")) return cap;
-  if (netIncome >= U("400000")) return ZERO;
-  return cap - mulRatioCents(netIncome - U("200000"), 15780n, 200000n);
+function bpamb(netIncome: Rational): Rational {
+  const cap = Q(U("15780"));
+  if (qc(netIncome, Q(U("200000"))) <= 0) return cap;
+  if (qc(netIncome, Q(U("400000"))) >= 0) return QZERO;
+  return Q(roundRational(qs(cap, qratio(qs(netIncome, Q(U("200000"))), 15780n, 200000n)), 100n));
 }
 
 /**
@@ -315,8 +323,8 @@ function cppExemptionForP(periods: number): bigint {
 }
 
 /** Statutory credit share of C (base CPP via the unrounded rate ratio). */
-function baseShare(amount: bigint, plan: PensionPlanRates): bigint {
-  return mulRatioUnits(amount, rate6(plan.baseRate), rate6(plan.totalRate));
+function baseShare(amount: bigint, plan: PensionPlanRates): Rational {
+  return qratio(Q(amount), rate6(plan.baseRate), rate6(plan.totalRate));
 }
 
 export function calculateT4127(input: T4127Input): T4127Result {
@@ -338,7 +346,10 @@ export function calculateT4127(input: T4127Input): T4127Result {
   const averaging=input.averaging;
   if(averaging && (!Number.isInteger(averaging.elapsedPeriods)||averaging.elapsedPeriods<1||averaging.elapsedPeriods>P))
     throw new PayrollError('Cumulative averaging requires elapsed scheduled periods from 1 through the schedule’s periods per year — review the withholding method window');
-  const project=(amount:bigint)=>averaging?mulRatioCents(amount,BigInt(P),BigInt(averaging.elapsedPeriods)):mulInt(amount,P);
+  const project = (amount: Rational): Rational => averaging
+    ? qratio(amount, BigInt(P), BigInt(averaging.elapsedPeriods))
+    : qint(amount, P);
+  const traceExact = (key: string, value: Rational) => trace(key, roundRational(value));
   const income = U(input.income);
   const bonus = opt(input.nonPeriodic);
   if(averaging&&bonus>ZERO&&[input.pensionableNonPeriodic,input.insurableNonPeriodic,input.qpipNonPeriodic].some(value=>value===undefined))
@@ -394,28 +405,22 @@ export function calculateT4127(input: T4127Input): T4127Result {
     trace("QPIP", qpip);
   }
 
-  // ---- F5: enhanced-CPP income deduction and its periodic/bonus split ------
-  // The credit bases below price off what was actually withheld on this run
-  // (the supplemental-period share); every other caller leaves the overrides
-  // absent and prices off the computed amounts, exactly as the guide states.
+  // Rate ratios remain exact through the income and credit calculations.
+  // Only statutory contributions and expressly rounded factors are quantized.
   const creditCpp = input.cppWithheld === undefined ? C : U(input.cppWithheld);
   const creditCpp2 = input.cpp2Withheld === undefined ? C2 : U(input.cpp2Withheld);
   const creditEi = input.eiWithheld === undefined ? EI : U(input.eiWithheld);
   const creditQpip = input.qpipWithheld === undefined ? qpip : U(input.qpipWithheld);
-  // F5 only reduces the annualized income A, so it keeps full precision:
-  // rounding it to the cent per period and multiplying by P moves A by up to
-  // P/2 cents, enough to shift the withheld tax by a cent.
-  const F5 = mulRatioUnits(creditCpp, rate6(plan.addlRate), rate6(plan.totalRate)) + creditCpp2;
+  const F5 = qa(qratio(Q(creditCpp), rate6(plan.addlRate), rate6(plan.totalRate)), Q(creditCpp2));
   let F5A = F5;
-  let F5B = ZERO;
-  const pensionableBonus=input.pensionableNonPeriodic===undefined?bonus:U(input.pensionableNonPeriodic);
+  let F5B = QZERO;
+  const pensionableBonus = input.pensionableNonPeriodic === undefined ? bonus : U(input.pensionableNonPeriodic);
   if (pensionableBonus > ZERO && PI > ZERO) {
-    F5A = mulRatioUnits(F5, max0(PI - pensionableBonus), PI);
-    F5B = F5 - F5A;
+    F5A = qratio(F5, max0(PI - pensionableBonus), PI);
+    F5B = qs(F5, F5A);
   }
-  trace("F5", F5); trace("F5A", F5A); trace("F5B", F5B);
+  traceExact("F5", F5); traceExact("F5A", F5A); traceExact("F5B", F5B);
 
-  // ---- Annual taxable income: Step 1 (with bonus) and Step 2 (without) -----
   const F = opt(input.pensionDeductions);
   const F2 = opt(input.alimonyDeductions);
   const F3 = opt(input.nonPeriodicPensionDeductions);
@@ -426,176 +431,138 @@ export function calculateT4127(input: T4127Input): T4127Result {
   const F4 = opt(ytd.nonPeriodicPensionDeductions);
   const F5BYtd = opt(ytd.nonPeriodicCppEnhancedDeductions);
 
-  const accumulatedPeriodic=income-F-F2-F5A-U1+(averaging?
-    U(averaging.income)-U(averaging.pensionDeductions)-U(averaging.alimonyDeductions)-U(averaging.f5A)-U(averaging.unionDues):ZERO);
-  const annualPeriodic = max0(project(accumulatedPeriodic) - HD - F1);
-  const bonusNet = max0(bonus - F3 - F5B);
-  const bonusYtdNet = max0(B1 - F4 - F5BYtd);
-  const aWithBonus = annualPeriodic + bonusNet + bonusYtdNet;
-  const aWithoutBonus = annualPeriodic + bonusYtdNet;
-  trace("A", aWithBonus);
-  trace("A_step2", aWithoutBonus);
+  const accumulatedPeriodic = qa(qs(Q(income - F - F2 - U1), F5A), Q(averaging
+    ? U(averaging.income) - U(averaging.pensionDeductions) - U(averaging.alimonyDeductions) - U(averaging.f5A) - U(averaging.unionDues)
+    : ZERO));
+  const annualPeriodic = qmax0(qs(project(accumulatedPeriodic), Q(HD + F1)));
+  const bonusNet = qmax0(qs(Q(bonus - F3), F5B));
+  const bonusYtdNet = Q(max0(B1 - F4 - F5BYtd));
+  const aWithBonus = qsum(annualPeriodic, bonusNet, bonusYtdNet);
+  const aWithoutBonus = qa(annualPeriodic, bonusYtdNet);
+  traceExact("A", aWithBonus);
+  traceExact("A_step2", aWithoutBonus);
 
-  // ---- Claims --------------------------------------------------------------
-  // A default claim (BPAF, BPAMB, an income-phased provincial amount) phases
-  // out on the net income of the step being priced, NI = A + HD. The bonus
-  // method prices two steps — with and without the bonus — and each takes
-  // its own claim, so the step without the bonus (which also sets the
-  // periodic tax) is never reduced by a bonus it does not include.
-  const claimsFor = (A: bigint): { TC: bigint; TCP: bigint } => {
-    const netIncomeForBpa = A + HD;
-    let TC: bigint;
-    if (input.federalClaim !== undefined) TC = U(input.federalClaim);
+  // Each bonus-method tax pass resolves its own income-phased claims.
+  const claimsFor = (A: Rational): { TC: Rational; TCP: Rational } => {
+    const netIncomeForBpa = qa(A, Q(HD));
+    let TC: Rational;
+    if (input.federalClaim !== undefined) TC = Q(U(input.federalClaim));
     else if (input.federalClaimCode !== undefined) {
-      TC = U(claimCodeAmount(rates.federal.claimCodes, input.federalClaimCode));
+      TC = Q(U(claimCodeAmount(rates.federal.claimCodes, input.federalClaimCode)));
     } else TC = bpaPhaseOut(netIncomeForBpa, rates.federal.bpaf);
 
-    let TCP = ZERO;
+    let TCP = QZERO;
     if (prov) {
-      if (input.provincialClaim !== undefined) TCP = U(input.provincialClaim);
+      if (input.provincialClaim !== undefined) TCP = Q(U(input.provincialClaim));
       else if (input.provincialClaimCode !== undefined) {
-        TCP = U(claimCodeAmount(prov.claimCodes, input.provincialClaimCode));
+        TCP = Q(U(claimCodeAmount(prov.claimCodes, input.provincialClaimCode)));
       } else if (prov.tcpDefault === "BPAF") TCP = bpaPhaseOut(netIncomeForBpa, rates.federal.bpaf);
       else if (prov.tcpDefault === "BPAMB") TCP = prov.bpamb ? bpaPhaseOut(netIncomeForBpa, prov.bpamb) : bpamb(netIncomeForBpa);
       else if (prov.tcpIncomePhaseOut) {
         const phase = prov.tcpIncomePhaseOut;
-        const phaseStart = U(phase.phaseStart);
-        const phaseEnd = U(phase.phaseEnd);
-        if (A <= phaseStart) TCP = U(phase.max);
-        else if (A >= phaseEnd) TCP = U(phase.min);
-        else TCP = bmax(U(phase.min), U(phase.max) - mulRateCents(A - phaseStart, phase.rate));
-      }
-      else TCP = U(prov.tcpDefault);
+        const phaseStart = Q(U(phase.phaseStart));
+        const phaseEnd = Q(U(phase.phaseEnd));
+        if (qc(A, phaseStart) <= 0) TCP = Q(U(phase.max));
+        else if (qc(A, phaseEnd) >= 0) TCP = Q(U(phase.min));
+        else TCP = qmax(Q(U(phase.min)), qs(Q(U(phase.max)), Q(roundRational(qrate(qs(A, phaseStart), phase.rate), 100n))));
+      } else TCP = Q(U(prov.tcpDefault));
     }
     return { TC, TCP };
   };
   const { TC, TCP } = claimsFor(aWithBonus);
-  trace("TC", TC); trace("TCP", TCP);
+  traceExact("TC", TC); traceExact("TCP", TCP);
 
-  // ---- K2 credits (base CPP + EI [+ QPIP], at the lowest rate) -------------
-  const maxBaseProrated = mulRatioUnits(U(plan.maxBase), BigInt(PM), 12n);
+  const maxBaseProrated = qratio(Q(U(plan.maxBase)), BigInt(PM), 12n);
   const k2Ytd = input.k2Method === "ytd";
   const PR = input.periodsRemaining ?? P;
-  let cppCreditBasis: bigint;
-  let eiCreditBasis: bigint;
+  let cppCreditBasis: Rational;
+  let eiCreditBasis: Rational;
   if (averaging) {
-    const projectedPe=project(PI-opt(input.pensionableNonPeriodic)+U(averaging.pensionablePeriodic))+U(averaging.pensionableNonPeriodic);
-    const projectedIe=project(IE-opt(input.insurableNonPeriodic)+U(averaging.insurablePeriodic))+U(averaging.insurableNonPeriodic);
-    cppCreditBasis=input.cppExempt||PM===0?ZERO:bmin(maxBaseProrated,mulRateUnits(max0(projectedPe-mulRatioUnits(U("3500"),BigInt(PM),12n)),plan.baseRate));
-    eiCreditBasis=input.eiExempt?ZERO:bmin(eiMax,mulRateUnits(max0(projectedIe),eiRate));
+    const projectedPe = qa(project(Q(PI - opt(input.pensionableNonPeriodic) + U(averaging.pensionablePeriodic))), Q(U(averaging.pensionableNonPeriodic)));
+    const projectedIe = qa(project(Q(IE - opt(input.insurableNonPeriodic) + U(averaging.insurablePeriodic))), Q(U(averaging.insurableNonPeriodic)));
+    cppCreditBasis = input.cppExempt || PM === 0 ? QZERO : qmin(maxBaseProrated,
+      qrate(qmax0(qs(projectedPe, qratio(Q(U("3500")), BigInt(PM), 12n))), plan.baseRate));
+    eiCreditBasis = input.eiExempt ? QZERO : qmin(Q(eiMax), qrate(qmax0(projectedIe), eiRate));
   } else if (k2Ytd) {
-    // Keep both annual credit terms at unit precision; neither is a withheld contribution.
-    cppCreditBasis = bmin(
-      maxBaseProrated,
-      baseShare(priorCpp, plan) + baseShare(mulInt(creditCpp, PR), plan),
-    );
-    eiCreditBasis = bmin(eiMax, priorEi + mulInt(creditEi, PR));
+    cppCreditBasis = qmin(maxBaseProrated, qa(baseShare(priorCpp, plan), baseShare(mulInt(creditCpp, PR), plan)));
+    eiCreditBasis = qmin(Q(eiMax), Q(priorEi + mulInt(creditEi, PR)));
   } else {
-    // Annualize the withheld contribution before applying the unrounded base-rate ratio.
     const maxReached = priorCpp + creditCpp >= maxTotalProrated && maxTotalProrated > ZERO;
-    cppCreditBasis = input.cppExempt || PM === 0
-      ? ZERO
-      : maxReached ? maxBaseProrated : bmin(baseShare(mulInt(creditCpp, P), plan), maxBaseProrated);
+    cppCreditBasis = input.cppExempt || PM === 0 ? QZERO
+      : maxReached ? maxBaseProrated : qmin(baseShare(mulInt(creditCpp, P), plan), maxBaseProrated);
     const eiMaxReached = priorEi + creditEi >= eiMax;
-    eiCreditBasis = input.eiExempt ? ZERO : eiMaxReached ? eiMax : bmin(mulInt(creditEi, P), eiMax);
+    eiCreditBasis = input.eiExempt ? QZERO : eiMaxReached ? Q(eiMax) : qmin(Q(mulInt(creditEi, P)), Q(eiMax));
   }
-  const projectedQpip=averaging?project((input.qpipInsurable===undefined?IE:U(input.qpipInsurable))-opt(input.qpipNonPeriodic)+U(averaging.qpipPeriodic))+U(averaging.qpipNonPeriodic):ZERO;
-  const qpipCreditBasis = isQuebec ? bmin(averaging?mulRateUnits(max0(projectedQpip),rates.qpip.employeeRate):mulInt(creditQpip,P), U(rates.qpip.maxEmployee)) : ZERO;
+  const projectedQpip = averaging
+    ? qa(project(Q((input.qpipInsurable === undefined ? IE : U(input.qpipInsurable)) - opt(input.qpipNonPeriodic) + U(averaging.qpipPeriodic))), Q(U(averaging.qpipNonPeriodic)))
+    : QZERO;
+  const qpipCreditBasis = isQuebec ? qmin(averaging
+    ? qrate(qmax0(projectedQpip), rates.qpip.employeeRate) : Q(mulInt(creditQpip, P)), Q(U(rates.qpip.maxEmployee))) : QZERO;
 
-  function k2At(lowestRate: string): bigint {
-    let credit = mulRateUnits(cppCreditBasis, lowestRate) + mulRateUnits(eiCreditBasis, lowestRate);
-    if (isQuebec) credit += mulRateUnits(qpipCreditBasis, lowestRate);
-    return credit;
+  function k2At(lowestRate: string): Rational {
+    return qrate(qsum(cppCreditBasis, eiCreditBasis, isQuebec ? qpipCreditBasis : QZERO), lowestRate);
   }
 
-  // ---- Annual tax passes ---------------------------------------------------
-  const K3 = opt(input.authorizedFederalCredits);
-  const K3P = opt(input.authorizedProvincialCredits);
-  // LCF/LCP inputs are per-period credit amounts. Annualize before applying
-  // the statutory annual caps; the tax formulas below consume annual credits.
-  const LCF = bmin(mulInt(opt(input.labourFundsCreditFederal), P), U(rates.federal.lcf.cap));
-  const LCP = prov?.lcp
-    ? bmin(mulInt(opt(input.labourFundsCreditProvincial), P), U(prov.lcp.cap))
-    : ZERO;
-  const Y = prov?.ontarioReduction
-    ? mulInt(U(prov.ontarioReduction.perDependant),
-        (input.disabledDependants ?? 0) + (input.dependantsUnder19 ?? 0))
-    : ZERO;
+  const K3 = Q(opt(input.authorizedFederalCredits));
+  const K3P = Q(opt(input.authorizedProvincialCredits));
+  const LCF = Q(bmin(mulInt(opt(input.labourFundsCreditFederal), P), U(rates.federal.lcf.cap)));
+  const LCP = Q(prov?.lcp ? bmin(mulInt(opt(input.labourFundsCreditProvincial), P), U(prov.lcp.cap)) : ZERO);
+  const Y = Q(prov?.ontarioReduction ? mulInt(U(prov.ontarioReduction.perDependant),
+    (input.disabledDependants ?? 0) + (input.dependantsUnder19 ?? 0)) : ZERO);
 
-  // T4127 Chapter 1 rounds the pay-period deduction, not the annual credit
-  // products in Chapters 4–5. Keep K values at unit precision through tax
-  // reduction and surtax; rounding the printed table values first can move
-  // a low-income provincial deduction across a half-cent boundary.
-  const annualTax = (A: bigint): { t1: bigint; t2: bigint; parts: Record<string, bigint> } => {
-    const parts: Record<string, bigint> = {};
+  const annualTax = (A: Rational): { t1: Rational; t2: Rational; parts: Record<string, Rational> } => {
+    const parts: Record<string, Rational> = {};
     const { TC, TCP } = claimsFor(A);
-    // Federal
     const fed = bracketFor(rates.federal.brackets, A);
-    const K1 = mulRateUnits(TC, rates.federal.lowestRate);
+    const K1 = qrate(TC, rates.federal.lowestRate);
     const K2 = k2At(rates.federal.lowestRate);
-    const K4 = bmin(
-      mulRateUnits(max0(A), rates.federal.lowestRate),
-      mulRateUnits(U(rates.federal.cea), rates.federal.lowestRate),
-    );
-    let T3 = max0(mulRateUnits(A, fed.rate) - U(fed.k) - K1 - K2 - K3 - K4);
-    if (input.taxExempt) T3 = ZERO;
-    let T1: bigint;
-    if (isQuebec) T1 = max0(T3 - LCF - mulRateUnits(T3, rates.federal.abatementQc));
-    else if (isOutside) T1 = max0(T3 + mulRateUnits(T3, rates.federal.outsideCanadaSurtax) - LCF);
-    else T1 = max0(T3 - LCF);
+    const K4 = qmin(qrate(qmax0(A), rates.federal.lowestRate), qrate(Q(U(rates.federal.cea)), rates.federal.lowestRate));
+    let T3 = qmax0(qs(qrate(A, fed.rate), qsum(Q(U(fed.k)), K1, K2, K3, K4)));
+    if (input.taxExempt) T3 = QZERO;
+    let T1: Rational;
+    if (isQuebec) T1 = qmax0(qs(qs(T3, LCF), qrate(T3, rates.federal.abatementQc)));
+    else if (isOutside) T1 = qmax0(qs(qa(T3, qrate(T3, rates.federal.outsideCanadaSurtax)), LCF));
+    else T1 = qmax0(qs(T3, LCF));
     parts.K1 = K1; parts.K2 = K2; parts.K4 = K4; parts.T3 = T3; parts.T1 = T1;
 
-    // Provincial / territorial
-    let T2 = ZERO;
+    let T2 = QZERO;
     if (prov) {
       const pb = bracketFor(prov.brackets, A);
-      const K1P = mulRateUnits(TCP, prov.lowestRate);
+      const K1P = qrate(TCP, prov.lowestRate);
       const K2P = k2At(prov.lowestRate);
-      const K4P = prov.hasK4p
-        ? bmin(mulRateUnits(max0(A), prov.lowestRate), mulRateUnits(U(rates.federal.cea), prov.lowestRate))
-        : ZERO;
-      const K5Basis = prov.k5p ? max0(K1P + K2P - U(prov.k5p.threshold)) : ZERO;
-      const K5P = prov.k5p
-        ? prov.k5p.ratio
-          ? mulRatioUnits(K5Basis, BigInt(prov.k5p.ratio.numerator), BigInt(prov.k5p.ratio.denominator))
-          : mulRateUnits(K5Basis, prov.k5p.rate)
-        : ZERO;
-      let T4 = max0(mulRateUnits(A, pb.rate) - U(pb.k) - K1P - K2P - K3P - K4P - K5P);
-      if (input.taxExempt) T4 = ZERO;
+      const K4P = prov.hasK4p ? qmin(qrate(qmax0(A), prov.lowestRate), qrate(Q(U(rates.federal.cea)), prov.lowestRate)) : QZERO;
+      const K5Basis = prov.k5p ? qmax0(qs(qa(K1P, K2P), Q(U(prov.k5p.threshold)))) : QZERO;
+      const K5P = prov.k5p ? prov.k5p.ratio
+        ? qratio(K5Basis, BigInt(prov.k5p.ratio.numerator), BigInt(prov.k5p.ratio.denominator))
+        : qrate(K5Basis, prov.k5p.rate) : QZERO;
+      let T4 = qmax0(qs(qrate(A, pb.rate), qsum(Q(U(pb.k)), K1P, K2P, K3P, K4P, K5P)));
+      if (input.taxExempt) T4 = QZERO;
 
-      let V1 = ZERO;
+      let V1 = QZERO;
       if (prov.surtax) {
-        const [th1, th2] = prov.surtax.thresholds.map(U) as [bigint, bigint];
+        const [th1, th2] = prov.surtax.thresholds.map(value => Q(U(value))) as [Rational, Rational];
         const [r1, sr2] = prov.surtax.rates;
-        if (T4 > th1) V1 += mulRateUnits(T4 - th1, r1);
-        if (T4 > th2) V1 += mulRateUnits(T4 - th2, sr2);
+        if (qc(T4, th1) > 0) V1 = qa(V1, qrate(qs(T4, th1), r1));
+        if (qc(T4, th2) > 0) V1 = qa(V1, qrate(qs(T4, th2), sr2));
       }
-
-      // Claim code E means no income tax is withheld at all, and the Ontario
-      // Health Premium is part of the provincial tax T2 — so an exempt
-      // employee owes no premium through payroll either.
-      let V2 = ZERO;
+      let V2 = QZERO;
       if (prov.healthPremium && !input.taxExempt) {
-        if (A > U("200000")) V2 = bmin(U("900"), U("750") + mulRateUnits(A - U("200000"), "0.25"));
-        else if (A > U("72000")) V2 = bmin(U("750"), U("600") + mulRateUnits(A - U("72000"), "0.25"));
-        else if (A > U("48000")) V2 = bmin(U("600"), U("450") + mulRateUnits(A - U("48000"), "0.25"));
-        else if (A > U("36000")) V2 = bmin(U("450"), U("300") + mulRateUnits(A - U("36000"), "0.06"));
-        else if (A > U("20000")) V2 = bmin(U("300"), mulRateUnits(A - U("20000"), "0.06"));
+        if (qc(A, Q(U("200000"))) > 0) V2 = qmin(Q(U("900")), qa(Q(U("750")), qrate(qs(A, Q(U("200000"))), "0.25")));
+        else if (qc(A, Q(U("72000"))) > 0) V2 = qmin(Q(U("750")), qa(Q(U("600")), qrate(qs(A, Q(U("72000"))), "0.25")));
+        else if (qc(A, Q(U("48000"))) > 0) V2 = qmin(Q(U("600")), qa(Q(U("450")), qrate(qs(A, Q(U("48000"))), "0.25")));
+        else if (qc(A, Q(U("36000"))) > 0) V2 = qmin(Q(U("450")), qa(Q(U("300")), qrate(qs(A, Q(U("36000"))), "0.06")));
+        else if (qc(A, Q(U("20000"))) > 0) V2 = qmin(Q(U("300")), qrate(qs(A, Q(U("20000"))), "0.06"));
       }
-
-      let S = ZERO;
+      let S = QZERO;
       if (prov.ontarioReduction) {
-        const basis = T4 + V1;
-        S = bmin(basis, max0(mulInt(U(prov.ontarioReduction.basic) + Y, 2) - basis));
+        const basis = qa(T4, V1);
+        S = qmin(basis, qmax0(qs(qint(qa(Q(U(prov.ontarioReduction.basic)), Y), 2), basis)));
       } else if (prov.bcReduction) {
         const red = prov.bcReduction;
-        if (A <= U(red.phaseStart)) S = bmin(T4, U(red.basic));
-        else if (A <= U(red.phaseEnd)) {
-          S = bmin(T4, max0(U(red.basic) - mulRateUnits(A - U(red.phaseStart), red.phaseRate)));
-        }
+        if (qc(A, Q(U(red.phaseStart))) <= 0) S = qmin(T4, Q(U(red.basic)));
+        else if (qc(A, Q(U(red.phaseEnd))) <= 0) S = qmin(T4, qmax0(qs(Q(U(red.basic)), qrate(qs(A, Q(U(red.phaseStart))), red.phaseRate))));
       }
-
-      T2 = max0(T4 + V1 + V2 - S - LCP);
+      T2 = qmax0(qs(qsum(T4, V1, V2), qa(S, LCP)));
       parts.K1P = K1P; parts.K2P = K2P; parts.K4P = K4P; parts.K5P = K5P;
       parts.T4 = T4; parts.V1 = V1; parts.V2 = V2; parts.S = S; parts.T2 = T2;
     }
@@ -605,15 +572,15 @@ export function calculateT4127(input: T4127Input): T4127Result {
   const L = opt(input.additionalTaxPerPeriod);
   const withBonus = annualTax(aWithBonus);
   const withoutBonus = bonus > ZERO ? annualTax(aWithoutBonus) : withBonus;
-  for (const [key, value] of Object.entries(withBonus.parts)) trace(key, value);
+  for (const [key, value] of Object.entries(withBonus.parts)) traceExact(key, value);
 
-  // ---- Per-period tax ------------------------------------------------------
   let periodicTax: bigint;
   if (averaging) {
-    const M=U(averaging.periodicTax),M1=U(averaging.bonusTax);
-    periodicTax=max0(mulRatioCents(withoutBonus.t1+withoutBonus.t2-M1,BigInt(averaging.elapsedPeriods),BigInt(P))-M)+L;
-    trace("S1_NUM",U(String(P)));trace("S1_DEN",U(String(averaging.elapsedPeriods)));trace("M",M);trace("M1",M1);
-  } else if (aWithoutBonus <= ZERO) periodicTax = L;
+    const M = Q(U(averaging.periodicTax)), M1 = Q(U(averaging.bonusTax));
+    const beforeCurrent = qs(qratio(qs(qa(withoutBonus.t1, withoutBonus.t2), M1), BigInt(averaging.elapsedPeriods), BigInt(P)), M);
+    periodicTax = roundRational(qmax0(beforeCurrent), 100n) + L;
+    trace("S1_NUM", U(String(P))); trace("S1_DEN", U(String(averaging.elapsedPeriods))); trace("M", roundRational(M)); trace("M1", roundRational(M1));
+  } else if (qc(aWithoutBonus, QZERO) <= 0) periodicTax = L;
   else {
     const legs = periodTaxLegs(withoutBonus.t1, withoutBonus.t2, P);
     trace("TF", legs.federal); trace("TP", legs.provincial);
@@ -621,21 +588,15 @@ export function calculateT4127(input: T4127Input): T4127Result {
   }
 
   let bonusTax = ZERO;
-  // An exempt employee has no tax withheld from a bonus either: the flat
-  // rate for small annual incomes is a withholding shortcut, not a levy that
-  // survives claim code E.
   if (bonus > ZERO && !input.taxExempt) {
-    if (!averaging && aWithBonus <= U("5000")) {
+    if (!averaging && qc(aWithBonus, Q(U("5000"))) <= 0) {
       bonusTax = mulRateCents(bonus, isQuebec ? "0.10" : "0.15");
     } else {
-      bonusTax = r2(max0(withBonus.t1 + withBonus.t2 - (withoutBonus.t1 + withoutBonus.t2)));
+      bonusTax = roundRational(qmax0(qs(qa(withBonus.t1, withBonus.t2), qa(withoutBonus.t1, withoutBonus.t2))), 100n);
     }
   }
-  trace("L",L);
-  trace("T", periodicTax);
-  trace("TB", bonusTax);
+  trace("L", L); trace("T", periodicTax); trace("TB", bonusTax);
 
-  // Every leg is a D() (fromUnits-fixed) output: canonical Money.
   return {
     edition: rates.edition,
     cpp: D(C) as Money,
@@ -645,23 +606,28 @@ export function calculateT4127(input: T4127Input): T4127Result {
     eiEmployer: D(eiEmployer) as Money,
     qpip: D(qpip) as Money,
     qpipEmployer: D(qpipEmployer) as Money,
-    f5: D(r2(F5)) as Money,
-    f5A: D(r2(F5A)) as Money,
-    f5B: D(r2(F5) - r2(F5A)) as Money,
+    f5: D(roundRational(F5, 100n)) as Money,
+    f5A: D(roundRational(F5A, 100n)) as Money,
+    f5B: D(roundRational(F5, 100n) - roundRational(F5A, 100n)) as Money,
     periodicTax: D(periodicTax) as Money,
     bonusTax: D(bonusTax) as Money,
     totalTax: D(periodicTax + bonusTax) as Money,
     factors,
   };
+
 }
 
 /** T4127 Chapter 4, Step 6 rounds the combined (T1 + T2) / P deduction.
  * Federal and provincial trace amounts must reconcile to that deduction:
  * round the federal display amount and allocate the remainder to provincial.
  * Independently rounding both legs changes the amount actually withheld. */
-export function periodTaxLegs(t1: bigint, t2: bigint, P: number): { federal: bigint; provincial: bigint } {
-  const federal = divIntCents(t1, P);
-  return { federal, provincial: divIntCents(t1 + t2, P) - federal };
+export function periodTaxLegs(t1: bigint | Rational, t2: bigint | Rational, P: number): { federal: bigint; provincial: bigint } {
+  if (!Number.isInteger(P) || P <= 0) throw new PayrollError(`not a positive integer: ${P}`);
+  const annualFederal = typeof t1 === "bigint" ? Q(t1) : t1;
+  const annualProvincial = typeof t2 === "bigint" ? Q(t2) : t2;
+  const federal = roundRational(qratio(annualFederal, 1n, BigInt(P)), 100n);
+  const combined = roundRational(qratio(qa(annualFederal, annualProvincial), 1n, BigInt(P)), 100n);
+  return { federal, provincial: combined - federal };
 }
 
 export type { EditionRates };
