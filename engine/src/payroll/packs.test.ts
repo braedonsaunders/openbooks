@@ -13,6 +13,7 @@ import {
   employmentJurisdictionsOf,
   employeeSocialInsuranceSystemKeys,
   incomeTaxWithholdingSystemKeys,
+  installablePayrollPackSummaries,
   jurisdictionKey,
   labourJurisdictionProblem,
   packStatutoryComponents,
@@ -567,5 +568,20 @@ test("non-taxability does not imply exclusion from an undeclared levy base", () 
     assert.deepEqual(defaultLevyExclusionsForNewComponent({ kind: "earning", taxable: false, country: "US" }), ["taxable_assessment"]);
   } finally {
     pack.employerLevyPrograms = before;
+  }
+});
+
+test("every installable pack declares enough for a chooser subtitle", () => {
+  const summaries = installablePayrollPackSummaries();
+  assert.deepEqual(
+    summaries.map((summary) => summary.country),
+    Object.values(PAYROLL_COUNTRY_PACKS).filter((pack) => pack.installable).map((pack) => pack.country),
+  );
+  for (const summary of summaries) {
+    assert.ok(summary.statutoryComponents.length > 0, `${summary.country} names what it calculates`);
+    assert.ok(summary.publishedTaxYears.length > 0, `${summary.country} has published tables`);
+    assert.deepEqual(summary.publishedTaxYears, [...summary.publishedTaxYears].sort((a, b) => a - b));
+    assert.ok(summary.regions.supported <= summary.regions.known, `${summary.country} coverage is a subset`);
+    assert.equal(new Set(summary.statutoryComponents).size, summary.statutoryComponents.length);
   }
 });

@@ -3,8 +3,11 @@ import test from "node:test";
 import {
   canonicalTimeZone,
   civilDateTimeToInstant,
+  countryTimeZoneDirectory,
+  countryTimeZones,
   isKnownTimeZone,
   listCanonicalTimeZones,
+  primaryCountryTimeZone,
 } from "./time-zone.ts";
 
 // The shared zone validator accepts every zone the runtime formats —
@@ -67,4 +70,30 @@ test("civil date-time conversion refuses nonexistent and repeated daylight-savin
   assert.throws(() => civilDateTimeToInstant("2026-03-08T02:30", "America/Toronto"), /does not exist/);
   assert.throws(() => civilDateTimeToInstant("2026-11-01T01:30", "America/Toronto"), /occurs twice/);
   assert.throws(() => civilDateTimeToInstant("2026-02-31T09:30", "America/Toronto"), /valid local date/);
+});
+
+test("a country's zones come from the runtime and its primary zone is one of them", () => {
+  const us = countryTimeZones("US");
+  assert.ok(us.includes(canonicalTimeZone("America/Chicago")!));
+  assert.ok(!us.includes(canonicalTimeZone("America/Toronto")!), "Toronto is not a US zone");
+  assert.equal(primaryCountryTimeZone("US"), canonicalTimeZone("America/New_York"));
+  assert.equal(primaryCountryTimeZone("CA"), canonicalTimeZone("America/Toronto"));
+  // Aliased declarations resolve to the runtime's canonical spelling.
+  assert.equal(primaryCountryTimeZone("UA"), canonicalTimeZone("Europe/Kyiv"));
+  // A single-zone country needs no declaration.
+  assert.equal(primaryCountryTimeZone("JP"), canonicalTimeZone("Asia/Tokyo"));
+  assert.deepEqual(countryTimeZones("not a country"), []);
+  assert.equal(primaryCountryTimeZone("ZZ"), null);
+});
+
+test("every multi-zone country resolves to a representative zone it actually contains", () => {
+  const offered = new Set(listCanonicalTimeZones());
+  for (const country of ["AR", "AU", "BR", "CA", "CL", "CN", "ES", "ID", "KZ", "MX", "NZ", "PT", "RU", "US"]) {
+    const primary = primaryCountryTimeZone(country);
+    assert.ok(primary && countryTimeZones(country).includes(primary), `${country} primary ${primary}`);
+    assert.ok(offered.has(primary!), `${country} primary must be offered by the picker`);
+  }
+  const directory = countryTimeZoneDirectory(["US", "ZZ"]);
+  assert.equal(directory.US!.primary, canonicalTimeZone("America/New_York"));
+  assert.deepEqual(directory.ZZ, { zones: [], primary: "UTC" });
 });

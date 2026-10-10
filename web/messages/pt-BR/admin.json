@@ -6091,7 +6091,12 @@
           "schedule": "Crie seu primeiro calendário de pagamentos em",
           "scheduleLink": "Configuração da folha → Calendários"
         },
-        "installError": "A folha foi ativada, mas o pacote de país não pôde ser instalado. Instale em Configuração da folha → Pacotes de país."
+        "installError": "A folha foi ativada, mas o pacote de país não pôde ser instalado. Instale em Configuração da folha → Pacotes de país.",
+        "packSummary": {
+          "national": "{components} · Tabelas fiscais {years}",
+          "allRegions": "{components} · Imposto de renda em todas as {known} regiões · Tabelas fiscais {years}",
+          "someRegions": "{components} · Imposto de renda em {supported} de {known} regiões · Tabelas fiscais {years}"
+        }
       }
     },
     "filterAll": "Todos",

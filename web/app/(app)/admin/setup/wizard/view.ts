@@ -14,8 +14,9 @@ import {
   isTaxPosition,
   isTeamSize,
 } from '../../../../../lib/workspace-profile'
-import { installablePayrollPacks } from '@openbooks/engine/src/payroll/packs.ts'
-import { canonicalTimeZone, listCanonicalTimeZones } from '@openbooks/engine/src/platform/time-zone.ts'
+import { installablePayrollPackSummaries } from '@openbooks/engine/src/payroll/packs.ts'
+import { canonicalTimeZone, countryTimeZoneDirectory, listCanonicalTimeZones } from '@openbooks/engine/src/platform/time-zone.ts'
+import { COUNTRY_CODES } from '../../../../../lib/countries'
 import type { SetupWizard } from './SetupWizard'
 import { setupLaunchActions, type SetupLaunchAction } from '@/lib/setup-launch-actions'
 
@@ -58,9 +59,11 @@ export interface WizardData {
   canSwitchIndustry: boolean
   isRerun: boolean
   /** Installable payroll packs, in registry order — declared by the packs. */
-  payrollPacks: { country: string; name: string }[]
+  payrollPacks: NonNullable<SetupWizardProps['payrollPacks']>
   /** Canonical zone names for the business-time-zone picker. */
   timeZones: string[]
+  /** Zones and representative zone per country. */
+  countryTimeZones: SetupWizardProps['countryTimeZones']
 }
 
 export async function loadWizard(): Promise<WizardData> {
@@ -84,8 +87,9 @@ export async function loadWizard(): Promise<WizardData> {
     launchActions: setupLaunchActions(authz),
     open: true,
     industries: INDUSTRIES,
-    payrollPacks: installablePayrollPacks(),
+    payrollPacks: installablePayrollPackSummaries(),
     timeZones: listCanonicalTimeZones(),
+    countryTimeZones: countryTimeZoneDirectory(COUNTRY_CODES),
     initial: {
       name: row?.name ?? '',
       legalName: row?.legal_name ?? '',
@@ -147,6 +151,7 @@ export function wizardSpec(data: WizardData): PageSpec {
         isRerun: data.isRerun,
         payrollPacks: data.payrollPacks,
         timeZones: data.timeZones,
+        countryTimeZones: data.countryTimeZones,
       }),
     ],
   })
