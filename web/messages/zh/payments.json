@@ -48,6 +48,13 @@
   "drawer": {
     "draftHint": "草稿 — 更改自动保存。",
     "viewGlImpact": "查看总账影响",
+    "postBlocked": {
+      "noParty": "{side, select, ap {选择供应商} other {选择客户}}",
+      "noBankAccount": "{side, select, ap {选择付款账户} other {选择收款账户}}",
+      "invalidRows": "过账前请修正核销行",
+      "noAllocations": "{side, select, ap {将付款至少核销到一张账单} other {将收款至少核销到一张发票}}",
+      "generic": "过账前请完善付款信息"
+    },
     "postAction": "{side, select, ap {付款并过账} other {收款并过账}}",
     "bankAccount": "银行账户",
     "selectPartyPlaceholder": "{side, select, ap {选择供应商…} other {选择客户…}}",

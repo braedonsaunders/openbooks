@@ -48,6 +48,13 @@
   "drawer": {
     "draftHint": "Draft — changes save automatically.",
     "viewGlImpact": "View GL impact",
+    "postBlocked": {
+      "noParty": "{side, select, ap {Choose a vendor} other {Choose a customer}}",
+      "noBankAccount": "{side, select, ap {Choose a paying account} other {Choose a deposit account}}",
+      "invalidRows": "Fix the application rows before posting",
+      "noAllocations": "{side, select, ap {Apply the payment to at least one bill} other {Apply the receipt to at least one invoice}}",
+      "generic": "Complete the payment details before posting"
+    },
     "postAction": "{side, select, ap {Pay & post} other {Receive & post}}",
     "bankAccount": "Bank account",
     "selectPartyPlaceholder": "{side, select, ap {Select vendor…} other {Select customer…}}",

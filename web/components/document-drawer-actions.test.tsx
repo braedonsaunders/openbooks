@@ -127,6 +127,107 @@ async function mountApprovedBill(options: { status?: string; effectStatus?: stri
   return { host, root };
 }
 
+async function mountPostedInvoice(settlementHref: string | null) {
+  globalThis.__drawerRouter = { push() {}, refresh() {} };
+  globalThis.__drawerToasts = [];
+  const host = document.createElement("div");
+  document.body.appendChild(host);
+  const root = createRoot(host);
+  const doc = {
+    id: randomUUID(),
+    kind: "customer_invoice",
+    status: "posted",
+    document_number: "INV-00004",
+    currency: "USD",
+    updated_at: "2026-09-17T12:00:00.000000Z",
+    document_date: "2026-09-17",
+    subtotal: "3500.00",
+    tax_total: "0.00",
+    total: "3500.00",
+  };
+  await act(async () => {
+    root.render(
+      <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
+        <MoneyProvider currency="USD">
+          <DocumentDrawer
+            payload={{ doc, lines: [] }}
+            config={DOC_KINDS["customer_invoice"]!}
+            basePath="/ar/invoices"
+            parties={[]}
+            accounts={[]}
+            taxCodes={[]}
+            taxGroups={[]}
+            cards={[]}
+            bankAccounts={[]}
+            departments={[]}
+            projects={[]}
+            locations={[]}
+            classes={[]}
+            items={[]}
+            subsidiaries={[]}
+            headerDefs={[]}
+            lineDefs={[]}
+            canCreate
+            canPost
+            settlementHref={settlementHref}
+            layout={{ header: { groups: [] }, lines: { columns: [] }, actions: [{ key: "post", visible: true }] } as never}
+          />
+        </MoneyProvider>
+      </NextIntlClientProvider>,
+    );
+    await tick();
+  });
+  await tick();
+  await tick();
+  return { host, root };
+}
+
+async function openActionsMenu() {
+  const actions = [...document.querySelectorAll("button")].find((b) => b.textContent?.includes("Actions"));
+  assert.ok(actions, "Actions menu must render");
+  await act(async () => {
+    actions.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+    await tick();
+  });
+  await tick();
+}
+
+/** An open posted invoice links straight into a prefilled receipt. */
+test("a posted invoice with a settlement link offers Receive payment", async (t) => {
+  const restore = scriptFetch(() => null);
+  t.after(restore);
+  const { host, root } = await mountPostedInvoice("/receipts?paymentNew=1&mode=edit&partyId=p&applyTo=d");
+  t.after(async () => {
+    await act(async () => {
+      root.unmount();
+    });
+    host.remove();
+  });
+  await openActionsMenu();
+  assert.ok(
+    (document.body.textContent ?? "").includes("Receive payment"),
+    "an open posted invoice must offer Receive payment",
+  );
+});
+
+/** No settlement link, no Receive payment entry. */
+test("a posted invoice without a settlement link offers no Receive payment", async (t) => {
+  const restore = scriptFetch(() => null);
+  t.after(restore);
+  const { host, root } = await mountPostedInvoice(null);
+  t.after(async () => {
+    await act(async () => {
+      root.unmount();
+    });
+    host.remove();
+  });
+  await openActionsMenu();
+  assert.ok(
+    !(document.body.textContent ?? "").includes("Receive payment"),
+    "a settled invoice must not offer Receive payment",
+  );
+});
+
 function postButton(): HTMLButtonElement {
   const buttons = [...document.querySelectorAll("button")].filter(
     (b) => b.textContent?.trim() === "Post",

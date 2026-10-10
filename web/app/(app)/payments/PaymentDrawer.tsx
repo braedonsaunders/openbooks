@@ -117,6 +117,10 @@ export interface PaymentPayload {
   doc: Record<string, unknown>
   bankAccountId: string | null
   allocations: AllocationClient[]
+  /** An enabled on_submit flow governs this kind: posting routes through
+   *  approval instead of posting directly. Resolved by the loader so the
+   *  drawer labels the primary action honestly. */
+  governedByFlow?: boolean
   /** Live applications as the loader hands them; narrowed to
    *  PaymentAppliedRow for rendering below. */
   applied: Record<string, unknown>[]
@@ -821,6 +825,20 @@ export function PaymentDrawer({
     !!bankAccountId &&
     validAllocations.length > 0 &&
     cmp(total, '0') > 0
+  // Why Post cannot proceed, first blocker first. A disabled button alone
+  // never explains itself (in the Actions menu it renders near-invisible),
+  // so the primary action carries its reason as visible text beside it.
+  const postBlocker =
+    !partyId ? t('postBlocked.noParty', { side })
+    : !bankAccountId ? t('postBlocked.noBankAccount', { side })
+    : hasInvalidRow ? t('postBlocked.invalidRows')
+    : validAllocations.length === 0 ? t('postBlocked.noAllocations', { side })
+    : cmp(total, '0') <= 0 ? t('postBlocked.generic')
+    : dirty ? t('postBlocked.generic')
+    : null
+  const postLabel = payment.governedByFlow === true
+    ? tCommon('actions.submitForApproval')
+    : t('postAction', { side })
 
   return (
     <TransactionDrawer
@@ -845,6 +863,9 @@ export function PaymentDrawer({
       description={mode === 'edit' ? tCommon('feedback.editingHint') : (doc.party_name ?? undefined)}
       // Save is the primary header action in edit mode — burying it in the
       // Actions menu hid receipt/payment persistence from routine operators.
+      // Post is primary the same way for drafts in view mode: a disabled
+      // menu entry rendered near-invisible and hid posting from operators
+      // whose draft missed a prerequisite.
       primaryAction={
         canEditStatus ? (
           mode === 'edit' ? (
@@ -857,9 +878,22 @@ export function PaymentDrawer({
               </Button>
             </>
           ) : (
-            <Button variant="outline" size="sm" className="h-8 px-2.5 text-xs" disabled={busy} onClick={() => setMode('edit')}>
-              {tCommon('actions.edit')}
-            </Button>
+            <>
+              <Button variant="outline" size="sm" className="h-8 px-2.5 text-xs" disabled={busy} onClick={() => setMode('edit')}>
+                {tCommon('actions.edit')}
+              </Button>
+              {isDraft && !createMode ? (
+                <Button
+                  size="sm"
+                  className="h-8 px-2.5 text-xs"
+                  disabled={busy || !canPost}
+                  title={postBlocker ?? undefined}
+                  onClick={post}
+                >
+                  {busy ? tCommon('actions.posting') : postLabel}
+                </Button>
+              ) : null}
+            </>
           )
         ) : null
       }
@@ -876,7 +910,7 @@ export function PaymentDrawer({
               />
               <FlowManualButtons subjectKind={String(doc.kind)} subjectId={String(doc.id)} />
               <ApprovalActions subjectKind={String(doc.kind)} subjectId={String(doc.id)} />
-              {isDraft || doc.status === 'approved' ? (
+              {doc.status === 'approved' ? (
                 <Button disabled={!canPost} onClick={post}>
                   {busy ? tCommon('actions.posting') : t('postAction', { side })}
                 </Button>
@@ -948,7 +982,9 @@ export function PaymentDrawer({
                   : dirty
                     ? t('saveState.dirty')
                     : null
-              : null}
+              : isDraft && !createMode && !busy && !canPost && postBlocker
+                ? postBlocker
+                : null}
           </span>
           <span className="flex-1" />
           <span className="text-sm text-slate-600 tabular-nums dark:text-slate-300">

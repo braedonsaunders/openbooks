@@ -140,6 +140,16 @@ export async function loadPaymentFlyout({
     lineDefs: [],
     explicitLayoutId: formId,
   })
+  // Whether posting this kind routes through approval: an enabled on_submit
+  // flow owns the post. The drawer labels its primary action from this so
+  // "Post" never promises a direct posting a flow will intercept. With the
+  // Flows feature off nothing can govern, whatever rows exist.
+  const governedByFlow = (await isFeatureEnabled(orgId, 'flows')) &&
+    (await db.execute<{ one: number }>(sql`
+      select 1 as one from flows
+       where org_id = ${orgId} and subject_kind = ${kind} and enabled
+         and graph->'nodes' @> '[{"data":{"kind":"trigger","trigger":{"trigger":"on_submit"}}}]'::jsonb
+       limit 1`)).rows.length > 0
   if (creating) {
     // The unsaved-create payload: no row exists, so the drawer edits blanks
     // and posts them once. Draft by default, dated today; party, bank
@@ -195,6 +205,7 @@ export async function loadPaymentFlyout({
         bankAccountId: banks.rows.length === 1 ? banks.rows[0]!.id : null,
         allocations: prefillAllocations,
         applied: [],
+        governedByFlow,
         withholdingEnabled: kind === 'vendor_payment' && await isFeatureEnabled(orgId, 'contractorWithholding'),
       } as PaymentPayload,
       initialOpenItems: prefillItems,
@@ -207,7 +218,7 @@ export async function loadPaymentFlyout({
   }
   return {
     mode: 'record',
-    payment: openPayment!,
+    payment: { ...openPayment!, governedByFlow },
     initialOpenItems,
     parties: parties.rows,
     bankAccounts: banks.rows,

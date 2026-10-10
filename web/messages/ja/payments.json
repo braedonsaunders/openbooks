@@ -48,6 +48,13 @@
   "drawer": {
     "draftHint": "下書き — 変更は自動的に保存されます。",
     "viewGlImpact": "総勘定元帳への影響を表示",
+    "postBlocked": {
+      "noParty": "{side, select, ap {仕入先を選択} other {得意先を選択}}",
+      "noBankAccount": "{side, select, ap {支払口座を選択} other {入金口座を選択}}",
+      "invalidRows": "転記する前に適用行を修正してください",
+      "noAllocations": "{side, select, ap {支払を少なくとも1件の請求書に適用} other {入金を少なくとも1件の請求書に適用}}",
+      "generic": "転記する前に支払内容を入力してください"
+    },
     "postAction": "{side, select, ap {支払して記帳} other {入金して記帳}}",
     "bankAccount": "銀行勘定",
     "selectPartyPlaceholder": "{side, select, ap {仕入先を選択…} other {得意先を選択…}}",

@@ -48,6 +48,13 @@
   "drawer": {
     "draftHint": "Borrador — los cambios se guardan automáticamente.",
     "viewGlImpact": "Ver impacto contable",
+    "postBlocked": {
+      "noParty": "{side, select, ap {Elige un proveedor} other {Elige un cliente}}",
+      "noBankAccount": "{side, select, ap {Elige una cuenta de pago} other {Elige una cuenta de depósito}}",
+      "invalidRows": "Corrige las líneas de aplicación antes de contabilizar",
+      "noAllocations": "{side, select, ap {Aplica el pago al menos a una factura de proveedor} other {Aplica el cobro al menos a una factura}}",
+      "generic": "Completa los datos del pago antes de contabilizar"
+    },
     "postAction": "{side, select, ap {Pagar y contabilizar} other {Cobrar y contabilizar}}",
     "bankAccount": "Cuenta bancaria",
     "selectPartyPlaceholder": "{side, select, ap {Seleccionar proveedor…} other {Seleccionar cliente…}}",
