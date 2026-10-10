@@ -595,8 +595,14 @@ export async function issueInventory(
         input.subsidiaryId,
       );
       if (!profile.allowNegativeInventory || profile.tracking !== "none") {
+        const where = (await tx.execute<{ item: string; location: string | null }>(sql`
+          select coalesce(nullif(btrim(i.code), ''), i.name) as item, l.code as location
+            from items i left join stock_locations l on l.org_id = i.org_id and l.id = ${input.stockLocationId}
+           where i.org_id = ${orgId} and i.id = ${input.itemId}`)).rows[0];
+        const item = where?.item ?? input.itemId;
+        const location = where?.location ? ` at ${where.location}` : "";
         throw new InventoryError(
-          `insufficient stock: need ${input.quantity}, on hand ${onHand.quantity} (negative inventory is disabled for this tracking configuration)`,
+          `insufficient stock of ${item}${location}: need ${input.quantity}, on hand ${onHand.quantity} (negative inventory is disabled for this tracking configuration) — receive or adjust stock into this location, or issue from a location that holds it`,
         );
       }
     }

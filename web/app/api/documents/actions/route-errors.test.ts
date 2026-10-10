@@ -8,6 +8,7 @@ const { toActionFailure } = await import('./action-failure')
 const { PostingError } = await import("@openbooks/engine/src/journal/posting-contracts.ts");
 const { ControlAccountsIncompleteError } = await import('@openbooks/engine/src/records/control-accounts.ts')
 const { PayrollError } = await import('@openbooks/engine/src/payroll/error.ts')
+const { InventoryError, InventoryOwnershipError } = await import('@openbooks/engine/src/inventory/contracts.ts')
 const { PostingEffectsReplayError } = await import('@openbooks/engine/src/ledger/posting-effects.ts')
 const { postingRefusal } = await import('@/lib/api/responses')
 
@@ -16,11 +17,18 @@ test('typed refusals keep their message as a 422', () => {
     new PostingError('1000 Cash only accepts CAD postings, not USD'),
     new ControlAccountsIncompleteError('missing control account'),
     new PayrollError('payroll refused'),
+    new InventoryError('insufficient stock of FG-100 at MAIN: need 40.0000, on hand 0.0000'),
   ]) {
     const mapped = toActionFailure(error) as { status: number; body: { error?: string } }
     assert.equal(mapped.status, 422)
     assert.equal(mapped.body.error, (error as Error).message)
   }
+})
+
+test('a stock movement into another legal entity refuses as an authorization boundary', () => {
+  const mapped = toActionFailure(new InventoryOwnershipError('stock location belongs to another legal entity')) as { status: number; body: { error?: string } }
+  assert.equal(mapped.status, 403)
+  assert.equal(mapped.body.error, 'stock location belongs to another legal entity')
 })
 
 test('posting-effect replay refusals keep their message in the shared vocabulary', async () => {
