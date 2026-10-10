@@ -12,9 +12,18 @@ import { SAMPLE_COMPANY_PROFILES } from "./catalog.ts";
 import { DEMO_DATA_VERSION, installDemoScenarios, verifyDemoScenarios } from "./install-scenarios.ts";
 import { SampleLocalAuthorRequiredError } from "./operator.ts";
 import { demoRecordId } from "./scenarios.ts";
+import { retireSampleFixtureCompanies } from "./retirement-test-fixtures.ts";
 
 const enabled = { skip: !process.env.OPENBOOKS_DB_URL };
 installEngineSeams();
+
+async function cleanupInstalledWorld(orgId: string): Promise<void> {
+  const anchor = await withBypass(() => createScratchOrg());
+  // The native helper creates an active local recovery actor in this retained
+  // company. Keep both available if admission or target cleanup refuses.
+  if (!await retireSampleFixtureCompanies(anchor.orgId, [orgId])) await wipeSimOrg(orgId);
+  await withBypass(() => dropScratchOrg(anchor.orgId));
+}
 
 for (const profile of SAMPLE_COMPANY_PROFILES) test(`${profile.companyName}: native demo installation is complete, balanced, and idempotent`, enabled, async () => {
   const world = await provisionOrg(getProfile(profile.profileId), { startDate: "2026-01-01", endDate: "2027-12-31" });
@@ -120,7 +129,7 @@ for (const profile of SAMPLE_COMPANY_PROFILES) test(`${profile.companyName}: nat
     });
     if (verified.features.hrmPerformance) assert.equal((await verifyDemoScenarios(world.orgId, profile.industryKey)).ready, false, "metadata alone must never hide missing feature data");
   } finally {
-    await wipeSimOrg(world.orgId);
+    await cleanupInstalledWorld(world.orgId);
     if (platformHomeOrgId) await withBypass(() => dropScratchOrg(platformHomeOrgId!));
   }
 });
@@ -152,7 +161,7 @@ test("a refused scenario installation rolls back earlier records, settings, and 
       `);
       assert.deepEqual(result.rows[0], { capital: 0, posted: 0, audits: 0, registered: false });
     });
-  } finally { await wipeSimOrg(world.orgId); }
+  } finally { await cleanupInstalledWorld(world.orgId); }
 });
 
 test("demo preparation extends fully closed history without reopening it", enabled, async () => {
@@ -175,5 +184,5 @@ test("demo preparation extends fully closed history without reopening it", enabl
       const future = await db.execute(sql`select 1 from documents where org_id=${world.orgId} and idempotency_key in (${`industry-demo:${world.orgId}:opening-cash`},${`industry-demo:${world.orgId}:bank-charge`}) and document_date >= '2027-01-01' and status='posted'`);
       assert.equal(future.rows.length, 2);
     });
-  } finally { await wipeSimOrg(world.orgId); }
+  } finally { await cleanupInstalledWorld(world.orgId); }
 });
