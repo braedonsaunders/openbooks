@@ -629,6 +629,10 @@ export async function deleteStatementImport(
            ${ctx.userId})
       `);
     }
+    // Governed-deletion marker for the statement-line guard: transaction
+    // scoped, so only this untouched import's audited delete passes the
+    // line-immutability fence.
+    await tx.execute(sql`select set_config('app.statement_import_delete', ${statementId}, true)`);
     await tx.execute(sql`
       delete from bank_statement_lines
        where statement_id = ${statementId} and org_id = ${ctx.orgId}

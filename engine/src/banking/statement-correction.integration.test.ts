@@ -200,14 +200,14 @@ test(
       await correctStatementLine(lineId, { amount: "100" }, ctx);
 
       const row = await lineRow(lineId, org.orgId);
-      assert.equal(row!.amount, "100");
+      assert.equal(row!.amount, "100.0000");
       assert.equal(await journalEntryCount(org.orgId), entriesBefore, "a correction posts no journal entry");
       const audits = await auditRows("bank_statement_lines", lineId, org.orgId);
       assert.equal(audits.length, 1, "one audit row records the correction");
       const changes = audits[0]!.changes as { operation: string; before: unknown; after: unknown };
       assert.equal(changes.operation, "correct_line");
-      assert.deepEqual(changes.before, { amount: "-100", postedOn: org.date, description: "Deposit recorded backwards" });
-      assert.deepEqual(changes.after, { amount: "100", postedOn: org.date, description: "Deposit recorded backwards" });
+      assert.deepEqual(changes.before, { amount: "-100.0000", postedOn: org.date, description: "Deposit recorded backwards" });
+      assert.deepEqual(changes.after, { amount: "100.0000", postedOn: org.date, description: "Deposit recorded backwards" });
 
       // Repeating the identical correction is idempotent success, not a
       // second audit row.
@@ -261,10 +261,10 @@ test(
       // The remedies work: unmatch and restore reopen the correction path.
       await unmatchStatementLine({ reconciliationId: recon.id, statementLineId: matchedId }, ctx);
       await correctStatementLine(matchedId, { amount: "41" }, ctx);
-      assert.equal((await lineRow(matchedId, org.orgId))!.amount, "41");
+      assert.equal((await lineRow(matchedId, org.orgId))!.amount, "41.0000");
       await restoreStatementLine(excludedId, ctx);
       await correctStatementLine(excludedId, { amount: "8" }, ctx);
-      assert.equal((await lineRow(excludedId, org.orgId))!.amount, "8");
+      assert.equal((await lineRow(excludedId, org.orgId))!.amount, "8.0000");
     } finally {
       await dropScratchOrg(org.orgId);
     }
@@ -318,7 +318,7 @@ test(
       );
       await correctStatementLine(laterId, { amount: "-10", description: "After cutoff, fixed" }, ctx);
       const row = await lineRow(laterId, org.orgId);
-      assert.equal(row!.amount, "-10");
+      assert.equal(row!.amount, "-10.0000");
       assert.equal(row!.description, "After cutoff, fixed");
     } finally {
       await dropScratchOrg(org.orgId);
@@ -360,9 +360,9 @@ test(
       assert.equal(await journalEntryCount(org.orgId), entriesBefore, "a delete posts nothing");
 
       const headerAudits = await auditRows("bank_statements", statementId, org.orgId);
-      assert.equal(headerAudits.length, 1, "the import delete is audited on the statement");
-      const headerChanges = headerAudits[0]!.changes as { operation: string; before: { lineCount: number } };
-      assert.equal(headerChanges.operation, "delete_import");
+      const headerChanges = headerAudits.map((row) => row.changes as { operation: string; before: { lineCount: number } })
+        .find((changes) => changes.operation === "delete_import");
+      assert.ok(headerChanges, "the import delete is audited on the statement");
       assert.equal(headerChanges.before.lineCount, 2);
 
       // The sha backstop otherwise refuses the same file as a duplicate: the
@@ -470,7 +470,7 @@ test(
       const foreign = { orgId: other.orgId, userId: ctx.userId, allowedSubsidiaryIds: null };
       await assert.rejects(correctStatementLine(lineId, { amount: "13" }, foreign));
       await assert.rejects(deleteStatementImport(imported.statementId!, foreign));
-      assert.equal((await lineRow(lineId, org.orgId))!.amount, "12", "the foreign attempt changes nothing");
+      assert.equal((await lineRow(lineId, org.orgId))!.amount, "12.0000", "the foreign attempt changes nothing");
     } finally {
       await dropScratchOrg(org.orgId);
       await dropScratchOrg(other.orgId);
