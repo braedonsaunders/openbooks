@@ -1156,6 +1156,9 @@ NAV_MODULES.push(
   // Clocking in is a person's own daily action, so the clock lives in My
   // Work beside Me rather than inside the Operations time workspace. It
   // stays a Time tab too; time.clock grants it without time.read.
+  // Deciding a period reopen is its own duty (close.reopen), reachable
+  // without close setup or the close workspace.
+  { key: 'close-reopen-requests', href: '/accounting/reopen-requests', label: 'Reopen Requests', iconKey: 'history', group: 'accounting', subgroup: 'close', requiredPermission: 'close.reopen', exact: true },
   { key: 'time-clock', href: '/time/clock', label: 'Clock', iconKey: 'timer', group: 'my-work', requiredPermission: 'time.clock', featureKey: 'fieldTime', exact: true },
 )
 

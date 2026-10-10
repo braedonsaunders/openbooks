@@ -222,7 +222,7 @@ export const periodClose: DocArticle = {
   category: 'banking-close',
   order: 2,
   summary: 'Prepare, execute, approve, and lock an accounting period — publishing the reporting package with advanced close — reopening under governance when needed.',
-  updated: '2026-07-20',
+  updated: '2026-10-10',
   keywords: [
     'period close',
     'month end',
@@ -311,7 +311,14 @@ restatement, and a note is required.
 ## Reopen carefully
 
 Reopening is a controlled exception requiring the appropriate permission and
-business reason. Identify every report, reconciliation, downstream period, and
+business reason. A reopen is requested on the period in **Settings → Setup →
+Close** and decided by someone else who holds the reopen permission: the
+requester can never approve their own request. Approvers find pending requests
+in their **Inbox** under My tasks and at **Accounting → Reopen Requests**, which
+needs only the reopen permission. Because a reopen affects the whole
+organization's close, the approver's role must cover every subsidiary.
+
+Identify every report, reconciliation, downstream period, and
 stakeholder affected. Make the correction through the governed transaction path,
 repeat affected close tasks, and close the scope again.
 

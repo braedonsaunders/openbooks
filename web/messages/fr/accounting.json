@@ -369,5 +369,32 @@
     "terminationCost": "Coût de résiliation étayé",
     "assetsReviewed": "Actifs liés examinés et dépréciations requises comptabilisées ?",
     "impairmentEvidence": "Justificatifs de revue des dépréciations des actifs liés"
+  },
+  "reopenRequests": {
+    "title": "Demandes de réouverture de période",
+    "description": "Demandes de réouverture d’une période clôturée. Une personne autre que le demandeur, disposant de l’autorisation de réouverture, approuve ou rejette chacune.",
+    "empty": "Aucune demande de réouverture n’a été déposée.",
+    "ownRequest": "Vous avez fait cette demande : un autre approbateur doit la trancher.",
+    "approve": "Approuver",
+    "reject": "Rejeter",
+    "approved": "Réouverture approuvée.",
+    "rejected": "Réouverture rejetée.",
+    "decideFailed": "La demande de réouverture n’a pas pu être tranchée.",
+    "scopedApprover": "Rouvrir une période touche la clôture de toute l’organisation : elle est donc tranchée par des approbateurs dont le rôle couvre toutes les filiales. Demandez à un administrateur d’élargir l’accès aux filiales de votre rôle ou d’acheminer la demande vers un approbateur qui en dispose.",
+    "columns": {
+      "period": "Période",
+      "scope": "Livre et entité",
+      "modules": "Modules concernés",
+      "reason": "Motif",
+      "requestedBy": "Demandée par",
+      "status": "Statut"
+    },
+    "status": {
+      "requested": "En attente d’approbation",
+      "approved": "Approuvée",
+      "rejected": "Rejetée",
+      "expired": "Expirée",
+      "reclosed": "Reclôturée"
+    }
   }
 }

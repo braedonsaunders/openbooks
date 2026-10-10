@@ -369,5 +369,32 @@
     "terminationCost": "Coste de rescisión justificado",
     "assetsReviewed": "¿Se revisaron los activos relacionados y se contabilizaron los deterioros requeridos?",
     "impairmentEvidence": "Evidencia de revisión del deterioro de activos relacionados"
+  },
+  "reopenRequests": {
+    "title": "Solicitudes de reapertura de período",
+    "description": "Solicitudes para reabrir un período cerrado. Una persona distinta del solicitante que tenga el permiso de reapertura aprueba o rechaza cada una.",
+    "empty": "No se ha presentado ninguna solicitud de reapertura.",
+    "ownRequest": "Usted hizo esta solicitud: debe decidirla otro aprobador.",
+    "approve": "Aprobar",
+    "reject": "Rechazar",
+    "approved": "Reapertura aprobada.",
+    "rejected": "Reapertura rechazada.",
+    "decideFailed": "No se pudo decidir la solicitud de reapertura.",
+    "scopedApprover": "Reabrir un período afecta al cierre de toda la organización, por lo que lo deciden aprobadores cuyo rol abarca todas las filiales. Pida a un administrador que amplíe el acceso a filiales de su rol o que dirija la solicitud a un aprobador que lo tenga.",
+    "columns": {
+      "period": "Período",
+      "scope": "Libro y entidad",
+      "modules": "Módulos",
+      "reason": "Motivo",
+      "requestedBy": "Solicitado por",
+      "status": "Estado"
+    },
+    "status": {
+      "requested": "Pendiente de aprobación",
+      "approved": "Aprobada",
+      "rejected": "Rechazada",
+      "expired": "Vencida",
+      "reclosed": "Cerrada de nuevo"
+    }
   }
 }

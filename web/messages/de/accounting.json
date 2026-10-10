@@ -369,5 +369,32 @@
     "terminationCost": "Belegte Kündigungskosten",
     "assetsReviewed": "Zugehörige Vermögenswerte geprüft und erforderliche Wertminderungen gebucht?",
     "impairmentEvidence": "Nachweise zur Wertminderungsprüfung zugehöriger Vermögenswerte"
+  },
+  "reopenRequests": {
+    "title": "Anträge auf Periodenwiedereröffnung",
+    "description": "Anträge, eine abgeschlossene Periode wieder zu öffnen. Eine andere Person als der Antragsteller mit der Berechtigung zur Wiedereröffnung genehmigt oder lehnt jeden Antrag ab.",
+    "empty": "Es wurden keine Wiedereröffnungsanträge gestellt.",
+    "ownRequest": "Sie haben diesen Antrag gestellt — eine andere genehmigende Person muss entscheiden.",
+    "approve": "Genehmigen",
+    "reject": "Ablehnen",
+    "approved": "Wiedereröffnung genehmigt.",
+    "rejected": "Wiedereröffnung abgelehnt.",
+    "decideFailed": "Über den Wiedereröffnungsantrag konnte nicht entschieden werden.",
+    "scopedApprover": "Die Wiedereröffnung einer Periode betrifft den Abschluss der gesamten Organisation und wird daher von genehmigenden Personen entschieden, deren Rolle alle Tochtergesellschaften abdeckt. Bitten Sie einen Administrator, den Tochtergesellschaftszugriff Ihrer Rolle zu erweitern oder den Antrag an eine solche Person weiterzuleiten.",
+    "columns": {
+      "period": "Periode",
+      "scope": "Buch und Einheit",
+      "modules": "Module",
+      "reason": "Begründung",
+      "requestedBy": "Beantragt von",
+      "status": "Stand"
+    },
+    "status": {
+      "requested": "Wartet auf Genehmigung",
+      "approved": "Genehmigt",
+      "rejected": "Abgelehnt",
+      "expired": "Abgelaufen",
+      "reclosed": "Wieder geschlossen"
+    }
   }
 }

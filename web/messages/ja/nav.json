@@ -165,7 +165,8 @@
     "manufacturing-routings": "工程表と改訂",
     "manufacturing-mrp": "MRP実行",
     "manufacturing-time": "製造工数",
-    "manufacturing-quality": "品質"
+    "manufacturing-quality": "品質",
+    "close-reopen-requests": "再オープン申請"
   },
   "groups": {
     "manufacturing": "製造",

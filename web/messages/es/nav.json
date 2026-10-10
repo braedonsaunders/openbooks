@@ -165,7 +165,8 @@
     "manufacturing-routings": "Rutas y revisiones",
     "manufacturing-mrp": "Ejecuciones de MRP",
     "manufacturing-time": "Tiempo de producción",
-    "manufacturing-quality": "Calidad"
+    "manufacturing-quality": "Calidad",
+    "close-reopen-requests": "Solicitudes de reapertura"
   },
   "modulesShort": {
     "hrm-performance-cycles": "Gestionar evaluaciones",

@@ -855,6 +855,7 @@ const SOURCES = {
   payroll_work_locations: { route: '/payroll/work-locations', mode: 'loaded' },
   admin_audit: { route: '/admin/audit', mode: 'external' },
   admin_roles: { route: '/admin/roles', mode: 'external' },
+  close_reopen_requests: { route: '/accounting/reopen-requests', mode: 'loaded' },
   admin_users: { route: '/admin/users', mode: 'external' },
   inbox_approvals: { route: '/inbox', mode: 'external' },
   inbox_tasks: { route: '/inbox', mode: 'external' },

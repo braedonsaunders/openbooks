@@ -369,5 +369,32 @@
     "terminationCost": "Supported termination cost",
     "assetsReviewed": "Related assets reviewed and required impairments posted?",
     "impairmentEvidence": "Related-asset impairment review evidence"
+  },
+  "reopenRequests": {
+    "title": "Period reopen requests",
+    "description": "Requests to reopen a closed period. Someone other than the requester who holds the reopen permission approves or rejects each one.",
+    "empty": "No reopen requests have been filed.",
+    "ownRequest": "You requested this — another approver must decide it.",
+    "approve": "Approve",
+    "reject": "Reject",
+    "approved": "Reopen approved.",
+    "rejected": "Reopen rejected.",
+    "decideFailed": "The reopen request could not be decided.",
+    "scopedApprover": "Reopening a period affects the whole organization's close, so it is decided by approvers whose role covers every subsidiary. Ask an administrator to widen your role's subsidiary access or route the request to an approver who has it.",
+    "columns": {
+      "period": "Period",
+      "scope": "Book and entity",
+      "modules": "Modules",
+      "reason": "Reason",
+      "requestedBy": "Requested by",
+      "status": "Status"
+    },
+    "status": {
+      "requested": "Awaiting approval",
+      "approved": "Approved",
+      "rejected": "Rejected",
+      "expired": "Expired",
+      "reclosed": "Reclosed"
+    }
   }
 }

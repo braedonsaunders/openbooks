@@ -369,5 +369,32 @@
     "terminationCost": "Custo de rescisão fundamentado",
     "assetsReviewed": "Ativos relacionados revisados e perdas por redução ao valor recuperável obrigatórias contabilizadas?",
     "impairmentEvidence": "Evidências de revisão da recuperabilidade dos ativos relacionados"
+  },
+  "reopenRequests": {
+    "title": "Solicitações de reabertura de período",
+    "description": "Solicitações para reabrir um período fechado. Uma pessoa diferente do solicitante, com a permissão de reabertura, aprova ou rejeita cada uma.",
+    "empty": "Nenhuma solicitação de reabertura foi registrada.",
+    "ownRequest": "Você fez esta solicitação — outro aprovador deve decidi-la.",
+    "approve": "Aprovar",
+    "reject": "Rejeitar",
+    "approved": "Reabertura aprovada.",
+    "rejected": "Reabertura rejeitada.",
+    "decideFailed": "Não foi possível decidir a solicitação de reabertura.",
+    "scopedApprover": "Reabrir um período afeta o fechamento de toda a organização, por isso é decidido por aprovadores cuja função abrange todas as subsidiárias. Peça a um administrador para ampliar o acesso a subsidiárias da sua função ou encaminhar a solicitação a um aprovador que o tenha.",
+    "columns": {
+      "period": "Período",
+      "scope": "Livro e entidade",
+      "modules": "Módulos",
+      "reason": "Motivo",
+      "requestedBy": "Solicitado por",
+      "status": "Situação"
+    },
+    "status": {
+      "requested": "Aguardando aprovação",
+      "approved": "Aprovada",
+      "rejected": "Rejeitada",
+      "expired": "Expirada",
+      "reclosed": "Fechada novamente"
+    }
   }
 }

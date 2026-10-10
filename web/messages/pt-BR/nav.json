@@ -165,7 +165,8 @@
     "manufacturing-routings": "Roteiros e revisões",
     "manufacturing-mrp": "Execuções de MRP",
     "manufacturing-time": "Tempo de produção",
-    "manufacturing-quality": "Qualidade"
+    "manufacturing-quality": "Qualidade",
+    "close-reopen-requests": "Solicitações de reabertura"
   },
   "groups": {
     "manufacturing": "Manufatura",
