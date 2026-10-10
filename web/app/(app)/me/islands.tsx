@@ -31,6 +31,177 @@ export function StepCompleteButton({
   return <Button asChild size="sm" variant="outline"><a href={`/me/checklists?step=${encodeURIComponent(stepId)}`}>{label}</a></Button>
 }
 
+interface BankDialogStrings {
+  title: string
+  description: string
+  employments: { value: string; label: string }[]
+  employmentLabel: string
+  bankNameLabel: string
+  accountLabel: string
+  accountHint: string
+  countryLabel: string
+  currencyLabel: string
+  routingLabel: string
+  routingHint: string
+  reasonLabel: string
+  reasonPlaceholder: string
+  submitLabel: string
+  cancelLabel: string
+  submitFailed: string
+  noEmployment: string
+}
+
+/**
+ * The bank-details dialog, opened from the profile page through the
+ * `bank` search param; closing navigates the param away. Files the
+ * direct-deposit change as a bank_change request: approval-gated where a
+ * flow is configured, directly applied where none is. The account number
+ * travels once and never renders back — only the masked echo returns.
+ */
+export function BankDetailsDialog({
+  dialog,
+  closeHref,
+}: {
+  dialog: BankDialogStrings | null
+  closeHref: string
+}) {
+  const router = useRouter()
+  const [employmentId, setEmploymentId] = useState('')
+  const [bankName, setBankName] = useState('')
+  const [accountNumber, setAccountNumber] = useState('')
+  const [country, setCountry] = useState('')
+  const [currency, setCurrency] = useState('')
+  const [routingNumber, setRoutingNumber] = useState('')
+  const [reason, setReason] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [status, setStatus] = useState<string | null>(null)
+
+  if (!dialog) return null
+  const strings = dialog
+
+  const submit = async (): Promise<void> => {
+    // No employment record means no binding exists at all: name the hire
+    // remedy for the person's administrator instead of a generic failure —
+    // self-service cannot mint its own employment.
+    if (strings.employments.length === 0) {
+      setStatus(strings.noEmployment)
+      return
+    }
+    // One employment binds silently; several ask which record the proposal rides.
+    const boundEmployment =
+      employmentId || (strings.employments.length === 1 ? (strings.employments[0]?.value ?? '') : '')
+    if (!boundEmployment) {
+      setStatus(strings.submitFailed)
+      return
+    }
+    if (!bankName.trim()) {
+      setStatus(strings.submitFailed)
+      return
+    }
+    if (accountNumber.trim().length < 4) {
+      setStatus(strings.submitFailed)
+      return
+    }
+    setBusy(true)
+    setStatus(null)
+    try {
+      const res = await fetch('/api/hrm/me/bank-changes', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          employmentId: boundEmployment,
+          bank: {
+            bankName: bankName.trim(),
+            accountNumber: accountNumber.trim(),
+            ...(country.trim() ? { country: country.trim() } : {}),
+            ...(currency.trim() ? { currency: currency.trim() } : {}),
+            ...(routingNumber.trim() ? { routing: { routing_number: routingNumber.trim() } } : {}),
+          },
+          reason: reason.trim(),
+        }),
+      })
+      if (!res.ok) {
+        setStatus(await readApiErrorMessage(res, strings.submitFailed))
+        return
+      }
+      router.push(closeHref)
+      router.refresh()
+    } catch {
+      setStatus(strings.submitFailed)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <UrlDrawer open closeHref={closeHref} title={strings.title} description={strings.description}>
+      <div className="flex flex-col gap-4 p-4">
+        {strings.employments.length > 1 ? (
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="me-bank-employment">{strings.employmentLabel}</Label>
+            <Select id="me-bank-employment" value={employmentId} onChange={(event) => setEmploymentId(event.target.value)}>
+              <option value="">{strings.employmentLabel}</option>
+              {strings.employments.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </Select>
+          </div>
+        ) : null}
+        {strings.employments.length === 0 ? (
+          <p role="status" className="text-sm text-amber-700 dark:text-amber-300">
+            {strings.noEmployment}
+          </p>
+        ) : null}
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="me-bank-name">{strings.bankNameLabel}</Label>
+          <Input id="me-bank-name" value={bankName} onChange={(event) => setBankName(event.target.value)} />
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="me-bank-account">{strings.accountLabel}</Label>
+          <Input
+            id="me-bank-account"
+            value={accountNumber}
+            inputMode="numeric"
+            autoComplete="off"
+            onChange={(event) => setAccountNumber(event.target.value)}
+          />
+          <p className="text-xs text-slate-500 dark:text-slate-400">{strings.accountHint}</p>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="me-bank-country">{strings.countryLabel}</Label>
+            <Input id="me-bank-country" value={country} maxLength={2} onChange={(event) => setCountry(event.target.value)} />
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="me-bank-currency">{strings.currencyLabel}</Label>
+            <Input id="me-bank-currency" value={currency} maxLength={3} onChange={(event) => setCurrency(event.target.value)} />
+          </div>
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="me-bank-routing">{strings.routingLabel}</Label>
+          <Input id="me-bank-routing" value={routingNumber} onChange={(event) => setRoutingNumber(event.target.value)} />
+          <p className="text-xs text-slate-500 dark:text-slate-400">{strings.routingHint}</p>
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="me-bank-reason">{strings.reasonLabel}</Label>
+          <Textarea id="me-bank-reason" placeholder={strings.reasonPlaceholder} value={reason} onChange={(event) => setReason(event.target.value)} />
+        </div>
+        {status ? <p className="text-sm text-red-600 dark:text-red-400">{status}</p> : null}
+        <div className="flex items-center justify-end gap-2">
+          <Button variant="outline" disabled={busy} onClick={() => router.push(closeHref)}>
+            {strings.cancelLabel}
+          </Button>
+          <Button disabled={busy || strings.employments.length === 0} onClick={submit}>
+            {strings.submitLabel}
+          </Button>
+        </div>
+      </div>
+    </UrlDrawer>
+  )
+}
+
 interface ProfileDialogStrings {
   title: string
   description: string
@@ -55,6 +226,7 @@ interface ProfileDialogStrings {
   submitLabel: string
   cancelLabel: string
   submitFailed: string
+  noEmployment: string
 }
 
 interface LoadedProfile {
@@ -149,6 +321,13 @@ export function ProfileDialog({
   const strings = dialog
 
   const submit = async (): Promise<void> => {
+    // No employment record means no binding exists at all: name the hire
+    // remedy for the person's administrator instead of a generic failure —
+    // self-service cannot mint its own employment.
+    if (strings.employments.length === 0) {
+      setStatus(strings.noEmployment)
+      return
+    }
     // One employment binds silently; several ask which record the proposal rides.
     const boundEmployment =
       employmentId || (strings.employments.length === 1 ? (strings.employments[0]?.value ?? '') : '')
@@ -276,12 +455,17 @@ export function ProfileDialog({
           <Label htmlFor="me-contact-reason">{strings.reasonLabel}</Label>
           <Textarea id="me-contact-reason" placeholder={strings.reasonPlaceholder} value={reason} onChange={(event) => setReason(event.target.value)} />
         </div>
+        {strings.employments.length === 0 ? (
+          <p role="status" className="text-sm text-amber-700 dark:text-amber-300">
+            {strings.noEmployment}
+          </p>
+        ) : null}
         {status ? <p className="text-sm text-red-600 dark:text-red-400">{status}</p> : null}
         <div className="flex items-center justify-end gap-2">
           <Button variant="outline" disabled={busy} onClick={() => router.push(closeHref)}>
             {strings.cancelLabel}
           </Button>
-          <Button disabled={busy} onClick={submit}>
+          <Button disabled={busy || strings.employments.length === 0} onClick={submit}>
             {strings.submitLabel}
           </Button>
         </div>

@@ -314,6 +314,7 @@
       "kindStatusChange": "Alteração de status",
       "kindAssignmentChange": "Alteração de atribuição",
       "kindTermination": "Desligamento",
+      "kindBankChange": "Alteração bancária",
       "statusLabel": "Status",
       "effectiveFromLabel": "Vigente a partir de",
       "effectiveToLabel": "Vigente até",
@@ -1611,6 +1612,7 @@
       "submit": "Enviar para aprovação",
       "cancel": "Cancelar",
       "submitFailed": "Não foi possível apresentar a solicitação de perfil.",
+      "noEmployment": "Sua pessoa ainda não tem registro de emprego, então esta alteração não tem contra o que ser apresentada. Peça ao administrador para registrar sua contratação com a ação Contratar do RH e apresente esta alteração novamente.",
       "dialogTitle": "Editar perfil",
       "dialogDescription": "Alterações são apresentadas como solicitação — a aprovação atualiza o registro.",
       "pendingTitle": "Solicitação de perfil pendente",
@@ -1898,6 +1900,24 @@
       "description": "Responda aos convites, consulte seus resultados e compartilhe sua avaliação dos cursos.",
       "emptyTitle": "Nenhum convite para treinamento",
       "emptyDescription": "Seus convites para os treinamentos agendados aparecerão aqui."
+    },
+    "bank": {
+      "title": "Depósito direto",
+      "description": "A conta bancária que recebe seu salário. Alterações são apresentadas como solicitação — o RH aprova antes de atualizar, e seu e-mail cadastrado é avisado de cada alteração.",
+      "noBank": "Sem dados bancários registrados",
+      "edit": "Atualizar dados bancários",
+      "failed": "Não foi possível carregar os dados bancários.",
+      "statusActive": "Ativa",
+      "statusPending": "Aprovação pendente",
+      "bankNameLabel": "Banco",
+      "accountLabel": "Número da conta",
+      "accountHint": "Enviado uma vez e nunca exibido de novo — só os últimos quatro retornam.",
+      "countryLabel": "País",
+      "currencyLabel": "Moeda",
+      "routingLabel": "Número de roteamento",
+      "routingHint": "Opcional. Deixe em branco se seu país não usa um.",
+      "submit": "Apresentar alteração bancária",
+      "submitFailed": "Não foi possível apresentar a alteração bancária."
     }
   },
   "options": {

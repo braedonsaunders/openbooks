@@ -314,6 +314,7 @@
       "kindStatusChange": "Statusänderung",
       "kindAssignmentChange": "Zuordnungsänderung",
       "kindTermination": "Beendigung",
+      "kindBankChange": "Bankänderung",
       "statusLabel": "Status",
       "effectiveFromLabel": "Gültig ab",
       "effectiveToLabel": "Gültig bis",
@@ -1611,6 +1612,7 @@
       "submit": "Zur Genehmigung einreichen",
       "cancel": "Abbrechen",
       "submitFailed": "Die Profilanfrage konnte nicht eingereicht werden.",
+      "noEmployment": "Für Ihre Person ist noch kein Beschäftigungsdatensatz vorhanden, daher kann diese Änderung an nichts geknüpft werden. Bitten Sie Ihre Administration, Ihre Einstellung über die HRM-Aktion Einstellen zu erfassen, und reichen Sie diese Änderung danach erneut ein.",
       "dialogTitle": "Profil bearbeiten",
       "dialogDescription": "Änderungen werden als Anfrage eingereicht — die Genehmigung aktualisiert den Datensatz.",
       "pendingTitle": "Offene Profilanfrage",
@@ -1898,6 +1900,24 @@
       "description": "Beantworten Sie Einladungen, prüfen Sie Ihre Ergebnisse und geben Sie Kursfeedback.",
       "emptyTitle": "Keine Schulungseinladungen",
       "emptyDescription": "Ihre Einladungen zu geplanten Schulungen werden hier angezeigt."
+    },
+    "bank": {
+      "title": "Direktüberweisung",
+      "description": "Das Bankkonto, auf das Ihr Gehalt geht. Änderungen werden als Antrag erfasst — die Personalabteilung genehmigt vor jeder Aktualisierung, und Ihre hinterlegte E-Mail wird über jede Änderung benachrichtigt.",
+      "noBank": "Keine Bankverbindung hinterlegt",
+      "edit": "Bankverbindung aktualisieren",
+      "failed": "Die Bankverbindung konnte nicht geladen werden.",
+      "statusActive": "Aktiv",
+      "statusPending": "Genehmigung ausstehend",
+      "bankNameLabel": "Bankname",
+      "accountLabel": "Kontonummer",
+      "accountHint": "Wird einmal gesendet und nie wieder angezeigt — nur die letzten vier Stellen kehren zurück.",
+      "countryLabel": "Land",
+      "currencyLabel": "Währung",
+      "routingLabel": "Bankleitzahl",
+      "routingHint": "Optional. Leer lassen, wenn Ihr Land keine verwendet.",
+      "submit": "Bankänderung einreichen",
+      "submitFailed": "Die Bankänderung konnte nicht erfasst werden."
     }
   },
   "options": {

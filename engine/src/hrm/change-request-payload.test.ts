@@ -24,6 +24,31 @@ function codeOf(fn: () => unknown): string {
   assert.fail("expected a refusal");
 }
 
+test("bank_change accepts the sealed shape and refuses plaintext-shaped proposals", () => {
+  const parsed = validateChangePayload({
+    kind: "bank_change",
+    bankName: "First Bank",
+    sealedAccount: "sealed-envelope-bytes",
+    accountLastFour: "6789",
+  });
+  assert.equal(parsed.kind, "bank_change");
+  if (parsed.kind !== "bank_change") throw new Error("unreachable");
+  assert.equal(parsed.accountLastFour, "6789");
+  assert.equal(
+    codeOf(() =>
+      validateChangePayload({ kind: "bank_change", bankName: "First Bank", accountNumber: "12345678" }),
+    ),
+    "INVALID_PAYLOAD",
+    "plaintext account numbers never validate — seal before filing",
+  );
+  assert.equal(
+    codeOf(() =>
+      validateChangePayload({ kind: "bank_change", bankName: "First Bank", sealedAccount: "x", accountLastFour: "678" }),
+    ),
+    "INVALID_PAYLOAD",
+  );
+});
+
 test("unknown kinds are refused by name", () => {
   assert.equal(codeOf(() => validateChangePayload({ kind: "promote" })), "UNKNOWN_KIND");
   assert.equal(codeOf(() => validateChangePayload({})), "UNKNOWN_KIND");
@@ -31,7 +56,7 @@ test("unknown kinds are refused by name", () => {
   assert.equal(codeOf(() => validateChangePayload([])), "INVALID_PAYLOAD");
   assert.throws(
     () => validateChangePayload({ kind: "promotion" }),
-    /hire, status_change, assignment_change, termination, position_assignment, or profile_change/,
+    /hire, status_change, assignment_change, termination, position_assignment, profile_change, or bank_change/,
     "the refusal lists the governed kinds",
   );
 });

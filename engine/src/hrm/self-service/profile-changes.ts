@@ -1,12 +1,12 @@
 import { db, withOrgTransaction, type SqlExecutor } from "../../platform/db.ts";
 import { lockAndCheckOrgFeature } from "../../organization/org-feature-lock.ts";
-import { loadOwnEmploymentIds, requireHrmSelfRead, requireHrmSelfRequest } from "../authorization.ts";
+import { requireHrmSelfRead, requireHrmSelfRequest } from "../authorization.ts";
 import {
   createChangeRequestDraft,
   submitChangeRequest,
   type ChangeRequestDTO,
 } from "../change-requests.ts";
-import { actorPartyOf, SelfServiceError } from "./actor.ts";
+import { actorPartyOf, ownEmploymentOrHireRemedy, SelfServiceError } from "./actor.ts";
 
 import {
   profileChangePayloadSchema,
@@ -109,16 +109,10 @@ export async function fileProfileChangeRequest(
     }
     await requireHrmSelfRequest(db, orgId, actorId);
     await actorPartyOf(db, orgId, actorId);
-    const own = await loadOwnEmploymentIds(db, orgId, actorId);
-    if (!own.includes(employmentId)) {
-      throw new SelfServiceError(
-        "FORBIDDEN",
-        "profile changes file only against your own employment — HR files anything else as an employment change",
-      );
-    }
     // The service re-checks the self.request gate and the own-employment
     // binding kind-aware at create and at submit; this pre-check fails
     // fast with the self-service remedy before any draft exists.
+    await ownEmploymentOrHireRemedy(db, { orgId, actorId, employmentId });
     const request = await createChangeRequestDraft({
       orgId,
       actorId,

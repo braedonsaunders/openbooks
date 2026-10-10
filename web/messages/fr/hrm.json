@@ -314,6 +314,7 @@
       "kindStatusChange": "Changement de statut",
       "kindAssignmentChange": "Changement d'affectation",
       "kindTermination": "Fin d'emploi",
+      "kindBankChange": "Modification bancaire",
       "statusLabel": "Statut",
       "effectiveFromLabel": "Effet à partir du",
       "effectiveToLabel": "Effet jusqu'au",
@@ -1611,6 +1612,7 @@
       "submit": "Soumettre pour approbation",
       "cancel": "Annuler",
       "submitFailed": "La demande de profil n'a pas pu être déposée.",
+      "noEmployment": "Votre personne n'a pas encore de dossier d'emploi, cette modification n'a donc rien à quoi se rattacher. Demandez à votre administrateur d'enregistrer votre embauche avec l'action Embaucher du SIRH, puis déposez à nouveau cette modification.",
       "dialogTitle": "Modifier le profil",
       "dialogDescription": "Les modifications sont déposées en demande — l'approbation met à jour la fiche.",
       "pendingTitle": "Demande de profil en cours",
@@ -1898,6 +1900,24 @@
       "description": "Répondez aux invitations, consultez vos résultats et donnez votre avis sur les formations.",
       "emptyTitle": "Aucune invitation à une formation",
       "emptyDescription": "Vos invitations aux formations planifiées apparaîtront ici."
+    },
+    "bank": {
+      "title": "Virement direct",
+      "description": "Le compte bancaire qui reçoit votre paie. Les modifications sont déposées comme demande — les RH approuvent avant toute mise à jour, et votre courriel enregistré est avisé de chaque changement.",
+      "noBank": "Aucune coordonnée bancaire enregistrée",
+      "edit": "Mettre à jour les coordonnées bancaires",
+      "failed": "Les coordonnées bancaires n'ont pas pu être chargées.",
+      "statusActive": "Actif",
+      "statusPending": "Approbation en attente",
+      "bankNameLabel": "Banque",
+      "accountLabel": "Numéro de compte",
+      "accountHint": "Envoyé une fois et jamais réaffiché — seuls les quatre derniers reviennent.",
+      "countryLabel": "Pays",
+      "currencyLabel": "Devise",
+      "routingLabel": "Numéro d'acheminement",
+      "routingHint": "Facultatif. Laissez vide si votre pays n'en utilise pas.",
+      "submit": "Déposer la modification bancaire",
+      "submitFailed": "La modification bancaire n'a pas pu être déposée."
     }
   },
   "options": {

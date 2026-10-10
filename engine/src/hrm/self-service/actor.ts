@@ -49,3 +49,33 @@ export async function actorPartyOf(
   }
   return row.partyId;
 }
+
+/**
+ * The actor's own employment binding for a filing call. Loads the
+ * employments on the trusted runner and proves the named one is the
+ * actor's own. An empty set means the person holds no employment at all:
+ * the proposal cannot be filed, let alone approved, so the refusal names
+ * the hire remedy for the person's administrator — self-service cannot
+ * mint its own employment. A non-empty set that excludes the named id
+ * means the proposal rides someone else's record, which HR files instead.
+ */
+export async function ownEmploymentOrHireRemedy(
+  exec: SqlExecutor,
+  args: { orgId: string; actorId: string; employmentId: string },
+): Promise<readonly string[]> {
+  const { loadOwnEmploymentIds } = await import("../authorization.ts");
+  const own = await loadOwnEmploymentIds(exec, args.orgId, args.actorId);
+  if (own.length === 0) {
+    throw new SelfServiceError(
+      "FORBIDDEN",
+      "your person has no employment record yet, so this change has nothing to file against — ask your administrator to record your hire with the HRM Hire action, then file this change again",
+    );
+  }
+  if (!own.includes(args.employmentId)) {
+    throw new SelfServiceError(
+      "FORBIDDEN",
+      "self-service changes file only against your own employment — HR files anything else as an employment change",
+    );
+  }
+  return own;
+}
