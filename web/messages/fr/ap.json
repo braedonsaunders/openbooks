@@ -64,6 +64,8 @@
     "formPreferredFailed": "Impossible d’enregistrer le formulaire préféré",
     "returnsReceipt": "Retourne la réception",
     "returnsNone": "Aucun stock retourné",
+    "returnsChoose": "Choisir…",
+    "returnsNoGoods": "Avoir — sans retour de marchandises",
     "controlAccount": "Compte fournisseur",
     "controlAccountHelp": "Le compte fournisseur sur lequel ce document est comptabilisé. Les paiements et avoirs fournisseurs le soldent sur ce même compte. Laissez vide pour utiliser le compte par défaut.",
     "controlAccountPartyDefault": "Défaut du fournisseur — {account}",

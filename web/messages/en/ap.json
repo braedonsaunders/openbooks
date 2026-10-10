@@ -64,6 +64,8 @@
     "formPreferredFailed": "Could not save the preferred form",
     "returnsReceipt": "Returns receipt",
     "returnsNone": "No stock returned",
+    "returnsChoose": "Choose…",
+    "returnsNoGoods": "Allowance — no goods returned",
     "controlAccount": "Payable account",
     "controlAccountHelp": "The payable this document posts to. Payments and vendor credits settle it on the same account. Leave empty to use the default.",
     "controlAccountPartyDefault": "Vendor default — {account}",

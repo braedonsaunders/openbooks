@@ -167,7 +167,9 @@ interface LineRow extends Record<string, unknown> {
   stockLocationId: string
   /** On a credit memo, the posted receipt or shipment this line returns.
    *  Blank = a purely financial credit line that moves no stock. The chosen
-   *  movement carries its own lot/serial, so the row stores only its id. */
+   *  movement carries its own lot/serial, so the row stores only its id. A
+   *  vendor credit may instead store NO_RETURN_SENTINEL: an allowance with
+   *  no goods returned, which settles commercially and moves no stock. */
   returnSourceMovementId: string
   taxProfileId: string
   amount: string
@@ -886,6 +888,48 @@ function isLineMap(v: unknown): v is Record<string, unknown> {
   return typeof v === 'object' && v !== null
 }
 
+/**
+ * Stored in a credit row's returnSourceMovementId when the operator chooses
+ * no goods returned (a vendor allowance). Never a movement id: real sources
+ * are UUIDs, so the save writer can tell the choice apart without a second
+ * field. Offered only on vendor credits; sales credits keep blank for a
+ * purely financial line.
+ */
+export const NO_RETURN_SENTINEL = 'allowance'
+
+/**
+ * Save payload for a credit row's return cell: a movement id becomes the
+ * typed return source (lot and serial ride from the offered source rather
+ * than being retyped), the allowance sentinel becomes the explicit
+ * no-goods-returned choice, and blank clears the source while a stored
+ * choice survives server-side. Pure so the row's wire meaning is pinned by
+ * unit tests, not by rendering the grid.
+ */
+export function returnCellPayload(
+  returnSourceMovementId: string,
+  returnSources: readonly Pick<ReturnableSourceOption, 'movementId' | 'lotId' | 'serialId'>[],
+): {
+  inventoryReturnSource: {
+    movementId: string
+    lotId: string | null
+    serialId: string | null
+  } | null
+  inventoryAllowance?: true
+} {
+  if (returnSourceMovementId === NO_RETURN_SENTINEL) {
+    return { inventoryReturnSource: null, inventoryAllowance: true }
+  }
+  if (returnSourceMovementId === '') return { inventoryReturnSource: null }
+  const source = returnSources.find((candidate) => candidate.movementId === returnSourceMovementId)
+  return {
+    inventoryReturnSource: {
+      movementId: returnSourceMovementId,
+      lotId: source?.lotId ?? null,
+      serialId: source?.serialId ?? null,
+    },
+  }
+}
+
 function toRow(l: Record<string, unknown>, lineDefs: CustomFieldDefClient[], segments: SegmentOpt[]): LineRow {
   const row: LineRow = {
     lineId: lineText(l.id),
@@ -926,10 +970,15 @@ function toRow(l: Record<string, unknown>, lineDefs: CustomFieldDefClient[], seg
   const extraDims = isLineMap(l.extra_dims) ? l.extra_dims : null
   // Native return evidence: the server owns both spellings (a vendor credit
   // names a receipt, a customer credit a shipment) and only ever writes one.
+  // An explicit no-goods-returned choice (a vendor allowance) round-trips as
+  // the sentinel so the picker shows the choice, not a blank.
   const inventoryReturn = custom && isLineMap(custom.inventoryReturn) ? custom.inventoryReturn : null
   row.returnSourceMovementId = lineText(
     inventoryReturn?.sourceReceiptMovementId ?? inventoryReturn?.sourceIssueMovementId,
   )
+  if (row.returnSourceMovementId === '' && custom?.inventoryAllowance === true) {
+    row.returnSourceMovementId = NO_RETURN_SENTINEL
+  }
   for (const def of lineDefs) row[`cf_${def.key}`] = custom?.[def.key] ?? ''
   for (const segment of segments) row[`seg_${segment.key}`] = segmentCellValue(extraDims, segment.key)
   return row
@@ -1107,6 +1156,9 @@ export interface DocumentDrawerProps {
   /** Prefilled-refund entry link for a posted cash sale, resolved by the
    *  cash-sales loader's permission and feature gates. */
   refundHref?: string | null
+  /** Prefilled-credit entry link for a posted vendor bill, resolved by the
+   *  AP bills loader's permission and subsidiary gates. */
+  creditHref?: string | null
   /** Org default tender account (till defaults) prefill for new tenders. */
   defaultTenderAccountId?: string | null
   /** Active marketplace facilitators for the "tax collected by" line column.
@@ -1165,6 +1217,7 @@ export function DocumentDrawer({
   promotionsEnabled,
   tenderAccounts,
   refundHref,
+  creditHref,
   defaultTenderAccountId,
   marketplaceFacilitators = EMPTY_FACILITATORS,
   withholdingSchemes,
@@ -1741,11 +1794,17 @@ export function DocumentDrawer({
   )
   // A credit memo may return stock. The engine settles the return against the
   // posted movement the goods left or arrived on, so the operator picks that
-  // movement here; leaving a row blank keeps it a purely financial credit.
+  // movement here; a vendor row may instead be recorded as an allowance with
+  // no goods returned. A blank vendor row is refused on save (a stocked line
+  // must choose), while a blank sales row stays a purely financial credit.
   // The same reader answers this list and the save-time check, so the picker
   // cannot offer a source the save refuses.
   const returnSide =
-    recordType === 'vendor_credit' ? 'purchase' : recordType === 'customer_credit' || (recordType === 'rma' && isCreate) ? 'sales' : null
+    recordType === 'vendor_credit'
+      ? 'purchase'
+      : recordType === 'customer_credit' || recordType === 'cash_refund' || (recordType === 'rma' && isCreate)
+        ? 'sales'
+        : null
   const returnRowsKey = rows
     .map((row) => `${row.itemId}:${row.stockLocationId}`)
     .filter((key) => key !== ':')
@@ -1761,7 +1820,7 @@ export function DocumentDrawer({
       try {
         const sourcePath = recordType === 'rma'
           ? `/api/returns/sources?partyId=${encodeURIComponent(partyId)}&subsidiaryId=${encodeURIComponent(subsidiaryId ?? '')}&limit=200`
-          : `/api/inventory/returnable-sources?side=${returnSide}&partyId=${encodeURIComponent(partyId)}&limit=200`
+          : `/api/inventory/returnable-sources?side=${returnSide}&kind=${encodeURIComponent(String(recordType))}&partyId=${encodeURIComponent(partyId)}&limit=200`
         const res = await fetch(sourcePath)
         // Inventory off, credit kind off, or no permission: no picker, and no
         // console noise for a refusal the drawer already knows how to absorb.
@@ -1835,21 +1894,42 @@ export function DocumentDrawer({
     : controlChoices?.organizationDefault
       ? t('drawer.controlAccountOrganizationDefault', { account: controlLabel(controlChoices.organizationDefault) })
       : t('drawer.controlAccountUnset')
-  const showReturnPicker = returnSide !== null && returnSources.length > 0
+  // A vendor credit always offers the choice: even with no returnable
+  // receipt in the list the operator can still record the line as an
+  // allowance (no goods returned). Sales credits keep the picker list-gated.
+  const hasStockedReturnRows = rows.some(
+    (row) => stockedItemIds.has(String(row.itemId ?? '')) && String(row.stockLocationId ?? '') !== '',
+  )
+  const showReturnPicker =
+    returnSide !== null && (returnSources.length > 0 || (returnSide === 'purchase' && hasStockedReturnRows))
   const returnSourceColumn = useMemo<LineGridColumn<LineRow> | null>(() => {
     if (!showReturnPicker) return null
+    // A blank vendor row is an unfinished choice, not a financial line: the
+    // save refuses it with the receipt-or-allowance message. Sales rows keep
+    // the standing "no stock returned" blank.
+    const blankOption = {
+      value: '',
+      label: returnSide === 'purchase' ? t('drawer.returnsChoose') : t('drawer.returnsNone'),
+    }
+    const allowanceOption =
+      returnSide === 'purchase'
+        ? [{ value: NO_RETURN_SENTINEL, label: t('drawer.returnsNoGoods') }]
+        : []
+    const sourceLabel = (source: ReturnableSourceOption): string =>
+      `${source.documentNumber ?? source.movedAt} · ${source.remaining}${
+        source.lotCode ? ` · ${source.lotCode}` : source.serialCode ? ` · ${source.serialCode}` : ''
+      }`
     return {
       key: 'returnSourceMovementId',
       label: returnSide === 'purchase' ? t('drawer.returnsReceipt') : t('drawer.returnsShipment'),
       width: '190px',
       type: 'select',
       options: [
-        { value: '', label: t('drawer.returnsNone') },
+        blankOption,
+        ...allowanceOption,
         ...returnSources.map((source) => ({
           value: source.movementId,
-          label: `${source.documentNumber ?? source.movedAt} · ${source.remaining}${
-            source.lotCode ? ` · ${source.lotCode}` : source.serialCode ? ` · ${source.serialCode}` : ''
-          }`,
+          label: sourceLabel(source),
         })),
       ],
       // Only a stocked row in a named warehouse can carry a return: the save
@@ -1857,14 +1937,13 @@ export function DocumentDrawer({
       isCellEditable: (row) =>
         stockedItemIds.has(String(row.itemId ?? '')) && String(row.stockLocationId ?? '') !== '',
       optionsFor: (row) => [
-        { value: '', label: t('drawer.returnsNone') },
+        blankOption,
+        ...allowanceOption,
         ...returnSources
           .filter((source) => source.itemId === String(row.itemId ?? '') && source.stockLocationId === String(row.stockLocationId ?? ''))
           .map((source) => ({
             value: source.movementId,
-            label: `${source.documentNumber ?? source.movedAt} · ${source.remaining}${
-              source.lotCode ? ` · ${source.lotCode}` : source.serialCode ? ` · ${source.serialCode}` : ''
-            }`,
+            label: sourceLabel(source),
           })),
       ],
     }
@@ -2019,23 +2098,10 @@ export function DocumentDrawer({
                 stockLocationId: r.stockLocationId || null,
                 // Tri-state, and only on kinds that can return stock: absent
                 // preserves the stored selection, null clears it, an object
-                // replaces it. The chosen movement carries its own lot and
-                // serial, so they ride from the offered source rather than
-                // being retyped — the save refuses any mismatch.
+                // replaces it (see returnCellPayload for the cell's wire
+                // meaning, including the allowance sentinel).
                 ...(returnSourceColumn
-                  ? {
-                      inventoryReturnSource: r.returnSourceMovementId
-                        ? {
-                            movementId: r.returnSourceMovementId,
-                            lotId:
-                              returnSources.find((s) => s.movementId === r.returnSourceMovementId)
-                                ?.lotId ?? null,
-                            serialId:
-                              returnSources.find((s) => s.movementId === r.returnSourceMovementId)
-                                ?.serialId ?? null,
-                          }
-                        : null,
-                    }
+                  ? returnCellPayload(r.returnSourceMovementId, returnSources)
                   : {}),
                 // Entry-mode distribution staging for A4's save path: a
                 // blank key is skipped server-side; the lock rides as the
@@ -3371,6 +3437,9 @@ export function DocumentDrawer({
             ) : null}
             {doc.kind === 'cash_sale' && isPosted && refundHref && canCreate ? (
               <Button variant="outline" asChild><Link href={refundHref}>{t('tenders.refundAction')}</Link></Button>
+            ) : null}
+            {doc.kind === 'vendor_bill' && isPosted && creditHref && canCreate ? (
+              <Button variant="outline" asChild><Link href={creditHref}>{t('actions.newCredit')}</Link></Button>
             ) : null}
             {isPosted && doc.posting_effect_status === 'terminal_failed' && canPost ? (
               <Button variant="outline" disabled={busy} onClick={retryPostingEffects}>{tPostingEffects('retry')}</Button>

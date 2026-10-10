@@ -21,6 +21,7 @@ import { loadFieldDefs } from '../../../../lib/custom-fields'
 import { isFeatureEnabled } from '../../../../lib/features'
 import { isMultiSubsidiary, subsidiaryOptions, subsidiaryVisibleFilter } from '../../../../lib/subsidiaries'
 import { contractorWithholdingScheme } from '@openbooks/engine/country-tax-packs'
+import { returnableBillLines } from '@openbooks/engine/src/inventory/vendor-credit-prefill.ts'
 import { isUuid, pickString } from '../../../../lib/list-params'
 import { resolveFormLayout } from '../../../../lib/customization/resolve'
 import { documentSettlementHref } from '../../../../lib/settlement-href'
@@ -81,6 +82,8 @@ export interface ApBillsDrawer {
   canCustomize: boolean
   /** Pay this posted bill (vendor + bill preselected). */
   settlementHref: string | null
+  /** New vendor credit prefilled from this posted bill. */
+  creditHref: string | null
 }
 
 export interface ApBillsData {
@@ -99,6 +102,8 @@ export interface ApBillsData {
   drawerOpen: boolean
   drawer: ApBillsDrawer | null
 }
+
+const BASE_PATH = '/ap/bills'
 
 export async function loadApBills(
   sp: Record<string, string | string[] | undefined>,
@@ -218,6 +223,46 @@ export async function loadApBills(
   // the first in-scope option in multi-subsidiary orgs so the form opens
   // submittable; unrestricted orgs keep the factory root default.
   const createSeed = isCreate && createKind ? await createDocumentSeed(authz.user.orgId, createKind) : null
+  // Credit prefill: `?doc=new&kind=vendor_credit&creditFrom=<bill>` proposes a
+  // credit for review — bill lines at their original amounts with return
+  // evidence on the still-unreturned stocked receipts. Nothing is written;
+  // Save creates the draft. An invisible, voided, or non-bill id behaves like
+  // no prefill: the blank create still opens.
+  const creditFromId = isCreate && createKind === 'vendor_credit' && typeof sp.creditFrom === 'string' && isUuid(sp.creditFrom)
+    ? sp.creditFrom
+    : null
+  const creditSource = creditFromId
+    ? (await db.execute<{ partyId: string | null; partyName: string | null; subsidiaryId: string | null }>(sql`
+        select d.party_id as "partyId", p.display_name as "partyName", d.subsidiary_id as "subsidiaryId"
+          from documents d
+          left join parties p on p.id = d.party_id and p.org_id = d.org_id
+         where d.org_id = ${authz.user.orgId} and d.id = ${creditFromId} and d.kind = 'vendor_bill' and d.status <> 'voided'
+         ${subsidiaryVisibleFilter(sql`d.subsidiary_id`, documentOptionScope ?? null)}
+         limit 1`)).rows[0] ?? null
+    : null
+  const creditLines = creditFromId && creditSource ? await returnableBillLines(db, authz.user.orgId, creditFromId) : []
+  if (createSeed && creditSource) {
+    const seed = createSeed.doc as Record<string, unknown>
+    seed.party_id = creditSource.partyId
+    if (creditSource.partyName) seed.party_name = creditSource.partyName
+    // The credit returns this bill's receipts, so it belongs to the bill's
+    // legal entity — the receipt scope the save validates against.
+    if (creditSource.subsidiaryId) seed.subsidiary_id = creditSource.subsidiaryId
+    ;(createSeed as { lines: Record<string, unknown>[] }).lines = creditLines.map((line) => ({
+      item_id: line.itemId,
+      account_id: line.accountId,
+      quantity: line.quantity,
+      unit_price: line.unitPrice,
+      amount: line.amount,
+      description: line.description,
+      tax_code_id: line.taxCodeId,
+      tax_group_id: line.taxGroupId,
+      stock_location_id: line.stockLocationId,
+      ...(line.receiptMovementId
+        ? { custom: { inventoryReturn: { sourceReceiptMovementId: line.receiptMovementId } } }
+        : {}),
+    }))
+  }
   const createSubsidiaryDefault = (() => {
     if (!createSeed || !pickers) return null
     const options = (pickers[6] ?? []) as { id: string }[]
@@ -227,7 +272,9 @@ export async function loadApBills(
       : options
     return createEntity ?? inScope[0]?.id ?? null
   })()
-  if (createSeed && createSubsidiaryDefault) {
+  // The bill's legal entity (set above) wins over the form default: the
+  // credit must live where its receipts live.
+  if (createSeed && createSubsidiaryDefault && !(creditSource?.subsidiaryId)) {
     (createSeed.doc as Record<string, unknown>).subsidiary_id = createSubsidiaryDefault
   }
   const requestedCreateParty = isCreate ? pickString(sp.partyId) : undefined
@@ -267,7 +314,7 @@ export async function loadApBills(
     drawerPayload && pickers && resolvedForm && drawerKind
       ? {
           basePath: '/ap/bills',
-          remountKey: openDoc ? String((openDoc.doc as Record<string, unknown>).id) : `new:${drawerKind}:${createEntity ?? ""}:${requestedCreateParty ?? ""}`,
+          remountKey: openDoc ? String((openDoc.doc as Record<string, unknown>).id) : `new:${drawerKind}:${createEntity ?? ""}:${requestedCreateParty ?? ""}:${creditFromId ?? ""}`,
           payload: drawerPayload,
           createMode: isCreate,
           config: DOC_KINDS[drawerKind]!,
@@ -299,6 +346,13 @@ export async function loadApBills(
             ar: false,
             ap: can(authz, 'ap.pay'),
           }),
+          // A posted bill proposes its credit: the prefill copies its lines
+          // with return evidence on the still-unreturned receipts.
+          creditHref:
+            openDoc && drawerKind === 'vendor_bill'
+              && String((openDoc.doc as Record<string, unknown>).status) === 'posted'
+              ? `${BASE_PATH}?doc=new&kind=vendor_credit&creditFrom=${(openDoc.doc as Record<string, unknown>).id}`
+              : null,
           // Only a posted vendor credit can settle a bill without cash. The
           // panel reads its own state; the loader supplies identity and the
           // permission, mirroring the customer-credit side.

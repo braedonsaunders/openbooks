@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { CLEAR_SEGMENT, INHERIT_SEGMENT, segmentCellValue, segmentAssignmentsFromCells } from '../lib/segment-assignments'
 import {
+  NO_RETURN_SENTINEL,
   applyQtyPriceToRows,
   asDocumentDoc,
   clearedDistributionFields,
@@ -13,6 +14,7 @@ import {
   isBlankDrawerLine,
   lineAmountFromQtyPrice,
   readDocumentActionResult,
+  returnCellPayload,
 } from './document-drawer'
 
 const row = (accountId: string, amount: string) => ({
@@ -314,4 +316,43 @@ test('optional dimension editor round-trips inherited, cleared and selected deci
   assert.deepEqual(asDocumentDoc({extra_dims:{cleared:null,selected:'native-value'}}).extra_dims,{cleared:null,selected:'native-value'},'reopening the header preserves an explicit blank')
   assert.deepEqual(segmentAssignmentsFromCells({seg_selected:INHERIT_SEGMENT},['selected']),{})
   assert.deepEqual(segmentAssignmentsFromCells({seg_selected:''},['selected']),{selected:null})
+})
+
+test('the return cell wires a movement, an allowance, or a cleared source', () => {
+  const sources = [
+    { movementId: '11111111-1111-4111-8111-111111111111', lotId: 'lot-1', serialId: null },
+    { movementId: '22222222-2222-4222-8222-222222222222', lotId: null, serialId: 'serial-2' },
+  ]
+  // A chosen receipt becomes the typed return source with its own lot/serial.
+  assert.deepEqual(returnCellPayload('11111111-1111-4111-8111-111111111111', sources), {
+    inventoryReturnSource: {
+      movementId: '11111111-1111-4111-8111-111111111111',
+      lotId: 'lot-1',
+      serialId: null,
+    },
+  })
+  // The allowance sentinel records the explicit no-goods-returned choice and
+  // clears any return source — it never reaches the server as a movement id.
+  assert.deepEqual(returnCellPayload(NO_RETURN_SENTINEL, sources), {
+    inventoryReturnSource: null,
+    inventoryAllowance: true,
+  })
+  // Blank clears the source while a stored choice survives server-side.
+  assert.deepEqual(returnCellPayload('', sources), { inventoryReturnSource: null })
+  // An unoffered movement still rides with blank lot/serial for the save to
+  // refuse by name rather than the drawer silently dropping the choice.
+  assert.deepEqual(returnCellPayload('33333333-3333-4333-8333-333333333333', sources), {
+    inventoryReturnSource: {
+      movementId: '33333333-3333-4333-8333-333333333333',
+      lotId: null,
+      serialId: null,
+    },
+  })
+})
+
+test('an allowance choice keeps its row contentful so it rides to the server', () => {
+  assert.equal(
+    isBlankDrawerLine({ ...blankGridRow(), returnSourceMovementId: NO_RETURN_SENTINEL }),
+    false,
+  )
 })

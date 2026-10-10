@@ -64,6 +64,8 @@
     "formPreferredFailed": "Não foi possível salvar o formulário preferido",
     "returnsReceipt": "Devolve recebimento",
     "returnsNone": "Sem devolução de estoque",
+    "returnsChoose": "Escolher…",
+    "returnsNoGoods": "Bonificação — sem devolução de mercadorias",
     "controlAccount": "Conta a pagar",
     "controlAccountHelp": "A conta a pagar em que este documento é lançado. Pagamentos e créditos de fornecedor o liquidam na mesma conta. Deixe em branco para usar o padrão.",
     "controlAccountPartyDefault": "Padrão do fornecedor — {account}",
