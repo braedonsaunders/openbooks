@@ -105,12 +105,16 @@ test("a void without a reversal date reverses in the entry's own period", { skip
         join journal_entries e on e.id = ${outcome.reversalEntryId} and e.org_id = d.org_id
        where d.id = ${documentId} and d.org_id = ${org.orgId}
     `)).rows[0];
-    assert.equal(stored?.reversalDate, org.date, "the reversal defaults to the entry's own date");
+    assert.equal(
+      stored?.reversalDate,
+      null,
+      "completion clears the void-request staging date (documents_void_request_evidence); the reversal entry below is the durable record",
+    );
     assert.equal(stored?.postingDate, org.date, "the reversal posts in the entry's own period");
     assert.equal(
-      await reversalSum(documentId, org.orgId, outcome.reversalEntryId!),
-      "0",
-      "the reversal balances exactly",
+      Number(await reversalSum(documentId, org.orgId, outcome.reversalEntryId!)),
+      0,
+      "the reversal balances exactly (numeric text carries scale, e.g. 0.0000)",
     );
     const audits = await voidRequestAudit(org.orgId, documentId);
     assert.equal(audits.length, 1, "the void request is audited once");
@@ -170,12 +174,16 @@ test("a closed entry period moves the default to the first open period", { skip:
         join journal_entries e on e.id = ${outcome.reversalEntryId} and e.org_id = d.org_id
        where d.id = ${documentId} and d.org_id = ${org.orgId}
     `)).rows[0];
-    assert.equal(stored?.reversalDate, "2026-08-01");
+    assert.equal(
+      stored?.reversalDate,
+      null,
+      "completion clears the void-request staging date (documents_void_request_evidence); the reversal entry below is the durable record",
+    );
     assert.equal(stored?.postingDate, "2026-08-01", "the reversal posts in the first open period");
     assert.equal(
-      await reversalSum(documentId, org.orgId, outcome.reversalEntryId!),
-      "0",
-      "the fallback reversal balances exactly",
+      Number(await reversalSum(documentId, org.orgId, outcome.reversalEntryId!)),
+      0,
+      "the fallback reversal balances exactly (numeric text carries scale, e.g. 0.0000)",
     );
   } finally {
     await dropScratchOrg(org.orgId);
@@ -197,11 +205,19 @@ test("an explicit reversal date is honored in an open period", { skip: !DB }, as
       source: "api",
     });
     assert.equal(outcome.status, "voided");
-    const stored = (await db.execute<{ reversalDate: string }>(sql`
-      select void_reversal_date::text as "reversalDate" from documents
-       where id = ${documentId} and org_id = ${org.orgId}
+    assert.ok(outcome.reversalEntryId, "the open entry period admits the reversal");
+    const stored = (await db.execute<{ reversalDate: string | null; postingDate: string }>(sql`
+      select d.void_reversal_date::text as "reversalDate", e.posting_date::text as "postingDate"
+        from documents d
+        join journal_entries e on e.id = ${outcome.reversalEntryId} and e.org_id = d.org_id
+       where d.id = ${documentId} and d.org_id = ${org.orgId}
     `)).rows[0];
-    assert.equal(stored?.reversalDate, org.date, "the named date reaches storage unchanged");
+    assert.equal(
+      stored?.reversalDate,
+      null,
+      "completion clears the void-request staging date (documents_void_request_evidence); the reversal entry below is the durable record",
+    );
+    assert.equal(stored?.postingDate, org.date, "the named date reaches the reversal entry unchanged");
   } finally {
     await dropScratchOrg(org.orgId);
   }

@@ -1518,6 +1518,11 @@ export async function completeRequestedDocumentVoid(
         reason: String(doc.void_reason),
         source: "controlled_void",
       });
+      // Completion clears the whole void-request group together. The
+      // documents_void_request_evidence check forbids a voided row that keeps
+      // request evidence; the completed void is durable through
+      // reversal_entry_id (whose posting date is the honored reversal date),
+      // void_reason, and the void_request audit entry below.
       await tx.execute(sql`
         update documents
            set status = 'voided',
