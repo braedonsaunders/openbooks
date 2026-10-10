@@ -788,6 +788,7 @@ export const TENANT_TABLE_POLICIES = {
   "vendor_pay_applications": "clone:catalog-uuid-rebase",
   "vendor_retainage_releases": "clone:catalog-uuid-rebase",
   "vendor_roles": "clone:catalog-uuid-rebase",
+  "warehouse_defaults": "clone:catalog-uuid-rebase",
   "warehouses": "clone:catalog-uuid-rebase",
   "prebill_holds": "clone:catalog-uuid-rebase",
   "prebill_events": "clone:catalog-uuid-rebase",

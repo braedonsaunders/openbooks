@@ -1,0 +1,1 @@
+DDL only: creates two missing retirement fence triggers when absent. No data is read or rewritten, so there is nothing to preflight for install readiness.
