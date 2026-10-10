@@ -124,7 +124,7 @@ export function toBaseQuantity(
   return fromUnits(mulUnits(toUnits(quantity), toUnits(factor)));
 }
 
-/** Scan comparisons retain document precision before inventory posting rounds to its stored scale. */
+/** Convert document quantities exactly, retaining all source and conversion-factor places. */
 export function toExactBaseQuantity(
   quantity: string,
   unit: string | null | undefined,
@@ -135,6 +135,23 @@ export function toExactBaseQuantity(
   const exact = canonicalDecimal(quantity, 8);
   if (exact === null) throw new InventoryError(`${lineLabel} quantity must be exact decimal text with at most eight places`);
   return multiplyDecimal(exact, inventoryConversionFactor(unit, conversions, baseUnit, lineLabel), 12);
+}
+
+/** Directed stock quantities must fit the stored scale without changing the document quantity. */
+export function toExactStockQuantity(
+  quantity: string,
+  unit: string | null | undefined,
+  conversions: Record<string, number>,
+  baseUnit: string,
+  lineLabel = "inventory line",
+): string {
+  const exact = toExactBaseQuantity(quantity, unit, conversions, baseUnit, lineLabel);
+  const stored = canonicalDecimal(exact, 4);
+  if (stored === null) throw new InventoryError(
+    `${lineLabel} converts to ${exact} ${baseUnit}, which cannot be stored exactly with four decimal places — ` +
+      `enter a quantity whose converted base units fit four places, or correct the item's unit conversion`,
+  );
+  return fromUnits(toUnits(stored));
 }
 
 function inventoryConversionFactor(

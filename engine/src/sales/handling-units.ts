@@ -7,12 +7,13 @@ import { InventoryError } from "../inventory/contracts.ts";
 import {
   loadSubsidiaryContext,
   restrictionAdmits,
+  uuidArray,
 } from "../organization/subsidiaries.ts";
 import { resolveProfile } from "../inventory/profile-policy.ts";
 import { assertSaleableStock } from "../inventory/stock-eligibility.ts";
 import { lockInventoryPosition } from "../inventory/position.ts";
 import { transferInventoryTx } from "../inventory/transfers.ts";
-import { toBaseQuantity } from "../inventory/costing.ts";
+import { toExactStockQuantity } from "../inventory/costing.ts";
 import {
   createExecutionSuggestion,
   type ExecutionTask,
@@ -154,7 +155,7 @@ export async function createHandlingUnit(
       await db.execute<Content>(sql`select line.id as shipment_line_id,fl.pick_line_id,line.item_id,fl.lot_id,fl.serial_id,
       line.quantity::text as document_quantity,line.unit from document_lines line
       join fulfillment_lines fl on fl.org_id=line.org_id and fl.line_id=line.id
-      where line.org_id=${orgId} and line.document_id=${input.shipmentId} and line.id=any(${input.lineIds}::uuid[])
+      where line.org_id=${orgId} and line.document_id=${input.shipmentId} and line.id=any(${uuidArray(input.lineIds)}::uuid[])
       order by line.line_number for update of line,fl`)
     ).rows;
     if (lines.length !== input.lineIds.length) throw new ScopeNotFoundError();
@@ -184,7 +185,7 @@ export async function createHandlingUnit(
     if (
       (
         await db.execute(sql`select shipment_line_id from handling_unit_contents where org_id=${orgId}
-      and shipment_line_id=any(${input.lineIds}::uuid[]) limit 1`)
+      and shipment_line_id=any(${uuidArray(input.lineIds)}::uuid[]) limit 1`)
       ).rows[0]
     )
       throw new InventoryError(
@@ -201,7 +202,7 @@ export async function createHandlingUnit(
       const row = await db.execute(sql`insert into handling_unit_contents
         (org_id,handling_unit_id,shipment_line_id,pick_line_id,item_id,lot_id,serial_id,quantity,document_quantity)
         values(${orgId},${unit.id},${line.shipment_line_id},${line.pick_line_id},${line.item_id},${line.lot_id},${line.serial_id},
-          ${toBaseQuantity(line.document_quantity, line.unit, profile.unitConversions ?? {}, profile.baseUnit)},${line.document_quantity}) returning shipment_line_id`);
+          ${toExactStockQuantity(line.document_quantity, line.unit, profile.unitConversions ?? {}, profile.baseUnit)},${line.document_quantity}) returning shipment_line_id`);
       if (row.rows.length !== 1)
         throw new InventoryError("Carton contents were not assigned");
       const carton =

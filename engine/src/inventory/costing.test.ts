@@ -13,6 +13,7 @@ import {
   receiveStandard,
   toBaseQuantity,
   toExactBaseQuantity,
+  toExactStockQuantity,
   type CostLayer,
 } from "./costing.ts";
 import {
@@ -63,6 +64,18 @@ test("toBaseQuantity applies the item's unit conversion and refuses unknown unit
     () => toBaseQuantity("2", "box", { box: 1 / 3 }, "ea"),
     /cannot be expressed exactly/,
   );
+});
+
+test("directed stock converts eight-place documents exactly and refuses unrepresentable base units", () => {
+  assert.equal(toExactStockQuantity("2.00000002", "bulk", { bulk: 10000 }, "ea"), "20000.0002");
+  assert.equal(toExactStockQuantity("0.00000001", "bulk", { bulk: 10000 }, "ea"), "0.0001");
+  for (const [quantity, unit, conversions] of [
+    ["2.00000002", "ea", {}],
+    ["0.0001", "fraction", { fraction: 0.0001 }],
+  ] as const) assert.throws(() => toExactStockQuantity(quantity, unit, conversions, "ea"),
+    (error: unknown) => error instanceof InventoryError && /cannot be stored exactly/.test(error.message));
+  // Existing costing callers retain their established rounding policy.
+  assert.equal(toBaseQuantity("0.0001", "fraction", { fraction: 0.0001 }, "ea"), "0.0000");
 });
 
 test("toBaseQuantity folds case and whitespace; empty means the base unit", () => {

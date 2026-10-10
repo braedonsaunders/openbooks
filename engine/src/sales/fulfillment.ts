@@ -1,6 +1,6 @@
 import { assertShipmentPacked } from "./handling-unit-state.ts";
 import { assertSaleableStock, saleableLocation, unheldTracking } from "../inventory/stock-eligibility.ts";
-import { toBaseQuantity } from "../inventory/costing.ts";
+import { toExactStockQuantity } from "../inventory/costing.ts";
 import { resolveProfile } from "../inventory/profile-policy.ts";
 import { validateTrackingSelection } from "../inventory/tracking.ts";
 import { allocationCandidates, type PhysicalAllocation } from "../inventory/allocation.ts";
@@ -595,7 +595,7 @@ export async function createPickList(
     const profile=await resolveProfile(orgId,itemId,tx);
     await assertSaleableStock(tx,orgId,line.binId,line);
     const unit=line.kitComponentItemId?kitComponentUnits.get(itemId)??null:source.unit;
-    const baseQuantity=toBaseQuantity(line.quantity,unit,profile.unitConversions??{},profile.baseUnit,'Pick quantity');
+    const baseQuantity=toExactStockQuantity(line.quantity,unit,profile.unitConversions??{},profile.baseUnit,'Pick quantity');
     await validateTrackingSelection(tx,orgId,itemId,line.binId,profile,{...line,quantity:baseQuantity},"issue");
     const matches = (await tx.execute<{ ok: boolean }>(sql`
       select (${line.lotId}::uuid is null or exists (
@@ -865,7 +865,7 @@ async function assertBinsCover(tx: SqlExecutor, orgId: string, pickList: Fulfill
     if (line.item_label===null || line.bin_code===null) throw new FulfillmentRefusal(
       'The pick line item or bin is unavailable','invalid_input',422,'Choose an inventory item and bin in this organization');
     const profile = await resolveProfile(orgId,line.item_id,tx,true);
-    const quantity = toBaseQuantity(line.quantity,line.unit,profile.unitConversions??{},profile.baseUnit,'Pick quantity');
+    const quantity = toExactStockQuantity(line.quantity,line.unit,profile.unitConversions??{},profile.baseUnit,'Pick quantity');
     await assertSaleableStock(tx,orgId,line.bin_id,{lotId:line.lot_id,serialId:line.serial_id});
     await validateTrackingSelection(tx,orgId,line.item_id,line.bin_id,profile,{quantity,lotId:line.lot_id,serialId:line.serial_id},"issue");
     const key = [line.item_id,line.bin_id,line.lot_id??'',line.serial_id??''].join(':');
@@ -878,7 +878,7 @@ async function assertBinsCover(tx: SqlExecutor, orgId: string, pickList: Fulfill
     const holds = await activePickReservations(tx,orgId,{itemId:bin.itemId,binId:bin.binId,subsidiaryId:ownerId,releasedOnly:true,excludePickListId:pickList.id});
     const reserved = (lotId?:string|null,serialId?:string|null) => holds
       .filter(h=>lotId===undefined || (h.lotId===lotId && h.serialId===serialId))
-      .reduce((q,h)=>add(q,toBaseQuantity(h.reserved,h.unit??null,profile.unitConversions??{},profile.baseUnit,'Reserved pick')),'0');
+      .reduce((q,h)=>add(q,toExactStockQuantity(h.reserved,h.unit??null,profile.unitConversions??{},profile.baseUnit,'Reserved pick')),'0');
     const onHand = await getOnHandWith(tx,orgId,bin.itemId,bin.binId,{subsidiaryId:ownerId,saleableOnly:true});
     const totalReserved = reserved();
     if (cmp(bin.quantity,add(onHand.quantity,neg(totalReserved)))>0) {

@@ -5,7 +5,7 @@ import { lockAndCheckOrgFeature } from "../organization/org-feature-lock.ts";
 import { InventoryError } from "./contracts.ts";
 import { lockInventoryPosition, persistReceiptMoney } from "./position.ts";
 import { resolveProfile } from "./profile-policy.ts";
-import { toBaseQuantity, toExactBaseQuantity } from "./costing.ts";
+import { toExactStockQuantity, toExactBaseQuantity } from "./costing.ts";
 import { cmp } from "../money/money.ts";
 import { canonicalDecimal, compareDecimal } from "../money/exact-decimal.ts";
 import { resolveScan, ScanRefusal } from "./item-identifiers.ts";
@@ -183,7 +183,7 @@ async function scanMismatch(
       return "Bin scan does not match the suggested bin. Keep stock in place and rescan the suggested bin.";
     const profile = await resolveProfile(orgId, task.item_id, tx);
     const quantity = persistReceiptMoney(
-      toBaseQuantity(
+      toExactStockQuantity(
         scannedQuantity(scan.quantity),
         item.unit,
         profile.unitConversions ?? {},

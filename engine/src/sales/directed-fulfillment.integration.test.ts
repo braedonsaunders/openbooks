@@ -48,6 +48,8 @@ import {
 } from "./handling-unit-state.ts";
 import { getShipmentRates, buyShipmentLabel } from "./shipping-labels.ts";
 import { createSandbox, deleteSandbox } from "../sandbox/lifecycle.ts";
+import { ScopeNotFoundError } from "../organization/subsidiary-scope.ts";
+import { InventoryError } from "../inventory/contracts.ts";
 import { compareDecimal } from "../money/exact-decimal.ts";
 
 const DB = Boolean(process.env.OPENBOOKS_DB_URL);
@@ -58,6 +60,7 @@ async function order(
   actor: string,
   number: string,
   quantity: string,
+  unit = "ea",
 ) {
   const id = randomUUID(),
     lineId = randomUUID();
@@ -65,7 +68,7 @@ async function order(
     await db.execute(sql`insert into documents(id,org_id,kind,document_number,party_id,document_date,currency,status,subsidiary_id,created_by)
       values(${id},${org.orgId},'sales_order',${number},${org.customerId},${org.date},'CAD','draft',${org.subsidiaryId},${actor})`);
     await db.execute(sql`insert into document_lines(id,org_id,document_id,line_number,item_id,account_id,description,quantity,unit,unit_price,amount,tax_amount,stock_location_id)
-      values(${lineId},${org.orgId},${id},1,${org.items.fifo},${org.accounts.revenue},'Widget',${quantity},'ea','10','20','0',${org.stockLocationId})`);
+      values(${lineId},${org.orgId},${id},1,${org.items.fifo},${org.accounts.revenue},'Widget',${quantity},${unit},'10','20','0',${org.stockLocationId})`);
     await db.execute(
       sql`update documents set status='approved',subtotal='20',total='20' where org_id=${org.orgId} and id=${id}`,
     );
@@ -102,13 +105,24 @@ test(
           itemId: org.items.fifo,
           stockLocationId: org.stockLocationId,
           subsidiaryId: org.subsidiaryId,
-          quantity: "20",
+          quantity: "40000",
           unitCost: "2",
           date: org.date,
           offsetAccountId: org.accounts.clearing,
         });
       });
-      const first = await order(org, actor, "SO-DIRECT-LOW", "2.00000002");
+      const stockBefore = await native(() => getOnHandWith(db, org.orgId, org.items.fifo, org.stockLocationId));
+      await assert.rejects(
+        order(org, actor, "SO-DIRECT-PRECISION-REFUSED", "2.00000002"),
+        (error: unknown) => error instanceof InventoryError && /cannot be stored exactly with four decimal places/.test(error.message),
+      );
+      assert.deepEqual(await native(() => getOnHandWith(db, org.orgId, org.items.fifo, org.stockLocationId)), stockBefore);
+      assert.equal((await native(() => db.execute(sql`select id from documents
+        where org_id=${org.orgId} and kind='pick_list'`))).rows.length, 0,
+        "unrepresentable base precision must not create a pick or reservation");
+      await native(() => db.execute(sql`update item_inventory_profiles set unit_conversions='{"bulk":10000}'::jsonb
+        where org_id=${org.orgId} and item_id=${org.items.fifo}`));
+      const first = await order(org, actor, "SO-DIRECT-LOW", "2.00000002", "bulk");
       const second = await order(org, actor, "SO-DIRECT-HIGH", "2");
       const later = await order(org, actor, "SO-DIRECT-LATER", "2");
       const cutoff = `${org.date}T12:00:00Z`;
@@ -130,10 +144,16 @@ test(
       const input = {
         warehouseId: org.stockLocationId,
         subsidiaryId: org.subsidiaryId,
+        pickListIds: [first.pick.id, second.pick.id],
         mode: "priority" as const,
         cutoffAt: cutoff,
         commandKey: randomUUID(),
       };
+      await assert.rejects(releasePickWave(org.orgId, actor, {
+        ...input, pickListIds: [first.pick.id, second.pick.id, later.pick.id], commandKey: randomUUID(),
+      }), ScopeNotFoundError);
+      assert.equal((await native(() => db.execute(sql`select id from pick_waves where org_id=${org.orgId}`))).rows.length, 0,
+        "a member beyond the cutoff must refuse the whole explicit wave");
       const wave = await releasePickWave(org.orgId, actor, input);
       const members = await native(() =>
         db.execute<{
@@ -164,6 +184,7 @@ test(
       const gated = await releasePickWave(org.orgId, actor, {
         ...input,
         mode: "cutoff",
+        pickListIds: [later.pick.id],
         cutoffAt: `${org.date}T14:00:00Z`,
         commandKey: randomUUID(),
       });
@@ -188,12 +209,28 @@ test(
         }),
         /between zero/,
       );
+      const taskCount = async () => (await native(() => db.execute(sql`select id from warehouse_execution_tasks
+        where org_id=${org.orgId} and document_line_id=${pickLine}`))).rows.length;
+      const beforeTaskCount = await taskCount();
+      await assert.rejects(suggestPickConfirmation(org.orgId, actor, {
+        lineId: pickLine, quantity: "1.000000001", reason: "Unrepresentable source precision", commandKey: randomUUID(),
+      }), /between zero/);
+      const secondView = await withOrgTransaction(org.orgId, () =>
+        getFulfillmentDocument(db, org.orgId, second.pick.id, null));
+      await assert.rejects(suggestPickConfirmation(org.orgId, actor, {
+        lineId: secondView!.lines[0]!.lineId, quantity: "1.00000001",
+        reason: "Unrepresentable base precision", commandKey: randomUUID(),
+      }), /cannot be stored exactly with four decimal places/);
+      assert.equal(await taskCount(), beforeTaskCount, "refusal must not leave suggested work");
+      assert.equal((await native(() => db.execute(sql`select id from warehouse_execution_tasks
+        where org_id=${org.orgId} and document_line_id=${secondView!.lines[0]!.lineId}`))).rows.length, 0);
       const task = await suggestPickConfirmation(org.orgId, actor, {
         lineId: pickLine,
         quantity: "1.00000001",
         reason: "One unit missing on shelf",
         commandKey: randomUUID(),
       });
+      assert.equal(task.quantity, "10000.0001", "conversion retains all eight document places exactly");
       const confirm = () =>
         confirmExecutionTask(
           org.orgId,
@@ -230,6 +267,8 @@ test(
         "short picking does not fulfill or cancel demand",
       );
       assert.equal(candidates!.lines[0]!.heldByPickLists, "1.00000001");
+      assert.equal(candidates!.lines[0]!.allocations[0]!.quantity, "2.99959999",
+        "base stock minus exact reservations remains selectable at eight-place document precision");
       const shipment = await withOrg(org.orgId, () =>
         db.transaction((tx) =>
           createShipment(tx, org.orgId, actor, {
@@ -317,7 +356,7 @@ test(
       const scan = {
         item: "DIRECT-WIDGET",
         bin: "PACK-DIRECT",
-        quantity: "1.00000001",
+        quantity: "10000.0001",
       };
       const doPack = (evidence = scan) =>
         confirmExecutionTask(
@@ -341,7 +380,7 @@ test(
         "0.0000",
       );
       assert.equal(
-        (await doPack({ ...scan, quantity: "1.00000002" })).status,
+        (await doPack({ ...scan, quantity: "10000.00010001" })).status,
         "exception",
         "an eight-place scan mismatch cannot round into a confirmation",
       );
@@ -380,9 +419,9 @@ test(
           subsidiaryId: org.subsidiaryId,
         }),
       );
-      assert.equal(physical.quantity, "1.0000");
+      assert.equal(physical.quantity, "10000.0001");
       assert.equal(
-        compareDecimal(physical.value, "2"),
+        compareDecimal(physical.value, "20000.0002"),
         0,
         "carton movement carries the original stock cost",
       );
@@ -622,6 +661,13 @@ test(
         lineIds: ship!.lines.map((line) => line.lineId),
       });
       const unitId = unit.id;
+      const members = await native(() => db.execute<{ shipment_line_id: string }>(sql`
+        select shipment_line_id from handling_unit_contents where org_id=${org.orgId} and handling_unit_id=${unitId}`));
+      assert.deepEqual(members.rows.map((row) => row.shipment_line_id).sort(), ship!.lines.map((line) => line.lineId).sort());
+      assert.equal((await createHandlingUnit(org.orgId, actor, {
+        shipmentId: shipment.id, code: "TWO-LINE-CARTON", binId: org.stockLocationId,
+        lineIds: ship!.lines.map((line) => line.lineId).reverse(),
+      })).id, unitId, "reordered multi-member selection reopens the same carton");
       const suggestions = [];
       for (const line of ship!.lines)
         suggestions.push(

@@ -3,7 +3,8 @@ import type { SqlExecutor } from "../platform/db.ts";
 import { add, fromUnits, toUnits } from "../money/money.ts";
 import { activePickReservations } from "./pick-reservations.ts";
 import { saleableLocation, unheldTracking } from "./stock-eligibility.ts";
-import { toBaseQuantity } from "./costing.ts";
+import { toBaseQuantity, toExactStockQuantity } from "./costing.ts";
+import { canonicalDecimal, divideDecimal, fixedDecimal } from "../money/exact-decimal.ts";
 import { InventoryError } from "./contracts.ts";
 
 export interface PhysicalAllocation {
@@ -74,7 +75,7 @@ export async function allocationCandidates(
         (q, h) =>
           add(
             q,
-            toBaseQuantity(
+            toExactStockQuantity(
               h.reserved,
               h.unit ?? null,
               profile.unit_conversions,
@@ -86,10 +87,12 @@ export async function allocationCandidates(
       );
     const base = toUnits(row.quantity) - toUnits(held);
     if (base <= 0n) return [];
-    if ((base * 10000n) % factor !== 0n)
+    if ((base * 100000000n) % factor !== 0n)
       throw new InventoryError(
         "Available stock cannot be represented in the order unit — use the inventory base unit",
       );
-    return [{ ...row, quantity: fromUnits((base * 10000n) / factor) }];
+    const documentQuantity = divideDecimal(fromUnits(base), fromUnits(factor), 8);
+    return [{ ...row, quantity: canonicalDecimal(documentQuantity, 4) === null
+      ? documentQuantity : fixedDecimal(documentQuantity, 4) }];
   });
 }
