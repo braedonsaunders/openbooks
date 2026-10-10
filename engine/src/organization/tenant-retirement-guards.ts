@@ -1129,9 +1129,9 @@ export const TENANT_RETIREMENT_GUARDS = [
   },
   {
     "name": "protect_application_idempotency_key",
-    "source": "0001_baseline.sql",
-    "sha256": "23fe7ce36335a3fa5f22c988910b3fe1ec199a3e285446cb443a867db06d4544",
-    "newSha256": "1ed4fa92bc97848784dea1a4dca2ff04ddf960b524683bc449fe1953f199f83e",
+    "source": "0402_rls_bypass_trigger_bodies.sql",
+    "sha256": "51a6d8252d54ee5b75a3d6ead4faf5e3b231a5d4bb3216abb06536d2d4830e51",
+    "newSha256": "1972cf0709d1c70ba282f05046deff4e8deb311235964166c0e925526e93d0cc",
     "patch": true
   },
   {
