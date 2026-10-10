@@ -34,15 +34,23 @@ const WEEK = '2026-07-12'
 
 async function fixture() {
   const org = await createScratchOrg()
-  const mate = await createScratchUser(org.orgId, 'Billable Mate', 'mate')
+  const mateUser = await createScratchUser(org.orgId, 'Billable Mate', 'mate')
   const supervisor = await createScratchUser(org.orgId, 'Time supervisor', 'time_supervisor')
   await db.execute(sql`update app_roles set permissions='["time.self"]'::jsonb where org_id=${org.orgId} and key='mate'`)
-  await db.execute(sql`update app_roles set permissions='["time.read","time.manage","time.approve"]'::jsonb where org_id=${org.orgId} and key='time_supervisor'`)
+  // Project weeks need project visibility on top of the time grant: the
+  // shared authority locks the project target for anyone else's week.
+  await db.execute(sql`update app_roles set permissions='["time.read","time.manage","time.approve","projects.read"]'::jsonb where org_id=${org.orgId} and key='time_supervisor'`)
   await db.execute(sql`update orgs set settings = settings || ${JSON.stringify({
     features: { projects: true, timeTracking: true },
     timesheets: { requireApproval: true },
     laborCosting: { allowUnratedTime: true },
   })}::jsonb where id=${org.orgId}`)
+  // The week belongs to a person party pinned past the employment guard; the
+  // login acts as that person through users.party_id.
+  const mate = randomUUID()
+  await db.execute(sql`insert into parties(id,org_id,kind,display_name,subsidiary_id,is_active,custom)
+    values (${mate},${org.orgId},'person','Billable mate',${org.subsidiaryId},true,'{}'::jsonb)`)
+  await db.execute(sql`update users set party_id=${mate} where id=${mateUser} and org_id=${org.orgId}`)
   const projectId = randomUUID()
   await db.execute(sql`
     insert into projects (id, org_id, subsidiary_id, code, name, customer_id, status, is_active, custom)
@@ -75,7 +83,7 @@ async function fixture() {
   const entries = async () => (await db.execute<{ status: string; is_billable: boolean; billing_status: string }>(sql`
     select status, is_billable, billing_status from time_entries where org_id=${org.orgId} and employee_party_id=${mate}`)).rows
   const close = async () => { session.user = null; await dropScratchOrg(org.orgId) }
-  return { org, mate, supervisor, projectId, line, as, save, submit, billable, approve, entries, close }
+  return { org, mate, mateUser, supervisor, projectId, line, as, save, submit, billable, approve, entries, close }
 }
 
 const needsDb = { skip: !env.OPENBOOKS_DB_URL }
@@ -83,7 +91,7 @@ const needsDb = { skip: !env.OPENBOOKS_DB_URL }
 test('an approver marks a submitted line non-billable with per-entry audit, and approval keeps the final flag', needsDb, async () => {
   const f = await fixture()
   try {
-    f.as(f.mate, 'Billable Mate')
+    f.as(f.mateUser, 'Billable Mate')
     assert.equal((await f.save()).status, 200)
     assert.equal((await f.submit()).status, 200)
     f.as(f.supervisor, 'Time supervisor')
@@ -111,7 +119,7 @@ test('an approver marks a submitted line non-billable with per-entry audit, and 
 test('a billable change on an approved line refuses by name with the way back', needsDb, async () => {
   const f = await fixture()
   try {
-    f.as(f.mate, 'Billable Mate')
+    f.as(f.mateUser, 'Billable Mate')
     assert.equal((await f.save()).status, 200)
     assert.equal((await f.submit()).status, 200)
     f.as(f.supervisor, 'Time supervisor')
@@ -129,7 +137,7 @@ test('a billable change on an approved line refuses by name with the way back', 
 test('a billable change on a billed line refuses by name with the invoice remedy', needsDb, async () => {
   const f = await fixture()
   try {
-    f.as(f.mate, 'Billable Mate')
+    f.as(f.mateUser, 'Billable Mate')
     assert.equal((await f.save()).status, 200)
     assert.equal((await f.submit()).status, 200)
     await db.execute(sql`update time_entries set billing_status='billed' where org_id=${f.org.orgId} and employee_party_id=${f.mate}`)
