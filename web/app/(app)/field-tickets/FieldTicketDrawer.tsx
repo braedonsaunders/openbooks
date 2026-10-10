@@ -30,6 +30,7 @@ import { confirmDialog } from '@/lib/confirm'
 import { TransactionDrawer } from '../../../components/transaction-drawer'
 import { HeaderFields } from '../../../components/transaction-form/header-fields'
 import { PdfButton } from '../../../components/pdf-button'
+import { ApprovalActions } from '../../../components/approval-actions'
 /**
  * The field-ticket flyout — the standard transaction drawer: configurable
  * header form (project → derives customer/PO/period), then the ticket's own
@@ -1160,6 +1161,12 @@ export function FieldTicketDrawer(props: FieldTicketDrawerProps) {
                     <Trash2 size={14} /> {t('editor.discard')}
                   </Button>
                 ) : null}
+                {/* Flow-gate Approve/Reject rides the viewer's gate
+                    capability (record-state/myActions), not the edit grant:
+                    a gate assignee with read-only access decides here
+                    through the same native gate decision path the Inbox
+                    uses. Renders nothing when no gate awaits this viewer. */}
+                <ApprovalActions subjectKind="field_ticket" subjectId={ticket.id} />
               </>
             )
           )}
