@@ -462,9 +462,6 @@ export function PartyDrawer({
   // successful save while the data was silently lost.
   const { busy, refusal, execute, clearRefusal, refuse } = useAppAction()
 
-  // Existing parties default to read-only; creation flows can explicitly
-  // request edit mode. Permission checks remain authoritative. Unsaved-create
-  // opens editable: there is no persisted record to read yet.
   // Sections that persist through their own endpoint (relationship,
   // compliance) edit with the record and save through its single Save, so a
   // viewer who may manage only one of them can still enter edit mode; the
@@ -472,6 +469,9 @@ export function PartyDrawer({
   const canEditRecord = canManage
     || (showRelationshipTab && canManageCrmAccounts)
     || (showComplianceTab && canManageCompliance)
+  // Existing parties default to read-only; creation flows can explicitly
+  // request edit mode. Permission checks remain authoritative. Unsaved-create
+  // opens editable: there is no persisted record to read yet.
   const [mode, setMode] = useState<DrawerMode>(
     createMode ? 'edit' : initialDrawerMode(initialMode, canEditRecord),
   )
@@ -924,7 +924,6 @@ export function PartyDrawer({
       setSavingSections(false)
     }
   }
-
 
   function cancel() {
     // Unsaved-create Cancel writes nothing: there is no persisted row to
