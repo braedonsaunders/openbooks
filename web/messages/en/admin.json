@@ -722,10 +722,10 @@
       "perEntityNote": "This company is your top-level entity — its legal name, country, and currency live here. Add subsidiaries beneath it, each with its own.",
       "subsidiariesLink": "Open Subsidiaries",
       "displayName": "Display name",
-      "displayNamePlaceholder": "Acme Manufacturing",
+      "displayNamePlaceholder": "Your company name",
       "displayNameHint": "The company name people see throughout OpenBooks. It does not need to match the registered legal name.",
       "legalName": "Legal name",
-      "legalNamePlaceholder": "Acme Manufacturing Inc.",
+      "legalNamePlaceholder": "Registered legal name",
       "legalNameHint": "The company’s registered name for formal records, reports and documents.",
       "country": "Country",
       "countryPlaceholder": "Select a country…",
@@ -1087,7 +1087,9 @@
     "linkSave": "Save link",
     "linkSaved": "Linked person saved",
     "linkSelfRefused": "You cannot change your own linked person — another administrator must perform it.",
-    "linkStale": "The linked person changed — close, refresh, and try again."
+    "linkStale": "The linked person changed — close, refresh, and try again.",
+    "inviteChooseRole": "Choose a role",
+    "inviteRoleRequired": "Choose the role this person will have."
   },
   "permissions": {
     "groups": {

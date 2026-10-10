@@ -19,10 +19,12 @@ export function InviteUserButton({
   allRoles: { id: string; name: string; isBuiltIn: boolean }[]
 }) {
   const t = useTranslations('admin.users')
+  const router = useRouter()
   const [open, setOpen] = useState(false)
   return (
     <>
-      <Button onClick={() => setOpen(true)}>{t('inviteButton')}</Button>
+      {/* Refresh on open so roles created since this page loaded are offered. */}
+      <Button onClick={() => { router.refresh(); setOpen(true) }}>{t('inviteButton')}</Button>
       {open ? (
         <InviteDrawer allRoles={allRoles} onClose={() => setOpen(false)} />
       ) : null}
@@ -41,7 +43,8 @@ function InviteDrawer({
   const tCommon = useTranslations('common')
   const router = useRouter()
   const [email, setEmail] = useState('')
-  const [roleId, setRoleId] = useState(allRoles[0]?.id ?? '')
+  // No role is preselected: the inviter chooses one deliberately.
+  const [roleId, setRoleId] = useState('')
   const [busy, setBusy] = useState(false)
   const [link, setLink] = useState<string | null>(null)
 
@@ -67,7 +70,7 @@ function InviteDrawer({
       return
     }
     if (!roleId) {
-      toast.error(t('noRoles'))
+      toast.error(t('inviteRoleRequired'))
       return
     }
     setBusy(true)
@@ -144,6 +147,7 @@ function InviteDrawer({
               disabled={busy}
               onChange={(e) => setRoleId(e.target.value)}
             >
+              <option value="" disabled>{t('inviteChooseRole')}</option>
               {allRoles.map((role) => (
                 <option key={role.id} value={role.id}>
                   {role.name}

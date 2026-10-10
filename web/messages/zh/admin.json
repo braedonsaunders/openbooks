@@ -722,10 +722,10 @@
       "perEntityNote": "本公司是您的顶层实体——法定名称、国家和币种在此维护。请在其下添加子公司，每个子公司拥有各自的信息。",
       "subsidiariesLink": "打开子公司",
       "displayName": "显示名称",
-      "displayNamePlaceholder": "Acme Manufacturing",
+      "displayNamePlaceholder": "您的公司名称",
       "displayNameHint": "在 OpenBooks 各处显示的公司名称，不必与注册法定名称相同。",
       "legalName": "法定名称",
-      "legalNamePlaceholder": "Acme Manufacturing Inc.",
+      "legalNamePlaceholder": "注册法定名称",
       "legalNameHint": "用于正式记录、报表和文件的公司注册名称。",
       "country": "国家/地区",
       "countryPlaceholder": "选择国家…",
@@ -1087,7 +1087,9 @@
     "inviteCopyLink": "复制链接",
     "inviteCopied": "链接已复制",
     "inviteCopyFailed": "复制失败 — 请手动选择链接",
-    "inviteTooManyAttempts": "邀请过于频繁 — 请稍后再试"
+    "inviteTooManyAttempts": "邀请过于频繁 — 请稍后再试",
+    "inviteChooseRole": "选择角色",
+    "inviteRoleRequired": "请选择此人将拥有的角色。"
   },
   "permissions": {
     "hrm_employment_read": "查看雇用记录",
