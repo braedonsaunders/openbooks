@@ -14,10 +14,23 @@ import { billSubscriptionNow } from "./subscription-billing.ts";
 import {
   runConsolidationGroup,
   runDueConsolidations,
+  ConsolidatedBillingError,
 } from "./consolidated-billing.ts";
 import { createScratchOrg, createScratchUser, dropScratchOrgReporting, type ScratchOrg } from "../testing/fixtures.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
+
+async function grantConsolidationOperator(orgId: string, actorId: string): Promise<void> {
+  const result = await db.execute(sql`
+    update app_roles set permissions='["documents.manage","ar.post"]'::jsonb,
+      subsidiary_restriction='{"mode":"all"}'::jsonb
+    where org_id=${orgId} and id in
+      (select role_id from role_assignments where org_id=${orgId} and user_id=${actorId}) returning id
+  `);
+  assert.equal(result.rows.length, 1);
+}
+
+
 
 async function enableFeatures(orgId: string): Promise<void> {
   await db.execute(sql`
@@ -97,6 +110,7 @@ test(
     const org = await createScratchOrg();
     try {
       const actorId = await createScratchUser(org.orgId, "Consolidated billing operator", "admin");
+      await grantConsolidationOperator(org.orgId, actorId);
       await enableFeatures(org.orgId);
       const payer = await seedCustomer(org.orgId, "Payer", org.subsidiaryId);
       const child = await seedCustomer(org.orgId, "Service customer", org.subsidiaryId);
@@ -173,6 +187,7 @@ test(
     const jobs: Promise<unknown>[] = [];
     try {
       const actorId = await createScratchUser(org.orgId, "Consolidated billing operator", "admin");
+      await grantConsolidationOperator(org.orgId, actorId);
       await enableFeatures(org.orgId);
       const payer = await seedCustomer(org.orgId, "Concurrent payer", org.subsidiaryId);
       const child = await seedCustomer(org.orgId, "Concurrent service customer", org.subsidiaryId);
@@ -247,6 +262,7 @@ test(
     const org = await createScratchOrg();
     try {
       const actorId = await createScratchUser(org.orgId, "Billing", "admin");
+      await grantConsolidationOperator(org.orgId, actorId);
       await enableFeatures(org.orgId);
       const payer = await seedCustomer(org.orgId, "Parent Co", org.subsidiaryId);
       const children = [
@@ -317,6 +333,7 @@ test(
     const org = await createScratchOrg();
     try {
       const actorId = await createScratchUser(org.orgId, "Billing", "admin");
+      await grantConsolidationOperator(org.orgId, actorId);
       await enableFeatures(org.orgId);
       const child = await seedCustomer(org.orgId, "Moving Child", org.subsidiaryId);
       const first = await seedCustomer(org.orgId, "First Payer", org.subsidiaryId);
@@ -345,6 +362,7 @@ test(
     const org = await createScratchOrg();
     try {
       const actorId = await createScratchUser(org.orgId, "Billing", "admin");
+      await grantConsolidationOperator(org.orgId, actorId);
       await enableFeatures(org.orgId);
       const branchId = randomUUID();
       await db.execute(sql`
@@ -405,6 +423,7 @@ test(
     const org = await createScratchOrg();
     try {
       const actorId = await createScratchUser(org.orgId, "Billing", "admin");
+      await grantConsolidationOperator(org.orgId, actorId);
       await enableFeatures(org.orgId);
       const payer = await seedCustomer(org.orgId, "Parent Co", org.subsidiaryId);
       const child = await seedCustomer(org.orgId, "Only Child", org.subsidiaryId);
@@ -449,6 +468,7 @@ test(
     const org = await createScratchOrg();
     try {
       const actorId = await createScratchUser(org.orgId, "Billing", "admin");
+      await grantConsolidationOperator(org.orgId, actorId);
       await enableFeatures(org.orgId);
       const payer = await seedCustomer(org.orgId, "Parent Co", org.subsidiaryId);
       const child = await seedCustomer(org.orgId, "Only Child", org.subsidiaryId);
@@ -475,3 +495,54 @@ test(
     }
   },
 );
+
+test("consolidation rechecks current unrestricted operator and posting authority before creation or replay", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const actorId = await createScratchUser(org.orgId, "Consolidation operator", "admin");
+    await grantConsolidationOperator(org.orgId, actorId);
+    await enableFeatures(org.orgId);
+    const payer = await seedCustomer(org.orgId, "Payer", org.subsidiaryId);
+    const child = await seedCustomer(org.orgId, "Service customer", null);
+    const groupId = await seedGroup(org.orgId, payer);
+    await seedRelationship(org.orgId, child, payer, groupId, "2026-01-01", null);
+    const planId = await seedPlan(org, actorId);
+    const subId = await seedSubscription(org, actorId, planId, child, org.date);
+    await billSubscriptionNow(org.orgId, subId, org.date, { actorId }, null);
+    const snapshot = () => withOrgContext(org.orgId, async () => (await db.execute(sql`
+      select (select jsonb_agg(to_jsonb(d) order by d.id) from documents d where d.org_id=${org.orgId}) as documents,
+        (select count(*)::int from audit_log where org_id=${org.orgId}) as audits,
+        (select count(*)::int from consolidation_runs where org_id=${org.orgId}) as runs,
+        (select count(*)::int from document_links where org_id=${org.orgId}) as links,
+        (select count(*)::int from journal_entries where org_id=${org.orgId}) as journals,
+        (select count(*)::int from flow_runs where org_id=${org.orgId}) as flows
+    `)).rows[0]);
+    const changeAuthority = async (permissions: readonly string[], restriction: {mode:"all"} | {mode:"list";subsidiaryIds:string[]}) => {
+      const changed = await db.execute(sql`update app_roles set permissions=${JSON.stringify(permissions)}::jsonb,
+        subsidiary_restriction=${JSON.stringify(restriction)}::jsonb where org_id=${org.orgId} and key='admin' returning id`);
+      assert.equal(changed.rows.length, 1);
+    };
+    const refuse = async (options: Parameters<typeof runConsolidationGroup>[4]) => {
+      const before = await snapshot();
+      await assert.rejects(runConsolidationGroup(org.orgId, groupId, "2026-07-01", "2026-07-31", options),
+        (error: unknown) => error instanceof ConsolidatedBillingError && error.status === 404);
+      assert.deepEqual(await snapshot(), before, "authority refusal has no document, lineage, approval or journal effects");
+    };
+    await refuse({ actorId: randomUUID() });
+    await refuse({ actorId, allowedSubsidiaryIds: new Set() });
+    await refuse({ actorId, allowedSubsidiaryIds: new Set([org.subsidiaryId]) });
+    await refuse({ actorId: "" });
+    await refuse({ autoPost: true });
+    await changeAuthority(["documents.manage","ar.post"], {mode:"list",subsidiaryIds:[org.subsidiaryId]});
+    await refuse({ actorId, allowedSubsidiaryIds: null });
+    await changeAuthority(["documents.manage"], {mode:"all"});
+    await refuse({ actorId, autoPost: true });
+    const [run] = await runConsolidationGroup(org.orgId, groupId, "2026-07-01", "2026-07-31", { actorId });
+    assert.ok(run); assert.equal(run.posted, false, "manage-only authority may create the native payer draft");
+    await changeAuthority([], {mode:"all"});
+    await refuse({ actorId });
+    await grantConsolidationOperator(org.orgId, actorId);
+    const [replay] = await runConsolidationGroup(org.orgId, groupId, "2026-07-01", "2026-07-31", { actorId });
+    assert.equal(replay.invoiceId, run.invoiceId); assert.equal(replay.replayed, true);
+  } finally { await dropScratchOrgReporting(org.orgId); }
+});

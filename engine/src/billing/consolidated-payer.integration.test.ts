@@ -25,6 +25,18 @@ import {
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
+async function grantConsolidationOperator(orgId: string, actorId: string): Promise<void> {
+  const result = await db.execute(sql`
+    update app_roles set permissions='["documents.manage","ar.post"]'::jsonb,
+      subsidiary_restriction='{"mode":"all"}'::jsonb
+    where org_id=${orgId} and id in
+      (select role_id from role_assignments where org_id=${orgId} and user_id=${actorId}) returning id
+  `);
+  assert.equal(result.rows.length, 1);
+}
+
+
+
 async function enableFeatures(orgId: string): Promise<void> {
   await db.execute(sql`
     update orgs
@@ -60,6 +72,7 @@ type PayerFixture = {
 async function seedPayerInvoice(dueDate: string): Promise<PayerFixture> {
   const org = await createScratchOrg();
   const actorId = await createScratchUser(org.orgId, "Billing", "admin");
+  await grantConsolidationOperator(org.orgId, actorId);
   await enableFeatures(org.orgId);
   // Collection receipts post on the real today, outside the July billing
   // window: provision the current month so the receipt can post.

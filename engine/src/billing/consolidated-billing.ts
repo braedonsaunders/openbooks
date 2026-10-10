@@ -5,6 +5,8 @@ import { postDocument } from "../ledger/posting-document.ts";
 import { submitAndReleaseIfUngated } from "../flows/submit.ts";
 import { lockAndCheckOrgFeature, orgFeatureEnabled } from "../organization/org-feature-lock.ts";
 import { uuidArray } from "../organization/subsidiaries.ts";
+import { lockActorCommandAuthority } from "../organization/actor-command-authority.ts";
+import { ScopeNotFoundError } from "../organization/subsidiary-scope.ts";
 import { businessToday } from "../platform/business-date.ts";
 import { addCalendarDays, daysInCivilMonth, mondayOfIsoWeek } from "../platform/civil-date.ts";
 import { db, orgContext, withBypass, withOrg, type SqlExecutor } from "../platform/db.ts";
@@ -373,6 +375,8 @@ async function replayConsolidationRuns(
 
 export interface ConsolidationRunOptions {
   actorId?: string | null;
+  /** Operator requests may narrow live authority, never widen it. */
+  allowedSubsidiaryIds?: ReadonlySet<string> | null;
   /** Post each consolidated invoice through approval/posting instead of leaving it draft. */
   autoPost?: boolean;
 }
@@ -454,6 +458,33 @@ function orderLines(lines: PendingLine[], grouping: ConsolidationGrouping): Pend
   });
 }
 
+/** Consolidation is a cross-entity command; operator authority must cover the organization. */
+async function lockConsolidationCommandAuthority(orgId: string, opts: ConsolidationRunOptions): Promise<void> {
+  if (opts.allowedSubsidiaryIds !== undefined && opts.allowedSubsidiaryIds !== null) {
+    throw new ConsolidatedBillingError("Consolidated billing requires unrestricted legal-entity access.", 404);
+  }
+  // Scheduled native runs have no operator principal and never auto-post.
+  if (opts.actorId === undefined || opts.actorId === null) {
+    if (opts.autoPost) throw new ConsolidatedBillingError("Choose an authorized operator before posting consolidated invoices.", 404);
+    return;
+  }
+  const actor = (await db.execute(sql`
+    select id from users where id=${opts.actorId} and is_active and (org_id=${orgId} or is_super_admin) for share
+  `)).rows[0];
+  if (!actor) throw new ConsolidatedBillingError("Consolidated billing is unavailable for this operator.", 404);
+  try {
+    const scope = await lockActorCommandAuthority(db, orgId, opts.actorId, null, "documents.manage");
+    if (scope !== null) throw new ScopeNotFoundError();
+    if (opts.autoPost) {
+      const postingScope = await lockActorCommandAuthority(db, orgId, opts.actorId, null, "ar.post");
+      if (postingScope !== null) throw new ScopeNotFoundError();
+    }
+  } catch (error) {
+    if (error instanceof ScopeNotFoundError) throw new ConsolidatedBillingError("Consolidated billing is unavailable for this operator.", 404);
+    throw error;
+  }
+}
+
 /**
  * Consolidate one group's pending drafts for [periodStart, periodEnd] into
  * one invoice per payer per currency. Drafts stay draft and are superseded
@@ -482,6 +513,7 @@ export async function runConsolidationGroup(
     if (!(await lockAndCheckOrgFeature(db, orgId, "consolidatedBilling"))) {
       throw new ConsolidatedBillingError(`Consolidated billing is turned off for this organization. ${FEATURE_REMEDY}`);
     }
+    await lockConsolidationCommandAuthority(orgId, opts);
     const lockKey = `consolidation:${orgId}:${groupId}:${periodStart}:${periodEnd}`;
     await db.execute(sql`select pg_advisory_xact_lock(hashtextextended(${lockKey}, 0))`);
     const group = await loadConsolidationGroup(orgId, groupId);
