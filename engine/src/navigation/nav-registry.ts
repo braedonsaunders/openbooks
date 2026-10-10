@@ -170,7 +170,7 @@ export const NAV_MODULES: NavModule[] = [
     requiredPermission: 'crm.forecasts.read',
   },
 
-  { key: 'crm-sales', href: '/crm/sales', label: 'Overview', iconKey: 'users', group: 'customers', subgroup: 'crm-sales', requiredPermissionsAny: ['crm.setup.manage', 'crm.forecasts.read'] },
+  { key: 'crm-sales', href: '/crm/sales', label: 'Overview', iconKey: 'chart-no-axes-combined', group: 'customers', subgroup: 'crm-sales', requiredPermissionsAny: ['crm.setup.manage', 'crm.forecasts.read'] },
 
   // Customer records and the sell-to-collect workflow.
   {
@@ -186,7 +186,7 @@ export const NAV_MODULES: NavModule[] = [
     key: 'pre-billing',
     href: '/projects/pre-billing',
     label: 'Pre-billing',
-    iconKey: 'clipboard-check',
+    iconKey: 'scroll',
     group: 'customers',
     subgroup: 'sell-collect',
     requiredPermission: 'projects.read',
@@ -248,7 +248,7 @@ export const NAV_MODULES: NavModule[] = [
     key: 'ar-invoices',
     href: '/ar/invoices',
     label: 'Invoices',
-    iconKey: 'clipboard-check',
+    iconKey: 'receipt',
     group: 'customers',
     subgroup: 'sell-collect',
     requiredPermission: 'ar.read',
@@ -308,7 +308,7 @@ export const NAV_MODULES: NavModule[] = [
     key: 'contract-costs',
     href: '/revenue/contract-costs',
     label: 'Contract Costs',
-    iconKey: 'trending-up',
+    iconKey: 'coins',
     group: 'accounting',
     subgroup: 'revenue-accounting',
     requiredPermission: 'contract_costs.read',
@@ -335,7 +335,7 @@ export const NAV_MODULES: NavModule[] = [
     requiredPermission: 'items.read',
   },
   {
-    key: 'manufacturing', href: '/manufacturing', label: 'Manufacturing', iconKey: 'package', group: 'operations', subgroup: 'delivery',
+    key: 'manufacturing', href: '/manufacturing', label: 'Manufacturing', iconKey: 'factory', group: 'operations', subgroup: 'delivery',
     requiredPermission: 'manufacturing.read', featureKey: 'manufacturing', exact: true,
   },
 
@@ -344,7 +344,7 @@ export const NAV_MODULES: NavModule[] = [
     requiredPermission:'time.read',requiredPermissionsAll:['manufacturing.read'],featureKey:'manufacturing',menuParent:'manufacturing',exact:true,
   },
   {
-    key:'manufacturing-quality',href:'/manufacturing/quality',label:'Quality',iconKey:'clipboard',group:'operations',subgroup:'manufacturing',
+    key:'manufacturing-quality',href:'/manufacturing/quality',label:'Quality',iconKey:'badge-check',group:'operations',subgroup:'manufacturing',
     requiredPermission:'manufacturing.read',requiredPermissionsAll:['items.read'],featureKey:'manufacturing',menuParent:'manufacturing',recordTarget:{kind:'query',param:'inspection'},exact:true,
   },
   ...([
@@ -359,7 +359,7 @@ export const NAV_MODULES: NavModule[] = [
     key: 'warehouses',
     href: '/warehouse',
     label: 'Warehouses',
-    iconKey: 'package',
+    iconKey: 'warehouse',
     group: 'operations',
     subgroup: 'delivery',
     requiredPermission: 'items.read',
@@ -443,7 +443,7 @@ export const NAV_MODULES: NavModule[] = [
     key: 'ap-bills',
     href: '/ap/bills',
     label: 'Bills',
-    iconKey: 'clipboard',
+    iconKey: 'receipt',
     group: 'purchasing',
     subgroup: 'buy',
     requiredPermission: 'ap.read',
@@ -503,7 +503,7 @@ export const NAV_MODULES: NavModule[] = [
     key: 'compliance-vendors',
     href: '/compliance/vendors',
     label: 'Subcontractors',
-    iconKey: 'list-checks',
+    iconKey: 'user-check',
     group: 'purchasing',
     subgroup: 'compliance',
     requiredPermission: 'compliance.read',
@@ -575,7 +575,7 @@ export const NAV_MODULES: NavModule[] = [
     key: 'banking-payouts',
     href: '/banking/payouts',
     label: 'Payouts',
-    iconKey: 'receipt',
+    iconKey: 'banknote-arrow-up',
     group: 'banking',
     subgroup: 'processing',
     requiredPermission: 'banking.read',
@@ -585,7 +585,7 @@ export const NAV_MODULES: NavModule[] = [
     key: 'banking-match',
     href: '/banking/match',
     label: 'Match',
-    iconKey: 'list-checks',
+    iconKey: 'link',
     group: 'banking',
     subgroup: 'processing',
     requiredPermission: 'banking.reconcile',
@@ -659,17 +659,17 @@ export const NAV_MODULES: NavModule[] = [
     requiredPermission: 'assets.read',
   },
   {
-    key: 'leases', href: '/assets/leases', label: 'Lessee Leases', iconKey: 'building',
+    key: 'leases', href: '/assets/leases', label: 'Lessee Leases', iconKey: 'key',
     group: 'accounting', subgroup: 'assets', requiredPermission: 'assets.read',
   },
   {
     // Subsequent-measurement register (lease/asset/revenue/consolidation).
     // Not ASC 250 / IAS 8. Sits with Period Close, not Journals.
-    key: 'accounting-changes', href: '/accounting/changes', label: 'Accounting events', iconKey: 'journal',
+    key: 'accounting-changes', href: '/accounting/changes', label: 'Accounting events', iconKey: 'git-branch',
     group: 'accounting', subgroup: 'close', requiredPermission: 'gl.read',
   },
   {
-    key: 'provisions', href: '/accounting/provisions', label: 'Provisions and contingencies', iconKey: 'journal',
+    key: 'provisions', href: '/accounting/provisions', label: 'Provisions and contingencies', iconKey: 'shield',
     group: 'accounting', subgroup: 'close', requiredPermission: 'gl.read',
   },
   {
@@ -944,7 +944,7 @@ export const NAV_MODULES: NavModule[] = [
     key: 'admin-customization',
     href: '/admin/customization',
     label: 'Forms & Views',
-    iconKey: 'panel-left',
+    iconKey: 'sliders-horizontal',
     group: 'settings',
     subgroup: 'customize',
     requiredPermission: 'admin.customization.manage',
@@ -953,7 +953,7 @@ export const NAV_MODULES: NavModule[] = [
     key: 'admin-page-layouts',
     href: '/admin/page-layouts',
     label: 'Page Layouts',
-    iconKey: 'grid',
+    iconKey: 'layers',
     group: 'settings',
     subgroup: 'customize',
     requiredPermission: 'admin.customization.manage',
@@ -992,7 +992,7 @@ export const NAV_MODULES: NavModule[] = [
     key: 'automations',
     href: '/admin/automations',
     label: 'Automations',
-    iconKey: 'workflow',
+    iconKey: 'calendar-clock',
     group: 'settings',
     subgroup: 'automate',
     requiredPermission: 'automations.read',
