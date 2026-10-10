@@ -246,7 +246,16 @@ export async function transitionCrmAccountStage(
   };
 }
 
-/** Promote an account and write immutable evidence in the caller's transaction. */
+/**
+ * Promote an account and write immutable evidence in the caller's transaction.
+ *
+ * A promotion only ever ADVANCES the lifecycle. Quoting (or losing an
+ * opportunity) for an established customer leaves the stage — and the
+ * customer role — untouched instead of attempting a demotion the guard
+ * would refuse against open receivables. Explicit demotions stay on
+ * transitionCrmAccountStage, the two-way primitive the Relationship tab
+ * drives (already mapped to a 422 carrying its remedy).
+ */
 export async function promoteCrmAccount(
   executor: SqlExecutor,
   input: {
@@ -259,6 +268,27 @@ export async function promoteCrmAccount(
     reason?: string | null;
   },
 ): Promise<CrmStageTransition> {
+  // Read under the same row lock the transition takes and hold it to commit,
+  // so a concurrent manual demotion cannot slip between this check and the
+  // delegated move: the delegate re-reads the locked row and acts on it.
+  const current = (await executor.execute<{ lifecycle_stage: CrmLifecycleStage }>(sql`
+    select lifecycle_stage from crm_account_profiles
+     where org_id = ${input.orgId} and party_id = ${input.partyId}
+     for update
+  `)).rows[0]?.lifecycle_stage;
+  if (current && current !== input.toStage && !shouldPromoteLifecycle(current, input.toStage)) {
+    // Backward: already converged. With CRM off the lifecycle is frozen, the
+    // same idle the transition answers; with CRM on the stage stands and the
+    // outcome reports the live customer role, never a demotion refusal.
+    if (!(await crmFeatureEnabled(executor, input.orgId))) {
+      return { customerRoleActive: false, lifecycleApplied: false, transitioned: false };
+    }
+    const role = (await executor.execute<{ id: string }>(sql`
+      select id from customer_roles
+       where org_id = ${input.orgId} and party_id = ${input.partyId} and is_active
+    `)).rows[0];
+    return { customerRoleActive: Boolean(role), lifecycleApplied: true, transitioned: false };
+  }
   return transitionCrmAccountStage(executor, input);
 }
 

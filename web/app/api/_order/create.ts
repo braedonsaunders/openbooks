@@ -7,7 +7,7 @@ import { guardFeaturePermission } from '../../../lib/feature-gates'
 import { isUuid } from '../../../lib/list-params'
 import { isFeatureEnabled, subsidiaryFeatureEnabled } from '../../../lib/features'
 import type { OrderKind } from '../../../lib/order-kinds'
-import { promoteCrmAccount } from '@openbooks/engine/src/crm/crm.ts'
+import { CrmLifecycleRefusalError, promoteCrmAccount } from '@openbooks/engine/src/crm/crm.ts'
 import { persistLineTaxComponents } from "../../../lib/bills.ts";
 import { activeStockLocations, profiledItemIds, resolveLineStockLocation } from '../../../lib/stock-locations'
 import { segmentRegistry, validateExtraDims } from '../../../lib/segments'
@@ -480,6 +480,11 @@ export async function createOrder(
       : String(error)
     if (message.includes('idempotency_key_conflict')) {
       return NextResponse.json({ error: 'invalid_idempotency_key' }, { status: 409 })
+    }
+    // A CRM lifecycle refusal is operator-actionable (it names its remedy),
+    // not a server fault: answer 422 with its message instead of a 500.
+    if (error instanceof CrmLifecycleRefusalError) {
+      return bad(error.message)
     }
     if (message.includes('order_scope_invisible')) {
       return bad('the saved order is outside your visible subsidiaries — nothing was kept; choose a subsidiary in scope and save again')
