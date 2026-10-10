@@ -209,7 +209,7 @@ export async function loadRelatedTransactionDrawerData({
       listScopedPartyOptions(authz.user.orgId, authz.allowedSubsidiaryIds, { role: orderKind === 'purchase_order' ? 'vendor' : 'customer', activeOnly: true }).then((rows) => ({ rows })),
       scopedAccountOptions(authz.user.orgId, authz.allowedSubsidiaryIds, { activeOnly: true, postingOnly: true }).then((rows) => ({ rows })),
       db.execute<ElementOf<OrderProps['items']>>(sql`
-        select id, code, name, default_rate, income_account_id, expense_account_id, tax_code_id, unit from items
+        select id, code, name, default_rate, default_cost, income_account_id, expense_account_id, tax_code_id, unit from items
          where org_id = ${authz.user.orgId} and is_active
            and (
              ${inventoryEnabled ? sql`true` : sql`kind not in ('inventory', 'assembly', 'kit')`}

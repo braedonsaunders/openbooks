@@ -47,6 +47,8 @@ type Opt = {
   code?: string
   rate?: string
   default_rate?: string | null
+  /** Purchase cost per unit: the only catalog price a purchase line may default from. */
+  default_cost?: string | null
   income_account_id?: string | null
   expense_account_id?: string | null
   tax_code_id?: string | null
@@ -669,6 +671,28 @@ export function OrderDrawer({
     catch { return '0.0000' }
   }
 
+  /**
+   * Footer totals for a live draft: the same per-line amount and tax the
+   * grid cells render above, summed over exactly the lines the save will
+   * persist. Saved totals stay the source in view mode; without this a
+   * draft that was never saved reads 0.00 in the footer while its cells
+   * already compute. On save the footer adopts the server's stored totals.
+   */
+  const draftTotals = useMemo(() => {
+    const amounts: string[] = []
+    const taxes: string[] = []
+    for (const row of rows) {
+      if (!orderLineIsPopulated(row)) continue
+      amounts.push(lineAmount(row))
+      taxes.push(lineTax(row))
+    }
+    const subtotal = amounts.length > 0 ? sum(amounts) : '0'
+    const taxTotal = taxes.length > 0 ? sum(taxes) : '0'
+    return { subtotal, taxTotal, total: sum([subtotal, taxTotal]) }
+    // lineAmount/lineTax close over the same rows + tax profiles below.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rows, taxByProfile])
+
   /** Converted progress across all lines: billed against the ordered
    *  quantity net of cancellations, which is never billed. */
   const converted = useMemo(() => {
@@ -806,10 +830,15 @@ export function OrderDrawer({
       if (row.itemId && row.itemId !== priorOf(row, i)?.itemId) {
         const it = itemById.get(row.itemId)
         if (it) {
+          // A purchase line costs; a sales line prices. The item's sales
+          // rate must never seed a vendor cost, so a purchase line with no
+          // recorded cost keeps a blank price for the operator to enter
+          // rather than inheriting the sell price.
+          const catalogPrice = kind === 'purchase_order' ? it.default_cost : it.default_rate
           return {
             ...row,
             description: row.description || (it.name ?? ''),
-            unitPrice: it.default_rate != null ? String(it.default_rate) : row.unitPrice,
+            unitPrice: catalogPrice != null ? String(catalogPrice) : row.unitPrice,
             accountId:
               (kind === 'purchase_order' ? it.expense_account_id : it.income_account_id) ?? row.accountId,
             taxProfileId: it.tax_code_id ? `code:${it.tax_code_id}` : row.taxProfileId,
@@ -1785,10 +1814,10 @@ export function OrderDrawer({
           </span>
           <span className="flex-1" />
           <span className="text-sm text-slate-600 tabular-nums dark:text-slate-300">
-            {t('totals.subtotal', { amount: money(totals.subtotal, { currency: doc.currency }) })} ·{' '}
-            {t('totals.tax', { amount: money(totals.taxTotal, { currency: doc.currency }) })} ·{' '}
+            {t('totals.subtotal', { amount: money((mode === 'edit' || createMode ? draftTotals : totals).subtotal, { currency: doc.currency }) })} ·{' '}
+            {t('totals.tax', { amount: money((mode === 'edit' || createMode ? draftTotals : totals).taxTotal, { currency: doc.currency }) })} ·{' '}
             <strong className="text-slate-900 dark:text-slate-100">
-              {t('totals.total', { amount: money(totals.total, { currency: doc.currency }) })}
+              {t('totals.total', { amount: money((mode === 'edit' || createMode ? draftTotals : totals).total, { currency: doc.currency }) })}
             </strong>
           </span>
         </div>
