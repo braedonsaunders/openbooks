@@ -303,7 +303,12 @@
     "voidReversalSummaryReversal": "Reversión",
     "voidReversalFiscalYear": "EF",
     "voidReversalFallbackNotice": "El período original está cerrado, por lo que la reversión se asigna al primer período abierto posterior.",
-    "voidReversalClosedNotice": "Ningún período abierto sigue al original. Genere un período posterior o reabra uno antes de anular."
+    "voidReversalClosedNotice": "Ningún período abierto sigue al original. Genere un período posterior o reabra uno antes de anular.",
+    "consequenceTitle": "Qué hará este cambio en el documento contabilizado",
+    "consequenceMetadata": "Este cambio solo corrige datos descriptivos. No se mueve ningún importe contable y el documento sigue contabilizado.",
+    "consequenceReclass": "Este cambio traslada la dimensión y registra un asiento equilibrado de reclasificación cuando las líneas contabilizadas la contienen. El documento sigue contabilizado.",
+    "consequenceVoid": "Este cambio anula el documento contabilizado y crea un borrador de reemplazo. El período original debe estar abierto.",
+    "correctionApplied": "Documento contabilizado corregido"
   },
   "approvalFlow": {
     "pendingWith": "Pendiente de {names}",

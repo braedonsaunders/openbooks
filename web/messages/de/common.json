@@ -303,7 +303,12 @@
     "voidReversalSummaryReversal": "Storno",
     "voidReversalFiscalYear": "GJ",
     "voidReversalFallbackNotice": "Die ursprüngliche Periode ist geschlossen, daher wird das Storno standardmäßig in die erste offene Folgeperiode gebucht.",
-    "voidReversalClosedNotice": "Es folgt keine offene Periode. Legen Sie erst eine spätere Periode an oder öffnen Sie eine Periode wieder."
+    "voidReversalClosedNotice": "Es folgt keine offene Periode. Legen Sie erst eine spätere Periode an oder öffnen Sie eine Periode wieder.",
+    "consequenceTitle": "Was diese Änderung am gebuchten Beleg bewirkt",
+    "consequenceMetadata": "Diese Änderung korrigiert nur beschreibende Angaben. Es werden keine Beträge umgebucht und der Beleg bleibt gebucht.",
+    "consequenceReclass": "Diese Änderung verschiebt die Dimensionszuordnung und bucht eine ausgeglichene Umbuchung, wenn gebuchte Zeilen sie tragen. Der Beleg bleibt gebucht.",
+    "consequenceVoid": "Diese Änderung storniert den gebuchten Beleg und erstellt einen Ersatzentwurf. Die ursprüngliche Periode muss offen sein.",
+    "correctionApplied": "Gebuchter Beleg korrigiert"
   },
   "approvalFlow": {
     "pendingWith": "Ausstehend bei {names}",

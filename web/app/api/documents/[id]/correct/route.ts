@@ -61,8 +61,9 @@ export const POST = defineRoute({
         return NextResponse.json({ error: 'invalid subsidiary' }, { status: 422 })
       }
     let outcome: {
-        replacement: { id: string; documentNumber: string }
-        result: { status: 'voided' | 'pending_approval'; runId: string | null }
+        replacement: { id: string; documentNumber: string; kind: string }
+        result: { status: 'voided' | 'pending_approval' | 'corrected' | 'reclassified'; runId: string | null }
+        reclassEntryIds: string[]
       }
     try {
         // The replacement draft (and its mandatory `reverses` evidence) plus the
@@ -72,18 +73,29 @@ export const POST = defineRoute({
         // its lineage back with it, so the source can never be left carrying a
         // correction edge while it is still posted.
         outcome = await withOrgTransaction(authz.user.orgId, async () => {
-          const { replacement, voidResult: result } = await correctPostedDocumentWithEditor(id, body, {
+          const corrected = await correctPostedDocumentWithEditor(id, body, {
             orgId: authz.user.orgId, userId: authz.user.id, source: 'posted_correction',
           })
-          return { replacement, result }
+          // In-place corrections (metadata, reclass) keep the source document:
+          // no replacement draft exists, so no draft flows run for them.
+          const result = corrected.kind === 'void-and-reissue'
+            ? { status: corrected.voidResult.status, runId: corrected.voidResult.runId }
+            : { status: (corrected.kind === 'reclass' ? 'reclassified' : 'corrected') as 'reclassified' | 'corrected', runId: null };
+          return {
+            replacement: corrected.replacement,
+            result,
+            reclassEntryIds: corrected.kind === 'void-and-reissue' ? [] : corrected.reclassEntryIds,
+          }
         })
         // Flow plans may enqueue email or other externally visible work; dispatch
         // only after the atomic unit above has committed.
-        await runPostedCorrectionDraftFlows(outcome.replacement.id, source.kind, {
-          orgId: authz.user.orgId,
-          userId: authz.user.id,
-          source: 'posted_correction',
-        })
+        if (outcome.replacement.id !== id) {
+          await runPostedCorrectionDraftFlows(outcome.replacement.id, source.kind, {
+            orgId: authz.user.orgId,
+            userId: authz.user.id,
+            source: 'posted_correction',
+          })
+        }
         return NextResponse.json(
           {
             ok: true,
@@ -91,8 +103,9 @@ export const POST = defineRoute({
             correctionNumber: outcome.replacement.documentNumber,
             voidStatus: outcome.result.status,
             requestId: outcome.result.runId,
+            reclassEntryIds: outcome.reclassEntryIds,
           },
-          { status: outcome.result.status === 'pending_approval' ? 202 : 201 },
+          { status: outcome.result.status === 'pending_approval' ? 202 : outcome.result.status === 'voided' ? 201 : 200 },
         )
       } catch (error) {
         if (error instanceof DocumentEditError || error instanceof DocumentVoidError) {

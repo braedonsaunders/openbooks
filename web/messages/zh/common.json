@@ -303,7 +303,12 @@
     "voidReversalSummaryReversal": "冲销",
     "voidReversalFiscalYear": "财年",
     "voidReversalFallbackNotice": "原始期间已关闭，因此冲销默认记入其后的第一个开放期间。",
-    "voidReversalClosedNotice": "原始分录之后没有开放期间。请先生成后续期间或重新开放某一期间，然后再作废。"
+    "voidReversalClosedNotice": "原始分录之后没有开放期间。请先生成后续期间或重新开放某一期间，然后再作废。",
+    "consequenceTitle": "此已记账更改的作用",
+    "consequenceMetadata": "此更改仅修正描述性信息。账簿金额不变，单据保持已记账状态。",
+    "consequenceReclass": "此更改将转移维度，并在已记账行携带该维度时记入一笔平衡的重分类分录。单据保持已记账状态。",
+    "consequenceVoid": "此更改将作废已记账单据并重新签发草稿。原始期间必须处于开放状态。",
+    "correctionApplied": "已记账单据已更正"
   },
   "approvalFlow": {
     "pendingWith": "等待 {names} 处理",

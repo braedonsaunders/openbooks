@@ -303,7 +303,12 @@
     "voidReversalSummaryReversal": "Contre-passation",
     "voidReversalFiscalYear": "EF",
     "voidReversalFallbackNotice": "La période d’origine est clôturée, la contre-passation est donc affectée par défaut à la première période ouverte suivante.",
-    "voidReversalClosedNotice": "Aucune période ouverte ne suit la période d’origine. Générez une période ultérieure ou rouvrez-en une avant d’annuler."
+    "voidReversalClosedNotice": "Aucune période ouverte ne suit la période d’origine. Générez une période ultérieure ou rouvrez-en une avant d’annuler.",
+    "consequenceTitle": "Ce que cette modification du document comptabilisé implique",
+    "consequenceMetadata": "Cette modification corrige uniquement des informations descriptives. Aucun montant comptable n’est déplacé et le document reste comptabilisé.",
+    "consequenceReclass": "Cette modification transfère la dimension et comptabilise une écriture de reclassement équilibrée lorsque les lignes comptabilisées la portent. Le document reste comptabilisé.",
+    "consequenceVoid": "Cette modification annule le document comptabilisé et crée un brouillon de remplacement. La période d’origine doit être ouverte.",
+    "correctionApplied": "Document comptabilisé corrigé"
   },
   "approvalFlow": {
     "pendingWith": "En attente de {names}",

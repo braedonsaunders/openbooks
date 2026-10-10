@@ -61,6 +61,7 @@ import { PDF_RECORD_TYPE_BY_KEY } from '../lib/pdf-templates/catalog'
 import { add, cmp, fromUnits, normalizeMoney, roundDiv, sum } from '@openbooks/engine/src/money/money.ts'
 import { computeLineTaxes, type TaxComponentConfig } from '@openbooks/engine/src/tax/tax.ts'
 import { confirmDialog } from '../lib/confirm'
+import { previewPostedCorrection } from '../lib/posted-correction-preview'
 import { promptDialog } from '../lib/prompt'
 import { promptVoidReversalPeriod } from '../lib/void-reversal-period'
 import { runClientScripts } from '../lib/client-scripts'
@@ -2191,6 +2192,27 @@ export function DocumentDrawer({
       })
       if (!reason) return
       amendmentReason = reason
+      // A posted edit states its consequence before anything writes, using
+      // the same engine classification the correct route enforces. A void
+      // and reissue needs an explicit confirm; metadata and reclass confirm
+      // the lighter touch in the same step.
+      const consequence = previewPostedCorrection({
+        doc,
+        storedLines: persistedBaseline.current.payload.lines ?? [],
+        payload: payload_ as Record<string, unknown>,
+      })
+      const confirmed = await confirmDialog({
+        title: tCommon('amendment.consequenceTitle'),
+        message:
+          consequence === 'void-and-reissue'
+            ? tCommon('amendment.consequenceVoid')
+            : consequence === 'reclass'
+              ? tCommon('amendment.consequenceReclass')
+              : tCommon('amendment.consequenceMetadata'),
+        confirmLabel: tCommon('actions.save'),
+        ...(consequence === 'void-and-reissue' ? { tone: 'danger' as const } : {}),
+      })
+      if (!confirmed) return
     }
     setSaveState('saving')
     // Client scripts (sandboxed, opaque-origin evaluator) gate the save: an
@@ -2277,9 +2299,17 @@ export function DocumentDrawer({
         onOk: (payload) => {
           const data = payload as DocPayload & {
             correctionId?: string
-            voidStatus?: 'voided' | 'pending_approval'
+            voidStatus?: 'voided' | 'pending_approval' | 'corrected' | 'reclassified'
           }
           if (isPosted && data.correctionId) {
+            // In-place corrections keep the source document: toast the
+            // lighter touch and refresh where the operator stands instead
+            // of navigating to a replacement draft that does not exist.
+            if (data.voidStatus === 'corrected' || data.voidStatus === 'reclassified') {
+              toast.success(tCommon('amendment.correctionApplied'))
+              router.refresh()
+              return
+            }
             toast.success(
               data.voidStatus === 'pending_approval'
                 ? t('toasts.submitted')
