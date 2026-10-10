@@ -27,12 +27,17 @@ export const migrationAndCutover: DocArticle = {
 A migration is complete only when users can perform their work and the new books
 are proven. Loading rows is one step in a controlled cutover.
 
-## Let the migration assistant lead
+## Work the guided cutover
 
-**Company Setup → [Migration assistant](/migrate)** runs the whole move as a
-conversation beside a live migration plan. Tell it what you use today and it
-recommends a path — mirror the current system, migrate through a connector and
-cut over, bring spreadsheets, or start fresh — then does the work with you:
+**Company Setup → [Move your books](/migrate)** runs the whole move as a
+checklist with the same measured plan the assistant reads. Set the cutover
+date, post the opening trial balance as a native balanced journal, import
+open invoices and bills, assets, and bank starting points, then run the
+final checks and go live — in any order, skipping what does not apply. The
+[migration assistant](/migrate/assistant) stays available as an optional
+helper that answers questions and drafts the same entries and imports; it
+recommends a path — mirror the current system, migrate through a connector
+and cut over, bring spreadsheets, or start fresh — and does the work with you:
 
 - opens the secure connection form for your source (credentials are entered
   only there, never in the conversation);

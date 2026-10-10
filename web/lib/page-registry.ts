@@ -1027,12 +1027,24 @@ export const PAGE_REGISTRY: Readonly<Record<string, PageRegistryEntry>> = {
   '/migrate': {
     route: '/migrate',
     segments: [],
-    searchParams: true,
+    searchParams: false,
     module: async () => {
       const m = await import('../app/(app)/migrate/view')
       return {
-        load: (input) => m.loadMigrationWorkspace(input.searchParams ?? {}),
-        spec: (data) => m.migrationWorkspaceSpec(data as never),
+        load: () => m.loadMigrationCutover(),
+        spec: (data) => m.migrationCutoverSpec(data as never),
+      }
+    },
+  },
+  '/migrate/assistant': {
+    route: '/migrate/assistant',
+    segments: [],
+    searchParams: true,
+    module: async () => {
+      const m = await import('../app/(app)/migrate/assistant/view')
+      return {
+        load: (input) => m.loadMigrationAssistant(input.searchParams ?? {}),
+        spec: (data) => m.migrationAssistantSpec(data as never),
       }
     },
   },

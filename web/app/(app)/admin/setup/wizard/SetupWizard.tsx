@@ -1492,8 +1492,8 @@ function DoneStep({ t, sampleOrgId, bookStart, actions, onNavigate }: {
     assistant: MIGRATION_WORKSPACE_HREF,
     migrate: '/sync', statement: '/banking/imports', demo: '/admin/setup/company#sample-companies',
   }
-  // Bringing existing books starts in the migration assistant, which leads to
-  // the connector or the imports; starting fresh offers it after the first invoice.
+  // Bringing existing books starts in the guided cutover, which works with or
+  // without the assistant; starting fresh offers it after the first invoice.
   const preferred: SetupLaunchAction = bookStart === 'migrate'
     ? actions.includes('assistant') ? 'assistant' : 'migrate'
     : 'invoice'
@@ -1542,7 +1542,7 @@ function DoneStep({ t, sampleOrgId, bookStart, actions, onNavigate }: {
             className={cn('rounded-lg border px-4 py-3 text-sm font-medium', index === 0
               ? 'border-teal-600 bg-teal-600 text-white hover:bg-teal-700'
               : 'border-slate-200 text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800')}>
-            {action === 'assistant' ? tMigration('entry.wizard') : t(`done.actions.${action}`)}
+            {action === 'assistant' ? tMigration('entry.cutover') : t(`done.actions.${action}`)}
           </button>
         ))}
         <button type="button" onClick={() => onNavigate('/admin/setup/readiness')} className="py-2 text-sm text-teal-700 underline dark:text-teal-300">

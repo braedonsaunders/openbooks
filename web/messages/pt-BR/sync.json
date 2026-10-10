@@ -549,8 +549,145 @@
     "placeholder": "Diga onde sua contabilidade está hoje ou solte aqui um arquivo de exportação…",
     "entry": {
       "plan": "Planejar a migração",
-      "wizard": "Planejar minha mudança com o assistente de migração",
+      "cutover": "Iniciar a virada guiada",
       "sync": "Perguntar ao assistente de migração"
+    },
+    "cutover": {
+      "title": "Transferir sua contabilidade",
+      "description": "Traga saldos, faturas em aberto, ativos e saldos bancários iniciais passo a passo, em qualquer ordem. Nada aqui precisa do assistente de IA.",
+      "anyOrder": "Execute as etapas em qualquer ordem e pule o que não se aplica — só a entrada em produção verifica seus requisitos.",
+      "progress": "{done} de {total} etapas concluídas",
+      "save": "Salvar",
+      "saving": "Salvando…",
+      "saved": "Salvo.",
+      "requestFailed": "A solicitação falhou. Tente de novo.",
+      "state": {
+        "complete": "Concluído",
+        "current": "Agora",
+        "upcoming": "Aguardando"
+      },
+      "helper": {
+        "title": "Quer ajuda com a transferência?",
+        "description": "O assistente de migração responde perguntas sobre sua contabilidade e prepara os mesmos lançamentos e importações que esta página descreve. Nada muda até você aprovar.",
+        "action": "Abrir o assistente de migração"
+      },
+      "setup": {
+        "title": "Sua transferência",
+        "description": "Como sua contabilidade chega e a data que separa os livros antigos destes.",
+        "path": "Como a contabilidade chega",
+        "paths": {
+          "spreadsheet": "De planilhas",
+          "cutover": "De um sistema conectado, depois virada",
+          "mirror": "Espelhado de um sistema conectado",
+          "fresh": "Começo novo, sem histórico"
+        },
+        "pathHint": "Planilhas servem para livros manuais. Um sistema conectado migra via Migração e sincronização.",
+        "source": "Sistema anterior",
+        "sourcePlaceholder": "ex.: planilhas, contabilidade local",
+        "cutoverDate": "Data da virada",
+        "cutoverDateHint": "Primeiro dia mantido nestes livros em vez do sistema anterior.",
+        "clearing": "Conta de compensação de abertura",
+        "clearingHint": "Faturas em aberto e o balancete de abertura se compensam aqui até os dois lados conferirem. Opcional.",
+        "none": "Nenhuma",
+        "connector": "Este caminho carrega em Migração e sincronização — conecte a fonte lá, ensaie e carregue o histórico, e volte aqui para as verificações finais.",
+        "openSync": "Abrir Migração e sincronização",
+        "freshNote": "Sem histórico para trazer: defina a data da virada e execute abaixo as verificações finais."
+      },
+      "steps": {
+        "title": "Lista da virada",
+        "plan": {
+          "title": "Escolha como a contabilidade chega",
+          "description": "Escolha acima a via de planilhas ou conecte o sistema anterior.",
+          "action": "Revisar o plano"
+        },
+        "cutoverDate": {
+          "title": "Defina a data da virada",
+          "description": "O primeiro dia nestes livros. Os saldos de abertura usam a data da véspera.",
+          "action": "Definir a data"
+        },
+        "opening": {
+          "title": "Lance o balancete de abertura",
+          "description": "Do balancete preparado abaixo: um lançamento nativo balanceado datado da véspera da virada. Um arquivo desbalanceado é recusado, nunca ajustado.",
+          "action": "Minutar o lançamento de abertura"
+        },
+        "receivables": {
+          "title": "Importe as faturas de clientes em aberto",
+          "description": "Faturas não pagas na virada, com datas e vencimentos originais, codificadas na conta de compensação. Escolha o modelo de faturas de clientes em Importar.",
+          "action": "Abrir Importar"
+        },
+        "payables": {
+          "title": "Importe as faturas de fornecedores em aberto",
+          "description": "Faturas não pagas na virada, com datas e vencimentos originais, codificadas na conta de compensação. Escolha o modelo de faturas de fornecedores em Importar.",
+          "action": "Abrir Importar"
+        },
+        "assets": {
+          "title": "Importe os ativos fixos",
+          "description": "Cada ativo com custo, data de entrada em serviço e depreciação acumulada na virada. Escolha o modelo de ativos fixos em Importar.",
+          "action": "Abrir Importar"
+        },
+        "bank": {
+          "title": "Defina os pontos de partida bancários",
+          "description": "Os saldos bancários chegam com o balancete de abertura. Depois importe o primeiro extrato e inicie a primeira conciliação, que comprova a abertura.",
+          "action": "Abrir Banco"
+        },
+        "checks": {
+          "title": "Execute as verificações finais e entre em produção",
+          "description": "Cada verificação obrigatória precisa passar antes destes livros entrarem em produção na data da virada.",
+          "action": "Revisar as verificações"
+        }
+      },
+      "stepDetail": {
+        "journalDraft": "Lançamento {number} · minuta — revise e lance pelo diário.",
+        "journalPosted": "Lançamento {number} · lançado.",
+        "noJournal": "Ainda sem lançamento de abertura.",
+        "imported": "{count, plural, one {# lista importada} other {# listas importadas}} — execute as verificações finais para comprová-las.",
+        "notImported": "Nada importado ainda.",
+        "bankReady": "{count, plural, one {# conta bancária} other {# contas bancárias}} prontas.",
+        "noBank": "Ainda sem contas bancárias — crie-as em Banco ou no plano de contas.",
+        "blockers": "{count, plural, one {# verificação obrigatória aberta.} other {# verificações obrigatórias abertas.}}",
+        "live": "Em produção desde {date}.",
+        "ready": "Cada verificação obrigatória passa — pronto para entrar em produção."
+      },
+      "opening": {
+        "title": "Balancete de abertura",
+        "description": "Prepare a exportação do balancete em Importar, selecione-a aqui, mapeie as colunas e pré-visualize exatamente o que seria lançado. A minuta cria um lançamento nativo que você revisa e lança.",
+        "upload": "Envie o arquivo em Importar",
+        "staged": "{name} · {rows, plural, one {# linha} other {# linhas}}",
+        "noFile": "Selecione o arquivo preparado ou envie-o primeiro em Importar.",
+        "columnAccount": "Coluna de conta",
+        "columnDebit": "Coluna de débito",
+        "columnCredit": "Coluna de crédito",
+        "columnAmount": "Coluna de valor com sinal",
+        "columnAmountHint": "Use colunas de débito e crédito ou uma coluna de valor com sinal (débito positivo) — não ambas.",
+        "columnDescription": "Coluna de descrição (opcional)",
+        "documentDate": "Saldos em",
+        "documentDateHint": "A véspera da data da virada.",
+        "memo": "Histórico do lançamento (opcional)",
+        "receivablesLine": "Linha de controle de recebíveis, como escrita no arquivo",
+        "payablesLine": "Linha de controle de pagáveis, como escrita no arquivo",
+        "remapHint": "As linhas de controle apontam para a conta de compensação acima, porque as faturas importadas reconstroem esses saldos.",
+        "equity": "Conta de patrimônio para uma diferença",
+        "equityHint": "Deixe vazio para recusar um arquivo desbalanceado. Nomeie uma conta de patrimônio só quando aprovar lançar a diferença nela.",
+        "preview": "Pré-visualizar",
+        "previewing": "Gerando pré-visualização…",
+        "draft": "Minutar o lançamento",
+        "drafting": "Minutando…",
+        "needsPermission": "Minutar o lançamento de abertura precisa das permissões de lançamento e importação. Peça a um admin para concedê-las.",
+        "needsCutover": "Defina acima primeiro a data da virada — o lançamento usa a data da véspera.",
+        "totals": "Débito {debits} · crédito {credits}",
+        "lines": "{count, plural, one {# linha} other {# linhas}} · {skipped, plural, one {# linha zero ignorada} other {# linhas zero ignoradas}}",
+        "drafted": "Minuta {number} criada.",
+        "openDraft": "Revisar e lançar a minuta no diário",
+        "issues": "Precisa de atenção"
+      },
+      "goLive": {
+        "record": "Registrar a entrada em produção",
+        "recording": "Registrando…",
+        "confirm": "Registrar que estes livros estão em produção desde {date}? O registro é único, com as verificações medidas como evidência.",
+        "reason": "Confirmação para o registro de auditoria",
+        "reasonPlaceholder": "ex.: saldos e itens em aberto conferidos contra o sistema anterior",
+        "recorded": "Estes livros estão em produção desde {date}. Correções posteriores usam o diário nativo."
+      }
     },
     "attach": {
       "label": "Anexar um arquivo de exportação",

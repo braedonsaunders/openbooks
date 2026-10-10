@@ -549,8 +549,145 @@
     "placeholder": "Sagen Sie mir, wo Ihre Buchhaltung heute geführt wird, oder legen Sie eine Exportdatei ab…",
     "entry": {
       "plan": "Migration planen",
-      "wizard": "Umzug mit dem Migrationsassistenten planen",
+      "cutover": "Geführte Umstellung starten",
       "sync": "Migrationsassistenten fragen"
+    },
+    "cutover": {
+      "title": "Bücher übernehmen",
+      "description": "Übernehmen Sie Salden, offene Rechnungen, Anlagen und Bankanfangsbestände Schritt für Schritt, in beliebiger Reihenfolge. Der KI-Assistent wird hier nicht benötigt.",
+      "anyOrder": "Arbeiten Sie die Schritte in beliebiger Reihenfolge ab und überspringen Sie, was nicht zutrifft – nur die Inbetriebnahme prüft ihre Voraussetzungen.",
+      "progress": "{done} von {total} Schritten erledigt",
+      "save": "Speichern",
+      "saving": "Wird gespeichert…",
+      "saved": "Gespeichert.",
+      "requestFailed": "Die Anfrage ist fehlgeschlagen. Versuchen Sie es erneut.",
+      "state": {
+        "complete": "Erledigt",
+        "current": "Jetzt",
+        "upcoming": "Wartend"
+      },
+      "helper": {
+        "title": "Hilfe beim Umzug gewünscht?",
+        "description": "Der Migrationsassistent beantwortet Fragen zu Ihren Büchern und erstellt dieselben Buchungen und Importe, die diese Seite beschreibt. Nichts ändert sich ohne Ihre Freigabe.",
+        "action": "Migrationsassistenten öffnen"
+      },
+      "setup": {
+        "title": "Ihr Umzug",
+        "description": "Wie Ihre Bücher ankommen und der Stichtag, der die alten Bücher von diesen trennt.",
+        "path": "Wie die Bücher ankommen",
+        "paths": {
+          "spreadsheet": "Aus Tabellenkalkulationen",
+          "cutover": "Aus einem angebundenen System, dann Umstellung",
+          "mirror": "Gespiegelt aus einem angebundenen System",
+          "fresh": "Neuanfang, keine Historie"
+        },
+        "pathHint": "Tabellen eignen sich für manuell geführte Bücher. Ein angebundenes System migriert über Migration & Sync.",
+        "source": "Voriges System",
+        "sourcePlaceholder": "z. B. Tabellen, Desktop-Buchhaltung",
+        "cutoverDate": "Umstellungsdatum",
+        "cutoverDateHint": "Erster Tag, der in diesen Büchern statt im Vorgängersystem geführt wird.",
+        "clearing": "Eröffnungs-Verrechnungskonto",
+        "clearingHint": "Offene Rechnungen und die Eröffnungsbilanz werden hier zwischengespeichert, bis beide Seiten abgestimmt sind. Optional.",
+        "none": "Keines",
+        "connector": "Dieser Weg lädt über Migration & Sync – verbinden Sie dort die Quelle, proben Sie und laden Sie die Historie, und kehren Sie hierher für die Abschlussprüfungen zurück.",
+        "openSync": "Migration & Sync öffnen",
+        "freshNote": "Keine Historie zu übernehmen: Legen Sie das Umstellungsdatum fest und führen Sie unten die Abschlussprüfungen aus."
+      },
+      "steps": {
+        "title": "Umstellungs-Checkliste",
+        "plan": {
+          "title": "Wählen Sie, wie die Bücher ankommen",
+          "description": "Wählen Sie oben den Tabellenweg oder binden Sie das Vorgängersystem an.",
+          "action": "Plan prüfen"
+        },
+        "cutoverDate": {
+          "title": "Umstellungsdatum festlegen",
+          "description": "Der erste Tag in diesen Büchern. Eröffnungssalden werden auf den Vortag datiert.",
+          "action": "Datum festlegen"
+        },
+        "opening": {
+          "title": "Eröffnungsbilanz buchen",
+          "description": "Aus der unten bereitgestellten Eröffnungsbilanz: eine ausgeglichene native Buchung auf den Vortag der Umstellung. Eine unausgeglichene Datei wird abgelehnt, nie gestopft.",
+          "action": "Eröffnungsbuchung entwerfen"
+        },
+        "receivables": {
+          "title": "Offene Kundenrechnungen importieren",
+          "description": "Unbezahlte Rechnungen zum Stichtag, mit Originaldaten und Fälligkeiten, auf das Verrechnungskonto kodiert. Wählen Sie auf Import die Vorlage für Kundenrechnungen.",
+          "action": "Import öffnen"
+        },
+        "payables": {
+          "title": "Offene Lieferantenrechnungen importieren",
+          "description": "Unbezahlte Rechnungen zum Stichtag, mit Originaldaten und Fälligkeiten, auf das Verrechnungskonto kodiert. Wählen Sie auf Import die Vorlage für Lieferantenrechnungen.",
+          "action": "Import öffnen"
+        },
+        "assets": {
+          "title": "Anlagevermögen importieren",
+          "description": "Jede Anlage mit Anschaffungskosten, Inbetriebnahmedatum und kumulierten Abschreibungen zum Stichtag. Wählen Sie auf Import die Vorlage für Anlagen.",
+          "action": "Import öffnen"
+        },
+        "bank": {
+          "title": "Bank-Anfangsbestände festlegen",
+          "description": "Bankbestände kommen mit der Eröffnungsbilanz. Importieren Sie dann den ersten Auszug und starten Sie die erste Abstimmung, die den Anfangsbestand belegt.",
+          "action": "Bankbereich öffnen"
+        },
+        "checks": {
+          "title": "Abschlussprüfungen ausführen und live gehen",
+          "description": "Jede erforderliche Prüfung muss bestanden sein, bevor diese Bücher ab dem Umstellungsdatum live gehen.",
+          "action": "Prüfungen ansehen"
+        }
+      },
+      "stepDetail": {
+        "journalDraft": "Buchung {number} · Entwurf – prüfen und buchen Sie sie im Buchungsjournal.",
+        "journalPosted": "Buchung {number} · gebucht.",
+        "noJournal": "Noch keine Eröffnungsbuchung.",
+        "imported": "{count, plural, one {# Liste importiert} other {# Listen importiert}} – führen Sie die Abschlussprüfungen als Beleg aus.",
+        "notImported": "Noch nichts importiert.",
+        "bankReady": "{count, plural, one {# Bankkonto} other {# Bankkonten}} bereit.",
+        "noBank": "Noch keine Bankkonten – legen Sie sie im Bankbereich oder im Kontenplan an.",
+        "blockers": "{count, plural, one {# erforderliche Prüfung ist offen.} other {# erforderliche Prüfungen sind offen.}}",
+        "live": "Live seit {date}.",
+        "ready": "Jede erforderliche Prüfung ist bestanden – bereit für die Inbetriebnahme."
+      },
+      "opening": {
+        "title": "Eröffnungsbilanz",
+        "description": "Bereiten Sie den Eröffnungsbilanz-Export auf Import vor, wählen Sie ihn hier, ordnen Sie die Spalten zu und prüfen Sie genau, was gebucht würde. Der Entwurf erzeugt eine native Entwurfsbuchung, die Sie selbst prüfen und buchen.",
+        "upload": "Datei auf Import hochladen",
+        "staged": "{name} · {rows, plural, one {# Zeile} other {# Zeilen}}",
+        "noFile": "Wählen Sie die bereitgestellte Datei oder laden Sie sie zuerst auf Import hoch.",
+        "columnAccount": "Kontospalte",
+        "columnDebit": "Sollspalte",
+        "columnCredit": "Habenspalte",
+        "columnAmount": "Betragsspalte mit Vorzeichen",
+        "columnAmountHint": "Verwenden Sie entweder Soll- und Habenspalten oder eine Betragsspalte mit Vorzeichen (Soll-positiv) – nicht beides.",
+        "columnDescription": "Beschreibungsspalte (optional)",
+        "documentDate": "Bestände zum",
+        "documentDateHint": "Der Tag vor dem Umstellungsdatum.",
+        "memo": "Buchungstext (optional)",
+        "receivablesLine": "Forderungszeile, wie in der Datei geschrieben",
+        "payablesLine": "Verbindlichkeitszeile, wie in der Datei geschrieben",
+        "remapHint": "Kontrollzeilen zeigen auf das obige Verrechnungskonto, weil die importierten Rechnungen diese Salden neu aufbauen.",
+        "equity": "Eigenkapitalkonto für eine Differenz",
+        "equityHint": "Leer lassen, um eine unausgeglichene Datei abzulehnen. Benennen Sie ein Eigenkapitalkonto nur, wenn Sie die Buchung der Differenz dorthin freigeben.",
+        "preview": "Vorschau",
+        "previewing": "Vorschau läuft…",
+        "draft": "Buchung entwerfen",
+        "drafting": "Entwurf läuft…",
+        "needsPermission": "Für den Entwurf der Eröffnungsbuchung sind Buchungs- und Importberechtigungen nötig. Bitten Sie einen Admin, sie zu erteilen.",
+        "needsCutover": "Legen Sie oben zuerst das Umstellungsdatum fest – die Buchung wird auf den Vortag datiert.",
+        "totals": "Soll {debits} · Haben {credits}",
+        "lines": "{count, plural, one {# Zeile} other {# Zeilen}} · {skipped, plural, one {# Nullzeile übersprungen} other {# Nullzeilen übersprungen}}",
+        "drafted": "Entwurfsbuchung {number} erstellt.",
+        "openDraft": "Entwurf im Buchungsjournal prüfen und buchen",
+        "issues": "Prüfung erforderlich"
+      },
+      "goLive": {
+        "record": "Inbetriebnahme festhalten",
+        "recording": "Wird festgehalten…",
+        "confirm": "Festhalten, dass diese Bücher ab {date} live sind? Dies wird einmalig festgehalten, mit den gemessenen Prüfungen als Beleg.",
+        "reason": "Bestätigung für das Prüfprotokoll",
+        "reasonPlaceholder": "z. B. Salden und offene Posten gegen das Vorgängersystem geprüft",
+        "recorded": "Diese Bücher sind seit {date} live. Spätere Korrekturen laufen über das native Buchungsjournal."
+      }
     },
     "attach": {
       "label": "Exportdatei anhängen",

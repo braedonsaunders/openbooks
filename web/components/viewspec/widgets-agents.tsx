@@ -2,6 +2,7 @@ import { Fragment, type ComponentProps } from 'react'
 import {
   AssistantApp,
   MigrationWorkspace,
+  MigrationCutover,
   ChatMarkdown,
   AgentsPackActions,
   AgentPolicyForm,
@@ -12,6 +13,7 @@ import {
   NarrativeDrawer,
 } from './native-widgets.client'
 import { type MigrationWorkspaceProps } from "../migration/migration-workspace"
+import { type MigrationCutoverProps } from "../migration/migration-cutover"
 import { AgentsLastRunCell } from '../../app/(app)/admin/setup/agents/AgentsLastRunCell'
 import { AgentsPackFindings } from '../../app/(app)/admin/setup/agents/AgentsPackFindings'
 import { AgentsPackCard } from '../../app/(app)/admin/setup/agents/library/AgentsPackCard'
@@ -199,6 +201,17 @@ export const AGENTS_WIDGETS = {
       canImport={props.canImport === true}
       journey={props.journey as MigrationWorkspaceProps['journey']}
       initialPrompt={str(props, 'initialPrompt')}
+    />
+  ),
+
+  /** The guided migration cutover: the checklist every path works through, with or without the assistant. */
+  'migration-cutover': (props) => (
+    <MigrationCutover
+      journey={props.journey as MigrationCutoverProps['journey']}
+      accounts={(props.accounts as MigrationCutoverProps['accounts']) ?? []}
+      canDraftOpening={props.canDraftOpening === true}
+      canImport={props.canImport === true}
+      aiEnabled={props.aiEnabled === true}
     />
   ),
 

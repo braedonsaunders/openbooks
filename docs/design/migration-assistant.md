@@ -1,9 +1,11 @@
 # Migration assistant
 
-The migration workspace (`/migrate`) leads an organization from its previous
-system into these books: a migration-scoped assistant conversation beside the
-measured migration plan. It composes existing machinery; it owns no second
-migration, import or journal path.
+The migration workspace (`/migrate/assistant`, deep-linkable threads at
+`/migrate/[id]`) is the optional helper beside the guided cutover at
+`/migrate`: a migration-scoped assistant conversation beside the measured
+migration plan. It composes existing machinery; it owns no second
+migration, import or journal path. The guided cutover drives the same
+native commands, so the move completes with no assistant involved.
 
 ## Components
 

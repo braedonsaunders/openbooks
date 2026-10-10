@@ -549,8 +549,145 @@
     "placeholder": "Indíqueme dónde lleva hoy su contabilidad o suelte aquí un archivo de exportación…",
     "entry": {
       "plan": "Planificar la migración",
-      "wizard": "Planificar mi traslado con el asistente de migración",
+      "cutover": "Iniciar el traspaso guiado",
       "sync": "Consultar al asistente de migración"
+    },
+    "cutover": {
+      "title": "Trasladar tus libros",
+      "description": "Traslada tus saldos, facturas pendientes, activos y saldos bancarios iniciales paso a paso, en cualquier orden. Nada de esto necesita el asistente de IA.",
+      "anyOrder": "Trabaja los pasos en cualquier orden y omite lo que no aplique; solo la puesta en marcha verifica sus requisitos.",
+      "progress": "{done} de {total} pasos completados",
+      "save": "Guardar",
+      "saving": "Guardando…",
+      "saved": "Guardado.",
+      "requestFailed": "La solicitud falló. Inténtalo de nuevo.",
+      "state": {
+        "complete": "Listo",
+        "current": "Ahora",
+        "upcoming": "En espera"
+      },
+      "helper": {
+        "title": "¿Quieres ayuda con el traslado?",
+        "description": "El asistente de migración responde preguntas sobre tus libros y prepara los mismos asientos e importaciones que describe esta página. Nada cambia hasta que lo apruebas.",
+        "action": "Abrir el asistente de migración"
+      },
+      "setup": {
+        "title": "Tu traslado",
+        "description": "Cómo llegan tus libros y la fecha que separa los libros anteriores de estos.",
+        "path": "Cómo llegan los libros",
+        "paths": {
+          "spreadsheet": "Desde hojas de cálculo",
+          "cutover": "Desde un sistema conectado, luego traspaso",
+          "mirror": "Sincronizado desde un sistema conectado",
+          "fresh": "Empezar de cero, sin historial"
+        },
+        "pathHint": "Las hojas de cálculo sirven para libros manuales. Un sistema conectado migra mediante Migración y sincronización.",
+        "source": "Sistema anterior",
+        "sourcePlaceholder": "p. ej., hojas de cálculo, contabilidad local",
+        "cutoverDate": "Fecha de traspaso",
+        "cutoverDateHint": "Primer día llevado en estos libros en lugar del sistema anterior.",
+        "clearing": "Cuenta puente de apertura",
+        "clearingHint": "Las facturas abiertas y el balance de apertura se compensan aquí hasta que ambas partes cuadren. Opcional.",
+        "none": "Ninguna",
+        "connector": "Esta vía se carga en Migración y sincronización: conecta allí la fuente, ensaya y carga el historial, y vuelve aquí para las comprobaciones finales.",
+        "openSync": "Abrir Migración y sincronización",
+        "freshNote": "No hay historial que traer: fija la fecha de traspaso y ejecuta abajo las comprobaciones finales."
+      },
+      "steps": {
+        "title": "Lista del traspaso",
+        "plan": {
+          "title": "Elige cómo llegan los libros",
+          "description": "Elige arriba la vía de hojas de cálculo o conecta el sistema anterior.",
+          "action": "Revisar el plan"
+        },
+        "cutoverDate": {
+          "title": "Fija la fecha de traspaso",
+          "description": "El primer día en estos libros. Los saldos de apertura se fechan el día anterior.",
+          "action": "Fijar la fecha"
+        },
+        "opening": {
+          "title": "Contabiliza el balance de apertura",
+          "description": "Desde el balance preparado abajo: un asiento nativo cuadrado fechado el día anterior al traspaso. Un archivo descuadrado se rechaza, nunca se ajusta.",
+          "action": "Preparar el asiento de apertura"
+        },
+        "receivables": {
+          "title": "Importa las facturas de clientes abiertas",
+          "description": "Facturas impagadas al traspaso, con fechas y vencimientos originales, codificadas a la cuenta puente. Elige la plantilla de facturas de clientes en Importar.",
+          "action": "Abrir Importar"
+        },
+        "payables": {
+          "title": "Importa las facturas de proveedores abiertas",
+          "description": "Facturas impagadas al traspaso, con fechas y vencimientos originales, codificadas a la cuenta puente. Elige la plantilla de facturas de proveedores en Importar.",
+          "action": "Abrir Importar"
+        },
+        "assets": {
+          "title": "Importa los activos fijos",
+          "description": "Cada activo con su costo, fecha de entrada en servicio y depreciación acumulada al traspaso. Elige la plantilla de activos fijos en Importar.",
+          "action": "Abrir Importar"
+        },
+        "bank": {
+          "title": "Fija los puntos de partida bancarios",
+          "description": "Los saldos bancarios llegan con el balance de apertura. Luego importa el primer extracto e inicia la primera conciliación, que acredita la apertura.",
+          "action": "Abrir Banca"
+        },
+        "checks": {
+          "title": "Ejecuta las comprobaciones finales y sal en vivo",
+          "description": "Cada comprobación requerida debe pasar antes de que estos libros salgan en vivo desde la fecha de traspaso.",
+          "action": "Revisar las comprobaciones"
+        }
+      },
+      "stepDetail": {
+        "journalDraft": "Asiento {number} · borrador: revísalo y contabilízalo desde el diario.",
+        "journalPosted": "Asiento {number} · contabilizado.",
+        "noJournal": "Aún no hay asiento de apertura.",
+        "imported": "{count, plural, one {# lista importada} other {# listas importadas}}: ejecuta las comprobaciones finales para acreditarlas.",
+        "notImported": "Nada importado aún.",
+        "bankReady": "{count, plural, one {# cuenta bancaria} other {# cuentas bancarias}} listas.",
+        "noBank": "Aún no hay cuentas bancarias; créalas en Banca o en el plan de cuentas.",
+        "blockers": "{count, plural, one {# comprobación requerida abierta.} other {# comprobaciones requeridas abiertas.}}",
+        "live": "En vivo desde el {date}.",
+        "ready": "Cada comprobación requerida pasa; listo para salir en vivo."
+      },
+      "opening": {
+        "title": "Balance de apertura",
+        "description": "Prepara la exportación del balance en Importar, elígela aquí, asigna sus columnas y previsualiza exactamente lo que se contabilizaría. El borrador crea un asiento nativo que revisas y contabilizas tú.",
+        "upload": "Subir el archivo en Importar",
+        "staged": "{name} · {rows, plural, one {# fila} other {# filas}}",
+        "noFile": "Elige el archivo preparado o súbelo primero en Importar.",
+        "columnAccount": "Columna de cuenta",
+        "columnDebit": "Columna de debe",
+        "columnCredit": "Columna de haber",
+        "columnAmount": "Columna de importe con signo",
+        "columnAmountHint": "Usa columnas de debe y haber o una columna de importe con signo (deudor positivo), no ambas.",
+        "columnDescription": "Columna de descripción (opcional)",
+        "documentDate": "Saldos al",
+        "documentDateHint": "El día anterior a la fecha de traspaso.",
+        "memo": "Concepto del asiento (opcional)",
+        "receivablesLine": "Línea de control de clientes, tal como aparece en el archivo",
+        "payablesLine": "Línea de control de proveedores, tal como aparece en el archivo",
+        "remapHint": "Las líneas de control apuntan a la cuenta puente de arriba, porque las facturas importadas reconstruyen esos saldos.",
+        "equity": "Cuenta de patrimonio para una diferencia",
+        "equityHint": "Déjalo vacío para rechazar un archivo descuadrado. Nombra una cuenta de patrimonio solo cuando apruebes contabilizar allí la diferencia.",
+        "preview": "Vista previa",
+        "previewing": "Generando vista previa…",
+        "draft": "Preparar el asiento",
+        "drafting": "Preparando…",
+        "needsPermission": "Preparar el asiento de apertura necesita los permisos de contabilización e importación. Pide a un admin que los otorgue.",
+        "needsCutover": "Fija arriba primero la fecha de traspaso; el asiento se fecha el día anterior.",
+        "totals": "Debe {debits} · haber {credits}",
+        "lines": "{count, plural, one {# línea} other {# líneas}} · {skipped, plural, one {# fila cero omitida} other {# filas cero omitidas}}",
+        "drafted": "Borrador {number} creado.",
+        "openDraft": "Revisar y contabilizar el borrador en el diario",
+        "issues": "Requiere atención"
+      },
+      "goLive": {
+        "record": "Registrar la salida en vivo",
+        "recording": "Registrando…",
+        "confirm": "¿Registrar que estos libros están en vivo desde el {date}? Se registra una vez, con las comprobaciones medidas como evidencia.",
+        "reason": "Confirmación para el registro de auditoría",
+        "reasonPlaceholder": "p. ej., saldos y partidas abiertas verificados contra el sistema anterior",
+        "recorded": "Estos libros están en vivo desde el {date}. Las correcciones posteriores usan el diario nativo."
+      }
     },
     "attach": {
       "label": "Adjuntar un archivo de exportación",
