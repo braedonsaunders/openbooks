@@ -213,23 +213,41 @@ every business or jurisdiction is ready to adopt without validation.
 
 | Your work | Connected capabilities |
 | --- | --- |
-| **Accounting and close** | Double-entry journals, chart of accounts, dimensions, budgets, open items, controlled reversals/corrections, close tasks, approvals, period locks and controlled reopen |
-| **Sales and receivables** | Quotes, orders, invoices, credits, receipts, returns, customer balances, recurring/usage billing and revenue recognition |
+| **Accounting and close** | Double-entry journals, chart of accounts, dimensions, budgets, open items, controlled reversals/corrections, close tasks, approvals, period locks, controlled reopen, allocation rules and internal billing |
+| **Sales and receivables** | CRM, sales territories, quotes, orders, invoices, credits, receipts, promotions, cash sales/refunds, gift cards/store credit, returns and customer balances |
 | **Purchasing and payables** | Purchase orders, vendor bills/credits, payments, purchasing controls, expenses and approvals |
-| **Banking** | Statements, matching, reconciliation, cash reporting and configurable feeds |
-| **Projects and construction** | Job costing, budgets, committed cost, labor rates, profitability, schedules of values, change orders, progress applications and retainage |
-| **Inventory and manufacturing** | Stock, locations, costing, landed cost, inventory/GL reconciliation, bills of materials, routings, MRP, work orders, material movements and production completion |
+| **Banking and collections** | Statement imports, matching, reconciliation, cash reporting, configurable bank feeds, payment files, provider settlements, hosted payments, saved payment methods and automatic collection/recovery |
+| **Subscriptions and revenue** | Versioned plans and components, trials, amendments, renewals, usage rating, prepaid usage, quote-to-cash, consolidated billing, SaaS metrics, revenue contracts, recognition schedules and capitalized contract costs |
+| **Customer self-service and commerce** | Passwordless customer portal, invoice/PDF access, payment methods, subscription controls, order tracking, returns, gift-card lookup and sales-channel connections |
+| **Projects and construction** | Job costing, budgets, committed cost, labor rates, profitability, project progress, earned-unbilled accrual, staffing, retainers, schedules of values, change orders, progress applications, retainage and subcontractor compliance |
+| **Inventory** | Stock locations, FIFO/average/standard costing, landed cost, cost-layer inquiry, lot/serial and combined tracking, holds, quarantine, consignment/ownership, ABC cycles, blind counts with independent recounts, item variants and inventory/GL reconciliation |
+| **Warehouse and shipping** | Barcode-backed receive/putaway/pick/pack/count tasks, execution waves, short-pick release, physical handling units, audited bin moves, pack confirmation, shipping rates/labels/tracking, drop shipping and demand planning |
+| **Manufacturing** | Standalone operator workspace, BOMs, versioned routings, work centers/rates, work orders, material issue/backflush, tracked output receipts, normal scrap capture, WIP/cost relief, MRP firm/convert/dismiss and advisory capacity planning |
 | **Assets and equipment** | Registers, depreciation methods/books, impairment, remeasurement, disposal and controlled corrections |
 | **Multiple entities and currencies** | Legal entities, accounting books, intercompany, eliminations, FX evidence/revaluation, ownership-based consolidation and consolidated reporting |
-| **People and payroll** | Employee records, recruitment, onboarding, performance, benefits enrolment, self-service, time/leave, pay-run readiness, statutory calculations, remittances and declared filing exports |
-| **Tax** | Tax configuration, jurisdiction-specific workpapers, return mappings and income-tax provisions; filing availability varies by pack |
-| **Specialized operations** | Nonprofit funds, gifts, grants, pledges and restrictions; property leases and CAM workflows; subscription billing and SaaS metrics |
-| **Reporting and automation** | Shared report engine, period/dimension filters, saved views, drill-through, exports, dashboards, approvals, scheduled jobs and sandboxed extensions |
+| **People and payroll** | Employee records, recruitment, onboarding, performance, benefits enrolment, compensation packages, qualifications/training, shifts/attendance, self-service, time/leave, pay-run readiness, statutory calculations, remittances and declared filing exports |
+| **Tax** | Tax configuration, jurisdiction-specific workpapers, return mappings, income-tax provisions, cross-border evidence, electronic-invoice profiles and contractor withholding; filing availability varies by pack |
+| **Property and nonprofit** | Properties, units, leases, rent schedules, CAM and lease workflows; nonprofit funds, gifts, grants, pledges, restrictions, encumbrances and functional reporting |
+| **Reporting, scheduling and automation** | Shared report engine, period/dimension filters, saved views, drill-through, exports, dashboards, schedule boards, standalone schedule PDFs, recipient review, rich-text email messages, approvals, scheduled jobs and sandboxed extensions |
+| **Migration and synchronization** | Source connections, native record imports, synchronization history, reconciliation evidence and source-specific connector controls |
 
-Manufacturing is broader than light assembly: routings, planning and production
-workflows are implemented. Evaluate capacity planning, shop-floor workflows,
-traceability and industry requirements against your actual operation before
-adopting it as a manufacturing system.
+Company Settings → Features is the authoritative switchboard. Optional capabilities
+have explicit dependencies; enabling one does not configure its policies,
+credentials, approvals or opening balances. Features are grouped by their operating
+domain, including separate Manufacturing, Property and Nonprofit areas.
+
+The standalone Manufacturing application includes native production and planning
+commands. The broader configurable operating-workflow and setup experience is
+being developed separately; that redesign is not included in the implemented
+capabilities above. Capacity results are advisory, and normal scrap capture
+currently requires capture before the first output receipt. Validate the native
+production flows against your operation before adoption.
+
+Eleven built-in [industry sample companies](docs/operations/industry-demo-companies.md)
+provide separate synthetic preview tenants. Their scenario and feature evidence is
+explicit: disconnected integrations and draft configuration are distinguished from
+executed workflows. Sample data is being expanded to cover newly added capabilities
+and richer day-to-day activity.
 
 ### Localization you can inspect
 
@@ -282,8 +300,9 @@ statements, and retain migration evidence before cutover.
 OpenBooks remains alpha. It does not claim universal statutory coverage,
 certified agency submission, SOC 2, ISO 27001, PCI DSS, or independent accounting
 and security audits. It has no native iOS/Android app or general offline-first
-client. Benefits-carrier/job-board integrations, POS and storefront requirements
-need separate evaluation. Self-hosting means owning deployment, backups,
+client. Native cash-sale and sales-channel workflows are implemented;
+hardware POS, benefits-carrier/job-board integrations and individual storefront
+requirements need separate evaluation. Self-hosting means owning deployment, backups,
 upgrades and operational support.
 
 ## Accounting kernel
