@@ -12,6 +12,8 @@ import { runMrp, getMrpRun, confirmPlannedOrder, dismissPlannedOrder, convertPla
 import { createWorkCenter,updateWorkCenter } from "./work-centers.ts";
 import { createRouting, createRoutingOperation } from "./routings.ts";
 import { upsertItemPolicy } from "./item-policies.ts";
+import { createWorkOrder, releaseWorkOrder } from "./work-orders.ts";
+import { waiveMaterial } from "./completion.ts";
 
 const DB = Boolean(process.env.OPENBOOKS_DB_URL);
 type Fixture = { org: ScratchOrg; actorId: string };
@@ -154,13 +156,29 @@ const cases: Case[] = [
   { name: "released work-order materials reduce available stock", run: async (f) => {
     const today = await businessToday(f.org.orgId); await policy(f, f.org.items.component, "buy", 2);
     await receiveInventory(f.org.orgId, f.actorId, { itemId: f.org.items.component, stockLocationId: f.org.stockLocationId, quantity: "30", unitCost: "1", subsidiaryId: f.org.subsidiaryId, offsetAccountId: f.org.accounts.clearing, date: f.org.date });
-    await withBypassContext(async () => {
-      const wo = randomUUID(), waivedWo = randomUUID();
-      const order = await db.execute(sql`insert into mfg_work_orders (id,org_id,number,produced_item_id,quantity_ordered,unit,status,source,subsidiary_id,released_at,created_by,updated_by) values (${wo},${f.org.orgId},${`WO-${wo.slice(0, 8)}`},${f.org.items.assembly},'1','ea','released','manual',${f.org.subsidiaryId},now(),${f.actorId},${f.actorId}),(${waivedWo},${f.org.orgId},${`WO-${waivedWo.slice(0, 8)}`},${f.org.items.assembly},'1','ea','released','manual',${f.org.subsidiaryId},now(),${f.actorId},${f.actorId}) returning id`);
-      assert.equal(order.rows.length, 2);
-      const material = await db.execute(sql`insert into mfg_wo_materials (org_id,work_order_id,component_item_id,quantity_per,required_qty,issued_qty,waived_at,waived_by,waive_reason,lot_serial_policy,created_by,updated_by) values (${f.org.orgId},${wo},${f.org.items.component},'20','20','0',null,null,null,'none',${f.actorId},${f.actorId}),(${f.org.orgId},${waivedWo},${f.org.items.component},'15','15','0',now(),${f.actorId},'No longer required','none',${f.actorId},${f.actorId}) returning work_order_id`);
-      assert.equal(material.rows.length, 2);
+    const departmentId=randomUUID(),wipId=randomUUID();
+    await tx(async runner=>{
+      assert.equal((await runner.execute(sql`insert into departments(id,org_id,name,subsidiary_id) values(${departmentId},${f.org.orgId},'Assembly',${f.org.subsidiaryId}) returning id`)).rows.length,1);
+      assert.equal((await runner.execute(sql`insert into labor_cost_rates(org_id,department_id,currency,rate,basis,annual_hours,effective_from,is_active,created_by,updated_by)
+        values(${f.org.orgId},${departmentId},'CAD','0','hour','2080','2026-01-01',true,${f.actorId},${f.actorId}) returning id`)).rows.length,1);
+      assert.equal((await runner.execute(sql`insert into accounts(id,org_id,number,name,type,is_summary,is_active,eliminate,reconcilable,required_dimensions,custom,subsidiary_include_children)
+        values(${wipId},${f.org.orgId},'1210','Manufacturing WIP','asset_current_other',false,true,false,false,'[]'::jsonb,'{}'::jsonb,true) returning id`)).rows.length,1);
+      assert.equal((await runner.execute(sql`update orgs set settings=jsonb_set(settings,'{controlAccounts}',coalesce(settings->'controlAccounts','{}'::jsonb)||jsonb_build_object('mfgWip',${wipId}::text),true) where id=${f.org.orgId} returning id`)).rows.length,1);
     });
+    const centerId=await routing(f,f.org.items.assembly);
+    await tx(runner=>updateWorkCenter(runner,f.org.orgId,f.actorId,centerId,{departmentId}));
+    const release=async(quantityOrdered:string)=>{
+      const order=await tx(runner=>createWorkOrder(runner,f.org.orgId,f.actorId,{producedItemId:f.org.items.assembly,quantityOrdered,subsidiaryId:f.org.subsidiaryId,plannedStart:f.org.date}));
+      const released=await tx(runner=>releaseWorkOrder(runner,f.org.orgId,f.actorId,order.id));
+      assert.equal(released.status,'released');
+      const materials=(await tx(runner=>runner.execute<{id:string;requiredQty:string}>(sql`select id,required_qty::text as "requiredQty" from mfg_wo_materials where org_id=${f.org.orgId} and work_order_id=${order.id} order by id`))).rows;
+      return {...released,materials};
+    };
+    const waived=await release('7.5');
+    assert.equal(waived.materials.length,1);assert.equal(waived.materials[0]!.requiredQty,'15.0000');
+    await tx(runner=>waiveMaterial(runner,f.org.orgId,f.actorId,waived.id,waived.materials[0]!.id,'No longer required'));
+    const reserved=await release('10');
+    assert.equal(reserved.materials.length,1);assert.equal(reserved.materials[0]!.requiredQty,'20.0000');
     await orderLine(f, "sales_order", f.org.items.component, "20", future(today, 20));
     const [plan] = await suggestions(f, (await run(f)).id); assert.equal(plan?.quantity, "10.0000");
   } },

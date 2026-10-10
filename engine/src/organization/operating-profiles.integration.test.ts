@@ -7,6 +7,7 @@ import { sql } from 'drizzle-orm'
 import { db, withBypassContext, type SqlExecutor } from '../platform/db.ts'
 import { createScratchOrg, dropScratchOrg } from '../testing/fixtures.ts'
 import { createWorkOperator } from '../testing/manufacturing.ts'
+import { errorChainMatches } from '../testing/error-chain.ts'
 import { createProject } from '../projects/project-create.ts'
 import { OPERATING_PRESETS, type OperatingProfileDefinition } from './operating-profile-model.ts'
 import { listOperatingProfileChoices, publishOperatingProfile, readPinnedOperatingProfile, resolveOperatingProfileForCreate, saveOperatingProfileScope } from './operating-profiles.ts'
@@ -48,7 +49,7 @@ test('operating compositions keep native work and historical versions while depa
     assert.equal((await transaction(tx => readPinnedOperatingProfile(tx, org.orgId, first.versionId, 'project')))?.capture, 'job')
     assert.equal((await transaction(tx => resolveOperatingProfileForCreate(tx, org.orgId, actorId, { family: 'project', subsidiaryId: org.subsidiaryId, departmentId: department.id }))).versionId, next.versionId)
     await assert.rejects(transaction(tx => resolveOperatingProfileForCreate(tx, org.orgId, actorId, { family: 'production', subsidiaryId: org.subsidiaryId, selection: engagement.versionId })))
-    await assert.rejects(transaction(tx => tx.execute(sql`update operating_profile_versions set definition='{}'::jsonb where org_id=${org.orgId} and id=${first.versionId}`)), /immutable/)
+    await assert.rejects(transaction(tx => tx.execute(sql`update operating_profile_versions set definition='{}'::jsonb where org_id=${org.orgId} and id=${first.versionId}`)), error => errorChainMatches(error, /Published operating profiles are immutable; publish a new version/))
     const counts = async () => (await transaction(tx => tx.execute(sql`select (select count(*) from projects where org_id=${org.orgId}) as projects,(select count(*) from audit_log where org_id=${org.orgId}) as audits`))).rows[0]
     const before = await counts()
     await transaction(tx => tx.execute(sql`update app_roles set permissions='["projects.read"]'::jsonb where org_id=${org.orgId} returning id`))
