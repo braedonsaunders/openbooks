@@ -1037,7 +1037,68 @@
     },
     "saved": "Configurações salvas",
     "savedPeriodsRederived": "Configurações salvas — períodos contábeis rerrotulados para o novo ano fiscal",
-    "saveSettings": "Salvar configurações"
+    "saveSettings": "Salvar configurações",
+    "legalIdentity": {
+      "title": "Identidade jurídica",
+      "description": "Endereço registrado, estrutura empresarial e os números fiscais usados em declarações e faturas. Faturas e outros documentos impressos os exibem no bloco do emitente.",
+      "address": {
+        "line1": "Endereço",
+        "line2": "Complemento",
+        "city": "Cidade",
+        "region": "Estado / província / região",
+        "postalCode": "CEP / código postal",
+        "country": "País do endereço",
+        "countryPlaceholder": "Selecione um país…"
+      },
+      "legalForm": "Natureza jurídica",
+      "legalFormHint": "A forma jurídica com que a empresa está registrada. Ela determina quais classificações fiscais estão disponíveis.",
+      "legalForms": {
+        "sole_proprietorship": "Empresário individual",
+        "general_partnership": "Sociedade em nome coletivo",
+        "limited_partnership": "Sociedade em comandita",
+        "llp": "Sociedade de responsabilidade limitada (LLP)",
+        "llc": "Sociedade limitada (LLC)",
+        "corporation": "Sociedade anônima",
+        "cooperative": "Cooperativa",
+        "nonprofit": "Organização sem fins lucrativos",
+        "trust": "Fundo fiduciário",
+        "other": "Outra"
+      },
+      "taxClassification": "Classificação fiscal",
+      "taxClassificationHint": "Como a empresa é tributada sobre a renda, por exemplo uma LLC tributada como sociedade de pessoas.",
+      "taxClassifications": {
+        "individual": "Tributado com o proprietário (empresário individual / entidade transparente)",
+        "partnership": "Sociedade de pessoas",
+        "corporation": "Pessoa jurídica (imposto corporativo)",
+        "s_corporation": "Sociedade S (S corporation)",
+        "tax_exempt": "Entidade isenta",
+        "trust": "Fundo fiduciário ou espólio",
+        "other": "Outra"
+      },
+      "taxIdsTitle": "Números fiscais e de registro",
+      "taxIdsHint": "Os números oferecidos seguem o país da empresa. Ao salvar, o formato (e o dígito verificador, quando a autoridade o publica) é conferido.",
+      "taxIds": {
+        "us_ein": "Número de identificação do empregador (EIN)",
+        "ca_bn": "Número da empresa (BN)",
+        "ca_gst_hst": "Número de registro GST/HST",
+        "ca_qst": "Número de registro QST",
+        "gb_vat": "Número de IVA (VAT)",
+        "gb_crn": "Número de registro da empresa",
+        "eu_vat": "Número de identificação de IVA",
+        "au_abn": "Número de empresa australiano (ABN)",
+        "tax_id": "Número de registro fiscal",
+        "registration": "Número de registro da empresa"
+      },
+      "taxIdInvalid": "Este número não é válido.",
+      "taxIdInvalidExample": "Este número não é válido — informe-o como {example}.",
+      "taxIdInvalidToast": "Verifique o campo {label} antes de salvar.",
+      "otherJurisdiction": "Registrado em outro país. Permanece salvo até que você o apague.",
+      "refusals": {
+        "taxId": "{label} não é válido para esta empresa. Verifique o número e o país da empresa.",
+        "address": "Complete o endereço da empresa com rua e cidade, ou deixe todos os campos de endereço em branco.",
+        "classification": "Essa classificação fiscal não está disponível para esta natureza jurídica neste país. Escolha outra classificação."
+      }
+    }
   },
   "users": {
     "unlinkedPerson": "Não vinculada",

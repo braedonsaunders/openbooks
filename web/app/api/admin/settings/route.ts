@@ -4,6 +4,7 @@ import { defineRoute } from "@/lib/api/route";
 import { notFound } from "@/lib/api/responses";
 import { NextResponse } from "next/server";
 import { guardPermission } from "../../../../lib/authz";
+import { LEGAL_FORMS, TAX_CLASSIFICATIONS } from "@openbooks/engine/src/organization/company-identity.ts";
 import {
   readCompanySettings,
   SETTINGS_READ_PERMISSION,
@@ -39,6 +40,19 @@ const requestBodySchema = z.object({
   cashSales: z.record(z.string(), z.union([z.string(), z.null()])).optional(),
   // Party-less journal/deposit lines on receivable or payable accounts.
   partylessControlPolicy: z.enum(["warn", "refuse"]).optional(),
+  // Legal identity. Shapes here; the jurisdiction rules (identifier formats
+  // per country, form/classification pairs) live in updateCompanySettings.
+  address: z.object({
+    line1: z.string().max(200).optional(),
+    line2: z.string().max(200).optional(),
+    city: z.string().max(200).optional(),
+    region: z.string().max(200).optional(),
+    postalCode: z.string().max(200).optional(),
+    country: z.string().max(2).optional(),
+  }).strict().nullable().optional(),
+  legalForm: z.enum(LEGAL_FORMS).nullable().optional(),
+  taxClassification: z.enum(TAX_CLASSIFICATIONS).nullable().optional(),
+  taxIds: z.record(z.string(), z.string().max(60).nullable()).optional(),
   // Strict: a field this route does not declare is refused rather than
   // silently dropped while the save reports success.
 }).strict().refine((body) => Object.keys(body).length > 0, { message: "At least one field must be provided." });

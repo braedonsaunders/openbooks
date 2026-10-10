@@ -1037,7 +1037,68 @@
     },
     "saved": "设置已保存",
     "savedPeriodsRederived": "设置已保存——会计期间已按新财年重新标注",
-    "saveSettings": "保存设置"
+    "saveSettings": "保存设置",
+    "legalIdentity": {
+      "title": "法律身份",
+      "description": "注册地址、企业组织形式以及用于申报和开票的税号。发票和其他打印文件会在开票方信息中显示这些内容。",
+      "address": {
+        "line1": "街道地址",
+        "line2": "地址第二行",
+        "city": "城市",
+        "region": "州 / 省 / 地区",
+        "postalCode": "邮政编码",
+        "country": "地址所在国家",
+        "countryPlaceholder": "选择国家…"
+      },
+      "legalForm": "企业组织形式",
+      "legalFormHint": "公司注册时的法律形式，决定可选择的税务分类。",
+      "legalForms": {
+        "sole_proprietorship": "个人独资企业",
+        "general_partnership": "普通合伙企业",
+        "limited_partnership": "有限合伙企业",
+        "llp": "有限责任合伙（LLP）",
+        "llc": "有限责任公司（LLC）",
+        "corporation": "股份有限公司",
+        "cooperative": "合作社",
+        "nonprofit": "非营利组织",
+        "trust": "信托",
+        "other": "其他"
+      },
+      "taxClassification": "税务分类",
+      "taxClassificationHint": "公司所得的纳税方式，例如按合伙企业纳税的有限责任公司。",
+      "taxClassifications": {
+        "individual": "随所有者纳税（个体经营者 / 穿透实体）",
+        "partnership": "合伙企业",
+        "corporation": "公司（企业所得税）",
+        "s_corporation": "S 型公司",
+        "tax_exempt": "免税组织",
+        "trust": "信托或遗产",
+        "other": "其他"
+      },
+      "taxIdsTitle": "税号与注册号",
+      "taxIdsHint": "可填写的号码取决于公司所在国家。保存时会校验格式（如税务机关公布了校验位，也会校验）。",
+      "taxIds": {
+        "us_ein": "雇主识别号（EIN）",
+        "ca_bn": "企业编号（BN）",
+        "ca_gst_hst": "GST/HST 登记号",
+        "ca_qst": "QST 登记号",
+        "gb_vat": "增值税登记号（VAT）",
+        "gb_crn": "公司注册号",
+        "eu_vat": "增值税识别号",
+        "au_abn": "澳大利亚商业号码（ABN）",
+        "tax_id": "税务登记号",
+        "registration": "企业注册号"
+      },
+      "taxIdInvalid": "号码无效。",
+      "taxIdInvalidExample": "号码无效——请按 {example} 的格式填写。",
+      "taxIdInvalidToast": "保存前请检查{label}。",
+      "otherJurisdiction": "此号码登记于其他国家，在您清除前会一直保留。",
+      "refusals": {
+        "taxId": "{label}对本公司无效。请检查号码和公司所在国家。",
+        "address": "请填写公司地址的街道和城市，或清空所有地址字段。",
+        "classification": "该税务分类不适用于此国家的这种企业组织形式。请选择其他分类。"
+      }
+    }
   },
   "users": {
     "unlinkedPerson": "未关联",

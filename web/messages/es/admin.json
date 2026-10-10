@@ -1037,7 +1037,68 @@
     },
     "saved": "Configuración guardada",
     "savedPeriodsRederived": "Configuración guardada — los períodos contables se volvieron a etiquetar según el nuevo ejercicio fiscal",
-    "saveSettings": "Guardar configuración"
+    "saveSettings": "Guardar configuración",
+    "legalIdentity": {
+      "title": "Identidad legal",
+      "description": "Domicilio social, estructura empresarial y los números fiscales con los que declara y factura. Las facturas y otros documentos impresos los muestran en el bloque del emisor.",
+      "address": {
+        "line1": "Dirección",
+        "line2": "Línea 2 de la dirección",
+        "city": "Ciudad",
+        "region": "Estado / provincia / región",
+        "postalCode": "Código postal",
+        "country": "País de la dirección",
+        "countryPlaceholder": "Seleccione un país…"
+      },
+      "legalForm": "Forma jurídica",
+      "legalFormHint": "La forma jurídica con la que está registrada la empresa. Determina qué clasificaciones fiscales están disponibles.",
+      "legalForms": {
+        "sole_proprietorship": "Empresario individual",
+        "general_partnership": "Sociedad colectiva",
+        "limited_partnership": "Sociedad comanditaria",
+        "llp": "Sociedad de responsabilidad limitada profesional (LLP)",
+        "llc": "Sociedad de responsabilidad limitada (LLC)",
+        "corporation": "Sociedad anónima",
+        "cooperative": "Cooperativa",
+        "nonprofit": "Organización sin ánimo de lucro",
+        "trust": "Fideicomiso",
+        "other": "Otra"
+      },
+      "taxClassification": "Clasificación fiscal",
+      "taxClassificationHint": "Cómo tributa la empresa por sus ingresos, por ejemplo una LLC que tributa como sociedad de personas.",
+      "taxClassifications": {
+        "individual": "Tributa con el propietario (empresario individual / entidad transparente)",
+        "partnership": "Sociedad de personas",
+        "corporation": "Sociedad (impuesto de sociedades)",
+        "s_corporation": "Sociedad S (S corporation)",
+        "tax_exempt": "Entidad exenta",
+        "trust": "Fideicomiso o herencia",
+        "other": "Otra"
+      },
+      "taxIdsTitle": "Números fiscales y de registro",
+      "taxIdsHint": "Los números disponibles dependen del país de la empresa. Al guardar se comprueba su formato (y el dígito de control cuando la autoridad lo publica).",
+      "taxIds": {
+        "us_ein": "Número de identificación del empleador (EIN)",
+        "ca_bn": "Número de empresa (BN)",
+        "ca_gst_hst": "Número de registro de GST/HST",
+        "ca_qst": "Número de registro de QST",
+        "gb_vat": "Número de IVA (VAT)",
+        "gb_crn": "Número de registro mercantil",
+        "eu_vat": "Número de identificación a efectos del IVA",
+        "au_abn": "Número de empresa australiano (ABN)",
+        "tax_id": "Número de identificación fiscal",
+        "registration": "Número de registro de la empresa"
+      },
+      "taxIdInvalid": "Este número no es válido.",
+      "taxIdInvalidExample": "Este número no es válido: introdúzcalo como {example}.",
+      "taxIdInvalidToast": "Revise el campo {label} antes de guardar.",
+      "otherJurisdiction": "Registrado con otro país. Se conserva hasta que lo borre.",
+      "refusals": {
+        "taxId": "{label} no es válido para esta empresa. Revise el número y el país de la empresa.",
+        "address": "Complete la dirección de la empresa con la calle y la ciudad, o deje vacíos todos los campos de dirección.",
+        "classification": "Esa clasificación fiscal no está disponible para esta forma jurídica en este país. Elija otra clasificación."
+      }
+    }
   },
   "users": {
     "unlinkedPerson": "Sin vincular",

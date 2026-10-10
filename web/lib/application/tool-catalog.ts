@@ -748,7 +748,7 @@ export const APPLICATION_TOOLS: readonly ApplicationToolDefinition[] = [
   }),
   definition({
     name: "get_company_settings", title: "Get Company Settings", tier: "core",
-    description: "Company & Accounting settings as the screen shows them: identity, locale, base currency, fiscal start month, frameworks, PDF style, control accounts, feature switchboard. Read-only.",
+    description: "Company & Accounting settings as the screen shows them: identity (incl. address, legal form, tax numbers), locale, base currency, fiscal start month, frameworks, PDF style, control accounts, feature switchboard. Read-only.",
     inputSchema: z.object({}), readOnly: true, destructive: false, openWorld: false,
     assistantConfirmation: "never", visibleTo: anyPermission("admin.users.manage", "admin.setup.manage"),
     execute: async (context) => {
@@ -787,7 +787,7 @@ export const APPLICATION_TOOLS: readonly ApplicationToolDefinition[] = [
   }),
   definition({
     name: "update_company_settings", title: "Update Company Settings",
-    description: "Change Company & Accounting settings (only passed keys change): names, locale, frameworks, PDF style, control accounts. Refuses fiscal-calendar/base-currency changes with postings, and invalid control accounts. Audited.",
+    description: "Change Company & Accounting settings (only passed keys change): names, locale, frameworks, PDF style, control accounts, legal identity (address {line1,line2,city,region,postalCode,country}, legalForm, taxClassification, taxIds keyed by scheme such as us_ein, ca_bn, ca_gst_hst, eu_vat). Refuses fiscal-calendar/base-currency changes with postings, invalid control accounts, malformed tax numbers and classifications the business structure cannot elect. Audited.",
     inputSchema: z.object({
       changes: z.record(z.string(), z.unknown())
         .describe("Settings to change, keyed by setting name (only the keys passed change)"),

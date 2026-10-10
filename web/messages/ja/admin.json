@@ -1037,7 +1037,68 @@
     },
     "saved": "設定を保存しました",
     "savedPeriodsRederived": "設定を保存しました。会計期間のラベルを新しい会計年度に付け直しました",
-    "saveSettings": "設定を保存"
+    "saveSettings": "設定を保存",
+    "legalIdentity": {
+      "title": "法的情報",
+      "description": "登記上の住所、事業形態、申告や請求に使用する税務番号です。請求書などの印刷書類の発行者欄に表示されます。",
+      "address": {
+        "line1": "番地・建物",
+        "line2": "住所2",
+        "city": "市区町村",
+        "region": "都道府県・州",
+        "postalCode": "郵便番号",
+        "country": "住所の国",
+        "countryPlaceholder": "国を選択…"
+      },
+      "legalForm": "事業形態",
+      "legalFormHint": "会社の登記上の形態です。選択できる税務上の区分が決まります。",
+      "legalForms": {
+        "sole_proprietorship": "個人事業",
+        "general_partnership": "合名会社・組合",
+        "limited_partnership": "合資会社・投資事業有限責任組合",
+        "llp": "有限責任事業組合（LLP）",
+        "llc": "合同会社（LLC）",
+        "corporation": "株式会社",
+        "cooperative": "協同組合",
+        "nonprofit": "非営利法人",
+        "trust": "信託",
+        "other": "その他"
+      },
+      "taxClassification": "税務上の区分",
+      "taxClassificationHint": "会社の所得に対する課税方法です。例：パートナーシップとして課税されるLLC。",
+      "taxClassifications": {
+        "individual": "所有者課税（個人事業主・パススルー事業体）",
+        "partnership": "パートナーシップ",
+        "corporation": "法人",
+        "s_corporation": "Sコーポレーション",
+        "tax_exempt": "非課税団体",
+        "trust": "信託・遺産財団",
+        "other": "その他"
+      },
+      "taxIdsTitle": "税務番号・登記番号",
+      "taxIdsHint": "表示される番号は会社の国に応じて変わります。保存時に形式（当局が公開している場合はチェックディジットも）を検証します。",
+      "taxIds": {
+        "us_ein": "雇用者識別番号（EIN）",
+        "ca_bn": "事業者番号（BN）",
+        "ca_gst_hst": "GST/HST登録番号",
+        "ca_qst": "QST登録番号",
+        "gb_vat": "VAT登録番号",
+        "gb_crn": "会社登記番号",
+        "eu_vat": "VAT識別番号",
+        "au_abn": "オーストラリア事業者番号（ABN）",
+        "tax_id": "納税者番号",
+        "registration": "法人登記番号"
+      },
+      "taxIdInvalid": "有効な番号ではありません。",
+      "taxIdInvalidExample": "有効な番号ではありません。{example} の形式で入力してください。",
+      "taxIdInvalidToast": "保存する前に{label}を確認してください。",
+      "otherJurisdiction": "別の国で登録された番号です。消去するまで保持されます。",
+      "refusals": {
+        "taxId": "{label}はこの会社では無効です。番号と会社の国を確認してください。",
+        "address": "会社の住所に番地と市区町村を入力するか、住所欄をすべて空にしてください。",
+        "classification": "この国のこの事業形態では、その税務上の区分は選択できません。別の区分を選択してください。"
+      }
+    }
   },
   "users": {
     "unlinkedPerson": "未紐付け",

@@ -242,6 +242,57 @@ test('a control-account refusal is restated with the field label, never the stor
   }
 })
 
+test('legal identity offers the country\'s tax numbers, checks them before saving, and sends canonical values', async () => {
+  const { seen, unmount } = await mountForm()
+  try {
+    const bn = document.getElementById('company-tax-id-ca_bn') as HTMLInputElement | null
+    assert.ok(bn, 'a Canadian company records its Business Number')
+    assert.ok(document.getElementById('company-tax-id-ca_gst_hst'), 'and its GST/HST number')
+    assert.equal(document.getElementById('company-tax-id-us_ein'), null, 'a US EIN is not offered to a Canadian company')
+    const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!
+    const type = async (input: HTMLInputElement, value: string) => {
+      await act(async () => {
+        setter.call(input, value)
+        input.dispatchEvent(new window.Event('input', { bubbles: true }))
+        await tick()
+      })
+    }
+    await type(bn, '123456789')
+    await act(async () => {
+      saveButton().click()
+      await tick()
+    })
+    assert.deepEqual(seen, [], 'a number failing its check digit never reaches the API')
+    assert.equal(bn.getAttribute('aria-invalid'), 'true')
+    assert.match(document.getElementById('company-tax-id-ca_bn-error')?.textContent ?? '', /enter it like 123456782/)
+
+    await type(bn, '123 456 782')
+    const street = document.getElementById('company-address-line1') as HTMLInputElement
+    const city = document.getElementById('company-address-city') as HTMLInputElement
+    await type(street, '400 King St W')
+    await type(city, 'Toronto')
+    const form = document.getElementById('company-legal-form') as HTMLSelectElement
+    await act(async () => {
+      form.value = 'sole_proprietorship'
+      form.dispatchEvent(new window.Event('change', { bubbles: true }))
+      await tick()
+    })
+    await act(async () => {
+      saveButton().click()
+      await tick()
+    })
+    await tick()
+    assert.equal(seen.length, 1)
+    const body = seen[0]!.body as Record<string, unknown>
+    assert.deepEqual(body.taxIds, { ca_bn: '123456782', ca_gst_hst: null, ca_qst: null, tax_id: null, registration: null })
+    assert.deepEqual(body.address, { line1: '400 King St W', line2: '', city: 'Toronto', region: '', postalCode: '', country: 'CA' })
+    assert.equal(body.legalForm, 'sole_proprietorship')
+    assert.equal(body.taxClassification, 'individual', 'a structure with one treatment selects it')
+  } finally {
+    await unmount()
+  }
+})
+
 // CTRL-01: the vendor-bill release policy lives on Company Settings as an
 // explicit opt-in (default off), with a warning while no approval flow is
 // configured for vendor bills.

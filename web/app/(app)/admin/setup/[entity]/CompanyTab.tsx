@@ -7,6 +7,13 @@ import { hasVendorBillApprovalFlow } from '@openbooks/engine/src/flows/index.ts'
 import { DEFAULT_LOCALE, isLocale } from '../../../../../i18n/config'
 import { isFeatureEnabled, subsidiaryFeatureEnabled } from '../../../../../lib/features'
 import { SettingsForm, type AccountOption } from '../../settings/SettingsForm'
+import {
+  EMPTY_COMPANY_ADDRESS,
+  isLegalForm,
+  isTaxClassification,
+  readCompanyAddress,
+  readTaxIds,
+} from '@openbooks/engine/src/organization/company-identity.ts'
 import { readCashSalesSettings } from '../../../../../lib/company-settings'
 import { SampleCompanyPicker } from '../../../../../components/sample-company-picker'
 import { parsePartylessControlPolicy } from '@openbooks/engine/src/ledger/partyless-control-policy.ts'
@@ -22,7 +29,7 @@ export async function CompanyTab({ orgId }: { orgId: string }) {
 
   const [org, accounts, currencies, multiSubsidiary, revenueRecognition, revenueContracts, saasMetricsEnabled, cashSalesEnabled, vendorBillFlowConfigured, customers] = ((await Promise.all([
     db.execute(sql`
-      select name, legal_name, base_currency, country, settings
+      select name, legal_name, base_currency, country, tax_ids, settings
         from orgs where id = ${orgId}`),
     db.execute(sql`
       select id, number, name, type from accounts
@@ -106,6 +113,12 @@ export async function CompanyTab({ orgId }: { orgId: string }) {
           partylessControlPolicy: parsePartylessControlPolicy(
             (settings.ledger as Record<string, unknown> | undefined)?.partylessControlPolicy,
           ),
+          legalIdentity: {
+            address: readCompanyAddress(settings.companyAddress) ?? { ...EMPTY_COMPANY_ADDRESS },
+            legalForm: isLegalForm(settings.legalForm) ? settings.legalForm : '',
+            taxClassification: isTaxClassification(settings.taxClassification) ? settings.taxClassification : '',
+            taxIds: readTaxIds(row?.tax_ids),
+          },
           cashSales: (() => {
             const stored = readCashSalesSettings(
               (settings.cashSales ?? {}) as Record<string, unknown>,

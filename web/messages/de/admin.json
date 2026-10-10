@@ -1037,7 +1037,68 @@
     },
     "saved": "Einstellungen gespeichert",
     "savedPeriodsRederived": "Einstellungen gespeichert — Buchungsperioden auf das neue Geschäftsjahr umbeschriftet",
-    "saveSettings": "Einstellungen speichern"
+    "saveSettings": "Einstellungen speichern",
+    "legalIdentity": {
+      "title": "Rechtliche Identität",
+      "description": "Eingetragene Anschrift, Rechtsform und die Steuernummern, unter denen Sie Erklärungen abgeben und Rechnungen stellen. Rechnungen und andere Druckdokumente zeigen sie im Absenderblock.",
+      "address": {
+        "line1": "Straße und Hausnummer",
+        "line2": "Adresszusatz",
+        "city": "Ort",
+        "region": "Bundesland / Region",
+        "postalCode": "Postleitzahl",
+        "country": "Land der Anschrift",
+        "countryPlaceholder": "Land auswählen…"
+      },
+      "legalForm": "Rechtsform",
+      "legalFormHint": "Die Rechtsform, in der das Unternehmen eingetragen ist. Sie bestimmt, welche steuerlichen Einstufungen möglich sind.",
+      "legalForms": {
+        "sole_proprietorship": "Einzelunternehmen",
+        "general_partnership": "Offene Handelsgesellschaft / GbR",
+        "limited_partnership": "Kommanditgesellschaft",
+        "llp": "Partnerschaft mit beschränkter Haftung (LLP)",
+        "llc": "Gesellschaft mit beschränkter Haftung (LLC)",
+        "corporation": "Kapitalgesellschaft",
+        "cooperative": "Genossenschaft",
+        "nonprofit": "Gemeinnützige Organisation",
+        "trust": "Treuhand / Trust",
+        "other": "Sonstige"
+      },
+      "taxClassification": "Steuerliche Einstufung",
+      "taxClassificationHint": "Wie das Einkommen des Unternehmens besteuert wird, zum Beispiel eine LLC, die als Personengesellschaft besteuert wird.",
+      "taxClassifications": {
+        "individual": "Beim Inhaber besteuert (Einzelunternehmer / transparente Einheit)",
+        "partnership": "Personengesellschaft",
+        "corporation": "Körperschaft",
+        "s_corporation": "S-Corporation",
+        "tax_exempt": "Steuerbefreite Organisation",
+        "trust": "Trust oder Nachlass",
+        "other": "Sonstige"
+      },
+      "taxIdsTitle": "Steuer- und Registernummern",
+      "taxIdsHint": "Die angebotenen Nummern richten sich nach dem Land des Unternehmens. Beim Speichern werden Format und, sofern veröffentlicht, Prüfziffer geprüft.",
+      "taxIds": {
+        "us_ein": "Arbeitgeber-Identifikationsnummer (EIN)",
+        "ca_bn": "Unternehmensnummer (BN)",
+        "ca_gst_hst": "GST/HST-Registrierungsnummer",
+        "ca_qst": "QST-Registrierungsnummer",
+        "gb_vat": "USt-Identifikationsnummer (VAT)",
+        "gb_crn": "Handelsregisternummer",
+        "eu_vat": "Umsatzsteuer-Identifikationsnummer",
+        "au_abn": "Australische Unternehmensnummer (ABN)",
+        "tax_id": "Steuernummer",
+        "registration": "Registernummer"
+      },
+      "taxIdInvalid": "Diese Nummer ist ungültig.",
+      "taxIdInvalidExample": "Diese Nummer ist ungültig – geben Sie sie wie {example} ein.",
+      "taxIdInvalidToast": "Prüfen Sie vor dem Speichern: {label}.",
+      "otherJurisdiction": "Unter einem anderen Land erfasst. Sie bleibt gespeichert, bis Sie sie löschen.",
+      "refusals": {
+        "taxId": "{label} ist für dieses Unternehmen ungültig. Prüfen Sie die Nummer und das Land des Unternehmens.",
+        "address": "Ergänzen Sie die Unternehmensanschrift um Straße und Ort oder leeren Sie alle Adressfelder.",
+        "classification": "Diese steuerliche Einstufung ist für diese Rechtsform in diesem Land nicht möglich. Wählen Sie eine andere Einstufung."
+      }
+    }
   },
   "users": {
     "unlinkedPerson": "Nicht verknüpft",

@@ -11,10 +11,21 @@ import {
   type OrgControlAccounts,
 } from "@openbooks/engine/src/records/control-accounts.ts";
 import { canonicalTimeZone } from "@openbooks/engine/src/platform/time-zone.ts";
+import {
+  isLegalForm,
+  isTaxClassification,
+  normalizeCompanyAddress,
+  normalizeTaxIds,
+  readCompanyAddress,
+  readTaxIds,
+  taxClassificationsFor,
+  taxIdScheme,
+  type LegalForm,
+} from "@openbooks/engine/src/organization/company-identity.ts";
 import { isFeatureEnabled } from "./features";
 import { isUuid } from "./list-params";
 import { DEFAULT_LOCALE, isLocale } from "../i18n/config";
-import { normalizeCountryCode } from "./countries";
+import { isCountryCode, normalizeCountryCode } from "./countries";
 import {
   periodDerivationSql,
   periodDerivationStagingSql,
@@ -94,7 +105,7 @@ function fiscalCalendarLockedResponse(): CompanySettingsResult {
 export async function readCompanySettings(orgId: string): Promise<CompanySettingsResult> {
 
   const org = await db.execute(sql`
-    select id, name, legal_name, country, settings
+    select id, name, legal_name, country, tax_ids, settings
       from orgs where id = ${orgId}`);
 
   const row = org.rows[0];
@@ -107,6 +118,12 @@ export async function readCompanySettings(orgId: string): Promise<CompanySetting
       name: row.name as string,
       legalName: (row.legal_name as string | null) ?? "",
       country: row.country as string,
+      // Legal identity: registered address, legal form, tax classification
+      // and the tax/registration identifiers documents print.
+      address: readCompanyAddress(settings.companyAddress),
+      legalForm: isLegalForm(settings.legalForm) ? settings.legalForm : null,
+      taxClassification: isTaxClassification(settings.taxClassification) ? settings.taxClassification : null,
+      taxIds: readTaxIds(row.tax_ids),
       defaultLocale: isLocale(settings.defaultLocale)
         ? settings.defaultLocale
         : DEFAULT_LOCALE,
@@ -168,6 +185,10 @@ export async function updateCompanySettings(
     requireVendorBillApproval?: unknown;
     requireStockCountReview?: unknown;
     partylessControlPolicy?: unknown;
+    address?: unknown;
+    legalForm?: unknown;
+    taxClassification?: unknown;
+    taxIds?: unknown;
   };
 
   // This feature probe does not contribute persisted state. Do it before the
@@ -208,7 +229,7 @@ export async function updateCompanySettings(
       await lockLedgerSetupFence(tx, orgId, "exclusive");
     }
     const existing = await tx.execute(sql`
-    select name, legal_name, base_currency, country, settings
+    select name, legal_name, base_currency, country, tax_ids, settings
       from orgs where id = ${orgId} for update`);
     const cur = existing.rows[0];
     if (!cur)
@@ -251,6 +272,79 @@ export async function updateCompanySettings(
       if (country !== cur.country) {
         sets.push(sql`country = ${country}`);
         changes.country = [cur.country, country];
+      }
+    }
+
+    // --- legal identity: registered address, legal form, tax classification
+    // and tax/registration identifiers. Validated against the country this
+    // same save leaves the company in; refusals name the field and the fix.
+    const effectiveCountry = (normalizeCountryCode(body.country) ?? cur.country) as string;
+    const identitySettings: { key: "companyAddress" | "legalForm" | "taxClassification"; value: unknown }[] = [];
+    if (body.address !== undefined) {
+      const result = normalizeCompanyAddress(body.address, isCountryCode);
+      if (!result.ok) {
+        const { field, reason } = result.problem;
+        const message = reason === "required"
+          ? `the company address needs a ${field === "line1" ? "street address" : "city"} — complete it or clear every address field`
+          : reason === "invalid_country"
+            ? "the company address needs a valid country"
+            : `the company address ${field} is too long — shorten it to 200 characters`;
+        return { status: 400, body: { error: message, code: "invalid-company-address", field, reason } };
+      }
+      identitySettings.push({ key: "companyAddress", value: result.address });
+    }
+    const storedLegalForm: LegalForm | null = isLegalForm(settings.legalForm) ? settings.legalForm : null;
+    let effectiveLegalForm = storedLegalForm;
+    if (body.legalForm !== undefined) {
+      if (body.legalForm !== null && !isLegalForm(body.legalForm)) {
+        return { status: 400, body: { error: "legal form is not one of the supported business structures", code: "invalid-legal-form" } };
+      }
+      effectiveLegalForm = body.legalForm;
+      identitySettings.push({ key: "legalForm", value: body.legalForm });
+    }
+    let effectiveClassification = isTaxClassification(settings.taxClassification) ? settings.taxClassification : null;
+    if (body.taxClassification !== undefined) {
+      if (body.taxClassification !== null && !isTaxClassification(body.taxClassification)) {
+        return { status: 400, body: { error: "tax classification is not one of the supported treatments", code: "invalid-tax-classification" } };
+      }
+      effectiveClassification = body.taxClassification;
+      identitySettings.push({ key: "taxClassification", value: body.taxClassification });
+    }
+    // A form, country or classification change must leave a combination the
+    // law allows (an LLC may elect S status only in the US; a sole
+    // proprietorship is taxed with its owner).
+    if (
+      effectiveClassification !== null
+      && (body.legalForm !== undefined || body.taxClassification !== undefined || body.country !== undefined)
+      && !taxClassificationsFor(effectiveLegalForm, effectiveCountry).includes(effectiveClassification)
+    ) {
+      return { status: 400, body: {
+        error: "the tax classification does not apply to this legal form in this country — choose a classification the structure can elect",
+        code: "tax-classification-mismatch",
+        legalForm: effectiveLegalForm,
+        taxClassification: effectiveClassification,
+      } };
+    }
+    const storedTaxIds = readTaxIds(cur.tax_ids);
+    if (body.taxIds !== undefined) {
+      if (body.taxIds === null || typeof body.taxIds !== "object" || Array.isArray(body.taxIds)) {
+        return { status: 400, body: { error: "taxIds must be an object keyed by identifier scheme", code: "invalid-tax-id" } };
+      }
+      const result = normalizeTaxIds(body.taxIds as Record<string, unknown>, effectiveCountry, storedTaxIds);
+      if (!result.ok) {
+        const { scheme, reason } = result.problem;
+        const label = taxIdScheme(scheme)?.printLabel ?? scheme;
+        const example = taxIdScheme(scheme)?.example;
+        const message = reason === "unknown_scheme"
+          ? `${scheme} is not a supported tax identifier`
+          : reason === "not_in_country"
+            ? `${label} is not issued in ${effectiveCountry} — remove it or change the company's country`
+            : `${label} is not a valid number${example ? ` — enter it like ${example}` : ""}`;
+        return { status: 400, body: { error: message, code: "invalid-tax-id", scheme, reason } };
+      }
+      if (JSON.stringify(result.taxIds) !== JSON.stringify(storedTaxIds)) {
+        sets.push(sql`tax_ids = ${JSON.stringify(result.taxIds)}::jsonb`);
+        changes.taxIds = [storedTaxIds, result.taxIds];
       }
     }
 
@@ -744,6 +838,14 @@ export async function updateCompanySettings(
         changes.partylessControlPolicy = [curPolicy, body.partylessControlPolicy];
         settingsChanged = true;
       }
+    }
+    for (const { key, value } of identitySettings) {
+      const before = key === "companyAddress" ? readCompanyAddress(settings[key]) : (settings[key] ?? null);
+      if (JSON.stringify(before) === JSON.stringify(value)) continue;
+      if (value === null) delete nextSettings[key];
+      else nextSettings[key] = value;
+      changes[key] = [before, value];
+      settingsChanged = true;
     }
     if (settingsChanged) {
       sets.push(sql`settings = ${JSON.stringify(nextSettings)}::jsonb`);
