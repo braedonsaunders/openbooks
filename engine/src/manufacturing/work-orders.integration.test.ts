@@ -35,8 +35,14 @@ async function withSandboxClone(f: Fixture, work: (orgId: string) => Promise<voi
 async function setup(): Promise<Fixture> {
   const org = await withBypassContext(() => createScratchOrg());
   const actorId = await withBypassContext(() => createScratchUser(org.orgId, "Shop lead", "admin"));
+  const wipId = randomUUID();
   await withBypassContext(async () => {
-    const result = await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||'{"manufacturing":true,"inventory":true,"warehousing":true}'::jsonb) where id=${org.orgId} returning id`);
+    const account = await db.execute(sql`insert into accounts
+      (id,org_id,number,name,type,is_summary,is_active,eliminate,reconcilable,required_dimensions,custom,subsidiary_include_children)
+      values(${wipId},${org.orgId},'1210','Manufacturing WIP','asset_current_other',false,true,false,false,'[]'::jsonb,'{}'::jsonb,true) returning id`);
+    assert.equal(account.rows.length, 1, "child release requires a genuine manufacturing WIP account");
+    const result = await db.execute(sql`update orgs set settings=jsonb_set(jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||'{"manufacturing":true,"inventory":true,"warehousing":true}'::jsonb),'{controlAccounts}',
+      coalesce(settings->'controlAccounts','{}'::jsonb)||jsonb_build_object('mfgWip',${wipId}::text),true) where id=${org.orgId} returning id`);
     assert.equal(result.rows.length, 1);
   });
   // Releasing a work order snapshots its work centers' department rates.

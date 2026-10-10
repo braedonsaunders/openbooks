@@ -509,7 +509,7 @@ cases.push(
    await run(tx=>tx.execute(sql`update app_roles set permissions=${JSON.stringify([remaining])}::jsonb where org_id=${f.org.orgId} returning id`));await attempts();
   }
   await run(tx=>tx.execute(sql`update app_roles set permissions='["manufacturing.manage","items.post"]'::jsonb,subsidiary_restriction='{"mode":"list","subsidiaryIds":[]}'::jsonb where org_id=${f.org.orgId} returning id`));await attempts();
-  await run(tx=>tx.execute(sql`update app_roles set subsidiary_restriction=null where org_id=${f.org.orgId} returning id`));
+  await run(tx=>tx.execute(sql`update app_roles set subsidiary_restriction='{"mode":"all"}'::jsonb where org_id=${f.org.orgId} returning id`));
   for(const unknown of [randomUUID()]){
    await denied(run(tx=>recordNormalScrap(tx,f.org.orgId,unknown,null,wo.id,scrapKey,input)));
    await denied(withBypassContext(()=>executeManufacturingReceipt(f.org.orgId,unknown,null,wo.id,receiptKey,{quantity:"1"})));
