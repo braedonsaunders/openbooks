@@ -29,6 +29,7 @@ export async function setupRailFlags(authz: Authz, features: FeatureState): Prom
     // One authoritative gate hides rail tabs — never a local OR over featureKey.
     hiddenEntityKeys: SETUP_ENTITIES.filter((entity) => !resolveSetupEntityGate(entity, features).enabled).map((entity) => entity.key),
     projectsEnabled: featureEnabled(features, 'projects'),
+    manufacturingEnabled: featureEnabled(features, 'manufacturing') && authz.allowedSubsidiaryIds === null,
     currencyEnabled: featureEnabled(features, 'multiCurrency'),
     fixedAssetsEnabled: featureEnabled(features, 'fixedAssets'),
     crmEnabled: featureEnabled(features, 'crm'),
