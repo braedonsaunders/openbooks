@@ -33,6 +33,12 @@ test('native list navigation uses its actual base path and encodes the form', ()
   assert.equal(url.searchParams.get('doc'), 'new/id')
   assert.equal(url.searchParams.get('form'), 'layout&1')
 })
+test('record navigation drops a stale edit request so reloads open in view mode', () => {
+  const href = documentDrawerHref({ pathname: '/projects', query: 'project=project-1&projectTxn=old&projectTxnKind=customer_invoice&mode=edit', basePath: '/projects', currentId: 'old', targetId: 'new', kind: 'customer_invoice', related: true })
+  const url = new URL(href, 'https://example.test')
+  assert.equal(url.searchParams.get('projectTxn'), 'new')
+  assert.equal(url.searchParams.has('mode'), false)
+})
 test('a related project charge without a selected host uses the global record host', () => {
   const href = documentDrawerHref({ pathname: '/reports/general-ledger', query: 'period=2026-09', basePath: '/projects', currentId: 'old', targetId: 'new', kind: 'project_charge', related: true })
   const url = new URL(href, 'https://example.test')

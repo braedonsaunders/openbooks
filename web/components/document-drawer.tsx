@@ -567,6 +567,15 @@ export type PersistedDocumentSnapshot<Payload> = {
   payload: Payload
 }
 
+/**
+ * Byte-stable fingerprint of the drawer's save payload. The payload is built
+ * by one code path from the same state, so equal content always serializes
+ * identically and no key sorting is needed.
+ */
+function savePayloadFingerprint(payload: unknown): string {
+  return JSON.stringify(payload)
+}
+
 export function reconcilePersistedDocumentSnapshot<Payload>(
   current: PersistedDocumentSnapshot<Payload>,
   incoming: PersistedDocumentSnapshot<Payload>,
@@ -2161,9 +2170,15 @@ export function DocumentDrawer({
   const [prevRehydrationEpoch, setPrevRehydrationEpoch] = useState(rehydrationEpoch)
   if (prevPayload !== payload_ || prevRehydrationEpoch !== rehydrationEpoch) {
     const rehydrating = prevRehydrationEpoch !== rehydrationEpoch
+    // Mount-time panel settling rebuilds the save payload with identical
+    // content (a fetch resolving into state mints fresh object identities):
+    // identity alone would read as user edits and prompt on close with
+    // nothing to discard. Only a content change marks the editor dirty.
+    const contentChanged =
+      !rehydrating && savePayloadFingerprint(prevPayload) !== savePayloadFingerprint(payload_)
     setPrevPayload(payload_)
     setPrevRehydrationEpoch(rehydrationEpoch)
-    if (!rehydrating && editable) setDirty(true)
+    if (!rehydrating && editable && contentChanged) setDirty(true)
   }
 
   function resetForm(source: DocPayload) {
@@ -2398,6 +2413,10 @@ export function DocumentDrawer({
           setDirty(false)
           setMode('view')
           toast.success(t('toasts.saved', { documentNumber: String(data.doc.document_number ?? '') }))
+          // The save consumes the explicit edit request: landing on the
+          // mode-less record URL keeps a later reload in view mode instead
+          // of resurrecting the editing caption with nothing to save.
+          router.push(hrefForDocument(String(data.doc.id), searchParams.get('form') ?? undefined))
           router.refresh()
         },
         onRefused: () => {

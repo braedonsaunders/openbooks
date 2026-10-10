@@ -33,6 +33,10 @@ export function documentDrawerHref({ pathname, query, basePath, currentId, targe
   }
   params.delete('transactionTab')
   params.delete('form')
+  // A navigation to a (possibly just-saved) record never carries a stale
+  // edit request: edit mode is entered explicitly per record, so a reload
+  // after this navigation opens in view mode.
+  params.delete('mode')
   if (form !== undefined) params.set('form', form)
   return `${pathname}?${params}`
 }

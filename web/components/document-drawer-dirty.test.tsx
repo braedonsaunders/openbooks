@@ -79,7 +79,7 @@ function scriptFetch(handler: (url: string) => Response | null) {
   };
 }
 
-async function mountDraftInvoice() {
+async function mountDraftInvoice(initialMode?: 'view' | 'edit') {
   globalThis.__drawerRouter = { push() {}, refresh() {} };
   globalThis.__drawerToasts = [];
   globalThis.__confirmCalls = [];
@@ -110,6 +110,7 @@ async function mountDraftInvoice() {
             payload={{ doc, lines: [] }}
             config={DOC_KINDS["customer_invoice"]!}
             basePath="/ar/invoices"
+            initialMode={initialMode}
             parties={[]}
             accounts={[]}
             taxCodes={[]}
@@ -257,4 +258,38 @@ test("closing a dirty drawer via X asks first and keeps the drawer on decline", 
   await click(close!);
   assert.equal(globalThis.__confirmCalls?.length, 1, "X on a dirty drawer must ask");
   assert.equal(buttonsNamed("Save").length, 1, "declining the discard must leave the drawer open");
+});
+
+test("opening directly in edit mode does not prompt on close without edits", async (t) => {
+  // A ?mode=edit URL (order conversion, capture review) mounts the drawer
+  // editing: mount-time panel settling must not read as user edits, or an
+  // untouched editor demands a discard with nothing to discard.
+  const { host, root, restoreFetch } = await mountDraftInvoice("edit");
+  t.after(async () => {
+    await act(async () => {
+      root.unmount();
+    });
+    host.remove();
+    restoreFetch();
+  });
+  assert.equal(buttonsNamed("Save").length, 1, "an explicit edit request must open editing");
+  await click(buttonsNamed("Cancel")[0]!);
+  assert.equal(globalThis.__confirmCalls?.length ?? 0, 0, "closing an unedited editor must not prompt");
+  assert.equal(buttonsNamed("Edit").length, 1, "closing an unedited editor returns to view mode");
+});
+
+test("opening directly in edit mode still prompts after a real edit", async (t) => {
+  const { host, root, restoreFetch } = await mountDraftInvoice("edit");
+  t.after(async () => {
+    await act(async () => {
+      root.unmount();
+    });
+    host.remove();
+    restoreFetch();
+  });
+  await typeMemo("an actual edit");
+  globalThis.__confirmVerdict = false;
+  await click(buttonsNamed("Cancel")[0]!);
+  assert.equal(globalThis.__confirmCalls?.length, 1, "Cancel on an edited editor must ask");
+  assert.equal(buttonsNamed("Save").length, 1, "declining the discard must stay in edit mode");
 });
