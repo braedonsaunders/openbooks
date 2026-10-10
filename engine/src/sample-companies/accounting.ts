@@ -1,3 +1,4 @@
+import { verifySampleOperatingHistory } from "./readiness.ts";
 import { createHash } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { db, withMaintenanceTransaction } from "../platform/db.ts";
@@ -12,6 +13,9 @@ export async function verifyAndRegisterDemoAccounting(orgId: string): Promise<{ 
     if (row?.settings.simHarness !== true || row.settings.sampleCompany || (row.settings.demoData as { version?: number } | undefined)?.version !== DEMO_DATA_VERSION) {
       throw new SampleCompanyPreconditionError("Accounting verification requires an installed synthetic master demo; prepare its native scenarios first.");
     }
+    const industryKey = (row.settings.demoData as { industryKey: string }).industryKey;
+    const historyGaps = await verifySampleOperatingHistory(orgId, industryKey);
+    if (historyGaps.length) throw new SampleCompanyPreconditionError(`Sample operating history is incomplete: ${historyGaps.join("; ")}. Populate the named native workflows before certifying this master.`);
     const checkpoint = await runScenario(orgId, { at: new Date().toISOString() });
     if (!checkpoint.pass) {
       throw new SampleCompanyPreconditionError(`Demo accounting checks failed: ${checkpoint.checks.filter(check => !check.ok).map(check => `${check.name}: ${check.detail}`).join("; ")}. Reconcile the named source records through their normal accounting workflows before preparing this industry again.`);

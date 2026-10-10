@@ -184,7 +184,7 @@ export const generalContractor: Profile = {
     { name: "State DOT Region 4", termDays: 60, revenueCategories: ["revenueService"], invoiceMin: 40000, invoiceMax: 500000, payment: { onTime: 0.55, late: 0.3, veryLate: 0.1, shortPay: 0.03, delinquent: 0.02 } },
   ],
   cadence: {
-    billsPerDay: 0.7,
+    billsPerDay: 1.2,
     invoicesPerDay: 0, // fully bottom-up — all revenue comes from job billing
     expenseReportsPerDay: 0.3,
     journalPerDay: 0.2,

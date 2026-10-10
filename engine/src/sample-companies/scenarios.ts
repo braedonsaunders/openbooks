@@ -1,11 +1,15 @@
+import { industryDetailRecords } from "./industry-detail.ts";
+import { extendedFeatureRecords } from "./feature-scenarios.ts";
 import { createHash } from "node:crypto";
 import { mul } from "../money/money.ts";
+import { industryOperatingRecords } from "./industry-operations.ts";
 import { sampleCompanyFeatures } from "./features.ts";
 
 export interface DemoContext {
+  identitySourceOrgId?: string; identitySeed?: string; memberSample?: boolean; preserveExisting?: boolean;
   orgId: string; industryKey: string; companyName: string; actorId: string;
   subsidiaryId: string; bookId: string; periodId: string; customerId: string; vendorId: string;
-  employeeId: string; currency: string; date: string; year: number;
+  employeeId: string; currency: string; operationDate?: string; operationDates?: readonly string[]; date: string; year: number;
   accounts: { bank: string; receivable: string; revenue: string; expense: string; inventory: string; payable: string; equipment: string; accumulatedDepreciation: string; deferredRevenue: string };
   opportunityStatusId: string;
 }
@@ -22,6 +26,15 @@ export function demoRecordId(orgId: string, table: string, key: string): string 
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }
 
+/** Resolve the same native identities in a master and its deterministic clone. */
+export function scenarioRecordId(c: Pick<DemoContext, "orgId" | "identitySourceOrgId" | "identitySeed">, table: string, key: string): string {
+  const source = demoRecordId(c.identitySourceOrgId ?? c.orgId, table, key);
+  if (!c.identitySeed) return source;
+  // This is the published ob_rebase identity contract used by the clone kernel.
+  const hex = createHash("md5").update(`${c.identitySeed.toLowerCase()}:${source}`).digest("hex");
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
+
 /** Native editable records supplement the simulator's posted accounting history.
  * Financial workflows start as drafts; their normal services perform approvals
  * and posting when an operator explores them. External connections are inert.
@@ -29,7 +42,7 @@ export function demoRecordId(orgId: string, table: string, key: string): string 
 export function demoRecords(c: DemoContext): DemoRecord[] {
   const rows: DemoRecord[] = [];
   const features = sampleCompanyFeatures(c.industryKey);
-  const id = (table: string, key = "main") => demoRecordId(c.orgId, table, key);
+  const id = (table: string, key = "main") => scenarioRecordId(c, table, key);
   const add = (table: string, values: DemoRecord["values"], key = "main", primaryKey = "id") => {
     const recordId = typeof values[primaryKey] === "string" ? values[primaryKey] : id(table, key);
     rows.push({ table, key, primaryKey, values: { [primaryKey]: recordId, org_id: c.orgId, created_by: c.actorId, updated_by: c.actorId, ...values } });
@@ -183,6 +196,9 @@ export function demoRecords(c: DemoContext): DemoRecord[] {
     add("subscription_plan_version_components", { version_id: version, component_key: "platform", name: "Platform licence", quantity: "1.00", unit_price: "2400.00", item_id: serviceItem, income_account_id: c.accounts.revenue });
     add("subscription_plan_version_components", { version_id: version, component_key: "support", name: "Premium support", quantity: "1.00", unit_price: "400.00", item_id: serviceItem, income_account_id: c.accounts.revenue, is_optional: true, sort_order: 10 }, "support");
   }
+  industryOperatingRecords(c, add);
+  extendedFeatureRecords(c, add);
+  industryDetailRecords(c, add);
   return rows;
 }
 

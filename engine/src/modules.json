@@ -626,23 +626,28 @@
     "sample-companies": {
       "description": "Sample company generators.",
       "dependsOn": [
+        "banking",
         "billing",
         "close",
         "composition",
         "flows",
         "golden",
+        "hrm",
         "inventory",
         "ledger",
         "money",
         "nonprofit",
         "organization",
+        "payments",
         "payroll",
         "platform",
+        "projects",
         "property",
         "records",
         "sales",
         "sandbox",
-        "sim"
+        "sim",
+        "tax"
       ]
     },
     "sandbox": {
