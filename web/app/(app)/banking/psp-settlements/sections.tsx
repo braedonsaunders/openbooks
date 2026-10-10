@@ -25,6 +25,7 @@ import { PagedTable } from '../../../../components/paged-table'
 import { Switch } from '@/components/switch'
 import { useMoney } from '../../../../components/money-provider'
 import { useBusinessToday } from '../../../../components/business-date-provider'
+import { promptDialog } from '@/lib/prompt'
 
 const SETTLEMENT_PROVIDERS = [
   'stripe',
@@ -51,12 +52,21 @@ export function settlementDocumentHref(line: {
   documentId: string | null
   documentKind: string | null
   documentNumber: string | null
+  journalEntryId?: string | null
+  journalEntryNumber?: string | null
 }): string | null {
+  // A line recognised by journal points at the entry, not a document: the
+  // Document cell stays a working link for journal-booked sales too.
+  if (line.journalEntryId && line.journalEntryNumber) return `/journal?entry=${encodeURIComponent(line.journalEntryId)}`
   if (!line.documentId || !line.documentNumber) return null
   if (line.documentKind === 'customer_payment') return `/receipts?payment=${encodeURIComponent(line.documentId)}`
   if (line.documentKind === 'customer_invoice') return `/ar/invoices?doc=${encodeURIComponent(line.documentId)}`
+  if (line.documentKind === 'cash_sale') return `/cash-sales?doc=${encodeURIComponent(line.documentId)}`
   return null
 }
+
+/** Line kinds that carry order evidence and accept a document or journal link. Mirrors the engine matchable set. */
+const EVIDENCE_LINE_KINDS = new Set(['charge', 'refund', 'dispute', 'dispute_reversal'])
 
 export interface PspSettlementRow {
   id: string
@@ -141,6 +151,7 @@ function isSettlementBatch(value: unknown): value is SettlementBatch {
 }
 
 interface SettlementDetailLine {
+  id: string | null
   lineNumber: number
   kind: string
   externalRef: string | null
@@ -150,6 +161,8 @@ interface SettlementDetailLine {
   documentId: string | null
   documentKind: string | null
   documentNumber: string | null
+  journalEntryId: string | null
+  journalEntryNumber: string | null
 }
 
 interface SettlementDetail {
@@ -405,6 +418,9 @@ export function PspSettlementsWorkspace({
   const [detail, setDetail] = useState<SettlementDetail | null>(null)
   const [detailLoading, setDetailLoading] = useState(false)
   const [detailFailed, setDetailFailed] = useState(false)
+  // Line-evidence panel: the matchable line under edit. Mutations reload the
+  // open detail; totals-changing ones reload the batch list too.
+  const [evidenceLineNumber, setEvidenceLineNumber] = useState<number | null>(null)
   // Scheduled-pull toggles (configure depth): the scheduler pulls each
   // enabled provider on the psp_payout_pull scan; the toggle is the only
   // writer of pullEnabled outside the config API.
@@ -460,6 +476,7 @@ export function PspSettlementsWorkspace({
     setDetail(null)
     setDetailFailed(false)
     setDetailLoading(true)
+    setEvidenceLineNumber(null)
     setSelectedBatchId(batchId)
   }
 
@@ -653,6 +670,41 @@ export function PspSettlementsWorkspace({
     setMsg(t('reversedToast', { id: d.data.entryId }))
     setReversalReason('')
     void load()
+  }
+
+  // Deleting an unposted draft frees its provider reference for a corrected
+  // reimport. The reason is mandatory and audited; posted history refuses
+  // and unwinds only through reversal.
+  const removeDraft = async (batchId: string) => {
+    setErr(null)
+    setMsg(null)
+    const reason = await promptDialog({
+      title: t('deleteDraftTitle'),
+      label: t('deleteDraftReason'),
+      confirmLabel: t('deleteDraft'),
+      cancelLabel: common('actions.cancel'),
+    })
+    if (reason === null) return
+    const d = await requestSettlement<{ batchId?: string }>({ action: 'deleteDraft', batchId, reason })
+    if (!d.ok || typeof d.data.batchId !== 'string') {
+      setErr(!d.ok && d.error ? d.error : t('reversalFailed'))
+      return
+    }
+    setMsg(t('deletedToast'))
+    if (selectedBatchId === batchId) {
+      setSelectedBatchId(null)
+      setDetail(null)
+      setEvidenceLineNumber(null)
+    }
+    void load()
+  }
+
+  const reloadDetail = async (reloadList: boolean) => {
+    if (selectedBatchId) {
+      const loaded = await fetchSettlementDetail(selectedBatchId)
+      if (loaded !== null) setDetail(loaded)
+    }
+    if (reloadList) void load()
   }
 
   const settlementDateLabel = (value: string) =>
@@ -1020,6 +1072,11 @@ export function PspSettlementsWorkspace({
                         {strings.postLabel}
                       </Button>
                     )}
+                    {b.rawStatus === 'draft' && canReconcile && (
+                      <Button size="sm" variant="ghost" onClick={() => void removeDraft(b.id)}>
+                        {t('deleteDraft')}
+                      </Button>
+                    )}
                     {b.rawStatus === 'posted' && canReconcile && (
                       <Button
                         size="sm"
@@ -1074,10 +1131,230 @@ export function PspSettlementsWorkspace({
             </Button>
           </div>
         ) : (
-          <SettlementDetailBody detail={detail} money={money} t={t} common={common} />
+          <div className="space-y-4">
+            <SettlementDetailBody
+              detail={detail}
+              money={money}
+              t={t}
+              common={common}
+              canReconcile={canReconcile}
+              onEvidence={(line) => setEvidenceLineNumber(line.lineNumber)}
+            />
+            {(() => {
+              const line =
+                evidenceLineNumber === null
+                  ? undefined
+                  : detail.lines.find((item) => item.lineNumber === evidenceLineNumber)
+              return line ? (
+                <LineEvidencePanel
+                  batchId={detail.batch.id}
+                  batchStatus={detail.batch.rawStatus}
+                  line={line}
+                  t={t}
+                  common={common}
+                  onChanged={reloadDetail}
+                  onClose={() => setEvidenceLineNumber(null)}
+                />
+              ) : null
+            })()}
+          </div>
         )}
       </Drawer>
     </>
+  )
+}
+
+interface EvidenceDocOption {
+  id: string
+  kind: string
+  documentNumber: string
+  total: string
+  currency: string
+  documentDate: string
+}
+
+interface EvidenceEntryOption {
+  id: string
+  entryNumber: string
+  postingDate: string
+}
+
+function isEvidenceDocOption(value: unknown): value is EvidenceDocOption {
+  return (
+    isRecord(value) &&
+    typeof value.id === 'string' &&
+    typeof value.kind === 'string' &&
+    typeof value.documentNumber === 'string'
+  )
+}
+
+function isEvidenceEntryOption(value: unknown): value is EvidenceEntryOption {
+  return (
+    isRecord(value) &&
+    typeof value.id === 'string' &&
+    typeof value.entryNumber === 'string'
+  )
+}
+
+/**
+ * Matching evidence for one settlement line: link the posted sales document
+ * the line settles, or mark the line as recognised by the posted journal
+ * entry that books the sale. Both are audited matching evidence — the money
+ * stays exactly as posted — and both satisfy the period-close payout gate.
+ */
+function LineEvidencePanel({
+  batchId,
+  batchStatus,
+  line,
+  t,
+  common,
+  onChanged,
+  onClose,
+}: {
+  batchId: string
+  batchStatus: string
+  line: SettlementDetailLine
+  t: ReturnType<typeof useTranslations>
+  common: ReturnType<typeof useTranslations>
+  onChanged: (reloadList: boolean) => Promise<void>
+  onClose: () => void
+}) {
+  const [docQuery, setDocQuery] = useState('')
+  const [docResults, setDocResults] = useState<EvidenceDocOption[]>([])
+  const [docSearched, setDocSearched] = useState(false)
+  const [entryQuery, setEntryQuery] = useState('')
+  const [entryResults, setEntryResults] = useState<EvidenceEntryOption[]>([])
+  const [entrySearched, setEntrySearched] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const search = async (kind: 'doc' | 'entry') => {
+    const query = (kind === 'doc' ? docQuery : entryQuery).trim()
+    if (!query) return
+    setBusy(true)
+    setError(null)
+    try {
+      const param = kind === 'doc' ? 'resolveDoc' : 'resolveEntry'
+      const response = await fetch(`/api/psp/settlements?${param}=${encodeURIComponent(query)}`)
+      if (!response.ok) {
+        setError(t('evidenceFailed'))
+        return
+      }
+      const data = (await response.json()) as unknown
+      if (kind === 'doc') {
+        const docs = (data as { documents?: unknown }).documents
+        setDocResults(Array.isArray(docs) ? docs.filter(isEvidenceDocOption) : [])
+        setDocSearched(true)
+      } else {
+        const entries = (data as { entries?: unknown }).entries
+        setEntryResults(Array.isArray(entries) ? entries.filter(isEvidenceEntryOption) : [])
+        setEntrySearched(true)
+      }
+    } catch {
+      setError(t('evidenceFailed'))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const mutate = async (body: Record<string, unknown>, reloadList: boolean) => {
+    if (!line.id) return
+    setBusy(true)
+    setError(null)
+    const result = await requestSettlement({ ...body, batchId, lineId: line.id })
+    if (!result.ok) {
+      setError(result.error ?? t('evidenceFailed'))
+    } else {
+      await onChanged(reloadList)
+    }
+    setBusy(false)
+  }
+
+  return (
+    <div className="space-y-3 rounded-md border border-slate-200 p-3 dark:border-slate-700">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h4 className="text-sm font-semibold">
+          {t('evidenceTitle')} · {line.externalRef ?? `#${line.lineNumber}`}
+        </h4>
+        <Button size="sm" variant="ghost" onClick={onClose}>
+          {common('actions.close')}
+        </Button>
+      </div>
+      {error ? (
+        <p role="alert" className="text-sm text-red-600">
+          {error}
+        </p>
+      ) : null}
+      <div className="flex flex-wrap items-center gap-2">
+        <Input
+          className="min-w-52 flex-1"
+          value={docQuery}
+          onChange={(e) => setDocQuery(e.target.value)}
+          placeholder={t('evidenceSearchDocs')}
+        />
+        <Button size="sm" variant="outline" disabled={busy || !docQuery.trim()} onClick={() => void search('doc')}>
+          {common('actions.search')}
+        </Button>
+      </div>
+      {docResults.length > 0 ? (
+        <ul className="space-y-1">
+          {docResults.map((doc) => (
+            <li key={doc.id} className="flex flex-wrap items-center justify-between gap-2 text-sm">
+              <span className="font-mono">
+                {doc.documentNumber} · {doc.total} {doc.currency}
+              </span>
+              <Button size="sm" variant="outline" disabled={busy} onClick={() => void mutate({ action: 'link', documentId: doc.id }, false)}>
+                {t('evidenceLink')}
+              </Button>
+            </li>
+          ))}
+        </ul>
+      ) : docSearched ? (
+        <p className="text-sm text-slate-500">{t('evidenceNoResults')}</p>
+      ) : null}
+      <div className="flex flex-wrap items-center gap-2">
+        <Input
+          className="min-w-52 flex-1"
+          value={entryQuery}
+          onChange={(e) => setEntryQuery(e.target.value)}
+          placeholder={t('evidenceSearchJournals')}
+        />
+        <Button size="sm" variant="outline" disabled={busy || !entryQuery.trim()} onClick={() => void search('entry')}>
+          {common('actions.search')}
+        </Button>
+      </div>
+      {entryResults.length > 0 ? (
+        <ul className="space-y-1">
+          {entryResults.map((entry) => (
+            <li key={entry.id} className="flex flex-wrap items-center justify-between gap-2 text-sm">
+              <span className="font-mono">{entry.entryNumber}</span>
+              <Button size="sm" variant="outline" disabled={busy} onClick={() => void mutate({ action: 'markJournal', journalEntryId: entry.id }, false)}>
+                {t('evidenceMarkJournal')}
+              </Button>
+            </li>
+          ))}
+        </ul>
+      ) : entrySearched ? (
+        <p className="text-sm text-slate-500">{t('evidenceNoResults')}</p>
+      ) : null}
+      <div className="flex flex-wrap items-center gap-2">
+        {line.documentId ? (
+          <Button size="sm" variant="outline" disabled={busy} onClick={() => void mutate({ action: 'unlink' }, false)}>
+            {t('evidenceUnlink')}
+          </Button>
+        ) : null}
+        {line.journalEntryId ? (
+          <Button size="sm" variant="outline" disabled={busy} onClick={() => void mutate({ action: 'unmarkJournal' }, false)}>
+            {t('evidenceUnmarkJournal')}
+          </Button>
+        ) : null}
+        {batchStatus === 'draft' && !line.documentId && !line.journalEntryId ? (
+          <Button size="sm" variant="outline" disabled={busy} onClick={() => void mutate({ action: 'markAdjustment' }, true)}>
+            {t('evidenceMarkAdjustment')}
+          </Button>
+        ) : null}
+      </div>
+    </div>
   )
 }
 
@@ -1086,11 +1363,15 @@ function SettlementDetailBody({
   money,
   t,
   common,
+  canReconcile,
+  onEvidence,
 }: {
   detail: SettlementDetail
   money: (value: string, options?: { currency?: string }) => string
   t: ReturnType<typeof useTranslations>
   common: ReturnType<typeof useTranslations>
+  canReconcile: boolean
+  onEvidence: (line: SettlementDetailLine) => void
 }) {
   const { batch, lines } = detail
   const currency = batch.currency
@@ -1154,19 +1435,27 @@ function SettlementDetailBody({
                     {money(line.amount, { currency: line.currency ?? currency })}
                   </TableCell>
                   <TableCell>
-                    {(() => {
-                      const href = settlementDocumentHref(line)
-                      return line.documentNumber && href ? (
-                        <Link
-                          href={href}
-                          className="text-teal-700 hover:underline dark:text-teal-300"
-                        >
-                          {line.documentNumber}
-                        </Link>
-                      ) : (
-                        (line.documentNumber ?? '—')
-                      )
-                    })()}
+                    <span className="inline-flex flex-wrap items-center gap-2">
+                      {(() => {
+                        const href = settlementDocumentHref(line)
+                        const label = line.journalEntryNumber ?? line.documentNumber ?? '—'
+                        return href ? (
+                          <Link
+                            href={href}
+                            className="text-teal-700 hover:underline dark:text-teal-300"
+                          >
+                            {label}
+                          </Link>
+                        ) : (
+                          label
+                        )
+                      })()}
+                      {canReconcile && EVIDENCE_LINE_KINDS.has(line.kind) ? (
+                        <Button size="sm" variant="ghost" onClick={() => onEvidence(line)}>
+                          {t('lineEvidence')}
+                        </Button>
+                      ) : null}
+                    </span>
                   </TableCell>
                 </TableRow>
               ))}

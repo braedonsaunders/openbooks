@@ -51,9 +51,6 @@ export type StorefrontTotalsProvider = (
   day: string,
 ) => Promise<StorefrontDayTotal>;
 
-/** Lines posted this close to period end may still be in flight to the bank. */
-const IN_TRANSIT_DAYS = 5;
-
 type ChannelRow = {
   id: string;
   name: string;
@@ -273,7 +270,9 @@ type UnmatchedLineRow = {
  * matchable lines (charges, refunds, disputes — the same kinds the payout
  * matcher resolves) point at nothing, or at a document that no longer
  * posts, is money without a receipt. The link is re-verified, never
- * trusted: a stale document id counts as unmatched.
+ * trusted: a stale document id counts as unmatched. A line marked as
+ * recognised by a posted journal entry is evidenced by that marker — the
+ * sale was booked by journal, so there is no document to link.
  */
 async function payoutCheck(orgId: string, scope: CommerceCloseScope): Promise<CommerceCloseCheck> {
   const subsidiaryIds = scope.subsidiaryIds ?? [];
@@ -303,6 +302,9 @@ async function payoutCheck(orgId: string, scope: CommerceCloseScope): Promise<Co
          and (${subsidiaryIds.length === 0} or b.subsidiary_id = any(${subsidiaryList}::uuid[]))
          and l.kind = any(${matchableList}::text[])
          and (l.document_id is null or d.id is null or d.status <> 'posted')
+         -- A line the bookkeeper marked as recognised by a posted journal
+         -- entry carries its evidence in the marker, not in a document link.
+         and (l.meta->>'recognizedByJournalEntry' is null)
        order by b.settlement_date, b.provider, l.line_number`)
   ).rows;
   return {
@@ -343,24 +345,56 @@ type ClearingRow = {
   name: string;
   currency: string;
   residual: string;
+  expected: string;
   line_count: string;
-  in_transit_count: string;
-  in_transit_sum: string;
+};
+
+type OpenPayoutRow = {
+  kind: "batch" | "accrual";
+  ref: string;
+  date: string;
+  amount: string;
+  currency: string;
 };
 
 /**
  * Gateway clearing (and the PSP batches' own clearing accounts, typically
- * undeposited funds) must clear to zero: money captured but not yet paid out
- * cannot sit unexplained at close. Lines posted in the last
- * in-transit window are named as possibly still in flight; anything older is
- * a genuine residual. Acknowledging in-transit money is the task waive with
- * its reason, not a silent pass.
+ * undeposited funds) must equal the open in-transit position at period end,
+ * not zero: money captured but not yet paid out — payouts settling after the
+ * period, and the period-end accruals taken for them — legitimately sits in
+ * clearing until it lands. The proof is per account and currency: the ledger
+ * residual must match the clearing legs the system attributes to those open
+ * payouts and their unreversed accruals. Anything beyond the attributed
+ * position is a genuine residual, and the open items are listed beside it so
+ * the operator reconciles instead of guessing. With nothing open the
+ * expectation is zero, which is exactly the old rule.
  */
 async function clearingCheck(orgId: string, scope: CommerceCloseScope): Promise<CommerceCloseCheck> {
   const subsidiaryIds = scope.subsidiaryIds ?? [];
   const subsidiaryFilter = subsidiaryIds.length === 0
     ? sql`true`
     : sql`l.subsidiary_id = any(${`{${subsidiaryIds.join(",")}}`}::uuid[])`;
+  const scopeAny = (column: ReturnType<typeof sql>) => subsidiaryIds.length === 0
+    ? sql`true`
+    : sql`${column} = any(${`{${subsidiaryIds.join(",")}}`}::uuid[])`;
+  const openItems = (
+    await db.execute<OpenPayoutRow>(sql`
+      select 'batch' as kind, b.external_ref as ref, b.settlement_date::text as date,
+             b.net_amount::text as amount, b.currency
+        from psp_settlement_batches b
+       where b.org_id = ${orgId} and b.status = 'posted'
+         and b.settlement_date > ${scope.endsOn}::date
+         and ${scopeAny(sql`b.subsidiary_id`)}
+      union all
+      select 'accrual' as kind, b.external_ref as ref, a.accrual_date::text as date,
+             a.amount::text as amount, a.currency
+        from psp_payout_accruals a
+        join psp_settlement_batches b on b.org_id = a.org_id and b.id = a.batch_id
+       where a.org_id = ${orgId} and a.status = 'accrued'
+         and a.accrual_date <= ${scope.endsOn}::date
+         and ${scopeAny(sql`a.subsidiary_id`)}
+       order by date, ref`)
+  ).rows;
   const rows = (
     await db.execute<ClearingRow>(sql`
       with clearing_accounts as (
@@ -377,22 +411,75 @@ async function clearingCheck(orgId: string, scope: CommerceCloseScope): Promise<
          where b.org_id = ${orgId} and b.clearing_account_id is not null
            and b.settlement_date between ${scope.startsOn}::date and ${scope.endsOn}::date
            and (${subsidiaryIds.length === 0} or b.subsidiary_id = any(${`{${subsidiaryIds.join(",")}}`}::uuid[]))
+      ),
+      -- Payouts settling after period end, and the unreversed period-end
+      -- accruals taken for in-transit money: their clearing legs are the
+      -- open position this balance must equal.
+      open_batches as (
+        select b.id, b.journal_entry_id
+          from psp_settlement_batches b
+         where b.org_id = ${orgId} and b.status = 'posted'
+           and b.settlement_date > ${scope.endsOn}::date
+           and b.journal_entry_id is not null
+           and (${subsidiaryIds.length === 0} or b.subsidiary_id = any(${`{${subsidiaryIds.join(",")}}`}::uuid[]))
+      ),
+      open_accruals as (
+        select a.accrual_entry_id
+          from psp_payout_accruals a
+         where a.org_id = ${orgId} and a.status = 'accrued'
+           and a.accrual_date <= ${scope.endsOn}::date
+           and (${subsidiaryIds.length === 0} or a.subsidiary_id = any(${`{${subsidiaryIds.join(",")}}`}::uuid[]))
+      ),
+      attributed_entries as (
+        select e.id
+          from journal_entries e
+         where e.org_id = ${orgId} and e.book_id = ${scope.bookId} and e.status in ('posted', 'reversed')
+           and (e.id in (select journal_entry_id from open_batches)
+             or e.id in (select accrual_entry_id from open_accruals)
+             or e.id in (select d.posted_entry_id
+                           from psp_settlement_lines l
+                           join open_batches b on b.id = l.batch_id and l.org_id = ${orgId}
+                           join documents d on d.org_id = l.org_id and d.id = l.document_id
+                          where d.posted_entry_id is not null))
+      ),
+      residual as (
+        select l.account_id, l.currency, coalesce(sum(l.txn_amount), 0) as residual,
+               count(*) as line_count
+          from journal_lines l
+          join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
+         where l.org_id = ${orgId} and e.book_id = ${scope.bookId} and e.status in ('posted', 'reversed')
+           and l.posting_date <= ${scope.endsOn}::date
+           and l.account_id in (select account_id from clearing_accounts)
+           and ${subsidiaryFilter}
+         group by l.account_id, l.currency
+      ),
+      expected as (
+        select l.account_id, l.currency, coalesce(sum(l.txn_amount), 0) as expected
+          from journal_lines l
+          join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
+         where l.org_id = ${orgId} and e.book_id = ${scope.bookId} and e.status in ('posted', 'reversed')
+           and l.posting_date <= ${scope.endsOn}::date
+           and l.account_id in (select account_id from clearing_accounts)
+           and ${subsidiaryFilter}
+           and e.id in (select id from attributed_entries)
+         group by l.account_id, l.currency
+      ),
+      joined as (
+        select coalesce(r.account_id, x.account_id) as account_id,
+               coalesce(r.currency, x.currency) as currency,
+               coalesce(r.residual, 0) as residual,
+               coalesce(x.expected, 0) as expected,
+               coalesce(r.line_count, 0) as line_count
+          from residual r
+          full outer join expected x using (account_id, currency)
       )
-      select l.account_id::text as account_id, a.number, a.name, l.currency as currency,
-             coalesce(sum(l.txn_amount), 0)::text as residual,
-             count(*)::text as line_count,
-             count(*) filter (where l.posting_date > (${scope.endsOn}::date - ${IN_TRANSIT_DAYS}::integer))::text as in_transit_count,
-             coalesce(sum(l.txn_amount) filter (where l.posting_date > (${scope.endsOn}::date - ${IN_TRANSIT_DAYS}::integer)), 0)::text as in_transit_sum
-        from journal_lines l
-        join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
-        join accounts a on a.id = l.account_id and a.org_id = l.org_id
-       where l.org_id = ${orgId} and e.book_id = ${scope.bookId} and e.status in ('posted', 'reversed')
-         and l.posting_date <= ${scope.endsOn}::date
-         and l.account_id in (select account_id from clearing_accounts)
-         and ${subsidiaryFilter}
-       group by l.account_id, a.number, a.name, l.currency
-      having coalesce(sum(l.txn_amount), 0) <> 0
-       order by a.number nulls last, a.name, l.currency`)
+      select j.account_id::text as account_id, a.number, a.name, j.currency as currency,
+             j.residual::text as residual, j.expected::text as expected,
+             j.line_count::text as line_count
+        from joined j
+        join accounts a on a.id = j.account_id and a.org_id = ${orgId}
+       where j.residual <> j.expected
+       order by a.number nulls last, a.name, j.currency`)
   ).rows;
   return {
     code: "commerce-clearing-residual",
@@ -403,17 +490,22 @@ async function clearingCheck(orgId: string, scope: CommerceCloseScope): Promise<
     message: "close.diagnostics.commerce-clearing-residual.message",
     count: rows.length,
     details: {
-      inTransitDays: IN_TRANSIT_DAYS,
       accounts: rows.map((row) => ({
         accountId: row.account_id,
         number: row.number,
         name: row.name,
         currency: row.currency,
         residual: row.residual,
+        expected: row.expected,
         lineCount: Number(row.line_count),
-        inTransitCount: Number(row.in_transit_count),
-        inTransitSum: row.in_transit_sum,
-        remedyHref: "/channels",
+        remedyHref: "/banking/psp-settlements",
+      })),
+      openItems: openItems.map((item) => ({
+        kind: item.kind,
+        ref: item.ref,
+        date: item.date,
+        amount: item.amount,
+        currency: item.currency,
       })),
     },
   };

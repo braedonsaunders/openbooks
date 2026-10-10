@@ -500,3 +500,85 @@ test("a capitalized cost without its asset legs fails naming the shortfall", { s
     await dropScratchOrg(fx.org.orgId);
   }
 });
+
+test("a journal-recognised line is evidenced and an explained clearing balance passes", { skip: !DB }, async () => {
+  const fx = await seedCommerceOrg();
+  try {
+    // A posted in-window batch with one unmatched charge line fails the gate.
+    const batchId = randomUUID();
+    await withBypass(async () => {
+      await db.execute(sql`
+        insert into psp_settlement_batches (id, org_id, provider, external_ref, currency, settlement_date, status, subsidiary_id)
+        values (${batchId}, ${fx.org.orgId}, 'stripe', 'po_mark_1', 'CAD', ${DAY}::date, 'posted', ${fx.org.subsidiaryId})`);
+      await db.execute(sql`
+        insert into psp_settlement_lines (org_id, batch_id, line_number, kind, amount, currency, external_ref)
+        values (${fx.org.orgId}, ${batchId}, 1, 'charge', 100, 'CAD', 'charge-1')`);
+    });
+    const failing = await withBypass(() => commerceCloseChecks(fx.org.orgId, SCOPE(fx.org), { storefrontTotals: matchingProvider() }));
+    const payoutsOpen = failing.find((check) => check.code === "commerce-payouts-unposted")!;
+    assert.equal(payoutsOpen.count, 1);
+    // Marking the line as recognised by a posted journal entry evidences it.
+    const sale = await withBypass(() =>
+      postEntry(db, {
+        orgId: fx.org.orgId,
+        bookId: fx.org.bookId,
+        subsidiaryId: fx.org.subsidiaryId,
+        entryNumber: `JE-MARK-${fx.org.orgId.slice(0, 8)}`,
+        postingDate: DAY,
+        periodId: fx.org.periodId,
+        origin: "manual",
+        idempotencyKey: `je-mark-${fx.org.orgId}`,
+        currency: "CAD",
+        actorId: fx.actor,
+        lines: [
+          { accountId: fx.org.accounts.bank, amount: "100.0000", currency: "CAD", txnAmount: "100.0000" },
+          { accountId: fx.org.accounts.revenue, amount: "-100.0000", currency: "CAD", txnAmount: "-100.0000" },
+        ],
+      }),
+    );
+    await withBypass(async () => {
+      await db.execute(sql`
+        update psp_settlement_lines
+           set meta = jsonb_build_object('recognizedByJournalEntry',
+                         jsonb_build_object('id', ${sale.entryId}, 'number', ${`JE-MARK-${fx.org.orgId.slice(0, 8)}`}))
+         where batch_id = ${batchId} and org_id = ${fx.org.orgId}`);
+    });
+    const marked = await withBypass(() => commerceCloseChecks(fx.org.orgId, SCOPE(fx.org), { storefrontTotals: matchingProvider() }));
+    assert.equal(marked.find((check) => check.code === "commerce-payouts-unposted")!.count, 0);
+    // An open batch settling after period end explains its clearing legs:
+    // the settlement entry posts in-window against clearing, the payout
+    // lands next month, and the gate lists it instead of failing.
+    const openEntry = await withBypass(() =>
+      postEntry(db, {
+        orgId: fx.org.orgId,
+        bookId: fx.org.bookId,
+        subsidiaryId: fx.org.subsidiaryId,
+        entryNumber: `PSP-OPEN-${fx.org.orgId.slice(0, 8)}`,
+        postingDate: DAY,
+        periodId: fx.org.periodId,
+        origin: "commerce_close_fixture",
+        idempotencyKey: `close-proof-open-${fx.org.orgId}`,
+        currency: "CAD",
+        actorId: fx.actor,
+        lines: [
+          { accountId: fx.org.accounts.bank, amount: "200.0000", currency: "CAD", txnAmount: "200.0000" },
+          { accountId: fx.clearing, amount: "-200.0000", currency: "CAD", txnAmount: "-200.0000" },
+        ],
+      }),
+    );
+    const openBatchId = randomUUID();
+    await withBypass(async () => {
+      await db.execute(sql`
+        insert into psp_settlement_batches
+          (id, org_id, provider, external_ref, currency, settlement_date, status, subsidiary_id, journal_entry_id, clearing_account_id)
+        values (${openBatchId}, ${fx.org.orgId}, 'stripe', 'po_open_1', 'CAD', '2026-08-04', 'posted', ${fx.org.subsidiaryId}, ${openEntry.entryId}, ${fx.clearing})`);
+    });
+    const explained = await withBypass(() => commerceCloseChecks(fx.org.orgId, SCOPE(fx.org), { storefrontTotals: matchingProvider() }));
+    const clearing = explained.find((check) => check.code === "commerce-clearing-residual")!;
+    assert.equal(clearing.count, 0);
+    const openItems = (clearing.details as { openItems: { kind: string; ref: string }[] }).openItems;
+    assert.ok(openItems.some((item) => item.kind === "batch" && item.ref === "po_open_1"));
+  } finally {
+    await dropScratchOrg(fx.org.orgId);
+  }
+});

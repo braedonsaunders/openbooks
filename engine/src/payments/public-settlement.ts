@@ -2,8 +2,11 @@
 export {
   batchDepositTieout,
   clearSettlementLineDocument,
+  clearSettlementLineJournal,
+  deleteSettlementDraft,
   isMatchableSettlementLineKind,
   markSettlementLineAdjustment,
+  markSettlementLineJournal,
   MATCHABLE_SETTLEMENT_LINE_KINDS,
   setSettlementLineDocument,
   type DepositTieout,

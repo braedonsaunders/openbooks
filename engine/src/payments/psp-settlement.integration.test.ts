@@ -5,7 +5,10 @@ import { sql } from "drizzle-orm";
 import { UnrestrictedScopeError } from "../organization/subsidiary-scope.ts";
 import { db } from "../platform/db.ts";
 import {
+  clearSettlementLineJournal,
+  deleteSettlementDraft,
   importSettlementBatch,
+  markSettlementLineJournal,
   parseChargebeeSettlement,
   postSettlementBatch,
   PspSettlementError,
@@ -13,6 +16,7 @@ import {
   savePspProviderConfig,
   type ParsedSettlement,
 } from "./psp-settlement.ts";
+import { postEntry } from "../journal/post-entry.ts";
 import {
   createScratchOrg,
   dropScratchOrg,
@@ -915,6 +919,111 @@ test(
            and action = 'post'
       `));
       assert.equal(postAudits.rows[0]?.count, 1);
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
+
+test(
+  "a matchable line marked as recognised by journal is evidenced, and a bad-scale draft deletes audited",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const actor = (await seedFlowActors(org.orgId)).adminId;
+      const sale = await postEntry(db, {
+        orgId: org.orgId,
+        bookId: org.bookId,
+        subsidiaryId: org.subsidiaryId,
+        entryNumber: `JE-SALE-${org.orgId.slice(0, 8)}`,
+        postingDate: org.date,
+        periodId: org.periodId,
+        origin: "manual",
+        idempotencyKey: `je-sale-${org.orgId}`,
+        currency: "CAD",
+        actorId: actor,
+        lines: [
+          { accountId: org.accounts.bank, amount: "100.0000", currency: "CAD", txnAmount: "100.0000" },
+          { accountId: org.accounts.revenue, amount: "-100.0000", currency: "CAD", txnAmount: "-100.0000" },
+        ],
+      });
+      const parsed: ParsedSettlement = {
+        provider: "stripe",
+        externalRef: `payout-mark-${org.orgId}`,
+        settlementDate: org.date,
+        currency: "CAD",
+        lines: [
+          { kind: "charge", amount: "100.0000", currency: "CAD", externalRef: "charge-1" },
+          { kind: "fee", amount: "3.0000", currency: "CAD", externalRef: "fee-1" },
+        ],
+      };
+      const accounts = {
+        bankAccountId: org.accounts.bank,
+        feeAccountId: org.accounts.freight,
+        disputeAccountId: org.accounts.adjustment,
+        fxAccountId: org.accounts.fxGainLoss,
+        clearingAccountId: org.accounts.clearing,
+        subsidiaryId: org.subsidiaryId,
+      };
+      const imported = await importSettlementBatch(org.orgId, actor, parsed, accounts);
+      assert.equal(imported.created, true);
+      const lineRows = (await db.execute<{ id: string; kind: string }>(sql`
+        select id, kind from psp_settlement_lines
+         where batch_id = ${imported.batchId} and org_id = ${org.orgId} order by line_number`)).rows;
+      const charge = lineRows.find((row) => row.kind === "charge")!;
+      const fee = lineRows.find((row) => row.kind === "fee")!;
+      // Journal recognition evidences the charge without a document link.
+      const marked = await markSettlementLineJournal(org.orgId, imported.batchId, charge.id, sale.entryId, actor, null);
+      assert.equal(marked.journalEntryId, sale.entryId);
+      assert.equal(marked.journalEntryNumber, `JE-SALE-${org.orgId.slice(0, 8)}`);
+      // Re-marking the same entry is idempotent; a fee leg is not order evidence.
+      const again = await markSettlementLineJournal(org.orgId, imported.batchId, charge.id, sale.entryId, actor, null);
+      assert.deepEqual(again, marked);
+      await assert.rejects(
+        markSettlementLineJournal(org.orgId, imported.batchId, fee.id, sale.entryId, actor, null),
+        /not order evidence/,
+      );
+      await assert.rejects(
+        markSettlementLineJournal(org.orgId, imported.batchId, charge.id, randomUUID(), actor, null),
+        /does not belong to this organization/,
+      );
+      // The marker reads back off the line for the close gate and the drawer.
+      const stored = (await db.execute<{ marker: string | null }>(sql`
+        select meta->'recognizedByJournalEntry'->>'number' as marker from psp_settlement_lines
+         where id = ${charge.id} and org_id = ${org.orgId}`)).rows[0];
+      assert.equal(stored?.marker, `JE-SALE-${org.orgId.slice(0, 8)}`);
+      await clearSettlementLineJournal(org.orgId, imported.batchId, charge.id, actor, null);
+      const cleared = (await db.execute<{ marker: string | null }>(sql`
+        select meta->>'recognizedByJournalEntry' as marker from psp_settlement_lines
+         where id = ${charge.id} and org_id = ${org.orgId}`)).rows[0];
+      assert.equal(cleared?.marker, null);
+      // Deleting the draft frees the provider reference for a corrected reimport.
+      const deleted = await deleteSettlementDraft(
+        org.orgId, imported.batchId, actor, { reason: "bad-scale test draft, reimporting corrected" }, null,
+      );
+      assert.equal(deleted.batchId, imported.batchId);
+      const gone = (await db.execute<{ count: number }>(sql`
+        select count(*)::int as count from psp_settlement_batches where id = ${imported.batchId}`));
+      assert.equal(gone.rows[0]?.count, 0);
+      const audit = (await db.execute<{ reason: string }>(sql`
+        select changes->>'reason' as reason from audit_log
+         where org_id = ${org.orgId} and table_name = 'psp_settlement_batches'
+           and row_id = ${imported.batchId} and action = 'delete'`)).rows[0];
+      assert.equal(audit?.reason, "bad-scale test draft, reimporting corrected");
+      const reimported = await importSettlementBatch(org.orgId, actor, parsed, accounts);
+      assert.equal(reimported.created, true);
+      assert.notEqual(reimported.batchId, imported.batchId);
+      // A posted batch refuses deletion: history unwinds through reversal.
+      await postSettlementBatch(org.orgId, reimported.batchId, actor, null);
+      await assert.rejects(
+        deleteSettlementDraft(org.orgId, reimported.batchId, actor, { reason: "posted history must stay" }, null),
+        /reverse a posted batch/,
+      );
+      await assert.rejects(
+        deleteSettlementDraft(org.orgId, reimported.batchId, actor, { reason: "x" }, null),
+        /between 5 and 500 characters/,
+      );
     } finally {
       await dropScratchOrg(org.orgId);
     }

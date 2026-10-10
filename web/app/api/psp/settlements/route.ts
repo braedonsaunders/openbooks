@@ -25,7 +25,10 @@ import {
   accruePayoutsInTransit,
   batchDepositTieout,
   clearSettlementLineDocument,
+  clearSettlementLineJournal,
+  deleteSettlementDraft,
   markSettlementLineAdjustment,
+  markSettlementLineJournal,
   setSettlementLineDocument,
 } from "@openbooks/engine/payments/settlement";
 import { CommerceError, matchPayoutLines } from "@openbooks/engine/commerce";
@@ -284,6 +287,22 @@ const postBodySchema0 = z.discriminatedUnion("action", [
     batchId: z.string(),
     lineId: z.string(),
   }),
+  z.strictObject({
+    action: z.literal("markJournal"),
+    batchId: z.string(),
+    lineId: z.string(),
+    journalEntryId: z.string(),
+  }),
+  z.strictObject({
+    action: z.literal("unmarkJournal"),
+    batchId: z.string(),
+    lineId: z.string(),
+  }),
+  z.strictObject({
+    action: z.literal("deleteDraft"),
+    batchId: z.string(),
+    reason: z.string().trim().min(1).max(500),
+  }),
   z.strictObject({ action: z.literal("accrue"), accrualDate: calendarDateShape }),
 ]);
 
@@ -326,6 +345,25 @@ export const GET = defineRoute({
     // evidence lines and the linked receipt numbers, under the same scope as
     // the list. A malformed id is a tenant-opaque 404, never a uuid cast 500.
     const batchId = new URL(req.url).searchParams.get("batchId");
+    // Journal picker for manual journal recognition: posted entries the
+    // caller may see whose number contains the query, newest first. A
+    // restricted caller never learns another entity's entry numbers through
+    // the picker.
+    const resolveEntry = new URL(req.url).searchParams.get("resolveEntry");
+    if (resolveEntry !== null && resolveEntry.trim() !== "") {
+      const query = `%${resolveEntry.trim().replace(/[%_\\]/g, "")}%`;
+      const entries = await db.execute(sql`
+        select e.id, e.entry_number as "entryNumber",
+               e.posting_date::text as "postingDate", e.status
+          from journal_entries e
+         where e.org_id = ${orgId} and e.status = 'posted'
+           and e.entry_number ilike ${query}
+           ${subsidiaryVisibleFilter(sql`e.subsidiary_id`, gate.allowedSubsidiaryIds)}
+         order by e.posting_date desc, e.entry_number
+         limit 10
+      `);
+      return NextResponse.json({ entries: entries.rows });
+    }
     // Document picker for manual line links: posted documents the caller may
     // see whose number contains the query, newest first. A restricted caller
     // never learns another entity's receipt numbers through the picker.
@@ -371,7 +409,9 @@ export const GET = defineRoute({
       const lines = await db.execute(sql`
         select l.id, l.line_number as "lineNumber", l.kind, l.external_ref as "externalRef",
                l.description, l.amount, l.currency, l.document_id as "documentId",
-               d.kind as "documentKind", d.document_number as "documentNumber"
+               d.kind as "documentKind", d.document_number as "documentNumber",
+               l.meta->'recognizedByJournalEntry'->>'id' as "journalEntryId",
+               l.meta->'recognizedByJournalEntry'->>'number' as "journalEntryNumber"
           from psp_settlement_lines l
           left join documents d on d.org_id = l.org_id and d.id = l.document_id
          where l.org_id = ${orgId} and l.batch_id = ${batchId}
@@ -659,6 +699,45 @@ export const POST = defineRoute({
             authz.allowedSubsidiaryIds,
           );
           return NextResponse.json(marked);
+        }
+        case "markJournal": {
+          if (!isUuid(body.batchId) || !isUuid(body.lineId)) return notFound("record");
+          const marked = await markSettlementLineJournal(
+            orgId,
+            body.batchId,
+            body.lineId,
+            body.journalEntryId,
+            userId,
+            authz.allowedSubsidiaryIds,
+          );
+          return NextResponse.json(marked);
+        }
+        case "unmarkJournal": {
+          if (!isUuid(body.batchId) || !isUuid(body.lineId)) return notFound("record");
+          const unmarked = await clearSettlementLineJournal(
+            orgId,
+            body.batchId,
+            body.lineId,
+            userId,
+            authz.allowedSubsidiaryIds,
+          );
+          return NextResponse.json(unmarked);
+        }
+        case "deleteDraft": {
+          if (!isUuid(body.batchId)) return notFound("record");
+          if (!body.reason)
+            return NextResponse.json(
+              { error: "reason required" },
+              { status: 422 },
+            );
+          const deleted = await deleteSettlementDraft(
+            orgId,
+            body.batchId,
+            userId,
+            { reason: String(body.reason) },
+            authz.allowedSubsidiaryIds,
+          );
+          return NextResponse.json(deleted);
         }
         case "accrue": {
           const accrued = await accruePayoutsInTransit(

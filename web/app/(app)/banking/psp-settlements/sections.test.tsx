@@ -643,3 +643,118 @@ for (const [name, canReconcile, present] of [
     }
   });
 }
+
+/** An unmatched matchable line offers evidence actions, and a draft batch
+ * offers audited deletion: the close gate's two remedies, in the workspace. */
+test("an unmatched line offers evidence actions and a draft offers delete", async (t) => {
+  const prior = globalThis.fetch;
+  const posts: { action?: unknown; batchId?: unknown; lineId?: unknown; documentId?: unknown }[] = [];
+  globalThis.fetch = (async (input: unknown, init?: { method?: string; body?: string }) => {
+    const href = String(input);
+    if (href.includes("batchId=")) {
+      return Response.json({
+        batch: {
+          id: "d0000000-0000-0000-0000-000000000001",
+          externalRef: "po_draft",
+          provider: "stripe",
+          providerName: "Stripe",
+          status: "Draft",
+          rawStatus: "draft",
+          settlementDate: "Sep 20, 2026",
+          currency: "USD",
+          grossAmount: "$100.00",
+          feeAmount: "$0.00",
+          refundAmount: "$0.00",
+          disputeAmount: "$0.00",
+          adjustmentAmount: "$0.00",
+          fxAmount: "$0.00",
+          netAmount: "$100.00",
+        },
+        lines: [
+          {
+            id: "l-0001",
+            lineNumber: 1,
+            kind: "charge",
+            externalRef: "ch_1",
+            description: null,
+            amount: "100.00",
+            currency: "USD",
+            documentId: null,
+            documentKind: null,
+            documentNumber: null,
+            journalEntryId: null,
+            journalEntryNumber: null,
+          },
+        ],
+        tieout: null,
+        accruals: [],
+      });
+    }
+    if (href.includes("resolveDoc=")) {
+      return Response.json({
+        documents: [
+          { id: "doc-1", kind: "customer_invoice", documentNumber: "INV-1", total: "100.00", currency: "USD", documentDate: "Sep 1, 2026" },
+        ],
+      });
+    }
+    if (init?.method === "POST") {
+      posts.push(JSON.parse(init.body ?? "{}") as { action?: unknown });
+      return Response.json({ ok: true, lineId: "l-0001", documentId: "doc-1" });
+    }
+    return Response.json({ rows: [] });
+  }) as typeof fetch;
+  t.after(() => {
+    globalThis.fetch = prior;
+  });
+  const { host, root } = await mount({ canReconcile: true, rows: ROWS });
+  t.after(async () => {
+    await act(async () => {
+      root.unmount();
+    });
+    host.remove();
+  });
+  await tick();
+  assert.ok(host.textContent?.includes("Delete draft"), "a draft batch offers audited deletion");
+  const opener = [...host.querySelectorAll("button")].find((el) => el.textContent === "po_draft");
+  assert.ok(opener, "the draft reference opens the detail drawer");
+  await act(async () => {
+    opener.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    await tick();
+  });
+  await tick();
+  const evidenceButtons = [...host.querySelectorAll("button")].filter((el) => el.textContent === "Evidence");
+  assert.ok(evidenceButtons.length >= 1, "an unmatched matchable line offers evidence actions");
+  await act(async () => {
+    evidenceButtons[0]!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    await tick();
+  });
+  await tick();
+  assert.ok(host.textContent?.includes("Settlement line evidence"), "the evidence panel opens for the line");
+  const searchBox = host.querySelector('input[placeholder="Search posted sales documents"]') as HTMLInputElement | null;
+  assert.ok(searchBox, "the panel searches posted sales documents");
+  await act(async () => {
+    const native = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(searchBox), "value")?.set;
+    native?.call(searchBox, "INV");
+    searchBox.dispatchEvent(new Event("input", { bubbles: true }));
+    await tick();
+  });
+  await tick();
+  const searchButtons = [...host.querySelectorAll("button")].filter((el) => el.textContent === "Search");
+  await act(async () => {
+    searchButtons[0]!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    await tick();
+  });
+  await tick();
+  assert.ok(host.textContent?.includes("INV-1"), "the document search lists the posted invoice");
+  const linkButtons = [...host.querySelectorAll("button")].filter((el) => el.textContent === "Link");
+  assert.equal(linkButtons.length, 1, "the found document offers linking");
+  await act(async () => {
+    linkButtons[0]!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    await tick();
+  });
+  await tick();
+  assert.ok(
+    posts.some((body) => body.action === "link" && body.lineId === "l-0001" && body.documentId === "doc-1"),
+    "linking posts the audited line link",
+  );
+});

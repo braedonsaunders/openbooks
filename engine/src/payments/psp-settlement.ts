@@ -2681,6 +2681,208 @@ export async function clearSettlementLineDocument(
 }
 
 /**
+ * Mark a matchable line as recognised by a posted journal entry — the
+ * bookkeeper booked the sale by journal instead of syncing the order, so
+ * there is no sales document to link. The marker is matching evidence like
+ * the document link: the journal stays untouched, and the close gate treats
+ * a marked line as evidenced. The entry must be a posted record of this
+ * organization in the payout's legal entity.
+ */
+export async function markSettlementLineJournal(
+  orgId: string,
+  batchId: string,
+  lineId: string,
+  journalEntryId: string,
+  actorId: string | null,
+  allowedSubsidiaryIds: ReadonlySet<string> | null | undefined,
+): Promise<{ lineId: string; journalEntryId: string; journalEntryNumber: string }> {
+  if (!isUuid(journalEntryId)) {
+    throw new PspSettlementError(
+      "a settlement line is recognised only by a posted journal entry; choose the journal entry that books this line's sale",
+    );
+  }
+  const scope = allowedSubsidiaryIds;
+  if (scope === undefined) throw new ScopeNotFoundError();
+  return withOrg(orgId, async () => {
+    await requireBankingFeature(orgId);
+    const batch = (await db.execute<{ id: string; subsidiary_id: string | null; external_ref: string }>(sql`
+      select id, subsidiary_id, external_ref from psp_settlement_batches
+       where id = ${batchId} and org_id = ${orgId} for update
+    `)).rows[0];
+    if (!batch) throw new ScopeNotFoundError();
+    if (!subsidiaryScopeAllows(scope, batch.subsidiary_id)) throw new ScopeNotFoundError();
+    const line = (await db.execute<SettlementLineLock & { meta: unknown }>(sql`
+      select id, kind, document_id, amount::text, currency, meta from psp_settlement_lines
+       where id = ${lineId} and org_id = ${orgId} and batch_id = ${batchId} for update
+    `)).rows[0];
+    if (!line) {
+      throw new PspSettlementError(
+        `settlement line ${lineId} is not part of batch ${batchId} in this organization; reload the payout and mark the line again`,
+      );
+    }
+    if (!isMatchableSettlementLineKind(line.kind)) {
+      throw new PspSettlementError(
+        `settlement line ${lineId} is a ${line.kind} leg, not order evidence; journal recognition applies to charge, refund and dispute lines`,
+      );
+    }
+    const entry = (await db.execute<{ id: string; entry_number: string; status: string; subsidiary_id: string | null }>(sql`
+      select id, entry_number, status, subsidiary_id from journal_entries
+       where id = ${journalEntryId} and org_id = ${orgId} for update
+    `)).rows[0];
+    if (!entry) {
+      throw new PspSettlementError(
+        "the journal entry does not belong to this organization; choose a posted journal entry in this organization",
+      );
+    }
+    if (!subsidiaryScopeAllows(scope, entry.subsidiary_id)) throw new ScopeNotFoundError();
+    if (!(await settlementLineDocumentInEntity(orgId, batch.subsidiary_id, entry.subsidiary_id))) {
+      throw new PspSettlementError(
+        `journal entry ${entry.entry_number} belongs to a different legal entity than payout ${batch.external_ref}; choose a journal entry posted in the payout's entity instead`,
+      );
+    }
+    if (entry.status !== "posted") {
+      throw new PspSettlementError(
+        `journal entry ${entry.entry_number} is ${entry.status}, not posted; post it first, then mark the settlement line`,
+      );
+    }
+    const before = (line.meta as Record<string, unknown> | null)?.["recognizedByJournalEntry"] ?? null;
+    const after = {
+      id: journalEntryId,
+      number: entry.entry_number,
+      by: actorId,
+      at: new Date().toISOString(),
+    };
+    if (before !== null && (before as Record<string, unknown>)["id"] === journalEntryId) {
+      return { lineId, journalEntryId, journalEntryNumber: entry.entry_number };
+    }
+    const updated = await db.execute(sql`
+      update psp_settlement_lines
+         set meta = coalesce(meta, '{}'::jsonb) || ${JSON.stringify({ recognizedByJournalEntry: after })}::jsonb,
+             updated_at = now(), updated_by = ${actorId}
+       where id = ${lineId} and org_id = ${orgId} and batch_id = ${batchId}
+    `);
+    if ((updated.rowCount ?? 0) !== 1) {
+      throw new PspSettlementError(`settlement line ${lineId} could not be marked; reload the payout and try again`);
+    }
+    await auditSettlementLine(orgId, lineId, "mark-journal", { before: { recognizedByJournalEntry: before }, after: { recognizedByJournalEntry: after } }, actorId);
+    return { lineId, journalEntryId, journalEntryNumber: entry.entry_number };
+  });
+}
+
+/**
+ * Clear a line's journal-recognition marker. Matching evidence comes off;
+ * the journal stays exactly as posted.
+ */
+export async function clearSettlementLineJournal(
+  orgId: string,
+  batchId: string,
+  lineId: string,
+  actorId: string | null,
+  allowedSubsidiaryIds: ReadonlySet<string> | null,
+): Promise<{ lineId: string }> {
+  return withOrg(orgId, async () => {
+    await requireBankingFeature(orgId);
+    const batch = (await db.execute<{ id: string; subsidiary_id: string | null }>(sql`
+      select id, subsidiary_id from psp_settlement_batches
+       where id = ${batchId} and org_id = ${orgId} for update
+    `)).rows[0];
+    if (!batch) throw new ScopeNotFoundError();
+    if (!subsidiaryScopeAllows(allowedSubsidiaryIds, batch.subsidiary_id)) throw new ScopeNotFoundError();
+    const line = (await db.execute<SettlementLineLock & { meta: unknown }>(sql`
+      select id, kind, document_id, amount::text, currency, meta from psp_settlement_lines
+       where id = ${lineId} and org_id = ${orgId} and batch_id = ${batchId} for update
+    `)).rows[0];
+    if (!line) {
+      throw new PspSettlementError(
+        `settlement line ${lineId} is not part of batch ${batchId} in this organization; reload the payout and try again`,
+      );
+    }
+    const before = (line.meta as Record<string, unknown> | null)?.["recognizedByJournalEntry"] ?? null;
+    if (before === null) return { lineId };
+    const updated = await db.execute(sql`
+      update psp_settlement_lines
+         set meta = coalesce(meta, '{}'::jsonb) - 'recognizedByJournalEntry',
+             updated_at = now(), updated_by = ${actorId}
+       where id = ${lineId} and org_id = ${orgId} and batch_id = ${batchId}
+    `);
+    if ((updated.rowCount ?? 0) !== 1) {
+      throw new PspSettlementError(`settlement line ${lineId} could not be unmarked; reload the payout and try again`);
+    }
+    await auditSettlementLine(orgId, lineId, "unmark-journal", { before: { recognizedByJournalEntry: before }, after: { recognizedByJournalEntry: null } }, actorId);
+    return { lineId };
+  });
+}
+
+/**
+ * Delete an unposted settlement draft. Drafts are not history — nothing is
+ * posted and nothing unwinds — but the removal is still audited with the
+ * batch and line snapshot, and the provider reference is freed so a
+ * corrected reimport can replace a bad-scale draft. Posted and void batches
+ * refuse: posted history unwinds only through reversal.
+ */
+export async function deleteSettlementDraft(
+  orgId: string,
+  batchId: string,
+  actorId: string | null,
+  input: { reason: string },
+  allowedSubsidiaryIds: ReadonlySet<string> | null | undefined,
+): Promise<{ batchId: string }> {
+  const reason = input.reason.trim();
+  if (reason.length < 5 || reason.length > 500) {
+    throw new PspSettlementError(
+      "a reason between 5 and 500 characters is required to delete a settlement draft",
+    );
+  }
+  const scope = allowedSubsidiaryIds;
+  if (scope === undefined) throw new ScopeNotFoundError();
+  await assertNotSandbox(orgId, "delete a PSP settlement draft");
+  return withOrg(orgId, async () => {
+    await requireBankingFeature(orgId);
+    const batch = (await db.execute<{ id: string; status: string; provider: string; external_ref: string; subsidiary_id: string | null; net_amount: string; settlement_date: string }>(sql`
+      select id, status, provider, external_ref, subsidiary_id, net_amount::text, settlement_date::text
+        from psp_settlement_batches
+       where id = ${batchId} and org_id = ${orgId}
+       for update
+    `)).rows[0];
+    if (!batch) throw new ScopeNotFoundError();
+    if (!subsidiaryScopeAllows(scope, batch.subsidiary_id)) throw new ScopeNotFoundError();
+    if (batch.status !== "draft") {
+      throw new PspSettlementError(
+        `batch is ${batch.status}; only an unposted draft can be deleted — reverse a posted batch instead`,
+      );
+    }
+    const lines = (await db.execute<{ line_number: number; kind: string; amount: string }>(sql`
+      select line_number, kind, amount::text from psp_settlement_lines
+       where batch_id = ${batchId} and org_id = ${orgId}
+       order by line_number
+    `)).rows;
+    await db.execute(sql`
+      delete from psp_settlement_lines where batch_id = ${batchId} and org_id = ${orgId}`);
+    const deleted = await db.execute(sql`
+      delete from psp_settlement_batches where id = ${batchId} and org_id = ${orgId} and status = 'draft'`);
+    if ((deleted.rowCount ?? 0) !== 1) {
+      throw new PspSettlementError(`settlement draft ${batchId} could not be deleted; reload and try again`);
+    }
+    await db.execute(sql`
+      insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+      values (${orgId}, 'psp_settlement_batches', ${batchId}, 'delete',
+              ${JSON.stringify({
+                before: {
+                  provider: batch.provider,
+                  externalRef: batch.external_ref,
+                  status: "draft",
+                  netAmount: batch.net_amount,
+                  settlementDate: batch.settlement_date,
+                  lines: lines.map((line) => ({ line: line.line_number, kind: line.kind, amount: line.amount })),
+                },
+                after: null,
+                reason,
+              })}::jsonb, ${actorId})`);
+    return { batchId };
+  });
+}
+
+/**
  * Reclassify an unmatched line as a provider adjustment. Draft batches only:
  * the kind feeds the stored batch totals, and posted totals are history.
  * Totals are recomputed from the stored lines through the same summarizer

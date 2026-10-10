@@ -273,6 +273,21 @@ const mockSources = new Map<string, string>([
         return { lineId, kind: 'adjustment' }
       }
 
+      export async function markSettlementLineJournal(orgId, batchId, lineId, journalEntryId, userId) {
+        state.domainCalls.push({ action: 'markJournal', orgId, userId, input: { batchId, lineId, journalEntryId } })
+        return { lineId, journalEntryId, journalEntryNumber: 'JE-1' }
+      }
+
+      export async function clearSettlementLineJournal(orgId, batchId, lineId, userId) {
+        state.domainCalls.push({ action: 'unmarkJournal', orgId, userId, input: { batchId, lineId } })
+        return { lineId }
+      }
+
+      export async function deleteSettlementDraft(orgId, batchId, userId, input) {
+        state.domainCalls.push({ action: 'deleteDraft', orgId, userId, input: { batchId, ...input } })
+        return { batchId }
+      }
+
       export async function accruePayoutsInTransit(orgId, accrualDate, userId) {
         state.domainCalls.push({ action: 'accrue', orgId, userId, input: { accrualDate } })
         return { accrualDate, reversalDate: accrualDate, accrued: [], reversed: [], skipped: [] }
