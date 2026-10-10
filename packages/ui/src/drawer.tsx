@@ -63,6 +63,11 @@ const SHEET_SPRING = { type: 'spring', damping: 32, stiffness: 320, mass: 0.8 } 
 const FOLD = 20
 const FOLD_CLIP = `polygon(${FOLD}px 0, 100% 0, 100% 100%, 0 100%, 0 ${FOLD}px)`
 
+/** A menu, picker or popover that is open (not playing its exit). */
+function hasOpenOverlay(): boolean {
+  return document.querySelector('[data-ui-overlay]:not([data-overlay-exiting])') !== null
+}
+
 let openDrawerCount = 0
 let originalBodyOverflow: string | null = null
 
@@ -184,13 +189,20 @@ export function Drawer({
   const reduceMotion = useReducedMotion() ?? false
   const paper = side === 'right'
 
+  // A press on the backdrop while a menu or picker is open belongs to that
+  // overlay: it closes the picker (each one closes itself on an outside
+  // press) and never dismisses the drawer, so a missed option click cannot
+  // throw away the operator's entries. Read at press time, because the
+  // picker is already gone by the time the click lands.
+  const backdropPressClosesOverlayRef = React.useRef(false)
+
   React.useEffect(() => {
     if (!open) return
     function onKey(e: KeyboardEvent) {
       if (e.key !== 'Escape') return
       // An open menu or picker takes this Escape; one that is already closing
       // does not, so a lingering exit never strands the drawer open.
-      if (document.querySelector('[data-ui-overlay]:not([data-overlay-exiting])')) return
+      if (hasOpenOverlay()) return
       if (hasDeeperDrawer()) return
       onClose()
     }
@@ -304,7 +316,15 @@ export function Drawer({
             exit={{ opacity: 0 }}
             transition={{ duration: 0.15 }}
             className="absolute inset-0 bg-slate-900/40 backdrop-blur-[2px]"
-            onClick={onClose}
+            onMouseDown={() => {
+              backdropPressClosesOverlayRef.current = hasOpenOverlay()
+            }}
+            onClick={() => {
+              const overlayTookPress = backdropPressClosesOverlayRef.current
+              backdropPressClosesOverlayRef.current = false
+              if (overlayTookPress || hasOpenOverlay()) return
+              onClose()
+            }}
             aria-hidden="true"
           />
           <motion.div
