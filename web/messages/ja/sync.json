@@ -18,6 +18,7 @@
     "mirrorBadge": "ミラー: {schedule}",
     "lastRun": "最終実行: {lastRun} · 同期完了: {cursor}",
     "schedule": "ミラースケジュール",
+    "incrementalHint": "各同期には、プロジェクトの財務データ、取引の添付ファイル、有効な業務台帳が含まれます。未取得または変更されたファイルをインポートし、変更のないファイルはスキップします。",
     "mirrorHealth": "ミラー",
     "attachmentHealth": "添付ファイル",
     "sourceDeletions": "ソース削除の照合待ち",
@@ -35,6 +36,8 @@
     "reconnect": "再接続",
     "test": "テスト",
     "mirrorNow": "今すぐミラー",
+    "syncNow": "今すぐ同期",
+    "more": "{name}のその他の操作",
     "retryMirror": "ミラーを再実行",
     "syncAttachments": "添付ファイルを同期",
     "syncProjectFinancials": "プロジェクト財務を同期",
@@ -51,6 +54,12 @@
   },
   "runs": {
     "heading": "最近の実行",
+    "history": "履歴",
+    "empty": "実行履歴はまだありません。「接続」から同期を開始してください。",
+    "features": {
+      "crm": "CRM",
+      "fixedAssets": "固定資産"
+    },
     "columns": {
       "started": "開始",
       "kind": "種別",
@@ -77,6 +86,10 @@
       "attachments": "ソースの添付ファイルを確認してインポートしています"
     },
     "stats": {
+      "crm": "CRM：{accounts}件の取引先 · {opportunities}件の商談",
+      "fixedAssets": "{count}件の固定資産",
+      "featureDisabled": "{feature}：機能は無効です",
+      "incrementalAttachments": "添付ファイル：新規{created}件 · 更新{changed}件 · 変更なし{skipped}件",
       "attachments": "ソースファイル {files} 件 · 取引リンク {links} 件 · 新規ファイル {created} 件",
       "projectFinancials": "ソースプロジェクト {projects} 件（変更 {projectChanges} 件）· ソース時間エントリ {source} 件 · 完全一致 {exact} 件 · 請求状態調整 {changed} 件",
       "docs": "+{new} 件のドキュメント · {amended} 件修正 · {unchanged} 件変更なし",

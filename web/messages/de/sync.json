@@ -18,6 +18,7 @@
     "mirrorBadge": "Spiegelung: {schedule}",
     "lastRun": "Letzter Lauf: {lastRun} · Synchronisiert bis: {cursor}",
     "schedule": "Spiegel-Zeitplan",
+    "incrementalHint": "Jede Synchronisierung umfasst Projektfinanzen, Transaktionsanhänge und aktivierte operative Register. Fehlende oder geänderte Dateien werden importiert; unveränderte Dateien werden übersprungen.",
     "mirrorHealth": "Spiegel",
     "attachmentHealth": "Anhänge",
     "sourceDeletions": "Quelllöschungen warten auf Abgleich",
@@ -35,6 +36,8 @@
     "reconnect": "Erneut verbinden",
     "test": "Testen",
     "mirrorNow": "Jetzt spiegeln",
+    "syncNow": "Jetzt synchronisieren",
+    "more": "Weitere Aktionen für {name}",
     "retryMirror": "Spiegelung erneut starten",
     "syncAttachments": "Anhänge synchronisieren",
     "syncProjectFinancials": "Projektfinanzen synchronisieren",
@@ -51,6 +54,12 @@
   },
   "runs": {
     "heading": "Letzte Läufe",
+    "history": "Verlauf",
+    "empty": "Noch keine Läufe. Starten Sie eine Synchronisierung unter Verbindungen.",
+    "features": {
+      "crm": "CRM",
+      "fixedAssets": "Anlagevermögen"
+    },
     "columns": {
       "started": "Gestartet",
       "kind": "Art",
@@ -77,6 +86,10 @@
       "attachments": "Quellanhänge werden inventarisiert und importiert"
     },
     "stats": {
+      "crm": "CRM: {accounts} Konten · {opportunities} Verkaufschancen",
+      "fixedAssets": "{count} Anlagegüter",
+      "featureDisabled": "{feature}: Funktion deaktiviert",
+      "incrementalAttachments": "Anhänge: {created} neu · {changed} aktualisiert · {skipped} unverändert",
       "attachments": "{files} Quelldateien · {links} Transaktionsverknüpfungen · {created} neue Dateien",
       "projectFinancials": "{projects} Quellprojekte ({projectChanges} geändert) · {source} Quellzeiteinträge · {exact} exakt · {changed} Abrechnungsstatus abgeglichen",
       "docs": "+{new} Dok. · {amended} geändert · {unchanged} unverändert",

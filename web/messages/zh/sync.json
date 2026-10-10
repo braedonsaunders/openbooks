@@ -18,6 +18,7 @@
     "mirrorBadge": "镜像：{schedule}",
     "lastRun": "上次运行：{lastRun} · 已同步至：{cursor}",
     "schedule": "镜像计划",
+    "incrementalHint": "每次同步都包含项目财务数据、交易附件和已启用的业务台账。系统导入缺失或已更改的文件，并跳过未更改的文件。",
     "mirrorHealth": "镜像",
     "attachmentHealth": "附件",
     "sourceDeletions": "源端删除记录待核对",
@@ -35,6 +36,8 @@
     "reconnect": "重新连接",
     "test": "测试",
     "mirrorNow": "立即镜像",
+    "syncNow": "立即同步",
+    "more": "{name}的更多操作",
     "retryMirror": "重试镜像",
     "syncAttachments": "同步附件",
     "syncProjectFinancials": "同步项目财务",
@@ -51,6 +54,12 @@
   },
   "runs": {
     "heading": "最近运行",
+    "history": "历史记录",
+    "empty": "暂无运行记录。请从“连接”开始同步。",
+    "features": {
+      "crm": "CRM",
+      "fixedAssets": "固定资产"
+    },
     "columns": {
       "started": "开始时间",
       "kind": "类型",
@@ -77,6 +86,10 @@
       "attachments": "正在清点并导入源附件"
     },
     "stats": {
+      "crm": "CRM：{accounts}个客户账户 · {opportunities}个商机",
+      "fixedAssets": "{count}项固定资产",
+      "featureDisabled": "{feature}：功能已禁用",
+      "incrementalAttachments": "附件：新增{created}个 · 更新{changed}个 · 未更改{skipped}个",
       "attachments": "{files} 个源文件 · {links} 个交易链接 · {created} 个新文件",
       "projectFinancials": "{projects} 个源项目（{projectChanges} 个变更）· {source} 条源工时记录 · {exact} 条精确 · {changed} 个计费状态已核对",
       "docs": "+{new} 份单据 · {amended} 份修订 · {unchanged} 份未变",

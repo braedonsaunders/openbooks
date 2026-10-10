@@ -18,6 +18,7 @@
     "mirrorBadge": "Espelhamento: {schedule}",
     "lastRun": "Última execução: {lastRun} · Sincronizado até: {cursor}",
     "schedule": "Agenda do espelhamento",
+    "incrementalHint": "Cada sincronização inclui os dados financeiros dos projetos, os anexos das transações e os registros operacionais habilitados. Os arquivos ausentes ou alterados são importados; os arquivos sem alterações são ignorados.",
     "mirrorHealth": "Espelhamento",
     "attachmentHealth": "Anexos",
     "sourceDeletions": "Exclusões na origem aguardando conciliação",
@@ -35,6 +36,8 @@
     "reconnect": "Reconectar",
     "test": "Testar",
     "mirrorNow": "Espelhar agora",
+    "syncNow": "Sincronizar agora",
+    "more": "Mais ações para {name}",
     "retryMirror": "Tentar espelhamento novamente",
     "syncAttachments": "Sincronizar anexos",
     "syncProjectFinancials": "Sincronizar finanças dos projetos",
@@ -51,6 +54,12 @@
   },
   "runs": {
     "heading": "Execuções recentes",
+    "history": "Histórico",
+    "empty": "Ainda não há execuções. Inicie uma sincronização em Conexões.",
+    "features": {
+      "crm": "CRM",
+      "fixedAssets": "Ativos imobilizados"
+    },
     "columns": {
       "started": "Iniciada",
       "kind": "Tipo",
@@ -77,6 +86,10 @@
       "attachments": "Inventariando e importando anexos de origem"
     },
     "stats": {
+      "crm": "CRM: {accounts} contas · {opportunities} oportunidades",
+      "fixedAssets": "{count} ativos imobilizados",
+      "featureDisabled": "{feature}: funcionalidade desabilitada",
+      "incrementalAttachments": "anexos: {created} novos · {changed} atualizados · {skipped} sem alterações",
       "attachments": "{files} arquivos de origem · {links} vínculos de transação · {created} arquivos novos",
       "projectFinancials": "{projects} projetos de origem ({projectChanges} alterados) · {source} registros de tempo de origem · {exact} exatos · {changed} estados de faturamento conciliados",
       "docs": "+{new} docs · {amended} alterados · {unchanged} inalterados",

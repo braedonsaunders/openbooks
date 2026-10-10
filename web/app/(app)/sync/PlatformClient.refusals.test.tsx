@@ -48,9 +48,36 @@ const React = await import("react");
 Object.assign(globalThis, { React });
 const { act } = await import("react");
 const { createRoot } = await import("react-dom/client");
-const { NextIntlClientProvider } = await import("next-intl");
+const { NextIntlClientProvider, createTranslator } = await import("next-intl");
+const { LOCALE_CODES } = await import("../../../i18n/config");
 const messages = (await import("../../../messages/en")).default;
 const { PlatformClient } = await import("./PlatformClient");
+
+test("unified sync actions and run summaries resolve in every shipped locale", async () => {
+  const labels = [
+    ["connections.incrementalHint", {}],
+    ["actions.syncNow", {}],
+    ["actions.more", { name: "Example connection" }],
+    ["runs.history", {}],
+    ["runs.empty", {}],
+    ["runs.features.crm", {}],
+    ["runs.features.fixedAssets", {}],
+    ["runs.stats.crm", { accounts: 2, opportunities: 3 }],
+    ["runs.stats.fixedAssets", { count: 4 }],
+    ["runs.stats.featureDisabled", { feature: "CRM" }],
+    ["runs.stats.incrementalAttachments", { created: 5, changed: 6, skipped: 7 }],
+  ] as const;
+  for (const locale of LOCALE_CODES) {
+    const catalog = (await import(`../../../messages/${locale}/index.ts`)).default;
+    const t = createTranslator({ locale, messages: catalog, namespace: "sync", onError: (error) => { throw error; } });
+    for (const [key, values] of labels) {
+      const label = t(key, values);
+      assert.ok(label.trim(), `${locale}: ${key}`);
+      assert.notEqual(label, `sync.${key}`, `${locale}: ${key} must resolve`);
+      assert.ok(!/[{}]/.test(label), `${locale}: ${key} must interpolate its values`);
+    }
+  }
+});
 
 const tick = () => new Promise((resolve) => setTimeout(resolve, 30));
 
