@@ -96,12 +96,12 @@ test(
       const branchSub = await seedSubscription(org, actorId, planId, branch.customerId);
       const rootSub = await seedSubscription(org, actorId, planId, org.customerId);
 
-      const branchGen = await billSubscriptionNow(org.orgId, branchSub, org.date, { actorId }, null);
+      const branchGen = await billSubscriptionNow(org.orgId, branchSub, { actorId }, null);
       const branchInvoice = await invoiceSubsidiary(org.orgId, branchGen.invoiceId);
       assert.equal(branchInvoice.subsidiaryId, branch.branchId, "customer B's invoice must carry branch B, not the root");
       assert.equal(branchInvoice.orgId, org.orgId, "no cross-org entity may leak onto the invoice");
 
-      const rootGen = await billSubscriptionNow(org.orgId, rootSub, org.date, { actorId }, null);
+      const rootGen = await billSubscriptionNow(org.orgId, rootSub, { actorId }, null);
       const rootInvoice = await invoiceSubsidiary(org.orgId, rootGen.invoiceId);
       assert.equal(rootInvoice.subsidiaryId, org.subsidiaryId, "a null-entity (org-wide) customer keeps the root fallback");
     } finally {
@@ -303,7 +303,7 @@ test(
       `)).rows[0]!.n;
 
       await assert.rejects(
-        billSubscriptionNow(org.orgId, subscriptionId, org.date, { actorId }, null),
+        billSubscriptionNow(org.orgId, subscriptionId, { actorId }, null),
         (e: unknown) =>
           e instanceof SubscriptionError &&
           /not active/.test(e.message) &&
