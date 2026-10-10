@@ -367,3 +367,78 @@ test("opt-in selection renders checkboxes bound to row identities", async (t) =>
   await tick();
   assert.deepEqual([...(seen[0] ?? [])].sort(), ["a", "b"], "toggling a row adds its identity");
 });
+
+async function mountTaxCell(computeTax: () => string, readOnly: boolean) {
+  const host = document.createElement("div");
+  document.body.appendChild(host);
+  const root = createRoot(host);
+  const columns: LineGridColumn<TestRow>[] = [
+    {
+      key: "taxAmount",
+      label: "Tax amt",
+      width: "120px",
+      type: "tax",
+      align: "right",
+      computeTax,
+      onTaxChange: () => {},
+    },
+  ];
+  const rows: TestRow[] = [{ clientKey: "l1", description: "untaxed", quantity: "1", taxAmount: "", taxOverridden: false }];
+  await act(async () => {
+    root.render(
+      <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
+        <LineGrid<TestRow>
+          columns={columns}
+          rows={rows}
+          readOnly={readOnly}
+          getRowKey={(row) => row.clientKey}
+          cloneRow={(row) => ({ ...row })}
+          onRowsChange={() => {}}
+          emptyRow={() => ({ clientKey: "new", description: "", quantity: "", taxAmount: "", taxOverridden: false })}
+        />
+      </NextIntlClientProvider>,
+    );
+    await tick();
+  });
+  await tick();
+  return {
+    host,
+    async done() {
+      await act(async () => {
+        root.unmount();
+      });
+      host.remove();
+    },
+  };
+}
+
+test("a leaked tax error code renders as a dash, never the code", async (t) => {
+  const viewing = await mountTaxCell(() => "not_found", true);
+  t.after(viewing.done);
+  assert.ok(
+    viewing.host.textContent?.includes("—"),
+    "a read-only tax cell shows a dash for an error code",
+  );
+  assert.ok(
+    !viewing.host.textContent?.includes("not_found"),
+    "a read-only tax cell never leaks the code",
+  );
+
+  const editing = await mountTaxCell(() => "not_found", false);
+  t.after(editing.done);
+  const input = editing.host.querySelector('div[data-lg-row="0"] input') as HTMLInputElement | null;
+  assert.ok(input, "the edit-mode tax cell renders");
+  assert.equal(input.value, "—", "an edit-mode tax cell shows a dash for an error code");
+});
+
+test("real and zero tax amounts keep their established display", async (t) => {
+  const viewing = await mountTaxCell(() => "5.0000", true);
+  t.after(viewing.done);
+  assert.ok(viewing.host.textContent?.includes("5.0000"), "a real computed amount still renders");
+  assert.ok(!viewing.host.textContent?.includes("—"), "a real amount is not dashed");
+
+  const zero = await mountTaxCell(() => "0.0000", true);
+  t.after(zero.done);
+  assert.ok(!zero.host.textContent?.includes("—"), "an untaxed line keeps its empty cell");
+  assert.ok(!zero.host.textContent?.includes("0.00"), "an untaxed line keeps zero suppressed");
+});

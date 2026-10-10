@@ -103,6 +103,27 @@ function invalidAmount(value: unknown): boolean {
 }
 
 /**
+ * What a tax cell shows for a computed or stored value. A non-decimal value
+ * is a leaked lookup error code, never an amount: an em dash, never the code
+ * (and never a crash in the zero comparison). Empty (an untaxed line) and
+ * every real amount pass through unchanged.
+ */
+function taxDisplayValue(value: string): string {
+  if (value === '') return ''
+  return invalidAmount(value) ? '—' : value
+}
+
+/**
+ * The settled (non-draft) tax cell content: the display value with exact-zero
+ * suppressed to blank, exactly as before, through an optional formatter.
+ */
+function settledTaxDisplay<T = string>(computed: string, format?: (value: string) => T): T | string {
+  const shown = taxDisplayValue(computed)
+  if (shown === '' || shown === '—') return shown
+  return cmp(shown, '0') !== 0 ? (format?.(shown) ?? shown) : ''
+}
+
+/**
  * A cell edit folded back into its row. Cells publish theirs while a draft is
  * uncommitted so a reorder/remove/duplicate can carry the typed value along
  * with its row instead of leaving it behind at the old position.
@@ -755,10 +776,11 @@ function TaxCell<Row extends Record<string, unknown>>({
   const overridden = row.taxOverridden === true
   const computed = column.computeTax?.(row) ?? '0.0000'
   // While overridden, show the explicit amount; otherwise mirror the computed
-  // value so the cell always reflects what will post.
+  // value so the cell always reflects what will post. A live draft passes
+  // through untouched so typing is never replaced mid-keystroke.
   const [draft, setDraft] = useState<string | null>(null)
-  const shown =
-    draft != null ? draft : overridden ? String(row.taxAmount ?? '') : cmp(computed, '0') !== 0 ? computed : ''
+  const stored = overridden ? String(row.taxAmount ?? '') : computed
+  const shown = draft != null ? draft : overridden ? taxDisplayValue(stored) : settledTaxDisplay(computed)
   const colKey = 'tax'
 
   // Same draft-carry contract as DecimalCell: a reorder folds the pending
@@ -795,7 +817,7 @@ function TaxCell<Row extends Record<string, unknown>>({
         inputMode="decimal"
         value={shown}
         placeholder="0.00"
-        aria-invalid={invalidAmount(shown) || undefined}
+        aria-invalid={(shown !== '—' && invalidAmount(shown)) || undefined}
         aria-labelledby={ariaLabelledBy}
         onChange={(e) => setDraft(e.target.value)}
         onBlur={(e) => commit(e.target.value)}
@@ -806,7 +828,7 @@ function TaxCell<Row extends Record<string, unknown>>({
           inputBase,
           'text-right tabular-nums',
           overridden && 'font-medium text-amber-700 dark:text-amber-400',
-          invalidAmount(shown) &&
+          shown !== '—' && invalidAmount(shown) &&
             'text-red-600 focus:ring-red-500/60 dark:text-red-400',
         )}
       />
@@ -919,7 +941,7 @@ function RowCells<Row extends Record<string, unknown>>({
           let display: React.ReactNode
           if (c.type === 'tax') {
             const overridden = row.taxOverridden === true
-            const shown = overridden ? String(row.taxAmount ?? '0.0000') : (c.computeTax?.(row) ?? '0.0000')
+            const computed = overridden ? String(row.taxAmount ?? '0.0000') : (c.computeTax?.(row) ?? '0.0000')
             display = (
               <span className="inline-flex items-center gap-1.5">
                 {overridden ? (
@@ -929,7 +951,7 @@ function RowCells<Row extends Record<string, unknown>>({
                     className="inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-amber-500"
                   />
                 ) : null}
-                {cmp(shown, '0') !== 0 ? (formatAmount?.(shown) ?? shown) : ''}
+                {settledTaxDisplay(computed, formatAmount)}
               </span>
             )
           } else if (c.render) display = c.render(row, i)
