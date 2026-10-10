@@ -44,6 +44,7 @@
     "submitForApproval": "提交审批",
     "prev": "上一周",
     "thisWeek": "本周",
+    "weekJump": "前往该周",
     "weekOf": "{from} – {to} 当周",
     "approvedReadOnly": "已审批的工时表为只读。",
     "viewOnly": "您仅有查看权限。",

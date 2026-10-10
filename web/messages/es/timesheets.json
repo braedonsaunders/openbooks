@@ -44,6 +44,7 @@
     "submitForApproval": "Enviar para aprobación",
     "prev": "Ant.",
     "thisWeek": "Esta semana",
+    "weekJump": "Ir a la semana",
     "weekOf": "Semana del {from} – {to}",
     "approvedReadOnly": "Las hojas de horas aprobadas son de solo lectura.",
     "viewOnly": "Tiene acceso de solo lectura.",

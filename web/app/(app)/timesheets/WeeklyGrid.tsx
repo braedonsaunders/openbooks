@@ -725,6 +725,17 @@ export function WeeklyGrid({
           <Button size="sm" variant="ghost" onClick={() => go(employeeId, sundayOf(today))} disabled={!employeeId}>
             {t('grid.thisWeek')}
           </Button>
+          <input
+            type="date"
+            value={week}
+            disabled={!employeeId}
+            onChange={(e) => {
+              if (e.target.value) go(employeeId, sundayOf(e.target.value))
+            }}
+            className="h-8 shrink-0 rounded-md border border-slate-200 bg-white px-2 text-sm dark:border-slate-700 dark:bg-slate-950"
+            aria-label={t('grid.weekJump')}
+            title={t('grid.weekJump')}
+          />
           {readOnly && status === 'approved' ? (
             <span className="text-xs text-slate-400 dark:text-slate-500">{t('grid.approvedReadOnly')}</span>
           ) : !canManage ? (
