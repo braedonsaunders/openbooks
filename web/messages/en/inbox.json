@@ -32,6 +32,7 @@
     "hrm_qualification_alert": "Qualification",
     "field_ticket_signature": "Signature",
     "timesheet_week": "Timesheet",
+    "timesheet_approval": "Timesheet approval",
     "expense_report": "Expense",
     "document_signature": "Signature",
     "payroll_anomaly_block": "Payroll check",

@@ -1,6 +1,7 @@
 import "server-only";
 import { countInbox, listInbox, type InboxItem, type InboxKind, type InboxListContext, type InboxSourceNotice } from "@openbooks/engine/src/inbox/index.ts";
 import { businessTimeZone, businessToday } from "@openbooks/engine/src/platform/business-date.ts";
+import { approveSubmittedTimeEntries } from "./time-approval";
 import { can, type Authz } from "./authz";
 import { isFeatureEnabled } from "./features";
 
@@ -27,6 +28,18 @@ export async function inboxContext(authz: Authz): Promise<InboxListContext> {
       allowedSubsidiaryIds: authz.allowedSubsidiaryIds === null ? null : [...authz.allowedSubsidiaryIds],
       includeBudgets: budgetsOn && can(authz, "budgets.approve"),
     },
+    // Direct timesheet-week approval executes the native approval service —
+    // the same command the drawer runs — so the inbox never grows a second
+    // write path. Scope rides the session, exactly as the approve route's.
+    approveTimesheetWeek: async ({ employeePartyId, weekStart }) => {
+      await approveSubmittedTimeEntries({
+        orgId,
+        actorId: authz.user.id,
+        employeePartyId,
+        weekStart,
+        allowedSubsidiaryIds: authz.allowedSubsidiaryIds,
+      });
+    },
   };
 }
 
@@ -45,7 +58,7 @@ import { maySeeUnion } from "./approval-doorway";
 export { maySeeUnion };
 
 export const INBOX_FILTER_KINDS: Record<string, InboxKind[]> = {
-  approvals: ["flows_approval", "expense_report"],
+  approvals: ["flows_approval", "expense_report", "timesheet_approval"],
   my_tasks: [
     "hrm_process_step",
     "hrm_leave_request",
@@ -92,14 +105,18 @@ export async function inboxTaskFilters(ctx: InboxListContext, selected = true) {
 
 /** Unfiltered personal work totals shared by navigation, Inbox and Home.
  * Count each source rather than a bounded list window. The badge totals the
- * My Approvals and My Tasks tabs, independent of the active tab or filters. */
+ * My Approvals and My Tasks tabs, independent of the active tab or filters.
+ * Direct timesheet approvals count with approvals: they await this actor's
+ * decision exactly like a gate, through the same native command. */
 export async function inboxCounts(authz: Authz, ctx: InboxListContext) {
   const notices: InboxSourceNotice[] = [];
-  const [approvals, tasks] = await Promise.all([
+  const [unionApprovals, directApprovals, tasks] = await Promise.all([
     maySeeUnion(authz)
       ? import("./application/approvals").then(({ approvalWorklistCountForAuthz }) => approvalWorklistCountForAuthz(authz))
       : Promise.resolve(0),
+    countInbox(ctx, { kinds: ["timesheet_approval"], notices }),
     countInbox(ctx, { kinds: INBOX_TASK_KINDS, notices }),
   ]);
+  const approvals = unionApprovals + directApprovals;
   return { approvals, tasks, count: approvals + tasks, notices };
 }

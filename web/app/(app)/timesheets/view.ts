@@ -16,6 +16,7 @@ import { loadOpenFlagsForWeek, type WeekFlagChip } from '../../../lib/hrm/ai-rai
 import { loadTimePolicy } from '../../../lib/time-policy'
 // HR-20: approver flag chips over the week's clock pairs.
 import { approvalFlags } from '@openbooks/engine/src/hrm/field-time/reads.ts'
+import { TIMESHEET_WEEK_SUBJECT_KIND } from '@openbooks/engine/src/flows/timesheet-weeks-adapter.ts'
 import { subsidiaryVisibleFilter } from '../../../lib/subsidiaries'
 import {
   currentWeekStart,
@@ -29,6 +30,9 @@ import {
 } from '../../api/timesheets/_lib'
 import type { WeeklyGrid } from './WeeklyGrid'
 import { managesOthersTime, resolveNewTimesheetStart } from './new-timesheet'
+import { listDirectApprovalWeeks } from '@openbooks/engine/src/inbox/adapters/timesheet-approval.ts'
+import { APPROVALS_BULK_BATCH_MAX } from '../../../lib/approvals-limits'
+import type { BulkApproveWeek } from './TimesheetBulkApprove'
 
 /**
  * The weekly-timesheet list, split into a loader and a spec.
@@ -68,6 +72,8 @@ export interface TimesheetsData {
   clockButton: { href: string; label: string }
   showCrewLink: boolean
   crewButton: { href: string; label: string }
+  /** Gateless submitted weeks awaiting a direct decision: the bulk panel, empty for non-approvers. */
+  bulkWeeks: BulkApproveWeek[]
 }
 
 export async function loadTimesheets(
@@ -184,6 +190,23 @@ export async function loadTimesheets(
     weekEnd.setUTCDate(weekEnd.getUTCDate() + 6)
     anomalyFlags = await loadOpenFlagsForWeek(authz, openEmployeeId, openWeek, weekEnd.toISOString().slice(0, 10))
   }
+  // A week owned by a pending approval flow decides through its gates: the
+  // server knows that before the drawer renders, so Approve arrives
+  // disabled with the reason instead of failing on click.
+  const approveBlockedReason = openEmployeeId && openWeek
+    ? await (async () => {
+        const header = (await db.execute<{ id: string }>(sql`
+          select id from timesheet_weeks
+           where org_id = ${orgId} and employee_party_id = ${openEmployeeId} and week_start = ${openWeek}::date
+           limit 1`)).rows[0]
+        if (!header) return null
+        const openGates = (await db.execute<{ n: number }>(sql`
+          select count(*)::int as n from flow_gates
+           where org_id = ${orgId} and subject_kind = ${TIMESHEET_WEEK_SUBJECT_KIND} and subject_id = ${header.id}
+             and status in ('pending', 'escalated')`)).rows[0]?.n ?? 0
+        return openGates > 0 ? t('grid.approveBlockedByWorkflow') : null
+      })()
+    : null
   const gridProps =
     pickers && weekPayload && openEmployeeId && openWeek
       ? {
@@ -198,6 +221,7 @@ export async function loadTimesheets(
           // Entering a week: anyone's with time.manage, one's own with time.self.
           canManage: supervisesTime || (entersOwnTime && openEmployeeId === ownEmployeeId),
           canApprove: can(authz, 'time.approve'),
+          approveBlockedReason,
           canReopen: can(authz, 'time.reopen'),
           requireApproval: timePolicy.requireApproval,
           fieldDefs: lineFieldDefs as never,
@@ -208,6 +232,19 @@ export async function loadTimesheets(
       : null
 
   const fieldTimeOn = fieldTimeOnEarly
+
+  // Bulk approval panel: gateless submitted weeks in scope, for approvers on
+  // the project workspace. Same population the inbox direct leg offers, so
+  // both surfaces decide exactly the weeks a direct approval may consume.
+  const bulkWeeks = workFamily === 'project' && can(authz, 'time.approve')
+    ? (await listDirectApprovalWeeks(db, orgId, authz.allowedSubsidiaryIds, APPROVALS_BULK_BATCH_MAX))
+        .map((row) => ({
+          employeeId: row.employee_party_id,
+          weekStart: row.week_start,
+          personName: row.person_name ?? '',
+          hours: row.hours,
+        }))
+    : []
 
   return {
     workFamily,
@@ -232,6 +269,7 @@ export async function loadTimesheets(
     clockButton: { href: '/time/clock', label: t('field.clockTab') },
     showCrewLink: fieldTimeOn && (can(authz, 'time.crew.enter') || can(authz, 'time.read')),
     crewButton: { href: '/time/crew', label: t('field.crewTab') },
+    bulkWeeks,
     drawer: gridProps
       ? {
           // Remount on identity change so no state can outlive its week.
@@ -263,6 +301,7 @@ export function timesheetsSpec(data: TimesheetsData): PageSpec {
     ],
     body: [
       widgetBlock('page-notice', { message: data.newNotice ?? '' }, f('newNotice')),
+      widgetBlock('timesheet-bulk-approve', { weeks: f('bulkWeeks') }),
       widgetBlock('entity-list-view', {
         recordType: 'timesheet_week',
         timeWorkFamily: data.workFamily,

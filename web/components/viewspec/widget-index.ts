@@ -596,6 +596,7 @@ export const WIDGET_FAMILY: Readonly<Record<string, WidgetFamily>> = {
   'tax-setup-guide': 'assets-tax',
   'tax-setup-header': 'assets-tax',
   'timesheet-drawer': 'records',
+  'timesheet-bulk-approve': 'records',
   'trash-back-link': 'records',
   'trash-list': 'records',
   'trend-chart': 'home',

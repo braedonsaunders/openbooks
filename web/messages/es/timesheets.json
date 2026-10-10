@@ -25,6 +25,16 @@
     "billable": "Facturable",
     "dailyTotals": "Totales diarios"
   },
+  "bulk": {
+    "title": "Semanas enviadas pendientes de aprobación",
+    "description": "Selecciona semanas y apruébalas juntas. Cada semana se aprueba en su propia transacción; las rechazadas indican su motivo.",
+    "approve": "Aprobar seleccionadas",
+    "approving": "Aprobando…",
+    "approved": "{count, plural, one {# semana aprobada} other {# semanas aprobadas}}",
+    "refused": "{count, plural, one {# semana requiere atención} other {# semanas requieren atención}}",
+    "selectAll": "Seleccionar todas",
+    "clear": "Limpiar"
+  },
   "status": {
     "submitted": "Enviada",
     "empty": "Sin horas"
@@ -55,6 +65,7 @@
     "saveBeforeSubmit": "Guarde sus cambios antes de enviar",
     "submittedToast": "Enviada para aprobación",
     "approvedToast": "Hoja de horas aprobada",
+    "approveBlockedByWorkflow": "Esta semana pertenece a un flujo de aprobación pendiente — decídela allí.",
     "addLine": "Agregar línea",
     "projectPlaceholder": "Proyecto…",
     "lineProjectAria": "Proyecto de la línea {line}",

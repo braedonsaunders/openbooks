@@ -25,6 +25,16 @@
     "billable": "Facturable",
     "dailyTotals": "Totaux quotidiens"
   },
+  "bulk": {
+    "title": "Semaines soumises en attente d’approbation",
+    "description": "Sélectionnez des semaines et approuvez-les ensemble. Chaque semaine est approuvée dans sa propre transaction ; les semaines refusées indiquent leur motif.",
+    "approve": "Approuver la sélection",
+    "approving": "Approbation…",
+    "approved": "{count, plural, one {# semaine approuvée} other {# semaines approuvées}}",
+    "refused": "{count, plural, one {# semaine à vérifier} other {# semaines à vérifier}}",
+    "selectAll": "Tout sélectionner",
+    "clear": "Effacer"
+  },
   "status": {
     "submitted": "Soumise",
     "empty": "Aucune heure"
@@ -55,6 +65,7 @@
     "saveBeforeSubmit": "Enregistrez vos modifications avant de soumettre",
     "submittedToast": "Soumise pour approbation",
     "approvedToast": "Feuille de temps approuvée",
+    "approveBlockedByWorkflow": "Cette semaine relève d’un flux d’approbation en cours — décidez-la dans le flux.",
     "addLine": "Ajouter une ligne",
     "projectPlaceholder": "Projet…",
     "lineProjectAria": "Projet de la ligne {line}",

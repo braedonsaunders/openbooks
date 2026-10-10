@@ -310,6 +310,7 @@ export const WarehousesPanel = dynamic(() => import("../../app/(app)/warehouse/W
 export const WebhookEndpointDrawer = dynamic(() => import("../../app/(app)/admin/webhooks/EndpointDrawer").then(module => module.WebhookEndpointDrawer))
 export const WeeklyGrid = dynamic(() => import("../../app/(app)/timesheets/WeeklyGrid").then(module => module.WeeklyGrid))
 export const TimesheetWeekJump = dynamic(() => import("../../app/(app)/timesheets/TimesheetWeekJump").then(module => module.TimesheetWeekJump))
+export const TimesheetBulkApprove = dynamic(() => import("../../app/(app)/timesheets/TimesheetBulkApprove").then(module => module.TimesheetBulkApprove))
 export const WindowDialog = dynamic(() => import("../../app/(app)/hrm/benefits/WindowDialog").then(module => module.WindowDialog))
 export const WindowDrawer = dynamic(() => import("../../app/(app)/hrm/benefits/WindowDrawer").then(module => module.WindowDrawer))
 export const WindowsManagerDrawer = dynamic(() => import("../../app/(app)/hrm/benefits/WindowsManagerDrawer").then(module => module.WindowsManagerDrawer))

@@ -25,6 +25,16 @@
     "billable": "可计费",
     "dailyTotals": "每日合计"
   },
+  "bulk": {
+    "title": "等待审批的已提交周",
+    "description": "选择多周并一起审批。每周在各自的事务中审批，被拒绝的周会列出原因。",
+    "approve": "审批所选",
+    "approving": "审批中…",
+    "approved": "{count, plural, other {# 周已审批}}",
+    "refused": "{count, plural, other {# 周需要注意}}",
+    "selectAll": "全选",
+    "clear": "清除"
+  },
   "status": {
     "submitted": "已提交",
     "empty": "无工时"
@@ -55,6 +65,7 @@
     "saveBeforeSubmit": "提交前请先保存更改",
     "submittedToast": "已提交审批",
     "approvedToast": "工时表已审批",
+    "approveBlockedByWorkflow": "本周由待定的审批流处理——请在审批流中决定。",
     "addLine": "添加行",
     "projectPlaceholder": "项目…",
     "lineProjectAria": "第 {line} 行项目",

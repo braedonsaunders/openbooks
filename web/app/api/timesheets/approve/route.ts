@@ -6,6 +6,9 @@ import { NextResponse } from "next/server";
 import { isUuid } from "../../../../lib/list-params";
 import { ScopeNotFoundError } from "@openbooks/engine/src/organization/subsidiary-scope.ts";
 import { approveSubmittedTimeEntries } from "../../../../lib/time-approval";
+import { TimeApprovalRefusal } from "../../../../lib/time-approval-refusal";
+import { TimeWorkTargetError } from "@openbooks/engine/src/projects/time-work-target.ts";
+import { apiErrorResponse } from "@/lib/api/error-response";
 import { isIsoDate, loadWeek, pinTimekeeper, weekStart } from "../_lib";
 import { notFound } from "@/lib/api/responses";
 const postBodySchema0 = z.strictObject({
@@ -61,19 +64,10 @@ export const POST = defineRoute({
     } catch (error) {
       if (error instanceof ScopeNotFoundError)
         return notFound("record");
-      const message = error instanceof Error ? error.message : String(error);
-      // Guard rejections carry their own sentence: nothing submitted (422), or
-      // the week's approval workflow still owns it (409). Anything else is a
-      // failed financial-effects unit, rolled back together.
-      if (/already approved/i.test(message)) {
-        return NextResponse.json({ error: message }, { status: 409 });
-      }
-      if (/no submitted entries|timesheet week not found/i.test(message)) {
-        return NextResponse.json({ error: message }, { status: 422 });
-      }
-      if (/pending approval workflow/i.test(message)) {
-        return NextResponse.json({ error: message }, { status: 409 });
-      }
+      // Designed domain refusals keep their own message, code, remedy and
+      // details (mapped by type, never by regex over the message).
+      if (error instanceof TimeApprovalRefusal || error instanceof TimeWorkTargetError)
+        return apiErrorResponse(error);
       console.error(
         "[timesheets/approve] approval transaction rolled back:",
         error,

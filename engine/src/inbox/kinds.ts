@@ -10,6 +10,7 @@ export const INBOX_KINDS = [
   "hrm_qualification_alert",
   "field_ticket_signature",
   "timesheet_week",
+  "timesheet_approval",
   "crew_time_batch",
   "expense_report",
   "notification",

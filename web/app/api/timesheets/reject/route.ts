@@ -1,5 +1,7 @@
 import { authorizeTimeWorkspace, timeWorkFamily } from "@/lib/time-workspace";
-import { lockSharedTimeAuthority } from "@openbooks/engine/src/projects/time-work-target.ts";
+import { lockSharedTimeAuthority, TimeWorkTargetError } from "@openbooks/engine/src/projects/time-work-target.ts";
+import { TimeApprovalRefusal } from "@/lib/time-approval-refusal";
+import { apiErrorResponse } from "@/lib/api/error-response";
 import { z } from "zod";
 import { isoDate, uuidId } from "@/lib/api/json";
 import { defineRoute } from "@/lib/api/route";
@@ -172,6 +174,8 @@ export const POST = defineRoute({
         );
       });
     } catch (error) {
+      if (error instanceof TimeApprovalRefusal || error instanceof TimeWorkTargetError)
+        return apiErrorResponse(error);
       const message = error instanceof Error ? error.message : String(error);
       if (/nothing to reject/i.test(message)) {
         return NextResponse.json({ error: message }, { status: 422 });

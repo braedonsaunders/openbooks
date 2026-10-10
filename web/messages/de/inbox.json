@@ -32,6 +32,7 @@
     "hrm_qualification_alert": "Qualifikation",
     "field_ticket_signature": "Unterschrift",
     "timesheet_week": "Stundenzettel",
+    "timesheet_approval": "Stundenzettelgenehmigung",
     "expense_report": "Spesen",
     "document_signature": "Unterschrift",
     "payroll_anomaly_block": "Lohnprüfung",

@@ -32,6 +32,7 @@
     "hrm_qualification_alert": "Cualificación",
     "field_ticket_signature": "Firma",
     "timesheet_week": "Parte de horas",
+    "timesheet_approval": "Aprobación de parte de horas",
     "expense_report": "Gasto",
     "document_signature": "Firma",
     "payroll_anomaly_block": "Control de nómina",

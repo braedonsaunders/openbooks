@@ -25,6 +25,16 @@
     "billable": "Billable",
     "dailyTotals": "Daily totals"
   },
+  "bulk": {
+    "title": "Submitted weeks awaiting approval",
+    "description": "Select weeks and approve them together. Each week approves in its own transaction; refused weeks list their reason.",
+    "approve": "Approve selected",
+    "approving": "Approving…",
+    "approved": "{count, plural, one {# week approved} other {# weeks approved}}",
+    "refused": "{count, plural, one {# week needs attention} other {# weeks need attention}}",
+    "selectAll": "Select all",
+    "clear": "Clear"
+  },
   "status": {
     "submitted": "Submitted",
     "empty": "No hours"
@@ -55,6 +65,7 @@
     "saveBeforeSubmit": "Save your changes before submitting",
     "submittedToast": "Submitted for approval",
     "approvedToast": "Timesheet approved",
+    "approveBlockedByWorkflow": "This week is owned by a pending approval flow — decide it there.",
     "addLine": "Add line",
     "projectPlaceholder": "Project…",
     "lineProjectAria": "Line {line} project",

@@ -12,6 +12,7 @@
  * approved or the user lacks time.manage.
  */
 
+import Link from 'next/link'
 import { RemoteRecordChoice } from '@/components/remote-record-choice'
 import type { TimeWorkFamily } from '@openbooks/engine/src/projects/time-work-target.ts'
 import { useEffect, useMemo, useRef, useState } from 'react'
@@ -226,6 +227,7 @@ export function WeeklyGrid({
   pickers,
   canManage,
   canApprove,
+  approveBlockedReason = null,
   canReopen,
   requireApproval = true,
   fieldDefs = [],
@@ -244,6 +246,12 @@ export function WeeklyGrid({
   pickers: TimesheetPickers
   canManage: boolean
   canApprove: boolean
+  /**
+   * Why Approve is withdrawn although the week is submitted: a pending
+   * approval flow owns the decision. The server resolves it when the drawer
+   * opens; the button stays disabled with this reason until the gates clear.
+   */
+  approveBlockedReason?: string | null
   /** Holds time.reopen — deliberately separate from approve, so the person who
    * signs off on hours is not automatically the one who can unwind that. */
   canReopen: boolean
@@ -280,6 +288,9 @@ export function WeeklyGrid({
   // refuses a save over a moved week with a named 409 instead of silently
   // overwriting the other editor's hours.
   const [revision, setRevision] = useState(payload.revision)
+  // A refused decision pins beside the actions until the next action — a
+  // toast alone vanishes, and the operator reads silence as success.
+  const [refusal, setRefusal] = useState<{ message: string; remedy: string | null; setupHref: string | null } | null>(null)
   // A refused (stale) save parks its server message here with a reload
   // path. Local edits stay in the grid — nothing the server holds is
   // touched, and nothing typed is dropped until the editor reloads.
@@ -395,6 +406,7 @@ export function WeeklyGrid({
     onConflict?: (message: string) => void,
   ) {
     setBusy(true)
+    setRefusal(null)
     try {
       const target = workFamily === 'production' ? `${url}?workFamily=production` : url
       const res = await fetch(target, {
@@ -411,9 +423,29 @@ export function WeeklyGrid({
         )
         return null
       }
-      const data = await res.json().catch(() => ({}))
+      const data = (await res.json().catch(() => ({}))) as {
+        error?: unknown
+        remedy?: unknown
+        details?: { setupHref?: unknown } | null
+      }
       if (!res.ok) {
-        toast.error(data?.error ?? tCommon('feedback.somethingWentWrong'))
+        // Designed refusals arrive typed: the message names what failed and
+        // the remedy names the fix, with a shortcut when the fix lives on a
+        // setup page. Anything else falls back to the generic failure. The
+        // refusal pins beside the actions until the next action — a toast
+        // alone vanishes, and the operator reads silence as success.
+        const message =
+          typeof data?.error === 'string' && data.error
+            ? data.error
+            : tCommon('feedback.somethingWentWrong')
+        const remedy = typeof data?.remedy === 'string' && data.remedy ? data.remedy : null
+        const setupHref = data?.details && typeof data.details.setupHref === 'string' && data.details.setupHref.startsWith('/')
+          ? data.details.setupHref
+          : null
+        setRefusal({ message, remedy, setupHref })
+        toast.error(remedy ? `${message}\n${remedy}` : message, {
+          ...(setupHref ? { action: { label: tCommon('actions.open'), onClick: () => router.push(setupHref) } } : {}),
+        })
         return null
       }
       return data as WeekPayload
@@ -661,9 +693,36 @@ export function WeeklyGrid({
             </Button>
           ) : null}
           {canDoApprove ? (
-            <Button size="sm" variant="outline" onClick={onApprove} disabled={busy}>
-              {tCommon('actions.approve')}
-            </Button>
+            <span className="inline-flex flex-col items-start gap-1">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={onApprove}
+                disabled={busy || approveBlockedReason != null}
+                title={approveBlockedReason ?? undefined}
+              >
+                {tCommon('actions.approve')}
+              </Button>
+              {approveBlockedReason ? (
+                <span className="max-w-64 text-xs text-slate-500 dark:text-slate-400">{approveBlockedReason}</span>
+              ) : null}
+            </span>
+          ) : null}
+          {refusal ? (
+            <div
+              role="alert"
+              className="flex w-full flex-wrap items-center gap-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-200"
+            >
+              <span className="min-w-52 flex-1">
+                {refusal.message}
+                {refusal.remedy ? <span className="mt-0.5 block text-xs opacity-90">{refusal.remedy}</span> : null}
+              </span>
+              {refusal.setupHref ? (
+                <Link href={refusal.setupHref} className="text-sm font-medium underline">
+                  {tCommon('actions.open')}
+                </Link>
+              ) : null}
+            </div>
           ) : null}
           {canDoReject ? (
             <Button size="sm" variant="outline" onClick={onReject} disabled={busy}>

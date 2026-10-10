@@ -73,6 +73,18 @@ export interface InboxListContext {
     readonly allowedSubsidiaryIds?: readonly string[] | null;
     readonly includeBudgets?: boolean;
   };
+  /**
+   * Direct timesheet-week approval through the native approval service.
+   * Provided by web callers (which own that service); the timesheet
+   * approval adapter calls it with the week the actor just decided, so the
+   * inbox executes the same command the drawer runs instead of a second
+   * write path. Absent in engine-only contexts, where direct approval
+   * refuses with a remedy naming Timesheets.
+   */
+  readonly approveTimesheetWeek?: (input: {
+    readonly employeePartyId: string;
+    readonly weekStart: string;
+  }) => Promise<void>;
 }
 
 /**

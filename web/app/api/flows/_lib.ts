@@ -204,6 +204,10 @@ export function gateErrorResponse(e: unknown): NextResponse {
     return NextResponse.json({ error: e.message }, { status: 500 });
   }
   if (e instanceof GateError) {
+    // Coded refusals map by code, never by message text.
+    if (e.code === "self_approval_forbidden") {
+      return NextResponse.json({ error: e.message, code: e.code }, { status: 422 });
+    }
     const msg = e.message;
     const status = /not found/.test(msg)
       ? 404
