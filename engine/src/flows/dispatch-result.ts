@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
+import { resolveApprovalRequestNotices } from "./approval-notices.ts";
 import type { RecordFlowsResult, RecordFlowRun } from "./run.ts";
 
 /**
@@ -68,12 +69,13 @@ export async function cancelDispatchRuns(
   const ids = [...new Set(runIds)];
   if (ids.length === 0) return;
   const actorId = opts?.actorId ?? null;
-  await db.execute(sql`
+  const cancelled = await db.execute<{ subject_kind: string; subject_id: string }>(sql`
     update flow_gates set status = 'cancelled', updated_at = now()
       ${actorId ? sql`, updated_by = ${actorId}` : sql``}
      where run_id in (
        select jsonb_array_elements_text(${JSON.stringify(ids)}::jsonb)::uuid
      ) and org_id = ${orgId} and status in ('pending', 'escalated')
+    returning subject_kind, subject_id::text as subject_id
   `);
   await db.execute(sql`
     update flow_runs set status = 'cancelled', finished_at = now(), updated_at = now()
@@ -82,4 +84,9 @@ export async function cancelDispatchRuns(
        select jsonb_array_elements_text(${JSON.stringify(ids)}::jsonb)::uuid
      ) and org_id = ${orgId} and status in ('running', 'waiting')
   `);
+  // Cancelled requests no longer wait on anyone: resolve their notices.
+  const subjects = new Map(cancelled.rows.map((row) => [`${row.subject_kind}:${row.subject_id}`, row]));
+  for (const row of subjects.values()) {
+    await resolveApprovalRequestNotices(orgId, row.subject_kind, row.subject_id);
+  }
 }
