@@ -107,9 +107,11 @@ type ReconcileWorkspaceProps = {
   canReconcile: boolean
   stmtRows: StmtRow[]
   stmtTotal: number
+  stmtOutstandingTotal: string
   stmtParams: PaneParams
   glRows: GlRow[]
   glTotal: number
+  glOutstandingTotal: string
   glParams: PaneParams
   matchedRows: MatchedRow[]
   matchedTotal: number
@@ -129,9 +131,11 @@ function ReconcileWorkspaceForId({
   canReconcile,
   stmtRows,
   stmtTotal,
+  stmtOutstandingTotal,
   stmtParams,
   glRows,
   glTotal,
+  glOutstandingTotal,
   glParams,
   matchedRows,
   matchedTotal,
@@ -150,7 +154,7 @@ function ReconcileWorkspaceForId({
     stmtParams.q, stmtParams.sort, stmtParams.dir, stmtParams.page, stmtParams.perPage,
     glParams.q, glParams.sort, glParams.dir, glParams.page, glParams.perPage,
   ])
-  const [selectedStmt, setSelectedStmt] = useScopedSelection<string | null>(selectionKey, null)
+  const [selectedStmts, setSelectedStmts] = useScopedSelection<Set<string>>(selectionKey, new Set())
   const [selectedGl, setSelectedGl] = useScopedSelection<Set<string>>(selectionKey, new Set())
   const [adjustOpen, setAdjustOpen] = useState(false)
   const adjustThroughDateId = useId()
@@ -174,7 +178,10 @@ function ReconcileWorkspaceForId({
   const zero = isZeroAmount(difference)
   const readOnly = signedOff || !canReconcile
 
-  const stmtSelection = useMemo(() => stmtRows.find((r) => r.id === selectedStmt) ?? null, [stmtRows, selectedStmt])
+  const stmtSelectionSum = useMemo(
+    () => sum(stmtRows.filter((r) => selectedStmts.has(r.id)).map((r) => r.amount)),
+    [stmtRows, selectedStmts],
+  )
   const glSelectionSum = useMemo(
     () => sum(glRows.filter((r) => selectedGl.has(r.id)).map((r) => r.amount)),
     [glRows, selectedGl],
@@ -221,14 +228,14 @@ function ReconcileWorkspaceForId({
   }
 
   async function matchSelected() {
-    if (!selectedStmt || selectedGl.size === 0) return
+    if (selectedStmts.size === 0 || selectedGl.size === 0) return
     const data = await call('POST', `/api/banking/reconciliations/${reconciliation.id}/matches`, {
-      statementLineId: selectedStmt,
+      statementLineIds: [...selectedStmts],
       journalLineIds: [...selectedGl],
     })
     if (!data) return
     toast.success(t('matchedToast'))
-    setSelectedStmt(null)
+    setSelectedStmts(new Set())
     setSelectedGl(new Set())
     router.refresh()
   }
@@ -297,12 +304,12 @@ function ReconcileWorkspaceForId({
               <Trash2 size={15} /> {t('discardSession')}
             </Button>
             <span className="flex-1" />
-            {selectedStmt ? (
+            {selectedStmts.size > 0 || selectedGl.size > 0 ? (
               <span className="text-xs text-slate-600 tabular-nums dark:text-slate-300">
-                {t('selectionSummary', { bank: money(stmtSelection?.amount ?? 0), gl: money(glSelectionSum) })}
+                {t('selectionSummary', { bank: money(stmtSelectionSum), gl: money(glSelectionSum) })}
               </span>
             ) : null}
-            <Button disabled={busy || !selectedStmt || selectedGl.size === 0} onClick={matchSelected}>
+            <Button disabled={busy || selectedStmts.size === 0 || selectedGl.size === 0} onClick={matchSelected}>
               <Link2 size={15} /> {t('matchSelected')}
             </Button>
             <Button disabled={busy || !zero} onClick={signOff} title={zero ? undefined : t('signOffDisabledTitle')}>
@@ -312,14 +319,17 @@ function ReconcileWorkspaceForId({
         )
       )}
 
-      {!signedOff ? (
-        <div className="grid gap-6 xl:grid-cols-2">
-          {/* -------- left: unmatched statement lines -------- */}
+      <div className="grid gap-6 xl:grid-cols-2">
+        {/* -------- left: unmatched statement lines -------- */}
+        {/* Outstanding evidence renders for signed-off sessions too,
+            read-only: a signed-off difference of zero must still show the
+            book entries with no bank line, or state there are none. */}
           <section className="min-w-0 space-y-2">
             <div className="flex flex-wrap items-center gap-2">
               <h2 className={cn(paneTitle, 'mr-auto')}>
                 {t('bankLinesTitle')} <span className="font-normal text-slate-500 dark:text-slate-400">{t('bankLinesCount', { count: stmtTotal })}</span>
               </h2>
+              <span className="text-xs tabular-nums text-slate-500 dark:text-slate-400">{t('outstandingTotal', { total: money(stmtOutstandingTotal) })}</span>
               <SearchInput placeholder={t('searchBankLines')} paramKey="stmtQ" pageParamKey="stmtPage" />
             </div>
             <Table>
@@ -340,22 +350,26 @@ function ReconcileWorkspaceForId({
                   </TableRow>
                 ) : (
                   stmtRows.map((l) => {
-                    const selected = selectedStmt === l.id
+                    const selected = selectedStmts.has(l.id)
+                    const toggleStmt = () => setSelectedStmts((current) => {
+                      const next = new Set(current)
+                      if (next.has(l.id)) next.delete(l.id); else next.add(l.id)
+                      return next
+                    })
                     return (
                       <InteractiveTableRow
                         key={l.id}
                         aria-label={t('selectBankLineAria', { date: l.posted_on, amount: money(l.amount) })}
                         className={cn(!readOnly && 'cursor-pointer', selected && selectedRow)}
-                        onClick={readOnly ? undefined : () => setSelectedStmt(selected ? null : l.id)}
+                        onClick={readOnly ? undefined : toggleStmt}
                       >
                         {!readOnly ? (
                           <TableCell className="w-8">
                             <input
-                              type="radio"
-                              name="stmt-line"
+                              type="checkbox"
                               aria-label={t('selectBankLineAria', { date: l.posted_on, amount: money(l.amount) })}
                               checked={selected}
-                              onChange={() => setSelectedStmt(selected ? null : l.id)}
+                              onChange={toggleStmt}
                               onClick={(e) => e.stopPropagation()}
                               className="accent-teal-700"
                             />
@@ -384,6 +398,7 @@ function ReconcileWorkspaceForId({
               <h2 className={cn(paneTitle, 'mr-auto')}>
                 {t('ledgerLinesTitle')} <span className="font-normal text-slate-500 dark:text-slate-400">{t('ledgerLinesCount', { count: glTotal })}</span>
               </h2>
+              <span className="text-xs tabular-nums text-slate-500 dark:text-slate-400">{t('outstandingTotal', { total: money(glOutstandingTotal) })}</span>
               <SearchInput placeholder={t('searchGlLines')} paramKey="glQ" pageParamKey="glPage" />
             </div>
             <Table>
@@ -447,7 +462,6 @@ function ReconcileWorkspaceForId({
             <Pagination basePath={basePath} currentParams={currentParams} total={glTotal} page={glParams.page} perPage={glParams.perPage} pageParamKey="glPage" />
           </section>
         </div>
-      ) : null}
 
       {/* -------- matched this session -------- */}
       <section className="space-y-2">

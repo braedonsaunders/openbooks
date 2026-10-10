@@ -147,9 +147,11 @@ export interface ReconciliationData {
   }
   stmtRows: ReconcileStmtRow[]
   stmtTotal: number
+  stmtOutstandingTotal: string
   stmtParams: ReconcilePaneParams
   glRows: ReconcileGlRow[]
   glTotal: number
+  glOutstandingTotal: string
   glParams: ReconcilePaneParams
   matchedRows: ReconcileMatchedRow[]
   matchedTotal: number
@@ -269,10 +271,12 @@ export async function loadReconciliation(
   const mWhere = sql`m.reconciliation_id = ${reconciliationId} and m.org_id = ${ctx.orgId}
     ${mParams.q ? sql` and (sl.description ilike ${'%' + mParams.q + '%'} or je.entry_number ilike ${'%' + mParams.q + '%'} or jl.memo ilike ${'%' + mParams.q + '%'})` : sql``}`
 
+  // Outstanding evidence loads for every status including signed_off: a
+  // signed-off session with a posted in-period book entry and no bank line
+  // must show it, not report difference zero over an empty pane. The panes
+  // stay read-only once signed; only their data flows again.
   const [stmtRows, stmtCount, glRows, glCount, mRows, mCount] = (await Promise.all([
-    signedOff
-      ? Promise.resolve({ rows: [] })
-      : db.execute<ReconcileStmtRow>(sql`
+    db.execute<ReconcileStmtRow>(sql`
           select l.id, l.posted_on, l.amount, l.description, l.counterparty_ref
             from bank_statement_lines l
             join bank_statements s on s.id = l.statement_id and s.org_id = l.org_id
@@ -280,15 +284,11 @@ export async function loadReconciliation(
            order by ${STMT_SORTS[stmtParams.sort]} ${stmtParams.dir === 'asc' ? sql`asc` : sql`desc`} nulls last, l.line_number
            limit ${stmtParams.perPage} offset ${(stmtParams.page - 1) * stmtParams.perPage}
         `),
-    signedOff
-      ? Promise.resolve({ rows: [{ n: 0 }] })
-      : db.execute<CountRow>(sql`
-          select count(*) as n from bank_statement_lines l
+    db.execute<CountRow & { total: string }>(sql`
+          select count(*) as n, coalesce(sum(l.amount), 0) as total from bank_statement_lines l
             join bank_statements s on s.id = l.statement_id and s.org_id = l.org_id
            where ${stmtWhere}`),
-    signedOff
-      ? Promise.resolve({ rows: [] })
-      : db.execute<ReconcileGlRow>(sql`
+    db.execute<ReconcileGlRow>(sql`
           select jl.id, je.posting_date, je.entry_number, jl.txn_amount as amount,
                  coalesce(jl.memo, je.memo) as memo, p.display_name as party
             from journal_lines jl
@@ -298,10 +298,8 @@ export async function loadReconciliation(
            order by ${GL_SORTS[glParams.sort]} ${glParams.dir === 'asc' ? sql`asc` : sql`desc`} nulls last, jl.line_number
            limit ${glParams.perPage} offset ${(glParams.page - 1) * glParams.perPage}
         `),
-    signedOff
-      ? Promise.resolve({ rows: [{ n: 0 }] })
-      : db.execute<CountRow>(sql`
-          select count(*) as n from journal_lines jl
+    db.execute<CountRow & { total: string }>(sql`
+          select count(*) as n, coalesce(sum(jl.txn_amount), 0) as total from journal_lines jl
             join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id
            where ${glWhere}`),
     db.execute<ReconcileMatchedRow>(sql`
@@ -383,9 +381,11 @@ export async function loadReconciliation(
     },
     stmtRows: stmtRows.rows,
     stmtTotal: Number(stmtCount.rows[0]?.n ?? 0),
+    stmtOutstandingTotal: String(stmtCount.rows[0]?.total ?? '0'),
     stmtParams,
     glRows: glRows.rows,
     glTotal: Number(glCount.rows[0]?.n ?? 0),
+    glOutstandingTotal: String(glCount.rows[0]?.total ?? '0'),
     glParams,
     matchedRows: mRows.rows,
     matchedTotal: Number(mCount.rows[0]?.n ?? 0),
@@ -436,9 +436,11 @@ export function reconcileSpec(data: ReconciliationData): PageSpec {
         canReconcile: data.canReconcile,
         stmtRows: data.stmtRows,
         stmtTotal: data.stmtTotal,
+        stmtOutstandingTotal: data.stmtOutstandingTotal,
         stmtParams: data.stmtParams,
         glRows: data.glRows,
         glTotal: data.glTotal,
+        glOutstandingTotal: data.glOutstandingTotal,
         glParams: data.glParams,
         matchedRows: data.matchedRows,
         matchedTotal: data.matchedTotal,

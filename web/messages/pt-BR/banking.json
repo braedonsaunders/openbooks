@@ -579,7 +579,8 @@
     },
     "unmatch": "Desfazer correspondência",
     "adjustTitle": "Ajustar conciliação",
-    "adjustDescription": "Altere a data de corte ou o saldo do extrato bancário desta sessão."
+    "adjustDescription": "Altere a data de corte ou o saldo do extrato bancário desta sessão.",
+    "outstandingTotal": "{total} pendente"
   },
   "sftp": {
     "title": "SFTP",

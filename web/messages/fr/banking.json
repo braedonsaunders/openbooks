@@ -579,7 +579,8 @@
     },
     "unmatch": "Annuler l’appariement",
     "adjustTitle": "Ajuster le rapprochement",
-    "adjustDescription": "Modifiez la date limite ou le solde du relevé bancaire pour cette session."
+    "adjustDescription": "Modifiez la date limite ou le solde du relevé bancaire pour cette session.",
+    "outstandingTotal": "{total} en suspens"
   },
   "sftp": {
     "title": "Serveurs SFTP",

@@ -58,7 +58,19 @@ const { ReconcileWorkspace } = await import('./ReconcileWorkspace')
 const tick = () => new Promise((resolve) => setTimeout(resolve, 30))
 const pane = { q: '', sort: 'date', dir: 'asc' as const, page: 1, perPage: 25 }
 
-async function mountWorkspace(t: TestContext, fetchImpl: typeof fetch): Promise<void> {
+async function mountWorkspace(
+  t: TestContext,
+  fetchImpl: typeof fetch,
+  override: {
+    status?: string;
+    stmtRows?: { id: string; posted_on: string; amount: string; description: string | null; counterparty_ref?: string | null }[];
+    stmtTotal?: number;
+    stmtOutstandingTotal?: string;
+    glRows?: { id: string; posting_date: string; entry_number: string; amount: string; memo: string | null; party?: string | null }[];
+    glTotal?: number;
+    glOutstandingTotal?: string;
+  } = {},
+): Promise<void> {
   const prior = globalThis.fetch
   globalThis.fetch = fetchImpl
   t.after(() => {
@@ -83,14 +95,16 @@ async function mountWorkspace(t: TestContext, fetchImpl: typeof fetch): Promise<
             basePath="/banking/acc/reconcile/rec"
             accountPath="/banking/acc"
             currentParams={{}}
-            reconciliation={{ id: 'rec-1', status: 'in_progress', throughDate: '2026-09-10', statementBalance: '17070.01', currency: 'CAD' }}
+            reconciliation={{ id: 'rec-1', status: override.status ?? 'in_progress', throughDate: '2026-09-10', statementBalance: '17070.01', currency: 'CAD' }}
             difference="0.00"
             canReconcile
-            stmtRows={[]}
-            stmtTotal={0}
+            stmtRows={override.stmtRows ?? []}
+            stmtTotal={override.stmtTotal ?? 0}
+            stmtOutstandingTotal={override.stmtOutstandingTotal ?? '0'}
             stmtParams={pane}
-            glRows={[]}
-            glTotal={0}
+            glRows={override.glRows ?? []}
+            glTotal={override.glTotal ?? 0}
+            glOutstandingTotal={override.glOutstandingTotal ?? '0'}
             glParams={pane}
             matchedRows={[]}
             matchedTotal={0}
@@ -192,4 +206,63 @@ test('an unreadable sign-off error body still surfaces the fallback copy', async
     `an empty-body 422 must still toast, got ${JSON.stringify(script.toasts)}`,
   )
   assert.equal(signOffButton().disabled, false, 'the workspace must not wedge busy on an unreadable body')
+})
+
+test('grouped selection posts both sides as one group', async (t) => {
+  const calls: { url: string; body?: string }[] = []
+  await mountWorkspace(t, (async (_input: unknown, init?: RequestInit) => {
+    if (String(_input).includes('/matches') && init?.method === 'POST') {
+      calls.push({ url: String(_input), body: String(init.body) })
+    }
+    return Response.json({ ok: true, totals: { difference: '0.00' } })
+  }) as typeof fetch, {
+    stmtRows: [
+      { id: 'stmt-a', posted_on: '2026-09-01', amount: '-4000.00', description: 'Wire A' },
+      { id: 'stmt-b', posted_on: '2026-09-01', amount: '-4000.00', description: 'Wire B' },
+    ],
+    stmtTotal: 2,
+    stmtOutstandingTotal: '-8000.00',
+    glRows: [{ id: 'gl-1', posting_date: '2026-08-30', entry_number: 'JE-9', amount: '-8000.00', memo: null, party: null }],
+    glTotal: 1,
+    glOutstandingTotal: '-8000.00',
+  })
+  const boxes = [...document.querySelectorAll('input[type="checkbox"]')] as HTMLInputElement[]
+  assert.equal(boxes.length, 3, 'both bank lines and the ledger line offer checkboxes')
+  await act(async () => {
+    for (const box of boxes) box.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
+    for (let i = 0; i < 6; i++) await tick()
+  })
+  const match = [...document.querySelectorAll('button')].find((b) => (b.textContent ?? '').trim() === 'Match selected') as HTMLButtonElement | undefined
+  assert.ok(match, 'the workspace offers Match selected')
+  assert.equal(match.disabled, false, 'a selected group enables Match selected')
+  await act(async () => {
+    match.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
+    for (let i = 0; i < 6; i++) await tick()
+  })
+  const posted = calls.find((c) => c.url.includes('/matches'))
+  assert.ok(posted, 'matching must POST the session matches route')
+  const body = JSON.parse(posted.body ?? '{}') as { statementLineIds?: string[]; journalLineIds?: string[] }
+  assert.deepEqual([...(body.statementLineIds ?? [])].sort(), ['stmt-a', 'stmt-b'], 'both bank lines post as the group')
+  assert.deepEqual(body.journalLineIds, ['gl-1'], 'the ledger side posts with them')
+  assert.ok(
+    script.toasts.some((toast) => toast.kind === 'success'),
+    `the group match must toast success, got ${JSON.stringify(script.toasts)}`,
+  )
+})
+
+test('a signed-off session lists its outstanding items with totals instead of empty panes', async (t) => {
+  await mountWorkspace(t, (async () => Response.json({})) as typeof fetch, {
+    status: 'signed_off',
+    stmtRows: [],
+    stmtTotal: 0,
+    stmtOutstandingTotal: '0',
+    glRows: [{ id: 'gl-orphan', posting_date: '2026-09-05', entry_number: 'JE-7', amount: '250.00', memo: 'Deposit in transit', party: null }],
+    glTotal: 1,
+    glOutstandingTotal: '250.00',
+  })
+  const text = document.body.textContent ?? ''
+  assert.ok(text.includes('Deposit in transit'), 'the orphaned book entry stays visible after sign-off')
+  assert.ok(text.includes('outstanding'), 'the panes name their outstanding totals')
+  assert.ok(!text.includes('Match selected'), 'a signed-off session offers no matching')
+  assert.ok(!text.includes('Sign off'), 'a signed-off session offers no second sign-off')
 })

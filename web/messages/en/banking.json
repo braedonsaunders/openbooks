@@ -586,7 +586,8 @@
     },
     "unmatch": "Unmatch",
     "adjustTitle": "Adjust reconciliation",
-    "adjustDescription": "Change the cutoff date or the bank statement balance for this session."
+    "adjustDescription": "Change the cutoff date or the bank statement balance for this session.",
+    "outstandingTotal": "{total} outstanding"
   },
   "sftp": {
     "title": "SFTP",

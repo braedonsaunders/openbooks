@@ -579,7 +579,8 @@
     },
     "unmatch": "取消匹配",
     "adjustTitle": "调整对账",
-    "adjustDescription": "更改本次会话的截止日期或银行对账单余额。"
+    "adjustDescription": "更改本次会话的截止日期或银行对账单余额。",
+    "outstandingTotal": "未清 {total}"
   },
   "sftp": {
     "title": "SFTP",

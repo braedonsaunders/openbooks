@@ -579,7 +579,8 @@
     },
     "unmatch": "照合を解除",
     "adjustTitle": "消込を調整",
-    "adjustDescription": "このセッションの締め日または銀行明細残高を変更します。"
+    "adjustDescription": "このセッションの締め日または銀行明細残高を変更します。",
+    "outstandingTotal": "未消込 {total}"
   },
   "sftp": {
     "title": "SFTP",

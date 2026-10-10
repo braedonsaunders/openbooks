@@ -579,7 +579,8 @@
     },
     "unmatch": "Deshacer conciliación",
     "adjustTitle": "Ajustar conciliación",
-    "adjustDescription": "Cambie la fecha de corte o el saldo del extracto bancario para esta sesión."
+    "adjustDescription": "Cambie la fecha de corte o el saldo del extracto bancario para esta sesión.",
+    "outstandingTotal": "{total} pendiente"
   },
   "sftp": {
     "title": "Servidores SFTP",
