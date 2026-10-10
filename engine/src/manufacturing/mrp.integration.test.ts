@@ -38,15 +38,15 @@ async function setup(): Promise<Fixture> {
 async function policy(f: Fixture, itemId: string, supplyMethod: "make" | "buy" | "transfer", leadTimeDays: number | null, minimumQty = "0", orderMultipleQty = "0") {
   return tx((runner) => upsertItemPolicy(runner, f.org.orgId, f.actorId, itemId, { supplyMethod, leadTimeDays, safetyStockQty: "0", minimumQty, orderMultipleQty, scrapPctPlanned: "0" }));
 }
-async function orderLine(f: Fixture, kind: "sales_order" | "purchase_order", itemId: string, quantity: string, dueDate: string, subsidiaryId = f.org.subsidiaryId) {
+async function orderLine(f: Fixture, kind: "sales_order" | "purchase_order", itemId: string, quantity: string, dueDate: string, subsidiaryId = f.org.subsidiaryId, departmentId: string | null = null) {
   const id = randomUUID(); const number = `${kind === "sales_order" ? "SO" : "PO"}-${id.slice(0, 8)}`;
   let lineId = "";
   await withBypassContext(async () => {
     const document = await db.execute(sql`insert into documents (id,org_id,kind,document_number,party_id,subsidiary_id,document_date,due_date,currency,status,subtotal,tax_total,total,created_by,updated_by)
       values (${id},${f.org.orgId},${kind},${number},${kind === "sales_order" ? f.org.customerId : f.org.vendorId},${subsidiaryId},${f.org.date},${dueDate},'CAD','draft',${quantity},'0',${quantity},${f.actorId},${f.actorId}) returning id`);
     assert.equal(document.rows.length, 1);
-    const inserted = await db.execute<{ id: string }>(sql`insert into document_lines (org_id,document_id,line_number,account_id,item_id,quantity,unit_price,amount,tax_input_amount,tax_amount,created_by,updated_by)
-      values (${f.org.orgId},${id},1,${kind === "sales_order" ? f.org.accounts.revenue : f.org.accounts.invAsset},${itemId},${quantity},'1',${quantity},${quantity},'0',${f.actorId},${f.actorId}) returning id`);
+    const inserted = await db.execute<{ id: string }>(sql`insert into document_lines (org_id,document_id,line_number,account_id,item_id,department_id,quantity,unit_price,amount,tax_input_amount,tax_amount,created_by,updated_by)
+      values (${f.org.orgId},${id},1,${kind === "sales_order" ? f.org.accounts.revenue : f.org.accounts.invAsset},${itemId},${departmentId},${quantity},'1',${quantity},${quantity},'0',${f.actorId},${f.actorId}) returning id`);
     lineId = inserted.rows[0]?.id ?? "";
     assert.ok(lineId);
     const approved = await db.execute(sql`update documents set status='approved',updated_by=${f.actorId},updated_at=now() where org_id=${f.org.orgId} and id=${id} and status='draft' returning id`);
@@ -66,7 +66,7 @@ async function routing(f: Fixture, itemId: string, capacity = "8", runMinutes = 
   const center = await tx((runner) => createWorkCenter(runner, f.org.orgId, f.actorId, { code, name: code, subsidiaryId: f.org.subsidiaryId, kind: "machine", capacityHoursPerDay: capacity, efficiencyPct: "100", absorbsOverhead: false }));
   const route = await tx((runner) => createRouting(runner, f.org.orgId, f.actorId, { producedItemId: itemId, code: `RT-${randomUUID().slice(0, 8)}`, name: "MRP route", effectiveFrom: "2026-01-01", defaultIssueLocationId: f.org.stockLocationId, defaultReceiptLocationId: f.org.stockLocationId2, overheadBasis: "units" }));
   await tx((runner) => createRoutingOperation(runner, f.org.orgId, f.actorId, String(route.id), { sequence: 1, name: "Build", workCenterId: String(center.id), setupMinutes: "0", runMinutesPerUnit: runMinutes }));
-  await tx((runner) => approveFixtureRouting(runner, f.org.orgId, f.actorId, String(route.id)));
+  await approveFixtureRouting(f.org.orgId, f.actorId, String(route.id));
   return String(center.id);
 }
 async function transitLocation(f: Fixture) {
@@ -80,23 +80,20 @@ async function transitLocation(f: Fixture) {
 }
 
 const cases: Case[] = [
-  {name:'planning refuses hidden demand and supply resources rather than publishing incomplete entity quantities',run:async f=>{
+  ...(['sales_order','purchase_order'] as const).map(kind=>({name:`planning refuses hidden ${kind==='sales_order'?'demand':'supply'} resources rather than publishing incomplete entity quantities`,run:async(f:Fixture)=>{
     const today=await businessToday(f.org.orgId),otherEntity=randomUUID(),otherDepartment=randomUUID();
     await policy(f,f.org.items.assembly,'buy',2);
     await tx(runner=>runner.execute(sql`insert into subsidiaries(id,org_id,parent_id,name,base_currency,country,tax_ids,is_active,is_elimination,custom) values(${otherEntity},${f.org.orgId},${f.org.subsidiaryId},'Restricted planning entity','CAD','CA','{}'::jsonb,true,false,'{}'::jsonb) returning id`));
     await tx(runner=>runner.execute(sql`insert into departments(id,org_id,name,subsidiary_id) values(${otherDepartment},${f.org.orgId},'Restricted demand department',${otherEntity}) returning id`));
-    for(const kind of ['sales_order','purchase_order'] as const) {
-      const source=await orderLine(f,kind,f.org.items.assembly,'3',future(today,20));
-      await tx(runner=>runner.execute(sql`update document_lines set department_id=${otherDepartment} where org_id=${f.org.orgId} and id=${source.lineId} returning id`));
-      await tx(runner=>runner.execute(sql`update app_roles set subsidiary_restriction=${JSON.stringify({mode:'list',subsidiaryIds:[f.org.subsidiaryId]})}::jsonb where org_id=${f.org.orgId} and id in(select role_id from role_assignments where org_id=${f.org.orgId} and user_id=${f.actorId}) returning id`));
-      const before=(await tx(runner=>runner.execute(sql`select id from mfg_mrp_runs where org_id=${f.org.orgId} order by id`))).rows;
-      await assert.rejects(run(f),/not.found/i);
-      assert.deepEqual((await tx(runner=>runner.execute(sql`select id from mfg_mrp_runs where org_id=${f.org.orgId} order by id`))).rows,before);
-      await tx(runner=>runner.execute(sql`update app_roles set subsidiary_restriction='{"mode":"all"}'::jsonb where org_id=${f.org.orgId} and id in(select role_id from role_assignments where org_id=${f.org.orgId} and user_id=${f.actorId}) returning id`));
-      assert((await run(f)).id,'unrestricted planning retains the same genuine source');
-      await tx(runner=>runner.execute(sql`update document_lines set department_id=null where org_id=${f.org.orgId} and id=${source.lineId} returning id`));
-    }
-  }},
+    const source=await orderLine(f,kind,f.org.items.assembly,'3',future(today,20),f.org.subsidiaryId,otherDepartment);
+    await tx(runner=>runner.execute(sql`update app_roles set subsidiary_restriction=${JSON.stringify({mode:'list',subsidiaryIds:[f.org.subsidiaryId]})}::jsonb where org_id=${f.org.orgId} and id in(select role_id from role_assignments where org_id=${f.org.orgId} and user_id=${f.actorId}) returning id`));
+    const before=(await tx(runner=>runner.execute(sql`select id from mfg_mrp_runs where org_id=${f.org.orgId} order by id`))).rows;
+    await assert.rejects(run(f),/not.found/i);
+    assert.deepEqual((await tx(runner=>runner.execute(sql`select id from mfg_mrp_runs where org_id=${f.org.orgId} order by id`))).rows,before);
+    await tx(runner=>runner.execute(sql`update app_roles set subsidiary_restriction='{"mode":"all"}'::jsonb where org_id=${f.org.orgId} and id in(select role_id from role_assignments where org_id=${f.org.orgId} and user_id=${f.actorId}) returning id`));
+    assert((await run(f)).id,'unrestricted planning retains the same genuine source');
+    assert.equal((await tx(runner=>runner.execute<{departmentId:string}>(sql`select department_id as "departmentId" from document_lines where org_id=${f.org.orgId} and id=${source.lineId}`))).rows[0]?.departmentId,otherDepartment,'planning retains the approved source dimensions');
+  }})),
 
   {name:"live planner authority refuses confirmed replay, conversion, dismissal and new runs after grant revocation without changes",run:async f=>{
     const today=await businessToday(f.org.orgId);

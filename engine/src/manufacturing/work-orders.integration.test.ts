@@ -67,7 +67,7 @@ async function route(f: Fixture, itemId: string, from = "2026-01-01", to: string
   await run((tx) => createRoutingOperation(tx, f.org.orgId, f.actorId, String(routing.id), {
     sequence: 10, name: "Assemble", workCenterId: String(center.id), setupMinutes: "5", runMinutesPerUnit: "1",
   }));
-  await run((tx) => approveFixtureRouting(tx, f.org.orgId, f.actorId, String(routing.id)));
+  await approveFixtureRouting(f.org.orgId, f.actorId, String(routing.id));
   return String(routing.id);
 }
 
@@ -92,7 +92,7 @@ const cases: Case[] = [
     const first = await route(f, f.org.items.assembly, "2026-01-01", "2026-06-30");
     const next = await run((tx) => createNextRoutingVersion(tx, f.org.orgId, f.actorId, first));
     await run((tx) => updateRouting(tx, f.org.orgId, f.actorId, String(next.id), { effectiveFrom: "2026-08-01", effectiveTo: null }));
-    await run((tx) => approveFixtureRouting(tx, f.org.orgId, f.actorId, String(next.id)));
+    await approveFixtureRouting(f.org.orgId, f.actorId, String(next.id));
     await route(f, f.org.items.standard);
     const draft = await order(f, f.org.items.assembly, "2026-07-15");
     await refuse(run((tx) => releaseWorkOrder(tx, f.org.orgId, f.actorId, draft.id)), "routing_not_effective", "Assembly");

@@ -75,14 +75,14 @@ const refusalCases: Array<{ name: string; run: (f: Fixture) => Promise<unknown>;
   } },
   { name: "active routing versions cannot be edited", code: "routing_not_draft", phrase: "create a new version", run: async (f) => {
     const wc = await center(f); const rt = await routing(f, f.org.items.fifo); await operation(f, String(rt.id), String(wc.id));
-    await run((tx) => approveFixtureRouting(tx, f.org.orgId, f.actorId, String(rt.id)));
+    await approveFixtureRouting(f.org.orgId, f.actorId, String(rt.id));
     return run((tx) => updateRouting(tx, f.org.orgId, f.actorId, String(rt.id), { name: "Changed" }));
   } },
   { name: "active versions report the other version and effectivity", code: "routing_version_overlap", phrase: "version 1 (2026-01-01 to open-ended)", run: async (f) => {
     const wc = await center(f); const first = await routing(f, f.org.items.assembly, "ROUTING-A"); await operation(f, String(first.id), String(wc.id));
     const next = await run((tx) => createNextRoutingVersion(tx, f.org.orgId, f.actorId, String(first.id)));
-    await run((tx) => approveFixtureRouting(tx, f.org.orgId, f.actorId, String(first.id)));
-    return run((tx) => approveFixtureRouting(tx, f.org.orgId, f.actorId, String(next.id)));
+    await approveFixtureRouting(f.org.orgId, f.actorId, String(first.id));
+    return approveFixtureRouting(f.org.orgId, f.actorId, String(next.id));
   } },
   { name: "archive names open work orders", code: "routing_in_use", phrase: "WO-OPEN-42", run: async (f) => {
     const rt = await routing(f, f.org.items.service);
@@ -122,11 +122,11 @@ test("manufacturing masters create, update, transition, and read their configura
     const op = await operation(f, String(first.id), String(wc.id));
     await run((tx) => updateRoutingOperation(tx, f.org.orgId, f.actorId, String(first.id), String(op.id), { name: "Cut" }));
     await run((tx) => updateRouting(tx, f.org.orgId, f.actorId, String(first.id), { name: "Assembly route", effectiveTo: "2027-01-01" }));
-    await run((tx) => approveFixtureRouting(tx, f.org.orgId, f.actorId, String(first.id)));
+    await approveFixtureRouting(f.org.orgId, f.actorId, String(first.id));
     const second = await run((tx) => createNextRoutingVersion(tx, f.org.orgId, f.actorId, String(first.id)));
     assert.equal(second.operations.length, 1);
     await run((tx) => updateRouting(tx, f.org.orgId, f.actorId, String(second.id), { effectiveFrom: "2027-01-01", effectiveTo: null }));
-    await run((tx) => approveFixtureRouting(tx, f.org.orgId, f.actorId, String(second.id)));
+    await approveFixtureRouting(f.org.orgId, f.actorId, String(second.id));
     await run((tx) => archiveRouting(tx, f.org.orgId, f.actorId, String(first.id)));
     await run((tx) => archiveRouting(tx, f.org.orgId, f.actorId, String(second.id)));
 

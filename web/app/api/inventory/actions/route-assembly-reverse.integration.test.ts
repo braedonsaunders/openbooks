@@ -169,7 +169,7 @@ test("API reverse of a work-order issue reverses every consume leg in the entry"
     await run((tx) => createRoutingOperation(tx, org.orgId, actor, String(routing.id), {
       sequence: 10, name: "Assemble", workCenterId: String(center.id), setupMinutes: "0", runMinutesPerUnit: "1",
     }));
-    await run((tx) => approveFixtureRouting(tx, org.orgId, actor, String(routing.id)));
+    await approveFixtureRouting(org.orgId, actor, String(routing.id));
     const order = await run((tx) => createWorkOrder(tx, org.orgId, actor, {
       producedItemId: org.items.assembly, quantityOrdered: "1", subsidiaryId: org.subsidiaryId,
       issueLocationId: org.stockLocationId, receiptLocationId: org.stockLocationId2, plannedStart: org.date,

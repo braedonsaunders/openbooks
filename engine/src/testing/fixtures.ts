@@ -1028,6 +1028,11 @@ const CORE_B = [
   "stock_locations",
   "locations",
   "projects",
+  // Projects pin profile versions; the profile's deferred current-version
+  // reference permits both profile parents to leave in this same transaction.
+  "operating_profile_scopes",
+  "operating_profile_versions",
+  "operating_profiles",
   "project_types",
   "time_types",
   // equipment_units.charge_item_id references items.
