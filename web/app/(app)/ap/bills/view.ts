@@ -19,7 +19,8 @@ import { listScopedPartyOptionsWithCurrent } from "../../../../lib/scoped-option
 import { loadDocument } from "../../../../../engine/src/ledger/document-service.ts";
 import { loadFieldDefs } from '../../../../lib/custom-fields'
 import { isFeatureEnabled } from '../../../../lib/features'
-import { isMultiSubsidiary, subsidiaryOptions } from '../../../../lib/subsidiaries'
+import { isMultiSubsidiary, subsidiaryOptions, subsidiaryVisibleFilter } from '../../../../lib/subsidiaries'
+import { contractorWithholdingScheme } from '@openbooks/engine/country-tax-packs'
 import { isUuid, pickString } from '../../../../lib/list-params'
 import { resolveFormLayout } from '../../../../lib/customization/resolve'
 import { documentSettlementHref } from '../../../../lib/settlement-href'
@@ -67,6 +68,9 @@ export interface ApBillsDrawer {
   lineDefs: unknown
   canCreate: boolean
   canPost: boolean
+  /** Active contractor-withholding scheme codes covering the bill's scope.
+   *  Empty hides the drawer's withholding line columns and scheme guidance. */
+  withholdingSchemes: { code: string }[]
   initialMode: 'edit' | 'view'
   layout: unknown
   availableLayouts: unknown
@@ -229,6 +233,22 @@ export async function loadApBills(
     ;(createSeed.doc as Record<string, unknown>).party_id = requestedCreateParty
   }
   const drawerPayload = openDoc ?? createSeed
+  // Contractor-withholding line classification is registration-gated: the
+  // drawer offers its treatment and direct-materials columns only when an
+  // active enrollment covers the bill's scope. Entry classification needs
+  // only an active registration — payment-time deduction is where the engine
+  // date-checks effectiveness — and unknown scheme codes never reach the
+  // drawer, so only pack-declared schemes qualify.
+  const withholdingSchemes = drawerOpen
+    ? (await db.execute<{ schemeCode: string }>(sql`
+        select distinct e.scheme_code as "schemeCode" from withholding_enrollments e
+         where e.org_id = ${authz.user.orgId} and e.is_active
+           ${subsidiaryVisibleFilter(sql`e.subsidiary_id`, documentOptionScope)}
+         order by 1`)).rows
+      .map((row) => row.schemeCode)
+      .filter((code) => contractorWithholdingScheme(code) !== undefined)
+      .map((code) => ({ code }))
+    : []
 
   const dimensions = pickers?.[4] as
     | {
@@ -264,6 +284,7 @@ export async function loadApBills(
           lineDefs,
           canCreate,
           canPost: can(authz, 'ap.post'),
+          withholdingSchemes,
           initialMode: (isCreate || pickString(sp.mode) === 'edit' ? 'edit' : 'view') as 'edit' | 'view',
           layout: resolvedForm.layout,
           availableLayouts: resolvedForm.available,

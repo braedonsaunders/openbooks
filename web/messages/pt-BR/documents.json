@@ -6,7 +6,7 @@
     "materials": "Materiais",
     "excluded": "Excluído",
     "directCost": "Custo direto dos materiais",
-    "directCostHelp": "Nas linhas de materiais CIS, informe o custo direto do subcontratado na moeda da fatura, comprovado por recibos ou uma estimativa. Exclua a margem. Inclua o IVA não recuperável dos materiais se o subcontratado não estiver registrado para IVA. Informe zero se nenhum custo direto for elegível; a classificação do item não fornece esse custo.",
+    "directCostHelp": "Informe o custo direto de materiais do subcontratado na moeda da fatura, comprovado por recibos ou uma estimativa. Exclua a margem. Informe zero se nenhum custo direto for elegível; a classificação do item não fornece esse custo.",
     "splitRefusal": "Corrija os custos diretos dos materiais antes de dividir ou combinar linhas."
   },
   "list": {

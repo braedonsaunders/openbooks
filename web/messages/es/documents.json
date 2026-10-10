@@ -6,7 +6,7 @@
     "materials": "Materiales",
     "excluded": "Excluido",
     "directCost": "Coste directo de materiales",
-    "directCostHelp": "Para las líneas de materiales CIS, indique el coste directo del subcontratista en la moneda de la factura, respaldado por recibos o una estimación. Excluya el margen. Incluya el IVA no recuperable de materiales si el subcontratista no está registrado a efectos del IVA. Introduzca cero si ningún coste directo cumple los requisitos; la clasificación del artículo no proporciona este coste.",
+    "directCostHelp": "Indique el coste directo de materiales del subcontratista en la moneda de la factura, respaldado por recibos o una estimación. Excluya el margen. Introduzca cero si ningún coste directo cumple los requisitos; la clasificación del artículo no proporciona este coste.",
     "splitRefusal": "Corrija los costes directos de materiales antes de dividir o combinar líneas."
   },
   "list": {

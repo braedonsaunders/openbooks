@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
   auditCountryNeutrality,
+  auditWithholdingGating,
   isPackPath,
   isScopedPath,
   isTaxLayerPath,
@@ -195,4 +196,39 @@ test('the audit rejects a country branch inside the tax layer', () => {
 test('isScopedPath is unscoped', () => {
   assert.equal(isScopedPath('scripts/check-country-neutrality.mjs'), false)
   assert.equal(isScopedPath('schema/migrations/generated/0147_gst34_box_basis_heal.sql'), false)
+})
+
+test('withholding line UI without the enrollment gate fails Rule 3', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'country-neutrality-withholding-'))
+  try {
+    const treatment = join(dir, 'bill-grid.tsx')
+    writeFileSync(treatment, `if (kind === 'vendor_bill') cols.push({ key: 'withholdingTreatment' })\n`)
+    const materials = join(dir, 'bill-layout.tsx')
+    writeFileSync(materials, `const help = tWithholding('directCostHelp')\nconst key = 'withholdingMaterialsCost'\n`)
+    const namespaced = join(dir, 'notice.tsx')
+    writeFileSync(namespaced, `const label = t('documents.withholdingLine.treatment')\nconst copy = messages.withholdingLine.directCost\n`)
+    // The gate token beside the UI reference passes: the columns render only
+    // behind loader-resolved registrations, never by default.
+    const gated = join(dir, 'gated-grid.tsx')
+    writeFileSync(
+      gated,
+      `const show = (withholdingSchemes?.length ?? 0) > 0\nif (show) cols.push({ key: 'withholdingTreatment' })\n`,
+    )
+    // Validation and arithmetic keep the fields unconditionally: they store
+    // and compute, never render — and .ts files are outside Rule 3's scope.
+    const schema = join(dir, 'edit-schema.ts')
+    writeFileSync(schema, `withholdingTreatment: z.enum(["labour"]).nullable()\n`)
+
+    assert.deepEqual(auditWithholdingGating([treatment, materials, namespaced, gated, schema], { roots: [dir] }), [
+      `${treatment}:1: withholding line UI without the enrollment gate (withholdingSchemes)`,
+      `${materials}:2: withholding line UI without the enrollment gate (withholdingSchemes)`,
+      `${namespaced}:1: withholding line UI without the enrollment gate (withholdingSchemes)`,
+    ])
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+test('the fixed bill drawer carries the enrollment gate', () => {
+  assert.deepEqual(auditWithholdingGating(['web/components/document-drawer.tsx']), [])
 })

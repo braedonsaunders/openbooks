@@ -32,6 +32,16 @@ import { pathToFileURL } from "node:url";
 // is empty and the ratchet keeps it so. The list may only shrink — a stale
 // entry (a path that no longer names a country) fails the gate.
 //
+// Rule 3 — withholding line UI renders only behind an enrollment gate. The
+// vendor-bill line grid once showed contractor-withholding treatment and
+// direct-materials columns (with scheme-specific guidance) on every bill in
+// every organization: a US company with no withholding registration saw UK
+// scheme copy by default. Column fields and their message namespace may be
+// named by a rendering file (*.tsx) only alongside the enrollment gate
+// (`withholdingSchemes`, the loader-resolved active registrations for the
+// bill's scope). Domain arithmetic, validation schemas and the ledger keep
+// the fields unconditionally — they store and compute, never render.
+//
 // What the gate does NOT cover, by decision: SQL migrations (data history
 // legitimately names forms — 0147 healed CA_GST34 rows by code), `??`/`||`
 // fallthrough defaults, and per-country UI copy in locale catalogs.
@@ -47,6 +57,14 @@ const countryComparison = new RegExp(
   `(===|!==)\\s*['"](${COUNTRY_CODE})['"]|['"](${COUNTRY_CODE})['"]\\s*(===|!==)`,
 );
 const countryCase = new RegExp(`case\\s*['"](${COUNTRY_CODE})['"]\\s*:`);
+
+// Rule 3: naming a withholding line-grid field (or its message namespace) in
+// a rendering file without naming the enrollment gate beside it. The gate
+// token is the prop, not a scheme code: branching on a code (GB_CIS, ...)
+// stays Rule 1's business, and no generic file may do it.
+const withholdingUiReference = /\bwithholding(Treatment|MaterialsCost|Line)\b/;
+const withholdingGateReference = /\bwithholdingSchemes\b/;
+const renderingSourcePattern = /\.tsx$/i;
 
 const executableSourcePattern = /\.(?:[cm]?[jt]sx?)$/i;
 const fixtureSourcePattern =
@@ -209,6 +227,53 @@ export function auditCountryNeutrality(publicFiles, overrides = {}) {
   return violations;
 }
 
+/**
+ * Audit rendering files for ungated withholding line UI (Rule 3) and return
+ * every violation as a human-readable line. Exported so the gate's policy is
+ * testable without a git fixture, mirroring auditCountryNeutrality.
+ */
+export function auditWithholdingGating(publicFiles, overrides = {}) {
+  const roots = overrides.roots ?? scopedRoots;
+  const violations = [];
+
+  for (const filePath of publicFiles) {
+    if (!renderingSourcePattern.test(filePath)) continue;
+    if (fixtureSourcePattern.test(filePath)) continue;
+    if (!isScopedPath(filePath, roots)) continue;
+    if (isPackPath(filePath)) continue;
+
+    let source;
+    try {
+      source = readFileSync(filePath, "utf8");
+    } catch {
+      continue;
+    }
+    if (source.includes("\0")) continue;
+
+    const lines = source.split("\n");
+    let namesUi = false;
+    let namesGate = false;
+    let firstUiLine = 0;
+    for (let index = 0; index < lines.length; index += 1) {
+      const line = lines[index];
+      if (line.trimStart().startsWith("//") || line.trimStart().startsWith("*")) continue;
+      if (!namesUi && withholdingUiReference.test(line)) {
+        namesUi = true;
+        firstUiLine = index + 1;
+      }
+      if (withholdingGateReference.test(line)) namesGate = true;
+      if (namesUi && namesGate) break;
+    }
+    if (namesUi && !namesGate) {
+      violations.push(
+        `${filePath}:${firstUiLine}: withholding line UI without the enrollment gate (withholdingSchemes)`,
+      );
+    }
+  }
+
+  return violations;
+}
+
 function discoverPublicFiles() {
   return execFileSync("git", ["ls-files", "--cached", "--others", "--exclude-standard", "-z"], {
     encoding: "utf8",
@@ -219,7 +284,7 @@ function discoverPublicFiles() {
 
 function main() {
   const files = discoverPublicFiles();
-  const violations = auditCountryNeutrality(files);
+  const violations = [...auditCountryNeutrality(files), ...auditWithholdingGating(files)];
   const stale = staleCountryLiteralExemptions(files);
 
   if (violations.length > 0 || stale.length > 0) {
