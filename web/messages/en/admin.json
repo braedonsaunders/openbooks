@@ -921,6 +921,12 @@
           "label": "Stored value liability",
           "hint": "Gift card and store credit balances owed to customers"
         }
+      },
+      "partylessPolicy": {
+        "label": "Journal or deposit lines on receivable/payable accounts without a customer or vendor",
+        "hint": "Such a line changes the GL balance without an open item, so aging, statements and open balances stop agreeing with the GL. Warn posts it and shows the remedy; Refuse blocks the posting and directs the user to Receive payment, Pay bills, or naming the party on the line. Applies to new postings only.",
+        "warn": "Warn and post",
+        "refuse": "Refuse the posting"
       }
     },
     "revenue": {

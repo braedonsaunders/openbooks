@@ -1306,6 +1306,10 @@ export function DocumentDrawer({
   // preference writes all run on the shared action path, whose busy flag
   // always releases through its own finally.
   const { busy, refusal, execute, refuse, runExclusive } = useAppAction()
+  // Warnings a successful post reports (a deposit line on a receivable or
+  // payable account with no party, accepted under the "warn" policy). They
+  // pin beside the record until the next lifecycle action.
+  const [postWarnings, setPostWarnings] = useState<string[]>([])
 
   const nativeGoods = config.kind==='customer_invoice' && customValues.canadianGoodsTax && typeof customValues.canadianGoodsTax==='object'
     ? customValues.canadianGoodsTax as {deliveryProvince:string;deliveryMethod:string;agreementEvidence:string} : null
@@ -2261,6 +2265,7 @@ export function DocumentDrawer({
       })
       if (!confirmed) return
     }
+    setPostWarnings([])
     await execute(
       () =>
         fetchAction('/api/documents/actions', {
@@ -2271,10 +2276,23 @@ export function DocumentDrawer({
       {
         fallbackMessage: t('toasts.actionFailed'),
         onOk: (data) => {
-          const pendingApproval =
-            (data as { pendingApproval?: unknown } | null)?.pendingApproval === true
+          const result = data as {
+            pendingApproval?: unknown
+            warnings?: { code: string; accounts?: { accountNumber: string | null; accountName: string }[] }[]
+          } | null
+          const pendingApproval = result?.pendingApproval === true
           if (pendingApproval) toast.success(t('toasts.submitted'))
           else toast.success(action === 'submit' ? t('toasts.submitted') : t('toasts.posted'))
+          const partyless = (result?.warnings ?? []).find((warning) => warning.code === 'partyless_control_lines')
+          if (partyless?.accounts?.length) {
+            setPostWarnings([
+              t('drawer.partylessControlWarning', {
+                accounts: partyless.accounts
+                  .map((account) => `${account.accountNumber ?? ''} ${account.accountName}`.trim())
+                  .join(', '),
+              }),
+            ])
+          }
           router.refresh()
         },
         onRefused: (error) => {
@@ -3199,6 +3217,11 @@ export function DocumentDrawer({
     >
       <div className="space-y-6 p-1">
         <ActionAlert error={refusal} fallbackMessage={t('toasts.actionFailed')} />
+        {postWarnings.map((warning, index) => (
+          <p key={index} role="alert" className="rounded-md border border-amber-200 bg-amber-50 p-2.5 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300">
+            {warning}
+          </p>
+        ))}
           {config.kind==='customer_invoice' && (editable || nativeGoods) ? <div className="space-y-3 border-b p-4">
             <div className="space-y-1"><FieldLabel fieldName={tCommon('nativeGoodsTax.title')}>{tCommon('nativeGoodsTax.title')}</FieldLabel>
               {editable ? <Select value={nativeGoods ? 'native' : 'manual'} onChange={event=>setCustomValues(values=>({...values,canadianGoodsTax:event.target.value==='native'

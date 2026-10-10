@@ -18,6 +18,7 @@ import {
   periodDerivationSql,
   periodDerivationStagingSql,
 } from "./fiscal-periods";
+import { PARTYLESS_CONTROL_POLICIES, parsePartylessControlPolicy, type PartylessControlPolicy } from "@openbooks/engine/src/ledger/partyless-control-policy.ts";
 
 
 /** Transport-neutral outcome: the HTTP status the route would answer with and
@@ -122,6 +123,9 @@ export async function readCompanySettings(orgId: string): Promise<CompanySetting
       requireStockCountReview:
         (settings.approvals as Record<string, unknown> | undefined)
           ?.requireStockCountReview === true,
+      partylessControlPolicy: parsePartylessControlPolicy(
+        (settings.ledger as Record<string, unknown> | undefined)?.partylessControlPolicy,
+      ),
       // A gated feature's settings stay hidden while the gate is off; the
       // stored values are kept and reappear with the switch.
       ...((await isFeatureEnabled(orgId, "cashSales"))
@@ -162,6 +166,7 @@ export async function updateCompanySettings(
     saasMetrics?: unknown;
     requireVendorBillApproval?: unknown;
     requireStockCountReview?: unknown;
+    partylessControlPolicy?: unknown;
   };
 
   // This feature probe does not contribute persisted state. Do it before the
@@ -196,6 +201,7 @@ export async function updateCompanySettings(
       "taxFramework",
       "controlAccounts",
       "timeZone",
+      "partylessControlPolicy",
     ];
     if (postingPolicyKeys.some((key) => body[key] !== undefined)) {
       await lockLedgerSetupFence(tx, orgId, "exclusive");
@@ -708,6 +714,23 @@ export async function updateCompanySettings(
           requireStockCountReview: body.requireStockCountReview,
         };
         changes.requireStockCountReview = [curRequired, body.requireStockCountReview];
+        settingsChanged = true;
+      }
+    }
+    // --- direct receivable/payable postings (journals and deposits) ---
+    // Whether a manual journal or deposit line on a receivable or payable
+    // account that names no customer or vendor posts with a warning or is
+    // refused at posting. It gates new postings only; posted history is
+    // never re-evaluated. Absent reads as "warn".
+    if (body.partylessControlPolicy !== undefined) {
+      if (!PARTYLESS_CONTROL_POLICIES.includes(body.partylessControlPolicy as PartylessControlPolicy)) {
+        return { status: 400, body: { error: "partylessControlPolicy must be 'warn' or 'refuse'" } };
+      }
+      const curLedger = (settings.ledger ?? {}) as Record<string, unknown>;
+      const curPolicy = parsePartylessControlPolicy(curLedger.partylessControlPolicy);
+      if (body.partylessControlPolicy !== curPolicy) {
+        nextSettings.ledger = { ...curLedger, partylessControlPolicy: body.partylessControlPolicy };
+        changes.partylessControlPolicy = [curPolicy, body.partylessControlPolicy];
         settingsChanged = true;
       }
     }

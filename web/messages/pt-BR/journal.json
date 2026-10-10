@@ -75,7 +75,7 @@
     "referenceNumberHint": "Número externo deste lançamento — documento fonte ou referência do extrato. Exibido ao lado do número do lançamento.",
     "memoHint": "Narração interna gravada no lançamento. Exibida no diário e na trilha de auditoria.",
     "noParty": "Sem parte",
-    "partylessControlWarning": "Lançado sem contraparte em {accounts}. Esses saldos ficam fora de qualquer sub-razão de clientes ou fornecedores — ver a linha (sem contraparte) do aging.",
+    "partylessControlWarning": "Lançado sem contraparte em {accounts}. Esses saldos ficam fora de qualquer sub-razão de clientes ou fornecedores — ver a linha (sem contraparte) do aging. Registre recebimentos de clientes com Receber pagamento e pagamentos a fornecedores com Pagar contas, ou informe o cliente ou fornecedor na linha. Configuração → Empresa e Contabilidade → Contas de controle pode recusar esses lançamentos.",
     "accountPlaceholder": "Conta…",
     "lineMissingAccount": "Linha {line}: selecione uma conta.",
     "columns": {

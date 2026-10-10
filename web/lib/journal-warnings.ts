@@ -16,10 +16,12 @@ export interface PartylessControlLine {
 
 /**
  * Posted entry legs on an AR/AP control account that name no customer or
- * vendor. The posting itself stays legitimate — a party-less
- * control leg is real GL activity — but it sits outside every subledger, so
- * the post response must carry the warning instead of accepting the journal
- * silently. One row per leg, in line order.
+ * vendor. Under the organization's "warn" policy the posting stands — a
+ * party-less control leg is real GL activity — but it sits outside every
+ * subledger, so the post response must carry the warning instead of
+ * accepting the journal or deposit silently ("refuse" stops it at posting).
+ * The project-tracked retainage controls are exempt, exactly as the posting
+ * policy exempts them. One row per leg, in line order.
  */
 export async function partylessControlLines(orgId: string, entryId: string): Promise<PartylessControlLine[]> {
   const r = await db.execute<{
@@ -28,8 +30,11 @@ export async function partylessControlLines(orgId: string, entryId: string): Pro
     select a.id as account_id, a.number as account_number, a.name as account_name, l.amount::text as amount
       from journal_lines l
       join accounts a on a.id = l.account_id and a.org_id = l.org_id
+      join orgs o on o.id = l.org_id
      where l.org_id = ${orgId} and l.entry_id = ${entryId}
        and a.type in ('asset_receivable', 'liability_payable')
+       and a.id::text is distinct from nullif(o.settings->'controlAccounts'->>'retainageReceivable', '')
+       and a.id::text is distinct from nullif(o.settings->'controlAccounts'->>'retainagePayable', '')
        and l.party_id is null
      order by a.number nulls last, l.line_number
   `);

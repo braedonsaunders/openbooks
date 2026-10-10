@@ -921,7 +921,13 @@
           "hint": "Offene Geschenkkarten- und Kundenguthaben gegenüber Kunden"
         }
       },
-      "defaultsNote": "Dies sind die unternehmensweiten Standards. Jede Tochtergesellschaft kann sie in ihrem eigenen Datensatz überschreiben; leere Überschreibungen fallen auf diese zurück."
+      "defaultsNote": "Dies sind die unternehmensweiten Standards. Jede Tochtergesellschaft kann sie in ihrem eigenen Datensatz überschreiben; leere Überschreibungen fallen auf diese zurück.",
+      "partylessPolicy": {
+        "label": "Journal- oder Einzahlungszeilen auf Forderungs-/Verbindlichkeitskonten ohne Kunde oder Lieferant",
+        "hint": "Eine solche Zeile ändert den Hauptbuchsaldo ohne offenen Posten, sodass Altersliste, Kontoauszüge und offene Salden nicht mehr mit dem Hauptbuch übereinstimmen. „Warnen“ bucht die Zeile und zeigt die Abhilfe; „Ablehnen“ verhindert die Buchung und verweist auf „Zahlung erfassen“, „Rechnungen bezahlen“ oder die Angabe des Partners auf der Zeile. Gilt nur für neue Buchungen.",
+        "warn": "Warnen und buchen",
+        "refuse": "Buchung ablehnen"
+      }
     },
     "revenue": {
       "title": "Umsatzrealisierung",

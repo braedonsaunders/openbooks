@@ -921,7 +921,13 @@
           "hint": "Soldes de cartes-cadeaux et d’avoirs dus aux clients"
         }
       },
-      "defaultsNote": "Ce sont les valeurs par défaut de toute l’entreprise. Chaque filiale peut les remplacer sur sa propre fiche ; les remplacements vides reprennent celles-ci."
+      "defaultsNote": "Ce sont les valeurs par défaut de toute l’entreprise. Chaque filiale peut les remplacer sur sa propre fiche ; les remplacements vides reprennent celles-ci.",
+      "partylessPolicy": {
+        "label": "Lignes d’écriture ou de dépôt sur des comptes clients/fournisseurs sans client ni fournisseur",
+        "hint": "Une telle ligne modifie le solde du grand livre sans pièce ouverte : la balance âgée, les relevés et les soldes ouverts ne concordent plus avec le grand livre. Avertir comptabilise la ligne et affiche la solution ; Refuser bloque la comptabilisation et renvoie vers Recevoir un paiement, Payer des factures ou l’indication du tiers sur la ligne. S’applique uniquement aux nouvelles comptabilisations.",
+        "warn": "Avertir et comptabiliser",
+        "refuse": "Refuser la comptabilisation"
+      }
     },
     "revenue": {
       "title": "Comptabilisation des produits",

@@ -40,6 +40,7 @@ import { resolveProviderTaxPlans, resolveShipToSnapshot } from "./posting-provid
 import { applySubsidiaries } from "./posting-subsidiaries.ts";
 import { resolveInternalBillingPostingContext } from "./internal-billing-posting.ts";
 import { documentControlChoice, resolveDocumentControlAccount } from "./posting-control-account.ts";
+import { assertPartylessControlPolicy } from "./partyless-control-policy.ts";
 
 import { postingEffectSubsidiaryId } from "./posting-dispatch.ts";
 import type { PostDocumentOptions } from "../journal/posting-contracts.ts";
@@ -463,6 +464,13 @@ export async function prepareDocumentPosting(documentId: string, deps: PostingDe
       `posting rule for ${doc.kind} does not balance (sum=${total})`,
     );
   }
+
+  // -- direct receivable/payable postings ---------------------------------
+  // A manual journal or deposit line on a receivable/payable account with no
+  // customer or vendor bypasses the sub-ledger. The organization's policy
+  // decides whether that posts with a warning or is refused here, before any
+  // automation or ledger write. Historical replay reproduces the source.
+  if (!deps.migration) await assertPartylessControlPolicy(db, effectiveDoc, kernelLines);
 
   // -- allocation kernel: post-mode RULE contributions --------------------
   // Rules in effect on the posting date contribute dimensional-attribution /

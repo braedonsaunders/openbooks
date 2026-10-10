@@ -51,6 +51,9 @@ type Initial = {
   requireVendorBillApproval: boolean
   requireStockCountReview: boolean
   controlAccounts: Partial<Record<ControlAccountRole, string>>
+  /** Journal/deposit lines on a receivable or payable account with no
+   *  customer or vendor: post with a warning, or refuse at posting. */
+  partylessControlPolicy?: 'warn' | 'refuse'
   cashSales?: {
     walkInCustomerId: string
     defaultCashAccountId: string
@@ -615,6 +618,21 @@ export function SettingsForm({
               </div>
             )
           })}
+          <div className="space-y-1.5">
+            <FieldLabel htmlFor="partylessControlPolicy" help={t('controlAccounts.partylessPolicy.hint')}>
+              {t('controlAccounts.partylessPolicy.label')}
+            </FieldLabel>
+            <Select
+              id="partylessControlPolicy"
+              value={form.partylessControlPolicy ?? 'warn'}
+              onChange={(e) =>
+                setForm((f) => ({ ...f, partylessControlPolicy: e.target.value === 'refuse' ? 'refuse' : 'warn' }))
+              }
+            >
+              <option value="warn">{t('controlAccounts.partylessPolicy.warn')}</option>
+              <option value="refuse">{t('controlAccounts.partylessPolicy.refuse')}</option>
+            </Select>
+          </div>
         </CardContent>
       </Card>
 

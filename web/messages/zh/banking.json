@@ -507,7 +507,8 @@
     "formPreferredFailed": "无法保存首选表单",
     "cardAccountHelp": "未登记卡 — 请选择用于过账的可对账卡账户。",
     "noCardAccounts": "暂无可对账的卡账户。",
-    "noCardAccountsCta": "在会计科目表中添加"
+    "noCardAccountsCta": "在会计科目表中添加",
+    "partylessControlWarning": "已过账到 {accounts}，但未指定客户或供应商。这些金额不在应收和应付明细账中，未结发票和账单仍显示未付。请使用“收款”登记客户收款、使用“支付账单”登记供应商付款，或在该行指定客户或供应商。可在“设置 → 公司与会计 → 控制科目”中设置拒绝此类过账。"
   },
   "reconcile": {
     "title": "对账截至 {date}",

@@ -16,6 +16,7 @@ import { ApprovalRoutingError } from '../../../../lib/approval-routing-error'
 import { isDocKindEnabled } from "../../../../lib/documents.ts";
 import { toActionFailure } from './action-failure'
 import { notFound, postingRefusal } from "@/lib/api/responses";
+import { partylessControlLines } from '../../../../lib/journal-warnings'
 const POSTBodySchema = z.discriminatedUnion('action', [
   z.object({ action: z.literal('submit'), documentId: z.string().uuid() }),
   z.object({ action: z.literal('post'), documentId: z.string().uuid() }),
@@ -298,7 +299,15 @@ export const POST = defineRoute({
             deferEffects: true,
             audit: { actorId: user.id, source: 'ui' },
           })
-          return { kind: 'posted' as const, entryId, previousStatus }
+          // A deposit line on a receivable/payable account that names no
+          // customer or vendor posted under the organization's "warn" policy:
+          // report it on the response, read through this transaction's handle
+          // so it describes exactly the posting that committed.
+          const partyless = current.kind === 'deposit' ? await partylessControlLines(user.orgId, entryId) : []
+          const warnings = partyless.length > 0
+            ? [{ code: 'partyless_control_lines' as const, accounts: partyless }]
+            : []
+          return { kind: 'posted' as const, entryId, previousStatus, warnings }
         })
         if (outcome.kind === 'not_found') {
           return notFound("record")
@@ -322,7 +331,7 @@ export const POST = defineRoute({
           )
         }
         await runPostDocumentEffects(doc.id, outcome.previousStatus)
-        return NextResponse.json({ ok: true, entryId: outcome.entryId })
+        return NextResponse.json({ ok: true, entryId: outcome.entryId, warnings: outcome.warnings })
       } catch (e) {
         // Typed refusals (kernel rules, unconfigured control accounts, payroll
         // domain) keep their message (422) — the operator can act on them.

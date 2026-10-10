@@ -507,7 +507,8 @@
     "formPreferredFailed": "Não foi possível salvar o formulário preferido",
     "cardAccountHelp": "Sem cartões cadastrados — selecione a conta de cartão conciliável para lançar.",
     "noCardAccounts": "Ainda não há contas de cartão conciliáveis.",
-    "noCardAccountsCta": "Adicione uma no plano de contas"
+    "noCardAccountsCta": "Adicione uma no plano de contas",
+    "partylessControlWarning": "Lançado sem cliente ou fornecedor em {accounts}. Esses valores ficam fora dos sub-razões de contas a receber e a pagar, então faturas e contas em aberto continuam pendentes. Registre recebimentos de clientes com Receber pagamento e pagamentos a fornecedores com Pagar contas, ou informe o cliente ou fornecedor na linha. Configuração → Empresa e Contabilidade → Contas de controle pode recusar esses lançamentos."
   },
   "reconcile": {
     "title": "Conciliar até {date}",

@@ -75,7 +75,7 @@
     "referenceNumberHint": "Externe Nummer dieses Eintrags — Quellbeleg oder Kontoauszugsreferenz. Wird neben der Buchungsnummer angezeigt.",
     "memoHint": "Interne Buchungserläuterung. Wird in der Journalübersicht und im Prüfpfad angezeigt.",
     "noParty": "Keine Partei",
-    "partylessControlWarning": "Ohne Partner auf {accounts} gebucht. Diese Salden stehen außerhalb aller Kunden- oder Lieferanten-Nebenbücher — siehe Zeile (kein Partner) in der Alterungsliste.",
+    "partylessControlWarning": "Ohne Partner auf {accounts} gebucht. Diese Salden stehen außerhalb aller Kunden- oder Lieferanten-Nebenbücher — siehe Zeile (kein Partner) in der Alterungsliste. Erfassen Sie Kundeneingänge mit „Zahlung erfassen“ und Lieferantenzahlungen mit „Rechnungen bezahlen“ oder geben Sie den Kunden bzw. Lieferanten auf der Zeile an. Unter Einrichtung → Unternehmen & Buchhaltung → Kontrollkonten lassen sich solche Buchungen ablehnen.",
     "accountPlaceholder": "Konto…",
     "lineMissingAccount": "Zeile {line}: Wählen Sie ein Konto aus.",
     "columns": {
