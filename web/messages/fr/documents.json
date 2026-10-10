@@ -6,7 +6,7 @@
     "materials": "Matériaux",
     "excluded": "Exclu",
     "directCost": "Coût direct des matériaux",
-    "directCostHelp": "Pour les lignes de matériaux CIS, saisissez le coût direct du sous-traitant dans la devise de la facture, justifié par des reçus ou une estimation. Excluez la marge. Incluez la TVA non récupérable sur les matériaux si le sous-traitant n’est pas assujetti à la TVA. Saisissez zéro si aucun coût direct n’est admissible ; la classification de l’article ne fournit pas ce coût.",
+    "directCostHelp": "Saisissez le coût direct des matériaux du sous-traitant dans la devise de la facture, justifié par des reçus ou une estimation. Excluez la marge. Saisissez zéro si aucun coût direct n’est admissible ; la classification de l’article ne fournit pas ce coût.",
     "splitRefusal": "Corrigez les coûts directs des matériaux avant de scinder ou regrouper les lignes."
   },
   "list": {

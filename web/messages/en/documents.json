@@ -6,7 +6,7 @@
     "materials": "Materials",
     "excluded": "Excluded",
     "directCost": "Direct materials cost",
-    "directCostHelp": "For CIS materials lines, enter the subcontractor’s direct cost in the bill currency, supported by receipts or an estimate. Exclude markup. Include irrecoverable materials VAT when the subcontractor is not VAT registered. Enter zero if no direct cost qualifies; item classification does not supply this cost.",
+    "directCostHelp": "Enter the subcontractor’s direct cost of materials in the bill currency, supported by receipts or an estimate. Exclude markup. Enter zero when no direct cost qualifies; item classification does not supply this cost.",
     "splitRefusal": "Correct the direct materials costs before splitting or merging lines."
   },
   "list": {

@@ -1112,6 +1112,13 @@ export interface DocumentDrawerProps {
    *  Empty or absent hides the column: with no facilitator there is nothing
    *  to choose. Only sales kinds offer it (see marketplaceColumn). */
   marketplaceFacilitators?: { name: string }[]
+  /** Active contractor-withholding registrations covering the bill's scope,
+   *  resolved by the loader from withholding enrollments. Empty or absent
+   *  hides the withholding treatment and direct-materials columns: with no
+   *  registration there is nothing to classify, and scheme guidance never
+   *  renders by default. Authority-generated documents keep their columns
+   *  through generatedAuthority instead. */
+  withholdingSchemes?: { code: string }[]
   /** Server-known stored-value gate. When explicitly false the tender
    *  section offers no gift card / store credit method. Undefined preserves
    *  the hidden default. */
@@ -1159,6 +1166,7 @@ export function DocumentDrawer({
   refundHref,
   defaultTenderAccountId,
   marketplaceFacilitators = EMPTY_FACILITATORS,
+  withholdingSchemes,
   storedValueEnabled,
 }: DocumentDrawerProps) {
   const { money } = useMoney()
@@ -1898,6 +1906,11 @@ export function DocumentDrawer({
   }, [config.kind, marketplaceFacilitators, t])
 
   const generatedAuthority = Boolean(doc.custom?.withholdingDeposit || doc.custom?.withholdingRemittance)
+  // Contractor-withholding line classification renders only behind a native
+  // registration: an active withholding enrollment covering the bill's scope,
+  // resolved by the loader. A company with no registration never sees the
+  // treatment and direct-materials columns or their scheme guidance.
+  const showWithholdingLines = generatedAuthority || (withholdingSchemes?.length ?? 0) > 0
   const payload_ = useMemo(() => {
     if (isTransfer) {
       return {
@@ -2532,13 +2545,13 @@ export function DocumentDrawer({
           ),
       })
     }
-    if (config.kind === 'vendor_bill') cols.push({ key: 'withholdingTreatment', label: tWithholdingLine('treatment'), width: '150px', type: 'select', options: [
+    if (config.kind === 'vendor_bill' && showWithholdingLines) cols.push({ key: 'withholdingTreatment', label: tWithholdingLine('treatment'), width: '150px', type: 'select', options: [
       { value: '', label: tWithholdingLine('fromItem') },
       { value: 'labour', label: tWithholdingLine('labour') },
       { value: 'materials', label: tWithholdingLine('materials') },
       { value: 'excluded', label: tWithholdingLine('excluded') },
     ] })
-    if (config.kind === 'vendor_bill') cols.push({ key: 'withholdingMaterialsCost', label: tWithholdingLine('directCost'), help: tWithholdingLine('directCostHelp'), width: '160px', type: 'amount', align: 'right' })
+    if (config.kind === 'vendor_bill' && showWithholdingLines) cols.push({ key: 'withholdingMaterialsCost', label: tWithholdingLine('directCost'), help: tWithholdingLine('directCostHelp'), width: '160px', type: 'amount', align: 'right' })
     if (marketplaceColumn) cols.push(marketplaceColumn)
     const lineVisibility = new Map(builtinSegments.map((segment) => [segment.storageColumn, segment.showOnLines]))
     const storageForRowKey: Record<string, string> = {
@@ -2549,7 +2562,7 @@ export function DocumentDrawer({
       return !storage || lineVisibility.get(storage) !== false
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [accounts, departments, projects, taxProfiles, lineDefs, segments, builtinSegments, config, t, tCommon, tWithholdingLine, warehouseColumn, returnSourceColumn, promotionColumn, marketplaceColumn])
+  }, [accounts, departments, projects, taxProfiles, lineDefs, segments, builtinSegments, config, t, tCommon, tWithholdingLine, warehouseColumn, returnSourceColumn, promotionColumn, marketplaceColumn, showWithholdingLines])
 
   const field = 'space-y-1.5'
   const accountName = (id: unknown): string => {
@@ -2692,13 +2705,18 @@ export function DocumentDrawer({
       },
       work_from: { key: 'workFrom', width: '130px', type: 'text', placeholder: 'YYYY-MM-DD' },
       work_to: { key: 'workTo', width: '130px', type: 'text', placeholder: 'YYYY-MM-DD' },
-      withholding_treatment: { key: 'withholdingTreatment', width: '150px', type: 'select', options: [
-        { value: '', label: tWithholdingLine('fromItem') },
-        { value: 'labour', label: tWithholdingLine('labour') },
-        { value: 'materials', label: tWithholdingLine('materials') },
-        { value: 'excluded', label: tWithholdingLine('excluded') },
-      ] },
-      withholding_materials_cost: { key: 'withholdingMaterialsCost', width: '160px', type: 'amount', align: 'right', help: tWithholdingLine('directCostHelp') },
+      // Withholding line fields stay out of the layout registry without a
+      // registration: a saved form layout cannot resurrect columns the grid
+      // itself refuses to offer.
+      ...(showWithholdingLines ? {
+        withholding_treatment: { key: 'withholdingTreatment', width: '150px', type: 'select', options: [
+          { value: '', label: tWithholdingLine('fromItem') },
+          { value: 'labour', label: tWithholdingLine('labour') },
+          { value: 'materials', label: tWithholdingLine('materials') },
+          { value: 'excluded', label: tWithholdingLine('excluded') },
+        ] },
+        withholding_materials_cost: { key: 'withholdingMaterialsCost', width: '160px', type: 'amount', align: 'right', help: tWithholdingLine('directCostHelp') },
+      } : {}),
       amount: { key: 'amount', width: '120px', type: 'amount', align: 'right', required: true },
       tax_amount: {
         key: 'taxAmount', width: '120px', type: 'tax', align: 'right', computeTax: lineTax,
@@ -2757,10 +2775,10 @@ export function DocumentDrawer({
       ...(warehouseColumn ? [warehouseColumn] : []),
       ...(returnSourceColumn ? [returnSourceColumn] : []),
       ...(promotionColumn ? [promotionColumn] : []),
-      ...columns.filter((column) => String(column.key).startsWith('seg_') || ((column.key === 'withholdingTreatment' || column.key === 'withholdingMaterialsCost') && !configured.some(c => c.key === column.key))),
+      ...columns.filter((column) => String(column.key).startsWith('seg_') || (showWithholdingLines && (column.key === 'withholdingTreatment' || column.key === 'withholdingMaterialsCost') && !configured.some(c => c.key === column.key))),
     ]
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [layout, accounts, departments, projects, locations, classes, items, taxProfiles, lineDefs, cfColumns, columns, recordType, builtinSegments, t, tCommon, tWithholdingLine, warehouseColumn, returnSourceColumn, promotionColumn])
+  }, [layout, accounts, departments, projects, locations, classes, items, taxProfiles, lineDefs, cfColumns, columns, recordType, builtinSegments, t, tCommon, tWithholdingLine, warehouseColumn, returnSourceColumn, promotionColumn, showWithholdingLines])
 
   const headerDefByDefKey = useMemo(() => new Map(headerDefs.map((d) => [d.key, d])), [headerDefs])
   const defLabelForHeader = (key: string): string => {
