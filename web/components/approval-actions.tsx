@@ -82,7 +82,14 @@ export function useRecordApprovalState(
           return
         }
         if (!res.ok) {
-          if (!cancelled) setLoadError(await readApiErrorMessage(res, t('feedback.loadFailed')))
+          const status = res.status
+          const named = await readApiErrorMessage(res, t('feedback.loadFailed'))
+          // A bare machine code ("not_found", "invalid_subject") is never
+          // operator copy: show the translated load failure with its status.
+          const message = /^[a-z][a-z0-9_]*$/.test(named)
+            ? await readApiErrorMessage(new Response(null, { status }), t('feedback.loadFailed'))
+            : named
+          if (!cancelled) setLoadError(message)
           return
         }
         const data = (await res.json().catch(() => null)) as RecordApprovalState | null
