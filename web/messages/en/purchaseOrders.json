@@ -104,6 +104,9 @@
       "cancelConfirm": "Cancel remainder",
       "cancelFailed": "The remainder could not be cancelled.",
       "cancelled": "Line {line} remainder cancelled"
-    }
+    },
+    "receiveAllConfirmTitle": "Receive everything still open?",
+    "receiveAllConfirmMessage": "This posts a goods receipt for every remaining quantity on this order, dated today, into each line's warehouse. It cannot be edited after posting.",
+    "receiveAllConfirmLabel": "Receive and post"
   }
 }

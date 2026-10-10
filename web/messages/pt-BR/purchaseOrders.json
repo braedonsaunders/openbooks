@@ -104,6 +104,9 @@
       "cancelConfirm": "Cancelar saldo",
       "cancelFailed": "Não foi possível cancelar o saldo.",
       "cancelled": "Saldo da linha {line} cancelado"
-    }
+    },
+    "receiveAllConfirmTitle": "Receber tudo o que ainda está em aberto?",
+    "receiveAllConfirmMessage": "Isso lança um recebimento de mercadorias para todas as quantidades restantes deste pedido, com a data de hoje, no depósito de cada linha. Ele não pode ser editado após o lançamento.",
+    "receiveAllConfirmLabel": "Receber e lançar"
   }
 }

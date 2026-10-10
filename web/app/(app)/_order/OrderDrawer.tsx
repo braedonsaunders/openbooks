@@ -325,8 +325,10 @@ function targetHref(kind: string, id: string): string {
     case 'quote':
       return `/estimates?estimate=${id}&mode=edit`
     case 'sales_fulfillment':
-      // Fulfilments are immutable evidence on the order they fulfil; the
-      // inventory ledger is where their movements are inspected (docHref).
+    case 'purchase_receipt':
+      // Fulfilments and receipts are immutable evidence on the order they
+      // move stock for; the inventory ledger is where their movements are
+      // inspected (docHref).
       return '/inventory'
     default:
       return '/'
@@ -1335,6 +1337,18 @@ export function OrderDrawer({
     label: string,
     creditOverrideReason?: string,
   ) {
+    // A receipt posts immediately for every open quantity, dated today:
+    // the operator confirms exactly that before anything moves.
+    if (
+      targetKind === 'purchase_receipt'
+      && !(await confirmDialog({
+        title: t('receiveAllConfirmTitle'),
+        message: t('receiveAllConfirmMessage'),
+        confirmLabel: t('receiveAllConfirmLabel'),
+        tone: 'danger',
+      }))
+    )
+      return
     await execute<ConvertedDocument | { creditOverrideNeeded: true }>(async () => {
       const res = await fetch(`${apiBase}/${doc.id}/convert`, {
         method: 'POST',

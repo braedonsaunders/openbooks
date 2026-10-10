@@ -104,6 +104,9 @@
       "cancelConfirm": "残数を取り消す",
       "cancelFailed": "残数を取り消せませんでした。",
       "cancelled": "明細 {line} の残数を取り消しました"
-    }
+    },
+    "receiveAllConfirmTitle": "未入荷分をすべて入荷しますか？",
+    "receiveAllConfirmMessage": "この注文の残りすべての数量について、本日付で各明細の倉庫に入荷を計上します。計上後は編集できません。",
+    "receiveAllConfirmLabel": "入荷して計上"
   }
 }

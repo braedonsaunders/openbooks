@@ -104,6 +104,9 @@
     "deleteConfirmTitle": "¿Eliminar esta orden?",
     "deleteConfirmMessage": "Esto elimina definitivamente la orden y sus líneas. No se puede deshacer.",
     "toastDeleted": "Orden eliminada",
-    "issueHint": "Añada un cliente o un proveedor y al menos una línea para emitir esta orden."
+    "issueHint": "Añada un cliente o un proveedor y al menos una línea para emitir esta orden.",
+    "receiveAllConfirmTitle": "¿Recibir todo lo que sigue abierto?",
+    "receiveAllConfirmMessage": "Esto contabiliza una recepción de mercancías por todas las cantidades pendientes de este pedido, con fecha de hoy, en el almacén de cada línea. No se puede editar después de contabilizarla.",
+    "receiveAllConfirmLabel": "Recibir y contabilizar"
   }
 }
