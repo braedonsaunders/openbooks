@@ -1,7 +1,6 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import {
   db,
@@ -24,6 +23,7 @@ import {
 import { isUuid } from "../platform/uuid.ts";
 import { DEMO_DATA_VERSION, installDemoScenarios, verifyDemoScenarios } from "./install-scenarios.ts";
 import { sampleCompanyFeatures } from "./features.ts";
+import { createPreviewActor } from "./preview-actor.ts";
 import { verifyAndRegisterDemoAccounting } from "./accounting.ts";
 
 export { SampleCompanyError, SampleCompanyPreconditionError } from "./provisioning-failures.ts";
@@ -1164,27 +1164,16 @@ async function finalizePreview(args: FinalizeSampleCompanyArgs): Promise<void> {
       const row = current.rows[0];
       if (!row) throw new SampleCompanyError("cloned sample organization disappeared during provisioning");
 
-      const actingUserId = randomUUID();
-      const role = (await tx.execute<{ id: string }>(sql`
-        select id from app_roles
-         where org_id = ${args.sandboxOrgId} and key = 'admin'
-         limit 1
-      `));
-      if (!role.rows[0]) throw new SampleCompanyError("sample template has no administrator role");
-
-      await tx.execute(sql`
-        insert into users (id, org_id, email, name, password_hash, is_active, created_by, updated_by)
-        values (
-          ${actingUserId}, ${args.sandboxOrgId},
-          ${`sample-${args.input.memberUserId}@openbooks.invalid`},
-          ${args.input.memberName || "Sample company administrator"},
-          'sample-company-direct-login-disabled', true, ${actingUserId}, ${actingUserId}
-        )
-      `);
-      await tx.execute(sql`
-        insert into role_assignments (org_id, user_id, role_id, created_by, updated_by)
-        values (${args.sandboxOrgId}, ${actingUserId}, ${role.rows[0].id}, ${actingUserId}, ${actingUserId})
-      `);
+      const birth = row.settings.sampleCompany as Record<string, unknown> | undefined;
+      if (!birth || birth.provisioningStage !== "cloned" || birth.ownerUserId !== args.input.memberUserId
+        || birth.templateOrgId !== args.templateOrgId || birth.requestedFromOrgId !== args.input.sourceOrgId
+        || birth.profileId !== args.profileId || birth.industryKey !== args.input.industryKey) {
+        throw new SampleCompanyError("sample administrator provisioning requires the matching unfinished clone");
+      }
+      const actingUserId = await createPreviewActor(tx, {
+        orgId: args.sandboxOrgId, memberUserId: args.input.memberUserId, memberName: args.input.memberName,
+        sourceOrgId: args.input.sourceOrgId, templateOrgId: args.templateOrgId,
+      });
 
       const settings = { ...(row.settings ?? {}) };
       delete settings.simHarness;
@@ -1398,10 +1387,14 @@ export async function cloneSampleCompanyTemplate(
 /** Transport credentials and device identities are intentionally excluded by cloning.
  * Restore only inert authored examples before exposing a fully numbered copy. */
 async function restoreClonedSampleScenarios(orgId: string, industryKey: string): Promise<void> {
-  const version = await withOrgContext(orgId, async () => (await db.execute<{ version: number | null }>(sql`
-    select (settings->'demoData'->>'version')::int as version from orgs where id=${orgId}
-  `)).rows[0]?.version);
-  if (version === DEMO_DATA_VERSION) await installDemoScenarios(orgId, industryKey);
+  const state = await withOrgContext(orgId, async () => (await db.execute<{ version: number | null; actorId: string | null }>(sql`
+    select (settings->'demoData'->>'version')::int as version,
+      settings->'sampleCompany'->>'finalizedBy' as "actorId" from orgs where id=${orgId}
+  `)).rows[0]);
+  if (state?.version === DEMO_DATA_VERSION) {
+    if (!state.actorId || !isUuid(state.actorId)) throw new SampleCompanyError("sample restoration requires its finalized local administrator");
+    await installDemoScenarios(orgId, industryKey, { actorId: state.actorId });
+  }
 }
 
 async function resumePartialSampleCompany(args: {
