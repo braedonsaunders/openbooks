@@ -647,6 +647,8 @@ const SOURCES: Record<string, EntityListSource> = {
       return ids
     },
     quickFilters: [
+      {paramKey:'workflowFilter',filterKey:'workflow',loadOptions:async orgId=>(await db.execute<EntityQuickFilterOption & Record<string,unknown>>(sql`select id as value,name as label from operating_profiles where org_id=${orgId} and family='project' order by name,id`)).rows},
+      {paramKey:'department',filterKey:'operating_department',loadOptions:async(orgId,scope)=>(await db.execute<EntityQuickFilterOption & Record<string,unknown>>(sql`select id as value,name as label from departments where org_id=${orgId} ${subsidiaryVisibleFilter(sql`subsidiary_id`,scope,{orgWideNull:true})} order by name,id`)).rows},
       { paramKey: 'status', filterKey: 'status' },
       {
         paramKey: 'billing',

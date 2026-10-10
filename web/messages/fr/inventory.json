@@ -22,11 +22,13 @@
       "effectiveTo": "En vigueur jusqu'au",
       "operationSeq": "Séquence d'opération",
       "scrapPct": "Rebut %",
-      "isByproduct": "Type de ligne"
+      "isByproduct": "Type de ligne",
+      "outputCostWeight": "Poids de coût relatif"
     },
     "values": {
       "component": "Composant",
-      "byproduct": "Coproduit"
+      "byproduct": "Coproduit",
+      "jointOutput": "Coproduit"
     },
     "refusals": {
       "effectivityOverlap": "Le composant {component} présente des périodes de validité qui se chevauchent {windows}. Modifiez les dates ou choisissez une autre opération ou désignation de coproduit si nécessaire.",
@@ -35,7 +37,8 @@
       "invalidScrap": "Le pourcentage de rebut doit être un décimal exact compris entre 0 inclus et 100 exclu.",
       "invalidOperation": "La séquence d'opération doit être un entier positif.",
       "manufacturingDisabled": "Activez Fabrication dans Paramètres de l'entreprise → Fonctionnalités pour modifier les opérations et les coproduits."
-    }
+    },
+    "jointOutputNote": "Les coproduits partagent le coût de production selon leur quantité et leur poids relatif par unité de base. Le produit principal a un poids de 1. Les sous-produits conservent leur traitement distinct à la valeur nette réalisable."
   },
   "labels": {
     "item": "Article",

@@ -1,3 +1,6 @@
+import {orderResourcesVisible} from "../organization/production-resource-scope.ts";
+import {subsidiaryVisibleFilter} from "../organization/subsidiary-scope.ts";
+import { lockActorCommandAuthority } from "../organization/actor-command-authority.ts";
 import { actorHasPermission } from "../organization/actor-permissions.ts";
 import { actorAllowedSubsidiaryIds } from "../organization/actor-subsidiaries.ts";
 import { orgFeatureEnabled, lockAndCheckOrgFeature } from "../organization/org-feature-lock.ts";
@@ -7,6 +10,10 @@ import { db, withOrg, withTransactionSavepoint } from "../platform/db.ts";
 import {
   ADJUDICATED_HOLIDAY_HOURS_OPERATION,
   MANUFACTURING_SCRAP_RESTATEMENT_OPERATION,
+  MANUFACTURING_STANDARD_ROLLUP_OPERATION,
+  MANUFACTURING_LOSS_DISPOSITION_OPERATION,
+  MANUFACTURING_ROUTING_APPROVAL_OPERATION,
+  MANUFACTURING_BOM_APPROVAL_OPERATION,
   FinancialChangeFeatureError,
   financialChangeInboxLabel,
   loadFinancialChange,
@@ -27,6 +34,7 @@ async function assertAccountingSubjectFeatures(orgId: string, subjectId: string,
   if (domain==='sales' && !await lockAndCheckOrgFeature(db,orgId,'dropShipping')) throw new FinancialChangeFeatureError('Turn on Drop Shipping in Company Settings → Features before submitting or approving a control assessment')
   if (domain==='revenue' && operation==='expected_breakage_estimate' && (!await lockAndCheckOrgFeature(db,orgId,'usageBilling') || !await lockAndCheckOrgFeature(db,orgId,'revenueRecognition')))
     throw new FinancialChangeFeatureError('Turn on Usage Billing and Revenue Recognition in Company Settings → Features before submitting or approving a breakage estimate')
+  if (domain === 'manufacturing' && !await lockAndCheckOrgFeature(db,orgId,'manufacturing')) throw new FinancialChangeFeatureError('Turn on Manufacturing in Company Settings → Features before submitting or approving a manufacturing event.');
   if (domain !== 'provision') return
   const project = (await db.execute<{project_id:string|null}>(sql`select project_id from provision_obligations where org_id=${orgId} and id=${subjectId}`)).rows[0]?.project_id
   if (project && !await lockAndCheckOrgFeature(db,orgId,'projects'))
@@ -81,6 +89,10 @@ export const financialChangesFlowAdapter: FlowSubjectAdapter = defineTableSubjec
           from financial_changes
          where org_id = ${orgId}
            and id in (select jsonb_array_elements_text(${JSON.stringify(ids)}::jsonb)::uuid)
+         and (domain<>'manufacturing' or operation<>'work_order_loss_disposition' or exists (
+           select 1 from mfg_work_orders work where work.org_id=financial_changes.org_id and work.id=financial_changes.subject_id
+             ${subsidiaryVisibleFilter(sql`work.subsidiary_id`,allowed)} ${orderResourcesVisible(allowed,'work')}
+         ))
          ${lock ? sql`for share` : sql``}
       `)).rows;
       return new Map(changes.map((change) => [
@@ -94,6 +106,10 @@ export const financialChangesFlowAdapter: FlowSubjectAdapter = defineTableSubjec
       return sql`exists (
         select 1 from financial_changes fc where fc.org_id=g.org_id and fc.id=g.subject_id
         and fc.subsidiary_id in (select jsonb_array_elements_text(${ids}::jsonb)::uuid)
+        and (fc.domain<>'manufacturing' or fc.operation<>'work_order_loss_disposition' or exists (
+          select 1 from mfg_work_orders work where work.org_id=fc.org_id and work.id=fc.subject_id
+            ${orderResourcesVisible(new Set(JSON.parse(ids) as string[]),'work')}
+        ))
         and not exists(select 1 from jsonb_array_elements_text(coalesce(fc.payload->'requiredSubsidiaryIds','[]'::jsonb)) required(id) where required.id not in(select jsonb_array_elements_text(${ids}::jsonb)))
       )`;
     },
@@ -114,6 +130,7 @@ export const financialChangesFlowAdapter: FlowSubjectAdapter = defineTableSubjec
       row.org_id,
       change.domain,
       change.subject_id,
+      change.operation,
     );
     return {
       values: {
@@ -178,9 +195,9 @@ export const financialChangesFlowAdapter: FlowSubjectAdapter = defineTableSubjec
       // Defense in depth: the restatement service rechecks actor, feature,
       // and legal-entity scope in the same transaction that applies the
       // change. The approval gate independently refuses here first.
-      if (row.operation !== MANUFACTURING_SCRAP_RESTATEMENT_OPERATION)
+      if (![MANUFACTURING_SCRAP_RESTATEMENT_OPERATION, MANUFACTURING_LOSS_DISPOSITION_OPERATION, MANUFACTURING_STANDARD_ROLLUP_OPERATION, MANUFACTURING_ROUTING_APPROVAL_OPERATION, MANUFACTURING_BOM_APPROVAL_OPERATION].includes(row.operation))
         throw new Error(
-          "manufacturing financial changes admit only the scrap snapshot restatement; reject the malformed proposal, then submit a corrected proposal",
+          "This manufacturing event is unsupported; reject it and submit a supported proposal.",
         );
       if (
         !(await actorHasPermission(
@@ -197,6 +214,19 @@ export const financialChangesFlowAdapter: FlowSubjectAdapter = defineTableSubjec
         throw new Error(
           "turn on Manufacturing in Company Settings → Features before approving this change",
         );
+      if(row.operation===MANUFACTURING_LOSS_DISPOSITION_OPERATION) {
+        const scope=await lockActorCommandAuthority(db,ctx.orgId,ctx.userId,row.subsidiary_id,'manufacturing.manage');
+        if(!(await db.execute(sql`select work.id from mfg_work_orders work where work.org_id=${ctx.orgId} and work.id=${row.subject_id} ${subsidiaryVisibleFilter(sql`work.subsidiary_id`,scope)} ${orderResourcesVisible(scope,'work')} for share of work`)).rows.length) throw new Error('Production work was not found in the approver’s current scope.');
+      }
+      if (row.operation === MANUFACTURING_STANDARD_ROLLUP_OPERATION) {
+        const scope = await lockActorCommandAuthority(db, ctx.orgId, ctx.userId, row.subsidiary_id, "manufacturing.manage");
+        const inventoryScope = await lockActorCommandAuthority(db, ctx.orgId, ctx.userId, row.subsidiary_id, "items.manage");
+        if (inventoryScope !== null || scope !== null || !await actorHasPermission(db, ctx.orgId, ctx.userId, "items.manage")) throw new Error("A shared item standard requires unrestricted manufacturing and inventory management authority.");
+      }
+      if(row.operation===MANUFACTURING_ROUTING_APPROVAL_OPERATION && await lockActorCommandAuthority(db,ctx.orgId,ctx.userId,row.subsidiary_id,"manufacturing.manage")!==null) throw new Error("Shared routing revisions require unrestricted manufacturing authority.");
+      if (row.operation === MANUFACTURING_BOM_APPROVAL_OPERATION) {
+        if (await lockActorCommandAuthority(db,ctx.orgId,ctx.userId,row.subsidiary_id,"manufacturing.manage") !== null || await lockActorCommandAuthority(db,ctx.orgId,ctx.userId,row.subsidiary_id,"admin.setup.manage") !== null) throw new Error("Shared BOM revisions require unrestricted manufacturing and setup authority.");
+      }
       const bound: unknown = row.payload.requiredSubsidiaryIds;
       if (
         !Array.isArray(bound) ||
@@ -247,6 +277,13 @@ export async function submitFinancialChange(
       if (row.domain === "payroll" && !await actorHasPermission(tx, orgId, actorId, "payroll.run"))
         throw new Error("Payroll run permission is required to submit an unpaid holiday entitlement.");
       await assertAccountingSubjectFeatures(orgId,row.subject_id,row.domain,row.operation)
+      if (row.domain === "manufacturing") {
+        const manufacturingScope=await lockActorCommandAuthority(tx,orgId,actorId,row.subsidiary_id,"manufacturing.manage");
+        if(row.operation===MANUFACTURING_LOSS_DISPOSITION_OPERATION&&!(await tx.execute(sql`select work.id from mfg_work_orders work where work.org_id=${orgId} and work.id=${row.subject_id} ${subsidiaryVisibleFilter(sql`work.subsidiary_id`,manufacturingScope)} ${orderResourcesVisible(manufacturingScope,'work')} for share of work`)).rows.length) throw new Error('Production work was not found in the proposer’s current scope.');
+        if([MANUFACTURING_STANDARD_ROLLUP_OPERATION,MANUFACTURING_ROUTING_APPROVAL_OPERATION,MANUFACTURING_BOM_APPROVAL_OPERATION].includes(row.operation)&&manufacturingScope!==null) throw new Error("Shared manufacturing policies require unrestricted authority.");
+        if (row.operation === MANUFACTURING_STANDARD_ROLLUP_OPERATION && await lockActorCommandAuthority(tx,orgId,actorId,row.subsidiary_id,"items.manage") !== null) throw new Error("A shared item standard requires unrestricted inventory management authority.");
+      }
+      if (row.domain === "manufacturing" && row.operation === MANUFACTURING_BOM_APPROVAL_OPERATION && await lockActorCommandAuthority(tx,orgId,actorId,row.subsidiary_id,"admin.setup.manage") !== null) throw new Error("Shared BOM revisions require unrestricted setup authority.");
       if (row.status !== "draft") return; // A retry reuses its existing routing/decision.
       const result = await runRecordFlows(
         { kind: "on_submit", source: "ui" },

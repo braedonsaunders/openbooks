@@ -3,7 +3,7 @@ import { sql } from "drizzle-orm";
 import { add, cmp, div, fromUnits, mul, mulPercent, neg, toUnits } from "../money/money.ts";
 import { getAvailableToPromise, stockedItems } from "../inventory/availability.ts";
 import { toBaseQuantity } from "../inventory/costing.ts";
-import { bomRequiredQuantity } from "../inventory/bom-scrap.ts";
+import { bomRequiredQuantity, type BomQuantityBasis } from "../inventory/bom-scrap.ts";
 import { createTransferOrder } from "../inventory/transfer-orders.ts";
 import type { Runner } from "../inventory/contracts.ts";
 import type { SqlExecutor } from "../platform/db.ts";
@@ -14,6 +14,36 @@ import { ManufacturingError, ManufacturingNotFoundError } from "./errors.ts";
 import { auditChange } from "./master-support.ts";
 import { explodeBom } from "./bom-explode.ts";
 import { createWorkOrder } from "./work-orders.ts";
+import { lockManufacturingManageAuthority,lockManufacturingReadAuthority } from "./authority.ts";
+import { lockActorCommandAuthority } from "../organization/actor-command-authority.ts";
+import { subsidiaryVisibleFilter } from "../organization/subsidiary-scope.ts";
+import { routingResourcesVisible,orderResourcesVisible,centerResourcesVisible } from "./resource-scope.ts";
+import { documentResourcesVisible } from "../organization/production-resource-scope.ts";
+import { isUuid } from "../platform/uuid.ts";
+
+async function lockPlanningAuthority(tx:SqlExecutor,orgId:string,actorId:string,subsidiaryId:string,extraPermission?:string) {
+  if(!isUuid(subsidiaryId)) throw new ManufacturingNotFoundError();
+  let scope=await lockManufacturingManageAuthority(tx,orgId,actorId,subsidiaryId);
+  scope=await lockManufacturingReadAuthority(tx,orgId,actorId,scope,['items.read']);
+  if(extraPermission) {
+    const extra=await lockActorCommandAuthority(tx,orgId,actorId,subsidiaryId,extraPermission);
+    if(extra!==null) scope=scope===null?extra:new Set([...scope].filter(id=>extra.has(id)));
+  }
+  if(scope!==null&&!scope.has(subsidiaryId)) throw new ManufacturingNotFoundError();
+  // Planning a whole entity cannot reveal quantities at hidden related locations.
+  if(scope!==null && (await tx.execute(sql`select movement.id from inventory_movements movement
+    left join stock_locations stock on stock.org_id=movement.org_id and stock.id=movement.stock_location_id
+    left join locations location on location.org_id=stock.org_id and location.id=stock.location_id
+    where movement.org_id=${orgId} and movement.subsidiary_id=${subsidiaryId}
+      and (location.id is null or not(true ${subsidiaryVisibleFilter(sql`location.subsidiary_id`,scope,{orgWideNull:true})})) limit 1`)).rows.length) throw new ManufacturingNotFoundError();
+  if((await tx.execute(sql`select work.id from mfg_work_orders work where work.org_id=${orgId} and work.subsidiary_id=${subsidiaryId}
+    and work.status in('released','in_progress') and not(true ${orderResourcesVisible(scope,'work')}) limit 1`)).rows.length)throw new ManufacturingNotFoundError();
+  if((await tx.execute(sql`select document.id from documents document where document.org_id=${orgId} and document.subsidiary_id=${subsidiaryId}
+    and document.kind in('sales_order','purchase_order') and document.status='approved'
+    and exists(select 1 from document_lines dl where dl.org_id=document.org_id and dl.document_id=document.id and ${openQuantitySql('dl')}>0)
+    and not(${documentResourcesVisible(scope,'document')}) limit 1`)).rows.length)throw new ManufacturingNotFoundError();
+  return scope;
+}
 
 const REMEDY_LEAD = "set a lead time in the item's manufacturing policy";
 const decimal = (value: string) => toUnits(value);
@@ -208,10 +238,10 @@ async function explodedComponentDemand(
   await explodeBom(tx, orgId, parent.itemId, quantity, plannedStart);
   const rows = (await tx.execute<{
     item_id: string; item_code: string | null; item_name: string;
-    quantity_per: string; scrap_pct: string | null; is_byproduct: boolean;
+    quantity_per: string;quantity_basis:BomQuantityBasis;formula_output_quantity:string; scrap_pct: string | null; is_byproduct: boolean;
   }>(sql`
     select b.component_item_id as item_id, i.code as item_code, i.name as item_name,
-           b.quantity_per::text, b.scrap_pct::text, b.is_byproduct
+           b.quantity_per::text,b.quantity_basis,b.formula_output_quantity::text, b.scrap_pct::text, b.is_byproduct
       from bom_components b join items i on i.org_id=b.org_id and i.id=b.component_item_id
      where b.org_id=${orgId} and b.assembly_item_id=${parent.itemId}
        and (b.effective_from is null or b.effective_from <= ${plannedStart}::date)
@@ -224,7 +254,7 @@ async function explodedComponentDemand(
   const requiredByItem = new Map<string, { itemCode: string; quantity: string }>();
   for (const row of rows) {
     const entry = requiredByItem.get(row.item_id);
-    const required = bomRequiredQuantity(quantity, row.quantity_per, row.scrap_pct).quantity;
+    const required = bomRequiredQuantity(quantity, row.quantity_per, row.scrap_pct,{quantityBasis:row.quantity_basis,formulaOutputQuantity:row.formula_output_quantity}).quantity;
     requiredByItem.set(row.item_id, {
       itemCode: itemLabel(row.item_code, row.item_name),
       quantity: add(entry?.quantity ?? "0", required),
@@ -246,13 +276,18 @@ async function explodedComponentDemand(
 
 async function buildCapacity(
   tx: SqlExecutor, orgId: string, actorId: string, subsidiaryId: string,
-  runDate: string, horizonEnd: string, planned: Planned[],
-): Promise<void> {
+  runDate: string, horizonEnd: string, planned: Planned[], scope: ReadonlySet<string> | null,
+): Promise<{weeks:Array<{workCenterId:string;workCenterCode:string;calendarId:string;weekStart:string;plannedHours:string;availableHours:string}>;centers:Array<{workCenterId:string;calendarId:string;hoursPerDay:string;efficiencyPct:string;workingDays:unknown;holidays:unknown}>}> {
+  await tx.execute(sql`select id from mfg_work_centers where org_id=${orgId} and subsidiary_id=${subsidiaryId} and is_active order by id for share`);
+  await tx.execute(sql`select calendar.id from schedule_calendars calendar where calendar.org_id=${orgId} and (calendar.id in(select calendar_id from mfg_work_centers where org_id=${orgId} and subsidiary_id=${subsidiaryId} and is_active) or calendar.is_default and calendar.project_id is null) order by calendar.id for share`);
+  await tx.execute(sql`select department.id from departments department where department.org_id=${orgId} and department.id in(select department_id from mfg_work_centers where org_id=${orgId} and subsidiary_id=${subsidiaryId} and is_active) order by department.id for share`);
+  await tx.execute(sql`select project.id from projects project join schedule_calendars calendar on calendar.org_id=project.org_id and calendar.project_id=project.id where project.org_id=${orgId} and calendar.id in(select calendar_id from mfg_work_centers where org_id=${orgId} and subsidiary_id=${subsidiaryId} and is_active) order by project.id for share of project`);
+  if((await tx.execute(sql`select center.id from mfg_work_centers center where center.org_id=${orgId} and center.subsidiary_id=${subsidiaryId} and center.is_active and not(true ${centerResourcesVisible(scope)}) limit 1`)).rows.length)throw new ManufacturingNotFoundError();
   const centers = (await tx.execute<{
-    id: string; capacity_hours_per_day: string; efficiency_pct: string;
+    id: string;code:string;calendar_id:string|null; capacity_hours_per_day: string; efficiency_pct: string;
     working_days: unknown; holidays: unknown;
   }>(sql`
-    select c.id, c.capacity_hours_per_day::text, c.efficiency_pct::text,
+    select c.id,c.code,cal.id as calendar_id, c.capacity_hours_per_day::text, c.efficiency_pct::text,
            cal.working_days, cal.holidays
       from mfg_work_centers c
       left join schedule_calendars cal on cal.org_id=c.org_id and
@@ -260,8 +295,9 @@ async function buildCapacity(
      where c.org_id=${orgId} and c.subsidiary_id=${subsidiaryId} and c.is_active
      order by c.code, c.id`)).rows;
   if (centers.some((center) => center.working_days === null)) {
-    refuse("A manufacturing work center has no schedule calendar.", "mrp_calendar_required", "set a default schedule calendar or assign one to each work center");
+    refuse("A manufacturing work center has no schedule calendar.", "mrp_calendar_required", "open Company Setup → Work & Production → Work calendars, set a company default or assign a calendar to each work center");
   }
+  if(new Set(centers.map(center=>center.id)).size!==centers.length) refuse("A work center resolves to more than one default calendar.","mrp_calendar_ambiguous","open Company Setup → Work & Production → Work calendars to choose one default, or assign an explicit company calendar to the work center");
   const plannedHours = new Map<string, string>();
   const addHours = (centerId: string, day: string, minutes: string) => {
     const week = monday(day); const key = `${centerId}:${week}`;
@@ -289,6 +325,7 @@ async function buildCapacity(
         from mfg_routing_operations where org_id=${orgId} and routing_id=${routing.id} order by sequence`)).rows;
     for (const op of ops) addHours(op.work_center_id, order.plannedStart, add(op.setup_minutes, mul(op.run_minutes_per_unit, order.quantity)));
   }
+  if([...plannedHours.keys()].some(key=>!centers.some(center=>key.startsWith(center.id+":")))) refuse("Planned work uses a center outside this entity’s active capacity plan.","mrp_capacity_center_unavailable","activate and assign the work center to this legal entity, or run MRP without capacity checking; dates will remain unchanged");
   const startWeek = monday(runDate); const lastWeek = monday(horizonEnd);
   const weeks: string[] = [];
   for (let week = startWeek; week <= lastWeek; week = addDays(week, 7)) weeks.push(week);
@@ -309,12 +346,16 @@ async function buildCapacity(
   }
   await tx.execute(sql`delete from mfg_capacity_weeks w using mfg_work_centers c
     where w.org_id=${orgId} and c.org_id=w.org_id and c.id=w.work_center_id and c.subsidiary_id=${subsidiaryId}`);
+  const snapshot:Array<{workCenterId:string;workCenterCode:string;calendarId:string;weekStart:string;plannedHours:string;availableHours:string}>=[];
   for (const row of inserts) {
     const saved = await tx.execute<{ id: string }>(sql`
       insert into mfg_capacity_weeks (org_id,work_center_id,week_start,planned_hours,available_hours,created_by,updated_by)
       values (${orgId},${row.centerId},${row.week},${row.planned},${row.available},${actorId},${actorId}) returning id`);
     if (saved.rows.length !== 1) refuse("Weekly capacity facts were not saved.", "mrp_capacity_write_failed", "retry the MRP run");
+    const center=centers.find(center=>center.id===row.centerId)!;
+    snapshot.push({workCenterId:row.centerId,workCenterCode:center.code,calendarId:center.calendar_id!,weekStart:row.week,plannedHours:row.planned,availableHours:row.available});
   }
+  return {weeks:snapshot,centers:centers.map(center=>({workCenterId:center.id,calendarId:center.calendar_id!,hoursPerDay:center.capacity_hours_per_day,efficiencyPct:center.efficiency_pct,workingDays:center.working_days,holidays:center.holidays}))};
 }
 
 /** Freeze the run inputs, time-phase shortages, then write human-reviewable suggestions. */
@@ -323,6 +364,7 @@ export async function runMrp(
   idempotency?: { id: string },
 ): Promise<MrpRun> {
   await assertManufacturingFeature(tx, orgId, "manufacturingMrp");
+  const scope=await lockPlanningAuthority(tx,orgId,actorId,raw.subsidiaryId);
   await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`mfg-mrp:${orgId}:${raw.subsidiaryId}`}, 0))`);
   await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`mfg-mrp-number:${orgId}`}, 0))`);
   const horizonDays = raw.horizonDays ?? 90;
@@ -330,7 +372,7 @@ export async function runMrp(
   if (!Number.isInteger(horizonDays) || horizonDays < 1 || horizonDays > 366) {
     refuse("The MRP horizon must be from 1 to 366 days.", "invalid_mrp_horizon", "choose a horizon from 1 to 366 days", 400);
   }
-  const subsidiary = (await tx.execute<{ id: string }>(sql`select id from subsidiaries where org_id=${orgId} and id=${raw.subsidiaryId} and not is_elimination`)).rows[0];
+  const subsidiary = (await tx.execute<{ id: string }>(sql`select id from subsidiaries where org_id=${orgId} and id=${raw.subsidiaryId} and is_active and not is_elimination for share`)).rows[0];
   if (!subsidiary) throw new ManufacturingNotFoundError();
   const runDate = await businessToday(orgId);
   const horizonEnd = addDays(runDate, horizonDays);
@@ -444,7 +486,7 @@ export async function runMrp(
     : sql`and false`;
   const bomSnapshot = (await tx.execute(sql`
     select assembly_item_id as "assemblyItemId",component_item_id as "componentItemId",
-           quantity_per::text as "quantityPer",scrap_pct::text as "scrapPct",is_byproduct as "isByproduct",
+           quantity_per::text as "quantityPer",quantity_basis as "quantityBasis",formula_output_quantity::text as "formulaOutputQuantity",scrap_pct::text as "scrapPct",is_byproduct as "isByproduct",
            effective_from::text as "effectiveFrom",effective_to::text as "effectiveTo",sort_order as "sortOrder",operation_seq as "operationSeq"
       from bom_components where org_id=${orgId} ${makeItemFilter}
         and (effective_from is null or effective_from <= ${horizonEnd}::date)
@@ -462,6 +504,12 @@ export async function runMrp(
      where r.org_id=${orgId} and r.status='active' ${routingItemFilter}
        and r.effective_from <= ${horizonEnd}::date and (r.effective_to is null or ${runDate}::date < r.effective_to)
      order by r.produced_item_id,r.version desc,o.sequence`)).rows;
+  if((await tx.execute(sql`select r.id from mfg_routings r where r.org_id=${orgId} and r.status='active' ${routingItemFilter}
+    and r.effective_from<=${horizonEnd}::date and (r.effective_to is null or ${runDate}::date<r.effective_to)
+    and not(true ${routingResourcesVisible(scope)}) limit 1`)).rows.length)throw new ManufacturingNotFoundError();
+  if(capacityCheck&&(await tx.execute(sql`select center.id from mfg_work_centers center left join departments department on department.org_id=center.org_id and department.id=center.department_id
+    where center.org_id=${orgId} and center.subsidiary_id=${raw.subsidiaryId} and center.is_active
+      and not(true ${centerResourcesVisible(scope)}) limit 1`)).rows.length)throw new ManufacturingNotFoundError();
   const parameters: Record<string, unknown> = {
     subsidiaryId: raw.subsidiaryId, horizonDays, demandSources: ["approved_sales_order_lines", "item_policy_replenishment", "make_order_bom_explosion"],
     demands: demandSnapshot.map(({ itemCode, itemId, dueDate, quantity, demandRef }) => ({ itemCode, itemId, dueDate, quantity, source: demandRef })),
@@ -485,9 +533,9 @@ export async function runMrp(
     if (!row) refuse("An MRP suggestion was not saved.", "mrp_suggestion_write_failed", "retry the run");
     await auditChange(tx, { orgId, actorId, table: "mfg_planned_orders", rowId: row.id, action: "insert", before: null, after: row });
   }
-  if (capacityCheck) await buildCapacity(tx, orgId, actorId, raw.subsidiaryId, runDate, horizonEnd, planned);
+  parameters.capacitySnapshot={format:"openbooks.manufacturing-capacity.v1",datesAdjusted:false,...(capacityCheck?await buildCapacity(tx,orgId,actorId,raw.subsidiaryId,runDate,horizonEnd,planned,scope):{weeks:[],centers:[]})};
   const completed = await tx.execute<MrpRun>(sql`
-    update mfg_mrp_runs set status='complete',ran_at=now(),updated_at=now(),updated_by=${actorId}
+    update mfg_mrp_runs set status='complete',parameters=${JSON.stringify(parameters)}::jsonb,ran_at=now(),updated_at=now(),updated_by=${actorId}
      where org_id=${orgId} and id=${run.id} and status='draft'
     returning id,number,horizon_start::text as "horizonStart",horizon_end::text as "horizonEnd",status,parameters,ran_at::text as "ranAt"`);
   const finalRun = completed.rows[0];
@@ -510,7 +558,7 @@ export async function listMrpRuns(tx: SqlExecutor, orgId: string, subsidiaryId: 
      order by ran_at desc nulls last,created_at desc limit ${Math.max(1, Math.min(limit, 100))}`)).rows;
 }
 
-export async function getMrpRun(tx: SqlExecutor, orgId: string, id: string) {
+export async function getMrpRun(tx: SqlExecutor, orgId: string, id: string,scope:ReadonlySet<string>|null=null) {
   await assertManufacturingFeature(tx, orgId, "manufacturingMrp");
   const run = (await tx.execute<MrpRun>(sql`
     select id,number,horizon_start::text as "horizonStart",horizon_end::text as "horizonEnd",status,parameters,ran_at::text as "ranAt"
@@ -522,14 +570,33 @@ export async function getMrpRun(tx: SqlExecutor, orgId: string, id: string) {
            p.converted_ref_id as "convertedRefId",p.is_expedite as "isExpedite",p.dismiss_reason as "dismissReason"
       from mfg_planned_orders p join items i on i.org_id=p.org_id and i.id=p.item_id
      where p.org_id=${orgId} and p.run_id=${run.id} order by p.due_date,i.code,p.id`)).rows;
+  const routes=run.parameters.activeRoutings;
+  if(routes!==undefined&&!Array.isArray(routes))throw new ManufacturingNotFoundError();
+  const routeIds=[...new Set(((routes as Array<{routingId:string}>|undefined)??[]).map(route=>route?.routingId))];
+  if(routeIds.some(id=>!isUuid(id)))throw new ManufacturingNotFoundError();
+  if(routeIds.length&&(await tx.execute(sql`select route.id from mfg_routings route where route.org_id=${orgId} and route.id in(${sql.join(routeIds.map(id=>sql`${id}::uuid`),sql`, `)}) ${routingResourcesVisible(scope,'route')}`)).rows.length!==routeIds.length)throw new ManufacturingNotFoundError();
   const sub = String(run.parameters.subsidiaryId ?? "");
-  const capacity = (await tx.execute<{ work_center_id: string; week_start: string; planned_hours: string; available_hours: string; code: string }>(sql`
+  const snapshot=run.parameters.capacitySnapshot;
+  if(snapshot!==undefined&&(!isRecord(snapshot)||snapshot.format!=="openbooks.manufacturing-capacity.v1"||snapshot.datesAdjusted!==false||!Array.isArray(snapshot.weeks))) refuse("The run has invalid retained capacity evidence.","mrp_capacity_evidence_invalid","review this run’s evidence with an administrator; rerun MRP for a new plan");
+  const frozen=isRecord(snapshot)?snapshot.weeks as Array<{workCenterId:string;workCenterCode:string;calendarId:string;weekStart:string;plannedHours:string;availableHours:string}>:null;
+  const centers=new Map<string,string>();
+  if(frozen)for(const week of frozen) {
+    if(!week||!isUuid(week.workCenterId)||!isUuid(week.calendarId)||typeof week.workCenterCode!=="string"||typeof week.weekStart!=="string"||!/^\d{4}-\d{2}-\d{2}$/.test(week.weekStart)||![week.plannedHours,week.availableHours].every(value=>typeof value==="string"&&/^(?:0|[1-9][0-9]*)(?:\.[0-9]{1,4})?$/.test(value))) refuse("The run has invalid retained weekly capacity evidence.","mrp_capacity_evidence_invalid","review this run’s evidence with an administrator; rerun MRP for a new plan");
+    const key=week.workCenterId+":"+week.calendarId;
+    if(centers.has(key))continue;centers.set(key,week.workCenterId);
+    if((await tx.execute(sql`select center.id from mfg_work_centers center left join departments department on department.org_id=center.org_id and department.id=center.department_id join schedule_calendars calendar on calendar.org_id=center.org_id and calendar.id=${week.calendarId} left join projects project on project.org_id=calendar.org_id and project.id=calendar.project_id
+      where center.org_id=${orgId} and center.id=${week.workCenterId} ${centerResourcesVisible(scope)}
+        and (calendar.project_id is null or project.id is not null and true ${subsidiaryVisibleFilter(sql`project.subsidiary_id`,scope)})`)).rows.length!==1)throw new ManufacturingNotFoundError();
+  }
+  const capacity = frozen?frozen.map(week=>({work_center_id:week.workCenterId,week_start:week.weekStart,planned_hours:week.plannedHours,available_hours:week.availableHours,code:week.workCenterCode})):(await tx.execute<{ work_center_id: string; week_start: string; planned_hours: string; available_hours: string; code: string }>(sql`
     select c.id as work_center_id,w.week_start::text,w.planned_hours::text,w.available_hours::text,c.code
       from mfg_capacity_weeks w join mfg_work_centers c on c.org_id=w.org_id and c.id=w.work_center_id
      where w.org_id=${orgId} and c.subsidiary_id=${sub} and w.week_start between ${monday(run.horizonStart)}::date and ${run.horizonEnd}::date
      order by w.week_start,c.code`)).rows;
+  if(!frozen&&(await tx.execute(sql`select center.id from mfg_work_centers center left join departments department on department.org_id=center.org_id and department.id=center.department_id where center.org_id=${orgId} and center.subsidiary_id=${sub} and not(true ${centerResourcesVisible(scope)}) limit 1`)).rows.length)throw new ManufacturingNotFoundError();
   return {
     run,
+    capacityEvidence:frozen?"frozen" as const:"legacy_current" as const,
     suggestions: suggestions.map(({ code, item_name, ...suggestion }) => ({ ...suggestion, itemCode: itemLabel(code, item_name) })),
     capacity: capacity.map((row) => {
       const planned = toUnits(row.planned_hours); const available = toUnits(row.available_hours);
@@ -539,11 +606,13 @@ export async function getMrpRun(tx: SqlExecutor, orgId: string, id: string) {
   };
 }
 
-export async function findMrpRunRecord(tx: SqlExecutor, orgId: string, id: string): Promise<MrpRun | null> {
+export async function findMrpRunRecord(tx: SqlExecutor, orgId: string, id: string, actorId?: string): Promise<MrpRun | null> {
   await assertManufacturingFeature(tx, orgId, "manufacturingMrp");
-  return (await tx.execute<MrpRun>(sql`
+  const record=(await tx.execute<MrpRun>(sql`
     select id,number,horizon_start::text as "horizonStart",horizon_end::text as "horizonEnd",status,parameters,ran_at::text as "ranAt"
-      from mfg_mrp_runs where org_id=${orgId} and id=${id}`)).rows[0] ?? null;
+      from mfg_mrp_runs where org_id=${orgId} and id=${id}` )).rows[0] ?? null;
+  if(record && actorId) await lockPlanningAuthority(tx,orgId,actorId,String(record.parameters.subsidiaryId??""));
+  return record;
 }
 
 async function lockSuggestion(tx: SqlExecutor, orgId: string, id: string) {
@@ -567,15 +636,25 @@ async function lockSuggestion(tx: SqlExecutor, orgId: string, id: string) {
   return row;
 }
 
-export async function getPlannedOrder(tx: SqlExecutor, orgId: string, id: string) {
+async function lockAuthorizedSuggestion(tx:SqlExecutor,orgId:string,actorId:string,id:string,converting=false) {
+  if(!isUuid(id)) throw new ManufacturingNotFoundError();
+  const subject=(await tx.execute<{subsidiaryId:string;action:string}>(sql`select run.parameters->>'subsidiaryId' as "subsidiaryId",suggestion.action
+    from mfg_planned_orders suggestion join mfg_mrp_runs run on run.org_id=suggestion.org_id and run.id=suggestion.run_id
+    where suggestion.org_id=${orgId} and suggestion.id=${id}`)).rows[0];
+  if(!subject) throw new ManufacturingNotFoundError();
+  const scope=await lockPlanningAuthority(tx,orgId,actorId,subject.subsidiaryId,converting?(subject.action==='buy'?'ap.create':'items.post'):undefined);
+  return {row:await lockSuggestion(tx,orgId,id),scope};
+}
+
+export async function getPlannedOrder(tx: SqlExecutor, orgId: string, id: string,actorId?:string) {
   await assertManufacturingFeature(tx, orgId, "manufacturingMrp");
-  const row = await lockSuggestion(tx, orgId, id);
+  const row = actorId?(await lockAuthorizedSuggestion(tx,orgId,actorId,id,true)).row:await lockSuggestion(tx, orgId, id);
   return { ...row, subsidiaryId: String(row.parameters.subsidiaryId ?? "") };
 }
 
 export async function confirmPlannedOrder(tx: SqlExecutor, orgId: string, actorId: string, id: string) {
   await assertManufacturingFeature(tx, orgId, "manufacturingMrp");
-  const before = await lockSuggestion(tx, orgId, id);
+  const before = (await lockAuthorizedSuggestion(tx,orgId,actorId,id)).row;
   if (before.status === "confirmed") return before;
   if (before.status !== "suggested") refuse("Only a suggested planned order can be confirmed.", "planned_order_not_suggested", "select a suggested planned order", 409);
   const updated = await tx.execute(sql`update mfg_planned_orders set status='confirmed',updated_at=now(),updated_by=${actorId}
@@ -589,7 +668,7 @@ export async function dismissPlannedOrder(tx: SqlExecutor, orgId: string, actorI
   await assertManufacturingFeature(tx, orgId, "manufacturingMrp");
   const text = reason.trim();
   if (!text) refuse("A dismissal reason is required.", "dismiss_reason_required", "enter why this suggestion is not being pursued", 400);
-  const before = await lockSuggestion(tx, orgId, id);
+  const before = (await lockAuthorizedSuggestion(tx,orgId,actorId,id)).row;
   if (before.status !== "suggested") refuse("Only a suggested planned order can be dismissed.", "planned_order_not_suggested", "select a suggested planned order", 409);
   const updated = await tx.execute(sql`update mfg_planned_orders set status='dismissed',dismiss_reason=${text},updated_at=now(),updated_by=${actorId}
     where org_id=${orgId} and id=${id} and status='suggested' returning id`);
@@ -618,10 +697,16 @@ export async function markBuyPlannedOrderConverted(
   tx: SqlExecutor, orgId: string, actorId: string, id: string, targetId: string,
 ): Promise<{ id: string; action: "buy"; replayed: boolean }> {
   await assertManufacturingFeature(tx, orgId, "manufacturingMrp");
-  const row = await lockSuggestion(tx, orgId, id);
+  const row = (await lockAuthorizedSuggestion(tx,orgId,actorId,id,true)).row;
   if (row.action !== "buy") refuse("Only a purchase suggestion can be converted to a purchase order.", "mrp_buy_action_required", "select a buy suggestion", 409);
   if (row.status === "converted" && row.converted_ref_id) return { id: row.converted_ref_id, action: "buy", replayed: true };
   assertConvertible(row);
+  const purchase=(await tx.execute(sql`select document.id from documents document
+    where document.org_id=${orgId} and document.id=${targetId} and document.kind='purchase_order'
+      and document.subsidiary_id::text=${String(row.parameters.subsidiaryId??'')}
+      and exists(select 1 from document_lines line where line.org_id=document.org_id and line.document_id=document.id
+        and line.item_id=${row.item_id} and line.quantity=${row.quantity}::numeric) for share of document`)).rows[0];
+  if(!purchase) refuse('The purchase order does not match this saved suggestion.','mrp_purchase_source_mismatch','Create the purchase order from the saved MRP suggestion.',409);
   await markConverted(tx, orgId, actorId, row, targetId);
   return { id: targetId, action: "buy", replayed: false };
 }
@@ -631,7 +716,7 @@ export async function convertPlannedOrder(
   input: { fromLocationId?: string; toLocationId?: string },
 ): Promise<{ id: string; action: string; replayed: boolean }> {
   await assertManufacturingFeature(tx, orgId, "manufacturingMrp");
-  const row = await lockSuggestion(tx, orgId, id);
+  const {row,scope} = await lockAuthorizedSuggestion(tx,orgId,actorId,id,true);
   if (row.action === "buy") refuse(
     "Convert this purchase suggestion through its purchase order route.",
     "mrp_buy_route_required",
@@ -643,9 +728,9 @@ export async function convertPlannedOrder(
   const subsidiaryId = String(row.parameters.subsidiaryId ?? "");
   let targetId: string;
   if (row.action === "make") {
-    const routing = (await tx.execute<{ id: string }>(sql`select id from mfg_routings where org_id=${orgId} and produced_item_id=${row.item_id}
-      and status='active' and effective_from <= ${row.planned_start ?? row.due_date}::date
-      and (effective_to is null or ${row.planned_start ?? row.due_date}::date < effective_to) order by version desc limit 1`)).rows[0];
+    const routing = (await tx.execute<{ id: string }>(sql`select r.id from mfg_routings r where r.org_id=${orgId} and r.produced_item_id=${row.item_id}
+      and r.status='active' and r.effective_from <= ${row.planned_start ?? row.due_date}::date
+      and (r.effective_to is null or ${row.planned_start ?? row.due_date}::date < r.effective_to) ${routingResourcesVisible(scope)} order by r.version desc limit 1`)).rows[0];
     if (!routing) refuse(`Item ${itemLabel(row.item_code, row.item_name)} has no active routing for this planned start.`, "mrp_routing_required", "activate a routing for the item before converting this make suggestion", 409);
     const workOrder = await createWorkOrder(tx, orgId, actorId, {
       producedItemId: row.item_id, quantityOrdered: row.quantity, subsidiaryId,

@@ -1,3 +1,4 @@
+import { approveFixtureRouting } from "../testing/manufacturing.ts";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
@@ -11,7 +12,7 @@ import { postManufacturingEntry } from "./journal.ts";
 import { ManufacturingError } from "./errors.ts";
 import { createWorkOrder, getWorkOrder, updateDraftWorkOrder, releaseWorkOrder, holdWorkOrder, resumeWorkOrder, startWorkOrder, cancelWorkOrder, startWorkOrderOperation, pauseWorkOrderOperation, resumeWorkOrderOperation } from "./work-orders.ts";
 import { createWorkCenter } from "./work-centers.ts";
-import { activateRouting, createNextRoutingVersion, createRouting, createRoutingOperation, updateRouting } from "./routings.ts";
+import { createNextRoutingVersion, createRouting, createRoutingOperation, updateRouting } from "./routings.ts";
 import { updateManufacturingPolicies } from "./policies.ts";
 import { upsertItemPolicy } from "./item-policies.ts";
 import { createSandbox } from "../sandbox/lifecycle.ts";
@@ -66,7 +67,7 @@ async function route(f: Fixture, itemId: string, from = "2026-01-01", to: string
   await run((tx) => createRoutingOperation(tx, f.org.orgId, f.actorId, String(routing.id), {
     sequence: 10, name: "Assemble", workCenterId: String(center.id), setupMinutes: "5", runMinutesPerUnit: "1",
   }));
-  await run((tx) => activateRouting(tx, f.org.orgId, f.actorId, String(routing.id)));
+  await run((tx) => approveFixtureRouting(tx, f.org.orgId, f.actorId, String(routing.id)));
   return String(routing.id);
 }
 
@@ -91,7 +92,7 @@ const cases: Case[] = [
     const first = await route(f, f.org.items.assembly, "2026-01-01", "2026-06-30");
     const next = await run((tx) => createNextRoutingVersion(tx, f.org.orgId, f.actorId, first));
     await run((tx) => updateRouting(tx, f.org.orgId, f.actorId, String(next.id), { effectiveFrom: "2026-08-01", effectiveTo: null }));
-    await run((tx) => activateRouting(tx, f.org.orgId, f.actorId, String(next.id)));
+    await run((tx) => approveFixtureRouting(tx, f.org.orgId, f.actorId, String(next.id)));
     await route(f, f.org.items.standard);
     const draft = await order(f, f.org.items.assembly, "2026-07-15");
     await refuse(run((tx) => releaseWorkOrder(tx, f.org.orgId, f.actorId, draft.id)), "routing_not_effective", "Assembly");
@@ -123,9 +124,10 @@ const cases: Case[] = [
     await refuse(run((tx) => releaseWorkOrder(tx, f.org.orgId, f.actorId, second.id)), "work_order_shortage", "Component: 1");
   } },
   { name: "make subassembly creates and releases a child", run: async (f) => {
-    await route(f, f.org.items.assembly); await route(f, f.org.items.component);
+    await route(f, f.org.items.assembly);
     await run((tx) => upsertItemPolicy(tx, f.org.orgId, f.actorId, f.org.items.component, itemPolicy));
     await withBypassContext(async () => db.execute(sql`insert into bom_components (org_id, assembly_item_id, component_item_id, quantity_per, sort_order) values (${f.org.orgId}, ${f.org.items.component}, ${f.org.items.standard}, '1', 0) returning id`));
+    await route(f, f.org.items.component);
     await run((tx) => upsertItemPolicy(tx, f.org.orgId, f.actorId, f.org.items.component, { ...itemPolicy, supplyMethod: "make" }));
     const parent = await order(f); await run((tx) => releaseWorkOrder(tx, f.org.orgId, f.actorId, parent.id));
     const children = await withBypassContext(async () => db.execute<{ status: string; source: string; parent_wo_id: string }>(sql`select status,source,parent_wo_id from mfg_work_orders where org_id=${f.org.orgId} and parent_wo_id=${parent.id}`));
@@ -161,9 +163,10 @@ const cases: Case[] = [
     await refuse(run((tx) => releaseWorkOrder(tx, f.org.orgId, f.actorId, draft.id)), "work_order_approval_required", "configured work-order flow");
   } },
   { name: "parent cancellation refuses a started child by number", run: async (f) => {
-    await route(f, f.org.items.assembly); await route(f, f.org.items.component);
+    await route(f, f.org.items.assembly);
     await run((tx) => upsertItemPolicy(tx, f.org.orgId, f.actorId, f.org.items.component, { ...itemPolicy, supplyMethod: "make" }));
     await withBypassContext(async () => db.execute(sql`insert into bom_components (org_id, assembly_item_id, component_item_id, quantity_per, sort_order) values (${f.org.orgId}, ${f.org.items.component}, ${f.org.items.standard}, '1', 0) returning id`));
+    await route(f, f.org.items.component);
     const parent = await order(f); await run((tx) => releaseWorkOrder(tx, f.org.orgId, f.actorId, parent.id));
     const child = await withBypassContext(async () => (await db.execute<{ id: string; number: string }>(sql`select id,number from mfg_work_orders where org_id=${f.org.orgId} and parent_wo_id=${parent.id}`)).rows[0]!);
     await run((tx) => startWorkOrder(tx, f.org.orgId, f.actorId, child.id));
@@ -192,6 +195,41 @@ const cases: Case[] = [
     const resumed = await run((tx) => resumeWorkOrderOperation(tx, f.org.orgId, f.actorId, draft.id, operation.id));
     assert.equal(resumed.status, "running"); assert.equal(resumed.pause_reason, null);
   } },
+  {name:"lifecycle commands and their successful replays refuse revoked authority without changing orders or operations",run:async f=>{
+    await route(f,f.org.items.assembly);
+    const draft=await order(f);
+    const cancelled=await order(f);await run(tx=>cancelWorkOrder(tx,f.org.orgId,f.actorId,cancelled.id));
+    const active=await order(f);await run(tx=>releaseWorkOrder(tx,f.org.orgId,f.actorId,active.id));
+    const operation=(await run(tx=>getWorkOrder(tx,f.org.orgId,active.id)))!.operations[0]!;
+    await run(tx=>startWorkOrderOperation(tx,f.org.orgId,f.actorId,active.id,operation.id));
+    await run(tx=>pauseWorkOrderOperation(tx,f.org.orgId,f.actorId,active.id,operation.id,"Material staging"));
+    await run(tx=>resumeWorkOrderOperation(tx,f.org.orgId,f.actorId,active.id,operation.id));
+    const held=await order(f);await run(tx=>releaseWorkOrder(tx,f.org.orgId,f.actorId,held.id));await run(tx=>holdWorkOrder(tx,f.org.orgId,f.actorId,held.id,"Awaiting components"));
+    const state=()=>run(async tx=>(await tx.execute(sql`select
+      (select jsonb_agg(to_jsonb(w) order by id) from mfg_work_orders w where org_id=${f.org.orgId}) as orders,
+      (select jsonb_agg(to_jsonb(o) order by id) from mfg_wo_operations o where org_id=${f.org.orgId}) as operations,
+      (select count(*)::text from journal_entries where org_id=${f.org.orgId}) as entries,
+      (select count(*)::text from audit_log where org_id=${f.org.orgId}) as audits`)).rows[0]);
+    const before=await state();
+    await run(async tx=>assert.ok((await tx.execute(sql`update app_roles set permissions='["manufacturing.read","items.post"]'::jsonb
+      where org_id=${f.org.orgId} and id in(select role_id from role_assignments where org_id=${f.org.orgId} and user_id=${f.actorId}) returning id`)).rows.length));
+    for(const command of [
+      ()=>run(tx=>updateDraftWorkOrder(tx,f.org.orgId,f.actorId,draft.id,{quantityOrdered:"2"})),
+      ()=>run(tx=>releaseWorkOrder(tx,f.org.orgId,f.actorId,draft.id)),
+      ()=>run(tx=>cancelWorkOrder(tx,f.org.orgId,f.actorId,cancelled.id)),
+      ()=>run(tx=>cancelWorkOrder(tx,f.org.orgId,f.actorId,draft.id)),
+      ()=>run(tx=>holdWorkOrder(tx,f.org.orgId,f.actorId,held.id,"Awaiting components")),
+      ()=>run(tx=>resumeWorkOrder(tx,f.org.orgId,f.actorId,held.id)),
+      ()=>run(tx=>resumeWorkOrder(tx,f.org.orgId,f.actorId,active.id)),
+      ()=>run(tx=>startWorkOrder(tx,f.org.orgId,f.actorId,active.id)),
+      ()=>run(tx=>startWorkOrderOperation(tx,f.org.orgId,f.actorId,active.id,operation.id)),
+      ()=>run(tx=>pauseWorkOrderOperation(tx,f.org.orgId,f.actorId,active.id,operation.id,"Awaiting tool")),
+      ()=>run(tx=>resumeWorkOrderOperation(tx,f.org.orgId,f.actorId,active.id,operation.id)),
+      ()=>run(tx=>holdWorkOrder(tx,f.org.orgId,randomUUID(),active.id,"Unknown actor")),
+    ]) await assert.rejects(command());
+    assert.deepEqual(await state(),before);
+  }},
+
 ];
 
 test("work-order lifecycle case table", { skip: !DB }, async () => {

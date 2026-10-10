@@ -484,6 +484,7 @@ const STOCK_LOCATION_KINDS = [
   { value: 'staging', labelKey: 'options.stockLocationKind.staging' },
   { value: 'transit', labelKey: 'options.stockLocationKind.transit' },
   { value: 'quarantine', labelKey: 'options.stockLocationKind.quarantine' },
+  { value: 'subcontract', labelKey: 'options.stockLocationKind.subcontract', featureKey: 'manufacturingSubcontract' },
 ]
 
 const CONSOLIDATION_METHODS = [

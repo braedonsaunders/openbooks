@@ -10,6 +10,8 @@ const query = z
     itemId: uuidId,
     q: z.string().max(200).optional(),
     lotId: uuidId.optional(),
+    selectedLotId:uuidId.optional(),
+    selectedSerialId:uuidId.optional(),
   })
   .strict();
 export const GET = defineRoute({

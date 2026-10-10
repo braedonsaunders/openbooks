@@ -1,4 +1,6 @@
 "use client";
+import { LineGrid } from "@/components/line-grid";
+import { cmp } from "@openbooks/engine/src/money/money.ts";
 import { useEffect, useId, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import {
@@ -9,13 +11,19 @@ import {
   SearchSelect,
   Textarea,
 } from "@openbooks/ui";
+import { RemoteRecordChoice } from "@/components/remote-record-choice";
 import { readApiErrorMessage } from "@/lib/api-error";
+import { OperatingProfilePicker } from "@/components/operating-profile-picker";
+import type { OperatingProfileChoice } from "@openbooks/engine/src/organization/operating-profiles.ts";
 import type { ManufacturingRecordData } from "@openbooks/engine/src/manufacturing/workspace.ts";
 import { commandBody, type Choice, type Command, type Field } from "./commands";
 
 type Line = Record<string, string> & { key: string };
 export function CommandForm({
   command,
+  initialWorkflow,
+  initialDepartmentId,
+  initialValues,
   data,
   onSaved,
   onCancel,
@@ -23,6 +31,9 @@ export function CommandForm({
   onDirty,
 }: {
   command: Command;
+  initialWorkflow?: OperatingProfileChoice;
+  initialDepartmentId?: string;
+  initialValues?: {producedItemId?:string;subsidiaryId?:string;quantityOrdered?:string};
   data?: ManufacturingRecordData;
   onSaved: (
     result: Record<string, unknown>,
@@ -39,7 +50,7 @@ export function CommandForm({
     Object.fromEntries(
       command.fields.map((f) => [
         f.key,
-        f.initial ?? (f.type === "boolean" ? false : ""),
+        (command.create && command.path==='/api/manufacturing/work-orders' && ['producedItemId','subsidiaryId','quantityOrdered'].includes(f.key) ? initialValues?.[f.key as keyof NonNullable<typeof initialValues>] : undefined) ?? f.initial ?? (f.type === "boolean" ? false : ""),
       ]),
     ),
   );
@@ -47,9 +58,16 @@ export function CommandForm({
     [error, setError] = useState<string | null>(null),
     [busy, setBusy] = useState(false),
     [uncertain, setUncertain] = useState(false);
+  const [recordInputs,setRecordInputs] = useState(false);
+  const [componentRows,setComponentRows] = useState<Array<Record<string,unknown>>>([]);
   const lock = useRef(false),
     requestKey = useRef<string | null>(null),
     sentBody = useRef<string | null>(null);
+  const workflowCreate = command.create === true && command.path === '/api/manufacturing/work-orders';
+  const [workflowSelection, setWorkflowSelection] = useState<OperatingProfileChoice | null>(initialWorkflow ?? null);
+  const [workflowChoosing, setWorkflowChoosing] = useState(workflowCreate && !initialWorkflow);
+  const [workflowDepartment,setWorkflowDepartment]=useState(initialDepartmentId ?? '');
+  const tOperating = useTranslations('operatingProfiles');
   const set = (key: string, value: unknown) => {
     onDirty?.();
     setValues((v) => ({ ...v, [key]: value }));
@@ -62,7 +80,8 @@ export function CommandForm({
     return (
       <div key={f.key} className="space-y-1.5">
         <Label htmlFor={id + "-" + f.key}>
-          {t("fields." + f.key)}
+          {t("fields." + (f.labelKey??f.key))}
+          {f.context?<span className="ml-1 text-xs font-normal text-slate-500">{f.context}</span>:null}
           {f.required ? " *" : ""}
         </Label>
         {f.type === "select" && remoteKind(f.key) ? (
@@ -177,8 +196,17 @@ export function CommandForm({
     try {
       for (const f of command.fields)
         if (f.required && (values[f.key] === undefined || values[f.key] === ""))
-          throw new Error(t("choose") + " · " + t("fields." + f.key));
+          throw new Error(t("choose") + " · " + t("fields." + (f.labelKey??f.key)));
       const body = commandBody(command, values);
+      if (workflowCreate) {
+        if (!workflowSelection) throw new Error(tOperating('chooseTitle'));
+        body.operatingProfile = workflowSelection.value; body.operatingDepartmentId=workflowDepartment || null;
+        if(workflowSelection.definition.physicalModel!=='process'){delete body.productionMode;delete body.campaignReference;}
+      }
+      if (command.key === 'complete' && recordInputs) {
+        if (!componentRows.length || componentRows.some(row=>!row.movementId || !row.quantity)) throw new Error(t('receiptInputs.required'));
+        body.componentSelections = componentRows.map(row=>({movementId:String(row.movementId),quantity:String(row.quantity)}));
+      }
       if (command.repeat === "issue") {
         if (!lines.length) throw new Error(t("issueLinesRequired"));
         for (const line of lines) {
@@ -271,6 +299,10 @@ export function CommandForm({
       setBusy(false);
     }
   }
+  if (workflowCreate && workflowChoosing) return <div className="space-y-4 rounded-xl border border-slate-200 p-4 dark:border-slate-800">
+    <OperatingProfilePicker family="production" departmentId={workflowDepartment} value={workflowSelection?.value ?? null} onChoose={(choice,department)=>{onDirty?.();setWorkflowSelection(choice);setWorkflowDepartment(department);setWorkflowChoosing(false)}} />
+    <Button variant="ghost" onClick={onCancel}>{t('cancel')}</Button>
+  </div>;
   return (
     <form
       onChange={onDirty}
@@ -279,12 +311,14 @@ export function CommandForm({
       aria-busy={busy}
     >
       <h3 className="font-semibold">{t("actions." + command.key)}</h3>
+      {workflowSelection ? <div className="flex items-center justify-between gap-3"><span className="text-sm font-medium">{workflowSelection.name}</span><Button type="button" variant="ghost" size="sm" disabled={busy || uncertain} onClick={() => setWorkflowChoosing(true)}>{tOperating('change')}</Button></div> : null}
       {command.note ? (
         <p className="text-sm text-slate-500">{t(command.note)}</p>
       ) : null}
       <div className="grid gap-4 sm:grid-cols-2">
-        {command.fields.map(control)}
+        {command.fields.filter(field=>!field.section).map(control)}
       </div>
+      {(workflowSelection?.definition.physicalModel==='process'||(data?.record.operatingProfile as {physicalModel?:string}|undefined)?.physicalModel==='process')&&command.fields.some(field=>field.section==='process')?<details className="rounded-xl border p-4"><summary className="cursor-pointer text-sm font-medium">{t('process.details')}</summary><p className="mt-3 text-xs text-slate-500">{t('process.windowNote')}</p><div className="mt-4 grid gap-4 sm:grid-cols-2">{command.fields.filter(field=>field.section==='process').map(control)}</div></details>:null}
       {command.repeat ? (
         <div className="space-y-3">
           <div className="flex items-center justify-between">
@@ -332,6 +366,15 @@ export function CommandForm({
           ) : null}
         </div>
       ) : null}
+      {command.key==='complete' ? <fieldset className="space-y-3 rounded-xl border p-4">
+        <legend className="px-1 text-sm font-semibold">{t('receiptInputs.title')}</legend>
+        <label className="flex items-start gap-2 text-sm"><input type="checkbox" checked={recordInputs} disabled={busy||uncertain} onChange={event=>{setRecordInputs(event.target.checked);onDirty?.();}}/>{t('receiptInputs.capture')}</label>
+        <p className="text-xs text-slate-500">{t(recordInputs ? 'receiptInputs.recordedNote' : 'receiptInputs.estimatedNote')}</p>
+        {recordInputs ? <LineGrid rows={componentRows} onRowsChange={rows=>{setComponentRows(rows);onDirty?.();}} readOnly={busy||uncertain} emptyRow={()=>({movementId:'',quantity:''})} columns={[
+          {key:'movementId',label:t('receiptInputs.issue'),type:'search-select',required:true,width:'minmax(280px,1fr)',options:(data?.sections.issues??[]).filter(row=>row.status==='posted'&&row.liveIssue&&cmp(String(row.unassignedQty??'0'),'0')>0).map(row=>({value:row.id,label:[row.itemName,row.lotNumber,row.serialNumber,row.unassignedQty,row.unit].filter(Boolean).join(' · ')}))},
+          {key:'quantity',label:t('fields.quantity'),type:'decimal',required:true,decimalScale:4,width:'160px'},
+        ]}/> : null}
+      </fieldset> : null}
       {command.byproducts?.length ? (
         <fieldset className="space-y-3">
           <legend className="text-sm font-semibold">
@@ -606,7 +649,9 @@ function CaptureLine({
 }
 
 const remoteKind = (key: string) =>
-  key === "producedItemId"
+  key === "workCenterId"
+    ? "centers"
+    : key === "producedItemId"
     ? "items"
     : key === "vendorId"
       ? "vendors"
@@ -614,115 +659,8 @@ const remoteKind = (key: string) =>
         ? "locations"
         : null;
 
-/** Search results and retries stay inside the house reference-picker shell. */
-function RemoteChoice({
-  id,
-  value,
-  options,
-  endpoint,
-  resultKey,
-  disabled,
-  clearable,
-  onChange,
-}: {
-  id: string;
-  value: string;
-  options: Choice[];
-  endpoint: string;
-  resultKey?: "lots" | "serials";
-  disabled: boolean;
-  clearable: boolean;
-  onChange: (value: string) => void;
-}) {
-  const t = useTranslations("manufacturing");
-  const [query, setQuery] = useState(""),
-    [rows, setRows] = useState(options),
-    [error, setError] = useState<string | null>(null),
-    [loading, setLoading] = useState(false),
-    [attempt, setAttempt] = useState(0);
-  const chosen = useRef<Choice | undefined>(
-    options.find((o) => o.value === value),
-  );
-  useEffect(() => {
-    const controller = new AbortController();
-    const timer = setTimeout(() => {
-      setLoading(true);
-      setError(null);
-      const url = new URL(endpoint, window.location.origin);
-      url.searchParams.set("q", query);
-      if (value) url.searchParams.set("selected", value);
-      fetch(url.pathname + url.search, { signal: controller.signal })
-        .then(async (response) => {
-          if (!response.ok)
-            throw new Error(
-              await readApiErrorMessage(response, t("loadFailed")),
-            );
-          const data = await response.json();
-          return (resultKey ? data[resultKey] : data) as Choice[];
-        })
-        .then((result) => {
-          if (!controller.signal.aborted) {
-            setRows(result);
-            const selected = result.find((o) => o.value === value);
-            if (selected) chosen.current = selected;
-          }
-        })
-        .catch((cause) => {
-          if (!controller.signal.aborted) {
-            setRows([]);
-            setError(cause instanceof Error ? cause.message : t("loadFailed"));
-          }
-        })
-        .finally(() => {
-          if (!controller.signal.aborted) setLoading(false);
-        });
-    }, 150);
-    return () => {
-      clearTimeout(timer);
-      controller.abort();
-    };
-  }, [endpoint, query, value, resultKey, t, attempt]);
-  const selected =
-    rows.find((o) => o.value === value) ??
-    (chosen.current?.value === value ? chosen.current : undefined);
-  const choices =
-    selected && !rows.some((o) => o.value === value)
-      ? [selected, ...rows]
-      : rows;
-  return (
-    <div className="space-y-1">
-      <SearchSelect
-        id={id}
-        ariaLabel={t("choose")}
-        value={value}
-        options={choices}
-        onChange={(next) => {
-          chosen.current = choices.find((o) => o.value === next);
-          onChange(next);
-        }}
-        placeholder={t("choose")}
-        searchPlaceholder={t("searchPlaceholder")}
-        disabled={disabled}
-        clearable={clearable}
-        emptyLabel={t("choose")}
-        remote
-        searchable
-        loading={loading}
-        onSearchChange={(q) => setQuery(q.slice(0, 200))}
-        statusMessage={error ?? undefined}
-        statusTone={error ? "error" : "muted"}
-      />
-      {error ? (
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          disabled={disabled}
-          onClick={() => setAttempt((a) => a + 1)}
-        >
-          {t("retry")}
-        </Button>
-      ) : null}
-    </div>
-  );
+/** The manufacturing vocabulary composes the shared remote reference control. */
+function RemoteChoice(props: Omit<Parameters<typeof RemoteRecordChoice>[0], 'labels'>) {
+  const t = useTranslations('manufacturing');
+  return <RemoteRecordChoice {...props} labels={{ choose: t('choose'), searchPlaceholder: t('searchPlaceholder'), loadFailed: t('loadFailed'), retry: t('retry') }} />;
 }

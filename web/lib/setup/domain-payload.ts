@@ -25,7 +25,10 @@ export function setupAggregatePayload(entity: SetupEntity, body: Record<string, 
   const result = { ...body }
   if (row && entity.mutationRevision) {
     const revision = row[entity.mutationRevision.rowColumn]
-    if (!Number.isSafeInteger(revision) || (revision as number) < 1) return { ok: false, error: 'revision' }
+    const valid = entity.mutationRevision.format === 'token'
+      ? typeof revision === 'string' && /^[0-9A-Za-z:_-]{1,160}$/.test(revision)
+      : Number.isSafeInteger(revision) && (revision as number) >= 1
+    if (!valid) return { ok: false, error: 'revision' }
     result[entity.mutationRevision.requestKey] = revision
   }
   const keys = row ? entity.mutationUpdateKeys : entity.mutationCreateKeys

@@ -1,3 +1,4 @@
+import { authorizeTimeWorkspace, timeWorkFamily } from "@/lib/time-workspace";
 import { z } from "zod";
 import { isoDate, uuidId } from "@/lib/api/json";
 import { defineRoute } from "@/lib/api/route";
@@ -29,10 +30,10 @@ interface Body {
  * alone (submit them first) so approval is an explicit two-step gate.
  */
 export const POST = defineRoute({
-  permission: "time.approve",
-  feature: "timeTracking",
+  authorize: authorizeTimeWorkspace("time.approve"),
+  feature: { none: "The explicit workspace pins Time Tracking or Manufacturing; native commands fence every actual target." },
   body: postBodySchema0,
-  handler: async ({ request: _req, authz: gate, body: routeBody }) => {
+  handler: async ({ request: workspaceRequest, authz: gate, body: routeBody }) => {
     const { user } = gate;
     const orgId = user.orgId;
 
@@ -55,6 +56,7 @@ export const POST = defineRoute({
         employeePartyId: ownedEmployee,
         weekStart: week,
         allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
+        workFamily: timeWorkFamily(workspaceRequest),
       });
     } catch (error) {
       if (error instanceof ScopeNotFoundError)

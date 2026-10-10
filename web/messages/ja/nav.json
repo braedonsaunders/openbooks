@@ -163,7 +163,9 @@
     "manufacturing-work-orders": "製造指図",
     "manufacturing-work-centers": "作業センター",
     "manufacturing-routings": "工程表と改訂",
-    "manufacturing-mrp": "MRP実行"
+    "manufacturing-mrp": "MRP実行",
+    "manufacturing-time": "製造工数",
+    "manufacturing-quality": "品質"
   },
   "groups": {
     "manufacturing": "製造",

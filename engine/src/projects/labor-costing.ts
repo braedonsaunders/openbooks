@@ -1,3 +1,4 @@
+import { lockActorCommandAuthority } from '../organization/actor-command-authority.ts'
 import { sql, type SQL } from "drizzle-orm";
 import { db, inDbTransaction, type SqlExecutor } from "../platform/db.ts";
 import { isIsoCalendarDate } from "../platform/business-date.ts";
@@ -756,6 +757,8 @@ export async function snapshotLaborCostRates(
       id: string;
       employee_party_id: string;
       project_id: string | null;
+      work_order_id: string | null;
+      work_order_subsidiary_id: string | null;
       worked_on: string;
       cost_multiplier: string;
       job_title: string | null;
@@ -768,11 +771,11 @@ export async function snapshotLaborCostRates(
       worker_comp_group_id: string | null;
       worker_comp_group_code: string | null;
     }>(sql`
-    select te.id, te.employee_party_id, te.project_id, te.worked_on,
+    select te.id, te.employee_party_id, te.project_id, te.work_order_id, wo.subsidiary_id as work_order_subsidiary_id, te.worked_on,
            coalesce(tt.cost_multiplier, '1') as cost_multiplier,
            er.job_title, er.trade_id, er.department_id, employee.subsidiary_id,
-           coalesce(project_sub.base_currency, employee_sub.base_currency) as target_currency,
-           coalesce(project.subsidiary_id, employee.subsidiary_id) as target_subsidiary_id,
+           case when te.work_order_id is not null then wo_sub.base_currency else coalesce(project_sub.base_currency, employee_sub.base_currency) end as target_currency,
+           case when te.work_order_id is not null then wo.subsidiary_id else coalesce(project.subsidiary_id, employee.subsidiary_id) end as target_subsidiary_id,
            wcg.rate_percent as worker_comp_percent,
            wcg.id as worker_comp_group_id, wcg.code as worker_comp_group_code
       from time_entries te
@@ -781,6 +784,8 @@ export async function snapshotLaborCostRates(
       left join parties employee on employee.id = te.employee_party_id and employee.org_id = te.org_id
       left join subsidiaries employee_sub on employee_sub.id = employee.subsidiary_id and employee_sub.org_id = te.org_id
       left join projects project on project.id = te.project_id and project.org_id = te.org_id
+      left join mfg_work_orders wo on wo.id=te.work_order_id and wo.org_id=te.org_id
+      left join subsidiaries wo_sub on wo_sub.id=wo.subsidiary_id and wo_sub.org_id=te.org_id
       left join subsidiaries project_sub on project_sub.id = project.subsidiary_id and project_sub.org_id = te.org_id
       left join worker_comp_groups wcg on wcg.id = er.worker_comp_group_id and wcg.org_id = te.org_id
      where te.org_id = ${orgId} and te.id = any(${idArr}::uuid[]) and te.cost_rate is null`));
@@ -810,6 +815,10 @@ export async function snapshotLaborCostRates(
   // HR-13 end
   const fxCache = new Map<string, string>();
   for (const r of rows.rows) {
+    if (r.work_order_id) {
+      await assertLaborCostObjectFeature(db, orgId, { projectId: r.project_id, workOrderId: r.work_order_id });
+      if (!r.work_order_subsidiary_id || !r.target_currency) throw new LaborCostObjectError('The production time entry has no valid work-order legal entity or currency. Review the work order before approving time.');
+    }
     const targetCurrency = r.target_currency ?? orgCurrency;
     const targetSubsidiaryId = r.target_subsidiary_id ?? rootSubsidiaryId;
     const key = `${r.employee_party_id}|${r.worked_on}|${targetSubsidiaryId}|${r.project_id ?? ""}`;
@@ -891,7 +900,7 @@ export async function snapshotLaborCostRates(
       functionalSettings,
       { workerCompPercent, workerCompSource },
     );
-    await db.execute(sql`
+    const updated = await db.execute(sql`
       update time_entries
          set cost_rate = ${rate},
              labor_cost_rate_id = ${prevailingPriced.get(key) ? null : wage.rateId},
@@ -900,7 +909,8 @@ export async function snapshotLaborCostRates(
              wage_fx_rate = ${normalizeDecimal(fxRate, 10)},
              cost_rate_currency = ${targetCurrency},
              cost_rate_subsidiary_id = ${targetSubsidiaryId}
-       where id = ${r.id} and org_id = ${orgId} and cost_rate is null`);
+       where id = ${r.id} and org_id = ${orgId} and cost_rate is null returning id`);
+    if (updated.rows.length !== 1) throw new LaborCostObjectError('The time entry changed during its cost snapshot. Reload and retry approval.');
     stamped++;
   }
   return stamped;
@@ -913,7 +923,7 @@ export async function snapshotLaborCostRates(
 export interface ClearingReconciliation {
   subsidiaryId: string;
   currency: string;
-  /** Σ standard labor CREDITED to clearing this period (origin labor_burden). */
+  /** Standard labor credited by project approval and manufacturing conversion, including reversals. */
   standardPosted: string;
   /** Σ payroll actuals DEBITED to clearing this period (all other postings). */
   payrollPosted: string;
@@ -923,6 +933,7 @@ export interface ClearingReconciliation {
   openBalance: string;
   /** Standard labor cost by project this period, for the drill table. */
   perProject: { projectId: string; name: string; standard: string }[];
+  perWork: { kind: "project" | "production"; id: string; name: string; standard: string }[];
 }
 
 type LaborTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
@@ -954,8 +965,9 @@ async function laborClearingReconciliationFrom(
   // reversal pairs cancel instead of double- or half-counting.
   const sums = (await executor.execute<{ standard_posted: string; payroll_posted: string }>(sql`
     select
-      coalesce(-sum(l.amount) filter (where e.origin = 'labor_burden'), 0) as standard_posted,
+      coalesce(-sum(l.amount) filter (where e.origin = 'labor_burden' or (e.origin='manufacturing' and e.custom ? 'conversion_labor_amount')), 0) as standard_posted,
       coalesce(sum(l.amount) filter (where e.origin is distinct from 'labor_burden'
+                                       and not (e.origin is not distinct from 'manufacturing' and coalesce(e.custom ? 'conversion_labor_amount',false))
                                        and e.origin is distinct from 'payroll_variance'), 0) as payroll_posted
       from journal_lines l
       join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id and e.status in ('posted', 'reversed')
@@ -985,6 +997,14 @@ async function laborClearingReconciliationFrom(
      having sum(l.amount) <> 0
      order by sum(l.amount) desc
      limit 25`));
+  const perProduction = (await executor.execute<{id:string;name:string;standard:string}>(sql`
+    select w.id,w.number as name,-sum(l.amount)::numeric as standard
+    from journal_lines l join journal_entries e on e.org_id=l.org_id and e.id=l.entry_id
+    join mfg_work_orders w on w.org_id=e.org_id and w.number=e.custom->>'work_order_number'
+    where l.org_id=${orgId} and l.account_id=${laborClearingAccountId} and l.subsidiary_id=${subsidiaryId}
+      and e.book_id=${bookId} and e.origin='manufacturing' and e.custom ? 'conversion_labor_amount'
+      and e.status in ('posted','reversed') and e.posting_date>=${periodStart} and e.posting_date<=${periodEnd}
+    group by w.id,w.number having sum(l.amount)<>0 order by -sum(l.amount) desc,w.id limit 25`)).rows;
   const subsidiary = (await executor.execute<{ base_currency: string }>(sql`
     select base_currency
       from subsidiaries
@@ -1004,6 +1024,7 @@ async function laborClearingReconciliationFrom(
       neg(String(s.payroll_posted)),
     ),
     openBalance: String(open.rows[0]?.balance ?? "0"),
+    perWork: [...perProject.rows.map(row=>({kind:"project" as const,id:row.project_id,name:row.name,standard:String(row.standard)})),...perProduction.map(row=>({kind:"production" as const,id:row.id,name:row.name,standard:String(row.standard)}))],
     perProject: perProject.rows.map((r) => ({
       projectId: r.project_id,
       name: r.name,
@@ -1027,7 +1048,7 @@ export async function laborClearingReconciliation(
   subsidiaryId: string,
 ): Promise<ClearingReconciliation | null> {
   return inDbTransaction(async (tx) => {
-    if (!(await lockAndCheckOrgFeature(tx, orgId, "projects"))) {
+    if (!(await lockAndCheckOrgFeature(tx, orgId, "projects")) && !(await lockAndCheckOrgFeature(tx, orgId, "manufacturing"))) {
       throw new LaborCostingFeatureDisabledError();
     }
     const accts = await recognitionAccounts(orgId, tx);
@@ -1064,6 +1085,8 @@ export async function postPayrollVariance(opts: {
   // reverse the prior generation and repost (journal_entries_org_number).
   const entryNumberBase = `PVAR-${periodEnd}-${subsidiaryId.slice(0, 8)}`;
   return inDbTransaction(async (tx) => {
+    if (!(await tx.execute(sql`select id from users where id=${actorId} and is_active and (org_id=${orgId} or is_super_admin) for share`)).rows[0]) throw Object.assign(new Error('Record not found.'), { status: 404 })
+    await lockActorCommandAuthority(tx,orgId,actorId,subsidiaryId,'gl.post')
     // The shared setup fence protects both account mappings for the complete
     // reverse/recompute/repost unit without serializing unrelated posting.
     await lockLedgerSetupFence(tx, orgId, "shared");
@@ -1083,7 +1106,7 @@ export async function postPayrollVariance(opts: {
         from orgs
        where id = ${orgId}
        for share`));
-    if (!(await lockAndCheckOrgFeature(tx, orgId, "projects"))) {
+    if (!(await lockAndCheckOrgFeature(tx, orgId, "projects")) && !(await lockAndCheckOrgFeature(tx, orgId, "manufacturing"))) {
       throw new LaborCostingFeatureDisabledError();
     }
     const laborClearing = config.rows[0]?.labor_clearing;

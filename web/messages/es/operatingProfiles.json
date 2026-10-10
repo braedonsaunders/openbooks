@@ -1,0 +1,87 @@
+{
+  "chooseTitle": "Elija cómo se realiza este trabajo",
+  "chooseDescription": "Empiece con el detalle que necesita su equipo. Las funciones y permisos controlan las opciones.",
+  "change": "Cambiar flujo",
+  "loading": "Cargando flujos…",
+  "loadFailed": "No se pudieron cargar los flujos.",
+  "retry": "Reintentar",
+  "noChoices": "No hay flujos disponibles. Revise las funciones y perfiles en Configuración.",
+  "presets": {
+    "shop_jobs": {
+      "name": "Trabajos de taller",
+      "description": "Trabajos de clientes, preparación y tiempo. Añada actividades cuando sean útiles."
+    },
+    "field_work": {
+      "name": "Trabajo de campo",
+      "description": "Trabajo en obra con partes de campo, equipos y planificación opcionales."
+    },
+    "professional_services": {
+      "name": "Servicios profesionales",
+      "description": "Encargos, tiempo y entregables sin campos de construcción."
+    },
+    "discrete_production": {
+      "name": "Producción discreta",
+      "description": "Productos repetibles con listas de materiales y operaciones definidas."
+    },
+    "custom_production": {
+      "name": "Producción personalizada",
+      "description": "Productos bajo pedido con materiales y revisiones controlados."
+    },
+    "batch_process": {
+      "name": "Producción por lotes y procesos",
+      "description": "Recetas, lotes, rendimientos medidos y productos trazables."
+    }
+  },
+  "capture": {
+    "job": "Trabajo completo",
+    "activities": "Actividades",
+    "tasks": "Tareas",
+    "field_tickets": "Partes de campo",
+    "operations": "Operaciones",
+    "batch": "Lote"
+  },
+  "time": {
+    "work": "Trabajo",
+    "project": "Proyecto / trabajo",
+    "production": "Producción",
+    "order": "Orden de producción",
+    "operation": "Operación (opcional)",
+    "search": "Buscar trabajo",
+    "title": "Tiempo de producción",
+    "correct": "Corregir",
+    "correctTitle": "Corregir horas de producción",
+    "correctMessage": "El original permanece contabilizado. Una contrapartida y un reemplazo registran la corrección; los productos recibidos conservan su costo histórico.",
+    "correctHours": "Horas corregidas",
+    "correctReason": "Motivo",
+    "record": "Registrar tiempo"
+  },
+  "department": "Departamento (opcional)",
+  "companyDefaults": "Valores de la empresa",
+  "default": "Flujo predeterminado",
+  "views": {
+    "presentation": "Vista",
+    "list": "Lista",
+    "board": "Tablero",
+    "emptyLane": "Sin trabajo en esta página",
+    "pageScope": "Las tarjetas y los recuentos de columnas muestran la página filtrada actual.",
+    "saveFailed": "No se pudo guardar la preferencia de vista."
+  },
+  "filters": {
+    "workflow": "Flujo de trabajo",
+    "department": "Departamento",
+    "allWorkflows": "Todos los flujos",
+    "allDepartments": "Todos los departamentos",
+    "legacy": "Trabajo existente sin perfil",
+    "unassigned": "Sin asignar"
+  },
+  "workJourney": {
+    "description": "Mantenga el trabajo, el tiempo y los costos en este trabajo. Añada un desglose cuando ayude al equipo.",
+    "recordTime": "Registrar tiempo",
+    "time": "Tiempo registrado",
+    "hours": "{hours} horas registradas",
+    "costs": "Añadir costos",
+    "costsNote": "Use el cargo existente del trabajo para registrar materiales y otros costos.",
+    "breakdown": "Desglose del trabajo",
+    "breakdownNote": "Use las actividades y tareas existentes cuando el detalle aporte valor."
+  }
+}

@@ -1,4 +1,6 @@
+import { lockSubcontractCustodyAuthority } from "./subcontract-custody.ts";
 import { assertCustodyReceiptEvidence } from "./custody-receipt-evidence.ts";
+import { createReceiptInspection, assertInspectionScrapIssue } from "./inspections.ts";
 import { applySerialReceipt, applySerialIssue } from "./count-movement-evidence.ts";
 import { assertSaleableStock, assertOwnedLocation } from "./stock-eligibility.ts";
 import { randomUUID } from "node:crypto";
@@ -128,6 +130,7 @@ export async function receiveInventory(
     // Costing policy is locked and re-read after the position lock. The
     // costing-policy writer takes the same profile lock before revaluing
     // layers, so a receipt cannot carry a stale pre-transaction policy.
+    await lockSubcontractCustodyAuthority(tx,orgId,actorId,input.subsidiaryId,input.stockLocationId);
     const profile = await resolveProfile(orgId, input.itemId, tx, true);
     await assertOwnedLocation(tx, orgId, input.stockLocationId);
     // INV-ACTIVE fence: a receipt mints stock, so an inactive item refuses
@@ -430,6 +433,8 @@ export async function receiveInventory(
       await applySerialReceipt(tx, orgId, actorId, input, movementId);
     }
 
+    if (input.admission!=="count") await createReceiptInspection(tx,orgId,actorId,movementId);
+
     return { movementId, entryId, value: assetDelta };
   };
   const result = input.tx ? await apply(input.tx) : await db.transaction(apply);
@@ -445,6 +450,10 @@ export async function receiveInventory(
 // ---------------------------------------------------------------------------
 
 export interface IssueInput {
+  /** Native proof for disposing exactly a failed receipt; never an unrestricted hold bypass. */
+  inspectionScrapId?: string;
+  /** Restrict a disposition to the originating receipt's still-available layers. */
+  sourceReceiptMovementId?: string;
   /** Exact reviewed count line whose shortage this issue recognizes. */
   stockCountLineId?: string;
   itemId: string;
@@ -516,6 +525,7 @@ export async function issueInventory(
     // Re-read the policy under the movement transaction's lock boundary so a
     // concurrent costing-policy revision cannot price this issue from stale
     // standard-cost or tracking settings.
+    await lockSubcontractCustodyAuthority(tx,orgId,actorId,input.subsidiaryId,input.stockLocationId);
     const profile = await resolveProfile(orgId, input.itemId, tx, true);
     await assertOwnedLocation(tx, orgId, input.stockLocationId);
     // INV-ACTIVE fence: an issue moves stock out, so an inactive item
@@ -535,7 +545,8 @@ export async function issueInventory(
       { quantity: input.quantity, lotId: input.lotId, serialId: input.serialId },
       "issue",
     );
-    if (input.admission !== "count") await assertSaleableStock(tx,orgId,input.stockLocationId,input);
+    if (input.inspectionScrapId) await assertInspectionScrapIssue(tx,orgId,actorId,{...input,inspectionId:input.inspectionScrapId});
+    else if (input.admission !== "count") await assertSaleableStock(tx,orgId,input.stockLocationId,input);
     const offset = input.offsetAccountId ?? profile.cogsAccountId;
     const accountProblem = inventoryOffsetAccountProblem(profile.assetAccountId, offset, "issue offset");
     if (accountProblem) throw new InventoryError(accountProblem);
@@ -566,12 +577,13 @@ export async function issueInventory(
       orgId,
       input.itemId,
       input.stockLocationId,
-      { lotId: input.lotId, serialId: input.serialId, subsidiaryId: input.subsidiaryId },
+      { lotId: input.lotId, serialId: input.serialId, subsidiaryId: input.subsidiaryId,sourceReceiptMovementId:input.sourceReceiptMovementId },
     );
     const shortage =
       toUnits(input.quantity) -
       (toUnits(onHand.quantity) > 0n ? toUnits(onHand.quantity) : 0n);
     if (shortage > 0n) {
+      if (input.inspectionScrapId || input.sourceReceiptMovementId) throw new InventoryError("The originating receipt no longer has the full disposition quantity; reconcile its consumption or transfer before disposing it.");
       // A shortfall while another legal entity's layers sit in the same
       // position is a cross-entity attempt, not a stockout — refuse it as
       // one instead of leaking their holdings through availability errors.
@@ -608,7 +620,7 @@ export async function issueInventory(
         input.quantity,
         onHand,
         provisionalUnitCost,
-        { lotId: input.lotId, serialId: input.serialId },
+        { lotId: input.lotId, serialId: input.serialId,sourceReceiptMovementId:input.sourceReceiptMovementId },
         input.subsidiaryId,
         actorId,
       );
@@ -663,6 +675,10 @@ export async function issueInventory(
       movementId,
       actorId,
     );
+    if (input.inspectionScrapId) {
+      const stamped=await tx.execute(sql`update inventory_inspections set scrap_movement_id=${movementId},updated_by=${actorId},updated_at=now() where org_id=${orgId} and id=${input.inspectionScrapId} and status='fail' and disposition is null and scrap_movement_id is null returning id`);
+      if (stamped.rows.length!==1) throw new InventoryError("The inspection scrap effect was not recorded.");
+    }
     if (!isZero(shortfallQuantity)) {
       await tx.execute(sql`
         insert into inventory_provisional_costs
@@ -732,6 +748,7 @@ export async function adjustInventory(
     // peer holding the fence deadlocks against this transaction at posting.
     await lockInventoryPosition(tx, input.itemId, input.stockLocationId);
     await assertInventoryFeature(tx, orgId);
+    await lockSubcontractCustodyAuthority(tx,orgId,actorId,input.subsidiaryId,input.stockLocationId);
     const profile = await resolveProfile(orgId, input.itemId, tx, true);
     await assertOwnedLocation(tx, orgId, input.stockLocationId);
     // Positive deltas inherit this refusal from receiveInventory; negative

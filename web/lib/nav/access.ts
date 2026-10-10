@@ -44,6 +44,7 @@ export function visibleNavigationHref(href: string, allowed: (permission: string
     if (owner.featureKey && !featureEnabled(state, owner.featureKey)) return false
     if (owner.requiredFeatures?.some(feature => !featureEnabled(state, feature))) return false
     if (FEATURES_BY_NAV_MODULE.get(owner.key)?.some((feature) => !featureEnabled(state, feature))) return false
+    if (owner.requiredPermissionsAll?.some(permission=>!allowed(permission))) return false
     const permissions = owner.key === ADMIN_MODULE_KEY ? ADMIN_HUB_PERMISSIONS : owner.requiredPermissionsAny
     if (permissions ? !permissions.some((permission) => allowed(permission)) : !allowed(owner.requiredPermission)) return false
   }

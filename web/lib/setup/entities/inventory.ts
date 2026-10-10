@@ -95,6 +95,7 @@ export const INVENTORY_ENTITIES: SetupEntity[] = [
       { key: 'kind', kind: 'select', options: STOCK_LOCATION_KINDS, keepDefault: true },
       {key:'inventoryOwnership',kind:'select',featureKey:'consignment',options:[{value:'owned',labelKey:'options.inventoryOwnership.owned'},{value:'vendor',labelKey:'options.inventoryOwnership.vendor'},{value:'customer',labelKey:'options.inventoryOwnership.customer'}],keepDefault:true},
       {key:'ownerPartyId',kind:'ref',ref:'parties',featureKey:'consignment'},
+      {key:'custodianPartyId',kind:'ref',ref:'parties',featureKey:'manufacturingSubcontract'},
       { key: 'parentId', kind: 'ref', ref: 'stock-locations' },
       { key: 'isActive', kind: 'boolean' },
     ],

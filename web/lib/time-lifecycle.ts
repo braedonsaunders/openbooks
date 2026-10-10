@@ -29,6 +29,7 @@ export interface EntryProvenance {
   invoicedByLineId: string | null
   payrollBatchRef: string | null
   costJournalEntryId: string | null
+  productionConsumedOperationId?: string | null
   /** Applied overhead is also posted ledger evidence, even when labour cost is not. */
   overheadJournalEntryId?: string | null
   fieldTicketId: string | null
@@ -41,7 +42,7 @@ export function lockReasonsFor(entry: EntryProvenance): LockReason[] {
   const reasons: LockReason[] = []
   if (entry.invoicedByLineId || entry.billingStatus === 'billed') reasons.push('invoiced')
   if (entry.payrollBatchRef) reasons.push('paid')
-  if (entry.costJournalEntryId || entry.overheadJournalEntryId) reasons.push('costed')
+  if (entry.costJournalEntryId || entry.overheadJournalEntryId || entry.productionConsumedOperationId) reasons.push('costed')
   if (entry.fieldTicketId) reasons.push('ticketed')
   return reasons
 }

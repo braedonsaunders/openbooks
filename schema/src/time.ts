@@ -165,8 +165,10 @@ export const timeEntries = pgTable(
      * of the original. Null for ordinary entries.
      */
     amendsEntryId: uuid("amends_entry_id"),
+    correctsEntryId: uuid("corrects_entry_id"),
     /** Downstream linkage. */
     costJournalEntryId: uuid("cost_journal_entry_id"),
+    productionConsumedOperationId: uuid("production_consumed_operation_id"),
     /** The net-zero overhead pair that carried this entry's hours (stamped at
      * approval / backfill; overhead applies with the hours, never monthly). */
     overheadJournalEntryId: uuid("overhead_journal_entry_id"),
@@ -213,6 +215,11 @@ export const timeEntries = pgTable(
       columns: [t.orgId, t.workOrderId, t.woOperationId],
       foreignColumns: [mfgWoOperations.orgId, mfgWoOperations.workOrderId, mfgWoOperations.id],
     }),
+    foreignKey({ name: "time_corrects_entry_fk", columns: [t.orgId,t.correctsEntryId], foreignColumns: [t.orgId,t.id] }),
+    check("time_correction_kind_chk",sql`${t.correctsEntryId} is null or (${t.amendsEntryId} is null and ${t.hours}>=0)`),
+    uniqueIndex("time_entries_one_replacement").on(t.orgId,t.correctsEntryId).where(sql`${t.correctsEntryId} is not null`),
+    foreignKey({name:"time_production_consumed_operation_fk", columns:[t.orgId,t.workOrderId,t.productionConsumedOperationId], foreignColumns:[mfgWoOperations.orgId,mfgWoOperations.workOrderId,mfgWoOperations.id]}),
+    check("time_production_consumed_target_chk",sql`${t.productionConsumedOperationId} is null or (${t.workOrderId} is not null and ${t.woOperationId} is not null and ${t.woOperationId}=${t.productionConsumedOperationId} and ${t.status}='approved')`),
     check(
       "time_entries_one_cost_object_check",
       sql`${t.projectId} is null or ${t.workOrderId} is null`,

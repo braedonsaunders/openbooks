@@ -1,4 +1,5 @@
 import { assertOwnedLocation } from "./stock-eligibility.ts";
+import { lockSubcontractCustodyAuthority } from "./subcontract-custody.ts";
 import { sumOriginalCosts } from "./original-cost.ts";
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
@@ -149,6 +150,7 @@ export async function transferInventoryTx(
     input.toStockLocationId,
   ].sort()) {
     await lockInventoryPosition(tx, input.itemId, locationId);
+    await lockSubcontractCustodyAuthority(tx,orgId,actorId,input.subsidiaryId,locationId);
     await assertStockLocationAdmitsSubsidiary(
       tx,
       orgId,
@@ -305,7 +307,7 @@ export async function transferInventoryTx(
   // link back to the transfer_out (one direction is enough to relate them).
   const transferQuantity = persistReceiptMoney(input.quantity, "transfer quantity");
   const fromMovementId = randomUUID();
-  await tx.execute(sql`
+  const outboundWritten=await tx.execute(sql`
       insert into inventory_movements
         (id, org_id, subsidiary_id, item_id, kind, moved_at, stock_location_id, lot_id,
          serial_id, quantity, unit_cost, total_value, journal_entry_id, status,
@@ -314,9 +316,10 @@ export async function transferInventoryTx(
               ${input.date}, ${input.fromStockLocationId}, ${input.lotId ?? null},
               ${input.serialId ?? null}, ${neg(transferQuantity)}, ${unitCost},
               ${neg(cost)}, ${entryId}, 'posted', ${input.memo ?? null},
-              ${actorId}, ${actorId})`);
+              ${actorId}, ${actorId}) returning id`);
+  if(outboundWritten.rows.length!==1) throw new InventoryError("The outbound transfer movement was not recorded; nothing moved.");
   const toMovementId = randomUUID();
-  await tx.execute(sql`
+  const inboundWritten=await tx.execute(sql`
       insert into inventory_movements
         (id, org_id, subsidiary_id, item_id, kind, moved_at, stock_location_id, lot_id,
          serial_id, quantity, unit_cost, total_value, journal_entry_id,
@@ -325,7 +328,8 @@ export async function transferInventoryTx(
               ${input.date}, ${input.toStockLocationId}, ${input.lotId ?? null},
               ${input.serialId ?? null}, ${transferQuantity}, ${unitCost}, ${cost},
               ${entryId}, ${fromMovementId}, 'posted', ${input.memo ?? null},
-              ${actorId}, ${actorId})`);
+              ${actorId}, ${actorId}) returning id`);
+  if(inboundWritten.rows.length!==1) throw new InventoryError("The inbound transfer movement was not recorded; nothing moved.");
 
   await recordConsumptions(
     tx,

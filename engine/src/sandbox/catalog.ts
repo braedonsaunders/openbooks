@@ -18,6 +18,7 @@ export const EXTRA_REBASE = ["file_versions", "file_blobs", "tax_group_members"]
  * to break genuine NO ACTION cycles before immediate FK-ordered deletion. */
 export const SANDBOX_CYCLE_BREAKERS: Record<string, readonly string[]> = {
   documents: ["posted_entry_id"],
+  operating_profiles: ["current_version_id"],
   payment_schedules: ["last_payment_run_id"],
   time_entries: ["invoiced_by_line_id"],
 };
@@ -46,6 +47,7 @@ const TRIGGER_INSERT_TABLE_PARENTS: Readonly<Record<string, readonly string[]>> 
   consignment_stock: ["item_inventory_profiles", "stock_locations", "lots", "serials", "cost_layers"],
   // These ownership guards resolve parents before deferred FKs are checked.
   project_financial_adjustments: ["projects"],
+  operating_profile_scopes: ["operating_profiles"],
   project_overhead_adjustments: ["projects"],
   project_financial_profile_versions: ["project_types"],
   // Immutable retainage coordinates resolve copied bill identities at INSERT.

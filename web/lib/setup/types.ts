@@ -69,6 +69,7 @@ export type SetupRefSource = 'accounts' | (string & {})
  */
 export interface SetupOption {
   value: string
+  featureKey?: string
   labelKey?: string
   label?: string
 }
@@ -360,6 +361,8 @@ export interface SetupCommandDescriptor {
  * conditional fields and sections the form shows next.
  */
 export interface SetupCreateChoice {
+  /** A starting composition cannot advertise capabilities the company has disabled. */
+  requiresFeatures?: readonly string[]
   key: string
   /** Message keys under `admin.setup`. */
   labelKey: string
@@ -390,7 +393,7 @@ export interface SetupEntity {
   mutationCreateKeys?: readonly string[]
   mutationUpdateKeys?: readonly string[]
   /** The current server-loaded revision is included on aggregate updates. */
-  mutationRevision?: { requestKey: string; rowColumn: string }
+  mutationRevision?: { requestKey: string; rowColumn: string; format?: 'integer' | 'token' }
   /** URL slug, e.g. 'tax-codes'. */
   key: string
   /** DB table name. */
@@ -604,7 +607,7 @@ export function setupEntitySubsidiaryReferenceFields(entity: SetupEntity): Setup
  */
 export function setupEntityForFeatureState(
   entity: SetupEntity,
-  features: { multiSubsidiary: boolean; equipment?: boolean; fieldTickets?: boolean; einvoicing?: boolean },
+  features: FeatureState & { multiSubsidiary: boolean; equipment?: boolean; fieldTickets?: boolean; einvoicing?: boolean },
 ): SetupEntity {
   const equipmentOn = features.equipment !== false
   const fieldTicketsOn = features.fieldTickets !== false
@@ -613,7 +616,9 @@ export function setupEntityForFeatureState(
     equipmentOn &&
     fieldTicketsOn &&
     features.einvoicing !== false &&
-    !entity.fields.some((field) => field.featureKey)
+    !entity.fields.some((field) => field.featureKey) &&
+    !entity.fields.some(field => field.options?.some(option => option.featureKey)) &&
+    !entity.createChooser?.options.some(choice => choice.requiresFeatures?.length)
   )
     return entity;
   const isSubsidiaryControl = (control: SetupField | SetupColumn) =>
@@ -623,10 +628,10 @@ export function setupEntityForFeatureState(
   const isFieldTicketControl = (control: SetupField | SetupColumn) =>
     control.key === 'showOnFieldTicket'
   const withoutEquipmentCharge = <T extends { options?: SetupOption[] }>(control: T): T => {
-    if (equipmentOn || !control.options?.some((option) => option.value === 'equipment_charge')) {
+    if (!control.options?.some(option => option.featureKey || (!equipmentOn && option.value === 'equipment_charge'))) {
       return control
     }
-    return { ...control, options: control.options.filter((option) => option.value !== 'equipment_charge') }
+    return { ...control, options: control.options.filter(option => (!option.featureKey || featureEnabled(features,option.featureKey)) && (equipmentOn || option.value !== 'equipment_charge')) }
   }
   const visible = (control: SetupField | SetupColumn) =>
     (!('featureKey' in control) || !control.featureKey || features[control.featureKey] === true)
@@ -636,6 +641,7 @@ export function setupEntityForFeatureState(
     && (fieldTicketsOn || !isFieldTicketControl(control))
   return {
     ...entity,
+    createChooser: entity.createChooser ? { ...entity.createChooser, options: entity.createChooser.options.filter(choice => (choice.requiresFeatures ?? []).every(key => featureEnabled(features, key))) } : undefined,
     columns: entity.columns.filter(visible).map(withoutEquipmentCharge),
     fields: entity.fields.filter(visible).map(withoutEquipmentCharge),
     presetsSource: features.einvoicing === true ? entity.presetsSource : undefined,

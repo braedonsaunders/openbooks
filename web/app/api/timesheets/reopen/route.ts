@@ -1,3 +1,5 @@
+import { authorizeTimeWorkspace, timeWorkFamily } from "@/lib/time-workspace";
+import { lockSharedTimeAuthority } from "@openbooks/engine/src/projects/time-work-target.ts";
 import { z } from "zod";
 import { isoDate, uuidId } from "@/lib/api/json";
 import { defineRoute } from "@/lib/api/route";
@@ -46,10 +48,10 @@ interface Body {
  * amendment, not an edit.
  */
 export const POST = defineRoute({
-  permission: "time.reopen",
-  feature: "timeTracking",
+  authorize: authorizeTimeWorkspace("time.reopen"),
+  feature: { none: "The explicit workspace pins Time Tracking or Manufacturing; native commands fence every actual target." },
   body: postBodySchema0,
-  handler: async ({ request: _req, authz: gate, body: routeBody }) => {
+  handler: async ({ request: workspaceRequest, authz: gate, body: routeBody }) => {
     const { user } = gate;
     const orgId = user.orgId;
 
@@ -81,6 +83,7 @@ export const POST = defineRoute({
       return bad("Only an approved week can be reopened");
 
     return withOrgTransaction(orgId, async () => {
+      await lockSharedTimeAuthority(db, orgId, user.id, { employeeId: employee, from: weekFrom, through: weekTo, requestedScope: gate.allowedSubsidiaryIds, permission: "time.reopen", workFamily: timeWorkFamily(workspaceRequest) });
       // Lock the header FIRST — the same order approval uses (header, then
       // entries) — so a concurrent approval cannot deadlock against this
       // reopen. The locked status is the authoritative state check: the
@@ -106,12 +109,13 @@ export const POST = defineRoute({
           invoiced_by_line_id: string | null;
           payroll_batch_ref: string | null;
           cost_journal_entry_id: string | null;
+          production_consumed_operation_id: string | null;
           overhead_journal_entry_id: string | null;
           field_ticket_id: string | null;
           billing_status: "unbilled" | "billed";
         }>(sql`
       select invoiced_by_line_id, payroll_batch_ref, cost_journal_entry_id,
-             overhead_journal_entry_id, field_ticket_id, billing_status
+             overhead_journal_entry_id, production_consumed_operation_id, field_ticket_id, billing_status
         from time_entries
        where org_id = ${orgId}
          and employee_party_id = ${employee}
@@ -124,6 +128,7 @@ export const POST = defineRoute({
         invoicedByLineId: r.invoiced_by_line_id,
         payrollBatchRef: r.payroll_batch_ref,
         costJournalEntryId: r.cost_journal_entry_id,
+      productionConsumedOperationId: r.production_consumed_operation_id,
         overheadJournalEntryId: r.overhead_journal_entry_id,
         fieldTicketId: r.field_ticket_id,
         billingStatus: r.billing_status,
@@ -151,7 +156,7 @@ export const POST = defineRoute({
          and entry.employee_party_id = ${employee}
          and entry.worked_on >= ${weekFrom} and worked_on <= ${weekTo}
          and (
-           entry.amends_entry_id is not null
+           entry.amends_entry_id is not null or entry.corrects_entry_id is not null
            or exists (
              select 1 from time_entries contra
               where contra.org_id = entry.org_id

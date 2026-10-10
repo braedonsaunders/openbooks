@@ -20,6 +20,7 @@ export const GET = defineRoute({
           authz.allowedSubsidiaryIds,
           params.view,
           params.id,
+          authz.user.id,
         ),
       ),
     ),

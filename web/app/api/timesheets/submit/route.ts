@@ -1,3 +1,5 @@
+import { authorizeTimeWorkspace, timeWorkFamily } from "@/lib/time-workspace";
+import { lockSharedTimeAuthority } from "@openbooks/engine/src/projects/time-work-target.ts";
 import { z } from "zod";
 import { isoDate, uuidId } from "@/lib/api/json";
 import { defineRoute } from "@/lib/api/route";
@@ -42,10 +44,10 @@ interface Body {
 
 /** POST { employee, week } → move the week's draft entries to submitted. */
 export const POST = defineRoute({
-  permission: "time.manage",
-  feature: "timeTracking",
+  authorize: authorizeTimeWorkspace("time.manage"),
+  feature: { none: "The explicit workspace pins Time Tracking or Manufacturing; native commands fence every actual target." },
   body: postBodySchema0,
-  handler: async ({ request: _req, authz: gate, body: routeBody }) => {
+  handler: async ({ request: workspaceRequest, authz: gate, body: routeBody }) => {
     const { user } = gate;
     const orgId = user.orgId;
 
@@ -74,6 +76,7 @@ export const POST = defineRoute({
       // tenant transaction, so a failed dispatch rolls back every submission
       // write instead of compensating with a second, failure-prone update.
       flow = await withOrgTransaction(orgId, async () => {
+        await lockSharedTimeAuthority(db, orgId, user.id, { employeeId: ownedEmployee, from: days[0]!, through: days[6]!, requestedScope: gate.allowedSubsidiaryIds, permission: "time.manage", workFamily: timeWorkFamily(workspaceRequest) });
         const moved = await db.execute(sql`
         update time_entries
            set status = 'submitted', rejection_reason = null,

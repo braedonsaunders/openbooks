@@ -22,11 +22,13 @@
       "effectiveTo": "Effective to",
       "operationSeq": "Operation sequence",
       "scrapPct": "Scrap %",
-      "isByproduct": "Line type"
+      "isByproduct": "Line type",
+      "outputCostWeight": "Relative cost weight"
     },
     "values": {
       "component": "Component",
-      "byproduct": "By-product"
+      "byproduct": "By-product",
+      "jointOutput": "Joint output"
     },
     "refusals": {
       "effectivityOverlap": "Component {component} has overlapping effectivity windows {windows}. Adjust the dates, or use a distinct operation or by-product designation when intended.",
@@ -35,7 +37,8 @@
       "invalidScrap": "Scrap percentage must be an exact decimal from 0 up to, but not including, 100.",
       "invalidOperation": "Operation sequence must be a positive whole number.",
       "manufacturingDisabled": "Turn on Manufacturing in Company Settings → Features to edit operation and by-product settings."
-    }
+    },
+    "jointOutputNote": "Joint outputs share production cost by their quantity and relative cost weight per base unit. The primary output has weight 1. NRV by-products retain their separate net realizable value treatment."
   },
   "labels": {
     "item": "Item",

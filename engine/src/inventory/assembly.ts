@@ -2,8 +2,9 @@ import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { add, cmp, isZero, neg, normalizeMoney } from "../money/money.ts";
-import { bomRequiredQuantity } from "./bom-scrap.ts";
+import { bomRequiredQuantity, type BomQuantityBasis } from "./bom-scrap.ts";
 import { extendCost, unitCostPerQuantity } from "./costing.ts";
+import { lockAndCheckOrgFeature } from "../organization/org-feature-lock.ts";
 import { loadSubsidiaryContext } from "../organization/subsidiaries.ts";
 import type { AssemblyBomRevisionEvidence } from "@openbooks/schema";
 import { InventoryError, type InventoryProfile } from "./contracts.ts";
@@ -78,7 +79,7 @@ export async function buildAssembly(
       component_item_id: string;
       component_code: string | null;
       component_name: string;
-      quantity_per: string;
+      quantity_per: string;quantity_basis:BomQuantityBasis;formula_output_quantity:string;
       sort_order: number;
       effective_from: string | null;
       effective_to: string | null;
@@ -90,7 +91,7 @@ export async function buildAssembly(
              b.quantity_per, b.sort_order,
              b.effective_from::text as effective_from,
              b.effective_to::text as effective_to,
-             b.operation_seq, b.scrap_pct::text as scrap_pct, b.is_byproduct
+             b.operation_seq,b.quantity_basis,b.formula_output_quantity::text,b.scrap_pct::text as scrap_pct, b.is_byproduct
         from bom_components b
         join items component on component.org_id = b.org_id and component.id = b.component_item_id
        where b.org_id = ${orgId} and b.assembly_item_id = ${input.assemblyItemId}
@@ -102,6 +103,7 @@ export async function buildAssembly(
     if (bom.rows.length === 0) {
       throw new InventoryError(`assembly has no bill of materials effective on ${input.date}`);
     }
+    if(bom.rows.some(component=>component.quantity_basis!=='per_unit')&&!await lockAndCheckOrgFeature(tx,orgId,'manufacturing')) throw new InventoryError("Formula and batch recipes require Manufacturing in Company Settings → Features.");
     const byproduct = bom.rows.find((component) => component.is_byproduct);
     if (byproduct) {
       const assemblyName = (await tx.execute<{ code: string | null; name: string }>(sql`
@@ -122,7 +124,7 @@ export async function buildAssembly(
           effectiveFrom?: string;
           effectiveTo?: string;
           operationSeq?: number;
-          scrapPct?: string;
+          scrapPct?: string;quantityBasis?:BomQuantityBasis;formulaOutputQuantity?:string;
         } = {
           componentItemId: component.component_item_id,
           quantityPer: normalizeMoney(component.quantity_per),
@@ -134,6 +136,7 @@ export async function buildAssembly(
         if (component.scrap_pct !== null && cmp(component.scrap_pct, "0") !== 0) {
           evidence.scrapPct = normalizeMoney(component.scrap_pct);
         }
+        if(component.quantity_basis!=='per_unit'){evidence.quantityBasis=component.quantity_basis;evidence.formulaOutputQuantity=normalizeMoney(component.formula_output_quantity);}
         return evidence;
       }),
     };
@@ -187,7 +190,7 @@ export async function buildAssembly(
           `tracked component ${component.component_item_id} requires explicit serial/lot consumption evidence`,
         );
       }
-      const requirement = bomRequiredQuantity(input.quantity, component.quantity_per, component.scrap_pct);
+      const requirement = bomRequiredQuantity(input.quantity, component.quantity_per, component.scrap_pct,{quantityBasis:component.quantity_basis,formulaOutputQuantity:component.formula_output_quantity});
       const reqQty = requirement.quantity;
       if (isZero(reqQty)) {
         // A valid quantity-per, build quantity and scrap factor can round to

@@ -118,7 +118,11 @@
       "provision_assessment": "Rückstellungsbeurteilung",
       "drop_ship_control_assessment": "Kontrollbeurteilung beim Streckengeschäft",
       "net_investment_oci": "Devisenbeurteilung der Nettoinvestition",
-      "net_investment_oci_reversal": "Devisenkorrektur der Nettoinvestition"
+      "net_investment_oci_reversal": "Devisenkorrektur der Nettoinvestition",
+      "standard_cost_rollup": "Standardkosten berechnen",
+      "routing_revision_activation": "Arbeitsplanrevision genehmigen",
+      "bom_revision_activation": "Genehmigung der Stücklistenrevision",
+      "work_order_loss_disposition": "Produktionsverlustentscheidung"
     },
     "domains": {
       "lease": "Leasingnehmervertrag",
@@ -126,7 +130,8 @@
       "revenue": "Ertragsvertrag",
       "consolidation": "Konsolidierung",
       "provision": "Rückstellung und Eventualverpflichtung",
-      "sales": "Vertriebsvermittlung"
+      "sales": "Vertriebsvermittlung",
+      "manufacturing": "Fertigung"
     },
     "evidence": {
       "assessment": "Beurteilung / Messung",

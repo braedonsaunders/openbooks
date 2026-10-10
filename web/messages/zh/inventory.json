@@ -22,11 +22,13 @@
       "effectiveTo": "失效日期",
       "operationSeq": "工序顺序",
       "scrapPct": "报废率 %",
-      "isByproduct": "行类型"
+      "isByproduct": "行类型",
+      "outputCostWeight": "相对成本权重"
     },
     "values": {
       "component": "组件",
-      "byproduct": "副产品"
+      "byproduct": "副产品",
+      "jointOutput": "联产品"
     },
     "refusals": {
       "effectivityOverlap": "组件 {component} 的生效期间 {windows} 存在重叠。请调整日期，或在适用时指定不同的工序或副产品类型。",
@@ -35,7 +37,8 @@
       "invalidScrap": "报废率必须是大于或等于 0 且小于 100 的精确小数。",
       "invalidOperation": "工序顺序必须是正整数。",
       "manufacturingDisabled": "请在公司设置 → 功能中启用制造，以编辑工序和副产品设置。"
-    }
+    },
+    "jointOutputNote": "联产品按数量和每基本单位的相对权重分摊生产成本。主产品的权重为1。副产品仍单独按可变现净值计价。"
   },
   "labels": {
     "item": "物料",

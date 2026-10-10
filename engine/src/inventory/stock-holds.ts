@@ -6,6 +6,7 @@ import { lockActorCommandAuthority } from "../organization/actor-command-authori
 import { InventoryError, InventoryNotFoundError } from "./contracts.ts";
 import { assertInventoryFeature } from "./profile-policy.ts";
 import { lockInventoryPosition } from "./position.ts";
+import { inspectionHoldReason } from "./inspection-holds.ts";
 
 /** A hold preserves on-hand and carrying value while preventing physical allocation. */
 export async function setStockHold(
@@ -24,6 +25,7 @@ export async function setStockHold(
       "Enter a hold or release reason of 5–500 characters",
     );
   return withOrgTransaction(orgId, async () => {
+    if (!(await db.execute(sql`select id from users where id=${actorId} and is_active and (org_id=${orgId} or is_super_admin) for share`)).rows.length) throw new ScopeNotFoundError();
     if (!(await actorHasPermission(db, orgId, actorId, "items.manage")))
       throw new ScopeNotFoundError();
     const table = input.kind === "lot" ? sql`lots` : sql`serials`;
@@ -84,6 +86,8 @@ export async function setStockHold(
       if (owners.some((owner) => !allowed.has(owner.subsidiary_id)))
         throw new InventoryNotFoundError("Stock identifier not found");
     }
+    const inspectionReason=(await db.execute<{reason:string|null}>(sql`select ${inspectionHoldReason(sql`${orgId}`,input.kind==='lot'?sql`${input.id}::uuid`:sql`null::uuid`,input.kind==='serial'?sql`${input.id}::uuid`:sql`null::uuid`)} as reason`)).rows[0]?.reason??null;
+    if (!input.held && before.hold_reason===null && inspectionReason!==null) throw new InventoryError("This stock is held by an inspection. Complete its inspection or governed quality disposition in Manufacturing; a manual release cannot clear it.");
     if ((before.hold_reason !== null) === input.held)
       throw new InventoryError(
         input.held ? "Stock is already held" : "Stock is already released",
@@ -100,6 +104,6 @@ export async function setStockHold(
         ${JSON.stringify({ operation: input.held ? "hold" : "release", reason, before, after: { hold_reason: after } })}::jsonb,${actorId}) returning id`);
     if (!audit.rows.length)
       throw new InventoryError("Stock hold was not audited");
-    return { id: input.id, holdReason: after };
+    return { id: input.id, holdReason: after??inspectionReason };
   });
 }

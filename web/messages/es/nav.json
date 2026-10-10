@@ -163,7 +163,9 @@
     "manufacturing-work-orders": "Órdenes de fabricación",
     "manufacturing-work-centers": "Centros de trabajo",
     "manufacturing-routings": "Rutas y revisiones",
-    "manufacturing-mrp": "Ejecuciones de MRP"
+    "manufacturing-mrp": "Ejecuciones de MRP",
+    "manufacturing-time": "Tiempo de producción",
+    "manufacturing-quality": "Calidad"
   },
   "modulesShort": {
     "hrm-performance-cycles": "Gestionar evaluaciones",

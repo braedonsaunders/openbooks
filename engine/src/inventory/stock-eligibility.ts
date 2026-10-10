@@ -1,8 +1,18 @@
 import { sql, type SQL } from "drizzle-orm";
 import { InventoryError, type Runner } from "./contracts.ts";
+import { pendingInspectionHold } from "./inspection-holds.ts";
 
 /** Ancestor restrictions apply to every descendant bin. Cycles are visited once. */
 export function saleableLocation(org: SQL, location: SQL): SQL {
+  return ownedOperationalLocation(org,location,false);
+}
+
+/** A governed repair may consume owned quarantine stock without making it saleable. */
+export function repairableLocation(org: SQL, location: SQL): SQL {
+  return ownedOperationalLocation(org,location,true);
+}
+
+function ownedOperationalLocation(org: SQL, location: SQL, allowQuarantine:boolean): SQL {
   return sql`exists (
     with recursive ancestors as (
       select id,parent_id,kind,is_active,inventory_ownership, array[id] as path
@@ -12,14 +22,15 @@ export function saleableLocation(org: SQL, location: SQL): SQL {
         from stock_locations p join ancestors a on p.id=a.parent_id
        where p.org_id=${org} and not p.id=any(a.path)
     ) select 1 from ancestors having count(*)>0
-       and bool_and(is_active and kind not in ('quarantine','transit') and inventory_ownership='owned')
+       and bool_and(is_active and kind not in ('transit','subcontract') and (${allowQuarantine} or kind<>'quarantine') and inventory_ownership='owned')
        and bool_or(parent_id is null)
   )`;
 }
 
 export function unheldTracking(org: SQL, lot: SQL, serial: SQL): SQL {
   return sql`not exists(select 1 from lots h where h.org_id=${org} and h.id=${lot} and h.hold_reason is not null)
-    and not exists(select 1 from serials h where h.org_id=${org} and h.id=${serial} and h.hold_reason is not null)`;
+    and not exists(select 1 from serials h where h.org_id=${org} and h.id=${serial} and h.hold_reason is not null)
+    and not ${pendingInspectionHold(org,lot,serial)}`;
 }
 
 export async function assertSaleableStock(
@@ -50,7 +61,7 @@ export async function assertSaleableStock(
   ).rows[0];
   if (!row?.eligible)
     throw new InventoryError(
-      "Stock is quarantined, held, externally owned, or unavailable — release the hold or transfer cleared stock to an active owned bin before picking or selling",
+      "Stock is held, unavailable, externally owned, or in vendor custody — release the hold or return cleared stock to an active company bin before picking or selling",
     );
 }
 

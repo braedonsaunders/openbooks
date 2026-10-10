@@ -3532,6 +3532,30 @@
         "plural": "Cycle-count policies",
         "description": "Effective legal-entity intervals and base-unit variance tolerances by ABC class.",
         "title": "Cycle-count policies"
+      },
+      "operating-profiles": {
+        "title": "Operating profiles",
+        "singularTitle": "Operating profiles",
+        "description": "Compose work capture and presentation without changing native billing or accounting rules."
+      },
+      "operating-profile-scopes": {
+        "title": "Workflow choices",
+        "singularTitle": "Workflow choices",
+        "description": "Choose allowed workflows and a default for a department or the whole company."
+      },
+      "operating-profile-versions": {
+        "title": "Workflow versions",
+        "singularTitle": "Workflow version",
+        "description": "Published workflow compositions retained by existing work."
+      },
+      "inspection-plans": {
+        "title": "Inspection plans",
+        "description": "Inspect incoming stock and production using frozen plans and controlled dispositions."
+      },
+      "work-calendars": {
+        "title": "Work calendars",
+        "singularTitle": "Work calendar",
+        "description": "Company working days and closures shared by production and project schedules. Work centers set their own available hours. Existing MRP runs keep the calendar facts used when they ran."
       }
     },
     "fields": {
@@ -4139,7 +4163,9 @@
       "varianceTolerance": "Variance tolerance",
       "inventoryOwnership": "Stock ownership",
       "schedulePdfColorTreatment": "Color treatment",
-      "schedulePdfColorIntensity": "Color tint (%)"
+      "schedulePdfColorIntensity": "Color tint (%)",
+      "custodianPartyId": "Custodian vendor",
+      "showReadiness": "Work guide"
     },
     "fieldHelp": {
       "fxRateMaxAgeDays": "Days between the newest usable rate and the period end beyond which revaluation and consolidation refuse the rate. Closing rates count from the date of the period-end spot rate; average rates from the newest quote averaged. Default when no policy is set: 31 days.",
@@ -4572,7 +4598,8 @@
         "bin": "Bin",
         "staging": "Staging",
         "transit": "Transit",
-        "quarantine": "Quarantine"
+        "quarantine": "Quarantine",
+        "subcontract": "Vendor custody"
       },
       "manufacturingScrap": {
         "normal": "Normal scrap",
@@ -6918,6 +6945,127 @@
     },
     "actions": {
       "scheduleDeliveryFlows": "Configure email timing in Flows"
+    },
+    "operatingProfiles": {
+      "chooser": {
+        "title": "Choose how this work runs",
+        "description": "Start with the detail your team needs. Features and permissions still control what is available."
+      },
+      "presets": {
+        "shop_jobs": {
+          "name": "Shop jobs",
+          "description": "Customer jobs, readiness and time. Add activities when useful."
+        },
+        "field_work": {
+          "name": "Field work",
+          "description": "Site work with optional field tickets, crews and planning."
+        },
+        "professional_services": {
+          "name": "Professional services",
+          "description": "Engagements, time and deliverables without construction fields."
+        },
+        "discrete_production": {
+          "name": "Discrete production",
+          "description": "Repeatable products with bills of material and routed operations."
+        },
+        "custom_production": {
+          "name": "Custom production",
+          "description": "Made-to-order products with controlled materials and revisions."
+        },
+        "batch_process": {
+          "name": "Batch and process production",
+          "description": "Recipes, batches, measured yields and traceable outputs."
+        }
+      },
+      "compositionHelp": "Each record keeps its selected version. Publishing changes the choices for new work.",
+      "sections": {
+        "basics": "Basics",
+        "composition": "Work capture and views",
+        "publish": "Publish a version"
+      },
+      "fields": {
+        "code": "Code",
+        "name": "Name",
+        "definition": "Composition",
+        "family": "Work records",
+        "capture": "Work capture",
+        "physicalModel": "Production model",
+        "demand": "Demand",
+        "terminology": "Work names",
+        "singular": "Singular name",
+        "plural": "Plural name",
+        "presentation": "Presentation",
+        "showSite": "Site details",
+        "showForeman": "Foreman",
+        "showCustomerPo": "Customer purchase order",
+        "showMaterials": "Materials",
+        "showReadiness": "Readiness",
+        "defaultView": "Default view",
+        "reason": "Reason for publishing",
+        "departmentId": "Department",
+        "profileIds": "Allowed workflows",
+        "defaultProfileId": "Default workflow",
+        "version": "Version",
+        "publishedAt": "Published at",
+        "profileId": "Profile"
+      },
+      "values": {
+        "project": "Projects",
+        "production": "Production orders",
+        "job": "Whole job",
+        "activities": "Activities",
+        "tasks": "Tasks",
+        "field_tickets": "Field tickets",
+        "operations": "Operations",
+        "batch": "Batch",
+        "none": "None",
+        "discrete": "Discrete",
+        "process": "Process",
+        "make_to_order": "Make to order",
+        "make_to_stock": "Make to stock",
+        "list": "List",
+        "board": "Board"
+      },
+      "scopeHelp": "Leave the department empty for company defaults. A department can offer several workflows."
+    },
+    "inspectionPlans": {
+      "name": "Plan name",
+      "itemId": "Inventory item",
+      "point": "Inspect at",
+      "operationSequence": "Operation sequence",
+      "effectiveFrom": "Effective from",
+      "effectiveTo": "Effective until",
+      "basics": "Plan and scope",
+      "measurements": "Measurements",
+      "help": "Add only useful measurements. Empty limits allow recording without a numeric tolerance. Used plans retain their content; end their window and create the next revision.",
+      "audit": "Audit",
+      "key": "Measurement key",
+      "label": "Label",
+      "unit": "Unit",
+      "required": "Required",
+      "minimum": "Minimum",
+      "maximum": "Maximum",
+      "reason": "Change reason",
+      "receipt": "Receipt",
+      "operation": "Operation"
+    },
+    "workCalendars": {
+      "help": "Company working days and closures shared by production and project schedules. Work centers set their own available hours. Existing MRP runs keep the calendar facts used when they ran.",
+      "name": "Name",
+      "description": "Description",
+      "isDefault": "Company default",
+      "workingDays": "Working days",
+      "holidays": "Closures",
+      "date": "Closure date",
+      "reason": "Reason for change",
+      "addClosure": "Add closure",
+      "0": "Sunday",
+      "1": "Monday",
+      "2": "Tuesday",
+      "3": "Wednesday",
+      "4": "Thursday",
+      "5": "Friday",
+      "6": "Saturday"
     }
   },
   "flows": {
@@ -7599,6 +7747,10 @@
     "consignment": {
       "description": "Track vendor and customer stock in custody and recognize inventory when ownership is acquired.",
       "title": "Consignment"
+    },
+    "manufacturingSubcontract": {
+      "title": "External manufacturing",
+      "description": "Send components to a vendor, record processing services and return production onto the work order."
     }
   },
   "backupsManager": {

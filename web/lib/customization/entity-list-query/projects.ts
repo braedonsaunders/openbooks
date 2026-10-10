@@ -1,3 +1,4 @@
+import { workProfileFilter,workDepartmentFilter } from "@openbooks/engine/src/organization/work-list-filters.ts";
 import "server-only";
 import { sql, type SQL } from "drizzle-orm";
 import type { ListViewConfig, FilterClause } from "@openbooks/customization";
@@ -78,6 +79,22 @@ function projectFilterPredicate(clause: FilterClause): SQL | null {
       if (operator === "in" || operator === "not_in") return inList(typeExpr)
       return null
     }
+    case "workflow":
+    case "operating_department": {
+      const predicate=(selection:string)=>key==='workflow'
+        ? workProfileFilter(sql`p.org_id`,sql`p.operating_profile_version_id`,selection)
+        : workDepartmentFilter(sql`p.operating_department_id`,selection);
+      const selected=(Array.isArray(value)?value:[value]).map(single);
+      if(selected.some(selection=>selection!=='legacy'&&selection!=='unassigned'&&uuidOrFalse(selection)))return sql`false`;
+      if(operator==='eq')return predicate(single(value));
+      if(operator==='ne')return sql`not (${predicate(single(value))})`;
+      if(operator==='in'||operator==='not_in') {
+        if(!selected.length)return operator==='in'?sql`false`:sql`true`;
+        const combined=sql.join(selected.map(predicate),sql` or `);
+        return operator==='in'?sql`(${combined})`:sql`not (${combined})`;
+      }
+      return null;
+    }
     case "customer_id": {
       const refused = uuidOrFalse(single(value))
       if (refused) return refused
@@ -112,6 +129,7 @@ export function projectWhere(
     const p = projectFilterPredicate(f)
     if (p) parts.push(sql`and ${p}`)
   }
+  parts.push(sql`and ${workProfileFilter(sql`${orgId}`,sql`p.operating_profile_version_id`,adhoc.filters?.workflow)} and ${workDepartmentFilter(sql`p.operating_department_id`,adhoc.filters?.operating_department)}`);
   if (adhoc.filters?.status) parts.push(sql`and p.status = ${adhoc.filters.status}`)
   if (adhoc.filters?.project_type) parts.push(sql`and coalesce((select pt.key from project_types pt where pt.id = p.project_type_id and pt.org_id = p.org_id), 'time_and_materials') = ${adhoc.filters.project_type}`)
   if (adhoc.q)

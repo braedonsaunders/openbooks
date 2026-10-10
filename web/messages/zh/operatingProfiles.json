@@ -1,0 +1,87 @@
+{
+  "chooseTitle": "选择此工作的运作方式",
+  "chooseDescription": "从团队需要的详细程度开始。功能与权限仍决定可用选项。",
+  "change": "更改工作流程",
+  "loading": "正在加载工作流程…",
+  "loadFailed": "无法加载工作流程。",
+  "retry": "重试",
+  "noChoices": "暂无可用工作流程。请检查公司功能与设置中的运营配置。",
+  "presets": {
+    "shop_jobs": {
+      "name": "车间作业",
+      "description": "客户作业、准备情况与工时。需要时再添加活动。"
+    },
+    "field_work": {
+      "name": "现场工作",
+      "description": "现场工作，可选现场工单、团队与计划。"
+    },
+    "professional_services": {
+      "name": "专业服务",
+      "description": "项目、工时与交付成果，无建筑专用字段。"
+    },
+    "discrete_production": {
+      "name": "离散生产",
+      "description": "使用物料清单与工艺路线的可重复产品。"
+    },
+    "custom_production": {
+      "name": "定制生产",
+      "description": "按订单生产，管控材料与版本。"
+    },
+    "batch_process": {
+      "name": "批次与流程生产",
+      "description": "配方、批次、实测产量与可追溯产品。"
+    }
+  },
+  "capture": {
+    "job": "整个作业",
+    "activities": "活动",
+    "tasks": "任务",
+    "field_tickets": "现场工单",
+    "operations": "工序",
+    "batch": "批次"
+  },
+  "time": {
+    "work": "工作",
+    "project": "项目 / 作业",
+    "production": "生产",
+    "order": "生产订单",
+    "operation": "工序（可选）",
+    "search": "搜索工作",
+    "title": "生产工时",
+    "correct": "更正",
+    "correctTitle": "更正生产工时",
+    "correctMessage": "原记录保持已过账状态。冲销和替代记录保存更正；已入库产品保留历史成本。",
+    "correctHours": "更正后工时",
+    "correctReason": "原因",
+    "record": "记录工时"
+  },
+  "department": "部门（可选）",
+  "companyDefaults": "公司默认设置",
+  "default": "默认流程",
+  "views": {
+    "presentation": "视图",
+    "list": "列表",
+    "board": "看板",
+    "emptyLane": "本页无工作",
+    "pageScope": "卡片和列计数显示当前筛选页。",
+    "saveFailed": "无法保存您的显示偏好。"
+  },
+  "filters": {
+    "workflow": "工作流程",
+    "department": "部门",
+    "allWorkflows": "所有流程",
+    "allDepartments": "所有部门",
+    "legacy": "未设定配置的现有工作",
+    "unassigned": "未分配"
+  },
+  "workJourney": {
+    "description": "在此工作中管理作业、工时和成本。需要时再添加有助于团队的工作分解。",
+    "recordTime": "记录工时",
+    "time": "已记录工时",
+    "hours": "已记录 {hours} 小时",
+    "costs": "添加成本",
+    "costsNote": "使用现有工作费用单记录材料和其他成本。",
+    "breakdown": "工作分解",
+    "breakdownNote": "当细化管理有价值时，使用现有活动和任务。"
+  }
+}

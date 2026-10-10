@@ -1,6 +1,12 @@
 'use client'
 
+import Link from 'next/link'
+
 import { RecordTabs } from '@/components/module-home/record-tabs'
+import { OperatingProfilePicker } from '@/components/operating-profile-picker'
+import { ProjectWorkJourney } from './ProjectWorkJourney'
+import type { OperatingProfileChoice } from '@openbooks/engine/src/organization/operating-profiles.ts'
+import type { OperatingProfileDefinition } from '@openbooks/engine/src/organization/operating-profile-model.ts'
 
 import { useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
@@ -166,6 +172,11 @@ export function ProjectDrawer({
   initialTab = 'overview',
   applicationPermissions,
   createMode = false,
+  operatingChoices = [],
+  operatingDefinition = null,
+  initialOperatingChoice = null,
+  initialOperatingDepartmentId = '',
+  quickTimeHref = null,
   closeHref,
 }: {
   payload: ProjectPayload
@@ -206,6 +217,11 @@ export function ProjectDrawer({
    * every cockpit tab needs a persisted project.
    */
   createMode?: boolean
+  operatingChoices?: OperatingProfileChoice[]
+  operatingDefinition?: OperatingProfileDefinition | null
+  initialOperatingChoice?: OperatingProfileChoice | null
+  initialOperatingDepartmentId?: string
+  quickTimeHref?: string | null
   /** List URL (filters preserved) that Cancel and the close affordance return to. */
   closeHref?: string
 }) {
@@ -279,6 +295,11 @@ export function ProjectDrawer({
   const [mode, setMode] = useState<'view' | 'edit'>(createMode ? 'edit' : 'view')
   const editable = mode === 'edit' && canManage
   const returnHref = closeHref ?? basePath
+  const tOperating = useTranslations('operatingProfiles')
+  const [operatingDepartmentId,setOperatingDepartmentId]=useState(initialOperatingDepartmentId)
+  const [operatingSelection, setOperatingSelection] = useState<OperatingProfileChoice | null>(initialOperatingChoice)
+  const [choosingWorkflow, setChoosingWorkflow] = useState(createMode && !initialOperatingChoice && operatingChoices.length > 0)
+  const activeOperatingDefinition = operatingSelection?.definition ?? operatingDefinition
 
   // Flyout chrome: subtabs + Actions-menu-driven create forms (repository conventions).
   // Unsaved-create lands on the overview: every other built-in tab needs a
@@ -296,6 +317,7 @@ export function ProjectDrawer({
   )
   const [actionsOpen, setActionsOpen] = useState(false)
   const [chargeFormOpen, setChargeFormOpen] = useState(false)
+  const [showOptionalBreakdown,setShowOptionalBreakdown]=useState(payload.tasks.length>0||initialTab==='work_breakdown')
   const [billingFormOpen, setBillingFormOpen] = useState(false)
   const [recognitionOpen, setRecognitionOpen] = useState(false)
 
@@ -325,8 +347,9 @@ export function ProjectDrawer({
       custom,
       subsidiaryId: subsidiaries.length > 0 ? subsidiaryId || null : undefined,
       subsidiaryIncludeChildren: subsidiaries.length > 0 ? subsidiaryIncludeChildren : undefined,
+      ...(createMode && operatingSelection ? { operatingProfile: operatingSelection.value, operatingDepartmentId: operatingDepartmentId || null } : {}),
     }),
-    [name, code, customerId, foremanId, managerId, status, projectTypeId, invoicingPref, customerPoNumber, startsOn, endsOn, contractValue, notes, siteJurisdiction, custom, subsidiaryId, subsidiaryIncludeChildren, subsidiaries.length, isActive],
+    [name, code, customerId, foremanId, managerId, status, projectTypeId, invoicingPref, customerPoNumber, startsOn, endsOn, contractValue, notes, siteJurisdiction, custom, subsidiaryId, subsidiaryIncludeChildren, subsidiaries.length, isActive, createMode, operatingSelection, operatingDepartmentId],
   )
   // Track unsaved edits (no autosave — Save is an explicit button). Adjusted
   // during render (same committed value, no extra render). `editable` is read
@@ -489,6 +512,11 @@ export function ProjectDrawer({
   )
 
   function renderProjectField(placement: HeaderFieldPlacement): React.ReactNode {
+    if (activeOperatingDefinition && (
+      (placement.key === 'foreman_id' && !activeOperatingDefinition.presentation.showForeman) ||
+      (placement.key === 'site_jurisdiction' && !activeOperatingDefinition.presentation.showSite) ||
+      (placement.key === 'customer_po_number' && !activeOperatingDefinition.presentation.showCustomerPo)
+    )) return null
     const lbl = placement.labelOverride?.trim() || undefined
     switch (placement.key) {
       case 'name':
@@ -662,7 +690,8 @@ export function ProjectDrawer({
             subtab.visible &&
             (subtab.key !== 'schedule' || schedulingEnabled) &&
             (subtab.key !== 'staffing' || resourcingEnabled) &&
-            (subtab.key !== 'progress' || progressEnabled),
+            (subtab.key !== 'progress' || progressEnabled) &&
+            (subtab.key !== 'work_breakdown' || !activeOperatingDefinition || showOptionalBreakdown || ['activities', 'tasks', 'field_tickets'].includes(activeOperatingDefinition.capture)),
           )
           .map((subtab) => ({
             key: subtab.key,
@@ -679,7 +708,10 @@ export function ProjectDrawer({
       .filter((placement) =>
         placement.key !== 'project_management' || placement.subtabs.length > 0,
       )
-  }, [effectiveLayout, schedulingEnabled, resourcingEnabled, progressEnabled, t, createMode])
+  }, [effectiveLayout, schedulingEnabled, resourcingEnabled, progressEnabled, t, createMode, activeOperatingDefinition,showOptionalBreakdown])
+
+  const optionalBreakdownConfigured=resolveFormTabs(effectiveLayout).some(placement=>placement.visible&&placement.key==='project_management'&&(placement.subtabs??[]).some(subtab=>subtab.visible&&subtab.key==='work_breakdown'))
+  function openWorkBreakdown(){setShowOptionalBreakdown(true);setTab('project_management');setManagementTab('work_breakdown')}
 
   // A hidden or gated-off tab must never stay selected, during render (same
   // committed value, no extra render).
@@ -727,12 +759,13 @@ export function ProjectDrawer({
             <Button size="sm" variant="outline" disabled={busy} onClick={cancel}>
               {tCommon('actions.cancel')}
             </Button>
-            <Button size="sm" disabled={busy || (createMode === true && !nameValid)} onClick={save}>
+            <Button size="sm" disabled={busy || choosingWorkflow || (createMode === true && !nameValid)} onClick={save}>
               {busy ? tCommon('actions.saving') : tCommon('actions.save')}
             </Button>
           </div>
-        ) : canManage || canViewGl || !!cockpit?.recognition ? (
+        ) : canManage || canViewGl || !!cockpit?.recognition || quickTimeHref ? (
           <div className="flex items-center gap-1.5">
+            {quickTimeHref ? <Button asChild size="sm"><Link href={quickTimeHref as never}>{tOperating('time.record')}</Link></Button> : null}
             {canManage ? (
               <Button variant="outline" size="sm" className="h-8 px-2.5 text-xs" onClick={() => { setTab('overview'); setMode('edit') }}>
                 {tCommon('actions.edit')}
@@ -774,8 +807,9 @@ export function ProjectDrawer({
               {canManage ? (
                 <>
                   <div className="my-1 border-t border-slate-200 dark:border-slate-800" />
-                  {menuItem(<Plus className="h-3.5 w-3.5" aria-hidden />, t('charges.addTitle'), () => { setTab('transactions'); setChargeFormOpen(true) })}
-                  {cockpit && cockpit.invoicing.billingProcedure !== 'application_for_payment'
+                  {optionalBreakdownConfigured?menuItem(<Plus className="h-3.5 w-3.5" aria-hidden />,tOperating('workJourney.breakdown'),openWorkBreakdown):null}
+                  {tabs.some(item=>item.key==='transactions')?menuItem(<Plus className="h-3.5 w-3.5" aria-hidden />, t('charges.addTitle'), () => { setTab('transactions'); setChargeFormOpen(true) }):null}
+                  {cockpit && tabs.some(item=>item.key==='billing')&&cockpit.invoicing.billingProcedure !== 'application_for_payment'
                     ? menuItem(<Receipt className="h-3.5 w-3.5" aria-hidden />, t('billing.requestBilling'), () => { setTab('billing'); setBillingFormOpen(true) })
                     : null}
                   <div className="my-1 border-t border-slate-200 dark:border-slate-800" />
@@ -813,6 +847,12 @@ export function ProjectDrawer({
       {tab === 'overview' ? (
         <div className="space-y-7 p-1">
           {/* Groups moved onto an author-created tab are drawn there, not here. */}
+          {choosingWorkflow ? <OperatingProfilePicker family="project" initialChoices={operatingChoices} departmentId={operatingDepartmentId} value={operatingSelection?.value ?? null} onChoose={(choice,department) => { setOperatingSelection(choice); setOperatingDepartmentId(department); setChoosingWorkflow(false) }} /> : <>
+          {createMode && operatingSelection ? <div className="flex items-center justify-between gap-3"><span className="text-sm font-medium">{operatingSelection.name}</span><Button variant="ghost" size="sm" onClick={() => setChoosingWorkflow(true)}>{tOperating('change')}</Button></div> : null}
+          {!createMode&&cockpit&&activeOperatingDefinition?.presentation.showReadiness?<ProjectWorkJourney definition={activeOperatingDefinition} quickTimeHref={quickTimeHref} hours={cockpit.time.totals.hours}
+            onTime={tabs.some(item=>item.key==='cost_time')?()=>setTab('cost_time'):undefined}
+            onCharge={canManage&&tabs.some(item=>item.key==='transactions')?()=>{setTab('transactions');setChargeFormOpen(true)}:undefined}
+            onBreakdown={optionalBreakdownConfigured?openWorkBreakdown:undefined}/>:null}
           <HeaderFields layout={overviewLayout} editable={editable} renderField={renderProjectField} />
 
           {/* Project-level invoicing/backup override (cascades over type ← customer). */}
@@ -832,7 +872,7 @@ export function ProjectDrawer({
 
           {/* HR-20: the clock enforcement place, rehomed onto the project page.
               Off never mounts — the section probes its API on mount. */}
-          {!isPlaceholderName && !createMode && cockpit?.showFieldTime === true ? (
+          {!isPlaceholderName && !createMode && cockpit?.showFieldTime === true && (!activeOperatingDefinition || activeOperatingDefinition.presentation.showSite) ? (
             <GeofenceSection projectId={String(pr.id)} initial={[]} canManage={editable} />
           ) : null}
 
@@ -847,6 +887,7 @@ export function ProjectDrawer({
               <span className="text-sm">{tCommon('labels.active')}</span>
             </label>
           ) : null}
+          </>}
 
         </div>
       ) : null}

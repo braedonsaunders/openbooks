@@ -163,7 +163,9 @@
     "manufacturing-work-orders": "生产工单",
     "manufacturing-work-centers": "工作中心",
     "manufacturing-routings": "工艺路线与版本",
-    "manufacturing-mrp": "MRP运行"
+    "manufacturing-mrp": "MRP运行",
+    "manufacturing-time": "生产工时",
+    "manufacturing-quality": "质量"
   },
   "groups": {
     "manufacturing": "制造",

@@ -23,11 +23,17 @@ export interface PreparedListSource {
  * owns the collection contract and pagination mode consumed by shared tables.
  * A server window must never be filtered or paginated again in the browser. */
 const SOURCES = {
+  manufacturing_home_queue: {route:'/manufacturing',rowsField:'orders.rows',rowKeyField:'id',mode:'server',clientSearch:false,paging:{totalField:'orders.total',pageField:'orders.page',perPageField:'orders.perPage'}},
   manufacturing_work_orders: {route:'/manufacturing/work-orders',rowsField:'rows',rowKeyField:'id',mode:'server',clientSearch:false,paging:{totalField:'total',pageField:'page',perPageField:'perPage'}},
   manufacturing_work_centers: {route:'/manufacturing/work-centers',rowsField:'rows',rowKeyField:'id',mode:'server',clientSearch:false,paging:{totalField:'total',pageField:'page',perPageField:'perPage'}},
   manufacturing_routings: {route:'/manufacturing/routings',rowsField:'rows',rowKeyField:'id',mode:'server',clientSearch:false,paging:{totalField:'total',pageField:'page',perPageField:'perPage'}},
   manufacturing_mrp: {route:'/manufacturing/mrp',rowsField:'rows',rowKeyField:'id',mode:'server',clientSearch:false,paging:{totalField:'total',pageField:'page',perPageField:'perPage'}},
+  manufacturing_genealogy: {route:'/manufacturing/genealogy',rowsField:'edges',rowKeyField:'id',mode:'loaded'},
+  manufacturing_quality: {route:'/manufacturing/quality',rowsField:'queue.rows',rowKeyField:'id',mode:'server',clientSearch:false,showPerPage:false,paging:{totalField:'queue.total',pageField:'queue.page',perPageField:'queue.perPage'}},
   manufacturing_record_rows: {route:'/manufacturing',rowsField:'rows',rowKeyField:'id',mode:'loaded'},
+  manufacturing_vendor_services: {route:'/manufacturing/work-orders',rowsField:'services',rowKeyField:'id',mode:'loaded'},
+  manufacturing_vendor_shipments: {route:'/manufacturing/work-orders',rowsField:'shipments',rowKeyField:'id',mode:'loaded'},
+  manufacturing_vendor_returns: {route:'/manufacturing/work-orders',rowsField:'deliveries',rowKeyField:'id',mode:'loaded'},
   inventory_stock_controls: {route:'/inventory',rowsField:'rows',rowKeyField:'id',mode:'server',clientSearch:false,paging:{totalField:'totalCount',pageField:'currentPage',perPageField:'perPage'}},
   contractor_withholding_payment_deductions: { route: '/payments', rowsField: 'withholdings', rowKeyField: 'openLineId', mode: 'loaded' },
   contractor_withholding_deposits: { route: '/contractor-withholding?tab=deposits', rowsField: 'deposits', rowKeyField: 'documentId', mode: 'loaded' },

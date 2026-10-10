@@ -1,3 +1,4 @@
+import { isFeatureEnabled } from "@/lib/features";
 import { redirect } from "next/navigation";
 import { accessDeniedHref } from "@/lib/gate-targets";
 import Link from "next/link";
@@ -13,7 +14,7 @@ import { groupTabs } from "@/components/module-home/group-tabs";
 import { can, getAuthz } from "@/lib/authz";
 import { isUuid } from "@/lib/list-params";
 import { subsidiaryVisibleFilter } from "@/lib/subsidiaries";
-import { financialChangeSubjectExpr } from "@/lib/customization/entity-list-query/accounting-lifecycles";
+import { financialChangeSubjectExpr,manufacturingChangeResourcesVisible } from "@/lib/customization/entity-list-query/accounting-lifecycles";
 import { ChangeEvidence, ChangeFacts } from "./ChangeEvidence";
 import { ReverseAssetChange } from "./ReverseAssetChange";
 import { ChangeActions } from "./ChangeActions";
@@ -37,12 +38,12 @@ export default async function AccountingEvents({
         ...(can(auth, "assets.read") ? ["lease", "asset"] : []),
         ...(can(auth, "ar.read") ? ["revenue", "sales"] : []),
         ...(can(auth, "close.read") ? ["consolidation"] : []),
-      ]), ...(can(auth, "payroll.read") ? ["payroll"] : [])];
+      ]), ...(can(auth, "payroll.read") ? ["payroll"] : []), ...(can(auth,"manufacturing.read") && await isFeatureEnabled(auth.user.orgId,"manufacturing") ? ["manufacturing"] : [])];
   if (!domains.length) redirect(accessDeniedHref({ permission: "gl.read" }));
   const scopePredicate = sql`fc.domain in (${sql.join(
     domains.map((domain) => sql`${domain}`),
     sql`, `,
-  )}) ${auth.allowedSubsidiaryIds ? sql`and not exists(select 1 from jsonb_array_elements_text(coalesce(fc.payload->'requiredSubsidiaryIds','[]'::jsonb)) required(id) where required.id not in(select jsonb_array_elements_text(${JSON.stringify([...auth.allowedSubsidiaryIds])}::jsonb)))` : sql``}`;
+  )}) ${auth.allowedSubsidiaryIds ? sql`and not exists(select 1 from jsonb_array_elements_text(coalesce(fc.payload->'requiredSubsidiaryIds','[]'::jsonb)) required(id) where required.id not in(select jsonb_array_elements_text(${JSON.stringify([...auth.allowedSubsidiaryIds])}::jsonb)))` : sql``} ${manufacturingChangeResourcesVisible(auth.allowedSubsidiaryIds)}`;
   const sp = await searchParams,
     orgId = auth.user.orgId;
   const id =
@@ -91,7 +92,7 @@ export default async function AccountingEvents({
     references.map((r) => [r.id, r.label]),
   );
   const permission =
-    row?.domain === "payroll"
+    row?.domain === "manufacturing" ? "manufacturing.manage" : row?.domain === "payroll"
       ? "payroll.run"
       : row?.domain === "provision"
       ? "gl.post"
@@ -260,7 +261,7 @@ export default async function AccountingEvents({
                   canSubmit={
                     can(auth, row.domain === "provision" ? "gl.manage" : permission) && row.submitted_by === auth.user.id
                   }
-                  canApply={can(auth, permission)}
+                  canApply={can(auth, permission) && (row.domain!=="manufacturing" || (row.operation==="work_order_loss_disposition" && can(auth,"items.post") || auth.allowedSubsidiaryIds===null && (row.operation==="bom_revision_activation" && can(auth,"admin.setup.manage") || row.operation==="routing_revision_activation" || row.operation==="standard_cost_rollup" && can(auth,"items.post") && can(auth,"items.manage"))))}
                 />
               </div>
             </UrlDrawer>

@@ -107,7 +107,7 @@ function initialValue(field: SetupField, row: Record<string, unknown> | null): u
     case 'date':
       return raw ? String(raw).slice(0, 10) : ''
     case 'multiref':
-      return [] as string[]
+      return Array.isArray(raw) ? raw.map(String) : [] as string[]
     case 'stringArray':
       return Array.isArray(raw) ? raw.map(String) : ([] as string[])
     case 'object':
@@ -264,7 +264,9 @@ export function SetupDrawer({
           else if (field.kind === 'select' && !allowed.has(String(next[field.key] ?? ''))) next[field.key] = ''
         }
         if (field.refScopeField !== key || !field.ref) continue
-        if (!(refOptions[field.ref] ?? []).some((option) => option.value === next[field.key] && (option.scopeValue == null || option.scopeValue === String(value ?? '')))) next[field.key] = ''
+        const allowedReferences = new Set((refOptions[field.ref] ?? []).filter(option => option.scopeValue == null || option.scopeValue === String(value ?? '')).map(option => option.value))
+        if (field.kind === 'multiref') next[field.key] = (Array.isArray(next[field.key]) ? next[field.key] as string[] : []).filter(id => allowedReferences.has(id))
+        else if (!allowedReferences.has(String(next[field.key] ?? ''))) next[field.key] = ''
       }
       return next
     })
@@ -1223,6 +1225,7 @@ export function FieldControl({
   }
 
   if (field.kind === 'multiref') {
+    if (field.refScopeField) refOptions=refOptions.filter(option=>option.scopeValue==null || option.scopeValue===String((Object.hasOwn(formValues,field.refScopeField) ? formValues : recordValues)[field.refScopeField] ?? ''))
     const selected: string[] = Array.isArray(value) ? value : []
     if (field.searchableReferences)
       return (

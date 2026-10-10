@@ -9,7 +9,7 @@ import { can } from "@/lib/authz";
 import { defineRoute } from "@/lib/api/route";
 const Query = z
   .object({
-    kind: z.enum(["items", "locations", "vendors"]).optional(),
+    kind: z.enum(["items", "locations", "vendors", "centers"]).optional(),
     q: z.string().max(200).optional(),
     selected: z.string().uuid().optional(),
   })
@@ -42,12 +42,14 @@ export const GET = defineRoute({
               kind,
               q,
               selected,
+              authz.user.id,
             )
           : await manufacturingOptions(
               db,
               authz.user.orgId,
               authz.allowedSubsidiaryIds,
               can(authz, "ap.create"),
+              authz.user.id,
             ),
       ),
     );

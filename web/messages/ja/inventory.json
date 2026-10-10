@@ -22,11 +22,13 @@
       "effectiveTo": "有効終了日",
       "operationSeq": "作業順序",
       "scrapPct": "仕損率 %",
-      "isByproduct": "明細種別"
+      "isByproduct": "明細種別",
+      "outputCostWeight": "相対原価ウェイト"
     },
     "values": {
       "component": "構成品",
-      "byproduct": "副産物"
+      "byproduct": "副産物",
+      "jointOutput": "連産品"
     },
     "refusals": {
       "effectivityOverlap": "構成品 {component} の有効期間 {windows} が重複しています。日付を修正するか、必要に応じて異なる作業順序または副産物区分を指定してください。",
@@ -35,7 +37,8 @@
       "invalidScrap": "仕損率は 0 以上 100 未満の正確な小数で入力してください。",
       "invalidOperation": "作業順序には正の整数を入力してください。",
       "manufacturingDisabled": "作業順序と副産物の設定を編集するには、会社設定 → 機能で製造を有効にしてください。"
-    }
+    },
+    "jointOutputNote": "連産品には、数量と基本単位ごとの相対ウェイトに応じて製造原価を配賦します。主製品のウェイトは1です。副産物には正味実現可能価額による個別の評価を適用します。"
   },
   "labels": {
     "item": "品目",

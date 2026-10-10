@@ -22,6 +22,7 @@ import { SETUP_GROUPS } from './types'
 import { CONTRACTOR_WITHHOLDING_ENTITIES } from './entities/contractor-withholding'
 import { COMPANY_ENTITIES } from './entities/company'
 import { CALENDAR_ENTITIES } from './entities/calendars'
+import { WORK_CALENDARS_ENTITY } from './entities/work-calendars'
 import { ACCOUNTING_ENTITIES } from './entities/accounting'
 import { INTERNAL_BILLING_RULES_ENTITY } from './entities/internal-billing'
 import { TAX_ENTITIES } from './entities/taxes'
@@ -40,6 +41,8 @@ import { HRM_PROCESS_ENTITIES } from './entities/hrm-processes'
 import { ASSET_ENTITIES } from './entities/assets'
 import { CURRENCY_ENTITIES } from './entities/currency'
 import { MANUFACTURING_ENTITIES } from './entities/manufacturing'
+import { INSPECTION_PLANS_ENTITY } from './entities/inspection-plans'
+import { OPERATING_PROFILE_ENTITIES } from './entities/operating-profiles'
 import { USAGE_ENTITIES } from './entities/usage'
 import { ENTITLEMENT_ENTITIES } from './entities/entitlements'
 import { NONPROFIT_SETUP_ENTITIES } from './entities/nonprofit'
@@ -59,6 +62,7 @@ export const SETUP_ENTITIES: SetupEntity[] = [
   ...ACCOUNTING_ENTITIES,
   INTERNAL_BILLING_RULES_ENTITY,
   ...CALENDAR_ENTITIES,
+  WORK_CALENDARS_ENTITY,
   ...TAX_ENTITIES,
   ...CONTRACTOR_WITHHOLDING_ENTITIES,
   ...DIMENSION_ENTITIES,
@@ -76,6 +80,8 @@ export const SETUP_ENTITIES: SetupEntity[] = [
   ...ASSET_ENTITIES,
   ...CURRENCY_ENTITIES,
   ...MANUFACTURING_ENTITIES,
+  INSPECTION_PLANS_ENTITY,
+  ...OPERATING_PROFILE_ENTITIES,
   ...USAGE_ENTITIES,
   ...ENTITLEMENT_ENTITIES,
   ...NONPROFIT_SETUP_ENTITIES,

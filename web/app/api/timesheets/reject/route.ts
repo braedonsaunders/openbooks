@@ -1,3 +1,5 @@
+import { authorizeTimeWorkspace, timeWorkFamily } from "@/lib/time-workspace";
+import { lockSharedTimeAuthority } from "@openbooks/engine/src/projects/time-work-target.ts";
 import { z } from "zod";
 import { isoDate, uuidId } from "@/lib/api/json";
 import { defineRoute } from "@/lib/api/route";
@@ -42,10 +44,10 @@ interface Body {
  * why an approver declined — the documented decision is the point.
  */
 export const POST = defineRoute({
-  permission: "time.approve",
-  feature: "timeTracking",
+  authorize: authorizeTimeWorkspace("time.approve"),
+  feature: { none: "The explicit workspace pins Time Tracking or Manufacturing; native commands fence every actual target." },
   body: postBodySchema0,
-  handler: async ({ request: _req, authz: gate, body: routeBody }) => {
+  handler: async ({ request: workspaceRequest, authz: gate, body: routeBody }) => {
     const { user } = gate;
     const orgId = user.orgId;
 
@@ -88,6 +90,7 @@ export const POST = defineRoute({
 
     try {
       return await withOrgTransaction(orgId, async () => {
+        await lockSharedTimeAuthority(db, orgId, user.id, { employeeId: ownedEmployee, from: days[0]!, through: days[6]!, requestedScope: gate.allowedSubsidiaryIds, permission: "time.approve", workFamily: timeWorkFamily(workspaceRequest) });
         // The locked header is the claim, not the pre-transaction read: a
         // replay that passed the fast path before the winner committed
         // observes rejected here and is refused before it can overwrite the

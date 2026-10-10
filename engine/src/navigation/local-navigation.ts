@@ -16,6 +16,7 @@ export type LocalNavigationTab = {
   menuParent?: string
   permission?: string
   permissionsAny?: string[]
+  permissionsAll?: readonly string[]
   feature?: string
   /** Additional feature dependencies required by this working view. */
   requiredFeatures?: readonly string[]
@@ -127,6 +128,8 @@ export const LOCAL_NAVIGATION: LocalNavigationSet[] = [
     {href:'/manufacturing/work-orders',label:'Work orders',ns:'manufacturing',key:'titles.work-orders',permission:'manufacturing.read',iconKey:'clipboard',menuParent:'manufacturing'},
     {href:'/manufacturing/work-centers',label:'Work centers',ns:'manufacturing',key:'titles.work-centers',permission:'manufacturing.read',iconKey:'settings',menuParent:'manufacturing'},
     {href:'/manufacturing/routings',label:'Routings',ns:'manufacturing',key:'titles.routings',permission:'manufacturing.read',iconKey:'workflow',menuParent:'manufacturing'},
+    {href:'/manufacturing/time',label:'Production time',ns:'operatingProfiles',key:'time.title',permission:'time.read',permissionsAll:['manufacturing.read'],iconKey:'clock',menuParent:'manufacturing'},
+    {href:'/manufacturing/quality',label:'Quality',ns:'manufacturing',key:'quality.title',permission:'manufacturing.read',permissionsAll:['items.read'],iconKey:'clipboard',menuParent:'manufacturing'},
     {href:'/manufacturing/mrp',label:'MRP',ns:'manufacturing',key:'titles.mrp',permission:'manufacturing.read',feature:'manufacturingMrp',iconKey:'calendar-days',menuParent:'manufacturing'},
   ] },
   { id: 'collections-views', label: 'Collections', tabs: [

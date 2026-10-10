@@ -1,0 +1,87 @@
+{
+  "chooseTitle": "Escolha como este trabalho funciona",
+  "chooseDescription": "Comece com o detalhe necessário para a equipe. Recursos e permissões controlam as opções.",
+  "change": "Alterar fluxo",
+  "loading": "Carregando fluxos…",
+  "loadFailed": "Não foi possível carregar os fluxos.",
+  "retry": "Tentar novamente",
+  "noChoices": "Nenhum fluxo disponível. Revise recursos e perfis nas configurações.",
+  "presets": {
+    "shop_jobs": {
+      "name": "Trabalhos de oficina",
+      "description": "Trabalhos de clientes, preparação e tempo. Adicione atividades quando forem úteis."
+    },
+    "field_work": {
+      "name": "Trabalho de campo",
+      "description": "Trabalho em campo com boletins, equipes e planejamento opcionais."
+    },
+    "professional_services": {
+      "name": "Serviços profissionais",
+      "description": "Projetos, tempo e entregas sem campos de construção."
+    },
+    "discrete_production": {
+      "name": "Produção discreta",
+      "description": "Produtos repetíveis com listas de materiais e operações definidas."
+    },
+    "custom_production": {
+      "name": "Produção sob encomenda",
+      "description": "Produtos sob encomenda com materiais e revisões controlados."
+    },
+    "batch_process": {
+      "name": "Produção por lotes e processos",
+      "description": "Receitas, lotes, rendimentos medidos e produtos rastreáveis."
+    }
+  },
+  "capture": {
+    "job": "Trabalho inteiro",
+    "activities": "Atividades",
+    "tasks": "Tarefas",
+    "field_tickets": "Boletins de campo",
+    "operations": "Operações",
+    "batch": "Lote"
+  },
+  "time": {
+    "work": "Trabalho",
+    "project": "Projeto / trabalho",
+    "production": "Produção",
+    "order": "Ordem de produção",
+    "operation": "Operação (opcional)",
+    "search": "Buscar trabalho",
+    "title": "Tempo de produção",
+    "correct": "Corrigir",
+    "correctTitle": "Corrigir horas de produção",
+    "correctMessage": "O original permanece contabilizado. Uma contrapartida e uma substituição registram a correção; os produtos recebidos mantêm o custo histórico.",
+    "correctHours": "Horas corrigidas",
+    "correctReason": "Motivo",
+    "record": "Registrar tempo"
+  },
+  "department": "Departamento (opcional)",
+  "companyDefaults": "Padrões da empresa",
+  "default": "Fluxo padrão",
+  "views": {
+    "presentation": "Visualização",
+    "list": "Lista",
+    "board": "Quadro",
+    "emptyLane": "Nenhum trabalho nesta página",
+    "pageScope": "Os cartões e as contagens das colunas mostram a página filtrada atual.",
+    "saveFailed": "Não foi possível salvar sua preferência de exibição."
+  },
+  "filters": {
+    "workflow": "Fluxo de trabalho",
+    "department": "Departamento",
+    "allWorkflows": "Todos os fluxos",
+    "allDepartments": "Todos os departamentos",
+    "legacy": "Trabalho existente sem perfil",
+    "unassigned": "Não atribuído"
+  },
+  "workJourney": {
+    "description": "Mantenha trabalho, tempo e custos neste serviço. Adicione uma estrutura quando ela ajudar sua equipe.",
+    "recordTime": "Registrar tempo",
+    "time": "Tempo registrado",
+    "hours": "{hours} horas registradas",
+    "costs": "Adicionar custos",
+    "costsNote": "Use o lançamento existente do serviço para registrar materiais e outros custos.",
+    "breakdown": "Estrutura do trabalho",
+    "breakdownNote": "Use as atividades e tarefas existentes quando o detalhamento trouxer valor."
+  }
+}

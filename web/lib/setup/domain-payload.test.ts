@@ -89,3 +89,10 @@ test('structured delivery controls retain parent board scope while coercing sibl
   if (!people.ok) throw new Error(people.error);
   assert.equal((people.body.automaticDeliveryPolicy as Record<string, unknown>).cohort, 'scope');
 });
+
+
+test('native opaque calendar revisions remain server-owned while integer aggregate contracts stay strict', () => {
+  const entity = { ...policy, mutationPath: '/api/work-calendars', mutationRevision: { requestKey: 'expectedRevision', rowColumn: 'revision', format: 'token' as const }, mutationUpdateKeys: ['name', 'expectedRevision'] }
+  assert.deepEqual(setupAggregatePayload(entity, { name: 'Updated week', expectedRevision: 'forged' }, { revision: '4294967295' }), { ok: true, body: { name: 'Updated week', expectedRevision: '4294967295' } })
+  for (const revision of [null, undefined, 7, '', 'arbitrary value', 'x'.repeat(161)]) assert.deepEqual(setupAggregatePayload(entity, { name: 'Updated week' }, { revision }), { ok: false, error: 'revision' })
+})

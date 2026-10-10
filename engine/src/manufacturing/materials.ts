@@ -1,5 +1,12 @@
+import {assertReceiptReworkIssue} from "./receipt-rework.ts";
+import { lockManufacturingOrderExecutionAuthority } from "./authority.ts";
+import { assertOperationInspectionAccepted, finishInspectionRework } from "./quality-execution.ts";
 import { saleableLocation,unheldTracking,assertSaleableStock } from "../inventory/stock-eligibility.ts";
 import { randomUUID } from "node:crypto";
+import { canonicalJson } from "../platform/canonical-json.ts";
+import { isUuid } from "../platform/uuid.ts";
+import { lockSubcontractCustodyAuthority } from "../inventory/subcontract-custody.ts";
+import { assertInspectionIdentifierScope } from "../inventory/inspections.ts";
 import { sql } from "drizzle-orm";
 import { add, cmp, fromUnits, isZero, neg, toUnits } from "../money/money.ts";
 import type { SqlExecutor } from "../platform/db.ts";
@@ -12,7 +19,7 @@ import { consumeLayers, recordConsumptions, resolveProvisionalUnitCost, type Con
 import { getOnHandWith, lockInventoryPosition, periodForDate, primaryBookId, subsidiaryCurrency } from "../inventory/position.ts";
 import { inventoryOffsetAccountProblem, stockLocationDim } from "../inventory/journal.ts";
 import { validateTrackingSelection } from "../inventory/tracking.ts";
-import { bomRequiredQuantity } from "../inventory/bom-scrap.ts";
+import { bomRequiredQuantity, type BomQuantityBasis } from "../inventory/bom-scrap.ts";
 import { assertManufacturingFeature } from "./gate.ts";
 import { ManufacturingError, ManufacturingNotFoundError } from "./errors.ts";
 import { auditChange, compareDecimal, decimalValue } from "./master-support.ts";
@@ -36,14 +43,14 @@ type WorkOrder = {
   id: string; number: string; status: string; hold_reason: string | null;
   subsidiary_id: string | null; issue_location_id: string | null;
   quantity_ordered: string; bom_revision: string | null; routing_version: number | null;
-  started_at: Date | null;
+  receipt_rework_inspection_id:string|null;started_at: Date | null;
 };
 
 type Material = {
   id: string; component_item_id: string; component_code: string | null; component_name: string;
   required_qty: string; issued_qty: string; backflush_qty: string; operation_seq: number | null;
   lot_serial_policy: InventoryProfile["tracking"];
-  quantity_per: string; scrap_pct: string;
+  quantity_per: string;quantity_basis:BomQuantityBasis;formula_output_quantity:string; scrap_pct: string;
 };
 
 type Operation = {
@@ -56,6 +63,7 @@ type IssueIntent = {
   quantity: string;
   lotId: string | null;
   serialId: string | null;
+  sourceReceiptMovementId?:string;
 };
 
 type PlannedIssue = IssueIntent & {
@@ -78,7 +86,7 @@ function rowOrNotFound<T>(rows: T[]): T {
 async function loadOrder(tx: SqlExecutor, orgId: string, id: string, lock = false): Promise<WorkOrder> {
   return rowOrNotFound((await tx.execute<WorkOrder>(sql`
     select id, number, status, hold_reason, subsidiary_id, issue_location_id,
-           quantity_ordered::text as quantity_ordered, bom_revision, routing_version, started_at
+           quantity_ordered::text as quantity_ordered, bom_revision, routing_version, receipt_rework_inspection_id,started_at
       from mfg_work_orders where org_id=${orgId} and id=${id} ${lock ? sql`for update` : sql``}`)).rows);
 }
 
@@ -95,7 +103,7 @@ async function lockMaterials(tx: SqlExecutor, orgId: string, workOrderId: string
            material.required_qty::text, material.issued_qty::text, material.backflush_qty::text,
            material.operation_seq, material.lot_serial_policy,
            material.quantity_per::text as quantity_per,
-           material.scrap_pct::text as scrap_pct
+           material.scrap_pct::text as scrap_pct,material.quantity_basis,material.formula_output_quantity::text
       from mfg_wo_materials material
       join items item on item.org_id=material.org_id and item.id=material.component_item_id
      where material.org_id=${orgId} and material.work_order_id=${workOrderId}
@@ -140,14 +148,16 @@ function materialName(material: Material): string {
 }
 
 function selectionKey(issue: IssueIntent): string {
-  return `${issue.material.component_item_id}:${issue.lotId ?? ""}:${issue.serialId ?? ""}`;
+  return `${issue.material.component_item_id}:${issue.lotId ?? ""}:${issue.serialId ?? ""}:${issue.sourceReceiptMovementId??""}`;
 }
 
 async function planIssues(
   tx: SqlExecutor,
   orgId: string,
+  actorId:string,
   order: WorkOrder,
   intents: IssueIntent[],
+  vendorCustody = false,
 ): Promise<PlannedIssue[]> {
   if (!order.subsidiary_id) refuse(`Work order ${order.number} has no subsidiary.`, "work_order_subsidiary_required", "Choose an operating subsidiary before releasing the work order.");
   if (!order.issue_location_id) refuse(`Work order ${order.number} has no issue location.`, "work_order_issue_location_required", "Choose an active stock location for material issue in the draft work order.");
@@ -171,21 +181,28 @@ async function planIssues(
     if (profile.tracking !== issue.material.lot_serial_policy) {
       refuse(`Component ${name} tracking changed after the work-order material snapshot.`, "material_tracking_changed", "Review the component inventory profile and release a new work order.", 409);
     }
-    await assertSaleableStock(tx as Runner,orgId,order.issue_location_id,{lotId:issue.lotId,serialId:issue.serialId});
+    if(order.receipt_rework_inspection_id) {
+      const repair=await assertReceiptReworkIssue(tx,orgId,actorId,order.id,{itemId:issue.material.component_item_id,quantity:issue.quantity,lotId:issue.lotId,serialId:issue.serialId,stockLocationId:order.issue_location_id,subsidiaryId:order.subsidiary_id});
+      issue.sourceReceiptMovementId=repair.receiptMovementId!;
+    } else if(vendorCustody) {
+      if(!issue.sourceReceiptMovementId || !(await tx.execute<{clear:boolean}>(sql`select ${unheldTracking(sql`${orgId}`,sql`${issue.lotId}::uuid`,sql`${issue.serialId}::uuid`)} as clear`)).rows[0]?.clear) {
+        refuse('Vendor components are held or lack shipment evidence.','subcontract_component_unavailable','Resolve the stock hold and use the actual component shipment.');
+      }
+    } else await assertSaleableStock(tx as Runner,orgId,order.issue_location_id,{lotId:issue.lotId,serialId:issue.serialId});
     await validateTrackingSelection(tx as Runner, orgId, issue.material.component_item_id, order.issue_location_id, profile,
       { quantity: issue.quantity, lotId: issue.lotId, serialId: issue.serialId }, "issue");
     const key = selectionKey(issue);
     let onHand = available.get(key);
     if (onHand === undefined) {
       onHand = (await getOnHandWith(tx as Runner, orgId, issue.material.component_item_id, order.issue_location_id, {
-        lotId: issue.lotId, serialId: issue.serialId, subsidiaryId: order.subsidiary_id,
+        lotId: issue.lotId, serialId: issue.serialId, subsidiaryId: order.subsidiary_id,sourceReceiptMovementId:issue.sourceReceiptMovementId,
       })).quantity;
     }
     const positiveOnHand = cmp(onHand, "0") > 0 ? onHand : "0";
     const shortageUnits = toUnits(issue.quantity) - toUnits(positiveOnHand);
     if (shortageUnits > 0n) {
       await assertNoForeignOnHand(tx as Runner, orgId, issue.material.component_item_id, order.issue_location_id, order.subsidiary_id);
-      if (!profile.allowNegativeInventory || profile.tracking !== "none") {
+      if (vendorCustody || order.receipt_rework_inspection_id || !profile.allowNegativeInventory || profile.tracking !== "none") {
         refuse(`Component ${name} is short by ${fromUnits(shortageUnits)} for work order ${order.number}.`, "material_shortage", "Receive or transfer the named component into the work order issue location before posting.");
       }
     }
@@ -252,7 +269,7 @@ async function backflushIntents(
   const remaining = new Map<string, string>();
   const intents: IssueIntent[] = [];
   for (const material of required) {
-    const requirement = bomRequiredQuantity(basisQuantity, material.quantity_per, material.scrap_pct);
+    const requirement = bomRequiredQuantity(basisQuantity, material.quantity_per, material.scrap_pct,{quantityBasis:material.quantity_basis,formulaOutputQuantity:material.formula_output_quantity});
     if (cmp(requirement.quantity, "0") <= 0 && cmp(requirement.exactQuantity, "0") > 0) {
       refuse(`Component ${materialName(material)} requires ${requirement.exactQuantity}, below the 0.0001 unit precision.`, "material_quantity_below_precision", "Increase the operation quantity or revise the BOM quantity per.");
     }
@@ -363,14 +380,14 @@ async function postMaterialIssue(
   let totalCost = "0";
   for (const issue of planned) {
     const onHand = await getOnHandWith(tx as Runner, orgId, issue.material.component_item_id, order.issue_location_id!, {
-      lotId: issue.lotId, serialId: issue.serialId, subsidiaryId: order.subsidiary_id,
+      lotId: issue.lotId, serialId: issue.serialId, subsidiaryId: order.subsidiary_id,sourceReceiptMovementId:issue.sourceReceiptMovementId,
     });
     const { cost, unitCost, consumptions, shortfallQuantity } = await consumeLayers(
       tx as Runner, orgId, issue.profile, issue.material.component_item_id, order.issue_location_id!, issue.quantity,
-      onHand, issue.provisionalUnitCost ?? onHand.unitCost, { lotId: issue.lotId, serialId: issue.serialId },
+      onHand, issue.provisionalUnitCost ?? onHand.unitCost, { lotId: issue.lotId, serialId: issue.serialId,sourceReceiptMovementId:issue.sourceReceiptMovementId },
       order.subsidiary_id, actorId,
     );
-    if (!isZero(shortfallQuantity) && (!issue.profile.allowNegativeInventory || issue.profile.tracking !== "none")) {
+    if (!isZero(shortfallQuantity) && (issue.sourceReceiptMovementId || !issue.profile.allowNegativeInventory || issue.profile.tracking !== "none")) {
       refuse(`Component ${issue.componentName} is short by ${shortfallQuantity} for work order ${order.number}.`, "material_shortage", "Receive or transfer the named component into the work order issue location before posting.");
     }
     const accountProblem = inventoryOffsetAccountProblem(issue.profile.assetAccountId, wip, "manufacturing WIP offset");
@@ -447,6 +464,7 @@ export async function issueMaterials(
   lines: MaterialIssueLine[],
 ): Promise<{ entryId: string | null; movementIds: string[] }> {
   await assertManufacturingFeature(tx, orgId, "manufacturing");
+  await lockManufacturingOrderExecutionAuthority(tx,orgId,actorId,workOrderId);
   if (!Array.isArray(lines) || lines.length === 0) refuse("Choose at least one material line to issue.", "issue_lines_required", "Select work-order material lines and enter quantities to issue.");
   const order = await loadOrder(tx, orgId, workOrderId, true);
   heldRefusal(order);
@@ -474,7 +492,7 @@ export async function issueMaterials(
     } else grouped.set(key, { material, quantity, lotId, serialId });
   }
   const intents: IssueIntent[] = [...grouped.values()];
-  const planned = await planIssues(tx, orgId, order, intents);
+  const planned = await planIssues(tx, orgId, actorId,order, intents);
   const updatedOrder = await requireValueOrder(tx, orgId, actorId, order);
   const deltas = new Map<string, { issued: string; backflush: string }>();
   for (const issue of planned) {
@@ -484,6 +502,61 @@ export async function issueMaterials(
   }
   // The plan was checked before the state transition. postMaterialIssue rechecks under the same row and position locks.
   return postMaterialIssue(tx, orgId, actorId, updatedOrder, planned, deltas);
+}
+
+/** A vendor drawdown consumes only this subcontract's actual transferred layers. */
+export async function consumeSubcontractMaterials(
+  tx:SqlExecutor,orgId:string,actorId:string,subcontractId:string,requestKey:string,
+  raw:Array<{shipmentId:string;quantity:string}>,
+) {
+  if(!isUuid(subcontractId)||!isUuid(requestKey)||!Array.isArray(raw)||!raw.length||raw.length>100||raw.some(line=>!line||typeof line!=="object"||!isUuid(line.shipmentId))) throw new ManufacturingNotFoundError();
+  const lines=raw.map(line=>({shipmentId:line.shipmentId,quantity:fromUnits(toUnits(decimalValue(line.quantity,'quantity','Enter a positive component quantity.')))})).sort((a,b)=>a.shipmentId.localeCompare(b.shipmentId));
+  if(new Set(lines.map(line=>line.shipmentId)).size!==lines.length || lines.some(line=>cmp(line.quantity,'0')<=0)) refuse('Select distinct shipments with positive consumed quantities.','subcontract_consumption_invalid','Record each actual shipment once with the quantity the vendor used.');
+  await assertManufacturingFeature(tx,orgId,'manufacturingSubcontract');
+  const contract=(await tx.execute<{workOrderId:string;custodyLocationId:string;vendorId:string;status:string}>(sql`select work_order_id as "workOrderId",custody_location_id as "custodyLocationId",vendor_id as "vendorId",status from mfg_subcontracts where org_id=${orgId} and id=${subcontractId}`)).rows[0];
+  if(!contract) throw new ManufacturingNotFoundError();
+  const scope=await lockManufacturingOrderExecutionAuthority(tx,orgId,actorId,contract.workOrderId,null,contract.custodyLocationId);
+  const original=await loadOrder(tx,orgId,contract.workOrderId,true);
+  const custody=await lockSubcontractCustodyAuthority(tx,orgId,actorId,original.subsidiary_id!,contract.custodyLocationId);
+  if(!custody || custody.vendorId!==contract.vendorId) throw new ManufacturingNotFoundError();
+  const prior=(await tx.execute<{id:string;custom:Record<string,unknown>;status:string}>(sql`select id,custom,status from journal_entries where org_id=${orgId} and origin='manufacturing' and reverses_entry_id is null and custom->>'subcontract_consumption_key'=${requestKey} for share`)).rows[0];
+  if(prior) {
+    if(prior.custom.work_order_number!==original.number || prior.custom.subcontract_id!==subcontractId || canonicalJson(prior.custom.subcontract_consumption)!==canonicalJson(lines)) refuse('This consumption key already belongs to another request.','idempotency_key_conflict','Reload the subcontract or use a new request for a separate consumption.');
+    if(prior.status!=='posted'||(await tx.execute(sql`select id from journal_entries where org_id=${orgId} and reverses_entry_id=${prior.id} and status='posted' limit 1`)).rows.length) refuse('This vendor consumption was reversed.','subcontract_consumption_reversed','Use a new request for a new vendor consumption; the reversal retains its history.');
+    const movementIds=(await tx.execute<{id:string}>(sql`select id from inventory_movements where org_id=${orgId} and journal_entry_id=${prior.id} and kind='assembly_consume' order by id`)).rows.map(row=>row.id);
+    return {entryId:prior.id,movementIds,replayed:true};
+  }
+  heldRefusal(original);
+  if(!['ready','sent'].includes(contract.status)||!['released','in_progress'].includes(original.status)) refuse('This order is not open for vendor consumption.','subcontract_not_open','Resume the order and use its open subcontract.');
+  const pinned=(await tx.execute(sql`select id from mfg_subcontracts where org_id=${orgId} and id=${subcontractId} and status in('ready','sent') for update`)).rows[0];
+  if(!pinned) throw new ManufacturingNotFoundError();
+  const materials=await lockMaterials(tx,orgId,original.id),byId=new Map(materials.map(material=>[material.id,material]));
+  const intents:IssueIntent[]=[];
+  for(const line of lines) {
+    const shipment=(await tx.execute<{materialId:string;receiptId:string;lotId:string|null;serialId:string|null}>(sql`select shipment.material_id as "materialId",shipment.to_movement_id as "receiptId",inbound.lot_id as "lotId",inbound.serial_id as "serialId"
+      from mfg_subcontract_shipments shipment join inventory_movements inbound on inbound.org_id=shipment.org_id and inbound.id=shipment.to_movement_id
+      join inventory_movements outbound on outbound.org_id=shipment.org_id and outbound.id=shipment.from_movement_id
+      where shipment.org_id=${orgId} and shipment.id=${line.shipmentId} and shipment.subcontract_id=${subcontractId}
+        and inbound.kind='transfer_in' and inbound.status='posted' and inbound.stock_location_id=${contract.custodyLocationId} and inbound.subsidiary_id=${original.subsidiary_id}
+        and outbound.kind='transfer_out' and outbound.status='posted' and inbound.paired_movement_id=outbound.id
+        and not exists(select 1 from inventory_movements reversal where reversal.org_id=shipment.org_id and reversal.reverses_movement_id in(inbound.id,outbound.id) and reversal.status='posted')
+      for share of shipment,inbound,outbound`)).rows[0];
+    if(!shipment) refuse('The component shipment is missing or reversed.','subcontract_shipment_unavailable','Use the live shipment that delivered these components to the vendor.');
+    const material=byId.get(shipment.materialId);
+    if(!material) throw new ManufacturingNotFoundError();
+    await assertInspectionIdentifierScope(tx,orgId,actorId,material.component_item_id,scope,shipment);
+    intents.push({material,quantity:line.quantity,lotId:shipment.lotId,serialId:shipment.serialId,sourceReceiptMovementId:shipment.receiptId});
+  }
+  const vendorOrder={...original,issue_location_id:contract.custodyLocationId};
+  const planned=await planIssues(tx,orgId,actorId,vendorOrder,intents,true);
+  const started=await requireValueOrder(tx,orgId,actorId,original);
+  const deltas=new Map<string,{issued:string;backflush:string}>();
+  for(const intent of planned) {
+    const delta=deltas.get(intent.material.id)??{issued:'0',backflush:'0'};
+    delta.issued=add(delta.issued,intent.quantity);deltas.set(intent.material.id,delta);
+  }
+  const result=await postMaterialIssue(tx,orgId,actorId,{...started,issue_location_id:contract.custodyLocationId},planned,deltas,{subcontract_id:subcontractId,subcontract_consumption_key:requestKey,subcontract_consumption:lines});
+  return {...result,replayed:false};
 }
 
 export async function backflushOperation(
@@ -503,6 +576,7 @@ export async function backflushOperation(
   if (order.status !== "in_progress" || operation.status !== expectedStatus) {
     refuse(`Operation ${operation.sequence} cannot backflush at ${trigger} while it is ${operation.status}.`, "invalid_operation_transition", `Set operation ${operation.sequence} to ${expectedStatus} before its ${trigger} backflush.`, 409);
   }
+  await lockManufacturingOrderExecutionAuthority(tx,orgId,actorId,workOrderId);
   const prior = (await tx.execute<{ id: string }>(sql`
     select id from journal_entries where org_id=${orgId} and origin='manufacturing'
       and custom->>'work_order_number'=${order.number}
@@ -524,7 +598,7 @@ export async function backflushOperation(
     deltas.set(issue.material.id, delta);
   }
   if (!intents.length) return { entryId: null, movementIds: [], fired: true };
-  const planned = await planIssues(tx, orgId, order, intents);
+  const planned = await planIssues(tx, orgId, actorId,order, intents);
   const result = await postMaterialIssue(tx, orgId, actorId, order, planned, deltas, {
     operation_id: operationId, operation_sequence: String(operation.sequence), backflush_trigger: trigger,
   });
@@ -540,6 +614,7 @@ export async function completeWorkOrderOperation(
   input: OperationCompletion,
 ): Promise<{ id: string; sequence: number; status: string; quantity_done: string; measured_qty: string | null }> {
   await assertManufacturingFeature(tx, orgId, "manufacturing");
+  await lockManufacturingOrderExecutionAuthority(tx,orgId,actorId,workOrderId);
   const order = await loadOrder(tx, orgId, workOrderId, true);
   heldRefusal(order);
   const operation = await loadOperation(tx, orgId, workOrderId, operationId, true);
@@ -559,6 +634,15 @@ export async function completeWorkOrderOperation(
   if (operation.status !== "running") {
     refuse(`Operation ${operation.sequence} cannot complete from ${operation.status}.`, "invalid_operation_transition", "Complete an operation that is running.", 409);
   }
+  const subcontract=(await tx.execute<{id:string;returned:string;final:boolean}>(sql`select contract.id,
+    (select coalesce(sum(quantity),0)::text from mfg_subcontract_returns where org_id=contract.org_id and subcontract_id=contract.id) as returned,
+    exists(select 1 from mfg_subcontract_returns where org_id=contract.org_id and subcontract_id=contract.id and request_snapshot->>'finish'='true') as final
+    from mfg_subcontracts contract where contract.org_id=${orgId} and contract.operation_id=${operationId} and contract.status<>'cancelled' for share`)).rows[0];
+  if(subcontract) {
+    await assertManufacturingFeature(tx,orgId,'manufacturingSubcontract');
+    if(!subcontract.final||cmp(subcontract.returned,doneQty)!==0) refuse('This operation must finish through its actual vendor deliveries.','subcontract_return_required','Record the final delivery on the subcontract; its accumulated returned quantity becomes the operation’s completed quantity.');
+  }
+  await assertOperationInspectionAccepted(tx,orgId,operationId,doneQty);
   const policies = await getManufacturingPolicies(tx, orgId);
   const toleranceUnits = toUnits(policies.completionTolerancePct);
   const maximumUnits = toUnits(operation.quantity_planned) * (1_000_000n + toleranceUnits) / 1_000_000n;
@@ -582,5 +666,6 @@ export async function completeWorkOrderOperation(
       actualLaborMinutes: conversion.laborMinutes, conversionEntryId: conversion.entryId,
       reason: `Operation completed with ${doneQty} units.` } });
   await backflushOperation(tx, orgId, actorId, workOrderId, operationId, "finish");
+  await finishInspectionRework(tx,orgId,actorId,operationId);
   return after;
 }

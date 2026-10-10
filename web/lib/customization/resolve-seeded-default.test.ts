@@ -36,17 +36,20 @@ type Row = Record<string, unknown>
   // A present row with view_id NULL is "use system default" (schema:
   // null viewId ⇒ skip personal, then org/system). That is not the same as no preference row.
   prefCleared: false,
+  presentationOnly: false,
   async execute() {
     const state = (globalThis as Record<string, unknown>).__resolveSeedDb as {
       calls: number
       viewRows: Row[]
       prefViewId: string | null
       prefCleared: boolean
+      presentationOnly: boolean
     }
     state.calls += 1
     // First query lists the views; the second (when no explicit view) reads
     // the user's default preference.
     if (state.calls === 1) return { rows: state.viewRows }
+    if (state.presentationOnly) return {rows:[{viewId:null,selectionExplicit:false}]}
     if (state.prefCleared) return { rows: [{ viewId: null }] }
     return { rows: state.prefViewId ? [{ viewId: state.prefViewId }] : [] }
   },
@@ -78,7 +81,7 @@ function seedRow(overrides: Row = {}): Row {
 }
 
 async function resolve(
-  overrides: { viewRows: Row[]; prefViewId?: string | null; prefCleared?: boolean; viewId?: string | null },
+  overrides: { viewRows: Row[]; prefViewId?: string | null; prefCleared?: boolean; presentationOnly?: boolean; viewId?: string | null },
   org: string,
 ) {
   const state = (globalThis as Record<string, unknown>).__resolveSeedDb as {
@@ -86,11 +89,13 @@ async function resolve(
     viewRows: Row[]
     prefViewId: string | null
     prefCleared: boolean
+    presentationOnly: boolean
   }
   state.calls = 0
   state.viewRows = overrides.viewRows
   state.prefViewId = overrides.prefViewId ?? null
   state.prefCleared = overrides.prefCleared === true
+  state.presentationOnly = overrides.presentationOnly === true
   return resolveListView({
     orgId: org,
     userId: 'user-1',
@@ -428,4 +433,12 @@ test('a sort-only edit through the PATCH path keeps its direction', async () => 
   )
   assert.equal(resolved.source, 'org')
   assert.deepEqual(resolved.view.sort, { column: 'short_code', dir: 'desc' })
+})
+
+test('choosing board presentation preserves the unique personal saved default',async()=>{
+  const personal=seedRow({id:'22222222-2222-4222-8222-222222222222',scope:'user',ownerId:'user-1',isDefault:true,name:'My work',config:{...seedShape,perPage:50,presentation:'board'},updatedAt:LATER});
+  const resolved=await resolve({viewRows:[seedRow(),personal],presentationOnly:true},'org-board-personal');
+  assert.equal(resolved.source,'user');assert.equal(resolved.row?.id,personal.id);assert.equal(resolved.view.perPage,50);assert.equal(resolved.view.presentation,'board');
+  const explicit=await resolve({viewRows:[seedRow(),personal],prefCleared:true},'org-explicit-system');
+  assert.equal(explicit.source,'org','an explicit system-default choice still overrides the personal default');
 })

@@ -152,7 +152,9 @@ export function setupRail({
           ]
         : group.key === 'projects'
         ? [
+            ...(canManageSetup && (projectsEnabled || manufacturingEnabled) ? [{ href:'/admin/setup/operating-profiles',labelKey:'admin.setup.entities.operating-profiles.title',iconKey:'building' }] : []),
             ...(canManageSetup && manufacturingEnabled ? [{ href: '/admin/setup/manufacturing', labelKey: 'manufacturing.setup', iconKey: 'settings' }] : []),
+            ...(!projectsEnabled && manufacturingEnabled ? [{ href: '/admin/setup/labor-costing', labelKey: 'admin.setup.laborCosting.navTitle', iconKey: 'coins' }, { href: '/admin/setup/overhead', labelKey: 'admin.setup.entities.overhead-model.title', iconKey: 'gauge' }] : []),
             ...(projectsEnabled
               ? [
                   { href: '/admin/setup/project-types', labelKey: 'projectTypes.title', iconKey: 'briefcase' },
@@ -161,7 +163,7 @@ export function setupRail({
                   { href: '/admin/setup/labor-pricing', labelKey: 'laborPricing.navTitle', iconKey: 'tag' },
                   // Overhead rates live as a subtab of the Overhead workspace, not
                   // a standalone rail entry — filter it out of the generic group.
-                  ...entities(group.key).filter((item) => item.href !== '/admin/setup/overhead-rates'),
+                  ...entities(group.key).filter((item) => !['/admin/setup/overhead-rates','/admin/setup/operating-profiles','/admin/setup/operating-profile-scopes','/admin/setup/operating-profile-versions'].includes(item.href)),
                 ]
               : []),
           ]

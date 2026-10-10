@@ -1,0 +1,87 @@
+{
+  "chooseTitle": "Choose how this work runs",
+  "chooseDescription": "Start with the detail your team needs. Features and permissions still control what is available.",
+  "change": "Change workflow",
+  "loading": "Loading workflows…",
+  "loadFailed": "Workflows could not be loaded.",
+  "retry": "Retry",
+  "noChoices": "No workflows are available. Review company features and Operating profiles in Setup.",
+  "presets": {
+    "shop_jobs": {
+      "name": "Shop jobs",
+      "description": "Customer jobs, readiness and time. Add activities when useful."
+    },
+    "field_work": {
+      "name": "Field work",
+      "description": "Site work with optional field tickets, crews and planning."
+    },
+    "professional_services": {
+      "name": "Professional services",
+      "description": "Engagements, time and deliverables without construction fields."
+    },
+    "discrete_production": {
+      "name": "Discrete production",
+      "description": "Repeatable products with bills of material and routed operations."
+    },
+    "custom_production": {
+      "name": "Custom production",
+      "description": "Made-to-order products with controlled materials and revisions."
+    },
+    "batch_process": {
+      "name": "Batch and process production",
+      "description": "Recipes, batches, measured yields and traceable outputs."
+    }
+  },
+  "capture": {
+    "job": "Whole job",
+    "activities": "Activities",
+    "tasks": "Tasks",
+    "field_tickets": "Field tickets",
+    "operations": "Operations",
+    "batch": "Batch"
+  },
+  "time": {
+    "work": "Work",
+    "project": "Project / job",
+    "production": "Production",
+    "order": "Production order",
+    "operation": "Operation (optional)",
+    "search": "Search work",
+    "title": "Production time",
+    "correct": "Correct",
+    "correctTitle": "Correct production hours",
+    "correctMessage": "The original stays posted. A contra and replacement record the correction; received goods keep their historical cost.",
+    "correctHours": "Corrected hours",
+    "correctReason": "Reason",
+    "record": "Record time"
+  },
+  "department": "Department (optional)",
+  "companyDefaults": "Company defaults",
+  "default": "Default workflow",
+  "views": {
+    "presentation": "View",
+    "list": "List",
+    "board": "Board",
+    "emptyLane": "No work on this page",
+    "pageScope": "Cards and lane counts show the current filtered page.",
+    "saveFailed": "Your display preference could not be saved."
+  },
+  "filters": {
+    "workflow": "Workflow",
+    "department": "Department",
+    "allWorkflows": "All workflows",
+    "allDepartments": "All departments",
+    "legacy": "Existing work without a profile",
+    "unassigned": "Unassigned"
+  },
+  "workJourney": {
+    "description": "Keep work, time and costs on this job. Add a breakdown when it helps your team.",
+    "recordTime": "Record time",
+    "time": "Time recorded",
+    "hours": "{hours} hours recorded",
+    "costs": "Add costs",
+    "costsNote": "Use the existing job charge to record materials and other costs.",
+    "breakdown": "Work breakdown",
+    "breakdownNote": "Use the existing activities and tasks when more detail earns its effort."
+  }
+}

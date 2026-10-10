@@ -3457,6 +3457,30 @@
         "plural": "Règles de comptage tournant",
         "description": "Intervalles effectifs par entité juridique et tolérances en unités de base par classe ABC.",
         "title": "Règles de comptage tournant"
+      },
+      "operating-profiles": {
+        "title": "Profils opérationnels",
+        "singularTitle": "Profils opérationnels",
+        "description": "Composez la saisie et la présentation sans modifier les règles de facturation ou de comptabilité."
+      },
+      "operating-profile-scopes": {
+        "title": "Choix de fonctionnement",
+        "singularTitle": "Choix de fonctionnement",
+        "description": "Choisissez les modes autorisés et un défaut pour un service ou toute la société."
+      },
+      "operating-profile-versions": {
+        "title": "Versions des flux",
+        "singularTitle": "Version du flux",
+        "description": "Compositions publiées conservées par les travaux existants."
+      },
+      "inspection-plans": {
+        "title": "Plans d’inspection",
+        "description": "Inspectez les réceptions et la production avec des plans figés et des décisions contrôlées."
+      },
+      "work-calendars": {
+        "title": "Calendriers de travail",
+        "singularTitle": "Calendrier de travail",
+        "description": "Jours de travail et fermetures de l’entreprise partagés par la production et les plannings de projets. Les centres de travail définissent leurs heures disponibles. Les calculs MRP existants conservent leurs données de calendrier."
       }
     },
     "fields": {
@@ -4064,7 +4088,9 @@
       "varianceTolerance": "Tolérance d'écart",
       "inventoryOwnership": "Propriété du stock",
       "schedulePdfColorTreatment": "Traitement des couleurs",
-      "schedulePdfColorIntensity": "Intensité de la teinte (%)"
+      "schedulePdfColorIntensity": "Intensité de la teinte (%)",
+      "custodianPartyId": "Fournisseur dépositaire",
+      "showReadiness": "Guide de travail"
     },
     "fieldHelp": {
       "fxRateMaxAgeDays": "Nombre de jours entre le taux utilisable le plus récent et la fin de période au-delà duquel la réévaluation et la consolidation refusent le taux. Les taux de clôture se comptent depuis la date du taux comptant de fin de période ; les taux moyens depuis la cotation la plus récente incluse dans la moyenne. Valeur par défaut sans politique : 31 jours.",
@@ -4436,7 +4462,8 @@
         "bin": "Casier",
         "staging": "Préparation",
         "transit": "Transit",
-        "quarantine": "Quarantaine"
+        "quarantine": "Quarantaine",
+        "subcontract": "Stock confié au fournisseur"
       },
       "manufacturingScrap": {
         "normal": "Rebut normal",
@@ -6918,6 +6945,127 @@
     },
     "actions": {
       "scheduleDeliveryFlows": "Configurer les heures d’envoi dans Flows"
+    },
+    "operatingProfiles": {
+      "chooser": {
+        "title": "Choisissez le fonctionnement du travail",
+        "description": "Commencez avec le détail nécessaire à votre équipe. Les fonctions et autorisations contrôlent les choix."
+      },
+      "presets": {
+        "shop_jobs": {
+          "name": "Travaux en atelier",
+          "description": "Travaux clients, préparation et temps. Ajoutez des activités au besoin."
+        },
+        "field_work": {
+          "name": "Travaux sur chantier",
+          "description": "Travaux sur site avec fiches de chantier, équipes et planification facultatives."
+        },
+        "professional_services": {
+          "name": "Services professionnels",
+          "description": "Missions, temps et livrables sans champs de construction."
+        },
+        "discrete_production": {
+          "name": "Production discrète",
+          "description": "Produits répétables avec nomenclatures et opérations définies."
+        },
+        "custom_production": {
+          "name": "Production sur mesure",
+          "description": "Produits sur commande avec matériaux et révisions contrôlés."
+        },
+        "batch_process": {
+          "name": "Production par lots et procédés",
+          "description": "Recettes, lots, rendements mesurés et produits traçables."
+        }
+      },
+      "compositionHelp": "Chaque dossier conserve sa version. La publication modifie les choix pour les nouveaux travaux.",
+      "sections": {
+        "basics": "Informations générales",
+        "composition": "Saisie et vues",
+        "publish": "Publier une version"
+      },
+      "fields": {
+        "code": "Code",
+        "name": "Nom",
+        "definition": "Composition",
+        "family": "Dossiers de travail",
+        "capture": "Saisie du travail",
+        "physicalModel": "Modèle de production",
+        "demand": "Demande",
+        "terminology": "Noms du travail",
+        "singular": "Nom singulier",
+        "plural": "Nom pluriel",
+        "presentation": "Présentation",
+        "showSite": "Détails du site",
+        "showForeman": "Contremaître",
+        "showCustomerPo": "Commande du client",
+        "showMaterials": "Matériaux",
+        "showReadiness": "Préparation",
+        "defaultView": "Vue par défaut",
+        "reason": "Motif de publication",
+        "departmentId": "Service",
+        "profileIds": "Modes autorisés",
+        "defaultProfileId": "Mode par défaut",
+        "version": "Version",
+        "publishedAt": "Publié le",
+        "profileId": "Profil"
+      },
+      "values": {
+        "project": "Projets",
+        "production": "Ordres de production",
+        "job": "Travail entier",
+        "activities": "Activités",
+        "tasks": "Tâches",
+        "field_tickets": "Fiches de chantier",
+        "operations": "Opérations",
+        "batch": "Lot",
+        "none": "Aucun",
+        "discrete": "Discrète",
+        "process": "Procédé",
+        "make_to_order": "Sur commande",
+        "make_to_stock": "Pour stock",
+        "list": "Liste",
+        "board": "Tableau"
+      },
+      "scopeHelp": "Laissez le service vide pour les défauts de la société. Un service peut proposer plusieurs modes."
+    },
+    "inspectionPlans": {
+      "name": "Nom du plan",
+      "itemId": "Article en stock",
+      "point": "Point d’inspection",
+      "operationSequence": "Séquence de l’opération",
+      "effectiveFrom": "Applicable à partir du",
+      "effectiveTo": "Applicable jusqu’au",
+      "basics": "Plan et portée",
+      "measurements": "Mesures",
+      "help": "Ajoutez uniquement les mesures utiles. Les limites vides permettent un relevé sans tolérance numérique. Clôturez la période d’un plan utilisé et créez la révision suivante.",
+      "audit": "Audit",
+      "key": "Clé de mesure",
+      "label": "Libellé",
+      "unit": "Unité",
+      "required": "Obligatoire",
+      "minimum": "Minimum",
+      "maximum": "Maximum",
+      "reason": "Motif du changement",
+      "receipt": "Réception",
+      "operation": "Opération"
+    },
+    "workCalendars": {
+      "help": "Jours de travail et fermetures de l’entreprise partagés par la production et les plannings de projets. Les centres de travail définissent leurs heures disponibles. Les calculs MRP existants conservent leurs données de calendrier.",
+      "name": "Nom",
+      "description": "Description",
+      "isDefault": "Par défaut pour l’entreprise",
+      "workingDays": "Jours de travail",
+      "holidays": "Fermetures",
+      "date": "Date de fermeture",
+      "reason": "Motif du changement",
+      "addClosure": "Ajouter une fermeture",
+      "0": "Dimanche",
+      "1": "Lundi",
+      "2": "Mardi",
+      "3": "Mercredi",
+      "4": "Jeudi",
+      "5": "Vendredi",
+      "6": "Samedi"
     }
   },
   "flows": {
@@ -7599,6 +7747,10 @@
     "consignment": {
       "description": "Suivez le stock de fournisseurs et de clients en garde et comptabilisez-le lors de l'acquisition de sa propriété.",
       "title": "Stock en consignation"
+    },
+    "manufacturingSubcontract": {
+      "title": "Fabrication externe",
+      "description": "Envoyez des composants à un fournisseur, enregistrez les services et retournez la production sur l’ordre."
     }
   },
   "backupsManager": {

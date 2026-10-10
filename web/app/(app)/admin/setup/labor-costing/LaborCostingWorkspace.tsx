@@ -149,6 +149,7 @@ export function LaborCostingWorkspace(props: {
 }) {
   const locale = useLocale()
   const t = useTranslations('admin.setup.laborCosting')
+  const tOperating = useTranslations('operatingProfiles')
   const router = useRouter()
   const today = useBusinessToday()
   const [busy, setBusy] = useState(false)
@@ -207,6 +208,7 @@ export function LaborCostingWorkspace(props: {
     periodVariance: string
     openBalance: string
     perProject: { projectId: string; name: string; standard: string }[]
+    perWork: {kind:"project"|"production";id:string;name:string;standard:string}[]
   } | null>(null)
   const reconciliationCurrency = props.subsidiaries.find((subsidiary) => subsidiary.id === recSubsidiaryId)?.currency
     ?? props.defaultSubsidiary?.currency
@@ -269,6 +271,7 @@ export function LaborCostingWorkspace(props: {
         periodVariance: string
         openBalance: string
         perProject: { projectId: string; name: string; standard: string }[]
+    perWork: {kind:"project"|"production";id:string;name:string;standard:string}[]
       }>(
         '/api/admin/setup/labor-costing',
         {
@@ -842,17 +845,17 @@ export function LaborCostingWorkspace(props: {
                   </div>
                 ))}
               </div>
-              {rec.perProject.length > 0 && (
+              {rec.perWork.length > 0 && (
                 <PagedTable
-                  rows={rec.perProject}
-                  rowKey={(r) => r.projectId}
+                  rows={rec.perWork}
+                  rowKey={(r) => `${r.kind}:${r.id}`}
                   pageSize={10}
                   empty={null}
                   columns={[
                     {
                       key: 'project',
-                      header: t('reconciliation.project'),
-                      cell: (r) => r.name,
+                      header: tOperating('time.work'),
+                      cell: (r) => <Link href={(r.kind === 'production' ? `/manufacturing/work-orders?record=${r.id}` : `/projects?project=${r.id}`) as never}>{r.name}</Link>,
                       search: (r) => r.name,
                     },
                     {

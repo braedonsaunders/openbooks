@@ -118,7 +118,11 @@
       "provision_assessment": "Évaluation de provision",
       "drop_ship_control_assessment": "Évaluation du contrôle en livraison directe",
       "net_investment_oci": "Évaluation des écarts de change sur investissement net",
-      "net_investment_oci_reversal": "Correction des écarts de change sur investissement net"
+      "net_investment_oci_reversal": "Correction des écarts de change sur investissement net",
+      "standard_cost_rollup": "Calcul du coût standard",
+      "routing_revision_activation": "Approbation de révision de gamme",
+      "bom_revision_activation": "Approbation de révision de nomenclature",
+      "work_order_loss_disposition": "Décision de perte de production"
     },
     "domains": {
       "lease": "Location-preneur",
@@ -126,7 +130,8 @@
       "revenue": "Contrat de revenus",
       "consolidation": "Consolidation",
       "provision": "Provision et éventualité",
-      "sales": "Mandat commercial"
+      "sales": "Mandat commercial",
+      "manufacturing": "Fabrication"
     },
     "evidence": {
       "assessment": "Évaluation / mesure",

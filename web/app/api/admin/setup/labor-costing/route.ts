@@ -1,3 +1,4 @@
+import { ScopeNotFoundError } from "@openbooks/engine/src/organization/subsidiary-scope.ts";
 import { uuidId } from "@/lib/api/json-schema";
 import { PAYROLL_AMOUNT_ROUNDING } from "@openbooks/engine/src/projects/payroll-wage-rounding.ts";
 import { z } from "zod";
@@ -35,7 +36,9 @@ import { normalizeMoney } from '@openbooks/engine/src/money/money.ts'
 import { PAY_RATE_BASES } from '@openbooks/engine/projects/pay-rate-basis'
 import { decimalNullRefusal } from '@openbooks/engine/src/money/decimal-refusal.ts'
 import { canonicalDecimal, compareDecimal } from '../../../../../lib/exact-decimal'
-import { guardProjectsFeature } from '../../../../../lib/projects-gate'
+import { isFeatureEnabled } from '../../../../../lib/features'
+import { acquireOrgFeatureGateLock } from '@openbooks/engine/src/organization/org-feature-lock.ts'
+import { lockActorCommandAuthority } from '@openbooks/engine/src/organization/actor-command-authority.ts'
 import { notFound } from "@/lib/api/responses";
 
 const decimalText = (field: string, noun: string) => z.unknown().transform((value, ctx) => {
@@ -101,7 +104,18 @@ export const dynamic = 'force-dynamic'
  */
 
 function projectsDisabledResponse() {
-  return NextResponse.json({ error: 'projects feature is disabled' }, { status: 404 })
+  return NextResponse.json({ error: 'Enable Projects or Manufacturing in Company Settings → Features to use labor costing.' }, { status: 404 })
+}
+async function guardLaborFeature(orgId: string) {
+  return await isFeatureEnabled(orgId, 'projects') || await isFeatureEnabled(orgId, 'manufacturing') ? null : projectsDisabledResponse()
+}
+async function pinLaborFeature(orgId: string, actorId: string, subsidiaryId: string | null = null) {
+  await acquireOrgFeatureGateLock(db, orgId)
+  const actor = (await db.execute(sql`select id from users where id=${actorId} and is_active and (org_id=${orgId} or is_super_admin) for share`)).rows[0]
+  if (!actor) throw new ScopeNotFoundError()
+  const currentScope = await lockActorCommandAuthority(db, orgId, actorId, subsidiaryId, 'admin.setup.manage')
+  if (subsidiaryId === null && currentScope !== null) throw new ScopeNotFoundError()
+  return await lockAndCheckOrgFeature(db,orgId,'projects') || await lockAndCheckOrgFeature(db,orgId,'manufacturing')
 }
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/
@@ -181,6 +195,7 @@ async function lockedRateScope(
   if (isOrgWideWageScope(row)) {
     const denied = guardUnrestrictedScope(gate)
     if (denied) return { response: denied }
+    if (!(await pinLaborFeature(orgId, gate.user.id))) return { response: projectsDisabledResponse() }
     return { row }
   }
   let employeeSubsidiary: string | null = null
@@ -203,10 +218,12 @@ async function lockedRateScope(
     // A null-subsidiary employee is org-wide on save-rate; end/delete match it.
     const denied = guardUnrestrictedScope(gate)
     if (denied) return { response: denied }
+    if (!(await pinLaborFeature(orgId, gate.user.id))) return { response: projectsDisabledResponse() }
     return { row }
   }
   if (!subsidiaryScopeAllows(gate.allowedSubsidiaryIds, row.subsidiaryId ?? employeeSubsidiary ?? departmentSubsidiary ?? null)) return missingRecord
   if (row.subsidiaryId && !subsidiariesInScope(gate, [row.subsidiaryId])) return missingRecord
+  if (!(await pinLaborFeature(orgId, gate.user.id, row.subsidiaryId ?? employeeSubsidiary ?? departmentSubsidiary))) return { response: projectsDisabledResponse() }
   return { row }
 }
 
@@ -292,7 +309,7 @@ function rateStorageRefusal(error: unknown): { error: string; errorCode: string 
 async function legacyGET(req: Request) {
   const gate = await guardPermission('admin.setup.manage')
   if (gate instanceof NextResponse) return gate
-  const feature = await guardProjectsFeature(gate.user.orgId)
+  const feature = await guardLaborFeature(gate.user.orgId)
   if (feature) return feature
   const url = new URL(req.url)
   const employee = url.searchParams.get('employee')
@@ -313,6 +330,7 @@ async function legacyGET(req: Request) {
       orgWideNull: true,
     })
     if (scopeDenied) return scopeDenied
+    if (!(await pinLaborFeature(gate.user.orgId, gate.user.id, employeeContext.rows[0]!.subsidiaryId))) return projectsDisabledResponse()
     const today = await businessToday(gate.user.orgId)
     const [rates, org, currencies] = await Promise.all([
       db.execute<Record<string, unknown>>(sql`
@@ -354,7 +372,7 @@ export const PUT = defineRoute({
     const gate = routeAuthz
 
     const orgId = gate.user.orgId
-    const feature = await guardProjectsFeature(orgId)
+    const feature = await guardLaborFeature(orgId)
     if (feature) return feature
 
 
@@ -440,10 +458,10 @@ export const PUT = defineRoute({
     // Settings + control accounts + audit evidence commit together or not at
     // all — no partial save can survive a failure past validation.
     const rejected = await withOrgTransaction(orgId, async () => {
+      if (!(await pinLaborFeature(orgId, gate.user.id))) return projectsDisabledResponse()
       await lockLedgerSetupFence(db, orgId, "exclusive")
       const current = await db.execute<{ settings: Record<string, unknown> | null }>(sql`
         select settings from orgs where id = ${orgId} for update`)
-      if (!(await lockAndCheckOrgFeature(db, orgId, 'projects'))) return projectsDisabledResponse()
       if (accountIds.length > 0) {
         const found = await db.execute<{ id: string }>(sql`
           select id from accounts
@@ -461,6 +479,10 @@ export const PUT = defineRoute({
       }
       const beforeSettings = (current.rows[0]?.settings ?? {}) as Record<string, unknown>
       const beforeControl = (beforeSettings.controlAccounts ?? {}) as Record<string, unknown>
+      if (!(await lockAndCheckOrgFeature(db, orgId, 'projects'))) {
+        const beforeLabor = (beforeSettings.laborCosting ?? {}) as Record<string, unknown>
+        if (settings.mode !== (beforeLabor.mode ?? 'off') || ('laborWip' in accounts && accounts.laborWip !== (beforeControl.laborWip ?? null))) return NextResponse.json({ error: 'Project labor posting requires Projects. Production operations own their manufacturing WIP posting.' }, { status: 422 })
+      }
 
       // One single-assignment update: every jsonb_set nests around the last.
       let nextSettings: SQL = sql`jsonb_set(coalesce(settings, '{}'::jsonb), '{laborCosting}', ${JSON.stringify(settings)}::jsonb)`
@@ -495,7 +517,7 @@ export const POST = defineRoute({
     const gate = routeAuthz
 
     const orgId = gate.user.orgId
-    const feature = await guardProjectsFeature(orgId)
+    const feature = await guardLaborFeature(orgId)
     if (feature) return feature
     const userId = gate.user.id
 
@@ -611,9 +633,7 @@ export const POST = defineRoute({
 
       try {
         const outcome = await withOrgTransaction(orgId, async (): Promise<RateMutation> => {
-          if (!(await lockAndCheckOrgFeature(db, orgId, 'projects'))) {
-            return { ok: false, response: projectsDisabledResponse() }
-          }
+          let liveSubsidiary = subsidiaryId
           // The anchor scope decision above ran on unlocked reads. Relock the
           // anchor rows here — a rehome landing between the check and this
           // write must deny rather than save into the new subsidiary.
@@ -626,6 +646,7 @@ export const POST = defineRoute({
             if (!lockedEmployee || !subsidiaryScopeAllows(gate.allowedSubsidiaryIds, lockedEmployee.subsidiaryId, { orgWideNull: true })) {
               return { ok: false, response: notFound("record") }
             }
+            liveSubsidiary = lockedEmployee.subsidiaryId
           }
           if (departmentId) {
             const lockedDepartment = (await db.execute<{ subsidiaryId: string | null }>(sql`
@@ -634,7 +655,9 @@ export const POST = defineRoute({
             if (!lockedDepartment || !subsidiaryScopeAllows(gate.allowedSubsidiaryIds, lockedDepartment.subsidiaryId)) {
               return { ok: false, response: notFound("record") }
             }
+            liveSubsidiary = lockedDepartment.subsidiaryId
           }
+          if (!(await pinLaborFeature(orgId, userId, liveSubsidiary))) return { ok: false, response: projectsDisabledResponse() }
           // The canonical writer (engine/src/projects/labor-cost-rates.ts):
           // same-scope lock, close, upsert-or-correct, and audit evidence in
           // one unit — the compensation push calls the same service, so the
@@ -676,9 +699,6 @@ export const POST = defineRoute({
       const reason = bodyReason(body.reason, to ? 'wage rate ended' : 'wage rate end date cleared')
       try {
         const outcome = await withOrgTransaction(orgId, async (): Promise<RateMutation> => {
-          if (!(await lockAndCheckOrgFeature(db, orgId, 'projects'))) {
-            return { ok: false, response: projectsDisabledResponse() }
-          }
           // Scope columns are immutable on this path: resolve the anchors
           // under lock with the save-rate policy, then re-read
           // authoritatively under the scope lock.
@@ -737,9 +757,6 @@ export const POST = defineRoute({
       const reason = bodyReason(body.reason, 'wage rate deleted')
       try {
         const outcome = await withOrgTransaction(orgId, async (): Promise<RateMutation> => {
-          if (!(await lockAndCheckOrgFeature(db, orgId, 'projects'))) {
-            return { ok: false, response: projectsDisabledResponse() }
-          }
           // Same locked anchor resolution as end-rate.
           const scoped = await lockedRateScope(orgId, gate, id)
           if ('response' in scoped) return { ok: false, response: scoped.response }

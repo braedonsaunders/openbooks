@@ -18,6 +18,10 @@ export const FINANCIAL_CHANGE_OPERATION_LABELS: Record<string, string> = {
   net_investment_oci: "Net-investment FX assessment",
   loss_of_control: "Loss of control",
   reversal: "Reversal",
+  bom_revision_activation: "Bill of materials revision approval",
+  routing_revision_activation: "Routing revision approval",
+  work_order_loss_disposition: "Production loss disposition",
+  standard_cost_rollup: "Manufacturing standard-cost roll-up",
   scrap_snapshot_restatement: "Scrap snapshot restatement",
 };
 

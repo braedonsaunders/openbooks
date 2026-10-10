@@ -1,3 +1,4 @@
+import { notFound } from 'next/navigation'
 import 'server-only'
 
 import { getTranslations } from 'next-intl/server'
@@ -123,9 +124,16 @@ export async function loadApBills(
   // Narrow the drawer's reference options to the open document's subsidiary:
   // a subsidiary-A caller opening a
   // subsidiary-A bill must not see subsidiary-B accounts or dimensions.
+  const requestedCreateEntity = rawDocId === 'new' && canCreate ? pickString(sp.subsidiaryId) : undefined
+  let createEntity: string | null = null
+  if (requestedCreateEntity !== undefined) {
+    if (!isUuid(requestedCreateEntity) || authz.allowedSubsidiaryIds !== null && !authz.allowedSubsidiaryIds.has(requestedCreateEntity)) notFound()
+    if (!(await db.execute(sql`select id from subsidiaries where org_id=${authz.user.orgId} and id=${requestedCreateEntity} and is_active and not is_elimination`)).rows.length) notFound()
+    createEntity = requestedCreateEntity
+  }
   const documentOptionScope = openDoc
     ? new Set([String((openDoc.doc as Record<string, unknown>).subsidiary_id)])
-    : authz.allowedSubsidiaryIds
+    : createEntity ? new Set([createEntity]) : authz.allowedSubsidiaryIds
   const openKind = (openDoc?.doc as Record<string, unknown> | undefined)?.kind as string | undefined
   // Unsaved create: `?doc=new&kind=` renders the shared drawer in createMode
   // over a blank in-memory payload. The kind must belong to this page, the
@@ -207,10 +215,15 @@ export async function loadApBills(
     const inScope = authz.allowedSubsidiaryIds
       ? options.filter((option) => authz.allowedSubsidiaryIds!.has(option.id))
       : options
-    return inScope[0]?.id ?? null
+    return createEntity ?? inScope[0]?.id ?? null
   })()
   if (createSeed && createSubsidiaryDefault) {
     (createSeed.doc as Record<string, unknown>).subsidiary_id = createSubsidiaryDefault
+  }
+  const requestedCreateParty = isCreate ? pickString(sp.partyId) : undefined
+  if (createSeed && requestedCreateParty !== undefined) {
+    if (!isUuid(requestedCreateParty) || !(pickers?.[0] as Array<{id:string}> | undefined)?.some(party=>party.id===requestedCreateParty)) notFound()
+    ;(createSeed.doc as Record<string, unknown>).party_id = requestedCreateParty
   }
   const drawerPayload = openDoc ?? createSeed
 
@@ -228,7 +241,7 @@ export async function loadApBills(
     drawerPayload && pickers && resolvedForm && drawerKind
       ? {
           basePath: '/ap/bills',
-          remountKey: openDoc ? String((openDoc.doc as Record<string, unknown>).id) : `new:${drawerKind}`,
+          remountKey: openDoc ? String((openDoc.doc as Record<string, unknown>).id) : `new:${drawerKind}:${createEntity ?? ""}:${requestedCreateParty ?? ""}`,
           payload: drawerPayload,
           createMode: isCreate,
           config: DOC_KINDS[drawerKind]!,

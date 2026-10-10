@@ -30,9 +30,9 @@ export const POST = defineRoute({
     if (denied) return denied;
     const match = { ...body, horizonDays: body.horizonDays ?? 90, capacityCheck: body.capacityCheck ?? true };
     const run = await idempotentManufacturingCreate({
-      orgId: authz.user.orgId, request, table: "mfg_mrp_runs", match,
+      orgId: authz.user.orgId, actorId: authz.user.id, request, table: "mfg_mrp_runs", match,
       create: (id) => runMrp(db, authz.user.orgId, authz.user.id, match, { id }),
-      load: () => findMrpRunRecord(db, authz.user.orgId, request.headers.get("Idempotency-Key")!.trim()),
+      load: () => findMrpRunRecord(db, authz.user.orgId, request.headers.get("Idempotency-Key")!.trim(),authz.user.id),
     });
     return Response.json(run, { status: 201 });
   }),

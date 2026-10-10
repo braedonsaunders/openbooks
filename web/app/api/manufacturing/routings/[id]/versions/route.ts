@@ -1,3 +1,4 @@
+import { lockManufacturingRoutingAuthority } from "@openbooks/engine/src/manufacturing/authority.ts";
 import { z } from "zod";
 import { db } from "@openbooks/engine/src/platform/db.ts";
 import { createNextRoutingVersion, getRouting } from "@openbooks/engine/src/manufacturing/routings.ts";
@@ -18,9 +19,9 @@ export const POST = defineRoute({
     const denied = guardRoutingSubsidiaryScope(authz, base);
     if (denied) return denied;
     const row = await idempotentManufacturingCreate({
-      orgId: authz.user.orgId, request, table: "mfg_routings", match: { baseRoutingId: params.id },
+      orgId: authz.user.orgId, actorId: authz.user.id, request, table: "mfg_routings", match: { baseRoutingId: params.id },
       create: (id, requestId, match) => createNextRoutingVersion(db, authz.user.orgId, authz.user.id, params.id, { id, requestId, match }),
-      load: () => getRouting(db, authz.user.orgId, request.headers.get("Idempotency-Key")!.trim()),
+      load: async () => { const id=request.headers.get("Idempotency-Key")!.trim(); await lockManufacturingRoutingAuthority(db,authz.user.orgId,authz.user.id,id); return getRouting(db,authz.user.orgId,id); },
     });
     return created(row);
   }),

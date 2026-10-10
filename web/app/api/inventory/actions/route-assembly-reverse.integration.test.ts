@@ -1,3 +1,4 @@
+import { approveFixtureRouting } from "@openbooks/engine/src/testing/manufacturing.ts";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { registerHooks } from "node:module";
@@ -10,7 +11,7 @@ import { receiveInventory } from "@openbooks/engine/src/inventory/movements.ts";
 import { buildAssembly } from "@openbooks/engine/src/inventory/assembly.ts";
 import { getOnHand } from "@openbooks/engine/src/inventory/position.ts";
 import { issueMaterials } from "@openbooks/engine/src/manufacturing/materials.ts";
-import { activateRouting, createRouting, createRoutingOperation } from "@openbooks/engine/src/manufacturing/routings.ts";
+import { createRouting, createRoutingOperation } from "@openbooks/engine/src/manufacturing/routings.ts";
 import { createWorkCenter } from "@openbooks/engine/src/manufacturing/work-centers.ts";
 import { createWorkOrder, releaseWorkOrder } from "@openbooks/engine/src/manufacturing/work-orders.ts";
 
@@ -168,7 +169,7 @@ test("API reverse of a work-order issue reverses every consume leg in the entry"
     await run((tx) => createRoutingOperation(tx, org.orgId, actor, String(routing.id), {
       sequence: 10, name: "Assemble", workCenterId: String(center.id), setupMinutes: "0", runMinutesPerUnit: "1",
     }));
-    await run((tx) => activateRouting(tx, org.orgId, actor, String(routing.id)));
+    await run((tx) => approveFixtureRouting(tx, org.orgId, actor, String(routing.id)));
     const order = await run((tx) => createWorkOrder(tx, org.orgId, actor, {
       producedItemId: org.items.assembly, quantityOrdered: "1", subsidiaryId: org.subsidiaryId,
       issueLocationId: org.stockLocationId, receiptLocationId: org.stockLocationId2, plannedStart: org.date,

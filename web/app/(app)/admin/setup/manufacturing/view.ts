@@ -11,11 +11,15 @@ import { SETUP_ENTITY_BY_KEY } from '../../../../../lib/setup/registry'
 import { pickString } from '../../../../../lib/list-params'
 
 const ENTITY_TABS = [
+  { key: 'workflows', entityKey: 'operating-profiles', labelKey: 'setup.entities.operating-profiles.title' },
+  { key: 'departments', entityKey: 'operating-profile-scopes', labelKey: 'setup.entities.operating-profile-scopes.title' },
+  { key: 'calendars', entityKey: 'work-calendars', labelKey: 'setup.entities.work-calendars.title' },
   { key: 'scrap-reasons', entityKey: 'mfg-scrap-reasons', labelKey: 'setup.entities.mfg-scrap-reasons.title' },
   { key: 'item-policies', entityKey: 'mfg-item-policies', labelKey: 'setup.entities.mfg-item-policies.title' },
+  { key: 'inspection-plans', entityKey: 'inspection-plans', labelKey: 'setup.entities.inspection-plans.title' },
 ] as const
 
-type ManufacturingTab = 'policies' | (typeof ENTITY_TABS)[number]['key']
+type ManufacturingTab = 'start' | 'policies' | (typeof ENTITY_TABS)[number]['key']
 
 export interface ManufacturingSetupData {
   title: string
@@ -37,10 +41,12 @@ export async function loadManufacturingSetup(
   const availableTabs = ENTITY_TABS.filter(({ entityKey }) => SETUP_ENTITY_BY_KEY.has(entityKey))
   const requested = pickString(sp.tab)
   const tab: ManufacturingTab =
-    requested === 'policies' || availableTabs.some((candidate) => candidate.key === requested)
+    requested === 'start' || requested === 'policies' || availableTabs.some((candidate) => candidate.key === requested)
       ? requested as ManufacturingTab
-      : 'policies'
+      : 'start'
+  const m = await getTranslations('manufacturing')
   const tabLabels = [
+    { key: 'start' as const, label: m('cockpit.setup') },
     { key: 'policies' as const, label: t('setup.entities.manufacturing-policies.title') },
     ...availableTabs.map(({ key, labelKey }) => ({ key, label: t(labelKey) })),
   ]

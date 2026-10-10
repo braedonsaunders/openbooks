@@ -1,3 +1,4 @@
+import { lockManufacturingCenterAuthority } from "@openbooks/engine/src/manufacturing/authority.ts";
 import { z } from "zod";
 import { db } from "@openbooks/engine/src/platform/db.ts";
 import { addWorkCenterRate, getWorkCenter, getWorkCenterRate } from "@openbooks/engine/src/manufacturing/work-centers.ts";
@@ -19,9 +20,9 @@ export const POST = defineRoute({
     if (denied) return denied;
     const match = { workCenterId: params.id, ...body };
     const row = await idempotentManufacturingCreate({
-      orgId: authz.user.orgId, request, table: "mfg_work_center_rates", match,
+      orgId: authz.user.orgId, actorId: authz.user.id, request, table: "mfg_work_center_rates", match,
       create: (id, requestId, savedMatch) => addWorkCenterRate(db, authz.user.orgId, authz.user.id, params.id, body, { id, requestId, match: savedMatch }),
-      load: () => getWorkCenterRate(db, authz.user.orgId, params.id, request.headers.get("Idempotency-Key")!.trim()),
+      load: async () => { await lockManufacturingCenterAuthority(db,authz.user.orgId,authz.user.id,params.id); return getWorkCenterRate(db,authz.user.orgId,params.id,request.headers.get("Idempotency-Key")!.trim()); },
     });
     return created(row);
   }),

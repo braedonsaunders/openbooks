@@ -3,6 +3,7 @@ import { sql, type SQL } from "drizzle-orm";
 import type { ListViewConfig } from "@openbooks/customization";
 import type { EntityAdhoc } from "./adhoc";
 import { subsidiaryVisibleFilter } from "../../subsidiaries";
+import {orderResourcesVisible} from "@openbooks/engine/src/organization/production-resource-scope.ts";
 
 const AWAITING_STATUSES = ["draft", "pending", "approved"] as const;
 
@@ -10,6 +11,9 @@ const AWAITING_STATUSES = ["draft", "pending", "approved"] as const;
 export function financialChangeSubjectExpr(alias: "fc"): SQL {
   const a = sql.identifier(alias);
   return sql`coalesce(
+    (select work.number from mfg_work_orders work where ${a}.domain='manufacturing' and ${a}.operation='work_order_loss_disposition' and work.org_id=${a}.org_id and work.id=${a}.subject_id),
+    (select route.code || ' — ' || route.name from mfg_routings route where ${a}.domain='manufacturing' and ${a}.operation='routing_revision_activation' and route.org_id=${a}.org_id and route.id=${a}.subject_id),
+    (select item.code || ' — ' || item.name from items item where ${a}.domain='manufacturing' and ${a}.operation in ('standard_cost_rollup','bom_revision_activation') and item.org_id=${a}.org_id and item.id=${a}.subject_id),
     (select p.display_name from parties p where ${a}.domain='payroll' and p.org_id=${a}.org_id and p.id=${a}.subject_id),
     (select document.document_number || ' — line ' || line.line_number from document_lines line join documents document on document.org_id=line.org_id and document.id=line.document_id where ${a}.domain='sales' and line.org_id=${a}.org_id and line.id=${a}.subject_id),
     (select p.name from provision_obligations p where p.org_id=${a}.org_id and p.id=${a}.subject_id),
@@ -28,6 +32,14 @@ export function financialChangeSubjectExpr(alias: "fc"): SQL {
       where soi.org_id = ${a}.org_id and soi.id = ${a}.subject_id),
     ${a}.subject_id::text
   )`;
+}
+
+/** Whole-order event evidence is visible only with all current child resources. */
+export function manufacturingChangeResourcesVisible(scope:ReadonlySet<string>|null):SQL {
+  return sql`and (fc.domain<>'manufacturing' or fc.operation<>'work_order_loss_disposition' or exists (
+    select 1 from mfg_work_orders work where work.org_id=fc.org_id and work.id=fc.subject_id
+      ${subsidiaryVisibleFilter(sql`work.subsidiary_id`,scope)} ${orderResourcesVisible(scope,'work')}
+  ))`;
 }
 
 function equality(aliasCol: SQL, operator: string, value: unknown): SQL | null {
@@ -74,6 +86,7 @@ export function lifecycleWhere(
       allowed === undefined ? new Set<string>() : allowed,
     ),
   ];
+  if(alias==="fc") parts.push(manufacturingChangeResourcesVisible(allowed===undefined?new Set<string>():allowed));
   for (const filter of view.filters) {
     if (filter.key === "status") {
       const pred = equality(sql`${a}.status`, filter.operator, filter.value);

@@ -193,11 +193,11 @@ export const PAYROLL_WIDGETS = {
    *  teal text link carrying a literal arrow. Diffed, kept separate. */
   'labor-costing-header-actions': (props) => (
     <div className="flex flex-wrap items-center gap-2">
-      <Button asChild variant="outline" size="sm">
+      {props.showGuide !== false ? <Button asChild variant="outline" size="sm">
         <Link href={(str(props, 'guideHref') ?? '') as never}>
           <Sparkles size={14} aria-hidden /> {str(props, 'guideLabel') ?? ''}
         </Link>
-      </Button>
+      </Button> : null}
       <Button asChild variant="ghost" size="sm">
         <Link href="/docs/labor-costing">
           <BookOpen size={14} aria-hidden /> {str(props, 'docsLabel') ?? ''}

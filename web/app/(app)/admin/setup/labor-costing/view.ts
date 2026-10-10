@@ -9,7 +9,7 @@ import { guardRootSubsidiaryScope, requirePermission } from '../../../../../lib/
 import { notFound } from 'next/navigation'
 import { isUuid, mergeHref, parseListParams, pickString } from '../../../../../lib/list-params'
 import { subsidiaryFeatureEnabled } from '../../../../../lib/features'
-import { requireProjectsFeature } from '../../../../../lib/projects-gate'
+import { isFeatureEnabled } from '../../../../../lib/features'
 import { grid, heading, page, ref, textBlock, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
 import type { RateRow } from './LaborCostingWorkspace'
 
@@ -51,6 +51,7 @@ export type LaborCostingView = (typeof VIEWS)[number]
 export interface LaborCostingData {
   title: string
   description: string
+  projectPostingAvailable: boolean
   guideHref: string
   guideLabel: string
   docsLabel: string
@@ -87,11 +88,13 @@ export async function loadLaborCosting(
   if (await guardRootSubsidiaryScope(authz)) notFound()
   const orgId = authz.user.orgId
   const today = await businessToday(orgId)
-  await requireProjectsFeature(orgId)
+  const projectsEnabled = await isFeatureEnabled(orgId, 'projects')
+  if (!projectsEnabled && !(await isFeatureEnabled(orgId, 'manufacturing'))) notFound()
+  const availableViews = projectsEnabled ? VIEWS : VIEWS.filter(item => item !== 'posting')
   const subsidiaryUiEnabled = await subsidiaryFeatureEnabled(orgId)
   const t = await getTranslations('admin')
   const rawView = pickString(sp.view) ?? ''
-  const view: LaborCostingView = (VIEWS as readonly string[]).includes(rawView) ? (rawView as LaborCostingView) : 'rates'
+  const view: LaborCostingView = (availableViews as readonly string[]).includes(rawView) ? (rawView as LaborCostingView) : 'rates'
   const list = parseListParams(sp, {
     sort: 'scope',
     allowedSorts: ['scope'] as const,
@@ -217,13 +220,14 @@ export async function loadLaborCosting(
   })
 
   return {
+    projectPostingAvailable: projectsEnabled,
     title: t('setup.laborCosting.title'),
     description: t('setup.laborCosting.description'),
     guideHref,
     guideLabel: t('setup.laborCosting.checklist.launchWizard'),
     docsLabel: t('setup.laborCosting.docs'),
     overheadLabel: t('setup.entities.overhead-model.title'),
-    tabs: VIEWS.map((item) => ({
+    tabs: availableViews.map((item) => ({
       href: `${BASE}?view=${item}`,
       label: t(`setup.laborCosting.tabs.${item}`),
       active: view === item,
@@ -234,7 +238,7 @@ export async function loadLaborCosting(
     rates: (ratesRes as unknown as { rows: RateRow[] }).rows,
     selectedRate: (selectedRateRes as unknown as { rows: RateRow[] }).rows[0] ?? null,
     creatingRate,
-    guideOpen: pickString(sp.guide) === 'setup',
+    guideOpen: projectsEnabled && pickString(sp.guide) === 'setup',
     totalRates: Number((rateCountRes as unknown as { rows: { n: number }[] }).rows[0]?.n ?? 0),
     ratePage: list.page,
     ratePerPage: list.perPage,
@@ -279,6 +283,7 @@ export function laborCostingSpec(data: LaborCostingData): PageSpec {
           ]),
           widgetBlock('labor-costing-header-actions', {
             guideHref: data.guideHref,
+            showGuide: data.projectPostingAvailable,
             guideLabel: data.guideLabel,
             docsLabel: data.docsLabel,
             overheadLabel: data.overheadLabel,

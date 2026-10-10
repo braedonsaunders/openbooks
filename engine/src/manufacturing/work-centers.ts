@@ -1,3 +1,5 @@
+import { lockManufacturingManageAuthority, lockManufacturingCenterAuthority } from "./authority.ts";
+import { subsidiaryScopeAllows, subsidiaryVisibleFilter } from "../organization/subsidiary-scope.ts";
 import { sql } from "drizzle-orm";
 import { parseMoney, type Money } from "../money/brands.ts";
 import type { SqlExecutor } from "../platform/db.ts";
@@ -50,14 +52,14 @@ function storageConstraint(error: unknown): string | undefined {
     : undefined;
 }
 
-async function validateReferences(tx: SqlExecutor, orgId: string, input: WorkCenterInput): Promise<void> {
-  if (input.kind === "labor" || input.kind === "cell") {
-    const department = await tx.execute(sql`select 1 from departments where org_id=${orgId} and id=${input.departmentId} and is_active for share`);
+async function validateReferences(tx: SqlExecutor, orgId: string, input: WorkCenterInput, scope: ReadonlySet<string> | null): Promise<void> {
+  if (input.departmentId) {
+    const department = await tx.execute(sql`select 1 from departments where org_id=${orgId} and id=${input.departmentId} and is_active ${subsidiaryVisibleFilter(sql`subsidiary_id`,scope,{orgWideNull:true})} for share`);
     if (!department.rows.length) refused("The selected department is not active in this organization.", "invalid_department", "departmentId", "Choose an active department from this organization.");
   }
   if (input.calendarId) {
-    const calendar = await tx.execute(sql`select 1 from schedule_calendars where org_id=${orgId} and id=${input.calendarId} for share`);
-    if (!calendar.rows.length) refused("The selected calendar does not belong to this organization.", "invalid_calendar", "calendarId", "Choose a calendar configured for this organization.");
+    const calendar = await tx.execute(sql`select 1 from schedule_calendars where org_id=${orgId} and id=${input.calendarId} and project_id is null for share`);
+    if (!calendar.rows.length) refused("The selected calendar must be a company calendar in this organization.", "invalid_calendar", "calendarId", "Choose a company calendar; project-specific calendars remain with their project.");
   }
 }
 
@@ -67,7 +69,9 @@ export async function createWorkCenter(
 ) {
   await assertManufacturingFeature(tx, orgId, "manufacturing");
   const input = validateCenter(raw);
-  await validateReferences(tx, orgId, input);
+  const scope = await lockManufacturingManageAuthority(tx,orgId,actorId,input.subsidiaryId ?? null);
+  if (!subsidiaryScopeAllows(scope,input.subsidiaryId ?? null)) throw new ManufacturingNotFoundError();
+  await validateReferences(tx, orgId, input, scope);
   const duplicate = await duplicateCode(tx, orgId, input.code);
   if (duplicate) duplicateCodeRefusal(input.code, duplicate.name);
   await tx.execute(sql`savepoint mfg_work_center_create`);
@@ -106,6 +110,7 @@ export async function updateWorkCenter(
   patch: Partial<WorkCenterInput>,
 ) {
   await assertManufacturingFeature(tx, orgId, "manufacturing");
+  await lockManufacturingCenterAuthority(tx,orgId,actorId,id);
   const locked = await tx.execute<Record<string, unknown>>(sql`select ${centerColumns} from mfg_work_centers where org_id=${orgId} and id=${id} for update`);
   const before = locked.rows[0] ?? null;
   if (!before) throw new ManufacturingNotFoundError();
@@ -119,7 +124,12 @@ export async function updateWorkCenter(
     absorbsOverhead: patch.absorbsOverhead === undefined ? before.absorbsOverhead as boolean : patch.absorbsOverhead,
     calendarId: patch.calendarId === undefined ? before.calendarId as string | null : patch.calendarId,
   });
-  await validateReferences(tx, orgId, merged);
+  const targetScope = await lockManufacturingManageAuthority(tx,orgId,actorId,merged.subsidiaryId ?? null);
+  if (!subsidiaryScopeAllows(targetScope,merged.subsidiaryId ?? null)) throw new ManufacturingNotFoundError();
+  if ((merged.kind !== before.kind || merged.absorbsOverhead !== before.absorbsOverhead)
+    && (await tx.execute(sql`select id from mfg_wo_operations where org_id=${orgId} and work_center_id=${id} limit 1`)).rows.length)
+    refused('This work center already belongs to released production history.','work_center_cost_identity_frozen','workCenter','Create another work center for a changed kind or overhead treatment; retained operations keep their original conversion-cost treatment.');
+  await validateReferences(tx, orgId, merged, targetScope);
   const duplicate = await duplicateCode(tx, orgId, merged.code, id);
   if (duplicate) duplicateCodeRefusal(merged.code, duplicate.name);
   await tx.execute(sql`savepoint mfg_work_center_update`);
@@ -147,6 +157,7 @@ export async function updateWorkCenter(
 
 async function setActive(tx: SqlExecutor, orgId: string, actorId: string, id: string, active: boolean) {
   await assertManufacturingFeature(tx, orgId, "manufacturing");
+  await lockManufacturingCenterAuthority(tx,orgId,actorId,id);
   const prior = await tx.execute<Record<string, unknown>>(sql`select ${centerColumns} from mfg_work_centers where org_id=${orgId} and id=${id} for update`);
   const before = prior.rows[0];
   if (!before) throw new ManufacturingNotFoundError();
@@ -170,6 +181,7 @@ export async function addWorkCenterRate(
   idempotency?: { id: string; requestId: string; match: Record<string, unknown> },
 ) {
   await assertManufacturingFeature(tx, orgId, "manufacturing");
+  await lockManufacturingCenterAuthority(tx,orgId,actorId,workCenterId);
   const center = await tx.execute<{ kind: WorkCenterKind }>(sql`select kind from mfg_work_centers where org_id=${orgId} and id=${workCenterId} and is_active for share`);
   if (!center.rows[0]) throw new ManufacturingNotFoundError();
   if (center.rows[0].kind === "labor") refused("Machine rates apply only to machine or cell work centers.", "rate_not_applicable", "workCenterId", "Choose a machine or cell work center.");
@@ -210,6 +222,7 @@ export async function addWorkCenterRate(
 
 export async function endWorkCenterRate(tx: SqlExecutor, orgId: string, actorId: string, workCenterId: string, rateId: string, effectiveTo: string) {
   await assertManufacturingFeature(tx, orgId, "manufacturing");
+  await lockManufacturingCenterAuthority(tx,orgId,actorId,workCenterId);
   const end = isoDate(effectiveTo, "effectiveTo");
   await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${orgId} || ':mfg_work_center_rates:' || ${workCenterId}, 0))`);
   const priorResult = await tx.execute<Record<string, unknown>>(sql`

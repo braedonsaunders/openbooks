@@ -32,6 +32,8 @@ export const bomComponents = pgTable(
     assemblyItemId: uuid("assembly_item_id").notNull(),
     componentItemId: uuid("component_item_id").notNull(),
     quantityPer: money("quantity_per").notNull(),
+    quantityBasis: text("quantity_basis",{enum:["per_unit","per_batch","per_formula"]}).notNull().default("per_unit"),
+    formulaOutputQuantity: money("formula_output_quantity").notNull().default("1"),
     sortOrder: integer("sort_order").notNull().default(0),
     ...auditColumns,
     effectiveFrom: date("effective_from"),
@@ -39,8 +41,11 @@ export const bomComponents = pgTable(
     operationSeq: integer("operation_seq"),
     scrapPct: money("scrap_pct"),
     isByproduct: boolean("is_byproduct").notNull().default(false),
+    outputCostWeight: money("output_cost_weight"),
   },
   (t) => [
+    check("bom_components_output_cost_weight",sql`${t.outputCostWeight} is null or (${t.isByproduct} and ${t.outputCostWeight}>0)`),
+    check("bom_components_quantity_basis",sql`${t.quantityBasis} in ('per_unit','per_batch','per_formula') and ${t.formulaOutputQuantity}>0 and (${t.quantityBasis}='per_formula' or ${t.formulaOutputQuantity}=1) and (not ${t.isByproduct} or ${t.quantityBasis}<>'per_batch')`),
     check(
       "bom_components_effective_range_check",
       sql`${t.effectiveFrom} is null or ${t.effectiveTo} is null or ${t.effectiveTo} > ${t.effectiveFrom}`,
@@ -65,15 +70,17 @@ export const stockLocations = pgTable(
     locationId: uuid("location_id").notNull(), // → locations dimension
     parentId: uuid("parent_id"), // bin hierarchy: zone → aisle → bin
     code: text("code").notNull(), // "A-03-14"
-    kind: text("kind", { enum: ["warehouse", "zone", "bin", "staging", "transit", "quarantine"] })
+    kind: text("kind", { enum: ["warehouse", "zone", "bin", "staging", "transit", "quarantine", "subcontract"] })
       .notNull()
       .default("bin"),
     inventoryOwnership: text("inventory_ownership",{enum:["owned","vendor","customer"]}).notNull().default("owned"),
     ownerPartyId: uuid("owner_party_id"),
+    custodianPartyId: uuid("custodian_party_id"),
     isActive: boolean("is_active").notNull().default(true),
     ...auditColumns,
   },
   (t) => [
+    check("stock_location_subcontract_custody",sql`(${t.kind}='subcontract')=(${t.custodianPartyId} is not null) and (${t.kind}<>'subcontract' or ${t.inventoryOwnership}='owned')`),
     uniqueIndex("stock_locations_org_id_id_unique").on(t.orgId, t.id),
     uniqueIndex("stock_locations_org_code").on(t.orgId, t.locationId, t.code),
     uniqueIndex("stock_locations_org_warehouse_code")
@@ -261,5 +268,7 @@ export interface AssemblyBomRevisionEvidence {
     componentItemId: string;
     quantityPer: string;
     sortOrder: number;
+    quantityBasis?:"per_unit"|"per_batch"|"per_formula";
+    formulaOutputQuantity?:string;
   }>;
 }

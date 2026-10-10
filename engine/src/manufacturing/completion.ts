@@ -1,8 +1,14 @@
+import {assertReceiptReworkOutput,finishReceiptRework} from "./receipt-rework.ts";
+import { lockManufacturingOrderExecutionAuthority } from "./authority.ts";
+import { recordCompletionGenealogy, type CompletionComponentSelection } from "./completion-genealogy.ts";
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
+import { createReceiptInspection } from "../inventory/inspections.ts";
+import { allocateJointProductionCost } from "../inventory/production-outputs.ts";
+import { assertWorkOrderQualityForReceipt } from "./quality-execution.ts";
 import { db, type SqlExecutor } from "../platform/db.ts";
 import { businessToday } from "../platform/business-date.ts";
-import { add, cmp, fromUnits, isZero, neg, roundDiv, sum, toUnits } from "../money/money.ts";
+import { apportion,add, cmp, fromUnits, isZero, neg, roundDiv, sum, toUnits } from "../money/money.ts";
 import { assertItemsActive } from "../inventory/item-active.ts";
 import { assertStockLocationAdmitsSubsidiary, resolveProfile } from "../inventory/profile-policy.ts";
 import { assertInventoryAccountsPostable, stockLocationDim, type JournalLineInput } from "../inventory/journal.ts";
@@ -16,7 +22,7 @@ import { assertManufacturingFeature } from "./gate.ts";
 import { ManufacturingError, ManufacturingNotFoundError } from "./errors.ts";
 import { auditChange, decimalValue } from "./master-support.ts";
 import { getManufacturingPolicies } from "./policies.ts";
-import { bomRequiredQuantity } from "../inventory/bom-scrap.ts";
+import { bomRequiredQuantity, type BomQuantityBasis } from "../inventory/bom-scrap.ts";
 import { manufacturingControlAccount, postManufacturingEntry } from "./journal.ts";
 import { conversionRelief } from "./conversion.ts";
 import { removeInboundLayer, restoreIssueLayers, reverseInventoryJournal, type ReverseInventoryInput, type ReverseInventoryResult, type ReversibleMovement } from "../inventory/reversal.ts";
@@ -26,20 +32,21 @@ type Order = {
   quantity_ordered: string; quantity_completed: string; quantity_scrapped: string; subsidiary_id: string | null;
   receipt_location_id: string | null; issue_location_id: string | null;
   bom_revision: string | null; routing_version: number | null; standard_cost_snapshot: string | null;
-  planned_start: string | null; short_close_reason: string | null;
+  receipt_rework_inspection_id:string|null;planned_start: string | null; short_close_reason: string | null;
 };
 type Material = {
   id: string; component_item_id: string; component_code: string | null; component_name: string; required_qty: string;
   issued_qty: string; backflush_qty: string; operation_seq: number | null; waived_at: Date | null;
-  quantity_per: string; scrap_pct: string;
+  quantity_per: string;quantity_basis:BomQuantityBasis;formula_output_quantity:string; scrap_pct: string;
 };
 type ReceiptSelection = { itemId?: string; quantity: string; lotNumber?: string; expiresOn?: string | null; serialNumber?: string };
 export interface CompleteWorkOrderInput {
   quantity: string; receiptLocationId?: string | null; lots?: ReceiptSelection[];
+  componentSelections?: CompletionComponentSelection[];
   byproductValues?: Array<{ itemId: string; nrvUnit: string; reason: string }>;
 }
 type ReceiptPiece = { quantity: string; lotId: string | null; serialId: string | null; serialNumber: string | null };
-type Byproduct = { item_id: string; code: string | null; name: string; quantity_per: string; default_rate: string | null };
+type Byproduct = { item_id: string; code: string | null; name: string; quantity_per: string;quantity_basis:BomQuantityBasis;formula_output_quantity:string; default_rate: string | null;output_cost_weight:string|null;standard_cost_snapshot:string|null };
 
 function refuse(message: string, code: string, remedy: string, status = 422): never {
   throw new ManufacturingError(message, { status, code, remedy });
@@ -70,7 +77,7 @@ async function loadOrder(tx: SqlExecutor, orgId: string, id: string, lock = fals
   return rowOrNotFound((await tx.execute<Order>(sql`
     select id, number, produced_item_id, status, hold_reason, quantity_ordered::text, quantity_completed::text, quantity_scrapped::text,
            subsidiary_id, receipt_location_id, issue_location_id, bom_revision, routing_version,
-           standard_cost_snapshot::text, planned_start::text, short_close_reason
+           standard_cost_snapshot::text,receipt_rework_inspection_id, planned_start::text, short_close_reason
       from mfg_work_orders where org_id=${orgId} and id=${id} ${lock ? sql`for update` : sql``}`)).rows);
 }
 function refuseIfHeld(order: Order): void {
@@ -109,7 +116,7 @@ async function loadMaterials(tx: SqlExecutor, orgId: string, orderId: string, lo
            item.code as component_code, material.required_qty::text, material.issued_qty::text, material.backflush_qty::text,
            material.operation_seq, material.waived_at,
            material.quantity_per::text as quantity_per,
-           material.scrap_pct::text as scrap_pct
+           material.scrap_pct::text as scrap_pct,material.quantity_basis,material.formula_output_quantity::text
       from mfg_wo_materials material join items item
         on item.org_id=material.org_id and item.id=material.component_item_id
      where material.org_id=${orgId} and material.work_order_id=${orderId}
@@ -117,7 +124,7 @@ async function loadMaterials(tx: SqlExecutor, orgId: string, orderId: string, lo
 }
 async function loadByproducts(tx: SqlExecutor, orgId: string, order: Order): Promise<Byproduct[]> {
   return (await tx.execute<Byproduct>(sql`
-    select item.id as item_id, item.code, item.name, byproduct.quantity_per::text, item.default_rate::text
+    select item.id as item_id, item.code, item.name, byproduct.quantity_per::text,byproduct.quantity_basis,byproduct.formula_output_quantity::text, item.default_rate::text,byproduct.output_cost_weight::text,byproduct.standard_cost_snapshot::text
       from mfg_wo_byproducts byproduct join items item
         on item.org_id=byproduct.org_id and item.id=byproduct.item_id
      where byproduct.org_id=${orgId} and byproduct.work_order_id=${order.id}
@@ -162,7 +169,7 @@ async function materialUsageVariance(
     if (!unitCost) continue;
     let allowed = "0.0000";
     for (const material of materials.filter((line) => line.component_item_id === componentId)) {
-      allowed = add(allowed, bomRequiredQuantity(completedQuantity, material.quantity_per, material.scrap_pct).quantity);
+      allowed = add(allowed, bomRequiredQuantity(completedQuantity, material.quantity_per, material.scrap_pct,{quantityBasis:material.quantity_basis,formulaOutputQuantity:material.formula_output_quantity}).quantity);
     }
     const cumulative = add(extendCost(issue.quantity, unitCost), neg(extendCost(allowed, unitCost)));
     const name = materialLabel(materials.find((material) => material.component_item_id === componentId)!);
@@ -174,7 +181,7 @@ async function materialUsageVariance(
 }
 async function receiptPieces(
   tx: SqlExecutor, orgId: string, actorId: string, itemId: string, quantity: string, locationId: string,
-  itemName: string, profile: Awaited<ReturnType<typeof resolveProfile>>, selections: ReceiptSelection[],
+  itemName: string, profile: Awaited<ReturnType<typeof resolveProfile>>, selections: ReceiptSelection[],reworkWorkOrderId?:string,
 ): Promise<ReceiptPiece[]> {
   const chosen = selections.filter((entry) => (entry.itemId ?? itemId) === itemId);
   if (profile.tracking === "none") {
@@ -199,7 +206,8 @@ async function receiptPieces(
       if (cmp(q, "1") !== 0 || !selection.serialNumber?.trim()) refuse("Serial-tracked item " + itemName + " requires one serial number per unit.", "receipt_serial_required", "Enter a serial number for each finished unit.");
       serialId = await ensureSerial(orgId, itemId, selection.serialNumber, locationId, actorId);
     }
-    await validateTrackingSelection(tx as Runner, orgId, itemId, locationId, profile,
+    if(reworkWorkOrderId) await assertReceiptReworkOutput(tx,orgId,actorId,reworkWorkOrderId,quantity,[{lotId,serialId}],locationId);
+    else await validateTrackingSelection(tx as Runner, orgId, itemId, locationId, profile,
       { quantity: q, lotId, serialId }, "receipt",actorId);
     pieces.push({ quantity: q, lotId, serialId, serialNumber: serialId ? selection.serialNumber!.trim() : null });
     total = add(total, q);
@@ -209,16 +217,9 @@ async function receiptPieces(
   }
   return pieces;
 }
+/** Native apportionment keeps every tracked piece non-negative even below one unit of cost per serial. */
 function splitValue(totalValue: string, pieces: ReceiptPiece[]): string[] {
-  const totalQuantity = toUnits(sum(pieces.map((piece) => piece.quantity)));
-  let assigned = 0n;
-  return pieces.map((piece, index) => {
-    const value = index === pieces.length - 1
-      ? toUnits(totalValue) - assigned
-      : roundDiv(toUnits(totalValue) * toUnits(piece.quantity), totalQuantity);
-    assigned += value;
-    return fromUnits(value);
-  });
+  return apportion(toUnits(totalValue),pieces.map(piece=>toUnits(piece.quantity))).map(fromUnits);
 }
 async function postReceiptLayer(
   tx: SqlExecutor, orgId: string, actorId: string, order: Order, itemId: string,
@@ -244,9 +245,10 @@ async function postReceiptLayer(
     if (piece.serialId) {
       const serial = await tx.execute<{ id: string }>(sql`
         update serials set status='in_stock', current_stock_location_id=${locationId}, updated_at=now(), updated_by=${actorId}
-         where org_id=${orgId} and id=${piece.serialId} and status='registered' returning id`);
+         where org_id=${orgId} and id=${piece.serialId} and (status='registered' or ${order.receipt_rework_inspection_id!==null} and status='shipped') returning id`);
       if (serial.rows.length !== 1) throw new ManufacturingError("Serial " + (piece.serialNumber ?? "evidence") + " changed before receipt.", { code: "receipt_serial_changed", remedy: "Review the serial history and retry with an unused serial." });
     }
+    await createReceiptInspection(tx,orgId,actorId,movementId);
   }
 }
 
@@ -254,6 +256,7 @@ export async function completeWorkOrder(
   tx: SqlExecutor, orgId: string, actorId: string, workOrderId: string, input: CompleteWorkOrderInput,
 ): Promise<{ entryId: string; quantityCompleted: string; relievedWip: string; value: string }> {
   await assertManufacturingFeature(tx, orgId, "manufacturing");
+  await lockManufacturingOrderExecutionAuthority(tx,orgId,actorId,workOrderId,null,input.receiptLocationId);
   const preview = await loadOrder(tx, orgId, workOrderId);
   const locationId = input.receiptLocationId ?? preview.receipt_location_id;
   if (!locationId) {
@@ -264,12 +267,28 @@ export async function completeWorkOrder(
   await lockPositions(tx, itemIds, locationId);
   const order = await loadOrder(tx, orgId, workOrderId, true);
   refuseIfHeld(order);
+  await assertWorkOrderQualityForReceipt(tx,orgId,workOrderId);
   if (order.status !== "released" && order.status !== "in_progress") {
     refuse("Work order " + order.number + " cannot receive finished goods from " + order.status + ".", "invalid_work_order_transition", "Release the work order before recording a completion.", 409);
   }
   const q = decimalValue(input.quantity, "completion quantity", "Enter a positive exact quantity with no more than four decimal places.");
   if (cmp(q, "0") <= 0) refuse("Completion quantity must be positive.", "invalid_completion_quantity", "Enter a positive exact quantity.");
   const completed = add(order.quantity_completed, q);
+  const vendorOperations=(await tx.execute<{status:string;returned:string}>(sql`select contract.status,
+    (select coalesce(sum(quantity),0)::text from mfg_subcontract_returns where org_id=contract.org_id and subcontract_id=contract.id) as returned
+    from mfg_subcontracts contract where contract.org_id=${orgId} and contract.work_order_id=${workOrderId} and contract.status<>'cancelled' order by contract.id for share`)).rows;
+  if(vendorOperations.length) {
+    await assertManufacturingFeature(tx,orgId,'manufacturingSubcontract');
+    if(vendorOperations.some(contract=>contract.status!=='received'||cmp(completed,contract.returned)>0))
+      refuse('Finished output exceeds a completed vendor operation’s actual returns.','subcontract_output_not_ready','Record its final vendor delivery, service cost and accepted inspection before receiving the returned good quantity.');
+    if((await tx.execute(sql`select contract.id from mfg_subcontracts contract where contract.org_id=${orgId} and contract.work_order_id=${workOrderId} and contract.status<>'cancelled'
+      and not exists(select 1 from mfg_subcontract_service_bills claim join documents bill on bill.org_id=claim.org_id and bill.id=claim.bill_id
+        join journal_entries source on source.org_id=claim.org_id and source.id=claim.source_entry_id
+        left join journal_entries cost on cost.org_id=claim.org_id and cost.id=claim.capitalization_entry_id
+        where claim.org_id=contract.org_id and claim.subcontract_id=contract.id and claim.reversal_entry_id is null
+          and bill.status='posted' and bill.posted_entry_id=source.id and source.status='posted' and (claim.amount=0 or cost.status='posted')) limit 1`)).rows.length)
+      refuse('A vendor service cost is missing or reversed.','subcontract_service_cost_required','Record the actual posted service bill on its subcontract before receiving finished goods.');
+  }
   const policies = await getManufacturingPolicies(tx, orgId);
   if (overTolerance(add(completed, order.quantity_scrapped), order.quantity_ordered, policies.completionTolerancePct)) {
     refuse("Work order " + order.number + " would exceed its " + policies.completionTolerancePct + "% completion tolerance.", "completion_tolerance_exceeded", "Revise the order quantity.");
@@ -310,7 +329,9 @@ export async function completeWorkOrder(
   const conversion = await conversionRelief(tx, orgId, order, q, remainingQuantity, finalCompletion, isStandard);
   const laborVariance = isStandard ? add(conversion.relievedLabor, neg(conversion.standardLabor)) : "0.0000";
   const overheadVariance = isStandard ? add(conversion.relievedOverhead, neg(conversion.standardOverhead)) : "0.0000";
-  const selections = input.lots ?? [];
+  const repairOutput=order.receipt_rework_inspection_id?await assertReceiptReworkOutput(tx,orgId,actorId,order.id,q):null;
+  const originalTracking=repairOutput?(await tx.execute<{lotNumber:string|null;serialNumber:string|null}>(sql`select lot.lot_number as "lotNumber",serial.serial_number as "serialNumber" from inventory_inspections inspected left join lots lot on lot.org_id=inspected.org_id and lot.id=inspected.lot_id left join serials serial on serial.org_id=inspected.org_id and serial.id=inspected.serial_id where inspected.org_id=${orgId} and inspected.id=${repairOutput.id}`)).rows[0]:null;
+  const selections = input.lots?.length?input.lots:repairOutput&&originalTracking?[{quantity:q,...(originalTracking.lotNumber?{lotNumber:originalTracking.lotNumber}:{}),...(originalTracking.serialNumber?{serialNumber:originalTracking.serialNumber}:{})}]:[];
   const date = await businessToday(orgId);
   const bookId = await primaryBookId(orgId, tx as Runner);
   const periodId = await periodForDate(orgId, date, tx as Runner);
@@ -318,11 +339,18 @@ export async function completeWorkOrder(
   const currency = await subsidiaryCurrency(orgId, order.subsidiary_id, tx as Runner);
   const locationDimension = await stockLocationDim(tx, orgId, locationId, null);
   const lines: JournalLineInput[] = [];
-  const byproductReceipts: Array<{ row: Byproduct; quantity: string; unit: string; value: string; profile: Awaited<ReturnType<typeof resolveProfile>>; pieces: ReceiptPiece[] }> = [];
+  const byproductReceipts: Array<{ row: Byproduct; quantity: string; unit: string|null; value: string;actualValue:string; profile: Awaited<ReturnType<typeof resolveProfile>>; pieces: ReceiptPiece[] }> = [];
   let byproductValue = "0.0000";
   for (const row of byproducts) {
-    const quantity = bomRequiredQuantity(q, row.quantity_per, "0").quantity;
+    const policy={quantityBasis:row.quantity_basis,formulaOutputQuantity:row.formula_output_quantity};
+    const quantity = add(bomRequiredQuantity(add(order.quantity_completed,q),row.quantity_per,"0",policy).quantity,neg(bomRequiredQuantity(order.quantity_completed,row.quantity_per,"0",policy).quantity));
     if (cmp(quantity, "0") <= 0) continue;
+    const profile = await resolveProfile(orgId, row.item_id, tx as Runner, true);
+    if(row.output_cost_weight!==null) {
+      if((profile.costingMethod==='standard')!==(row.standard_cost_snapshot!==null))refuse('A joint output’s costing method differs from its released snapshot.','joint_output_costing_method_changed','Restore its released costing method or close this order through a governed disposition before releasing a new order.');
+      byproductReceipts.push({row,quantity,unit:null,value:'0.0000',actualValue:'0.0000',profile,pieces:[]});
+      continue;
+    }
     const manual = input.byproductValues?.find((value) => value.itemId === row.item_id);
     const nrvUnit = row.default_rate ?? manual?.nrvUnit ?? null;
     if (!nrvUnit) refuse("By-product " + (row.code?.trim() || row.name) + " has no NRV value.", "byproduct_nrv_missing", "Set a default rate on the by-product item or provide a manual NRV with a reason.");
@@ -333,14 +361,26 @@ export async function completeWorkOrder(
     if (cmp(normalizedNrv, "0") < 0) refuse("By-product " + (row.code?.trim() || row.name) + " has a negative NRV unit value.", "byproduct_nrv_negative", "Enter a non-negative NRV unit value.");
     const value = extendCost(quantity, normalizedNrv);
     byproductValue = add(byproductValue, value);
-    const profile = await resolveProfile(orgId, row.item_id, tx as Runner, true);
-    byproductReceipts.push({ row, quantity, unit: normalizedNrv, value, profile, pieces: [] });
+    byproductReceipts.push({ row, quantity, unit: normalizedNrv, value,actualValue:value, profile, pieces: [] });
     lines.push({ accountId: profile.assetAccountId, amount: value, locationId: locationDimension,
       memo: "Work order " + order.number + " by-product " + (row.code?.trim() || row.name) + " at NRV" });
   }
-  const mainActualValue = add(relievedWip, neg(byproductValue));
-  if (cmp(mainActualValue, "0") < 0) {
+  const jointPool = add(relievedWip, neg(byproductValue));
+  if (cmp(jointPool, "0") < 0) {
     refuse("By-product NRV exceeds the WIP relief for work order " + order.number + ".", "byproduct_nrv_exceeds_wip", "Reduce the by-product NRV or complete more output before receiving it.");
+  }
+  const jointReceipts=byproductReceipts.filter(receipt=>receipt.row.output_cost_weight!==null);
+  const allocation=allocateJointProductionCost(jointPool,[{itemId:order.produced_item_id,quantity:q,costWeight:'1'},...jointReceipts.map(receipt=>({itemId:receipt.row.item_id,quantity:receipt.quantity,costWeight:receipt.row.output_cost_weight!}))]);
+  const mainActualValue=allocation.get(order.produced_item_id)!;
+  for(const receipt of jointReceipts) {
+    receipt.actualValue=allocation.get(receipt.row.item_id)!;
+    receipt.value=receipt.profile.costingMethod==='standard'?extendCost(receipt.quantity,receipt.row.standard_cost_snapshot!):receipt.actualValue;
+    const variance=add(receipt.actualValue,neg(receipt.value));
+    if(!isZero(variance)) {
+      if(!receipt.profile.varianceAccountId)refuse('A standard-cost joint output has no production variance account.','joint_output_variance_account_missing','Configure its item costing variance account before receiving joint output.');
+      lines.push({accountId:receipt.profile.varianceAccountId!,amount:variance,locationId:locationDimension,memo:'Work order '+order.number+' joint output production variance: '+receipt.row.name});
+    }
+    if(!isZero(receipt.value))lines.push({accountId:receipt.profile.assetAccountId,amount:receipt.value,locationId:locationDimension,memo:'Work order '+order.number+' joint output: '+receipt.row.name});
   }
   let finishedValue = mainActualValue;
   if (producedProfile.costingMethod === "standard") {
@@ -353,10 +393,10 @@ export async function completeWorkOrder(
   if (selections.some((selection) => selection.itemId && !validReceiptItems.has(selection.itemId))) {
     refuse("A tracking selection references an item not received by this completion.", "receipt_tracking_item_invalid", "Choose the produced item or a by-product on this work order.");
   }
-  if (input.byproductValues?.some((value) => !byproducts.some((row) => row.item_id === value.itemId))) {
-    refuse("A manual NRV references an item that is not a by-product on this order.", "byproduct_nrv_item_invalid", "Provide NRV values only for this order's by-products.");
+  if (input.byproductValues?.some((value) => !byproducts.some((row) => row.item_id === value.itemId&&row.output_cost_weight===null))) {
+    refuse("A manual NRV references an item that is not an NRV by-product on this order.", "byproduct_nrv_item_invalid", "Provide NRV values only for this order's NRV by-products; joint outputs use their released cost weights.");
   }
-  const itemVariance = add(add(relievedWip, neg(byproductValue)), neg(finishedValue));
+  const itemVariance = add(mainActualValue, neg(finishedValue));
   const finalItemVariance = add(add(add(itemVariance, neg(usage.delta)), neg(laborVariance)), neg(overheadVariance));
   const varianceLines: JournalLineInput[] = [];
   if (!isZero(laborVariance)) {
@@ -389,10 +429,11 @@ export async function completeWorkOrder(
   }
   await assertInventoryAccountsPostable(tx as Runner, orgId, lines.map((line) => line.accountId));
   const piecesByItem = await receiptPieces(tx, orgId, actorId, order.produced_item_id, q, locationId,
-    itemLabels.get(order.produced_item_id)!, producedProfile, selections);
+    itemLabels.get(order.produced_item_id)!, producedProfile, selections,order.receipt_rework_inspection_id?order.id:undefined);
+  await assertWorkOrderQualityForReceipt(tx,orgId,workOrderId,{quantity:completed,pieces:piecesByItem});
   for (const receipt of byproductReceipts) {
     receipt.pieces = await receiptPieces(tx, orgId, actorId, receipt.row.item_id, receipt.quantity,
-      locationId, receipt.row.code?.trim() || receipt.row.name, receipt.profile, selections);
+      locationId, receipt.row.code?.trim() || receipt.row.name, receipt.profile, selections.filter(selection=>selection.itemId===receipt.row.item_id));
   }
   const entryId = await postManufacturingEntry(tx as Runner, {
     orgId, bookId, subsidiaryId: order.subsidiary_id, actorId, currency, periodId, date,
@@ -403,7 +444,8 @@ export async function completeWorkOrder(
       relieved_labor: conversion.relievedLabor, relieved_overhead: conversion.relievedOverhead,
       labor_variance: laborVariance, overhead_variance: overheadVariance,
       material_usage_variance_delta_by_component: Object.fromEntries(usage.byComponent.map((component) => [component.itemId, component.delta])),
-      byproductNrv: byproductReceipts.map(({ row, unit, value }) => ({ itemId: row.item_id, nrvUnit: unit, value,
+      jointOutputCosts:jointReceipts.map(receipt=>({itemId:receipt.row.item_id,quantity:receipt.quantity,costWeight:receipt.row.output_cost_weight,actualValue:receipt.actualValue,receiptValue:receipt.value,standardCostSnapshot:receipt.row.standard_cost_snapshot})),
+      byproductNrv: byproductReceipts.filter(receipt=>receipt.row.output_cost_weight===null).map(({ row, unit, value }) => ({ itemId: row.item_id, nrvUnit: unit, value,
         reason: row.default_rate === null ? input.byproductValues?.find((v) => v.itemId === row.item_id)?.reason?.trim() : null })) },
   });
   await postReceiptLayer(tx, orgId, actorId, order, order.produced_item_id, locationId, date, entryId,
@@ -411,14 +453,15 @@ export async function completeWorkOrder(
   for (const receipt of byproductReceipts) {
     await postReceiptLayer(tx, orgId, actorId, order, receipt.row.item_id, locationId, date, entryId,
       receipt.pieces, splitValue(receipt.value, receipt.pieces), receipt.profile.costingMethod,
-      "Work order " + order.number + " by-product receipt");
-    if (receipt.row.default_rate === null) {
+      "Work order " + order.number + (receipt.row.output_cost_weight===null?" by-product receipt":" joint output receipt"));
+    if (receipt.row.output_cost_weight===null&&receipt.row.default_rate === null) {
       await auditChange(tx, { orgId, actorId, table: "mfg_work_orders", rowId: order.id, action: "update",
         before: { byproductItemId: receipt.row.item_id },
         after: { byproductItemId: receipt.row.item_id, nrvUnit: receipt.unit,
           reason: input.byproductValues?.find((v) => v.itemId === receipt.row.item_id)?.reason?.trim() } });
     }
   }
+  await recordCompletionGenealogy(tx,orgId,actorId,{workOrderId:order.id,orderNumber:order.number,entryId,quantity:q,remainingGood:remainingQuantity,final:finalCompletion,components:input.componentSelections});
   const update = await tx.execute<{ id: string }>(sql`
     update mfg_work_orders set quantity_completed=${completed}, status='in_progress',
       started_at=coalesce(started_at, now()), updated_by=${actorId}, updated_at=now()
@@ -428,6 +471,7 @@ export async function completeWorkOrder(
   await auditChange(tx, { orgId, actorId, table: "mfg_work_orders", rowId: order.id, action: "update",
     before: order, after: { ...order, quantity_completed: completed, status: "in_progress",
       lastCompletionEntryId: entryId, reason: "Finished goods were received." } });
+  if(order.receipt_rework_inspection_id) await finishReceiptRework(tx,orgId,actorId,order.id);
   return { entryId, quantityCompleted: completed, relievedWip, value: finishedValue };
 }
 
@@ -435,6 +479,7 @@ export async function waiveMaterial(
   tx: SqlExecutor, orgId: string, actorId: string, workOrderId: string, materialId: string, reason: string,
 ): Promise<{ id: string; waivedAt: Date }> {
   await assertManufacturingFeature(tx, orgId, "manufacturing");
+  await lockManufacturingOrderExecutionAuthority(tx,orgId,actorId,workOrderId);
   const order = await loadOrder(tx, orgId, workOrderId, true);
   refuseIfHeld(order);
   if (order.status !== "released" && order.status !== "in_progress") {
@@ -471,6 +516,7 @@ export async function markWorkOrderDone(
   input: { shortCloseReason?: string | null } = {},
 ): Promise<{ id: string; status: "done"; shortCloseReason: string | null }> {
   await assertManufacturingFeature(tx, orgId, "manufacturing");
+  await lockManufacturingOrderExecutionAuthority(tx,orgId,actorId,workOrderId);
   const preview = await loadOrder(tx, orgId, workOrderId);
   if (preview.receipt_location_id) await lockPositions(tx, [preview.produced_item_id], preview.receipt_location_id);
   const order = await loadOrder(tx, orgId, workOrderId, true);
@@ -483,7 +529,7 @@ export async function markWorkOrderDone(
   if (!withinTolerance(add(order.quantity_completed, order.quantity_scrapped), order.quantity_ordered, policies.completionTolerancePct)) {
     refuse("Work order " + order.number + " completed " + order.quantity_completed + " of " + order.quantity_ordered + ", outside the " + policies.completionTolerancePct + "% completion tolerance.", "completion_tolerance_not_met", "Complete the remaining quantity or revise the order quantity.");
   }
-  if (cmp(order.quantity_completed, "0") === 0 && cmp(order.quantity_scrapped, "0") > 0) refuse("An all-loss order requires a governed disposition.", "all_loss_disposition_required", "Hold the work order for inventory and costing review.");
+  if (cmp(order.quantity_completed, "0") === 0 && cmp(order.quantity_scrapped, "0") > 0) refuse("An all-loss order requires a governed disposition.", "all_loss_disposition_required", "Open Close as loss to propose the actual discarded quantity and consumed costs for independent approval.");
   const shortCloseReason = input.shortCloseReason?.trim() || null;
   const short = cmp(order.quantity_completed, order.quantity_ordered) < 0;
   if (short && !shortCloseReason) {
@@ -602,7 +648,7 @@ async function reverseCompletionReceipt(
   const order = (await tx.execute<Order>(sql`
     select id, number, produced_item_id, status, hold_reason, quantity_ordered::text, quantity_completed::text, quantity_scrapped::text,
            subsidiary_id, receipt_location_id, issue_location_id, bom_revision, routing_version,
-           standard_cost_snapshot::text, planned_start::text, short_close_reason
+           standard_cost_snapshot::text,receipt_rework_inspection_id, planned_start::text, short_close_reason
       from mfg_work_orders where org_id=${orgId} and number=${peek.work_order_number} for update`)).rows[0];
   if (!order) throw new ManufacturingNotFoundError();
   const prior = (await tx.execute<{ id: string }>(sql`
@@ -713,6 +759,10 @@ export async function reverseMaterialIssue(
        where movement.org_id=${orgId} and movement.id=${input.movementId}`)).rows[0];
     if (!peek) throw new ManufacturingNotFoundError();
     if (peek.entry_origin !== "manufacturing") throw new InventoryError("The movement is not a manufacturing work-order movement.");
+    const subject=(await tx.execute<{id:string;entity:string|null}>(sql`select id,subsidiary_id as entity from mfg_work_orders where org_id=${orgId} and number=${peek.work_order_number}`)).rows[0];
+    if(!subject||subject.entity!==peek.subsidiary_id)throw new ManufacturingNotFoundError();
+    await lockManufacturingOrderExecutionAuthority(tx,orgId,actorId,subject.id);
+
     if (peek.kind === "assembly_build") return reverseCompletionReceipt(tx, orgId, actorId, peek, input, reason);
     if (peek.kind !== "assembly_consume" || !peek.journal_entry_id || !peek.work_order_number) {
       throw new InventoryError("Only a posted work-order material issue or backflush can be reversed.");
@@ -727,7 +777,7 @@ export async function reverseMaterialIssue(
     const order = (await tx.execute<Order>(sql`
       select id, number, produced_item_id, status, hold_reason, quantity_ordered::text, quantity_completed::text, quantity_scrapped::text,
              subsidiary_id, receipt_location_id, issue_location_id, bom_revision, routing_version,
-             standard_cost_snapshot::text, planned_start::text, short_close_reason
+             standard_cost_snapshot::text,receipt_rework_inspection_id, planned_start::text, short_close_reason
         from mfg_work_orders where org_id=${orgId} and number=${peek.work_order_number} for update`)).rows[0];
     if (!order) throw new ManufacturingNotFoundError();
     const prior = (await tx.execute<{ id: string }>(sql`
@@ -743,7 +793,7 @@ export async function reverseMaterialIssue(
       }
       return { movementIds: reversalMovements.map((row) => row.id), entryId: prior.id, alreadyReversed: true };
     }
-    if (order.status === "done" || order.status === "closed") {
+    if (order.status === "done" || order.status === "closed" || order.status === "cancelled") {
       refuse("Material issue for work order " + order.number + " cannot be reversed after it is " + order.status + ".", "issue_reversal_after_completion", "Use a new work order for any additional material movement.", 409);
     }
     // A completion relieves WIP in proportion to the units it receives, so a

@@ -17,6 +17,7 @@ const Body = z.object({
     lotNumber: z.string().trim().min(1).optional(), expiresOn: isoDate().nullable().optional(),
     serialNumber: z.string().trim().min(1).optional(),
   }).strict()).max(200).optional(),
+  componentSelections:z.array(z.object({movementId:z.string().uuid(),quantity:z.string()}).strict()).min(1).max(500).optional(),
   byproductValues: z.array(z.object({
     itemId: z.string().uuid(), nrvUnit: z.string(), reason: z.string().trim().min(5).max(500),
   }).strict()).max(100).optional(),

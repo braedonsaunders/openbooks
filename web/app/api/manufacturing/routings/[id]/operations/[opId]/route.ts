@@ -11,7 +11,7 @@ import { manufacturingTransaction } from "../../../../_transaction";
 const Params = z.object({ id: z.string().uuid(), opId: z.string().uuid() });
 const Patch = z.object({
   sequence: z.number().int().positive().optional(), name: z.string().trim().min(1).optional(), workCenterId: z.string().uuid().optional(),
-  setupMinutes: z.string().optional(), runMinutesPerUnit: z.string().optional(), laborMinutesPerUnit: z.string().nullable().optional(),
+  setupMinutes: z.string().optional(), runMinutesPerUnit: z.string().optional(), laborTimeSource: z.enum(["operation", "approved_time"]).optional(), laborMinutesPerUnit: z.string().nullable().optional(),
   backflushAt: z.enum(["none", "start", "finish"]).optional(), qualityGate: z.enum(["none", "measure"]).optional(),
 }).refine((value) => Object.keys(value).length > 0);
 const Empty = z.object({}).strict();
