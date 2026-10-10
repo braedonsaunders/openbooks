@@ -203,7 +203,7 @@ test(
       );
       await assert.rejects(
         applyLeaseChange(org.orgId, changeId, actors.submitterId),
-        /independent approval/,
+        /approval policy/,
       );
       await approve(org, actors, changeId);
       const first = await applyLeaseChange(

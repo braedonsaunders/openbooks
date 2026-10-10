@@ -154,7 +154,7 @@ test(
         );
       await assert.rejects(
         () => applyAssetChange(f.org.orgId, id, f.actors.submitterId),
-        /independent approval/,
+        /approval policy/,
       );
       await approve(f, id);
       const result = await applyAssetChange(
@@ -476,7 +476,7 @@ test(
             groupChange,
             f.actors.submitterId,
           ),
-        /independent approval/,
+        /approval policy/,
       );
       await approve(f, groupChange);
       const measured = await applyAssetGroupValuation(
