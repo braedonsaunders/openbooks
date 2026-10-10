@@ -64,7 +64,7 @@ test("retirement backup admission requires complete read-only dump access withou
       assert.deepEqual((await reader.query(`select count(*)::text as count from ${relation}`)).rows,
         (await admin.query(`select count(*)::text as count from ${relation}`)).rows, `${table.name} is completely readable`);
       await assert.rejects(reader.query(`delete from ${relation} where false`), { code: "42501" });
-      await assert.rejects(reader.query(`update ${relation} set ${ident(table.column)}=${ident(table.column)} where false`), { code: "42501" });
+      await assert.rejects(reader.query(`update ${relation} set ${ident(table.column)}=default where false`), { code: "42501" });
       await assert.rejects(reader.query(`insert into ${relation} (${ident(table.column)}) overriding system value select ${ident(table.column)} from ${relation} where false`), { code: "42501" });
     }
     const sequences = (await admin.query<{ name: string }>(`select c.relname::text as name from pg_class c
