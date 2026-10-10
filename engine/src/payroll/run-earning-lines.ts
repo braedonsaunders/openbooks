@@ -297,7 +297,7 @@ async function runLineAdjustmentRows(
   employeePartyId: string,
 ): Promise<readonly Record<string, unknown>[]> {
   return (await tx.execute<Record<string, unknown>>(sql`
-    select a.id as adjustment_id, a.amount as adj_amount, a.hours as adj_hours, a.replace_component, a.note, c.*,
+    select a.id as adjustment_id, a.amount as adj_amount, a.hours as adj_hours, a.earned_from::text as adj_earned_from, a.earned_to::text as adj_earned_to, a.replace_component, a.note, c.*,
            ec.supplemental_wage_category, ec.statutory_reporting_category, ec.statutory_exemption_category
       from pay_run_adjustments a
       join pay_components c on c.id = a.component_id and c.org_id = a.org_id
@@ -556,10 +556,15 @@ export async function applyRunLineAdjustments(
   const replacedComponentIds = new Set<string>();
   const adjustments = await runLineAdjustmentRows(tx, orgId, documentId, employeePartyId);
   for (const adj of adjustments) {
+    if ((adj.adj_earned_from != null || adj.adj_earned_to != null) && adj.kind !== "earning") {
+      throw new PayrollError("The dated adjustment component is no longer an earning; review the editable run input.");
+    }
     if (adj.system_key === "stat_holiday") {
       if (adj.kind !== "earning" || adj.payment_kind !== "cash" || adj.replace_component !== true
         || adj.adj_hours == null) throw new PayrollError("The recorded holiday input no longer identifies a cash earning replacement with paid hours; review the editable run input.");
-      const priced = await priceRunHolidayHours(tx, { orgId, documentId, employeePartyId, hours: String(adj.adj_hours) });
+      if (adj.adj_earned_from !== adj.adj_earned_to) throw new PayrollError("Record holiday hours on one date within this pay period.");
+      const priced = await priceRunHolidayHours(tx, { orgId, documentId, employeePartyId, hours: String(adj.adj_hours),
+        earnedOn: adj.adj_earned_from == null ? undefined : String(adj.adj_earned_from) });
       if (cmp(String(adj.adj_amount), priced) !== 0) throw new PayrollError("The dated wage for recorded holiday hours has changed; update the editable holiday input and recalculate.");
     }
 
@@ -596,6 +601,8 @@ export async function applyRunLineAdjustments(
     lines.push({
       componentId: adj.id as string, kind: adj.kind as Line["kind"],
       runAdjustmentId: String(adj.adjustment_id),
+      earnedFrom: adj.adj_earned_from == null ? null : String(adj.adj_earned_from),
+      earnedTo: adj.adj_earned_to == null ? null : String(adj.adj_earned_to),
       // Recorded holiday units are ordinary wages, not an alternate-day draw.
       fundedByEntitlementBank: adj.system_key === "stat_holiday" ? false : undefined,
       description: (adj.note as string | null) || (adj.name as string),

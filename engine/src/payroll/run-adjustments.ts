@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
+import { isIsoCalendarDate } from "../platform/iso-date.ts";
 import { canonicalDecimal } from "../money/exact-decimal.ts";
 import { cmp, normalizeMoney } from "../money/money.ts";
 import { PayrollError } from "./error.ts";
@@ -113,6 +114,9 @@ export type PayRunAdjustmentMutation =
       componentId: string;
       amount: string;
       hours?: string | null;
+      /** Inclusive source dates for the earning; absent retains legacy period-wide treatment. */
+      earnedFrom?: string | null;
+      earnedTo?: string | null;
       replaceComponent?: boolean;
       note?: string | null;
       /**
@@ -197,7 +201,7 @@ export async function mutatePayRunAdjustment(input: PayRunAdjustmentInput): Prom
 /** Record paid holiday hours through the ordinary audited payroll input lifecycle. */
 export async function recordPayRunHolidayHours(input: {
   orgId: string; documentId: string; actorId: string; employeePartyId: string;
-  hours: string; reason: string; note?: string; idempotencyKey?: string;
+  hours: string; earnedOn?: string; reason: string; note?: string; idempotencyKey?: string;
   allowedSubsidiaryIds?: PayrollSubsidiaryScope;
 }): Promise<{ changed: boolean; replayed: boolean }> {
   return db.transaction(async tx => {
@@ -210,7 +214,7 @@ export async function recordPayRunHolidayHours(input: {
     return mutatePayRunAdjustment({ orgId: input.orgId, documentId: input.documentId,
       actorId: input.actorId, reason: input.reason, allowedSubsidiaryIds: input.allowedSubsidiaryIds,
       mutation: { action: "add", employeePartyId: input.employeePartyId, componentId: components.rows[0]!.id,
-        amount, hours: input.hours, replaceComponent: true, note: input.note, idempotencyKey: input.idempotencyKey } });
+        amount, hours: input.hours, earnedFrom: input.earnedOn, earnedTo: input.earnedOn, replaceComponent: true, note: input.note, idempotencyKey: input.idempotencyKey } });
   });
 }
 
@@ -328,6 +332,12 @@ async function executePayRunAdjustment(input: PayRunAdjustmentInput, validateOnl
       const hours = mutation.hours == null || mutation.hours === ""
         ? null
         : persistAdjustmentHours(mutation.hours, amount);
+      const earnedFrom = mutation.earnedFrom ?? null;
+      const earnedTo = mutation.earnedTo ?? null;
+      if ((earnedFrom === null) !== (earnedTo === null)
+        || earnedFrom !== null && (!isIsoCalendarDate(earnedFrom) || !isIsoCalendarDate(earnedTo) || earnedFrom > earnedTo)) {
+        throw new PayrollError("Supply both earned dates as valid YYYY-MM-DD dates, with the end on or after the start, or omit both.");
+      }
       const replaceComponent = mutation.replaceComponent === true;
       const note = mutation.note ?? null;
       // Idempotent add: the key becomes the row id (the document-create
@@ -343,11 +353,11 @@ async function executePayRunAdjustment(input: PayRunAdjustmentInput, validateOnl
         const prior = (await tx.execute<{
           org_id: string; pay_run_document_id: string; employee_party_id: string;
           component_id: string | null; amount: string | null; hours: string | null;
-          replace_component: boolean; note: string | null;
+          replace_component: boolean; note: string | null; earned_from: string | null; earned_to: string | null;
         }>(sql`
           select org_id, pay_run_document_id::text, employee_party_id::text,
                  component_id::text, amount::text as amount, hours::text as hours,
-                 replace_component, note
+                 replace_component, note, earned_from::text, earned_to::text
             from pay_run_adjustments where id = ${key}
         `)).rows[0];
         if (prior) {
@@ -357,6 +367,7 @@ async function executePayRunAdjustment(input: PayRunAdjustmentInput, validateOnl
             && prior.component_id === mutation.componentId
             && normalizeMoney(prior.amount ?? "0") === amount
             && canonicalAdjustmentHours(prior.hours, prior.amount) === hours
+            && prior.earned_from === earnedFrom && prior.earned_to === earnedTo
             && prior.replace_component === replaceComponent
             && (prior.note ?? null) === note;
           if (!same) throw new PayRunAdjustmentIdempotencyConflict("changed-payload");
@@ -371,12 +382,18 @@ async function executePayRunAdjustment(input: PayRunAdjustmentInput, validateOnl
          limit 1
       `));
       if (component.rows.length === 0) throw new PayrollError("component cannot be adjusted");
+      if (earnedFrom !== null && component.rows[0]!.kind !== "earning") {
+        throw new PayrollError("Earned dates apply only to earning adjustments.");
+      }
       if (component.rows[0]!.system_key === "stat_holiday") {
+        if (earnedFrom !== null && (earnedFrom !== earnedTo || earnedFrom < run.period_start || earnedFrom > run.period_end)) {
+          throw new PayrollError("Record holiday hours on one date within this pay period.");
+        }
         if (component.rows[0]!.kind !== "earning" || component.rows[0]!.payment_kind !== "cash"
           || !replaceComponent || !hours || !(input.reason ?? note)?.trim()) {
           throw new PayrollError("Recorded holiday pay requires a cash earning component, non-negative paid hours, component replacement and a supporting reason.");
         }
-        const priced = await priceRunHolidayHours(tx, { orgId, documentId, employeePartyId: mutation.employeePartyId, hours });
+        const priced = await priceRunHolidayHours(tx, { orgId, documentId, employeePartyId: mutation.employeePartyId, hours, earnedOn: earnedFrom ?? undefined });
         if (cmp(amount, priced) !== 0) throw new PayrollError("Holiday pay must equal the native dated wage calculation; supply paid hours instead of a cash override.");
       }
 
@@ -390,10 +407,10 @@ async function executePayRunAdjustment(input: PayRunAdjustmentInput, validateOnl
         const inserted = (await tx.execute<Record<string, unknown> & { id: string }>(sql`
           insert into pay_run_adjustments
             (id, org_id, pay_run_document_id, employee_party_id, adjustment_type,
-             component_id, amount, hours, replace_component, note, created_by, updated_by)
+             component_id, amount, hours, earned_from, earned_to, replace_component, note, created_by, updated_by)
           values
             (${key}, ${orgId}, ${documentId}, ${mutation.employeePartyId}, 'line',
-             ${mutation.componentId}, ${amount}, ${hours},
+             ${mutation.componentId}, ${amount}, ${hours}, ${earnedFrom}, ${earnedTo},
              ${replaceComponent}, ${note}, ${actorId}, ${actorId})
           returning *
         `)).rows[0];
@@ -403,10 +420,10 @@ async function executePayRunAdjustment(input: PayRunAdjustmentInput, validateOnl
         const inserted = (await tx.execute<Record<string, unknown> & { id: string }>(sql`
           insert into pay_run_adjustments
             (org_id, pay_run_document_id, employee_party_id, adjustment_type,
-             component_id, amount, hours, replace_component, note, created_by, updated_by)
+             component_id, amount, hours, earned_from, earned_to, replace_component, note, created_by, updated_by)
           values
             (${orgId}, ${documentId}, ${mutation.employeePartyId}, 'line',
-             ${mutation.componentId}, ${amount}, ${hours},
+             ${mutation.componentId}, ${amount}, ${hours}, ${earnedFrom}, ${earnedTo},
              ${replaceComponent}, ${mutation.note ?? null}, ${actorId}, ${actorId})
           returning *
         `)).rows[0];

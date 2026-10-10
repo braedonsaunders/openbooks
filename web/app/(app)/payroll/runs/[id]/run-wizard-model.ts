@@ -172,6 +172,8 @@ export interface AdjustmentRow {
   component_id: string | null
   amount: string | null
   hours: string | null
+  earned_from?: string | null
+  earned_to?: string | null
   replace_component: boolean
   note: string | null
   employee_name: string

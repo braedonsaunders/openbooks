@@ -72,6 +72,8 @@ export function StubDrawer({
   const [adjComponent, setAdjComponent] = useState('')
   const [adjAmount, setAdjAmount] = useState('')
   const [adjNote, setAdjNote] = useState('')
+  const [adjEarnedFrom, setAdjEarnedFrom] = useState('')
+  const [adjEarnedTo, setAdjEarnedTo] = useState('')
   const [adjReplace, setAdjReplace] = useState(false)
   // One idempotency key per form session: a double-clicked Add (or a retried
   // request) reuses it and replays instead of writing twice. Rotated after
@@ -84,7 +86,7 @@ export function StubDrawer({
   // drawer still closes without prompting; the successful-exclude path below
   // keeps the direct onClose (its work already landed).
   const adjustGuard = useDirtyClose({
-    dirty: adjComponent !== '' || adjAmount !== '' || adjNote !== '' || adjReplace,
+    dirty: adjComponent !== '' || adjAmount !== '' || adjNote !== '' || adjEarnedFrom !== '' || adjEarnedTo !== '' || adjReplace,
     busy,
     onClose,
     message: tCommon('feedback.unsavedChanges'),
@@ -261,6 +263,7 @@ export function StubDrawer({
                   <li key={row.id} className="flex items-center justify-between gap-2">
                     <span>
                       {row.component_name}
+                      {row.earned_from && row.earned_to ? <span className="ml-1.5 text-xs text-slate-500">{row.earned_from} – {row.earned_to}</span> : null}
                       {row.replace_component ? ` · ${t('wizard.adjust.replaces')}` : ''}
                       {row.note ? <span className="ml-1.5 text-xs text-slate-400">{row.note}</span> : null}
                     </span>
@@ -286,7 +289,7 @@ export function StubDrawer({
                   <select
                     aria-label={t('wizard.adjust.component')}
                     value={adjComponent}
-                    onChange={(e) => setAdjComponent(e.target.value)}
+                    onChange={(e) => { setAdjComponent(e.target.value); setAdjEarnedFrom(''); setAdjEarnedTo('') }}
                     className="rounded-md border border-slate-300 bg-white px-2 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-900"
                   >
                     <option value="">{t('wizard.adjust.component')}</option>
@@ -320,6 +323,20 @@ export function StubDrawer({
                   placeholder={t('wizard.adjust.note')}
                   className="w-full rounded-md border border-slate-300 bg-white px-2 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-900"
                 />
+                {components.find(component => component.id === adjComponent)?.kind === 'earning' && (
+                  <details className="text-sm text-slate-700 dark:text-slate-200">
+                    <summary className="cursor-pointer">{t('wizard.adjust.earnedDates')}</summary>
+                    <p className="mt-2 text-xs text-slate-500">{t('wizard.adjust.earnedDatesHelp')}</p>
+                    <div className="mt-2 grid grid-cols-2 gap-2">
+                      <label>{t('wizard.adjust.earnedFrom')}
+                        <input type="date" value={adjEarnedFrom} onChange={event => setAdjEarnedFrom(event.target.value)} className="mt-1 w-full rounded-md border border-slate-300 bg-white px-2 py-1.5 dark:border-slate-700 dark:bg-slate-900" />
+                      </label>
+                      <label>{t('wizard.adjust.earnedTo')}
+                        <input type="date" value={adjEarnedTo} onChange={event => setAdjEarnedTo(event.target.value)} className="mt-1 w-full rounded-md border border-slate-300 bg-white px-2 py-1.5 dark:border-slate-700 dark:bg-slate-900" />
+                      </label>
+                    </div>
+                  </details>
+                )}
                 <span className="flex items-center gap-1.5">
                   <label className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-200">
                     <input type="checkbox" checked={adjReplace} onChange={(e) => setAdjReplace(e.target.checked)} />
@@ -333,6 +350,8 @@ export function StubDrawer({
                     disabled={
                       !adjComponent
                       || moneyFieldError(t('wizard.adjust.amount'), 'a money amount', adjAmount, 4, { required: true }) !== null
+                      || ((adjEarnedFrom === '') !== (adjEarnedTo === ''))
+                      || (adjEarnedFrom !== '' && adjEarnedFrom > adjEarnedTo)
                       || busy
                     }
                     onClick={() => {
@@ -342,11 +361,13 @@ export function StubDrawer({
                         componentId: adjComponent,
                         amount: adjAmount,
                         note: adjNote || undefined,
+                        earnedFrom: adjEarnedFrom || undefined,
+                        earnedTo: adjEarnedTo || undefined,
                         replaceComponent: adjReplace,
                         idempotencyKey: requestKey,
                       }).then((added) => {
                         if (!added) return
-                        setAdjComponent(''); setAdjAmount(''); setAdjNote(''); setAdjReplace(false)
+                        setAdjComponent(''); setAdjAmount(''); setAdjNote(''); setAdjEarnedFrom(''); setAdjEarnedTo(''); setAdjReplace(false)
                         setRequestKey(crypto.randomUUID())
                       })
                     }}
