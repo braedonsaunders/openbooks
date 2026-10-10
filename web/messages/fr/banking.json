@@ -507,7 +507,8 @@
     "formPreferredFailed": "Impossible d’enregistrer le formulaire préféré",
     "cardAccountHelp": "Aucune carte enregistrée — sélectionnez le compte de carte à rapprocher pour comptabiliser.",
     "noCardAccounts": "Aucun compte de carte à rapprocher pour l'instant.",
-    "noCardAccountsCta": "Ajoutez-en un dans le plan comptable"
+    "noCardAccountsCta": "Ajoutez-en un dans le plan comptable",
+    "partylessControlWarning": "Comptabilisé sans client ni fournisseur sur {accounts}. Ces montants restent hors des auxiliaires clients et fournisseurs : les factures ouvertes restent impayées. Enregistrez les encaissements clients avec Recevoir un paiement et les paiements fournisseurs avec Payer des factures, ou indiquez le client ou le fournisseur sur la ligne. Configuration → Société et comptabilité → Comptes de contrôle permet de refuser ces écritures."
   },
   "reconcile": {
     "title": "Rapprochement jusqu’au {date}",

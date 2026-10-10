@@ -75,7 +75,7 @@
     "referenceNumberHint": "Numéro externe de cette écriture — pièce source ou référence de relevé. Affiché à côté du numéro d’écriture.",
     "memoHint": "Narration interne enregistrée sur l’écriture. Affichée dans le journal et la piste d’audit.",
     "noParty": "Aucun tiers",
-    "partylessControlWarning": "Comptabilisé sans tiers sur {accounts}. Ces soldes restent hors de tout auxiliaire client ou fournisseur — voir la ligne (sans tiers) de la balance âgée.",
+    "partylessControlWarning": "Comptabilisé sans tiers sur {accounts}. Ces soldes restent hors de tout auxiliaire client ou fournisseur — voir la ligne (sans tiers) de la balance âgée. Enregistrez les encaissements clients avec Recevoir un paiement et les paiements fournisseurs avec Payer des factures, ou indiquez le client ou le fournisseur sur la ligne. Configuration → Société et comptabilité → Comptes de contrôle permet de refuser ces écritures.",
     "accountPlaceholder": "Compte…",
     "lineMissingAccount": "Ligne {line} : sélectionnez un compte.",
     "columns": {

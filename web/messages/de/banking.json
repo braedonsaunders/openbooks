@@ -507,7 +507,8 @@
     "formPreferredFailed": "Das bevorzugte Formular konnte nicht gespeichert werden",
     "cardAccountHelp": "Keine Karten hinterlegt — wählen Sie das abstimmbare Kartenkonto, gegen das gebucht wird.",
     "noCardAccounts": "Noch keine abstimmbaren Kartenkonten.",
-    "noCardAccountsCta": "Im Kontenplan hinzufügen"
+    "noCardAccountsCta": "Im Kontenplan hinzufügen",
+    "partylessControlWarning": "Ohne Kunden oder Lieferanten auf {accounts} gebucht. Diese Beträge stehen außerhalb der Debitoren- und Kreditoren-Nebenbücher, offene Rechnungen bleiben daher unbezahlt. Erfassen Sie Kundeneingänge mit „Zahlung erfassen“ und Lieferantenzahlungen mit „Rechnungen bezahlen“ oder geben Sie den Kunden bzw. Lieferanten auf der Zeile an. Unter Einrichtung → Unternehmen & Buchhaltung → Kontrollkonten lassen sich solche Buchungen ablehnen."
   },
   "reconcile": {
     "title": "Abstimmen bis {date}",

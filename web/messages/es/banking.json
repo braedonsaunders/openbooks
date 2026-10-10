@@ -507,7 +507,8 @@
     "formPreferredFailed": "No se pudo guardar el formulario preferido",
     "cardAccountHelp": "Sin tarjetas registradas — selecciona la cuenta de tarjeta conciliable para contabilizar.",
     "noCardAccounts": "Aún no hay cuentas de tarjeta conciliables.",
-    "noCardAccountsCta": "Añade una en el plan de cuentas"
+    "noCardAccountsCta": "Añade una en el plan de cuentas",
+    "partylessControlWarning": "Contabilizado sin cliente ni proveedor en {accounts}. Estos importes quedan fuera de los submayores de cuentas por cobrar y por pagar, por lo que las facturas abiertas siguen pendientes. Registre los cobros de clientes con Recibir pago y los pagos a proveedores con Pagar facturas, o indique el cliente o proveedor en la línea. Configuración → Empresa y contabilidad → Cuentas de control puede rechazar estos asientos."
   },
   "reconcile": {
     "title": "Conciliar hasta {date}",

@@ -921,6 +921,12 @@
           "label": "Passivo de valor armazenado",
           "hint": "Saldos de vales-presente e créditos de loja devidos aos clientes"
         }
+      },
+      "partylessPolicy": {
+        "label": "Linhas de lançamento ou depósito em contas a receber/pagar sem cliente ou fornecedor",
+        "hint": "Uma linha assim altera o saldo do razão sem item em aberto, e o aging, os extratos e os saldos em aberto deixam de conferir com o razão. Avisar lança a linha e mostra a solução; Recusar bloqueia o lançamento e orienta a usar Receber pagamento, Pagar contas ou informar a contraparte na linha. Vale apenas para novos lançamentos.",
+        "warn": "Avisar e lançar",
+        "refuse": "Recusar o lançamento"
       }
     },
     "revenue": {

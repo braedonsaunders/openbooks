@@ -514,7 +514,8 @@
     "formSetPreferred": "Set as my preferred",
     "formSetPreferredDone": "Preferred form saved",
     "formPreferredCleared": "Preferred form cleared",
-    "formPreferredFailed": "Could not save the preferred form"
+    "formPreferredFailed": "Could not save the preferred form",
+    "partylessControlWarning": "Posted with no customer or vendor on {accounts}. These amounts sit outside the receivable and payable subledgers, so open invoices and bills stay unpaid. Record customer receipts with Receive payment and supplier payments with Pay bills, or name the customer or vendor on the line. Setup → Company & Accounting → Control accounts can refuse these postings."
   },
   "reconcile": {
     "title": "Reconcile through {date}",

@@ -9,6 +9,7 @@ import { isFeatureEnabled, subsidiaryFeatureEnabled } from '../../../../../lib/f
 import { SettingsForm, type AccountOption } from '../../settings/SettingsForm'
 import { readCashSalesSettings } from '../../../../../lib/company-settings'
 import { SampleCompanyPicker } from '../../../../../components/sample-company-picker'
+import { parsePartylessControlPolicy } from '@openbooks/engine/src/ledger/partyless-control-policy.ts'
 
 /**
  * Company & Accounting settings, rendered as the Setup "Company" tab. This is
@@ -101,6 +102,9 @@ export async function CompanyTab({ orgId }: { orgId: string }) {
               ?.requireStockCountReview === true,
           controlAccounts: Object.fromEntries(
             CONTROL_ACCOUNT_ROLES.map((role) => [role, control[role] ?? '']),
+          ),
+          partylessControlPolicy: parsePartylessControlPolicy(
+            (settings.ledger as Record<string, unknown> | undefined)?.partylessControlPolicy,
           ),
           cashSales: (() => {
             const stored = readCashSalesSettings(
