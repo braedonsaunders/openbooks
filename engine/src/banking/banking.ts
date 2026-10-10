@@ -11,8 +11,8 @@
  * `jl_guard` trigger explicitly allows on posted lines).
  */
 
-export { BankingError, normalizeExternalAccountId, BANK_STATEMENT_PARSER_VERSION, SYSTEM_ACTOR_ID } from "./banking-core"
-export type { ParsedStatementLine, ParsedStatement, StatementSource, StatementSourceContent, StatementSourceEvidence, BankingContext, CsvMapping, SkippedStatementRowCode, SkippedStatementRow } from "./banking-core"
+export { BankingError, normalizeExternalAccountId, BANK_STATEMENT_PARSER_VERSION, SYSTEM_ACTOR_ID, statementComparisonSign, statementTotalsAgree } from "./banking-core"
+export type { ParsedStatementLine, ParsedStatement, StatementSource, StatementSourceContent, StatementSourceEvidence, BankingContext, CsvMapping, SkippedStatementRowCode, SkippedStatementRow, StatementBalanceRole, BalanceCandidateLine } from "./banking-core"
 export { decodeStatementSourceText } from "./statement-encoding"
 export { parseOfx } from "./statement-parsers/ofx"
 export { parseCsvRows, parseCsvDate, parseCsv } from "./statement-parsers/csv"
@@ -22,9 +22,9 @@ export { parseMt940 } from "./statement-parsers/mt940"
 export { requireBankAccountInScope } from "./reconcilable-account"
 export { normalizeFingerprintText, filterDuplicateStatementLines, statementSourceSha256, importStatement, deleteStatementImport } from "./statement-import"
 export type { FlaggedStatementLine, ImportResult } from "./statement-import"
-export { startReconciliation, reconciliationBookId, reconciliationTotals, adjustReconciliation, discardReconciliation, markReconciled } from "./reconciliation"
-export type { ReconciliationTotals } from "./reconciliation"
-export { autoMatch, createMatchWithJournal, createMatch, unmatchStatementLine, excludeStatementLine, clearPossibleDuplicateFlag, excludePossibleDuplicates, restoreStatementLine, correctStatementLine } from "./matching"
+export { startReconciliation, reconciliationBookId, reconciliationTotals, listSignOffBlockers, adjustReconciliation, discardReconciliation, markReconciled } from "./reconciliation"
+export type { ReconciliationTotals, SignOffBlocker } from "./reconciliation"
+export { autoMatch, createMatchWithJournal, createMatch, unmatchStatementLine, createGlClearingGroup, unmatchGlClearingGroup, excludeStatementLine, clearPossibleDuplicateFlag, excludePossibleDuplicates, restoreStatementLine, correctStatementLine } from "./matching"
 export type { AutoMatchResult, StatementLineCorrection } from "./matching"
 export { SOURCE_EVIDENCE_POLICY_CODE, sourceEvidencePolicyActive, applySourceLineEvidence, refreshSourceReconciliationState, signOffFromSourceEvidence } from "./source-evidence"
 export type { SourceClearedLineEvidence, SourceClearedEntryEvidence, SourceAccountEvidenceState, SourceSignOffOutcome } from "./source-evidence"

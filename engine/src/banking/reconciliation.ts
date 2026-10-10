@@ -1,5 +1,5 @@
 /** Reconciliation lifecycle. Split from banking.ts (pure moves only). */
-import { BankingError, type BankingContext, subsidiaryScopeSql } from "./banking-core"
+import { BankingError, statementComparisonSign, statementTotalsAgree, type BankingContext, subsidiaryScopeSql } from "./banking-core"
 import { loadReconcilableAccount, requireSessionRowInScope, validateReconciliationDate, lockReconciliationAccount, requireCutoffAfterSignedHistory, type BankingSqlExecutor } from "./reconcilable-account"
 import { normalizeAmount } from "./statement-parsers/shared"
 import { sql } from "drizzle-orm"
@@ -148,6 +148,9 @@ export async function firstReconciliationCarry(
   if (!coverage || coverage.opening_balance === null) return null;
 
   const openingUnits = toUnits(coverage.opening_balance);
+  const accountType = (await executor.execute<{ type: string }>(sql`
+    select type from accounts where id = ${recon.account_id} and org_id = ${ctx.orgId}
+  `)).rows[0]?.type ?? "";
   // Opening balances include immutable originals and their dated reversals.
   // Match eligibility is narrower than the ledger history proving this carry.
   const history = (await executor.execute<{ carry: string; matched_old: string }>(sql`
@@ -174,9 +177,18 @@ export async function firstReconciliationCarry(
             and other.reconciliation_id <> ${recon.id}
        )
   `)).rows[0]!;
-  const carryUnits = toUnits(history.carry);
-  if (openingUnits !== carryUnits + toUnits(history.matched_old)) return null;
-  return { startDate: coverage.start_date, amount: fromUnits(openingUnits) };
+  // The imported opening is statement-signed; the proving history is
+  // GL-signed. Asset-style accounts require exact equality; liability
+  // accounts accept either pairing (owing-positive CSV vs GL-signed OFX).
+  // The carry is stored in GL terms, matching the cleared sums it joins.
+  const historyUnits = toUnits(history.carry) + toUnits(history.matched_old);
+  const glCarryUnits = openingUnits === historyUnits
+    ? openingUnits
+    : statementComparisonSign(accountType) === -1 && -openingUnits === historyUnits
+      ? -openingUnits
+      : null;
+  if (glCarryUnits === null) return null;
+  return { startDate: coverage.start_date, amount: fromUnits(glCarryUnits) };
 }
 
 export interface ReconciliationTotals {
@@ -191,6 +203,33 @@ export interface ReconciliationTotals {
 }
 
 export type BankingTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+/**
+ * Foot a session's cleared balance and sign-off difference under the
+ * account's statement sign convention. Asset-style accounts foot in GL
+ * terms, exactly as before. Liability accounts whose typed statement
+ * balance is owing-positive (CSV card portals) foot in statement terms —
+ * otherwise a matched book could never reach a zero difference; a
+ * negative typed balance (OFX GL-signed feeds) keeps GL terms, preserving
+ * the existing behavior byte for byte. The typed balance selects the
+ * convention, so the choice is deterministic and stays in the audit record.
+ */
+function footSessionBalance(
+  statementBalance: string,
+  carryAmount: string | null,
+  cleared: string,
+  accountType: string,
+): { clearedBalance: string; difference: string } {
+  const statementUnits = toUnits(statementBalance);
+  const clearedGlUnits = (carryAmount ? toUnits(carryAmount) : 0n) + toUnits(cleared);
+  const owingPositive =
+    statementComparisonSign(accountType) === -1 && statementUnits >= 0n;
+  const clearedTerms = owingPositive ? -clearedGlUnits : clearedGlUnits;
+  return {
+    clearedBalance: fromUnits(clearedTerms),
+    difference: fromUnits(statementUnits - clearedTerms),
+  };
+}
 
 /** Bank statements describe physical cash once. Secondary accounting
  * representations are not additional deposits or withdrawals. The primary
@@ -216,7 +255,9 @@ async function reconciliationTotalsUsing(
   const bookId = await reconciliationBookId(executor, ctx.orgId);
   const carry = await firstReconciliationCarry(executor, recon, ctx, bookId);
   const carryStart = carry?.startDate ?? null;
-  const carryUnits = carry ? toUnits(carry.amount) : 0n;
+  const accountType = (await executor.execute<{ type: string }>(sql`
+    select type from accounts where id = ${recon.account_id} and org_id = ${ctx.orgId}
+  `)).rows[0]?.type ?? "";
   const r = (await executor.execute<{ cleared: string; matched_journal: string; matched_stmt: string; unmatched_stmt: string }>(sql`
     select
       coalesce((
@@ -243,8 +284,12 @@ async function reconciliationTotalsUsing(
           and l.match_status = 'unmatched' and l.posted_on <= ${recon.through_date}) as unmatched_stmt
   `));
   const row = r.rows[0]!;
-  const clearedBalance = fromUnits(carryUnits + toUnits(row.cleared));
-  const difference = fromUnits(toUnits(recon.statement_balance) - carryUnits - toUnits(row.cleared));
+  const { clearedBalance, difference } = footSessionBalance(
+    recon.statement_balance,
+    carry?.amount ?? null,
+    row.cleared,
+    accountType,
+  );
   return {
     statementBalance: fromUnits(toUnits(recon.statement_balance)),
     clearedBalance,
@@ -253,6 +298,50 @@ async function reconciliationTotalsUsing(
     unmatchedStatementLines: Number(row.unmatched_stmt),
     matchedJournalLines: Number(row.matched_journal),
   };
+}
+
+export interface SignOffBlocker {
+  id: string;
+  postedOn: string;
+  amount: string;
+  description: string | null;
+}
+
+/**
+ * The unmatched statement lines through the cutoff that refuse sign-off,
+ * oldest first, with the total count. The workspace renders these beside
+ * the refusal so the operator sees exactly which lines block the session
+ * instead of a bare count.
+ */
+export async function listSignOffBlockers(
+  reconciliationId: string,
+  ctx: BankingContext,
+  limit = 50,
+): Promise<{ lines: SignOffBlocker[]; total: number }> {
+  return withOrgTransaction(ctx.orgId, async () => {
+    const recon = await loadReconciliation(ctx.orgId, reconciliationId, ctx.allowedSubsidiaryIds);
+    const lines = (await db.execute<SignOffBlocker>(sql`
+      select l.id, l.posted_on as "postedOn", l.amount::text as amount, l.description
+        from bank_statement_lines l
+       where l.org_id = ${ctx.orgId}
+         and l.account_id = ${recon.account_id}
+         and l.currency = ${recon.currency}
+         and l.posted_on <= ${recon.through_date}
+         and l.match_status = 'unmatched'
+       order by l.posted_on, l.line_number
+       limit ${limit}
+    `)).rows;
+    const total = (await db.execute<{ count: number }>(sql`
+      select count(*)::int as count
+        from bank_statement_lines l
+       where l.org_id = ${ctx.orgId}
+         and l.account_id = ${recon.account_id}
+         and l.currency = ${recon.currency}
+         and l.posted_on <= ${recon.through_date}
+         and l.match_status = 'unmatched'
+    `)).rows[0]!.count;
+    return { lines, total };
+  });
 }
 
 /** Running totals for a session — the workspace difference badge and the sign-off gate. */
@@ -426,8 +515,8 @@ export async function markReconciled(
   ctx: BankingContext,
 ): Promise<{ journalLinesReconciled: number }> {
   return db.transaction(async (tx) => {
-    const account = (await tx.execute<{ account_id: string; status: string; subsidiary_id: string | null }>(sql`
-      select r.account_id, r.status, a.subsidiary_id
+    const account = (await tx.execute<{ account_id: string; status: string; subsidiary_id: string | null; account_type: string }>(sql`
+      select r.account_id, r.status, a.subsidiary_id, a.type as account_type
         from reconciliations r
         join accounts a on a.id = r.account_id and a.org_id = r.org_id
        where r.id = ${reconciliationId} and r.org_id = ${ctx.orgId}
@@ -447,8 +536,8 @@ export async function markReconciled(
     }
     const bookId = await reconciliationBookId(tx, ctx.orgId);
     await lockReconciliationAccount(tx, ctx.orgId, account.account_id);
-    const r = (await tx.execute<ReconciliationRow & { subsidiary_id: string | null }>(sql`
-      select r.id, r.account_id, r.through_date, r.currency, r.statement_balance, r.status, a.subsidiary_id
+    const r = (await tx.execute<ReconciliationRow & { subsidiary_id: string | null; account_type: string }>(sql`
+      select r.id, r.account_id, r.through_date, r.currency, r.statement_balance, r.status, a.subsidiary_id, a.type as account_type
         from reconciliations r
         join accounts a on a.id = r.account_id and a.org_id = r.org_id
        where r.id = ${reconciliationId} and r.org_id = ${ctx.orgId}
@@ -523,12 +612,12 @@ export async function markReconciled(
     // at match time and both sides sum exactly alike.
     const groupRows = (await tx.execute<{
       group_id: string;
-      stmt_id: string;
-      stmt_amount: string;
-      stmt_account: string;
-      stmt_currency: string;
-      stmt_posted_on: string;
-      stmt_status: string;
+      stmt_id: string | null;
+      stmt_amount: string | null;
+      stmt_account: string | null;
+      stmt_currency: string | null;
+      stmt_posted_on: string | null;
+      stmt_status: string | null;
       journal_id: string;
       journal_amount: string;
       journal_account: string;
@@ -547,7 +636,9 @@ export async function markReconciled(
              jl.reconciled_at::text as journal_reconciled_at,
              je.book_id as entry_book, je.status as entry_status, je.posting_date::text as entry_posting_date
         from reconciliation_matches m
-        join bank_statement_lines l
+        -- GL-only clearing rows name no statement line: the statement side
+        -- is optional, the journal side is not.
+        left join bank_statement_lines l
           on l.id = m.statement_line_id
          and l.org_id = m.org_id
         join journal_lines jl
@@ -567,12 +658,19 @@ export async function markReconciled(
     }
     const groupInvalid = (rows: typeof groupRows): string | null => {
       for (const row of rows) {
+        // GL-only clearing rows carry no statement side; only the journal
+        // side is footed for them.
         if (
-          row.stmt_account !== recon.account_id
-          || row.stmt_currency !== recon.currency
-          || row.stmt_posted_on > recon.through_date
-          || row.stmt_status !== "matched"
-          || row.journal_account !== recon.account_id
+          row.stmt_id !== null
+          && (row.stmt_account !== recon.account_id
+            || row.stmt_currency !== recon.currency
+            || (row.stmt_posted_on ?? "") > recon.through_date
+            || row.stmt_status !== "matched")
+        ) {
+          return "one or more matches fail book, account, currency, cutoff, or availability";
+        }
+        if (
+          row.journal_account !== recon.account_id
           || row.journal_currency !== recon.currency
           || row.entry_book !== bookId
           // Live entries only: a match whose entry has since been reversed is stale.
@@ -586,11 +684,14 @@ export async function markReconciled(
       }
       // Distinct members only: the group's rows are the complete bipartite
       // edges, so a naive sum would count each side's members many times.
-      const stmtTotal = [...new Map(rows.map((row) => [row.stmt_id, row.stmt_amount])).values()]
+      // GL-only groups sum an empty statement side against a zero journal
+      // sum. Liability accounts foot under the statement sign convention
+      // (see statementTotalsAgree): card feeds disagree on charge signs.
+      const stmtTotal = [...new Map(rows.filter((row) => row.stmt_id !== null).map((row) => [row.stmt_id, row.stmt_amount as string])).values()]
         .reduce((total, amount) => total + toUnits(amount), 0n);
       const journalTotal = [...new Map(rows.map((row) => [row.journal_id, row.journal_amount])).values()]
         .reduce((total, amount) => total + toUnits(amount), 0n);
-      if (stmtTotal !== journalTotal) {
+      if (!statementTotalsAgree(stmtTotal, journalTotal, recon.account_type)) {
         return `group total ${fromUnits(stmtTotal)} does not foot to ${fromUnits(journalTotal)}`;
       }
       return null;
@@ -604,7 +705,6 @@ export async function markReconciled(
 
     const carry = await firstReconciliationCarry(tx, recon, ctx, bookId);
     const carryStart = carry?.startDate ?? null;
-    const carryUnits = carry ? toUnits(carry.amount) : 0n;
     const bal = (await tx.execute<{ cleared: string }>(sql`
       select coalesce(sum(jl.txn_amount), 0) as cleared
         from journal_lines jl
@@ -619,7 +719,12 @@ export async function markReconciled(
                             where rm.reconciliation_id = ${recon.id}
                               and rm.org_id = ${ctx.orgId}))
     `));
-    const difference = fromUnits(toUnits(recon.statement_balance) - carryUnits - toUnits(bal.rows[0]!.cleared));
+    const { difference } = footSessionBalance(
+      recon.statement_balance,
+      carry?.amount ?? null,
+      bal.rows[0]!.cleared,
+      recon.account_type,
+    );
     if (!isZero(difference)) {
       throw new BankingError(
         `Cannot sign off: difference is ${difference}, not 0.0000 — match or unmatch lines until it balances`,

@@ -2,11 +2,12 @@ import 'server-only'
 import { sql } from 'drizzle-orm'
 import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
 import { db, schema, withOrgTransaction, withTransactionSavepoint } from '@openbooks/engine/src/platform/db.ts'
+import { fromUnits, toUnits } from '@openbooks/engine/src/money/money.ts'
 import { PostingError } from '@openbooks/engine/journal/contracts'
 import { typedRefusal } from './api/error-response'
 import { postDocument } from "@openbooks/engine/src/ledger/posting-document.ts";
 import { submitAndReleaseIfUngated } from '@openbooks/engine/src/flows/index.ts'
-import { startReconciliation, createMatchWithJournal, excludeStatementLine } from '@openbooks/engine/src/banking/banking.ts'
+import { startReconciliation, createMatchWithJournal, excludeStatementLine, statementComparisonSign } from '@openbooks/engine/src/banking/banking.ts'
 import { ScopeNotFoundError, subsidiaryScopeAllows } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
 import { controlDeps } from "../../engine/src/ledger/document-service.ts";
 import { can, resolveAuthzByUserId } from "./authz";
@@ -323,6 +324,30 @@ export async function applyRuleToLine(
   await postCategorizeForLine(orgId, userId, ctx, recId, line.account_id, line, rule)
 }
 
+/**
+ * The bank leg of a categorizing journal in GL terms: on a liability
+ * account whose session balance is owing-positive, a positive statement
+ * charge is a GL credit, so the leg is negated (offsets still book its
+ * negation). Anything else posts the line verbatim, exactly as before.
+ */
+async function bankLegAmountInGlTerms(
+  orgId: string,
+  accountId: string,
+  accountType: string,
+  reconciliationId: string,
+  statementAmount: string,
+): Promise<string> {
+  const sessionRes = (await db.execute<{ statement_balance: string }>(sql`
+    select statement_balance from reconciliations
+     where id = ${reconciliationId} and org_id = ${orgId} and account_id = ${accountId}
+  `))
+  const sessionBalance = sessionRes.rows[0]?.statement_balance
+  if (!sessionBalance) throw new BankRuleRefusal('Reconciliation session not found for this line; refresh and pick a session on the line’s account', 409)
+  return statementComparisonSign(accountType) === -1 && toUnits(sessionBalance) >= 0n
+    ? fromUnits(-toUnits(statementAmount))
+    : statementAmount
+}
+
 /** Post the categorizing journal for one line under one rule, then match it. */
 async function postCategorizeForLine(
   orgId: string,
@@ -338,6 +363,9 @@ async function postCategorizeForLine(
   const splits: RuleSplitLine[] = outcome.lines
   const headerParty = outcome.partyId ?? null
   const memo = outcome.memo ?? line.description ?? rule.name
+  const accountType = (await db.execute<{ type: string }>(sql`
+    select type from accounts where id = ${bankAccountId} and org_id = ${orgId}
+  `)).rows[0]?.type ?? ''
 
   await createMatchWithJournal(
     {
@@ -345,11 +373,11 @@ async function postCategorizeForLine(
       statementLineIds: [line.id],
       matchedBy: 'rule',
       additionalAccountIds: splits.map((split) => split.accountId),
-      createJournal: () => createCategorizingJournal(orgId, userId, {
+      createJournal: async () => createCategorizingJournal(orgId, userId, {
         bankAccountId,
         splits,
         headerPartyId: headerParty,
-        amount: line.amount,
+        amount: await bankLegAmountInGlTerms(orgId, bankAccountId, accountType, reconciliationId, line.amount),
         date: line.posted_on,
         memo,
         currency: line.currency,
@@ -623,8 +651,9 @@ export async function addJournalMatchFromLine(
   scope: ReadonlySet<string> | null,
 ): Promise<void> {
   const ctx = { orgId, userId, allowedSubsidiaryIds: scope }
-  const lineRes = (await db.execute<{ posted_on: string; amount: string; description: string | null; currency: string; account_id: string; subsidiaryId: string | null }>(sql`
+  const lineRes = (await db.execute<{ posted_on: string; amount: string; description: string | null; currency: string; account_id: string; accountType: string; subsidiaryId: string | null }>(sql`
     select l.posted_on, l.amount, l.description, l.currency, s.account_id,
+           a.type as "accountType",
            a.subsidiary_id as "subsidiaryId"
       from bank_statement_lines l
       join bank_statements s on s.id = l.statement_id and s.org_id = l.org_id
@@ -633,6 +662,7 @@ export async function addJournalMatchFromLine(
   `))
   const line = lineRes.rows[0]
   if (!line) throw new BankRuleRefusal('Statement line not found or already matched; refresh Match Bank Data and pick an unmatched line', 409)
+  const bankLegAmount = await bankLegAmountInGlTerms(orgId, line.account_id, line.accountType, opts.reconciliationId, line.amount)
   // Both legs stay inside the caller's boundary: the bank leg's account and
   // the chosen offset account. The session itself is gated again inside
   // createMatchWithJournal.
@@ -654,10 +684,10 @@ export async function addJournalMatchFromLine(
       statementLineIds: [opts.statementLineId],
       matchedBy: 'manual',
       additionalAccountIds: [opts.offsetAccountId],
-      createJournal: () => createCategorizingJournal(orgId, userId, {
+      createJournal: async () => createCategorizingJournal(orgId, userId, {
         bankAccountId: line.account_id,
         splits: [{ accountId: opts.offsetAccountId, portion: { kind: 'remainder' } }],
-        amount: line.amount,
+        amount: bankLegAmount,
         date: line.posted_on,
         memo: line.description,
         currency: line.currency,

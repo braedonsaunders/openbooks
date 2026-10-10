@@ -1,5 +1,5 @@
 /** Auto/manual matching. Split from banking.ts (pure moves only). */
-import { BankingError, type BankingContext, subsidiaryScopeSql } from "./banking-core"
+import { BankingError, statementComparisonSign, statementTotalsAgree, type BankingContext, subsidiaryScopeSql } from "./banking-core"
 import { requireSessionRowInScope, requireBankAccountInScope, lockBankAccountInScope, requireStatementLineAccountInScope, lockReconciliationAccount } from "./reconcilable-account"
 import { type ReconciliationRow, firstReconciliationCarry, type ReconciliationTotals, type BankingTransaction, reconciliationBookId, refreshStatus } from "./reconciliation"
 import { sql } from "drizzle-orm"
@@ -8,7 +8,7 @@ import { db, inDbTransaction, withOrgTransaction, withTransactionSavepoint } fro
 import { fromUnits, sum, toUnits } from "../money/money.ts"
 import { calendarDaysBetween } from "../platform/civil-date.ts"
 import { lockScopeRows, ScopeNotFoundError } from "../organization/subsidiary-scope.ts"
-import { assertRealDate, normalizeAmount } from "./statement-parsers/shared"
+import { assertRealDate, isBalanceSummaryRow, normalizeAmount } from "./statement-parsers/shared"
 
 // ---------------------------------------------------------------------------
 // Matching
@@ -23,11 +23,16 @@ export interface AutoMatchResult {
 
 /**
  * Auto-match unmatched statement lines to unreconciled, unclaimed posted
- * journal lines on the session's account: exact signed amount + posting date
- * within 3 days ⇒ confidence 0.9; within 14 days ⇒ 0.7. Each journal line is
- * used at most once; the closest date wins. Lines flagged as possible
- * duplicates are never auto-matched — the reviewer clears the flag or
- * excludes the line first.
+ * journal lines on the session's account: exact amount under the account's
+ * statement sign convention (liability accounts pair either sign: CSV
+ * portals print charges owing-positive while OFX carries them GL-signed)
+ * + posting date within 3 days ⇒ confidence 0.9; within 14 days ⇒ 0.7.
+ * Each journal line is used at most once; when an exact-date candidate
+ * exists it wins over any farther pairing, otherwise the closest date
+ * wins. Lines flagged as possible duplicates are never auto-matched — the
+ * reviewer clears the flag or excludes the line first — and neither are
+ * balance-summary rows ("Opening balance …"), which have no GL counterpart
+ * to pair with.
  */
 export async function autoMatch(reconciliationId: string, ctx: BankingContext): Promise<AutoMatchResult> {
   return db.transaction(async (tx) => {
@@ -37,8 +42,8 @@ export async function autoMatch(reconciliationId: string, ctx: BankingContext): 
     if (!account) throw new ScopeNotFoundError();
     await lockBankAccountInScope(tx, ctx.orgId, account.account_id, ctx.allowedSubsidiaryIds);
     const bookId = await reconciliationBookId(tx, ctx.orgId);
-    const reconResult = (await tx.execute<ReconciliationRow & { subsidiary_id: string | null }>(sql`
-      select r.id, r.account_id, r.through_date, r.currency, r.statement_balance, r.status, a.subsidiary_id
+    const reconResult = (await tx.execute<ReconciliationRow & { subsidiary_id: string | null; account_type: string }>(sql`
+      select r.id, r.account_id, r.through_date, r.currency, r.statement_balance, r.status, a.subsidiary_id, a.type as account_type
         from reconciliations r
         join accounts a on a.id = r.account_id and a.org_id = r.org_id
        where r.id = ${reconciliationId} and r.org_id = ${ctx.orgId} and r.account_id = ${account.account_id}
@@ -51,8 +56,8 @@ export async function autoMatch(reconciliationId: string, ctx: BankingContext): 
     // not by matching: claiming one would double-count the opening.
     const carryStart = (await firstReconciliationCarry(tx, recon, ctx, bookId))?.startDate ?? null;
 
-    const stmtRes = (await tx.execute<{ id: string; posted_on: string; amount: string }>(sql`
-      select l.id, l.posted_on, l.amount
+    const stmtRes = (await tx.execute<{ id: string; posted_on: string; amount: string; description: string | null }>(sql`
+      select l.id, l.posted_on, l.amount, l.description
        from bank_statement_lines l
        where l.account_id = ${recon.account_id} and l.org_id = ${ctx.orgId}
          and l.currency = ${recon.currency}
@@ -78,35 +83,68 @@ export async function autoMatch(reconciliationId: string, ctx: BankingContext): 
        for update of jl
     `));
 
-    // candidates by exact signed amount
-    const byAmount = new Map<string, { id: string; date: string }[]>();
+    // Candidates by exact amount under the account's statement sign
+    // convention: liability accounts bucket each journal under both signs,
+    // because card feeds disagree (owing-positive CSV vs GL-signed OFX).
+    // A journal claimed through one bucket must not pair again through the
+    // other, so usage is tracked separately from bucket membership.
+    const inverted = statementComparisonSign(recon.account_type) === -1;
+    // On a liability account the session's typed balance names the feed's
+    // convention: an owing-positive balance pairs the negated bucket first,
+    // a GL-signed (negative) balance the direct one.
+    const preferFlipped = inverted && toUnits(recon.statement_balance) >= 0n;
+    const byAmount = new Map<string, { id: string; date: string; flipped: boolean }[]>();
     for (const jl of glRes.rows) {
-      const key = toUnits(jl.amount).toString();
-      const list = byAmount.get(key) ?? [];
-      list.push({ id: jl.id, date: jl.posting_date });
-      byAmount.set(key, list);
+      const units = toUnits(jl.amount);
+      const entries = inverted && units !== 0n
+        ? [{ key: units.toString(), flipped: false }, { key: (-units).toString(), flipped: true }]
+        : [{ key: units.toString(), flipped: false }];
+      for (const entry of entries) {
+        const list = byAmount.get(entry.key) ?? [];
+        list.push({ id: jl.id, date: jl.posting_date, flipped: entry.flipped });
+        byAmount.set(entry.key, list);
+      }
     }
 
+    const usedJournals = new Set<string>();
     const pairs: { statementLineId: string; journalLineId: string; confidence: string }[] = [];
-    for (const line of stmtRes.rows) {
-      const candidates = byAmount.get(toUnits(line.amount).toString());
-      if (!candidates?.length) continue;
-      let bestIdx = -1;
-      let bestDays = Infinity;
-      for (let i = 0; i < candidates.length; i++) {
-        const days = Math.abs(calendarDaysBetween(line.posted_on, candidates[i]!.date));
-        if (days < bestDays) {
-          bestDays = days;
-          bestIdx = i;
-        }
-      }
-      if (bestIdx === -1 || bestDays > 14) continue;
-      const [winner] = candidates.splice(bestIdx, 1);
+    // Balance-summary rows ("Opening balance …", "Opening 1,914.90")
+    // never pair: they have no GL counterpart, so pairing one with a
+    // same-amount payment is the mismatch this guard exists to prevent.
+    // The reviewer matches or excludes the row by hand.
+    const pairable = stmtRes.rows.filter((line) => !isBalanceSummaryRow(line.description));
+    const sortedCandidates = (line: { posted_on: string; amount: string }) =>
+      ((byAmount.get(toUnits(line.amount).toString()) ?? [])
+        .filter((c) => !usedJournals.has(c.id))
+        .map((c) => ({ ...c, days: Math.abs(calendarDaysBetween(line.posted_on, c.date)) }))
+        .sort((a, b) => a.days - b.days || Number(b.flipped === preferFlipped) - Number(a.flipped === preferFlipped)));
+    const claim = (
+      line: { id: string },
+      candidate: { id: string; days: number },
+    ) => {
+      usedJournals.add(candidate.id);
       pairs.push({
         statementLineId: line.id,
-        journalLineId: winner!.id,
-        confidence: bestDays <= 3 ? "0.9" : "0.7",
+        journalLineId: candidate.id,
+        confidence: candidate.days <= 3 ? "0.9" : "0.7",
       });
+    };
+    // Exact-date pairings claim first, so a far line can never steal the
+    // journal a same-day line needs; remaining lines then take the closest
+    // candidate within 14 days.
+    const pending = new Set(pairable.map((line) => line.id));
+    for (const line of pairable) {
+      const exact = sortedCandidates(line).filter((c) => c.days === 0);
+      if (exact.length === 0) continue;
+      claim(line, exact[0]!);
+      pending.delete(line.id);
+    }
+    for (const line of pairable) {
+      if (!pending.has(line.id)) continue;
+      const [best] = sortedCandidates(line);
+      if (!best || best.days > 14) continue;
+      claim(line, best);
+      pending.delete(line.id);
     }
 
     if (pairs.length > 0) {
@@ -196,8 +234,8 @@ async function createMatchInTransaction(
   if (!account) throw new ScopeNotFoundError();
   await lockBankAccountInScope(tx, ctx.orgId, account.account_id, ctx.allowedSubsidiaryIds);
   const bookId = await reconciliationBookId(tx, ctx.orgId);
-  const reconResult = (await tx.execute<ReconciliationRow & { subsidiary_id: string | null }>(sql`
-    select r.id, r.account_id, r.through_date, r.currency, r.statement_balance, r.status, a.subsidiary_id
+  const reconResult = (await tx.execute<ReconciliationRow & { subsidiary_id: string | null; account_type: string }>(sql`
+    select r.id, r.account_id, r.through_date, r.currency, r.statement_balance, r.status, a.subsidiary_id, a.type as account_type
       from reconciliations r
       join accounts a on a.id = r.account_id and a.org_id = r.org_id
      where r.id = ${opts.reconciliationId} and r.org_id = ${ctx.orgId} and r.account_id = ${account.account_id}
@@ -268,9 +306,12 @@ async function createMatchInTransaction(
   }
   // Both sides foot exactly, in the account currency and in exact units —
   // a cent apart is a refusal naming both totals, never a silent rounding.
+  // Liability accounts foot under the statement sign convention (statement
+  // charges positive are GL credits), accepting either pairing because
+  // card feeds disagree; sign-off's difference stays the strict gate.
   const statementTotal = sum(stmt.rows.map((line) => line.amount));
   const journalTotal = sum(gl.rows.map((line) => line.amount));
-  if (toUnits(statementTotal) !== toUnits(journalTotal)) {
+  if (!statementTotalsAgree(toUnits(statementTotal), toUnits(journalTotal), recon.account_type)) {
     throw new BankingError(
       `Selected bank lines total ${statementTotal}; selected journal lines total ${journalTotal}`,
     );
@@ -364,6 +405,178 @@ export async function createMatch(
   return db.transaction((tx) =>
     createMatchInTransaction(tx, opts, ctx, journalLineIds, "manual"),
   );
+}
+
+/**
+ * Clear GL-only offsetting items with no bank counterpart (a voided deposit
+ * and its correcting journal netting to zero): journal lines only, same
+ * account, posted, within the cutoff, summing exactly to zero. Stored as a
+ * match group with no statement side — claimed journals cannot be matched
+ * elsewhere, sign-off cross-foots the group (an empty statement side foots
+ * a zero journal sum), and the cleared sum is unchanged because the group
+ * nets to zero. Audited as one row on the session; unmatch removes the
+ * whole group by id (see unmatchGlClearingGroup).
+ */
+export async function createGlClearingGroup(
+  opts: { reconciliationId: string; journalLineIds: string[] },
+  ctx: BankingContext,
+): Promise<ReconciliationTotals> {
+  const journalLineIds = [...new Set(opts.journalLineIds)];
+  if (journalLineIds.length === 0) throw new BankingError("Select at least one journal line to clear");
+  return db.transaction(async (tx) => {
+    const account = (await tx.execute<{ account_id: string }>(sql`
+      select account_id from reconciliations
+       where id = ${opts.reconciliationId} and org_id = ${ctx.orgId}
+    `)).rows[0];
+    if (!account) throw new ScopeNotFoundError();
+    await lockBankAccountInScope(tx, ctx.orgId, account.account_id, ctx.allowedSubsidiaryIds);
+    const bookId = await reconciliationBookId(tx, ctx.orgId);
+    const reconResult = (await tx.execute<ReconciliationRow & { subsidiary_id: string | null }>(sql`
+      select r.id, r.account_id, r.through_date, r.currency, r.statement_balance, r.status, a.subsidiary_id
+        from reconciliations r
+        join accounts a on a.id = r.account_id and a.org_id = r.org_id
+       where r.id = ${opts.reconciliationId} and r.org_id = ${ctx.orgId} and r.account_id = ${account.account_id}
+       for update of r
+    `));
+    const recon = reconResult.rows[0];
+    requireSessionRowInScope(recon, ctx.allowedSubsidiaryIds);
+    if (recon.status === "signed_off") throw new BankingError("Reconciliation is already signed off");
+
+    const gl = (await tx.execute<{ id: string; amount: string; posting_date: string }>(sql`
+      select jl.id, jl.txn_amount as amount, je.posting_date
+        from journal_lines jl
+        -- Live entries only: a reversed original is no longer an item to clear.
+        join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id and je.status = 'posted'
+       where jl.id = any(${sql.param(journalLineIds)}::uuid[])
+         and jl.org_id = ${ctx.orgId}
+         and je.book_id = ${bookId}
+         and jl.account_id = ${recon.account_id}
+         and jl.currency = ${recon.currency}
+         and jl.reconciled_at is null
+         and je.posting_date <= ${recon.through_date}
+         and not exists (
+           select 1 from reconciliation_matches m where m.journal_line_id = jl.id and m.org_id = jl.org_id
+         )
+         ${subsidiaryScopeSql(ctx.allowedSubsidiaryIds, sql`jl.subsidiary_id`)}
+       order by jl.id
+       for update of jl
+    `));
+    if (gl.rows.length !== journalLineIds.length) {
+      throw new BankingError(
+        "One or more journal lines are unavailable, outside the cutoff, already reconciled, or already matched",
+      );
+    }
+    const carryStart = (await firstReconciliationCarry(tx, recon, ctx, bookId))?.startDate ?? null;
+    if (carryStart && gl.rows.some((line) => line.posting_date < carryStart)) {
+      throw new BankingError(
+        "One or more journal lines predate the carried statement opening balance and cannot be cleared",
+      );
+    }
+    // Exact zero in the account currency and in exact units — a cent apart
+    // is a refusal naming the total, never a silent rounding.
+    const total = sum(gl.rows.map((line) => line.amount));
+    if (toUnits(total) !== 0n) {
+      throw new BankingError(
+        `Selected journal lines total ${total}, not zero — a GL clearing group must sum exactly to zero`,
+      );
+    }
+
+    const groupId = randomUUID();
+    await tx.execute(sql`
+      insert into reconciliation_matches
+        (org_id, reconciliation_id, statement_line_id, journal_line_id, group_id, matched_by, confidence, created_by)
+      values ${sql.join(
+        journalLineIds.map(
+          (journalLineId) =>
+            sql`(${ctx.orgId}, ${recon.id}, null, ${journalLineId}, ${groupId}, 'manual', null, ${ctx.userId})`,
+        ),
+        sql`, `,
+      )}
+    `);
+    await tx.execute(sql`
+      insert into audit_log
+        (org_id, table_name, row_id, action, changes, actor_id)
+      values
+        (${ctx.orgId}, 'reconciliations', ${recon.id}, 'update',
+         ${JSON.stringify({
+           operation: "gl_clear",
+           reconciliationId: recon.id,
+           groupId,
+           journalLineIds,
+           total: "0.0000",
+         })}::jsonb,
+         ${ctx.userId})
+    `);
+    return refreshStatus(recon, ctx, tx);
+  });
+}
+
+/**
+ * Undo a GL-only clearing group within a session: every row of the group
+ * goes and its journals return to the unreconciled pool. Groups that clear
+ * statement lines are refused here — unmatch those from a statement line
+ * so the bank side releases with them.
+ */
+export async function unmatchGlClearingGroup(
+  opts: { reconciliationId: string; groupId: string },
+  ctx: BankingContext,
+): Promise<ReconciliationTotals> {
+  return db.transaction(async (tx) => {
+    const account = (await tx.execute<{ account_id: string }>(sql`
+      select account_id from reconciliations
+       where id = ${opts.reconciliationId} and org_id = ${ctx.orgId}
+    `)).rows[0];
+    if (!account) throw new ScopeNotFoundError();
+    await lockBankAccountInScope(tx, ctx.orgId, account.account_id, ctx.allowedSubsidiaryIds);
+    const reconResult = (await tx.execute<ReconciliationRow & { subsidiary_id: string | null }>(sql`
+      select r.id, r.account_id, r.through_date, r.currency, r.statement_balance, r.status, a.subsidiary_id
+        from reconciliations r
+        join accounts a on a.id = r.account_id and a.org_id = r.org_id
+       where r.id = ${opts.reconciliationId} and r.org_id = ${ctx.orgId} and r.account_id = ${account.account_id}
+       for update of r
+    `));
+    const recon = reconResult.rows[0];
+    requireSessionRowInScope(recon, ctx.allowedSubsidiaryIds);
+    if (recon.status === "signed_off") throw new BankingError("Reconciliation is already signed off");
+
+    const members = (await tx.execute<{ statement_line_id: string | null; journal_line_id: string }>(sql`
+      select m.statement_line_id, m.journal_line_id
+        from reconciliation_matches m
+       where m.reconciliation_id = ${recon.id}
+         and m.group_id = ${opts.groupId}
+         and m.org_id = ${ctx.orgId}
+    `));
+    if (members.rows.length === 0) {
+      throw new BankingError("No clearing group with that id in this reconciliation");
+    }
+    if (members.rows.some((row) => row.statement_line_id !== null)) {
+      throw new BankingError(
+        "That group clears statement lines — unmatch it from one of its statement lines instead",
+      );
+    }
+    const journalLineIds = [...new Set(members.rows.map((row) => row.journal_line_id))];
+    await tx.execute(sql`
+      delete from reconciliation_matches m
+       where m.reconciliation_id = ${recon.id}
+         and m.group_id = ${opts.groupId}
+         and m.org_id = ${ctx.orgId}
+         and m.statement_line_id is null
+    `);
+    await tx.execute(sql`
+      insert into audit_log
+        (org_id, table_name, row_id, action, changes, actor_id)
+      values
+        (${ctx.orgId}, 'reconciliations', ${recon.id}, 'update',
+         ${JSON.stringify({
+           operation: "unmatch_gl_clear",
+           reconciliationId: recon.id,
+           groupId: opts.groupId,
+           journalLineIds,
+         })}::jsonb,
+         ${ctx.userId})
+    `);
+    return refreshStatus(recon, ctx, tx);
+  });
 }
 
 /** Undo a statement line's match group within a session: every row bound to
