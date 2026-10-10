@@ -652,10 +652,10 @@ test(
       const current = (before.settings.controlAccounts ?? {}) as Record<string, string>;
       // The Company tab posts every role, with an empty string for each unset one.
       const formRoles = Object.fromEntries(CONTROL_ACCOUNT_ROLES.map((role) => [role, current[role] ?? ""]));
-      const saved = await put(fixture, { name: "Renamed Scratch Company", controlAccounts: formRoles });
+      const saved = await put(fixture, { name: "Scratch Renamed Company", controlAccounts: formRoles });
       assert.equal(saved.status, 200, await saved.clone().text());
       const after = await settingsState(fixture.orgId);
-      assert.equal(after.name, "Renamed Scratch Company");
+      assert.equal(after.name, "Scratch Renamed Company");
       assert.deepEqual(after.settings.controlAccounts, current, "blank roles leave existing mappings unchanged");
 
       const malformed = await put(fixture, { controlAccounts: { ...formRoles, taxPaid: "not-an-account" } });
