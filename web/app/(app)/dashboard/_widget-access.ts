@@ -54,7 +54,10 @@ const WIDGET_PERMISSIONS: Record<string, readonly string[]> = {
   // HR-15 persona tiles: own/team-scoped reads with null-absent data.
   'inbox-list': [],
   'pay-tile': [],
-  'balance-tile': [],
+  // The balances card opens My leave, which files leave under
+  // hrm.leave.request (a self-service grant on every built-in role); a
+  // custom role without it gets no card that leads to a refusal.
+  'balance-tile': ['hrm.leave.request'],
   'whos-out-strip': [],
   'home-upcoming': [],
   'celebrations-list': [],

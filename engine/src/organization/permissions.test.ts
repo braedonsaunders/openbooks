@@ -281,13 +281,18 @@ test("hrm permissions are catalogued, grouped, and split between admin-only and 
   for (const perm of keys) {
     assert.equal(holds("admin", perm), true, `admin must hold ${perm}`);
   }
-  for (const perm of selfKeys) {
+  // Filing leave is scoped by the service to the employment behind the
+  // login, so it is self-service like the hrm.self keys: every role files
+  // its own leave; nobody else's.
+  const everyRoleKeys: CataloguePermission[] = [...selfKeys, "hrm.leave.request"];
+  for (const perm of everyRoleKeys) {
     for (const role of BUILT_IN_ROLE_KEYS) {
       assert.equal(holds(role, perm), true, `${role} must hold ${perm}: every login is a person`);
     }
   }
-  for (const role of ["controller", "accountant", "approver", "viewer", "sales_manager", "sales_rep"]) {
-    for (const perm of keys) {
+  const adminOnly = keys.filter((perm) => !everyRoleKeys.includes(perm));
+  for (const role of BUILT_IN_ROLE_KEYS.filter((key) => key !== "admin")) {
+    for (const perm of adminOnly) {
       assert.equal(holds(role, perm), false, `${role} must not hold ${perm}`);
     }
   }

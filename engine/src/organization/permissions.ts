@@ -227,10 +227,12 @@ export const PERMISSION_CATALOGUE = [
   "hrm.process.read",
   "hrm.process.manage",
   // HR-5 leave and attendance — the same confidentiality rule as employment:
-  // read sees leave records; request files for one's own employment only
-  // (the service scopes the subject, never the caller); approve decides;
-  // manage configures types/policies and acts with a reason where others
-  // are refused. Admin-only like the employment keys below.
+  // read sees leave records; approve decides; manage configures types and
+  // policies and acts with a reason where others are refused — those stay
+  // admin-only like the employment keys below. request files for one's own
+  // employment only (the service scopes the subject to the employment behind
+  // the login, never the caller), so it is self-service: every built-in role
+  // carries it beside the hrm.self keys.
   "hrm.leave.read",
   "hrm.leave.request",
   "hrm.leave.approve",
@@ -1064,6 +1066,7 @@ export const BUILT_IN_ROLES: Record<
       // carries both self keys. Team keys stay structural with no grant.
       "hrm.self.read",
       "hrm.self.request",
+      "hrm.leave.request",
     ],
   },
   accountant: {
@@ -1157,13 +1160,14 @@ export const BUILT_IN_ROLES: Record<
       // HR-9 self-service on every built-in role (see controller).
       "hrm.self.read",
       "hrm.self.request",
+      "hrm.leave.request",
     ],
   },
   production: {
     name: "Production",
     description:
       "Manages manufacturing masters and shop-floor work, and posts inventory movements. Cannot reverse inventory postings or see the ledger.",
-    permissions: ["manufacturing.read", "manufacturing.manage", "items.read", "items.post", "time.clock", "hrm.self.read", "hrm.self.request"],
+    permissions: ["manufacturing.read", "manufacturing.manage", "items.read", "items.post", "time.clock", "hrm.self.read", "hrm.self.request", "hrm.leave.request"],
   },
   approver: {
     name: "Approver",
@@ -1213,13 +1217,14 @@ export const BUILT_IN_ROLES: Record<
       // HR-9 self-service on every built-in role (see controller).
       "hrm.self.read",
       "hrm.self.request",
+      "hrm.leave.request",
     ],
   },
   viewer: {
     name: "Viewer",
     description:
       "Read-only access to the ledger, subledgers, reports and insights. Cannot create, change, post or pay transactions.",
-    permissions: ["gl.read", "close.read", "ap.read", "purchase_orders.read", "ar.read", "usage.read", "payment_methods.read", "contract_costs.read", "resourcing.read", "retainers.read", "reports.read", "budgets.read", "allocations.read", "nonprofit.report", "funds.read", "grants.read", "encumbrances.read", "insights.read", "records.read", "items.read", "assets.read", "time.read", "time.clock", "compliance.read", "assistant.use", "documents.read", "feedback.use", "data.export", "apps.use", "hrm.self.read", "hrm.self.request", "cash_sales.read"],
+    permissions: ["gl.read", "close.read", "ap.read", "purchase_orders.read", "ar.read", "usage.read", "payment_methods.read", "contract_costs.read", "resourcing.read", "retainers.read", "reports.read", "budgets.read", "allocations.read", "nonprofit.report", "funds.read", "grants.read", "encumbrances.read", "insights.read", "records.read", "items.read", "assets.read", "time.read", "time.clock", "compliance.read", "assistant.use", "documents.read", "feedback.use", "data.export", "apps.use", "hrm.self.read", "hrm.self.request", "hrm.leave.request", "cash_sales.read"],
   },
   sales_manager: {
     name: "Sales Manager",
@@ -1235,7 +1240,7 @@ export const BUILT_IN_ROLES: Record<
       "cash_sales.read", "cash_sales.create",
       "insights.read", "documents.read", "feedback.use", "data.export", "data.import", "assistant.use",
       // HR-9 self-service on every built-in role (see controller).
-      "hrm.self.read", "hrm.self.request",
+      "hrm.self.read", "hrm.self.request", "hrm.leave.request",
       // HR-20 begin: self clock-in rides every employee role.
       "time.clock",
       // HR-20 end
@@ -1255,7 +1260,7 @@ export const BUILT_IN_ROLES: Record<
       "cash_sales.read", "cash_sales.create",
       "documents.read", "feedback.use", "data.export", "assistant.use",
       // HR-9 self-service on every built-in role (see controller).
-      "hrm.self.read", "hrm.self.request",
+      "hrm.self.read", "hrm.self.request", "hrm.leave.request",
       // HR-20 begin: self clock-in rides every employee role.
       "time.clock",
       // HR-20 end
@@ -1272,7 +1277,7 @@ export const BUILT_IN_ROLES: Record<
       "purchase_orders.read", "purchase_orders.create", "goods_receipts.create",
       "ap.read", "parties.read", "items.read", "reports.read",
       "documents.read", "feedback.use", "assistant.use",
-      "hrm.self.read", "hrm.self.request", "time.clock",
+      "hrm.self.read", "hrm.self.request", "hrm.leave.request", "time.clock",
     ],
   },
   // Till operator: sells and refunds at the counter. Posting a paid-at-sale
@@ -1284,7 +1289,7 @@ export const BUILT_IN_ROLES: Record<
     permissions: [
       "cash_sales.read", "cash_sales.create", "cash_sales.post",
       "stored_value.read", "items.read",
-      "feedback.use", "hrm.self.read", "hrm.self.request", "time.clock",
+      "feedback.use", "hrm.self.read", "hrm.self.request", "hrm.leave.request", "time.clock",
     ],
   },
   // Project billing coordinator: time, project visibility and invoice drafts.
@@ -1299,7 +1304,7 @@ export const BUILT_IN_ROLES: Record<
       "ar.read", "ar.create", "usage.read", "usage.manage", "usage.bill",
       "parties.read", "items.read", "reports.read",
       "documents.read", "feedback.use", "assistant.use",
-      "hrm.self.read", "hrm.self.request",
+      "hrm.self.read", "hrm.self.request", "hrm.leave.request",
     ],
   },
 };

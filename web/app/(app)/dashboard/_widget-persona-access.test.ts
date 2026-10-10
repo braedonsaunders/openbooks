@@ -38,9 +38,14 @@ test('admin-rail tiles resolve through the persona', () => {
 
 test('persona tiles are placement-open: the loader (not the gate) keeps them honest', () => {
   const plain = fakeAuthz(['gl.read'])
-  for (const id of ['inbox-list', 'pay-tile', 'balance-tile', 'team-approvals', 'team-steps']) {
+  for (const id of ['inbox-list', 'pay-tile', 'team-approvals', 'team-steps']) {
     assert.equal(canSeeWidget(plain, id), true, `${id} renders the honest empty card without a grant`)
   }
+})
+
+test('the leave balances card shows only where My leave would admit the caller', () => {
+  assert.equal(canSeeWidget(fakeAuthz(['cash_sales.create']), 'balance-tile'), false)
+  assert.equal(canSeeWidget(fakeAuthz(['hrm.leave.request']), 'balance-tile'), true)
 })
 
 test('the ask box shows only to callers the assistant admits', () => {
