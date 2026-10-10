@@ -54,7 +54,11 @@ const DAYS = ["2026-07-12", "2026-07-13", "2026-07-14", "2026-07-15", "2026-07-1
 
 const PICKERS = {
   employees: [{ value: "emp-8", label: "Billable Worker" }],
-  projects: [{ value: "proj-8", label: "DAY · Day job" }],
+  projects: [
+    { value: "proj-8", label: "DAY · Day job" },
+    { value: "proj-shop", label: "SHOP · Shop" },
+  ],
+  internalProjectIds: ["proj-shop"],
   items: [],
   timeTypes: [
     { value: "tt-travel", label: "Travel", classification: "other", costMultiplier: "0.5", isBillableDefault: false, isDefault: false },
@@ -143,4 +147,8 @@ test("billable follows the project and time-type policy, never pre-checked", asy
 
   await chooseOption("Line 1 time type", "Travel");
   assert.equal(billableBox().checked, false, "a non-billable time type unchecks the line");
+
+  await chooseOption("Line 1 project", "Shop");
+  await chooseOption("Line 1 time type", "Regular");
+  assert.equal(billableBox().checked, false, "an internal shop project never bills, even with a billable type");
 });
