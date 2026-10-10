@@ -17,7 +17,7 @@
 import { basename } from "node:path";
 import { pathToFileURL } from "node:url";
 import { sql } from "drizzle-orm";
-import { db, pool, withBypass, withOrg } from "../platform/db.ts";
+import { db, pool, withBypass, withOrgTransaction } from "../platform/db.ts";
 import { loadCatalog } from "./catalog.ts";
 import { selectCloneTables, type SandboxTier } from "./clone.ts";
 import { assertTemplateSandboxSource } from "./source-validation.ts";
@@ -229,9 +229,9 @@ export async function verifyCloneRls(args: {
   // bypass: cross-org-by-design — unscoped counts are the reference the scoped counts below are proven against.
   const bypassProduction = await withBypass(() => countChunk(verifyTables, args.productionOrgId));
   const bypassSandbox = await withBypass(() => countChunk(verifyTables, args.sandboxOrgId));
-  const scopedProduction = await withOrg(args.productionOrgId, () => countChunk(verifyTables, null));
-  const scopedSandbox = await withOrg(args.sandboxOrgId, () => countChunk(verifyTables, null));
-  const scopedBogus = await withOrg(BOGUS_ORG_ID, () => countChunk(verifyTables, null));
+  const scopedProduction = await withOrgTransaction(args.productionOrgId, () => countChunk(verifyTables, null), { readOnly: true });
+  const scopedSandbox = await withOrgTransaction(args.sandboxOrgId, () => countChunk(verifyTables, null), { readOnly: true });
+  const scopedBogus = await withOrgTransaction(BOGUS_ORG_ID, () => countChunk(verifyTables, null), { readOnly: true });
 
   const tables: CloneRlsTableCounts[] = verifyTables.map((table) => ({
     table,
