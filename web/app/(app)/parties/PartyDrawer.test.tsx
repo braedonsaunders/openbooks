@@ -305,8 +305,14 @@ async function clickTab(button: HTMLButtonElement) {
   await tick();
 }
 
-function setInputValue(input: HTMLInputElement, value: string) {
-  const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")!.set!;
+function setInputValue(input: HTMLInputElement | HTMLTextAreaElement, value: string) {
+  // The setter must come from the element's own prototype: the input
+  // setter throws on a textarea (and vice versa), which is exactly how the
+  // Hire reason fill broke.
+  const proto = input instanceof window.HTMLTextAreaElement
+    ? window.HTMLTextAreaElement.prototype
+    : window.HTMLInputElement.prototype;
+  const setter = Object.getOwnPropertyDescriptor(proto, "value")!.set!;
   setter.call(input, value);
   input.dispatchEvent(new window.Event("change", { bubbles: true }));
 }
