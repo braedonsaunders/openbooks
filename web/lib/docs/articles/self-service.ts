@@ -14,7 +14,7 @@ export const selfService: DocArticle = {
 
 The Me workspace is your own view of your employment: the summary HR holds about you, your contact profile, your leave requests and balances, the checklist steps assigned to you, and — when you manage people — your direct-report team. Every row is scoped to the person behind your login. A colleague's rows can never appear here, and a missing person link refuses with the remedy instead of showing an empty page.
 
-Enable the module in Company Settings → Features → HRM. The workspace exists only while HRM is on, and every built-in role carries the self-service grants: seeing your own record is part of every login, not an extra permission to request.
+Enable the module in Company Settings → Features → HRM. The workspace exists only while HRM is on, and every built-in role carries the self-service grants, including requesting your own leave: seeing your own record is part of every login, not an extra permission to request.
 
 ## Before you start
 
@@ -24,7 +24,7 @@ Me appears under My Work when three things are true. If one is missing, this is 
 - **Your login is linked to your employee record.** Without the link every Me page says so. An administrator links it in Administration → Users with Link person. A sole administrator can link their own login there too: the link is attested, recorded in the audit log with a reason, and refused once a second active administrator exists, who must then perform it.
 - **Your employee record has an employment.** Creating an employee in People → Employees does not create an employment. The employee record says when one is missing and points to its Employment tab, where HR hires the employee. Until then the overview shows no employment and leave requests refuse with the same remedy.
 
-A custom role also needs the self-service grants (View own employment summary, File profile changes for own party) for Me to appear.
+Every built-in role carries the self-service grants. A custom role needs them too: View own employment summary and File profile changes for own party for Me to appear, and Request leave for own employment for My leave and the time-off balances card.
 
 ## Overview
 
