@@ -177,16 +177,20 @@
       "restoreSupported": "Restaurar opciones compatibles",
       "help": "Seleccione el contenido adicional de las sincronizaciones manuales y programadas.",
       "labels": {
-        "attachments": "Adjuntos de transacciones",
+        "attachments": "Sincronizar documentos y archivos de transacciones",
         "projectFinancials": "Datos financieros de proyectos",
         "crm": "Relaciones con clientes",
         "fixedAssets": "Activos fijos"
       },
       "hints": {
-        "attachments": "Importe los archivos que faltan o han cambiado y omita los archivos sin cambios.",
+        "attachments": "Importa archivos adjuntos a transacciones, incluidos PDF de facturas de proveedores y recibos de gastos. Al activar esta opción se incluyen transacciones ya sincronizadas; después se añaden archivos y versiones nuevos sin duplicados.",
         "projectFinancials": "Concilie los datos comerciales de proyectos y los estados de facturación de registros de tiempo.",
         "crm": "Importe oportunidades, actividades y relaciones con clientes compatibles cuando CRM esté habilitado.",
         "fixedAssets": "Importe el registro de activos y su historial cuando Activos fijos esté habilitado."
+      },
+      "unavailableReasons": {
+        "desktopProtocol": "El protocolo del conector de QuickBooks Desktop no permite leer archivos de transacciones.",
+        "notImplemented": "Este conector no ofrece un lector de archivos de transacciones."
       }
     },
     "mappings": {
@@ -198,10 +202,10 @@
       "sourceIdentifier": "ID del campo o registro de origen",
       "childHelp": "Campo del registro de origen configurado en {parent}.",
       "useDefault": "Usar valor predeterminado",
-      "valueRequired": "Introduzca un valor de origen único y seleccione su destino antes de añadirlo.",
+      "valueRequired": "Elija un valor de origen único y su destino antes de añadirlo.",
       "taxUse": "Uso fiscal",
       "sourceValue": "Valor de origen",
-      "sourceTaxCode": "ID o tasa del código fiscal de origen",
+      "sourceTaxCode": "Código fiscal de origen",
       "targetValue": "Valor nativo",
       "select": "Seleccionar…",
       "noOverrides": "Se usan los valores estándar de origen.",
@@ -252,14 +256,22 @@
         "not_to_exceed": "Importe máximo",
         "sales": "Ventas",
         "purchase": "Compras"
-      }
+      },
+      "nativeRecords": "Las cuentas, artículos, entidades y referencias se relacionan automáticamente por su identidad de origen. Estas asignaciones opcionales seleccionan campos personalizados y traducen valores de origen.",
+      "saveFirst": "Guarde primero la conexión y vuelva a abrir Asignaciones para elegir campos de origen.",
+      "choicesFailed": "No se pudieron cargar las opciones de origen. Revise la conexión y los permisos de lectura e inténtelo de nuevo.",
+      "savedChoice": "Opción guardada: {value}",
+      "searchChoices": "Buscar opciones de origen…",
+      "retryChoices": "Reintentar",
+      "parentChangeConfirm": "Al cambiar el registro de origen se elimina la asignación de su campo secundario. ¿Continuar?"
     },
     "postedChanges": {
       "label": "Cambios en transacciones contabilizadas en origen",
       "review": "Detener y requerir revisión",
       "automatic": "Anexar reversión y reemplazo automáticamente",
       "help": "Las correcciones automáticas nunca reescriben el historial contabilizado. OpenBooks conserva el original, contabiliza una reversión y un reemplazo vinculados, transfiere las aplicaciones elegibles y aun así se detiene ante conciliaciones, períodos cerrados, inventario, reconocimiento de ingresos o documentos derivados."
-    }
+    },
+    "structuredRequired": "Esta opción necesita un editor estructurado. Actualice la configuración del conector antes de editarla."
   },
   "oauth": {
     "title": "Configuración única de la aplicación en el <link>{portal}</link>",
@@ -277,7 +289,13 @@
     "lastContact": "Último contacto de Web Connector: {time}",
     "notConnected": "Web Connector aún no se ha conectado",
     "capture": "Captura {status}: {completed}/{total} solicitudes",
-    "captureStatus": { "queued": "en cola", "running": "en curso", "complete": "completa", "failed": "fallida", "cancelled": "cancelada" },
+    "captureStatus": {
+      "queued": "en cola",
+      "running": "en curso",
+      "complete": "completa",
+      "failed": "fallida",
+      "cancelled": "cancelada"
+    },
     "documentation": "Documentación",
     "qwcDescription": "Conector de solo lectura para migración y conciliación contable"
   },
@@ -285,13 +303,40 @@
     "netsuite": {
       "blurb": "Instale el puente de solo lectura y conecte un rol dedicado mediante token. Transacciones, aplicaciones, controles contables y eliminaciones se importan con verificación.",
       "fields": {
-        "account": { "label": "ID de cuenta", "help": "El dominio de la cuenta de NetSuite." },
-        "host": { "label": "Host de SuiteTalk" }, "baseCurrency": { "label": "Moneda base" },
-        "bridgeScriptId": { "label": "ID del script del puente", "help": "Déjelo vacío para usar customscript_openbooks_bridge_rl." },
-        "bridgeDeploymentId": { "label": "ID del despliegue", "help": "Déjelo vacío para usar customdeploy_openbooks_bridge_rl." },
-        "mappingJson": { "label": "Mapeo de campos de la cuenta", "help": "JSON opcional para relacionar campos y registros personalizados con conceptos de OpenBooks." },
-        "consumerKey": { "label": "Clave de consumidor" }, "consumerSecret": { "label": "Secreto de consumidor" },
-        "tokenKey": { "label": "ID del token" }, "tokenSecret": { "label": "Secreto del token" }
+        "account": {
+          "label": "ID de cuenta",
+          "help": "El dominio de la cuenta de NetSuite."
+        },
+        "host": {
+          "label": "Host de SuiteTalk"
+        },
+        "baseCurrency": {
+          "label": "Moneda base"
+        },
+        "bridgeScriptId": {
+          "label": "ID del script del puente",
+          "help": "Déjelo vacío para usar customscript_openbooks_bridge_rl."
+        },
+        "bridgeDeploymentId": {
+          "label": "ID del despliegue",
+          "help": "Déjelo vacío para usar customdeploy_openbooks_bridge_rl."
+        },
+        "mappingJson": {
+          "label": "Asignaciones de campos personalizados y valores",
+          "help": "Elija campos personalizados y asignaciones de valores en la pestaña Asignaciones."
+        },
+        "consumerKey": {
+          "label": "Clave de consumidor"
+        },
+        "consumerSecret": {
+          "label": "Secreto de consumidor"
+        },
+        "tokenKey": {
+          "label": "ID del token"
+        },
+        "tokenSecret": {
+          "label": "Secreto del token"
+        }
       }
     },
     "odoo": {
@@ -302,13 +347,32 @@
     },
     "qbd": {
       "blurb": "Conecte QuickBooks Desktop mediante Web Connector de Intuit. QuickBooks debe estar abierto para la autorización inicial y durante las capturas; no se requiere una regla de firewall entrante en Windows.",
-      "options": { "US": "Estados Unidos", "CA": "Canadá", "UK": "Reino Unido", "AU": "Australia", "NZ": "Nueva Zelanda" },
+      "options": {
+        "US": "Estados Unidos",
+        "CA": "Canadá",
+        "UK": "Reino Unido",
+        "AU": "Australia",
+        "NZ": "Nueva Zelanda"
+      },
       "fields": {
-        "historyStartDate": { "label": "Fecha inicial del historial", "help": "La primera fecha contable que se migrará. Cada espejo vuelve a comprobar todo el intervalo para detectar cambios y eliminaciones históricas." },
-        "region": { "label": "Región de QuickBooks" },
-        "baseCurrency": { "label": "Moneda base" },
-        "companyFile": { "label": "Ruta del archivo de empresa (opcional)", "help": "Déjelo en blanco para usar la empresa que esté abierta cuando se ejecute Web Connector." },
-        "webConnectorPassword": { "label": "Contraseña de Web Connector", "help": "Ingrese esta contraseña una vez en QuickBooks Web Connector después de importar el archivo .QWC." }
+        "historyStartDate": {
+          "label": "Fecha inicial del historial",
+          "help": "La primera fecha contable que se migrará. Cada espejo vuelve a comprobar todo el intervalo para detectar cambios y eliminaciones históricas."
+        },
+        "region": {
+          "label": "Región de QuickBooks"
+        },
+        "baseCurrency": {
+          "label": "Moneda base"
+        },
+        "companyFile": {
+          "label": "Ruta del archivo de empresa (opcional)",
+          "help": "Déjelo en blanco para usar la empresa que esté abierta cuando se ejecute Web Connector."
+        },
+        "webConnectorPassword": {
+          "label": "Contraseña de Web Connector",
+          "help": "Ingrese esta contraseña una vez en QuickBooks Web Connector después de importar el archivo .QWC."
+        }
       }
     },
     "qbo": {

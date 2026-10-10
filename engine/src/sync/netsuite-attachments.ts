@@ -1,10 +1,11 @@
-import { createHash, randomUUID } from "node:crypto";
-import { basename, extname } from "node:path";
+import { AttachmentImportError, type ImportSummary } from "./attachment-contract.ts";
+export { AttachmentImportError, type ImportSummary, type AttachmentImportFailure } from "./attachment-contract.ts";
+import { linkExistingTransactionFiles } from "./transaction-attachments.ts";
+import { detectContentType, normalizeAttachmentBytes, persistTransactionFile, verifyTransactionFiles } from "./transaction-file-storage.ts";
+export { safeFilename, detectContentType, normalizeAttachmentBytes } from "./transaction-file-storage.ts";
 import { sql } from "drizzle-orm";
-import { deriveFileType } from "../platform/file-names.ts";
 import { db } from "../platform/db.ts";
-import { fileCabinetObjectKey, getS3Blob, putS3Blob, refuseMaskedStorageKind, s3Enabled } from "../platform/file-storage.ts";
-import { enqueueStorageCleanupStandalone } from "../platform/storage-cleanup.ts";
+import { s3Enabled } from "../platform/file-storage.ts";
 import {
   netsuiteRestlet,
   netsuiteSoapFileGet,
@@ -62,36 +63,6 @@ export function normalizeImportActorId(actorId: string | null | undefined): stri
   return normalized;
 }
 
-export interface AttachmentImportFailure {
-  fileId: string;
-  message: string;
-}
-
-export interface ImportSummary {
-  scope: "all" | "source_file_ids";
-  requestedSourceFileIds: string[];
-  sourceDocuments: number;
-  sourceDocumentsWithoutId: number;
-  sourceFiles: number;
-  sourceLinks: number;
-  createdFiles: number;
-  newVersions: number;
-  unchangedFiles: number;
-  /** Already-imported files skipped without download when the source marker
-   * matches a complete stored version. */
-  skippedUnchanged: number;
-  createdLinks: number;
-  failures: number;
-  failureDetails: AttachmentImportFailure[];
-}
-
-export class AttachmentImportError extends Error {
-  constructor(public readonly summary: ImportSummary) {
-    super(`${summary.failures} source files failed to import`);
-    this.name = "AttachmentImportError";
-  }
-}
-
 function chunks<T>(values: T[], size: number): T[][] {
   const result: T[][] = [];
   for (let index = 0; index < values.length; index += size) result.push(values.slice(index, index + size));
@@ -140,42 +111,6 @@ async function concurrentMap<T, R>(
   return result;
 }
 
-function extension(filename: string): string | null {
-  const value = extname(filename).slice(1).toLowerCase();
-  return value || null;
-}
-
-export function safeFilename(input: string, sourceId: string): string {
-  const cleaned = basename((input || "").replaceAll("\\", "/"))
-    .replace(/[\u0000-\u001f\u007f]/g, "")
-    .trim();
-  return cleaned || `attachment-${sourceId}`;
-}
-
-export function detectContentType(bytes: Buffer, _filename: string): string {
-  if (bytes.subarray(0, 5).toString("ascii") === "%PDF-") return "application/pdf";
-  if (bytes.length >= 8 && bytes.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) return "image/png";
-  if (bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return "image/jpeg";
-  const head = bytes.subarray(0, 12).toString("ascii");
-  if (head.startsWith("GIF87a") || head.startsWith("GIF89a")) return "image/gif";
-  if (head.startsWith("RIFF") && head.slice(8, 12) === "WEBP") return "image/webp";
-  if (bytes.length >= 4 && (head.startsWith("II*\u0000") || head.startsWith("MM\u0000*"))) return "image/tiff";
-  if (head.startsWith("BM")) return "image/bmp";
-  if (bytes.length >= 12 && head.slice(4, 8) === "ftyp" && /hei[cf]|mif1/.test(head.slice(8, 12))) return "image/heic";
-
-  // Preserve every source file while serving unrecognized bytes as downloads.
-  // Extension alone never grants an executable or inline content type.
-  return "application/octet-stream";
-}
-
-export function normalizeAttachmentBytes(bytes: Buffer): Buffer {
-  if (!bytes.subarray(0, 13).toString("ascii").startsWith("%PDFfileName=")) return bytes;
-  const boundedPrefix = bytes.subarray(0, Math.min(bytes.length, 1_024)).toString("ascii");
-  const pdfHeader = boundedPrefix.indexOf("%PDF-", 5);
-  if (pdfHeader < 0) return bytes;
-  return bytes.subarray(pdfHeader);
-}
-
 export function expenseReportFileIds(record: unknown): string[] {
   if (!record || typeof record !== "object") return [];
   const expense = (record as { expense?: unknown }).expense;
@@ -198,6 +133,7 @@ async function resolveContext(options: ImportOptions): Promise<{
   creds: NetSuiteCreds;
   bridge: { script: string; deploy: string };
   soapEndpointVersion: string;
+  connectionId: string;
 }> {
   const orgResult = (await db.execute<{ id: string; name: string }>(sql`
     select id, name from orgs where id::text = ${options.org} or name = ${options.org}
@@ -211,8 +147,8 @@ async function resolveContext(options: ImportOptions): Promise<{
      where org_id = ${orgId} and source = 'netsuite'
        ${options.connectionId ? sql`and id = ${options.connectionId}` : sql``}
      order by (status = 'active') desc, created_at desc
-     limit 1
   `));
+  if (connectionResult.rows.length > 1) throw new Error('Select one NetSuite connection before importing transaction files');
   const connection = connectionResult.rows[0];
   if (!connection) throw new Error("tenant does not have a NetSuite connection");
   const secret =
@@ -237,6 +173,7 @@ async function resolveContext(options: ImportOptions): Promise<{
   }
   return {
     orgId,
+    connectionId: connection.id,
     actorId,
     creds: {
       account,
@@ -254,7 +191,7 @@ async function resolveContext(options: ImportOptions): Promise<{
   };
 }
 
-async function sourceDocuments(orgId: string, limit?: number): Promise<{
+async function sourceDocuments(orgId: string, connectionId: string, limit?: number): Promise<{
   documents: SourceDocument[];
   withoutSourceId: number;
 }> {
@@ -262,6 +199,7 @@ async function sourceDocuments(orgId: string, limit?: number): Promise<{
     select id, kind, custom->>'nsId' as "nsId"
       from documents
      where org_id = ${orgId} and custom->>'nsId' is not null
+       and (custom->>'connectionId' is null or custom->>'connectionId'=${connectionId})
      order by kind, id
      ${limit ? sql`limit ${limit}` : sql``}
   `));
@@ -273,6 +211,7 @@ async function sourceDocuments(orgId: string, limit?: number): Promise<{
 
 async function targetedAttachmentInventory(
   orgId: string,
+  connectionId: string,
   sourceFileIds: string[],
   creds: NetSuiteCreds,
   concurrency: number,
@@ -310,6 +249,7 @@ async function targetedAttachmentInventory(
       from documents
      where org_id = ${orgId}
        and custom->>'nsId' is not null
+       and (custom->>'connectionId' is null or custom->>'connectionId'=${connectionId})
        and custom->>'nsId' in (${sourceIdsSql})
      order by kind, id
   `));
@@ -374,7 +314,11 @@ async function attachmentInventory(
     return { batch, records: response.records };
   });
 
-  const sourceIdToDocumentIds = new Map(documents.map((doc) => [doc.nsId, doc.id]));
+  const sourceIdToDocumentIds = new Map<string, string>();
+  for (const document of documents) {
+    if (sourceIdToDocumentIds.has(document.nsId)) throw new Error(`Multiple native transactions share NetSuite identity ${document.nsId}`);
+    sourceIdToDocumentIds.set(document.nsId, document.id);
+  }
   const fileToDocuments = new Map<string, Set<string>>();
   for (const result of results) {
     for (const [sourceTransactionId, fileIds] of Object.entries(result.records)) {
@@ -436,272 +380,6 @@ export async function downloadSourceFile(
   throw new Error(String(body?.error || "attachment bridge download failed"));
 }
 
-/** Title-case a snake_case kind ("vendor_bill" -> "Vendor Bill"). Must match
- *  web/lib/file-cabinet.ts titleizeKind and the SQL backfill so the sync and the
- *  cabinet UI resolve attachments to the same kind group folder. */
-function titleizeKind(s: string): string {
-  return s
-    .split("_")
-    .filter(Boolean)
-    .map((w) => w[0]!.toUpperCase() + w.slice(1))
-    .join(" ");
-}
-
-async function ensureRecordFolder(
-  tx: Parameters<Parameters<typeof db.transaction>[0]>[0],
-  orgId: string,
-  documentId: string,
-): Promise<string> {
-  await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`attachments:${orgId}:${documentId}`}))`);
-  const existing = (await tx.execute<{ id: string }>(sql`
-    select id from folders where org_id = ${orgId} and record_table = 'documents' and record_id = ${documentId}
-      and record_id is not null
-  `));
-  if (existing.rows[0]) return existing.rows[0].id;
-
-  await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`attachments-root:${orgId}`}))`);
-  let root = (await tx.execute<{ id: string }>(sql`
-    select id from folders where org_id = ${orgId} and system_kind = 'attachments' limit 1
-  `));
-  if (!root.rows[0]) {
-    root = (await tx.execute<{ id: string }>(sql`
-      insert into folders (org_id, name, is_system, system_kind, created_at, updated_at)
-      values (${orgId}, 'Attachments', true, 'attachments', now(), now()) returning id
-    `));
-  }
-  const rootId = root.rows[0]!.id;
-
-  // Nest the per-record leaf under a kind group folder so the cabinet never
-  // enumerates tens of thousands of flat attachment folders.
-  const kindRow = (await tx.execute<{ kind: string | null }>(sql`
-    select kind from documents where id = ${documentId} and org_id = ${orgId}
-  `));
-  const label = kindRow.rows[0]?.kind ? titleizeKind(kindRow.rows[0].kind) : "Documents";
-  await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`attach-group:${orgId}:${label}`}))`);
-  let group = (await tx.execute<{ id: string }>(sql`
-    select id from folders
-     where org_id = ${orgId} and parent_folder_id = ${rootId} and record_id is null and name = ${label}
-  `));
-  if (!group.rows[0]) {
-    group = (await tx.execute<{ id: string }>(sql`
-      insert into folders (org_id, parent_folder_id, name, is_system, record_table, created_at, updated_at)
-      values (${orgId}, ${rootId}, ${label}, true, 'documents', now(), now()) returning id
-    `));
-  }
-
-  const inserted = (await tx.execute<{ id: string }>(sql`
-    insert into folders (org_id, parent_folder_id, name, is_system, record_table, record_id, created_at, updated_at)
-    values (${orgId}, ${group.rows[0]!.id}, ${`documents / ${documentId.slice(0, 8)}`}, true, 'documents', ${documentId}, now(), now())
-    returning id
-  `));
-  return inserted.rows[0]!.id;
-}
-
-async function persistFile(input: {
-  orgId: string;
-  actorId: string | null;
-  source: SourceFile;
-  targetDocumentIds: string[];
-  bytes: Buffer;
-  contentType: string;
-  sourceModifiedAt: Date | null;
-}): Promise<{ fileId: string; created: boolean; versioned: boolean; unchanged: boolean; stale: boolean; createdLinks: number }> {
-  const hash = createHash("sha256").update(input.bytes).digest("hex");
-  const filename = safeFilename(input.source.name, input.source.id);
-  const sourceModifiedAtIso = input.sourceModifiedAt?.toISOString() ?? null;
-  // The S3 object staged inside the row transaction cannot
-  // roll back with it. Track the staged key so a later failure records a
-  // durable cleanup intent instead of stranding the blob.
-  let stagedVersionId: string | null = null;
-  let stagedFileId: string | null = null;
-  return db.transaction(async (tx) => {
-    const existing = (await tx.execute<{
-      id: string;
-      contentHash: string | null;
-      sourceModifiedAt: Date | string | null;
-      maxVersion: number;
-      currentVersionReady: boolean;
-    }>(sql`
-      select id, content_hash as "contentHash", source_modified_at as "sourceModifiedAt",
-             exists(select 1 from file_versions fv where fv.id = files.current_version_id
-                      and fv.file_id = files.id and fv.storage_kind = 's3'
-                      and files.storage_kind = 's3' and fv.content_hash = files.content_hash
-                      and fv.size_bytes = files.size_bytes) as "currentVersionReady",
-             (select coalesce(max(fv.version_number), 0)
-                from file_versions fv
-                join files fi on fi.id = fv.file_id and fi.org_id = ${input.orgId}
-               where fv.file_id = files.id) as "maxVersion"
-        from files
-       where org_id = ${input.orgId} and source_system = ${SOURCE_SYSTEM} and source_id = ${input.source.id}
-       for update
-    `));
-
-    let fileId = existing.rows[0]?.id;
-    let created = false;
-    let versioned = false;
-    const unchanged = existing.rows[0]?.contentHash === hash && existing.rows[0]?.currentVersionReady === true;
-    const storedModifiedAt = existing.rows[0]?.sourceModifiedAt == null
-      ? null
-      : new Date(existing.rows[0].sourceModifiedAt).getTime();
-    const incomingModifiedAt = input.sourceModifiedAt?.getTime() ?? null;
-    // The file row lock fences this comparison with every concurrent import.
-    // A slower attempt may finish downloading an older source snapshot after a
-    // newer attempt has already committed; it must not replace that version or
-    // move the source watermark backwards.
-    const stale = storedModifiedAt != null && incomingModifiedAt != null
-      && incomingModifiedAt < storedModifiedAt;
-    if (!fileId) {
-      fileId = randomUUID();
-      const folderId = await ensureRecordFolder(tx, input.orgId, input.targetDocumentIds[0]!);
-      await tx.execute(sql`
-        insert into files (id, org_id, folder_id, name, extension, file_type, content_type,
-                           size_bytes, storage_kind, source_system, source_id, source_modified_at, content_hash,
-                           created_by, updated_by, created_at, updated_at)
-        values (${fileId}, ${input.orgId}, ${folderId}, ${filename}, ${extension(filename)},
-                ${deriveFileType(input.contentType)}, ${input.contentType}, ${input.bytes.length}, 's3',
-                ${SOURCE_SYSTEM}, ${input.source.id}, ${sourceModifiedAtIso}, ${hash}, ${input.actorId}, ${input.actorId}, now(), now())
-      `);
-      created = true;
-    }
-
-    if (stale) {
-      // Keep the current blob and source marker. The source link graph is still
-      // reconciled below because those links are independent of file version.
-    } else if (created || !unchanged) {
-      const versionId = randomUUID();
-      const versionNumber = created ? 1 : Number(existing.rows[0]!.maxVersion) + 1;
-      await tx.execute(sql`
-        insert into file_versions (id, file_id, version_number, size_bytes, content_type, storage_kind,
-                                   content_hash, created_by, created_at)
-        values (${versionId}, ${fileId}, ${versionNumber}, ${input.bytes.length}, ${input.contentType}, 's3',
-                ${hash}, ${input.actorId}, now())
-      `);
-      await putS3Blob(versionId, input.bytes, input.contentType);
-      stagedVersionId = versionId;
-      stagedFileId = fileId;
-      await tx.execute(sql`
-        update files set current_version_id = ${versionId}, name = ${filename}, extension = ${extension(filename)},
-                         file_type = ${deriveFileType(input.contentType)}, content_type = ${input.contentType},
-                         size_bytes = ${input.bytes.length}, storage_kind = 's3', content_hash = ${hash},
-                         source_modified_at = coalesce(${sourceModifiedAtIso}, source_modified_at),
-                         updated_by = ${input.actorId}, updated_at = now()
-         where id = ${fileId} and org_id = ${input.orgId}
-      `);
-      versioned = !created;
-    } else {
-      await tx.execute(sql`
-        update files set name = ${filename}, extension = ${extension(filename)},
-                         file_type = ${deriveFileType(input.contentType)}, content_type = ${input.contentType},
-                         size_bytes = ${input.bytes.length},
-                         source_modified_at = coalesce(${sourceModifiedAtIso}, source_modified_at),
-                         updated_by = ${input.actorId}, updated_at = now()
-         where id = ${fileId} and org_id = ${input.orgId}
-      `);
-    }
-
-    let createdLinks = 0;
-    for (const documentId of input.targetDocumentIds) {
-      const linked = (await tx.execute<{ id: string }>(sql`
-        insert into file_attachments (org_id, file_id, target_table, target_id, created_by, created_at)
-        values (${input.orgId}, ${fileId}, 'documents', ${documentId}, ${input.actorId}, now())
-        -- An existing attachment already links this file to this document; count only new associations.
-        on conflict (org_id, file_id, target_table, target_id) do nothing
-        returning id
-      `));
-      createdLinks += linked.rows.length;
-    }
-    return { fileId, created, versioned, unchanged: !created && unchanged, stale, createdLinks };
-  }).catch(async (error) => {
-    if (stagedVersionId) {
-      await enqueueStorageCleanupStandalone({
-        orgId: input.orgId,
-        objectKey: fileCabinetObjectKey(stagedVersionId),
-        ownerKind: "file_version",
-        ownerId: stagedFileId ?? stagedVersionId,
-      });
-    }
-    throw error;
-  });
-}
-
-async function verifyImport(
-  orgId: string,
-  fileToDocuments: Map<string, Set<string>>,
-  verifyStoredBytes: boolean,
-): Promise<void> {
-  const sourceFileIds = Array.from(fileToDocuments.keys());
-  if (sourceFileIds.length === 0) return;
-  const sourceIdsSql = sql.join(sourceFileIds.map((fileId) => sql`${fileId}`), sql`, `);
-  const filesResult = (await db.execute<{
-      sourceId: string;
-      id: string;
-      currentVersionId: string | null;
-      storageKind: string;
-      sizeBytes: number;
-      contentHash: string | null;
-      versionStorageKind: string | null;
-      versionSizeBytes: number | null;
-      versionContentHash: string | null;
-    }>(sql`
-    select f.source_id as "sourceId", f.id, f.current_version_id as "currentVersionId",
-           f.storage_kind as "storageKind", f.size_bytes as "sizeBytes",
-           f.content_hash as "contentHash", fv.storage_kind as "versionStorageKind",
-           fv.size_bytes as "versionSizeBytes", fv.content_hash as "versionContentHash"
-      from files f
-      left join file_versions fv on fv.id = f.current_version_id and fv.file_id = f.id
-     where f.org_id = ${orgId} and f.source_system = ${SOURCE_SYSTEM}
-       and f.source_id in (${sourceIdsSql})
-  `));
-  const filesBySourceId = new Map(filesResult.rows.map((row) => [row.sourceId, row]));
-
-  for (const sourceFileId of sourceFileIds) {
-    const row = filesBySourceId.get(sourceFileId);
-    // A masked-clone tombstone refuses by name: without this the generic
-    // S3 check below would misreport masked rows as "no current S3 version".
-    refuseMaskedStorageKind(row?.storageKind);
-    refuseMaskedStorageKind(row?.versionStorageKind);
-    if (!row?.currentVersionId || row.storageKind !== "s3" || row.versionStorageKind !== "s3") {
-      throw new Error(`verification failed: source file ${sourceFileId} has no current S3 version`);
-    }
-    if (
-      !row.contentHash
-      || row.contentHash !== row.versionContentHash
-      || row.sizeBytes !== row.versionSizeBytes
-    ) {
-      throw new Error(`verification failed: source file ${sourceFileId} metadata does not match its current version`);
-    }
-    if (verifyStoredBytes) {
-      const bytes = await getS3Blob(row.currentVersionId);
-      if (!bytes) throw new Error(`verification failed: source file ${sourceFileId} is missing from object storage`);
-      const storedHash = createHash("sha256").update(bytes).digest("hex");
-      if (bytes.length !== row.sizeBytes || storedHash !== row.contentHash) {
-        throw new Error(`verification failed: source file ${sourceFileId} object bytes do not match the database`);
-      }
-    }
-  }
-
-  const linksResult = (await db.execute<{ sourceId: string; targetId: string }>(sql`
-    select f.source_id as "sourceId", fa.target_id as "targetId"
-      from files f
-      join file_attachments fa
-        on fa.org_id = f.org_id and fa.file_id = f.id and fa.target_table = 'documents'
-     where f.org_id = ${orgId} and f.source_system = ${SOURCE_SYSTEM}
-       and f.source_id in (${sourceIdsSql})
-  `));
-  const actualLinks = new Set(
-    linksResult.rows.map((row) => `${row.sourceId}\0${row.targetId}`),
-  );
-  for (const [sourceFileId, documentIds] of fileToDocuments) {
-    for (const documentId of documentIds) {
-      if (!actualLinks.has(`${sourceFileId}\0${documentId}`)) {
-        throw new Error(
-          `verification failed: source file ${sourceFileId} is not linked to document ${documentId}`,
-        );
-      }
-    }
-  }
-}
-
 /**
  * Upstream last-modified per source file id, in epoch ms. The source's wall
  * clock is read as UTC; only equality across runs determines eligibility.
@@ -744,7 +422,10 @@ export async function importNetSuiteAttachments(options: ImportOptions): Promise
   if (requestedSourceFileIds.length > 0 && options.limit !== undefined) {
     throw new Error("targeted source-file retries cannot be combined with a document limit");
   }
-  const { orgId, actorId, creds, bridge, soapEndpointVersion } = await resolveContext(options);
+  const { orgId, connectionId, actorId, creds, bridge, soapEndpointVersion } = await resolveContext(options);
+  const otherConnection = (await db.execute(sql`select id from connections where org_id=${orgId} and source='netsuite' and id<>${connectionId} limit 1`)).rows[0];
+  // Legacy NetSuite file identities are account-wide; never reuse them across connections.
+  if (otherConnection) throw new Error("NetSuite file sync requires one source connection per organization; resolve the account identity before importing files");
   if (options.execute && !s3Enabled) {
     throw new Error("S3/MinIO is not configured; refusing to fall back to database blobs");
   }
@@ -754,6 +435,7 @@ export async function importNetSuiteAttachments(options: ImportOptions): Promise
   if (requestedSourceFileIds.length > 0) {
     const targeted = await targetedAttachmentInventory(
       orgId,
+      connectionId,
       requestedSourceFileIds,
       creds,
       options.concurrency,
@@ -766,7 +448,7 @@ export async function importNetSuiteAttachments(options: ImportOptions): Promise
       `[inventory] resolved ${requestedSourceFileIds.length} requested files directly across ${documents.length} source transactions`,
     );
   } else {
-    const source = await sourceDocuments(orgId, options.limit);
+    const source = await sourceDocuments(orgId, connectionId, options.limit);
     documents = source.documents;
     withoutSourceId = source.withoutSourceId;
     console.log(
@@ -845,7 +527,7 @@ export async function importNetSuiteAttachments(options: ImportOptions): Promise
     } else summary.skippedUnchanged++;
   }
 
-  // Skipped files bypass persistFile, but the source's link graph may have
+  // Skipped files bypass version persistence, but the source's link graph may have
   // grown (an already-held file attached to another transaction) — ensure
   // every inventoried link exists.
   const linkTuples: { sourceId: string; documentId: string }[] = [];
@@ -854,19 +536,7 @@ export async function importNetSuiteAttachments(options: ImportOptions): Promise
     for (const documentId of documentIds) linkTuples.push({ sourceId: fileId, documentId });
   }
   for (const batch of chunks(linkTuples, 1000)) {
-    const values = sql.join(
-      batch.map(({ sourceId, documentId }) => sql`(${sourceId}, ${documentId}::uuid)`),
-      sql`, `,
-    );
-    const res = (await db.execute(sql`
-      insert into file_attachments (org_id, file_id, target_table, target_id, created_by, created_at)
-      select ${orgId}, f.id, 'documents', v.did, ${actorId}, now()
-        from (values ${values}) as v(sid, did)
-        join files f on f.org_id = ${orgId} and f.source_system = ${SOURCE_SYSTEM} and f.source_id = v.sid
-      -- Imported files may already have these document associations; retain each existing link.
-      on conflict (org_id, file_id, target_table, target_id) do nothing
-    `));
-    summary.createdLinks += res.rowCount ?? 0;
+    summary.createdLinks += await linkExistingTransactionFiles(orgId, SOURCE_SYSTEM, actorId, batch);
   }
 
   downloadIds.sort((left, right) => Number(left) - Number(right));
@@ -877,8 +547,9 @@ export async function importNetSuiteAttachments(options: ImportOptions): Promise
       const bytes = normalizeAttachmentBytes(sourceBytes);
       const contentType = detectContentType(bytes, source.name);
       const lastModifiedMs = sourceModified.get(fileId) ?? null;
-      const persisted = await persistFile({
+      const persisted = await persistTransactionFile({
         orgId,
+        sourceSystem: SOURCE_SYSTEM,
         actorId,
         source,
         targetDocumentIds: Array.from(fileToDocuments.get(source.id) ?? []),
@@ -902,6 +573,6 @@ export async function importNetSuiteAttachments(options: ImportOptions): Promise
     }
   });
   if (summary.failures) throw new AttachmentImportError(summary);
-  await verifyImport(orgId, fileToDocuments, requestedSourceFileIds.length > 0);
+  await verifyTransactionFiles(orgId, SOURCE_SYSTEM, fileToDocuments, requestedSourceFileIds.length > 0);
   return summary;
 }

@@ -1,3 +1,4 @@
+import { XMLParser, XMLValidator } from "fast-xml-parser";
 import { createHmac, randomBytes } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -538,4 +539,54 @@ export async function netsuiteSoapFileGet(
     }
   }
   throw lastError instanceof Error ? lastError : new Error("SuiteTalk SOAP file-get failed after retries");
+}
+
+
+export type NetSuiteCustomizationKind = 'entityCustomField' | 'itemCustomField' | 'transactionBodyCustomField' | 'transactionColumnCustomField' | 'customRecordType';
+export interface NetSuiteCustomizationChoice { value: string; label: string; internalId: string }
+const customizationKinds: readonly NetSuiteCustomizationKind[] = ['entityCustomField', 'itemCustomField', 'transactionBodyCustomField', 'transactionColumnCustomField', 'customRecordType'];
+const xmlRows = (value: unknown): Record<string, unknown>[] => value == null ? [] : (Array.isArray(value) ? value : [value]) as Record<string, unknown>[];
+type MetadataNode = Record<string, unknown>;
+const metadataNode = (value: unknown): MetadataNode => value && typeof value === 'object' && !Array.isArray(value) ? value as MetadataNode : {};
+function metadataAt(value: unknown, ...keys: string[]): MetadataNode {
+  for (const key of keys) value = metadataNode(value)[key];
+  return metadataNode(value);
+}
+function soapMetadata(text: string): MetadataNode {
+  if (XMLValidator.validate(text) !== true) throw new Error('NetSuite customization metadata is incomplete');
+  const result: unknown = new XMLParser({ ignoreAttributes: false, removeNSPrefix: true, parseTagValue: false }).parse(text);
+  const body = metadataAt(result, 'Envelope', 'Body');
+  if (!Object.keys(body).length || body.Fault) throw new Error('NetSuite customization access was refused; grant read access to custom fields and records, then retry');
+  return body;
+}
+/** Read names and stable script identities through the authenticated customization service. */
+export async function netsuiteCustomizationChoices(kind: NetSuiteCustomizationKind, creds: NetSuiteCreds, endpointVersion = '2022_1', transport: typeof fetch = guardedFetch): Promise<NetSuiteCustomizationChoice[]> {
+  if (!customizationKinds.includes(kind)) throw new Error('Unsupported NetSuite customization type');
+  const response = soapMetadata(await netsuiteSoapRequest('getCustomizationId', `<getCustomizationId xmlns="urn:messages_${xmlAttribute(endpointVersion)}.platform.webservices.netsuite.com"><customizationType getCustomizationType="${kind}"/><includeInactives>false</includeInactives></getCustomizationId>`, creds, endpointVersion, 60_000, transport));
+  const result = metadataAt(response, 'getCustomizationIdResponse', 'getCustomizationIdResult');
+  if (metadataNode(result.status)['@_isSuccess'] !== 'true') throw new Error('NetSuite customization access was refused; grant read access to custom fields and records, then retry');
+  const rows = xmlRows(metadataNode(result.customizationRefList).customizationRef);
+  if (!/^\d+$/.test(String(result.totalRecords ?? '')) || Number(result.totalRecords) !== rows.length) throw new Error('NetSuite customization metadata is incomplete; retry before changing mappings');
+  return rows.map((row) => {
+    const scriptId = String(row['@_scriptId'] ?? '');
+    const internalId = String(row['@_internalId'] ?? '');
+    if (!/^[a-z][a-z0-9_]{0,119}$/i.test(scriptId) || !internalId) throw new Error('NetSuite returned an invalid customization identity');
+    return { value: scriptId, label: String(row.name ?? scriptId), internalId };
+  });
+}
+/** Child-field choices come only from the selected custom record's definition. */
+export async function netsuiteCustomRecordFields(parent: string, creds: NetSuiteCreds, endpointVersion = '2022_1', transport: typeof fetch = guardedFetch): Promise<NetSuiteCustomizationChoice[]> {
+  const choices = await netsuiteCustomizationChoices('customRecordType', creds, endpointVersion, transport);
+  const record = choices.find((row) => row.value === parent);
+  if (!record) throw new Error('Selected source record is unavailable; choose an accessible record before mapping its fields');
+  const response = soapMetadata(await netsuiteSoapRequest('getList', `<getList xmlns="urn:messages_${xmlAttribute(endpointVersion)}.platform.webservices.netsuite.com"><baseRef xmlns:c="urn:core_${xmlAttribute(endpointVersion)}.platform.webservices.netsuite.com" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:type="c:CustomizationRef" internalId="${xmlAttribute(record.internalId)}" type="customRecordType"/></getList>`, creds, endpointVersion, 60_000, transport));
+  const reads = xmlRows(metadataAt(response, 'getListResponse', 'readResponseList').readResponse);
+  const read = reads[0];
+  const definition = metadataNode(read?.record);
+  if (reads.length !== 1 || metadataNode(read?.status)['@_isSuccess'] !== 'true' || String(definition['@_internalId']) !== record.internalId) throw new Error('Selected source record metadata is inaccessible; grant custom-record read access and retry');
+  return xmlRows(metadataNode(definition.customFieldList).customField).map((field) => {
+    const scriptId = String(field.scriptId ?? field['@_scriptId'] ?? '');
+    if (!/^[a-z][a-z0-9_]{0,119}$/i.test(scriptId)) throw new Error('Source record returned an invalid child field');
+    return { value: scriptId, label: String(field.label ?? scriptId), internalId: String(field['@_internalId'] ?? '') };
+  });
 }

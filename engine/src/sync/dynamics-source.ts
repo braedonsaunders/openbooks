@@ -1,3 +1,5 @@
+import { dynamicsAttachmentProvider } from "./attachment-providers.ts";
+import { syncTransactionAttachments, type AttachmentSyncOptions } from "./transaction-attachments.ts";
 import { businessToday } from "../platform/business-date.ts";
 import { DynamicsClient } from "../connectors/dynamics.ts";
 import { formatMoney, fromUnits, roundDiv, toUnits } from "../money/money.ts";
@@ -137,6 +139,10 @@ export class DynamicsSource implements MigrationSource {
   constructor(private client: DynamicsClient, opts: { orgId: string; baseCurrency?: string }) {
     this.orgId = opts.orgId;
     this.baseCurrency = opts.baseCurrency ?? "USD";
+  }
+
+  syncAttachments(options: AttachmentSyncOptions) {
+    return syncTransactionAttachments(dynamicsAttachmentProvider(this.client), options);
   }
 
   async ping(): Promise<{ ok: boolean; detail?: string }> {

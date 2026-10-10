@@ -1,3 +1,5 @@
+import { erpnextAttachmentProvider } from "./attachment-providers.ts";
+import { syncTransactionAttachments, type AttachmentSyncOptions } from "./transaction-attachments.ts";
 import { ErpNextClient, type ErpNextCreds } from "../connectors/erpnext.ts";
 import { formatMoney, fromUnits, toUnits } from "../money/money.ts";
 import {
@@ -65,6 +67,10 @@ export class ErpNextSource implements MigrationSource {
   constructor(creds: ErpNextCreds, opts: { baseCurrency?: string } = {}) {
     this.client = new ErpNextClient(creds);
     this.baseCurrency = opts.baseCurrency ?? "USD";
+  }
+
+  syncAttachments(options: AttachmentSyncOptions) {
+    return syncTransactionAttachments(erpnextAttachmentProvider(this.client), options);
   }
 
   async ping(): Promise<{ ok: boolean; detail?: string }> {

@@ -1,6 +1,6 @@
 import type { CrmImportReport } from "./netsuite-crm.ts";
 import type { NetSuiteFixedAssetSyncResult } from "./netsuite-fixed-assets.ts";
-import type { ImportSummary } from "./netsuite-attachments.ts";
+import type { ImportSummary } from "./attachment-contract.ts";
 import type { NativeContext, NativeDocument } from "./native.ts";
 
 /**
@@ -340,6 +340,9 @@ export interface MigrationSource {
 
   /** Complete transaction-link inventory with incremental file-byte imports. */
   syncAttachments?(options: { orgId: string; connectionId: string; actorId: string | null }): Promise<ImportSummary>;
+
+  /** Human-readable source field/value choices for connection-owned overrides. */
+  mappingOptions?(field: string, parent?: string): Promise<{ value: string; label: string }[]>;
 
   /** Native operational registers exposed by this connector, with explicit feature exclusions. */
   syncOperationalRecords?(options: { orgId: string; connectionId: string; actorId: string | null; populations?: { crm: boolean; fixedAssets: boolean } }): Promise<SourceOperationalSyncResult>;

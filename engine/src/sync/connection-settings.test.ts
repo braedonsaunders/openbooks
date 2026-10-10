@@ -9,9 +9,11 @@ test('sync selections preserve legacy defaults and refuse unsupported or malform
   assert.deepEqual(resolveSyncSelection({ attachments: false, crm: false }, supported), { attachments: false, projectFinancials: true, crm: false, fixedAssets: true });
   for (const source of ['odoo', 'erpnext', 'qbd', 'qbo', 'xero', 'dynamics']) {
     const { syncCapabilities, mappingGroups } = connectorSettings(source);
-    assert.deepEqual(resolveSyncSelection(undefined, syncCapabilities), { attachments: false, projectFinancials: false, crm: false, fixedAssets: false });
+    assert.deepEqual(resolveSyncSelection(undefined, syncCapabilities), { attachments: source !== 'qbd', projectFinancials: false, crm: false, fixedAssets: false });
     assert.equal(mappingGroups.length, 0);
-    assert.throws(() => resolveSyncSelection({ attachments: true }, syncCapabilities), /does not support attachments/);
+    if (source === 'qbd') assert.throws(() => resolveSyncSelection({ attachments: true }, syncCapabilities), /does not support attachments/);
+    else assert.equal(resolveSyncSelection({ attachments: true }, syncCapabilities).attachments, true);
+    assert.throws(() => resolveSyncSelection({ crm: true }, syncCapabilities), /does not support crm/);
   }
   assert.throws(() => resolveSyncSelection('false', supported), /must be an object/);
   assert.throws(() => resolveSyncSelection({ attachments: 'false' }, supported), /enabled or disabled/);

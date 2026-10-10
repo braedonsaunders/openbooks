@@ -47,10 +47,10 @@ test('native connection edits preserve identity, audit nested content choices an
     assert.equal(isolated.status, 404)
     assert.equal((await getConnection(org.orgId, id))!.displayName, 'Source account')
 
-    const unsupported = await withOrgContext(org.orgId, () => updateConnection(actor, qboId, { config: { syncOptions: { attachments: true } } }))
+    const unsupported = await withOrgContext(org.orgId, () => updateConnection(actor, qboId, { config: { syncOptions: { crm: true } } }))
     assert.equal(unsupported.status, 400)
-    assert.match(String(unsupported.body.error), /does not support attachments/)
-    const supportedDefaults = { attachments: false, projectFinancials: false, crm: false, fixedAssets: false }
+    assert.match(String(unsupported.body.error), /does not support crm/)
+    const supportedDefaults = { attachments: true, projectFinancials: false, crm: false, fixedAssets: false }
     const oauth = await withOrgContext(org.orgId, () => updateConnection(actor, qboId, { config: { syncOptions: supportedDefaults } }))
     assert.equal(oauth.status, 200)
     assert.deepEqual((await getConnection(org.orgId, qboId))!.config, { environment: 'sandbox', realmId: 'callback-owned', syncOptions: supportedDefaults })

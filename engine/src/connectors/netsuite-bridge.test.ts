@@ -457,3 +457,24 @@ test("text attachments request original bytes instead of treating decoded text a
   assert.deepEqual(JSON.parse(JSON.stringify(response)), { ok: true, schemaVersion: 1, file: { id: "10", name: "schedule.csv", fileType: "CSV", size: 3, encoding: "raw-bytes" } });
   assert.equal(textReads, 0);
 });
+
+test('vendor bill PDFs and expense-line receipts share one deduplicated transaction file inventory', () => {
+  type Column = { name: string; join?: string };
+  let restlet: { post: (input: Record<string, unknown>) => unknown } | undefined;
+  const record = { Type: { EXPENSE_REPORT: 'expenseReport' }, load: ({ type, id }: { type: string; id: string }) => {
+    assert.equal(type, 'expenseReport'); assert.equal(id, '20');
+    return { getLineCount: () => 3, getSublistValue: ({ sublistId, fieldId, line }: { sublistId: string; fieldId: string; line: number }) => {
+      assert.equal(sublistId, 'expense'); assert.equal(fieldId, 'expmediaitem');
+      return ['201', '202', '201'][line];
+    } };
+  } };
+  const search = { Type: { TRANSACTION: 'transaction', VENDOR_BILL: 'vendorBill', EXPENSE_REPORT: 'expenseReport' }, Sort: { ASC: 'ASC' }, Summary: { GROUP: 'GROUP' }, createColumn: (column: Column) => column,
+    create: ({ type }: { type: string }) => ({ runPaged: () => ({ count: 1, pageRanges: [{ index: 0 }], fetch: () => ({ data: [{ id: type === 'vendorBill' ? '10' : '20', getValue: (column: Column) => column.join ? type === 'vendorBill' ? '100' : '200' : type === 'vendorBill' ? '10' : '20' }] }) }) }),
+  };
+  runInNewContext(readSuiteScript('integrations/netsuite-bridge/src/FileCabinet/SuiteScripts/OpenBooks/openbooks_bridge_restlet.js'), {
+    define: (_dependencies: string[], factory: (...modules: unknown[]) => typeof restlet) => { restlet = factory({}, {}, {}, record, {}, search, {}); },
+  });
+  assert.deepEqual(JSON.parse(JSON.stringify(restlet!.post({ action: 'attachmentInventory', records: [{ recordType: 'vendorBill', internalId: '10' }, { recordType: 'expenseReport', internalId: '20' }] }))), {
+    ok: true, schemaVersion: 1, records: { '10': ['100'], '20': ['200', '201', '202'] },
+  });
+});

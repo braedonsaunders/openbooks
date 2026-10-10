@@ -28,9 +28,23 @@ export const NETSUITE_MAPPING_GROUPS: readonly MappingGroup[] = [
   { key: 'taxes', fields: [{ key: 'taxCodeFallbacks', kind: 'tax', targets: ['sales', 'purchase'] }] },
 ];
 
-export function connectorSettings(source: string): { syncCapabilities: SyncCapabilities; mappingGroups: readonly MappingGroup[] } {
-  const supported = source === 'netsuite';
-  return { syncCapabilities: { attachments: supported, projectFinancials: supported, crm: supported, fixedAssets: supported }, mappingGroups: supported ? NETSUITE_MAPPING_GROUPS : [] };
+/** Capabilities describe implemented adapter contracts, not connector branding. */
+export const CONNECTOR_SYNC_CAPABILITIES: Readonly<Record<string, SyncCapabilities>> = {
+  netsuite: { attachments: true, projectFinancials: true, crm: true, fixedAssets: true },
+  qbo: { attachments: true, projectFinancials: false, crm: false, fixedAssets: false },
+  xero: { attachments: true, projectFinancials: false, crm: false, fixedAssets: false },
+  odoo: { attachments: true, projectFinancials: false, crm: false, fixedAssets: false },
+  erpnext: { attachments: true, projectFinancials: false, crm: false, fixedAssets: false },
+  dynamics: { attachments: true, projectFinancials: false, crm: false, fixedAssets: false },
+  qbd: { attachments: false, projectFinancials: false, crm: false, fixedAssets: false },
+};
+export function connectorSettings(source: string): {
+  syncCapabilities: SyncCapabilities; mappingGroups: readonly MappingGroup[];
+  attachmentUnavailableReason?: 'desktopProtocol' | 'notImplemented';
+} {
+  const capabilities = CONNECTOR_SYNC_CAPABILITIES[source] ?? { attachments: false, projectFinancials: false, crm: false, fixedAssets: false };
+  return { syncCapabilities: capabilities, mappingGroups: source === 'netsuite' ? NETSUITE_MAPPING_GROUPS : [],
+    attachmentUnavailableReason: capabilities.attachments ? undefined : source === 'qbd' ? 'desktopProtocol' : 'notImplemented' };
 }
 
 function objectValue(value: unknown, label: string): Record<string, unknown> {

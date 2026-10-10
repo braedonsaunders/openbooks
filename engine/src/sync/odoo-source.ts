@@ -1,3 +1,5 @@
+import { odooAttachmentProvider } from "./attachment-providers.ts";
+import { syncTransactionAttachments, type AttachmentSyncOptions } from "./transaction-attachments.ts";
 import { businessToday } from "../platform/business-date.ts";
 import { OdooClient, m2oId, type OdooCreds } from "../connectors/odoo.ts";
 import { formatMoney, fromUnits, toUnits } from "../money/money.ts";
@@ -80,6 +82,10 @@ export class OdooSource implements MigrationSource {
     this.client = new OdooClient(creds);
     this.orgId = opts.orgId;
     this.baseCurrency = opts.baseCurrency ?? "USD";
+  }
+
+  syncAttachments(options: AttachmentSyncOptions) {
+    return syncTransactionAttachments(odooAttachmentProvider(this.client), options);
   }
 
   async ping(): Promise<{ ok: boolean; detail?: string }> {

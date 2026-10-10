@@ -160,6 +160,7 @@ async function listConnectionRoutes() {
       authKind: s.authKind,
       blurb: s.blurb,
       configFields: s.configFields,
+      attachmentUnavailableReason: s.attachmentUnavailableReason,
       mappingGroups: s.mappingGroups ?? [],
       syncCapabilities: s.syncCapabilities,
       secretFields: s.secretFields.map((f) => ({ ...f })),
