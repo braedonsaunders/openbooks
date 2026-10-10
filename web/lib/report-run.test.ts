@@ -13,11 +13,14 @@ const agingState: {
   bookThreading: Array<{ kind: string; bookId: unknown }>
   agingOptions: Array<{ basis: unknown; reportingCurrency: unknown }>
   featuresOn: string[]
+  /** The reader's grants: the ledger, both subledgers and projects, never payroll. */
+  permissions: string[]
 } = {
   asOfValues: [],
   bookThreading: [],
   agingOptions: [],
   featuresOn: [],
+  permissions: ['gl.read', 'ar.read', 'ap.read', 'projects.read'],
 }
 ;(globalThis as typeof globalThis & Record<symbol, unknown>)[agingKey] = agingState
 
@@ -33,7 +36,8 @@ const mockSources = new Map<string, string>([
     `
       export * from '${executionContextUrl}'
       export async function requireReportAuthz(orgId) {
-        return { user: { orgId, id: 'user-1' }, permissions: new Set(), allowedSubsidiaryIds: null }
+        const state = globalThis[Symbol.for('openbooks.aging-export-asof-test')]
+        return { user: { orgId, id: 'user-1' }, permissions: new Set(state.permissions), allowedSubsidiaryIds: null }
       }
     `,
   ],
@@ -254,4 +258,19 @@ test('payroll capability exports refuse a disabled feature and a reader without 
   try {
     await assert.rejects(resolveReport('payroll-support', new URLSearchParams(), ctx), /requires payroll.read.*administrator/)
   } finally { agingState.featuresOn = [] }
+})
+
+test('a statement export refuses a reader without the grant for the data it reads, naming that grant', async () => {
+  const granted = agingState.permissions
+  agingState.permissions = ['ar.read']
+  try {
+    agingState.bookThreading = []
+    await assert.rejects(resolveReport('trial-balance', new URLSearchParams(), ctx), /requires gl\.read.*administrator/)
+    await assert.rejects(resolveReport('aging', new URLSearchParams({ side: 'ap' }), ctx), /requires ap\.read.*administrator/)
+    assert.deepEqual(agingState.bookThreading, [], 'a refused statement never reaches its reader')
+    await resolveReport('aging', new URLSearchParams({ side: 'ar' }), ctx)
+    assert.deepEqual(agingState.bookThreading.map(({ kind }) => kind), ['aging'], 'the held receivables grant still opens AR aging')
+  } finally {
+    agingState.permissions = granted
+  }
 })

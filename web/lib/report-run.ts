@@ -240,7 +240,7 @@ export async function resolveReport(kind: ReportKind, p: URLSearchParams, ctx: R
   // apply, so an export, schedule or send never reaches data its page refuses.
   const statementPermission = statementKindPermission(kind, p)
   if (statementPermission && !can(authz, statementPermission)) {
-    throw new ReportResolutionError('you do not have access to the data in this report — ask an administrator to add the matching read access to your role')
+    throw new ReportResolutionError(`This report requires ${statementPermission} — ask an administrator to add that read access to your role.`)
   }
   if (kind === 'payroll-support') {
     if (!can(authz, 'payroll.read')) throw new ReportResolutionError('This report requires payroll.read — ask an administrator for payroll read access.');
