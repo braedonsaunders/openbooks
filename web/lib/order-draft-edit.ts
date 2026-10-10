@@ -11,6 +11,7 @@ import { documentWorkDatesRefusal } from '@openbooks/engine/records/work-period'
 import { listScopedAccountOptions, listScopedDepartmentOptions, listScopedPartyOptions, listScopedProjectOptions } from './scoped-options';
 import { notFound } from './api/responses';
 import type { OrderKind } from './order-cycle';
+import { CrmLifecycleRefusalError } from '@openbooks/engine/src/crm/crm.ts';
 import { findDocumentByExternalRef, isExternalRefConflict, resolveExternalRefPair } from './external-ref';
 
 export interface OrderHandlerConfig {
@@ -652,6 +653,11 @@ export async function applyOrderEdit(context: OrderEditContext, cfg: OrderHandle
   } catch (error) {
     if (isTenantReferenceViolation(error)) {
       throw new OrderEditError(422, { error: 'Referenced party, account, tax profile, or dimension must belong to this organization' })
+    }
+    // A CRM lifecycle refusal is operator-actionable (it names its remedy),
+    // not a server fault: answer 422 with its message instead of a 500.
+    if (error instanceof CrmLifecycleRefusalError) {
+      throw new OrderEditError(422, { error: error.message })
     }
     // The pre-write duplicate check passed, then a concurrent write claimed
     // the same external pair: name the winning document instead of
