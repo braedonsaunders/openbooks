@@ -28,6 +28,7 @@ import {
 import { type ComponentProps } from 'react'
 import { RecordCountCell, InNavCell } from '../../app/(app)/records/types/sections'
 import { PartyRolesCell } from '../../app/(app)/parties/sections'
+import { AssignPartyRoleButton } from '../../app/(app)/parties/AssignPartyRoleButton'
 import { TrashBackLink } from '../../app/(app)/documents/trash/sections'
 import { DocumentsActions, DocumentsBreadcrumb, DocumentsLinkNotice } from '../../app/(app)/documents/sections'
 import { ForecastKpiGroup, ForecastExcludedNote, ManageQuotasButton, QuotaEmptyAction, ForecastSnapshotAction } from '../../app/(app)/crm/forecasts/sections'
@@ -286,6 +287,14 @@ export const RECORDS_WIDGETS = {
   },
 
   'new-party': () => <NewPartyButton />,
+  'assign-party-role': (props) => (
+    <AssignPartyRoleButton
+      roles={((props.roles as { value: string; label: string }[] | undefined) ?? []).filter((r) => typeof r?.value === 'string' && typeof r?.label === 'string')}
+      total={Number(props.total ?? 0)}
+      q={str(props, 'q') ?? ''}
+      includeInactive={props.includeInactive === true}
+    />
+  ),
   'party-roles-cell': (props) => (
     <PartyRolesCell badges={(props.badges as ComponentProps<typeof PartyRolesCell>['badges']) ?? []} />
   ),

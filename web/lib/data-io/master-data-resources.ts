@@ -1,5 +1,13 @@
 import { readExportWindow, transferId, transferWhere, transferOrder, transferLimit, finishExportPage } from './export-page'
 import { importRowError } from './row-error'
+import { matchSelectOption, selectRefusal } from './select-options'
+import partiesEn from '../../messages/en/parties.json'
+import partiesDe from '../../messages/de/parties.json'
+import partiesEs from '../../messages/es/parties.json'
+import partiesFr from '../../messages/fr/parties.json'
+import partiesJa from '../../messages/ja/parties.json'
+import partiesPtBr from '../../messages/pt-BR/parties.json'
+import partiesZh from '../../messages/zh/parties.json'
 /** Master-data (accounts, items, parties) import/export resources. */
 
 import 'server-only'
@@ -40,6 +48,13 @@ interface MasterCol {
   options?: { value: string; label: string }[]
   ref?: ResourceRefTarget
   lockedOnEdit?: boolean
+  /**
+   * Virtual columns have no stored column: they are import affordances over
+   * related rows. They are excluded from the export SELECT, filled from a
+   * batched lookup on read, and applied through native commands on write —
+   * never bound as a column value.
+   */
+  virtual?: boolean
 }
 
 interface MasterEntity {
@@ -65,6 +80,48 @@ const ITEM_KIND_OPTS = [
 ].map((v) => ({ value: v, label: v }))
 
 export const INVENTORY_ITEM_KINDS = new Set(['inventory', 'assembly', 'kit'])
+
+/**
+ * The stored party vocabulary. Labels are the drawer's own kind words, read
+ * from the message catalogs — never hardcoded translations — so the importer
+ * accepts exactly what the operator sees ("Company", "Kunde", "会社") in any
+ * shipped locale, case-insensitively. Role-like kinds (customer/vendor/
+ * employee) store as-is, the way the hand form writes them, and the writer
+ * below backs each with its native role row.
+ */
+const PARTY_KIND_VALUES = ['company', 'person', 'customer', 'vendor', 'employee'] as const
+const PARTY_KIND_LABEL_KEYS: Record<(typeof PARTY_KIND_VALUES)[number], string> = {
+  company: 'kindCompany',
+  person: 'kindPerson',
+  customer: 'kindCustomer',
+  vendor: 'kindVendor',
+  employee: 'kindEmployee',
+}
+function catalogKindLabel(catalog: unknown, value: (typeof PARTY_KIND_VALUES)[number]): string | null {
+  const drawer = (catalog as { drawer?: Record<string, unknown> } | null)?.drawer
+  const label = drawer?.[PARTY_KIND_LABEL_KEYS[value]]
+  return typeof label === 'string' && label.trim() !== '' ? label : null
+}
+const PARTY_KIND_OPTIONS = PARTY_KIND_VALUES.map((value) => ({
+  value,
+  label: catalogKindLabel(partiesEn, value) ?? value,
+}))
+/** Localized kind labels alias their canonical value; English rides the options above. */
+const PARTY_KIND_ALIASES: { value: string; label: string }[] = [
+  partiesDe, partiesEs, partiesFr, partiesJa, partiesPtBr, partiesZh,
+].flatMap((catalog) =>
+  PARTY_KIND_VALUES.flatMap((value) => {
+    const label = catalogKindLabel(catalog, value)
+    return label && label !== catalogKindLabel(partiesEn, value) ? [{ value, label }] : []
+  }),
+)
+
+/** Native party roles addressable as import columns. The kind column names at most one. */
+const PARTY_ROLE_FLAGS = [
+  { key: 'isCustomer', role: 'customer' },
+  { key: 'isVendor', role: 'vendor' },
+  { key: 'isEmployee', role: 'employee' },
+] as const
 
 const ITEM_EQUIPMENT_KINDS = new Set(['equipment_charge'])
 
@@ -122,14 +179,21 @@ export const MASTER_ENTITIES: MasterEntity[] = [
     cols: [
       { key: 'shortCode', column: 'short_code', kind: 'text', lockedOnEdit: true },
       { key: 'displayName', column: 'display_name', kind: 'text', required: true },
-      // parties.kind is unconstrained text and the product stores
-      // role-denormalized values (customer/vendor/employee) that export
-      // emits — the importer must accept the vocabulary export produces,
-      // or no exported parties file re-imports.
-      { key: 'kind', column: 'kind', kind: 'select', required: true, options: [
-        { value: 'company', label: 'company' }, { value: 'person', label: 'person' },
-        { value: 'customer', label: 'customer' }, { value: 'vendor', label: 'vendor' },
-        { value: 'employee', label: 'employee' }] },
+      // parties.kind carries the role-denormalized values the product stores
+      // (customer/vendor/employee) that export emits — the importer must
+      // accept the vocabulary export produces, or no exported parties file
+      // re-imports. Labels are the drawer's own kind words (see
+      // PARTY_KIND_OPTIONS): the file may name what the operator sees.
+      { key: 'kind', column: 'kind', kind: 'select', required: true, options: PARTY_KIND_OPTIONS },
+      // A party is a company or a person; ROLES make it a customer, vendor,
+      // and/or employee. The kind column names at most one role, so these
+      // flags carry the rest: each true flag ensures its native role row
+      // through the same command the writers use, idempotent on re-import.
+      // A false or blank flag leaves the role alone — imports never strip a
+      // role; the drawer does that.
+      { key: 'isCustomer', column: 'is_customer', kind: 'boolean', virtual: true },
+      { key: 'isVendor', column: 'is_vendor', kind: 'boolean', virtual: true },
+      { key: 'isEmployee', column: 'is_employee', kind: 'boolean', virtual: true },
       { key: 'legalName', column: 'legal_name', kind: 'text' },
       { key: 'email', column: 'email', kind: 'text' },
       { key: 'phone', column: 'phone', kind: 'text' },
@@ -290,7 +354,9 @@ export function masterResource(m: MasterEntity, orgId: string): DataResource {
       const fields = await masterFields(m, orgId)
       const resolver = new RefResolver(orgId)
       const exportCols = m.cols.filter((c) => fields.some((f) => f.key === c.key))
-      const coreCols = exportCols.map((c) => sql.raw(c.column))
+      const storedCols = exportCols.filter((c) => !c.virtual)
+      const virtualCols = exportCols.filter((c) => c.virtual)
+      const coreCols = storedCols.map((c) => sql.raw(c.column))
       // Subsidiary scope is enforced HERE, by row identity: the registry used
       // to read org-wide and post-filter on display labels, so two parties
       // sharing a name across legal entities leaked each other's full rows
@@ -301,7 +367,7 @@ export function masterResource(m: MasterEntity, orgId: string): DataResource {
           ? sql``
           : subsidiaryReadFilterWithUnassigned(sql`subsidiary_id`, readCtx?.allowedSubsidiaryIds)
       const result = (await readExportWindow(db, sql`
-        select ${sql.join(coreCols, sql`, `)}, custom${transferId(readCtx, sql`id`)}
+        select ${sql.join(coreCols, sql`, `)}, custom${transferId(readCtx, sql`id`)}${virtualCols.length ? sql`, id as "__partyId"` : sql``}
           from ${sql.raw(m.table)}
          where org_id = ${orgId}${scopeFilter}${transferWhere(readCtx, sql`id`)}
          order by ${transferOrder(readCtx, sql`id`, sql.raw(m.naturalKey === 'shortCode' ? 'display_name' : m.cols[0]!.column))}
@@ -309,13 +375,44 @@ export function masterResource(m: MasterEntity, orgId: string): DataResource {
       // Sentinel read: one row past the cap proves overflow; exactly at the
       // cap proves completeness. Refuse rather than truncate silently.
       finishExportPage(result.rows, masterDescriptor(m).label, readCtx)
+      // Virtual columns resolve from related rows in one batched lookup per
+      // export — never a query per row. Active role rows only, matching the
+      // badges the party lists render, so an exported file re-imports the
+      // same roles it left with.
+      let roleMembership = new Set<string>()
+      if (m.key === 'parties' && virtualCols.length > 0) {
+        const partyIds = [
+          ...new Set(
+            result.rows
+              .map((r) => r.__partyId)
+              .filter((v): v is string => typeof v === 'string' && v !== ''),
+          ),
+        ]
+        if (partyIds.length > 0) {
+          const idList = sql.join(partyIds.map((id) => sql`${id}`), sql`, `)
+          const membership = (await db.execute(sql`
+            select party_id, 'customer' as role from customer_roles where org_id = ${orgId} and is_active and party_id in (${idList})
+            union all
+            select party_id, 'vendor' as role from vendor_roles where org_id = ${orgId} and is_active and party_id in (${idList})
+            union all
+            select party_id, 'employee' as role from employee_roles where org_id = ${orgId} and is_active and party_id in (${idList})`)) as {
+            rows: { party_id: string; role: string }[]
+          }
+          roleMembership = new Set(membership.rows.map((r) => `${r.party_id}:${r.role}`))
+        }
+      }
       const customDefs = fields.filter((f) => f.custom)
       const out: Record<string, CellValue>[] = []
       for (const raw of result.rows) {
         const row: Record<string, CellValue> = {}
-        for (const c of exportCols) {
+        for (const c of storedCols) {
           const f = fields.find((x) => x.key === c.key)!
           row[c.key] = await exportMasterCell(f, raw[c.column], resolver, orgId)
+        }
+        for (const flag of PARTY_ROLE_FLAGS) {
+          if (!virtualCols.some((c) => c.key === flag.key)) continue
+          const partyId = typeof raw.__partyId === 'string' ? raw.__partyId : ''
+          row[flag.key] = roleMembership.has(`${partyId}:${flag.role}`)
         }
         const custom = (raw.custom ?? {}) as Record<string, unknown>
         for (const f of customDefs) row[f.key] = await exportMasterCell(f, custom[f.key], resolver, orgId)
@@ -419,6 +516,11 @@ async function writeMaster(
           break
         }
         if (!present) continue
+        if (c.virtual) {
+          // Virtual columns never bind: party role flags collect below and
+          // are ensured through the native role command with the row write.
+          continue
+        }
         if (c.kind === 'boolean') {
           setCols.push({ column: c.column, value: coerceBoolean(raw) })
           continue
@@ -432,9 +534,22 @@ async function writeMaster(
           setCols.push({ column: c.column, value: id })
           continue
         }
-        if (c.kind === 'select' && c.options && !c.options.some((o) => o.value === String(raw))) {
-          err = `${c.key}: invalid value "${String(raw)}"`
-          break
+        if (c.kind === 'select' && c.options) {
+          // Operators write what the product shows: canonical values and
+          // displayed labels, in any capitalization — and, for the party
+          // kind, in any shipped locale. The stored value is the canonical
+          // one, so downstream kind gates keep working. A refusal lists the
+          // accepted values with the field named.
+          const matchable = m.key === 'parties' && c.key === 'kind'
+            ? [...c.options, ...PARTY_KIND_ALIASES]
+            : c.options
+          const matched = matchSelectOption(matchable, raw)
+          if (matched === null) {
+            err = selectRefusal(c.key, raw, c.options)
+            break
+          }
+          setCols.push({ column: c.column, value: matched })
+          continue
         }
         if (c.kind === 'number' || c.kind === 'currency' || c.kind === 'percent') {
           // Exact-decimal boundary, matching the interactive/API writers
@@ -494,6 +609,16 @@ async function writeMaster(
         outcome.failed++
         outcome.errors.push({ row: rowNo, message: err })
         continue
+      }
+      // Party role flags (virtual columns): each true flag ensures its
+      // native role row with the row write, through the same command the
+      // interactive writers use. False or blank leaves the role alone —
+      // imports add roles, never strip them, so re-imports stay idempotent.
+      const pendingRoles: ('customer' | 'vendor' | 'employee')[] = []
+      if (m.key === 'parties') {
+        for (const flag of PARTY_ROLE_FLAGS) {
+          if (coerceBoolean(src[flag.key])) pendingRoles.push(flag.role)
+        }
       }
       let nkVal = String(src[m.naturalKey] ?? '').trim()
       // A master row without its natural key has no identity: it can never
@@ -664,16 +789,27 @@ async function writeMaster(
             // A role-kind kind names its role row — keep the claim
             // backed in the same row transaction (see ensurePartyRoleRow).
             // Effective values — the row's cells over the stored row — so a
-            // partial update re-checks the kind as it will stand.
+            // partial update re-checks the kind as it will stand. Import
+            // role flags ride the same guarantee.
             if (m.key === 'parties') {
               const cell = (column: string): unknown => setCols.find((c) => c.column === column)?.value
+              const roleActive = cell('is_active') ?? after.is_active ?? true
               await ensurePartyRoleRow(tx, {
                 orgId: ctx.orgId,
                 partyId: existingId,
                 kind: cell('kind') ?? after.kind,
-                isActive: cell('is_active') ?? after.is_active ?? true,
+                isActive: roleActive,
                 actorId: ctx.actorId,
               })
+              for (const role of pendingRoles) {
+                await ensurePartyRoleRow(tx, {
+                  orgId: ctx.orgId,
+                  partyId: existingId,
+                  kind: role,
+                  isActive: roleActive,
+                  actorId: ctx.actorId,
+                })
+              }
             }
             return { rowId: existingId, after }
           })
@@ -703,15 +839,26 @@ async function writeMaster(
             }
             // A role-kind kind names its role row — keep the claim
             // backed in the same row transaction (see ensurePartyRoleRow).
+            // Import role flags ride the same guarantee.
             if (m.key === 'parties') {
               const cell = (column: string): unknown => setCols.find((c) => c.column === column)?.value
+              const roleActive = cell('is_active') ?? after.is_active ?? true
               await ensurePartyRoleRow(tx, {
                 orgId: ctx.orgId,
                 partyId: after.id,
                 kind: cell('kind') ?? after.kind,
-                isActive: cell('is_active') ?? after.is_active ?? true,
+                isActive: roleActive,
                 actorId: ctx.actorId,
               })
+              for (const role of pendingRoles) {
+                await ensurePartyRoleRow(tx, {
+                  orgId: ctx.orgId,
+                  partyId: after.id,
+                  kind: role,
+                  isActive: roleActive,
+                  actorId: ctx.actorId,
+                })
+              }
             }
             return { rowId: after.id, after }
           })

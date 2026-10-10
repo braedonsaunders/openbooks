@@ -1275,8 +1275,10 @@ export function PartyDrawer({
              Role-scoped open (Customers/Vendors/Employees list): only that
              role's details render, with no enable checkbox — the multi-role
              party model is an internal abstraction. The unified /parties
-             directory (no `role`) keeps the full checkbox view. */}
-        {tab === 'accounting' && (!effectiveLayout || !role) && ro ? (
+             directory (no `role`) keeps the full checkbox view. Roles live
+             on Overview beside identity, where operators land; Accounting
+             keeps the bank accounts. */}
+        {tab === 'overview' && (!effectiveLayout || !role) && ro ? (
           <section className="space-y-5">
             {(!role || role === 'customer') && customer.enabled ? (
               <div className="space-y-3">
@@ -1322,7 +1324,7 @@ export function PartyDrawer({
           </section>
         ) : null}
 
-        {tab === 'accounting' && (!effectiveLayout || !role) && editable ? (
+        {tab === 'overview' && (!effectiveLayout || !role) && editable ? (
         <>
         <section className="space-y-3">
           <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">

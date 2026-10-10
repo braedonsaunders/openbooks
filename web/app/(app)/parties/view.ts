@@ -87,6 +87,7 @@ type PartyCounts = {
   customers: string | number
   vendors: string | number
   employees: string | number
+  roleless: string | number
   active: string | number
   inactive: string | number
 }
@@ -101,12 +102,17 @@ async function loadWorkerCompGroups(
   return { rows: result.rows }
 }
 
-// A party is classified only by its active canonical role row.
+// A party is classified only by its active canonical role row. A party with
+// no active row in any role table is role-less: no role list or picker shows
+// it, only global search finds it — the "No role" filter surfaces exactly
+// those parties for bulk assignment below.
 const ROLE_CONDITIONS = {
   customer: sql`exists (select 1 from customer_roles r where r.party_id = p.id and r.org_id = p.org_id and r.is_active)`,
   vendor: sql`exists (select 1 from vendor_roles r where r.party_id = p.id and r.org_id = p.org_id and r.is_active)`,
   employee: sql`exists (select 1 from employee_roles r where r.party_id = p.id and r.org_id = p.org_id and r.is_active)`,
 } as const
+const NO_ROLE_CONDITION =
+  sql`not ${ROLE_CONDITIONS.customer} and not ${ROLE_CONDITIONS.vendor} and not ${ROLE_CONDITIONS.employee}`
 
 export interface PartyRoleBadge {
   label: string
@@ -133,6 +139,17 @@ export interface PartiesData {
   currentParams: Record<string, string | string[] | undefined>
   roleOptions: { value: string; label: string; count: number }[]
   canManage: boolean
+  /**
+   * Bulk role assignment rides the role-less slice: shown only to managers
+   * while the directory is filtered to parties with no role. The slice the
+   * button assigns (search text, inactives toggle, filtered count) is the
+   * slice the endpoint re-applies server-side.
+   */
+  showAssignRole: boolean
+  assignRoles: { value: string; label: string }[]
+  assignTotal: number
+  assignQ: string
+  assignIncludeInactive: boolean
   isEmpty: boolean
   isFilteredEmpty: boolean
   hasRows: boolean
@@ -205,7 +222,8 @@ export async function loadParties(
   const role =
     roleParam === 'customer' ||
     roleParam === 'vendor' ||
-    roleParam === 'employee'
+    roleParam === 'employee' ||
+    roleParam === 'no-role'
       ? roleParam
       : undefined
   const showInactive = pickString(sp.showInactive) === 'true'
@@ -217,7 +235,7 @@ export async function loadParties(
         ? sql` and (p.display_name ilike ${'%' + params.q + '%'} or p.short_code ilike ${'%' + params.q + '%'} or p.email ilike ${'%' + params.q + '%'})`
         : sql``
     }
-    ${role ? sql` and ${ROLE_CONDITIONS[role]}` : sql``}
+    ${role === 'no-role' ? sql` and ${NO_ROLE_CONDITION}` : role ? sql` and ${ROLE_CONDITIONS[role]}` : sql``}
     ${showInactive ? sql`` : sql` and p.is_active`}`
 
   const [parties, counts] = await Promise.all([
@@ -236,6 +254,7 @@ export async function loadParties(
              count(*) filter (where ${ROLE_CONDITIONS.customer}) as customers,
              count(*) filter (where ${ROLE_CONDITIONS.vendor}) as vendors,
              count(*) filter (where ${ROLE_CONDITIONS.employee}) as employees,
+             count(*) filter (where ${NO_ROLE_CONDITION}) as roleless,
              count(*) filter (where p.is_active) as active,
              count(*) filter (where not p.is_active) as inactive
         from parties p
@@ -248,6 +267,7 @@ export async function loadParties(
     customers: 0,
     vendors: 0,
     employees: 0,
+    roleless: 0,
     active: 0,
     inactive: 0,
   }
@@ -514,8 +534,22 @@ export async function loadParties(
         label: tc('labels.employee'),
         count: Number(c.employees),
       },
+      {
+        value: 'no-role',
+        label: t('list.noRole'),
+        count: Number(c.roleless),
+      },
     ],
     canManage,
+    showAssignRole: canManage && role === 'no-role',
+    assignRoles: [
+      { value: 'customer', label: tc('labels.customer') },
+      { value: 'vendor', label: tc('labels.vendor') },
+      { value: 'employee', label: tc('labels.employee') },
+    ],
+    assignTotal: filteredTotal,
+    assignQ: params.q ?? '',
+    assignIncludeInactive: showInactive,
     isEmpty: total === 0,
     isFilteredEmpty: total > 0 && filteredTotal === 0,
     hasRows: filteredTotal > 0,
@@ -589,6 +623,16 @@ export function partiesSpec(data: PartiesData): PageSpec {
           basePath: '/parties',
           currentParams: data.currentParams,
         }),
+        ...(data.showAssignRole
+          ? [
+              widgetBlock('assign-party-role', {
+                roles: data.assignRoles,
+                total: data.assignTotal,
+                q: data.assignQ,
+                includeInactive: data.assignIncludeInactive,
+              }),
+            ]
+          : []),
       ]),
     ],
     body: [

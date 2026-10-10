@@ -1284,3 +1284,30 @@ test("a new mandate is issued to the drawer's party and an edit sends only the m
   assert.deepEqual(updated?.body, { status: "active", signedOn: "2026-09-01", validFrom: "", expiresOn: "" },
     "an edit never resends the party, bank account, scheme or reference the route refuses");
 });
+
+test("the unified drawer shows roles on the overview tab", async (t) => {
+  const { done } = await renderDrawer({ generic: true, initialTab: "overview", initialMode: "view" });
+  t.after(done);
+  const overview = railTabNamed(en("parties.drawer.tabs.overview"));
+  assert.ok(overview, "the overview tab must render");
+  await clickTab(overview);
+  const headings = [...document.querySelectorAll("h3")].map((h) => h.textContent?.trim());
+  assert.ok(
+    headings.includes(en("common.labels.vendor")),
+    "the vendor role details must render on overview beside identity",
+  );
+});
+
+test("the unified drawer offers role checkboxes on overview in edit mode", async (t) => {
+  const { done } = await renderDrawer({ generic: true, initialTab: "overview", initialMode: "edit" });
+  t.after(done);
+  const overview = railTabNamed(en("parties.drawer.tabs.overview"));
+  assert.ok(overview, "the overview tab must render");
+  await clickTab(overview);
+  const section = [...document.querySelectorAll("section")].find((element) =>
+    element.textContent?.includes(en("parties.drawer.rolesHeading")),
+  );
+  assert.ok(section, "the roles section must render on overview in edit mode");
+  const boxes = section?.querySelectorAll('input[type="checkbox"]') ?? [];
+  assert.ok(boxes.length >= 3, "customer, vendor, and employee each offer an enable checkbox");
+});
