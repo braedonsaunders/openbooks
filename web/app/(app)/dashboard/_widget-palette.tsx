@@ -1,8 +1,8 @@
 'use client'
 
-import { Plus } from 'lucide-react'
+import { Loader2, Plus, Save } from 'lucide-react'
 import { useTranslations } from 'next-intl'
-import { Drawer } from '@openbooks/ui'
+import { Button, Drawer } from '@openbooks/ui'
 import {
   CATEGORY_LABEL_KEYS,
   type WidgetCategory,
@@ -26,6 +26,14 @@ interface WidgetPaletteProps {
   onAddApp: (app: DashboardApp) => void
   allowedWidgetIds: readonly string[] | Set<string> | undefined
   onClose: () => void
+  /**
+   * Save the customize draft without closing the picker. The drawer's
+   * backdrop covers the header toolbar, so without this the operator cannot
+   * reach Save while picking widgets. Mirrors the toolbar's enabled state.
+   */
+  onSave?: () => void
+  saving?: boolean
+  canSave?: boolean
 }
 
 export function WidgetPalette({
@@ -38,6 +46,9 @@ export function WidgetPalette({
   onAddApp,
   allowedWidgetIds,
   onClose,
+  onSave,
+  saving = false,
+  canSave = false,
 }: WidgetPaletteProps) {
   const t = useTranslations('dashboard')
   const tApps = useTranslations('apps')
@@ -64,6 +75,12 @@ export function WidgetPalette({
       title={t('palette.title')}
       description={t('palette.subtitle')}
       bodyClassName="overflow-y-auto p-3"
+      footer={onSave ? (
+        <Button type="button" onClick={onSave} disabled={saving || !canSave} className="h-8 text-xs">
+          {saving ? <Loader2 size={13} className="mr-1 animate-spin" /> : <Save size={13} className="mr-1" />}
+          {t('grid.save')}
+        </Button>
+      ) : undefined}
     >
           {byCategory.size === 0 && libraryCards.length === 0 && availableApps.length === 0 ? (
             <p className="px-2 py-4 text-sm text-slate-400">

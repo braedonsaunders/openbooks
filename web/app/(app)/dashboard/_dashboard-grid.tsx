@@ -421,6 +421,9 @@ export function DashboardGrid({
             onAddApp={handleAddApp}
             allowedWidgetIds={allowedWidgetIds}
             onClose={() => setPaletteOpen(false)}
+            onSave={handleSave}
+            saving={saving}
+            canSave={dirty}
           />
         ) : null}
       </div>
