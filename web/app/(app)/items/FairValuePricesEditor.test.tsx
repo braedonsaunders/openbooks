@@ -43,7 +43,14 @@ test('a pricing read refusal names its remedy and retry restores the actual date
   assert.match(document.querySelector('table')?.textContent ?? '', /900719925474099\.1234/)
 })
 
-test('editing replaces the price list until cancel or an exact save refreshes the dated record', async (t) => {
+/** The open price drawer, ignoring one still playing its exit animation. */
+function liveDialog(): HTMLElement {
+  const dialog = [...document.querySelectorAll('[role="dialog"]')].find((node) => !node.closest('[data-overlay-exiting]')) as HTMLElement | undefined
+  assert.ok(dialog, 'the price drawer is open')
+  return dialog
+}
+
+test('a price edits in a drawer over the list; cancel writes nothing and an exact save refreshes the dated record', async (t) => {
   let current = price
   const writes: Record<string, unknown>[] = []
   const previousFetch = globalThis.fetch
@@ -54,28 +61,31 @@ test('editing replaces the price list until cancel or an exact save refreshes th
       current = { ...current, unit_price: String(body.unitPrice) }
       return Response.json({ id: price.id })
     }
-    return Response.json({ prices: [current] })
+    return Response.json({ prices: [current], currencies: [{ value: 'USD', label: 'USD · US Dollar' }] })
   }
   const root = createRoot(document.body)
   t.after(async () => { await act(async () => root.unmount()); globalThis.fetch = previousFetch })
   await act(async () => root.render(React.createElement(FairValuePricesEditor, { itemId: 'item-a', canManage: true })))
   await act(async () => button('actions.edit').click())
-  assert.ok(document.querySelector('table') === null, 'other price rows cannot replace an open draft')
-  assert.equal((document.querySelectorAll('input')[1] as HTMLInputElement).value, price.unit_price)
+  const dialog = liveDialog()
+  assert.ok(document.querySelector('table'), 'the list stays behind the drawer')
+  assert.equal((dialog.querySelectorAll('input')[0] as HTMLInputElement).value, price.unit_price)
+  const currency = [...dialog.querySelectorAll('select')].find((select) => [...select.options].some((option) => option.value === 'USD')) as HTMLSelectElement | undefined
+  assert.ok(currency, 'currency is a select of enabled currencies, never free text')
+  assert.deepEqual([...currency.options].map((option) => option.value), ['', 'BHD', 'USD'], 'a stored currency stays selectable beside the enabled ones')
+  assert.equal(currency.value, 'BHD')
   await act(async () => button('actions.cancel').click())
   assert.equal(writes.length, 0)
-  assert.ok(document.querySelector('table'))
   await act(async () => button('actions.edit').click())
-  const amount = document.querySelectorAll('input')[1] as HTMLInputElement
+  const amount = liveDialog().querySelectorAll('input')[0] as HTMLInputElement
   await act(async () => {
     Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!.call(amount, '900719925474099.2345')
     amount.dispatchEvent(new window.Event('input', { bubbles: true }))
   })
-  await act(async () => button('actions.save').click())
+  await act(async () => [...liveDialog().querySelectorAll('button')].find((candidate) => candidate.textContent?.trim() === 'actions.save')!.click())
   assert.equal(writes.length, 1)
   assert.equal(writes[0]!.unitPrice, '900719925474099.2345')
+  assert.equal(writes[0]!.currency, 'BHD')
   assert.equal(writes[0]!.effectiveFrom, '2026-10-01')
   assert.match(document.querySelector('table')?.textContent ?? '', /900719925474099\.2345/)
-  await act(async () => button('actions.edit').click())
-  assert.equal((document.querySelectorAll('input')[1] as HTMLInputElement).value, '900719925474099.2345')
 })

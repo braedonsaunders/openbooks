@@ -158,7 +158,9 @@
     "scopes": { "base": "Basispreis", "level": "Preisstufe", "customer": "Bestimmter Kunde" },
     "priceLevel": "Preisstufe", "customer": "Kunde", "selectCustomer": "Kunden auswählen…", "currency": "Währung", "quantityBasis": "Mengenbasis",
     "quantityBases": { "line": "Zeilenmenge", "overallItem": "Gesamtmenge dieses Artikels" },
-    "effectiveFrom": "Gültig ab", "effectiveTo": "Gültig bis", "breaksTitle": "Mengenstaffeln", "breaksDescription": "Die höchste erreichte Mindestmenge bestimmt den Preis für alle Einheiten.", "addBreak": "Mengenstaffel hinzufügen", "saveFailed": "Preisschema konnte nicht gespeichert werden.", "loadFailed": "Preisschemata konnten nicht geladen werden.", "saved": "Preisschema gespeichert", "changeReason": "Grund der Änderung", "changeReasonPlaceholder": "Warum ändert sich dieser Preis?", "changeReasonHint": "Erforderlich, wenn die neuen Preise bereits wirksame Zeiträume abdecken. Die vorherige Version bleibt erhalten und der Grund wird im Protokoll festgehalten.", "endDateTitle": "Preisschema beenden", "endDateReasonLabel": "Grund für die Beendigung", "ended": "Preisschema beendet", "confirmDelete": "Dieses Preisschema löschen?", "deleteFailed": "Preisschema konnte nicht gelöscht werden.", "deleted": "Preisschema gelöscht", "customerTarget": "Kunde · {customer}", "baseTarget": "Basispreis", "empty": "Für diesen Artikel ist keine Matrix konfiguriert.", "target": "Ziel", "effective": "Gültigkeit", "breaks": "Mengenpreise", "familyDescription": "Hier bepreiste Staffeln gelten für jede Variante ohne eigene Staffel für den Bereich.", "inheritedTitle": "Von der Familie übernommen", "inheritedDescription": "Familienstaffeln, die diese Variante bepreisen; zum abweichenden Bepreisen eine Staffel überschreiben.", "override": "Für diese Variante überschreiben", "inheritedBadge": "Übernommen von {family}", "overriddenBadge": "Überschrieben", "source": "Herkunft"
+    "effectiveFrom": "Gültig ab", "effectiveTo": "Gültig bis", "breaksTitle": "Mengenstaffeln", "breaksDescription": "Die höchste erreichte Mindestmenge bestimmt den Preis für alle Einheiten.", "addBreak": "Mengenstaffel hinzufügen", "saveFailed": "Preisschema konnte nicht gespeichert werden.", "loadFailed": "Preisschemata konnten nicht geladen werden.", "saved": "Preisschema gespeichert", "changeReason": "Grund der Änderung", "changeReasonPlaceholder": "Warum ändert sich dieser Preis?", "changeReasonHint": "Erforderlich, wenn die neuen Preise bereits wirksame Zeiträume abdecken. Die vorherige Version bleibt erhalten und der Grund wird im Protokoll festgehalten.", "endDateTitle": "Preisschema beenden", "endDateReasonLabel": "Grund für die Beendigung", "ended": "Preisschema beendet", "confirmDelete": "Dieses Preisschema löschen?", "deleteFailed": "Preisschema konnte nicht gelöscht werden.", "deleted": "Preisschema gelöscht", "customerTarget": "Kunde · {customer}", "baseTarget": "Basispreis", "empty": "Für diesen Artikel ist keine Matrix konfiguriert.", "target": "Ziel", "effective": "Gültigkeit", "breaks": "Mengenpreise", "familyDescription": "Hier bepreiste Staffeln gelten für jede Variante ohne eigene Staffel für den Bereich.", "inheritedTitle": "Von der Familie übernommen", "inheritedDescription": "Familienstaffeln, die diese Variante bepreisen; zum abweichenden Bepreisen eine Staffel überschreiben.", "override": "Für diese Variante überschreiben", "inheritedBadge": "Übernommen von {family}", "overriddenBadge": "Überschrieben", "source": "Herkunft",
+    "search": "Preisstaffeln suchen…",
+    "editSchedule": "Preisstaffel bearbeiten"
   },
   "rates": {
     "title": "Erweiterte Preisstaffeln",
@@ -213,7 +215,8 @@
     "rates": "Sätze",
     "tierOverrides": "Zuschlagssätze für Arbeit",
     "tierOverridesHide": "Zuschlagssätze für Arbeit ausblenden",
-    "tierAuto": "Automatisch"
+    "tierAuto": "Automatisch",
+    "search": "Tarifversionen suchen…"
   },
   "rateBookDrawer": {
     "laborPolicy": "Preisregel für Arbeit",
@@ -302,7 +305,6 @@
     "layerInquiry": "Bestandskostenschichten anzeigen",
     "title": "Bestandsbewertung",
     "description": "Wie der Bestand dieses Artikels bewertet und verfolgt wird — Methode, Konten und Meldebestände.",
-    "configure": "Bewertung konfigurieren",
     "empty": "Noch kein Bewertungsprofil — konfigurieren Sie eines, bevor Sie Bestand einlagern.",
     "method": "Bewertungsmethode",
     "methods": {
@@ -360,7 +362,9 @@
     "effectiveFrom": "Gültig ab",
     "effectiveTo": "Gültig bis",
     "empty": "Noch keine Zeitwerte — der einzelne SSP oben wird verwendet.",
-    "confirmDelete": "Diesen Zeitwert entfernen?"
+    "confirmDelete": "Diesen Zeitwert entfernen?",
+    "selectCurrency": "Währung auswählen…",
+    "edit": "Beizulegenden Zeitwert bearbeiten"
   },
   "families": {
     "title": "Produktfamilien",

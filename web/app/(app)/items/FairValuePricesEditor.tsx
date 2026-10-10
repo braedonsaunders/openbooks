@@ -5,7 +5,8 @@ import { useEffect, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { fetchAction } from '@braedonsaunders/appkit-errors'
 import { ActionAlert } from '@braedonsaunders/appkit-errors/react'
-import { Badge, Button, Card, CardContent, Input, Label } from '@openbooks/ui'
+import { Badge, Button, Drawer, Input, Label, Select } from '@openbooks/ui'
+import { DrawerSublist, SublistAddButton, SublistEmpty, SublistLoadError, SublistLoading } from '@/components/drawer-sublist'
 import { useAppAction } from '../../../lib/use-app-action'
 import { confirmDialog } from '@/lib/confirm'
 import { apiJson, ApiResponseError } from '@/lib/api-error'
@@ -32,12 +33,14 @@ const num = (v: string | null) => (v != null ? String(v) : '')
  * Fair-value / standalone selling prices for one item (fair_value_prices),
  * re-homed from Setup onto the item record — the dated, multi-currency form of
  * the single SSP field above. Manages its own dated rows via
- * /api/items/[id]/fair-values.
+ * /api/items/[id]/fair-values; the currency is picked from the
+ * organization's enabled currencies that read returns, never typed.
  */
 export function FairValuePricesEditor({ itemId, canManage }: { itemId: string; canManage: boolean }) {
   const t = useTranslations('items.fairValue')
   const common = useTranslations('common')
   const [prices, setPrices] = useState<Price[]>([])
+  const [currencies, setCurrencies] = useState<Array<{ value: string; label: string }>>([])
   const [loadState, setLoadState] = useState<'loading' | 'loaded' | 'failed'>('loading')
   const [loadError, setLoadError] = useState('')
   const action = useAppAction()
@@ -53,10 +56,11 @@ export function FairValuePricesEditor({ itemId, canManage }: { itemId: string; c
     setLoadState('loading')
     setLoadError('')
     setPrices([])
-    return apiJson<{ prices: Price[] }>(`/api/items/${itemId}/fair-values`, undefined, common('feedback.loadFailed'))
+    return apiJson<{ prices: Price[]; currencies?: Array<{ value: string; label: string }> }>(`/api/items/${itemId}/fair-values`, undefined, common('feedback.loadFailed'))
       .then((data) => {
         if (!Array.isArray(data.prices)) throw new Error(common('feedback.loadFailed'))
         setPrices(data.prices)
+        setCurrencies(Array.isArray(data.currencies) ? data.currencies : [])
         setLoadState('loaded')
       })
       .catch((error: unknown) => {
@@ -71,7 +75,7 @@ export function FairValuePricesEditor({ itemId, canManage }: { itemId: string; c
 
   function startNew() {
     if (loadState !== 'loaded') return
-    setForm({ id: null, currency: '', unitPrice: '', lowValue: '', highValue: '', effectiveFrom: '', effectiveTo: '', isActive: true })
+    setForm({ id: null, currency: currencies.length === 1 ? currencies[0]!.value : '', unitPrice: '', lowValue: '', highValue: '', effectiveFrom: '', effectiveTo: '', isActive: true })
   }
   function startEdit(p: Price) {
     setForm({
@@ -109,68 +113,23 @@ export function FairValuePricesEditor({ itemId, canManage }: { itemId: string; c
     })
   }
 
+  // A stored row keeps its currency selectable even when the organization no
+  // longer enables it, so editing never silently changes it.
+  const currencyChoices = form?.currency && !currencies.some((option) => option.value === form.currency)
+    ? [{ value: form.currency, label: form.currency }, ...currencies]
+    : currencies
+
   return (
-    <section className="space-y-3">
-      <ActionAlert error={action.refusal} fallbackMessage={common('feedback.saveFailed')} />
-      <div className="flex items-center justify-between gap-3">
-        <div>
-          <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t('title')}</h3>
-          <p className="text-xs text-slate-500 dark:text-slate-400">{t('description')}</p>
-        </div>
-        {canManage && loadState === 'loaded' && !form ? (
-          <Button variant="outline" size="sm" onClick={startNew}>{t('new')}</Button>
-        ) : null}
-      </div>
-
-      {loadState === 'loading' ? <p role="status" className="text-sm text-slate-500">{common('feedback.loading')}</p> : null}
-      {loadState === 'failed' ? (
-        <div role="alert" className="flex items-center gap-3 text-sm text-red-600 dark:text-red-400">
-          <span>{loadError}</span><Button variant="outline" size="sm" onClick={() => { void load() }}>{common('actions.retry')}</Button>
-        </div>
-      ) : null}
-
-      {form ? (
-        <Card>
-          <CardContent className="grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-4"><fieldset disabled={busy} className="contents">
-            <div className={field}>
-              <Label>{t('currency')}<span className="text-red-500"> *</span></Label>
-              <Input value={form.currency} maxLength={3} className="uppercase" onChange={(e) => setForm({ ...form, currency: e.target.value.toUpperCase() })} placeholder="USD" />
-            </div>
-            <div className={field}>
-              <Label>{t('unitPrice')}<span className="text-red-500"> *</span></Label>
-              <Input inputMode="decimal" className="text-right tabular-nums" value={form.unitPrice} onChange={(e) => setForm({ ...form, unitPrice: e.target.value })} />
-            </div>
-            <div className={field}>
-              <Label>{t('lowValue')}</Label>
-              <Input inputMode="decimal" className="text-right tabular-nums" value={form.lowValue} onChange={(e) => setForm({ ...form, lowValue: e.target.value })} />
-            </div>
-            <div className={field}>
-              <Label>{t('highValue')}</Label>
-              <Input inputMode="decimal" className="text-right tabular-nums" value={form.highValue} onChange={(e) => setForm({ ...form, highValue: e.target.value })} />
-            </div>
-            <div className={field}>
-              <Label>{t('effectiveFrom')}</Label>
-              <Input type="date" value={form.effectiveFrom} onChange={(e) => setForm({ ...form, effectiveFrom: e.target.value })} />
-            </div>
-            <div className={field}>
-              <Label>{t('effectiveTo')}</Label>
-              <Input type="date" value={form.effectiveTo} onChange={(e) => setForm({ ...form, effectiveTo: e.target.value })} />
-            </div>
-            <label className="flex items-center gap-2 self-end pb-2 text-sm">
-              <input type="checkbox" checked={form.isActive} onChange={(e) => setForm({ ...form, isActive: e.target.checked })}
-                className="h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500" />
-              {common('status.active')}
-            </label>
-            <div className="flex items-end gap-2">
-              <Button disabled={busy} onClick={save}>{busy ? common('actions.saving') : common('actions.save')}</Button>
-              <Button variant="outline" onClick={() => setForm(null)}>{common('actions.cancel')}</Button>
-            </div>
-            </fieldset>
-          </CardContent>
-        </Card>
-      ) : null}
-
-      {!form && prices.length > 0 ? (
+    <DrawerSublist
+      title={t('title')}
+      description={t('description')}
+      action={canManage && loadState === 'loaded' ? <SublistAddButton label={t('new')} onClick={startNew} /> : undefined}
+      alert={form ? null : <ActionAlert error={action.refusal} fallbackMessage={common('feedback.saveFailed')} />}
+    >
+      {loadState === 'loading' ? <SublistLoading /> : null}
+      {loadState === 'failed' ? <SublistLoadError message={loadError} onRetry={() => { void load() }} /> : null}
+      {loadState === 'loaded' && prices.length === 0 ? <SublistEmpty text={t('empty')} /> : null}
+      {prices.length > 0 ? (
         <div className="overflow-hidden rounded-lg border border-slate-200 dark:border-slate-800">
           <SharedTable className="w-full text-sm">
             <SharedTableHeader className="bg-slate-50 text-left text-xs text-slate-500 dark:bg-slate-900 dark:text-slate-400">
@@ -206,9 +165,61 @@ export function FairValuePricesEditor({ itemId, canManage }: { itemId: string; c
             </SharedTableBody>
           </SharedTable>
         </div>
-      ) : loadState === 'loaded' && !form ? (
-        <p className="text-sm text-slate-500 dark:text-slate-400">{t('empty')}</p>
       ) : null}
-    </section>
+
+      <Drawer
+        open={form !== null}
+        onClose={() => { if (!busy) setForm(null) }}
+        stacked
+        size="md"
+        title={form?.id ? t('edit') : t('new')}
+        footer={(
+          <>
+            <Button variant="outline" disabled={busy} onClick={() => setForm(null)}>{common('actions.cancel')}</Button>
+            <Button disabled={busy || !form?.currency || !form?.unitPrice} onClick={save}>{busy ? common('actions.saving') : common('actions.save')}</Button>
+          </>
+        )}
+      >
+        {form ? (
+          <div className="space-y-4">
+            <ActionAlert error={action.refusal} fallbackMessage={common('feedback.saveFailed')} />
+            <fieldset disabled={busy} className="grid gap-3 sm:grid-cols-2">
+            <div className={field}>
+              <Label>{t('currency')}<span className="text-red-500"> *</span></Label>
+              <Select value={form.currency} onChange={(e) => setForm({ ...form, currency: e.target.value })} aria-label={t('currency')}>
+                <option value="">{t('selectCurrency')}</option>
+                {currencyChoices.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+              </Select>
+            </div>
+            <div className={field}>
+              <Label>{t('unitPrice')}<span className="text-red-500"> *</span></Label>
+              <Input inputMode="decimal" className="text-right tabular-nums" value={form.unitPrice} onChange={(e) => setForm({ ...form, unitPrice: e.target.value })} />
+            </div>
+            <div className={field}>
+              <Label>{t('lowValue')}</Label>
+              <Input inputMode="decimal" className="text-right tabular-nums" value={form.lowValue} onChange={(e) => setForm({ ...form, lowValue: e.target.value })} />
+            </div>
+            <div className={field}>
+              <Label>{t('highValue')}</Label>
+              <Input inputMode="decimal" className="text-right tabular-nums" value={form.highValue} onChange={(e) => setForm({ ...form, highValue: e.target.value })} />
+            </div>
+            <div className={field}>
+              <Label>{t('effectiveFrom')}</Label>
+              <Input type="date" value={form.effectiveFrom} onChange={(e) => setForm({ ...form, effectiveFrom: e.target.value })} />
+            </div>
+            <div className={field}>
+              <Label>{t('effectiveTo')}</Label>
+              <Input type="date" value={form.effectiveTo} onChange={(e) => setForm({ ...form, effectiveTo: e.target.value })} />
+            </div>
+            <label className="flex items-center gap-2 self-end pb-2 text-sm sm:col-span-2">
+              <input type="checkbox" checked={form.isActive} onChange={(e) => setForm({ ...form, isActive: e.target.checked })}
+                className="h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500" />
+              {common('status.active')}
+            </label>
+            </fieldset>
+          </div>
+        ) : null}
+      </Drawer>
+    </DrawerSublist>
   )
 }

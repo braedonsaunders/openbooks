@@ -145,7 +145,9 @@
     "scopes": { "base": "Preço base", "level": "Nível de preço", "customer": "Cliente específico" },
     "priceLevel": "Nível de preço", "customer": "Cliente", "selectCustomer": "Selecionar cliente…", "currency": "Moeda", "quantityBasis": "Base de quantidade",
     "quantityBases": { "line": "Quantidade da linha", "overallItem": "Quantidade total do item" },
-    "effectiveFrom": "Vigente desde", "effectiveTo": "Vigente até", "breaksTitle": "Faixas de quantidade", "breaksDescription": "A maior quantidade mínima atingida define o preço de todas as unidades.", "addBreak": "Adicionar faixa", "saveFailed": "Não foi possível salvar a tabela.", "loadFailed": "Não foi possível carregar as tabelas de preços.", "saved": "Tabela salva", "changeReason": "Motivo da alteração", "changeReasonPlaceholder": "Por que este preço está mudando?", "changeReasonHint": "Obrigatório quando os novos preços abrangem datas já vigentes. A versão anterior é mantida e o motivo é registrado na auditoria.", "endDateTitle": "Encerrar tabela", "endDateReasonLabel": "Motivo do encerramento", "ended": "Tabela encerrada", "confirmDelete": "Excluir esta tabela?", "deleteFailed": "Não foi possível excluir a tabela.", "deleted": "Tabela excluída", "customerTarget": "Cliente · {customer}", "baseTarget": "Preço base", "empty": "Nenhum preço matricial foi configurado.", "target": "Destino", "effective": "Vigência", "breaks": "Preços por quantidade", "familyDescription": "As tabelas aqui valem para cada variante sem tabela própria para o escopo.", "inheritedTitle": "Herdado da família", "inheritedDescription": "Tabelas da família aplicadas a esta variante; substitua uma para precificar só esta variante.", "override": "Substituir para esta variante", "inheritedBadge": "Herdado de {family}", "overriddenBadge": "Substituído", "source": "Origem"
+    "effectiveFrom": "Vigente desde", "effectiveTo": "Vigente até", "breaksTitle": "Faixas de quantidade", "breaksDescription": "A maior quantidade mínima atingida define o preço de todas as unidades.", "addBreak": "Adicionar faixa", "saveFailed": "Não foi possível salvar a tabela.", "loadFailed": "Não foi possível carregar as tabelas de preços.", "saved": "Tabela salva", "changeReason": "Motivo da alteração", "changeReasonPlaceholder": "Por que este preço está mudando?", "changeReasonHint": "Obrigatório quando os novos preços abrangem datas já vigentes. A versão anterior é mantida e o motivo é registrado na auditoria.", "endDateTitle": "Encerrar tabela", "endDateReasonLabel": "Motivo do encerramento", "ended": "Tabela encerrada", "confirmDelete": "Excluir esta tabela?", "deleteFailed": "Não foi possível excluir a tabela.", "deleted": "Tabela excluída", "customerTarget": "Cliente · {customer}", "baseTarget": "Preço base", "empty": "Nenhum preço matricial foi configurado.", "target": "Destino", "effective": "Vigência", "breaks": "Preços por quantidade", "familyDescription": "As tabelas aqui valem para cada variante sem tabela própria para o escopo.", "inheritedTitle": "Herdado da família", "inheritedDescription": "Tabelas da família aplicadas a esta variante; substitua uma para precificar só esta variante.", "override": "Substituir para esta variante", "inheritedBadge": "Herdado de {family}", "overriddenBadge": "Substituído", "source": "Origem",
+    "search": "Pesquisar tabelas de preços…",
+    "editSchedule": "Editar tabela de preços"
   },
   "rates": {
     "title": "Preços avançados por tarifa",
@@ -200,7 +202,8 @@
     "rates": "Tarifas",
     "tierOverrides": "Adicionais de mão de obra",
     "tierOverridesHide": "Ocultar adicionais de mão de obra",
-    "tierAuto": "Automático"
+    "tierAuto": "Automático",
+    "search": "Pesquisar versões de tarifas…"
   },
   "rateBookDrawer": {
     "laborPolicy": "Política de preços de mão de obra",
@@ -289,7 +292,6 @@
     "layerInquiry": "Ver camadas de custo do estoque",
     "title": "Custeio de estoque",
     "description": "Como o estoque deste item é avaliado e controlado — método, contas e pontos de pedido.",
-    "configure": "Configurar custeio",
     "empty": "Ainda sem perfil de custo — configure um antes de receber estoque.",
     "method": "Método de custeio",
     "methods": {
@@ -347,7 +349,9 @@
     "effectiveFrom": "Vigente desde",
     "effectiveTo": "Vigente até",
     "empty": "Ainda sem preços de valor justo — o SSP único acima é usado.",
-    "confirmDelete": "Remover este preço de valor justo?"
+    "confirmDelete": "Remover este preço de valor justo?",
+    "selectCurrency": "Selecione uma moeda…",
+    "edit": "Editar preço de valor justo"
   },
   "families": {
     "title": "Famílias de produtos",

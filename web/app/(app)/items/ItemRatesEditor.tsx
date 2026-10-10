@@ -6,7 +6,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import Link from 'next/link'
 import { toast } from 'sonner'
-import { Badge, Button, Card, CardContent, Input, Label, Select } from '@openbooks/ui'
+import { Badge, Button, Card, CardContent, Drawer, Input, Label, Select } from '@openbooks/ui'
+import { DrawerSublist, SublistAddButton, SublistLoadError, SublistLoading, useSublistRows } from '../../../components/drawer-sublist'
 import { LineGrid, type LineGridColumn } from '../../../components/line-grid'
 import { PagedTable } from '../../../components/paged-table'
 import { enumLabel } from '../../../lib/enum-label'
@@ -28,6 +29,7 @@ interface RateData {
   versions: { id: string; rate_book_id: string; rate_book_name: string; effective_from: string; effective_to: string | null; status: string; tiers: Tier[] }[]
   timeTypes: { id: string; name: string; bill_multiplier: string }[]
 }
+type RateVersionRow = RateData['versions'][number]
 
 export function defaultRateTiers(
   itemKind: string,
@@ -204,6 +206,9 @@ export function ItemRatesEditor({
     }
   }
 
+  const versionText = (version: RateVersionRow) => `${version.rate_book_name} ${version.effective_from} ${version.effective_to ?? ''}`
+  const list = useSublistRows(data?.versions ?? [], versionText)
+
   return (
     <section className="space-y-3">
       {data ? (
@@ -250,29 +255,46 @@ export function ItemRatesEditor({
         </Card>
       ) : null}
 
-      <div className="flex items-center justify-between gap-3">
-        <div>
-          <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t('title')}</h3>
-          <p className="text-xs text-slate-500 dark:text-slate-400">{t('description')}</p>
-        </div>
-        <div className="flex items-center gap-2">
-          <Link href="/docs/item-rates" className="text-xs font-medium text-teal-700 hover:underline dark:text-teal-300">{t('documentation')}</Link>
-          {canManage && data && loadState === 'loaded' && !editing ? <Button variant="outline" size="sm" onClick={beginEditing}>{advancedPricing ? t('newVersion') : t('configure')}</Button> : null}
-        </div>
-      </div>
+      <DrawerSublist
+        title={t('title')}
+        description={<>{t('description')}{' '}<Link href="/docs/item-rates" className="font-medium text-teal-700 hover:underline dark:text-teal-300">{t('documentation')}</Link></>}
+        action={canManage && data && loadState === 'loaded' ? <SublistAddButton label={advancedPricing ? t('newVersion') : t('configure')} onClick={beginEditing} /> : undefined}
+        search={data?.versions.length ? { value: list.query, onChange: list.setQuery, placeholder: t('search') } : undefined}
+      >
+        {loadState === 'loading' ? <SublistLoading /> : null}
+        {loadState === 'failed' ? <SublistLoadError message={loadError} onRetry={() => { void load() }} /> : null}
+        <PagedTable
+          rows={list.filtered}
+          rowKey={(version) => version.id}
+          empty={<p className="text-sm text-slate-500 dark:text-slate-400">{t('empty')}</p>}
+          columns={[
+            { key: 'book', header: t('rateBook'), cell: (version) => version.rate_book_name, search: (version) => version.rate_book_name },
+            { key: 'from', header: t('effectiveFrom'), cell: (version) => version.effective_from },
+            { key: 'to', header: t('effectiveTo'), cell: (version) => version.effective_to ?? '—' },
+            { key: 'status', header: common('labels.status'), cell: (version) => <Badge variant={version.status === 'active' ? 'success' : 'secondary'}>{enumLabel(version.status, {
+              draft: common('status.draft'), active: common('status.active'), retired: common('status.retired'),
+            } satisfies Record<RateVersionStatus, string>, t('statusUnknown'))}</Badge> },
+            { key: 'rates', header: t('rates'), cell: (version) => version.tiers.map((tier) => `${tier.unitName}: ${money(tier.billRate)}`).join(' · ') },
+          ]}
+        />
+      </DrawerSublist>
 
-      {loadState === 'loading' ? <p role="status" className="text-sm text-slate-500">{common('feedback.loading')}</p> : null}
-      {loadState === 'failed' ? (
-        <div role="alert" className="flex items-center gap-3 text-sm text-red-600 dark:text-red-400">
-          <span>{loadError}</span><Button variant="outline" size="sm" onClick={() => { void load() }}>{common('actions.retry')}</Button>
-        </div>
-      ) : null}
-
-      {editing ? (
-        <Card>
-          <CardContent className="space-y-4 p-4">
-            <fieldset disabled={busy} className="space-y-4">
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+      <Drawer
+        open={editing}
+        onClose={() => { if (!busy) setEditingRequested(false) }}
+        stacked
+        size="xl"
+        title={advancedPricing ? t('newVersion') : t('configure')}
+        description={t('description')}
+        footer={(
+          <>
+            <Button variant="outline" disabled={busy} onClick={() => setEditingRequested(false)}>{common('actions.cancel')}</Button>
+            <Button disabled={busy} onClick={save}>{busy ? common('actions.saving') : common('actions.save')}</Button>
+          </>
+        )}
+      >
+        <fieldset disabled={busy} className="space-y-4">
+            <div className="grid gap-3 sm:grid-cols-2">
               <div className="space-y-1"><Label>{t('rateBook')}</Label><Select value={rateBookId} onChange={(event) => setRateBookId(event.target.value)}>
                 <option value="">{t('standardBook')}</option>{data?.books.map((book) => <option key={book.id} value={book.id}>{book.name} · {book.currency}</option>)}
               </Select></div>
@@ -302,32 +324,8 @@ export function ItemRatesEditor({
               </button>
             ) : null}
             {serverError ? <p role="alert" className="text-sm text-red-600 dark:text-red-400">{serverError}</p> : null}
-            <div className="flex gap-2">
-              <Button disabled={busy} onClick={save}>{busy ? common('actions.saving') : common('actions.save')}</Button>
-              <Button variant="outline" onClick={() => setEditingRequested(false)}>{common('actions.cancel')}</Button>
-            </div>
-            </fieldset>
-          </CardContent>
-        </Card>
-      ) : null}
-
-      {!editing ? (
-      <PagedTable
-        rows={data?.versions ?? []}
-        rowKey={(version) => version.id}
-        searchable
-        empty={<p className="text-sm text-slate-500 dark:text-slate-400">{t('empty')}</p>}
-        columns={[
-          { key: 'book', header: t('rateBook'), cell: (version) => version.rate_book_name, search: (version) => version.rate_book_name },
-          { key: 'from', header: t('effectiveFrom'), cell: (version) => version.effective_from },
-          { key: 'to', header: t('effectiveTo'), cell: (version) => version.effective_to ?? '—' },
-          { key: 'status', header: common('labels.status'), cell: (version) => <Badge variant={version.status === 'active' ? 'success' : 'secondary'}>{enumLabel(version.status, {
-            draft: common('status.draft'), active: common('status.active'), retired: common('status.retired'),
-          } satisfies Record<RateVersionStatus, string>, t('statusUnknown'))}</Badge> },
-          { key: 'rates', header: t('rates'), cell: (version) => version.tiers.map((tier) => `${tier.unitName}: ${money(tier.billRate)}`).join(' · ') },
-        ]}
-      />
-      ) : null}
+        </fieldset>
+      </Drawer>
     </section>
   )
 }

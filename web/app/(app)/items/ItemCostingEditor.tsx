@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { Button, Card, CardContent, Input, Label, SearchSelect, Select } from '@openbooks/ui'
+import { useRecordSaveParticipant } from '@/components/record-save-participants'
 
 interface AccountOpt {
   id: string
@@ -127,7 +128,9 @@ export function validateConversionRows(rows: ConversionRowInput[]): ConversionRo
 /**
  * Per-item costing profile (item_inventory_profiles), re-homed from Setup onto
  * the item record. Only shown for item kinds that carry stock. Loads the profile
- * on mount and upserts via /api/items/[id]/costing.
+ * on mount and upserts via /api/items/[id]/costing. The profile edits with the
+ * item: its fields open when the item drawer enters edit mode and the item's
+ * single Save persists them through the record save registry.
  */
 export function ItemCostingEditor({
   itemId,
@@ -138,16 +141,14 @@ export function ItemCostingEditor({
   itemId: string
   kind: string
   accounts: AccountOpt[]
+  /** The item drawer is in edit mode and the viewer may manage the item. */
   canManage: boolean
 }) {
   const t = useTranslations('items.costing')
   const common = useTranslations('common')
   const [profile, setProfile] = useState<Profile | null>(null)
   const [loaded, setLoaded] = useState(false)
-  const [editing, setEditing] = useState(false)
-  // A read-only viewer must never hold the form in edit mode. Adjusted during
-  // render (same committed value, no extra render).
-  if (!canManage && editing) setEditing(false)
+  const editing = canManage && loaded
   const [busy, setBusy] = useState(false)
   const [blocked, setBlocked] = useState(false)
   const [serverError, setServerError] = useState<string | null>(null)
@@ -245,7 +246,6 @@ export function ItemCostingEditor({
   if (prevItemId !== itemId) {
     setPrevItemId(itemId)
     setLoaded(false)
-    setEditing(false)
     setProfile(null)
   }
   useEffect(() => {
@@ -257,13 +257,13 @@ export function ItemCostingEditor({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [itemId])
 
-  async function save() {
+  async function save(): Promise<boolean> {
     // Refuse the combination inline: the server answers 422 for any offset
     // account equal to the asset account, and for any malformed conversion
     // row, so never issue that PUT.
     if (conflicts.length > 0 || conversionIssues.length > 0) {
       setBlocked(true)
-      return
+      return false
     }
     setBlocked(false)
     setServerError(null)
@@ -291,26 +291,46 @@ export function ItemCostingEditor({
         // A rejected save must persist as an inline error, not only a toast.
         setServerError(message)
         toast.error(message)
-      } else {
-        toast.success(common('feedback.saved'))
-        setEditing(false)
-        await load()
+        return false
       }
+      await load()
+      return true
     } catch {
       const message = common('feedback.saveFailed')
       setServerError(message)
       toast.error(message)
+      return false
     } finally {
       setBusy(false)
     }
   }
 
-  function cancel() {
-    hydrate(profile)
-    setBlocked(false)
-    setServerError(null)
-    setEditing(false)
-  }
+  // Dirty while any field differs from the loaded profile, compared through
+  // the same shape hydrate() writes.
+  const snapshot = JSON.stringify([
+    costingMethod, tracking, abcClass, assetAccountId, cogsAccountId, adjustmentAccountId,
+    varianceAccountId, receivedNotBilledAccountId, standardCost, baseUnit,
+    conversions.map((row) => [row.unit, row.factor]), reorderPoint, preferredStockLevel,
+    allowNegativeInventory, negativeCostBasis, provisionalUnitCost,
+  ])
+  const baseline = useMemo(() => JSON.stringify([
+    profile?.costing_method ?? 'moving_average', profile?.tracking ?? 'none', profile?.abc_class ?? '',
+    profile?.asset_account_id ?? '', profile?.cogs_account_id ?? '', profile?.adjustment_account_id ?? '',
+    profile?.variance_account_id ?? '', profile?.received_not_billed_account_id ?? '', profile?.standard_cost ?? '',
+    profile?.base_unit ?? 'ea',
+    Object.entries(profile?.unit_conversions ?? {}).sort(([a], [b]) => a.localeCompare(b)).map(([unit, factor]) => [unit, String(factor)]),
+    profile?.reorder_point ?? '', profile?.preferred_stock_level ?? '', profile?.allow_negative_inventory ?? false,
+    profile?.negative_cost_basis ?? 'last_receipt', profile?.provisional_unit_cost ?? '',
+  ]), [profile])
+  useRecordSaveParticipant('costing', {
+    dirty: loaded && snapshot !== baseline,
+    save,
+    reset: () => {
+      hydrate(profile)
+      setBlocked(false)
+      setServerError(null)
+    },
+  })
 
   // Costing only applies to items that actually hold stock.
   if (!['inventory', 'assembly', 'kit'].includes(kind)) return null
@@ -322,11 +342,6 @@ export function ItemCostingEditor({
           <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t('title')}</h3>
           <p className="text-xs text-slate-500 dark:text-slate-400">{t('description')}</p>
         </div>
-        {canManage && !editing ? (
-          <Button variant="outline" size="sm" disabled={!loaded || busy} onClick={() => setEditing(true)}>
-            {profile ? common('actions.edit') : t('configure')}
-          </Button>
-        ) : null}
       </div>
 
       <Link className="text-sm text-teal-700 hover:underline" href={`/inventory?layerItem=${encodeURIComponent(itemId)}`}>{t("layerInquiry")}</Link>
@@ -502,10 +517,6 @@ export function ItemCostingEditor({
                 {serverError}
               </p>
             ) : null}
-            <div className="flex items-end gap-2 sm:col-span-2 lg:col-span-3">
-              <Button disabled={busy} onClick={save}>{busy ? common('actions.saving') : common('actions.save')}</Button>
-              <Button variant="outline" onClick={cancel}>{common('actions.cancel')}</Button>
-            </div>
             </fieldset>
           </CardContent>
         </Card>

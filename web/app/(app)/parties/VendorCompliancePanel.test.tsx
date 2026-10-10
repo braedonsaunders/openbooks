@@ -43,7 +43,7 @@ type Registry = ReturnType<typeof useRecordSaveRegistry>;
 let recordSave: Registry | null = null;
 
 function RecordHost({ children }: { children: React.ReactNode }) {
-  const registry = useRecordSaveRegistry();
+  const registry = useRecordSaveRegistry(true);
   recordSave = registry;
   return <RecordSaveContext.Provider value={registry.context}>{children}</RecordSaveContext.Provider>;
 }

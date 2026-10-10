@@ -89,9 +89,12 @@ export async function ItemDrawerSlot({ drawer, sp }: {
   const planningTab = await itemPlanningTab(authz, props, sp)
   const variantsTab = await itemVariantsTab(props, sp)
   const channelStockTab = await itemChannelStockTab(authz, props, sp)
+  // A planner edits the item's planning policy through the item's Edit and
+  // Save even without managing the item itself.
+  const recordSectionEditors = planningTab !== null && can(authz, 'inventory.plan')
   const operationalTabs = [...(kitTab ? [kitTab] : []), ...(kitAvailabilityTab ? [kitAvailabilityTab] : []), ...(assemblyRecipeTab ? [assemblyRecipeTab] : []), ...(planningTab ? [planningTab] : []), ...(variantsTab ? [variantsTab] : []), ...(channelStockTab ? [channelStockTab] : [])]
   if (props.createMode || !can(authz, 'admin.setup.manage') || authz.allowedSubsidiaryIds !== null) {
-    return <ItemDrawer key={remountKey} {...props} recordTabs={operationalTabs} />
+    return <ItemDrawer key={remountKey} {...props} recordTabs={operationalTabs} recordSectionEditors={recordSectionEditors} />
   }
   const features = await resolvedFeatureState(authz.user.orgId)
   const t = await getTranslations('admin.setup')
@@ -141,7 +144,7 @@ export async function ItemDrawerSlot({ drawer, sp }: {
         ) : null,
       })),
   ]
-  return <ItemDrawer key={remountKey} {...props} recordTabs={recordTabs} />
+  return <ItemDrawer key={remountKey} {...props} recordTabs={recordTabs} recordSectionEditors={recordSectionEditors} />
 }
 
 /**

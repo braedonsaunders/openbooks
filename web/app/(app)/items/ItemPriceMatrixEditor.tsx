@@ -3,10 +3,12 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
-import { Badge, Button, Card, CardContent, Label, Select, Input } from '@openbooks/ui'
+import { Badge, Button, Drawer, Label, Select, Input } from '@openbooks/ui'
+import { DrawerSublist, SublistAddButton } from '@/components/drawer-sublist'
 import { useBusinessToday } from '@/components/business-date-provider'
 import { LineGrid, type LineGridColumn } from '@/components/line-grid'
 import { PagedTable } from '@/components/paged-table'
+import { useSublistRows } from '@/components/drawer-sublist'
 import { confirmDialog } from '@/lib/confirm'
 import { promptDialog } from '@/lib/prompt'
 
@@ -181,15 +183,66 @@ export function ItemPriceMatrixEditor({ itemId, familyId, canManage }: { itemId?
     setEditingRevision(0); setReason(''); setError('')
   }
 
-  return (
-    <section className="space-y-4">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div><h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t('title')}</h3><p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{familyId ? t('familyDescription') : t('description')}</p></div>
-      </div>
+  const scheduleText = (row: CombinedRow) => `${targetLabel(row)} ${row.currency} ${row.effective_from} ${row.breaks.map((entry) => `${entry.minimumQuantity} ${entry.unitPrice}`).join(' ')}`
+  const list = useSublistRows(combinedRows, scheduleText)
 
-      {editingId !== null ? (
-        <Card><CardContent className="space-y-4 p-4"><fieldset disabled={busy} className="space-y-4">
-          <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
+  return (
+    <DrawerSublist
+      title={t('title')}
+      description={familyId ? t('familyDescription') : t('description')}
+      action={canManage ? <SublistAddButton label={t('addSchedule')} onClick={() => beginNew('base')} /> : undefined}
+      alert={editingId === null && error ? <p role="alert" className="text-sm text-red-600 dark:text-red-400">{error}</p> : null}
+      search={combinedRows.length ? { value: list.query, onChange: list.setQuery, placeholder: t('search') } : undefined}
+    >
+      <PagedTable
+        rows={list.filtered} rowKey={(row) => `${row.inheritedRow ? 'inherited' : 'own'}:${row.id}`} emptyAsRow
+        empty={<span>{t('empty')}</span>} onRowClick={canManage ? (row) => { if (!row.inheritedRow) beginEdit(row) } : undefined}
+        columns={[
+          { key: 'target', header: t('target'), cell: targetLabel, search: targetLabel },
+          { key: 'currency', header: t('currency'), cell: (row) => row.currency, search: (row) => row.currency },
+          { key: 'basis', header: t('quantityBasis'), cell: (row) => t(row.quantity_basis === 'overall_item_quantity' ? 'quantityBases.overallItem' : 'quantityBases.line') },
+          { key: 'dates', header: t('effective'), cell: (row) => `${row.effective_from} → ${row.effective_to ?? '∞'}` },
+          { key: 'breaks', header: t('breaks'), cell: (row) => row.breaks.map((entry) => `${entry.minimumQuantity}+: ${row.currency} ${entry.unitPrice}`).join(' · '), search: (row) => row.breaks.map((entry) => `${entry.minimumQuantity} ${entry.unitPrice}`).join(' ') },
+          {
+            key: 'source', header: t('source'), cell: (row) => {
+              if (!row.inheritedRow) return null
+              const shadowed = ownKeys.has(scopeKey(row))
+              return (
+                <span className="flex items-center gap-1.5">
+                  <Badge variant={shadowed ? 'secondary' : 'outline'}>
+                    {shadowed ? t('overriddenBadge') : t('inheritedBadge', { family: row.inheritedFrom?.familyName ?? '' })}
+                  </Badge>
+                </span>
+              )
+            },
+          },
+          { key: 'status', header: common('labels.status'), cell: (row) => <Badge variant={row.is_active ? 'success' : 'secondary'}>{row.is_active ? common('status.active') : common('status.inactive')}</Badge> },
+          {
+            key: 'actions', header: '', cell: (row) => {
+              if (row.inheritedRow) {
+                return canManage && !ownKeys.has(scopeKey(row)) ? <Button variant="ghost" size="sm" onClick={() => beginOverride(row)}>{t('override')}</Button> : null
+              }
+              return canManage ? <Button variant="ghost" size="sm" onClick={(event) => { event.stopPropagation(); void remove(row) }}>{common('actions.delete')}</Button> : null
+            },
+          },
+        ]}
+      />
+
+      <Drawer
+        open={editingId !== null && canManage}
+        onClose={() => { if (!busy) setEditingId(null) }}
+        stacked
+        size="lg"
+        title={editingId === 'new' ? t('addSchedule') : t('editSchedule')}
+        footer={(
+          <>
+            <Button variant="outline" disabled={busy} onClick={() => setEditingId(null)}>{common('actions.cancel')}</Button>
+            <Button disabled={busy || !currency || (scope === 'level' && !priceLevelId) || (scope === 'customer' && !customerId)} onClick={save}>{busy ? common('actions.saving') : common('actions.save')}</Button>
+          </>
+        )}
+      >
+        <fieldset disabled={busy} className="space-y-4">
+          <div className="grid gap-3 sm:grid-cols-2">
             <div className="space-y-1"><Label>{t('scope')}</Label><Select value={scope} onChange={(event) => setScope(event.target.value as typeof scope)}><option value="base">{t('scopes.base')}</option><option value="level">{t('scopes.level')}</option><option value="customer">{t('scopes.customer')}</option></Select></div>
             {scope === 'level' ? <div className="space-y-1"><Label>{t('priceLevel')}</Label><Select value={priceLevelId} onChange={(event) => setPriceLevelId(event.target.value)}>{data?.levels.filter((level) => !level.is_base).map((level) => <option key={level.id} value={level.id}>{level.name}</option>)}</Select></div> : null}
             {scope === 'customer' ? <div className="space-y-1"><Label>{t('customer')}</Label><Select value={customerId} onChange={(event) => setCustomerId(event.target.value)}><option value="">{t('selectCustomer')}</option>{data?.customers.map((customer) => <option key={customer.id} value={customer.id}>{customer.display_name}</option>)}</Select></div> : null}
@@ -210,47 +263,8 @@ export function ItemPriceMatrixEditor({ itemId, familyId, canManage }: { itemId?
             <LineGrid columns={breakColumns} rows={breaks} onRowsChange={setBreaks} emptyRow={() => ({ minimumQuantity: '', unitPrice: '' })} minRows={1} addLabel={t('addBreak')} addPlacement="top" />
           </div>
           {error ? <p role="alert" className="text-sm text-red-600 dark:text-red-400">{error}</p> : null}
-          <div className="flex gap-2"><Button disabled={busy || !currency || (scope === 'level' && !priceLevelId) || (scope === 'customer' && !customerId)} onClick={save}>{busy ? common('actions.saving') : common('actions.save')}</Button><Button variant="outline" onClick={() => setEditingId(null)}>{common('actions.cancel')}</Button></div>
-          </fieldset>
-        </CardContent></Card>
-      ) : null}
-
-      {editingId === null ? (
-        <PagedTable
-          rows={combinedRows} rowKey={(row) => `${row.inheritedRow ? 'inherited' : 'own'}:${row.id}`} searchable emptyAsRow
-          empty={<span>{t('empty')}</span>} onRowClick={canManage ? (row) => { if (!row.inheritedRow) beginEdit(row) } : undefined}
-          toolbarAfter={canManage ? <Button size="sm" onClick={() => beginNew('base')}>{t('addSchedule')}</Button> : undefined}
-          columns={[
-            { key: 'target', header: t('target'), cell: targetLabel, search: targetLabel },
-            { key: 'currency', header: t('currency'), cell: (row) => row.currency, search: (row) => row.currency },
-            { key: 'basis', header: t('quantityBasis'), cell: (row) => t(row.quantity_basis === 'overall_item_quantity' ? 'quantityBases.overallItem' : 'quantityBases.line') },
-            { key: 'dates', header: t('effective'), cell: (row) => `${row.effective_from} → ${row.effective_to ?? '∞'}` },
-            { key: 'breaks', header: t('breaks'), cell: (row) => row.breaks.map((entry) => `${entry.minimumQuantity}+: ${row.currency} ${entry.unitPrice}`).join(' · '), search: (row) => row.breaks.map((entry) => `${entry.minimumQuantity} ${entry.unitPrice}`).join(' ') },
-            {
-              key: 'source', header: t('source'), cell: (row) => {
-                if (!row.inheritedRow) return null
-                const shadowed = ownKeys.has(scopeKey(row))
-                return (
-                  <span className="flex items-center gap-1.5">
-                    <Badge variant={shadowed ? 'secondary' : 'outline'}>
-                      {shadowed ? t('overriddenBadge') : t('inheritedBadge', { family: row.inheritedFrom?.familyName ?? '' })}
-                    </Badge>
-                  </span>
-                )
-              },
-            },
-            { key: 'status', header: common('labels.status'), cell: (row) => <Badge variant={row.is_active ? 'success' : 'secondary'}>{row.is_active ? common('status.active') : common('status.inactive')}</Badge> },
-            {
-              key: 'actions', header: '', cell: (row) => {
-                if (row.inheritedRow) {
-                  return canManage && !ownKeys.has(scopeKey(row)) ? <Button variant="ghost" size="sm" onClick={() => beginOverride(row)}>{t('override')}</Button> : null
-                }
-                return canManage ? <Button variant="ghost" size="sm" onClick={(event) => { event.stopPropagation(); void remove(row) }}>{common('actions.delete')}</Button> : null
-              },
-            },
-          ]}
-        />
-      ) : null}
-    </section>
+        </fieldset>
+      </Drawer>
+    </DrawerSublist>
   )
 }
