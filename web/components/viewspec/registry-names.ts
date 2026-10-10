@@ -64,6 +64,7 @@ export const WIDGET_NAMES: ReadonlySet<string> = new Set([
   'approvals-table',
   'approvals-pagination',
   // HR-16 begin
+  'assign-party-role',
   'automation-approval-settings',
   'automation-builder',
   'automation-last-run-cell',
@@ -603,6 +604,7 @@ export const WIDGET_NAMES: ReadonlySet<string> = new Set([
   'waiver-number-cell',
   'waivers-panel',
   'new-webhook-endpoint',
+  'warehouse-execution-queue',
   'webhook-endpoint-drawer',
   'warehouses-panel',
   'pre-billing-workspace',
