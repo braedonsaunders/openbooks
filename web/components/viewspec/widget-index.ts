@@ -572,6 +572,7 @@ export const WIDGET_FAMILY: Readonly<Record<string, WidgetFamily>> = {
   'single-book-label': 'operations',
   'spend-velocity-view': 'reporting',
   'start-reconciliation': 'banking',
+  'statement-delete-cell': 'banking',
   'statement-drawer': 'banking',
   'statement-matrix': 'reporting',
   'statement-rows': 'reporting',

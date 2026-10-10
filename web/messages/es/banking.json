@@ -359,7 +359,11 @@
     "excludedFlaggedToast": "{count, plural, one {# duplicado excluido} other {# duplicados excluidos}}",
     "createRule": "Crear regla desde esta línea",
     "postAndMatch": "Contabilizar y conciliar",
-    "suggestedBy": "Sugerencia: {rule}"
+    "suggestedBy": "Sugerencia: {rule}",
+    "correctLine": "Corregir línea",
+    "correctTitle": "Corregir línea del extracto",
+    "correctHint": "Corrija un error de importación de esta línea no conciliada. El cambio queda auditado; no se contabiliza nada.",
+    "correctedToast": "Línea corregida"
   },
   "transactionsSearch": "Buscar cargos de tarjeta, cheques, transferencias…",
   "transactionsEmptyTitle": "Aún no hay transacciones bancarias",
@@ -414,7 +418,12 @@
     "searchReconciliations": "Buscar por fecha o saldo…",
     "reconciliationsEmptyTitle": "Aún no hay conciliaciones",
     "reconciliationsEmptyDescription": "Inicie una conciliación con la fecha de corte y el saldo final del extracto bancario.",
-    "openWorkspace": "Abrir espacio de trabajo"
+    "openWorkspace": "Abrir espacio de trabajo",
+    "deleteImport": "Eliminar importación",
+    "deleteBlockedMatched": "Tiene {count} líneas conciliadas — descóncilielas primero en el espacio de conciliación",
+    "deleteBlockedExcluded": "Tiene {count} líneas excluidas — restáurelas primero",
+    "deleteImportConfirm": "¿Eliminar esta importación y sus {count} líneas? El mismo archivo podrá importarse de nuevo después.",
+    "importDeleted": "Importación eliminada ({count} líneas eliminadas)"
   },
   "import": {
     "button": "Importar extracto",

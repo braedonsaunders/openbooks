@@ -102,6 +102,8 @@ interface StatementRow extends Record<string, unknown> {
   imported_at: string
   line_count: string | number
   unmatched_count: string | number
+  matched_count: string | number
+  excluded_count: string | number
 }
 interface ReconciliationRow extends Record<string, unknown> {
   id: string
@@ -131,6 +133,12 @@ export interface StatementListRow {
   openingBalance: string
   closingBalance: string
   importedAt: string
+  /** Delete affordance: offered only to reconcilers, blocked with its reason
+   * when the import already carries match evidence. The engine re-checks. */
+  showDelete: boolean
+  deleteBlockedReason: string | null
+  deleteConfirmMessage: string
+  deleteLineCount: number
 }
 
 export interface ReconciliationListRow {
@@ -301,10 +309,13 @@ export async function loadBankingAccount(
   const [statements, stmtCount, sourceCounts, recons, reconCount, reconStatusCounts] = (await Promise.all([
     db.execute<StatementRow>(sql`
       select s.id, s.source, s.statement_date, s.opening_balance, s.closing_balance, s.imported_at,
-             coalesce(lc.n, 0) as line_count, coalesce(lc.unmatched, 0) as unmatched_count
+             coalesce(lc.n, 0) as line_count, coalesce(lc.unmatched, 0) as unmatched_count,
+             coalesce(lc.matched, 0) as matched_count, coalesce(lc.excluded, 0) as excluded_count
         from bank_statements s
         left join lateral (
-          select count(*) as n, count(*) filter (where l.match_status = 'unmatched') as unmatched
+          select count(*) as n, count(*) filter (where l.match_status = 'unmatched') as unmatched,
+                 count(*) filter (where l.match_status = 'matched') as matched,
+                 count(*) filter (where l.match_status = 'excluded') as excluded
             from bank_statement_lines l where l.statement_id = s.id and l.org_id = s.org_id) lc on true
        where ${stmtWhere}
        order by ${STMT_SORTS[stmtParams.sort]} ${stmtParams.dir === 'asc' ? sql`asc` : sql`desc`} nulls last
@@ -453,21 +464,35 @@ export async function loadBankingAccount(
     columnOpening: t('account.columns.opening'),
     columnClosing: t('account.columns.closing'),
     columnImported: t('account.columns.imported'),
-    statementRows: statements.rows.map((s) => ({
-      id: s.id,
-      // The opener keeps the lists' search, sort and page exactly like the
-      // drawer's closeHref does — rebuilding from the id alone reset the
-      // page underneath to an unfiltered page 1 (F1T-12).
-      dateHref: mergeHref(basePath, sp, { statement: s.id }),
-      dateLabel: s.statement_date,
-      sourceLabel: statementSourceLabel(s.source),
-      lineCount: Number(s.line_count).toLocaleString(locale),
-      unmatchedCount: Number(s.unmatched_count).toLocaleString(locale),
-      unmatchedIsZero: Number(s.unmatched_count) === 0,
-      openingBalance: money(s.opening_balance),
-      closingBalance: money(s.closing_balance),
-      importedAt: formatTimestamp(s.imported_at),
-    })),
+    statementRows: statements.rows.map((s) => {
+      const matched = Number(s.matched_count)
+      const excluded = Number(s.excluded_count)
+      const lineCount = Number(s.line_count)
+      return {
+        id: s.id,
+        // The opener keeps the lists' search, sort and page exactly like the
+        // drawer's closeHref does — rebuilding from the id alone reset the
+        // page underneath to an unfiltered page 1 (F1T-12).
+        dateHref: mergeHref(basePath, sp, { statement: s.id }),
+        dateLabel: s.statement_date,
+        sourceLabel: statementSourceLabel(s.source),
+        lineCount: lineCount.toLocaleString(locale),
+        unmatchedCount: Number(s.unmatched_count).toLocaleString(locale),
+        unmatchedIsZero: Number(s.unmatched_count) === 0,
+        openingBalance: money(s.opening_balance),
+        closingBalance: money(s.closing_balance),
+        importedAt: formatTimestamp(s.imported_at),
+        showDelete: canReconcile,
+        deleteBlockedReason:
+          matched > 0
+            ? t('account.deleteBlockedMatched', { count: matched })
+            : excluded > 0
+              ? t('account.deleteBlockedExcluded', { count: excluded })
+              : null,
+        deleteConfirmMessage: t('account.deleteImportConfirm', { count: lineCount }),
+        deleteLineCount: lineCount,
+      }
+    }),
     stmtTotal,
     stmtPage: stmtParams.page,
     stmtPerPage: stmtParams.perPage,
@@ -621,6 +646,16 @@ export function bankingAccountSpec(data: BankingAccountData): PageSpec {
                   sort: 'imported',
                   className: MUTED,
                 }),
+                column(
+                  '',
+                  widgetCell('statement-delete-cell', {
+                    statementId: item('id'),
+                    lineCount: item('deleteLineCount'),
+                    blockedReason: item('deleteBlockedReason'),
+                    confirmMessage: item('deleteConfirmMessage'),
+                    showDelete: item('showDelete'),
+                  }),
+                ),
               ],
             }),
             when: f('stmtShowTable'),

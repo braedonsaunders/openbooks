@@ -359,7 +359,11 @@
     "excludedFlaggedToast": "{count, plural, one {# Duplikat ausgeschlossen} other {# Duplikate ausgeschlossen}}",
     "createRule": "Regel aus dieser Zeile erstellen",
     "postAndMatch": "Buchen und zuordnen",
-    "suggestedBy": "Vorschlag: {rule}"
+    "suggestedBy": "Vorschlag: {rule}",
+    "correctLine": "Zeile korrigieren",
+    "correctTitle": "Kontoauszugszeile korrigieren",
+    "correctHint": "Einen Importfehler dieser nicht abgeglichenen Zeile beheben. Die Änderung wird protokolliert; es wird nichts gebucht.",
+    "correctedToast": "Zeile korrigiert"
   },
   "transactionsSearch": "Kartenbelastungen, Schecks, Überträge suchen…",
   "transactionsEmptyTitle": "Noch keine Banktransaktionen",
@@ -414,7 +418,12 @@
     "searchReconciliations": "Nach Datum oder Saldo suchen…",
     "reconciliationsEmptyTitle": "Noch keine Abstimmungen",
     "reconciliationsEmptyDescription": "Starten Sie eine Abstimmung mit dem Stichtag und dem Endsaldo des Kontoauszugs.",
-    "openWorkspace": "Arbeitsbereich öffnen"
+    "openWorkspace": "Arbeitsbereich öffnen",
+    "deleteImport": "Import löschen",
+    "deleteBlockedMatched": "Enthält {count} abgeglichene Zeilen — gleichen Sie diese zuerst im Abgleichsarbeitsbereich ab",
+    "deleteBlockedExcluded": "Enthält {count} ausgeschlossene Zeilen — stellen Sie diese zuerst wieder her",
+    "deleteImportConfirm": "Diesen Import und seine {count} Zeilen löschen? Dieselbe Datei kann danach erneut importiert werden.",
+    "importDeleted": "Import gelöscht ({count} Zeilen entfernt)"
   },
   "import": {
     "button": "Auszug importieren",

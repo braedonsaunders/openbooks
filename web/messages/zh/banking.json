@@ -359,7 +359,11 @@
     "excludedFlaggedToast": "{count, plural, one {已排除 # 条重复} other {已排除 # 条重复}}",
     "createRule": "从本明细创建规则",
     "postAndMatch": "过账并匹配",
-    "suggestedBy": "建议：{rule}"
+    "suggestedBy": "建议：{rule}",
+    "correctLine": "更正行",
+    "correctTitle": "更正对账单行",
+    "correctHint": "修正此未对账行的导入错误。更改会被审计；不会记账。",
+    "correctedToast": "行已更正"
   },
   "transactionsSearch": "搜索信用卡刷卡、支票、转账…",
   "transactionsEmptyTitle": "暂无银行交易",
@@ -414,7 +418,12 @@
     "searchReconciliations": "按日期或余额搜索…",
     "reconciliationsEmptyTitle": "暂无对账",
     "reconciliationsEmptyDescription": "以银行对账单的截止日期和期末余额开始对账。",
-    "openWorkspace": "打开工作区"
+    "openWorkspace": "打开工作区",
+    "deleteImport": "删除导入",
+    "deleteBlockedMatched": "有{count}行已对账 — 请先在对账工作区取消对账",
+    "deleteBlockedExcluded": "有{count}行已排除 — 请先恢复",
+    "deleteImportConfirm": "删除此次导入及其{count}行吗？之后可以重新导入同一文件。",
+    "importDeleted": "导入已删除（移除了{count}行）"
   },
   "import": {
     "button": "导入对账单",

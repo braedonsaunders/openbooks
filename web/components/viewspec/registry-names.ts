@@ -556,6 +556,7 @@ export const WIDGET_NAMES: ReadonlySet<string> = new Set([
   'single-book-label',
   'spend-velocity-view',
   'start-reconciliation',
+  'statement-delete-cell',
   'statement-drawer',
   'statement-matrix',
   'statement-rows',

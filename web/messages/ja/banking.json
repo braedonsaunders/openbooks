@@ -359,7 +359,11 @@
     "excludedFlaggedToast": "{count, plural, one {# 件の重複を除外しました} other {# 件の重複を除外しました}}",
     "createRule": "この明細からルールを作成",
     "postAndMatch": "記帳して照合",
-    "suggestedBy": "提案: {rule}"
+    "suggestedBy": "提案: {rule}",
+    "correctLine": "明細を訂正",
+    "correctTitle": "明細を訂正する",
+    "correctHint": "未消込明細のインポートエラーを修正します。変更は監査記録され、何も記帳されません。",
+    "correctedToast": "明細を訂正しました"
   },
   "transactionsSearch": "カード請求、小切手、振替を検索…",
   "transactionsEmptyTitle": "銀行取引はまだありません",
@@ -414,7 +418,12 @@
     "searchReconciliations": "日付または残高で検索…",
     "reconciliationsEmptyTitle": "消込はまだありません",
     "reconciliationsEmptyDescription": "銀行明細の締め日と期末残高で消込を開始します。",
-    "openWorkspace": "ワークスペースを開く"
+    "openWorkspace": "ワークスペースを開く",
+    "deleteImport": "インポートを削除",
+    "deleteBlockedMatched": "{count}件の消込済み明細があります — 照合作業画面で先に消込を解除してください",
+    "deleteBlockedExcluded": "{count}件の除外済み明細があります — 先に復元してください",
+    "deleteImportConfirm": "このインポートとその{count}件の明細を削除しますか？同じファイルは後から再インポートできます。",
+    "importDeleted": "インポートを削除しました（{count}件の明細を削除）"
   },
   "import": {
     "button": "明細をインポート",
