@@ -105,8 +105,18 @@ test("opening-balance preview and draft run the native writer through the guided
     assert.equal(refused.status, 422);
     const refusedBody = await refused.json() as { error: string; issues: { rowNo: number; message: string }[] };
     assert.match(refusedBody.error, /does not balance/);
-    assert.ok(refusedBody.issues.length > 0, "row-level refusals travel in the body");
-    assert.match(refusedBody.issues.map((issue) => issue.message).join(" "), /difference/);
+    assert.match(refusedBody.error, /difference 0\.0100/);
+    assert.ok(Array.isArray(refusedBody.issues), "the refusal carries its row-level issues");
+
+    const bad = await stage("tb-bad.csv", `Account,Debit,Credit\nNo Such Account,100.00,\n${revenue},,100.00\n`);
+    const badPreview = await previewPOST(postRequest("/api/migration/opening-balances/preview", {
+      transferId: bad.id, columns, documentDate: "2026-09-30",
+    }));
+    assert.equal(badPreview.status, 422);
+    const badBody = await badPreview.json() as { error: string; issues: { rowNo: number; message: string }[] };
+    assert.ok(badBody.issues.length > 0, "row-level refusals travel in the body");
+    assert.equal(typeof badBody.issues[0]!.rowNo, "number");
+    assert.match(badBody.issues[0]!.message, /No Such Account/);
 
     const job = await stage("tb.csv", `Account,Debit,Credit\n${bank},1000.00,\n${revenue},,1000.00\n`);
     const previewed = await previewPOST(postRequest("/api/migration/opening-balances/preview", {

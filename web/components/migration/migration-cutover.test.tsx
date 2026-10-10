@@ -72,7 +72,8 @@ test('the guided cutover works without the assistant: checklist, opening draft, 
   const { host, unmount } = await mount(english, 'en', false)
   try {
     const text = host.textContent ?? ''
-    assert.match(text, /Move your books/)
+    // The page header owns the title; the component owns the checklist body.
+    assert.match(text, /Work the steps in any order/)
     assert.match(text, /Cutover checklist/)
     assert.match(text, /Post the opening trial balance/)
     assert.match(text, /Import open customer invoices/)
