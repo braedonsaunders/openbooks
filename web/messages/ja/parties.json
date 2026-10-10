@@ -19,6 +19,8 @@
   },
   "newParty": {
     "defaultLabel": "新規取引先",
+  "companyLabel": "新しい会社",
+  "personLabel": "新しい個人",
     "createFailed": "取引先の下書きを作成できませんでした"
   },
   "drawer": {
@@ -306,6 +308,10 @@
     "additionalSubsidiaries": "追加の子会社",
     "additionalSubsidiariesHint": "この法人がこれらの追加の法人と取引できるようにします。",
     "rolesHeading": "ロール",
+    "removeRole": "ロールを削除",
+    "removeRoleTitle": "「{role}」ロールを削除しますか?",
+    "removeRoleConfirm": "この取引先から「{role}」ロールを削除しますか?設定は削除されますが、過去の伝票の履歴は残ります。",
+    "removeRoleFailed": "ロールを削除できませんでした。",
     "paymentTerms": "支払条件",
     "creditLimit": "与信限度額",
     "receivableAccount": "売掛金勘定",

@@ -292,7 +292,15 @@ export const RECORDS_WIDGETS = {
     )
   },
 
-  'new-party': () => <NewPartyButton />,
+  'new-party': (props) => {
+    const kind = str(props, 'kind')
+    return (
+      <NewPartyButton
+        label={str(props, 'label') ?? undefined}
+        kind={kind === 'person' || kind === 'company' ? kind : undefined}
+      />
+    )
+  },
   'assign-party-role': (props) => (
     <AssignPartyRoleButton
       roles={((props.roles as { value: string; label: string }[] | undefined) ?? []).filter((r) => typeof r?.value === 'string' && typeof r?.label === 'string')}

@@ -175,6 +175,53 @@ test(
   },
 );
 
+test(
+  "parties POST creates a role-less person and company without stamping a role",
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const { adminId } = await seedFlowActors(org.orgId);
+      routeState.authz = { user: { orgId: org.orgId, id: adminId }, allowedSubsidiaryIds: null };
+
+      // A non-commercial person (owner/partner) and company register with a
+      // base kind and no roles — the New person / New company path.
+      for (const [key, body] of [
+        [randomUUID(), { displayName: "Pat Partner", kind: "person" }],
+        [randomUUID(), { displayName: "HoldCo Ltd", kind: "company" }],
+      ] as const) {
+        const created = await POST(postRequest(key, body));
+        assert.equal(created.status, 201, JSON.stringify(await created.clone().json().catch(() => null)));
+      }
+
+      const stored = (
+        await db.execute<{ display_name: string; kind: string }>(sql`
+          select display_name, kind from parties
+           where org_id = ${org.orgId} and display_name in ('Pat Partner', 'HoldCo Ltd')
+           order by display_name
+        `)
+      ).rows;
+      assert.deepEqual(
+        stored.map((r) => [r.display_name, r.kind]),
+        [["HoldCo Ltd", "company"], ["Pat Partner", "person"]],
+      );
+
+      const roles = (
+        await db.execute<{ n: number }>(sql`
+          select count(*)::int as n from (
+            select party_id from customer_roles where org_id = ${org.orgId}
+            union all select party_id from vendor_roles where org_id = ${org.orgId}
+            union all select party_id from employee_roles where org_id = ${org.orgId}
+          ) r join parties p on p.id = r.party_id and p.org_id = ${org.orgId}
+         where p.display_name in ('Pat Partner', 'HoldCo Ltd')
+        `)
+      ).rows[0]?.n;
+      assert.equal(roles, 0, "no commercial role is stamped on a non-commercial party");
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
+
 // Release the route doubles after every test in this file has run.
 // The factory's lazy session-gate import runs on every request, so the hook
 // must stay registered until the file's tests finish.

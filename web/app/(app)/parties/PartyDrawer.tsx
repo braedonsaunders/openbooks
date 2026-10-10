@@ -987,6 +987,49 @@ export function PartyDrawer({
     router.refresh()
   }
 
+  /**
+   * Remove one native role outright (unlike the enable checkbox, which only
+   * deactivates). The endpoint refuses a role with open activity and names
+   * deactivation as the remedy. On success the form mirrors the server —
+   * role off with blanked details, base kind restored — without marking
+   * dirty, and the refresh reloads the canonical payload behind it.
+   */
+  async function removePartyRole(roleKind: 'customer' | 'vendor' | 'employee', roleLabel: string) {
+    if (createMode) return
+    const confirmed = await confirmDialog({
+      title: t('removeRoleTitle', { role: roleLabel }),
+      message: t('removeRoleConfirm', { role: roleLabel }),
+      confirmLabel: t('removeRole'),
+      tone: 'danger',
+    })
+    if (!confirmed) return
+    const ok = await execute(
+      () =>
+        fetchAction(`/api/parties/${p.id}/roles/remove`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ role: roleKind }),
+        }),
+      {
+        fallbackMessage: t('removeRoleFailed'),
+        successMessage: tc('feedback.deleted'),
+        onOk: (result) => {
+          setSkipDirty(true)
+          if (roleKind === 'customer') {
+            setCustomer({ enabled: false, paymentTermsId: '', creditLimit: '', currency: '', arAccountId: '', salesRepId: '', taxCodeId: '', isOnHold: false, holdReason: '' })
+          } else if (roleKind === 'vendor') {
+            setVendor({ enabled: false, paymentMethod: '', eftNotificationEmail: '', paymentTermsId: '', currency: '', is1099OrT4a: false, apAccountId: '', defaultExpenseAccountId: '', taxCodeId: '', isOnHold: false, holdReason: '' })
+          } else {
+            setEmployee({ enabled: false, employeeNumber: '', jobTitle: '', departmentId: '', tradeId: '', workerCompGroupId: '', hiredOn: '' })
+          }
+          const nextKind = (result as { kind?: unknown } | null)?.kind
+          if (nextKind === 'company' || nextKind === 'person') setKind(nextKind)
+        },
+      },
+    )
+    if (ok) router.refresh()
+  }
+
   const ro = !editable
   const partyFieldsId = useId()
   const yesNo = useMemo(() => [
@@ -1439,16 +1482,29 @@ export function PartyDrawer({
           {!role || role === 'customer' ? (
           <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-800">
             {!role ? (
-              <label className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  checked={customer.enabled}
-                  onChange={(e) => setCustomer({ ...customer, enabled: e.target.checked })}
-                  disabled={ro}
-                  className={checkboxClass}
-                />
-                <span className="text-sm font-medium">{tc('labels.customer')}</span>
-              </label>
+              <div className="flex items-center gap-2">
+                <label className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={customer.enabled}
+                    onChange={(e) => setCustomer({ ...customer, enabled: e.target.checked })}
+                    disabled={ro}
+                    className={checkboxClass}
+                  />
+                  <span className="text-sm font-medium">{tc('labels.customer')}</span>
+                </label>
+                {customer.enabled && !createMode ? (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    disabled={busy}
+                    onClick={() => removePartyRole('customer', tc('labels.customer'))}
+                    className="ml-auto text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300"
+                  >
+                    {t('removeRole')}
+                  </Button>
+                ) : null}
+              </div>
             ) : null}
             {role === 'customer' || customer.enabled ? (
               <>
@@ -1535,16 +1591,29 @@ export function PartyDrawer({
           {!role || role === 'vendor' ? (
           <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-800">
             {!role ? (
-              <label className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  checked={vendor.enabled}
-                  onChange={(e) => setVendor({ ...vendor, enabled: e.target.checked })}
-                  disabled={ro}
-                  className={checkboxClass}
-                />
-                <span className="text-sm font-medium">{tc('labels.vendor')}</span>
-              </label>
+              <div className="flex items-center gap-2">
+                <label className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={vendor.enabled}
+                    onChange={(e) => setVendor({ ...vendor, enabled: e.target.checked })}
+                    disabled={ro}
+                    className={checkboxClass}
+                  />
+                  <span className="text-sm font-medium">{tc('labels.vendor')}</span>
+                </label>
+                {vendor.enabled && !createMode ? (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    disabled={busy}
+                    onClick={() => removePartyRole('vendor', tc('labels.vendor'))}
+                    className="ml-auto text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300"
+                  >
+                    {t('removeRole')}
+                  </Button>
+                ) : null}
+              </div>
             ) : null}
             {role === 'vendor' || vendor.enabled ? (
               <div className={`${role ? '' : 'mt-3 '}grid gap-3 sm:grid-cols-3`}>
@@ -1653,16 +1722,29 @@ export function PartyDrawer({
           {!role || role === 'employee' ? (
           <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-800">
             {!role ? (
-              <label className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  checked={employee.enabled}
-                  onChange={(e) => setEmployee({ ...employee, enabled: e.target.checked })}
-                  disabled={ro}
-                  className={checkboxClass}
-                />
-                <span className="text-sm font-medium">{tc('labels.employee')}</span>
-              </label>
+              <div className="flex items-center gap-2">
+                <label className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={employee.enabled}
+                    onChange={(e) => setEmployee({ ...employee, enabled: e.target.checked })}
+                    disabled={ro}
+                    className={checkboxClass}
+                  />
+                  <span className="text-sm font-medium">{tc('labels.employee')}</span>
+                </label>
+                {employee.enabled && !createMode ? (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    disabled={busy}
+                    onClick={() => removePartyRole('employee', tc('labels.employee'))}
+                    className="ml-auto text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300"
+                  >
+                    {t('removeRole')}
+                  </Button>
+                ) : null}
+              </div>
             ) : null}
             {role === 'employee' || employee.enabled ? (
               <div className={`${role ? '' : 'mt-3 '}grid gap-3 sm:grid-cols-4`}>

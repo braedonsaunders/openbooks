@@ -151,6 +151,9 @@ export interface PartiesData {
   assignTotal: number
   assignQ: string
   assignIncludeInactive: boolean
+  /** Non-commercial create entry points: a company or a person, no role stamped. */
+  newCompanyLabel: string
+  newPersonLabel: string
   isEmpty: boolean
   isFilteredEmpty: boolean
   hasRows: boolean
@@ -192,6 +195,11 @@ export async function loadParties(
   // single idempotent POST. Gated on manage like the draft flow was.
   const creating =
     (pickString(sp.partyNew) === '1' || partyId === 'new') && canManage
+  // Non-commercial create: ?partyNew=1&kind=person opens the drawer naming a
+  // person with no role; any other kind value falls back to company. Only
+  // the base kinds travel here — roles are enabled in the drawer, never
+  // smuggled through the create URL.
+  const createKind = pickString(sp.kind) === 'person' ? 'person' : 'company'
   const partyTransactionId = pickString(sp.partyTxn)
   const partyTransactionKind = pickString(sp.partyTxnKind)
   const requestedPartyTab = pickString(sp.partyTab)
@@ -394,8 +402,10 @@ export async function loadParties(
       display_name: '',
       legal_name: null,
       short_code: null,
-      // Employees are people; customers and vendors default to a company.
-      kind: role === 'employee' ? 'person' : 'company',
+      // Employees are people; customers and vendors default to a company. A
+      // kind preset from the New person button wins on the unified
+      // directory; role-scoped lists keep their own role's default.
+      kind: !role ? createKind : role === 'employee' ? 'person' : 'company',
       email: null,
       phone: null,
       website: null,
@@ -422,6 +432,7 @@ export async function loadParties(
   const closeHref = mergeHref('/parties', sp, {
     party: undefined,
     partyNew: undefined,
+    kind: undefined,
     mode: undefined,
     partyTab: undefined,
     partyForm: undefined,
@@ -566,6 +577,8 @@ export async function loadParties(
     assignTotal: filteredTotal,
     assignQ: params.q ?? '',
     assignIncludeInactive: showInactive,
+    newCompanyLabel: t('newParty.companyLabel'),
+    newPersonLabel: t('newParty.personLabel'),
     isEmpty: total === 0,
     isFilteredEmpty: total > 0 && filteredTotal === 0,
     hasRows: filteredTotal > 0,
@@ -624,7 +637,18 @@ export function partiesSpec(data: PartiesData): PageSpec {
       pageHeader({
         title: f('title'),
         description: f('description'),
-        actions: [widget('new-party', {}, f('canManage'))],
+        actions: [
+          widget(
+            'new-party',
+            { label: data.newCompanyLabel, kind: 'company' },
+            f('canManage'),
+          ),
+          widget(
+            'new-party',
+            { label: data.newPersonLabel, kind: 'person' },
+            f('canManage'),
+          ),
+        ],
       }),
       grid('flex flex-wrap items-center gap-2', [
         widgetBlock('search-input', { placeholder: data.searchPlaceholder }),

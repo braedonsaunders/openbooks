@@ -19,6 +19,8 @@
   },
   "newParty": {
     "defaultLabel": "Nova parte",
+  "companyLabel": "Nova empresa",
+  "personLabel": "Nova pessoa",
     "createFailed": "Não foi possível criar uma parte em rascunho"
   },
   "drawer": {
@@ -306,6 +308,10 @@
     "additionalSubsidiaries": "Subsidiárias adicionais",
     "additionalSubsidiariesHint": "Permitir que esta entidade transacione com estas entidades legais adicionais.",
     "rolesHeading": "Papéis",
+    "removeRole": "Remover papel",
+    "removeRoleTitle": "Remover o papel {role}?",
+    "removeRoleConfirm": "Remover o papel {role} desta parte? Suas configurações são excluídas; documentos anteriores mantêm o histórico.",
+    "removeRoleFailed": "Não foi possível remover o papel.",
     "paymentTerms": "Condições de pagamento",
     "creditLimit": "Limite de crédito",
     "receivableAccount": "Conta a receber",

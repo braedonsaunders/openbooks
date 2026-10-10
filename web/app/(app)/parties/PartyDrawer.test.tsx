@@ -1361,3 +1361,43 @@ test("the relationship tab reads as values until Edit, and the drawer's single S
   assert.equal(panel()!.querySelectorAll("input, select").length, 0, "a successful Save returns the relationship to view mode");
 });
 
+
+test("removing a mistaken role posts to the remove endpoint and clears the card", async (t) => {
+  const seen: Array<{ url: string; method: string; body: Record<string, unknown> | null }> = [];
+  const { done } = await renderDrawer({
+    generic: true,
+    initialTab: "overview",
+    initialMode: "edit",
+    fetchHandler: (url, init) => {
+      seen.push({ url, method: init?.method ?? "GET", body: typeof init?.body === "string" ? JSON.parse(init.body) as Record<string, unknown> : null });
+      if (url.endsWith("/roles/remove")) return Response.json({ removed: true, kind: "company" });
+      return null;
+    },
+  });
+  t.after(done);
+  const remove = [...document.querySelectorAll("button")].find(
+    (button) => button.textContent?.trim() === en("parties.drawer.removeRole"),
+  ) as HTMLButtonElement | undefined;
+  assert.ok(remove, "an enabled role offers Remove role in edit mode");
+  await act(async () => {
+    remove.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+    await tick();
+  });
+  await tick();
+  await tick();
+  const post = seen.find((request) => request.url.endsWith("/roles/remove"));
+  assert.ok(post, "removal posts to the role remove endpoint");
+  assert.equal(post?.method, "POST");
+  assert.deepEqual(post?.body, { role: "vendor" });
+  const cards = [...document.querySelectorAll("div.rounded-lg")].filter((element) =>
+    element.textContent?.includes(en("parties.drawer.rolesHeading")) ||
+    element.closest("section")?.textContent?.includes(en("parties.drawer.rolesHeading")),
+  );
+  const vendorCard = cards.find((element) =>
+    element.textContent?.includes(en("common.labels.vendor")) &&
+    !element.textContent?.includes(en("common.labels.customer")),
+  );
+  const vendorBox = vendorCard?.querySelector('input[type="checkbox"]') as HTMLInputElement | null;
+  assert.ok(vendorBox, "the vendor card keeps its enable checkbox");
+  assert.equal(vendorBox?.checked, false, "the removed role's checkbox clears without a save round-trip");
+});
