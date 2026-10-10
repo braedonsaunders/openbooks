@@ -458,7 +458,10 @@
       "subsidiaryListRequired": "Select at least one subsidiary",
       "permissionsLoadFailed": "Unable to load app permissions",
       "inactivePermissions": "Inactive app permissions",
-      "saveNotConfirmed": "The server did not confirm that every permission change was saved. Reopen the role to see its current permissions, then apply your changes again."
+      "saveNotConfirmed": "The server did not confirm that every permission change was saved. Reopen the role to see its current permissions, then apply your changes again.",
+      "includes": "Also includes: {permissions}",
+      "includedBy": "Already included by: {permissions}",
+      "ownScope": "{permission} (own records only)"
     },
     "builtInDescriptions": {
       "admin": "Full access to everything, including users, roles, navigation and company settings.",

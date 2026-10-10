@@ -458,7 +458,10 @@
       "subsidiaryListRequired": "Wählen Sie mindestens eine Tochtergesellschaft aus",
       "inactivePermissions": "Inaktive App-Berechtigungen",
       "permissionsLoadFailed": "App-Berechtigungen konnten nicht geladen werden",
-      "saveNotConfirmed": "Der Server hat nicht bestätigt, dass alle Berechtigungsänderungen gespeichert wurden. Öffnen Sie die Rolle erneut, um ihre aktuellen Berechtigungen zu sehen, und wenden Sie Ihre Änderungen dann erneut an."
+      "saveNotConfirmed": "Der Server hat nicht bestätigt, dass alle Berechtigungsänderungen gespeichert wurden. Öffnen Sie die Rolle erneut, um ihre aktuellen Berechtigungen zu sehen, und wenden Sie Ihre Änderungen dann erneut an.",
+      "includes": "Umfasst außerdem: {permissions}",
+      "includedBy": "Bereits enthalten über: {permissions}",
+      "ownScope": "{permission} (nur eigene Datensätze)"
     },
     "builtInDescriptions": {
       "admin": "Vollzugriff auf alles, einschließlich Benutzern, Rollen, Navigation und Unternehmenseinstellungen.",

@@ -18,6 +18,7 @@ import {
   type PageSpec,
 } from '@braedonsaunders/appkit-viewspec'
 import { can, requirePermission } from '../../../../lib/authz'
+import { timeCommandGrants } from '../../../../lib/time-workspace'
 import { requireFeatureEnabled } from '../../../../lib/feature-gates'
 import { loadOrRefuse, type PageRefusal } from '../../../../lib/load-or-refuse'
 import { FieldTimeError } from '@openbooks/engine/src/hrm/field-time/errors.ts'
@@ -79,7 +80,8 @@ export async function loadClockPage(): Promise<ClockPageData> {
   const t = await getTranslations('timesheets')
   return loadClockPageData(authz.user.orgId, authz.user.id, t as unknown as ClockText, {
     canManageSetup: can(authz, 'time.manage'),
-    canReadTimesheets: can(authz, 'time.read') || can(authz, 'time.self'),
+    // Clocking in confers reading one's own timesheets (PERMISSION_IMPLICATIONS).
+    canReadTimesheets: [...timeCommandGrants('time.read').all, ...timeCommandGrants('time.read').own].some((grant) => can(authz, grant)),
     canEnterCrew: can(authz, 'time.read') || can(authz, 'time.crew.enter'),
   })
 }

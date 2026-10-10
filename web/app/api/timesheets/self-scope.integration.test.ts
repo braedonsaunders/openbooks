@@ -30,6 +30,8 @@ async function fixture() {
   const org = await createScratchOrg()
   const worker = await createScratchUser(org.orgId, 'Field technician', 'field_technician')
   const supervisor = await createScratchUser(org.orgId, 'Time supervisor', 'time_supervisor')
+  const clocker = await createScratchUser(org.orgId, 'Clock only', 'clock_only')
+  await db.execute(sql`update app_roles set permissions='["time.clock"]'::jsonb where org_id=${org.orgId} and key='clock_only'`)
   await db.execute(sql`update app_roles set permissions='["time.self","time.clock"]'::jsonb where org_id=${org.orgId} and key='field_technician'`)
   await db.execute(sql`update app_roles set permissions='["time.read","time.manage","projects.read"]'::jsonb where org_id=${org.orgId} and key='time_supervisor'`)
   await db.execute(sql`update orgs set settings = settings || ${JSON.stringify({
@@ -42,6 +44,7 @@ async function fixture() {
     await db.execute(sql`insert into employee_roles(id,org_id,party_id,is_active) values (${randomUUID()},${org.orgId},${id},true)`)
   }
   await db.execute(sql`update users set party_id=${own} where id=${worker} and org_id=${org.orgId}`)
+  await db.execute(sql`update users set party_id=${coworker} where id=${clocker} and org_id=${org.orgId}`)
   await db.execute(sql`insert into projects(id,org_id,subsidiary_id,code,name,customer_id,status,is_active,custom)
     values (${project},${org.orgId},${org.subsidiaryId},'SELF','Self scope',${org.customerId},'active',true,'{}'::jsonb)`)
   const as = (userId: string, name: string) => {
@@ -63,7 +66,7 @@ async function fixture() {
   const entries = async (employee: string) => (await db.execute<{ status: string }>(sql`
     select status from time_entries where org_id=${org.orgId} and employee_party_id=${employee}`)).rows
   const close = async () => { session.user = null; await dropScratchOrgReporting(org.orgId) }
-  return { org, worker, supervisor, own, coworker, as, read, save, submit, entries, close }
+  return { org, worker, supervisor, clocker, own, coworker, as, read, save, submit, entries, close }
 }
 
 test('a self-service time user reads, enters and submits only their own week', async () => {
@@ -109,3 +112,17 @@ test('a supervisor holding time.read and time.manage keeps working on anyone\'s 
     }
   } finally { await f.close() }
 })
+
+test('clocking in alone reads the clocker\'s own week and nothing else, and never enters time', async () => {
+  const f = await fixture()
+  try {
+    f.as(f.clocker, 'Clock only')
+    assert.equal((await f.read(f.coworker)).status, 200, 'time.clock reads the holder\'s own week')
+    const others = await f.read(f.own)
+    assert.equal(others.status, 403)
+    assert.equal((await others.json() as { code?: string }).code, 'time_self_only')
+    assert.equal((await f.save(f.coworker)).status, 403, 'clocking in never opens week entry')
+    assert.deepEqual(await f.entries(f.coworker), [])
+  } finally { await f.close() }
+})
+

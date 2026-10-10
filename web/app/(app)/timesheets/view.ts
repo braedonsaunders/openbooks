@@ -7,6 +7,7 @@ import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { page, pageHeader, ref, widget, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
 import { can, getAuthz, requirePermission } from '../../../lib/authz'
+import { ownTimeOnly, supervisesTime as supervisesTimeCommand, timeCommandGrants } from '../../../lib/time-workspace'
 import { isFeatureEnabled } from '../../../lib/features'
 import { requireFeatureEnabled } from '../../../lib/feature-gates'
 import { isUuid, pickString } from '../../../lib/list-params'
@@ -75,13 +76,19 @@ export async function loadTimesheets(
 ): Promise<TimesheetsData> {
   const t = await getTranslations('timesheets')
 
-  // Supervisors read everyone's weeks with time.read. A self-service caller
-  // holding only time.self sees, opens, enters and submits the weeks of the
-  // employee linked to their own login — the list, the drawer, the pickers
-  // and every timesheet API (through the shared time authority) agree.
+  // Supervisors read everyone's weeks (time.read, or time.manage which
+  // implies it). A caller holding only an own-scope grant sees the weeks of
+  // the employee linked to their own login: time.self also enters and
+  // submits them, time.clock reads them. The list, the drawer, the pickers
+  // and every timesheet API (through the shared time authority) agree, and
+  // the grants come from the declared permission implications.
   const viewer = await getAuthz()
-  const selfOnly = !!viewer && !can(viewer, 'time.read') && can(viewer, 'time.self')
-  const authz = await requirePermission(selfOnly ? 'time.self' : 'time.read')
+  const selfOnly = !!viewer && ownTimeOnly(viewer, 'time.read')
+  const readGrants = timeCommandGrants('time.read')
+  const heldReadGrant = viewer
+    ? (selfOnly ? readGrants.own : readGrants.all).find((grant) => can(viewer, grant)) ?? 'time.read'
+    : 'time.read'
+  const authz = await requirePermission(heldReadGrant)
   await requireFeatureEnabled(authz.user.orgId, workFamily === 'production' ? 'manufacturing' : 'timeTracking')
   if (workFamily === 'production') await requirePermission('manufacturing.read')
   const basePath = workFamily === 'production' ? '/manufacturing/time' : '/timesheets'
@@ -91,8 +98,8 @@ export async function loadTimesheets(
   // A person's own week books to the projects in their scope without the
   // project-read grant; reading other people's project time still needs it.
   const projectAvailable = (can(authz,'projects.read') || selfOnly) && await isFeatureEnabled(authz.user.orgId,'timeTracking')
-  const supervisesTime = can(authz, 'time.manage')
-  const entersOwnTime = can(authz, 'time.self')
+  const supervisesTime = supervisesTimeCommand(authz, 'time.manage')
+  const entersOwnTime = ownTimeOnly(authz, 'time.manage')
   const canManage = supervisesTime || entersOwnTime
 
   // Employee filter — the same active-employee set the editor uses.

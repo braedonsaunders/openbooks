@@ -458,7 +458,10 @@
       "subsidiaryListRequired": "请至少选择一个子公司",
       "permissionsLoadFailed": "无法加载应用权限",
       "inactivePermissions": "未启用的应用权限",
-      "saveNotConfirmed": "服务器未确认所有权限更改均已保存。请重新打开该角色查看其当前权限，然后再次应用您的更改。"
+      "saveNotConfirmed": "服务器未确认所有权限更改均已保存。请重新打开该角色查看其当前权限，然后再次应用您的更改。",
+      "includes": "同时包含：{permissions}",
+      "includedBy": "已由以下权限包含：{permissions}",
+      "ownScope": "{permission}（仅限本人记录）"
     },
     "builtInDescriptions": {
       "admin": "拥有全部访问权限，包括用户、角色、导航和公司设置。",

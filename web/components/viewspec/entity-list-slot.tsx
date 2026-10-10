@@ -5,6 +5,7 @@ import 'server-only'
 
 import type { ReactNode } from 'react'
 import { sql } from 'drizzle-orm'
+import { ownTimeOnly, timeCommandGrants } from '../../lib/time-workspace'
 import { getTranslations } from 'next-intl/server'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { can, getAuthz } from '../../lib/authz'
@@ -156,8 +157,11 @@ export async function EntityListSlot({
     // Supervisors list everyone's weeks with time.read; a self-service caller
     // holding only time.self lists the weeks of the employee linked to their
     // own login and nobody else's.
-    const selfOnly = !can(authz, 'time.read') && can(authz, 'time.self')
-    const timeAuthz = await requirePermission(selfOnly ? 'time.self' : 'time.read')
+    // Own-scope grants (time.self, time.clock) and supervisory ones
+    // (time.read, time.manage) resolve from the declared implications.
+    const selfOnly = ownTimeOnly(authz, 'time.read')
+    const readGrants = timeCommandGrants('time.read')
+    const timeAuthz = await requirePermission((selfOnly ? readGrants.own : readGrants.all).find((grant) => can(authz, grant)) ?? 'time.read')
     const production = timeWorkFamily === 'production'
     // Production time is Manufacturing's workspace: it follows the
     // Manufacturing switch, and weeks carrying project time stay hidden by

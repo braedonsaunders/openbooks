@@ -857,6 +857,39 @@ export const PERMISSION_GROUPS: {
 ];
 
 /**
+ * Declared permission dependencies: holding the key on the left also confers
+ * the listed capabilities, over everyone's records (`all`) or only over the
+ * holder's own (`own`, the records of the employee linked to the login).
+ * This one table drives both enforcement (every time command resolves its
+ * grant through `grantsConferring`) and the role editor, which shows each
+ * permission's implications so an administrator sees what a grant already
+ * includes instead of discovering that it is inert on its own.
+ */
+export type PermissionImplication = { key: CataloguePermission; scope: "all" | "own" };
+export const PERMISSION_IMPLICATIONS: Partial<Record<CataloguePermission, readonly PermissionImplication[]>> = {
+  // Entering anyone's time is supervisory and needs to read what it edits.
+  "time.manage": [{ key: "time.read", scope: "all" }],
+  // Self-service time reads, enters and submits the holder's own weeks.
+  "time.self": [{ key: "time.read", scope: "own" }, { key: "time.manage", scope: "own" }],
+  // Clocking in shows the holder's own resulting timesheets, read-only.
+  "time.clock": [{ key: "time.read", scope: "own" }],
+};
+
+/**
+ * Every catalogue key that confers `permission` at `scope`: for `all`, the key
+ * itself plus every key implying it over everyone's records; for `own`, every
+ * key implying it over the holder's own records. Order is stable (catalogue
+ * order) so callers can pick the first grant an actor holds.
+ */
+export function grantsConferring(permission: CataloguePermission, scope: "all" | "own"): CataloguePermission[] {
+  const out: CataloguePermission[] = scope === "all" ? [permission] : [];
+  for (const key of PERMISSION_CATALOGUE) {
+    if (PERMISSION_IMPLICATIONS[key]?.some((implied) => implied.key === permission && implied.scope === scope)) out.push(key);
+  }
+  return out;
+}
+
+/**
  * Which catalogue key authorizes each state-changing action of the inventory
  * movement API (`web/app/api/inventory/actions`):
  *

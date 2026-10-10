@@ -8,6 +8,9 @@ import { Badge, Button, Drawer, Input, Label, SearchSelect, Select, Textarea } f
 import { confirmDialog } from '@/lib/confirm'
 import {
   PERMISSION_GROUPS,
+  PERMISSION_IMPLICATIONS,
+  permissionLabelKey,
+  type CataloguePermission,
 } from '@/lib/permissions'
 import type { SubsidiaryRestriction } from '@openbooks/schema'
 
@@ -144,6 +147,31 @@ function RoleDrawer({
       ),
     [selected, permissionGroups],
   )
+
+  // Declared permission dependencies (PERMISSION_IMPLICATIONS): what each
+  // grant already includes, and which selected grants already include a
+  // permission that is not ticked — so a grant never looks inert or missing.
+  const implicationLabel = (implication: { key: CataloguePermission; scope: 'all' | 'own' }) => {
+    const label = tAdmin(permissionLabelKey(implication.key))
+    return implication.scope === 'own' ? t('drawer.ownScope', { permission: label }) : label
+  }
+  function impliesText(permKey: string): string | null {
+    const implications = PERMISSION_IMPLICATIONS[permKey as CataloguePermission]
+    if (!implications?.length) return null
+    return t('drawer.includes', { permissions: implications.map(implicationLabel).join(', ') })
+  }
+  function includedByText(permKey: string): string | null {
+    const sources = [...selected].flatMap((key) =>
+      (PERMISSION_IMPLICATIONS[key as CataloguePermission] ?? [])
+        .filter((implication) => implication.key === permKey)
+        .map((implication) => ({ key: key as CataloguePermission, scope: implication.scope })))
+    if (sources.length === 0) return null
+    return t('drawer.includedBy', {
+      permissions: sources.map((source) => source.scope === 'own'
+        ? t('drawer.ownScope', { permission: tAdmin(permissionLabelKey(source.key)) })
+        : tAdmin(permissionLabelKey(source.key))).join(', '),
+    })
+  }
 
   function togglePermission(permKey: string) {
     setSelected((prev) => {
@@ -423,6 +451,12 @@ function RoleDrawer({
                         <span className="block font-mono text-[11px] text-slate-400 dark:text-slate-500">
                           {perm.key}
                         </span>
+                        {impliesText(perm.key) ? (
+                          <span className="block text-[11px] text-slate-500 dark:text-slate-400">{impliesText(perm.key)}</span>
+                        ) : null}
+                        {!selected.has(perm.key) && includedByText(perm.key) ? (
+                          <span className="block text-[11px] text-teal-700 dark:text-teal-400">{includedByText(perm.key)}</span>
+                        ) : null}
                       </span>
                     </label>
                   ))}
