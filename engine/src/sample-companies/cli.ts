@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { sampleTenantInventory } from "./tenant-inventory.ts";
-import { verifyDemoScenarios } from "./install-scenarios.ts";
+import { installDemoScenarios, verifyDemoScenarios } from "./install-scenarios.ts";
 import { sampleSourceManifest } from "./manifest.ts";
 import {
   createSampleCompany,
@@ -28,6 +28,16 @@ function line(value: unknown): void {
   process.stdout.write(`${JSON.stringify(value)}\n`);
 }
 
+function required(flag: string): string {
+  const value = valueAfter(flag);
+  if (!value) throw new Error(`Missing ${flag}`);
+  return value;
+}
+
+function operatorOptions(): { actorId?: string } {
+  return process.argv.includes("--actor") ? { actorId: required("--actor") } : {};
+}
+
 async function main(): Promise<void> {
   const command = process.argv[2] ?? "inventory";
   if (command === "tenant-inventory") { for (const tenant of await sampleTenantInventory()) line(tenant); return; }
@@ -49,13 +59,18 @@ async function main(): Promise<void> {
   }
 
   if (command === "refresh-plan") {
-    line(await sampleRefreshPlan(valueAfter("--industry") ?? undefined));
+    line(await sampleRefreshPlan(valueAfter("--industry") ?? undefined, operatorOptions()));
     return;
   }
   if (command === "refresh") {
     const digest = valueAfter("--plan-digest");
     if (!digest) throw new Error("refresh requires --plan-digest SHA256 from a reviewed refresh-plan");
-    await refreshAllSampleCompanies({ digest, industryKey: valueAfter("--industry") ?? undefined, onResult: line });
+    await refreshAllSampleCompanies({ digest, ...operatorOptions(), industryKey: valueAfter("--industry") ?? undefined, onResult: line });
+    return;
+  }
+
+  if (command === "install-scenarios") {
+    line(await installDemoScenarios(required("--org"), required("--industry"), operatorOptions()));
     return;
   }
 
@@ -97,7 +112,7 @@ async function main(): Promise<void> {
   }
 
   if (command !== "prepare") {
-    throw new Error("usage: npm -w engine run samples -- manifest | tenant-inventory | inventory | inspect --org UUID --industry KEY | refresh-plan [--industry KEY] | refresh --plan-digest SHA256 [--industry KEY] | prepare [--industry KEY] | install --member-user UUID --source-org UUID --member-name NAME [--industry KEY] | resume --run-dir PATH | promote --industry KEY --source-org UUID --confirm-sample-data [--unmasked --confirm-synthetic]");
+    throw new Error("usage: npm -w engine run samples -- manifest | tenant-inventory | inventory | inspect --org UUID --industry KEY | refresh-plan [--industry KEY] [--actor UUID] | refresh --plan-digest SHA256 [--industry KEY] [--actor UUID] | install-scenarios --org UUID --industry KEY [--actor UUID] | prepare [--industry KEY] | install --member-user UUID --source-org UUID --member-name NAME [--industry KEY] | resume --run-dir PATH | promote --industry KEY --source-org UUID --confirm-sample-data [--unmasked --confirm-synthetic]");
   }
 
   const industry = valueAfter("--industry");

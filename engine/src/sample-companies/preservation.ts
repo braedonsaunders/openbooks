@@ -6,7 +6,7 @@ import { sampleCompanyFeatures } from "./features.ts";
 import { SampleCompanyError } from "./provisioning-failures.ts";
 
 type RowDigest = { id: string; digest: string };
-export type SamplePreservationSnapshot = Map<string, { primaryKey: string; rows: RowDigest[] }>;
+export type SamplePreservationSnapshot = Map<string, { primaryKeys: string[]; rows: RowDigest[] }>;
 const PROTECTED_TABLES = [
   "documents", "document_lines", "journal_entries", "journal_lines", "applications",
   "flows", "flow_runs", "flow_run_effects", "flow_gates", "flow_locks", "approval_delegations",
@@ -27,28 +27,40 @@ function identifier(value: string) {
 
 /** Existing rows are locked and compared in full; only new rows may be added. */
 export async function snapshotSampleRecords(orgId: string, authoredTables: Map<string, string>): Promise<SamplePreservationSnapshot> {
-  const tables = new Map(PROTECTED_TABLES.map(table => [table as string, "id"]));
-  tables.set("rma_documents", "document_id");
-  tables.set("rma_lines", "line_id");
-  for (const [table, key] of authoredTables) tables.set(table, key);
+  const tables = [...new Set<string>([...PROTECTED_TABLES, "rma_documents", ...authoredTables.keys()])].sort();
+  const selected = sql.join(tables.map(table => sql`${table}`), sql`, `);
   const columns = (await db.execute<{ tableName: string; columnName: string }>(sql`
     select table_name as "tableName",column_name as "columnName" from information_schema.columns
-    where table_schema='public' and table_name in (${sql.join([...tables.keys()].map(table => sql`${table}`), sql`, `)})
+    where table_schema='public' and table_name in (${selected})
+  `)).rows;
+  // Authored fixture keys are lookup hints, not authoritative row identities.
+  // Preserve every component, in the native primary-key constraint's order.
+  const keys = (await db.execute<{ tableName: string; primaryKeys: string[] }>(sql`
+    select t.relname as "tableName",array_agg(a.attname::text order by k.ordinality) as "primaryKeys"
+    from pg_catalog.pg_constraint c
+    join pg_catalog.pg_class t on t.oid=c.conrelid
+    join pg_catalog.pg_namespace n on n.oid=t.relnamespace
+    cross join lateral unnest(c.conkey) with ordinality as k(attnum,ordinality)
+    join pg_catalog.pg_attribute a on a.attrelid=t.oid and a.attnum=k.attnum and not a.attisdropped
+    where c.contype='p' and n.nspname='public' and t.relname in (${selected})
+    group by t.relname
   `)).rows;
   const snapshot: SamplePreservationSnapshot = new Map();
-  for (const [table, primaryKey] of [...tables].sort(([a], [b]) => a.localeCompare(b))) {
+  for (const table of tables) {
     const available = columns.filter(column => column.tableName === table).map(column => column.columnName);
     // Optional features may not have a table on an older released schema. The
     // scenario installer separately refuses any missing required feature table.
     if (!available.length) continue;
-    if (!available.includes("org_id") || !available.includes(primaryKey)) {
+    const primaryKeys = keys.find(key => key.tableName === table)?.primaryKeys;
+    if (!available.includes("org_id") || !primaryKeys?.length || primaryKeys.some(key => !available.includes(key))) {
       throw new SampleCompanyError(`Cannot preserve ${table}: its tenant or native primary key is unavailable. Use a compatible released schema before refreshing.`);
     }
+    const keyColumns = sql.join(primaryKeys.map(key => sql`r.${identifier(key)}`), sql`, `);
     const rows = (await db.execute<RowDigest>(sql`
-      select r.${identifier(primaryKey)}::text as id,md5(to_jsonb(r)::text) as digest
-      from ${identifier(table)} r where r.org_id=${orgId} order by r.${identifier(primaryKey)} for share
+      select jsonb_build_array(${keyColumns})::text as id,md5(to_jsonb(r)::text) as digest
+      from public.${identifier(table)} r where r.org_id=${orgId} order by ${keyColumns} for share
     `)).rows;
-    snapshot.set(table, { primaryKey, rows });
+    snapshot.set(table, { primaryKeys, rows });
   }
   return snapshot;
 }
@@ -56,9 +68,10 @@ export async function snapshotSampleRecords(orgId: string, authoredTables: Map<s
 export async function assertSampleRecordsPreserved(orgId: string, before: SamplePreservationSnapshot): Promise<{ records: number; digest: string }> {
   let records = 0;
   for (const [table, snapshot] of before) {
+    const keyColumns = sql.join(snapshot.primaryKeys.map(key => sql`r.${identifier(key)}`), sql`, `);
     const rows = (await db.execute<RowDigest>(sql`
-      select r.${identifier(snapshot.primaryKey)}::text as id,md5(to_jsonb(r)::text) as digest
-      from ${identifier(table)} r where r.org_id=${orgId} order by r.${identifier(snapshot.primaryKey)}
+      select jsonb_build_array(${keyColumns})::text as id,md5(to_jsonb(r)::text) as digest
+      from public.${identifier(table)} r where r.org_id=${orgId} order by ${keyColumns}
     `)).rows;
     const after = new Map(rows.map(row => [row.id, row.digest]));
     const changed = snapshot.rows.find(row => after.get(row.id) !== row.digest);

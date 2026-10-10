@@ -13,3 +13,5 @@ export { sampleCompanyFeatures } from "./features.ts";
 export { SAMPLE_COMPANY_PROFILES } from "./catalog.ts";
 
 export { sampleRefreshPlan, refreshSampleCompany, refreshAllSampleCompanies } from "./refresh.ts";
+
+export type { SampleOperatorOptions } from "./operator.ts";
