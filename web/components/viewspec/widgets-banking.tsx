@@ -29,6 +29,7 @@ import { ViewTabs as PaymentsViewTabs } from '../../app/(app)/payments/sections'
 import { ReceiptsViewTabs } from '../../app/(app)/receipts/sections'
 import { Plus } from 'lucide-react'
 import { AccountStats, UnmatchedCountCell, ReconActionCell } from '../../app/(app)/banking/[accountId]/sections'
+import { StatementDeleteCell } from '../../app/(app)/banking/[accountId]/StatementDeleteCell'
 import { StatementDrawer } from '../../app/(app)/banking/[accountId]/StatementDrawer'
 import { Button } from '@openbooks/ui'
 import Link from 'next/link'
@@ -363,6 +364,15 @@ export const BANKING_WIDGETS = {
   ),
   'unmatched-count-cell': (props) => (
     <UnmatchedCountCell display={str(props, 'display') ?? ''} isZero={props.isZero === true} />
+  ),
+  'statement-delete-cell': (props) => (
+    <StatementDeleteCell
+      statementId={str(props, 'statementId') ?? ''}
+      lineCount={typeof props.lineCount === 'number' ? props.lineCount : 0}
+      blockedReason={(props.blockedReason as string | null) ?? null}
+      confirmMessage={str(props, 'confirmMessage') ?? ''}
+      showDelete={props.showDelete === true}
+    />
   ),
   'recon-action-cell': (props) => (
     <ReconActionCell href={str(props, 'href') ?? ''} label={str(props, 'label') ?? ''} />

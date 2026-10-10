@@ -359,7 +359,11 @@
     "excludedFlaggedToast": "{count, plural, one {# doublon exclu} other {# doublons exclus}}",
     "createRule": "Créer une règle depuis cette ligne",
     "postAndMatch": "Comptabiliser et rapprocher",
-    "suggestedBy": "Suggestion : {rule}"
+    "suggestedBy": "Suggestion : {rule}",
+    "correctLine": "Corriger la ligne",
+    "correctTitle": "Corriger la ligne du relevé",
+    "correctHint": "Corrigez une erreur d'import sur cette ligne non rapprochée. La modification est auditée ; rien n'est comptabilisé.",
+    "correctedToast": "Ligne corrigée"
   },
   "transactionsSearch": "Rechercher frais de carte, chèques, virements…",
   "transactionsEmptyTitle": "Aucune transaction bancaire pour l’instant",
@@ -414,7 +418,12 @@
     "searchReconciliations": "Rechercher par date ou solde…",
     "reconciliationsEmptyTitle": "Aucun rapprochement pour l’instant",
     "reconciliationsEmptyDescription": "Démarrez un rapprochement avec la date de clôture et le solde de clôture du relevé bancaire.",
-    "openWorkspace": "Ouvrir l’espace de travail"
+    "openWorkspace": "Ouvrir l’espace de travail",
+    "deleteImport": "Supprimer l'import",
+    "deleteBlockedMatched": "Contient {count} lignes rapprochées — annulez d'abord leur rapprochement dans l'espace de rapprochement",
+    "deleteBlockedExcluded": "Contient {count} lignes exclues — restaurez-les d'abord",
+    "deleteImportConfirm": "Supprimer cet import et ses {count} lignes ? Le même fichier pourra être réimporté ensuite.",
+    "importDeleted": "Import supprimé ({count} lignes supprimées)"
   },
   "import": {
     "button": "Importer un relevé",

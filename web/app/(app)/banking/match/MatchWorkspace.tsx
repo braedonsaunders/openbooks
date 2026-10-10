@@ -7,7 +7,7 @@ import { useEffect, useId, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
-import { Ban, CheckCheck, FilePlus2, Link2, RotateCcw, Sparkles, Wand2, Workflow } from 'lucide-react'
+import { Ban, CheckCheck, FilePlus2, Link2, Pencil, RotateCcw, Sparkles, Wand2, Workflow } from 'lucide-react'
 import { toast } from 'sonner'
 import {
   Badge, Button, Drawer, EmptyState, Label, SearchSelect, Table, TableBody,
@@ -19,6 +19,7 @@ import { compareDecimal } from '../../../../lib/exact-decimal'
 import { confirmDialog } from '../../../../lib/confirm'
 import { promptDialog } from '../../../../lib/prompt'
 import { InteractiveTableRow } from '@/components/interactive-table-row'
+import { CorrectStatementLineDialog } from './CorrectStatementLineDialog'
 type Search = Record<string, string | string[] | undefined>
 type Opt = { id: string; label: string; unmatched?: number };
 interface Account { id: string; label: string }
@@ -117,6 +118,7 @@ export function MatchWorkspace({
   const [busy, setBusy] = useState(false)
   const [selection, setSelection] = useState<{ scope: string; stmt: string | null; gl: Set<string> }>({ scope: '', stmt: null, gl: new Set() })
   const [addLine, setAddLine] = useState<{ id: string; label: string } | null>(null)
+  const [correctLine, setCorrectLine] = useState<{ id: string; posted_on: string; amount: string; description: string | null } | null>(null)
   const [offsetId, setOffsetId] = useState('')
   // A refused add-journal that only fires a transient toast reads as
   // "nothing happened" once it dismisses with the dialog left open
@@ -494,6 +496,7 @@ export function MatchWorkspace({
                           ) : null}
                           <Button variant="ghost" size="sm" disabled={busy} title={t('createRule')} onClick={() => router.push((`/banking/rules?rule=new&fromLine=${l.id}`))}><Workflow size={14} /></Button>
                           <Button variant="ghost" size="sm" disabled={busy} title={t('addJournal')} onClick={() => { setAddLine({ id: l.id, label: `${l.posted_on} · ${money(l.amount)}` }); setOffsetId(''); setAddError(null) }}><FilePlus2 size={14} /></Button>
+                          <Button variant="ghost" size="sm" disabled={busy} title={t('correctLine')} onClick={(e) => { e.stopPropagation(); setCorrectLine({ id: l.id, posted_on: l.posted_on, amount: l.amount, description: l.description }) }}><Pencil size={14} /></Button>
                           <Button variant="ghost" size="sm" disabled={busy} title={t('exclude')} onClick={() => exclude(l.id)}><Ban size={14} /></Button>
                         </div>
                       </TableCell>
@@ -629,6 +632,20 @@ export function MatchWorkspace({
           <p className="text-xs text-slate-500 dark:text-slate-400">{t('addJournalHint')}</p>
         </div>
       </Drawer>
+
+      {/* correct-line drawer */}
+      {correctLine ? (
+        <CorrectStatementLineDialog
+          key={correctLine.id}
+          line={correctLine}
+          onClose={() => setCorrectLine(null)}
+          onSaved={() => {
+            setCorrectLine(null)
+            toast.success(t('correctedToast'))
+            router.refresh()
+          }}
+        />
+      ) : null}
     </div>
   )
 }

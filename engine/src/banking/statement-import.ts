@@ -1,12 +1,13 @@
 /** Statement import with dedupe. Split from banking.ts (pure moves only). */
 import { BankingError, type ParsedStatementLine, type StatementSource, BANK_STATEMENT_PARSER_VERSION, type StatementSourceEvidence, type BankingContext, requireActorId, type SkippedStatementRow } from "./banking-core"
 import { canonicalCsvMapping } from "./statement-parsers/csv"
-import { loadReconcilableAccount, lockReconciliationAccount } from "./reconcilable-account"
+import { loadReconcilableAccount, lockBankAccountInScope, lockReconciliationAccount } from "./reconcilable-account"
 import { assertRealDate, normalizeAmount } from "./statement-parsers/shared"
 import { createHash, randomUUID } from "node:crypto"
 import { sql } from "drizzle-orm"
 import { db, schema, type SqlExecutor } from "../platform/db.ts"
 import { toUnits } from "../money/money.ts"
+import { ScopeNotFoundError } from "../organization/subsidiary-scope.ts"
 
 export function normalizeFingerprintText(value: string | null | undefined): string {
   return (value ?? "").trim().replace(/\s+/g, " ").toUpperCase();
@@ -498,6 +499,163 @@ export async function importStatement(
       skipped,
       lines: fresh,
     };
+  });
+}
+
+/**
+ * Delete a whole statement import with every line it brought in — the remedy
+ * when an import is wrong beyond line-level correction, and the path that
+ * frees a re-import (the sha backstop otherwise refuses the same file as a
+ * duplicate). Only an untouched import can go: matched lines carry journal
+ * evidence (unmatch first), excluded lines carry a review decision (restore
+ * first), lines inside signed-off history are immutable, and other lines'
+ * possible-duplicate pointers into this import are their review evidence
+ * (clear those flags first). Every removed row is audited with its
+ * before-image; nothing posts.
+ */
+export async function deleteStatementImport(
+  statementId: string,
+  ctx: BankingContext,
+): Promise<{ deletedLines: number }> {
+  const statement = (await db.execute<{
+      id: string;
+      account_id: string;
+      source: string;
+      statement_date: string;
+      opening_balance: string | null;
+      closing_balance: string | null;
+      imported_at: string;
+    }>(sql`
+    select s.id, s.account_id, s.source, s.statement_date::text as statement_date,
+           s.opening_balance::text as opening_balance, s.closing_balance::text as closing_balance,
+           s.imported_at::text as imported_at
+      from bank_statements s
+      join accounts a on a.id = s.account_id and a.org_id = s.org_id
+     where s.id = ${statementId} and s.org_id = ${ctx.orgId}
+  `)).rows[0];
+  if (!statement) throw new ScopeNotFoundError();
+  const account = await loadReconcilableAccount(ctx.orgId, statement.account_id, ctx.allowedSubsidiaryIds);
+  return db.transaction(async (tx) => {
+    await lockReconciliationAccount(tx, ctx.orgId, account.id);
+    await lockBankAccountInScope(tx, ctx.orgId, account.id, ctx.allowedSubsidiaryIds);
+    const lines = (await tx.execute<{
+        id: string;
+        line_number: number;
+        posted_on: string;
+        amount: string;
+        currency: string;
+        description: string | null;
+        counterparty_ref: string | null;
+        bank_transaction_id: string | null;
+        match_status: string;
+      }>(sql`
+      select l.id, l.line_number, l.posted_on::text as posted_on, l.amount::text as amount,
+             l.currency, l.description, l.counterparty_ref, l.bank_transaction_id, l.match_status
+        from bank_statement_lines l
+       where l.statement_id = ${statementId} and l.org_id = ${ctx.orgId}
+       order by l.line_number
+    `)).rows;
+    const matched = lines.filter((line) => line.match_status === "matched").length;
+    if (matched > 0) {
+      throw new BankingError(
+        `This import has ${matched} matched line(s) — unmatch them first`,
+      );
+    }
+    const excluded = lines.filter((line) => line.match_status === "excluded").length;
+    if (excluded > 0) {
+      throw new BankingError(
+        `This import has ${excluded} excluded line(s) — restore them first`,
+      );
+    }
+    // Defensive: status says unmatched only when no match rows remain, but
+    // the rows are the evidence — never delete under them.
+    const matchRows = (await tx.execute<{ count: number }>(sql`
+      select count(*)::int as count from reconciliation_matches m
+       join bank_statement_lines l on l.id = m.statement_line_id and l.org_id = m.org_id
+       where l.statement_id = ${statementId} and l.org_id = ${ctx.orgId}
+    `)).rows[0]!.count;
+    if (matchRows > 0) {
+      throw new BankingError(
+        `This import has ${matchRows} matched line(s) — unmatch them first`,
+      );
+    }
+    // Signed-off history is immutable (the import fence): refuse below the
+    // cutoff even with every line unmatched.
+    const signedThrough = (await tx.execute<{ through_date: string }>(sql`
+      select through_date::text as through_date from reconciliations
+       where org_id = ${ctx.orgId} and account_id = ${account.id} and status = 'signed_off'
+       order by through_date desc limit 1
+    `)).rows[0];
+    if (signedThrough && lines.some((line) => line.posted_on <= signedThrough.through_date)) {
+      throw new BankingError(
+        `This import reaches on or before the signed-off reconciliation through ${signedThrough.through_date} — signed-off history is immutable`,
+      );
+    }
+    // Other lines' possible-duplicate pointers into this import are their
+    // review evidence; nulling them from a delete would rewrite it.
+    const inboundFlags = (await tx.execute<{ count: number }>(sql`
+      select count(*)::int as count from bank_statement_lines o
+       where o.org_id = ${ctx.orgId}
+         and o.possible_duplicate_of in (
+           select l.id from bank_statement_lines l
+            where l.statement_id = ${statementId} and l.org_id = ${ctx.orgId}
+         )
+         and not (o.statement_id = ${statementId} and o.org_id = ${ctx.orgId})
+    `)).rows[0]!.count;
+    if (inboundFlags > 0) {
+      throw new BankingError(
+        `This import is flagged as a possible duplicate by ${inboundFlags} other line(s) — clear those flags first`,
+      );
+    }
+    for (const line of lines) {
+      await tx.execute(sql`
+        insert into audit_log
+          (org_id, table_name, row_id, action, changes, actor_id)
+        values
+          (${ctx.orgId}, 'bank_statement_lines', ${line.id}, 'delete',
+           ${JSON.stringify({
+             operation: "delete_import_line",
+             statementId,
+             before: {
+               lineNumber: line.line_number,
+               postedOn: line.posted_on,
+               amount: line.amount,
+               currency: line.currency,
+               description: line.description,
+               counterpartyRef: line.counterparty_ref,
+               bankTransactionId: line.bank_transaction_id,
+             },
+           })}::jsonb,
+           ${ctx.userId})
+      `);
+    }
+    await tx.execute(sql`
+      delete from bank_statement_lines
+       where statement_id = ${statementId} and org_id = ${ctx.orgId}
+    `);
+    await tx.execute(sql`
+      insert into audit_log
+        (org_id, table_name, row_id, action, changes, actor_id)
+      values
+        (${ctx.orgId}, 'bank_statements', ${statementId}, 'delete',
+         ${JSON.stringify({
+           operation: "delete_import",
+           before: {
+             source: statement.source,
+             statementDate: statement.statement_date,
+             openingBalance: statement.opening_balance,
+             closingBalance: statement.closing_balance,
+             importedAt: statement.imported_at,
+             lineCount: lines.length,
+           },
+         })}::jsonb,
+         ${ctx.userId})
+    `);
+    await tx.execute(sql`
+      delete from bank_statements
+       where id = ${statementId} and org_id = ${ctx.orgId}
+    `);
+    return { deletedLines: lines.length };
   });
 }
 

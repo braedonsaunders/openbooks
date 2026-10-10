@@ -366,7 +366,11 @@
     "excludeFlagged": "Exclude {count} duplicates",
     "excludeFlaggedConfirm": "Exclude {count} flagged lines as duplicates of their earlier imports?",
     "excludeFlaggedReason": "Duplicate of an earlier import (bulk duplicate review)",
-    "excludedFlaggedToast": "Excluded {count} duplicates"
+    "excludedFlaggedToast": "Excluded {count} duplicates",
+    "correctLine": "Correct line",
+    "correctTitle": "Correct statement line",
+    "correctHint": "Fix an import error on this unmatched line. The change is audited; nothing posts.",
+    "correctedToast": "Line corrected"
   },
   "transactionsSearch": "Search card charges, checks, transfers…",
   "transactionsEmptyTitle": "No banking transactions yet",
@@ -421,7 +425,12 @@
     "searchReconciliations": "Search by date or balance…",
     "reconciliationsEmptyTitle": "No reconciliations yet",
     "reconciliationsEmptyDescription": "Start a reconciliation with the bank statement's cutoff date and closing balance.",
-    "openWorkspace": "Open workspace"
+    "openWorkspace": "Open workspace",
+    "deleteImport": "Delete import",
+    "deleteBlockedMatched": "Has {count} matched lines — unmatch them in the reconcile workspace first",
+    "deleteBlockedExcluded": "Has {count} excluded lines — restore them first",
+    "deleteImportConfirm": "Delete this import and its {count} lines? The same file can be re-imported afterwards.",
+    "importDeleted": "Import deleted ({count} lines removed)"
   },
   "import": {
     "button": "Import statement",

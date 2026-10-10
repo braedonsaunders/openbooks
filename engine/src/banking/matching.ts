@@ -7,6 +7,7 @@ import { db, inDbTransaction, schema, withOrgTransaction, withTransactionSavepoi
 import { fromUnits, sum, toUnits } from "../money/money.ts"
 import { calendarDaysBetween } from "../platform/civil-date.ts"
 import { lockScopeRows, ScopeNotFoundError } from "../organization/subsidiary-scope.ts"
+import { assertRealDate, normalizeAmount } from "./statement-parsers/shared"
 
 // ---------------------------------------------------------------------------
 // Matching
@@ -632,6 +633,131 @@ export async function restoreStatementLine(statementLineId: string, ctx: Banking
            priorReason: line.exclusion_reason,
            before: { matchStatus: "excluded" },
            after: { matchStatus: "unmatched" },
+         })}::jsonb,
+         ${ctx.userId})
+    `);
+  });
+}
+
+export interface StatementLineCorrection {
+  /** Signed decimal string from the bank's perspective; sign flips allowed. */
+  amount?: string;
+  /** ISO date (YYYY-MM-DD). */
+  postedOn?: string;
+  /** Null clears the description; undefined leaves it. */
+  description?: string | null;
+}
+
+/**
+ * Correct an unmatched statement line's amount, sign, date or description —
+ * the import-time sign error that otherwise leaves the account
+ * unreconcilable. Only unmatched lines can be corrected (matched lines carry
+ * journal evidence: unmatch first; excluded lines carry a review decision:
+ * restore first), and never inside signed-off history. The possible-duplicate
+ * flag is review evidence about the line's identity and survives the edit.
+ * Every change is audited with its before/after image; nothing posts — no
+ * adjusting entry is ever booked for an import correction.
+ */
+export async function correctStatementLine(
+  statementLineId: string,
+  patch: StatementLineCorrection,
+  ctx: BankingContext,
+): Promise<void> {
+  const next: { amount?: string; postedOn?: string; description?: string | null } = {};
+  if (patch.amount !== undefined) next.amount = normalizeAmount(patch.amount, "Line amount");
+  if (patch.postedOn !== undefined) {
+    const dateMatch = patch.postedOn.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (!dateMatch) throw new BankingError("Corrected posted date must be YYYY-MM-DD");
+    next.postedOn = assertRealDate(dateMatch[1]!, dateMatch[2]!, dateMatch[3]!, "Corrected posted date");
+  }
+  if (patch.description !== undefined) {
+    const trimmed = patch.description?.trim() ?? "";
+    next.description = trimmed === "" ? null : trimmed;
+  }
+  if (next.amount === undefined && next.postedOn === undefined && next.description === undefined) {
+    throw new BankingError("No correction supplied: change the amount, date or description");
+  }
+  const account = await requireStatementLineAccountInScope(db, ctx.orgId, statementLineId, ctx.allowedSubsidiaryIds);
+  await db.transaction(async (tx) => {
+    await lockReconciliationAccount(tx, ctx.orgId, account.account_id);
+    await lockBankAccountInScope(tx, ctx.orgId, account.account_id, ctx.allowedSubsidiaryIds);
+    const before = (await tx.execute<{
+        id: string;
+        posted_on: string;
+        amount: string;
+        description: string | null;
+        match_status: string;
+      }>(sql`
+      select l.id, l.posted_on::text as posted_on, l.amount::text as amount,
+             l.description, l.match_status
+        from bank_statement_lines l
+       where l.id = ${statementLineId}
+         and l.org_id = ${ctx.orgId}
+         and l.account_id = ${account.account_id}
+       for update
+    `)).rows[0];
+    if (!before) throw new BankingError("Only unmatched lines can be corrected — unmatch it first");
+    if (before.match_status === "matched") {
+      throw new BankingError("Only unmatched lines can be corrected — unmatch it first");
+    }
+    if (before.match_status === "excluded") {
+      throw new BankingError("Only unmatched lines can be corrected — restore it first");
+    }
+    // Signed-off history is immutable (the import fence): a correction must
+    // neither touch a line inside it nor move a line into it, or the closed
+    // session would carry evidence it can never clear.
+    const signedThrough = (await tx.execute<{ through_date: string }>(sql`
+      select through_date::text as through_date from reconciliations
+       where org_id = ${ctx.orgId} and account_id = ${account.account_id} and status = 'signed_off'
+       order by through_date desc limit 1
+    `)).rows[0];
+    const afterPostedOn = next.postedOn ?? before.posted_on;
+    if (
+      signedThrough
+      && (before.posted_on <= signedThrough.through_date || afterPostedOn <= signedThrough.through_date)
+    ) {
+      throw new BankingError(
+        `This line is dated on or before the signed-off reconciliation through ${signedThrough.through_date} — signed-off history is immutable`,
+      );
+    }
+    const after = {
+      amount: next.amount ?? fromUnits(toUnits(before.amount)),
+      postedOn: afterPostedOn,
+      description: next.description !== undefined ? next.description : before.description,
+    };
+    const beforeCanonical = {
+      amount: fromUnits(toUnits(before.amount)),
+      postedOn: before.posted_on,
+      description: before.description,
+    };
+    // Idempotent success without audit noise: an identical re-correction
+    // writes nothing. Amounts compare in exact units — database text keeps
+    // its stored scale while normalized input is canonical.
+    if (
+      toUnits(after.amount) === toUnits(beforeCanonical.amount)
+      && after.postedOn === beforeCanonical.postedOn
+      && after.description === beforeCanonical.description
+    ) {
+      return;
+    }
+    await tx.execute(sql`
+      update bank_statement_lines
+         set amount = ${after.amount},
+             posted_on = ${after.postedOn},
+             description = ${after.description},
+             updated_at = now(),
+             updated_by = ${ctx.userId}
+       where id = ${statementLineId} and org_id = ${ctx.orgId}
+    `);
+    await tx.execute(sql`
+      insert into audit_log
+        (org_id, table_name, row_id, action, changes, actor_id)
+      values
+        (${ctx.orgId}, 'bank_statement_lines', ${statementLineId}, 'update',
+         ${JSON.stringify({
+           operation: "correct_line",
+           before: beforeCanonical,
+           after: { amount: after.amount, postedOn: after.postedOn, description: after.description },
          })}::jsonb,
          ${ctx.userId})
     `);

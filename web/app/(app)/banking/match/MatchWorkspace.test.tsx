@@ -300,3 +300,90 @@ test('a flagged line shows its duplicate evidence with a clear action and a bulk
     `clearing must toast success, got ${JSON.stringify(script.toasts)}`,
   )
 })
+
+function correctLineButton(): HTMLButtonElement {
+  const found = [...document.querySelectorAll('button[title]')].find((b) => b.getAttribute('title') === 'Correct line')
+  assert.ok(found, 'the unmatched row must offer Correct line')
+  return found as HTMLButtonElement
+}
+
+function correctDialog(): HTMLElement {
+  const dialogs = document.querySelectorAll('[role="dialog"]')
+  const dialog = dialogs[dialogs.length - 1] as HTMLElement | undefined
+  assert.ok(dialog, 'the correct-line dialog must open')
+  assert.ok(
+    (dialog.textContent ?? '').includes('Correct statement line'),
+    'the dialog names its purpose',
+  )
+  return dialog
+}
+
+async function setInputValue(input: HTMLInputElement, value: string): Promise<void> {
+  await act(async () => {
+    const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!
+    setter.call(input, value)
+    input.dispatchEvent(new window.Event('input', { bubbles: true }))
+    await tick()
+  })
+}
+
+test('correcting a line sends the edited fields and toasts', async (t) => {
+  const calls: { url: string; body?: string }[] = []
+  await mountWorkspace(t, scriptedFetch({
+    '/rules/preview': () => Response.json({ matches: [] }),
+    '/statement-lines/stmt-1': (url, body) => {
+      calls.push({ url, body })
+      return Response.json({ ok: true })
+    },
+  }))
+  await act(async () => {
+    correctLineButton().dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
+    for (let i = 0; i < 6; i++) await tick()
+  })
+  const dialog = correctDialog()
+  const amount = dialog.querySelector('#correct-line-amount') as HTMLInputElement | null
+  assert.ok(amount, 'the dialog edits the amount')
+  assert.equal(amount.value, '-25.00', 'the amount starts from the imported figure')
+  await setInputValue(amount, '25.00')
+  const save = [...dialog.querySelectorAll('button')].find((b) => (b.textContent ?? '').trim() === 'Correct line') as HTMLButtonElement | undefined
+  assert.ok(save, 'the dialog offers Correct line once edited')
+  await act(async () => {
+    save.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
+    for (let i = 0; i < 6; i++) await tick()
+  })
+  assert.ok(
+    calls.some((c) => c.url.includes('/statement-lines/stmt-1') && (c.body ?? '').includes('"action":"correct"') && (c.body ?? '').includes('"amount":"25.00"')),
+    `the save must call the correct action with the edited amount, got ${JSON.stringify(calls)}`,
+  )
+  assert.ok(
+    script.toasts.some((toast) => toast.kind === 'success' && toast.message.includes('Line corrected')),
+    `the save must toast success, got ${JSON.stringify(script.toasts)}`,
+  )
+})
+
+test('a refused correction persists the server reason inline', async (t) => {
+  await mountWorkspace(t, scriptedFetch({
+    '/rules/preview': () => Response.json({ matches: [] }),
+    '/statement-lines/stmt-1': () => Response.json({ error: 'Only unmatched lines can be corrected — unmatch it first' }, { status: 422 }),
+  }))
+  await act(async () => {
+    correctLineButton().dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
+    for (let i = 0; i < 6; i++) await tick()
+  })
+  const dialog = correctDialog()
+  const amount = dialog.querySelector('#correct-line-amount') as HTMLInputElement | null
+  assert.ok(amount, 'the dialog edits the amount')
+  await setInputValue(amount, '25.00')
+  const save = [...dialog.querySelectorAll('button')].find((b) => (b.textContent ?? '').trim() === 'Correct line') as HTMLButtonElement | undefined
+  assert.ok(save, 'the dialog offers Correct line once edited')
+  await act(async () => {
+    save.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
+    for (let i = 0; i < 6; i++) await tick()
+  })
+  const alert = dialog.querySelector('[role="alert"]')
+  assert.ok(alert, 'the refused dialog must persist a role=alert')
+  assert.ok(
+    (alert.textContent ?? '').includes('unmatch it first'),
+    `the alert must carry the named remedy, got ${JSON.stringify(alert.textContent)}`,
+  )
+})

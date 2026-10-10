@@ -16,7 +16,10 @@ const MATCH_STATUS_KEYS = ['matched', 'unmatched', 'excluded']
 
 /**
  * Read-only flyout over the account view (?statement=<id>) showing an
- * imported statement's lines — the immutable bank-side truth.
+ * imported statement's lines. Unmatched lines stay correctable through the
+ * match workspace and deletable with their import from the import history —
+ * governed, audited, never posting — so this flyout never takes edits
+ * itself; matched lines carry journal evidence and refuse them everywhere.
  */
 export async function StatementDrawer({
   basePath,

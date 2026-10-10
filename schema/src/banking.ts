@@ -20,7 +20,10 @@ import { paymentSchedules } from "./payment-operations";
 /**
  * Banking: statement import → matching → reconciliation sign-off, and
  * outbound payment runs (EFT/ACH/cheque batches). Statement lines are the
- * immutable imported truth; matches connect them to journal lines.
+ * bank-side truth as imported: unmatched lines may be corrected or removed
+ * with their import through governed, audited actions that never post, while
+ * matched lines carry journal evidence and stay immutable. Matches connect
+ * lines to journal lines.
  */
 
 export const bankStatements = pgTable(
