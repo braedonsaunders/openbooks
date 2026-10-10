@@ -143,7 +143,8 @@
           "remittanceVendor": "Fournisseur de versement légal non défini : {detail}",
           "paymentRail": "Aucun profil d’émetteur TEF configuré, et le secours par chèque est désactivé — il n’y a aucun moyen de payer qui que ce soit.",
           "taxYear": "{detail}",
-          "statutoryRate": "{detail}"
+          "statutoryRate": "{detail}",
+          "documentNumberSeries": "{detail}"
         },
         "period": {
           "missing": "Aucune période comptable ne couvre le jour de paie {detail}.",
@@ -793,7 +794,9 @@
           "ca_sdi_employee": "SDI de Californie (salarié) à payer",
           "ct_pl_employee": "Congé payé du Connecticut (employé) à payer",
           "vt_child_care_contribution": "Contribution du Vermont pour la garde d'enfants à payer",
-          "mn_paid_leave": "Congé payé du Minnesota à payer"
+          "mn_paid_leave": "Congé payé du Minnesota à payer",
+          "wa_pfml": "PFML de Washington à payer",
+          "wa_cares": "WA Cares de Washington à payer"
         }
       },
       "NL": {

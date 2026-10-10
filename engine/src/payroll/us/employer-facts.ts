@@ -30,6 +30,22 @@ export const US_EMPLOYER_FACTS: readonly PayrollEmployerFact[] = [
     required: false,
   },
   {
+    key: "wa_pfml_employer_size",
+    kind: "choice",
+    label: "Washington PFML employer size",
+    choices: [
+      { value: "fifty_or_more", label: "50 or more employees" },
+      { value: "fewer_than_fifty", label: "Fewer than 50 employees" },
+    ],
+    refusalReason:
+      "employers with 50 or more employees owe the 28.57% employer share of the PFML premium while smaller employers owe no employer share (both still withhold the employee share); record which side this legal employer is on",
+    legalBasis:
+      "Washington Employment Security Department, Paid Family & Medical Leave premium rate 1.13% for 2026 (released 10/29/25): "
+      + "employers with at least 50 employees pay 28.57% of the premium and employees pay 71.43%; smaller employers remit the employee portion only. "
+      + "https://esd.wa.gov/about-us/news-release/2025/paid-family-medical-leave-premium-rate-increases-113-2026",
+    required: true,
+  },
+  {
     key: "sui_financing_method",
     kind: "choice",
     scope: "filing_account",

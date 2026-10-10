@@ -143,7 +143,8 @@
           "remittanceVendor": "未设置法定代缴供应商:{detail}",
           "paymentRail": "没有已配置的 EFT 发起方档案,且支票兜底已关闭——无法向任何人付款。",
           "taxYear": "{detail}",
-          "statutoryRate": "{detail}"
+          "statutoryRate": "{detail}",
+          "documentNumberSeries": "{detail}"
         },
         "period": {
           "missing": "没有会计期间覆盖发薪日 {detail}。",
@@ -793,7 +794,9 @@
           "ca_sdi_employee": "加利福尼亚州 SDI（员工部分）应付",
           "ct_pl_employee": "康涅狄格州带薪假（雇员部分）应付",
           "vt_child_care_contribution": "佛蒙特州儿童保育缴款应付",
-          "mn_paid_leave": "明尼苏达州带薪假应付"
+          "mn_paid_leave": "明尼苏达州带薪假应付",
+          "wa_pfml": "华盛顿州PFML应付",
+          "wa_cares": "华盛顿州WA Cares应付"
         }
       },
       "NL": {

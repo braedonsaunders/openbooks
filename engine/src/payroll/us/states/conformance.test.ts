@@ -55,6 +55,7 @@ import {
 import { AR_RATES_2026, arAnnualGrossTax, arMidrangeLookup, arRoundToDollar } from "./ar.ts";
 import { AZ_CERTIFICATE, AZ_WITHHOLDING, azRateForPrintedPercent } from "./az.ts";
 import { coFamliWithholding } from "./co.ts";
+import { waCaresWithholding, waPfmlWithholding, waRatesForPayDate } from "./wa.ts";
 import {
   ctInitialTax, ctPaidLeaveWithholding, ctPersonalCredit, ctPersonalExemption, ctPhaseOutAddBack,
   ctTaxRecapture,
@@ -4498,4 +4499,43 @@ test("VT Child Care Contribution accrues 0.44% of Vermont wages at the employer'
     basis: "nonresident", side: "work", reach: "nonresident", certificateKey: null,
   } as const;
   assert.equal(computeUsEmployerWithholding({ levy: { ...levy }, payDate: "2026-07-21", wages: "100000.00", tenantRates: () => undefined }).tax, money("440"));
+});
+
+test("WA PFML splits the 1.13% total 71.43/28.57 with the legs summing to the total", () => {
+  // ESD news release 10/29/25: 2026 total premium 1.13% of gross wages; employers (50+)
+  // pay 28.57% and employees 71.43%. $10,000 prices $113.00 total: the employee leg is
+  // 71.43% of the rounded total ($80.72) and the employer leg is the remainder ($32.28),
+  // so the stub legs always sum to the accrued liability.
+  const pfml = waPfmlWithholding("2026-03-06", "10000.00", "0", "fifty_or_more");
+  assert.equal(pfml.total, money("113.00"));
+  assert.equal(pfml.employee, money("80.72"));
+  assert.equal(pfml.employer, money("32.28"));
+});
+
+test("WA PFML caps at the Social Security base and exempts small employers from the share", () => {
+  // The family-leave base is the federal OASDI base ($184,500 for 2026): $200,000 of wages
+  // with $184,000 already priced leaves $500 of room, pricing $5.65 total ($4.04/$1.61).
+  const capped = waPfmlWithholding("2026-03-06", "200000.00", "184000.00", "fifty_or_more");
+  assert.equal(capped.total, money("5.65"));
+  assert.equal(capped.employee, money("4.04"));
+  assert.equal(capped.employer, money("1.61"));
+  // Past the base nothing prices; a smaller employer still withholds the employee share
+  // but owes no employer share.
+  const pastBase = waPfmlWithholding("2026-03-06", "10000.00", "184500.00", "fifty_or_more");
+  assert.equal(pastBase.total, money("0.00"));
+  const small = waPfmlWithholding("2026-03-06", "10000.00", "0", "fewer_than_fifty");
+  assert.equal(small.employee, money("80.72"));
+  assert.equal(small.employer, money("0.00"));
+});
+
+test("WA Cares withholds 0.58% of gross wages with no cap", () => {
+  // RCW 50B.04.080: $10,000 prices $58.00; the uncapped levy prices $1,000,000 at $5,800.00.
+  assert.equal(waCaresWithholding("2026-03-06", "10000.00"), money("58.00"));
+  assert.equal(waCaresWithholding("2026-03-06", "1000000.00"), money("5800.00"));
+});
+
+test("WA levies refuse pay dates outside the transcribed year", () => {
+  assert.equal(waRatesForPayDate("2026-01-01").year, 2026);
+  assert.throws(() => waPfmlWithholding("2025-12-31", "10000.00", "0", "fifty_or_more"), /no transcribed rates for 2025/);
+  assert.throws(() => waCaresWithholding("2027-01-15", "10000.00"), /no transcribed rates for 2027/);
 });

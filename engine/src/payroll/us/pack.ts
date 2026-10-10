@@ -11,7 +11,8 @@ import {
   US_FICA_WAGES_ACCOUNT_BASE, US_FICA_WITHHELD_ACCOUNT_BASE, US_OPENING_YTD_FIELDS, US_SUI_ACCOUNT_BASE,
 } from "./opening-ytd.ts";
 import { PUB15T_FACTOR_LABELS } from "./pub15t.ts";
-import { US_PACK_RATES, US_STATES, US_TAX_YEARS } from "./rates.ts";
+import { NO_WITHHOLDING_STATES, US_PACK_RATES, US_STATES, US_TAX_YEARS } from "./rates.ts";
+import { WA_FACTOR_LABELS } from "./states/wa.ts";
 import { implementedUsStates, supportedUsStates, usStateWithholding } from "./states/index.ts";
 import { AL_FACTOR_LABELS } from "./states/al.ts";
 import { AR_FACTOR_LABELS } from "./states/ar.ts";
@@ -199,6 +200,35 @@ const US_REGIONS: PayrollRegionCoverage = {
     + "state's published withholding tables into engine/src/payroll/us/states/ and register the "
     + `engine. Implemented: ${implementedUsStates().join(", ")}.`,
 };
+
+/**
+ * States whose wages carry a state income tax: every state except the ones
+ * the pack declares as levying none. DERIVED from `NO_WITHHOLDING_STATES`,
+ * never a second literal — a state that enacts a wage income tax leaves
+ * that set and enters this one with no edit here. The state-income-tax slot
+ * is live exactly there, so a Washington-only employer is never asked to
+ * map a tax Washington does not levy, while every levying state still is
+ * (including one whose tables are not yet transcribed — the run refuses
+ * those by name at calculate, and the mapping demand is that refusal's
+ * setup half).
+ */
+const US_STATE_INCOME_TAX_REGIONS: readonly string[] = US_STATES.filter(
+  (state) => !NO_WITHHOLDING_STATES.has(state),
+);
+
+/**
+ * States with an income tax BELOW the state: a declared sub-region levy
+ * (New York City, Philadelphia, Detroit, Louisville, Wilmington, the Ohio
+ * municipalities and school districts, the Michigan cities, the Maryland
+ * and Indiana counties) or an open sub-region registry (Pennsylvania Act
+ * 32). DERIVED from the pack's own withholding declarations, so the next
+ * transcribed locality extends the demand with no edit here. The
+ * local-income-tax slot is live exactly there: a Tacoma employer sees no
+ * local-tax mapping demand, an Ohio employer still does.
+ */
+const US_LOCAL_INCOME_TAX_REGIONS: readonly string[] = US_WITHHOLDING.regions
+  .filter((entry) => entry.subRegions.length > 0 || entry.openSubRegions != null)
+  .map((entry) => entry.region);
 
 export const US_PAYROLL_PACK: PayrollCountryPack = {
   country: "US",
@@ -422,6 +452,9 @@ export const US_PAYROLL_PACK: PayrollCountryPack = {
     },
     {
       key: "state_income_tax",
+      // Live only where a state levies a wage income tax — never in the
+      // nine no-tax states. A Washington-only run neither maps nor posts it.
+      regions: US_STATE_INCOME_TAX_REGIONS,
       components: [
         // A state's income tax is computed from state-taxable wages after
         // pre-tax deductions, so a §125 or 401(k) order moves it exactly as
@@ -537,6 +570,10 @@ export const US_PAYROLL_PACK: PayrollCountryPack = {
     },
     {
       key: "local_income_tax",
+      // Live only where a locality levies one — the states with declared
+      // sub-region levies. Tacoma levies no local income tax, so a
+      // Washington-only run neither maps nor posts it.
+      regions: US_LOCAL_INCOME_TAX_REGIONS,
       components: [
         // The taxing unit BELOW the state: New York City, Yonkers,
         // Philadelphia, an Ohio municipality or school district, a Michigan
@@ -567,6 +604,29 @@ export const US_PAYROLL_PACK: PayrollCountryPack = {
         // wages, no cap since 2024): an EMPLOYEE deduction, not PIT, so its
         // own slot rather than the SIT line. Assessed on earnings (gross).
         { code: "CA-SDI", name: "California SDI (employee)", systemKey: "ca_sdi_employee", kind: "deduction", sequence: 148, assessedOn: "earnings", remittance: "external" },
+      ],
+    },
+    {
+      key: "wa_pfml",
+      regions: ["WA"],
+      components: [
+        // Washington Paid Family and Medical Leave (2026: 1.13% of gross
+        // wages to the Social Security base — 71.43% employee, 28.57%
+        // employer for employers with 50+ employees): the two legs remit to
+        // ESD as one premium, so one slot covers both, as Vermont's and
+        // Minnesota's single-remittance levies do. Assessed on earnings.
+        { code: "WA-PFML", name: "Washington PFML (employee)", systemKey: "wa_pfml_employee", kind: "deduction", sequence: 144, assessedOn: "earnings", remittance: "external" },
+        { code: "WA-PFML-ER", name: "Washington PFML (employer)", systemKey: "wa_pfml_employer", kind: "employer_contribution", sequence: 253, assessedOn: "earnings", remittance: "external" },
+      ],
+    },
+    {
+      key: "wa_cares",
+      regions: ["WA"],
+      components: [
+        // WA Cares Fund (RCW 50B.04: 0.58% of gross wages, employee-paid, no
+        // cap): an EMPLOYEE deduction beside income tax, never inside it.
+        // Assessed on earnings (gross).
+        { code: "WA-CARES", name: "Washington WA Cares (employee)", systemKey: "wa_cares_employee", kind: "deduction", sequence: 146, assessedOn: "earnings", remittance: "external" },
       ],
     },
   ],
@@ -621,6 +681,7 @@ export const US_PAYROLL_PACK: PayrollCountryPack = {
     ...UT_FACTOR_LABELS,
     ...VA_FACTOR_LABELS,
     ...VT_FACTOR_LABELS,
+    ...WA_FACTOR_LABELS,
     ...WI_FACTOR_LABELS,
     ...WV_FACTOR_LABELS,
     ...US_LOCAL_FACTOR_LABELS,

@@ -143,7 +143,8 @@
           "remittanceVendor": "Gesetzlicher Abführungsempfänger nicht gesetzt: {detail}",
           "paymentRail": "Kein eingerichtetes EFT-Originatorprofil, und die Scheck-Alternative ist aus — es gibt keine Möglichkeit, jemanden zu bezahlen.",
           "taxYear": "{detail}",
-          "statutoryRate": "{detail}"
+          "statutoryRate": "{detail}",
+          "documentNumberSeries": "{detail}"
         },
         "period": {
           "missing": "Keine Buchungsperiode deckt das Zahldatum {detail} ab.",
@@ -793,7 +794,9 @@
           "ca_sdi_employee": "Verbindlichkeiten aus kalifornischer SDI (Arbeitnehmer)",
           "ct_pl_employee": "Verbindlichkeiten aus bezahltem Urlaub Connecticut (Arbeitnehmer)",
           "vt_child_care_contribution": "Verbindlichkeiten aus Kinderbetreuungsbeitrag Vermont",
-          "mn_paid_leave": "Verbindlichkeiten aus bezahltem Urlaub Minnesota"
+          "mn_paid_leave": "Verbindlichkeiten aus bezahltem Urlaub Minnesota",
+          "wa_pfml": "Verbindlichkeiten aus PFML Washington",
+          "wa_cares": "Verbindlichkeiten aus WA Cares Washington"
         }
       },
       "NL": {

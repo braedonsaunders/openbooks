@@ -199,7 +199,8 @@ test("the register social-insurance key set derives from the pack declarations",
     "qpip", "rv", "sostitutiva_premi", "sostitutiva_rinnovi",
     "sostitutiva_turni", "ss", "ss_cc", "ss_des", "ss_for", "ss_hex_fm",
     "ss_hex_resto", "ss_mei", "ss_solidaridad", "student_loan", "usc",
-    "vieillesse", "vt_child_care_contribution_employee", "zus_chor",
+    "vieillesse", "vt_child_care_contribution_employee", "wa_cares_employee",
+    "wa_pfml_employee", "zus_chor",
     "zus_emeryt", "zus_rent", "zus_zdr",
   ]);
   // QPIP is the named reason this set exists: the old register buckets
