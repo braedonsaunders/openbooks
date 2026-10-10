@@ -129,7 +129,8 @@
     "title": "Préparation du grand livre",
     "description": "Les diagnostics en direct détectent les blocages et invalident les approbations périmées lorsque les livres changent.",
     "score": "prêt",
-    "clear": "Aucune exception bloquante ne subsiste."
+    "clear": "Aucune exception bloquante ne subsiste.",
+    "affectedDocuments": "Documents concernés : {list}"
   },
   "diagnostics": {
     "drafts-open": {
@@ -198,7 +199,7 @@
     },
     "commerce-clearing-residual": {
       "title": "Des comptes d’attente gardent un solde",
-      "message": "{count, plural, one {# compte d’attente ne se solde pas à zéro.} other {# comptes d’attente ne se soldent pas à zéro.}}"
+      "message": "{count, plural, one {# compte d’attente ne correspond pas aux paiements en transit ouverts.} other {# comptes d’attente ne correspondent pas aux paiements en transit ouverts.}}"
     },
     "commerce-stored-value-gap": {
       "title": "Le passif des cartes cadeaux ne concorde pas",
@@ -254,7 +255,8 @@
   },
   "tasks": {
     "dependencies": "Dépend de : {dependencies}",
-    "notePlaceholder": "Ajouter une note ou un résumé de preuve…"
+    "notePlaceholder": "Ajouter une note ou un résumé de preuve…",
+    "revalidateReason": "Nouvel examen requis : {what, select, ledger {les écritures} reconciliations {les rapprochements bancaires} rates {les taux ou les règles} other {les livres}} ont changé."
   },
   "lock": {
     "title": "Verrouillage contrôlé",
@@ -862,6 +864,7 @@
     "status": "Statut",
     "assignable": "Affectable",
     "assign": "Affecter {count, plural, one {# période} other {# périodes}}",
+    "assignAdjustment": "Affecter {count, plural, one {# document} other {# documents}} à {name}",
     "blockedNote": "{count, plural, one {# document est} other {# documents sont}} bloqué(s) et sera(ont) ignoré(s).",
     "refusedNote": "{count, plural, one {# document a été} other {# documents ont été}} refusé(s) à la validation.",
     "skippedNote": "{count, plural, one {# document a été} other {# documents ont été}} attribué(s) entre-temps par une autre personne et retiré(s) de cet aperçu.",

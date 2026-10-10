@@ -4,6 +4,7 @@ import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db, withOrg } from "../platform/db.ts";
 import { finalizeCloseFlowApproval } from "./approvals.ts";
+import { periodFingerprint } from "./readiness.ts";
 import { refreshCloseRun } from "./run-automation.ts";
 import { startCloseRun } from "./run-start.ts";
 import { createScratchOrg, dropScratchOrg, seedFlowActors, type ScratchOrg } from "../testing/fixtures.ts";
@@ -105,6 +106,26 @@ test('posting-period-missing ignores period-less documents dated outside the run
              (${inside},${org.orgId},${org.subsidiaryId},'vendor_bill','draft',${inside},${org.date},'CAD',10,0,10)`);
     const runId=await run(org,actor);
     assert.equal((await counts(org.orgId,runId))['posting-period-missing'],1);
+  } finally {await dropScratchOrg(org.orgId);}
+});
+
+test('the close fingerprint ignores unassigned documents dated outside the run period', {skip:!enabled}, async () => {
+  const {org}=await setup();
+  try {
+    const before = await periodFingerprint(org.orgId, org.periodId, org.bookId);
+    const outside = randomUUID(), inside = randomUUID();
+    await db.execute(sql`insert into documents (id,org_id,subsidiary_id,kind,status,document_number,document_date,currency,subtotal,tax_total,total)
+      values (${outside},${org.orgId},${org.subsidiaryId},'vendor_bill','draft',${outside},'2026-01-15','CAD',10,0,10)`);
+    assert.equal(
+      await periodFingerprint(org.orgId, org.periodId, org.bookId), before,
+      'a draft dated outside the period is not this review evidence and must not invalidate an attestation',
+    );
+    await db.execute(sql`insert into documents (id,org_id,subsidiary_id,kind,status,document_number,document_date,currency,subtotal,tax_total,total)
+      values (${inside},${org.orgId},${org.subsidiaryId},'vendor_bill','draft',${inside},${org.date},'CAD',10,0,10)`);
+    assert.notEqual(
+      await periodFingerprint(org.orgId, org.periodId, org.bookId), before,
+      'an in-period draft still moves the fingerprint',
+    );
   } finally {await dropScratchOrg(org.orgId);}
 });
 

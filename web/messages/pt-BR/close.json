@@ -129,7 +129,8 @@
     "title": "Prontidão do razão",
     "description": "Diagnósticos ao vivo detectam bloqueios e invalidam aprovações desatualizadas quando os livros mudam.",
     "score": "pronto",
-    "clear": "Nenhuma exceção bloqueante do razão permanece."
+    "clear": "Nenhuma exceção bloqueante do razão permanece.",
+    "affectedDocuments": "Documentos afetados: {list}"
   },
   "diagnostics": {
     "drafts-open": {
@@ -198,7 +199,7 @@
     },
     "commerce-clearing-residual": {
       "title": "Contas de compensação têm saldo",
-      "message": "{count, plural, one {# conta de compensação não zera.} other {# contas de compensação não zeram.}}"
+      "message": "{count, plural, one {# conta de compensação não confere com os pagamentos em trânsito em aberto.} other {# contas de compensação não conferem com os pagamentos em trânsito em aberto.}}"
     },
     "commerce-stored-value-gap": {
       "title": "O passivo de cartões-presente não confere",
@@ -254,7 +255,8 @@
   },
   "tasks": {
     "dependencies": "Depende de: {dependencies}",
-    "notePlaceholder": "Adicione uma nota ou resumo de evidência…"
+    "notePlaceholder": "Adicione uma nota ou resumo de evidência…",
+    "revalidateReason": "Nova revisão necessária: {what, select, ledger {os lançamentos} reconciliations {as conciliações bancárias} rates {as taxas ou políticas} other {os livros}} foram alterados."
   },
   "lock": {
     "title": "Bloqueio controlado de período",
@@ -862,6 +864,7 @@
     "status": "Status",
     "assignable": "Atribuível",
     "assign": "{count, plural, one {Atribuir # período} other {Atribuir # períodos}}",
+    "assignAdjustment": "Atribuir {count, plural, one {# documento} other {# documentos}} a {name}",
     "blockedNote": "{count, plural, one {# documento está bloqueado e será ignorado.} other {# documentos estão bloqueados e serão ignorados.}}",
     "refusedNote": "{count, plural, one {# documento foi recusado na confirmação.} other {# documentos foram recusados na confirmação.}}",
     "skippedNote": "{count, plural, one {# documento foi} other {# documentos foram}} atribuído(s) por outra pessoa e removido(s) desta prévia.",

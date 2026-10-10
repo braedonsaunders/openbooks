@@ -5,6 +5,7 @@ import { sql } from "drizzle-orm";
 import { addCloseEvidence } from "./tasks.ts";
 import { CloseError, closeModuleForDocument, NON_POSTING_DOCUMENT_KINDS, periodLockBlocksPosting, periodLockRequiresApprovedReopen } from "../periods/period-policy.ts";
 import { DOCUMENT_PERMISSION_NAMESPACE } from "../records/document-kind-permissions.ts";
+import { fingerprintChangeBuckets } from "./readiness.ts";
 import { PURCHASE_RECEIPT_DOCUMENT_KIND } from "../inventory/documents-purchasing.ts";
 import { SALES_FULFILLMENT_DOCUMENT_KIND } from "../inventory/documents-customer-credits.ts";
 import { decidePeriodReopen, requestPeriodReopen } from "./reopening.ts";
@@ -127,6 +128,36 @@ test("inventory and field documents map to their buy/sell/project close modules"
   assert.equal(closeModuleForDocument(SALES_FULFILLMENT_DOCUMENT_KIND), "ar");
   assert.equal(closeModuleForDocument("field_ticket"), "gl");
   assert.ok(NON_POSTING_DOCUMENT_KINDS.includes("field_ticket"));
+});
+
+test("fingerprint changes name what moved for the re-review reason", () => {
+  const base = {
+    entries: "3", entry_changed: "t", debits: "10", documents: "1",
+    document_changed: "t", unassigned_documents: "0", unassigned_document_changed: "",
+    reconciliations: "2", consolidated_rates: "r", fx_rate_age_policy: "p",
+    group_activity: "",
+  };
+  assert.deepEqual(fingerprintChangeBuckets(null, base), []);
+  assert.deepEqual(fingerprintChangeBuckets(base, { ...base }), []);
+  assert.deepEqual(
+    fingerprintChangeBuckets(base, { ...base, debits: "11" }),
+    ["ledger"],
+  );
+  assert.deepEqual(
+    fingerprintChangeBuckets(base, { ...base, reconciliations: "3" }),
+    ["reconciliations"],
+  );
+  assert.deepEqual(
+    fingerprintChangeBuckets(base, { ...base, consolidated_rates: "r2" }),
+    ["rates"],
+  );
+  assert.deepEqual(
+    fingerprintChangeBuckets(
+      base,
+      { ...base, unassigned_documents: "1", reconciliations: "3", fx_rate_age_policy: "p2" },
+    ),
+    ["ledger", "reconciliations", "rates"],
+  );
 });
 
 test("every known document kind carries a period-close module decision", () => {

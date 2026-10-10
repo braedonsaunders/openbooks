@@ -129,7 +129,8 @@
     "title": "Ledger readiness",
     "description": "Live diagnostics detect blockers and invalidate stale sign-offs when the books change.",
     "score": "ready",
-    "clear": "No blocking ledger exceptions remain."
+    "clear": "No blocking ledger exceptions remain.",
+    "affectedDocuments": "Affected documents: {list}"
   },
   "diagnostics": {
     "drafts-open": {
@@ -198,7 +199,7 @@
     },
     "commerce-clearing-residual": {
       "title": "Clearing accounts hold a residual",
-      "message": "{count, plural, one {# clearing account does not clear to zero.} other {# clearing accounts do not clear to zero.}}"
+      "message": "{count, plural, one {# clearing account does not equal its open in-transit payouts.} other {# clearing accounts do not equal their open in-transit payouts.}}"
     },
     "commerce-stored-value-gap": {
       "title": "Gift card liability does not tie",
@@ -254,7 +255,8 @@
   },
   "tasks": {
     "dependencies": "Depends on: {dependencies}",
-    "notePlaceholder": "Add a note or evidence summary…"
+    "notePlaceholder": "Add a note or evidence summary…",
+    "revalidateReason": "Re-review needed: {what, select, ledger {the ledger} reconciliations {bank reconciliations} rates {rates or policies} other {the books}} changed."
   },
   "lock": {
     "title": "Controlled period lock",
@@ -862,6 +864,7 @@
     "status": "Status",
     "assignable": "Assignable",
     "assign": "Assign {count, plural, one {# period} other {# periods}}",
+    "assignAdjustment": "Assign {count, plural, one {# document} other {# documents}} to {name}",
     "blockedNote": "{count, plural, one {# document is} other {# documents are}} blocked and will be skipped.",
     "refusedNote": "{count, plural, one {# document was} other {# documents were}} refused at commit.",
     "skippedNote": "{count, plural, one {# document was} other {# documents were}} assigned by someone else and removed from this preview.",

@@ -277,6 +277,60 @@ test("a 422 consolidation refusal persists inline on the task", async (t) => {
   assert.equal(errors.length, 1, "the refusal must also surface exactly one error toast");
 });
 
+/** An invalidated attestation names what changed, and a computed gate at
+ * Ready offers revalidation instead of stranding the operator with no
+ * action. */
+test("an invalidated attestation names what changed and a computed gate offers revalidation", async (t) => {
+  globalThis.__closeTestRouter = { push() {}, refresh() {} };
+  globalThis.__closeTestToasts = [];
+  const host = document.createElement("div");
+  document.body.appendChild(host);
+  const root = createRoot(host);
+  t.after(async () => {
+    await act(async () => {
+      root.unmount();
+    });
+    host.remove();
+  });
+  const base = props();
+  const reviewTask = {
+    ...base.tasks[0]!,
+    key: "variance-review",
+    completion_mode: "manual",
+    status: "invalidated",
+    workstream: "review",
+    result: { invalidatedBecause: ["ledger", "rates"] },
+  };
+  const computedTask = {
+    ...base.tasks[0]!,
+    id: randomUUID(),
+    key: "drafts-cleared",
+    completion_mode: "computed",
+    status: "ready",
+    workstream: "readiness",
+  };
+  await act(async () => {
+    root.render(
+      <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
+        <CloseWizard {...base} tasks={[reviewTask, computedTask]} />
+      </NextIntlClientProvider>,
+    );
+    await tick();
+  });
+  assert.match(
+    host.textContent ?? "",
+    /Re-review needed: the ledger changed\./,
+    "the invalidated attestation must say the ledger changed",
+  );
+  assert.match(
+    host.textContent ?? "",
+    /Re-review needed: rates or policies changed\./,
+    "the invalidated attestation must say rates changed",
+  );
+  const labels = [...host.querySelectorAll("button")].map((el) => el.textContent?.trim());
+  assert.ok(labels.includes("Revalidate"), "a computed gate must offer revalidation");
+});
+
 /** A commerce-complete task groups under the translated Sales heading — a
  * workstream without locale copy renders as the raw close.workstreams.sales
  * key on the heading. */

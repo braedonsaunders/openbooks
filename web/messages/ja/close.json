@@ -129,7 +129,8 @@
     "title": "元帳の準備状況",
     "description": "ライブ診断が障害要因を検出し、帳簿が変更された際には古い承認を無効化します。",
     "score": "準備完了",
-    "clear": "決算を妨げる元帳の例外は残っていません。"
+    "clear": "決算を妨げる元帳の例外は残っていません。",
+    "affectedDocuments": "対象の伝票: {list}"
   },
   "diagnostics": {
     "drafts-open": {
@@ -198,7 +199,7 @@
     },
     "commerce-clearing-residual": {
       "title": "クリアリング勘定に残高があります",
-      "message": "{count, plural, one {# 件のクリアリング勘定がゼロになっていません。} other {# 件のクリアリング勘定がゼロになっていません。}}"
+      "message": "{count, plural, one {# 件のクリアリング勘定が未決済の振込予定と一致しません。} other {# 件のクリアリング勘定が未決済の振込予定と一致しません。}}"
     },
     "commerce-stored-value-gap": {
       "title": "ギフトカード負債が一致しません",
@@ -254,7 +255,8 @@
   },
   "tasks": {
     "dependencies": "依存関係：{dependencies}",
-    "notePlaceholder": "メモまたは証跡の概要を追加…"
+    "notePlaceholder": "メモまたは証跡の概要を追加…",
+    "revalidateReason": "再レビューが必要です：{what, select, ledger {台帳} reconciliations {銀行照合} rates {レートまたはポリシー} other {帳簿}}が変更されました。"
   },
   "lock": {
     "title": "統制された期間ロック",
@@ -862,6 +864,7 @@
     "status": "ステータス",
     "assignable": "割り当て可能",
     "assign": "{count, plural, one {# 件の期間を割り当て} other {# 件の期間を割り当て}}",
+    "assignAdjustment": "{count} 件を{name}に割当",
     "blockedNote": "{count, plural, one {# 件のドキュメントがブロックされており、スキップされます。} other {# 件のドキュメントがブロックされており、スキップされます。}}",
     "refusedNote": "{count, plural, one {# 件のドキュメントが確定時に拒否されました。} other {# 件のドキュメントが確定時に拒否されました。}}",
     "skippedNote": "{count}件のドキュメントは他のユーザーが割り当てたため、このプレビューから削除しました。",

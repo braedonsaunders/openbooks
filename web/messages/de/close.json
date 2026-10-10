@@ -129,7 +129,8 @@
     "title": "Hauptbuchbereitschaft",
     "description": "Live-Diagnosen erkennen Blocker und machen veraltete Freigaben ungültig, wenn sich die Bücher ändern.",
     "score": "bereit",
-    "clear": "Es verbleiben keine blockierenden Hauptbuchausnahmen."
+    "clear": "Es verbleiben keine blockierenden Hauptbuchausnahmen.",
+    "affectedDocuments": "Betroffene Belege: {list}"
   },
   "diagnostics": {
     "drafts-open": {
@@ -198,7 +199,7 @@
     },
     "commerce-clearing-residual": {
       "title": "Verrechnungskonten haben einen Rest",
-      "message": "{count, plural, one {# Verrechnungskonto gleicht sich nicht auf null aus.} other {# Verrechnungskonten gleichen sich nicht auf null aus.}}"
+      "message": "{count, plural, one {# Verrechnungskonto entspricht nicht den offenen Posten im Zahlungsverkehr.} other {# Verrechnungskonten entsprechen nicht den offenen Posten im Zahlungsverkehr.}}"
     },
     "commerce-stored-value-gap": {
       "title": "Gutscheinschuld stimmt nicht",
@@ -254,7 +255,8 @@
   },
   "tasks": {
     "dependencies": "Hängt ab von: {dependencies}",
-    "notePlaceholder": "Fügen Sie eine Notiz oder Nachweiszusammenfassung hinzu…"
+    "notePlaceholder": "Fügen Sie eine Notiz oder Nachweiszusammenfassung hinzu…",
+    "revalidateReason": "Erneut prüfen: {what, select, ledger {die Buchungen} reconciliations {die Bankabstimmungen} rates {Kurse oder Richtlinien} other {die Bücher}} haben sich geändert."
   },
   "lock": {
     "title": "Kontrollierte Periodensperrung",
@@ -862,6 +864,7 @@
     "status": "Status",
     "assignable": "Zuordenbar",
     "assign": "{count, plural, one {# Periode zuordnen} other {# Perioden zuordnen}}",
+    "assignAdjustment": "{count, plural, one {# Beleg} other {# Belege}} {name} zuordnen",
     "blockedNote": "{count, plural, one {# Dokument ist} other {# Dokumente sind}} blockiert und wird übersprungen.",
     "refusedNote": "{count, plural, one {# Dokument wurde} other {# Dokumente wurden}} bei der Übernahme abgelehnt.",
     "skippedNote": "{count, plural, one {# Dokument wurde} other {# Dokumente wurden}} inzwischen anderweitig zugewiesen und aus dieser Vorschau entfernt.",

@@ -129,7 +129,8 @@
     "title": "总账就绪度",
     "description": "实时诊断可检测阻碍项，并在账簿变动时使过期的审签失效。",
     "score": "就绪",
-    "clear": "无阻碍性总账异常。"
+    "clear": "无阻碍性总账异常。",
+    "affectedDocuments": "受影响的单据：{list}"
   },
   "diagnostics": {
     "drafts-open": {
@@ -198,7 +199,7 @@
     },
     "commerce-clearing-residual": {
       "title": "清算科目留有余额",
-      "message": "{count, plural, one {有 # 个清算科目未能清零。} other {有 # 个清算科目未能清零。}}"
+      "message": "{count, plural, one {有 # 个清算科目与在途未达账项不一致。} other {有 # 个清算科目与在途未达账项不一致。}}"
     },
     "commerce-stored-value-gap": {
       "title": "礼品卡负债对不上",
@@ -254,7 +255,8 @@
   },
   "tasks": {
     "dependencies": "依赖于：{dependencies}",
-    "notePlaceholder": "添加备注或证据摘要…"
+    "notePlaceholder": "添加备注或证据摘要…",
+    "revalidateReason": "需要重新审核：{what, select, ledger {账簿} reconciliations {银行对账} rates {汇率或政策} other {账目}}已更改。"
   },
   "lock": {
     "title": "受控期间锁定",
@@ -862,6 +864,7 @@
     "status": "状态",
     "assignable": "可指定",
     "assign": "{count, plural, one {指定 # 个期间} other {指定 # 个期间}}",
+    "assignAdjustment": "将 {count} 项分配至{name}",
     "blockedNote": "{count, plural, one {有 # 张单据受阻，将被跳过。} other {有 # 张单据受阻，将被跳过。}}",
     "refusedNote": "{count, plural, one {有 # 张单据在提交时被拒绝。} other {有 # 张单据在提交时被拒绝。}}",
     "skippedNote": "{count}张单据已被其他用户分配，因此已从此预览中移除。",

@@ -44,16 +44,40 @@ function closeBankStatementScope(orgId: string, subsidiaryIds: string[]): SQL {
     )))`;
 }
 
-export async function periodFingerprint(
+export type PeriodFingerprintEvidence = Record<string, unknown>;
+
+/**
+ * Change buckets naming what a revalidation saw move, for the
+ * "re-review needed because <what> changed" invalidation reason. Ledger
+ * activity (entries, attributed and unassigned documents, group eliminations)
+ * is the book of record; bank sign-offs and rates/policies are named
+ * separately so the operator knows which evidence to re-check.
+ */
+export function fingerprintChangeBuckets(
+  before: PeriodFingerprintEvidence | null | undefined,
+  after: PeriodFingerprintEvidence,
+): string[] {
+  if (!before) return [];
+  const changed = (keys: string[]): boolean =>
+    keys.some((key) => String(before[key] ?? "") !== String(after[key] ?? ""));
+  const buckets: string[] = [];
+  if (changed(["entries", "entry_changed", "debits", "documents", "document_changed",
+    "unassigned_documents", "unassigned_document_changed", "group_activity"])) buckets.push("ledger");
+  if (changed(["reconciliations"])) buckets.push("reconciliations");
+  if (changed(["consolidated_rates", "fx_rate_age_policy"])) buckets.push("rates");
+  return buckets;
+}
+
+export async function periodFingerprintEvidence(
   orgId: string,
   periodId: string,
   bookId: string,
   subsidiaryIds: string[] = [],
   includeGroupEvidence = true,
-): Promise<string> {
+): Promise<PeriodFingerprintEvidence> {
   const period = (await db.execute<{
-    id: string; ends_on: string; is_adjustment: boolean; fiscal_calendar_id: string; period_number: number;
-  }>(sql`select id,ends_on,is_adjustment,fiscal_calendar_id,period_number from accounting_periods
+    id: string; starts_on: string; ends_on: string; is_adjustment: boolean; fiscal_calendar_id: string; period_number: number;
+  }>(sql`select id,starts_on::text as starts_on,ends_on::text as ends_on,is_adjustment,fiscal_calendar_id,period_number from accounting_periods
     where org_id=${orgId} and id=${periodId}`)).rows[0];
   if (!period) throw new CloseError("period not found");
   // Closing balances include prior posted activity. A controlled reopening of
@@ -81,13 +105,20 @@ export async function periodFingerprint(
       (select count(*) from documents d
         where d.org_id = ${orgId}
           -- Live entries only: a voided document needs no posting period before close.
+          -- Period-bounded: a draft dated outside this period (next month's
+          -- invoice) is not this review's evidence, so creating it must not
+          -- invalidate a completed attestation on revalidation.
           and d.status in ('draft','pending_approval','approved','posted')
-          and d.posting_period_id is null and ${documentScope}) as unassigned_documents,
+          and d.posting_period_id is null
+          and d.document_date between ${period.starts_on}::date and ${period.ends_on}::date
+          and ${documentScope}) as unassigned_documents,
       (select coalesce(max(d.updated_at)::text, '') from documents d
         where d.org_id = ${orgId}
           -- Live entries only: the change marker watches the same unassigned set the count above reads.
           and d.status in ('draft','pending_approval','approved','posted')
-          and d.posting_period_id is null and ${documentScope}) as unassigned_document_changed,
+          and d.posting_period_id is null
+          and d.document_date between ${period.starts_on}::date and ${period.ends_on}::date
+          and ${documentScope}) as unassigned_document_changed,
       (select count(*) from reconciliations r join accounts a on a.org_id=r.org_id and a.id=r.account_id join accounting_periods p on p.id = ${periodId} and p.org_id = r.org_id
         where r.org_id = ${orgId} and r.through_date <= p.ends_on and r.status = 'signed_off'
           and (${closeBankStatementScope(orgId, subsidiaryIds)} or exists(select 1 from journal_lines l where l.org_id=r.org_id and l.account_id=r.account_id and ${inScope(sql`l.subsidiary_id`)}))) as reconciliations,
@@ -115,9 +146,38 @@ export async function periodFingerprint(
         where e.org_id=${orgId} and ${ledgerPeriodScope} and e.book_id=${bookId}
           and a.eliminate and ${includeGroupEvidence}) as group_activity
   `));
+  return (result.rows[0] ?? {}) as PeriodFingerprintEvidence;
+}
+
+function hashFingerprintEvidence(subsidiaryIds: string[], evidence: PeriodFingerprintEvidence): string {
   return createHash("sha256")
-    .update(JSON.stringify({ subsidiaryIds: [...subsidiaryIds].sort(), evidence: result.rows[0] ?? {} }))
+    .update(JSON.stringify({ subsidiaryIds: [...subsidiaryIds].sort(), evidence }))
     .digest("hex");
+}
+
+export async function periodFingerprint(
+  orgId: string,
+  periodId: string,
+  bookId: string,
+  subsidiaryIds: string[] = [],
+  includeGroupEvidence = true,
+): Promise<string> {
+  return hashFingerprintEvidence(
+    subsidiaryIds,
+    await periodFingerprintEvidence(orgId, periodId, bookId, subsidiaryIds, includeGroupEvidence),
+  );
+}
+
+/** Fingerprint with the evidence it was hashed from, for change attribution without a second read. */
+export async function periodFingerprintWithEvidence(
+  orgId: string,
+  periodId: string,
+  bookId: string,
+  subsidiaryIds: string[] = [],
+  includeGroupEvidence = true,
+): Promise<{ fingerprint: string; evidence: PeriodFingerprintEvidence }> {
+  const evidence = await periodFingerprintEvidence(orgId, periodId, bookId, subsidiaryIds, includeGroupEvidence);
+  return { fingerprint: hashFingerprintEvidence(subsidiaryIds, evidence), evidence };
 }
 
 export async function readinessChecks(
@@ -360,6 +420,25 @@ export async function readinessChecks(
         from close_policies where org_id = ${orgId} and code = 'material-variance' and is_active limit 1`),
     ]));
 
+  // Name the documents behind an incomplete-effects count: the exception
+  // tells the operator to retry terminal failures from the document, so it
+  // must say which documents to open. Only queried on the failure path.
+  let effectDocuments: string[] = [];
+  if (postingEffects > 0) {
+    effectDocuments = (await db.execute<{ document_number: string }>(sql`
+      select distinct d.document_number
+        from posting_effects pe
+        join journal_entries e on e.id = pe.entry_id and e.org_id = pe.org_id
+        join documents d on d.id = pe.document_id and d.org_id = pe.org_id
+       where pe.org_id = ${orgId} and e.period_id = ${ctx.period_id}
+         and e.book_id = ${ctx.book_id} and pe.status <> 'succeeded'
+         and ${subsidiaryIds.length
+           ? sql`(d.subsidiary_id is null or ${inScope(sql`d.subsidiary_id`)}
+             or exists (select 1 from journal_lines l where l.org_id = e.org_id and l.entry_id = e.id and ${inScope(sql`l.subsidiary_id`)}))`
+           : sql`true`}
+       order by d.document_number limit 10`)).rows.map((row) => row.document_number);
+  }
+
   // Commerce completeness runs only when the run carries the task: the
   // step is created exactly when Sales Channels is on, and every check
   // reads clean on an org with no channel data — so a run without the task
@@ -438,6 +517,7 @@ export async function readinessChecks(
       title: "close.diagnostics.posting-effects-incomplete.title",
       message: "close.diagnostics.posting-effects-incomplete.message",
       count: postingEffects,
+      details: effectDocuments.length > 0 ? { documents: effectDocuments } : undefined,
     },
     {
       code: "drafts-open",

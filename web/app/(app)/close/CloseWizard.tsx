@@ -120,7 +120,7 @@ export interface CloseExceptionRow extends Record<string, unknown> {
   status: string;
   title: string;
   message: string;
-  details: { count?: unknown } | null;
+  details: { count?: unknown; documents?: unknown } | null;
 }
 /** One `close_task_evidence` row. */
 export interface CloseEvidenceRow extends Record<string, unknown> {
@@ -583,6 +583,13 @@ function ExceptionRow({ item, run }: { item: CloseExceptionRow; run: Props["run"
         <p className="mt-0.5 text-sm text-slate-600 dark:text-slate-300">
           {message}
         </p>
+        {Array.isArray(item.details?.documents) && item.details.documents.length > 0 ? (
+          <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
+            {t("readiness.affectedDocuments", {
+              list: (item.details.documents as unknown[]).map((entry) => String(entry)).join(", "),
+            })}
+          </p>
+        ) : null}
         {actionHref ? (
           <Link href={(actionHref)} className="mt-3 inline-flex">
             <Button size="sm" variant="outline">
@@ -607,8 +614,17 @@ function closeExceptionActionHref(code: string, run: CloseRunRow): string | null
     "recognition-unposted": "/revenue",
     "fx-missing": "/admin/setup/fx-rates",
     "fx-unrevalued": "/admin/setup/fx-rates",
+    "fx-reversal-period-missing": "/admin/setup/fx-rates",
     "intercompany-residual": "/reports/trial-balance",
+    "consolidated-rates-missing": "/reports/trial-balance",
     "material-variances": "/reports/pnl",
+    "commerce-orders-incomplete": "/channels",
+    "commerce-storefront-unreachable": "/channels",
+    "commerce-payouts-unposted": "/banking/psp-settlements",
+    "commerce-clearing-residual": "/channels",
+    "commerce-stored-value-gap": "/stored-value",
+    "commerce-deferred-gap": "/revenue",
+    "commerce-contract-cost-gap": "/revenue/contract-costs",
   };
   return actions[code] ?? null;
 }
@@ -653,7 +669,32 @@ function TaskCard(props: Props & { task: CloseTaskRow }) {
   const openException = props.exceptions.find(
     (item) => item.task_id === props.task.id && item.status === "open",
   );
+  // Invalidation reasons stamped by the last revalidation: rendered only
+  // while the task is invalidated, so a re-decided task never shows a stale
+  // reason from its previous attestation.
+  const invalidatedBecause = (() => {
+    const result = props.task.result as { invalidatedBecause?: unknown } | null | undefined;
+    const raw = result && typeof result === "object" ? result.invalidatedBecause : [];
+    return Array.isArray(raw)
+      ? raw.filter((entry): entry is string => typeof entry === "string")
+      : [];
+  })();
   const actionHref = closeTaskActionHref(props.task, props.run);
+  // Computed and automatic gates have no Start/Complete of their own: they
+  // complete when a run validation finds their checks clean. This gives the
+  // gate its action — re-check now instead of hunting the run-level button.
+  async function revalidateTask() {
+    setBusy(true);
+    try {
+      await call(`/api/close/runs/${props.run.id}`, { action: "refresh" });
+      toast.success(t("messages.refresh"));
+      router.refresh();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : t("errors.actionFailed"));
+    } finally {
+      setBusy(false);
+    }
+  }
   async function action(actionName: string) {
     setBusy(true);
     try {
@@ -826,6 +867,15 @@ function TaskCard(props: Props & { task: CloseTaskRow }) {
           </p>
         ) : null}
         {openException ? <ExceptionRow item={openException} run={props.run} /> : null}
+        {props.task.status === "invalidated" && invalidatedBecause.length > 0 ? (
+          <div className="space-y-1">
+            {invalidatedBecause.map((bucket) => (
+              <p key={bucket} className="text-sm text-amber-700 dark:text-amber-300">
+                {t("tasks.revalidateReason", { what: bucket })}
+              </p>
+            ))}
+          </div>
+        ) : null}
         {taskEvidence.length ? (
           <div className="flex flex-wrap gap-2">
             {taskEvidence.map((item) => (
@@ -875,6 +925,19 @@ function TaskCard(props: Props & { task: CloseTaskRow }) {
               <ExternalLink size={14} />
               {t("actions.takeAction")}
             </Link>
+          </Button>
+        ) : null}
+        {props.canRun &&
+        !["complete", "waived"].includes(props.task.status) &&
+        props.task.completion_mode !== "manual" ? (
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={busy}
+            onClick={revalidateTask}
+          >
+            <RefreshCw size={14} />
+            {t("actions.revalidate")}
           </Button>
         ) : null}
         {props.canRun &&
@@ -969,6 +1032,7 @@ function closeTaskActionHref(task: CloseTaskRow, run: CloseRunRow): string | nul
   const workstream: Record<string, string> = {
     readiness: `/close?run=${run.id}&stage=readiness`,
     banking: "/banking/reconciliations",
+    sales: "/banking/psp-settlements",
     ar: "/ar",
     ap: "/ap",
     assets: "/assets",

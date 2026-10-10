@@ -129,7 +129,8 @@
     "title": "Preparación del libro",
     "description": "Los diagnósticos en vivo detectan bloqueos e invalidan aprobaciones obsoletas cuando cambian los libros.",
     "score": "listo",
-    "clear": "No quedan excepciones contables bloqueantes."
+    "clear": "No quedan excepciones contables bloqueantes.",
+    "affectedDocuments": "Documentos afectados: {list}"
   },
   "diagnostics": {
     "drafts-open": {
@@ -198,7 +199,7 @@
     },
     "commerce-clearing-residual": {
       "title": "Las cuentas de compensación tienen saldo",
-      "message": "{count, plural, one {# cuenta de compensación no queda en cero.} other {# cuentas de compensación no quedan en cero.}}"
+      "message": "{count, plural, one {# cuenta de compensación no coincide con los pagos en tránsito abiertos.} other {# cuentas de compensación no coinciden con los pagos en tránsito abiertos.}}"
     },
     "commerce-stored-value-gap": {
       "title": "El pasivo de tarjetas regalo no cuadra",
@@ -254,7 +255,8 @@
   },
   "tasks": {
     "dependencies": "Depende de: {dependencies}",
-    "notePlaceholder": "Agregar nota o resumen de evidencia…"
+    "notePlaceholder": "Agregar nota o resumen de evidencia…",
+    "revalidateReason": "Se necesita una nueva revisión: {what, select, ledger {los movimientos} reconciliations {las conciliaciones bancarias} rates {los tipos o las políticas} other {los libros}} han cambiado."
   },
   "lock": {
     "title": "Bloqueo controlado del período",
@@ -862,6 +864,7 @@
     "status": "Estado",
     "assignable": "Asignable",
     "assign": "Asignar {count, plural, one {# período} other {# períodos}}",
+    "assignAdjustment": "Asignar {count, plural, one {# documento} other {# documentos}} a {name}",
     "blockedNote": "{count, plural, one {# documento está} other {# documentos están}} bloqueado(s) y se omitirá(n).",
     "refusedNote": "{count, plural, one {# documento fue} other {# documentos fueron}} rechazado(s) al confirmar.",
     "skippedNote": "{count, plural, one {# documento fue} other {# documentos fueron}} asignado(s) por otra persona y se quitaron de esta vista previa.",

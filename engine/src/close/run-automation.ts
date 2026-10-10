@@ -6,7 +6,7 @@ import { sql } from "drizzle-orm";
 import { canonicalJson } from "../platform/canonical-json.ts";
 import { addCalendarDays, businessToday, calendarDaysBetween } from "../platform/business-date.ts";
 import { db, withBypassContext, withOrgContext } from "../platform/db.ts";
-import { periodFingerprint, readinessChecks } from "./readiness.ts";
+import { fingerprintChangeBuckets, periodFingerprintWithEvidence, readinessChecks, type PeriodFingerprintEvidence } from "./readiness.ts";
 import { snapshotCommerceCloseEvidence } from "./commerce-close.ts";
 import { resolveTaskDependenciesTx } from "./task-dependencies.ts";
 export async function refreshCloseRun(
@@ -32,7 +32,7 @@ export async function refreshCloseRun(
       where r.id = ${runId} and r.org_id = ${orgId}`));
   const run = runRes.rows[0];
   if (!run) throw new CloseError("close run not found");
-  const fingerprint = await periodFingerprint(
+  const { fingerprint, evidence } = await periodFingerprintWithEvidence(
     orgId,
     run.period_id,
     run.book_id,
@@ -42,6 +42,20 @@ export async function refreshCloseRun(
   const dataChanged = Boolean(
     run.data_fingerprint && run.data_fingerprint !== fingerprint,
   );
+  // Name what moved since the fingerprint the completed tasks were stamped
+  // with: the last validation snapshot carrying that fingerprint is the
+  // baseline, so the reason says what actually changed rather than that
+  // something did. Without a baseline (first validation after this ships)
+  // the invalidation stays generic.
+  let changedBuckets: string[] = [];
+  if (dataChanged) {
+    const baseline = (await db.execute<{ evidence: PeriodFingerprintEvidence | null }>(sql`
+      select payload->'evidence' as evidence from close_events
+       where org_id = ${orgId} and run_id = ${runId} and event_type = 'run.validated'
+         and payload->>'fingerprint' = ${run.data_fingerprint}
+       order by at desc limit 1`)).rows[0]?.evidence ?? null;
+    changedBuckets = fingerprintChangeBuckets(baseline, evidence);
+  }
   const availableTasks = (await db.execute<{ key: string }>(sql`
     select key from close_run_tasks where run_id=${runId} and org_id=${orgId}
   `));
@@ -59,10 +73,17 @@ export async function refreshCloseRun(
   const outcome = await db.transaction(async (tx) => {
     let invalidated = 0;
     if (dataChanged) {
+      // The invalidation reason rides on the task row so the heading can say
+      // re-review is needed because <what> changed. Computed tasks get a
+      // fresh result below; manual attestations keep this until re-decided,
+      // and the card only renders it while the status is invalidated.
       const changed = (await tx.execute<{ id: string }>(sql`
         update close_run_tasks
            set status = 'invalidated', completed_at = null, completed_by = null,
                reviewed_at = null, reviewed_by = null, updated_at = now(), updated_by = ${actorId ?? null}
+               ${changedBuckets.length > 0
+                 ? sql`, result = coalesce(result, '{}'::jsonb) || ${JSON.stringify({ invalidatedBecause: changedBuckets })}::jsonb`
+                 : sql``}
          where run_id = ${runId} and org_id = ${orgId}
            and status in ('complete','submitted') and data_fingerprint is not null
            and data_fingerprint <> ${fingerprint}
@@ -82,8 +103,15 @@ export async function refreshCloseRun(
       await tx.execute(sql`
         insert into close_events (org_id, run_id, event_type, actor_id, payload)
         values (${orgId}, ${runId}, 'run.data_changed', ${actorId ?? null},
-                ${JSON.stringify({ invalidated })}::jsonb)`);
+                ${JSON.stringify({ invalidated, changedBuckets })}::jsonb)`);
     }
+    // Snapshot every validation with the evidence behind its fingerprint:
+    // the next change diffs against the snapshot carrying the stamped
+    // fingerprint, which is what makes the invalidation reason specific.
+    await tx.execute(sql`
+      insert into close_events (org_id, run_id, event_type, actor_id, payload)
+      values (${orgId}, ${runId}, 'run.validated', ${actorId ?? null},
+              ${JSON.stringify({ fingerprint, evidence })}::jsonb)`);
 
     // Old standard runs may already contain group tasks. Preserve their rows
     // and evidence, but explicitly waive inapplicable work instead of claiming
