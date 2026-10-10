@@ -30,7 +30,8 @@ CREATE INDEX recon_matches_group ON reconciliation_matches (org_id, group_id);
 -- engine already serializes group creation on the bank-account lock; this
 -- trigger is the storage backstop for writers that do not (hand-applied SQL
 -- included). Same-group rows never trip it; a second group claiming the
--- journal raises instead of silently double-clearing it.
+-- journal raises instead of silently double-clearing it. Constraint triggers
+-- run after the row is written; the check ignores the row's own group.
 CREATE OR REPLACE FUNCTION recon_matches_single_group_per_journal() RETURNS trigger
   LANGUAGE plpgsql AS $$
 BEGIN
@@ -51,6 +52,6 @@ END;
 $$;
 
 CREATE CONSTRAINT TRIGGER recon_matches_one_journal_one_group
-  BEFORE INSERT OR UPDATE OF journal_line_id, group_id ON reconciliation_matches
+  AFTER INSERT OR UPDATE OF journal_line_id, group_id ON reconciliation_matches
   DEFERRABLE INITIALLY IMMEDIATE
   FOR EACH ROW EXECUTE FUNCTION recon_matches_single_group_per_journal();
