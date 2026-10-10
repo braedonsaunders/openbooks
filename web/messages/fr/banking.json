@@ -460,7 +460,23 @@
     "skippedRow": "Ligne {line} (« {dateCell} ») écartée comme ligne de métadonnées — non importée",
     "moreLines": "…et {count, plural, one {# autre ligne} other {# autres lignes}}",
     "totalBadge": "{count, number} au total",
-    "possibleDuplicateBadge": "Doublon possible"
+    "possibleDuplicateBadge": "Doublon possible",
+    "importAccount": "Compte",
+    "unknownCurrency": "devise inconnue",
+    "singleAccountFallback": "Import dans le compte de cette page.",
+    "currencyMismatchWarning": "La devise du relevé ({statement}) ne correspond pas à celle du compte ({account}) — l’import sera refusé tant qu’elles diffèrent.",
+    "nextStepSource": "Suivant : collez le texte du relevé ou choisissez un fichier.",
+    "nextStepDetect": "Suivant : lancez Détecter les colonnes pour associer Date, Montant et Description.",
+    "nextStepPreview": "Suivant : lancez Aperçu pour contrôler les lignes analysées.",
+    "nextStepImport": "Suivant : contrôlez les lignes, puis choisissez Importer.",
+    "repreviewNotice": "Les données ont changé après l’aperçu — relancez-le pour activer Importer.",
+    "detectColumnsHint": "Le CSV collé nécessite Détecter les colonnes avant qu’Aperçu puisse associer Date, Montant et Description.",
+    "balanceCandidatesTitle": "Ces lignes ressemblent à des soldes de relevé, pas à des opérations — utilisez-les comme solde au lieu de les importer.",
+    "balanceRoleOpening": "solde d’ouverture",
+    "balanceRoleClosing": "solde de clôture",
+    "useAsOpening": "Utiliser comme solde d’ouverture",
+    "useAsClosing": "Utiliser comme solde de clôture",
+    "skippedBalanceRow": "Ligne {line} : « {dateCell} » ressemble à un {role} de {amount} — utilisez-la comme solde au lieu de l’importer."
   },
   "start": {
     "resume": "Reprendre le rapprochement",
@@ -581,7 +597,16 @@
     "unmatch": "Annuler l’appariement",
     "adjustTitle": "Ajuster le rapprochement",
     "adjustDescription": "Modifiez la date limite ou le solde du relevé bancaire pour cette session.",
-    "outstandingTotal": "{total} en suspens"
+    "outstandingTotal": "{total} en suspens",
+    "blockingLines": "Lignes bloquantes",
+    "moreBlockingLines": "Affichage de {shown} lignes bloquantes sur {total} — appariez ou excluez des lignes pour réduire la liste.",
+    "clearSelected": "Compenser la sélection",
+    "clearSelectedTitle": "Compenser les lignes comptables sans contrepartie bancaire en groupe à somme nulle",
+    "clearedToast": "Compensé comme groupe à somme nulle",
+    "clearingsTitle": "Groupes de compensation comptable",
+    "clearingsCount": "{count, plural, one {# groupe} other {# groupes}}",
+    "openWorkspace": "Ouvrir l’espace de rapprochement",
+    "signOffWorkspaceNote": "L’approbation a lieu dans l’espace de rapprochement, où l’écart est totalisé et les lignes bloquantes sont listées."
   },
   "sftp": {
     "title": "Serveurs SFTP",

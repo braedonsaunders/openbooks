@@ -467,7 +467,23 @@
     "skippedRow": "Row {line} (\"{dateCell}\") was set aside as a metadata row — not imported",
     "moreLines": "…and {count, plural, one {# more line} other {# more lines}}",
     "totalBadge": "{count, number} total",
-    "possibleDuplicateBadge": "Possible duplicate"
+    "possibleDuplicateBadge": "Possible duplicate",
+    "importAccount": "Account",
+    "unknownCurrency": "currency unknown",
+    "singleAccountFallback": "Importing into the account from this page.",
+    "currencyMismatchWarning": "Statement currency {statement} does not match account currency {account} — import will be refused until they agree.",
+    "nextStepSource": "Next: paste statement text or choose a file.",
+    "nextStepDetect": "Next: run Detect columns to map Date, Amount and Description.",
+    "nextStepPreview": "Next: run Preview to review the parsed lines.",
+    "nextStepImport": "Next: review the lines, then choose Import.",
+    "repreviewNotice": "Details changed after the preview — run Preview again to enable Import.",
+    "detectColumnsHint": "Pasted CSV needs Detect columns before Preview can map Date, Amount and Description.",
+    "balanceCandidatesTitle": "These rows look like statement balances, not transactions — use them as a balance instead of importing them.",
+    "balanceRoleOpening": "opening balance",
+    "balanceRoleClosing": "closing balance",
+    "useAsOpening": "Use as opening",
+    "useAsClosing": "Use as closing",
+    "skippedBalanceRow": "Line {line}: “{dateCell}” looks like a {role} of {amount} — use it as a balance instead of importing it."
   },
   "start": {
     "resume": "Resume reconciliation",
@@ -588,7 +604,16 @@
     "unmatch": "Unmatch",
     "adjustTitle": "Adjust reconciliation",
     "adjustDescription": "Change the cutoff date or the bank statement balance for this session.",
-    "outstandingTotal": "{total} outstanding"
+    "outstandingTotal": "{total} outstanding",
+    "blockingLines": "Blocking lines",
+    "moreBlockingLines": "Showing {shown} of {total} blocking lines — match or exclude lines to narrow this list.",
+    "clearSelected": "Clear selected",
+    "clearSelectedTitle": "Clear GL-only offsetting lines with no bank counterpart as a zero-sum group",
+    "clearedToast": "Cleared as a zero-sum group",
+    "clearingsTitle": "GL clearing groups",
+    "clearingsCount": "{count, plural, one {# group} other {# groups}}",
+    "openWorkspace": "Open reconciliation workspace",
+    "signOffWorkspaceNote": "Sign-off happens in the reconciliation workspace, where the difference is footed and blocking lines are listed."
   },
   "sftp": {
     "title": "SFTP",

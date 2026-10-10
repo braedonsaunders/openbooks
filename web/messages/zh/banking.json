@@ -460,7 +460,23 @@
     "skippedRow": "第 {line} 行（{dateCell}）已作为元数据行略过，未导入",
     "moreLines": "…以及 {count, plural, one {# 条其他明细} other {# 条其他明细}}",
     "totalBadge": "共 {count, number} 条",
-    "possibleDuplicateBadge": "可能重复"
+    "possibleDuplicateBadge": "可能重复",
+    "importAccount": "账户",
+    "unknownCurrency": "币种未知",
+    "singleAccountFallback": "将导入到本页面的账户。",
+    "currencyMismatchWarning": "对账单币种（{statement}）与账户币种（{account}）不一致，在一致之前导入将被拒绝。",
+    "nextStepSource": "下一步：粘贴对账单文本或选择文件。",
+    "nextStepDetect": "下一步：运行“检测列”以映射日期、金额和摘要。",
+    "nextStepPreview": "下一步：运行“预览”以检查解析出的明细。",
+    "nextStepImport": "下一步：检查明细，然后选择导入。",
+    "repreviewNotice": "预览后内容已更改，请重新运行预览以启用导入。",
+    "detectColumnsHint": "粘贴的CSV需要先运行“检测列”，预览才能映射日期、金额和摘要。",
+    "balanceCandidatesTitle": "这些行看起来是对账单余额而非交易，请将其用作余额，不要导入。",
+    "balanceRoleOpening": "期初余额",
+    "balanceRoleClosing": "期末余额",
+    "useAsOpening": "用作期初余额",
+    "useAsClosing": "用作期末余额",
+    "skippedBalanceRow": "第{line}行（{dateCell}）看起来像金额为{amount}的{role}，请将其用作余额，不要导入。"
   },
   "start": {
     "resume": "继续对账",
@@ -581,7 +597,16 @@
     "unmatch": "取消匹配",
     "adjustTitle": "调整对账",
     "adjustDescription": "更改本次会话的截止日期或银行对账单余额。",
-    "outstandingTotal": "未清 {total}"
+    "outstandingTotal": "未清 {total}",
+    "blockingLines": "阻止中的明细",
+    "moreBlockingLines": "共{total}条阻止中的明细，当前显示{shown}条。请匹配或排除明细以缩小列表。",
+    "clearSelected": "结清所选",
+    "clearSelectedTitle": "将没有银行对账单对应的总账相抵分录作为和零组结清",
+    "clearedToast": "已作为和零组结清",
+    "clearingsTitle": "总账结清组",
+    "clearingsCount": "{count, plural, other {# 个组}}",
+    "openWorkspace": "打开对账工作区",
+    "signOffWorkspaceNote": "签核在对账工作区中进行，差额将在该处轧平，并列出阻止中的明细。"
   },
   "sftp": {
     "title": "SFTP",
