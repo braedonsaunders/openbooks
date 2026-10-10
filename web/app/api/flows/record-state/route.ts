@@ -128,11 +128,10 @@ async function legacyGET(req: Request) {
 
   const orgId = authz.user.orgId;
   const adapter = getFlowAdapter(subjectKind);
-  if (!adapter)
-    return NextResponse.json(
-      { error: "unknown subject kind" },
-      { status: 400 },
-    );
+  // A kind no flow can govern has no approval state for any record of it.
+  // The answer reads nothing about the named record, so it discloses
+  // nothing; the record's own page keeps enforcing its read grant.
+  if (!adapter) return NextResponse.json(emptyApprovalState(""));
   // Domain read before anything about the record is disclosed: a caller
   // without the subject kind's read grant (ap.read for a vendor bill, …)
   // meets the same answer as for a nonexistent record, so approval

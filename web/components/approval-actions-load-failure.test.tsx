@@ -8,7 +8,7 @@ import { bootJsdomEnvironment } from '../testing/jsdom-env.ts'
 // controls vanished silently on a pending document. A blocked endpoint must
 // surface a named error state with a working retry instead.
 const script = {
-  mode: 'blocked' as 'blocked' | 'named-refusal' | 'healed' | 'no-state',
+  mode: 'blocked' as 'blocked' | 'named-refusal' | 'healed' | 'no-state' | 'code-refusal',
 }
 Object.assign(globalThis, {
   __approvalLoadRouter: {
@@ -65,6 +65,7 @@ globalThis.fetch = (async (url: unknown) => {
   if (href.includes('/api/flows/record-state')) {
     if (script.mode === 'healed') return Response.json(healedState())
     if (script.mode === 'no-state') return Response.json({ error: 'not_found' }, { status: 404 })
+    if (script.mode === 'code-refusal') return Response.json({ error: 'invalid_subject' }, { status: 400 })
     if (script.mode === 'named-refusal') {
       return Response.json({ error: 'flow pack retired — reinstall the pack' }, { status: 422 })
     }
@@ -182,4 +183,16 @@ test('a record with no approval state for the caller shows no raw refusal code',
     text.includes((messages as { common: { approvalFlow: { historyEmpty: string } } }).common.approvalFlow.historyEmpty),
     `the Approvals tab shows its empty body, got: ${JSON.stringify(text)}`,
   )
+})
+
+test('a refusal carrying only a machine code shows the translated failure, never the code', async (t) => {
+  script.mode = 'code-refusal'
+  const header = await mount(<ApprovalActions subjectKind="vendor_payment" subjectId="pay-1" />)
+  await unmount(t, header.host, header.root)
+  const tab = await mount(<ApprovalHistory subjectKind="vendor_payment" subjectId="pay-2" showEmptyState />)
+  await unmount(t, tab.host, tab.root)
+  for (const text of [header.host.textContent ?? '', tab.host.textContent ?? '']) {
+    assert.ok(!text.includes('invalid_subject'), `never the raw code, got: ${JSON.stringify(text)}`)
+    assert.ok(text.includes('Failed to load (status 400)'), `the translated failure names its status, got: ${JSON.stringify(text)}`)
+  }
 })

@@ -61,7 +61,8 @@ const mockSources = new Map<string, string>([
     "mock:flows",
     `
       const state = globalThis[Symbol.for('openbooks.flow-record-state-route-test')]
-      export function getFlowAdapter() {
+      export function getFlowAdapter(subjectKind) {
+        if (subjectKind === 'ungoverned_kind') return null
         return {
           async getStatus(subjectId) {
             state.statusCalls.push(subjectId)
@@ -157,9 +158,9 @@ function reset(allowedSubsidiaryIds: Set<string> | null): void {
 
 const SUBJECT_ID = "11111111-1111-4111-8111-111111111111";
 
-function request(): Request {
+function request(subjectKind = "vendor_bill"): Request {
   return new Request(
-    `http://openbooks.test/api/flows/record-state?subjectKind=vendor_bill&subjectId=${SUBJECT_ID}`,
+    `http://openbooks.test/api/flows/record-state?subjectKind=${subjectKind}&subjectId=${SUBJECT_ID}`,
   );
 }
 
@@ -312,4 +313,50 @@ test("with Flows off a hidden record still meets the missing-record answer", asy
   routeState.status = null;
   const missing = await GET(request());
   assert.equal(missing.status, 404);
+});
+
+test("a readable vendor payment answers its approval state, never a refusal", async () => {
+  reset(new Set(["sub-hidden"]));
+  routeState.status = "draft";
+
+  const response = await GET(request("vendor_payment"));
+
+  assert.equal(response.status, 200);
+  const body = (await response.json()) as {
+    approvalState: { status: string; pendingWith: unknown[]; myActions: unknown };
+    history: unknown[];
+  };
+  assert.equal(body.approvalState.status, "draft");
+  assert.deepEqual(body.approvalState.pendingWith, []);
+  assert.equal(body.approvalState.myActions, null);
+  assert.deepEqual(body.history, []);
+  assert.deepEqual(routeState.readChecks, ["vendor_payment"], "the payment's own read grant is enforced");
+});
+
+test("a vendor payment the caller cannot read still meets the missing-record answer", async () => {
+  reset(new Set(["sub-hidden"]));
+  routeState.canRead = false;
+
+  const response = await GET(request("vendor_payment"));
+
+  assert.equal(response.status, 404);
+  assert.deepEqual(routeState.statusCalls, [], "no record read may run");
+});
+
+test("a kind no flow can govern answers an empty approval state without reading the record", async () => {
+  reset(new Set(["sub-hidden"]));
+
+  const response = await GET(request("ungoverned_kind"));
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), {
+    approvalState: { status: "", pendingWith: [], myActions: null },
+    history: [],
+    failedRun: null,
+    neverSubmitted: false,
+    canRetry: false,
+  });
+  assert.deepEqual(routeState.lockChecks, [], "nothing about the named record is resolved");
+  assert.deepEqual(routeState.statusCalls, []);
+  assert.equal(routeState.flowQueries, 0);
 });
