@@ -26,11 +26,15 @@ test(
         dryRun: false,
         allowedSubsidiaryIds: null,
       }
+      // Scratch orgs ship seeded parties, so role and kind assertions stay
+      // scoped to the imported short codes.
       const roleCount = async (table: string): Promise<number> =>
         Number(
           (
             await db.execute<{ count: string }>(
-              sql`select count(*)::text as count from ${sql.raw(table)} where org_id = ${org.orgId}`,
+              sql`select count(*)::text as count from ${sql.raw(table)} r
+                   join parties p on p.id = r.party_id and p.org_id = r.org_id
+                  where r.org_id = ${org.orgId} and p.short_code in ('ACME', 'BETA')`,
             )
           ).rows[0]?.count ?? '0',
         )
@@ -46,7 +50,9 @@ test(
         assert.equal(first.created, 2, JSON.stringify(first.errors))
 
         const stored = (await db.execute<{ short_code: string; kind: string }>(sql`
-          select short_code, kind from parties where org_id = ${org.orgId} order by short_code`)).rows
+          select short_code, kind from parties
+           where org_id = ${org.orgId} and short_code in ('ACME', 'BETA')
+           order by short_code`)).rows
         assert.deepEqual(
           stored.map((r) => [r.short_code, r.kind]),
           [['ACME', 'company'], ['BETA', 'vendor']],
