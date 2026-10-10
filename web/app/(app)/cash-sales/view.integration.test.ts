@@ -93,3 +93,46 @@ test('a cash sale draft is editable for its create grant and postable only with 
     await withBypassContext(() => dropScratchOrg(org.orgId))
   }
 })
+
+test('refund prefill loads returnable lines for a sale with an issued stock line', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+  // The returnable-lines query joins a JSON-extracted text id against the
+  // uuid movement key: the uuid side must cast, so an issued stock line
+  // resolves instead of failing the comparison.
+  const org = await withBypassContext(() => createScratchOrg())
+  try {
+    await withBypassContext(() => db.execute(sql`
+      update orgs set settings = jsonb_set(settings, '{features}',
+        coalesce(settings->'features', '{}'::jsonb) || '{"cashSales":true}'::jsonb, true)
+       where id = ${org.orgId}`))
+    const cashier = await role(org.orgId, 'cashier', ['cash_sales.read', 'cash_sales.create'])
+    const saleId = crypto.randomUUID()
+    const lineId = crypto.randomUUID()
+    const movementId = crypto.randomUUID()
+    await withBypassContext(() => db.execute(sql`
+      insert into documents (id, org_id, kind, document_number, document_date, currency, subsidiary_id, created_by, status)
+      values (${saleId}, ${org.orgId}, 'cash_sale', 'CS-T5', ${org.date}, 'USD', ${org.subsidiaryId}, ${cashier}, 'posted')`))
+    await withBypassContext(() => db.execute(sql`
+      insert into document_lines (id, org_id, document_id, line_number, account_id, description, quantity, unit_price, amount, item_id, stock_location_id)
+      values (${lineId}, ${org.orgId}, ${saleId}, 1, ${org.accounts.revenue}, 'FIFO Widget', 2, 10, 20, ${org.items.fifo}, ${org.stockLocationId})`))
+    await withBypassContext(() => db.execute(sql`
+      insert into inventory_movements (id, org_id, subsidiary_id, item_id, kind, moved_at, stock_location_id, quantity, document_line_id, status)
+      values (${movementId}, ${org.orgId}, ${org.subsidiaryId}, ${org.items.fifo}, 'issue', now(), ${org.stockLocationId}, 2, ${lineId}, 'posted')`))
+
+    const load = (user: string, sp: Record<string, string>) => {
+      state.user = sessionFor(org.orgId, user)
+      return withOrgContext(org.orgId, () => loadCashSales(sp))
+    }
+    const refund = await load(cashier, { doc: 'new', kind: 'cash_refund', refundFrom: saleId })
+    assert.equal(refund.drawer?.createMode, true, 'the refund prefill opens the unsaved-create drawer')
+    const lines = (refund.drawer?.payload as { lines?: Record<string, unknown>[] } | undefined)?.lines ?? []
+    assert.equal(lines.length, 1, 'the issued stock line prefills exactly once')
+    assert.deepEqual(
+      (lines[0]?.custom as { inventoryReturn?: { sourceIssueMovementId?: unknown } } | undefined)?.inventoryReturn,
+      { sourceIssueMovementId: movementId },
+      'the prefill carries the issue movement as return evidence',
+    )
+  } finally {
+    state.user = null
+    await withBypassContext(() => dropScratchOrg(org.orgId))
+  }
+})

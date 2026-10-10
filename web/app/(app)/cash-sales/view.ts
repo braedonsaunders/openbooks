@@ -107,6 +107,9 @@ async function returnableSaleLines(orgId: string, saleId: string) {
          and m.kind = 'issue' and m.status = 'posted'
     ),
     returned as (
+      -- The stored source id is JSON text while movement ids are uuid: the
+      -- uuid side casts, never the stored text, so a malformed stored id
+      -- misses instead of failing the whole query.
       select (l.custom->'inventoryReturn'->>'sourceIssueMovementId') as issue_id,
              coalesce(sum(case when m.kind = 'receipt' then m.quantity else -m.quantity end), 0) as qty
         from document_lines l
@@ -114,7 +117,7 @@ async function returnableSaleLines(orgId: string, saleId: string) {
         left join inventory_movements m on m.document_line_id = l.id and m.org_id = l.org_id
          and m.kind in ('receipt', 'reversal') and m.status = 'posted'
        where l.org_id = ${orgId}
-         and l.custom->'inventoryReturn'->>'sourceIssueMovementId' in (select movement_id from shipped)
+         and l.custom->'inventoryReturn'->>'sourceIssueMovementId' in (select movement_id::text from shipped)
          and d.status = 'posted'
        group by 1
     )
@@ -135,7 +138,7 @@ async function returnableSaleLines(orgId: string, saleId: string) {
            coalesce(r.qty, 0)::text as returned
       from document_lines l
       left join shipped s on s.line_id = l.id
-      left join returned r on r.issue_id = s.movement_id
+      left join returned r on r.issue_id = s.movement_id::text
      where l.org_id = ${orgId} and l.document_id = ${saleId}
        and (s.movement_id is null or s.shipped_qty - coalesce(r.qty, 0) > 0)
      order by l.line_number`)).rows
