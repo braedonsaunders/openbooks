@@ -651,7 +651,7 @@ test("hire without an approval flow applies directly through the governed admiss
         .filled_count,
       1,
     );
-    assert.deepEqual(await eventKinds(orgId, application.id), ["applied", "offer_created", "offer_sent", "offer_accepted"]);
+    assert.deepEqual(await eventKinds(orgId, application.id), ["applied", "offer_created", "offer_sent", "offer_accepted", "hired"]);
   });
 });
 

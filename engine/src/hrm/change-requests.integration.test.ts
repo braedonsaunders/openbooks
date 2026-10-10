@@ -286,11 +286,19 @@ test("termination applies and a second termination is refused", { skip: !DB }, a
     await submitChangeRequest({ orgId: h.org.orgId, actorId: h.submitterId, requestId: draft.id, reason: "resigned" });
     await decideGate({ gateId: (await gateOf(draft.id)).id, decision: "approved", userId: h.approver1Id });
     assert.equal(await requestStatus(draft.id), "applied");
-    const live = (await db.execute<{ status: string }>(sql`
-      select status from worker_employment_versions
+    // History outside the termination window is preserved, never
+    // rewritten: the active slice stays live beside the terminated one,
+    // so as-of reads before the termination still resolve active.
+    const live = (await db.execute<{ status: string; from: string; to: string | null }>(sql`
+      select status, effective_from::text as from, effective_to::text as to
+        from worker_employment_versions
        where employment_id = ${employmentId} and recorded_until is null
+       order by effective_from
     `)).rows;
-    assert.deepEqual(live.map((v) => v.status), ["terminated"]);
+    assert.deepEqual(live, [
+      { status: "active", from: "2026-01-01", to: "2026-10-31" },
+      { status: "terminated", from: "2026-10-31", to: null },
+    ]);
 
     await assert.rejects(
       createChangeRequestDraft({
@@ -600,27 +608,49 @@ test("identity separation: the affected worker cannot approve their own change",
   });
 });
 
-test("submit without a configured flow is refused, never auto-approved", { skip: !DB }, async () => {
+test("submit without a configured flow applies directly with automatic evidence", { skip: !DB }, async () => {
   await withHarness(() => setupHarness(CHANGE_REQUESTS_SPEC), async (h) => {
     const { employmentId } = await seedEmployment(h.org.orgId, h.org.subsidiaryId, { withVersion: false, displayName: "Hired Worker" });
     const draft = await createChangeRequestDraft({
       orgId: h.org.orgId, actorId: h.submitterId, employmentId,
       payload: { kind: "hire", status: "active", effectiveFrom: "2026-09-01" },
     });
-    await assert.rejects(
-      submitChangeRequest({ orgId: h.org.orgId, actorId: h.submitterId, requestId: draft.id, reason: "hire" }),
-      (e: unknown) => {
-        assert.ok(e instanceof HrmChangeRequestError && e.code === "NO_FLOW");
-        assert.match(e.message, /configure a flow/);
-        return true;
-      },
-    );
-    assert.equal(await requestStatus(draft.id), "draft", "a refused submit leaves the draft untouched");
+    // Approval is an optional Flow: with zero enabled flows the
+    // submission applies at once instead of refusing.
+    const applied = await submitChangeRequest({ orgId: h.org.orgId, actorId: h.submitterId, requestId: draft.id, reason: "hire" });
+    assert.equal(applied.status, "applied");
+    assert.equal(await requestStatus(draft.id), "applied");
+    assert.equal(applied.appliedEmploymentRevision, 2);
+    assert.ok(applied.appliedEmploymentChangeId);
+    const snapshot = applied.decisionSnapshot as { mode: string; gates: unknown[]; policy: { flowConfigured: boolean } };
+    assert.equal(snapshot.mode, "automatic");
+    assert.deepEqual(snapshot.gates, []);
+    assert.equal(snapshot.policy.flowConfigured, false);
     const runs = (await db.execute<{ n: number }>(sql`
       select count(*)::int as n from flow_runs
        where subject_id = ${draft.id} and status <> 'cancelled'
     `)).rows[0]!.n;
-    assert.equal(runs, 0);
+    assert.equal(runs, 0, "direct application invents no flow run");
+    const versions = (await db.execute<{ version_no: number; status: string }>(sql`
+      select version_no, status from worker_employment_versions
+       where employment_id = ${employmentId} and recorded_until is null order by version_no
+    `)).rows;
+    assert.deepEqual(versions.map((v) => [v.version_no, v.status]), [[1, "active"]]);
+  });
+});
+
+test("submit with a configured flow still gates instead of applying directly", { skip: !DB }, async () => {
+  await withHarness(() => setupHarness(CHANGE_REQUESTS_SPEC), async (h) => {
+    await seedFlow(h.org.orgId, h.approver1Id);
+    const { employmentId } = await seedEmployment(h.org.orgId, h.org.subsidiaryId, { withVersion: false, displayName: "Hired Worker" });
+    const draft = await createChangeRequestDraft({
+      orgId: h.org.orgId, actorId: h.submitterId, employmentId,
+      payload: { kind: "hire", status: "active", effectiveFrom: "2026-09-01" },
+    });
+    const submitted = await submitChangeRequest({ orgId: h.org.orgId, actorId: h.submitterId, requestId: draft.id, reason: "hire" });
+    assert.equal(submitted.status, "pending_approval");
+    assert.ok(submitted.flowRunId, "a configured flow owns the submission");
+    assert.equal(await requestStatus(draft.id), "pending_approval");
   });
 });
 
