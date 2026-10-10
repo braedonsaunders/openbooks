@@ -124,9 +124,10 @@ export async function loadRelatedTransactionDrawerData({
   formLayoutId?: string
 }): Promise<RelatedTransactionDrawerData | null> {
   if (!(await isDocKindEnabled(authz.user.orgId, kind))) return null
-  const [inventoryEnabled, equipmentEnabled] = await Promise.all([
+  const [inventoryEnabled, equipmentEnabled, allocationsEntryEnabled] = await Promise.all([
     isFeatureEnabled(authz.user.orgId, 'inventory'),
     isFeatureEnabled(authz.user.orgId, 'equipment'),
+    isFeatureEnabled(authz.user.orgId, 'allocationsAtEntry'),
   ])
   if (projectId) {
     const related = (await db.execute<{ id: string }>(sql`
@@ -427,6 +428,7 @@ export async function loadRelatedTransactionDrawerData({
       // universal drawer; governed header amendments preserve that evidence.
       canCreate: kind === 'project_charge' ? can(authz, 'projects.manage') : can(authz, createPermission(kind)),
       canPost: kind === 'project_charge' ? false : can(authz, postPermission(kind)),
+      allocationsEntryEnabled,
       layout: resolvedForm.layout,
       availableLayouts: resolvedForm.available,
       currentLayoutId: resolvedForm.row?.id ?? null,

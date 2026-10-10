@@ -52,6 +52,8 @@ export interface BankingTransactionsDrawer {
   payload: LoadedDocument | { doc: Record<string, unknown>; lines: Record<string, unknown>[] }
   /** Unsaved create: the drawer edits a blank payload; Save POSTs the collection. */
   createMode: boolean
+  /** Allocations → entry distributions on (parent gate resolved). */
+  allocationsEntryEnabled: boolean
   config: DocKindConfig
   initialMode: 'edit' | 'view'
   accounts: DocumentDrawerProps['accounts']
@@ -114,9 +116,10 @@ export async function loadBankingTransactions(
   // page-level gate follows the filtered list. Server enforcement stays.
   const creatableKinds = NEW_KINDS.filter((kind) => can(authz, createPermission(kind)))
   const canCreate = creatableKinds.length > 0
-  const [inventoryEnabled, equipmentEnabled] = await Promise.all([
+  const [inventoryEnabled, equipmentEnabled, allocationsEntryEnabled] = await Promise.all([
     isFeatureEnabled(authz.user.orgId, 'inventory'),
     isFeatureEnabled(authz.user.orgId, 'equipment'),
+    isFeatureEnabled(authz.user.orgId, 'allocationsAtEntry'),
   ])
   const t = await getTranslations('banking')
   const basePath = '/banking/transactions'
@@ -255,6 +258,7 @@ export async function loadBankingTransactions(
           lineDefs: pickers[8] as DocumentDrawerProps['lineDefs'],
           canCreate: can(authz, createPermission(drawerKind!)),
           canPost: can(authz, postPermission(drawerKind!)),
+          allocationsEntryEnabled,
           layout: resolvedForm.layout,
           availableLayouts: resolvedForm.available,
           currentLayoutId: resolvedForm.row?.id ?? null,
