@@ -13,7 +13,7 @@
 
 import { acknowledgeReview } from "../../hrm/performance/reviews.ts";
 import { listMyReviews } from "../../hrm/performance/performance-read.ts";
-import { hrmOn } from "../guard.ts";
+import { hrmOn, orgFeatureOn } from "../guard.ts";
 import type { InboxAdapter } from "../registry.ts";
 import type { InboxItem, InboxListContext } from "../types.ts";
 import { inboxItemId } from "../types.ts";
@@ -21,7 +21,9 @@ import { inboxItemId } from "../types.ts";
 export const hrmReviewAdapter: InboxAdapter = {
   kind: "hrm_review",
   async list(ctx: InboxListContext): Promise<InboxItem[]> {
-    if (!(await hrmOn(ctx))) return [];
+    // Reviews live under the Performance switch beneath HR: either off
+    // means no review work, not a failed source.
+    if (!(await hrmOn(ctx)) || !(await orgFeatureOn(ctx, "hrmPerformance"))) return [];
     const mine = await listMyReviews({ orgId: ctx.orgId, actorId: ctx.actorId });
     const out: InboxItem[] = [];
     for (const review of mine.asReviewer) {

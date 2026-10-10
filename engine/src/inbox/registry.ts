@@ -101,14 +101,16 @@ export interface InboxSourceNotice {
  * never cached, so a retry re-reads rather than serving an empty list as
  * "no work".
  *
- * A source the actor holds no grant for is not a failure: the actor simply
- * has no work there, so an authorization refusal contributes nothing and
- * names nothing — a personal inbox never lists permission keys or setup
- * routes at the person it refused. Anything unexpected logs the way the
- * house does.
+ * A source the actor holds no grant for, or whose module is switched off,
+ * is not a failure: the actor simply has no work there, so the refusal
+ * contributes nothing and names nothing — a personal inbox never lists
+ * permission keys or setup routes at the person it refused. Anything
+ * unexpected logs the way the house does.
  */
 function recordSourceFailure(kind: InboxKind, error: unknown, notices?: InboxSourceNotice[]): void {
   if (error instanceof HrmAuthorizationError) return;
+  // A source whose module is switched off has no work to show either.
+  if ((error as { code?: unknown } | null)?.code === "FEATURE_OFF") return;
   if (error instanceof InboxError) {
     notices?.push({ kind, code: "refused", message: error.message });
     return;

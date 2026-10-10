@@ -220,6 +220,12 @@ export async function loadApprovals(
   const canManageFlows = can(authz, 'flows.manage')
   const canSeeAll = canManageFlows
 
+  // The badge and the tab counts come from the same native counts. With no
+  // tab chosen, the inbox opens where the waiting work is: My approvals when
+  // anything awaits a decision, otherwise My tasks when tasks are waiting —
+  // never an "all clear" page beside a badge that counts tasks.
+  const ctx = await inboxContext(authz)
+  const counts = await inboxCounts(authz, ctx)
   const rawTab = pickString(sp.tab)
   const tab: Tab =
     rawTab === 'submitted'
@@ -228,7 +234,9 @@ export async function loadApprovals(
         ? 'tasks'
         : rawTab === 'all' && canSeeAll
           ? 'all'
-          : 'mine'
+          : rawTab === undefined && counts.approvals === 0 && counts.tasks > 0
+            ? 'tasks'
+            : 'mine'
   /** The two tabs the approvals union backs. */
   const onApprovals = tab === 'mine' || tab === 'all'
   const kindFilter = pickString(sp.kind) || undefined
@@ -592,8 +600,6 @@ export async function loadApprovals(
   // rows keep ApprovalsTable + GateActions, task rows get generic actions
   // through /api/inbox/act. One live population supplies the presentation
   // filters; native counts remain separate so a list window cannot truncate a badge.
-  const ctx = await inboxContext(authz)
-  const counts = await inboxCounts(authz, ctx)
   // One source's refusal or failure must not blank the inbox (OM-10): the
   // engine names each failed source into this collector while the healthy
   // legs still list, and the loader renders them as small named notices
@@ -728,7 +734,7 @@ export async function loadApprovals(
     delegateUsers,
     tabs: tabs.map(({ key, label, count }) => ({
       key,
-      href: key === 'mine' ? '/inbox' : `/inbox?tab=${key}`,
+      href: `/inbox?tab=${key}`,
       label,
       active: tab === key,
       count: typeof count === 'number' ? count : null,

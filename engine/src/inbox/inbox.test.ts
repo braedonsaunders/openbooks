@@ -306,6 +306,21 @@ describe("adapter isolation (OM-10)", () => {
     }
   });
 
+  it("a source whose module is switched off is no work, not a failure", async () => {
+    const healthy = [item({ id: "flows_approval:g1", actions: [] })];
+    const featureOff = Object.assign(new Error("performance is switched off"), { code: "FEATURE_OFF" });
+    __testResetInboxAdapters([fakeAdapter(healthy), failingAdapter("notification", featureOff)]);
+    const notices: InboxSourceNotice[] = [];
+    try {
+      const { result: listed, errors } = await captureConsoleError(() => listInbox(CTX, { notices }));
+      assert.deepEqual(listed.map((i) => i.id), ["flows_approval:g1"]);
+      assert.deepEqual(notices, [], "a switched-off module names no failure");
+      assert.deepEqual(errors, []);
+    } finally {
+      __testResetInboxAdapters([]);
+    }
+  });
+
   it("a failing source is not cached as an empty leg", async () => {
     let calls = 0;
     const flaky: InboxAdapter = {
