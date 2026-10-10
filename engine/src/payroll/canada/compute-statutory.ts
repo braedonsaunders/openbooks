@@ -213,6 +213,12 @@ export async function computeCaStatutory(
   assertRegionSupported(region);
 
   const ytd = await employeeYtd({ tx, orgId, employeePartyId, taxYear, documentId });
+  const runAdditionalTax = (await tx.execute<{ amount: string }>(sql`
+    select coalesce(sum(a.amount),0)::text as amount from pay_run_adjustments a
+      join pay_components c on c.org_id=a.org_id and c.id=a.component_id
+     where a.org_id=${orgId} and a.pay_run_document_id=${documentId} and a.employee_party_id=${employeePartyId}
+       and a.adjustment_type='line' and c.system_key='income_tax'`)).rows[0]?.amount ?? "0";
+  const nonZeroOrUndefined = (value: string): string | undefined => cmp(value, "0") === 0 ? undefined : value;
   const ontarioDependantInputs = region === "ON"
     ? t4127OntarioDependantInputs(ctx.certificateFor("ca_td1_ON"))
     : {};
@@ -328,10 +334,11 @@ export async function computeCaStatutory(
     authorizedProvincialCredits: empFact("CA", emp, "authorized_provincial_credits") ?? undefined,
     // The TD1 additional deduction is requested once per pay period and is
     // withheld through the period's regular or final pay; a supplemental run
-    // sharing the period never withholds it a second time.
-    additionalTaxPerPeriod: runType === "supplemental"
-      ? undefined
-      : empFact("CA", emp, "additional_tax_per_period") ?? undefined,
+    // sharing the period never withholds it a second time. Additional tax the
+    // employee requested for this run alone adds to it on any run.
+    additionalTaxPerPeriod: nonZeroOrUndefined(add(
+      runType === "supplemental" ? "0" : empFact("CA", emp, "additional_tax_per_period") ?? "0",
+      runAdditionalTax)),
     ...ontarioDependantInputs,
     federalClaim: empFact("CA", emp, "federal_claim_amount") ?? undefined,
     federalClaimCode: empFact("CA", emp, "federal_claim_amount") == null && empFact("CA", emp, "federal_claim_code") != null

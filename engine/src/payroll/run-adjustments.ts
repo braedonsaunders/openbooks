@@ -378,12 +378,18 @@ async function executePayRunAdjustment(input: PayRunAdjustmentInput, validateOnl
         select system_key, kind, payment_kind
           from pay_components
          where org_id = ${orgId} and id = ${mutation.componentId} and is_active
-           and (system_key is null or system_key in ('base_pay','overtime','allowance','bonus','vacation_payout','stat_holiday'))
+           and (system_key is null or system_key in ('base_pay','overtime','allowance','bonus','vacation_payout','stat_holiday','income_tax'))
          limit 1
       `));
       if (component.rows.length === 0) throw new PayrollError("component cannot be adjusted");
       if (earnedFrom !== null && component.rows[0]!.kind !== "earning") {
         throw new PayrollError("Earned dates apply only to earning adjustments.");
+      }
+      // An employee may ask for extra income tax on one cheque. It is withheld
+      // through the statutory income-tax line, never as a separate deduction.
+      if (component.rows[0]!.system_key === "income_tax"
+        && (replaceComponent || hours !== null || earnedFrom !== null || cmp(amount, "0") <= 0 || !(input.reason ?? note)?.trim())) {
+        throw new PayrollError("Additional income tax for this run must be a positive amount added to the calculated tax, without hours or dates, with a supporting reason.");
       }
       if (component.rows[0]!.system_key === "stat_holiday") {
         if (earnedFrom !== null && (earnedFrom !== earnedTo || earnedFrom < run.period_start || earnedFrom > run.period_end)) {

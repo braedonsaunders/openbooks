@@ -561,6 +561,8 @@ export async function applyRunLineAdjustments(
   const replacedComponentIds = new Set<string>();
   const adjustments = await runLineAdjustmentRows(tx, orgId, documentId, employeePartyId);
   for (const adj of adjustments) {
+    // Additional income tax is a statutory input withheld through the tax line.
+    if (adj.system_key === "income_tax") continue;
     if ((adj.adj_earned_from != null || adj.adj_earned_to != null) && adj.kind !== "earning") {
       throw new PayrollError("The dated adjustment component is no longer an earning; review the editable run input.");
     }
