@@ -143,12 +143,13 @@ export async function loadProjects(
     config: d.config,
     isRequired: d.isRequired,
   }))
+  const defaultPresentation = operatingChoices.find(choice=>choice.isDefault)?.definition.presentation.defaultView ?? 'list'
   const resolvedForm = openProject || creating
     ? await resolveFormLayout({
         orgId,
         userId: authz.user.id,
         recordType: 'project',
-        defaultPresentation: data.defaultPresentation,
+        defaultPresentation,
         userRoles: authz.user.roles.map(({ key }) => key),
         headerDefs: projectFieldDefs,
         lineDefs: [],
@@ -157,7 +158,7 @@ export async function loadProjects(
     : null
 
   return {
-    defaultPresentation: operatingChoices.find(choice=>choice.isDefault)?.definition.presentation.defaultView ?? 'list',
+    defaultPresentation,
     title: t('list.title'),
     description: t('list.description'),
     canManage,

@@ -94,6 +94,8 @@ export function htmlPdfPageDimensions(paperSize: PdfPaperSize, orientation: PdfO
 export async function renderHtmlDocumentPdf(input: HtmlDocumentPdfInput): Promise<Buffer> {
   assertPrintablePage(input.paperSize, input.marginMm)
   const pageDimensions = htmlPdfPageDimensions(input.paperSize, input.orientation)
+  // Explicit label dimensions already carry their orientation.
+  const customSize = input.paperSize === '4x6'
   const m = `${input.marginMm}mm`
   const html = `<!doctype html><html><head><meta charset="utf-8"><style>
     *{box-sizing:border-box;} body{margin:0;font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;color:#0f172a;}
