@@ -1,0 +1,29 @@
+{
+  "organizations": {
+    "create": {
+      "newButton": "Neue Organisation",
+      "title": "Neue Organisation",
+      "description": "Legt eine Produktivorganisation mit Hauptbuch, Buchungsperioden, oberster rechtlicher Einheit, integrierten Rollen und Standardkonfiguration an und lädt ihren ersten Administrator ein.",
+      "nameLabel": "Name der Organisation",
+      "namePlaceholder": "z. B. Northwind Holding",
+      "countryLabel": "Land",
+      "countryPlaceholder": "Land auswählen…",
+      "countryHint": "Wo die Organisation eingetragen ist. Ihre oberste rechtliche Einheit verwendet dasselbe Land.",
+      "currencyLabel": "Basiswährung",
+      "currencyPlaceholder": "Währung auswählen…",
+      "currencyHint": "Die funktionale Währung der Bücher der Organisation und ihrer obersten rechtlichen Einheit.",
+      "adminNameLabel": "Name des Administrators",
+      "adminEmailLabel": "E-Mail des Administrators",
+      "adminEmailHint": "Der erste Administrator erhält einen einmaligen Link zum Festlegen eines Passworts. Die Adresse darf sich nicht bereits bei einer anderen Organisation anmelden.",
+      "reasonLabel": "Begründung",
+      "reasonPlaceholder": "Warum diese Organisation angelegt wird",
+      "reasonHint": "Wird mit der Organisation, dem Administrator und der Rollenzuweisung im Prüfprotokoll erfasst.",
+      "create": "Organisation anlegen",
+      "creating": "Wird angelegt…",
+      "required": "Füllen Sie alle Felder aus, bevor Sie die Organisation anlegen.",
+      "created": "{name} angelegt. Ein Link zum Festlegen des Passworts wurde an {email} gesendet.",
+      "createdLinkOnly": "{name} angelegt. Kopieren Sie jetzt den einmaligen Passwort-Link des Administrators.",
+      "requestFailed": "Die Organisation konnte nicht angelegt werden."
+    }
+  }
+}

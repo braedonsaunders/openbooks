@@ -177,11 +177,17 @@ function generatedPeriods(
   return rows;
 }
 
+/**
+ * Create the missing periods of one fiscal year on an active calendar (each
+ * with open close locks per active book) and reconcile drift on existing
+ * ones. `actorId` is null only for installation bootstrap, which seeds the
+ * first organization before any user exists.
+ */
 export async function generateAccountingPeriods(
   orgId: string,
   calendarId: string,
   fiscalYear: number,
-  actorId: string,
+  actorId: string | null,
 ): Promise<{ created: number; updated: number; periods: GeneratedPeriod[] }> {
   const calendarRes = (await db.execute<CalendarRow>(sql`
     select id, cadence, year_start_month, anchor_date, adjustment_period_enabled, config

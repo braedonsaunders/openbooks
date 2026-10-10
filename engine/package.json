@@ -60,6 +60,8 @@
     "./organization/scope": "./src/organization/subsidiary-scope.ts",
     "./organization/aging-buckets": "./src/organization/aging-buckets.ts",
     "./organization/currencies": "./src/organization/currency-options.ts",
+    "./organization/pending-credential": "./src/organization/pending-credential.ts",
+    "./provisioning/organizations": "./src/provisioning/public-organizations.ts",
     "./hrm/compensation": "./src/hrm/public-compensation.ts",
     "./inventory/stock-locations": "./src/inventory/stock-locations.ts",
     "./journal/contracts": "./src/journal/posting-contracts.ts",

@@ -1,0 +1,29 @@
+{
+  "organizations": {
+    "create": {
+      "newButton": "Nouvelle organisation",
+      "title": "Nouvelle organisation",
+      "description": "Crée une organisation de production avec son livre principal, ses périodes comptables, son entité juridique racine, ses rôles intégrés et sa configuration par défaut, et invite son premier administrateur.",
+      "nameLabel": "Nom de l’organisation",
+      "namePlaceholder": "p. ex. Northwind Holdings",
+      "countryLabel": "Pays",
+      "countryPlaceholder": "Sélectionnez un pays…",
+      "countryHint": "Le pays d’immatriculation de l’organisation. Son entité juridique racine utilise le même pays.",
+      "currencyLabel": "Devise de base",
+      "currencyPlaceholder": "Sélectionnez une devise…",
+      "currencyHint": "La devise fonctionnelle des livres de l’organisation et de son entité juridique racine.",
+      "adminNameLabel": "Nom de l’administrateur",
+      "adminEmailLabel": "E-mail de l’administrateur",
+      "adminEmailHint": "Le premier administrateur reçoit un lien à usage unique pour définir un mot de passe. L’adresse ne doit pas déjà permettre de se connecter à une autre organisation.",
+      "reasonLabel": "Motif",
+      "reasonPlaceholder": "Pourquoi cette organisation est créée",
+      "reasonHint": "Enregistré dans le journal d’audit avec l’organisation, l’administrateur et l’attribution du rôle.",
+      "create": "Créer l’organisation",
+      "creating": "Création…",
+      "required": "Renseignez tous les champs avant de créer l’organisation.",
+      "created": "{name} créée. Un lien de définition du mot de passe a été envoyé à {email}.",
+      "createdLinkOnly": "{name} créée. Copiez maintenant le lien à usage unique de l’administrateur pour définir son mot de passe.",
+      "requestFailed": "L’organisation n’a pas pu être créée."
+    }
+  }
+}

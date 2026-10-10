@@ -11,6 +11,7 @@ import {
   OrgOpenCell,
   OrgUsersCell,
 } from '../organizations/sections'
+import { NewOrganizationButton } from './NewOrganizationDrawer'
 
 const ENV_VARIANT = {
   production: 'success',
@@ -56,7 +57,7 @@ export function TenantsList({
 }) {
   const filtered = currentParams.q !== undefined || environment !== undefined
   return (
-    <ListPageLayout header={<PageHeader title="Organizations" description="Every production company, sandbox, and preview environment. Open enters that organization as the current workspace." back={{ href: '/platform', label: 'Back to platform' }} />}>
+    <ListPageLayout header={<PageHeader title="Organizations" description="Every production company, sandbox, and preview environment. Open enters that organization as the current workspace." back={{ href: '/platform', label: 'Back to platform' }} actions={<NewOrganizationButton basePath={basePath} />} />}>
       <div className="space-y-5">
 
         <ServerPagedTable
