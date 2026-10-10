@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { buildListDrawerHref, hasActiveListFilters, isUuid } from './list-params'
+import { buildListDrawerHref, hasActiveListFilters, isUuid, mergeHref } from './list-params'
 
 test('exclusive journal links clear competing drawers and preserve list state', () => {
   const href = buildListDrawerHref('/journal', { q: 'accrual', page: '3', entry: 'old-journal', txn: 'old-payment', reportRecord: 'old-invoice' },
@@ -124,4 +124,21 @@ test('a saved-view filter marks the list filter-active', () => {
     hasActiveListFilters({ q: undefined, quickValues: {}, savedViewFilterCount: 2 }),
     true,
   )
+})
+
+test('mergeHref keeps a query-bearing base to a single question mark', () => {
+  const href = mergeHref('/admin/setup/period-close?tab=periods', {}, { fy: 2025 })
+  assert.equal(href, '/admin/setup/period-close?tab=periods&fy=2025')
+  const params = new URL(href, 'https://openbooks.example').searchParams
+  assert.equal(params.get('tab'), 'periods')
+  assert.equal(params.get('fy'), '2025')
+})
+
+test('mergeHref lets current params and overrides win over the base query', () => {
+  const href = mergeHref('/items?item=old&view=catalog', { item: 'new' }, { view: undefined, fy: 2025 })
+  const params = new URL(href, 'https://openbooks.example').searchParams
+  assert.equal(params.get('item'), 'new')
+  assert.equal(params.has('view'), false)
+  assert.equal(params.get('fy'), '2025')
+  assert.equal(href.split('?').length, 2)
 })
