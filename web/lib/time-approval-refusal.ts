@@ -17,6 +17,8 @@ export type TimeApprovalRefusalCode =
   | 'week_owned_by_workflow'
   | 'already_approved'
   | 'nothing_submitted'
+  | 'line_approved'
+  | 'line_billed'
 
 export interface UncoveredTimeEntry {
   employeeName: string | null
