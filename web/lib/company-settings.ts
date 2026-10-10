@@ -407,7 +407,7 @@ export async function updateCompanySettings(
       if (tenderAccountIds.length > 0) {
         const found = await tx.execute<{ id: string; type: string }>(sql`
           select id, type from accounts
-           where org_id = ${orgId} and id = any(${tenderAccountIds}::uuid[])
+           where org_id = ${orgId} and id in (select jsonb_array_elements_text(${JSON.stringify(tenderAccountIds)}::jsonb)::uuid)
              and is_active and not is_summary`);
         const byId = new Map(found.rows.map((row) => [row.id, row.type]));
         for (const key of CASH_SALES_SETTING_KEYS) {
