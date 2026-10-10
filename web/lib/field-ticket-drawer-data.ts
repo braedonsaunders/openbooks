@@ -4,10 +4,78 @@ import { sql } from 'drizzle-orm'
 import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import type { FieldTicketDrawerProps, TicketPayload } from '../app/(app)/field-tickets/FieldTicketDrawer'
+import type { FieldTicketCreateDrawerProps } from '../app/(app)/field-tickets/FieldTicketCreateDrawer'
 import { can, type Authz } from './authz'
 import { resolveFormLayout } from './customization/resolve'
 import { isFeatureEnabled } from './features'
 import { FieldTicketError, loadFieldTicket } from './field-tickets'
+
+type ScopeFilter = (column: string) => ReturnType<typeof sql>
+
+/**
+ * Project picker rows for a ticket: active projects inside the legal-entity
+ * filter, each with the ticket period its effective Field Ticket policy
+ * proposes (project, then customer, then organization scope).
+ */
+function ticketProjectOptions(orgId: string, today: string, legalEntityFilter: ScopeFilter) {
+  return db.execute<(FieldTicketDrawerProps['projects'])[number]>(sql`
+    select p.id, coalesce(p.code || ' · ' || p.name, p.name) as name,
+           cust.display_name as "customerName",
+           coalesce((
+             select policy.period
+               from field_ticket_policies policy
+              where policy.org_id = p.org_id and policy.is_active
+                and policy.effective_from <= ${today}
+                and (policy.effective_to is null or policy.effective_to >= ${today})
+                and (
+                  (policy.scope = 'project' and policy.project_id = p.id)
+                  or (policy.scope = 'customer' and policy.customer_party_id = p.customer_id)
+                  or policy.scope = 'organization'
+                )
+              order by case policy.scope
+                when 'project' then 1 when 'customer' then 2 else 3 end,
+                policy.effective_from desc
+              limit 1
+           ), 'weekly') as period
+      from projects p
+      left join parties cust on cust.id = p.customer_id and cust.org_id = p.org_id
+        ${legalEntityFilter('cust.subsidiary_id')}
+     where p.org_id = ${orgId} and p.is_active
+       ${legalEntityFilter('p.subsidiary_id')}
+     order by p.name
+     limit 2000`)
+}
+
+/**
+ * The unsaved New-ticket drawer's payload: the caller's in-scope projects
+ * and the business date. Reads only; nothing is allocated until Save. Null
+ * when the caller cannot create tickets or the feature is off.
+ */
+export async function loadFieldTicketCreateData({
+  authz,
+}: {
+  authz: Authz
+}): Promise<FieldTicketCreateDrawerProps | null> {
+  if (!can(authz, 'time.manage')) return null
+  const orgId = authz.user.orgId
+  if (!(await isFeatureEnabled(orgId, 'fieldTickets'))) return null
+  const today = await businessToday(orgId)
+  // A restricted caller picks only projects in their legal entities: the
+  // create route refuses any other with the uniform not-found.
+  const scope = authz.allowedSubsidiaryIds
+  // One pg array literal parameter; an empty scope sees no project. An
+  // org-wide customer (no subsidiary) still names its in-scope project.
+  const legalEntityFilter: ScopeFilter = (column) => {
+    if (!scope) return sql``
+    if (scope.size === 0) return sql` and false`
+    const inScope = sql`${sql.raw(column)} = any(${`{${[...scope].join(',')}}`}::uuid[])`
+    return column.startsWith('cust.')
+      ? sql` and (${sql.raw(column)} is null or ${inScope})`
+      : sql` and ${inScope}`
+  }
+  const projects = await ticketProjectOptions(orgId, today, legalEntityFilter)
+  return { createMode: true, projects: projects.rows, today }
+}
 
 /**
  * Loads the canonical Field Ticket transaction drawer payload for list pages
@@ -111,32 +179,7 @@ export async function loadFieldTicketDrawerData({
          where org_id = ${orgId} and is_active
            and kind in (${sql.join(catalogItemKinds.map((kind) => sql`${kind}`), sql`, `)})
          order by kind, name`),
-      db.execute<(FieldTicketDrawerProps['projects'])[number]>(sql`
-        select p.id, coalesce(p.code || ' · ' || p.name, p.name) as name,
-               cust.display_name as "customerName",
-               coalesce((
-                 select policy.period
-                   from field_ticket_policies policy
-                  where policy.org_id = p.org_id and policy.is_active
-                    and policy.effective_from <= ${today}
-                    and (policy.effective_to is null or policy.effective_to >= ${today})
-                    and (
-                      (policy.scope = 'project' and policy.project_id = p.id)
-                      or (policy.scope = 'customer' and policy.customer_party_id = p.customer_id)
-                      or policy.scope = 'organization'
-                    )
-                  order by case policy.scope
-                    when 'project' then 1 when 'customer' then 2 else 3 end,
-                    policy.effective_from desc
-                  limit 1
-               ), 'weekly') as period
-          from projects p
-          left join parties cust on cust.id = p.customer_id and cust.org_id = p.org_id
-            ${legalEntityFilter('cust.subsidiary_id')}
-         where p.org_id = ${orgId} and p.is_active
-           ${legalEntityFilter('p.subsidiary_id')}
-         order by p.name
-         limit 2000`),
+      ticketProjectOptions(orgId, today, legalEntityFilter),
       ticket.projectId
         ? db.execute<(FieldTicketDrawerProps['projectTasks'])[number]>(sql`
             select id, code, name, status, estimated_hours as "estimatedHours",

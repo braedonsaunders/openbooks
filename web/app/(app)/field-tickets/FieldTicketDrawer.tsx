@@ -765,43 +765,38 @@ export function FieldTicketDrawer(props: FieldTicketDrawerProps) {
   const discardedRef = useRef(false)
 
   /**
-   * Discard the draft shell. The server is the authority on
-   * "untouched": anything with content, signatures, links, or status
-   * refuses with the blocker named. A raced 404 means someone else already
-   * discarded it — that is the requested end state too.
+   * Discard an empty draft. The server is the authority on "untouched":
+   * anything with content, signatures, links, or status refuses with the
+   * blocker named. A raced 404 means someone else already discarded it —
+   * that is the requested end state too.
    */
-  async function discardDraft(explicit: boolean): Promise<boolean> {
+  async function discardDraft(): Promise<boolean> {
     if (discardedRef.current) return true
     setDiscarding(true)
-    if (explicit) setDiscardError(null)
+    setDiscardError(null)
     try {
       const response = await fetch(`/api/field-tickets/${ticket.id}`, {
         method: 'DELETE',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ expectedRevision: persistedDocumentRevision(latestRevisionRef.current) }),
       })
-      const payload = (await response.json().catch(() => ({}))) as { error?: string }
       if (!response.ok) {
         if (response.status === 404) {
           discardedRef.current = true
           return true
         }
-        if (explicit) {
-          const message = payload.error ?? t('editor.discardFailed')
-          setDiscardError(message)
-          toast.error(message)
-        }
+        const message = await readApiErrorMessage(response, t('editor.discardFailed'))
+        setDiscardError(message)
+        toast.error(message)
         return false
       }
       discardedRef.current = true
-      if (explicit) toast.success(t('editor.discarded'))
+      toast.success(t('editor.discarded'))
       return true
     } catch {
-      if (explicit) {
-        const message = t('editor.discardFailed')
-        setDiscardError(message)
-        toast.error(message)
-      }
+      const message = t('editor.discardFailed')
+      setDiscardError(message)
+      toast.error(message)
       return false
     } finally {
       setDiscarding(false)
@@ -810,7 +805,7 @@ export function FieldTicketDrawer(props: FieldTicketDrawerProps) {
 
   async function confirmDiscard() {
     if (!(await confirmDialog(t('editor.discardConfirm')))) return
-    void discardDraft(true).then((ok) => {
+    void discardDraft().then((ok) => {
       if (ok) router.push('/field-tickets')
     })
   }
@@ -1039,12 +1034,9 @@ export function FieldTicketDrawer(props: FieldTicketDrawerProps) {
       closeHref="/field-tickets"
       beforeClose={async () => {
         if (busy || discarding) return false
-        // A pristine draft is the New-ticket shell: discard it instead of
-        // orphaning a row. The server refuses anything with content, so a
-        // raced or filled draft simply stays — closing still proceeds.
-        if (!headerDirty && !gridDirty && !lineDraftDirty && ticket.status === 'draft' && props.canManage) {
-          await discardDraft(false)
-        }
+        // A persisted ticket exists only because the operator saved it from
+        // the unsaved New-ticket drawer, so closing never discards it; an
+        // empty draft is removed through the explicit Discard action.
         return closeGuard.beforeClose()
       }}
       recordId={ticket.id}

@@ -189,7 +189,7 @@ test('a refused rate lookup keeps the last good rate and pins the named reason',
   )
 })
 
-test('a pristine draft closes by discarding its server shell', async (t) => {
+test('closing a saved draft never discards it', async (t) => {
   const { requests } = await mount(t, () => Response.json({}), () => Response.json({ ok: true }), 'view')
   const close = document.querySelector('button[aria-label="Close"]') as HTMLButtonElement | null
   assert.ok(close, 'the drawer close action renders')
@@ -198,7 +198,10 @@ test('a pristine draft closes by discarding its server shell', async (t) => {
     await tick()
     await tick()
   })
-  assert.ok(requests.some((request) => request.url === `/api/field-tickets/${TICKET.id}` && request.method === 'DELETE'))
+  assert.ok(
+    !requests.some((request) => request.method === 'DELETE'),
+    'a ticket the operator saved stays until an explicit Discard',
+  )
 })
 
 test('explicit discard keeps a refused draft open with its reason pinned', async (t) => {

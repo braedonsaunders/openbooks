@@ -35,7 +35,10 @@
     "waiting": "Wartet auf Unterschrift",
     "signed": "Unterschrieben",
     "date": "Datum",
-    "createFailed": "Der Bericht konnte nicht erstellt werden"
+    "createFailed": "Der Bericht konnte nicht erstellt werden",
+    "createTitle": "Neuer Arbeitsnachweis",
+    "createHint": "Wählen Sie Projekt, Zeitraum und Datum. Der Nachweis erhält seine Nummer beim Speichern; Schließen speichert nichts.",
+    "periodPolicy": "Projektrichtlinie"
   },
   "editor": {
     "tabs": { "time": "Zeit", "items": "Positionen", "tasks": "Aufgaben", "related": "Verknüpft", "production": "Leistung" },

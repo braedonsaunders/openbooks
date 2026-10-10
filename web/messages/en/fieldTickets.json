@@ -35,7 +35,10 @@
     "waiting": "Awaiting signature",
     "signed": "Signed",
     "date": "Date",
-    "createFailed": "Could not create the ticket"
+    "createFailed": "Could not create the ticket",
+    "createTitle": "New field ticket",
+    "createHint": "Choose the project, period and date. The ticket is numbered when you save; closing writes nothing.",
+    "periodPolicy": "Project policy"
   },
   "editor": {
     "tabs": { "time": "Time", "items": "Items", "tasks": "Tasks", "related": "Related", "production": "Production" },

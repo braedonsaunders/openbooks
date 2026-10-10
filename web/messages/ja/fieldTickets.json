@@ -35,7 +35,10 @@
     "waiting": "署名待ち",
     "signed": "署名済み",
     "date": "日付",
-    "createFailed": "チケットを作成できませんでした"
+    "createFailed": "チケットを作成できませんでした",
+    "createTitle": "新規作業伝票",
+    "createHint": "プロジェクト、期間、日付を選択してください。伝票番号は保存時に採番され、閉じても何も保存されません。",
+    "periodPolicy": "プロジェクトのポリシー"
   },
   "editor": {
     "tabs": { "time": "時間", "items": "明細", "tasks": "タスク", "related": "関連", "production": "出来高" },

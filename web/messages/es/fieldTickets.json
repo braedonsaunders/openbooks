@@ -35,7 +35,10 @@
     "waiting": "Esperando firma",
     "signed": "Firmado",
     "date": "Fecha",
-    "createFailed": "No se pudo crear el parte"
+    "createFailed": "No se pudo crear el parte",
+    "createTitle": "Nuevo parte de campo",
+    "createHint": "Elige el proyecto, el periodo y la fecha. El parte se numera al guardar; cerrar no guarda nada.",
+    "periodPolicy": "Política del proyecto"
   },
   "editor": {
     "tabs": {

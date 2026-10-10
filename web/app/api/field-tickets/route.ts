@@ -8,7 +8,7 @@ import { db } from '@openbooks/engine/src/platform/db.ts'
 import { guardSubsidiaryScope } from '../../../lib/authz'
 import { isUuid } from '../../../lib/list-params'
 import { createFieldTicket, FieldTicketError, FieldTicketNotFoundError, TICKET_PERIODS, type TicketPeriod } from '../../../lib/field-tickets'
-import { notFound } from "@/lib/api/responses";
+import { notFound, unprocessable } from "@/lib/api/responses";
 
 
 export const runtime = 'nodejs'
@@ -18,7 +18,12 @@ const createBody = z.object({
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
 }).strict()
 
-/** GET → ticket list (filters: status, project). POST → create a draft. */
+/**
+ * GET → ticket list (filters: status, project).
+ * POST → create a draft from the unsaved New-ticket drawer's Save. The
+ * caller's UUID Idempotency-Key becomes the ticket id, so a retried Save
+ * returns the same ticket (200) instead of minting a second number (201).
+ */
 export const GET = defineRoute({
   permission: 'time.read',
   feature: 'fieldTickets',
@@ -77,6 +82,10 @@ export const POST = defineRoute({
   handler: async ({ request: req, authz: gate }) => {
   const orgId = gate.user.orgId
 
+  const requestId = req.headers.get('Idempotency-Key')?.trim() ?? ''
+  if (!isUuid(requestId)) {
+    return unprocessable('invalid_idempotency_key', { status: 400 })
+  }
   const parsedBody = await parseJsonBody(req, createBody);
   if (!parsedBody.ok) return parsedBody.response;
   const body = parsedBody.data
@@ -99,8 +108,8 @@ export const POST = defineRoute({
   const period = body.period as TicketPeriod | undefined
   const date = body.date
   try {
-    const created = await createFieldTicket(orgId, gate.user.id, { projectId: body.projectId, date, period, allowedSubsidiaryIds: gate.allowedSubsidiaryIds })
-    return NextResponse.json(created)
+    const created = await createFieldTicket(orgId, gate.user.id, { projectId: body.projectId, date, period, allowedSubsidiaryIds: gate.allowedSubsidiaryIds, requestId })
+    return NextResponse.json({ id: created.id, documentNumber: created.documentNumber }, { status: created.created ? 201 : 200 })
   } catch (e) {
     if (e instanceof FieldTicketError && !(e instanceof FieldTicketNotFoundError)) {
       return apiErrorResponse(e, { safeStatus: 422 })
