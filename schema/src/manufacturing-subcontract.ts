@@ -5,7 +5,8 @@ import { mfgWorkOrders,mfgWoOperations,mfgWoMaterials } from "./manufacturing";
 import { parties } from "./parties";
 import { stockLocations,inventoryMovements } from "./inventory";
 import { documents } from "./documents";
-import { accounts,journalEntries } from "./ledger";
+import { accounts } from "./coa";
+import { journalEntries } from "./ledger";
 
 /** An outsourced production operation; project purchasing keeps its own documents. */
 export const mfgSubcontracts=pgTable("mfg_subcontracts",{

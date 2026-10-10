@@ -1,7 +1,8 @@
 import { sql } from "drizzle-orm";
 import { check, date, foreignKey, index, integer, jsonb, pgTable, text, timestamp, uniqueIndex, uuid, type PgTableExtraConfigValue } from "drizzle-orm/pg-core";
 import { auditColumns, id, money, orgRef } from "./helpers";
-import { items, subsidiaries } from "./core";
+import { items } from "./documents";
+import { subsidiaries } from "./subsidiaries";
 import { inventoryMovements, lots, serials, stockLocations } from "./inventory";
 import { mfgWorkOrders, mfgWoOperations } from "./manufacturing";
 
