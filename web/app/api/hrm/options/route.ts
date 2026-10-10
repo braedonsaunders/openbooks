@@ -3,7 +3,9 @@ import { apiErrorResponse } from "@/lib/api/error-response";
 import { NextResponse } from "next/server";
 import {
   EmploymentReadError,
+  listEmployerSubsidiaryOptions,
   listEmploymentOptions,
+  listHireablePeopleOptions,
   listLocationOptions,
   listPeopleOptions,
 } from "@openbooks/engine/src/hrm/employment-read.ts";
@@ -27,6 +29,11 @@ import { isUuid } from "../../../../lib/list-params";
  * for the line-manager picker, `source=locations` names active native
  * locations, `source=people` names the same holders keyed by party for the
  * exit-interviewer picker (the exit record names its interviewer by party),
+ * `source=hireable-people` names active employee parties holding no
+ * employment at all for the Hire drawer's person picker (the same
+ * population the cockpit readiness panel counts),
+ * `source=employer-subsidiaries` names active legal entities for the
+ * Hire drawer's employer picker,
  * `source=positions` names the funded establishment for the
  * position-assignment picker (behind hrm.position.read, never the
  * employment grant), and `source=leave-types` names active leave types for
@@ -54,6 +61,8 @@ export const GET = defineRoute({
       source !== "locations" &&
       source !== "positions" &&
       source !== "people" &&
+      source !== "hireable-people" &&
+      source !== "employer-subsidiaries" &&
       source !== "leave-types" &&
       source !== "leave-filing-employments" &&
       source !== "leave-own-employments"
@@ -61,7 +70,7 @@ export const GET = defineRoute({
       return NextResponse.json(
         {
           error:
-            "source must be one of employments, locations, positions, people, leave-types, leave-filing-employments, leave-own-employments",
+            "source must be one of employments, locations, positions, people, hireable-people, employer-subsidiaries, leave-types, leave-filing-employments, leave-own-employments",
         },
         { status: 400 },
       );
@@ -161,6 +170,21 @@ export const GET = defineRoute({
                     ? { ...base, ...(active === null ? {} : { activeOnly: active === 'true' }) }
                     : { ...base, includePartyId: include, ...(active === null ? {} : { activeOnly: active === 'true' }) },
                 )
+              : source === "hireable-people"
+                ? // Employee parties with no employment at all, keyed by
+                  // party for the Hire drawer's person picker — the same
+                  // read grant and party-side scope as the people picker.
+                  await listHireablePeopleOptions(
+                    include === null ? base : { ...base, includePartyId: include },
+                  )
+                : source === "employer-subsidiaries"
+                  ? // Active legal entities for the Hire drawer's employer
+                    // picker — the employment read grant plus employer
+                    // scope, so the drawer can never offer an entity the
+                    // hire refusal would reject.
+                    await listEmployerSubsidiaryOptions(
+                      include === null ? base : { ...base, includeSubsidiaryId: include },
+                    )
               : await listPositionOptions(
                   include === null
                     ? base

@@ -34,10 +34,16 @@ in plain words: those employees are not yet migrated to employment records and
 headcount excludes them. A zero on the cockpit is always a resolved zero —
 nobody in service on the date — never a migration gap pretending to be data.
 
-Migration is deliberate, one employment at a time. Open the employee record,
-propose a hire change with the effective start date, and submit it: the
-approval run decides, and the decision writes the first effective version onto
-the canonical record. The employment appears in headcount on and after its
+Migration is deliberate, one employment at a time. Open the employee record
+and choose Hire — or start Hire from the Human Resources cockpit (the New
+menu) or the change-request queue, which names a person holding no
+employment at all. Record the employing legal entity and the effective
+start date, and submit with the reason: a configured approval flow
+decides, and a flow with the apply-without-approval outcome applies the
+hire at once. Either decided way writes the first effective version onto
+the canonical record; with no flow configured the hire refuses by name —
+configure the flow first, then hire.
+The employment appears in headcount on and after its
 effective start date, backdated correctly as of any later reporting date
 because the history is bitemporal. There is no bulk import for this step — a
 hire is an attested event with a reason, and unattested rows would poison the

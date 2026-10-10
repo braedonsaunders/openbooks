@@ -11,6 +11,7 @@ export function NewHrmButton({
   employeeLabel,
   changeLabel,
   processLabel,
+  hireLabel,
 }: {
   canCreateEmployee: boolean
   canProposeChange: boolean
@@ -18,16 +19,25 @@ export function NewHrmButton({
   employeeLabel: string
   changeLabel: string
   processLabel: string
+  hireLabel?: string
 }) {
   const tc = useTranslations('common')
   const router = useRouter()
   const items: NewMenuItem[] = [
     ...(canCreateEmployee ? [{ key: 'employee', label: employeeLabel }] : []),
+    ...(canProposeChange && hireLabel ? [{ key: 'hire', label: hireLabel }] : []),
     ...(canProposeChange ? [{ key: 'change', label: changeLabel }] : []),
     ...(canCreateProcess ? [{ key: 'process', label: processLabel }] : []),
   ]
 
   function select(key: string) {
+    // A first employment has no employment to pick yet, so Hire opens the
+    // queue's propose dialog in hire mode — person picker, no employment
+    // picker — rather than the change drawer.
+    if (key === 'hire') {
+      router.push('/hrm/change-requests?propose=1&hire=1' as never)
+      return
+    }
     if (key === 'change') {
       router.push('/hrm/change-requests?propose=1' as never)
       return

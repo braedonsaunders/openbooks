@@ -113,6 +113,7 @@ export function hrmSpec(data: HrmHomeData): PageSpec {
             employeeLabel: data.newEmployee.label,
             changeLabel: data.actions.find((action) => action.href === '/hrm/change-requests')?.label ?? '',
             processLabel: data.newProcessLabel,
+            hireLabel: data.hireLabel,
           }),
           widget('module-home-tabs', { tabs: data.tabs }),
         ],

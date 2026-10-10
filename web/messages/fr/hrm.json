@@ -143,6 +143,7 @@
     "actions": {
       "title": "Actions rapides",
       "newEmployee": "Nouvel employé",
+      "hireEmployee": "Embaucher un employé",
       "proposeChange": "Proposer un changement",
       "manageDepartments": "Gérer les services",
       "openReports": "Ouvrir les rapports"
@@ -192,6 +193,7 @@
     "proposeEmploymentLabel": "Emploi",
     "proposeEmploymentPlaceholder": "Rechercher des emplois…",
     "proposeEmpty": "Aucun emploi ne correspond.",
+    "proposeHireLink": "Embaucher plutôt une personne sans emploi",
     "proposeFailed": "La liste des emplois n'a pas pu être chargée.",
     "draftBadge": "Actions",
     "openEmployee": "Ouvrir le dossier de l'employé",
@@ -250,7 +252,25 @@
     },
     "noRecord": {
       "title": "Aucun dossier d'emploi",
-      "description": "Cette personne n'a pas encore de dossier d'emploi. Les dossiers d'emploi sont créés par le flux de rédaction RH."
+      "description": "Cette personne n'a pas encore de dossier d'emploi. Enregistrez le premier emploi avec Embaucher — effectifs, congés et paie s'y rattachent une fois qu'il existe."
+    },
+    "hire": {
+      "title": "Embaucher un employé",
+      "description": "Enregistrez le premier emploi de cette personne : l'entité juridique employeuse et le premier jour effectif. L'embauche suit le service gouverné des demandes de modification : un flux d'approbation configuré la décide, et un flux avec le résultat d'application directe l'applique aussitôt.",
+      "button": "Embaucher",
+      "submit": "Enregistrer l'embauche",
+      "personLabel": "Personne",
+      "personPlaceholder": "Rechercher des personnes sans emploi…",
+      "personEmpty": "Personne n'attend un premier emploi — chaque partie employée active a déjà un dossier d'emploi.",
+      "personFailed": "La liste des personnes embauchables n'a pas pu être chargée.",
+      "personRequired": "Choisissez la personne qu'enregistre cette embauche.",
+      "employerLabel": "Entité juridique employeuse",
+      "employerPlaceholder": "Rechercher des entités juridiques…",
+      "employerFailed": "La liste des entités juridiques n'a pas pu être chargée.",
+      "employerRequired": "Choisissez l'entité juridique employeuse — un emploi nomme toujours son employeur.",
+      "employerHint": "L'emploi, les effectifs et la paie lisent tous cette entité.",
+      "statusLabel": "Statut",
+      "startLabel": "Début effectif"
     },
     "multiple": {
       "title": "Plus d'un dossier d'emploi",
@@ -1529,7 +1549,7 @@
       "notAvailable": "non renseigné",
       "employmentsTitle": "Mon emploi",
       "employmentsEmpty": "Aucun dossier d'emploi",
-      "employmentsEmptyDescription": "Les RH n'ont pas encore enregistré d'emploi pour votre personne.",
+      "employmentsEmptyDescription": "Les RH n'ont pas encore enregistré d'emploi pour votre personne — demandez à votre administrateur RH d'enregistrer votre embauche avec l'action Embaucher du SIRH.",
       "employer": "Employeur",
       "jobTitle": "Intitulé",
       "department": "Service",

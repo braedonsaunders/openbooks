@@ -16,6 +16,7 @@ export const HRM_PROCESS_WIDGETS = {
       employeeLabel={str(props, 'employeeLabel') ?? ''}
       changeLabel={str(props, 'changeLabel') ?? ''}
       processLabel={str(props, 'processLabel') ?? ''}
+      hireLabel={str(props, 'hireLabel')}
     />
   ),
   'hrm-process-create': (props) => (

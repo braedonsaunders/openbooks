@@ -1500,6 +1500,202 @@ export async function listPeopleOptions(
   });
 }
 
+export interface HireablePeopleOptionsQuery {
+  readonly orgId: string;
+  readonly actorId: string;
+  /** Substring match on the person's display name; empty matches all. */
+  readonly q?: string;
+  /** Bounded page size; defaults to 25, refuses above 100. */
+  readonly limit?: number;
+  /** Party id to pin first (the hire drawer's stored person under edit). */
+  readonly includePartyId?: string;
+}
+
+export interface HireablePersonOptionDTO {
+  readonly partyId: string;
+  readonly label: string;
+}
+
+/**
+ * Active employee parties holding no employment record at all — the Hire
+ * drawer's person picker, and the same population the cockpit readiness
+ * panel counts. Authority is the aggregate half (grant + party-side
+ * subsidiary visibility, org-wide parties visible to every in-scope
+ * reader): an out-of-scope person stays absent rather than leaking
+ * existence, and an empty page is truthful, never a refusal. Parties
+ * whose employment history exists (even terminated) are not hireable
+ * here — their next episode is a status change or a governed rehire on
+ * the record, never a first hire.
+ */
+export async function loadHireablePeopleOptions(
+  exec: SqlExecutor,
+  query: HireablePeopleOptionsQuery,
+): Promise<readonly HireablePersonOptionDTO[]> {
+  const orgId = requireId(query.orgId, "orgId");
+  const actorId = requireId(query.actorId, "actorId");
+  const limit = requireOptionsLimit(query.limit);
+  const allowed = await requireAggregateEmploymentRead(exec, orgId, actorId);
+  const fragment = (query.q ?? "").trim();
+  const includeId = query.includePartyId?.trim() ? query.includePartyId.trim() : null;
+
+  type HireableRow = {
+    partyId: string;
+    personName: string;
+  };
+  // Party-side visibility: org-wide (null-subsidiary) people are visible to
+  // every in-scope reader; subsidiary-assigned ones only inside the scope.
+  const partyScope = allowed === null
+    ? sql`true`
+    : allowed.size === 0
+      ? sql`p.subsidiary_id is null`
+      : sql`(p.subsidiary_id is null or p.subsidiary_id in (${sql.join([...allowed].map((id) => sql`${id}::uuid`), sql`, `)}))`;
+  const hireable = sql`p.is_active
+    and p.kind = 'person'
+    and exists (
+      select 1 from employee_roles r
+       where r.org_id = p.org_id and r.party_id = p.id and r.is_active
+    )
+    and not exists (
+      select 1 from worker_employments w
+       where w.org_id = p.org_id and w.worker_party_id = p.id
+    )`;
+  const page = (await exec.execute<HireableRow>(sql`
+    select p.id::text as "partyId",
+           p.display_name as "personName"
+      from parties p
+     where p.org_id = ${orgId}::uuid
+       and ${partyScope}
+       and ${hireable}
+       ${fragment ? sql`and p.display_name ilike ${`%${likeEscape(fragment)}%`} escape '\\'` : sql``}
+     order by p.display_name, p.id
+     limit ${limit}`)).rows;
+  // The pinned stored value is read by id, never by page position: it
+  // leads even when it falls outside the bounded page. An unknown,
+  // out-of-scope, or since-hired id stays absent rather than leaking
+  // existence.
+  const pinned = includeId
+    ? (await exec.execute<HireableRow>(sql`
+      select p.id::text as "partyId",
+             p.display_name as "personName"
+        from parties p
+       where p.org_id = ${orgId}::uuid
+         and p.id = ${includeId}::uuid
+         and ${partyScope}
+         and ${hireable}`)).rows[0] ?? null
+    : null;
+  const rows = pinned ? [pinned, ...page.filter((row) => row.partyId !== pinned.partyId)] : page;
+
+  const toOption = (row: HireableRow): HireablePersonOptionDTO => ({
+    partyId: requireText("parties.id", row.partyId),
+    label: row.personName,
+  });
+  return rows.slice(0, limit + (pinned ? 1 : 0)).map(toOption);
+}
+
+/**
+ * Public boundary: one tenant-scoped transaction, the authoritative HRM
+ * feature gate rechecked inside it, then the scoped hireable-people
+ * options. Read only.
+ */
+export async function listHireablePeopleOptions(
+  query: HireablePeopleOptionsQuery,
+): Promise<readonly HireablePersonOptionDTO[]> {
+  const orgId = requireId(query.orgId, "orgId");
+  return withOrgTransaction(orgId, async () => {
+    await assertHrmFeatureOn(db, orgId);
+    return loadHireablePeopleOptions(db, query);
+  });
+}
+
+export interface EmployerSubsidiaryOptionsQuery {
+  readonly orgId: string;
+  readonly actorId: string;
+  /** Substring match on the subsidiary name; empty matches all. */
+  readonly q?: string;
+  /** Bounded page size; defaults to 25, refuses above 100. */
+  readonly limit?: number;
+  /** Subsidiary id to pin first (the hire drawer's stored entity under edit). */
+  readonly includeSubsidiaryId?: string;
+}
+
+export interface EmployerSubsidiaryOptionDTO {
+  readonly subsidiaryId: string;
+  readonly label: string;
+}
+
+/**
+ * Active legal entities for the Hire drawer's employer picker. Authority
+ * is the aggregate half (grant + employer-subsidiary scope): entities
+ * outside the actor's scope stay absent rather than leaking existence,
+ * and inactive entities never list — a hire against one would fail
+ * closed downstream. An empty page is truthful, never a refusal.
+ */
+export async function loadEmployerSubsidiaryOptions(
+  exec: SqlExecutor,
+  query: EmployerSubsidiaryOptionsQuery,
+): Promise<readonly EmployerSubsidiaryOptionDTO[]> {
+  const orgId = requireId(query.orgId, "orgId");
+  const actorId = requireId(query.actorId, "actorId");
+  const limit = requireOptionsLimit(query.limit);
+  const allowed = await requireAggregateEmploymentRead(exec, orgId, actorId);
+  const fragment = (query.q ?? "").trim();
+  const includeId = query.includeSubsidiaryId?.trim() ? query.includeSubsidiaryId.trim() : null;
+
+  type SubsidiaryRow = {
+    subsidiaryId: string;
+    name: string;
+  };
+  const scope = allowed === null
+    ? sql`true`
+    : allowed.size === 0
+      ? sql`false`
+      : sql`s.id in (${sql.join([...allowed].map((id) => sql`${id}::uuid`), sql`, `)})`;
+  const page = (await exec.execute<SubsidiaryRow>(sql`
+    select s.id::text as "subsidiaryId", s.name
+      from subsidiaries s
+     where s.org_id = ${orgId}::uuid
+       and s.is_active
+       and ${scope}
+       ${fragment ? sql`and s.name ilike ${`%${likeEscape(fragment)}%`} escape '\\'` : sql``}
+     order by s.name, s.id
+     limit ${limit}`)).rows;
+  // The pinned stored value is read by id, never by page position: it
+  // leads even when it falls outside the bounded page. An unknown,
+  // inactive, or out-of-scope id stays absent rather than leaking
+  // existence.
+  const pinned = includeId
+    ? (await exec.execute<SubsidiaryRow>(sql`
+      select s.id::text as "subsidiaryId", s.name
+        from subsidiaries s
+       where s.org_id = ${orgId}::uuid
+         and s.id = ${includeId}::uuid
+         and s.is_active
+         and ${scope}`)).rows[0] ?? null
+    : null;
+  const rows = pinned ? [pinned, ...page.filter((row) => row.subsidiaryId !== pinned.subsidiaryId)] : page;
+
+  const toOption = (row: SubsidiaryRow): EmployerSubsidiaryOptionDTO => ({
+    subsidiaryId: requireText("subsidiaries.id", row.subsidiaryId),
+    label: row.name,
+  });
+  return rows.slice(0, limit + (pinned ? 1 : 0)).map(toOption);
+}
+
+/**
+ * Public boundary: one tenant-scoped transaction, the authoritative HRM
+ * feature gate rechecked inside it, then the scoped employer options.
+ * Read only.
+ */
+export async function listEmployerSubsidiaryOptions(
+  query: EmployerSubsidiaryOptionsQuery,
+): Promise<readonly EmployerSubsidiaryOptionDTO[]> {
+  const orgId = requireId(query.orgId, "orgId");
+  return withOrgTransaction(orgId, async () => {
+    await assertHrmFeatureOn(db, orgId);
+    return loadEmployerSubsidiaryOptions(db, query);
+  });
+}
+
 export interface LocationOptionsQuery {
   readonly orgId: string;
   readonly actorId: string;

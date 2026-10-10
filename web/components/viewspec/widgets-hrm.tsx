@@ -130,6 +130,9 @@ export const HRM_WIDGETS = {
       emptyLabel={str(props, 'emptyLabel') ?? ''}
       requestFailed={str(props, 'requestFailed') ?? ''}
       closeHref={str(props, 'closeHref') ?? '/hrm/change-requests'}
+      hireMode={props.hireMode === true}
+      hireHref={str(props, 'hireHref')}
+      hireLinkLabel={str(props, 'hireLinkLabel')}
     />
   ),
   'hrm-pending-requests': (props) => (

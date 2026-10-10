@@ -143,6 +143,7 @@
     "actions": {
       "title": "Schnellaktionen",
       "newEmployee": "Neuer Mitarbeiter",
+      "hireEmployee": "Mitarbeiter einstellen",
       "proposeChange": "Änderung beantragen",
       "manageDepartments": "Abteilungen verwalten",
       "openReports": "Berichte öffnen"
@@ -192,6 +193,7 @@
     "proposeEmploymentLabel": "Beschäftigung",
     "proposeEmploymentPlaceholder": "Beschäftigungen suchen…",
     "proposeEmpty": "Keine Beschäftigung passt.",
+    "proposeHireLink": "Stattdessen jemanden ohne Beschäftigung einstellen",
     "proposeFailed": "Die Beschäftigungsliste konnte nicht geladen werden.",
     "draftBadge": "Aktionen",
     "openEmployee": "Personalakte öffnen",
@@ -250,7 +252,25 @@
     },
     "noRecord": {
       "title": "Kein Beschäftigungsdatensatz",
-      "description": "Für diese Person ist noch kein Beschäftigungsdatensatz vorhanden. Beschäftigungsdatensätze werden über den HRM-Erfassungsprozess angelegt."
+      "description": "Für diese Person ist noch kein Beschäftigungsdatensatz vorhanden. Erfassen Sie die erste Beschäftigung mit Einstellen — Kopfzahl, Urlaub und Lohnabrechnung knüpfen ab dann daran an."
+    },
+    "hire": {
+      "title": "Mitarbeiter einstellen",
+      "description": "Erfassen Sie die erste Beschäftigung dieser Person: die beschäftigende juristische Einheit und den ersten effektiven Tag. Die Einstellung läuft über den gesteuerten Änderungsantragsprozess: Ein konfigurierter Genehmigungsablauf entscheidet, ein Ablauf mit dem Ergebnis „direkt anwenden“ wendet sie sofort an.",
+      "button": "Einstellen",
+      "submit": "Einstellung erfassen",
+      "personLabel": "Person",
+      "personPlaceholder": "Personen ohne Beschäftigung suchen…",
+      "personEmpty": "Niemand wartet auf eine erste Beschäftigung — jede aktive Mitarbeiterpartei hat bereits einen Beschäftigungsdatensatz.",
+      "personFailed": "Die Liste einstellbarer Personen konnte nicht geladen werden.",
+      "personRequired": "Wählen Sie die Person, für die diese Einstellung gilt.",
+      "employerLabel": "Beschäftigende juristische Einheit",
+      "employerPlaceholder": "Juristische Einheiten suchen…",
+      "employerFailed": "Die Liste der juristischen Einheiten konnte nicht geladen werden.",
+      "employerRequired": "Wählen Sie die beschäftigende juristische Einheit — eine Beschäftigung nennt immer ihren Arbeitgeber.",
+      "employerHint": "Beschäftigung, Kopfzahl und Lohnabrechnung lesen alle diese Einheit.",
+      "statusLabel": "Status",
+      "startLabel": "Effektiver Beginn"
     },
     "multiple": {
       "title": "Mehr als ein Beschäftigungsdatensatz",
@@ -1529,7 +1549,7 @@
       "notAvailable": "keine Angabe",
       "employmentsTitle": "Meine Anstellung",
       "employmentsEmpty": "Kein Arbeitsverhältnis",
-      "employmentsEmptyDescription": "Die Personalabteilung hat für Ihre Person noch keine Anstellung erfasst.",
+      "employmentsEmptyDescription": "Die Personalabteilung hat für Ihre Person noch keine Anstellung erfasst — bitten Sie Ihre Personalabteilung, Ihre Einstellung über die HRM-Aktion Einstellen zu erfassen.",
       "employer": "Arbeitgeber",
       "jobTitle": "Titel",
       "department": "Abteilung",

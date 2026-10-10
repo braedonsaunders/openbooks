@@ -98,6 +98,16 @@ const mockSources = new Map<string, string>([
         if (state.serviceThrow) throw state.serviceThrow
         return [{ partyId: 'party-1', label: 'Alice Holder' }]
       }
+      export async function listHireablePeopleOptions(args) {
+        state.calls.push({ fn: 'hireable-people', args })
+        if (state.serviceThrow) throw state.serviceThrow
+        return [{ partyId: 'party-9', label: 'No Employment Yet' }]
+      }
+      export async function listEmployerSubsidiaryOptions(args) {
+        state.calls.push({ fn: 'employer-subsidiaries', args })
+        if (state.serviceThrow) throw state.serviceThrow
+        return [{ subsidiaryId: 'sub-1', label: 'Main Co' }]
+      }
     `,
   ],
   [
@@ -331,6 +341,38 @@ test("people forwards the pin under its own key for the exit-interviewer picker"
     {
       fn: "people",
       args: { orgId: "org-1", actorId: "user-1", q: undefined, includePartyId: include },
+    },
+  ]);
+});
+
+test("hireable-people forwards the pin under its own key for the Hire person picker", async () => {
+  reset();
+  const include = "00000000-0000-4000-8000-000000000039";
+  const response = await optionsRoute!.GET(getRequest(`?source=hireable-people&include=${include}`));
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), {
+    options: [{ partyId: "party-9", label: "No Employment Yet" }],
+  });
+  assert.deepEqual(routeState.calls, [
+    {
+      fn: "hireable-people",
+      args: { orgId: "org-1", actorId: "user-1", q: undefined, includePartyId: include },
+    },
+  ]);
+});
+
+test("employer-subsidiaries forwards the pin under its own key for the Hire employer picker", async () => {
+  reset();
+  const include = "00000000-0000-4000-8000-000000000041";
+  const response = await optionsRoute!.GET(getRequest(`?source=employer-subsidiaries&include=${include}`));
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), {
+    options: [{ subsidiaryId: "sub-1", label: "Main Co" }],
+  });
+  assert.deepEqual(routeState.calls, [
+    {
+      fn: "employer-subsidiaries",
+      args: { orgId: "org-1", actorId: "user-1", q: undefined, includeSubsidiaryId: include },
     },
   ]);
 });

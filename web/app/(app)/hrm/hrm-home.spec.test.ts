@@ -161,6 +161,7 @@ function fixture(overrides: Partial<HrmHomeData> = {}): HrmHomeData {
     canCreateProcess: true,
     newEmployee: { basePath: "/entities/employees", role: "employee", label: "New employee" },
     newProcessLabel: "New process",
+    hireLabel: "Hire employee",
     onboarding: { ...ONBOARDING },
     onboardingHasActivity: true,
     leaveHasActivity: true,

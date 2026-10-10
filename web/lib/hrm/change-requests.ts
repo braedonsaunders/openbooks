@@ -137,6 +137,11 @@ export interface ChangeRequestQueueData {
   proposeButton: string
   proposeHref: string
   proposeOpen: boolean
+  /** First-employment mode of the propose dialog (?propose=1&hire=1): the
+   * employment picker gives way to the Hire drawer. */
+  hireMode: boolean
+  hireHref: string
+  hireLinkLabel: string
   /** Shared return href for the propose and request-detail dialogs: the
    * queue route with the active segment, every dialog param navigated
    * away. */
@@ -309,10 +314,11 @@ type Catalog = {
 }
 
 /** Header/dialog hrefs preserve the active status segment; the dialog closes by navigating the param away. */
-function queueHref(status: string | undefined, propose: boolean): string {
+function queueHref(status: string | undefined, propose: boolean, hire = false): string {
   const params = new URLSearchParams()
   if (status) params.set('status', status)
   if (propose) params.set('propose', '1')
+  if (hire) params.set('hire', '1')
   const query = params.toString()
   return query ? `/hrm/change-requests?${query}` : '/hrm/change-requests'
 }
@@ -407,6 +413,9 @@ export async function loadChangeRequestQueue(
     proposeButton: t('queue.proposeButton'),
     proposeHref: queueHref(typeof sp.status === 'string' ? sp.status : undefined, true),
     proposeOpen: sp.propose === '1',
+    hireMode: sp.hire === '1',
+    hireHref: queueHref(typeof sp.status === 'string' ? sp.status : undefined, true, true),
+    hireLinkLabel: t('queue.proposeHireLink'),
     proposeEmploymentLabel: t('queue.proposeEmploymentLabel'),
     proposeEmploymentPlaceholder: t('queue.proposeEmploymentPlaceholder'),
     proposeEmpty: t('queue.proposeEmpty'),

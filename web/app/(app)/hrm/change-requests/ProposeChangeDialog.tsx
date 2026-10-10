@@ -6,14 +6,18 @@ import { useTranslations } from 'next-intl'
 import { Button, SearchSelect } from '@openbooks/ui'
 import { readApiErrorMessage } from '../../../../lib/api-error'
 import { ChangeRequestDrawer } from '../ChangeRequestDrawer'
+import { HireEmploymentDrawer } from '../HireEmploymentDrawer'
 
 /**
  * Propose-entry point for the change-request queue, opened from the page
  * header through the `propose` search param: pick the employment first (the
  * drawer itself is per-employment), then hand off to the existing authoring
- * drawer. Options ride the existing HRM options route with its refusals.
- * Closing navigates the param away, which re-runs the server that owns the
- * open state. res.ok is checked before any body is parsed.
+ * drawer. Hire mode (`propose` plus `hire`) skips the employment picker —
+ * a first employment has no employment to pick — and hands off to the Hire
+ * drawer with its own hireable-person picker instead. Options ride the
+ * existing HRM options route with its refusals. Closing navigates the param
+ * away, which re-runs the server that owns the open state. res.ok is
+ * checked before any body is parsed.
  */
 
 export function ProposeChangeDialog({
@@ -23,6 +27,9 @@ export function ProposeChangeDialog({
   emptyLabel,
   requestFailed,
   closeHref,
+  hireMode = false,
+  hireHref,
+  hireLinkLabel,
 }: {
   departmentOptions: { value: string; label: string }[]
   employmentLabel: string
@@ -30,6 +37,11 @@ export function ProposeChangeDialog({
   emptyLabel: string
   requestFailed: string
   closeHref: string
+  /** First-employment mode: no employment picker, the Hire drawer instead. */
+  hireMode?: boolean
+  /** Where the "hire someone without an employment" link navigates. */
+  hireHref?: string
+  hireLinkLabel?: string
 }) {
   const tCommon = useTranslations('common')
   const router = useRouter()
@@ -45,6 +57,8 @@ export function ProposeChangeDialog({
   }
 
   useEffect(() => {
+    // Hire mode never picks an employment — no employment fetch.
+    if (hireMode) return
     const id = (requestId.current += 1)
     const params = new URLSearchParams()
     params.set('source', 'employments')
@@ -82,7 +96,21 @@ export function ProposeChangeDialog({
         setStatus(requestFailed)
         setLoading(false)
       })
-  }, [query, employmentId, requestFailed])
+  }, [query, employmentId, requestFailed, hireMode])
+
+  // Hire mode never picks an employment: the Hire drawer's own person
+  // picker names someone with no employment record at all.
+  if (hireMode) {
+    return (
+      <HireEmploymentDrawer
+        onClose={close}
+        onSaved={() => {
+          router.refresh()
+          close()
+        }}
+      />
+    )
+  }
 
   if (employmentId) {
     return (
@@ -125,6 +153,13 @@ export function ProposeChangeDialog({
           <p role="alert" className="text-sm text-red-600 dark:text-red-400">
             {status}
           </p>
+        ) : null}
+        {hireHref && hireLinkLabel ? (
+          <div className="flex justify-start">
+            <Button variant="ghost" onClick={() => router.push(hireHref as never)}>
+              {hireLinkLabel}
+            </Button>
+          </div>
         ) : null}
         <div className="flex justify-end gap-2">
           <Button variant="outline" onClick={close}>

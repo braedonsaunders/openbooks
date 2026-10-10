@@ -143,6 +143,7 @@
     "actions": {
       "title": "快捷操作",
       "newEmployee": "新增员工",
+      "hireEmployee": "聘用员工",
       "proposeChange": "提议变更",
       "manageDepartments": "管理部门",
       "openReports": "打开报表"
@@ -192,6 +193,7 @@
     "proposeEmploymentLabel": "雇佣",
     "proposeEmploymentPlaceholder": "搜索雇佣关系…",
     "proposeEmpty": "没有匹配的雇佣关系。",
+    "proposeHireLink": "改为聘用没有雇用记录的人员",
     "proposeFailed": "雇佣列表加载失败。",
     "draftBadge": "操作",
     "openEmployee": "打开员工档案",
@@ -250,7 +252,25 @@
     },
     "noRecord": {
       "title": "没有雇用记录",
-      "description": "此人尚无雇用记录。雇用记录通过人力资源编制流程创建。"
+      "description": "此人尚无雇用记录。请使用「聘用」记录首次雇用 — 记录存在后，人头数、休假和薪酬即可关联。"
+    },
+    "hire": {
+      "title": "聘用员工",
+      "description": "记录此人的首次雇用：雇用法人实体和首次生效日期。聘用通过受管控的变更申请服务办理：配置了审批流程的走审批，配置了直接生效结果的流程会立即生效。",
+      "button": "聘用",
+      "submit": "记录聘用",
+      "personLabel": "人员",
+      "personPlaceholder": "搜索没有雇用记录的人员…",
+      "personEmpty": "没有人等待首次雇用 — 每个在职员工方都已有雇用记录。",
+      "personFailed": "无法加载可聘用人员列表。",
+      "personRequired": "请选择本次聘用记录的人员。",
+      "employerLabel": "雇用法人实体",
+      "employerPlaceholder": "搜索法人实体…",
+      "employerFailed": "无法加载法人实体列表。",
+      "employerRequired": "请选择雇用法人实体 — 雇用必须指明雇主。",
+      "employerHint": "雇用、人头数和薪酬都读取该实体。",
+      "statusLabel": "状态",
+      "startLabel": "生效开始日期"
     },
     "multiple": {
       "title": "存在多条雇用记录",
@@ -1529,7 +1549,7 @@
       "notAvailable": "暂无",
       "employmentsTitle": "我的雇佣",
       "employmentsEmpty": "暂无雇佣记录",
-      "employmentsEmptyDescription": "人事部尚未为您登记雇佣记录。",
+      "employmentsEmptyDescription": "人事部尚未为您登记雇佣记录 — 请让人事管理员使用人力资源「聘用」操作记录您的聘用。",
       "employer": "雇主",
       "jobTitle": "职位",
       "department": "部门",

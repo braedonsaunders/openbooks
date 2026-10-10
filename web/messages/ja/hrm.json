@@ -143,6 +143,7 @@
     "actions": {
       "title": "クイックアクション",
       "newEmployee": "新規従業員",
+      "hireEmployee": "従業員を採用",
       "proposeChange": "変更を提案",
       "manageDepartments": "部門を管理",
       "openReports": "レポートを開く"
@@ -192,6 +193,7 @@
     "proposeEmploymentLabel": "雇用",
     "proposeEmploymentPlaceholder": "雇用を検索…",
     "proposeEmpty": "一致する雇用がありません。",
+    "proposeHireLink": "雇用がない人物を代わりに採用する",
     "proposeFailed": "雇用リストを読み込めませんでした。",
     "draftBadge": "操作",
     "openEmployee": "従業員レコードを開く",
@@ -250,7 +252,25 @@
     },
     "noRecord": {
       "title": "雇用記録なし",
-      "description": "この人物にはまだ雇用記録がありません。雇用記録はHRMの作成フローで作成されます。"
+      "description": "この人物にはまだ雇用記録がありません。「採用」で最初の雇用を記録してください。記録後は人員数・休暇・給与が紐付きます。"
+    },
+    "hire": {
+      "title": "従業員を採用",
+      "description": "この人物の最初の雇用を記録します:雇用する法人と最初の有効日。採用はガバナンス化された変更要求サービスを経由します:設定された承認フローが判断し、直接適用アウトカムのフローでは即時に適用されます。",
+      "button": "採用",
+      "submit": "採用を記録",
+      "personLabel": "人物",
+      "personPlaceholder": "雇用されていない人物を検索…",
+      "personEmpty": "最初の雇用を待っている人はいません — 有効な従業員パーティはすべて雇用記録を持っています。",
+      "personFailed": "採用可能な人物の一覧を読み込めませんでした。",
+      "personRequired": "この採用が記録する人物を選択してください。",
+      "employerLabel": "雇用法人",
+      "employerPlaceholder": "法人を検索…",
+      "employerFailed": "法人の一覧を読み込めませんでした。",
+      "employerRequired": "雇用する法人を選択してください — 雇用には必ず雇用主を指定します。",
+      "employerHint": "雇用・人員数・給与はいずれもこの法人を参照します。",
+      "statusLabel": "ステータス",
+      "startLabel": "有効開始日"
     },
     "multiple": {
       "title": "複数の雇用記録",
@@ -1529,7 +1549,7 @@
       "notAvailable": "未設定",
       "employmentsTitle": "私の雇用",
       "employmentsEmpty": "雇用記録がありません",
-      "employmentsEmptyDescription": "人事部があなたの雇用をまだ登録していません。",
+      "employmentsEmptyDescription": "人事部があなたの雇用をまだ登録していません — HRMの「採用」アクションで採用を記録するよう人事管理者に依頼してください。",
       "employer": "雇用主",
       "jobTitle": "職名",
       "department": "部門",
