@@ -120,3 +120,22 @@ test('performance managers see their configuration without unrelated setup desti
   const denied = hrefs(renderNav({ ...BASE_PROPS, canManageSetup: false }))
   assert.equal(denied.length, 0, 'domain entries require their own grants')
 })
+
+
+test('Work and production keeps Manufacturing setup out of Company and follows native gates', () => {
+  const on = renderNav({ ...BASE_PROPS, manufacturingEnabled: true });
+  const beforeWork = on.slice(0, on.indexOf('Work &amp; production'));
+  assert.equal(hrefs(on).filter(href => href === '/admin/setup/manufacturing').length, 1);
+  assert.ok(!hrefs(beforeWork).includes('/admin/setup/manufacturing'));
+  for (const href of ['/admin/setup/project-types', '/admin/setup/labor-costing', '/admin/setup/labor-pricing', '/admin/setup/overhead']) {
+    assert.ok(hrefs(on).includes(href), href);
+  }
+  const productionOnly = renderNav({ ...BASE_PROPS, projectsEnabled: false, manufacturingEnabled: true });
+  assert.ok(productionOnly.includes('Work &amp; production'));
+  assert.ok(hrefs(productionOnly).includes('/admin/setup/manufacturing'));
+  assert.ok(!hrefs(productionOnly).includes('/admin/setup/project-types'));
+  const off = renderNav({ ...BASE_PROPS, projectsEnabled: false, manufacturingEnabled: false });
+  assert.ok(!hrefs(off).includes('/admin/setup/manufacturing'));
+  const denied = renderNav({ ...BASE_PROPS, canManageSetup: false, manufacturingEnabled: true });
+  assert.ok(!hrefs(denied).includes('/admin/setup/manufacturing'));
+});
