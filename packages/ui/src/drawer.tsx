@@ -7,6 +7,7 @@ import { useTranslations } from 'next-intl'
 import { useHydrated } from './use-hydrated'
 import { nextDrawerShow, shouldCommitDrawerCloseNavigation } from './drawer-nav'
 import { OverlayExit } from './overlay-exit'
+import { usePopoverRetention } from './popover'
 import { DrawerSubtabSlotContext, DrawerViewSwitchContext, drawerViewSwitchType, ViewTransition } from './view-transition'
 import { cn } from './utils'
 
@@ -135,9 +136,29 @@ export function Drawer({
   const mounted = useHydrated()
   const parentDepth = React.useContext(DrawerDepthContext)
   const depth = stacked ? Math.max(1, parentDepth + 1) : 0
+  // A drawer that is playing its exit no longer covers this one: Escape and
+  // the focus trap belong to the topmost drawer that is still open.
   const hasDeeperDrawer = React.useCallback(() =>
-    Array.from(document.querySelectorAll<HTMLElement>('[data-drawer-depth]'))
+    Array.from(document.querySelectorAll<HTMLElement>('[data-drawer-depth]:not([data-overlay-exiting])'))
       .some(node => Number(node.dataset.drawerDepth) > depth), [depth])
+
+  // A drawer opened from a popover's menu keeps that popover's content (and
+  // so this drawer) mounted until the drawer has finished closing.
+  const popoverRetention = usePopoverRetention()
+  const releaseRetentionRef = React.useRef<(() => void) | null>(null)
+  React.useEffect(() => {
+    if (!open || !popoverRetention || releaseRetentionRef.current) return
+    releaseRetentionRef.current = popoverRetention.retain()
+  }, [open, popoverRetention])
+  React.useEffect(() => () => {
+    releaseRetentionRef.current?.()
+    releaseRetentionRef.current = null
+  }, [])
+  const handleExitComplete = React.useCallback(() => {
+    releaseRetentionRef.current?.()
+    releaseRetentionRef.current = null
+    onExitComplete?.()
+  }, [onExitComplete])
 
   // The dialog's accessible name is its own heading: aria-labelledby points at
   // the h2 below. A drawer opened without usable title text never ships as an
@@ -167,7 +188,9 @@ export function Drawer({
     if (!open) return
     function onKey(e: KeyboardEvent) {
       if (e.key !== 'Escape') return
-      if (document.querySelector('[data-ui-overlay]')) return
+      // An open menu or picker takes this Escape; one that is already closing
+      // does not, so a lingering exit never strands the drawer open.
+      if (document.querySelector('[data-ui-overlay]:not([data-overlay-exiting])')) return
       if (hasDeeperDrawer()) return
       onClose()
     }
@@ -253,7 +276,7 @@ export function Drawer({
   return createPortal(
     <DrawerDepthContext.Provider value={depth}>
     <DrawerViewSwitchContext.Provider value={viewSwitchType}>
-    <AnimatePresence onExitComplete={onExitComplete}>
+    <AnimatePresence onExitComplete={handleExitComplete}>
       {mounted && open ? (
         <OverlayExit key="drawer">
         {(exiting) => (
@@ -270,6 +293,9 @@ export function Drawer({
             // device safe-area inset used by AppShell on mobile.
             'fixed inset-x-0 bottom-0 [top:calc(3.5rem+env(safe-area-inset-top))]',
             stacked ? 'z-[55]' : 'z-50',
+            // A closing drawer stops taking the pointer at once, so the page
+            // or the drawer beneath answers the next click during the slide.
+            exiting && 'pointer-events-none',
           )}
         >
           <motion.div
