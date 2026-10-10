@@ -105,8 +105,19 @@
       "cancelFailed": "Não foi possível cancelar o saldo.",
       "cancelled": "Saldo da linha {line} cancelado"
     },
-    "receiveAllConfirmTitle": "Receber tudo o que ainda está em aberto?",
-    "receiveAllConfirmMessage": "Isso lança um recebimento de mercadorias para todas as quantidades restantes deste pedido, com a data de hoje, no depósito de cada linha. Ele não pode ser editado após o lançamento.",
-    "receiveAllConfirmLabel": "Receber e lançar"
+    "receive": {
+      "title": "Receber mercadorias",
+      "receiptDate": "Data de recebimento",
+      "receiveQty": "Qtd. a receber",
+      "remaining": "restam {remaining}",
+      "noLines": "Não resta nada a receber neste pedido.",
+      "prefillFailed": "Não foi possível carregar o rascunho de recebimento.",
+      "receiptFailed": "Não foi possível registrar o recebimento de mercadorias.",
+      "overReceive": "Linha {line}: {qty} excede os {remaining} restantes para receber.",
+      "invalidDate": "Informe a data de recebimento como AAAA-MM-DD."
+    },
+    "restoreDraftTitle": "Alterações não salvas encontradas",
+    "restoreDraftPrompt": "Restaurar as alterações não salvas de {time}?",
+    "restoreDraftConfirm": "Restaurar alterações"
   }
 }

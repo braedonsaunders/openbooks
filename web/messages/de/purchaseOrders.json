@@ -105,8 +105,19 @@
       "cancelFailed": "Die Restmenge konnte nicht storniert werden.",
       "cancelled": "Restmenge von Zeile {line} storniert"
     },
-    "receiveAllConfirmTitle": "Alles Offene empfangen?",
-    "receiveAllConfirmMessage": "Damit wird ein Wareneingang für alle offenen Mengen dieser Bestellung mit dem heutigen Datum im Lager jeder Position gebucht. Nach dem Buchen kann er nicht mehr bearbeitet werden.",
-    "receiveAllConfirmLabel": "Empfangen und buchen"
+    "receive": {
+      "title": "Waren erhalten",
+      "receiptDate": "Eingangsdatum",
+      "receiveQty": "Eingangsmenge",
+      "remaining": "{remaining} offen",
+      "noLines": "Diese Bestellung ist vollständig erhalten.",
+      "prefillFailed": "Der Wareneingangsentwurf konnte nicht geladen werden.",
+      "receiptFailed": "Der Wareneingang konnte nicht gebucht werden.",
+      "overReceive": "Zeile {line}: {qty} übersteigt die verbleibenden {remaining}.",
+      "invalidDate": "Geben Sie das Eingangsdatum als JJJJ-MM-TT ein."
+    },
+    "restoreDraftTitle": "Ungespeicherte Änderungen gefunden",
+    "restoreDraftPrompt": "Ungespeicherte Änderungen von {time} wiederherstellen?",
+    "restoreDraftConfirm": "Änderungen wiederherstellen"
   }
 }

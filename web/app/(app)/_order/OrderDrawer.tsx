@@ -4,7 +4,7 @@ import { CLEAR_SEGMENT, INHERIT_SEGMENT, segmentCellValue, segmentAssignmentsFro
 
 import { useMoney } from '@/components/money-provider'
 import { initialDrawerMode, type DrawerMode } from '@/lib/drawer-mode'
-import { useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
@@ -28,6 +28,7 @@ import { promptDialog } from '../../../lib/prompt'
 import { FlowManualButtons } from '../../../components/flow-manual-buttons'
 import { ApprovalActions } from '../../../components/approval-actions'
 import { AssignWarehousePanel } from './AssignWarehousePanel'
+import { GoodsReceiptForm } from './GoodsReceiptForm'
 import { ApprovalHistory } from '../../../components/approval-history'
 import { DropShipAssessmentButton } from './DropShipAssessmentButton'
 import { OrderBackorders } from './OrderBackorders'
@@ -258,6 +259,75 @@ export async function issueSavedOrder({
   return true
 }
 
+/**
+ * Unsaved order-draft retention. A failed save (or a stalled one that hits
+ * the save timeout) keeps the form state with the refusal pinned; the draft
+ * itself is also retained in the tab's sessionStorage so navigating away
+ * loses nothing. The key scopes by organization, order kind, and record
+ * ('new' for unsaved-create). Restoring only fills the form — saving stays
+ * explicit, and a successful save or an explicit discard clears the key.
+ */
+const ORDER_DRAFT_VERSION = 1
+/** A save that stalls longer than this fails into the refusal path (state
+ *  kept, Retry offered) instead of hanging the drawer on 'saving' forever. */
+const ORDER_SAVE_TIMEOUT_MS = 60_000
+interface OrderDraftSnapshot {
+  version: 1
+  savedAt: string
+  header: {
+    partyId: string
+    documentDate: string
+    dueDate: string
+    workCompletedOn: string
+    memo: string
+    departmentId: string
+    projectId: string
+    subsidiaryId: string
+    extraDims: Record<string, string | null>
+  }
+  rows: LineRow[]
+}
+function orderDraftKey(orgId: string, kind: OrderKind, recordId: string): string {
+  return `openbooks:order-draft:${orgId}:${kind}:${recordId}`
+}
+/** Tab-local storage for retained drafts (null on the server or when disabled). */
+function draftStorage(): Storage | null {
+  try {
+    if (typeof window !== 'undefined' && window.sessionStorage) return window.sessionStorage
+    if (typeof sessionStorage !== 'undefined') return sessionStorage
+  } catch {
+    return null
+  }
+  return null
+}
+function readOrderDraft(key: string): OrderDraftSnapshot | null {
+  try {
+    const raw = draftStorage()?.getItem(key)
+    if (!raw) return null
+    const parsed = JSON.parse(raw) as Partial<OrderDraftSnapshot>
+    if (parsed?.version !== ORDER_DRAFT_VERSION || typeof parsed.savedAt !== 'string') return null
+    if (!parsed.header || !Array.isArray(parsed.rows)) return null
+    return parsed as OrderDraftSnapshot
+  } catch {
+    return null
+  }
+}
+function writeOrderDraft(key: string, snapshot: OrderDraftSnapshot): void {
+  try {
+    draftStorage()?.setItem(key, JSON.stringify(snapshot))
+  } catch {
+    // Retention is best-effort (private-mode quota, disabled storage): the
+    // save path itself is unaffected.
+  }
+}
+function clearOrderDraft(key: string): void {
+  try {
+    draftStorage()?.removeItem(key)
+  } catch {
+    // Best-effort, as above.
+  }
+}
+
 const STATUS_VARIANT: Record<string, 'default' | 'success' | 'secondary' | 'warning' | 'outline'> = {
   approved: 'success',
   pending_approval: 'warning',
@@ -476,6 +546,7 @@ export function OrderDrawer({
   layout,
   createMode = false,
   closeHref,
+  orgId,
   backorders = false,
   pickLists = false,
   returnAuthorizations = false,
@@ -531,6 +602,12 @@ export function OrderDrawer({
   createMode?: boolean
   /** List URL (filters preserved) that Cancel and the close affordance return to. */
   closeHref?: string
+  /**
+   * Calling organization for unsaved-draft retention (sessionStorage is
+   * keyed by org + kind + record). Absent means no retention: the drawer
+   * still saves explicitly, it just cannot offer a restore on reopen.
+   */
+  orgId?: string
   /** Show the Backorders tab: the page resolved Fulfillment on and the
    *  fulfil-orders permission. The tab's route enforces both again. */
   backorders?: boolean
@@ -632,6 +709,11 @@ export function OrderDrawer({
   })
   const [totals, setTotals] = useState({ subtotal: doc.subtotal, taxTotal: doc.tax_total, total: doc.total })
   const [saveState, setSaveState] = useState<'saved' | 'saving' | 'dirty' | 'error'>('saved')
+  // Goods-receipt draft: "Convert to Goods receipt" opens the prefilled form
+  // instead of receiving the full remainder blindly; the receipt posts only
+  // on the form's explicit Save through the native receive path.
+  const [receiveOpen, setReceiveOpen] = useState(false)
+  // Unsaved-draft retention state lives below, next to the dirty tracker.
   const [dropShipRoutes, setDropShipRoutes] = useState<DropShipRoute[]>(dropShipLines)
   const [dropShipVendorId, setDropShipVendorId] = useState('')
 
@@ -923,6 +1005,70 @@ export function OrderDrawer({
     setPrevPayload(payload)
     if (editable) setDirty(true)
   }
+  // Unsaved-draft retention key: org + kind + record ('new' for create).
+  // Without the calling org there is no retention — saving stays explicit.
+  const draftKey = orgId ? orderDraftKey(orgId, kind, createMode ? 'new' : String(doc.id ?? '')) : null
+  const restoreOfferedRef = useRef(false)
+  async function maybeOfferDraftRestore() {
+    if (!draftKey || restoreOfferedRef.current) return
+    restoreOfferedRef.current = true
+    const snapshot = readOrderDraft(draftKey)
+    if (!snapshot) return
+    const restore = await confirmDialog({
+      title: t('restoreDraftTitle'),
+      message: t('restoreDraftPrompt', { time: new Date(snapshot.savedAt).toLocaleString() }),
+      confirmLabel: t('restoreDraftConfirm'),
+    })
+    if (!restore) {
+      // Declining discards the retained draft; the pristine form is untouched.
+      clearOrderDraft(draftKey)
+      return
+    }
+    setPartyId(snapshot.header.partyId)
+    setDocumentDate(snapshot.header.documentDate)
+    setDueDate(snapshot.header.dueDate)
+    setWorkCompletedOn(snapshot.header.workCompletedOn)
+    setMemo(snapshot.header.memo)
+    setDepartmentId(snapshot.header.departmentId)
+    setProjectId(snapshot.header.projectId)
+    setSubsidiaryId(snapshot.header.subsidiaryId)
+    setExtraDims(snapshot.header.extraDims ?? {})
+    // Normalize stored rows over a blank row: storage predates code, so a
+    // missing field must fall back instead of crashing the grid below.
+    const blank = emptyLine(segments)
+    const restored = snapshot.rows
+      .filter((row) => row !== null && typeof row === 'object')
+      .map((row) => ({ ...blank, ...(row as Record<string, unknown>) }))
+    setRows((restored.length > 0 ? restored : [{ ...blank }]) as LineRow[])
+    setDirty(true)
+  }
+  // Retain unsaved create/edit state locally on every dirty change, so a
+  // failed save, a stall, or navigating away loses nothing. Restoring only
+  // fills the form — it never submits.
+  useEffect(() => {
+    if (!draftKey || !(createMode || mode === 'edit') || !dirty) return
+    writeOrderDraft(draftKey, {
+      version: ORDER_DRAFT_VERSION,
+      savedAt: new Date().toISOString(),
+      header: {
+        partyId,
+        documentDate,
+        dueDate,
+        workCompletedOn,
+        memo,
+        departmentId,
+        projectId,
+        subsidiaryId,
+        extraDims,
+      },
+      rows,
+    })
+  }, [draftKey, createMode, mode, dirty, partyId, documentDate, dueDate, workCompletedOn, memo, departmentId, projectId, subsidiaryId, extraDims, rows])
+  useEffect(() => {
+    // Mount-only: reopening offers the retained draft once.
+    if (createMode || initialMode === 'edit') void maybeOfferDraftRestore()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
   // Latest committed payload identity for the in-flight-save guard below:
   // async price resolutions can still land while busy (user input is frozen,
   // but fetches are not), and those edits are not in the PATCH body. Written
@@ -1022,6 +1168,9 @@ export function OrderDrawer({
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...sent, lines: withPriceBasis(sentRows), expectedUpdatedAt: revisionRef.current }),
+        // A stalled save fails into the refusal path (state kept, Retry
+        // offered) instead of hanging the drawer on 'saving' forever.
+        signal: AbortSignal.timeout(ORDER_SAVE_TIMEOUT_MS),
       }),
       setState: setSaveState,
       // The callback-style helper cannot return its refusal into execute:
@@ -1053,6 +1202,11 @@ export function OrderDrawer({
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Idempotency-Key': createKey() },
         body: JSON.stringify({ ...payload, lines: withPriceBasis(sentRows) }),
+        // A stalled save fails into the refusal path (state kept, Retry
+        // offered) instead of hanging the drawer on 'saving' forever. The
+        // idempotency key survives the retry, so a save the server actually
+        // stored replays instead of creating a second record.
+        signal: AbortSignal.timeout(ORDER_SAVE_TIMEOUT_MS),
       }),
       setState: setSaveState,
       onError: (message) => refuse(message, t('actionFailed')),
@@ -1063,6 +1217,8 @@ export function OrderDrawer({
       refuse(undefined, t('actionFailed'))
       return null
     }
+    // A successful save retires the retained draft.
+    if (draftKey) clearOrderDraft(draftKey)
     return id
   }
 
@@ -1098,6 +1254,8 @@ export function OrderDrawer({
         // switching to view mode would show them as saved and lose them.
         return { ok: true as const, status: 200, data: null }
       }
+      // A successful save retires the retained draft.
+      if (draftKey) clearOrderDraft(draftKey)
       setMode('view')
       router.refresh()
       return { ok: true as const, status: 200, data: null }
@@ -1105,6 +1263,8 @@ export function OrderDrawer({
   }
 
   function cancel() {
+    // An explicit discard retires the retained draft with the form state.
+    if (draftKey) clearOrderDraft(draftKey)
     // Unsaved-create Cancel writes nothing: there is no row to reset to, so
     // leave by navigation instead of restoring form state.
     if (createMode) {
@@ -1304,6 +1464,40 @@ export function OrderDrawer({
     )
   }
 
+  async function submitReceipt(input: {
+    receiptDate: string
+    lines: { sourceLineId: string; quantity: string }[]
+    idempotencyKey: string
+  }): Promise<{ ok: true } | { ok: false; message: string }> {
+    // The outcome crosses the execute boundary through this cell: on failure
+    // execute pins (and toasts) the typed refusal — a warehouse refusal opens
+    // the assign panel — while the form stays open on its own state, so Save
+    // retries with the same idempotency key and replays instead of doubling.
+    let outcome: { ok: true } | { ok: false; message: string } = { ok: false, message: t('receive.receiptFailed') }
+    await execute<ConvertedDocument>(async () => {
+      const res = await fetch(`${apiBase}/${doc.id}/receive`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Idempotency-Key': input.idempotencyKey },
+        body: JSON.stringify({ receiptDate: input.receiptDate, lines: input.lines }),
+      })
+      const result = await readActionResult<ConvertedDocument>(res)
+      outcome = result.ok ? { ok: true } : { ok: false, message: result.error.displayMessage(t('receive.receiptFailed')) }
+      return result
+    }, {
+      fallbackMessage: t('receive.receiptFailed'),
+      onOk: (data) => {
+        if (!data || typeof data.id !== 'string' || !data.id) {
+          refuse(null, t('receive.receiptFailed'))
+          return
+        }
+        toast.success(t('convertCreated', { target: t('kinds.receipt'), number: data.documentNumber }))
+        router.push(targetHref(data.kind, data.id))
+        router.refresh()
+      },
+    })
+    return outcome
+  }
+
   async function remove() {
     if (
       !(await confirmDialog({
@@ -1325,6 +1519,8 @@ export function OrderDrawer({
         fallbackMessage: t('actionFailed'),
         successMessage: t('toastDeleted'),
         onOk: () => {
+          // The record is gone: its retained draft goes with it.
+          if (draftKey) clearOrderDraft(draftKey)
           router.push(meta.base)
           router.refresh()
         },
@@ -1337,18 +1533,8 @@ export function OrderDrawer({
     label: string,
     creditOverrideReason?: string,
   ) {
-    // A receipt posts immediately for every open quantity, dated today:
-    // the operator confirms exactly that before anything moves.
-    if (
-      targetKind === 'purchase_receipt'
-      && !(await confirmDialog({
-        title: t('receiveAllConfirmTitle'),
-        message: t('receiveAllConfirmMessage'),
-        confirmLabel: t('receiveAllConfirmLabel'),
-        tone: 'danger',
-      }))
-    )
-      return
+    // Goods receipts never post from here: "Convert to Goods receipt" opens
+    // the prefilled receipt form, which posts only on explicit save.
     await execute<ConvertedDocument | { creditOverrideNeeded: true }>(async () => {
       const res = await fetch(`${apiBase}/${doc.id}/convert`, {
         method: 'POST',
@@ -1657,7 +1843,15 @@ export function OrderDrawer({
       description={mode === 'edit' ? tCommon('feedback.editingHint') : (doc.party_name ?? undefined)}
       primaryAction={
         canManage && canEditStatus ? (
-          <Button variant="outline" size="sm" className="h-8 px-2.5 text-xs" disabled={busy} onClick={() => mode === 'edit' ? cancelWithConfirm() : setMode('edit')}>
+          <Button variant="outline" size="sm" className="h-8 px-2.5 text-xs" disabled={busy} onClick={() => {
+            if (mode === 'edit') {
+              void cancelWithConfirm()
+              return
+            }
+            setMode('edit')
+            // Entering edit mode reopens the retained draft when one waits.
+            void maybeOfferDraftRestore()
+          }}>
             {mode === 'edit' ? tCommon('actions.cancel') : tCommon('actions.edit')}
           </Button>
         ) : null
@@ -1682,7 +1876,11 @@ export function OrderDrawer({
                     key={target.kind}
                     disabled={busy || converted.full}
                     title={converted.full ? t('fullyConverted') : undefined}
-                    onClick={() => convert(target.kind, t(target.labelKey))}
+                    onClick={() =>
+                      kind === 'purchase_order' && target.kind === 'purchase_receipt'
+                        ? setReceiveOpen(true)
+                        : convert(target.kind, t(target.labelKey))
+                    }
                   >
                     {t('convertTo', { target: t(target.labelKey) })}
                   </Button>
@@ -1836,7 +2034,16 @@ export function OrderDrawer({
               ? saveState === 'saving'
                 ? tCommon('actions.saving')
                 : saveState === 'error'
-                  ? t('saveFailedRetry')
+                  ? (
+                    <button
+                      type="button"
+                      className="underline underline-offset-2"
+                      disabled={busy}
+                      onClick={() => void save()}
+                    >
+                      {t('saveFailedRetry')}
+                    </button>
+                  )
                   : dirty
                     ? t('unsavedChanges')
                     : null
@@ -1996,6 +2203,15 @@ export function OrderDrawer({
           />
         </div>
       </div>
+      {receiveOpen && kind === 'purchase_order' ? (
+        <GoodsReceiptForm
+          orderId={String(doc.id)}
+          apiBase={apiBase}
+          warehouses={stockLocations}
+          onSubmit={submitReceipt}
+          onClose={() => setReceiveOpen(false)}
+        />
+      ) : null}
     </TransactionDrawer>
   )
 }

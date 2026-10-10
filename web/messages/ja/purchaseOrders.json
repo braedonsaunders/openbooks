@@ -105,8 +105,19 @@
       "cancelFailed": "残数を取り消せませんでした。",
       "cancelled": "明細 {line} の残数を取り消しました"
     },
-    "receiveAllConfirmTitle": "未入荷分をすべて入荷しますか？",
-    "receiveAllConfirmMessage": "この注文の残りすべての数量について、本日付で各明細の倉庫に入荷を計上します。計上後は編集できません。",
-    "receiveAllConfirmLabel": "入荷して計上"
+    "receive": {
+      "title": "入荷登録",
+      "receiptDate": "入荷日",
+      "receiveQty": "入荷数量",
+      "remaining": "残り {remaining}",
+      "noLines": "この発注には入荷対象が残っていません。",
+      "prefillFailed": "入荷の下書きを読み込めませんでした。",
+      "receiptFailed": "入荷を記録できませんでした。",
+      "overReceive": "明細 {line}: {qty} は入荷残数 {remaining} を超えています。",
+      "invalidDate": "入荷日をYYYY-MM-DD形式で入力してください。"
+    },
+    "restoreDraftTitle": "未保存の変更があります",
+    "restoreDraftPrompt": "{time} の未保存の変更を復元しますか?",
+    "restoreDraftConfirm": "変更を復元"
   }
 }

@@ -105,8 +105,19 @@
       "cancelFailed": "The remainder could not be cancelled.",
       "cancelled": "Line {line} remainder cancelled"
     },
-    "receiveAllConfirmTitle": "Receive everything still open?",
-    "receiveAllConfirmMessage": "This posts a goods receipt for every remaining quantity on this order, dated today, into each line's warehouse. It cannot be edited after posting.",
-    "receiveAllConfirmLabel": "Receive and post"
+    "receive": {
+      "title": "Receive goods",
+      "receiptDate": "Receipt date",
+      "receiveQty": "Receive qty",
+      "remaining": "{remaining} remaining",
+      "noLines": "Nothing is left to receive on this order.",
+      "prefillFailed": "The receipt draft could not be loaded.",
+      "receiptFailed": "The goods receipt could not be recorded.",
+      "overReceive": "Line {line}: {qty} exceeds the {remaining} remaining to receive.",
+      "invalidDate": "Enter the receipt date as YYYY-MM-DD."
+    },
+    "restoreDraftTitle": "Unsaved changes found",
+    "restoreDraftPrompt": "Restore unsaved changes from {time}?",
+    "restoreDraftConfirm": "Restore changes"
   }
 }

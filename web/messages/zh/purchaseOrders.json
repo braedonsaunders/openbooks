@@ -105,8 +105,19 @@
       "cancelFailed": "无法取消剩余数量。",
       "cancelled": "已取消第 {line} 行的剩余数量"
     },
-    "receiveAllConfirmTitle": "接收所有未完成的数量？",
-    "receiveAllConfirmMessage": "这将按今天的日期，把本订单所有剩余数量的收货计入每行的仓库。过账后无法编辑。",
-    "receiveAllConfirmLabel": "接收并过账"
+    "receive": {
+      "title": "收货登记",
+      "receiptDate": "收货日期",
+      "receiveQty": "收货数量",
+      "remaining": "剩余 {remaining}",
+      "noLines": "此订单已无可收货项目。",
+      "prefillFailed": "无法加载收货草稿。",
+      "receiptFailed": "无法记录收货。",
+      "overReceive": "行 {line}：{qty} 超出剩余可收数量 {remaining}。",
+      "invalidDate": "请按YYYY-MM-DD格式输入收货日期。"
+    },
+    "restoreDraftTitle": "发现未保存更改",
+    "restoreDraftPrompt": "是否恢复来自 {time} 的未保存更改?",
+    "restoreDraftConfirm": "恢复更改"
   }
 }
