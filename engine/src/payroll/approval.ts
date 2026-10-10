@@ -8,9 +8,9 @@ type Executor = Pick<typeof db, "execute">;
 /**
  * Pay-run approval — payroll's segregation-of-duties control.
  *
- * Money must not move before the run is reviewed: the office manager checks
- * the payroll journal, one or two executives approve, and only then is the run
- * committed, posted, and its bank file released.
+ * The tenant's authored Flow determines whether approval is required and
+ * which decisions release the run. A tenant without an approval policy can
+ * operate payroll directly; configured gates protect commit and payment.
  *
  * There is NO payroll approval engine. Approval is the Flows engine's
  * on_submit gates over the `pay_run` document subject, exactly as for a vendor
