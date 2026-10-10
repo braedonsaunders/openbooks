@@ -722,10 +722,10 @@
       "perEntityNote": "Esta empresa é sua entidade de nível superior — nome jurídico, país e moeda ficam aqui. Adicione subsidiárias abaixo dela, cada uma com os seus.",
       "subsidiariesLink": "Abrir subsidiárias",
       "displayName": "Nome de exibição",
-      "displayNamePlaceholder": "Acme Manufacturing",
+      "displayNamePlaceholder": "Nome da sua empresa",
       "displayNameHint": "O nome da empresa exibido no OpenBooks. Não precisa ser igual à razão social registrada.",
       "legalName": "Razão social",
-      "legalNamePlaceholder": "Acme Manufacturing Inc.",
+      "legalNamePlaceholder": "Razão social registrada",
       "legalNameHint": "O nome registrado da empresa usado em registros, relatórios e documentos formais.",
       "country": "País",
       "countryPlaceholder": "Selecione um país…",
@@ -1087,7 +1087,9 @@
     "inviteCopyLink": "Copiar link",
     "inviteCopied": "Link copiado",
     "inviteCopyFailed": "Não foi possível copiar o link — selecione-o manualmente",
-    "inviteTooManyAttempts": "Convites demais — tente novamente mais tarde"
+    "inviteTooManyAttempts": "Convites demais — tente novamente mais tarde",
+    "inviteChooseRole": "Escolha uma função",
+    "inviteRoleRequired": "Escolha a função que esta pessoa terá."
   },
   "permissions": {
     "hrm_employment_read": "Ver registros de emprego",

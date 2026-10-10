@@ -720,10 +720,10 @@
       "title": "組織",
       "description": "この会社がアプリ全体でどのように識別されるか。",
       "displayName": "表示名",
-      "displayNamePlaceholder": "Acme Manufacturing",
+      "displayNamePlaceholder": "会社名",
       "displayNameHint": "OpenBooks 全体に表示される会社名です。登記上の正式名称と一致している必要はありません。",
       "legalName": "正式名称",
-      "legalNamePlaceholder": "Acme Manufacturing Inc.",
+      "legalNamePlaceholder": "登記上の正式名称",
       "legalNameHint": "正式な記録、レポート、文書に使用する会社の登記名称です。",
       "country": "国",
       "countryPlaceholder": "国を選択…",
@@ -1087,7 +1087,9 @@
     "inviteCopied": "リンクをコピーしました",
     "inviteCopyFailed": "リンクをコピーできませんでした — 手動で選択してください",
     "inviteTooManyAttempts": "招待が多すぎます — しばらくしてから試してください",
-    "unassignedRole": "ロール未割当"
+    "unassignedRole": "ロール未割当",
+    "inviteChooseRole": "ロールを選択",
+    "inviteRoleRequired": "この人に付与するロールを選択してください。"
   },
   "permissions": {
     "hrm_employment_read": "雇用記録の表示",

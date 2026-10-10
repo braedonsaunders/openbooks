@@ -720,10 +720,10 @@
       "title": "Organisation",
       "description": "Wie dieses Unternehmen in der gesamten App identifiziert wird.",
       "displayName": "Anzeigename",
-      "displayNamePlaceholder": "Acme Manufacturing",
+      "displayNamePlaceholder": "Name Ihres Unternehmens",
       "displayNameHint": "Der Firmenname, der in OpenBooks angezeigt wird. Er muss nicht dem eingetragenen rechtlichen Namen entsprechen.",
       "legalName": "Rechtlicher Name",
-      "legalNamePlaceholder": "Acme Manufacturing Inc.",
+      "legalNamePlaceholder": "Eingetragener Firmenname",
       "legalNameHint": "Der eingetragene Firmenname für formelle Aufzeichnungen, Berichte und Dokumente.",
       "country": "Land",
       "countryPlaceholder": "Land auswählen…",
@@ -1087,7 +1087,9 @@
     "inviteCopied": "Link kopiert",
     "inviteCopyFailed": "Link konnte nicht kopiert werden – bitte manuell auswählen",
     "inviteTooManyAttempts": "Zu viele Einladungen – versuchen Sie es später erneut",
-    "unassignedRole": "keine Rolle zugeordnet"
+    "unassignedRole": "keine Rolle zugeordnet",
+    "inviteChooseRole": "Rolle auswählen",
+    "inviteRoleRequired": "Wählen Sie die Rolle, die diese Person erhalten soll."
   },
   "permissions": {
     "hrm_employment_read": "Beschäftigungsdaten anzeigen",
