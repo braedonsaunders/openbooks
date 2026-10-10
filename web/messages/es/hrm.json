@@ -143,6 +143,7 @@
     "actions": {
       "title": "Acciones rápidas",
       "newEmployee": "Nuevo empleado",
+      "hireEmployee": "Contratar empleado",
       "proposeChange": "Proponer cambio",
       "manageDepartments": "Gestionar departamentos",
       "openReports": "Abrir informes"
@@ -192,6 +193,7 @@
     "proposeEmploymentLabel": "Empleo",
     "proposeEmploymentPlaceholder": "Buscar empleos…",
     "proposeEmpty": "Ningún empleo coincide.",
+    "proposeHireLink": "Contratar a alguien sin empleo en su lugar",
     "proposeFailed": "La lista de empleos no se pudo cargar.",
     "draftBadge": "Acciones",
     "openEmployee": "Abrir el registro del empleado",
@@ -250,7 +252,25 @@
     },
     "noRecord": {
       "title": "Sin registro de empleo",
-      "description": "Esta persona aún no tiene registro de empleo. Los registros de empleo se crean mediante el flujo de autoría de RR. HH."
+      "description": "Esta persona aún no tiene registro de empleo. Registre el primer empleo con Contratar — plantilla, vacaciones y nómina se vinculan una vez que existe."
+    },
+    "hire": {
+      "title": "Contratar empleado",
+      "description": "Registre el primer empleo de esta persona: la entidad jurídica empleadora y el primer día efectivo. La contratación se tramita mediante el servicio gobernado de solicitudes de cambio: un flujo de aprobación configurado la decide, y un flujo con el resultado de aplicación directa la aplica de inmediato.",
+      "button": "Contratar",
+      "submit": "Registrar contratación",
+      "personLabel": "Persona",
+      "personPlaceholder": "Buscar personas sin empleo…",
+      "personEmpty": "Nadie espera un primer empleo — cada parte empleada activa ya tiene registro de empleo.",
+      "personFailed": "No se pudo cargar la lista de personas contratables.",
+      "personRequired": "Elija la persona que registra esta contratación.",
+      "employerLabel": "Entidad jurídica empleadora",
+      "employerPlaceholder": "Buscar entidades jurídicas…",
+      "employerFailed": "No se pudo cargar la lista de entidades jurídicas.",
+      "employerRequired": "Elija la entidad jurídica empleadora — un empleo siempre nombra a su empleador.",
+      "employerHint": "El empleo, la plantilla y la nómina leen esta entidad.",
+      "statusLabel": "Estado",
+      "startLabel": "Inicio efectivo"
     },
     "multiple": {
       "title": "Más de un registro de empleo",
@@ -1529,7 +1549,7 @@
       "notAvailable": "no disponible",
       "employmentsTitle": "Mi empleo",
       "employmentsEmpty": "Sin registro de empleo",
-      "employmentsEmptyDescription": "Recursos Humanos aún no ha registrado un empleo para su persona.",
+      "employmentsEmptyDescription": "Recursos Humanos aún no ha registrado un empleo para su persona — pida a su administrador de RR. HH. que registre su contratación con la acción Contratar de RR. HH.",
       "employer": "Empleador",
       "jobTitle": "Puesto",
       "department": "Departamento",

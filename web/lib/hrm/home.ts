@@ -153,6 +153,9 @@ export interface HrmHomeData {
   canCreateProcess: boolean
   newEmployee: { basePath: string; role: 'employee'; label: string }
   newProcessLabel: string
+  /** The cockpit New menu's Hire entry — the first employment for a person
+   * with no employment record. Shares the propose-change grant. */
+  hireLabel: string
   /** Present exactly when the viewer holds hrm.process.read; otherwise the rail stays headcount-only. */
   onboarding: HrmOnboardingPanelData | null
   /** True while the module has anything to show. The cockpit quiets a
@@ -830,10 +833,14 @@ export async function loadHrmHome(authz: Authz): Promise<HrmHomeData> {
     })
   }
   if (unmigrated > 0) {
+    // Managers land directly on the Hire action for the unmigrated
+    // population; readers without the manage grant keep the migration
+    // article, which names the same remedy without opening a surface that
+    // would refuse them.
     attention.push({
       tone: 'warning',
       text: t('overview.readiness.unmigrated', { count: unmigrated }),
-      href: '/docs/employment-migration',
+      href: canManageHrm ? '/hrm/change-requests?propose=1&hire=1' : '/docs/employment-migration',
     })
   }
 
@@ -850,6 +857,7 @@ export async function loadHrmHome(authz: Authz): Promise<HrmHomeData> {
       role: 'employee',
       label: t('overview.actions.newEmployee'),
     },
+    hireLabel: t('overview.actions.hireEmployee'),
     newProcessLabel: t('processes.newChecklist'),
     onboarding,
     // UX-14: a subordinate feature panel renders only while its module has

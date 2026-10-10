@@ -143,6 +143,7 @@
     "actions": {
       "title": "Ações rápidas",
       "newEmployee": "Novo funcionário",
+      "hireEmployee": "Contratar funcionário",
       "proposeChange": "Propor alteração",
       "manageDepartments": "Gerenciar departamentos",
       "openReports": "Abrir relatórios"
@@ -192,6 +193,7 @@
     "proposeEmploymentLabel": "Emprego",
     "proposeEmploymentPlaceholder": "Pesquisar empregos…",
     "proposeEmpty": "Nenhum emprego corresponde.",
+    "proposeHireLink": "Contratar alguém sem vínculo",
     "proposeFailed": "A lista de empregos não pôde ser carregada.",
     "draftBadge": "Ações",
     "openEmployee": "Abrir o registro do funcionário",
@@ -250,7 +252,25 @@
     },
     "noRecord": {
       "title": "Sem registro de emprego",
-      "description": "Esta pessoa ainda não tem registro de emprego. Registros de emprego são criados pelo fluxo de autoria de RH."
+      "description": "Esta pessoa ainda não tem registro de emprego. Registre o primeiro vínculo com Contratar — headcount, licenças e folha se vinculam assim que ele existir."
+    },
+    "hire": {
+      "title": "Contratar funcionário",
+      "description": "Registre o primeiro vínculo desta pessoa: a entidade jurídica empregadora e o primeiro dia efetivo. A contratação tramita pelo serviço governado de solicitações de alteração: um fluxo de aprovação configurado a decide, e um fluxo com o resultado de aplicação direta a aplica de imediato.",
+      "button": "Contratar",
+      "submit": "Registrar contratação",
+      "personLabel": "Pessoa",
+      "personPlaceholder": "Buscar pessoas sem vínculo…",
+      "personEmpty": "Ninguém aguarda um primeiro vínculo — cada parte funcionária ativa já tem registro de emprego.",
+      "personFailed": "A lista de pessoas contratáveis não pôde ser carregada.",
+      "personRequired": "Escolha a pessoa que esta contratação registra.",
+      "employerLabel": "Entidade jurídica empregadora",
+      "employerPlaceholder": "Buscar entidades jurídicas…",
+      "employerFailed": "A lista de entidades jurídicas não pôde ser carregada.",
+      "employerRequired": "Escolha a entidade jurídica empregadora — um vínculo sempre nomeia seu empregador.",
+      "employerHint": "O vínculo, o headcount e a folha leem esta entidade.",
+      "statusLabel": "Status",
+      "startLabel": "Início efetivo"
     },
     "multiple": {
       "title": "Mais de um registro de emprego",
@@ -1529,7 +1549,7 @@
       "notAvailable": "não informado",
       "employmentsTitle": "Meu vínculo",
       "employmentsEmpty": "Sem registro de vínculo",
-      "employmentsEmptyDescription": "O RH ainda não registrou um vínculo para a sua pessoa.",
+      "employmentsEmptyDescription": "O RH ainda não registrou um vínculo para a sua pessoa — peça ao administrador de RH que registre sua contratação com a ação Contratar do RH.",
       "employer": "Empregador",
       "jobTitle": "Cargo",
       "department": "Departamento",

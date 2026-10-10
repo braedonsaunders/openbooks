@@ -143,6 +143,7 @@
     "actions": {
       "title": "Quick actions",
       "newEmployee": "New employee",
+      "hireEmployee": "Hire employee",
       "proposeChange": "Propose change",
       "manageDepartments": "Manage departments",
       "openReports": "Open reports"
@@ -193,6 +194,7 @@
     "proposeEmploymentPlaceholder": "Search employments…",
     "proposeEmpty": "No employments match.",
     "proposeFailed": "The employment list could not be loaded.",
+    "proposeHireLink": "Hire someone without an employment instead",
     "draftBadge": "Actions",
     "openEmployee": "Open the employee record",
     "openRequest": "Open",
@@ -250,7 +252,25 @@
     },
     "noRecord": {
       "title": "No employment record",
-      "description": "This person has no employment record yet. Employment records are created by the HRM authoring flow."
+      "description": "This person has no employment record yet. Record the first employment with Hire — headcount, leave, and payroll attach once it exists."
+    },
+    "hire": {
+      "title": "Hire employee",
+      "description": "Record this person's first employment: the employing legal entity and the first effective day. The hire files through the governed change-request service — a configured approval flow decides it, and a flow with the apply-without-approval outcome applies it at once.",
+      "button": "Hire",
+      "submit": "Record hire",
+      "personLabel": "Person",
+      "personPlaceholder": "Search people without an employment…",
+      "personEmpty": "Nobody is waiting for a first employment — every active employee party already has an employment record.",
+      "personFailed": "The hireable-people list could not be loaded.",
+      "personRequired": "Choose the person this hire records.",
+      "employerLabel": "Employing legal entity",
+      "employerPlaceholder": "Search legal entities…",
+      "employerFailed": "The legal-entity list could not be loaded.",
+      "employerRequired": "Choose the employing legal entity — an employment always names its employer.",
+      "employerHint": "The employment, headcount, and payroll all read this entity.",
+      "statusLabel": "Status",
+      "startLabel": "Effective start"
     },
     "multiple": {
       "title": "More than one employment record",
@@ -1529,7 +1549,7 @@
       "notAvailable": "—",
       "employmentsTitle": "My employment",
       "employmentsEmpty": "No employment record",
-      "employmentsEmptyDescription": "HR has not recorded an employment for your person yet.",
+      "employmentsEmptyDescription": "HR has not recorded an employment for your person yet — ask your HR administrator to record your hire with the HRM Hire action.",
       "employer": "Employer",
       "jobTitle": "Title",
       "department": "Department",

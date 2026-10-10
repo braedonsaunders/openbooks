@@ -36,6 +36,7 @@ import { EmployeePayComponents } from './EmployeePayComponents'
 import { PayrollProfileTab, type PayrollSubTab } from '../payroll/_ui/PayrollProfileTab'
 import { DrawerTabStrip } from '../../../components/drawer-tab-strip'
 import { EmploymentTab } from '../hrm/EmploymentTab'
+import { HireEmploymentDrawer } from '../hrm/HireEmploymentDrawer'
 import { RateBookAssignmentSection } from './RateBookAssignmentSection'
 import { PartyTaxIdSection } from './PartyTaxIdSection'
 import { BillingRelationshipsSection } from './BillingRelationshipsSection'
@@ -423,6 +424,10 @@ export function PartyDrawer({
   )
   const [addressDraft, setAddressDraft] = useState<{ index: number | null; row: AddressRow } | null>(null)
   const [contactDraft, setContactDraft] = useState<{ index: number | null; row: ContactRow } | null>(null)
+  // First-employment Hire drawer state. The no-record Employment tab owns
+  // it: a freshly created employee lands here with no employment yet, and
+  // the Hire button beside the notice is the creation flow's remedy.
+  const [hiring, setHiring] = useState(false)
   // Address/contact rows save on their own lifecycle beside the main form —
   // one pin per surface, so a refused row save pins in its own editor.
   const relatedAction = useAppAction()
@@ -1772,6 +1777,21 @@ export function PartyDrawer({
                 {th('employment.noRecord.title')}
               </h3>
               <p className="text-sm text-slate-500 dark:text-slate-400">{th('employment.noRecord.description')}</p>
+              {hrm.canManageHrm && !createMode ? (
+                <div>
+                  <Button size="sm" onClick={() => setHiring(true)}>
+                    <Plus size={14} />{th('employment.hire.button')}
+                  </Button>
+                </div>
+              ) : null}
+              {hiring ? (
+                <HireEmploymentDrawer
+                  partyId={String(p.id)}
+                  partyName={p.display_name}
+                  onClose={() => setHiring(false)}
+                  onSaved={() => setHiring(false)}
+                />
+              ) : null}
             </div>
           ) : (
             <div className="space-y-2 p-1">
