@@ -289,6 +289,10 @@
     "effectiveEnded": "Encerrado antes de {to}",
     "noCurrentRecipe": "Nenhum componente vigente hoje — as linhas abaixo são histórico."
   },
+  "costingPresave": {
+    "title": "Salve o item para configurar o estoque",
+    "hint": "O custeio do estoque — método, contas e pontos de reposição — fica disponível após salvar o item."
+  },
   "costing": {
     "abcClass": "Classe ABC de contagem cíclica",
     "layerInquiry": "Ver camadas de custo do estoque",

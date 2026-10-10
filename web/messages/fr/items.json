@@ -299,6 +299,10 @@
     "effectiveEnded": "Terminé avant {to}",
     "noCurrentRecipe": "Aucun composant en vigueur aujourd'hui — les lignes ci-dessous sont l'historique."
   },
+  "costingPresave": {
+    "title": "Enregistrez l’article pour configurer le stock",
+    "hint": "La valorisation du stock — méthode, comptes et seuils de réapprovisionnement — est disponible une fois l’article enregistré."
+  },
   "costing": {
     "abcClass": "Classe ABC de comptage tournant",
     "layerInquiry": "Voir les couches de coût du stock",
