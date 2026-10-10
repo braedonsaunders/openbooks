@@ -200,6 +200,7 @@ export async function loadPurchaseOrders(
               ? mergeHref(BASE, sp, { [PARAM]: undefined, [CREATE_PARAM]: undefined, mode: undefined, form: undefined })
               : undefined,
             kind: KIND,
+            orgId: authz.user.orgId,
             parties: pickers[0].rows,
             accounts: pickers[1].rows,
             items: pickers[2].rows,

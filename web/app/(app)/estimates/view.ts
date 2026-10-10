@@ -220,6 +220,7 @@ export async function loadEstimates(
             ? mergeHref(BASE, sp, { [PARAM]: undefined, [CREATE_PARAM]: undefined, mode: undefined, form: undefined })
             : undefined,
           kind: KIND,
+          orgId: authz.user.orgId,
           parties: (pickers[0] as { rows: unknown }).rows,
           accounts: (pickers[1] as { rows: unknown }).rows,
           items: (pickers[2] as { rows: unknown }).rows,
