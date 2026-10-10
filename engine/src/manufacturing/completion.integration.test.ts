@@ -567,17 +567,17 @@ const cases: Case[] = [
     await run((tx) => completeWorkOrder(tx, f.org.orgId, f.actorId, wo.id, { quantity: "1" }));
     await run((tx) => markWorkOrderDone(tx, f.org.orgId, f.actorId, wo.id));
     assert.equal(await wip(f, wo.number), "0.0000");
-    const layerValue = await withBypassContext(async () => (await db.execute<{ value: string }>(sql`select sum(layer.original_quantity*layer.unit_cost)::numeric(19,4)::text value
+    const layerValue = await withBypassContext(async () => normalizeMoney((await db.execute<{ value: string }>(sql`select sum(layer.original_quantity*layer.unit_cost)::numeric(19,4)::text value
       from cost_layers layer join inventory_movements movement on movement.org_id=layer.org_id and movement.id=layer.source_movement_id
       join journal_entries entry on entry.org_id=movement.org_id and entry.id=movement.journal_entry_id
       where layer.org_id=${f.org.orgId} and movement.item_id=${f.org.items.assembly} and movement.kind='assembly_build'
         and entry.custom->>'work_order_number'=${wo.number} and entry.status in ('posted','reversed')`)).rows[0]!.value));
     const assetAccount = await withBypassContext(async () => (await db.execute<{ id: string }>(sql`select asset_account_id id from item_inventory_profiles
       where org_id=${f.org.orgId} and item_id=${f.org.items.assembly}`)).rows[0]!.id);
-    const finishedGoods = await withBypassContext(async () => (await db.execute<{ value: string }>(sql`select coalesce(sum(line.amount),0)::text value
+    const finishedGoods = await withBypassContext(async () => normalizeMoney((await db.execute<{ value: string }>(sql`select coalesce(sum(line.amount),0)::text value
       from journal_lines line where line.org_id=${f.org.orgId} and line.account_id=${assetAccount}
         and line.entry_id in (select movement.journal_entry_id from inventory_movements movement
-          where movement.org_id=${f.org.orgId} and movement.item_id=${f.org.items.assembly} and movement.kind='assembly_build')`)).rows[0]!.value);
+          where movement.org_id=${f.org.orgId} and movement.item_id=${f.org.items.assembly} and movement.kind='assembly_build')`)).rows[0]!.value));
     assert.equal(finishedGoods, layerValue, "finished-goods GL and completed cost layers must agree");
   } },
   { name: "standard output books favorable and adverse usage and remaining variance", run: async (f) => {
