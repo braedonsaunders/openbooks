@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { createHash, randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
-import { db, withBypass, withOrgContext } from "../platform/db.ts";
+import { db, withBypass, withOrgContext, withMaintenanceTransaction } from "../platform/db.ts";
 import { installEngineSeams } from "../composition/install.ts";
 import { provisionOrg, wipeSimOrg } from "../sim/world.ts";
 import { getProfile } from "../sim/profiles/index.ts";
@@ -9,6 +10,9 @@ import { createScratchOrg, createScratchUser, dropSampleCloneOrg, dropScratchOrg
 import { createSampleCompany } from "./service.ts";
 import { installDemoScenarios, DEMO_DATA_VERSION, verifyDemoScenarios } from "./install-scenarios.ts";
 import { refreshAllSampleCompanies, refreshSampleCompany, sampleRefreshPlan } from "./refresh.ts";
+import { admitSampleRetirement, executeSampleRetirement } from "./retirement.ts";
+import { sampleRetirementPlan } from "./retirement-plan.ts";
+import type { RetirementDatabaseIdentity } from "./retirement-contract.ts";
 import { SampleLocalAuthorRequiredError } from "./operator.ts";
 import { scenarioRecordId } from "./scenarios.ts";
 import { sampleCompanyFeatures } from "./features.ts";
@@ -121,8 +125,31 @@ test("native exploration refresh preserves rebased posted history, member drafts
     assert.deepEqual(await snapshot(), before, "revoked operator refuses without touching existing records");
     await assert.rejects(refreshAllSampleCompanies({ industryKey: "general_business", digest: "stale" }), /sample population changed/i);
   } finally {
-    if (memberOrgId) await withBypass(() => dropSampleCloneOrg(memberOrgId!));
-    await withBypass(() => dropScratchOrg(home.orgId));
-    await wipeSimOrg(master.orgId);
+    const retirementInstalled = await withBypass(async () => (await db.execute<{ installed: boolean }>(sql`
+      select to_regprocedure('tenant_retirement.openbooks_retirement_register(uuid,text,text,jsonb,uuid[],uuid[],uuid,text,jsonb,jsonb)') is not null as installed`)).rows[0]!.installed);
+    if (retirementInstalled) {
+      const retireOrgIds = [...(memberOrgId ? [memberOrgId] : []), master.orgId];
+      const state = await withMaintenanceTransaction(null, async () => ({
+        database: (await db.execute<RetirementDatabaseIdentity>(sql`select current_database() as database,inet_server_addr()::text as "serverAddress",
+          inet_server_port() as "serverPort",current_setting('cluster_name') as "clusterName"`)).rows[0]!,
+        live: (await db.execute<{ id: string }>(sql`select id from orgs order by id`)).rows.map(row => row.id),
+      }));
+      const plan = await sampleRetirementPlan({ version: 1, database: state.database, retainOrgIds: state.live.filter(id => !retireOrgIds.includes(id)),
+        retireOrgIds, reason: "Retire the exact rich sample fixtures after native preservation verification" });
+      assert.deepEqual(plan.blockers, []);
+      const actorId = await withBypass(() => createScratchUser(home.orgId, "Sample fixture recovery administrator", "admin"));
+      // Disposable-fixture attestations exercise native cleanup authority;
+      // operational retirement requires independently verified recovery artifacts.
+      const fixtureHash = createHash("sha256").update("Rich sample fixture recovery contract").digest("hex");
+      const runId = randomUUID();
+      await admitSampleRetirement({ plan, runId, actorId, recovery: { backupSha256: fixtureHash, restoreReceiptSha256: fixtureHash,
+        preservationReceiptSha256: fixtureHash, objectRetentionReceiptSha256: fixtureHash, verifiedAt: new Date().toISOString(), verifier: "Disposable sample fixture" } });
+      for (const orgId of retireOrgIds) await executeSampleRetirement({ runId, orgId, planDigest: plan.digest });
+      await withBypass(() => dropScratchOrg(home.orgId));
+    } else {
+      if (memberOrgId) await withBypass(() => dropSampleCloneOrg(memberOrgId!));
+      await withBypass(() => dropScratchOrg(home.orgId));
+      await wipeSimOrg(master.orgId);
+    }
   }
 });
