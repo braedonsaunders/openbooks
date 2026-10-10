@@ -153,10 +153,10 @@ test(
       }
       await assert.rejects(db.execute(sql`update reconciliation_matches set confidence='0.5000'
         where org_id=${org.orgId} and reconciliation_id=${recon.id}`),
-      /signed-off reconciliation matches are immutable/);
+      (error: unknown) => /signed-off reconciliation matches are immutable/.test(String((error as { cause?: unknown }).cause ?? error)));
       await assert.rejects(db.execute(sql`delete from reconciliation_matches
         where org_id=${org.orgId} and reconciliation_id=${recon.id}`),
-      /signed-off reconciliation matches are immutable/);
+      (error: unknown) => /signed-off reconciliation matches are immutable/.test(String((error as { cause?: unknown }).cause ?? error)));
       const signoff = (await db.execute<{ changes: { openingCarriedForward: string; openingCarryStartDate: string } }>(sql`
         select changes from audit_log
          where org_id = ${org.orgId} and table_name = 'reconciliations' and row_id = ${recon.id}
