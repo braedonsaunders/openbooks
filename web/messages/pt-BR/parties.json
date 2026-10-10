@@ -80,10 +80,8 @@
       "emptyTitle": "Nenhum método de pagamento registrado",
       "emptyDescription": "Envie um link de configuração e o cliente salva um cartão ou mandato. Nada é cobrado até a cobrança de uma fatura.",
       "sendSetupLink": "Enviar link de configuração",
-      "sendHint": "O cliente abre o link e salva um cartão ou mandato com o provedor. Enviar o link não cobra nada.",
       "provider": "Provedor",
       "currency": "Moeda",
-      "currencyPlaceholder": "ex.: BRL",
       "setupLinkReady": "Link pronto: envie ao cliente:",
       "copyLink": "Copiar link",
       "linkCopied": "Link copiado",
@@ -96,7 +94,6 @@
       "removeFailed": "Não foi possível remover o método de pagamento.",
       "setDefaultFailed": "Não foi possível alterar o método padrão.",
       "loadFailed": "Não foi possível carregar os métodos de pagamento.",
-      "tryAgain": "Tentar de novo",
       "awaitingCustomer": "Aguardando o cliente",
       "active": "Ativo",
       "expires": "Vence {month}/{year}",
@@ -119,7 +116,42 @@
       "backupDescription": "Se o método padrão for recusado, os métodos de reserva serão cobrados na ordem exibida.",
       "moveUp": "Mover para antes na ordem de reserva",
       "moveDown": "Mover para depois na ordem de reserva",
-      "reorderFailed": "Não foi possível alterar a ordem de reserva."
+      "reorderFailed": "Não foi possível alterar a ordem de reserva.",
+      "addMethod": "Adicionar método de pagamento",
+      "addTitle": "Adicionar método de pagamento",
+      "addDescription": "Envie ao cliente um link seguro para salvar um cartão ou conta bancária no seu provedor de pagamentos. Nada é cobrado ao salvar.",
+      "recipient": "Enviar para",
+      "recipientSelect": "Escolha um destinatário…",
+      "recipientHint": "Somente os e-mails deste cliente são listados. Adicione um contato para enviar a outra pessoa.",
+      "noRecipients": "Este cliente não tem e-mail cadastrado, então o link é criado para você compartilhar. Adicione um e-mail na aba Contatos para enviá-lo diretamente.",
+      "emailNotConfigured": "O envio de e-mails não está configurado, então o link é criado para você copiar e compartilhar. <link>Configure o e-mail</link> para enviar os links diretamente.",
+      "noProviders": "Nenhum provedor de pagamentos aceita pagamentos online ainda. <link>Ative um provedor</link> primeiro.",
+      "noCurrencies": "Nenhuma moeda está habilitada para a entidade legal deste cliente. Ative Multimoeda em Configurações da empresa → Recursos para cobrar em outras moedas.",
+      "whatIsSent": "{recipient} recebe um e-mail com um link seguro para salvar um cartão ou conta bancária deste cliente. O método aparece como Aguardando cliente até a conclusão.",
+      "chooseRecipient": "Escolha quem recebe o link de configuração.",
+      "whatIsCreated": "Um link de configuração seguro é criado para você compartilhar com o cliente. O método aparece como Aguardando cliente até a conclusão.",
+      "createLink": "Criar link de configuração",
+      "sent": "Link de configuração enviado para {recipient}.",
+      "deliveryUncertain": "Não foi possível confirmar o e-mail para {recipient}. Se não chegar, copie o link abaixo e compartilhe de outra forma.",
+      "deliveryFailed": "Não foi possível enviar o e-mail para {recipient}. Copie o link abaixo e compartilhe de outra forma.",
+      "setupLink": "Link de configuração",
+      "copyFailed": "Não foi possível copiar o link. Selecione-o e copie manualmente.",
+      "optionsLoadFailed": "Não foi possível carregar as opções de configuração.",
+      "search": "Pesquisar métodos de pagamento…",
+      "allStatuses": "Todos os status",
+      "method": "Método",
+      "details": "Detalhes",
+      "enrollmentsLoadFailed": "Não foi possível carregar as configurações de pagamento automático.",
+      "needsMethodTitle": "Adicione primeiro um método de pagamento",
+      "needsMethodHint": "O pagamento automático cobra o método de pagamento padrão do cliente. Envie ao cliente um link de configuração para salvar um cartão ou conta bancária e depois ative o pagamento automático.",
+      "needsMethodHintReadOnly": "O pagamento automático cobra o método de pagamento padrão do cliente. Alguém que gerencia métodos de pagamento precisa adicionar um primeiro.",
+      "awaitingMethodTitle": "Aguardando o cliente salvar um método de pagamento",
+      "awaitingMethodHint": "O pagamento automático pode ser ativado assim que o cliente concluir o link de configuração.",
+      "notEnrolled": "O pagamento automático está desativado para este cliente.",
+      "scope": "Aplica-se a",
+      "collect": "Cobrar automaticamente",
+      "enrollDescription": "As faturas vencidas são cobradas automaticamente do método de pagamento padrão do cliente.",
+      "chargeOnIssueHint": "Cobrar cada nova fatura assim que for emitida, em vez de na data de vencimento."
     },
     "debitMandates": {
       "heading": "Mandatos de débito",
@@ -159,7 +191,9 @@
       "validation": {
         "bankAccount": "Escolha uma conta bancária aprovada para o mandato.",
         "reference": "Informe a referência do mandato."
-      }
+      },
+      "search": "Pesquisar mandatos…",
+      "allStatuses": "Todos os status"
     },
     "wages": {
       "title": "Taxas salariais",
@@ -200,7 +234,8 @@
       "timeEntryRounding": "Por registro de horas",
       "roundingEffectiveDateHint": "Aplica-se às horas da folha desta remuneração com vigência; salários e custos de projeto aprovados permanecem inalterados.",
       "payrollRatePrecisionHelp": "Arredonda a taxa horária após os multiplicadores de horas extras ou outros pagamentos, antes de calcular o valor das horas. Não altera a taxa base registrada.",
-      "payrollAmountRoundingHelp": "Arredondar cada lançamento de horas antes de somar, ou somar as dimensões salariais e contábeis correspondentes antes de arredondar aos centavos."
+      "payrollAmountRoundingHelp": "Arredondar cada lançamento de horas antes de somar, ou somar as dimensões salariais e contábeis correspondentes antes de arredondar aos centavos.",
+      "search": "Pesquisar taxas salariais…"
     },
     "payComponents": {
       "title": "Componentes salariais recorrentes",
@@ -240,7 +275,8 @@
       "standardRuns": "Regulares, suplementares e de rescisão",
       "regularOnly": "Somente regulares",
       "periodicAndFinal": "Folhas regulares e finais",
-      "unknownApplicability": "Aplicabilidade desconhecida"
+      "unknownApplicability": "Aplicabilidade desconhecida",
+      "search": "Pesquisar componentes de pagamento…"
     },
     "summary": {
       "transactions": "Transações",
@@ -555,7 +591,8 @@
       "references": "Escolha registros desta organização.",
       "overlap": "Este registro já tem preço de mão de obra ativo em parte desse intervalo.",
       "save": "Não foi possível salvar a atribuição de preço de mão de obra."
-    }
+    },
+    "editTitle": "Editar atribuição de tabela de preços"
   },
   "taxIds": {
     "title": "Inscrições fiscais da empresa",
@@ -583,7 +620,12 @@
       "valid": "IVA válido ({scheme})",
       "invalid": "IVA inválido ({scheme})",
       "unverified": "IVA não verificado ({scheme})"
-    }
+    },
+    "addTaxId": "Adicionar identificação fiscal",
+    "addDescription": "Registre uma identificação fiscal da empresa. Ela é validada junto à autoridade do seu esquema.",
+    "search": "Pesquisar identificações fiscais…",
+    "verdict": "Resultado",
+    "lastChecked": "Última verificação"
   },
   "billingRelationships": {
     "heading": "Faturamento",
@@ -625,6 +667,7 @@
       "overlap": "Este cliente já fatura por meio de outro pagador em parte desse período — encerre primeiro a janela existente e depois adicione a nova.",
       "featureOff": "O faturamento consolidado foi desativado — ative-o em Configurações da empresa, Recursos, e tente novamente.",
       "save": "Não foi possível salvar a relação de faturamento."
-    }
+    },
+    "editTitle": "Editar relação de faturamento"
   }
 }

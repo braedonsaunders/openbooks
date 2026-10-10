@@ -1,15 +1,15 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useFormatter, useTranslations } from 'next-intl'
-import { FilePenLine, Plus } from 'lucide-react'
+import { FilePenLine } from 'lucide-react'
 import { fetchAction } from '@braedonsaunders/appkit-errors'
 import { ActionAlert } from '@braedonsaunders/appkit-errors/react'
 import { useAppAction } from '@/lib/use-app-action'
 import { Badge, Button, Drawer, Input, Label, Select, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@openbooks/ui'
 import { field } from './party-drawer-model'
-import { SublistEmpty, SublistHeading } from './PartySummary'
+import { DrawerSublist, SublistAddButton, SublistEmpty, SublistLoadError, SublistLoading, SublistPager, useSublistRows } from '../../../components/drawer-sublist'
 
 const MANDATE_SCHEMES = ['nacha', 'sepa_core', 'sepa_b2b', 'custom'] as const
 const MANDATE_STATUSES = ['pending', 'active', 'suspended', 'revoked', 'expired'] as const
@@ -122,6 +122,13 @@ export function PartyDebitMandatesPanel({ partyId }: { partyId: string }) {
   const [data, setData] = useState<{ mandates: MandateRow[]; bankAccounts: BankAccountOption[] } | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [draft, setDraft] = useState<MandateDraft | null>(null)
+  const [statusFilter, setStatusFilter] = useState<MandateStatus | ''>('')
+  const mandates = useMemo(
+    () => (data?.mandates ?? []).filter((mandate) => !statusFilter || mandate.status === statusFilter),
+    [data, statusFilter],
+  )
+  const mandateText = useCallback((mandate: MandateRow) => `${mandate.mandateReference} ${mandate.bankAccountLabel}`, [])
+  const list = useSublistRows(mandates, mandateText)
 
   const reload = useCallback(async (signal?: AbortSignal) => {
     const response = await fetch(`/api/parties/${encodeURIComponent(partyId)}/debit-mandates`, { signal, cache: 'no-store' })
@@ -202,15 +209,21 @@ export function PartyDebitMandatesPanel({ partyId }: { partyId: string }) {
   const creating = draft !== null && draft.id === null
 
   return (
-    <section className="space-y-3">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <SublistHeading title={t('heading')} description={t('description')} icon={<FilePenLine size={16} />} />
-        {data ? (
-          <Button variant="outline" size="sm" onClick={() => open(newDraft())}>
-            <Plus size={14} />{t('new')}
-          </Button>
-        ) : null}
-      </div>
+    <DrawerSublist
+      title={t('heading')}
+      description={t('description')}
+      icon={<FilePenLine size={16} />}
+      action={data ? <SublistAddButton label={t('new')} onClick={() => open(newDraft())} /> : undefined}
+      alert={draft === null ? <ActionAlert error={refusal} fallbackMessage={t('saveFailed')} /> : null}
+      search={data?.mandates.length ? { value: list.query, onChange: list.setQuery, placeholder: t('search') } : undefined}
+      filters={data?.mandates.length ? (
+        <Select value={statusFilter} onChange={(event) => { setStatusFilter(event.target.value as MandateStatus | ''); list.setPage(1) }} className="w-auto min-w-40" aria-label={tc('labels.status')}>
+          <option value="">{t('allStatuses')}</option>
+          {MANDATE_STATUSES.map((status) => <option key={status} value={status}>{t(`states.${status}`)}</option>)}
+        </Select>
+      ) : null}
+      footer={data?.mandates.length ? <SublistPager page={list.page} pages={list.pages} onPage={list.setPage} /> : null}
+    >
 
       <Drawer
         open={draft !== null}
@@ -312,19 +325,12 @@ export function PartyDebitMandatesPanel({ partyId }: { partyId: string }) {
         ) : null}
       </Drawer>
 
-      {draft === null ? <ActionAlert error={refusal} fallbackMessage={t('saveFailed')} /> : null}
-
       {data === null ? (
-        loadError ? (
-          <div className="space-y-2">
-            <p role="alert" className="text-sm text-red-600 dark:text-red-400">{loadError}</p>
-            <Button variant="outline" size="sm" onClick={() => refresh()}>{tc('actions.retry')}</Button>
-          </div>
-        ) : (
-          <p className="text-sm text-slate-500 dark:text-slate-400">{tc('feedback.loading')}</p>
-        )
+        loadError ? <SublistLoadError message={loadError} onRetry={refresh} /> : <SublistLoading />
       ) : data.mandates.length === 0 ? (
         <SublistEmpty icon={<FilePenLine size={22} />} text={t('empty')} />
+      ) : list.shown.length === 0 ? (
+        <p className="rounded-lg border border-dashed border-slate-300 p-8 text-center text-sm text-slate-500 dark:border-slate-700 dark:text-slate-400">{tc('feedback.noResults')}</p>
       ) : (
         <Table>
           <TableHeader>
@@ -339,7 +345,7 @@ export function PartyDebitMandatesPanel({ partyId }: { partyId: string }) {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {data.mandates.map((mandate) => (
+            {list.shown.map((mandate) => (
               <TableRow key={mandate.id}>
                 <TableCell className="font-mono text-xs font-semibold">{mandate.mandateReference}</TableCell>
                 <TableCell>{mandate.bankAccountLabel || '—'}</TableCell>
@@ -355,6 +361,6 @@ export function PartyDebitMandatesPanel({ partyId }: { partyId: string }) {
           </TableBody>
         </Table>
       )}
-    </section>
+    </DrawerSublist>
   )
 }

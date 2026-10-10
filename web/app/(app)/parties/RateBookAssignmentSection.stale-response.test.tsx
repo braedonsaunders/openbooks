@@ -138,12 +138,12 @@ test('saving and reopening an assignment retains its contract pin until automati
   </NextIntlClientProvider>))
   await act(async () => { await tick() })
   const click = async (label: string) => {
-    const button = [...host.querySelectorAll('button')].find(node => node.textContent?.trim() === label)
+    const button = [...document.querySelectorAll('button')].find(node => node.textContent?.trim() === label)
     assert.ok(button, `${label} action is available`)
     await act(async () => { button.click(); await tick() })
   }
   const versionSelect = () => {
-    const control = host.querySelector<HTMLSelectElement>('select[name="rateVersionId"]')
+    const control = document.querySelector<HTMLSelectElement>('select[name="rateVersionId"]')
     assert.ok(control, 'native assignment editor exposes the selected version')
     return control
   }

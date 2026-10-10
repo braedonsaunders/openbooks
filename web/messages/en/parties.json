@@ -77,10 +77,8 @@
       "emptyTitle": "No payment methods on file",
       "emptyDescription": "Send a setup link and the customer saves a card or bank mandate themselves. Nothing is charged until an invoice is collected.",
       "sendSetupLink": "Send setup link",
-      "sendHint": "The customer opens the link and saves a card or bank mandate with the provider. Nothing is charged by sending the link.",
       "provider": "Provider",
       "currency": "Currency",
-      "currencyPlaceholder": "e.g. USD",
       "setupLinkReady": "Setup link ready — send it to the customer:",
       "copyLink": "Copy link",
       "linkCopied": "Link copied",
@@ -93,7 +91,6 @@
       "removeFailed": "The payment method could not be removed.",
       "setDefaultFailed": "The default method could not be changed.",
       "loadFailed": "Payment methods could not be loaded.",
-      "tryAgain": "Try again",
       "awaitingCustomer": "Awaiting customer",
       "active": "Active",
       "expires": "Expires {month}/{year}",
@@ -116,7 +113,42 @@
       "backupDescription": "If the default method declines, backup methods are charged in the order shown.",
       "moveUp": "Move earlier in the backup order",
       "moveDown": "Move later in the backup order",
-      "reorderFailed": "The backup order could not be changed."
+      "reorderFailed": "The backup order could not be changed.",
+      "addMethod": "Add payment method",
+      "addTitle": "Add payment method",
+      "addDescription": "Send the customer a secure link to save a card or bank account with your payment provider. Nothing is charged when they save it.",
+      "recipient": "Send to",
+      "recipientSelect": "Choose a recipient…",
+      "recipientHint": "Only email addresses on this customer are listed. Add a contact to send to someone else.",
+      "noRecipients": "This customer has no email address on file, so the link is created for you to share. Add an email on the Contacts tab to send it directly.",
+      "emailNotConfigured": "Outbound email is not set up, so the link is created for you to copy and share. <link>Set up email</link> to send setup links directly.",
+      "noProviders": "No payment provider accepts online payments yet. <link>Enable a provider</link> first.",
+      "noCurrencies": "No currency is enabled for this customer’s legal entity. Turn on Multi-currency in Company Settings → Features to collect in other currencies.",
+      "whatIsSent": "{recipient} receives an email with a secure link to save a card or bank account for this customer. The method shows as Awaiting customer until they finish.",
+      "chooseRecipient": "Choose who receives the setup link.",
+      "whatIsCreated": "A secure setup link is created for you to share with the customer. The method shows as Awaiting customer until they finish.",
+      "createLink": "Create setup link",
+      "sent": "Setup link sent to {recipient}.",
+      "deliveryUncertain": "The email to {recipient} could not be confirmed. If it does not arrive, copy the link below and share it another way.",
+      "deliveryFailed": "The email to {recipient} could not be sent. Copy the link below and share it another way.",
+      "setupLink": "Setup link",
+      "copyFailed": "The link could not be copied. Select it and copy it manually.",
+      "optionsLoadFailed": "The setup options could not be loaded.",
+      "search": "Search payment methods…",
+      "allStatuses": "All statuses",
+      "method": "Method",
+      "details": "Details",
+      "enrollmentsLoadFailed": "Autopay settings could not be loaded.",
+      "needsMethodTitle": "Add a payment method first",
+      "needsMethodHint": "Autopay charges the customer’s default payment method. Send the customer a setup link to save a card or bank account, then turn autopay on.",
+      "needsMethodHintReadOnly": "Autopay charges the customer’s default payment method. Someone who manages payment methods must add one first.",
+      "awaitingMethodTitle": "Waiting for the customer to save a payment method",
+      "awaitingMethodHint": "Autopay can be turned on once the customer finishes the setup link.",
+      "notEnrolled": "Autopay is off for this customer.",
+      "scope": "Applies to",
+      "collect": "Collect automatically",
+      "enrollDescription": "Due invoices are charged automatically from the customer’s default payment method.",
+      "chargeOnIssueHint": "Charge each new invoice as soon as it is issued instead of on its due date."
     },
     "debitMandates": {
       "heading": "Debit mandates",
@@ -156,7 +188,9 @@
       "validation": {
         "bankAccount": "Choose an approved bank account for the mandate.",
         "reference": "Enter the mandate reference."
-      }
+      },
+      "search": "Search mandates…",
+      "allStatuses": "All statuses"
     },
     "wages": {
       "title": "Wage rates",
@@ -197,7 +231,8 @@
       "timeEntryRounding": "Per time entry",
       "roundingEffectiveDateHint": "Applies to payroll hours under this dated wage; salary payments and approved job costs are unchanged.",
       "payrollRatePrecisionHelp": "Rounds the hourly rate after overtime or other pay multipliers, before hours are priced. It does not change the recorded base rate.",
-      "payrollAmountRoundingHelp": "Round each time entry before adding, or total matching wage and accounting dimensions before rounding to currency cents."
+      "payrollAmountRoundingHelp": "Round each time entry before adding, or total matching wage and accounting dimensions before rounding to currency cents.",
+      "search": "Search wage rates…"
     },
     "payComponents": {
       "title": "Recurring pay components",
@@ -237,7 +272,8 @@
       "standardRuns": "Regular, supplemental and termination",
       "regularOnly": "Regular only",
       "periodicAndFinal": "Regular and final runs",
-      "unknownApplicability": "Unknown applicability"
+      "unknownApplicability": "Unknown applicability",
+      "search": "Search pay components…"
     },
     "summary": {
       "transactions": "Transactions",
@@ -555,7 +591,8 @@
       "references": "Choose records from this organization.",
       "overlap": "This record already has active Labor Pricing for part of that date range.",
       "save": "Could not save the Labor Pricing assignment."
-    }
+    },
+    "editTitle": "Edit rate book assignment"
   },
   "taxIds": {
     "title": "Business tax IDs",
@@ -583,7 +620,12 @@
       "valid": "VAT ID valid ({scheme})",
       "invalid": "VAT ID invalid ({scheme})",
       "unverified": "VAT ID unverified ({scheme})"
-    }
+    },
+    "addTaxId": "Add tax ID",
+    "addDescription": "Record a business tax ID. It is validated against the authority for its scheme.",
+    "search": "Search tax IDs…",
+    "verdict": "Verdict",
+    "lastChecked": "Last checked"
   },
   "billingRelationships": {
     "heading": "Billing",
@@ -625,6 +667,7 @@
       "overlap": "This customer already bills through another payer for part of that window — close the existing window first, then add the new one.",
       "featureOff": "Consolidated billing was turned off — turn it back on under Company Settings, Features, then retry.",
       "save": "Could not save the billing relationship."
-    }
+    },
+    "editTitle": "Edit billing relationship"
   }
 }

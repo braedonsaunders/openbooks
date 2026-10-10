@@ -1,17 +1,16 @@
 'use client'
 
-/** Split from PartyDrawer.tsx; moved without behavior changes. */
-import { SublistHeading, SublistEmpty } from './PartySummary'
+import { DrawerSublist, SublistEmpty, SublistLoading, SublistPager } from '../../../components/drawer-sublist'
 import { useMoney } from '@/components/money-provider'
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { usePathname, useSearchParams } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { useViewerFormat } from '@/lib/viewer-format'
-import { FileText, Search } from 'lucide-react'
+import { FileText } from 'lucide-react'
 import { toast } from 'sonner'
 import { readApiErrorMessage } from '@/lib/api-error'
-import { Badge, Button, Input, Select, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@openbooks/ui'
+import { Badge, Select, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@openbooks/ui'
 import { DocTypeBadge, docTypeMeta } from '../../../components/doc-type-badge'
 
 interface TransactionRow {
@@ -145,60 +144,55 @@ export function TransactionSublist({ partyId, role }: { partyId: string; role?: 
     return `${target.path}?${params.toString()}`
   }
   return (
-    <section className="space-y-3">
-      <SublistHeading title={t('transactionsHeading')} description={t('transactionsDescription')} icon={<FileText size={16} />} />
-      <div className="flex flex-wrap gap-2">
-        <div className="relative min-w-56 flex-1">
-          <Search className="pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2 text-slate-400" size={15} />
-          <Input value={q} onChange={(event) => { setQ(event.target.value); setPage(1) }} placeholder={t('transactionSearch')} className="pl-8" />
-        </div>
-        <Select value={kind} onChange={(event) => { setKind(event.target.value); setPage(1) }} className="w-auto min-w-40" aria-label={tc('labels.type')}>
-          <option value="">{t('allTypes')}</option>
-          {(visibleData?.kinds ?? []).map((value) => {
-            const meta = docTypeMeta(value)
-            return <option key={value} value={value}>{tc(`transactionTypes.${meta.labelKey}` as never)}</option>
-          })}
-        </Select>
-        <Select value={status} onChange={(event) => { setStatus(event.target.value); setPage(1) }} className="w-auto min-w-40" aria-label={tc('labels.status')}>
-          <option value="">{t('allStatuses')}</option>
-          {(visibleData?.statuses ?? []).map((value) => <option key={value} value={value}>{statusLabel(value)}</option>)}
-        </Select>
-      </div>
+    <DrawerSublist
+      title={t('transactionsHeading')}
+      description={t('transactionsDescription')}
+      icon={<FileText size={16} />}
+      search={{ value: q, onChange: (value) => { setQ(value); setPage(1) }, placeholder: t('transactionSearch') }}
+      filters={(
+        <>
+          <Select value={kind} onChange={(event) => { setKind(event.target.value); setPage(1) }} className="w-auto min-w-40" aria-label={tc('labels.type')}>
+            <option value="">{t('allTypes')}</option>
+            {(visibleData?.kinds ?? []).map((value) => {
+              const meta = docTypeMeta(value)
+              return <option key={value} value={value}>{tc(`transactionTypes.${meta.labelKey}` as never)}</option>
+            })}
+          </Select>
+          <Select value={status} onChange={(event) => { setStatus(event.target.value); setPage(1) }} className="w-auto min-w-40" aria-label={tc('labels.status')}>
+            <option value="">{t('allStatuses')}</option>
+            {(visibleData?.statuses ?? []).map((value) => <option key={value} value={value}>{statusLabel(value)}</option>)}
+          </Select>
+        </>
+      )}
+      footer={visibleData?.rows.length ? (
+        <SublistPager count={t('transactionCount', { count: visibleData.total })} page={page} pages={pages} onPage={setPage} disabled={loading} />
+      ) : null}
+    >
       {loading && !visibleData ? (
-        <div className="h-48 animate-pulse rounded-lg bg-slate-100 dark:bg-slate-800" />
+        <SublistLoading />
       ) : !visibleData?.rows.length ? (
         <SublistEmpty icon={<FileText size={22} />} text={t('noTransactions')} />
       ) : (
-        <>
-          <Table>
-            <TableHeader><TableRow>
-              <TableHead>{tc('labels.number')}</TableHead><TableHead>{tc('labels.date')}</TableHead>
-              <TableHead>{tc('labels.reference')}</TableHead><TableHead>{tc('labels.status')}</TableHead>
-              <TableHead className="text-right">{tc('labels.total')}</TableHead><TableHead className="text-right">{tc('labels.openBalance')}</TableHead>
-            </TableRow></TableHeader>
-            <TableBody>
-              {visibleData.rows.map((row) => (
-                <TableRow key={row.id} className={loading ? 'opacity-60' : undefined}>
-                  <TableCell><div className="flex items-center gap-2"><DocTypeBadge kind={row.kind} /><Link href={transactionHref(row) as never} className="font-mono text-[13px] font-semibold text-teal-700 hover:underline dark:text-teal-300">{row.document_number}</Link>{row.party_role && row.party_role !== 'billed' ? <Badge variant="secondary">{t(`role.${row.party_role}`)}</Badge> : null}</div></TableCell>
-                  <TableCell>{date(new Date(`${row.document_date}T12:00:00Z`), { dateStyle: 'medium', timeZone: 'UTC' })}</TableCell>
-                  <TableCell className="text-slate-500 dark:text-slate-400">{row.reference_number || '—'}</TableCell>
-                  <TableCell><Badge variant={row.status === 'posted' ? 'success' : row.status === 'pending_approval' ? 'warning' : 'secondary'}>{statusLabel(row.status)}</Badge></TableCell>
-                  <TableCell className="text-right tabular-nums">{money(row.total, { currency: row.currency })}</TableCell>
-                  <TableCell className="text-right tabular-nums">{row.open_balance == null ? '—' : money(row.open_balance, { currency: row.currency })}</TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-          <div className="flex items-center justify-between gap-3">
-            <span className="text-xs text-slate-500 dark:text-slate-400">{t('transactionCount', { count: visibleData.total })}</span>
-            <div className="flex items-center gap-2">
-              <Button variant="outline" size="sm" disabled={page <= 1 || loading} onClick={() => setPage((value) => value - 1)}>{tc('actions.previous')}</Button>
-              <span className="text-xs tabular-nums text-slate-500">{page} / {pages}</span>
-              <Button variant="outline" size="sm" disabled={page >= pages || loading} onClick={() => setPage((value) => value + 1)}>{tc('actions.next')}</Button>
-            </div>
-          </div>
-        </>
+        <Table>
+          <TableHeader><TableRow>
+            <TableHead>{tc('labels.number')}</TableHead><TableHead>{tc('labels.date')}</TableHead>
+            <TableHead>{tc('labels.reference')}</TableHead><TableHead>{tc('labels.status')}</TableHead>
+            <TableHead className="text-right">{tc('labels.total')}</TableHead><TableHead className="text-right">{tc('labels.openBalance')}</TableHead>
+          </TableRow></TableHeader>
+          <TableBody>
+            {visibleData.rows.map((row) => (
+              <TableRow key={row.id} className={loading ? 'opacity-60' : undefined}>
+                <TableCell><div className="flex items-center gap-2"><DocTypeBadge kind={row.kind} /><Link href={transactionHref(row) as never} className="font-mono text-[13px] font-semibold text-teal-700 hover:underline dark:text-teal-300">{row.document_number}</Link>{row.party_role && row.party_role !== 'billed' ? <Badge variant="secondary">{t(`role.${row.party_role}`)}</Badge> : null}</div></TableCell>
+                <TableCell>{date(new Date(`${row.document_date}T12:00:00Z`), { dateStyle: 'medium', timeZone: 'UTC' })}</TableCell>
+                <TableCell className="text-slate-500 dark:text-slate-400">{row.reference_number || '—'}</TableCell>
+                <TableCell><Badge variant={row.status === 'posted' ? 'success' : row.status === 'pending_approval' ? 'warning' : 'secondary'}>{statusLabel(row.status)}</Badge></TableCell>
+                <TableCell className="text-right tabular-nums">{money(row.total, { currency: row.currency })}</TableCell>
+                <TableCell className="text-right tabular-nums">{row.open_balance == null ? '—' : money(row.open_balance, { currency: row.currency })}</TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
       )}
-    </section>
+    </DrawerSublist>
   )
 }

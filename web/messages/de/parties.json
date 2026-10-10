@@ -80,10 +80,8 @@
       "emptyTitle": "Keine Zahlungsmethoden hinterlegt",
       "emptyDescription": "Senden Sie einen Einrichtungslink, über den der Kunde selbst eine Karte oder ein Mandat speichert. Abgebucht wird erst beim Einzug einer Rechnung.",
       "sendSetupLink": "Einrichtungslink senden",
-      "sendHint": "Der Kunde öffnet den Link und speichert eine Karte oder ein Mandat beim Anbieter. Der Versand löst keine Abbuchung aus.",
       "provider": "Anbieter",
       "currency": "Währung",
-      "currencyPlaceholder": "z. B. EUR",
       "setupLinkReady": "Einrichtungslink bereit — an den Kunden senden:",
       "copyLink": "Link kopieren",
       "linkCopied": "Link kopiert",
@@ -96,7 +94,6 @@
       "removeFailed": "Die Zahlungsmethode konnte nicht entfernt werden.",
       "setDefaultFailed": "Die Standardmethode konnte nicht geändert werden.",
       "loadFailed": "Zahlungsmethoden konnten nicht geladen werden.",
-      "tryAgain": "Erneut versuchen",
       "awaitingCustomer": "Wartet auf Kunden",
       "active": "Aktiv",
       "expires": "Läuft ab {month}/{year}",
@@ -119,7 +116,42 @@
       "backupDescription": "Wenn die Standardmethode ablehnt, werden Ersatzmethoden in der angezeigten Reihenfolge belastet.",
       "moveUp": "In der Ersatzreihenfolge nach oben verschieben",
       "moveDown": "In der Ersatzreihenfolge nach unten verschieben",
-      "reorderFailed": "Die Ersatzreihenfolge konnte nicht geändert werden."
+      "reorderFailed": "Die Ersatzreihenfolge konnte nicht geändert werden.",
+      "addMethod": "Zahlungsmethode hinzufügen",
+      "addTitle": "Zahlungsmethode hinzufügen",
+      "addDescription": "Senden Sie dem Kunden einen sicheren Link, um eine Karte oder ein Bankkonto bei Ihrem Zahlungsanbieter zu hinterlegen. Beim Hinterlegen wird nichts belastet.",
+      "recipient": "Senden an",
+      "recipientSelect": "Empfänger auswählen…",
+      "recipientHint": "Es werden nur E-Mail-Adressen dieses Kunden angezeigt. Fügen Sie einen Kontakt hinzu, um an jemand anderen zu senden.",
+      "noRecipients": "Für diesen Kunden ist keine E-Mail-Adresse hinterlegt, daher wird der Link zum Teilen erstellt. Fügen Sie auf der Registerkarte „Kontakte“ eine E-Mail hinzu, um ihn direkt zu senden.",
+      "emailNotConfigured": "Der E-Mail-Versand ist nicht eingerichtet, daher wird der Link zum Kopieren und Teilen erstellt. <link>E-Mail einrichten</link>, um Einrichtungslinks direkt zu senden.",
+      "noProviders": "Noch kein Zahlungsanbieter nimmt Online-Zahlungen an. <link>Aktivieren Sie zuerst einen Anbieter</link>.",
+      "noCurrencies": "Für die juristische Einheit dieses Kunden ist keine Währung aktiviert. Aktivieren Sie „Mehrere Währungen“ unter Unternehmenseinstellungen → Funktionen, um in anderen Währungen einzuziehen.",
+      "whatIsSent": "{recipient} erhält eine E-Mail mit einem sicheren Link, um eine Karte oder ein Bankkonto für diesen Kunden zu hinterlegen. Bis zum Abschluss wird die Methode als „Wartet auf Kunden“ angezeigt.",
+      "chooseRecipient": "Wählen Sie aus, wer den Einrichtungslink erhält.",
+      "whatIsCreated": "Es wird ein sicherer Einrichtungslink erstellt, den Sie mit dem Kunden teilen. Bis zum Abschluss wird die Methode als „Wartet auf Kunden“ angezeigt.",
+      "createLink": "Einrichtungslink erstellen",
+      "sent": "Einrichtungslink an {recipient} gesendet.",
+      "deliveryUncertain": "Die E-Mail an {recipient} konnte nicht bestätigt werden. Falls sie nicht ankommt, kopieren Sie den Link unten und teilen Sie ihn auf anderem Weg.",
+      "deliveryFailed": "Die E-Mail an {recipient} konnte nicht gesendet werden. Kopieren Sie den Link unten und teilen Sie ihn auf anderem Weg.",
+      "setupLink": "Einrichtungslink",
+      "copyFailed": "Der Link konnte nicht kopiert werden. Markieren und kopieren Sie ihn manuell.",
+      "optionsLoadFailed": "Die Einrichtungsoptionen konnten nicht geladen werden.",
+      "search": "Zahlungsmethoden suchen…",
+      "allStatuses": "Alle Status",
+      "method": "Methode",
+      "details": "Details",
+      "enrollmentsLoadFailed": "Die Einstellungen für automatische Zahlungen konnten nicht geladen werden.",
+      "needsMethodTitle": "Fügen Sie zuerst eine Zahlungsmethode hinzu",
+      "needsMethodHint": "Automatische Zahlungen belasten die Standardzahlungsmethode des Kunden. Senden Sie dem Kunden einen Einrichtungslink, um eine Karte oder ein Bankkonto zu hinterlegen, und aktivieren Sie dann die automatische Zahlung.",
+      "needsMethodHintReadOnly": "Automatische Zahlungen belasten die Standardzahlungsmethode des Kunden. Eine Person, die Zahlungsmethoden verwaltet, muss zuerst eine hinzufügen.",
+      "awaitingMethodTitle": "Warten darauf, dass der Kunde eine Zahlungsmethode hinterlegt",
+      "awaitingMethodHint": "Die automatische Zahlung kann aktiviert werden, sobald der Kunde den Einrichtungslink abgeschlossen hat.",
+      "notEnrolled": "Die automatische Zahlung ist für diesen Kunden deaktiviert.",
+      "scope": "Gilt für",
+      "collect": "Automatisch einziehen",
+      "enrollDescription": "Fällige Rechnungen werden automatisch über die Standardzahlungsmethode des Kunden belastet.",
+      "chargeOnIssueHint": "Jede neue Rechnung sofort bei Ausstellung statt am Fälligkeitstag belasten."
     },
     "debitMandates": {
       "heading": "Lastschriftmandate",
@@ -159,7 +191,9 @@
       "validation": {
         "bankAccount": "Wählen Sie ein genehmigtes Bankkonto für das Mandat.",
         "reference": "Geben Sie die Mandatsreferenz ein."
-      }
+      },
+      "search": "Mandate suchen…",
+      "allStatuses": "Alle Status"
     },
     "wages": {
       "title": "Lohnsätze",
@@ -200,7 +234,8 @@
       "timeEntryRounding": "Je Zeiteintrag",
       "roundingEffectiveDateHint": "Gilt für Lohnstunden dieser datierten Vergütung; Gehaltszahlungen und genehmigte Projektkosten bleiben unverändert.",
       "payrollRatePrecisionHelp": "Rundet den Stundensatz nach Überstunden- oder anderen Entgeltfaktoren, bevor die Stunden bewertet werden. Der erfasste Grundsatz bleibt unverändert.",
-      "payrollAmountRoundingHelp": "Jeden Zeiteintrag vor der Addition runden oder passende Lohn- und Buchhaltungsdimensionen vor der Rundung auf Währungscent zusammenfassen."
+      "payrollAmountRoundingHelp": "Jeden Zeiteintrag vor der Addition runden oder passende Lohn- und Buchhaltungsdimensionen vor der Rundung auf Währungscent zusammenfassen.",
+      "search": "Lohnsätze suchen…"
     },
     "payComponents": {
       "title": "Wiederkehrende Lohnkomponenten",
@@ -240,7 +275,8 @@
       "standardRuns": "Regulär, zusätzlich und bei Beendigung",
       "regularOnly": "Nur regulär",
       "periodicAndFinal": "Reguläre und letzte Abrechnung",
-      "unknownApplicability": "Unbekannte Anwendbarkeit"
+      "unknownApplicability": "Unbekannte Anwendbarkeit",
+      "search": "Lohnbestandteile suchen…"
     },
     "summary": {
       "transactions": "Transaktionen",
@@ -555,7 +591,8 @@
       "references": "Wählen Sie Datensätze dieser Organisation.",
       "overlap": "Dieser Datensatz hat für einen Teil des Zeitraums bereits aktive Lohntarife.",
       "save": "Die Lohntarifzuordnung konnte nicht gespeichert werden."
-    }
+    },
+    "editTitle": "Preisbuchzuordnung bearbeiten"
   },
   "taxIds": {
     "title": "USt-Identifikationsnummern",
@@ -583,7 +620,12 @@
       "valid": "USt-IdNr. gültig ({scheme})",
       "invalid": "USt-IdNr. ungültig ({scheme})",
       "unverified": "USt-IdNr. ungeprüft ({scheme})"
-    }
+    },
+    "addTaxId": "Steuernummer hinzufügen",
+    "addDescription": "Erfassen Sie eine Steuernummer des Unternehmens. Sie wird bei der zuständigen Behörde ihres Verfahrens geprüft.",
+    "search": "Steuernummern suchen…",
+    "verdict": "Ergebnis",
+    "lastChecked": "Zuletzt geprüft"
   },
   "billingRelationships": {
     "heading": "Abrechnung",
@@ -625,6 +667,7 @@
       "overlap": "Dieser Kunde rechnet für einen Teil dieses Zeitraums bereits über einen anderen Zahler ab — schließen Sie zuerst das bestehende Fenster und fügen Sie dann das neue hinzu.",
       "featureOff": "Die konsolidierte Abrechnung wurde deaktiviert — aktivieren Sie sie unter Unternehmenseinstellungen, Funktionen, und versuchen Sie es erneut.",
       "save": "Die Abrechnungsbeziehung konnte nicht gespeichert werden."
-    }
+    },
+    "editTitle": "Abrechnungsbeziehung bearbeiten"
   }
 }

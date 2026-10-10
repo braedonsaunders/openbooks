@@ -1,12 +1,13 @@
 'use client'
 
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { useId, useState } from 'react'
-import { toast } from 'sonner'
-import { Button, Label, Select } from '@openbooks/ui'
-import { readApiErrorMessage } from '../../../lib/api-error'
+import { fetchAction } from '@braedonsaunders/appkit-errors'
+import { ActionAlert } from '@braedonsaunders/appkit-errors/react'
+import { Label, Select } from '@openbooks/ui'
+import { useAppAction } from '../../../lib/use-app-action'
+import { useRecordSaveParticipant } from '../../../components/record-save-participants'
 
 export interface ComplianceClassOption {
   id: string
@@ -19,47 +20,50 @@ export interface ComplianceClassOption {
  * class is the only path that brings a vendor into the
  * /compliance/vendors matrix (membership = an active vendor_roles row with
  * compliance_class_id set), and the matrix empty state already points here.
- * Saves through PATCH /api/compliance/vendors/[partyId], which owns the
- * permission (`compliance.manage`), subsidiary fence, and audit trail.
+ * The class edits with the record — read-only until the drawer is in edit
+ * mode, saved by the drawer's single Save — through
+ * PATCH /api/compliance/vendors/[partyId], which owns the permission
+ * (`compliance.manage`), subsidiary fence, and audit trail.
  */
 export function VendorCompliancePanel({
   partyId,
   initialClassId,
   classes,
-  canManage,
+  editable,
 }: {
   partyId: string
   initialClassId: string | null
   classes: ComplianceClassOption[]
-  canManage: boolean
+  /** The drawer is in edit mode and the viewer holds compliance.manage. */
+  editable: boolean
 }) {
   const classFieldId = useId()
   const t = useTranslations('parties.drawer')
-  const tc = useTranslations('common')
-  const router = useRouter()
+  const { refusal, execute, clearRefusal } = useAppAction()
+  const [savedClassId, setSavedClassId] = useState(initialClassId ?? '')
   const [classId, setClassId] = useState(initialClassId ?? '')
-  const [busy, setBusy] = useState(false)
-  const assigned = classes.find((option) => option.id === (initialClassId ?? ''))
+  const assigned = classes.find((option) => option.id === savedClassId)
 
-  async function save() {
-    setBusy(true)
-    try {
-      const response = await fetch(`/api/compliance/vendors/${partyId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ complianceClassId: classId || null }),
-      })
-      // The status is checked before the body is read: `result.error` is
-      // unguarded here, so an object payload toasted '[object Object]'.
-      if (!response.ok) throw new Error(await readApiErrorMessage(response, t('compliance.saveFailed')))
-      toast.success(t('compliance.saved'))
-      router.refresh()
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : t('compliance.saveFailed'))
-    } finally {
-      setBusy(false)
-    }
-  }
+  useRecordSaveParticipant('compliance', {
+    dirty: classId !== savedClassId,
+    save: async () => {
+      const submitted = classId
+      const ok = await execute(
+        () => fetchAction(`/api/compliance/vendors/${partyId}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ complianceClassId: submitted || null }),
+        }),
+        { fallbackMessage: t('compliance.saveFailed') },
+      )
+      if (ok) setSavedClassId(submitted)
+      return ok
+    },
+    reset: () => {
+      setClassId(savedClassId)
+      clearRefusal()
+    },
+  })
 
   return (
     <section className="space-y-4">
@@ -67,7 +71,18 @@ export function VendorCompliancePanel({
         <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t('compliance.heading')}</h3>
         <p className="text-xs text-slate-500 dark:text-slate-400">{t('compliance.description')}</p>
       </div>
-      {assigned ? (
+      <ActionAlert error={refusal} fallbackMessage={t('compliance.saveFailed')} />
+      {editable ? (
+        <div className="max-w-md space-y-1.5">
+          <Label id={`${classFieldId}-label`} htmlFor={classFieldId}>{t('compliance.classLabel')}</Label>
+          <Select id={classFieldId} aria-labelledby={`${classFieldId}-label`} value={classId} onChange={(event) => setClassId(event.target.value)}>
+            <option value="">{t('compliance.noClass')}</option>
+            {classes.map((option) => (
+              <option key={option.id} value={option.id}>{`${option.code} — ${option.name}`}</option>
+            ))}
+          </Select>
+        </div>
+      ) : assigned ? (
         <p className="text-sm text-slate-700 dark:text-slate-300">
           {assigned.code} — {assigned.name}
         </p>
@@ -76,20 +91,6 @@ export function VendorCompliancePanel({
           {t('compliance.untrackedHint')}
         </p>
       )}
-      {canManage ? (
-        <div className="max-w-md space-y-3">
-          <div className="space-y-1.5">
-            <Label id={`${classFieldId}-label`}>{t('compliance.classLabel')}</Label>
-            <Select id={classFieldId} aria-labelledby={`${classFieldId}-label`} aria-label={t('compliance.classLabel')} value={classId} onChange={(event) => setClassId(event.target.value)}>
-              <option value="">{t('compliance.noClass')}</option>
-              {classes.map((option) => (
-                <option key={option.id} value={option.id}>{`${option.code} — ${option.name}`}</option>
-              ))}
-            </Select>
-          </div>
-          <Button disabled={busy} onClick={save}>{busy ? tc('actions.saving') : tc('actions.save')}</Button>
-        </div>
-      ) : null}
       <p className="text-xs">
         <Link href="/compliance/vendors" className="text-teal-700 underline dark:text-teal-300">
           {t('compliance.viewMatrix')}

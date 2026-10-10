@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import {
   Button,
-  Card,
+  Drawer,
   Input,
   Label,
   SearchSelect,
@@ -18,6 +18,7 @@ import {
 } from '@openbooks/ui'
 import { ActionError, kindForStatus, transportError } from '@braedonsaunders/appkit-errors'
 import { DrawerTabStrip } from '../../../components/drawer-tab-strip'
+import { DrawerSublist, SublistAddButton, SublistEmpty } from '../../../components/drawer-sublist'
 import { useAppAction } from '@/lib/use-app-action'
 import { confirmDialog } from '@/lib/confirm'
 import { toast } from 'sonner'
@@ -328,18 +329,14 @@ export function BillingRelationshipsSection({
       ) : null}
       </div>
 
-      <div hidden={panel !== 'relationships'} className="space-y-2">
-      <div>
-        <div className="flex items-center justify-between">
-          <h4 className="text-sm font-semibold">{t('relationshipsHeading')}</h4>
-          {canManage && !draft ? (
-            <Button size="sm" variant="outline" onClick={() => { setDraft(EMPTY_DRAFT); setError(null) }}>
-              {t('new')}
-            </Button>
-          ) : null}
-        </div>
-        {payload.relationships.length === 0 && !draft ? (
-          <p className="mt-2 text-sm text-muted-foreground">{t('empty')}</p>
+      <div hidden={panel !== 'relationships'}>
+      <DrawerSublist
+        title={t('relationshipsHeading')}
+        action={canManage ? <SublistAddButton label={t('new')} onClick={() => { setDraft(EMPTY_DRAFT); setError(null) }} /> : undefined}
+        alert={!draft && error ? <p role="alert" className="text-sm text-destructive">{error}</p> : null}
+      >
+        {payload.relationships.length === 0 ? (
+          <SublistEmpty text={t('empty')} />
         ) : (
           <SharedTable>
             <TableHeader>
@@ -348,7 +345,7 @@ export function BillingRelationshipsSection({
                 <TableHead>{t('payer')}</TableHead>
                 <TableHead>{t('group')}</TableHead>
                 <TableHead>{t('window')}</TableHead>
-                {canManage ? <TableHead>{tc('labels.actions')}</TableHead> : null}
+                {canManage ? <TableHead className="text-right">{tc('labels.actions')}</TableHead> : null}
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -362,7 +359,7 @@ export function BillingRelationshipsSection({
                   </TableCell>
                   {canManage ? (
                     <TableCell>
-                      <div className="flex gap-1">
+                      <div className="flex justify-end gap-1">
                         <Button
                           size="sm"
                           variant="ghost"
@@ -392,79 +389,88 @@ export function BillingRelationshipsSection({
             </TableBody>
           </SharedTable>
         )}
+      </DrawerSublist>
       </div>
 
-      {draft && canManage ? (
-        <Card className="space-y-3 p-4">
-          <div className="grid gap-3 md:grid-cols-2">
-            <div>
-              <Label>{t('billTo')}</Label>
-              <SearchSelect
-                value={draft.billTo}
-                onChange={(billTo) => setDraft({ ...draft, billTo })}
-                options={partyOptions}
-                sheetTitle={t('billTo')}
-                ariaLabel={t('billTo')}
-              />
-            </div>
-            <div>
-              <Label>{t('payer')}</Label>
-              <SearchSelect
-                value={draft.payer}
-                onChange={(payer) => setDraft({
-                  ...draft,
-                  payer,
-                  group: draft.group && payload.groups.some((g) => g.id === draft.group && g.payerPartyId === payer)
-                    ? draft.group
-                    : '',
-                })}
-                options={partyOptions}
-                sheetTitle={t('payer')}
-                ariaLabel={t('payer')}
-              />
-            </div>
-            <div>
-              <Label>{t('group')}</Label>
-              <Select
-                value={draft.group}
-                onChange={(e) => setDraft({ ...draft, group: e.target.value })}
-                aria-label={t('group')}
-              >
-                <option value="">{t('groupNone')}</option>
-                {eligibleGroups.map((g) => (
-                  <option key={g.id} value={g.id}>{`${g.code} · ${g.name}`}</option>
-                ))}
-              </Select>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <Label>{t('effectiveFrom')}</Label>
-                <Input type="date" value={draft.from} onChange={(e) => setDraft({ ...draft, from: e.target.value })} />
-              </div>
-              <div>
-                <Label>{t('effectiveTo')}</Label>
-                <Input type="date" value={draft.to} onChange={(e) => setDraft({ ...draft, to: e.target.value })} />
-              </div>
-            </div>
-          </div>
-          {draft.billTo && draft.from ? (
-            <p className="text-sm text-muted-foreground">
-              {t('consequence', { from: draft.from, billTo: billToName })}
-            </p>
-          ) : null}
-          {error ? <p className="text-sm text-destructive">{error}</p> : null}
-          <div className="flex justify-end gap-2">
+      <Drawer
+        open={draft !== null && canManage}
+        onClose={() => { if (!busy) { setDraft(null); setError(null) } }}
+        stacked
+        size="md"
+        title={draft?.id ? t('editTitle') : t('new')}
+        footer={draft ? (
+          <>
             <Button variant="outline" disabled={busy} onClick={() => { setDraft(null); setError(null) }}>
               {tc('actions.cancel')}
             </Button>
             <Button disabled={busy || !draft.billTo || !draft.payer || !draft.from} onClick={save}>
               {busy ? tc('actions.saving') : tc('actions.save')}
             </Button>
+          </>
+        ) : undefined}
+      >
+        {draft ? (
+          <div className="space-y-4">
+            {error ? <p role="alert" className="text-sm text-destructive">{error}</p> : null}
+            <div className="grid gap-3 md:grid-cols-2">
+              <div>
+                <Label>{t('billTo')}</Label>
+                <SearchSelect
+                  value={draft.billTo}
+                  onChange={(billTo) => setDraft({ ...draft, billTo })}
+                  options={partyOptions}
+                  sheetTitle={t('billTo')}
+                  ariaLabel={t('billTo')}
+                />
+              </div>
+              <div>
+                <Label>{t('payer')}</Label>
+                <SearchSelect
+                  value={draft.payer}
+                  onChange={(payer) => setDraft({
+                    ...draft,
+                    payer,
+                    group: draft.group && payload.groups.some((g) => g.id === draft.group && g.payerPartyId === payer)
+                      ? draft.group
+                      : '',
+                  })}
+                  options={partyOptions}
+                  sheetTitle={t('payer')}
+                  ariaLabel={t('payer')}
+                />
+              </div>
+              <div>
+                <Label>{t('group')}</Label>
+                <Select
+                  value={draft.group}
+                  onChange={(e) => setDraft({ ...draft, group: e.target.value })}
+                  aria-label={t('group')}
+                >
+                  <option value="">{t('groupNone')}</option>
+                  {eligibleGroups.map((g) => (
+                    <option key={g.id} value={g.id}>{`${g.code} · ${g.name}`}</option>
+                  ))}
+                </Select>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label>{t('effectiveFrom')}</Label>
+                  <Input type="date" value={draft.from} onChange={(e) => setDraft({ ...draft, from: e.target.value })} />
+                </div>
+                <div>
+                  <Label>{t('effectiveTo')}</Label>
+                  <Input type="date" value={draft.to} onChange={(e) => setDraft({ ...draft, to: e.target.value })} />
+                </div>
+              </div>
+            </div>
+            {draft.billTo && draft.from ? (
+              <p className="text-sm text-muted-foreground">
+                {t('consequence', { from: draft.from, billTo: billToName })}
+              </p>
+            ) : null}
           </div>
-        </Card>
-      ) : null}
-
-      </div>
+        ) : null}
+      </Drawer>
 
       <div hidden={panel !== 'groups'} className="space-y-2">
       {payload.groups.length > 0 ? (

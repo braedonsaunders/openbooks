@@ -2,13 +2,15 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { useTranslations } from 'next-intl'
+import { useFormatter, useTranslations } from 'next-intl'
 import { Badge, Button, Input, Select, Skeleton } from '@openbooks/ui'
 import { Field } from '@/components/field'
+import { useRecordSaveParticipant } from '@/components/record-save-participants'
 import { fetchAction } from '@braedonsaunders/appkit-errors'
 import { ActionAlert } from '@braedonsaunders/appkit-errors/react'
 import { useAppAction } from '@/lib/use-app-action'
 import { displayAccountStatusName } from '../../../lib/crm-status-display'
+import { PartyReadOnlyField } from './PartySummary'
 
 /**
  * The Relationship tab of the account flyout — the CRM profile that used to
@@ -23,6 +25,10 @@ import { displayAccountStatusName } from '../../../lib/crm-status-display'
  * Stage is the field that matters. Moving forward is a promotion the server
  * records (and, at `customer`, writes the AR role for); moving backward
  * demands a reason, so the stage history never silently rewinds.
+ *
+ * The fields edit with the record: read-only until the drawer is in edit
+ * mode, and saved by the drawer's single Save through the record save
+ * registry — the section never carries a Save of its own.
  */
 
 interface StatusOption { id: string; name: string; lifecycle_stage: string; is_default: boolean }
@@ -55,6 +61,11 @@ interface FormState {
 }
 
 const text = (value: unknown): string => (value == null ? '' : String(value))
+
+function optionName<T extends { id: string; name: string }>(options: T[], id: string, label: (option: T) => string = (option) => option.name): string {
+  const option = options.find((item) => item.id === id)
+  return option ? label(option) : ''
+}
 
 const pad2 = (n: number): string => String(n).padStart(2, '0')
 
@@ -100,16 +111,29 @@ function toForm(profile: Record<string, unknown>): FormState {
   }
 }
 
-export function PartyRelationshipSection({ partyId, canManage }: { partyId: string; canManage: boolean }) {
+export function PartyRelationshipSection({
+  partyId,
+  canManage,
+  editable,
+}: {
+  partyId: string
+  /** crm.accounts.manage — may open a relationship profile. */
+  canManage: boolean
+  /** The record drawer is in edit mode and the viewer may manage accounts. */
+  editable: boolean
+}) {
   const t = useTranslations('crm')
   const tc = useTranslations('common')
+  const format = useFormatter()
   const router = useRouter()
-  const { busy, refusal, execute, runExclusive } = useAppAction()
+  const { busy, refusal, execute, runExclusive, clearRefusal } = useAppAction()
   // Keyed by party so switching accounts reads as "not loaded yet" without a
   // synchronous reset inside the effect body, which would cascade a render on
   // every mount (react-hooks/set-state-in-effect).
   const [result, setResult] = useState<{ partyId: string; body: RelationshipResponse | null } | null>(null)
   const [form, setForm] = useState<FormState | null>(null)
+  // The form as last read: the section is dirty only while it differs.
+  const [loadedForm, setLoadedForm] = useState<FormState | null>(null)
   const [storedStage, setStoredStage] = useState<Stage | null>(null)
   // The optimistic-concurrency token for the PATCH below: profile.updated_at
   // arrives in token form (the read rewrites it, like opportunity saves), so
@@ -142,6 +166,7 @@ export function PartyRelationshipSection({ partyId, canManage }: { partyId: stri
       (applied) => {
         setResult(applied.result)
         setForm(applied.form)
+        setLoadedForm(applied.form)
         setStoredStage(applied.storedStage)
         setStoredRevision(applied.revision)
       },
@@ -185,6 +210,7 @@ export function PartyRelationshipSection({ partyId, canManage }: { partyId: stri
       const applied = await reload()
       setResult(applied.result)
       setForm(applied.form)
+      setLoadedForm(applied.form)
       setStoredStage(applied.storedStage)
       setStoredRevision(applied.revision)
     } catch {
@@ -194,8 +220,8 @@ export function PartyRelationshipSection({ partyId, canManage }: { partyId: stri
     router.refresh()
   })
 
-  async function save() {
-    if (!form) return
+  async function save(): Promise<boolean> {
+    if (!form) return true
     const ok = await execute(
       () => fetchAction(`/api/crm/accounts/${partyId}`, {
         method: 'PATCH',
@@ -220,23 +246,39 @@ export function PartyRelationshipSection({ partyId, canManage }: { partyId: stri
           expectedUpdatedAt: storedRevision,
         }),
       }),
-      { fallbackMessage: tc('feedback.saveFailed'), successMessage: tc('feedback.saved') },
+      { fallbackMessage: tc('feedback.saveFailed') },
     )
-    if (!ok) return
+    if (!ok) return false
+    setStageReason('')
     // A save rotates the token: re-read so the next save carries the fresh
     // revision instead of 409ing against this one's write.
     try {
       const applied = await reload()
       setResult(applied.result)
       setForm(applied.form)
+      setLoadedForm(applied.form)
       setStoredStage(applied.storedStage)
       setStoredRevision(applied.revision)
     } catch {
       // The save landed server-side; a failed re-read keeps the saved form
-      // and the next save re-checks the token rather than failing silently.
+      // as the new baseline and the next save re-checks the token rather
+      // than failing silently.
+      setLoadedForm(form)
     }
-    router.refresh()
+    return true
   }
+
+  const dirty = form !== null && loadedForm !== null
+    && (stageReason !== '' || (Object.keys(form) as (keyof FormState)[]).some((key) => form[key] !== loadedForm[key]))
+  useRecordSaveParticipant('relationship', {
+    dirty,
+    save,
+    reset: () => {
+      setForm(loadedForm)
+      setStageReason('')
+      clearRefusal()
+    },
+  })
 
   if (loaded === null) {
     return <div className="py-8 text-center text-sm text-slate-500">{tc('feedback.loadFailed')}</div>
@@ -270,6 +312,7 @@ export function PartyRelationshipSection({ partyId, canManage }: { partyId: stri
   }
 
   const statuses = loaded.options.statuses.filter((status) => status.lifecycle_stage === form.lifecycleStage)
+  const statusName = (status: StatusOption) => displayAccountStatusName(status.name, (key) => t(`accounts.statuses.${key}`))
   const movingBackward = storedStage != null && RANK[form.lifecycleStage] < RANK[storedStage]
   const opportunities = loaded.account.opportunities ?? []
 
@@ -277,74 +320,86 @@ export function PartyRelationshipSection({ partyId, canManage }: { partyId: stri
     <section className="space-y-5">
       <ActionAlert error={refusal} fallbackMessage={tc('feedback.saveFailed')} />
 
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-2">
-          <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t('accounts.relationshipHeading')}</h3>
-          <Badge>{t(`stages.${form.lifecycleStage}`)}</Badge>
+      <div className="flex items-center gap-2">
+        <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t('accounts.relationshipHeading')}</h3>
+        <Badge>{t(`stages.${form.lifecycleStage}`)}</Badge>
+      </div>
+
+      {editable ? (
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field label={t('fields.lifecycleStage')}>
+            <Select value={form.lifecycleStage} onChange={(event) => changeStage(event.target.value as Stage)}>
+              {STAGES.map((stage) => <option key={stage} value={stage}>{t(`stages.${stage}`)}</option>)}
+            </Select>
+          </Field>
+          <Field label={t('fields.status')}>
+            <Select value={form.statusId} onChange={(event) => set('statusId', event.target.value)}>
+              <option value="">{tc('labels.none')}</option>
+              {statuses.map((status) => (
+                <option key={status.id} value={status.id}>{statusName(status)}</option>
+              ))}
+            </Select>
+          </Field>
+          <Field label={t('fields.owner')}>
+            <Select value={form.ownerUserId} onChange={(event) => set('ownerUserId', event.target.value)}>
+              <option value="">{t('fields.unassigned')}</option>
+              {loaded.options.owners.map((owner) => <option key={owner.id} value={owner.id}>{owner.name}</option>)}
+            </Select>
+          </Field>
+          <Field label={t('fields.territory')}>
+            <Select value={form.territoryId} onChange={(event) => set('territoryId', event.target.value)}>
+              <option value="">{tc('labels.none')}</option>
+              {loaded.options.territories.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+            </Select>
+          </Field>
+          <Field label={t('fields.leadSource')}>
+            <Select value={form.leadSourceId} onChange={(event) => set('leadSourceId', event.target.value)}>
+              <option value="">{tc('labels.none')}</option>
+              {loaded.options.sources.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+            </Select>
+          </Field>
+          <Field label={t('fields.qualificationScore')}>
+            <Input type="number" min="0" max="100" value={form.qualificationScore} onChange={(event) => set('qualificationScore', event.target.value)} />
+          </Field>
+          <Field label={t('fields.industry')}>
+            <Input value={form.industry} onChange={(event) => set('industry', event.target.value)} />
+          </Field>
+          <Field label={t('fields.category')}>
+            <Input value={form.category} onChange={(event) => set('category', event.target.value)} />
+          </Field>
+          <Field label={t('fields.annualRevenue')}>
+            <Input inputMode="decimal" value={form.annualRevenue} onChange={(event) => set('annualRevenue', event.target.value)} />
+          </Field>
+          <Field label={t('fields.employeeCount')}>
+            <Input type="number" min="0" value={form.employeeCount} onChange={(event) => set('employeeCount', event.target.value)} />
+          </Field>
+          <Field label={t('fields.nextAction')}>
+            <Input type="datetime-local" value={form.nextActionAt} onChange={(event) => set('nextActionAt', event.target.value)} />
+          </Field>
         </div>
-        {canManage ? (
-          <Button size="sm" disabled={busy} onClick={save}>{busy ? tc('actions.saving') : tc('actions.save')}</Button>
-        ) : null}
-      </div>
+      ) : (
+        <div className="grid gap-4 sm:grid-cols-2" data-relationship-read-only="">
+          <PartyReadOnlyField label={t('fields.lifecycleStage')} value={t(`stages.${form.lifecycleStage}`)} />
+          <PartyReadOnlyField label={t('fields.status')} value={optionName(loaded.options.statuses, form.statusId, statusName)} />
+          <PartyReadOnlyField label={t('fields.owner')} value={optionName(loaded.options.owners, form.ownerUserId) || t('fields.unassigned')} />
+          <PartyReadOnlyField label={t('fields.territory')} value={optionName(loaded.options.territories, form.territoryId)} />
+          <PartyReadOnlyField label={t('fields.leadSource')} value={optionName(loaded.options.sources, form.leadSourceId)} />
+          <PartyReadOnlyField label={t('fields.qualificationScore')} value={form.qualificationScore} />
+          <PartyReadOnlyField label={t('fields.industry')} value={form.industry} />
+          <PartyReadOnlyField label={t('fields.category')} value={form.category} />
+          <PartyReadOnlyField label={t('fields.annualRevenue')} value={form.annualRevenue} />
+          <PartyReadOnlyField label={t('fields.employeeCount')} value={form.employeeCount} />
+          <ReadField
+            label={t('fields.nextAction')}
+            value={form.nextActionAt ? format.dateTime(new Date(form.nextActionAt), { dateStyle: 'medium', timeStyle: 'short' }) : ''}
+          />
+        </div>
+      )}
 
-      <div className="grid gap-4 sm:grid-cols-2">
-        <Field label={t('fields.lifecycleStage')}>
-          <Select value={form.lifecycleStage} onChange={(event) => changeStage(event.target.value as Stage)} disabled={!canManage}>
-            {STAGES.map((stage) => <option key={stage} value={stage}>{t(`stages.${stage}`)}</option>)}
-          </Select>
-        </Field>
-        <Field label={t('fields.status')}>
-          <Select value={form.statusId} onChange={(event) => set('statusId', event.target.value)} disabled={!canManage}>
-            <option value="">{tc('labels.none')}</option>
-            {statuses.map((status) => (
-              <option key={status.id} value={status.id}>
-                {displayAccountStatusName(status.name, (key) => t(`accounts.statuses.${key}`))}
-              </option>
-            ))}
-          </Select>
-        </Field>
-        <Field label={t('fields.owner')}>
-          <Select value={form.ownerUserId} onChange={(event) => set('ownerUserId', event.target.value)} disabled={!canManage}>
-            <option value="">{t('fields.unassigned')}</option>
-            {loaded.options.owners.map((owner) => <option key={owner.id} value={owner.id}>{owner.name}</option>)}
-          </Select>
-        </Field>
-        <Field label={t('fields.territory')}>
-          <Select value={form.territoryId} onChange={(event) => set('territoryId', event.target.value)} disabled={!canManage}>
-            <option value="">{tc('labels.none')}</option>
-            {loaded.options.territories.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
-          </Select>
-        </Field>
-        <Field label={t('fields.leadSource')}>
-          <Select value={form.leadSourceId} onChange={(event) => set('leadSourceId', event.target.value)} disabled={!canManage}>
-            <option value="">{tc('labels.none')}</option>
-            {loaded.options.sources.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
-          </Select>
-        </Field>
-        <Field label={t('fields.qualificationScore')}>
-          <Input type="number" min="0" max="100" value={form.qualificationScore} onChange={(event) => set('qualificationScore', event.target.value)} disabled={!canManage} />
-        </Field>
-        <Field label={t('fields.industry')}>
-          <Input value={form.industry} onChange={(event) => set('industry', event.target.value)} disabled={!canManage} />
-        </Field>
-        <Field label={t('fields.category')}>
-          <Input value={form.category} onChange={(event) => set('category', event.target.value)} disabled={!canManage} />
-        </Field>
-        <Field label={t('fields.annualRevenue')}>
-          <Input inputMode="decimal" value={form.annualRevenue} onChange={(event) => set('annualRevenue', event.target.value)} disabled={!canManage} />
-        </Field>
-        <Field label={t('fields.employeeCount')}>
-          <Input type="number" min="0" value={form.employeeCount} onChange={(event) => set('employeeCount', event.target.value)} disabled={!canManage} />
-        </Field>
-        <Field label={t('fields.nextAction')}>
-          <Input type="datetime-local" value={form.nextActionAt} onChange={(event) => set('nextActionAt', event.target.value)} disabled={!canManage} />
-        </Field>
-      </div>
-
-      {movingBackward ? (
+      {editable && movingBackward ? (
         <div className="space-y-1.5">
           <Field label={t('accounts.stageReason')}>
-            <Input value={stageReason} onChange={(event) => setStageReason(event.target.value)} disabled={!canManage} />
+            <Input value={stageReason} onChange={(event) => setStageReason(event.target.value)} />
           </Field>
           <p className="text-xs text-slate-500">{t('accounts.stageReasonHint')}</p>
         </div>

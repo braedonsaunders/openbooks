@@ -3,13 +3,14 @@
 /** Split from PartyDrawer.tsx; moved without behavior changes. */
 import { type PartyPayload, field } from './party-drawer-model'
 import { useMoney } from '@/components/money-provider'
-import { useMemo, useState, type ReactNode } from 'react'
+import { useCallback, type ReactNode } from 'react'
 import { useTranslations } from 'next-intl'
 import { useViewerFormat } from '@/lib/viewer-format'
-import { CalendarDays, CircleDollarSign, FileText, Search } from 'lucide-react'
-import { Button, Input, Label, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@openbooks/ui'
+import { CalendarDays, CircleDollarSign, FileText } from 'lucide-react'
+import { Button, Label, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@openbooks/ui'
 import type { LineGridColumn } from '../../../components/line-grid'
 import { ReadOnlyValue } from '../../../components/read-only-value'
+import { DrawerSublist, SublistEmpty, SublistPager, useSublistRows } from '../../../components/drawer-sublist'
 
 export function PartyReadOnlyField({
   label,
@@ -65,52 +66,49 @@ export function PartySummary({ payload }: { payload: PartyPayload }) {
   )
 }
 
-export function SublistHeading({ title, description, icon }: { title: string; description: string; icon: React.ReactNode }) {
-  return (
-    <div>
-      <h3 className="flex items-center gap-2 text-sm font-semibold text-slate-900 dark:text-slate-100">{icon}{title}</h3>
-      <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{description}</p>
-    </div>
-  )
-}
-
-export function SublistEmpty({ icon, text }: { icon: React.ReactNode; text: string }) {
-  return (
-    <div className="flex min-h-36 flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-slate-300 text-slate-400 dark:border-slate-700 dark:text-slate-500">
-      {icon}<p className="text-sm">{text}</p>
-    </div>
-  )
-}
-
+/**
+ * A drawer tab over rows the drawer already holds (contacts, addresses):
+ * the shared sublist archetype with client-side search and paging.
+ */
 export function ReadOnlyLineSublist<Row extends Record<string, unknown>>({
+  title,
+  description,
+  icon,
+  action,
+  emptyText,
   columns,
   rows,
   searchPlaceholder,
   onEdit,
 }: {
+  title: string
+  description?: ReactNode
+  icon?: ReactNode
+  action?: ReactNode
+  emptyText: string
   columns: LineGridColumn<Row>[]
   rows: Row[]
   searchPlaceholder: string
   onEdit?: (row: Row, index: number) => void
 }) {
   const tc = useTranslations('common')
-  const [q, setQ] = useState('')
-  const [page, setPage] = useState(1)
-  const perPage = 10
-  const filtered = useMemo(() => {
-    const needle = q.trim().toLocaleLowerCase()
-    if (!needle) return rows
-    return rows.filter((row) => columns.some((column) => String(row[column.key] ?? '').toLocaleLowerCase().includes(needle)))
-  }, [columns, q, rows])
-  const pages = Math.max(1, Math.ceil(filtered.length / perPage))
-  const shown = filtered.slice((page - 1) * perPage, page * perPage)
+  const text = useCallback(
+    (row: Row) => columns.map((column) => String(row[column.key] ?? '')).join(' '),
+    [columns],
+  )
+  const list = useSublistRows(rows, text)
   return (
-    <div className="space-y-3">
-      <div className="relative max-w-sm">
-        <Search className="pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2 text-slate-400" size={15} />
-        <Input value={q} onChange={(event) => { setQ(event.target.value); setPage(1) }} placeholder={searchPlaceholder} className="pl-8" />
-      </div>
-      {shown.length ? (
+    <DrawerSublist
+      title={title}
+      description={description}
+      icon={icon}
+      action={action}
+      search={rows.length ? { value: list.query, onChange: list.setQuery, placeholder: searchPlaceholder } : undefined}
+      footer={rows.length ? <SublistPager page={list.page} pages={list.pages} onPage={list.setPage} /> : null}
+    >
+      {rows.length === 0 ? (
+        <SublistEmpty icon={icon} text={emptyText} />
+      ) : list.shown.length ? (
         <div className="overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-800">
           <Table>
             <TableHeader>
@@ -120,8 +118,8 @@ export function ReadOnlyLineSublist<Row extends Record<string, unknown>>({
               </TableRow>
             </TableHeader>
             <TableBody>
-              {shown.map((row, shownIndex) => (
-                <TableRow key={String(row.id ?? `${page}-${shownIndex}`)}>
+              {list.shown.map((row, shownIndex) => (
+                <TableRow key={String(row.id ?? `${list.page}-${shownIndex}`)}>
                   {columns.map((column) => {
                     const value = String(row[column.key] ?? '')
                     const option = column.options?.find((item) => item.value === value)
@@ -140,11 +138,6 @@ export function ReadOnlyLineSublist<Row extends Record<string, unknown>>({
       ) : (
         <p className="rounded-lg border border-dashed border-slate-300 p-8 text-center text-sm text-slate-500 dark:border-slate-700 dark:text-slate-400">{tc('feedback.noResults')}</p>
       )}
-      <div className="flex items-center justify-end gap-2">
-        <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage((value) => value - 1)}>{tc('actions.previous')}</Button>
-        <span className="text-xs tabular-nums text-slate-500">{page} / {pages}</span>
-        <Button variant="outline" size="sm" disabled={page >= pages} onClick={() => setPage((value) => value + 1)}>{tc('actions.next')}</Button>
-      </div>
-    </div>
+    </DrawerSublist>
   )
 }

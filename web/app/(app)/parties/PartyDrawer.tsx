@@ -1,7 +1,8 @@
 'use client'
 
 import { type Opt, type AddressApiRecord, type ContactApiRecord, type PartyPayload, type SubsidiaryOpt, type AddressRow, type ContactRow, PAYMENT_METHOD_OPTIONS, emptyAddress, emptyContact, addressFromApi, contactFromApi, serializeAddresses, serializeContacts, type PartyTab, toShellTab, fromShellTab, rememberDrawerTab, checkboxClass, field, formatCreditLimit } from './party-drawer-model'
-import { PartyReadOnlyField, PartySummary, SublistHeading, SublistEmpty, ReadOnlyLineSublist } from './PartySummary'
+import { PartyReadOnlyField, PartySummary, ReadOnlyLineSublist } from './PartySummary'
+import { SublistAddButton } from '../../../components/drawer-sublist'
 import { ContactForm, AddressForm } from './PartyContactForms'
 import { BankAccountsPanel } from './PartyBankAccountsPanel'
 import { PartyPaymentMethodsPanel } from './PartyPaymentMethodsPanel'
@@ -11,11 +12,12 @@ import { EmployeeBenefitsPanel } from './EmployeeBenefitsPanel'
 import { ActivitySublist } from './PartyActivitySublist'
 import { TransactionSublist } from './PartyTransactionSublist'
 import { initialDrawerMode, type DrawerMode } from '@/lib/drawer-mode'
+import { RecordSaveContext, useRecordSaveRegistry } from '@/components/record-save-participants'
 import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { useLocale, useTranslations } from 'next-intl'
-import { Building2, Plus, Users } from 'lucide-react'
+import { Building2, Users } from 'lucide-react'
 import { fetchAction } from '@braedonsaunders/appkit-errors'
 import { ActionAlert } from '@braedonsaunders/appkit-errors/react'
 import { useAppAction } from '@/lib/use-app-action'
@@ -306,6 +308,8 @@ export function PartyDrawer({
   // the shared drawer strip (never stacked). Both panels stay mounted
   // (hidden) so a switch never discards in-flight edits.
   const [paymentMethodsSubTab, setPaymentMethodsSubTab] = useState<'methods' | 'autopay'>('methods')
+  // Both payment-method sub-tabs stay mounted; a change in either re-reads both.
+  const [paymentMethodsRevision, setPaymentMethodsRevision] = useState(0)
   // Tabs visited this drawer session. The employee compensation panels stay
   // mounted once visited (see the keep-alive blocks below) so tab switches
   // never discard their local edits. The drawer remounts per party
@@ -461,10 +465,19 @@ export function PartyDrawer({
   // Existing parties default to read-only; creation flows can explicitly
   // request edit mode. Permission checks remain authoritative. Unsaved-create
   // opens editable: there is no persisted record to read yet.
+  // Sections that persist through their own endpoint (relationship,
+  // compliance) edit with the record and save through its single Save, so a
+  // viewer who may manage only one of them can still enter edit mode; the
+  // party fields stay governed by `canManage`.
+  const canEditRecord = canManage
+    || (showRelationshipTab && canManageCrmAccounts)
+    || (showComplianceTab && canManageCompliance)
   const [mode, setMode] = useState<DrawerMode>(
-    createMode ? 'edit' : initialDrawerMode(initialMode, canManage),
+    createMode ? 'edit' : initialDrawerMode(initialMode, canEditRecord),
   )
   const editable = mode === 'edit' && canManage
+  const saveRegistry = useRecordSaveRegistry()
+  const [savingSections, setSavingSections] = useState(false)
 
   const nameValid = displayName.trim().length > 0
     && displayName.trim() !== 'New party' && displayName.trim() !== 'New lead'
@@ -573,7 +586,7 @@ export function PartyDrawer({
   // A dirty editor never closes silently: the X button (via beforeClose)
   // and Cancel both ask first, so typed work survives a stray click.
   async function confirmDiscard() {
-    if (mode !== 'edit' || (!dirty && !payrollDirty && !payComponentsDirty)) return true
+    if (mode !== 'edit' || (!dirty && !payrollDirty && !payComponentsDirty && !saveRegistry.dirty)) return true
     return confirmDialog({
       message: tc('feedback.unsavedChanges'),
       confirmLabel: tc('confirm.discardChanges'),
@@ -821,6 +834,12 @@ export function PartyDrawer({
       await saveNew()
       return
     }
+    // A viewer who may edit only the relationship or compliance sections
+    // saves those; the party fields stayed read-only for them.
+    if (!canManage) {
+      await saveSections()
+      return
+    }
     // A blank display name must never persist a nameless record: the API
     // accepts the 'New party' placeholder on inactive drafts, so the drawer
     // fails fast with an inline error instead of saving silently.
@@ -850,6 +869,7 @@ export function PartyDrawer({
     // Snapshot the exact submitted draft: edits typed while the PATCH is in
     // flight must not be marked clean by this response (see onOk).
     const submitted = savePayload
+    let partySaved = false
     const ok = await execute(
       () =>
         fetchAction(`/api/parties/${p.id}`, {
@@ -868,9 +888,8 @@ export function PartyDrawer({
             setSaveState('dirty')
             return
           }
-          setSaveState('saved')
           setDirty(false)
-          setMode('view')
+          partySaved = true
         },
         onRefused: () => {
           // Stay in edit mode with the typed values intact: the form is
@@ -879,8 +898,33 @@ export function PartyDrawer({
         },
       },
     )
-    if (ok) router.refresh()
+    if (!ok) return
+    if (partySaved) await saveSections()
+    router.refresh()
   }
+
+  /**
+   * Save the sections that persist through their own endpoints, then leave
+   * edit mode. A refused section keeps the drawer in edit mode on that
+   * section's tab, where its fields show the reason.
+   */
+  async function saveSections() {
+    setSaveState('saving')
+    setSavingSections(true)
+    try {
+      const result = await saveRegistry.saveAll()
+      if (!result.ok) {
+        setSaveState('error')
+        showTab(result.key as PartyTab)
+        return
+      }
+      setSaveState('saved')
+      setMode('view')
+    } finally {
+      setSavingSections(false)
+    }
+  }
+
 
   function cancel() {
     // Unsaved-create Cancel writes nothing: there is no persisted row to
@@ -891,6 +935,7 @@ export function PartyDrawer({
       return
     }
     resetForm()
+    saveRegistry.resetAll()
     setDirty(false)
     setSaveState('saved')
     clearRefusal()
@@ -1084,6 +1129,7 @@ export function PartyDrawer({
   }
 
   return (
+    <RecordSaveContext.Provider value={saveRegistry.context}>
     <TransactionDrawer
       closeHref={returnHref}
       beforeClose={confirmDiscard}
@@ -1123,7 +1169,7 @@ export function PartyDrawer({
         />
       }
       description={mode === 'edit' ? tc('feedback.editingHint') : undefined}
-      primaryAction={canManage ? <Button variant="outline" size="sm" disabled={busy} onClick={() => mode === 'edit' ? cancelWithConfirm() : setMode('edit')}>{mode === 'edit' ? tc('actions.cancel') : tc('actions.edit')}</Button> : undefined}
+      primaryAction={canEditRecord ? <Button variant="outline" size="sm" disabled={busy || savingSections} onClick={() => mode === 'edit' ? cancelWithConfirm() : setMode('edit')}>{mode === 'edit' ? tc('actions.cancel') : tc('actions.edit')}</Button> : undefined}
       actionsMenuHeader={forms.length > 0 ? (
         <div className="border-b border-slate-200 p-2 dark:border-slate-800">
           <Label className="mb-1 block text-xs">{t('customForm')}</Label>
@@ -1183,14 +1229,14 @@ export function PartyDrawer({
                 ? tc('actions.saving')
                 : saveState === 'error'
                   ? t('saveFailedRetry')
-                  : dirty
+                  : dirty || saveRegistry.dirty
                     ? t('unsavedChanges')
                     : null
               : null}
           </span>
           {mode === 'edit' ? (
             <div className="ml-auto flex items-center gap-2">
-              <Button disabled={busy || (createMode && !nameValid)} onClick={save}>{busy ? tc('actions.saving') : tc('actions.save')}</Button>
+              <Button disabled={busy || savingSections || (createMode && !nameValid)} onClick={save}>{busy || savingSections ? tc('actions.saving') : tc('actions.save')}</Button>
             </div>
           ) : null}
         </div>
@@ -1727,13 +1773,17 @@ export function PartyDrawer({
               <PartyPaymentMethodsPanel
                 partyId={String(p.id)}
                 canManageMethods={autopay?.canManageMethods ?? false}
-                defaultCurrency={payload.transactionSummary.currencies?.[0]?.currency ?? ''}
+                revision={paymentMethodsRevision}
+                onChanged={() => setPaymentMethodsRevision((value) => value + 1)}
               />
             </div>
             <div hidden={paymentMethodsSubTab !== 'autopay'}>
               <PartyAutopayPanel
                 partyId={String(p.id)}
                 canManageAutopay={autopay?.canManageAutopay ?? false}
+                canManageMethods={autopay?.canManageMethods ?? false}
+                revision={paymentMethodsRevision}
+                onChanged={() => setPaymentMethodsRevision((value) => value + 1)}
               />
             </div>
           </div>
@@ -1755,49 +1805,31 @@ export function PartyDrawer({
         ) : null}
 
         {tab === 'contacts' ? (
-          <section className="space-y-3">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <SublistHeading title={t('contactsHeading')} description={t('contactsDescription')} icon={<Users size={16} />} />
-              {canManage ? (
-                <Button variant="outline" size="sm" onClick={() => setContactDraft({ index: null, row: emptyContact() })}>
-                  <Plus size={14} />{t('addContact')}
-                </Button>
-              ) : null}
-            </div>
-            {contacts.length === 0 ? (
-              <SublistEmpty icon={<Users size={22} />} text={t('noContacts')} />
-            ) : (
-              <ReadOnlyLineSublist
-                columns={contactColumns}
-                rows={contacts}
-                searchPlaceholder={t('contactSearch')}
-                onEdit={canManage ? (row, index) => setContactDraft({ index, row: { ...row } }) : undefined}
-              />
-            )}
-          </section>
+          <ReadOnlyLineSublist
+            title={t('contactsHeading')}
+            description={t('contactsDescription')}
+            icon={<Users size={16} />}
+            action={canManage ? <SublistAddButton label={t('addContact')} onClick={() => setContactDraft({ index: null, row: emptyContact() })} /> : undefined}
+            emptyText={t('noContacts')}
+            columns={contactColumns}
+            rows={contacts}
+            searchPlaceholder={t('contactSearch')}
+            onEdit={canManage ? (row, index) => setContactDraft({ index, row: { ...row } }) : undefined}
+          />
         ) : null}
 
         {tab === 'addresses' ? (
-          <section className="space-y-3">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <SublistHeading title={t('addressesHeading')} description={t('addressesDescription')} icon={<Building2 size={16} />} />
-              {canManage ? (
-                <Button variant="outline" size="sm" onClick={() => setAddressDraft({ index: null, row: emptyAddress() })}>
-                  <Plus size={14} />{t('addAddress')}
-                </Button>
-              ) : null}
-            </div>
-            {addresses.length === 0 ? (
-              <SublistEmpty icon={<Building2 size={22} />} text={t('noAddresses')} />
-            ) : (
-              <ReadOnlyLineSublist
-                columns={addressColumns}
-                rows={addresses}
-                searchPlaceholder={t('addressSearch')}
-                onEdit={canManage ? (row, index) => setAddressDraft({ index, row: { ...row } }) : undefined}
-              />
-            )}
-          </section>
+          <ReadOnlyLineSublist
+            title={t('addressesHeading')}
+            description={t('addressesDescription')}
+            icon={<Building2 size={16} />}
+            action={canManage ? <SublistAddButton label={t('addAddress')} onClick={() => setAddressDraft({ index: null, row: emptyAddress() })} /> : undefined}
+            emptyText={t('noAddresses')}
+            columns={addressColumns}
+            rows={addresses}
+            searchPlaceholder={t('addressSearch')}
+            onEdit={canManage ? (row, index) => setAddressDraft({ index, row: { ...row } }) : undefined}
+          />
         ) : null}
 
         {tab === 'employment' && showEmploymentTab && hrm ? (
@@ -1936,7 +1968,7 @@ export function PartyDrawer({
           an unvisited tab issues no requests until first opened. */}
       {showRelationshipTab && keptTabs.has('relationship') ? (
         <div hidden={tab !== 'relationship'} className="space-y-7 p-1">
-          <PartyRelationshipSection partyId={String(p.id)} canManage={canManageCrmAccounts} />
+          <PartyRelationshipSection partyId={String(p.id)} canManage={canManageCrmAccounts} editable={mode === 'edit' && canManageCrmAccounts} />
         </div>
       ) : null}
       {showExternalIdsTab && keptTabs.has('external-ids') ? (
@@ -1955,7 +1987,7 @@ export function PartyDrawer({
             partyId={String(p.id)}
             initialClassId={compliance.classId}
             classes={compliance.classes}
-            canManage={canManageCompliance}
+            editable={mode === 'edit' && canManageCompliance}
           />
         </div>
       ) : null}
@@ -2045,6 +2077,7 @@ export function PartyDrawer({
         />
       ) : null}
     </TransactionDrawer>
+    </RecordSaveContext.Provider>
   )
 }
 

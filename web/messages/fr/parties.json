@@ -77,10 +77,8 @@
       "emptyTitle": "Aucun moyen de paiement enregistré",
       "emptyDescription": "Envoyez un lien de configuration et le client enregistre lui-même une carte ou un mandat. Rien n'est prélevé avant l'encaissement d'une facture.",
       "sendSetupLink": "Envoyer un lien de configuration",
-      "sendHint": "Le client ouvre le lien et enregistre une carte ou un mandat auprès du prestataire. L'envoi du lien ne prélève rien.",
       "provider": "Prestataire",
       "currency": "Devise",
-      "currencyPlaceholder": "p. ex. EUR",
       "setupLinkReady": "Lien prêt — envoyez-le au client :",
       "copyLink": "Copier le lien",
       "linkCopied": "Lien copié",
@@ -93,7 +91,6 @@
       "removeFailed": "Le moyen de paiement n'a pas pu être retiré.",
       "setDefaultFailed": "Le moyen par défaut n'a pas pu être modifié.",
       "loadFailed": "Les moyens de paiement n'ont pas pu être chargés.",
-      "tryAgain": "Réessayer",
       "awaitingCustomer": "En attente du client",
       "active": "Actif",
       "expires": "Expire {month}/{year}",
@@ -116,7 +113,42 @@
       "backupDescription": "Si le mode par défaut est refusé, les modes de secours sont débités dans l'ordre affiché.",
       "moveUp": "Avancer dans l'ordre de secours",
       "moveDown": "Reculer dans l'ordre de secours",
-      "reorderFailed": "L'ordre de secours n'a pas pu être modifié."
+      "reorderFailed": "L'ordre de secours n'a pas pu être modifié.",
+      "addMethod": "Ajouter un moyen de paiement",
+      "addTitle": "Ajouter un moyen de paiement",
+      "addDescription": "Envoyez au client un lien sécurisé pour enregistrer une carte ou un compte bancaire auprès de votre prestataire de paiement. Rien n’est prélevé lors de l’enregistrement.",
+      "recipient": "Envoyer à",
+      "recipientSelect": "Choisir un destinataire…",
+      "recipientHint": "Seules les adresses e-mail de ce client sont proposées. Ajoutez un contact pour l’envoyer à quelqu’un d’autre.",
+      "noRecipients": "Ce client n’a aucune adresse e-mail enregistrée : le lien est créé pour que vous le partagiez. Ajoutez une adresse dans l’onglet Contacts pour l’envoyer directement.",
+      "emailNotConfigured": "L’envoi d’e-mails n’est pas configuré : le lien est créé pour que vous le copiiez et le partagiez. <link>Configurez l’e-mail</link> pour envoyer les liens directement.",
+      "noProviders": "Aucun prestataire de paiement n’accepte encore les paiements en ligne. <link>Activez d’abord un prestataire</link>.",
+      "noCurrencies": "Aucune devise n’est activée pour l’entité juridique de ce client. Activez le multidevise dans Paramètres de l’entreprise → Fonctionnalités pour encaisser dans d’autres devises.",
+      "whatIsSent": "{recipient} reçoit un e-mail contenant un lien sécurisé pour enregistrer une carte ou un compte bancaire pour ce client. Le moyen apparaît comme En attente du client jusqu’à la fin.",
+      "chooseRecipient": "Choisissez qui reçoit le lien de configuration.",
+      "whatIsCreated": "Un lien de configuration sécurisé est créé pour que vous le partagiez avec le client. Le moyen apparaît comme En attente du client jusqu’à la fin.",
+      "createLink": "Créer le lien de configuration",
+      "sent": "Lien de configuration envoyé à {recipient}.",
+      "deliveryUncertain": "L’e-mail à {recipient} n’a pas pu être confirmé. S’il n’arrive pas, copiez le lien ci-dessous et partagez-le autrement.",
+      "deliveryFailed": "L’e-mail à {recipient} n’a pas pu être envoyé. Copiez le lien ci-dessous et partagez-le autrement.",
+      "setupLink": "Lien de configuration",
+      "copyFailed": "Le lien n’a pas pu être copié. Sélectionnez-le et copiez-le manuellement.",
+      "optionsLoadFailed": "Les options de configuration n’ont pas pu être chargées.",
+      "search": "Rechercher des moyens de paiement…",
+      "allStatuses": "Tous les statuts",
+      "method": "Moyen",
+      "details": "Détails",
+      "enrollmentsLoadFailed": "Les paramètres du prélèvement automatique n’ont pas pu être chargés.",
+      "needsMethodTitle": "Ajoutez d’abord un moyen de paiement",
+      "needsMethodHint": "Le prélèvement automatique débite le moyen de paiement par défaut du client. Envoyez au client un lien de configuration pour enregistrer une carte ou un compte bancaire, puis activez le prélèvement automatique.",
+      "needsMethodHintReadOnly": "Le prélèvement automatique débite le moyen de paiement par défaut du client. Une personne qui gère les moyens de paiement doit d’abord en ajouter un.",
+      "awaitingMethodTitle": "En attente de l’enregistrement d’un moyen de paiement par le client",
+      "awaitingMethodHint": "Le prélèvement automatique pourra être activé une fois que le client aura terminé le lien de configuration.",
+      "notEnrolled": "Le prélèvement automatique est désactivé pour ce client.",
+      "scope": "S’applique à",
+      "collect": "Encaisser automatiquement",
+      "enrollDescription": "Les factures échues sont prélevées automatiquement sur le moyen de paiement par défaut du client.",
+      "chargeOnIssueHint": "Prélever chaque nouvelle facture dès son émission plutôt qu’à son échéance."
     },
     "debitMandates": {
       "heading": "Mandats de prélèvement",
@@ -156,7 +188,9 @@
       "validation": {
         "bankAccount": "Choisissez un compte bancaire approuvé pour le mandat.",
         "reference": "Saisissez la référence du mandat."
-      }
+      },
+      "search": "Rechercher des mandats…",
+      "allStatuses": "Tous les statuts"
     },
     "wages": {
       "title": "Taux de rémunération",
@@ -197,7 +231,8 @@
       "timeEntryRounding": "Par saisie de temps",
       "roundingEffectiveDateHint": "Applicable aux heures de paie de ce taux daté ; les salaires et les coûts de projet approuvés restent inchangés.",
       "payrollRatePrecisionHelp": "Arrondit le taux horaire après les multiplicateurs des heures supplémentaires ou autres rémunérations, avant de calculer le montant des heures. Le taux de base enregistré reste inchangé.",
-      "payrollAmountRoundingHelp": "Arrondir chaque entrée de temps avant de les additionner, ou totaliser les dimensions salariales et comptables correspondantes avant d’arrondir aux cents."
+      "payrollAmountRoundingHelp": "Arrondir chaque entrée de temps avant de les additionner, ou totaliser les dimensions salariales et comptables correspondantes avant d’arrondir aux cents.",
+      "search": "Rechercher des taux de salaire…"
     },
     "payComponents": {
       "title": "Éléments de paie récurrents",
@@ -237,7 +272,8 @@
       "standardRuns": "Régulières, supplémentaires et de cessation",
       "regularOnly": "Régulières uniquement",
       "periodicAndFinal": "Paies régulières et finales",
-      "unknownApplicability": "Applicabilité inconnue"
+      "unknownApplicability": "Applicabilité inconnue",
+      "search": "Rechercher des éléments de paie…"
     },
     "summary": {
       "transactions": "Transactions",
@@ -555,7 +591,8 @@
       "references": "Choisissez des dossiers de cette organisation.",
       "overlap": "Ce dossier possède déjà une tarification active pour une partie de cette période.",
       "save": "Impossible d’enregistrer l’affectation."
-    }
+    },
+    "editTitle": "Modifier l’affectation du barème"
   },
   "taxIds": {
     "title": "Numéros de TVA professionnels",
@@ -583,7 +620,12 @@
       "valid": "N° TVA valide ({scheme})",
       "invalid": "N° TVA invalide ({scheme})",
       "unverified": "N° TVA non vérifié ({scheme})"
-    }
+    },
+    "addTaxId": "Ajouter un identifiant fiscal",
+    "addDescription": "Enregistrez un identifiant fiscal d’entreprise. Il est validé auprès de l’autorité de son régime.",
+    "search": "Rechercher des identifiants fiscaux…",
+    "verdict": "Verdict",
+    "lastChecked": "Dernière vérification"
   },
   "billingRelationships": {
     "heading": "Facturation",
@@ -625,6 +667,7 @@
       "overlap": "Ce client facture déjà via un autre payeur sur une partie de cette période — fermez d'abord la fenêtre existante, puis ajoutez la nouvelle.",
       "featureOff": "La facturation consolidée a été désactivée — réactivez-la dans Paramètres de l'entreprise, Fonctionnalités, puis réessayez.",
       "save": "Impossible d'enregistrer la relation de facturation."
-    }
+    },
+    "editTitle": "Modifier la relation de facturation"
   }
 }

@@ -1,12 +1,11 @@
 'use client'
 
-/** Split from PartyDrawer.tsx; moved without behavior changes. */
 import { type BankAccountClient, field } from './party-drawer-model'
-import { SublistHeading, SublistEmpty } from './PartySummary'
+import { DrawerSublist, SublistAddButton, SublistEmpty, SublistPager } from '../../../components/drawer-sublist'
 import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useLocale, useTranslations } from 'next-intl'
-import { Landmark, Plus, Search } from 'lucide-react'
+import { Landmark } from 'lucide-react'
 import { fetchAction } from '@braedonsaunders/appkit-errors'
 import { ActionAlert } from '@braedonsaunders/appkit-errors/react'
 import { useAppAction } from '@/lib/use-app-action'
@@ -218,11 +217,15 @@ export function BankAccountsPanel({
   if (!partyId) return null
 
   return (
-    <section className="space-y-3">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <SublistHeading title={t('bankAccountsHeading')} description={t('bankAccountsDescription')} icon={<Landmark size={16} />} />
-        {canEditAccounts ? <Button variant="outline" size="sm" onClick={() => setDraft(emptyBankDraft())}><Plus size={14} />{t('addBankAccount')}</Button> : null}
-      </div>
+    <DrawerSublist
+      title={t('bankAccountsHeading')}
+      description={t('bankAccountsDescription')}
+      icon={<Landmark size={16} />}
+      action={canEditAccounts ? <SublistAddButton label={t('addBankAccount')} onClick={() => setDraft(emptyBankDraft())} /> : undefined}
+      alert={<ActionAlert error={refusal} fallbackMessage={t('bankAccountSaveFailed')} />}
+      search={accounts.length && !readOnly ? { value: q, onChange: (value) => { setQ(value); setPage(1) }, placeholder: t('bankAccountSearch') } : undefined}
+      footer={accounts.length ? <SublistPager page={page} pages={pages} onPage={setPage} /> : null}
+    >
 
       <Drawer
         open={draft !== null}
@@ -274,18 +277,9 @@ export function BankAccountsPanel({
         ) : null}
       </Drawer>
 
-      <ActionAlert error={refusal} fallbackMessage={t('bankAccountSaveFailed')} />
-
       {accounts.length === 0 ? (
         <SublistEmpty icon={<Landmark size={22} />} text={t('noBankAccounts')} />
       ) : (
-        <>
-          {!readOnly ? (
-          <div className="relative max-w-sm">
-            <Search className="pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2 text-slate-400" size={15} />
-            <Input value={q} onChange={(event) => { setQ(event.target.value); setPage(1) }} placeholder={t('bankAccountSearch')} className="pl-8" />
-          </div>
-          ) : null}
           <Table>
             <TableHeader><TableRow>
               <TableHead>{t('bankName')}</TableHead><TableHead>{t('routing')}</TableHead>
@@ -325,13 +319,7 @@ export function BankAccountsPanel({
               ))}
             </TableBody>
           </Table>
-          <div className="flex items-center justify-end gap-2">
-            <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage((value) => value - 1)}>{tc('actions.previous')}</Button>
-            <span className="text-xs tabular-nums text-slate-500">{page} / {pages}</span>
-            <Button variant="outline" size="sm" disabled={page >= pages} onClick={() => setPage((value) => value + 1)}>{tc('actions.next')}</Button>
-          </div>
-        </>
       )}
-    </section>
+    </DrawerSublist>
   )
 }

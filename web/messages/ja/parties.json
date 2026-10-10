@@ -80,10 +80,8 @@
       "emptyTitle": "お支払い方法が登録されていません",
       "emptyDescription": "セットアップリンクを送ると、お客様ご自身でカードや口座情報を保存できます。請求書の回収まで課金は発生しません。",
       "sendSetupLink": "セットアップリンクを送る",
-      "sendHint": "お客様がリンクを開き、決済事業者側でカードや口座情報を保存します。リンクの送信で課金は発生しません。",
       "provider": "決済事業者",
       "currency": "通貨",
-      "currencyPlaceholder": "例：JPY",
       "setupLinkReady": "セットアップリンクの準備ができました。お客様へお送りください：",
       "copyLink": "リンクをコピー",
       "linkCopied": "リンクをコピーしました",
@@ -96,7 +94,6 @@
       "removeFailed": "お支払い方法を削除できませんでした。",
       "setDefaultFailed": "標準の方法を変更できませんでした。",
       "loadFailed": "お支払い方法を読み込めませんでした。",
-      "tryAgain": "再試行",
       "awaitingCustomer": "お客様の操作待ち",
       "active": "有効",
       "expires": "有効期限 {month}/{year}",
@@ -119,7 +116,42 @@
       "backupDescription": "デフォルトの方法が拒否された場合、バックアップ方法が表示順に請求されます。",
       "moveUp": "バックアップ順序で前に移動",
       "moveDown": "バックアップ順序で後に移動",
-      "reorderFailed": "バックアップ順序を変更できませんでした。"
+      "reorderFailed": "バックアップ順序を変更できませんでした。",
+      "addMethod": "支払い方法を追加",
+      "addTitle": "支払い方法を追加",
+      "addDescription": "顧客に安全なリンクを送信し、決済プロバイダーにカードまたは銀行口座を登録してもらいます。登録時に請求は発生しません。",
+      "recipient": "送信先",
+      "recipientSelect": "送信先を選択…",
+      "recipientHint": "この顧客に登録されたメールアドレスのみ表示されます。別の相手に送るには連絡先を追加してください。",
+      "noRecipients": "この顧客にはメールアドレスが登録されていないため、共有用のリンクを作成します。直接送信するには「連絡先」タブでメールアドレスを追加してください。",
+      "emailNotConfigured": "送信メールが設定されていないため、コピーして共有するためのリンクを作成します。セットアップリンクを直接送信するには<link>メールを設定</link>してください。",
+      "noProviders": "オンライン決済を受け付ける決済プロバイダーがまだありません。先に<link>プロバイダーを有効化</link>してください。",
+      "noCurrencies": "この顧客の法人に有効な通貨がありません。他の通貨で回収するには、会社設定 → 機能で多通貨を有効にしてください。",
+      "whatIsSent": "{recipient} に、この顧客のカードまたは銀行口座を登録するための安全なリンクがメールで届きます。完了するまで、この方法は「顧客の対応待ち」と表示されます。",
+      "chooseRecipient": "セットアップリンクの受信者を選択してください。",
+      "whatIsCreated": "顧客と共有するための安全なセットアップリンクを作成します。完了するまで、この方法は「顧客の対応待ち」と表示されます。",
+      "createLink": "セットアップリンクを作成",
+      "sent": "セットアップリンクを {recipient} に送信しました。",
+      "deliveryUncertain": "{recipient} へのメールを確認できませんでした。届かない場合は、下のリンクをコピーして別の方法で共有してください。",
+      "deliveryFailed": "{recipient} へのメールを送信できませんでした。下のリンクをコピーして別の方法で共有してください。",
+      "setupLink": "セットアップリンク",
+      "copyFailed": "リンクをコピーできませんでした。選択して手動でコピーしてください。",
+      "optionsLoadFailed": "セットアップのオプションを読み込めませんでした。",
+      "search": "支払い方法を検索…",
+      "allStatuses": "すべてのステータス",
+      "method": "方法",
+      "details": "詳細",
+      "enrollmentsLoadFailed": "自動支払いの設定を読み込めませんでした。",
+      "needsMethodTitle": "先に支払い方法を追加してください",
+      "needsMethodHint": "自動支払いは顧客の既定の支払い方法に請求します。顧客にセットアップリンクを送ってカードまたは銀行口座を登録してもらい、その後で自動支払いを有効にしてください。",
+      "needsMethodHintReadOnly": "自動支払いは顧客の既定の支払い方法に請求します。支払い方法を管理するユーザーが先に追加する必要があります。",
+      "awaitingMethodTitle": "顧客による支払い方法の登録待ち",
+      "awaitingMethodHint": "顧客がセットアップリンクの手続きを完了すると、自動支払いを有効にできます。",
+      "notEnrolled": "この顧客の自動支払いはオフです。",
+      "scope": "対象",
+      "collect": "自動で回収",
+      "enrollDescription": "期日の請求書は顧客の既定の支払い方法から自動的に請求されます。",
+      "chargeOnIssueHint": "新しい請求書を期日ではなく発行時にすぐ請求します。"
     },
     "debitMandates": {
       "heading": "口座振替委任状",
@@ -159,7 +191,9 @@
       "validation": {
         "bankAccount": "委任状の承認済み銀行口座を選択してください。",
         "reference": "委任状参照を入力してください。"
-      }
+      },
+      "search": "委任状を検索…",
+      "allStatuses": "すべてのステータス"
     },
     "wages": {
       "title": "賃金レート",
@@ -200,7 +234,8 @@
       "timeEntryRounding": "時間記録ごと",
       "roundingEffectiveDateHint": "この有効日付き賃金の給与時間に適用します。固定給と承認済みのプロジェクト原価は変更されません。",
       "payrollRatePrecisionHelp": "時間外手当などの倍率を適用した時給を、時間数による金額計算の前に丸めます。記録された基本単価は変更しません。",
-      "payrollAmountRoundingHelp": "各時間入力の金額を丸めてから合計するか、賃金・会計の区分が一致する金額を合計してから通貨の最小単位に丸めます。"
+      "payrollAmountRoundingHelp": "各時間入力の金額を丸めてから合計するか、賃金・会計の区分が一致する金額を合計してから通貨の最小単位に丸めます。",
+      "search": "賃金率を検索…"
     },
     "payComponents": {
       "title": "定期支給項目",
@@ -240,7 +275,8 @@
       "standardRuns": "通常・追加・退職",
       "regularOnly": "通常のみ",
       "periodicAndFinal": "通常給与および最終給与",
-      "unknownApplicability": "適用範囲が不明"
+      "unknownApplicability": "適用範囲が不明",
+      "search": "給与項目を検索…"
     },
     "summary": {
       "transactions": "取引",
@@ -555,7 +591,8 @@
       "references": "この組織のレコードを選択してください。",
       "overlap": "このレコードには当該期間の一部に有効な労務料金がすでにあります。",
       "save": "労務料金の割当てを保存できませんでした。"
-    }
+    },
+    "editTitle": "料金表の割り当てを編集"
   },
   "taxIds": {
     "title": "事業者VAT ID",
@@ -583,7 +620,12 @@
       "valid": "VAT ID有効 ({scheme})",
       "invalid": "VAT ID無効 ({scheme})",
       "unverified": "VAT ID未検証 ({scheme})"
-    }
+    },
+    "addTaxId": "税番号を追加",
+    "addDescription": "事業者の税番号を登録します。番号は制度ごとの当局で検証されます。",
+    "search": "税番号を検索…",
+    "verdict": "判定",
+    "lastChecked": "最終確認"
   },
   "billingRelationships": {
     "heading": "請求",
@@ -625,6 +667,7 @@
       "overlap": "この顧客はその期間の一部ですでに別の支払者経由で請求されています。既存の期間を先に終了してから、新しい期間を追加してください。",
       "featureOff": "統合請求が無効になりました。会社設定の機能で再度有効にしてからお試しください。",
       "save": "請求リレーションを保存できませんでした。"
-    }
+    },
+    "editTitle": "請求関係を編集"
   }
 }
