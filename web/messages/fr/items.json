@@ -253,6 +253,21 @@
       "software": "Logiciel (résiduel)"
     }
   },
+  "assembly": {
+    "tab": "Recette",
+    "loading": "Chargement de la recette de l’assemblage…",
+    "loadFailed": "La recette de l’assemblage n’a pas pu être chargée.",
+    "needsCosting": "Cet assemblage n’a pas encore de profil de coût. Configurez-en un dans l’onglet Inventaire avant de constituer sa recette.",
+    "emptyTitle": "Pas encore de recette",
+    "emptyDescription": "Nommez les composants d’un assemblage pour le rendre productible.",
+    "unknownComponent": "Ne figure plus au catalogue",
+    "addRecipe": "Ajouter une recette",
+    "editRecipe": "Modifier la recette",
+    "effectiveRange": "En vigueur {from} jusqu'avant {to}",
+    "effectiveFrom": "En vigueur depuis {from}",
+    "effectiveEnded": "Terminé avant {to}",
+    "noCurrentRecipe": "Aucun composant en vigueur aujourd’hui — les lignes ci-dessous sont l’historique."
+  },
   "kit": {
     "tab": "Composants",
     "loading": "Chargement de la recette du kit…",

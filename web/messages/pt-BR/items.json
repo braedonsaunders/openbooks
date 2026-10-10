@@ -243,6 +243,21 @@
       "software": "Software (residual)"
     }
   },
+  "assembly": {
+    "tab": "Receita",
+    "loading": "Carregando a receita da montagem…",
+    "loadFailed": "Não foi possível carregar a receita da montagem.",
+    "needsCosting": "Esta montagem ainda não tem perfil de custo. Configure um na aba Estoque antes de montar sua receita.",
+    "emptyTitle": "Ainda sem receita",
+    "emptyDescription": "Nomeie os componentes de uma montagem para torná-la produzível.",
+    "unknownComponent": "Não está mais no catálogo",
+    "addRecipe": "Adicionar receita",
+    "editRecipe": "Editar receita",
+    "effectiveRange": "Vigente {from} até antes de {to}",
+    "effectiveFrom": "Vigente desde {from}",
+    "effectiveEnded": "Encerrado antes de {to}",
+    "noCurrentRecipe": "Nenhum componente vigente hoje — as linhas abaixo são histórico."
+  },
   "kit": {
     "tab": "Componentes",
     "loading": "Carregando a receita do kit…",

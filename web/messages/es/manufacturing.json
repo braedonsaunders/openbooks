@@ -260,6 +260,7 @@
   "no": "No",
   "search": "Buscar",
   "searchPlaceholder": "Número, código o nombre",
+  "producedItemEmptyHint": "Ningún artículo tiene perfil de costeo. <action>Configura primero el costeo del artículo</action>.",
   "allStatuses": "Todos los estados",
   "allEntities": "Todas las entidades accesibles",
   "filter": "Aplicar",

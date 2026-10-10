@@ -260,6 +260,7 @@
   "no": "いいえ",
   "search": "検索",
   "searchPlaceholder": "番号、コード、名称",
+  "producedItemEmptyHint": "在庫の原価プロファイルを持つ品目がありません。<action>品目の原価計算を先に設定してください</action>。",
   "allStatuses": "すべての状態",
   "allEntities": "アクセス可能なすべての法人",
   "filter": "適用",

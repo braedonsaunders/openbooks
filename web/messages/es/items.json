@@ -253,6 +253,21 @@
       "software": "Software (residual)"
     }
   },
+  "assembly": {
+    "tab": "Receta",
+    "loading": "Cargando la receta del ensamblado…",
+    "loadFailed": "No se pudo cargar la receta del ensamblado.",
+    "needsCosting": "Este ensamblado aún no tiene perfil de costeo. Configura uno en la pestaña Inventario antes de crear su receta.",
+    "emptyTitle": "Aún sin receta",
+    "emptyDescription": "Nombra los componentes de un ensamblado para que sea producible.",
+    "unknownComponent": "Ya no está en el catálogo",
+    "addRecipe": "Añadir receta",
+    "editRecipe": "Editar receta",
+    "effectiveRange": "Vigente {from} hasta antes de {to}",
+    "effectiveFrom": "Vigente desde {from}",
+    "effectiveEnded": "Finalizado antes de {to}",
+    "noCurrentRecipe": "Ningún componente está vigente hoy — las líneas siguientes son historial."
+  },
   "kit": {
     "tab": "Componentes",
     "loading": "Cargando la receta del kit…",

@@ -260,6 +260,7 @@
   "no": "Non",
   "search": "Rechercher",
   "searchPlaceholder": "Numéro, code ou nom",
+  "producedItemEmptyHint": "Aucun article n’a de profil de coût. <action>Configurez d’abord le coût de l’article</action>.",
   "allStatuses": "Tous les états",
   "allEntities": "Toutes les entités accessibles",
   "filter": "Appliquer",

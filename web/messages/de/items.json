@@ -256,6 +256,21 @@
       "software": "Software (Residual)"
     }
   },
+  "assembly": {
+    "tab": "Rezeptur",
+    "loading": "Rezeptur wird geladen…",
+    "loadFailed": "Die Rezeptur konnte nicht geladen werden.",
+    "needsCosting": "Diese Baugruppe hat noch kein Bewertungsprofil. Legen Sie eines auf der Registerkarte Lagerbestand an, bevor Sie ihre Rezeptur aufbauen.",
+    "emptyTitle": "Noch keine Rezeptur",
+    "emptyDescription": "Benennen Sie die Komponenten, aus denen eine Baugruppe gebaut wird, damit sie produzierbar wird.",
+    "unknownComponent": "Nicht mehr im Katalog",
+    "addRecipe": "Rezeptur anlegen",
+    "editRecipe": "Rezeptur bearbeiten",
+    "effectiveRange": "Gültig {from} bis vor {to}",
+    "effectiveFrom": "Gültig ab {from}",
+    "effectiveEnded": "Beendet vor {to}",
+    "noCurrentRecipe": "Heute ist keine Komponente gültig — die Zeilen unten sind Verlauf."
+  },
   "kit": {
     "tab": "Komponenten",
     "loading": "Kit-Rezept wird geladen…",

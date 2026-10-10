@@ -243,6 +243,21 @@
       "software": "软件（残值法）"
     }
   },
+  "assembly": {
+    "tab": "配方",
+    "loading": "正在加载装配配方…",
+    "loadFailed": "无法加载装配配方。",
+    "needsCosting": "该装配件尚无库存成本档案。请先在库存选项卡中添加，然后再构建其配方。",
+    "emptyTitle": "尚无配方",
+    "emptyDescription": "指定构成一个装配件的组件，即可使其可生产。",
+    "unknownComponent": "已不在目录中",
+    "addRecipe": "添加配方",
+    "editRecipe": "编辑配方",
+    "effectiveRange": "{from}至{to}之前有效",
+    "effectiveFrom": "自{from}起有效",
+    "effectiveEnded": "已于{to}之前结束",
+    "noCurrentRecipe": "今天没有生效的组件 — 以下行为历史记录。"
+  },
   "kit": {
     "tab": "组件",
     "loading": "正在加载套件配方…",

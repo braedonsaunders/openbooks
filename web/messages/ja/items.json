@@ -243,6 +243,21 @@
       "software": "ソフトウェア(残余法)"
     }
   },
+  "assembly": {
+    "tab": "レシピ",
+    "loading": "アセンブリのレシピを読み込み中…",
+    "loadFailed": "アセンブリのレシピを読み込めませんでした。",
+    "needsCosting": "このアセンブリには原価プロファイルがありません。レシピを作成する前に在庫タブで設定してください。",
+    "emptyTitle": "レシピがまだありません",
+    "emptyDescription": "1つのアセンブリを構成する部品を指定すると生産可能になります。",
+    "unknownComponent": "カタログに存在しません",
+    "addRecipe": "レシピを追加",
+    "editRecipe": "レシピを編集",
+    "effectiveRange": "{from}から{to}の直前まで有効",
+    "effectiveFrom": "{from}から有効",
+    "effectiveEnded": "{to}の直前に終了",
+    "noCurrentRecipe": "今日有効な構成品がありません — 下の行は履歴です。"
+  },
   "kit": {
     "tab": "構成品",
     "loading": "キットのレシピを読み込み中…",

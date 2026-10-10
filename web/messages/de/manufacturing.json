@@ -260,6 +260,7 @@
   "no": "Nein",
   "search": "Suchen",
   "searchPlaceholder": "Nummer, Kennung oder Bezeichnung",
+  "producedItemEmptyHint": "Keine Artikel mit Bewertungsprofil. <action>Konfigurieren Sie zuerst die Bewertung des Artikels</action>.",
   "allStatuses": "Alle Zustände",
   "allEntities": "Alle zugänglichen Rechtseinheiten",
   "filter": "Anwenden",

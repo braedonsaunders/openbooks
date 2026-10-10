@@ -369,6 +369,21 @@
       "software": "Software (residual)"
     }
   },
+  "assembly": {
+    "tab": "Recipe",
+    "loading": "Loading the assembly recipe…",
+    "loadFailed": "The assembly recipe could not be loaded.",
+    "needsCosting": "This assembly has no inventory costing profile. Add one on the Inventory tab before building its recipe.",
+    "emptyTitle": "No recipe yet",
+    "emptyDescription": "Name the components built into one assembly and it becomes producible.",
+    "unknownComponent": "No longer in the catalog",
+    "addRecipe": "Add recipe",
+    "editRecipe": "Edit recipe",
+    "effectiveRange": "Effective {from} to before {to}",
+    "effectiveFrom": "Effective from {from}",
+    "effectiveEnded": "Ended before {to}",
+    "noCurrentRecipe": "No components are effective today — the lines below are history."
+  },
   "kit": {
     "tab": "Components",
     "loading": "Loading the kit recipe…",
