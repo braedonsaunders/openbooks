@@ -1402,6 +1402,10 @@ async function applyApprovedRequest(
 
   if (payload.kind === "status_change" && payload.historicalObservation) {
     await assertHistoricalStatusWindow(exec, orgId, request.employment_id, payload);
+  } else if (payload.kind === "status_change" || payload.kind === "termination") {
+    await assertEmploymentStatusPayrollWindow(exec, orgId, request.employment_id,
+      payload.kind === "termination" ? payload.effectiveDate : payload.effectiveFrom,
+      payload.kind === "termination" ? null : payload.effectiveTo);
   }
 
   // (1) Re-read the aggregate under lock and refuse a stale proposal: the
@@ -1694,6 +1698,38 @@ async function applyHire(
   await bumpAggregateRevision(exec, { orgId, actorId, request, expected: newRevision - 1, next: newRevision });
 }
 
+/** Status corrections cannot reinterpret payroll already committed for their window. */
+async function assertEmploymentStatusPayrollWindow(
+  exec: SqlExecutor,
+  orgId: string,
+  employmentId: string,
+  from: string,
+  end: string | null,
+): Promise<void> {
+  const subject = (await exec.execute<{ worker_party_id: string; employer_subsidiary_id: string }>(sql`
+    select worker_party_id,employer_subsidiary_id from worker_employments where org_id=${orgId} and id=${employmentId}
+  `)).rows[0];
+  if (!subject) throw new HrmChangeRequestError("NOT_FOUND", "Select a saved employment in this organization.");
+  // Payroll calculation and commit take this employee-wide fence before
+  // their year locks, so a committed-period check cannot race a commit.
+  await takeEmployeeConfigurationFence(exec, orgId, subject.worker_party_id);
+  const committed = (await exec.execute<{ pay_date: string }>(sql`
+    select r.pay_date::text from pay_runs r
+    join pay_stubs s on s.org_id=r.org_id and s.pay_run_document_id=r.document_id
+    join documents d on d.org_id=r.org_id and d.id=r.document_id
+    where r.org_id=${orgId} and s.employee_party_id=${subject.worker_party_id}
+      and (s.employment_id=${employmentId} or (s.employment_id is null
+        and (d.subsidiary_id=${subject.employer_subsidiary_id} or d.subsidiary_id is null)))
+      and r.run_status='committed'  and d.status<>'voided'
+      and (((${end}::date is null or r.period_start<${end}::date) and r.period_end>=${from}::date)
+        or (r.pay_date>=${from}::date and (${end}::date is null or r.pay_date<${end}::date)))
+    limit 1
+  `)).rows[0];
+  if (committed) {
+    throw new HrmChangeRequestError("REFUSED", `Payroll dated ${committed.pay_date} is committed for this employment window; preserve its status evidence and use a governed correction.`);
+  }
+}
+
 /** Historical observations fill only documented gaps; they never supersede a status. */
 async function assertHistoricalStatusWindow(
   exec: SqlExecutor,
@@ -1705,31 +1741,10 @@ async function assertHistoricalStatusWindow(
   if (!payload.historicalObservation || end === null || end > await businessTodayInTx(exec, orgId)) {
     throw new HrmChangeRequestError("REFUSED", "Record a bounded historical status window ending before the current business day; use an ordinary status change for current employment.");
   }
-  const subject = (await exec.execute<{ worker_party_id: string; employer_subsidiary_id: string }>(sql`
-    select worker_party_id,employer_subsidiary_id from worker_employments where org_id=${orgId} and id=${employmentId}
-  `)).rows[0];
-  if (!subject) throw new HrmChangeRequestError("NOT_FOUND", "Select a saved employment in this organization.");
-  // Payroll calculation and commit take this employee-wide fence before
-  // their year locks, so a committed-period check cannot race a commit.
-  await takeEmployeeConfigurationFence(exec, orgId, subject.worker_party_id);
+  await assertEmploymentStatusPayrollWindow(exec, orgId, employmentId, payload.effectiveFrom, end);
   const live = await liveEmploymentVersions(exec, orgId, employmentId);
   if (!live.length || live.some(version => effectiveOverlaps(version, payload.effectiveFrom, end))) {
     throw new HrmChangeRequestError("REFUSED", "A historical observation must fill an uncovered employment window; review the existing status history without overwriting it.");
-  }
-  const committed = (await exec.execute<{ pay_date: string }>(sql`
-    select r.pay_date::text from pay_runs r
-    join pay_stubs s on s.org_id=r.org_id and s.pay_run_document_id=r.document_id
-    join documents d on d.org_id=r.org_id and d.id=r.document_id
-    where r.org_id=${orgId} and s.employee_party_id=${subject.worker_party_id}
-      and (s.employment_id=${employmentId} or (s.employment_id is null
-        and (d.subsidiary_id=${subject.employer_subsidiary_id} or d.subsidiary_id is null)))
-      and r.run_status='committed'  and d.status<>'voided'
-      and ((r.period_start<${end}::date and r.period_end>=${payload.effectiveFrom}::date)
-        or (r.pay_date>=${payload.effectiveFrom}::date and r.pay_date<${end}::date))
-    limit 1
-  `)).rows[0];
-  if (committed) {
-    throw new HrmChangeRequestError("REFUSED", `Payroll dated ${committed.pay_date} is committed for this employment window; preserve its status evidence and use a governed correction.`);
   }
 }
 
@@ -1783,8 +1798,8 @@ async function applyHistoricalStatusObservation(
 /**
  * (b)/(d) Status/dates change and termination: close every live version
  * overlapping the successor window (close-first, per the 0184 write order),
- * insert the single successor, and evidence every closure with its exact
- * before-image in one aggregate event.
+ * preserve the portions outside that window, and evidence every closure
+ * with its exact before-image in one aggregate event.
  */
 async function applyEmploymentVersionChange(
   exec: SqlExecutor,
@@ -1826,6 +1841,16 @@ async function applyEmploymentVersionChange(
       "this employment is already terminated — a second termination is a duplicate, not an update",
     );
   }
+  const retainedIntervals = overlapping.flatMap(version => {
+    const portions: { status: string; from: string; to: string | null }[] = [];
+    if (version.effective_from < windowStart) {
+      portions.push({ status: version.status, from: version.effective_from, to: windowStart });
+    }
+    if (windowEnd !== null && (version.effective_to === null || version.effective_to > windowEnd)) {
+      portions.push({ status: version.status, from: windowEnd, to: version.effective_to });
+    }
+    return portions;
+  }).sort((left, right) => left.from.localeCompare(right.from));
   const successorNo = await nextEmploymentVersionNumber(exec, orgId, request.employment_id);
   const changeId = await insertEmploymentChange(exec, {
     orgId,
@@ -1868,14 +1893,21 @@ async function applyEmploymentVersionChange(
       );
     }
   }
-  await exec.execute(sql`
-    insert into worker_employment_versions
-      (org_id, employment_id, version_no, status, effective_from, effective_to,
-       recorded_at, created_by, updated_by)
-    values (${orgId}, ${request.employment_id}, ${successorNo}, ${successorStatus},
-            ${windowStart}::date, ${windowEnd}::date,
-            ${recordedAt}, ${actorId}, ${actorId})
-  `);
+  const successors = [{ status: successorStatus, from: windowStart, to: windowEnd }, ...retainedIntervals];
+  for (const [offset, successor] of successors.entries()) {
+    const inserted = (await exec.execute(sql`
+      insert into worker_employment_versions
+        (org_id, employment_id, version_no, status, effective_from, effective_to,
+         recorded_at, created_by, updated_by)
+      values (${orgId}, ${request.employment_id}, ${successorNo + offset}, ${successor.status},
+              ${successor.from}::date, ${successor.to}::date,
+              ${recordedAt}, ${actorId}, ${actorId})
+      returning id
+    `)).rows;
+    if (inserted.length !== 1) {
+      throw new HrmChangeRequestError("REFUSED", "The employment status interval was not saved; nothing applied.");
+    }
+  }
   // A termination owes its offboarding checklist in this same transaction
   // (same all-or-nothing contract as the hire above). A status_change rides
   // the hire's onboarding episode — it opens nothing on its own.
