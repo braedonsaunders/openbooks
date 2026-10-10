@@ -24,6 +24,23 @@ export async function requireFlowsSession(): Promise<Authz | NextResponse> {
   return authz;
 }
 
+/**
+ * Session for the record-level Flow reads that other modules' drawers embed
+ * (approval state, manual record buttons). Those surfaces render on every
+ * document whether or not the organization uses Flows, so Flows being off is
+ * not a refusal there: the caller still meets the subject's own read grant
+ * and legal-entity scope, and the route answers with an empty state that
+ * discloses no gates, runs or buttons.
+ */
+export async function requireFlowsRecordReader(): Promise<
+  { authz: Authz; flowsEnabled: boolean } | NextResponse
+> {
+  const authz = await getAuthz();
+  if (!authz)
+    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  return { authz, flowsEnabled: await isFeatureEnabled(authz.user.orgId, "flows") };
+}
+
 /** Shared helpers for the /api/flows/* gate endpoints. */
 
 export type GateHeader = {

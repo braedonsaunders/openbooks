@@ -13,7 +13,7 @@ import {
 } from '@openbooks/engine/src/flows/index.ts'
 import { can, guardSubsidiaryScope, type Authz } from '../../../../lib/authz'
 import { canReadFlowSubject, manualButtonPermission } from '../../../../lib/flow-subject-authz'
-import { loadFlowSubjectSubsidiary, requireFlowsSession } from '../_lib'
+import { loadFlowSubjectSubsidiary, requireFlowsRecordReader } from '../_lib'
 import { isUuid } from '../../../../lib/list-params'
 
 const requestBodySchema = z.object({
@@ -48,6 +48,7 @@ async function availableButtons(
   authz: Authz,
   subjectKind: string,
   subjectId: string,
+  flowsEnabled = true,
 ): Promise<ManualButton[] | NextResponse> {
   const adapter = getFlowAdapter(subjectKind)
   if (!adapter) return NextResponse.json({ error: 'unknown subject kind' }, { status: 400 })
@@ -68,6 +69,8 @@ async function availableButtons(
 
   const subject = await adapter.loadContext(subjectId)
   if (!subject) return NextResponse.json({ error: 'record not found' }, { status: 404 })
+  // With Flows off no flow offers a button: the visible record has none.
+  if (!flowsEnabled) return []
   // Viewer-aware showIf (source platform button conditions like "Next Approver =
   // Current User" / "Requestor = Current User"): inject who is LOOKING before
   // evaluating each button's rule.
@@ -134,8 +137,9 @@ async function availableButtons(
 }
 
 async function legacyGET(req: Request) {
-  const authz = await requireFlowsSession()
-  if (authz instanceof NextResponse) return authz
+  const session = await requireFlowsRecordReader()
+  if (session instanceof NextResponse) return session
+  const { authz, flowsEnabled } = session
 
   const url = new URL(req.url)
   const subjectKind = url.searchParams.get('subjectKind') ?? ''
@@ -145,7 +149,7 @@ async function legacyGET(req: Request) {
   }
 
   const buttons = await withOrgContext(authz.user.orgId, () =>
-    availableButtons(authz, subjectKind, subjectId),
+    availableButtons(authz, subjectKind, subjectId, flowsEnabled),
   )
   if (buttons instanceof NextResponse) return buttons
   return NextResponse.json({ buttons })

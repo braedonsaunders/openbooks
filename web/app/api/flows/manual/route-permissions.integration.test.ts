@@ -216,3 +216,56 @@ test('an edit grant outside the record subsidiary still cannot run it', async ()
     await withBypassContext(() => dropScratchOrg(org.orgId))
   }
 })
+
+test('with Flows off a visible record lists no buttons and a hidden one stays missing', async () => {
+  const org = await withBypassContext(() => createScratchOrg())
+  try {
+    await withBypassContext(() =>
+      db.execute(sql`
+        update orgs set settings = jsonb_set(
+          settings, '{features}',
+          coalesce(settings->'features', '{}'::jsonb) || '{"flows":false}'::jsonb, true)
+        where id = ${org.orgId}`),
+    )
+    await seedTagManualFlow(org.orgId)
+    const maker = await withBypassContext(() => createScratchUser(org.orgId, 'maker', 'maker'))
+    const docId = await withBypassContext(() =>
+      seedDraftDocument(org.orgId, { kind: 'vendor_bill', createdBy: maker }))
+    await seedRole(org.orgId, 'bill_editor', ['ap.read', 'ap.create'])
+
+    const list = await withOrgContext(org.orgId, () =>
+      GET(new Request(
+        `http://manual.test/api/flows/manual?subjectKind=vendor_bill&subjectId=${docId}`,
+      )))
+    assert.equal(list.status, 200, 'Flows off is an empty state, not a refusal')
+    assert.deepEqual(
+      ((await list.json()) as { buttons: unknown[] }).buttons, [],
+      'an enabled flow graph offers nothing while the feature is off',
+    )
+
+    const missing = await withOrgContext(org.orgId, () =>
+      GET(new Request(
+        `http://manual.test/api/flows/manual?subjectKind=vendor_bill&subjectId=${randomUUID()}`,
+      )))
+    assert.equal(missing.status, 404, 'a record that does not exist still answers as missing')
+
+    const res = await withOrgContext(org.orgId, () =>
+      POST(new Request('http://manual.test/api/flows/manual', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ subjectKind: 'vendor_bill', subjectId: docId, buttonId: 'tag' }),
+      })))
+    assert.notEqual(res.status, 200, 'a manual run cannot dispatch while Flows is off')
+    assert.equal(await runCount(org.orgId, docId), 0, 'no flow run may start')
+
+    await seedRole(org.orgId, 'no_ap', [])
+    const noGrant = await withOrgContext(org.orgId, () =>
+      GET(new Request(
+        `http://manual.test/api/flows/manual?subjectKind=vendor_bill&subjectId=${docId}`,
+      )))
+    assert.equal(noGrant.status, 404, 'a caller without the read grant meets the missing-record answer')
+  } finally {
+    state.user = null
+    await withBypassContext(() => dropScratchOrg(org.orgId))
+  }
+})

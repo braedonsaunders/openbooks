@@ -8,7 +8,7 @@ import { bootJsdomEnvironment } from '../testing/jsdom-env.ts'
 // controls vanished silently on a pending document. A blocked endpoint must
 // surface a named error state with a working retry instead.
 const script = {
-  mode: 'blocked' as 'blocked' | 'named-refusal' | 'healed',
+  mode: 'blocked' as 'blocked' | 'named-refusal' | 'healed' | 'no-state',
 }
 Object.assign(globalThis, {
   __approvalLoadRouter: {
@@ -64,6 +64,7 @@ globalThis.fetch = (async (url: unknown) => {
   const href = String(url)
   if (href.includes('/api/flows/record-state')) {
     if (script.mode === 'healed') return Response.json(healedState())
+    if (script.mode === 'no-state') return Response.json({ error: 'not_found' }, { status: 404 })
     if (script.mode === 'named-refusal') {
       return Response.json({ error: 'flow pack retired — reinstall the pack' }, { status: 422 })
     }
@@ -159,5 +160,26 @@ test('the history tab names a failed load instead of spinning forever (F1-11)', 
   assert.ok(
     host.textContent?.includes('Failed to load (status 502)'),
     `the tab must name the failure, got: ${JSON.stringify(host.textContent)}`,
+  )
+})
+
+test('a record with no approval state for the caller shows no raw refusal code', async (t) => {
+  script.mode = 'no-state'
+  const header = await mount(<ApprovalActions subjectKind="bill" subjectId="bill-5" />)
+  await unmount(t, header.host, header.root)
+  assert.equal(header.host.textContent, '', 'the header controls render nothing')
+
+  const inline = await mount(<ApprovalHistory subjectKind="bill" subjectId="bill-6" />)
+  await unmount(t, inline.host, inline.root)
+  assert.equal(inline.host.textContent, '', 'an inline history section renders nothing')
+
+  const tab = await mount(<ApprovalHistory subjectKind="bill" subjectId="bill-7" showEmptyState />)
+  await unmount(t, tab.host, tab.root)
+  const text = tab.host.textContent ?? ''
+  assert.ok(!text.includes('not_found'), `never the raw code, got: ${JSON.stringify(text)}`)
+  assert.ok(!/retry/i.test(text), 'no retry for an answer retrying cannot change')
+  assert.ok(
+    text.includes((messages as { common: { approvalFlow: { historyEmpty: string } } }).common.approvalFlow.historyEmpty),
+    `the Approvals tab shows its empty body, got: ${JSON.stringify(text)}`,
   )
 })

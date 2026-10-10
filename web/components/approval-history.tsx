@@ -101,7 +101,7 @@ export function ApprovalHistory({
 }) {
   const t = useTranslations('common')
   const locale = useLocale()
-  const { state, loadError } = useRecordApprovalState(subjectKind, subjectId)
+  const { state, loadError, unavailable } = useRecordApprovalState(subjectKind, subjectId)
   const [open, setOpen] = useState(true)
 
   const history = state?.history ?? []
@@ -116,7 +116,9 @@ export function ApprovalHistory({
       )
     }
     if (!showEmptyState) return null
-    const kind = approvalTabBody(state)
+    // No approval state for this caller is an empty history, never a spinner
+    // or a raw refusal code.
+    const kind = !state && unavailable ? 'empty' : approvalTabBody(state)
     if (kind === 'loading') {
       return (
         <div role="status" className="flex items-center gap-2 px-1 py-6 text-sm text-slate-500 dark:text-slate-400">
