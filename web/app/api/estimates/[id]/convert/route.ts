@@ -5,15 +5,19 @@ import { makeConvertPOST } from '../../../_order/handlers'
 import '../../../../../lib/feature-gates';
 import { isUuid } from '../../../../../lib/list-params'
 import { conversionWouldCopyInventoryKinds } from '../../../../../lib/order-cycle'
+import { estimateConversionPermission } from '../../../../../lib/permissions'
 import { notFound } from "@/lib/api/responses";
 
 
 export const runtime = 'nodejs'
 
-const convert = makeConvertPOST({ kind: 'quote', readPerm: 'ar.read', createPerm: 'ar.create' })
+// Converting mints the downstream document under its own book's authority:
+// a sales order or invoice still needs ar.create, so pricing estimates can
+// never mint receivables on its own (estimateConversionPermission).
+const convert = makeConvertPOST({ kind: 'quote', readPerm: 'estimates.read', createPerm: 'estimates.create', convertPerm: estimateConversionPermission })
 
 export const POST = defineRoute({
-  permission: 'ar.create',
+  permission: 'estimates.create',
   feature: 'orders',
   params: z.object({ "id": z.string() }),
   handler: async ({ request: req, authz: gate, params: routeParams }) => {

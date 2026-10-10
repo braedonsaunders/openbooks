@@ -19,9 +19,11 @@ const activateBody = z.object({
  * Activate a signed quote into billed subscriptions. GET previews the
  * consequence (subscriptions, first bill dates, revenue contract) before
  * committing; POST creates everything in one idempotent transaction.
+ * Previewing rides the quote grant; activating mints billed subscriptions,
+ * so it keeps the receivables book's authority.
  */
 export const GET = defineRoute({
-  permission: "ar.read",
+  permission: "estimates.read",
   feature: "quoteToCash",
   params,
   handler: async ({ authz, params }) => {

@@ -82,7 +82,10 @@ export function documentEditPermission(kind: string): string {
  * - vendor_payment: /payments requires ap.pay; void requires ap.pay.
  * - customer_payment: /receipts requires ar.pay; void requires ar.pay.
  * - expense_report: /expenses requires expenses.read; writes expenses.create.
- * - sales_order / quote: estimates require ar.read; void requires ar.create.
+ * - sales_order: orders require ar.read; void requires ar.create.
+ * - quote: /estimates requires estimates.read; writes estimates.create;
+ *   issuing the quote requires estimates.issue; void requires
+ *   estimates.create.
  * - purchase_order: purchase_orders.read reads; void requires purchase_orders.create.
  * - field_ticket: /field-tickets requires time.read; writes time.manage.
  * - pick_list / shipment: /picks and /shipments require orders.fulfill, and
@@ -94,7 +97,7 @@ const NON_REGISTRY_DOCUMENT_PERMISSIONS: Readonly<Record<string, DocumentKindPer
   customer_payment: { read: "ar.pay", edit: "ar.pay", approve: "ar.pay" },
   expense_report: { read: "expenses.read", edit: "expenses.create", approve: "ap.post" },
   sales_order: { read: "ar.read", edit: "ar.create", approve: "ar.create" },
-  quote: { read: "ar.read", edit: "ar.create", approve: "ar.create" },
+  quote: { read: "estimates.read", edit: "estimates.create", approve: "estimates.issue" },
   purchase_order: { read: "purchase_orders.read", edit: "purchase_orders.create", approve: "purchase_orders.create" },
   field_ticket: { read: "time.read", edit: "time.manage", approve: "time.manage" },
   pick_list: { read: "orders.fulfill", edit: "orders.fulfill", approve: "orders.fulfill" },

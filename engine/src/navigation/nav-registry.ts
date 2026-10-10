@@ -199,7 +199,7 @@ export const NAV_MODULES: NavModule[] = [
     iconKey: 'file',
     group: 'customers',
     subgroup: 'sell-collect',
-    requiredPermission: 'ar.read',
+    requiredPermission: 'estimates.read',
     featureKey: 'orders',
     recordTarget: { kind: 'query', param: 'estimate' },
   },

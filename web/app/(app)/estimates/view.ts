@@ -17,7 +17,7 @@ import { subsidiaryUiOptions } from '../../../lib/subsidiaries'
 
 /**
  * Estimates (quotes), split into a loader and a spec. The loader copies the
- * native page's query, permission and formatting logic verbatim: ar.read gate,
+ * native page's query, permission and formatting logic verbatim: estimates.read gate,
  * the orders feature gate (404 when the module is off), the inventory flag
  * for the items picker, the customer-scoped parties picker, the income-only
  * accounts picker, the ?estimate= drawer with its form-layout resolution, and
@@ -27,7 +27,9 @@ import { subsidiaryUiOptions } from '../../../lib/subsidiaries'
  * placed by name through the `record-list-view` widget (see
  * the registry entry), the same arrangement the AP bills page uses. The header
  * carries only the New button (`new-estimate-order` widget, named after the
- * shared _order components two sibling pages will reuse).
+ * shared _order components two sibling pages will reuse). Reading the page
+ * needs estimates.read; the New button and drawer writes need
+ * estimates.create (never the receivables book).
  *
  * The drawer composes TWO widgets when open: the redirect (create flow) and
  * the OrderDrawer flyout (record flow). The native page renders both as
@@ -67,6 +69,7 @@ export interface EstimateDrawer {
   promotionsEnabled: boolean
   quoteToCashEnabled: boolean
   quoteAwardEnabled: boolean
+  quoteAwardAvailable: boolean
 }
 
 export interface EstimatesData {
@@ -74,6 +77,12 @@ export interface EstimatesData {
   description: string
   baseCurrencyConfigured: boolean
   canManage: boolean
+  /**
+   * The New action hides without the create grant; the header then shows
+   * the shared missing-grant hint instead (permission-hint widget).
+   */
+  showCreateHint: boolean
+  createHintAction: string
   currentParams: Record<string, string | string[] | undefined>
   newOrder: {
     apiPath: string
@@ -91,11 +100,11 @@ export interface EstimatesData {
 export async function loadEstimates(
   sp: Record<string, string | string[] | undefined>,
 ): Promise<EstimatesData> {
-  const authz = await requirePermission('ar.read')
+  const authz = await requirePermission('estimates.read')
   await requireFeatureEnabled(authz.user.orgId, 'orders')
   const inventoryEnabled = await isFeatureEnabled(authz.user.orgId, 'inventory')
   const barcodeScanningEnabled = await isFeatureEnabled(authz.user.orgId, 'barcodeScanning')
-  const canManage = can(authz, 'ar.create')
+  const canManage = can(authz, 'estimates.create')
   const t = await getTranslations('estimates')
   const openId = pickString(sp[PARAM])
   // Only a real document id may reach the uuid comparison: the create view
@@ -239,7 +248,11 @@ export async function loadEstimates(
           quoteToCashEnabled: await isFeatureEnabled(authz.user.orgId, 'quoteToCash'),
           // Awarding creates a project: it needs Projects on and the
           // project-management grant (this page already gates Orders).
-          quoteAwardEnabled: can(authz, 'projects.manage') && (await isFeatureEnabled(authz.user.orgId, 'projects')),
+          // Split so the drawer shows the action disabled with the
+          // missing-grant hint when the grant is absent (QA-042), never
+          // silently missing.
+          quoteAwardEnabled: can(authz, 'projects.manage'),
+          quoteAwardAvailable: await isFeatureEnabled(authz.user.orgId, 'projects'),
         }
       : null
 
@@ -248,6 +261,8 @@ export async function loadEstimates(
     description: t('list.description'),
     baseCurrencyConfigured: baseCurrency !== null,
     canManage,
+    showCreateHint: !canManage,
+    createHintAction: t('list.createHintAction'),
     currentParams: sp,
     newOrder: {
       apiPath: API,
@@ -284,7 +299,10 @@ export function estimatesSpec(data: EstimatesData): PageSpec {
       pageHeader({
         title: f('title'),
         description: f('description'),
-        actions: [widget(newOrder.widget, newOrder.props, f('canManage'))],
+        actions: [
+          widget(newOrder.widget, newOrder.props, f('canManage')),
+          widget('permission-hint', { permission: 'estimates.create', action: data.createHintAction }, f('showCreateHint')),
+        ],
       }),
     ],
     body: [

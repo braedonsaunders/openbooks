@@ -33,13 +33,13 @@ const termBody = z.object({
 
 /**
  * Quote subscription terms: the drawer's Subscription section reads the
- * valued preview and writes terms through here. Reads ride ar.read;
- * writes ride ar.create (the same duty as editing the quote), always
+ * valued preview and writes terms through here. Reads ride estimates.read;
+ * writes ride estimates.create (the same duty as editing the quote), always
  * behind the quoteToCash leaf gate — the registry resolves its
  * orders + subscriptionBilling parents.
  */
 export const GET = defineRoute({
-  permission: "ar.read",
+  permission: "estimates.read",
   feature: "quoteToCash",
   params,
   handler: async ({ authz, params }) => {
@@ -52,7 +52,7 @@ export const GET = defineRoute({
 });
 
 export const POST = defineRoute({
-  permission: "ar.create",
+  permission: "estimates.create",
   feature: "quoteToCash",
   params,
   body: termBody,
@@ -83,7 +83,7 @@ export const POST = defineRoute({
 });
 
 export const DELETE = defineRoute({
-  permission: "ar.create",
+  permission: "estimates.create",
   feature: "quoteToCash",
   params,
   handler: async ({ request, authz, params }) => {

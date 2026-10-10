@@ -51,6 +51,10 @@ export interface PurchaseOrdersData {
   title: string
   description: string
   canManage: boolean
+  /** The New action hides without the create grant; the header then shows
+   * the shared missing-grant hint instead (permission-hint widget). */
+  showCreateHint: boolean
+  createHintAction: string
   currentParams: Record<string, string | string[] | undefined>
   newOrderButtonLabel: string
   baseCurrencyConfigured: boolean
@@ -178,6 +182,8 @@ export async function loadPurchaseOrders(
     title: t('list.title'),
     description: t('list.description'),
     canManage,
+    showCreateHint: !canManage,
+    createHintAction: t('list.createHintAction'),
     currentParams: sp,
     newOrderButtonLabel: t('list.newButton'),
     baseCurrencyConfigured: baseCurrency !== null,
@@ -256,7 +262,10 @@ export function purchaseOrdersSpec(data: PurchaseOrdersData): PageSpec {
       pageHeader({
         title: f('title'),
         description: f('description'),
-        actions: [widget(newOrder.widget, newOrder.props, f('canManage'))],
+        actions: [
+          widget(newOrder.widget, newOrder.props, f('canManage')),
+          widget('permission-hint', { permission: 'purchase_orders.create', action: data.createHintAction }, f('showCreateHint')),
+        ],
       }),
     ],
     body: [

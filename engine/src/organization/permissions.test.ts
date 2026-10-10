@@ -10,6 +10,8 @@ import {
   grantsConferring,
   PERMISSION_IMPLICATIONS,
   purchaseOrderConversionPermission,
+  ESTIMATE_PERMISSIONS,
+  estimateConversionPermission,
   resolveKeyScopeAuthority,
   type CataloguePermission,
 } from "./permissions.ts";
@@ -352,6 +354,37 @@ test("purchasing has its own grants, kept apart from the payables book", () => {
   for (const denied of ["ap.create", "ap.post", "ap.pay", "banking.read", "gl.read", "items.post"]) {
     assert.equal(holds("buyer", denied), false, `a buyer holds no ${denied}`);
   }
+});
+
+test("estimates have their own grants, kept apart from the receivables book", () => {
+  const keys: CataloguePermission[] = ["estimates.read", "estimates.create", "estimates.issue"];
+  const group = PERMISSION_GROUPS.find((entry) => entry.key === "estimates");
+  assert.ok(group, "estimates need their own group in the role picker");
+  assert.deepEqual(group.permissions.map((entry) => entry.key), keys);
+  assert.equal(ESTIMATE_PERMISSIONS.read, "estimates.read");
+  assert.equal(ESTIMATE_PERMISSIONS.create, "estimates.create");
+  assert.equal(ESTIMATE_PERMISSIONS.issue, "estimates.issue");
+  // Minting the downstream document keeps its own book's authority: pricing
+  // estimates can never mint receivables on its own.
+  assert.equal(estimateConversionPermission("customer_invoice"), "ar.create", "invoicing a quote creates a receivables document");
+  assert.equal(estimateConversionPermission("sales_order"), "ar.create", "converting a quote creates a receivables document");
+  const holds = (role: string, perm: string) => permissionSetCovers(new Set(BUILT_IN_ROLES[role]!.permissions), perm);
+  // Roles that could read or price estimates through ar.* keep that access.
+  for (const role of BUILT_IN_ROLE_KEYS) {
+    if (holds(role, "ar.read")) assert.equal(holds(role, "estimates.read"), true, `${role} keeps reading estimates`);
+    if (holds(role, "ar.create")) {
+      assert.equal(holds(role, "estimates.create"), true, `${role} keeps authoring estimates`);
+      assert.equal(holds(role, "estimates.issue"), true, `${role} keeps issuing estimates`);
+    }
+  }
+  // A field owner prices estimates without gaining the receivables book.
+  assert.equal(holds("sales_rep", "estimates.create"), true);
+  assert.equal(holds("sales_rep", "ar.create"), true, "today's sales roles keep invoicing until the grant is narrowed");
+  assert.equal(holds("cashier", "estimates.read"), false, "the till never sees estimates");
+  assert.equal(holds("cashier", "estimates.create"), false);
+  assert.equal(holds("buyer", "estimates.create"), false, "buying never prices estimates");
+  assert.equal(holds("approver", "estimates.read"), true, "the approver reviews quotes");
+  assert.equal(holds("approver", "estimates.create"), false, "the approver cannot author quotes");
 });
 
 test("people, banking and expense grants are filed under their own groups, not Administration", () => {

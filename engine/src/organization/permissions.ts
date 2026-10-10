@@ -44,6 +44,13 @@ export const PERMISSION_CATALOGUE = [
   "ar.approve",
   "ar.post",
   "ar.pay",
+  // Estimates (quotes): reading, authoring and issuing priced proposals.
+  // Kept apart from ar.* so a field owner can price estimates without
+  // gaining the receivables book (creating invoices). Quotes issue rather
+  // than approve, so the decision grant is estimates.issue.
+  "estimates.read",
+  "estimates.create",
+  "estimates.issue",
   // Stored value (gift cards and store credit): reading balances is widely
   // shared, issuing and redeeming move liability money, and adjusting a
   // balance outside a document is its own duty.
@@ -465,6 +472,15 @@ export const PERMISSION_GROUPS: {
       { key: "ar.approve", labelKey: permissionLabelKey("ar.approve") },
       { key: "ar.post", labelKey: permissionLabelKey("ar.post") },
       { key: "ar.pay", labelKey: permissionLabelKey("ar.pay") },
+    ],
+  },
+  {
+    key: "estimates",
+    labelKey: "permissions.groups.estimates",
+    permissions: [
+      { key: "estimates.read", labelKey: permissionLabelKey("estimates.read") },
+      { key: "estimates.create", labelKey: permissionLabelKey("estimates.create") },
+      { key: "estimates.issue", labelKey: permissionLabelKey("estimates.issue") },
     ],
   },
   {
@@ -950,6 +966,24 @@ export function purchaseOrderConversionPermission(targetKind: string): Catalogue
   return PURCHASE_ORDER_PERMISSIONS.create;
 }
 
+export const ESTIMATE_PERMISSIONS = {
+  read: "estimates.read",
+  create: "estimates.create",
+  issue: "estimates.issue",
+  downstream: "ar.create",
+} as const satisfies Record<string, CataloguePermission>;
+
+/**
+ * Grant needed to convert a quote into `targetKind`. Minting the
+ * downstream document keeps its own book's authority — a sales order or an
+ * invoice still needs ar.create — so pricing estimates can never mint
+ * receivables on its own.
+ */
+export function estimateConversionPermission(targetKind: string): CataloguePermission {
+  if (targetKind === "customer_invoice" || targetKind === "sales_order") return ESTIMATE_PERMISSIONS.downstream;
+  return ESTIMATE_PERMISSIONS.create;
+}
+
 /**
  * Built-in role definitions, seeded per organization. Authorization is based
  * exclusively on explicit role_assignments rows.
@@ -987,6 +1021,9 @@ export const BUILT_IN_ROLES: Record<
       "goods_receipts.create",
       "ar.read",
       "ar.create",
+      "estimates.read",
+      "estimates.create",
+      "estimates.issue",
       "ar.approve",
       "ar.post",
       "ar.pay",
@@ -1128,6 +1165,9 @@ export const BUILT_IN_ROLES: Record<
       "goods_receipts.create",
       "ar.read",
       "ar.create",
+      "estimates.read",
+      "estimates.create",
+      "estimates.issue",
       "ar.post",
       "ar.pay",
       "stored_value.read",
@@ -1225,6 +1265,7 @@ export const BUILT_IN_ROLES: Record<
       "ap.approve",
       "purchase_orders.read",
       "ar.read",
+      "estimates.read",
       "ar.approve",
       "usage.read",
       "payment_methods.read",
@@ -1268,7 +1309,7 @@ export const BUILT_IN_ROLES: Record<
     name: "Viewer",
     description:
       "Read-only access to the ledger, subledgers, reports and insights. Cannot create, change, post or pay transactions.",
-    permissions: ["gl.read", "close.read", "ap.read", "purchase_orders.read", "ar.read", "usage.read", "payment_methods.read", "contract_costs.read", "resourcing.read", "retainers.read", "reports.read", "budgets.read", "allocations.read", "nonprofit.report", "funds.read", "grants.read", "encumbrances.read", "insights.read", "records.read", "items.read", "assets.read", "time.read", "time.clock", "compliance.read", "assistant.use", "documents.read", "feedback.use", "data.export", "apps.use", "hrm.self.read", "hrm.self.request", "hrm.leave.request", "cash_sales.read"],
+    permissions: ["gl.read", "close.read", "ap.read", "purchase_orders.read", "ar.read", "estimates.read", "usage.read", "payment_methods.read", "contract_costs.read", "resourcing.read", "retainers.read", "reports.read", "budgets.read", "allocations.read", "nonprofit.report", "funds.read", "grants.read", "encumbrances.read", "insights.read", "records.read", "items.read", "assets.read", "time.read", "time.clock", "compliance.read", "assistant.use", "documents.read", "feedback.use", "data.export", "apps.use", "hrm.self.read", "hrm.self.request", "hrm.leave.request", "cash_sales.read"],
   },
   sales_manager: {
     name: "Sales Manager",
@@ -1279,7 +1320,7 @@ export const BUILT_IN_ROLES: Record<
       "crm.activities.read", "crm.activities.manage",
       "crm.opportunities.read", "crm.opportunities.manage", "crm.opportunities.close",
       "crm.forecasts.read", "crm.forecasts.manage", "crm.forecasts.override", "crm.setup.manage",
-      "parties.read", "parties.manage", "ar.read", "ar.create", "stored_value.read", "stored_value.manage", "usage.read", "usage.manage", "usage.bill", "payment_methods.read", "items.read", "reports.read",
+      "parties.read", "parties.manage", "ar.read", "ar.create", "estimates.read", "estimates.create", "estimates.issue", "stored_value.read", "stored_value.manage", "usage.read", "usage.manage", "usage.bill", "payment_methods.read", "items.read", "reports.read",
       "channels.read",
       "cash_sales.read", "cash_sales.create",
       "insights.read", "documents.read", "feedback.use", "data.export", "data.import", "assistant.use",
@@ -1300,7 +1341,7 @@ export const BUILT_IN_ROLES: Record<
       "crm.activities.read", "crm.activities.manage",
       "crm.opportunities.read", "crm.opportunities.manage", "crm.opportunities.close",
       "crm.forecasts.read", "crm.forecasts.manage",
-      "parties.read", "parties.manage", "ar.read", "ar.create", "stored_value.read", "usage.read", "usage.manage", "usage.bill", "payment_methods.read", "items.read", "reports.read",
+      "parties.read", "parties.manage", "ar.read", "ar.create", "estimates.read", "estimates.create", "estimates.issue", "stored_value.read", "usage.read", "usage.manage", "usage.bill", "payment_methods.read", "items.read", "reports.read",
       "channels.read",
       "cash_sales.read", "cash_sales.create",
       "documents.read", "feedback.use", "data.export", "assistant.use",
@@ -1347,7 +1388,7 @@ export const BUILT_IN_ROLES: Record<
       "Logs their own time, follows projects and drafts customer invoices for approval. Cannot see coworkers' time, post invoices, take or make payments, or see banking or the ledger.",
     permissions: [
       "projects.read", "time.self", "time.clock",
-      "ar.read", "ar.create", "usage.read", "usage.manage", "usage.bill",
+      "ar.read", "ar.create", "estimates.read", "estimates.create", "estimates.issue", "usage.read", "usage.manage", "usage.bill",
       "parties.read", "items.read", "reports.read",
       "documents.read", "feedback.use", "assistant.use",
       "hrm.self.read", "hrm.self.request", "hrm.leave.request",
