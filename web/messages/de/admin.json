@@ -7127,7 +7127,15 @@
       "subjectPlaceholder": "Datensatztyp auswählen…",
       "create": "Flow erstellen",
       "failed": "Der Flow konnte nicht erstellt werden",
-      "scheduleWeekdayPreset": "Werktags 06:00 und 14:30 (optionaler Entwurf; vor Aktivierung prüfen)"
+      "scheduleWeekdayPreset": "Werktags 06:00 und 14:30 (optionaler Entwurf; vor Aktivierung prüfen)",
+      "groups": {
+        "documents": "Dokumente",
+        "payroll": "Lohnabrechnung",
+        "people": "Personal",
+        "operations": "Vorgänge",
+        "finance": "Finanzen",
+        "other": "Weitere"
+      }
     },
     "actions": {
       "enable": "Aktivieren",

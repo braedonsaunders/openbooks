@@ -278,6 +278,10 @@ const COGNATES = new Set<string>([
   'fr:reports.formats.ratio|Ratio',
   // French spells the Features-page tab “Finance” identically.
   'fr:admin.setup.features.categories.finance|Finance',
+  // French spells the flow record-type groups “Documents” and “Finance”
+  // exactly like English (des documents, la finance).
+  'fr:admin.flows.new.groups.documents|Documents',
+  'fr:admin.flows.new.groups.finance|Finance',
   // French spells concentration, fragmentation and projections exactly like
   // English; these analytics group headings are the correct French terms.
   'fr:analytics.vendor.config.groups.concentration|Concentration',

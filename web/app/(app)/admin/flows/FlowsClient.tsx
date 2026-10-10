@@ -14,7 +14,7 @@ import { confirmDialog } from '../../../../lib/confirm'
  * from the profiles API) and per-row enable/delete controls.
  */
 
-type ProfileOption = { subjectKind: string; label?: string; labelKey?: string; supportsUngatedSubmission?: boolean }
+type ProfileOption = { subjectKind: string; label?: string; labelKey?: string; group?: string; supportsUngatedSubmission?: boolean }
 
 export function NewFlowButton() {
   const t = useTranslations('admin.flows')
@@ -43,6 +43,7 @@ export function NewFlowButton() {
               subjectKind: p.subjectKind,
               label: p.label,
               labelKey: p.labelKey,
+              group: p.group,
               supportsUngatedSubmission: p.supportsUngatedSubmission,
             })),
           ),
@@ -126,12 +127,20 @@ export function NewFlowButton() {
             <Label>{t('new.subject')}</Label>
             <SearchSelect
               value={subjectKind}
-              options={(profiles ?? []).map((p) => ({
-                value: p.subjectKind,
-                label: p.labelKey && tSubjects.has(p.labelKey as never)
-                  ? tSubjects(p.labelKey as never)
-                    : (p.label ?? p.subjectKind),
-              }))}
+              options={(profiles ?? [])
+                .map((p) => {
+                  const groupKey = `new.groups.${p.group ?? 'other'}` as const
+                  return {
+                    value: p.subjectKind,
+                    label: p.labelKey && tSubjects.has(p.labelKey as never)
+                      ? tSubjects(p.labelKey as never)
+                      : (p.label ?? p.subjectKind),
+                    // Unknown future groups fall back to Other so the picker
+                    // never renders an ungrouped row.
+                    group: t.has(groupKey as never) ? t(groupKey as never) : t('new.groups.other'),
+                  }
+                })
+                .sort((a, b) => a.group.localeCompare(b.group) || a.label.localeCompare(b.label))}
               placeholder={t('new.subjectPlaceholder')}
               loading={profiles === null}
               onChange={(value) => { setSubjectKind(value); setUngatedOutcome(undefined) }}

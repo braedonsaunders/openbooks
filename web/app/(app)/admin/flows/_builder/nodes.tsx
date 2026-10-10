@@ -17,12 +17,20 @@ const CARD =
   'w-52 rounded-lg border bg-white px-3 py-2 text-xs shadow-sm transition-shadow dark:bg-slate-900'
 const SELECTED = 'border-teal-500 ring-2 ring-teal-500/40'
 const HANDLE_STYLE = { width: 9, height: 9 }
+/**
+ * Invisible drag halo around every connect handle (see _flow-canvas.css):
+ * the dot stays 9px while pointer targeting uses a ±12px halo, and the
+ * handle pins its own pointer events above cards and edges. Without it,
+ * drags cannot start on the dot and wiring works only through the
+ * side-panel Connect.
+ */
+const HANDLE_HIT_CLASS = 'flow-connect-handle'
 
 function BranchHandles({ a, b }: { a: string; b: string }) {
   return (
     <>
-      <Handle type="source" position={Position.Right} id={a} style={{ ...HANDLE_STYLE, top: '38%' }} />
-      <Handle type="source" position={Position.Right} id={b} style={{ ...HANDLE_STYLE, top: '72%' }} />
+      <Handle type="source" position={Position.Right} id={a} className={HANDLE_HIT_CLASS} style={{ ...HANDLE_STYLE, top: '38%' }} />
+      <Handle type="source" position={Position.Right} id={b} className={HANDLE_HIT_CLASS} style={{ ...HANDLE_STYLE, top: '72%' }} />
     </>
   )
 }
@@ -101,7 +109,7 @@ function TriggerNode({ data, selected }: NodeProps) {
           {triggerSummary(t, d.trigger)}
         </div>
       ) : null}
-      <Handle type="source" position={Position.Right} id="next" style={HANDLE_STYLE} />
+      <Handle type="source" position={Position.Right} id="next" className={HANDLE_HIT_CLASS} style={HANDLE_STYLE} />
     </div>
   )
 }
@@ -111,7 +119,7 @@ function ConditionNode({ data, selected }: NodeProps) {
   const d = data as Extract<NodeData, { kind: 'condition' }>
   return (
     <div className={cn(CARD, 'relative', selected ? SELECTED : 'border-amber-300 dark:border-amber-800')}>
-      <Handle type="target" position={Position.Left} style={HANDLE_STYLE} />
+      <Handle type="target" position={Position.Left} className={HANDLE_HIT_CLASS} style={HANDLE_STYLE} />
       <div className="flex items-center gap-1.5 font-semibold text-amber-700 dark:text-amber-400">
         <GitBranch size={13} /> {t('node.condition')}
       </div>
@@ -128,14 +136,14 @@ function ActionNode({ data, selected }: NodeProps) {
   const d = data as Extract<NodeData, { kind: 'action' }>
   return (
     <div className={cn(CARD, selected ? SELECTED : 'border-sky-300 dark:border-sky-800')}>
-      <Handle type="target" position={Position.Left} style={HANDLE_STYLE} />
+      <Handle type="target" position={Position.Left} className={HANDLE_HIT_CLASS} style={HANDLE_STYLE} />
       <div className="flex items-center gap-1.5 font-semibold text-sky-700 dark:text-sky-400">
         <Play size={13} /> {t(`action.kinds.${d.action.action}`)}
       </div>
       <div className="mt-0.5 truncate text-slate-600 dark:text-slate-400">
         {actionSummary(t, d.action)}
       </div>
-      <Handle type="source" position={Position.Right} id="next" style={HANDLE_STYLE} />
+      <Handle type="source" position={Position.Right} id="next" className={HANDLE_HIT_CLASS} style={HANDLE_STYLE} />
     </div>
   )
 }
@@ -145,7 +153,7 @@ function GateNode({ data, selected }: NodeProps) {
   const d = data as Extract<NodeData, { kind: 'gate' }>
   return (
     <div className={cn(CARD, 'relative', selected ? SELECTED : 'border-violet-300 dark:border-violet-800')}>
-      <Handle type="target" position={Position.Left} style={HANDLE_STYLE} />
+      <Handle type="target" position={Position.Left} className={HANDLE_HIT_CLASS} style={HANDLE_STYLE} />
       <div className="flex items-center gap-1.5 font-semibold text-violet-700 dark:text-violet-400">
         <ShieldCheck size={13} /> {t('node.gate')}
       </div>
