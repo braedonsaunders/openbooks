@@ -207,13 +207,19 @@ async function resolveProjectRow(
   const managerId = await party(body.managerId, "manager", "managerId");
   // Project roles are internal people (the timekeeper rule): an active
   // person party, or an employee party holding an active employment. A
-  // customer, vendor, or company party cannot manage a project. Subsidiary
-  // scope is deliberately not pinned here — the visibility check below
-  // still reports an out-of-scope person by name instead.
+  // customer, vendor, or company party cannot manage a project or run its
+  // crew. Subsidiary scope is deliberately not pinned here — the visibility
+  // check below still reports an out-of-scope person by name instead.
   if (managerId !== null && !(await pinInternalPerson(runner, orgId, managerId))) {
     throw bad(
       `project manager "${managerId}" must be an active employee or internal person in this organization — choose the manager from the organization's people`,
       "managerId",
+    );
+  }
+  if (foremanId !== null && !(await pinInternalPerson(runner, orgId, foremanId))) {
+    throw bad(
+      `project foreman "${foremanId}" must be an active employee or internal person in this organization — choose the foreman from the organization's people`,
+      "foremanId",
     );
   }
   // Pickers only offer subsidiary-visible active parties: the write agrees,

@@ -193,6 +193,11 @@ export const PATCH = defineRoute({
     const v = uuidOrNull(body.foremanId)
     if (v === 'invalid') return bad('Invalid foreman')
     if (v !== null && !(await partyExists(v, user.orgId))) return bad('Foreman not found')
+    // Same rule as create: a foreman is an active employee or internal
+    // person, never a customer, vendor, or company party.
+    if (v !== null && !(await pinInternalPerson(db, user.orgId, v))) {
+      return bad(`project foreman "${v}" must be an active employee or internal person in this organization — choose the foreman from the organization's people`)
+    }
     foremanId = v
   }
   let managerId: string | null | undefined

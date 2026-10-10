@@ -104,6 +104,7 @@ async function renderDrawer() {
             payload={NEW_PAYLOAD as never}
             parties={[]}
             managerParties={[]}
+            foremanParties={[]}
             subsidiaries={[]}
             canManage
             canViewGl={false}

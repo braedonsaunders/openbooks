@@ -160,6 +160,7 @@ export function ProjectDrawer({
   payload,
   parties,
   managerParties,
+  foremanParties,
   subsidiaries,
   canManage,
   canViewGl,
@@ -185,6 +186,8 @@ export function ProjectDrawer({
   parties: PartyOpt[]
   /** Manager picker: internal people only (the write path refuses anyone else). */
   managerParties: PartyOpt[]
+  /** Foreman picker: the same internal people (the write path refuses anyone else). */
+  foremanParties: PartyOpt[]
   subsidiaries: SubsidiaryOpt[]
   canManage: boolean
   canViewGl: boolean
@@ -346,6 +349,10 @@ export function ProjectDrawer({
   const managerOptions = useMemo(
     () => managerParties.map((p) => ({ value: p.id, label: p.display_name ?? '' })),
     [managerParties],
+  )
+  const foremanOptions = useMemo(
+    () => foremanParties.map((p) => ({ value: p.id, label: p.display_name ?? '' })),
+    [foremanParties],
   )
 
   const savePayload = useMemo(
@@ -596,7 +603,7 @@ export function ProjectDrawer({
         return (
           <>
             <Label>{lbl || t('labels.foreman')}</Label>
-            {editable ? <SearchSelect value={foremanId} onChange={setForemanId} options={partyOptions} clearable emptyLabel={t('drawer.noForeman')} placeholder={t('drawer.selectForeman')} sheetTitle={t('labels.foreman')} ariaLabel={t('labels.foreman')} /> : <ReadOnlyValue value={partyOptions.find((option) => option.value === foremanId)?.label ?? ''} />}
+            {editable ? <SearchSelect value={foremanId} onChange={setForemanId} options={foremanOptions} clearable emptyLabel={t('drawer.noForeman')} placeholder={t('drawer.selectForeman')} sheetTitle={t('labels.foreman')} ariaLabel={t('labels.foreman')} /> : <ReadOnlyValue value={foremanOptions.find((option) => option.value === foremanId)?.label ?? partyOptions.find((option) => option.value === foremanId)?.label ?? ''} />}
           </>
         )
       case 'manager_id':

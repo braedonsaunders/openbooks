@@ -112,10 +112,10 @@ export async function loadProjects(
   // cockpit — those tabs need a persisted project and stay hidden).
   const [parties, managerParties, subsidiaries, projectTypesRes] = openProject || creating
     ? await Promise.all([
-        // Customer/foreman pickers: only parties the caller may see.
+        // Customer picker: only parties the caller may see.
         listScopedPartyOptions(orgId, authz.allowedSubsidiaryIds, { activeOnly: true }),
-        // Manager picker: internal people only — the same predicate the
-        // write path enforces, so a choice here always saves.
+        // Manager and foreman pickers: internal people only — the same
+        // predicate the write path enforces, so a choice here always saves.
         listInternalPersonOptions(db, orgId, authz.allowedSubsidiaryIds),
         subsidiaryUiOptions(orgId),
         db.execute<ProjectTypeOption>(sql`
@@ -207,6 +207,7 @@ export async function loadProjects(
               : openProject) as unknown as ProjectDrawerProps['payload'],
             parties,
             managerParties,
+            foremanParties: managerParties,
             subsidiaries,
             canManage,
             canViewGl,
