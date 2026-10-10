@@ -1084,10 +1084,10 @@ export interface DocumentDrawerProps {
   /** Optional kind-specific section rendered read-only at the bottom of the
    *  drawer body (e.g. online payment links on customer invoices). */
   afterContent?: React.ReactNode
-  /** Server-known entry-mode allocation gate. When explicitly false the
-   *  drawer skips the entry-candidates presence checks entirely instead of
-   *  firing requests the server must refuse (console 404s in orgs without
-   *  the feature). Undefined preserves the probe-and-hide behavior. */
+  /** Server-known entry-mode allocation gate (Allocations → entry
+   *  distributions, parent gate resolved). Only `true` queries entry
+   *  candidates; false or absent skips them, so an organization without the
+   *  module never calls an endpoint the server must refuse. */
   allocationsEntryEnabled?: boolean
   /** RMA create link resolved by the invoice loader's permission and feature gates. */
   returnAuthorizationHref?: string | null
@@ -1471,7 +1471,9 @@ export function DocumentDrawer({
   const [distApplying, setDistApplying] = useState(false)
   const [splitTarget, setSplitTarget] = useState<number | null>(null)
   const distContext = new URLSearchParams({ documentKind: config.kind, documentDate, ...(subsidiaryId ? { subsidiaryId } : {}) }).toString()
-  const dist = useEntryCandidates(distContext, distEditable && allocationsEntryEnabled !== false && /^\d{4}-\d{2}-\d{2}$/.test(documentDate))
+  // Fail closed: a host that does not state the Allocations entry gate
+  // never queries candidates, so a module that is off is never called.
+  const dist = useEntryCandidates(distContext, distEditable && allocationsEntryEnabled === true && /^\d{4}-\d{2}-\d{2}$/.test(documentDate))
   const { key: distKey, cache: distLineMap, failed: distLineFailed, load: loadDistCandidates } = dist
   const distOn = dist.on
   const distAuto = dist.automatic

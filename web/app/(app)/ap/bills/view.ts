@@ -51,6 +51,8 @@ export interface ApBillsDrawer {
   payload: unknown
   /** Unsaved create: the drawer edits a blank payload; Save POSTs the collection. */
   createMode: boolean
+  /** Allocations → entry distributions on (parent gate resolved). */
+  allocationsEntryEnabled: boolean
   config: unknown
   parties: unknown
   accounts: unknown
@@ -103,9 +105,10 @@ export async function loadApBills(
 ): Promise<ApBillsData> {
   const authz = await requirePermission('ap.read')
   const canCreate = can(authz, 'ap.create')
-  const [inventoryEnabled, equipmentEnabled] = await Promise.all([
+  const [inventoryEnabled, equipmentEnabled, allocationsEntryEnabled] = await Promise.all([
     isFeatureEnabled(authz.user.orgId, 'inventory'),
     isFeatureEnabled(authz.user.orgId, 'equipment'),
+    isFeatureEnabled(authz.user.orgId, 'allocationsAtEntry'),
   ])
   const t = await getTranslations('ap')
   const rawDocId = typeof sp.doc === 'string' ? sp.doc : undefined
@@ -285,6 +288,7 @@ export async function loadApBills(
           canCreate,
           canPost: can(authz, 'ap.post'),
           withholdingSchemes,
+          allocationsEntryEnabled,
           initialMode: (isCreate || pickString(sp.mode) === 'edit' ? 'edit' : 'view') as 'edit' | 'view',
           layout: resolvedForm.layout,
           availableLayouts: resolvedForm.available,
