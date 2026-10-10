@@ -127,7 +127,6 @@ export const LOCAL_NAVIGATION: LocalNavigationSet[] = [
     {href:'/manufacturing/work-centers',label:'Work centers',ns:'manufacturing',key:'titles.work-centers',permission:'manufacturing.read',iconKey:'settings',menuParent:'manufacturing'},
     {href:'/manufacturing/routings',label:'Routings',ns:'manufacturing',key:'titles.routings',permission:'manufacturing.read',iconKey:'workflow',menuParent:'manufacturing'},
     {href:'/manufacturing/mrp',label:'MRP',ns:'manufacturing',key:'titles.mrp',permission:'manufacturing.read',feature:'manufacturingMrp',iconKey:'calendar-days',menuParent:'manufacturing'},
-    {href:'/admin/setup/manufacturing',label:'Manufacturing setup',ns:'manufacturing',key:'setup',permission:'admin.setup.manage',feature:'manufacturing',iconKey:'settings',secondary:true,menuParent:'manufacturing'},
   ] },
   { id: 'collections-views', label: 'Collections', tabs: [
     { href: '/collections', ns: 'ar', key: 'collections.tabs.worklist', permission: 'documents.manage', permissionsAny: ['ar.read'] },

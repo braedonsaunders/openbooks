@@ -18,6 +18,7 @@ export type SetupRailFlags = {
   canManageCrm?: boolean
   canManagePeriods?: boolean
   hiddenEntityKeys?: string[]
+  manufacturingEnabled?: boolean
   projectsEnabled?: boolean
   currencyEnabled?: boolean
   fixedAssetsEnabled?: boolean
@@ -79,6 +80,7 @@ export function setupRail({
   canManagePeriods,
   hiddenEntityKeys = [],
   projectsEnabled = true,
+  manufacturingEnabled = false,
   currencyEnabled = true,
   fixedAssetsEnabled = true,
   crmEnabled = true,
@@ -119,6 +121,7 @@ export function setupRail({
             { href: '/admin/setup/company', labelKey: 'admin.setup.entities.company.title', iconKey: 'building' },
             { href: '/admin/setup/company#sample-companies', labelKey: 'data.import.sample.industry', iconKey: 'sparkles' },
             { href: '/admin/setup/features', labelKey: 'admin.setup.features.navTitle', iconKey: 'layers' },
+            ...(canManageSetup && manufacturingEnabled ? [{ href: '/admin/setup/manufacturing', labelKey: 'manufacturing.setup', iconKey: 'settings' }] : []),
             ...entities(group.key),
           ]
         : group.key === 'banking'
