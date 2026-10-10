@@ -15,15 +15,7 @@ export class BomPolicyError extends Error {
   constructor(message: string, readonly status = 422, readonly code = "bom_policy_refused", readonly details?: Record<string, unknown>) { super(message); }
 }
 
-/**
- * Item kinds that can parent a bill of materials: assemblies built by the
- * shop floor and kits exploded at sale/issue. Raw materials, packaging, and
- * service kinds never qualify — the assembly picker offers only these, so a
- * recipe cannot start life on an item the build commands would not produce.
- */
-export function isAssemblyCapableKind(kind: string | null | undefined): boolean {
-  return kind === "assembly" || kind === "kit";
-}
+export { isAssemblyCapableKind } from "./public-contracts.ts";
 export interface BomPolicyLine extends BomQuantityPolicy {
   componentItemId: string; quantityPer: string; sortOrder: number;
   effectiveFrom: string | null; effectiveTo: string | null;
