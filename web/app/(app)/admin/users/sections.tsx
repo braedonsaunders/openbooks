@@ -14,6 +14,8 @@ export interface AdminUserRow {
   email: string
   isActive: boolean
   isSelf: boolean
+  /** The viewer is the sole active user administrator and may link their own login. */
+  selfLinkAllowed: boolean
   /** Invited but never signed in while a set-password link is outstanding. */
   isPending: boolean
   statusLabel: string
@@ -226,6 +228,7 @@ export function AdminUsersTable({
                   partyId={u.partyId}
                   partyName={u.partyName}
                   isSelf={u.isSelf}
+                  selfLinkAllowed={u.selfLinkAllowed}
                 />
                 <ResendInviteButton
                   userId={u.id}

@@ -8,6 +8,7 @@ import { requirePermission } from '../../../../lib/authz'
 import { dateTime } from '../../../../lib/format'
 import { parseListParams, pickString } from '../../../../lib/list-params'
 import type { AdminUserRow } from './sections'
+import { countOtherActiveUserAdministrators } from '../../../../lib/sole-administrator'
 
 /**
  * Org users and their role assignments, split into a loader and a spec.
@@ -74,6 +75,9 @@ export async function loadAdminUsers(
   sp: Record<string, string | string[] | undefined>,
 ): Promise<AdminUsersData> {
   const authz = await requirePermission('admin.users.manage')
+  // The sole active user administrator may link their own login (attested
+  // and audited); the server re-checks this inside the write.
+  const soleAdministrator = (await countOtherActiveUserAdministrators(db, authz.user.orgId, authz.user.id)) === 0
   const t = await getTranslations('admin.users')
   const tCommon = await getTranslations('common')
   const tHub = await getTranslations('admin.hub')
@@ -183,6 +187,7 @@ export async function loadAdminUsers(
       email: u.email,
       isActive: u.is_active,
       isSelf: u.id === authz.user.id,
+      selfLinkAllowed: u.id === authz.user.id && soleAdministrator,
       isPending: u.is_pending,
       statusLabel: u.is_pending
         ? t('statusPending')

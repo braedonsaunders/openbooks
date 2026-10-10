@@ -1117,7 +1117,7 @@
     "linkAttestationRequired": "Une attestation explicite est requise",
     "linkSave": "Enregistrer le lien",
     "linkSaved": "Personne liée enregistrée",
-    "linkSelfRefused": "Vous ne pouvez pas modifier votre propre personne liée : un autre administrateur doit le faire.",
+    "linkSelfRefused": "Vous ne pouvez pas modifier votre propre personne liée tant qu'un autre administrateur actif existe : demandez-lui de le faire.",
     "linkStale": "La personne liée a changé : fermez, actualisez et réessayez.",
     "metaTitle": "Utilisateurs",
     "title": "Utilisateurs",
@@ -1166,7 +1166,8 @@
     "inviteTooManyAttempts": "Trop d’invitations — réessayez plus tard",
     "unassignedRole": "aucun rôle attribué",
     "inviteChooseRole": "Choisissez un rôle",
-    "inviteRoleRequired": "Choisissez le rôle de cette personne."
+    "inviteRoleRequired": "Choisissez le rôle de cette personne.",
+    "linkSelfSoleAdministrator": "Vous êtes le seul administrateur actif : vous pouvez donc lier votre propre identifiant. Le lien est consigné dans le journal d'audit comme auto-liaison, avec votre motif et votre attestation ; dès qu'un autre administrateur existe, c'est lui qui doit effectuer toute modification ultérieure."
   },
   "permissions": {
     "hrm_employment_read": "Consulter les dossiers d'emploi",

@@ -1117,7 +1117,7 @@
     "linkAttestationRequired": "Se requiere una certificación explícita",
     "linkSave": "Guardar vínculo",
     "linkSaved": "Persona vinculada guardada",
-    "linkSelfRefused": "No puede cambiar su propia persona vinculada; debe hacerlo otro administrador.",
+    "linkSelfRefused": "No puede cambiar su propia persona vinculada mientras exista otro administrador activo; pídale que lo haga.",
     "linkStale": "La persona vinculada cambió: cierre, actualice y vuelva a intentarlo.",
     "metaTitle": "Usuarios",
     "title": "Usuarios",
@@ -1166,7 +1166,8 @@
     "inviteTooManyAttempts": "Demasiadas invitaciones: inténtelo más tarde",
     "unassignedRole": "sin rol asignado",
     "inviteChooseRole": "Elija un rol",
-    "inviteRoleRequired": "Elija el rol que tendrá esta persona."
+    "inviteRoleRequired": "Elija el rol que tendrá esta persona.",
+    "linkSelfSoleAdministrator": "Es el único administrador activo, así que puede vincular su propio inicio de sesión. El vínculo queda registrado en el registro de auditoría como autovinculación, con su motivo y su declaración; cuando exista otro administrador, será él quien deba hacer cualquier cambio posterior."
   },
   "permissions": {
     "hrm_employment_read": "Ver registros de empleo",

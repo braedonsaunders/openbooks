@@ -1117,7 +1117,7 @@
     "linkAttestationRequired": "Eine ausdrückliche Bestätigung ist erforderlich",
     "linkSave": "Verknüpfung speichern",
     "linkSaved": "Verknüpfte Person gespeichert",
-    "linkSelfRefused": "Sie können Ihre eigene verknüpfte Person nicht ändern — das muss ein anderer Administrator tun.",
+    "linkSelfRefused": "Sie können Ihre eigene verknüpfte Person nicht ändern, solange ein weiterer aktiver Administrator existiert — bitten Sie diesen, es zu tun.",
     "linkStale": "Die verknüpfte Person hat sich geändert — schließen, aktualisieren und erneut versuchen.",
     "metaTitle": "Benutzer",
     "title": "Benutzer",
@@ -1166,7 +1166,8 @@
     "inviteTooManyAttempts": "Zu viele Einladungen – versuchen Sie es später erneut",
     "unassignedRole": "keine Rolle zugeordnet",
     "inviteChooseRole": "Rolle auswählen",
-    "inviteRoleRequired": "Wählen Sie die Rolle, die diese Person erhalten soll."
+    "inviteRoleRequired": "Wählen Sie die Rolle, die diese Person erhalten soll.",
+    "linkSelfSoleAdministrator": "Sie sind der einzige aktive Administrator und dürfen daher Ihr eigenes Login verknüpfen. Die Verknüpfung wird mit Ihrer Begründung und Bestätigung als Selbstverknüpfung im Prüfprotokoll erfasst; sobald ein weiterer Administrator existiert, muss dieser spätere Änderungen vornehmen."
   },
   "permissions": {
     "hrm_employment_read": "Beschäftigungsdaten anzeigen",
