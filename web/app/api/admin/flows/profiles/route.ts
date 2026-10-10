@@ -1,7 +1,6 @@
 import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from 'next/server'
-import { DOCUMENT_FLOW_KINDS, listFlowSubjectProfiles } from '@openbooks/engine/src/flows/index.ts'
-import { PAY_RUN_SUBJECT_KIND } from '@openbooks/engine/src/flows/pay-runs-adapter.ts'
+import { listFlowSubjectProfiles } from '@openbooks/engine/src/flows/index.ts'
 import { flowSubjectGroup } from './groups.ts'
 import { guardFeaturePermission } from '../../../../../lib/feature-gates'
 
@@ -19,13 +18,7 @@ async function legacyGET() {
   if (gate instanceof NextResponse) return gate
   return NextResponse.json({
     profiles: listFlowSubjectProfiles().map((profile) => {
-      // Pay runs ride the generic document kind list but carry payroll's
-      // dedicated profile, so they group with payroll, not documents.
-      const group =
-        DOCUMENT_FLOW_KINDS.includes(profile.subjectKind) &&
-        profile.subjectKind !== PAY_RUN_SUBJECT_KIND
-          ? 'documents'
-          : flowSubjectGroup(profile.subjectKind)
+      const group = flowSubjectGroup(profile.subjectKind)
       if (!profile.labelKey) return { ...profile, group }
       const { label: _label, ...stableProfile } = profile
       return { ...stableProfile, group }
