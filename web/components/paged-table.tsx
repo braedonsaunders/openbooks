@@ -56,6 +56,7 @@ export function PagedTable<T>({
   rowInteractive,
   contained = false,
   resetPageKey,
+  searchLayout = 'list',
 }: {
   rows: T[]
   columns: PagedColumn<T>[]
@@ -92,6 +93,9 @@ export function PagedTable<T>({
   contained?: boolean
   /** Sorting changes restart paging without discarding the search query. */
   resetPageKey?: string
+  /** Inside a record drawer the search stretches across the drawer, the
+   *  drawer sublist composition; list pages keep the capped page search. */
+  searchLayout?: 'list' | 'drawer'
 }) {
   const external = source ? preparedListSource(source).mode !== 'loaded' : false
   searchable = searchable && !external
@@ -145,7 +149,27 @@ export function PagedTable<T>({
   }, [someFilteredSelected])
 
   const toolbar = searchable ? (
-    toolbarAfter ? (
+    searchLayout === 'drawer' ? (
+      <div className={`flex w-full flex-wrap gap-2${toolbarAlign === 'end' ? ' items-end' : ''}`} data-sublist-toolbar="">
+        <div className="relative min-w-56 flex-1" data-sublist-search="">
+          <Search
+            className="pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2 text-slate-400"
+            size={15}
+          />
+          <Input
+            value={query}
+            onChange={(e) => {
+              setQuery(e.target.value)
+              setPage(0)
+            }}
+            aria-label={t('actions.search')}
+            placeholder={t('actions.search')}
+            className="w-full pl-8"
+          />
+        </div>
+        {toolbarAfter}
+      </div>
+    ) : toolbarAfter ? (
       <div className={`flex flex-wrap gap-2${toolbarAlign === 'end' ? ' items-end' : ''}`}>
         <div className={`relative ${LIST_SEARCH_WIDTH}`}>
           <Search

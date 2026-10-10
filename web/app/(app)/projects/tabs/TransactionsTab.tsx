@@ -102,6 +102,7 @@ export function TransactionsTab({
         rows={visibleTransactions}
         rowKey={(r) => r.id}
         searchable
+        searchLayout="drawer"
         toolbarAfter={(
           <Select
             value={kind}

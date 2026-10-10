@@ -465,6 +465,7 @@ export function BillingSection({
           rows={requests}
           rowKey={(r) => r.id}
           searchable
+          searchLayout="drawer"
           empty={<p className="text-sm text-slate-500 dark:text-slate-400">{t('noRequests')}</p>}
           columns={[
             { key: 'number', header: tCommon('labels.number'), cell: (r) => <span className="font-mono text-[13px] font-semibold">{r.requestNumber}</span>, search: (r) => r.requestNumber },

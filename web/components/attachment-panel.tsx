@@ -258,6 +258,7 @@ export function AttachmentPanel({
                 placeholder={t('searchPlaceholder')}
                 paramKey="attq"
                 pageParamKey="attpage"
+                className="min-w-0 flex-1 shrink sm:w-auto sm:max-w-none"
               />
               <FilterChips
                 basePath={pathname}

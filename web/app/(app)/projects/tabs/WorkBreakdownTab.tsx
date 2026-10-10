@@ -379,6 +379,7 @@ export function WorkBreakdownTab({
           rows={visibleTasks}
           rowKey={(task) => task.id}
           searchable
+          searchLayout="drawer"
           empty={<p className="text-sm text-slate-500 dark:text-slate-400">{tasks.length === 0 ? t('drawer.noTasks') : t('drawer.noTasksMatchingStatus')}</p>}
           columns={[
             {

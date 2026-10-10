@@ -335,3 +335,35 @@ test('row interactivity scopes click and keyboard opens without changing the def
   })
   assert.deepEqual(opened, ['open', 'open'])
 })
+
+test('inside a record drawer the search stretches across the drawer beside its filters', async (t) => {
+  const host = document.createElement('div')
+  document.body.appendChild(host)
+  const root = createRoot(host)
+  t.after(async () => {
+    await act(async () => root.unmount())
+    host.remove()
+  })
+  await act(async () => {
+    root.render(
+      <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
+        <PagedTable
+          rows={[{ id: '1', name: 'Foundation' }]}
+          searchable
+          searchLayout="drawer"
+          toolbarAfter={<select aria-label="Status"><option>All</option></select>}
+          columns={[{ key: 'name', header: 'Name', cell: (row) => row.name, search: (row) => row.name }]}
+          rowKey={(row) => row.id}
+          empty="Empty"
+        />
+      </NextIntlClientProvider>,
+    )
+    await tick()
+  })
+  const toolbar = host.querySelector('[data-sublist-toolbar]')
+  assert.ok(toolbar?.className.split(/\s+/).includes('w-full'), 'the toolbar spans the drawer')
+  const search = toolbar?.querySelector('[data-sublist-search]')
+  assert.ok(search?.className.split(/\s+/).includes('flex-1'), 'the search grows to fill the row')
+  assert.ok(!search?.className.includes('max-w'), 'the drawer search is never capped')
+  assert.ok(toolbar?.querySelector('select[aria-label="Status"]'), 'filters sit beside the search')
+})
