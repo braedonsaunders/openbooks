@@ -314,7 +314,10 @@ test("rate-engine overhead matches org-wide rates and the posted net-zero pair",
     assert.equal(report.measures.calculated_overhead, "108.0000");
     assert.equal(report.measures.overhead, "108.0000");
     assert.equal(report.measures.total_cost, "108.0000");
-    assert.equal(report.measures.gross_profit, "-108.0000");
+    // Profit to date is recognized revenue less posted cost: no revenue has
+    // posted and statistical overhead is never a posting, so this is zero —
+    // not priced total minus total cost.
+    assert.equal(report.measures.gross_profit, "0.0000");
 
     // The statistical measure and the posted net-zero pair are ONE rule.
     await withBypassContext(() => db.execute(sql`

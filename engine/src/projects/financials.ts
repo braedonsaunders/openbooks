@@ -204,11 +204,12 @@ async function resolveProjectFinancialsInSnapshot(
   projectId: string,
   profile: FinancialProfile,
 ): Promise<ProjectFinancials> {
-  // Project header (contract value + markup + billing method).
-  const projRow = (await db.execute<{ contract_value: string; markup_percent: string; project_type: string | null; cost_budget: string; original_budget_cost: string; original_budget_price: string }>(sql`
+  // Project header (contract value + markup + billing method + revenue basis).
+  const projRow = (await db.execute<{ contract_value: string; markup_percent: string; project_type: string | null; recognition: string | null; cost_budget: string; original_budget_cost: string; original_budget_price: string }>(sql`
     select coalesce(p.contract_value, 0) as contract_value,
            coalesce((p.custom->>'markupPercent')::numeric, 0) as markup_percent,
            coalesce(pt.key, 'time_and_materials') as project_type,
+           pt.invoicing_profile->>'recognition' as recognition,
            coalesce((select sum(t.estimated_cost) from project_tasks t where t.project_id = p.id and t.org_id = p.org_id), 0) as cost_budget,
            -- The original (sold) budget is baseline 1; zero until one is captured.
            coalesce((select b.total_cost from project_budget_baselines b
@@ -219,7 +220,7 @@ async function resolveProjectFinancialsInSnapshot(
       left join project_types pt on pt.id = p.project_type_id and pt.org_id = p.org_id
      where p.id = ${projectId} and p.org_id = ${orgId}
   `))
-  const proj = projRow.rows[0] ?? { contract_value: '0', markup_percent: '0', project_type: null, cost_budget: '0', original_budget_cost: '0', original_budget_price: '0' }
+  const proj = projRow.rows[0] ?? { contract_value: '0', markup_percent: '0', project_type: null, recognition: null, cost_budget: '0', original_budget_cost: '0', original_budget_price: '0' }
   const contractValue = amount(proj.contract_value)
   const projectMarkupPercent = amount(proj.markup_percent)
   const costBudget = profile.costBudget.source === 'wbs_estimates' ? amount(proj.cost_budget) : '0.0000'
@@ -671,7 +672,15 @@ async function resolveProjectFinancialsInSnapshot(
     calculatedCouldBeInvoiced,
     adjustments.could_be_invoiced,
   )
-  const calculatedGrossProfit = add(totalPrice, neg(totalCost))
+  // Profit to date is recognized revenue less posted cost — never the
+  // contract value. Projects recognizing as invoiced read posted invoices;
+  // percent-complete and milestone projects read posted GL revenue, where
+  // their recognition postings land. Either way a job with no revenue and
+  // no cost reports zero, not its contract price.
+  const revenueBasis = proj.recognition === "as_invoiced" || proj.recognition === null
+    ? invoicedToDate
+    : revenuePosted;
+  const calculatedGrossProfit = add(revenueBasis, neg(actualCost))
   const grossProfit = add(calculatedGrossProfit, adjustments.gross_profit)
   const totalPriceUnits = toUnits(totalPrice)
   const marginPct = totalPriceUnits !== 0n
