@@ -173,6 +173,7 @@ async function jsonBackedRows(
 function setupFields(entity: SetupEntity): ResourceField[] {
   return entity.fields
     .filter((f) => f.kind !== 'multiref') // join-table fields aren't bulk-importable yet
+    .filter((f) => !f.inputOnly) // save-command inputs are not row data
     .map((f) => ({
       key: f.key,
       label: f.key,
