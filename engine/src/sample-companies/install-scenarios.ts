@@ -1,3 +1,4 @@
+import { assertSampleOperator, sampleOperatorId, withSampleOperator, type SampleOperatorOptions } from "./operator.ts";
 import { createPromotion } from "../sales/promotions.ts";
 import { installOperatingReturns } from "./install-returns.ts";
 import { snapshotSampleRecords, assertSampleRecordsPreserved, assertSampleSettingsPreserved } from "./preservation.ts";
@@ -35,7 +36,7 @@ function identifier(value: string) {
   return sql.raw(`"${value}"`);
 }
 
-async function context(tx: SqlExecutor, orgId: string, industryKey: string, extendPeriods = false): Promise<DemoContext> {
+async function context(tx: SqlExecutor, orgId: string, industryKey: string, extendPeriods = false, options: SampleOperatorOptions = {}): Promise<DemoContext> {
   const profile = SAMPLE_COMPANY_BY_INDUSTRY.get(industryKey);
   if (!profile) throw new SampleCompanyError(`Unknown demo industry: ${industryKey}`);
   const result = await tx.execute<{
@@ -66,6 +67,8 @@ async function context(tx: SqlExecutor, orgId: string, industryKey: string, exte
   `);
   const row = result.rows[0];
   if (!row) throw new SampleCompanyError(`Demo organization ${orgId} could not be read`);
+  const operatorActorId = sampleOperatorId(options);
+  if (operatorActorId) row.actorId = operatorActorId;
   const member = row.settings.sampleCompany as Record<string, unknown> | undefined;
   const memberSample = !!member;
   if (memberSample ? row.envKind !== "preview" || member!.industryKey !== industryKey || member!.profileId !== profile.profileId
@@ -86,6 +89,7 @@ async function context(tx: SqlExecutor, orgId: string, industryKey: string, exte
   for (const key of ["actorId", "subsidiaryId", "bookId", "customerId", "vendorId", "opportunityStatusId"] as const) {
     if (!row[key]) throw new SampleCompanyError(`Demo company is missing ${key}; prepare its accounting foundation before installing scenarios.`);
   }
+  if (extendPeriods) await assertSampleOperator(tx, orgId, row.actorId, row.subsidiaryId, industryKey, true);
   if (!row.periodId) {
     if (!extendPeriods) throw new SampleCompanyError("The master demo has no open accounting period; prepare its industry template to extend the calendar without reopening posted history.");
     const calendar = (await tx.execute<{ id: string; year: number }>(sql`
@@ -94,7 +98,7 @@ async function context(tx: SqlExecutor, orgId: string, industryKey: string, exte
     `)).rows[0];
     if (!calendar) throw new SampleCompanyError("The demo needs an active default fiscal calendar; configure its calendar before preparing scenarios.");
     await generateAccountingPeriods(orgId, calendar.id, calendar.year, row.actorId);
-    return context(tx, orgId, industryKey);
+    return context(tx, orgId, industryKey, false, options);
   }
   const openDates = (await tx.execute<{ date: string }>(sql`
     select least(p.ends_on,greatest(p.starts_on,${operationDate}::date))::text as date
@@ -143,8 +147,8 @@ async function tableColumns(tx: SqlExecutor, tables: string[]): Promise<Map<stri
 }
 
 /** Tables and native primary keys authored by this industry, including legacy drafts. */
-export async function sampleScenarioPreservationTables(orgId: string, industryKey: string): Promise<Map<string, string>> {
-  const c = await context(db, orgId, industryKey, true);
+export async function sampleScenarioPreservationTables(orgId: string, industryKey: string, options: SampleOperatorOptions = {}): Promise<Map<string, string>> {
+  const c = await context(db, orgId, industryKey, true, options);
   return new Map(demoRecords(c).map(record => [record.table, record.primaryKey ?? "id"]));
 }
 
@@ -235,9 +239,9 @@ async function insertRecord(tx: SqlExecutor, record: DemoRecord, columns: Map<st
 export interface DemoInstallationResult { orgId: string; industryKey: string; version: number; inserted: number; updated: number; records: number; tables: number }
 
 /** All editable scenarios and their registration commit atomically per tenant. */
-export async function installDemoScenarios(orgId: string, industryKey: string): Promise<DemoInstallationResult> {
-  return withOrgTransaction(orgId, async () => {
-    const c = await context(db, orgId, industryKey, true);
+export async function installDemoScenarios(orgId: string, industryKey: string, options: SampleOperatorOptions = {}): Promise<DemoInstallationResult> {
+  return withSampleOperator(orgId, options, () => withOrgTransaction(orgId, async () => {
+    const c = await context(db, orgId, industryKey, true, options);
     const rows = demoRecords(c);
     const preservation = c.preserveExisting ? await snapshotSampleRecords(orgId, new Map(rows.map(row => [row.table, row.primaryKey ?? "id"]))) : undefined;
     const tables = [...new Set(rows.map((row) => row.table))];
@@ -274,7 +278,7 @@ export async function installDemoScenarios(orgId: string, industryKey: string): 
     const previous = (await db.execute<{ settings: Record<string, unknown>; envKind: string }>(sql`select settings, env_kind as "envKind" from orgs where id=${orgId}`)).rows[0]!;
     const before = previous.settings;
     const installed = before.demoData as Record<string, unknown> | undefined;
-    if (inserted === 0 && updated === 0 && installed?.version === DEMO_DATA_VERSION && (await verifyDemoScenarios(orgId, industryKey)).ready) {
+    if (inserted === 0 && updated === 0 && installed?.version === DEMO_DATA_VERSION && (await verifyDemoScenarios(orgId, industryKey, options)).ready) {
       return { orgId, industryKey, version: DEMO_DATA_VERSION, inserted, updated, records: rows.length, tables: tables.length };
     }
     const announcements = (before.home as { announcements?: Array<{ id: string }> } | undefined)?.announcements ?? [];
@@ -381,7 +385,7 @@ export async function installDemoScenarios(orgId: string, industryKey: string): 
     await installOperatingReturns(c);
     await installOperatingPayments(c);
     await installOperatingBanking(c);
-    const verified = await verifyDemoScenarios(orgId, industryKey);
+    const verified = await verifyDemoScenarios(orgId, industryKey, options);
     if (!verified.ready) throw new SampleCompanyError(`The demo installation could not be verified: ${verified.missing.join(", ")}. Review the named native records before retrying preparation.`);
     if (preservation) {
       await assertSampleRecordsPreserved(orgId, preservation);
@@ -394,7 +398,7 @@ export async function installDemoScenarios(orgId: string, industryKey: string): 
         ${JSON.stringify({ source: "industry_demo_installation", reason: "Register verified synthetic feature scenarios", before, after, environment: { before: previous.envKind, after: "preview" } })}::jsonb)
     `);
     return { orgId, industryKey, version: DEMO_DATA_VERSION, inserted, updated, records: rows.length, tables: tables.length };
-  });
+  }));
 }
 
 export interface DemoVerificationResult {
@@ -403,9 +407,9 @@ export interface DemoVerificationResult {
 }
 
 /** Inspect the stored native records under the source tenant's RLS context. */
-export async function verifyDemoScenarios(orgId: string, industryKey: string): Promise<DemoVerificationResult> {
+export async function verifyDemoScenarios(orgId: string, industryKey: string, options: SampleOperatorOptions = {}): Promise<DemoVerificationResult> {
   return withOrgTransaction(orgId, async () => {
-    const c = await context(db, orgId, industryKey);
+    const c = await context(db, orgId, industryKey, false, options);
     const expected = demoRecords(c);
     const missing: string[] = await verifyOperatingDocuments({ ...c, employeeId: scenarioRecordId(c, "parties", "employee") });
     for (const table of new Set(expected.map((row) => row.table))) {
