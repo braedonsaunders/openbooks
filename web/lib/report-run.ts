@@ -9,6 +9,8 @@ import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import {
   applyBuiltInUrlFilters,
+  AS_OF_DEFAULT_PERIOD_PRESET,
+  AS_OF_STATEMENT_KINDS,
   BUILT_IN_REPORT_DEFINITION_MAP,
   REPORT_ENTITY_MAP,
   type ReportCustomQuery,
@@ -218,7 +220,14 @@ export type ResolveReportCtx = {
  * on-screen paper view, and scheduling share exactly one implementation.
  */
 export async function resolveReport(kind: ReportKind, p: URLSearchParams, ctx: ResolveReportCtx): Promise<ResolvedReport> {
-  const { orgId, t, period, query: q } = ctx
+  const { orgId, t, query: q } = ctx
+  // Point-in-time statements report balances as of the window end. A bare
+  // request (export, schedule, assistant) carrying no period is dated today
+  // through the same default the screen uses — never a fiscal year end that
+  // has not happened yet.
+  const period = AS_OF_STATEMENT_KINDS.includes(kind) && !p.get('period') && !p.get('asOf')
+    ? await resolvePeriod(AS_OF_DEFAULT_PERIOD_PRESET, { orgId })
+    : ctx.period
   const featureKey = STATEMENT_KIND_FEATURE[kind] ?? (kind.startsWith('resourcing-') ? 'resourcing' : undefined)
   if (featureKey && !(await isFeatureEnabled(orgId, featureKey))) {
     throw new ReportResolutionError(`${featureKey} feature is disabled`)

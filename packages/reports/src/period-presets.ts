@@ -154,6 +154,15 @@ export const PERIOD_PRESETS: PeriodPreset[] = [
 
 export const PERIOD_PRESET_IDS = PERIOD_PRESETS.map((p) => p.id)
 export const DEFAULT_PERIOD_PRESET = 'this_fiscal_year'
+/**
+ * Default window for point-in-time statements (balance sheet, trial
+ * balance), which report "as of" the window's end. Fiscal year to date ends
+ * today, so an unfiltered statement is never dated at a fiscal year end that
+ * has not happened yet; the year start still anchors current-year earnings.
+ */
+export const AS_OF_DEFAULT_PERIOD_PRESET = 'this_fiscal_year_to_date'
+/** Statement kinds whose figures are balances as of the window end. */
+export const AS_OF_STATEMENT_KINDS: readonly string[] = ['balance-sheet', 'trial-balance']
 export function isPeriodPreset(id: unknown): id is string {
   return typeof id === 'string' && PERIOD_PRESET_IDS.includes(id)
 }

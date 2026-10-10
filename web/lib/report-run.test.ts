@@ -47,6 +47,7 @@ const mockSources = new Map<string, string>([
     `
       export async function resolvePeriod(preset, opts) {
         if (preset === 'today') return { from: '${TODAY}', to: '${TODAY}', label: '' }
+        if (preset === 'this_fiscal_year_to_date') return { presetId: preset, from: '2026-01-01', to: '${TODAY}', label: 'FY 2026 to date' }
         throw new Error('unexpected period preset: ' + preset)
       }
     `,
@@ -72,7 +73,7 @@ const mockSources = new Map<string, string>([
       export async function partyRegister(side, opts) { thread('registers', opts?.bookId); return [] }
       export async function partnerStatement(partyId, orgId, opts) { thread('partner-statement', opts?.bookId); return {} }
       export async function projectProfitability(from, to, opts) { thread('project-profitability', opts?.bookId); return [] }
-      export async function trialBalance(asOf, dims, orgId, bookId) { thread('trial-balance', bookId); return [] }
+      export async function trialBalance(asOf, dims, orgId, bookId) { state.asOfValues.push(asOf); thread('trial-balance', bookId); return [] }
       export async function partnerBalances(s, orgId, asOf, bookId, dims) { thread('partners', bookId); return [] }
       export async function cashFlow(from, to, dims, orgId, bookId) { thread('cash-flow', bookId); return {} }
       export async function cashFlowIndirect(from, to, dims, orgId, bookId) { thread('cash-flow-indirect', bookId); return {} }
@@ -173,6 +174,26 @@ test('an explicit aging as-of keeps its meaning', async () => {
   await resolveReport('aging', new URLSearchParams('asOf=2026-07-31'), ctx)
 
   assert.deepEqual(agingState.asOfValues, ['2026-07-31'])
+})
+
+// The caller's default window here ends at the fiscal year end (2026-12-31),
+// a date that has not happened yet: a point-in-time statement with no period
+// of its own must be dated today instead.
+test('a bare trial-balance export is dated today, not the fiscal year end', async () => {
+  agingState.asOfValues = []
+
+  await resolveReport('trial-balance', new URLSearchParams(), ctx)
+
+  assert.deepEqual(agingState.asOfValues, [TODAY])
+})
+
+test('an explicit period or as-of keeps its meaning for a point-in-time statement', async () => {
+  agingState.asOfValues = []
+
+  await resolveReport('trial-balance', new URLSearchParams('period=this_fiscal_year'), ctx)
+  await resolveReport('trial-balance', new URLSearchParams('asOf=2026-06-30'), ctx)
+
+  assert.deepEqual(agingState.asOfValues, ['2026-12-31', '2026-06-30'])
 })
 
 test('aging exports use the same validated currency selection as the screen', async () => {
