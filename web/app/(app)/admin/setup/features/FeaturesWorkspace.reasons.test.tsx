@@ -44,6 +44,9 @@ Object.assign(globalThis, { React });
 const { act } = await import("react");
 const { createRoot } = await import("react-dom/client");
 const { NextIntlClientProvider } = await import("next-intl");
+const { createTranslator } = await import("next-intl");
+const { LOCALE_CODES } = await import("../../../../../i18n/config");
+const { FEATURE_CATEGORIES, FEATURE_GROUPS } = await import("@openbooks/engine/organization/feature-catalog");
 const messages = (await import("../../../../../messages/fr")).default;
 const { FeaturesWorkspace } = await import("./FeaturesWorkspace");
 
@@ -56,7 +59,7 @@ async function renderWorkspace() {
   const root = createRoot(host);
   await act(async () => {
     root.render(
-      <NextIntlClientProvider locale="fr" messages={messages} timeZone="UTC">
+      <NextIntlClientProvider locale="fr" messages={messages} timeZone="UTC" onError={(error) => { throw error; }}>
         <FeaturesWorkspace
           features={[
             { key: "bankFeeds", category: "finance", enabled: true, requiresAll: ["banking"] },
@@ -93,6 +96,21 @@ test("requires and recommends reasons render translated with catalog titles", as
   );
   assert.ok(!/Requires /.test(text), "no English Requires template may leak into the French page");
   assert.ok(!/Works best with /.test(text), "no English Works best with template may leak into the French page");
+  assert.match(text, /Autres fonctionnalités/, "ungrouped features have a translated fallback heading");
+});
+
+test("all shipped locales resolve feature areas and group headings without missing messages", async () => {
+  const groupKeys = new Set([...Object.values(FEATURE_GROUPS).flat(), "other"]);
+  for (const locale of LOCALE_CODES) {
+    const catalog = (await import(`../../../../../messages/${locale}/index.ts`)).default;
+    const t = createTranslator({ locale, messages: catalog, namespace: "admin", onError: (error) => { throw error; } });
+    for (const category of FEATURE_CATEGORIES) {
+      assert.ok(t(`setup.features.categories.${category}`).trim(), `${locale}: ${category}`);
+    }
+    for (const group of groupKeys) {
+      assert.ok(t(`setup.features.groups.${group}`).trim(), `${locale}: ${group}`);
+    }
+  }
 });
 
 test("search finds a feature on another tab, accent-insensitively, and clearing restores the tab", async (t) => {
