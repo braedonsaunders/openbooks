@@ -4,6 +4,7 @@ import { z } from 'zod'
 import { sql } from 'drizzle-orm'
 import { db, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
 import { encryptAccountNumber } from "@openbooks/engine/src/payments-core/rail-settings.ts";
+import { businessToday } from "@openbooks/engine/src/platform/business-date.ts";
 import { runRecordFlows } from '@openbooks/engine/src/flows/run.ts'
 import { BANK_ACCOUNT_SUBJECT_KIND } from '@openbooks/engine/src/flows/bank-accounts-adapter.ts'
 import { defineRoute } from '../../../../../lib/api/route'
@@ -22,12 +23,12 @@ export const runtime = 'nodejs'
  * Party bank details — the fraud-sensitive record behind the replicated
  * source platform "Vendor Bank Details Approval" workflow.
  *
- * Every create lands PENDING (inactive, invisible to payment runs — see
+ * Every create starts PENDING (inactive, invisible to payment runs — see
  * payments.ts's `is_active AND approved_at IS NOT NULL` selection); a
  * material-field edit resets an approved row back to pending. Approval flows
- * on subject kind 'party_bank_account' route the gate; without an enabled
- * flow the row simply stays pending until an admin flow approves it (there is
- * deliberately NO auto-approve fallback for bank details).
+ * on subject kind 'party_bank_account' route the gate; with no enabled flow
+ * listening, the write applies the details directly (audited) instead of
+ * stranding them pending with no run and no gate.
  */
 
 const MATERIAL_COLUMNS = ['bankName', 'country', 'currency', 'routing', 'accountNumber'] as const
@@ -140,12 +141,49 @@ export const POST = defineRoute({
   })
   if (accountId instanceof NextResponse) return accountId
 
-  await runRecordFlows(
+  const dispatch = await runRecordFlows(
     { kind: 'on_create', source: 'ui' },
     BANK_ACCOUNT_SUBJECT_KIND,
     accountId,
     { orgId: user.orgId, userId: user.id },
   )
+  // Approvals are optional Flows: with no enabled flow listening, the new
+  // details apply directly (audited) instead of stranding pending with no
+  // run and no gate. A failed dispatch stays pending — its failed run is
+  // retryable and must never auto-release.
+  if (!dispatch.failed && dispatch.runs.length === 0) {
+    const today = await businessToday(user.orgId)
+    await withOrgTransaction(user.orgId, async () => {
+      const applied = (await db.execute(sql`
+        update party_bank_accounts
+           set approval_status = 'approved', approved_at = ${today},
+               approved_by = ${user.id}, is_active = true,
+               updated_at = now(), updated_by = ${user.id}
+         where id = ${accountId} and party_id = ${partyId} and org_id = ${user.orgId}
+           and approval_status = 'pending' and retired_at is null
+         returning id`))
+      if (!applied.rows[0]) {
+        return NextResponse.json(
+          { error: 'these bank details changed while being recorded; reload and review the latest revision' },
+          { status: 409 },
+        )
+      }
+      await db.execute(sql`
+        insert into audit_log
+          (org_id, table_name, row_id, action, changes, actor_id, request_id)
+        values (
+          ${user.orgId}, 'party_bank_accounts', ${accountId}, 'approve',
+          ${JSON.stringify({
+            mode: 'bank_detail_direct_apply',
+            outcome: 'approved',
+            reason: 'no enabled approval flow governs new bank details',
+          })}::jsonb,
+          ${user.id}, ${req.headers.get('X-Request-Id')}
+        )
+      `)
+    })
+    return NextResponse.json({ id: accountId, approvalStatus: 'approved' }, { status: 201 })
+  }
   return NextResponse.json({ id: accountId, approvalStatus: 'pending' }, { status: 201 })
   },
 })
@@ -308,6 +346,34 @@ export const PATCH = defineRoute({
     // change, cancelled approvals, and audit evidence together.
     if (flows.failed) {
       throw new Error('bank-detail approval routing failed; the bank details were not changed')
+    }
+    // Approvals are optional Flows: with no enabled flow listening, the
+    // edited details apply directly (audited) instead of stranding pending
+    // with no run and no gate.
+    if (flows.runs.length === 0) {
+      const today = await businessToday(user.orgId)
+      await db.execute(sql`
+        update party_bank_accounts
+           set approval_status = 'approved', approved_at = ${today},
+               approved_by = ${user.id}, is_active = true,
+               updated_at = now(), updated_by = ${user.id}
+         where id = ${accountId} and party_id = ${partyId} and org_id = ${user.orgId}
+      `)
+      await db.execute(sql`
+        insert into audit_log
+          (org_id, table_name, row_id, action, changes, actor_id, request_id)
+        values (
+          ${user.orgId}, 'party_bank_accounts', ${accountId}, 'update',
+          ${JSON.stringify({
+            mode: 'bank_detail_direct_apply',
+            outcome: 'approved',
+            changedFields,
+            reason: 'no enabled approval flow governs changed bank details',
+          })}::jsonb,
+          ${user.id}, ${req.headers.get('X-Request-Id')}
+        )
+      `)
+      return NextResponse.json({ id: accountId, approvalStatus: 'approved', changedFields })
     }
     return NextResponse.json({ id: accountId, approvalStatus: 'pending', changedFields })
   })

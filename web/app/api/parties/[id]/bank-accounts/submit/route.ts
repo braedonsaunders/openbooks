@@ -5,6 +5,7 @@ import { sql } from 'drizzle-orm'
 import { db, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
 import { dispatchFailureReason } from '@openbooks/engine/src/flows/index.ts'
 import { runRecordFlows } from '@openbooks/engine/src/flows/run.ts'
+import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
 import { BANK_ACCOUNT_SUBJECT_KIND } from '@openbooks/engine/src/flows/bank-accounts-adapter.ts'
 import { defineRoute } from '../../../../../../lib/api/route'
 import { isUuid } from '../../../../../../lib/list-params'
@@ -27,18 +28,15 @@ export const runtime = 'nodejs'
  * Submit stale-pending bank details into the current approval flow.
  *
  * How a bank record strands with no run: rows are born `pending` at create
- * (and re-enter it on material edit) while the approval flow is OPTIONAL —
- * with no enabled flow, runRecordFlows returns EMPTY and the engine never
- * sees the record. A flow authored later (or enabled later) does not
- * backfill: the row stays pending with no run and no gate, invisible to the
- * approvals centre, and the Approvals dialog truthfully reports no flow
- * history. The engine treats "no run" as "no approval required" — so the
- * only honest path forward is to dispatch the record through the CURRENT
- * flow now: the creation-side trigger re-planned against current values,
- * exactly what would have fired had the flow existed at create time.
- * Deliberately no auto-approve fallback (see the collection route): when no
- * enabled flow listens, the submit refuses with a typed message and the row
- * stays pending.
+ * (and re-enter it on material edit) while the approval flow is OPTIONAL.
+ * The engine treats "no run" as "no approval required" — so the submit
+ * first dispatches the record through the CURRENT flow (the creation-side
+ * trigger re-planned against current values, exactly what would have fired
+ * had the flow existed at create time), and only when no enabled flow
+ * listens does the explicit submit apply the details directly, audited.
+ * That fallback is also the recovery for rows stranded pending before any
+ * flow existed: with nothing to govern them, submitting activates them
+ * instead of refusing with nowhere to go.
  */
 export const POST = defineRoute({
   permission: 'parties.manage',
@@ -129,11 +127,41 @@ export const POST = defineRoute({
       accountId,
       { orgId: user.orgId, userId: user.id },
     )
+    // Approvals are optional Flows: with no enabled flow listening, an
+    // explicit submit applies the details directly (audited) instead of
+    // refusing and leaving the row pending with no run and no gate. This is
+    // also the recovery for records stranded pending before any flow
+    // existed: the operator submits, and with nothing to govern them the
+    // details activate.
     if (flows.runs.length === 0 && !flows.failed) {
-      return NextResponse.json(
-        { error: 'no enabled approval flow handles new bank details — enable one, then submit again' },
-        { status: 422 },
-      )
+      const today = await businessToday(user.orgId)
+      const applied = (await db.execute(sql`
+        update party_bank_accounts
+           set approval_status = 'approved', approved_at = ${today},
+               approved_by = ${user.id}, is_active = true,
+               updated_at = now(), updated_by = ${user.id}
+         where id = ${accountId} and party_id = ${partyId} and org_id = ${user.orgId}
+           and approval_status = 'pending' and retired_at is null
+         returning id`))
+      if (!applied.rows[0]) {
+        throw new BankAccountSubmitError(
+          'these bank details changed while submitting — reload and submit again',
+        )
+      }
+      await db.execute(sql`
+        insert into audit_log
+          (org_id, table_name, row_id, action, changes, actor_id, request_id)
+        values (
+          ${user.orgId}, 'party_bank_accounts', ${accountId}, 'approve',
+          ${JSON.stringify({
+            mode: 'bank_detail_direct_apply',
+            outcome: 'approved',
+            reason: 'no enabled approval flow governs bank details',
+          })}::jsonb,
+          ${user.id}, ${req.headers.get('X-Request-Id')}
+        )
+      `)
+      return NextResponse.json({ id: accountId, approvalStatus: 'approved', directApplied: true })
     }
     const runId = flows.runs[0]?.runId ?? null
     if (flows.failed) {
