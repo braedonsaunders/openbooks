@@ -230,7 +230,7 @@ export function EmailScheduleDrawer({
               setVisibility(event.target.value as 'personal' | 'board')
               reset()
             }}
-            className="mt-1 w-full rounded border p-2 dark:bg-slate-950"
+            className="mt-1 w-full"
           >
             <option value="personal">{t('personal')}</option>
             <option value="board">{t('wholeBoard')}</option>
@@ -425,7 +425,7 @@ export function EmailScheduleDrawer({
                 value={recipientId}
                 disabled={busy || queued !== null}
                 onChange={(event) => setRecipientId(event.target.value)}
-                className="mt-1 w-full rounded border p-2 dark:bg-slate-950"
+                className="mt-1 w-full"
               >
                 {preview.recipients.map((r) => (
                   <option key={r.partyId} value={r.partyId}>

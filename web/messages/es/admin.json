@@ -5391,7 +5391,9 @@
         "projects": "Proyectos",
         "people": "Personas",
         "industries": "Sectores",
-        "platform": "Plataforma"
+        "platform": "Plataforma",
+        "property": "Gestión inmobiliaria",
+        "nonprofit": "Operaciones sin fines de lucro"
       },
       "impacts": {
         "trackedVendors": "{count, plural, one {# subcontratista controlado} other {# subcontratistas controlados}}",
@@ -5500,7 +5502,8 @@
       "searchPlaceholder": "Buscar funciones…",
       "noMatches": "Ninguna función coincide con «{query}».",
       "otherIndustryModules": "Otros módulos sectoriales",
-      "yourIndustry": "Su sector"
+      "yourIndustry": "Su sector",
+      "companyCountOn": "Funciones de la empresa: {n} de {total} activadas"
     },
     "bankFeeds": {
       "navTitle": "Feeds bancarios"

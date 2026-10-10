@@ -110,6 +110,15 @@ export function resolveFeatureOn(
   return visit(key)
 }
 
+/** Company-wide effective counts include every unique registered capability. */
+export function summarizeFeatures(rows: FeatureTreeRow[], state: FeatureSwitchState): { n: number; total: number } {
+  const unique = [...new Map(rows.map((row) => [row.key, row])).values()]
+  return {
+    n: unique.filter((row) => resolveFeatureOn(unique, state, row.key)).length,
+    total: unique.length,
+  }
+}
+
 function missingRequirements(
   byKey: Map<string, FeatureTreeRow>,
   state: FeatureSwitchState,
@@ -271,64 +280,6 @@ export function filterFeatureTree(
     })
     .filter((section) => section.groups.length > 0)
 }
-
-/**
- * One merged section holding the rows a key set names, across every tab, in
- * tab order — the Industries tab's per-vertical view. The rows are the same
- * nodes the home tabs render, so a switch reads and toggles identically
- * wherever it appears. Null when no named row exists.
- */
-export function featureLens(
-  sections: FeatureTreeSection[],
-  keys: ReadonlySet<string>,
-  category: string,
-): FeatureTreeSection | null {
-  const groups = filterFeatureTree(sections, (row) => keys.has(row.key)).flatMap((section) => section.groups)
-  if (groups.length === 0) return null
-  const rendered = groups.flatMap((group) => [group.parent, ...group.visibleChildren])
-  return {
-    category,
-    groups,
-    visibleTotal: rendered.length,
-    visibleOn: rendered.filter((node) => node.on).length,
-  }
-}
-
-/** Section key for Industries-category modules no industry preset names. */
-export const OTHER_INDUSTRY_MODULES = 'other'
-
-/** One industry preset as the Industries tab reads it: the keys it switches on. */
-export interface FeatureIndustry {
-  key: string
-  features: string[]
-}
-
-/**
- * The Industries tab's sections: one per industry preset, the org's applied
- * industry first, then every Industries-category module no preset names —
- * so the tab can never hide a switch it owns.
- */
-export function industryLenses(
-  sections: FeatureTreeSection[],
-  industries: FeatureIndustry[],
-  orgIndustry: string | null,
-): { key: string; section: FeatureTreeSection }[] {
-  const ordered = [
-    ...industries.filter((industry) => industry.key === orgIndustry),
-    ...industries.filter((industry) => industry.key !== orgIndustry),
-  ]
-  const lenses = ordered.flatMap((industry) => {
-    const section = featureLens(sections, new Set(industry.features), industry.key)
-    return section ? [{ key: industry.key, section }] : []
-  })
-  const named = new Set(industries.flatMap((industry) => industry.features))
-  const unnamed = (sections.find((section) => section.category === 'industries')?.groups ?? [])
-    .map((group) => group.parent.row.key)
-    .filter((key) => !named.has(key))
-  const other = featureLens(sections, new Set(unnamed), OTHER_INDUSTRY_MODULES)
-  return other ? [...lenses, { key: OTHER_INDUSTRY_MODULES, section: other }] : lenses
-}
-
 
 /** Ordered settings sections. Every root and its hierarchy is rendered once;
  * new capabilities without presentation metadata stay visible under Other. */

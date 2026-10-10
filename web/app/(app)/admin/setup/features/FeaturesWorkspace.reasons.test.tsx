@@ -88,6 +88,8 @@ test("requires and recommends reasons render translated with catalog titles", as
   const { unmount } = await renderWorkspace();
   t.after(unmount);
   const text = document.body.textContent ?? "";
+  assert.match(document.querySelector('[data-feature-summary]')?.textContent ?? '', /1 sur 5 activées/,
+    "the company summary includes Platform and counts effective dependencies, independent of the Finance body");
   assert.match(text, /Requiert Banque\./, "the missing requirement must read French with the catalog title");
   assert.match(
     text,

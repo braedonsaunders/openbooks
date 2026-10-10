@@ -5530,7 +5530,9 @@
         "projects": "Projetos",
         "people": "Pessoas",
         "industries": "Setores",
-        "platform": "Plataforma"
+        "platform": "Plataforma",
+        "property": "Gestão imobiliária",
+        "nonprofit": "Operações sem fins lucrativos"
       },
       "groups": {
         "structure": "Estrutura da empresa",
@@ -5578,7 +5580,8 @@
       "searchPlaceholder": "Pesquisar funcionalidades…",
       "noMatches": "Nenhuma funcionalidade corresponde a “{query}”.",
       "otherIndustryModules": "Outros módulos setoriais",
-      "yourIndustry": "Seu setor"
+      "yourIndustry": "Seu setor",
+      "companyCountOn": "Recursos da empresa: {n} de {total} ativados"
     },
     "readiness": {
       "navTitle": "Guia de entrada em operação"

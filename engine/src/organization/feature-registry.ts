@@ -11,7 +11,7 @@
 
 /** Features-page tabs, in display order. Each tab follows the operating
  * cycle of its domain so related switches sit together. */
-export const FEATURE_CATEGORIES = ['finance', 'sales', 'billing', 'inventory', 'manufacturing', 'projects', 'people', 'industries', 'platform'] as const
+export const FEATURE_CATEGORIES = ['finance', 'sales', 'billing', 'inventory', 'manufacturing', 'projects', 'people', 'property', 'nonprofit', 'platform'] as const
 export type FeatureCategory = (typeof FEATURE_CATEGORIES)[number]
 
 /** Presentation groups do not introduce gates or alter feature dependencies. */
@@ -23,7 +23,8 @@ export const FEATURE_GROUPS = {
   manufacturing: ['production'],
   projects: ['delivery', 'labor', 'field', 'planning', 'billing', 'resourcing', 'purchasing', 'equipment'],
   people: ['humanResources', 'recruiting', 'talent', 'workforce', 'compliance', 'experience', 'payroll', 'expenses'],
-  industries: ['property', 'nonprofit'],
+  property: ['property'],
+  nonprofit: ['nonprofit'],
   platform: ['automation', 'communication', 'governance', 'integrations', 'development'],
 } as const satisfies Record<FeatureCategory, readonly string[]>
 export type FeatureGroup = (typeof FEATURE_GROUPS)[FeatureCategory][number]
@@ -332,16 +333,16 @@ export const FEATURES: FeatureDef[] = [
   // Lease, rent, CAM, and deposit operations. A third-party manager may not
   // own the buildings or use separate legal entities, so adjacent accounting
   // capabilities are recommendations rather than hard dependencies.
-  { key: 'propertyManagement', defaultEnabled: false, category: 'industries', group: 'property', navModules: ['property-management'], recommends: ['fixedAssets', 'multiSubsidiary', 'onlinePayments', 'revenueRecognition'] },
+  { key: 'propertyManagement', defaultEnabled: false, category: 'property', group: 'property', navModules: ['property-management'], recommends: ['fixedAssets', 'multiSubsidiary', 'onlinePayments', 'revenueRecognition'] },
   // Nonprofit accounting: funds, grants, pledges, encumbrances, and
   // functional-expense reporting, all subordinate to the nonprofit parent.
-  { key: 'nonprofit', defaultEnabled: false, category: 'industries', group: 'nonprofit', navModules: ['nonprofit'] },
-  { key: 'fundAccounting', defaultEnabled: false, category: 'industries', group: 'nonprofit', parentKey: 'nonprofit' },
-  { key: 'grantManagement', defaultEnabled: false, category: 'industries', group: 'nonprofit', parentKey: 'nonprofit', requiresAll: ['fundAccounting'] },
-  { key: 'pledges', defaultEnabled: false, category: 'industries', group: 'nonprofit', parentKey: 'nonprofit' },
-  { key: 'encumbrances', defaultEnabled: false, category: 'industries', group: 'nonprofit', parentKey: 'nonprofit', requiresAll: ['budgets'] },
-  { key: 'functionalExpenses', defaultEnabled: false, category: 'industries', group: 'nonprofit', parentKey: 'nonprofit' },
-  { key: 'form990', defaultEnabled: false, category: 'industries', group: 'nonprofit', parentKey: 'nonprofit', requiresAll: ['functionalExpenses'] },
+  { key: 'nonprofit', defaultEnabled: false, category: 'nonprofit', group: 'nonprofit', navModules: ['nonprofit'] },
+  { key: 'fundAccounting', defaultEnabled: false, category: 'nonprofit', group: 'nonprofit', parentKey: 'nonprofit' },
+  { key: 'grantManagement', defaultEnabled: false, category: 'nonprofit', group: 'nonprofit', parentKey: 'nonprofit', requiresAll: ['fundAccounting'] },
+  { key: 'pledges', defaultEnabled: false, category: 'nonprofit', group: 'nonprofit', parentKey: 'nonprofit' },
+  { key: 'encumbrances', defaultEnabled: false, category: 'nonprofit', group: 'nonprofit', parentKey: 'nonprofit', requiresAll: ['budgets'] },
+  { key: 'functionalExpenses', defaultEnabled: false, category: 'nonprofit', group: 'nonprofit', parentKey: 'nonprofit' },
+  { key: 'form990', defaultEnabled: false, category: 'nonprofit', group: 'nonprofit', parentKey: 'nonprofit', requiresAll: ['functionalExpenses'] },
 
   // Platform — workflow, workspace, extensibility and developer access.
   // The inbox nav module ('approvals') is not a flows surface. It is the one

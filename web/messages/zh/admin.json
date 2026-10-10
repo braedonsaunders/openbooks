@@ -5530,7 +5530,9 @@
         "projects": "项目",
         "people": "人员",
         "industries": "行业",
-        "platform": "平台"
+        "platform": "平台",
+        "property": "物业管理",
+        "nonprofit": "非营利组织运营"
       },
       "groups": {
         "structure": "公司结构",
@@ -5578,7 +5580,8 @@
       "searchPlaceholder": "搜索功能…",
       "noMatches": "没有与“{query}”匹配的功能。",
       "otherIndustryModules": "其他行业模块",
-      "yourIndustry": "您的行业"
+      "yourIndustry": "您的行业",
+      "companyCountOn": "公司功能：{total} 项中已启用 {n} 项"
     },
     "readiness": {
       "navTitle": "上线指南"

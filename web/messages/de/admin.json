@@ -5526,7 +5526,9 @@
         "projects": "Projekte",
         "people": "Personal",
         "industries": "Branchen",
-        "platform": "Plattform"
+        "platform": "Plattform",
+        "property": "Immobilienverwaltung",
+        "nonprofit": "Gemeinnützige Organisationen"
       },
       "childOptions": "{count, plural, one {# Option nach Aktivierung} other {# Optionen nach Aktivierung}}",
       "confirmDisable": "{name} ausschalten?\n\nDadurch wird {items} ausgeblendet. Die Daten bleiben erhalten und kehren zurück, wenn Sie erneut aktivieren.",
@@ -5629,7 +5631,8 @@
       "searchPlaceholder": "Funktionen suchen…",
       "noMatches": "Keine Funktion entspricht „{query}“.",
       "otherIndustryModules": "Weitere Branchenmodule",
-      "yourIndustry": "Ihre Branche"
+      "yourIndustry": "Ihre Branche",
+      "companyCountOn": "Unternehmensfunktionen: {n} von {total} aktiviert"
     },
     "invoicing": {
       "navTitle": "Rechnungsstellung"

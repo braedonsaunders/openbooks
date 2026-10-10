@@ -5530,7 +5530,9 @@
         "projects": "Projects",
         "people": "People",
         "industries": "Industries",
-        "platform": "Platform"
+        "platform": "Platform",
+        "property": "Property management",
+        "nonprofit": "Nonprofit operations"
       },
       "groups": {
         "structure": "Company structure",
@@ -5578,7 +5580,8 @@
       "searchPlaceholder": "Search features…",
       "noMatches": "No features match “{query}”.",
       "otherIndustryModules": "Other industry modules",
-      "yourIndustry": "Your industry"
+      "yourIndustry": "Your industry",
+      "companyCountOn": "Company features: {n} of {total} on"
     },
     "readiness": {
       "navTitle": "Go-live guide"
