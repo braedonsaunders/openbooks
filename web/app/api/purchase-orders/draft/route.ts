@@ -20,8 +20,8 @@ export const runtime = 'nodejs'
  * though it matched.
  */
 export const POST = defineRoute({
-  authorize: () => guardFeaturePermission('ap.create', 'orders'),
-  feature: { none: 'The purchase-order draft guard combines ap.create with the orders feature.' },
+  authorize: () => guardFeaturePermission('purchase_orders.create', 'orders'),
+  feature: { none: 'The purchase-order draft guard combines purchase_orders.create with the orders feature.' },
   handler: async ({ request: req, authz: gate }) => {
   const { user } = gate
   // The UI contract requires a UUID key (like the canonical order create);

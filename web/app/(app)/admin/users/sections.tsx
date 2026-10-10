@@ -39,7 +39,7 @@ export function AdminUsersTable({
   labels,
 }: {
   users: AdminUserRow[]
-  allRoles: { id: string; name: string; isBuiltIn: boolean }[]
+  allRoles: { id: string; name: string; isBuiltIn: boolean; description?: string | null }[]
   basePath: string
   currentParams: Record<string, string | string[] | undefined>
   sort: string

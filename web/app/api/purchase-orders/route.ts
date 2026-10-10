@@ -12,9 +12,9 @@ export const runtime = 'nodejs'
  * order-create boundary before the kernel sees it.
  */
 export const POST = defineRoute({
-  authorize: () => guardFeaturePermission('ap.create', 'orders'),
-  feature: { none: 'The purchase-order create guard combines ap.create with the orders feature.' },
+  authorize: () => guardFeaturePermission('purchase_orders.create', 'orders'),
+  feature: { none: 'The purchase-order create guard combines purchase_orders.create with the orders feature.' },
   body: orderCreateBody,
   handler: async ({ request, authz, body }) =>
-    createOrder({ kind: 'purchase_order', createPerm: 'ap.create', numberPrefix: 'PO-' }, authz, request, body),
+    createOrder({ kind: 'purchase_order', createPerm: 'purchase_orders.create', numberPrefix: 'PO-' }, authz, request, body),
 })

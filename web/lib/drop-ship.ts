@@ -134,7 +134,7 @@ export async function createDropShipPurchaseOrder(
 ): Promise<{ id: string; documentNumber: string; replayed: boolean }> {
   const orgId = context.authz.user.orgId;
   const userId = context.authz.user.id;
-  assertApplicationPermission(context, "ap.create");
+  assertApplicationPermission(context, "purchase_orders.create");
   await assertDropShippingFeature(db, orgId);
   if (!isUuid(input.salesOrderId) || !isUuid(input.vendorId)) throw invalidInput("salesOrderId and vendorId must be UUIDs");
   if (!input.idempotencyKey.trim() || input.idempotencyKey.length > 500) throw invalidInput("Idempotency key must be between 1 and 500 characters");

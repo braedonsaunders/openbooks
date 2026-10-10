@@ -23,7 +23,7 @@ stubModules({
 const { registerHooks: registerViewHooks } = await import('node:module')
 registerViewHooks({
   resolve(specifier, context, next) {
-    if (specifier === '../../../lib/authz' && context.parentURL?.endsWith('/web/app/(app)/purchasing/view.ts')) return { shortCircuit: true, url: 'data:text/javascript,export async function getAuthz(){return {user:{orgId:"org-1",roles:[]}}}export function can(authz,permission){return permission==="ap.create"?globalThis.__purchasingViewTest.canCreate:true}export function assertCan(){throw new Error("unexpected refusal")}' }
+    if (specifier === '../../../lib/authz' && context.parentURL?.endsWith('/web/app/(app)/purchasing/view.ts')) return { shortCircuit: true, url: 'data:text/javascript,export async function getAuthz(){return {user:{orgId:"org-1",roles:[]}}}export function can(authz,permission){return permission==="ap.create"||permission==="purchase_orders.create"?globalThis.__purchasingViewTest.canCreate:true}export function assertCan(){throw new Error("unexpected refusal")}' }
     if (specifier === '../../../lib/consolidation' && context.parentURL?.endsWith('/web/app/(app)/purchasing/view.ts')) return { shortCircuit: true, url: 'data:text/javascript,' + encodeURIComponent(`
       export class MissingRatesError extends Error {}
       export async function reportSubsidiaryView(){if(globalThis.__purchasingViewTest.unexpected)throw new Error('database unavailable');throw new MissingRatesError('USD/CAD rates are not derived through 2026-09-24')}

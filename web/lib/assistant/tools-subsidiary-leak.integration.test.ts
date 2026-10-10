@@ -26,7 +26,7 @@ const { getAuthz } = await import('../authz');
 const { executeAssistantTool } = await import('./registry');
 const { voidReportDocument } = await import('../../testing/document-void.ts')
 
-const PROBE_PERMS = ["ap.read", "ar.read", "parties.read", "projects.read", "reports.read", "assistant.use"];
+const PROBE_PERMS = ["ap.read", "purchase_orders.read", "ar.read", "parties.read", "projects.read", "reports.read", "assistant.use"];
 
 async function seedScopedOrg() {
   const org = await withBypassContext(() => createScratchOrg());

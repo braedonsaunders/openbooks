@@ -2,6 +2,7 @@ import 'server-only'
 
 import { sql, type SQL } from 'drizzle-orm'
 import { getTranslations } from 'next-intl/server'
+import { displayRoleDescription } from '../../../../lib/role-display'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { grid, page, pageHeader, pagination, ref, widget, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
 import { requirePermission } from '../../../../lib/authz'
@@ -149,7 +150,10 @@ export async function loadAdminRoles(
       id: r.id,
       key: r.key,
       name: r.name,
-      description: r.description,
+      description: displayRoleDescription(
+        { key: r.key, isBuiltIn: r.is_built_in, description: r.description },
+        (key) => (t.has(`builtInDescriptions.${key}` as never) ? t(`builtInDescriptions.${key}` as never) : null),
+      ),
       isBuiltIn: r.is_built_in,
       permissions: Array.isArray(r.permissions)
         ? r.permissions.filter((p): p is string => typeof p === 'string')

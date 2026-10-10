@@ -466,6 +466,7 @@ export function OrderDrawer({
   subsidiaries,
   segments,
   canManage,
+  allowedConvertKinds,
   canOverrideCredit = false,
   layout,
   createMode = false,
@@ -504,6 +505,12 @@ export function OrderDrawer({
   subsidiaries: Opt[]
   segments: SegmentOption[]
   canManage: boolean
+  /**
+   * Conversion targets this caller may run on an approved order, when they
+   * are granted separately from authoring the order (purchase orders:
+   * receiving and billing). Absent means every target rides canManage.
+   */
+  allowedConvertKinds?: readonly string[]
   /** AR approvers may supply a reasoned credit-limit exception after refusal. */
   canOverrideCredit?: boolean
   layout?: FormLayoutConfig
@@ -1556,7 +1563,9 @@ export function OrderDrawer({
   const canIssue = !priceLookupBlocked && !!partyId && rows.some((r) => {
     try { return Boolean(r.itemId || r.accountId) && cmp(lineAmount(r), '0') > 0 } catch { return false }
   })
-  const convertTargets = CONVERSION_TARGETS[kind]
+  const convertTargets = allowedConvertKinds
+    ? CONVERSION_TARGETS[kind].filter((target) => allowedConvertKinds.includes(target.kind))
+    : canManage ? CONVERSION_TARGETS[kind] : []
 
   return (
     <TransactionDrawer
@@ -1603,11 +1612,23 @@ export function OrderDrawer({
               {busy ? tCommon('actions.saving') : tCommon('actions.save')}
             </Button>
           </>
-        ) : (canManage || canCreateDropShipPurchaseOrder || canConfirmDropShip || (kind === 'quote' && quoteAwardEnabled)) ? (
+        ) : (canManage || convertTargets.length > 0 || canCreateDropShipPurchaseOrder || canConfirmDropShip || (kind === 'quote' && quoteAwardEnabled)) ? (
           <>
             {kind === 'quote' && quoteAwardEnabled && !createMode ? (
               <QuoteAwardAction quoteId={String(doc.id)} docStatus={doc.status} />
             ) : null}
+            {isApproved
+              ? convertTargets.map((target) => (
+                  <Button
+                    key={target.kind}
+                    disabled={busy || converted.full}
+                    title={converted.full ? t('fullyConverted') : undefined}
+                    onClick={() => convert(target.kind, t(target.labelKey))}
+                  >
+                    {t('convertTo', { target: t(target.labelKey) })}
+                  </Button>
+                ))
+              : null}
             {canManage ? (
               <>
                 <PdfButton recordType={kind} recordId={String(doc.id)} />
@@ -1619,18 +1640,6 @@ export function OrderDrawer({
                     {t('issue')}
                   </Button>
                 ) : null}
-                {isApproved
-                  ? convertTargets.map((target) => (
-                      <Button
-                        key={target.kind}
-                        disabled={busy || converted.full}
-                        title={converted.full ? t('fullyConverted') : undefined}
-                        onClick={() => convert(target.kind, t(target.labelKey))}
-                      >
-                        {t('convertTo', { target: t(target.labelKey) })}
-                      </Button>
-                    ))
-                  : null}
                 {pickLists && kind === 'sales_order' && isApproved ? (
                   <Button disabled={busy} onClick={() => router.push(`/picks?pickFrom=${encodeURIComponent(String(doc.id))}`)}>
                     {tFulfillment('pick.createFromOrder')}

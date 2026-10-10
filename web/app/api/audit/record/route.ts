@@ -18,6 +18,7 @@ function documentReadPermission(kind: string): string {
   if (kind === 'cash_sale' || kind === 'cash_refund') return 'cash_sales.read'
   if (kind === 'customer_invoice' || kind === 'customer_credit' || kind === 'customer_payment'
     || kind === 'quote' || kind === 'sales_order') return 'ar.read'
+  if (kind === 'purchase_order' || kind === 'purchase_receipt') return 'purchase_orders.read'
   return 'ap.read'
 }
 

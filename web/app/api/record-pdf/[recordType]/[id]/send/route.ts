@@ -41,7 +41,7 @@ const RECORD_TYPE_SEND_PERMISSION: Record<string, string> = {
   quote: 'ar.create',
   sales_order: 'ar.create',
   customer_payment: 'ar.pay',
-  purchase_order: 'ap.create',
+  purchase_order: 'purchase_orders.create',
   vendor_bill: 'ap.create',
   vendor_credit: 'ap.create',
   vendor_payment: 'ap.pay',

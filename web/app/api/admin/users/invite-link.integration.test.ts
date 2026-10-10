@@ -47,7 +47,7 @@ registerHooks({
     }
     if (specifier === "next-intl/server") {
       return virtual(`
-        export async function getTranslations() { return (key) => key; }
+        export async function getTranslations() { return Object.assign((key) => key, { has: () => false }); }
         export async function getLocale() { return 'en'; }
       `);
     }

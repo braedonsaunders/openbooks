@@ -18,6 +18,23 @@ export const SEEDED_ROLE_NAMES: Record<string, string> = {
   'Sales Manager': 'salesManager',
   'Sales Representative': 'salesRepresentative',
   Production: 'production',
+  Buyer: 'buyer',
+  Cashier: 'cashier',
+  'Project Coordinator': 'projectCoordinator',
+}
+
+/**
+ * Description for a role as shown in pickers and the roles admin. A built-in
+ * role's one-line "can and cannot" description renders through the catalog
+ * (admin.roles.builtInDescriptions.<key>) so it follows the reader's locale;
+ * a custom role shows the description its administrator wrote.
+ */
+export function displayRoleDescription(
+  role: { key: string; isBuiltIn: boolean; description: string | null },
+  builtInDescription: (key: string) => string | null,
+): string | null {
+  if (role.isBuiltIn) return builtInDescription(role.key) ?? role.description
+  return role.description
 }
 
 export function displayRoleName(storedName: string, translatedByKey: (key: string) => string): string {

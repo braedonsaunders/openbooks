@@ -160,7 +160,7 @@ export function reportDrillPermission(target: { kind: string; side?: string; ord
     case 'budget':
       return 'budgets.read'
     case 'orders':
-      return target.orderKind === 'purchase_order' ? 'ap.read' : 'ar.read'
+      return target.orderKind === 'purchase_order' ? 'purchase_orders.read' : 'ar.read'
     case 'time':
       return 'time.read'
     case 'custom':

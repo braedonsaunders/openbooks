@@ -24,7 +24,7 @@ export function RoleAssignmentButton({
 }: {
   userId: string
   userName: string
-  allRoles: { id: string; name: string; isBuiltIn: boolean }[]
+  allRoles: { id: string; name: string; isBuiltIn: boolean; description?: string | null }[]
   assignedRoleIds: string[]
 }) {
   const t = useTranslations('admin.users')
@@ -107,7 +107,12 @@ export function RoleAssignmentButton({
                   size={14}
                   className={cn('shrink-0', active ? 'text-teal-600' : 'text-transparent')}
                 />
-                <span className="flex-1 truncate">{role.name}</span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate">{role.name}</span>
+                  {role.description ? (
+                    <span className="block text-xs font-normal text-slate-500 dark:text-slate-400">{role.description}</span>
+                  ) : null}
+                </span>
                 {role.isBuiltIn ? (
                   <Badge variant="secondary" className="text-[10px]">
                     {t('builtInBadge')}

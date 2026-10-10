@@ -68,7 +68,7 @@ export async function convertBuyGroup(
         allowedSubsidiaryIds: auth.allowedSubsidiaryIds,
         permissions: auth.permissions,
         services: orderEditServices,
-      }, { kind: "purchase_order", readPerm: "ap.read", createPerm: "ap.create" }, draft.id, {
+      }, { kind: "purchase_order", readPerm: "purchase_orders.read", createPerm: "purchase_orders.create" }, draft.id, {
         expectedUpdatedAt: revision,
         partyId: args.supplierId,
         dueDate: args.dueDate,

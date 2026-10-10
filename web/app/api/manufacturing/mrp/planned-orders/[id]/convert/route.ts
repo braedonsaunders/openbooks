@@ -2,7 +2,7 @@ import { z } from "zod";
 import { convertPlannedOrder, getPlannedOrder, markBuyPlannedOrderConverted } from "@openbooks/engine/src/manufacturing/mrp.ts";
 import { ManufacturingError } from "@openbooks/engine/src/manufacturing/errors.ts";
 import { db } from "@openbooks/engine/src/platform/db.ts";
-import { guardSubsidiaryScope } from "@/lib/authz";
+import { can, guardSubsidiaryScope } from "@/lib/authz";
 import { defineRoute } from "@/lib/api/route";
 import { createOrderDraft } from "@/lib/order-cycle";
 import { applyOrderEdit, OrderEditError } from "@/lib/order-draft-edit";
@@ -27,8 +27,8 @@ export const POST = defineRoute({
     const denied = guardSubsidiaryScope(authz, suggestion.subsidiaryId);
     if (denied) return denied;
     if (suggestion.action === "buy") {
-      if (!authz.permissions.has("ap.create")) {
-        return Response.json({ error: "forbidden", permission: "ap.create", message: "Missing required grant: ap.create." }, { status: 403 });
+      if (!can(authz, "purchase_orders.create")) {
+        return Response.json({ error: "forbidden", permission: "purchase_orders.create", message: "Missing required grant: purchase_orders.create." }, { status: 403 });
       }
       if (suggestion.status === "converted" && suggestion.converted_ref_id) {
         return Response.json({ id: suggestion.converted_ref_id, action: "buy", replayed: true }, { status: 200 });
@@ -67,7 +67,7 @@ export const POST = defineRoute({
           allowedSubsidiaryIds: authz.allowedSubsidiaryIds,
           permissions: authz.permissions,
           services: orderEditServices,
-        }, { kind: "purchase_order", readPerm: "ap.read", createPerm: "ap.create" }, draft.id, {
+        }, { kind: "purchase_order", readPerm: "purchase_orders.read", createPerm: "purchase_orders.create" }, draft.id, {
           expectedUpdatedAt: revision,
           partyId: body.vendorId,
           dueDate: suggestion.due_date,

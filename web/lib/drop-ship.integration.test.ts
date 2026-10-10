@@ -21,7 +21,7 @@ test("drop-ship confirmation posts cost once, covers the vendor bill, invoices, 
     const context = {
       authz: {
         user: { id: actorId, orgId: org.orgId, roles: [] },
-        permissions: new Set(["orders.fulfill", "ap.create", "items.post", "ar.create"]),
+        permissions: new Set(["orders.fulfill", "ap.create", "purchase_orders.create", "goods_receipts.create", "items.post", "ar.create"]),
         allowedSubsidiaryIds: null,
       },
       source: "api",

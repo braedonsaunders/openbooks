@@ -7,6 +7,7 @@ import {
   PERMISSION_GROUPS,
   permissionLabelKey,
   permissionSetCovers,
+  purchaseOrderConversionPermission,
   resolveKeyScopeAuthority,
   type CataloguePermission,
 } from "./permissions.ts";
@@ -322,3 +323,56 @@ test("resolveKeyScopeAuthority intersects owner permissions with exact key scope
   assert.ok(nothingHeld instanceof Set, "an owner holding nothing still yields a set for valid scopes");
   assert.deepEqual([...nothingHeld], []);
 });
+
+test("purchasing has its own grants, kept apart from the payables book", () => {
+  const keys: CataloguePermission[] = ["purchase_orders.read", "purchase_orders.create", "goods_receipts.create"];
+  const group = PERMISSION_GROUPS.find((entry) => entry.key === "purchasing");
+  assert.ok(group, "purchasing needs its own group in the role picker");
+  assert.deepEqual(group.permissions.map((entry) => entry.key), keys);
+  assert.equal(purchaseOrderConversionPermission("purchase_receipt"), "goods_receipts.create");
+  assert.equal(purchaseOrderConversionPermission("vendor_bill"), "ap.create", "billing an order creates a payables document");
+  const holds = (role: string, perm: string) => permissionSetCovers(new Set(BUILT_IN_ROLES[role]!.permissions), perm);
+  // Roles that could read or author purchase orders through ap.* keep that access.
+  for (const role of BUILT_IN_ROLE_KEYS) {
+    if (holds(role, "ap.read")) assert.equal(holds(role, "purchase_orders.read"), true, `${role} keeps reading purchase orders`);
+    if (holds(role, "ap.create")) {
+      assert.equal(holds(role, "purchase_orders.create"), true, `${role} keeps authoring purchase orders`);
+      assert.equal(holds(role, "goods_receipts.create"), true, `${role} keeps receiving goods`);
+    }
+  }
+  assert.equal(holds("buyer", "purchase_orders.create"), true);
+  assert.equal(holds("buyer", "goods_receipts.create"), true);
+  for (const denied of ["ap.create", "ap.post", "ap.pay", "banking.read", "gl.read", "items.post"]) {
+    assert.equal(holds("buyer", denied), false, `a buyer holds no ${denied}`);
+  }
+});
+
+test("people, banking and expense grants are filed under their own groups, not Administration", () => {
+  const groupOf = (key: string) => PERMISSION_GROUPS.find((group) => group.permissions.some((entry) => entry.key === key))?.key;
+  assert.equal(groupOf("parties.read"), "parties");
+  assert.equal(groupOf("banking.read"), "banking");
+  assert.equal(groupOf("expenses.read"), "expenses");
+  const listed = PERMISSION_GROUPS.flatMap((group) => group.permissions.map((entry) => entry.key));
+  assert.deepEqual([...listed].sort(), [...PERMISSION_CATALOGUE].sort(), "every catalogue key appears in exactly one group");
+});
+
+test("every built-in role says what it can and cannot do", () => {
+  for (const [key, role] of Object.entries(BUILT_IN_ROLES)) {
+    if (key === "admin") continue;
+    assert.match(role.description, /Cannot /, `${key} names what it cannot do`);
+  }
+});
+
+test("the cashier and project coordinator roles carry no bank, ledger or payment authority", () => {
+  const holds = (role: string, perm: string) => permissionSetCovers(new Set(BUILT_IN_ROLES[role]!.permissions), perm);
+  for (const role of ["cashier", "project_coordinator"]) {
+    for (const denied of ["banking.read", "gl.read", "ap.pay", "ar.pay", "ar.post"]) {
+      assert.equal(holds(role, denied), false, `${role} holds no ${denied}`);
+    }
+  }
+  assert.equal(holds("cashier", "cash_sales.create"), true);
+  assert.equal(holds("project_coordinator", "time.manage"), true);
+  assert.equal(holds("project_coordinator", "projects.read"), true);
+  assert.equal(holds("project_coordinator", "ar.create"), true, "drafts customer invoices");
+});
+

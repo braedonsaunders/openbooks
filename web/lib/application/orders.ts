@@ -12,6 +12,7 @@ import {
   type OrderKind,
 } from "../order-cycle";
 import { isFeatureEnabled } from "../features";
+import { purchaseOrderConversionPermission } from "../permissions";
 import { isUuid } from "../list-params";
 import { isDocumentRevisionToken } from "@openbooks/engine/src/records/revision.ts";
 import { add, compareDecimal, mulPercent, neg } from "@openbooks/engine/money";
@@ -53,7 +54,19 @@ export const ORDER_TYPE_KIND = {
 export type OrderTypeKey = keyof typeof ORDER_TYPE_KIND;
 
 function orderWritePermission(kind: OrderKind): string {
-  return kind === "purchase_order" ? "ap.create" : "ar.create";
+  return kind === "purchase_order" ? "purchase_orders.create" : "ar.create";
+}
+
+/**
+ * Grant to convert an order into `targetKind`. Purchase orders split by
+ * target (receiving and billing carry their own grants); receiving or
+ * fulfilling moves stock, so with Inventory on it also needs items.post —
+ * the same rule as the order drawer's convert endpoint.
+ */
+async function conversionPermissions(orgId: string, sourceKind: OrderKind, targetKind: string): Promise<string[]> {
+  const base = sourceKind === "purchase_order" ? purchaseOrderConversionPermission(targetKind) : orderWritePermission(sourceKind);
+  const movesStock = targetKind === "purchase_receipt" || targetKind === "sales_fulfillment";
+  return movesStock && (await isFeatureEnabled(orgId, "inventory")) ? [base, "items.post"] : [base];
 }
 
 function conversionFailure(error: unknown): never {
@@ -146,7 +159,9 @@ export async function convertApplicationOrder(
   }
   assertSubsidiaryAccess(context, source.subsidiaryId);
   const sourceKind = source.kind;
-  assertApplicationPermission(context, orderWritePermission(sourceKind));
+  for (const permission of await conversionPermissions(context.authz.user.orgId, sourceKind, input.targetKind)) {
+    assertApplicationPermission(context, permission);
+  }
   if (!(await isFeatureEnabled(context.authz.user.orgId, "orders"))) throw notFound("order");
   const allowed = CONVERSION_TARGETS[sourceKind] ?? [];
   if (!allowed.some((target) => target.kind === input.targetKind)) {

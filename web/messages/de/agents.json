@@ -87,7 +87,10 @@
         "salesManager": "Vertriebsleiter",
         "salesRepresentative": "Vertriebsmitarbeiter",
         "viewer": "Betrachter",
-        "production": "Produktion"
+        "production": "Produktion",
+        "buyer": "Einkäufer",
+        "cashier": "Kassierer",
+        "projectCoordinator": "Projektkoordinator"
       },
       "due": "Fällig",
       "overdue": "Überfällig",

@@ -32,10 +32,10 @@ import { assistantListPage, dateInput, decimalText, money, uuidInput } from "./t
 const ORDER_KINDS = ["quote", "sales_order", "purchase_order"] as const;
 type OrderKind = (typeof ORDER_KINDS)[number];
 
-/** Sales-side orders need ar.read; purchase orders need ap.read — same split
- *  the _order handlers enforce (readPerm ar.read vs ap.read). */
+/** Sales-side orders need ar.read; purchase orders need purchase_orders.read —
+ *  the same split the _order handlers enforce through their readPerm. */
 function kindPerm(kind: OrderKind): string {
-  return kind === "purchase_order" ? "ap.read" : "ar.read";
+  return kind === "purchase_order" ? "purchase_orders.read" : "ar.read";
 }
 
 function fulfilmentStatus(ordered: bigint, fulfilled: bigint): string {

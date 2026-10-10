@@ -30,6 +30,14 @@ export const PERMISSION_CATALOGUE = [
   "ap.approve",
   "ap.post",
   "ap.pay",
+  // Purchasing: purchase orders and the goods received against them. Kept
+  // apart from ap.* so buying and receiving can be granted without the
+  // payables book, and the payables book without buying. Creating an order
+  // commits no money; receiving moves stock and, with Inventory on, also
+  // needs items.post. Turning an order into a vendor bill needs ap.create.
+  "purchase_orders.read",
+  "purchase_orders.create",
+  "goods_receipts.create",
   // Accounts receivable
   "ar.read",
   "ar.create",
@@ -355,13 +363,16 @@ export const PERMISSION_CATALOGUE = [
   // withholds this without touching anything else. Granted to every built-in
   // role: whoever hits a defect is whoever should be able to report it.
   "feedback.use",
-  // Admin
+  // People and companies (the shared customer, vendor and employee records)
   "parties.read",
   "parties.manage",
+  // Banking
   "banking.read",
   "banking.reconcile",
+  // Expense reports
   "expenses.create",
   "expenses.read",
+  // Admin
   "admin.custom_fields.manage",
   "admin.users.manage",
   "admin.roles.manage",
@@ -426,6 +437,15 @@ export const PERMISSION_GROUPS: {
       { key: "ap.approve", labelKey: permissionLabelKey("ap.approve") },
       { key: "ap.post", labelKey: permissionLabelKey("ap.post") },
       { key: "ap.pay", labelKey: permissionLabelKey("ap.pay") },
+    ],
+  },
+  {
+    key: "purchasing",
+    labelKey: "permissions.groups.purchasing",
+    permissions: [
+      { key: "purchase_orders.read", labelKey: permissionLabelKey("purchase_orders.read") },
+      { key: "purchase_orders.create", labelKey: permissionLabelKey("purchase_orders.create") },
+      { key: "goods_receipts.create", labelKey: permissionLabelKey("goods_receipts.create") },
     ],
   },
   {
@@ -783,15 +803,33 @@ export const PERMISSION_GROUPS: {
     permissions: [{ key: "feedback.use", labelKey: permissionLabelKey("feedback.use") }],
   },
   {
-    key: "admin",
-    labelKey: "permissions.groups.admin",
+    key: "parties",
+    labelKey: "permissions.groups.parties",
     permissions: [
       { key: "parties.read", labelKey: permissionLabelKey("parties.read") },
       { key: "parties.manage", labelKey: permissionLabelKey("parties.manage") },
+    ],
+  },
+  {
+    key: "banking",
+    labelKey: "permissions.groups.banking",
+    permissions: [
       { key: "banking.read", labelKey: permissionLabelKey("banking.read") },
       { key: "banking.reconcile", labelKey: permissionLabelKey("banking.reconcile") },
+    ],
+  },
+  {
+    key: "expenses",
+    labelKey: "permissions.groups.expenses",
+    permissions: [
       { key: "expenses.read", labelKey: permissionLabelKey("expenses.read") },
       { key: "expenses.create", labelKey: permissionLabelKey("expenses.create") },
+    ],
+  },
+  {
+    key: "admin",
+    labelKey: "permissions.groups.admin",
+    permissions: [
       { key: "admin.custom_fields.manage", labelKey: permissionLabelKey("admin.custom_fields.manage") },
       { key: "admin.users.manage", labelKey: permissionLabelKey("admin.users.manage") },
       { key: "admin.roles.manage", labelKey: permissionLabelKey("admin.roles.manage") },
@@ -850,6 +888,27 @@ export const INVENTORY_ADVANCED_ACTION_PERMISSIONS = {
 } as const satisfies Record<string, CataloguePermission>;
 
 /**
+ * The one authority for purchase-order surfaces. Reading and authoring
+ * orders are purchasing grants; receiving goods against an order is its own
+ * grant (receiving into stock with Inventory on also needs items.post); and
+ * turning an order into a vendor bill creates a payables document, so it
+ * needs the bill's own ap.create.
+ */
+export const PURCHASE_ORDER_PERMISSIONS = {
+  read: "purchase_orders.read",
+  create: "purchase_orders.create",
+  receive: "goods_receipts.create",
+  bill: "ap.create",
+} as const satisfies Record<string, CataloguePermission>;
+
+/** Grant needed to convert a purchase order into `targetKind`. */
+export function purchaseOrderConversionPermission(targetKind: string): CataloguePermission {
+  if (targetKind === "purchase_receipt") return PURCHASE_ORDER_PERMISSIONS.receive;
+  if (targetKind === "vendor_bill") return PURCHASE_ORDER_PERMISSIONS.bill;
+  return PURCHASE_ORDER_PERMISSIONS.create;
+}
+
+/**
  * Built-in role definitions, seeded per organization. Authorization is based
  * exclusively on explicit role_assignments rows.
  */
@@ -859,13 +918,14 @@ export const BUILT_IN_ROLES: Record<
 > = {
   admin: {
     name: "Administrator",
-    description: "Full access, including user, role, and navigation administration.",
+    description:
+      "Full access to everything, including users, roles, navigation and company settings.",
     permissions: [...PERMISSION_CATALOGUE],
   },
   controller: {
     name: "Controller",
     description:
-      "Owns the books. Full GL/AP/AR including approvals, posting, payment, and period close, plus reporting, insights, SQL, sync, and the audit log.",
+      "Owns the books: ledger, payables, receivables, purchasing, approvals, period close, reporting and the audit log. Cannot manage users or roles.",
     permissions: [
       "gl.read",
       "gl.manage",
@@ -880,6 +940,9 @@ export const BUILT_IN_ROLES: Record<
       "ap.approve",
       "ap.post",
       "ap.pay",
+      "purchase_orders.read",
+      "purchase_orders.create",
+      "goods_receipts.create",
       "ar.read",
       "ar.create",
       "ar.approve",
@@ -1006,7 +1069,7 @@ export const BUILT_IN_ROLES: Record<
   accountant: {
     name: "Accountant",
     description:
-      "Day-to-day bookkeeping: enters and posts journals, bills, and invoices, pays and receives, and builds reports. Cannot approve or close periods.",
+      "Day-to-day bookkeeping: enters and posts journals, bills and invoices, pays and receives, and builds reports. Cannot approve, close periods, reconcile banks or manage users.",
     permissions: [
       "gl.read",
       "gl.manage",
@@ -1017,6 +1080,9 @@ export const BUILT_IN_ROLES: Record<
       "ap.create",
       "ap.post",
       "ap.pay",
+      "purchase_orders.read",
+      "purchase_orders.create",
+      "goods_receipts.create",
       "ar.read",
       "ar.create",
       "ar.post",
@@ -1095,19 +1161,21 @@ export const BUILT_IN_ROLES: Record<
   },
   production: {
     name: "Production",
-    description: "Manages manufacturing masters and shop-floor work, with inventory posting authority but no reversal authority.",
+    description:
+      "Manages manufacturing masters and shop-floor work, and posts inventory movements. Cannot reverse inventory postings or see the ledger.",
     permissions: ["manufacturing.read", "manufacturing.manage", "items.read", "items.post", "time.clock", "hrm.self.read", "hrm.self.request"],
   },
   approver: {
     name: "Approver",
     description:
-      "Reviews and decides approval requests for bills and invoices; read access to the ledger and reports.",
+      "Reviews and decides approval requests, with read access to the ledger, subledgers and reports. Cannot enter, post or pay transactions.",
     permissions: [
       "gl.read",
       "close.read",
       "close.approve",
       "ap.read",
       "ap.approve",
+      "purchase_orders.read",
       "ar.read",
       "ar.approve",
       "usage.read",
@@ -1149,12 +1217,14 @@ export const BUILT_IN_ROLES: Record<
   },
   viewer: {
     name: "Viewer",
-    description: "Read-only access to the ledger, subledgers, reports, and insights.",
-    permissions: ["gl.read", "close.read", "ap.read", "ar.read", "usage.read", "payment_methods.read", "contract_costs.read", "resourcing.read", "retainers.read", "reports.read", "budgets.read", "allocations.read", "nonprofit.report", "funds.read", "grants.read", "encumbrances.read", "insights.read", "records.read", "items.read", "assets.read", "time.read", "time.clock", "compliance.read", "assistant.use", "documents.read", "feedback.use", "data.export", "apps.use", "hrm.self.read", "hrm.self.request", "cash_sales.read"],
+    description:
+      "Read-only access to the ledger, subledgers, reports and insights. Cannot create, change, post or pay transactions.",
+    permissions: ["gl.read", "close.read", "ap.read", "purchase_orders.read", "ar.read", "usage.read", "payment_methods.read", "contract_costs.read", "resourcing.read", "retainers.read", "reports.read", "budgets.read", "allocations.read", "nonprofit.report", "funds.read", "grants.read", "encumbrances.read", "insights.read", "records.read", "items.read", "assets.read", "time.read", "time.clock", "compliance.read", "assistant.use", "documents.read", "feedback.use", "data.export", "apps.use", "hrm.self.read", "hrm.self.request", "cash_sales.read"],
   },
   sales_manager: {
     name: "Sales Manager",
-    description: "Manages relationship records, sales activities, opportunities, territories, quotas, and team forecasts.",
+    description:
+      "Runs the sales team: accounts, activities, opportunities, quotas and forecasts, and drafts invoices and cash sales. Cannot post, collect payments or see the ledger.",
     permissions: [
       "crm.accounts.read", "crm.accounts.create", "crm.accounts.manage", "crm.accounts.assign",
       "crm.activities.read", "crm.activities.manage",
@@ -1173,7 +1243,8 @@ export const BUILT_IN_ROLES: Record<
   },
   sales_rep: {
     name: "Sales Representative",
-    description: "Works assigned accounts, activities, opportunities, estimates, and personal forecasts.",
+    description:
+      "Works assigned accounts, activities, opportunities and personal forecasts, and drafts invoices and cash sales. Cannot post, collect payments or see the ledger.",
     permissions: [
       "crm.accounts.read", "crm.accounts.create", "crm.accounts.manage",
       "crm.activities.read", "crm.activities.manage",
@@ -1188,6 +1259,47 @@ export const BUILT_IN_ROLES: Record<
       // HR-20 begin: self clock-in rides every employee role.
       "time.clock",
       // HR-20 end
+    ],
+  },
+  // Purchasing desk: raises purchase orders and receives goods against them.
+  // Receiving into stock with Inventory on additionally needs items.post,
+  // which stays with roles that own inventory value.
+  buyer: {
+    name: "Buyer",
+    description:
+      "Raises purchase orders and receives goods against them, with read access to vendors, items and payables. Cannot post or pay bills, post inventory, or see banking or the ledger.",
+    permissions: [
+      "purchase_orders.read", "purchase_orders.create", "goods_receipts.create",
+      "ap.read", "parties.read", "items.read", "reports.read",
+      "documents.read", "feedback.use", "assistant.use",
+      "hrm.self.read", "hrm.self.request", "time.clock",
+    ],
+  },
+  // Till operator: sells and refunds at the counter. Posting a paid-at-sale
+  // document is the till's own duty; invoices, banking and the ledger are not.
+  cashier: {
+    name: "Cashier",
+    description:
+      "Rings up, posts and refunds cash sales at the till and looks up gift card balances. Cannot see invoices, banking or the ledger.",
+    permissions: [
+      "cash_sales.read", "cash_sales.create", "cash_sales.post",
+      "stored_value.read", "items.read",
+      "feedback.use", "hrm.self.read", "hrm.self.request", "time.clock",
+    ],
+  },
+  // Project billing coordinator: time, project visibility and invoice drafts.
+  // Invoices are drafted and submitted for approval; posting, collecting,
+  // banking and the ledger stay with accounting.
+  project_coordinator: {
+    name: "Project Coordinator",
+    description:
+      "Logs time, follows projects and drafts customer invoices for approval. Cannot post invoices, take or make payments, or see banking or the ledger.",
+    permissions: [
+      "projects.read", "time.read", "time.manage", "time.clock",
+      "ar.read", "ar.create", "usage.read", "usage.manage", "usage.bill",
+      "parties.read", "items.read", "reports.read",
+      "documents.read", "feedback.use", "assistant.use",
+      "hrm.self.read", "hrm.self.request",
     ],
   },
 };

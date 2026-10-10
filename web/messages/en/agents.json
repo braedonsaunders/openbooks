@@ -87,7 +87,10 @@
         "salesManager": "Sales Manager",
         "salesRepresentative": "Sales Representative",
         "viewer": "Viewer",
-        "production": "Production"
+        "production": "Production",
+        "buyer": "Buyer",
+        "cashier": "Cashier",
+        "projectCoordinator": "Project Coordinator"
       },
       "due": "Due",
       "overdue": "Overdue",
