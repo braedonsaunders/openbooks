@@ -139,9 +139,11 @@ export const BANKING_WIDGETS = {
       canReconcile={props.canReconcile === true}
       stmtRows={(props.stmtRows as ComponentProps<typeof ReconcileWorkspace>['stmtRows']) ?? []}
       stmtTotal={num(props, 'stmtTotal') ?? 0}
+      stmtOutstandingTotal={str(props, 'stmtOutstandingTotal') ?? '0'}
       stmtParams={props.stmtParams as ComponentProps<typeof ReconcileWorkspace>['stmtParams']}
       glRows={(props.glRows as ComponentProps<typeof ReconcileWorkspace>['glRows']) ?? []}
       glTotal={num(props, 'glTotal') ?? 0}
+      glOutstandingTotal={str(props, 'glOutstandingTotal') ?? '0'}
       glParams={props.glParams as ComponentProps<typeof ReconcileWorkspace>['glParams']}
       matchedRows={(props.matchedRows as ComponentProps<typeof ReconcileWorkspace>['matchedRows']) ?? []}
       matchedTotal={num(props, 'matchedTotal') ?? 0}

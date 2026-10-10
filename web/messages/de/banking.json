@@ -579,7 +579,8 @@
     },
     "unmatch": "Zuordnung aufheben",
     "adjustTitle": "Abstimmung anpassen",
-    "adjustDescription": "Ändern Sie den Stichtag oder den Kontoauszugssaldo für diese Sitzung."
+    "adjustDescription": "Ändern Sie den Stichtag oder den Kontoauszugssaldo für diese Sitzung.",
+    "outstandingTotal": "{total} offen"
   },
   "sftp": {
     "title": "SFTP",

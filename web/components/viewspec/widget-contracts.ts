@@ -474,7 +474,7 @@ export const WIDGET_CONTRACTS: Readonly<Record<string, WidgetContract>> = {
   'recon-action-cell': { props: ['href', 'label'] },
   'reconcile-stats': { props: ['clearedBalanceLabel', 'clearedBalanceValue', 'difference', 'differenceCurrency', 'differenceLabel', 'matchedLabel', 'matchedValue', 'statementBalanceLabel', 'statementBalanceValue'] },
   'reconcile-status-badge': { props: ['label', 'variant'] },
-  'reconcile-workspace': { props: ['accountPath', 'basePath', 'canReconcile', 'currentParams', 'difference', 'glParams', 'glRows', 'glTotal', 'mParams', 'matchedRows', 'matchedTotal', 'reconciliation', 'stmtParams', 'stmtRows', 'stmtTotal'] },
+  'reconcile-workspace': { props: ['accountPath', 'basePath', 'canReconcile', 'currentParams', 'difference', 'glOutstandingTotal', 'glParams', 'glRows', 'glTotal', 'mParams', 'matchedRows', 'matchedTotal', 'reconciliation', 'stmtOutstandingTotal', 'stmtParams', 'stmtRows', 'stmtTotal'] },
   'reconciliation-note': { props: ['label', 'reconciled', 'status'] },
   'record-count-cell': { props: ['count', 'href', 'linked'] },
   'record-drawer': { props: ['drawer'] },
