@@ -915,6 +915,10 @@
         "retainagePayable": {
           "hint": "Retenue de garantie sur la facturation d’avancement des fournisseurs, conservée jusqu’à une mainlevée approuvée",
           "label": "Retenue de garantie à payer"
+        },
+        "storedValueLiability": {
+          "label": "Passif de valeur stockée",
+          "hint": "Soldes de cartes-cadeaux et d’avoirs dus aux clients"
         }
       },
       "defaultsNote": "Ce sont les valeurs par défaut de toute l’entreprise. Chaque filiale peut les remplacer sur sa propre fiche ; les remplacements vides reprennent celles-ci."

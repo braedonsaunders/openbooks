@@ -915,6 +915,10 @@
         "retainagePayable": {
           "hint": "Einbehalt aus Lieferanten-Abschlagsrechnungen bis zu einer genehmigten Freigabe",
           "label": "Einbehaltverbindlichkeiten"
+        },
+        "storedValueLiability": {
+          "label": "Verbindlichkeit aus Guthaben",
+          "hint": "Offene Geschenkkarten- und Kundenguthaben gegenüber Kunden"
         }
       },
       "defaultsNote": "Dies sind die unternehmensweiten Standards. Jede Tochtergesellschaft kann sie in ihrem eigenen Datensatz überschreiben; leere Überschreibungen fallen auf diese zurück."

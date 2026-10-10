@@ -916,6 +916,10 @@
         "valuationAllowance": {
           "label": "递延所得税资产减值准备",
           "hint": "递延所得税资产备抵"
+        },
+        "storedValueLiability": {
+          "label": "储值负债",
+          "hint": "欠客户的礼品卡和商店积分余额"
         }
       }
     },

@@ -19,7 +19,9 @@ const requestBodySchema = z.object({
   fiscalYearStartMonth: z.number().int().min(1).max(12).optional(),
   reportingFramework: z.enum(["us_gaap", "ifrs"]).nullable().optional(),
   taxFramework: z.enum(["asc740", "ias12"]).optional(),
-  controlAccounts: z.record(z.string(), z.string().uuid()).optional(),
+  // Blank or null clears a role; the settings command validates each role by
+  // name so a refusal identifies the account mapping to correct.
+  controlAccounts: z.record(z.string(), z.union([z.string(), z.null()])).optional(),
   defaultLocale: z.string().optional(),
   timeZone: z.string().nullable().optional(),
   reportPdfStyle: z.enum(["modern", "formal"]).optional(),
