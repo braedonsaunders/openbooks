@@ -22,6 +22,9 @@ export const projectTypes: DocArticle = {
     'P&L',
     'markup',
     'source platform',
+    'retainage',
+    'holdback',
+    'opening balance',
   ],
   body: `# Project Types
 
@@ -93,6 +96,35 @@ create a new SOV line or revise an existing one. A deductive change must identif
 an existing line and cannot reduce it below zero or below the amount already
 invoiced. Retainage releases are reserved against the GL-backed retained balance
 so concurrent draft releases cannot exceed funds held.
+
+### Opening retainage (holdback) balances
+
+Retainage held on a project is the balance of the **Retainage Receivable**
+control account (Setup → Company & Accounting → Control accounts) for that
+project in the primary book. Applications for Payment add to it and
+**Retainage release** invoices draw it down; a release can never exceed the
+held balance.
+
+To bring retainage already held at cutover into OpenBooks, post one manual
+journal per project, dated on or before the cutover date:
+
+- debit the Retainage Receivable control account for the amount held, with the
+  **project** set on the line and the line's subsidiary equal to the project's
+  legal entity;
+- credit the opening-balance offset account your migration plan uses.
+
+Leave the customer off the retainage line. Held retainage is tracked per
+project, not as a customer open item: a line that names the customer becomes
+an open item and is not counted as retainage held. The project's customer
+receives the receivable when you create the **Retainage release** invoice,
+which moves the released amount into collectible receivables. The project must
+use the Applications for Payment billing procedure to release retainage.
+
+Each customer's open (unpaid) invoices are loaded as invoices, not journals,
+so payments can be received against them. A customer whose invoices belong on
+a dedicated receivable account carries it as the **Receivable account** on the
+customer record; every invoice and credit memo for that customer posts there
+unless the document chooses another receivable account.
 
 ### Price and backlog
 

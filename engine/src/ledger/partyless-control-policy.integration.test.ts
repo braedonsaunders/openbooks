@@ -5,6 +5,7 @@ import { sql } from "drizzle-orm";
 import { db, withBypass } from "../platform/db.ts";
 import { PostingError } from "../journal/posting-contracts.ts";
 import { postDocument } from "./posting-document.ts";
+import { projectRetainageHeldSql } from "../projects/construction-billing.ts";
 import { createScratchOrg, createScratchUser, dropScratchOrg } from "../testing/fixtures.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
@@ -115,7 +116,7 @@ test(
 );
 
 test(
-  "the project-tracked retainage receivable control is exempt from the party-less refusal",
+  "an opening retainage journal on the project posts under refuse and counts as held; a customer-named line does not",
   { skip: !DB },
   async () => {
     const org = await withBypass(() => createScratchOrg());
@@ -131,10 +132,27 @@ test(
         await db.execute(sql`
           update orgs set settings = jsonb_set(settings, '{controlAccounts,retainageReceivable}', to_jsonb(${retainage}::text), true)
            where id = ${org.orgId}`);
+        const projectId = randomUUID();
+        await db.execute(sql`
+          insert into projects (id, org_id, subsidiary_id, code, name, status, is_active, custom)
+          values (${projectId}, ${org.orgId}, ${org.subsidiaryId}, 'OPEN-RET', 'Opening retainage', 'active', true, '{}'::jsonb)`);
         await setPolicy(org, "refuse");
         const opening = await journal(org, actorId, "JE-RET-OPEN", { debitAccount: retainage, creditAccount: org.accounts.revenue, amount: "500" });
+        await db.execute(sql`update document_lines set project_id = ${projectId} where document_id = ${opening} and line_number = 1`);
         await post(org, opening);
         assert.equal(await entries(opening), 1);
+        const held = async () => String((await db.execute<{ held: string }>(
+          projectRetainageHeldSql(org.orgId, projectId, retainage))).rows[0]!.held);
+        assert.equal(await held(), "500.0000");
+
+        // Naming the customer makes the line a receivable open item, which is
+        // collectible AR rather than retainage awaiting release.
+        const named = await journal(org, actorId, "JE-RET-NAMED", { debitAccount: retainage, creditAccount: org.accounts.revenue, amount: "70" });
+        await db.execute(sql`
+          update document_lines set project_id = ${projectId}, party_id = ${org.customerId}
+           where document_id = ${named} and line_number = 1`);
+        await post(org, named);
+        assert.equal(await held(), "500.0000");
       });
     } finally {
       await withBypass(() => dropScratchOrg(org.orgId));
