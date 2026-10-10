@@ -8,6 +8,7 @@ import { db } from '@openbooks/engine/src/platform/db.ts'
 import { guardPermission, guardUnrestrictedScope } from '../../../../../lib/authz'
 import { FEATURE_BY_KEY, acquireFeatureGateLock, featureDisableBlocked, featureRequirements } from '../../../../../lib/features'
 import { INDUSTRY_BY_KEY, canSwitchIndustry } from '../../../../../lib/industries'
+import { NEUTRAL_INDUSTRY_KEY } from '../../../../../lib/industry-keys'
 import { normalizeCountryCode } from '../../../../../lib/countries'
 import { canonicalTimeZone } from '@openbooks/engine/src/platform/time-zone.ts'
 import { lockLedgerSetupFence } from '@openbooks/engine/src/organization/ledger-setup-fence.ts'
@@ -27,6 +28,9 @@ const requestBodySchema = z.object({
   timeZone: z.string().optional(),
   reportingFramework: z.enum(["us_gaap", "ifrs"]).optional(),
   industry: z.string().optional(),
+  // "custom": no industry preset fits, so the neutral chart is installed and
+  // the submitted features are the operator's own switchboard choices.
+  featureSelection: z.enum(["industry", "custom"]).optional(),
   features: z.record(z.string(), z.boolean()).optional(),
   workspaceProfile: z.object({
     teamSize: z.enum(["solo", "small", "medium", "large"]).optional(),
@@ -161,9 +165,11 @@ export const PUT = defineRoute({
       timeZone: inputTimeZone,
       reportingFramework: inputReportingFramework,
       industry: inputIndustry,
+      featureSelection: inputFeatureSelection,
       features: inputFeatureOverrides,
       workspaceProfile: inputWorkspaceProfile,
     } = body as {
+      featureSelection?: 'industry' | 'custom'
       name?: string
       legalName?: string
       country?: string
@@ -252,6 +258,26 @@ export const PUT = defineRoute({
     const industry = typeof inputIndustry === 'string' ? INDUSTRY_BY_KEY.get(inputIndustry) : undefined
     if (!industry) {
       return NextResponse.json({ error: 'unknown-industry', key: inputIndustry }, { status: 422 })
+    }
+    const featureSelection = inputFeatureSelection ?? 'industry'
+    // Choosing features individually installs the neutral chart and carries
+    // no preset of its own: the submitted switches are the whole decision.
+    if (featureSelection === 'custom') {
+      if (industry.key !== NEUTRAL_INDUSTRY_KEY) {
+        return NextResponse.json(
+          {
+            error: 'custom-features-require-neutral-chart',
+            message: 'Choosing features individually installs the neutral General Business chart of accounts. Choose that option, or an industry template with its own chart.',
+          },
+          { status: 422 },
+        )
+      }
+      if (Object.keys(inputFeatureOverrides).length === 0) {
+        return NextResponse.json(
+          { error: 'custom-features-required', message: 'Choose at least one feature setting when picking features individually.' },
+          { status: 422 },
+        )
+      }
     }
 
     const changes: Record<string, unknown> = {}
@@ -537,6 +563,7 @@ export const PUT = defineRoute({
         taxPosition: inputWorkspaceProfile.taxPosition,
         monthlyActivity: inputWorkspaceProfile.monthlyActivity,
         closeCadence: inputWorkspaceProfile.closeCadence,
+        featureSelection,
         assessedAt: new Date().toISOString(),
         assessedBy: actorId,
       }

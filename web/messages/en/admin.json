@@ -5812,7 +5812,12 @@
         "description": "We'll recommend a chart of accounts and relevant capabilities for the way your industry works. You review the recommendation before it is applied.",
         "search": "Search industries…",
         "locked": "Your industry can't be changed after transactions have been posted, but you can still customize your chart of accounts and features individually.",
-        "classificationOnly": "Your existing chart and posted history will be preserved. This first-time classification only tunes workspace and feature recommendations."
+        "classificationOnly": "Your existing chart and posted history will be preserved. This first-time classification only tunes workspace and feature recommendations.",
+        "custom": {
+          "title": "None of these fit — pick my own features",
+          "description": "Start from a neutral chart of accounts and switch on exactly the features you run, with the same dependency rules as Company Settings → Features."
+        },
+        "noMatches": "No industry template matches “{query}”. Choose the closest one, or pick your own features below."
       },
       "profile": {
         "title": "Meet your company where it is",
@@ -6007,7 +6012,9 @@
         "payrollPack": "Payroll country pack",
         "payrollPackNone": "None — install later from Payroll setup",
         "defaultBadge": "Default",
-        "defaultsHint": "Fields marked Default kept their pre-selected value. Go back to change them before applying."
+        "defaultsHint": "Fields marked Default kept their pre-selected value. Go back to change them before applying.",
+        "industryCustom": "None — features chosen individually",
+        "chartNeutral": "{count} accounts (neutral base chart)"
       },
       "applying": {
         "title": "Setting up your books…",
@@ -6027,47 +6034,58 @@
       "industries": {
         "general_business": {
           "title": "General Business",
-          "description": "A standard setup that works for any company. No industry-specific assumptions."
+          "description": "A standard setup that works for any company. No industry-specific assumptions.",
+          "keywords": "retail, shop, store, boutique, café, coffee shop, restaurant, bar, bakery, food service, hospitality, salon, spa, fitness, e-commerce, online store, small business, sole proprietor, freelancer, other"
         },
         "construction_contractor": {
           "title": "Construction & Trade",
-          "description": "Contractors, trades, and builders. Job costing, progress billing, retainage, and field tickets."
+          "description": "Contractors, trades, and builders. Job costing, progress billing, retainage, and field tickets.",
+          "keywords": "contractor, builder, construction, renovation, plumbing, electrical, HVAC, roofing, landscaping, trades, general contractor, subcontractor"
         },
         "professional_services": {
           "title": "Professional Services",
-          "description": "Consultants, agencies, and advisors. Time tracking, project profitability, and retainer billing."
+          "description": "Consultants, agencies, and advisors. Time tracking, project profitability, and retainer billing.",
+          "keywords": "consulting, consultant, agency, marketing agency, design studio, legal, law firm, lawyer, advisory, coaching, staffing, recruiting, freelancer"
         },
         "engineering_architecture": {
           "title": "Engineering & Architecture",
-          "description": "EPC and AEC firms. WBS, phase billing, equipment costing, and progress billing."
+          "description": "EPC and AEC firms. WBS, phase billing, equipment costing, and progress billing.",
+          "keywords": "engineering, engineer, architect, architecture, AEC, EPC, surveying, design firm"
         },
         "it_software_saas": {
           "title": "Software & SaaS",
-          "description": "Subscription billing, ASC 606 revenue recognition, and deferred revenue tracking."
+          "description": "Subscription billing, ASC 606 revenue recognition, and deferred revenue tracking.",
+          "keywords": "software, SaaS, subscription, app, technology, tech startup, IT services, managed services, digital products, memberships"
         },
         "accounting_firm": {
           "title": "Accounting Practice",
-          "description": "Bookkeeping and accounting firms. Multi-client, trust accounting, and engagement tracking."
+          "description": "Bookkeeping and accounting firms. Multi-client, trust accounting, and engagement tracking.",
+          "keywords": "accountant, bookkeeper, bookkeeping, CPA, tax preparer, accounting firm, payroll bureau"
         },
         "wholesale_distribution": {
           "title": "Wholesale & Distribution",
-          "description": "Distributors and wholesalers. Inventory, landed cost, GRNI, and stock locations."
+          "description": "Distributors and wholesalers. Inventory, landed cost, GRNI, and stock locations.",
+          "keywords": "wholesale, distribution, distributor, retail, e-commerce, online store, online sales, shop, store, import, export, trading, food, beverage, grocery, coffee, wine, supplier, inventory"
         },
         "property_management": {
           "title": "Property Management",
-          "description": "Rental portfolios and property managers. Recurring rent, CAM, security deposits, and fixed assets."
+          "description": "Rental portfolios and property managers. Recurring rent, CAM, security deposits, and fixed assets.",
+          "keywords": "real estate, landlord, rental, property, apartments, condos, commercial property, leasing, HOA"
         },
         "nonprofit": {
           "title": "Non-Profit",
-          "description": "Charities and non-profits. Grant tracking, fund accounting, donations, and restricted net assets."
+          "description": "Charities and non-profits. Grant tracking, fund accounting, donations, and restricted net assets.",
+          "keywords": "charity, foundation, NGO, church, association, club, society, donations, grants"
         },
         "manufacturing": {
           "title": "Manufacturing",
-          "description": "Light and discrete manufacturing. BOMs, raw materials, WIP, finished goods, and overhead."
+          "description": "Light and discrete manufacturing. BOMs, raw materials, WIP, finished goods, and overhead.",
+          "keywords": "manufacturer, production, factory, fabrication, food production, food, beverage, coffee roaster, roastery, coffee, bakery, brewery, winery, distillery, craft, maker, assembly, processing"
         },
         "healthcare_practice": {
           "title": "Healthcare Practice",
-          "description": "Medical and dental practices. Patient AR, medical supplies, and equipment."
+          "description": "Medical and dental practices. Patient AR, medical supplies, and equipment.",
+          "keywords": "medical, dental, clinic, doctor, dentist, physiotherapy, chiropractor, veterinary, vet, optometry, therapy, wellness"
         }
       },
       "payroll": {
@@ -6097,6 +6115,11 @@
           "allRegions": "{components} · Income tax in all {known} regions · Tax tables {years}",
           "someRegions": "{components} · Income tax in {supported} of {known} regions · Tax tables {years}"
         }
+      },
+      "features": {
+        "title": "Choose your features",
+        "description": "Switch on what this company runs. A capability that depends on another unlocks once its parent is on — the same rules as Company Settings → Features, where every choice stays adjustable.",
+        "tabsAria": "Feature categories"
       }
     },
     "filterAll": "All",

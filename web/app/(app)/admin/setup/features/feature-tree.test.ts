@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import {
   buildFeatureTree,
+  effectiveFeatureState,
   groupFeatureSections,
   groupFeatureChildren,
   featureSearchMatcher,
@@ -277,3 +278,30 @@ test('uncategorized subgroups keep future features visible under Other', () => {
   const section = buildFeatureTree([{ key: 'future', category: 'finance' }], { future: true }, CATEGORIES)[0]!;
   assert.equal(groupFeatureSections(section, FEATURE_GROUPS.finance)[0]!.key, 'other');
 });
+
+test('effective state turns off every child and dependent of an off parent, keeping the rest', () => {
+  const chosen = { ...ALL_ON, projects: false, flows: false }
+  const effective = effectiveFeatureState(ROWS, chosen)
+  for (const key of ['projects', 'timeTracking', 'fieldTickets', 'projectScheduling', 'subcontracts', 'flows', 'advancedClose']) {
+    assert.equal(effective[key], false, `${key} resolves off`)
+  }
+  for (const key of ['inventory', 'allocations', 'allocationsAtEntry', 'allocationsAtPosting']) {
+    assert.equal(effective[key], true, `${key} keeps its choice`)
+  }
+  assert.deepEqual(Object.keys(effective).sort(), ROWS.map((row) => row.key).sort())
+  // The stored choice is read, never rewritten.
+  assert.equal(chosen.fieldTickets, true)
+})
+
+test('effective state over the real registry never enables a child whose parent is off', () => {
+  const rows: FeatureTreeRow[] = FEATURES.map((f) => ({ key: f.key, category: f.category, parentKey: f.parentKey, requiresAll: f.requiresAll }))
+  const everythingButProjects = Object.fromEntries(rows.map((row) => [row.key, row.key !== 'projects']))
+  const effective = effectiveFeatureState(rows, everythingButProjects)
+  for (const row of rows) {
+    const requirements = [...(row.parentKey ? [row.parentKey] : []), ...(row.requiresAll ?? [])]
+    if (effective[row.key]) {
+      for (const required of requirements) assert.equal(effective[required], true, `${row.key} requires ${required}`)
+    }
+  }
+  assert.equal(effective.fieldTickets, false, 'Field Tickets is a Projects capability')
+})

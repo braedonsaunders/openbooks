@@ -5812,7 +5812,12 @@
         "description": "Vamos recomendar um plano de contas e recursos relevantes para o jeito do seu setor. Você revisa a recomendação antes de aplicar.",
         "search": "Pesquisar setores…",
         "locked": "Seu setor não pode mudar após lançamentos, mas dá para personalizar plano de contas e funcionalidades individualmente.",
-        "classificationOnly": "Seu plano atual e histórico lançado serão preservados. Esta primeira classificação só ajusta recomendações de workspace e funcionalidades."
+        "classificationOnly": "Seu plano atual e histórico lançado serão preservados. Esta primeira classificação só ajusta recomendações de workspace e funcionalidades.",
+        "custom": {
+          "title": "Nenhum se encaixa — escolher meus próprios recursos",
+          "description": "Comece com um plano de contas neutro e ative exatamente os recursos que você usa, com as mesmas regras de dependência de Configurações da empresa → Recursos."
+        },
+        "noMatches": "Nenhum modelo de setor corresponde a “{query}”. Escolha o mais próximo ou seus próprios recursos abaixo."
       },
       "profile": {
         "title": "Encontre sua empresa onde ela está",
@@ -6007,7 +6012,9 @@
         "payrollPack": "Pacote de país da folha",
         "payrollPackNone": "Nenhum — instale depois pela configuração da Folha",
         "defaultBadge": "Padrão",
-        "defaultsHint": "Os campos marcados como Padrão mantiveram o valor pré-selecionado. Volte para alterá-los antes de aplicar."
+        "defaultsHint": "Os campos marcados como Padrão mantiveram o valor pré-selecionado. Volte para alterá-los antes de aplicar.",
+        "industryCustom": "Nenhum — recursos escolhidos individualmente",
+        "chartNeutral": "{count} contas (plano de contas base neutro)"
       },
       "applying": {
         "title": "Montando seus livros…",
@@ -6027,47 +6034,58 @@
       "industries": {
         "general_business": {
           "title": "Negócios em geral",
-          "description": "Uma configuração padrão que serve para qualquer empresa. Sem premissas específicas de setor."
+          "description": "Uma configuração padrão que serve para qualquer empresa. Sem premissas específicas de setor.",
+          "keywords": "varejo, loja, comércio, boutique, café, cafeteria, restaurante, bar, padaria, alimentação, hotelaria, salão, academia, e-commerce, loja online, pequena empresa, autônomo, outro"
         },
         "construction_contractor": {
           "title": "Construção e ofícios",
-          "description": "Empreiteiras, ofícios e construtoras. Custeio de obras, medições, retenções e boletins de campo."
+          "description": "Empreiteiras, ofícios e construtoras. Custeio de obras, medições, retenções e boletins de campo.",
+          "keywords": "empreiteira, construtora, construção, reforma, encanamento, elétrica, climatização, telhados, paisagismo, ofícios, subempreiteiro"
         },
         "professional_services": {
           "title": "Serviços profissionais",
-          "description": "Consultorias, agências e assessores. Apontamento de horas, rentabilidade de projetos e faturamento por contrato de avença."
+          "description": "Consultorias, agências e assessores. Apontamento de horas, rentabilidade de projetos e faturamento por contrato de avença.",
+          "keywords": "consultoria, consultor, agência, agência de marketing, estúdio de design, escritório de advocacia, advogado, assessoria, coaching, recrutamento, autônomo"
         },
         "engineering_architecture": {
           "title": "Engenharia e arquitetura",
-          "description": "Empresas EPC e AEC. EAP, faturamento por fase, custeio de equipamentos e medições."
+          "description": "Empresas EPC e AEC. EAP, faturamento por fase, custeio de equipamentos e medições.",
+          "keywords": "engenharia, engenheiro, arquiteto, arquitetura, topografia, escritório de projetos"
         },
         "it_software_saas": {
           "title": "Software e SaaS",
-          "description": "Faturamento de assinaturas, reconhecimento de receita ASC 606 e acompanhamento de receita diferida."
+          "description": "Faturamento de assinaturas, reconhecimento de receita ASC 606 e acompanhamento de receita diferida.",
+          "keywords": "software, SaaS, assinatura, aplicativo, tecnologia, startup, serviços de TI, serviços gerenciados, produtos digitais, associações"
         },
         "accounting_firm": {
           "title": "Escritório contábil",
-          "description": "Contabilidades e escritórios. Multiclientes, conta de terceiros e acompanhamento de trabalhos."
+          "description": "Contabilidades e escritórios. Multiclientes, conta de terceiros e acompanhamento de trabalhos.",
+          "keywords": "contador, contabilidade, escritório contábil, guarda-livros, preparação de impostos, folha de pagamento"
         },
         "wholesale_distribution": {
           "title": "Atacado e distribuição",
-          "description": "Distribuidores e atacadistas. Estoque, custo de desembarque, GRNI e locais de estoque."
+          "description": "Distribuidores e atacadistas. Estoque, custo de desembarque, GRNI e locais de estoque.",
+          "keywords": "atacado, distribuição, distribuidor, varejo, e-commerce, loja online, vendas online, loja, importação, exportação, comércio, alimentos, bebidas, café, vinho, fornecedor, estoque"
         },
         "property_management": {
           "title": "Administração de imóveis",
-          "description": "Carteiras de aluguel e administradoras. Aluguel recorrente, CAM, cauções e imobilizado."
+          "description": "Carteiras de aluguel e administradoras. Aluguel recorrente, CAM, cauções e imobilizado.",
+          "keywords": "imobiliária, locador, aluguel, imóveis, apartamentos, imóveis comerciais, arrendamento, condomínio"
         },
         "nonprofit": {
           "title": "Sem fins lucrativos",
-          "description": "Entidades beneficentes e sem fins lucrativos. Acompanhamento de subvenções, contabilidade por fundos, doações e patrimônio líquido restrito."
+          "description": "Entidades beneficentes e sem fins lucrativos. Acompanhamento de subvenções, contabilidade por fundos, doações e patrimônio líquido restrito.",
+          "keywords": "caridade, fundação, ONG, igreja, associação, clube, doações, subsídios"
         },
         "manufacturing": {
           "title": "Indústria",
-          "description": "Manufatura leve e discreta. BOMs, matérias-primas, WIP, produtos acabados e indiretos."
+          "description": "Manufatura leve e discreta. BOMs, matérias-primas, WIP, produtos acabados e indiretos.",
+          "keywords": "fabricante, produção, fábrica, fabricação, produção de alimentos, alimentos, bebidas, torrefação, torrefadora, café, padaria, cervejaria, vinícola, destilaria, artesanal, montagem, processamento"
         },
         "healthcare_practice": {
           "title": "Clínica de saúde",
-          "description": "Clínicas médicas e odontológicas. Contas a receber de pacientes, material médico e equipamentos."
+          "description": "Clínicas médicas e odontológicas. Contas a receber de pacientes, material médico e equipamentos.",
+          "keywords": "médico, odontologia, clínica, dentista, fisioterapia, quiropraxia, veterinário, optometria, terapia, bem-estar"
         }
       },
       "payroll": {
@@ -6097,6 +6115,11 @@
           "allRegions": "{components} · Imposto de renda em todas as {known} regiões · Tabelas fiscais {years}",
           "someRegions": "{components} · Imposto de renda em {supported} de {known} regiões · Tabelas fiscais {years}"
         }
+      },
+      "features": {
+        "title": "Escolha seus recursos",
+        "description": "Ative o que esta empresa usa. Um recurso que depende de outro é liberado quando o recurso principal está ativo — as mesmas regras de Configurações da empresa → Recursos, onde tudo continua ajustável.",
+        "tabsAria": "Categorias de recursos"
       }
     },
     "filterAll": "Todos",

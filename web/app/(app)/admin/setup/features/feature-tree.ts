@@ -119,6 +119,19 @@ export function summarizeFeatures(rows: FeatureTreeRow[], state: FeatureSwitchSt
   }
 }
 
+/**
+ * Every row's effective on/off for a batch of switch choices: a child whose
+ * parent (or any requirement) is off resolves off, exactly as the
+ * switchboard renders it. What a wizard submits, so its choices never ask the
+ * server for a combination the registry would refuse.
+ */
+export function effectiveFeatureState(
+  rows: FeatureTreeRow[],
+  state: FeatureSwitchState,
+): FeatureSwitchState {
+  return Object.fromEntries(rows.map((row) => [row.key, resolveFeatureOn(rows, state, row.key)]))
+}
+
 function missingRequirements(
   byKey: Map<string, FeatureTreeRow>,
   state: FeatureSwitchState,
@@ -235,12 +248,13 @@ function foldSearchText(value: string): string {
  * Search predicate over one row's displayed text (title, description, and
  * whatever else the caller supplies). Every whitespace-separated term must
  * appear somewhere in that text, so "bank feed" narrows rather than widens.
- * Returns null for a blank query: nothing to filter.
+ * Returns null for a blank query: nothing to filter. Generic over the row so
+ * the setup wizard's industry picker searches with the same folding rules.
  */
-export function featureSearchMatcher(
+export function featureSearchMatcher<Row = FeatureTreeRow>(
   query: string,
-  textFor: (row: FeatureTreeRow) => string[],
-): ((row: FeatureTreeRow) => boolean) | null {
+  textFor: (row: Row) => string[],
+): ((row: Row) => boolean) | null {
   const terms = foldSearchText(query).split(/\s+/).filter(Boolean)
   if (terms.length === 0) return null
   return (row) => {

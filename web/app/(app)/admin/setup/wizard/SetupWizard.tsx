@@ -31,6 +31,7 @@ import {
   Repeat,
   Ruler,
   Search,
+  SlidersHorizontal,
   ShieldCheck,
   Sparkles,
   Stethoscope,
@@ -58,11 +59,19 @@ import { initialPayrollPack, packDescription, packTitle, type WizardPayrollPack,
 import type { SetupLaunchAction } from '@/lib/setup-launch-actions'
 import { MIGRATION_WORKSPACE_HREF } from '@/lib/migration/links'
 import { defaultBusinessTimeZone, type CountryTimeZoneDirectory } from './time-zone-default'
+import { NEUTRAL_INDUSTRY_KEY } from '@/lib/industry-keys'
+import { effectiveFeatureState, type FeatureTreeRow } from '../features/feature-tree'
+import { FeatureChoiceStep } from './FeatureChoiceStep'
+import { searchIndustries } from './industry-search'
 import { documentCreateHref } from '@/lib/document-kinds'
 
 // ─── Types ────────────────────────────────────────────────────────────────
 
-type StepKey = 'welcome' | 'company' | 'industry' | 'profile' | 'rhythm' | 'operations' | 'payroll' | 'launch' | 'review' | 'applying' | 'done'
+type StepKey = 'welcome' | 'company' | 'industry' | 'profile' | 'rhythm' | 'operations' | 'features' | 'payroll' | 'launch' | 'review' | 'applying' | 'done'
+
+/** How the company's features are chosen: from an industry preset (the
+ *  Operations step), or individually on the switchboard when no preset fits. */
+type FeatureSelection = 'industry' | 'custom'
 const BASE_STEPS: StepKey[] = ['welcome', 'company', 'industry', 'profile', 'rhythm', 'operations', 'launch', 'review', 'applying', 'done']
 
 type ToggleKey = 'inventory' | 'timeTracking' | 'multiSubsidiary' | 'multiCurrency' | 'projects' | 'subscriptionBilling' | 'orders' | 'crm' | 'bankFeeds' | 'onlinePayments' | 'fixedAssets' | 'payroll'
@@ -119,9 +128,14 @@ export function SetupWizard(props: {
     timeZone: string | null
     industry: string | null
     workspaceProfile: WorkspaceProfile
+    /** How the stored features were chosen, when setup ran before. */
+    featureSelection?: FeatureSelection
     features: Record<ToggleKey, boolean>
     allFeatures: Record<string, boolean>
   }
+  /** The feature registry as a tree (category, parent, requirements,
+   *  recommendations) — the same rows Company Settings → Features renders. */
+  featureRows: FeatureTreeRow[]
   canSwitchIndustry: boolean
   isRerun: boolean
   suppressOnWizardRoute?: boolean
@@ -178,6 +192,12 @@ export function SetupWizard(props: {
     return countryDefaultTimeZone(props.initial.country)
   })
   const [industryKey, setIndustryKey] = useState<string | null>(props.initial.industry)
+  const [featureMode, setFeatureMode] = useState<FeatureSelection>(
+    props.initial.featureSelection === 'custom' && props.initial.industry === NEUTRAL_INDUSTRY_KEY ? 'custom' : 'industry',
+  )
+  // A re-run of a custom setup opens on the stored choices, which are
+  // already the operator's own.
+  const [customFeaturesChosen, setCustomFeaturesChosen] = useState(featureMode === 'custom')
   const [teamSize, setTeamSize] = useState<TeamSize>(props.initial.workspaceProfile.teamSize)
   const [complexity, setComplexity] = useState<ComplexityLevel>(props.initial.workspaceProfile.complexity)
   const [configureRhythm, setConfigureRhythm] = useState(false)
@@ -204,13 +224,23 @@ export function SetupWizard(props: {
     }))
   }, [locale])
 
+  // Every choice resolved through the registry tree: a child of an off parent
+  // (Field Tickets under Projects) is off, as the Features switchboard shows it.
+  const effectiveFeatures = useMemo(
+    () => effectiveFeatureState(props.featureRows, { ...featureChoices, ...toggles }),
+    [featureChoices, props.featureRows, toggles],
+  )
+  const payrollOn = featureMode === 'custom' ? Boolean(effectiveFeatures.payroll) : toggles.payroll
+
   // The Payroll step only exists when the module is switched on — it is an
   // optional module step, inserted after Operations where it was enabled.
+  // Choosing features individually replaces Operations with the switchboard.
   const steps = useMemo<StepKey[]>(
     () => BASE_STEPS
       .filter((key) => key !== 'rhythm' || complexity !== 'essentials' || configureRhythm)
-      .flatMap((key): StepKey[] => key === 'operations' && toggles.payroll ? ['operations', 'payroll'] : [key]),
-    [toggles.payroll, complexity, configureRhythm],
+      .map((key): StepKey => key === 'operations' && featureMode === 'custom' ? 'features' : key)
+      .flatMap((key): StepKey[] => (key === 'operations' || key === 'features') && payrollOn ? [key, 'payroll'] : [key]),
+    [payrollOn, complexity, configureRhythm, featureMode],
   )
 
   const step = steps[stepIdx]!
@@ -221,27 +251,24 @@ export function SetupWizard(props: {
     [props.industries, industryKey],
   )
 
-  const filteredIndustries = useMemo(() => {
-    if (!search.trim()) return props.industries
-    const q = search.toLowerCase()
-    return props.industries.filter((i) => {
-      const name = t(`industries.${i.key}.title`).toLowerCase()
-      const desc = t(`industries.${i.key}.description`).toLowerCase()
-      return name.includes(q) || desc.includes(q)
-    })
-  }, [props.industries, search, t])
+  // Titles, descriptions and localized keywords ("café", "retail",
+  // "e-commerce") all find a preset, so a business the preset names fits.
+  const filteredIndustries = useMemo(
+    () => searchIndustries(props.industries, search, (key) => ({
+      title: t(`industries.${key}.title`),
+      description: t(`industries.${key}.description`),
+      keywords: t.has(`industries.${key}.keywords` as never) ? t(`industries.${key}.keywords` as never) : '',
+    })),
+    [props.industries, search, t],
+  )
 
-  const reviewFeatureKeys = useMemo(() => {
-    const effective: Record<string, boolean> = { ...featureChoices, ...toggles }
-    if (!effective.projects) {
-      effective.fieldTickets = false
-      effective.projectScheduling = false
-    }
-    return Object.entries(effective)
+  const reviewFeatureKeys = useMemo(
+    () => Object.entries(effectiveFeatures)
       .filter(([, enabled]) => enabled)
       .map(([key]) => key)
-      .sort((a, b) => tAdmin(`features.${a}.title`).localeCompare(tAdmin(`features.${b}.title`)))
-  }, [featureChoices, tAdmin, toggles])
+      .sort((a, b) => tAdmin(`features.${a}.title`).localeCompare(tAdmin(`features.${b}.title`))),
+    [effectiveFeatures, tAdmin],
+  )
 
   if (!props.open || (props.suppressOnWizardRoute && pathname === '/admin/setup/wizard')) return null
   // HR-15: work waiting on the user stays reachable while onboarding pends.
@@ -298,18 +325,27 @@ export function SetupWizard(props: {
           timeZone,
           industry: industryKey,
           workspaceProfile: { teamSize, complexity, bookStart, taxPosition, monthlyActivity, closeCadence },
-          features: { ...featureChoices, ...toggles },
+          // Choosing individually submits the resolved switchboard state, so
+          // every child of an off parent travels as off.
+          features: featureMode === 'custom' ? effectiveFeatures : { ...featureChoices, ...toggles },
+          featureSelection: featureMode,
         }),
       })
       if (!res.ok) {
-        const err = await res.json().catch(() => ({ error: 'failed' }))
-        throw new Error(err.error ?? 'failed')
+        // A refusal's sentence wins over its code; a body that is not JSON
+        // keeps the localized fallback.
+        const err = await res.json().catch(() => null) as { error?: unknown; message?: unknown } | null
+        throw new Error(
+          typeof err?.message === 'string' && err.message.trim()
+            ? err.message
+            : typeof err?.error === 'string' && err.error.trim() ? err.error : t('error'),
+        )
       }
       // Payroll module chosen with a country pack: install it now (statutory
       // component seed + pack marker), mirroring the sample-company follow-up.
       // The pack is whatever the operator chose — the settings API refuses
       // anything outside the registry's installable set.
-      if (toggles.payroll && payrollPack) {
+      if (payrollOn && payrollPack) {
         const pack = await fetch('/api/payroll/settings', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -371,13 +407,38 @@ export function SetupWizard(props: {
   // When user picks an industry, update toggles from its preset (only keys it has opinions about)
   function pickIndustry(key: string) {
     setIndustryKey(key)
+    setFeatureMode('industry')
+    setCustomFeaturesChosen(false)
     const ind = props.industries.find((i) => i.key === key)
     if (ind) {
-      applyRecommendation({ teamSize, complexity, bookStart, taxPosition, monthlyActivity, closeCadence }, ind)
+      applyRecommendation({ teamSize, complexity, bookStart, taxPosition, monthlyActivity, closeCadence }, ind, true)
     }
   }
 
-  function applyRecommendation(profile: WorkspaceProfile, industry = selectedIndustry) {
+  /** No preset fits: the neutral base chart, with features chosen on the
+   *  switchboard. The profile's recommendation is only a starting point. */
+  function chooseOwnFeatures() {
+    setIndustryKey(NEUTRAL_INDUSTRY_KEY)
+    setFeatureMode('custom')
+    setCustomFeaturesChosen(false)
+    applyRecommendation(
+      { teamSize, complexity, bookStart, taxPosition, monthlyActivity, closeCadence },
+      props.industries.find((industry) => industry.key === NEUTRAL_INDUSTRY_KEY),
+      true,
+    )
+  }
+
+  /** One switchboard choice in the "pick my own features" step. */
+  function chooseFeature(key: string, value: boolean) {
+    setCustomFeaturesChosen(true)
+    setFeatureChoices((current) => ({ ...current, [key]: value }))
+    if (key in toggles) setToggles((current) => ({ ...current, [key]: value }))
+  }
+
+  function applyRecommendation(profile: WorkspaceProfile, industry = selectedIndustry, force = false) {
+    // Once the operator has picked features individually, later profile
+    // answers never overwrite those picks.
+    if (!force && featureMode === 'custom' && customFeaturesChosen) return
     const recommended = recommendWorkspaceFeatures({
       featureKeys: Object.keys(props.initial.allFeatures),
       industryFeatures: industry?.features,
@@ -518,6 +579,8 @@ export function SetupWizard(props: {
           search={search}
           setSearch={setSearch}
           onPick={pickIndustry}
+          customSelected={featureMode === 'custom'}
+          onPickCustom={chooseOwnFeatures}
           canSwitch={props.canSwitchIndustry}
           currentIndustry={props.initial.industry}
         />
@@ -553,6 +616,13 @@ export function SetupWizard(props: {
           }}
         />
       )}
+      {step === 'features' && (
+        <FeatureChoiceStep
+          rows={props.featureRows}
+          state={{ ...featureChoices, ...toggles }}
+          onToggle={chooseFeature}
+        />
+      )}
       {step === 'payroll' && (
         <PayrollStep t={t} packs={installablePacks} pack={payrollPack} setPack={setPayrollPack} />
       )}
@@ -565,6 +635,8 @@ export function SetupWizard(props: {
           setBookStart={setBookStart}
           setTaxPosition={setTaxPosition}
           setIncludeSampleCompany={setIncludeSampleCompany}
+          // Features chosen on the switchboard already cover these tools.
+          showTools={featureMode !== 'custom'}
           toggles={toggles}
           setToggle={(key, value) => {
             setToggles((current) => ({ ...current, [key]: value }))
@@ -604,10 +676,11 @@ export function SetupWizard(props: {
           monthlyActivity={monthlyActivity}
           closeCadence={closeCadence}
           industry={selectedIndustry}
+          customFeatures={featureMode === 'custom'}
           featureKeys={reviewFeatureKeys}
           featureTitle={(key) => tAdmin(`features.${key}.title`)}
           includeSampleCompany={includeSampleCompany}
-          payrollOn={toggles.payroll}
+          payrollOn={payrollOn}
           payrollPack={payrollPack}
           payrollPacks={installablePacks}
           seedChartOfAccounts={Boolean(
@@ -807,10 +880,16 @@ function IndustryStep(props: {
   search: string
   setSearch: (v: string) => void
   onPick: (key: string) => void
+  /** "None of these fit" is chosen: the neutral chart, features picked individually. */
+  customSelected: boolean
+  onPickCustom: () => void
   canSwitch: boolean
   currentIndustry: string | null
 }) {
-  const { t, industries, selected, search, setSearch, onPick, canSwitch, currentIndustry } = props
+  const { t, industries, selected, search, setSearch, onPick, customSelected, onPickCustom, canSwitch, currentIndustry } = props
+  // Choosing features individually installs the neutral chart, so it is
+  // locked exactly when switching to that preset would be.
+  const customLocked = !canSwitch && currentIndustry !== null && currentIndustry !== NEUTRAL_INDUSTRY_KEY
   return (
     <div className="space-y-5">
       <div>
@@ -836,7 +915,7 @@ function IndustryStep(props: {
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         {industries.map((ind, i) => {
           const Icon = INDUSTRY_ICONS[ind.key] ?? Building2
-          const isSelected = selected === ind.key
+          const isSelected = !customSelected && selected === ind.key
           // A company imported or created before an industry was classified
           // may already have postings. It may choose its initial classification
           // without replacing its established chart; only changing an existing
@@ -895,6 +974,45 @@ function IndustryStep(props: {
           )
         })}
       </div>
+
+      {industries.length === 0 && search.trim() ? (
+        <p className="rounded-lg bg-slate-50 p-3 text-center text-sm text-slate-500 dark:bg-slate-800/60 dark:text-slate-400">
+          {t('industry.noMatches', { query: search.trim() })}
+        </p>
+      ) : null}
+
+      <button
+        type="button"
+        aria-pressed={customSelected}
+        disabled={customLocked}
+        onClick={() => !customLocked && onPickCustom()}
+        className={cn(
+          'relative flex w-full items-start gap-3 rounded-xl border border-dashed p-4 text-left transition-colors',
+          customSelected
+            ? 'border-teal-500 bg-teal-50 ring-2 ring-teal-500/20 dark:border-teal-400 dark:bg-teal-950/40'
+            : customLocked
+              ? 'cursor-not-allowed border-slate-200 bg-slate-50 opacity-50 dark:border-slate-800 dark:bg-slate-800/50'
+              : 'border-slate-300 hover:border-slate-400 hover:bg-slate-50 dark:border-slate-600 dark:hover:bg-slate-800/60',
+        )}
+      >
+        <div
+          className={cn(
+            'flex h-10 w-10 shrink-0 items-center justify-center rounded-lg transition-colors',
+            customSelected ? 'bg-teal-500 text-white' : 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400',
+          )}
+        >
+          <SlidersHorizontal size={20} />
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t('industry.custom.title')}</p>
+          <p className="mt-0.5 text-xs leading-relaxed text-slate-500 dark:text-slate-400">{t('industry.custom.description')}</p>
+        </div>
+        {customSelected && (
+          <span className="absolute right-3 top-3 flex h-5 w-5 items-center justify-center rounded-full bg-teal-500">
+            <Check className="text-white" size={12} strokeWidth={3} />
+          </span>
+        )}
+      </button>
 
       {!canSwitch && currentIndustry && (
         <p className="text-center text-xs text-amber-600 dark:text-amber-400">
@@ -1228,6 +1346,9 @@ function LaunchStep(props: {
   setBookStart: (value: BookStart) => void
   setTaxPosition: (value: TaxPosition) => void
   setIncludeSampleCompany: (value: boolean) => void
+  /** The bank-feed / online-payment / fixed-asset shortcuts; hidden when the
+   *  operator already chose every feature on the switchboard. */
+  showTools: boolean
   toggles: Record<ToggleKey, boolean>
   setToggle: (key: 'bankFeeds' | 'onlinePayments' | 'fixedAssets', value: boolean) => void
 }) {
@@ -1275,7 +1396,7 @@ function LaunchStep(props: {
           })}
         </div>
       </fieldset>
-      <fieldset className="space-y-3">
+      {props.showTools ? <fieldset className="space-y-3">
         <legend className="text-sm font-semibold text-slate-800 dark:text-slate-100">{props.t('launch.toolsQuestion')}</legend>
         <div className="grid gap-3 sm:grid-cols-3">
           {launchFeatures.map(({ key, icon: Icon }) => (
@@ -1284,7 +1405,7 @@ function LaunchStep(props: {
               onToggle={() => props.setToggle(key, !props.toggles[key])} />
           ))}
         </div>
-      </fieldset>
+      </fieldset> : null}
       <fieldset className="space-y-3">
         <legend className="text-sm font-semibold text-slate-800 dark:text-slate-100">{props.t('launch.sample.question')}</legend>
         <ToggleRow
@@ -1377,6 +1498,8 @@ function ReviewStep(props: {
   monthlyActivity: MonthlyActivityLevel
   closeCadence: CloseCadence
   industry?: IndustryDef
+  /** No preset fits: the neutral chart with features chosen individually. */
+  customFeatures: boolean
   featureKeys: string[]
   featureTitle: (key: string) => string
   includeSampleCompany: boolean
@@ -1386,7 +1509,7 @@ function ReviewStep(props: {
   seedChartOfAccounts: boolean
 }) {
   const locale = useLocale()
-  const { t, name, legalName, country, currency, fiscalMonth, timeZone, defaults, teamSize, complexity, bookStart, taxPosition, monthlyActivity, closeCadence, industry, featureKeys, featureTitle, includeSampleCompany, payrollOn, payrollPack, payrollPacks, seedChartOfAccounts } = props
+  const { t, name, legalName, country, currency, fiscalMonth, timeZone, defaults, teamSize, complexity, bookStart, taxPosition, monthlyActivity, closeCadence, industry, customFeatures, featureKeys, featureTitle, includeSampleCompany, payrollOn, payrollPack, payrollPacks, seedChartOfAccounts } = props
   const payrollPackName = payrollPack
     ? (payrollPacks.find((pack) => pack.country === payrollPack)?.name ?? payrollPack)
     : null
@@ -1437,11 +1560,16 @@ function ReviewStep(props: {
         )}
         {industry && (
           <>
-            <ReviewRow label={t('review.industry')} value={t(`industries.${industry.key}.title`)} />
+            <ReviewRow
+              label={t('review.industry')}
+              value={customFeatures ? t('review.industryCustom') : t(`industries.${industry.key}.title`)}
+            />
             <ReviewRow
               label={t('review.chartOfAccounts')}
               value={seedChartOfAccounts
-                ? `${industry.coa.length} ${t('review.accounts')}`
+                ? customFeatures
+                  ? t('review.chartNeutral', { count: industry.coa.length })
+                  : `${industry.coa.length} ${t('review.accounts')}`
                 : t('review.chartPreserved')}
             />
           </>

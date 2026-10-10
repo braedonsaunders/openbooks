@@ -5802,7 +5802,12 @@
         "description": "Recomendaremos un plan contable y funciones adaptadas a su sector. Revisará la recomendación antes de aplicarla.",
         "search": "Buscar sectores…",
         "locked": "Su sector no podrá cambiarse después de contabilizar movimientos, pero aún podrá personalizar su plan contable y sus funciones.",
-        "classificationOnly": "Su plan existente y su historial contabilizado se conservarán. Esta primera clasificación solo ajusta las recomendaciones de espacio y funciones."
+        "classificationOnly": "Su plan existente y su historial contabilizado se conservarán. Esta primera clasificación solo ajusta las recomendaciones de espacio y funciones.",
+        "custom": {
+          "title": "Ninguno encaja: elegir mis propias funciones",
+          "description": "Empiece con un plan de cuentas neutral y active exactamente las funciones que usa, con las mismas reglas de dependencia que en Configuración de la empresa → Funciones."
+        },
+        "noMatches": "Ninguna plantilla de sector coincide con «{query}». Elija la más cercana o sus propias funciones a continuación."
       },
       "profile": {
         "title": "Partimos de donde está su empresa",
@@ -5997,7 +6002,9 @@
         "payrollPack": "Paquete de nómina por país",
         "payrollPackNone": "Ninguno — instalar más tarde desde Nómina",
         "defaultBadge": "Predeterminado",
-        "defaultsHint": "Los campos marcados como Predeterminado conservaron su valor preseleccionado. Vuelva atrás para cambiarlos antes de aplicar."
+        "defaultsHint": "Los campos marcados como Predeterminado conservaron su valor preseleccionado. Vuelva atrás para cambiarlos antes de aplicar.",
+        "industryCustom": "Ninguno: funciones elegidas individualmente",
+        "chartNeutral": "{count} cuentas (plan de cuentas base neutral)"
       },
       "applying": {
         "title": "Configurando sus libros…",
@@ -6017,47 +6024,58 @@
       "industries": {
         "general_business": {
           "title": "Negocio general",
-          "description": "Una configuración estándar que sirve para cualquier empresa. Sin supuestos sectoriales."
+          "description": "Una configuración estándar que sirve para cualquier empresa. Sin supuestos sectoriales.",
+          "keywords": "minorista, comercio, tienda, boutique, café, cafetería, restaurante, bar, panadería, hostelería, salón, gimnasio, comercio electrónico, tienda en línea, pequeña empresa, autónomo, otro"
         },
         "construction_contractor": {
           "title": "Construcción y oficios",
-          "description": "Contratistas, oficios y constructores. Costos de obra, facturación por avance, retenciones de garantía y partes de campo."
+          "description": "Contratistas, oficios y constructores. Costos de obra, facturación por avance, retenciones de garantía y partes de campo.",
+          "keywords": "contratista, constructora, construcción, reformas, fontanería, electricidad, climatización, tejados, jardinería, oficios, subcontratista"
         },
         "professional_services": {
           "title": "Servicios profesionales",
-          "description": "Consultores, agencias y asesores. Control horario, rentabilidad de proyectos y facturación con anticipo."
+          "description": "Consultores, agencias y asesores. Control horario, rentabilidad de proyectos y facturación con anticipo.",
+          "keywords": "consultoría, consultor, agencia, agencia de marketing, estudio de diseño, despacho de abogados, abogado, asesoría, coaching, selección de personal, autónomo"
         },
         "engineering_architecture": {
           "title": "Ingeniería y arquitectura",
-          "description": "Firmas EPC y AEC. EDT (WBS), facturación por fases, costos de equipos y facturación por avance."
+          "description": "Firmas EPC y AEC. EDT (WBS), facturación por fases, costos de equipos y facturación por avance.",
+          "keywords": "ingeniería, ingeniero, arquitecto, arquitectura, topografía, estudio de diseño"
         },
         "it_software_saas": {
           "title": "Software y SaaS",
-          "description": "Facturación de suscripciones, reconocimiento de ingresos ASC 606 y seguimiento de ingresos diferidos."
+          "description": "Facturación de suscripciones, reconocimiento de ingresos ASC 606 y seguimiento de ingresos diferidos.",
+          "keywords": "software, SaaS, suscripción, aplicación, tecnología, startup, servicios informáticos, servicios gestionados, productos digitales, membresías"
         },
         "accounting_firm": {
           "title": "Despacho contable",
-          "description": "Despachos de contabilidad y teneduría. Multicliente, contabilidad de fondos de terceros y seguimiento de encargos."
+          "description": "Despachos de contabilidad y teneduría. Multicliente, contabilidad de fondos de terceros y seguimiento de encargos.",
+          "keywords": "contable, contador, teneduría de libros, asesoría fiscal, gestoría, despacho contable"
         },
         "wholesale_distribution": {
           "title": "Mayorista y distribución",
-          "description": "Mayoristas y distribuidores. Inventario, costos de importación, recepciones no facturadas (GRNI) y ubicaciones de stock."
+          "description": "Mayoristas y distribuidores. Inventario, costos de importación, recepciones no facturadas (GRNI) y ubicaciones de stock.",
+          "keywords": "mayorista, distribución, distribuidor, minorista, comercio electrónico, tienda en línea, venta en línea, tienda, importación, exportación, alimentos, bebidas, café, vino, proveedor, inventario"
         },
         "property_management": {
           "title": "Administración de inmuebles",
-          "description": "Carteras de alquiler y administradores. Rentas recurrentes, gastos comunes (CAM), depósitos de garantía y activos fijos."
+          "description": "Carteras de alquiler y administradores. Rentas recurrentes, gastos comunes (CAM), depósitos de garantía y activos fijos.",
+          "keywords": "inmobiliaria, propietario, alquiler, propiedades, apartamentos, locales comerciales, arrendamiento, comunidad de propietarios"
         },
         "nonprofit": {
           "title": "Sin fines de lucro",
-          "description": "Fundaciones y organizaciones sin fines de lucro. Seguimiento de subvenciones, contabilidad por fondos, donaciones y activo neto restringido."
+          "description": "Fundaciones y organizaciones sin fines de lucro. Seguimiento de subvenciones, contabilidad por fondos, donaciones y activo neto restringido.",
+          "keywords": "beneficencia, fundación, ONG, iglesia, asociación, club, donaciones, subvenciones"
         },
         "manufacturing": {
           "title": "Manufactura",
-          "description": "Manufactura ligera y discreta. Listas de materiales, materias primas, trabajo en curso, productos terminados y costos indirectos."
+          "description": "Manufactura ligera y discreta. Listas de materiales, materias primas, trabajo en curso, productos terminados y costos indirectos.",
+          "keywords": "fabricante, producción, fábrica, fabricación, producción de alimentos, alimentos, bebidas, tostador de café, tostaduría, café, panadería, cervecería, bodega, destilería, artesanal, ensamblaje, procesamiento"
         },
         "healthcare_practice": {
           "title": "Clínica",
-          "description": "Clínicas médicas y dentales. Cuentas por cobrar de pacientes, insumos médicos y equipos."
+          "description": "Clínicas médicas y dentales. Cuentas por cobrar de pacientes, insumos médicos y equipos.",
+          "keywords": "médico, dental, clínica, doctor, dentista, fisioterapia, quiropráctico, veterinario, óptica, terapia, bienestar"
         }
       },
       "payroll": {
@@ -6087,6 +6105,11 @@
           "allRegions": "{components} · Impuesto sobre la renta en las {known} regiones · Tablas fiscales {years}",
           "someRegions": "{components} · Impuesto sobre la renta en {supported} de {known} regiones · Tablas fiscales {years}"
         }
+      },
+      "features": {
+        "title": "Elija sus funciones",
+        "description": "Active lo que usa esta empresa. Una función que depende de otra se habilita cuando su función principal está activa: las mismas reglas que en Configuración de la empresa → Funciones, donde todo sigue siendo ajustable.",
+        "tabsAria": "Categorías de funciones"
       }
     },
     "constructionRateEditor": {

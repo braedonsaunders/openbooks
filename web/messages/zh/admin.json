@@ -5812,7 +5812,12 @@
         "description": "我们将按行业特点推荐会计科目表与相关功能。应用前由您复核推荐方案。",
         "search": "搜索行业…",
         "locked": "过账后行业不可更改，但仍可逐项自定义科目表与功能。",
-        "classificationOnly": "现有科目与已过账历史将保留。此次首次归类只调整工作区与功能推荐。"
+        "classificationOnly": "现有科目与已过账历史将保留。此次首次归类只调整工作区与功能推荐。",
+        "custom": {
+          "title": "都不合适——自行选择功能",
+          "description": "从中性会计科目表开始，按与“公司设置 → 功能”相同的依赖规则，只开启您实际使用的功能。"
+        },
+        "noMatches": "没有与“{query}”匹配的行业模板。请选择最接近的模板，或在下方自行选择功能。"
       },
       "profile": {
         "title": "从企业现状出发",
@@ -6007,7 +6012,9 @@
         "payrollPack": "工资国家包",
         "payrollPackNone": "无——以后从工资设置安装",
         "defaultBadge": "默认",
-        "defaultsHint": "标为“默认”的字段保留了预选值。如需更改，请在应用前返回修改。"
+        "defaultsHint": "标为“默认”的字段保留了预选值。如需更改，请在应用前返回修改。",
+        "industryCustom": "无——功能逐项选择",
+        "chartNeutral": "{count} 个科目（中性基础科目表）"
       },
       "applying": {
         "title": "正在建账…",
@@ -6027,47 +6034,58 @@
       "industries": {
         "general_business": {
           "title": "一般工商",
-          "description": "适用于任何公司的标准设置，无行业特定假设。"
+          "description": "适用于任何公司的标准设置，无行业特定假设。",
+          "keywords": "零售, 商店, 门店, 咖啡馆, 咖啡店, 餐厅, 餐饮, 酒吧, 面包店, 美容院, 健身, 电商, 网店, 小企业, 个体户, 自由职业, 其他"
         },
         "construction_contractor": {
           "title": "建筑与施工",
-          "description": "承包商、施工队与建造商。项目成本核算、进度开票、保留款与现场工单。"
+          "description": "承包商、施工队与建造商。项目成本核算、进度开票、保留款与现场工单。",
+          "keywords": "承包商, 建筑, 施工, 装修, 水暖, 电气, 暖通, 屋面, 园林, 工匠, 总包, 分包"
         },
         "professional_services": {
           "title": "专业服务",
-          "description": "咨询、代理与顾问。工时跟踪、项目盈利与聘用制开票。"
+          "description": "咨询、代理与顾问。工时跟踪、项目盈利与聘用制开票。",
+          "keywords": "咨询, 顾问, 代理机构, 营销机构, 设计工作室, 律师事务所, 律师, 教练, 人力资源, 招聘, 自由职业"
         },
         "engineering_architecture": {
           "title": "工程与建筑设计",
-          "description": "EPC 与 AEC 公司。WBS、阶段开票、设备成本核算与进度开票。"
+          "description": "EPC 与 AEC 公司。WBS、阶段开票、设备成本核算与进度开票。",
+          "keywords": "工程设计, 工程师, 建筑师, 建筑设计, 测绘, 设计院"
         },
         "it_software_saas": {
           "title": "软件与 SaaS",
-          "description": "订阅开票、ASC 606 收入确认与递延收入跟踪。"
+          "description": "订阅开票、ASC 606 收入确认与递延收入跟踪。",
+          "keywords": "软件, SaaS, 订阅, 应用, 科技, 初创公司, IT服务, 托管服务, 数字产品, 会员"
         },
         "accounting_firm": {
           "title": "会计师事务所",
-          "description": "记账与会计师事务所。多客户、信托会计与业务跟踪。"
+          "description": "记账与会计师事务所。多客户、信托会计与业务跟踪。",
+          "keywords": "会计师, 记账, 代理记账, 会计师事务所, 税务代理, 薪资外包"
         },
         "wholesale_distribution": {
           "title": "批发与分销",
-          "description": "分销商与批发商。存货、到岸成本、GRNI 与库存地点。"
+          "description": "分销商与批发商。存货、到岸成本、GRNI 与库存地点。",
+          "keywords": "批发, 分销, 经销商, 零售, 电商, 网店, 线上销售, 商店, 进口, 出口, 贸易, 食品, 饮料, 咖啡, 葡萄酒, 供应商, 库存"
         },
         "property_management": {
           "title": "物业管理",
-          "description": "出租组合与物业管理人。循环租金、公区费用、保证金与固定资产。"
+          "description": "出租组合与物业管理人。循环租金、公区费用、保证金与固定资产。",
+          "keywords": "房地产, 房东, 租赁, 物业, 公寓, 商业地产, 出租, 业主委员会"
         },
         "nonprofit": {
           "title": "非营利组织",
-          "description": "慈善与非营利组织。拨款跟踪、基金会计、捐赠与限定性净资产。"
+          "description": "慈善与非营利组织。拨款跟踪、基金会计、捐赠与限定性净资产。",
+          "keywords": "慈善, 基金会, 非政府组织, 教会, 协会, 俱乐部, 社团, 捐赠, 资助"
         },
         "manufacturing": {
           "title": "制造业",
-          "description": "轻型与离散制造。BOM、原材料、在产、产成品与间接费用。"
+          "description": "轻型与离散制造。BOM、原材料、在产、产成品与间接费用。",
+          "keywords": "制造商, 生产, 工厂, 加工, 食品生产, 食品, 饮料, 咖啡烘焙, 烘焙坊, 咖啡, 面包, 啤酒厂, 酒庄, 酿酒厂, 手工, 组装"
         },
         "healthcare_practice": {
           "title": "医疗诊所",
-          "description": "医疗与牙科诊所。患者应收、医用耗材与设备。"
+          "description": "医疗与牙科诊所。患者应收、医用耗材与设备。",
+          "keywords": "医疗, 牙科, 诊所, 医生, 牙医, 理疗, 整脊, 兽医, 眼科, 治疗, 健康"
         }
       },
       "payroll": {
@@ -6097,6 +6115,11 @@
           "allRegions": "{components} · 覆盖全部 {known} 个地区的所得税 · 税率表 {years}",
           "someRegions": "{components} · 覆盖 {known} 个地区中 {supported} 个的所得税 · 税率表 {years}"
         }
+      },
+      "features": {
+        "title": "选择功能",
+        "description": "开启本公司使用的功能。依赖其他功能的项会在其上级功能开启后解锁——规则与“公司设置 → 功能”相同，所有选择之后都可调整。",
+        "tabsAria": "功能类别"
       }
     },
     "filterAll": "全部",
