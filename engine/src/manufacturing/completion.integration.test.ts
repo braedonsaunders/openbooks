@@ -281,7 +281,7 @@ const cases: Case[] = [
     const after=await counts(f);assert.deepEqual(await withBypassContext(()=>applyProductionLoss(f.org.orgId,f.actorId,replacement.changeId)),result);assert.deepEqual(await counts(f),after);
     const inspection=(await run(tx=>tx.execute<{id:string}>(sql`select id from inventory_inspections where org_id=${f.org.orgId} and operation_id=${order.operation}`))).rows[0]!;
     assert.equal((await run(tx=>loadInspection(tx,f.org.orgId,inspection.id))).sourceActive,false);
-    await assert.rejects(run(tx=>markEntryReversed(tx,{orgId:f.org.orgId,actorId:f.actorId,entryId:String(result.entryId)})),/adjusting journal/);
+    await assert.rejects(run(tx=>markEntryReversed(tx,{orgId:f.org.orgId,actorId:f.actorId,entryId:String(result.entryId)})),error=>errorChainMatches(error,/posted mirror reversal in the same book/));
     await assert.rejects(run(tx=>tx.execute(sql`update mfg_work_orders set status='released',cancel_reason=null where org_id=${f.org.orgId} and id=${order.id} returning id`)),error=>errorChainMatches(error,/terminal loss/));
     await assert.rejects(run(tx=>completeWorkOrder(tx,f.org.orgId,f.actorId,order.id,{quantity:'1'})));
     const roles=(await run(tx=>tx.execute<{id:string;permissions:unknown}>(sql`select id,permissions from app_roles where org_id=${f.org.orgId} and id in(select role_id from role_assignments where org_id=${f.org.orgId} and user_id=${f.actorId})`))).rows;
@@ -388,6 +388,7 @@ const cases: Case[] = [
     assert.equal(missing.findings.find(f=>f.key==="routing")?.status,"missing");assert.equal(missing.readyFor,"draft");
     assert.equal(new URL(missing.nextHref!,"http://localhost").searchParams.get("producedItemId"),f.org.items.assembly);assert.equal(new URL(missing.nextHref!,"http://localhost").searchParams.get("subsidiaryId"),f.org.subsidiaryId);
     const center=await route(f,f.org.items.assembly);
+    await account(f,"mfgOverheadApplied","cogs");
     await run(tx=>addWorkCenterRate(tx,f.org.orgId,f.actorId,center,{machineRatePerHour:"0",effectiveFrom:"2026-01-01"}));
     const configured=await run(tx=>readOperatingSetupJourney(tx,f.org.orgId,f.actorId,{family:"production",selection:"discrete_production",itemId:f.org.items.assembly,subsidiaryId:f.org.subsidiaryId,quantity:'10'}));
     assert.equal(configured.readyFor,"release");assert.ok(configured.findings.every(f=>f.status==="ready"));
@@ -1080,6 +1081,7 @@ for(const {tracking,quarantined} of [{tracking:'lot',quarantined:false},{trackin
   await run(tx=>recordQualityInspection(tx,f.org.orgId,f.actorId,original.id,{outcome:'pass',measurements:{length:'10.1000'},reason:'Received finish outside tolerance'}));
   await route(f,item);
   const routing=(await run(tx=>tx.execute<{id:string;centerId:string}>(sql`select route.id,operation.work_center_id as "centerId" from mfg_routings route join mfg_routing_operations operation on operation.org_id=route.org_id and operation.routing_id=route.id where route.org_id=${f.org.orgId} and route.produced_item_id=${item} and route.status='active' and operation.sequence=10`))).rows[0]!;
+  await account(f,'mfgOverheadApplied','cogs');
   await run(tx=>addWorkCenterRate(tx,f.org.orgId,f.actorId,routing.centerId,{machineRatePerHour:'12',effectiveFrom:'2026-01-01'}));
   const input={action:'rework' as const,reason:'Repair the finish and reinspect the original stock',requestKey:randomUUID(),reworkRoutingId:routing.id,reworkSequence:10};
   const before=await counts(f);await assert.rejects(run(async tx=>{await disposeQualityInspection(tx,f.org.orgId,f.actorId,original.id,input);throw new Error('rollback repair draft')}),/rollback repair draft/);assert.deepEqual(await counts(f),before);
@@ -1098,8 +1100,20 @@ for(const {tracking,quarantined} of [{tracking:'lot',quarantined:false},{trackin
   await withBypassContext(()=>setStockHold(f.org.orgId,f.actorId,{kind:tracking,id:identifier,held:true,reason:'Independent safety review'}));
   await assert.rejects(run(tx=>issueMaterials(tx,f.org.orgId,f.actorId,orderId,[{materialId:material[0]!.id,quantity,...selection}])),/Another stock or inspection hold/);
   await withBypassContext(()=>setStockHold(f.org.orgId,f.actorId,{kind:tracking,id:identifier,held:false,reason:'Independent safety review completed'}));
+  const serialState=()=>run(async tx=>(await tx.execute<{status:string;location:string|null}>(sql`select status,current_stock_location_id as location from serials where org_id=${f.org.orgId} and id=${identifier}`)).rows[0]);
+  if(tracking==='serial') {
+    assert.deepEqual(await serialState(),{status:'in_stock',location:sourceLocationId});
+    const forgedState=await counts(f);
+    await assert.rejects(run(tx=>tx.execute(sql`update serials set status='shipped',current_stock_location_id=null where org_id=${f.org.orgId} and id=${identifier} returning id`)),error=>errorChainMatches(error,/lifecycle transition lacks matching posted inventory evidence/));
+    assert.deepEqual(await counts(f),forgedState);assert.deepEqual(await serialState(),{status:'in_stock',location:sourceLocationId});
+  }
   const issueKey=randomUUID(),issueCommand=()=>withBypassContext(()=>executeManufacturingIssue(f.org.orgId,f.actorId,null,orderId,issueKey,[{materialId:material[0]!.id,quantity,...selection}]));
   const issued=await issueCommand(),issuedCounts=await counts(f);assert.deepEqual((await issueCommand()).value,issued.value);assert.deepEqual(await counts(f),issuedCounts);
+  if(tracking==='serial') {
+    assert.deepEqual(await serialState(),{status:'shipped',location:null});
+    await assert.rejects(run(tx=>tx.execute(sql`update serials set status='in_stock',current_stock_location_id=${sourceLocationId} where org_id=${f.org.orgId} and id=${identifier} returning id`)),error=>errorChainMatches(error,/lifecycle transition lacks matching posted inventory evidence/));
+    assert.deepEqual(await counts(f),issuedCounts);assert.deepEqual(await serialState(),{status:'shipped',location:null});
+  }
   const order=(await run(tx=>getWorkOrder(tx,f.org.orgId,orderId)))!;assert.equal(await wip(f,order.number),tracking==='lot'?'6.0000':'3.0000');
   const operation=(await run(tx=>tx.execute<{id:string}>(sql`select id from mfg_wo_operations where org_id=${f.org.orgId} and work_order_id=${orderId}`))).rows[0]!;
   await run(tx=>startWorkOrderOperation(tx,f.org.orgId,f.actorId,orderId,operation.id));
@@ -1108,6 +1122,12 @@ for(const {tracking,quarantined} of [{tracking:'lot',quarantined:false},{trackin
   await run(tx=>completeWorkOrderOperation(tx,f.org.orgId,f.actorId,orderId,operation.id,{doneQty:quantity,actualSetupMinutes:'0',actualRunMinutes:'5',actualLaborMinutes:'0'}));
   const receipt=await run(tx=>completeWorkOrder(tx,f.org.orgId,f.actorId,orderId,{quantity}));
   assert.equal(receipt.value,tracking==='lot'?'7.0000':'4.0000');assert.equal(await wip(f,order.number),'0.0000');
+  if(tracking==='serial') {
+    assert.deepEqual(await serialState(),{status:'in_stock',location:f.org.stockLocationId});
+    const receiptCounts=await counts(f);
+    for(const status of ['registered','shipped'])await assert.rejects(run(tx=>tx.execute(sql`update serials set status=${status},current_stock_location_id=null where org_id=${f.org.orgId} and id=${identifier} returning id`)),error=>errorChainMatches(error,/lifecycle transition lacks matching posted inventory evidence/));
+    assert.deepEqual(await counts(f),receiptCounts);assert.deepEqual(await serialState(),{status:'in_stock',location:f.org.stockLocationId});
+  }
   const repaired=(await run(tx=>tx.execute<{id:string;lotId:string|null;serialId:string|null}>(sql`select id,lot_id as "lotId",serial_id as "serialId" from inventory_movements where org_id=${f.org.orgId} and journal_entry_id=${receipt.entryId} and kind='assembly_build'`))).rows[0]!;
   assert.equal(repaired.lotId,selection.lotId);assert.equal(repaired.serialId,selection.serialId);
   const inspected=(await run(tx=>tx.execute<{id:string}>(sql`select id from inventory_inspections where org_id=${f.org.orgId} and receipt_movement_id=${repaired.id}`))).rows[0]!;
@@ -1115,8 +1135,10 @@ for(const {tracking,quarantined} of [{tracking:'lot',quarantined:false},{trackin
   const available=()=>run(tx=>getAvailableToPromise(tx,f.org.orgId,{itemId:item,subsidiaryId:f.org.subsidiaryId}));assert.equal((await available()).available,quantity+'.0000');
   await run(()=>reverseMaterialIssue(f.org.orgId,f.actorId,{movementId:repaired.id,reversalDate:f.postingDate,reason:'Correct repaired receipt without losing original hold'}));
   assert.equal((await available()).available,'0.0000');assert.equal(await wip(f,order.number),receipt.value);
+  if(tracking==='serial')assert.deepEqual(await serialState(),{status:'registered',location:null});
   const afterReversal=await counts(f);await assert.rejects(run(tx=>issueInventory(f.org.orgId,f.actorId,{tx,itemId:item,stockLocationId:sourceLocationId,quantity,subsidiaryId:f.org.subsidiaryId,date:f.postingDate,...selection})),/held/);assert.deepEqual(await counts(f),afterReversal);
   await run(tx=>completeWorkOrder(tx,f.org.orgId,f.actorId,orderId,{quantity}));assert.equal(await wip(f,order.number),'0.0000');
+  if(tracking==='serial')assert.deepEqual(await serialState(),{status:'in_stock',location:f.org.stockLocationId});
 }});
 
 cases.push(
@@ -1240,6 +1262,7 @@ cases.push({name:'formula and fixed batch ingredients freeze at release and spli
   assert.equal(tooSmallSetup.findings.find(finding=>finding.key==='bom')?.status,'missing');
   await run(tx=>tx.execute(sql`update bom_components set quantity_per='10' where org_id=${f.org.orgId} and assembly_item_id=${f.org.items.assembly} and component_item_id=${f.org.items.component} returning id`));
   const center=await route(f,f.org.items.assembly);
+  await account(f,'mfgOverheadApplied','cogs');
   await run(tx=>addWorkCenterRate(tx,f.org.orgId,f.actorId,center,{machineRatePerHour:'0',effectiveFrom:'2026-01-01'}));
   const readyBatch=await run(tx=>readOperatingSetupJourney(tx,f.org.orgId,f.actorId,{family:'production',selection:'batch_process',itemId:f.org.items.assembly,subsidiaryId:f.org.subsidiaryId,quantity:'100'}));
   assert.equal(readyBatch.readyFor,'release');
@@ -1308,6 +1331,9 @@ cases.push({name:"production subcontract ships valued components once with nativ
 
 cases.push({name:"vendor deliveries, native bill capitalization and unused returns conserve WIP, stock, replay and reversal evidence",run:async f=>{
   const order=await prepare(f,{quantity:'3'});
+  const vendorCenter=(await run(tx=>tx.execute<{id:string}>(sql`select work_center_id as id from mfg_wo_operations where org_id=${f.org.orgId} and work_order_id=${order.id}`))).rows;
+  assert.equal(vendorCenter.length,1);
+  await run(tx=>addWorkCenterRate(tx,f.org.orgId,f.actorId,vendorCenter[0]!.id,{machineRatePerHour:'0',effectiveFrom:'2026-01-01'}));
   await stock(f,f.org.items.component,'6','4.5');
   await run(tx=>tx.execute(sql`update orgs set settings=jsonb_set(settings,'{features,manufacturingSubcontract}','true'::jsonb,true) where id=${f.org.orgId} returning id`));
   const custody=randomUUID();
@@ -1372,6 +1398,12 @@ cases.push({name:"vendor deliveries, native bill capitalization and unused retur
 
 async function jointOutputScenario(f:Fixture,standard:boolean) {
  const output=standard?f.org.items.standard:f.org.items.movingAvg;
+ if(!standard)await run(async tx=>{
+  const current=await lockItemInventoryProfile(tx,f.org.orgId,output);assert(current);
+  assert.deepEqual(await assertCostingPolicyChangeAllowed(tx,f.org.orgId,output,current,{costingMethod:'fifo',tracking:'none'},null),{changed:true,historyExisted:false});
+  const configured=await tx.execute(sql`update item_inventory_profiles set costing_method='fifo',updated_at=now(),updated_by=${f.actorId} where org_id=${f.org.orgId} and item_id=${output} returning id`);
+  assert.equal(configured.rows.length,1);
+ });
  await run(async tx=>{
   await tx.execute(sql`insert into bom_components(org_id,assembly_item_id,component_item_id,quantity_per,sort_order,is_byproduct,output_cost_weight)
     values(${f.org.orgId},${f.org.items.assembly},${output},'1',10,true,'2'),(${f.org.orgId},${f.org.items.assembly},${f.org.items.fifo},'1',11,true,null) returning id`);
@@ -1533,7 +1565,7 @@ cases.push({name:'masked and full native clones retain frozen costing, inspectio
    assert.equal(accepted.status,'pass');assert.equal(accepted.lotId,rebased.lotId);assert.deepEqual(accepted.planSnapshot,frozen.plan);
    if(masked)assert.equal(accepted.planSnapshot.name,'REDACTED');
    const posted=(await run(tx=>tx.execute<{custom:Record<string,unknown>}>(sql`select custom from journal_entries where org_id=${cloned.sandboxOrgId} and origin='manufacturing' and custom ? 'completion_quantity' and status='posted'`))).rows[0]!;
-   assert.equal(posted.custom.work_order_number,order.number);assert.equal(posted.custom.completion_quantity,'1.0000');
+   assert.equal(posted.custom.work_order_number,order.number);assert.equal(normalizeMoney(String(posted.custom.completion_quantity)),'1.0000');
    const change=(await run(tx=>tx.execute<{id:string}>(sql`select id from financial_changes where org_id=${cloned.sandboxOrgId} and domain='manufacturing' and status='applied' and operation='routing_revision_activation'`))).rows[0];
    assert(change);const replay=await withBypassContext(()=>applyRoutingActivation(cloned.sandboxOrgId,rebased.actorId,change.id));assert.equal(replay.id,detail.record.routingId);
    await run(tx=>recordQualityInspection(tx,cloned.sandboxOrgId,rebased.actorId,rebased.receiptId,{outcome:'pass',measurements:{length:'10'},reason:'Cloned receipt retains enforceable criteria'}));

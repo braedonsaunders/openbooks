@@ -702,10 +702,10 @@ export const TENANT_RETIREMENT_GUARDS = [
   },
   {
     "name": "inventory_serial_lifecycle_guard",
-    "source": "0616_serial_count_restoration.sql",
-    "sha256": "ffebe0014068cda1b663b6db56f852968fcfcdca53a4701519a40b6bb28cce82",
-    "newSha256": "dbfa848bebb13a143ed711a40365301b6cb5c3d49e3c41777763266a5cf89540",
-    "patch": true
+    "source": "0632_serial_manufacturing_lifecycle.sql",
+    "sha256": "afca5b0f6fa07555dc01e37cbf428b40c0a09267a0ccea0763e9d64d8a8b6c05",
+    "newSha256": "afca5b0f6fa07555dc01e37cbf428b40c0a09267a0ccea0763e9d64d8a8b6c05",
+    "patch": false
   },
   {
     "name": "je_guard",
