@@ -117,6 +117,7 @@ async function validatePaymentBankProfileRefs(orgId: string, input: {
   subsidiaryId?: string | null;
   sftpServerId?: string | null;
   currency: string;
+  country?: string | null;
   settings?: Record<string, unknown>;
   originatorSecrets?: Record<string, unknown> | null;
 }): Promise<void> {
@@ -151,6 +152,22 @@ async function validatePaymentBankProfileRefs(orgId: string, input: {
   if (row.rail === "cpa005_credit" && transactionCode !== undefined
       && (typeof transactionCode !== "string" || !/^\d{3}$/.test(transactionCode))) {
     throw new PaymentError("CPA-005 transaction code override must be three digits; omit it to use the standard 460 code");
+  }
+  // NACHA originator configuration is validated on save through the same
+  // validator the pay run readiness check uses, so a profile that saves is
+  // one whose runs report ready: every missing or malformed originator
+  // field is named, plus the profile country the file header needs.
+  if (row.rail === "nacha_credit" || row.rail === "nacha_debit") {
+    const problems: string[] = [];
+    const checked = validateNachaSettings(
+      (input.originatorSecrets ?? null) as Partial<NachaSettings>,
+    );
+    if (!checked.ok) problems.push(...checked.missing);
+    const country = input.country?.trim() ?? "";
+    if (!/^[A-Za-z]{2}$/.test(country)) problems.push("country (2-letter ISO code)");
+    if (problems.length > 0) {
+      throw new PaymentError(`NACHA originator configuration is incomplete: ${problems.join(", ")}`);
+    }
   }
 }
 
@@ -253,6 +270,7 @@ export async function updatePaymentBankProfile(
       subsidiary_id: string | null;
       payment_format_id: string;
       currency: string;
+      country: string | null;
       settings: Record<string, unknown>;
       sftp_server_id: string | null;
       originator_secrets_encrypted: string | null;
@@ -283,6 +301,7 @@ export async function updatePaymentBankProfile(
       subsidiaryId: input.subsidiaryId === undefined ? current.subsidiary_id : input.subsidiaryId,
       paymentFormatId: input.paymentFormatId ?? current.payment_format_id,
       currency: input.currency ?? current.currency,
+      country: input.country === undefined ? current.country : input.country,
       settings: input.settings ?? current.settings,
       sftpServerId: input.sftpServerId === undefined ? current.sftp_server_id : input.sftpServerId,
       originatorSecrets,

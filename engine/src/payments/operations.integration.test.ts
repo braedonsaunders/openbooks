@@ -119,6 +119,65 @@ test("CPA profile creation and secret updates refuse malformed transaction-code 
   }
 });
 
+test("NACHA profile saves refuse incomplete originator configuration by field", { skip: !DB }, async () => {
+  const priorDataKey = process.env.OPENBOOKS_DATA_KEY;
+  process.env.OPENBOOKS_DATA_KEY = "00".repeat(32);
+  const org = await withBypass(() => createScratchOrg());
+  try {
+    const actorId = await withBypass(() => createScratchUser(org.orgId, "NACHA profile operator", "admin"));
+    await withOrgContext(org.orgId, () => ensureBuiltInPaymentFormats(org.orgId, actorId));
+    const format = (await withOrgContext(org.orgId, () => db.execute<{ id: string }>(sql`
+      select id from payment_formats where org_id = ${org.orgId} and code = 'NACHA-CREDIT'
+    `))).rows[0]!;
+    const profileInput = {
+      name: "NACHA originator profile",
+      bankAccountId: org.accounts.bank,
+      subsidiaryId: org.subsidiaryId,
+      paymentFormatId: format.id,
+      currency: "USD",
+      country: "US",
+      originatorSecrets: {
+        odfiRouting: "021000021",
+        immediateDestination: " 021000021",
+        immediateOrigin: "1123456789",
+        destinationName: "BANK OF EXAMPLE",
+        originName: "EXAMPLE CONSTRUCTION",
+        companyName: "EXAMPLE CONST",
+        companyId: "1123456789",
+      },
+    };
+    // Empty originator configuration never saves: every missing field is named.
+    await assert.rejects(
+      withOrgContext(org.orgId, () => createPaymentBankProfile(org.orgId, actorId, {
+        ...profileInput,
+        country: null,
+        originatorSecrets: {},
+      })),
+      /NACHA originator configuration is incomplete: odfiRouting, immediateDestination, immediateOrigin, destinationName, originName, companyName, companyId, country \(2-letter ISO code\)/,
+    );
+    // A well-formed routing with a bad check digit names the field.
+    await assert.rejects(
+      withOrgContext(org.orgId, () => createPaymentBankProfile(org.orgId, actorId, {
+        ...profileInput,
+        originatorSecrets: { ...profileInput.originatorSecrets, odfiRouting: "021000029" },
+      })),
+      /odfiRouting \(check digit mismatch\)/,
+    );
+    const profile = await withOrgContext(org.orgId, () => createPaymentBankProfile(org.orgId, actorId, profileInput));
+    // Clearing the country afterwards refuses the same way.
+    await assert.rejects(
+      withOrgContext(org.orgId, () => updatePaymentBankProfile(profile.id, org.orgId, actorId, {
+        country: null,
+      })),
+      /country \(2-letter ISO code\)/,
+    );
+  } finally {
+    await withBypass(() => dropScratchOrg(org.orgId));
+    if (priorDataKey === undefined) delete process.env.OPENBOOKS_DATA_KEY;
+    else process.env.OPENBOOKS_DATA_KEY = priorDataKey;
+  }
+});
+
 test(
   "a returned payment instruction cannot be relabelled settled while a sent instruction still can",
   { skip: !DB },

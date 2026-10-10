@@ -37,6 +37,17 @@ export function validateNachaSettings(raw: Partial<NachaSettings> | null): { ok:
   });
   if (missing.length) return { ok: false, missing };
   if (!/^\d{9}$/.test(s.odfiRouting!)) return { ok: false, missing: ["odfiRouting (9 digits)"] };
+  // A well-formed but mis-addressed routing writes a valid file to the WRONG
+  // originating institution — refuse it here so profile save, readiness and
+  // the debit writer share the one rule.
+  if (nachaCheckDigit(s.odfiRouting!.slice(0, 8)) !== s.odfiRouting![8]) {
+    return { ok: false, missing: ["odfiRouting (check digit mismatch)"] };
+  }
+  // The writer truncates companyId to its 10-position field: anything longer
+  // (or non-alphanumeric) would file under a mangled identity.
+  if (!/^[A-Za-z0-9]{1,10}$/.test(s.companyId!)) {
+    return { ok: false, missing: ["companyId (1-10 alphanumeric characters)"] };
+  }
   return { ok: true, settings: s as NachaSettings };
 }
 
