@@ -1112,7 +1112,7 @@ export const BUILT_IN_ROLES: Record<
   accountant: {
     name: "Accountant",
     description:
-      "Day-to-day bookkeeping: enters and posts journals, bills and invoices, pays and receives, and builds reports. Cannot approve, close periods, reconcile banks or manage users.",
+      "Day-to-day bookkeeping: enters and posts journals, bills and invoices, pays and receives, builds reports and reviews bank and card reconciliations. Cannot approve, close periods, reconcile banks or manage users.",
     permissions: [
       "gl.read",
       "gl.manage",
@@ -1188,6 +1188,10 @@ export const BUILT_IN_ROLES: Record<
       "time.crew.enter",
       "time.kiosk.manage",
       // HR-20 end
+      // Reviewing bank and card reconciliations is part of the monthly books
+      // review; performing and finalizing them (banking.reconcile) stays with
+      // the controller.
+      "banking.read",
       "assistant.use",
       "assistant.write",
       "documents.read",

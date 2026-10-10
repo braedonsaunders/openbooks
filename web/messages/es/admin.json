@@ -619,7 +619,7 @@
     "builtInDescriptions": {
       "admin": "Acceso total a todo, incluidos usuarios, roles, navegación y configuración de la empresa.",
       "controller": "Responsable de los libros: libro mayor, cuentas por pagar y por cobrar, compras, aprobaciones, cierre de períodos, informes y registro de auditoría. No puede gestionar usuarios ni roles.",
-      "accountant": "Contabilidad diaria: registra y contabiliza asientos, facturas de proveedor y de cliente, paga y cobra, y crea informes. No puede aprobar, cerrar períodos, conciliar bancos ni gestionar usuarios.",
+      "accountant": "Contabilidad diaria: registra y contabiliza asientos, facturas de proveedor y de cliente, paga y cobra, crea informes y revisa las conciliaciones bancarias y de tarjetas. No puede aprobar, cerrar períodos, conciliar bancos ni gestionar usuarios.",
       "production": "Gestiona los datos maestros de fabricación y el trabajo de planta, y contabiliza movimientos de inventario. No puede revertir contabilizaciones de inventario ni ver el libro mayor.",
       "approver": "Revisa y decide solicitudes de aprobación, con acceso de lectura al libro mayor, los auxiliares y los informes. No puede registrar, contabilizar ni pagar transacciones.",
       "viewer": "Acceso de solo lectura al libro mayor, los auxiliares, los informes y los análisis. No puede crear, modificar, contabilizar ni pagar transacciones.",

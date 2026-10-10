@@ -466,7 +466,7 @@
     "builtInDescriptions": {
       "admin": "Accès complet à tout, y compris les utilisateurs, les rôles, la navigation et les paramètres de l’entreprise.",
       "controller": "Responsable des livres : grand livre, fournisseurs, clients, achats, approbations, clôture des périodes, rapports et journal d’audit. Ne peut pas gérer les utilisateurs ni les rôles.",
-      "accountant": "Comptabilité courante : saisit et comptabilise les écritures, factures fournisseurs et clients, paie et encaisse, et crée des rapports. Ne peut pas approuver, clôturer les périodes, rapprocher les banques ni gérer les utilisateurs.",
+      "accountant": "Comptabilité courante : saisit et comptabilise les écritures, factures fournisseurs et clients, paie et encaisse, crée des rapports et consulte les rapprochements bancaires et de cartes. Ne peut pas approuver, clôturer les périodes, rapprocher les banques ni gérer les utilisateurs.",
       "production": "Gère les données de fabrication et le travail en atelier, et comptabilise les mouvements de stock. Ne peut pas contrepasser les mouvements de stock ni voir le grand livre.",
       "approver": "Examine et tranche les demandes d’approbation, avec un accès en lecture au grand livre, aux auxiliaires et aux rapports. Ne peut pas saisir, comptabiliser ni payer de transactions.",
       "viewer": "Accès en lecture seule au grand livre, aux auxiliaires, aux rapports et aux analyses. Ne peut pas créer, modifier, comptabiliser ni payer de transactions.",

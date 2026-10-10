@@ -397,6 +397,13 @@ test("hourly roles enter their own time through time.self, never the supervisory
   }
 });
 
+test("the accountant reviews bank and card reconciliations but never performs them", () => {
+  const holds = (role: string, perm: string) => permissionSetCovers(new Set(BUILT_IN_ROLES[role]!.permissions), perm);
+  assert.equal(holds("accountant", "banking.read"), true, "the monthly review opens reconciliations");
+  assert.equal(holds("accountant", "banking.reconcile"), false, "reconciling stays with the controller");
+  assert.equal(holds("controller", "banking.reconcile"), true);
+});
+
 test("declared implications decide which grants open each time command", () => {
   assert.deepEqual(grantsConferring("time.read", "all"), ["time.read", "time.manage"], "entering anyone's time reads it");
   assert.deepEqual(grantsConferring("time.read", "own"), ["time.self", "time.clock"], "own-time grants read the holder's weeks");

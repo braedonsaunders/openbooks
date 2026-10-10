@@ -466,7 +466,7 @@
     "builtInDescriptions": {
       "admin": "Full access to everything, including users, roles, navigation and company settings.",
       "controller": "Owns the books: ledger, payables, receivables, purchasing, approvals, period close, reporting and the audit log. Cannot manage users or roles.",
-      "accountant": "Day-to-day bookkeeping: enters and posts journals, bills and invoices, pays and receives, and builds reports. Cannot approve, close periods, reconcile banks or manage users.",
+      "accountant": "Day-to-day bookkeeping: enters and posts journals, bills and invoices, pays and receives, builds reports and reviews bank and card reconciliations. Cannot approve, close periods, reconcile banks or manage users.",
       "production": "Manages manufacturing masters and shop-floor work, and posts inventory movements. Cannot reverse inventory postings or see the ledger.",
       "approver": "Reviews and decides approval requests, with read access to the ledger, subledgers and reports. Cannot enter, post or pay transactions.",
       "viewer": "Read-only access to the ledger, subledgers, reports and insights. Cannot create, change, post or pay transactions.",
