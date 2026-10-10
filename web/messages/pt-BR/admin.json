@@ -7190,6 +7190,7 @@
       "effectiveTo": "Vigente até",
       "basics": "Plano e escopo",
       "measurements": "Medições",
+      "measures": "Medições",
       "help": "Adicione apenas medições úteis. Limites vazios permitem registrar sem tolerância numérica. Encerre a vigência de um plano usado e crie a próxima revisão.",
       "audit": "Auditoria",
       "key": "Chave da medição",

@@ -5,6 +5,7 @@ import test from 'node:test'
 import { hiddenNavModules, type FeatureState } from '../features'
 import {
   DEFAULT_NAV_ORDER,
+  MODULE_BY_KEY,
   NAV_GROUPS,
   NAV_MODULES,
   defaultNavConfig,
@@ -17,10 +18,16 @@ test('default navigation is a complete version-two workspace configuration', () 
     config.groups.map((group) => group.id),
     NAV_GROUPS.map((group) => group.key),
   )
+  // Supporting work that lives inside its native module (local-only) never
+  // seeds the workspace menu; every other module keeps its default place.
+  const seeded = config.groups.flatMap((group) => group.items).map((item) => (item.kind === 'module' ? item.moduleKey : ''))
   assert.deepEqual(
-    config.groups.flatMap((group) => group.items).map((item) => (item.kind === 'module' ? item.moduleKey : '')),
-    NAV_GROUPS.flatMap((group) => DEFAULT_NAV_ORDER[group.key]),
+    seeded,
+    NAV_GROUPS.flatMap((group) => DEFAULT_NAV_ORDER[group.key]).filter((key) => !MODULE_BY_KEY.get(key)?.localOnly),
   )
+  const localOnly = NAV_MODULES.filter((module) => module.localOnly).map((module) => module.key).sort()
+  assert.deepEqual(localOnly, ['hrm-change-requests', 'hrm-compensation-plans', 'hrm-processes', 'payroll-anomalies', 'payroll-separations'])
+  assert.ok(localOnly.every((key) => !seeded.includes(key)), 'local-only modules stay inside their native modules')
 })
 
 test('default workspaces follow the approved journey-oriented information architecture', () => {

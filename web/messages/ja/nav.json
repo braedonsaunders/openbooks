@@ -1,6 +1,5 @@
 {
   "modules": {
-    "admin-setup-manufacturing": "製造設定",
     "hrm-performance-cycles": "評価を管理",
     "hrm-performance-goals": "目標",
     "hrm-performance-conversations": "1対1の対話",
