@@ -277,7 +277,7 @@ const consolidatedRows = [
         const { sql } = await import('drizzle-orm')
         const { createScratchOrg, seedFlowActors, seedActiveEmployment, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
         const { ScopeNotFoundError } = await import('@openbooks/engine/src/organization/subsidiary-scope.ts')
-        const { pinTimesheetEntryEmployee, weekStart } = await import('../app/api/timesheets/_lib.ts')
+        const { pinTimekeeperEntry, weekStart } = await import('../app/api/timesheets/_lib.ts')
         const { amendLockedWeek, amendTimeEntry } = await import('./time-amendment')
         const { approveSubmittedTimeEntries } = await import('./time-approval')
 
@@ -451,7 +451,7 @@ const consolidatedRows = [
                 values (${randomUUID()}, ${org.orgId}, ${employee}, ${weekStart(org.date)}, 'approved', ${actor}, ${actor})`)
 
               const allowed = new Set([org.subsidiaryId])
-              assert.equal(await pinTimesheetEntryEmployee(org.orgId, original, allowed), employee)
+              assert.equal(await pinTimekeeperEntry(org.orgId, original, allowed), employee)
               await db.execute(sql`update parties set subsidiary_id = ${subsidiaryB} where org_id = ${org.orgId} and id = ${employee}`)
               // Every amendment writer must enforce the subject's current subsidiary
               // under its own transaction lock, regardless of which editor path calls it.

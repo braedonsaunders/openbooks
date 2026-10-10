@@ -218,18 +218,26 @@ export const FEATURES: FeatureDef[] = [
   // Projects is a parent gate on the centralized Features page.
   // Schedule-of-values billing remains a project-type procedure, not a gate.
   { key: 'projects', defaultEnabled: true, category: 'projects', group: 'delivery', navModules: ['projects', 'field-tickets', 'lien-waivers'] },
-  { key: 'timeTracking', defaultEnabled: true, category: 'projects', group: 'labor', navModules: ['timesheets'], parentKey: 'projects' },
+  // Time tracking stands alone: hourly time and attendance need no job
+  // costing. Projects become an optional dimension on time lines — the
+  // project and task fields show only while Projects is on, and writes
+  // that name a project refuse while it is off. Labor pricing, project
+  // time costing and the other project capabilities stay under Projects.
+  { key: 'timeTracking', defaultEnabled: true, category: 'projects', group: 'labor', navModules: ['timesheets'] },
   // Field time capture — ONE switch for mobile and kiosk clock-in,
   // geofence checks, clock photos, the offline queue, foreman crew batches
   // and equipment hours on time. It rides timeTracking (office orgs never
-  // see a clock) and needs projects. What stays tunable is configuration,
-  // not a feature: geofences are declared per project, photo requirements
-  // live in Timesheets setup and on each kiosk, equipment hours need the
-  // Equipment module, and approval routing is authored in Flows. Off stops
-  // rendering and writing, never data. It owns the clock and crew pages,
-  // never Timesheets itself: weekly timesheets belong to timeTracking, so an
-  // office org with field time off still reaches its timesheets.
-  { key: 'fieldTime', defaultEnabled: false, category: 'projects', group: 'field', navModules: ['time-clock', 'time-crew'], parentKey: 'timeTracking', requiresAll: ['projects'] },
+  // see a clock); the project binding lives in the data, not the switch:
+  // crew batches still open on project days and geofences are still
+  // declared per project, while clock-in, crew lines and kiosk attendance
+  // need no project. What stays tunable is configuration, not a feature:
+  // photo requirements live in Timesheets setup and on each kiosk,
+  // equipment hours need the Equipment module, and approval routing is
+  // authored in Flows. Off stops rendering and writing, never data. It
+  // owns the clock and crew pages, never Timesheets itself: weekly
+  // timesheets belong to timeTracking, so an office org with field time
+  // off still reaches its timesheets.
+  { key: 'fieldTime', defaultEnabled: false, category: 'projects', group: 'field', navModules: ['time-clock', 'time-crew'], parentKey: 'timeTracking' },
   { key: 'fieldTickets', defaultEnabled: false, category: 'projects', group: 'field', navModules: ['field-tickets'], parentKey: 'projects' },
   // Progress and earned value: budgeted production quantities on tasks,
   // installed quantities (entered or reported on field tickets), estimates to

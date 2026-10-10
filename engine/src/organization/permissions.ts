@@ -177,8 +177,8 @@ export const PERMISSION_CATALOGUE = [
   // Fixed assets & depreciation
   "assets.read",
   "assets.manage",
-  // Time tracking & timesheets. time.self is the employee's own time: list,
-  // read, enter and submit the weeks of the employee linked to the login and
+  // Time tracking & timesheets. time.self is the timekeeper's own time: list,
+  // read, enter and submit the weeks of the person linked to the login and
   // nobody else's (enforced where every timesheet command locks its week).
   // time.read and time.manage are the supervisory grants over everyone's
   // time inside the actor's subsidiary scope; approving and reopening stay
@@ -859,7 +859,7 @@ export const PERMISSION_GROUPS: {
 /**
  * Declared permission dependencies: holding the key on the left also confers
  * the listed capabilities, over everyone's records (`all`) or only over the
- * holder's own (`own`, the records of the employee linked to the login).
+ * holder's own (`own`, the records of the person linked to the login).
  * This one table drives both enforcement (every time command resolves its
  * grant through `grantsConferring`) and the role editor, which shows each
  * permission's implications so an administrator sees what a grant already

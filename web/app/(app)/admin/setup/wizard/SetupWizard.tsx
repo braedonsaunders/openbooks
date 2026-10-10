@@ -1159,10 +1159,11 @@ function OperationsStep(props: {
     { key: 'multiCurrency', icon: Coins },
   ]
 
+  // Time tracking stands alone: hourly time needs no job costing, so the
+  // Projects and Time tracking toggles are independent. Project capabilities
+  // that need Projects keep their own parent/child enforcement server-side.
   const toggle = (key: ToggleKey) => setToggles((previous) => {
     const next = { ...previous, [key]: !previous[key] }
-    if (key === 'projects' && !next.projects) next.timeTracking = false
-    if (key === 'timeTracking' && next.timeTracking) next.projects = true
     return next
   })
 

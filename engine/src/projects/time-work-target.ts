@@ -99,13 +99,19 @@ export async function lockSharedTimeAuthority(tx: SqlExecutor, orgId: string, ac
   if (!actor) throw new ScopeNotFoundError()
   // Saves and lifecycle commands serialize discovery before locking targets. A peer cannot add an unseen target between the authority read and the week write.
   if(input.permission!=='time.read') await tx.execute(sql`select pg_advisory_xact_lock(hashtext('shared.employee.time'),hashtext(${orgId+input.employeeId}))`)
+  // A week belongs to a timekeeper: an active person party, or an employee
+  // party holding an active employment. Payroll admits only employments, so
+  // partner and contractor time never reaches a pay run; vendors, customers
+  // and contacts hold no time. A former employee's party alone reopens
+  // nothing until the employment is restored.
   const employee = (await tx.execute<{ subsidiaryId: string | null }>(sql`
     select p.subsidiary_id as "subsidiaryId" from parties p where p.org_id=${orgId} and p.id=${input.employeeId} and p.is_active
-    and exists(select 1 from employee_roles r where r.org_id=p.org_id and r.party_id=p.id and r.is_active) for share of p`)).rows[0]
+    and p.kind in ('person','employee')
+    and (p.kind = 'person' or exists(select 1 from employee_roles r where r.org_id=p.org_id and r.party_id=p.id and r.is_active)) for share of p`)).rows[0]
   if (!employee || !subsidiaryScopeAllows(input.requestedScope,employee.subsidiaryId)) throw new ScopeNotFoundError()
   // Supervisory grants act on anyone's week inside the actor's scope. Without
   // one, an own-scope grant (time.self, or time.clock for reading) acts only
-  // on the employee linked to the actor's own login — never a coworker,
+  // on the person linked to the actor's own login — never a coworker,
   // whatever the request names.
   const held = await resolveTimeGrant(tx, orgId, actorId, input.permission)
   if (!held) throw new ScopeNotFoundError()
@@ -120,12 +126,17 @@ export async function lockSharedTimeAuthority(tx: SqlExecutor, orgId: string, ac
     select distinct project_id as "projectId", work_order_id as "workOrderId", wo_operation_id as "operationId"
     from time_entries where org_id=${orgId} and employee_party_id=${input.employeeId} and worked_on>=${input.from}::date and worked_on<=${input.through}::date
     order by "workOrderId", "operationId", "projectId"`)).rows
+  let projectsOn: boolean | null = null
   for (const entry of entries) {
     if (entry.projectId && entry.workOrderId) throw new TimeWorkTargetError('Split project and production work into separate time lines.')
     if (entry.workOrderId) {
       await lockTimeWorkOrderTarget(tx,orgId,actorId,{ workOrderId:entry.workOrderId,operationId:entry.operationId,requestedScope:input.requestedScope,permission:held.grant,requireOpen:false,lockMode:input.permission==='time.read' ? 'share' : 'update' })
     } else if (entry.projectId) {
-      if (!projectOn) throw new TimeWorkTargetError('This week contains project time. Enable Projects and Time Tracking before changing or reading the complete week.',404)
+      // The project dimension needs Projects: a week naming project time
+      // refuses while it is off, with the remedy, while non-project weeks
+      // stay readable. Preserved project history is never deleted by this.
+      projectsOn ??= await lockAndCheckOrgFeature(tx, orgId, 'projects')
+      if (!projectOn || !projectsOn) throw new TimeWorkTargetError('This week contains project time. Enable Projects and Time Tracking before changing or reading the complete week.',404)
       const project = (await tx.execute<{ subsidiaryId: string | null }>(sql`select subsidiary_id as "subsidiaryId" from projects where org_id=${orgId} and id=${entry.projectId} for share`)).rows[0]
       if (!project || !subsidiaryScopeAllows(actualScope,project.subsidiaryId) || !subsidiaryScopeAllows(input.requestedScope,project.subsidiaryId)) throw new ScopeNotFoundError()
       // Reading another person's project time needs project visibility; a

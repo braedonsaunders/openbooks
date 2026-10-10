@@ -2,12 +2,13 @@ import { canonicalNonNegativeDecimal } from "../../money/exact-decimal.ts";
 /**
  * Field time feature key and org settings.
  *
- * fieldTime is the one switch (parentKey timeTracking, requiresAll
- * projects): office orgs never see a clock. Everything field time does —
- * clock, kiosks, geofence checks, photos, crew batches — follows it; what
- * a tenant tunes is declared here or on the records themselves (project
- * geofences, kiosk photo rules). Equipment hours additionally need the
- * Equipment module. Turning field time off stops rendering and writing,
+ * fieldTime is the one switch (parentKey timeTracking): office orgs never
+ * see a clock. Everything field time does — clock, kiosks, geofence
+ * checks, photos, crew batches — follows it; the project binding lives in
+ * the data (crew batches open on project days, geofences are declared per
+ * project), not the switch. What a tenant tunes is declared here or on the
+ * records themselves (kiosk photo rules). Equipment hours additionally need
+ * the Equipment module. Turning field time off stops rendering and writing,
  * never data.
  */
 

@@ -23,6 +23,7 @@ import { sql } from "drizzle-orm";
 import { db, withOrg, withOrgTransaction, withTransactionSavepoint } from "../../platform/db.ts";
 import { runRecordFlows } from "../../flows/index.ts";
 import { lockAndCheckOrgFeature } from "../../organization/org-feature-lock.ts";
+import { checkProjectsWriteEnabled } from "../../organization/feature-state.ts";
 import {
   lockEquipmentProjectScope,
   lockScopeRows,
@@ -817,6 +818,12 @@ export async function postBatch(input: {
       await lockEquipmentScope(input.orgId, batch.project_id, lines.map((line) => line.equipmentId ?? null), input.allowedSubsidiaryIds);
     }
     await lockLineEmployeeScope(input.orgId, batch.project_id, batch.worked_on, lines.map((line) => line.employeePartyId), input.allowedSubsidiaryIds);
+    // Posting writes open project time: the same disable-blocker class the
+    // timesheet save fences, so a Projects disable racing this post refuses
+    // one side or the other instead of stranding entries under a dark flag.
+    if (!(await checkProjectsWriteEnabled(input.orgId, db))) {
+      refuse("projects_off", "This batch posts time against a project — turn Projects back on in Company Settings → Features before posting it");
+    }
     await lockEmployeeTimeSources(db, input.orgId, lines.map((line) => line.employeePartyId));
     for (const employeePartyId of [...new Set(lines.map((line) => line.employeePartyId))]) {
       await assertNoFieldTimeSourceCollision(db, {

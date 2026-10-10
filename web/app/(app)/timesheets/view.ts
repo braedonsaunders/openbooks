@@ -22,7 +22,7 @@ import {
   isIsoDate,
   loadPickers,
   loadWeek,
-  pinTimesheetEmployee,
+  pinTimekeeper,
   userEmployeeId,
   weekStart,
   weekWindow,
@@ -78,7 +78,7 @@ export async function loadTimesheets(
 
   // Supervisors read everyone's weeks (time.read, or time.manage which
   // implies it). A caller holding only an own-scope grant sees the weeks of
-  // the employee linked to their own login: time.self also enters and
+  // the person linked to their own login: time.self also enters and
   // submits them, time.clock reads them. The list, the drawer, the pickers
   // and every timesheet API (through the shared time authority) agree, and
   // the grants come from the declared permission implications.
@@ -97,19 +97,22 @@ export async function loadTimesheets(
   const productionAvailable = can(authz,'manufacturing.read') && await isFeatureEnabled(authz.user.orgId,'manufacturing')
   // A person's own week books to the projects in their scope without the
   // project-read grant; reading other people's project time still needs it.
-  const projectAvailable = (can(authz,'projects.read') || selfOnly) && await isFeatureEnabled(authz.user.orgId,'timeTracking')
+  // The project dimension shows only while Projects is on — Time Tracking
+  // stands alone, and writes naming a project refuse while it is off.
+  const projectAvailable = (can(authz,'projects.read') || selfOnly) && await isFeatureEnabled(authz.user.orgId,'projects')
   const supervisesTime = supervisesTimeCommand(authz, 'time.manage')
   const entersOwnTime = ownTimeOnly(authz, 'time.manage')
   const canManage = supervisesTime || entersOwnTime
 
-  // Employee filter — the same active-employee set the editor uses.
+  // Timekeeper filter — the same person-or-employed set the editor uses.
   const employees = (await db.execute<{ id: string; name: string | null }>(sql`
     select p.id, p.display_name as name
          from parties p
          where p.org_id = ${orgId} and p.is_active
            ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, authz.allowedSubsidiaryIds)}
            ${selfOnly ? sql`and p.id = ${ownEmployeeId}` : sql``}
-           and exists (select 1 from employee_roles r where r.party_id = p.id and r.org_id = p.org_id and r.is_active)
+           and p.kind in ('person', 'employee')
+           and (p.kind = 'person' or exists (select 1 from employee_roles r where r.party_id = p.id and r.org_id = p.org_id and r.is_active))
          order by p.display_name`))
 
   // "New timesheet" opens the current user's own week when the login is
@@ -122,7 +125,7 @@ export async function loadTimesheets(
     canManage,
     managesOthersTime: managesOthersTime((permission) => can(authz, permission)),
     linkedEmployeeId: ownEmployeeId,
-    pinInScope: (employeeId) => pinTimesheetEmployee(orgId, employeeId, authz.allowedSubsidiaryIds),
+    pinInScope: (employeeId) => pinTimekeeper(orgId, employeeId, authz.allowedSubsidiaryIds),
     firstActiveEmployeeId: employees.rows[0]?.id ?? null,
   })
   const newHref = timesheetStart.employeeId
@@ -138,7 +141,7 @@ export async function loadTimesheets(
   // closed and the page names the rule instead.
   const othersWeekRefused = selfOnly && requestedEmployeeId !== null && requestedEmployeeId !== ownEmployeeId
   const openEmployeeId = requestedEmployeeId && !othersWeekRefused
-    ? await pinTimesheetEmployee(orgId, requestedEmployeeId, authz.allowedSubsidiaryIds)
+    ? await pinTimekeeper(orgId, requestedEmployeeId, authz.allowedSubsidiaryIds)
     : null
   const openWeek = openWeekRaw && isIsoDate(openWeekRaw) ? weekStart(openWeekRaw) : null
   if (openEmployeeId && openWeek) {

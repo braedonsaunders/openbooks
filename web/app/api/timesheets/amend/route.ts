@@ -13,8 +13,8 @@ import {
 import {
   isIsoDate,
   loadWeek,
-  pinTimesheetEmployee,
-  pinTimesheetEntryEmployee,
+  pinTimekeeper,
+  pinTimekeeperEntry,
   weekStart,
 } from "../_lib";
 import { notFound } from "@/lib/api/responses";
@@ -49,7 +49,7 @@ export const POST = defineRoute({
         if (!isUuid(body.entryId)) {
           return NextResponse.json({ error: "Invalid entry" }, { status: 422 });
         }
-        const sourceEmployee = await pinTimesheetEntryEmployee(
+        const sourceEmployee = await pinTimekeeperEntry(
           gate.user.orgId,
           body.entryId,
           gate.allowedSubsidiaryIds,
@@ -79,7 +79,7 @@ export const POST = defineRoute({
       if (!body.week || !isIsoDate(body.week)) {
         return NextResponse.json({ error: "Invalid week" }, { status: 422 });
       }
-      const ownedEmployee = await pinTimesheetEmployee(
+      const ownedEmployee = await pinTimekeeper(
         gate.user.orgId,
         body.employee,
         gate.allowedSubsidiaryIds,

@@ -6,7 +6,7 @@ import { NextResponse } from "next/server";
 import { isUuid } from "../../../../lib/list-params";
 import { ScopeNotFoundError } from "@openbooks/engine/src/organization/subsidiary-scope.ts";
 import { approveSubmittedTimeEntries } from "../../../../lib/time-approval";
-import { isIsoDate, loadWeek, pinTimesheetEmployee, weekStart } from "../_lib";
+import { isIsoDate, loadWeek, pinTimekeeper, weekStart } from "../_lib";
 import { notFound } from "@/lib/api/responses";
 const postBodySchema0 = z.strictObject({
   employee: uuidId,
@@ -41,7 +41,7 @@ export const POST = defineRoute({
     if (!body.employee || !isUuid(body.employee))
       return bad("Invalid employee");
     if (!body.week || !isIsoDate(body.week)) return bad("Invalid week");
-    const ownedEmployee = await pinTimesheetEmployee(
+    const ownedEmployee = await pinTimekeeper(
       orgId,
       body.employee,
       gate.allowedSubsidiaryIds,

@@ -21,7 +21,7 @@ class InvalidTimeWorkspaceError extends Error {
  * Every grant that opens a time command, in resolution order: the
  * supervisory grants over everyone's weeks, then the own-scope grants
  * declared in PERMISSION_IMPLICATIONS (time.self reads and enters, time.clock
- * reads). An own-scope caller is then confined to the employee linked to
+ * reads). An own-scope caller is then confined to the person linked to
  * their own login by the shared time authority every command locks its week
  * through (lockSharedTimeAuthority), which refuses anyone else's week by name.
  */
@@ -62,7 +62,7 @@ export function authorizeTimeWorkspace(permission: TimeCommandPermission) {
  * before any of that week is read. The shared time authority repeats the
  * check under lock; this answers first so no coworker data is touched.
  * Returns null when the caller holds the supervisory grant or names their
- * own linked employee.
+ * own linked person.
  */
 export async function refuseOthersTime(authz: Authz, permission: TimeCommandPermission, employeeId: string): Promise<NextResponse | null> {
   if (supervisesTime(authz, permission)) return null

@@ -2,9 +2,9 @@
  * Which week "New timesheet" opens, decided without a session so the rule is
  * testable on its own.
  *
- * - A login linked to an in-scope employee always starts its own week.
+ * - A login linked to an in-scope timekeeper always starts its own week.
  * - Only someone who manages other people's time (the supervisory
- *   time.manage grant) may start from the first active employee as a picker
+ *   time.manage grant) may start from the first active timekeeper as a picker
  *   seed.
  * - A self-service time enterer (time.self) is never handed another person's
  *   week. When there is nothing to open the action is withdrawn and the
@@ -28,7 +28,7 @@ export async function resolveNewTimesheetStart(input: {
   canManage: boolean
   managesOthersTime: boolean
   linkedEmployeeId: string | null
-  /** Returns the employee id when it is active and inside the caller's scope. */
+  /** Returns the timekeeper id when it is active and inside the caller's scope. */
   pinInScope: (employeeId: string) => Promise<string | null>
   firstActiveEmployeeId: string | null
 }): Promise<NewTimesheetStart> {

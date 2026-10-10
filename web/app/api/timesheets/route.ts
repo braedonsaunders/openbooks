@@ -32,7 +32,7 @@ import { lockTimeWorkOrderTarget } from "@openbooks/engine/src/projects/time-wor
 import {
   isIsoDate,
   loadWeek,
-  pinTimesheetEmployee,
+  pinTimekeeper,
   pinTimesheetLineRefs,
   weekStart,
   weekWindow,
@@ -138,7 +138,7 @@ export const GET = defineRoute({
     if (!weekParam || !isIsoDate(weekParam))
       return unprocessable("Invalid week");
 
-    const ownedEmployee = await pinTimesheetEmployee(
+    const ownedEmployee = await pinTimekeeper(
       orgId,
       employee,
       authz.allowedSubsidiaryIds,
@@ -200,7 +200,7 @@ const save = defineRoute({
     const days = weekWindow(week);
     if (!Array.isArray(body.rows)) return bad("Rows must be a list");
 
-    const ownedEmployee = await pinTimesheetEmployee(
+    const ownedEmployee = await pinTimekeeper(
       orgId,
       employee,
       gate.allowedSubsidiaryIds,

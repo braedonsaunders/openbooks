@@ -97,7 +97,7 @@ const TOGGLES = {
 };
 
 // The registry tree for the toggled keys, with Field Tickets nested under
-// Projects as the real registry declares it.
+// Projects as the real registry declares it. Time tracking stands alone.
 const FEATURE_ROWS = [
   { key: "multiSubsidiary", category: "finance" },
   { key: "multiCurrency", category: "finance" },
@@ -109,7 +109,7 @@ const FEATURE_ROWS = [
   { key: "onlinePayments", category: "billing" },
   { key: "inventory", category: "inventory" },
   { key: "projects", category: "projects" },
-  { key: "timeTracking", category: "projects", parentKey: "projects" },
+  { key: "timeTracking", category: "projects" },
   { key: "fieldTickets", category: "projects", parentKey: "projects" },
   { key: "payroll", category: "people", recommends: ["timeTracking"] },
 ];
