@@ -74,7 +74,9 @@
     "readOnly": "このボードは閲覧のみ可能です。割り当てにはスケジュール管理の権限が必要です。",
     "saving": "保存中…",
     "clearSpotlight": "すべての作業先を表示",
-    "resources": "{count} リソース"
+    "resources": "{count} リソース",
+    "noPeopleEditScope": "このボードの対象者を編集",
+    "noPeopleAsk": "ボードに表示される人は、スケジュールボードを管理する人がボードの範囲で設定します。あなたやチームを追加するよう管理者に依頼してください。"
   },
   "chip": {
     "unassigned": "作業先なし",

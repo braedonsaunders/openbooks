@@ -74,7 +74,9 @@
     "readOnly": "You can view this board. Booking needs permission to manage schedules.",
     "saving": "Saving…",
     "clearSpotlight": "Show all jobs",
-    "resources": "{count, plural, one {# resource} other {# resources}}"
+    "resources": "{count, plural, one {# resource} other {# resources}}",
+    "noPeopleEditScope": "Edit who this board includes",
+    "noPeopleAsk": "Who appears on a board is set in its scope by whoever manages schedule boards. Ask your administrator to add you or your team."
   },
   "chip": {
     "unassigned": "No target",

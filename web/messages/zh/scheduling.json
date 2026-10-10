@@ -74,7 +74,9 @@
     "readOnly": "您可以查看此排程板。安排人员需要管理排程的权限。",
     "saving": "正在保存…",
     "clearSpotlight": "显示所有作业",
-    "resources": "{count} 个资源"
+    "resources": "{count} 个资源",
+    "noPeopleEditScope": "编辑此看板包含的人员",
+    "noPeopleAsk": "看板上显示哪些人员，由管理排班看板的人员在其范围中设置。请让管理员将您或您的团队添加进来。"
   },
   "chip": {
     "unassigned": "无去向",

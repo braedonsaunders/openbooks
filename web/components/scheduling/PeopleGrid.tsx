@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ClipboardEvent, type DragEvent, type KeyboardEvent, type MouseEvent } from 'react'
 import { useLocale, useTranslations } from 'next-intl'
+import { EmptyBoardScope } from './EmptyBoardScope'
 import { ClipboardPaste, Copy, Eraser, Pencil, Scissors, SquareSplitHorizontal, Trash2 } from 'lucide-react'
 import { ContextMenu, cn, useContextMenu, type ContextMenuEntry } from '@openbooks/ui'
 import { AbsenceChip, BookingChip } from './BookingChip'
@@ -36,6 +37,8 @@ export interface GridProps {
   readonly onOpenEntry: (entry: BoardEntry) => void
   readonly onOpenSourceRecord: (record: BoardSourceRecord) => void
   readonly today: string
+  /** This board's settings for a board administrator; null for everyone else. */
+  readonly settingsHref?: string | null
 }
 
 type Clip = { block: ClipCell[][]; text: string }
@@ -43,7 +46,7 @@ type Clip = { block: ClipCell[][]; text: string }
 const newId = () => crypto.randomUUID()
 const targetKey = (entry: BoardEntry) => bookingLegendKey(entry) ?? 'none'
 
-export function PeopleGrid({ controller, window: board, groupBy, search, compact, showHoursColumn, spotlight, onOpenEntry, onOpenSourceRecord, today }: GridProps) {
+export function PeopleGrid({ controller, window: board, groupBy, search, compact, showHoursColumn, spotlight, onOpenEntry, onOpenSourceRecord, today, settingsHref = null }: GridProps) {
   const t = useTranslations('scheduling')
   const locale = useLocale()
   const menu = useContextMenu()
@@ -714,7 +717,7 @@ export function PeopleGrid({ controller, window: board, groupBy, search, compact
         </div>
         {rows === 0 ? (
           <div className="pointer-events-none absolute inset-x-0 top-24 text-center text-sm text-slate-500">
-            {search || spotlight ? t('grid.noMatch') : t('grid.noPeople')}
+            {search || spotlight ? t('grid.noMatch') : <EmptyBoardScope settingsHref={settingsHref} />}
           </div>
         ) : null}
       </div>

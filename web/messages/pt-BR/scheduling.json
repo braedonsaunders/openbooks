@@ -74,7 +74,9 @@
     "readOnly": "Você pode visualizar este quadro. Para alocar, é preciso ter permissão para gerenciar programações.",
     "saving": "Salvando…",
     "clearSpotlight": "Mostrar todos os serviços",
-    "resources": "{count, plural, one {# recurso} other {# recursos}}"
+    "resources": "{count, plural, one {# recurso} other {# recursos}}",
+    "noPeopleEditScope": "Editar quem este quadro inclui",
+    "noPeopleAsk": "Quem aparece em um quadro é definido no escopo dele por quem gerencia os quadros de programação. Peça ao seu administrador para adicionar você ou sua equipe."
   },
   "chip": {
     "unassigned": "Sem destino",
