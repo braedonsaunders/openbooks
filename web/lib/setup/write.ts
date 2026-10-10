@@ -3206,7 +3206,9 @@ export async function deleteSetupRecord(
 
   if (!id) return { status: 400, body: { error: 'id required' } }
   if (idColumn(entity) === 'id' && !isUuid(id)) {
-    return { status: 404, body: { error: 'not_found' } }
+    // A row no caller in this organization can see refuses exactly like the
+    // update path's unknown row, so operators meet one wording.
+    return { status: 404, body: { error: 'not found' } }
   }
 
   const orgFilter = entity.orgScoped ? sql` and org_id = ${orgId}` : sql``
@@ -3262,7 +3264,9 @@ export async function deleteSetupRecord(
       }, tx)
       return true
     }, scopeOptions)
-    if (!found) return { status: 404, body: { error: 'not_found' } }
+    // The delete touched no row in this organization — the same unknown-row
+    // wording as the update path, never a bare machine code.
+    if (!found) return { status: 404, body: { error: 'not found' } }
     return { status: 200, body: { ok: true } }
   } catch (e) {
     if (e instanceof WarehouseRefusal) {
