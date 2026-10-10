@@ -1,4 +1,4 @@
-import type { Edge, Node } from '@xyflow/react'
+import type { ConnectionMode, Edge, Node } from '@xyflow/react'
 import type {
   ActionData,
   ActionKind,
@@ -39,6 +39,15 @@ export interface ConnectRequest {
   sourceHandle: string
   target: string
 }
+
+/**
+ * How the canvas accepts pointer wiring: loose drops finish on the target
+ * NODE, not only its 9px handle. Strict mode (React Flow's default) drops
+ * anything that lands on a card body, which is why wiring worked only
+ * through the side-panel Connect — the drag had to thread a dot. The edge
+ * still validates through buildConnectEdge exactly like a picked one.
+ */
+export const CANVAS_CONNECTION_MODE = 'loose' as ConnectionMode
 
 /**
  * Handles a node can connect FROM — exactly the source Handle ids the

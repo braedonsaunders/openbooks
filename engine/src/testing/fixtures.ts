@@ -854,15 +854,28 @@ export async function seedApprovalFlow(
     preventSelfApproval?: boolean;
     gateTitle?: string;
     trigger?: string;
+    /** Optional threshold condition between the trigger and the gate. */
+    condition?: { field: string; op: "gt"; value: number };
   },
 ): Promise<{ flowId: string; gateNodeId: string }> {
   await assertFixtureDatabase();
   const flowId = randomUUID();
   const gateNodeId = "gate";
+  const conditionNode = opts.condition
+    ? {
+        id: "condition",
+        position: { x: 110, y: 0 },
+        data: {
+          kind: "condition",
+          rule: { op: opts.condition.op, field: opts.condition.field, value: opts.condition.value, valueType: "number" as const },
+        },
+      }
+    : null;
   const graph = {
     schemaVersion: 1,
     nodes: [
       { id: "trigger", position: { x: 0, y: 0 }, data: { kind: "trigger", trigger: { trigger: opts.trigger ?? "on_submit" } } },
+      ...(conditionNode ? [conditionNode] : []),
       {
         id: gateNodeId,
         position: { x: 220, y: 0 },
@@ -879,7 +892,12 @@ export async function seedApprovalFlow(
         },
       },
     ],
-    edges: [{ id: "e1", source: "trigger", target: gateNodeId, sourceHandle: "next" }],
+    edges: opts.condition
+      ? [
+          { id: "e1", source: "trigger", target: "condition", sourceHandle: "next" },
+          { id: "e2", source: "condition", target: gateNodeId, sourceHandle: "then" },
+        ]
+      : [{ id: "e1", source: "trigger", target: gateNodeId, sourceHandle: "next" }],
   };
   await db.execute(sql`
     insert into flows (id, org_id, name, subject_kind, enabled, graph)

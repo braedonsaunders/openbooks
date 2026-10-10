@@ -40,6 +40,7 @@ import {
   type FlowSubjectProfile,
 } from '@openbooks/forms-core'
 import {
+  CANVAS_CONNECTION_MODE,
   buildConnectEdge,
   defaultNodeData,
   fromFlow,
@@ -440,6 +441,7 @@ export default function FlowBuilder({
               nodeTypes={NODE_TYPES}
               colorMode={isDark ? 'dark' : 'light'}
               deleteKeyCode={['Backspace', 'Delete']}
+              connectionMode={CANVAS_CONNECTION_MODE}
               isValidConnection={(c) => c.source !== c.target}
               defaultEdgeOptions={{ markerEnd: { type: MarkerType.ArrowClosed } }}
               fitView

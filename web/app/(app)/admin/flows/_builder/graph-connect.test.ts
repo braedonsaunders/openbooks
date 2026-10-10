@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import {
+  CANVAS_CONNECTION_MODE,
   buildConnectEdge,
   connectHandles,
   connectTargets,
@@ -62,6 +63,14 @@ test('a keyboard connect builds the same edge a drag would', () => {
   assert.ok(branch)
   assert.equal(branch?.sourceHandle, 'else')
   assert.equal(branch?.label, 'else')
+})
+
+test('the canvas accepts drops on the target node, not only its handle', () => {
+  // React Flow Strict (the default) drops a drag that lands on a card body,
+  // which is why wiring worked only through the side-panel Connect. Loose
+  // finishes the drop on the node; the edge still validates through
+  // buildConnectEdge exactly like a picked one.
+  assert.equal(CANVAS_CONNECTION_MODE, 'loose')
 })
 
 test('an invalid connect builds nothing', () => {

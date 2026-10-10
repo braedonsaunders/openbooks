@@ -685,6 +685,64 @@ describe('lintAutomationGraph', () => {
     assert.ok(errors.includes('Condition c: references unknown field "missing"'))
     assert.ok(errors.includes('Action a: set_field targets unknown field "ghost"'))
   })
+
+  test('names triggers the subject lifecycle can never emit', () => {
+    const postTrigger = {
+      id: 't-post',
+      position: { x: 0, y: 0 },
+      data: { kind: 'trigger', trigger: { trigger: 'before_post' } },
+    } as const
+    const createTrigger = {
+      id: 't-create',
+      position: { x: 0, y: 100 },
+      data: { kind: 'trigger', trigger: { trigger: 'on_create' } },
+    } as const
+    const action = {
+      id: 'a',
+      position: { x: 200, y: 0 },
+      data: { kind: 'action', action: notify('x') },
+    } as const
+    const edges = [
+      { id: 'e1', source: 't-post', target: 'a', sourceHandle: 'next' },
+      { id: 'e2', source: 't-create', target: 'a', sourceHandle: 'next' },
+    ] as const
+    // A subject that never posts and lives outside the document writers:
+    // both triggers are dead, and the warning names the node and the cause.
+    const dead = lintAutomationGraph(
+      { schemaVersion: 1, nodes: [postTrigger, createTrigger, action], edges: [...edges] },
+      invoiceFieldIds,
+      {
+        ...invoiceProfile,
+        label: 'Estimate',
+        // Offered by the vocabulary so only the never-fire rule can object.
+        triggers: [...invoiceProfile.triggers, 'before_post', 'on_create'],
+        actions: invoiceProfile.actions.filter((action) => action !== 'post_document'),
+        orderRecord: true,
+      },
+    )
+    assert.ok(
+      dead.includes('Trigger t-post: "before_post" never fires for Estimate — these records never post. Gate their approval with "on_submit" instead.'),
+      `posting triggers must be named, got: ${dead.join(' | ')}`,
+    )
+    assert.ok(
+      dead.includes('Trigger t-create: "on_create" never fires for Estimate — orders are created and edited through the order pipeline. Gate Issue with "on_submit" instead.'),
+      `create triggers must be named, got: ${dead.join(' | ')}`,
+    )
+    // A posting subject with a document-writer lifecycle stays silent.
+    const live = lintAutomationGraph(
+      {
+        schemaVersion: 1,
+        nodes: [postTrigger, action],
+        edges: [{ id: 'e1', source: 't-post', target: 'a', sourceHandle: 'next' }],
+      },
+      invoiceFieldIds,
+      invoiceProfile,
+    )
+    assert.ok(
+      live.every((error) => !error.includes('never fires')),
+      `fireable triggers must not be flagged, got: ${live.join(' | ')}`,
+    )
+  })
 })
 
 describe('explicit submission policy', () => {

@@ -530,6 +530,24 @@ export function lintAutomationGraph(
     }
   }
 
+  // A trigger the subject's lifecycle can never emit saves (or enables)
+  // silently dead: no run is ever created, so the record sails through as
+  // if no flow existed. Name the node and the trigger alongside the remedy
+  // (the builder enriches the storage id into the canvas name).
+  if (profile) {
+    const canPost = profile.actions.includes('post_document')
+    for (const n of graph.nodes) {
+      if (n.data.kind !== 'trigger') continue
+      const trigger = n.data.trigger.trigger
+      if ((trigger === 'before_post' || trigger === 'after_post') && !canPost) {
+        errors.push(`Trigger ${n.id}: "${trigger}" never fires for ${profile.label} — these records never post. Gate their approval with "on_submit" instead.`)
+      }
+      if ((trigger === 'on_create' || trigger === 'on_update') && profile.orderRecord === true) {
+        errors.push(`Trigger ${n.id}: "${trigger}" never fires for ${profile.label} — orders are created and edited through the order pipeline. Gate Issue with "on_submit" instead.`)
+      }
+    }
+  }
+
   // When a subject profile is supplied, reject triggers/actions the subject
   // does not support (e.g. a journal flow using `post_document` when journals
   // post immediately) and status values outside the subject's lifecycle.
