@@ -6,7 +6,7 @@ import { dataTransferJob } from '../../../../testing/data-transfer'
 // and transfer restoration must never expose provisioning actions here.
 
 declare global {
-  var __sampleTestRouter: { pushes: string[] } | undefined
+  var __sampleTestRouter: { pushes: string[]; refreshes: number } | undefined
   var __sampleTestToasts: { kind: string; message: string }[] | undefined
   var __sampleTestEnteredOrgs: string[] | undefined
 }
@@ -19,7 +19,7 @@ const { stubModules } = await import('../../../../testing/stub-modules')
 stubModules({
   navigation: {
     pathname: '/data/import',
-    routerSource: 'export function useRouter(){return {push(url){globalThis.__sampleTestRouter.pushes.push(String(url))}}}',
+    routerSource: 'export function useRouter(){return {push(url){globalThis.__sampleTestRouter.pushes.push(String(url))},refresh(){globalThis.__sampleTestRouter.refreshes+=1}}}',
   },
 })
 registerHooks({
@@ -127,7 +127,7 @@ function stubFetch(): void {
 }
 
 async function mountWizard(t: TestContext, sample = false, back?: { backHref: string; backLabel: string }): Promise<void> {
-  globalThis.__sampleTestRouter = { pushes: [] }
+  globalThis.__sampleTestRouter = { pushes: [], refreshes: 0 }
   globalThis.__sampleTestToasts = []
   globalThis.__sampleTestEnteredOrgs = []
   script.sampleGets = 0
@@ -331,4 +331,22 @@ test('the import header returns to Company Settings instead of history', async (
   assert.ok(back)
   assert.match(back.textContent ?? '', /Company Settings/)
   assert.equal(document.querySelector('a[href="/data/import/history"]'), null)
+})
+
+test('a committed import refreshes the cached lists and counters it changed', async (t) => {
+  script.resources = [{ key: 'customers', label: 'Customers', group: 'Master data', supportsImport: true }]
+  await mountWizard(t)
+  assert.equal(globalThis.__sampleTestRouter!.refreshes, 0, 'an unfinished import refreshes nothing')
+  await chooseImportSource()
+  await clickImportAction('Continue')
+  await clickImportAction('Preview')
+  assert.equal(globalThis.__sampleTestRouter!.refreshes, 0, 'previewing writes nothing, so nothing refreshes')
+  await clickImportAction('Import 1 row')
+  // The committing job completes on its next poll.
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 1200))
+    await tick()
+  })
+  assert.equal(script.job.state, 'completed')
+  assert.equal(globalThis.__sampleTestRouter!.refreshes, 1, 'completion refreshes the router once')
 })
