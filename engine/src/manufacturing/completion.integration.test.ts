@@ -20,7 +20,7 @@ import { disposeQualityInspection } from "./quality-disposition.ts";
 import { readManufacturingInspection, listManufacturingInspections } from "./quality-workspace.ts";
 import { saveBomPolicy,applyBomRevision,readBomPolicyVersion } from "../inventory/bom-policy.ts";
 import { explodeBom } from "./bom-explode.ts";
-import { approveFixtureRouting } from "../testing/manufacturing.ts";
+import { approveFixtureRouting, createManufacturingOperator, createWorkOperator } from "../testing/manufacturing.ts";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
@@ -29,7 +29,7 @@ import { db, withBypassContext, withOrgContext } from "../platform/db.ts";
 import type { SqlExecutor } from "../platform/db.ts";
 import { withSimClock } from "../platform/clock.ts";
 import { addCalendarDays,businessToday } from "../platform/business-date.ts";
-import { createScratchOrg, createScratchUser, dropScratchOrg, seedApprovalFlow, seedPayrollPerson, seedActiveEmployment, type ScratchOrg } from "../testing/fixtures.ts";
+import { createScratchOrg, dropScratchOrg, seedApprovalFlow, seedPayrollPerson, seedActiveEmployment, type ScratchOrg } from "../testing/fixtures.ts";
 import { receiveInventory } from "../inventory/movements.ts";
 import { getOnHand, getOnHandWith } from "../inventory/position.ts";
 import { assertCostingPolicyChangeAllowed, lockItemInventoryProfile } from "../inventory/profile-policy.ts";
@@ -61,7 +61,7 @@ function run<T>(work: (tx: SqlExecutor) => Promise<T>): Promise<T> { return with
 async function setup(): Promise<Fixture> {
   const org = await withBypassContext(() => createScratchOrg());
   try {
-    const actorId = await withBypassContext(() => createScratchUser(org.orgId, "Shop lead", "admin"));
+    const actorId = await withBypassContext(() => createManufacturingOperator(org.orgId, "Shop lead"));
     const wipId = randomUUID(), usageId = randomUUID(), departmentId = randomUUID();
     await withBypassContext(async () => {
       const department = await db.execute<{ id: string }>(sql`insert into departments (id, org_id, name, subsidiary_id)
@@ -253,12 +253,12 @@ const cases: Case[] = [
     assert.deepEqual(await run(tx=>proposeProductionLoss(tx,f.org.orgId,f.actorId,order.id,input)),proposal);
     await assert.rejects(withBypassContext(()=>applyProductionLoss(f.org.orgId,f.actorId,proposal.changeId)),/approval policy/);
     assert.deepEqual(await counts(f),before);assert.equal(await wip(f,order.number),'60.0000');
-    const approver=await withBypassContext(()=>createScratchUser(f.org.orgId,'Independent loss approver','admin'));
+    const approver=await withBypassContext(()=>createWorkOperator(f.org.orgId,"Independent loss approver",["manufacturing.manage"]));
     await withBypassContext(()=>seedApprovalFlow(f.org.orgId,{subjectKind:'financial_change',assignees:[{type:'user',userId:approver}],mode:'any',preventSelfApproval:true}));
     await withBypassContext(()=>submitFinancialChange(f.org.orgId,proposal.changeId,f.actorId));
     const gates=(await run(tx=>tx.execute<{id:string}>(sql`select id from flow_gates where org_id=${f.org.orgId} and subject_kind='financial_change' and subject_id=${proposal.changeId} and status='pending'`))).rows;
     assert.equal(gates.length,1);await withBypassContext(()=>decideGate({gateId:gates[0]!.id,userId:approver,decision:'approved'}));
-    await run(tx=>addWorkCenterRate(tx,f.org.orgId,f.actorId,(await tx.execute<{center:string}>(sql`select work_center_id as center from mfg_wo_operations where org_id=${f.org.orgId} and id=${order.operation}`)).rows[0]!.center,{machineRatePerHour:'13',effectiveFrom:f.postingDate}));
+    await run(async tx=>addWorkCenterRate(tx,f.org.orgId,f.actorId,(await tx.execute<{center:string}>(sql`select work_center_id as center from mfg_wo_operations where org_id=${f.org.orgId} and id=${order.operation}`)).rows[0]!.center,{machineRatePerHour:'13',effectiveFrom:f.postingDate}));
     const stale=await counts(f);await assert.rejects(withBypassContext(()=>applyProductionLoss(f.org.orgId,f.actorId,proposal.changeId)),/changed/);assert.deepEqual(await counts(f),stale);
     // A new proposal retains the changed effective rate and obtains its own decision.
     const replacement=await run(tx=>proposeProductionLoss(tx,f.org.orgId,f.actorId,order.id,{...input,requestKey:randomUUID()}));
@@ -288,7 +288,7 @@ const cases: Case[] = [
     await run(tx=>tx.execute(sql`insert into mfg_scrap_reasons(id,org_id,code,name,classification,is_active) values(${reasonId},${f.org.orgId},${reasonId},'Unvalued failed trial','abnormal',true) returning id`));
     const input={operationId:operation.id,reasonId,quantity:'2',reason:'Discard two unvalued trial units and cancel eight unstarted units',requestKey:randomUUID(),times:[]};
     const proposal=await run(tx=>proposeProductionLoss(tx,f.org.orgId,f.actorId,order.id,input));
-    const approver=await withBypassContext(()=>createScratchUser(f.org.orgId,'Loss decision','admin'));
+    const approver=await withBypassContext(()=>createWorkOperator(f.org.orgId,"Loss decision",["manufacturing.manage"]));
     await withBypassContext(()=>seedApprovalFlow(f.org.orgId,{subjectKind:'financial_change',assignees:[{type:'user',userId:approver}],mode:'any',preventSelfApproval:true}));
     await withBypassContext(()=>submitFinancialChange(f.org.orgId,proposal.changeId,f.actorId));
     const gate=(await run(tx=>tx.execute<{id:string}>(sql`select id from flow_gates where org_id=${f.org.orgId} and subject_id=${proposal.changeId} and status='pending'`))).rows[0]!;
@@ -313,7 +313,7 @@ const cases: Case[] = [
     const before=await counts(f);
     await assert.rejects(withBypassContext(()=>applyBomRevision(f.org.orgId,f.actorId,proposal.changeId)),/approval policy/);
     assert.equal(await run(tx=>readBomPolicyVersion(tx,f.org.orgId,f.org.items.assembly)),version);
-    const approver=await withBypassContext(()=>createScratchUser(f.org.orgId,"Recipe decision","admin"));
+    const approver=await withBypassContext(()=>createWorkOperator(f.org.orgId,"Recipe decision",["manufacturing.manage","admin.setup.manage"]));
     await withBypassContext(()=>seedApprovalFlow(f.org.orgId,{subjectKind:"financial_change",assignees:[{type:"user",userId:approver}],mode:"any",preventSelfApproval:true}));
     await withBypassContext(()=>submitFinancialChange(f.org.orgId,proposal.changeId,f.actorId));
     const gate=(await run(tx=>tx.execute<{id:string}>(sql`select id from flow_gates where org_id=${f.org.orgId} and subject_id=${proposal.changeId} and subject_kind='financial_change' and status='pending'`))).rows;
@@ -339,7 +339,7 @@ const cases: Case[] = [
     const next=await run(tx=>createNextRoutingVersion(tx,f.org.orgId,f.actorId,initial.routingId));
     await run(tx=>updateRouting(tx,f.org.orgId,f.actorId,String(next.id),{effectiveFrom:f.postingDate,name:"Revised assembly"}));
     await refuse(run(tx=>activateRouting(tx,f.org.orgId,f.actorId,String(next.id))),"routing_approval_required","approval");
-    const approver=await withBypassContext(()=>createScratchUser(f.org.orgId,"Revision decision","admin"));
+    const approver=await withBypassContext(()=>createWorkOperator(f.org.orgId,"Revision decision",["manufacturing.manage"]));
     await withBypassContext(()=>seedApprovalFlow(f.org.orgId,{subjectKind:"financial_change",assignees:[{type:"user",userId:approver}],mode:"any",preventSelfApproval:true}));
     const propose=()=>run(tx=>proposeRoutingActivation(tx,f.org.orgId,f.actorId,String(next.id),{subsidiaryId:f.org.subsidiaryId,reason:"Improve the assembly process",idempotencyKey:randomUUID()}));
     const approve=async(changeId:string)=>{
@@ -448,7 +448,7 @@ const cases: Case[] = [
     const before=await counts(f);
     await refuse(withBypassContext(()=>applyStandardRollup(f.org.orgId,f.actorId,proposal.changeId)),"rollup_approval_required","approval policy");
     assert.deepEqual(await counts(f),before);
-    const approver=await withBypassContext(()=>createScratchUser(f.org.orgId,"Cost approver","admin"));
+    const approver=await withBypassContext(()=>createWorkOperator(f.org.orgId,"Cost approver",["manufacturing.manage","items.manage"]));
     await withBypassContext(()=>seedApprovalFlow(f.org.orgId,{subjectKind:"financial_change",assignees:[{type:"user",userId:approver}],mode:"any",preventSelfApproval:true}));
     await withBypassContext(()=>submitFinancialChange(f.org.orgId,proposal.changeId,f.actorId));
     const gate=await run(async tx=>(await tx.execute<{id:string}>(sql`select id from flow_gates where org_id=${f.org.orgId} and subject_kind='financial_change' and subject_id=${proposal.changeId} and status='pending'`)).rows[0]!);
@@ -841,7 +841,7 @@ cases.push(
   }
   await denied(withBypassContext(()=>executeManufacturingReceipt(f.org.orgId,f.actorId,new Set(),wo.id,receiptKey,{quantity:"1"})));
   const foreign=await withBypassContext(()=>createScratchOrg());
-  try{const actor=await withBypassContext(()=>createScratchUser(foreign.orgId,'Foreign operator','admin'));await denied(withBypassContext(()=>executeManufacturingReceipt(f.org.orgId,actor,null,wo.id,receiptKey,{quantity:'1'})));await denied(run(tx=>recordNormalScrap(tx,f.org.orgId,actor,null,wo.id,scrapKey,input)))}finally{await withBypassContext(()=>dropScratchOrg(foreign.orgId))}
+  try{const actor=await withBypassContext(()=>createManufacturingOperator(foreign.orgId,'Foreign operator'));await denied(withBypassContext(()=>executeManufacturingReceipt(f.org.orgId,actor,null,wo.id,receiptKey,{quantity:'1'})));await denied(run(tx=>recordNormalScrap(tx,f.org.orgId,actor,null,wo.id,scrapKey,input)))}finally{await withBypassContext(()=>dropScratchOrg(foreign.orgId))}
   assert.deepEqual(await counts(f),before);assert.deepEqual(await scrapState(f,wo.id),scrapBefore);
  }},
  {name:"concurrent normal-loss retries count once and distinct events accumulate under the order lock",run:async f=>{
@@ -1115,7 +1115,7 @@ cases.push(
   await assert.rejects(run(tx=>proposeProductionLoss(tx,f.org.orgId,f.actorId,id,{...loss,quantity:'1',requestKey:randomUUID()})),/all of its original inspected stock/);
   await withBypassContext(()=>setStockHold(f.org.orgId,f.actorId,{kind:'lot',id:lotId,held:true,reason:'Independent recall review'}));
   const proposal=await run(tx=>proposeProductionLoss(tx,f.org.orgId,f.actorId,id,loss));
-  const approver=await withBypassContext(()=>createScratchUser(f.org.orgId,'Independent repair disposition','admin'));
+  const approver=await withBypassContext(()=>createWorkOperator(f.org.orgId,"Independent repair disposition",["manufacturing.manage"]));
   await withBypassContext(()=>seedApprovalFlow(f.org.orgId,{subjectKind:'financial_change',assignees:[{type:'user',userId:approver}],mode:'any',preventSelfApproval:true}));
   await withBypassContext(()=>submitFinancialChange(f.org.orgId,proposal.changeId,f.actorId));
   const gates=(await run(tx=>tx.execute<{id:string}>(sql`select id from flow_gates where org_id=${f.org.orgId} and subject_kind='financial_change' and subject_id=${proposal.changeId} and status='pending'`))).rows;

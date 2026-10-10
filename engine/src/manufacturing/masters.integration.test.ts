@@ -1,11 +1,11 @@
-import { approveFixtureRouting } from "../testing/manufacturing.ts";
+import { approveFixtureRouting, createManufacturingOperator } from "../testing/manufacturing.ts";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db, withBypassContext } from "../platform/db.ts";
 import { ManufacturingError } from "./errors.ts";
-import { createScratchOrg, createScratchUser, dropScratchOrg, type ScratchOrg } from "../testing/fixtures.ts";
+import { createScratchOrg, dropScratchOrg, type ScratchOrg } from "../testing/fixtures.ts";
 import { addWorkCenterRate, createWorkCenter, deactivateWorkCenter, endWorkCenterRate, reactivateWorkCenter, updateWorkCenter } from "./work-centers.ts";
 import { archiveRouting, createNextRoutingVersion, createRouting, createRoutingOperation, updateRouting, updateRoutingOperation, deleteRoutingOperation } from "./routings.ts";
 import { getItemPolicy, upsertItemPolicy, type ItemPolicyInput } from "./item-policies.ts";
@@ -15,7 +15,7 @@ type Fixture = { org: ScratchOrg; actorId: string };
 const DB = Boolean(process.env.OPENBOOKS_DB_URL);
 async function setup(): Promise<Fixture> {
   const org = await withBypassContext(() => createScratchOrg());
-  const actorId = await withBypassContext(() => createScratchUser(org.orgId, "Shop lead", "admin"));
+  const actorId = await withBypassContext(() => createManufacturingOperator(org.orgId, "Shop lead"));
   await withBypassContext(async () => {
     const rows = await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||'{"manufacturing":true,"inventory":true}'::jsonb) where id=${org.orgId} returning id`);
     assert.equal(rows.rows.length, 1);
