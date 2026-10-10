@@ -10,13 +10,19 @@ import { act, click, mountDashboard, scriptFetch } from '../../dashboard/_dashbo
 // harness above evaluates, so only imports that resolve after that point see
 // the jsdom shims.
 const { StatementDeleteCell } = await import('./StatementDeleteCell')
-const { ConfirmRoot } = await import('@/lib/confirm')
+
+// The dashboard harness models confirmation headlessly: confirmDialog
+// resolves globalThis.__confirmAnswer without rendering a dialog, so these
+// tests pin the confirm gate by answering false (nothing sends) then true.
+function confirmAnswer(value: boolean): void {
+  ;(globalThis as unknown as { __confirmAnswer: boolean }).__confirmAnswer = value
+}
 
 const dir = dirname(fileURLToPath(import.meta.url));
 const messages = {
-  banking: JSON.parse(readFileSync(join(dir, '..', '..', '..', 'messages', 'en', 'banking.json'), 'utf8')),
-  common: JSON.parse(readFileSync(join(dir, '..', '..', '..', 'messages', 'en', 'common.json'), 'utf8')),
-  ui: JSON.parse(readFileSync(join(dir, '..', '..', '..', 'messages', 'en', 'ui.json'), 'utf8')),
+  banking: JSON.parse(readFileSync(join(dir, '..', '..', '..', '..', 'messages', 'en', 'banking.json'), 'utf8')),
+  common: JSON.parse(readFileSync(join(dir, '..', '..', '..', '..', 'messages', 'en', 'common.json'), 'utf8')),
+  ui: JSON.parse(readFileSync(join(dir, '..', '..', '..', '..', 'messages', 'en', 'ui.json'), 'utf8')),
 };
 
 const STATEMENT_ID = '11111111-0000-4000-8000-000000000001'
@@ -35,16 +41,13 @@ function toasts(): { kind: string; message: string }[] {
 
 test('a blocked import names its reason on the disabled control', async () => {
   const { unmount } = await mountDashboard(
-    <>
-      <StatementDeleteCell
-        statementId={STATEMENT_ID}
-        lineCount={2}
-        blockedReason="Has 1 matched line — unmatch it first"
-        confirmMessage="Delete?"
-        showDelete
-      />
-      <ConfirmRoot />
-    </>,
+    <StatementDeleteCell
+      statementId={STATEMENT_ID}
+      lineCount={2}
+      blockedReason="Has 1 matched line — unmatch it first"
+      confirmMessage="Delete?"
+      showDelete
+    />,
     messages,
   )
   try {
@@ -68,27 +71,26 @@ test('deleting confirms first, then toasts and refreshes', async () => {
     return null
   })
   const { unmount } = await mountDashboard(
-    <>
-      <StatementDeleteCell
-        statementId={STATEMENT_ID}
-        lineCount={3}
-        blockedReason={null}
-        confirmMessage="Delete this import and its 3 lines?"
-        showDelete
-      />
-      <ConfirmRoot />
-    </>,
+    <StatementDeleteCell
+      statementId={STATEMENT_ID}
+      lineCount={3}
+      blockedReason={null}
+      confirmMessage="Delete this import and its 3 lines?"
+      showDelete
+    />,
     messages,
   )
   try {
     const router = (globalThis as unknown as { __dashRouter: { refresh(): void } }).__dashRouter
     router.refresh = () => { refreshed += 1 }
+    // A declined confirmation sends nothing.
+    confirmAnswer(false)
     await click(deleteButton()!)
-    const confirm = [...document.querySelectorAll('[role="dialog"] button')].find(
-      (b) => b.textContent?.trim() === 'Delete import',
-    ) as HTMLButtonElement | undefined
-    assert.ok(confirm, 'the delete asks for confirmation first')
-    await click(confirm)
+    await act(async () => {})
+    assert.equal(calls.length, 0, 'a declined confirmation must not send')
+    // An accepted confirmation sends the delete.
+    confirmAnswer(true)
+    await click(deleteButton()!)
     await act(async () => {})
     assert.ok(
       calls.some((c) => c.method === 'DELETE'),
@@ -112,25 +114,17 @@ test('a refused delete toasts the named remedy', async () => {
       : null,
   )
   const { unmount } = await mountDashboard(
-    <>
-      <StatementDeleteCell
-        statementId={STATEMENT_ID}
-        lineCount={1}
-        blockedReason={null}
-        confirmMessage="Delete this import and its 1 line?"
-        showDelete
-      />
-      <ConfirmRoot />
-    </>,
+    <StatementDeleteCell
+      statementId={STATEMENT_ID}
+      lineCount={1}
+      blockedReason={null}
+      confirmMessage="Delete this import and its 1 line?"
+      showDelete
+    />,
     messages,
   )
   try {
     await click(deleteButton()!)
-    const confirm = [...document.querySelectorAll('[role="dialog"] button')].find(
-      (b) => b.textContent?.trim() === 'Delete import',
-    ) as HTMLButtonElement | undefined
-    assert.ok(confirm, 'the delete asks for confirmation first')
-    await click(confirm)
     await act(async () => {})
     assert.ok(
       toasts().some((t) => t.kind === 'error' && t.message.includes('unmatch it first')),
