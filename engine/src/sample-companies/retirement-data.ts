@@ -1,7 +1,8 @@
 import { sql, type SQL } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { isUuid } from "../platform/uuid.ts";
-import { PARENT_FILTER, deletionOrder, type Catalog, type TableInfo } from "../sandbox/catalog.ts";
+import { PARENT_FILTER, type Catalog, type TableInfo } from "../sandbox/catalog.ts";
+import { orderDependencyComponents } from "../sandbox/catalog-graph.ts";
 import { retirementDigest } from "./retirement-contract.ts";
 
 export const RETIREMENT_AUTH_TABLES = ["auth_login_challenges", "auth_login_events", "auth_login_state", "auth_mfa_factors", "auth_oidc_identities", "auth_password_resets", "auth_sessions"] as const;
@@ -53,20 +54,67 @@ function errorCode(error: unknown): string | undefined {
   const item = error as { code?: string; cause?: unknown } | null;
   return item?.code ?? (item?.cause ? errorCode(item.cause) : undefined);
 }
+export interface RetirementForeignKey {
+  table: string; referencedTable: string; deleteAction: string; deferrable: boolean;
+  columns: string[]; referencedColumns: string[];
+}
+
+/** Retirement cannot rely on cascades or SET NULL updates. Order every native
+ * child before its parent; within deferred cycles retain all immediate actions.
+ * Native row constraints still refuse cycles that need protected-row updates. */
+export function retirementDeletionOrder(names: readonly string[], foreignKeys: readonly RetirementForeignKey[]): string[] {
+  if (new Set(names).size !== names.length) throw new Error("Duplicate retirement table identity");
+  const orderedNames = [...names].sort();
+  const included = new Set(orderedNames);
+  const dependencies = new Map(orderedNames.map(name => [name, new Set<string>()]));
+  const indegree = new Map(orderedNames.map(name => [name, 0]));
+  for (const edge of foreignKeys) {
+    if (edge.table === edge.referencedTable || !included.has(edge.table) || !included.has(edge.referencedTable)) continue;
+    if (dependencies.get(edge.table)!.has(edge.referencedTable)) continue;
+    dependencies.get(edge.table)!.add(edge.referencedTable);
+    indegree.set(edge.referencedTable, indegree.get(edge.referencedTable)! + 1);
+  }
+  const queue = orderedNames.filter(name => indegree.get(name) === 0);
+  const order: string[] = [];
+  while (queue.length) {
+    const name = queue.shift()!;
+    order.push(name);
+    for (const parent of dependencies.get(name)!) {
+      indegree.set(parent, indegree.get(parent)! - 1);
+      if (indegree.get(parent) === 0) queue.push(parent);
+    }
+  }
+  const emitted = new Set(order);
+  const tail = orderedNames.filter(name => !emitted.has(name));
+  const tailSet = new Set(tail);
+  const immediate = new Map(tail.map(name => [name, new Set<string>()]));
+  for (const edge of foreignKeys) {
+    if (edge.table === edge.referencedTable || !tailSet.has(edge.table) || !tailSet.has(edge.referencedTable)) continue;
+    // Referential actions execute immediately even on DEFERRABLE constraints.
+    if (edge.deleteAction !== "a" || !edge.deferrable) immediate.get(edge.table)!.add(edge.referencedTable);
+  }
+  order.push(...orderDependencyComponents(tail, immediate));
+  if (order.length !== names.length || new Set(order).size !== names.length) throw new Error("Incomplete retirement deletion order");
+  return order;
+}
+
 /** Delete only owned rows. Constraint refusals are retried after their children;
  * cycles that cannot be removed without UPDATE roll back the entire target. */
 export async function deleteRetiredTenantRows(catalog: Catalog, orgId: string) {
   const targets = catalog.tenantTables.filter(t => t.name !== "orgs");
   const byName = new Map(targets.map(table => [table.name, table]));
-  const order = deletionOrder({ ...catalog, tables: targets });
-  const selfEdges = (await db.execute<{ table: string; columns: string[]; referencedColumns: string[] }>(sql`
-    select c.relname as table,array_agg(child.attname::text order by position) as columns,array_agg(parent.attname::text order by position) as "referencedColumns"
+  const foreignKeys = (await db.execute<RetirementForeignKey & Record<string, unknown>>(sql`
+    select c.relname as table,p.relname as "referencedTable",fk.confdeltype::text as "deleteAction",fk.condeferrable as deferrable,
+      array_agg(child.attname::text order by position) as columns,array_agg(parent.attname::text order by position) as "referencedColumns"
     from pg_constraint fk join pg_class c on c.oid=fk.conrelid join pg_namespace n on n.oid=c.relnamespace
+    join pg_class p on p.oid=fk.confrelid join pg_namespace pn on pn.oid=p.relnamespace
     cross join lateral generate_subscripts(fk.conkey,1) position
     join pg_attribute child on child.attrelid=fk.conrelid and child.attnum=fk.conkey[position]
     join pg_attribute parent on parent.attrelid=fk.confrelid and parent.attnum=fk.confkey[position]
-    where n.nspname='public' and fk.contype='f' and fk.confrelid=fk.conrelid and (fk.confdeltype<>'a' or not fk.condeferrable)
-    group by c.relname,fk.oid order by c.relname,fk.oid`)).rows;
+    where n.nspname='public' and pn.nspname='public' and fk.contype='f'
+    group by c.relname,p.relname,fk.oid,fk.confdeltype,fk.condeferrable order by c.relname,p.relname,fk.oid`)).rows;
+  const order = retirementDeletionOrder(targets.map(table => table.name), foreignKeys);
+  const selfEdges = foreignKeys.filter(edge => edge.table === edge.referencedTable && (edge.deleteAction !== "a" || !edge.deferrable));
   const removed: Record<string, string> = {};
   for (const name of RETIREMENT_AUTH_TABLES) {
     const result = await db.execute(sql`delete from public.${sql.identifier(name)} where ${retirementPredicate({ name, hasOrgId: false }, orgId)}`);

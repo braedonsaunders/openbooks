@@ -14,14 +14,14 @@ import { loadCatalog } from "../sandbox/catalog.ts";
 import { beginTenantRetirement, recordTenantRetirementFailure, releaseTenantRetirement, tenantRetirementStatus } from "../organization/tenant-retirement.ts";
 import { sampleRetirementPlan } from "./retirement-plan.ts";
 import { admitSampleRetirement, executeSampleRetirement } from "./retirement.ts";
-import { deleteRetiredTenantRows, retirementFingerprint, retirementPredicate, RETIREMENT_AUTH_TABLES, retirementSharedDependencies, retirementOutstandingWork } from "./retirement-data.ts";
+import { deleteRetiredTenantRows, retirementDeletionOrder, type RetirementForeignKey, retirementFingerprint, retirementPredicate, RETIREMENT_AUTH_TABLES, retirementSharedDependencies, retirementOutstandingWork } from "./retirement-data.ts";
 import { retirementDigest, type RetirementDatabaseIdentity } from "./retirement-contract.ts";
 import { drainSampleFixtureFlowEmails, retireSampleFixtureCompanies } from "./retirement-test-fixtures.ts";
 
 installEngineSeams();
 const enabled = { skip: !process.env.OPENBOOKS_DB_URL };
 type Plan = Awaited<ReturnType<typeof sampleRetirementPlan>>;
-type Evidence = { org: ScratchOrg; actorId: string; postedId: string; draftId: string; gateId: string; sessionId: string };
+type Evidence = { org: ScratchOrg; actorId: string; postedId: string; draftId: string; gateId: string; sessionId: string; aiRunId: string };
 const hash = (value: string) => createHash("sha256").update(value).digest("hex");
 
 /** Synthetic attestations exercise the disposable-fixture admission contract.
@@ -61,11 +61,22 @@ async function createEvidence(org: ScratchOrg): Promise<Evidence> {
   // user-linked authentication row, without issuing a token or importing web code.
   await withBypass(() => db.execute(sql`insert into auth_sessions(id,user_id,token_hash,auth_method,expires_at)
     values(${sessionId},${actorId},${hash(randomUUID())},'password',now()+interval '1 hour')`));
+  // Authored historical dependency fixtures exercise native FK actions only;
+  // no detector, model provider or external job is invoked by this caller.
+  const aiRunId = randomUUID(), workItemId = randomUUID();
+  await withOrgContext(org.orgId, async () => {
+    await db.execute(sql`insert into ai_agent_runs(id,org_id,agent_key,trigger,status,detector_version,finished_at,initiated_by)
+      values(${aiRunId},${org.orgId},'accounting','manual','completed','retirement-fixture',now(),${actorId})`);
+    await db.execute(sql`insert into ai_work_items(id,org_id,agent_key,finding_type,detector_version,fingerprint,severity,last_detected_run_id,created_by,updated_by)
+      values(${workItemId},${org.orgId},'accounting','retirement_dependency','retirement-fixture',${`retirement:${org.orgId}`},'info',${aiRunId},${actorId},${actorId})`);
+    await db.execute(sql`insert into ai_work_item_evidence(org_id,work_item_id,kind,source_type,source_id,data)
+      values(${org.orgId},${workItemId},'document','document',${draft.id},'{"fixture":"linked native dependency"}'::jsonb)`);
+  });
   const outstanding = await withMaintenanceTransaction(null, () => retirementOutstandingWork([org.orgId]));
   assert.equal(outstanding.find(row => row.table === "scheduler_outbox")?.count, "2", "native pending notices block retirement before their delivery lifecycle settles");
   assert.equal(await drainSampleFixtureFlowEmails(org.orgId), 2, "native gate and decision notices settle through the mocked queue boundary");
   assert.equal((await withMaintenanceTransaction(null, () => retirementOutstandingWork([org.orgId]))).some(row => row.table === "scheduler_outbox"), false);
-  return { org, actorId, postedId: posted.id, draftId: draft.id, gateId, sessionId };
+  return { org, actorId, postedId: posted.id, draftId: draft.id, gateId, sessionId, aiRunId };
 }
 async function planFor(retireIds: string[]): Promise<Plan> {
   const { database, live } = await withMaintenanceTransaction(null, async () => ({
@@ -185,7 +196,7 @@ test("native tenant retirement rejects forged authority and preserves posted, dr
     const beforeRetained = await fingerprint(retainedOrg.orgId);
     const beforeTarget = await fingerprint(targetOrg.orgId, true);
     for (const evidence of [beforeRetained, beforeTarget]) {
-      for (const table of ["documents", "document_lines", "journal_entries", "journal_lines", "flow_gates", "audit_log", "auth_sessions", "role_assignments"])
+      for (const table of ["documents", "document_lines", "journal_entries", "journal_lines", "flow_gates", "audit_log", "auth_sessions", "role_assignments", "ai_agent_runs", "ai_work_items", "ai_work_item_evidence"])
         assert.ok(BigInt(evidence.tables.find(row => row.table === table)!.count) > 0n, `the preservation proof includes real ${table} evidence`);
     }
     const plan = await planFor([targetOrg.orgId]);
@@ -220,6 +231,7 @@ test("native tenant retirement rejects forged authority and preserves posted, dr
       await refusedStatement(() => db.execute(sql`insert into app_listings(publisher_org_id,key,name,version,created_by,updated_by)
         values(${targetOrg.orgId},${`quarantined-${randomUUID()}`},'Forbidden publication','1.0.0',${target.actorId},${target.actorId})`), /retirement fence/);
       await refusedStatement(() => db.execute(sql`delete from documents where org_id=${retainedOrg.orgId} and id=${retained.postedId}`), /posted|immutable|delete/i);
+      await refusedStatement(() => db.execute(sql`delete from ai_agent_runs where org_id=${targetOrg.orgId} and id=${target.aiRunId}`), /retirement fence/);
       await db.execute(sql`set constraints all deferred`);
       await deleteRetiredTenantRows(await loadCatalog(), targetOrg.orgId);
       assert.equal((await db.execute(sql`select id from orgs where id=${targetOrg.orgId}`)).rows.length, 0);
@@ -243,8 +255,11 @@ test("native tenant retirement rejects forged authority and preserves posted, dr
     const completed = await executeSampleRetirement({ runId: freshRun, orgId: targetOrg.orgId, planDigest: fresh.digest });
     assert.equal(completed.targets[0]!.state, "deleted");
     assert.deepEqual(await fingerprint(retainedOrg.orgId), beforeRetained, "successful retirement retains every protected row, not just ledger totals");
-    const receipt = completed.targets[0]!.receipt as { retainedBefore: Record<string, string>; retainedAfter: Record<string, string>; administrativeDeltas: unknown; storageManifestDigest: string };
+    const receipt = completed.targets[0]!.receipt as { retainedBefore: Record<string, string>; retainedAfter: Record<string, string>; administrativeDeltas: unknown; storageManifestDigest: string; explicitlyDeletedRows: Record<string, string> };
     assert.deepEqual(receipt.retainedAfter, receipt.retainedBefore);
+    for (const table of ["ai_work_item_evidence", "ai_work_items", "ai_agent_runs"]) {
+      assert.equal(receipt.explicitlyDeletedRows[table], "1", `${table} is removed explicitly, without cascade deletion or SET NULL updates`);
+    }
     assert.ok(receipt.administrativeDeltas && receipt.storageManifestDigest);
     assert.deepEqual(await executeSampleRetirement({ runId: freshRun, orgId: targetOrg.orgId, planDigest: fresh.digest }), completed, "a completed target is a durable replay with no second deletion");
     await assert.rejects(releaseTenantRetirement({ runId: freshRun, orgId: targetOrg.orgId, planDigest: fresh.digest, actorId: anchorActor, reason: "Cannot release a deleted company" }), error => /existing quarantined target/.test(nativeMessage(error)));
@@ -261,4 +276,23 @@ test("native tenant retirement rejects forged authority and preserves posted, dr
     }
     await withBypass(() => dropScratchOrg(anchor.orgId));
   }
+});
+
+
+test("retirement ordering includes referential actions and preserves immediate dependencies inside the deferred tail", () => {
+  const fk = (table: string, referencedTable: string, deleteAction: string, deferrable = true): RetirementForeignKey =>
+    ({ table, referencedTable, deleteAction, deferrable, columns: ["parent_id"], referencedColumns: ["id"] });
+  const aiOrder = retirementDeletionOrder(["ai_agent_runs", "ai_work_items", "ai_work_item_evidence", "users"], [
+    fk("ai_work_items", "ai_agent_runs", "n"), fk("ai_work_item_evidence", "ai_work_items", "c"), fk("ai_agent_runs", "users", "n"),
+  ]);
+  assert.deepEqual(aiOrder, ["ai_work_item_evidence", "ai_work_items", "ai_agent_runs", "users"]);
+  const tailOrder = retirementDeletionOrder(["accounts", "documents", "journal_entries", "journal_lines"], [
+    fk("documents", "journal_entries", "a"), fk("journal_entries", "documents", "c"),
+    fk("journal_lines", "journal_entries", "c"), fk("documents", "accounts", "r"),
+  ]);
+  assert.deepEqual(tailOrder, ["journal_lines", "journal_entries", "documents", "accounts"],
+    "a deferred backlink does not erase CASCADE or RESTRICT dependencies in the remaining graph");
+  const immediateCycle = [fk("first", "second", "n"), fk("second", "first", "n")];
+  assert.deepEqual(retirementDeletionOrder(["first", "second"], immediateCycle), ["first", "second"],
+    "structural cycles remain for native row-level refusal; no edge is converted into an UPDATE exemption");
 });
