@@ -3,8 +3,8 @@ import test from 'node:test'
 import { readFileSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import '../dashboard/_dashboard-render-harness'
-import { act, click, mountDashboard, scriptFetch } from '../dashboard/_dashboard-render-harness'
+import '../../dashboard/_dashboard-render-harness'
+import { act, click, mountDashboard, scriptFetch } from '../../dashboard/_dashboard-render-harness'
 
 // Await-imports (not static imports): module hooks register while the
 // harness above evaluates, so only imports that resolve after that point see

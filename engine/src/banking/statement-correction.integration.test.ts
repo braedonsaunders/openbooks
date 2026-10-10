@@ -79,6 +79,38 @@ async function postBankJournal(
   });
 }
 
+type CsvImportInput = Omit<Parameters<typeof importStatement>[0], "source" | "sourceEvidence"> & {
+  source: "csv";
+};
+
+/**
+ * Import fixture lines as the bank CSV file they stand for. CSV imports must
+ * retain the column mapping used to parse the file, so the fixture renders
+ * the lines into deterministic CSV bytes with that mapping: an identical
+ * input reproduces the identical file (and source hash).
+ */
+function importCsv(input: CsvImportInput, ctx: Parameters<typeof importStatement>[1]) {
+  const quote = (value: string) => `"${value.replace(/"/g, '""')}"`;
+  const content = [
+    "date,amount,description,bank_transaction_id",
+    ...input.lines.map((line) =>
+      [line.postedOn, line.amount, quote(line.description ?? ""), line.bankTransactionId ?? ""].join(","),
+    ),
+  ].join("\n") + "\n";
+  return importStatement(
+    {
+      ...input,
+      sourceEvidence: {
+        content,
+        filename: "statement.csv",
+        contentType: "text/csv",
+        csvMapping: { date: 0, amount: 1, description: 2, bankTransactionId: 3 },
+      },
+    },
+    ctx,
+  );
+}
+
 async function setup() {
   const org = await createScratchOrg();
   const actor = (await seedFlowActors(org.orgId)).adminId;
@@ -148,7 +180,7 @@ test(
   async () => {
     const { org, actor, ctx } = await setup();
     try {
-      const imported = await importStatement(
+      const imported = await importCsv(
         {
           accountId: org.accounts.bank,
           source: "csv" as const,
@@ -195,7 +227,7 @@ test(
     const { org, actor, ctx } = await setup();
     try {
       const journals = await postBankJournal(org, actor, ["40.0000"], "correct-guard");
-      const imported = await importStatement(
+      const imported = await importCsv(
         {
           accountId: org.accounts.bank,
           source: "csv" as const,
@@ -246,7 +278,7 @@ test(
     const { org, actor, ctx } = await setup();
     try {
       const journals = await postBankJournal(org, actor, ["25.0000"], "signoff-guard");
-      const first = await importStatement(
+      const first = await importCsv(
         {
           accountId: org.accounts.bank,
           source: "csv" as const,
@@ -269,7 +301,7 @@ test(
       const dayAfter = new Date(`${org.date}T00:00:00Z`);
       dayAfter.setUTCDate(dayAfter.getUTCDate() + 1);
       const afterCutoff = dayAfter.toISOString().slice(0, 10);
-      const second = await importStatement(
+      const second = await importCsv(
         {
           accountId: org.accounts.bank,
           source: "csv" as const,
@@ -310,7 +342,7 @@ test(
           { postedOn: org.date, amount: "-11", description: "Wrong file fee", bankTransactionId: "doomed-11" },
         ],
       };
-      const imported = await importStatement(input, ctx);
+      const imported = await importCsv(input, ctx);
       const statementId = imported.statementId!;
       const entriesBefore = await journalEntryCount(org.orgId);
 
@@ -335,7 +367,7 @@ test(
 
       // The sha backstop otherwise refuses the same file as a duplicate: the
       // delete is what frees an honest re-import.
-      const retry = await importStatement(input, ctx);
+      const retry = await importCsv(input, ctx);
       assert.equal(retry.imported, 2, "the same file re-imports after its bad import is deleted");
     } finally {
       await dropScratchOrg(org.orgId);
@@ -350,7 +382,7 @@ test(
     const { org, actor, ctx } = await setup();
     try {
       const journals = await postBankJournal(org, actor, ["33.0000"], "delete-guard");
-      const imported = await importStatement(
+      const imported = await importCsv(
         {
           accountId: org.accounts.bank,
           source: "csv" as const,
@@ -387,7 +419,7 @@ test(
       // A later import's identical id-less line flags as a possible duplicate
       // of this import's line. That pointer is the later line's review
       // evidence: it blocks the delete until cleared.
-      const later = await importStatement(
+      const later = await importCsv(
         {
           accountId: org.accounts.bank,
           source: "csv" as const,
@@ -424,7 +456,7 @@ test(
     const { org, ctx } = await setup();
     const other = await createScratchOrg();
     try {
-      const imported = await importStatement(
+      const imported = await importCsv(
         {
           accountId: org.accounts.bank,
           source: "csv" as const,

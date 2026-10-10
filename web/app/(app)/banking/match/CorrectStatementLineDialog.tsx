@@ -76,7 +76,7 @@ export function CorrectStatementLineDialog({
             {tCommon('actions.cancel')}
           </Button>
           <Button disabled={busy || !dirty} onClick={save}>
-            {t('correctSave')}
+            {t('correctLine')}
           </Button>
         </>
       }
