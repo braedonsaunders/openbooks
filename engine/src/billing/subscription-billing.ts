@@ -13,7 +13,7 @@ import { postDocument } from "../ledger/posting-document.ts";
 import { resolveDocumentLineDefaults } from "../ledger/document-defaults.ts";
 import { type PostingDeps } from "../journal/posting-contracts.ts";
 import { submitAndReleaseIfUngated } from "../flows/submit.ts";
-import { resolveSubscriptionBillingTarget } from "./consolidated-billing.ts";
+import { ConsolidatedBillingError, resolveSubscriptionBillingTarget } from "./consolidated-billing.ts";
 import { advanceAnchoredMonth, retreatAnchoredMonth } from "./cadence.ts";
 import { daysInCivilMonth } from "../platform/civil-date.ts";
 import {
@@ -961,9 +961,19 @@ async function billOne(
   // group-held charge collects as an unposted pending draft. Without a
   // relationship this resolves to the service customer itself, preserving
   // the historical header, entity and posting behaviour exactly.
+  // Bill-now speaks SubscriptionError: a hierarchy refusal keeps its message
+  // and remedy, narrowed to this module's typed contract with the original
+  // error as cause, so operator-facing callers never see a foreign class.
   const target = await resolveSubscriptionBillingTarget(sub.orgId, sub.customerId, billingDate, {
     billToPartyId: sub.billToOverride,
     payerPartyId: sub.payerOverride,
+  }).catch((error: unknown) => {
+    if (error instanceof ConsolidatedBillingError) {
+      const refusal = new SubscriptionError(error.message, error.status);
+      refusal.cause = error;
+      throw refusal;
+    }
+    throw error;
   });
   // The plain plan line carries no tax of its own: resolve it through the
   // native defaults (plan, then payer, then item) so a taxable customer is

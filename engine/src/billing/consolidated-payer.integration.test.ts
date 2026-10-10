@@ -113,7 +113,7 @@ async function seedPayerInvoice(dueDate: string): Promise<PayerFixture> {
       (id, org_id, customer_id, plan_id, quantity, status, start_on, next_bill_on, auto_post, created_by)
     values (${subscriptionId}, ${org.orgId}, ${child}, ${planId}, '1', 'active',
             ${org.date}, ${org.date}, false, ${actorId})`);
-  await billSubscriptionNow(org.orgId, subscriptionId, org.date, { actorId }, null);
+  await billSubscriptionNow(org.orgId, subscriptionId, { actorId }, null);
   const [run] = await runConsolidationGroup(org.orgId, groupId, "2026-07-01", "2026-07-31", { actorId });
   assert.ok(run && !run.replayed);
   const invoiceId = run.invoiceId;

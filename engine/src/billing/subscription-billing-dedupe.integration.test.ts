@@ -285,8 +285,8 @@ test(
       // A double-click on "bill now": both serialize on the subscription row
       // lock inside billOne, the loser replays the winner's committed guard.
       const [a, b] = await Promise.all([
-        billSubscriptionNow(org.orgId, subscriptionId, org.date, undefined, null),
-        billSubscriptionNow(org.orgId, subscriptionId, org.date, undefined, null),
+        billSubscriptionNow(org.orgId, subscriptionId, undefined, null),
+        billSubscriptionNow(org.orgId, subscriptionId, undefined, null),
       ]);
       assert.equal(a.invoiceId, b.invoiceId, "both callers observe the same invoice");
       assert.equal(await postedInvoiceCount(org.orgId), 1);

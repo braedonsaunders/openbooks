@@ -159,10 +159,12 @@ test(
 
       const replay = await billSubscriptionNow(org.orgId, subscriptionId, { actorId }, null);
       assert.equal(replay.invoiceId, first.invoiceId, "same-occurrence replay returns the committed invoice");
+      // A double-click replay keeps the creator's count: only a newly cut
+      // invoice advances run_count, so the snapshot is byte-identical.
       assert.deepEqual(
         await mutationSnapshot(org.orgId, subscriptionId),
-        { ...mid, runCount: mid.runCount + 1 },
-        "replay creates no new document, journal, or guard row",
+        mid,
+        "replay creates no new document, journal, guard row, or counter advance",
       );
     } finally {
       await dropScratchOrgReporting(org.orgId);
