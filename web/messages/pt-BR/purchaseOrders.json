@@ -27,6 +27,8 @@
     "convertTo": "Converter em {target}",
     "convertCreated": "{target} {number} criado",
     "convertFailed": "Falha na conversão",
+    "convertCreatedWithShortfall": "{target} {number} criado para parte do pedido: {amount} não foi convertido e permanece em aberto no pedido.",
+    "convertWithheldLine": "{kind, select, purchase_order {Linha {line} ({item}): {withheld} não faturado — pedido {ordered}, recebido {fulfilled}} other {Linha {line} ({item}): {withheld} não faturado — pedido {ordered}, enviado {fulfilled}}}",
     "actionFailed": "Falha na ação",
     "pricingResolving": "A consulta do preço de venda está em andamento. Aguarde a conclusão ou corrija o preço da linha antes de salvar ou emitir.",
     "invalidLineSave": "Linha {row}, {field}: informe um valor válido ou remova esta linha antes de salvar.",

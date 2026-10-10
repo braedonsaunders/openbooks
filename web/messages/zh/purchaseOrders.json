@@ -27,6 +27,8 @@
     "convertTo": "转为{target}",
     "convertCreated": "已创建 {target} {number}",
     "convertFailed": "转换失败",
+    "convertCreatedWithShortfall": "已为订单的一部分创建 {target} {number}：{amount} 未转换，仍在订单中保持未结。",
+    "convertWithheldLine": "{kind, select, purchase_order {第 {line} 行（{item}）：{withheld} 未开票 — 订购 {ordered}，已收货 {fulfilled}} other {第 {line} 行（{item}）：{withheld} 未开票 — 订购 {ordered}，已发货 {fulfilled}}}",
     "actionFailed": "操作失败",
     "pricingResolving": "销售价格正在查询中。请等待查询完成，或先更正明细价格，再保存或签发。",
     "invalidLineSave": "第 {row} 行的{field}无效。请输入有效值，或在保存前删除此行。",

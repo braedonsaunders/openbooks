@@ -19,7 +19,7 @@ import { pathToFileURL } from "node:url";
 
 declare global {
   var __dashRouter: { push(url: string): void; refresh(): void; pushes: string[] };
-  var __dashToasts: { kind: string; message: string }[];
+  var __dashToasts: { kind: string; message: string; description?: string }[];
   var __promptAnswers: (string | null)[];
   var __confirmAnswer: boolean | undefined;
 }
@@ -114,7 +114,7 @@ export function notFound() { throw new Error('NOT_FOUND') }
 export function usePathname() { return '/' }
 export function useSearchParams() { return new URLSearchParams() }`;
 const DYNAMIC_MOCK = `export default function dynamic() { return function DynamicStub(p) { return p.children ?? null } }`;
-const SONNER_MOCK = `export const toast = { success(m) { (globalThis.__dashToasts ?? []).push({ kind: 'success', message: String(m) }) }, error(m) { (globalThis.__dashToasts ?? []).push({ kind: 'error', message: String(m) }) } }; export function Toaster() { return null }`;
+const SONNER_MOCK = `export const toast = { success(m) { (globalThis.__dashToasts ?? []).push({ kind: 'success', message: String(m) }) }, error(m) { (globalThis.__dashToasts ?? []).push({ kind: 'error', message: String(m) }) }, warning(m, o) { (globalThis.__dashToasts ?? []).push({ kind: 'warning', message: String(m), description: o && o.description != null ? String(o.description) : undefined }) } }; export function Toaster() { return null }`;
 const ACTIONS_MOCK = `export async function saveDashboardLayout() { return { ok: true } } export async function resetDashboardLayout() { return { ok: true } } export async function loadDashboardWidgetPreview() { return { ok: false } }`;
 const PROMPT_MOCK = `export async function promptDialog() { const answers = globalThis.__promptAnswers ?? []; return answers.length > 0 ? answers.shift() : null }`;
 const CONFIRM_MOCK = `export async function confirmDialog() { return globalThis.__confirmAnswer ?? true }`;
