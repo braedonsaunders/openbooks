@@ -1247,34 +1247,34 @@ export async function runScenario(
   // Trial balance (balance-mode: scans inception..cutoff).
   await bench("trial_balance", sql`
     select a.id, sum(l.amount) as bal from accounts a
-      join journal_lines l on l.account_id = a.id
-      join journal_entries e on e.id = l.entry_id and e.status in ('posted','reversed') and e.posting_date <= ${cutoff}
+      join journal_lines l on l.org_id = a.org_id and l.account_id = a.id
+      join journal_entries e on e.org_id = l.org_id and e.id = l.entry_id and e.status in ('posted','reversed') and e.posting_date <= ${cutoff}
      where a.org_id = ${orgId} group by a.id having abs(sum(l.amount)) >= 0.005`);
   // Balance sheet aggregate (same inception scan).
   await bench("balance_sheet", sql`
     select a.type, sum(l.amount) as bal from accounts a
-      join journal_lines l on l.account_id = a.id
-      join journal_entries e on e.id = l.entry_id and e.status in ('posted','reversed') and e.posting_date <= ${cutoff}
+      join journal_lines l on l.org_id = a.org_id and l.account_id = a.id
+      join journal_entries e on e.org_id = l.org_id and e.id = l.entry_id and e.status in ('posted','reversed') and e.posting_date <= ${cutoff}
      where a.org_id = ${orgId} group by a.type`);
   // P&L for the fiscal year up to the cutoff.
   await bench("profit_and_loss", sql`
     select a.id, sum(l.amount) as bal from accounts a
-      join journal_lines l on l.account_id = a.id
-      join journal_entries e on e.id = l.entry_id and e.status in ('posted','reversed') and e.posting_date between ${fyStart} and ${cutoff}
+      join journal_lines l on l.org_id = a.org_id and l.account_id = a.id
+      join journal_entries e on e.org_id = l.org_id and e.id = l.entry_id and e.status in ('posted','reversed') and e.posting_date between ${fyStart} and ${cutoff}
      where a.org_id = ${orgId} and a.type in ('income','income_other','cogs','expense','expense_other','expense_deferred') group by a.id`);
   // AR aging (open items by party, signed point-in-time as-of cutoff).
   await bench("ar_aging", sql`
     select d.party_id,
            sum(l.amount - sign(l.amount) * coalesce((
              select sum(ap.amount) from applications ap
-               join journal_lines ol on ol.id = case when ap.to_line_id = l.id then ap.from_line_id else ap.to_line_id end
-               join journal_entries oe on oe.id = ol.entry_id
-              where (ap.to_line_id = l.id or ap.from_line_id = l.id)
+               join journal_lines ol on ol.org_id = ap.org_id and ol.id = case when ap.to_line_id = l.id then ap.from_line_id else ap.to_line_id end
+               join journal_entries oe on oe.org_id = ol.org_id and oe.id = ol.entry_id
+              where ap.org_id = l.org_id and (ap.to_line_id = l.id or ap.from_line_id = l.id)
                 and ap.unapplied_at is null and ap.applied_on <= ${cutoff}
                 and oe.posting_date <= ${cutoff}), 0)) ob
       from documents d
-      join journal_entries e on e.id = d.posted_entry_id and e.status in ('posted','reversed') and e.posting_date <= ${cutoff}
-      join journal_lines l on l.entry_id = d.posted_entry_id and l.is_open_item
+      join journal_entries e on e.org_id = d.org_id and e.id = d.posted_entry_id and e.status in ('posted','reversed') and e.posting_date <= ${cutoff}
+      join journal_lines l on l.org_id = d.org_id and l.entry_id = d.posted_entry_id and l.is_open_item
      where d.org_id=${orgId} and d.status in ('posted','voided') and d.kind in ('customer_invoice','customer_credit')
        and not exists (select 1 from journal_entries r
                         where r.id = d.reversal_entry_id and r.org_id = d.org_id and r.status in ('posted','reversed')
@@ -1287,8 +1287,8 @@ export async function runScenario(
            coalesce(sum(case when l.amount<0 then -l.amount else 0 end),0)::text credits,
            count(distinct a.id)::text accounts
       from accounts a
-      join journal_lines l on l.account_id = a.id
-      join journal_entries e on e.id = l.entry_id and e.status in ('posted','reversed') and e.posting_date <= ${cutoff}
+      join journal_lines l on l.org_id = a.org_id and l.account_id = a.id
+      join journal_entries e on e.org_id = l.org_id and e.id = l.entry_id and e.status in ('posted','reversed') and e.posting_date <= ${cutoff}
      where a.org_id = ${orgId}`);
 
   const pass = checks.every((c) => c.ok);
