@@ -1056,6 +1056,8 @@ export interface StatutoryHolidayEarningLine {
   /** Provenance for the stub trace. */
   holidayKey: string;
   holidayDate: string;
+  /** Wages earned across the whole period rather than on the holiday date. */
+  periodWide?: true;
   basis: string;
 }
 
@@ -1171,7 +1173,7 @@ async function resolveMbConstructionHolidayPay(
     componentId: input.holidayComponentId, kind: "earning",
     description: "Manitoba construction general holiday pay (4% of regular wages, s. 30)",
     amount: fourPercent, sequence: 45,
-    holidayKey: "mb-construction-holiday-pay", holidayDate: input.periodEnd,
+    holidayKey: "mb-construction-holiday-pay", holidayDate: input.periodEnd, periodWide: true,
     basis: `4% of current-period regular wages (${MB_CONSTRUCTION_HOLIDAY.citation})`,
   });
   let sequence = 46;

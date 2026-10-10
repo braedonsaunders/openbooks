@@ -398,6 +398,11 @@ export async function appendStatutoryHolidayEarningLines(
         // Cross-struct boundary, re-parsed like the retro lines above.
         amount: parseMoney(line.amount),
         sequence: line.sequence,
+        // Holiday pay is earned on its holiday, so dated coverage (benefit
+        // elections, assignments) counts it in full whenever that day is
+        // covered instead of prorating it across the period.
+        ...(!line.periodWide && line.holidayDate >= run.period_start! && line.holidayDate <= run.period_end!
+          ? { earnedFrom: line.holidayDate, earnedTo: line.holidayDate } : {}),
         // Current holiday wages do not withdraw previously banked alternate days.
         fundedByEntitlementBank: false,
       });
