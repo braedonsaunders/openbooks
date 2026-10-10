@@ -180,9 +180,13 @@ test("add subscription rechecks customer scope after a concurrent rehome", async
     await holder.query("begin");
     await holder.query("select set_config('app.bypass_rls', 'on', true)");
     await holder.query("select id from parties where id = $1 for update", [customerId]);
+    // A catch-up choice is required for past-due periods; "skip" carries no
+    // billing intent so the request reaches the in-transaction scope recheck
+    // this race exercises.
     const adding = post({
       action: "addSubscription", customerId, planId,
       startOn: "2026-09-01", firstBillOn: "2026-09-01",
+      catchUp: { mode: "skip" },
     });
     await new Promise((resolve) => setTimeout(resolve, 300));
     await holder.query("update parties set subsidiary_id = $2 where id = $1", [customerId, outsideSubsidiaryId]);
@@ -289,15 +293,18 @@ test("a bill-vs-edit race never double-bills: the edit loses against fresh state
     // invoice and a refused (never half-applied) edit. A stale write would
     // rewind the cursor behind the tick and the follow-up tick would cut a
     // second, overlapping invoice.
+    // Pin the scheduler's "today" inside September: the race is about the
+    // September window, and an unpinned follow-up would legitimately bill
+    // October once the wall clock moves past it.
     const editFirst = post({ action: "updateSubscription", id: subscriptionId, nextBillOn: "2026-09-15" });
-    const [edit, billed] = await Promise.all([editFirst, runDueSubscriptions()]);
+    const [edit, billed] = await Promise.all([editFirst, runDueSubscriptions("2026-09-15")]);
     assert.equal(edit.status, 422);
     assert.match(String((await edit.json() as { error: string }).error), /billed service|skips unbilled service/);
     assert.equal((await billed).billed, 1);
     assert.deepEqual(await guards(orgId, subscriptionId), [{ startsOn: "2026-09-01", endsOn: "2026-10-01" }]);
     assert.equal(await invoiceCount(orgId), 1);
     assert.equal(await cursor(orgId, subscriptionId), "2026-10-01");
-    const followUp = await runDueSubscriptions();
+    const followUp = await runDueSubscriptions("2026-09-15");
     assert.equal(followUp.billed, 0);
     assert.equal(await invoiceCount(orgId), 1, "no overlapping second invoice after the race");
   } finally {
