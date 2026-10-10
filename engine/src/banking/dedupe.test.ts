@@ -97,18 +97,17 @@ test("source-provided transaction IDs still dedupe across and within imports", (
   assert.equal(filtered.duplicates, 2);
 });
 
-test("plaid pagination accumulates every page until has_more is false", async () => {
+test("Plaid pagination follows the reported total and advances by actual returned rows", async () => {
   const pages = [
-    { transactions: [{ transaction_id: "t1" }, { transaction_id: "t2" }], has_more: true },
-    { transactions: [{ transaction_id: "t3" }], has_more: true },
-    { transactions: [], has_more: false },
+    { transactions: [{ transaction_id: "t1" }, { transaction_id: "t2" }], total_transactions: 3 },
+    { transactions: [{ transaction_id: "t3" }], total_transactions: 3 },
   ];
   const offsetsSeen: number[] = [];
   const all = await plaidFetchAllTransactions(async (offset) => {
     offsetsSeen.push(offset);
     return pages[offsetsSeen.length - 1]!;
   });
-  assert.deepEqual(offsetsSeen, [0, 500, 1000]);
+  assert.deepEqual(offsetsSeen, [0, 2]);
   assert.deepEqual(all, pages.flatMap((p) => p.transactions));
 });
 
@@ -117,11 +116,41 @@ test("plaid pagination aborts loudly past the hard page cap instead of truncatin
   await assert.rejects(
     plaidFetchAllTransactions(async () => {
       calls += 1;
-      return { transactions: [{ transaction_id: `t${calls}` }], has_more: true };
+      return { transactions: [{ transaction_id: `t${calls}` }], total_transactions: 21 };
     }),
     /exceeded 20 pages/,
   );
   assert.equal(calls, 20);
+});
+
+test("Plaid refuses missing, drifting, duplicated and incomplete page evidence", async () => {
+  for (const total of [undefined, null, "1", -1, 1.5, Number.NaN, Number.MAX_SAFE_INTEGER + 1]) {
+    await assert.rejects(plaidFetchAllTransactions(async () => ({transactions: [], total_transactions: total})), /valid transaction total/);
+  }
+  await assert.rejects(plaidFetchAllTransactions(async () => ({transactions: [], total_transactions: 1})), /incomplete transaction page/);
+  await assert.rejects(plaidFetchAllTransactions(async () => ({transactions: [{transaction_id: "t1"}], total_transactions: 0})), /does not match its total/);
+  let page = 0;
+  await assert.rejects(plaidFetchAllTransactions(async () => ({transactions: [{transaction_id: `t${page}`}], total_transactions: ++page === 1 ? 2 : 3})), /total changed/);
+  await assert.rejects(plaidFetchAllTransactions(async () => ({transactions: [{transaction_id: "repeated"}], total_transactions: 2})), /repeated a transaction/);
+  assert.deepEqual(await plaidFetchAllTransactions(async () => ({transactions: [], total_transactions: 0})), []);
+});
+
+test("GoCardless uses explicit bank booking timestamps and refuses undated booked evidence", async (t) => {
+  const originalFetch = globalThis.fetch;
+  t.after(() => { globalThis.fetch = originalFetch; });
+  let transactions: unknown[] = [
+    {bookingDateTime: "2026-08-02T23:30:00-04:00", valueDate: "2026-08-04", transactionAmount: {amount: "10", currency: "CAD"}, internalTransactionId: "booked"},
+    {valueDateTime: "2026-08-05T12:00:00Z", transactionAmount: {amount: "-5", currency: "CAD"}, internalTransactionId: "value"},
+  ];
+  globalThis.fetch = async (input) => new Response(JSON.stringify(String(input).includes("/token/new/") ? {access: "token"} : {transactions: {booked: transactions}}), {status: 200, headers: {"content-type": "application/json"}});
+  const adapter = getBankFeedAdapter("gocardless")!;
+  const pull = () => adapter.fetch({secretId: "id", secretKey: "secret"}, "account", "2026-07-01", "2026-08-31");
+  const result = await pull();
+  assert.deepEqual(result.lines.map(row => [row.postedOn, row.amount]), [["2026-08-02", "10.0000"], ["2026-08-05", "-5.0000"]]);
+  transactions = [{transactionAmount: {amount: "1", currency: "CAD"}}];
+  await assert.rejects(pull(), /no booking or value date/);
+  transactions = [{bookingDate: "2026-02-30", transactionAmount: {amount: "1", currency: "CAD"}}];
+  await assert.rejects(pull(), /GoCardless booking date/);
 });
 
 test("live provider fetch retains exact response bytes for statement audit", async (t) => {
@@ -208,7 +237,7 @@ test("plaid adapter imports only settled transactions, never pending ones", asyn
         pending: true,
       },
     ],
-    has_more: false,
+    total_transactions: 2,
   }), {
     status: 200,
     headers: { "content-type": "application/json" },
