@@ -70,15 +70,28 @@ interface GridRow {
 
 /**
  * Billable is a project expectation gated by the time type: a line bills
- * only on a project whose time type bills by default. Production lines never
- * bill. New lines start unchecked (no project yet), so shop time is never
- * pre-checked — the policy, not list position, decides.
+ * only on a customer project whose time type bills by default. Internal
+ * (shop/overhead) projects never bill, production lines never bill, and new
+ * lines start unchecked (no project yet) — so shop time is never pre-checked.
+ * The policy, not list position, decides.
  */
-function policyBillable(projectId: string, timeType: TimeTypeOption | undefined, costTarget: TimeWorkFamily): boolean {
-  return costTarget !== 'production' && projectId !== '' && (timeType?.isBillableDefault ?? false)
+function policyBillable(
+  projectId: string,
+  timeType: TimeTypeOption | undefined,
+  costTarget: TimeWorkFamily,
+  internalProjectIds: readonly string[] = [],
+): boolean {
+  if (costTarget === 'production' || projectId === '') return false
+  if (internalProjectIds.includes(projectId)) return false
+  return timeType?.isBillableDefault ?? false
 }
 
-function emptyRow(timeTypes: TimeTypeOption[], workFamily: TimeWorkFamily = 'project', projectId = ''): GridRow {
+function emptyRow(
+  timeTypes: TimeTypeOption[],
+  workFamily: TimeWorkFamily = 'project',
+  projectId = '',
+  internalProjectIds: readonly string[] = [],
+): GridRow {
   // New lines start on the org's standard time type. List position is never
   // the default: multiplier or alphabetical order would silently book premium
   // or travel time as the operator's first, unexamined choice.
@@ -91,7 +104,7 @@ function emptyRow(timeTypes: TimeTypeOption[], workFamily: TimeWorkFamily = 'pro
     itemId: '',
     timeTypeId: def?.value ?? '',
     departmentId: '',
-    isBillable: policyBillable(projectId, def, workFamily),
+    isBillable: policyBillable(projectId, def, workFamily, internalProjectIds),
     memo: '',
     hours: ['', '', '', '', '', '', ''],
     productionEntryIds: Array.from({length:7},()=>[]),
@@ -128,7 +141,7 @@ function fromPayload(rows: WeekRow[], timeTypes: TimeTypeOption[], workFamily: T
 function seedRows(payload: WeekPayload, pickers: TimesheetPickers, workFamily: TimeWorkFamily = 'project', quickProjectId?: string): GridRow[] {
   const rows = fromPayload(payload.rows, pickers.timeTypes,workFamily)
   if (quickProjectId && ['draft','empty','rejected'].includes(payload.status) && pickers.projects.some(project=>project.value===quickProjectId) && !rows.some(row=>row.projectId===quickProjectId)) {
-    const quick = emptyRow(pickers.timeTypes, workFamily, quickProjectId)
+    const quick = emptyRow(pickers.timeTypes, workFamily, quickProjectId, pickers.internalProjectIds ?? [])
     if (!payload.rows.length) rows[0]=quick
     else rows.push(quick)
   }
@@ -328,8 +341,9 @@ export function WeeklyGrid({
   // When the time type changes, follow the billable policy (only if the user
   // hasn't diverged — we keep it simple and always follow the policy here).
   // The explicit checkbox wins until a policy input changes.
+  const internalIds = pickers.internalProjectIds ?? []
   const onTimeType = (i: number, value: string) => {
-    setRow(i, { timeTypeId: value, isBillable: policyBillable(rows[i]!.projectId, timeTypeById.get(value), rows[i]!.costTarget) })
+    setRow(i, { timeTypeId: value, isBillable: policyBillable(rows[i]!.projectId, timeTypeById.get(value), rows[i]!.costTarget, internalIds) })
   }
 
   const dayTotals = useMemo(() => {
@@ -569,7 +583,7 @@ export function WeeklyGrid({
     // keep the operator's choice.
     setRows(result.rows.map((row, index) =>
       row.projectId !== '' && (beforeProjects[index] ?? '') === ''
-        ? { ...row, isBillable: policyBillable(row.projectId, timeTypeById.get(row.timeTypeId), row.costTarget) }
+        ? { ...row, isBillable: policyBillable(row.projectId, timeTypeById.get(row.timeTypeId), row.costTarget, internalIds) }
         : row,
     ))
     setDirty(true)
@@ -839,7 +853,7 @@ export function WeeklyGrid({
                   onTarget={(value) => setRow(i, { costTarget: value, projectId: '', workOrderId: '', woOperationId: '', isBillable: value === 'production' ? false : r.isBillable })}
                   onWorkOrder={(v) => setRow(i, { projectId: '', workOrderId: v, woOperationId: '', isBillable: false })}
                   onOperation={(v) => setRow(i, { woOperationId: v })}
-                  onProject={(v) => setRow(i, { projectId: v, workOrderId: '', woOperationId: '', isBillable: policyBillable(v, timeTypeById.get(r.timeTypeId), r.costTarget) })}
+                  onProject={(v) => setRow(i, { projectId: v, workOrderId: '', woOperationId: '', isBillable: policyBillable(v, timeTypeById.get(r.timeTypeId), r.costTarget, internalIds) })}
                   onItem={(v) => setRow(i, { itemId: v })}
                   onTimeType={(v) => onTimeType(i, v)}
                   onDept={(v) => setRow(i, { departmentId: v })}

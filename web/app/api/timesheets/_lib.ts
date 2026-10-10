@@ -636,6 +636,9 @@ function flagStandardTimeType(options: TimeTypeOption[]): TimeTypeOption[] {
 export interface TimesheetPickers {
   employees: PickerOption[]
   projects: PickerOption[]
+  /** Internal (shop/overhead) project ids: non-billable by policy, so lines
+   * targeting them never pre-check billable. */
+  internalProjectIds: string[]
   items: PickerOption[]
   timeTypes: TimeTypeOption[]
   departments: PickerOption[]
@@ -690,7 +693,7 @@ export async function loadPickers(
          )
        order by p.display_name`),
     db.execute<Record<string, unknown>>(sql`
-          select p.id, p.code, p.name from projects p
+          select p.id, p.code, p.name, p.is_internal from projects p
            where p.org_id = ${orgId} and p.is_active
              ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds ?? null)}
            order by p.name`),
@@ -720,6 +723,7 @@ export async function loadPickers(
       label: ((r.label as string) || '(unnamed)') + (r.currently_active ? '' : ' (inactive)'),
     })),
     projects: projects.rows.map(withCode),
+    internalProjectIds: projects.rows.filter((r) => r.is_internal === true).map((r) => String(r.id)),
     items: items.rows.map(withCode),
     timeTypes: flagStandardTimeType(timeTypes.rows.map((r) => ({
       value: String(r.id),
