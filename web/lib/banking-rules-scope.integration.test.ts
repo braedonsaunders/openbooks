@@ -344,7 +344,7 @@ const consolidatedRows = [
                 );
                 const rejected = attempts.find((result) => result.status === "rejected");
                 assert.ok(rejected && rejected.reason instanceof Error);
-                assert.match(rejected.reason.message, /Statement line is unavailable/);
+                assert.match(rejected.reason.message, /statement lines are unavailable/);
 
                 const state = await db.execute(sql\`
                   select
@@ -702,6 +702,10 @@ for (const row of consolidatedRows) row.register();
 test('applyRulesToAccount reports a refused line and still applies the rest', { skip: !env.OPENBOOKS_DB_URL }, async () => {
   const fx = await fixture()
   try {
+    // Categorizing journals post to the ledger, so the applier holds gl.post;
+    // scratch roles start with no permissions.
+    await db.execute(sql`update app_roles set permissions = '["gl.post"]'::jsonb
+      where org_id = ${fx.orgId} and key = 'admin'`)
     await seedExcludeRule(fx.orgId, fx.actor)
     await importStatement(
       {
@@ -711,12 +715,12 @@ test('applyRulesToAccount reports a refused line and still applies the rest', { 
       { orgId: fx.orgId, userId: fx.actor, allowedSubsidiaryIds: null },
     )
     const offset = (await db.execute<{ id: string }>(sql`
-      select id from accounts where org_id = ${fx.orgId} and type = 'revenue' and not is_summary limit 1`)).rows[0]!.id
+      select id from accounts where org_id = ${fx.orgId} and type = 'income' and not is_summary limit 1`)).rows[0]!.id
     await withBypassContext(() => (db.execute(sql`
       insert into bank_match_rules (id, org_id, name, criteria, outcome, priority, is_active, created_by)
       values (${randomUUID()}, ${fx.orgId}, 'Oversplit',
         '{"version":2,"match":{"combinator":"and","rules":[{"field":"description","op":"contains","value":"Oversplit"}]}}'::jsonb,
-        ${JSON.stringify({ action: 'categorize', version: 2, mode: 'auto', lines: [{ accountId: offset, portion: { kind: 'fixed', value: '1000' } }] })}::jsonb,
+        ${JSON.stringify({ action: 'categorize', version: 2, mode: 'auto', lines: [{ accountId: offset, portion: { kind: 'fixed', value: 1000 } }] })}::jsonb,
         10, true, ${fx.actor})`)))
     const result = await applyRulesToAccount(fx.orgId, fx.actor, fx.bankA, null)
     assert.equal(result.excluded, 1)
