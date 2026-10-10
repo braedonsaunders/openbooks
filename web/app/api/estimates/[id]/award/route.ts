@@ -40,8 +40,8 @@ const awardBody = z.object({
 /** Awarding needs Orders on and the quote readable, beyond the route's Projects gate. */
 async function guard(authz: Authz): Promise<NextResponse | null> {
   if (!(await isFeatureEnabled(authz.user.orgId, 'orders'))) return notFound('record')
-  if (!can(authz, 'ar.read')) {
-    return NextResponse.json({ error: 'missing permission: ar.read' }, { status: 403 })
+  if (!can(authz, 'estimates.read')) {
+    return NextResponse.json({ error: 'missing permission: estimates.read' }, { status: 403 })
   }
   return null
 }

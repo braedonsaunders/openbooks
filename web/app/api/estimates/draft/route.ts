@@ -20,7 +20,7 @@ export const runtime = 'nodejs'
  * though it matched.
  */
 export const POST = defineRoute({
-  permission: 'ar.create',
+  permission: 'estimates.create',
   feature: 'orders',
   handler: async ({ request: req, authz: gate }) => {
     const { user } = gate

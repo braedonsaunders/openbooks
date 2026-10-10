@@ -29,7 +29,7 @@ const sendBody = z.object({
  * GET reports the open or latest request for the drawer's timeline.
  */
 export const GET = defineRoute({
-  permission: "ar.read",
+  permission: "estimates.read",
   feature: "quoteToCash",
   params,
   handler: async ({ authz, params }) => {
@@ -45,7 +45,7 @@ export const GET = defineRoute({
 });
 
 export const DELETE = defineRoute({
-  permission: "ar.create",
+  permission: "estimates.create",
   feature: "quoteToCash",
   params,
   handler: async ({ authz, params }) => {
@@ -61,7 +61,7 @@ export const DELETE = defineRoute({
 });
 
 export const POST = defineRoute({
-  permission: "ar.create",
+  permission: "estimates.create",
   feature: "quoteToCash",
   params,
   body: sendBody,

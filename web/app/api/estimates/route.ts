@@ -13,12 +13,12 @@ export const runtime = 'nodejs'
  * boundary before the kernel sees it.
  */
 export const POST = defineRoute({
-  permission: 'ar.create',
+  permission: 'estimates.create',
   feature: 'orders',
   handler: async ({ request: req, authz: gate }) => {
     const parsed = await parseJsonBody(req, orderCreateBody)
     if (!parsed.ok) return parsed.response
-    return createOrder({ kind: 'quote', createPerm: 'ar.create', numberPrefix: 'EST-' }, gate, req, parsed.data)
+    return createOrder({ kind: 'quote', createPerm: 'estimates.create', numberPrefix: 'EST-' }, gate, req, parsed.data)
 
   },
 })
