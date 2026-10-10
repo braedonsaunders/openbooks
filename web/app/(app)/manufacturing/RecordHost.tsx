@@ -221,16 +221,25 @@ export function ManufacturingRecordHost({
   const [requestedTab, setTab] = useState("summary"),
     [selected, setSelected] = useState<ManufacturingRow | null>(null),
     [command, setCommand] = useState<Command | null>(null),
-    [dirty, setDirty] = useState(false);
-  const identity = useRef(recordId);
+    [dirty, setDirty] = useState(false),
+    [peerDirty, setPeerDirty] = useState(false);
+  const requestedIdentity = JSON.stringify(recordId === "new"
+    ? [view,recordId,initialWorkflow?.value,initialDepartmentId,initialValues?.producedItemId,initialValues?.subsidiaryId,initialValues?.quantityOrdered]
+    : [view,recordId]);
+  const identity = useRef<string | undefined>(requestedIdentity);
+  identity.current = requestedIdentity;
+  useEffect(() => {
+    identity.current = requestedIdentity;
+    return () => { identity.current = undefined; };
+  }, [requestedIdentity]);
   useEffect(() => {
     setCommand(null);
     setSelected(null);
     setTab("summary");
     setDirty(false);
+    setPeerDirty(false);
     setError(null);
-    identity.current = recordId;
-  }, [recordId]);
+  }, [requestedIdentity]);
   useEffect(() => {
     if (!recordId || recordId === "new") {
       setData(null);
@@ -249,6 +258,7 @@ export function ManufacturingRecordHost({
         return response.json();
       })
       .then((result) => {
+        if (controller.signal.aborted) return;
         setData(result);
         setLoadedId(recordId);
       })
@@ -340,7 +350,13 @@ export function ManufacturingRecordHost({
       );
     return formatted(key, row[key]);
   };
-  function openCommand(value: Command) {
+  async function openCommand(value: Command) {
+    if (identity.current !== requestedIdentity) return;
+    if (peerDirty) {
+      if (!await confirmDialog(t("discardDraft")) || identity.current !== requestedIdentity) return;
+      setPeerDirty(false);
+      setTab("summary");
+    }
     setCommand(value);
     setDirty(true);
   }
@@ -353,6 +369,7 @@ export function ManufacturingRecordHost({
     action: Command,
     approval: boolean,
   ) {
+    if (identity.current !== requestedIdentity) { router.refresh(); return; }
     toast.success(t(approval ? "approvalPending" : "saved"));
     setDirty(false);
     setCommand(null);
@@ -432,7 +449,7 @@ export function ManufacturingRecordHost({
       pending={!isNew && (pending || loadedId !== recordId) && !error}
       error={error}
       onRetry={() => setAttempt((v) => v + 1)}
-      beforeClose={() => !dirty || confirmDialog(t("discardDraft"))}
+      beforeClose={() => (!dirty && !peerDirty) || confirmDialog(t("discardDraft"))}
     >
       {isNew ? (
         <CommandForm
@@ -446,7 +463,7 @@ export function ManufacturingRecordHost({
           onCancel={() => router.push(closeHref)}
           onReview={(id) => {
             router.refresh();
-            if (identity.current === "new") {
+            if (identity.current === requestedIdentity) {
               const url = new URL(closeHref, window.location.origin);
               if (id) url.searchParams.set("record", id);
               else url.searchParams.delete("record");
@@ -494,6 +511,7 @@ export function ManufacturingRecordHost({
               onSaved={saved}
               onCancel={cancelCommand}
               onReview={() => {
+                if (identity.current !== requestedIdentity) { router.refresh(); return; }
                 cancelCommand();
                 setAttempt((v) => v + 1);
                 router.refresh();
@@ -510,12 +528,16 @@ export function ManufacturingRecordHost({
                 ? { count: visibleData.sections[key]!.length }
                 : {}),
             }))}
-            onChange={(value) => {
+            onChange={async (value) => {
+              if (value === tab) return;
+              if (peerDirty && !await confirmDialog(t("discardDraft"))) return;
+              if (identity.current !== requestedIdentity) return;
+              setPeerDirty(false);
               setTab(value);
               setSelected(null);
             }}
           >
-            {view === "work-orders" && tab === "process" ? <ProcessRunPanel data={visibleData} onOpen={setTab}/> : view === "work-orders" && tab === "subcontracts" && canSubcontract ? <SubcontractPanel workOrderId={visibleData.record.id} canWrite={canManage && canPost} canBuy={canBuy} onDirty={()=>setDirty(true)} onSaved={()=>setDirty(false)} /> : view === "routings" && tab === "standard" && canRollup ? <StandardRollupPanel itemId={String(visibleData.record.producedItemId)} options={options} onDirty={()=>setDirty(true)} onSaved={()=>setDirty(false)} /> : view === "work-orders" && tab === "summary" ? <WorkOrderJourney canReadQuality={canReadQuality} data={visibleData} next={nextAction} onCommand={openCommand} busy={!!command} onOpen={(nextTab,row)=>{setTab(nextTab);setSelected(row??null)}} /> : tab === "summary" || tab === "details" ? (
+            {view === "work-orders" && tab === "process" ? <ProcessRunPanel data={visibleData} onOpen={setTab}/> : view === "work-orders" && tab === "subcontracts" && canSubcontract ? <SubcontractPanel workOrderId={visibleData.record.id} canWrite={canManage && canPost} canBuy={canBuy} onDirty={()=>setPeerDirty(true)} onSaved={()=>setPeerDirty(false)} /> : view === "routings" && tab === "standard" && canRollup ? <StandardRollupPanel itemId={String(visibleData.record.producedItemId)} options={options} onDirty={()=>setPeerDirty(true)} onSaved={()=>setPeerDirty(false)} /> : view === "work-orders" && tab === "summary" ? <WorkOrderJourney canReadQuality={canReadQuality} data={visibleData} next={nextAction} onCommand={openCommand} busy={!!command} onOpen={(nextTab,row)=>{setTab(nextTab);setSelected(row??null)}} /> : tab === "summary" || tab === "details" ? (
               <dl className="grid gap-4 py-4 sm:grid-cols-2">
                 {summaryKeys[view].map((key) => (
                   <div key={key}>

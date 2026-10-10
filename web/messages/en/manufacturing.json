@@ -290,7 +290,7 @@
   "retry": "Retry",
   "saving": "Saving…",
   "cancelForm": "Cancel",
-  "discardDraft": "Discard the unsaved command details?",
+  "discardDraft": "Discard the unsaved changes?",
   "emptyChildren": "No records yet",
   "emptyChildrenNote": "Related records appear here as this parent progresses.",
   "selectRecord": "Select {name}",
