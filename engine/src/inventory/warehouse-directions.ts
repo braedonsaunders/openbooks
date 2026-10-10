@@ -7,7 +7,7 @@ import {
   lockInventoryPosition,
   persistReceiptMoney,
 } from "./position.ts";
-import { toBaseQuantity } from "./costing.ts";
+import { toExactStockQuantity } from "./costing.ts";
 import { cmp } from "../money/money.ts";
 import { resolvePutawayLocation, putAwayStagedStock } from "./putaway.ts";
 import { recordCountedQuantity } from "./stock-counts.ts";
@@ -57,7 +57,7 @@ export async function suggestReceiptConfirmation(
       documentLineId: line.id,
       fromStockLocationId: line.stock_location_id,
       toStockLocationId: line.stock_location_id,
-      quantity: toBaseQuantity(
+      quantity: toExactStockQuantity(
         line.quantity,
         line.unit,
         profile.unitConversions ?? {},

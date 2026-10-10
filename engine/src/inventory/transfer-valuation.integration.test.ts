@@ -255,8 +255,14 @@ test("transfer receipt refuses replacement transit stock and rolls back earlier 
       lines: [org.items.fifo, org.items.movingAvg].map((itemId) => ({ itemId, quantity: "5" })),
     });
     await shipTransferOrder(org.orgId, actor, order.id, org.date);
-    await issueInventory(org.orgId, actor, {
+    await assert.rejects(issueInventory(org.orgId, actor, {
       itemId: org.items.movingAvg, stockLocationId: transitId, quantity: "1",
+      subsidiaryId: org.subsidiaryId, date: org.date,
+    }), /quarantined, held, externally owned, or unavailable/);
+    // Withdraw through a governed transfer: transit stock cannot be picked or sold.
+    await transferInventory(org.orgId, actor, {
+      itemId: org.items.movingAvg, fromStockLocationId: transitId,
+      toStockLocationId: org.stockLocationId, quantity: "1",
       subsidiaryId: org.subsidiaryId, date: org.date,
     });
     await receiveInventory(org.orgId, actor, {

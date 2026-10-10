@@ -121,7 +121,14 @@ async function setFeature(orgId: string, key: string, on: boolean) {
 async function withFencedOrg(run: (org: ScratchOrg, actorId: string) => Promise<void>) {
   const org = await withBypassContext(() => createScratchOrg())
   try {
-    const actorId = await withBypassContext(async () => (await seedFlowActors(org.orgId)).adminId)
+    const actorId = await withBypassContext(async () => {
+      const id = (await seedFlowActors(org.orgId)).adminId
+      const grant = await db.execute(sql`update app_roles set permissions=permissions || '["orders.fulfill"]'::jsonb
+        where org_id=${org.orgId} and id in (select role_id from role_assignments
+          where org_id=${org.orgId} and user_id=${id}) returning id`)
+      assert.ok(grant.rows.length, 'fulfillment fixture requires an actual assigned operator grant')
+      return id
+    })
     state.authz = {
       user: { orgId: org.orgId, id: actorId, roles: [] },
       permissions: new Set(['assistant.use', 'items.read', 'items.warehouses', 'items.post', 'admin.setup.manage', 'orders.fulfill', 'ar.create', 'ar.read']),

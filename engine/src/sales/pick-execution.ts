@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import { db, withOrgTransaction, type SqlExecutor } from "../platform/db.ts";
+import { uuidArray } from "../organization/subsidiaries.ts";
 import { lockActorCommandAuthority } from "../organization/actor-command-authority.ts";
 import { lockAndCheckOrgFeature } from "../organization/org-feature-lock.ts";
 import { ScopeNotFoundError } from "../organization/subsidiary-scope.ts";
@@ -7,7 +8,7 @@ import { InventoryError } from "../inventory/contracts.ts";
 import { resolveProfile } from "../inventory/profile-policy.ts";
 import { assertSaleableStock } from "../inventory/stock-eligibility.ts";
 import { getOnHandWith, lockInventoryPosition } from "../inventory/position.ts";
-import { toBaseQuantity } from "../inventory/costing.ts";
+import { toExactStockQuantity } from "../inventory/costing.ts";
 import {
   createExecutionSuggestion,
   admitExecution,
@@ -93,7 +94,7 @@ export async function suggestPickConfirmation(
       documentLineId: source.line_id,
       fromStockLocationId: source.stock_location_id,
       toStockLocationId: source.stock_location_id,
-      quantity: toBaseQuantity(
+      quantity: toExactStockQuantity(
         quantity,
         source.unit,
         profile.unitConversions ?? {},
@@ -305,7 +306,7 @@ export async function releasePickWave(
       where pick.org_id=${orgId} and pick.kind='pick_list' and pick.status='draft' and fd.stage='open'
         and pick.subsidiary_id=${input.subsidiaryId} and fd.warehouse_id=${input.warehouseId}
         and coalesce(fd.release_cutoff_at,pick.created_at)<=${input.cutoffAt}::timestamptz
-        ${request.pickListIds ? sql`and pick.id=any(${request.pickListIds}::uuid[])` : sql``}
+        ${request.pickListIds ? sql`and pick.id=any(${uuidArray(request.pickListIds)}::uuid[])` : sql``}
       order by ${input.mode === "priority" ? sql`fd.pick_priority desc,` : sql``}coalesce(fd.release_cutoff_at,pick.created_at),pick.id limit 500`)
     ).rows;
     if (!selected.length)
@@ -318,7 +319,7 @@ export async function releasePickWave(
         item_id: string;
         stock_location_id: string;
       }>(sql`select distinct item_id,stock_location_id from document_lines
-      where org_id=${orgId} and document_id=any(${ids}::uuid[]) order by item_id,stock_location_id`)
+      where org_id=${orgId} and document_id=any(${uuidArray(ids)}::uuid[]) order by item_id,stock_location_id`)
     ).rows;
     for (const position of positions)
       await lockInventoryPosition(
@@ -343,7 +344,7 @@ export async function releasePickWave(
       }>(sql`select pick.id,fd.pick_priority as priority,
       coalesce(fd.release_cutoff_at,pick.created_at)::text as cutoff_at
       from documents pick join fulfillment_documents fd on fd.org_id=pick.org_id and fd.document_id=pick.id
-      where pick.org_id=${orgId} and pick.id=any(${ids}::uuid[]) and pick.kind='pick_list' and pick.status='draft'
+      where pick.org_id=${orgId} and pick.id=any(${uuidArray(ids)}::uuid[]) and pick.kind='pick_list' and pick.status='draft'
         and fd.stage='open' and fd.warehouse_id=${input.warehouseId} and pick.subsidiary_id=${input.subsidiaryId}
       order by pick.id for update of pick,fd`)
     ).rows;
