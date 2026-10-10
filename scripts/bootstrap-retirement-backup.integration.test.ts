@@ -83,8 +83,12 @@ test("retirement backup admission requires complete read-only dump access withou
       assert.equal((await admin.query("select pg_has_role($1,$2,'MEMBER') as member", [role, owner.name])).rows[0].member, false);
     }
     const dump = join(directory, "retirement.dump");
-    // The URL is carried only in the private child environment, never argv.
-    await exec("pg_dump", ["-Fc", "--schema=tenant_retirement", "--file", dump], { env: { ...process.env, PGDATABASE: dumpUrl.toString() }, timeout: 60_000 });
+    // Credentials are carried only in the private child environment, never
+    // argv; libpq reads connection fields, not URLs, from PG* variables.
+    const dumpEnv = { ...process.env, PGHOST: dumpUrl.hostname, PGPORT: dumpUrl.port || "5432",
+      PGUSER: decodeURIComponent(dumpUrl.username), PGPASSWORD: decodeURIComponent(dumpUrl.password),
+      PGDATABASE: decodeURIComponent(dumpUrl.pathname.slice(1)) };
+    await exec("pg_dump", ["-Fc", "--schema=tenant_retirement", "--file", dump], { env: dumpEnv, timeout: 60_000 });
     const listing = await exec("pg_restore", ["--list", dump], { timeout: 30_000 });
     for (const table of tables) assert.ok(listing.stdout.includes(`TABLE DATA tenant_retirement ${table.name} `));
     for (const sequence of sequences) assert.ok(listing.stdout.includes(`SEQUENCE SET tenant_retirement ${sequence.name} `));
